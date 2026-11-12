@@ -81,7 +81,7 @@ fn warn(what: String) -> Effect[()] given Logger {
   arguments.
 - **Emission.** The function takes a hidden trailing `deps` parameter that carries
   exactly the capabilities it names (before the execution context of
-  [`~>`, `within` and `race`](#within)), and every call passes the caller's `deps` on.
+  [`detach`, `within` and `race`](#within)), and every call passes the caller's `deps` on.
 
 ## Joining independent effects — `par` {#par}
 
@@ -162,7 +162,7 @@ actually stop. An effect that already returns a `Result` gains a second layer.
 |---|---|---|
 | an agent handler, a lambda in one included | `bynk.within.in_agent_handler` | no execution context to hand the abandoned effect to |
 | a provider operation, a WebSocket handler or a test `case` body | `bynk.within.outside_handler` | none of them has an execution context (a WebSocket handler runs in the connection's Durable Object). An effectful `fn` or method is allowed: it takes the context from its caller (#2719) |
-| a call to, or a reference to, a function that uses `within`, `race` or `~>`, from an agent handler, a WebSocket handler or a provider operation | `bynk.exec.unavailable` | the note names the chain of calls down to the construct |
+| a call to, or a reference to, a function that uses `within`, `race`, `detach` or `~>`, from an agent handler, a WebSocket handler or a provider operation | `bynk.exec.unavailable` | the note names the chain of calls down to the construct |
 | a pure body | `bynk.within.in_pure_context` | it needs an effectful body |
 | a unit that does not consume `bynk` | `bynk.within.timed_out_not_in_scope` | `TimedOut` is `bynk`'s |
 
@@ -207,11 +207,11 @@ is evaluated), and `detach` hands that running promise to the platform's `waitUn
 after the handler has answered. It never starts anything and never delays one.
 
 ```bynk,ignore
-fn notify(req: Request) -> Effect[()] {
+fn notify(req: Request) -> Effect[()] given Fetch {
   Fetch.send(req).detach()        // an `Err` reply is reported, never lost
 }
 
-fn notifyAll(reqs: List[Request]) -> Effect[()] {
+fn notifyAll(reqs: List[Request]) -> Effect[()] given Fetch {
   reqs.forEach((r) => Fetch.send(r).detach())
 }
 ```

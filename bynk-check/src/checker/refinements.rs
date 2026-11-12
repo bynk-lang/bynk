@@ -882,7 +882,11 @@ fn check_refinement_annotations(
                 errors.push(CompileError::new(
                     "bynk.types.example_not_literal",
                     arg.span,
-                    format!("`@example` requires a literal `{}` value", base.name()),
+                    format!(
+                        "`@example` requires a literal `{}` value, or a `{}` constant bound to one",
+                        base.name(),
+                        base.name()
+                    ),
                 ));
                 continue;
             }

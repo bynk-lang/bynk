@@ -1,11 +1,21 @@
 context api
 
+const PageKey: String = "page-size"
+
 type Filter = {
+    @name(PageKey) pageSize: Option[Int],
+}
+
+type Paging = {
     @name("page-size") pageSize: Option[Int],
 }
 
 service api from http {
     on GET("/f") (query: Filter) -> Effect[HttpResult[String]] by v: Visitor {
+        Ok("x")
+    }
+
+    on GET("/g") (query: Paging) -> Effect[HttpResult[String]] by v: Visitor {
         Ok("x")
     }
 }

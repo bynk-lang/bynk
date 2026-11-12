@@ -1,0 +1,45 @@
+context shop.consts
+
+consumes bynk { Clock }
+
+// #3445: a constant stands in every annotation argument that takes a literal
+// of its type, and the compiler reads the literal it is bound to.
+
+const SessionTtl: Duration = 5.minutes
+const Retention: Duration = 30.days
+const Fresh: Duration = 1.hours
+const MaxUpload: Int = 8
+const SchemaVersion: Int = 2
+const Blob: String = "application/octet-stream"
+const Immutable: Bool = true
+const CodeExample: String = "ABC"
+const CodeSample: String = CodeExample
+const TagExample: String = "abc"
+
+type Code = String where Matches("[A-Z]{3}") @example(CodeSample)
+type Tag = { code: String where Matches("[a-z]+") @example(TagExample), n: Int }
+
+event Paid @schema(SchemaVersion) = { id: String }
+
+agent Memo {
+  key id: String
+  store c: Cache[String, Int] @ttl(SessionTtl)
+  store l: Log[Int] @retain(Retention)
+  on call set(k: String, v: Int) -> Effect[()] given Clock {
+    let _ <- c.put(k, v)
+    ()
+  }
+}
+
+service files from http {
+  @raw(contentType: Blob)
+  @limit(maxBody: MaxUpload)
+  on POST("/blob") (body: Bytes) -> Effect[HttpResult[String]] by v: Visitor {
+    Ok(body.toBase64())
+  }
+
+  @cache(maxAge: Fresh, scope: public, immutable: Immutable)
+  on GET("/f") () -> Effect[HttpResult[String]] by v: Visitor {
+    Ok("x")
+  }
+}

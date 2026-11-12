@@ -1851,6 +1851,7 @@ mod tests {
                 label: None,
                 value: int_lit(n),
                 span: Span::default(),
+                from_const: None,
             }],
             span: Span::default(),
         }

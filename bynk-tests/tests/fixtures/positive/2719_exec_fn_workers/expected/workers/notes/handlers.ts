@@ -2,13 +2,13 @@
 // context notes
 
 import { Ok, Err, Some, None, type Result, type Option } from "../../__bynk_runtime/result.js";
-import { __bynkWithin } from "../../__bynk_runtime/settle.js";
+import { __bynkWithin, __bynkDetach } from "../../__bynk_runtime/settle.js";
 import type { ValidationError } from "../../__bynk_runtime/errors.js";
 import { type __JsonValue, type __BoundaryError, type __ServiceBinding, __callService, __boundaryError } from "../../__bynk_runtime/boundary.js";
 import { HttpResult } from "../../__bynk_runtime/httpresult.js";
 
 export async function audited(f: (a0: number) => globalThis.Promise<void>, n: number, __exec: { waitUntil(promise: globalThis.Promise<unknown>): void }): globalThis.Promise<number> {
-  __exec.waitUntil(f(n));
+  await __bynkDetach(f(n), __exec, "notes.bynk:25:5");
   return n;
 }
 

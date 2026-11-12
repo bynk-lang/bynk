@@ -1382,7 +1382,7 @@ implicit value `()` (unit) — the parser synthesises a `()` tail (v0.146, ADR
 
 {{#grammar _statement}}
 
-A statement: a `let`, an effectful `let`, an asynchronous send (`~>`), a `do`
+A statement: a `let`, an effectful `let`, a deprecated asynchronous send (`~>`), a `do`
 effect statement, a `:=` store write, a `par` block, or an assertion.
 
 ### §4.8.3 let_stmt
@@ -1453,7 +1453,8 @@ well-formedness: §5.6.
 
 {{#grammar effect_send_stmt}}
 
-`~>` and an effect expression — an **asynchronous send**. Unlike an
+`~>` and an effect expression — an **asynchronous send**, **deprecated** (#3437) in favour of
+`do e.detach()`, an ordinary `do_stmt` (§4.8.6) whose operand is the kernel method `detach`. Unlike an
 `effect_let_stmt` it carries **no binder**: the reply is not awaited and nothing
 is bound. Well-formedness — including the requirement that the reply be
 `Effect[()]` (the error gate): §5.

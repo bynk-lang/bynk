@@ -2,9 +2,16 @@ context api
 
 type Note = { text: String }
 
+const NoteCap: Int = 1_048_576
+
 service api from http {
     @limit(maxBody: 1_048_576)
     on POST("/notes") (body: Note) -> Effect[HttpResult[String]] by v: Visitor {
+        Ok("x")
+    }
+
+    @limit(maxBody: NoteCap)
+    on POST("/drafts") (body: Note) -> Effect[HttpResult[String]] by v: Visitor {
         Ok("x")
     }
 }

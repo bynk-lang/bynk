@@ -1,6 +1,6 @@
 # 0693 — The execution context reaches effectful functions as a hidden trailing parameter, inferred by the compiler
 
-- **Status:** Accepted (v0.475)
+- **Status:** Accepted (v0.475). **Amended by [[0824]]** (decision B: `detach` joins the needs-context fixed point beside `within` and `race`).
 
 **Context.** `~>`, `e.within(d)` and `a.race(b)` hand work to the execution context's
 `waitUntil`, which a service handler reaches as `deps.__exec`. A function has no `deps`:

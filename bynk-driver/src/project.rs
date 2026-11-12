@@ -2636,7 +2636,6 @@ fn run_checks(
     if !tests {
         parsed.retain(|pf| !matches!(pf.kind(), UnitKind::Test | UnitKind::Integration));
     }
-    let parsed = parsed;
     // #3243: `parsed` is final here. Register its files once, so the per-unit
     // attribution in `check_unit_files` does not re-register every file for every unit.
     errors.register_parsed(&parsed);
@@ -2655,16 +2654,15 @@ fn run_checks(
         errors.push_for(Some(Path::new(bynk_check::stability::MANIFEST)), err);
     }
     // -- 4. Build per-unit combined symbol tables. --
-    let unit_tables = project_model::phase_symbol_tables(&groups, &kinds, &parsed, &mut errors);
-
-    // -- 5. Resolve `uses` clauses (target must exist + be a commons). --
-    let unit_uses = project_model::phase_resolve_uses(
+    // -- 4-5. Symbol tables, `uses` resolution, and (#3445) the constants named by
+    //         literal-only annotation arguments, resolved ahead of every reader. --
+    let (unit_tables, unit_uses) = project_model::phase_tables_uses_consts(
         &groups,
         &kinds,
-        &parsed,
-        &unit_tables,
+        &mut parsed,
         &policy,
         &mut errors,
+        &mut refs,
     );
 
     // -- 5b. Resolve `consumes` clauses (target must exist + be a context). --

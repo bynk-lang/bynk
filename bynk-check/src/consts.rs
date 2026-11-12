@@ -526,35 +526,116 @@ pub fn compose_unit_consts(
     .collect()
 }
 
+/// Whether `kind` is a plain literal of the base type `base`: the closed set of
+/// values a constant can be bound to directly (a constant's initialiser has no
+/// operators, calls or interpolation, [`static_error`]).
+pub fn is_literal_of(kind: &ExprKind, base: BaseType) -> bool {
+    let numeric = |k: &ExprKind| match base {
+        BaseType::Int => matches!(k, ExprKind::IntLit { .. }),
+        BaseType::Float => matches!(k, ExprKind::FloatLit { .. }),
+        BaseType::Decimal => matches!(k, ExprKind::DecimalLit { .. }),
+        _ => false,
+    };
+    match kind {
+        ExprKind::StrLit(_) => base == BaseType::String,
+        ExprKind::BoolLit(_) => base == BaseType::Bool,
+        ExprKind::DurationLit { .. } => base == BaseType::Duration,
+        // A negative numeric literal is a static initialiser too ([`static_error`]).
+        ExprKind::UnaryOp(UnaryOp::Neg, inner) => numeric(&inner.kind),
+        k => numeric(k),
+    }
+}
+
+/// #3445: the literal a constant denotes, following constant-to-constant
+/// references. The one resolution loop every literal-only position shares: the
+/// text of a SQL call (#3065, ADR 0762) and an annotation argument (ADR 0678 C,
+/// as amended). Every constant on the chain must be declared exactly `base`
+/// (a refined or opaque constant does not count) and the chain must end at a
+/// literal of it. `next` names the constant a reference points to, in whichever
+/// scope the caller resolves names; `limit` bounds the walk, since a longer
+/// chain is a cycle already reported as `bynk.resolve.const_cycle`.
+pub fn chain_literal<'a>(
+    start: &'a ConstDecl,
+    base: BaseType,
+    limit: usize,
+    mut next: impl FnMut(&str) -> Option<&'a ConstDecl>,
+) -> Option<&'a Expr> {
+    let mut current = start;
+    for _ in 0..=limit {
+        if !matches!(current.ty, TypeRef::Base(b, _) if b == base) {
+            return None;
+        }
+        match &current.init.kind {
+            k if is_literal_of(k, base) => return Some(&current.init),
+            ExprKind::Ident(n) => current = next(n.name.as_str())?,
+            _ => return None,
+        }
+    }
+    None
+}
+
 /// #3065: the string literal a `String` constant alias denotes, following each
 /// hop in the scope of the unit declaring the constant it was written in.
 pub fn alias_literal<'a>(
     unit: impl Fn(&str) -> Option<(&'a UnitTable, &'a [String])>,
     owner: &str,
-    start: &ConstDecl,
+    start: &'a ConstDecl,
 ) -> Option<String> {
     let mut at = owner;
-    let mut current = start;
-    // A chain this long is a cycle, reported as `bynk.resolve.const_cycle`.
-    for _ in 0..64 {
-        if !matches!(current.ty, TypeRef::Base(BaseType::String, _)) {
-            return None;
+    let lit = chain_literal(start, BaseType::String, 64, |name| {
+        let (table, uses) = unit(at)?;
+        let vis = visible_consts(table, uses, |u| unit(u).map(|(t, _)| t));
+        let found = vis.get(name)?;
+        if let Some(o) = found.owner {
+            at = o;
         }
-        match &current.init.kind {
-            ExprKind::StrLit(s) => return Some(s.clone()),
-            ExprKind::Ident(next) => {
-                let (table, uses) = unit(at)?;
-                let vis = visible_consts(table, uses, |u| unit(u).map(|(t, _)| t));
-                let found = vis.get(next.name.as_str())?;
-                if let Some(o) = found.owner {
-                    at = o;
-                }
-                current = found.decl;
-            }
-            _ => return None,
-        }
+        Some(found.decl)
+    })?;
+    match &lit.kind {
+        ExprKind::StrLit(s) => Some(s.clone()),
+        _ => None,
     }
-    None
+}
+
+/// #3445: a constant an annotation argument names, resolved to the literal it
+/// denotes.
+pub struct ResolvedConst<'a> {
+    /// The constant the argument names (the first hop).
+    pub decl: &'a ConstDecl,
+    /// The literal at the end of its chain.
+    pub literal: &'a Expr,
+    /// The used commons declaring `decl`; `None` for the unit's own constant.
+    pub owner: Option<&'a str>,
+}
+
+/// #3445: resolve the bare name `name`, written in unit `at`, to the literal of
+/// type `base` it denotes. Each hop of the chain is read in the scope of the
+/// unit declaring it, as [`alias_literal`] does.
+pub fn resolve_const_literal<'a>(
+    unit: impl Fn(&str) -> Option<(&'a UnitTable, &'a [String])>,
+    at: &'a str,
+    name: &str,
+    base: BaseType,
+) -> Option<ResolvedConst<'a>> {
+    let (table, uses) = unit(at)?;
+    let vis = visible_consts(table, uses, |u| unit(u).map(|(t, _)| t));
+    let first = vis.get(name)?;
+    let (decl, owner) = (first.decl, first.owner);
+    let mut scope = owner.unwrap_or(at);
+    let literal = chain_literal(decl, base, 64, |n| {
+        let (table, uses) = unit(scope)?;
+        let vis = visible_consts(table, uses, |u| unit(u).map(|(t, _)| t));
+        let found = vis.get(n)?;
+        if let Some(o) = found.owner {
+            scope = o;
+        }
+        Some(found.decl)
+    })?;
+    Some(ResolvedConst {
+        decl,
+        literal,
+        owner,
+    })
 }
 
 /// A constant visible in a unit ([`visible_consts`]), with where it is declared.

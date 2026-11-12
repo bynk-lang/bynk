@@ -97,8 +97,17 @@ of a unit may import each other freely: `a.bynk` can declare `const A: Int = 1`
 and `const C: Int = B` while `b.bynk` declares `const B: Int = A`, and either
 file's functions can call the other's.
 
-A constant cannot yet stand in a compile-time position, such as a refinement
-bound (`InRange(1, MaxQty)`) or an annotation argument.
+A constant cannot yet stand in a refinement bound (`InRange(1, MaxQty)`). It
+can stand in an annotation argument that takes a literal of its type, when it is
+declared exactly that type (not a refined one) and bound to a literal or to
+another such constant: `@name(VisitsCookie)`
+([`@name`](/book/reference/types/#field-name)), `@ttl(SessionTtl)`,
+`@retain`, `@cache(maxAge: Fresh, immutable: Pinned)`,
+`@limit(maxBody: MaxUpload)`, `@schema`, `@raw(contentType: Png)` and
+`@example`. The compiler replaces the reference with the literal before it
+reads the annotation, so the value is written once and checked as the literal
+would be. A keyword argument such as `@cache(scope: public)` is a word, not a
+value, and stays as written.
 
 ## What it becomes
 

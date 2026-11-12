@@ -124,7 +124,9 @@ pub fn diagnose(source: &str) -> Vec<Diagnostic> {
     // Resolution and checking are only well-defined for self-contained
     // commons units in single-file mode — contexts go through compile_project
     // which has the cross-file machinery. Match the same restriction here.
-    if let ast::SourceUnit::Commons(c) = unit {
+    if let ast::SourceUnit::Commons(mut c) = unit {
+        // #3445: constants named by literal-only annotation arguments, resolved.
+        bynk_check::annotation_consts::resolve_single_file(&mut c);
         let push = |diagnostics: &mut Vec<Diagnostic>, errs: Vec<CompileError>| {
             diagnostics.extend(errs.into_iter().map(|e| Diagnostic {
                 severity: Severity::for_error(&e),

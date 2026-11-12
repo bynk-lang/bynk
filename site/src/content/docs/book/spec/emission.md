@@ -210,8 +210,8 @@ A module that declares no constant emits exactly as before.
 | `?` | a check-and-early-return: on a `Result`, `if (r.tag === "Err") return r;` (or, when a declared embedding converts the error (v0.154), `return Err(F.V(r.error));`); on an `Option` in an HttpResult handler (v0.153), `if (o.tag === "None") return HttpResult.NotFound;` — then the expression is the `Ok`/`Some` payload |
 | `unreachable(m)` / `todo(m)` (#2620) | a call of the runtime's `never`-returning `__fault("Unreachable" \| "Todo", m, "path:line:col")` ([§7.4](/book/spec/runtime-library/)): it throws, so it is an expression of any type, and inside an async body it rejects the effect |
 | `<-` | `await` |
-| `~>` | `ctx.__exec.waitUntil(<effect>)` — dispatched, not awaited |
-| `e.within(d)` | `__bynkWithin(<e>, <ms>, deps.__exec)` — races the effect against a timer and yields `Ok(value)` or `Err({ after })`; the handler receives `__exec` when its body calls `within`, as it does for `~>` (§7.4.14) |
+| `e.detach()` (and the deprecated `~> e`) | `__bynkDetach(<e>, deps.__exec, "path:line:col"[, "<ErrType>"])` — hands the running effect to `waitUntil` and reports a failure (§7.4.17); the type name is passed only when `e` is an `Effect[Result[_, E]]` |
+| `e.within(d)` | `__bynkWithin(<e>, <ms>, deps.__exec)` — races the effect against a timer and yields `Ok(value)` or `Err({ after })`; the handler receives `__exec` when its body calls `within`, as it does for `detach` (§7.4.14) |
 | `a.race(b)` | `__bynkRace([<a>, <b>], deps.__exec)` — resolves with the first effect to succeed and hands the others to `waitUntil`; a chain `a.race(b).race(c)` is one call over `[a, b, c]`; the handler receives `__exec` when its body calls `race`, as for `within` (§7.4.15) |
 | `par { let a <- e1  let b <- e2 }` | `const [a, b] = await __bynkSettleAll([() => e1, () => e2]);` — the join calls the thunks in source order, issuing each effect before either is awaited; a `do` binding takes a hole in the pattern (§7.4.13) |
 
@@ -280,23 +280,26 @@ identifier as for `<-`, and the names are bound only after every expression is
 lowered. The join is imported only by a module that has a `par` block, so every
 other module emits byte-for-byte as before. The `parTraverse` family imports it too, in a module with no `par` block.
 
-An **asynchronous send** (`~>`, §4.8.5) lowers on the Workers target to
-`deps.__exec.waitUntil(<effect>)`: the effect's `Promise` is handed to the
+A **detached effect** (`e.detach()`, and the deprecated `~> e`, §4.8.5) lowers on the Workers target to
+`__bynkDetach(<effect>, deps.__exec, <site>)`: the effect's `Promise` is handed to the
 execution context's `waitUntil` rather than awaited, so it settles *after* the
 handler returns its response instead of being cancelled with it. The execution
 context is threaded from the entry point (`fetch`/`scheduled`/`queue`'s third
 argument) through `compose(env, ctx)` into the handler's `deps.__exec` — but
-**only for contexts that contain a send**, so a context that never uses `~>`
+**only for contexts that contain a detach**, so a context that never uses `detach`
 emits byte-for-byte as before. This is the *immediate* delivery tier; a
 buffered/at-commit tier is reserved for the events channel and is not yet
-emitted. `waitUntil` only keeps the effect alive past the response: nothing awaits,
-retries or reports it, so the send is best-effort and a failure is never observed by the
-handler (§5.5, *Delivery guarantee*; ADR 0106).
+emitted. `waitUntil` only keeps the effect alive past the response: nothing awaits or retries it, so the
+send is best-effort. A failure is never returned to the handler, but it is reported:
+`__bynkDetach` passes a fault on unchanged as a rejected promise into `waitUntil`, the mechanism
+of `__bynkReportFault`, and logs an `Err` of an `Effect[Result[_, E]]` as one structured
+`console.error` record carrying the site, the error's type name and, for a sum, its variant tag,
+never its payload (§5.5, *Delivery guarantee*; ADR 0106, #3437).
 
 A function, which has no `deps`, receives the execution context as a **hidden trailing
 parameter** (#2719). A function in the needs-context set (§4.8.5, *The execution context
 in functions*) is emitted with a final `__exec` parameter, after any comparator witnesses;
-`~>`, `within` and `race` lower through it (`__exec.waitUntil(…)`), every call to the
+`detach`, `within` and `race` lower through it (`__exec.waitUntil(…)`), every call to the
 function passes the caller's context as the last argument (`deps.__exec` in a handler, its
 own `__exec` in another function, the harness's double in a test `case`), and a function
 named as a value is wrapped in a closure that passes the context in scope. A service handler

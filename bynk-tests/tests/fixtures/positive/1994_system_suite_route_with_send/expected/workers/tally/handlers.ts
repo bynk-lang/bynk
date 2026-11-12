@@ -2,6 +2,7 @@
 // context tally
 
 import { Ok, Err, Some, None, type Result, type Option } from "../../__bynk_runtime/result.js";
+import { __bynkDetach } from "../../__bynk_runtime/settle.js";
 import type { ValidationError } from "../../__bynk_runtime/errors.js";
 import { type __JsonValue, type __BoundaryError, type __ServiceBinding, __callService, __boundaryError } from "../../__bynk_runtime/boundary.js";
 import { HttpResult } from "../../__bynk_runtime/httpresult.js";
@@ -10,7 +11,7 @@ import * as bynk from "../../bynk.js";
 
 export const api = {
   async http_GET(deps: { Logger: bynk.Logger; __exec: { waitUntil(promise: globalThis.Promise<unknown>): void } }): globalThis.Promise<HttpResult<string>> {
-    deps.__exec.waitUntil(deps.Logger.info("hi"));
+    await __bynkDetach(deps.Logger.info("hi"), deps.__exec, "src/tally.bynk:9:6");
     return HttpResult.Ok("hi");
   },
 };

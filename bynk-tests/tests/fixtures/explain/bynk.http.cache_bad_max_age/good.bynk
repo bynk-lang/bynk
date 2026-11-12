@@ -1,8 +1,15 @@
 context api
 
+const Fresh: Duration = 1.hours
+
 service api from http {
     @cache(maxAge: 1.hours)
     on GET("/links") () -> Effect[HttpResult[String]] by v: Visitor {
+        Ok("x")
+    }
+
+    @cache(maxAge: Fresh)
+    on GET("/docs") () -> Effect[HttpResult[String]] by v: Visitor {
         Ok("x")
     }
 }
