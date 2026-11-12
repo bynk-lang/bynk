@@ -575,7 +575,11 @@ impl DeployLock {
                 continue;
             };
             let hash = shape.hash();
-            self.contract_shapes.retain(|e| e.hash != hash);
+            // Already filed: leave it where it is, so a push that changes
+            // nothing leaves the committed lock byte-identical.
+            if self.contract_shapes.iter().any(|e| e.hash == hash) {
+                continue;
+            }
             self.contract_shapes
                 .push(ContractShape { hash, shape: text });
         }
@@ -2238,6 +2242,56 @@ pub(crate) mod tests {
         assert_eq!(lock.live_shape("default", "pay", "charge"), Some(v1));
         let read: DeployLock = toml::from_str(&toml::to_string_pretty(&lock).unwrap()).unwrap();
         assert_eq!(read, lock, "the table survives a write and read");
+    }
+
+    /// #3112: recording what is already filed changes nothing (the lock is
+    /// committed, so a no-op push must not reorder it), and a target whose
+    /// shape was pruned resolves to no shape, so its skew stays unclassified.
+    #[test]
+    fn recording_a_known_shape_changes_nothing_and_a_pruned_one_resolves_to_none() {
+        use bynk_check::contract_compat::{ServiceShape, Shape};
+        let shape = |n: usize| ServiceShape {
+            name: "charge".into(),
+            params: vec![(format!("p{n}"), Shape::Base("Int".into()))],
+            ret: Shape::Base("Bool".into()),
+        };
+        let mut lock = DeployLock {
+            version: 1,
+            ..Default::default()
+        };
+        let push = |lock: &mut DeployLock, s: &ServiceShape| {
+            lock.record_deployed(
+                "default",
+                "pay",
+                Some(BTreeMap::from([("charge".to_string(), s.hash())])),
+            );
+            lock.record_shapes(
+                BTreeMap::from([("charge".to_string(), s.to_text())]),
+                BTreeMap::new(),
+            );
+        };
+        push(&mut lock, &shape(0));
+        push(&mut lock, &shape(1));
+        let before = toml::to_string_pretty(&lock).unwrap();
+        // Re-record the older, now unreferenced shape alongside the live one.
+        lock.record_shapes(
+            BTreeMap::from([
+                ("a".to_string(), shape(0).to_text()),
+                ("b".to_string(), shape(1).to_text()),
+            ]),
+            BTreeMap::new(),
+        );
+        assert_eq!(toml::to_string_pretty(&lock).unwrap(), before);
+        // Enough later pushes prune shape 0: a revert to it classifies nothing.
+        for n in 2..(RECENT_SHAPES + 4) {
+            push(&mut lock, &shape(n));
+        }
+        lock.record_deployed(
+            "default",
+            "pay",
+            Some(BTreeMap::from([("charge".to_string(), shape(0).hash())])),
+        );
+        assert_eq!(lock.live_shape("default", "pay", "charge"), None);
     }
 
     /// #3112: a ledger written with per-Worker shapes still reads, and its
