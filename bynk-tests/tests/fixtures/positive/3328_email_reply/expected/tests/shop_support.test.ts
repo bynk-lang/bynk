@@ -86,7 +86,7 @@ async function test_a_reply_carries_the_content() {
     type SqlStatement = __ns_bynk_cloudflare.SqlStatement;
     type SqlValue = __ns_bynk_cloudflare.SqlValue;
     type WorkerVersion = __ns_bynk_cloudflare.WorkerVersion;
-    const r = await ((__m: any) => support.queue_support_0(__m, { ...deps, identity: { address: __m.from, dmarc: { tag: "DmarcNone" } } }))({ from: "a@b.example", to: "support@shop.example", subject: "order", messageId: "", headers: new globalThis.Map(), text: { tag: "None" }, html: { tag: "None" }, attachments: [], size: 0 });
+    const r = await ((__m: any) => support.queue_support_0(__m, { ...deps, identity: { address: __m.from, dmarc: { tag: "DmarcNone" } } }))({ from: "a@b.example", to: "support@shop.example", subject: "order", messageId: "", headers: new globalThis.Map(), text: { tag: "None" as const }, html: { tag: "None" as const }, attachments: [], size: 0 });
     void (((__d) => {
         switch (__d.tag) {
           case "Reply": {
@@ -156,7 +156,7 @@ async function test_a_reply_is_a_value() {
     type SqlStatement = __ns_bynk_cloudflare.SqlStatement;
     type SqlValue = __ns_bynk_cloudflare.SqlValue;
     type WorkerVersion = __ns_bynk_cloudflare.WorkerVersion;
-    const r = await ((__m: any) => support.queue_support_0(__m, { ...deps, identity: { address: __m.from, dmarc: { tag: "DmarcNone" } } }))({ from: "a@b.example", to: "support@shop.example", subject: "order", messageId: "", headers: new globalThis.Map(), text: { tag: "None" }, html: { tag: "None" }, attachments: [], size: 0 });
+    const r = await ((__m: any) => support.queue_support_0(__m, { ...deps, identity: { address: __m.from, dmarc: { tag: "DmarcNone" } } }))({ from: "a@b.example", to: "support@shop.example", subject: "order", messageId: "", headers: new globalThis.Map(), text: { tag: "None" as const }, html: { tag: "None" as const }, attachments: [], size: 0 });
     if (!(((__c: boolean) => __c)(r.tag === "Reply" && r.message.subject.tag === "None"))) { throw __bynkExpectFailure("tests/support.bynk:12:12", 453, 497, "expect r is Reply(EmailReply { subject: None, .. })"); }
     return { pass: true };
   } catch (e) {

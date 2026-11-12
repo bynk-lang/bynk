@@ -64,11 +64,11 @@ export function isPending<T>(o: Outcome<T>, r: string): boolean {
 }
 
 export function search(q: string): Search {
-  return { query: q, page: { items: ["first"], next: { tag: "None" } }, outcome: { tag: "Pending", reason: "queued" } };
+  return { query: q, page: { items: ["first"], next: { tag: "None" as const } }, outcome: { tag: "Pending" as const, reason: "queued" } };
 }
 
 export function cache(k: string): Cache<number> {
-  return { key: k, warm: { items: [], next: { tag: "None" } }, last: { tag: "Pending", reason: "cold" } };
+  return { key: k, warm: { items: [], next: { tag: "None" as const } }, last: { tag: "Pending" as const, reason: "cold" } };
 }
 
 export function decodedSearch(json: string): Search {
@@ -79,7 +79,7 @@ export function decodedSearch(json: string): Search {
       return s;
     }
     case "Err": {
-      return { query: "failed", page: { items: ["first"], next: { tag: "None" } }, outcome: { tag: "Pending", reason: "queued" } };
+      return { query: "failed", page: { items: ["first"], next: { tag: "None" as const } }, outcome: { tag: "Pending" as const, reason: "queued" } };
     }
   }
   throw new globalThis.Error("non-exhaustive match");
@@ -93,7 +93,7 @@ export function decodedCache(json: string): Cache<number> {
       return c;
     }
     case "Err": {
-      return { key: "failed", warm: { items: [], next: { tag: "None" } }, last: { tag: "Pending", reason: "cold" } };
+      return { key: "failed", warm: { items: [], next: { tag: "None" as const } }, last: { tag: "Pending" as const, reason: "cold" } };
     }
   }
   throw new globalThis.Error("non-exhaustive match");

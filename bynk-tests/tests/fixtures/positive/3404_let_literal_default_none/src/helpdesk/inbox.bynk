@@ -1,0 +1,7 @@
+context helpdesk.inbox
+
+consumes bynk.cloudflare { InboundEmail, EmailVerdict, EmailReply }
+
+fn triage(mail: InboundEmail, verified: Bool) -> EmailVerdict {
+	if verified { Reply(EmailReply { text: Some("Thanks") }) } else { Accept }
+}
