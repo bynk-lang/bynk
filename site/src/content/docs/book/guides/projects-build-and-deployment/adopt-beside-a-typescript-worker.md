@@ -55,6 +55,8 @@ command that sets the same value on the TypeScript Worker:
 printf '%s' '<value>' | npx wrangler secret put BYNK_CALL_TO_SHOP__LEDGER --name billing-svc
 ```
 
+The command names your project's own runner: `pnpm dlx wrangler …` under pnpm, `bunx wrangler …` under bun, `npx wrangler …` otherwise.
+
 Run it (or pass it to whoever operates `billing-svc`). The value is shown only
 this once; `bynk deploy --force` mints a new one.
 
@@ -133,6 +135,8 @@ the same value, and wrangler's dev registry joins the two bindings:
 ```bash
 npx wrangler dev --var BYNK_CALL_TO_SHOP__LEDGER:bynk-local-call-key
 ```
+
+With pnpm use `pnpm dlx wrangler …`; with bun, `bunx wrangler …`.
 
 ## Moving more over
 

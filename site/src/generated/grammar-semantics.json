@@ -938,6 +938,22 @@
       "summary": "A cookie literal outside the `__Host-` prefix sets a `domain`, so every subdomain receives it (warning)."
     },
     {
+      "code": "bynk.http.cookie_field_arity",
+      "summary": "A typed cookie write or deletion (`Record.field.cookie(v)`, `Record.field.expire()`) is given the wrong number of arguments."
+    },
+    {
+      "code": "bynk.http.cookie_field_list",
+      "summary": "A typed cookie write names a `List` field of the cookie record."
+    },
+    {
+      "code": "bynk.http.cookie_field_not_cookie_record",
+      "summary": "A typed cookie write names a record that is not the `cookies` record of an `on http` handler in this unit."
+    },
+    {
+      "code": "bynk.http.cookie_field_unknown",
+      "summary": "A typed cookie write names a field the cookie record does not have."
+    },
+    {
       "code": "bynk.http.cookie_host_prefix",
       "summary": "A `__Host-` cookie literal is not `secure`, sets a `domain`, or uses a `path` other than `/`."
     },

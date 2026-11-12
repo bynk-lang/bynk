@@ -768,6 +768,7 @@ pub fn run(
         }
     };
     let lock_path = project_root.join(LOCK_FILE);
+    let runner = wrangler_runner_in(project_root);
     let mut lock = match read_lock(&lock_path) {
         Ok(lock) => lock,
         Err(e) => {
@@ -936,7 +937,7 @@ pub fn run(
             if !orphaned.is_empty() {
                 eprint!(
                     "{}",
-                    orphaned_caller_skew_refusal(&opts.environment, worker, &orphaned)
+                    orphaned_caller_skew_refusal(&opts.environment, worker, &orphaned, runner)
                 );
             }
             return ExitCode::FAILURE;
@@ -1347,7 +1348,7 @@ pub fn run(
                     {
                         eprint!(
                             "{}",
-                            foreign_hand_off(&opts.environment, worker, caller, value)
+                            foreign_hand_off(&opts.environment, worker, caller, value, runner)
                         );
                     }
                 }
@@ -1403,7 +1404,7 @@ pub fn run(
                         );
                         eprint!(
                             "{}",
-                            foreign_hand_off(&opts.environment, worker, caller, value)
+                            foreign_hand_off(&opts.environment, worker, caller, value, runner)
                         );
                     }
                 }
@@ -1988,6 +1989,7 @@ pub(crate) fn orphaned_caller_skew_refusal(
     environment: &str,
     worker: &str,
     skews: &[CalleeSkew],
+    runner: &str,
 ) -> String {
     let mut out = format!(
         "bynk: `{}` no longer provides the contract a live Worker this project no longer builds was compiled against ({CONTRACT_SKEW}):\n",
@@ -2020,7 +2022,7 @@ pub(crate) fn orphaned_caller_skew_refusal(
         callers
             .iter()
             .map(|c| format!(
-                "`npx wrangler delete --name {}`",
+                "`{runner} wrangler delete --name {}`",
                 deployed_worker_name(environment, c)
             ))
             .collect::<Vec<_>>()
@@ -4920,7 +4922,7 @@ queue = "jobs"
         assert!(built.is_empty(), "{built:?}");
         assert_eq!(orphaned.len(), 1);
         assert_eq!(orphaned[0].caller, "shop-legacy");
-        let refusal = orphaned_caller_skew_refusal("staging", "shop-payment", &orphaned);
+        let refusal = orphaned_caller_skew_refusal("staging", "shop-payment", &orphaned, "npx");
         assert!(refusal.contains(CONTRACT_SKEW), "{refusal}");
         assert!(
             refusal.contains("`shop-legacy-staging` (orphaned) calls shop.payment.authorise"),
@@ -4932,6 +4934,38 @@ queue = "jobs"
                 && refusal.contains("`bynk deploy --env staging`"),
             "{refusal}"
         );
+    }
+
+    #[test]
+    fn the_orphan_refusal_names_the_detected_managers_runner() {
+        use bynk_driver::npm_install::PackageManager::{Bun, Npm, Pnpm, Yarn};
+        for (manager, runner) in [
+            (Npm, "npx"),
+            (Pnpm, "pnpm dlx"),
+            (Bun, "bunx"),
+            (Yarn, "npx"),
+        ] {
+            let orphaned = vec![CalleeSkew {
+                caller: "shop-legacy".to_string(),
+                dependency: "shop.payment".to_string(),
+                service: "authorise".to_string(),
+                expected: "febd15c2757b72e1".to_string(),
+                provided: "da0d725f3a004040".to_string(),
+                compat: None,
+            }];
+            let refusal = orphaned_caller_skew_refusal(
+                "staging",
+                "shop-payment",
+                &orphaned,
+                secrets::wrangler_runner(manager),
+            );
+            assert!(
+                refusal.contains(&format!(
+                    "`{runner} wrangler delete --name shop-legacy-staging`"
+                )),
+                "{refusal}"
+            );
+        }
     }
 
     #[test]
