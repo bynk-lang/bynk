@@ -3,7 +3,7 @@ title: Version compatibility & changelog
 ---
 Bynk is pre-1.0 and developed in small, spec-first increments (see
 [Versioning & roadmap](/book/about/versioning-and-roadmap/)). This book is
-written against **v0.565**.
+written against **v0.566**.
 
 This page is a high-level summary of notable increments, not an exhaustive
 per-commit history. While Bynk is pre-1.0, increments may change behaviour.
@@ -28,6 +28,7 @@ per-commit history. While Bynk is pre-1.0, increments may change behaviour.
 
 | Version | Highlights |
 |---|---|
+| **v0.566.0** | A route guarded by a `SignedCookie` actor verifies the session cookie, refuses a cross-site state-changing request, and hides the credential from the handler (#3386) |
 | **v0.565.2** | The explanation of `bynk.query.sum_needs_numeric` says which of `sum` and `average` take a `Decimal` key |
 | **v0.565.1** | A defaulted `Option`, `Result` or sum field in a let-bound record literal keeps its literal tag type, so the literal is assignable to its record type in generated TypeScript |
 | **v0.565.0** | A `SignedCookie` actor scheme (#3386), declaration and diagnostics only; a route it guards is refused until the verifier lands |
