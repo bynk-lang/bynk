@@ -1188,7 +1188,7 @@ field reads it). `run` reports `MySqlRun { rowCount, insertId }`: the rows affec
 and the `AUTO_INCREMENT` id the statement inserted (`0` when none),
 since MySQL has no `RETURNING`. An id or a count past 2^53 is not an `Int`, so
 `run` answers `Err(MySqlFailed(0, …))` naming it instead of a `0` that would read
-as "inserted none" (inside a transaction, that failure rolls it back).
+as "inserted none" (outside a transaction the statement has still been applied, so do not retry on it blindly; inside one, the failure rolls the transaction back).
 
 **The errors.** Every operation answers a `MySqlError` rather than faulting, keyed
 on MySQL's error number:
