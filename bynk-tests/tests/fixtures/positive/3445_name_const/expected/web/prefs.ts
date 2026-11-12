@@ -9,6 +9,7 @@ export interface Prefs {
   readonly visits: Option<number>;
   readonly theme: Option<string>;
   readonly sid: Option<string>;
+  readonly alias: Option<string>;
 }
 
 export const Prefs = {

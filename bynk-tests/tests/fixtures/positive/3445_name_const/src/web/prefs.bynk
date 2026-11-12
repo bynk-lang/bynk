@@ -12,6 +12,7 @@ type Prefs = {
 	@name(VisitsCookie) visits: Option[Int],
 	@name(ThemeCookie) theme: Option[String],
 	@name(SidCookie) sid: Option[String],
+	@name(AliasCookie) alias: Option[String],
 }
 
 service api from http {

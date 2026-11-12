@@ -6,3 +6,9 @@ import type { ValidationError } from "../__bynk_runtime/errors.js";
 
 var __const_SidCookie: { v: string } | undefined;
 export function SidCookie(): string { return (__const_SidCookie ??= { v: "__Host-sid" }).v; }
+
+var __const_AliasCookie: { v: string } | undefined;
+export function AliasCookie(): string { return (__const_AliasCookie ??= { v: HiddenBase() }).v; }
+
+var __const_HiddenBase: { v: string } | undefined;
+export function HiddenBase(): string { return (__const_HiddenBase ??= { v: "__Host-alias" }).v; }
