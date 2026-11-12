@@ -448,6 +448,8 @@ bynk: minted LEDGER_CALL_KEY for `Ledger`, a foreign caller of `shop.orders`. It
   printf '%s' '<value>' | npx wrangler secret put BYNK_CALL_TO_SHOP__ORDERS --name ledger-svc
 ```
 
+The command names your project's own runner: `pnpm dlx wrangler …` under pnpm, `bunx wrangler …` under bun, `npx wrangler …` otherwise (Yarn classic has none, so it prints `npx`).
+
 The deploy prints the value only this once. It can't read it back later, so if
 you lose it, run `bynk deploy --force` to mint and print a new one; the
 foreign Worker then needs the new value. To share a value you already hold,
