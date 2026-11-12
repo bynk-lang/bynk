@@ -1,11 +1,6 @@
----
-level: patch
-changelog: The toolchain's `tsc`, `tsx` and `wrangler` fallbacks and install hints follow the detected package manager (`pnpm dlx`, `bunx`, `pnpm add -g`, and so on), not `npx` and `npm install -g`; `bynk doctor` names the runner it used
----
+# 0822 — The toolchain's tool fallbacks and install hints follow the detected package manager
 
-## ADR: package-manager-tool-runners
-title: The toolchain's tool fallbacks and install hints follow the detected package manager
-summary: tsc, tsx and wrangler run through the detected tool's runner, and hints give its install commands
+- **Status:** Accepted (v0.570.5)
 
 **Context.** The package manager detection that installs a build's npm packages
 (npm, pnpm, bun or Yarn classic, by a fixed order) left the toolchain's own tools

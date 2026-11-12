@@ -17,6 +17,7 @@ or a row links to no file. Summaries and statuses are curated by hand; the
 
 | # | Decision | Status |
 |---|---|---|
+| [0822](0822-package-manager-tool-runners.md) | **The toolchain's tool fallbacks and install hints follow the detected package manager** (v0.570.5) — tsc, tsx and wrangler run through the detected tool's runner, and hints give its install commands | Accepted (v0.570.5) |
 | [0821](0821-signed-cookie-actor.md) | **A SignedCookie actor scheme: a stateless, signed session cookie Bynk issues and verifies** (v0.570) — The scheme's shape, cookie format, key management, CSRF rule, and what is deferred | Accepted (v0.570) |
 | [0820](0820-automatic-npm-install-with-the-users-package-manager.md) | **Install a build's npm packages automatically, with the user's own package manager** (v0.569.2) — bynk test, dev and deploy install missing npm packages into the generated directory with the detected package manager; `--no-install` restores the preflight stop | Accepted (v0.569.2) |
 | [0819](0819-typescript-7-only.md) | **Bynk verifies against TypeScript 7 only** (v0.567.1) — The TypeScript 5 floor is dropped; every leg, the fallbacks and `bynk doctor` use 7 | Accepted (v0.567.1) |
