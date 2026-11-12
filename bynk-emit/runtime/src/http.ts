@@ -1076,6 +1076,41 @@ export function cookiePairs(header: string | null): [string, string][] {
   return out;
 }
 
+/** #3386: the value of the session cookie `name` on `request`, or `null` when it is absent **or sent more
+ *  than once**: a second cookie of the same name is a sign of cookie tossing from another path or
+ *  subdomain, and the credential is then refused rather than guessed at. */
+export function sessionCookieOf(request: Request, name: string): string | null {
+  let found: string | null = null;
+  for (const [n, v] of cookiePairs(request.headers.get("cookie"))) {
+    if (n !== name) continue;
+    if (found !== null) return null;
+    found = v;
+  }
+  return found;
+}
+
+/** #3386: whether a state-changing request to a cookie-authenticated route is one the browser's user
+ *  meant to make, from fetch metadata. `Sec-Fetch-Site` of `same-origin` (or `none`) is accepted; any
+ *  other request must carry an `Origin` that is exactly one of `allowedOrigins` (the service's
+ *  credentialed `cors` origins), or, when the browser sent no `Sec-Fetch-Site` at all, this request's
+ *  own origin. A request revealing neither header is refused. */
+export function csrfAllowed(request: Request, allowedOrigins: readonly string[]): boolean {
+  const site = request.headers.get("sec-fetch-site");
+  if (site === "same-origin" || site === "none") return true;
+  const origin = request.headers.get("origin");
+  if (origin === null || origin === "null") return false;
+  if (site === null) {
+    let own: string;
+    try {
+      own = new URL(request.url).origin;
+    } catch {
+      return false;
+    }
+    if (origin === own) return true;
+  }
+  return allowedOrigins.includes(origin);
+}
+
 /** #3277 (decisions A, B): decode the request's `Cookie` header into the JSON
  *  object a record's codec reads, field by field, by the typed `query` rules (a
  *  name sent twice fills a `List`, and is otherwise refused; an unknown cookie is
@@ -1083,9 +1118,12 @@ export function cookiePairs(header: string | null): [string, string][] {
 export function cookieObject(
   request: Request,
   fields: readonly QueryField[],
+  hide?: string,
 ): { ok: true; value: JsonValue } | { ok: false; error: BoundaryError } {
   const search = new URLSearchParams();
-  for (const [name, value] of cookiePairs(request.headers.get("cookie"))) search.append(name, value);
+  for (const [name, value] of cookiePairs(request.headers.get("cookie"))) {
+    if (name !== hide) search.append(name, value);
+  }
   return fieldsObject(search, fields, "cookies", false);
 }
 
@@ -1103,9 +1141,10 @@ const REQUEST_COOKIES_HEADER = Symbol("bynk.requestCookiesHeader");
 
 /** #3277: the request's cookies, or — in a test — `"name=value"` pairs
  *  (`RequestCookies.of`), read as a `Cookie` header is. */
-export function requestCookies(source: Request | readonly string[]): RequestCookies {
+export function requestCookies(source: Request | readonly string[], hide?: string): RequestCookies {
   const header = source instanceof Request ? source.headers.get("cookie") : source.join("; ");
-  const pairs = cookiePairs(header);
+  // #3386: a `SignedCookie` actor's credential is consumed at the seam; the handler's view omits it.
+  const pairs = cookiePairs(header).filter(([n]) => n !== hide);
   const view: RequestCookies = {
     get: (name: string) => {
       const hit = pairs.find(([n]) => n === name);

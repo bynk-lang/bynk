@@ -259,3 +259,78 @@ test("the default clock is Date.now", async () => {
   const c = await signSessionCookie(KEYS, "User", "ada", 60);
   assert.equal((await verifySignedCookie(c, KEYS, "User", 60)).tag, "Ok");
 });
+
+// -- the router's cookie and CSRF helpers (http.ts) --------------------------------------------
+import { cookieObject, csrfAllowed, requestCookies, sessionCookieOf } from "../src/http.ts";
+
+const req = (headers: Record<string, string>, url = "https://api.example.com/x", method = "POST") =>
+  new Request(url, { method, headers });
+
+test("sessionCookieOf reads the named cookie, and refuses a missing or repeated one", () => {
+  assert.equal(sessionCookieOf(req({ cookie: "a=1; __Host-session=tok; b=2" }), "__Host-session"), "tok");
+  assert.equal(sessionCookieOf(req({}), "__Host-session"), null);
+  assert.equal(sessionCookieOf(req({ cookie: "a=1" }), "__Host-session"), null);
+  // A second cookie of the name is cookie tossing: refuse rather than pick one.
+  assert.equal(sessionCookieOf(req({ cookie: "__Host-session=a; __Host-session=b" }), "__Host-session"), null);
+  assert.equal(sessionCookieOf(req({ cookie: '__Host-session="quoted"' }), "__Host-session"), "quoted");
+  assert.equal(sessionCookieOf(req({ cookie: "__host-session=x" }), "__Host-session"), null);
+});
+
+test("the credential is hidden from the handler's raw cookie view and typed record", () => {
+  const r = req({ cookie: "theme=dark; __Host-session=tok" });
+  const view = requestCookies(r, "__Host-session");
+  assert.deepEqual(view.names(), ["theme"]);
+  assert.deepEqual(view.get("__Host-session"), { tag: "None" });
+  assert.deepEqual(view.all("__Host-session"), []);
+  assert.deepEqual(requestCookies(r).names(), ["theme", "__Host-session"]);
+  const fields = [{ name: "sid", wire: "__Host-session", kind: "string", list: false, optional: true }] as never;
+  const shown = cookieObject(r, fields);
+  assert.deepEqual(shown.ok && shown.value, { sid: "tok" });
+  const hidden = cookieObject(r, fields, "__Host-session");
+  assert.deepEqual(hidden.ok && hidden.value, {});
+});
+
+const CORS = ["https://app.example.com"];
+test("csrf: a same-origin or user-initiated request passes", () => {
+  assert.equal(csrfAllowed(req({ "sec-fetch-site": "same-origin" }), []), true);
+  assert.equal(csrfAllowed(req({ "sec-fetch-site": "none" }), []), true);
+  // `Origin` is irrelevant once the browser says same-origin.
+  assert.equal(csrfAllowed(req({ "sec-fetch-site": "same-origin", origin: "https://evil.example" }), []), true);
+});
+
+test("csrf: a cross-site or same-site request is refused unless its Origin is a credentialed cors origin", () => {
+  for (const site of ["cross-site", "same-site", "bogus"]) {
+    assert.equal(csrfAllowed(req({ "sec-fetch-site": site }), CORS), false, site);
+    assert.equal(csrfAllowed(req({ "sec-fetch-site": site, origin: "https://evil.example" }), CORS), false, site);
+    assert.equal(csrfAllowed(req({ "sec-fetch-site": site, origin: "https://app.example.com" }), CORS), true, site);
+    assert.equal(csrfAllowed(req({ "sec-fetch-site": site, origin: "https://app.example.com" }), []), false, site);
+  }
+  // The origin must match exactly: no prefix, scheme or port games.
+  for (const o of ["https://app.example.com.evil.example", "http://app.example.com", "https://app.example.com:8443", "https://APP.example.com/"]) {
+    assert.equal(csrfAllowed(req({ "sec-fetch-site": "cross-site", origin: o }), CORS), false, o);
+  }
+  // Same-origin by `Origin` alone does not rescue a request the browser called cross-site.
+  assert.equal(csrfAllowed(req({ "sec-fetch-site": "cross-site", origin: "https://api.example.com" }), []), false);
+});
+
+test("csrf: with no Sec-Fetch-Site the Origin must be this origin or an allowed one", () => {
+  assert.equal(csrfAllowed(req({ origin: "https://api.example.com" }), []), true);
+  assert.equal(csrfAllowed(req({ origin: "https://app.example.com" }), CORS), true);
+  assert.equal(csrfAllowed(req({ origin: "https://evil.example" }), CORS), false);
+  assert.equal(csrfAllowed(req({ origin: "null" }), CORS), false);
+});
+
+test("csrf: a request revealing neither header is refused", () => {
+  assert.equal(csrfAllowed(req({}), CORS), false);
+  assert.equal(csrfAllowed(req({}), []), false);
+});
+
+test("a key that is not a string, or empty, is a fault that names the key", async () => {
+  for (const bad of [undefined, null, 7, "", {}]) {
+    await assert.rejects(verifySignedCookie("a.b.c", { secret: bad }, "User", TTL, NOW), (e: unknown) => {
+      assert.ok(e instanceof SessionKeyFault);
+      assert.match((e as Error).message, /`secret` is not set/);
+      return true;
+    });
+  }
+});

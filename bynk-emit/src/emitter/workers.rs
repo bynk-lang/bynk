@@ -433,6 +433,7 @@ pub fn emit_worker_compose(
             .iter()
             .any(|h| bynk_check::actors::oidc_seam_for(h, &table.actors).is_some())
     });
+    let signed_cookie_imports = signed_cookie_runtime_imports(table);
     // A sum wrapper references `JsonValue` only when it parses a `body`.
     let sum_parses_body = sum_handlers.iter().flatten().any(|m| m.needs_body())
         || table
@@ -458,12 +459,13 @@ pub fn emit_worker_compose(
     runtime_imports.extend(platform_binding_imports(bindings));
     runtime_imports.push("type __ServiceBinding".to_string());
     runtime_imports.extend(email_identity_import(table));
-    if has_bearer || has_sum || has_oidc {
+    if has_bearer || has_sum || has_oidc || !signed_cookie_imports.is_empty() {
         runtime_imports.push("HttpResult".to_string());
     }
     if has_bearer {
         runtime_imports.push("__verifyBearerJwtHs256".to_string());
     }
+    runtime_imports.extend(signed_cookie_imports);
     if has_oidc {
         runtime_imports.push("__verifyOidcJwt".to_string());
     }
@@ -722,6 +724,8 @@ pub fn emit_worker_compose(
                             return_entries
                                 .push(emit_http_oidc_wrapper(sname, h, method, &path, &oidc));
                         }
+                        bynk_model::ActorSeamIr::SignedCookie(seam) => return_entries
+                            .push(signed_cookie_entry(service, sname, h, method, &path, &seam)),
                         bynk_model::ActorSeamIr::Sum(members) => {
                             return_entries.push(emit_http_sum_wrapper(
                                 sname,
@@ -2341,6 +2345,181 @@ fn emit_http_oidc_wrapper(
             call_args,
         ))));
     }
+    TsObjectEntry::Method {
+        name: method_key,
+        is_async: true,
+        generics: Vec::new(),
+        params,
+        return_type: None,
+        doc: None,
+        inline: false,
+        body: stmts,
+    }
+}
+
+/// #3386: the runtime names the compose wrappers of a context's single-actor `SignedCookie`
+/// handlers import: the cookie reader and verifier, and (for a `POST`/`PUT`/`PATCH`/`DELETE`
+/// route, the only ones that carry it) the CSRF check. Empty when the context has none.
+fn signed_cookie_runtime_imports(table: &UnitTable) -> Vec<String> {
+    let methods: Vec<bynk_model::IrHttpMethod> = table
+        .services
+        .values()
+        .flat_map(|s| s.handlers.iter())
+        .filter(|h| bynk_check::actors::signed_cookie_seam_for(h, &table.actors).is_some())
+        .filter_map(|h| match bynk_model::lower_handler_kind_ir(&h.kind) {
+            bynk_model::IrHandlerKind::Http { method, .. } => Some(method),
+            _ => None,
+        })
+        .collect();
+    if methods.is_empty() {
+        return Vec::new();
+    }
+    let mut names = vec![
+        "__verifySignedCookie".to_string(),
+        "__sessionCookieOf".to_string(),
+    ];
+    if methods
+        .iter()
+        .any(|m| !matches!(m, bynk_model::IrHttpMethod::Get))
+    {
+        names.push("__csrfAllowed".to_string());
+    }
+    names
+}
+
+/// #3386: the compose entry for one `SignedCookie` handler. A credentialed `cors` origin is one
+/// the CSRF check trusts.
+fn signed_cookie_entry(
+    service: &ServiceDecl,
+    sname: &str,
+    h: &Handler,
+    method: bynk_model::IrHttpMethod,
+    path: &str,
+    seam: &bynk_check::actors::SignedCookieSeam,
+) -> TsObjectEntry {
+    let origins = service
+        .cors
+        .as_ref()
+        .filter(|c| c.credentials())
+        .map(|c| c.origins())
+        .unwrap_or_default();
+    emit_http_signed_cookie_wrapper(sname, h, method, path, seam, &origins)
+}
+
+/// #3386: the compose wrapper for a single-actor `SignedCookie` HTTP handler. Before the body
+/// runs it (1) refuses a cross-site state-changing request (fetch metadata, then `Origin`;
+/// a `GET` is safe and skips this), (2) reads the session cookie, refusing an absent or
+/// repeated one, (3) verifies it with `verifySignedCookie` (HMAC-SHA-256, `kid`-selected key,
+/// `aud` = this actor, expiry, lifetime within the actor's `ttl`) and (4) mints the identity
+/// from the verified `sub`. Any failure is `Unauthorized` (401), a CSRF failure `Forbidden`
+/// (403), both fail-closed; a bad key is a thrown `SessionKeyFault` (a faulted request), never
+/// a quiet accept. The credential is verified here and never reaches the handler.
+#[allow(clippy::vec_init_then_push)]
+fn emit_http_signed_cookie_wrapper(
+    sname: &str,
+    h: &Handler,
+    method: bynk_model::IrHttpMethod,
+    path: &str,
+    seam: &bynk_check::actors::SignedCookieSeam,
+    csrf_origins: &[String],
+) -> TsObjectEntry {
+    let method_key = http_handler_method_name_ir(method, path);
+    let param_args: Vec<TsExpr> = h
+        .params
+        .iter()
+        .map(|p| ident(wire_ident(&p.name.name)))
+        .collect();
+    let mut params: Vec<TsParam> = vec![TsParam {
+        name: "request".to_string(),
+        ty: Some(TsType::named("globalThis.Request")),
+        optional: false,
+    }];
+    params.extend(h.params.iter().map(|p| TsParam {
+        name: wire_ident(&p.name.name),
+        ty: Some(qualified_ts_type_ref(&p.type_ref)),
+        optional: false,
+    }));
+    let mut stmts: Vec<TsStmt> = Vec::new();
+    if !matches!(method, bynk_model::IrHttpMethod::Get) {
+        let origins: Vec<TsExpr> = csrf_origins
+            .iter()
+            .map(|o| str_lit(crate::emitter::escape_ts_string(o)))
+            .collect();
+        stmts.push(if_(
+            not_expr(call(
+                ident("__csrfAllowed"),
+                vec![ident("request"), TsExpr::array(origins)],
+            )),
+            return_(Some(member(ident("HttpResult"), "Forbidden"))),
+        ));
+    }
+    stmts.push(const_(
+        "__cookie",
+        call(
+            ident("__sessionCookieOf"),
+            vec![
+                ident("request"),
+                str_lit(crate::emitter::escape_ts_string(&seam.cookie)),
+            ],
+        ),
+    ));
+    stmts.push(if_(
+        strict_eq(ident("__cookie"), null_lit()),
+        return_(Some(member(ident("HttpResult"), "Unauthorized"))),
+    ));
+    let previous = match &seam.previous {
+        Some(var) => secret_probe_expr(&crate::emitter::escape_ts_string(var)),
+        None => ident("undefined"),
+    };
+    stmts.push(const_(
+        "__session",
+        await_expr(call(
+            ident("__verifySignedCookie"),
+            vec![
+                ident("__cookie"),
+                TsExpr::object(vec![
+                    (
+                        "secret".to_string(),
+                        secret_probe_expr(&crate::emitter::escape_ts_string(&seam.secret)),
+                    ),
+                    ("previous".to_string(), previous),
+                ]),
+                str_lit(crate::emitter::escape_ts_string(&seam.actor)),
+                num_lit(seam.ttl_secs.to_string()),
+            ],
+        )),
+    ));
+    stmts.push(if_(
+        strict_eq(member(ident("__session"), "tag"), str_lit("Err")),
+        return_(Some(member(ident("HttpResult"), "Unauthorized"))),
+    ));
+    let mut call_args = param_args;
+    if seam.binder.is_some() {
+        // Capture the identity: construct the declared type from the verified `sub`
+        // (fail-closed on a refinement violation) and thread it into deps.
+        stmts.push(const_(
+            "__id",
+            method_call(
+                member(ident("handlers"), seam.identity_type.clone()),
+                "of",
+                vec![member(member(ident("__session"), "value"), "sub")],
+            ),
+        ));
+        stmts.push(if_(
+            strict_eq(member(ident("__id"), "tag"), str_lit("Err")),
+            return_(Some(member(ident("HttpResult"), "Unauthorized"))),
+        ));
+        call_args.push(TsExpr::object_entries(vec![
+            TsObjectEntry::Spread(ident("deps")),
+            TsObjectEntry::Prop("identity".to_string(), member(ident("__id"), "value")),
+        ]));
+    } else {
+        call_args.push(ident("deps"));
+    }
+    stmts.push(return_(Some(call(
+        member_chain(ident("handlers"), &[sname, &method_key]),
+        call_args,
+    ))));
     TsObjectEntry::Method {
         name: method_key,
         is_async: true,

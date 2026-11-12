@@ -34,10 +34,11 @@ export class SessionKeyFault extends Error {
   }
 }
 
-/** The keys a `SignedCookie` actor holds: the signing `secret`, and the optional `previous` being rotated out. */
+/** The keys a `SignedCookie` actor holds: the signing `secret`, and the optional `previous` being rotated out.
+ *  Both are read from the environment, so any value is accepted here: anything but a string is "not set". */
 export interface SessionKeys {
-  readonly secret: string;
-  readonly previous?: string | undefined;
+  readonly secret: unknown;
+  readonly previous?: unknown;
 }
 
 const enc = new TextEncoder();
@@ -69,15 +70,19 @@ export function newSessionKey(): string {
   return toB64Url(crypto.getRandomValues(new Uint8Array(SESSION_KEY_MIN_BYTES)));
 }
 
-function decodeKey(name: string, value: string): Uint8Array {
+/** Raise a key fault, logging its message first: the router's fault log carries only an error's name,
+ *  and the operator needs to know which key is wrong. The message never contains the key. */
+function keyFault(message: string): never {
+  console.error(`bynk: ${message}`);
+  throw new SessionKeyFault(message);
+}
+
+function decodeKey(name: string, value: unknown): Uint8Array {
+  if (typeof value !== "string" || value === "") keyFault(`the session key \`${name}\` is not set`);
   const bytes = fromB64Url(value);
-  if (bytes === null) {
-    throw new SessionKeyFault(`the session key \`${name}\` is not base64url`);
-  }
+  if (bytes === null) keyFault(`the session key \`${name}\` is not base64url`);
   if (bytes.length < SESSION_KEY_MIN_BYTES) {
-    throw new SessionKeyFault(
-      `the session key \`${name}\` is ${bytes.length} bytes; it must be at least ${SESSION_KEY_MIN_BYTES}`,
-    );
+    keyFault(`the session key \`${name}\` is ${bytes.length} bytes; it must be at least ${SESSION_KEY_MIN_BYTES}`);
   }
   return bytes;
 }
@@ -96,11 +101,11 @@ async function keyId(bytes: Uint8Array): Promise<string> {
 async function loadKeys(keys: SessionKeys): Promise<{ current: ImportedKey; previous: ImportedKey | null }> {
   const secretBytes = decodeKey("secret", keys.secret);
   const current = { kid: await keyId(secretBytes), bytes: secretBytes };
-  if (keys.previous === undefined || keys.previous === "") return { current, previous: null };
+  if (keys.previous === undefined || keys.previous === null || keys.previous === "") return { current, previous: null };
   const prevBytes = decodeKey("previous", keys.previous);
   const previous = { kid: await keyId(prevBytes), bytes: prevBytes };
   if (previous.kid === current.kid) {
-    throw new SessionKeyFault("the session keys `secret` and `previous` are the same key");
+    keyFault("the session keys `secret` and `previous` are the same key");
   }
   return { current, previous };
 }

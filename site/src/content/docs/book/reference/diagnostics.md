@@ -356,8 +356,8 @@ There are **840** codes in total.
 | [`bynk.actor.signed_cookie_missing_secret`](/book/reference/actors/#signed-cookies) | A `SignedCookie` actor does not name its signing secret. |  | — |
 | [`bynk.actor.signed_cookie_missing_ttl`](/book/reference/actors/#signed-cookies) | A `SignedCookie` actor does not declare a `ttl`. |  | — |
 | [`bynk.actor.signed_cookie_not_in_sum`](/book/reference/actors/#signed-cookies) | A `SignedCookie` actor appears as a member of a multi-actor sum. |  | — |
-| `bynk.actor.signed_cookie_not_yet_emitted` | A route is guarded by a `SignedCookie` actor, whose verifier is not emitted yet. |  | — |
 | [`bynk.actor.signed_cookie_public_cache`](/book/reference/actors/#signed-cookies) | A `@cache(scope: public)` route is guarded by a `SignedCookie` actor. |  | — |
+| [`bynk.actor.signed_cookie_read_directly`](/book/reference/actors/#signed-cookies) | A typed `cookies` field reads the session cookie that a route's `SignedCookie` actor consumes. |  | — |
 | [`bynk.actor.signed_cookie_secret_shared`](/book/reference/actors/#signed-cookies) | A `SignedCookie` actor's `secret` or `previous` is also used by another actor, or by itself. |  | — |
 | [`bynk.actor.signed_cookie_ttl_long`](/book/reference/actors/#signed-cookies) | A `SignedCookie` `ttl` is longer than 30 days (warning). |  | Warning |
 | [`bynk.actor.signed_cookie_unknown_key`](/book/reference/actors/#signed-cookies) | A `SignedCookie` config has a key outside the closed set. |  | — |

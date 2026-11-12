@@ -429,6 +429,9 @@ pub enum ActorSeamIr {
     CallSum(Vec<bynk_check::actors::CallSumMember>),
     Bearer(bynk_check::actors::BearerSeam),
     Oidc(bynk_check::actors::OidcSeam),
+    /// #3386: a single `SignedCookie` actor: the session cookie is read, verified
+    /// and its `sub` minted into the identity at the edge.
+    SignedCookie(bynk_check::actors::SignedCookieSeam),
     /// A cross-context `on call … by c: Caller` handler's own binder name —
     /// `caller_binder_for`'s return type is already the bare `Option<String>`
     /// the other four resolvers reduce a whole struct down to one field for.
@@ -437,6 +440,18 @@ pub enum ActorSeamIr {
     /// `email()` entry mints the `SenderIdentity` and threads it through
     /// `deps.identity`, as `Caller` threads the calling context's name.
     Sender(String),
+}
+
+impl ActorSeamIr {
+    /// The identity type a Bearer or `SignedCookie` seam mints from the verified `sub`
+    /// and threads into `deps.identity`, when the handler's `by` clause binds it.
+    pub fn captured_identity_type(&self) -> Option<&str> {
+        match self {
+            ActorSeamIr::Bearer(s) if s.binder.is_some() => Some(&s.identity_type),
+            ActorSeamIr::SignedCookie(s) if s.binder.is_some() => Some(&s.identity_type),
+            _ => None,
+        }
+    }
 }
 
 /// P6.24a: an IR-native mirror of [`bynk_syntax::ast::HandlerKind`] — a

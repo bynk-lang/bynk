@@ -1,0 +1,31 @@
+context shop.api
+
+type UserId = String where NonEmpty && MaxLength(64)
+
+type Prefs = { theme: Option[String] }
+
+actor User { auth = SignedCookie(secret = "SESSION_KEY", previous = "SESSION_KEY_PREV", ttl = 12.hours), identity = UserId }
+
+service api from http {
+	cors { origins: ["https://app.example.com"], credentials: true }
+
+	// A safe read: the session cookie is verified, the identity read from the binder.
+	on GET("/me") () -> Effect[HttpResult[String]] by u: User {
+		Ok(u.identity)
+	}
+
+	// The handler's own `cookies` record reads other cookies; the session cookie is not among them.
+	on GET("/theme") (cookies: Prefs) -> Effect[HttpResult[String]] by u: User {
+		Ok(cookies.theme.getOrElse("light"))
+	}
+
+	// A state-changing route: the seam also refuses a cross-site request.
+	on POST("/rename") () -> Effect[HttpResult[()]] by u: User {
+		NoContent
+	}
+
+	// The binder is optional: verify the cookie, capture nothing.
+	on DELETE("/session") () -> Effect[HttpResult[()]] by User {
+		NoContent
+	}
+}
