@@ -5,6 +5,25 @@ suite site.prefs {
 		expect r.cookies().map((c) => c.value) == ["1.50", "true", "42", "7", "hello"]
 	}
 
+	case "a typed cookie carries every Cookie default" {
+		let r <- site.POST("/leaves")
+		expect r.cookies().length() == 5
+		match r.cookies().first() {
+			Some(c) => {
+				expect c.path == "/"
+				expect c.secure
+				expect c.httpOnly
+				expect c.maxAge == None
+				expect c.expires == None
+				expect c.domain == None
+				expect !c.partitioned
+			}
+			None => {
+				expect false
+			}
+		}
+	}
+
 	case "an enum writes its variant's name, and attributes spread in" {
 		let r <- site.POST("/theme/dark")
 		expect r.cookies().map((c) => c.name) == ["theme"]
@@ -20,6 +39,65 @@ suite site.prefs {
 	}
 
 	case "expire is the matching deletion" {
+		let r <- site.POST("/theme/reset")
+		match r.cookies().first() {
+			Some(c) => {
+				expect c.name == "theme"
+				expect c.value == ""
+				expect c.maxAge == Some(0.seconds)
+				expect c.path == "/"
+				expect c.secure
+				expect c.httpOnly
+			}
+			None => {
+				expect false
+			}
+		}
+	}
+}
+
+suite site.prefs as system {
+	case "the router sends a typed cookie with the safe defaults" {
+		let r <- site.POST("/theme/dark")
+		match r.cookies().first() {
+			Some(c) => {
+				expect c.name == "theme"
+				expect c.value == "Dark"
+				expect c.path == "/"
+				expect c.secure
+				expect c.httpOnly
+				expect c.maxAge == Some(365.days)
+			}
+			None => {
+				expect false
+			}
+		}
+	}
+
+	case "a __Host- field is sent Secure with Path=/ and no Domain" {
+		let r <- site.POST("/leaves")
+		expect r.cookies().map((c) => c.name) == ["price", "dark", "__Host-visits", "qty", "note"]
+		match r.cookies().filter((c) => c.name == "__Host-visits").first() {
+			Some(c) => {
+				expect c.value == "42"
+				expect c.secure
+				expect c.path == "/"
+				match c.domain {
+					Some(_) => {
+						expect false
+					}
+					None => {
+						expect true
+					}
+				}
+			}
+			None => {
+				expect false
+			}
+		}
+	}
+
+	case "expire is sent empty and already expired" {
 		let r <- site.POST("/theme/reset")
 		match r.cookies().first() {
 			Some(c) => {

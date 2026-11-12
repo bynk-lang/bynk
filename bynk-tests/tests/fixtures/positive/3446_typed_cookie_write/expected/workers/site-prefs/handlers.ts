@@ -6,6 +6,8 @@ import { __bynkDecimalParseWire, __bynkDecimalToString } from "../../__bynk_runt
 import type { ValidationError } from "../../__bynk_runtime/errors.js";
 import { type __JsonValue, type __BoundaryError, type __ServiceBinding, __callService, __boundaryError } from "../../__bynk_runtime/boundary.js";
 import { HttpResult } from "../../__bynk_runtime/httpresult.js";
+import { __cookieValue } from "../../__bynk_runtime/http.js";
+import { __issueSessionCookie, __expireSessionCookie, __sessionKeysOf } from "../../__bynk_runtime/session.js";
 
 import { Cookie } from "../../bynk.js";
 
@@ -46,16 +48,16 @@ export const Prefs = {
 
 export const site = {
   async http_GET_visit(cookies: Prefs, deps: {}): globalThis.Promise<HttpResult<string>> {
-    return ((__r: any) => ({ ...__r, cookies: [...(__r.cookies ?? []), (({ name: "__Host-visits", value: String(cookies.visits + 1) }))] }))(HttpResult.Ok("visit"));
+    return ((__r: any) => ({ ...__r, cookies: [...(__r.cookies ?? []), (({ name: "__Host-visits", value: __cookieValue("int", cookies.visits + 1), maxAge: { tag: "None" as const }, expires: { tag: "None" as const }, domain: { tag: "None" as const }, path: "/", secure: true, httpOnly: true, sameSite: { tag: "Lax" as const }, partitioned: false }))] }))(HttpResult.Ok("visit"));
   },
   async http_POST_theme_dark(deps: {}): globalThis.Promise<HttpResult<string>> {
-    return ((__r: any) => ({ ...__r, cookies: [...(__r.cookies ?? []), ({ ...({ name: "theme", value: (Theme.Dark).tag }), maxAge: Some(31536000000) })] }))(HttpResult.Ok("dark"));
+    return ((__r: any) => ({ ...__r, cookies: [...(__r.cookies ?? []), ({ ...({ name: "theme", value: __cookieValue("enum", Theme.Dark), maxAge: { tag: "None" as const }, expires: { tag: "None" as const }, domain: { tag: "None" as const }, path: "/", secure: true, httpOnly: true, sameSite: { tag: "Lax" as const }, partitioned: false }), maxAge: Some(31536000000) })] }))(HttpResult.Ok("dark"));
   },
   async http_POST_leaves(deps: {}): globalThis.Promise<HttpResult<void>> {
-    return ((__r: any) => ({ ...__r, cookies: [...(__r.cookies ?? []), (({ name: "note", value: "hello" }))] }))(((__r: any) => ({ ...__r, cookies: [...(__r.cookies ?? []), (({ name: "qty", value: String((7 as Qty)) }))] }))(((__r: any) => ({ ...__r, cookies: [...(__r.cookies ?? []), (({ name: "__Host-visits", value: String(42) }))] }))(((__r: any) => ({ ...__r, cookies: [...(__r.cookies ?? []), (({ name: "dark", value: String(true) }))] }))(((__r: any) => ({ ...__r, cookies: [...(__r.cookies ?? []), (({ name: "price", value: __bynkDecimalToString({ coefficient: 150n, scale: 2 }) }))] }))(HttpResult.NoContent)))));
+    return ((__r: any) => ({ ...__r, cookies: [...(__r.cookies ?? []), (({ name: "note", value: __cookieValue("string", "hello"), maxAge: { tag: "None" as const }, expires: { tag: "None" as const }, domain: { tag: "None" as const }, path: "/", secure: true, httpOnly: true, sameSite: { tag: "Lax" as const }, partitioned: false }))] }))(((__r: any) => ({ ...__r, cookies: [...(__r.cookies ?? []), (({ name: "qty", value: __cookieValue("int", (7 as Qty)), maxAge: { tag: "None" as const }, expires: { tag: "None" as const }, domain: { tag: "None" as const }, path: "/", secure: true, httpOnly: true, sameSite: { tag: "Lax" as const }, partitioned: false }))] }))(((__r: any) => ({ ...__r, cookies: [...(__r.cookies ?? []), (({ name: "__Host-visits", value: __cookieValue("int", 42), maxAge: { tag: "None" as const }, expires: { tag: "None" as const }, domain: { tag: "None" as const }, path: "/", secure: true, httpOnly: true, sameSite: { tag: "Lax" as const }, partitioned: false }))] }))(((__r: any) => ({ ...__r, cookies: [...(__r.cookies ?? []), (({ name: "dark", value: __cookieValue("bool", true), maxAge: { tag: "None" as const }, expires: { tag: "None" as const }, domain: { tag: "None" as const }, path: "/", secure: true, httpOnly: true, sameSite: { tag: "Lax" as const }, partitioned: false }))] }))(((__r: any) => ({ ...__r, cookies: [...(__r.cookies ?? []), (({ name: "price", value: __cookieValue("decimal", __bynkDecimalToString({ coefficient: 150n, scale: 2 })), maxAge: { tag: "None" as const }, expires: { tag: "None" as const }, domain: { tag: "None" as const }, path: "/", secure: true, httpOnly: true, sameSite: { tag: "Lax" as const }, partitioned: false }))] }))(HttpResult.NoContent)))));
   },
   async http_POST_theme_reset(deps: {}): globalThis.Promise<HttpResult<void>> {
-    return ((__r: any) => ({ ...__r, cookies: [...(__r.cookies ?? []), (({ name: "theme", value: "", maxAge: Some(0), expires: Some(0) }))] }))(HttpResult.NoContent);
+    return ((__r: any) => ({ ...__r, cookies: [...(__r.cookies ?? []), (({ name: "theme", value: "", maxAge: Some(0), expires: Some(0), domain: { tag: "None" as const }, path: "/", secure: true, httpOnly: true, sameSite: { tag: "Lax" as const }, partitioned: false }))] }))(HttpResult.NoContent);
   },
 };
 
