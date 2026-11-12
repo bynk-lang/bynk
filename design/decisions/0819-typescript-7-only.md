@@ -1,11 +1,6 @@
----
-level: patch
-changelog: Bynk supports TypeScript 7 only (#3420): the TypeScript 5 floor is dropped, `bynk doctor` warns on a `tsc` below 7, and CI verifies under 7 on every leg
----
+# 0819 — Bynk verifies against TypeScript 7 only
 
-## ADR: typescript-7-only
-title: Bynk verifies against TypeScript 7 only
-summary: The TypeScript 5 floor is dropped; every leg, the fallbacks and `bynk doctor` use 7
+- **Status:** Accepted (v0.567.1)
 
 **Context.** Emitted output was verified under two TypeScript majors (#1672): 5, the floor, on every CI leg, and 7, the current one, in a dedicated job. Both cost something. The tsc 5 legs ran the corpus-wide type-checks and every `bynk test` under the slower JavaScript compiler (about 4x tsc 7 on the behavioural fixtures: 182 s against 45 s on 4 cores, found while fixing the slow tests in #3387 / #3413), and the TypeScript 7 job repeated parts of the same work. Meanwhile the `npx` fallbacks, the devcontainer feature and the runtime package already used 7.
 

@@ -17,6 +17,7 @@ or a row links to no file. Summaries and statuses are curated by hand; the
 
 | # | Decision | Status |
 |---|---|---|
+| [0819](0819-typescript-7-only.md) | **Bynk verifies against TypeScript 7 only** (v0.567.1) — The TypeScript 5 floor is dropped; every leg, the fallbacks and `bynk doctor` use 7 | Accepted (v0.567.1) |
 | [0818](0818-stream-request-body-into-raw-handler.md) | **A `@raw` handler streams its request body as a `Stream[Bytes]` under the route's cap** (v0.562.3) — `body: Stream[Bytes]` on a `@raw` route; a lazy, single-pass, counted body; a mid-stream overrun answers the route's `413` | Accepted (v0.562.3) |
 | [0817](0817-hyperdrive-h5-mysql-instance-kind.md) | **Hyperdrive H5 adds a `MySql` instance kind over mysql2, with its own value and error types and a closed `@tls` set** (v0.562) — `MySql` mirrors `Postgres` (same operations, rows, transactions, deploy path) with `?` placeholders, separate `MySqlValue`/`MySqlError` types, mysql2 with `disableEval`, and `@tls` carried to deploy as the config's `sslmode` | Accepted (v0.562) |
 | [0816](0816-hyperdrive-h4-postgres-test-double-and-sql-check.md) | **Hyperdrive H4 adds an opt-in PGlite `Postgres` test double and a `schema.sql`-gated statement check** (v0.561) — PGlite is adopted as an opt-in double on measurements, stub-only stays the default; a `schema.sql` at the root switches on a syntax warning (sqlparser) and an exact placeholder-count error | Accepted (v0.561) |
