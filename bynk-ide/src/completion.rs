@@ -2182,6 +2182,26 @@ fn builtin_sum_variants(receiver: &str) -> Vec<(String, String)> {
 /// variants, refined/opaque `of`/`unsafe`, or capability operations. Yields `[]`
 /// when the receiver resolves to none of these (e.g. a plain `type X = Int`
 /// alias or a record).
+/// #3386: whether an actor authenticates with a signed session cookie.
+pub fn is_signed_cookie_actor(a: &bynk_syntax::ast::ActorDecl) -> bool {
+    a.auth.as_ref().is_some_and(|s| s.name == "SignedCookie")
+}
+
+/// #3386: the members a `SignedCookie` actor has inside its context, as `(name, signature)`.
+pub fn signed_cookie_members(a: &bynk_syntax::ast::ActorDecl) -> [(&'static str, String); 2] {
+    let identity = a
+        .identity
+        .as_ref()
+        .map_or_else(|| "identity".to_string(), crate::symbols::type_ref_str);
+    [
+        (
+            "issue",
+            format!("issue(identity: {identity}) -> Effect[Cookie]"),
+        ),
+        ("expire", "expire() -> Cookie".to_string()),
+    ]
+}
+
 fn member_candidates(
     receiver: &str,
     doc_text: &str,
@@ -2301,6 +2321,18 @@ fn member_candidates_from(
                             )
                             .with_doc(f.documentation.as_deref()),
                         );
+                    }
+                }
+                // #3386: a `SignedCookie` actor issues and deletes its own session cookie.
+                CommonsItem::Actor(a) if a.name.name == receiver && is_signed_cookie_actor(a) => {
+                    for (label, sig) in signed_cookie_members(a) {
+                        if seen.insert(label.to_string()) {
+                            out.push(Completion::item(
+                                label,
+                                CompletionKind::Member,
+                                Some(format!("{sig} — session cookie of `{receiver}`")),
+                            ));
+                        }
                     }
                 }
                 CommonsItem::Capability(c) if c.name.name == receiver => {
@@ -4069,6 +4101,29 @@ mod tests {
         // emits Id.of/Id.unsafe for every Refined body, refinement or not).
         let doc = "commons m {\n  type Id = Int\n}\n";
         assert!(find(&complete("  Id.", doc, None), "of", CompletionKind::Member).is_some());
+    }
+
+    #[test]
+    fn a_signed_cookie_actor_offers_issue_and_expire() {
+        let doc = "context a.b\n\ntype UserId = String where NonEmpty\n\nactor User { auth = SignedCookie(secret = \"K\", ttl = 1.hours), identity = UserId }\n";
+        let items = complete("    User.", doc, None);
+        let issue = find(&items, "issue", CompletionKind::Member).expect("`issue` offered");
+        assert_eq!(
+            issue.detail.as_deref(),
+            Some("issue(identity: UserId) -> Effect[Cookie] — session cookie of `User`")
+        );
+        assert!(find(&items, "expire", CompletionKind::Member).is_some());
+        // Another scheme has neither.
+        let doc =
+            "context a.b\n\nactor Admin { auth = Bearer(secret = \"K\"), identity = String }\n";
+        assert!(
+            find(
+                &complete("    Admin.", doc, None),
+                "issue",
+                CompletionKind::Member
+            )
+            .is_none()
+        );
     }
 
     #[test]
