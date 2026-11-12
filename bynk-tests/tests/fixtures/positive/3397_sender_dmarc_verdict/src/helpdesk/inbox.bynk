@@ -1,0 +1,13 @@
+context helpdesk.inbox
+
+consumes bynk.cloudflare { InboundEmail, EmailVerdict, EmailReply, DmarcVerdict }
+
+fn triage(mail: InboundEmail, dmarc: DmarcVerdict) -> EmailVerdict {
+	if dmarc == DmarcPass { Reply(EmailReply { text: Some("Thanks") }) } else { Accept }
+}
+
+service support from email("support@shop.example") {
+	on message(mail: InboundEmail) -> Effect[EmailVerdict] by s: Sender {
+		triage(mail, s.identity.dmarc)
+	}
+}

@@ -28,6 +28,8 @@ per-commit history. While Bynk is pre-1.0, increments may change behaviour.
 
 | Version | Highlights |
 |---|---|
+| **v0.564.2** | A typed `Postgres` read (`firstAs[T]`, `select[T]`) called directly in a test case imports its row helper into the test module |
+| **v0.564.1** | A `Sender` identity's `dmarc` is typed as the `DmarcVerdict` union in generated TypeScript, so `s.identity.dmarc` passes to a `DmarcVerdict` parameter |
 | **v0.564.0** | A `@raw` handler's `body` may be a `Stream[Bytes]`, the request body as it arrives, counted against the cap as it is read; a body that crosses the cap answers the route's `413`, and a test case passes it a `Stream[Bytes]` at every tier (#3380, #3180 slice 3) |
 | **v0.563.1** | The diagnostic for `Val[…]` of a generic type is renamed from `bynk.generics.generic_record_at_boundary` to `bynk.val.generic_type` — it never concerned a boundary, and it covers generic sums as well as records; five diagnostic messages no longer quote the version they were written in |
 | **v0.563.0** | Two cookie warnings from the typed-cookies proposal, `bynk.http.cookie_domain_widens` and `bynk.http.cookie_cross_site_without_credentials` |
