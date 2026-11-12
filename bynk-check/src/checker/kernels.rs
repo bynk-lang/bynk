@@ -2031,6 +2031,8 @@ pub(crate) fn check_signed_cookie_call(
             &format!("the `{}.issue` identity", actor.name),
             ctx,
         );
+    } else {
+        let _ = type_of(&args[0], None, ctx);
     }
     if !ctx.effectful {
         ctx.errors.push(CompileError::new(
@@ -2041,6 +2043,20 @@ pub(crate) fn check_signed_cookie_call(
                 actor.name
             ),
         ));
+    }
+    // The signing keys travel in a handler's deps; a provider's or an agent's carry only its
+    // `given` capabilities, so there the call would fault on every request.
+    if !ctx.in_service_handler && !ctx.in_test_body {
+        ctx.errors.push(
+            CompileError::new(
+                "bynk.actor.signed_cookie_issue_outside_handler",
+                span,
+                format!("`{}.issue` can only be called in a service handler", actor.name),
+            )
+            .with_note(
+                "the signing key reaches a handler, not a provider or an agent: issue the cookie in the handler and pass what a provider needs",
+            ),
+        );
     }
     if ctx.caps.capabilities.contains_key("Clock") {
         ctx.caps.given_used.insert("Clock".to_string());

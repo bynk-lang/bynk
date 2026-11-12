@@ -591,24 +591,79 @@ impl ManagedKeys<'_> {
                 .map_err(|e| foreign_binding_refusal(&opts.environment, worker, caller, &e))?;
                 keys.insert((worker.clone(), caller.binding.clone()), decision);
             }
-            for key in &self.resources[worker].session_keys {
-                let supplied = value_from_source(&key.binding, source);
-                let decision = decide_session_key(
-                    supplied,
-                    presence(&key.binding),
-                    opts.force,
-                    &mut mint_session_key,
-                )
-                .map_err(|e| {
-                    format!(
-                        "bynk: the session key `{}` of the `SignedCookie` actor `{}` on `{worker}`: {e}\n",
-                        key.binding, key.actor
-                    )
-                })?;
-                keys.insert((worker.clone(), key.binding.clone()), decision);
+        }
+        self.decide_session_keys(lock, opts, source, &mut keys)?;
+        Ok(keys)
+    }
+
+    /// A `SignedCookie` actor's signing key, by binding. Contexts that list the same binding
+    /// (a login service that issues the cookie and an API that is guarded by it) must hold the
+    /// **same** value, or every cookie one issues fails on the other. So a minted key is minted
+    /// once and set on each; and since Cloudflare never returns a secret's value, a run that would
+    /// leave the contexts with different keys (a sibling already holds one and another is new, or
+    /// a `--context` run reaches only some of them) is refused, asking for the value to be supplied.
+    fn decide_session_keys(
+        &self,
+        lock: &DeployLock,
+        opts: &DeployOptions,
+        source: &SecretSource,
+        keys: &mut BTreeMap<(String, String), ForeignKey>,
+    ) -> Result<(), String> {
+        let mut holders: BTreeMap<&str, Vec<(&String, &str)>> = BTreeMap::new();
+        for (worker, r) in self.resources {
+            for k in &r.session_keys {
+                holders
+                    .entry(k.binding.as_str())
+                    .or_default()
+                    .push((worker, k.actor.as_str()));
             }
         }
-        Ok(keys)
+        for (binding, all) in holders {
+            let in_run: Vec<_> = all
+                .iter()
+                .filter(|(w, _)| self.order.contains(*w))
+                .collect();
+            let supplied = value_from_source(binding, source);
+            let mut minted: Option<String> = None;
+            let mut mint = || match &minted {
+                Some(v) => Ok(v.clone()),
+                None => {
+                    let v = mint_session_key()?;
+                    minted = Some(v.clone());
+                    Ok(v)
+                }
+            };
+            let mut decisions = Vec::new();
+            for (worker, actor) in &in_run {
+                let presence = presence_of(
+                    binding,
+                    self.listed[*worker].as_ref(),
+                    !lock.is_deployed(&opts.environment, worker),
+                );
+                let d = decide_session_key(supplied.clone(), presence, opts.force, &mut mint)
+                    .map_err(|e| {
+                        format!(
+                            "bynk: the session key `{binding}` of the `SignedCookie` actor `{actor}` on `{worker}`: {e}\n"
+                        )
+                    })?;
+                decisions.push(((*worker).clone(), d));
+            }
+            let fresh = decisions
+                .iter()
+                .any(|(_, d)| matches!(d, ForeignKey::Set { minted: true, .. }));
+            let kept = decisions.iter().any(|(_, d)| *d == ForeignKey::Keep);
+            if all.len() > 1 && fresh && (kept || in_run.len() < all.len()) {
+                let names: Vec<&str> = all.iter().map(|(w, _)| w.as_str()).collect();
+                return Err(format!(
+                    "bynk: the session key `{binding}` is shared by {}, but this run would leave them with different values (one already holds a key, or not all of them are in this run) and Cloudflare never returns a secret's value.\n  Supply the same value for every one of them: set `{binding}` in the environment or `--secrets-file` (a base64url value of at least 32 bytes), then deploy again.\n",
+                    names.join(", ")
+                ));
+            }
+            for (worker, d) in decisions {
+                keys.insert((worker, binding.to_string()), d);
+            }
+        }
+        Ok(())
     }
 }
 
@@ -2986,6 +3041,119 @@ pub(crate) mod tests {
     use crate::deploy::config::tests::project;
     use crate::deploy::graph::tests::graph;
     use crate::deploy::ledger::tests::{lock_with_deployed, with_kv, with_queue};
+
+    /// Two contexts that list the same `SignedCookie` key binding: a login service that issues
+    /// the cookie and an API that it guards (#3386).
+    fn shared_session_key() -> BTreeMap<String, Resources> {
+        BTreeMap::from([
+            (
+                "login".to_string(),
+                Resources::default().session_keys(&[("User", "SESSION_KEY")]),
+            ),
+            (
+                "api".to_string(),
+                Resources::default().session_keys(&[("User", "SESSION_KEY")]),
+            ),
+        ])
+    }
+
+    fn decide_sessions(
+        resources: &BTreeMap<String, Resources>,
+        order: &[&str],
+        held: &[(&str, bool)],
+        source: &SecretSource,
+    ) -> Result<BTreeMap<(String, String), ForeignKey>, String> {
+        let order = names(order);
+        let listed: BTreeMap<String, Option<BTreeSet<String>>> = held
+            .iter()
+            .map(|(w, has)| {
+                (
+                    w.to_string(),
+                    Some(if *has {
+                        BTreeSet::from(["SESSION_KEY".to_string()])
+                    } else {
+                        BTreeSet::new()
+                    }),
+                )
+            })
+            .collect();
+        let lock = lock_with_deployed(&[order[0].as_str(), order[order.len() - 1].as_str()]);
+        let opts = DeployOptions {
+            environment: "default".to_string(),
+            ..DeployOptions::default()
+        };
+        ManagedKeys {
+            order: &order,
+            resources,
+            listed: &listed,
+        }
+        .decide(&lock, &opts, source)
+    }
+
+    #[test]
+    fn contexts_sharing_a_session_key_are_set_to_one_minted_value() {
+        let keys = decide_sessions(
+            &shared_session_key(),
+            &["api", "login"],
+            &[("api", false), ("login", false)],
+            &SecretSource::of_values(&[]),
+        )
+        .expect("both are new: one key for both");
+        let value = |w: &str| match &keys[&(w.to_string(), "SESSION_KEY".to_string())] {
+            ForeignKey::Set {
+                value,
+                minted: true,
+            } => value.clone(),
+            other => panic!("expected a minted key, got {other:?}"),
+        };
+        assert_eq!(value("api"), value("login"));
+    }
+
+    #[test]
+    fn a_session_key_one_sibling_holds_and_another_lacks_is_refused() {
+        let err = decide_sessions(
+            &shared_session_key(),
+            &["api", "login"],
+            &[("api", true), ("login", false)],
+            &SecretSource::of_values(&[]),
+        )
+        .expect_err("different keys would break every cookie");
+        assert!(
+            err.contains("SESSION_KEY") && err.contains("api, login"),
+            "{err}"
+        );
+    }
+
+    #[test]
+    fn a_run_reaching_only_one_sharing_context_does_not_mint() {
+        let err = decide_sessions(
+            &shared_session_key(),
+            &["login"],
+            &[("login", false)],
+            &SecretSource::of_values(&[]),
+        )
+        .expect_err("the sibling's key would differ");
+        assert!(err.contains("not all of them are in this run"), "{err}");
+    }
+
+    #[test]
+    fn a_supplied_session_key_is_set_on_every_sharing_context() {
+        let key = "Ynluay10ZXN0LXNlc3Npb24ta2V5LTAxMjM0NTY3ODk";
+        let keys = decide_sessions(
+            &shared_session_key(),
+            &["login"],
+            &[("login", false)],
+            &SecretSource::of_values(&[("SESSION_KEY", key)]),
+        )
+        .expect("a supplied value is the same everywhere");
+        assert_eq!(
+            keys[&("login".to_string(), "SESSION_KEY".to_string())],
+            ForeignKey::Set {
+                value: key.to_string(),
+                minted: false
+            }
+        );
+    }
 
     fn names(v: &[&str]) -> Vec<String> {
         v.iter().map(|s| s.to_string()).collect()

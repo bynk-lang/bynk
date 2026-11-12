@@ -1,0 +1,14 @@
+context shop
+
+consumes bynk { Cookie, Clock }
+
+type UserId = String where NonEmpty
+
+actor User { auth = SignedCookie(secret = "SESSION_KEY", ttl = 12.hours), identity = UserId }
+
+service api from http {
+  on POST("/login") (body: UserId) -> Effect[HttpResult[String]] by v: Visitor given Clock {
+    let c <- User.issue(body)
+    Created("ok").withCookie(c)
+  }
+}
