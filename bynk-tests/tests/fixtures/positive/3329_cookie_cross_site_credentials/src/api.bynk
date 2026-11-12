@@ -1,0 +1,22 @@
+context api
+
+consumes bynk { Cookie, SameSite }
+
+service api from http {
+	cors { origins: ["https://app.example.com"], credentials: true }
+
+	// A cross-site cookie on a credentialed service: no warning.
+	on POST("/login") () -> Effect[HttpResult[String]] by v: Visitor {
+		Created("ok").withCookie(Cookie { name: "sid", value: "a", sameSite: SameSite.Unrestricted })
+	}
+
+	// A `__Host-` cookie carries no `domain`; a `domain: None` is not a widening.
+	on POST("/host") () -> Effect[HttpResult[String]] by v: Visitor {
+		Created("ok").withCookie(Cookie { name: "__Host-sid", value: "a", domain: None })
+	}
+
+	// No prefix and `domain: None`: not a widening either.
+	on POST("/plain") () -> Effect[HttpResult[String]] by v: Visitor {
+		Created("ok").withCookie(Cookie { name: "sid", value: "a", domain: None })
+	}
+}

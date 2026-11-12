@@ -1817,13 +1817,6 @@ pub const EXPLANATIONS: &[Explain] = &[
         anchor: "generic-record-types",
     },
     Explain {
-        code: "bynk.generics.generic_record_at_boundary",
-        blurb: "Despite its name, this is about `Val[T]`, not about a boundary: a generic type can cross one through its codec. `Val` fabricates a value from the declaration of `T`, which is not yet done for each instantiation of a generic type, bare, `Val[Box]`, or applied, `Val[Box[Int]]`. Build the value with a record literal instead.",
-        example: "type Box[T] = { v: T }\n\nlet b = Val[Box[Int]]    // ✗ a generic type cannot be fabricated\n\nlet b = Box { v: 1 }     // ✓ build it",
-        page: "/book/reference/testing",
-        anchor: "val",
-    },
-    Explain {
         code: "bynk.generics.generic_sum_embeds",
         blurb: "`embeds E as V` lets `?` wrap an `E` error in the variant `V`, picking the variant by the error's type. In a generic sum that conversion would have to hold for every instantiation, which is not supported. Drop the `embeds` clause and wrap the error by hand where it is needed, with `.mapErr(Payment)`, or make the sum non-generic.",
         example: "type PayError = enum { Declined }\n\ntype Failure[T] =\n    | Payment(reason: PayError)\n    | Other(value: T)\n    embeds PayError as Payment    // ✗ a generic sum cannot embed\n\ntype Failure[T] =\n    | Payment(reason: PayError)\n    | Other(value: T)             // ✓ no `embeds`; wrap with `.mapErr(Payment)`",
@@ -2195,6 +2188,20 @@ pub const EXPLANATIONS: &[Explain] = &[
         example: "@cache(maxAge: 5.minutes, stale: true)   // ✗ not an argument of `@cache`\non GET(\"/links\") () -> Effect[HttpResult[String]] by v: Visitor { … }\n\n@cache(maxAge: 5.minutes)                // ✓\non GET(\"/links\") () -> Effect[HttpResult[String]] by v: Visitor { … }",
         page: "/book/reference/http",
         anchor: "caching",
+    },
+    Explain {
+        code: "bynk.http.cookie_cross_site_without_credentials",
+        blurb: "A cookie with `SameSite=None` (`SameSite.Unrestricted`) exists to travel on cross-site requests, and a browser attaches cookies to a cross-origin `fetch` only when the request is credentialed and the response carries `Access-Control-Allow-Credentials: true`. A service with no `cors` policy, or one with `credentials: false`, never sends that header, so a cross-origin `fetch` can never send the cookie back. This is a warning, because a `SameSite=None` cookie is still sent on top-level cross-site navigations, cross-site form posts and in embeds (SSO and payment callbacks, widgets), none of which needs CORS. If a page on another origin must send it back with `fetch`, declare `cors { origins: [...], credentials: true }` (the origins must be exact, not `[\"*\"]`), or use `SameSite.Lax` if the cookie need not cross sites at all.",
+        example: "service api from http {\n  on POST(\"/login\") () -> Effect[HttpResult[String]] by v: Visitor {\n    Created(\"ok\").withCookie(Cookie { name: \"sid\", value: \"a\", sameSite: SameSite.Unrestricted })   // ⚠ no `cors { credentials: true }`\n  }\n}\n\nservice api from http {\n  cors { origins: [\"https://app.example.com\"], credentials: true }   // ✓\n  …\n}",
+        page: "/book/reference/http",
+        anchor: "setting-cookies",
+    },
+    Explain {
+        code: "bynk.http.cookie_domain_widens",
+        blurb: "A cookie with no `Domain` attribute belongs to exactly the host that set it. Setting `domain` makes it available to that domain and every subdomain, so a sibling service, or a subdomain an attacker can take over, receives it and can set a cookie of the same name. That is rarely wanted, so it is a warning. Drop `domain`; or, if the cookie is a session cookie, name it `__Host-…`, which makes the compiler refuse a `domain` altogether (`bynk.http.cookie_host_prefix`). Keep `domain` only when subdomains genuinely share the login.",
+        example: "Created(\"ok\").withCookie(Cookie { name: \"sid\", value: \"a\", domain: Some(\"example.com\") })   // ⚠ every subdomain receives it\n\nCreated(\"ok\").withCookie(Cookie { name: \"__Host-sid\", value: \"a\" })                           // ✓ this host only",
+        page: "/book/reference/http",
+        anchor: "setting-cookies",
     },
     Explain {
         code: "bynk.http.cookie_host_prefix",
@@ -6170,6 +6177,19 @@ pub const EXPLANATIONS: &[Explain] = &[
         anchor: "val",
     },
     Explain {
+        code: "bynk.val.generic_type",
+        blurb: "`Val[T]` fabricates a value for a test from the declaration of `T`. \
+                That is not yet done for each instantiation of a generic type, so \
+                `Val` refuses one whether it is written bare, `Val[Box]`, or \
+                applied, `Val[Box[Int]]`. The type itself is fine, and may cross a \
+                boundary through its codec; only fabrication is missing. Build the \
+                value yourself instead: a record literal for a generic record, \
+                one of its variants for a generic sum.",
+        example: "type Box[T] = { v: T }\n\nlet b = Val[Box[Int]]    // ✗ a generic type cannot be fabricated\n\nlet b = Box { v: 1 }     // ✓ build it",
+        page: "/book/reference/testing",
+        anchor: "val",
+    },
+    Explain {
         code: "bynk.val.literal_violates",
         blurb: "A pinned `Val[T](…)` is checked against the refinement of `T` at \
                 compile time, and this literal breaks it, so the test would build \
@@ -7346,11 +7366,6 @@ pub const REGISTRY: &[DiagnosticInfo] = &[
         &["type_decl"],
     ),
     dg(
-        "bynk.generics.generic_record_at_boundary",
-        "A `Val[…]` fabricates a value of a generic type; per-instantiation value fabrication is not yet wired (ADR 0197). Since v0.174 a generic-record instantiation may otherwise cross a boundary through its monomorphised codec.",
-        &[],
-    ),
-    dg(
         "bynk.generics.generic_sum_embeds",
         "A generic sum type carries an `embeds` clause; embedding into a generic sum is not supported (#593).",
         &["type_decl"],
@@ -7407,7 +7422,7 @@ pub const REGISTRY: &[DiagnosticInfo] = &[
     ),
     dg(
         "bynk.generics.uninferable_type_arg",
-        "A generic function's type parameter could not be inferred from the arguments and was not given explicitly (`name[T](…)`); a bare generic function also cannot be passed as a value in v0.20a.",
+        "A generic function's type parameter could not be inferred from the arguments and was not given explicitly (`name[T](…)`); a bare generic function also cannot be passed as a value.",
         &["call"],
     ),
     dg(
@@ -7541,6 +7556,16 @@ pub const REGISTRY: &[DiagnosticInfo] = &[
         "bynk.http.cache_unknown_arg",
         "A `@cache` annotation has an argument outside the closed set (`maxAge`/`scope`/`immutable`).",
     ),
+    warn(dg(
+        "bynk.http.cookie_cross_site_without_credentials",
+        "A service attaches a `SameSite.Unrestricted` cookie but declares no `cors { credentials: true }`, so a cross-origin `fetch` can never send it back (warning).",
+        &["http_handler"],
+    )),
+    warn(dg(
+        "bynk.http.cookie_domain_widens",
+        "A cookie literal outside the `__Host-` prefix sets a `domain`, so every subdomain receives it (warning).",
+        &["http_handler"],
+    )),
     dg(
         "bynk.http.cookie_host_prefix",
         "A `__Host-` cookie literal is not `secure`, sets a `domain`, or uses a `path` other than `/`.",
@@ -10023,6 +10048,11 @@ pub const REGISTRY: &[DiagnosticInfo] = &[
     dg(
         "bynk.val.arity",
         "`Val[T]` was given the wrong number of pin arguments.",
+        &["val_expr"],
+    ),
+    dg(
+        "bynk.val.generic_type",
+        "A `Val[…]` fabricates a value of a generic type; per-instantiation value fabrication is not yet wired (ADR 0197). The type itself may cross a boundary through its monomorphised codec (v0.174). Named `bynk.generics.generic_record_at_boundary` before #3379.",
         &["val_expr"],
     ),
     dg(

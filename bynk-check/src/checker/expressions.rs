@@ -264,7 +264,7 @@ pub(crate) fn check_ident(
                         "bynk.generics.uninferable_type_arg",
                         id.span,
                         format!(
-                            "generic function `{}` cannot be passed as a value in v0.20a — its type parameters cannot be instantiated here",
+                            "generic function `{}` cannot be passed as a value — its type parameters cannot be instantiated here",
                             id.name
                         ),
                     )
@@ -295,7 +295,7 @@ pub(crate) fn check_ident(
                 ),
             )
             .with_note(
-                "a bare function reference is only a value in a function-typed position (v0.20a)",
+                "a bare function reference is only a value in a function-typed position",
             ),
         );
         return None;
@@ -421,19 +421,23 @@ pub(crate) fn check_val(
     // — the resolver does not walk a `Val` type ref, so it never fires its own
     // arity check for the bare form.
     if let Ty::Named { name, .. } = &*tys.get(ty)
-        && ctx
-            .input
-            .types
-            .get(name)
-            .is_some_and(|d| !d.type_params.is_empty())
+        && let Some(decl) = ctx.input.types.get(name)
+        && !decl.type_params.is_empty()
     {
+        // #3379: only a record or a sum may be generic, and each is built its
+        // own way, so the note names the one that applies.
+        let note = if matches!(decl.body, TypeBody::Sum(_)) {
+            "construct the value explicitly with one of its variants instead"
+        } else {
+            "construct the value explicitly with a record literal instead"
+        };
         ctx.errors.push(
             CompileError::new(
-                "bynk.generics.generic_record_at_boundary",
+                "bynk.val.generic_type",
                 span,
-                format!("`Val[{name}[…]]` cannot fabricate a value of a generic type in v0.157"),
+                format!("`Val[{name}[…]]` cannot fabricate a value of a generic type"),
             )
-            .with_note("construct the value explicitly with a record literal instead"),
+            .with_note(note),
         );
         return None;
     }

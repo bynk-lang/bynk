@@ -1,0 +1,7 @@
+suite demo {
+  // #3379: `Val` of a generic sum is refused like a generic record.
+  case "x" {
+    let l = Val[Loaded[Int]]
+    expect true
+  }
+}
