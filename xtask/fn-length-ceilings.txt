@@ -51,7 +51,6 @@ bynk-check/src/checker/calls.rs::check_effect_let_principal = 378
 bynk-syntax/src/parser/declarations.rs::parse_adapter_body = 378
 bynk/src/registry/conformance.rs::publishing = 375
 bynk/src/deploy/provisioning.rs::deploy_one = 371
-bynk-check/src/checker.rs::type_of_block = 370
 bynk-check/src/checker/expressions.rs::check_field_access = 363
 bynk-syntax/src/parser/types.rs::parse_type_atom = 362
 bynk-driver/src/project/tests_emit/test_deps.rs::emit_test_deps = 360

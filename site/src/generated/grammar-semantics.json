@@ -584,6 +584,10 @@
   ],
   "effect_send_stmt": [
     {
+      "code": "bynk.send.deprecated",
+      "summary": "The `~>` send is deprecated in favour of `do e.detach()` (warning; auto-fixable)."
+    },
+    {
       "code": "bynk.send.in_agent_handler",
       "summary": "A `~>` send was used in an agent handler, which has no execution context to keep a fire-and-forget send alive."
     },
