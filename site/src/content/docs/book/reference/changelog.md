@@ -3,7 +3,7 @@ title: Version compatibility & changelog
 ---
 Bynk is pre-1.0 and developed in small, spec-first increments (see
 [Versioning & roadmap](/book/about/versioning-and-roadmap/)). This book is
-written against **v0.576**.
+written against **v0.577**.
 
 This page is a high-level summary of notable increments, not an exhaustive
 per-commit history. While Bynk is pre-1.0, increments may change behaviour.
@@ -28,6 +28,7 @@ per-commit history. While Bynk is pre-1.0, increments may change behaviour.
 
 | Version | Highlights |
 |---|---|
+| **v0.577.0** | A cookie is written from the record that reads it with `Prefs.theme.cookie(Dark)` and `Prefs.theme.expire()`, named by the field's wire name and valued as the decoder reads it |
 | **v0.576.3** | The `wrangler` commands `bynk deploy` prints (`secret put`, `delete`) and the guides name the detected package manager's runner (`pnpm dlx`, `bunx`, `npx`) |
 | **v0.576.2** | `bynk revert` recognises a rollback as Cloudflare reports it (trigger `deployment`), so a second revert no longer goes back to the release just left |
 | **v0.576.1** | `MySql.run` answers `MySqlFailed` for an `insertId` or row count past 2^53, where it read as `0` |
