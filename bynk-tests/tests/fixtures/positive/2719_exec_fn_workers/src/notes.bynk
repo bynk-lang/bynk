@@ -2,7 +2,7 @@ context notes
 
 consumes bynk
 
-// #2719 on the Workers target: a function's `~>` and `within` hand work to the
+// #2719 on the Workers target: a function's `detach` and `within` hand work to the
 // request's `ctx.waitUntil` through the context the handler passes in.
 
 capability Audit {
@@ -22,7 +22,7 @@ provides Prices = FixedPrices {
 }
 
 fn audited(f: (Int) -> Effect[()], n: Int) -> Effect[Int] {
-	~> f(n)
+	do f(n).detach()
 	Effect.pure(n)
 }
 

@@ -35,7 +35,7 @@ export const Dice = {
 };
 
 export async function twice(f: (a0: number) => globalThis.Promise<void>, n: number, __exec: { waitUntil(promise: globalThis.Promise<unknown>): void }): globalThis.Promise<number> {
-  __bynkDetach(f(n), __exec, "src/shapes.bynk:27:2");
+  await __bynkDetach(f(n), __exec, "src/shapes.bynk:27:5");
   const __r0 = await f(n + 1);
   return n;
 }
@@ -69,7 +69,7 @@ export async function tick(n: number, __exec: { waitUntil(promise: globalThis.Pr
 }
 
 export async function guarded(f: (a0: number) => globalThis.Promise<void>, n: number, __exec: { waitUntil(promise: globalThis.Promise<unknown>): void }): globalThis.Promise<number> {
-  __bynkDetach(f(n), __exec, "src/shapes.bynk:70:2");
+  await __bynkDetach(f(n), __exec, "src/shapes.bynk:70:5");
   return n;
 }
 
