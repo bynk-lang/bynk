@@ -2,7 +2,7 @@
 //! `workerd`: the platform behaviour the proposal made a condition of building
 //! (and ADR "stream-request-body-into-raw-handler" records).
 //!
-//! One Worker with three streamed routes, driven by a dependency-free HTTP/1.1
+//! One Worker with streamed routes, driven by a dependency-free HTTP/1.1
 //! client that sends `Transfer-Encoding: chunked` bodies, so no `Content-Length`
 //! is there to fast-reject and the router's counted read is what runs:
 //!
@@ -12,6 +12,9 @@
 //!   the route's `413 PayloadTooLarge`, which a client that is still sending reads
 //!   (a fast sender may see its connection reset instead, which is the platform's
 //!   and is not asserted);
+//! - `/to-r2/…` hands the request stream to `R2.putStream`: a body that fits is stored,
+//!   and one the cap cuts off mid-stream faults the write (nothing stored) and
+//!   answers `413`;
 //! - `/ignore` answers without reading its body, and the Worker serves the next
 //!   request normally;
 //!
@@ -79,6 +82,10 @@ impl Drop for Wranglers {
 
 const SOURCE: &str = r#"context up.smoke
 
+consumes bynk.cloudflare { R2 }
+
+capability Archives = R2
+
 service api from http {
   limits { maxBody: 4_000_000 }
 
@@ -99,6 +106,32 @@ service api from http {
   @raw(contentType: "*/*")
   on PUT("/ignore") (body: Stream[Bytes]) -> Effect[HttpResult[String]] by v: Visitor {
     Ok("ignored")
+  }
+
+  // The request stream goes straight into R2. The declared size is 300 000 and the
+  // route's cap is 100 000, so the counted read cuts the upload off mid-stream and the
+  // write must fault whole: a 413 for the client, and nothing stored.
+  @raw(contentType: "*/*")
+  @limit(maxBody: 100_000)
+  on PUT("/to-r2/overrun/:key") (key: String, body: Stream[Bytes]) -> Effect[HttpResult[String]] by v: Visitor given Archives {
+    let o <- Archives.putStream(key, body, 300_000)
+    Ok("stored \(o.size)")
+  }
+
+  // The same, with a body that fits.
+  @raw(contentType: "*/*")
+  @limit(maxBody: 100_000)
+  on PUT("/to-r2/fits/:key") (key: String, body: Stream[Bytes]) -> Effect[HttpResult[String]] by v: Visitor given Archives {
+    let o <- Archives.putStream(key, body, 50_000)
+    Ok("stored \(o.size)")
+  }
+
+  on GET("/r2-has/:key") (key: String) -> Effect[HttpResult[String]] by v: Visitor given Archives {
+    let found <- Archives.head(key)
+    match found {
+      Some(_) => Ok("yes")
+      None => Ok("no")
+    }
   }
 
   on GET("/ready") () -> Effect[HttpResult[String]] by v: Visitor {
@@ -239,6 +272,11 @@ fn a_streamed_raw_body_is_counted_unread_and_echoed_on_workerd() {
     let proj = tmp.join("proj/up");
     fs::create_dir_all(&proj).unwrap();
     fs::write(proj.join("smoke.bynk"), SOURCE).unwrap();
+    fs::write(
+        tmp.join("proj/bynk.toml"),
+        "[project]\nname = \"stream-request-body\"\nversion = \"0.1.0\"\n\n[unstable]\nallow = [\"bynk.cloudflare.R2\"]\n",
+    )
+    .unwrap();
 
     let out = match bynk_driver::project::compile_project(
         &bynk_testkit::compile_options_single(tmp.join("proj")).target(BuildTarget::Workers),
@@ -360,6 +398,52 @@ fn a_streamed_raw_body_is_counted_unread_and_echoed_on_workerd() {
     assert!(
         request(port, "GET", "/ready", None).is_ok_and(|r| r.status == 200),
         "the Worker serves a request after one that left its body unread\n{}",
+        log()
+    );
+
+    // 4. The request stream goes into `R2.putStream`. A body that fits is stored; one
+    //    cut off mid-stream by the cap faults the write, which stores nothing, and
+    //    the client gets the route's `413`, not a `500`.
+    let fits = chunks_of(50_000, 8 * 1024);
+    let r = request(port, "PUT", "/to-r2/fits/a", Some((&fits, Duration::ZERO)))
+        .unwrap_or_else(|e| panic!("/to-r2/fits: {e}\n{}", log()));
+    assert_eq!(r.status, 200, "/to-r2/fits\n{}", log());
+    assert!(
+        String::from_utf8_lossy(&r.body).contains("stored 50000"),
+        "the object is stored whole: {:?}\n{}",
+        String::from_utf8_lossy(&r.body),
+        log()
+    );
+    let over = chunks_of(300_000, 8 * 1024);
+    let r = request(
+        port,
+        "PUT",
+        "/to-r2/overrun/b",
+        Some((&over, Duration::from_millis(5))),
+    )
+    .unwrap_or_else(|e| panic!("/to-r2/overrun: {e}\n{}", log()));
+    assert_eq!(
+        r.status,
+        413,
+        "an overrun through R2.putStream answers 413, not 500\n{}",
+        log()
+    );
+    let has = |key: &str| {
+        request(port, "GET", &format!("/r2-has/{key}"), None).map(|r| {
+            String::from_utf8_lossy(&r.body)
+                .trim_matches('"')
+                .to_string()
+        })
+    };
+    assert_eq!(
+        has("a").as_deref(),
+        Ok("yes"),
+        "the fitting upload is stored"
+    );
+    assert_eq!(
+        has("b").as_deref(),
+        Ok("no"),
+        "the overrun stored nothing\n{}",
         log()
     );
 
