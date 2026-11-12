@@ -3063,7 +3063,7 @@ pub const EXPLANATIONS: &[Explain] = &[
     },
     Explain {
         code: "bynk.package.unsupported_in_dependency",
-        blurb: "A dependency may not declare an `asset` or an `embed`, because the path would be resolved against the project that consumes it, whose `assets/` or `embeds/` folder is not the package's. Move the file into your own project, and have the package take its content as an argument. The same rule covers an `embed`.",
+        blurb: "A dependency may not declare an `asset` or an `embed`, because the path would be resolved against the project that consumes it, whose `assets/` or `embeds/` folder is not the package's. Move the file into your own project, and have the package take its content as an argument.",
         example: "commons board                           // in the package `acme/lib`\n\nasset style = \"assets/board.css\"        // ✗ a dependency cannot declare one\nfn sheet() -> String { style.url }\n\ncommons board\n\nfn sheet(url: String) -> String { url } // ✓ the project supplies the URL",
         page: "/book/reference/assets",
         anchor: "declaring-an-asset",
