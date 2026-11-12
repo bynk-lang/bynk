@@ -110,7 +110,7 @@ There are **832** codes in total.
 | [`bynk.contract.duplicate_name`](/book/reference/testing/#contracts) | A function declares two contract clauses (`requires`/`ensures`) with the same name. |  | — |
 | [`bynk.contract.impure_predicate`](/book/reference/testing/#contracts) | A contract predicate uses an effectful or test-only construct; a contract clause must be pure. |  | — |
 | [`bynk.contract.not_bool`](/book/reference/testing/#contracts) | A contract predicate does not have type `Bool`. |  | — |
-| `bynk.contract.restated_by_test` | A `case`/`property` merely restates a contract clause already declared at the function; the test is redundant. |  | — |
+| [`bynk.contract.restated_by_test`](/book/reference/testing/#contracts) | A `case`/`property` merely restates a contract clause already declared at the function; the test is redundant. |  | — |
 | [`bynk.contract.result_in_requires`](/book/reference/testing/#contracts) | A precondition (`requires`) references `result`; the return value is only in scope inside an `ensures`. |  | — |
 
 ## Cron
@@ -313,11 +313,11 @@ There are **832** codes in total.
 
 | Code | Summary | Construct | Severity |
 |---|---|---|---|
-| `bynk.observe.impure_with` | A `with` predicate uses an effectful or test-only construct; it must be pure. |  | — |
-| `bynk.observe.not_a_seam` | An observation targets a capability the unit under test does not consume. |  | — |
-| `bynk.observe.trace_outside_test` | `trace(Cap.op)` appears outside a `case` body. |  | — |
+| [`bynk.observe.impure_with`](/book/reference/testing/#observation) | A `with` predicate uses an effectful or test-only construct; it must be pure. |  | — |
+| [`bynk.observe.not_a_seam`](/book/reference/testing/#observation) | An observation targets a capability the unit under test does not consume. |  | — |
+| [`bynk.observe.trace_outside_test`](/book/reference/testing/#observation) | `trace(Cap.op)` appears outside a `case` body. |  | — |
 | [`bynk.observe.unknown_op`](/book/reference/testing/#observation) | An observation names an operation the capability does not declare. |  | — |
-| `bynk.observe.with_not_bool` | A `with` predicate does not have type `Bool`. |  | — |
+| [`bynk.observe.with_not_bool`](/book/reference/testing/#observation) | A `with` predicate does not have type `Bool`. |  | — |
 
 ## Other
 
@@ -407,14 +407,14 @@ There are **832** codes in total.
 | [`bynk.event.unknown_subscription`](/book/guides/events/understand-events/#the-three-pieces) | A `from Events(E)` subscription named `E`, which is not a declared event in this context or any consumed context. |  | — |
 | `bynk.exec.unavailable` | A call to, or reference to, a function that hands work to the execution context (`~>`, `within` or `race`, directly or through the functions it calls) appears where no execution context exists: an agent handler, a WebSocket handler or a provider operation. |  | — |
 | `bynk.fault.todo` | A `todo(message)` placeholder: the code type-checks but faults when it runs. A non-failing warning, so `check --deny-warnings` refuses unfinished code in CI (warning). |  | Warning |
-| `bynk.fixture.binary_content` | A suite's `fixture` names a file that contains a NUL byte, so it is binary, not text. | [`fixture_decl`](/book/reference/grammar/#rule-fixture_decl) | — |
-| `bynk.fixture.duplicate` | A suite declares two `fixture`s of the same name. | [`fixture_decl`](/book/reference/grammar/#rule-fixture_decl) | — |
-| `bynk.fixture.invalid_encoding` | A suite's `fixture` names a file that is not valid UTF-8. | [`fixture_decl`](/book/reference/grammar/#rule-fixture_decl) | — |
+| [`bynk.fixture.binary_content`](/book/reference/fixtures/#what-the-text-is) | A suite's `fixture` names a file that contains a NUL byte, so it is binary, not text. | [`fixture_decl`](/book/reference/grammar/#rule-fixture_decl) | — |
+| [`bynk.fixture.duplicate`](/book/reference/fixtures/#declaring-a-fixture) | A suite declares two `fixture`s of the same name. | [`fixture_decl`](/book/reference/grammar/#rule-fixture_decl) | — |
+| [`bynk.fixture.invalid_encoding`](/book/reference/fixtures/#what-the-text-is) | A suite's `fixture` names a file that is not valid UTF-8. | [`fixture_decl`](/book/reference/grammar/#rule-fixture_decl) | — |
 | [`bynk.fixture.missing_file`](/book/reference/fixtures/#declaring-a-fixture) | A suite's `fixture` names a file that is not in the project's `fixtures/` folder. | [`fixture_decl`](/book/reference/grammar/#rule-fixture_decl) | — |
-| `bynk.fixture.outside_fixtures_dir` | A suite's `fixture` names a file outside the project's `fixtures/` folder. | [`fixture_decl`](/book/reference/grammar/#rule-fixture_decl) | — |
+| [`bynk.fixture.outside_fixtures_dir`](/book/reference/fixtures/#declaring-a-fixture) | A suite's `fixture` names a file outside the project's `fixtures/` folder. | [`fixture_decl`](/book/reference/grammar/#rule-fixture_decl) | — |
 | `bynk.fixture.too_large` | A suite's `fixture` names a file over the 4 MiB limit for one fixture file. | [`fixture_decl`](/book/reference/grammar/#rule-fixture_decl) | — |
 | `bynk.fixture.unreadable_file` | A suite's `fixture` names a listed file that could not be read. | [`fixture_decl`](/book/reference/grammar/#rule-fixture_decl) | — |
-| `bynk.fixture.unsafe_path` | A suite's `fixture` path is empty, absolute or contains a `..` segment. | [`fixture_decl`](/book/reference/grammar/#rule-fixture_decl) | — |
+| [`bynk.fixture.unsafe_path`](/book/reference/fixtures/#declaring-a-fixture) | A suite's `fixture` path is empty, absolute or contains a `..` segment. | [`fixture_decl`](/book/reference/grammar/#rule-fixture_decl) | — |
 | `bynk.fixture.unused` | A suite declares a `fixture` that none of its cases, properties or helpers uses (warning). | [`fixture_decl`](/book/reference/grammar/#rule-fixture_decl) | Warning |
 | `bynk.fmt.comment_loss` | The formatter would drop a comment, so it leaves the file unchanged. |  | — |
 | `bynk.fmt.mixed_comment_syntax` | A file mixes the retired `--` comment or `--|` doc spellings with a line that reads differently under the old and new comment rules (#2203), so the formatter leaves it unchanged. |  | — |
@@ -438,17 +438,17 @@ There are **832** codes in total.
 | [`bynk.generics.uninferable_type_arg`](/book/reference/generics/#the-expected-type-for-every-generic-call) | A generic function's type parameter could not be inferred from the arguments and was not given explicitly (`name[T](…)`); a bare generic function also cannot be passed as a value. | [`call`](/book/reference/grammar/#rule-call) | — |
 | [`bynk.generics.unknown_constraint`](/book/reference/generics/#bounds) | A bound, or a `derives` entry, names something that is not a constraint; the constraints are `Eq`, `Ord`, `Key` and `Codable`. | [`type_param`](/book/reference/grammar/#rule-type_param) | — |
 | [`bynk.generics.unknown_where_param`](/book/reference/generics/#bounds) | A method's `where` clause bounds a name that is not a type parameter of the method or of its receiver type. | [`where_clause`](/book/reference/grammar/#rule-where_clause) | — |
-| `bynk.held.branch_divergence` | Branches of a conditional leave a held value (e.g. `Connection[F]`) in inconsistent ownership states — one consumes or stores it, another leaves it owned (§2.9.5, real-time track slice 2). |  | — |
+| [`bynk.held.branch_divergence`](/book/reference/websocket/#sending-and-broadcasting) | Branches of a conditional leave a held value (e.g. `Connection[F]`) in inconsistent ownership states — one consumes or stores it, another leaves it owned (§2.9.5, real-time track slice 2). |  | — |
 | [`bynk.held.consume_on_borrow`](/book/reference/websocket/#sending-and-broadcasting) | A consuming operation (`close`/`put`/`take`) is called on a *borrowed* held reference — borrows admit only non-consuming operations like `send` (§2.9.3, real-time track slice 2). |  | — |
 | [`bynk.held.leak`](/book/reference/websocket/#service-form) | A held value (`Connection[F]`) is still owned at scope exit — it must be disposed (stored, closed, or transferred) before the handler or function returns (§2.9.1, real-time track slice 2). |  | — |
 | [`bynk.held.query_accessor_on_held_map`](/book/reference/websocket/#sending-and-broadcasting) | A key-aware query accessor (`.entries`/`.keys`/`.values`) is used on a held `Map[K, Connection]` — a held resource is iterated with the broadcast ops (`forEach`/`parTraverse`), not a key query. |  | — |
 | [`bynk.held.unsupported_map_op`](/book/reference/websocket/#sending-and-broadcasting) | A held `Map[K, Connection]` is given an `update`/`upsert` — a held resource cannot be transformed by a `(Connection) -> Connection` function; use `put`/`get`/`remove` (real-time track slice 3b-ii). |  | — |
 | [`bynk.held.unsupported_storage`](/book/reference/types/#connection) | A held value (`Connection[F]`) is stored in a `Set`/`Log`/`Cache` — held values may only live in `Cell[Option[Connection]]` or `Map[K, Connection]` (§2.9.3, real-time track slice 2). |  | — |
 | [`bynk.held.use_after_consume`](/book/reference/websocket/#sending-and-broadcasting) | A held value (`Connection[F]`) is used after a consuming operation (`close`/`put`/`take`) ended its lifetime (§2.9.2, real-time track slice 2). |  | — |
-| `bynk.history.not_an_agent` | A `for all run: History[T]` names a `T` that is not an agent — only an agent has handlers to sequence and reachable states to observe (testing track slice 7, ADR 0155). |  | — |
-| `bynk.history.not_generable` | A `for all run: History[Agent]` targets an agent with a handler parameter whose type cannot be generated (e.g. a `Matches` refinement), so its call-history cannot be driven (testing track slice 7, ADR 0155). |  | — |
-| `bynk.history.outside_property` | `History[Agent]` appears outside a `property`'s `for all` binding — it is a test-only generator, not a value type (testing track slice 7, ADR 0155). |  | — |
-| `bynk.history.restates_invariant` | A history property merely re-checks a guarantee a declared `invariant`/`transition` already enforces on every reached state (testing track slice 7, ADR 0155). |  | — |
+| [`bynk.history.not_an_agent`](/book/reference/testing/#history-properties) | A `for all run: History[T]` names a `T` that is not an agent — only an agent has handlers to sequence and reachable states to observe (testing track slice 7, ADR 0155). |  | — |
+| [`bynk.history.not_generable`](/book/reference/testing/#history-properties) | A `for all run: History[Agent]` targets an agent with a handler parameter whose type cannot be generated (e.g. a `Matches` refinement), so its call-history cannot be driven (testing track slice 7, ADR 0155). |  | — |
+| [`bynk.history.outside_property`](/book/reference/testing/#history-properties) | `History[Agent]` appears outside a `property`'s `for all` binding — it is a test-only generator, not a value type (testing track slice 7, ADR 0155). |  | — |
+| [`bynk.history.restates_invariant`](/book/reference/testing/#history-properties) | A history property merely re-checks a guarantee a declared `invariant`/`transition` already enforces on every reached state (testing track slice 7, ADR 0155). |  | — |
 | [`bynk.index.bad_argument`](/book/reference/agents/#storage-annotations) | An `@indexed` argument is not a `by: <field>` label. |  | — |
 | `bynk.index.missing` | A query filters a map by equality on a field that is not `@indexed` (a perf-hint warning). |  | Warning |
 | [`bynk.index.unkeyable_key`](/book/reference/agents/#storage-annotations) | An `@indexed(by: k)` field is not value-keyable. |  | — |
@@ -490,10 +490,10 @@ There are **832** codes in total.
 | [`bynk.postgres.sql_invalid`](/book/reference/bynk-capabilities/#postgres-sql-checked-for-syntax) | A literal `Postgres` statement does not parse with the Postgres dialect of a pure-Rust SQL parser, or is more than one command, in a project that has a `schema.sql` (warning: the parser is not Postgres' own, so it may refuse valid SQL). |  | Warning |
 | [`bynk.postgres.sql_param_count`](/book/reference/bynk-capabilities/#postgres-sql-checked-for-syntax) | A literal `Postgres` statement uses a different number of parameters (its highest `$n`) than the list literal passed with it holds, in a project that has a `schema.sql`. |  | — |
 | [`bynk.query.join_key_mismatch`](/book/reference/types/#joins-and-grouping) | A `joinOn`/`leftJoin` left and right key function return different types. |  | — |
-| `bynk.query.sum_needs_numeric` | A `sum`/`average` key function does not return a numeric type (`Int`, `Float`, or `Duration`). |  | — |
+| [`bynk.query.sum_needs_numeric`](/book/reference/types/#query) | A `sum`/`average` key function does not return a numeric type (`Int`, `Float`, or `Duration`). |  | — |
 | [`bynk.race.in_agent_handler`](/book/reference/capabilities/#race) | `a.race(b)` was used in an agent handler, which has no execution context to hand the losing effect to. | [`method_call`](/book/reference/grammar/#rule-method_call) | — |
 | [`bynk.race.in_pure_context`](/book/reference/capabilities/#race) | `a.race(b)` was used in a pure (non-effectful) context. | [`method_call`](/book/reference/grammar/#rule-method_call) | — |
-| `bynk.race.outside_handler` | `a.race(b)` was used outside a service handler's body and outside a function (in a provider operation, a WebSocket handler or a test `case` body), where no execution context exists. | [`method_call`](/book/reference/grammar/#rule-method_call) | — |
+| [`bynk.race.outside_handler`](/book/reference/capabilities/#race) | `a.race(b)` was used outside a service handler's body and outside a function (in a provider operation, a WebSocket handler or a test `case` body), where no execution context exists. | [`method_call`](/book/reference/grammar/#rule-method_call) | — |
 | `bynk.registry.account_refused` | `bynk login`, `bynk logout` or a `bynk org` command didn't go through: you aren't signed in or your session expired, the registry has no account API (or is read through a mirror), the sign-in was declined or its code expired, or the registry refused the request (a taken or reserved name, not the owner, an unknown member or token). |  | — |
 | `bynk.registry.bad_archive` | A registry archive is malformed or hostile: not a `bynk-tree-v1` stream, a path that is absolute or climbs out of the package, an out-of-order or repeated file, or past the size limits. |  | — |
 | `bynk.registry.bad_signature` | An index line isn't signed by a key the trusted key's rotation chain reaches, or its signed registry `id` or package `name` isn't the one asked for (a forged or replayed line). |  | — |
@@ -514,11 +514,11 @@ There are **832** codes in total.
 | [`bynk.send.requires_unit`](/book/guides/effects-and-capabilities/synchronous-and-asynchronous-sends/#the-error-gate) | A `~>` send targets an operation whose reply is not `Effect[()]`. | [`effect_send_stmt`](/book/reference/grammar/#rule-effect_send_stmt) | — |
 | [`bynk.send.store_op`](/book/guides/effects-and-capabilities/synchronous-and-asynchronous-sends/#not-in-an-agent-handler) | A `~>` send targets an agent store operation, which is part of the handler's atomic commit and cannot be sent without waiting. | [`effect_send_stmt`](/book/reference/grammar/#rule-effect_send_stmt) | — |
 | [`bynk.store.annotation_kind_mismatch`](/book/reference/agents/#storage-annotations) | A storage annotation is used on a kind it does not apply to (e.g. `@ttl` on a `Map`). |  | — |
-| `bynk.store.annotation_unsupported` | A known storage annotation (`@ttl`/`@retain`/`@indexed`/`@bounded`) is used before the slice that supports it. |  | — |
+| [`bynk.store.annotation_unsupported`](/book/reference/agents/#storage-annotations) | A known storage annotation that nothing acts on yet (`@bounded`) is used; the others (`@ttl`, `@retain`, `@indexed`) are functional. |  | — |
 | [`bynk.store.cache_needs_clock`](/book/reference/agents/#storage-kinds-and-their-operations) | A handler performs a `Cache` operation (TTL expiry reads the clock) without declaring `given Clock`. |  | — |
 | [`bynk.store.cache_ttl_required`](/book/reference/agents/#storage-annotations) | A `Cache` field is missing its required `@ttl(<duration>)` annotation (a keyed store with no expiry is a `Map`). |  | — |
 | [`bynk.store.kind_arity`](/book/reference/agents/#storage-kinds-and-their-operations) | A storage kind was applied to the wrong number of type arguments (e.g. `Cell[A, B]`). |  | — |
-| `bynk.store.kind_unsupported` | A known storage kind (`Queue`) is used before the slice that supports it. |  | — |
+| [`bynk.store.kind_unsupported`](/book/reference/agents/#storage-kinds-and-their-operations) | A known storage kind (`Queue`) is used before the slice that supports it. |  | — |
 | [`bynk.store.log_needs_clock`](/book/reference/agents/#storage-kinds-and-their-operations) | A handler calls `Log.append` (which stamps the current time) without declaring `given Clock`. |  | — |
 | [`bynk.store.unkeyable_key`](/book/reference/agents/#storage-kinds-and-their-operations) | A store `Set` element or `Map`/`Cache` key is not value-keyable — it must be `String`, `Int`, or a refined/opaque type over them (#1680). |  | — |
 | [`bynk.store.unknown_annotation`](/book/reference/agents/#storage-annotations) | A `store` field carries an annotation outside the closed `@indexed`/`@ttl`/`@retain`/`@bounded` set. |  | — |
@@ -526,9 +526,9 @@ There are **832** codes in total.
 | [`bynk.store.unknown_map_accessor`](/book/reference/types/#map-key-accessors) | A `store Map` field access is not one of its query accessors (`entries`/`keys`/`values`). |  | — |
 | [`bynk.store.unknown_op`](/book/reference/agents/#storage-kinds-and-their-operations) | A method called on a `store` field (`Map`, `Cache`, `Set`, `Cell` or `Log`) is not one of that kind's storage operations. |  | — |
 | [`bynk.stub.after_type`](/book/reference/testing/#stub-latency) | A test `stub … returns <value> after <d>` latency is not a `Duration`. |  | — |
-| `bynk.stub.at_system` | A test `stub` is in a `system`-tier case, or at the scope of a `suite … as system` (or a suite whose cases run `as system`); each context runs as the Worker it deploys as, which builds its own capability providers, so there is no seam to override. | [`stub_clause`](/book/reference/grammar/#rule-stub_clause) | — |
+| [`bynk.stub.at_system`](/book/reference/testing/#stub) | A test `stub` is in a `system`-tier case, or at the scope of a `suite … as system` (or a suite whose cases run `as system`); each context runs as the Worker it deploys as, which builds its own capability providers, so there is no seam to override. | [`stub_clause`](/book/reference/grammar/#rule-stub_clause) | — |
 | [`bynk.stub.bad_sequence`](/book/reference/testing/#stub) | A `stub … returns each […]` sequence is malformed (e.g. empty). |  | — |
-| `bynk.stub.generic_op` | A test `stub` targets a capability operation that declares its own type parameter — not supported at v1. |  | — |
+| [`bynk.stub.generic_op`](/book/reference/capabilities/#generic-operations) | A test `stub` targets a capability operation that declares its own type parameter — not supported at v1. |  | — |
 | [`bynk.stub.not_a_seam`](/book/reference/testing/#stub) | A test `stub` overrides a capability the unit under test does not consume. |  | — |
 | [`bynk.stub.rhs_type`](/book/reference/testing/#stub) | A test `stub … returns <value>` right-hand side does not match the operation's return type. |  | — |
 | [`bynk.stub.unknown_op`](/book/reference/testing/#stub) | A test `stub` names an operation the capability does not declare. |  | — |
@@ -585,9 +585,9 @@ There are **832** codes in total.
 | `bynk.test.wrong_issuer_needs_oidc_route` | A case drives `by WrongIssuer` at an address that is not an http route with an `Oidc` actor; it sends a correctly signed token whose `iss` is not the actor's, so only an `Oidc` seam can refuse it. | [`case`](/book/reference/grammar/#rule-case) | — |
 | `bynk.test.ws_lifecycle_by` | A case's `svc.message(tc, frame)` or `svc.close(tc)` on a `from websocket` service carries a `by` clause; the connection's principal is given once, at `open`, and carried from there. | [`case`](/book/reference/grammar/#rule-case) | — |
 | `bynk.test.ws_needs_in_process` | A `system`-tier case drives a `from websocket` service by address (`svc.open(tc, …)`, `svc.message(tc, frame)`, `svc.close(tc)`); a deployed WebSocket is a real upgrade through the Worker and a Durable Object, which a `system` case does not drive, so the case runs at `unit` or `integration`. | [`case`](/book/reference/grammar/#rule-case) | — |
-| `bynk.tier.cross_context_needs_system` | A `unit` or `integration` case, or a `property`, reaches another context's service, directly or through a target service or agent handler that calls one; below `system` no other context is stood up to call, so the flow belongs in a `suite … as system`. | [`case`](/book/reference/grammar/#rule-case) | — |
-| `bynk.tier.mixed_system_suite` | A suite mixes `system` cases with `unit` or `integration` ones; a `system` case runs against deployed Workers and addresses services by context path, so it needs a `suite … as system` of its own. | [`case`](/book/reference/grammar/#rule-case) | — |
-| `bynk.tier.system_needs_wire` | An `as system` test stands up fewer than two contexts; the system tier wires across contexts. |  | — |
+| [`bynk.tier.cross_context_needs_system`](/book/reference/testing/#tiers-the-as-tier-clause) | A `unit` or `integration` case, or a `property`, reaches another context's service, directly or through a target service or agent handler that calls one; below `system` no other context is stood up to call, so the flow belongs in a `suite … as system`. | [`case`](/book/reference/grammar/#rule-case) | — |
+| [`bynk.tier.mixed_system_suite`](/book/reference/testing/#tiers-the-as-tier-clause) | A suite mixes `system` cases with `unit` or `integration` ones; a `system` case runs against deployed Workers and addresses services by context path, so it needs a `suite … as system` of its own. | [`case`](/book/reference/grammar/#rule-case) | — |
+| [`bynk.tier.system_needs_wire`](/book/reference/testing/#tiers-the-as-tier-clause) | An `as system` suite whose target has no serialisation edge: it consumes no other context and exposes no `http`, `queue` or `email` service, so there is no wire for a `system` case to cross. |  | — |
 | [`bynk.visibility.private_in_public`](/book/guides/program-structure/design-a-public-surface/#keep-private-types-out-of-public-signatures) | A public declaration's signature names a `private` type of its own unit, which an importer could neither name nor build. | [`visibility_modifier`](/book/reference/grammar/#rule-visibility_modifier) | — |
 | [`bynk.visibility.private_item`](/book/guides/program-structure/design-a-public-surface/) | A reference from another unit names a `private` declaration, which is visible only within its own unit and that unit's suites. | [`visibility_modifier`](/book/reference/grammar/#rule-visibility_modifier) | — |
 | `bynk.visibility.private_messages` | A `messages` block in a commons is `private`. A bundle whose `@reference` block is private is never negotiated by a context that uses the commons, and `private` on another block of a bundle whose reference is public has no effect (warning). | [`visibility_modifier`](/book/reference/grammar/#rule-visibility_modifier) | Warning |
@@ -596,15 +596,15 @@ There are **832** codes in total.
 | `bynk.wasm.strip_failed` | The in-browser compiler could not strip the emitted TypeScript to JavaScript. |  | — |
 | [`bynk.within.in_agent_handler`](/book/reference/capabilities/#within) | `e.within(d)` was used in an agent handler, which has no execution context to hand the abandoned effect to. | [`method_call`](/book/reference/grammar/#rule-method_call) | — |
 | [`bynk.within.in_pure_context`](/book/reference/capabilities/#within) | `e.within(d)` was used in a pure (non-effectful) context. | [`method_call`](/book/reference/grammar/#rule-method_call) | — |
-| `bynk.within.outside_handler` | `e.within(d)` was used outside a service handler's body and outside a function (in a provider operation, a WebSocket handler or a test `case` body), where no execution context exists. | [`method_call`](/book/reference/grammar/#rule-method_call) | — |
+| [`bynk.within.outside_handler`](/book/reference/capabilities/#within) | `e.within(d)` was used outside a service handler's body and outside a function (in a provider operation, a WebSocket handler or a test `case` body), where no execution context exists. | [`method_call`](/book/reference/grammar/#rule-method_call) | — |
 | [`bynk.within.timed_out_not_in_scope`](/book/reference/capabilities/#within) | `e.within(d)` yields `Result[_, TimedOut]`, but the unit does not consume `bynk`, so `TimedOut` is not in scope. | [`method_call`](/book/reference/grammar/#rule-method_call) | — |
 | [`bynk.ws.lifecycle_by_mismatch`](/book/reference/websocket/#service-form) | A WebSocket `on message`/`on close` handler's `by` clause does not name the same actor(s) as `on open`'s — the connection's principal is verified once, at `on open`, and carried for its life, so the lifecycle handlers must be the same single actor or the same actor-sum members (binder names may differ). |  | — |
 | [`bynk.ws.message_frame_param`](/book/reference/websocket/#service-form) | A WebSocket `on message` handler does not have exactly one parameter of the service's inbound (`in:`) frame type — the decoded frame (real-time track slice 3b-iii). |  | — |
-| `bynk.ws.open_given_unsupported` | A WebSocket `on open` handler declares `given` capabilities — unsupported at v1, since on Workers the handler runs inside the connection-hosting Durable Object, which has no composition root to supply them (real-time track slice 3b). |  | — |
+| [`bynk.ws.open_given_unsupported`](/book/reference/websocket/#service-form) | A WebSocket `on open` handler declares `given` capabilities — unsupported at v1, since on Workers the handler runs inside the connection-hosting Durable Object, which has no composition root to supply them (real-time track slice 3b). |  | — |
 | `bynk.ws.open_transfer_cross_file` | On the Workers target, a WebSocket `on open` handler transfers its `connection` to an agent declared in a different file of the same context — the open is hosted in the agent's Durable Object, which is emitted from the agent's own file, so the upgrade would never be handled; the service and the agent must share a file. |  | — |
 | `bynk.ws.open_transfer_key` | On the Workers target, the key of a WebSocket `on open` handler's connection transfer is not a route parameter, a constant of the context or of a commons it uses, or a literal — the upgrade is routed to the hosting Durable Object before the body runs, so the edge must be able to evaluate the key on its own. |  | — |
 | [`bynk.ws.open_transfer_shape`](/book/reference/websocket/#service-form) | A WebSocket `on open` handler does not transfer its `connection` into exactly one agent, so the Workers upgrade has no single Durable Object to route to (real-time track slice 3b). |  | — |
-| `bynk.ws.route_param_mismatch` | A WebSocket `on message`/`on close` route parameter does not match the `on open` parameter at the same position — route values are recovered positionally from the connection, so they must be a type-compatible prefix of the `on open` parameters (real-time track slice 3b-iii). |  | — |
+| [`bynk.ws.route_param_mismatch`](/book/reference/websocket/#service-form) | A WebSocket `on message`/`on close` route parameter does not match the `on open` parameter at the same position — route values are recovered positionally from the connection, so they must be a type-compatible prefix of the `on open` parameters (real-time track slice 3b-iii). |  | — |
 
 ## Parser
 
@@ -716,9 +716,9 @@ There are **832** codes in total.
 | [`bynk.provider.agent_call_undeclared_capability`](/book/guides/effects-and-capabilities/compose-a-provider/#the-rules) | A provider calls an agent handler that needs a capability the provider's `given` does not list. | [`provider_decl`](/book/reference/grammar/#rule-provider_decl) | — |
 | [`bynk.provider.dependency_cycle`](/book/guides/effects-and-capabilities/compose-a-provider/#the-rules) | Providers form a capability dependency cycle through `given`. | [`provider_decl`](/book/reference/grammar/#rule-provider_decl) | — |
 | [`bynk.provider.extra_operation`](/book/reference/capabilities/#providing-a-capability) | A `provides` block implements an operation not in the capability. | [`provider_decl`](/book/reference/grammar/#rule-provider_decl) | — |
-| `bynk.provider.generic_op_requires_external` | A Bynk-bodied `provides` implements a capability operation that declares its own type parameter — only an external (bodiless) provider can. | [`provider_decl`](/book/reference/grammar/#rule-provider_decl) | — |
+| [`bynk.provider.generic_op_requires_external`](/book/reference/capabilities/#generic-operations) | A Bynk-bodied `provides` implements a capability operation that declares its own type parameter — only an external (bodiless) provider can. | [`provider_decl`](/book/reference/grammar/#rule-provider_decl) | — |
 | [`bynk.provider.missing_operation`](/book/reference/capabilities/#providing-a-capability) | A `provides` block is missing a capability operation. | [`provider_decl`](/book/reference/grammar/#rule-provider_decl) | — |
-| `bynk.provider.outside_context` | `provides` was declared outside a context. | [`provider_decl`](/book/reference/grammar/#rule-provider_decl) | — |
+| [`bynk.provider.outside_context`](/book/reference/capabilities/#providing-a-capability) | `provides` was declared outside a context. | [`provider_decl`](/book/reference/grammar/#rule-provider_decl) | — |
 | [`bynk.provider.signature_mismatch`](/book/reference/capabilities/#providing-a-capability) | A `provides` operation's signature does not match the capability. | [`provider_decl`](/book/reference/grammar/#rule-provider_decl) | — |
 | [`bynk.provider.unknown_capability`](/book/reference/capabilities/#providing-a-capability) | `provides` names a capability that does not exist. | [`provider_decl`](/book/reference/grammar/#rule-provider_decl) | — |
 
@@ -728,7 +728,7 @@ There are **832** codes in total.
 |---|---|---|---|
 | [`bynk.queue.bad_params`](/book/reference/queue/#handler-form) | An `on message` handler does not take exactly one `message` parameter. | [`queue_handler`](/book/reference/grammar/#rule-queue_handler) | — |
 | [`bynk.queue.duplicate_consumer`](/book/reference/queue/#handler-form) | Two `on message` handlers consume the same queue. | [`queue_handler`](/book/reference/grammar/#rule-queue_handler) | — |
-| `bynk.queue.invalid_name` | A `from queue("…")` binding has an empty queue name, or one Cloudflare refuses. | [`queue_handler`](/book/reference/grammar/#rule-queue_handler) | — |
+| [`bynk.queue.invalid_name`](/book/reference/queue/#handler-form) | A `from queue("…")` binding has an empty queue name, or one Cloudflare refuses. | [`queue_handler`](/book/reference/grammar/#rule-queue_handler) | — |
 | [`bynk.queue.return_not_queue_result`](/book/reference/queue/#handler-form) | An `on message` handler does not return `Effect[QueueResult]`. | [`handler`](/book/reference/grammar/#rule-handler) | — |
 
 ## Record spread
@@ -803,11 +803,11 @@ There are **832** codes in total.
 | [`bynk.service.outside_context`](/book/reference/grammar/#rule-service_decl) | A `service` was declared outside a context. | [`service_decl`](/book/reference/grammar/#rule-service_decl) | — |
 | [`bynk.service.return_not_effect`](/book/reference/grammar/#rule-service_decl) | A service handler's return type is not an `Effect`. | [`service_decl`](/book/reference/grammar/#rule-service_decl) | — |
 | [`bynk.service.unknown_protocol`](/book/reference/grammar/#rule-service_protocol) | A `from <protocol>` names an unknown protocol (e.g. a transport like Kafka). | [`service_decl`](/book/reference/grammar/#rule-service_decl) | — |
-| `bynk.service.unknown_via_clause` | A `via <name>(...)` clause on a `from Events(...)` header named something other than `schema` — `via` clauses are a closed set, and only `via schema(...)` exists today. |  | — |
-| `bynk.service.websocket_header` | The `from websocket` header is malformed — it binds frame types as `websocket(in: <type>, out: <type>)` (real-time track slice 3). |  | — |
-| `bynk.service.websocket_multiple` | A context holds more than one `from websocket` service — at v1 the Workers upgrade routes by the `Upgrade: websocket` header alone, so one WebSocket service per context (real-time track slice 3b). |  | — |
-| `bynk.service.websocket_open_arity` | A `from websocket` service must hold exactly one `on open` handler (the edge upgrade), and at most one `on message` (inbound) and one `on close` (real-time track slice 3/3b-iii). |  | — |
-| `bynk.service.websocket_param_not_stringy` | A `from websocket` service's `on open` parameter has a type not constructible from `String`; it arrives as a query-string value (#1657). |  | — |
+| [`bynk.service.unknown_via_clause`](/book/guides/events/understand-events/#dispatching-by-version-with-via-scheman) | A `via <name>(...)` clause on a `from Events(...)` header named something other than `schema` — `via` clauses are a closed set, and only `via schema(...)` exists today. |  | — |
+| [`bynk.service.websocket_header`](/book/reference/websocket/#service-form) | The `from websocket` header is malformed — it binds frame types as `websocket(in: <type>, out: <type>)` (real-time track slice 3). |  | — |
+| [`bynk.service.websocket_multiple`](/book/reference/websocket/#service-form) | A context holds more than one `from websocket` service — at v1 the Workers upgrade routes by the `Upgrade: websocket` header alone, so one WebSocket service per context (real-time track slice 3b). |  | — |
+| [`bynk.service.websocket_open_arity`](/book/reference/websocket/#service-form) | A `from websocket` service must hold exactly one `on open` handler (the edge upgrade), and at most one `on message` (inbound) and one `on close` (real-time track slice 3/3b-iii). |  | — |
+| [`bynk.service.websocket_param_not_stringy`](/book/reference/websocket/#service-form) | A `from websocket` service's `on open` parameter has a type not constructible from `String`; it arrives as a query-string value (#1657). |  | — |
 
 ## Stability
 
@@ -839,16 +839,16 @@ There are **832** codes in total.
 | `bynk.suite.const_name_clash` | A suite `const` has the name of a declaration or sum variant already in scope in the suite's cases. | [`const_decl`](/book/reference/grammar/#rule-const_decl) | — |
 | [`bynk.suite.duplicate_case_name`](/book/reference/testing/#suite-blocks) | Two `case`s share a description. | [`case`](/book/reference/grammar/#rule-case) | — |
 | `bynk.suite.duplicate_const` | A suite declares two `const`s of the same name, or a `const` with the name of one of its `type`s. | [`const_decl`](/book/reference/grammar/#rule-const_decl) | — |
-| `bynk.suite.duplicate_env` | An `env { … }` clause gives the same name twice at one scope (a suite's `env` clauses, or one case's); a case's `env` may override a suite's name, but not repeat its own. | [`env_clause`](/book/reference/grammar/#rule-env_clause) | — |
+| [`bynk.suite.duplicate_env`](/book/reference/testing/#env) | An `env { … }` clause gives the same name twice at one scope (a suite's `env` clauses, or one case's); a case's `env` may override a suite's name, but not repeat its own. | [`env_clause`](/book/reference/grammar/#rule-env_clause) | — |
 | [`bynk.suite.duplicate_fn`](/book/reference/testing/#helpers) | A suite declares two helper `fn`s of the same name. | [`fn_decl`](/book/reference/grammar/#rule-fn_decl) | — |
-| `bynk.suite.duplicate_type` | A suite declares two `type`s of the same name. | [`type_decl`](/book/reference/grammar/#rule-type_decl) | — |
+| [`bynk.suite.duplicate_type`](/book/reference/testing/#suite-types-consts) | A suite declares two `type`s of the same name. | [`type_decl`](/book/reference/grammar/#rule-type_decl) | — |
 | `bynk.suite.env_binding_clash` | A `system`-tier suite's or case's `env` names a binding a participant's Worker already declares (a Service Binding, KV namespace, or Durable Object namespace), or a key the test harness sets on it (a call-edge key, a `Foreign` caller's secret), so the entry would clash with it on the Worker's `env`. | [`env_clause`](/book/reference/grammar/#rule-env_clause) | — |
-| `bynk.suite.env_not_literal` | An `env { … }` entry's value is neither a `String` literal nor a `fixture` the same suite declares; a Worker's variables and secrets are strings, given verbatim. | [`env_clause`](/book/reference/grammar/#rule-env_clause) | — |
+| [`bynk.suite.env_not_literal`](/book/reference/testing/#env) | An `env { … }` entry's value is neither a `String` literal nor a `fixture` the same suite declares; a Worker's variables and secrets are strings, given verbatim. | [`env_clause`](/book/reference/grammar/#rule-env_clause) | — |
 | [`bynk.suite.fn_effectful`](/book/reference/testing/#helpers) | A suite helper `fn` returns an `Effect`; suite helpers are pure. | [`fn_decl`](/book/reference/grammar/#rule-fn_decl) | — |
 | [`bynk.suite.fn_method`](/book/reference/testing/#helpers) | A suite helper `fn` is a method (`fn Type.name`); suite helpers are free functions. | [`fn_decl`](/book/reference/grammar/#rule-fn_decl) | — |
 | [`bynk.suite.fn_name_clash`](/book/reference/testing/#helpers) | A suite helper `fn` has the name of a declaration already in scope in the suite's cases. | [`fn_decl`](/book/reference/grammar/#rule-fn_decl) | — |
 | [`bynk.suite.type_generic`](/book/reference/testing/#suite-types-consts) | A suite declares a generic `type`; a suite type is a plain, non-generic shape. | [`type_decl`](/book/reference/grammar/#rule-type_decl) | — |
-| `bynk.suite.type_name_clash` | A suite `type`, or a variant of one, has the name of a declaration or sum variant already in scope in the suite's cases, or of another suite item. | [`type_decl`](/book/reference/grammar/#rule-type_decl) | — |
+| [`bynk.suite.type_name_clash`](/book/reference/testing/#suite-types-consts) | A suite `type`, or a variant of one, has the name of a declaration or sum variant already in scope in the suite's cases, or of another suite item. | [`type_decl`](/book/reference/grammar/#rule-type_decl) | — |
 | [`bynk.suite.unknown_target`](/book/reference/testing/#suite-blocks) | A `suite` targets a unit that does not exist. | [`suite_decl`](/book/reference/grammar/#rule-suite_decl) | — |
 
 ## Transitions (step invariants)
@@ -1005,13 +1005,13 @@ There are **832** codes in total.
 
 | Code | Summary | Construct | Severity |
 |---|---|---|---|
-| `bynk.val.agent_not_generable` | A `for all`/`Val` cannot generate an agent — fabricated agent states need not be reachable. | [`for_all`](/book/reference/grammar/#rule-for_all) | — |
+| [`bynk.val.agent_not_generable`](/book/reference/testing/#properties) | A `for all`/`Val` cannot generate an agent — fabricated agent states need not be reachable. | [`for_all`](/book/reference/grammar/#rule-for_all) | — |
 | [`bynk.val.arity`](/book/reference/testing/#val) | `Val[T]` was given the wrong number of pin arguments. | [`val_expr`](/book/reference/grammar/#rule-val_expr) | — |
 | [`bynk.val.generic_type`](/book/reference/testing/#val) | A `Val[…]` fabricates a value of a generic type; per-instantiation value fabrication is not yet wired (ADR 0197). The type itself may cross a boundary through its monomorphised codec (v0.174). Named `bynk.generics.generic_record_at_boundary` before #3379. | [`val_expr`](/book/reference/grammar/#rule-val_expr) | — |
 | [`bynk.val.literal_violates`](/book/reference/testing/#val) | A pinned `Val[T]` value violates the type's refinement. | [`val_expr`](/book/reference/grammar/#rule-val_expr) | — |
 | [`bynk.val.needs_pin`](/book/reference/testing/#val) | A bare `Val[T]` cannot generate a value (e.g. a `Matches` string); pin one. | [`val_expr`](/book/reference/grammar/#rule-val_expr) | — |
 | [`bynk.val.outside_test`](/book/reference/testing/#val) | `Val[T]` was used outside a test case body. | [`val_expr`](/book/reference/grammar/#rule-val_expr) | — |
 | [`bynk.val.pin_not_literal`](/book/reference/testing/#val) | A `Val[T]` pin argument is not a compile-time literal. | [`val_expr`](/book/reference/grammar/#rule-val_expr) | — |
-| `bynk.val.pin_unsupported` | A pin was given for a type kind that does not support pinning. | [`val_expr`](/book/reference/grammar/#rule-val_expr) | — |
+| [`bynk.val.pin_unsupported`](/book/reference/testing/#val) | A pin was given for a type kind that does not support pinning. | [`val_expr`](/book/reference/grammar/#rule-val_expr) | — |
 | [`bynk.val.unknown_type`](/book/reference/testing/#val) | `Val[T]` names a type that does not resolve. | [`val_expr`](/book/reference/grammar/#rule-val_expr) | — |
-| `bynk.val.unsupported_kind` | `Val[T]` cannot fabricate a value for this kind of type. | [`val_expr`](/book/reference/grammar/#rule-val_expr) | — |
+| [`bynk.val.unsupported_kind`](/book/reference/testing/#val) | `Val[T]` cannot fabricate a value for this kind of type. | [`val_expr`](/book/reference/grammar/#rule-val_expr) | — |

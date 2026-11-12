@@ -1,0 +1,9 @@
+context demo.wallet
+
+type Code = String where Matches("[A-Z]{3}")
+
+agent Wallet {
+  key id: String
+  store label: Cell[String] = ""
+  on call setLabel(code: Code) -> Effect[()] { label.update((x) => code) }
+}

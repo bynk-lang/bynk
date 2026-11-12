@@ -1,0 +1,9 @@
+suite demo.desk {
+  env {
+    MODE = "fake"
+    MODE = "live"
+  }
+  case "c" {
+    expect twice(2) == 4
+  }
+}

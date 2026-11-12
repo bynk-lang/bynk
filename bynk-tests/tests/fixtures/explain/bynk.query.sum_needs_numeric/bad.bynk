@@ -1,0 +1,8 @@
+commons demo
+
+type Line = { sku: String, qty: Int }
+
+fn total(lines: List[Line]) -> Int {
+    let t = lines.sum((l) => l.sku)
+    0
+}

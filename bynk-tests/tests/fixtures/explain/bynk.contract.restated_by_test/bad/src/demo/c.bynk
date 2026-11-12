@@ -1,0 +1,9 @@
+commons demo.c
+
+fn discount(p: Int, pct: Int) -> Int
+  requires p_nonneg: p >= 0
+  requires pct_in_range: pct >= 0 && pct <= 100
+  ensures never_above: result <= p
+{
+  p - (p * pct) / 100
+}
