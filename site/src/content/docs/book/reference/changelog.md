@@ -28,6 +28,7 @@ per-commit history. While Bynk is pre-1.0, increments may change behaviour.
 
 | Version | Highlights |
 |---|---|
+| **v0.566.1** | A `system` test case that builds a first-party record such as `File` resolves `Bytes`, `Duration` and `Instant` statics inside it |
 | **v0.566.0** | A route guarded by a `SignedCookie` actor verifies the session cookie, refuses a cross-site state-changing request, and hides the credential from the handler (#3386) |
 | **v0.565.2** | The explanation of `bynk.query.sum_needs_numeric` says which of `sum` and `average` take a `Decimal` key |
 | **v0.565.1** | A defaulted `Option`, `Result` or sum field in a let-bound record literal keeps its literal tag type, so the literal is assignable to its record type in generated TypeScript |
