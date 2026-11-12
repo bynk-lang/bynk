@@ -927,7 +927,7 @@
     },
     {
       "code": "bynk.http.cookie_cross_site_without_credentials",
-      "summary": "A service attaches a `SameSite.Unrestricted` cookie but declares no `cors { credentials: true }`, so the browser can never send it back cross-site (warning)."
+      "summary": "A service attaches a `SameSite.Unrestricted` cookie but declares no `cors { credentials: true }`, so a cross-origin `fetch` can never send it back (warning)."
     },
     {
       "code": "bynk.http.cookie_domain_widens",

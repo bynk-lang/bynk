@@ -14,4 +14,9 @@ service api from http {
 	on POST("/host") () -> Effect[HttpResult[String]] by v: Visitor {
 		Created("ok").withCookie(Cookie { name: "__Host-sid", value: "a", domain: None })
 	}
+
+	// No prefix and `domain: None`: not a widening either.
+	on POST("/plain") () -> Effect[HttpResult[String]] by v: Visitor {
+		Created("ok").withCookie(Cookie { name: "sid", value: "a", domain: None })
+	}
 }

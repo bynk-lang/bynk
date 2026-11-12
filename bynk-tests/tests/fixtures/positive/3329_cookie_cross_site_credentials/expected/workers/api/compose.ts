@@ -16,5 +16,8 @@ export function compose(env: Env) {
     async http_POST_host() {
       return handlers.api.http_POST_host(deps);
     },
+    async http_POST_plain() {
+      return handlers.api.http_POST_plain(deps);
+    },
   };
 }

@@ -2874,15 +2874,7 @@ fn check_service_decls(
 
     // v0.131 (ADR 0159): validate each service's `cors { }` policy.
     for service in table.services.values() {
-        if let Some(policy) = &service.cors {
-            validate_cors_policy(service, policy, errors);
-        }
-    }
-
-    // #3329: a cross-site cookie (`SameSite.Unrestricted`) is only ever sent back
-    // by a credentialed cross-origin request, so the service needs `cors { credentials: true }`.
-    for service in table.services.values() {
-        warn_cross_site_cookie_without_credentials(service, errors);
+        validate_service_cors(service, errors);
     }
 
     // v0.141 (ADR 0164): validate each service's `security { }` policy. (Absence
@@ -4355,6 +4347,15 @@ fn check_agent_decls(
     }
 }
 
+/// A service's CORS checks: its `cors { }` policy (ADR 0159) and, #3329, the
+/// cross-site cookie warning that depends on it.
+fn validate_service_cors(service: &ServiceDecl, errors: &mut Vec<CompileError>) {
+    if let Some(policy) = &service.cors {
+        validate_cors_policy(service, policy, errors);
+    }
+    warn_cross_site_cookie_without_credentials(service, errors);
+}
+
 /// #3329 (`bynk.http.cookie_cross_site_without_credentials`, a warning): a
 /// `from http` service whose handlers attach a `Cookie { … sameSite:
 /// SameSite.Unrestricted … }` (`withCookie`/`clearCookie`) but whose `cors`
@@ -4424,12 +4425,12 @@ fn warn_cross_site_cookie_without_credentials(
             "bynk.http.cookie_cross_site_without_credentials",
             span,
             format!(
-                "service `{}` sets a `SameSite.Unrestricted` cookie but does not declare `cors {{ credentials: true }}`, so the browser can never send it back cross-site",
+                "service `{}` sets a `SameSite.Unrestricted` cookie but does not declare `cors {{ credentials: true }}`, so a cross-origin `fetch` can never send it back",
                 service.name.name
             ),
         )
         .with_note(
-            "add `cors { origins: [...], credentials: true }` to the service, or use `SameSite.Lax` if the cookie need not cross sites",
+            "add `cors { origins: [...], credentials: true }` if a page on another origin must send it back; a cookie used only in cross-site navigations, embeds or SSO callbacks needs no `cors`, and `SameSite.Lax` suits one that need not cross sites",
         ),
     );
 }

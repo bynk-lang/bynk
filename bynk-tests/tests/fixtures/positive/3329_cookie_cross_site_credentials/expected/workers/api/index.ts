@@ -37,7 +37,7 @@ export default {
         }
       }
 
-      if (method === "OPTIONS" && request.headers.get("access-control-request-method") !== null && (path === "/host" || path === "/login")) {
+      if (method === "OPTIONS" && request.headers.get("access-control-request-method") !== null && (path === "/host" || path === "/login" || path === "/plain")) {
         return __applySecurityHeaders(__corsPreflightResponse(__cors_api, request.headers.get("origin")), __security_api);
       }
       {
@@ -54,12 +54,24 @@ export default {
           return __applySecurityHeaders(__applyCors(__httpResultToResponse(result, (__v: string) => __v as __JsonValue), __cors_api, request.headers.get("origin")), __security_api);
         }
       }
+      {
+        if (method === "POST" && path === "/plain") {
+          __route = "POST /plain";
+          const result = await surface.http_POST_plain();
+          return __applySecurityHeaders(__applyCors(__httpResultToResponse(result, (__v: string) => __v as __JsonValue), __cors_api, request.headers.get("origin")), __security_api);
+        }
+      }
       if (path === "/host") {
         const __status = method === "OPTIONS" ? 204 : 405;
         const __res = new globalThis.Response(null, { status: __status, headers: { allow: "OPTIONS, POST" } });
         return __applySecurityHeaders(__applyCors(__res, __cors_api, request.headers.get("origin")), __security_api);
       }
       if (path === "/login") {
+        const __status = method === "OPTIONS" ? 204 : 405;
+        const __res = new globalThis.Response(null, { status: __status, headers: { allow: "OPTIONS, POST" } });
+        return __applySecurityHeaders(__applyCors(__res, __cors_api, request.headers.get("origin")), __security_api);
+      }
+      if (path === "/plain") {
         const __status = method === "OPTIONS" ? 204 : 405;
         const __res = new globalThis.Response(null, { status: __status, headers: { allow: "OPTIONS, POST" } });
         return __applySecurityHeaders(__applyCors(__res, __cors_api, request.headers.get("origin")), __security_api);

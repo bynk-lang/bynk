@@ -484,7 +484,7 @@ or warned about:
 | `bynk.http.cookie_secure_prefix` | a `__Secure-` name that is not `secure` |
 | `bynk.http.cookie_script_readable` | `httpOnly: false` (a warning) |
 | `bynk.http.cookie_domain_widens` | a `domain` on a cookie whose name is not `__Host-` (a warning): every subdomain receives it |
-| `bynk.http.cookie_cross_site_without_credentials` | a service attaches a `SameSite.Unrestricted` cookie but has no `cors { credentials: true }` (a warning): the browser never sends it back cross-site |
+| `bynk.http.cookie_cross_site_without_credentials` | a service attaches a `SameSite.Unrestricted` cookie but has no `cors { credentials: true }` (a warning): a cross-origin `fetch` can never send it back |
 | `bynk.http.cache_public_reads_cookies` | `@cache(scope: public)` on a handler that takes `cookies` |
 
 Only a literal is judged. A computed cookie is checked when it is sent: a name that is not

@@ -15,4 +15,7 @@ export const api = {
   async http_POST_host(deps: {}): globalThis.Promise<HttpResult<string>> {
     return ((__r: any) => ({ ...__r, cookies: [...(__r.cookies ?? []), ({ name: "__Host-sid", value: "a", domain: None, maxAge: { tag: "None" }, expires: { tag: "None" }, path: "/", secure: true, httpOnly: true, sameSite: { tag: "Lax" }, partitioned: false })] }))(HttpResult.Created("ok"));
   },
+  async http_POST_plain(deps: {}): globalThis.Promise<HttpResult<string>> {
+    return ((__r: any) => ({ ...__r, cookies: [...(__r.cookies ?? []), ({ name: "sid", value: "a", domain: None, maxAge: { tag: "None" }, expires: { tag: "None" }, path: "/", secure: true, httpOnly: true, sameSite: { tag: "Lax" }, partitioned: false })] }))(HttpResult.Created("ok"));
+  },
 };

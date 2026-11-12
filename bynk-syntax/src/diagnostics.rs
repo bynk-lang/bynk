@@ -2198,7 +2198,7 @@ pub const EXPLANATIONS: &[Explain] = &[
     },
     Explain {
         code: "bynk.http.cookie_cross_site_without_credentials",
-        blurb: "A cookie with `SameSite=None` (`SameSite.Unrestricted`) exists to travel on cross-site requests, and a browser attaches cookies to a cross-origin `fetch` only when the request is credentialed and the response carries `Access-Control-Allow-Credentials: true`. A service with no `cors` policy, or one with `credentials: false`, never sends that header, so the cookie it sets can never come back. This is a warning, since the cookie may be read by a same-site page or another service. Declare `cors { origins: [...], credentials: true }` (the origins must be exact, not `[\"*\"]`), or use `SameSite.Lax` if the cookie need not cross sites.",
+        blurb: "A cookie with `SameSite=None` (`SameSite.Unrestricted`) exists to travel on cross-site requests, and a browser attaches cookies to a cross-origin `fetch` only when the request is credentialed and the response carries `Access-Control-Allow-Credentials: true`. A service with no `cors` policy, or one with `credentials: false`, never sends that header, so a cross-origin `fetch` can never send the cookie back. This is a warning, because a `SameSite=None` cookie is still sent on top-level cross-site navigations, cross-site form posts and in embeds (SSO and payment callbacks, widgets), none of which needs CORS. If a page on another origin must send it back with `fetch`, declare `cors { origins: [...], credentials: true }` (the origins must be exact, not `[\"*\"]`), or use `SameSite.Lax` if the cookie need not cross sites at all.",
         example: "service api from http {\n  on POST(\"/login\") () -> Effect[HttpResult[String]] by v: Visitor {\n    Created(\"ok\").withCookie(Cookie { name: \"sid\", value: \"a\", sameSite: SameSite.Unrestricted })   // ⚠ no `cors { credentials: true }`\n  }\n}\n\nservice api from http {\n  cors { origins: [\"https://app.example.com\"], credentials: true }   // ✓\n  …\n}",
         page: "/book/reference/http",
         anchor: "setting-cookies",
@@ -7534,7 +7534,7 @@ pub const REGISTRY: &[DiagnosticInfo] = &[
     ),
     warn(dg(
         "bynk.http.cookie_cross_site_without_credentials",
-        "A service attaches a `SameSite.Unrestricted` cookie but declares no `cors { credentials: true }`, so the browser can never send it back cross-site (warning).",
+        "A service attaches a `SameSite.Unrestricted` cookie but declares no `cors { credentials: true }`, so a cross-origin `fetch` can never send it back (warning).",
         &["http_handler"],
     )),
     warn(dg(
