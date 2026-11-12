@@ -1,0 +1,9 @@
+context shop
+
+service api from http {
+    json { options: plain }
+
+    on GET("/a") () -> Effect[HttpResult[Int]] by Visitor {
+        Ok(1)
+    }
+}

@@ -1,0 +1,9 @@
+context audit {
+  capability Audit {
+    fn note[T](key: String) -> Effect[()]
+  }
+
+  provides Audit = MemoAudit {
+    fn note(key: String) -> Effect[()] { Effect.pure(()) }
+  }
+}

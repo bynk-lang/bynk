@@ -1,0 +1,7 @@
+commons demo
+
+type Quantity = Int where InRange(1, 100)
+
+fn valid(s: String) -> Bool {
+    s is Quantity
+}

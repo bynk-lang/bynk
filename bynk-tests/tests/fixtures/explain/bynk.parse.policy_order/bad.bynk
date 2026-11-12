@@ -1,0 +1,10 @@
+context shop
+
+service api from http {
+    limits { maxBody: 1_048_576 }
+    cors { origins: ["*"] }
+
+    on GET("/a") () -> Effect[HttpResult[Int]] by Visitor {
+        Ok(1)
+    }
+}

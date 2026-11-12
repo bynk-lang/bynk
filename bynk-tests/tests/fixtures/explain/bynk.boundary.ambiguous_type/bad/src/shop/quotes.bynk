@@ -1,0 +1,13 @@
+context shop.quotes
+
+exports transparent { Wrap }
+
+type Amount = { cents: Int }
+
+type Wrap = { inner: Amount }
+
+service wrap {
+    on call() -> Effect[Wrap] {
+        Effect.pure(Wrap { inner: Amount { cents: 2 } })
+    }
+}

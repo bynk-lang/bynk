@@ -1,0 +1,8 @@
+suite demo.desk {
+  stub Meter.read() returns 7
+
+  case "the desk checks" {
+    let n <- local.call(1)
+    expect n == 8
+  }
+}

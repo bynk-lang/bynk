@@ -1,0 +1,5 @@
+context demo.desk
+
+service local {
+  on call(n: Int) -> Effect[Int] { n + 1 }
+}

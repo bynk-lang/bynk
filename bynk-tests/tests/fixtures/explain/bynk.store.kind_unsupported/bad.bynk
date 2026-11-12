@@ -1,0 +1,10 @@
+context shop
+
+type Event = { id: String }
+
+agent A {
+  key k: String
+  store pending: Queue[Event]
+
+  on call n() -> Effect[Int] { Effect.pure(1) }
+}
