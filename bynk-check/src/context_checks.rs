@@ -2304,6 +2304,57 @@ fn check_by_clause_contracts(
     }
 }
 
+/// #3386: the config value kinds a scheme admits. The config grammar also reads a duration
+/// (`12.hours`) and a bare identifier (`Lax`), but only `SignedCookie` takes either; for every other
+/// scheme they are refused here, because their seams read a string or an integer and would otherwise
+/// drop the value quietly (a `Signature` `tolerance = 5.minutes` reads as no tolerance at all, which
+/// would turn the replay window off). A repeated `SignedCookie` key is refused too, since the first
+/// would win quietly in a scheme that guards a session.
+fn check_scheme_arg_kinds(actor: &ActorDecl, errors: &mut Vec<CompileError>) {
+    use crate::actors::Scheme;
+    let signed_cookie =
+        actor.auth.as_ref().and_then(|a| Scheme::from_name(&a.name)) == Some(Scheme::SignedCookie);
+    let mut seen: HashSet<&str> = HashSet::new();
+    for arg in &actor.auth_config {
+        if signed_cookie && !seen.insert(arg.key.name.as_str()) {
+            errors.push(
+                CompileError::new(
+                    "bynk.actor.signed_cookie_duplicate_key",
+                    arg.key.span,
+                    format!(
+                        "the scheme config key `{}` is given more than once",
+                        arg.key.name
+                    ),
+                )
+                .with_note(
+                    "only the first value would be read, so the second is refused: keep one",
+                ),
+            );
+        }
+        if !signed_cookie
+            && matches!(
+                arg.value,
+                bynk_syntax::ast::SchemeArgValue::Duration { .. }
+                    | bynk_syntax::ast::SchemeArgValue::Ident(_)
+            )
+        {
+            errors.push(
+                CompileError::new(
+                    "bynk.actor.scheme_arg_kind",
+                    arg.span,
+                    format!(
+                        "the scheme config value for `{}` must be a string or an integer",
+                        arg.key.name
+                    ),
+                )
+                .with_note(
+                    "a duration or a bare name is accepted only by `SignedCookie`; give a whole number (a `Signature` `tolerance` is in seconds: `tolerance = 300`) or a quoted string",
+                ),
+            );
+        }
+    }
+}
+
 /// The keys a `SignedCookie` actor's config admits (#3386).
 const SIGNED_COOKIE_KEYS: &[&str] = &["cookie", "secret", "previous", "ttl", "sameSite"];
 
@@ -2612,6 +2663,55 @@ fn check_missing_by(handler: &Handler, protocol: &ServiceProtocol, errors: &mut 
     );
 }
 
+/// Once per context, after every actor declaration is read: the checks on foreign callers' secrets.
+fn check_foreign_secret_dupes(table: &UnitTable, errors: &mut Vec<CompileError>) {
+    use crate::actors::Scheme;
+    // I3 (#1971): a foreign caller's secret is the context's only use of that
+    // name. The Worker's table of foreign callers maps every one of them to
+    // its secret, and a caller is checked under the secret its claimed name
+    // selects, so two foreign actors on one secret could each pass for the
+    // other wherever either is admitted; and `bynk deploy` mints a foreign
+    // secret, which would overwrite another actor's. In declaration order, so
+    // the later one is reported.
+    let mut by_position: Vec<&ActorDecl> = table.actors.values().collect();
+    by_position.sort_by_key(|a| a.name.span.start);
+    let mut secret_owner: HashMap<&str, (&str, bool)> = HashMap::new();
+    for actor in by_position {
+        let Some(arg) = actor.scheme_arg("secret") else {
+            continue;
+        };
+        let Some(secret) = arg.value.as_str() else {
+            continue;
+        };
+        let foreign = actor
+            .auth
+            .as_ref()
+            .is_some_and(|au| Scheme::from_name(&au.name) == Some(Scheme::Foreign));
+        match secret_owner.get(secret) {
+            Some((other, other_foreign)) if foreign || *other_foreign => {
+                errors.push(
+                    CompileError::new(
+                        "bynk.actor.foreign_duplicate_secret",
+                        arg.span,
+                        format!(
+                            "actor `{}` uses the secret `{secret}` already named by actor `{other}`, and one of them is a foreign caller",
+                            actor.name.name
+                        ),
+                    )
+                    .with_note(
+                        "a foreign caller is told apart by the secret its calls verify under, and \
+                         `bynk deploy` mints it — give it a name no other actor uses",
+                    ),
+                );
+            }
+            Some(_) => {}
+            None => {
+                secret_owner.insert(secret, (&actor.name.name, foreign));
+            }
+        }
+    }
+}
+
 fn check_actor_contracts(
     table: &UnitTable,
     resolved: &ResolvedCommons,
@@ -2670,6 +2770,7 @@ fn check_actor_contracts(
         let Some(auth) = &actor.auth else {
             continue;
         };
+        check_scheme_arg_kinds(actor, errors);
         match Scheme::from_name(&auth.name) {
             None => errors.push(
                 CompileError::new(
@@ -3022,50 +3123,7 @@ fn check_actor_contracts(
         }
     }
 
-    // I3 (#1971): a foreign caller's secret is the context's only use of that
-    // name. The Worker's table of foreign callers maps every one of them to
-    // its secret, and a caller is checked under the secret its claimed name
-    // selects, so two foreign actors on one secret could each pass for the
-    // other wherever either is admitted; and `bynk deploy` mints a foreign
-    // secret, which would overwrite another actor's. In declaration order, so
-    // the later one is reported.
-    let mut by_position: Vec<&ActorDecl> = table.actors.values().collect();
-    by_position.sort_by_key(|a| a.name.span.start);
-    let mut secret_owner: HashMap<&str, (&str, bool)> = HashMap::new();
-    for actor in by_position {
-        let Some(arg) = actor.scheme_arg("secret") else {
-            continue;
-        };
-        let Some(secret) = arg.value.as_str() else {
-            continue;
-        };
-        let foreign = actor
-            .auth
-            .as_ref()
-            .is_some_and(|au| Scheme::from_name(&au.name) == Some(Scheme::Foreign));
-        match secret_owner.get(secret) {
-            Some((other, other_foreign)) if foreign || *other_foreign => {
-                errors.push(
-                    CompileError::new(
-                        "bynk.actor.foreign_duplicate_secret",
-                        arg.span,
-                        format!(
-                            "actor `{}` uses the secret `{secret}` already named by actor `{other}`, and one of them is a foreign caller",
-                            actor.name.name
-                        ),
-                    )
-                    .with_note(
-                        "a foreign caller is told apart by the secret its calls verify under, and \
-                         `bynk deploy` mints it — give it a name no other actor uses",
-                    ),
-                );
-            }
-            Some(_) => {}
-            None => {
-                secret_owner.insert(secret, (&actor.name.name, foreign));
-            }
-        }
-    }
+    check_foreign_secret_dupes(table, errors);
 
     // Pass 2 — handler `by`-clause contracts.
     for service in table.services.values() {

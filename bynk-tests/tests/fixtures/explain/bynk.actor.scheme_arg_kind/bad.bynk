@@ -1,0 +1,5 @@
+context shop
+
+type UserId = String where NonEmpty
+
+actor Hook { auth = Signature(secret = "K", header = "X-Sig", timestamp = "X-Ts", tolerance = 5.minutes) }
