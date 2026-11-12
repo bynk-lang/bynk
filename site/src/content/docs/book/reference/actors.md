@@ -134,6 +134,10 @@ A `system` suite signs in as `by User("ada")` and probes the seam with `by Nobod
 `by Expired` (see [the failure principals](/book/reference/testing/#failure-principals)); a case's own
 `Sec-Fetch-Site` and `Origin` headers probe the CSRF check.
 
+`bynk openapi` documents a route a `SignedCookie` actor guards with an `apiKey` security scheme
+`in: cookie`, named after the cookie, and lists the seam's refusals as responses: `401` always and, on a
+state-changing method, `403` for a cross-site request.
+
 ### What a signed cookie does and does not protect against
 
 It **does**: reject a cookie that was forged, altered, issued for another actor, signed with a key the

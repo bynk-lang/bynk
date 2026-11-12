@@ -665,3 +665,54 @@ service api from http {
     );
     assert_eq!(schema["required"], serde_json::json!(["e-mail"]));
 }
+
+/// #3386: a route guarded by a `SignedCookie` actor is documented with an `apiKey` security scheme
+/// `in: cookie`, named after the cookie, and the seam's refusals: `401` on every such route and
+/// `403` (a cross-site request) on a state-changing one.
+#[test]
+fn a_signed_cookie_route_is_documented_with_its_cookie_scheme() {
+    let dir = scratch("signed-cookie");
+    write(&dir.join("bynk.toml"), "[project]\nname = \"p\"\n");
+    write(
+        &dir.join("src/p.bynk"),
+        r#"context p
+
+type UserId = String where NonEmpty
+
+actor User { auth = SignedCookie(secret = "SESSION_KEY", ttl = 12.hours), identity = UserId }
+
+service api from http {
+  cors { origins: ["https://app.example.com"], credentials: true }
+
+  on GET("/me") () -> Effect[HttpResult[String]] by u: User {
+    Ok(u.identity)
+  }
+
+  on POST("/rename") () -> Effect[HttpResult[()]] by u: User {
+    NoContent
+  }
+
+  on GET("/open") () -> Effect[HttpResult[String]] by v: Visitor {
+    Ok("x")
+  }
+}
+"#,
+    );
+    let d = doc(&dir, &[]);
+    assert_valid(&d);
+    let scheme = &d["components"]["securitySchemes"]["User"];
+    assert_eq!(scheme["type"], "apiKey");
+    assert_eq!(scheme["in"], "cookie");
+    assert_eq!(scheme["name"], "__Host-session");
+    let me = &d["paths"]["/me"]["get"];
+    assert_eq!(me["security"][0]["User"], serde_json::json!([]));
+    assert!(me["responses"]["401"].is_object());
+    assert!(
+        me["responses"].get("403").is_none(),
+        "a safe method skips the CSRF check: {me:?}"
+    );
+    let rename = &d["paths"]["/rename"]["post"];
+    assert!(rename["responses"]["401"].is_object() && rename["responses"]["403"].is_object());
+    let open = &d["paths"]["/open"]["get"];
+    assert!(open.get("security").is_none(), "{open:?}");
+}

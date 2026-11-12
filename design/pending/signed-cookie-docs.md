@@ -1,6 +1,6 @@
 ---
 level: minor
-changelog: Docs for the `SignedCookie` actor scheme (#3386): a guide recipe, the reference, testing, `examples/sessions`, and an ADR; closes #3181
+changelog: `bynk openapi` documents a `SignedCookie` route's cookie scheme, hover, completion and signature help know `User.issue` and `User.expire`, and the scheme has a guide, reference, an example cross-reference and an ADR (#3386); closes #3181
 probes: emit_diagnostics, diagnostic_coverage, explained_codes
 ---
 
