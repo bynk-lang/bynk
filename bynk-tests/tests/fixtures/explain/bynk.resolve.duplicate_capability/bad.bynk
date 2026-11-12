@@ -1,0 +1,9 @@
+context shop
+
+capability Clock {
+    fn now() -> Effect[Int]
+}
+
+capability Clock {
+    fn today() -> Effect[Int]
+}

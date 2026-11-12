@@ -1,0 +1,16 @@
+context orders
+
+consumes bynk.cloudflare { D1 }
+
+capability Orders = D1
+
+type Job = {
+    id: String,
+}
+
+service exec {
+    on call(job: Job) -> Effect[Int] given Orders {
+        let runs <- Orders.batch([SqlStatement { sql: "delete from orders where id = ?1", params: [Text(job.id)] }])
+        Effect.pure(1)
+    }
+}

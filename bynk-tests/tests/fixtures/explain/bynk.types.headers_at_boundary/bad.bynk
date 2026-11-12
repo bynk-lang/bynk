@@ -1,0 +1,11 @@
+context api
+
+type Seen = {
+    headers: RequestHeaders,
+}
+
+service api from http {
+    on GET("/who") (headers: RequestHeaders) -> Effect[HttpResult[String]] by v: Visitor {
+        Ok(headers.get("user-agent").getOrElse("-"))
+    }
+}
