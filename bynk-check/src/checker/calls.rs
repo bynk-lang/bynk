@@ -5275,12 +5275,8 @@ pub(crate) fn check_effect_let_principal(
         let by = handler.by_clause.as_ref();
         let sig_seam =
             by.and_then(|by| crate::actors::signature_seam_of_route(by, &ctx.test_actors));
-        // #3386: a `SignedCookie` route's seam refuses a forged or expired cookie as a Bearer one
-        // refuses a token.
-        let bearer = by.is_some_and(|by| {
-            crate::actors::route_has_bearer_seam(by, &ctx.test_actors)
-                || crate::actors::by_clause_is_signed_cookie(by, &ctx.test_actors)
-        });
+        let bearer =
+            by.is_some_and(|by| crate::actors::route_refuses_bad_token(by, &ctx.test_actors));
         // #3052: an `Oidc` route's seam refuses a bad token too.
         let oidc = by.is_some_and(|by| crate::actors::by_clause_is_oidc(by, &ctx.test_actors));
         match (name, sig_seam) {

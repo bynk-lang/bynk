@@ -110,4 +110,19 @@ suite shop.api as system {
 		let r <- api.POST("/rename") by Nobody
 		expect r is Rejected(Unauthorized)
 	}
+
+	case "the handler never sees the session cookie in its headers" {
+		let r <- api.GET("/cookie-header", RequestHeaders.of(["X-Trace: 1"])) by User("ada")
+		expect r is Ok("none")
+	}
+
+	case "a session cookie sent twice is refused" {
+		let r <- api.GET("/jar", RequestCookies.of(["__Host-session=junk"])) by User("ada")
+		expect r is Unauthorized
+	}
+
+	case "another cookie beside the session cookie does not disturb it" {
+		let r <- api.GET("/jar", RequestCookies.of(["theme=dark"])) by User("ada")
+		expect r is Ok("ada")
+	}
 }

@@ -34,6 +34,12 @@ export const api = {
   async http_GET_theme(cookies: Prefs, deps: { identity: UserId }): globalThis.Promise<HttpResult<string>> {
     return HttpResult.Ok(((__o: Option<string>, __d: string) => __o.tag === "Some" ? __o.value : __d)(cookies.theme, "light"));
   },
+  async http_GET_cookie_header(headers: { get(name: string): { readonly tag: "Some"; readonly value: string } | { readonly tag: "None" }; bearer(): { readonly tag: "Some"; readonly value: string } | { readonly tag: "None" }; clientIp(): { readonly tag: "Some"; readonly value: string } | { readonly tag: "None" } }, deps: { identity: UserId }): globalThis.Promise<HttpResult<string>> {
+    return HttpResult.Ok(((__o: Option<string>, __d: string) => __o.tag === "Some" ? __o.value : __d)((headers).get("cookie"), "none"));
+  },
+  async http_GET_jar(cookies: { get(name: string): { readonly tag: "Some"; readonly value: string } | { readonly tag: "None" }; all(name: string): readonly string[]; names(): readonly string[] }, deps: { identity: UserId }): globalThis.Promise<HttpResult<string>> {
+    return HttpResult.Ok(deps.identity);
+  },
   async http_POST_rename(deps: { identity: UserId }): globalThis.Promise<HttpResult<void>> {
     return HttpResult.NoContent;
   },

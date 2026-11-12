@@ -974,12 +974,7 @@ pub(super) fn emit_test_module(
     if runtime_use.request_headers() {
         append_missing_bindings(&mut runtime_names, emitter::REQUEST_HEADERS_RUNTIME_IMPORTS);
     }
-    if runtime_use.request_cookies() {
-        append_missing_bindings(&mut runtime_names, emitter::REQUEST_COOKIES_RUNTIME_IMPORTS);
-    }
-    if runtime_use.session_signing() {
-        append_missing_bindings(&mut runtime_names, emitter::SESSION_SIGNING_RUNTIME_IMPORTS);
-    }
+    append_cookie_bindings(&mut runtime_names, &runtime_use);
     if runtime_use.request_query() {
         append_missing_bindings(&mut runtime_names, emitter::REQUEST_QUERY_RUNTIME_IMPORTS);
     }
