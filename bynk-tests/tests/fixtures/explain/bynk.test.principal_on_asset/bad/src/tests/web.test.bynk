@@ -1,0 +1,6 @@
+suite demo.web {
+  case "the stylesheet is served" {
+    let r <- api.GET(style) by Visitor
+    expect r is Raw(_, _)
+  }
+}

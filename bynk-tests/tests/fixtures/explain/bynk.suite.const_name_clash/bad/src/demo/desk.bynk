@@ -1,0 +1,5 @@
+commons demo.desk
+
+const Limit: Int = 5
+
+fn twice(n: Int) -> Int { n * 2 }

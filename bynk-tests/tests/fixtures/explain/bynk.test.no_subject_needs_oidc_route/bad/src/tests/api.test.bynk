@@ -1,0 +1,6 @@
+suite demo.api as system {
+  case "a refused token" {
+    let r <- api.GET("/me") by NoSubject
+    expect r is Rejected(Unauthorized)
+  }
+}

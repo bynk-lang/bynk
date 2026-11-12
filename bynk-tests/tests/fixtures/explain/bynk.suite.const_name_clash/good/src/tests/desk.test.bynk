@@ -1,0 +1,6 @@
+suite demo.desk {
+  const Cap: Int = 9
+  case "c" {
+    expect twice(Cap) == 18
+  }
+}

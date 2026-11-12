@@ -1,0 +1,7 @@
+suite chat.room {
+  case "a message" {
+    let tc = TestConnection[Frame]()
+    let _ <- Gateway.open(tc, RoomId.unsafe("r")) by Member(UserId.unsafe("ann"))
+    let _ <- Gateway.message(tc, Frame { text: "hi" }) by Member(UserId.unsafe("ann"))
+  }
+}

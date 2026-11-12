@@ -1,0 +1,6 @@
+suite shop.ledger {
+  case "a placed order is booked" {
+    let env = EventEnvelope { eventId: "e1", publisherId: "shop.order", emittedAt: Instant.fromEpochMillis(0), schemaVersion: 1 }
+    let _ <- OnPlaced.event(Placed { id: "o1" }, env)
+  }
+}

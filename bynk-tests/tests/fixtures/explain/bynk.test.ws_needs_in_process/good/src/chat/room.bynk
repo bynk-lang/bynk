@@ -1,0 +1,34 @@
+context chat.room
+
+type RoomId = opaque String
+type UserId = opaque String
+type Frame = { text: String }
+
+actor Member { auth = Bearer(secret = "S"), identity = UserId }
+
+service Gateway from websocket(in: Frame, out: Frame) {
+  on open (roomId: RoomId) -> Effect[()] by user: Member {
+    let _ <- Room(roomId).join(user.identity, connection)
+    ()
+  }
+
+  on message (roomId: RoomId, frame: Frame) -> Effect[()] by user: Member {
+    ()
+  }
+}
+
+agent Room {
+  key id: RoomId
+  store conns: Map[UserId, Connection[Frame]]
+
+  on call join(u: UserId, conn: Connection[Frame]) -> Effect[()] {
+    let _ <- conns.put(u, conn)
+    ()
+  }
+}
+
+service Api from http {
+  on GET("/ping") () -> Effect[HttpResult[String]] by v: Visitor {
+    Ok("pong")
+  }
+}
