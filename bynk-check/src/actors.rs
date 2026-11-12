@@ -281,6 +281,80 @@ pub fn bearer_seam_for(
     })
 }
 
+/// The cookie name a `SignedCookie` actor issues and reads when `cookie` is not given.
+pub const SIGNED_COOKIE_DEFAULT_NAME: &str = "__Host-session";
+
+/// #3386: the data the emitter needs to lower a `SignedCookie` verification seam:
+/// the `by` binder, the actor's name (the cookie's `aud`), the cookie's name, the
+/// signing and previous-key env names, the `ttl` in seconds and the identity type
+/// minted from the verified `sub`. Resolved only for a handler whose `by` clause
+/// names a single local `SignedCookie` actor (it is never a sum member or a
+/// refinement base); the checker guarantees the secret and `ttl` are present and
+/// the identity is a string-constructible local type.
+#[derive(Debug, Clone)]
+pub struct SignedCookieSeam {
+    /// The identity binder, or `None` for `by <Actor>` (verify, capture nothing).
+    pub binder: Option<String>,
+    /// The declaring actor's name: the cookie's `aud`.
+    pub actor: String,
+    /// The cookie's name.
+    pub cookie: String,
+    /// The env var holding the signing key.
+    pub secret: String,
+    /// The env var holding the key being rotated out, when declared.
+    pub previous: Option<String>,
+    /// How long an issued cookie is valid, in seconds.
+    pub ttl_secs: i64,
+    /// The context-owned, string-constructible identity type minted from `sub`.
+    pub identity_type: String,
+}
+
+/// Resolve a handler's `SignedCookie` seam, if its `by` clause names a single
+/// local `SignedCookie` actor.
+pub fn signed_cookie_seam_for(
+    handler: &Handler,
+    actors: &HashMap<String, ActorDecl>,
+) -> Option<SignedCookieSeam> {
+    let by = handler.by_clause.as_ref()?;
+    if by.is_sum() {
+        return None;
+    }
+    let actor = actors.get(&by.primary().name)?;
+    signed_cookie_seam_of(actor, by.binder.as_ref().map(|b| b.name.clone()))
+}
+
+/// The seam of one `SignedCookie` actor declaration (shared by the handler
+/// resolver and by an actor's `issue`/`expire` members).
+pub fn signed_cookie_seam_of(
+    actor: &ActorDecl,
+    binder: Option<String>,
+) -> Option<SignedCookieSeam> {
+    if Scheme::from_name(actor.auth.as_ref()?.name.as_str()) != Some(Scheme::SignedCookie) {
+        return None;
+    }
+    let secret = actor.scheme_arg("secret")?.value.as_str()?.to_string();
+    let ttl_ms = actor.scheme_arg("ttl")?.value.as_duration_millis()?;
+    let TypeRef::Named(id) = actor.identity.as_ref()? else {
+        return None;
+    };
+    Some(SignedCookieSeam {
+        binder,
+        actor: actor.name.name.clone(),
+        cookie: actor
+            .scheme_arg("cookie")
+            .and_then(|a| a.value.as_str())
+            .unwrap_or(SIGNED_COOKIE_DEFAULT_NAME)
+            .to_string(),
+        secret,
+        previous: actor
+            .scheme_arg("previous")
+            .and_then(|a| a.value.as_str())
+            .map(str::to_string),
+        ttl_secs: ttl_ms / 1000,
+        identity_type: id.name.clone(),
+    })
+}
+
 /// v0.151: the data the emitter needs to lower an OIDC/JWKS verification seam —
 /// the `by` binder (or `None` for the verify-and-discard form), the public
 /// trust parameters (`issuer`, `audience`, `jwks` URL), and the identity type

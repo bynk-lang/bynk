@@ -86,6 +86,11 @@ pub(crate) fn declared_secrets(table: &UnitTable) -> BTreeSet<String> {
         if let Some(seam) = bynk_check::actors::signature_seam_for(handler, &table.actors) {
             names.insert(seam.secret);
         }
+        // #3386: a `SignedCookie` actor's signing key. (Its optional `previous` key is not
+        // declared: a deploy has no need to demand a key being rotated out.)
+        if let Some(seam) = bynk_check::actors::signed_cookie_seam_for(handler, &table.actors) {
+            names.insert(seam.secret);
+        }
         for member in bynk_check::actors::sum_members_for(handler, &table.actors)
             .into_iter()
             .flatten()

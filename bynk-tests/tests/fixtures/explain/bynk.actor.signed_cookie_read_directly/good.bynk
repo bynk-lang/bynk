@@ -1,0 +1,15 @@
+context shop
+
+type UserId = String where NonEmpty
+
+type Prefs = {
+  theme: Option[String],
+}
+
+actor User { auth = SignedCookie(secret = "SESSION_KEY", ttl = 12.hours), identity = UserId }
+
+service api from http {
+  on GET("/me") (cookies: Prefs) -> Effect[HttpResult[String]] by who: User {
+    Ok("x")
+  }
+}

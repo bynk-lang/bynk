@@ -2188,8 +2188,11 @@ A `ttl` over 30 days (`bynk.actor.signed_cookie_ttl_long`) and a `cookie` withou
 `__Host-` prefix (`bynk.actor.signed_cookie_unprefixed`) are warnings. It is `http`
 only, MUST NOT be a sum member (`bynk.actor.signed_cookie_not_in_sum`) or a refinement
 base, and MUST NOT guard a `@cache(scope: public)` route
-(`bynk.actor.signed_cookie_public_cache`). Until its verifier is emitted, a route it
-guards is refused (`bynk.actor.signed_cookie_not_yet_emitted`).
+(`bynk.actor.signed_cookie_public_cache`). A route it guards verifies the session
+cookie before the body runs (§7.3.4a): a cross-site state-changing request is `403`, a missing,
+repeated, forged, tampered, expired or over-long-lived cookie is `401`, a bad signing key
+faults the request, and the credential is hidden from the handler's `cookies` view
+(`bynk.actor.signed_cookie_read_directly`).
 
 > **Who, not whose.** An actor contract answers *who* is at the boundary — it
 > authenticates a party and seals its identity. It deliberately does **not**

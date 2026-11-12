@@ -470,14 +470,21 @@ pub const EXPLANATIONS: &[Explain] = &[
     Explain {
         code: "bynk.actor.signed_cookie_not_in_sum",
         blurb: "A multi-actor `by` clause tries its peers in turn. A cookie is an ambient credential, so the CSRF check must apply only when the cookie is what authenticated the request, and that per-arm rule is not built yet. A `SignedCookie` actor therefore stands alone on its route: give it a single `by who: User` and serve any anonymous route separately.",
-        example: "on POST(\"/x\") () -> Effect[HttpResult[String]] by who: User | Visitor {   // ✗ a `SignedCookie` peer in a sum\n\nactor User { auth = SignedCookie(secret = \"SESSION_KEY\", ttl = 12.hours), identity = UserId }   // ✓ declared; guard a route with a single `by who: User` once routes are accepted",
+        example: "on POST(\"/x\") () -> Effect[HttpResult[String]] by who: User | Visitor {   // ✗ a `SignedCookie` peer in a sum\n\non POST(\"/x\") () -> Effect[HttpResult[String]] by who: User {   // ✓ alone",
         page: "/book/reference/actors",
         anchor: "signed-cookies",
     },
     Explain {
         code: "bynk.actor.signed_cookie_public_cache",
         blurb: "A route guarded by a session cookie answers one user, so a shared cache must not store its response, or it would serve one user's answer to another. Use `scope: private`, which lets only the browser keep it, or drop `@cache`.",
-        example: "@cache(maxAge: 5.minutes, scope: public)   // ✗ a shared cache would replay it\non GET(\"/me\") () -> Effect[HttpResult[String]] by who: User { … }\n\nactor User { auth = SignedCookie(secret = \"SESSION_KEY\", ttl = 12.hours), identity = UserId }   // ✓ declared; use `scope: private` (or no `@cache`) on the routes it guards",
+        example: "@cache(maxAge: 5.minutes, scope: public)   // ✗ a shared cache would replay it\n\n@cache(maxAge: 5.minutes, scope: private)   // ✓",
+        page: "/book/reference/actors",
+        anchor: "signed-cookies",
+    },
+    Explain {
+        code: "bynk.actor.signed_cookie_read_directly",
+        blurb: "A `SignedCookie` actor reads its session cookie at the boundary, verifies it and hands the handler only the identity, so the signed value never reaches handler code. A `cookies` record on the same route that names that cookie (by its own name or `@name`) would ask for the raw value, so it is refused, and the router leaves the cookie out of a raw `RequestCookies` view too. Read the identity from the `by` binder, and keep other cookies (a theme, a language) in the record.",
+        example: "type Prefs = {\n  @name(\"__Host-session\") session: Option[String],   // ✗ the session cookie\n  theme: Option[String],\n}\n\ntype Prefs = {\n  theme: Option[String],   // ✓ other cookies only\n}",
         page: "/book/reference/actors",
         anchor: "signed-cookies",
     },
@@ -7273,12 +7280,12 @@ pub const REGISTRY: &[DiagnosticInfo] = &[
         "A `SignedCookie` actor appears as a member of a multi-actor sum.",
     ),
     d(
-        "bynk.actor.signed_cookie_not_yet_emitted",
-        "A route is guarded by a `SignedCookie` actor, whose verifier is not emitted yet.",
-    ),
-    d(
         "bynk.actor.signed_cookie_public_cache",
         "A `@cache(scope: public)` route is guarded by a `SignedCookie` actor.",
+    ),
+    d(
+        "bynk.actor.signed_cookie_read_directly",
+        "A typed `cookies` field reads the session cookie that a route's `SignedCookie` actor consumes.",
     ),
     d(
         "bynk.actor.signed_cookie_secret_shared",

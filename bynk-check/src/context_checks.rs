@@ -2602,25 +2602,43 @@ fn check_signed_cookie_actor(
     }
 }
 
-/// #3386: route-level refusals for a handler guarded by a `SignedCookie`
-/// actor. Until the verifier is emitted, a route guarded by one is refused
-/// outright: accepting it would compile a route with no authentication.
+/// #3386: route-level refusals for a handler guarded by a `SignedCookie` actor.
+/// The signed value is consumed at the seam and never reaches handler code, so a
+/// typed `cookies` record may not read the session cookie by name; and a shared
+/// cache would serve one user's answer to another.
 fn check_signed_cookie_route(
     handler: &Handler,
-    by: &ByClause,
     table: &UnitTable,
+    types: &HashMap<String, Arc<TypeDecl>>,
     errors: &mut Vec<CompileError>,
 ) {
-    use crate::actors::Scheme;
-    let Some(actor) = by.actors.iter().find(|a| {
-        table.actors.get(&a.name).is_some_and(|d| {
-            d.auth.as_ref().and_then(|x| Scheme::from_name(&x.name)) == Some(Scheme::SignedCookie)
-        })
-    }) else {
+    let Some(seam) = crate::actors::signed_cookie_seam_for(handler, &table.actors) else {
         return;
     };
-    // A shared cache would serve one user's answer to another.
-    let before = errors.len();
+    // A typed `cookies` field whose wire name (its own, or `@name`) is the session cookie.
+    if let Some(p) = handler.params.iter().find(|p| p.name.name == "cookies")
+        && let TypeRef::Named(rec) = &p.type_ref
+        && let Some(TypeBody::Record(r)) = types.get(&rec.name).map(|d| &d.body)
+    {
+        for f in &r.fields {
+            let wire = f.wire_name().unwrap_or_else(|| f.name.name.clone());
+            if wire == seam.cookie {
+                errors.push(
+                    CompileError::new(
+                        "bynk.actor.signed_cookie_read_directly",
+                        f.span,
+                        format!(
+                            "the field `{}` reads the session cookie `{}` that the `SignedCookie` actor `{}` consumes",
+                            f.name.name, seam.cookie, seam.actor
+                        ),
+                    )
+                    .with_note(
+                        "the signed value is verified at the boundary and never reaches the handler — read the identity from the `by` binder; the router also hides this cookie from a raw `RequestCookies` view",
+                    ),
+                );
+            }
+        }
+    }
     for ann in handler
         .annotations
         .iter()
@@ -2640,23 +2658,6 @@ fn check_signed_cookie_route(
                 .with_note("use `scope: private`, or drop `@cache`"),
             );
         }
-    }
-    // A sum is refused on its own (`signed_cookie_not_in_sum`); report the
-    // missing verifier only for a route with no other refusal.
-    if errors.len() == before && !by.is_sum() {
-        errors.push(
-            CompileError::new(
-                "bynk.actor.signed_cookie_not_yet_emitted",
-                actor.span,
-                format!(
-                    "the `SignedCookie` actor `{}` cannot guard a route yet: its verifier is not emitted in this version",
-                    actor.name
-                ),
-            )
-            .with_note(
-                "the scheme is accepted so its declaration can be checked; refusing the route keeps a cookie-guarded route from compiling with no authentication",
-            ),
-        );
     }
 }
 
@@ -3159,7 +3160,7 @@ fn check_actor_contracts(
                         refs,
                         errors,
                     );
-                    check_signed_cookie_route(handler, by, table, errors);
+                    check_signed_cookie_route(handler, table, &resolved.types, errors);
                 }
                 // #2341 (decision C): `on rejected` has no actor; its own
                 // checks (`check_rejected_handlers`) refuse a `by`.
