@@ -12,8 +12,8 @@
 //!
 //! **The connection string is a secret** (R-16). It is read from the
 //! environment, parsed, and sent to Cloudflare over TLS, and that is all. It
-//! never reaches the ledger (which holds an id, a name and a one-way
-//! fingerprint), the plan or its JSON, a generated file, a log or an error
+//! never reaches the ledger (which holds an id and a name, and nothing derived
+//! from the string), the plan or its JSON, a generated file, a log or an error
 //! message: [`Secret`] and [`Origin`] print as `<redacted>`, every message here
 //! is built from names and never from the value, and what Cloudflare answers
 //! is [`scrub`]bed before it is shown.
@@ -21,7 +21,6 @@
 use super::*;
 use crate::migrate::live::{self, Credentials, Rest};
 use bynk_project::hyperdrive::HyperdriveDeployConfig;
-use sha2::{Digest, Sha256};
 
 /// A value that must never be printed: it has no `Display`, and its `Debug`
 /// hides it, so a stray `{:?}` of a struct holding one cannot leak it.
@@ -157,24 +156,6 @@ pub(crate) fn parse_connection_string(raw: &str) -> Result<Origin, ParseProblem>
     })
 }
 
-/// A one-way fingerprint of the connection string behind `binding` in
-/// `environment`: the first eight bytes of a SHA-256, so the ledger can tell the
-/// string changed without holding it. Salted with the environment and the
-/// binding, so two configs that share a string do not share a fingerprint.
-pub(crate) fn fingerprint(environment: &str, binding: &str, raw: &str) -> String {
-    let mut hash = Sha256::new();
-    hash.update(b"bynk-hyperdrive-v1\0");
-    hash.update(environment.as_bytes());
-    hash.update(b"\0");
-    hash.update(binding.as_bytes());
-    hash.update(b"\0");
-    hash.update(raw.trim().as_bytes());
-    hash.finalize()[..8]
-        .iter()
-        .map(|b| format!("{b:02x}"))
-        .collect()
-}
-
 /// `message` with every form of `secrets` removed: the whole string, and the
 /// password in the raw and percent-encoded forms a server could echo.
 pub(crate) fn scrub(message: &str, secrets: &[&str]) -> String {
@@ -194,7 +175,6 @@ pub(crate) enum Want {
     Connection {
         /// The environment variable it was read from: a name, safe to print.
         variable: String,
-        fingerprint: String,
         origin: Origin,
         /// The whole string, kept only to scrub it from what an API answers.
         raw: Secret,
@@ -274,7 +254,6 @@ pub(crate) fn resolve_wants(
                         (worker.clone(), decl.binding.clone()),
                         Want::Connection {
                             variable: variable.clone(),
-                            fingerprint: fingerprint(environment, &decl.binding, &raw),
                             origin,
                             raw: Secret(raw),
                         },
@@ -298,8 +277,9 @@ pub(crate) fn resolve_wants(
 /// wanted. Pure, so the plan shows it before anything is asked of the account.
 ///
 /// - `create`: no config of this name is recorded.
-/// - `update`: one is, and the connection string has changed.
-/// - `reuse`: one is, and nothing changed.
+/// - `sync`: one is, and it is updated from the variable again (every deploy).
+/// - `reuse`: one is, and there is no string to sync (a recorded config with
+///   nothing wanted).
 /// - `adopt`: the project names a config that already exists.
 pub(crate) fn action(
     recorded: Option<&HyperdriveRecord>,
@@ -314,14 +294,12 @@ pub(crate) fn action(
                 "adopt"
             }
         }
-        Some(Want::Connection { fingerprint, .. }) => match recorded {
-            Some(r) if !r.adopted && r.name == physical => {
-                if r.fingerprint.as_deref() == Some(fingerprint.as_str()) {
-                    "reuse"
-                } else {
-                    "update"
-                }
-            }
+        // The config is synced from the variable on every deploy: nothing
+        // derived from the string is kept to tell whether it changed, since
+        // the ledger is committed and a digest of a secret there could be
+        // guessed offline. A repeat sync is idempotent.
+        Some(Want::Connection { .. }) => match recorded {
+            Some(r) if !r.adopted && r.name == physical => "sync",
             _ => "create",
         },
         None => {
@@ -539,21 +517,12 @@ pub(crate) fn provision(
                         name,
                         id: id.clone(),
                         adopted: true,
-                        fingerprint: None,
                         superseded: Vec::new(),
                     },
                 )?;
                 id.clone()
             }
-            (
-                "create",
-                Some(Want::Connection {
-                    origin,
-                    raw,
-                    fingerprint,
-                    ..
-                }),
-            ) => {
+            ("create", Some(Want::Connection { origin, raw, .. })) => {
                 let api = need_api(run, worker, binding)?;
                 let id = api.create(&physical, origin).map_err(|e| {
                     DeployFailure::driver(format!(
@@ -571,21 +540,12 @@ pub(crate) fn provision(
                         name: physical.clone(),
                         id: id.clone(),
                         adopted: false,
-                        fingerprint: Some(fingerprint.clone()),
                         superseded: Vec::new(),
                     },
                 )?;
                 id
             }
-            (
-                "update",
-                Some(Want::Connection {
-                    origin,
-                    raw,
-                    fingerprint,
-                    ..
-                }),
-            ) => {
+            ("sync", Some(Want::Connection { origin, raw, .. })) => {
                 let api = need_api(run, worker, binding)?;
                 let Some(old) = recorded else {
                     return Err(DeployFailure::driver(format!(
@@ -594,21 +554,11 @@ pub(crate) fn provision(
                 };
                 api.update(&old.id, &physical, origin).map_err(|e| {
                     DeployFailure::driver(format!(
-                        "could not update the Hyperdrive config `{physical}` for `{worker}`'s `{binding}`: {}",
+                        "could not sync the Hyperdrive config `{physical}` for `{worker}`'s `{binding}`: {}",
                         scrub(&e, &[raw.expose(), origin.password.expose()])
                     ))
                 })?;
-                record(
-                    lock,
-                    lock_path,
-                    environment,
-                    worker,
-                    binding,
-                    HyperdriveRecord {
-                        fingerprint: Some(fingerprint.clone()),
-                        ..old.clone()
-                    },
-                )?;
+                record(lock, lock_path, environment, worker, binding, old.clone())?;
                 old.id
             }
             _ => {

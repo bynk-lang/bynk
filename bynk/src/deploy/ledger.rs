@@ -55,8 +55,9 @@ pub(crate) struct Environment {
     /// #3319: each Worker's `Postgres` instances (`capability Main =
     /// Postgres`), keyed by the instance's binding (`HYPERDRIVE_MAIN`): the
     /// Hyperdrive config the deploy created or adopted for it, and the id
-    /// the push binds. It holds an id and a name, and a one-way fingerprint
-    /// of the connection string so a change is seen; never the string.
+    /// the push binds. It holds an id and a name and nothing derived from
+    /// the connection string: the ledger is committed, so even a digest of a
+    /// secret there could be guessed offline.
     ///
     /// Additive, `default`ed and omitted when empty, so an older ledger still
     /// reads and a project without `Postgres` writes the same file.
@@ -223,12 +224,6 @@ pub(crate) struct HyperdriveRecord {
     /// project's to change or delete: it is never updated and never pruned.
     #[serde(default, skip_serializing_if = "std::ops::Not::not")]
     pub(crate) adopted: bool,
-    /// A one-way fingerprint of the connection string the config was last
-    /// made or updated from, so the plan can tell the string changed. It is
-    /// a truncated SHA-256 over the string, the environment and the binding:
-    /// it identifies a change, and is not the string.
-    #[serde(default, skip_serializing_if = "Option::is_none")]
-    pub(crate) fingerprint: Option<String>,
     /// Configs this binding used to have, under another id. They stay recorded
     /// (and are reported as orphans) until pruned or removed by hand.
     #[serde(default, skip_serializing_if = "Vec::is_empty")]

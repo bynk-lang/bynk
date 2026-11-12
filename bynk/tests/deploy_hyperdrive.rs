@@ -120,7 +120,9 @@ fn the_plan_creates_the_config_and_prints_none_of_the_string() {
     let (ok, text, err) = dry_run(&dir, &[("MAIN_DATABASE_URL", STRING)], &[]);
     assert!(ok, "{text}{err}");
     assert!(
-        text.contains("hyperdrive create shop-orders-main (HYPERDRIVE_MAIN)\n"),
+        text.contains(
+            "hyperdrive create shop-orders-main (HYPERDRIVE_MAIN; from `MAIN_DATABASE_URL`)\n"
+        ),
         "{text}"
     );
     assert_clean("the plan", &text);
@@ -164,7 +166,7 @@ fn a_named_environment_plans_its_own_config() {
     );
     assert!(ok, "{text}{err}");
     assert!(
-        text.contains("hyperdrive create shop-orders-main-staging (HYPERDRIVE_MAIN)\n"),
+        text.contains("hyperdrive create shop-orders-main-staging (HYPERDRIVE_MAIN; from `MAIN_DATABASE_URL`)\n"),
         "{text}"
     );
 }

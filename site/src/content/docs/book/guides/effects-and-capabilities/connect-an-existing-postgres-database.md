@@ -91,8 +91,8 @@ bynk deploy
 
 `bynk dev` hands the local string to that Worker's `wrangler dev` as
 `CLOUDFLARE_HYPERDRIVE_LOCAL_CONNECTION_STRING_HYPERDRIVE_MAIN`, so the Worker
-reaches your own Postgres. Deploy makes the config from the other variable, updates
-it when the string changes, and records its id, so there is no
+reaches your own Postgres. Deploy makes the config from the other variable, syncs
+it from that variable on every deploy, and records its id, so there is no
 `wrangler hyperdrive create` and no id to paste. A team whose config already exists
 names it with `config_id` instead and needs no string at deploy. The
 [deploy guide](/book/guides/projects-build-and-deployment/deploy-to-cloudflare/#postgres-databases-hyperdrive)

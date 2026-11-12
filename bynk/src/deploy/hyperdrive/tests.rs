@@ -184,20 +184,6 @@ fn a_malformed_string_names_the_part_that_is_wrong() {
     }
 }
 
-#[test]
-fn the_fingerprint_changes_with_the_string_the_environment_and_the_binding() {
-    let base = fingerprint("default", "HYPERDRIVE_MAIN", STRING);
-    assert_eq!(base.len(), 16);
-    assert_eq!(base, fingerprint("default", "HYPERDRIVE_MAIN", STRING));
-    assert_ne!(
-        base,
-        fingerprint("default", "HYPERDRIVE_MAIN", "postgres://u:p2@h/d")
-    );
-    assert_ne!(base, fingerprint("staging", "HYPERDRIVE_MAIN", STRING));
-    assert_ne!(base, fingerprint("default", "HYPERDRIVE_OTHER", STRING));
-    assert!(!base.contains("Hunter2"));
-}
-
 // ---- DECISIONS A and B: where a config comes from ----
 
 #[test]
@@ -324,10 +310,10 @@ fn every_problem_is_found_in_one_run() {
     assert_eq!(problems.len(), 2, "{problems:?}");
 }
 
-// ---- the plan: create, update, reuse, adopt (DECISION C) ----
+// ---- the plan: create, sync, adopt (DECISION C) ----
 
 #[test]
-fn the_plan_creates_then_reuses_then_updates_when_the_string_changes() {
+fn the_plan_creates_then_syncs_from_the_variable_and_never_prints_it() {
     let (_root, lock_path, config) = scratch("plan");
     let resources = shop();
     let order = names(&["shop"]);
@@ -339,7 +325,8 @@ fn the_plan_creates_then_reuses_then_updates_when_the_string_changes() {
         plan_of(&order, &resources, &lock).with_hyperdrive(&order, &resources, &lock, &wants);
     let report = plan_report(&fresh, DeployFormat::Short);
     assert!(
-        report.contains("hyperdrive create shop-main (HYPERDRIVE_MAIN)\n"),
+        report
+            .contains("hyperdrive create shop-main (HYPERDRIVE_MAIN; from `MAIN_DATABASE_URL`)\n"),
         "{report}"
     );
 
@@ -358,7 +345,7 @@ fn the_plan_creates_then_reuses_then_updates_when_the_string_changes() {
         plan_of(&order, &resources, &lock).with_hyperdrive(&order, &resources, &lock, &wants);
     let report = plan_report(&same, DeployFormat::Short);
     assert!(
-        report.contains("hyperdrive reuse shop-main (HYPERDRIVE_MAIN)\n"),
+        report.contains("hyperdrive sync shop-main (HYPERDRIVE_MAIN; from `MAIN_DATABASE_URL`)\n"),
         "{report}"
     );
 
@@ -370,9 +357,7 @@ fn the_plan_creates_then_reuses_then_updates_when_the_string_changes() {
         plan_of(&order, &resources, &lock).with_hyperdrive(&order, &resources, &lock, &rotated);
     let report = plan_report(&changed, DeployFormat::Short);
     assert!(
-        report.contains(
-            "hyperdrive update shop-main (HYPERDRIVE_MAIN; `MAIN_DATABASE_URL` changed)\n"
-        ),
+        report.contains("hyperdrive sync shop-main (HYPERDRIVE_MAIN; from `MAIN_DATABASE_URL`)\n"),
         "{report}"
     );
     // The plan names the variable and never the value, in either format.
@@ -385,7 +370,7 @@ fn the_plan_creates_then_reuses_then_updates_when_the_string_changes() {
         "{json}"
     );
     assert!(
-        json.contains("\"action\": \"update\"") || json.contains("\"action\":\"update\""),
+        json.contains("\"action\": \"sync\"") || json.contains("\"action\":\"sync\""),
         "{json}"
     );
 }
@@ -431,7 +416,7 @@ fn the_plan_adopts_a_named_config_then_reuses_it() {
         "adopting only looks the config up"
     );
     let recorded = recorded_hyperdrive(&lock, "shop", "HYPERDRIVE_MAIN", "default").unwrap();
-    assert!(recorded.adopted && recorded.fingerprint.is_none());
+    assert!(recorded.adopted);
     assert_eq!(
         (recorded.id.as_str(), recorded.name.as_str()),
         ("abc123", "shop-prod")
@@ -516,7 +501,7 @@ fn a_create_sends_the_parts_records_the_id_and_binds_it() {
     assert!(text.contains("id = \"cfg-0\""), "{text}");
     assert!(!text.contains("<HYPERDRIVE_MAIN_ID>"), "{text}");
 
-    // A second run with the same string asks nothing of the account.
+    // A second run syncs the same config; it never makes a second one.
     let before = api.calls.borrow().len();
     provision(
         &run_with(&wants, &api),
@@ -528,11 +513,15 @@ fn a_create_sends_the_parts_records_the_id_and_binds_it() {
         "default",
     )
     .unwrap();
-    assert_eq!(api.calls.borrow().len(), before);
+    assert_eq!(api.calls.borrow().len(), before + 1);
+    assert_eq!(
+        api.calls.borrow().last().unwrap().split(' ').next(),
+        Some("update")
+    );
 }
 
 #[test]
-fn a_changed_string_updates_the_same_config_and_keeps_its_id() {
+fn every_deploy_syncs_the_same_config_and_keeps_its_id() {
     let (_root, lock_path, config) = scratch("update");
     let resources = shop();
     let api = Fake::default();
@@ -547,11 +536,8 @@ fn a_changed_string_updates_the_same_config_and_keeps_its_id() {
         "default",
     )
     .unwrap();
-    let before = recorded_hyperdrive(&lock, "shop", "HYPERDRIVE_MAIN", "default")
-        .unwrap()
-        .fingerprint
-        .clone();
-
+    // The same string again: synced all the same, since nothing derived from
+    // the string is kept to tell that it did not change.
     let rotated = wants_of(
         "postgres://svc_user:Rotated-Pw-99@new-host.example/shopdb",
         "default",
@@ -572,8 +558,9 @@ fn a_changed_string_updates_the_same_config_and_keeps_its_id() {
     );
     let after = recorded_hyperdrive(&lock, "shop", "HYPERDRIVE_MAIN", "default").unwrap();
     assert_eq!(after.id, "cfg-0", "an update keeps the id");
-    assert_ne!(after.fingerprint, before);
-    assert!(after.superseded.is_empty(), "an update leaves no orphan");
+    assert!(after.superseded.is_empty(), "a sync leaves no orphan");
+    // The ledger holds the id and the name, and nothing of the string.
+    assert_clean("the ledger", &std::fs::read_to_string(&lock_path).unwrap());
 }
 
 #[test]
@@ -668,7 +655,9 @@ fn a_renamed_capability_plans_a_create_and_an_orphan_that_prune_deletes() {
     let plan = plan_of(&order, &renamed, &lock).with_hyperdrive(&order, &renamed, &lock, &wants);
     let report = plan_report(&plan, DeployFormat::Short);
     assert!(
-        report.contains("hyperdrive create shop-primary (HYPERDRIVE_PRIMARY)\n"),
+        report.contains(
+            "hyperdrive create shop-primary (HYPERDRIVE_PRIMARY; from `MAIN_DATABASE_URL`)\n"
+        ),
         "{report}"
     );
     assert!(
@@ -703,7 +692,6 @@ fn an_adopted_orphan_is_reported_and_never_deleted() {
             name: "theirs".into(),
             id: "abc123".into(),
             adopted: true,
-            fingerprint: None,
             superseded: Vec::new(),
         },
     );

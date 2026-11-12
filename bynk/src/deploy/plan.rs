@@ -245,9 +245,10 @@ struct PlanD1<'a> {
 struct PlanHyperdrive<'a> {
     /// `HYPERDRIVE_<SNAKE>`.
     binding: &'a str,
-    /// `create` (a config made from the connection string), `update` (the
-    /// string changed since the ledger last saw it), `reuse` (the recorded
-    /// config, unchanged) or `adopt` (a config `bynk.toml` names by id).
+    /// `create` (a config made from the connection string), `sync` (the
+    /// recorded config, updated from the variable again), `reuse` (the
+    /// recorded config, nothing to sync) or `adopt` (a config `bynk.toml`
+    /// names by id).
     action: &'static str,
     /// The config's account-facing name, or for an adopted config its id.
     /// Never the connection string, or any part of it.
@@ -2057,10 +2058,8 @@ pub(crate) fn plan_report(plan: &Plan<'_>, format: DeployFormat) -> String {
                         "hyperdrive {} {} ({}",
                         h.action, h.config, h.binding
                     ));
-                    if h.action == "update"
-                        && let Some(variable) = &h.connection_env
-                    {
-                        out.push_str(&format!("; `{variable}` changed"));
+                    if let Some(variable) = &h.connection_env {
+                        out.push_str(&format!("; from `{variable}`"));
                     }
                     out.push_str(")\n");
                 }
@@ -2282,8 +2281,7 @@ fn hyperdrive_plan<'a>(
 
 impl<'a> Plan<'a> {
     /// #3319: show each Hyperdrive config as `bynk.toml` and the environment
-    /// say it will be handled (an `update` when the connection string
-    /// changed, an `adopt`), once the deploy has read them.
+    /// say it will be handled (a `sync` from the variable, an `adopt`), once the deploy has read them.
     pub(crate) fn with_hyperdrive(
         mut self,
         order: &[String],

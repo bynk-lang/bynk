@@ -649,17 +649,20 @@ environment suffix under `--env` (`shop-orders-main-staging`), and each
 environment makes its own:
 
 ```
-hyperdrive create shop-orders-main (HYPERDRIVE_MAIN)
+hyperdrive create shop-orders-main (HYPERDRIVE_MAIN; from `MAIN_DATABASE_URL`)
 deploy shop-orders
 ```
 
-**When the string changes.** The ledger keeps a one-way fingerprint of the string
-each config was made from (not the string), so rotating the password or moving the
-database shows in the plan as an update to the same config, which keeps its id, and
-the plan names the variable and never its value:
+**Every deploy syncs the config.** When `connection_env` is set, deploy updates
+the config from the variable each time, so rotating the password or moving the
+database needs nothing but the new value in the variable. The update is
+idempotent and keeps the config's id. The ledger records only the id and the name:
+the ledger is committed, so nothing derived from the string, not even a digest,
+is kept there. The plan says where the config is synced from, and never shows the
+value:
 
 ```
-hyperdrive update shop-orders-main (HYPERDRIVE_MAIN; `MAIN_DATABASE_URL` changed)
+hyperdrive sync shop-orders-main (HYPERDRIVE_MAIN; from `MAIN_DATABASE_URL`)
 deploy shop-orders
 ```
 
@@ -693,7 +696,7 @@ Renaming the capability makes a new config and orphans the old one:
 
 ```
 orphan hyperdrive shop-orders HYPERDRIVE_MAIN (shop-orders-main; deleted by --prune)
-hyperdrive create shop-orders-primary (HYPERDRIVE_PRIMARY)
+hyperdrive create shop-orders-primary (HYPERDRIVE_PRIMARY; from `MAIN_DATABASE_URL`)
 ```
 
 A Hyperdrive config holds no data, so `--prune` deletes an orphan the deploy made

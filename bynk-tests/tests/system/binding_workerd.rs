@@ -2058,6 +2058,11 @@ impl Drop for LocalPostgres {
     }
 }
 
+/// KNOWN, TO BE FIXED BY H3 (#3320), and so not exercised here: a `PgJson`
+/// parameter cast `$n::jsonb` is stored as a JSON string, not parsed (the
+/// runtime hands postgres.js already-encoded text, which it encodes again), so
+/// the `jsonb` column below is written by the statement and read back, not bound.
+///
 /// The `Postgres` smoke's Worker: three instances, one per database the smoke
 /// reaches (a real one; a port nothing listens on; a host that does not
 /// resolve). The routes answer plain text so a step is one line.
@@ -2251,10 +2256,12 @@ fn workers_postgres_runs_through_hyperdrive_on_workerd() {
                 match get(port, path) {
                     Ok((200, body)) => {
                         let body = unquote(&body);
-                        // Under local Hyperdrive a socket error carries no
-                        // driver `code`, so it is `PgFailed` with an empty
-                        // SQLSTATE; a driver that gave one would be
-                        // `PgConnection`. Either is a `PgError` answer.
+                        // KNOWN, TO BE FIXED BY H3 (#3320): under local
+                        // Hyperdrive a socket error carries no driver `code`,
+                        // so it arrives as `PgFailed` with an empty SQLSTATE,
+                        // not `PgConnection`. Both forms are accepted so the
+                        // fix does not break this; what is checked is that
+                        // it is a `PgError` and holds nothing of the string.
                         if !(body.starts_with("connection:") || body.starts_with("failed [] ")) {
                             failures.push(format!("{path}: not a `PgError`: {body}"));
                         }
