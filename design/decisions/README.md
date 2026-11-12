@@ -17,6 +17,7 @@ or a row links to no file. Summaries and statuses are curated by hand; the
 
 | # | Decision | Status |
 |---|---|---|
+| [0813](0813-hyperdrive-h3-typed-reads-and-transaction.md) | **Hyperdrive H3: typed reads and `transaction` for `Postgres`, and what stays apart from `decodeSql`** (v0.558) — Variant names, how an `Instant` and an `int8` are read, why `decodeSql` is not unified with the codec yet, and how a transaction reaches the driver | Accepted (v0.558) |
 | [0812](0812-field-name-annotation.md) | **`@name("…")` field annotation for external names that are not identifiers** (v0.557) — The first field annotation in the language, how it is parsed and where it is legal | Accepted (v0.557) |
 | [0811](0811-hyperdrive-h1-postgres-instance-kind.md) | **Hyperdrive H1: a `Postgres` instance kind over postgres.js** (v0.556) — Variant names, how the driver reaches the binding, one connection per statement, and the SQLSTATE mapping | Accepted (v0.556) |
 | [0810](0810-form-codec.md) | **`Form.decode` and `Form.encode` expose the `@form` mapping as a codec** (v0.555) — How form text is read into and written from a record, and where the codec sits beside `Json` | Accepted (v0.555) |

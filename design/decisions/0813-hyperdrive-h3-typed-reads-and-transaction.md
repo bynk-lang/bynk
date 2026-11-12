@@ -1,12 +1,6 @@
----
-level: minor
-probes: emit_diagnostics, emit_abi_shapes, ts_writes
-changelog: A `Postgres` instance has typed reads `select[T]` and `firstAs[T]`, which write the column list from `T` and decode the rows (an `int8` into an `Int`, a `timestamptz` into an `Instant`), and `transaction`, which runs a fixed list of `PgStatement`s all or none
----
+# 0813 — Hyperdrive H3: typed reads and `transaction` for `Postgres`, and what stays apart from `decodeSql`
 
-## ADR: hyperdrive-h3-typed-reads-and-transaction
-title: Hyperdrive H3: typed reads and `transaction` for `Postgres`, and what stays apart from `decodeSql`
-summary: Variant names, how an `Instant` and an `int8` are read, why `decodeSql` is not unified with the codec yet, and how a transaction reaches the driver
+- **Status:** Accepted (v0.558)
 
 **Context.** ADR 0799 settled the driver and the row rules, and H1 built
 `Postgres.all`, `first` and `run`. After H1 a `Postgres` read spells its columns
