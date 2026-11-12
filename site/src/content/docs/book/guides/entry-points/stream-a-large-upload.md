@@ -20,7 +20,7 @@ service archives from http {
   limits { maxBody: 5_000_000_000 }
 
   @raw(contentType: "application/zip")
-  on PUT("/archives/:name") (name: ArchiveName, headers: RequestHeaders, body: Stream[Bytes])
+  on PUT("/archives/:name") (name: String, headers: RequestHeaders, body: Stream[Bytes])
       -> Effect[HttpResult[()]] by u: User given Archives {
     …
   }
@@ -38,10 +38,12 @@ from the request's `Content-Length` header:
 
 ```bynk,ignore
     match headers.get("content-length") {
-      Some(length) => {
-        let size = …      // parse `length` to an Int; answer 400 if it is not one
-        let _ <- Archives.putStream(name.value, body, size)
-        NoContent
+      Some(length) => match Int.parse(length) {
+        Some(size) => {
+          let _ <- Archives.putStream(name, body, size)
+          NoContent
+        }
+        None => BadRequest("Content-Length is not a number")
       }
       None => BadRequest("send a Content-Length")
     }
@@ -73,7 +75,7 @@ length, to forward it to another service.
   not the bytes.
 - **Read first, then answer.** Do not build the response from the request stream (an echo
   through `RawStreamed`): it failed under `wrangler dev`'s proxy and is unchecked on
-  Cloudflare's edge.
+  Cloudflare's edge ([#3396](https://github.com/bynk-lang/bynk/issues/3396)).
 - **Retries.** A request body cannot be replayed, so a client that retries sends it again.
   If the upload must be safe to repeat, take an
   [`Idempotency`](/book/reference/bynk-capabilities/#the-idempotency-capability) key from the
@@ -84,19 +86,45 @@ length, to forward it to another service.
 
 ## Test it
 
-A case passes a `Stream`, usually `Stream.of([…])`. At the `unit` and `integration` tiers it
-reaches the handler as it is. At `system` the driver sends it chunked with no
-`Content-Length`, so the router's counted read runs and an upload past the cap is
-`Rejected(PayloadTooLarge(_))`:
+A case passes a `Stream`, usually `Stream.of([…])`, in the body's position, after the path
+parameter and the `headers: RequestHeaders` this route declares. At the `unit` and
+`integration` tiers the stream reaches the handler as it is, so a case sets the
+`Content-Length` itself and can see the upload reach R2:
 
 ```bynk,ignore
-suite archives.api as system {
-  case "an archive is accepted" {
-    let r <- api.PUT("/archives/:name", "a.zip", Stream.of([Bytes.fromUtf8("PK"), Bytes.fromUtf8("data")]))
-    expect r is Ok(_)
+suite archives.api {
+  case "an archive is stored" {
+    let r <- api.PUT("/archives/:name", "a.zip", RequestHeaders.of(["Content-Length: 6"]),
+                     Stream.of([Bytes.fromUtf8("PK"), Bytes.fromUtf8("data")])) by User("alice")
+    expect r is NoContent
+    expect Archives.putStream called
+  }
+
+  case "an upload with no Content-Length is refused" {
+    let r <- api.PUT("/archives/:name", "a.zip", RequestHeaders.empty(),
+                     Stream.of([Bytes.fromUtf8("PK")])) by User("alice")
+    expect r is BadRequest(_)
   }
 }
 ```
+
+At `system` the driver sends a stream chunked, with no `Content-Length`, so the router's
+counted read runs, and a case can drive the limit and the media type: a `Wire(…)` body is one
+streamed chunk of `text/plain`, which this route refuses (a route declaring `"*/*"` takes it,
+and a body past the cap is then `Rejected(PayloadTooLarge(_))`):
+
+```bynk,ignore
+suite archives.api as system {
+  case "another media type is refused" {
+    let r <- api.PUT("/archives/:name", "a.zip", RequestHeaders.empty(), Wire("not a zip")) by User("alice")
+    expect r is Rejected(UnsupportedMediaType(_))
+  }
+}
+```
+
+The happy path of the `Content-Length` pattern above cannot be run at `system` today, because
+the driver never sends a `Content-Length` for a stream: a case there reaches the handler's
+`BadRequest`. Cover it at `unit` or `integration`, as above.
 
 **See also:** [Reference: streamed request bodies](/book/reference/http/#streamed-request-bodies),
 [Streams](/book/reference/types/#stream), [R2](/book/reference/bynk-capabilities/),
