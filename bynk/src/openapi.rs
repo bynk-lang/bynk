@@ -405,11 +405,21 @@ pub fn document(
                 .collect(),
         ),
     );
-    if !components.schemas.is_empty() {
-        doc.insert(
-            "components".into(),
-            json!({ "schemas": Value::Object(components.schemas.into_iter().collect()) }),
-        );
+    if !components.schemas.is_empty() || !components.security.is_empty() {
+        let mut c = Map::new();
+        if !components.schemas.is_empty() {
+            c.insert(
+                "schemas".into(),
+                Value::Object(components.schemas.into_iter().collect()),
+            );
+        }
+        if !components.security.is_empty() {
+            c.insert(
+                "securitySchemes".into(),
+                Value::Object(components.security.into_iter().collect()),
+            );
+        }
+        doc.insert("components".into(), Value::Object(c));
     }
     Ok(sorted(Value::Object(doc)))
 }
@@ -555,11 +565,53 @@ fn operation(
         op.insert("requestBody".into(), b);
     }
 
-    op.insert(
-        "responses".into(),
-        responses_of(r_resp, components, handler, model),
-    );
+    let mut responses = responses_of(r_resp, components, handler, model);
+    if let Some(seam) = bynk_check::actors::signed_cookie_seam_for(handler, &sel.info.actors) {
+        signed_cookie_security(&mut op, &mut responses, components, &seam, method);
+    }
+    op.insert("responses".into(), responses);
     Value::Object(op)
+}
+
+/// #3386: a route guarded by a `SignedCookie` actor needs that actor's cookie: an `apiKey` security
+/// scheme `in: cookie`, named after the cookie, with the seam's refusals documented: `401` for a
+/// missing, forged or expired cookie and, on a state-changing method, `403` for a cross-site request.
+fn signed_cookie_security(
+    op: &mut Map<String, Value>,
+    responses: &mut Value,
+    components: &mut Components,
+    seam: &bynk_check::actors::SignedCookieSeam,
+    method: IrHttpMethod,
+) {
+    components.security.entry(seam.actor.clone()).or_insert_with(|| {
+        json!({
+            "type": "apiKey",
+            "in": "cookie",
+            "name": seam.cookie,
+            "description": format!(
+                "A session cookie the `{}` actor issues and verifies. It is signed, not encrypted, and \
+                 expires after {} seconds.",
+                seam.actor, seam.ttl_secs
+            ),
+        })
+    });
+    op.insert("security".into(), json!([{ (seam.actor.clone()): [] }]));
+    let mut refusals = vec![(
+        "401",
+        "No session cookie, or one that is forged, expired or for another actor.",
+    )];
+    if !matches!(method, IrHttpMethod::Get) {
+        refusals.push((
+            "403",
+            "A cross-site request: its `Sec-Fetch-Site` is not `same-origin` and its `Origin` is not one of the service's credentialed CORS origins.",
+        ));
+    }
+    if let Value::Object(map) = responses {
+        for (status, description) in refusals {
+            map.entry(status.to_string())
+                .or_insert_with(|| json!({ "description": description }));
+        }
+    }
 }
 
 /// #2854: the `in: query` parameters of a handler's typed `query` record, one per
@@ -872,6 +924,8 @@ fn http_result_inner(t: &TypeRef) -> Option<&TypeRef> {
 #[derive(Default)]
 struct Components {
     schemas: BTreeMap<String, Value>,
+    /// #3386: the `components/securitySchemes`, by actor name.
+    security: BTreeMap<String, Value>,
 }
 
 impl Components {

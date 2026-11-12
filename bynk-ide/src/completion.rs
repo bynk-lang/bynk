@@ -217,6 +217,13 @@ pub fn complete_in(
     if is_given_position(line_prefix) {
         return in_scope_capabilities(doc_text, &split());
     }
+    // 3b. #3386: `auth = <cursor>` — the actor schemes, and inside `SignedCookie(` its keys.
+    if let Some(keys) = signed_cookie_key_candidates(line_prefix) {
+        return keys;
+    }
+    if auth_scheme_position(line_prefix) {
+        return auth_scheme_candidates();
+    }
     // 4. `UpperIdent.<cursor>` — name-receiver members: sum variants, refined/
     //    opaque `of`/`unsafe`, capability ops, or built-in type statics.
     if let Some(receiver) = member_receiver(line_prefix) {
@@ -2182,6 +2189,115 @@ fn builtin_sum_variants(receiver: &str) -> Vec<(String, String)> {
 /// variants, refined/opaque `of`/`unsafe`, or capability operations. Yields `[]`
 /// when the receiver resolves to none of these (e.g. a plain `type X = Int`
 /// alias or a record).
+/// #3386: whether the cursor is on the scheme of an `auth = <cursor>` entry.
+fn auth_scheme_position(line_prefix: &str) -> bool {
+    let Some(i) = line_prefix.rfind("auth") else {
+        return false;
+    };
+    line_prefix[i + "auth".len()..]
+        .trim_start()
+        .strip_prefix('=')
+        .is_some_and(|r| {
+            r.trim_start()
+                .chars()
+                .all(|c| c.is_alphanumeric() || c == '_')
+        })
+}
+
+/// #3386: the actor authentication schemes `auth =` takes.
+fn auth_scheme_candidates() -> Vec<Completion> {
+    [
+        ("None", "anonymous: no credential"),
+        ("Bearer", "a signed JWT in `Authorization: Bearer …`"),
+        (
+            "SignedCookie",
+            "a signed, expiring session cookie that Bynk issues and verifies",
+        ),
+        ("Oidc", "an OIDC/JWKS provider token"),
+        ("Signature", "a webhook HMAC signature"),
+        ("Internal", "an in-system caller"),
+        ("Foreign", "a caller that is not Bynk, signing the call"),
+    ]
+    .into_iter()
+    .map(|(label, detail)| {
+        Completion::item(
+            label,
+            CompletionKind::Keyword,
+            Some(format!("auth scheme — {detail}")),
+        )
+    })
+    .collect()
+}
+
+/// #3386: inside the parentheses of `auth = SignedCookie(…`, the config keys not yet written.
+fn signed_cookie_key_candidates(line_prefix: &str) -> Option<Vec<Completion>> {
+    let open = line_prefix.rfind("SignedCookie(")? + "SignedCookie(".len();
+    let args = &line_prefix[open..];
+    if args.contains(')') {
+        return None;
+    }
+    // The key being typed starts after the last comma; a value (after `=`) completes nothing.
+    let current = args.rsplit(',').next().unwrap_or(args);
+    if current.contains('=') {
+        return Some(Vec::new());
+    }
+    let written: Vec<&str> = args
+        .split(',')
+        .filter_map(|part| part.split('=').next().map(str::trim))
+        .collect();
+    Some(
+        [
+            (
+                "secret",
+                "the environment variable holding the signing key (required)",
+            ),
+            (
+                "ttl",
+                "how long an issued cookie is valid, e.g. `12.hours` (required)",
+            ),
+            ("cookie", "the cookie's name; defaults to `__Host-session`"),
+            (
+                "previous",
+                "the key being rotated out, accepted for verification only",
+            ),
+            (
+                "sameSite",
+                "`Lax` (the default), `Strict` or `Unrestricted`",
+            ),
+        ]
+        .into_iter()
+        .filter(|(key, _)| !written.contains(key))
+        .map(|(key, detail)| {
+            Completion::item(
+                key,
+                CompletionKind::Field,
+                Some(format!("SignedCookie key — {detail}")),
+            )
+        })
+        .collect(),
+    )
+}
+
+/// #3386: whether an actor authenticates with a signed session cookie.
+pub fn is_signed_cookie_actor(a: &bynk_syntax::ast::ActorDecl) -> bool {
+    a.auth.as_ref().is_some_and(|s| s.name == "SignedCookie")
+}
+
+/// #3386: the members a `SignedCookie` actor has inside its context, as `(name, signature)`.
+pub fn signed_cookie_members(a: &bynk_syntax::ast::ActorDecl) -> [(&'static str, String); 2] {
+    let identity = a
+        .identity
+        .as_ref()
+        .map_or_else(|| "identity".to_string(), crate::symbols::type_ref_str);
+    [
+        (
+            "issue",
+            format!("issue(identity: {identity}) -> Effect[Cookie]"),
+        ),
+        ("expire", "expire() -> Cookie".to_string()),
+    ]
+}
+
 fn member_candidates(
     receiver: &str,
     doc_text: &str,
@@ -2301,6 +2417,18 @@ fn member_candidates_from(
                             )
                             .with_doc(f.documentation.as_deref()),
                         );
+                    }
+                }
+                // #3386: a `SignedCookie` actor issues and deletes its own session cookie.
+                CommonsItem::Actor(a) if a.name.name == receiver && is_signed_cookie_actor(a) => {
+                    for (label, sig) in signed_cookie_members(a) {
+                        if seen.insert(label.to_string()) {
+                            out.push(Completion::item(
+                                label,
+                                CompletionKind::Member,
+                                Some(format!("{sig} — session cookie of `{receiver}`")),
+                            ));
+                        }
                     }
                 }
                 CommonsItem::Capability(c) if c.name.name == receiver => {
@@ -4069,6 +4197,56 @@ mod tests {
         // emits Id.of/Id.unsafe for every Refined body, refinement or not).
         let doc = "commons m {\n  type Id = Int\n}\n";
         assert!(find(&complete("  Id.", doc, None), "of", CompletionKind::Member).is_some());
+    }
+
+    #[test]
+    fn auth_completes_the_schemes_and_a_signed_cookie_its_keys() {
+        let schemes = complete("actor User { auth = Sig", "context a.b\n", None);
+        assert!(find(&schemes, "SignedCookie", CompletionKind::Keyword).is_some());
+        assert!(find(&schemes, "Bearer", CompletionKind::Keyword).is_some());
+        let keys = complete(
+            "actor User { auth = SignedCookie(secret = \"K\", ",
+            "context a.b\n",
+            None,
+        );
+        assert!(find(&keys, "ttl", CompletionKind::Field).is_some());
+        assert!(
+            find(&keys, "secret", CompletionKind::Field).is_none(),
+            "already written"
+        );
+        let value = complete(
+            "actor User { auth = SignedCookie(ttl = ",
+            "context a.b\n",
+            None,
+        );
+        assert!(value.is_empty());
+        // A closed config offers nothing of its own.
+        assert!(!auth_scheme_position(
+            "actor User { auth = Bearer(secret = \"K\"), identity = "
+        ));
+    }
+
+    #[test]
+    fn a_signed_cookie_actor_offers_issue_and_expire() {
+        let doc = "context a.b\n\ntype UserId = String where NonEmpty\n\nactor User { auth = SignedCookie(secret = \"K\", ttl = 1.hours), identity = UserId }\n";
+        let items = complete("    User.", doc, None);
+        let issue = find(&items, "issue", CompletionKind::Member).expect("`issue` offered");
+        assert_eq!(
+            issue.detail.as_deref(),
+            Some("issue(identity: UserId) -> Effect[Cookie] — session cookie of `User`")
+        );
+        assert!(find(&items, "expire", CompletionKind::Member).is_some());
+        // Another scheme has neither.
+        let doc =
+            "context a.b\n\nactor Admin { auth = Bearer(secret = \"K\"), identity = String }\n";
+        assert!(
+            find(
+                &complete("    Admin.", doc, None),
+                "issue",
+                CompletionKind::Member
+            )
+            .is_none()
+        );
     }
 
     #[test]

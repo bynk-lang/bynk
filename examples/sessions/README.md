@@ -36,6 +36,12 @@ What it shows:
   the `login` reads the first instant, and the `whoami` 31 minutes later finds
   the session gone.
 
+> **Two ways to keep a session.** This example keeps the session on the server, in a `Cache`, so it
+> can be ended at once and holds whatever you like. If you would rather keep no store and can accept a
+> session that lives until its `ttl`, a [`SignedCookie` actor](../../site/src/content/docs/book/guides/actors/authenticate-with-a-signed-cookie.md)
+> signs the cookie for you, issues it with `User.issue(identity)` and checks it (and cross-site posts) before
+> your handler runs.
+
 ## Layout
 
 ```text
