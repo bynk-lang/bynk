@@ -39,6 +39,37 @@ pub fn is_ignored(key: &str) -> bool {
 /// A database without a directory has no entry.
 pub type D1Migrations = BTreeMap<String, Vec<MigrationFile>>;
 
+/// W30 (#2840): the binding of a Worker's implicit idempotency database, which
+/// holds `Idempotency.claim`'s claims. A Worker that calls `claim` declares it
+/// with no author action; its database is `<worker>-idempotency`
+/// ([`d1_database_name`]), and its schema is [`implicit_migrations`].
+pub const IDEMPOTENCY_BINDING: &str = "D1_IDEMPOTENCY";
+
+/// W30 (#2840): the migration files the compiler owns for an implicit database
+/// (the author writes no SQL), by its `binding`; `None` for any other binding.
+/// The claims table holds one row per claimed key and the time it lapses.
+pub fn implicit_migrations(binding: &str) -> Option<Vec<MigrationFile>> {
+    (binding == IDEMPOTENCY_BINDING).then(|| {
+        vec![MigrationFile {
+            name: "0001_idempotency_claims.sql".to_string(),
+            sql: "CREATE TABLE idempotency_claims (\n  key TEXT PRIMARY KEY NOT NULL,\n  expires_at INTEGER NOT NULL\n);\n\nCREATE INDEX idempotency_claims_expires_at ON idempotency_claims (expires_at);\n".to_string(),
+        }]
+    })
+}
+
+/// The migration files of database `database`, bound as `binding`: the
+/// project's own (`migrations/<database>/`), or the compiler's for an implicit
+/// database ([`implicit_migrations`]).
+pub fn migrations_of(
+    migrations: &D1Migrations,
+    database: &str,
+    binding: &str,
+) -> Vec<MigrationFile> {
+    implicit_migrations(binding)
+        .or_else(|| migrations.get(database).cloned())
+        .unwrap_or_default()
+}
+
 /// #3321: the key the opt-in `Postgres` test double's schema rides under in a
 /// [`D1Migrations`] on its way to the test emitters. Not a database name (those
 /// are `<worker>-<capability>`, never starting `@`), so it cannot collide with
@@ -342,6 +373,40 @@ mod tests {
         assert_eq!(
             d1_database_name("shop", "D1_ORDER_LINES"),
             "shop-order-lines"
+        );
+    }
+
+    /// W30 (#2840): the idempotency database is `<worker>-idempotency`, its
+    /// migration is the compiler's, and no other binding gets one.
+    #[test]
+    fn the_implicit_idempotency_database_is_named_and_migrated_by_the_compiler() {
+        assert_eq!(
+            d1_database_name("shop-hooks", IDEMPOTENCY_BINDING),
+            "shop-hooks-idempotency"
+        );
+        let files = implicit_migrations(IDEMPOTENCY_BINDING).expect("the compiler owns it");
+        assert_eq!(files.len(), 1);
+        assert!(files[0].sql.contains("CREATE TABLE idempotency_claims"));
+        assert!(implicit_migrations("D1_ORDERS").is_none());
+    }
+
+    /// A project's own database keeps its folder's files; the implicit one
+    /// ignores the folder.
+    #[test]
+    fn migrations_of_reads_the_folder_for_a_project_database_only() {
+        let mut folder = D1Migrations::new();
+        folder.insert(
+            "shop-orders".to_string(),
+            vec![MigrationFile {
+                name: "0001_a.sql".to_string(),
+                sql: "SELECT 1;".to_string(),
+            }],
+        );
+        assert_eq!(migrations_of(&folder, "shop-orders", "D1_ORDERS").len(), 1);
+        assert!(migrations_of(&folder, "shop-cart", "D1_CART").is_empty());
+        assert_eq!(
+            migrations_of(&folder, "shop-idempotency", IDEMPOTENCY_BINDING)[0].name,
+            "0001_idempotency_claims.sql"
         );
     }
 }

@@ -646,6 +646,23 @@ applied, and deploy stops with wrangler's message before anything is pushed,
 so the previous code keeps serving. Deploy's own confirmation covers the
 apply, so wrangler doesn't ask again.
 
+#### The idempotency database
+
+A Worker that calls [`Idempotency.claim`](/book/reference/bynk-capabilities/#the-idempotency-capability)
+gets a database with no declaration: `<worker>-idempotency`, bound as
+`D1_IDEMPOTENCY`, which holds its claims. It is provisioned, adopted and recorded like
+any other, and the plan lists it:
+
+```
+d1 create shop-hooks-idempotency (D1_IDEMPOTENCY)
+d1 migrate shop-hooks-idempotency (1 file; pending ones applied before the push)
+deploy shop-hooks
+```
+
+The compiler owns its schema (one table of claimed keys and when each lapses): you write no
+SQL and add no `migrations/` folder. A Worker that only uses `dedup` and `remember` gets no
+database.
+
 ### Postgres databases: Hyperdrive
 
 Each [`Postgres` instance](/book/reference/bynk-capabilities/#postgres-databases-postgres)
