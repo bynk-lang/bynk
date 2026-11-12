@@ -3420,9 +3420,13 @@ its unit. The reference is resolved once, before any annotation argument is
 read, so every check and every reader (the emitters, the OpenAPI document,
 hover) sees the literal, and a diagnostic about the value points at the
 reference. A name that does not resolve is the annotation's own bad-argument
-diagnostic. `@name` takes such a `String` constant
-([`@name`](/book/reference/types/#field-name)); the other literal-taking
-annotations follow.
+diagnostic. The annotations that take such a constant are `@name`
+([`String`](/book/reference/types/#field-name)), `@ttl`, `@retain` and
+`@cache(maxAge:)` (`Duration`), `@cache(immutable:)` (`Bool`), `@limit` and
+`@schema` (`Int`), `@raw(contentType:)` (`String`) and `@example` (the base of
+its refinement). A keyword argument (`@cache(scope: public)`,
+`@json(options: plain)`), `@indexed(by:)` and the value-less markers are not
+values and are unchanged.
 
 A constant is emitted as an exported, hoisted function of the declaring module
 that returns its cached value
