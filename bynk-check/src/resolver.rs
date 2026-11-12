@@ -1517,8 +1517,8 @@ fn check_type_decl_refs(t: &TypeDecl, types: &HashMap<String, Arc<TypeDecl>>, er
     }
     // v0.157 (ADR 0183): a record body may be generic. #593: a sum body may too
     // — its variant payloads resolve the parameters as rigid vars, exactly as
-    // record fields do. Type parameters on a refined / opaque body are still
-    // rejected; a parameter shadowing a declared type is diagnosed (mirrors the
+    // record fields do. Type parameters on a refined / opaque / alias body are
+    // still rejected; a parameter shadowing a declared type is diagnosed (mirrors the
     // function-generics rule).
     let type_params: HashSet<String> = t.type_params.iter().map(|p| p.name.name.clone()).collect();
     if !t.type_params.is_empty() {
@@ -1534,13 +1534,14 @@ fn check_type_decl_refs(t: &TypeDecl, types: &HashMap<String, Arc<TypeDecl>>, er
                         t.name.name
                     ),
                 )
-                .with_note("refined and opaque types cannot be generic — their base is a fixed primitive"),
+                .with_note("refined, opaque and alias types cannot be generic — their base is fixed, so a parameter has nowhere to go"),
             );
         }
-        // #593: a generic sum may not carry an `embeds` clause. Embedding folds
-        // another sum's variants in by name; composing that with per-parameter
-        // substitution (the embedded source could itself be generic, or mention
-        // the host's parameters) is out of scope for this increment.
+        // #593: a generic sum may not carry an `embeds` clause. `embeds E as V`
+        // has `?` wrap an `E` error in the variant `V`; composing that conversion
+        // with per-parameter substitution (the embedded type could itself be
+        // generic, or mention the host's parameters) is out of scope for this
+        // increment.
         if let TypeBody::Sum(s) = &t.body
             && let Some(clause) = s.embeds.first()
         {
@@ -1550,7 +1551,7 @@ fn check_type_decl_refs(t: &TypeDecl, types: &HashMap<String, Arc<TypeDecl>>, er
                     clause.span,
                     format!("generic sum `{}` cannot use an `embeds` clause", t.name.name),
                 )
-                .with_note("embedding into a generic sum is not supported — declare the variants directly, or make the sum non-generic"),
+                .with_note("embedding into a generic sum is not supported — drop the `embeds` clause and wrap the error with `.mapErr(…)`, or make the sum non-generic"),
             );
         }
         for tp in &t.type_params {
