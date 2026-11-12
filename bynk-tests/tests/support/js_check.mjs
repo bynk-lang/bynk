@@ -1,19 +1,15 @@
-// Validate that every `.js` file under a root is syntactically valid (parsed as
-// an ES module) — the verification side of the in-browser track's first-class JS
-// artefact (slice 1, ADR 0137). `bynk compile --emit js` type-strips the emitted
-// TypeScript via oxc; this confirms the result is runnable JavaScript with no
-// residual TypeScript syntax (a surviving annotation would fail `node --check`).
+// The files are parsed in this one process with `vm.SourceTextModule` (parse
+// only: nothing is linked or evaluated), which is V8's own ES-module parser, so
+// a surviving TypeScript construct fails exactly as it would under `node
+// --check`. The caller runs this with `--experimental-vm-modules`. (#3387: the
+// check used to spawn `node --check` per file; at ~6,800 files the ~65 ms
+// process startup each dominated the corpus-wide test.)
 //
-// `node --check <file>` is one process per file, so the checks fan out across a
-// bounded worker pool in this single driver process. A root `package.json`
-// (`type: module`, staged by the caller) makes Node parse the `.js` as ESM
-// regardless of Node version.
-//
-// Usage: node js_check.mjs <root-dir>
+// Usage: node --experimental-vm-modules js_check.mjs <root-dir>
 //   exit 0 — every `.js` parses; exit 1 — at least one failed (FAIL lines on stdout)
-import { readdirSync } from "node:fs";
+import { readdirSync, readFileSync } from "node:fs";
 import { join, relative } from "node:path";
-import { execFile } from "node:child_process";
+import vm from "node:vm";
 
 const root = process.argv[2];
 if (!root) {
@@ -32,27 +28,15 @@ function walk(dir, acc) {
 
 const files = walk(root, []);
 let failed = 0;
-let cursor = 0;
 
-function check(file) {
-  return new Promise((resolve) => {
-    execFile(process.execPath, ["--check", file], (err, _stdout, stderr) => {
-      if (err) {
-        failed++;
-        const reason = (stderr || "").split("\n").find((l) => l.includes("Error")) || "invalid";
-        console.log(`FAIL\t${relative(root, file)}\t${reason.trim()}`);
-      }
-      resolve();
-    });
-  });
-}
-
-async function worker() {
-  while (cursor < files.length) {
-    await check(files[cursor++]);
+for (const file of files) {
+  try {
+    new vm.SourceTextModule(readFileSync(file, "utf8"), { identifier: file });
+  } catch (err) {
+    failed++;
+    console.log(`FAIL\t${relative(root, file)}\t${String(err && err.message).split("\n")[0].trim()}`);
   }
 }
 
-await Promise.all(Array.from({ length: 8 }, worker));
 console.log(`CHECKED\t${files.length}`);
 process.exit(failed > 0 ? 1 : 0);
