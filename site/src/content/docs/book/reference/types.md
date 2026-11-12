@@ -276,8 +276,8 @@ type Filter = {
 The field is `pageSize` everywhere in Bynk (access, construction, defaults, refinements);
 only the key a request reader looks for changes. It is legal only on a field of a record used as the
 `cookies`, `query` or `@form`/`@multipart` `body` record of an `on http` handler
-(`bynk.types.field_name_not_request_record`), takes exactly one string literal
-(`bynk.types.field_name_bad_arg`), and such a record may not be used as a JSON body, a result,
+(`bynk.types.field_name_not_request_record`), takes exactly one string literal, or
+a `String` constant bound to one (`bynk.types.field_name_bad_arg`), and such a record may not be used as a JSON body, a result,
 a store field, an event or a call argument (`bynk.types.field_name_record_not_boundary`), since
 its JSON key is the field name. Two fields may not read the same name
 (`bynk.types.field_name_duplicate`), a cookie name must be a token and no name may be empty
@@ -288,6 +288,22 @@ key (the typed system-test drivers and `Form.encode` write it there, and the Ope
 and hover name it), while a failure still names the field, as `query.pageSize`. A tracked
 follow-up moves `examples/sessions` to a typed `@name("__Host-sid")` read
 ([#3343](https://github.com/bynk-lang/bynk/issues/3343)).
+
+A name that two places must agree on can be a constant. `@name` accepts a bare reference
+to a constant declared exactly `String` (not a refined type) and bound to a string literal,
+or to another such constant, from this unit or a `uses`d commons:
+
+```bynk,fragment
+const VisitsCookie: String = "__Host-visits"
+
+type Prefs = {
+  @name(VisitsCookie) visits: Option[Int],
+}
+```
+
+The compiler reads `@name(VisitsCookie)` as `@name("__Host-visits")`: the token rule and the
+duplicate and case checks run on the resolved text, and a diagnostic points at the reference
+and names the constant. Go-to-definition, hover and rename work on it.
 
 ### Cookie and SameSite {#cookie}
 

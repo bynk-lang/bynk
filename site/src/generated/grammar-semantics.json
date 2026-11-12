@@ -1461,7 +1461,7 @@
     },
     {
       "code": "bynk.types.field_name_bad_arg",
-      "summary": "A field's `@name` does not take exactly one string literal."
+      "summary": "A field's `@name` does not take exactly one string literal, or a `String` constant bound to one."
     },
     {
       "code": "bynk.types.field_name_case_conflict",

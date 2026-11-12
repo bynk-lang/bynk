@@ -6389,8 +6389,8 @@ pub const EXPLANATIONS: &[Explain] = &[
     },
     Explain {
         code: "bynk.types.field_name_bad_arg",
-        blurb: "`@name` renames a field's key on an HTTP request, and the compiler reads that key at compile time, so it takes exactly one string literal: not a number, a constant, a computed value, a second argument or none. Write the key as a literal, as in `@name(\"__Host-sid\")`.",
-        example: "type Filter = {\n    @name(1) pageSize: Option[Int],             // ✗ not a string literal\n}\n\ntype Filter = {\n    @name(\"page-size\") pageSize: Option[Int],   // ✓\n}",
+        blurb: "`@name` renames a field's key on an HTTP request, and the compiler reads that key at compile time, so it takes exactly one string literal, or a `String` constant bound to one: not a number, a computed value, a second argument or none. A constant must be declared exactly `String` (not a refined type) and bound to a string literal or to another such constant. Write the key as a literal, as in `@name(\"__Host-sid\")`, or name it once with a constant.",
+        example: "type Filter = {\n    @name(1) pageSize: Option[Int],             // ✗ not a string literal\n}\n\nconst PageKey: String = \"page-size\"\n\ntype Filter = {\n    @name(PageKey) pageSize: Option[Int],       // ✓ a `String` constant bound to a literal\n}\n\ntype Filter = {\n    @name(\"page-size\") pageSize: Option[Int],   // ✓\n}",
         page: "/book/reference/types",
         anchor: "field-name",
     },
@@ -10845,7 +10845,7 @@ pub const REGISTRY: &[DiagnosticInfo] = &[
     ),
     dg(
         "bynk.types.field_name_bad_arg",
-        "A field's `@name` does not take exactly one string literal.",
+        "A field's `@name` does not take exactly one string literal, or a `String` constant bound to one.",
         &["record_field"],
     ),
     dg(
