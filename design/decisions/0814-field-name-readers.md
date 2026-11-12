@@ -1,12 +1,6 @@
----
-level: minor
-changelog: The request readers apply `@name("…")`: a renamed `cookies`, `query` or `@form`/`@multipart` body field is read from, and written to, its wire key (#3343, slice 2)
-probes: ts_writes
----
+# 0814 — The request readers apply a record field's `@name` wire key
 
-## ADR: field-name-readers
-title: The request readers apply a record field's `@name` wire key
-summary: Where a renamed field is read, written and documented, and what an error names
+- **Status:** Accepted (v0.559)
 
 **Context.** `@name("…")` on a request record's field (ADR from slice 1) was checked but not applied: the readers still looked for the field's own name, so `@name("__Host-sid") sid` could not read a `__Host-sid` cookie.
 
