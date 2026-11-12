@@ -10091,7 +10091,7 @@ pub const REGISTRY: &[DiagnosticInfo] = &[
     ),
     dg(
         "bynk.types.select_tail_has_select",
-        "A `D1`, `Postgres` or `MySql` `select[T]` or `firstAs[T]` statement does not start at `FROM` (it begins with `SELECT`, or with `WITH` or a parenthesis); the compiler writes the `SELECT` and column list from `T`.",
+        "A `D1`, `Postgres` or `MySql` `select[T]` or `firstAs[T]` statement does not start at `FROM` (for example it begins with `SELECT`, `WITH` or a parenthesis); the compiler writes the `SELECT` and column list from `T`.",
         &["method_call"],
     ),
     dg(
