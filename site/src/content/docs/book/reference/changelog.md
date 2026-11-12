@@ -28,6 +28,7 @@ per-commit history. While Bynk is pre-1.0, increments may change behaviour.
 
 | Version | Highlights |
 |---|---|
+| **v0.559.1** | `bynk explain` gains thirty-three entries under the actor, adapter, capability, consumes, exports and generics codes (#3163) |
 | **v0.559.0** | The request readers apply `@name("…")`: a renamed `cookies`, `query` or `@form`/`@multipart` body field is read from, and written to, its wire key (#3343, slice 2) |
 | **v0.558.2** | `bynk explain` covers eighteen more codes across `package`, `requires`, `lambda`, `record_spread`, `json`, `duration`, `namespace`, `messages`, `given`, `cell` and `resolve` (#3163) |
 | **v0.558.1** | bynk explain covers nineteen more codes under test and project |
