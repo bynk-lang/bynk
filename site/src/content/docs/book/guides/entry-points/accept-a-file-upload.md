@@ -39,7 +39,8 @@ service api from http {
   only. The name and content type are what the client claimed: never use the filename as
   a storage key, and do not trust the type as proof of the content.
 - The upload is buffered in memory (up to the cap), then handed over as `Bytes`; pass it
-  on, for example to R2, rather than keeping it.
+  on, for example to R2, rather than keeping it. For an upload too large to buffer, see
+  [Stream a large upload](/book/guides/entry-points/stream-a-large-upload/).
 
 ## Test it
 
