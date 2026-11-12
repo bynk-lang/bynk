@@ -28,6 +28,7 @@ per-commit history. While Bynk is pre-1.0, increments may change behaviour.
 
 | Version | Highlights |
 |---|---|
+| **v0.563.1** | The diagnostic for `Val[…]` of a generic type is renamed from `bynk.generics.generic_record_at_boundary` to `bynk.val.generic_type` — it never concerned a boundary, and it covers generic sums as well as records; five diagnostic messages no longer quote the version they were written in |
 | **v0.563.0** | Two cookie warnings from the typed-cookies proposal, `bynk.http.cookie_domain_widens` and `bynk.http.cookie_cross_site_without_credentials` |
 | **v0.562.4** | `bynk deploy` warns when an inbound email `Forward` destination is not a verified address |
 | **v0.562.3** | The runtime gains `requestBodyStream`, a lazy, cap-counted `Stream[Bytes]` over a request body, and `BodyTooLarge`, the first step of streaming a `@raw` request body (#3380, #3180 slice 3) |
