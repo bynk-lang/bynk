@@ -951,15 +951,13 @@ pub fn run_test(program: &str, args: TestArgs) -> ExitCode {
     // NodeNext` follows, #2148), but `out-js` sits in no such `package.json`
     // scope, so mark it ESM for Node to run the result as such. The `out/`
     // tree is left as the compiler wrote it.
-    if let Err(e) = write_esm_marker(&out_js_root) {
-        let msg = format!(
-            "could not write {}: {e}",
-            out_js_root.join("package.json").display()
-        );
-        return fail_run(program, json, stream, msg);
-    }
-
-    if let Err(msg) = provision_npm_dependencies(&input, &output_root, &out_js_root, no_install) {
+    let prepared = write_esm_marker(&out_js_root).map_err(|e| {
+        let marker = out_js_root.join("package.json");
+        format!("could not write {}: {e}", marker.display())
+    });
+    if let Err(msg) =
+        prepared.and_then(|()| provision_npm(&input, &output_root, &out_js_root, no_install))
+    {
         return fail_run(program, json, stream, msg);
     }
 
@@ -1964,7 +1962,7 @@ mod output_within_tests {
 /// them resolvable from the compiled `out-js`. A tree that lists none, or whose
 /// `node_modules` already holds them, runs nothing (offline-safe on a re-run).
 /// `--no-install` (or `BYNK_NO_INSTALL`) stops instead of installing.
-fn provision_npm_dependencies(
+fn provision_npm(
     project_root: &Path,
     output_root: &Path,
     out_js_root: &Path,
