@@ -5121,22 +5121,50 @@ impl SuiteView {
     /// `Bytes` static inside it recorded no callee and lowered to `/* unknown */`.
     /// A name no declaration of the view binds, which a first-party unit does, can
     /// only have come from that unit's `consumes`, so it is that unit's type.
-    fn reach_first_party_types(&mut self, unit_tables: &HashMap<String, UnitTable>) {
+    ///
+    /// The walk starts from what the view's types and fns name, and from the
+    /// participants' service handlers' parameters and results, as a type a
+    /// handler names without any record around it (a JSON `body: Cookie`) is
+    /// reached by neither.
+    fn reach_first_party_types(
+        &mut self,
+        participants: &[String],
+        unit_tables: &HashMap<String, UnitTable>,
+    ) {
+        let no_vars = HashSet::new();
         let mut queue: Vec<String> = self
             .types
             .values()
             .flat_map(|d| crate::project_model::type_decl_ref_names(d))
             .collect();
+        for f in self.fns.values() {
+            for p in &f.params {
+                crate::project_model::type_ref_names(&p.type_ref, &no_vars, &mut queue);
+            }
+            crate::project_model::type_ref_names(&f.return_type, &no_vars, &mut queue);
+        }
+        for table in participants.iter().filter_map(|p| unit_tables.get(p)) {
+            for h in table.services.values().flat_map(|s| &s.handlers) {
+                for p in &h.params {
+                    crate::project_model::type_ref_names(&p.type_ref, &no_vars, &mut queue);
+                }
+                crate::project_model::type_ref_names(&h.return_type, &no_vars, &mut queue);
+            }
+        }
+        // `bynk` is read before `bynk.cloudflare`; the two declare no name in
+        // common, so which unit a participant consumed a name from is not
+        // ambiguous.
+        let first_party = [
+            crate::firstparty::BYNK_UNIT,
+            crate::firstparty::CLOUDFLARE_UNIT,
+        ];
         while let Some(name) = queue.pop() {
             if self.types.contains_key(&name) {
                 continue;
             }
-            let found = [
-                crate::firstparty::BYNK_UNIT,
-                crate::firstparty::CLOUDFLARE_UNIT,
-            ]
-            .into_iter()
-            .find_map(|u| unit_tables.get(u).and_then(|t| t.types.get(&name)));
+            let found = first_party
+                .into_iter()
+                .find_map(|u| unit_tables.get(u).and_then(|t| t.types.get(&name)));
             if let Some(decl) = found {
                 queue.extend(crate::project_model::type_decl_ref_names(decl));
                 self.types.insert(name, decl.clone());
@@ -5307,7 +5335,7 @@ pub fn integration_view(
     }
     // #3064: a participant's actors' identity types are reached too.
     view.close(&imported, unit_tables, unit_uses, true);
-    view.reach_first_party_types(unit_tables);
+    view.reach_first_party_types(participants, unit_tables);
     view
 }
 

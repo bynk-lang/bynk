@@ -1,0 +1,9 @@
+context newsletter.site
+
+consumes bynk { Cookie }
+
+service site from http {
+	on POST("/c") (body: Cookie) -> Effect[HttpResult[String]] by v: Visitor {
+		Ok(body.name)
+	}
+}
