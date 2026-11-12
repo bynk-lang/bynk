@@ -1,0 +1,14 @@
+context demo
+
+consumes bynk.cloudflare { D1 }
+
+capability Orders = D1
+
+type Order = { id: String, total: Int }
+
+service probe {
+  on call() -> Effect[Bool] given Orders {
+    let _ <- Orders.select[Order]("FROM orders", [])
+    true
+  }
+}

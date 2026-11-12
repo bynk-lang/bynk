@@ -1,0 +1,12 @@
+context demo
+
+type Order = { id: String, paid: Bool, customerId: String }
+
+agent A {
+    key k: String
+    store orders: Map[String, Order] @indexed(by: customerId)
+
+    on call run(c: String) -> Effect[Int] {
+        orders.filter((o) => o.customerId == c).count()
+    }
+}

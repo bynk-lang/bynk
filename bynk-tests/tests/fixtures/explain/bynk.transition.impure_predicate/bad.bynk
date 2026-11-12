@@ -1,0 +1,14 @@
+context demo
+
+agent Counter {
+    key id: String
+    store count: Cell[Int] = 0
+
+    transition grows: Effect.pure(new.count >= old.count)
+
+    on call bump() -> Effect[()] {
+        let cur = count
+        count := cur + 1
+        Effect.pure(())
+    }
+}

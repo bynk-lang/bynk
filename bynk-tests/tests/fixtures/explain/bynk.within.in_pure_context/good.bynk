@@ -1,0 +1,7 @@
+context demo
+
+consumes bynk { TimedOut }
+
+fn bounded(e: Effect[Int]) -> Effect[Result[Int, TimedOut]] {
+    e.within(1.seconds)
+}

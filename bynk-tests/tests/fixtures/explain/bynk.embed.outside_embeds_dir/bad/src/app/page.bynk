@@ -1,0 +1,3 @@
+commons app.page
+
+embed shell = "templates/page.html"

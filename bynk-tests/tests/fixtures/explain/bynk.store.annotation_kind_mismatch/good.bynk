@@ -1,0 +1,10 @@
+context demo
+
+agent A {
+    key k: String
+    store sessions: Cache[String, Int] @ttl(30.minutes)
+
+    on call run(c: String) -> Effect[Int] {
+        Effect.pure(0)
+    }
+}

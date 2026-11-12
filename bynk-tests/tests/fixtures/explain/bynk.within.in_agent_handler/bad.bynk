@@ -1,0 +1,21 @@
+context demo
+
+consumes bynk { TimedOut }
+
+agent Slow {
+    key id: String
+    store n: Cell[Int] = 0
+
+    on call get() -> Effect[Int] {
+        Effect.pure(1)
+    }
+}
+
+agent Feed {
+    key id: String
+    store n: Cell[Int] = 0
+
+    on call quote() -> Effect[Result[Int, TimedOut]] {
+        Slow("a").get().within(1.seconds)
+    }
+}

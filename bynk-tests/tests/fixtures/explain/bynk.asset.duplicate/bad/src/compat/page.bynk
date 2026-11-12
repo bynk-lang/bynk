@@ -1,0 +1,4 @@
+commons compat.page
+
+asset style = "assets/board.css"
+asset style = "assets/print.css"

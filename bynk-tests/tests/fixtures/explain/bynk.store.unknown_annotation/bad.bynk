@@ -1,0 +1,10 @@
+context demo
+
+agent A {
+    key k: String
+    store audit: Log[String] @keep(7.days)
+
+    on call run(c: String) -> Effect[Int] {
+        Effect.pure(0)
+    }
+}

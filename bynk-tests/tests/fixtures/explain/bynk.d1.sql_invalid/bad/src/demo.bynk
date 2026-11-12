@@ -1,0 +1,12 @@
+context demo
+
+consumes bynk.cloudflare { D1 }
+
+capability Orders = D1
+
+service probe {
+  on call() -> Effect[Bool] given Orders {
+    let _ <- Orders.all("SELECT id, totl FROM orders", [])
+    true
+  }
+}
