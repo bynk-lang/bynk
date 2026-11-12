@@ -48,7 +48,7 @@ compiler: in-process
 | Capability | Needs | Missing means |
 |---|---|---|
 | **compile / check / fmt** | nothing — the compiler is built into `bynk` | always available |
-| **`bynk test`** | Node ≥ 22.13 **and** `tsc` (TypeScript 5–7) or `tsx` | you can't run `test` blocks |
+| **`bynk test`** | Node ≥ 22.13 **and** `tsc` (TypeScript 7) or `tsx` | you can't run `test` blocks |
 | **dev / deploy** | Node ≥ 22.13 **and** `wrangler` (4.120.1 or newer for `bynk dev`) | you can't deploy to Cloudflare |
 | **editor** *(optional)* | `bynk-lsp` | a note — editor features only |
 | **build-from-source** *(optional)* | a Rust toolchain | shown only inside the Bynk repo |
@@ -81,9 +81,9 @@ older one, naming the version and the fix. A project with no agent still
 deploys, which is why `doctor` keeps this a warning rather than failing
 `--only deploy`.
 
-The emitted TypeScript is verified under **TypeScript 5** (the oldest supported
-major) and **7** (the current one, what `npm install -g typescript` installs). A
-`tsc` below 5 is a warning, `below floor (≥ 5)`, with the fix
+The emitted TypeScript is verified under **TypeScript 7** (what `npm install -g
+typescript` installs), the only supported major. A
+`tsc` below 7 is a warning, `below supported (≥ 7)`, with the fix
 `npm install -g typescript@7`. A `tsc` newer than 7 is reported as
 `untested (verified up to 7)` but stays `ok`: it says the emitted output hasn't
 been checked under that major yet, not that anything is wrong. So
