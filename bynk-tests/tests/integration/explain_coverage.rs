@@ -19,40 +19,8 @@ use bynk_syntax::error::Severity;
 /// Error codes with no explanation yet, each with the reason.
 const EXCEPTIONS: &[(&str, &str)] = &[
     (
-        "bynk.capability.not_provided",
-        "the example gate compiles for the bundle target only; this code needs the Workers target or a platform flag (#3163, gate work: a per-fixture target)",
-    ),
-    (
-        "bynk.capability.provider_agent_cross_context",
-        "the example gate compiles for the bundle target only; this code needs the Workers target or a platform flag (#3163, gate work: a per-fixture target)",
-    ),
-    (
-        "bynk.context.duplicate_binding",
-        "the example gate compiles for the bundle target only; this code needs the Workers target or a platform flag (#3163, gate work: a per-fixture target)",
-    ),
-    (
-        "bynk.ws.open_transfer_cross_file",
-        "the example gate compiles for the bundle target only; this code needs the Workers target or a platform flag (#3163, gate work: a per-fixture target)",
-    ),
-    (
-        "bynk.ws.open_transfer_key",
-        "the example gate compiles for the bundle target only; this code needs the Workers target or a platform flag (#3163, gate work: a per-fixture target)",
-    ),
-    (
-        "bynk.suite.env_binding_clash",
-        "the example gate compiles for the bundle target only; this code needs the Workers target or a platform flag (#3163, gate work: a per-fixture target)",
-    ),
-    (
         "bynk.target.vendor_conflict",
-        "the example gate compiles for the bundle target only; this code needs the Workers target or a platform flag (#3163, gate work: a per-fixture target)",
-    ),
-    (
-        "bynk.target.vendor_required",
-        "the example gate compiles for the bundle target only; this code needs the Workers target or a platform flag (#3163, gate work: a per-fixture target)",
-    ),
-    (
-        "bynk.target.browser_bundle_only",
-        "the example gate compiles for the bundle target only; this code needs the Workers target or a platform flag (#3163, gate work: a per-fixture target)",
+        "needs platform-native capabilities from two platforms, and only Cloudflare ships any today, so no program can raise it",
     ),
     (
         "bynk.agent.class_conflict",
@@ -353,6 +321,14 @@ const EXCEPTIONS: &[(&str, &str)] = &[
     (
         "bynk.fmt.roundtrip",
         "a tool failure or compiler bug, not a program error",
+    ),
+    (
+        "bynk.target.vendor_required",
+        "reported with no source file (the check is not attributed to the `consumes` clause's file), so the example gate cannot tell which line it is on",
+    ),
+    (
+        "bynk.target.browser_bundle_only",
+        "a build-option error with no source position, so the example gate cannot tell which line it is on",
     ),
 ];
 
