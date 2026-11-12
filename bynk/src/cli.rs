@@ -159,6 +159,11 @@ pub enum Command {
         /// sessions started together do not collide on 9229.
         #[arg(long, value_name = "PORT")]
         inspect_port: Option<u16>,
+        /// Do not install the generated project's npm packages: stop, naming
+        /// the install command, when one is missing. For people who provision
+        /// `node_modules` themselves, and CI. Also set by `BYNK_NO_INSTALL=1`.
+        #[arg(long)]
+        no_install: bool,
         /// Which `bynk.deploy.lock` environment `-- --remote` reads the KV id
         /// from. `dev` never provisions, so this only selects among what
         /// `bynk deploy --env NAME` already recorded — irrelevant without
@@ -253,6 +258,11 @@ pub enum Command {
         /// or writing `bynk.deploy.lock`.
         #[arg(long, visible_alias = "plan")]
         dry_run: bool,
+        /// Do not install the generated project's npm packages: stop, naming
+        /// the install command, when one is missing. For people who provision
+        /// `node_modules` themselves, and CI. Also set by `BYNK_NO_INSTALL=1`.
+        #[arg(long)]
+        no_install: bool,
         /// Plan output format. `short` is line-oriented; `json` is for CI.
         #[arg(long, value_enum, default_value = "short")]
         format: DeployFormatArg,
@@ -945,6 +955,24 @@ pub enum DeployFormatArg {
     #[default]
     Short,
     Json,
+}
+
+impl From<DeployFormatArg> for crate::migrate::StatusFormat {
+    fn from(arg: DeployFormatArg) -> Self {
+        match arg {
+            DeployFormatArg::Short => Self::Short,
+            DeployFormatArg::Json => Self::Json,
+        }
+    }
+}
+
+impl From<DeployFormatArg> for crate::deploy::DeployFormat {
+    fn from(arg: DeployFormatArg) -> Self {
+        match arg {
+            DeployFormatArg::Short => Self::Short,
+            DeployFormatArg::Json => Self::Json,
+        }
+    }
 }
 
 impl From<FormatArg> for Format {

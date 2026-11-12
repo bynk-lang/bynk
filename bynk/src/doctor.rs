@@ -161,12 +161,17 @@ pub fn diagnose(tb: &dyn Toolbox, ctx: &Context, opts: &DoctorOptions) -> Report
     if want(Capability::Test) {
         let node = detect_node(tb, root, ctx.node_floor);
         let runner = detect_runner(tb, root);
-        capabilities.push(capability(Capability::Test, vec![node, runner]));
+        let packages = detect_package_manager(tb, root);
+        capabilities.push(capability(Capability::Test, vec![node, runner, packages]));
     }
     if want(Capability::Deploy) {
         let node = detect_node(tb, root, ctx.node_floor);
         let wrangler = detect_wrangler(tb, root);
-        capabilities.push(capability(Capability::Deploy, vec![node, wrangler]));
+        let packages = detect_package_manager(tb, root);
+        capabilities.push(capability(
+            Capability::Deploy,
+            vec![node, wrangler, packages],
+        ));
     }
     if want(Capability::Editor) {
         let lsp = detect_plain(
@@ -425,6 +430,53 @@ fn has_git_dependencies(root: &std::path::Path) -> bool {
                 .any(|e| e.as_table().is_some_and(|e| e.contains_key("git")))
         })
     })
+}
+
+/// #3350: the package manager `bynk test`, `bynk dev` and `bynk deploy` install
+/// the generated project's npm packages with, and the rule that chose it.
+fn detect_package_manager(tb: &dyn Toolbox, root: Option<&std::path::Path>) -> Row {
+    use bynk_driver::npm_install::{self, Project};
+
+    /// The project root's files (none without a root) and the real environment.
+    struct View<'a>(Option<&'a std::path::Path>);
+    impl Project for View<'_> {
+        fn read(&self, name: &str) -> Option<String> {
+            self.0.and_then(|r| npm_install::RealProject(r).read(name))
+        }
+        fn exists(&self, name: &str) -> bool {
+            self.0
+                .is_some_and(|r| npm_install::RealProject(r).exists(name))
+        }
+        fn env(&self, key: &str) -> Option<String> {
+            std::env::var(key).ok().filter(|v| !v.trim().is_empty())
+        }
+    }
+
+    let setting = root.and_then(npm_install::configured_manager);
+    match npm_install::detect(&View(root), setting.as_deref(), tb) {
+        Ok(found) => Row {
+            label: "package manager".into(),
+            level: Level::Ok,
+            detail: format!("{} ({})", found.manager.name(), found.rule.describe()),
+            remedy: None,
+        },
+        // A package manager that cannot be chosen is a hard error for a run that
+        // needs to install, so an unknown explicit setting warns.
+        Err(e @ npm_install::DetectError::UnknownManager { .. }) => Row {
+            label: "package manager".into(),
+            level: Level::Warn,
+            detail: "unknown".into(),
+            remedy: Some(e.to_string()),
+        },
+        // Informational: only a project with npm dependencies needs one, so
+        // its absence is not a fault (it would turn `--strict` red for others).
+        Err(e) => Row {
+            label: "package manager".into(),
+            level: Level::Ok,
+            detail: format!("none found ({e})"),
+            remedy: None,
+        },
+    }
 }
 
 fn detect_plain(tb: &dyn Toolbox, tool: &str, remedy: &str) -> Row {

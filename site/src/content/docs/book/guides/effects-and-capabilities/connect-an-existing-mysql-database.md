@@ -143,8 +143,10 @@ hand, which you adopt with `config_id`. See the
 [deploy guide](/book/guides/projects-build-and-deployment/deploy-to-cloudflare/#mysql-databases).
 
 The Worker needs the `mysql2` npm package, which the build adds to
-`out/package.json` pinned to an exact version. Run `npm install` in the build
-directory before `bynk dev` or `bynk deploy`. The connection's password is a secret:
+`out/package.json` pinned to an exact version. `bynk dev`, `bynk deploy` and
+`bynk test` install it into the build directory with your own package manager
+when it is missing; [`--no-install`](/docs/bynk-cli/#installing-npm-packages)
+stops instead, naming the command to run. The connection's password is a secret:
 it is never logged and never appears in an error.
 
 ## Test it with stubs
