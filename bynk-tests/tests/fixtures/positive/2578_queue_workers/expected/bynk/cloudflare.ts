@@ -652,7 +652,9 @@ export const MySqlValue = {
  * (for a `SELECT`, returned), and `insertId` the `AUTO_INCREMENT` id of the
  * row it inserted, `0` when it inserted none. MySQL has no `RETURNING`, so
  * `insertId` is how a handler learns the key of the row it just wrote. An id
- * past 2^53 reads as `0`.
+ * or a count past 2^53 cannot be an `Int`: `run` answers `Err(MySqlFailed(0, …))`
+ * naming it, rather than a `0` that would mean "inserted none". (Inside a
+ * transaction, that failure rolls it back.)
  */
 export interface MySqlRun {
   readonly rowCount: number;

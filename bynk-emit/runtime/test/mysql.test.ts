@@ -114,6 +114,37 @@ test("a write answers its affected rows and insert id", async () => {
   assert.deepEqual(out, { ok: true, rows: [], rowCount: 2, insertId: 41 });
 });
 
+test("an insert id or row count past 2^53 is a failure, not 0", async () => {
+  for (const header of [
+    { affectedRows: 1, insertId: 9007199254740992 },
+    { affectedRows: 1, insertId: "18446744073709551615" },
+    { affectedRows: 9007199254740992, insertId: 0 },
+    { affectedRows: "9007199254740993", insertId: 0 },
+  ]) {
+    const f = fake(() => header);
+    const out = await makeMySqlExecute(f.factory)(ENDPOINT, "INSERT INTO t VALUES (?)", [{ tag: "MySqlText", value: "x" }]);
+    assert.equal(out.ok, false);
+    if (!out.ok) {
+      assert.equal(out.failure.kind, "failed");
+      assert.match(out.failure.message, /past the Int range/);
+    }
+    assert.equal(f.ended(), 1);
+  }
+});
+
+test("a zero, a string id and the largest safe id read unchanged", async () => {
+  for (const [header, want] of [
+    [{ affectedRows: 0, insertId: 0 }, { rowCount: 0, insertId: 0 }],
+    [{ affectedRows: "3", insertId: "42" }, { rowCount: 3, insertId: 42 }],
+    [{ affectedRows: 1, insertId: 9007199254740991 }, { rowCount: 1, insertId: 9007199254740991 }],
+    [{}, { rowCount: 0, insertId: 0 }],
+  ] as const) {
+    const f = fake(() => header);
+    const out = await makeMySqlExecute(f.factory)(ENDPOINT, "INSERT INTO t VALUES (?)", [{ tag: "MySqlText", value: "x" }]);
+    assert.deepEqual(out, { ok: true, rows: [], ...want });
+  }
+});
+
 test("bytes bind as a Buffer and read back as base64", async () => {
   const f = fake(() => [{ b: new Uint8Array([1, 2, 3]) }]);
   const out = await makeMySqlExecute(f.factory)(ENDPOINT, "SELECT ?", [{ tag: "MySqlBytes", value: new Uint8Array([1, 2, 3]) }]);

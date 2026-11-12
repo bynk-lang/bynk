@@ -36,8 +36,12 @@ impl Deployment {
     fn is_secret(&self) -> bool {
         self.trigger.as_deref() == Some("secret")
     }
+    /// A deployment that re-activates an existing version. Cloudflare records
+    /// `wrangler rollback` (and so `bynk revert`) as trigger `deployment`,
+    /// not `rollback` (#3112, observed on a real account); `rollback` is kept
+    /// in case another path reports it.
     fn is_rollback(&self) -> bool {
-        self.trigger.as_deref() == Some("rollback")
+        matches!(self.trigger.as_deref(), Some("rollback" | "deployment"))
     }
     /// The one version this deployment serves at 100%, if it is not split.
     fn sole_version(&self) -> Option<&str> {
@@ -1238,6 +1242,23 @@ mod tests {
         let l = locate(&h, None).unwrap();
         assert_eq!(l.live_version, "v2");
         assert_eq!(l.target_version, "v1", "never back to the bad v3");
+    }
+
+    #[test]
+    fn a_rollback_as_cloudflare_reports_it_is_not_taken_for_an_upload() {
+        // #3112: a real `wrangler rollback` lists as `workers/triggered_by:
+        // "deployment"`. Read as an upload, the second revert went to the bad
+        // release (v2) instead of finding the rollback's own upload (v1).
+        let h = [
+            dep("d3", "deployment", "v1"),
+            dep("d2", "upload", "v2"),
+            dep("d1", "upload", "v1"),
+        ];
+        let l = locate(&h, None);
+        assert!(
+            l.unwrap_err().contains("no earlier deployment"),
+            "v1 is the first upload; nothing precedes it"
+        );
     }
 
     #[test]
