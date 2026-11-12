@@ -37,6 +37,16 @@ export default {
       }
 
       {
+        const __m = __matchPath("/flaky/:id", path);
+        if (method === "POST" && __m) {
+          __route = "POST /flaky/:id";
+          const __raw_id = __m.params["id"];
+          const id = __raw_id;
+          const result = await surface.http_POST_flaky_Param_id(id);
+          return __applySecurityHeaders(__httpResultToResponse(result, (__v: string) => __v as __JsonValue), __security_api);
+        }
+      }
+      {
         const __m = __matchPath("/hooks/:id", path);
         if (method === "POST" && __m) {
           __route = "POST /hooks/:id";
@@ -45,6 +55,11 @@ export default {
           const result = await surface.http_POST_hooks_Param_id(id);
           return __applySecurityHeaders(__httpResultToResponse(result, (__v: string) => __v as __JsonValue), __security_api);
         }
+      }
+      if (__matchPath("/flaky/:id", path) !== null) {
+        const __status = method === "OPTIONS" ? 204 : 405;
+        const __res = new globalThis.Response(null, { status: __status, headers: { allow: "OPTIONS, POST" } });
+        return __applySecurityHeaders(__res, __security_api);
       }
       if (__matchPath("/hooks/:id", path) !== null) {
         const __status = method === "OPTIONS" ? 204 : 405;

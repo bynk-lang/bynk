@@ -60,14 +60,14 @@ function __bynkTest_Idempotency(): __ns_bynk.Idempotency {
   const store = new globalThis.Map<string, { value: unknown; until: number }>();
   const claims = new globalThis.Map<string, number>();
   return {
-    async dedup(key) {
+    async dedup(key: string) {
       const hit = store.get(key);
       return (hit !== undefined && hit.until > 0 ? Some(hit.value) : None) as never;
     },
-    async remember(key, value, expiresAfter) {
+    async remember(key: string, value: unknown, expiresAfter: number) {
       store.set(key, { value, until: 0 + expiresAfter });
     },
-    async claim(key, expiresAfter) {
+    async claim(key: string, expiresAfter: number) {
       const until = claims.get(key);
       if (until !== undefined && until > 0) {
         return __ns_bynk.Claim.AlreadyClaimed;
@@ -75,7 +75,30 @@ function __bynkTest_Idempotency(): __ns_bynk.Idempotency {
       claims.set(key, 0 + expiresAfter);
       return __ns_bynk.Claim.Claimed;
     },
-  };
+    // Hidden from the capability: a handler's claim scope, as the real
+    // providers take it (released on failure, confirmed otherwise).
+    __track() {
+      const held: { key: string; expiresAfter: number }[] = [];
+      return {
+        note(key: string, claim: { tag: string }, expiresAfter: number) {
+          if (claim.tag === "Claimed") held.push({ key, expiresAfter });
+          return claim;
+        },
+        async settle(result: { tag?: string; status?: number } | null | undefined, threw: boolean) {
+          const tag = result?.tag;
+          const failed =
+            threw ||
+            tag === "Err" ||
+            (tag !== undefined && ["ServerError", "NotImplemented", "BadGateway", "ServiceUnavailable", "GatewayTimeout"].includes(tag)) ||
+            (tag === "RawError" && (result?.status ?? 0) >= 500);
+          for (const h of held) {
+            if (failed) claims.delete(h.key);
+            else claims.set(h.key, 0 + h.expiresAfter);
+          }
+        },
+      };
+    },
+  } as never;
 }
 
 function __makeTestDeps() {

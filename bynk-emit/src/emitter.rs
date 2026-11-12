@@ -5221,6 +5221,10 @@ pub(crate) struct LowerCtx<'a> {
     /// scan did (its own body text also contained `"await "`); closing that is a
     /// separate, unscoped defect, not this one.
     pub(crate) emitted_await: bool,
+    /// W30 (#2840): this body lowered an `Idempotency.claim` through the
+    /// handler's claim scope, so its function body is wrapped to settle the
+    /// claims it made (see [`wrap_claim_scope`]).
+    pub(crate) claim_scope_used: bool,
     /// T2.3 (R6.3): set when lowering a `?` pushes a propagating early-return
     /// statement (`if (...) return ...;`) into the current `Pre`. Read (and
     /// reset) around a short-circuit operand's own lowering in `lower_bin_op`/
@@ -5337,6 +5341,7 @@ impl<'a> LowerCtx<'a> {
             call_site_bad_signature: None,
             source_map: None,
             emitted_await: false,
+            claim_scope_used: false,
             emitted_early_return: false,
             lambda_depth: 0,
             tail_slot: None,
@@ -5468,6 +5473,15 @@ impl<'a> LowerCtx<'a> {
     /// #2045: whether `name` is a consumed context's type on `workers`.
     pub(crate) fn is_consumed_context_type(&self, name: &str) -> bool {
         self.module.consumed_context_types.contains(name)
+    }
+
+    /// W30 (#2840): whether a first-party `Idempotency.claim` here is recorded
+    /// in the handler's claim scope so it can be released or confirmed on exit.
+    /// Only a service handler's body is wrapped, so only there is a claim
+    /// tracked; anywhere else (an agent handler, a provider) it is a plain call
+    /// held for its full window.
+    pub(crate) fn tracks_claims(&self) -> bool {
+        matches!(self.mode, BodyMode::ServiceHandler { .. })
     }
 
     /// #934: true when the unit being emitted is the first-party `bynk` adapter.

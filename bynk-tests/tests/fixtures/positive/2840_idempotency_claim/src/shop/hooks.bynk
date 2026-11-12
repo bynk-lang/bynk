@@ -7,4 +7,17 @@ service api from http {
     let Claim.Claimed <- Idempotency.claim(id, 1.hours) else { Ok("duplicate") }
     Ok("processed")
   }
+
+  // A claim is released when the handler fails with a 5xx, and kept (confirmed)
+  // when it completes with a 4xx.
+  on POST("/flaky/:id") (id: String) -> Effect[HttpResult[String]] by Visitor given Idempotency {
+    let Claim.Claimed <- Idempotency.claim(id, 1.hours) else { Ok("duplicate") }
+    if id == "down" {
+      ServerError("upstream down")
+    } else if id == "invalid" {
+      BadRequest("invalid payload")
+    } else {
+      Ok("processed")
+    }
+  }
 }

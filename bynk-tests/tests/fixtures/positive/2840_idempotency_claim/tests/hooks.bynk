@@ -20,4 +20,34 @@ suite shop.hooks {
     let later <- api.POST("/hooks/:id", "d1") by Visitor
     expect later is Ok("processed")
   }
+
+  case "a claim is released when the handler returns a 5xx" {
+    let first <- api.POST("/flaky/:id", "down") by Visitor
+    expect first is ServerError(_)
+    let retry <- api.POST("/flaky/:id", "down") by Visitor
+    expect retry is ServerError(_)
+  }
+
+  case "a claim is kept when the handler completes with a 4xx" {
+    let first <- api.POST("/flaky/:id", "invalid") by Visitor
+    expect first is BadRequest(_)
+    let retry <- api.POST("/flaky/:id", "invalid") by Visitor
+    expect retry is Ok("duplicate")
+  }
+
+  case "a completed claim stays claimed" {
+    let first <- api.POST("/flaky/:id", "fine") by Visitor
+    expect first is Ok("processed")
+    let again <- api.POST("/flaky/:id", "fine") by Visitor
+    expect again is Ok("duplicate")
+  }
+
+  // The lease is only for an unsettled claim: a settled one holds for its full window.
+  case "a completed claim outlasts the lease" {
+    let first <- api.POST("/flaky/:id", "fine") by Visitor
+    expect first is Ok("processed")
+    advance Clock by 10.minutes
+    let again <- api.POST("/flaky/:id", "fine") by Visitor
+    expect again is Ok("duplicate")
+  }
 }

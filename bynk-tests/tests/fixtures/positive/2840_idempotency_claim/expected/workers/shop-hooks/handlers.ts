@@ -12,7 +12,11 @@ import * as bynk from "../../bynk.js";
 
 export const api = {
   async http_POST_hooks_Param_id(id: string, deps: { Idempotency: bynk.Idempotency }): globalThis.Promise<HttpResult<string>> {
-    const __letElse184 = await deps.Idempotency.claim(`shop.hooks.api.http_POST_hooks_Param_id::${id}`, 3600000);
+    const __claims = (deps.Idempotency as unknown as { __track?: () => { note<C>(k: string, c: C, t: number): C; settle(r: unknown, threw: boolean): Promise<void> } }).__track?.() ?? { note: <C>(_k: string, c: C, _t: number) => c, settle: async (_r: unknown, _threw: boolean) => {} };
+    let __r;
+    try {
+    __r = await (async () => {
+    const __letElse184 = await (await (async (__k: string, __t: number) => __claims.note(__k, await deps.Idempotency.claim(__k, globalThis.Math.min(__t, 30000)), __t))(`shop.hooks.api.http_POST_hooks_Param_id::${id}`, 3600000));
     switch (__letElse184.tag) {
       case "Claimed": {
         return HttpResult.Ok("processed");
@@ -22,5 +26,35 @@ export const api = {
       }
     }
     throw new globalThis.Error("non-exhaustive match");
+    })();
+    } catch (__e) {
+      await __claims.settle(undefined, true);
+      throw __e;
+    }
+    await __claims.settle(__r, false);
+    return __r;
+  },
+  async http_POST_flaky_Param_id(id: string, deps: { Idempotency: bynk.Idempotency }): globalThis.Promise<HttpResult<string>> {
+    const __claims = (deps.Idempotency as unknown as { __track?: () => { note<C>(k: string, c: C, t: number): C; settle(r: unknown, threw: boolean): Promise<void> } }).__track?.() ?? { note: <C>(_k: string, c: C, _t: number) => c, settle: async (_r: unknown, _threw: boolean) => {} };
+    let __r;
+    try {
+    __r = await (async () => {
+    const __letElse504 = await (await (async (__k: string, __t: number) => __claims.note(__k, await deps.Idempotency.claim(__k, globalThis.Math.min(__t, 30000)), __t))(`shop.hooks.api.http_POST_flaky_Param_id::${id}`, 3600000));
+    switch (__letElse504.tag) {
+      case "Claimed": {
+        return (id === "down" ? HttpResult.ServerError("upstream down") : (id === "invalid" ? HttpResult.BadRequest("invalid payload") : HttpResult.Ok("processed")));
+      }
+      default: {
+        return HttpResult.Ok("duplicate");
+      }
+    }
+    throw new globalThis.Error("non-exhaustive match");
+    })();
+    } catch (__e) {
+      await __claims.settle(undefined, true);
+      throw __e;
+    }
+    await __claims.settle(__r, false);
+    return __r;
   },
 };

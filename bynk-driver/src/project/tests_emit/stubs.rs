@@ -973,14 +973,14 @@ function __bynkOverlay(base: unknown, stub: object, cap: string): unknown {
 pub(super) const IDEMPOTENCY_DOUBLE_BODY: &str = r#"  const store = new globalThis.Map<string, { value: unknown; until: number }>();
   const claims = new globalThis.Map<string, number>();
   return {
-    async dedup(key) {
+    async dedup(key: string) {
       const hit = store.get(key);
       return (hit !== undefined && hit.until > __NOW__ ? Some(hit.value) : None) as never;
     },
-    async remember(key, value, expiresAfter) {
+    async remember(key: string, value: unknown, expiresAfter: number) {
       store.set(key, { value, until: __NOW__ + expiresAfter });
     },
-    async claim(key, expiresAfter) {
+    async claim(key: string, expiresAfter: number) {
       const until = claims.get(key);
       if (until !== undefined && until > __NOW__) {
         return __CLAIM__.AlreadyClaimed;
@@ -988,7 +988,30 @@ pub(super) const IDEMPOTENCY_DOUBLE_BODY: &str = r#"  const store = new globalTh
       claims.set(key, __NOW__ + expiresAfter);
       return __CLAIM__.Claimed;
     },
-  };
+    // Hidden from the capability: a handler's claim scope, as the real
+    // providers take it (released on failure, confirmed otherwise).
+    __track() {
+      const held: { key: string; expiresAfter: number }[] = [];
+      return {
+        note(key: string, claim: { tag: string }, expiresAfter: number) {
+          if (claim.tag === "Claimed") held.push({ key, expiresAfter });
+          return claim;
+        },
+        async settle(result: { tag?: string; status?: number } | null | undefined, threw: boolean) {
+          const tag = result?.tag;
+          const failed =
+            threw ||
+            tag === "Err" ||
+            (tag !== undefined && ["ServerError", "NotImplemented", "BadGateway", "ServiceUnavailable", "GatewayTimeout"].includes(tag)) ||
+            (tag === "RawError" && (result?.status ?? 0) >= 500);
+          for (const h of held) {
+            if (failed) claims.delete(h.key);
+            else claims.set(h.key, __NOW__ + h.expiresAfter);
+          }
+        },
+      };
+    },
+  } as never;
 "#;
 
 pub(super) const KV_DOUBLE_BODY: &str = r#"  type Entry = { bytes: Uint8Array; metadata: globalThis.Map<string, string>; expiration: number | undefined };

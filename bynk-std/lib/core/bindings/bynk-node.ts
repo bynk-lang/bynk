@@ -406,6 +406,19 @@ export class LocaleProvider implements Locale {
   }
 }
 
+// Whether a handler's result is a failure for its claims (#2840): a returned
+// `Err`, or an `HttpResult` that is a 5xx. A 4xx is a completed outcome.
+const SERVER_ERROR_TAGS = new Set(["ServerError", "NotImplemented", "BadGateway", "ServiceUnavailable", "GatewayTimeout"]);
+function claimFailed(result: unknown): boolean {
+  const r = result as { tag?: unknown; status?: unknown } | null | undefined;
+  if (r === null || r === undefined || typeof r !== "object") return false;
+  return (
+    r.tag === "Err" ||
+    (typeof r.tag === "string" && SERVER_ERROR_TAGS.has(r.tag)) ||
+    (r.tag === "RawError" && typeof r.status === "number" && r.status >= 500)
+  );
+}
+
 // Identical to the Cloudflare binding: ambient, needs nothing platform-specific.
 // See that binding for the design notes (Idempotency capability track, slice 0).
 export class IdempotencyProvider implements Idempotency {
@@ -435,5 +448,31 @@ export class IdempotencyProvider implements Idempotency {
     }
     this.claims.set(key, now + expiresAfter);
     return Claim.Claimed;
+  }
+  // Hidden from the capability (#2840): a handler that claims takes a scope, which
+  // releases its claims if the handler fails and confirms them, for their full
+  // window, if it doesn't. A claim is taken for a short lease only, so one whose
+  // handler never settles (its instance died) lapses and a retry can claim again.
+  __track() {
+    const held: Array<{ key: string; expiresAfter: number }> = [];
+    return {
+      note: <C>(key: string, claim: C, expiresAfter: number): C => {
+        if ((claim as unknown as { tag?: string }).tag === "Claimed") {
+          held.push({ key, expiresAfter });
+        }
+        return claim;
+      },
+      settle: async (result: unknown, threw: boolean): Promise<void> => {
+        const failed = threw || claimFailed(result);
+        const now = await this.deps.Clock.now();
+        for (const h of held) {
+          if (failed) {
+            this.claims.delete(h.key);
+          } else {
+            this.claims.set(h.key, now + h.expiresAfter);
+          }
+        }
+      },
+    };
   }
 }

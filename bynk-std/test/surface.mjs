@@ -939,4 +939,38 @@ export function surfaceSuite(name, b, rt, bynk, shape) {
     assert.equal((await idem.claim("k", 100)).tag, "Claimed");
     assert.deepEqual(await idem.dedup("other"), None);
   });
+
+  t("IdempotencyProvider.__track: a failed handler releases its claim, so a retry claims again", async () => {
+    const idem = new b.IdempotencyProvider({ Clock: fakeClock(0) });
+    for (const [result, threw] of [[undefined, true], [{ tag: "Err" }, false], [{ tag: "ServiceUnavailable" }, false], [{ tag: "RawError", status: 502 }, false]]) {
+      const scope = idem.__track();
+      assert.equal(scope.note("k", await idem.claim("k", 10_000), 10_000).tag, "Claimed");
+      await scope.settle(result, threw);
+      assert.equal((await idem.claim("k", 10_000)).tag, "Claimed", `released after ${JSON.stringify(result)}`);
+      idem.claims.delete("k");
+    }
+  });
+
+  t("IdempotencyProvider.__track: a completed handler keeps its claim for the full window", async () => {
+    const clock = fakeClock(0);
+    const idem = new b.IdempotencyProvider({ Clock: clock });
+    const scope = idem.__track();
+    // Claimed for the lease only, then confirmed for the whole window.
+    scope.note("k", await idem.claim("k", 30_000), 1_000_000);
+    await scope.settle({ tag: "BadRequest" }, false);
+    clock.t = 999_999;
+    assert.equal((await idem.claim("k", 1)).tag, "AlreadyClaimed");
+    clock.t = 1_000_000;
+    assert.equal((await idem.claim("k", 1)).tag, "Claimed");
+  });
+
+  t("IdempotencyProvider.__track: an unsettled claim lapses after its lease", async () => {
+    const clock = fakeClock(0);
+    const idem = new b.IdempotencyProvider({ Clock: clock });
+    idem.__track().note("k", await idem.claim("k", 30_000), 1_000_000);
+    clock.t = 29_999;
+    assert.equal((await idem.claim("k", 30_000)).tag, "AlreadyClaimed");
+    clock.t = 30_000;
+    assert.equal((await idem.claim("k", 30_000)).tag, "Claimed");
+  });
 }

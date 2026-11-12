@@ -417,9 +417,19 @@ pub(crate) fn emit_block_as_function_body_with_return(
         .and_then(|rt| bynk_check::checker::resolve_type_ref(rt, &cx.commons().types, tys));
     // #1750: a function body's tails `return`, whatever sink encloses it.
     let prev_slot = cx.tail_slot.take();
+    let start = out.len();
     emit_block_inner(out, block, cx, indent, async_tail);
     cx.tail_slot = prev_slot;
     cx.return_ty = prev;
+    // W30 (#2840): a service handler that claimed settles its claims on exit.
+    if cx.claim_scope_used && cx.tracks_claims() {
+        let (before, after) = claim_scope_wrapper(indent);
+        out.insert_str(start, &before);
+        out.push_str(&after);
+        if let Some(map) = cx.source_map {
+            map.borrow_mut().shift_checkpoints(before.len());
+        }
+    }
 }
 
 /// v0.154 (ADR 0178): the `Err`-wrap a `?` on a `Result` operand needs, if the
@@ -2283,6 +2293,46 @@ fn scope_idempotency_key(
     args_lowered[0] = format!("`{scope}::${{{}}}`", args_lowered[0]);
 }
 
+/// The lease, in milliseconds, a claim made in a handler holds before the
+/// handler settles it. A handler that settles confirms the claim for its full
+/// `expiresAfter` (or releases it on failure); one whose instance dies first
+/// leaves a claim that lapses after the lease, so a retry can claim again. 30 s
+/// matches the `waitUntil` limit.
+const CLAIM_LEASE_MS: u32 = 30_000;
+
+/// W30 (#2840): lower a first-party `Idempotency.claim(key, expiresAfter)` made
+/// in a service handler so the claim is recorded in the handler's claim scope
+/// (`__claims`, declared by [`wrap_claim_scope`]). The claim is taken for
+/// `min(expiresAfter, lease)`; `note` remembers the key when it was `Claimed`,
+/// and the scope confirms it for the full `expiresAfter` or releases it when
+/// the handler exits. The call itself still goes through
+/// `<deps>.Idempotency.claim`, so a `stub` of it applies.
+fn tracked_claim_call(cap_expr: &str, args: &[String], cx: &mut LowerCtx) -> String {
+    cx.claim_scope_used = true;
+    format!(
+        "(await (async (__k: string, __t: number) => __claims.note(__k, await {cap_expr}.claim(__k, globalThis.Math.min(__t, {CLAIM_LEASE_MS})), __t))({}, {}))",
+        args[0], args[1]
+    )
+}
+
+/// W30 (#2840): wrap a service handler's already-lowered function body so the
+/// claims it made are settled when it exits. `__claims` is the provider's own
+/// scope (`Idempotency.__track()`, hidden: not in the capability), or a no-op
+/// scope for a provider without one. A thrown fault releases the claims; a
+/// returned `Err` or a 5xx `HttpResult` does too; any other outcome confirms
+/// them. Returns the text to put before and after the body, which is left
+/// where it is so its source-map checkpoints stay valid.
+fn claim_scope_wrapper(indent: usize) -> (String, String) {
+    let pad = " ".repeat(indent);
+    let before = format!(
+        "{pad}const __claims = (deps.Idempotency as unknown as {{ __track?: () => {{ note<C>(k: string, c: C, t: number): C; settle(r: unknown, threw: boolean): Promise<void> }} }}).__track?.() ?? {{ note: <C>(_k: string, c: C, _t: number) => c, settle: async (_r: unknown, _threw: boolean) => {{}} }};\n{pad}let __r;\n{pad}try {{\n{pad}__r = await (async () => {{\n"
+    );
+    let after = format!(
+        "{pad}}})();\n{pad}}} catch (__e) {{\n{pad}  await __claims.settle(undefined, true);\n{pad}  throw __e;\n{pad}}}\n{pad}await __claims.settle(__r, false);\n{pad}return __r;\n"
+    );
+    (before, after)
+}
+
 fn lower_method_call(
     e: &Expr,
     receiver: &Expr,
@@ -2506,6 +2556,14 @@ fn lower_cross_context_call(
             &mut args_lowered,
             cx,
         );
+        if cap == "Idempotency"
+            && consumed == "bynk"
+            && method.name == "claim"
+            && cx.tracks_claims()
+        {
+            let cap_expr = format!("{}.{}", cx.cap_deps_expr(), cap);
+            return Some(tracked_claim_call(&cap_expr, &args_lowered, cx));
+        }
         let wire = capability_wire(e, cx);
         encode_capability_args(wire.as_deref(), &mut args_lowered, cx);
         return Some(format!(
@@ -2661,6 +2719,10 @@ fn lower_capability_call(
                     .map(String::as_str)
                     == Some("bynk"));
         scope_idempotency_key(is_first_party, &method.name, &mut args_lowered, cx);
+        if is_first_party && method.name == "claim" && cx.tracks_claims() {
+            let cap_expr = format!("{}.{}", cx.cap_deps_expr(), id.name);
+            return Some(tracked_claim_call(&cap_expr, &args_lowered, cx));
+        }
         let wire = capability_wire(e, cx);
         encode_capability_args(wire.as_deref(), &mut args_lowered, cx);
         return Some(format!(
