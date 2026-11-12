@@ -1325,12 +1325,7 @@ pub fn run(
                     lock.record_expects(&opts.environment, worker, m.expects);
                     // #2485: and the structure behind both, so the next gate
                     // can say whether a skew is compatible.
-                    lock.record_shapes(
-                        &opts.environment,
-                        worker,
-                        m.provides_shapes,
-                        m.expects_shapes,
-                    );
+                    lock.record_shapes(m.provides_shapes, m.expects_shapes);
                 }
                 // I4 (#1970): and what its declared foreign callers may call
                 // it at, so the ledger knows the consumers no manifest of
@@ -5078,8 +5073,6 @@ queue = "jobs"
                 Some(BTreeMap::from([("charge".into(), shape.hash())])),
             );
             lock.record_shapes(
-                "default",
-                "shop-payment",
                 BTreeMap::from([("charge".into(), shape.to_text())]),
                 BTreeMap::new(),
             );
@@ -5129,8 +5122,6 @@ queue = "jobs"
                 )]),
             );
             lock.record_shapes(
-                "default",
-                "shop-orders",
                 BTreeMap::new(),
                 BTreeMap::from([(
                     "shop.payment".to_string(),
@@ -5173,8 +5164,6 @@ queue = "jobs"
                 )]),
             );
             lock.record_shapes(
-                "default",
-                "shop-orders",
                 BTreeMap::new(),
                 BTreeMap::from([(
                     "shop.payment".to_string(),
@@ -5350,8 +5339,6 @@ queue = "jobs"
                     )]),
                 );
                 lock.record_shapes(
-                    "default",
-                    caller,
                     BTreeMap::new(),
                     BTreeMap::from([(
                         "shop.payment".to_string(),

@@ -8,7 +8,26 @@ pub(crate) struct DeployLock {
     version: u32,
     #[serde(default)]
     pub(crate) environments: BTreeMap<String, Environment>,
+    /// #3112: the structured form behind recent contract hashes, oldest first.
+    /// A hash that is live resolves here, and so does one a `bynk revert`
+    /// restores from a version's deploy facts, which the ledger no longer
+    /// listed. Each entry is trusted only while it hashes to the hash it is
+    /// filed under. Pruned on write ([`DeployLock::record_shapes`]).
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    contract_shapes: Vec<ContractShape>,
 }
+
+/// One entry of [`DeployLock::contract_shapes`].
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
+struct ContractShape {
+    hash: String,
+    /// `bynk_check::contract_compat::ServiceShape::to_text`.
+    shape: String,
+}
+
+/// How many contract shapes no Worker's record references are kept, for a
+/// revert to restore (#3112).
+const RECENT_SHAPES: usize = 16;
 
 /// #2077: what a Worker was compiled against — dependency (qualified context
 /// name) → service → contract hash ([`WorkerRecord::expects`]).
@@ -315,21 +334,36 @@ struct WorkerRecord {
     /// for a Worker with none; additive and `default`ed.
     #[serde(default, skip_serializing_if = "BTreeMap::is_empty")]
     foreign: BTreeMap<String, BTreeMap<String, String>>,
-    /// #2485: the structured form behind each hash in
-    /// [`WorkerRecord::contracts`], by service
-    /// (`bynk_check::contract_compat::ServiceShape::to_text`). It is what lets
-    /// a skew be classified as compatible or breaking rather than only
-    /// "different". Trusted only when it hashes to the recorded hash, so a
-    /// ledger that has only hashes, or an entry that has drifted, simply
-    /// classifies nothing. Empty (and omitted) when none was recorded.
+    /// #2485, read-only since #3112: the per-Worker form of the shapes now
+    /// filed by hash in [`DeployLock::contract_shapes`]. A ledger written
+    /// before that carries them; [`read_lock`] moves them into the table and
+    /// they are never written again.
     #[serde(default, skip_serializing_if = "BTreeMap::is_empty")]
     shapes: BTreeMap<String, String>,
-    /// #2485: the same for [`WorkerRecord::expects`], dependency then service.
     #[serde(default, skip_serializing_if = "BTreeMap::is_empty")]
     expects_shapes: BTreeMap<String, BTreeMap<String, String>>,
 }
 
 impl DeployLock {
+    /// #3112: move any per-Worker shapes an older ledger carries into the
+    /// hash-keyed table, so none is lost when the file is next written.
+    fn fold_legacy_shapes(&mut self) {
+        let mut moved = Vec::new();
+        for record in self
+            .environments
+            .values_mut()
+            .flat_map(|env| env.workers.values_mut())
+        {
+            moved.push((
+                std::mem::take(&mut record.shapes),
+                std::mem::take(&mut record.expects_shapes),
+            ));
+        }
+        for (shapes, expects_shapes) in moved {
+            self.record_shapes(shapes, expects_shapes);
+        }
+    }
+
     pub(crate) fn is_deployed(&self, environment: &str, worker: &str) -> bool {
         self.environments
             .get(environment)
@@ -522,29 +556,65 @@ impl DeployLock {
         }
     }
 
-    /// #2485: record the structured form behind the contracts `worker` provides
-    /// and expects as of this push ([`WorkerRecord::shapes`]). Called right
-    /// after [`DeployLock::record_deployed`]; a Worker not yet recorded is
-    /// ignored.
+    /// #2485: record the structured form behind the contracts a Worker provides
+    /// and expects as of this push, filed by hash ([`DeployLock::contract_shapes`]).
+    /// Called right after [`DeployLock::record_deployed`]. Entries no Worker's
+    /// record references any more are kept up to [`RECENT_SHAPES`], oldest
+    /// dropped first, so a `bynk revert` can still classify the contracts it
+    /// restores (#3112).
     pub(crate) fn record_shapes(
         &mut self,
-        environment: &str,
-        worker: &str,
         shapes: BTreeMap<String, String>,
         expects_shapes: BTreeMap<String, BTreeMap<String, String>>,
     ) {
-        if let Some(record) = self
-            .environments
-            .get_mut(environment)
-            .and_then(|env| env.workers.get_mut(worker))
-        {
-            record.shapes = shapes;
-            record.expects_shapes = expects_shapes;
+        let texts = shapes
+            .into_values()
+            .chain(expects_shapes.into_values().flat_map(BTreeMap::into_values));
+        for text in texts {
+            let Some(shape) = ServiceShape::from_text(&text) else {
+                continue;
+            };
+            let hash = shape.hash();
+            self.contract_shapes.retain(|e| e.hash != hash);
+            self.contract_shapes
+                .push(ContractShape { hash, shape: text });
         }
+        let live: BTreeSet<String> = self
+            .environments
+            .values()
+            .flat_map(|env| env.workers.values())
+            .flat_map(|w| {
+                w.contracts.iter().flat_map(BTreeMap::values).chain(
+                    w.expects
+                        .iter()
+                        .flat_map(|e| e.values().flat_map(BTreeMap::values)),
+                )
+            })
+            .cloned()
+            .collect();
+        let mut spare = self
+            .contract_shapes
+            .iter()
+            .filter(|e| !live.contains(&e.hash))
+            .count();
+        self.contract_shapes.retain(|e| {
+            if live.contains(&e.hash) {
+                return true;
+            }
+            let keep = spare <= RECENT_SHAPES;
+            spare -= 1;
+            keep
+        });
     }
 
-    /// #2485: the shape `worker` provides `service` at, if the ledger recorded
-    /// one **and** it hashes to the hash recorded beside it.
+    /// The shape filed under `hash`, if it hashes to it.
+    fn shape_for(&self, hash: &str) -> Option<ServiceShape> {
+        let entry = self.contract_shapes.iter().find(|e| e.hash == hash)?;
+        ServiceShape::from_text_checked(&entry.shape, hash)
+    }
+
+    /// #2485: the shape `worker` provides `service` at, if the ledger holds one
+    /// for the hash recorded for it (and it hashes to it).
     pub(crate) fn live_shape(
         &self,
         environment: &str,
@@ -552,8 +622,7 @@ impl DeployLock {
         service: &str,
     ) -> Option<ServiceShape> {
         let record = self.environments.get(environment)?.workers.get(worker)?;
-        let hash = record.contracts.as_ref()?.get(service)?;
-        ServiceShape::from_text_checked(record.shapes.get(service)?, hash)
+        self.shape_for(record.contracts.as_ref()?.get(service)?)
     }
 
     /// #2485: the shape `caller` was compiled against for `dependency.service`,
@@ -566,9 +635,7 @@ impl DeployLock {
         service: &str,
     ) -> Option<ServiceShape> {
         let record = self.environments.get(environment)?.workers.get(caller)?;
-        let hash = record.expects.as_ref()?.get(dependency)?.get(service)?;
-        let text = record.expects_shapes.get(dependency)?.get(service)?;
-        ServiceShape::from_text_checked(text, hash)
+        self.shape_for(record.expects.as_ref()?.get(dependency)?.get(service)?)
     }
 
     /// #2077: every Worker the ledger records as deployed in `environment`,
@@ -1385,7 +1452,7 @@ pub(crate) fn read_lock(path: &Path) -> Result<DeployLock, String> {
     // its now-required `version` — is corruption too, and gets the same
     // restore-it guidance rather than a bare toml diagnostic. A version we simply
     // do not support is a distinct case (a newer or older format), not corruption.
-    let lock: DeployLock = toml::from_str(&text).map_err(|e| {
+    let mut lock: DeployLock = toml::from_str(&text).map_err(|e| {
         format!(
             "deploy ledger `{}` is corrupt ({e}) — restore it from version control",
             path.display()
@@ -1394,6 +1461,7 @@ pub(crate) fn read_lock(path: &Path) -> Result<DeployLock, String> {
     if lock.version != lock_version() {
         return Err(format!("unsupported deploy lock version {}", lock.version));
     }
+    lock.fold_legacy_shapes();
     Ok(lock)
 }
 
@@ -1982,6 +2050,7 @@ pub(crate) mod tests {
                     reused_queues: BTreeSet::new(),
                 },
             )]),
+            contract_shapes: Vec::new(),
         };
         assert_eq!(
             toml::from_str::<DeployLock>(&toml::to_string_pretty(&lock).unwrap()).unwrap(),
@@ -2113,8 +2182,6 @@ pub(crate) mod tests {
             "no shapes recorded, none written"
         );
         lock.record_shapes(
-            "default",
-            "shop-payment",
             BTreeMap::from([("charge".to_string(), shape.to_text())]),
             BTreeMap::new(),
         );
@@ -2132,6 +2199,114 @@ pub(crate) mod tests {
             Some(BTreeMap::from([("charge".to_string(), "0".repeat(16))])),
         );
         assert_eq!(lock.live_shape("default", "shop-payment", "charge"), None);
+    }
+
+    /// #3112: a revert replaces the Worker's contract hashes with the target's
+    /// and drops nothing it can still classify: the target's shape is found by
+    /// hash, from the push that recorded it.
+    #[test]
+    fn a_reverted_contract_still_resolves_its_shape_by_hash() {
+        use bynk_check::contract_compat::{ServiceShape, Shape};
+        let shape = |ret: &str| ServiceShape {
+            name: "charge".into(),
+            params: vec![("order".into(), Shape::Base("Int".into()))],
+            ret: Shape::Base(ret.into()),
+        };
+        let (v1, v2) = (shape("Bool"), shape("Int"));
+        let mut lock = DeployLock {
+            version: 1,
+            ..Default::default()
+        };
+        for s in [&v1, &v2] {
+            lock.record_deployed(
+                "default",
+                "pay",
+                Some(BTreeMap::from([("charge".to_string(), s.hash())])),
+            );
+            lock.record_shapes(
+                BTreeMap::from([("charge".to_string(), s.to_text())]),
+                BTreeMap::new(),
+            );
+        }
+        assert_eq!(lock.live_shape("default", "pay", "charge"), Some(v2));
+        // The revert: v1's hash again, no shape handed over.
+        lock.record_deployed(
+            "default",
+            "pay",
+            Some(BTreeMap::from([("charge".to_string(), v1.hash())])),
+        );
+        assert_eq!(lock.live_shape("default", "pay", "charge"), Some(v1));
+        let read: DeployLock = toml::from_str(&toml::to_string_pretty(&lock).unwrap()).unwrap();
+        assert_eq!(read, lock, "the table survives a write and read");
+    }
+
+    /// #3112: a ledger written with per-Worker shapes still reads, and its
+    /// shapes move into the table rather than being lost on the next write.
+    #[test]
+    fn per_worker_shapes_from_an_older_ledger_are_folded_into_the_table() {
+        use bynk_check::contract_compat::{ServiceShape, Shape};
+        let shape = ServiceShape {
+            name: "charge".into(),
+            params: vec![("order".into(), Shape::Base("Int".into()))],
+            ret: Shape::Base("Bool".into()),
+        };
+        let dir = std::env::temp_dir().join(format!("bynk-legacy-shapes-{}", std::process::id()));
+        std::fs::create_dir_all(&dir).unwrap();
+        let path = dir.join("bynk.deploy.lock");
+        std::fs::write(
+            &path,
+            format!(
+                "version = 1\n[environments.default.workers.pay]\ndeployed = true\n\
+                 [environments.default.workers.pay.contracts]\ncharge = '{}'\n\
+                 [environments.default.workers.pay.shapes]\ncharge = '{}'\n",
+                shape.hash(),
+                shape.to_text()
+            ),
+        )
+        .unwrap();
+        let lock = read_lock(&path).unwrap();
+        assert_eq!(lock.live_shape("default", "pay", "charge"), Some(shape));
+        let written = toml::to_string_pretty(&lock).unwrap();
+        assert!(
+            !written.contains(".shapes]"),
+            "not written per Worker again"
+        );
+        assert!(written.contains("contract_shapes"));
+        std::fs::remove_dir_all(&dir).ok();
+    }
+
+    /// #3112: shapes no record references are kept to a bound, oldest first;
+    /// the live ones are never dropped.
+    #[test]
+    fn unreferenced_shapes_are_pruned_to_a_bound_and_live_ones_stay() {
+        use bynk_check::contract_compat::{ServiceShape, Shape};
+        let shape = |n: usize| ServiceShape {
+            name: "charge".into(),
+            params: vec![(format!("p{n}"), Shape::Base("Int".into()))],
+            ret: Shape::Base("Bool".into()),
+        };
+        let mut lock = DeployLock {
+            version: 1,
+            ..Default::default()
+        };
+        for n in 0..(RECENT_SHAPES + 5) {
+            let s = shape(n);
+            lock.record_deployed(
+                "default",
+                "pay",
+                Some(BTreeMap::from([("charge".to_string(), s.hash())])),
+            );
+            lock.record_shapes(
+                BTreeMap::from([("charge".to_string(), s.to_text())]),
+                BTreeMap::new(),
+            );
+        }
+        // The live one plus the most recent RECENT_SHAPES others.
+        assert_eq!(lock.contract_shapes.len(), RECENT_SHAPES + 1);
+        let newest = shape(RECENT_SHAPES + 4);
+        assert_eq!(lock.live_shape("default", "pay", "charge"), Some(newest));
+        let oldest = shape(0).hash();
+        assert!(lock.shape_for(&oldest).is_none(), "the oldest was pruned");
     }
 
     /// #2077: what a Worker expects round-trips — a dotted dependency key, and
