@@ -1,0 +1,8 @@
+suite demo.desk {
+  env {
+    RETRIES = "3"
+  }
+  case "c" {
+    expect twice(2) == 4
+  }
+}

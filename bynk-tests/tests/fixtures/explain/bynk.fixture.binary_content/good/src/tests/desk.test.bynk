@@ -1,0 +1,7 @@
+suite demo.desk {
+  fixture blob = "fixtures/blob.b64"
+
+  case "uses it" {
+    expect blob.length() > 0
+  }
+}

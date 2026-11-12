@@ -1773,6 +1773,27 @@ pub const EXPLANATIONS: &[Explain] = &[
         anchor: "opaque-types",
     },
     Explain {
+        code: "bynk.fixture.binary_content",
+        blurb: "A `fixture` becomes a `String` in the test code, so its file must be text. A file holding a NUL byte is binary, and a `String` made from it would be meaningless. Keep a text form of the data in the fixture, such as base64, and decode it in the case with `Bytes.fromBase64`. Text that is not valid UTF-8 is `bynk.fixture.invalid_encoding`.",
+        example: "fixture blob = \"fixtures/blob.bin\"    // ✗ the file has a NUL byte\n\nfixture blob = \"fixtures/blob.b64\"    // ✓ its base64 text",
+        page: "/book/reference/fixtures",
+        anchor: "what-the-text-is",
+    },
+    Explain {
+        code: "bynk.fixture.duplicate",
+        blurb: "A fixture is a `String` constant used by its name in the suite, so a suite declares each name once: a second `fixture note` would leave `note` meaning two files. Give each fixture its own name. A fixture whose name is a declaration already in scope is `bynk.resolve.name_conflict` instead.",
+        example: "fixture note = \"fixtures/a.txt\"\nfixture note = \"fixtures/b.txt\"      // ✗ `note` is already declared\n\nfixture note = \"fixtures/a.txt\"\nfixture other = \"fixtures/b.txt\"     // ✓ one name each",
+        page: "/book/reference/fixtures",
+        anchor: "declaring-a-fixture",
+    },
+    Explain {
+        code: "bynk.fixture.invalid_encoding",
+        blurb: "A `fixture` becomes a `String`, which is Unicode text, so its file must be valid UTF-8. A file saved in another encoding, such as Latin-1, holds bytes that cannot be read as text. Re-save it as UTF-8. A file that holds a NUL byte is binary and is `bynk.fixture.binary_content`.",
+        example: "fixture note = \"fixtures/note.txt\"    // ✗ the file is Latin-1, not UTF-8\nfixture note = \"fixtures/note.txt\"    // ✓ once the file is saved as UTF-8",
+        page: "/book/reference/fixtures",
+        anchor: "what-the-text-is",
+    },
+    Explain {
         code: "bynk.fixture.missing_file",
         blurb: "A `fixture` reads a file into a `String` for the suite's \
                 cases, so the file must exist as a regular file in the \
@@ -1785,6 +1806,20 @@ pub const EXPLANATIONS: &[Explain] = &[
         example: "// tests/desk.test.bynk\n\
                   fixture note = \"fixtures/absent.txt\"    // ✗ no such file in `fixtures/`\n\
                   fixture note = \"fixtures/note.txt\"      // ✓",
+        page: "/book/reference/fixtures",
+        anchor: "declaring-a-fixture",
+    },
+    Explain {
+        code: "bynk.fixture.outside_fixtures_dir",
+        blurb: "A fixture is test input, and it may come only from the project's `fixtures/` folder. If any path were allowed, a declaration could read `.env` or a source file just by naming it. Move the file into `fixtures/` and name it there. A path that is empty, absolute or contains `..` is `bynk.fixture.unsafe_path` instead.",
+        example: "fixture note = \"data/note.txt\"        // ✗ not in the fixtures/ folder\n\nfixture note = \"fixtures/note.txt\"    // ✓",
+        page: "/book/reference/fixtures",
+        anchor: "declaring-a-fixture",
+    },
+    Explain {
+        code: "bynk.fixture.unsafe_path",
+        blurb: "A fixture's path is joined onto the project root to find the file, so it must stay inside the project: it may not be empty or absolute, and it may not contain a `..` segment, which could climb out of it. Write the path relative to the project root, inside `fixtures/`. A relative path that is only outside `fixtures/` is `bynk.fixture.outside_fixtures_dir`.",
+        example: "fixture note = \"fixtures/../note.txt\"    // ✗ a `..` segment\n\nfixture note = \"fixtures/note.txt\"       // ✓",
         page: "/book/reference/fixtures",
         anchor: "declaring-a-fixture",
     },
@@ -4586,6 +4621,13 @@ pub const EXPLANATIONS: &[Explain] = &[
         anchor: "stub-latency",
     },
     Explain {
+        code: "bynk.stub.at_system",
+        blurb: "At the `system` tier each context runs as the Worker it deploys as, and that Worker builds its own capability providers, so there is no seam for a `stub` to override. A `stub` there would be accepted and then ignored, so it is refused. Move the case to a suite below `system`, where a `stub` replaces the seam, or remove the stub and test the real provider.",
+        example: "suite demo.desk as system {\n    stub Meter.read() returns 7   // ✗ a `system` suite has no seam to stub\n\n    case \"the desk checks\" { … }\n}\n\nsuite demo.desk {\n    stub Meter.read() returns 7   // ✓ below `system` the seam can be stubbed\n\n    case \"the desk checks\" { … }\n}",
+        page: "/book/reference/testing",
+        anchor: "stub",
+    },
+    Explain {
         code: "bynk.stub.bad_sequence",
         blurb: "`returns each […]` gives one outcome per call, in order, and the \
                 last outcome repeats once the list runs out. An empty list has no \
@@ -4674,6 +4716,13 @@ pub const EXPLANATIONS: &[Explain] = &[
         anchor: "suite-blocks",
     },
     Explain {
+        code: "bynk.suite.duplicate_env",
+        blurb: "An `env` clause gives a variable one value in its scope, so naming it twice in the same suite or the same case leaves two values and no way to choose. Keep one. A case's own `env` may still override a name its suite gives; only a repeat within one scope is refused.",
+        example: "env {\n    MODE = \"fake\"\n    MODE = \"live\"     // ✗ `MODE` is already given in this suite\n}\n\nenv {\n    MODE = \"fake\"\n    REGION = \"eu\"     // ✓ one value per name\n}",
+        page: "/book/reference/testing",
+        anchor: "env",
+    },
+    Explain {
         code: "bynk.suite.duplicate_fn",
         blurb: "A case calls a suite helper by its bare name, so two helpers \
                 of one suite with one name would leave the call ambiguous. \
@@ -4686,6 +4735,20 @@ pub const EXPLANATIONS: &[Explain] = &[
                   fn thrice(n: Int) -> Int { n * 3 }    // ✓",
         page: "/book/reference/testing",
         anchor: "helpers",
+    },
+    Explain {
+        code: "bynk.suite.duplicate_type",
+        blurb: "A suite's types are used by their bare names in its cases, so a suite declares each name once: a second `type Counted` would leave `Counted` meaning two shapes. Rename one. The same holds for a suite's constants, as `bynk.suite.duplicate_const`, and for helper functions, as `bynk.suite.duplicate_fn`.",
+        example: "type Counted = { n: Int }\ntype Counted = { total: Int }     // ✗ `Counted` again\n\ntype Counted = { n: Int }\ntype Totalled = { total: Int }    // ✓ a name each",
+        page: "/book/reference/testing",
+        anchor: "suite-types-consts",
+    },
+    Explain {
+        code: "bynk.suite.env_not_literal",
+        blurb: "A Worker's variables and secrets are strings, so an `env` entry's value must be a `String` literal, `NAME = \"value\"`, or the name of a `fixture` the same suite declares. A number, a call or any other expression is refused, since the value is fixed when the suite is compiled. Write it as a string, and parse a number in the code that reads it.",
+        example: "env {\n    RETRIES = 3       // ✗ not a `String`\n}\n\nenv {\n    RETRIES = \"3\"     // ✓\n}",
+        page: "/book/reference/testing",
+        anchor: "env",
     },
     Explain {
         code: "bynk.suite.fn_effectful",
@@ -4743,6 +4806,13 @@ pub const EXPLANATIONS: &[Explain] = &[
         example: "// tests/desk.test.bynk\n\
                   type Box[T] = { v: T }       // ✗ a suite type is not generic\n\
                   type IntBox = { v: Int }     // ✓",
+        page: "/book/reference/testing",
+        anchor: "suite-types-consts",
+    },
+    Explain {
+        code: "bynk.suite.type_name_clash",
+        blurb: "A suite's cases see the target's own declarations and those of the commons it `uses`, and the suite's types are used by bare name beside them. A suite type with one of those names would silently change which type a mention reaches, so it is refused instead of shadowing. The same goes for a variant of a suite's own sum type. Rename it. A constant clashing is `bynk.suite.const_name_clash`.",
+        example: "// demo/desk.bynk\ntype Item = { sku: String }\n\n// tests/desk.test.bynk\ntype Item = { n: Int }       // ✗ the target already has an `Item`\ntype Counted = { n: Int }    // ✓ a name of its own",
         page: "/book/reference/testing",
         anchor: "suite-types-consts",
     },
@@ -5226,6 +5296,27 @@ pub const EXPLANATIONS: &[Explain] = &[
                   }",
         page: "/book/reference/testing",
         anchor: "driving-a-rejection-with-wire",
+    },
+    Explain {
+        code: "bynk.tier.cross_context_needs_system",
+        blurb: "Below `system` a case runs in one process. No other context is stood up, and a `stub` doubles capabilities, not another context's services. So a `unit` or `integration` case, or a `property`, that reaches another context, directly or through a service or agent handler, has nothing to call. Promote the case to a `system` suite, which wires the contexts, or test the unit that does not cross.",
+        example: "suite demo.desk {\n    case \"the desk checks\" {\n        let n <- check.call(5)   // ✗ `check` calls `demo.vault`, another context\n    }\n}\n\nsuite demo.desk as system {\n    case \"the desk checks\" {\n        let n <- demo.desk.check(5)   // ✓ both contexts are stood up\n    }\n}",
+        page: "/book/reference/testing",
+        anchor: "tiers-the-as-tier-clause",
+    },
+    Explain {
+        code: "bynk.tier.mixed_system_suite",
+        blurb: "A `system` case runs against deployed Workers and addresses services by their context path, which no `unit` or `integration` case can. So a suite holds either `system` cases only or none: a case of another tier in a `system` suite, or a `system` case among others, is refused. Move it into a suite of its own.",
+        example: "suite demo.desk as system {\n    case \"a local one\" as unit {   // ✗ not `system`, in a `system` suite\n        let n <- local.call(1)\n    }\n}\n\nsuite demo.desk {\n    case \"a local one\" {   // ✓ in a suite of its own\n        let n <- local.call(1)\n    }\n}",
+        page: "/book/reference/testing",
+        anchor: "tiers-the-as-tier-clause",
+    },
+    Explain {
+        code: "bynk.tier.system_needs_wire",
+        blurb: "A `system` case exists to cross a real serialise, JSON, deserialise boundary. A target has one if it consumes another context, or exposes an `http`, `queue` or `email` service. One with neither has nothing to cross, so a `system` suite adds nothing over `unit`. Run the suite at `unit` or `integration`, or give the target a service that has a boundary.",
+        example: "suite commerce.payment as system {   // ✗ no other context, and no `http`, `queue` or `email` service\n    case \"authorises\" { … }\n}\n\nsuite commerce.payment as integration {   // ✓ real collaborators, no wire\n    case \"authorises\" { … }\n}",
+        page: "/book/reference/testing",
+        anchor: "tiers-the-as-tier-clause",
     },
     Explain {
         code: "bynk.transition.cross_agent_reference",
