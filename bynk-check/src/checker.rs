@@ -7262,33 +7262,32 @@ mod pure_helper_pins {
 /// #3437: `~> e` is deprecated in favour of `do e.detach()`, which says the same
 /// thing as an ordinary effect statement and works anywhere an `Effect[()]` does.
 /// A warning with a machine-applicable rewrite: `~>` becomes `do ` and `.detach()`
-/// follows the operand (parenthesised unless it already ends a postfix chain). In
-/// an agent handler `detach` is refused too, so the warning carries no rewrite
-/// there.
+/// follows the operand (parenthesised unless it already ends a postfix chain).
+/// Only reached for a send that was not refused, so `detach` is legal here.
 fn warn_send_deprecated(s: &bynk_syntax::ast::SendStmt, ctx: &mut Ctx) {
-    let mut err = CompileError::new(
-        "bynk.send.deprecated",
-        s.span,
-        "the `~>` send is deprecated — write `do e.detach()`",
-    )
-    .with_note(
-        "`e.detach()` stops waiting for `e` as `~>` does, for any `Effect[T]`, and reports a fault or an `Err` instead of losing it; `bynk check --fix` rewrites each `~> e` to `do e.detach()`",
+    let postfix_safe = matches!(
+        s.value.kind,
+        ExprKind::Call { .. }
+            | ExprKind::MethodCall { .. }
+            | ExprKind::Ident(_)
+            | ExprKind::FieldAccess { .. }
+            | ExprKind::Paren(_)
     );
-    if !ctx.in_agent_handler {
-        let postfix_safe = matches!(
-            s.value.kind,
-            ExprKind::Call { .. }
-                | ExprKind::MethodCall { .. }
-                | ExprKind::Ident(_)
-                | ExprKind::FieldAccess { .. }
-                | ExprKind::Paren(_)
-        );
-        let (open, close) = if postfix_safe {
-            ("do ", ".detach()")
-        } else {
-            ("do (", ").detach()")
-        };
-        err = err.with_suggestion(
+    let (open, close) = if postfix_safe {
+        ("do ", ".detach()")
+    } else {
+        ("do (", ").detach()")
+    };
+    ctx.errors.push(
+        CompileError::new(
+            "bynk.send.deprecated",
+            s.span,
+            "the `~>` send is deprecated — write `do e.detach()`",
+        )
+        .with_note(
+            "`e.detach()` stops waiting for `e` as `~>` does, for any `Effect[T]`, and reports a fault or an `Err` instead of losing it; `bynk check --fix` rewrites each `~> e` to `do e.detach()`",
+        )
+        .with_suggestion(
             "rewrite to `do e.detach()`",
             vec![
                 (
@@ -7301,9 +7300,8 @@ fn warn_send_deprecated(s: &bynk_syntax::ast::SendStmt, ctx: &mut Ctx) {
                 ),
             ],
             Applicability::MachineApplicable,
-        );
-    }
-    ctx.errors.push(err);
+        ),
+    );
 }
 
 /// `~> e` (v0.79): fire-and-forget. Effectful context only, like `<-`; the reply
@@ -7406,7 +7404,12 @@ fn check_send_statement(s: &bynk_syntax::ast::SendStmt, ctx: &mut Ctx) {
     }
     // A refused send has the refusal to fix first; the deprecation
     // is for one that would otherwise be accepted.
-    if ctx.errors.len() == errors_before {
+    // Only an error counts: a warning raised in the operand (`todo()`, a
+    // deprecated call) must not hide the deprecation, or `--fix` would skip the send.
+    let refused = ctx.errors[errors_before..]
+        .iter()
+        .any(|e| bynk_syntax::Severity::for_error(e) == bynk_syntax::Severity::Error);
+    if !refused {
         warn_send_deprecated(s, ctx);
     }
 }
