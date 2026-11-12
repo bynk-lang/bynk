@@ -429,7 +429,7 @@ pub(crate) fn check_val(
     {
         ctx.errors.push(
             CompileError::new(
-                "bynk.generics.generic_record_at_boundary",
+                "bynk.val.generic_type",
                 span,
                 format!("`Val[{name}[…]]` cannot fabricate a value of a generic type in v0.157"),
             )

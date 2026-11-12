@@ -1846,6 +1846,10 @@
       "summary": "`Val[T]` was given the wrong number of pin arguments."
     },
     {
+      "code": "bynk.val.generic_type",
+      "summary": "A `Val[…]` fabricates a value of a generic type; per-instantiation value fabrication is not yet wired (ADR 0197). The type itself may cross a boundary through its monomorphised codec (v0.174). Named `bynk.generics.generic_record_at_boundary` before #3379."
+    },
+    {
       "code": "bynk.val.literal_violates",
       "summary": "A pinned `Val[T]` value violates the type's refinement."
     },
