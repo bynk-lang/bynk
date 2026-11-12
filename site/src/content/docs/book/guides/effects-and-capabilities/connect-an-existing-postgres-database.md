@@ -67,6 +67,61 @@ base64, and `json` and `jsonb` nested. The
 [reference](/book/reference/bynk-capabilities/#postgres-databases-postgres) has the
 full rules and the `PgError` variants.
 
+## Read rows into a record
+
+Writing a column list in the SQL and again in a row type drifts. `select[T]` and
+`firstAs[T]` take only the statement from `FROM` on and write the `SELECT` from
+the fields of `T`, quoted as Postgres quotes them:
+
+```bynk,fragment
+consumes bynk.cloudflare { Postgres, PgReadError }
+
+type Order = { id: Int, name: String, placed: Instant, note: Option[String] }
+
+service orders from http {
+	on GET("/orders/count") () -> Effect[HttpResult[Int]] by Visitor given Main {
+		let rows <- Main.select[Order]("FROM orders WHERE qty > $1 ORDER BY id", [PgInteger(0)])
+		match rows {
+			Ok(list) => Ok(list.length())
+			Err(PgSql(_)) => Ok(-1)
+			Err(PgDecode(_)) => Ok(-2)
+		}
+	}
+}
+```
+
+`firstAs[T]` gives an `Option[T]`. A `bigint` column reads into an `Int` (it
+fails the decode past 2^53, rather than losing digits) and a `timestamptz` into an
+`Instant`, whatever offset Postgres writes. A field takes the column of its own
+name, so alias a computed column in a statement you write with `all` instead.
+
+## Change several rows, all or none
+
+`transaction` runs a list of statements in order on one connection. If one fails,
+the earlier ones are rolled back and you get that statement's `PgError`:
+
+```bynk,fragment
+consumes bynk.cloudflare { Postgres, PgStatement }
+
+service orders from http {
+	on POST("/orders/:name") (name: String) -> Effect[HttpResult[String]] by Visitor given Main {
+		let done <- Main.transaction([
+			PgStatement { sql: "insert into orders (name, qty) values ($1, 1)", params: [PgText(name)] },
+			PgStatement { sql: "update stock set qty = qty - 1 where name = $1", params: [PgText(name)] },
+		])
+		match done {
+			Ok(_) => Ok("placed")
+			Err(PgConstraint(_, _)) => Ok("out of stock")
+			Err(_) => Ok("failed")
+		}
+	}
+}
+```
+
+The list is fixed up front. A read whose answer decides a later write cannot sit
+between them; put the decision in one statement (`update … where qty > 0`) and
+check the `rowCount`.
+
 ## Give Bynk the connection string
 
 `bynk deploy` makes the Hyperdrive configuration, and `bynk dev` needs a local
@@ -119,7 +174,9 @@ over more than six statements runs them in turns, not all at once.
 ## Test it with stubs
 
 A test never reaches a database, so every operation faults until the case stubs
-it, as a `Service` does. A stub can answer a value or force any `PgError`:
+it, as a `Service` does. A typed read goes through `all` and `first`, so stub those with the rows as JSON
+text; `transaction` is stubbed as `stub Main.transaction(_) returns …`. A stub can
+answer a value or force any `PgError`:
 
 ```bynk,fragment
 suite shop.orders

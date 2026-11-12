@@ -1,0 +1,4 @@
+bynk.types.sql_statement_at_boundary a `PgStatement` cannot appear in a record field
+bynk.types.sql_statement_at_boundary a `PgStatement` cannot appear in a service handler signature
+bynk.types.sql_statement_at_boundary a `PgStatement` cannot appear in an event field
+# exact

@@ -17,6 +17,8 @@ interface Call {
 
 function fake(answer: (call: Call) => unknown) {
   const calls: Call[] = [];
+  // The order of what the fake saw, so a test can read a transaction's shape.
+  const events: string[] = [];
   const opened: { url: string; options: Record<string, unknown> }[] = [];
   let ended = 0;
   const factory: PgFactory = (url, options) => {
@@ -27,10 +29,36 @@ function fake(answer: (call: Call) => unknown) {
       unsafe(sql: string, params: readonly unknown[], options: { prepare: boolean }) {
         const call: Call = { sql, params, options };
         calls.push(call);
+        events.push(`unsafe ${sql}`);
         try {
           return Promise.resolve(answer(call) as never);
         } catch (e) {
           return Promise.reject(e);
+        }
+      },
+      // Mirrors `sql.begin`: the callback's `tx.unsafe` is the same method; a
+      // throw rolls back (and rethrows), a return commits.
+      async begin<T>(fn: (tx: never) => Promise<T>): Promise<T> {
+        events.push("begin");
+        const tx = {
+          unsafe: (sql: string, params: readonly unknown[], options: { prepare: boolean }) => {
+            const call: Call = { sql, params, options };
+            calls.push(call);
+            events.push(`unsafe ${sql}`);
+            try {
+              return Promise.resolve(answer(call) as never);
+            } catch (e) {
+              return Promise.reject(e);
+            }
+          },
+        };
+        try {
+          const out = await fn(tx as never);
+          events.push("commit");
+          return out;
+        } catch (e) {
+          events.push("rollback");
+          throw e;
         }
       },
       async end() {
@@ -38,7 +66,7 @@ function fake(answer: (call: Call) => unknown) {
       },
     };
   };
-  return { factory, calls, opened, ended: () => ended };
+  return { factory, calls, events, opened, ended: () => ended };
 }
 
 function rows(list: Record<string, unknown>[], count?: number) {
@@ -227,4 +255,176 @@ test("the real default executor is postgres.js's, and reports an unreachable hos
   assert.equal(out.failure.kind, "connection");
   assert.ok(!out.failure.message.includes("s3cr3t"));
   assert.ok(!out.failure.message.includes("127.0.0.1"));
+});
+
+// Hyperdrive H3 (#3320): `transaction`.
+
+test("a transaction runs its statements in order in one begin, each with { prepare: true }, and commits", async () => {
+  const f = fake((call) => {
+    assert.deepEqual(call.options, { prepare: true });
+    return rows([], call.sql.startsWith("insert") ? 1 : 4);
+  });
+  const out = await makePgExecute(f.factory).transaction(URL_WITH_SECRET, [
+    { sql: "insert into a values ($1)", params: [T("x")] },
+    { sql: "update b set n = 1", params: [] },
+  ]);
+  assert.deepEqual(out, { ok: true, rowCounts: [1, 4] });
+  assert.deepEqual(f.events, ["begin", "unsafe insert into a values ($1)", "unsafe update b set n = 1", "commit"]);
+  assert.deepEqual(f.calls[0]!.params, ["x"]);
+  assert.equal(f.opened.length, 1);
+  assert.equal(f.ended(), 1);
+});
+
+test("a failing second statement rolls back the first and stops; the SQLSTATE is kept", async () => {
+  const f = fake((call) => {
+    if (call.sql === "insert into b values (1)") {
+      throw Object.assign(new Error("duplicate key"), { code: "23505" });
+    }
+    return rows([], 1);
+  });
+  const out = await makePgExecute(f.factory).transaction(URL_WITH_SECRET, [
+    { sql: "insert into a values (1)", params: [] },
+    { sql: "insert into b values (1)", params: [] },
+    { sql: "insert into c values (1)", params: [] },
+  ]);
+  assert.ok(!out.ok);
+  if (out.ok) return;
+  assert.deepEqual([out.failure.kind, out.failure.sqlstate], ["constraint", "23505"]);
+  // Rolled back after the second statement; the third never ran.
+  assert.deepEqual(f.events, ["begin", "unsafe insert into a values (1)", "unsafe insert into b values (1)", "rollback"]);
+  assert.equal(f.ended(), 1);
+});
+
+test("a transaction's connection failure keeps the secret out of the message and ends the client", async () => {
+  const f = fake(() => {
+    throw Object.assign(new Error(`write CONNECTION_CLOSED ${URL_WITH_SECRET}`), { code: "CONNECTION_CLOSED" });
+  });
+  const out = await makePgExecute(f.factory).transaction(URL_WITH_SECRET, [{ sql: "select 1", params: [] }]);
+  assert.ok(!out.ok);
+  if (out.ok) return;
+  assert.equal(out.failure.kind, "connection");
+  assert.ok(!out.failure.message.includes("s3cr3t"));
+  assert.equal(f.ended(), 1);
+  const refused = await makePgExecute(() => {
+    throw new Error(`Invalid URL ${URL_WITH_SECRET}`);
+  }).transaction(URL_WITH_SECRET, []);
+  assert.ok(!refused.ok);
+  if (!refused.ok) assert.ok(!refused.failure.message.includes("s3cr3t"));
+});
+
+test("a transaction's parameters reach the driver in their driver form", async () => {
+  const f = fake(() => rows([]));
+  await makePgExecute(f.factory).transaction(URL_WITH_SECRET, [
+    { sql: "select $1, $2", params: [{ tag: "PgNull" }, { tag: "PgTimestamp", value: 1_700_000_000_000 }] },
+  ]);
+  assert.equal(f.calls[0]!.params[0], null);
+  assert.deepEqual(f.calls[0]!.params[1], new Date(1_700_000_000_000));
+});
+
+test("the real default executor's transaction reports an unreachable host as a connection failure", async () => {
+  const out = await pgExecute.transaction("postgres://app:s3cr3t@127.0.0.1:1/db", [{ sql: "select 1", params: [] }]);
+  assert.ok(!out.ok);
+  if (out.ok) return;
+  assert.equal(out.failure.kind, "connection");
+  assert.ok(!out.failure.message.includes("s3cr3t"));
+});
+
+// Review of #3372: the shape a date or time column really has in a row, through
+// the real postgres.js type parsers (no connection is made: `options.parsers` is
+// built from the `types` the executor passes).
+import postgres from "postgres";
+import { PG_TYPES } from "../src/postgres.ts";
+import { jsonRow } from "../src/postgres.ts";
+import { __bynkPgRow } from "../src/time.ts";
+
+test("a timestamp, a date and an infinity stay text and an Instant refuses them; a finite timestamptz is converted", () => {
+  const parsers = (postgres("postgres://u:p@127.0.0.1:1/db", { types: PG_TYPES }) as unknown as {
+    options: { parsers: Record<number, (text: string) => unknown> };
+  }).options.parsers;
+  const row = jsonRow({
+    tz: parsers[1184]!("2026-11-11 12:34:56.789+00"),
+    plain: parsers[1114]!("2026-11-11 12:34:56"),
+    day: parsers[1082]!("2026-11-11"),
+    inf: parsers[1184]!("infinity"),
+    ninf: parsers[1184]!("-infinity"),
+  });
+  assert.deepEqual(row, {
+    tz: "2026-11-11T12:34:56.789Z",
+    plain: "2026-11-11 12:34:56",
+    day: "2026-11-11",
+    inf: "infinity",
+    ninf: "-infinity",
+  });
+  __bynkPgRow(row, ["tz", "plain", "day", "inf", "ninf"], []);
+  assert.equal(row.tz, Date.UTC(2026, 10, 11, 12, 34, 56, 789));
+  // Left as text, so the codec refuses each of them rather than reading an instant.
+  assert.equal(row.plain, "2026-11-11 12:34:56");
+  assert.equal(row.day, "2026-11-11");
+  assert.equal(row.inf, "infinity");
+  assert.equal(row.ninf, "-infinity");
+});
+
+test("the executor opens its client with the date types", async () => {
+  const f = fake(() => rows([]));
+  await makePgExecute(f.factory)(URL_WITH_SECRET, "select 1", []);
+  assert.equal(f.opened[0]!.options.types, PG_TYPES);
+});
+
+// Corrections to H1 (#3320), found by H2's smoke against local Hyperdrive.
+
+test("a PgJson reaches the server as the text it is: the real driver's json and jsonb serializers pass it through", () => {
+  const options = (postgres("postgres://u:p@127.0.0.1:1/db", { types: PG_TYPES }) as unknown as {
+    options: { serializers: Record<number, (x: unknown) => string>; parsers: Record<number, (t: string) => unknown> };
+  }).options;
+  const text = '{"k":[1,2],"s":"a\\"b"}';
+  // 114 is `json`, 3802 `jsonb`: a `$n::jsonb` parameter is described as 3802.
+  for (const oid of [114, 3802]) {
+    assert.equal(options.serializers[oid]!(text), text);
+    assert.deepEqual(JSON.parse(options.serializers[oid]!(text)), { k: [1, 2], s: 'a"b' });
+  }
+  // The driver's own default would have stored a JSON string: the bug.
+  const stock = (postgres("postgres://u:p@127.0.0.1:1/db") as unknown as {
+    options: { serializers: Record<number, (x: unknown) => string> };
+  }).options;
+  assert.equal(stock.serializers[3802]!(text), JSON.stringify(text));
+  // Results are unchanged: parsed and nested.
+  assert.deepEqual(options.parsers[3802]!(text), { k: [1, 2], s: 'a"b' });
+});
+
+test("a PgJson parameter is handed to the driver as text, and the executor opens the client with the types", async () => {
+  const f = fake(() => rows([]));
+  await makePgExecute(f.factory)(URL_WITH_SECRET, "insert into t (m) values ($1::jsonb)", [
+    { tag: "PgJson", value: '{"a":[1]}' },
+  ]);
+  assert.equal(f.calls[0]!.params[0], '{"a":[1]}');
+  assert.equal(f.opened[0]!.options.types, PG_TYPES);
+});
+
+test("a socket error with no code is a connection failure, with a fixed message that names no host", () => {
+  for (const text of [
+    "connection attempt failed",
+    "Network connection lost.",
+    "connect failed: Connection refused (127.0.0.1:1)",
+    "proxy request failed, cannot connect to the specified address",
+    "getaddrinfo ENOTFOUND db.internal.example",
+  ]) {
+    const f = classifyPgError(new Error(text));
+    assert.deepEqual([f.kind, f.sqlstate, f.message], ["connection", "", "could not reach the database"], text);
+  }
+});
+
+test("the database's own errors and ordinary failures are not mistaken for a connection failure", () => {
+  // A server error has a SQLSTATE: its message may say anything.
+  const server = classifyPgError(Object.assign(new Error('relation "connection" does not exist'), { code: "42P01" }));
+  assert.deepEqual([server.kind, server.sqlstate], ["failed", "42P01"]);
+  assert.equal(classifyPgError(new Error("syntax error at or near selec")).kind, "failed");
+  assert.equal(classifyPgError(new Error("expected a number")).kind, "failed");
+});
+
+test("an unreachable host through the real driver is PgConnection-shaped, with no password or host in it", async () => {
+  const out = await pgExecute("postgres://app:s3cr3t@db.invalid.example:1/db", "select 1", []);
+  assert.ok(!out.ok);
+  if (out.ok) return;
+  assert.equal(out.failure.kind, "connection");
+  assert.ok(!out.failure.message.includes("s3cr3t") && !out.failure.message.includes("db.invalid.example"));
 });

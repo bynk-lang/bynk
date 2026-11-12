@@ -1887,9 +1887,8 @@ pub fn emit_worker_entry(
     if runtime_use.bytes_ops() {
         append_missing_bindings(&mut imports, crate::emitter::BYTES_OPS_RUNTIME_IMPORTS);
     }
-    if runtime_use.time_ops() {
-        append_missing_bindings(&mut imports, crate::emitter::TIME_OPS_RUNTIME_IMPORTS);
-    }
+    let time = crate::emitter::time_runtime_imports(&runtime_use);
+    append_missing_bindings(&mut imports, &time);
     if runtime_use.iso_date() {
         append_missing_bindings(&mut imports, crate::emitter::ISO_DATE_RUNTIME_IMPORTS);
     }

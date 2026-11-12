@@ -1,0 +1,14 @@
+context demo
+
+consumes bynk
+consumes bynk.cloudflare { Postgres, PgReadError }
+
+capability Main = Postgres
+
+type Order = { id: Int }
+
+service probe {
+  on call(tail: String) -> Effect[Result[List[Order], PgReadError]] given Main {
+    Main.select[Order](tail, [])
+  }
+}

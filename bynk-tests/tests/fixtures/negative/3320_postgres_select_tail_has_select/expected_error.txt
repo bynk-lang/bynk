@@ -1,0 +1,4 @@
+bynk.types.select_tail_has_select the SQL of `Main.select` must start at `FROM`, not `SELECT`
+bynk.types.select_tail_has_select the SQL of `Main.select` must start at `FROM`, not `SELECT`
+bynk.types.select_tail_has_select the SQL of `Main.firstAs` must start at `FROM`
+# exact

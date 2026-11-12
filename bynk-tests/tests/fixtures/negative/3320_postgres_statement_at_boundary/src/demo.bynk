@@ -1,0 +1,19 @@
+context demo
+
+consumes bynk.cloudflare { Postgres, PgError, PgRun, PgStatement }
+
+capability Main = Postgres
+
+// #3320: a `PgStatement` from outside would carry SQL that was never a
+// literal, so it never crosses a boundary or is stored.
+type Job = { statement: PgStatement }
+
+service exec {
+  on call(s: PgStatement) -> Effect[Result[List[PgRun], PgError]] given Main {
+    Main.transaction([s])
+  }
+}
+
+event Prepared = {
+  statement: PgStatement,
+}

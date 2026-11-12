@@ -1,0 +1,12 @@
+context demo
+
+consumes bynk
+consumes bynk.cloudflare { Postgres, PgError, PgRun, PgStatement }
+
+capability Main = Postgres
+
+service probe {
+  on call(table: String) -> Effect[Result[List[PgRun], PgError]] given Main {
+    Main.transaction([PgStatement { sql: table, params: [] }])
+  }
+}

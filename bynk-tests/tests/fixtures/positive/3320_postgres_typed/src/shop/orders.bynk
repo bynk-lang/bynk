@@ -1,0 +1,54 @@
+context shop.orders
+
+// Hyperdrive H3 (#3320): typed reads and a transaction on a `Postgres`
+// instance. `select[T]` and `firstAs[T]` write the column list from `T`'s
+// fields, quoted as Postgres does (double quotes, an embedded one doubled),
+// and decode the rows: an `int8` arrives as text at an `Int` field and a
+// `timestamptz` as ISO-8601 at an `Instant`. `transaction` runs a fixed list of
+// statements in order, all or none. A failure is a `PgReadError` (`PgSql`,
+// `PgDecode`) or a `PgError`.
+
+consumes bynk
+consumes bynk.cloudflare { Postgres, PgError, PgReadError, PgRun, PgStatement, PgValue }
+
+capability Main = Postgres
+
+type Order = {
+	id: Int,
+	name: String,
+	placed: Instant,
+	note: Option[String],
+	paid: Bool,
+}
+
+service api from http {
+	on GET("/orders") () -> Effect[HttpResult[Int]] by Visitor given Main {
+		let rows <- Main.select[Order]("FROM orders WHERE id > $1 ORDER BY id", [PgInteger(0)])
+		match rows {
+			Ok(list) => Ok(list.length())
+			Err(PgSql(_)) => Ok(-1)
+			Err(PgDecode(_)) => Ok(-2)
+		}
+	}
+
+	on GET("/orders/latest") () -> Effect[HttpResult[String]] by Visitor given Main {
+		let one <- Main.firstAs[Order]("FROM orders ORDER BY placed DESC LIMIT 1", [])
+		match one {
+			Ok(Some(o)) => Ok(o.name)
+			Ok(None) => Ok("none")
+			Err(_) => Ok("failed")
+		}
+	}
+
+	on POST("/orders/:name") (name: String) -> Effect[HttpResult[String]] by Visitor given Main {
+		let done <- Main.transaction([
+			PgStatement { sql: "insert into orders (name, qty) values ($1, $2)", params: [PgText(name), PgInteger(1)] },
+			PgStatement { sql: "update stock set qty = qty - 1 where name = $1", params: [PgText(name)] },
+		])
+		match done {
+			Ok(runs) => Ok("applied")
+			Err(PgConstraint(_, _)) => Ok("conflict")
+			Err(_) => Ok("failed")
+		}
+	}
+}
