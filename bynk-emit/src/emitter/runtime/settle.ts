@@ -217,7 +217,7 @@ export function __bynkDetach(
   site: string,
   errType?: string,
 ): Promise<void> {
-  const watched = promise.then(
+  const watched = Promise.resolve(promise).then(
     (value) => {
       if (errType === undefined) return;
       const r = value as { readonly tag?: string; readonly error?: unknown } | null;

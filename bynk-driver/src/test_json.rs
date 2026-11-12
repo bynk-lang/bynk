@@ -853,6 +853,34 @@ mod tests {
         assert!(!rendered.contains("durationMs"), "{rendered}");
     }
 
+    /// #3437: the failures a detached effect reported while a case ran are a count on
+    /// the case; zero and absent both leave it out.
+    #[test]
+    fn a_cases_detached_failures_are_kept_and_zero_is_dropped() {
+        let ndjson = concat!(
+            r#"{"type":"suite-begin","name":"s","kind":"unit","tests":2}"#,
+            "\n",
+            r#"{"type":"case","suite":"s","name":"a","outcome":"pass","detached_failures":2}"#,
+            "\n",
+            r#"{"type":"case","suite":"s","name":"b","outcome":"pass","detached_failures":0}"#,
+            "\n",
+            r#"{"type":"suite-end","name":"s"}"#,
+            "\n",
+            r#"{"type":"run-end","passed":2,"failed":0}"#,
+            "\n",
+        );
+        let parsed = parse_ndjson(ndjson);
+        assert_eq!(parsed.suites[0].cases[0].detached_failures, Some(2));
+        assert_eq!(parsed.suites[0].cases[1].detached_failures, None);
+        let rendered = parsed.into_document("").render();
+        assert!(rendered.contains("\"detached_failures\": 2"), "{rendered}");
+        assert_eq!(
+            rendered.matches("detached_failures").count(),
+            1,
+            "{rendered}"
+        );
+    }
+
     /// `run-end` names the `--suite`/`--case` values that selected nothing, when
     /// the runner reports any (#2273); without the field there are none.
     #[test]

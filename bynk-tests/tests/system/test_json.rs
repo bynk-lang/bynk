@@ -724,3 +724,61 @@ fn parser_reads_the_violation_a_failed_case_names() {
         "a passing case names no violation"
     );
 }
+
+/// #3437: a run of the `3437_detach_shapes` fixture reports each detached failure
+/// on the case that caused it, in the human output and as `detached_failures` in
+/// the JSON document, and none of them fails a case. Needs a TypeScript runner;
+/// skips without one.
+#[test]
+fn a_detached_failure_is_reported_on_its_case() {
+    let have = |t: &str| which::which(t).is_ok();
+    if !(have("tsx") || (have("tsc") && have("node")) || have("npx")) {
+        eprintln!("skipped: no TypeScript runner on PATH");
+        return;
+    }
+    let fixture =
+        Path::new(env!("CARGO_MANIFEST_DIR")).join("tests/fixtures/positive/3437_detach_shapes");
+    let scratch = std::env::temp_dir().join(format!("bynk-detach-json-{}", std::process::id()));
+    let run = |format: &str| {
+        Command::new(env!("CARGO_BIN_EXE_bynk-under-test"))
+            .args(["test"])
+            .arg(&fixture)
+            .arg("--output")
+            .arg(&scratch)
+            .args(["--format", format])
+            .output()
+            .expect("run bynk test")
+    };
+    let json = run("json");
+    assert!(
+        json.status.success(),
+        "a detached failure does not fail the run:\n{}",
+        String::from_utf8_lossy(&json.stderr)
+    );
+    let doc: serde_json::Value = serde_json::from_slice(&json.stdout).expect("a JSON document");
+    let counts: Vec<(String, u64)> = doc["suites"][0]["cases"]
+        .as_array()
+        .unwrap()
+        .iter()
+        .map(|c| {
+            (
+                c["name"].as_str().unwrap().to_string(),
+                c["detached_failures"].as_u64().unwrap_or(0),
+            )
+        })
+        .collect();
+    let by = |name: &str| counts.iter().find(|(n, _)| n.contains(name)).unwrap().1;
+    assert_eq!(by("of any type"), 2, "{counts:?}");
+    assert_eq!(by("a detached Err does not"), 4, "{counts:?}");
+    assert_eq!(by("with a payload"), 4, "{counts:?}");
+    assert_eq!(by("a helper detaches"), 1, "{counts:?}");
+
+    let human = run("rich");
+    let text = String::from_utf8_lossy(&human.stdout).to_string();
+    assert!(
+        text.contains("! a detached effect returned Err (MailError.Refused) at src/shapes.bynk:"),
+        "{text}"
+    );
+    assert!(text.contains("(MailError.Bounced)"), "{text}");
+    let _ = std::fs::remove_dir_all(&scratch);
+}
