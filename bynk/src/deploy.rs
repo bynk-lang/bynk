@@ -128,7 +128,7 @@ pub(crate) fn local_edge_keys(
 
 /// #3386: for `bynk dev`, the env binding of each `SignedCookie` actor's signing key, by built
 /// Worker (a Worker with none is absent), read from the build's own manifests as `bynk deploy`
-/// reads them. `dev` gives every one a per-run key, so no operator invents a weak one locally.
+/// reads them. `dev` gives every one a local key derived from its name, so no operator invents a weak one locally.
 pub(crate) fn local_session_keys(
     workers_dir: &Path,
     workers: &[String],
@@ -144,9 +144,9 @@ pub(crate) fn local_session_keys(
         .collect())
 }
 
-/// A session key `bynk dev` uses for one run (see [`local_session_keys`]).
-pub(crate) fn mint_local_session_key() -> Result<String, String> {
-    secrets::mint_session_key()
+/// The session key `bynk dev` uses for one binding (see [`local_session_keys`]).
+pub(crate) fn local_session_key(binding: &str) -> String {
+    secrets::local_session_key(binding)
 }
 
 #[cfg(test)]

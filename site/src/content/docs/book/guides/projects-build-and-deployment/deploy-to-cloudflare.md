@@ -364,8 +364,15 @@ prints only its name, as for any secret. A plan lists it as `managed`.
   variable, which you set with `wrangler secret put`. Keep `previous` for one `ttl`, then remove it. A
   value you supply is checked here: it must be base64url of at least 32 bytes, so a weak key is refused
   at deploy rather than faulting the first login.
-- **`bynk dev` uses a fresh key for each run**, so a cookie from an earlier session never verifies.
-  A `--var NAME:value` you pass after `--` is yours and is left alone.
+- **Contexts that share a key get one key.** A login service that issues the cookie and an API guarded
+  by it list the same variable, and a cookie only verifies if both hold the same value. A first deploy
+  mints one value and sets it on both. If one of them already holds a key and another does not, or a
+  `--context` run reaches only some of them, `deploy` refuses and asks you to supply the value yourself
+  (Cloudflare never returns a secret's value, so it cannot copy one across).
+- **`bynk dev` uses a local key derived from the variable's name**, the same in every session (so two
+  `bynk dev --context` sessions side by side accept each other's cookies) and different for each actor. It
+  is for local development only; `deploy` never uses it. A `--var NAME:value` you pass after `--` is yours
+  and is left alone.
 
 ### Edge keys
 

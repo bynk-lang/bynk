@@ -73,6 +73,18 @@ pub(crate) struct SecretSource {
 }
 
 impl SecretSource {
+    /// A source holding `file`'s values, for a test.
+    #[cfg(test)]
+    pub(crate) fn of_values(file: &[(&str, &str)]) -> Self {
+        Self {
+            file: file
+                .iter()
+                .map(|(k, v)| (k.to_string(), v.to_string()))
+                .collect(),
+            named: BTreeSet::new(),
+        }
+    }
+
     /// Read the source the options describe. Failing to read a named file is an
     /// error rather than an empty source: the user pointed at it, so silently
     /// proceeding with no values would surface later as a missing-secret error
@@ -459,6 +471,17 @@ pub(crate) fn mint_session_key() -> Result<String, String> {
     let mut bytes = [0u8; SESSION_KEY_MIN_BYTES];
     getrandom::fill(&mut bytes).map_err(|e| format!("could not generate a session key: {e}"))?;
     Ok(base64url_encode(&bytes))
+}
+
+/// #3386: the signing key `bynk dev` uses for one session-key binding: derived from the binding's
+/// name, so it differs per actor and is the same in every `bynk dev --context` session (two side by
+/// side admit each other's cookies, as they admit each other's calls under the local edge key). It
+/// is a local-development key only: it is public in this source and `deploy` never uses it.
+pub(crate) fn local_session_key(binding: &str) -> String {
+    use sha2::{Digest, Sha256};
+    base64url_encode(&Sha256::digest(format!(
+        "bynk dev session key v1:{binding}"
+    )))
 }
 
 /// #3386: whether a value an operator supplies for a session key is one the runtime will accept:
