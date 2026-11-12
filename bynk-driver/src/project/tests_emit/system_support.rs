@@ -1822,6 +1822,20 @@ fn register_param_route(
     route_body.insert(key, (idx, param.type_ref.clone()));
 }
 
+/// #3343: the arguments of `__queryString` for a typed record's wire form `ser`: the
+/// record's field table too when a field is renamed by `@name`.
+fn query_string_args(
+    type_ref: &bynk_syntax::ast::TypeRef,
+    ser: &str,
+    types: &std::collections::HashMap<String, std::sync::Arc<bynk_syntax::ast::TypeDecl>>,
+) -> Vec<TsExpr> {
+    let mut args = vec![ident(ser)];
+    if let Some(table) = bynk_emit::emitter::renamed_specs_source(type_ref, types) {
+        args.push(ident(table));
+    }
+    args
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -1936,18 +1950,4 @@ mod tests {
         assert!(!names_ident("/* Region */ x()", "Region"));
         assert!(names_ident("/* a */ Region.Here", "Region"));
     }
-}
-
-/// #3343: the arguments of `__queryString` for a typed record's wire form `ser`: the
-/// record's field table too when a field is renamed by `@name`.
-fn query_string_args(
-    type_ref: &bynk_syntax::ast::TypeRef,
-    ser: &str,
-    types: &std::collections::HashMap<String, std::sync::Arc<bynk_syntax::ast::TypeDecl>>,
-) -> Vec<TsExpr> {
-    let mut args = vec![ident(ser)];
-    if let Some(table) = bynk_emit::emitter::renamed_specs_source(type_ref, types) {
-        args.push(ident(table));
-    }
-    args
 }
