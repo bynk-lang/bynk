@@ -4189,13 +4189,12 @@ fn write_header(commons: &TypedCommons, ctx: &EmitProjectCtx) -> Vec<bynk_ts::Ts
                     .split(", "),
             );
         }
-        if ctx.runtime_use.time_ops() {
-            parts.extend(
-                TIME_OPS_RUNTIME_IMPORTS
-                    .trim_start_matches(", ")
-                    .split(", "),
-            );
-        }
+        let time = time_runtime_imports(&ctx.runtime_use);
+        parts.extend(
+            time.trim_start_matches(", ")
+                .split(", ")
+                .filter(|p| !p.is_empty()),
+        );
         if ctx.runtime_use.iso_date() {
             parts.extend(
                 ISO_DATE_RUNTIME_IMPORTS
@@ -4357,11 +4356,7 @@ fn write_header_single(
             ""
         };
         // K3 (#2592): the `Instant` ISO-8601 helpers, imported only when called.
-        let time_ops_imports = if runtime_use.time_ops() {
-            TIME_OPS_RUNTIME_IMPORTS
-        } else {
-            ""
-        };
+        let time_ops_imports = time_runtime_imports(runtime_use);
         // K2 (#2594): the percent-encoding helpers, imported only when called.
         let iso_date_imports = if runtime_use.iso_date() {
             ISO_DATE_RUNTIME_IMPORTS
@@ -4525,6 +4520,25 @@ pub const COOKIES_ROUTE_SUFFIX: &str = "?cookies";
 /// K3 (#2592): the `Instant` ISO-8601 helpers (`toIso`, `Instant.fromIso`),
 /// appended only when the body calls one.
 pub const TIME_OPS_RUNTIME_IMPORTS: &str = ", __bynkInstantToIso, __bynkInstantFromIso";
+
+/// Hyperdrive H3 (#3320): the typed `Postgres` reads' row pass, a group apart
+/// from the `Instant` helpers so a module that only reads ISO text keeps its
+/// import list.
+pub const PG_ROWS_RUNTIME_IMPORTS: &str = ", __bynkPgRow";
+
+/// The runtime names a module takes from the `time` module: the `Instant`
+/// helpers and the typed `Postgres` read pass, each only when the module
+/// references it.
+pub(crate) fn time_runtime_imports(ru: &runtime_use::RuntimeUse) -> String {
+    let mut imports = String::new();
+    if ru.time_ops() {
+        imports.push_str(TIME_OPS_RUNTIME_IMPORTS);
+    }
+    if ru.pg_rows() {
+        imports.push_str(PG_ROWS_RUNTIME_IMPORTS);
+    }
+    imports
+}
 
 /// #2867: the `IsoDate` predicate's check, appended only when a refinement check uses it.
 pub const ISO_DATE_RUNTIME_IMPORTS: &str = ", __bynkIsIsoDate";

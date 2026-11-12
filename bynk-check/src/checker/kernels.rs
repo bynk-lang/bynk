@@ -3284,10 +3284,11 @@ pub(crate) fn check_json_static(
                 ctx.errors.push(recursive_generic_error(&rec, args[0].span));
                 return None;
             }
-            if super::d1::carries_statement(t, &ctx.input.types, tys) {
+            if let Some(statement) = super::d1::carried_statement(t, &ctx.input.types, tys) {
                 ctx.errors.push(super::d1::statement_at_boundary(
                     args[0].span,
                     "a `Json` codec target",
+                    &statement,
                 ));
                 return None;
             }
@@ -3407,10 +3408,11 @@ pub(crate) fn check_json_static(
                 ctx.errors.push(recursive_generic_error(&rec, span));
                 return None;
             }
-            if super::d1::carries_statement(t, &ctx.input.types, tys) {
+            if let Some(statement) = super::d1::carried_statement(t, &ctx.input.types, tys) {
                 ctx.errors.push(super::d1::statement_at_boundary(
                     span,
                     &format!("a `{ns}` codec target"),
+                    &statement,
                 ));
                 return None;
             }

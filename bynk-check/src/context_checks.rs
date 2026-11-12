@@ -2,7 +2,9 @@ use std::collections::{HashMap, HashSet};
 use std::sync::Arc;
 
 use crate::builtin_names::methods::{OF, UNSAFE};
-use crate::checker::{self, CapabilityInfo, CapabilityOpInfo, Ty, TyId, TypedExpr, Types};
+use crate::checker::{
+    self, CapabilityInfo, CapabilityOpInfo, Ty, TyId, TypedExpr, Types, statement_at_boundary,
+};
 use crate::hints::HintSink;
 use crate::index::{RefSink, SymbolKind};
 use crate::locals::LocalsSink;
@@ -6500,7 +6502,7 @@ pub fn reject_fn_types(
             if what != CAPABILITY_SIGNATURE
                 && crate::checker::is_sql_statement_type(&id.name, types) =>
         {
-            errors.push(crate::checker::statement_at_boundary(id.span, what));
+            errors.push(statement_at_boundary(id.span, what, &id.name));
         }
         // K4: a `bynk.crypto` key holds a non-extractable platform key. It is
         // imported where it is used and lives for that call: persisting,

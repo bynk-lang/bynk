@@ -696,7 +696,7 @@ pub fn check_event_field_default(
 
 /// Standard-library S3 (#1963): refuse a use of the experimental first-party
 /// item `path` at `span` unless the project's `[unstable] allow` covers it.
-fn refuse_experimental(path: &str, span: Span, ctx: &mut Ctx) {
+pub(super) fn refuse_experimental(path: &str, span: Span, ctx: &mut Ctx) {
     if let Some(err) = ctx.input.stability.policy.check(path, span) {
         ctx.errors.push(err);
     }
@@ -1834,10 +1834,8 @@ pub(crate) fn check_static_call(
         // #2865: `select[T]` / `firstAs[T]` on a derived `D1` are lowered by
         // the compiler over `all`/`first`, not declared operations.
         if d1::is_typed_read(cap.derived_from.as_ref(), &method.name) {
-            if let Some((unit, base)) = &cap.derived_from {
-                refuse_experimental(&format!("{unit}.{base}.{}", method.name), method.span, ctx);
-            }
             return d1::check_typed_read(
+                cap.derived_from.as_ref(),
                 &type_name.name,
                 method,
                 type_args,

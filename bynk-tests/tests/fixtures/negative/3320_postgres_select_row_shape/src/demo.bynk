@@ -1,0 +1,22 @@
+context demo
+
+consumes bynk
+consumes bynk.cloudflare { Postgres }
+
+capability Main = Postgres
+
+type Money = { cents: Int }
+type Order = { id: String, total: Money }
+type Timed = { id: Int, took: Duration }
+type Placed = { id: Int, at: Instant, maybe: Option[Instant] }
+type Plain = { id: String }
+
+service probe {
+  on call() -> Effect[Bool] given Main {
+    let a <- Main.select[Order]("FROM orders", [])
+    let b <- Main.select[Timed]("FROM orders", [])
+    let c <- Main.select[List[Plain]]("FROM orders", [])
+    let d <- Main.firstAs[Placed]("FROM orders", [])
+    a is Ok(_) && b is Ok(_) && c is Ok(_) && d is Ok(_)
+  }
+}

@@ -87,8 +87,8 @@ pub use calls::{
     BYNK_LIST_DEPRECATED, FnCaps, check_const_decl, check_context_fn, check_event_field_default,
     check_state_initialiser, check_suite_fn,
 };
-pub use d1::row_bool_fields;
 pub(crate) use d1::{is_sql_statement_type, statement_at_boundary};
+pub use d1::{row_base_fields, row_bool_fields};
 pub use refinements::{ZeroValue, is_zeroable, locale_tag_accepts, locale_tag_pattern, zero_value};
 
 // ==== Type representation ====
@@ -651,6 +651,9 @@ pub enum Callee {
         row: TyId,
         sql: String,
         first: bool,
+        /// Hyperdrive H3 (#3320): the instance is a `Postgres` one, so the
+        /// read decodes with Postgres' rules and fails as a `PgReadError`.
+        pg: bool,
     },
     /// #3070: a literal SQL statement of a derived `D1` instance, recorded under
     /// the *SQL argument's* id (not the call's, which keeps its own entry), so
