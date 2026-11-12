@@ -1,0 +1,13 @@
+context api
+
+consumes bynk { Cookie }
+
+type Theme = enum { Light, Dark }
+type Other = { theme: Theme = Light }
+type Prefs = { theme: Theme = Light, tags: List[String] }
+
+service api from http {
+    on GET("/a") (cookies: Prefs) -> Effect[HttpResult[String]] by v: Visitor {
+        Ok("x").withCookie(Prefs.theme.cookie(Dark))
+    }
+}

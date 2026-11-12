@@ -6,15 +6,9 @@
 # the diagnostic_coverage probe does not count a code as asserted merely for
 # being named on it.
 
-bynk.capability.not_provided: the example gate compiles for the bundle target only; this code needs the Workers target or a platform flag (#3163, gate work: a per-fixture target)
-bynk.capability.provider_agent_cross_context: the example gate compiles for the bundle target only; this code needs the Workers target or a platform flag (#3163, gate work: a per-fixture target)
-bynk.context.duplicate_binding: the example gate compiles for the bundle target only; this code needs the Workers target or a platform flag (#3163, gate work: a per-fixture target)
-bynk.ws.open_transfer_cross_file: the example gate compiles for the bundle target only; this code needs the Workers target or a platform flag (#3163, gate work: a per-fixture target)
-bynk.ws.open_transfer_key: the example gate compiles for the bundle target only; this code needs the Workers target or a platform flag (#3163, gate work: a per-fixture target)
-bynk.suite.env_binding_clash: the example gate compiles for the bundle target only; this code needs the Workers target or a platform flag (#3163, gate work: a per-fixture target)
-bynk.target.vendor_conflict: the example gate compiles for the bundle target only; this code needs the Workers target or a platform flag (#3163, gate work: a per-fixture target)
-bynk.target.vendor_required: the example gate compiles for the bundle target only; this code needs the Workers target or a platform flag (#3163, gate work: a per-fixture target)
-bynk.target.browser_bundle_only: the example gate compiles for the bundle target only; this code needs the Workers target or a platform flag (#3163, gate work: a per-fixture target)
+bynk.target.vendor_conflict: needs platform-native capabilities from two platforms, and only Cloudflare ships any today, so no program can raise it
+bynk.target.vendor_required: reported with no source file (the check is not attributed to the file of the `consumes` clause), so the example gate cannot tell which line it is on
+bynk.target.browser_bundle_only: a build-option error with no source position, so the example gate cannot tell which line it is on
 bynk.agent.class_removed: reported with no source position (the class is gone from source, so there is no line), so the example gate cannot tell which line it is on
 bynk.event.non_additive_schema_change: reported with no source file (the registry check is not attributed to the file that declares the event), so the example gate cannot tell which line it is on
 bynk.event.schema_version_mismatch: reported with no source file (the registry check is not attributed to the file that declares the event), so the example gate cannot tell which line it is on

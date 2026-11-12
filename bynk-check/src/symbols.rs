@@ -1923,6 +1923,10 @@ pub fn build_cross_context_info(
         consumed_type_aliases,
         callee_type_aliases,
         callee_alias_keys: callee_alias_keys_out,
+        cookie_records: unit_tables
+            .get(name)
+            .map(crate::context_checks::cookie_records_of)
+            .unwrap_or_default(),
     }
 }
 
