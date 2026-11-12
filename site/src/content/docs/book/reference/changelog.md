@@ -3,7 +3,7 @@ title: Version compatibility & changelog
 ---
 Bynk is pre-1.0 and developed in small, spec-first increments (see
 [Versioning & roadmap](/book/about/versioning-and-roadmap/)). This book is
-written against **v0.568**.
+written against **v0.569**.
 
 This page is a high-level summary of notable increments, not an exhaustive
 per-commit history. While Bynk is pre-1.0, increments may change behaviour.
@@ -28,6 +28,7 @@ per-commit history. While Bynk is pre-1.0, increments may change behaviour.
 
 | Version | Highlights |
 |---|---|
+| **v0.569.0** | A `system` suite signs in to a `SignedCookie` route as `by User("ada")`, and `by Nobody`, `by Forged` and `by Expired` probe its seam; a case's `Sec-Fetch-Site` and `Origin` headers probe the CSRF check (#3386) |
 | **v0.568.1** | `Query.sum` takes a `Decimal` key and sums it exactly, as `List.sum` does, and `average` over a `Decimal` key says why it is refused and points at `sum` then `div` |
 | **v0.568.0** | `bynk deploy` mints a `SignedCookie` actor's signing key when it is unset, keeps a held one, and refuses a weak supplied one; `bynk dev` uses a local key derived per binding (#3386) |
 | **v0.567.2** | `bynk.store.annotation_unsupported` says `@bounded` is recognised but has no effect yet, with the alternative in the note, and the stale storage-kind and annotation doc comments are corrected |
