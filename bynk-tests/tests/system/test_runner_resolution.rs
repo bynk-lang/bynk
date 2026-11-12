@@ -4,7 +4,7 @@
 //! The Windows failure was a `tsc.cmd` shim that detection found (through
 //! `PATHEXT`) but a bare-name spawn never started, so every runner was skipped
 //! and the run advised installing `tsc`. The Windows test below pins the fix
-//! where it can be seen: CI's Windows leg installs `typescript@5` with npm and
+//! where it can be seen: CI's Windows leg installs `typescript@7` with npm and
 //! sets `BYNK_REQUIRE_TSC`. The Unix test pins the reporting half: a `tsc` on
 //! `PATH` that is executable, so detection finds it, but whose interpreter does
 //! not exist, so spawning it fails.
@@ -42,7 +42,7 @@ fn one_case_project(project: &Path) {
 /// #1758 acceptance: on Windows an npm-installed `tsc` is a `tsc.cmd` shim,
 /// which `bynk test` used to find but never start. Runs whenever `tsc`
 /// resolves; under `BYNK_REQUIRE_TSC` (set on CI, which installs
-/// `typescript@5` with npm) a missing `tsc` fails rather than skips.
+/// `typescript@7` with npm) a missing `tsc` fails rather than skips.
 #[cfg(windows)]
 #[test]
 fn an_npm_installed_tsc_shim_runs_the_suite() {

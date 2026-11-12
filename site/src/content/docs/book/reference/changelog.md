@@ -3,7 +3,7 @@ title: Version compatibility & changelog
 ---
 Bynk is pre-1.0 and developed in small, spec-first increments (see
 [Versioning & roadmap](/book/about/versioning-and-roadmap/)). This book is
-written against **v0.566**.
+written against **v0.567**.
 
 This page is a high-level summary of notable increments, not an exhaustive
 per-commit history. While Bynk is pre-1.0, increments may change behaviour.
@@ -28,6 +28,9 @@ per-commit history. While Bynk is pre-1.0, increments may change behaviour.
 
 | Version | Highlights |
 |---|---|
+| **v0.567.2** | `bynk.store.annotation_unsupported` says `@bounded` is recognised but has no effect yet, with the alternative in the note, and the stale storage-kind and annotation doc comments are corrected |
+| **v0.567.1** | Bynk supports TypeScript 7 only (#3420): the TypeScript 5 floor is dropped, `bynk doctor` warns on a `tsc` below 7, and CI verifies under 7 on every leg |
+| **v0.567.0** | A `SignedCookie` actor issues and deletes its session cookie with `User.issue(identity)` and `User.expire()` (#3386) |
 | **v0.566.1** | A `system` test case that builds a first-party record such as `File` resolves `Bytes`, `Duration` and `Instant` statics inside it |
 | **v0.566.0** | A route guarded by a `SignedCookie` actor verifies the session cookie, refuses a cross-site state-changing request, and hides the credential from the handler (#3386) |
 | **v0.565.2** | The explanation of `bynk.query.sum_needs_numeric` says which of `sum` and `average` take a `Decimal` key |

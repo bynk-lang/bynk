@@ -200,7 +200,7 @@ fn bare_compile_only_env_exits_zero_with_test_dev_flagged() {
 fn everything_present_is_all_green_exit_zero() {
     let fake = Fake::default()
         .path_tool("node", "/usr/bin/node", Some(node_at_floor()))
-        .path_tool("tsc", "/usr/bin/tsc", Some(v(5, 4, 2)))
+        .path_tool("tsc", "/usr/bin/tsc", Some(v(7, 0, 2)))
         .path_tool("wrangler", "/usr/bin/wrangler", Some(wrangler_at_min()))
         .path_tool("bynk-lsp", "/usr/bin/bynk-lsp", Some(v(9, 9, 9)));
     let report = doctor::diagnose(&fake, &ctx(false), &bare());
@@ -283,7 +283,7 @@ fn wrangler_is_checked_against_the_compatibility_date_minimum() {
     let all_green_but = |wrangler: Version| {
         let fake = Fake::default()
             .path_tool("node", "/usr/bin/node", Some(node_at_floor()))
-            .path_tool("tsc", "/usr/bin/tsc", Some(v(5, 4, 2)))
+            .path_tool("tsc", "/usr/bin/tsc", Some(v(7, 0, 2)))
             .path_tool("bynk-lsp", "/usr/bin/bynk-lsp", Some(v(9, 9, 9)))
             .path_tool("wrangler", "/usr/bin/wrangler", Some(wrangler));
         doctor::diagnose(&fake, &ctx(false), &bare())
@@ -359,7 +359,7 @@ fn strict_escalates_optional_only_gap() {
     // missing. Bare → 0; --strict → non-zero.
     let fake = Fake::default()
         .path_tool("node", "/usr/bin/node", Some(node_at_floor()))
-        .path_tool("tsc", "/usr/bin/tsc", Some(v(5, 4, 2)))
+        .path_tool("tsc", "/usr/bin/tsc", Some(v(7, 0, 2)))
         .path_tool("wrangler", "/usr/bin/wrangler", Some(wrangler_at_min()));
     let report = doctor::diagnose(&fake, &ctx(false), &bare());
     assert_eq!(cap(&report, Capability::Editor).level, Level::Fail); // displayed as "note"
@@ -378,7 +378,7 @@ fn in_process_compile_floor_is_always_ok() {
     // longer a failure (the driver doesn't shell it). Compile is ok, bare.
     let fake = Fake::default()
         .path_tool("node", "/usr/bin/node", Some(node_at_floor()))
-        .path_tool("tsc", "/usr/bin/tsc", Some(v(5, 4, 2)));
+        .path_tool("tsc", "/usr/bin/tsc", Some(v(7, 0, 2)));
     let report = doctor::diagnose(&fake, &ctx(false), &bare());
     assert_eq!(cap(&report, Capability::Compile).level, Level::Ok);
 }
@@ -422,7 +422,7 @@ fn only_filter_scopes_probes() {
 fn node_below_the_floor_warns() {
     let fake = Fake::default()
         .path_tool("node", "/usr/bin/node", Some(v(FLOOR - 2, 11, 0)))
-        .path_tool("tsc", "/usr/bin/tsc", Some(v(5, 4, 2)))
+        .path_tool("tsc", "/usr/bin/tsc", Some(v(7, 0, 2)))
         .path_tool("wrangler", "/usr/bin/wrangler", Some(wrangler_at_min()));
     let report = doctor::diagnose(&fake, &ctx(false), &bare());
     for c in [Capability::Test, Capability::Deploy] {
@@ -438,28 +438,27 @@ fn node_below_the_floor_warns() {
     // P4a (#2602): the floor has a minor, so a 22.x before 22.13 warns too.
     let fake = Fake::default()
         .path_tool("node", "/usr/bin/node", Some(v(FLOOR, FLOOR_MINOR - 1, 9)))
-        .path_tool("tsc", "/usr/bin/tsc", Some(v(5, 4, 2)))
+        .path_tool("tsc", "/usr/bin/tsc", Some(v(7, 0, 2)))
         .path_tool("wrangler", "/usr/bin/wrangler", Some(wrangler_at_min()));
     let report = doctor::diagnose(&fake, &ctx(false), &bare());
     assert_eq!(cap(&report, Capability::Test).level, Level::Warn);
     // At the floor, the same environment is all green.
     let fake = Fake::default()
         .path_tool("node", "/usr/bin/node", Some(node_at_floor()))
-        .path_tool("tsc", "/usr/bin/tsc", Some(v(5, 4, 2)))
+        .path_tool("tsc", "/usr/bin/tsc", Some(v(7, 0, 2)))
         .path_tool("wrangler", "/usr/bin/wrangler", Some(wrangler_at_min()));
     let report = doctor::diagnose(&fake, &ctx(false), &bare());
     assert_eq!(cap(&report, Capability::Test).level, Level::Ok);
     assert_eq!(cap(&report, Capability::Deploy).level, Level::Ok);
 }
 
-/// #1672: `tsc` is checked against the verified TypeScript majors. Below the
-/// floor it warns. Above the tested major it is reported as untested but stays
+/// #1672, #3420: `tsc` is checked against the one supported TypeScript major.
+/// Below it, it warns. Above the tested major it is reported as untested but stays
 /// `ok`, so `doctor --strict` does not go red the day a new major ships. Both
 /// verified majors (and everything between) are plain `ok`. `tsx` type-checks
 /// nothing, so it carries no TypeScript version to check.
 #[test]
 fn tsc_is_checked_against_the_verified_majors() {
-    let floor = bynk_emit::TYPESCRIPT_MAJOR_FLOOR;
     let tested = bynk_emit::TYPESCRIPT_MAJOR_TESTED;
     let test_row = |tsc: Version| {
         let fake = Fake::default()
@@ -476,10 +475,11 @@ fn tsc_is_checked_against_the_verified_majors() {
         (r.level, row)
     };
 
-    let (level, row) = test_row(v(floor - 1, 9, 0));
+    let (level, row) = test_row(v(tested - 1, 9, 0));
     assert_eq!(level, Level::Warn);
     assert!(
-        row.detail.ends_with(&format!("below floor (≥ {floor})")),
+        row.detail
+            .ends_with(&format!("below supported (≥ {tested})")),
         "{}",
         row.detail
     );
@@ -501,17 +501,17 @@ fn tsc_is_checked_against_the_verified_majors() {
     );
     assert_eq!(row.remedy, None, "no advice to downgrade a working tsc");
 
-    for ok in [v(floor, 0, 0), v(tested, 0, 2)] {
+    for ok in [v(tested, 0, 0), v(tested, 0, 2)] {
         let (level, row) = test_row(ok);
         assert_eq!(level, Level::Ok, "{}", row.detail);
         assert!(!row.detail.contains("untested"), "{}", row.detail);
     }
 
     // `tsc` is the runner whenever it is present (`bynk test` prefers it), so a
-    // below-floor `tsc` still warns even when a healthy `tsx` is installed too.
+    // below-supported `tsc` still warns even when a healthy `tsx` is installed too.
     let fake = Fake::default()
         .path_tool("node", "/usr/bin/node", Some(node_at_floor()))
-        .path_tool("tsc", "/usr/bin/tsc", Some(v(floor - 1, 9, 0)))
+        .path_tool("tsc", "/usr/bin/tsc", Some(v(tested - 1, 9, 0)))
         .path_tool("tsx", "/usr/bin/tsx", Some(v(4, 19, 0)));
     let report = doctor::diagnose(&fake, &ctx(false), &bare());
     assert_eq!(cap(&report, Capability::Test).level, Level::Warn);
@@ -530,7 +530,7 @@ fn tsc_is_checked_against_the_verified_majors() {
 fn golden_report() -> doctor::Report {
     let fake = Fake::default()
         .path_tool("node", "/usr/bin/node", Some(node_at_floor()))
-        .path_tool("tsc", "/usr/bin/tsc", Some(v(5, 4, 2)))
+        .path_tool("tsc", "/usr/bin/tsc", Some(v(7, 0, 2)))
         .with_npx(); // wrangler provisionable, not installed
     let mut report = doctor::diagnose(&fake, &ctx(false), &bare());
     report.driver_version = "9.9.9".to_string();

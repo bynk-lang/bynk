@@ -189,9 +189,9 @@ jobs:
       - uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v6
         with:
           node-version: "24"
-      # Range-pinned to major 5, as in the verify job above — see #828.
+      # Range-pinned to major 7 (TYPESCRIPT_MAJOR_TESTED, #3420), as in the test jobs above — see #828.
       - name: Install TypeScript
-        run: npm install -g typescript@5
+        run: npm install -g typescript@7
       # Provision wrangler ONCE, serially, before the suite. The three workerd
       # smokes each shell out to `npx -y wrangler@4 dev`, and they do it
       # concurrently — under nextest every test is its own process in one pool,

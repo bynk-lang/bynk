@@ -71,7 +71,7 @@ jobs:
         with:
           node-version: "24"
       - name: Install TypeScript
-        run: npm install -g typescript@5
+        run: npm install -g typescript@7
       - name: Type-check every positive fixture's emitted TypeScript
         run: cargo nextest run --locked --profile ci -p bynk-tests --test it -E 'test(=system::tsc_verify::emitted_typescript_passes_tsc_strict)'
         env:
