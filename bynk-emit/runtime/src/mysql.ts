@@ -300,9 +300,18 @@ interface ResultHeader {
   readonly insertId?: unknown;
 }
 
-function numberOf(v: unknown): number {
-  const n = typeof v === "string" ? Number(v) : v;
-  return typeof n === "number" && Number.isSafeInteger(n) ? n : 0;
+/**
+ * A header field as an `Int`. A missing or non-numeric field (which the driver
+ * never produces) reads as `0`; an integer past the safe-integer domain throws,
+ * so it surfaces as `MySqlFailed` rather than as `0`, which means "inserted none".
+ */
+function numberOf(v: unknown, field: string): number {
+  const n = typeof v === "string" && v.trim() !== "" ? Number(v) : v;
+  if (typeof n !== "number" || !Number.isInteger(n)) return 0;
+  if (!Number.isSafeInteger(n)) {
+    throw new Error(`${field} past the Int range: ${String(v)}`);
+  }
+  return n;
 }
 
 /** The connection options (`disableEval` is first, and not optional: ADR 0799 D, Cloudflare's mysql2 guide). */
@@ -350,7 +359,8 @@ export function makeMySqlExecute(factory: MySqlFactory): MySqlExecute {
       return { rows, rowCount: rows.length, insertId: 0 };
     }
     const header = (answer ?? {}) as ResultHeader;
-    return { rows: [], rowCount: numberOf(header.affectedRows), insertId: numberOf(header.insertId) };
+    return { rows: [], rowCount: numberOf(header.affectedRows, "affectedRows"),
+      insertId: numberOf(header.insertId, "insertId"), };
   };
   const query = async (conn: MySqlConnection, sql: string, params: readonly MySqlParam[]) => {
     const [answer] = await conn.query(sql, params.map(driverParam));
