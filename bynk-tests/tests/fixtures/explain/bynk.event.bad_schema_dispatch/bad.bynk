@@ -1,0 +1,11 @@
+context shop.orders
+
+event Paid = {
+  id: String,
+}
+
+service OnPaid from Events(Paid) via schema(0) {
+  on event(e: Paid) -> Effect[()] {
+    ()
+  }
+}

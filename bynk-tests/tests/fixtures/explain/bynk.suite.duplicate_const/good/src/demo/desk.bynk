@@ -1,0 +1,3 @@
+commons demo.desk
+
+fn twice(n: Int) -> Int { n * 2 }

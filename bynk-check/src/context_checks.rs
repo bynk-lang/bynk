@@ -2502,16 +2502,29 @@ fn check_signed_cookie_actor(
     }
     // Expiry: required, a positive whole number of seconds, bounded by a warning.
     match actor.scheme_arg("ttl") {
-        None => errors.push(
-            CompileError::new(
+        None => {
+            let mut err = CompileError::new(
                 "bynk.actor.signed_cookie_missing_ttl",
                 auth.span,
                 "a `SignedCookie` actor must declare a `ttl`",
             )
             .with_note(
                 "an immortal session cookie is the failure to avoid — write `ttl = 12.hours`; a stateless cookie cannot be revoked before it expires, so keep it short",
-            ),
-        ),
+            );
+            // #3431: insert `ttl = 12.hours` after the last config entry. Adding
+            // a key touches nothing else, but the lifetime is the author's
+            // choice, so it is offered (`MaybeIncorrect`), never taken by
+            // fix-all. No entry to anchor on (no config at all) ⇒ note only.
+            if let Some(last) = actor.auth_config.last() {
+                let at = Span::new_in(last.span.file, last.span.end, last.span.end);
+                err = err.with_suggestion(
+                    "add `ttl = 12.hours` (a stateless cookie cannot be revoked before it expires, so keep it short)",
+                    vec![(at, ", ttl = 12.hours".to_string())],
+                    Applicability::MaybeIncorrect,
+                );
+            }
+            errors.push(err);
+        }
         Some(arg) => match arg.value.as_duration_millis() {
             Some(ms) if ms > 0 && ms % 1000 == 0 => {
                 if ms / 1000 > SIGNED_COOKIE_LONG_TTL_SECS {
@@ -2533,7 +2546,9 @@ fn check_signed_cookie_actor(
                     arg.span,
                     "a `SignedCookie` `ttl` must be a positive whole number of seconds",
                 )
-                .with_note("write a `Duration` literal such as `ttl = 12.hours` or `ttl = 30.minutes`"),
+                .with_note(
+                    "write a `Duration` literal such as `ttl = 12.hours` or `ttl = 30.minutes`",
+                ),
             ),
         },
     }

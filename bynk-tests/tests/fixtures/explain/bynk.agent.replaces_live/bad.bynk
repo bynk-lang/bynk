@@ -1,0 +1,19 @@
+context shop.cart
+
+agent Cart {
+  key id: String
+  store total: Cell[Int] = 0
+
+  on call read() -> Effect[Int] {
+    total
+  }
+}
+
+agent Basket replaces Cart {
+  key id: String
+  store total: Cell[Int] = 0
+
+  on call read() -> Effect[Int] {
+    total
+  }
+}

@@ -755,6 +755,27 @@ pub const EXPLANATIONS: &[Explain] = &[
         anchor: "addressing-and-calling",
     },
     Explain {
+        code: "bynk.agent.migrate_duplicate",
+        blurb: "A stored record carries the schema version it was written at, and is loaded through the one `migrate from N` step for that version. Two steps for the same `N` would leave the compiler to choose between them, so the second is refused. Merge them into one step that assigns every field the move from version `N` needs. A step that assigns one field twice is `bynk.agent.migrate_duplicate_assignment`.",
+        example: "type CartV1 = { owner: String, total: Int }\n\nmigrate from 1 (old: CartV1) {\n    ownerName := old.owner\n}\nmigrate from 1 (old: CartV1) {    // ✗ version 1 again\n    totalCents := old.total * 100\n}\n\nmigrate from 1 (old: CartV1) {\n    ownerName := old.owner\n    totalCents := old.total * 100    // ✓ one step does both\n}",
+        page: "/book/reference/agents",
+        anchor: "migrations",
+    },
+    Explain {
+        code: "bynk.agent.migrate_duplicate_assignment",
+        blurb: "A migration step builds the new state like a record literal: each `store` field takes at most one value. A bare field name in the body reads the value carried over, never an earlier assignment, so a second `:=` to a field cannot build on the first and is refused. Combine the two into one expression of `old` and the carried fields. Two steps for one version is `bynk.agent.migrate_duplicate`.",
+        example: "type CartV1 = { owner: String, total: Int }\n\nmigrate from 1 (old: CartV1) {\n    totalCents := old.total\n    totalCents := old.total * 100    // ✗ `totalCents` again\n}\n\nmigrate from 1 (old: CartV1) {\n    totalCents := old.total * 100    // ✓ one value\n}",
+        page: "/book/reference/agents",
+        anchor: "migrations",
+    },
+    Explain {
+        code: "bynk.agent.migrate_impure",
+        blurb: "A migration step must be pure and must not read the agent's key. A migration sweep wakes each stored instance by its object ID, which does not recover the key, so a step cannot depend on who the instance is, and it cannot use `?`, `expect` or `Effect.pure`. Compute the new value from `old` and the carried fields. If it needs the key, do that in a handler after the migration.",
+        example: "type CartV1 = { owner: String, total: Int }\n\nmigrate from 1 (old: CartV1) {\n    ownerName := id    // ✗ reads the agent's key\n}\n\nmigrate from 1 (old: CartV1) {\n    ownerName := old.owner    // ✓\n}",
+        page: "/book/reference/agents",
+        anchor: "migrations",
+    },
+    Explain {
         code: "bynk.agent.outside_context",
         blurb: "An agent holds state, and a context is the unit that owns it. A `commons` is \
                 code shared between contexts, which each `uses` it, so it is not given an agent, \
@@ -770,6 +791,20 @@ pub const EXPLANATIONS: &[Explain] = &[
                   agent Counter { … }   // ✓ a context owns it",
         page: "/book/reference/agents",
         anchor: "declaration",
+    },
+    Explain {
+        code: "bynk.agent.removed_live",
+        blurb: "`removed agent Cart` tells the next deploy to delete the class `Cart` and all of its stored data. While `Cart` is still declared, that would delete the data of a class the code still uses, so the two together are refused. Delete the `agent Cart` declaration; the data goes at the next deploy, once you confirm it by name. If the class should stay, delete the `removed agent` line instead.",
+        example: "removed agent Cart    // ✗ `Cart` is still declared\nagent Cart { … }\n\nremoved agent Cart\nagent Basket { … }    // ✓ `Cart` is gone",
+        page: "/book/reference/agents",
+        anchor: "renaming-and-removing-an-agent",
+    },
+    Explain {
+        code: "bynk.agent.replaces_live",
+        blurb: "`agent New replaces Old` renames a class: `Old`'s stored data moves to `New`. While `Old` is still declared, both would claim that data, so it is refused. To rename, delete the `Old` declaration. If the two are separate classes, drop `replaces`. Each old name has one fate, as `bynk.agent.class_conflict` says.",
+        example: "agent Cart { … }\nagent Basket replaces Cart { … }    // ✗ `Cart` is still declared\nagent Basket { … }                  // ✓ a separate class; delete `Cart` to rename it",
+        page: "/book/reference/agents",
+        anchor: "renaming-and-removing-an-agent",
     },
     Explain {
         code: "bynk.agent.return_not_effect",
@@ -1747,6 +1782,20 @@ pub const EXPLANATIONS: &[Explain] = &[
         anchor: "the-envelope-and-idempotent-handling",
     },
     Explain {
+        code: "bynk.event.bad_schema_dispatch",
+        blurb: "`via schema(N)` filters a subscription by the envelope's `schemaVersion`. Versions count up from 1, so every bound must be a positive `Int` literal: `schema(0)` or `schema(0..3)` names a version no event has. Write a version, a range such as `schema(2..4)`, or `_` for every version. A range whose lower bound is above its upper one is `bynk.types.empty_range_pattern`.",
+        example: "service OnPaid from Events(Paid) via schema(0) {    // ✗ versions start at 1\nservice OnPaid from Events(Paid) via schema(1) {    // ✓\n    on event(e: Paid) -> Effect[()] { … }\n}",
+        page: "/book/guides/events/understand-events",
+        anchor: "dispatching-by-version-with-via-scheman",
+    },
+    Explain {
+        code: "bynk.event.bad_schema_version",
+        blurb: "`@schema(N)` states the version an event is at, so that the number can be reviewed in the source and is checked against the version the registry computes. `N` must be one positive `Int` literal, given by position, and `@schema` may appear once on an event: `@schema(0)`, `@schema(\"2\")`, `@schema(v: 2)` and a second `@schema` are all refused. Write `@schema(2)`, or drop the annotation, since the registry tracks the version anyway.",
+        example: "event Paid @schema(0) = {    // ✗ versions start at 1\nevent Paid @schema(1) = {    // ✓\n    id: String,\n}",
+        page: "/book/guides/events/understand-events",
+        anchor: "asserting-a-schema-version-with-scheman",
+    },
+    Explain {
         code: "bynk.event.duplicate_handler",
         blurb: "A `from Events(E)` service has exactly one `on event` handler. To react to an event in two ways, declare two services, each subscribing to it: every subscriber is delivered to independently. So the second handler is refused here, and the fix is to move it into a service of its own.",
         example: "service onPaid from Events(Paid) {\n    on event(e: Paid) -> Effect[()] { … }\n    on event(e: Paid) -> Effect[()] { … }   // ✗ a service has one `on event` handler\n}\n\nservice onPaidAudit from Events(Paid) {     // ✓ a second subscriber, delivered to separately\n    on event(e: Paid) -> Effect[()] { … }\n}",
@@ -1780,6 +1829,13 @@ pub const EXPLANATIONS: &[Explain] = &[
         example: "commons shop\n\nevent Paid = { id: String }   // ✗ a commons has no owner to emit it\n\ncontext shop\n\nevent Paid = { id: String }   // ✓ declared where it is emitted",
         page: "/book/guides/events/understand-events",
         anchor: "the-three-pieces",
+    },
+    Explain {
+        code: "bynk.event.pattern_duplicate_field",
+        blurb: "A subscription pattern narrows delivery by field: `from Events(Paid { region: Domestic, .. })` runs the handler only when `region` is `Domestic`. The listed fields combine with AND, so naming one twice would ask for two values at once, or say the same thing twice, and is refused rather than guessed at. List each field once. To accept several values, leave the field out of the pattern and `match` on it in the handler.",
+        example: "service OnPaid from Events(Paid { region: Domestic, region: International, .. }) {    // ✗ `region` twice\nservice OnPaid from Events(Paid { region: Domestic, .. }) {                            // ✓\n    on event(e: Paid) -> Effect[()] { … }\n}",
+        page: "/book/guides/events/understand-events",
+        anchor: "filtering-delivery-with-a-pattern",
     },
     Explain {
         code: "bynk.event.pattern_type_mismatch",
@@ -1829,6 +1885,13 @@ pub const EXPLANATIONS: &[Explain] = &[
         example: "context mailer\n\nconsumes orders\n\nservice onPaid from Events(Payd) {   // ✗ no event `Payd`\n\nservice onPaid from Events(Paid) {   // ✓ the event `orders` declares",
         page: "/book/guides/events/understand-events",
         anchor: "the-three-pieces",
+    },
+    Explain {
+        code: "bynk.exec.unavailable",
+        blurb: "A function that uses `~>`, `within` or `race` hands work to the execution context, which a service handler has. An agent handler, a WebSocket handler, a provider operation, a function that is not effectful and a `const`, `store` or predicate initialiser do not. Calling such a function from one of those, directly or through other functions, or naming it as a value, is refused. The note gives the chain of calls down to the construct. Make the call in a service handler, and pass what it returns on.",
+        example: "fn bounded(e: Effect[Int]) -> Effect[Bool] { … }\n\nagent Counter {\n    key id: String\n    store n: Cell[Int] = 0\n\n    on call check() -> Effect[Bool] {\n        bounded(Effect.pure(1))    // ✗ an agent handler has no execution context\n    }\n}\n\nservice api {\n    on call() -> Effect[Bool] {\n        bounded(Effect.pure(1))    // ✓ a service handler has\n    }\n}",
+        page: "/book/reference/capabilities",
+        anchor: "within",
     },
     Explain {
         code: "bynk.expect.faults_not_effect",
@@ -4921,6 +4984,13 @@ pub const EXPLANATIONS: &[Explain] = &[
         anchor: "service-form",
     },
     Explain {
+        code: "bynk.stability.experimental",
+        blurb: "Some standard-library items are experimental: they may change or disappear in any release, and the compatibility promise does not cover them. Using one is an error until the project opts in, so that relying on it is a choice someone made and can find. Add the item's path, as the error gives it, to `allow` under `[unstable]` in `bynk.toml`, or avoid the item. An entry that names no standard-library item is `bynk.project.unstable_unknown_item`.",
+        example: "// demo.bynk\nconsumes bynk.cloudflare { Version }    // ✗ experimental\n\n// bynk.toml\n[unstable]\nallow = [\"bynk.cloudflare.Version\"]     // ✓",
+        page: "/book/reference/bynk-capabilities",
+        anchor: "stability",
+    },
+    Explain {
         code: "bynk.store.annotation_kind_mismatch",
         blurb: "Each storage annotation is for one kind of store: `@ttl` for a `Cache`, `@retain` for a `Log` and `@indexed` for a `Map`. On any other kind it has nothing to act on: a `Map` has no expiry, for one. Move the annotation to a field of the kind it belongs to, or change the field's kind if that is what you meant.",
         example: "store sessions: Map[String, Int] @ttl(30.minutes)     // ✗ `@ttl` is for a `Cache`\n\nstore sessions: Cache[String, Int] @ttl(30.minutes)   // ✓",
@@ -5102,6 +5172,13 @@ pub const EXPLANATIONS: &[Explain] = &[
         anchor: "stub",
     },
     Explain {
+        code: "bynk.suite.const_name_clash",
+        blurb: "A suite's cases see the target's own declarations and those of the commons it `uses`, and the suite's constants are used by bare name beside them. A suite constant with one of those names, or with that of a sum variant in scope, would silently change which value a mention reaches, so it is refused instead of shadowing. Rename it. A type clashing is `bynk.suite.type_name_clash`.",
+        example: "// demo/desk.bynk\nconst Limit: Int = 5\n\n// tests/desk.test.bynk\nconst Limit: Int = 9    // ✗ the target already has a `Limit`\nconst Cap: Int = 9      // ✓ a name of its own",
+        page: "/book/reference/testing",
+        anchor: "suite-types-consts",
+    },
+    Explain {
         code: "bynk.suite.duplicate_case_name",
         blurb: "A case is identified by its description in the runner's output and \
                 in failure reports, so each description must be unique across the \
@@ -5113,6 +5190,13 @@ pub const EXPLANATIONS: &[Explain] = &[
                   case \"another entry\" { … }     // ✓",
         page: "/book/reference/testing",
         anchor: "suite-blocks",
+    },
+    Explain {
+        code: "bynk.suite.duplicate_const",
+        blurb: "A suite's constants are used by bare name in its cases, so a suite declares each name once: a second `const Limit` would leave `Limit` meaning two values. A `const` named like one of the suite's `type`s counts as a repeat too. Rename one. The same holds for a suite's types, as `bynk.suite.duplicate_type`, and for helper functions, as `bynk.suite.duplicate_fn`.",
+        example: "const Limit: Int = 5\nconst Limit: Int = 9    // ✗ `Limit` again\nconst Cap: Int = 9      // ✓ a name each",
+        page: "/book/reference/testing",
+        anchor: "suite-types-consts",
     },
     Explain {
         code: "bynk.suite.duplicate_env",
@@ -5316,6 +5400,13 @@ pub const EXPLANATIONS: &[Explain] = &[
         anchor: "time-in-tests",
     },
     Explain {
+        code: "bynk.test.asset_address_method",
+        blurb: "An asset is served by the platform before the Worker runs, and only to `GET`: it answers every other method with `405`. A case fetches one with `api.GET(asset)`, and a different method is refused, since the answer would be the platform's `405` and nothing your code decides. Use `GET`, and pass the asset alone. A `by` clause on the fetch is `bynk.test.principal_on_asset`.",
+        example: "// demo/web.bynk\nasset style = \"assets/board.css\"\n\n// tests/web.test.bynk\nlet r <- api.POST(style)    // ✗ only `GET` fetches an asset\nlet r <- api.GET(style)     // ✓",
+        page: "/book/reference/testing",
+        anchor: "assets",
+    },
+    Explain {
         code: "bynk.test.call_needs_in_process",
         blurb: "A service with an `on call` handler is internal to a deployment: \
                 it has no public route, and a `system` case can only send requests \
@@ -5364,6 +5455,13 @@ pub const EXPLANATIONS: &[Explain] = &[
                   // tests/ledger.test.bynk\n\
                   let _ <- OnPlaced.event(Cancelled { id: \"o1\" })   // ✗ it subscribes to `Placed`\n\
                   let _ <- OnPlaced.event(Placed { id: \"o1\" })      // ✓",
+        page: "/book/reference/testing",
+        anchor: "event-address",
+    },
+    Explain {
+        code: "bynk.test.event_publisher_ambiguous",
+        blurb: "`svc.event(e)` delivers an event in a default envelope, whose `publisherId` is the context that publishes the event to the target: its own, or the one context it consumes that declares it. When two consumed contexts both declare the event there is no single publisher to name, so the case must build the envelope itself. Pass `svc.event(e, env)`, with an `EventEnvelope` whose `publisherId` names the one you mean; the target must consume `EventEnvelope` from `bynk`.",
+        example: "// shop/ledger.bynk\nconsumes shop.order\nconsumes shop.archive\nconsumes bynk { EventEnvelope }\n\n// tests/ledger.test.bynk\nlet _ <- OnPlaced.event(Placed { id: \"o1\" })         // ✗ `shop.order` or `shop.archive`?\nlet env = EventEnvelope { eventId: \"e1\", publisherId: \"shop.order\", …\nlet _ <- OnPlaced.event(Placed { id: \"o1\" }, env)    // ✓ the envelope names it",
         page: "/book/reference/testing",
         anchor: "event-address",
     },
@@ -5418,6 +5516,13 @@ pub const EXPLANATIONS: &[Explain] = &[
         anchor: "faults",
     },
     Explain {
+        code: "bynk.test.forged_needs_signature_route",
+        blurb: "`by Forged` and `by Stale` send a bad credential to a real auth seam, so the route must have a seam that can refuse it. `Forged` needs a `Signature`, `Bearer` or `Oidc` actor. `Stale` needs a `Signature` actor, since only a signature carries a timestamp to age. On any other route there is nothing to refuse and the case would test nothing, so it is refused. Drive a route with the right seam. See `bynk.test.stale_needs_timestamp` for a `Signature` actor with no timestamp.",
+        example: "// demo/api.bynk\non GET(\"/me\") () -> Effect[HttpResult[String]] by u: User { … }\non POST(\"/hook\") (body: String) -> Effect[HttpResult[String]] by Hook { … }\n\n// tests/api.test.bynk\nlet r <- api.GET(\"/me\") by Stale             // ✗ a `Bearer` route has no signature to age\nlet r <- api.POST(\"/hook\", \"x\") by Stale     // ✓ `Hook` is a `Signature` actor",
+        page: "/book/reference/testing",
+        anchor: "failure-principals",
+    },
+    Explain {
         code: "bynk.test.forged_needs_system",
         blurb: "`by Forged`, `by Stale` and the other bad-credential principals \
                 send a forged or out-of-date credential to the real auth seam, \
@@ -5430,6 +5535,13 @@ pub const EXPLANATIONS: &[Explain] = &[
                   \x20\x20\x20\x20let r <- api.GET(\"/a\") by Forged\n\
                   \x20\x20\x20\x20expect r is Rejected(Unauthorized)\n\
                   }",
+        page: "/book/reference/testing",
+        anchor: "failure-principals",
+    },
+    Explain {
+        code: "bynk.test.no_subject_needs_oidc_route",
+        blurb: "`by NoSubject` sends two correctly signed, unexpired tokens whose `sub` the seam must refuse: one empty, one missing. Only an `Oidc` actor's seam is driven with these tokens, so on any other route, a `Bearer` or `Signature` one or a public one, the case is refused. Drive a route guarded by an `Oidc` actor. The same holds for `bynk.test.wrong_issuer_needs_oidc_route`, `bynk.test.wrong_audience_needs_oidc_route` and `bynk.test.wrong_algorithm_needs_oidc_route`.",
+        example: "// demo/api.bynk\nactor User { auth = Bearer(secret = \"S\"), identity = UserId }\nactor Workload { auth = Oidc(…\non GET(\"/me\") () -> Effect[HttpResult[String]] by u: User { … }\non GET(\"/who\") () -> Effect[HttpResult[String]] by w: Workload { … }\n\n// tests/api.test.bynk\nlet r <- api.GET(\"/me\") by NoSubject      // ✗ a `Bearer` route is not an `Oidc` one\nlet r <- api.GET(\"/who\") by NoSubject     // ✓",
         page: "/book/reference/testing",
         anchor: "failure-principals",
     },
@@ -5479,6 +5591,13 @@ pub const EXPLANATIONS: &[Explain] = &[
                   let r <- api.GET(\"/a\") by User(\"bob\")    // ✓",
         page: "/book/reference/testing",
         anchor: "call-site-by",
+    },
+    Explain {
+        code: "bynk.test.principal_on_asset",
+        blurb: "An asset is public: the platform serves it before the Worker runs, so no actor's seam ever sees the request. A `by` clause on an asset fetch would name a principal that nothing checks, so it is refused. Drop the `by`. To test who may reach something, drive a route, not an asset. A method other than `GET` is `bynk.test.asset_address_method`.",
+        example: "// demo/web.bynk\nasset style = \"assets/board.css\"\n\n// tests/web.test.bynk\nlet r <- api.GET(style) by Visitor    // ✗ an asset has no principal\nlet r <- api.GET(style)               // ✓",
+        page: "/book/reference/testing",
+        anchor: "assets",
     },
     Explain {
         code: "bynk.test.principal_on_wrong_method",
@@ -5649,6 +5768,20 @@ pub const EXPLANATIONS: &[Explain] = &[
         anchor: "snapshots",
     },
     Explain {
+        code: "bynk.test.stale_needs_timestamp",
+        blurb: "A `Signature` actor refuses a stale request by reading a timestamp header and comparing it with a `tolerance`. `by Stale` signs a request in the past, so it means something only when the actor declares both; without them the seam has no window to refuse it by, and the case would test nothing. Add `timestamp = \"<Header>\"` and `tolerance = <seconds>` to the actor, or test the signature itself with `by Forged`. On a route with no `Signature` actor, see `bynk.test.forged_needs_signature_route`.",
+        example: "// demo/api.bynk\nactor Legacy { auth = Signature(secret = \"LEGACY_SECRET\", header = \"X-Legacy-Sig\") }\nactor Hook { auth = Signature(secret = \"HOOK_SECRET\", header = \"X-Sig\", timestamp = \"X-Ts\", tolerance = 300) }\n\n// tests/api.test.bynk\nlet r <- api.POST(\"/legacy\", \"x\") by Stale    // ✗ `Legacy` declares no `timestamp`\nlet r <- api.POST(\"/hook\", \"x\") by Stale      // ✓",
+        page: "/book/reference/testing",
+        anchor: "failure-principals",
+    },
+    Explain {
+        code: "bynk.test.system_claims_need_literal",
+        blurb: "At `system` the driver mints an `Oidc` actor's token itself, writing its claims from the `\"name: value\"` lines of the `TokenClaims.of([…])` in the `by` clause. A `TokenClaims` held in a variable is opaque: it can be read with `get` and `has`, but its lines cannot be recovered, so the driver has nothing to mint from and the case is refused rather than sent with no claims. Write `TokenClaims.of([…])` in the principal, or move the case to `integration`, where the handler is given the value as it is.",
+        example: "// tests/api.test.bynk\nlet claims = TokenClaims.of([\"repository: acme/money\"])\nlet r <- api.GET(\"/who\") by Workload(\"wid\", claims)    // ✗ the claims are in a variable\nlet r <- api.GET(\"/who\") by Workload(\"wid\", TokenClaims.of([\"repository: acme/money\"]))    // ✓",
+        page: "/book/reference/testing",
+        anchor: "token-claims",
+    },
+    Explain {
         code: "bynk.test.unknown_actor",
         blurb: "A call-site `by <Actor>` makes the case act as that actor, so \
                 it must name an `actor` the target context declares, or one of \
@@ -5695,6 +5828,41 @@ pub const EXPLANATIONS: &[Explain] = &[
                   }",
         page: "/book/reference/testing",
         anchor: "driving-a-rejection-with-wire",
+    },
+    Explain {
+        code: "bynk.test.wrong_algorithm_needs_oidc_route",
+        blurb: "`by WrongAlgorithm` sends two otherwise valid tokens under an algorithm the seam must refuse: one with `alg: none`, and one `HS256`-signed with the JWKS public key as the secret. Only an `Oidc` actor's seam is driven with these tokens, so on any other route, a `Bearer` or `Signature` one or a public one, the case is refused. Drive a route guarded by an `Oidc` actor. The same holds for `bynk.test.wrong_issuer_needs_oidc_route`, `bynk.test.wrong_audience_needs_oidc_route` and `bynk.test.no_subject_needs_oidc_route`.",
+        example: "// demo/api.bynk\nactor User { auth = Bearer(secret = \"S\"), identity = UserId }\nactor Workload { auth = Oidc(…\non GET(\"/me\") () -> Effect[HttpResult[String]] by u: User { … }\non GET(\"/who\") () -> Effect[HttpResult[String]] by w: Workload { … }\n\n// tests/api.test.bynk\nlet r <- api.GET(\"/me\") by WrongAlgorithm      // ✗ a `Bearer` route is not an `Oidc` one\nlet r <- api.GET(\"/who\") by WrongAlgorithm     // ✓",
+        page: "/book/reference/testing",
+        anchor: "failure-principals",
+    },
+    Explain {
+        code: "bynk.test.wrong_audience_needs_oidc_route",
+        blurb: "`by WrongAudience` sends a correctly signed, unexpired token whose `aud` is not the actor's audience. Only an `Oidc` actor has an audience to check: a `Bearer` token has none, and a `Signature` or public route has no token. On any other route the case is refused. Drive a route guarded by an `Oidc` actor. The same holds for `bynk.test.wrong_issuer_needs_oidc_route`, `bynk.test.wrong_algorithm_needs_oidc_route` and `bynk.test.no_subject_needs_oidc_route`.",
+        example: "// demo/api.bynk\nactor User { auth = Bearer(secret = \"S\"), identity = UserId }\nactor Workload { auth = Oidc(…\non GET(\"/me\") () -> Effect[HttpResult[String]] by u: User { … }\non GET(\"/who\") () -> Effect[HttpResult[String]] by w: Workload { … }\n\n// tests/api.test.bynk\nlet r <- api.GET(\"/me\") by WrongAudience      // ✗ a `Bearer` token has no audience\nlet r <- api.GET(\"/who\") by WrongAudience     // ✓",
+        page: "/book/reference/testing",
+        anchor: "failure-principals",
+    },
+    Explain {
+        code: "bynk.test.wrong_issuer_needs_oidc_route",
+        blurb: "`by WrongIssuer` sends a correctly signed, unexpired token whose `iss` is not the actor's issuer. Only an `Oidc` actor has an issuer to check: a `Bearer` token has none, and a `Signature` or public route has no token. On any other route the case is refused. Drive a route guarded by an `Oidc` actor. The same holds for `bynk.test.wrong_audience_needs_oidc_route`, `bynk.test.wrong_algorithm_needs_oidc_route` and `bynk.test.no_subject_needs_oidc_route`.",
+        example: "// demo/api.bynk\nactor User { auth = Bearer(secret = \"S\"), identity = UserId }\nactor Workload { auth = Oidc(…\non GET(\"/me\") () -> Effect[HttpResult[String]] by u: User { … }\non GET(\"/who\") () -> Effect[HttpResult[String]] by w: Workload { … }\n\n// tests/api.test.bynk\nlet r <- api.GET(\"/me\") by WrongIssuer      // ✗ a `Bearer` token has no issuer\nlet r <- api.GET(\"/who\") by WrongIssuer     // ✓",
+        page: "/book/reference/testing",
+        anchor: "failure-principals",
+    },
+    Explain {
+        code: "bynk.test.ws_lifecycle_by",
+        blurb: "A WebSocket connection's principal is given once, at `open`, and the connection carries it from there, as the platform recovers it from the socket. So `message` and `close` take no `by`: a case that named one could present a principal production never sees. Drop the `by`. To act as another principal, open a new `TestConnection`.",
+        example: "// tests/room.test.bynk\nlet tc = TestConnection[Frame]()\nlet _ <- Gateway.open(tc, RoomId.unsafe(\"r\")) by Member(UserId.unsafe(\"ann\"))\nlet _ <- Gateway.message(tc, Frame { text: \"hi\" }) by Member(UserId.unsafe(\"ann\"))    // ✗ given at `open`\nlet _ <- Gateway.message(tc, Frame { text: \"hi\" })                                    // ✓",
+        page: "/book/reference/testing",
+        anchor: "websocket-address",
+    },
+    Explain {
+        code: "bynk.test.ws_needs_in_process",
+        blurb: "`svc.open(tc, …)`, `svc.message` and `svc.close` drive a `from websocket` service in process, against a `TestConnection`. A deployed WebSocket is a real upgrade through the Worker and a Durable Object, which a `system` case does not drive, so the address has nothing to run. Drive the service in a case at `unit` or `integration` instead.",
+        example: "// tests/room.test.bynk\ncase \"a join\" as system {         // ✗ a `system` case cannot drive a WebSocket\ncase \"a join\" as integration {    // ✓\n    let tc = TestConnection[Frame]()\n    let _ <- Gateway.open(tc, Val[RoomId]) by Member(Val[UserId])\n}",
+        page: "/book/reference/testing",
+        anchor: "websocket-address",
     },
     Explain {
         code: "bynk.tier.cross_context_needs_system",

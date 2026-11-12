@@ -1,0 +1,23 @@
+context demo.shop
+
+consumes bynk
+
+fn bounded(e: Effect[Int]) -> Effect[Bool] {
+  let r <- e.within(2.seconds)
+  Effect.pure(r.isOk())
+}
+
+agent Counter {
+  key id: String
+  store n: Cell[Int] = 0
+
+  on call check() -> Effect[Bool] {
+    Effect.pure(true)
+  }
+}
+
+service api {
+  on call() -> Effect[Bool] {
+    bounded(Effect.pure(1))
+  }
+}

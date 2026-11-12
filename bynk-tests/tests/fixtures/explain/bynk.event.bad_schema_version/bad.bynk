@@ -1,0 +1,5 @@
+context shop.orders
+
+event Paid @schema(0) = {
+  id: String,
+}

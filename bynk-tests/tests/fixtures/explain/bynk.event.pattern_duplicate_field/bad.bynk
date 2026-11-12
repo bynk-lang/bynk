@@ -1,0 +1,16 @@
+context shop.notes
+
+type Region =
+  | Domestic
+  | International
+
+event Paid = {
+  id: String,
+  region: Region,
+}
+
+service OnPaid from Events(Paid { region: Domestic, region: International, .. }) {
+  on event(e: Paid) -> Effect[()] {
+    ()
+  }
+}

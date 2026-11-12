@@ -1,0 +1,6 @@
+suite chat.room {
+  case "a join" as system {
+    let tc = TestConnection[Frame]()
+    let _ <- Gateway.open(tc, Val[RoomId]) by Member(Val[UserId])
+  }
+}
