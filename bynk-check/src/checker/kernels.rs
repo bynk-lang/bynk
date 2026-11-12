@@ -1857,6 +1857,27 @@ fn lint_cookie_literal(arg: &Expr, ctx: &mut Ctx) {
             );
         }
     }
+    // #3329: a `Domain` attribute opens the cookie to every subdomain. A literal
+    // `__Host-` name is already judged above (an error), so only the rest warn.
+    let host_named = matches!(
+        field("name").map(|e| &e.kind),
+        Some(ExprKind::StrLit(n)) if n.to_ascii_lowercase().starts_with("__host-")
+    );
+    if !host_named
+        && let Some(d) = field("domain")
+        && matches!(d.kind, ExprKind::Some(_) | ExprKind::Call { .. })
+    {
+        ctx.errors.push(
+            CompileError::new(
+                "bynk.http.cookie_domain_widens",
+                d.span,
+                "this cookie sets a `domain`, so every subdomain of it receives the cookie".to_string(),
+            )
+            .with_note(
+                "drop `domain` to keep the cookie to this host, or name it `__Host-…` to have the compiler enforce that",
+            ),
+        );
+    }
     if bool_of("httpOnly") == Some(false) {
         ctx.errors.push(
             CompileError::new(

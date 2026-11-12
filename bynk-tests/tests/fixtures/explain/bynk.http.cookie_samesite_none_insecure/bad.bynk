@@ -3,6 +3,7 @@ context api
 consumes bynk { Cookie, SameSite }
 
 service api from http {
+    cors { origins: ["https://app.example.com"], credentials: true }
     on POST("/login") () -> Effect[HttpResult[String]] by v: Visitor {
         Created("ok").withCookie(Cookie { name: "sid", value: "a", sameSite: SameSite.Unrestricted, secure: false })
     }

@@ -19,6 +19,11 @@ service api from http {
 		Ok(cookies.theme.getOrElse("light"))
 	}
 
+	// The `headers` view hides the session cookie too: the handler never sees the credential.
+	on GET("/cookie-header") (headers: RequestHeaders) -> Effect[HttpResult[String]] by u: User {
+		Ok(headers.get("cookie").getOrElse("none"))
+	}
+
 	// A state-changing route: the seam also refuses a cross-site request.
 	on POST("/rename") () -> Effect[HttpResult[()]] by u: User {
 		NoContent

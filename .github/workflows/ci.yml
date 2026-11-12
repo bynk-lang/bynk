@@ -1025,6 +1025,26 @@ jobs:
       contents: read
       # The watcher reads this run's jobs.
       actions: read
+    # The Hyperdrive `MySql` smoke's database (#3322). A service container, not
+    # an apt install, so a mirror or DNS outage cannot stop it, pinned by digest
+    # like the actions. The smoke reads the mapped port from
+    # BYNK_MYSQL_SMOKE_PORT, and BYNK_REQUIRE_MYSQL makes a missing server fail.
+    # The password is a throwaway for this container, not a secret.
+    services:
+      mariadb:
+        image: mariadb:10.11@sha256:7d829180b5b2a9ba74f6242876ab401a0d7dd338a807e522ef92bc9698760f20
+        env:
+          MARIADB_RANDOM_ROOT_PASSWORD: "1"
+          MARIADB_DATABASE: smoke
+          MARIADB_USER: smoke
+          MARIADB_PASSWORD: smoke-pw-4712
+        ports:
+          - 3306/tcp
+        options: >-
+          --health-cmd "healthcheck.sh --connect --innodb_initialized"
+          --health-interval 5s
+          --health-timeout 5s
+          --health-retries 20
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
@@ -1052,6 +1072,8 @@ jobs:
         env:
           BYNK_REQUIRE_TSC: "1"
           BYNK_REQUIRE_WORKERD: "1"
+          BYNK_REQUIRE_MYSQL: "1"
+          BYNK_MYSQL_SMOKE_PORT: ${{ job.services.mariadb.ports['3306'] }}
           GH_TOKEN: ${{ github.token }}
       - name: Upload nextest JUnit
         if: always()

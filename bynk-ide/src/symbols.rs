@@ -1501,8 +1501,9 @@ fn render_handler_annotation_hover(
         return format!(
             "```bynk\n{sig}\n```\n\n\
              **`@raw`** — take this route's `body: Bytes` as the raw request body: the octets as \
-             sent, with no JSON and no base64. Any other `Content-Type` is answered `415 \
-             Unsupported Media Type`.\n\n\
+             sent, with no JSON and no base64. Type it `Stream[Bytes]` instead to receive it as \
+             it arrives, read once and counted against the cap as it is read. Any other \
+             `Content-Type` is answered `415 Unsupported Media Type`.\n\n\
              - **`contentType`** — the media type accepted: {content_type}.\n\
              - **Effective body cap** — {cap}."
         );

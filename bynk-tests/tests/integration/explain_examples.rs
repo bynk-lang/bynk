@@ -73,6 +73,14 @@ const WARNING_ONLY: &[(&str, &str)] = &[
         "a warning; `positive/3386_signed_cookie_unprefixed` holds it with `expected_warnings.txt`",
     ),
     (
+        "bynk.http.cookie_cross_site_without_credentials",
+        "a warning; `positive/3329_cookie_cross_site_without_credentials` holds it with `expected_warnings.txt`, and `positive/3329_cookie_cross_site_credentials` holds the credentialed good case",
+    ),
+    (
+        "bynk.http.cookie_domain_widens",
+        "a warning; `positive/3329_cookie_domain_widens` holds it with `expected_warnings.txt`",
+    ),
+    (
         "bynk.postgres.sql_invalid",
         "a warning (the parser is not Postgres' own); `positive/3321_postgres_sql_invalid` and `_in_transaction` hold it with `expected_warnings.txt`",
     ),

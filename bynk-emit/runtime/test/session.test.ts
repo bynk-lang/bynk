@@ -268,7 +268,7 @@ test("the default clock is Date.now", async () => {
 });
 
 // -- the router's cookie and CSRF helpers (http.ts) --------------------------------------------
-import { cookieObject, csrfAllowed, requestCookies, sessionCookieOf } from "../src/http.ts";
+import { cookieObject, csrfAllowed, requestCookies, requestHeaders, sessionCookieOf } from "../src/http.ts";
 
 const req = (headers: Record<string, string>, url = "https://api.example.com/x", method = "POST") =>
   new Request(url, { method, headers });
@@ -312,8 +312,9 @@ test("csrf matrix: Sec-Fetch-Site x Origin (listed, unlisted, null, absent) for 
       const headers: Record<string, string> = {};
       if (site !== null) headers["sec-fetch-site"] = site;
       if (origin !== null) headers["origin"] = origin;
-      // Only same-origin passes alone; otherwise the Origin must be a listed credentialed origin.
-      const want = site === "same-origin" || kind === "listed";
+      // Only same-origin passes alone; `none` never passes; otherwise the Origin must be a listed
+      // credentialed origin.
+      const want = site === "same-origin" || (site !== "none" && kind === "listed");
       assert.equal(csrfAllowed(req(headers, "https://api.example.com/x", "POST"), CORS), want, `${site} / ${kind}`);
     }
   }
@@ -322,6 +323,8 @@ test("csrf matrix: Sec-Fetch-Site x Origin (listed, unlisted, null, absent) for 
 test("csrf: `none` (a user-initiated navigation) is refused on its own", () => {
   assert.equal(csrfAllowed(req({ "sec-fetch-site": "none" }), CORS), false);
   assert.equal(csrfAllowed(req({ "sec-fetch-site": "none" }), []), false);
+  // Even with an Origin the service lists: a state-changing request is never a navigation.
+  assert.equal(csrfAllowed(req({ "sec-fetch-site": "none", origin: CORS[0] }), CORS), false);
 });
 
 test("csrf: the match is exact (scheme, host, port); a sibling subdomain needs its own listing", () => {
@@ -410,4 +413,21 @@ test("keys are read from deps by actor, and absent keys are a fault", () => {
   for (const deps of [{}, undefined, null, { __session: {} }, { __session: { Admin: KEYS } }]) {
     assert.throws(() => sessionKeysOf(deps, "User"), SessionKeyFault);
   }
+});
+
+test("requestHeaders hides the session cookie from the Cookie header and keeps the others", () => {
+  const request = new Request("https://x/", { headers: { cookie: "__Host-session=abc.def.ghi; theme=dark" } });
+  const view = requestHeaders(request, "__Host-session");
+  assert.deepEqual(view.get("cookie"), { tag: "Some", value: "theme=dark" });
+  assert.deepEqual(view.get("Cookie"), { tag: "Some", value: "theme=dark" });
+  // Without the hide argument (any other route) the header is untouched.
+  assert.deepEqual(requestHeaders(request).get("cookie"), {
+    tag: "Some",
+    value: "__Host-session=abc.def.ghi; theme=dark",
+  });
+});
+
+test("requestHeaders drops the Cookie header when the session cookie was the only one", () => {
+  const request = new Request("https://x/", { headers: { cookie: "__Host-session=abc.def.ghi" } });
+  assert.deepEqual(requestHeaders(request, "__Host-session").get("cookie"), { tag: "None" });
 });
