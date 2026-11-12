@@ -1,0 +1,3 @@
+commons shop
+
+fn double(n: Int) -> Int { n + n }

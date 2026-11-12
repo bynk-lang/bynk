@@ -1,0 +1,6 @@
+suite commerce.payment as integration {
+  case "authorises" {
+    let r <- authorise.call()
+    expect r == 1
+  }
+}

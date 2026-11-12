@@ -1,0 +1,6 @@
+suite demo.desk {
+  type Item = { n: Int }
+  case "c" {
+    expect twice(2) == 4
+  }
+}

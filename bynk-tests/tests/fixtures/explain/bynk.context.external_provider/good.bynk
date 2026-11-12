@@ -1,0 +1,11 @@
+context shop
+
+capability Clock {
+    fn now() -> Effect[Int]
+}
+
+provides Clock = SystemClock {
+    fn now() -> Effect[Int] {
+        Effect.pure(0)
+    }
+}

@@ -1,0 +1,6 @@
+suite helpdesk.inbox {
+  case "the sender's dmarc verdict reaches a DmarcVerdict parameter" {
+    let r <- support.message(InboundEmail { from: "a@b.example", to: "support@shop.example", subject: "hi" })
+    expect r is Accept
+  }
+}

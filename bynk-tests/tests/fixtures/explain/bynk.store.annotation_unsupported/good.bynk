@@ -1,0 +1,10 @@
+context shop
+
+type Event = { id: String }
+
+agent A {
+  key k: String
+  store trail: Log[Event] @retain(30.days)
+
+  on call n() -> Effect[Int] { Effect.pure(1) }
+}
