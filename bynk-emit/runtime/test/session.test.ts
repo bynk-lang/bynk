@@ -255,6 +255,13 @@ test("signing refuses a bad ttl, an empty identity and an oversized value", asyn
   await assert.rejects(signSessionCookie(KEYS, "User", "x".repeat(4000), TTL, NOW), RangeError);
 });
 
+test("the verifier refuses a ttl that is not a positive whole number, as the signer does", async () => {
+  const c = await signSessionCookie(KEYS, "User", "ada", TTL, NOW);
+  for (const ttl of [0, -1, 1.5, NaN, Infinity, undefined as unknown as number]) {
+    await assert.rejects(verifySignedCookie(c, KEYS, "User", ttl, NOW), RangeError, String(ttl));
+  }
+});
+
 test("the default clock is Date.now", async () => {
   const c = await signSessionCookie(KEYS, "User", "ada", 60);
   assert.equal((await verifySignedCookie(c, KEYS, "User", 60)).tag, "Ok");
