@@ -228,3 +228,30 @@ fn sum_over_a_non_numeric_key_lists_decimal_among_the_numeric_keys() {
         e.notes
     );
 }
+
+/// #3437: a function that calls `e.detach()` needs the execution context, so calling it
+/// from an agent handler is refused with `bynk.exec.unavailable`, and the note's chain
+/// ends at `detach`. The fixture `3437_exec_unavailable_detach_agent_handler` pins the
+/// message; the note is pinned here.
+#[test]
+fn exec_unavailable_through_detach_names_detach_at_the_end_of_the_chain() {
+    let dir = Path::new(env!("CARGO_MANIFEST_DIR"))
+        .join("tests/fixtures/negative/3437_exec_unavailable_detach_agent_handler");
+    let target = bynk_driver::project::BuildTarget::Bundle;
+    let Err(failure) = super::e2e::compile_fixture(&dir, target) else {
+        panic!("expected a compile failure");
+    };
+    let e = failure
+        .errors
+        .iter()
+        .map(|a| &a.error)
+        .find(|e| e.category == "bynk.exec.unavailable")
+        .expect("a `bynk.exec.unavailable` error");
+    assert!(
+        e.notes
+            .iter()
+            .any(|n| n.contains("`wrapper` → `background` → `detach`")),
+        "note should end the chain at `detach`: {:?}",
+        e.notes
+    );
+}

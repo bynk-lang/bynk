@@ -1,0 +1,23 @@
+context r
+
+consumes bynk
+
+// #3437: `e.detach()` hands work to the execution context, so a function that calls it
+// needs one, and an agent handler has none. The note names `detach` at the end of the chain.
+fn background(e: Effect[Int]) -> Effect[()] {
+	do e.detach()
+	Effect.pure(())
+}
+
+fn wrapper(e: Effect[Int]) -> Effect[()] {
+	background(e)
+}
+
+agent Counter {
+	key id: String
+	store n: Cell[Int] = 0
+
+	on call check() -> Effect[()] {
+		wrapper(Effect.pure(1))
+	}
+}
