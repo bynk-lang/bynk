@@ -1,0 +1,13 @@
+context demo
+
+capability Net {
+  fn send() -> Effect[Result[Int, String]]
+}
+
+service s {
+  on call() -> Effect[()] given Net {
+    par {
+      do Net.send()
+    }
+  }
+}

@@ -82,11 +82,14 @@ on call() -> Effect[()] given Logger {
 }
 ```
 
-`do e` runs `e` (which must be `Effect[()]`) and discards its unit result — the
-binder-free spelling of `let _ <- e`. The body also needs no closing tail: an
-`Effect[()]` block may simply *end*, so `Effect.pure(())` disappears too. (To
-await and discard a *valued* reply, keep `let _ <- e` — throwing away a real
-value stays visible.) A one-armed conditional effect drops its `else` the same
+`do e` runs `e` (any `Effect[T]`) and discards its result — the binder-free
+spelling of `let _ <- e`, so `do Cache.put(k, v)` or `do orders.insert(row)`
+needs no throwaway binder. The body also needs no closing tail: an
+`Effect[()]` block may simply *end*, so `Effect.pure(())` disappears too. The one
+exception is a `Result`: `do e` on an `Effect[Result[_, _]]` is refused
+(`bynk.effect.do_discards_result`), so an `Err` is never dropped by accident.
+Bind it and handle the error, or write `let _ <- e` to discard it deliberately.
+`let _ = e` (no arrow) is still an error: an effect must be awaited. A one-armed conditional effect drops its `else` the same
 way — `if verbose { do Logger.info(msg) }` needs no `else Effect.pure(())`, since
 a missing `else` on a unit branch defaults to "do nothing".
 

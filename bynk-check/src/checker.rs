@@ -4176,14 +4176,16 @@ pub fn compatible(t: TyId, u: TyId, tys: &Types) -> bool {
 }
 
 /// Check a `do e` statement: the effect-context requirement (when
-/// `check_context`) and that the operand is an `Effect[()]`.
+/// `check_context`) and that the operand is an `Effect[T]` whose `T` is not a `Result`
+/// (ADR 0170 B, amended).
 pub(super) fn check_do(d: &DoStmt, check_context: bool, ctx: &mut Ctx) {
     let tys = ctx.tys;
     // v0.146 (ADR 0170): `do e` — perform a unit effect as a
-    // statement. Effectful context only, like `<-`; nothing is bound,
-    // so the operand MUST be `Effect[()]`. A valued reply is rejected
-    // (`bynk.effect.do_requires_unit`): throwing away a real result
-    // stays explicit with `let _ <- e`.
+    // statement. Effectful context only, like `<-`; nothing is bound.
+    // Any `Effect[T]` is accepted except a `Result` payload
+    // (`bynk.effect.do_discards_result`): dropping an `Err` stays explicit
+    // with `let _ <- e`. Aliases are already resolved in the interned type;
+    // an opaque `T` in a generic body is accepted.
     if check_context && !ctx.effectful {
         ctx.errors.push(
                         CompileError::new(
@@ -4200,39 +4202,50 @@ pub(super) fn check_do(d: &DoStmt, check_context: bool, ctx: &mut Ctx) {
                         ),
                     );
     }
-    let unit = tys.intern(Ty::Unit);
-    let expected = tys.intern(Ty::Effect(unit));
-    let rhs_ty = type_of(&d.value, Some(expected), ctx);
+    let rhs_ty = type_of(&d.value, None, ctx);
     check_unbound_effects(&d.value, true, ctx);
     match rhs_ty.map(|t| tys.get(t)).as_deref() {
-        Some(Ty::Effect(inner)) if *inner == unit => {}
-        Some(Ty::Effect(inner)) => {
+        Some(Ty::Effect(inner)) if matches!(*tys.get(*inner), Ty::Result(..)) => {
+            // The `do` keyword is `d.span.start..d.value.span.start`; the
+            // quick-fix swaps it for `let _ <- `. Not machine-applicable:
+            // it silently chooses to discard an `Err`.
+            let head = Span {
+                file: d.span.file,
+                start: d.span.start,
+                end: d.value.span.start,
+            };
             ctx.errors.push(
-                            CompileError::new(
-                                "bynk.effect.do_requires_unit",
-                                d.value.span,
-                                format!(
-                                    "a `do` statement requires an `Effect[()]`, but this is `Effect[{}]` — its result would be silently dropped",
-                                    inner.display(tys)
-                                ),
-                            )
-                            .with_note(
-                                "`do e` performs a unit effect; to await and discard a real result, write `let _ <- e` instead",
-                            ),
-                        );
+                CompileError::new(
+                    "bynk.effect.do_discards_result",
+                    d.value.span,
+                    format!(
+                        "a `do` statement would drop a `Result`: `Effect[{}]`. An `Err` here would be lost without a trace",
+                        inner.display(tys)
+                    ),
+                )
+                .with_note(
+                    "bind it and handle the error with `let r <- e` and a `match` (or `?`); to discard it deliberately, write `let _ <- e`",
+                )
+                .with_suggestion(
+                    "discard the result deliberately with `let _ <- e`",
+                    vec![(head, "let _ <- ".to_string())],
+                    Applicability::MaybeIncorrect,
+                ),
+            );
         }
+        Some(Ty::Effect(_)) => {}
         Some(other) => {
             ctx.errors.push(
                 CompileError::new(
                     "bynk.effect.do_on_non_effect",
                     d.value.span,
                     format!(
-                        "a `do` statement requires an `Effect[()]` value, but got `{}`",
+                        "a `do` statement requires an `Effect[T]` value, but got `{}`",
                         other.display(tys)
                     ),
                 )
                 .with_note(
-                    "`do` performs an effect; its operand must be a call returning `Effect[()]`",
+                    "`do` performs an effect; its operand must be a call returning `Effect[T]`",
                 ),
             );
         }

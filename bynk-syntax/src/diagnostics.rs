@@ -1605,23 +1605,23 @@ pub const EXPLANATIONS: &[Explain] = &[
         anchor: "why-effects-are-gated",
     },
     Explain {
+        code: "bynk.effect.do_discards_result",
+        blurb: "`do e` awaits an effect and discards what it returns, which is fine for a unit or an ordinary value but not for a `Result`: an `Err` dropped this way is lost without a trace. Bind it and handle the error with `let r <- e` and a `match` (or `?`). If dropping the outcome is really what you want, write `let _ <- e`, which is legal and keeps the discard visible in the source. `do` on a plain value is `bynk.effect.do_on_non_effect`.",
+        example: "fn send() -> Effect[Result[Int, String]] {\n    Effect.pure(Ok(1))\n}\n\nfn run() -> Effect[()] {\n    do send()                    // ✗ would silently drop an `Err`\n}\n\nfn run() -> Effect[()] {\n    let _ <- send()              // ✓ the discard is written out\n    Effect.pure(())\n}",
+        page: "/book/guides/effects-and-capabilities/understand-the-capability-model",
+        anchor: "why-effects-are-gated",
+    },
+    Explain {
         code: "bynk.effect.do_in_pure_context",
-        blurb: "`do e` runs a unit effect as a statement, so like `<-` it belongs in a body that is itself effectful, one whose return type is `Effect[T]`. A function that returns a plain `Int` promises to wait for nothing and reach nothing outside, and a `do` inside it would break that promise for every caller. Change the return type to `Effect[T]` and end with `Effect.pure(…)`, or drop the `do`. The same mistake with `<-` is `bynk.effect.bind_in_pure_context`.",
+        blurb: "`do e` runs an effect as a statement, so like `<-` it belongs in a body that is itself effectful, one whose return type is `Effect[T]`. A function that returns a plain `Int` promises to wait for nothing and reach nothing outside, and a `do` inside it would break that promise for every caller. Change the return type to `Effect[T]` and end with `Effect.pure(…)`, or drop the `do`. The same mistake with `<-` is `bynk.effect.bind_in_pure_context`.",
         example: "fn ping() -> Effect[()] {\n    Effect.pure(())\n}\n\nfn run() -> Int {\n    do ping()                    // ✗ `do` in a function that returns a plain `Int`\n    5\n}\n\nfn run() -> Effect[Int] {        // ✓ effectful, so `do` is allowed\n    do ping()\n    Effect.pure(5)\n}",
         page: "/book/guides/effects-and-capabilities/understand-the-capability-model",
         anchor: "why-effects-are-gated",
     },
     Explain {
         code: "bynk.effect.do_on_non_effect",
-        blurb: "`do e` performs an effect, so its operand must be an `Effect[()]`: a call to something effectful that has no result to return. A plain value has nothing to run, which usually means the operand is not the call you meant. Call the effectful function you intended. If you wanted the value, bind it with `let`. A valued effect under `do` is `bynk.effect.do_requires_unit`, and `<-` on a plain value is `bynk.effect.bind_on_non_effect`.",
-        example: "fn ping() -> Effect[()] {\n    Effect.pure(())\n}\n\nfn clear() -> Effect[()] {\n    do 5                         // ✗ `5` is an `Int`, not an `Effect[()]`\n}\n\nfn clear() -> Effect[()] {\n    do ping()                    // ✓ an effect with a unit result\n}",
-        page: "/book/guides/effects-and-capabilities/understand-the-capability-model",
-        anchor: "why-effects-are-gated",
-    },
-    Explain {
-        code: "bynk.effect.do_requires_unit",
-        blurb: "`do e` discards what the effect returns, so it only accepts an `Effect[()]`, where there is nothing to lose. Applied to an `Effect[Int]` it would drop a real value without any sign in the code. If you want to wait for a valued effect and ignore its result, say so with `let _ <- e`. Otherwise bind the result with `let x <- e` and use it.",
-        example: "fn count() -> Effect[Int] {\n    Effect.pure(5)\n}\n\nfn run() -> Effect[()] {\n    do count()                   // ✗ would silently drop an `Int`\n}\n\nfn run() -> Effect[()] {\n    let _ <- count()             // ✓ the discard is written out\n    Effect.pure(())\n}",
+        blurb: "`do e` performs an effect, so its operand must be an `Effect[T]`: a call to something effectful. A plain value has nothing to run, which usually means the operand is not the call you meant. Call the effectful function you intended. If you wanted the value, bind it with `let`. An effect whose result is a `Result` is `bynk.effect.do_discards_result`, and `<-` on a plain value is `bynk.effect.bind_on_non_effect`.",
+        example: "fn ping() -> Effect[()] {\n    Effect.pure(())\n}\n\nfn clear() -> Effect[()] {\n    do 5                         // ✗ `5` is an `Int`, not an `Effect[T]`\n}\n\nfn clear() -> Effect[()] {\n    do ping()                    // ✓ an effect\n}",
         page: "/book/guides/effects-and-capabilities/understand-the-capability-model",
         anchor: "why-effects-are-gated",
     },
@@ -8270,6 +8270,11 @@ pub const REGISTRY: &[DiagnosticInfo] = &[
         "A cross-context call was made in a pure context.",
     ),
     dg(
+        "bynk.effect.do_discards_result",
+        "A `do` statement was applied to an `Effect[Result[_, _]]`, which would drop an `Err`; bind it, or write `let _ <- e` to discard it deliberately.",
+        &["do_stmt"],
+    ),
+    dg(
         "bynk.effect.do_in_pure_context",
         "A `do` statement was used in a pure (non-effectful) context.",
         &["do_stmt"],
@@ -8277,11 +8282,6 @@ pub const REGISTRY: &[DiagnosticInfo] = &[
     dg(
         "bynk.effect.do_on_non_effect",
         "A `do` statement was applied to a non-`Effect` value.",
-        &["do_stmt"],
-    ),
-    dg(
-        "bynk.effect.do_requires_unit",
-        "A `do` statement was applied to a valued `Effect[T]`; `do` performs a unit effect, so a real result would be dropped — use `let _ <- e` instead.",
         &["do_stmt"],
     ),
     dg(

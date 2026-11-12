@@ -3195,10 +3195,10 @@ pub enum Statement {
     /// not await the reply; legal only when the reply is `Effect[()]`. No binder.
     Send(SendStmt),
     /// `do expr` — an effect-performing expression statement (v0.146, ADR 0170).
-    /// Runs an `Effect[()]` and discards its (unit) result — the binder-free
-    /// sugar for `let _ <- expr` when the awaited value is unit. Legal only in
-    /// an effectful body; the operand MUST be `Effect[()]` (a valued reply keeps
-    /// the explicit `let _ <- e`, so throwing away a real value stays visible).
+    /// Runs an `Effect[T]` and discards its result — the binder-free sugar for
+    /// `let _ <- expr`. Legal only in an effectful body; the operand MUST be an
+    /// `Effect[T]` whose `T` is not a `Result` (a `Result` keeps the explicit
+    /// `let _ <- e`, so dropping an `Err` stays visible; amended by #3436).
     Do(DoStmt),
     /// `name := expr` — a `Cell` store write (v0.81, storage track). The
     /// unconditional write form; `.update(fn)` (a method call) is the
@@ -3379,7 +3379,7 @@ pub struct SendStmt {
 }
 
 /// `do expr` — an effect-performing expression statement (v0.146, ADR 0170).
-/// `value` is the awaited effect, which MUST be `Effect[()]`.
+/// `value` is the awaited effect, which MUST be an `Effect[T]` with `T` not a `Result`.
 #[derive(Debug, Clone)]
 pub struct DoStmt {
     pub value: Expr,
