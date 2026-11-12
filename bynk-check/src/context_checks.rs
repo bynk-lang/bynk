@@ -3739,10 +3739,12 @@ fn validate_store_annotations(
                     ann.span,
                     format!("`@{name}` is recognised but has no effect yet"),
                 )
-                .with_note(
+                .with_note(if head == "Log" {
                     "leave the annotation off; to limit a `Log`, use `@retain`, which drops \
-                     entries older than a period",
-                ),
+                     entries older than a period"
+                } else {
+                    "leave the annotation off"
+                }),
             );
             continue;
         }
@@ -4203,11 +4205,11 @@ fn store_field_scopes(
                         "bynk.store.kind_unsupported",
                         f.kind.head.span,
                         format!(
-                            "storage kind `{other}` is not yet supported — `Cell`, `Map`, \
-                             `Set`, `Cache`, and `Log` are functional in this storage-track slice"
+                            "storage kind `{other}` is not yet supported — use `Cell`, `Map`, \
+                             `Set`, `Cache` or `Log`"
                         ),
                     )
-                    .with_note("the remaining kind (`Queue`) follows in a later slice"),
+                    .with_note("`Queue` is the one storage kind with no implementation yet"),
                 );
             }
         }

@@ -318,6 +318,34 @@ fn bounded_is_refused_in_the_users_words() {
 }
 
 #[test]
+fn bounded_on_a_queue_gets_no_log_advice() {
+    // #3419 review: `@bounded` also attaches to `Queue`, where `@retain` (a `Log`
+    // annotation) is no alternative, so the note names it only for a `Log`.
+    let ds = diagnostics(
+        "annboundedq",
+        &agent_with("store q: Queue[Int] @bounded(5)", ""),
+    );
+    let d = ds
+        .iter()
+        .find(|d| d.category == "bynk.store.annotation_unsupported")
+        .unwrap_or_else(|| panic!("no annotation_unsupported in {ds:?}"));
+    let note = d.notes.join(" ");
+    assert!(
+        !note.contains("@retain"),
+        "no `@retain` advice for a Queue: {note}"
+    );
+    let k = ds
+        .iter()
+        .find(|d| d.category == "bynk.store.kind_unsupported")
+        .unwrap_or_else(|| panic!("no kind_unsupported in {ds:?}"));
+    assert!(
+        !k.message.contains("slice"),
+        "no implementer wording: {}",
+        k.message
+    );
+}
+
+#[test]
 fn annotation_unknown_name_is_rejected() {
     let cs = codes(
         "annunk",
