@@ -5706,8 +5706,13 @@ pub(crate) fn validate_field_names(
                     };
                     if let Some(why) = bad {
                         let shown = match origin.and_then(|a| a.from_const.as_ref()) {
-                            Some(c) => format!("`@name({})` is not a valid name here: {why} (`{literal}`)", c.name.name),
-                            None => format!("`@name(\"{literal}\")` is not a valid name here: {why}"),
+                            Some(c) => format!(
+                                "`@name({})` is not a valid name here: {why} (`{literal}`)",
+                                c.name.name
+                            ),
+                            None => {
+                                format!("`@name(\"{literal}\")` is not a valid name here: {why}")
+                            }
                         };
                         let err = CompileError::new("bynk.types.field_name_invalid", at, shown);
                         errors.push(match origin {

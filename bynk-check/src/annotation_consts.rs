@@ -30,8 +30,8 @@ use bynk_syntax::ast::{
 use bynk_syntax::error::CompileError;
 
 use crate::index::{RefSink, SymbolKind};
-use bynk_project::{ParsedFile, UnitKind};
 use crate::symbols::{UnitTable, build_unit_table};
+use bynk_project::{ParsedFile, UnitKind};
 
 /// One literal-only annotation argument: the annotation, its argument's label
 /// (`None` for the positional one), and the base type its constant must be.
@@ -181,10 +181,7 @@ pub fn resolve_annotation_consts(
 
 /// Attach the constant's declaration to `err` as a related span, when the
 /// argument was a reference to a constant in the same file.
-pub fn with_const_origin(
-    err: CompileError,
-    arg: &bynk_syntax::ast::AnnotationArg,
-) -> CompileError {
+pub fn with_const_origin(err: CompileError, arg: &bynk_syntax::ast::AnnotationArg) -> CompileError {
     let Some(c) = &arg.from_const else {
         return err;
     };

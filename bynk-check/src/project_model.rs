@@ -2348,6 +2348,31 @@ where
     order
 }
 
+/// Phases 4, 5 and 5a: build the unit tables, resolve each unit's `uses`, then
+/// resolve a constant named by a literal-only annotation argument to the literal
+/// it denotes (#3445, [`crate::annotation_consts`]). The last rewrites `parsed`
+/// and the tables built from it, ahead of every reader of annotation arguments.
+pub fn phase_tables_uses_consts(
+    groups: &BTreeMap<String, Vec<usize>>,
+    kinds: &BTreeMap<String, UnitKind>,
+    parsed: &mut [ParsedFile],
+    policy: &crate::stability::StabilityPolicy,
+    errors: &mut ErrorSink,
+    refs: &mut RefSink,
+) -> (HashMap<String, UnitTable>, HashMap<String, Vec<String>>) {
+    let mut unit_tables = phase_symbol_tables(groups, kinds, parsed, errors);
+    let unit_uses = phase_resolve_uses(groups, kinds, parsed, &unit_tables, policy, errors);
+    crate::annotation_consts::resolve_annotation_consts(
+        groups,
+        kinds,
+        parsed,
+        &mut unit_tables,
+        &unit_uses,
+        refs,
+    );
+    (unit_tables, unit_uses)
+}
+
 pub fn phase_resolve_uses(
     groups: &BTreeMap<String, Vec<usize>>,
     kinds: &BTreeMap<String, UnitKind>,

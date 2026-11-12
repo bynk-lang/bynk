@@ -355,3 +355,29 @@ fn an_asset_named_like_a_service_does_not_steal_its_refs() {
             .contains_key(&key("app", SymbolKind::Asset, "api"))
     );
 }
+
+/// #3445: a constant named by a literal-only annotation argument (`@name(C)`)
+/// is a use of the constant, so find-references and rename reach it, whether the
+/// constant is the unit's own or a used commons'. The resolution pass replaces
+/// the argument with its literal, so the reference is recorded by the pass.
+#[test]
+fn annotation_argument_constant_is_a_recorded_use() {
+    let root =
+        Path::new(env!("CARGO_MANIFEST_DIR")).join("tests/fixtures/positive/3445_name_const/src");
+    let (index, snapshots) = analyse(&root);
+    let own = key("web.prefs", SymbolKind::Const, "VisitsCookie");
+    assert_sites_spell(&index, &snapshots, &own, &["web/prefs.bynk"]);
+    assert_eq!(refs_in(&index, &own, "web/prefs.bynk").len(), 1);
+    let imported = key("app.names", SymbolKind::Const, "SidCookie");
+    assert_sites_spell(
+        &index,
+        &snapshots,
+        &imported,
+        &["app/names.bynk", "web/prefs.bynk"],
+    );
+    assert_eq!(refs_in(&index, &imported, "web/prefs.bynk").len(), 1);
+    // A reference through another constant is a use of the name written, not of
+    // the end of the chain.
+    let alias = key("web.prefs", SymbolKind::Const, "ThemeCookie");
+    assert_eq!(refs_in(&index, &alias, "web/prefs.bynk").len(), 1);
+}
