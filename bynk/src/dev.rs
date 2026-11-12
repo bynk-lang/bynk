@@ -1471,11 +1471,22 @@ fn warm_up_wrangler(provenance: &Provenance, serving: usize) -> bool {
     });
     if warmed != Some(true) {
         eprintln!(
-            "bynk: `{runner}` could not install `wrangler@4` (`--version` failed) — wrangler could not be installed via {runner}."
+            "bynk: `{}` failed — wrangler could not be installed via {runner}.",
+            wrangler_warm_up_command_line(provenance)
         );
         return false;
     }
     true
+}
+
+/// The warm-up command as a user would type it, to reproduce a failure.
+fn wrangler_warm_up_command_line(provenance: &Provenance) -> String {
+    let Provenance::Runner(manager) = provenance else {
+        return "wrangler --version".to_string();
+    };
+    let program = manager.runner_program().unwrap_or("npx");
+    let args = manager.runner_args("wrangler@4", "wrangler");
+    format!("{program} {} --version", args.join(" "))
 }
 
 /// #3301: whether the table `wrangler secrets-store secret list` printed has
@@ -2175,6 +2186,23 @@ mod tests {
         assert_eq!(port_clash(&allocate(&two, None, &opts)), None);
         // A lone worker has neither, so nothing can clash.
         assert_eq!(port_clash(&allocate(&names(&["links"]), None, &opts)), None);
+    }
+
+    #[test]
+    fn the_warm_up_failure_quotes_the_command_to_reproduce() {
+        let line = |m| wrangler_warm_up_command_line(&Provenance::Runner(m));
+        assert_eq!(
+            line(PackageManager::Npm),
+            "npx --yes -p wrangler@4 wrangler --version"
+        );
+        assert_eq!(
+            line(PackageManager::Pnpm),
+            "pnpm dlx --package wrangler@4 wrangler --version"
+        );
+        assert_eq!(
+            line(PackageManager::Bun),
+            "bunx --package wrangler@4 wrangler --version"
+        );
     }
 
     #[test]

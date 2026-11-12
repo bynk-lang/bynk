@@ -631,21 +631,36 @@ fn human_smoke() {
 
 /// A project root holding only a lockfile, so the package manager is detected
 /// by the lockfile rule.
-fn project_with_lockfile(name: &str, lockfile: &str) -> PathBuf {
+fn project_with_lockfile(name: &str, lockfile: &str) -> TempProject {
     let dir = std::env::temp_dir().join(format!("bynk-doctor-{name}-{}", std::process::id()));
     std::fs::create_dir_all(&dir).expect("temp project");
     std::fs::write(dir.join(lockfile), "").expect("lockfile");
-    dir
+    TempProject(dir)
+}
+
+/// A temporary project directory, removed on drop so a failed run cleans up too.
+struct TempProject(PathBuf);
+
+impl Drop for TempProject {
+    fn drop(&mut self) {
+        let _ = std::fs::remove_dir_all(&self.0);
+    }
 }
 
 /// #3426: `bynk doctor` names the runner it would use and the install commands
 /// of the project's own package manager, not `npx` and `npm install -g`.
 #[test]
 fn doctor_follows_the_projects_package_manager() {
+    // Detection reads the process environment, and an explicit setting beats the
+    // lockfile, so this test does not apply when one is set.
+    if std::env::var_os(bynk_driver::npm_install::PACKAGE_MANAGER_ENV).is_some() {
+        eprintln!("skipping: BYNK_PACKAGE_MANAGER is set");
+        return;
+    }
     let tested = bynk_emit::TYPESCRIPT_MAJOR_TESTED;
     let root = project_with_lockfile("pnpm", "pnpm-lock.yaml");
     let context = Context {
-        project_root: Some(root.clone()),
+        project_root: Some(root.0.clone()),
         in_repo: false,
         node_floor: bynk_emit::NODE_FLOOR,
     };
@@ -687,7 +702,7 @@ fn doctor_follows_the_projects_package_manager() {
     // Yarn classic has no runner: with `npx` on PATH it is the fallback, named so.
     let yarn_root = project_with_lockfile("yarn", "yarn.lock");
     let yarn_context = Context {
-        project_root: Some(yarn_root.clone()),
+        project_root: Some(yarn_root.0.clone()),
         ..context
     };
     let report = doctor::diagnose(&fake.with_npx(), &yarn_context, &bare());
@@ -706,6 +721,4 @@ fn doctor_follows_the_projects_package_manager() {
         "{:?}",
         wrangler.remedy
     );
-    let _ = std::fs::remove_dir_all(root);
-    let _ = std::fs::remove_dir_all(yarn_root);
 }
