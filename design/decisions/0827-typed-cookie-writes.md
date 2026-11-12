@@ -1,12 +1,6 @@
----
-level: minor
-probes: emit_diagnostics, ts_writes, diagnostic_coverage, explained_codes
-changelog: A cookie is written from the record that reads it with `Prefs.theme.cookie(Dark)` and `Prefs.theme.expire()`, named by the field's wire name and valued as the decoder reads it
----
+# 0827 — A typed cookie write from the cookie record's field
 
-## ADR: typed-cookie-writes
-title: A typed cookie write from the cookie record's field
-summary: `Record.field.cookie(v)` and `Record.field.expire()` are checker-typed forms answering a `Cookie` named and encoded as the record's decoder reads it; amends ADR 0806 E
+- **Status:** Accepted (v0.577)
 
 **Context.** A cookie was written by hand-typing its name and its wire text, and nothing tied either to the record that reads it. `Cookie { name: "theme", value: "dark" }` compiles for a `Theme` field the decoder reads only as `Dark`, and a renamed field leaves the write valid and wrong; the fault surfaces as a `400` on the next request, in another handler (#3446).
 
