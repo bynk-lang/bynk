@@ -186,10 +186,28 @@ pub(super) fn emit_integration_harness<'a>(
                 // #3318: a test never reaches Postgres, so reading the
                 // connection string faults, naming the binding, until the case
                 // stubs the instance.
-                BindingSource::Postgres { .. } => call(
-                    ident("__makeIntegrationHyperdrive"),
-                    vec![str_lit(&binding.name)],
-                ),
+                BindingSource::Postgres { .. } => {
+                    match d1_migrations.get(bynk_check::d1_migrations::PG_TEST_KEY) {
+                        // #3321: `[test] postgres = "pglite"`: a database of its own
+                        // for the participant's binding, reset for each case and
+                        // given the project's `schema.sql`.
+                        Some(schema) => call(
+                            ident("__makeIntegrationPgliteBinding"),
+                            vec![
+                                str_lit(format!(
+                                    "{}-{}",
+                                    bynk_project::worker_dir_name(p),
+                                    binding.name
+                                )),
+                                str_lit(schema.iter().map(|f| f.sql.as_str()).collect::<String>()),
+                            ],
+                        ),
+                        None => call(
+                            ident("__makeIntegrationHyperdrive"),
+                            vec![str_lit(&binding.name)],
+                        ),
+                    }
+                }
                 // #3302: an in-memory outbox per participant.
                 BindingSource::Email { .. } => call(ident("__makeIntegrationEmail"), vec![]),
                 // #3300: a fixed version, the same for every participant.

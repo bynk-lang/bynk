@@ -428,3 +428,35 @@ test("an unreachable host through the real driver is PgConnection-shaped, with n
   assert.equal(out.failure.kind, "connection");
   assert.ok(!out.failure.message.includes("s3cr3t") && !out.failure.message.includes("db.invalid.example"));
 });
+
+// Hyperdrive H4 (#3321): the opt-in test double is reached through the
+// connection string, and a real one never finds it.
+
+test("a test double's executor is reached only by its own connection string", async () => {
+  const { registerPgTestDouble, PG_TEST_DOUBLE_SCHEME } = await import("../src/postgres.ts");
+  const calls: string[] = [];
+  const double = Object.assign(
+    async (cs: string) => {
+      calls.push(cs);
+      return { ok: true as const, rows: [], rowCount: 7 };
+    },
+    { transaction: async () => ({ ok: true as const, rowCounts: [] }) },
+  );
+  registerPgTestDouble(`${PG_TEST_DOUBLE_SCHEME}orders`, double);
+  const out = await pgExecute(`${PG_TEST_DOUBLE_SCHEME}orders`, "select 1", []);
+  assert.deepEqual(out, { ok: true, rows: [], rowCount: 7 });
+  assert.deepEqual(calls, [`${PG_TEST_DOUBLE_SCHEME}orders`]);
+  // A real string is never a key: it reaches the driver, which here has no server, and is a failure.
+  const real = await pgExecute("postgres://app:s3cr3t@127.0.0.1:1/shop", "select 1", []);
+  assert.equal(real.ok, false);
+  assert.equal(calls.length, 1);
+  if (!real.ok) assert.ok(!JSON.stringify(real).includes("s3cr3t"));
+});
+
+test("only a connection string in the double's scheme can be registered", async () => {
+  const { registerPgTestDouble } = await import("../src/postgres.ts");
+  const noop = Object.assign(async () => ({ ok: true as const, rows: [], rowCount: 0 }), {
+    transaction: async () => ({ ok: true as const, rowCounts: [] }),
+  });
+  assert.throws(() => registerPgTestDouble("postgres://app:pw@db.example/shop", noop), /only a test double's connection string/);
+});

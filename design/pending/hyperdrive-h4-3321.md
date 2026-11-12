@@ -1,0 +1,56 @@
+---
+level: minor
+probes: emit_diagnostics, ts_writes, diagnostic_coverage, explained_codes
+changelog: A `Postgres` instance can run on PGlite in tests (`[test] postgres = "pglite"`), and a `schema.sql` switches on a syntax and placeholder-count check of each literal statement (`bynk.postgres.sql_invalid`, `bynk.postgres.sql_param_count`)
+---
+
+## ADR: hyperdrive-h4-postgres-test-double-and-sql-check
+title: Hyperdrive H4 adds an opt-in PGlite `Postgres` test double and a `schema.sql`-gated statement check
+summary: PGlite is adopted as an opt-in double on measurements, stub-only stays the default; a `schema.sql` at the root switches on libpg_query's syntax and placeholder check
+
+**Context.** After H1 every `Postgres` call in a test must be stubbed, whereas `D1` runs a real SQLite (ADR 0666, 0728) and has its SQL checked at compile time (ADR 0763). ADR 0799 I deferred the test double to this slice, and ADR 0799 G allowed a later check with libpg_query when a `schema.sql` is supplied. Proposal #3321 (part of #3184), decisions A and B, accepted as recommended. The measurements did not contradict either recommendation, so neither is changed; what the numbers settled is *how* PGlite is used (one database per instance, reset per case) and what it cannot model.
+
+**Decision.**
+
+- **A. PGlite, opt-in; stub-only stays the default.** A project chooses with `[test] postgres = "pglite"` in `bynk.toml` (`"stub"`, the default, or `"pglite"`; any other value is refused). It is a key of the existing `[test]` table, beside `targets` and `mutate`, which is where test-tier configuration already lives, and it is a setting of the project rather than of a suite because the choice is which dependency a test build carries. With it, the unit-tier and integration-tier `Postgres` double is the binding's own `WorkersPostgres` over PGlite, so a statement runs for real. At the integration tier each participant's Hyperdrive binding carries a connection string in a scheme no database has (`bynk-pglite://<worker>-<binding>`), which the runtime's `pgExecute` (the executor every Worker's compose already passes) resolves to the double's own executor; nothing else about a compose changes, and a deployed Worker's connection string can never find an entry. A `stub` still answers before the database.
+
+  *Measurements* (PGlite 0.5.16, Node 22.23, this container; real server PostgreSQL 16.15):
+
+  | | stub-only | D1 double (`node:sqlite`, for scale) | PGlite |
+  | --- | --- | --- | --- |
+  | Install | nothing | nothing (Node's own) | 9.3 MB tarball, 27 MB installed, no dependencies |
+  | Start-up, in a process | none | 6 ms | 1.8 s for the first database, 1.4 to 1.5 s for each further one |
+  | `bynk test` of a six-case suite, wall clock | 1.7 s | not measured | 5.1 s (about 3.4 s more, of which the start-up is 1.9 s) |
+  | One statement (a 200-row insert loop) | none | 0.003 ms | 0.16 to 0.19 ms |
+  | A case after the first (reset, then its statements) | none | a new database, 6 ms | 4 ms to reset, 6 to 8 ms for a case of one to four statements |
+  | Memory | none | negligible | 0.7 to 1.1 GB resident for the process |
+
+  PGlite is therefore about fifty times slower per statement than SQLite, which is immaterial next to its start-up, and the start-up is what shapes the design: *a fresh database per case, as the D1 double has, would cost 1.5 seconds per case*. So a database is started once per instance and **reset for each case** (`DROP SCHEMA public CASCADE; CREATE SCHEMA public`, then `schema.sql`), which gives the same guarantee (a case sees none of another's tables, rows or sequences) for 4 ms. The cost of an opt-in is about 2 seconds a run plus 27 MB once, which is why it stays opt-in: a project that stubs everything pays nothing.
+
+  *Fidelity against the real PostgreSQL 16.15* (the server H2's smoke uses), the same statements through postgres.js and through PGlite:
+
+  | Check | Result |
+  | --- | --- |
+  | SQLSTATE of a primary-key violation, a unique violation, a not-null violation | `23505`, `23505`, `23502` on both; the constraint name and the server's message are identical |
+  | SQLSTATE of an undefined column, division by zero, a syntax error | `42703`, `22012`, `42601` on both |
+  | Serialisation failure (`40001`) | **real: `40001`; PGlite: cannot be provoked.** It needs two concurrent serializable transactions and PGlite has one session. A case forces `PgSerialization` with a stub |
+  | `int8` / `bigint` past 2^53, `numeric` with 30 digits, `timestamptz` with a zone and microseconds, `jsonb` nested, `bytea` | identical values; but PGlite's own client types differ from postgres.js's (a small `int8` is a number, a `numeric` a string, a `bytea` a bare `Uint8Array`), so the double applies ADR 0799 F itself: `int8` and `numeric` are parsed as text, `timestamptz` as an ISO-8601 string (`date`, zone-less `timestamp` and `infinity` as the server's text), `bytea` as base64, `json` and `jsonb` nested, and text bound to a `json` or `jsonb` parameter is not quoted twice. The first fixture run caught a small `int8` arriving as `1`, not `"1"`; it is now a runtime test |
+  | `transaction` rollback | a failing statement rolls every earlier one back on both |
+
+  One further difference the numbers surfaced: PGlite 0.5.16 is PostgreSQL **18.6**, two major versions ahead of the 16.15 measured against. A statement valid on 18 and not on 16 passes here and fails on the server. The documentation says so.
+
+  *Tables, and what a test does about migrations.* Bynk does not own the Postgres schema (ADR 0799 G), so there are no migrations. A test gets its tables from an **optional `schema.sql` at the project root, applied to each case's fresh database**, and may `CREATE TABLE` itself with `run` for anything more. The file is chosen over making every test create its own tables because the schema is one fact about the project, and repeating it per suite would have each copy drift from the real one. It is the same file B uses as its switch, so a project that keeps one gets both. A `schema.sql` that does not apply faults the case, naming the failure, rather than letting each statement echo it.
+
+  *Packaging.* The package joins ADR 0808's first-party mechanism: an exact pin (`0.5.16`) in `FIRST_PARTY_NPM`, the one runtime module that imports it (`pglite`), `bynk-emit/runtime/package.json`'s matching dev dependency (a test holds the two equal), and a lock row marked first-party and never approved. It enters a build only when that module is emitted, which only the test harness of a project that opts in references, so no deployed Worker and no project without the key carries it. The new `Reach::TestPostgresDouble` is decided on the manifest, since nothing in a program names a test double; `bynk.lock` records the row exactly when `[test] postgres = "pglite"` is present. `bynk test` installs it into `out/node_modules` with the rest (ADR 0808 G). PGlite's WebAssembly runs in Node 22 with no native build.
+
+  *The ten-second exit.* PGlite (Postgres' interval timer, compiled in) leaves a ten-second timer running after its last statement, which keeps a Node process alive that long; `close()` clears it. The generated test runner of a project that opts in therefore closes the databases before it ends. Other projects' runners are unchanged. A plain Node script that uses PGlite and does not close it waits ten seconds to exit.
+
+  *What it cannot be.* One session, so `PgSerialization` and `PgConnection` cannot arise (a case stubs them), a second Worker's concurrent transaction cannot conflict with the first, and a `par` over statements is serialised. All of this is in the testing reference.
+
+- **B. A `schema.sql` at the root switches on a syntax and placeholder-count check.** Only when the file exists, each literal `Postgres` statement (`all`, `first`, `run`, and the inline `PgStatement`s of a `transaction`; not the typed reads, whose text is a tail the compiler completes) is parsed by libpg_query, through the `pg_query` crate. `bynk.postgres.sql_invalid` is a statement that does not parse or is more than one command (a prepared statement takes one); `bynk.postgres.sql_param_count` is a highest `$n` that differs from the written-out `params` list. They mirror `bynk.d1.sql_invalid` and `bynk.d1.sql_param_count`, each with a `bynk explain` entry. The statement is **not** checked against the schema: the file's presence is the switch, because Bynk does not own the schema and a half-modelled check (tables the file defines, but not extensions, search paths or roles) would refuse programs that run. Without the file nothing is checked and a fixture holds that.
+
+  The parameter count is a scanner of this repository's (`$n` in a string, an escape string, a quoted name, a nested comment or a dollar-quoted body is text), pinned by a test to libpg_query's own `ParamRef` nodes over eighteen statements, so it holds wherever the parser does not.
+
+  *Does libpg_query build?* `pg_query` 18.1.0 builds on Linux x86-64 here, with `cc` and `clang` present: it compiles the C sources of libpg_query with the `cc` crate, generates its Rust bindings at build time with `bindgen` (so it needs **libclang**) and its protobuf types with `prost-build`. That adds a C toolchain and libclang to what building the workspace needs, and about fifty seconds to a cold build of `bynk-check`, and about 313 lines of `Cargo.lock`. The crate is MIT-licensed and every new crate in the tree is under a licence `deny.toml` already allows; the libpg_query it bundles is BSD-3-Clause. It has no `wasm32-unknown-unknown` build (C), so it is a dependency of `bynk-check` for non-`wasm32` targets only, as `rusqlite` is (ADR 0763); on `wasm32` a statement is never reported invalid and only the parameter count is checked. The parser is PostgreSQL 18's, so syntax newer than the server's parses and fails on the server. Where it does not build (a machine without libclang), the check cannot be dropped for it; the workspace does not build there, as it does not without a C compiler for `rusqlite`.
+
+**Consequences.** A project can run its `Postgres` statements for real in tests for a cost it chooses, and be told of a typo or a missing parameter before the first request. The cost is carried only by projects that opt in or supply a `schema.sql`; a toolchain contributor now needs libclang. `StabilityPolicy` carries the one project-wide fact the check needs (that a `schema.sql` exists), because it is the value every unit's check already receives and is hashed into the file-check memo; it is documented there as not a stability matter. A test double that cannot make a serialisation failure is the reason `stub` remains the way to force one. Typed reads, and statements in a suite's own bodies, are not yet checked; neither needed a different mechanism, only more call sites.

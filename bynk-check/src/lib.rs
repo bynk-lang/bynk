@@ -59,6 +59,7 @@ pub mod memo;
 pub mod narrowing;
 pub mod oracle;
 pub mod packages;
+pub mod pg_sql;
 pub mod phase_timing;
 pub mod project_model;
 pub mod recovery;

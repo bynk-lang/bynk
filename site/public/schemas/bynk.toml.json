@@ -481,6 +481,16 @@
           },
           "type": "object"
         },
+        "postgres": {
+          "default": "stub",
+          "description": "What a test's `Postgres` instance is: `\"stub\"` (a test never reaches a\ndatabase; each operation faults until it is stubbed) or `\"pglite\"`\n(PGlite, Postgres compiled to WASM, runs the statements on a fresh\nin-memory database per case, with `schema.sql` applied). Default:\n`\"stub\"`.",
+          "enum": [
+            "stub",
+            "pglite",
+            null
+          ],
+          "type": "string"
+        },
         "targets": {
           "additionalProperties": {
             "additionalProperties": false,

@@ -3670,6 +3670,20 @@ pub const EXPLANATIONS: &[Explain] = &[
         anchor: "sum-types",
     },
     Explain {
+        code: "bynk.postgres.sql_invalid",
+        blurb: "When the project has a `schema.sql` at its root, Bynk parses each literal SQL statement of a `Postgres` capability with Postgres' own parser, so a syntax error is a compile error, not a failure on the first request. It also refuses a statement of several commands, which a prepared statement does not accept: send each with its own call, or use `transaction`. Nothing runs, and the statement is not checked against the schema, which Bynk does not own. Correct the statement, or delete `schema.sql` to turn the check off.",
+        example: "let _ <- Main.all(\"SELEC id FROM orders\", [])        // ✗ syntax error at or near \"SELEC\"\n\nlet _ <- Main.all(\"SELECT id FROM orders\", [])      // ✓",
+        page: "/book/reference/bynk-capabilities",
+        anchor: "postgres-sql-checked-for-syntax",
+    },
+    Explain {
+        code: "bynk.postgres.sql_param_count",
+        blurb: "When the project has a `schema.sql`, Bynk counts the parameters of each literal `Postgres` statement, by Postgres' rule: the highest `$n`, so `$2` alone still takes two values. It checks a list written out in place, or a name `let`-bound to one. A `$n` inside a string, a quoted name, a comment or a dollar-quoted body is text, not a parameter. Pass one `PgValue` for each, or change the SQL.",
+        example: "let _ <- Main.all(\"SELECT id FROM orders WHERE id = $1 AND qty > $2\", [PgInteger(id)])                 // ✗ two parameters, one value\n\nlet _ <- Main.all(\"SELECT id FROM orders WHERE id = $1 AND qty > $2\", [PgInteger(id), PgInteger(5)])    // ✓",
+        page: "/book/reference/bynk-capabilities",
+        anchor: "postgres-sql-checked-for-syntax",
+    },
+    Explain {
         code: "bynk.project.duplicate_module_doc",
         blurb: "A unit's module doc is one piece of prose. When a unit is split \
                 across files, at most one of them may open with it: with two, the \
@@ -8361,6 +8375,14 @@ pub const REGISTRY: &[DiagnosticInfo] = &[
         "bynk.parse.variant_name_case",
         "A sum-type or enum variant name is not capitalised.",
         &["sum_variant", "enum_type"],
+    ),
+    d(
+        "bynk.postgres.sql_invalid",
+        "A literal `Postgres` statement does not parse (or is more than one command), in a project that has a `schema.sql`.",
+    ),
+    d(
+        "bynk.postgres.sql_param_count",
+        "A literal `Postgres` statement uses a different number of parameters (its highest `$n`) than the list literal passed with it holds, in a project that has a `schema.sql`.",
     ),
     d(
         "bynk.project.contracts_lock_corrupt",

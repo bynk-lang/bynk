@@ -161,6 +161,8 @@ pub enum ProjectPathsError {
     },
     /// #2138: a `[test.targets.<name>]` entry that is not well formed.
     BadTestTarget { target: String, reason: String },
+    /// #3321: a `[test] postgres` value that is not one the key accepts.
+    BadTestPostgres { reason: String },
     /// #2207 (`project_and_package`): both `[project]` and `[package]`, so the
     /// project would have two names.
     ProjectAndPackage,
@@ -227,7 +229,7 @@ pub const MANIFEST_TABLES: &[(&str, &[&str])] = &[
     ("check", &["d1_sql"]),
     ("profile", PROFILE_NAMES),
     ("unstable", &["allow"]),
-    ("test", &["targets", "mutate"]),
+    ("test", &["targets", "mutate", "postgres"]),
     ("workspace", &["members", "exclude"]),
 ];
 
@@ -382,6 +384,9 @@ impl std::fmt::Display for ProjectPathsError {
             }
             ProjectPathsError::BadTestTarget { target, reason } => {
                 write!(f, "`[test.targets.{target}]` {reason}")
+            }
+            ProjectPathsError::BadTestPostgres { reason } => {
+                write!(f, "`[test]` `postgres` {reason}")
             }
             ProjectPathsError::ProjectAndPackage => write!(
                 f,
@@ -555,7 +560,10 @@ pub fn check_manifest_str(content: &str) -> Result<(), ProjectPathsError> {
             "build" => drop(build_config_from(entries)?),
             "profile" => drop(profiles_from(entries)?),
             "unstable" => drop(unstable_config_from(entries)?),
-            "test" => drop(test_targets_from(entries)?),
+            "test" => {
+                drop(test_targets_from(entries)?);
+                test_postgres_from(entries)?;
+            }
             "package" => drop(crate::manifest::package_config_from(entries)?),
             "workspace" => drop(crate::manifest::workspace_config_from(entries)?),
             "deploy" => drop(crate::hyperdrive::deploy_hyperdrive_from(entries)?),
@@ -887,6 +895,55 @@ pub fn try_read_test_targets(
         Some(t) => test_targets_from(t),
         None => Ok(BTreeMap::new()),
     }
+}
+
+/// #3321: what a test's `Postgres` instance is, `[test] postgres` in `bynk.toml`.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Default)]
+pub enum TestPostgres {
+    /// The default: a test never reaches a database, so each operation faults
+    /// until the case stubs it.
+    #[default]
+    Stub,
+    /// PGlite, Postgres compiled to WASM, runs the statements for real on a
+    /// fresh in-memory database per case.
+    Pglite,
+}
+
+/// The file a project's Postgres schema is kept in, at the project root. Bynk
+/// does not own it (ADR 0799 G): when it is there, `bynk check` checks each
+/// literal `Postgres` statement's syntax and placeholder count, and the PGlite
+/// double applies it to each case's fresh database.
+pub const PG_SCHEMA_FILE: &str = "schema.sql";
+
+/// The `[test]` table's `postgres`: `"stub"` (the default) or `"pglite"`.
+fn test_postgres_from(table: &toml::Table) -> Result<TestPostgres, ProjectPathsError> {
+    match table.get("postgres") {
+        None => Ok(TestPostgres::Stub),
+        Some(toml::Value::String(s)) if s == "stub" => Ok(TestPostgres::Stub),
+        Some(toml::Value::String(s)) if s == "pglite" => Ok(TestPostgres::Pglite),
+        Some(_) => Err(ProjectPathsError::BadTestPostgres {
+            reason: "must be `\"stub\"` (the default) or `\"pglite\"`".to_string(),
+        }),
+    }
+}
+
+/// #3321: `[test] postgres` of an already-parsed manifest. A value that is not
+/// well formed reads as the default (the manifest check reports it).
+pub fn test_postgres_of(doc: &toml::Table) -> TestPostgres {
+    doc.get("test")
+        .and_then(|v| v.as_table())
+        .and_then(|t| test_postgres_from(t).ok())
+        .unwrap_or_default()
+}
+
+/// #3321: `[test] postgres` of the project at `project_root`; the default when
+/// there is no manifest.
+pub fn read_test_postgres(project_root: &Path) -> TestPostgres {
+    fs::read_to_string(project_root.join("bynk.toml"))
+        .ok()
+        .and_then(|c| c.parse::<toml::Table>().ok())
+        .map(|doc| test_postgres_of(&doc))
+        .unwrap_or_default()
 }
 
 /// The `[test]` table's `targets`, each checked for shape: `url` a table of

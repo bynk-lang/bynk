@@ -6,7 +6,7 @@ use super::*;
 use bynk_emit::emitter::RuntimeUse;
 // #1759: every namespace a test module imports, from one definition.
 use bynk_check::checker::Types;
-use bynk_check::d1_migrations::{D1Migrations, d1_database_name};
+use bynk_check::d1_migrations::{D1Migrations, d1_database_name, double_files, pglite_on};
 use bynk_check::test_suites::{self, ResolvedStub};
 use bynk_emit::emitter::emit::test_scaffold_ns as test_ns;
 use bynk_syntax::ast::{
@@ -19,9 +19,10 @@ use std::sync::Arc;
 /// once, in a fixed order.
 fn real_provider_factories<'a>(
     doubles: impl Iterator<Item = &'a (String, String, String)>,
+    pglite: bool,
 ) -> Vec<String> {
     doubles
-        .filter_map(|(owner, cap, _)| real_provider_double_factory(owner, cap))
+        .filter_map(|(owner, cap, _)| real_provider_double_factory(owner, cap, pglite))
         .collect::<BTreeSet<_>>()
         .into_iter()
         .map(str::to_string)
@@ -30,14 +31,17 @@ fn real_provider_factories<'a>(
 
 /// The runtime factory of the fake a `bynk.cloudflare` double wraps its real
 /// provider around, for the capabilities whose test double *is* the provider
-/// (P4a #2602: `D1` over in-memory SQLite; #3302: `Email` over an outbox).
-fn real_provider_double_factory(owner: &str, cap: &str) -> Option<&'static str> {
+/// (P4a #2602: `D1` over in-memory SQLite; #3302: `Email` over an outbox;
+/// #3321: `Postgres` over PGlite, when the project opts in).
+fn real_provider_double_factory(owner: &str, cap: &str, pglite: bool) -> Option<&'static str> {
     if owner != bynk_check::firstparty::CLOUDFLARE_UNIT {
         return None;
     }
     match cap {
         "D1" => Some("__makeIntegrationD1"),
         "Email" => Some("__makeIntegrationEmail"),
+        // #3321: only when the project opts in (`[test] postgres = "pglite"`).
+        "Postgres" if pglite => Some("__makeIntegrationPostgres"),
         _ => None,
     }
 }
@@ -237,6 +241,7 @@ pub(super) fn emit_test_module(
     // whose test double is its own binding ([`platform_double`]). P4a
     // (#2602): and `bynk.cloudflare`'s for a `D1` double, which is the real
     // `WorkersD1` over an in-memory database.
+    let pglite = pglite_on(d1_migrations);
     let all_doubles = || {
         deps.doubles
             .iter()
@@ -247,11 +252,11 @@ pub(super) fn emit_test_module(
         all_doubles()
             .filter(|(owner, cap, _)| {
                 owner == bynk_check::firstparty::CRYPTO_UNIT
-                    || real_provider_double_factory(owner, cap).is_some()
+                    || real_provider_double_factory(owner, cap, pglite).is_some()
             })
             .map(|(owner, _, _)| owner),
     );
-    runtime_names.extend(real_provider_factories(all_doubles()));
+    runtime_names.extend(real_provider_factories(all_doubles(), pglite));
     for unit in &binding_units {
         // P4a (#2602): `bynk.cloudflare`'s binding is first-party, so it is
         // never in `binding_modules` (a test keeps its doubles); the `D1`
@@ -543,16 +548,13 @@ pub(super) fn emit_test_module(
         // #2137: in a module whose cases `advance`, the `Clock` double reads
         // the harness clock.
         // P4b (#2608): a `D1` double runs its database's migrations.
-        let migrations = unit_tables
+        // #3321: and a `Postgres` double its `schema.sql`, when the project
+        // opts in to PGlite.
+        let database = unit_tables
             .get(target_name)
             .and_then(|t| t.derived.get(name))
-            .and_then(|d| {
-                d1_migrations.get(&d1_database_name(
-                    &bynk_project::worker_dir_name(target_name),
-                    &d.binding,
-                ))
-            })
-            .map(Vec::as_slice);
+            .map(|d| d1_database_name(&bynk_project::worker_dir_name(target_name), &d.binding));
+        let migrations = double_files(d1_migrations, cap, database);
         let def = if with_env {
             env_secrets_double(owner, cap, &test_ns(owner), name).or_else(|| {
                 platform_double(owner, cap, &test_ns(owner), name, uses_advance, migrations)

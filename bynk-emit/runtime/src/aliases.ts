@@ -9,6 +9,7 @@ import { oidcTrust, tokenClaims, verifyBearerJwtHs256, verifyOidcJwt, verifySign
 import { boundaryError, callService, checkStoredLayout, checkStoredSchemaVersion, deliverEvent, deserialiseEventEnvelope, faultResponse, migrationFailed, readCapped, rehydrationViolation, reportUnknownStoredKeys, verifyCall, type BoundaryError, type JsonValue, type ServiceBinding } from "./boundary.ts";
 import { WorkersConnection, acceptHibernatableConnection, connIdOf, newWebSocketPair, resolveConnection, webSocketUpgradeResponse } from "./connection.ts";
 import { pgExecute, type PgExecute, type PgOutcome, type PgParam, type PgStatementParam, type PgTxOutcome } from "./postgres.ts";
+import { makeIntegrationPgliteBinding, makeIntegrationPostgres } from "./pglite.ts";
 import { handleEmail, type InboundMessage, type SenderIdentity } from "./email.ts";
 import { commitStored, noteClock, readStored, readsLazily, then } from "./entries.ts";
 import { attachLazy } from "./lazy.ts";
@@ -38,6 +39,8 @@ export {
   wireSet as __wireSet,
   WorkersConnection as __WorkersConnection,
   handleEmail as __handleEmail,
+  makeIntegrationPgliteBinding as __makeIntegrationPgliteBinding,
+  makeIntegrationPostgres as __makeIntegrationPostgres,
   pgExecute as __pgExecute,
   acceptHibernatableConnection as __acceptHibernatableConnection,
   applyCache as __applyCache,

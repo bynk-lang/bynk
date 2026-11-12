@@ -402,7 +402,7 @@ pub(super) fn if_(cond: TsExpr, then_branch: TsStmt) -> TsStmt {
     TsStmt::if_stmt(cond, then_branch, None)
 }
 
-pub(crate) fn emit_test_main(tests: &[RunnableTest], import_ext: ImportExt) -> TsProgram {
+pub(crate) fn emit_test_main(tests: &[RunnableTest], import_ext: ImportExt, pg: bool) -> TsProgram {
     let ext = import_ext.as_str();
     let mut program = TsProgram::new();
     program.push(TsStmt::comment(
@@ -850,18 +850,7 @@ pub(crate) fn emit_test_main(tests: &[RunnableTest], import_ext: ImportExt) -> T
     ]);
     // #2842: under `BYNK_SNAPSHOT_REPORT=1` the driver reads the report from one
     // marked line at the end of the human output and strips it.
-    let human_branch = match &snapshot_report {
-        Some(decl) => block(vec![
-            human_branch,
-            TsStmt::raw(
-                format!(
-                    "{decl}\nif (process.env.BYNK_SNAPSHOT_REPORT === \"1\") {{ globalThis.console.log(\"\\u0001bynk-snapshots \" + globalThis.JSON.stringify(__snapshotFiles)); }}"
-                ),
-                None,
-            ),
-        ]),
-        None => human_branch,
-    };
+    let human_branch = with_snapshot_report(human_branch, &snapshot_report);
 
     main_body.push(TsStmt::if_else_same_line_stmt(
         strict_eq(
@@ -872,6 +861,7 @@ pub(crate) fn emit_test_main(tests: &[RunnableTest], import_ext: ImportExt) -> T
         human_branch,
         None,
     ));
+    main_body.extend(pg.then(pglite_teardown));
     // A filter value that selected nothing fails the run, as a failed case does.
     main_body.push(if_(
         or_expr(
@@ -987,6 +977,33 @@ function reportUnmatched(): void {
   }
 }"#;
 
+/// #3321: closes the PGlite databases a run started. PGlite leaves a ten-second
+/// timer behind, which would otherwise hold the process open that long; the
+/// runtime registers the closer on `globalThis`, so no import is needed.
+fn pglite_teardown() -> TsStmt {
+    TsStmt::raw(
+        "await (globalThis as unknown as { __bynkPgliteTeardown?: () => Promise<void> }).__bynkPgliteTeardown?.();".to_string(),
+        None,
+    )
+}
+
+/// #2842: under `BYNK_SNAPSHOT_REPORT=1` the driver reads the report from one
+/// marked line at the end of the human output and strips it.
+fn with_snapshot_report(human_branch: TsStmt, snapshot_report: &Option<String>) -> TsStmt {
+    match snapshot_report {
+        Some(decl) => block(vec![
+            human_branch,
+            TsStmt::raw(
+                format!(
+                    "{decl}\nif (process.env.BYNK_SNAPSHOT_REPORT === \"1\") {{ globalThis.console.log(\"\\u0001bynk-snapshots \" + globalThis.JSON.stringify(__snapshotFiles)); }}"
+                ),
+                None,
+            ),
+        ]),
+        None => human_branch,
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -1065,7 +1082,7 @@ mod tests {
             remote: false,
             generative: false,
         }];
-        let program = emit_test_main(&tests, ImportExt::Js);
+        let program = emit_test_main(&tests, ImportExt::Js, false);
         let out = bynk_ts::print(&program, "", "", "").text;
         assert!(
             out.contains("process.env.BYNK_TEST_FILTER"),
@@ -1121,7 +1138,7 @@ mod tests {
             remote: false,
             generative: false,
         }];
-        let program = emit_test_main(&tests, ImportExt::Js);
+        let program = emit_test_main(&tests, ImportExt::Js, false);
         let printed = bynk_ts::print(&program, "", "", "");
         assert_eq!(printed.text, expected);
     }

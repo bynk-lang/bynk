@@ -1,0 +1,16 @@
+{
+  "version": 1,
+  "provides": {
+    "add": "87fd1c77bfc8b5be",
+    "find": "9e519bcc563e5608",
+    "list": "cc98e6e1f3ec5782",
+    "rename": "81e8be567e4ff756"
+  },
+  "expects": {},
+  "provides_shapes": {
+    "add": "Svc(\"add\",P(\"name\",B(\"String\")),Ret(R(N(\"PgRun\"),N(\"PgError\"))))",
+    "find": "Svc(\"find\",P(\"id\",B(\"Int\")),Ret(R(O(Rec(\"Order\",F(\"id\",B(\"Int\")),F(\"name\",B(\"String\")),F(\"placed\",B(\"Instant\")),F(\"qty\",B(\"Int\")))),N(\"PgReadError\"))))",
+    "list": "Svc(\"list\",Ret(R(B(\"String\"),N(\"PgError\"))))",
+    "rename": "Svc(\"rename\",P(\"old\",B(\"String\")),P(\"new\",B(\"String\")),Ret(R(L(N(\"PgRun\")),N(\"PgError\"))))"
+  }
+}

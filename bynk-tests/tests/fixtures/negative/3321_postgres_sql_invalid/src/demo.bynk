@@ -1,0 +1,12 @@
+context demo
+
+consumes bynk
+consumes bynk.cloudflare { Postgres, PgError }
+
+capability Main = Postgres
+
+service probe {
+  on call() -> Effect[Result[String, PgError]] given Main {
+    Main.all("selec id from orders", [])
+  }
+}

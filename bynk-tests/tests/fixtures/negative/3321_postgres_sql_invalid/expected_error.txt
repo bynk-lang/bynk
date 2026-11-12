@@ -1,0 +1,2 @@
+bynk.postgres.sql_invalid
+syntax error at or near "selec"

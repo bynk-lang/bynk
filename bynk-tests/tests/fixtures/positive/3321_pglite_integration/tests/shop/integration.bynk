@@ -1,0 +1,21 @@
+suite shop.orders as integration {
+	case "the Worker's statements run on a real Postgres" {
+		let a <- api.POST("/orders") by Visitor
+		expect a is Ok("inserted")
+		let l <- api.GET("/orders") by Visitor
+		expect l is Ok("[{\"name\":\"first\"}]")
+	}
+
+	case "a unique violation reaches the handler as a PgConstraint, and the case's rows are its own" {
+		let a <- api.POST("/orders") by Visitor
+		expect a is Ok("inserted")
+		let b <- api.POST("/orders") by Visitor
+		expect b is Ok("duplicate")
+	}
+
+	case "a stub still answers before the database" {
+		stub Main.run(_, _) returns Err(PgConstraint("23505", "dup"))
+		let a <- api.POST("/orders") by Visitor
+		expect a is Ok("duplicate")
+	}
+}

@@ -39,6 +39,35 @@ pub fn is_ignored(key: &str) -> bool {
 /// A database without a directory has no entry.
 pub type D1Migrations = BTreeMap<String, Vec<MigrationFile>>;
 
+/// #3321: the key the opt-in `Postgres` test double's schema rides under in a
+/// [`D1Migrations`] on its way to the test emitters. Not a database name (those
+/// are `<worker>-<capability>`, never starting `@`), so it cannot collide with
+/// one, and nothing that looks a database up finds it. Present exactly when the
+/// project has `[test] postgres = "pglite"`; its one file is `schema.sql`, or
+/// none when the project has none.
+pub const PG_TEST_KEY: &str = "@postgres";
+
+/// Whether the project opts in to the PGlite `Postgres` test double (#3321).
+pub fn pglite_on(migrations: &D1Migrations) -> bool {
+    migrations.contains_key(PG_TEST_KEY)
+}
+
+/// The `Postgres` test double's database, as test emitters look it up: the
+/// project's `schema.sql` for a `Postgres` instance, the migrations of a `D1`
+/// database named `d1_database` otherwise (#3321, P4b #2608).
+pub fn double_files<'a>(
+    migrations: &'a D1Migrations,
+    cap: &str,
+    d1_database: Option<String>,
+) -> Option<&'a [MigrationFile]> {
+    let key = if cap == "Postgres" {
+        Some(PG_TEST_KEY.to_string())
+    } else {
+        d1_database
+    };
+    migrations.get(&key?).map(Vec::as_slice)
+}
+
 /// P4a (#2602): the account-facing name of a `D1` instance's database,
 /// `<worker>-<capability, kebab>`: `shop-cart` and `D1_ORDERS` give
 /// `shop-cart-orders`. D1 database names are scoped to the account, as R2

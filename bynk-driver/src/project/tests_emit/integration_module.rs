@@ -7,7 +7,7 @@ use bynk_emit::emitter::RuntimeUse;
 use bynk_emit::emitter::wrangler::{BindingSource, WorkerBinding};
 // #1759: every namespace a test module imports, from one definition.
 use bynk_check::checker::Types;
-use bynk_check::d1_migrations::D1Migrations;
+use bynk_check::d1_migrations::{D1Migrations, pglite_on};
 use bynk_check::test_suites::{self};
 use bynk_emit::emitter::emit::test_scaffold_ns as test_ns;
 use bynk_ts::{SourceMapBuilder, TsDecl, TsExpr, TsProgram, TsStmt};
@@ -140,7 +140,7 @@ pub(super) fn emit_integration_module(
     if asset_harness.is_some() {
         runtime_names.push("HttpResult".to_string());
     }
-    runtime_names.extend(platform_binding_factories(&binds));
+    runtime_names.extend(platform_binding_factories(&binds, pglite_on(d1_migrations)));
     if has_objects {
         runtime_names.push("__makeIntegrationDoNamespace".to_string());
         runtime_names.push("type __DurableObjectState".to_string());
@@ -862,7 +862,10 @@ pub(super) fn emit_integration_module(
 /// resources with (KV, R2, rate limiters, queue producers, Analytics datasets,
 /// D1, Version metadata), each once, in a fixed order. `binds` answers whether
 /// any participant has a binding of a kind.
-fn platform_binding_factories(binds: &dyn Fn(fn(&BindingSource) -> bool) -> bool) -> Vec<String> {
+fn platform_binding_factories(
+    binds: &dyn Fn(fn(&BindingSource) -> bool) -> bool,
+    pglite: bool,
+) -> Vec<String> {
     let kinds: [(bynk_emit::emitter::wrangler::BindingKind, &str); 10] = [
         (
             |s| matches!(s, BindingSource::Kv | BindingSource::KvInstance { .. }),
@@ -908,6 +911,10 @@ fn platform_binding_factories(binds: &dyn Fn(fn(&BindingSource) -> bool) -> bool
     kinds
         .into_iter()
         .filter(|(kind, _)| binds(*kind))
-        .map(|(_, name)| name.to_string())
+        // #3321: with PGlite the `Postgres` binding is the double's.
+        .map(|(_, name)| match (pglite, name) {
+            (true, "__makeIntegrationHyperdrive") => "__makeIntegrationPgliteBinding".to_string(),
+            _ => name.to_string(),
+        })
         .collect()
 }

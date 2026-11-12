@@ -295,15 +295,21 @@ pub(crate) fn check_sql_argument(
     // literal too. It is not recorded as a site: the schema a site is prepared
     // against is a D1 migration's SQLite, which says nothing of Postgres.
     if base == "Postgres" && SQL_TEXT_OPS.contains(&method) {
-        if let Some(sql) = args.first()
-            && sql_literal_text(sql, ctx).is_none()
-        {
-            ctx.errors.push(sql_not_literal_with(
-                sql.span,
-                &format!("the SQL of `{cap}.{method}`"),
-                "`$1`, `$2`",
-            ));
+        if let Some(sql) = args.first() {
+            match sql_literal_text(sql, ctx) {
+                None => ctx.errors.push(sql_not_literal_with(
+                    sql.span,
+                    &format!("the SQL of `{cap}.{method}`"),
+                    "`$1`, `$2`",
+                )),
+                // Hyperdrive H4 (#3321): with a `schema.sql`, the text is checked.
+                Some(text) => check_pg_text(&text, sql.span, args.get(1), ctx),
+            }
         }
+        return;
+    }
+    if base == "Postgres" && method == "transaction" {
+        check_pg_transaction(args.first(), ctx);
         return;
     }
     if base != "D1" {
@@ -388,6 +394,84 @@ fn record_batch_sites(cap: &str, list: Option<&Expr>, ctx: &mut Ctx) {
                 batch: Some(BatchPosition { group, index }),
             }),
         );
+    }
+}
+
+/// Hyperdrive H4 (#3321, ADR 0799 G): the checks of a literal `Postgres`
+/// statement's text, when the project supplies a `schema.sql`; nothing without
+/// one. `params` is the call's parameter list, whose length is checked when it
+/// is written out.
+fn check_pg_text(text: &str, span: Span, params: Option<&Expr>, ctx: &mut Ctx) {
+    if !ctx.input.stability.policy.pg_sql {
+        return;
+    }
+    let passed = literal_list_len(params, ctx);
+    for problem in crate::pg_sql::check_statement(text, passed) {
+        ctx.errors.push(pg_problem(problem, span));
+    }
+}
+
+/// `Postgres.transaction([PgStatement { sql: "…", params: […] }, …])`: each
+/// statement written inline in the list literal is checked as a call's SQL is. A
+/// non-literal `sql` is already `bynk.types.sql_not_literal`, from
+/// [`check_statement_fields`]; a statement built elsewhere stays unchecked.
+fn check_pg_transaction(list: Option<&Expr>, ctx: &mut Ctx) {
+    let Some(Expr {
+        kind: ExprKind::ListLit(items, ..),
+        ..
+    }) = list
+    else {
+        return;
+    };
+    for item in items {
+        let ExprKind::RecordConstruction {
+            type_name, fields, ..
+        } = &item.kind
+        else {
+            continue;
+        };
+        if type_name.name != PG_STATEMENT {
+            continue;
+        }
+        let field = |name: &str| {
+            fields
+                .iter()
+                .find(|f| f.name.name == name)
+                .and_then(|f| f.value.as_ref())
+        };
+        let Some(sql) = field("sql") else { continue };
+        let Some(text) = sql_literal_text(sql, ctx) else {
+            continue;
+        };
+        check_pg_text(&text, sql.span, field("params"), ctx);
+    }
+}
+
+/// The diagnostic for a [`PgSqlProblem`](crate::pg_sql::PgSqlProblem) at the
+/// statement's `span`.
+fn pg_problem(problem: crate::pg_sql::PgSqlProblem, span: Span) -> CompileError {
+    use crate::pg_sql::PgSqlProblem;
+    match problem {
+        PgSqlProblem::Invalid(message) => CompileError::new(
+            "bynk.postgres.sql_invalid",
+            span,
+            format!("this is not a Postgres statement: {message}"),
+        )
+        .with_note(
+            "checked with Postgres' own parser because the project has a `schema.sql`; delete that file to turn the check off",
+        ),
+        PgSqlProblem::ParamCount { expected, passed } => CompileError::new(
+            "bynk.postgres.sql_param_count",
+            span,
+            format!(
+                "the statement uses {expected} parameter{}, but {passed} {} passed",
+                if expected == 1 { "" } else { "s" },
+                if passed == 1 { "is" } else { "are" },
+            ),
+        )
+        .with_note(
+            "a `$n` placeholder takes the n-th element of `params`, so the list needs as many elements as the highest `$n`",
+        ),
     }
 }
 

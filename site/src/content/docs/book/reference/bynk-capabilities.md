@@ -1065,6 +1065,31 @@ write needs the transaction held open between them; Bynk does not offer that, so
 make the decision in one statement (`insert … select`, `update … where`) or retry
 on `PgSerialization`.
 
+#### Postgres SQL checked for syntax {#postgres-sql-checked-for-syntax}
+
+Bynk does not own your Postgres schema: it is made and changed outside the
+project, so there are no migrations to check a statement against, as there are for
+[`D1`](#sql-checked-against-the-migrations). A project that keeps a schema file
+can still have each literal statement checked. Put a `schema.sql` at the project
+root (beside `bynk.toml`) and `bynk check` parses every literal statement of a
+`Postgres` capability, in `all`, `first`, `run` and the statements of a
+`transaction`, with Postgres' own parser ([libpg_query](https://github.com/pganalyze/libpg_query)):
+
+- `bynk.postgres.sql_invalid`: the statement does not parse, or is more than one
+  command (a prepared statement takes one);
+- `bynk.postgres.sql_param_count`: the statement's highest `$n` differs from the
+  number of elements in the `params` list written out in place (or `let`-bound).
+
+A `$n` inside a string, a quoted name, a comment or a dollar-quoted body is text,
+not a parameter. Nothing is checked against the tables and columns the file
+defines: the file's presence is the switch, and the same file seeds the
+[PGlite test double](/book/reference/testing/#postgres-under-test). Without a
+`schema.sql` nothing is checked, and deleting it turns the check off. The typed
+reads (`select[T]`, `firstAs[T]`) are not checked, since their text is a tail the
+compiler completes. The parser is the current Postgres grammar, so a statement
+using syntax newer than your server parses here and fails there; the playground
+(`wasm32`) has no parser and checks only the parameter count.
+
 ### SQL databases: `D1`
 
 `D1` queries a D1 database, Cloudflare's SQLite. Each database is a named

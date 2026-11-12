@@ -194,5 +194,53 @@ case "a duplicate is answered" {
 }
 ```
 
+## Test it against a real Postgres
+
+Stubs cannot tell you that your SQL is right. To run the statements, opt in to
+PGlite, Postgres compiled to WebAssembly, in `bynk.toml`:
+
+```toml
+[test]
+postgres = "pglite"
+```
+
+Keep your schema in a `schema.sql` at the project root. Every case starts from an
+empty in-memory database with that file applied, so the tables are there and the
+rows from the case before are not:
+
+```sql
+CREATE TABLE orders (
+	id serial PRIMARY KEY,
+	name text NOT NULL UNIQUE
+);
+```
+
+The same case, with nothing stubbed, now runs `insert into orders …` for real, so
+the second `POST` of a name meets the `UNIQUE` constraint and the handler sees a
+`PgConstraint` with SQLSTATE `23505`. A `stub` still answers before the database,
+which is how a case forces what one connection cannot: a `PgSerialization`
+failure needs two transactions at once, so stub it to test your retry.
+
+The first `bynk test` of a project that opts in installs PGlite (about 27 MB), and
+each run starts it once, about 1.5 seconds per `Postgres` instance. Leave the
+setting out and tests stay as quick as before, with every operation stubbed. See
+[Postgres under test](/book/reference/testing/#postgres-under-test).
+
+## Catch a bad statement at compile time
+
+The same `schema.sql` switches on a check. `bynk check` parses each literal
+statement with Postgres' own parser and counts its `$n` placeholders against the
+list you pass, so a typo or a missing parameter is an error in the editor instead of
+a `PgFailed` on the first request:
+
+```bynk,fragment
+Main.all("selec name from orders", [])                      // bynk.postgres.sql_invalid
+Main.all("select name from orders where id = $1", [])       // bynk.postgres.sql_param_count
+```
+
+It does not check names against your tables: Bynk does not own the schema. Without
+a `schema.sql` there is no check. See
+[Postgres SQL checked for syntax](/book/reference/bynk-capabilities/#postgres-sql-checked-for-syntax).
+
 **See also:** [Reference: Postgres databases](/book/reference/bynk-capabilities/#postgres-databases-postgres),
 [Run independent calls at the same time](/book/guides/effects-and-capabilities/run-independent-calls-at-the-same-time/).

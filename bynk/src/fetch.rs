@@ -713,6 +713,13 @@ fn npm_requirements(dirs: &BTreeMap<String, PathBuf>, members: &[PathBuf]) -> Ve
     out
 }
 
+/// Whether a project's manifest reaches `reach`: the opt-in a test double is
+/// chosen by, which no source declares (#3321).
+fn manifest_reaches(manifest: &toml::Table, reach: &bynk_check::firstparty::Reach) -> bool {
+    matches!(reach, bynk_check::firstparty::Reach::TestPostgresDouble)
+        && bynk_project::test_postgres_of(manifest) == bynk_project::TestPostgres::Pglite
+}
+
 /// ADR 0799 C: the toolchain's own npm dependencies a project uses, one
 /// `first-party` row each, required by `bynk-std`: those whose binding the
 /// project's own contexts reach ([`bynk_check::firstparty::FirstPartyNpm::reached_by`]).
@@ -720,10 +727,12 @@ fn npm_requirements(dirs: &BTreeMap<String, PathBuf>, members: &[PathBuf]) -> Ve
 /// a build.
 fn first_party_rows(members: &[PathBuf]) -> Vec<LockedNpm> {
     let mut units = Vec::new();
+    let mut manifests = Vec::new();
     for member in members {
         let Some(doc) = read_manifest(member) else {
             continue;
         };
+        manifests.push(doc.clone());
         for root in bynk_project::packages::package_source_roots(member, &doc) {
             for file in bynk_project::discover_bynk_files(&root, &[]).unwrap_or_default() {
                 let text = std::fs::read_to_string(file).unwrap_or_default();
@@ -742,6 +751,7 @@ fn first_party_rows(members: &[PathBuf]) -> Vec<LockedNpm> {
             units
                 .iter()
                 .any(|u| bynk_check::firstparty::unit_reaches(u, &d.reached_by))
+                || manifests.iter().any(|m| manifest_reaches(m, &d.reached_by))
         })
         .map(|d| LockedNpm {
             package: d.package.to_string(),

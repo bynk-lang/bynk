@@ -1,0 +1,44 @@
+context shop.orders
+
+// Hyperdrive H4 (#3321): with `[test] postgres = "pglite"` the `Postgres`
+// instance below runs its statements for real, on an in-memory Postgres that
+// starts each case from `schema.sql`.
+
+consumes bynk
+consumes bynk.cloudflare { Postgres, PgError, PgReadError, PgRun, PgStatement, PgValue }
+
+capability Main = Postgres
+
+type Order = {
+	id: Int,
+	name: String,
+	qty: Int,
+	placed: Instant,
+}
+
+service add {
+	on call(name: String) -> Effect[Result[PgRun, PgError]] given Main {
+		Main.run("insert into orders (name) values ($1)", [PgText(name)])
+	}
+}
+
+service list {
+	on call() -> Effect[Result[String, PgError]] given Main {
+		Main.all("select id, name, qty from orders order by id", [])
+	}
+}
+
+service find {
+	on call(id: Int) -> Effect[Result[Option[Order], PgReadError]] given Main {
+		Main.firstAs[Order]("FROM orders WHERE id = $1", [PgInteger(id)])
+	}
+}
+
+service rename {
+	on call(old: String, new: String) -> Effect[Result[List[PgRun], PgError]] given Main {
+		Main.transaction([
+			PgStatement { sql: "update orders set name = $1 where name = $2", params: [PgText(new), PgText(old)] },
+			PgStatement { sql: "insert into orders (name) values ($1)", params: [PgText(old)] },
+		])
+	}
+}

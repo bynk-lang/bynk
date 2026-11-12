@@ -1,0 +1,2 @@
+bynk.postgres.sql_param_count
+the statement uses 2 parameters, but 1 is passed

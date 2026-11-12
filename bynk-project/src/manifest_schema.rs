@@ -227,6 +227,22 @@ struct TestTable {
     targets: Option<std::collections::BTreeMap<String, TestTargetTable>>,
     /// What `bynk test --mutate` leaves unmutated.
     mutate: Option<TestMutateTable>,
+    /// What a test's `Postgres` instance is: `"stub"` (a test never reaches a
+    /// database; each operation faults until it is stubbed) or `"pglite"`
+    /// (PGlite, Postgres compiled to WASM, runs the statements on a fresh
+    /// in-memory database per case, with `schema.sql` applied). Default:
+    /// `"stub"`.
+    #[schemars(extend("default" = "stub"))]
+    postgres: Option<TestPostgresKind>,
+}
+
+/// The values of `[test] postgres`.
+#[derive(JsonSchema)]
+#[serde(rename_all = "lowercase")]
+#[allow(dead_code)]
+enum TestPostgresKind {
+    Stub,
+    Pglite,
 }
 
 /// `bynk test --mutate`'s configuration.
