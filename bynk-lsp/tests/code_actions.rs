@@ -1080,15 +1080,49 @@ fn signed_cookie_unprefixed_stays_note_only_with_a_read_site() {
 }
 
 #[test]
+fn signed_cookie_secure_prefix_is_swapped_for_host() {
+    let src = cookie_actor(", ttl = 12.hours, cookie = \"__Secure-sid\"");
+    let (_, fixed) = cookie_fixes(
+        "rename-secure",
+        &[("shop.bynk", &src)],
+        "bynk.actor.signed_cookie_unprefixed",
+    );
+    assert_eq!(
+        fixed[0],
+        cookie_actor(", ttl = 12.hours, cookie = \"__Host-sid\"")
+    );
+}
+
+#[test]
 fn signed_cookie_fixes_are_never_taken_by_fix_all() {
+    // Through `diagnose_project`, the path that attaches the rename.
     let src = cookie_actor(", cookie = \"sid\"");
-    let diagnostics = bynk_ide::diagnose(&src);
-    assert!(
-        diagnostics
+    let root = setup_project("never-fix-all", &[("shop.bynk", &src)]);
+    let sources =
+        bynk_testkit::read_project_sources(&bynk_ide::AnalysisRoots::SingleTree(root.clone()));
+    let result = bynk_ide::diagnose_project(&root, &sources);
+    let file = result
+        .files
+        .iter()
+        .find(|f| f.source_path == Path::new("shop.bynk"))
+        .expect("shop analysed");
+    for code in [
+        "bynk.actor.signed_cookie_missing_ttl",
+        "bynk.actor.signed_cookie_unprefixed",
+    ] {
+        let d = file
+            .diagnostics
             .iter()
-            .filter(|d| d.error.category.starts_with("bynk.actor.signed_cookie"))
-            .flat_map(|d| &d.error.suggestions)
-            .all(|s| s.applicability != bynk_syntax::error::Applicability::MachineApplicable),
-        "a lifetime and a rename are the author's call"
+            .find(|d| d.error.category == code)
+            .unwrap_or_else(|| panic!("{code} raised"));
+        assert_eq!(d.error.suggestions.len(), 1, "{code} carries its fix");
+        assert_eq!(
+            d.error.suggestions[0].applicability,
+            bynk_syntax::error::Applicability::MaybeIncorrect,
+            "{code}: a lifetime and a rename are the author's call"
+        );
+    }
+    assert!(
+        bynk_syntax::fix::edits(&file.text, file.diagnostics.iter().map(|d| &d.error)).is_empty()
     );
 }

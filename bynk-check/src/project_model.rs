@@ -95,6 +95,9 @@ pub struct ErrorSink {
     /// `SignedCookie` actor, so `signed_cookie_unprefixed` can tell whether its
     /// cookie name is read anywhere else before offering a rename.
     cookie_sources: Vec<(FileId, Arc<str>)>,
+    /// The `(address, length)` of each parsed source `cookie_sources` was built
+    /// from, so a repeat `register_parsed` over the same files skips the rebuild.
+    cookie_key: Vec<(usize, usize)>,
 }
 
 impl Default for ErrorSink {
@@ -110,6 +113,7 @@ impl ErrorSink {
             warnings: Vec::new(),
             files: HashMap::new(),
             cookie_sources: Vec::new(),
+            cookie_key: Vec::new(),
         }
     }
     /// Record that spans carrying `file` lie in the project file `identity`.
@@ -123,16 +127,31 @@ impl ErrorSink {
     /// disagree. `phase_parse` registers every file it parses; a
     /// toolchain-injected unit, with no absolute path, is never registered.
     pub fn register_parsed(&mut self, parsed: &[ParsedFile]) {
-        self.cookie_sources.clear();
+        let key: Vec<(usize, usize)> = parsed
+            .iter()
+            .map(|pf| (pf.source().as_ptr() as usize, pf.source().len()))
+            .collect();
+        if key != self.cookie_key {
+            self.cookie_key = key;
+            self.cookie_sources = Self::cookie_sources_of(parsed);
+        }
+        self.register_files(parsed);
+    }
+    /// #3431: the project's sources, when some file declares a `SignedCookie`.
+    fn cookie_sources_of(parsed: &[ParsedFile]) -> Vec<(FileId, Arc<str>)> {
         if parsed.iter().any(|pf| pf.source().contains("SignedCookie")) {
-            self.cookie_sources = parsed
+            parsed
                 .iter()
                 .filter_map(|pf| {
                     let id = bynk_project::parse_cache::file_id_for(&pf.abs_path()?);
                     Some((id, Arc::from(pf.source())))
                 })
-                .collect();
+                .collect()
+        } else {
+            Vec::new()
         }
+    }
+    fn register_files(&mut self, parsed: &[ParsedFile]) {
         for pf in parsed {
             if let Some(abs) = pf.abs_path() {
                 self.register_file(
@@ -256,11 +275,19 @@ fn attach_cookie_rename_fix(sources: &[(FileId, Arc<str>)], errors: &mut [Attrib
         if mentions != 1 {
             continue;
         }
+        // A `__Secure-` name is swapped, not stacked: `__Host-sid`, not `__Host-__Secure-sid`.
+        let base = match name.get(..9) {
+            Some(p) if p.eq_ignore_ascii_case("__Secure-") => &name[9..],
+            _ => name,
+        };
+        if base.is_empty() {
+            continue;
+        }
         e.suggestions.push(bynk_syntax::error::Suggestion {
             message: format!(
-                "rename the cookie to `__Host-{name}` (no other site in the project names `{name}`; existing users are logged out when the name changes)"
+                "rename the cookie to `__Host-{base}` (no other site in the project names `{name}`; existing users are logged out when the name changes)"
             ),
-            edits: vec![(e.span, format!("\"__Host-{name}\""))],
+            edits: vec![(e.span, format!("\"__Host-{base}\""))],
             applicability: bynk_syntax::error::Applicability::MaybeIncorrect,
         });
     }
