@@ -28,6 +28,7 @@ per-commit history. While Bynk is pre-1.0, increments may change behaviour.
 
 | Version | Highlights |
 |---|---|
+| **v0.562.2** | A test keeps the Book's upgrading page ordered, non-empty and matched to the changelog (#3178) |
 | **v0.562.1** | Three diagnostic notes no longer give stale advice — `bynk.parse.doc_block_contains_code` suggests a `//` divider, `bynk.generics.generic_non_record` names alias bodies, and `bynk.generics.generic_sum_embeds` says to wrap with `.mapErr(…)` |
 | **v0.562.0** | A `MySql` instance kind reaches an existing MySQL or MariaDB database through Hyperdrive over mysql2 (`capability Legacy = MySql`, `?` placeholders, `MySqlValue` and `MySqlError`, an `@tls("…")` option), with the same typed reads, transactions, deploy path and `schema.sql` statement check as `Postgres` |
 | **v0.561.0** | A `Postgres` instance can run on PGlite in tests (`[test] postgres = "pglite"`), and a `schema.sql` switches on a syntax and placeholder-count check of each literal statement (`bynk.postgres.sql_invalid` as a warning, `bynk.postgres.sql_param_count` as an error) |
