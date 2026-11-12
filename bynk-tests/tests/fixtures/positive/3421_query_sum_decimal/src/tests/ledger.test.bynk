@@ -1,0 +1,24 @@
+// #3421: a stored `Decimal` summed by `Query.sum` is exact.
+suite ledger {
+  case "0.10 + 0.20 is exactly 0.30, not a float's 0.30000000000000004" {
+    do Basket("a").add("tea", 0.10d)
+    do Basket("a").add("milk", 0.20d)
+    let text <- Basket("a").totalText()
+    expect text == "0.30"
+    let total <- Basket("a").total()
+    expect total == 0.30d
+  }
+
+  case "an empty basket sums to the zero decimal" {
+    let total <- Basket("b").total()
+    expect total == 0d
+  }
+
+  case "a filtered query sums the rows it keeps" {
+    do Basket("c").add("tea", 0.10d)
+    do Basket("c").add("milk", 0.20d)
+    do Basket("c").add("cake", 0.30d)
+    let text <- Basket("c").dearText(0.15d)
+    expect text == "0.50"
+  }
+}
