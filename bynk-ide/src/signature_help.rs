@@ -719,6 +719,9 @@ mod tests {
             Some("expire() -> Cookie")
         );
         assert_eq!(resolve_label("Prefs.nope.cookie", doc, None), None);
+        // a record no handler takes as `cookies` has no cookie signatures
+        let plain = "context a.b\ntype P = { x: Int }\n";
+        assert_eq!(resolve_label("P.x.cookie", plain, None), None);
         // the call context names the whole chain as the callee
         let call = "  Ok(\"x\").withCookie(Prefs.visits.cookie(";
         let ctx = call_context(call, call.len()).expect("a call");

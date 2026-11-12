@@ -312,12 +312,12 @@ on POST("/theme/reset") () -> Effect[HttpResult[()]] by v: Visitor {
 }
 ```
 
-`Prefs.theme.cookie(Dark)` is a `Cookie` named by the field's wire name (here the `@name` of
-`visits`) and valued as the decoder reads it. Writing `"dark"` by hand compiles with a literal
-`Cookie`, and then every later request is a `400`, because the decoder reads an enum by its
-exact variant name. A literal `Cookie` that a record reads draws a warning, and an
-undecodable literal value is an error (`bynk.http.cookie_untyped_has_field`,
-`bynk.http.cookie_value_undecodable`). Spread the typed cookie into a `Cookie { … }` literal
+`Prefs.theme.cookie(Dark)` is a `Cookie` named by the field's wire name (`theme`; for `visits`
+it is the `@name`, `__Host-visits`) and valued as the decoder reads it. Writing `dark` by hand
+in a literal `Cookie` would make every later request a `400`, because the decoder reads an
+enum by its exact variant name, so the compiler rejects it
+(`bynk.http.cookie_value_undecodable`). A literal `Cookie` that a record reads, even with a
+decodable value, draws a warning (`bynk.http.cookie_untyped_has_field`). Spread the typed cookie into a `Cookie { … }` literal
 for attributes (`maxAge`, `domain`, `path`, `sameSite`), and give `expire()` the same `Path`
 and `Domain` the cookie was set with. A cookie in no record is still written as a plain
 `Cookie { name, value }`.

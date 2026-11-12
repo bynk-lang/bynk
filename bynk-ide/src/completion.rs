@@ -4279,6 +4279,9 @@ mod tests {
               on GET(\"/p\") (cookies: Prefs) -> Effect[HttpResult[String]] by v: Visitor { Ok(\"x\") }\n\
             }\n";
         let fields = complete("  Ok(\"x\").withCookie(Prefs.", src, None);
+        // the ordinary members of the type name are still offered beside its fields
+        let theme = complete("  Theme.", src, None);
+        assert!(find(&theme, "Dark", CompletionKind::Variant).is_some());
         assert!(find(&fields, "theme", CompletionKind::Field).is_some());
         assert!(find(&fields, "visits", CompletionKind::Field).is_some());
         let members = complete("  Ok(\"x\").withCookie(Prefs.visits.", src, None);
