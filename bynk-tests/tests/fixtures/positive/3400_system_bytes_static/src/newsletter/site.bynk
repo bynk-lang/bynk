@@ -1,0 +1,22 @@
+context newsletter.site
+
+consumes bynk { File, Cookie }
+
+type PhotoForm = {
+	caption: Option[String],
+	photo: File,
+}
+
+type Remembered = {
+	label: String,
+	cookie: Cookie,
+}
+
+service site from http {
+	limits { maxBody: 4096, maxFile: 64, maxParts: 12 }
+
+	@multipart
+	on POST("/photos") (body: PhotoForm) -> Effect[HttpResult[String]] by v: Visitor {
+		Ok("\(body.photo.bytes.length())")
+	}
+}

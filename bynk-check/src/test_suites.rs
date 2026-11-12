@@ -5111,6 +5111,39 @@ impl SuiteView {
         }
     }
 
+    /// #3400: add the first-party types the view's declarations still name.
+    ///
+    /// The closure ([`SuiteView::close`]) adds only types a commons owns, and
+    /// the first-party units a unit `consumes` (`bynk`'s `File`, `bynk.cloudflare`'s
+    /// email types) are adapters, so a `@multipart` body's `File` was never in a
+    /// `system` harness view. A case that built one then had its fields left
+    /// unchecked (`check_record_construction` skips a type the view lacks), so a
+    /// `Bytes` static inside it recorded no callee and lowered to `/* unknown */`.
+    /// A name no declaration of the view binds, which a first-party unit does, can
+    /// only have come from that unit's `consumes`, so it is that unit's type.
+    fn reach_first_party_types(&mut self, unit_tables: &HashMap<String, UnitTable>) {
+        let mut queue: Vec<String> = self
+            .types
+            .values()
+            .flat_map(|d| crate::project_model::type_decl_ref_names(d))
+            .collect();
+        while let Some(name) = queue.pop() {
+            if self.types.contains_key(&name) {
+                continue;
+            }
+            let found = [
+                crate::firstparty::BYNK_UNIT,
+                crate::firstparty::CLOUDFLARE_UNIT,
+            ]
+            .into_iter()
+            .find_map(|u| unit_tables.get(u).and_then(|t| t.types.get(&name)));
+            if let Some(decl) = found {
+                queue.extend(crate::project_model::type_decl_ref_names(decl));
+                self.types.insert(name, decl.clone());
+            }
+        }
+    }
+
     /// #1814: close the view over what the declarations of `imported` reach
     /// (`project_model::close_view_types`), recording what it adds.
     fn close(
@@ -5274,6 +5307,7 @@ pub fn integration_view(
     }
     // #3064: a participant's actors' identity types are reached too.
     view.close(&imported, unit_tables, unit_uses, true);
+    view.reach_first_party_types(unit_tables);
     view
 }
 
