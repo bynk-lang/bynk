@@ -283,7 +283,8 @@ fn a_non_conventional_manifest_include_and_exclude_are_honoured() {
 
 /// #3355: the `Forward(...)` verdicts of `from email` handlers are found on the
 /// checked tree: a literal destination is read, a computed one is reported as
-/// such, and a comment or a string that spells a forward counts for nothing.
+/// such, and a comment or a string that spells a forward counts for nothing, and a
+/// `Forward` in a helper `fn` of the context is attributed to its handlers.
 #[test]
 fn email_forwards_come_from_the_checked_tree_not_the_text() {
     let manifest = fs::read_to_string(
@@ -294,6 +295,7 @@ fn email_forwards_come_from_the_checked_tree_not_the_text() {
     let source = "context shop.support\n\nconsumes bynk.cloudflare { InboundEmail, EmailVerdict }\n\n\
 fn finance() -> String { \"finance@shop.example\" }\n\n\
 service billing from email(\"billing@shop.example\") {\n  on message(mail: InboundEmail) -> Effect[EmailVerdict] {\n    // Forward(\"commented@shop.example\")\n    Forward(\"Finance@Shop.Example\")\n  }\n}\n\n\
+fn route(mail: InboundEmail) -> EmailVerdict { Forward(\"helper@shop.example\") }\n\n\
 service ops from email(\"ops@shop.example\") {\n  on message(mail: InboundEmail) -> Effect[EmailVerdict] {\n    if true { Forward(finance()) } else { Reject(\"Forward(\\\"string@shop.example\\\")\") }\n  }\n}\n";
     let root = scratch_project(
         "email_forwards",
@@ -309,7 +311,12 @@ service ops from email(\"ops@shop.example\") {\n  on message(mail: InboundEmail)
         .collect();
     assert_eq!(
         got,
-        [("billing", Some("Finance@Shop.Example")), ("ops", None)],
+        [
+            ("billing", Some("Finance@Shop.Example")),
+            ("billing", Some("helper@shop.example")),
+            ("ops", None),
+            ("ops", Some("helper@shop.example")),
+        ],
         "{:?}",
         check.email_forwards
     );

@@ -804,11 +804,61 @@ pub fn check_project(options: &CompileOptions) -> ProjectCheck {
 /// a string that spells `Forward("x@y")`, or a user type with a `Forward`
 /// variant of its own is not one. The destination is the first argument when it
 /// is a string literal, and `None` otherwise (an interpolated or computed one).
+///
+/// A handler may delegate to a helper `fn` of its context, so a `Forward` in
+/// any `fn` of a context that has a `from email` service is attributed to each
+/// of that context's email handlers. That can over-report (a helper no handler
+/// calls), which is cheap: the result only ever warns.
 fn email_forwards_of(
     parsed: &[ParsedFile],
     unit_callees: &HashMap<String, HashMap<ExprId, bynk_check::checker::Callee>>,
 ) -> Vec<EmailForward> {
-    use bynk_syntax::ast::{CommonsItem, ExprKind, ServiceProtocol, SourceUnit};
+    use bynk_syntax::ast::{CommonsItem, ServiceProtocol, SourceUnit};
+    let mut out = Vec::new();
+    for pf in parsed {
+        let SourceUnit::Context(ctx) = pf.unit() else {
+            continue;
+        };
+        let helpers: Vec<Option<String>> = ctx
+            .items
+            .iter()
+            .filter_map(|item| match item {
+                CommonsItem::Fn(f) => Some(forwards_in(&f.body, unit_callees)),
+                _ => None,
+            })
+            .flatten()
+            .collect();
+        for item in &ctx.items {
+            let CommonsItem::Service(service) = item else {
+                continue;
+            };
+            let ServiceProtocol::Email { address } = &service.protocol else {
+                continue;
+            };
+            let own = service
+                .handlers
+                .iter()
+                .flat_map(|h| forwards_in(&h.body, unit_callees));
+            out.extend(own.chain(helpers.iter().cloned()).map(|to| EmailForward {
+                context: ctx.name.joined(),
+                service: service.name.name.clone(),
+                address: address.clone(),
+                to,
+            }));
+        }
+    }
+    out.sort();
+    out.dedup();
+    out
+}
+
+/// The destination of each `EmailVerdict`'s `Forward(...)` call under `body`:
+/// its string literal, or `None` when computed.
+fn forwards_in(
+    body: &bynk_syntax::ast::Block,
+    unit_callees: &HashMap<String, HashMap<ExprId, bynk_check::checker::Callee>>,
+) -> Vec<Option<String>> {
+    use bynk_syntax::ast::ExprKind;
     let is_forward = |id: &ExprId| {
         unit_callees.values().any(|m| {
             matches!(
@@ -818,46 +868,24 @@ fn email_forwards_of(
             )
         })
     };
-    let mut out = Vec::new();
-    for pf in parsed {
-        let SourceUnit::Context(ctx) = pf.unit() else {
-            continue;
-        };
-        for item in &ctx.items {
-            let CommonsItem::Service(service) = item else {
-                continue;
-            };
-            let ServiceProtocol::Email { address } = &service.protocol else {
-                continue;
-            };
-            for handler in &service.handlers {
-                let mut stack: Vec<&bynk_syntax::ast::Expr> = Vec::new();
-                for s in &handler.body.statements {
-                    bynk_syntax::ast::statement_exprs(s, &mut stack);
-                }
-                stack.push(&handler.body.tail);
-                while let Some(e) = stack.pop() {
-                    if let ExprKind::Call { args, .. } = &e.kind
-                        && is_forward(&e.id)
-                    {
-                        out.push(EmailForward {
-                            context: ctx.name.joined(),
-                            service: service.name.name.clone(),
-                            address: address.clone(),
-                            to: match args.first().map(|a| &a.kind) {
-                                Some(ExprKind::StrLit(s)) => Some(s.clone()),
-                                _ => None,
-                            },
-                        });
-                    }
-                    stack.extend(bynk_syntax::ast::expr_children(e));
-                }
-            }
-        }
+    let mut found = Vec::new();
+    let mut stack: Vec<&bynk_syntax::ast::Expr> = Vec::new();
+    for s in &body.statements {
+        bynk_syntax::ast::statement_exprs(s, &mut stack);
     }
-    out.sort();
-    out.dedup();
-    out
+    stack.push(&body.tail);
+    while let Some(e) = stack.pop() {
+        if let ExprKind::Call { args, .. } = &e.kind
+            && is_forward(&e.id)
+        {
+            found.push(match args.first().map(|a| &a.kind) {
+                Some(ExprKind::StrLit(s)) => Some(s.clone()),
+                _ => None,
+            });
+        }
+        stack.extend(bynk_syntax::ast::expr_children(e));
+    }
+    found
 }
 
 /// Compile a single **in-memory** Bynk source through the full project pipeline —

@@ -836,7 +836,7 @@ bynk: warning: `billing` (context `shop.support`) forwards to `finance@shop.exam
 To verify an address, open **Email Routing → Destination addresses** in the
 dashboard and add it if it is not listed; Cloudflare emails a link to that address,
 and its owner clicks the link. Deploy finds the literals from the checked program,
-so a comment or an unrelated string that spells an address counts for nothing. A
+so a comment or an unrelated string that spells an address counts for nothing. A `Forward` in a helper `fn` of the context is attributed to the context's email handlers. A
 destination computed at run time (`Forward(lookup(mail))`) cannot be known at
 deploy, so the plan says so once per handler that does it and leaves the check to
 you. Addresses are matched with the domain case-insensitive and the local part
