@@ -64,7 +64,7 @@ export const Page = {
 };
 
 export function minimal(): Options {
-  return { name: "m", count: 3, mode: { tag: "Careful" }, retry: { tag: "Times", n: 2 }, timeout: { tag: "None" }, note: { tag: "Some", value: "default note" }, tags: ["a"], meta: new globalThis.Map(), seen: new globalThis.Set(), inner: { a: 7, label: "inner" } };
+  return { name: "m", count: 3, mode: { tag: "Careful" as const }, retry: { tag: "Times" as const, n: 2 }, timeout: { tag: "None" as const }, note: { tag: "Some" as const, value: "default note" }, tags: ["a"], meta: new globalThis.Map(), seen: new globalThis.Set(), inner: { a: 7, label: "inner" } };
 }
 
 export function decoded(json: string): Options {
@@ -75,7 +75,7 @@ export function decoded(json: string): Options {
       return o;
     }
     case "Err": {
-      return { name: "failed", count: -1, mode: { tag: "Careful" }, retry: { tag: "Times", n: 2 }, timeout: { tag: "None" }, note: { tag: "Some", value: "default note" }, tags: ["a"], meta: new globalThis.Map(), seen: new globalThis.Set(), inner: { a: 7, label: "inner" } };
+      return { name: "failed", count: -1, mode: { tag: "Careful" as const }, retry: { tag: "Times" as const, n: 2 }, timeout: { tag: "None" as const }, note: { tag: "Some" as const, value: "default note" }, tags: ["a"], meta: new globalThis.Map(), seen: new globalThis.Set(), inner: { a: 7, label: "inner" } };
     }
   }
   throw new globalThis.Error("non-exhaustive match");
@@ -89,7 +89,7 @@ export function decodedPage(json: string): Page<number> {
       return p;
     }
     case "Err": {
-      return { items: [-1], note: "", next: { tag: "None" } };
+      return { items: [-1], note: "", next: { tag: "None" as const } };
     }
   }
   throw new globalThis.Error("non-exhaustive match");

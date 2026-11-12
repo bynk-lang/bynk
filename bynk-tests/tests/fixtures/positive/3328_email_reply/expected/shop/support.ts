@@ -9,7 +9,7 @@ import { EmailReply, EmailVerdict, InboundEmail } from "../bynk/cloudflare.js";
 
 export const support = {
   async queue_support_0(mail: InboundEmail, deps: {}): globalThis.Promise<EmailVerdict> {
-    return EmailVerdict.Reply({ text: Some(`We have your message about ${String(mail.subject)}.`), subject: { tag: "None" }, html: { tag: "None" } });
+    return EmailVerdict.Reply({ text: Some(`We have your message about ${String(mail.subject)}.`), subject: { tag: "None" as const }, html: { tag: "None" as const } });
   },
 };
 

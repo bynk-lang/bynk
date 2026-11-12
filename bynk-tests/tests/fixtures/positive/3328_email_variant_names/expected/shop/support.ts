@@ -24,7 +24,7 @@ export const support = {
         return EmailVerdict.Forward("team@shop.example");
       }
       default: {
-        return EmailVerdict.Reply({ subject: { tag: "None" }, text: { tag: "None" }, html: { tag: "None" } });
+        return EmailVerdict.Reply({ subject: { tag: "None" as const }, text: { tag: "None" as const }, html: { tag: "None" as const } });
       }
     }
     throw new globalThis.Error("non-exhaustive match");
