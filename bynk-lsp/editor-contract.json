@@ -32,6 +32,12 @@
               "label": "tsc | tsx",
               "level": "ok",
               "remedy": null
+            },
+            {
+              "detail": "none found (none of npm, pnpm or bun is on PATH to install the generated project's npm packages; install Node.js (which ships npm), or set `[build] package_manager`)",
+              "label": "package manager",
+              "level": "ok",
+              "remedy": null
             }
           ]
         },
@@ -51,6 +57,12 @@
               "label": "wrangler",
               "level": "warn",
               "remedy": "npm install -g wrangler@4, or clear a stale npx cache (~/.npm/_npx)"
+            },
+            {
+              "detail": "none found (none of npm, pnpm or bun is on PATH to install the generated project's npm packages; install Node.js (which ships npm), or set `[build] package_manager`)",
+              "label": "package manager",
+              "level": "ok",
+              "remedy": null
             }
           ]
         },

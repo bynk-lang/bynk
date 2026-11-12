@@ -6,7 +6,7 @@ use std::process::ExitCode;
 use bynk::check;
 use bynk::cli::{CheckFormatArg, Cli, Command};
 use bynk::compile;
-use bynk::deploy::{self, DeployFormat, DeployOptions};
+use bynk::deploy::{self, DeployOptions};
 use bynk::dev::{self, DevOptions};
 use bynk::doctor::{self, Context, DoctorOptions};
 use bynk::fmt;
@@ -63,6 +63,7 @@ fn run() -> ExitCode {
             inspect_port,
             env,
             local_workers,
+            no_install,
             format,
             ready_json,
             log_events,
@@ -81,6 +82,7 @@ fn run() -> ExitCode {
                     inspect_port,
                     environment: env,
                     local_workers,
+                    no_install,
                     wrangler_args,
                     format: format.into(),
                     ready_json,
@@ -114,6 +116,7 @@ fn run() -> ExitCode {
             context,
             env,
             dry_run,
+            no_install,
             format,
             yes,
             secrets_file,
@@ -133,10 +136,8 @@ fn run() -> ExitCode {
                     context,
                     environment: env,
                     dry_run,
-                    format: match format {
-                        bynk::cli::DeployFormatArg::Short => DeployFormat::Short,
-                        bynk::cli::DeployFormatArg::Json => DeployFormat::Json,
-                    },
+                    no_install,
+                    format: format.into(),
                     yes,
                     secrets_file,
                     secrets,
@@ -318,13 +319,7 @@ fn run() -> ExitCode {
                 if !prepare(&path, lock.options()) {
                     return ExitCode::FAILURE;
                 }
-                bynk::migrate::status(
-                    &path,
-                    match format {
-                        bynk::cli::DeployFormatArg::Short => bynk::migrate::StatusFormat::Short,
-                        bynk::cli::DeployFormatArg::Json => bynk::migrate::StatusFormat::Json,
-                    },
-                )
+                bynk::migrate::status(&path, format.into())
             }
             bynk::cli::MigrateCommand::Sweep {
                 path,

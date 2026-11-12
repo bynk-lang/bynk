@@ -22,6 +22,16 @@
           "description": "The output directory, relative to the project root. Must stay inside\nthe project. Default: `\"out\"`.",
           "type": "string"
         },
+        "package_manager": {
+          "description": "The package manager that installs the npm packages of the build\ndirectory `bynk test`, `bynk dev` and `bynk deploy` generate:\n`\"npm\"`, `\"pnpm\"`, `\"bun\"` or `\"yarn\"` (Yarn classic). Unset, bynk\ndetects the one you use, from the `packageManager` field of the project\nroot's `package.json`, then a lockfile there, then how bynk was\nstarted, then the first of npm, pnpm and bun on PATH. The environment\nvariable `BYNK_PACKAGE_MANAGER` overrides this.",
+          "enum": [
+            "npm",
+            "pnpm",
+            "bun",
+            "yarn"
+          ],
+          "type": "string"
+        },
         "platform": {
           "default": "cloudflare",
           "description": "The surface binding: `\"cloudflare\"`, `\"node\"` or `\"browser\"` (`bundle`\nonly). Default: `\"cloudflare\"`.",

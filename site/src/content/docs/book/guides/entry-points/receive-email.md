@@ -63,10 +63,11 @@ the account has not verified is refused (and falls back to
 `Reject("forward refused")`).
 
 The build's `package.json` lists `postal-mime`, which the Worker parses messages
-with, at an exact version. Run `npm install` in the build directory (`.bynk/dev`
-for `bynk dev`, `.bynk/deploy` for `bynk deploy`, the output directory of a
-`bynk compile`) before running it: `bynk dev` and `bynk deploy` stop before
-wrangler, naming any package that is not installed.
+with, at an exact version. `bynk dev`, `bynk deploy` and `bynk test` install it
+for you, with the package manager you already use, into the build directory
+(`.bynk/dev`, `.bynk/deploy`, `out`), and only when it is missing. For the
+output directory of a plain `bynk compile`, run your package manager's `install`
+there yourself. See [Installing npm packages](/docs/bynk-cli/#installing-npm-packages).
 
 A reply goes out only for a sender whose mail passed DMARC, and only once per
 message. The runtime does the sending, so the handler stays a pure decision.
