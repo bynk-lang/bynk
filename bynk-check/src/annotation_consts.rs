@@ -25,7 +25,7 @@
 use std::collections::{BTreeMap, HashMap, HashSet};
 
 use bynk_syntax::ast::{
-    Annotation, BaseType, CommonsItem, ConstRef, ExprKind, SourceUnit, TypeBody,
+    Annotation, BaseType, Commons, CommonsItem, ConstRef, ExprKind, SourceUnit, TypeBody,
 };
 use bynk_syntax::error::CompileError;
 
@@ -190,4 +190,37 @@ pub fn with_const_origin(err: CompileError, arg: &bynk_syntax::ast::AnnotationAr
         None => err,
     };
     err.with_note(format!("the value comes from `const {}`", c.name.name))
+}
+
+/// The single-file form of [`resolve_annotation_consts`], for a commons checked
+/// on its own (`bynk check file.bynk`, the playground, the editor's single-file
+/// mode): no `uses`, so only the file's own constants are in scope. It runs the
+/// same pass over a one-unit project, so the rules cannot differ.
+pub fn resolve_single_file(commons: &mut Commons) {
+    use std::path::PathBuf;
+    let name = commons.name.joined();
+    let file = ParsedFile::synthetic(
+        PathBuf::from("single.bynk"),
+        PathBuf::from("single.bynk"),
+        String::new(),
+        SourceUnit::Commons(commons.clone()),
+        UnitKind::Commons,
+    );
+    let mut parsed = [file];
+    let groups = BTreeMap::from([(name.clone(), vec![0])]);
+    let kinds = BTreeMap::from([(name.clone(), UnitKind::Commons)]);
+    let mut discarded = Vec::new();
+    let table = build_unit_table(&name, UnitKind::Commons, &[0], &parsed, &mut discarded);
+    let mut tables = HashMap::from([(name, table)]);
+    resolve_annotation_consts(
+        &groups,
+        &kinds,
+        &mut parsed,
+        &mut tables,
+        &HashMap::new(),
+        &mut RefSink::new(),
+    );
+    if let SourceUnit::Commons(rewritten) = parsed[0].unit() {
+        *commons = rewritten.clone();
+    }
 }
