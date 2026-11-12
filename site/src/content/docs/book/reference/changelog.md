@@ -28,6 +28,7 @@ per-commit history. While Bynk is pre-1.0, increments may change behaviour.
 
 | Version | Highlights |
 |---|---|
+| **v0.570.4** | `bynk explain` gains fifteen entries under the `bynk.parse` codes: the generic `expected_*`, `extra_tokens` and `unexpected_eof` diagnostics, read by what they expected and where, the duplicate `limits` and `security` policies, and the `migrate` step diagnostics (#3163) |
 | **v0.570.3** | SignedCookie diagnostics offer quick-fixes, to insert a missing ttl and to rename an unprefixed cookie to __Host- when nothing else reads it |
 | **v0.570.2** | bynk explain covers 24 more codes under test, event, exec, stability, agent and suite |
 | **v0.570.1** | `bynk explain` gains twenty-one entries under the `http`, `types` and `resolve` codes (#3163) |
