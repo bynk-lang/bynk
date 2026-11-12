@@ -6,6 +6,7 @@ name: Release
 #     git tag v0.16.0 && git push origin v0.16.0
 #
 #   -> verify (tag/version match + on-main) -> the test suite on all three OSes
+#      (minus any leg ci.yml already passed on the tagged commit: `plan`, #3391)
 #      -> build binaries + cut the GitHub
 #      Release, AND publish the crates to crates.io and the grammar to npm
 #      (both via OIDC Trusted Publishing, both re-run-safe — a version already
@@ -109,7 +110,7 @@ jobs:
         # ancestor of origin/main means an *existing, honest* off-main commit
         # (e.g. an unmerged PR-branch head) can't be released without first
         # reaching main through branch protection. Every publish job has
-        # `needs: [verify, test]`, so failing here blocks the release (tag push
+        # `needs: [verify, tests-passed]`, so failing here blocks the release (tag push
         # AND dispatch). This is a PARTIAL mitigation: a tag-triggered run executes
         # this workflow from the tagged commit, so an attacker who authors that
         # commit can strip this check — closing that needs the deferred `v*` tag
@@ -131,15 +132,45 @@ jobs:
   # leg, and the release gate could not have seen any of them. Split out here so
   # `verify` stays a fast tag/version/ancestry check and the publish jobs can
   # depend on both.
+  #
+  # #3391: a tag points at a commit already on `main`, where ci.yml has usually
+  # run these legs. `plan` looks that run up and drops the legs it already
+  # passed (scripts/ci/release-test-plan.sh, which says what counts as
+  # equivalent), failing closed: any leg without an explicit green result runs.
+  # `tests-passed` is what the publish jobs wait on, because `test` is skipped
+  # outright when every leg is dropped (an empty matrix is an error).
+  plan:
+    name: Plan the test legs
+    needs: verify
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    permissions:
+      contents: read
+      actions: read # list ci.yml's runs and jobs for the tagged commit
+    outputs:
+      matrix: ${{ steps.plan.outputs.matrix }}
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - id: plan
+        env:
+          GH_TOKEN: ${{ github.token }}
+          REPO: ${{ github.repository }}
+          SHA: ${{ github.sha }}
+          EVENT: ${{ github.event_name }}
+        run: scripts/ci/release-test-plan.sh
+
   test:
     name: Test suite (${{ matrix.os }})
-    needs: verify
+    needs: [verify, plan]
+    if: needs.plan.outputs.matrix != '[]'
     runs-on: ${{ matrix.os }}
     timeout-minutes: 40
     strategy:
       fail-fast: false
       matrix:
-        os: [ubuntu-latest, macos-latest, windows-latest]
+        os: ${{ fromJSON(needs.plan.outputs.matrix) }}
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
@@ -193,11 +224,36 @@ jobs:
           # including why this is not a `shell: bash` conditional export.
           BYNK_REQUIRE_WORKERD: ${{ matrix.os == 'ubuntu-latest' && '1' || '' }}
 
+  # The publish jobs' single dependency on the test suite. Green when every
+  # planned leg passed, or when `plan` found nothing left to run. A `test`
+  # that is skipped for any other reason (a failed `plan`) is red, so a gate
+  # that could not decide never reads as a pass.
+  tests-passed:
+    name: Test suite passed
+    needs: [plan, test]
+    if: always()
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - env:
+          PLAN: ${{ needs.plan.result }}
+          MATRIX: ${{ needs.plan.outputs.matrix }}
+          TEST: ${{ needs.test.result }}
+        run: |
+          if [ "$PLAN" = "success" ] && [ "$TEST" = "success" ]; then
+            echo "every planned leg passed ($MATRIX)"
+          elif [ "$PLAN" = "success" ] && [ "$TEST" = "skipped" ] && [ "$MATRIX" = "[]" ]; then
+            echo "no legs left to run: ci.yml already passed them on this commit"
+          else
+            echo "::error::plan=$PLAN test=$TEST matrix=$MATRIX"
+            exit 1
+          fi
+
   # Build native binaries on each host (no cross-compilation). fail-fast off so
   # one platform's failure doesn't abandon the others' artifacts.
   binaries:
     name: Build ${{ matrix.target }}
-    needs: [verify, test]
+    needs: [verify, tests-passed]
     if: github.event_name == 'push' # tag push only — not the manual registry-publish dispatch
     runs-on: ${{ matrix.os }}
     timeout-minutes: 45
@@ -280,7 +336,7 @@ jobs:
   # at -rc1 is a break found early. Same toolchain pins as ci.yml.
   web-assets:
     name: Build the browser artefacts
-    needs: [verify, test]
+    needs: [verify, tests-passed]
     if: github.event_name == 'push' # tag push only — not the manual registry-publish dispatch
     runs-on: ubuntu-latest
     timeout-minutes: 30
@@ -323,7 +379,7 @@ jobs:
   # file, no glue. Attached to the release as `bynk_registry_core-<tag>.wasm`.
   registry-core-wasm:
     name: Build the registry admission module
-    needs: [verify, test]
+    needs: [verify, tests-passed]
     if: github.event_name == 'push' # tag push only - not the manual registry-publish dispatch
     runs-on: ubuntu-latest
     timeout-minutes: 30
@@ -356,7 +412,7 @@ jobs:
   # (design/vscode-extension-extraction.md §4). Pre-release tags publish it too.
   editor-contract:
     name: Build the editor contract
-    needs: [verify, test]
+    needs: [verify, tests-passed]
     if: github.event_name == 'push' # tag push only — not the manual registry-publish dispatch
     runs-on: ubuntu-latest
     timeout-minutes: 20
@@ -541,7 +597,7 @@ jobs:
   # back here for every subsequent release.
   publish-crates:
     name: Publish to crates.io
-    needs: [verify, test]
+    needs: [verify, tests-passed]
     if: ${{ github.event_name == 'push' || (github.event_name == 'workflow_dispatch' && inputs.publish_crates) }}
     runs-on: ubuntu-latest
     timeout-minutes: 40
@@ -581,7 +637,7 @@ jobs:
   # Trusted Publisher can only be configured on an existing package.
   publish-npm:
     name: Publish to npm
-    needs: [verify, test]
+    needs: [verify, tests-passed]
     if: ${{ github.event_name == 'push' || (github.event_name == 'workflow_dispatch' && inputs.publish_npm) }}
     runs-on: ubuntu-latest
     timeout-minutes: 20
