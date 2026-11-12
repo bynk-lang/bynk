@@ -405,6 +405,8 @@ mod system {
     mod schema_lock_check_and_test_cli;
     #[path = "signature_auth.rs"]
     mod signature_auth;
+    #[path = "signed_cookie_loop_workerd.rs"]
+    mod signed_cookie_loop_workerd;
     #[path = "snapshot_behaviour.rs"]
     mod snapshot_behaviour;
     #[path = "store_behaviour.rs"]
