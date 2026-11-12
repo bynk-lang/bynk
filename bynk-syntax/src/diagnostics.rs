@@ -4516,7 +4516,7 @@ pub const EXPLANATIONS: &[Explain] = &[
     },
     Explain {
         code: "bynk.service.websocket_multiple",
-        blurb: "A WebSocket upgrade reaches the context by its `Upgrade: websocket` header alone, with no path to tell two endpoints apart, so a context can host only one `from websocket` service. The compiler reports each one after the first. Keep one, or move the other into a context of its own.",
+        blurb: "A WebSocket upgrade reaches the context by its `Upgrade: websocket` header alone, with no path to tell two endpoints apart, so a context can host only one `from websocket` service. The compiler reports every one but the first by name. Keep one, or move the other into a context of its own.",
         example: "service lobby from websocket(in: Frame, out: Frame) { … }\nservice rooms from websocket(in: Frame, out: Frame) { … }   // ✗ a second WebSocket service in this context\n\nservice lobby from websocket(in: Frame, out: Frame) { … }   // ✓ one per context",
         page: "/book/reference/websocket",
         anchor: "service-form",
