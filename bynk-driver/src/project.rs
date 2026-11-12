@@ -638,6 +638,25 @@ pub struct ProjectCheck {
     /// `bynk test --mutate` to pick SQL mutants. Empty when the check stopped
     /// before the units ran.
     pub d1_sql_sites: Vec<D1SqlRef>,
+    /// #3355: every `Forward(...)` verdict a `from email` handler returns, as
+    /// the checker resolved it. Read by `bynk deploy` to warn about a
+    /// destination Cloudflare will refuse. Empty when the check stopped before
+    /// the units ran.
+    pub email_forwards: Vec<EmailForward>,
+}
+
+/// #3355: one `Forward(to)` verdict in a `from email` handler's body.
+#[derive(Debug, Clone, PartialEq, Eq, PartialOrd, Ord)]
+pub struct EmailForward {
+    /// The context holding the handler, as written (`shop.support`).
+    pub context: String,
+    /// The `from email` service.
+    pub service: String,
+    /// The address the service claims (`support@shop.example`, or `*@domain`).
+    pub address: String,
+    /// The literal destination, or `None` when the argument is computed and so
+    /// cannot be known at deploy time.
+    pub to: Option<String>,
 }
 
 /// #3142: one D1 call's SQL argument, as the checker recorded it.
@@ -716,10 +735,10 @@ pub fn check_project(options: &CompileOptions) -> ProjectCheck {
         tys,
         None,
     );
-    let (errors, snapshots, agent_versions, d1_sql_sites) = match run {
+    let (errors, snapshots, agent_versions, d1_sql_sites, email_forwards) = match run {
         RunChecks::Bailed {
             errors, snapshots, ..
-        } => (errors, snapshots, HashMap::new(), Vec::new()),
+        } => (errors, snapshots, HashMap::new(), Vec::new(), Vec::new()),
         RunChecks::Checked {
             errors,
             snapshots,
@@ -760,7 +779,8 @@ pub fn check_project(options: &CompileOptions) -> ProjectCheck {
                 .collect();
             lits.sort();
             lits.dedup();
-            (errors, snapshots, agent_versions, lits)
+            let forwards = email_forwards_of(&parsed, &unit_callees);
+            (errors, snapshots, agent_versions, lits, forwards)
         }
     };
     ProjectCheck {
@@ -774,7 +794,70 @@ pub fn check_project(options: &CompileOptions) -> ProjectCheck {
         display_root: options.roots.project_root().to_path_buf(),
         agent_versions,
         d1_sql_sites,
+        email_forwards,
     }
+}
+
+/// #3355: the `Forward(to)` verdicts of every `from email` handler, found on
+/// the parsed declarations by the checker's own classification of each call
+/// (`Callee::Ctor` of `EmailVerdict`'s `Forward`), never by text: a comment,
+/// a string that spells `Forward("x@y")`, or a user type with a `Forward`
+/// variant of its own is not one. The destination is the first argument when it
+/// is a string literal, and `None` otherwise (an interpolated or computed one).
+fn email_forwards_of(
+    parsed: &[ParsedFile],
+    unit_callees: &HashMap<String, HashMap<ExprId, bynk_check::checker::Callee>>,
+) -> Vec<EmailForward> {
+    use bynk_syntax::ast::{CommonsItem, ExprKind, ServiceProtocol, SourceUnit};
+    let is_forward = |id: &ExprId| {
+        unit_callees.values().any(|m| {
+            matches!(
+                m.get(id),
+                Some(bynk_check::checker::Callee::Ctor { sum, tag })
+                    if tag == "Forward" && sum.name.name == "EmailVerdict"
+            )
+        })
+    };
+    let mut out = Vec::new();
+    for pf in parsed {
+        let SourceUnit::Context(ctx) = pf.unit() else {
+            continue;
+        };
+        for item in &ctx.items {
+            let CommonsItem::Service(service) = item else {
+                continue;
+            };
+            let ServiceProtocol::Email { address } = &service.protocol else {
+                continue;
+            };
+            for handler in &service.handlers {
+                let mut stack: Vec<&bynk_syntax::ast::Expr> = Vec::new();
+                for s in &handler.body.statements {
+                    bynk_syntax::ast::statement_exprs(s, &mut stack);
+                }
+                stack.push(&handler.body.tail);
+                while let Some(e) = stack.pop() {
+                    if let ExprKind::Call { args, .. } = &e.kind
+                        && is_forward(&e.id)
+                    {
+                        out.push(EmailForward {
+                            context: ctx.name.joined(),
+                            service: service.name.name.clone(),
+                            address: address.clone(),
+                            to: match args.first().map(|a| &a.kind) {
+                                Some(ExprKind::StrLit(s)) => Some(s.clone()),
+                                _ => None,
+                            },
+                        });
+                    }
+                    stack.extend(bynk_syntax::ast::expr_children(e));
+                }
+            }
+        }
+    }
+    out.sort();
+    out.dedup();
+    out
 }
 
 /// Compile a single **in-memory** Bynk source through the full project pipeline —
@@ -2079,6 +2162,10 @@ fn check_unit_files(
                 let keep = match c {
                     bynk_check::checker::Callee::D1Sql(_) => true,
                     bynk_check::checker::Callee::Const(_, site) => site.is_some(),
+                    // #3355: an inbound email handler's `Forward(...)`.
+                    bynk_check::checker::Callee::Ctor { sum, tag } => {
+                        tag == "Forward" && sum.name.name == "EmailVerdict"
+                    }
                     _ => false,
                 };
                 keep.then(|| (*id, c.clone()))

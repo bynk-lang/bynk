@@ -280,3 +280,37 @@ fn a_non_conventional_manifest_include_and_exclude_are_honoured() {
         sources.keys().collect::<Vec<_>>()
     );
 }
+
+/// #3355: the `Forward(...)` verdicts of `from email` handlers are found on the
+/// checked tree: a literal destination is read, a computed one is reported as
+/// such, and a comment or a string that spells a forward counts for nothing.
+#[test]
+fn email_forwards_come_from_the_checked_tree_not_the_text() {
+    let manifest = fs::read_to_string(
+        Path::new(env!("CARGO_MANIFEST_DIR"))
+            .join("../bynk-tests/tests/fixtures/positive/3328_s2_email_worker/bynk.toml"),
+    )
+    .unwrap();
+    let source = "context shop.support\n\nconsumes bynk.cloudflare { InboundEmail, EmailVerdict }\n\n\
+fn finance() -> String { \"finance@shop.example\" }\n\n\
+service billing from email(\"billing@shop.example\") {\n  on message(mail: InboundEmail) -> Effect[EmailVerdict] {\n    // Forward(\"commented@shop.example\")\n    Forward(\"Finance@Shop.Example\")\n  }\n}\n\n\
+service ops from email(\"ops@shop.example\") {\n  on message(mail: InboundEmail) -> Effect[EmailVerdict] {\n    if true { Forward(finance()) } else { Reject(\"Forward(\\\"string@shop.example\\\")\") }\n  }\n}\n";
+    let root = scratch_project(
+        "email_forwards",
+        &[("bynk.toml", &manifest), ("src/shop/support.bynk", source)],
+    );
+    let opts = bynk_driver::project_options(&root.0).expect("readable");
+    let check = project::check_project(&opts);
+    assert!(!check.has_errors());
+    let got: Vec<(&str, Option<&str>)> = check
+        .email_forwards
+        .iter()
+        .map(|f| (f.service.as_str(), f.to.as_deref()))
+        .collect();
+    assert_eq!(
+        got,
+        [("billing", Some("Finance@Shop.Example")), ("ops", None)],
+        "{:?}",
+        check.email_forwards
+    );
+}
