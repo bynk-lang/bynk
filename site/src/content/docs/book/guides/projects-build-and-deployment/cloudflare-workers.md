@@ -46,6 +46,8 @@ cd out/workers/notes
 npx wrangler dev
 ```
 
+With pnpm, run `pnpm dlx wrangler …`; with bun, `bunx wrangler …`.
+
 > **Or, in one step:** [`bynk dev`](/book/guides/projects-build-and-deployment/run-locally/) does this whole recipe for
 > you — compile, pick the worker, and `wrangler dev` — from anywhere inside the
 > project, with nothing to provision. The manual flow above is what it runs
