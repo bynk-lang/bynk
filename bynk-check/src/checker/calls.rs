@@ -3599,24 +3599,13 @@ pub(crate) fn check_method_call(
         // `Effect` wrapping a `Result` has methods; any other `Effect[_]` falls
         // through to the "no methods" error below.
         Ty::Effect(inner) => {
-            // #2683: `within` is on every `Effect[T]`, and wins over the
-            // `Effect[Result]` combinators (it is not one of them), so
-            // `Effect[Result[T, E]].within(d)` is the plain nested case.
-            if method.name == "within" {
+            // #2683, #2711, #3437: `within`, `race` and `detach` are on every
+            // `Effect[T]`, and win over the `Effect[Result]` combinators (they are
+            // not among them), so `Effect[Result[T, E]].within(d)` is the plain
+            // nested case.
+            if matches!(method.name.as_str(), "within" | "race" | "detach") {
                 let op = EffectOp::from_name(&method.name).map(KernelOp::Effect);
-                let r = check_effect_within_method(method, args, *inner, span, ctx);
-                return record_kernel(ctx, expr_id, recv_ty, op, method, r);
-            }
-            // #2711: `race` is on every `Effect[T]` too.
-            if method.name == "race" {
-                let op = EffectOp::from_name(&method.name).map(KernelOp::Effect);
-                let r = check_effect_race_method(args, *inner, span, ctx);
-                return record_kernel(ctx, expr_id, recv_ty, op, method, r);
-            }
-            // #3437: `detach` is on every `Effect[T]` too.
-            if method.name == "detach" {
-                let op = EffectOp::from_name(&method.name).map(KernelOp::Effect);
-                let r = check_effect_detach_method(receiver, args, span, ctx);
+                let r = check_effect_method(method, receiver, args, *inner, span, ctx);
                 return record_kernel(ctx, expr_id, recv_ty, op, method, r);
             }
             if let Ty::Result(ok, err) = &*tys.get(*inner) {

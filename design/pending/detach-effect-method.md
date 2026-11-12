@@ -1,7 +1,7 @@
 ---
 level: minor
 changelog: `e.detach()` on any `Effect[T]` stops waiting for a running effect and reports a fault or an `Err` through the runtime instead of losing it
-probes: diagnostic_coverage
+probes: diagnostic_coverage, emit_diagnostics, ts_writes, explained_codes
 ---
 
 ## ADR: detach-effect-method
