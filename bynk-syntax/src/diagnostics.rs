@@ -3996,6 +3996,20 @@ pub const EXPLANATIONS: &[Explain] = &[
         anchor: "flatten-a-staircase",
     },
     Explain {
+        code: "bynk.parse.migrate_after_handler",
+        blurb: "A `migrate` step carries a stored record from an older schema version to the agent's current shape, so it belongs with the agent's storage and invariants, above the handlers that read the migrated state. One written after a handler is refused. Move it above the first handler. `bynk.parse.invariant_after_handler` and `bynk.parse.transition_after_handler` are the same rule for invariants and transitions.",
+        example: "type CartV1 = { owner: String, total: Int }\n\nagent Cart {\n    key id: String\n    store ownerName: Cell[String]\n    store totalCents: Cell[Int]\n\n    on call cents() -> Effect[Int] { … }\n\n    migrate from 1 (old: CartV1) {            // ✗ after a handler\n        ownerName := old.owner\n        totalCents := old.total * 100\n    }\n}\n\nagent Cart {\n    key id: String\n    store ownerName: Cell[String]\n    store totalCents: Cell[Int]\n\n    migrate from 1 (old: CartV1) {            // ✓ before the handlers\n        ownerName := old.owner\n        totalCents := old.total * 100\n    }\n\n    on call cents() -> Effect[Int] { … }\n}",
+        page: "/book/reference/agents",
+        anchor: "migrations",
+    },
+    Explain {
+        code: "bynk.parse.migrate_item",
+        blurb: "A `migrate` step carries a stored record from an older schema version to the agent's current shape, so its body is only a list of what happens to each field: `field := value` assigns a current field, `let x = value` binds a local for later lines, and `drop field` discards a stored field on purpose. A step is pure, so nothing else belongs in it. The commonest mistake is `=` where `:=` is meant; a bare expression lands here too. The position is the first token of the line that is none of the three.",
+        example: "type CartV1 = { owner: String, total: Int }\n\nagent Cart {\n    key id: String\n    store ownerName: Cell[String]\n    store totalCents: Cell[Int]\n\n    migrate from 1 (old: CartV1) {\n        ownerName = old.owner                 // ✗ a step assigns with `:=`\n        totalCents := old.total * 100\n    }\n\n    on call cents() -> Effect[Int] { … }\n}\n\nagent Cart {\n    key id: String\n    store ownerName: Cell[String]\n    store totalCents: Cell[Int]\n\n    migrate from 1 (old: CartV1) {\n        ownerName := old.owner                // ✓\n        totalCents := old.total * 100\n    }\n\n    on call cents() -> Effect[Int] { … }\n}",
+        page: "/book/reference/agents",
+        anchor: "migrations",
+    },
+    Explain {
         code: "bynk.parse.multiple_docs",
         blurb: "A declaration or member has one doc. Two doc lines in a row are \
                 two docs, not one of two lines. For more than one line, write a \

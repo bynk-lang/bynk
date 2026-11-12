@@ -672,8 +672,8 @@ There are **849** codes in total.
 | [`bynk.parse.list_rest_not_last`](/book/reference/types/#list-patterns) | A `..` in a list pattern is not the final element; suffix forms such as `[.., last]` are not available. | [`list_pattern`](/book/reference/grammar/#rule-list_pattern) | — |
 | [`bynk.parse.malformed_float_literal`](/book/spec/lexical-grammar/#321a-float_literal) | A float literal is missing a digit on one side of the `.` (`1.`, `.5`). | [`float_literal`](/book/reference/grammar/#rule-float_literal) | — |
 | [`bynk.parse.match_ends_block`](/book/guides/type-system/match/#flatten-a-staircase) | A `match` ends the block it is in, because a block has no expression statements; a second `match` straight after it cannot follow. | [`block`](/book/reference/grammar/#rule-block) | — |
-| `bynk.parse.migrate_after_handler` | A `migrate` step is declared after an agent handler; migration steps precede the handlers. |  | — |
-| `bynk.parse.migrate_item` | A `migrate` step's body holds something other than `field := value`, `let` or `drop field`. |  | — |
+| [`bynk.parse.migrate_after_handler`](/book/reference/agents/#migrations) | A `migrate` step is declared after an agent handler; migration steps precede the handlers. |  | — |
+| [`bynk.parse.migrate_item`](/book/reference/agents/#migrations) | A `migrate` step's body holds something other than `field := value`, `let` or `drop field`. |  | — |
 | [`bynk.parse.multiple_docs`](/book/spec/static-semantics/#one-doc-per-target) | A declaration or member has two docs directly above it; a target has one doc, so a doc of more than one line is a `---` block. |  | — |
 | `bynk.parse.nesting_too_deep` | An expression or type nests deeper than the parser's fixed limit. |  | — |
 | [`bynk.parse.no_remainder_operator`](/book/reference/operators/#remainder) | `%` is not an operator; use `Int.rem` (the dividend's sign) or `Int.mod` (the divisor's). |  | — |
