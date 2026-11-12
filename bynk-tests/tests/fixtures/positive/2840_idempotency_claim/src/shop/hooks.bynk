@@ -8,3 +8,16 @@ service api from http {
     Ok("processed")
   }
 }
+
+service replay from http {
+  on POST("/replay/:id") (id: String) -> Effect[HttpResult[String]] by Visitor given Idempotency {
+    let cached <- Idempotency.dedup[String](id)
+    match cached {
+      Some(v) => Ok(v),
+      None => {
+        let _ <- Idempotency.remember[String](id, "computed", 1.hours)
+        Ok("fresh")
+      }
+    }
+  }
+}

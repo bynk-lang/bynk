@@ -20,4 +20,15 @@ suite shop.hooks {
     let later <- api.POST("/hooks/:id", "d1") by Visitor
     expect later is Ok("processed")
   }
+
+  // The double honours `remember`'s window on the harness clock.
+  case "a remembered value lapses after its window" {
+    let first <- replay.POST("/replay/:id", "r1") by Visitor
+    expect first is Ok("fresh")
+    let hit <- replay.POST("/replay/:id", "r1") by Visitor
+    expect hit is Ok("computed")
+    advance Clock by 61.minutes
+    let after <- replay.POST("/replay/:id", "r1") by Visitor
+    expect after is Ok("fresh")
+  }
 }

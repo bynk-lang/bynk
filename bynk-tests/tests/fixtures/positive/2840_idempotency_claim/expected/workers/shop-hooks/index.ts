@@ -21,6 +21,7 @@ export default {
     const method = request.method;
     const surface = compose(env);
     const __security_api: __SecurityPolicy = { nosniff: true, hstsMaxAgeSecs: null };
+    const __security_replay: __SecurityPolicy = { nosniff: true, hstsMaxAgeSecs: null };
     let __route: string = "request";
     try {
       if (path.startsWith("/_bynk/call/")) {
@@ -46,10 +47,25 @@ export default {
           return __applySecurityHeaders(__httpResultToResponse(result, (__v: string) => __v as __JsonValue), __security_api);
         }
       }
+      {
+        const __m = __matchPath("/replay/:id", path);
+        if (method === "POST" && __m) {
+          __route = "POST /replay/:id";
+          const __raw_id = __m.params["id"];
+          const id = __raw_id;
+          const result = await surface.http_POST_replay_Param_id(id);
+          return __applySecurityHeaders(__httpResultToResponse(result, (__v: string) => __v as __JsonValue), __security_replay);
+        }
+      }
       if (__matchPath("/hooks/:id", path) !== null) {
         const __status = method === "OPTIONS" ? 204 : 405;
         const __res = new globalThis.Response(null, { status: __status, headers: { allow: "OPTIONS, POST" } });
         return __applySecurityHeaders(__res, __security_api);
+      }
+      if (__matchPath("/replay/:id", path) !== null) {
+        const __status = method === "OPTIONS" ? 204 : 405;
+        const __res = new globalThis.Response(null, { status: __status, headers: { allow: "OPTIONS, POST" } });
+        return __applySecurityHeaders(__res, __security_replay);
       }
       return new globalThis.Response("Not Found", { status: 404 });
     } catch (e) {
