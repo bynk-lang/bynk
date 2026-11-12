@@ -706,7 +706,7 @@ There are **832** codes in total.
 
 | Code | Summary | Construct | Severity |
 |---|---|---|---|
-| [`bynk.property.restates_refinement`](/book/reference/testing/#properties) | A `property` merely re-checks a refinement its type already guarantees. | [`for_all`](/book/reference/grammar/#rule-for_all) | — |
+| `bynk.property.restates_refinement` | A `property` merely re-checks a refinement its type already guarantees. | [`for_all`](/book/reference/grammar/#rule-for_all) | — |
 | [`bynk.property.where_not_bool`](/book/reference/testing/#properties) | A `for all ... where` filter does not type to `Bool`. | [`for_all`](/book/reference/grammar/#rule-for_all) | — |
 
 ## Providers

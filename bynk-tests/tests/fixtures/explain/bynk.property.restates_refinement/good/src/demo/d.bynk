@@ -1,5 +1,0 @@
-commons demo.d
-
-type Pos = Int where Positive
-
-fn double(n: Int) -> Int { n + n }

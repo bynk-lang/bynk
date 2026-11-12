@@ -3885,13 +3885,6 @@ pub const EXPLANATIONS: &[Explain] = &[
         anchor: "83-source-layout-and-test-ness",
     },
     Explain {
-        code: "bynk.property.restates_refinement",
-        blurb: "Every value a `for all` draws for a refined type already satisfies the refinement, so a property whose only check is that refinement can never fail. The compiler flags it, and only the plain form; other restatements may pass. Assert something about behaviour over the valid inputs, such as how a function treats them.",
-        example: "// demo/d.bynk\ntype Pos = Int where Positive\n\n// tests/d.test.bynk\nfor all q: Pos { expect q > 0 }            // ✗ `Pos` already guarantees it\nfor all q: Pos { expect double(q) > q }    // ✓ a claim about behaviour",
-        page: "/book/reference/testing",
-        anchor: "properties",
-    },
-    Explain {
         code: "bynk.property.where_not_bool",
         blurb: "A `where` clause on `for all` discards each generated input \
                 that fails it, so it must be a `Bool`. A filter of another \
