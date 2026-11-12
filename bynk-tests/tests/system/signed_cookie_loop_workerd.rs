@@ -224,6 +224,16 @@ fn read_log(path: &Path) -> String {
     fs::read_to_string(path).unwrap_or_else(|e| format!("<could not read {path:?}: {e}>"))
 }
 
+/// Removes the test's scratch directory when it goes out of scope, panic or early return
+/// included. Declared before the [`Wranglers`], so the Workers stop first.
+struct Scratch(std::path::PathBuf);
+
+impl Drop for Scratch {
+    fn drop(&mut self) {
+        let _ = fs::remove_dir_all(&self.0);
+    }
+}
+
 struct Wranglers(Vec<wrangler::Wrangler>);
 
 impl Drop for Wranglers {
@@ -305,6 +315,7 @@ fn the_cookie_login_sets_authenticates_until_logout_on_workerd() {
 
     let tmp = std::env::temp_dir().join(format!("bynk-signed-cookie-loop-{}", std::process::id()));
     let _ = fs::remove_dir_all(&tmp);
+    let _scratch = Scratch(tmp.clone());
     let proj = tmp.join("proj/shop");
     fs::create_dir_all(&proj).unwrap();
     fs::write(proj.join("api.bynk"), SOURCE).unwrap();
@@ -356,7 +367,6 @@ fn the_cookie_login_sets_authenticates_until_logout_on_workerd() {
     for (p, l) in [(port, &log_path), (rotated_port, &rotated_log)] {
         if let Err(log) = wait_ready(p, l) {
             drop(wranglers);
-            let _ = fs::remove_dir_all(&tmp);
             if skip(&format!(
                 "wrangler dev did not serve within the boot window (likely no network to \
                  provision {WRANGLER})\n{log}"
@@ -428,7 +438,9 @@ fn the_cookie_login_sets_authenticates_until_logout_on_workerd() {
         assert!(attrs.iter().any(|a| a == want), "`{want}` in {cleared}");
     }
 
-    // 4. The cleared cookie, and no cookie, are refused.
+    // 4. The cleared cookie, and no cookie, are refused. (This is the browser dropping its
+    //    cookie, not server-side revocation: a stateless signed cookie, `session` above, still
+    //    verifies until its `ttl` runs out, which is why the `ttl` is required and kept short.)
     let r = request(port, "GET", "/me", Some(cookie_pair(cleared)), None)
         .unwrap_or_else(|e| panic!("/me (cleared): {e}\n{}", log()));
     assert_eq!(r.status, 401, "the cleared cookie is refused\n{}", log());
@@ -437,7 +449,34 @@ fn the_cookie_login_sets_authenticates_until_logout_on_workerd() {
     assert_eq!(r.status, 401, "no cookie is refused\n{}", log());
 
     // 5. A Worker holding a different key refuses the cookie the first one issued, so what
-    //    made step 2 pass is the key (and `kid`) the issuer signed with.
+    //    made step 2 pass is the key (and `kid`) the issuer signed with. First a positive
+    //    control: that Worker does authenticate a cookie it issued itself, so its refusal below
+    //    is the key mismatch and not a Worker that refuses everything.
+    let rotated_log_text = || read_log(&rotated_log);
+    let r = request(
+        rotated_port,
+        "POST",
+        "/login",
+        None,
+        Some(r#"{"user":"ada"}"#),
+    )
+    .unwrap_or_else(|e| panic!("/login (rotated): {e}\n{}", rotated_log_text()));
+    assert_eq!(r.status, 201, "/login (rotated)\n{}", rotated_log_text());
+    let own = cookie_pair(r.set_cookies().first().copied().unwrap_or("")).to_string();
+    assert!(
+        own.starts_with("__Host-session="),
+        "the rotated Worker issues its own cookie: {:?}",
+        r.headers
+    );
+    assert_ne!(own, session, "a different key signs a different credential");
+    let r = request(rotated_port, "GET", "/me", Some(&own), None)
+        .unwrap_or_else(|e| panic!("/me (rotated, own cookie): {e}\n{}", rotated_log_text()));
+    assert_eq!(
+        (r.status, r.body.trim_matches('"')),
+        (200, "ada"),
+        "the rotated Worker authenticates a cookie it issued\n{}",
+        rotated_log_text()
+    );
     let r = request(rotated_port, "GET", "/me", Some(&session), None)
         .unwrap_or_else(|e| panic!("/me (rotated): {e}\n{}", read_log(&rotated_log)));
     assert_eq!(
@@ -448,5 +487,4 @@ fn the_cookie_login_sets_authenticates_until_logout_on_workerd() {
     );
 
     drop(wranglers);
-    let _ = fs::remove_dir_all(&tmp);
 }
