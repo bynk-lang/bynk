@@ -3697,7 +3697,7 @@ pub const EXPLANATIONS: &[Explain] = &[
     },
     Explain {
         code: "bynk.parse.extra_tokens",
-        blurb: "A `.bynk` file holds one `commons` or `context`, and the parser found more after it ended. The commonest cause is a `}` too many: the unit closed early, or an extra brace sits at the end, and the first token after the close is reported, either the stray brace or the next declaration. Count the braces back from there. The other is a second `commons` or `context` in the same file; each goes in its own file. The position is the first token after the unit's end, not the brace that ended it.",
+        blurb: "A `.bynk` file holds one `commons` or `context`, and the parser found more after it ended. The commonest cause is a `}` too many: the unit closed early, or an extra brace sits at the end, and the first token after the close is reported, either the stray brace or the next declaration. Count the braces back from there. The other is a second `commons` or `context` in the same file; each goes in its own file. The position is the first token after the unit's end, not the brace that ended it. Inside a string, an interpolation `\\(…)` holds a single expression, and a second token in it lands here too.",
         example: "commons demo {\n    fn one() -> Int { 1 }\n}\n}                                         // ✗ nothing can follow the unit\n\ncommons demo {\n    fn one() -> Int { 1 }\n}                                         // ✓ the unit closes once",
         page: "/book/reference/grammar",
         anchor: "rule-source_file",
