@@ -1,0 +1,46 @@
+context store.blobs
+
+service blobs from http {
+	// The cap a streamed body is counted against as the handler reads it.
+	limits { maxBody: 64 }
+
+	// A streamed raw body of any type: the handler pulls it chunk by chunk and the
+	// reply is how many bytes it read, so the answer does not depend on how the
+	// transport happened to split them.
+	@raw(contentType: "*/*")
+	on PUT("/blobs/:name") (name: String, body: Stream[Bytes]) -> Effect[HttpResult[String]] by v: Visitor {
+		let chunks <- body.collect()
+		let total = chunks.fold(0, (acc, b) => acc + b.length())
+		Ok("\(name) \(total)")
+	}
+
+	// The same route with a declared media type, to probe the `415`.
+	@raw(contentType: "application/zip")
+	on PUT("/zips/:name") (name: String, body: Stream[Bytes]) -> Effect[HttpResult[String]] by v: Visitor {
+		let chunks <- body.collect()
+		Ok("\(name) \(chunks.length())")
+	}
+}
+
+// A service that renders the router's rejections itself: a streamed body that crosses
+// its cap mid-read goes through `on rejected` like any other `413`.
+service rendered from http {
+	limits { maxBody: 64 }
+
+	@raw(contentType: "*/*")
+	on PUT("/rendered/:name") (name: String, body: Stream[Bytes]) -> Effect[HttpResult[String]] by v: Visitor {
+		let chunks <- body.collect()
+		Ok("\(name) \(chunks.length())")
+	}
+
+	on rejected(why: BoundaryRejection) -> Effect[HttpResult[()]] {
+		match why {
+			PayloadTooLarge(_) => RawError(PayloadTooLarge, problem("too_large", "the body is too large"), "application/json")
+			_ => RawError(BadRequest, problem("bad_request", "the request is malformed"), "application/json")
+		}
+	}
+}
+
+fn problem(code: String, message: String) -> Bytes {
+	Bytes.fromUtf8("{\"error\":\"\(code)\",\"message\":\"\(message)\"}")
+}

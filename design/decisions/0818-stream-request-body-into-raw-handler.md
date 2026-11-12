@@ -81,9 +81,11 @@ Node client sending a `duplex: "half"` `ReadableStream` body:
    must finish reading before it returns, which a Bynk handler does by
    construction (its effects complete before it returns). A response body
    *derived* from the request stream, pulling it lazily after the handler has
-   returned (an echo of 8 MiB), streams without error, so `RawStreamed` over a
-   mapped request body is permitted by the platform. A sequential read of 64 MiB
-   then a reply is fine.
+   returned (an echo of 8 MiB), streamed without error on Miniflare driven
+   directly, but failed under `wrangler dev`'s proxy (`Network connection lost`,
+   and an uncaught "This ReadableStream is currently locked to a reader" from the
+   proxy), so it is neither promised nor part of the smoke test, and is not
+   checked on the edge. A sequential read of 64 MiB then a reply is fine.
 
 *Bundle target.* The HTTP router is `workers_entry.rs` only; the bundle emits an
 `on http` handler as a plain method (`http_handler_method_name_ir`) that the host

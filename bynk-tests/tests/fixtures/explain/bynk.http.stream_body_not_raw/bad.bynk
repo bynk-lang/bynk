@@ -1,0 +1,8 @@
+context api
+
+service api from http {
+    @limit(maxBody: 1_000_000)
+    on PUT("/blobs/:id") (id: String, body: Stream[Bytes]) -> Effect[HttpResult[()]] by v: Visitor {
+        NoContent
+    }
+}

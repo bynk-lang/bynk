@@ -2114,6 +2114,37 @@ pub fn check_function_type_boundary_items(
                             && (matches!(p.name.name.as_str(), "cookies" | "query")
                                 || (p.name.name == "body"
                                     && h.annotations.iter().any(|a| a.name.name == "form")));
+                        // #3380: a `@raw` handler's `body` may be a `Stream[Bytes]`, the
+                        // request body as it arrives; without `@raw` it has no wire form,
+                        // so it is refused with the fix rather than a generic boundary
+                        // error. Any other stream position keeps `stream_at_boundary`.
+                        let is_http_body = matches!(h.kind, HandlerKind::Http { .. })
+                            && p.name.name == "body";
+                        let has_raw = h.annotations.iter().any(|a| a.name.name == "raw");
+                        // Any stream on a `@raw` body passes this check: `@raw`'s own check
+                        // refuses an element type but `Bytes` (`raw_body_not_bytes`).
+                        let streamed_body = is_http_body
+                            && matches!(p.type_ref, TypeRef::Stream(..))
+                            && has_raw;
+                        if is_http_body
+                            && crate::context_checks::is_byte_stream(&p.type_ref)
+                            && !has_raw
+                        {
+                            errors.push(
+                                CompileError::new(
+                                    "bynk.http.stream_body_not_raw",
+                                    p.type_ref.span(),
+                                    "a `Stream[Bytes]` `body` needs `@raw`",
+                                )
+                                .with_note(
+                                    "a request body has a JSON wire form unless the route says otherwise; write `@raw(contentType: \"…\")` and a `@limit` to receive it as a stream",
+                                ),
+                            );
+                            continue;
+                        }
+                        if streamed_body {
+                            continue;
+                        }
                         if !type_ref_is_held(&p.type_ref) && !http_headers && !multipart_body {
                             // Only the `@name` arm is relaxed for a request record;
                             // every other boundary check still runs on it.

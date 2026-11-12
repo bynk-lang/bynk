@@ -1,0 +1,2 @@
+bynk.val.generic_type
+`Val[Box[…]]` cannot fabricate a value of a generic type
