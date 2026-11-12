@@ -1,0 +1,11 @@
+adapter tokens {
+  binding "./tokens.binding.ts" requires { "jose": "*" }
+
+  exports capability { Jwt }
+
+  capability Jwt {
+    fn sign(secret: String) -> Effect[String]
+  }
+
+  provides Jwt = JoseJwt
+}

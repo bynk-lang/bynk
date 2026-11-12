@@ -182,7 +182,7 @@ There are **823** codes in total.
 | Code | Summary | Construct | Severity |
 |---|---|---|---|
 | [`bynk.given.cross_context_unknown_capability`](/book/reference/capabilities/) | `given B.Cap` or `consumes B { Cap }` names a capability the consumed context does not export. | [`given_clause`](/book/reference/grammar/#rule-given_clause) | — |
-| `bynk.given.fn_outside_context` | A function in a commons (or a suite) declares `given`; only a context function can. | [`given_clause`](/book/reference/grammar/#rule-given_clause) | — |
+| [`bynk.given.fn_outside_context`](/book/reference/capabilities/#capabilities-in-functions) | A function in a commons (or a suite) declares `given`; only a context function can. | [`given_clause`](/book/reference/grammar/#rule-given_clause) | — |
 | [`bynk.given.fn_unsupported`](/book/reference/capabilities/#capabilities-in-functions) | A `given` clause on a method, on a function that does not return `Effect[T]`, or naming `Events`. | [`given_clause`](/book/reference/grammar/#rule-given_clause) | — |
 | [`bynk.given.missing_for_call`](/book/reference/capabilities/#capabilities-in-functions) | A call to a function that declares `given` from a body that does not declare those capabilities. | [`given_clause`](/book/reference/grammar/#rule-given_clause) | — |
 | [`bynk.given.undeclared_capability`](/book/guides/effects-and-capabilities/understand-the-capability-model/) | A handler uses a capability it did not declare with `given`. | [`given_clause`](/book/reference/grammar/#rule-given_clause) | — |
@@ -300,7 +300,7 @@ There are **823** codes in total.
 | [`bynk.messages.malformed_icu_syntax`](/book/guides/localisation/format-with-icu/#what-the-compiler-checks) | A message template's ICU placeholder syntax is invalid — unbalanced arm braces, an unknown format keyword, `#` outside a plural arm, a missing mandatory `other` arm, or an explicitly out-of-scope construct (`selectordinal`, `offset:`/`=N`, a CLDR skeleton). |  | — |
 | [`bynk.messages.missing_locale_dependency`](/book/guides/localisation/declare-a-message-bundle/#the-smallest-bundle) | A commons declaring `messages` doesn't `uses bynk.locale` and/or `uses bynk.locale.types`, which its generated `render` and the types its signature names need. |  | — |
 | [`bynk.messages.missing_reference`](/book/guides/localisation/declare-a-message-bundle/#the-smallest-bundle) | A message bundle has no `@reference` block. |  | — |
-| `bynk.messages.multiple_reference` | A message bundle has more than one `@reference` block. |  | — |
+| [`bynk.messages.multiple_reference`](/book/guides/localisation/declare-a-message-bundle/#the-smallest-bundle) | A message bundle has more than one `@reference` block. |  | — |
 | [`bynk.messages.outside_commons`](/book/guides/localisation/declare-a-message-bundle/#the-smallest-bundle) | A `messages` declaration appears outside a commons. |  | — |
 | [`bynk.messages.placeholder_mismatch`](/book/guides/localisation/declare-a-message-bundle/#adding-a-locale) | A locale's template for a code uses a different set of `{name}` placeholders than the reference locale's. |  | — |
 
@@ -363,7 +363,7 @@ There are **823** codes in total.
 | `bynk.adapter.include_outside` | An adapter `binding … includes [ … ]` path is absolute or climbs out of the adapter's directory with `..`. | [`binding_decl`](/book/reference/grammar/#rule-binding_decl) | — |
 | [`bynk.adapter.no_binding`](/book/reference/adapters/#anatomy) | An `adapter` declares an external provider but no `binding` module to supply it. | [`adapter_decl`](/book/reference/grammar/#rule-adapter_decl) | — |
 | `bynk.adapter.provider_has_body` | A provider inside an `adapter` has a Bynk body; adapter providers must be external. | [`provider_decl`](/book/reference/grammar/#rule-provider_decl) | — |
-| `bynk.cell.invalid_target` | A `:=` write targets something that is not a `store Cell` field. |  | — |
+| [`bynk.cell.invalid_target`](/book/reference/agents/#reading-and-writing-state) | A `:=` write targets something that is not a `store Cell` field. |  | — |
 | [`bynk.cell.self_reference`](/book/reference/agents/#reading-and-writing-state) | A `:=` right-hand side reads the cell being written (a read-modify-write); use `.update`. |  | — |
 | `bynk.codegen.tsc_failed` | `tsc` rejected the TypeScript the compiler generated for a program that passed the checker. This is a bug in the Bynk compiler, not in the program: the diagnostic points at the Bynk code the failing generated line came from, with the TypeScript error attached (#3068). |  | — |
 | `bynk.d1.migration_invalid` | A `D1` migration does not apply to an empty in-memory SQLite, so the binding's literal SQL is not checked against its schema (warning). |  | Warning |
@@ -376,7 +376,7 @@ There are **823** codes in total.
 | `bynk.dependency.path_outside_root` | A path dependency declared by a dependency resolves outside the workspace; a dependency's own path dependencies are honoured only between members of one workspace. |  | — |
 | `bynk.deploy.contract_skew` | A worker was compiled against a contract its live dependencies no longer provide, or no longer provides the contract its live callers were compiled against, so `bynk deploy --context` refuses to ship it. |  | — |
 | `bynk.deploy.foreign_contract_skew` | A build breaks the contract a declared foreign caller's client was generated at, as pinned in `bynk.foreign.toml`, so `bynk deploy` refuses to ship it. |  | — |
-| `bynk.duration.literal_overflow` | A `Duration` literal (`<int>.<unit>`) exceeds the representable millisecond range. |  | — |
+| [`bynk.duration.literal_overflow`](/book/reference/types/#duration) | A `Duration` literal (`<int>.<unit>`) exceeds the representable millisecond range. |  | — |
 | [`bynk.email.bad_params`](/book/reference/inbound-email/#handler-form) | An email `on message` handler does not take exactly one `InboundEmail` parameter. |  | — |
 | [`bynk.email.duplicate_address`](/book/reference/inbound-email/#addresses) | Two `from email` services claim the same recipient address. |  | — |
 | [`bynk.email.duplicate_handler`](/book/reference/inbound-email/#handler-form) | A `from email` service declares more than one `on message` handler; it has exactly one. |  | — |
@@ -454,25 +454,25 @@ There are **823** codes in total.
 | [`bynk.invariant.duplicate_name`](/book/reference/agent-invariants/#the-predicate-surface) | An agent declares two invariants with the same name. |  | — |
 | [`bynk.invariant.impure_predicate`](/book/reference/agent-invariants/#the-predicate-surface) | An invariant predicate uses an effectful or test-only construct. |  | — |
 | [`bynk.invariant.not_bool`](/book/reference/agent-invariants/#the-predicate-surface) | An invariant predicate does not have type `Bool`. |  | — |
-| `bynk.json.encode_plain_generic` | `Json.encodePlain` is given a value whose type mentions a type parameter. A generic value encodes through its `Codable` witness, which always writes `Option` in the tagged form, so plain encoding is available only at a concrete type. |  | — |
+| [`bynk.json.encode_plain_generic`](/book/reference/types/#plain-json) | `Json.encodePlain` is given a value whose type mentions a type parameter. A generic value encodes through its `Codable` witness, which always writes `Option` in the tagged form, so plain encoding is available only at a concrete type. |  | — |
 | [`bynk.json.nested_option_plain`](/book/reference/types/#plain-json) | A plain-JSON route's response type, or the argument of `Json.encodePlain`, contains an `Option[U]` whose payload `U` can itself encode as `null` (`Option[T]` or `()`), so `Some(U)` and `None` would both be written `null`. |  | — |
-| `bynk.lambda.unannotated_param` | A lambda parameter has no type annotation in a position where no function type is expected to infer it from. | [`lambda_expr`](/book/reference/grammar/#rule-lambda_expr) | — |
+| [`bynk.lambda.unannotated_param`](/book/spec/static-semantics/) | A lambda parameter has no type annotation in a position where no function type is expected to infer it from. | [`lambda_expr`](/book/reference/grammar/#rule-lambda_expr) | — |
 | `bynk.list.deprecated_function` | A `bynk.list` free function (`map`/`filter`/`find`/`any`/`all`) is deprecated in favour of the `List` method form (warning; auto-fixable). |  | Warning |
 | `bynk.locale.multiple_message_bundles` | A context consumes `Locale` but its direct `uses` reaches two or more message-bundle commons — there is no single bundle to negotiate against. |  | — |
-| `bynk.namespace.reserved` | A user unit is named `bynk` or `bynk.*`; the `bynk` root is reserved for the toolchain. |  | — |
-| `bynk.package.alias_shadows_unit` | A dependency alias in `[dependencies]` is also the first segment of one of the project's own units, so `<alias>.…` would be ambiguous. |  | — |
+| [`bynk.namespace.reserved`](/book/spec/static-semantics/) | A user unit is named `bynk` or `bynk.*`; the `bynk` root is reserved for the toolchain. |  | — |
+| [`bynk.package.alias_shadows_unit`](/book/guides/projects-build-and-deployment/share-code-between-projects/#what-the-checks-catch) | A dependency alias in `[dependencies]` is also the first segment of one of the project's own units, so `<alias>.…` would be ambiguous. |  | — |
 | `bynk.package.checksum_mismatch` | A git dependency's store entry, or a freshly fetched commit, doesn't hash to the checksum `bynk.lock` records; `bynk` refuses to build it. |  | — |
 | `bynk.package.dependency_cycle` | The package graph has a cycle: a dependency depends, directly or not, on itself or on the project. |  | — |
-| `bynk.package.dependency_not_found` | A path dependency's directory has no readable `bynk.toml`, its `bynk.toml` is invalid, or it has no `[package]`. |  | — |
-| `bynk.package.dev_dependency_in_source` | A commons, context or adapter reaches a `[dev-dependencies]` alias, which only a suite may use. |  | — |
+| [`bynk.package.dependency_not_found`](/book/guides/projects-build-and-deployment/share-code-between-projects/#depend-on-it) | A path dependency's directory has no readable `bynk.toml`, its `bynk.toml` is invalid, or it has no `[package]`. |  | — |
+| [`bynk.package.dev_dependency_in_source`](/book/guides/projects-build-and-deployment/share-code-between-projects/#dependencies-only-tests-use) | A commons, context or adapter reaches a `[dev-dependencies]` alias, which only a suite may use. |  | — |
 | `bynk.package.duplicate_source` | One package is reached from two different directories; a build holds one copy of each package. |  | — |
 | `bynk.package.git_failed` | `git` couldn't clone, fetch or check out a git dependency, or the revision it names doesn't exist. |  | — |
 | `bynk.package.lock_invalid` | `bynk.lock` can't be read: it isn't valid TOML, has no `version`, is a version this toolchain doesn't read, or locks a package to something that isn't a commit. |  | — |
 | `bynk.package.lock_out_of_date` | `--locked` was given, and resolving the manifests would change `bynk.lock`. |  | — |
-| `bynk.package.name_mismatch` | A path dependency's `package` names a different package than the directory's `[package] name`. |  | — |
+| [`bynk.package.name_mismatch`](/book/guides/projects-build-and-deployment/share-code-between-projects/#what-the-checks-catch) | A path dependency's `package` names a different package than the directory's `[package] name`. |  | — |
 | `bynk.package.not_fetched` | A git dependency has no `bynk.lock` entry, or its store entry is missing; `bynk fetch` fetches it (refused under `--offline`). |  | — |
-| `bynk.package.unit_not_exported` | A `uses` or `consumes` reaches a unit its dependency declares but doesn't list in `[package] exports`. |  | — |
-| `bynk.package.unknown_unit` | A `uses` or `consumes` names, through a dependency alias, a unit the dependency doesn't declare. |  | — |
+| [`bynk.package.unit_not_exported`](/book/guides/projects-build-and-deployment/share-code-between-projects/#what-the-checks-catch) | A `uses` or `consumes` reaches a unit its dependency declares but doesn't list in `[package] exports`. |  | — |
+| [`bynk.package.unknown_unit`](/book/guides/projects-build-and-deployment/share-code-between-projects/#what-the-checks-catch) | A `uses` or `consumes` names, through a dependency alias, a unit the dependency doesn't declare. |  | — |
 | `bynk.package.unsafe_source` | A git dependency's URL or revision looks like a command-line option, or uses a transport other than `https`, `ssh` (or `file`, from the project's own manifests). |  | — |
 | `bynk.package.unsupported_in_dependency` | A dependency declares an `asset` or an `embed`, which would resolve against the consuming project's `assets/` or `embeds/`; a per-package namespace for either isn't designed yet. |  | — |
 | `bynk.package.version_conflict` | One package is reached at two different git revisions (or from git and a path); a build, or a workspace, holds one copy of each package. |  | — |
@@ -496,9 +496,9 @@ There are **823** codes in total.
 | `bynk.registry.source_mismatch` | `bynk.lock` locks a package to one registry, but its organisation now routes to another; a misrouted organisation fails rather than resolving a same-named package elsewhere. |  | — |
 | `bynk.registry.unavailable` | No registry serves a package: its organisation isn't listed by any `[registries]` entry (the first-party registry isn't live yet), the registry has no `config.json`, or it has no such package or archive. |  | — |
 | [`bynk.registry.withdrawn`](/book/guides/projects-build-and-deployment/run-a-private-registry/#withdraw-a-version) | `bynk.lock` locks a registry version that its registry withdrew (a takedown: yanked, and its archive deleted), and its tree isn't in the store. |  | — |
-| `bynk.requires.conflicting_range` | Two adapter `binding … requires { … }` entries give different version ranges for one npm package. | [`binding_decl`](/book/reference/grammar/#rule-binding_decl) | — |
+| [`bynk.requires.conflicting_range`](/book/guides/projects-build-and-deployment/share-code-between-projects/#a-dependency-that-wraps-an-npm-library) | Two adapter `binding … requires { … }` entries give different version ranges for one npm package. | [`binding_decl`](/book/reference/grammar/#rule-binding_decl) | — |
 | [`bynk.requires.unapproved`](/book/guides/projects-build-and-deployment/share-code-between-projects/#approve-a-dependencys-npm-packages) | A reached adapter of a git or registry dependency requires an npm package, at a range, that the project hasn't approved in `bynk.lock`; review it and run `bynk approve <package>`. | [`binding_decl`](/book/reference/grammar/#rule-binding_decl) | — |
-| `bynk.requires.unpinned_dependency` | An adapter `binding … requires { … }` entry has an unpinned version range. | [`binding_decl`](/book/reference/grammar/#rule-binding_decl) | — |
+| [`bynk.requires.unpinned_dependency`](/book/reference/adapters/#anatomy) | An adapter `binding … requires { … }` entry has an unpinned version range. | [`binding_decl`](/book/reference/grammar/#rule-binding_decl) | — |
 | `bynk.secrets.computed_name` | A `bynk.Secrets` read names its secret with a computed expression rather than a literal, so `bynk deploy` cannot plan it (warning). |  | Warning |
 | [`bynk.send.in_agent_handler`](/book/spec/static-semantics/) | A `~>` send was used in an agent handler, which has no execution context to keep a fire-and-forget send alive. | [`effect_send_stmt`](/book/reference/grammar/#rule-effect_send_stmt) | — |
 | [`bynk.send.in_pure_context`](/book/reference/capabilities/#capabilities-in-functions) | A `~>` send was used in a pure (non-effectful) context. | [`effect_send_stmt`](/book/reference/grammar/#rule-effect_send_stmt) | — |
@@ -729,7 +729,7 @@ There are **823** codes in total.
 |---|---|---|---|
 | [`bynk.record_spread.field_type_mismatch`](/book/reference/types/#record-types) | A record-spread override has the wrong type for the field. | [`record_spread`](/book/reference/grammar/#rule-record_spread) | — |
 | [`bynk.record_spread.non_record_base`](/book/reference/types/#record-types) | The base of a record spread is not a record. | [`record_spread`](/book/reference/grammar/#rule-record_spread) | — |
-| `bynk.record_spread.type_mismatch` | A record spread's base is a different record type. | [`record_spread`](/book/reference/grammar/#rule-record_spread) | — |
+| [`bynk.record_spread.type_mismatch`](/book/reference/types/#record-types) | A record spread's base is a different record type. | [`record_spread`](/book/reference/grammar/#rule-record_spread) | — |
 | [`bynk.record_spread.unknown_field`](/book/reference/types/#record-types) | A record spread overrides a field the record does not have. | [`record_spread`](/book/reference/grammar/#rule-record_spread) | — |
 
 ## Refinement
@@ -747,7 +747,7 @@ There are **823** codes in total.
 | [`bynk.resolve.bad_const_initialiser`](/book/reference/constants/#what-an-initialiser-may-be) | A `const` initialiser is not a static value of the declared type: only literals, constructors over static values, `T.unsafe(lit)`, `List.empty()`/`Map.empty()`/`Set.empty()`, `Duration` literals and references to other constants are allowed. | [`const_decl`](/book/reference/grammar/#rule-const_decl) | — |
 | [`bynk.resolve.const_cycle`](/book/reference/constants/#what-an-initialiser-may-be) | Constants refer to each other in a cycle, so none of them has a value. | [`const_decl`](/book/reference/grammar/#rule-const_decl) | — |
 | [`bynk.resolve.const_name_case`](/book/reference/constants/#declaring-a-constant) | A constant's name is not upper-camel case (`MaxRetries`, not `maxRetries`). | [`const_decl`](/book/reference/grammar/#rule-const_decl) | — |
-| `bynk.resolve.const_outside_context_or_commons` | A `const` declaration appears outside a context or commons. | [`const_decl`](/book/reference/grammar/#rule-const_decl) | — |
+| [`bynk.resolve.const_outside_context_or_commons`](/book/reference/constants/#declaring-a-constant) | A `const` declaration appears outside a context or commons. | [`const_decl`](/book/reference/grammar/#rule-const_decl) | — |
 | `bynk.resolve.duplicate_actor` | Two actors share a name. |  | — |
 | `bynk.resolve.duplicate_agent` | Two agents share a name. | [`agent_decl`](/book/reference/grammar/#rule-agent_decl) | — |
 | `bynk.resolve.duplicate_capability` | Two capabilities share a name. | [`capability_decl`](/book/reference/grammar/#rule-capability_decl) | — |
@@ -760,7 +760,7 @@ There are **823** codes in total.
 | [`bynk.resolve.duplicate_method`](/book/spec/static-semantics/) | Two methods share a name. | [`fn_decl`](/book/reference/grammar/#rule-fn_decl) | — |
 | [`bynk.resolve.duplicate_param`](/book/spec/static-semantics/) | A parameter name is repeated. | [`param`](/book/reference/grammar/#rule-param) | — |
 | `bynk.resolve.duplicate_provider` | A capability is provided more than once. | [`provider_decl`](/book/reference/grammar/#rule-provider_decl) | — |
-| `bynk.resolve.duplicate_service` | Two services share a name. | [`service_decl`](/book/reference/grammar/#rule-service_decl) | — |
+| [`bynk.resolve.duplicate_service`](/book/spec/static-semantics/) | Two services share a name. | [`service_decl`](/book/reference/grammar/#rule-service_decl) | — |
 | [`bynk.resolve.duplicate_type`](/book/spec/static-semantics/) | Two types share a name. | [`type_decl`](/book/reference/grammar/#rule-type_decl) | — |
 | [`bynk.resolve.duplicate_variant`](/book/reference/types/#sum-types) | A sum type declares a variant twice. | [`sum_type`](/book/reference/grammar/#rule-sum_type) | — |
 | [`bynk.resolve.fn_without_call`](/book/spec/static-semantics/) | A function was referenced without being called. |  | — |

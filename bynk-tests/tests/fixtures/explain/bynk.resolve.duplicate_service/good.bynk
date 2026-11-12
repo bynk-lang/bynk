@@ -1,0 +1,13 @@
+context shop
+
+service orders {
+    on call() -> Effect[Int] {
+        Effect.pure(1)
+    }
+}
+
+service refunds {
+    on call() -> Effect[Int] {
+        Effect.pure(2)
+    }
+}

@@ -829,6 +829,13 @@ pub const EXPLANATIONS: &[Explain] = &[
         anchor: "derived-capabilities",
     },
     Explain {
+        code: "bynk.cell.invalid_target",
+        blurb: "A `:=` replaces the value of a `Cell`, the one store kind that holds a single value. A `Set`, `Map`, `Log` or `Cache` has no one value to replace; each changes through its own operations (`add`, `put`, `append`), and a name that is not a `store` field of the agent has nothing to write. Use the operation the field's kind offers, or declare the field `Cell[T]` if a single replaceable value is what you want. The same check covers a `migrate from` step that assigns a field.",
+        example: "store ids: Set[Int]\n\nids := n               // ✗ a `Set` has no single value to replace\n\nlet _ <- ids.add(n)    // ✓ the operation the kind offers",
+        page: "/book/reference/agents",
+        anchor: "reading-and-writing-state",
+    },
+    Explain {
         code: "bynk.cell.self_reference",
         blurb: "A `:=` writes a `Cell` store field, and its right-hand side may not read the cell \
                 it is writing. Computing the new value from the old one is a hidden \
@@ -1168,6 +1175,13 @@ pub const EXPLANATIONS: &[Explain] = &[
         example: "let _ <- Orders.all(\"SELECT id FROM orders WHERE id = ?1 AND total > ?2\", [Text(id)])                 // ✗ two parameters, one value\n\nlet _ <- Orders.all(\"SELECT id FROM orders WHERE id = ?1 AND total > ?2\", [Text(id), Integer(100)])    // ✓",
         page: "/book/reference/bynk-capabilities",
         anchor: "sql-checked-against-the-migrations",
+    },
+    Explain {
+        code: "bynk.duration.literal_overflow",
+        blurb: "`5.minutes` is a `Duration`, which the compiler stores as a whole number of milliseconds, so it multiplies the count by the unit when it reads the literal. A count whose total does not fit in a 64-bit integer is refused rather than wrapped into a wrong or negative span. No real timeout or interval is that large: write a smaller count, or a smaller unit.",
+        example: "fn forever() -> Duration { 9007199254740991.days }   // ✗ overflows the millisecond range\n\nfn forever() -> Duration { 365.days }                // ✓",
+        page: "/book/reference/types",
+        anchor: "duration",
     },
     Explain {
         code: "bynk.effect.bind_in_pure_context",
@@ -1769,6 +1783,13 @@ pub const EXPLANATIONS: &[Explain] = &[
         anchor: "",
     },
     Explain {
+        code: "bynk.given.fn_outside_context",
+        blurb: "`given` lets a function use capabilities, and only a context declares which capabilities it consumes. A commons is shared by every context that uses it, and those may consume different capabilities, so a function in a commons or a suite cannot declare `given`. Take the operation as a parameter instead, and pass `(m) => Logger.error(m)` from the handler, or move the function into the context that consumes the capability. A method cannot declare `given` anywhere: that is `bynk.given.fn_unsupported`.",
+        example: "fn warn(what: String) -> Effect[()] given Logger { … }   // ✗ a commons function has no `given`\n\nfn warn(log: (String) -> Effect[()], what: String) -> Effect[()] { … }   // ✓ the caller passes the operation in",
+        page: "/book/reference/capabilities",
+        anchor: "capabilities-in-functions",
+    },
+    Explain {
         code: "bynk.given.fn_unsupported",
         blurb: "Only a free function in a context that returns `Effect[T]` may declare `given`. A capability operation is an effect, so a function that reaches one has to say so in its return type, and a method has no place to carry the capabilities. `Events` is refused too: `Events.emit` buffers until its handler commits, so emit in the handler, or pass the event back to the caller. Return `Effect[T]` and make it a free function, or take the operation as a function-value parameter. A `given` in a commons is `bynk.given.fn_outside_context`.",
         example: "fn size(sku: String) -> Int given Logger {   // ✗ it must return an `Effect`\n    3\n}\n\nfn size(sku: String) -> Effect[Int] given Logger {   // ✓\n    Effect.pure(3)\n}",
@@ -2336,11 +2357,25 @@ pub const EXPLANATIONS: &[Explain] = &[
         anchor: "the-predicate-surface",
     },
     Explain {
+        code: "bynk.json.encode_plain_generic",
+        blurb: "`Json.encodePlain` writes an `Option` as its value or `null`, which it can do only when it knows the type. A generic function is compiled once for every `T`, and encodes through its `Codable` witness, which always writes `Option` in the tagged form `{\"kind\":\"Some\",…}`. Encode at a concrete type, or use `Json.encode` if the tagged form will do. A concrete type that is ambiguous in plain form is `bynk.json.nested_option_plain`.",
+        example: "fn plain[T: Codable](v: T) -> String { Json.encodePlain(v) }   // ✗ `T` could be an `Option`\n\nfn plain(v: Option[Int]) -> String { Json.encodePlain(v) }     // ✓ a concrete type",
+        page: "/book/reference/types",
+        anchor: "plain-json",
+    },
+    Explain {
         code: "bynk.json.nested_option_plain",
         blurb: "Plain JSON writes `Some(v)` as `v` and `None` as `null`, so it can only be read back if `v` is never itself `null`. In an `Option[Option[T]]` or an `Option[()]`, `Some(None)` and `None` (or `Some(())` and `None`) would both be written `null`, and the decoder could not tell them apart. The compiler refuses the type wherever plain encoding is asked for: in the response type of a route whose `json { options: plain }` or `@json(options: plain)` applies, or in the argument of `Json.encodePlain`, through records, sums, containers and generic arguments alike. The tagged form, which `Json.encode` and a route's default use, writes `Option` as `{\"kind\":\"Some\",\"value\":…}` and has no such ambiguity. Either flatten the type, model the distinction as a sum type, or keep that route tagged.",
         example: "type Row = { id: String, note: Option[Option[String]] }\n\non GET(\"/rows\") () -> Effect[HttpResult[List[Row]]] by v: Visitor { … }   // ✗ `Some(None)` and `None` both write `null`\n\ntype Row = { id: String, note: Option[String] }   // ✓",
         page: "/book/reference/types",
         anchor: "plain-json",
+    },
+    Explain {
+        code: "bynk.lambda.unannotated_param",
+        blurb: "A lambda's parameter types come from where it is used: passed to `map` over a `List[Int]`, `(x) => x + 1` takes `x: Int`. A lambda standing alone, bound by a `let` for instance, has no such context, and the compiler asks for the type rather than guess it from the body. Annotate the parameter, or pass the lambda directly where a function type is expected.",
+        example: "let f = (x) => x + x          // ✗ nothing says what `x` is\n\nlet f = (x: Int) => x + x     // ✓ annotated",
+        page: "/book/spec/static-semantics",
+        anchor: "",
     },
     Explain {
         code: "bynk.lex.bad_escape",
@@ -2588,6 +2623,13 @@ pub const EXPLANATIONS: &[Explain] = &[
         anchor: "the-smallest-bundle",
     },
     Explain {
+        code: "bynk.messages.multiple_reference",
+        blurb: "A message bundle is checked against one reference locale, which is also the fallback when a requested locale is not declared. With two blocks marked `@reference` there are two answers, so exactly one per commons may carry the mark. Keep `@reference` on the locale your strings are written in first and take it off the others. No block marked at all is `bynk.messages.missing_reference`.",
+        example: "messages \"en\" @reference { … }\nmessages \"fr\" @reference { … }   // ✗ a second reference\n\nmessages \"fr\" { … }              // ✓",
+        page: "/book/guides/localisation/declare-a-message-bundle",
+        anchor: "the-smallest-bundle",
+    },
+    Explain {
         code: "bynk.messages.outside_commons",
         blurb: "A `messages` block is pure, stateless data, which is what a `commons` holds. A \
                 context carries services and state and an adapter wraps foreign code, and neither \
@@ -2625,6 +2667,13 @@ pub const EXPLANATIONS: &[Explain] = &[
         anchor: "adding-a-locale",
     },
     Explain {
+        code: "bynk.namespace.reserved",
+        blurb: "The `bynk` root belongs to the toolchain: its own libraries, such as `bynk.list`, and the platform adapters live there and are added to a build when a unit consumes them. A unit of yours named `bynk` or `bynk.<anything>` could collide with one of them, so the name is refused for every kind of unit. Rename the unit so its first segment is not `bynk`, and move its file to match.",
+        example: "// bynk/foo.bynk\ncommons bynk.foo    // ✗ `bynk` is the toolchain's namespace\n\n// shop/foo.bynk\ncommons shop.foo    // ✓",
+        page: "/book/spec/static-semantics",
+        anchor: "",
+    },
+    Explain {
         code: "bynk.observe.unknown_op",
         blurb: "`expect Cap.op called` checks the calls recorded for one \
                 operation of a capability, so `op` must be declared by that \
@@ -2639,6 +2688,48 @@ pub const EXPLANATIONS: &[Explain] = &[
                   expect Logger.log called     // ✓",
         page: "/book/reference/testing",
         anchor: "observation",
+    },
+    Explain {
+        code: "bynk.package.alias_shadows_unit",
+        blurb: "The key of a `[dependencies]` entry is the alias a unit reaches the package by, as in `lib.notify`. If one of the project's own units also starts with that word, `shop.cart` for an alias `shop`, then `shop.…` could mean the package or the unit, and the compiler will not choose. Rename the alias, which is the key, or rename the unit.",
+        example: "[dependencies]\nshop = { package = \"acme/lib\", path = \"pkg/lib\" }   // ✗ the project has a unit `shop`\n\nlib = { package = \"acme/lib\", path = \"pkg/lib\" }    // ✓ an alias no unit starts with",
+        page: "/book/guides/projects-build-and-deployment/share-code-between-projects",
+        anchor: "what-the-checks-catch",
+    },
+    Explain {
+        code: "bynk.package.dependency_not_found",
+        blurb: "A path dependency points at a directory that is a package: it has its own `bynk.toml` with a `[package]` table. The path is read from the manifest that names it. The entry is refused when there is no readable `bynk.toml` there, when it is not valid, or when it has no `[package]`. Correct the path, or add the manifest to the package.",
+        example: "[dependencies]\nlib = { package = \"acme/lib\", path = \"pkg/libs\" }   // ✗ no `bynk.toml` at `pkg/libs`\n\nlib = { package = \"acme/lib\", path = \"pkg/lib\" }    // ✓ the package's directory",
+        page: "/book/guides/projects-build-and-deployment/share-code-between-projects",
+        anchor: "depend-on-it",
+    },
+    Explain {
+        code: "bynk.package.dev_dependency_in_source",
+        blurb: "A `[dev-dependencies]` package is there for the project's suites, and a deployable build leaves suites out, so a package that only suites need is never compiled into it. A context or commons that reached one would break that build, so only a suite may. If the source needs the package, move its entry to `[dependencies]`; otherwise keep the use in a suite.",
+        example: "// bynk.toml\n[dev-dependencies]\nlib = { package = \"acme/lib\", path = \"pkg/lib\" }\n\n// shop.bynk\nuses lib.notify      // ✗ a `[dev-dependencies]` alias is for suites\n\n// bynk.toml\n[dependencies]       // ✓ the entry moved here\nlib = { package = \"acme/lib\", path = \"pkg/lib\" }",
+        page: "/book/guides/projects-build-and-deployment/share-code-between-projects",
+        anchor: "dependencies-only-tests-use",
+    },
+    Explain {
+        code: "bynk.package.name_mismatch",
+        blurb: "A path dependency gives the package's name twice: `package = \"acme/lib\"` in your `[dependencies]`, and `name` under `[package]` in the manifest at that path. They must agree, so that what you asked for is what you get. A mismatch usually means the path is the wrong directory, or the package was renamed. Correct whichever is wrong.",
+        example: "[dependencies]\nmoney = { package = \"acme/money\", path = \"pkg/lib\" }   // ✗ `pkg/lib` is the package `acme/lib`\n\nmoney = { package = \"acme/lib\", path = \"pkg/lib\" }     // ✓ the name it declares",
+        page: "/book/guides/projects-build-and-deployment/share-code-between-projects",
+        anchor: "what-the-checks-catch",
+    },
+    Explain {
+        code: "bynk.package.unit_not_exported",
+        blurb: "A package lists in `exports` the units it offers to its users, and keeps the rest free to change, as a library keeps its internals. A unit that exists but is not listed is refused, so a consumer cannot come to rely on it. Use one of the exported units, or ask the package to export it. Leaving `exports` out shares every commons and adapter. A name the package does not declare at all is `bynk.package.unknown_unit`.",
+        example: "exports = [\"notify\"]      // in the package's `bynk.toml`\n\nuses lib.internal     // ✗ not in `exports`\n\nuses lib.notify       // ✓ an exported unit",
+        page: "/book/guides/projects-build-and-deployment/share-code-between-projects",
+        anchor: "what-the-checks-catch",
+    },
+    Explain {
+        code: "bynk.package.unknown_unit",
+        blurb: "A dependency is reached as `alias.unit`, where the unit is a commons or adapter the package declares. A name after the alias that matches none of them is refused, most often because it is misspelt. The diagnostic's note lists the units the package shares. A unit that exists but is not exported is `bynk.package.unit_not_exported`.",
+        example: "commons notify          // in the package `acme/lib`\n\nuses lib.notifiy      // ✗ the package declares no `notifiy`\n\nuses lib.notify       // ✓",
+        page: "/book/guides/projects-build-and-deployment/share-code-between-projects",
+        anchor: "what-the-checks-catch",
     },
     Explain {
         code: "bynk.par.invalid_statement",
@@ -3471,6 +3562,13 @@ pub const EXPLANATIONS: &[Explain] = &[
         anchor: "record-types",
     },
     Explain {
+        code: "bynk.record_spread.type_mismatch",
+        blurb: "A spread, `T { ...base, x: 1 }`, copies the fields of `base` that you do not name, so the result has the base's own type. It cannot convert one record type to another, even one with the same fields, and a `T` that names a different type from the base's is refused. Write the base's type, or, to build a different record, give every field: `Point { x: s.x, y: s.y }`. A base that is not a record is `bynk.record_spread.non_record_base`.",
+        example: "type Point = { x: Int, y: Int }\ntype Size = { x: Int, y: Int }\n\nfn widen(s: Size) -> Size { Point { ...s, x: 1 } }   // ✗ `s` is a `Size`, not a `Point`\n\nfn widen(s: Size) -> Size { Size { ...s, x: 1 } }    // ✓ the base's own type",
+        page: "/book/reference/types",
+        anchor: "record-types",
+    },
+    Explain {
         code: "bynk.record_spread.unknown_field",
         blurb: "A record spread, `T { ...base, field: value }`, copies every field of `base` and replaces the ones you list. Each listed field has to be one the record declares: a misspelt or invented name would otherwise be dropped silently, or build a value that is not a `T`. Check the field name against the type's declaration. To add a field, declare it on the type first.",
         example: "type Counter = { n: Int }\n\nfn bump(c: Counter) -> Counter {\n    Counter { ...c, missing: 0 }   // ✗ `Counter` has no field `missing`\n}\n\nfn bump(c: Counter) -> Counter {\n    Counter { ...c, n: 0 }   // ✓ an existing field\n}",
@@ -3510,6 +3608,13 @@ pub const EXPLANATIONS: &[Explain] = &[
         anchor: "withdraw-a-version",
     },
     Explain {
+        code: "bynk.requires.conflicting_range",
+        blurb: "A project installs one version of each npm package, so every adapter that `requires` a package must give the same range for it. Two adapters that ask for `jose` at `^4` and `^5` leave the build with no version that satisfies both, so the second is refused and names the first. Give both the same range. A package the toolchain itself pins, such as the one its own bindings use, must be required at that exact version.",
+        example: "// auth.bynk\nbinding \"./auth.binding.ts\" requires { \"jose\": \"^5\" }\n\n// tokens.bynk\nbinding \"./tokens.binding.ts\" requires { \"jose\": \"^4\" }   // ✗ `auth` already requires `^5`\n\nbinding \"./tokens.binding.ts\" requires { \"jose\": \"^5\" }   // ✓ one range",
+        page: "/book/guides/projects-build-and-deployment/share-code-between-projects",
+        anchor: "a-dependency-that-wraps-an-npm-library",
+    },
+    Explain {
         code: "bynk.requires.unapproved",
         blurb: "An adapter in a git or registry dependency requires an npm package \
                 your project hasn't approved. A dependency's adapters bring their \
@@ -3527,6 +3632,13 @@ pub const EXPLANATIONS: &[Explain] = &[
                   required-by = [\"acme/money:tokens\"]\napproved = true",
         page: "/book/guides/projects-build-and-deployment/share-code-between-projects",
         anchor: "approve-a-dependencys-npm-packages",
+    },
+    Explain {
+        code: "bynk.requires.unpinned_dependency",
+        blurb: "An adapter's `requires` states the npm versions its binding is written against, and the build installs exactly what it says. `*`, `x`, `latest` and a range with no digit in it accept whatever version is newest on the day, so two builds of the same source can differ. Name a range that has a version in it, such as `^5.2.0`.",
+        example: "binding \"./tokens.binding.ts\" requires { \"jose\": \"*\" }        // ✗ any version at all\n\nbinding \"./tokens.binding.ts\" requires { \"jose\": \"^5.2.0\" }   // ✓ a pinned range",
+        page: "/book/reference/adapters",
+        anchor: "anatomy",
     },
     Explain {
         code: "bynk.resolve.ambiguous_variant",
@@ -3570,6 +3682,13 @@ pub const EXPLANATIONS: &[Explain] = &[
         anchor: "declaring-a-constant",
     },
     Explain {
+        code: "bynk.resolve.const_outside_context_or_commons",
+        blurb: "An adapter is the program's boundary with the host: it declares capabilities and the providers a binding supplies, not values for the program to share, so a `const` is refused there. Declare the constant in a commons, which a unit reads by `uses`, or in the context that needs it, and move it out of the adapter.",
+        example: "// tokens.bynk\nconst Lifetime: Int = 3600     // ✗ an adapter declares no constants\n\n// limits.bynk\ncommons limits\nconst Lifetime: Int = 3600     // ✓ in a commons",
+        page: "/book/reference/constants",
+        anchor: "declaring-a-constant",
+    },
+    Explain {
         code: "bynk.resolve.duplicate_const",
         blurb: "A constant is a value that every use of its name reads, so a name is declared once in a unit. With two `Limit`s, a use would have two values to read. Rename one, or delete the repeat. A constant whose name is a function's, a type's or another declaration's in the unit is `bynk.resolve.name_conflict`.",
         example: "const Limit: Int = 1\nconst Limit: Int = 2   // ✗ `Limit` is already declared\n\nconst Cap: Int = 2     // ✓ a different name",
@@ -3601,6 +3720,13 @@ pub const EXPLANATIONS: &[Explain] = &[
         code: "bynk.resolve.duplicate_param",
         blurb: "A function's parameters are read by name in its body, and a call passes them in order, so each name may appear once in the list. A repeat is usually two different parameters meant, and the body could see only one of them. Rename one of the two, or remove it.",
         example: "fn area(w: Int, w: Int) -> Int { w * w }   // ✗ `w` declared twice\n\nfn area(w: Int, h: Int) -> Int { w * h }   // ✓ distinct names",
+        page: "/book/spec/static-semantics",
+        anchor: "",
+    },
+    Explain {
+        code: "bynk.resolve.duplicate_service",
+        blurb: "A service is called by its name, and the name is one of the unit's top-level names, so two services of one name leave a call with nothing to choose between. Rename one, or delete the repeat. The same holds for the other named declarations: `bynk.resolve.duplicate_agent`, `bynk.resolve.duplicate_actor`, `bynk.resolve.duplicate_capability` and `bynk.resolve.duplicate_provider`, and for the entries of a message bundle, `bynk.resolve.duplicate_message_code` and `bynk.resolve.duplicate_message_locale`.",
+        example: "service orders { … }\nservice orders { … }     // ✗ `orders` is already declared\n\nservice refunds { … }    // ✓ a name of its own",
         page: "/book/spec/static-semantics",
         anchor: "",
     },

@@ -1,0 +1,3 @@
+commons demo
+
+fn plain(v: Option[Int]) -> String { Json.encodePlain(v) }

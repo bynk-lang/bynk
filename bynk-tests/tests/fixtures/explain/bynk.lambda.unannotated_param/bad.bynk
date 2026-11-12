@@ -1,0 +1,6 @@
+commons demo
+
+fn twice() -> Int {
+    let f = (x) => x + x
+    5
+}
