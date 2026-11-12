@@ -514,9 +514,7 @@ fn stage_binding_files(
             continue;
         }
         let database = emitter::wrangler::d1_database_name(dashes, &binding.name);
-        for file in
-            bynk_check::d1_migrations::migrations_of(d1_migrations, &database, &binding.name)
-        {
+        for file in bynk_check::d1_migrations::migrations_of(d1_migrations, &database, binding) {
             compiled.push(StagedFile {
                 output_path: PathBuf::from(format!(
                     "workers/{dashes}/{}/{database}/{}",
@@ -2219,8 +2217,8 @@ fn check_unit_files(
         // Filtered to the two variants either reader actually matches on
         // (review of #1202): every other `Callee` variant would otherwise
         // sit retained project-wide, for the rest of the build, to answer
-        // two boolean-ish questions (three since W30: an `Idempotency.claim`
-        // declares the implicit claims database) — a real `String`/`Arc` cost on a large
+        // the questions its readers ask (since W30, whether a body calls
+        // `Idempotency.claim`, which declares the implicit claims database) — a real `String`/`Arc` cost on a large
         // project with nothing reading the rest yet. Widen this filter (or
         // drop it) the moment a future reader needs a different variant.
         unit_callees.extend(program.program().callees.iter().filter_map(|(id, c)| {

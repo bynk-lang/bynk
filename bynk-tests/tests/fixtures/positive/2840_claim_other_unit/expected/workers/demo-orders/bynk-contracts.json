@@ -1,0 +1,10 @@
+{
+  "version": 1,
+  "provides": {
+    "reserve": "96330d4b0f6553a1"
+  },
+  "expects": {},
+  "provides_shapes": {
+    "reserve": "Svc(\"reserve\",Ret(B(\"Bool\")))"
+  }
+}

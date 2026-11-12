@@ -260,12 +260,7 @@ pub(super) fn context_bindings(
     instances.sort_by(|a, b| a.0.cmp(b.0));
     let mut instances: Vec<WorkerBinding> = instances.into_iter().map(|(_, b)| b).collect();
     if uses_claim {
-        instances.push(WorkerBinding {
-            name: bynk_check::d1_migrations::IDEMPOTENCY_BINDING.to_string(),
-            source: BindingSource::D1Database {
-                capability: "Idempotency".to_string(),
-            },
-        });
+        instances.push(bynk_check::worker_bindings::idempotency_binding());
     }
     let singletons: Vec<WorkerBinding> = singletons.iter().map(|c| singleton_binding(c)).collect();
     worker_bindings(

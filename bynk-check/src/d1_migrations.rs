@@ -48,13 +48,26 @@ pub const IDEMPOTENCY_BINDING: &str = "D1_IDEMPOTENCY";
 /// W30 (#2840): the migration files the compiler owns for an implicit database
 /// (the author writes no SQL), by its `binding`; `None` for any other binding.
 /// The claims table holds one row per claimed key and the time it lapses.
-pub fn implicit_migrations(binding: &str) -> Option<Vec<MigrationFile>> {
-    (binding == IDEMPOTENCY_BINDING).then(|| {
+pub fn implicit_migrations(
+    binding: &crate::worker_bindings::WorkerBinding,
+) -> Option<Vec<MigrationFile>> {
+    is_implicit_idempotency(binding).then(|| {
         vec![MigrationFile {
             name: "0001_idempotency_claims.sql".to_string(),
             sql: "CREATE TABLE idempotency_claims (\n  key TEXT PRIMARY KEY NOT NULL,\n  expires_at INTEGER NOT NULL\n);\n\nCREATE INDEX idempotency_claims_expires_at ON idempotency_claims (expires_at);\n".to_string(),
         }]
     })
+}
+
+/// Whether `binding` is a Worker's implicit idempotency database: decided by
+/// its source, not its name, so a project's own `D1` capability named
+/// `Idempotency` (also bound as `D1_IDEMPOTENCY`) keeps its own migrations.
+pub fn is_implicit_idempotency(binding: &crate::worker_bindings::WorkerBinding) -> bool {
+    matches!(
+        &binding.source,
+        crate::worker_bindings::BindingSource::D1Database { capability }
+            if capability == crate::worker_bindings::IMPLICIT_IDEMPOTENCY_CAPABILITY
+    )
 }
 
 /// The migration files of database `database`, bound as `binding`: the
@@ -63,7 +76,7 @@ pub fn implicit_migrations(binding: &str) -> Option<Vec<MigrationFile>> {
 pub fn migrations_of(
     migrations: &D1Migrations,
     database: &str,
-    binding: &str,
+    binding: &crate::worker_bindings::WorkerBinding,
 ) -> Vec<MigrationFile> {
     implicit_migrations(binding)
         .or_else(|| migrations.get(database).cloned())
@@ -384,10 +397,19 @@ mod tests {
             d1_database_name("shop-hooks", IDEMPOTENCY_BINDING),
             "shop-hooks-idempotency"
         );
-        let files = implicit_migrations(IDEMPOTENCY_BINDING).expect("the compiler owns it");
+        let files = implicit_migrations(&crate::worker_bindings::idempotency_binding())
+            .expect("the compiler owns it");
         assert_eq!(files.len(), 1);
         assert!(files[0].sql.contains("CREATE TABLE idempotency_claims"));
-        assert!(implicit_migrations("D1_ORDERS").is_none());
+        // A project's own `capability Idempotency = D1` is bound as `D1_IDEMPOTENCY`
+        // too, but is not the implicit database: it keeps its own migrations.
+        let own = crate::worker_bindings::WorkerBinding {
+            name: IDEMPOTENCY_BINDING.to_string(),
+            source: crate::worker_bindings::BindingSource::D1Database {
+                capability: "Idempotency".to_string(),
+            },
+        };
+        assert!(implicit_migrations(&own).is_none());
     }
 
     /// A project's own database keeps its folder's files; the implicit one
@@ -402,11 +424,42 @@ mod tests {
                 sql: "SELECT 1;".to_string(),
             }],
         );
-        assert_eq!(migrations_of(&folder, "shop-orders", "D1_ORDERS").len(), 1);
-        assert!(migrations_of(&folder, "shop-cart", "D1_CART").is_empty());
+        let derived = |name: &str, capability: &str| crate::worker_bindings::WorkerBinding {
+            name: name.to_string(),
+            source: crate::worker_bindings::BindingSource::D1Database {
+                capability: capability.to_string(),
+            },
+        };
         assert_eq!(
-            migrations_of(&folder, "shop-idempotency", IDEMPOTENCY_BINDING)[0].name,
+            migrations_of(&folder, "shop-orders", &derived("D1_ORDERS", "Orders")).len(),
+            1
+        );
+        assert!(migrations_of(&folder, "shop-cart", &derived("D1_CART", "Cart")).is_empty());
+        assert_eq!(
+            migrations_of(
+                &folder,
+                "shop-idempotency",
+                &crate::worker_bindings::idempotency_binding()
+            )[0]
+            .name,
             "0001_idempotency_claims.sql"
+        );
+        // The project's own database of the same name keeps its folder.
+        folder.insert(
+            "shop-idempotency".to_string(),
+            vec![MigrationFile {
+                name: "0001_mine.sql".to_string(),
+                sql: "SELECT 1;".to_string(),
+            }],
+        );
+        assert_eq!(
+            migrations_of(
+                &folder,
+                "shop-idempotency",
+                &derived(IDEMPOTENCY_BINDING, "Idempotency")
+            )[0]
+            .name,
+            "0001_mine.sql"
         );
     }
 }
