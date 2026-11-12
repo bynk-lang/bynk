@@ -27,6 +27,7 @@ export * from "./mysql.ts";
 export * from "./pglite.ts";
 export * from "./agent.ts";
 export * from "./auth.ts";
+export * from "./session.ts";
 export * from "./connection.ts";
 export * from "./messages.ts";
 export * from "./locale.ts";
