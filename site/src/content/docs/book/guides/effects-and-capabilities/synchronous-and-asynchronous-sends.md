@@ -40,7 +40,7 @@ So Bynk gives you a small grid, and a distinct spelling for each cell:
 `forEach` step:
 
 ```bynk,fragment
-fn notifyAll(reqs: List[Request]) -> Effect[()] {
+fn notifyAll(reqs: List[Request]) -> Effect[()] given Fetch {
   reqs.forEach((r) => Fetch.send(r).detach())
 }
 ```

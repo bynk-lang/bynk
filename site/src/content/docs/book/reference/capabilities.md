@@ -207,11 +207,11 @@ is evaluated), and `detach` hands that running promise to the platform's `waitUn
 after the handler has answered. It never starts anything and never delays one.
 
 ```bynk,ignore
-fn notify(req: Request) -> Effect[()] {
+fn notify(req: Request) -> Effect[()] given Fetch {
   Fetch.send(req).detach()        // an `Err` reply is reported, never lost
 }
 
-fn notifyAll(reqs: List[Request]) -> Effect[()] {
+fn notifyAll(reqs: List[Request]) -> Effect[()] given Fetch {
   reqs.forEach((r) => Fetch.send(r).detach())
 }
 ```
