@@ -15,12 +15,17 @@ context shop.api
 
 type UserId = String where NonEmpty && MaxLength(64)
 
-type LoginRequest = { user: String }
+type LoginRequest = {
+	user: String,
+}
 
 actor User { auth = SignedCookie(secret = "SESSION_KEY", ttl = 12.hours), identity = UserId }
 
 service api from http {
-	cors { origins: ["https://app.example.com"], credentials: true }
+	cors {
+		origins: ["https://app.example.com"],
+		credentials: true,
+	}
 
 	// The cookie is verified before the body runs; u.identity is the signed-in user.
 	on GET("/me") () -> Effect[HttpResult[String]] by u: User {
@@ -92,20 +97,23 @@ tier the driver sends a real signed cookie to the real Worker, and a case can pr
 
 ```bynk,fragment
 suite shop.api as system {
-  case "a signed-in user is read" {
-    let r <- api.GET("/me") by User("ada")
-    expect r is Ok("ada")
-  }
+	case "a signed-in user is read" {
+		let r <- api.GET("/me") by User("ada")
+		expect r is Ok("ada")
+	}
 
-  case "no cookie is refused" {
-    let r <- api.GET("/me") by Nobody
-    expect r is Rejected(Unauthorized)
-  }
+	case "no cookie is refused" {
+		let r <- api.GET("/me") by Nobody
+		expect r is Rejected(Unauthorized)
+	}
 
-  case "a cross-site post is refused" {
-    let r <- api.POST("/rename", RequestHeaders.of(["Sec-Fetch-Site: cross-site", "Origin: https://evil.example"])) by User("ada")
-    expect r is Forbidden
-  }
+	case "a cross-site post is refused" {
+		let r <- api.POST(
+			"/rename",
+			RequestHeaders.of(["Sec-Fetch-Site: cross-site", "Origin: https://evil.example"])
+		) by User("ada")
+		expect r is Forbidden
+	}
 }
 ```
 
