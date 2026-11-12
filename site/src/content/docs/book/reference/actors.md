@@ -129,8 +129,23 @@ or keep the session on the server (see `examples/sessions`) if you need to log o
 The handler never sees the credential: the router leaves the session cookie out of the handler's
 `cookies` record and raw `RequestCookies` view, and a record that names it is refused
 (`bynk.actor.signed_cookie_read_directly`). `bynk deploy` mints the `secret` variable when it is unset (see [Signed cookies](/book/guides/projects-build-and-deployment/deploy-to-cloudflare/#session-keys)).
-Key minting at deploy and the system-tier test driver follow in later versions of the same increment
-([#3386](https://github.com/bynk-lang/bynk/issues/3386)).
+A `system` suite signs in as `by User("ada")` and probes the seam with `by Nobody`, `by Forged` and
+`by Expired` (see [the failure principals](/book/reference/testing/#failure-principals)); a case's own
+`Sec-Fetch-Site` and `Origin` headers probe the CSRF check.
+
+### What a signed cookie does and does not protect against
+
+It **does**: reject a cookie that was forged, altered, issued for another actor, signed with a key the
+seam does not hold, expired, or sent twice; refuse a cross-site state-changing request that the service
+does not list; keep the credential out of the handler (its `cookies` and `headers` views omit it); and
+keep the cookie from page scripts (`HttpOnly`), from plain HTTP (`Secure`), and from sibling subdomains
+(`__Host-` and no `Domain`).
+
+It does **not**: hide the cookie's contents. The value is **signed, not encrypted**: anyone holding the
+cookie can read its `sub`, so never put a secret in an identity. It cannot be revoked before `ttl`
+(above). It does not stop a script already running on your own origin, and it is not a defence against a
+stolen device. Rotating `secret` (moving the old value to `previous`, then dropping it) is how every
+cookie is ended at once.
 
 A `SignedCookie` actor stands alone on its route, like `Oidc`
 (`bynk.actor.signed_cookie_not_in_sum`), cannot be the base of a refinement actor, and cannot guard
