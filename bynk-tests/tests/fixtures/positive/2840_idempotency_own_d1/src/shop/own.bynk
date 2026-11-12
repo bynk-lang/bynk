@@ -1,0 +1,19 @@
+context shop.own
+
+// A project's own D1 capability named `Idempotency` is bound as `D1_IDEMPOTENCY`
+// too, but it is not the implicit claims database: it keeps its own migrations.
+
+consumes bynk
+consumes bynk.cloudflare { D1 }
+
+capability Idempotency = D1
+
+service api from http {
+	on GET("/rows") () -> Effect[HttpResult[String]] by Visitor given Idempotency {
+		let rows <- Idempotency.all("SELECT id FROM mine ORDER BY id", [])
+		match rows {
+			Ok(text) => Ok(text)
+			Err(_) => ServerError("query failed")
+		}
+	}
+}

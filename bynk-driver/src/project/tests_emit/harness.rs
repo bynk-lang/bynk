@@ -175,7 +175,7 @@ pub(super) fn emit_integration_harness<'a>(
                     d1_migrations_args(Some(&bynk_check::d1_migrations::migrations_of(
                         d1_migrations,
                         &d1_database_name(&bynk_project::worker_dir_name(p), &binding.name),
-                        &binding.name,
+                        binding,
                     ))),
                 ),
                 // #3301: the account's store is never reached in a test, so

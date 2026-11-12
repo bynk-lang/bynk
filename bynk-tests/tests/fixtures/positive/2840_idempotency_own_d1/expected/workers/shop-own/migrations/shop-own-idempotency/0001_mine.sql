@@ -1,0 +1,1 @@
+CREATE TABLE mine (id TEXT PRIMARY KEY);

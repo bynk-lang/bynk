@@ -525,8 +525,7 @@ fn d1_block(
             "set at deploy time",
         ),
     ];
-    if !bynk_check::d1_migrations::migrations_of(d1_migrations, &database, &binding.name).is_empty()
-    {
+    if !bynk_check::d1_migrations::migrations_of(d1_migrations, &database, binding).is_empty() {
         entries.push(TomlEntry::kv(
             "migrations_dir",
             TomlValue::str(format!("{D1_MIGRATIONS_DIR}/{database}")),

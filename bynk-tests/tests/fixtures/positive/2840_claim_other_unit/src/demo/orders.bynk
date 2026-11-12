@@ -1,0 +1,9 @@
+context demo.orders
+
+consumes idempotency
+
+service reserve {
+  on call() -> Effect[Bool] given idempotency.Idempotency {
+    idempotency.Idempotency.claim("order-key-1")
+  }
+}
