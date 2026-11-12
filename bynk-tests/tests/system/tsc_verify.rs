@@ -19,6 +19,8 @@
 //!   depend on). Under it, a missing Node, or one too old for
 //!   `stripTypeScriptTypes` (< 22.13), fails rather than skips.
 
+#[path = "../par/mod.rs"]
+mod par;
 #[path = "../require/mod.rs"]
 mod require;
 
@@ -347,11 +349,15 @@ fn emitted_typescript_passes_tsc_strict() {
     let _ = fs::remove_dir_all(&root);
     fs::create_dir_all(&root).expect("create tsc-verify temp root");
 
-    let mut failures: Vec<String> = Vec::new();
-    // Fixture names successfully staged into the tree — the set the single
-    // `tsc` run actually type-checks.
-    let mut staged: Vec<String> = Vec::new();
-    for dir in &dirs {
+    // Compile and stage each fixture on a worker pool (#3387): each writes only
+    // under its own `root/<name>`, and `par_map` keeps the results in fixture
+    // order, so `staged` and `failures` come out as they did serially.
+    enum Staging {
+        Staged(String),
+        Skipped,
+        Failed(String),
+    }
+    let results = par::par_map(&dirs, |dir| {
         let name = dir
             .file_name()
             .and_then(|s| s.to_str())
@@ -362,36 +368,44 @@ fn emitted_typescript_passes_tsc_strict() {
             // #1767: a single-file fixture (`input.bynk` → one `.ts`) imports
             // nothing but `./runtime.js`, so staged beside the runtime it is a
             // complete module graph like any project's.
-            match stage_single_file(dir, &root.join(&name)) {
-                Ok(true) => staged.push(name),
-                Ok(false) => {}
-                Err(failure) => failures.push(failure),
-            }
-            continue;
+            return match stage_single_file(dir, &root.join(&name)) {
+                Ok(true) => Staging::Staged(name),
+                Ok(false) => Staging::Skipped,
+                Err(failure) => Staging::Failed(failure),
+            };
         }
         let target = fixture_target(dir);
         let compiled = match compile_fixture(dir, target) {
             Ok(out) => out,
             Err(errors) => {
                 let rendered = bynk_driver::render::render_project_errors(&errors);
-                failures.push(format!(
+                return Staging::Failed(format!(
                     "\n=== {} ===\nexpected compile success but got errors:\n{}",
                     dir.display(),
                     rendered,
                 ));
-                continue;
             }
         };
         let fixture_root = root.join(&name);
         if let Err(e) = write_outputs(&compiled, &fixture_root) {
-            failures.push(format!(
+            return Staging::Failed(format!(
                 "\n=== {} ===\nfailed to write emitted output to {}: {e}",
                 dir.display(),
                 fixture_root.display(),
             ));
-            continue;
         }
-        staged.push(name);
+        Staging::Staged(name)
+    });
+    let mut failures: Vec<String> = Vec::new();
+    // Fixture names successfully staged into the tree: the set the chunked
+    // `tsc` runs actually type-check.
+    let mut staged: Vec<String> = Vec::new();
+    for r in results {
+        match r {
+            Staging::Staged(name) => staged.push(name),
+            Staging::Skipped => {}
+            Staging::Failed(f) => failures.push(f),
+        }
     }
 
     // A root `tsconfig.json` (from `emit_tsconfig`) that each chunk's config

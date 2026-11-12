@@ -2526,7 +2526,7 @@ pub const EXPLANATIONS: &[Explain] = &[
     },
     Explain {
         code: "bynk.http.raw_body_not_bytes",
-        blurb: "`@raw` hands the handler the request's octets untouched, so its `body` must be `Bytes`; any other type would have to be decoded from them, and decoding is what `@raw` opts out of. Type `body` as `Bytes` and decode it in the handler, or drop `@raw` to have the router decode a JSON body for you. Without `@raw`, a `Bytes` body is base64 inside JSON.",
+        blurb: "`@raw` hands the handler the request's octets untouched, so its `body` must be `Bytes` (read whole) or `Stream[Bytes]` (read chunk by chunk); any other type would have to be decoded from them, and decoding is what `@raw` opts out of. Type `body` as `Bytes` and decode it in the handler, or drop `@raw` to have the router decode a JSON body for you. Without `@raw`, a `Bytes` body is base64 inside JSON.",
         example: "@raw(contentType: \"image/png\")\n@limit(maxBody: 1_000_000)\non POST(\"/avatars\") (body: String) -> Effect[HttpResult[String]] by v: Visitor { … }   // ✗ raw octets are `Bytes`\n\n@raw(contentType: \"image/png\")\n@limit(maxBody: 1_000_000)\non POST(\"/avatars\") (body: Bytes) -> Effect[HttpResult[String]] by v: Visitor { … }    // ✓",
         page: "/book/reference/http",
         anchor: "raw-request-bodies",
@@ -2587,6 +2587,27 @@ pub const EXPLANATIONS: &[Explain] = &[
         example: "service jobs from cron {\n    security { hsts: 180.days }   // ✗ a schedule sends no response headers\n    on schedule(\"0 0 * * *\") () -> Effect[Result[(), String]] { … }\n}\n\nservice api from http {\n    security { hsts: 180.days }   // ✓\n    on GET(\"/items\") () -> Effect[HttpResult[String]] by v: Visitor { … }\n}",
         page: "/book/reference/http",
         anchor: "security-headers",
+    },
+    Explain {
+        code: "bynk.http.stream_body_not_raw",
+        blurb: "A `Stream[Bytes]` `body` is a request body handed to the handler chunk by chunk, so the router must be told to leave it as octets: without `@raw` a body is JSON (or base64 inside JSON for `Bytes`), which has no streamed form. Add `@raw(contentType: \"…\")` and a `@limit`, or take the body as a value (`T`, or `Bytes`) to have it read whole.",
+        example: "@limit(maxBody: 1_000_000)\non PUT(\"/blobs/:id\") (id: String, body: Stream[Bytes]) -> Effect[HttpResult[()]] by v: Visitor { … }   // ✗ not `@raw`\n\n@raw(contentType: \"application/octet-stream\")\n@limit(maxBody: 1_000_000)\non PUT(\"/blobs/:id\") (id: String, body: Stream[Bytes]) -> Effect[HttpResult[()]] by v: Visitor { … }   // ✓",
+        page: "/book/reference/http",
+        anchor: "streamed-request-bodies",
+    },
+    Explain {
+        code: "bynk.http.stream_body_on_sum_route",
+        blurb: "A route `by` a sum of actors, such as `User | Visitor`, reads and verifies the request body itself before the handler runs. A streamed `body` is not read until the handler pulls it, so the two cannot both own it and the pair is refused. Name one actor on the route, or split it into one route per actor.",
+        example: "actor User { auth = Bearer(secret = \"AUTH_JWT_SECRET\"), identity = UserId }\n\n@raw(contentType: \"image/png\")\n@limit(maxBody: 5_000_000)\non PUT(\"/avatars\") (body: Stream[Bytes]) -> Effect[HttpResult[()]] by who: User | Visitor { … }   // ✗ a sum of actors\n\n@raw(contentType: \"image/png\")\n@limit(maxBody: 5_000_000)\non PUT(\"/avatars\") (body: Stream[Bytes]) -> Effect[HttpResult[()]] by who: User { … }             // ✓ one actor",
+        page: "/book/reference/http",
+        anchor: "streamed-request-bodies",
+    },
+    Explain {
+        code: "bynk.http.stream_body_signature",
+        blurb: "A `Signature` actor checks an HMAC over the whole request body before the handler runs, so the body has to be held in full. A streamed `body` is read by the handler afterwards, a chunk at a time, and could not have been verified. Take `body: Bytes` on a signed route (a webhook, say), or sign the head (a header or the path) and verify the content another way.",
+        example: "actor Hook { auth = Signature(secret = \"HOOK_SECRET\", header = \"X-Signature\") }\n\n@raw(contentType: \"application/octet-stream\")\n@limit(maxBody: 1_000_000)\non POST(\"/hook\") (body: Stream[Bytes]) -> Effect[HttpResult[()]] by h: Hook { … }   // ✗ unverifiable\n\n@raw(contentType: \"application/octet-stream\")\n@limit(maxBody: 1_000_000)\non POST(\"/hook\") (body: Bytes) -> Effect[HttpResult[()]] by h: Hook { … }          // ✓",
+        page: "/book/reference/http",
+        anchor: "streamed-request-bodies",
     },
     Explain {
         code: "bynk.http.unbound_path_param",
@@ -6118,7 +6139,9 @@ pub const EXPLANATIONS: &[Explain] = &[
                 handler parameter or result, a store field or an event field, nor can a record \
                 or sum that carries one in a field, at any depth. Drain it with `collect()` \
                 and send or keep the resulting `List`. A capability operation may take or \
-                return a stream, since its provider runs in the caller's own isolate.",
+                return a stream, since its provider runs in the caller's own isolate, and a \
+                `@raw` HTTP handler's `body` may be a `Stream[Bytes]`, the request body as it \
+                arrives.",
         example: "service s {\n    on call(readings: Stream[Int]) -> Effect[Int] {    // ✗ a stream cannot be a parameter\n        Effect.pure(0)\n    }\n}\n\n\
                   service s {\n    on call(readings: List[Int]) -> Effect[Int] {      // ✓\n        Effect.pure(readings.length())\n    }\n}",
         page: "/book/reference/types",
@@ -7904,7 +7927,7 @@ pub const REGISTRY: &[DiagnosticInfo] = &[
     ),
     d(
         "bynk.http.raw_body_not_bytes",
-        "The `body` of a `@raw` handler is not typed `Bytes`.",
+        "The `body` of a `@raw` handler is not typed `Bytes` or `Stream[Bytes]`.",
     ),
     d(
         "bynk.http.raw_body_unbounded",
@@ -7952,6 +7975,18 @@ pub const REGISTRY: &[DiagnosticInfo] = &[
     d(
         "bynk.http.security_unknown_field",
         "A `security { }` policy declares a field outside the closed set.",
+    ),
+    d(
+        "bynk.http.stream_body_not_raw",
+        "A `Stream[Bytes]` `body` is on a handler that is not `@raw`.",
+    ),
+    d(
+        "bynk.http.stream_body_on_sum_route",
+        "A route with a streamed `body` has a `by` clause that is a sum of actors, whose wrapper reads the body itself.",
+    ),
+    d(
+        "bynk.http.stream_body_signature",
+        "A route with a streamed `body` has a `Signature` actor, which verifies an HMAC over the whole body first.",
     ),
     dg(
         "bynk.http.unbound_path_param",
