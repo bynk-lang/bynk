@@ -7,7 +7,7 @@ title: Diagnostic index
 
 Every diagnostic code the compiler can emit, with a one-line summary of the cause, grouped by category. For step-by-step cause-and-fix guidance on the most common ones, see the [troubleshooting guides](/book/troubleshooting/). For a code with a curated explanation, `bynk explain <code>` prints it in a terminal, and in VS Code the diagnostic's **Explain** quick fix (or **Bynk: Explain Diagnostic Code…**) shows the same text in a panel, offline.
 
-There are **849** codes in total.
+There are **852** codes in total.
 
 ## Agents
 
@@ -398,6 +398,9 @@ There are **849** codes in total.
 | [`bynk.dependency.path_outside_root`](/book/guides/projects-build-and-deployment/share-code-between-projects/#what-the-checks-catch) | A path dependency declared by a dependency resolves outside the workspace; a dependency's own path dependencies are honoured only between members of one workspace. |  | — |
 | `bynk.deploy.contract_skew` | A worker was compiled against a contract its live dependencies no longer provide, or no longer provides the contract its live callers were compiled against, so `bynk deploy --context` refuses to ship it. |  | — |
 | `bynk.deploy.foreign_contract_skew` | A build breaks the contract a declared foreign caller's client was generated at, as pinned in `bynk.foreign.toml`, so `bynk deploy` refuses to ship it. |  | — |
+| [`bynk.detach.in_agent_handler`](/book/reference/capabilities/#detach) | A `detach` was used in an agent handler, which has no execution context to keep a detached effect alive. | [`method_call`](/book/reference/grammar/#rule-method_call) | — |
+| [`bynk.detach.in_pure_context`](/book/reference/capabilities/#detach) | A `detach` was used in a pure (non-effectful) context. | [`method_call`](/book/reference/grammar/#rule-method_call) | — |
+| [`bynk.detach.store_op`](/book/reference/capabilities/#detach) | A `detach` targets an agent store operation, which is part of the handler's atomic commit and cannot be detached. | [`method_call`](/book/reference/grammar/#rule-method_call) | — |
 | [`bynk.duration.literal_overflow`](/book/reference/types/#duration) | A `Duration` literal (`<int>.<unit>`) exceeds the representable millisecond range. |  | — |
 | [`bynk.email.bad_params`](/book/reference/inbound-email/#handler-form) | An email `on message` handler does not take exactly one `InboundEmail` parameter. |  | — |
 | [`bynk.email.duplicate_address`](/book/reference/inbound-email/#addresses) | Two `from email` services claim the same recipient address. |  | — |
@@ -422,7 +425,7 @@ There are **849** codes in total.
 | `bynk.event.schema_version_mismatch` | An event's `@schema(N)` annotation disagrees with the version the schema registry computes from the event's build history. |  | — |
 | [`bynk.event.unknown_annotation`](/book/guides/events/understand-events/#asserting-a-schema-version-with-scheman) | An `event` declaration carried an `@`-annotation other than `@schema` — event annotations are a closed set. |  | — |
 | [`bynk.event.unknown_subscription`](/book/guides/events/understand-events/#the-three-pieces) | A `from Events(E)` subscription named `E`, which is not a declared event in this context or any consumed context. |  | — |
-| [`bynk.exec.unavailable`](/book/reference/capabilities/#within) | A call to, or reference to, a function that hands work to the execution context (`~>`, `within` or `race`, directly or through the functions it calls) appears where no execution context exists: an agent handler, a WebSocket handler or a provider operation. |  | — |
+| [`bynk.exec.unavailable`](/book/reference/capabilities/#within) | A call to, or reference to, a function that hands work to the execution context (`~>`, `detach`, `within` or `race`, directly or through the functions it calls) appears where no execution context exists: an agent handler, a WebSocket handler or a provider operation. |  | — |
 | `bynk.fault.todo` | A `todo(message)` placeholder: the code type-checks but faults when it runs. A non-failing warning, so `check --deny-warnings` refuses unfinished code in CI (warning). |  | Warning |
 | [`bynk.fixture.binary_content`](/book/reference/fixtures/#what-the-text-is) | A suite's `fixture` names a file that contains a NUL byte, so it is binary, not text. | [`fixture_decl`](/book/reference/grammar/#rule-fixture_decl) | — |
 | [`bynk.fixture.duplicate`](/book/reference/fixtures/#declaring-a-fixture) | A suite declares two `fixture`s of the same name. | [`fixture_decl`](/book/reference/grammar/#rule-fixture_decl) | — |
