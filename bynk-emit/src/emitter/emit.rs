@@ -3246,6 +3246,7 @@ pub(crate) fn emit_service(
             ActorSeamIr::Caller(binder) | ActorSeamIr::Sender(binder) => Some(binder.clone()),
             ActorSeamIr::Bearer(s) => s.binder.clone(),
             ActorSeamIr::Oidc(s) => s.binder.clone(),
+            ActorSeamIr::SignedCookie(s) => s.binder.clone(),
             ActorSeamIr::Sum(_) | ActorSeamIr::CallSum(_) | ActorSeamIr::None => None,
         };
         let actor_sum_binder = if matches!(seam, ActorSeamIr::Sum(_) | ActorSeamIr::CallSum(_)) {
@@ -3379,12 +3380,11 @@ pub(crate) fn emit_service(
         // mutual exclusion depended on the resolver-priority `if`s above
         // rather than the type system).
         match &seam {
-            ActorSeamIr::Bearer(s) if s.binder.is_some() => {
-                append_deps_field(
-                    &mut deps_members,
-                    "identity",
-                    bynk_ts::TsType::named(s.identity_type.clone()),
-                );
+            // #3386: a `SignedCookie` seam mints its identity from `sub` just the same.
+            ActorSeamIr::Bearer(_) | ActorSeamIr::SignedCookie(_) => {
+                if let Some(id) = seam.captured_identity_type() {
+                    append_deps_field(&mut deps_members, "identity", bynk_ts::TsType::named(id));
+                }
             }
             // v0.151: an `Oidc`-binding handler threads its `sub`-minted
             // identity into deps exactly like Bearer.
@@ -3437,7 +3437,7 @@ pub(crate) fn emit_service(
                 append_deps_field(&mut deps_members, "who", call_sum_ts_type(members));
             }
             // A binder-less Bearer/Oidc, or no seam at all — nothing to widen.
-            ActorSeamIr::Bearer(_) | ActorSeamIr::Oidc(_) | ActorSeamIr::None => {}
+            ActorSeamIr::Oidc(_) | ActorSeamIr::None => {}
         }
         // v0.79: a handler whose body uses `~>` receives the execution context
         // (`__exec`) in its deps, so the fire-and-forget send can hand its promise

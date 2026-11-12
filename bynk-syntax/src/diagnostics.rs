@@ -454,6 +454,20 @@ pub const EXPLANATIONS: &[Explain] = &[
         anchor: "signed-cookies",
     },
     Explain {
+        code: "bynk.actor.signed_cookie_issue_needs_clock",
+        blurb: "`User.issue(identity)` signs a cookie that expires, so it reads the current time from the `Clock` capability, and a handler's dependencies are always visible in its `given` clause (and a test can stub the clock to know exactly the cookie it gets). Add `consumes bynk { Clock }` to the context and `given Clock` to the handler.",
+        example: "let c <- User.issue(body)   // ✗ the handler lists no `given Clock`\n\nlet c <- User.issue(body)   // ✓ with `given Clock` on the handler",
+        page: "/book/reference/actors",
+        anchor: "signed-cookies",
+    },
+    Explain {
+        code: "bynk.actor.signed_cookie_issue_outside_handler",
+        blurb: "The signing key reaches a service handler, which is where a request arrives and a `Set-Cookie` is sent. A provider or an agent holds only the capabilities in its `given`, so `User.issue(identity)` there would find no key and fault on every request. Issue the cookie in the handler.",
+        example: "User.issue(id)   // ✗ in a provider or an agent\n\nlet c <- User.issue(body)   // ✓ in a service handler",
+        page: "/book/reference/actors",
+        anchor: "signed-cookies",
+    },
+    Explain {
         code: "bynk.actor.signed_cookie_missing_secret",
         blurb: "A `SignedCookie` actor signs the session cookies it issues and verifies the ones it receives, so it needs a key. `secret` names the environment variable holding it, never the key itself. `bynk deploy` mints a random 32-byte key for it when the variable is unset, so you never choose one.",
         example: "actor User { auth = SignedCookie(ttl = 12.hours), identity = UserId }   // ✗\n\nactor User { auth = SignedCookie(secret = \"SESSION_KEY\", ttl = 12.hours), identity = UserId }   // ✓",
@@ -470,14 +484,21 @@ pub const EXPLANATIONS: &[Explain] = &[
     Explain {
         code: "bynk.actor.signed_cookie_not_in_sum",
         blurb: "A multi-actor `by` clause tries its peers in turn. A cookie is an ambient credential, so the CSRF check must apply only when the cookie is what authenticated the request, and that per-arm rule is not built yet. A `SignedCookie` actor therefore stands alone on its route: give it a single `by who: User` and serve any anonymous route separately.",
-        example: "on POST(\"/x\") () -> Effect[HttpResult[String]] by who: User | Visitor {   // ✗ a `SignedCookie` peer in a sum\n\nactor User { auth = SignedCookie(secret = \"SESSION_KEY\", ttl = 12.hours), identity = UserId }   // ✓ declared; guard a route with a single `by who: User` once routes are accepted",
+        example: "on POST(\"/x\") () -> Effect[HttpResult[String]] by who: User | Visitor {   // ✗ a `SignedCookie` peer in a sum\n\non POST(\"/x\") () -> Effect[HttpResult[String]] by who: User {   // ✓ alone",
         page: "/book/reference/actors",
         anchor: "signed-cookies",
     },
     Explain {
         code: "bynk.actor.signed_cookie_public_cache",
         blurb: "A route guarded by a session cookie answers one user, so a shared cache must not store its response, or it would serve one user's answer to another. Use `scope: private`, which lets only the browser keep it, or drop `@cache`.",
-        example: "@cache(maxAge: 5.minutes, scope: public)   // ✗ a shared cache would replay it\non GET(\"/me\") () -> Effect[HttpResult[String]] by who: User { … }\n\nactor User { auth = SignedCookie(secret = \"SESSION_KEY\", ttl = 12.hours), identity = UserId }   // ✓ declared; use `scope: private` (or no `@cache`) on the routes it guards",
+        example: "@cache(maxAge: 5.minutes, scope: public)   // ✗ a shared cache would replay it\n\n@cache(maxAge: 5.minutes, scope: private)   // ✓",
+        page: "/book/reference/actors",
+        anchor: "signed-cookies",
+    },
+    Explain {
+        code: "bynk.actor.signed_cookie_read_directly",
+        blurb: "A `SignedCookie` actor reads its session cookie at the boundary, verifies it and hands the handler only the identity, so the signed value never reaches handler code. A `cookies` record on the same route that names that cookie (by its own name or `@name`) would ask for the raw value, so it is refused, and the router leaves the cookie out of a raw `RequestCookies` view too. Read the identity from the `by` binder, and keep other cookies (a theme, a language) in the record.",
+        example: "type Prefs = {\n  @name(\"__Host-session\") session: Option[String],   // ✗ the session cookie\n  theme: Option[String],\n}\n\ntype Prefs = {\n  theme: Option[String],   // ✓ other cookies only\n}",
         page: "/book/reference/actors",
         anchor: "signed-cookies",
     },
@@ -4240,7 +4261,7 @@ pub const EXPLANATIONS: &[Explain] = &[
     },
     Explain {
         code: "bynk.query.sum_needs_numeric",
-        blurb: "`sum` and `average` add the values the key function returns, so the key must be numeric: `Int`, `Float` or `Duration`, or a refined type over one of them. A `String` or a record cannot be added. Return a numeric field. To pick by an ordering rather than add, `min`, `max` and `sortBy` accept any orderable key. The rule is the same for a `List` and a `Query`.",
+        blurb: "`sum` and `average` add the values the key function returns, so the key must be numeric: `Int`, `Float` or `Duration`, or a refined type over one of them. A `String` or a record cannot be added. Return a numeric field. `sum` on a `List` also adds a `Decimal` key, exactly; `average`, and `sum` on a `Query`, do not take one. To pick by an ordering rather than add, `min`, `max` and `sortBy` accept any orderable key.",
         example: "type Line = { sku: String, qty: Int }\n\nfn total(lines: List[Line]) -> Int {\n    let t = lines.sum((l) => l.sku)   // ✗ a `String` cannot be summed\n    0\n}\n\nfn total(lines: List[Line]) -> Int {\n    lines.sum((l) => l.qty)           // ✓ a numeric key\n}",
         page: "/book/reference/types",
         anchor: "query",
@@ -7261,6 +7282,14 @@ pub const REGISTRY: &[DiagnosticInfo] = &[
         "A `SignedCookie` actor's identity is missing or not a string-constructible type.",
     ),
     d(
+        "bynk.actor.signed_cookie_issue_needs_clock",
+        "`Actor.issue(identity)` on a `SignedCookie` actor is called where the handler does not list `Clock` in `given`.",
+    ),
+    d(
+        "bynk.actor.signed_cookie_issue_outside_handler",
+        "`Actor.issue(identity)` on a `SignedCookie` actor is called outside a service handler (in a provider or an agent).",
+    ),
+    d(
         "bynk.actor.signed_cookie_missing_secret",
         "A `SignedCookie` actor does not name its signing secret.",
     ),
@@ -7273,12 +7302,12 @@ pub const REGISTRY: &[DiagnosticInfo] = &[
         "A `SignedCookie` actor appears as a member of a multi-actor sum.",
     ),
     d(
-        "bynk.actor.signed_cookie_not_yet_emitted",
-        "A route is guarded by a `SignedCookie` actor, whose verifier is not emitted yet.",
-    ),
-    d(
         "bynk.actor.signed_cookie_public_cache",
         "A `@cache(scope: public)` route is guarded by a `SignedCookie` actor.",
+    ),
+    d(
+        "bynk.actor.signed_cookie_read_directly",
+        "A typed `cookies` field reads the session cookie that a route's `SignedCookie` actor consumes.",
     ),
     d(
         "bynk.actor.signed_cookie_secret_shared",

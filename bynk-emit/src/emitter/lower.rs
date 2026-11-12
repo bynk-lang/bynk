@@ -2302,6 +2302,9 @@ fn lower_method_call(
     if let Some(s) = lower_events_emit_call(e, receiver, type_args, args, cx, &mut pre) {
         return pre.finish(s);
     }
+    if let Some(s) = lower_signed_cookie_call(e, args, cx, &mut pre) {
+        return pre.finish(s);
+    }
     if let Some(s) = lower_capability_call(e, receiver, method, type_args, args, cx, &mut pre) {
         return pre.finish(s);
     }
@@ -2423,6 +2426,47 @@ fn lower_d1_select_call(
         }
     }
     None
+}
+
+/// #3386: lower `Actor.issue(identity)` and `Actor.expire()` on a local `SignedCookie` actor, or
+/// `None` when the call is not one. `issue` is an effect: it signs the identity into a session
+/// cookie with the actor's keys (from `deps.__session`, supplied by the Worker's compose from the
+/// environment) at the `Clock`'s time; `expire` is the pure matching deletion.
+fn lower_signed_cookie_call(
+    e: &Expr,
+    args: &[Expr],
+    cx: &mut LowerCtx,
+    pre: &mut Pre,
+) -> Option<String> {
+    let Some(Callee::SignedCookie { actor, issue }) = cx.commons().callees.get(&e.id).cloned()
+    else {
+        return None;
+    };
+    let seam = cx.commons().commons.items.iter().find_map(|i| match i {
+        CommonsItem::Actor(a) if a.name.name == actor => {
+            bynk_check::actors::signed_cookie_seam_of(a, None)
+        }
+        _ => None,
+    })?;
+    cx.note_session_cookie();
+    let name = escape_ts_string(&seam.cookie);
+    let same_site = escape_ts_string(&seam.same_site);
+    if !issue {
+        return Some(format!(
+            "__expireSessionCookie(\"{name}\", \"{same_site}\")"
+        ));
+    }
+    let id = pre.lower(args.first()?, cx);
+    let deps = if cx.in_test_case() {
+        "deps".to_string()
+    } else {
+        cx.cap_deps_expr().to_string()
+    };
+    let actor = escape_ts_string(&actor);
+    Some(format!(
+        "(async () => __issueSessionCookie(__sessionKeysOf({deps}, \"{actor}\"), \"{actor}\", \"{name}\", \"{same_site}\", {id}, {}, await {deps}.Clock.now()))()",
+        seam.ttl_secs
+    ))
 }
 
 /// Lower a cross-context capability call (`B.Cap.op(…)`) or service call, or `None` when the call is not one. Moved out of

@@ -1,0 +1,21 @@
+suite shop.api {
+	case "a signed-in user is read from the binder" {
+		let r <- api.GET("/me") by User("ada")
+		expect r is Ok("ada")
+	}
+
+	case "other cookies reach the handler's record" {
+		let r <- api.GET("/theme", Prefs { theme: Some("dark") }) by User("ada")
+		expect r is Ok("dark")
+	}
+
+	case "a state-changing route runs as the signed-in user" {
+		let r <- api.POST("/rename") by User("ada")
+		expect r is NoContent
+	}
+
+	case "a route that captures nothing still runs" {
+		let r <- api.DELETE("/session") by User("ada")
+		expect r is NoContent
+	}
+}

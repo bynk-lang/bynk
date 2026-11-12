@@ -7,7 +7,7 @@ title: Diagnostic index
 
 Every diagnostic code the compiler can emit, with a one-line summary of the cause, grouped by category. For step-by-step cause-and-fix guidance on the most common ones, see the [troubleshooting guides](/book/troubleshooting/). For a code with a curated explanation, `bynk explain <code>` prints it in a terminal, and in VS Code the diagnostic's **Explain** quick fix (or **Bynk: Explain Diagnostic Code…**) shows the same text in a panel, offline.
 
-There are **847** codes in total.
+There are **849** codes in total.
 
 ## Agents
 
@@ -360,11 +360,13 @@ There are **847** codes in total.
 | [`bynk.actor.signed_cookie_bad_ttl`](/book/reference/actors/#signed-cookies) | A `SignedCookie` `ttl` is not a positive whole number of seconds. |  | — |
 | [`bynk.actor.signed_cookie_duplicate_key`](/book/reference/actors/#signed-cookies) | A `SignedCookie` config repeats a key. |  | — |
 | [`bynk.actor.signed_cookie_identity_not_string_constructible`](/book/reference/actors/#signed-cookies) | A `SignedCookie` actor's identity is missing or not a string-constructible type. |  | — |
+| [`bynk.actor.signed_cookie_issue_needs_clock`](/book/reference/actors/#signed-cookies) | `Actor.issue(identity)` on a `SignedCookie` actor is called where the handler does not list `Clock` in `given`. |  | — |
+| [`bynk.actor.signed_cookie_issue_outside_handler`](/book/reference/actors/#signed-cookies) | `Actor.issue(identity)` on a `SignedCookie` actor is called outside a service handler (in a provider or an agent). |  | — |
 | [`bynk.actor.signed_cookie_missing_secret`](/book/reference/actors/#signed-cookies) | A `SignedCookie` actor does not name its signing secret. |  | — |
 | [`bynk.actor.signed_cookie_missing_ttl`](/book/reference/actors/#signed-cookies) | A `SignedCookie` actor does not declare a `ttl`. |  | — |
 | [`bynk.actor.signed_cookie_not_in_sum`](/book/reference/actors/#signed-cookies) | A `SignedCookie` actor appears as a member of a multi-actor sum. |  | — |
-| `bynk.actor.signed_cookie_not_yet_emitted` | A route is guarded by a `SignedCookie` actor, whose verifier is not emitted yet. |  | — |
 | [`bynk.actor.signed_cookie_public_cache`](/book/reference/actors/#signed-cookies) | A `@cache(scope: public)` route is guarded by a `SignedCookie` actor. |  | — |
+| [`bynk.actor.signed_cookie_read_directly`](/book/reference/actors/#signed-cookies) | A typed `cookies` field reads the session cookie that a route's `SignedCookie` actor consumes. |  | — |
 | [`bynk.actor.signed_cookie_secret_shared`](/book/reference/actors/#signed-cookies) | A `SignedCookie` actor's `secret` or `previous` is also used by another actor, or by itself. |  | — |
 | [`bynk.actor.signed_cookie_ttl_long`](/book/reference/actors/#signed-cookies) | A `SignedCookie` `ttl` is longer than 30 days (warning). |  | Warning |
 | [`bynk.actor.signed_cookie_unknown_key`](/book/reference/actors/#signed-cookies) | A `SignedCookie` config has a key outside the closed set. |  | — |

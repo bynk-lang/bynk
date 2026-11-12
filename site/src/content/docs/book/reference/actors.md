@@ -23,7 +23,7 @@ A closed, compiler-known set. `auth = <Scheme>` with keyed config where noted.
 | `None` | — | `()` | any | none (anonymous; the prelude `Visitor`) |
 | `Bearer` | `secret = "<ENV>"` | a string-constructible type | `http` | JWT HS256 over `Authorization: Bearer …`; `sub` → identity; `401` |
 | `Signature` | `secret`, `header`, optional `timestamp` + `tolerance` | none | `http` | HMAC-SHA256 over the raw body; `401` |
-| `SignedCookie` | `secret = "<ENV>"`, `ttl`, optional `cookie`, `previous`, `sameSite` | a string-constructible type | `http` | a signed, expiring session cookie that Bynk issues and verifies; `sub` → identity; `401`. **Declaration only in this version**: see [Signed cookies](#signed-cookies) |
+| `SignedCookie` | `secret = "<ENV>"`, `ttl`, optional `cookie`, `previous`, `sameSite` | a string-constructible type | `http` | a signed, expiring session cookie that Bynk issues and verifies; `sub` → identity; `401`. see [Signed cookies](#signed-cookies) |
 | `Oidc` | `issuer`, `audience`, `jwks` (all URLs/ids; **no secret**); optional `trustFrom` | a string-constructible type | `http` | RS256/ES256 JWT verified against the provider's JWKS over `Authorization: Bearer …`; `iss`/`aud`/`exp` checked; `sub` → identity, and the verified claims → [`claims`](#reading-claims); `401` |
 | `Internal` | — | `()`, or `CallerId` for `Caller` | `call`/`cron`/`queue` | a call's per-edge signature proves the calling context; cron and queue are platform-dispatched |
 | `Foreign` | `secret = "<ENV>"`, optional `worker = "<name>"` | none | `call` | the caller, a Worker that is not Bynk, signs the call as the actor under the secret ([wire format](/book/reference/wire-format/#foreign-callers)); `401` unsigned, `403` where the handler does not admit it |
@@ -77,10 +77,60 @@ The cookie's `Domain` and `Path` are not configurable: it is always host-only wi
 The identity is minted from the cookie's `sub` and must be a string-constructible type the
 context owns, as for `Bearer`. A `SignedCookie` secret may not be any other actor's secret.
 
-**What this version does.** It checks the declaration and its diagnostics, and refuses a route
-guarded by one (`bynk.actor.signed_cookie_not_yet_emitted`): accepting it before the verifier
-is emitted would compile a route with no authentication. Issuing, verifying, expiry, key
-rotation and CSRF protection follow in later versions of the same increment
+**What the seam does.** A route guarded by a `SignedCookie` actor runs, before the body:
+
+1. **A CSRF check**, on `POST`, `PUT`, `PATCH` and `DELETE` (a `GET` is safe and skips it). Only a request
+   whose `Sec-Fetch-Site` is `same-origin` passes on its own. Any other (`same-site`, `cross-site`, `none`, a
+   user-initiated navigation that a state-changing request is not, or an unknown value) must carry an
+   `Origin` that is **exactly** one of the service's [`cors`](/book/reference/http/#cors) origins (scheme,
+   host and port; the service must declare `credentials: true`, a sibling subdomain counts only if it is
+   listed, and a wildcard or `null` never qualifies). When the browser sent no `Sec-Fetch-Site` at all, this
+   request's own origin passes too. A request that reveals neither header is refused. Failure is `403`.
+2. **Reading the cookie.** A missing cookie, or one sent more than once (a sign of cookie tossing
+   from another path or subdomain), is `401`.
+3. **Verifying it.** HMAC-SHA-256 under `secret`, or `previous` when the cookie's `kid` names it;
+   the cookie must be for this actor, unexpired, issued no later than now, and valid for no longer
+   than the actor's current `ttl`. Any failure is `401`. A signing key that is missing, not
+   base64url, or shorter than 32 bytes faults the request (`500`, and the log names the variable),
+   never a quiet accept.
+4. **Minting the identity** from the verified `sub`; a `sub` that violates the identity type's
+   refinement is `401`.
+
+## Issuing and deleting the cookie
+
+Inside the context that declares it, a `SignedCookie` actor has two members, so no other context can
+mint its identity:
+
+```bynk,fragment
+on POST("/login") (body: LoginRequest) -> Effect[HttpResult[String]] by v: Visitor given Clock {
+  let Ok(id) = UserId.of(body.user) else { BadRequest("bad user") }
+  let c <- User.issue(id)               // Effect[Cookie]
+  Created("welcome").withCookie(c)
+}
+
+on POST("/logout") () -> Effect[HttpResult[()]] by u: User {
+  NoContent.withCookie(User.expire())   // Cookie
+}
+```
+
+`User.issue(identity)` takes the actor's identity type and answers an `Effect[Cookie]`: the signed
+cookie, valid for the actor's `ttl`. It reads the time from the [`Clock`](/book/reference/bynk-capabilities/),
+so the handler lists `Clock` in `given` (`bynk.actor.signed_cookie_issue_needs_clock`), and a test can stub
+it. It can only be called in a service handler, where the signing key arrives, not in a provider or an agent
+(`bynk.actor.signed_cookie_issue_outside_handler`). The `Cookie` it returns is built by the scheme, not by you: the configured name,
+`HttpOnly`, `Secure`, `Path=/`, no `Domain`, the actor's `SameSite` and a `Max-Age` equal to `ttl`.
+There are no attributes to get wrong, so you attach it with `withCookie` and nothing else.
+`User.expire()` is the matching deletion (same name and path, empty, `Max-Age=0`), so a logout cannot
+miss the cookie it set.
+
+A stateless cookie **cannot be revoked** before it expires: a copy a user already took keeps working
+until then. `expire` removes it from this browser; it does not invalidate the cookie. Keep the `ttl` short,
+or keep the session on the server (see `examples/sessions`) if you need to log out everywhere.
+
+The handler never sees the credential: the router leaves the session cookie out of the handler's
+`cookies` record and raw `RequestCookies` view, and a record that names it is refused
+(`bynk.actor.signed_cookie_read_directly`). `bynk deploy` requires the `secret` variable to be set.
+Key minting at deploy and the system-tier test driver follow in later versions of the same increment
 ([#3386](https://github.com/bynk-lang/bynk/issues/3386)).
 
 A `SignedCookie` actor stands alone on its route, like `Oidc`

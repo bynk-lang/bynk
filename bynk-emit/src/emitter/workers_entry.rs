@@ -650,6 +650,14 @@ fn append_missing_bindings(names: &mut Vec<String>, extra: &str) {
     names.extend(wanted);
 }
 
+/// #3386: the cookie a route's `SignedCookie` seam reads, if it has one.
+fn signed_cookie_name(
+    h: &bynk_syntax::ast::Handler,
+    actors: &std::collections::HashMap<String, bynk_syntax::ast::ActorDecl>,
+) -> Option<String> {
+    bynk_check::actors::signed_cookie_seam_for(h, actors).map(|s| s.cookie)
+}
+
 #[allow(clippy::too_many_arguments)]
 pub fn emit_worker_entry(
     context: &str,
@@ -794,9 +802,9 @@ pub fn emit_worker_entry(
                     // v0.47: a Bearer handler's surface wrapper runs the
                     // verification seam and needs the request passed in.
                     bearer: bynk_check::actors::bearer_seam_for(h, &table.actors).is_some(),
-                    // v0.151: an `Oidc` handler's wrapper — like Bearer's — runs the
-                    // verification seam and takes the request as its first argument.
+                    // v0.151: an `Oidc` wrapper runs its verification seam, taking the request first.
                     oidc: bynk_check::actors::oidc_seam_for(h, &table.actors).is_some(),
+                    signed_cookie: signed_cookie_name(h, &table.actors),
                     signature: bynk_check::actors::signature_seam_for(h, &table.actors),
                     // v0.52: a multi-actor sum handler's wrapper owns the whole
                     // boundary (raw read, first-wins resolution, body parse), so
@@ -2539,6 +2547,10 @@ struct HttpRoute {
     /// wrapper runs the JWKS verification seam and takes the request first, like
     /// Bearer.
     oidc: bool,
+    /// #3386: the handler's `by` clause names a `SignedCookie` actor, whose session
+    /// cookie (this name) the wrapper verifies and the handler's `cookies` view omits.
+    /// Its wrapper takes the request first, like Bearer.
+    signed_cookie: Option<String>,
     /// v0.51: the handler's `by` clause names a Signature actor — the entry
     /// dispatch reads the raw body, verifies the HMAC, and parses the body from
     /// those same bytes.
@@ -2741,25 +2753,77 @@ fn form_field_specs(
     Some(record_field_specs(rec, types, false))
 }
 
+/// #3277: bind a handler's `cookies` parameter. `cookies: RequestCookies` (decision A) is the
+/// raw view of the request's cookies; a `cookies` record is decoded off the `Cookie` header and
+/// validated before the handler runs, answering `400` as a `body` does, with the record's own
+/// codec checking refinements and filling defaults. #3386: a route guarded by a `SignedCookie`
+/// actor consumes that cookie at the seam, so it is hidden from either form. Returns whether the
+/// parameter was a `cookies` one (a `:cookies` path segment is a path parameter instead).
+/// #2341: the `RequestHeaders` a handler is passed. #3386: on a `SignedCookie` route the session
+/// cookie is hidden from its `Cookie` header, as it is from the `cookies` views.
+fn request_headers_arg(route: &HttpRoute) -> TsExpr {
+    let mut args = vec![ident("request")];
+    args.extend(
+        route
+            .signed_cookie
+            .as_deref()
+            .map(|h| str_lit(crate::emitter::escape_ts_string(h))),
+    );
+    call(ident("__requestHeaders"), args)
+}
+
+fn bind_cookies_param(
+    route: &HttpRoute,
+    p: &bynk_syntax::ast::Param,
+    guarded: &mut Vec<TsStmt>,
+    call_args: &mut Vec<TsExpr>,
+    wrappers: (Option<&str>, Option<&str>, Option<&str>),
+    ru: &RuntimeUse,
+) -> bool {
+    if p.name.name != "cookies" || route.path.split('/').any(|seg| seg == ":cookies") {
+        return false;
+    }
+    let hidden = route.signed_cookie.as_deref();
+    if matches!(p.type_ref, TypeRef::RequestCookies(_)) {
+        let mut args = vec![ident("request")];
+        args.extend(hidden.map(|h| str_lit(crate::emitter::escape_ts_string(h))));
+        call_args.push(call(ident("__requestCookies"), args));
+        return true;
+    }
+    let Some(fields) = &route.cookies_fields else {
+        return false;
+    };
+    push_cookies_param(
+        fields,
+        &p.type_ref,
+        hidden,
+        guarded,
+        call_args,
+        wrappers,
+        ru,
+    );
+    true
+}
+
 /// #3277: the statements that decode a route's `cookies` record off the `Cookie`
 /// header and bind it for the handler call: `400` on a rejection, as a `body`
 /// answers, with the record's own codec checking refinements and filling defaults.
 fn push_cookies_param(
     fields: &[FieldSpec],
     type_ref: &TypeRef,
+    hide: Option<&str>,
     guarded: &mut Vec<TsStmt>,
     call_args: &mut Vec<TsExpr>,
     (cors_const, security_const, rejected): (Option<&str>, Option<&str>, Option<&str>),
     ru: &RuntimeUse,
 ) {
     let spec: Vec<TsExpr> = field_specs_exprs(fields);
-    guarded.push(const_(
-        "__c",
-        call(
-            ident("__cookieObject"),
-            vec![ident("request"), TsExpr::array(spec)],
-        ),
-    ));
+    let mut cookie_args = vec![ident("request"), TsExpr::array(spec)];
+    // #3386: a `SignedCookie` actor's credential is not the handler's to read.
+    if let Some(hidden) = hide {
+        cookie_args.push(str_lit(crate::emitter::escape_ts_string(hidden)));
+    }
+    guarded.push(const_("__c", call(ident("__cookieObject"), cookie_args)));
     guarded.push(if_(
         TsExpr::Unary {
             op: bynk_ts::TsUnaryOp::Not,
@@ -3181,7 +3245,7 @@ fn emit_http_route_dispatch(
         }
         // #2341 (decision A): `headers` is the request's headers, read-only.
         if pname == "headers" && matches!(p.type_ref, TypeRef::RequestHeaders(_)) {
-            call_args.push(call(ident("__requestHeaders"), vec![ident("request")]));
+            call_args.push(request_headers_arg(route));
             continue;
         }
         // #2854 (decision B): `query: RequestQuery` is the raw query string.
@@ -3233,32 +3297,14 @@ fn emit_http_route_dispatch(
             call_args.push(ident("query"));
             continue;
         }
-        // #3277 (decision A): `cookies: RequestCookies` is the raw view of the
-        // request's cookies.
-        let cookies_is_path_raw = route.path.split('/').any(|seg| seg == ":cookies");
-        if pname == "cookies"
-            && !cookies_is_path_raw
-            && matches!(p.type_ref, TypeRef::RequestCookies(_))
-        {
-            call_args.push(call(ident("__requestCookies"), vec![ident("request")]));
-            continue;
-        }
-        // #3277: `cookies` is decoded off the `Cookie` header and validated before
-        // the handler runs, answering `400` as a `body` does; the record's own codec
-        // checks refinements and fills defaults.
-        let cookies_is_path = route.path.split('/').any(|seg| seg == ":cookies");
-        if pname == "cookies"
-            && !cookies_is_path
-            && let Some(fields) = &route.cookies_fields
-        {
-            push_cookies_param(
-                fields,
-                &p.type_ref,
-                &mut guarded,
-                &mut call_args,
-                (cors_const, security_const, rejected),
-                ru,
-            );
+        if bind_cookies_param(
+            route,
+            p,
+            &mut guarded,
+            &mut call_args,
+            (cors_const, security_const, rejected),
+            ru,
+        ) {
             continue;
         }
         // It's a path parameter — extract from __m.params and construct. The
@@ -3644,16 +3690,17 @@ fn emit_http_route_dispatch(
     // Invoke the handler and serialise the HttpResult. The handler is
     // wrapped on the surface so its deps are wired by `compose`. v0.47: a
     // Bearer wrapper takes the request first (it runs the verification seam).
-    let surface_args: Vec<TsExpr> = if route.bearer || route.sum || route.oidc {
-        // The Bearer, Oidc, and sum wrappers take the request first (they run the
-        // verification seam); a sum wrapper also reads/parses the body itself,
-        // so `call_args` here carries only the path params.
-        let mut a = vec![ident("request")];
-        a.extend(call_args.iter().cloned());
-        a
-    } else {
-        call_args
-    };
+    let surface_args: Vec<TsExpr> =
+        if route.bearer || route.sum || route.oidc || route.signed_cookie.is_some() {
+            // The Bearer, Oidc, and sum wrappers take the request first (they run the
+            // verification seam); a sum wrapper also reads/parses the body itself,
+            // so `call_args` here carries only the path params.
+            let mut a = vec![ident("request")];
+            a.extend(call_args.iter().cloned());
+            a
+        } else {
+            call_args
+        };
     push_handler_invocation(route, method_key, surface_args, too_large, &mut guarded);
     let inner_ty = http_result_inner(&h.return_type);
     let ser_fn = crate::emitter::serialisation::serialise_ref_via(&inner_ty, "handlers.", ru);
