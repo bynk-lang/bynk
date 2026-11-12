@@ -1195,8 +1195,8 @@ fn emit_statement(out: &mut String, stmt: &Statement, cx: &mut LowerCtx, indent:
         }
         Statement::Do(d) => {
             // v0.146 (ADR 0170): `do expr` → `await expr;`. The binder-free
-            // `let _ <- expr` for a unit effect — the effect runs and joins the
-            // handler, its `()` result discarded (no `const`).
+            // `let _ <- expr` — the effect runs and joins the handler, its
+            // result discarded (no `const`).
             let mut pre = Pre::new();
             let value = pre.lower(&d.value, cx);
             for st in pre.stmts() {

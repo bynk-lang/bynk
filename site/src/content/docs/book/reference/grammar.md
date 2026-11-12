@@ -2189,12 +2189,11 @@ and discards it.
 
 {{#grammar do_stmt}}
 
-Performs a unit effect as a statement: `do effect` (v0.146, ADR 0170). The
-binder-free spelling of `let _ <- effect` when the awaited value is `()` — the
-effect runs and joins the handler, its unit result discarded. Legal only in an
-effectful body; the operand must be `Effect[()]`. To await and discard a
-*valued* reply, keep `let _ <- effect`, so throwing away a real value stays
-visible.
+Performs an effect as a statement: `do effect` (v0.146, ADR 0170). The
+binder-free spelling of `let _ <- effect` — the effect runs and joins the
+handler, its result discarded. Legal only in an effectful body; the operand
+must be an `Effect[T]` whose `T` is not a `Result`. To await and discard a
+`Result`, write `let _ <- effect`, so dropping an `Err` stays visible.
 
 **Static semantics.**
 {{#grammar-semantics do_stmt}}

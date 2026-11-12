@@ -1,9 +1,0 @@
-commons demo.doreq
-
-fn valued() -> Effect[Int] {
-  Effect.pure(5)
-}
-
-fn bad() -> Effect[()] {
-  do valued()
-}

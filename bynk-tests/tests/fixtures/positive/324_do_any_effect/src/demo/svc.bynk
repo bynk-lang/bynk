@@ -1,0 +1,38 @@
+context demo.svc
+
+// ADR (amends 0170 B): `do e` accepts any `Effect[T]` whose payload is not a
+// `Result`: a unit, a count, an optional old value, an id. A `Result` is
+// refused (`bynk.effect.do_discards_result`); `let _ <- e` is the explicit way.
+
+capability Store {
+  fn count() -> Effect[Int]
+  fn upsert(key: String) -> Effect[Option[String]]
+  fn insert(key: String) -> Effect[Int]
+  fn touch() -> Effect[()]
+}
+
+provides Store = MemStore {
+  fn count() -> Effect[Int] { 3 }
+  fn upsert(key: String) -> Effect[Option[String]] { None }
+  fn insert(key: String) -> Effect[Int] { 7 }
+  fn touch() -> Effect[()] { () }
+}
+
+fn generic[T](e: Effect[T]) -> Effect[()] {
+  do e
+}
+
+service writes {
+  on call(key: String) -> Effect[String] given Store {
+    do Store.touch()
+    do Store.count()
+    do Store.upsert(key)
+    do Store.insert(key)
+    par {
+      do Store.count()
+      do Store.upsert(key)
+      let n <- Store.insert(key)
+    }
+    Effect.pure(key)
+  }
+}

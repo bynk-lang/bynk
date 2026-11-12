@@ -1,0 +1,9 @@
+commons demo
+
+fn send() -> Effect[Result[Int, String]] {
+  Effect.pure(Ok(1))
+}
+
+fn run() -> Effect[()] {
+  do send()
+}
