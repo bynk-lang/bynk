@@ -1,0 +1,17 @@
+context shop
+
+consumes bynk { Cookie, Clock }
+
+type UserId = String where NonEmpty
+
+actor User { auth = SignedCookie(secret = "SESSION_KEY", ttl = 12.hours), identity = UserId }
+
+capability Minter {
+  fn mint(id: UserId) -> Effect[Cookie]
+}
+
+provides Minter = Mint given Clock {
+  fn mint(id: UserId) -> Effect[Cookie] {
+    User.issue(id)
+  }
+}

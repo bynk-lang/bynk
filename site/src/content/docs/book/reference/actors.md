@@ -116,7 +116,8 @@ on POST("/logout") () -> Effect[HttpResult[()]] by u: User {
 `User.issue(identity)` takes the actor's identity type and answers an `Effect[Cookie]`: the signed
 cookie, valid for the actor's `ttl`. It reads the time from the [`Clock`](/book/reference/bynk-capabilities/),
 so the handler lists `Clock` in `given` (`bynk.actor.signed_cookie_issue_needs_clock`), and a test can stub
-it. The `Cookie` it returns is built by the scheme, not by you: the configured name,
+it. It can only be called in a service handler, where the signing key arrives, not in a provider or an agent
+(`bynk.actor.signed_cookie_issue_outside_handler`). The `Cookie` it returns is built by the scheme, not by you: the configured name,
 `HttpOnly`, `Secure`, `Path=/`, no `Domain`, the actor's `SameSite` and a `Max-Age` equal to `ttl`.
 There are no attributes to get wrong, so you attach it with `withCookie` and nothing else.
 `User.expire()` is the matching deletion (same name and path, empty, `Max-Age=0`), so a logout cannot
