@@ -251,6 +251,23 @@ pub fn by_clause_is_oidc(by: &ByClause, actors: &HashMap<String, ActorDecl>) -> 
             == Some(Scheme::Oidc)
 }
 
+/// Whether a route's seam refuses a forged or expired credential as a `401`: a `Bearer` route's
+/// token, or (#3386) a `SignedCookie` route's cookie.
+pub fn route_refuses_bad_token(by: &ByClause, actors: &HashMap<String, ActorDecl>) -> bool {
+    route_has_bearer_seam(by, actors) || by_clause_is_signed_cookie(by, actors)
+}
+
+/// #3386: whether a `by` clause names a single local `SignedCookie` actor (never a sum member), so
+/// the `system` driver can mint a session cookie for it and its seam refuses a bad one.
+pub fn by_clause_is_signed_cookie(by: &ByClause, actors: &HashMap<String, ActorDecl>) -> bool {
+    !by.is_sum()
+        && actors
+            .get(&by.primary().name)
+            .and_then(|a| a.auth.as_ref())
+            .and_then(|a| Scheme::from_name(a.name.as_str()))
+            == Some(Scheme::SignedCookie)
+}
+
 pub fn bearer_seam_for(
     handler: &Handler,
     actors: &HashMap<String, ActorDecl>,
@@ -661,6 +678,7 @@ pub fn route_is_secured(by: &ByClause, actors: &HashMap<String, ActorDecl>) -> b
     if !by.is_sum() {
         return by_clause_is_bearer(by, actors)
             || by_clause_is_oidc(by, actors)
+            || by_clause_is_signed_cookie(by, actors)
             || signature_seam_for_by(by, actors).is_some();
     }
     if sum_has_open_member(by, actors) {

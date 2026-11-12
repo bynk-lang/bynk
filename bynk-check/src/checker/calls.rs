@@ -5276,7 +5276,7 @@ pub(crate) fn check_effect_let_principal(
         let sig_seam =
             by.and_then(|by| crate::actors::signature_seam_of_route(by, &ctx.test_actors));
         let bearer =
-            by.is_some_and(|by| crate::actors::route_has_bearer_seam(by, &ctx.test_actors));
+            by.is_some_and(|by| crate::actors::route_refuses_bad_token(by, &ctx.test_actors));
         // #3052: an `Oidc` route's seam refuses a bad token too.
         let oidc = by.is_some_and(|by| crate::actors::by_clause_is_oidc(by, &ctx.test_actors));
         match (name, sig_seam) {
