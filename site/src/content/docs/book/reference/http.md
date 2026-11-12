@@ -916,8 +916,8 @@ service archives from http {
   `headers.get("content-length")`; a stream with more or fewer bytes than `size` faults the
   write and stores nothing. A chunked upload has no `Content-Length`, so it cannot go to
   `putStream`: pass it to [`Fetch.sendStream`](/book/reference/bynk-capabilities/#streamed-bodies),
-  which needs no length, or answer `411`. A proxy can also re-serve what it receives
-  through [`RawStreamed`](#streamed-raw-responses).
+  which needs no length, or answer `411`. A proxy reads the body first, then answers: it
+  does not re-serve the request stream as its response (see below).
 - **Not with a signature or a sum of actors.** A `Signature` actor verifies an HMAC over
   the whole body before the handler runs (`bynk.http.stream_body_signature`), and a sum
   of actors reads the body itself (`bynk.http.stream_body_on_sum_route`). Use a

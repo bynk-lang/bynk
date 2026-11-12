@@ -16,5 +16,11 @@ export function compose(env: Env) {
     async http_PUT_zips_Param_name(name: string, body: AsyncIterable<globalThis.Uint8Array>) {
       return handlers.blobs.http_PUT_zips_Param_name(name, body, deps);
     },
+    async http_PUT_rendered_Param_name(name: string, body: AsyncIterable<globalThis.Uint8Array>) {
+      return handlers.rendered.http_PUT_rendered_Param_name(name, body, deps);
+    },
+    async rejected_rendered(why: { readonly tag: string; readonly detail: string }) {
+      return handlers.rendered.rejected(why, deps);
+    },
   };
 }
