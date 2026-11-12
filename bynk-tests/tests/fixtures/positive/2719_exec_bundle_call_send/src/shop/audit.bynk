@@ -1,7 +1,7 @@
 context shop.audit
 
 // #2719 DECISION C: a Bundle `on call` handler receives the execution context for
-// a direct `~>`, as it already did for `within` and `race`, so the send behaves the
+// a direct `detach`, as it already did for `within` and `race`, so the send behaves the
 // same written in the handler or reached through a function.
 
 capability Ledger {
@@ -13,13 +13,13 @@ provides Ledger = NoLedger {
 }
 
 fn logIt(id: Int, f: (Int) -> Effect[()]) -> Effect[Int] {
-	~> f(id)
+	do f(id).detach()
 	Effect.pure(id)
 }
 
 service audit {
 	on call(id: Int) -> Effect[Int] given Ledger {
-		~> Ledger.book(id)
+		do Ledger.book(id).detach()
 		Effect.pure(id)
 	}
 }

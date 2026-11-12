@@ -8,7 +8,7 @@ import { type __JsonValue, type __BoundaryError, type __ServiceBinding, __callSe
 import { HttpResult } from "../../__bynk_runtime/httpresult.js";
 
 export async function audited(f: (a0: number) => globalThis.Promise<void>, n: number, __exec: { waitUntil(promise: globalThis.Promise<unknown>): void }): globalThis.Promise<number> {
-  __bynkDetach(f(n), __exec, "notes.bynk:25:2");
+  await __bynkDetach(f(n), __exec, "notes.bynk:25:5");
   return n;
 }
 

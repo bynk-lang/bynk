@@ -16,7 +16,7 @@ export async function book(n: number, deps: { Audit: Audit; Logger: bynk.Logger 
 }
 
 export async function announce(n: number, deps: { Audit: Audit }, __exec: { waitUntil(promise: globalThis.Promise<unknown>): void }): globalThis.Promise<number> {
-  __bynkDetach(deps.Audit.note(n), __exec, "src/shop/orders/steps.bynk:15:2");
+  await __bynkDetach(deps.Audit.note(n), __exec, "src/shop/orders/steps.bynk:15:5");
   return n;
 }
 

@@ -28,6 +28,7 @@ per-commit history. While Bynk is pre-1.0, increments may change behaviour.
 
 | Version | Highlights |
 |---|---|
+| **v0.574.1** | The repository's own corpus, spec §5.5, the guides and the reference describe `e.detach()` and the deprecated `~>` |
 | **v0.574.0** | `~>` is deprecated for `do e.detach()`: a warning with a `bynk check --fix` rewrite, and `~>` now lowers through the same failure-reporting helper |
 | **v0.573.0** | `e.detach()` on any `Effect[T]` stops waiting for a running effect and reports a fault or an `Err` through the runtime instead of losing it |
 | **v0.572.0** | `e.detach()` on any `Effect[T]` stops waiting for a running effect and reports a fault or an `Err` through the runtime instead of losing it |

@@ -74,8 +74,8 @@ export function __makeCounter(key: string, env?: { COUNTER?: __DurableObjectName
 
 export const api = {
   async http_GET(deps: { Logger: bynk.Logger; __exec: { waitUntil(promise: globalThis.Promise<unknown>): void } }): globalThis.Promise<HttpResult<string>> {
-    __bynkDetach(deps.Logger.info("hi"), deps.__exec, "src/tally.bynk:16:3");
-    __bynkDetach(__makeCounter("a").bump(deps), deps.__exec, "src/tally.bynk:17:3");
+    await __bynkDetach(deps.Logger.info("hi"), deps.__exec, "src/tally.bynk:16:6");
+    await __bynkDetach(__makeCounter("a").bump(deps), deps.__exec, "src/tally.bynk:17:6");
     return HttpResult.Ok("hi");
   },
 };

@@ -12,7 +12,7 @@ fn book(n: Int) -> Effect[Int] given Audit, Logger {
 
 // Sends, so it takes the execution context as well as `deps`.
 fn announce(n: Int) -> Effect[Int] given Audit {
-	~> Audit.note(n)
+	do Audit.note(n).detach()
 	Effect.pure(n)
 }
 

@@ -41,6 +41,6 @@ handler has returned. The platform logs it. A fault *before* the deadline faults
 
 ## Where this shows up in a test
 
-A test settles the effects `within` abandoned when the call returns, as it settles `~>`
-sends. A call that timed out is recorded when it was issued, like any call, so
+A test settles the effects `within` abandoned when the call returns, as it settles a
+detached effect. A call that timed out is recorded when it was issued, like any call, so
 `expect Pricing.quote called once` sees it.
