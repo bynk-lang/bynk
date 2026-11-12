@@ -4,6 +4,7 @@
 
 use super::*;
 // #1759: every namespace a test module imports, from one definition.
+use crate::dev_run::TEST_SESSION_KEY;
 use bynk_check::test_suites::{self, ResolvedStub};
 use bynk_emit::emitter::emit::test_scaffold_ns as test_ns;
 use bynk_ts::{TsBindingName, TsDecl, TsExpr, TsLit, TsObjectEntry, TsParam, TsStmt, TsType};
@@ -929,12 +930,9 @@ pub(super) fn base64(bytes: &[u8]) -> String {
     out
 }
 
-/// The signing key a `unit` or `integration` case uses for every `SignedCookie` actor of the target: a
-/// fixed test key (base64url of 32 bytes), so a cookie a handler issues is the same on every run.
-/// The `system` tier signs with the key it sets on the deployed Worker instead.
-pub(super) const TEST_SESSION_KEY: &str = "Ynluay10ZXN0LXNlc3Npb24ta2V5LTAxMjM0NTY3ODk";
-
-/// (`deps.__session`, for a handler's `Actor.issue(identity)`.)
+/// `deps.__session`, for a handler's `Actor.issue(identity)`: every `SignedCookie` actor of the target
+/// signs with the fixed `TEST_SESSION_KEY`, so an issued cookie is the same on every run. The `system`
+/// tier signs with the key it sets on the deployed Worker instead.
 fn session_keys_entry(
     target_name: &str,
     target_kind: UnitKind,

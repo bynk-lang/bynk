@@ -1,0 +1,113 @@
+suite shop.api as system {
+	// #3386: the cookie arm's CSRF check, end to end: each `Sec-Fetch-Site` value against an `Origin` that is
+	// listed, unlisted or `null`, on a safe and on a state-changing route. The driver sends
+	// `Sec-Fetch-Site: same-origin` unless a case's own headers say otherwise.
+
+	case "a signed-in read works" {
+		let r <- api.GET("/me") by User("ada")
+		expect r is Ok("ada")
+	}
+	case "a state-changing request from the same origin works" {
+		let r <- api.POST("/rename") by User("ada")
+		expect r is NoContent
+	}
+	case "POST same-origin with a listed Origin is allowed" {
+		let r <- api.POST("/rename", RequestHeaders.of(["Sec-Fetch-Site: same-origin", "Origin: https://app.example.com"])) by User("ada")
+		expect r is NoContent
+	}
+	case "POST same-origin with an unlisted Origin is allowed" {
+		let r <- api.POST("/rename", RequestHeaders.of(["Sec-Fetch-Site: same-origin", "Origin: https://evil.example"])) by User("ada")
+		expect r is NoContent
+	}
+	case "POST same-origin with a null Origin is allowed" {
+		let r <- api.POST("/rename", RequestHeaders.of(["Sec-Fetch-Site: same-origin", "Origin: null"])) by User("ada")
+		expect r is NoContent
+	}
+	case "POST same-origin with no Origin is allowed" {
+		let r <- api.POST("/rename", RequestHeaders.of(["Sec-Fetch-Site: same-origin"])) by User("ada")
+		expect r is NoContent
+	}
+	case "GET same-origin with an unlisted Origin is not checked" {
+		let r <- api.GET("/me", RequestHeaders.of(["Sec-Fetch-Site: same-origin", "Origin: https://evil.example"])) by User("ada")
+		expect r is Ok("ada")
+	}
+	case "POST same-site with a listed Origin is allowed" {
+		let r <- api.POST("/rename", RequestHeaders.of(["Sec-Fetch-Site: same-site", "Origin: https://app.example.com"])) by User("ada")
+		expect r is NoContent
+	}
+	case "POST same-site with an unlisted Origin is refused" {
+		let r <- api.POST("/rename", RequestHeaders.of(["Sec-Fetch-Site: same-site", "Origin: https://evil.example"])) by User("ada")
+		expect r is Forbidden
+	}
+	case "POST same-site with a null Origin is refused" {
+		let r <- api.POST("/rename", RequestHeaders.of(["Sec-Fetch-Site: same-site", "Origin: null"])) by User("ada")
+		expect r is Forbidden
+	}
+	case "POST same-site with no Origin is refused" {
+		let r <- api.POST("/rename", RequestHeaders.of(["Sec-Fetch-Site: same-site"])) by User("ada")
+		expect r is Forbidden
+	}
+	case "GET same-site with an unlisted Origin is not checked" {
+		let r <- api.GET("/me", RequestHeaders.of(["Sec-Fetch-Site: same-site", "Origin: https://evil.example"])) by User("ada")
+		expect r is Ok("ada")
+	}
+	case "POST cross-site with a listed Origin is allowed" {
+		let r <- api.POST("/rename", RequestHeaders.of(["Sec-Fetch-Site: cross-site", "Origin: https://app.example.com"])) by User("ada")
+		expect r is NoContent
+	}
+	case "POST cross-site with an unlisted Origin is refused" {
+		let r <- api.POST("/rename", RequestHeaders.of(["Sec-Fetch-Site: cross-site", "Origin: https://evil.example"])) by User("ada")
+		expect r is Forbidden
+	}
+	case "POST cross-site with a null Origin is refused" {
+		let r <- api.POST("/rename", RequestHeaders.of(["Sec-Fetch-Site: cross-site", "Origin: null"])) by User("ada")
+		expect r is Forbidden
+	}
+	case "POST cross-site with no Origin is refused" {
+		let r <- api.POST("/rename", RequestHeaders.of(["Sec-Fetch-Site: cross-site"])) by User("ada")
+		expect r is Forbidden
+	}
+	case "GET cross-site with an unlisted Origin is not checked" {
+		let r <- api.GET("/me", RequestHeaders.of(["Sec-Fetch-Site: cross-site", "Origin: https://evil.example"])) by User("ada")
+		expect r is Ok("ada")
+	}
+	case "POST none with a listed Origin is refused" {
+		let r <- api.POST("/rename", RequestHeaders.of(["Sec-Fetch-Site: none", "Origin: https://app.example.com"])) by User("ada")
+		expect r is Forbidden
+	}
+	case "POST none with an unlisted Origin is refused" {
+		let r <- api.POST("/rename", RequestHeaders.of(["Sec-Fetch-Site: none", "Origin: https://evil.example"])) by User("ada")
+		expect r is Forbidden
+	}
+	case "POST none with a null Origin is refused" {
+		let r <- api.POST("/rename", RequestHeaders.of(["Sec-Fetch-Site: none", "Origin: null"])) by User("ada")
+		expect r is Forbidden
+	}
+	case "POST none with no Origin is refused" {
+		let r <- api.POST("/rename", RequestHeaders.of(["Sec-Fetch-Site: none"])) by User("ada")
+		expect r is Forbidden
+	}
+	case "GET none with an unlisted Origin is not checked" {
+		let r <- api.GET("/me", RequestHeaders.of(["Sec-Fetch-Site: none", "Origin: https://evil.example"])) by User("ada")
+		expect r is Ok("ada")
+	}
+	case "no cookie is refused" {
+		let r <- api.GET("/me") by Nobody
+		expect r is Rejected(Unauthorized)
+	}
+
+	case "a forged cookie is refused" {
+		let r <- api.GET("/me") by Forged
+		expect r is Rejected(Unauthorized)
+	}
+
+	case "an expired cookie is refused" {
+		let r <- api.GET("/me") by Expired
+		expect r is Rejected(Unauthorized)
+	}
+
+	case "a state-changing request with no cookie is refused as unauthenticated" {
+		let r <- api.POST("/rename") by Nobody
+		expect r is Rejected(Unauthorized)
+	}
+}

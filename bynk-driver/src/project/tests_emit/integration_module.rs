@@ -774,6 +774,9 @@ pub(super) fn emit_integration_module(
     if runtime_use.request_cookies() {
         append_missing_bindings(&mut runtime_names, emitter::REQUEST_COOKIES_RUNTIME_IMPORTS);
     }
+    if runtime_use.session_signing() {
+        append_missing_bindings(&mut runtime_names, emitter::SESSION_SIGNING_RUNTIME_IMPORTS);
+    }
     if runtime_use.request_query() {
         append_missing_bindings(&mut runtime_names, emitter::REQUEST_QUERY_RUNTIME_IMPORTS);
     }

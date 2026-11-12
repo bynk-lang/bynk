@@ -127,6 +127,8 @@ pub struct RuntimeUse {
     request_cookies: Cell<bool>,
     /// #3386: the module issues or deletes a `SignedCookie` session cookie.
     session_cookie: Cell<bool>,
+    /// #3386: a `system` driver mints session cookies (`__signSessionCookie`, `__newSessionKey`).
+    session_signing: Cell<bool>,
     /// #2854: a typed query becomes a query string (`__queryString`).
     query_string: Cell<bool>,
     /// #3276: a typed `@multipart` body becomes a `FormData` (`__multipartForm`).
@@ -290,6 +292,16 @@ impl RuntimeUse {
     /// Record that the module issues or deletes a session cookie (#3386).
     pub fn note_session_cookie(&self) {
         self.session_cookie.set(true);
+    }
+
+    /// Record that a `system` driver mints session cookies (#3386).
+    pub fn note_session_signing(&self) {
+        self.session_signing.set(true);
+    }
+
+    /// Whether the session-signing helpers must be imported (#3386).
+    pub fn session_signing(&self) -> bool {
+        self.session_signing.get()
     }
 
     /// Whether the session-cookie helpers must be imported (#3386).

@@ -1,0 +1,2 @@
+# #3386: the cookie arm and its CSRF check, end to end through the real Worker.
+passed=26 failed=0

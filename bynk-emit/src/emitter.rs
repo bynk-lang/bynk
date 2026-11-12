@@ -3860,6 +3860,7 @@ fn cookie_runtime_imports(ru: &RuntimeUse, parts: &mut Vec<&str>) {
     for (used, imports) in [
         (ru.request_cookies(), REQUEST_COOKIES_RUNTIME_IMPORTS),
         (ru.session_cookie(), SESSION_COOKIE_RUNTIME_IMPORTS),
+        (ru.session_signing(), SESSION_SIGNING_RUNTIME_IMPORTS),
     ] {
         if used {
             parts.extend(imports.trim_start_matches(", ").split(", "));
@@ -4506,6 +4507,8 @@ pub const REQUEST_COOKIES_RUNTIME_IMPORTS: &str = ", __requestCookies, __request
 /// #3386: what `Actor.issue(identity)` and `Actor.expire()` lower to.
 pub const SESSION_COOKIE_RUNTIME_IMPORTS: &str =
     ", __issueSessionCookie, __expireSessionCookie, __sessionKeysOf";
+/// #3386: what a `system` driver mints a `SignedCookie` session cookie with.
+pub const SESSION_SIGNING_RUNTIME_IMPORTS: &str = ", __signSessionCookie, __newSessionKey";
 /// #2854: the typed-query serialiser a mixed typed+`Wire` system call and a typed
 /// query driver turn a record's wire form into a query string with.
 pub const QUERY_STRING_RUNTIME_IMPORTS: &str = ", __queryString";

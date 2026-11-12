@@ -1095,11 +1095,12 @@ export function sessionCookieOf(request: Request, name: string): string | null {
  *  **exactly** one of `allowedOrigins`, the service's credentialed `cors` origins (scheme, host and port;
  *  a sibling subdomain is accepted only if listed; a wildcard or `null` never qualifies), or, when the
  *  browser sent no `Sec-Fetch-Site` at all, this request's own origin. `none` is a user-initiated
- *  navigation, which a state-changing request is not, so it is refused like the rest. A request that
+ *  navigation, which a state-changing request is not, so it is refused whatever its `Origin`. A request that
  *  reveals neither header is refused. */
 export function csrfAllowed(request: Request, allowedOrigins: readonly string[]): boolean {
   const site = request.headers.get("sec-fetch-site");
   if (site === "same-origin") return true;
+  if (site === "none") return false;
   const origin = request.headers.get("origin");
   if (origin === null || origin === "null" || origin === "*") return false;
   if (site === null) {

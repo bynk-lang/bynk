@@ -29,6 +29,10 @@ use crate::test_json::TestRun;
 /// Workers (`-- --var`) and in the runner that signs for them.
 pub const TEST_SECRET: &str = "__bynk_test_secret";
 
+/// #3386: the fixed signing key a `SignedCookie` actor's key variable takes in a test run (base64url of
+/// 32 bytes), as the verifier refuses the short `TEST_SECRET`.
+pub const TEST_SESSION_KEY: &str = "Ynluay10ZXN0LXNlc3Npb24ta2V5LTAxMjM0NTY3ODk";
+
 /// How long to wait for a `bynk dev` to answer before giving up.
 const READY_TIMEOUT: Duration = Duration::from_secs(180);
 
@@ -97,7 +101,7 @@ pub fn run(program: &str, args: &DevRunArgs) -> ExitCode {
     let mut docs: Vec<serde_json::Value> = Vec::new();
     let mut all_ok = true;
     for (i, group) in plan.groups.iter().enumerate() {
-        let vars = dev_vars(group, &plan.secrets);
+        let vars = dev_vars(group, &plan.secrets, &plan.session_secrets);
         if !args.json {
             eprintln!(
                 "{program} test: starting `bynk dev`{}",
@@ -152,6 +156,8 @@ pub fn run(program: &str, args: &DevRunArgs) -> ExitCode {
 struct Plan {
     groups: Vec<BTreeMap<String, String>>,
     secrets: BTreeSet<String>,
+    /// #3386: the variables holding a `SignedCookie` actor's signing key.
+    session_secrets: BTreeSet<String>,
     /// Every (suite, case) a group can run, to judge `--suite`/`--case` against.
     cases: Vec<(String, String)>,
 }
@@ -235,6 +241,7 @@ fn plan(program: &str, args: &DevRunArgs) -> Result<Plan, Planned> {
         })
         .collect();
     let mut secrets = BTreeSet::new();
+    let mut session_secrets = BTreeSet::new();
     for (path, doc) in &out.artefacts.docs {
         if path.file_name().is_some_and(|n| n == "bynk-secrets.json") {
             let manifest: serde_json::Value = serde_json::from_str(&doc.text()).unwrap_or_default();
@@ -245,11 +252,17 @@ fn plan(program: &str, args: &DevRunArgs) -> Result<Plan, Planned> {
                     }
                 }
             }
+            for entry in manifest["session"].as_array().into_iter().flatten() {
+                if let Some(name) = entry["secret"].as_str() {
+                    session_secrets.insert(name.to_string());
+                }
+            }
         }
     }
     Ok(Plan {
         groups,
         secrets,
+        session_secrets,
         cases,
     })
 }
@@ -259,8 +272,13 @@ fn plan(program: &str, args: &DevRunArgs) -> Result<Plan, Planned> {
 pub fn dev_vars(
     group: &BTreeMap<String, String>,
     secrets: &BTreeSet<String>,
+    session_secrets: &BTreeSet<String>,
 ) -> BTreeMap<String, String> {
     let mut vars = group.clone();
+    for s in session_secrets {
+        vars.entry(s.clone())
+            .or_insert_with(|| TEST_SESSION_KEY.to_string());
+    }
     for s in secrets {
         vars.entry(s.clone())
             .or_insert_with(|| TEST_SECRET.to_string());
@@ -626,7 +644,7 @@ mod tests {
             ("AUTH_SECRET".to_string(), "s3".to_string()),
         ]);
         let secrets = BTreeSet::from(["AUTH_SECRET".to_string(), "HOOK_SECRET".to_string()]);
-        let vars = dev_vars(&group, &secrets);
+        let vars = dev_vars(&group, &secrets, &BTreeSet::new());
         assert_eq!(vars["PAYMENTS"], "fake");
         assert_eq!(vars["AUTH_SECRET"], "s3");
         assert_eq!(vars["HOOK_SECRET"], TEST_SECRET);

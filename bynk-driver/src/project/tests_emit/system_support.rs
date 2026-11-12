@@ -367,6 +367,8 @@ pub(super) fn emit_system_http_support(
     // #2135: whether some route is `Signature`-secured, so the module needs
     // the HMAC signer.
     let mut signs_hmac = false;
+    // #3386: the variables holding a `SignedCookie` actor's signing key.
+    let mut session_secrets: std::collections::BTreeSet<String> = std::collections::BTreeSet::new();
     // #3052: whether some route is `Oidc`-secured, so the module needs the
     // test issuer.
     let mut has_oidc = false;
@@ -694,6 +696,29 @@ pub(super) fn emit_system_http_support(
             } else {
                 (auth_header, signs_claims)
             };
+            // #3386: a `SignedCookie` route's drivers send a session cookie, and by default the
+            // `Sec-Fetch-Site: same-origin` a browser's own page would (a case's headers win).
+            let session = bynk_check::actors::signed_cookie_seam_for(h, &table.actors).map(|seam| {
+                session_secrets.insert(seam.secret.clone());
+                runtime_use.note_session_signing();
+                SessionDriver {
+                    keys: format!("{{ secret: {} }}", secret_read_of(&seam.secret)),
+                    actor: seam.actor,
+                    cookie: seam.cookie,
+                    ttl_secs: seam.ttl_secs,
+                }
+            });
+            let (typed_cookie, raw_cookie, csrf_default) = match &session {
+                Some(s) => {
+                    let pair = s.pair(&s.keys, "__sub", "__bynkNow()");
+                    (
+                        merge_cookie(&typed_cookie, &pair),
+                        merge_cookie(&raw_cookie, &pair),
+                        "\"sec-fetch-site\": \"same-origin\", ",
+                    )
+                }
+                None => (typed_cookie, raw_cookie, ""),
+            };
             // #2864: the secret a `by Forged` / `by Expired` Bearer token is
             // signed against — the lone Bearer actor's, or a sum's first
             // Bearer member's.
@@ -918,7 +943,7 @@ pub(super) fn emit_system_http_support(
                 (headers_spread, "")
             };
             let typed_options = ident(format!(
-                "{{ method: {method:?}, headers: {{ {spread_first}{content_type}{spread_last}{typed_cookie}{auth_header}{sig_header}}}, {body_init}}}",
+                "{{ method: {method:?}, headers: {{ {csrf_default}{spread_first}{content_type}{spread_last}{typed_cookie}{auth_header}{sig_header}}}, {body_init}}}",
                 method = method.as_str(),
             ));
             // #2135: the bytes a signing driver signs: what it sends.
@@ -982,7 +1007,7 @@ pub(super) fn emit_system_http_support(
                     content_type.clone()
                 };
                 let raw_options = ident(format!(
-                    "{{ method: {method:?}, headers: {{ {spread_first}{raw_content_type}{spread_last}{raw_cookie}{auth_header}{sig_header}}}, {raw_body_init}}}",
+                    "{{ method: {method:?}, headers: {{ {csrf_default}{spread_first}{raw_content_type}{spread_last}{raw_cookie}{auth_header}{sig_header}}}, {raw_body_init}}}",
                     method = method.as_str(),
                 ));
                 routes.push(sysdrive_driver(
@@ -1008,10 +1033,10 @@ pub(super) fn emit_system_http_support(
             // normally. Emitted only for a Bearer-secured route (one that carries
             // an auth header) — an unsecured route has no seam to reject a missing
             // credential, so a `by Nobody` there is meaningless.
-            let secured = !auth_header.is_empty() || sig.is_some() || sum.is_some();
+            let secured = !auth_header.is_empty() || sig.is_some() || sum.is_some() || session.is_some();
             if secured {
                 let noauth_options = ident(format!(
-                    "{{ method: {method:?}, headers: {{ {headers_spread}{content_type}}}, {body_init}}}",
+                    "{{ method: {method:?}, headers: {{ {csrf_default}{headers_spread}{content_type}}}, {body_init}}}",
                     method = method.as_str(),
                 ));
                 routes.push(sysdrive_driver(
@@ -1046,7 +1071,7 @@ pub(super) fn emit_system_http_support(
                     None => String::new(),
                 };
                 let rawnoauth_options = ident(format!(
-                    "{{ method: {method:?}, headers: {{ {headers_spread}{content_type}}}, {raw_body_init}}}",
+                    "{{ method: {method:?}, headers: {{ {csrf_default}{headers_spread}{content_type}}}, {raw_body_init}}}",
                     method = method.as_str(),
                 ));
                 routes.push(sysdrive_driver(
@@ -1190,6 +1215,35 @@ pub(super) fn emit_system_http_support(
                         ));
                     }
                 }
+            }
+            // #3386: on a `SignedCookie` route, `by Forged` (signed with a key the seam does
+            // not hold) and `by Expired` (issued before the cookie's `ttl`), each decoding a
+            // `401` to `Rejected(Unauthorized)`.
+            if let Some(s) = &session {
+                push_session_refusal_drivers(
+                    &mut routes,
+                    s,
+                    sname,
+                    &key,
+                    &binding,
+                    &payload_deser,
+                    (driver_params.as_slice(), raw_params.as_slice()),
+                    (&url, &raw_url),
+                    SessionRequest {
+                        method: method.as_str(),
+                        content_type: &content_type,
+                        headers_spread,
+                        body_stmt: body_stmt.as_ref(),
+                        body_init,
+                        raw_body_init: &match body_ps.first() {
+                            Some(p) => {
+                                format!("body: {}, ", bynk_emit::emitter::ts_ident(&p.name.name))
+                            }
+                            None => String::new(),
+                        },
+                        has_params: !h.params.is_empty(),
+                    },
+                );
             }
             // #3052: on an `Oidc` route, `by Forged` (signed by a key the
             // JWKS does not publish), `by Expired`, `by WrongIssuer` and
@@ -1450,6 +1504,7 @@ pub(super) fn emit_system_http_support(
             ty: TsType::Object(vec![process_member]),
         }
     };
+    secrets.extend(session_secrets.iter().cloned());
     for s in secrets.iter().filter(|_| !remote) {
         let assign_process = TsStmt::assign(
             member(cast_globalthis_process(false), "process"),
@@ -1471,7 +1526,11 @@ pub(super) fn emit_system_http_support(
                 )),
                 index: Box::new(str_lit(s.clone())),
             },
-            str_lit("__bynk_test_secret"),
+            str_lit(if session_secrets.contains(s) {
+                crate::dev_run::TEST_SESSION_KEY
+            } else {
+                "__bynk_test_secret"
+            }),
             None,
         );
         code.push(assign_process);
@@ -1949,5 +2008,124 @@ mod tests {
         assert!(names_ident("x(); // c\nRegion.Here", "Region"));
         assert!(!names_ident("/* Region */ x()", "Region"));
         assert!(names_ident("/* a */ Region.Here", "Region"));
+    }
+}
+
+/// #3386: what a `system` driver needs to mint a `SignedCookie` actor's session cookie.
+struct SessionDriver {
+    /// The `{ secret: … }` keys expression the cookie is signed with.
+    keys: String,
+    /// The declaring actor's name: the cookie's `aud`.
+    actor: String,
+    /// The cookie's name.
+    cookie: String,
+    /// How long an issued cookie is valid, in seconds.
+    ttl_secs: i64,
+}
+
+impl SessionDriver {
+    /// The `name=value` template-literal text for `sub` (a TS expression) signed with `keys`
+    /// and issued `issued_secs` (a TS expression, in seconds) after the epoch.
+    fn pair(&self, keys: &str, sub: &str, issued_secs: &str) -> String {
+        format!(
+            "`{}=${{await __signSessionCookie({keys}, {:?}, {sub}, {}, ({issued_secs}) * 1000)}}`",
+            self.cookie, self.actor, self.ttl_secs
+        )
+    }
+}
+
+/// The `Cookie` header text carrying `pair` and, when a route also takes a `cookies` param,
+/// the cookies that param is sent as. `existing` is `"cookie": <expr>, ` or empty.
+fn merge_cookie(existing: &str, pair: &str) -> String {
+    match existing
+        .strip_prefix("\"cookie\": ")
+        .and_then(|e| e.strip_suffix(", "))
+    {
+        Some(expr) => format!("\"cookie\": [{expr}, {pair}].join(\"; \"), "),
+        None => format!("\"cookie\": {pair}, "),
+    }
+}
+
+/// The request a route's session-refusal drivers build, bar the credential.
+struct SessionRequest<'a> {
+    method: &'a str,
+    content_type: &'a str,
+    headers_spread: &'a str,
+    body_stmt: Option<&'a TsStmt>,
+    body_init: &'a str,
+    raw_body_init: &'a str,
+    has_params: bool,
+}
+
+/// #3386: the `forged_` and `expired_` drivers (typed, and raw when the route takes params)
+/// of a `SignedCookie` route: a well-formed cookie signed with a key the seam does not hold,
+/// and a correctly signed one issued before its `ttl`. Each decodes a `401` to
+/// `Rejected(Unauthorized)`. Both carry `Sec-Fetch-Site: same-origin`, so the refusal is the
+/// cookie's and not the CSRF check's.
+#[allow(clippy::too_many_arguments)]
+fn push_session_refusal_drivers(
+    routes: &mut Vec<TsStmt>,
+    session: &SessionDriver,
+    sname: &str,
+    key: &str,
+    binding: &str,
+    payload: &str,
+    (driver_params, raw_params): (&[TsParam], &[TsParam]),
+    (url, raw_url): (&TsExpr, &TsExpr),
+    req: SessionRequest<'_>,
+) {
+    let make = |body: &str| {
+        ident(format!(
+            "{{ method: {:?}, headers: {{ \"sec-fetch-site\": \"same-origin\", {}{}\"cookie\": __cookie, }}, {body}}}",
+            req.method, req.headers_spread, req.content_type
+        ))
+    };
+    let options = make(req.body_init);
+    let raw_options = make(req.raw_body_init);
+    let issued_before_ttl = format!("__bynkNow() - {} - 3600", session.ttl_secs);
+    let variants = [
+        (
+            "forged",
+            session.pair("{ secret: __newSessionKey() }", "\"bynk-test\"", "__bynkNow()"),
+        ),
+        (
+            "expired",
+            session.pair(&session.keys, "\"bynk-test\"", &issued_before_ttl),
+        ),
+    ];
+    for (name, pair) in variants {
+        let sign_stmt = TsStmt::raw(format!("const __cookie = {pair};"), None);
+        routes.push(sysdrive_driver(
+            &format!("{name}_"),
+            sname,
+            key,
+            driver_params.to_vec(),
+            req.body_stmt.cloned(),
+            url.clone(),
+            options.clone(),
+            binding,
+            "__responseToUnauthOutcome",
+            payload,
+            false,
+            vec![sign_stmt.clone()],
+            false,
+        ));
+        if req.has_params {
+            routes.push(sysdrive_driver(
+                &format!("raw{name}_"),
+                sname,
+                key,
+                raw_params.to_vec(),
+                None,
+                raw_url.clone(),
+                raw_options.clone(),
+                binding,
+                "__responseToUnauthOutcome",
+                payload,
+                false,
+                vec![sign_stmt],
+                false,
+            ));
+        }
     }
 }

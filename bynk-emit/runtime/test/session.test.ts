@@ -312,8 +312,9 @@ test("csrf matrix: Sec-Fetch-Site x Origin (listed, unlisted, null, absent) for 
       const headers: Record<string, string> = {};
       if (site !== null) headers["sec-fetch-site"] = site;
       if (origin !== null) headers["origin"] = origin;
-      // Only same-origin passes alone; otherwise the Origin must be a listed credentialed origin.
-      const want = site === "same-origin" || kind === "listed";
+      // Only same-origin passes alone; `none` never passes; otherwise the Origin must be a listed
+      // credentialed origin.
+      const want = site === "same-origin" || (site !== "none" && kind === "listed");
       assert.equal(csrfAllowed(req(headers, "https://api.example.com/x", "POST"), CORS), want, `${site} / ${kind}`);
     }
   }
@@ -322,6 +323,8 @@ test("csrf matrix: Sec-Fetch-Site x Origin (listed, unlisted, null, absent) for 
 test("csrf: `none` (a user-initiated navigation) is refused on its own", () => {
   assert.equal(csrfAllowed(req({ "sec-fetch-site": "none" }), CORS), false);
   assert.equal(csrfAllowed(req({ "sec-fetch-site": "none" }), []), false);
+  // Even with an Origin the service lists: a state-changing request is never a navigation.
+  assert.equal(csrfAllowed(req({ "sec-fetch-site": "none", origin: CORS[0] }), CORS), false);
 });
 
 test("csrf: the match is exact (scheme, host, port); a sibling subdomain needs its own listing", () => {
