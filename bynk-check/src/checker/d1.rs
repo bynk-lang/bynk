@@ -240,21 +240,19 @@ pub(crate) fn sql_literal_text(e: &Expr, ctx: &Ctx) -> Option<String> {
     match &e.kind {
         ExprKind::StrLit(s) => Some(s.clone()),
         ExprKind::Ident(id) if ctx.lookup(id.name.as_str()).is_none() => {
-            let mut name = id.name.as_str();
             // A chain longer than the constants in scope is a cycle, already
             // `bynk.resolve.const_cycle`; the bound keeps this total.
-            for _ in 0..=ctx.input.consts.len() {
-                let c = ctx.input.consts.get(name)?;
-                if !matches!(c.ty, TypeRef::Base(BaseType::String, _)) {
-                    return None;
-                }
-                match &c.init.kind {
-                    ExprKind::StrLit(s) => return Some(s.clone()),
-                    ExprKind::Ident(next) => name = next.name.as_str(),
-                    _ => return None,
-                }
+            let start = ctx.input.consts.get(id.name.as_str())?;
+            let lit = crate::consts::chain_literal(
+                start,
+                BaseType::String,
+                ctx.input.consts.len(),
+                |n| ctx.input.consts.get(n),
+            )?;
+            match &lit.kind {
+                ExprKind::StrLit(s) => Some(s.clone()),
+                _ => None,
             }
-            None
         }
         _ => None,
     }

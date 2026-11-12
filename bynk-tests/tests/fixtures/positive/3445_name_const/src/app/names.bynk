@@ -1,0 +1,5 @@
+commons app.names
+
+// #3445: a constant in a literal-only annotation argument. A used commons'
+// public constant counts; a private one does not leave its unit.
+const SidCookie: String = "__Host-sid"

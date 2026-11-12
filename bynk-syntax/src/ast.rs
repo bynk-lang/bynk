@@ -1587,6 +1587,23 @@ pub struct AnnotationArg {
     pub label: Option<Ident>,
     pub value: Expr,
     pub span: Span,
+    /// #3445: set when `value` is the literal a bare constant reference
+    /// resolved to (`annotation_consts`), not text the author wrote. `value`
+    /// keeps the reference's span, so a diagnostic points where the author can
+    /// act; this names the constant and where it is declared.
+    pub from_const: Option<ConstRef>,
+}
+
+/// #3445: the constant an annotation argument named before the resolution pass
+/// replaced it with the literal it denotes.
+#[derive(Debug, Clone)]
+pub struct ConstRef {
+    /// The reference as written (its span is the argument's).
+    pub name: Ident,
+    /// The span of the constant's declaration, when it is in the same file as
+    /// the reference (a span is an offset into one file); `None` for a constant
+    /// from a sibling file or a used commons.
+    pub decl_span: Option<Span>,
 }
 
 /// A storage kind applied to its element type(s) (v0.81): `Cell[Int]`,

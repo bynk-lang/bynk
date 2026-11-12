@@ -1,0 +1,14 @@
+context api
+
+type CookieName = String where MinLength(1)
+const Key: CookieName = "sid"
+
+type Session = {
+  @name(Key) sid: Option[String],
+}
+
+service api from http {
+  on GET("/me") (query: Session) -> Effect[HttpResult[String]] by v: Visitor {
+    Ok("x")
+  }
+}

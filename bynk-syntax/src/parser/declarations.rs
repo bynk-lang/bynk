@@ -3930,7 +3930,12 @@ impl<'a> Parser<'a> {
             .as_ref()
             .map(|l| l.span.merge(value.span))
             .unwrap_or(value.span);
-        Ok(AnnotationArg { label, value, span })
+        Ok(AnnotationArg {
+            label,
+            value,
+            span,
+            from_const: None,
+        })
     }
 
     /// True when the cursor is on an alphabetic word immediately followed by `:`

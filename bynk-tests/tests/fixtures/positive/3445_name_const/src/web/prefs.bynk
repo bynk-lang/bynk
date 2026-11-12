@@ -1,0 +1,21 @@
+context web.prefs
+
+uses app.names
+
+// #3445: `@name` takes a `String` constant bound to a literal, so the name is
+// written once and the same constant can name the cookie a handler sets.
+const VisitsCookie: String = "__Host-visits"
+const ThemeCookie: String = VisitsCookieTheme
+const VisitsCookieTheme: String = "theme"
+
+type Prefs = {
+	@name(VisitsCookie) visits: Option[Int],
+	@name(ThemeCookie) theme: Option[String],
+	@name(SidCookie) sid: Option[String],
+}
+
+service api from http {
+	on GET("/prefs") (cookies: Prefs) -> Effect[HttpResult[String]] by v: Visitor {
+		Ok("prefs")
+	}
+}

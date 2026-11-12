@@ -3408,8 +3408,21 @@ constants of a commons the unit `uses`, but MUST NOT do so in a cycle
 order). The files of a unit MAY import each other in a cycle through their
 constants: a constant is emitted as a hoisted function, so the order in which
 the files' modules evaluate does not matter. A constant MAY NOT yet appear in
-a compile-time position, such as a refinement bound (`InRange(1, MaxQty)`) or
-an annotation argument.
+a refinement bound (`InRange(1, MaxQty)`).
+
+A bare reference to a constant MAY stand in an **annotation argument** that
+takes a literal, and counts as the literal it is bound to, following
+constant-to-constant references (ADR 0678 C, as amended; the rule ADR 0762
+applies to SQL text). The constant's declared type MUST be exactly the
+argument's base type (a refined or opaque constant is not accepted) and each
+constant on the chain MUST be declared so; a `private` constant does not leave
+its unit. The reference is resolved once, before any annotation argument is
+read, so every check and every reader (the emitters, the OpenAPI document,
+hover) sees the literal, and a diagnostic about the value points at the
+reference. A name that does not resolve is the annotation's own bad-argument
+diagnostic. `@name` takes such a `String` constant
+([`@name`](/book/reference/types/#field-name)); the other literal-taking
+annotations follow.
 
 A constant is emitted as an exported, hoisted function of the declaring module
 that returns its cached value

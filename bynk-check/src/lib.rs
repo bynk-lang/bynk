@@ -28,6 +28,7 @@
 pub mod actors;
 pub mod agent_state;
 pub mod analysis;
+pub mod annotation_consts;
 pub mod assets;
 pub mod ast_text;
 pub mod builtin_names;
