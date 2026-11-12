@@ -2536,6 +2536,34 @@ pub const EXPLANATIONS: &[Explain] = &[
         anchor: "setting-cookies",
     },
     Explain {
+        code: "bynk.http.cookie_field_arity",
+        blurb: "`Record.field.cookie(value)` writes a typed cookie from a record's field, so it takes exactly the value to write, and `Record.field.expire()` takes nothing: the field is named by the path, not by an argument. Write `Prefs.theme.cookie(Dark)` to set it and `Prefs.theme.expire()` to remove it.",
+        example: "Ok(\"x\").withCookie(Prefs.theme.cookie())       // ✗ the value to write is missing\n\nOk(\"x\").withCookie(Prefs.theme.cookie(Dark))   // ✓",
+        page: "/book/reference/http",
+        anchor: "setting-cookies",
+    },
+    Explain {
+        code: "bynk.http.cookie_field_list",
+        blurb: "A `List` field of a `cookies` record is a cookie name sent several times, so writing one would be several `Set-Cookie` lines, which one `Cookie` cannot be. The typed write is refused for it. Write each cookie with an untyped `Cookie { name, value }` and `withCookie`.",
+        example: "Ok(\"x\").withCookie(Prefs.tags.cookie(\"a\"))   // ✗ `tags` is a `List` field\n\nOk(\"x\").withCookie(Prefs.theme.cookie(Dark))   // ✓ a scalar field",
+        page: "/book/reference/http",
+        anchor: "setting-cookies",
+    },
+    Explain {
+        code: "bynk.http.cookie_field_not_cookie_record",
+        blurb: "A typed cookie write is named and encoded as its record's decoder reads it, so the record must be the `cookies` parameter of an `on http` handler in this unit: that decoder is what the write agrees with. For a cookie in no record, write an untyped `Cookie { name, value }`.",
+        example: "type Other = { theme: Theme = Light }\nOk(\"x\").withCookie(Other.theme.cookie(Dark))   // ✗ no handler decodes `Other` as `cookies`\n\nOk(\"x\").withCookie(Prefs.theme.cookie(Dark))    // ✓ `Prefs` is a handler's `cookies` record",
+        page: "/book/reference/http",
+        anchor: "setting-cookies",
+    },
+    Explain {
+        code: "bynk.http.cookie_field_unknown",
+        blurb: "`Record.field.cookie(value)` and `Record.field.expire()` name a field of the cookie record, and the field is the one the cookie is named and encoded by. The name given is not a field of the record; the note lists its fields.",
+        example: "Ok(\"x\").withCookie(Prefs.mode.cookie(Dark))    // ✗ `Prefs` has no field `mode`\n\nOk(\"x\").withCookie(Prefs.theme.cookie(Dark))   // ✓",
+        page: "/book/reference/http",
+        anchor: "setting-cookies",
+    },
+    Explain {
         code: "bynk.http.cookie_host_prefix",
         blurb: "A cookie named `__Host-…` asks the browser to keep it only if it is `Secure`, has no `Domain` and has `Path=/`. That ties it to this exact host, so a sibling subdomain or an insecure page cannot set or overwrite it. A browser drops one that breaks any of the three, so a literal that does is refused. Remove `secure: false`, the `domain` and any `path` other than `\"/\"`, or rename the cookie.",
         example: "Created(\"ok\").withCookie(Cookie { name: \"__Host-sid\", value: \"a\", path: \"/app\" })   // ✗ must be `/`\n\nCreated(\"ok\").withCookie(Cookie { name: \"__Host-sid\", value: \"a\" })                 // ✓",
@@ -8815,6 +8843,26 @@ pub const REGISTRY: &[DiagnosticInfo] = &[
         "A cookie literal outside the `__Host-` prefix sets a `domain`, so every subdomain receives it (warning).",
         &["http_handler"],
     )),
+    dg(
+        "bynk.http.cookie_field_arity",
+        "A typed cookie write or deletion (`Record.field.cookie(v)`, `Record.field.expire()`) is given the wrong number of arguments.",
+        &["http_handler"],
+    ),
+    dg(
+        "bynk.http.cookie_field_list",
+        "A typed cookie write names a `List` field of the cookie record.",
+        &["http_handler"],
+    ),
+    dg(
+        "bynk.http.cookie_field_not_cookie_record",
+        "A typed cookie write names a record that is not the `cookies` record of an `on http` handler in this unit.",
+        &["http_handler"],
+    ),
+    dg(
+        "bynk.http.cookie_field_unknown",
+        "A typed cookie write names a field the cookie record does not have.",
+        &["http_handler"],
+    ),
     dg(
         "bynk.http.cookie_host_prefix",
         "A `__Host-` cookie literal is not `secure`, sets a `domain`, or uses a `path` other than `/`.",
