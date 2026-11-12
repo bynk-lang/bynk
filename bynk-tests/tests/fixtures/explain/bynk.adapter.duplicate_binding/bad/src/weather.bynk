@@ -1,0 +1,10 @@
+adapter weather {
+    binding "./station.binding.ts"
+    binding "./extra.binding.ts"
+
+    capability Weather {
+        fn now() -> Effect[Int]
+    }
+
+    provides Weather = Station
+}

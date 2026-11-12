@@ -1,0 +1,4 @@
+context shop
+
+consumes payment as Pay
+consumes shipping as Pay

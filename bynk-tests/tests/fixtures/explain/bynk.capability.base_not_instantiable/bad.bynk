@@ -1,0 +1,11 @@
+context demo
+
+consumes bynk { Clock }
+
+capability Ticks = Clock
+
+service probe {
+    on call() -> Effect[Int] {
+        Effect.pure(1)
+    }
+}

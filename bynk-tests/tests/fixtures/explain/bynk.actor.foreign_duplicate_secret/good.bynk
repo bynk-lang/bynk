@@ -1,0 +1,10 @@
+context demo
+
+actor Legacy { auth = Foreign(secret = "SHARED_KEY") }
+actor Ledger { auth = Foreign(secret = "LEDGER_CALL_KEY") }
+
+service ping {
+    on call(n: Int) -> Effect[Int] by who: Legacy | Ledger {
+        n
+    }
+}

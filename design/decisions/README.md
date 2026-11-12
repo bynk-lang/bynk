@@ -17,6 +17,7 @@ or a row links to no file. Summaries and statuses are curated by hand; the
 
 | # | Decision | Status |
 |---|---|---|
+| [0814](0814-field-name-readers.md) | **The request readers apply a record field's `@name` wire key** (v0.559) — Where a renamed field is read, written and documented, and what an error names | Accepted (v0.559) |
 | [0813](0813-hyperdrive-h3-typed-reads-and-transaction.md) | **Hyperdrive H3: typed reads and `transaction` for `Postgres`, and what stays apart from `decodeSql`** (v0.558) — Variant names, how an `Instant` and an `int8` are read, why `decodeSql` is not unified with the codec yet, and how a transaction reaches the driver | Accepted (v0.558) |
 | [0812](0812-field-name-annotation.md) | **`@name("…")` field annotation for external names that are not identifiers** (v0.557) — The first field annotation in the language, how it is parsed and where it is legal | Accepted (v0.557) |
 | [0811](0811-hyperdrive-h1-postgres-instance-kind.md) | **Hyperdrive H1: a `Postgres` instance kind over postgres.js** (v0.556) — Variant names, how the driver reaches the binding, one connection per statement, and the SQLSTATE mapping | Accepted (v0.556) |

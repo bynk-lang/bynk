@@ -1,0 +1,9 @@
+context demo
+
+actor Legacy { auth = Foreign }
+
+service ping {
+    on call(n: Int) -> Effect[Int] by Legacy {
+        n
+    }
+}

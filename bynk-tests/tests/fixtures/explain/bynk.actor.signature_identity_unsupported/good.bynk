@@ -1,0 +1,9 @@
+context demo
+
+actor Hook { auth = Signature(secret = "WEBHOOK_KEY", header = "X-Sig") }
+
+service api from http {
+    on POST("/x") (body: String) -> Effect[HttpResult[String]] by Hook {
+        Ok("x")
+    }
+}

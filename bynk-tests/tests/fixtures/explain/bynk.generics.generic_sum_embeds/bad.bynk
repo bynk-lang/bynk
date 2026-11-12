@@ -1,0 +1,8 @@
+commons demo
+
+type PayError = enum { Declined }
+
+type Failure[T] =
+    | Payment(reason: PayError)
+    | Other(value: T)
+    embeds PayError as Payment
