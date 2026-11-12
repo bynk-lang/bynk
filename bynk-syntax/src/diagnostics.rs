@@ -2197,6 +2197,20 @@ pub const EXPLANATIONS: &[Explain] = &[
         anchor: "caching",
     },
     Explain {
+        code: "bynk.http.cookie_cross_site_without_credentials",
+        blurb: "A cookie with `SameSite=None` (`SameSite.Unrestricted`) exists to travel on cross-site requests, and a browser attaches cookies to a cross-origin `fetch` only when the request is credentialed and the response carries `Access-Control-Allow-Credentials: true`. A service with no `cors` policy, or one with `credentials: false`, never sends that header, so a cross-origin `fetch` can never send the cookie back. This is a warning, because a `SameSite=None` cookie is still sent on top-level cross-site navigations, cross-site form posts and in embeds (SSO and payment callbacks, widgets), none of which needs CORS. If a page on another origin must send it back with `fetch`, declare `cors { origins: [...], credentials: true }` (the origins must be exact, not `[\"*\"]`), or use `SameSite.Lax` if the cookie need not cross sites at all.",
+        example: "service api from http {\n  on POST(\"/login\") () -> Effect[HttpResult[String]] by v: Visitor {\n    Created(\"ok\").withCookie(Cookie { name: \"sid\", value: \"a\", sameSite: SameSite.Unrestricted })   // ⚠ no `cors { credentials: true }`\n  }\n}\n\nservice api from http {\n  cors { origins: [\"https://app.example.com\"], credentials: true }   // ✓\n  …\n}",
+        page: "/book/reference/http",
+        anchor: "setting-cookies",
+    },
+    Explain {
+        code: "bynk.http.cookie_domain_widens",
+        blurb: "A cookie with no `Domain` attribute belongs to exactly the host that set it. Setting `domain` makes it available to that domain and every subdomain, so a sibling service, or a subdomain an attacker can take over, receives it and can set a cookie of the same name. That is rarely wanted, so it is a warning. Drop `domain`; or, if the cookie is a session cookie, name it `__Host-…`, which makes the compiler refuse a `domain` altogether (`bynk.http.cookie_host_prefix`). Keep `domain` only when subdomains genuinely share the login.",
+        example: "Created(\"ok\").withCookie(Cookie { name: \"sid\", value: \"a\", domain: Some(\"example.com\") })   // ⚠ every subdomain receives it\n\nCreated(\"ok\").withCookie(Cookie { name: \"__Host-sid\", value: \"a\" })                           // ✓ this host only",
+        page: "/book/reference/http",
+        anchor: "setting-cookies",
+    },
+    Explain {
         code: "bynk.http.cookie_host_prefix",
         blurb: "A cookie named `__Host-…` asks the browser to keep it only if it is `Secure`, has no `Domain` and has `Path=/`. That ties it to this exact host, so a sibling subdomain or an insecure page cannot set or overwrite it. A browser drops one that breaks any of the three, so a literal that does is refused. Remove `secure: false`, the `domain` and any `path` other than `\"/\"`, or rename the cookie.",
         example: "Created(\"ok\").withCookie(Cookie { name: \"__Host-sid\", value: \"a\", path: \"/app\" })   // ✗ must be `/`\n\nCreated(\"ok\").withCookie(Cookie { name: \"__Host-sid\", value: \"a\" })                 // ✓",
@@ -7518,6 +7532,16 @@ pub const REGISTRY: &[DiagnosticInfo] = &[
         "bynk.http.cache_unknown_arg",
         "A `@cache` annotation has an argument outside the closed set (`maxAge`/`scope`/`immutable`).",
     ),
+    warn(dg(
+        "bynk.http.cookie_cross_site_without_credentials",
+        "A service attaches a `SameSite.Unrestricted` cookie but declares no `cors { credentials: true }`, so a cross-origin `fetch` can never send it back (warning).",
+        &["http_handler"],
+    )),
+    warn(dg(
+        "bynk.http.cookie_domain_widens",
+        "A cookie literal outside the `__Host-` prefix sets a `domain`, so every subdomain receives it (warning).",
+        &["http_handler"],
+    )),
     dg(
         "bynk.http.cookie_host_prefix",
         "A `__Host-` cookie literal is not `secure`, sets a `domain`, or uses a `path` other than `/`.",

@@ -7,7 +7,7 @@ title: Diagnostic index
 
 Every diagnostic code the compiler can emit, with a one-line summary of the cause, grouped by category. For step-by-step cause-and-fix guidance on the most common ones, see the [troubleshooting guides](/book/troubleshooting/). For a code with a curated explanation, `bynk explain <code>` prints it in a terminal, and in VS Code the diagnostic's **Explain** quick fix (or **Bynk: Explain Diagnostic Code…**) shows the same text in a panel, offline.
 
-There are **827** codes in total.
+There are **829** codes in total.
 
 ## Agents
 
@@ -203,6 +203,8 @@ There are **827** codes in total.
 | [`bynk.http.cache_on_non_get`](/book/reference/http/#caching) | A `@cache` annotation is placed on a handler that is not `on http GET`. |  | — |
 | [`bynk.http.cache_public_reads_cookies`](/book/reference/http/#caching) | A `@cache(scope: public)` handler takes a `cookies` parameter, so a shared cache could replay one user's response to another. | [`http_handler`](/book/reference/grammar/#rule-http_handler) | — |
 | [`bynk.http.cache_unknown_arg`](/book/reference/http/#caching) | A `@cache` annotation has an argument outside the closed set (`maxAge`/`scope`/`immutable`). |  | — |
+| [`bynk.http.cookie_cross_site_without_credentials`](/book/reference/http/#setting-cookies) | A service attaches a `SameSite.Unrestricted` cookie but declares no `cors { credentials: true }`, so a cross-origin `fetch` can never send it back (warning). | [`http_handler`](/book/reference/grammar/#rule-http_handler) | Warning |
+| [`bynk.http.cookie_domain_widens`](/book/reference/http/#setting-cookies) | A cookie literal outside the `__Host-` prefix sets a `domain`, so every subdomain receives it (warning). | [`http_handler`](/book/reference/grammar/#rule-http_handler) | Warning |
 | [`bynk.http.cookie_host_prefix`](/book/reference/http/#setting-cookies) | A `__Host-` cookie literal is not `secure`, sets a `domain`, or uses a `path` other than `/`. | [`http_handler`](/book/reference/grammar/#rule-http_handler) | — |
 | [`bynk.http.cookie_partitioned_insecure`](/book/reference/http/#setting-cookies) | A `partitioned` cookie literal is not `secure`. | [`http_handler`](/book/reference/grammar/#rule-http_handler) | — |
 | [`bynk.http.cookie_samesite_none_insecure`](/book/reference/http/#setting-cookies) | A cookie literal with `sameSite: SameSite.Unrestricted` is not `secure`. | [`http_handler`](/book/reference/grammar/#rule-http_handler) | — |
