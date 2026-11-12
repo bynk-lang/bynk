@@ -1,0 +1,6 @@
+[project]
+name = "3400-system-bytes-static"
+version = "0.1.0"
+
+[paths]
+include = ["src", "tests"]
