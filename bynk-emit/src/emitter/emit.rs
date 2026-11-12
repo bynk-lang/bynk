@@ -3052,10 +3052,19 @@ fn seam_identity_ts_type(seam: &ActorSeamIr) -> bynk_ts::TsType {
         bynk_ts::TsTypeMember::readonly_prop("address", bynk_ts::TsType::named("string")),
         bynk_ts::TsTypeMember::readonly_prop(
             "dmarc",
-            bynk_ts::TsType::Object(vec![bynk_ts::TsTypeMember::readonly_prop(
-                "tag",
-                bynk_ts::TsType::named("string"),
-            )]),
+            // #3397: the `DmarcVerdict` union itself, not `{ tag: string }`,
+            // so `s.identity.dmarc` passes where a `DmarcVerdict` is expected.
+            bynk_ts::TsType::union(
+                ["DmarcPass", "DmarcFail", "DmarcNone"]
+                    .into_iter()
+                    .map(|v| {
+                        bynk_ts::TsType::Object(vec![bynk_ts::TsTypeMember::readonly_prop(
+                            "tag",
+                            bynk_ts::TsType::named(format!("\"{v}\"")),
+                        )])
+                    })
+                    .collect(),
+            ),
         ),
     ])
 }
