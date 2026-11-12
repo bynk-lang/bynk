@@ -41,6 +41,9 @@ use std::path::{Path, PathBuf};
 
 use bynk_driver::project::BuildTarget;
 
+#[path = "../par/mod.rs"]
+mod par;
+
 /// `(source, target, module, unbound names, issue)`. `source` is a fixture
 /// directory name or a [`repros`] name.
 const KNOWN: &[(&str, &str, &str, &[&str], u32)] = &[];
@@ -270,10 +273,13 @@ fn every_emitted_module_binds_every_name_it_uses() {
         .collect();
     dirs.sort();
 
-    let mut reports = Reports::new();
-    let mut modules = 0;
-    for dir in &dirs {
+    // Compile each fixture on a worker pool (#3387); every fixture reports into
+    // its own map, merged afterwards (the keys never collide: they lead with
+    // the fixture name).
+    let per_fixture = par::par_map(&dirs, |dir| {
         let name = dir.file_name().unwrap().to_string_lossy().to_string();
+        let mut reports = Reports::new();
+        let mut modules = 0;
         if dir.join("src").is_dir() {
             for target in [BuildTarget::Bundle, BuildTarget::Workers] {
                 if let Some(out) = compile_project_fixture(dir, target) {
@@ -290,6 +296,13 @@ fn every_emitted_module_binds_every_name_it_uses() {
             .unwrap_or_else(|_| panic!("{name} must compile"));
             modules += record(&mut reports, &name, BuildTarget::Bundle, &out);
         }
+        (reports, modules)
+    });
+    let mut reports = Reports::new();
+    let mut modules = 0;
+    for (r, m) in per_fixture {
+        reports.extend(r);
+        modules += m;
     }
 
     let scratch = std::env::temp_dir().join(format!("bynk-import-closure-{}", std::process::id()));

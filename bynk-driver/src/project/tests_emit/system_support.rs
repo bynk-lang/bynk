@@ -806,6 +806,9 @@ pub(super) fn emit_system_http_support(
                     );
                     (Some(stmt), "body: __body, ")
                 }
+                Some(p) if raw_type.is_some() && is_stream(&p.type_ref) => {
+                    streamed_typed_body(&bynk_emit::emitter::ts_ident(&p.name.name))
+                }
                 Some(p) if raw_type.is_some() => {
                     let stmt = TsStmt::const_stmt(
                         TsBindingName::Ident("__body".to_string()),
@@ -964,10 +967,7 @@ pub(super) fn emit_system_http_support(
             // path-param-less route (e.g. `GET /cart/size`) can carry no `Wire`
             // argument, so its raw driver would be dead code.
             if !h.params.is_empty() {
-                let raw_body_init = match body_ps.first() {
-                    Some(p) => format!("body: {}, ", bynk_emit::emitter::ts_ident(&p.name.name)),
-                    None => String::new(),
-                };
+                let raw_body_init = wire_body_init(body_ps.first().copied(), raw_type.is_some());
                 // The `Wire` text is text, so a raw route is sent it as `text/plain`:
                 // a route declaring another media type answers `415`, which is how a
                 // case probes it, and a `"*/*"` route still takes the text.
@@ -1041,10 +1041,7 @@ pub(super) fn emit_system_http_support(
             // correctly here. Emitted under the same conditions as both parent
             // drivers: a `Wire`-eligible slot and a Bearer-secured route.
             if !h.params.is_empty() && secured {
-                let raw_body_init = match body_ps.first() {
-                    Some(p) => format!("body: {}, ", bynk_emit::emitter::ts_ident(&p.name.name)),
-                    None => String::new(),
-                };
+                let raw_body_init = wire_body_init(body_ps.first().copied(), raw_type.is_some());
                 let rawnoauth_options = ident(format!(
                     "{{ method: {method:?}, headers: {{ {headers_spread}{content_type}}}, {raw_body_init}}}",
                     method = method.as_str(),
@@ -1095,12 +1092,8 @@ pub(super) fn emit_system_http_support(
                         false,
                     ));
                     if !h.params.is_empty() {
-                        let raw_body_init = match body_ps.first() {
-                            Some(p) => {
-                                format!("body: {}, ", bynk_emit::emitter::ts_ident(&p.name.name))
-                            }
-                            None => String::new(),
-                        };
+                        let raw_body_init =
+                            wire_body_init(body_ps.first().copied(), raw_type.is_some());
                         let options = ident(format!(
                             "{{ method: {method:?}, headers: {{ {headers_spread}{content_type}{bad_sig_header}}}, {raw_body_init}}}",
                             method = method.as_str(),
@@ -1636,6 +1629,49 @@ pub(super) fn emit_system_job_support(
     SystemJobSupport { code, services }
 }
 
+/// #3380: whether a handler parameter is a `Stream`, so a `@raw` route's `body` is
+/// streamed.
+fn is_stream(t: &bynk_syntax::ast::TypeRef) -> bool {
+    matches!(t, bynk_syntax::ast::TypeRef::Stream(..))
+}
+
+/// #3380: the typed driver's body for a streamed `@raw` route: a `ReadableStream`
+/// pulled from the case's `Stream[Bytes]`, so it goes chunked with no
+/// `content-length`, and the router's counted read (not the `Content-Length`
+/// fast-reject) is what a case over the cap exercises. `duplex: "half"` is what a
+/// streamed request body needs on Node; the spread keeps it out of `RequestInit`'s
+/// excess-property check on lib versions that lack it.
+fn streamed_typed_body(param: &str) -> (Option<TsStmt>, &'static str) {
+    let stmt = TsStmt::raw(
+        format!(
+            "const __it = {param}[globalThis.Symbol.asyncIterator](); const __body = new globalThis.ReadableStream<Uint8Array>({{ async pull(c) {{ const r = await __it.next(); if (r.done) c.close(); else c.enqueue(r.value); }} }}, {{ highWaterMark: 0 }});"
+        ),
+        None,
+    );
+    (
+        Some(stmt),
+        "body: __body, ...({ duplex: \"half\" } as object), ",
+    )
+}
+
+/// The request-init `body:` entry a `Wire` driver sends for a route's body slot (a
+/// raw `string`). #3380: for a streamed `@raw` route it is one streamed chunk with
+/// no `content-length`, so a case can drive the counted overrun (a `"*/*"` route
+/// takes the `text/plain` it is sent).
+fn wire_body_init(body: Option<&bynk_syntax::ast::Param>, raw: bool) -> String {
+    let Some(p) = body else {
+        return String::new();
+    };
+    let param = bynk_emit::emitter::ts_ident(&p.name.name);
+    if raw && is_stream(&p.type_ref) {
+        format!(
+            "body: new globalThis.ReadableStream<Uint8Array>({{ start(c) {{ c.enqueue(new globalThis.TextEncoder().encode({param})); c.close(); }} }}), ...({{ duplex: \"half\" }} as object), "
+        )
+    } else {
+        format!("body: {param}, ")
+    }
+}
+
 /// Type a system-http driver parameter (v0.182): a named type is reached
 /// through the target's handler namespace (`todos.AddRequest`); primitives and
 /// compound shapes fall back to `unknown` — the driver only forwards the value
@@ -1834,6 +1870,100 @@ fn query_string_args(
         args.push(ident(table));
     }
     args
+}
+
+/// Fold every conditional runtime helper a test module's lowered bodies reached
+/// for (as recorded on `ru`) into its runtime import's `names`.
+///
+/// The one list behind both the unit-suite and the integration-suite modules
+/// (#3398): each used to carry its own copy, and a helper added to one flag
+/// chain only (`__bynkPgRow`, for the typed `Postgres` reads) left the other
+/// without it. A new `RuntimeUse` flag that a test body can set is added here.
+pub(super) fn append_runtime_use_imports(names: &mut Vec<String>, ru: &RuntimeUse) {
+    if ru.boundary_codec() {
+        append_missing_bindings(names, emitter::BOUNDARY_CODEC_RUNTIME_IMPORTS);
+    }
+    if ru.json_codec() {
+        append_missing_bindings(names, emitter::JSON_CODEC_RUNTIME_IMPORTS);
+    }
+    if ru.bytes() {
+        append_missing_bindings(names, emitter::BYTES_RUNTIME_IMPORTS);
+    }
+    if ru.bytes_ops() {
+        append_missing_bindings(names, emitter::BYTES_OPS_RUNTIME_IMPORTS);
+    }
+    if ru.time_ops() || ru.pg_rows() {
+        append_missing_bindings(names, &emitter::time_runtime_imports(ru));
+    }
+    if ru.iso_date() {
+        append_missing_bindings(names, emitter::ISO_DATE_RUNTIME_IMPORTS);
+    }
+    if ru.yaml() {
+        append_missing_bindings(names, emitter::YAML_RUNTIME_IMPORTS);
+    }
+    if ru.settle_all() {
+        append_missing_bindings(names, emitter::SETTLE_ALL_RUNTIME_IMPORTS);
+    }
+    if ru.within() {
+        append_missing_bindings(names, emitter::WITHIN_RUNTIME_IMPORTS);
+    }
+    if ru.race() {
+        append_missing_bindings(names, emitter::RACE_RUNTIME_IMPORTS);
+    }
+    if ru.fault() {
+        append_missing_bindings(names, emitter::FAULT_RUNTIME_IMPORTS);
+    }
+    if ru.url_ops() {
+        append_missing_bindings(names, emitter::URL_OPS_RUNTIME_IMPORTS);
+    }
+    if ru.request_headers() {
+        append_missing_bindings(names, emitter::REQUEST_HEADERS_RUNTIME_IMPORTS);
+    }
+    if ru.request_cookies() {
+        append_missing_bindings(names, emitter::REQUEST_COOKIES_RUNTIME_IMPORTS);
+    }
+    if ru.request_query() {
+        append_missing_bindings(names, emitter::REQUEST_QUERY_RUNTIME_IMPORTS);
+    }
+    if ru.query_string() {
+        append_missing_bindings(names, emitter::QUERY_STRING_RUNTIME_IMPORTS);
+    }
+    if ru.form_codec() {
+        append_missing_bindings(names, emitter::FORM_CODEC_RUNTIME_IMPORTS);
+    }
+    if ru.multipart_form() {
+        append_missing_bindings(names, emitter::MULTIPART_FORM_RUNTIME_IMPORTS);
+    }
+    if ru.cookie_string() {
+        append_missing_bindings(names, emitter::COOKIE_STRING_RUNTIME_IMPORTS);
+    }
+    if ru.request_header_pairs() {
+        append_missing_bindings(names, ", __requestHeaderPairs");
+    }
+    if ru.request_query_search() {
+        append_missing_bindings(names, ", __requestQuerySearch");
+    }
+    if ru.token_claims() {
+        append_missing_bindings(names, ", __tokenClaims");
+    }
+    if ru.test_connection() {
+        append_missing_bindings(names, ", TestConnection");
+    }
+    if ru.eq() {
+        append_missing_bindings(names, emitter::EQ_RUNTIME_IMPORTS);
+    }
+    // #1934: a case that compares a typed http outcome with `Ok(…)`.
+    if ru.http_result() {
+        append_missing_bindings(names, "HttpResult");
+    }
+    // #2839: a case that compares a queue verdict with a bare variant.
+    if ru.queue_result() {
+        append_missing_bindings(names, "QueueResult");
+    }
+    if ru.int() {
+        append_missing_bindings(names, emitter::INT_RUNTIME_IMPORTS);
+    }
+    append_missing_bindings(names, &ru.cmp_imports());
 }
 
 #[cfg(test)]

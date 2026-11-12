@@ -1,0 +1,22 @@
+context store.blobs
+
+service blobs from http {
+	// The service-wide cap, for a streamed route with no `@limit` of its own.
+	limits { maxBody: 1_000_000 }
+
+	// A streamed raw body: the handler pulls the request body chunk by chunk, counted
+	// against the cap as it goes. Reading it whole is one `collect`.
+	@raw(contentType: "application/octet-stream")
+	on PUT("/blobs/:name") (name: String, body: Stream[Bytes]) -> Effect[HttpResult[String]] by v: Visitor {
+		let chunks <- body.collect()
+		Ok("\(name): \(chunks.length()) chunks")
+	}
+
+	// The route's own cap wins, and a body a `Stream` is also a plain `Bytes` route's
+	// neighbour: the buffered form is unchanged.
+	@raw(contentType: "*/*")
+	@limit(maxBody: 8)
+	on POST("/small") (body: Bytes) -> Effect[HttpResult[String]] by v: Visitor {
+		Ok(body.toBase64())
+	}
+}

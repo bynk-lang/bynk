@@ -1,0 +1,8 @@
+context api
+
+service api from http {
+  @raw(contentType: "application/octet-stream")
+  on PUT("/blob") (body: Stream[Bytes]) -> Effect[HttpResult[String]] by v: Visitor {
+    Ok("x")
+  }
+}
