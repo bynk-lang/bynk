@@ -1,3 +1,2 @@
 bynk.detach.store_op `count.update(…).detach()` detaches a store operation, but a store write is part of the agent handler's atomic commit
 bynk.detach.store_op `count.update(…).detach()` detaches a store operation, but a store write is part of the agent handler's atomic commit
-# exact

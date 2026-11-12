@@ -1580,7 +1580,7 @@ pub const EXPLANATIONS: &[Explain] = &[
     Explain {
         code: "bynk.detach.in_pure_context",
         blurb: "`detach` hands a running effect to the execution context, and only an effectful body has effects to run: a pure function never runs one. Change the enclosing function's return type to `Effect[…]`. The same rule holds for `bynk.within.in_pure_context`, `bynk.race.in_pure_context` and `bynk.send.in_pure_context`.",
-        example: "fn twice(ping: Effect[()], n: Int) -> Int {\n    do ping.detach()   // ✗ the body is pure\n    n * 2\n}\n\n\
+        example: "fn twice(ping: Effect[()], n: Int) -> Int {\n    let _ = ping.detach()   // ✗ the body is pure\n    n * 2\n}\n\n\
                   fn twice(ping: Effect[()], n: Int) -> Effect[Int] {   // ✓ an effectful body\n    do ping.detach()\n    Effect.pure(n * 2)\n}",
         page: "/book/reference/capabilities",
         anchor: "detach",
