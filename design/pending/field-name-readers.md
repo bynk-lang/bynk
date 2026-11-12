@@ -1,6 +1,7 @@
 ---
 level: minor
 changelog: The request readers apply `@name("…")`: a renamed `cookies`, `query` or `@form`/`@multipart` body field is read from, and written to, its wire key (#3343, slice 2)
+probes: ts_writes
 ---
 
 ## ADR: field-name-readers
