@@ -1,0 +1,14 @@
+context shop
+
+type UserId = String where NonEmpty && MaxLength(64)
+
+actor User {
+  auth = SignedCookie(
+    cookie = "__Host-session",
+    secret = "SESSION_KEY",
+    previous = "SESSION_KEY_PREV",
+    ttl = 12.hours,
+    sameSite = Lax
+  ),
+  identity = UserId
+}

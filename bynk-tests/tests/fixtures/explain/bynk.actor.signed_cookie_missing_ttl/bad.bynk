@@ -1,0 +1,5 @@
+context shop
+
+type UserId = String where NonEmpty
+
+actor User { auth = SignedCookie(secret = "SESSION_KEY"), identity = UserId }

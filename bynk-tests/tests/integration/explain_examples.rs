@@ -65,6 +65,14 @@ use bynk_syntax::diagnostics::EXPLANATIONS;
 /// with an `expected_warnings.txt` instead (`fixtures/positive/`), named here.
 const WARNING_ONLY: &[(&str, &str)] = &[
     (
+        "bynk.actor.signed_cookie_ttl_long",
+        "a warning; `positive/3386_signed_cookie_ttl_long` holds it with `expected_warnings.txt`",
+    ),
+    (
+        "bynk.actor.signed_cookie_unprefixed",
+        "a warning; `positive/3386_signed_cookie_unprefixed` holds it with `expected_warnings.txt`",
+    ),
+    (
         "bynk.postgres.sql_invalid",
         "a warning (the parser is not Postgres' own); `positive/3321_postgres_sql_invalid` and `_in_transaction` hold it with `expected_warnings.txt`",
     ),

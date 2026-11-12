@@ -6225,6 +6225,10 @@
         {
           "type": "STRING",
           "value": "Foreign"
+        },
+        {
+          "type": "STRING",
+          "value": "SignedCookie"
         }
       ]
     },
@@ -6266,6 +6270,23 @@
         }
       ]
     },
+    "scheme_duration": {
+      "type": "SEQ",
+      "members": [
+        {
+          "type": "SYMBOL",
+          "name": "number_literal"
+        },
+        {
+          "type": "STRING",
+          "value": "."
+        },
+        {
+          "type": "SYMBOL",
+          "name": "identifier"
+        }
+      ]
+    },
     "scheme_arg": {
       "type": "SEQ",
       "members": [
@@ -6294,6 +6315,14 @@
               {
                 "type": "SYMBOL",
                 "name": "number_literal"
+              },
+              {
+                "type": "SYMBOL",
+                "name": "scheme_duration"
+              },
+              {
+                "type": "SYMBOL",
+                "name": "identifier"
               }
             ]
           }

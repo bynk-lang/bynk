@@ -1,0 +1,30 @@
+================================================================================
+#3386: a SignedCookie actor with a duration and a bare variant name
+================================================================================
+
+context demo {
+  actor User { auth = SignedCookie(secret = "SESSION_KEY", ttl = 12.hours, sameSite = Lax), identity = UserId }
+}
+
+--------------------------------------------------------------------------------
+
+(source_file
+  (context_decl
+    (qualified_name
+      (identifier))
+    (actor_decl
+      (identifier)
+      (scheme)
+      (scheme_config
+        (scheme_arg
+          (identifier)
+          (string_literal))
+        (scheme_arg
+          (identifier)
+          (scheme_duration
+            (number_literal)
+            (identifier)))
+        (scheme_arg
+          (identifier)
+          (identifier)))
+      (identifier))))

@@ -1361,7 +1361,8 @@ module.exports = grammar({
     // The closed, compiler-known scheme set. `None`/`Internal` are zero-crypto;
     // `Bearer` (JWT/HS256), `Signature` (HMAC over the body), and `Oidc`
     // (JWKS/RS256+ES256) are compiler-generated verifiers.
-    scheme: () => choice("None", "Internal", "Bearer", "Signature", "Oidc", "Foreign"),
+    scheme: () =>
+      choice("None", "Internal", "Bearer", "Signature", "Oidc", "Foreign", "SignedCookie"),
     // v0.51: the keyed-args scheme config — `(key = value, …)`. Values are
     // string or integer literals; the checker validates which keys each scheme
     // admits (Bearer: secret; Signature: secret/header/timestamp/tolerance).
@@ -1371,11 +1372,23 @@ module.exports = grammar({
         sep1($.scheme_arg, ","),
         ")",
       ),
+    // #3386: `12.hours` in a scheme config.
+    scheme_duration: ($) => seq($.number_literal, ".", $.identifier),
     scheme_arg: ($) =>
       seq(
         field("key", $.identifier),
         "=",
-        field("value", choice($.string_literal, $.number_literal)),
+        field(
+          "value",
+          choice(
+            $.string_literal,
+            $.number_literal,
+            // #3386: a duration (`ttl = 12.hours`) or a bare variant name
+            // (`sameSite = Lax`).
+            $.scheme_duration,
+            $.identifier,
+          ),
+        ),
       ),
     // v0.45: the handler `by <binder>: <Actor>` clause — sits after the protocol
     // config and before the parameters.
