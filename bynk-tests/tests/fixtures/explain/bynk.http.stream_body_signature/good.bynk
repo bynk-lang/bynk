@@ -1,0 +1,11 @@
+context api
+
+actor Hook { auth = Signature(secret = "HOOK_SECRET", header = "X-Signature") }
+
+service api from http {
+    @raw(contentType: "application/octet-stream")
+    @limit(maxBody: 1_000_000)
+    on POST("/hook") (body: Bytes) -> Effect[HttpResult[()]] by h: Hook {
+        NoContent
+    }
+}

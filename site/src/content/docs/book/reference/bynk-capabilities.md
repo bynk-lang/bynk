@@ -520,8 +520,12 @@ objects stream, or are uploaded in parts (below).
   a completion R2 refuses faults, and R2 aborts an upload left incomplete for
   7 days.
 
-A request body is still read whole, so a client's upload doesn't stream into
-R2; send a large object as a multipart upload, a part a request.
+A `@raw` handler whose `body` is a `Stream[Bytes]` can pass it to `putStream`, so a
+client's upload streams into R2 without being held: read the length from the request's
+`content-length` header for `size`. See
+[Streamed request bodies](/book/reference/http/#streamed-request-bodies). A chunked
+upload has no length, so send a large object that way as a multipart upload, a part a
+request.
 
 Each instance has its own in-memory bucket in tests, honouring conditions,
 metadata, paging, declared sizes and part rules (all but the 5 MiB minimum, so

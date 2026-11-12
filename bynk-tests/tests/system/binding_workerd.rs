@@ -2298,14 +2298,23 @@ fn workers_postgres_runs_through_hyperdrive_on_workerd() {
 /// Absent when no server binaries are installed, and then the smoke skips (or
 /// fails under `BYNK_REQUIRE_MYSQL`). It runs with `--skip-grant-tables`, so any
 /// user and password are accepted and the connection string still carries both,
-/// as a real one does.
+/// as a real one does. Under `BYNK_MYSQL_SMOKE_PORT` the smoke uses an existing
+/// server instead (CI's service container), which does check them.
 struct LocalMySql {
-    dir: std::path::PathBuf,
+    /// The scratch directory of a server the smoke started; `None` for an
+    /// existing one, which leaves nothing to remove.
+    dir: Option<std::path::PathBuf>,
     port: u16,
     server: Option<std::process::Child>,
 }
 
 const REQUIRE_MYSQL_ENV: &str = "BYNK_REQUIRE_MYSQL";
+
+/// The port of a server someone else started, when set: CI's MariaDB service
+/// container. That server must already have a database `smoke` and a user
+/// `smoke` with the password in [`LocalMySql::url`]. The smoke's `/setup` drops
+/// and recreates its table, so a reused server is fine.
+const MYSQL_PORT_ENV: &str = "BYNK_MYSQL_SMOKE_PORT";
 
 impl LocalMySql {
     fn find(names: &[&str]) -> Option<std::path::PathBuf> {
@@ -2318,6 +2327,20 @@ impl LocalMySql {
     /// A started server with a database `smoke`, or `None` when this machine
     /// cannot run one.
     fn start() -> Option<Self> {
+        if let Some(port) = std::env::var(MYSQL_PORT_ENV).ok().filter(|p| !p.is_empty()) {
+            let port = port
+                .parse()
+                .unwrap_or_else(|_| panic!("{MYSQL_PORT_ENV} is not a port: {port}"));
+            // Probe it now, so a missing server fails as `BYNK_REQUIRE_MYSQL`
+            // says rather than later as a connection error inside the smoke.
+            let addr = std::net::SocketAddr::from(([127, 0, 0, 1], port));
+            std::net::TcpStream::connect_timeout(&addr, std::time::Duration::from_secs(5)).ok()?;
+            return Some(Self {
+                dir: None,
+                port,
+                server: None,
+            });
+        }
         let server_bin = Self::find(&["mariadbd", "mysqld"])?;
         let install = Self::find(&["mariadb-install-db", "mysql_install_db"])?;
         let client = Self::find(&["mariadb", "mysql"])?;
@@ -2340,7 +2363,7 @@ impl LocalMySql {
         let socket = dir.join("mysql.sock");
         let mut me = Self {
             port: free_port(),
-            dir,
+            dir: Some(dir),
             server: None,
         };
         me.server = Some(
@@ -2386,7 +2409,9 @@ impl Drop for LocalMySql {
             let _ = server.kill();
             let _ = server.wait();
         }
-        let _ = fs::remove_dir_all(&self.dir);
+        if let Some(dir) = &self.dir {
+            let _ = fs::remove_dir_all(dir);
+        }
     }
 }
 

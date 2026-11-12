@@ -328,6 +328,18 @@ a case can send what a browser would, and observe the boundary's rejections:
 `Rejected(MalformedForm(_))` for a body that is not multipart, `Rejected(PayloadTooLarge(_))`
 for a file over `maxFile` or too many parts.
 
+### Sending a streamed body {#sending-a-streamed-body}
+
+A [`@raw`](/book/reference/http/#streamed-request-bodies) route whose `body` is a
+`Stream[Bytes]` takes a stream as its argument, in the parameter's position, usually
+`Stream.of([…])`. At the `unit` and `integration` tiers the stream reaches the handler as it
+is, without the boundary, so no cap is applied there. At `system` the driver sends it as a
+chunked request body with no `content-length`, so the router's counted read is what runs: a
+body past the cap is `Rejected(PayloadTooLarge(_))`, as the buffered route's is. A `Wire(…)`
+body is sent as one streamed chunk of text, under `text/plain`, so a `"*/*"` route takes it,
+and a route declaring another media type answers `Rejected(UnsupportedMediaType(_))`. A
+handler that reads the stream twice faults with `bynk: a stream can be read only once`.
+
 ### Sending cookies — a typed `cookies` {#sending-cookies}
 
 A handler that declares [`cookies: T`](/book/reference/http/#cookies) takes the record as an
