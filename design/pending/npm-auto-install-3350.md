@@ -22,9 +22,10 @@ re-run runs nothing and needs no network. Lifecycle scripts are always off.
 
 - A failed install stops with the tool's error, the command and the directory, so
   the user can run it by hand.
-- `--no-install` (and `BYNK_NO_INSTALL=1`, for CI) on `bynk dev` and `bynk deploy`
-  restore the preflight stop, naming the *detected* command. `bynk test` always
-  installs, as before.
+- `--no-install` (and `BYNK_NO_INSTALL=1`, for CI) on `bynk test`, `bynk dev` and
+  `bynk deploy` restore the preflight stop, naming the *detected* command and the
+  directory. The maintainer asked for `bynk test` to honour it too, for
+  consistency.
 - `--dry-run` never installs: it reports what it would install, and with which
   tool. It outranks `--no-install`.
 - The lockfile question dissolves: the directory is generated and regenerated, so

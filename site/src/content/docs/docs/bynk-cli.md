@@ -63,7 +63,7 @@ stays the source of truth, and an adapter's npm packages must still be approved
 with `bynk approve` before anything installs them. [`bynk doctor`](#bynk-doctor)
 reports which package manager it detected and which rule chose it.
 
-`bynk dev` and `bynk deploy` take `--no-install` (or `BYNK_NO_INSTALL=1`, for CI),
+`bynk test`, `bynk dev` and `bynk deploy` take `--no-install` (or `BYNK_NO_INSTALL=1`, for CI),
 for projects that provision `node_modules` themselves. A missing package then
 stops the build before wrangler, naming the detected command, for example
 `pnpm install --ignore-scripts --ignore-workspace`, and the directory to run it
@@ -828,7 +828,7 @@ Discover and run a project's test declarations, **in-process**. It still starts 
 Node.js) or `tsx` on `PATH`.
 
 ```text
-bynk test [INPUT] [--each] [-o OUTPUT] [--no-run] [--require-tests] [--format rich|json|ndjson] [--inspect] [--seed HEX] [--case NAME]... [--suite NAME]... [--coverage] [--against TARGET [--skip-unsupported] [--settle DURATION]] [--smoke [--print] [--smoke-unsafe]] [--update-snapshots] [--mutate [--only DECL] [--max-mutants N] [--mutate-timeout SECONDS] [--mutate-all-suites] [--mutate-fail-under PERCENT] [--changed GIT_REF] [--mutate-jobs N]]
+bynk test [INPUT] [--each] [-o OUTPUT] [--no-run] [--require-tests] [--format rich|json|ndjson] [--inspect] [--seed HEX] [--case NAME]... [--suite NAME]... [--coverage] [--against TARGET [--skip-unsupported] [--settle DURATION]] [--smoke [--print] [--smoke-unsafe]] [--no-install] [--update-snapshots] [--mutate [--only DECL] [--max-mutants N] [--mutate-timeout SECONDS] [--mutate-all-suites] [--mutate-fail-under PERCENT] [--changed GIT_REF] [--mutate-jobs N]]
 ```
 
 | Argument | Default | Meaning |
@@ -849,6 +849,7 @@ bynk test [INPUT] [--each] [-o OUTPUT] [--no-run] [--require-tests] [--format ri
 | `--settle DURATION` | `5s` | With `--against`, how long a failing `expect` is retried before it fails, replaying the reads before it (see [Waiting for a real system](#waiting-for-a-real-system)). `500ms`, `5s`, `2m`, or `0` for no retry. |
 | `--smoke` | off | Run a smoke test of every `from http` route instead of the project's own suites. See [Smoke-testing every route](#smoke-testing-every-route). Combine with `--against` to smoke a running system. |
 | `--print` | off | With `--smoke`, print the synthesised suites as `.bynk` source and run nothing. |
+| `--no-install` | off | Do not install the build's npm packages; stop, naming the detected install command and `out`, when one is missing. Also `BYNK_NO_INSTALL=1`. See [Installing npm packages](#installing-npm-packages). |
 | `--smoke-unsafe` | off | With `--smoke --against <target>`, also call the routes that write (`POST`, `PUT`, `PATCH`, `DELETE`). |
 | `--update-snapshots` | off | Record snapshots instead of comparing: write each `expect … matches snapshot` that has no stored snapshot, refresh the ones whose value changed, and delete the obsolete ones, in `snapshots/<suite file>.snap.json`. Without it a missing snapshot fails the case, a changed one fails with a diff, and an obsolete one is only reported. See [Snapshots](/book/reference/testing/#snapshots). Incompatible with `--against`, `--smoke`, `--coverage`, `--inspect` and `--no-run`. |
 | `--mutate` | off | Check that the suites would notice a small change to the code: apply one typed mutation at a time to `src/`, run the suites that exercise the mutated unit, and report the mutants no suite failed on. See [Mutation testing](#mutation-testing). Incompatible with `--inspect`, `--no-run`, `--coverage`, `--against`, `--smoke`, `--update-snapshots`, `--case` and `--format ndjson`. |

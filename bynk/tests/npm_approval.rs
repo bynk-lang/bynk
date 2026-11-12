@@ -531,3 +531,61 @@ fn an_unapproved_adapters_npm_package_is_never_installed() {
         assert!(!ran.exists(), "{args:?}: a package manager ran");
     }
 }
+
+/// #3350: `bynk test` honours `--no-install` and `BYNK_NO_INSTALL` as `dev` and
+/// `deploy` do: it stops naming the detected command and the directory.
+#[cfg(unix)]
+#[test]
+fn test_stops_instead_of_installing_under_no_install() {
+    let root = scratch("test-no-install");
+    let (reg, key) = registry(&root);
+    publish(&root, &reg, &key, "money", "1.0.0", "^5.2.0");
+    let app = app(&root, &reg, MONEY, &sessions("money"));
+    write(&app.join("pnpm-lock.yaml"), "lockfileVersion: '9.0'\n");
+    write(
+        &app.join("src/pure.bynk"),
+        "commons pure\n\nfn double2(n: Int) -> Int {\n  n * 2\n}\n",
+    );
+    write(
+        &app.join("src/tests/pure.test.bynk"),
+        "suite pure {\n  case \"doubles\" {\n    expect double2(2) == 4\n  }\n}\n",
+    );
+    let _ = bynk(&app, &root, &["fetch"]);
+    let (code, out) = bynk(&app, &root, &["approve", "jose"]);
+    assert_eq!(code, 0, "{out}");
+    let bin = recording_tools(&root);
+    let ran = bin.join("ran");
+    let path = format!(
+        "{}:{}",
+        bin.display(),
+        std::env::var("PATH").unwrap_or_default()
+    );
+    for (args, env) in [
+        (vec!["test", "--no-install"], None),
+        (vec!["test"], Some(("BYNK_NO_INSTALL", "1"))),
+    ] {
+        let mut cmd = Command::new(bin_path());
+        cmd.args(&args)
+            .current_dir(&app)
+            .env("BYNK_HOME", root.join("home"))
+            .env("PATH", &path)
+            .stdin(Stdio::null());
+        if let Some((k, v)) = env {
+            cmd.env(k, v);
+        }
+        let out = cmd.output().expect("spawn");
+        let text = format!(
+            "{}{}",
+            String::from_utf8_lossy(&out.stdout),
+            String::from_utf8_lossy(&out.stderr)
+        );
+        assert_ne!(out.status.code(), Some(0), "{args:?}: {text}");
+        assert!(
+            text.contains("npm packages that are not installed: jose")
+                && text.contains("Run `pnpm install --ignore-scripts --ignore-workspace`")
+                && text.contains("out"),
+            "{args:?}: {text}"
+        );
+        assert!(!ran.exists(), "{args:?}: a package manager ran");
+    }
+}
