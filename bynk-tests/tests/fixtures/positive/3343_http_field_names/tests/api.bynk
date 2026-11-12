@@ -13,6 +13,24 @@ suite web.api {
 		let r <- api.POST("/signup", Signup { email: "a@b.c", remember: true })
 		expect r is Ok("a@b.c true")
 	}
+
+	case "Form.encode writes the wire keys and Form.decode reads them back" {
+		let r <- api.GET("/roundtrip")
+		expect r is Ok("e-mail=a%40b.c&remember-me=true a@b.c")
+	}
+
+	case "a renamed multipart body reaches the handler under its own names" {
+		match Bytes.fromBase64("UE5H") {
+			Some(png) => {
+				let photo = File { filename: Some("a.png"), contentType: "image/png", bytes: png }
+				let r <- api.POST("/upload", Upload { title: "Hi", photo: photo })
+				expect r is Ok("Hi 3")
+			}
+			None => {
+				expect false
+			}
+		}
+	}
 }
 
 suite web.api as system {
@@ -44,5 +62,28 @@ suite web.api as system {
 	case "a typed form is written under its wire names" {
 		let r <- api.POST("/signup", Signup { email: "a@b.c", remember: true })
 		expect r is Ok("a@b.c true")
+	}
+
+	case "a renamed multipart part is read by its wire name" {
+		let r <- api.POST("/upload", Wire("--bynk-boundary\r\nContent-Disposition: form-data; name=\"doc-title\"\r\n\r\nHello\r\n--bynk-boundary\r\nContent-Disposition: form-data; name=\"photo-file\"; filename=\"p.bin\"\r\nContent-Type: application/octet-stream\r\n\r\nabc\r\n--bynk-boundary--\r\n"))
+		expect r is Handled(Ok("Hello 3"))
+	}
+
+	case "a typed multipart body is written under its wire names" {
+		match Bytes.fromBase64("UE5HREFUQQ==") {
+			Some(png) => {
+				let photo = File { filename: Some("a.png"), contentType: "image/png", bytes: png }
+				let r <- api.POST("/upload", Upload { title: "Hi", photo: photo })
+				expect r is Ok("Hi 7")
+			}
+			None => {
+				expect false
+			}
+		}
+	}
+
+	case "Form.encode and Form.decode agree at the system tier" {
+		let r <- api.GET("/roundtrip")
+		expect r is Ok("e-mail=a%40b.c&remember-me=true a@b.c")
 	}
 }

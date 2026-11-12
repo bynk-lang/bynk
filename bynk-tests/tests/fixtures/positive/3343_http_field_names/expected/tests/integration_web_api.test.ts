@@ -2,9 +2,10 @@
 // system test: web.api
 
 import { Ok, Err, Some, None, type Result, type Option } from "../__bynk_runtime/result.js";
+import { __bynkBytesEqual, __bynkBytesToBase64, __bynkBytesFromBase64, __bynkBytesDecodeUtf8 } from "../__bynk_runtime/bytes.js";
 import type { ValidationError, DecodeError } from "../__bynk_runtime/errors.js";
 import { __callService, type __JsonValue, type __BoundaryError, type __ServiceBinding } from "../__bynk_runtime/boundary.js";
-import { __responseToHttpResult, __responseToHttpOutcome, __responseToUnauthOutcome, __queryString, __cookieString, __requestHeaderPairs } from "../__bynk_runtime/http.js";
+import { __responseToHttpResult, __responseToHttpOutcome, __responseToUnauthOutcome, __queryString, __multipartForm, __cookieString, __requestHeaderPairs } from "../__bynk_runtime/http.js";
 import * as __ns_web_api from "../workers/web-api/handlers.js";
 import worker___ns_web_api from "../workers/web-api/index.js";
 
@@ -104,6 +105,25 @@ async function __sysdrive_raw_api_http_POST_signup(body: string, __extraHeaders:
   const __res = await __h.env.WEB_API.fetch(__req);
   return __responseToHttpOutcome(__res, (__j: __JsonValue) => ((__v) => typeof __v === "string" ? Ok(__v) : Err({ kind: "StructuralMismatch", path: "$", expected: "string", actual: typeof __v } as __BoundaryError))(__j));
 }
+async function __sysdrive_api_http_POST_upload(body: any, __extraHeaders: { get(name: string): { readonly tag: "Some"; readonly value: string } | { readonly tag: "None" }; bearer(): { readonly tag: "Some"; readonly value: string } | { readonly tag: "None" }; clientIp(): { readonly tag: "Some"; readonly value: string } | { readonly tag: "None" } } | undefined, __sub: string) {
+  const __body = __multipartForm(__ns_web_api.__serialise_Upload(body), [{ name: "title", wire: "doc-title", kind: "string", list: false, option: false }, { name: "photo", wire: "photo-file", kind: "file", list: false, option: false }] as const);
+  const __h = __makeHarness();
+  const __req = new globalThis.Request(`https://test/upload`, { method: "POST", headers: { ...(__extraHeaders ? __requestHeaderPairs(__extraHeaders, true) : {}), }, body: __body, });
+  const __res = await __h.env.WEB_API.fetch(__req);
+  return __responseToHttpResult(__res, (__j: __JsonValue) => ((__v) => typeof __v === "string" ? Ok(__v) : Err({ kind: "StructuralMismatch", path: "$", expected: "string", actual: typeof __v } as __BoundaryError))(__j));
+}
+async function __sysdrive_raw_api_http_POST_upload(body: string, __extraHeaders: { get(name: string): { readonly tag: "Some"; readonly value: string } | { readonly tag: "None" }; bearer(): { readonly tag: "Some"; readonly value: string } | { readonly tag: "None" }; clientIp(): { readonly tag: "Some"; readonly value: string } | { readonly tag: "None" } } | undefined, __sub: string) {
+  const __h = __makeHarness();
+  const __req = new globalThis.Request(`https://test/upload`, { method: "POST", headers: { ...(__extraHeaders ? __requestHeaderPairs(__extraHeaders, true) : {}), "content-type": "multipart/form-data; boundary=bynk-boundary", }, body: body, });
+  const __res = await __h.env.WEB_API.fetch(__req);
+  return __responseToHttpOutcome(__res, (__j: __JsonValue) => ((__v) => typeof __v === "string" ? Ok(__v) : Err({ kind: "StructuralMismatch", path: "$", expected: "string", actual: typeof __v } as __BoundaryError))(__j));
+}
+async function __sysdrive_api_http_GET_roundtrip(__extraHeaders: { get(name: string): { readonly tag: "Some"; readonly value: string } | { readonly tag: "None" }; bearer(): { readonly tag: "Some"; readonly value: string } | { readonly tag: "None" }; clientIp(): { readonly tag: "Some"; readonly value: string } | { readonly tag: "None" } } | undefined, __sub: string) {
+  const __h = __makeHarness();
+  const __req = new globalThis.Request(`https://test/roundtrip`, { method: "GET", headers: { ...(__extraHeaders ? __requestHeaderPairs(__extraHeaders, true) : {}), }, });
+  const __res = await __h.env.WEB_API.fetch(__req);
+  return __responseToHttpResult(__res, (__j: __JsonValue) => ((__v) => typeof __v === "string" ? Ok(__v) : Err({ kind: "StructuralMismatch", path: "$", expected: "string", actual: typeof __v } as __BoundaryError))(__j));
+}
 async function __sysdrive_wrongmethod_api(method: string, path: string) {
   const __h = __makeHarness();
   const __req = new globalThis.Request(`https://test${path}`, { method });
@@ -117,7 +137,7 @@ async function test_a___Host__cookie_is_read_into_its_field() {
     __bynkClockNow = 0;
     const deps = __makeHarness();
     const r = await __sysdrive_raw_api_http_GET_me("__Host-sid=abc; theme=dark", undefined, "");
-    if (!(((__c: boolean) => __c)(r.tag === "Handled" && r.value.tag === "Ok" && r.value.value === "abc dark"))) { throw __bynkExpectFailure("tests/api.bynk:21:10", 711, 739, "expect r is Handled(Ok(\"abc dark\"))"); }
+    if (!(((__c: boolean) => __c)(r.tag === "Handled" && r.value.tag === "Ok" && r.value.value === "abc dark"))) { throw __bynkExpectFailure("tests/api.bynk:39:10", 1242, 1270, "expect r is Handled(Ok(\"abc dark\"))"); }
     return { pass: true };
   } catch (e) {
     if (e instanceof ExpectationError) {
@@ -133,7 +153,7 @@ async function test_the_field_s_own_name_is_not_the_cookie_s_key() {
     __bynkClockNow = 0;
     const deps = __makeHarness();
     const r = await __sysdrive_raw_api_http_GET_me("sid=abc", undefined, "");
-    if (!(((__c: boolean) => __c)(r.tag === "Handled" && r.value.tag === "Ok" && r.value.value === "- light"))) { throw __bynkExpectFailure("tests/api.bynk:26:10", 851, 878, "expect r is Handled(Ok(\"- light\"))"); }
+    if (!(((__c: boolean) => __c)(r.tag === "Handled" && r.value.tag === "Ok" && r.value.value === "- light"))) { throw __bynkExpectFailure("tests/api.bynk:44:10", 1382, 1409, "expect r is Handled(Ok(\"- light\"))"); }
     return { pass: true };
   } catch (e) {
     if (e instanceof ExpectationError) {
@@ -149,7 +169,7 @@ async function test_a_typed_cookies_record_is_written_under_its_wire_name() {
     __bynkClockNow = 0;
     const deps = __makeHarness();
     const r = await __sysdrive_api_http_GET_me({ sid: Some(("xyz" as any)), theme: "dark" }, undefined, "");
-    if (!(((__c: boolean) => __c)(r.tag === "Ok" && r.value === "xyz dark"))) { throw __bynkExpectFailure("tests/api.bynk:31:10", 1027, 1046, "expect r is Ok(\"xyz dark\")"); }
+    if (!(((__c: boolean) => __c)(r.tag === "Ok" && r.value === "xyz dark"))) { throw __bynkExpectFailure("tests/api.bynk:49:10", 1558, 1577, "expect r is Ok(\"xyz dark\")"); }
     return { pass: true };
   } catch (e) {
     if (e instanceof ExpectationError) {
@@ -165,7 +185,7 @@ async function test_a_renamed_query_key_is_read__and_its_refinement_is_still_che
     __bynkClockNow = 0;
     const deps = __makeHarness();
     const r = await __sysdrive_raw_api_http_GET_items("?page-size=7&filter%5Bstatus%5D=done", undefined, "");
-    if (!(((__c: boolean) => __c)(r.tag === "Handled" && r.value.tag === "Ok" && r.value.value === "7 done"))) { throw __bynkExpectFailure("tests/api.bynk:36:10", 1210, 1236, "expect r is Handled(Ok(\"7 done\"))"); }
+    if (!(((__c: boolean) => __c)(r.tag === "Handled" && r.value.tag === "Ok" && r.value.value === "7 done"))) { throw __bynkExpectFailure("tests/api.bynk:54:10", 1741, 1767, "expect r is Handled(Ok(\"7 done\"))"); }
     return { pass: true };
   } catch (e) {
     if (e instanceof ExpectationError) {
@@ -181,7 +201,7 @@ async function test_a_renamed_form_key_is_read() {
     __bynkClockNow = 0;
     const deps = __makeHarness();
     const r = await __sysdrive_raw_api_http_POST_signup("e-mail=a%40b.c&remember-me=on", undefined, "");
-    if (!(((__c: boolean) => __c)(r.tag === "Handled" && r.value.tag === "Ok" && r.value.value === "a@b.c true"))) { throw __bynkExpectFailure("tests/api.bynk:41:10", 1357, 1387, "expect r is Handled(Ok(\"a@b.c true\"))"); }
+    if (!(((__c: boolean) => __c)(r.tag === "Handled" && r.value.tag === "Ok" && r.value.value === "a@b.c true"))) { throw __bynkExpectFailure("tests/api.bynk:59:10", 1888, 1918, "expect r is Handled(Ok(\"a@b.c true\"))"); }
     return { pass: true };
   } catch (e) {
     if (e instanceof ExpectationError) {
@@ -197,7 +217,69 @@ async function test_a_typed_form_is_written_under_its_wire_names() {
     __bynkClockNow = 0;
     const deps = __makeHarness();
     const r = await __sysdrive_api_http_POST_signup({ email: "a@b.c", remember: true }, undefined, "");
-    if (!(((__c: boolean) => __c)(r.tag === "Ok" && r.value === "a@b.c true"))) { throw __bynkExpectFailure("tests/api.bynk:46:10", 1530, 1551, "expect r is Ok(\"a@b.c true\")"); }
+    if (!(((__c: boolean) => __c)(r.tag === "Ok" && r.value === "a@b.c true"))) { throw __bynkExpectFailure("tests/api.bynk:64:10", 2061, 2082, "expect r is Ok(\"a@b.c true\")"); }
+    return { pass: true };
+  } catch (e) {
+    if (e instanceof ExpectationError) {
+      return { pass: false, error: { message: e.message, location: e.location } };
+    }
+    return { pass: false, error: { message: String(e), location: "unknown", violation: __bynkViolationOf(e) } };
+  }
+}
+
+async function test_a_renamed_multipart_part_is_read_by_its_wire_name() {
+  try {
+    __bynkHarness = undefined;
+    __bynkClockNow = 0;
+    const deps = __makeHarness();
+    const r = await __sysdrive_raw_api_http_POST_upload("--bynk-boundary\r\nContent-Disposition: form-data; name=\"doc-title\"\r\n\r\nHello\r\n--bynk-boundary\r\nContent-Disposition: form-data; name=\"photo-file\"; filename=\"p.bin\"\r\nContent-Type: application/octet-stream\r\n\r\nabc\r\n--bynk-boundary--\r\n", undefined, "");
+    if (!(((__c: boolean) => __c)(r.tag === "Handled" && r.value.tag === "Ok" && r.value.value === "Hello 3"))) { throw __bynkExpectFailure("tests/api.bynk:69:10", 2451, 2478, "expect r is Handled(Ok(\"Hello 3\"))"); }
+    return { pass: true };
+  } catch (e) {
+    if (e instanceof ExpectationError) {
+      return { pass: false, error: { message: e.message, location: e.location } };
+    }
+    return { pass: false, error: { message: String(e), location: "unknown", violation: __bynkViolationOf(e) } };
+  }
+}
+
+async function test_a_typed_multipart_body_is_written_under_its_wire_names() {
+  try {
+    __bynkHarness = undefined;
+    __bynkClockNow = 0;
+    const deps = __makeHarness();
+    void (await (async (__d) => {
+        switch (__d.tag) {
+          case "Some": {
+            const png = __d.value;
+            const photo = { filename: Some("a.png"), contentType: "image/png", bytes: png };
+            const r = await __sysdrive_api_http_POST_upload({ title: "Hi", photo: photo }, undefined, "");
+            if (!(((__c: boolean) => __c)(r.tag === "Ok" && r.value === "Hi 7"))) { throw __bynkExpectFailure("tests/api.bynk:77:12", 2778, 2793, "expect r is Ok(\"Hi 7\")"); }
+            return undefined;
+          }
+          case "None": {
+            if (!(false)) { throw __bynkExpectFailure("tests/api.bynk:80:12", 2823, 2828, "expect false"); }
+            return undefined;
+          }
+        }
+        throw new globalThis.Error("non-exhaustive match");
+      })(__bynkBytesFromBase64("UE5HREFUQQ==")));
+    return { pass: true };
+  } catch (e) {
+    if (e instanceof ExpectationError) {
+      return { pass: false, error: { message: e.message, location: e.location } };
+    }
+    return { pass: false, error: { message: String(e), location: "unknown", violation: __bynkViolationOf(e) } };
+  }
+}
+
+async function test_Form_encode_and_Form_decode_agree_at_the_system_tier() {
+  try {
+    __bynkHarness = undefined;
+    __bynkClockNow = 0;
+    const deps = __makeHarness();
+    const r = await __sysdrive_api_http_GET_roundtrip(undefined, "");
+    if (!(((__c: boolean) => __c)(r.tag === "Ok" && r.value === "e-mail=a%40b.c&remember-me=true a@b.c"))) { throw __bynkExpectFailure("tests/api.bynk:87:10", 2947, 2995, "expect r is Ok(\"e-mail=a%40b.c&remember-me=true a@b.c\")"); }
     return { pass: true };
   } catch (e) {
     if (e instanceof ExpectationError) {
@@ -221,7 +303,7 @@ const __bynkCasePerformance = (globalThis as unknown as { performance?: { now():
 const __bynkCaseNow = (): number => (__bynkCasePerformance ? __bynkCasePerformance.now() : Date.now());
 const __bynkCaseSince = (started: number): number => Math.round((__bynkCaseNow() - started) * 100) / 100;
 
-export const __bynkCases: readonly string[] = ["a __Host- cookie is read into its field", "the field's own name is not the cookie's key", "a typed cookies record is written under its wire name", "a renamed query key is read, and its refinement is still checked", "a renamed form key is read", "a typed form is written under its wire names"];
+export const __bynkCases: readonly string[] = ["a __Host- cookie is read into its field", "the field's own name is not the cookie's key", "a typed cookies record is written under its wire name", "a renamed query key is read, and its refinement is still checked", "a renamed form key is read", "a typed form is written under its wire names", "a renamed multipart part is read by its wire name", "a typed multipart body is written under its wire names", "Form.encode and Form.decode agree at the system tier"];
 
 export async function run(only?: string, onCase?: (a0: CaseResult) => void) {
   const results = [];
@@ -259,6 +341,24 @@ export async function run(only?: string, onCase?: (a0: CaseResult) => void) {
   if (want("a typed form is written under its wire names")) {
     const started = __bynkCaseNow();
     const r = { name: "a typed form is written under its wire names", ...(await test_a_typed_form_is_written_under_its_wire_names()), durationMs: __bynkCaseSince(started) };
+    results.push(r);
+    if (onCase) onCase(r);
+  }
+  if (want("a renamed multipart part is read by its wire name")) {
+    const started = __bynkCaseNow();
+    const r = { name: "a renamed multipart part is read by its wire name", ...(await test_a_renamed_multipart_part_is_read_by_its_wire_name()), durationMs: __bynkCaseSince(started) };
+    results.push(r);
+    if (onCase) onCase(r);
+  }
+  if (want("a typed multipart body is written under its wire names")) {
+    const started = __bynkCaseNow();
+    const r = { name: "a typed multipart body is written under its wire names", ...(await test_a_typed_multipart_body_is_written_under_its_wire_names()), durationMs: __bynkCaseSince(started) };
+    results.push(r);
+    if (onCase) onCase(r);
+  }
+  if (want("Form.encode and Form.decode agree at the system tier")) {
+    const started = __bynkCaseNow();
+    const r = { name: "Form.encode and Form.decode agree at the system tier", ...(await test_Form_encode_and_Form_decode_agree_at_the_system_tier()), durationMs: __bynkCaseSince(started) };
     results.push(r);
     if (onCase) onCase(r);
   }

@@ -2,8 +2,8 @@
 // Worker entry point for context `web.api`.
 
 import { Ok, Err, type Result } from "../../__bynk_runtime/result.js";
-import { type __JsonValue, type __BoundaryError, __boundaryError, __verifyCall, __faultResponse } from "../../__bynk_runtime/boundary.js";
-import { __matchPath, __httpResultToResponse, __headResponse, __notModifiedIfMatch, type __SecurityPolicy, __applySecurityHeaders, __queryObject, __cookieObject, __formMediaTypeMatches, __formObject } from "../../__bynk_runtime/http.js";
+import { type __JsonValue, type __BoundaryError, __boundaryError, __verifyCall, __faultResponse, __readBodyCapped } from "../../__bynk_runtime/boundary.js";
+import { __matchPath, __httpResultToResponse, __headResponse, __notModifiedIfMatch, type __SecurityPolicy, __applySecurityHeaders, __queryObject, __cookieObject, __multipartMediaTypeMatches, __multipartObject, __formMediaTypeMatches, __formObject } from "../../__bynk_runtime/http.js";
 import { compose, type Env } from "./compose.js";
 import * as handlers from "./handlers.js";
 
@@ -63,23 +63,69 @@ export default {
         }
       }
       {
+        if ((method === "GET" || method === "HEAD") && path === "/roundtrip") {
+          __route = "GET /roundtrip";
+          const result = await surface.http_GET_roundtrip();
+          const __response = __applySecurityHeaders(__notModifiedIfMatch(__httpResultToResponse(result, (__v: string) => __v as __JsonValue, { weakEtag: true }), request), __security_api);
+          return method === "HEAD" ? __headResponse(__response) : __response;
+        }
+      }
+      {
         if (method === "POST" && path === "/signup") {
           __route = "POST /signup";
           if (!__formMediaTypeMatches(request)) {
             return __applySecurityHeaders(new globalThis.Response(globalThis.JSON.stringify({ kind: "UnsupportedMediaType", details: "expected Content-Type application/x-www-form-urlencoded (UTF-8)" }), { status: 415, headers: { "content-type": "application/json" } }), __security_api);
           }
-          let __raw: string;
+          const __contentLength = request.headers.get("content-length");
+          if (__contentLength !== null && globalThis.Number(__contentLength) > 4096) {
+            return __applySecurityHeaders(new globalThis.Response(globalThis.JSON.stringify({ kind: "PayloadTooLarge", details: "request body exceeds 4096 bytes" }), { status: 413, headers: { "content-type": "application/json" } }), __security_api);
+          }
+          let __bytes: globalThis.Uint8Array | undefined;
           try {
-            __raw = await request.text();
+            __bytes = await __readBodyCapped(request, 4096);
           } catch {
             return __applySecurityHeaders(new globalThis.Response(globalThis.JSON.stringify({ kind: "MalformedJson", details: "Invalid request body" }), { status: 400, headers: { "content-type": "application/json" } }), __security_api);
           }
+          if (__bytes === undefined) {
+            return __applySecurityHeaders(new globalThis.Response(globalThis.JSON.stringify({ kind: "PayloadTooLarge", details: "request body exceeds 4096 bytes" }), { status: 413, headers: { "content-type": "application/json" } }), __security_api);
+          }
+          const __raw = new globalThis.TextDecoder().decode(__bytes);
           const __f = __formObject(__raw, [{ name: "email", wire: "e-mail", kind: "string", list: false, option: false }, { name: "remember", wire: "remember-me", kind: "bool", list: false, option: false }]);
           if (!__f.ok) return __applySecurityHeaders(new globalThis.Response(globalThis.JSON.stringify(__f.error), { status: 400, headers: { "content-type": "application/json" } }), __security_api);
           const __r_body = handlers.__deserialise_Signup(__f.value, "body");
           if (__r_body.tag === "Err") return __applySecurityHeaders(new globalThis.Response(globalThis.JSON.stringify(__r_body.error), { status: 400, headers: { "content-type": "application/json" } }), __security_api);
           const body = __r_body.value;
           const result = await surface.http_POST_signup(body);
+          return __applySecurityHeaders(__httpResultToResponse(result, (__v: string) => __v as __JsonValue), __security_api);
+        }
+      }
+      {
+        if (method === "POST" && path === "/upload") {
+          __route = "POST /upload";
+          if (!__multipartMediaTypeMatches(request)) {
+            return __applySecurityHeaders(new globalThis.Response(globalThis.JSON.stringify({ kind: "UnsupportedMediaType", details: "expected Content-Type multipart/form-data" }), { status: 415, headers: { "content-type": "application/json" } }), __security_api);
+          }
+          const __contentLength = request.headers.get("content-length");
+          if (__contentLength !== null && globalThis.Number(__contentLength) > 4096) {
+            return __applySecurityHeaders(new globalThis.Response(globalThis.JSON.stringify({ kind: "PayloadTooLarge", details: "request body exceeds 4096 bytes" }), { status: 413, headers: { "content-type": "application/json" } }), __security_api);
+          }
+          let __bytes: globalThis.Uint8Array | undefined;
+          try {
+            __bytes = await __readBodyCapped(request, 4096);
+          } catch {
+            return __applySecurityHeaders(new globalThis.Response(globalThis.JSON.stringify({ kind: "MalformedJson", details: "Invalid request body" }), { status: 400, headers: { "content-type": "application/json" } }), __security_api);
+          }
+          if (__bytes === undefined) {
+            return __applySecurityHeaders(new globalThis.Response(globalThis.JSON.stringify({ kind: "PayloadTooLarge", details: "request body exceeds 4096 bytes" }), { status: 413, headers: { "content-type": "application/json" } }), __security_api);
+          }
+          const __f = await __multipartObject(__bytes, request.headers.get("content-type") ?? "", [{ name: "title", wire: "doc-title", kind: "string", list: false, option: false }, { name: "photo", wire: "photo-file", kind: "file", list: false, option: false }], { maxFile: 64, maxParts: 12 });
+          if (!__f.ok) {
+            return __f.status === 413 ? __applySecurityHeaders(new globalThis.Response(globalThis.JSON.stringify(__f.error), { status: 413, headers: { "content-type": "application/json" } }), __security_api) : __applySecurityHeaders(new globalThis.Response(globalThis.JSON.stringify(__f.error), { status: 400, headers: { "content-type": "application/json" } }), __security_api);
+          }
+          const __r_body = handlers.__deserialise_Upload(__f.value, "body");
+          if (__r_body.tag === "Err") return __applySecurityHeaders(new globalThis.Response(globalThis.JSON.stringify(__r_body.error), { status: 400, headers: { "content-type": "application/json" } }), __security_api);
+          const body = globalThis.Object.assign({}, __r_body.value, __f.files);
+          const result = await surface.http_POST_upload(body);
           return __applySecurityHeaders(__httpResultToResponse(result, (__v: string) => __v as __JsonValue), __security_api);
         }
       }
@@ -93,7 +139,17 @@ export default {
         const __res = new globalThis.Response(null, { status: __status, headers: { allow: "GET, HEAD, OPTIONS" } });
         return __applySecurityHeaders(__res, __security_api);
       }
+      if (path === "/roundtrip") {
+        const __status = method === "OPTIONS" ? 204 : 405;
+        const __res = new globalThis.Response(null, { status: __status, headers: { allow: "GET, HEAD, OPTIONS" } });
+        return __applySecurityHeaders(__res, __security_api);
+      }
       if (path === "/signup") {
+        const __status = method === "OPTIONS" ? 204 : 405;
+        const __res = new globalThis.Response(null, { status: __status, headers: { allow: "OPTIONS, POST" } });
+        return __applySecurityHeaders(__res, __security_api);
+      }
+      if (path === "/upload") {
         const __status = method === "OPTIONS" ? 204 : 405;
         const __res = new globalThis.Response(null, { status: __status, headers: { allow: "OPTIONS, POST" } });
         return __applySecurityHeaders(__res, __security_api);

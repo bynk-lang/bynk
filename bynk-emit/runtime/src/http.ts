@@ -1239,10 +1239,12 @@ export async function multipartObject(
     if (list === undefined) uploaded.set(name, [value]);
     else list.push(value);
   }
+  // #3343: a rejection names the field the author wrote, not its `@name` wire key.
+  const fieldOf = new Map(fields.map((f) => [wireName(f), f.name] as const));
   const mismatch = (name: string, expected: string, actual: string): MultipartRead => ({
     ok: false,
     status: 400,
-    error: { kind: "StructuralMismatch", path: `body.${name}`, expected, actual },
+    error: { kind: "StructuralMismatch", path: `body.${fieldOf.get(name) ?? name}`, expected, actual },
   });
   const textFields = fields.filter((f) => f.kind !== "file");
   const fileNames = new Set(fields.filter((f) => f.kind === "file").map(wireName));
@@ -1262,7 +1264,7 @@ export async function multipartObject(
   for (const f of fields) {
     if (f.kind !== "file") continue;
     const got = uploaded.get(wireName(f)) ?? [];
-    if (!f.list && got.length > 1) return mismatch(f.name, "a single file", `${got.length} files`);
+    if (!f.list && got.length > 1) return mismatch(wireName(f), "a single file", `${got.length} files`);
     const read = await Promise.all(
       got.map(async (file) => ({
         filename: file.name === "" ? { tag: "None" } : { tag: "Some", value: file.name },

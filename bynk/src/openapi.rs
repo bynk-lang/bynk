@@ -690,11 +690,15 @@ fn renamed_form_schema(r: &Renderer, components: &mut Components, ty: &TypeRef) 
             }
             other => r.parameter_schema(components, other),
         };
-        let schema = if list {
+        let mut schema = if list {
             json!({ "type": "array", "items": item })
         } else {
             item
         };
+        // The component schema carries a field's doc as its description; so does this.
+        if let (Some(d), Some(o)) = (&f.documentation, schema.as_object_mut()) {
+            o.insert("description".into(), json!(d.text.trim()));
+        }
         let name = f.wire_name().unwrap_or_else(|| f.name.name.clone());
         if !optional && !list && f.init.is_none() {
             required.push(json!(name));

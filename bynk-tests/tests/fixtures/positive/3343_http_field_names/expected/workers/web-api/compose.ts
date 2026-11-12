@@ -19,5 +19,11 @@ export function compose(env: Env) {
     async http_POST_signup(body: handlers.Signup) {
       return handlers.api.http_POST_signup(body, deps);
     },
+    async http_POST_upload(body: handlers.Upload) {
+      return handlers.api.http_POST_upload(body, deps);
+    },
+    async http_GET_roundtrip() {
+      return handlers.api.http_GET_roundtrip(deps);
+    },
   };
 }

@@ -2,9 +2,13 @@
 // context web.api
 
 import { Ok, Err, Some, None, type Result, type Option } from "../../__bynk_runtime/result.js";
-import type { ValidationError } from "../../__bynk_runtime/errors.js";
+import type { ValidationError, DecodeError } from "../../__bynk_runtime/errors.js";
 import { type __JsonValue, type __BoundaryError, type __ServiceBinding, __callService, __boundaryError } from "../../__bynk_runtime/boundary.js";
 import { HttpResult } from "../../__bynk_runtime/httpresult.js";
+import { __formDecode, __formString } from "../../__bynk_runtime/http.js";
+
+import { File } from "../../bynk.js";
+import { __serialise_File, __deserialise_File } from "../../bynk.js";
 
 export type Token = string & { readonly __brand: "web.api.Token" };
 
@@ -45,6 +49,14 @@ export interface Signup {
 export const Signup = {
 };
 
+export interface Upload {
+  readonly title: string;
+  readonly photo: File;
+}
+
+export const Upload = {
+};
+
 export const api = {
   async http_GET_me(cookies: Session, deps: {}): globalThis.Promise<HttpResult<string>> {
     const sid = ((__d) => {
@@ -78,6 +90,23 @@ export const api = {
   },
   async http_POST_signup(body: Signup, deps: {}): globalThis.Promise<HttpResult<string>> {
     return HttpResult.Ok(`${String(body.email)} ${String(body.remember)}`);
+  },
+  async http_POST_upload(body: Upload, deps: {}): globalThis.Promise<HttpResult<string>> {
+    return HttpResult.Ok(`${String(body.title)} ${String((body.photo.bytes).length)}`);
+  },
+  async http_GET_roundtrip(deps: {}): globalThis.Promise<HttpResult<string>> {
+    const text = __formString(__serialise_Signup({ email: "a@b.c", remember: true }), [{ name: "email", wire: "e-mail", kind: "string", list: false, option: false }, { name: "remember", wire: "remember-me", kind: "bool", list: false, option: false }] as const);
+    const __r0 = ((__s: string): Result<Signup, DecodeError> => { const __p = __formDecode(__s, [{ name: "email", wire: "e-mail", kind: "string", list: false, option: false }, { name: "remember", wire: "remember-me", kind: "bool", list: false, option: false }]); if (__p.tag === "Err") return Err(__p.error); const __j: __JsonValue = __p.value; const __r = __deserialise_Signup(__j, "$"); if (__r.tag === "Ok") return Ok(__r.value as Signup); const __be = __r.error; return Err({ kind: __be.kind, path: (__be.kind === "StructuralMismatch" || __be.kind === "RefinementViolation") ? __be.path : "$", message: __be.kind === "StructuralMismatch" ? `expected ${__be.expected}, got ${String(__be.actual)}` : __be.kind === "RefinementViolation" ? __be.violation.message : __be.details }); })(text);
+    switch (__r0.tag) {
+      case "Ok": {
+        const s = __r0.value;
+        return HttpResult.Ok(`${String(text)} ${String(s.email)}`);
+      }
+      case "Err": {
+        return HttpResult.BadRequest("bad");
+      }
+    }
+    throw new globalThis.Error("non-exhaustive match");
   },
 };
 
@@ -175,6 +204,30 @@ export function __deserialise_Token(json: __JsonValue, path: string = "$"): Resu
   return Ok(validated.value as Token);
 }
 
+export function __serialise_Upload(value: Upload): __JsonValue {
+  return {
+    title: value.title as __JsonValue,
+    photo: __serialise_File(value.photo),
+  };
+}
+
+export function __deserialise_Upload(json: __JsonValue, path: string = "$"): Result<Upload, __BoundaryError> {
+  if (typeof json !== "object" || json === null || globalThis.Array.isArray(json)) {
+    return Err({ kind: "StructuralMismatch", path, expected: "object", actual: typeof json });
+  }
+  const obj = json as { [k: string]: __JsonValue };
+  if (typeof obj["title"] !== "string") {
+    return Err({ kind: "StructuralMismatch", path: `${path}.title`, expected: "string", actual: typeof obj["title"] });
+  }
+  const __title = obj["title"];
+  const __r_photo = __deserialise_File(obj["photo"], `${path}.photo`);
+  if (__r_photo.tag === "Err") return __r_photo;
+  const __photo = __r_photo.value;
+  return Ok({ title: __title, photo: __photo } as Upload);
+}
+
+
+export { __serialise_File, __deserialise_File };
 
 export function __serialise_Option_String(value: Option<string>): __JsonValue {
   if (value.tag === "Some") return { kind: "Some", value: value.value as __JsonValue };
