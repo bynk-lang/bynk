@@ -412,12 +412,31 @@ A cookie is not authentication: it reaches the router from the client, so treat 
 as input to check. A cookie-backed actor is separate. See
 [#3181](https://github.com/bynk-lang/bynk/issues/3181).
 
-### Reading a prefixed cookie: `RequestCookies` {#request-cookies}
+### Reading a prefixed cookie {#request-cookies}
 
-A cookie named `__Host-sid` or `__Secure-id` is not a legal record field, so a typed
-`cookies` record cannot read it. Declare the parameter as `cookies: RequestCookies` instead:
-the raw, read-only view of the request's cookies. It is not decoded or validated at the
-boundary, so the handler builds the values it needs.
+A cookie named `__Host-sid` or `__Secure-id` is not a legal record field name. There are two
+ways to read it. The typed way is a [`@name`](/book/reference/types/#field-name) on the field,
+which gives it the key the browser sends, so the value is decoded and validated before the
+handler runs:
+
+```bynk,fragment
+type SessionCookies = {
+  @name("__Host-sid") sid: Option[Token],
+}
+```
+
+```bynk,fragment
+on GET("/me") (cookies: SessionCookies) -> Effect[HttpResult[String]] by v: Visitor {
+  match cookies.sid {
+    Some(t) => Ok("\(t)")
+    None => Unauthorized
+  }
+}
+```
+
+The other is `cookies: RequestCookies`: the raw, read-only view of the request's cookies. It
+is not decoded or validated at the boundary, so the handler builds the values it needs. Use it
+when the names are not known until the request arrives.
 
 ```bynk,fragment
 on GET("/me") (cookies: RequestCookies) -> Effect[HttpResult[String]] by v: Visitor {

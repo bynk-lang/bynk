@@ -43,20 +43,20 @@ case "logging in sets a session cookie" {
 
 case "the cookie the login set identifies its user" {
 	let login <- api.POST("/sessions", LoginRequest { user: "ann" }) by Visitor
-	let sid = login.cookies().first().map((c) => "__Host-sid=\(c.value)").getOrElse("")
-	let me <- api.GET("/me", RequestCookies.of([sid])) by Visitor
+	let sid = asToken(login.cookies().first().map((c) => c.value))
+	let me <- api.GET("/me", SessionCookies { sid: sid }) by Visitor
 	expect me is Ok("ann")
 }
 
 case "no cookie means no session" {
-	let me <- api.GET("/me", RequestCookies.empty()) by Visitor
+	let me <- api.GET("/me", SessionCookies { sid: None }) by Visitor
 	expect me is Unauthorized
 }
 
 case "logging out clears the cookie and ends the session" {
 	let login <- api.POST("/sessions", LoginRequest { user: "ann" }) by Visitor
-	let sid = login.cookies().first().map((c) => "__Host-sid=\(c.value)").getOrElse("")
-	let out <- api.POST("/logout", RequestCookies.of([sid])) by Visitor
+	let raw = login.cookies().first().map((c) => "__Host-sid=\(c.value)").getOrElse("")
+	let out <- api.POST("/logout", RequestCookies.of([raw])) by Visitor
 	expect out.cookies().map((c) => c.value) == [""]
 	let n <- api.GET("/sessions") by Visitor
 	expect n is Ok(0)
@@ -66,4 +66,9 @@ case "the http surface reports live sessions" {
 	let _ <- api.POST("/sessions", LoginRequest { user: "ann" }) by Visitor
 	let r <- api.GET("/sessions") by Visitor
 	expect r is Ok(1)
+}
+
+case "logout clears a malformed session cookie too" {
+	let out <- api.POST("/logout", RequestCookies.of(["__Host-sid=not a token!"])) by Visitor
+	expect out.cookies().map((c) => c.value) == [""]
 }

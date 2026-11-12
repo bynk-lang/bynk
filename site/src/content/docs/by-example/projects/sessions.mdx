@@ -36,8 +36,11 @@ The session travels in a cookie. `POST /sessions` mints an unguessable token wit
 `Created("ok").withCookie(Cookie { name: "__Host-sid", value: text, maxAge: Some(30.minutes) })`.
 A `Cookie`'s defaults are the safe ones: `Secure`, `HttpOnly`, `SameSite=Lax` and `Path=/`,
 and the `__Host-` prefix, which binds the cookie to this origin, is checked at compile time.
-`GET /me` and `POST /logout` read it back through `cookies: RequestCookies`, the raw view
-(a hyphenated name cannot be a record field), and build their own `Token`, so a malformed
-value is refused by the same refinement the typed boundary would apply. Whoami answers
+`GET /me` reads it back through a typed `cookies: SessionCookies` record whose field is
+`@name("__Host-sid") sid: Option[Token]` (a hyphenated name cannot be a field name, so `@name`
+gives the field the key the browser sends), so a malformed value is refused with a `400` by the
+`Token` refinement before the handler runs. `POST /logout` reads the raw `cookies: RequestCookies`
+view instead, so it clears the cookie whatever it holds, even a value the typed record would
+refuse. Whoami answers
 `Unauthorized` for an unknown or expired token, and logout ends the session and clears the
 cookie with `clearCookie`. `GET /sessions` still reports the live count.
