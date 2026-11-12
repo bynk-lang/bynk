@@ -1486,6 +1486,9 @@ type Code = String where Matches("[A-Z]{3}") @example("ABC")
 type Tag = { code: String where Matches("[a-z]+") @example("abc") }
 ```
 
+The example may also be a constant declared exactly the base type and bound to a
+literal (`@example(CodeSample)`).
+
 `Val[Code]` is `"ABC"`, and `Val[Tag]` is a `Tag` whose `code` is `"abc"`, as does
 any record or sum that reaches them. The compiler checks the example at the
 declaration, against every predicate of the refinement (so

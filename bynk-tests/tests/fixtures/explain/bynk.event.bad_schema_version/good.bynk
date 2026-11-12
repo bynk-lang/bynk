@@ -1,5 +1,11 @@
 context shop.orders
 
+const Version: Int = 1
+
 event Paid @schema(1) = {
+  id: String,
+}
+
+event Refunded @schema(Version) = {
   id: String,
 }

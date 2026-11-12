@@ -1,9 +1,12 @@
 context demo
 
+const Life: Duration = 5.minutes
+
 agent Sessions {
   key id: String
 
   store live: Cache[String, Int] @ttl(5.minutes)
+  store quick: Cache[String, Int] @ttl(Life)
 
   on call size() -> Effect[Int] {
     Effect.pure(1)

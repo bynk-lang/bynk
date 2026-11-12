@@ -1068,10 +1068,13 @@ fn check_event_annotations(table: &UnitTable, errors: &mut Vec<CompileError>) {
             match ann.args.as_slice() {
                 [arg] if arg.label.is_none() => {
                     if !matches!(&arg.value.kind, ExprKind::IntLit { value, .. } if *value > 0) {
-                        errors.push(CompileError::new(
-                            "bynk.event.bad_schema_version",
-                            arg.span,
-                            "`@schema`'s argument must be a positive `Int` literal",
+                        errors.push(crate::annotation_consts::with_const_origin(
+                            CompileError::new(
+                                "bynk.event.bad_schema_version",
+                                arg.span,
+                                "`@schema`'s argument must be a positive `Int` literal, or an `Int` constant bound to one",
+                            ),
+                            arg,
                         ));
                     }
                 }
@@ -4263,7 +4266,7 @@ fn cache_ttl_millis(f: &StoreField, errors: &mut Vec<CompileError>) -> Option<i6
                 CompileError::new(
                     "bynk.store.cache_ttl_required",
                     span,
-                    "`@ttl`'s argument must be a duration literal, e.g. `5.minutes`",
+                    "`@ttl`'s argument must be a duration literal, e.g. `5.minutes`, or a `Duration` constant bound to one",
                 )
                 .with_note("a keyed store with no expiry is a `Map`, not a `Cache`"),
             );
@@ -6413,10 +6416,14 @@ fn validate_cache_args(ann: &Annotation, errors: &mut Vec<CompileError>) {
             );
         }
         Some(_) => {
-            errors.push(CompileError::new(
-                "bynk.http.cache_bad_max_age",
-                max_age.unwrap().span,
-                "`@cache` `maxAge` must be a positive `Duration` literal (e.g. `5.minutes`)",
+            let arg = max_age.unwrap();
+            errors.push(crate::annotation_consts::with_const_origin(
+                CompileError::new(
+                    "bynk.http.cache_bad_max_age",
+                    arg.span,
+                    "`@cache` `maxAge` must be a positive `Duration` literal (e.g. `5.minutes`), or a `Duration` constant bound to one",
+                ),
+                arg,
             ));
         }
         None => {
@@ -6493,10 +6500,15 @@ fn validate_limit_args(ann: &Annotation, is_multipart: bool, errors: &mut Vec<Co
                         ),
                     );
                 } else if !matches!(&arg.value.kind, ExprKind::IntLit { value: n, .. } if *n > 0) {
-                    errors.push(CompileError::new(
-                        "bynk.http.limit_bad_max_file",
-                        arg.span,
-                        format!("`@limit` `{name}` must be a positive `Int` literal"),
+                    errors.push(crate::annotation_consts::with_const_origin(
+                        CompileError::new(
+                            "bynk.http.limit_bad_max_file",
+                            arg.span,
+                            format!(
+                                "`@limit` `{name}` must be a positive `Int` literal, or an `Int` constant bound to one"
+                            ),
+                        ),
+                        arg,
                     ));
                 }
             }
@@ -6521,10 +6533,14 @@ fn validate_limit_args(ann: &Annotation, is_multipart: bool, errors: &mut Vec<Co
     match max_body.map(|a| &a.value.kind) {
         Some(ExprKind::IntLit { value: n, .. }) if *n > 0 => {}
         Some(_) => {
-            errors.push(CompileError::new(
-                "bynk.http.limit_bad_max_body",
-                max_body.unwrap().span,
-                "`@limit` `maxBody` must be a positive `Int` literal — a byte count (e.g. `26_214_400`)",
+            let arg = max_body.unwrap();
+            errors.push(crate::annotation_consts::with_const_origin(
+                CompileError::new(
+                    "bynk.http.limit_bad_max_body",
+                    arg.span,
+                    "`@limit` `maxBody` must be a positive `Int` literal — a byte count (e.g. `26_214_400`), or an `Int` constant bound to one",
+                ),
+                arg,
             ));
         }
         None => {
@@ -6565,10 +6581,14 @@ fn validate_raw_args(ann: &Annotation, errors: &mut Vec<CompileError>) {
     match content_type.map(|a| &a.value.kind) {
         Some(ExprKind::StrLit(s)) if bynk_syntax::ast::is_media_type(s) => {}
         Some(_) => {
-            errors.push(CompileError::new(
-                "bynk.http.raw_bad_content_type",
-                content_type.unwrap().span,
-                "`@raw` `contentType` must be a media type string literal — `type/subtype`, or `\"*/*\"` to accept any",
+            let arg = content_type.unwrap();
+            errors.push(crate::annotation_consts::with_const_origin(
+                CompileError::new(
+                    "bynk.http.raw_bad_content_type",
+                    arg.span,
+                    "`@raw` `contentType` must be a media type string literal (or a `String` constant bound to one) — `type/subtype`, or `\"*/*\"` to accept any",
+                ),
+                arg,
             ));
         }
         None => {

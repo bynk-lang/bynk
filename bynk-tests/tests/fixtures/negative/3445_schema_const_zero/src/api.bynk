@@ -1,0 +1,5 @@
+context api
+
+const Version: Int = 0
+
+event Paid @schema(Version) = { id: String }
