@@ -28,6 +28,7 @@ per-commit history. While Bynk is pre-1.0, increments may change behaviour.
 
 | Version | Highlights |
 |---|---|
+| **v0.569.1** | The `bynk explain` entry for `bynk.query.sum_needs_numeric` says `sum` takes a `Decimal` key on a `List` and a `Query`, and how to average a `Decimal` |
 | **v0.569.0** | A `system` suite signs in to a `SignedCookie` route as `by User("ada")`, and `by Nobody`, `by Forged` and `by Expired` probe its seam; a case's `Sec-Fetch-Site` and `Origin` headers probe the CSRF check (#3386) |
 | **v0.568.1** | `Query.sum` takes a `Decimal` key and sums it exactly, as `List.sum` does, and `average` over a `Decimal` key says why it is refused and points at `sum` then `div` |
 | **v0.568.0** | `bynk deploy` mints a `SignedCookie` actor's signing key when it is unset, keeps a held one, and refuses a weak supplied one; `bynk dev` uses a local key derived per binding (#3386) |
