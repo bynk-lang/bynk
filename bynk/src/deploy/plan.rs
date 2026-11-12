@@ -768,6 +768,7 @@ pub fn run(
         }
     };
     let lock_path = project_root.join(LOCK_FILE);
+    let runner = wrangler_runner_in(project_root);
     let mut lock = match read_lock(&lock_path) {
         Ok(lock) => lock,
         Err(e) => {
@@ -936,12 +937,7 @@ pub fn run(
             if !orphaned.is_empty() {
                 eprint!(
                     "{}",
-                    orphaned_caller_skew_refusal(
-                        &opts.environment,
-                        worker,
-                        &orphaned,
-                        wrangler_runner_in(project_root),
-                    )
+                    orphaned_caller_skew_refusal(&opts.environment, worker, &orphaned, runner)
                 );
             }
             return ExitCode::FAILURE;
@@ -1357,13 +1353,7 @@ pub fn run(
                     {
                         eprint!(
                             "{}",
-                            foreign_hand_off(
-                                &opts.environment,
-                                worker,
-                                caller,
-                                value,
-                                wrangler_runner_in(project_root),
-                            )
+                            foreign_hand_off(&opts.environment, worker, caller, value, runner)
                         );
                     }
                 }
@@ -1419,13 +1409,7 @@ pub fn run(
                         );
                         eprint!(
                             "{}",
-                            foreign_hand_off(
-                                &opts.environment,
-                                worker,
-                                caller,
-                                value,
-                                wrangler_runner_in(project_root),
-                            )
+                            foreign_hand_off(&opts.environment, worker, caller, value, runner)
                         );
                     }
                 }
