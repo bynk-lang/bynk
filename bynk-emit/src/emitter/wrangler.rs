@@ -400,6 +400,17 @@ pub fn emit_wrangler_toml(
                     ),
                 ],
             ),
+            // #3480: the account's instance, named as the declaration writes it
+            // (in every environment). `bynk deploy` checks it exists and never
+            // creates it; `[[ai_search]]` needs the platform's newer
+            // compatibility date, which this one is past.
+            BindingSource::AiSearchInstance { instance, .. } => TomlBlock::array_table(
+                "ai_search",
+                vec![
+                    TomlEntry::kv("binding", name),
+                    TomlEntry::kv("instance_name", TomlValue::str(instance.clone())),
+                ],
+            ),
             // #3300: a one-per-Worker capability's plain table, holding only
             // its fixed binding name (`[version_metadata]`).
             BindingSource::Singleton { capability } => {
@@ -665,6 +676,13 @@ pub fn worker_bindings(
             .filter(|b| matches!(b.source, BindingSource::VectorizeIndex { .. }))
             .cloned(),
     );
+    // #3480: the AI Search instances, after the Vectorize indexes.
+    bindings.extend(
+        instances
+            .iter()
+            .filter(|b| matches!(b.source, BindingSource::AiSearchInstance { .. }))
+            .cloned(),
+    );
     // #3300: the one-per-Worker bindings, after the databases.
     bindings.extend(singletons.iter().cloned());
     // Events track, slice 0 (spine #936, ADR 0284): a context whose handlers
@@ -809,6 +827,7 @@ pub(crate) fn binding_ts_type(source: &BindingSource) -> &'static str {
         BindingSource::StoredSecret { .. } => "__SecretsStoreSecret",
         BindingSource::Email { .. } => "__SendEmail",
         BindingSource::VectorizeIndex { .. } => "__VectorizeIndex",
+        BindingSource::AiSearchInstance { .. } => "__AiSearchInstance",
         BindingSource::Postgres { .. } | BindingSource::MySql { .. } => "__Hyperdrive",
         BindingSource::Singleton { capability } => match capability.as_str() {
             "Version" => "__WorkerVersionMetadata",

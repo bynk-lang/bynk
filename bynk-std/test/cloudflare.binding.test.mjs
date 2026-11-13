@@ -11,6 +11,7 @@
 // `WorkersVersion` (#3300) against a Version metadata fake, and
 // `WorkersAi` (#3478) against a Workers AI binding fake, and
 // `WorkersVectorize` (#3479) against a Vectorize index fake, and
+// `WorkersAiSearch` (#3480) against an AI Search instance fake, and
 // `WorkersStoredSecret` (#3301) against a Secrets Store secret fake, and
 // `WorkersEmail` (#3302) against a `send_email` binding fake, and
 // `WorkersPostgres` (Hyperdrive H1, #3318) against a driver-executor fake (the
@@ -27,7 +28,7 @@
 
 import { test } from "node:test";
 import assert from "node:assert/strict";
-import { WorkersAi, WorkersAnalytics, WorkersD1, WorkersEdgeCache, WorkersEmail, WorkersKv, WorkersMySql, WorkersPostgres, WorkersQueue, WorkersR2, WorkersRateLimit, WorkersService, WorkersStoredSecret, WorkersVectorize, WorkersVersion } from "./bynk/cloudflare.binding.js";
+import { WorkersAi, WorkersAiSearch, WorkersAnalytics, WorkersD1, WorkersEdgeCache, WorkersEmail, WorkersKv, WorkersMySql, WorkersPostgres, WorkersQueue, WorkersR2, WorkersRateLimit, WorkersService, WorkersStoredSecret, WorkersVectorize, WorkersVersion } from "./bynk/cloudflare.binding.js";
 import { Method, FetchError } from "./bynk.js";
 import { Some, None } from "./__bynk_runtime/result.js";
 
@@ -2231,4 +2232,203 @@ t("WorkersVectorize.describe: reads the configuration from the top level or unde
   assert.deepEqual((await vz(nested).describe()).value, { dimensions: 8, metric: "euclidean" });
   const bare = fakeIndex({ describe: { vectorCount: 1 } });
   assert.equal((await vz(bare).describe()).error.tag, "VectorFailed");
+});
+
+// #3480: `WorkersAiSearch`, against a fake of Cloudflare's AI Search instance
+// binding. The thrown messages are not documented, so the mapping is pinned
+// against messages of the shapes the binding recognises; the request and reply
+// shapes are the Workers binding page's.
+const chunkOf = (id, extra = {}) => ({
+  id,
+  type: "text",
+  score: 0.8,
+  text: `text ${id}`,
+  item: { key: `docs/${id}.md`, timestamp: 1735689600000, metadata: { lang: "en" } },
+  scoring_details: { vector_score: 0.8 },
+  ...extra,
+});
+function fakeSearch(over = {}) {
+  const calls = [];
+  const rec = (name, reply) => async (...args) => {
+    calls.push({ name, args });
+    if (over[name] instanceof Error) throw over[name];
+    return over[name] ?? reply;
+  };
+  return {
+    calls,
+    search: rec("search", { query_kind: "text", search_query: "q", chunks: [chunkOf("a"), chunkOf("b")] }),
+    chatCompletions: rec("chatCompletions", {
+      id: "c1",
+      object: "chat.completion",
+      model: "m",
+      choices: [{ message: { role: "assistant", content: "Within 30 days." }, finish_reason: "stop" }],
+      usage: { prompt_tokens: 12, completion_tokens: 5, total_tokens: 17 },
+      chunks: [chunkOf("a")],
+    }),
+  };
+}
+const sOpts = (over = {}) => ({
+  maxResults: None,
+  matchThreshold: None,
+  retrieval: None,
+  rewriteQuery: false,
+  rerank: false,
+  filter: [],
+  ...over,
+});
+const as = (instance) => new WorkersAiSearch({ AI_SEARCH_KB: instance }, "AI_SEARCH_KB");
+const userMsg = (content) => ({ role: { tag: "User" }, content });
+
+t("WorkersAiSearch.search: sends the query with no options, leaving the platform defaults", async () => {
+  const instance = fakeSearch();
+  const got = await as(instance).search("refunds", sOpts());
+  assert.deepEqual(instance.calls, [{ name: "search", args: [{ query: "refunds", ai_search_options: {} }] }]);
+  assert.equal(got.tag, "Ok");
+  assert.deepEqual(got.value[0], {
+    id: "a",
+    score: 0.8,
+    text: "text a",
+    key: "docs/a.md",
+    timestamp: Some(1735689600000),
+    metadata: Some('{"lang":"en"}'),
+  });
+});
+
+t("WorkersAiSearch.search: sends each option the author set, with query_rewrite and reranking beside retrieval", async () => {
+  const instance = fakeSearch();
+  await as(instance).search(
+    "q",
+    sOpts({
+      maxResults: Some(5),
+      matchThreshold: Some(0.6),
+      retrieval: Some({ tag: "Keyword" }),
+      rewriteQuery: true,
+      rerank: true,
+      filter: [eq("folder", metaText("docs/")), range("timestamp", "FilterGte", 10), range("timestamp", "FilterLt", 20)],
+    }),
+  );
+  assert.deepEqual(instance.calls[0].args[0].ai_search_options, {
+    retrieval: {
+      max_num_results: 5,
+      match_threshold: 0.6,
+      retrieval_type: "keyword",
+      filters: { folder: { $eq: "docs/" }, timestamp: { $gte: 10, $lt: 20 } },
+    },
+    query_rewrite: { enabled: true },
+    reranking: { enabled: true },
+  });
+});
+
+t("WorkersAiSearch.search: an out-of-range option or an unsendable filter is SearchInvalidInput, and nothing is sent", async () => {
+  const instance = fakeSearch();
+  const refused = async (over) => (await as(instance).search("q", sOpts(over))).error;
+  for (const over of [
+    { maxResults: Some(0) },
+    { maxResults: Some(51) },
+    { matchThreshold: Some(1.5) },
+    { matchThreshold: Some(-0.1) },
+    { filter: [eq("", metaText("x"))] },
+    { filter: [eq("$and", metaText("x"))] },
+    { filter: [eq("k".repeat(513), metaText("x"))] },
+    { filter: [eq("f", { tag: "MetaFlag", value: true }), eq("f", metaText("x"))] },
+    { filter: [range("n", "FilterGt", 1), range("n", "FilterGte", 2)] },
+    { filter: [{ field: "f", op: { tag: "FilterLt", value: { tag: "MetaFlag", value: true } } }] },
+  ]) {
+    assert.equal((await refused(over)).tag, "SearchInvalidInput");
+  }
+  assert.equal(instance.calls.length, 0);
+});
+
+t("WorkersAiSearch.search: a filter's every operator takes the platform's $ spelling", async () => {
+  const instance = fakeSearch();
+  const op = (tag, value) => ({ field: "k", op: { tag, value } });
+  const sent = async (condition) => {
+    instance.calls.length = 0;
+    await as(instance).search("q", sOpts({ filter: [condition] }));
+    return instance.calls[0].args[0].ai_search_options.retrieval.filters.k;
+  };
+  assert.deepEqual(await sent(op("FilterNe", metaText("x"))), { $ne: "x" });
+  assert.deepEqual(await sent(op("FilterAnyOf", [metaText("a"), metaText("b")])), { $in: ["a", "b"] });
+  assert.deepEqual(await sent(op("FilterNoneOf", [metaNum(1)])), { $nin: [1] });
+  assert.deepEqual(await sent(op("FilterEq", { tag: "MetaFlag", value: true })), { $eq: true });
+});
+
+t("WorkersAiSearch.search: a query against an empty index is an empty list", async () => {
+  assert.deepEqual(await as(fakeSearch({ search: { chunks: [] } })).search("q", sOpts()), { tag: "Ok", value: [] });
+});
+
+t("WorkersAiSearch.search: a reply that is not the documented shape is SearchFailed, never a fault", async () => {
+  for (const reply of [null, "text", {}, { chunks: "no" }, { chunks: [{ id: "a" }] }, { chunks: [chunkOf("a", { item: {} })] }]) {
+    const got = await as(fakeSearch({ search: reply })).search("q", sOpts());
+    assert.equal(got.error.tag, "SearchFailed");
+    assert.match(got.error.message, /^unexpected reply from AI Search: /);
+  }
+});
+
+t("WorkersAiSearch.search: an item without a timestamp or metadata gives None", async () => {
+  const bare = chunkOf("a", { item: { key: "docs/a.md" } });
+  const got = await as(fakeSearch({ search: { chunks: [bare] } })).search("q", sOpts());
+  assert.deepEqual(got.value[0], { id: "a", score: 0.8, text: "text a", key: "docs/a.md", timestamp: None, metadata: None });
+});
+
+t("WorkersAiSearch.search: the platform's refusals map by message, and anything else is SearchFailed", async () => {
+  const failing = (message) => as(fakeSearch({ search: new Error(message) })).search("q", sOpts());
+  assert.equal((await failing("Rate limit exceeded")).error.tag, "SearchRateLimited");
+  assert.equal((await failing("429 Too Many Requests")).error.tag, "SearchRateLimited");
+  assert.equal((await failing("You have exceeded your usage quota")).error.tag, "SearchQuotaExceeded");
+  assert.deepEqual((await failing("invalid filter: unknown operator")).error, {
+    tag: "SearchInvalidInput",
+    message: "invalid filter: unknown operator",
+  });
+  assert.deepEqual((await failing("something new")).error, { tag: "SearchFailed", message: "something new" });
+});
+
+t("WorkersAiSearch.search: an instance that is not there is a fault, as is a missing binding", async () => {
+  await assert.rejects(as(fakeSearch({ search: new Error("Instance support-docs not found") })).search("q", sOpts()), /not found/);
+  await assert.rejects(new WorkersAiSearch({}, "AI_SEARCH_KB").search("q", sOpts()), /requires an AI Search binding/);
+});
+
+t("WorkersAiSearch.answer: sends the conversation and returns the text, the chunks and the usage", async () => {
+  const instance = fakeSearch();
+  const got = await as(instance).answer([{ role: { tag: "System" }, content: "Be brief." }, userMsg("refunds?")], sOpts({ maxResults: Some(3) }));
+  assert.deepEqual(instance.calls[0].args[0], {
+    messages: [
+      { role: "system", content: "Be brief." },
+      { role: "user", content: "refunds?" },
+    ],
+    ai_search_options: { retrieval: { max_num_results: 3 } },
+  });
+  assert.equal(got.tag, "Ok");
+  assert.equal(got.value.text, "Within 30 days.");
+  assert.equal(got.value.hits.length, 1);
+  assert.deepEqual(got.value.usage, Some({ promptTokens: 12, completionTokens: 5 }));
+});
+
+t("WorkersAiSearch.answer: a reply with no usage or chunks still answers", async () => {
+  const reply = { choices: [{ message: { role: "assistant", content: "ok" } }] };
+  assert.deepEqual(await as(fakeSearch({ chatCompletions: reply })).answer([userMsg("q")], sOpts()), {
+    tag: "Ok",
+    value: { text: "ok", hits: [], usage: None },
+  });
+});
+
+t("WorkersAiSearch.answer: a reply that is not the documented shape is SearchFailed, never a fault", async () => {
+  for (const reply of [null, {}, { choices: [] }, { choices: [{ message: { content: 7 } }] }, { choices: [{ message: { content: "x" } }], chunks: "no" }]) {
+    const got = await as(fakeSearch({ chatCompletions: reply })).answer([userMsg("q")], sOpts());
+    assert.equal(got.error.tag, "SearchFailed");
+    assert.match(got.error.message, /^unexpected reply from AI Search: /);
+  }
+});
+
+t("WorkersAiSearch.answer: an empty conversation is a fault, and a bad option is refused before the call", async () => {
+  const instance = fakeSearch();
+  await assert.rejects(as(instance).answer([], sOpts()), /needs at least one message/);
+  assert.equal((await as(instance).answer([userMsg("q")], sOpts({ maxResults: Some(99) }))).error.tag, "SearchInvalidInput");
+  assert.equal(instance.calls.length, 0);
+});
+
+t("WorkersAiSearch.answer: the platform's refusals map as for search", async () => {
+  const failing = (message) => as(fakeSearch({ chatCompletions: new Error(message) })).answer([userMsg("q")], sOpts());
+  assert.equal((await failing("rate limited")).error.tag, "SearchRateLimited");
+  assert.equal((await failing("boom")).error.tag, "SearchFailed");
 });

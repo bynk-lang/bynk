@@ -1187,6 +1187,7 @@ pub(crate) fn instance_example(kind: &firstparty::Instantiable) -> String {
         "Postgres" => "Main",
         "MySql" => "Legacy",
         "Vectorize" => "Docs",
+        "AiSearch" => "Kb",
         _ => "Archives",
     };
     let mut out = format!("capability {name} = {}", kind.capability);
@@ -1209,6 +1210,7 @@ fn option_sample(option: &str) -> &'static str {
         firstparty::EMAIL_ALLOWED_RECIPIENTS_OPTION | firstparty::EMAIL_ALLOWED_SENDERS_OPTION => {
             "[\"orders@shop.example\"]"
         }
+        firstparty::AI_SEARCH_INSTANCE_OPTION => "\"support-docs\"",
         firstparty::VECTORIZE_DIMENSIONS_OPTION => "768",
         firstparty::VECTORIZE_METRIC_OPTION => "\"cosine\"",
         firstparty::VECTORIZE_INDEXED_OPTION => "[\"category:string\"]",
@@ -1493,6 +1495,26 @@ fn instance_option_value(
         );
         return None;
     }
+    // #3480: the instance is a path segment of the REST call that links it, so
+    // it is not empty and has no character a name never has. (The platform's
+    // own naming rules are not read here: they are its to enforce.)
+    if base == "AiSearch"
+        && option == crate::firstparty::AI_SEARCH_INSTANCE_OPTION
+        && !is_ai_search_instance_name(text)
+    {
+        errors.push_for(
+            Some(path),
+            CompileError::new(
+                "bynk.capability.invalid_option",
+                ann.span,
+                format!("`{text}` is not an instance name a `{base}` can reach"),
+            )
+            .with_note(
+                "an instance name is 1 to 64 letters, digits, `-` or `_`, as written in the Cloudflare dashboard",
+            ),
+        );
+        return None;
+    }
     if base == "StoredSecret"
         && matches!(
             option,
@@ -1640,6 +1662,14 @@ pub(crate) fn is_email_address(text: &str) -> bool {
 /// `_`.
 pub(crate) fn is_secrets_store_name(name: &str) -> bool {
     (1..=255).contains(&name.len())
+        && name
+            .bytes()
+            .all(|b| b.is_ascii_alphanumeric() || b == b'-' || b == b'_')
+}
+
+/// Whether `name` can name an AI Search instance ([`instance_option_value`]).
+fn is_ai_search_instance_name(name: &str) -> bool {
+    (1..=64).contains(&name.len())
         && name
             .bytes()
             .all(|b| b.is_ascii_alphanumeric() || b == b'-' || b == b'_')

@@ -156,6 +156,16 @@ pub enum BindingSource {
         metric: String,
         indexed: Vec<String>,
     },
+    /// #3480: the `[[ai_search]]` binding of an `AiSearch` instance
+    /// (`capability Kb = AiSearch @instance("support-docs")`), naming the
+    /// account's instance `instance` as written, in every environment. The
+    /// instance is linked by `bynk deploy`, which checks it exists, and never
+    /// created. Never seen by handlers: they reach it through the instance's
+    /// `WorkersAiSearch`.
+    AiSearchInstance {
+        capability: String,
+        instance: String,
+    },
     /// #3300: the binding of a one-per-Worker capability of `bynk.cloudflare`
     /// (`Version`'s `[version_metadata]`), declared when the Worker's
     /// closure reaches the bare capability. Never seen by handlers: they
@@ -234,6 +244,12 @@ impl BindingSource {
             Self::VectorizeIndex { capability, .. } => {
                 format!("the `[[vectorize]]` binding of derived capability `{capability}`")
             }
+            Self::AiSearchInstance {
+                capability,
+                instance,
+            } => format!(
+                "the `[[ai_search]]` binding of derived capability `{capability}` (to instance `{instance}`)"
+            ),
             Self::Postgres { capability } | Self::MySql { capability, .. } => {
                 format!("the `[[hyperdrive]]` binding of derived capability `{capability}`")
             }
@@ -368,6 +384,7 @@ fn declared_at(
             | BindingSource::Postgres { capability }
             | BindingSource::MySql { capability, .. }
             | BindingSource::VectorizeIndex { capability, .. }
+            | BindingSource::AiSearchInstance { capability, .. }
             | BindingSource::D1Database { capability } => c.items.iter().find_map(|item| {
                 let CommonsItem::Capability(d) = item else {
                     return None;
