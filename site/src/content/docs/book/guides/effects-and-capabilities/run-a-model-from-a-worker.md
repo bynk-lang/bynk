@@ -23,6 +23,10 @@ create. Compare it with the
 which needs an account id and an API token held in secrets: the binding needs
 neither.
 
+If your documents are in R2 or on a website and you want search or answers from them with no pipeline of your own, see
+[Answer questions from your documents with AI Search](/book/guides/effects-and-capabilities/answer-questions-from-your-documents/), which also says
+when to choose `Ai`, `Vectorize` or `AiSearch`.
+
 Workers AI runs on your Cloudflare account, so a call may incur charges. What
 applies is on Cloudflare's [Workers AI pricing](https://developers.cloudflare.com/workers-ai/platform/pricing/)
 page, which this guide does not repeat. Put a [`RateLimit`](/book/guides/effects-and-capabilities/rate-limit-a-route/)
