@@ -32,6 +32,7 @@ service api from http {
 		body: Event
 	) -> Effect[HttpResult[String]] by Webhook given Idempotency {
 		let Claim.Claimed <- Idempotency.claim(body.id, 7.days) else { Ok("duplicate") }
+		// ... do the work here: it runs at most once per delivery id ...
 		Ok("processed")
 	}
 }
