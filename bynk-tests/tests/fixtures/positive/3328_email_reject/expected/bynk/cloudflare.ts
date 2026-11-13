@@ -1024,6 +1024,106 @@ export const VectorError = {
 };
 
 /**
+ * One retrieved chunk of an `AiSearch` instance: the chunk's `id`, its `score`
+ * (0 to 1, larger is a closer match), its `text`, and where it came from: `key`
+ * is the source file's path or the page's URL, `timestamp` the source item's
+ * unix time in milliseconds when the platform reports one (a `timestamp`
+ * condition in `SearchOptions.filter` compares in the same unit), and `metadata` the item's custom
+ * metadata as a JSON object in text (`None` when it has none). The text is
+ * indexed content, so treat it as untrusted input.
+ */
+export interface SearchHit {
+  readonly id: string;
+  readonly score: number;
+  readonly text: string;
+  readonly key: string;
+  readonly timestamp: Option<number>;
+  readonly metadata: Option<string>;
+}
+
+export const SearchHit = {
+};
+
+/**
+ * How an `AiSearch` query finds chunks: by `Vector` (meaning), by `Keyword`
+ * (words), or `Hybrid`, both together. The platform's default is `Hybrid`.
+ */
+export type RetrievalType =
+    { readonly tag: "Vector" }
+  | { readonly tag: "Keyword" }
+  | { readonly tag: "Hybrid" };
+
+export const RetrievalType = {
+  Vector: { tag: "Vector" } as RetrievalType,
+  Keyword: { tag: "Keyword" } as RetrievalType,
+  Hybrid: { tag: "Hybrid" } as RetrievalType,
+};
+
+/**
+ * The options of `AiSearch.search` and `AiSearch.answer` (for `answer` they
+ * shape its retrieval step). A setting left `None` or `false` leaves the
+ * platform's own default in place: `maxResults` is how many chunks to return
+ * (1 to 50, 10 unless set), `matchThreshold` the least score a chunk may have
+ * (0 to 1, 0.4 unless set), and `retrieval` how chunks are found. `rewriteQuery`
+ * has the instance rewrite the question for better retrieval, and `rerank`
+ * has it reorder the chunks with a reranking model; both use the models the
+ * platform picks. `filter` is a list of conditions on the items' attributes
+ * (`folder`, `timestamp`, `filename`) and on the instance's custom metadata
+ * (at most five fields), and every condition must hold. A text value is
+ * matched on its first 64 bytes only. Out-of-range values are refused as
+ * `SearchInvalidInput`.
+ */
+export interface SearchOptions {
+  readonly maxResults: Option<number>;
+  readonly matchThreshold: Option<number>;
+  readonly retrieval: Option<RetrievalType>;
+  readonly rewriteQuery: boolean;
+  readonly rerank: boolean;
+  readonly filter: readonly Condition[];
+}
+
+export const SearchOptions = {
+};
+
+/**
+ * The reply of `AiSearch.answer`: the generated `text`, which is untrusted
+ * input, the `hits` it was grounded on, and the `usage` of the generation when
+ * the platform reported it.
+ */
+export interface SearchAnswer {
+  readonly text: string;
+  readonly hits: readonly SearchHit[];
+  readonly usage: Option<TokenUsage>;
+}
+
+export const SearchAnswer = {
+};
+
+/**
+ * Why an AI Search call did not give a reply. `SearchInvalidInput` is a
+ * request the platform refused as malformed or out of range (a bad filter or
+ * option), with its message; `SearchRateLimited` is a rate limit, worth
+ * retrying later; `SearchQuotaExceeded` is a usage limit of the account;
+ * `SearchFailed` is any other refusal, or a reply that is not the shape the
+ * operation promises, with a message. The `Search` prefix is because
+ * `InvalidInput` is `AiError`'s, `RateLimited` `EmailError`'s, `QuotaExceeded`
+ * `AiError`'s and `Failed` `SqlError`'s. Cloudflare adds error cases over time,
+ * so a `match` over this type needs a wildcard.
+ */
+export type SearchError =
+    { readonly tag: "SearchInvalidInput"; readonly message: string }
+  | { readonly tag: "SearchRateLimited" }
+  | { readonly tag: "SearchQuotaExceeded" }
+  | { readonly tag: "SearchFailed"; readonly message: string };
+
+export const SearchError = {
+  SearchInvalidInput: (message: string): SearchError => ({ tag: "SearchInvalidInput", message }),
+  SearchRateLimited: { tag: "SearchRateLimited" } as SearchError,
+  SearchQuotaExceeded: { tag: "SearchQuotaExceeded" } as SearchError,
+  SearchFailed: (message: string): SearchError => ({ tag: "SearchFailed", message }),
+};
+
+/**
  * A Cloudflare Workers KV namespace: a key/value store with optional per-entry
  * expiry and prefix listing.
  *
@@ -1594,3 +1694,44 @@ export interface Vectorize {
 }
 
 export const __VectorizeToken: symbol = globalThis.Symbol("Vectorize");
+
+/**
+ * An AI Search instance: a managed retrieval service that indexes a data source
+ * (an R2 bucket, a website, files uploaded to it) and answers from it. Used
+ * only through a named instance that names it,
+ * `capability Kb = AiSearch @instance("support-docs")`, which binds as
+ * `AI_SEARCH_KB`, an `[[ai_search]]` entry; the annotation is required, and a
+ * bare `given AiSearch` is refused. Experimental.
+ *
+ * The instance is not created by Bynk. It is configured by whoever owns it (the
+ * data source, the models, the chunking, how it is kept in sync), so you create
+ * it in the Cloudflare dashboard, with `wrangler` or the REST API, and the
+ * Worker only queries it. The name is used as written in every environment.
+ * To fill an instance backed by an R2 bucket, write the files with `R2.put`;
+ * the instance indexes them on its own schedule, so a freshly written file is
+ * not searchable at once, and a query against an instance that has indexed
+ * nothing yet is an empty list, not an error.
+ *
+ * `search(query, options)` returns the best-matching chunks, best first, for a
+ * handler that shows results or builds its own prompt (with `Ai.generate`).
+ * `answer(messages, options)` retrieves the same way and has the instance's own
+ * generation model write the reply from the conversation, which must not be
+ * empty; a `SearchAnswer` carries the text, the chunks it used and the token usage.
+ * The generation model is the instance's setting and a call cannot override
+ * it. Every operation gives a `SearchError` rather than faulting, except a call
+ * on an instance that does not exist, which is a platform fault.
+ *
+ * AI Search is a remote service on your Cloudflare account, so a call may be
+ * billed; see Cloudflare's AI Search pricing page for what applies, and put a
+ * `RateLimit` in front of any handler an anonymous caller can reach. Under
+ * `bynk dev` a call goes to the deployed instance on Cloudflare. In a test every
+ * operation faults until `stub Kb.search(_, _) returns …` replaces it, so a test
+ * never reaches AI Search; to test retrieval logic, use `Vectorize`, which
+ * has an in-memory double.
+ */
+export interface AiSearch {
+  search(query: string, options: SearchOptions): globalThis.Promise<Result<readonly SearchHit[], SearchError>>;
+  answer(messages: readonly ChatMessage[], options: SearchOptions): globalThis.Promise<Result<SearchAnswer, SearchError>>;
+}
+
+export const __AiSearchToken: symbol = globalThis.Symbol("AiSearch");

@@ -75,6 +75,10 @@ index = { production = "docs-prod" }   # adopted for that environment, never cre
 
 [dev]
 ai = "allow"                # no default: silences `bynk dev`'s Workers AI cost warning
+vectorize = "allow"         # no default: silences `bynk dev`'s Vectorize cost warning
+
+[dev.vectorize-index]       # no default: the index of your own `bynk dev` binds, per capability
+Docs = "docs-dev"
 
 [dev.hyperdrive.Main]       # no default: its local database under `bynk dev`
 connection_env = "MAIN_LOCAL_DATABASE_URL"
@@ -646,7 +650,7 @@ Cloudflare](/book/guides/projects-build-and-deployment/deploy-to-cloudflare/#vec
 ### Acknowledging a remote-only binding
 
 Some bindings have no local simulation: under `bynk dev`, a call to Workers AI
-(`Ai`) runs on your Cloudflare account and may incur charges. `bynk dev` never
+(`Ai`) or to a Vectorize index runs on your Cloudflare account and may incur charges. `bynk dev` never
 blocks such a call. The first one in a session prints a one-time warning that
 links to Cloudflare's own pricing page, and the call goes ahead. A project that
 has read it acknowledges it in `[dev]`, which silences the warning:
@@ -654,21 +658,48 @@ has read it acknowledges it in `[dev]`, which silences the warning:
 ```toml
 [dev]
 ai = "allow"
+vectorize = "allow"
 ```
 
 | Key | Table | Type | Notes |
 |---|---|---|---|
 | `ai` | `[dev]` | `"allow"` | Acknowledges that `Ai` calls run remotely under `bynk dev`. The only value; any other is a manifest error. There is no command-line flag. |
+| `vectorize` | `[dev]` | `"allow"` | The same for `Vectorize` calls. |
 
 The key is per binding kind, so a later remote-only binding takes its own key
 and the same warning. `bynk dev` marks each Worker it serves with a `BYNK_DEV`
-variable and sets an acknowledged kind's variable (`BYNK_DEV_ACK_AI`), which the
+variable and sets an acknowledged kind's variable (`BYNK_DEV_ACK_AI`, `BYNK_DEV_ACK_VECTORIZE`), which the
 provider reads; a deployed Worker has neither, so the warning and the
 acknowledgement never apply to production. `bynk test` never reaches Workers AI:
 every `Ai` operation faults until it is stubbed. The warning is per Worker
 process, so a rebuild that restarts the Worker can show it again. `bynk dev`
 reads `[dev]` once, when it starts, so an acknowledgement added to a running
 session takes effect the next time `bynk dev` starts.
+
+### Binding a Vectorize index under `bynk dev`
+
+A `Vectorize` instance has no local simulation, so under `bynk dev` a Worker can
+only reach a real index. Which one is yours to say, per capability, and never the
+deploy's derived name, so a development session cannot write to a deployed index
+by accident:
+
+```toml
+[dev.vectorize-index]
+Docs = "docs-dev"
+```
+
+| Key | Table | Type | Notes |
+|---|---|---|---|
+| `<Capability>` | `[dev.vectorize-index]` | string | The name of an index of your own that `bynk dev` binds (remotely) for that capability. A name is 1 to 64 lowercase letters, digits or `-`. |
+
+The index must already exist with the declaration's `@dimensions` and `@metric`:
+`bynk dev` never creates one (`bynk deploy --env dev`, or `wrangler vectorize
+create`, does). The first call checks the index against the declaration and fails,
+saying so, on a mismatch or an index it cannot reach. A capability with no entry is
+unbound: a call to it fails, naming the entry to add. An entry that names no
+`Vectorize` capability of the project is an error. `bynk dev -- --remote` keeps the
+account's deployed names instead. Calls reach your Cloudflare account, so the
+warning of the previous section applies; `[dev] vectorize = "allow"` silences it.
 
 ## `[unstable]`
 

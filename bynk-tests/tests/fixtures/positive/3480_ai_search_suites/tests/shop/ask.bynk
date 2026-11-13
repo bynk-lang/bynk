@@ -1,0 +1,31 @@
+suite shop.ask
+
+// #3480: an unstubbed operation faults, a stubbed `Ok` is what the handler
+// sees, and a typed error is matched.
+
+case "an unstubbed search faults" {
+	expect api.POST("/search", "refunds") by Visitor faults
+}
+
+case "an unstubbed answer faults" {
+	expect api.POST("/ask", "refunds") by Visitor faults
+}
+
+case "a stubbed search is returned" {
+	stub Kb.search(_, _) returns Ok([])
+	let r <- api.POST("/search", "refunds") by Visitor
+	expect r is Ok("[]")
+	expect Kb.search called once
+}
+
+case "a stubbed answer is returned" {
+	stub Kb.answer(_, _) returns Ok(SearchAnswer { text: "Within 30 days.", hits: [], usage: None })
+	let r <- api.POST("/ask", "refunds") by Visitor
+	expect r is Ok("Within 30 days.")
+}
+
+case "a rate limit is matched" {
+	stub Kb.answer(_, _) returns Err(SearchRateLimited)
+	let r <- api.POST("/ask", "refunds") by Visitor
+	expect r is ServerError("busy")
+}

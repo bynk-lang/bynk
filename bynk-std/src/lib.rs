@@ -659,6 +659,16 @@ pub const STORED_SECRET_STORE_OPTION: &str = "store";
 /// The option of a `StoredSecret` instance that names the secret in its store.
 pub const STORED_SECRET_SECRET_OPTION: &str = "secret";
 
+/// The Worker binding prefix of an `AiSearch` instance (#3480):
+/// `capability Kb = AiSearch @instance("support-docs")` binds as
+/// `AI_SEARCH_KB`, an `[[ai_search]]` entry.
+pub const AI_SEARCH_BINDING_PREFIX: &str = "AI_SEARCH";
+
+/// The option of an `AiSearch` instance that names the instance, by the name
+/// the account gives it. It is used as written in every environment, and
+/// `bynk deploy` links to it and never creates it (#3480 Decisions A and B).
+pub const AI_SEARCH_INSTANCE_OPTION: &str = "instance";
+
 /// The Worker binding prefix of an `Email` instance (#3302):
 /// `capability Mail = Email @allowedSenders(["orders@shop.example"])` binds as
 /// `EMAIL_MAIL`, a `[[send_email]]` entry (keyed by `name`).
@@ -841,6 +851,7 @@ pub const UNITS: &[Unit] = &[
             "WorkersPostgres",
             "WorkersMySql",
             "WorkersVectorize",
+            "WorkersAiSearch",
         ],
         stability: Stability::Stable,
         // Interop I5 (#1972): a Service Binding to a non-Bynk Worker is new
@@ -876,6 +887,7 @@ pub const UNITS: &[Unit] = &[
             "Postgres",
             "MySql",
             "Vectorize",
+            "AiSearch",
             "Kv.getWith",
             "Kv.putWith",
             "Kv.getBytes",
@@ -892,6 +904,7 @@ pub const UNITS: &[Unit] = &[
             "PgError",
             "MySqlError",
             "VectorError",
+            "SearchError",
         ],
         instantiable: &[
             Instantiable {
@@ -1022,6 +1035,18 @@ pub const UNITS: &[Unit] = &[
                 required: &[VECTORIZE_DIMENSIONS_OPTION, VECTORIZE_METRIC_OPTION],
                 bare: false,
                 linked: false,
+            },
+            // #3480: an AI Search instance is configured and owned by someone
+            // else (a data source, models, an indexing lifecycle), so the
+            // deploy links to it by name and never creates it. The name is
+            // required: a bare `given AiSearch` would name no instance.
+            Instantiable {
+                capability: "AiSearch",
+                binding_prefix: AI_SEARCH_BINDING_PREFIX,
+                options: &[(AI_SEARCH_INSTANCE_OPTION, OptionKind::Str)],
+                required: &[AI_SEARCH_INSTANCE_OPTION],
+                bare: false,
+                linked: true,
             },
         ],
         // Version metadata (#3300): the running Worker version's id, tag and
@@ -1681,7 +1706,8 @@ mod tests {
                 ("bynk.cloudflare", "Email", "EMAIL"),
                 ("bynk.cloudflare", "Postgres", "HYPERDRIVE"),
                 ("bynk.cloudflare", "MySql", "HYPERDRIVE"),
-                ("bynk.cloudflare", "Vectorize", "VECTORIZE")
+                ("bynk.cloudflare", "Vectorize", "VECTORIZE"),
+                ("bynk.cloudflare", "AiSearch", "AI_SEARCH")
             ]
         );
         let kv = instantiable("bynk.cloudflare", "Kv").expect("Kv is instantiable");
@@ -1722,7 +1748,13 @@ mod tests {
             .flat_map(|u| u.instantiable.iter().filter(|i| i.linked))
             .map(|i| i.capability)
             .collect();
-        assert_eq!(linked, ["StoredSecret"]);
+        assert_eq!(linked, ["StoredSecret", "AiSearch"]);
+        // #3480: an AI Search instance names the instance, required, and is
+        // linked like a stored secret.
+        let search = instantiable("bynk.cloudflare", "AiSearch").expect("AiSearch is instantiable");
+        assert_eq!(search.option_names().collect::<Vec<_>>(), ["instance"]);
+        assert_eq!(search.required, ["instance"]);
+        assert!(!search.bare && search.linked);
         // #3302: an email instance takes three optional options and is not
         // linked.
         let email = instantiable("bynk.cloudflare", "Email").expect("Email is instantiable");
@@ -1815,6 +1847,7 @@ mod tests {
                 "bynk.cloudflare.Postgres",
                 "bynk.cloudflare.MySql",
                 "bynk.cloudflare.Vectorize",
+                "bynk.cloudflare.AiSearch",
                 "bynk.cloudflare.Kv.getWith",
                 "bynk.cloudflare.Kv.putWith",
                 "bynk.cloudflare.Kv.getBytes",
@@ -1842,6 +1875,7 @@ mod tests {
                 ("bynk.cloudflare", "PgError"),
                 ("bynk.cloudflare", "MySqlError"),
                 ("bynk.cloudflare", "VectorError"),
+                ("bynk.cloudflare", "SearchError"),
                 ("bynk.crypto", "Digest"),
                 ("bynk.crypto", "Signature"),
                 ("bynk.crypto", "CryptoError"),

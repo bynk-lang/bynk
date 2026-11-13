@@ -1,0 +1,7 @@
+context demo
+
+// #3480: the instance name is not empty.
+
+consumes bynk.cloudflare { AiSearch }
+
+capability Kb = AiSearch @instance("")

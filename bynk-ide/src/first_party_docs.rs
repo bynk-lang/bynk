@@ -163,6 +163,12 @@ pub const FIRST_PARTY_DOCS: &[Entry] = &[
             "describe",
         ],
     ),
+    (
+        "bynk.cloudflare",
+        "AiSearch",
+        "ai-search-aisearch",
+        &["search", "answer"],
+    ),
 ];
 
 /// The Book URL for the first-party capability a doc-link `name` (`Clock` or

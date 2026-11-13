@@ -33,6 +33,7 @@ pub mod compile;
 pub mod deploy;
 pub mod dev;
 mod dev_hyperdrive;
+mod dev_vectorize;
 pub mod diagnostics;
 pub mod doctor;
 pub mod explain;

@@ -1506,6 +1506,17 @@ pub(super) fn platform_double(
                 "function __bynkTest_{name}(dimensions: number = 1, metric: string = \"cosine\", indexed: readonly string[] = []): {ns}.{cap} {{\n  return new bynk_cloudflare__binding.WorkersVectorize({{ INDEX: __makeIntegrationVectorize(dimensions, metric, indexed) }}, \"INDEX\");\n}}\n"
             ));
         }
+        // #3480: a test never reaches AI Search, so each instance faults until
+        // its operation is stubbed (no double could keep the service's
+        // contract: chunking, embeddings and ranking are the service).
+        ("bynk.cloudflare", "AiSearch") => {
+            let op = |op: &str| {
+                format!(
+                    "    async {op}() {{\n      throw new globalThis.Error(\"bynk: `{name}.{op}` is not stubbed, and a test never reaches AI Search — add `stub {name}.{op}(_, _) returns …`\");\n    }},\n"
+                )
+            };
+            format!("  return {{\n{}{}  }};\n", op("search"), op("answer"))
+        }
         // #3301: a test never reads the account's Secrets Store, so each
         // instance faults until its `get` is stubbed. The message names the
         // instance and never a value: there is none to name.
