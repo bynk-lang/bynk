@@ -1010,6 +1010,106 @@ export const VectorError = {
 };
 
 /**
+ * One retrieved chunk of an `AiSearch` instance: the chunk's `id`, its `score`
+ * (0 to 1, larger is a closer match), its `text`, and where it came from: `key`
+ * is the source file's path or the page's URL, `timestamp` the source item's
+ * unix time in milliseconds when the platform reports one (a `timestamp`
+ * condition in `SearchOptions.filter` compares in the same unit), and `metadata` the item's custom
+ * metadata as a JSON object in text (`None` when it has none). The text is
+ * indexed content, so treat it as untrusted input.
+ */
+export interface SearchHit {
+  readonly id: string;
+  readonly score: number;
+  readonly text: string;
+  readonly key: string;
+  readonly timestamp: Option<number>;
+  readonly metadata: Option<string>;
+}
+
+export const SearchHit = {
+};
+
+/**
+ * How an `AiSearch` query finds chunks: by `Vector` (meaning), by `Keyword`
+ * (words), or `Hybrid`, both together. The platform's default is `Hybrid`.
+ */
+export type RetrievalType =
+    { readonly tag: "Vector" }
+  | { readonly tag: "Keyword" }
+  | { readonly tag: "Hybrid" };
+
+export const RetrievalType = {
+  Vector: { tag: "Vector" } as RetrievalType,
+  Keyword: { tag: "Keyword" } as RetrievalType,
+  Hybrid: { tag: "Hybrid" } as RetrievalType,
+};
+
+/**
+ * The options of `AiSearch.search` and `AiSearch.answer` (for `answer` they
+ * shape its retrieval step). A setting left `None` or `false` leaves the
+ * platform's own default in place: `maxResults` is how many chunks to return
+ * (1 to 50, 10 unless set), `matchThreshold` the least score a chunk may have
+ * (0 to 1, 0.4 unless set), and `retrieval` how chunks are found. `rewriteQuery`
+ * has the instance rewrite the question for better retrieval, and `rerank`
+ * has it reorder the chunks with a reranking model; both use the models the
+ * platform picks. `filter` is a list of conditions on the items' attributes
+ * (`folder`, `timestamp`, `filename`) and on the instance's custom metadata
+ * (at most five fields), and every condition must hold. A text value is
+ * matched on its first 64 bytes only. Out-of-range values are refused as
+ * `SearchInvalidInput`.
+ */
+export interface SearchOptions {
+  readonly maxResults: Option<number>;
+  readonly matchThreshold: Option<number>;
+  readonly retrieval: Option<RetrievalType>;
+  readonly rewriteQuery: boolean;
+  readonly rerank: boolean;
+  readonly filter: readonly Condition[];
+}
+
+export const SearchOptions = {
+};
+
+/**
+ * The reply of `AiSearch.answer`: the generated `text`, which is untrusted
+ * input, the `hits` it was grounded on, and the `usage` of the generation when
+ * the platform reported it.
+ */
+export interface SearchAnswer {
+  readonly text: string;
+  readonly hits: readonly SearchHit[];
+  readonly usage: Option<TokenUsage>;
+}
+
+export const SearchAnswer = {
+};
+
+/**
+ * Why an AI Search call did not give a reply. `SearchInvalidInput` is a
+ * request the platform refused as malformed or out of range (a bad filter or
+ * option), with its message; `SearchRateLimited` is a rate limit, worth
+ * retrying later; `SearchQuotaExceeded` is a usage limit of the account;
+ * `SearchFailed` is any other refusal, or a reply that is not the shape the
+ * operation promises, with a message. The `Search` prefix is because
+ * `InvalidInput` is `AiError`'s, `RateLimited` `EmailError`'s, `QuotaExceeded`
+ * `AiError`'s and `Failed` `SqlError`'s. Cloudflare adds error cases over time,
+ * so a `match` over this type needs a wildcard.
+ */
+export type SearchError =
+    { readonly tag: "SearchInvalidInput"; readonly message: string }
+  | { readonly tag: "SearchRateLimited" }
+  | { readonly tag: "SearchQuotaExceeded" }
+  | { readonly tag: "SearchFailed"; readonly message: string };
+
+export const SearchError = {
+  SearchInvalidInput: (message: string): SearchError => ({ tag: "SearchInvalidInput", message }),
+  SearchRateLimited: { tag: "SearchRateLimited" } as SearchError,
+  SearchQuotaExceeded: { tag: "SearchQuotaExceeded" } as SearchError,
+  SearchFailed: (message: string): SearchError => ({ tag: "SearchFailed", message }),
+};
+
+/**
  * A Cloudflare Workers KV namespace: a key/value store with optional per-entry
  * expiry and prefix listing.
  *
@@ -1577,6 +1677,47 @@ export interface Vectorize {
 }
 
 export const __VectorizeToken: symbol = globalThis.Symbol("Vectorize");
+
+/**
+ * An AI Search instance: a managed retrieval service that indexes a data source
+ * (an R2 bucket, a website, files uploaded to it) and answers from it. Used
+ * only through a named instance that names it,
+ * `capability Kb = AiSearch @instance("support-docs")`, which binds as
+ * `AI_SEARCH_KB`, an `[[ai_search]]` entry; the annotation is required, and a
+ * bare `given AiSearch` is refused. Experimental.
+ *
+ * The instance is not created by Bynk. It is configured by whoever owns it (the
+ * data source, the models, the chunking, how it is kept in sync), so you create
+ * it in the Cloudflare dashboard, with `wrangler` or the REST API, and the
+ * Worker only queries it. The name is used as written in every environment.
+ * To fill an instance backed by an R2 bucket, write the files with `R2.put`;
+ * the instance indexes them on its own schedule, so a freshly written file is
+ * not searchable at once, and a query against an instance that has indexed
+ * nothing yet is an empty list, not an error.
+ *
+ * `search(query, options)` returns the best-matching chunks, best first, for a
+ * handler that shows results or builds its own prompt (with `Ai.generate`).
+ * `answer(messages, options)` retrieves the same way and has the instance's own
+ * generation model write the reply from the conversation, which must not be
+ * empty; a `SearchAnswer` carries the text, the chunks it used and the token usage.
+ * The generation model is the instance's setting and a call cannot override
+ * it. Every operation gives a `SearchError` rather than faulting, except a call
+ * on an instance that does not exist, which is a platform fault.
+ *
+ * AI Search is a remote service on your Cloudflare account, so a call may be
+ * billed; see Cloudflare's AI Search pricing page for what applies, and put a
+ * `RateLimit` in front of any handler an anonymous caller can reach. Under
+ * `bynk dev` a call goes to the deployed instance on Cloudflare. In a test every
+ * operation faults until `stub Kb.search(_, _) returns …` replaces it, so a test
+ * never reaches AI Search; to test retrieval logic, use `Vectorize`, which
+ * has an in-memory double.
+ */
+export interface AiSearch {
+  search(query: string, options: SearchOptions): globalThis.Promise<Result<readonly SearchHit[], SearchError>>;
+  answer(messages: readonly ChatMessage[], options: SearchOptions): globalThis.Promise<Result<SearchAnswer, SearchError>>;
+}
+
+export const __AiSearchToken: symbol = globalThis.Symbol("AiSearch");
 
 export function __serialise_AiError(value: AiError): __JsonValue {
   switch (value.tag) {
@@ -3353,6 +3494,195 @@ export function __deserialise_R2UploadOptions(json: __JsonValue, path: string = 
   return Ok({ contentType: __contentType, metadata: __metadata } as R2UploadOptions);
 }
 
+export function __serialise_RetrievalType(value: RetrievalType): __JsonValue {
+  switch (value.tag) {
+    case "Vector":
+      return { kind: "Vector" };
+    case "Keyword":
+      return { kind: "Keyword" };
+    case "Hybrid":
+      return { kind: "Hybrid" };
+  }
+}
+
+export function __deserialise_RetrievalType(json: __JsonValue, path: string = "$"): Result<RetrievalType, __BoundaryError> {
+  if (typeof json !== "object" || json === null || globalThis.Array.isArray(json)) {
+    return Err({ kind: "StructuralMismatch", path, expected: "object", actual: typeof json });
+  }
+  const obj = json as { [k: string]: __JsonValue };
+  const kind = obj["kind"];
+  switch (kind) {
+    case "Vector":
+      return Ok({ tag: "Vector" } as RetrievalType);
+    case "Keyword":
+      return Ok({ tag: "Keyword" } as RetrievalType);
+    case "Hybrid":
+      return Ok({ tag: "Hybrid" } as RetrievalType);
+    default:
+      return Err({ kind: "StructuralMismatch", path, expected: "sum variant kind", actual: String(kind) });
+  }
+}
+
+export function __serialise_SearchAnswer(value: SearchAnswer): __JsonValue {
+  return {
+    text: value.text as __JsonValue,
+    hits: __serialise_List_SearchHit(value.hits),
+    usage: __serialise_Option_TokenUsage(value.usage),
+  };
+}
+
+export function __deserialise_SearchAnswer(json: __JsonValue, path: string = "$"): Result<SearchAnswer, __BoundaryError> {
+  if (typeof json !== "object" || json === null || globalThis.Array.isArray(json)) {
+    return Err({ kind: "StructuralMismatch", path, expected: "object", actual: typeof json });
+  }
+  const obj = json as { [k: string]: __JsonValue };
+  if (typeof obj["text"] !== "string") {
+    return Err({ kind: "StructuralMismatch", path: `${path}.text`, expected: "string", actual: typeof obj["text"] });
+  }
+  const __text = obj["text"];
+  const __r_hits = __deserialise_List_SearchHit(obj["hits"], `${path}.hits`);
+  if (__r_hits.tag === "Err") return __r_hits;
+  const __hits = __r_hits.value;
+  const __r_usage = __deserialise_Option_TokenUsage(obj["usage"], `${path}.usage`);
+  if (__r_usage.tag === "Err") return __r_usage;
+  const __usage = __r_usage.value;
+  return Ok({ text: __text, hits: __hits, usage: __usage } as SearchAnswer);
+}
+
+export function __serialise_SearchError(value: SearchError): __JsonValue {
+  switch (value.tag) {
+    case "SearchInvalidInput": {
+      return { kind: "SearchInvalidInput", message: value.message as __JsonValue };
+    }
+    case "SearchRateLimited":
+      return { kind: "SearchRateLimited" };
+    case "SearchQuotaExceeded":
+      return { kind: "SearchQuotaExceeded" };
+    case "SearchFailed": {
+      return { kind: "SearchFailed", message: value.message as __JsonValue };
+    }
+  }
+}
+
+export function __deserialise_SearchError(json: __JsonValue, path: string = "$"): Result<SearchError, __BoundaryError> {
+  if (typeof json !== "object" || json === null || globalThis.Array.isArray(json)) {
+    return Err({ kind: "StructuralMismatch", path, expected: "object", actual: typeof json });
+  }
+  const obj = json as { [k: string]: __JsonValue };
+  const kind = obj["kind"];
+  switch (kind) {
+    case "SearchInvalidInput": {
+  if (typeof obj["message"] !== "string") {
+    return Err({ kind: "StructuralMismatch", path: `${path}.message`, expected: "string", actual: typeof obj["message"] });
+  }
+  const __message = obj["message"];
+      return Ok({ tag: "SearchInvalidInput", message: __message } as SearchError);
+    }
+    case "SearchRateLimited":
+      return Ok({ tag: "SearchRateLimited" } as SearchError);
+    case "SearchQuotaExceeded":
+      return Ok({ tag: "SearchQuotaExceeded" } as SearchError);
+    case "SearchFailed": {
+  if (typeof obj["message"] !== "string") {
+    return Err({ kind: "StructuralMismatch", path: `${path}.message`, expected: "string", actual: typeof obj["message"] });
+  }
+  const __message = obj["message"];
+      return Ok({ tag: "SearchFailed", message: __message } as SearchError);
+    }
+    default:
+      return Err({ kind: "StructuralMismatch", path, expected: "sum variant kind", actual: String(kind) });
+  }
+}
+
+export function __serialise_SearchHit(value: SearchHit): __JsonValue {
+  return {
+    id: value.id as __JsonValue,
+    score: ((v: number) => { if (!globalThis.Number.isFinite(v)) throw new globalThis.Error("non-finite Float at boundary"); return v as __JsonValue; })(value.score),
+    text: value.text as __JsonValue,
+    key: value.key as __JsonValue,
+    timestamp: __serialise_Option_Int(value.timestamp),
+    metadata: __serialise_Option_String(value.metadata),
+  };
+}
+
+export function __deserialise_SearchHit(json: __JsonValue, path: string = "$"): Result<SearchHit, __BoundaryError> {
+  if (typeof json !== "object" || json === null || globalThis.Array.isArray(json)) {
+    return Err({ kind: "StructuralMismatch", path, expected: "object", actual: typeof json });
+  }
+  const obj = json as { [k: string]: __JsonValue };
+  if (typeof obj["id"] !== "string") {
+    return Err({ kind: "StructuralMismatch", path: `${path}.id`, expected: "string", actual: typeof obj["id"] });
+  }
+  const __id = obj["id"];
+  if (typeof obj["score"] !== "number") {
+    return Err({ kind: "StructuralMismatch", path: `${path}.score`, expected: "number", actual: typeof obj["score"] });
+  }
+  if (!globalThis.Number.isFinite(obj["score"])) {
+    return Err({ kind: "StructuralMismatch", path: `${path}.score`, expected: "finite number", actual: String(obj["score"]) });
+  }
+  const __score = obj["score"];
+  if (typeof obj["text"] !== "string") {
+    return Err({ kind: "StructuralMismatch", path: `${path}.text`, expected: "string", actual: typeof obj["text"] });
+  }
+  const __text = obj["text"];
+  if (typeof obj["key"] !== "string") {
+    return Err({ kind: "StructuralMismatch", path: `${path}.key`, expected: "string", actual: typeof obj["key"] });
+  }
+  const __key = obj["key"];
+  const __r_timestamp = __deserialise_Option_Int(obj["timestamp"], `${path}.timestamp`);
+  if (__r_timestamp.tag === "Err") return __r_timestamp;
+  const __timestamp = __r_timestamp.value;
+  const __r_metadata = __deserialise_Option_String(obj["metadata"], `${path}.metadata`);
+  if (__r_metadata.tag === "Err") return __r_metadata;
+  const __metadata = __r_metadata.value;
+  return Ok({ id: __id, score: __score, text: __text, key: __key, timestamp: __timestamp, metadata: __metadata } as SearchHit);
+}
+
+export function __serialise_SearchOptions(value: SearchOptions): __JsonValue {
+  return {
+    maxResults: __serialise_Option_Int(value.maxResults),
+    matchThreshold: __serialise_Option_Float(value.matchThreshold),
+    retrieval: __serialise_Option_RetrievalType(value.retrieval),
+    rewriteQuery: value.rewriteQuery as __JsonValue,
+    rerank: value.rerank as __JsonValue,
+    filter: __serialise_List_Condition(value.filter),
+  };
+}
+
+export function __deserialise_SearchOptions(json: __JsonValue, path: string = "$"): Result<SearchOptions, __BoundaryError> {
+  if (typeof json !== "object" || json === null || globalThis.Array.isArray(json)) {
+    return Err({ kind: "StructuralMismatch", path, expected: "object", actual: typeof json });
+  }
+  const obj = json as { [k: string]: __JsonValue };
+  const __d_maxResults: __JsonValue = "maxResults" in obj ? obj["maxResults"] : { kind: "None" };
+  const __r_maxResults = __deserialise_Option_Int(__d_maxResults, `${path}.maxResults`);
+  if (__r_maxResults.tag === "Err") return __r_maxResults;
+  const __maxResults = __r_maxResults.value;
+  const __d_matchThreshold: __JsonValue = "matchThreshold" in obj ? obj["matchThreshold"] : { kind: "None" };
+  const __r_matchThreshold = __deserialise_Option_Float(__d_matchThreshold, `${path}.matchThreshold`);
+  if (__r_matchThreshold.tag === "Err") return __r_matchThreshold;
+  const __matchThreshold = __r_matchThreshold.value;
+  const __d_retrieval: __JsonValue = "retrieval" in obj ? obj["retrieval"] : { kind: "None" };
+  const __r_retrieval = __deserialise_Option_RetrievalType(__d_retrieval, `${path}.retrieval`);
+  if (__r_retrieval.tag === "Err") return __r_retrieval;
+  const __retrieval = __r_retrieval.value;
+  const __d_rewriteQuery: __JsonValue = "rewriteQuery" in obj ? obj["rewriteQuery"] : false;
+  if (typeof __d_rewriteQuery !== "boolean") {
+    return Err({ kind: "StructuralMismatch", path: `${path}.rewriteQuery`, expected: "boolean", actual: typeof __d_rewriteQuery });
+  }
+  const __rewriteQuery = __d_rewriteQuery;
+  const __d_rerank: __JsonValue = "rerank" in obj ? obj["rerank"] : false;
+  if (typeof __d_rerank !== "boolean") {
+    return Err({ kind: "StructuralMismatch", path: `${path}.rerank`, expected: "boolean", actual: typeof __d_rerank });
+  }
+  const __rerank = __d_rerank;
+  const __d_filter: __JsonValue = "filter" in obj ? obj["filter"] : [];
+  const __r_filter = __deserialise_List_Condition(__d_filter, `${path}.filter`);
+  if (__r_filter.tag === "Err") return __r_filter;
+  const __filter = __r_filter.value;
+  return Ok({ maxResults: __maxResults, matchThreshold: __matchThreshold, retrieval: __retrieval, rewriteQuery: __rewriteQuery, rerank: __rerank, filter: __filter } as SearchOptions);
+}
+
 export function __serialise_SenderIdentity(value: SenderIdentity): __JsonValue {
   return {
     address: value.address as __JsonValue,
@@ -4263,6 +4593,65 @@ export function __deserialise_List_R2Object(json: __JsonValue, path: string = "$
   out.push(__el as R2Object);
   }
   return Ok(out);
+}
+
+export function __serialise_List_SearchHit(value: readonly SearchHit[]): __JsonValue {
+  return value.map((v) => __serialise_SearchHit(v));
+}
+
+export function __deserialise_List_SearchHit(json: __JsonValue, path: string = "$"): Result<readonly SearchHit[], __BoundaryError> {
+  if (!globalThis.Array.isArray(json)) {
+    return Err({ kind: "StructuralMismatch", path, expected: "array", actual: typeof json });
+  }
+  const out: SearchHit[] = [];
+  for (let i = 0; i < json.length; i++) {
+  const item = json[i];
+  const __r_el = __deserialise_SearchHit(item, `${path}[${i}]`);
+  if (__r_el.tag === "Err") return __r_el;
+  const __el = __r_el.value;
+  out.push(__el as SearchHit);
+  }
+  return Ok(out);
+}
+
+export function __serialise_Option_RetrievalType(value: Option<RetrievalType>): __JsonValue {
+  if (value.tag === "Some") return { kind: "Some", value: __serialise_RetrievalType(value.value) };
+  return { kind: "None" };
+}
+
+function __option_value_RetrievalType(raw: __JsonValue, at: string): Result<unknown, __BoundaryError> {
+  const __r_v = __deserialise_RetrievalType(raw, at);
+  if (__r_v.tag === "Err") return __r_v;
+  const __v = __r_v.value;
+  return Ok(__v);
+}
+
+export function __deserialise_Option_RetrievalType(json: __JsonValue, path: string = "$"): Result<Option<RetrievalType>, __BoundaryError> {
+  if (json === undefined || json === null) {
+    return Ok(None as Option<RetrievalType>);
+  }
+  if (typeof json === "object" && !globalThis.Array.isArray(json)) {
+    const obj = json as { [k: string]: __JsonValue };
+    const __keys = globalThis.Object.keys(obj);
+    if (obj["kind"] === "None" && __keys.length === 1) {
+      return Ok(None as Option<RetrievalType>);
+    }
+    if (obj["kind"] === "Some" && __keys.length === 2 && "value" in obj) {
+      const __t = __option_value_RetrievalType(obj["value"], `${path}.value`);
+      if (__t.tag === "Err") {
+        return __t;
+      }
+      return Ok(Some(__t.value as RetrievalType) as Option<RetrievalType>);
+    }
+  }
+  const __b = __option_value_RetrievalType(json, path);
+  if (__b.tag === "Ok") {
+    return Ok(Some(__b.value as RetrievalType) as Option<RetrievalType>);
+  }
+  if (__b.error.kind === "StructuralMismatch" && __b.error.path === path && !__b.error.expected.endsWith(" | null | {\"kind\": \"None\"} | {\"kind\": \"Some\", \"value\": ...}")) {
+    return Err({ ...__b.error, expected: __b.error.expected + " | null | {\"kind\": \"None\"} | {\"kind\": \"Some\", \"value\": ...}" });
+  }
+  return __b;
 }
 
 export function __serialise_List_SqlValue(value: readonly SqlValue[]): __JsonValue {

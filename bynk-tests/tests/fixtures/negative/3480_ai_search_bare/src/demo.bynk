@@ -1,0 +1,11 @@
+context demo
+
+// #3480: a bare use of an instance-only kind.
+
+consumes bynk.cloudflare { AiSearch }
+
+service api from http {
+	on GET("/x") () -> Effect[HttpResult[String]] by Visitor given AiSearch {
+		Ok("x")
+	}
+}

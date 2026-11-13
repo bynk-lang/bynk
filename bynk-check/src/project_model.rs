@@ -1187,6 +1187,7 @@ pub(crate) fn instance_example(kind: &firstparty::Instantiable) -> String {
         "Postgres" => "Main",
         "MySql" => "Legacy",
         "Vectorize" => "Docs",
+        "AiSearch" => "Kb",
         _ => "Archives",
     };
     let mut out = format!("capability {name} = {}", kind.capability);
@@ -1209,6 +1210,7 @@ fn option_sample(option: &str) -> &'static str {
         firstparty::EMAIL_ALLOWED_RECIPIENTS_OPTION | firstparty::EMAIL_ALLOWED_SENDERS_OPTION => {
             "[\"orders@shop.example\"]"
         }
+        firstparty::AI_SEARCH_INSTANCE_OPTION => "\"support-docs\"",
         firstparty::VECTORIZE_DIMENSIONS_OPTION => "768",
         firstparty::VECTORIZE_METRIC_OPTION => "\"cosine\"",
         firstparty::VECTORIZE_INDEXED_OPTION => "[\"category:string\"]",
@@ -1227,6 +1229,58 @@ fn vectorize_dimensions_problem(value: i64) -> Option<(&'static str, i64)> {
     } else {
         None
     }
+}
+
+/// #3480: an `AiSearch` `@instance` that is not an instance name. The instance
+/// is a path segment of the REST call that links it, and Cloudflare's API
+/// documents an instance id as 1 to 64 lowercase letters, digits, hyphens and
+/// underscores.
+fn ai_search_instance_error(
+    base: &str,
+    option: &str,
+    text: &str,
+    span: bynk_syntax::span::Span,
+) -> Option<CompileError> {
+    (base == "AiSearch"
+        && option == crate::firstparty::AI_SEARCH_INSTANCE_OPTION
+        && !is_ai_search_instance_name(text))
+    .then(|| {
+        CompileError::new(
+            "bynk.capability.invalid_option",
+            span,
+            format!("`{text}` is not an instance name a `{base}` can reach"),
+        )
+        .with_note(
+            "an instance name is 1 to 64 lowercase letters, digits, `-` or `_`, the form Cloudflare's API documents",
+        )
+    })
+}
+
+/// #3479 (DECISION A): a `Vectorize` `@metric` outside the closed set.
+fn vectorize_metric_error(
+    base: &str,
+    option: &str,
+    text: &str,
+    span: bynk_syntax::span::Span,
+) -> Option<CompileError> {
+    (base == "Vectorize"
+        && option == crate::firstparty::VECTORIZE_METRIC_OPTION
+        && !crate::firstparty::VECTORIZE_METRICS.contains(&text))
+    .then(|| {
+        CompileError::new(
+            "bynk.capability.invalid_option",
+            span,
+            format!("`{text}` is not a distance metric a `{base}` index can use"),
+        )
+        .with_note(format!(
+            "the metrics are {}",
+            crate::firstparty::VECTORIZE_METRICS
+                .iter()
+                .map(|m| format!("`\"{m}\"`"))
+                .collect::<Vec<_>>()
+                .join(", ")
+        ))
+    })
 }
 
 /// Interop I5 (#1972): the value of one instance option: one positional
@@ -1432,27 +1486,8 @@ fn instance_option_value(
         );
         return None;
     }
-    // #3479 (DECISION A): `@metric` is one of a closed set.
-    if base == "Vectorize"
-        && option == crate::firstparty::VECTORIZE_METRIC_OPTION
-        && !crate::firstparty::VECTORIZE_METRICS.contains(&text.as_str())
-    {
-        errors.push_for(
-            Some(path),
-            CompileError::new(
-                "bynk.capability.invalid_option",
-                ann.span,
-                format!("`{text}` is not a distance metric a `{base}` index can use"),
-            )
-            .with_note(format!(
-                "the metrics are {}",
-                crate::firstparty::VECTORIZE_METRICS
-                    .iter()
-                    .map(|m| format!("`\"{m}\"`"))
-                    .collect::<Vec<_>>()
-                    .join(", ")
-            )),
-        );
+    if let Some(error) = vectorize_metric_error(base, option, text, ann.span) {
+        errors.push_for(Some(path), error);
         return None;
     }
     // Hyperdrive H5 (#3322, DECISION B): `@tls` is one of a closed set.
@@ -1491,6 +1526,10 @@ fn instance_option_value(
                 "a Worker name is 1 to 63 lowercase letters, digits, `-` or `_`, and does not start or end with `-`",
             ),
         );
+        return None;
+    }
+    if let Some(error) = ai_search_instance_error(base, option, text, ann.span) {
+        errors.push_for(Some(path), error);
         return None;
     }
     if base == "StoredSecret"
@@ -1643,6 +1682,14 @@ pub(crate) fn is_secrets_store_name(name: &str) -> bool {
         && name
             .bytes()
             .all(|b| b.is_ascii_alphanumeric() || b == b'-' || b == b'_')
+}
+
+/// Whether `name` can name an AI Search instance ([`instance_option_value`]).
+fn is_ai_search_instance_name(name: &str) -> bool {
+    (1..=64).contains(&name.len())
+        && name
+            .bytes()
+            .all(|b| b.is_ascii_lowercase() || b.is_ascii_digit() || b == b'-' || b == b'_')
 }
 
 /// Whether `name` is a Cloudflare Worker name ([`instance_option_value`]).

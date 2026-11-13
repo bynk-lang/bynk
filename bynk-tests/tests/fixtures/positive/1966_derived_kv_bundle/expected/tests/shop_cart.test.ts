@@ -94,7 +94,7 @@ class __Stub_PriceCache {
     return true;
   }
   async get(key: string): globalThis.Promise<Option<string>> {
-    const { AiError, ChatMessage, ChatRole, Condition, DataPoint, DmarcVerdict, EmailAttachment, EmailError, EmailMessage, EmailReply, EmailVerdict, FilterOp, GenerateRequest, Generation, InboundAttachment, InboundEmail, IndexInfo, KvEntry, KvExpiration, KvGet, KvKey, KvList, KvListing, KvPut, MetaValue, MetadataScope, Mutation, MySqlError, MySqlReadError, MySqlRun, MySqlStatement, MySqlValue, PgError, PgReadError, PgRun, PgStatement, PgValue, QueryOptions, QueueSend, R2Body, R2Condition, R2Listing, R2Object, R2Part, R2Put, R2Upload, R2UploadOptions, SenderIdentity, SqlError, SqlReadError, SqlRun, SqlStatement, SqlValue, TokenUsage, Vector, VectorError, VectorMatch, WorkerVersion } = __ns_bynk_cloudflare;
+    const { AiError, ChatMessage, ChatRole, Condition, DataPoint, DmarcVerdict, EmailAttachment, EmailError, EmailMessage, EmailReply, EmailVerdict, FilterOp, GenerateRequest, Generation, InboundAttachment, InboundEmail, IndexInfo, KvEntry, KvExpiration, KvGet, KvKey, KvList, KvListing, KvPut, MetaValue, MetadataScope, Mutation, MySqlError, MySqlReadError, MySqlRun, MySqlStatement, MySqlValue, PgError, PgReadError, PgRun, PgStatement, PgValue, QueryOptions, QueueSend, R2Body, R2Condition, R2Listing, R2Object, R2Part, R2Put, R2Upload, R2UploadOptions, RetrievalType, SearchAnswer, SearchError, SearchHit, SearchOptions, SenderIdentity, SqlError, SqlReadError, SqlRun, SqlStatement, SqlValue, TokenUsage, Vector, VectorError, VectorMatch, WorkerVersion } = __ns_bynk_cloudflare;
     type AiError = __ns_bynk_cloudflare.AiError;
     type ChatMessage = __ns_bynk_cloudflare.ChatMessage;
     type ChatRole = __ns_bynk_cloudflare.ChatRole;
@@ -142,6 +142,11 @@ class __Stub_PriceCache {
     type R2Put = __ns_bynk_cloudflare.R2Put;
     type R2Upload = __ns_bynk_cloudflare.R2Upload;
     type R2UploadOptions = __ns_bynk_cloudflare.R2UploadOptions;
+    type RetrievalType = __ns_bynk_cloudflare.RetrievalType;
+    type SearchAnswer = __ns_bynk_cloudflare.SearchAnswer;
+    type SearchError = __ns_bynk_cloudflare.SearchError;
+    type SearchHit = __ns_bynk_cloudflare.SearchHit;
+    type SearchOptions = __ns_bynk_cloudflare.SearchOptions;
     type SenderIdentity = __ns_bynk_cloudflare.SenderIdentity;
     type SqlError = __ns_bynk_cloudflare.SqlError;
     type SqlReadError = __ns_bynk_cloudflare.SqlReadError;
@@ -465,7 +470,7 @@ async function test_an_instance_is_in_memory() {
     const __obs = { log: {} as globalThis.Record<string, { args: unknown[]; order: number }[]>, n: 0 };
     const deps = __bynkRecordDeps(__makeTestDeps(), { Kv: ["delete", "get", "getBytes", "getWith", "list", "listPage", "put", "putBytes", "putTtl", "putWith"], PriceCache: ["delete", "get", "getBytes", "getWith", "list", "listPage", "put", "putBytes", "putTtl", "putWith"], Prices: ["price"], Sessions: ["delete", "get", "getBytes", "getWith", "list", "listPage", "put", "putBytes", "putTtl", "putWith"] }, __obs);
     const { Cart, __makeCart, peek, price, remember, touch } = __ns_shop_cart;
-    const { AiError, ChatMessage, ChatRole, Condition, DataPoint, DmarcVerdict, EmailAttachment, EmailError, EmailMessage, EmailReply, EmailVerdict, FilterOp, GenerateRequest, Generation, InboundAttachment, InboundEmail, IndexInfo, KvEntry, KvExpiration, KvGet, KvKey, KvList, KvListing, KvPut, MetaValue, MetadataScope, Mutation, MySqlError, MySqlReadError, MySqlRun, MySqlStatement, MySqlValue, PgError, PgReadError, PgRun, PgStatement, PgValue, QueryOptions, QueueSend, R2Body, R2Condition, R2Listing, R2Object, R2Part, R2Put, R2Upload, R2UploadOptions, SenderIdentity, SqlError, SqlReadError, SqlRun, SqlStatement, SqlValue, TokenUsage, Vector, VectorError, VectorMatch, WorkerVersion } = __ns_bynk_cloudflare;
+    const { AiError, ChatMessage, ChatRole, Condition, DataPoint, DmarcVerdict, EmailAttachment, EmailError, EmailMessage, EmailReply, EmailVerdict, FilterOp, GenerateRequest, Generation, InboundAttachment, InboundEmail, IndexInfo, KvEntry, KvExpiration, KvGet, KvKey, KvList, KvListing, KvPut, MetaValue, MetadataScope, Mutation, MySqlError, MySqlReadError, MySqlRun, MySqlStatement, MySqlValue, PgError, PgReadError, PgRun, PgStatement, PgValue, QueryOptions, QueueSend, R2Body, R2Condition, R2Listing, R2Object, R2Part, R2Put, R2Upload, R2UploadOptions, RetrievalType, SearchAnswer, SearchError, SearchHit, SearchOptions, SenderIdentity, SqlError, SqlReadError, SqlRun, SqlStatement, SqlValue, TokenUsage, Vector, VectorError, VectorMatch, WorkerVersion } = __ns_bynk_cloudflare;
     type AiError = __ns_bynk_cloudflare.AiError;
     type ChatMessage = __ns_bynk_cloudflare.ChatMessage;
     type ChatRole = __ns_bynk_cloudflare.ChatRole;
@@ -513,6 +518,11 @@ async function test_an_instance_is_in_memory() {
     type R2Put = __ns_bynk_cloudflare.R2Put;
     type R2Upload = __ns_bynk_cloudflare.R2Upload;
     type R2UploadOptions = __ns_bynk_cloudflare.R2UploadOptions;
+    type RetrievalType = __ns_bynk_cloudflare.RetrievalType;
+    type SearchAnswer = __ns_bynk_cloudflare.SearchAnswer;
+    type SearchError = __ns_bynk_cloudflare.SearchError;
+    type SearchHit = __ns_bynk_cloudflare.SearchHit;
+    type SearchOptions = __ns_bynk_cloudflare.SearchOptions;
     type SenderIdentity = __ns_bynk_cloudflare.SenderIdentity;
     type SqlError = __ns_bynk_cloudflare.SqlError;
     type SqlReadError = __ns_bynk_cloudflare.SqlReadError;
@@ -543,7 +553,7 @@ async function test_instances_are_separate() {
     const __obs = { log: {} as globalThis.Record<string, { args: unknown[]; order: number }[]>, n: 0 };
     const deps = __bynkRecordDeps(__makeTestDeps(), { Kv: ["delete", "get", "getBytes", "getWith", "list", "listPage", "put", "putBytes", "putTtl", "putWith"], PriceCache: ["delete", "get", "getBytes", "getWith", "list", "listPage", "put", "putBytes", "putTtl", "putWith"], Prices: ["price"], Sessions: ["delete", "get", "getBytes", "getWith", "list", "listPage", "put", "putBytes", "putTtl", "putWith"] }, __obs);
     const { Cart, __makeCart, peek, price, remember, touch } = __ns_shop_cart;
-    const { AiError, ChatMessage, ChatRole, Condition, DataPoint, DmarcVerdict, EmailAttachment, EmailError, EmailMessage, EmailReply, EmailVerdict, FilterOp, GenerateRequest, Generation, InboundAttachment, InboundEmail, IndexInfo, KvEntry, KvExpiration, KvGet, KvKey, KvList, KvListing, KvPut, MetaValue, MetadataScope, Mutation, MySqlError, MySqlReadError, MySqlRun, MySqlStatement, MySqlValue, PgError, PgReadError, PgRun, PgStatement, PgValue, QueryOptions, QueueSend, R2Body, R2Condition, R2Listing, R2Object, R2Part, R2Put, R2Upload, R2UploadOptions, SenderIdentity, SqlError, SqlReadError, SqlRun, SqlStatement, SqlValue, TokenUsage, Vector, VectorError, VectorMatch, WorkerVersion } = __ns_bynk_cloudflare;
+    const { AiError, ChatMessage, ChatRole, Condition, DataPoint, DmarcVerdict, EmailAttachment, EmailError, EmailMessage, EmailReply, EmailVerdict, FilterOp, GenerateRequest, Generation, InboundAttachment, InboundEmail, IndexInfo, KvEntry, KvExpiration, KvGet, KvKey, KvList, KvListing, KvPut, MetaValue, MetadataScope, Mutation, MySqlError, MySqlReadError, MySqlRun, MySqlStatement, MySqlValue, PgError, PgReadError, PgRun, PgStatement, PgValue, QueryOptions, QueueSend, R2Body, R2Condition, R2Listing, R2Object, R2Part, R2Put, R2Upload, R2UploadOptions, RetrievalType, SearchAnswer, SearchError, SearchHit, SearchOptions, SenderIdentity, SqlError, SqlReadError, SqlRun, SqlStatement, SqlValue, TokenUsage, Vector, VectorError, VectorMatch, WorkerVersion } = __ns_bynk_cloudflare;
     type AiError = __ns_bynk_cloudflare.AiError;
     type ChatMessage = __ns_bynk_cloudflare.ChatMessage;
     type ChatRole = __ns_bynk_cloudflare.ChatRole;
@@ -591,6 +601,11 @@ async function test_instances_are_separate() {
     type R2Put = __ns_bynk_cloudflare.R2Put;
     type R2Upload = __ns_bynk_cloudflare.R2Upload;
     type R2UploadOptions = __ns_bynk_cloudflare.R2UploadOptions;
+    type RetrievalType = __ns_bynk_cloudflare.RetrievalType;
+    type SearchAnswer = __ns_bynk_cloudflare.SearchAnswer;
+    type SearchError = __ns_bynk_cloudflare.SearchError;
+    type SearchHit = __ns_bynk_cloudflare.SearchHit;
+    type SearchOptions = __ns_bynk_cloudflare.SearchOptions;
     type SenderIdentity = __ns_bynk_cloudflare.SenderIdentity;
     type SqlError = __ns_bynk_cloudflare.SqlError;
     type SqlReadError = __ns_bynk_cloudflare.SqlReadError;
@@ -621,7 +636,7 @@ async function test_a_stubbed_instance_answers() {
     __ns_shop_cart.__resetAgents();
     const deps = __makeTestDeps("a stubbed instance answers");
     const { Cart, __makeCart, peek, price, remember, touch } = __ns_shop_cart;
-    const { AiError, ChatMessage, ChatRole, Condition, DataPoint, DmarcVerdict, EmailAttachment, EmailError, EmailMessage, EmailReply, EmailVerdict, FilterOp, GenerateRequest, Generation, InboundAttachment, InboundEmail, IndexInfo, KvEntry, KvExpiration, KvGet, KvKey, KvList, KvListing, KvPut, MetaValue, MetadataScope, Mutation, MySqlError, MySqlReadError, MySqlRun, MySqlStatement, MySqlValue, PgError, PgReadError, PgRun, PgStatement, PgValue, QueryOptions, QueueSend, R2Body, R2Condition, R2Listing, R2Object, R2Part, R2Put, R2Upload, R2UploadOptions, SenderIdentity, SqlError, SqlReadError, SqlRun, SqlStatement, SqlValue, TokenUsage, Vector, VectorError, VectorMatch, WorkerVersion } = __ns_bynk_cloudflare;
+    const { AiError, ChatMessage, ChatRole, Condition, DataPoint, DmarcVerdict, EmailAttachment, EmailError, EmailMessage, EmailReply, EmailVerdict, FilterOp, GenerateRequest, Generation, InboundAttachment, InboundEmail, IndexInfo, KvEntry, KvExpiration, KvGet, KvKey, KvList, KvListing, KvPut, MetaValue, MetadataScope, Mutation, MySqlError, MySqlReadError, MySqlRun, MySqlStatement, MySqlValue, PgError, PgReadError, PgRun, PgStatement, PgValue, QueryOptions, QueueSend, R2Body, R2Condition, R2Listing, R2Object, R2Part, R2Put, R2Upload, R2UploadOptions, RetrievalType, SearchAnswer, SearchError, SearchHit, SearchOptions, SenderIdentity, SqlError, SqlReadError, SqlRun, SqlStatement, SqlValue, TokenUsage, Vector, VectorError, VectorMatch, WorkerVersion } = __ns_bynk_cloudflare;
     type AiError = __ns_bynk_cloudflare.AiError;
     type ChatMessage = __ns_bynk_cloudflare.ChatMessage;
     type ChatRole = __ns_bynk_cloudflare.ChatRole;
@@ -669,6 +684,11 @@ async function test_a_stubbed_instance_answers() {
     type R2Put = __ns_bynk_cloudflare.R2Put;
     type R2Upload = __ns_bynk_cloudflare.R2Upload;
     type R2UploadOptions = __ns_bynk_cloudflare.R2UploadOptions;
+    type RetrievalType = __ns_bynk_cloudflare.RetrievalType;
+    type SearchAnswer = __ns_bynk_cloudflare.SearchAnswer;
+    type SearchError = __ns_bynk_cloudflare.SearchError;
+    type SearchHit = __ns_bynk_cloudflare.SearchHit;
+    type SearchOptions = __ns_bynk_cloudflare.SearchOptions;
     type SenderIdentity = __ns_bynk_cloudflare.SenderIdentity;
     type SqlError = __ns_bynk_cloudflare.SqlError;
     type SqlReadError = __ns_bynk_cloudflare.SqlReadError;
@@ -697,7 +717,7 @@ async function test_instances_are_separate_at_integration() {
     __ns_shop_cart.__resetAgents();
     const deps = __makeTestDeps();
     const { Cart, __makeCart, peek, price, remember, touch } = __ns_shop_cart;
-    const { AiError, ChatMessage, ChatRole, Condition, DataPoint, DmarcVerdict, EmailAttachment, EmailError, EmailMessage, EmailReply, EmailVerdict, FilterOp, GenerateRequest, Generation, InboundAttachment, InboundEmail, IndexInfo, KvEntry, KvExpiration, KvGet, KvKey, KvList, KvListing, KvPut, MetaValue, MetadataScope, Mutation, MySqlError, MySqlReadError, MySqlRun, MySqlStatement, MySqlValue, PgError, PgReadError, PgRun, PgStatement, PgValue, QueryOptions, QueueSend, R2Body, R2Condition, R2Listing, R2Object, R2Part, R2Put, R2Upload, R2UploadOptions, SenderIdentity, SqlError, SqlReadError, SqlRun, SqlStatement, SqlValue, TokenUsage, Vector, VectorError, VectorMatch, WorkerVersion } = __ns_bynk_cloudflare;
+    const { AiError, ChatMessage, ChatRole, Condition, DataPoint, DmarcVerdict, EmailAttachment, EmailError, EmailMessage, EmailReply, EmailVerdict, FilterOp, GenerateRequest, Generation, InboundAttachment, InboundEmail, IndexInfo, KvEntry, KvExpiration, KvGet, KvKey, KvList, KvListing, KvPut, MetaValue, MetadataScope, Mutation, MySqlError, MySqlReadError, MySqlRun, MySqlStatement, MySqlValue, PgError, PgReadError, PgRun, PgStatement, PgValue, QueryOptions, QueueSend, R2Body, R2Condition, R2Listing, R2Object, R2Part, R2Put, R2Upload, R2UploadOptions, RetrievalType, SearchAnswer, SearchError, SearchHit, SearchOptions, SenderIdentity, SqlError, SqlReadError, SqlRun, SqlStatement, SqlValue, TokenUsage, Vector, VectorError, VectorMatch, WorkerVersion } = __ns_bynk_cloudflare;
     type AiError = __ns_bynk_cloudflare.AiError;
     type ChatMessage = __ns_bynk_cloudflare.ChatMessage;
     type ChatRole = __ns_bynk_cloudflare.ChatRole;
@@ -745,6 +765,11 @@ async function test_instances_are_separate_at_integration() {
     type R2Put = __ns_bynk_cloudflare.R2Put;
     type R2Upload = __ns_bynk_cloudflare.R2Upload;
     type R2UploadOptions = __ns_bynk_cloudflare.R2UploadOptions;
+    type RetrievalType = __ns_bynk_cloudflare.RetrievalType;
+    type SearchAnswer = __ns_bynk_cloudflare.SearchAnswer;
+    type SearchError = __ns_bynk_cloudflare.SearchError;
+    type SearchHit = __ns_bynk_cloudflare.SearchHit;
+    type SearchOptions = __ns_bynk_cloudflare.SearchOptions;
     type SenderIdentity = __ns_bynk_cloudflare.SenderIdentity;
     type SqlError = __ns_bynk_cloudflare.SqlError;
     type SqlReadError = __ns_bynk_cloudflare.SqlReadError;
