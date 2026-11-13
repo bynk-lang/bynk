@@ -1678,7 +1678,7 @@ export class WorkersVectorize implements Vectorize {
   private static outgoing(vectors: readonly Vector[]): Record<string, unknown>[] {
     return vectors.map((v) => {
       const out: Record<string, unknown> = { id: v.id, values: [...v.values] };
-      if (v.namespace.tag === "Some") out.namespace = v.namespace.value;
+      if (v["namespace"].tag === "Some") out["namespace"] = v["namespace"].value;
       const metadata = WorkersVectorize.metadata(v.metadata, v.id);
       if (metadata !== undefined) out.metadata = metadata;
       return out;
@@ -1790,7 +1790,7 @@ export class WorkersVectorize implements Vectorize {
       returnValues: options.returnValues,
       returnMetadata: scope,
     };
-    if (options.namespace.tag === "Some") platform.namespace = options.namespace.value;
+    if (options["namespace"].tag === "Some") platform["namespace"] = options["namespace"].value;
     if (filter.value !== undefined) platform.filter = filter.value;
     try {
       const reply = (await index.query([...vector], platform)) as { matches?: unknown } | null | undefined;
@@ -1801,7 +1801,7 @@ export class WorkersVectorize implements Vectorize {
           score: Number(m.score),
           values: WorkersVectorize.incomingValues(m.values),
           metadata: WorkersVectorize.incomingMetadata(m.metadata),
-          namespace: typeof m.namespace === "string" ? Some(m.namespace) : None,
+          "namespace": typeof m["namespace"] === "string" ? Some(m["namespace"]) : None,
         })),
       );
     } catch (e) {
@@ -1818,7 +1818,7 @@ export class WorkersVectorize implements Vectorize {
           id: String(v.id),
           values: Array.from((v.values ?? []) as unknown as number[]),
           metadata: WorkersVectorize.incomingMetadata(v.metadata),
-          namespace: typeof v.namespace === "string" ? Some(v.namespace) : None,
+          "namespace": typeof v["namespace"] === "string" ? Some(v["namespace"]) : None,
         })),
       );
     } catch (e) {
