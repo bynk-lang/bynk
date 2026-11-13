@@ -409,13 +409,17 @@ const CRYPTO_BROWSER_BINDING: &str = include_str!("../lib/crypto/crypto-browser.
 /// first-party capability reply. Experimental and not part of the language.
 pub const TESTING_UNIT: &str = "bynk.testing";
 
-/// `bynk.testing`, the typed-read test support.
+/// `bynk.testing`, the typed-read test support. Compiled in only with the
+/// `test-support` feature, which the toolchain's own test corpus enables: a
+/// released toolchain does not contain the unit.
+#[cfg(feature = "test-support")]
 pub const BYNK_TESTING_SRC: &str = include_str!("../lib/testing/bynk.testing.bynk");
 
 /// The output path of `bynk.testing`'s binding, beside its emitted `bynk/testing.ts`.
 pub const TESTING_BINDING_FILENAME: &str = "bynk/testing.binding.ts";
 
 /// The binding for `bynk.testing`: platform-free, an in-memory map.
+#[cfg(feature = "test-support")]
 const TESTING_BINDING: &str = include_str!("../lib/testing/testing.binding.ts");
 
 /// The opaque key types `bynk.crypto` exports. A value of one holds a
@@ -1098,6 +1102,7 @@ pub const UNITS: &[Unit] = &[
         instantiable: &[],
         singletons: &[],
     },
+    #[cfg(feature = "test-support")]
     Unit {
         name: TESTING_UNIT,
         kind: UnitKind::Adapter,
@@ -1702,8 +1707,10 @@ mod tests {
             };
             assert_eq!(u.stability, expected, "{}", u.name);
         }
+        let mut shipped = experimental_items();
+        shipped.retain(|i| i != TESTING_UNIT);
         assert_eq!(
-            experimental_items(),
+            shipped,
             [
                 "bynk.Fetch.sendWith",
                 "bynk.Fetch.receiveBytes",
@@ -1727,8 +1734,7 @@ mod tests {
                 "bynk.cloudflare.Kv.getBytes",
                 "bynk.cloudflare.Kv.putBytes",
                 "bynk.cloudflare.Kv.listPage",
-                "bynk.crypto",
-                "bynk.testing"
+                "bynk.crypto"
             ]
         );
         let extensible: Vec<(&str, &str)> = UNITS
@@ -1799,7 +1805,12 @@ mod tests {
     /// unit takes a new block and never moves one of these.
     #[test]
     fn id_blocks_are_pinned_and_distinct() {
-        let blocks: Vec<(&str, u32)> = UNITS.iter().map(|u| (u.name, u.id_block)).collect();
+        // `bynk.testing` (#3458) exists only with the `test-support` feature.
+        let blocks: Vec<(&str, u32)> = UNITS
+            .iter()
+            .filter(|u| u.name != TESTING_UNIT)
+            .map(|u| (u.name, u.id_block))
+            .collect();
         assert_eq!(
             blocks,
             [
@@ -1813,7 +1824,6 @@ mod tests {
                 ("bynk.crypto", 7),
                 ("bynk.url", 8),
                 ("bynk.set", 9),
-                ("bynk.testing", 10),
             ]
         );
         let mut sorted: Vec<u32> = UNITS.iter().map(|u| u.id_block).collect();
@@ -1826,7 +1836,12 @@ mod tests {
     /// pinned to the order the hand-written list had.
     #[test]
     fn firstparty_sources_keep_their_order() {
-        let names: Vec<&str> = FIRSTPARTY_SOURCES.iter().map(|(n, _)| *n).collect();
+        // `bynk.testing` (#3458) exists only with the `test-support` feature.
+        let names: Vec<&str> = FIRSTPARTY_SOURCES
+            .iter()
+            .map(|(n, _)| *n)
+            .filter(|n| *n != TESTING_UNIT)
+            .collect();
         assert_eq!(
             names,
             [
@@ -1840,7 +1855,6 @@ mod tests {
                 "bynk.crypto",
                 "bynk.url",
                 "bynk.set",
-                "bynk.testing",
             ]
         );
         for (unit, (name, source)) in UNITS.iter().zip(FIRSTPARTY_SOURCES) {
