@@ -1799,6 +1799,17 @@ mod tests {
         );
     }
 
+    /// #3458: `bynk.testing` is the toolchain's own test support, so a build
+    /// without the `test-support` feature (every release) does not know it, and
+    /// `[unstable] allow = ["bynk.testing"]` names no standard-library item.
+    #[cfg(not(feature = "test-support"))]
+    #[test]
+    fn a_release_does_not_contain_the_test_support_unit() {
+        assert!(unit(TESTING_UNIT).is_none());
+        assert!(!UNITS.iter().any(|u| u.name == TESTING_UNIT));
+        assert!(!names_first_party_item(TESTING_UNIT));
+    }
+
     /// Each unit's `ExprId` block is permanent: emitted output and the
     /// process-wide parse cache depend on it. These are the blocks the
     /// hand-written injection used before the registry (S1, #1945); a new
