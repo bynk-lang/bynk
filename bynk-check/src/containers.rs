@@ -43,7 +43,8 @@ pub fn build_path_problem(path: &str) -> Option<&'static str> {
     if path.contains(['\0', '\n', '\r']) || path.chars().any(char::is_control) {
         return Some("holds a control character");
     }
-    if path.starts_with('/') || path.as_bytes().get(1) == Some(&b':') {
+    if path.starts_with('/') || matches!(path.as_bytes(), [d, b':', ..] if d.is_ascii_alphabetic())
+    {
         return Some("is absolute; it must be relative to the project root");
     }
     if path.split('/').any(|seg| seg == "..") {
@@ -200,6 +201,7 @@ mod tests {
         assert!(build_path_problem("a/../../x").is_some());
         assert!(build_path_problem("/abs").is_some());
         assert!(build_path_problem("C:/abs").is_some());
+        assert_eq!(build_path_problem("a:b/c"), None);
         assert!(build_path_problem("a\\b").is_some());
         assert!(build_path_problem(".").is_some());
         assert!(build_path_problem("a\nb").is_some());

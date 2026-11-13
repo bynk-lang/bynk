@@ -111,6 +111,10 @@ const WARNING_ONLY: &[(&str, &str)] = &[
 /// examples show a lockfile, a manifest entry or a command line, which no compile can check.
 const NOT_BYNK_SOURCE: &[(&str, &str)] = &[
     (
+        "bynk.container.output_outside_project",
+        "a build refusal that depends on where the build is written (`[build] out` or `--out`), shown as a manifest entry; there is no Bynk program to compile",
+    ),
+    (
         "bynk.revert.facts_missing",
         "a deploy-time refusal of `bynk revert`, shown as a command line and its plan; there is no Bynk program to compile",
     ),

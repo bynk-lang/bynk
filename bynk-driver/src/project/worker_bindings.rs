@@ -399,20 +399,103 @@ pub(super) fn phase_duplicate_bindings(
 }
 
 /// #3477: the path back to the project root from a Worker's output directory,
-/// `<out>/workers/<worker>`: one `..` for each part of `[build] out` (default
-/// `out`) and two more (`../../..` by default). The output directory is taken
-/// from the manifest, so a `bynk build --out` outside the project is not
-/// followed (the deploy slice refuses it).
-pub(super) fn container_root(project_root: &std::path::Path) -> String {
-    let out = bynk_project::try_read_build_config(project_root)
-        .ok()
-        .and_then(|c| c.out)
-        .unwrap_or_else(|| "out".to_string());
-    let depth = std::path::Path::new(&out)
+/// `<out>/workers/<worker>`: one `..` for each part of the output directory
+/// below the project and two more (`../../..` for the default `out`). The
+/// output directory is the one the build is written to (`out_dir`), else the
+/// manifest's `[build] out` (default `out`). `Err` holds the resolved output
+/// directory and project when the output directory is not inside the project.
+pub(super) fn container_root(
+    project_root: &std::path::Path,
+    out_dir: Option<&std::path::Path>,
+) -> Result<String, (std::path::PathBuf, std::path::PathBuf)> {
+    let project = resolved(project_root);
+    let out = match out_dir {
+        Some(out) => resolved(out),
+        None => {
+            let out = bynk_project::try_read_build_config(project_root)
+                .ok()
+                .and_then(|c| c.out)
+                .unwrap_or_else(|| "out".to_string());
+            resolved(&project_root.join(out))
+        }
+    };
+    let Ok(below) = out.strip_prefix(&project) else {
+        return Err((out, project));
+    };
+    let depth = below
         .components()
         .filter(|c| matches!(c, std::path::Component::Normal(_)))
         .count();
-    vec![".."; depth + 2].join("/")
+    Ok(vec![".."; depth + 2].join("/"))
+}
+
+/// `path` made absolute and lexically normalised, with symlinks resolved as far
+/// as it exists (a not-yet-created output directory is placed by its parent).
+fn resolved(path: &std::path::Path) -> std::path::PathBuf {
+    let abs = std::path::absolute(path).unwrap_or_else(|_| path.to_path_buf());
+    let mut normal = std::path::PathBuf::new();
+    for component in abs.components() {
+        match component {
+            std::path::Component::ParentDir => {
+                normal.pop();
+            }
+            std::path::Component::CurDir => {}
+            other => normal.push(other),
+        }
+    }
+    let mut rest = Vec::new();
+    let mut base = normal.as_path();
+    loop {
+        if let Ok(real) = base.canonicalize() {
+            return rest.iter().rev().fold(real, |acc, part| acc.join(part));
+        }
+        match (base.parent(), base.file_name()) {
+            (Some(parent), Some(name)) => {
+                rest.push(name.to_os_string());
+                base = parent;
+            }
+            _ => return normal,
+        }
+    }
+}
+
+/// `bynk.container.output_outside_project`: one error for each container of a
+/// build whose output directory is not inside the project, naming the container
+/// and both paths.
+pub(super) fn container_output_errors(
+    unit_tables: &HashMap<String, UnitTable>,
+    outside: &(std::path::PathBuf, std::path::PathBuf),
+) -> Vec<bynk_project::AttributedError> {
+    let (out, project) = outside;
+    let mut names: Vec<(&String, &String)> = unit_tables
+        .iter()
+        .flat_map(|(unit, table)| {
+            table
+                .derived
+                .iter()
+                .filter(|(_, d)| d.is_container())
+                .map(move |(capability, _)| (unit, capability))
+        })
+        .collect();
+    names.sort();
+    names
+        .into_iter()
+        .map(|(unit, capability)| {
+            let mut error = bynk_syntax::CompileError::new(
+                "bynk.container.output_outside_project",
+                bynk_syntax::span::Span::default(),
+                format!(
+                    "the container `{unit}.{capability}` is built from a directory of the project `{}`, but the output directory `{}` is outside it",
+                    project.display(),
+                    out.display()
+                ),
+            );
+            error.notes.push(
+                "`wrangler` reaches the container's Dockerfile from the Worker's output directory by a relative path, which needs the output directory to be inside the project: build into one that is, for example `bynk build --out out`, or set `[build] out`".to_string(),
+            );
+            bynk_project::AttributedError::new(None, error)
+        })
+        .collect()
 }
 
 /// Sets each container binding's path back to the project root ([`container_root`]).

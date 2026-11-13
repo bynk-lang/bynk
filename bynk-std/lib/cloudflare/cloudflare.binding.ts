@@ -1954,6 +1954,9 @@ export class WorkersContainer implements Container {
       const res = await stub.fetch(new globalThis.Request(url, init));
       if (res.headers.has(CONTAINER_ERROR_HEADER)) {
         reported = WorkersContainer.reported(res, (await res.text()).slice(0, 512));
+        // The body is spent: hand `FetchProvider` an empty response, which it
+        // can read, and let `reported` decide the result.
+        return new globalThis.Response(null, { status: res.status });
       }
       return res;
     });

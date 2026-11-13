@@ -72,7 +72,10 @@ pub fn emit_containers_ts(bindings: &[WorkerBinding]) -> Option<TsProgram> {
                 "image".to_string(),
                 TsExpr::Lit(TsLit::Str(capability.clone())),
             ),
-            ("port".to_string(), TsExpr::Lit(TsLit::Num(port.to_string()))),
+            (
+                "port".to_string(),
+                TsExpr::Lit(TsLit::Num(port.to_string())),
+            ),
         ];
         if let Some(seconds) = sleep_after {
             settings.push((

@@ -99,12 +99,14 @@ needs.
 Object binding, its `exports` entry and a `[[containers]]` entry whose image is
 built from the directory you named. Deploy with `wrangler deploy` from the
 Worker's output directory: Docker must be running, and Wrangler must be 4.136.0 or
-later. The `[[containers]]` entry names its build paths from the output directory
-back to the project, which assumes the output directory is the one `[build] out`
-names inside the project.
+later. The `[[containers]]` entry names its build paths from the Worker's output
+directory back to the project, computed from the directory the build is written
+to, so `bynk build --out <dir>` works for any directory inside the project. A
+build written outside the project is refused (`bynk.container.output_outside_project`),
+naming each container and both paths, because the paths could not be written.
 
 Images are pushed to Cloudflare's registry by `wrangler`; Docker Hub, Amazon ECR
-and Google Artifact Registry references are not supported for this kind of
+and Google's registry references are not supported for this kind of
 container. A running container costs money: see Cloudflare's
 [Containers pricing](https://developers.cloudflare.com/containers/pricing/) page,
 which this guide does not repeat.

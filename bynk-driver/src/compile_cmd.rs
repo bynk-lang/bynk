@@ -427,6 +427,7 @@ fn compile_dir(prog: &str, input: &Path, output: &Path, settings: DirSettings) -
             .schema_registry(schema_lock)
             .contracts(contracts)
             .progress(progress)
+            .out_dir(Some(output.to_path_buf()))
             .tests(false),
         Err(e) => {
             // #3274: `compile` can't take `--each`, so its refusal of a

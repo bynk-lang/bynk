@@ -1036,7 +1036,10 @@ fn container_blocks(source: &BindingSource, doc: &mut TomlDocument) {
         "containers.images",
         capability.clone(),
         vec![
-            TomlEntry::kv("dockerfile", TomlValue::str(format!("{context}/Dockerfile"))),
+            TomlEntry::kv(
+                "dockerfile",
+                TomlValue::str(format!("{context}/Dockerfile")),
+            ),
             TomlEntry::kv("build_context", TomlValue::str(context)),
         ],
     ));

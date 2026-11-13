@@ -7,7 +7,7 @@ title: Diagnostic index
 
 Every diagnostic code the compiler can emit, with a one-line summary of the cause, grouped by category. For step-by-step cause-and-fix guidance on the most common ones, see the [troubleshooting guides](/book/troubleshooting/). For a code with a curated explanation, `bynk explain <code>` prints it in a terminal, and in VS Code the diagnostic's **Explain** quick fix (or **Bynk: Explain Diagnostic Code…**) shows the same text in a panel, offline.
 
-There are **873** codes in total.
+There are **874** codes in total.
 
 ## Agents
 
@@ -398,6 +398,7 @@ There are **873** codes in total.
 | `bynk.codegen.tsc_failed` | `tsc` rejected the TypeScript the compiler generated for a program that passed the checker. This is a bug in the Bynk compiler, not in the program: the diagnostic points at the Bynk code the failing generated line came from, with the TypeScript error attached (#3068). |  | — |
 | [`bynk.container.build_missing`](/book/reference/capabilities/#derived-capabilities) | A `Container`'s `@build` directory holds no `Dockerfile`, so there is no image to build. |  | — |
 | [`bynk.container.build_path`](/book/reference/capabilities/#derived-capabilities) | A `Container`'s `@build` is not a directory inside the project: it is empty, absolute, uses `\`, or leaves the project with `..`. |  | — |
+| [`bynk.container.output_outside_project`](/book/reference/capabilities/#derived-capabilities) | A build with a `Container` is written to an output directory outside the project, so `wrangler` cannot reach the container's Dockerfile from the Worker's output directory by a relative path inside the project. |  | — |
 | `bynk.d1.migration_invalid` | A `D1` migration does not apply to an empty in-memory SQLite, so the binding's literal SQL is not checked against its schema (warning). |  | Warning |
 | `bynk.d1.migration_name` | A file in the project's `migrations/` folder isn't `migrations/<database>/NNNN_<name>.sql`, or shares its number with another migration of the same database. |  | — |
 | `bynk.d1.migration_unreadable` | A `D1` migration in the project's `migrations/` folder can't be read, or isn't UTF-8 text. |  | — |
