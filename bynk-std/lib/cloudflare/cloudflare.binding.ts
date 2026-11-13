@@ -912,15 +912,17 @@ export class WorkersAi implements Ai {
   }
 
   // The platform's internal code (Workers AI errors page), from the error's
-  // `code` when it has one and otherwise from the first four-digit code in its
-  // message (`5007: No such model …`, `AiGatewayError: 3040: …`). Anything
+  // `code` when it has one and otherwise from the code that opens its message (`5007: No such model …`, `AiGatewayError: 3040: …`). Anything
   // unrecognised is `AiFailed`, so a code Cloudflare adds never becomes a fault.
   private static code(e: unknown): number | undefined {
     const code = (e as { code?: unknown } | null)?.code;
     if (typeof code === "number") return code;
     if (typeof code === "string" && /^\d{4}$/.test(code)) return Number(code);
+    // The documented shape is `NNNN: …`, optionally after an `XxxError: `
+    // prefix, so a number elsewhere in a message (a model id, a count) is not
+    // a code.
     const text = e instanceof Error ? e.message : String(e);
-    const found = /(?:^|[^\d])([35]\d{3})(?:[^\d]|$)/.exec(text);
+    const found = /^(?:\w+Error:\s*)?([35]\d{3})\s*:/.exec(text);
     return found ? Number(found[1]) : undefined;
   }
 
@@ -955,6 +957,9 @@ export class WorkersAi implements Ai {
     } catch (e) {
       return Err(WorkersAi.failure(e));
     }
+    // `input` is free-form, so `"stream": true` can hand back a live stream:
+    // cancel it, so the model does not keep running for nobody.
+    if (reply instanceof ReadableStream) await reply.cancel().catch(() => {});
     if (reply instanceof ReadableStream || reply instanceof ArrayBuffer || ArrayBuffer.isView(reply)) {
       return Err({ tag: "AiFailed", message: "model returned binary data; run supports JSON replies only" });
     }
