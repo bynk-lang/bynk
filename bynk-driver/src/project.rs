@@ -127,6 +127,11 @@ pub type ProgressSink = Arc<dyn Fn(&ProgressEvent) + Send + Sync>;
 /// `.import_ext(…)` to override the bundle/default-platform/`.js` defaults.
 #[derive(Clone)]
 pub struct CompileOptions {
+    /// #3477: the directory the build will be written to, when the caller knows
+    /// it (`bynk build` and `bynk compile`), so a container's build paths can be
+    /// written from the Worker's output directory back to the project. `None`
+    /// uses the project's `[build] out`.
+    pub out_dir: Option<PathBuf>,
     pub target: BuildTarget,
     pub platform: Platform,
     pub roots: Roots,
@@ -287,6 +292,7 @@ impl CompileOptions {
     /// Single-root project (`src == tests`), bundle target, default platform.
     pub fn single(root: impl Into<PathBuf>) -> Self {
         Self {
+            out_dir: None,
             target: BuildTarget::Bundle,
             platform: Platform::default(),
             roots: Roots::Single(root.into()),
@@ -313,6 +319,7 @@ impl CompileOptions {
     /// `bynk test` so its rooting matches `bynk compile`'s.
     pub fn split(project_root: impl Into<PathBuf>, paths: ProjectPaths) -> Self {
         Self {
+            out_dir: None,
             target: BuildTarget::Bundle,
             platform: Platform::default(),
             roots: Roots::Split {
@@ -335,6 +342,12 @@ impl CompileOptions {
             progress: None,
             remote_tests: None,
         }
+    }
+
+    /// #3477: the directory the build is written to ([`CompileOptions::out_dir`]).
+    pub fn out_dir(mut self, out: Option<PathBuf>) -> Self {
+        self.out_dir = out;
+        self
     }
 
     /// #3100: report each context as it compiles ([`CompileOptions::progress`]).
@@ -624,6 +637,7 @@ pub fn compile_project(options: &CompileOptions) -> Result<ProjectOutput, Projec
         options.roots.project_root(),
         &options.compatibility_flags,
         options.workers_dev,
+        options.out_dir.as_deref(),
         options.contracts_lock.as_deref(),
     )
 }
@@ -951,7 +965,7 @@ pub fn compile_in_memory(
         tys,
         None,
     );
-    finish_build(run, ImportExt::Js, Path::new(""), &[], None, None)
+    finish_build(run, ImportExt::Js, Path::new(""), &[], None, None, None)
 }
 
 /// [`compile_in_memory`] for several files (#1830): each `(path, source)` pair
@@ -1028,7 +1042,15 @@ pub fn compile_files_in_memory_locked(
         tys,
         None,
     );
-    finish_build(run, ImportExt::Js, Path::new(""), &[], None, contracts_lock)
+    finish_build(
+        run,
+        ImportExt::Js,
+        Path::new(""),
+        &[],
+        None,
+        None,
+        contracts_lock,
+    )
 }
 
 /// Analyse a single **in-memory** Bynk source and return all diagnostics —
@@ -1402,6 +1424,8 @@ fn finish_build(
     display_root: &Path,
     compatibility_flags: &[String],
     workers_dev: Option<bool>,
+    // #3477: the directory the build is written to, when known.
+    out_dir: Option<&Path>,
     // #2554: the pre-read `bynk.contracts.lock`; `None` is a project without
     // one, which accepts no older contract.
     contracts_lock: Option<&str>,
@@ -1465,6 +1489,22 @@ fn finish_build(
             d1_migrations,
             ..
         } => {
+            // #3477: a container's build paths are written from the output
+            // directory, which has to be inside the project.
+            let container_root = match worker_bindings::container_root(display_root, out_dir) {
+                Ok(root) => root,
+                Err(outside) => {
+                    let errors = worker_bindings::container_output_errors(&unit_tables, &outside);
+                    if !errors.is_empty() {
+                        return Err(ProjectFailure {
+                            errors,
+                            snapshots,
+                            display_root: display_root.to_path_buf(),
+                        });
+                    }
+                    String::new()
+                }
+            };
             let mut out = build_output(
                 parsed,
                 compiled,
@@ -1487,6 +1527,7 @@ fn finish_build(
                 import_ext,
                 &flags,
                 workers_dev,
+                &container_root,
                 asset_bytes.as_ref(),
                 &agent_versions,
                 &contracts_lock,
@@ -2705,6 +2746,15 @@ fn run_checks(
         &mut errors,
     );
     let unit_tables = unit_tables;
+    // #3477: each `Container`'s `@build` directory holds a Dockerfile.
+    bynk_check::containers::phase_container_builds(
+        &groups,
+        &kinds,
+        &parsed,
+        &unit_tables,
+        project_root,
+        &mut errors,
+    );
 
     // -- 5b'. Collect `consumes` aliases (v0.6 §3.1). Each consuming context
     //         has an alias map: alias → consumed-context qualified name.
@@ -3476,6 +3526,9 @@ fn build_output(
     // #1890: the merged `wrangler.toml` flag list (`finish_build` merges it).
     compatibility_flags: &[String],
     workers_dev: Option<bool>,
+    // #3477: the path back to the project root from a Worker's output
+    // directory, for a container's build paths.
+    container_root: &str,
     // #1883, slice 1b: the declared asset files' bytes; each Worker ships
     // the files its `uses` closure declares.
     asset_files: Option<&BTreeMap<String, Vec<u8>>>,
@@ -3727,7 +3780,7 @@ fn build_output(
                     &kinds,
                     unit_callees.get(ctx_name),
                 );
-                let bindings = worker_bindings::context_bindings(
+                let mut bindings = worker_bindings::context_bindings(
                     table,
                     &called_contexts,
                     &own_event_routes,
@@ -3740,6 +3793,10 @@ fn build_output(
                         unit_flattened.get(ctx_name),
                     ),
                 );
+                // #3477: a container's image is built from a directory of the
+                // project, which `wrangler` reaches from the Worker's output
+                // directory.
+                worker_bindings::locate_container_builds(&mut bindings, container_root);
                 // #2719: the context's handlers that hand work to the execution
                 // context, from the checker's needs-context set.
                 let ctx_uses_exec = table
@@ -3906,6 +3963,15 @@ fn build_output(
                     compiled.push(StagedFile {
                         output_path: PathBuf::from(format!("workers/{dashes}/events_fanout.ts")),
                         document: Document::Ts(fanout_program),
+                        source_map: None,
+                        debug_metadata: None,
+                    });
+                }
+                // #3477: the Durable Object classes of this Worker's containers.
+                if let Some(program) = emitter::emit_containers_ts(&bindings) {
+                    compiled.push(StagedFile {
+                        output_path: PathBuf::from(format!("workers/{dashes}/containers.ts")),
+                        document: Document::Ts(program),
                         source_map: None,
                         debug_metadata: None,
                     });

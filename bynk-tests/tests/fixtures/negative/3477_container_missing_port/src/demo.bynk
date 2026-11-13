@@ -1,0 +1,7 @@
+context demo
+
+// #3477: a Container names its port.
+
+consumes bynk.cloudflare { Container }
+
+capability Renderer = Container @build("containers/renderer")

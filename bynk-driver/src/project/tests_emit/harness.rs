@@ -241,6 +241,12 @@ pub(super) fn emit_integration_harness<'a>(
                     ident("__makeIntegrationAiSearch"),
                     vec![str_lit(&binding.name)],
                 ),
+                // #3477: there is no in-process container, so the binding faults,
+                // naming itself, until the case stubs the instance.
+                BindingSource::ContainerInstance { .. } => call(
+                    ident("__makeIntegrationContainer"),
+                    vec![str_lit(&binding.name)],
+                ),
                 // #3300: a fixed version, the same for every participant.
                 BindingSource::Singleton { capability } if capability == "Version" => {
                     call(ident("__makeIntegrationVersionMetadata"), vec![])

@@ -1,0 +1,11 @@
+context demo
+
+// #3477: a bare use of an instance-only kind.
+
+consumes bynk.cloudflare { Container }
+
+service api from http {
+	on GET("/x") () -> Effect[HttpResult[String]] by Visitor given Container {
+		Ok("x")
+	}
+}

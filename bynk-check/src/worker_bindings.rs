@@ -156,6 +156,28 @@ pub enum BindingSource {
         metric: String,
         indexed: Vec<String>,
     },
+    /// #3477: the Durable Object namespace of a `Container` instance
+    /// (`capability Renderer = Container @build("…") @port(8080)`): a
+    /// `[[durable_objects.bindings]]` entry for the generated class
+    /// `class_name` (`__Container_Renderer`), its `exports` entry, and a
+    /// `[[containers]]` entry whose image is built from `build`, the
+    /// project-relative directory of its `Dockerfile`. `sleep_after`
+    /// (seconds), `instance_type` and `forward` are applied when the class
+    /// starts the container, not in config. Never seen by handlers: they reach
+    /// it through the instance's `WorkersContainer`.
+    ContainerInstance {
+        capability: String,
+        class_name: String,
+        build: String,
+        // The path from the Worker's output directory (`<out>/workers/<worker>`)
+        // back to the project root (`../../..` for the default `out`), which
+        // the driver fills in from `[build] out`; empty until then.
+        root_from_worker: String,
+        port: i64,
+        sleep_after: Option<i64>,
+        instance_type: Option<String>,
+        forward: Vec<String>,
+    },
     /// #3480: the `[[ai_search]]` binding of an `AiSearch` instance
     /// (`capability Kb = AiSearch @instance("support-docs")`), naming the
     /// account's instance `instance` as written, in every environment. The
@@ -243,6 +265,11 @@ impl BindingSource {
             }
             Self::VectorizeIndex { capability, .. } => {
                 format!("the `[[vectorize]]` binding of derived capability `{capability}`")
+            }
+            Self::ContainerInstance { capability, .. } => {
+                format!(
+                    "the Durable Object binding of the container of derived capability `{capability}`"
+                )
             }
             Self::AiSearchInstance {
                 capability,
@@ -384,6 +411,7 @@ fn declared_at(
             | BindingSource::Postgres { capability }
             | BindingSource::MySql { capability, .. }
             | BindingSource::VectorizeIndex { capability, .. }
+            | BindingSource::ContainerInstance { capability, .. }
             | BindingSource::AiSearchInstance { capability, .. }
             | BindingSource::D1Database { capability } => c.items.iter().find_map(|item| {
                 let CommonsItem::Capability(d) = item else {

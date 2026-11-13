@@ -1517,6 +1517,22 @@ pub(super) fn platform_double(
             };
             format!("  return {{\n{}{}  }};\n", op("search"), op("answer"))
         }
+        // #3477: a test never starts a container, so each operation faults,
+        // naming the instance it was asked for, until it is stubbed. There is
+        // no in-memory echo: it would pass cases a real image fails.
+        ("bynk.cloudflare", "Container") => {
+            let op = |op: &str, args: &str| {
+                format!(
+                    "    async {op}(instance: string) {{\n      throw new globalThis.Error(`bynk: \\`{name}.{op}\\` on instance ${{JSON.stringify(instance)}} is not stubbed, and a test never starts a container — add \\`stub {name}.{op}({args}) returns …\\``);\n    }},\n"
+                )
+            };
+            format!(
+                "  return {{\n{}{}{}  }};\n",
+                op("send", "_, _"),
+                op("receiveBytes", "_, _"),
+                op("sendBytes", "_, _, _")
+            )
+        }
         // #3301: a test never reads the account's Secrets Store, so each
         // instance faults until its `get` is stubbed. The message names the
         // instance and never a value: there is none to name.

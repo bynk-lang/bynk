@@ -4,7 +4,7 @@
 import { Ok, Err, Some, None, type Result, type Option } from "../__bynk_runtime/result.js";
 import type { ValidationError, DecodeError } from "../__bynk_runtime/errors.js";
 
-import { FetchError, Request, Response } from "../bynk.js";
+import { BytesResponse, FetchError, Request, Response } from "../bynk.js";
 
 /**
  * When a `Kv.putWith` or `Kv.putBytes` entry expires: `Never`, `After` a
@@ -1127,6 +1127,27 @@ export const SearchError = {
 };
 
 /**
+ * Why a `Container` call did not succeed. `StartFailed` is a container that
+ * would not start, or whose port never listened, with a message; `Unavailable`
+ * is the platform declining to start another instance (the account's limits);
+ * `Timeout` is a start or a call that took too long; `Network` is a failure
+ * reaching the instance. Cloudflare adds error cases over time, so a `match`
+ * over this type needs a wildcard.
+ */
+export type ContainerError =
+    { readonly tag: "StartFailed"; readonly message: string }
+  | { readonly tag: "Unavailable" }
+  | { readonly tag: "Timeout" }
+  | { readonly tag: "Network" };
+
+export const ContainerError = {
+  StartFailed: (message: string): ContainerError => ({ tag: "StartFailed", message }),
+  Unavailable: { tag: "Unavailable" } as ContainerError,
+  Timeout: { tag: "Timeout" } as ContainerError,
+  Network: { tag: "Network" } as ContainerError,
+};
+
+/**
  * A Cloudflare Workers KV namespace: a key/value store with optional per-entry
  * expiry and prefix listing.
  *
@@ -1738,3 +1759,56 @@ export interface AiSearch {
 }
 
 export const __AiSearchToken: symbol = globalThis.Symbol("AiSearch");
+
+/**
+ * A container: a server in a Docker image, run on Cloudflare and reached over
+ * HTTP on one port. Used only through a named instance,
+ * `capability Renderer = Container @build("containers/renderer") @port(8080)`,
+ * which binds as `CONTAINER_RENDERER`, a Durable Object class the compiler
+ * generates; a bare `given Container` is refused. `@build` is the
+ * project-relative directory that holds the `Dockerfile`, and `@port` the
+ * port its server listens on; both are required. Experimental.
+ *
+ * `@sleepAfter(5.minutes)` stops an idle container after that long (more than
+ * zero, at most 6 hours); left out, the platform stops it shortly after the
+ * instance goes inactive, with no figure to rely on. `@instanceType` is
+ * `"lite"` (the default), `"standard-1"`, `"standard-2"`, `"standard-3"` or
+ * `"standard-4"`. `@forward(["API_KEY"])` names Worker secrets the container's
+ * process reads from its environment: every process and dependency in the
+ * image can read them, and Bynk cannot scope them further.
+ *
+ * `send(instance, req)` sends `req` to the container named `instance` and
+ * returns its response; `receiveBytes` returns the body as `Bytes`, and
+ * `sendBytes` sends `body` as the request body (`req.body` must be `None`).
+ * `Request`, `Response` and `BytesResponse` are `bynk`'s, so a context that
+ * calls them also writes `consumes bynk`. The URL's host is not used for
+ * routing, but the URL must be absolute, and the container sees it.
+ *
+ * `instance` is the name of one container instance, one process: the same
+ * name reaches the same instance, and a new name starts a new one. It is a
+ * runtime value, so a handler can use one per tenant, and it is not a secret:
+ * names appear in Cloudflare's dashboards and logs. A name that is empty, over
+ * 256 bytes or holds a control character faults the call. The first call to an
+ * instance starts its container, which takes noticeable time, longer for a
+ * larger image. A container is not storage: its disk is ephemeral.
+ *
+ * A container has no internet access: Bynk always starts it with outbound
+ * access off. Images must be built for `linux/amd64` and live in Cloudflare's
+ * registry. `bynk.cloudflare` puts no ceiling on instances: names are chosen
+ * by the caller and only the account's limits apply, so choose `@sleepAfter`
+ * and `@instanceType` with that in mind. A running container costs money; see
+ * Cloudflare's Containers pricing and limits pages for what applies. A slow
+ * call from inside an agent handler holds that agent's queue, so call from a
+ * service and hand the result to the agent.
+ *
+ * Deploy with `wrangler deploy` (Docker running, Wrangler 4.136.0 or later).
+ * In a test every operation faults until `stub Renderer.send(_, _) returns …`
+ * replaces it, so a test never starts a container.
+ */
+export interface Container {
+  send(instance: string, req: Request): globalThis.Promise<Result<Response, ContainerError>>;
+  receiveBytes(instance: string, req: Request): globalThis.Promise<Result<BytesResponse, ContainerError>>;
+  sendBytes(instance: string, req: Request, body: globalThis.Uint8Array): globalThis.Promise<Result<BytesResponse, ContainerError>>;
+}
+
+export const __ContainerToken: symbol = globalThis.Symbol("Container");

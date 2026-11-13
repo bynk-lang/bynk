@@ -28,7 +28,7 @@
 
 import { test } from "node:test";
 import assert from "node:assert/strict";
-import { WorkersAi, WorkersAiSearch, WorkersAnalytics, WorkersD1, WorkersEdgeCache, WorkersEmail, WorkersKv, WorkersMySql, WorkersPostgres, WorkersQueue, WorkersR2, WorkersRateLimit, WorkersService, WorkersStoredSecret, WorkersVectorize, WorkersVersion } from "./bynk/cloudflare.binding.js";
+import { WorkersAi, WorkersAiSearch, WorkersAnalytics, WorkersContainer, WorkersD1, WorkersEdgeCache, WorkersEmail, WorkersKv, WorkersMySql, WorkersPostgres, WorkersQueue, WorkersR2, WorkersRateLimit, WorkersService, WorkersStoredSecret, WorkersVectorize, WorkersVersion } from "./bynk/cloudflare.binding.js";
 import { Method, FetchError } from "./bynk.js";
 import { Some, None } from "./__bynk_runtime/result.js";
 
@@ -2570,4 +2570,77 @@ t("WorkersVectorize.upsertValue: metadata that is not a JSON object faults, as u
   const wire = [{ id: "a", values: [0.1], metadata: { kind: "Some", value: "just text" }, namespace: { kind: "None" } }];
   await assert.rejects(() => vz(index).upsertValue(wire), /must be a JSON object/);
   assert.equal(index.calls.length, 0);
+});
+
+// #3477: `WorkersContainer`, against a fake of the Durable Object namespace the
+// generated class sits behind. The class itself (starting the container) is
+// tested in the runtime; here only what the provider sends and how it reads the
+// class's answer.
+function fakeContainerNs(answer) {
+  const seen = [];
+  return {
+    seen,
+    idFromName: (name) => `id:${name}`,
+    get: (id) => ({
+      fetch: async (request) => {
+        seen.push({ id, url: request.url, method: request.method, body: await request.text() });
+        return answer(request);
+      },
+    }),
+  };
+}
+const creq = (over = {}) => ({ method: { tag: "Post" }, url: "http://renderer/render", contentType: Some("text/plain"), authorization: None, headers: new Map(), body: Some("hello"), ...over });
+const cont = (ns) => new WorkersContainer({ CONTAINER_RENDERER: ns }, "CONTAINER_RENDERER");
+
+t("WorkersContainer.send: reaches the named instance and returns the container's response", async () => {
+  const ns = fakeContainerNs(() => new Response("<svg/>", { status: 201 }));
+  const r = await cont(ns).send("tenant-a", creq());
+  assert.equal(r.tag, "Ok");
+  assert.equal(r.value.status, 201);
+  assert.equal(r.value.body, "<svg/>");
+  assert.deepEqual(ns.seen, [{ id: "id:tenant-a", url: "http://renderer/render", method: "POST", body: "hello" }]);
+});
+
+t("WorkersContainer.receiveBytes and sendBytes: bytes both ways", async () => {
+  const ns = fakeContainerNs(() => new Response(new Uint8Array([1, 2, 3])));
+  const got = await cont(ns).receiveBytes("a", creq({ method: { tag: "Get" }, body: None }));
+  assert.deepEqual([...got.value.body], [1, 2, 3]);
+  const sent = await cont(ns).sendBytes("a", creq({ body: None }), new Uint8Array([9, 8]));
+  assert.equal(sent.tag, "Ok");
+  assert.equal(ns.seen[1].body, "\u0009\u0008");
+});
+
+t("WorkersContainer: a 5xx from the container is its answer, not an error", async () => {
+  const r = await cont(fakeContainerNs(() => new Response("boom", { status: 503 }))).send("a", creq());
+  assert.equal(r.tag, "Ok");
+  assert.equal(r.value.status, 503);
+});
+
+t("WorkersContainer: an error the generated class reports is a ContainerError value", async () => {
+  const reply = (kind) => () => new Response("the port never listened", { status: 502, headers: { "bynk-container-error": kind } });
+  assert.deepEqual((await cont(fakeContainerNs(reply("start-failed"))).send("a", creq())).error, { tag: "StartFailed", message: "the port never listened" });
+  assert.deepEqual((await cont(fakeContainerNs(reply("unavailable"))).send("a", creq())).error, { tag: "Unavailable" });
+  assert.deepEqual((await cont(fakeContainerNs(reply("timeout"))).send("a", creq())).error, { tag: "Timeout" });
+  assert.deepEqual((await cont(fakeContainerNs(reply("other"))).send("a", creq())).error, { tag: "Network" });
+});
+
+t("WorkersContainer: a failed call is Network", async () => {
+  const r = await cont(fakeContainerNs(() => { throw new Error("socket closed"); })).send("a", creq());
+  assert.deepEqual(r.error, { tag: "Network" });
+});
+
+t("WorkersContainer: a bad instance name, a refused request or a missing binding faults", async () => {
+  const ns = fakeContainerNs(() => new Response("x"));
+  for (const bad of ["", "a".repeat(257), "a\nb", "a\u0000b"]) {
+    await assert.rejects(() => cont(ns).send(bad, creq()), /an instance name is 1 to 256 bytes/);
+  }
+  await assert.rejects(() => cont(ns).send("a", creq({ headers: new Map([["host", "x"]]) })), /not one the platform can send/);
+  await assert.rejects(() => cont(ns).send("a", creq({ method: { tag: "Get" } })), /not one the platform can send/);
+  await assert.rejects(() => new WorkersContainer({}, "CONTAINER_RENDERER").send("a", creq()), /\[\[containers\]\]/);
+  assert.equal(ns.seen.length, 0);
+});
+
+t("WorkersContainer: a response cannot forge a ContainerError without the header, and the header is the class's", async () => {
+  const r = await cont(fakeContainerNs(() => new Response("StartFailed", { status: 500 }))).send("a", creq());
+  assert.equal(r.tag, "Ok");
 });

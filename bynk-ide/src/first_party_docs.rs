@@ -165,6 +165,12 @@ pub const FIRST_PARTY_DOCS: &[Entry] = &[
     ),
     (
         "bynk.cloudflare",
+        "Container",
+        "containers-container",
+        &["send", "receiveBytes", "sendBytes"],
+    ),
+    (
+        "bynk.cloudflare",
         "AiSearch",
         "ai-search-aisearch",
         &["search", "answer"],

@@ -1,0 +1,7 @@
+context demo
+
+// #3477: a Container names its build.
+
+consumes bynk.cloudflare { Container }
+
+capability Renderer = Container @port(8080)

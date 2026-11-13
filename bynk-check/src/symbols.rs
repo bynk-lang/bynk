@@ -865,6 +865,46 @@ impl DerivedInstance {
         self.list(crate::firstparty::VECTORIZE_INDEXED_OPTION)
     }
 
+    /// Whether this is a `Container` instance (#3477).
+    pub fn is_container(&self) -> bool {
+        self.base_unit == crate::firstparty::CLOUDFLARE_UNIT && self.base_cap == "Container"
+    }
+
+    /// A `Container` instance's `@build` directory as written; `None` for any
+    /// other kind.
+    pub fn container_build(&self) -> Option<&str> {
+        self.is_container()
+            .then(|| self.option(crate::firstparty::CONTAINER_BUILD_OPTION))
+            .flatten()
+    }
+
+    /// A `Container` instance's `@port`; `None` for any other kind.
+    pub fn container_port(&self) -> Option<i64> {
+        self.is_container()
+            .then(|| self.number(crate::firstparty::CONTAINER_PORT_OPTION))
+            .flatten()
+    }
+
+    /// A `Container` instance's `@sleepAfter` in seconds, when it has one.
+    pub fn container_sleep_after(&self) -> Option<i64> {
+        self.is_container()
+            .then(|| self.number(crate::firstparty::CONTAINER_SLEEP_AFTER_OPTION))
+            .flatten()
+    }
+
+    /// A `Container` instance's `@instanceType`, when it has one.
+    pub fn container_instance_type(&self) -> Option<&str> {
+        self.is_container()
+            .then(|| self.option(crate::firstparty::CONTAINER_INSTANCE_TYPE_OPTION))
+            .flatten()
+    }
+
+    /// A `Container` instance's `@forward` names; empty when it has none or is
+    /// another kind.
+    pub fn container_forward(&self) -> &[String] {
+        self.list(crate::firstparty::CONTAINER_FORWARD_OPTION)
+    }
+
     /// Whether this is an `Email` instance (#3302).
     pub fn is_email(&self) -> bool {
         self.base_unit == crate::firstparty::CLOUDFLARE_UNIT && self.base_cap == "Email"

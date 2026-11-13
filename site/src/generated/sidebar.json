@@ -230,6 +230,10 @@
             "link": "/book/guides/effects-and-capabilities/run-a-model-from-a-worker/"
           },
           {
+            "label": "Run a container from a Worker",
+            "link": "/book/guides/effects-and-capabilities/run-a-container-from-a-worker/"
+          },
+          {
             "label": "Call Workers AI through an adapter",
             "link": "/book/guides/effects-and-capabilities/call-workers-ai-through-an-adapter/"
           },

@@ -5257,6 +5257,7 @@ fn Box.size(self) -> Int { 1 }
                 "Postgres",
                 "MySql",
                 "Vectorize",
+                "Container",
                 "AiSearch"
             ]
         );

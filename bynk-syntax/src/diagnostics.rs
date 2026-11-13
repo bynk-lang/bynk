@@ -1517,6 +1517,49 @@ pub const EXPLANATIONS: &[Explain] = &[
         anchor: "declare-the-dependency-and-call-the-service",
     },
     Explain {
+        code: "bynk.container.build_missing",
+        blurb: "A `Container` is built from a Dockerfile: `@build(\"dir\")` names the \
+                project-relative directory that holds it, and `bynk check` looks for \
+                `dir/Dockerfile`. A directory with no Dockerfile would fail only when \
+                `wrangler deploy` tried to build the image, so it is refused here. Create the \
+                Dockerfile, or correct the path. Bynk does not read or generate the Dockerfile, \
+                and the image must be built for `linux/amd64`.",
+        example: "capability Renderer = Container @build(\"containers/renderer\") @port(8080)    // ✗ containers/renderer/Dockerfile does not exist\n\
+                  capability Renderer = Container @build(\"containers/renderer\") @port(8080)    // ✓ once containers/renderer/Dockerfile exists",
+        page: "/book/reference/capabilities",
+        anchor: "derived-capabilities",
+    },
+    Explain {
+        code: "bynk.container.build_path",
+        blurb: "`@build` on a `Container` is a directory inside the project, written relative to \
+                the project root with `/` separators: `@build(\"containers/renderer\")`. An empty \
+                path, an absolute path, a drive path, a path with `\\` and a path that leaves the \
+                project with `..` are refused, so the build context can never reach outside the \
+                project and the emitted configuration stays a function of the source.",
+        example: "capability Renderer = Container @build(\"../renderer\") @port(8080)       // ✗ leaves the project\n\
+                  capability Renderer = Container @build(\"containers/renderer\") @port(8080) // ✓",
+        page: "/book/reference/capabilities",
+        anchor: "derived-capabilities",
+    },
+    Explain {
+        code: "bynk.container.output_outside_project",
+        blurb: "A container's image is built by `wrangler deploy` from the Dockerfile that `@build` \
+                names. The generated `wrangler.toml` reaches it from the Worker's output directory, \
+                `<out>/workers/<worker>`, by a relative path back into the project, so the output \
+                directory has to be inside the project; the path is computed from the directory the \
+                build is written to. A build into a directory outside the project is refused, naming \
+                each container and both paths, because a path that climbs out and back in would break \
+                when the output is moved, and copying the build directory into the output would take \
+                `node_modules`, secrets and large files with it. Build into a directory inside the \
+                project: set `[build] out` or pass `--out` a path under the project root.",
+        example: "# bynk.toml\n\
+                  [build]\n\
+                  out = \"../dist\"    # ✗ outside the project\n\
+                  out = \"dist\"       # ✓ inside it",
+        page: "/book/reference/capabilities",
+        anchor: "derived-capabilities",
+    },
+    Explain {
         code: "bynk.context.consumes_cycle",
         blurb: "Contexts may not form a circle of `consumes` clauses, whether directly or \
                 through others. `bynk deploy` takes the order in which to upload the Workers \
@@ -8600,6 +8643,18 @@ pub const REGISTRY: &[DiagnosticInfo] = &[
         "bynk.consumes.unknown_service",
         "Called a service the consumed context does not declare.",
         &["consumes_decl"],
+    ),
+    d(
+        "bynk.container.build_missing",
+        "A `Container`'s `@build` directory holds no `Dockerfile`, so there is no image to build.",
+    ),
+    d(
+        "bynk.container.build_path",
+        "A `Container`'s `@build` is not a directory inside the project: it is empty, absolute, uses `\\`, or leaves the project with `..`.",
+    ),
+    d(
+        "bynk.container.output_outside_project",
+        "A build with a `Container` is written to an output directory outside the project, so `wrangler` cannot reach the container's Dockerfile from the Worker's output directory by a relative path inside the project.",
     ),
     d(
         "bynk.context.consumes_cycle",

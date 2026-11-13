@@ -1,0 +1,2 @@
+bynk.container.build_missing
+has no Dockerfile

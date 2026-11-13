@@ -1,0 +1,7 @@
+context demo
+
+// #3477: a build directory holds a Dockerfile.
+
+consumes bynk.cloudflare { Container }
+
+capability Renderer = Container @build("containers/renderer") @port(8080)

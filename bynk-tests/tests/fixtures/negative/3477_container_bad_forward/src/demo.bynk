@@ -1,0 +1,7 @@
+context demo
+
+// #3477: a forwarded name is an identifier.
+
+consumes bynk.cloudflare { Container }
+
+capability Renderer = Container @build("containers/renderer") @port(8080) @forward(["API-KEY"])

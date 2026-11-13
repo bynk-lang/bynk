@@ -1187,6 +1187,7 @@ pub(crate) fn instance_example(kind: &firstparty::Instantiable) -> String {
         "Postgres" => "Main",
         "MySql" => "Legacy",
         "Vectorize" => "Docs",
+        "Container" => "Renderer",
         "AiSearch" => "Kb",
         _ => "Archives",
     };
@@ -1214,6 +1215,11 @@ fn option_sample(option: &str) -> &'static str {
         firstparty::VECTORIZE_DIMENSIONS_OPTION => "768",
         firstparty::VECTORIZE_METRIC_OPTION => "\"cosine\"",
         firstparty::VECTORIZE_INDEXED_OPTION => "[\"category:string\"]",
+        firstparty::CONTAINER_BUILD_OPTION => "\"containers/renderer\"",
+        firstparty::CONTAINER_PORT_OPTION => "8080",
+        firstparty::CONTAINER_SLEEP_AFTER_OPTION => "5.minutes",
+        firstparty::CONTAINER_INSTANCE_TYPE_OPTION => "\"lite\"",
+        firstparty::CONTAINER_FORWARD_OPTION => "[\"API_KEY\"]",
         _ => "\"legacy-billing\"",
     }
 }
@@ -1353,7 +1359,17 @@ fn instance_option_value(
             if out.is_empty() {
                 errors.push_for(
                     Some(path),
-                    invalid(arg.span, format!("`@{option}` takes at least one address")),
+                    invalid(
+                        arg.span,
+                        format!(
+                            "`@{option}` takes at least one {}",
+                            if base == "Container" {
+                                "entry"
+                            } else {
+                                "address"
+                            }
+                        ),
+                    ),
                 );
                 return None;
             }
@@ -1386,6 +1402,22 @@ fn instance_option_value(
             );
             return None;
         }
+        (firstparty::OptionKind::PositiveInt, ExprKind::IntLit { value, .. })
+            if base == "Container"
+                && option == firstparty::CONTAINER_PORT_OPTION
+                && crate::containers::port_problem(*value).is_some() =>
+        {
+            errors.push_for(
+                Some(path),
+                CompileError::new(
+                    "bynk.capability.invalid_option",
+                    arg.span,
+                    format!("`@{option}` is not a port a `{base}` can listen on"),
+                )
+                .with_note("a port is a TCP port, 1 to 65535"),
+            );
+            return None;
+        }
         (firstparty::OptionKind::PositiveInt, ExprKind::IntLit { value, .. }) if *value > 0 => {
             OptionValue::Int(*value)
         }
@@ -1399,6 +1431,9 @@ fn instance_option_value(
             );
             return None;
         }
+        (firstparty::OptionKind::Duration, _) if base == "Container" => OptionValue::Seconds(
+            container_sleep_after(&arg.value.kind, arg.span, path, errors)?,
+        ),
         (firstparty::OptionKind::Duration, ExprKind::DurationLit { millis, .. })
             if *millis % 1000 == 0 && firstparty::RATELIMIT_PERIODS.contains(&(*millis / 1000)) =>
         {
@@ -1425,26 +1460,17 @@ fn instance_option_value(
         }
     };
     if let OptionValue::List(items) = &value {
+        // #3477: a `Container`'s `@forward` names Worker secrets.
+        if base == "Container" {
+            return container_forward_ok(items, ann, path, errors).then_some(value);
+        }
         // #3479: a `Vectorize`'s `@indexed` entries are metadata indexes.
         if base == "Vectorize" {
             return vectorize_indexed_ok(items, ann, path, errors).then_some(value);
         }
         // Every address is checked as the platform will see it (#3302).
-        for item in items {
-            if !is_email_address(item) {
-                errors.push_for(
-                    Some(path),
-                    invalid(
-                        ann.span,
-                        format!(
-                            "`{}` is not an email address a `{base}` can use",
-                            item.escape_debug()
-                        ),
-                    )
-                    .with_note("an address is `name@domain`, with no spaces or control characters"),
-                );
-                return None;
-            }
+        if !email_list_ok(items, base, ann, path, errors) {
+            return None;
         }
         return Some(value);
     }
@@ -1466,28 +1492,16 @@ fn instance_option_value(
         return None;
     }
     if option == crate::firstparty::R2_JURISDICTION_OPTION
-        && !crate::firstparty::R2_JURISDICTIONS.contains(&text.as_str())
+        && !r2_jurisdiction_ok(text, base, ann, path, errors)
     {
-        errors.push_for(
-            Some(path),
-            CompileError::new(
-                "bynk.capability.invalid_option",
-                ann.span,
-                format!("`{text}` is not a jurisdiction a `{base}` bucket can be pinned to"),
-            )
-            .with_note(format!(
-                "the jurisdictions are {}",
-                crate::firstparty::R2_JURISDICTIONS
-                    .iter()
-                    .map(|j| format!("`\"{j}\"`"))
-                    .collect::<Vec<_>>()
-                    .join(" and ")
-            )),
-        );
         return None;
     }
     if let Some(error) = vectorize_metric_error(base, option, text, ann.span) {
         errors.push_for(Some(path), error);
+        return None;
+    }
+    // #3477: a `Container`'s `@build` and `@instanceType`.
+    if base == "Container" && !container_str_ok(text, option, ann, path, errors) {
         return None;
     }
     // Hyperdrive H5 (#3322, DECISION B): `@tls` is one of a closed set.
@@ -1571,6 +1585,167 @@ fn instance_option_value(
         return None;
     }
     Some(value)
+}
+
+/// #3302: whether every entry of an `Email` instance's address list is an
+/// address the platform takes. Pushes the error and returns `false` otherwise.
+fn email_list_ok(
+    items: &[String],
+    base: &str,
+    ann: &bynk_syntax::ast::Annotation,
+    path: &std::path::Path,
+    errors: &mut ErrorSink,
+) -> bool {
+    let option = ann.name.name.as_str();
+    let Some(item) = items.iter().find(|item| !is_email_address(item)) else {
+        return true;
+    };
+    errors.push_for(
+        Some(path),
+        CompileError::new(
+            "bynk.capability.invalid_option",
+            ann.span,
+            format!(
+                "`{}` is not an email address a `{base}` can use",
+                item.escape_debug()
+            ),
+        )
+        .with_note(format!(
+            "write `@{option}({})`, for example",
+            option_sample(option)
+        ))
+        .with_note("an address is `name@domain`, with no spaces or control characters"),
+    );
+    false
+}
+
+/// Whether `text` is a jurisdiction an `R2` bucket can be pinned to. Pushes the
+/// error and returns `false` otherwise.
+fn r2_jurisdiction_ok(
+    text: &str,
+    base: &str,
+    ann: &bynk_syntax::ast::Annotation,
+    path: &std::path::Path,
+    errors: &mut ErrorSink,
+) -> bool {
+    if crate::firstparty::R2_JURISDICTIONS.contains(&text) {
+        return true;
+    }
+    errors.push_for(
+        Some(path),
+        CompileError::new(
+            "bynk.capability.invalid_option",
+            ann.span,
+            format!("`{text}` is not a jurisdiction a `{base}` bucket can be pinned to"),
+        )
+        .with_note(format!(
+            "the jurisdictions are {}",
+            crate::firstparty::R2_JURISDICTIONS
+                .iter()
+                .map(|j| format!("`\"{j}\"`"))
+                .collect::<Vec<_>>()
+                .join(" and ")
+        )),
+    );
+    false
+}
+
+/// #3477: whether a `Container`'s string option `option` is a value the
+/// platform takes: `@build` a directory inside the project, `@instanceType` one
+/// of a closed set. Pushes the error and returns `false` otherwise.
+fn container_str_ok(
+    text: &str,
+    option: &str,
+    ann: &bynk_syntax::ast::Annotation,
+    path: &std::path::Path,
+    errors: &mut ErrorSink,
+) -> bool {
+    let error = if option == firstparty::CONTAINER_BUILD_OPTION {
+        crate::containers::build_path_problem(text).map(|problem| {
+            CompileError::new(
+                "bynk.container.build_path",
+                ann.span,
+                format!("`@build(\"{}\")` {problem}", text.escape_debug()),
+            )
+            .with_note(
+                "`@build` names the directory that holds the `Dockerfile`, relative to the project root, for example `@build(\"containers/renderer\")`",
+            )
+        })
+    } else if option == firstparty::CONTAINER_INSTANCE_TYPE_OPTION
+        && !firstparty::CONTAINER_INSTANCE_TYPES.contains(&text)
+    {
+        Some(
+            CompileError::new(
+                "bynk.capability.invalid_option",
+                ann.span,
+                format!("`{text}` is not an instance type a `Container` can start with"),
+            )
+            .with_note(format!(
+                "the instance types are {}",
+                firstparty::CONTAINER_INSTANCE_TYPES
+                    .iter()
+                    .map(|t| format!("`\"{t}\"`"))
+                    .collect::<Vec<_>>()
+                    .join(", ")
+            )),
+        )
+    } else {
+        None
+    };
+    let Some(error) = error else {
+        return true;
+    };
+    errors.push_for(Some(path), error);
+    false
+}
+
+/// #3477: a `Container`'s `@sleepAfter` in whole seconds: more than zero and at
+/// most 6 hours. Pushes the error and returns `None` otherwise.
+fn container_sleep_after(
+    kind: &ExprKind,
+    span: bynk_syntax::span::Span,
+    path: &std::path::Path,
+    errors: &mut ErrorSink,
+) -> Option<i64> {
+    let seconds = match kind {
+        ExprKind::DurationLit { millis, .. } => crate::containers::sleep_after_seconds(*millis),
+        _ => None,
+    };
+    if seconds.is_none() {
+        errors.push_for(
+            Some(path),
+            CompileError::new(
+                "bynk.capability.invalid_option",
+                span,
+                "`@sleepAfter` is not a time a `Container` can sleep after".to_string(),
+            )
+            .with_note(
+                "write a whole number of seconds, more than zero and at most 6 hours, for example `5.minutes`",
+            ),
+        );
+    }
+    seconds
+}
+
+/// #3477 (DECISION J): whether a `Container`'s `@forward` is a list of Worker
+/// secret names a process environment can hold. Pushes the error and returns
+/// `false` otherwise.
+fn container_forward_ok(
+    items: &[String],
+    ann: &bynk_syntax::ast::Annotation,
+    path: &std::path::Path,
+    errors: &mut ErrorSink,
+) -> bool {
+    let Some(message) = crate::containers::forward_problem(items) else {
+        return true;
+    };
+    errors.push_for(
+        Some(path),
+        CompileError::new("bynk.capability.invalid_option", ann.span, message).with_note(
+            "write `@forward([\"API_KEY\"])`: the names of Worker secrets, each a letter or `_` then letters, digits or `_`; their values are never written into source or config",
+        ),
+    );
+    false
 }
 
 /// #3479 (DECISION C): whether a `Vectorize`'s `@indexed` entries are a list of

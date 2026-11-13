@@ -1345,3 +1345,68 @@ fn allow_skew_is_an_unknown_flag() {
         assert!(err.contains("--allow-skew"), "{args:?}: {err}");
     }
 }
+
+/// #3477: a container's build paths are written from the directory the build is
+/// written to, however deep inside the project it is, and a build written
+/// outside the project is refused, naming the container and both paths.
+#[test]
+fn a_container_build_path_follows_the_output_directory() {
+    let proj = scratch("container-out");
+    write(
+        &proj.join("bynk.toml"),
+        "[project]\nname = \"c\"\nversion = \"0.1.0\"\n\n[unstable]\nallow = [\"bynk.cloudflare.Container\"]\n",
+    );
+    write(
+        &proj.join("src/shop/render.bynk"),
+        "context shop.render\n\nconsumes bynk.cloudflare { Container }\n\ncapability Renderer = Container @build(\"images/renderer\") @port(8080)\n\nservice api from http {\n\ton GET(\"/x\") () -> Effect[HttpResult[String]] by Visitor given Renderer {\n\t\tOk(\"x\")\n\t}\n}\n",
+    );
+    write(&proj.join("images/renderer/Dockerfile"), "FROM scratch\n");
+    let elsewhere = scratch("container-out-cwd");
+    let dir = proj.to_str().unwrap();
+    for (out, dots) in [("dist", "../../.."), ("a/b/dist", "../../../../..")] {
+        let (code, _, err) = run_bynk_in(
+            &elsewhere,
+            &[
+                "compile",
+                dir,
+                "--target",
+                "workers",
+                "--output",
+                &proj.join(out).to_string_lossy(),
+            ],
+        );
+        assert_eq!(code, 0, "{err}");
+        let toml =
+            std::fs::read_to_string(proj.join(out).join("workers/shop-render/wrangler.toml"))
+                .unwrap();
+        assert!(
+            toml.contains(&format!(
+                "dockerfile = \"{dots}/images/renderer/Dockerfile\""
+            )),
+            "{out}: {toml}"
+        );
+        assert!(
+            toml.contains(&format!("build_context = \"{dots}/images/renderer\"")),
+            "{out}: {toml}"
+        );
+    }
+    let outside = scratch("container-out-outside");
+    let (code, _, err) = run_bynk_in(
+        &elsewhere,
+        &[
+            "compile",
+            dir,
+            "--target",
+            "workers",
+            "--output",
+            outside.to_str().unwrap(),
+        ],
+    );
+    assert_ne!(code, 0);
+    assert!(
+        err.contains("bynk.container.output_outside_project"),
+        "{err}"
+    );
+    assert!(err.contains("shop.render.Renderer"), "{err}");
+    assert!(err.contains(outside.to_str().unwrap()), "{err}");
+}

@@ -60,6 +60,7 @@
     - [Share a capability across contexts](guides/effects-and-capabilities/share-across-contexts.md)
     - [Wrap a library as an adapter](guides/effects-and-capabilities/wrap-a-library.md)
     - [Run a model from a Worker](guides/effects-and-capabilities/run-a-model-from-a-worker.md)
+    - [Run a container from a Worker](guides/effects-and-capabilities/run-a-container-from-a-worker.md)
     - [Call Workers AI through an adapter](guides/effects-and-capabilities/call-workers-ai-through-an-adapter.md)
     - [Search by meaning with Vectorize and Workers AI](guides/effects-and-capabilities/search-by-meaning-with-vectorize.md)
     - [Use more than one KV namespace](guides/effects-and-capabilities/use-several-kv-namespaces.md)

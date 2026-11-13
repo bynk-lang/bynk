@@ -746,6 +746,47 @@ pub const VECTORIZE_MIN_DIMENSIONS: i64 = 32;
 /// limit); `@dimensions` above it is refused at compile time.
 pub const VECTORIZE_MAX_DIMENSIONS: i64 = 1536;
 
+/// The Worker binding prefix of a `Container` instance (#3477): `capability
+/// Renderer = Container @build("containers/renderer") @port(8080)` binds as
+/// `CONTAINER_RENDERER`, a Durable Object namespace whose class (derived from
+/// the capability's name) runs the container.
+pub const CONTAINER_BINDING_PREFIX: &str = "CONTAINER";
+
+/// A `Container` instance's build context: a project-relative directory that
+/// holds a `Dockerfile` (#3477 B).
+pub const CONTAINER_BUILD_OPTION: &str = "build";
+
+/// The one TCP port the container's HTTP server listens on (#3477 D).
+pub const CONTAINER_PORT_OPTION: &str = "port";
+
+/// How long an idle container runs before the platform stops it, applied with
+/// `setInactivityTimeout` on every start (#3477 E).
+pub const CONTAINER_SLEEP_AFTER_OPTION: &str = "sleepAfter";
+
+/// The instance type the container starts with, one of
+/// [`CONTAINER_INSTANCE_TYPES`], passed as `instance` to `start()` (#3477 E).
+pub const CONTAINER_INSTANCE_TYPE_OPTION: &str = "instanceType";
+
+/// The names of the Worker secrets passed to the container's process at start
+/// (#3477 J).
+pub const CONTAINER_FORWARD_OPTION: &str = "forward";
+
+/// The instance types a `Container` can start with under the `durable_object`
+/// scheduling policy. There is no `basic` under it.
+pub const CONTAINER_INSTANCE_TYPES: &[&str] = &[
+    "lite",
+    "standard-1",
+    "standard-2",
+    "standard-3",
+    "standard-4",
+];
+
+/// The longest inactivity timeout the platform accepts, in seconds (6 hours).
+pub const CONTAINER_MAX_SLEEP_AFTER_SECONDS: i64 = 6 * 60 * 60;
+
+/// The most Worker secrets one container forwards.
+pub const CONTAINER_MAX_FORWARD: usize = 32;
+
 /// The Worker binding of the `Version` capability (#3300): Cloudflare's
 /// Version metadata binding, `[version_metadata] binding = "CF_VERSION_METADATA"`,
 /// the name Cloudflare's own documentation uses.
@@ -851,6 +892,7 @@ pub const UNITS: &[Unit] = &[
             "WorkersPostgres",
             "WorkersMySql",
             "WorkersVectorize",
+            "WorkersContainer",
             "WorkersAiSearch",
         ],
         stability: Stability::Stable,
@@ -887,6 +929,7 @@ pub const UNITS: &[Unit] = &[
             "Postgres",
             "MySql",
             "Vectorize",
+            "Container",
             "AiSearch",
             "Kv.getWith",
             "Kv.putWith",
@@ -904,6 +947,7 @@ pub const UNITS: &[Unit] = &[
             "PgError",
             "MySqlError",
             "VectorError",
+            "ContainerError",
             "SearchError",
         ],
         instantiable: &[
@@ -1033,6 +1077,23 @@ pub const UNITS: &[Unit] = &[
                     (VECTORIZE_INDEXED_OPTION, OptionKind::StrList),
                 ],
                 required: &[VECTORIZE_DIMENSIONS_OPTION, VECTORIZE_METRIC_OPTION],
+                bare: false,
+                linked: false,
+            },
+            // #3477: a container is a Durable Object class backed by an image
+            // that `wrangler deploy` builds and pushes, so it is neither
+            // linked nor provisioned by `bynk deploy`.
+            Instantiable {
+                capability: "Container",
+                binding_prefix: CONTAINER_BINDING_PREFIX,
+                options: &[
+                    (CONTAINER_BUILD_OPTION, OptionKind::Str),
+                    (CONTAINER_PORT_OPTION, OptionKind::PositiveInt),
+                    (CONTAINER_SLEEP_AFTER_OPTION, OptionKind::Duration),
+                    (CONTAINER_INSTANCE_TYPE_OPTION, OptionKind::Str),
+                    (CONTAINER_FORWARD_OPTION, OptionKind::StrList),
+                ],
+                required: &[CONTAINER_BUILD_OPTION, CONTAINER_PORT_OPTION],
                 bare: false,
                 linked: false,
             },
@@ -1707,6 +1768,7 @@ mod tests {
                 ("bynk.cloudflare", "Postgres", "HYPERDRIVE"),
                 ("bynk.cloudflare", "MySql", "HYPERDRIVE"),
                 ("bynk.cloudflare", "Vectorize", "VECTORIZE"),
+                ("bynk.cloudflare", "Container", "CONTAINER"),
                 ("bynk.cloudflare", "AiSearch", "AI_SEARCH")
             ]
         );
@@ -1788,6 +1850,19 @@ mod tests {
         assert_eq!(vec.option_kind("indexed"), Some(OptionKind::StrList));
         assert_eq!(vec.required, ["dimensions", "metric"]);
         assert!(!vec.bare && !vec.linked);
+        // #3477: a Container names its build and port, and may set the rest.
+        let container =
+            instantiable("bynk.cloudflare", "Container").expect("Container is instantiable");
+        assert_eq!(
+            container.option_names().collect::<Vec<_>>(),
+            ["build", "port", "sleepAfter", "instanceType", "forward"]
+        );
+        assert_eq!(
+            container.option_kind("sleepAfter"),
+            Some(OptionKind::Duration)
+        );
+        assert_eq!(container.required, ["build", "port"]);
+        assert!(!container.bare && !container.linked);
         let pg = instantiable("bynk.cloudflare", "Postgres").expect("Postgres is instantiable");
         assert!(pg.options.is_empty() && pg.required.is_empty() && !pg.bare && !pg.linked);
         for u in UNITS {
@@ -1847,6 +1922,7 @@ mod tests {
                 "bynk.cloudflare.Postgres",
                 "bynk.cloudflare.MySql",
                 "bynk.cloudflare.Vectorize",
+                "bynk.cloudflare.Container",
                 "bynk.cloudflare.AiSearch",
                 "bynk.cloudflare.Kv.getWith",
                 "bynk.cloudflare.Kv.putWith",
@@ -1875,6 +1951,7 @@ mod tests {
                 ("bynk.cloudflare", "PgError"),
                 ("bynk.cloudflare", "MySqlError"),
                 ("bynk.cloudflare", "VectorError"),
+                ("bynk.cloudflare", "ContainerError"),
                 ("bynk.cloudflare", "SearchError"),
                 ("bynk.crypto", "Digest"),
                 ("bynk.crypto", "Signature"),

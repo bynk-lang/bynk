@@ -26,6 +26,7 @@ Effects are explicit and capability-gated: a handler declares what it needs via
 - [Apply webhook events that arrive late, twice or out of order](/book/guides/effects-and-capabilities/apply-webhook-events-out-of-order/)
 - [Cache responses at Cloudflare's edge](/book/guides/effects-and-capabilities/cache-at-the-edge/)
 - [Run a model from a Worker](/book/guides/effects-and-capabilities/run-a-model-from-a-worker/)
+- [Run a container from a Worker](/book/guides/effects-and-capabilities/run-a-container-from-a-worker/)
 - [Answer questions from your documents with AI Search](/book/guides/effects-and-capabilities/answer-questions-from-your-documents/)
 - [Call Workers AI through an adapter](/book/guides/effects-and-capabilities/call-workers-ai-through-an-adapter/)
 - [Search by meaning with Vectorize and Workers AI](/book/guides/effects-and-capabilities/search-by-meaning-with-vectorize/)

@@ -1069,7 +1069,9 @@ pub fn emit_worker_compose(
     if binds(|s| {
         matches!(
             s,
-            BindingSource::Agent { .. } | BindingSource::EventsFanout { .. }
+            BindingSource::Agent { .. }
+                | BindingSource::EventsFanout { .. }
+                | BindingSource::ContainerInstance { .. }
         )
     }) {
         // P7.2: deferred, not narrowed — this settling attempt broke real

@@ -1,0 +1,7 @@
+context demo
+
+// #3477: there is no instance ceiling to set.
+
+consumes bynk.cloudflare { Container }
+
+capability Renderer = Container @build("containers/renderer") @port(8080) @maxInstances(5)
