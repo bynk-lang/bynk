@@ -1,12 +1,6 @@
----
-level: minor
-changelog: `Ai.runStream(model, input)` streams a Workers AI model's own events as a `Stream[String]`, ready to serve with `Streaming`; a refusal before the stream is an `Err`, a failure after it faults the stream, and a client that hangs up cancels the model
-probes: emit_abi_shapes, ts_writes
----
+# 0835 — `Ai.runStream` passes a Workers AI model's streamed events through as text
 
-## ADR: workers-ai-run-stream
-title: `Ai.runStream` passes a Workers AI model's streamed events through as text
-summary: One element per Server-Sent Event, `[DONE]` consumed, the event shape left to the model
+- **Status:** Accepted (v0.591)
 
 **Context.** #3478 accepted `runStream` as a plain `Stream[String]` whose mid-stream failure faults. Cloudflare documents that `env.AI.run(model, { stream: true })` returns a stream of Server-Sent Events, and that a model's streaming output is binary `text/event-stream`. It does not document the fields of an event, a `[DONE]` terminator, where `usage` appears, or what a failure after the first event looks like.
 
