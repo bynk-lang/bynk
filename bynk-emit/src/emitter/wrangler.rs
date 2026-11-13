@@ -2009,7 +2009,10 @@ mod vectorize_manifest_tests {
             "shop-cart-docs"
         );
         let long = vectorize_index_name(&"a".repeat(80), "VECTORIZE_DOCS");
-        assert_eq!(long.len(), 64);
+        assert_eq!(
+            long.len(),
+            VECTORIZE_INDEX_NAME_MAX - VECTORIZE_ENV_SUFFIX_ROOM
+        );
         assert_eq!(
             long,
             vectorize_index_name(&"a".repeat(80), "VECTORIZE_DOCS")
