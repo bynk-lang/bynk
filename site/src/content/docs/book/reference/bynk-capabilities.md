@@ -87,6 +87,11 @@ holding claims and remembered values, and each call costs one round trip to it. 
 in the browser they are an in-memory map, lost on restart and not shared between instances.
 `dedup` then `remember` is still check-then-act: use `claim` for work that must run once.
 
+A remembered value larger than about 1 MB is not stored on Cloudflare (a warning is logged
+and the handler carries on), because `dedup` is a cache. Keys are scoped to the calling
+function or handler, so a generic helper that wraps `dedup`/`remember` shares one key space
+across every caller of that helper: include whatever tells the callers apart in the key.
+
 #### `claim`: first delivery wins
 
 `dedup` then `remember` is check-then-act: two deliveries of one key that arrive together
@@ -126,7 +131,7 @@ settled: it is held for `expiresAfter` whether or not the work succeeds.
 The key is scoped to the calling handler as for `dedup`.
 
 `claim` is atomic on Cloudflare: the claim is one `INSERT … ON CONFLICT` in the Worker's D1
-database: two deliveries of one key, on
+database, so two deliveries of one key, on
 different isolates or after a restart, yield exactly one `Claimed`. A claim that has
 lapsed is taken over, and a few expired rows are deleted with each claim, so the table
 stays small. It costs one database round trip per `claim`. On Node and in the browser

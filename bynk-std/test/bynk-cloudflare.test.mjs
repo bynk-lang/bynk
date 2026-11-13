@@ -215,3 +215,20 @@ d1("remember: with a database, expired values of other keys are swept, and claim
   await idem.remember("new", 2, 10);
   assert.deepEqual(db.valueKeys(), ["new"]);
 });
+
+d1("dedup: a stored value that is not JSON reads as a miss; remember skips an oversized value", async () => {
+  const db = claimsDatabase(MIGRATION);
+  const c = clock(0);
+  const idem = new binding.IdempotencyProvider({ Clock: c }, { D1_IDEMPOTENCY: db });
+  await db.batch([db.prepare("INSERT INTO idempotency_values (key, value, expires_at) VALUES (?1, ?2, ?3)").bind("bad", "{not json", 1_000)]);
+  assert.deepEqual(await idem.dedup("bad"), { kind: "None" });
+  const warn = console.warn;
+  console.warn = () => {};
+  try {
+    await idem.remember("big", "x".repeat(1_100_000), 100);
+  } finally {
+    console.warn = warn;
+  }
+  assert.deepEqual(await idem.dedup("big"), { kind: "None" });
+  assert.deepEqual(db.valueKeys(), ["bad"]);
+});
