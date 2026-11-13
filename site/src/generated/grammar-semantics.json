@@ -226,8 +226,8 @@
       "summary": "A generic capability operation's type parameter carries a bound other than `Key` or `Codable`; operations take only those two (constrained-generics slices 2 and 3)."
     },
     {
-      "code": "bynk.generics.codable_op_return",
-      "summary": "A capability operation's `Codable` type parameter appears in its return type. A `Codable` parameter is encoded at the call site; decoding a provider's reply raises a question this slice does not answer (what a failed decode of stored data means), so typed reads are deferred (constrained-generics slice 3)."
+      "code": "bynk.generics.codable_op_return_not_first_party",
+      "summary": "A user-declared capability operation's `Codable` type parameter appears in its return type. A typed read, the call site decoding the provider's reply as the instantiated payload, is accepted only for the standard library's own operations (#3458, lifting ADR 0696 decision 5)."
     },
     {
       "code": "bynk.generics.internal_op_annotation",

@@ -404,6 +404,24 @@ const CRYPTO_NODE_BINDING: &str = include_str!("../lib/crypto/crypto-node.bindin
 /// context (R14.5): outside one it throws, loudly, rather than degrade.
 const CRYPTO_BROWSER_BINDING: &str = include_str!("../lib/crypto/crypto-browser.binding.ts");
 
+/// The unit name of the toolchain's test-support adapter (#3458): an in-memory
+/// store whose reads are typed, which exercises the call-site decode of a
+/// first-party capability reply. Experimental and not part of the language.
+pub const TESTING_UNIT: &str = "bynk.testing";
+
+/// `bynk.testing`, the typed-read test support. Compiled in only with the
+/// `test-support` feature, which the toolchain's own test corpus enables: a
+/// released toolchain does not contain the unit.
+#[cfg(feature = "test-support")]
+pub const BYNK_TESTING_SRC: &str = include_str!("../lib/testing/bynk.testing.bynk");
+
+/// The output path of `bynk.testing`'s binding, beside its emitted `bynk/testing.ts`.
+pub const TESTING_BINDING_FILENAME: &str = "bynk/testing.binding.ts";
+
+/// The binding for `bynk.testing`: platform-free, an in-memory map.
+#[cfg(feature = "test-support")]
+const TESTING_BINDING: &str = include_str!("../lib/testing/testing.binding.ts");
+
 /// The opaque key types `bynk.crypto` exports. A value of one holds a
 /// non-extractable platform key, so it is never stored, persisted, logged or
 /// sent (`bynk.types.key_at_boundary`), as a `Stream` is not. The checker finds
@@ -1084,6 +1102,26 @@ pub const UNITS: &[Unit] = &[
         instantiable: &[],
         singletons: &[],
     },
+    #[cfg(feature = "test-support")]
+    Unit {
+        name: TESTING_UNIT,
+        kind: UnitKind::Adapter,
+        identity_path: "bynk/testing.bynk",
+        source: BYNK_TESTING_SRC,
+        binding: Binding::Fixed {
+            filename: TESTING_BINDING_FILENAME,
+            source: TESTING_BINDING,
+        },
+        id_block: 10,
+        platform: None,
+        env_providers: &[],
+        // The toolchain's own test support: no promise, and a project must opt in.
+        stability: Stability::Experimental,
+        experimental: &[],
+        extensible: &[],
+        instantiable: &[],
+        singletons: &[],
+    },
 ];
 
 /// The registry entry for `name`, if it is a first-party unit.
@@ -1662,15 +1700,17 @@ mod tests {
     #[test]
     fn the_shipped_stability_is_pinned() {
         for u in UNITS {
-            let expected = if u.name == CRYPTO_UNIT {
+            let expected = if u.name == CRYPTO_UNIT || u.name == TESTING_UNIT {
                 Stability::Experimental
             } else {
                 Stability::Stable
             };
             assert_eq!(u.stability, expected, "{}", u.name);
         }
+        let mut shipped = experimental_items();
+        shipped.retain(|i| i != TESTING_UNIT);
         assert_eq!(
-            experimental_items(),
+            shipped,
             [
                 "bynk.Fetch.sendWith",
                 "bynk.Fetch.receiveBytes",
@@ -1759,13 +1799,29 @@ mod tests {
         );
     }
 
+    /// #3458: `bynk.testing` is the toolchain's own test support, so a build
+    /// without the `test-support` feature (every release) does not know it, and
+    /// `[unstable] allow = ["bynk.testing"]` names no standard-library item.
+    #[cfg(not(feature = "test-support"))]
+    #[test]
+    fn a_release_does_not_contain_the_test_support_unit() {
+        assert!(unit(TESTING_UNIT).is_none());
+        assert!(!UNITS.iter().any(|u| u.name == TESTING_UNIT));
+        assert!(!names_first_party_item(TESTING_UNIT));
+    }
+
     /// Each unit's `ExprId` block is permanent: emitted output and the
     /// process-wide parse cache depend on it. These are the blocks the
     /// hand-written injection used before the registry (S1, #1945); a new
     /// unit takes a new block and never moves one of these.
     #[test]
     fn id_blocks_are_pinned_and_distinct() {
-        let blocks: Vec<(&str, u32)> = UNITS.iter().map(|u| (u.name, u.id_block)).collect();
+        // `bynk.testing` (#3458) exists only with the `test-support` feature.
+        let blocks: Vec<(&str, u32)> = UNITS
+            .iter()
+            .filter(|u| u.name != TESTING_UNIT)
+            .map(|u| (u.name, u.id_block))
+            .collect();
         assert_eq!(
             blocks,
             [
@@ -1791,7 +1847,12 @@ mod tests {
     /// pinned to the order the hand-written list had.
     #[test]
     fn firstparty_sources_keep_their_order() {
-        let names: Vec<&str> = FIRSTPARTY_SOURCES.iter().map(|(n, _)| *n).collect();
+        // `bynk.testing` (#3458) exists only with the `test-support` feature.
+        let names: Vec<&str> = FIRSTPARTY_SOURCES
+            .iter()
+            .map(|(n, _)| *n)
+            .filter(|n| *n != TESTING_UNIT)
+            .collect();
         assert_eq!(
             names,
             [

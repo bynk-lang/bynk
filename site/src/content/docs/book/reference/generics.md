@@ -366,11 +366,11 @@ hand-written TypeScript that receives plain JSON, never a codec, and the operati
 ABI does not grow. The type arguments are inferred from the arguments when they
 determine every parameter: `Queue.sendValue(order)`.
 
-A `Codable` parameter may not appear in the operation's return type
-(`bynk.generics.codable_op_return`): decoding a provider's reply raises what a failed
-decode of stored data means, which is not settled. Typed reads wait for that. As for
-any generic operation, it needs a provider written in TypeScript
-(`bynk.provider.generic_op_requires_external`).
+A `Codable` parameter may appear in the operation's return type only in the standard
+library's own operations (a typed read): a capability you declare is refused with
+`bynk.generics.codable_op_return_not_first_party`, and returns plain data that you decode
+where you call it. As for any generic operation, it needs a provider written in
+TypeScript (`bynk.provider.generic_op_requires_external`).
 
 ## Where this is going
 

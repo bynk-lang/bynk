@@ -3145,6 +3145,13 @@ const UNUSED_DEPS_ALLOWED: &[(&str, &str, &str)] = &[
     ),
     (
         "bynk-tests",
+        "bynk-std",
+        "declared only to switch on its `test-support` feature (the `bynk.testing` unit the \
+         corpus runs, #3458); no identifier appears in this crate's source. Goes with that \
+         feature if the unit moves.",
+    ),
+    (
+        "bynk-tests",
         "clap",
         "used by bynk/src/main.rs, which bynk-tests/src/bin/bynk-under-test.rs includes via \
          include!, so no identifier appears in this crate's source. Goes with the \

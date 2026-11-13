@@ -1,0 +1,33 @@
+---
+#3458: the reply of a typed read is decoded as the instantiated payload; a reply
+that does not decode is a miss for `readOpt` and a fault for `read`.
+---
+suite demo.store as integration
+
+case "a value written as a Receipt reads back as one" {
+	let _ <- stash.call("a", Receipt { id: "a", total: 5 })
+	let found <- find.call("a")
+	expect found == Some(Receipt { id: "a", total: 5 })
+	let needed <- need.call("a")
+	expect needed == Receipt { id: "a", total: 5 }
+}
+
+case "a missing key is a miss" {
+	let found <- find.call("nobody")
+	expect found == None
+}
+
+case "a value stored as another type is a miss, and the next write overwrites it" {
+	let _ <- stashLegacy.call("k", Legacy { id: "k" })
+	let stale <- find.call("k")
+	expect stale == None
+	let _ <- stash.call("k", Receipt { id: "k", total: 1 })
+	let fresh <- find.call("k")
+	expect fresh == Some(Receipt { id: "k", total: 1 })
+}
+
+case "a value stored as another type faults a read that declares no miss" {
+	let _ <- stashLegacy.call("k", Legacy { id: "k" })
+	let needed <- need.call("k")
+	expect false
+}

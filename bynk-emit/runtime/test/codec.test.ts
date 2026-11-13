@@ -162,3 +162,48 @@ test("map: duplicates are detected on the canonical key, not the wire text (#270
   const ok = c.decode([["1.20", 1], ["1.3", 2]], "$");
   assert.ok(ok.tag === "Ok" && ok.value.size === 2);
 });
+
+// #3458: a typed read's reply is decoded as the payload type, and a reply that
+// does not decode is a fault or, for an `Option` payload that declares it, a miss.
+import { __bynkCapabilityReply } from "../src/codec.ts";
+
+const intCodec = {
+  encode: (v: number): JsonValue => v,
+  decode: (j: JsonValue, path: string): Result<number, BoundaryError> =>
+    typeof j === "number"
+      ? Ok(j)
+      : Err({ kind: "StructuralMismatch", path, expected: "number", actual: typeof j }),
+};
+const site = { capability: "Store", operation: "load", type: "Option[Int]" };
+
+test("a typed read decodes a reply that matches its payload", async () => {
+  const r = await __bynkCapabilityReply(Promise.resolve({ kind: "Some", value: 7 }), __bynkCodecOption(intCodec), site, "miss");
+  assert.deepEqual(r, Some(7));
+  assert.deepEqual(await __bynkCapabilityReply(Promise.resolve(null), __bynkCodecOption(intCodec), site, "miss"), None);
+});
+
+test("a reply that does not decode faults, naming the capability, operation, type and path", async () => {
+  await assert.rejects(
+    __bynkCapabilityReply(Promise.resolve("nope"), intCodec, { ...site, type: "Int" }, "fault"),
+    { message: "bynk: Store.load returned a value that does not decode as Int: at $: expected number, got string" },
+  );
+});
+
+test("a reply that does not decode is a miss when the operation declares one, with a warning that omits the value", async () => {
+  const warned: string[] = [];
+  const warn = globalThis.console.warn;
+  globalThis.console.warn = (m: string) => void warned.push(m);
+  try {
+    const r = await __bynkCapabilityReply(Promise.resolve({ kind: "Some", value: "secret" }), __bynkCodecOption(intCodec), site, "miss");
+    assert.deepEqual(r, None);
+  } finally {
+    globalThis.console.warn = warn;
+  }
+  assert.equal(warned.length, 1);
+  assert.match(warned[0]!, /^bynk: warning: Store\.load returned a value that does not decode as Option\[Int\]: at \$\.value: expected number/);
+  assert.doesNotMatch(warned[0]!, /secret/);
+});
+
+test("a provider that rejects still rejects, whichever the policy", async () => {
+  await assert.rejects(__bynkCapabilityReply(Promise.reject(new Error("down")), intCodec, site, "miss"), /down/);
+});
