@@ -3,7 +3,7 @@ title: Version compatibility & changelog
 ---
 Bynk is pre-1.0 and developed in small, spec-first increments (see
 [Versioning & roadmap](/book/about/versioning-and-roadmap/)). This book is
-written against **v0.589**.
+written against **v0.590**.
 
 This page is a high-level summary of notable increments, not an exhaustive
 per-commit history. While Bynk is pre-1.0, increments may change behaviour.
@@ -28,6 +28,7 @@ per-commit history. While Bynk is pre-1.0, increments may change behaviour.
 
 | Version | Highlights |
 |---|---|
+| **v0.590.0** | `Ai.generate` and `Ai.embed` are typed Workers AI operations for chat generation and text embeddings, returning concrete records and vectors, with a `BadReply` error for a reply that is not the shape promised |
 | **v0.589.0** | `[dev] ai = "allow"` in `bynk.toml` acknowledges that `Ai` calls run remotely under `bynk dev`; without it the first call in a session prints a one-time warning that links to Cloudflare's pricing page, and the call goes ahead |
 | **v0.588.0** | `bynk.cloudflare` gains `Ai`, a one-per-Worker Workers AI capability whose `run(model, input)` runs any model over JSON text through the `[ai]` binding, with a typed `AiError`; every operation faults until stubbed in a test |
 | **v0.587.2** | A `claim` in an agent handler is settled like a service handler's, released when the handler fails and confirmed otherwise, after the state commit and events flush |
