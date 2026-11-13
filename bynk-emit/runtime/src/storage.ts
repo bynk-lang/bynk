@@ -970,7 +970,7 @@ export function makeIntegrationAi(): WorkerAiBinding {
   return {
     async run(): Promise<unknown> {
       throw new globalThis.Error(
-        "bynk: `Ai.run` is not stubbed, and a test never reaches Workers AI — add `stub Ai.run(_, _) returns …`",
+        "bynk: the `Ai` binding is not stubbed, and a test never reaches Workers AI — stub the operation the case calls (`stub Ai.run(_, _) returns …`)",
       );
     },
   };

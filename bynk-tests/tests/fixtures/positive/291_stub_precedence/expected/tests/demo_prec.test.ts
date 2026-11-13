@@ -71,8 +71,10 @@ class __Stub_Kv {
     return true;
   }
   async get(key: string): globalThis.Promise<Option<string>> {
-    const { AiError, DataPoint, DmarcVerdict, EmailAttachment, EmailError, EmailMessage, EmailReply, EmailVerdict, InboundAttachment, InboundEmail, KvEntry, KvExpiration, KvGet, KvKey, KvList, KvListing, KvPut, MySqlError, MySqlReadError, MySqlRun, MySqlStatement, MySqlValue, PgError, PgReadError, PgRun, PgStatement, PgValue, QueueSend, R2Body, R2Condition, R2Listing, R2Object, R2Part, R2Put, R2Upload, R2UploadOptions, SenderIdentity, SqlError, SqlReadError, SqlRun, SqlStatement, SqlValue, WorkerVersion } = __ns_bynk_cloudflare;
+    const { AiError, ChatMessage, ChatRole, DataPoint, DmarcVerdict, EmailAttachment, EmailError, EmailMessage, EmailReply, EmailVerdict, GenerateRequest, Generation, InboundAttachment, InboundEmail, KvEntry, KvExpiration, KvGet, KvKey, KvList, KvListing, KvPut, MySqlError, MySqlReadError, MySqlRun, MySqlStatement, MySqlValue, PgError, PgReadError, PgRun, PgStatement, PgValue, QueueSend, R2Body, R2Condition, R2Listing, R2Object, R2Part, R2Put, R2Upload, R2UploadOptions, SenderIdentity, SqlError, SqlReadError, SqlRun, SqlStatement, SqlValue, TokenUsage, WorkerVersion } = __ns_bynk_cloudflare;
     type AiError = __ns_bynk_cloudflare.AiError;
+    type ChatMessage = __ns_bynk_cloudflare.ChatMessage;
+    type ChatRole = __ns_bynk_cloudflare.ChatRole;
     type DataPoint = __ns_bynk_cloudflare.DataPoint;
     type DmarcVerdict = __ns_bynk_cloudflare.DmarcVerdict;
     type EmailAttachment = __ns_bynk_cloudflare.EmailAttachment;
@@ -80,6 +82,8 @@ class __Stub_Kv {
     type EmailMessage = __ns_bynk_cloudflare.EmailMessage;
     type EmailReply = __ns_bynk_cloudflare.EmailReply;
     type EmailVerdict = __ns_bynk_cloudflare.EmailVerdict;
+    type GenerateRequest = __ns_bynk_cloudflare.GenerateRequest;
+    type Generation = __ns_bynk_cloudflare.Generation;
     type InboundAttachment = __ns_bynk_cloudflare.InboundAttachment;
     type InboundEmail = __ns_bynk_cloudflare.InboundEmail;
     type KvEntry = __ns_bynk_cloudflare.KvEntry;
@@ -114,6 +118,7 @@ class __Stub_Kv {
     type SqlRun = __ns_bynk_cloudflare.SqlRun;
     type SqlStatement = __ns_bynk_cloudflare.SqlStatement;
     type SqlValue = __ns_bynk_cloudflare.SqlValue;
+    type TokenUsage = __ns_bynk_cloudflare.TokenUsage;
     type WorkerVersion = __ns_bynk_cloudflare.WorkerVersion;
     if (this.__case === "a case stub beats the suite stub") {
       return Some("case");
@@ -246,8 +251,10 @@ async function test_a_suite_stub_beats_the_double() {
     const __obs = { log: {} as globalThis.Record<string, { args: unknown[]; order: number }[]>, n: 0 };
     const deps = __bynkRecordDeps(__makeTestDeps(), { Kv: ["delete", "get", "getBytes", "getWith", "list", "listPage", "put", "putBytes", "putTtl", "putWith"] }, __obs);
     const { store } = __ns_demo_prec;
-    const { AiError, DataPoint, DmarcVerdict, EmailAttachment, EmailError, EmailMessage, EmailReply, EmailVerdict, InboundAttachment, InboundEmail, KvEntry, KvExpiration, KvGet, KvKey, KvList, KvListing, KvPut, MySqlError, MySqlReadError, MySqlRun, MySqlStatement, MySqlValue, PgError, PgReadError, PgRun, PgStatement, PgValue, QueueSend, R2Body, R2Condition, R2Listing, R2Object, R2Part, R2Put, R2Upload, R2UploadOptions, SenderIdentity, SqlError, SqlReadError, SqlRun, SqlStatement, SqlValue, WorkerVersion } = __ns_bynk_cloudflare;
+    const { AiError, ChatMessage, ChatRole, DataPoint, DmarcVerdict, EmailAttachment, EmailError, EmailMessage, EmailReply, EmailVerdict, GenerateRequest, Generation, InboundAttachment, InboundEmail, KvEntry, KvExpiration, KvGet, KvKey, KvList, KvListing, KvPut, MySqlError, MySqlReadError, MySqlRun, MySqlStatement, MySqlValue, PgError, PgReadError, PgRun, PgStatement, PgValue, QueueSend, R2Body, R2Condition, R2Listing, R2Object, R2Part, R2Put, R2Upload, R2UploadOptions, SenderIdentity, SqlError, SqlReadError, SqlRun, SqlStatement, SqlValue, TokenUsage, WorkerVersion } = __ns_bynk_cloudflare;
     type AiError = __ns_bynk_cloudflare.AiError;
+    type ChatMessage = __ns_bynk_cloudflare.ChatMessage;
+    type ChatRole = __ns_bynk_cloudflare.ChatRole;
     type DataPoint = __ns_bynk_cloudflare.DataPoint;
     type DmarcVerdict = __ns_bynk_cloudflare.DmarcVerdict;
     type EmailAttachment = __ns_bynk_cloudflare.EmailAttachment;
@@ -255,6 +262,8 @@ async function test_a_suite_stub_beats_the_double() {
     type EmailMessage = __ns_bynk_cloudflare.EmailMessage;
     type EmailReply = __ns_bynk_cloudflare.EmailReply;
     type EmailVerdict = __ns_bynk_cloudflare.EmailVerdict;
+    type GenerateRequest = __ns_bynk_cloudflare.GenerateRequest;
+    type Generation = __ns_bynk_cloudflare.Generation;
     type InboundAttachment = __ns_bynk_cloudflare.InboundAttachment;
     type InboundEmail = __ns_bynk_cloudflare.InboundEmail;
     type KvEntry = __ns_bynk_cloudflare.KvEntry;
@@ -289,6 +298,7 @@ async function test_a_suite_stub_beats_the_double() {
     type SqlRun = __ns_bynk_cloudflare.SqlRun;
     type SqlStatement = __ns_bynk_cloudflare.SqlStatement;
     type SqlValue = __ns_bynk_cloudflare.SqlValue;
+    type TokenUsage = __ns_bynk_cloudflare.TokenUsage;
     type WorkerVersion = __ns_bynk_cloudflare.WorkerVersion;
     const r = await store.call("a", "1", deps);
     if (!(__bynkEq(r, Some("suite")))) { throw __bynkExpectFailure("tests/demo/prec.bynk:8:12", 296, 314, "expect r == Some(\"suite\")\n  expected: r == Some(\"suite\")\n  actual:   " + __bynkShow((r)) + " == " + __bynkShow((Some("suite")))); }
@@ -307,8 +317,10 @@ async function test_a_case_stub_beats_the_suite_stub() {
   try {
     const deps = __makeTestDeps("a case stub beats the suite stub");
     const { store } = __ns_demo_prec;
-    const { AiError, DataPoint, DmarcVerdict, EmailAttachment, EmailError, EmailMessage, EmailReply, EmailVerdict, InboundAttachment, InboundEmail, KvEntry, KvExpiration, KvGet, KvKey, KvList, KvListing, KvPut, MySqlError, MySqlReadError, MySqlRun, MySqlStatement, MySqlValue, PgError, PgReadError, PgRun, PgStatement, PgValue, QueueSend, R2Body, R2Condition, R2Listing, R2Object, R2Part, R2Put, R2Upload, R2UploadOptions, SenderIdentity, SqlError, SqlReadError, SqlRun, SqlStatement, SqlValue, WorkerVersion } = __ns_bynk_cloudflare;
+    const { AiError, ChatMessage, ChatRole, DataPoint, DmarcVerdict, EmailAttachment, EmailError, EmailMessage, EmailReply, EmailVerdict, GenerateRequest, Generation, InboundAttachment, InboundEmail, KvEntry, KvExpiration, KvGet, KvKey, KvList, KvListing, KvPut, MySqlError, MySqlReadError, MySqlRun, MySqlStatement, MySqlValue, PgError, PgReadError, PgRun, PgStatement, PgValue, QueueSend, R2Body, R2Condition, R2Listing, R2Object, R2Part, R2Put, R2Upload, R2UploadOptions, SenderIdentity, SqlError, SqlReadError, SqlRun, SqlStatement, SqlValue, TokenUsage, WorkerVersion } = __ns_bynk_cloudflare;
     type AiError = __ns_bynk_cloudflare.AiError;
+    type ChatMessage = __ns_bynk_cloudflare.ChatMessage;
+    type ChatRole = __ns_bynk_cloudflare.ChatRole;
     type DataPoint = __ns_bynk_cloudflare.DataPoint;
     type DmarcVerdict = __ns_bynk_cloudflare.DmarcVerdict;
     type EmailAttachment = __ns_bynk_cloudflare.EmailAttachment;
@@ -316,6 +328,8 @@ async function test_a_case_stub_beats_the_suite_stub() {
     type EmailMessage = __ns_bynk_cloudflare.EmailMessage;
     type EmailReply = __ns_bynk_cloudflare.EmailReply;
     type EmailVerdict = __ns_bynk_cloudflare.EmailVerdict;
+    type GenerateRequest = __ns_bynk_cloudflare.GenerateRequest;
+    type Generation = __ns_bynk_cloudflare.Generation;
     type InboundAttachment = __ns_bynk_cloudflare.InboundAttachment;
     type InboundEmail = __ns_bynk_cloudflare.InboundEmail;
     type KvEntry = __ns_bynk_cloudflare.KvEntry;
@@ -350,6 +364,7 @@ async function test_a_case_stub_beats_the_suite_stub() {
     type SqlRun = __ns_bynk_cloudflare.SqlRun;
     type SqlStatement = __ns_bynk_cloudflare.SqlStatement;
     type SqlValue = __ns_bynk_cloudflare.SqlValue;
+    type TokenUsage = __ns_bynk_cloudflare.TokenUsage;
     type WorkerVersion = __ns_bynk_cloudflare.WorkerVersion;
     const r = await store.call("a", "1", deps);
     if (!(__bynkEq(r, Some("case")))) { throw __bynkExpectFailure("tests/demo/prec.bynk:15:12", 479, 496, "expect r == Some(\"case\")\n  expected: r == Some(\"case\")\n  actual:   " + __bynkShow((r)) + " == " + __bynkShow((Some("case")))); }
@@ -367,8 +382,10 @@ async function test_a_later_case_sees_the_suite_stub_again() {
   try {
     const deps = __makeTestDeps();
     const { store } = __ns_demo_prec;
-    const { AiError, DataPoint, DmarcVerdict, EmailAttachment, EmailError, EmailMessage, EmailReply, EmailVerdict, InboundAttachment, InboundEmail, KvEntry, KvExpiration, KvGet, KvKey, KvList, KvListing, KvPut, MySqlError, MySqlReadError, MySqlRun, MySqlStatement, MySqlValue, PgError, PgReadError, PgRun, PgStatement, PgValue, QueueSend, R2Body, R2Condition, R2Listing, R2Object, R2Part, R2Put, R2Upload, R2UploadOptions, SenderIdentity, SqlError, SqlReadError, SqlRun, SqlStatement, SqlValue, WorkerVersion } = __ns_bynk_cloudflare;
+    const { AiError, ChatMessage, ChatRole, DataPoint, DmarcVerdict, EmailAttachment, EmailError, EmailMessage, EmailReply, EmailVerdict, GenerateRequest, Generation, InboundAttachment, InboundEmail, KvEntry, KvExpiration, KvGet, KvKey, KvList, KvListing, KvPut, MySqlError, MySqlReadError, MySqlRun, MySqlStatement, MySqlValue, PgError, PgReadError, PgRun, PgStatement, PgValue, QueueSend, R2Body, R2Condition, R2Listing, R2Object, R2Part, R2Put, R2Upload, R2UploadOptions, SenderIdentity, SqlError, SqlReadError, SqlRun, SqlStatement, SqlValue, TokenUsage, WorkerVersion } = __ns_bynk_cloudflare;
     type AiError = __ns_bynk_cloudflare.AiError;
+    type ChatMessage = __ns_bynk_cloudflare.ChatMessage;
+    type ChatRole = __ns_bynk_cloudflare.ChatRole;
     type DataPoint = __ns_bynk_cloudflare.DataPoint;
     type DmarcVerdict = __ns_bynk_cloudflare.DmarcVerdict;
     type EmailAttachment = __ns_bynk_cloudflare.EmailAttachment;
@@ -376,6 +393,8 @@ async function test_a_later_case_sees_the_suite_stub_again() {
     type EmailMessage = __ns_bynk_cloudflare.EmailMessage;
     type EmailReply = __ns_bynk_cloudflare.EmailReply;
     type EmailVerdict = __ns_bynk_cloudflare.EmailVerdict;
+    type GenerateRequest = __ns_bynk_cloudflare.GenerateRequest;
+    type Generation = __ns_bynk_cloudflare.Generation;
     type InboundAttachment = __ns_bynk_cloudflare.InboundAttachment;
     type InboundEmail = __ns_bynk_cloudflare.InboundEmail;
     type KvEntry = __ns_bynk_cloudflare.KvEntry;
@@ -410,6 +429,7 @@ async function test_a_later_case_sees_the_suite_stub_again() {
     type SqlRun = __ns_bynk_cloudflare.SqlRun;
     type SqlStatement = __ns_bynk_cloudflare.SqlStatement;
     type SqlValue = __ns_bynk_cloudflare.SqlValue;
+    type TokenUsage = __ns_bynk_cloudflare.TokenUsage;
     type WorkerVersion = __ns_bynk_cloudflare.WorkerVersion;
     const r = await store.call("a", "1", deps);
     if (!(__bynkEq(r, Some("suite")))) { throw __bynkExpectFailure("tests/demo/prec.bynk:20:12", 597, 615, "expect r == Some(\"suite\")\n  expected: r == Some(\"suite\")\n  actual:   " + __bynkShow((r)) + " == " + __bynkShow((Some("suite")))); }

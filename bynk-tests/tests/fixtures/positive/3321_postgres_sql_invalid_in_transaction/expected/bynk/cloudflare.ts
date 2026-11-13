@@ -736,21 +736,93 @@ export const WorkerVersion = {
 };
 
 /**
+ * Who said a `ChatMessage`. A `System` message sets how the model behaves, a
+ * `User` message is what it is asked, and an `Assistant` message is an earlier
+ * reply of the model, to carry a conversation. Cloudflare adds roles over
+ * time, so a `match` over this type needs a wildcard.
+ */
+export type ChatRole =
+    { readonly tag: "System" }
+  | { readonly tag: "User" }
+  | { readonly tag: "Assistant" };
+
+export const ChatRole = {
+  System: { tag: "System" } as ChatRole,
+  User: { tag: "User" } as ChatRole,
+  Assistant: { tag: "Assistant" } as ChatRole,
+};
+
+/**
+ * One message of a conversation for `Ai.generate`.
+ */
+export interface ChatMessage {
+  readonly role: ChatRole;
+  readonly content: string;
+}
+
+export const ChatMessage = {
+};
+
+/**
+ * The input of `Ai.generate`: the conversation so far in `messages`, which must
+ * not be empty, and the sampling settings the platform's chat models share.
+ * A setting left `None` is the model's own default. `maxTokens` caps the
+ * length of the reply; `temperature` and `topP` shape how varied it is; `seed`
+ * makes a run repeatable where the model supports it.
+ */
+export interface GenerateRequest {
+  readonly messages: readonly ChatMessage[];
+  readonly maxTokens: Option<number>;
+  readonly temperature: Option<number>;
+  readonly topP: Option<number>;
+  readonly seed: Option<number>;
+}
+
+export const GenerateRequest = {
+};
+
+/**
+ * The tokens a generation used: `promptTokens` read and `completionTokens`
+ * written.
+ */
+export interface TokenUsage {
+  readonly promptTokens: number;
+  readonly completionTokens: number;
+}
+
+export const TokenUsage = {
+};
+
+/**
+ * The reply of `Ai.generate`: the model's `text`, which is untrusted input,
+ * and `usage` when the platform reported it (`None` when it did not).
+ */
+export interface Generation {
+  readonly text: string;
+  readonly usage: Option<TokenUsage>;
+}
+
+export const Generation = {
+};
+
+/**
  * Why a Workers AI call did not give a reply. `ModelNotFound` is a model id
  * the platform does not know, or has retired; `InvalidInput` is a request the
  * platform refused as malformed or too large, with its message; `QuotaExceeded`
  * is a usage limit of the account, or a model its plan does not include, so
  * back off or change the plan; `Overloaded` is the platform's temporary
- * capacity, worth retrying; `AiFailed` is any other refusal, with the
- * platform's message (the `Ai` prefix because `Failed` is `SqlError`'s).
- * Cloudflare adds error codes over time, so a `match` over this type needs
- * a wildcard.
+ * capacity, worth retrying; `BadReply` is a reply that is not the shape the
+ * operation promises (`generate` and `embed` only, never `run`), with what was
+ * wrong; `AiFailed` is any other refusal, with the platform's message (the `Ai`
+ * prefix because `Failed` is `SqlError`'s). Cloudflare adds error codes over
+ * time, so a `match` over this type needs a wildcard.
  */
 export type AiError =
     { readonly tag: "ModelNotFound" }
   | { readonly tag: "InvalidInput"; readonly message: string }
   | { readonly tag: "QuotaExceeded" }
   | { readonly tag: "Overloaded" }
+  | { readonly tag: "BadReply"; readonly message: string }
   | { readonly tag: "AiFailed"; readonly message: string };
 
 export const AiError = {
@@ -758,6 +830,7 @@ export const AiError = {
   InvalidInput: (message: string): AiError => ({ tag: "InvalidInput", message }),
   QuotaExceeded: { tag: "QuotaExceeded" } as AiError,
   Overloaded: { tag: "Overloaded" } as AiError,
+  BadReply: (message: string): AiError => ({ tag: "BadReply", message }),
   AiFailed: (message: string): AiError => ({ tag: "AiFailed", message }),
 };
 
@@ -1052,6 +1125,16 @@ export const __VersionToken: symbol = globalThis.Symbol("Version");
  * id never has, is a fault. A model that answers with binary data (an image,
  * say) is `AiFailed`: `run` carries JSON replies only.
  *
+ * `generate(model, request)` is chat-style text generation with the same
+ * request and reply for every chat model, and `embed(model, texts)` gives one
+ * vector per text, in order, all of one length, for a text-embedding model such as
+ * `"@cf/baai/bge-base-en-v1.5"`. Both return `BadReply` when the platform
+ * answers but not in the promised shape (a model that is not of that kind,
+ * say). An empty `messages` or `texts` is a fault. `embed` does not check
+ * how many texts one call may carry: the limit is the model's, and a call over
+ * it is `InvalidInput`. The embeddings use the platform's default pooling, so
+ * an index built from them stays consistent.
+ *
  * Workers AI is a remote service on your Cloudflare account, so a call
  * may be billed, and a model's reply is untrusted input like any other
  * user text. See Cloudflare's Workers AI pricing page for what applies,
@@ -1062,6 +1145,8 @@ export const __VersionToken: symbol = globalThis.Symbol("Version");
  */
 export interface Ai {
   run(model: string, input: string): globalThis.Promise<Result<string, AiError>>;
+  generate(model: string, request: GenerateRequest): globalThis.Promise<Result<Generation, AiError>>;
+  embed(model: string, texts: readonly string[]): globalThis.Promise<Result<readonly (readonly number[])[], AiError>>;
 }
 
 export const __AiToken: symbol = globalThis.Symbol("Ai");
@@ -1260,6 +1345,9 @@ export function __serialise_AiError(value: AiError): __JsonValue {
       return { kind: "QuotaExceeded" };
     case "Overloaded":
       return { kind: "Overloaded" };
+    case "BadReply": {
+      return { kind: "BadReply", message: value.message as __JsonValue };
+    }
     case "AiFailed": {
       return { kind: "AiFailed", message: value.message as __JsonValue };
     }
@@ -1286,6 +1374,13 @@ export function __deserialise_AiError(json: __JsonValue, path: string = "$"): Re
       return Ok({ tag: "QuotaExceeded" } as AiError);
     case "Overloaded":
       return Ok({ tag: "Overloaded" } as AiError);
+    case "BadReply": {
+  if (typeof obj["message"] !== "string") {
+    return Err({ kind: "StructuralMismatch", path: `${path}.message`, expected: "string", actual: typeof obj["message"] });
+  }
+  const __message = obj["message"];
+      return Ok({ tag: "BadReply", message: __message } as AiError);
+    }
     case "AiFailed": {
   if (typeof obj["message"] !== "string") {
     return Err({ kind: "StructuralMismatch", path: `${path}.message`, expected: "string", actual: typeof obj["message"] });
@@ -1293,6 +1388,57 @@ export function __deserialise_AiError(json: __JsonValue, path: string = "$"): Re
   const __message = obj["message"];
       return Ok({ tag: "AiFailed", message: __message } as AiError);
     }
+    default:
+      return Err({ kind: "StructuralMismatch", path, expected: "sum variant kind", actual: String(kind) });
+  }
+}
+
+export function __serialise_ChatMessage(value: ChatMessage): __JsonValue {
+  return {
+    role: __serialise_ChatRole(value.role),
+    content: value.content as __JsonValue,
+  };
+}
+
+export function __deserialise_ChatMessage(json: __JsonValue, path: string = "$"): Result<ChatMessage, __BoundaryError> {
+  if (typeof json !== "object" || json === null || globalThis.Array.isArray(json)) {
+    return Err({ kind: "StructuralMismatch", path, expected: "object", actual: typeof json });
+  }
+  const obj = json as { [k: string]: __JsonValue };
+  const __r_role = __deserialise_ChatRole(obj["role"], `${path}.role`);
+  if (__r_role.tag === "Err") return __r_role;
+  const __role = __r_role.value;
+  if (typeof obj["content"] !== "string") {
+    return Err({ kind: "StructuralMismatch", path: `${path}.content`, expected: "string", actual: typeof obj["content"] });
+  }
+  const __content = obj["content"];
+  return Ok({ role: __role, content: __content } as ChatMessage);
+}
+
+export function __serialise_ChatRole(value: ChatRole): __JsonValue {
+  switch (value.tag) {
+    case "System":
+      return { kind: "System" };
+    case "User":
+      return { kind: "User" };
+    case "Assistant":
+      return { kind: "Assistant" };
+  }
+}
+
+export function __deserialise_ChatRole(json: __JsonValue, path: string = "$"): Result<ChatRole, __BoundaryError> {
+  if (typeof json !== "object" || json === null || globalThis.Array.isArray(json)) {
+    return Err({ kind: "StructuralMismatch", path, expected: "object", actual: typeof json });
+  }
+  const obj = json as { [k: string]: __JsonValue };
+  const kind = obj["kind"];
+  switch (kind) {
+    case "System":
+      return Ok({ tag: "System" } as ChatRole);
+    case "User":
+      return Ok({ tag: "User" } as ChatRole);
+    case "Assistant":
+      return Ok({ tag: "Assistant" } as ChatRole);
     default:
       return Err({ kind: "StructuralMismatch", path, expected: "sum variant kind", actual: String(kind) });
   }
@@ -1571,6 +1717,65 @@ export function __deserialise_EmailVerdict(json: __JsonValue, path: string = "$"
     default:
       return Err({ kind: "StructuralMismatch", path, expected: "sum variant kind", actual: String(kind) });
   }
+}
+
+export function __serialise_GenerateRequest(value: GenerateRequest): __JsonValue {
+  return {
+    messages: __serialise_List_ChatMessage(value.messages),
+    maxTokens: __serialise_Option_Int(value.maxTokens),
+    temperature: __serialise_Option_Float(value.temperature),
+    topP: __serialise_Option_Float(value.topP),
+    seed: __serialise_Option_Int(value.seed),
+  };
+}
+
+export function __deserialise_GenerateRequest(json: __JsonValue, path: string = "$"): Result<GenerateRequest, __BoundaryError> {
+  if (typeof json !== "object" || json === null || globalThis.Array.isArray(json)) {
+    return Err({ kind: "StructuralMismatch", path, expected: "object", actual: typeof json });
+  }
+  const obj = json as { [k: string]: __JsonValue };
+  const __r_messages = __deserialise_List_ChatMessage(obj["messages"], `${path}.messages`);
+  if (__r_messages.tag === "Err") return __r_messages;
+  const __messages = __r_messages.value;
+  const __d_maxTokens: __JsonValue = "maxTokens" in obj ? obj["maxTokens"] : { kind: "None" };
+  const __r_maxTokens = __deserialise_Option_Int(__d_maxTokens, `${path}.maxTokens`);
+  if (__r_maxTokens.tag === "Err") return __r_maxTokens;
+  const __maxTokens = __r_maxTokens.value;
+  const __d_temperature: __JsonValue = "temperature" in obj ? obj["temperature"] : { kind: "None" };
+  const __r_temperature = __deserialise_Option_Float(__d_temperature, `${path}.temperature`);
+  if (__r_temperature.tag === "Err") return __r_temperature;
+  const __temperature = __r_temperature.value;
+  const __d_topP: __JsonValue = "topP" in obj ? obj["topP"] : { kind: "None" };
+  const __r_topP = __deserialise_Option_Float(__d_topP, `${path}.topP`);
+  if (__r_topP.tag === "Err") return __r_topP;
+  const __topP = __r_topP.value;
+  const __d_seed: __JsonValue = "seed" in obj ? obj["seed"] : { kind: "None" };
+  const __r_seed = __deserialise_Option_Int(__d_seed, `${path}.seed`);
+  if (__r_seed.tag === "Err") return __r_seed;
+  const __seed = __r_seed.value;
+  return Ok({ messages: __messages, maxTokens: __maxTokens, temperature: __temperature, topP: __topP, seed: __seed } as GenerateRequest);
+}
+
+export function __serialise_Generation(value: Generation): __JsonValue {
+  return {
+    text: value.text as __JsonValue,
+    usage: __serialise_Option_TokenUsage(value.usage),
+  };
+}
+
+export function __deserialise_Generation(json: __JsonValue, path: string = "$"): Result<Generation, __BoundaryError> {
+  if (typeof json !== "object" || json === null || globalThis.Array.isArray(json)) {
+    return Err({ kind: "StructuralMismatch", path, expected: "object", actual: typeof json });
+  }
+  const obj = json as { [k: string]: __JsonValue };
+  if (typeof obj["text"] !== "string") {
+    return Err({ kind: "StructuralMismatch", path: `${path}.text`, expected: "string", actual: typeof obj["text"] });
+  }
+  const __text = obj["text"];
+  const __r_usage = __deserialise_Option_TokenUsage(obj["usage"], `${path}.usage`);
+  if (__r_usage.tag === "Err") return __r_usage;
+  const __usage = __r_usage.value;
+  return Ok({ text: __text, usage: __usage } as Generation);
 }
 
 export function __serialise_InboundAttachment(value: InboundAttachment): __JsonValue {
@@ -2851,6 +3056,35 @@ export function __deserialise_SqlValue(json: __JsonValue, path: string = "$"): R
   }
 }
 
+export function __serialise_TokenUsage(value: TokenUsage): __JsonValue {
+  return {
+    promptTokens: ((v: number) => { if (!globalThis.Number.isSafeInteger(v)) throw new globalThis.Error("Int outside the safe-integer range at boundary"); return v as __JsonValue; })(value.promptTokens),
+    completionTokens: ((v: number) => { if (!globalThis.Number.isSafeInteger(v)) throw new globalThis.Error("Int outside the safe-integer range at boundary"); return v as __JsonValue; })(value.completionTokens),
+  };
+}
+
+export function __deserialise_TokenUsage(json: __JsonValue, path: string = "$"): Result<TokenUsage, __BoundaryError> {
+  if (typeof json !== "object" || json === null || globalThis.Array.isArray(json)) {
+    return Err({ kind: "StructuralMismatch", path, expected: "object", actual: typeof json });
+  }
+  const obj = json as { [k: string]: __JsonValue };
+  if (typeof obj["promptTokens"] !== "number") {
+    return Err({ kind: "StructuralMismatch", path: `${path}.promptTokens`, expected: "number", actual: typeof obj["promptTokens"] });
+  }
+  if (!globalThis.Number.isSafeInteger(obj["promptTokens"])) {
+    return Err({ kind: "StructuralMismatch", path: `${path}.promptTokens`, expected: "safe integer", actual: String(obj["promptTokens"]) });
+  }
+  const __promptTokens = obj["promptTokens"];
+  if (typeof obj["completionTokens"] !== "number") {
+    return Err({ kind: "StructuralMismatch", path: `${path}.completionTokens`, expected: "number", actual: typeof obj["completionTokens"] });
+  }
+  if (!globalThis.Number.isSafeInteger(obj["completionTokens"])) {
+    return Err({ kind: "StructuralMismatch", path: `${path}.completionTokens`, expected: "safe integer", actual: String(obj["completionTokens"]) });
+  }
+  const __completionTokens = obj["completionTokens"];
+  return Ok({ promptTokens: __promptTokens, completionTokens: __completionTokens } as TokenUsage);
+}
+
 export function __serialise_WorkerVersion(value: WorkerVersion): __JsonValue {
   return {
     id: value.id as __JsonValue,
@@ -3021,6 +3255,153 @@ export function __deserialise_Map_String_String(json: __JsonValue, path: string 
   return Ok(out);
 }
 
+export function __serialise_List_ChatMessage(value: readonly ChatMessage[]): __JsonValue {
+  return value.map((v) => __serialise_ChatMessage(v));
+}
+
+export function __deserialise_List_ChatMessage(json: __JsonValue, path: string = "$"): Result<readonly ChatMessage[], __BoundaryError> {
+  if (!globalThis.Array.isArray(json)) {
+    return Err({ kind: "StructuralMismatch", path, expected: "array", actual: typeof json });
+  }
+  const out: ChatMessage[] = [];
+  for (let i = 0; i < json.length; i++) {
+  const item = json[i];
+  const __r_el = __deserialise_ChatMessage(item, `${path}[${i}]`);
+  if (__r_el.tag === "Err") return __r_el;
+  const __el = __r_el.value;
+  out.push(__el as ChatMessage);
+  }
+  return Ok(out);
+}
+
+export function __serialise_Option_Int(value: Option<number>): __JsonValue {
+  if (value.tag === "Some") return { kind: "Some", value: ((v: number) => { if (!globalThis.Number.isSafeInteger(v)) throw new globalThis.Error("Int outside the safe-integer range at boundary"); return v as __JsonValue; })(value.value) };
+  return { kind: "None" };
+}
+
+function __option_value_Int(raw: __JsonValue, at: string): Result<unknown, __BoundaryError> {
+  if (typeof raw !== "number") {
+    return Err({ kind: "StructuralMismatch", path: at, expected: "number", actual: typeof raw });
+  }
+  if (!globalThis.Number.isSafeInteger(raw)) {
+    return Err({ kind: "StructuralMismatch", path: at, expected: "safe integer", actual: String(raw) });
+  }
+  const __v = raw;
+  return Ok(__v);
+}
+
+export function __deserialise_Option_Int(json: __JsonValue, path: string = "$"): Result<Option<number>, __BoundaryError> {
+  if (json === undefined || json === null) {
+    return Ok(None as Option<number>);
+  }
+  if (typeof json === "object" && !globalThis.Array.isArray(json)) {
+    const obj = json as { [k: string]: __JsonValue };
+    const __keys = globalThis.Object.keys(obj);
+    if (obj["kind"] === "None" && __keys.length === 1) {
+      return Ok(None as Option<number>);
+    }
+    if (obj["kind"] === "Some" && __keys.length === 2 && "value" in obj) {
+      const __t = __option_value_Int(obj["value"], `${path}.value`);
+      if (__t.tag === "Err") {
+        return __t;
+      }
+      return Ok(Some(__t.value as number) as Option<number>);
+    }
+  }
+  const __b = __option_value_Int(json, path);
+  if (__b.tag === "Ok") {
+    return Ok(Some(__b.value as number) as Option<number>);
+  }
+  if (__b.error.kind === "StructuralMismatch" && __b.error.path === path && !__b.error.expected.endsWith(" | null | {\"kind\": \"None\"} | {\"kind\": \"Some\", \"value\": ...}")) {
+    return Err({ ...__b.error, expected: __b.error.expected + " | null | {\"kind\": \"None\"} | {\"kind\": \"Some\", \"value\": ...}" });
+  }
+  return __b;
+}
+
+export function __serialise_Option_Float(value: Option<number>): __JsonValue {
+  if (value.tag === "Some") return { kind: "Some", value: ((v: number) => { if (!globalThis.Number.isFinite(v)) throw new globalThis.Error("non-finite Float at boundary"); return v as __JsonValue; })(value.value) };
+  return { kind: "None" };
+}
+
+function __option_value_Float(raw: __JsonValue, at: string): Result<unknown, __BoundaryError> {
+  if (typeof raw !== "number") {
+    return Err({ kind: "StructuralMismatch", path: at, expected: "number", actual: typeof raw });
+  }
+  if (!globalThis.Number.isFinite(raw)) {
+    return Err({ kind: "StructuralMismatch", path: at, expected: "finite number", actual: String(raw) });
+  }
+  const __v = raw;
+  return Ok(__v);
+}
+
+export function __deserialise_Option_Float(json: __JsonValue, path: string = "$"): Result<Option<number>, __BoundaryError> {
+  if (json === undefined || json === null) {
+    return Ok(None as Option<number>);
+  }
+  if (typeof json === "object" && !globalThis.Array.isArray(json)) {
+    const obj = json as { [k: string]: __JsonValue };
+    const __keys = globalThis.Object.keys(obj);
+    if (obj["kind"] === "None" && __keys.length === 1) {
+      return Ok(None as Option<number>);
+    }
+    if (obj["kind"] === "Some" && __keys.length === 2 && "value" in obj) {
+      const __t = __option_value_Float(obj["value"], `${path}.value`);
+      if (__t.tag === "Err") {
+        return __t;
+      }
+      return Ok(Some(__t.value as number) as Option<number>);
+    }
+  }
+  const __b = __option_value_Float(json, path);
+  if (__b.tag === "Ok") {
+    return Ok(Some(__b.value as number) as Option<number>);
+  }
+  if (__b.error.kind === "StructuralMismatch" && __b.error.path === path && !__b.error.expected.endsWith(" | null | {\"kind\": \"None\"} | {\"kind\": \"Some\", \"value\": ...}")) {
+    return Err({ ...__b.error, expected: __b.error.expected + " | null | {\"kind\": \"None\"} | {\"kind\": \"Some\", \"value\": ...}" });
+  }
+  return __b;
+}
+
+export function __serialise_Option_TokenUsage(value: Option<TokenUsage>): __JsonValue {
+  if (value.tag === "Some") return { kind: "Some", value: __serialise_TokenUsage(value.value) };
+  return { kind: "None" };
+}
+
+function __option_value_TokenUsage(raw: __JsonValue, at: string): Result<unknown, __BoundaryError> {
+  const __r_v = __deserialise_TokenUsage(raw, at);
+  if (__r_v.tag === "Err") return __r_v;
+  const __v = __r_v.value;
+  return Ok(__v);
+}
+
+export function __deserialise_Option_TokenUsage(json: __JsonValue, path: string = "$"): Result<Option<TokenUsage>, __BoundaryError> {
+  if (json === undefined || json === null) {
+    return Ok(None as Option<TokenUsage>);
+  }
+  if (typeof json === "object" && !globalThis.Array.isArray(json)) {
+    const obj = json as { [k: string]: __JsonValue };
+    const __keys = globalThis.Object.keys(obj);
+    if (obj["kind"] === "None" && __keys.length === 1) {
+      return Ok(None as Option<TokenUsage>);
+    }
+    if (obj["kind"] === "Some" && __keys.length === 2 && "value" in obj) {
+      const __t = __option_value_TokenUsage(obj["value"], `${path}.value`);
+      if (__t.tag === "Err") {
+        return __t;
+      }
+      return Ok(Some(__t.value as TokenUsage) as Option<TokenUsage>);
+    }
+  }
+  const __b = __option_value_TokenUsage(json, path);
+  if (__b.tag === "Ok") {
+    return Ok(Some(__b.value as TokenUsage) as Option<TokenUsage>);
+  }
+  if (__b.error.kind === "StructuralMismatch" && __b.error.path === path && !__b.error.expected.endsWith(" | null | {\"kind\": \"None\"} | {\"kind\": \"Some\", \"value\": ...}")) {
+    return Err({ ...__b.error, expected: __b.error.expected + " | null | {\"kind\": \"None\"} | {\"kind\": \"Some\", \"value\": ...}" });
+  }
+  return __b;
+}
+
 export function __serialise_List_InboundAttachment(value: readonly InboundAttachment[]): __JsonValue {
   return value.map((v) => __serialise_InboundAttachment(v));
 }
@@ -3119,50 +3500,6 @@ export function __deserialise_Option_Instant(json: __JsonValue, path: string = "
     }
   }
   const __b = __option_value_Instant(json, path);
-  if (__b.tag === "Ok") {
-    return Ok(Some(__b.value as number) as Option<number>);
-  }
-  if (__b.error.kind === "StructuralMismatch" && __b.error.path === path && !__b.error.expected.endsWith(" | null | {\"kind\": \"None\"} | {\"kind\": \"Some\", \"value\": ...}")) {
-    return Err({ ...__b.error, expected: __b.error.expected + " | null | {\"kind\": \"None\"} | {\"kind\": \"Some\", \"value\": ...}" });
-  }
-  return __b;
-}
-
-export function __serialise_Option_Int(value: Option<number>): __JsonValue {
-  if (value.tag === "Some") return { kind: "Some", value: ((v: number) => { if (!globalThis.Number.isSafeInteger(v)) throw new globalThis.Error("Int outside the safe-integer range at boundary"); return v as __JsonValue; })(value.value) };
-  return { kind: "None" };
-}
-
-function __option_value_Int(raw: __JsonValue, at: string): Result<unknown, __BoundaryError> {
-  if (typeof raw !== "number") {
-    return Err({ kind: "StructuralMismatch", path: at, expected: "number", actual: typeof raw });
-  }
-  if (!globalThis.Number.isSafeInteger(raw)) {
-    return Err({ kind: "StructuralMismatch", path: at, expected: "safe integer", actual: String(raw) });
-  }
-  const __v = raw;
-  return Ok(__v);
-}
-
-export function __deserialise_Option_Int(json: __JsonValue, path: string = "$"): Result<Option<number>, __BoundaryError> {
-  if (json === undefined || json === null) {
-    return Ok(None as Option<number>);
-  }
-  if (typeof json === "object" && !globalThis.Array.isArray(json)) {
-    const obj = json as { [k: string]: __JsonValue };
-    const __keys = globalThis.Object.keys(obj);
-    if (obj["kind"] === "None" && __keys.length === 1) {
-      return Ok(None as Option<number>);
-    }
-    if (obj["kind"] === "Some" && __keys.length === 2 && "value" in obj) {
-      const __t = __option_value_Int(obj["value"], `${path}.value`);
-      if (__t.tag === "Err") {
-        return __t;
-      }
-      return Ok(Some(__t.value as number) as Option<number>);
-    }
-  }
-  const __b = __option_value_Int(json, path);
   if (__b.tag === "Ok") {
     return Ok(Some(__b.value as number) as Option<number>);
   }

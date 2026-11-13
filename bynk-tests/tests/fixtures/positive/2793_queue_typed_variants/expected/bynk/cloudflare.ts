@@ -734,21 +734,93 @@ export const WorkerVersion = {
 };
 
 /**
+ * Who said a `ChatMessage`. A `System` message sets how the model behaves, a
+ * `User` message is what it is asked, and an `Assistant` message is an earlier
+ * reply of the model, to carry a conversation. Cloudflare adds roles over
+ * time, so a `match` over this type needs a wildcard.
+ */
+export type ChatRole =
+    { readonly tag: "System" }
+  | { readonly tag: "User" }
+  | { readonly tag: "Assistant" };
+
+export const ChatRole = {
+  System: { tag: "System" } as ChatRole,
+  User: { tag: "User" } as ChatRole,
+  Assistant: { tag: "Assistant" } as ChatRole,
+};
+
+/**
+ * One message of a conversation for `Ai.generate`.
+ */
+export interface ChatMessage {
+  readonly role: ChatRole;
+  readonly content: string;
+}
+
+export const ChatMessage = {
+};
+
+/**
+ * The input of `Ai.generate`: the conversation so far in `messages`, which must
+ * not be empty, and the sampling settings the platform's chat models share.
+ * A setting left `None` is the model's own default. `maxTokens` caps the
+ * length of the reply; `temperature` and `topP` shape how varied it is; `seed`
+ * makes a run repeatable where the model supports it.
+ */
+export interface GenerateRequest {
+  readonly messages: readonly ChatMessage[];
+  readonly maxTokens: Option<number>;
+  readonly temperature: Option<number>;
+  readonly topP: Option<number>;
+  readonly seed: Option<number>;
+}
+
+export const GenerateRequest = {
+};
+
+/**
+ * The tokens a generation used: `promptTokens` read and `completionTokens`
+ * written.
+ */
+export interface TokenUsage {
+  readonly promptTokens: number;
+  readonly completionTokens: number;
+}
+
+export const TokenUsage = {
+};
+
+/**
+ * The reply of `Ai.generate`: the model's `text`, which is untrusted input,
+ * and `usage` when the platform reported it (`None` when it did not).
+ */
+export interface Generation {
+  readonly text: string;
+  readonly usage: Option<TokenUsage>;
+}
+
+export const Generation = {
+};
+
+/**
  * Why a Workers AI call did not give a reply. `ModelNotFound` is a model id
  * the platform does not know, or has retired; `InvalidInput` is a request the
  * platform refused as malformed or too large, with its message; `QuotaExceeded`
  * is a usage limit of the account, or a model its plan does not include, so
  * back off or change the plan; `Overloaded` is the platform's temporary
- * capacity, worth retrying; `AiFailed` is any other refusal, with the
- * platform's message (the `Ai` prefix because `Failed` is `SqlError`'s).
- * Cloudflare adds error codes over time, so a `match` over this type needs
- * a wildcard.
+ * capacity, worth retrying; `BadReply` is a reply that is not the shape the
+ * operation promises (`generate` and `embed` only, never `run`), with what was
+ * wrong; `AiFailed` is any other refusal, with the platform's message (the `Ai`
+ * prefix because `Failed` is `SqlError`'s). Cloudflare adds error codes over
+ * time, so a `match` over this type needs a wildcard.
  */
 export type AiError =
     { readonly tag: "ModelNotFound" }
   | { readonly tag: "InvalidInput"; readonly message: string }
   | { readonly tag: "QuotaExceeded" }
   | { readonly tag: "Overloaded" }
+  | { readonly tag: "BadReply"; readonly message: string }
   | { readonly tag: "AiFailed"; readonly message: string };
 
 export const AiError = {
@@ -756,6 +828,7 @@ export const AiError = {
   InvalidInput: (message: string): AiError => ({ tag: "InvalidInput", message }),
   QuotaExceeded: { tag: "QuotaExceeded" } as AiError,
   Overloaded: { tag: "Overloaded" } as AiError,
+  BadReply: (message: string): AiError => ({ tag: "BadReply", message }),
   AiFailed: (message: string): AiError => ({ tag: "AiFailed", message }),
 };
 
@@ -1050,6 +1123,16 @@ export const __VersionToken: symbol = globalThis.Symbol("Version");
  * id never has, is a fault. A model that answers with binary data (an image,
  * say) is `AiFailed`: `run` carries JSON replies only.
  *
+ * `generate(model, request)` is chat-style text generation with the same
+ * request and reply for every chat model, and `embed(model, texts)` gives one
+ * vector per text, in order, all of one length, for a text-embedding model such as
+ * `"@cf/baai/bge-base-en-v1.5"`. Both return `BadReply` when the platform
+ * answers but not in the promised shape (a model that is not of that kind,
+ * say). An empty `messages` or `texts` is a fault. `embed` does not check
+ * how many texts one call may carry: the limit is the model's, and a call over
+ * it is `InvalidInput`. The embeddings use the platform's default pooling, so
+ * an index built from them stays consistent.
+ *
  * Workers AI is a remote service on your Cloudflare account, so a call
  * may be billed, and a model's reply is untrusted input like any other
  * user text. See Cloudflare's Workers AI pricing page for what applies,
@@ -1060,6 +1143,8 @@ export const __VersionToken: symbol = globalThis.Symbol("Version");
  */
 export interface Ai {
   run(model: string, input: string): globalThis.Promise<Result<string, AiError>>;
+  generate(model: string, request: GenerateRequest): globalThis.Promise<Result<Generation, AiError>>;
+  embed(model: string, texts: readonly string[]): globalThis.Promise<Result<readonly (readonly number[])[], AiError>>;
 }
 
 export const __AiToken: symbol = globalThis.Symbol("Ai");

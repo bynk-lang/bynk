@@ -1,0 +1,42 @@
+context shop.chat
+
+// #3478: the typed operations. `generate` and `embed` return concrete records
+// and lists, so a reply that is not the shape they promise is a `BadReply`
+// value, never a fault.
+
+consumes bynk
+consumes bynk.cloudflare { Ai, AiError, ChatMessage, ChatRole, GenerateRequest, Generation, TokenUsage }
+
+type Answer = {
+	text: String,
+	tokens: Int,
+}
+
+fn tokensOf(g: Generation) -> Int {
+	let usage = g.usage
+	match usage {
+		Some(u) => u.promptTokens + u.completionTokens,
+		None => 0,
+	}
+}
+
+service chat from http {
+	on GET("/chat") () -> Effect[HttpResult[Answer]] by Visitor given Ai {
+		let first = ChatMessage { role: ChatRole.User, content: "hello" }
+		let ask = GenerateRequest { maxTokens: Some(64), messages: [first] }
+		let reply <- Ai.generate("@cf/meta/llama-3.1-8b-instruct", ask)
+		match reply {
+			Ok(g) => Ok(Answer { text: g.text, tokens: tokensOf(g) }),
+			Err(BadReply(_)) => ServerError("the model answered oddly"),
+			Err(_) => ServerError("model unavailable"),
+		}
+	}
+
+	on GET("/embed") () -> Effect[HttpResult[Int]] by Visitor given Ai {
+		let reply <- Ai.embed("@cf/baai/bge-base-en-v1.5", ["a", "b"])
+		match reply {
+			Ok(vectors) => Ok(vectors.length()),
+			Err(_) => ServerError("model unavailable"),
+		}
+	}
+}
