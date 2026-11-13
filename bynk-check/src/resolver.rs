@@ -307,6 +307,9 @@ pub struct CrossContextInfo {
     /// #3446: the records some handler of the unit decodes as its `cookies` parameter (any file
     /// of the unit): the ones `Record.field.cookie(v)` may write.
     pub cookie_records: HashSet<String>,
+    /// #3446: the cookie names the unit's `SignedCookie` actors consume (their `cookie` key, else
+    /// the default): the cookies only `Actor.issue`/`expire` may write.
+    pub signed_cookie_names: HashSet<String>,
 }
 
 /// Snapshot of one exported capability in a consumed context, as needed for
