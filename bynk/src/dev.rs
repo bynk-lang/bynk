@@ -1902,6 +1902,13 @@ pub fn serving_report(serving: &[Serving]) -> String {
 
 #[cfg(test)]
 mod tests {
+    use super::*;
+    use bynk_driver::npm_install::PackageManager;
+
+    fn names(v: &[&str]) -> Vec<String> {
+        v.iter().map(|s| s.to_string()).collect()
+    }
+
     /// #3478: every served Worker is marked as a development session, and an
     /// acknowledged remote-only kind sets its own variable to `allow`.
     #[test]
@@ -1912,13 +1919,6 @@ mod tests {
             dev_var_args(&BTreeSet::from(["ai"])),
             ["--var", "BYNK_DEV:1", "--var", "BYNK_DEV_ACK_AI:allow"]
         );
-    }
-
-    use super::*;
-    use bynk_driver::npm_install::PackageManager;
-
-    fn names(v: &[&str]) -> Vec<String> {
-        v.iter().map(|s| s.to_string()).collect()
     }
 
     #[test]

@@ -638,7 +638,9 @@ variable and sets an acknowledged kind's variable (`BYNK_DEV_ACK_AI`), which the
 provider reads; a deployed Worker has neither, so the warning and the
 acknowledgement never apply to production. `bynk test` never reaches Workers AI:
 every `Ai` operation faults until it is stubbed. The warning is per Worker
-process, so a rebuild that restarts the Worker can show it again.
+process, so a rebuild that restarts the Worker can show it again. `bynk dev`
+reads `[dev]` once, when it starts, so an acknowledgement added to a running
+session takes effect the next time `bynk dev` starts.
 
 ## `[unstable]`
 
