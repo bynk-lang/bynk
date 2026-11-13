@@ -75,6 +75,7 @@ index = { production = "docs-prod" }   # adopted for that environment, never cre
 
 [dev]
 ai = "allow"                # no default: silences `bynk dev`'s Workers AI cost warning
+ai-search = "allow"         # no default: silences `bynk dev`'s AI Search cost warning
 
 [dev.hyperdrive.Main]       # no default: its local database under `bynk dev`
 connection_env = "MAIN_LOCAL_DATABASE_URL"
