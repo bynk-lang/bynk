@@ -988,6 +988,63 @@ fn set_string_preserving_decor(item: &mut toml_edit::Item, s: &str) {
     *item = toml_edit::Item::Value(new_value);
 }
 
+/// #3479: a Worker's generated `wrangler.toml` for `bynk dev`. A `Vectorize`
+/// has no local simulation, so each `[[vectorize]]` entry whose binding is in
+/// `dev` is pointed at that index of the developer's own with `remote = true`,
+/// and the entries not in it are removed: the instance is unbound, and a call
+/// to it faults saying how to bind it. `[vars]` gains one `<binding> =
+/// "<dimensions>:<metric>"` per bound index (`declared`), which the binding
+/// checks the index against on its first call. `dev` and `declared` are keyed
+/// by binding. The text is unchanged when there is no `[[vectorize]]`.
+pub fn bind_vectorize_for_dev(
+    text: &str,
+    dev: &std::collections::BTreeMap<String, String>,
+    declared: &std::collections::BTreeMap<String, String>,
+) -> Result<String, String> {
+    let mut doc: toml_edit::DocumentMut = text
+        .parse()
+        .map_err(|e| format!("invalid wrangler.toml: {e}"))?;
+    let Some(tables) = doc
+        .get_mut("vectorize")
+        .and_then(|i| i.as_array_of_tables_mut())
+    else {
+        return Ok(text.to_string());
+    };
+    tables.retain(|t| {
+        t.get("binding")
+            .and_then(|b| b.as_str())
+            .is_some_and(|b| dev.contains_key(b))
+    });
+    for table in tables.iter_mut() {
+        let Some(binding) = table.get("binding").and_then(|b| b.as_str()) else {
+            continue;
+        };
+        let Some(index) = dev.get(binding).cloned() else {
+            continue;
+        };
+        table["index_name"] = toml_edit::value(index);
+        table["remote"] = toml_edit::value(true);
+    }
+    if tables.is_empty() {
+        doc.remove("vectorize");
+    }
+    if !declared.is_empty() {
+        let vars = doc
+            .entry("vars")
+            .or_insert_with(|| toml_edit::Item::Table(toml_edit::Table::new()));
+        let Some(vars) = vars.as_table_like_mut() else {
+            return Err("`vars` in wrangler.toml is not a table".to_string());
+        };
+        for (binding, value) in declared {
+            vars.insert(
+                &format!("BYNK_DEV_INDEX_{binding}"),
+                toml_edit::value(value.as_str()),
+            );
+        }
+    }
+    Ok(doc.to_string())
+}
+
 /// The deploy-time placeholder a `[[kv_namespaces]]` entry for `binding`
 /// carries until `bynk deploy` materialises it: [`KV_NAMESPACE_ID_PLACEHOLDER`]
 /// for the bare `KV`, [`kv_instance_id_placeholder`] for a derived instance
@@ -1732,6 +1789,39 @@ mod ai_search_dev_tests {
 #[cfg(test)]
 mod vectorize_name_tests {
     use super::*;
+
+    #[test]
+    fn dev_binds_the_named_index_remotely_and_unbinds_the_rest() {
+        let text = "name = \"w\"\n\n[[vectorize]]\nbinding = \"VECTORIZE_DOCS\"\nindex_name = \"w-docs\"\n\n[[vectorize]]\nbinding = \"VECTORIZE_OTHER\"\nindex_name = \"w-other\"\n";
+        let dev = std::collections::BTreeMap::from([(
+            "VECTORIZE_DOCS".to_string(),
+            "docs-dev".to_string(),
+        )]);
+        let declared = std::collections::BTreeMap::from([(
+            "VECTORIZE_DOCS".to_string(),
+            "768:cosine".to_string(),
+        )]);
+        let out = bind_vectorize_for_dev(text, &dev, &declared).unwrap();
+        assert!(
+            out.contains("index_name = \"docs-dev\"") && out.contains("remote = true"),
+            "{out}"
+        );
+        assert!(
+            !out.contains("VECTORIZE_OTHER") && !out.contains("w-docs"),
+            "{out}"
+        );
+        assert!(
+            out.contains("BYNK_DEV_INDEX_VECTORIZE_DOCS = \"768:cosine\""),
+            "{out}"
+        );
+        // Nothing bound leaves no stanza at all; no Vectorize leaves the text.
+        let none = bind_vectorize_for_dev(text, &Default::default(), &Default::default()).unwrap();
+        assert!(!none.contains("[[vectorize]]"), "{none}");
+        assert_eq!(
+            bind_vectorize_for_dev("name = \"w\"\n", &dev, &declared).unwrap(),
+            "name = \"w\"\n"
+        );
+    }
 
     #[test]
     fn an_adopted_binding_with_no_stanza_is_an_error_not_a_silent_derived_name() {

@@ -38,6 +38,10 @@ pub const REMOTE_KINDS: &[RemoteKind] = &[
         key: "ai",
         var: "BYNK_DEV_ACK_AI",
     },
+    RemoteKind {
+        key: "vectorize",
+        var: "BYNK_DEV_ACK_VECTORIZE",
+    },
     // #3480: AI Search is its own kind, not covered by `ai`.
     RemoteKind {
         key: "ai-search",

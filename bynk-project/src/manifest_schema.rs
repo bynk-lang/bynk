@@ -147,6 +147,18 @@ struct DevTable {
     /// warns once, on the first call, unless this is `"allow"`. See Cloudflare's
     /// Workers AI pricing page.
     ai: Option<DevAck>,
+    /// Acknowledges that Vectorize has no local simulation: under `bynk dev` a
+    /// call runs against your own index on your Cloudflare account and may
+    /// incur charges. `bynk dev` warns once, on the first call, unless this is
+    /// `"allow"`. See Cloudflare's Vectorize pricing page.
+    vectorize: Option<DevAck>,
+    /// The Vectorize index of your own that `bynk dev` binds, keyed by the
+    /// `Vectorize` capability's name (`Docs = "docs-dev"`). It must already
+    /// exist with the declaration's dimensions and metric: `bynk dev` never
+    /// creates one, and never uses the deploy's derived name. A capability
+    /// with no entry is unbound under `bynk dev`.
+    #[serde(rename = "vectorize-index")]
+    vectorize_index: Option<std::collections::BTreeMap<String, String>>,
     /// Acknowledges that AI Search has no local simulation: under `bynk dev`
     /// a call goes to your deployed instance on your Cloudflare account and may
     /// incur charges. `bynk dev` warns once, on the first call, unless this is

@@ -233,7 +233,16 @@ pub const MANIFEST_TABLES: &[(&str, &[&str])] = &[
     ("lsp", &["diagnostics_mode", "diagnostics_debounce_ms"]),
     ("workers", &["compatibility_flags", "workers_dev"]),
     ("deploy", &["hyperdrive", "vectorize"]),
-    ("dev", &["hyperdrive", "ai", "ai-search"]),
+    (
+        "dev",
+        &[
+            "hyperdrive",
+            "ai",
+            "ai-search",
+            "vectorize",
+            "vectorize-index",
+        ],
+    ),
     (
         "build",
         &["out", "target", "platform", "emit", "package_manager"],
@@ -595,6 +604,7 @@ pub fn check_manifest_str(content: &str) -> Result<(), ProjectPathsError> {
             "dev" => {
                 drop(crate::hyperdrive::dev_hyperdrive_from(entries)?);
                 drop(crate::dev_ack::dev_acks_from(entries)?);
+                drop(crate::vectorize::dev_vectorize_index_from(entries)?);
             }
             _ => {}
         }

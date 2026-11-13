@@ -1,12 +1,6 @@
----
-level: minor
-changelog: `bynk.cloudflare` gains `AiSearch`, a linked instance kind for an existing AI Search instance named by a required `@instance`, with `search` and `answer`, a typed filter and typed errors, emitted as `[[ai_search]]`; every operation faults until stubbed in a test
-probes: emit_abi_shapes, emit_diagnostics, ts_writes
----
+# 0837 — AiSearch is a linked instance kind that the deploy finds and never creates
 
-## ADR: ai-search-instance-kind
-title: AiSearch is a linked instance kind that the deploy finds and never creates
-summary: Decisions A–J of #3480: a named, linked instance, search and answer over query and messages, shared chat and filter types, errors as values, stub-only in tests
+- **Status:** Accepted (v0.596)
 
 **Context.** An AI Search instance is configured by someone (a data source, models, chunking, an indexing lifecycle), is often shared, and is neither a stateless per-Worker call (Workers AI) nor state the project owns (Vectorize). That is the case #3301's rule covers: the deploy links and never creates.
 

@@ -600,6 +600,18 @@ with the `wrangler` command that makes it, not created. An adopted index keeps i
 own name, is recorded as adopted, and is never deleted, not even by `--prune`.
 Other environments still create theirs.
 
+`bynk dev` never uses an index the deploy made. A `Vectorize` has no local
+simulation, so name an index of your own for it, per capability, in `bynk.toml`:
+
+```toml
+[dev.vectorize-index]
+Docs = "docs-dev"
+```
+
+It binds that index, remotely, and checks it against the declaration on the first
+call; a capability with no entry is unbound and a call to it fails, naming the entry
+to add. See [the manifest reference](/docs/manifest/#binding-a-vectorize-index-under-bynk-dev).
+
 A renamed or removed instance leaves its index recorded and reported as an orphan
 (`orphan vectorize shop-cart VECTORIZE_DOCS (shop-cart-docs; deleted by --prune)`).
 `--prune` deletes it behind the same confirmation as a KV namespace, naming the

@@ -2450,6 +2450,62 @@ t("WorkersAiSearch.answer: the platform's refusals map as for search", async () 
   assert.equal((await failing("boom")).error.tag, "SearchFailed");
 });
 
+// #3479: `bynk dev` binds a Vectorize to an index of the developer's own.
+t("WorkersVectorize: under bynk dev, warns once unless acknowledged, and never in a deployment", async () => {
+  const warnings = [];
+  const original = console.warn;
+  console.warn = (...args) => warnings.push(args.join(" "));
+  try {
+    const run = async (env) => new WorkersVectorize({ VECTORIZE_DOCS: fakeIndex(), ...env }, "VECTORIZE_DOCS").describe();
+    assert.equal((await run({})).tag, "Ok");
+    assert.equal((await run({ BYNK_DEV: "1", BYNK_DEV_ACK_VECTORIZE: "allow" })).tag, "Ok");
+    assert.deepEqual(warnings, []);
+    assert.equal((await run({ BYNK_DEV: "1" })).tag, "Ok");
+    assert.equal(warnings.length, 1);
+    assert.match(warnings[0], /may incur charges/);
+    assert.match(warnings[0], /https:\/\/developers\.cloudflare\.com\/vectorize\/platform\/pricing\//);
+    assert.match(warnings[0], /vectorize = "allow"/);
+    assert.doesNotMatch(warnings[0], /\$|free/i);
+    assert.equal((await run({ BYNK_DEV: "1" })).tag, "Ok");
+    assert.equal(warnings.length, 1);
+  } finally {
+    console.warn = original;
+  }
+});
+
+t("WorkersVectorize: an instance with no development index faults, saying how to bind one", async () => {
+  const unbound = new WorkersVectorize({ BYNK_DEV: "1" }, "VECTORIZE_MY_DOCS");
+  await assert.rejects(() => unbound.describe(), /`MyDocs` has no development index: set `\[dev\.vectorize-index\] MyDocs = "<index-name>"`/);
+});
+
+t("WorkersVectorize: the first call under bynk dev checks the index against the declaration", async () => {
+  const env = (index, declared) => ({ VECTORIZE_DOCS: index, BYNK_DEV: "1", BYNK_DEV_ACK_VECTORIZE: "allow", BYNK_DEV_INDEX_VECTORIZE_DOCS: declared });
+  // A wrong index faults, on every call until it is right.
+  const wrong = fakeIndex({ describe: { dimensions: 8, metric: "cosine" } });
+  const bad = new WorkersVectorize(env(wrong, "3:cosine"), "VECTORIZE_DOCS");
+  await assert.rejects(() => bad.query([0, 0, 0], opts()), /has 8 dimensions and the cosine metric, but the declaration says 3 and cosine/);
+  await assert.rejects(() => bad.upsert([vec("a")]), /declaration says 3 and cosine/);
+  assert.equal(wrong.calls.filter((c) => c.name === "query" || c.name === "upsert").length, 0);
+  // An index that cannot be reached faults, naming that bynk dev never creates one.
+  const gone = fakeIndex({ describe: new Error("index not found") });
+  await assert.rejects(() => new WorkersVectorize(env(gone, "3:cosine"), "VECTORIZE_DOCS").getByIds(["a"]), /could not reach the development index.*never creates one/);
+  // A matching index is checked once, then the call goes ahead.
+  const good = fakeIndex({ describe: { config: { dimensions: 3, metric: "cosine" } } });
+  const ok = new WorkersVectorize(env(good, "3:cosine"), "VECTORIZE_DOCS");
+  assert.equal((await ok.upsert([vec("a")])).tag, "Ok");
+  assert.equal((await ok.deleteByIds(["a"])).tag, "Ok");
+  assert.equal(good.calls.filter((c) => c.name === "describe").length, 1);
+  // The check's own describe is reused by a first `describe()` call: one platform call, not two.
+  const once = fakeIndex({ describe: { dimensions: 3, metric: "cosine" } });
+  const first = new WorkersVectorize({ ...env(once, "3:cosine"), BYNK_DEV_INDEX_VECTORIZE_DOCS: "3:cosine" }, "VECTORIZE_DOCS");
+  assert.deepEqual((await first.describe()).value, { dimensions: 3, metric: "cosine" });
+  assert.equal(once.calls.filter((c) => c.name === "describe").length, 1);
+  // Not under bynk dev (a deployment, or bynk test): no check at all.
+  const plain = fakeIndex({ describe: { dimensions: 99, metric: "euclidean" } });
+  assert.equal((await new WorkersVectorize({ VECTORIZE_DOCS: plain }, "VECTORIZE_DOCS").upsert([vec("a")])).tag, "Ok");
+  assert.equal(plain.calls.filter((c) => c.name === "describe").length, 0);
+});
+
 // #3480: AI Search is a remote-only binding of its own kind: its warning is
 // keyed `ai-search`, acknowledged by its own variable (not Workers AI's), once
 // per session, never in a deployment, and links to Cloudflare, not a price.
