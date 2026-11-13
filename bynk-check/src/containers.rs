@@ -43,7 +43,8 @@ pub fn build_path_problem(path: &str) -> Option<&'static str> {
     if path.contains(['\0', '\n', '\r']) || path.chars().any(char::is_control) {
         return Some("holds a control character");
     }
-    if path.starts_with('/') || matches!(path.as_bytes(), [d, b':', ..] if d.is_ascii_alphabetic())
+    if path.starts_with('/')
+        || matches!(path.as_bytes(), [d, b':'] | [d, b':', b'/', ..] if d.is_ascii_alphabetic())
     {
         return Some("is absolute; it must be relative to the project root");
     }
