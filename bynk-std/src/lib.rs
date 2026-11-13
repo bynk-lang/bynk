@@ -727,6 +727,11 @@ pub const VECTORIZE_INDEXED_TYPES: &[&str] = &["string", "number", "boolean"];
 /// The most metadata indexes one index carries.
 pub const VECTORIZE_MAX_INDEXED: usize = 10;
 
+/// The fewest dimensions a Cloudflare Vectorize index accepts: creating one with
+/// fewer fails with `Dimensions must be in range: [32, 1536]`. `@dimensions`
+/// below it is refused at compile time, so the failure is not left for a deploy.
+pub const VECTORIZE_MIN_DIMENSIONS: i64 = 32;
+
 /// The most dimensions a Cloudflare Vectorize vector can have (its published
 /// limit); `@dimensions` above it is refused at compile time.
 pub const VECTORIZE_MAX_DIMENSIONS: i64 = 1536;

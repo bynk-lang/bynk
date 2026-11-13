@@ -5,7 +5,7 @@ context shop.plain
 consumes bynk
 consumes bynk.cloudflare { Vectorize }
 
-capability Docs = Vectorize @dimensions(3) @metric("cosine")
+capability Docs = Vectorize @dimensions(32) @metric("cosine")
 
 service api from http {
 	on GET("/ping") () -> Effect[HttpResult[String]] by Visitor {

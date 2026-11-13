@@ -573,7 +573,12 @@ index by hand and reindex.
 
 The `@indexed` metadata indexes are created straight after the index and before the
 Worker that writes vectors is pushed, because a vector written before its
-property's index existed is not covered by it until it is written again. Adding an
+property's index existed is not covered by it until it is written again.
+Cloudflare builds a metadata index asynchronously, so a deploy that created one
+waits (for up to five minutes, printing a progress line) until every new one is
+listed, and only then pushes the Worker. If one is still not listed by then, the
+deploy fails without pushing: run it again once they are. A deploy that creates no
+metadata index does not wait. Adding an
 entry to `@indexed` later creates the new metadata index and prints a warning that
 vectors already stored need an upsert to be filterable on it. Removing one is
 reported and left in place, since a metadata index holds no data of its own but

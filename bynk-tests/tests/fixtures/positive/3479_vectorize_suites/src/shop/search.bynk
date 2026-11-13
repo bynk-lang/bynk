@@ -6,7 +6,7 @@ context shop.search
 consumes bynk
 consumes bynk.cloudflare { Vectorize, Vector, VectorError, VectorMatch, QueryOptions, Mutation }
 
-capability Docs = Vectorize @dimensions(3) @metric("cosine")
+capability Docs = Vectorize @dimensions(32) @metric("cosine")
 
 service api from http {
 	on PUT("/doc") (body: String) -> Effect[HttpResult[String]] by Visitor given Docs {

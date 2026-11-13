@@ -7,7 +7,10 @@
 //! one that does not, naming both configurations and the way out. Metadata
 //! indexes are created straight after the index and before the Worker that
 //! writes vectors is pushed, because a vector written before its property's
-//! index existed is not covered by it until it is written again.
+//! index existed is not covered by it until it is written again. Cloudflare
+//! builds a metadata index asynchronously (`create-metadata-index` only
+//! enqueues it), so the deploy waits for every one it just created to be listed
+//! before it pushes the Worker; one that does not appear in time fails the deploy.
 //!
 //! Everything goes through wrangler, as D1 and R2 do, so the token the deploy
 //! needs does not grow. Wrangler's `--json` output is not documented field by
@@ -17,6 +20,7 @@
 use super::*;
 
 use serde_json::Value;
+use std::time::{Duration, Instant};
 
 /// An index's fixed configuration, as the account reports it.
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -179,7 +183,7 @@ fn create_metadata_index(
     let (property, ty) = entry
         .split_once(':')
         .ok_or_else(|| format!("`{entry}` is not `name:type`"))?;
-    vectorize_command(
+    match vectorize_command(
         provenance,
         &[
             "create-metadata-index",
@@ -190,8 +194,86 @@ fn create_metadata_index(
             ty,
         ],
         project_root,
-    )
-    .map(|_| ())
+    ) {
+        Ok(_) => Ok(()),
+        // Listed between the listing and this request (Cloudflare builds them
+        // asynchronously): the property is there, which is what was wanted.
+        Err(e) if e.contains("metadata index already exists") => Ok(()),
+        Err(e) => Err(e),
+    }
+}
+
+/// How the deploy waits for new metadata indexes to be listed: the first delay,
+/// the longest delay (each is double the last, up to this), and when to give up.
+#[derive(Debug, Clone, Copy)]
+pub(crate) struct Pacing {
+    pub(crate) first: Duration,
+    pub(crate) longest: Duration,
+    pub(crate) timeout: Duration,
+}
+
+/// Five minutes: a metadata index was seen to take from 30 seconds to 144, and a
+/// false timeout costs more than waiting.
+pub(crate) const METADATA_INDEX_PACING: Pacing = Pacing {
+    first: Duration::from_secs(3),
+    longest: Duration::from_secs(15),
+    timeout: Duration::from_secs(300),
+};
+
+/// Poll `list-metadata-index` until every entry of `wanted` (`name:type`) is
+/// listed on `name`, backing off between polls. `Err` is what could not be read,
+/// or the entries still unlisted at the timeout.
+fn wait_for_metadata_indexes(
+    provenance: &Provenance,
+    name: &str,
+    wanted: &[String],
+    project_root: &Path,
+    pacing: Pacing,
+) -> Result<(), String> {
+    let start = Instant::now();
+    let mut delay = pacing.first;
+    let mut announced = false;
+    loop {
+        let listed = existing_metadata_indexes(provenance, name, project_root)?;
+        let pending: Vec<&String> = wanted.iter().filter(|w| !listed.contains(*w)).collect();
+        if pending.is_empty() {
+            if announced {
+                eprintln!(
+                    "bynk: the metadata indexes on `{name}` are listed ({}s)",
+                    start.elapsed().as_secs()
+                );
+            }
+            return Ok(());
+        }
+        if start.elapsed() >= pacing.timeout {
+            return Err(format!(
+                "the metadata index{} {} {} created but {} not listed after {} seconds; Cloudflare builds them asynchronously. The Worker was not pushed: run the deploy again once they are listed",
+                if pending.len() == 1 { "" } else { "es" },
+                pending
+                    .iter()
+                    .map(|p| p.as_str())
+                    .collect::<Vec<_>>()
+                    .join(", "),
+                if pending.len() == 1 { "was" } else { "were" },
+                if pending.len() == 1 { "is" } else { "are" },
+                pacing.timeout.as_secs()
+            ));
+        }
+        if !announced {
+            eprintln!(
+                "bynk: waiting for Cloudflare to build the metadata indexes on `{name}` ({}), up to {} seconds",
+                pending
+                    .iter()
+                    .map(|p| p.as_str())
+                    .collect::<Vec<_>>()
+                    .join(", "),
+                pacing.timeout.as_secs()
+            );
+            announced = true;
+        }
+        std::thread::sleep(delay);
+        delay = (delay * 2).min(pacing.longest);
+    }
 }
 
 /// Delete the index `name` (`--prune`, after its confirmation). One already
@@ -415,6 +497,29 @@ pub(crate) fn provision_vectorize_indexes(
     lock_path: &Path,
     environment: &str,
 ) -> Result<(), DeployFailure> {
+    provision_vectorize_indexes_paced(
+        provenance,
+        project_root,
+        worker,
+        declared,
+        lock,
+        lock_path,
+        environment,
+        METADATA_INDEX_PACING,
+    )
+}
+
+#[allow(clippy::too_many_arguments)]
+fn provision_vectorize_indexes_paced(
+    provenance: &Provenance,
+    project_root: &Path,
+    worker: &str,
+    declared: &Resources,
+    lock: &mut DeployLock,
+    lock_path: &Path,
+    environment: &str,
+    pacing: Pacing,
+) -> Result<(), DeployFailure> {
     for decl in &declared.vectorize_indexes {
         let physical = decl.physical_name(environment);
         if decl.adopt.is_some() {
@@ -483,7 +588,26 @@ pub(crate) fn provision_vectorize_indexes(
             create_metadata_index(provenance, &physical, entry, project_root)
                 .map_err(|e| fail(&format!("create the metadata index `{entry}` on"), e))?;
         }
-        if existed && !missing.is_empty() {
+        if !missing.is_empty() {
+            // Only now is the index safe to write to: a vector upserted before a
+            // metadata index is listed is silently left out of it.
+            wait_for_metadata_indexes(provenance, &physical, &missing, project_root, pacing)
+                .map_err(|e| {
+                    DeployFailure::driver(format!(
+                        "the Vectorize index `{physical}` for `{worker}`'s `{}`: {e}",
+                        decl.binding
+                    ))
+                })?;
+        }
+        // Vectors can predate a metadata index only if something already wrote
+        // to the index: an adopted one, or one this project's Worker was
+        // deployed against. An index this very project created and never
+        // deployed has none, which is also the state a deploy that timed out
+        // above is re-run from.
+        let may_hold_vectors = recorded_vectorize(lock, worker, &decl.binding, environment)
+            .is_some_and(|r| r.adopted)
+            || lock.is_deployed(environment, worker);
+        if existed && may_hold_vectors && !missing.is_empty() {
             eprintln!(
                 "bynk: warning: `{physical}` already existed, so vectors written before {} will not be filterable on {} until they are written again (upsert them)",
                 if missing.len() == 1 {

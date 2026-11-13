@@ -1216,6 +1216,19 @@ fn option_sample(option: &str) -> &'static str {
     }
 }
 
+/// Why a `Vectorize` `@dimensions` literal is outside Cloudflare's range of
+/// 32 to 1536: `("least", 32)` or `("most", 1536)`. `None` when it is inside, or
+/// not positive (which the positive-`Int` check reports).
+fn vectorize_dimensions_problem(value: i64) -> Option<(&'static str, i64)> {
+    if value > firstparty::VECTORIZE_MAX_DIMENSIONS {
+        Some(("most", firstparty::VECTORIZE_MAX_DIMENSIONS))
+    } else if value > 0 && value < firstparty::VECTORIZE_MIN_DIMENSIONS {
+        Some(("least", firstparty::VECTORIZE_MIN_DIMENSIONS))
+    } else {
+        None
+    }
+}
+
 /// Interop I5 (#1972): the value of one instance option: one positional
 /// literal of the option's kind (P3, #2342). `@worker("name")` names a Worker,
 /// so it must be a Worker name as Cloudflare takes one: lowercase letters,
@@ -1305,19 +1318,17 @@ fn instance_option_value(
         (firstparty::OptionKind::PositiveInt, ExprKind::IntLit { value, .. })
             if base == "Vectorize"
                 && option == firstparty::VECTORIZE_DIMENSIONS_OPTION
-                && *value > firstparty::VECTORIZE_MAX_DIMENSIONS =>
+                && vectorize_dimensions_problem(*value).is_some() =>
         {
+            let (bound, limit) = vectorize_dimensions_problem(*value).unwrap_or_default();
             errors.push_for(
                 Some(path),
                 CompileError::new(
                     "bynk.capability.invalid_option",
                     arg.span,
-                    format!(
-                        "`@{option}` is at most {} for a `{base}` index",
-                        firstparty::VECTORIZE_MAX_DIMENSIONS
-                    ),
+                    format!("`@{option}` is at {bound} {limit} for a `{base}` index"),
                 )
-                .with_note("Cloudflare's published limit on dimensions per vector"),
+                .with_note("Cloudflare creates an index only with a dimension count in its supported range, 32 to 1536"),
             );
             return None;
         }

@@ -1,6 +1,6 @@
 {
   "version": 1,
   "vectorize": [
-    { "binding": "VECTORIZE_DOCS", "dimensions": 3, "metric": "cosine", "indexed": [] }
+    { "binding": "VECTORIZE_DOCS", "dimensions": 32, "metric": "cosine", "indexed": [] }
   ]
 }

@@ -1497,7 +1497,7 @@ service search from http {
 ```
 
 `capability Docs = Vectorize …` binds as `VECTORIZE_DOCS`, a `[[vectorize]]` entry
-naming the index. `@dimensions(n)` (a positive `Int`) and `@metric("cosine" |
+naming the index. `@dimensions(n)` (an `Int` from 32 to 1536, the range Cloudflare creates an index with; one outside it is `bynk.capability.invalid_option`) and `@metric("cosine" |
 "euclidean" | "dot-product")` are both required; a bare `given Vectorize` is
 `bynk.capability.instance_only`. `@indexed([…])` lists the metadata properties a
 query may filter on, each written `name:type` with the type `string`, `number` or
