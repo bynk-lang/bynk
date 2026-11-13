@@ -228,6 +228,32 @@ pub(crate) fn metadata_index_changes(
     (missing, removed)
 }
 
+/// The failure for a metadata index whose type the source changed
+/// (`category:string` to `category:number`): the platform cannot retype one, so
+/// the deploy says so before it creates anything. `None` when none changed.
+pub(crate) fn type_change_message(
+    index: &str,
+    missing: &[String],
+    removed: &[String],
+) -> Option<String> {
+    let changed: Vec<String> = missing
+        .iter()
+        .filter_map(|new| {
+            let (property, _) = new.split_once(':')?;
+            let old = removed
+                .iter()
+                .find(|r| r.split_once(':').is_some_and(|(p, _)| p == property))?;
+            Some(format!("`{old}` is now `{new}`"))
+        })
+        .collect();
+    (!changed.is_empty()).then(|| {
+        format!(
+            "the metadata index type of a property changed on `{index}` ({}); an index cannot be retyped. Keep the type, or declare the property under a new name",
+            changed.join(", ")
+        )
+    })
+}
+
 /// Each `Vectorize` index of `worker`: created when the account has none of
 /// that name, checked against the declaration when it has (a mismatch fails the
 /// deploy and changes nothing), recorded in the ledger before the push, then its
@@ -254,7 +280,8 @@ pub(crate) fn provision_vectorize_indexes(
         if existed {
             let found = read_index_config(provenance, &physical, project_root)
                 .map_err(|e| fail("check", e))?;
-            let matches = found.dimensions == decl.dimensions && found.metric == decl.metric;
+            let matches = found.dimensions == decl.dimensions
+                && found.metric == normalise_metric(&decl.metric);
             if !matches {
                 return Err(DeployFailure::driver(drift_message(
                     &physical,
@@ -273,7 +300,9 @@ pub(crate) fn provision_vectorize_indexes(
         let already = recorded_vectorize(lock, worker, &decl.binding, environment)
             .is_some_and(|r| r.name == physical);
         if !already {
-            lock.record_vectorize(environment, worker, &decl.binding, &physical, false);
+            // An index already on the account was not made by this deploy, so
+            // it is recorded as adopted: never pruned.
+            lock.record_vectorize(environment, worker, &decl.binding, &physical, existed);
             write_lock(lock_path, lock).map_err(|e| {
                 DeployFailure::driver(format!(
                     "provisioned the Vectorize index `{physical}` but could not record it in {}: {e}",
@@ -284,6 +313,9 @@ pub(crate) fn provision_vectorize_indexes(
         let existing = existing_metadata_indexes(provenance, &physical, project_root)
             .map_err(|e| fail("read the metadata indexes of", e))?;
         let (missing, removed) = metadata_index_changes(&decl.indexed, &existing);
+        if let Some(message) = type_change_message(&physical, &missing, &removed) {
+            return Err(DeployFailure::driver(message));
+        }
         for entry in &missing {
             create_metadata_index(provenance, &physical, entry, project_root)
                 .map_err(|e| fail(&format!("create the metadata index `{entry}` on"), e))?;

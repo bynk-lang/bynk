@@ -290,9 +290,10 @@ pub(crate) struct D1Past {
 pub(crate) struct VectorizeRecord {
     /// The index's account-facing name, environment-qualified.
     pub(crate) name: String,
-    /// `true` when the project named an existing index rather than having this
-    /// deploy create one. An adopted index is checked for drift and never
-    /// created, changed or deleted.
+    /// `true` when the index was already on the account when this deploy first
+    /// met it (named by the project, or found under the derived name) rather
+    /// than created by this deploy. An adopted index is checked for drift and
+    /// never created, changed or deleted.
     #[serde(default, skip_serializing_if = "std::ops::Not::not")]
     pub(crate) adopted: bool,
     /// Indexes this binding used to have, under another name. They hold
@@ -799,6 +800,9 @@ impl DeployLock {
         let mut superseded = Vec::new();
         if let Some(old) = instances.remove(binding) {
             superseded = old.superseded;
+            // A binding that moves back to an index it left (A, B, A) must
+            // not list the live index as an orphan: `--prune` would delete it.
+            superseded.retain(|past| past.name != name);
             if old.name != name && !old.adopted {
                 superseded.push(VectorizePast {
                     name: old.name,

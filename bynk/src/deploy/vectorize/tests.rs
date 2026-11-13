@@ -297,3 +297,36 @@ fn a_name_the_environment_pushes_over_the_limit_is_an_error_naming_the_instance(
         "{message}"
     );
 }
+
+#[test]
+fn moving_back_to_a_left_index_does_not_make_the_live_one_an_orphan() {
+    let mut lock = DeployLock::default();
+    lock.record_vectorize("default", "shop", "VECTORIZE_DOCS", "a", false);
+    lock.record_vectorize("default", "shop", "VECTORIZE_DOCS", "b", false);
+    lock.record_vectorize("default", "shop", "VECTORIZE_DOCS", "a", false);
+    let record = recorded_vectorize(&lock, "shop", "VECTORIZE_DOCS", "default").unwrap();
+    assert_eq!(record.name, "a");
+    assert_eq!(
+        record
+            .superseded
+            .iter()
+            .map(|p| p.name.as_str())
+            .collect::<Vec<_>>(),
+        ["b"]
+    );
+}
+
+#[test]
+fn a_retyped_metadata_index_is_refused_before_anything_is_created() {
+    let d = |v: &[&str]| v.iter().map(|s| s.to_string()).collect::<Vec<_>>();
+    let (missing, removed) =
+        metadata_index_changes(&d(&["category:number"]), &d(&["category:string"]));
+    let message = type_change_message("shop-docs", &missing, &removed).unwrap();
+    assert!(
+        message.contains("`category:string` is now `category:number`"),
+        "{message}"
+    );
+    // A plain addition or removal is not a retype.
+    let (m, r) = metadata_index_changes(&d(&["a:string"]), &d(&["b:string"]));
+    assert_eq!(type_change_message("shop-docs", &m, &r), None);
+}
