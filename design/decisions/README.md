@@ -17,6 +17,7 @@ or a row links to no file. Summaries and statuses are curated by hand; the
 
 | # | Decision | Status |
 |---|---|---|
+| [0836](0836-vectorize-instance-kind.md) | **Vectorize is an instance kind with a fixed index shape and a typed filter** (v0.592) — Decisions A–K of #3479: a named instance with required dimensions and metric, a deploy-created never-recreated index, a typed filter, errors as values | Accepted (v0.592) |
 | [0835](0835-workers-ai-run-stream.md) | **`Ai.runStream` passes a Workers AI model's streamed events through as text** (v0.591) — One element per Server-Sent Event, `[DONE]` consumed, the event shape left to the model | Accepted (v0.591) |
 | [0834](0834-dev-remote-binding-acknowledgement.md) | **A remote-only binding is acknowledged in `[dev]`, and `bynk dev` warns once instead of blocking** (v0.589) — One per-binding-kind mechanism for bindings with no local simulation, with no billing specifics in any text | Accepted (v0.589) |
 | [0833](0833-workers-ai-capability.md) | **Workers AI is a one-per-Worker `Ai` capability: `run` over JSON text, typed operations layered on it** (v0.588) — The `[ai]` singleton, its error type, the model-id rule and why typed reads are not used | Accepted (v0.588) |

@@ -1,12 +1,6 @@
----
-level: minor
-changelog: `bynk.cloudflare` gains `Vectorize`, an instance kind for a Vectorize index with required `@dimensions` and `@metric`, optional `@indexed`, a typed filter and typed errors, emitted as `[[vectorize]]`; every operation faults until stubbed in a test
-probes: emit_abi_shapes, emit_diagnostics, ts_writes
----
+# 0836 — Vectorize is an instance kind with a fixed index shape and a typed filter
 
-## ADR: vectorize-instance-kind
-title: Vectorize is an instance kind with a fixed index shape and a typed filter
-summary: Decisions A–K of #3479: a named instance with required dimensions and metric, a deploy-created never-recreated index, a typed filter, errors as values
+- **Status:** Accepted (v0.592)
 
 **Context.** An index's dimensions and metric cannot change after creation, the index is project-owned state, and writes are asynchronous.
 

@@ -62,7 +62,7 @@ directly.
 
 ```toml
 [dependencies]
-bynk-emit = "0.591"
+bynk-emit = "0.592"
 ```
 
 ```rust

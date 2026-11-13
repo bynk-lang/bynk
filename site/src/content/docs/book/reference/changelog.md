@@ -3,7 +3,7 @@ title: Version compatibility & changelog
 ---
 Bynk is pre-1.0 and developed in small, spec-first increments (see
 [Versioning & roadmap](/book/about/versioning-and-roadmap/)). This book is
-written against **v0.591**.
+written against **v0.592**.
 
 This page is a high-level summary of notable increments, not an exhaustive
 per-commit history. While Bynk is pre-1.0, increments may change behaviour.
@@ -28,6 +28,7 @@ per-commit history. While Bynk is pre-1.0, increments may change behaviour.
 
 | Version | Highlights |
 |---|---|
+| **v0.592.0** | `bynk.cloudflare` gains `Vectorize`, an instance kind for a Vectorize index with required `@dimensions` and `@metric`, optional `@indexed`, a typed filter and typed errors, emitted as `[[vectorize]]`; every operation faults until stubbed in a test |
 | **v0.591.3** | `Ai.generate` reads the reply text from `choices[0].message.content` when a model sends no `response`, as granite does; `response` still wins when both are there |
 | **v0.591.2** | A Workers AI input the model's schema rejects (platform code `5006`) is `InvalidInput`, not `AiFailed`, as observed on a real account |
 | **v0.591.1** | The Book gains "Run a model from a Worker", a guide to the Workers AI `Ai` capability (`generate`, `embed`, `run`, `runStream`, errors, tests and `bynk dev`), and the REST adapter guide now ends with a migration to the binding |
