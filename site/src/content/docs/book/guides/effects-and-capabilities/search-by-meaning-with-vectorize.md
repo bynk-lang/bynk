@@ -93,6 +93,10 @@ let written <- Docs.upsertValue([VectorOf {
 Metadata is a JSON object on the platform, so the type must encode to one: a bare
 `String` is a fault. Only writes are typed. Reads give the metadata back as text.
 
+Keep the properties you filter on plain (`String`, `Int`, `Bool`), not `Option`: an
+`Option` field is written as a tagged object (`{"kind":"Some","value":"x"}`), exactly
+as `Json.encode` writes it, so a filter on `tag:string` would never match it.
+
 ## Find the nearest
 
 `query` takes a vector and returns the nearest matches, best first. Its `filter` is
@@ -131,7 +135,7 @@ that property's metadata index existed.
 
 Decode what a query returns yourself, with `Json.decode`, instead of asking the
 query to decode it. Metadata outlives the type that wrote it: after a release adds
-a field, every older vector fails to decode, and one stale vector would otherwise
+a required field, every older vector fails to decode, and one stale vector would otherwise
 fail every query that returns it. Decoding in a second step lets the handler skip,
 repair or count it:
 

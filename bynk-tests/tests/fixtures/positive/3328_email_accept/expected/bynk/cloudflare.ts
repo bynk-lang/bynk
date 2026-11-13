@@ -854,6 +854,9 @@ export const Vector = {
  * value of `M`, which `upsertValue` encodes with `M`'s codec. Reading is not
  * typed: `getByIds` and a query's matches give the metadata as text, so a
  * vector stored by an older version of `M` can be skipped or repaired.
+ * Keep the properties a query filters on plain (not `Option`): an `Option` is
+ * written as a tagged object, as `Json.encode` writes it, so a filter on it
+ * would never match.
  */
 export interface VectorOf<M> {
   readonly id: string;

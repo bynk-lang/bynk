@@ -1519,7 +1519,7 @@ whose `metadata` is an `Option[M]`, encoded by `M`'s codec as `Queue.sendValue` 
 a message (`M` is inferred from the argument), so `Docs.upsertValue([VectorOf { id,
 values, metadata: Some(meta) }])` writes what `upsert` writes with `Json.encode(meta)`.
 Metadata is a JSON object on the platform, so an `M` that does not encode to an object
-(a bare `String`, say) faults. Only writes are typed; reads stay as text.
+(a bare `String`, say) faults. Only writes are typed; reads stay as text. An `Option` field of `M` is written as a tagged object, as `Json.encode` writes it, so keep the properties you filter on non-`Option`.
 `query(vector, options)` returns the nearest matches, best first, as `VectorMatch`es
 with a `score` whose meaning depends on the metric (a larger cosine score is nearer;
 a smaller euclidean distance is nearer). `QueryOptions` carries `topK` (5 by default),
