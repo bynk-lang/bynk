@@ -426,13 +426,7 @@ pub fn emit_wrangler_toml(
             | BindingSource::EventsFanout { class_name }
             | BindingSource::ContainerInstance { class_name, .. } => {
                 class_names.push(class_name);
-                TomlBlock::array_table(
-                    "durable_objects.bindings",
-                    vec![
-                        TomlEntry::kv("name", name),
-                        TomlEntry::kv("class_name", TomlValue::str(class_name.clone())),
-                    ],
-                )
+                durable_object_binding_block(name, class_name)
             }
         };
         doc.push_block(block);
@@ -1003,6 +997,17 @@ pub fn r2_bucket_name(worker: &str, binding: &str) -> String {
     let prefix = format!("{}_", bynk_check::firstparty::R2_BINDING_PREFIX);
     let stem = binding.strip_prefix(&prefix).unwrap_or(binding);
     format!("{worker}-{}", stem.to_ascii_lowercase().replace('_', "-"))
+}
+
+/// The `[[durable_objects.bindings]]` entry binding `name` to `class_name`.
+fn durable_object_binding_block(name: TomlValue, class_name: &str) -> TomlBlock {
+    TomlBlock::array_table(
+        "durable_objects.bindings",
+        vec![
+            TomlEntry::kv("name", name),
+            TomlEntry::kv("class_name", TomlValue::str(class_name.to_string())),
+        ],
+    )
 }
 
 /// Cloudflare's longest index name, in bytes.

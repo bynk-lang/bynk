@@ -1,0 +1,5 @@
+context demo
+
+consumes bynk.cloudflare { Container }
+
+capability Renderer = Container @build("../renderer") @port(8080)

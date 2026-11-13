@@ -1,7 +1,7 @@
 ---
 level: minor
 changelog: `bynk.cloudflare` gains `Container`, an instance kind for a container run from a Docker image, with required `@build` and `@port`, optional `@sleepAfter`, `@instanceType` and `@forward`, typed errors, emitted as a Durable Object binding and `exports` entry; every operation faults until stubbed in a test
-probes: emit_abi_shapes, emit_diagnostics, ts_writes
+probes: emit_abi_shapes, emit_diagnostics, ts_writes, diagnostic_coverage, explained_codes
 ---
 
 ## ADR: container-instance-kind

@@ -1884,7 +1884,7 @@ export class WorkersVectorize implements Vectorize {
 // A request that is wrong whatever the data (a header the platform owns, a
 // body a method forbids, a name the platform would refuse) is a fault, as it
 // is for `Email`: nothing is sent. A missing binding is a fault too.
-type ContainerNamespace = {
+type ContainerObjects = {
   idFromName(name: string): unknown;
   get(id: unknown): { fetch(request: globalThis.Request): Promise<globalThis.Response> };
 };
@@ -1901,14 +1901,14 @@ export class WorkersContainer implements Container {
     this.binding = binding;
   }
 
-  private namespace(): ContainerNamespace {
-    const ns = (this.env as Record<string, ContainerNamespace | undefined> | undefined)?.[this.binding];
-    if (!ns) {
+  private objects(): ContainerObjects {
+    const objects = (this.env as Record<string, ContainerObjects | undefined> | undefined)?.[this.binding];
+    if (!objects) {
       throw new Error(
         `bynk.cloudflare.Container requires a Durable Object binding (env.${this.binding}) — deploy with the generated [[durable_objects.bindings]] and [[containers]] wrangler stanzas`,
       );
     }
-    return ns;
+    return objects;
   }
 
   // The instance name is checked before anything is sent: non-empty, at most
@@ -1947,8 +1947,8 @@ export class WorkersContainer implements Container {
     run: (fetcher: FetchProvider) => Promise<Result<T, FetchError>>,
   ): Promise<Result<T, ContainerError>> {
     WorkersContainer.checkName(op, instance);
-    const ns = this.namespace();
-    const stub = ns.get(ns.idFromName(instance));
+    const objects = this.objects();
+    const stub = objects.get(objects.idFromName(instance));
     let reported: ContainerError | undefined;
     const provider = new FetchProvider(async (url, init) => {
       const res = await stub.fetch(new globalThis.Request(url, init));

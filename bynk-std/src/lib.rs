@@ -763,8 +763,13 @@ pub const CONTAINER_FORWARD_OPTION: &str = "forward";
 
 /// The instance types a `Container` can start with under the `durable_object`
 /// scheduling policy. There is no `basic` under it.
-pub const CONTAINER_INSTANCE_TYPES: &[&str] =
-    &["lite", "standard-1", "standard-2", "standard-3", "standard-4"];
+pub const CONTAINER_INSTANCE_TYPES: &[&str] = &[
+    "lite",
+    "standard-1",
+    "standard-2",
+    "standard-3",
+    "standard-4",
+];
 
 /// The longest inactivity timeout the platform accepts, in seconds (6 hours).
 pub const CONTAINER_MAX_SLEEP_AFTER_SECONDS: i64 = 6 * 60 * 60;
@@ -1820,7 +1825,10 @@ mod tests {
             container.option_names().collect::<Vec<_>>(),
             ["build", "port", "sleepAfter", "instanceType", "forward"]
         );
-        assert_eq!(container.option_kind("sleepAfter"), Some(OptionKind::Duration));
+        assert_eq!(
+            container.option_kind("sleepAfter"),
+            Some(OptionKind::Duration)
+        );
         assert_eq!(container.required, ["build", "port"]);
         assert!(!container.bare && !container.linked);
         let pg = instantiable("bynk.cloudflare", "Postgres").expect("Postgres is instantiable");

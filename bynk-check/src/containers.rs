@@ -207,8 +207,14 @@ mod tests {
 
     #[test]
     fn a_build_path_is_normalised() {
-        assert_eq!(normalise_build("./containers//renderer/"), "containers/renderer");
-        assert_eq!(dockerfile_path("containers/renderer/"), "containers/renderer/Dockerfile");
+        assert_eq!(
+            normalise_build("./containers//renderer/"),
+            "containers/renderer"
+        );
+        assert_eq!(
+            dockerfile_path("containers/renderer/"),
+            "containers/renderer/Dockerfile"
+        );
     }
 
     #[test]
