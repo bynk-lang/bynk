@@ -1898,6 +1898,9 @@ export class WorkersAiSearch implements AiSearch {
   }
 
   private instance(): AiSearchInstance {
+    // #3480: under `bynk dev` the call runs on the account (the binding is
+    // proxied to the deployed instance), so the first one says so, once.
+    devRemoteNotice(this.env, "ai-search", "BYNK_DEV_ACK_AI_SEARCH", "AI Search", "https://developers.cloudflare.com/ai-search/platform/limits-pricing/");
     const found = (this.env as Record<string, AiSearchInstance | undefined> | undefined)?.[this.binding];
     if (!found) {
       throw new Error(

@@ -608,6 +608,7 @@ pub fn run(
         );
         return ExitCode::FAILURE;
     }
+    proxy_ai_search(&workers_dir, &serving);
     let stand_in_configs = match write_stand_ins(&build_dir, &stand_in_plans) {
         Ok(configs) => configs,
         Err(e) => {
@@ -812,6 +813,7 @@ pub fn run(
             emit(opts.format, &DevEvent::Rebuilding);
             let rebuild = crate::workers::Build::new(true, false).no_install(opts.no_install);
             if crate::workers::compile_once_reporting(project_root, &build_dir, rebuild, None) {
+                proxy_ai_search(&workers_dir, &serving);
                 // Interop I5 (#1972): refresh the served copy from the
                 // rebuilt config. A binding added since start has no
                 // stand-in until `bynk dev` restarts.
@@ -1813,6 +1815,35 @@ fn serve_args(s: &Serving, edge_keys: &[String]) -> Vec<String> {
     args
 }
 
+/// #3480: each served Worker's development copy of its config proxies an
+/// `[[ai_search]]` binding to the deployed instance (`remote = true`), since
+/// AI Search has no local simulation. The generated config `bynk deploy`
+/// reads is written elsewhere and never carries it. A failure is reported and
+/// the Worker serves without, so a call faults naming the binding.
+fn proxy_ai_search(workers_dir: &Path, serving: &[Serving]) {
+    for s in serving {
+        let path = workers_dir.join(&s.worker).join("wrangler.toml");
+        let Ok(text) = std::fs::read_to_string(&path) else {
+            continue;
+        };
+        match bynk_emit::emitter::wrangler::enable_remote_ai_search(&text) {
+            Ok(out) if out != text => {
+                if let Err(e) = std::fs::write(&path, out) {
+                    eprintln!(
+                        "bynk: could not proxy `{}`'s AI Search bindings to the account: {e}",
+                        s.worker
+                    );
+                }
+            }
+            Ok(_) => {}
+            Err(e) => eprintln!(
+                "bynk: could not proxy `{}`'s AI Search bindings: {e}",
+                s.worker
+            ),
+        }
+    }
+}
+
 /// #3478: the `--var`s of [`dev_var_args`] for `project_root`'s `[dev]`
 /// acknowledgements, or `None` after printing why not.
 fn dev_vars_for(project_root: &Path) -> Option<Vec<String>> {
@@ -1918,6 +1949,16 @@ mod tests {
         assert_eq!(
             dev_var_args(&BTreeSet::from(["ai"])),
             ["--var", "BYNK_DEV:1", "--var", "BYNK_DEV_ACK_AI:allow"]
+        );
+        // #3480: AI Search has its own acknowledgement.
+        assert_eq!(
+            dev_var_args(&BTreeSet::from(["ai-search"])),
+            [
+                "--var",
+                "BYNK_DEV:1",
+                "--var",
+                "BYNK_DEV_ACK_AI_SEARCH:allow"
+            ]
         );
     }
 

@@ -233,7 +233,7 @@ pub const MANIFEST_TABLES: &[(&str, &[&str])] = &[
     ("lsp", &["diagnostics_mode", "diagnostics_debounce_ms"]),
     ("workers", &["compatibility_flags", "workers_dev"]),
     ("deploy", &["hyperdrive", "vectorize"]),
-    ("dev", &["hyperdrive", "ai"]),
+    ("dev", &["hyperdrive", "ai", "ai-search"]),
     (
         "build",
         &["out", "target", "platform", "emit", "package_manager"],
