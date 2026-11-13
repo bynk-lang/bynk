@@ -1102,6 +1102,75 @@ pub fn vectorize_index_entries(text: &str) -> Result<Vec<(String, String)>, Stri
         .collect())
 }
 
+/// #3479: point `[[vectorize]]` entries at the indexes `bynk.toml` adopts,
+/// structurally, by binding. An adopted index keeps the name it has on the
+/// account (never the derived, environment-qualified one), so it is written
+/// into the top-level entries for the default environment and into
+/// `[env.<environment>]`'s for a named one. Unchanged text when nothing
+/// differs, as [`materialise_r2_bucket_names`].
+pub fn materialise_vectorize_index_names(
+    text: &str,
+    environment: &str,
+    names: &std::collections::BTreeMap<String, String>,
+) -> Result<String, String> {
+    let mut doc: toml_edit::DocumentMut = text
+        .parse()
+        .map_err(|e| format!("invalid wrangler.toml: {e}"))?;
+    let mut changed = false;
+    let mut found = std::collections::BTreeSet::new();
+    let item = if environment == "default" {
+        doc.get_mut("vectorize")
+    } else {
+        doc.get_mut("env")
+            .and_then(|e| e.get_mut(environment))
+            .and_then(|e| e.get_mut("vectorize"))
+    };
+    let mut set = |entry: &mut dyn toml_edit::TableLike| {
+        let Some(binding) = entry.get("binding").and_then(|b| b.as_str()) else {
+            return;
+        };
+        let Some(name) = names.get(binding).cloned() else {
+            return;
+        };
+        found.insert(binding.to_string());
+        if let Some(index) = entry.get_mut("index_name")
+            && index.as_str() != Some(name.as_str())
+        {
+            set_string_preserving_decor(index, &name);
+            changed = true;
+        }
+    };
+    if let Some(item) = item {
+        if let Some(tables) = item.as_array_of_tables_mut() {
+            for table in tables.iter_mut() {
+                set(table);
+            }
+        } else if let Some(array) = item.as_array_mut() {
+            for value in array.iter_mut() {
+                if let Some(table) = value.as_inline_table_mut() {
+                    set(table);
+                }
+            }
+        }
+    }
+    // An adopted binding with no stanza to name would bind the derived name.
+    if let Some(missing) = names.keys().find(|b| !found.contains(*b)) {
+        return Err(format!(
+            "no `[[vectorize]]` entry for `{missing}` in {}",
+            if environment == "default" {
+                "the configuration".to_string()
+            } else {
+                format!("`[env.{environment}]`")
+            }
+        ));
+    }
+    Ok(if changed {
+        doc.to_string()
+    } else {
+        text.to_string()
+    })
+}
+
 /// P4b (#2608): the directory beside a Worker's `wrangler.toml` holding its
 /// `D1` databases' migrations, one subdirectory per database, as the
 /// project's own `migrations/` folder does.
@@ -1590,6 +1659,17 @@ mod vectorize_name_tests {
     use super::*;
 
     #[test]
+    fn an_adopted_binding_with_no_stanza_is_an_error_not_a_silent_derived_name() {
+        let names = std::collections::BTreeMap::from([(
+            "VECTORIZE_DOCS".to_string(),
+            "docs-prod".to_string(),
+        )]);
+        let text = "name = \"w\"\n\n[env.production]\nname = \"w-production\"\n";
+        let err = materialise_vectorize_index_names(text, "production", &names).unwrap_err();
+        assert!(err.contains("VECTORIZE_DOCS"), "{err}");
+    }
+
+    #[test]
     fn short_name_is_kebab_and_unhashed() {
         assert_eq!(
             vectorize_index_name("shop-cart", "VECTORIZE_DOCS"),
@@ -1998,6 +2078,28 @@ mod vectorize_manifest_tests {
             vectorize_index_entries(toml).unwrap(),
             [("VECTORIZE_DOCS".to_string(), "shop-docs".to_string())]
         );
+    }
+
+    /// #3479: an adopted index's name replaces the derived one, in the top-level
+    /// entries for the default environment and in the environment's block for a
+    /// named one; a binding that is not adopted is left alone.
+    #[test]
+    fn adopted_index_names_are_written_where_the_environment_reads_them() {
+        let top = "name = \"shop\"\n\n[[vectorize]]\nbinding = \"VECTORIZE_DOCS\"\nindex_name = \"shop-docs\"\n\n[[vectorize]]\nbinding = \"VECTORIZE_OTHER\"\nindex_name = \"shop-other\"\n";
+        let names = std::collections::BTreeMap::from([(
+            "VECTORIZE_DOCS".to_string(),
+            "docs-prod".to_string(),
+        )]);
+        let patched = materialise_vectorize_index_names(top, "default", &names).unwrap();
+        assert!(patched.contains("index_name = \"docs-prod\""), "{patched}");
+        assert!(patched.contains("index_name = \"shop-other\""), "{patched}");
+        assert_eq!(
+            materialise_vectorize_index_names(top, "default", &Default::default()).unwrap(),
+            top
+        );
+        let named = "name = \"shop\"\n\n[[env.staging.vectorize]]\nbinding = \"VECTORIZE_DOCS\"\nindex_name = \"shop-docs-staging\"\n";
+        let patched = materialise_vectorize_index_names(named, "staging", &names).unwrap();
+        assert!(patched.contains("index_name = \"docs-prod\""), "{patched}");
     }
 
     /// A derived name longer than Cloudflare's 64 bytes keeps its head and ends
