@@ -126,6 +126,7 @@ service OnPayment from Events(PaymentConfirmed) {
 	on event(e: PaymentConfirmed, env: EventEnvelope) -> Effect[()] given Idempotency {
 		let Claim.Claimed <- Idempotency.claim(env.eventId, 7.days) else { () }
 		// react to e here, once per eventId
+		()
 	}
 }
 ```
