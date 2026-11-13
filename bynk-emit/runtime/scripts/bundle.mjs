@@ -52,6 +52,7 @@ const MODULES = [
   "mysql",
   "pglite",
   "agent",
+  "container",
   "auth",
   "session",
   "connection",

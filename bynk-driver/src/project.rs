@@ -1487,6 +1487,7 @@ fn finish_build(
                 import_ext,
                 &flags,
                 workers_dev,
+                &worker_bindings::container_root(display_root),
                 asset_bytes.as_ref(),
                 &agent_versions,
                 &contracts_lock,
@@ -3485,6 +3486,9 @@ fn build_output(
     // #1890: the merged `wrangler.toml` flag list (`finish_build` merges it).
     compatibility_flags: &[String],
     workers_dev: Option<bool>,
+    // #3477: the path back to the project root from a Worker's output
+    // directory, for a container's build paths.
+    container_root: &str,
     // #1883, slice 1b: the declared asset files' bytes; each Worker ships
     // the files its `uses` closure declares.
     asset_files: Option<&BTreeMap<String, Vec<u8>>>,
@@ -3736,7 +3740,7 @@ fn build_output(
                     &kinds,
                     unit_callees.get(ctx_name),
                 );
-                let bindings = worker_bindings::context_bindings(
+                let mut bindings = worker_bindings::context_bindings(
                     table,
                     &called_contexts,
                     &own_event_routes,
@@ -3749,6 +3753,10 @@ fn build_output(
                         unit_flattened.get(ctx_name),
                     ),
                 );
+                // #3477: a container's image is built from a directory of the
+                // project, which `wrangler` reaches from the Worker's output
+                // directory.
+                worker_bindings::locate_container_builds(&mut bindings, container_root);
                 // #2719: the context's handlers that hand work to the execution
                 // context, from the checker's needs-context set.
                 let ctx_uses_exec = table
@@ -3915,6 +3923,15 @@ fn build_output(
                     compiled.push(StagedFile {
                         output_path: PathBuf::from(format!("workers/{dashes}/events_fanout.ts")),
                         document: Document::Ts(fanout_program),
+                        source_map: None,
+                        debug_metadata: None,
+                    });
+                }
+                // #3477: the Durable Object classes of this Worker's containers.
+                if let Some(program) = emitter::emit_containers_ts(&bindings) {
+                    compiled.push(StagedFile {
+                        output_path: PathBuf::from(format!("workers/{dashes}/containers.ts")),
+                        document: Document::Ts(program),
                         source_map: None,
                         debug_metadata: None,
                     });

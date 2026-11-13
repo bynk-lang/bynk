@@ -4,6 +4,7 @@
 // importing module can collide with an imported runtime name (a user
 // `type JsonValue` beside an import of `JsonValue` would not compile).
 // The plain names stay exported for the runtime's own tests.
+import { containerClass } from "./container.ts";
 import { AGENT_WIRE_PASS, StateRegistry, decodeAgentArgs, decodeAgentKey, dispatchToEventsFanout, encodeAgentResult, makeAgent, makeIntegrationDoNamespace, serialiseAgentClass, serialiseAgentKey, sweepAgentInstances, wakeForMigration, type AgentWire, type DurableObjectNamespace } from "./agent.ts";
 import { oidcTrust, tokenClaims, verifyBearerJwtHs256, verifyOidcJwt, verifySignatureHmacSha256 } from "./auth.ts";
 import { expireSessionCookie, issueSessionCookie, newSessionKey, sessionKeysOf, signSessionCookie, verifySignedCookie } from "./session.ts";
@@ -132,6 +133,7 @@ export {
   selectPluralArm as __selectPluralArm,
   serialiseAgentKey as __serialiseAgentKey,
   serialiseAgentClass as __serialiseAgentClass,
+  containerClass as __containerClass,
   sweepAgentInstances as __sweepAgentInstances,
   varyAcceptLanguage as __varyAcceptLanguage,
   expireSessionCookie as __expireSessionCookie,

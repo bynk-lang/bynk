@@ -169,6 +169,10 @@ pub enum BindingSource {
         capability: String,
         class_name: String,
         build: String,
+        // The path from the Worker's output directory (`<out>/workers/<worker>`)
+        // back to the project root (`../../..` for the default `out`), which
+        // the driver fills in from `[build] out`; empty until then.
+        root_from_worker: String,
         port: i64,
         sleep_after: Option<i64>,
         instance_type: Option<String>,

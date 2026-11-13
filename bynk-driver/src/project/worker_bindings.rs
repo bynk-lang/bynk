@@ -255,6 +255,7 @@ pub(super) fn context_bindings(
                     build: bynk_check::containers::normalise_build(
                         d.container_build().unwrap_or_default(),
                     ),
+                    root_from_worker: String::new(),
                     port: d.container_port().unwrap_or_default(),
                     sleep_after: d.container_sleep_after(),
                     instance_type: d.container_instance_type().map(str::to_string),
@@ -395,4 +396,33 @@ pub(super) fn phase_duplicate_bindings(
         return;
     }
     bynk_check::worker_bindings::phase_duplicate_bindings(parsed, groups, bindings, errors);
+}
+
+/// #3477: the path back to the project root from a Worker's output directory,
+/// `<out>/workers/<worker>`: one `..` for each part of `[build] out` (default
+/// `out`) and two more (`../../..` by default). The output directory is taken
+/// from the manifest, so a `bynk build --out` outside the project is not
+/// followed (the deploy slice refuses it).
+pub(super) fn container_root(project_root: &std::path::Path) -> String {
+    let out = bynk_project::try_read_build_config(project_root)
+        .ok()
+        .and_then(|c| c.out)
+        .unwrap_or_else(|| "out".to_string());
+    let depth = std::path::Path::new(&out)
+        .components()
+        .filter(|c| matches!(c, std::path::Component::Normal(_)))
+        .count();
+    vec![".."; depth + 2].join("/")
+}
+
+/// Sets each container binding's path back to the project root ([`container_root`]).
+pub(super) fn locate_container_builds(bindings: &mut [WorkerBinding], root: &str) {
+    for binding in bindings {
+        if let BindingSource::ContainerInstance {
+            root_from_worker, ..
+        } = &mut binding.source
+        {
+            root.clone_into(root_from_worker);
+        }
+    }
 }

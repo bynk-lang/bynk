@@ -68,6 +68,7 @@ use bynk_syntax::ast::{
 };
 
 pub mod client;
+pub mod containers;
 pub mod contracts;
 pub(crate) mod events_fanout;
 pub mod secrets;
@@ -78,6 +79,7 @@ pub(crate) mod workers_email;
 pub(crate) mod workers_entry;
 pub mod wrangler;
 
+pub use containers::{container_class_names, emit_containers_ts};
 pub use events_fanout::emit_events_fanout_do;
 pub use secrets::emit_secrets_manifest;
 pub use toml_doc::print_toml_document;

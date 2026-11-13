@@ -474,6 +474,15 @@ pub fn emit_wrangler_toml(
             ],
         ));
     }
+    // #3477: each container's application, after the `exports` it names. Only
+    // `class_name`, `scheduling_policy` and the `images` map belong here: under
+    // the `durable_object` policy Wrangler rejects `image`, `max_instances` and
+    // `instance_type` on the entry (the instance type is passed to `start()`).
+    for binding in bindings {
+        if let BindingSource::ContainerInstance { .. } = &binding.source {
+            container_blocks(&binding.source, &mut doc);
+        }
+    }
     let mut tombstones_sorted: Vec<(&str, Option<&str>)> = tombstones
         .renamed
         .iter()
@@ -997,6 +1006,40 @@ pub fn r2_bucket_name(worker: &str, binding: &str) -> String {
     let prefix = format!("{}_", bynk_check::firstparty::R2_BINDING_PREFIX);
     let stem = binding.strip_prefix(&prefix).unwrap_or(binding);
     format!("{worker}-{}", stem.to_ascii_lowercase().replace('_', "-"))
+}
+
+/// #3477: a container's `[[containers]]` entry, with its image built from the
+/// Dockerfile of `@build`. `dockerfile` is the path of the file itself and
+/// `build_context` its directory, both from the Worker's output directory. The
+/// image's key is the capability's name, which the generated class reads as
+/// `ctx.container.images.<key>`.
+fn container_blocks(source: &BindingSource, doc: &mut TomlDocument) {
+    let BindingSource::ContainerInstance {
+        capability,
+        class_name,
+        build,
+        root_from_worker,
+        ..
+    } = source
+    else {
+        return;
+    };
+    let context = format!("{root_from_worker}/{build}");
+    doc.push_block(TomlBlock::array_table(
+        "containers",
+        vec![
+            TomlEntry::kv("class_name", TomlValue::str(class_name.clone())),
+            TomlEntry::kv("scheduling_policy", TomlValue::str("durable_object")),
+        ],
+    ));
+    doc.push_block(TomlBlock::keyed_table(
+        "containers.images",
+        capability.clone(),
+        vec![
+            TomlEntry::kv("dockerfile", TomlValue::str(format!("{context}/Dockerfile"))),
+            TomlEntry::kv("build_context", TomlValue::str(context)),
+        ],
+    ));
 }
 
 /// The `[[durable_objects.bindings]]` entry binding `name` to `class_name`.
