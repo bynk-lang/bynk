@@ -1,0 +1,7 @@
+context demo
+
+// #3479: an @indexed property name has no dot.
+
+consumes bynk.cloudflare { Vectorize }
+
+capability Docs = Vectorize @dimensions(3) @metric("cosine") @indexed(["a.b:string"])

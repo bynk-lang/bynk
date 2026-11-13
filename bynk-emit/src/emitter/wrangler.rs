@@ -997,17 +997,22 @@ pub fn r2_bucket_name(worker: &str, binding: &str) -> String {
 /// Cloudflare's longest index name, in bytes.
 const VECTORIZE_INDEX_NAME_MAX: usize = 64;
 
+/// Bytes kept free for `bynk deploy`'s `-<environment>` suffix (a hyphen and up
+/// to 15 bytes of environment name), so the qualified name stays within the limit.
+const VECTORIZE_ENV_SUFFIX_ROOM: usize = 16;
+
 /// #3479: the account-facing name of a `Vectorize` instance's index,
 /// `<worker>-<capability>` in kebab case: `shop-cart` and `VECTORIZE_DOCS` give
 /// `shop-cart-docs`. Cloudflare takes a kebab-cased name of at most 64 bytes,
-/// so a longer one keeps its head and ends in a hash of the whole name (the
+/// so a name longer than that, less room for the environment suffix, keeps its head and ends in a hash of the whole name (the
 /// same inputs always give the same name). `bynk deploy` environment-qualifies
 /// it (`shop-cart-docs-staging`).
 pub fn vectorize_index_name(worker: &str, binding: &str) -> String {
     let prefix = format!("{}_", bynk_check::firstparty::VECTORIZE_BINDING_PREFIX);
     let stem = binding.strip_prefix(&prefix).unwrap_or(binding);
     let full = format!("{worker}-{}", stem.to_ascii_lowercase().replace('_', "-"));
-    if full.len() <= VECTORIZE_INDEX_NAME_MAX {
+    let budget = VECTORIZE_INDEX_NAME_MAX - VECTORIZE_ENV_SUFFIX_ROOM;
+    if full.len() <= budget {
         return full;
     }
     // FNV-1a: stable across builds and platforms, unlike `DefaultHasher`.
@@ -1015,7 +1020,7 @@ pub fn vectorize_index_name(worker: &str, binding: &str) -> String {
         (h ^ u64::from(b)).wrapping_mul(0x0000_0100_0000_01b3)
     });
     let suffix = format!("-{:08x}", hash as u32);
-    let head = &full[..VECTORIZE_INDEX_NAME_MAX - suffix.len()];
+    let head = &full[..budget - suffix.len()];
     format!("{}{suffix}", head.trim_end_matches('-'))
 }
 
@@ -1514,6 +1519,37 @@ fn kv_entries(doc: &toml_edit::DocumentMut) -> impl Iterator<Item = (&str, &str)
         .into_iter()
         .flatten()
         .filter_map(|t| Some((t.get("binding")?.as_str()?, t.get("id")?.as_str()?)))
+}
+
+#[cfg(test)]
+mod vectorize_name_tests {
+    use super::*;
+
+    #[test]
+    fn short_name_is_kebab_and_unhashed() {
+        assert_eq!(
+            vectorize_index_name("shop-cart", "VECTORIZE_DOCS"),
+            "shop-cart-docs"
+        );
+    }
+
+    #[test]
+    fn long_name_keeps_room_for_the_environment_suffix_and_is_stable() {
+        let long = "w".repeat(70);
+        let a = vectorize_index_name(&long, "VECTORIZE_DOCS");
+        assert_eq!(a, vectorize_index_name(&long, "VECTORIZE_DOCS"));
+        assert!(a.len() + VECTORIZE_ENV_SUFFIX_ROOM <= VECTORIZE_INDEX_NAME_MAX);
+        // FNV-1a pin: the hashed form must not change between builds.
+        assert!(a.ends_with("-46a118f1"), "{a}");
+    }
+
+    #[test]
+    fn head_does_not_end_in_a_doubled_hyphen() {
+        // The cut lands on a hyphen: it is trimmed, not doubled.
+        let worker = format!("{}-{}", "a".repeat(30), "b".repeat(30));
+        let name = vectorize_index_name(&worker, "VECTORIZE_DOCS");
+        assert!(!name.contains("--"), "{name}");
+    }
 }
 
 #[cfg(test)]

@@ -893,8 +893,8 @@ export const FilterOp = {
 };
 
 /**
- * One test of a `Vectorize` query: the metadata property `field` (a dot nests,
- * as in `"author.name"`) against `op`. A query's conditions all have to hold.
+ * One test of a `Vectorize` query: the metadata property `field` (its
+ * name has no `.`; a nested property is not supported yet) against `op`. A query's conditions all have to hold.
  * The property has to be declared in the index's `@indexed`, and a vector
  * only matches once it was written after that index existed.
  */

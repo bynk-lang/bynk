@@ -24,4 +24,4 @@ other error types. H: writes return a `Mutation`. I: `bynk dev` binds only a
 named index (V2). J: the in-memory exact test double (V3); until then every
 operation faults until stubbed. K: pairing with `Ai.embed` is documentation.
 
-**Consequences.** Experimental, so no 1.0 promise. A program that does not use `Vectorize` emits byte-identically. The deploy, `bynk dev` and the in-memory double follow in later slices.
+**Consequences.** Experimental, so no 1.0 promise. A program that does not use `Vectorize` has unchanged handler and Worker output; only the emitted `bynk.cloudflare` module grows. The deploy, `bynk dev` and the in-memory double follow in later slices.

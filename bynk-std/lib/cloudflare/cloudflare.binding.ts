@@ -1663,10 +1663,10 @@ export class WorkersVectorize implements Vectorize {
   // a fault.
   private static failure(e: unknown): VectorError {
     const message = e instanceof Error ? e.message : String(e);
-    if (/index.*(not found|does not exist)|no such index/i.test(message)) {
+    if ((/\bindex\b.*(not found|does not exist)|no such index/i.test(message) && !/metadata/i.test(message))) {
       throw e instanceof Error ? e : new Error(message);
     }
-    if (/dimension/i.test(message)) return { tag: "DimensionMismatch", message };
+    if (/dimensions?\b.*(mismatch|does not match|expected)|(mismatch|expected).*\bdimensions?\b/i.test(message)) return { tag: "DimensionMismatch", message };
     if (/rate.?limit|too many requests|\b429\b/i.test(message)) return { tag: "VectorRateLimited" };
     if (/invalid|too (large|many|long)|exceed|must be|not allowed|maximum|limit/i.test(message)) {
       return { tag: "VectorInvalidInput", message };
