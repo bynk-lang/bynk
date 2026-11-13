@@ -986,6 +986,10 @@ pub struct CapabilityOp {
     pub type_params: Vec<TypeParam>,
     pub params: Vec<Param>,
     pub return_type: TypeRef,
+    /// Typed capability reads (#3458): `@name(arg)` annotations after the
+    /// return type. Internal to the standard library: the checker refuses any
+    /// outside a first-party unit (`bynk.generics.internal_op_annotation`).
+    pub annotations: Vec<Annotation>,
     pub documentation: Option<Doc>,
     pub span: Span,
     pub trivia: Trivia,

@@ -230,6 +230,10 @@
       "summary": "A capability operation's `Codable` type parameter appears in its return type. A `Codable` parameter is encoded at the call site; decoding a provider's reply raises a question this slice does not answer (what a failed decode of stored data means), so typed reads are deferred (constrained-generics slice 3)."
     },
     {
+      "code": "bynk.generics.internal_op_annotation",
+      "summary": "A capability operation carries an annotation outside the standard library, or a first-party operation's is not `@onUndecodable(miss)` or `@onUndecodable(fault)`: the reply policy of a typed read is internal to first-party operations (#3458)."
+    },
+    {
       "code": "bynk.parse.expected_capability_op",
       "summary": "Expected a capability operation."
     }

@@ -1,0 +1,11 @@
+context shop
+
+capability Store {
+    fn load(id: String) -> Effect[Option[String]] @onUndecodable(miss)
+}
+
+service probe {
+    on call() -> Effect[Int] {
+        Effect.pure(1)
+    }
+}

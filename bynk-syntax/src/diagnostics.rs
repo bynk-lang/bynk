@@ -2337,6 +2337,13 @@ pub const EXPLANATIONS: &[Explain] = &[
         anchor: "generic-sums",
     },
     Explain {
+        code: "bynk.generics.internal_op_annotation",
+        blurb: "A capability operation's reply policy, `@onUndecodable(miss)` or `@onUndecodable(fault)`, says what a reply that does not decode as the operation's payload type means. It belongs to the standard library's own operations, where the provider is reviewed with the runtime, so a capability you declare takes no annotation. Remove it.",
+        example: "capability Store {\n    fn load(id: String) -> Effect[Option[String]] @onUndecodable(miss)   // ✗ internal\n}\n\ncapability Store {\n    fn load(id: String) -> Effect[Option[String]]                    // ✓\n}",
+        page: "/book/reference/generics",
+        anchor: "capability-operations-take-key-and-codable",
+    },
+    Explain {
         code: "bynk.generics.method_on_generic_type",
         blurb: "A static method on a generic type (one with no `self`) is generic over the type's parameters, and \
                 a call has to be able to fix each of them: from its arguments, from the type the call is \
@@ -8958,6 +8965,11 @@ pub const REGISTRY: &[DiagnosticInfo] = &[
         "bynk.generics.generic_sum_embeds",
         "A generic sum type carries an `embeds` clause; embedding into a generic sum is not supported (#593).",
         &["type_decl"],
+    ),
+    dg(
+        "bynk.generics.internal_op_annotation",
+        "A capability operation carries an annotation outside the standard library, or a first-party operation's is not `@onUndecodable(miss)` or `@onUndecodable(fault)`: the reply policy of a typed read is internal to first-party operations (#3458).",
+        &["capability_op"],
     ),
     dg(
         "bynk.generics.method_on_generic_type",

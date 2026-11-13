@@ -1,0 +1,7 @@
+context a
+
+// `@onUndecodable` is the standard library's own: a user capability may not
+// declare a reply policy.
+capability Store {
+  fn load(id: String) -> Effect[Option[String]] @onUndecodable(miss)
+}
