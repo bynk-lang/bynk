@@ -28,6 +28,7 @@ per-commit history. While Bynk is pre-1.0, increments may change behaviour.
 
 | Version | Highlights |
 |---|---|
+| **v0.587.2** | A `claim` in an agent handler is settled like a service handler's, released when the handler fails and confirmed otherwise, after the state commit and events flush |
 | **v0.587.1** | `bynk revert` refusals now carry registered `bynk.revert.*` diagnostic codes, in the plan's JSON and in `bynk explain` |
 | **v0.587.0** | `Idempotency.dedup` and `remember` take a `Codable` value and are durable and shared across isolates on Cloudflare, in the Worker's implicit D1 database; an undecodable stored value reads as a miss |
 | **v0.586.0** | `Idempotency.claim` is durable and shared across isolates on Cloudflare, stored in the Worker's implicit D1 database |
