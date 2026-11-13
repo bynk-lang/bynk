@@ -149,6 +149,19 @@ pub const FIRST_PARTY_DOCS: &[Entry] = &[
         "mysql-databases-mysql",
         &["all", "first", "run", "transaction"],
     ),
+    (
+        "bynk.cloudflare",
+        "Vectorize",
+        "vector-indexes-vectorize",
+        &[
+            "upsert",
+            "insert",
+            "query",
+            "getByIds",
+            "deleteByIds",
+            "describe",
+        ],
+    ),
 ];
 
 /// The Book URL for the first-party capability a doc-link `name` (`Clock` or

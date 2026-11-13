@@ -1,0 +1,14 @@
+context shop.plain
+
+// #3479: a Worker that reaches no index declares no `[[vectorize]]`.
+
+consumes bynk
+consumes bynk.cloudflare { Vectorize }
+
+capability Docs = Vectorize @dimensions(3) @metric("cosine")
+
+service api from http {
+	on GET("/ping") () -> Effect[HttpResult[String]] by Visitor {
+		Ok("pong")
+	}
+}

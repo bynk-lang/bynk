@@ -383,6 +383,23 @@ pub fn emit_wrangler_toml(
                 hyperdrive_block(name, &binding.name)
             }
             BindingSource::Email { .. } => email_block(name, &binding.source),
+            // #3479: the index's derived name, which `bynk deploy`
+            // environment-qualifies and creates (never recreates). The binding
+            // names the index; its dimensions, metric and metadata indexes are
+            // the deploy's, not this stanza's.
+            BindingSource::VectorizeIndex { .. } => TomlBlock::array_table(
+                "vectorize",
+                vec![
+                    TomlEntry::kv("binding", name),
+                    TomlEntry::kv(
+                        "index_name",
+                        TomlValue::str(vectorize_index_name(
+                            &worker_dir_name(context),
+                            &binding.name,
+                        )),
+                    ),
+                ],
+            ),
             // #3300: a one-per-Worker capability's plain table, holding only
             // its fixed binding name (`[version_metadata]`).
             BindingSource::Singleton { capability } => {
@@ -641,6 +658,13 @@ pub fn worker_bindings(
             .filter(|b| matches!(b.source, BindingSource::Email { .. }))
             .cloned(),
     );
+    // #3479: the Vectorize indexes, after the email bindings.
+    bindings.extend(
+        instances
+            .iter()
+            .filter(|b| matches!(b.source, BindingSource::VectorizeIndex { .. }))
+            .cloned(),
+    );
     // #3300: the one-per-Worker bindings, after the databases.
     bindings.extend(singletons.iter().cloned());
     // Events track, slice 0 (spine #936, ADR 0284): a context whose handlers
@@ -784,6 +808,7 @@ pub(crate) fn binding_ts_type(source: &BindingSource) -> &'static str {
         BindingSource::D1Database { .. } => "__D1Database",
         BindingSource::StoredSecret { .. } => "__SecretsStoreSecret",
         BindingSource::Email { .. } => "__SendEmail",
+        BindingSource::VectorizeIndex { .. } => "__VectorizeIndex",
         BindingSource::Postgres { .. } | BindingSource::MySql { .. } => "__Hyperdrive",
         BindingSource::Singleton { capability } => match capability.as_str() {
             "Version" => "__WorkerVersionMetadata",
@@ -967,6 +992,31 @@ pub fn r2_bucket_name(worker: &str, binding: &str) -> String {
     let prefix = format!("{}_", bynk_check::firstparty::R2_BINDING_PREFIX);
     let stem = binding.strip_prefix(&prefix).unwrap_or(binding);
     format!("{worker}-{}", stem.to_ascii_lowercase().replace('_', "-"))
+}
+
+/// Cloudflare's longest index name, in bytes.
+const VECTORIZE_INDEX_NAME_MAX: usize = 64;
+
+/// #3479: the account-facing name of a `Vectorize` instance's index,
+/// `<worker>-<capability>` in kebab case: `shop-cart` and `VECTORIZE_DOCS` give
+/// `shop-cart-docs`. Cloudflare takes a kebab-cased name of at most 64 bytes,
+/// so a longer one keeps its head and ends in a hash of the whole name (the
+/// same inputs always give the same name). `bynk deploy` environment-qualifies
+/// it (`shop-cart-docs-staging`).
+pub fn vectorize_index_name(worker: &str, binding: &str) -> String {
+    let prefix = format!("{}_", bynk_check::firstparty::VECTORIZE_BINDING_PREFIX);
+    let stem = binding.strip_prefix(&prefix).unwrap_or(binding);
+    let full = format!("{worker}-{}", stem.to_ascii_lowercase().replace('_', "-"));
+    if full.len() <= VECTORIZE_INDEX_NAME_MAX {
+        return full;
+    }
+    // FNV-1a: stable across builds and platforms, unlike `DefaultHasher`.
+    let hash = full.bytes().fold(0xcbf2_9ce4_8422_2325_u64, |h, b| {
+        (h ^ u64::from(b)).wrapping_mul(0x0000_0100_0000_01b3)
+    });
+    let suffix = format!("-{:08x}", hash as u32);
+    let head = &full[..VECTORIZE_INDEX_NAME_MAX - suffix.len()];
+    format!("{}{suffix}", head.trim_end_matches('-'))
 }
 
 /// P3b (#2582): the account-facing name of an `Analytics` instance's dataset,

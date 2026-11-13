@@ -217,6 +217,12 @@ pub(super) fn emit_integration_harness<'a>(
                 }
                 // #3302: an in-memory outbox per participant.
                 BindingSource::Email { .. } => call(ident("__makeIntegrationEmail"), vec![]),
+                // #3479: a test never reaches an index, so the binding faults,
+                // naming itself, until the case stubs the instance.
+                BindingSource::VectorizeIndex { .. } => call(
+                    ident("__makeIntegrationVectorize"),
+                    vec![str_lit(&binding.name)],
+                ),
                 // #3300: a fixed version, the same for every participant.
                 BindingSource::Singleton { capability } if capability == "Version" => {
                     call(ident("__makeIntegrationVersionMetadata"), vec![])

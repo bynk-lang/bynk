@@ -1,0 +1,7 @@
+context demo
+
+// #3479: the metric is one of a closed set.
+
+consumes bynk.cloudflare { Vectorize }
+
+capability Docs = Vectorize @dimensions(3) @metric("manhattan")

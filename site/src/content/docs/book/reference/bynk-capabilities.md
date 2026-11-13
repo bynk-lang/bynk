@@ -491,6 +491,7 @@ Consuming it **locks the deployment unit to Cloudflare** (it cannot then target
 | **`Email`** *(experimental)* | `send(message: EmailMessage) -> Effect[Result[String, EmailError]]`. Used only through a named instance, which may restrict its senders and recipients; see [Outbound email](#outbound-email-email). |
 | **`Postgres`** *(experimental)* | `all(sql: String, params: List[PgValue]) -> Effect[Result[String, PgError]]` · `first(sql, params) -> Effect[Result[Option[String], PgError]]` · `run(sql, params) -> Effect[Result[PgRun, PgError]]` · `transaction(statements: List[PgStatement]) -> Effect[Result[List[PgRun], PgError]]`, and the compiler-lowered typed reads `select[T]` and `firstAs[T]`. Used only through a named instance; see [Postgres databases](#postgres-databases-postgres). |
 | **`MySql`** *(experimental)* | `all(sql: String, params: List[MySqlValue]) -> Effect[Result[String, MySqlError]]` · `first(sql, params) -> Effect[Result[Option[String], MySqlError]]` · `run(sql, params) -> Effect[Result[MySqlRun, MySqlError]]` · `transaction(statements: List[MySqlStatement]) -> Effect[Result[List[MySqlRun], MySqlError]]`, and the compiler-lowered typed reads `select[T]` and `firstAs[T]`. Takes an optional `@tls("…")`. Used only through a named instance; see [MySQL databases](#mysql-databases-mysql). |
+| **`Vectorize`** *(experimental)* | `upsert(vectors: List[Vector]) -> Effect[Result[Mutation, VectorError]]` · `insert(vectors) -> Effect[Result[Mutation, VectorError]]` · `query(vector: List[Float], options: QueryOptions) -> Effect[Result[List[VectorMatch], VectorError]]` · `getByIds(ids: List[String]) -> Effect[Result[List[Vector], VectorError]]` · `deleteByIds(ids) -> Effect[Result[Mutation, VectorError]]` · `describe() -> Effect[Result[IndexInfo, VectorError]]`. Used only through a named instance that states its dimensions and metric; see [Vector indexes](#vector-indexes-vectorize). |
 
 `Kv` is backed by a Worker KV namespace bound as `env.KV`; the
 `[[kv_namespaces]]` stanza is derived for you.
@@ -1466,6 +1467,89 @@ MySQL dialect. It is the switch `Postgres`'s check uses:
 
 Nothing is checked against the tables the file defines. Without a `schema.sql`
 nothing is checked, and the typed reads are not checked either.
+
+### Vector indexes: `Vectorize`
+
+`Vectorize` is a Cloudflare [Vectorize](https://developers.cloudflare.com/vectorize/)
+index: vectors with an id, searched by similarity. It is used only through a named
+instance that states the index's fixed shape, because Cloudflare cannot change an
+index's dimensions or metric after it exists:
+
+```bynk,fragment
+consumes bynk
+consumes bynk.cloudflare { Vectorize, Vector, QueryOptions, Condition, FilterEq, MetaText }
+
+capability Docs = Vectorize @dimensions(768) @metric("cosine") @indexed(["category:string", "year:number"])
+
+service search from http {
+	on GET("/search") (q: String) -> Effect[HttpResult[String]] by Visitor given Docs {
+		let hits <- Docs.query(embedding, QueryOptions {
+			topK: 5,
+			filter: [Condition { field: "category", op: FilterEq(MetaText("faq")) }],
+		})
+		match hits {
+			Ok(found) => Ok(Json.encode(found)),
+			Err(_) => ServerError("search unavailable"),
+		}
+	}
+}
+```
+
+`capability Docs = Vectorize …` binds as `VECTORIZE_DOCS`, a `[[vectorize]]` entry
+naming the index. `@dimensions(n)` (a positive `Int`) and `@metric("cosine" |
+"euclidean" | "dot-product")` are both required; a bare `given Vectorize` is
+`bynk.capability.instance_only`. `@indexed([…])` lists the metadata properties a
+query may filter on, each written `name:type` with the type `string`, `number` or
+`boolean`, at most 10; a malformed entry, an unknown type or more than 10 is
+`bynk.capability.invalid_option`. Nothing ties `@dimensions` to an embedding model:
+`Ai.embed`'s output length is a runtime fact (768 for
+`@cf/baai/bge-base-en-v1.5`, which pairs with `@metric("cosine")`), and a vector of
+the wrong length is the platform's `DimensionMismatch`, returned as a value.
+
+A `Vector` is `{ id, values: List[Float], metadata: Option[String], namespace:
+Option[String] }`. `upsert` replaces a vector with the same id in full (the platform
+does not merge values or metadata) and `insert` keeps an existing id's vector and
+writes only new ones. Metadata is a JSON object as text: write it with `Json.encode`
+and read it back with `Json.decode` in a second step, so a vector written by an older
+version of the program can be skipped or repaired instead of faulting the query.
+`query(vector, options)` returns the nearest matches, best first, as `VectorMatch`es
+with a `score` whose meaning depends on the metric (a larger cosine score is nearer;
+a smaller euclidean distance is nearer). `QueryOptions` carries `topK` (5 by default),
+`returnValues`, `returnMetadata` (`Omit`, `Indexed` or `All`), an optional `namespace`
+and `filter`, a list of `Condition`s that must all hold. A condition tests one
+metadata property with `FilterEq`, `FilterNe`, `FilterLt`, `FilterLte`, `FilterGt`,
+`FilterGte`, `FilterAnyOf` or `FilterNoneOf`, over a `MetaText`, `MetaNumber` or
+`MetaFlag`. The filter is typed, so a user-supplied string can never become an
+operator. Before calling, the binding refuses what the platform cannot take whatever
+the data (an empty property name, one with a double quote or a leading `$`, one over
+512 characters, a range over a flag, or conditions on one property that are not one
+lower and one upper bound) as `VectorInvalidInput`; the limits that drift (the
+filter's size, `topK`, a batch, metadata) are the platform's to say, and come back as
+`VectorInvalidInput(message)` as well. A property can be filtered on only when it is
+in `@indexed` and the vector was written after the metadata index existed.
+
+A write (`upsert`, `insert`, `deleteByIds`) returns a `Mutation { id }` and is
+queryable only once the platform has processed it, which takes some seconds: a
+handler that writes and then queries in the same request will not see its own write.
+`getByIds` reads vectors back with their values and metadata, and `describe` reports
+the index's `dimensions` and `metric`.
+
+A `VectorError` is `DimensionMismatch(message)`, `VectorInvalidInput(message)`,
+`VectorRateLimited` (worth retrying later) or `VectorFailed(message)` (anything else,
+with the platform's message), the `Vector` prefix because `InvalidInput`,
+`RateLimited` and `Failed` belong to other error types. Cloudflare adds error cases
+over time, so a `match` over `VectorError` needs a wildcard. A call on an index that
+does not exist is a platform fault: the deploy creates the index.
+
+A Worker whose code reaches a `Vectorize` instance declares `[[vectorize]]` with
+`binding` and `index_name`, the index named for the context and the capability
+(`shop.cart`'s `Docs` is `shop-cart-docs`). In a test every `Vectorize` operation
+faults until it is stubbed (`stub Docs.query(_, _) returns …`), so a test never
+reaches an index. Vectorize is a remote service on your Cloudflare account, so a call
+may incur charges; see Cloudflare's [Vectorize pricing](https://developers.cloudflare.com/vectorize/platform/pricing/)
+for what applies, and put a `RateLimit` in front of any handler an anonymous caller
+can reach. `Vectorize` is experimental: list `"bynk.cloudflare.Vectorize"` under
+`[unstable] allow`.
 
 ### SQL databases: `D1`
 

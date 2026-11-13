@@ -1496,6 +1496,24 @@ pub(super) fn platform_double(
                 op("runStream", "_, _")
             )
         }
+        // #3479: a test never reaches an index, so each instance faults until
+        // its operation is stubbed. (The in-memory index is a later slice.)
+        ("bynk.cloudflare", "Vectorize") => {
+            let op = |op: &str, args: &str| {
+                format!(
+                    "    async {op}() {{\n      throw new globalThis.Error(\"bynk: `{name}.{op}` is not stubbed, and a test never reaches a Vectorize index — add `stub {name}.{op}({args}) returns …`\");\n    }},\n"
+                )
+            };
+            format!(
+                "  return {{\n{}{}{}{}{}{}  }};\n",
+                op("upsert", "_"),
+                op("insert", "_"),
+                op("query", "_, _"),
+                op("getByIds", "_"),
+                op("deleteByIds", "_"),
+                op("describe", "")
+            )
+        }
         // #3301: a test never reads the account's Secrets Store, so each
         // instance faults until its `get` is stubbed. The message names the
         // instance and never a value: there is none to name.

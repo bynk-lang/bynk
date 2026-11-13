@@ -143,6 +143,19 @@ pub enum BindingSource {
         capability: String,
         tls: Option<String>,
     },
+    /// #3479: the `[[vectorize]]` binding of a `Vectorize` instance
+    /// (`capability Docs = Vectorize @dimensions(768) @metric("cosine")`), one
+    /// index per instance under a derived name that `bynk deploy`
+    /// environment-qualifies and creates with `dimensions` and `metric`, which
+    /// Cloudflare cannot change afterwards. `indexed` is each `@indexed`
+    /// entry as written (`name:type`). Never seen by handlers: they reach it
+    /// through the instance's `WorkersVectorize`.
+    VectorizeIndex {
+        capability: String,
+        dimensions: i64,
+        metric: String,
+        indexed: Vec<String>,
+    },
     /// #3300: the binding of a one-per-Worker capability of `bynk.cloudflare`
     /// (`Version`'s `[version_metadata]`), declared when the Worker's
     /// closure reaches the bare capability. Never seen by handlers: they
@@ -217,6 +230,9 @@ impl BindingSource {
             ),
             Self::Email { capability, .. } => {
                 format!("the `[[send_email]]` binding of derived capability `{capability}`")
+            }
+            Self::VectorizeIndex { capability, .. } => {
+                format!("the `[[vectorize]]` binding of derived capability `{capability}`")
             }
             Self::Postgres { capability } | Self::MySql { capability, .. } => {
                 format!("the `[[hyperdrive]]` binding of derived capability `{capability}`")
@@ -351,6 +367,7 @@ fn declared_at(
             | BindingSource::Email { capability, .. }
             | BindingSource::Postgres { capability }
             | BindingSource::MySql { capability, .. }
+            | BindingSource::VectorizeIndex { capability, .. }
             | BindingSource::D1Database { capability } => c.items.iter().find_map(|item| {
                 let CommonsItem::Capability(d) = item else {
                     return None;

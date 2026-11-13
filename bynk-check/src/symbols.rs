@@ -840,6 +840,31 @@ impl DerivedInstance {
             .flatten()
     }
 
+    /// Whether this is a `Vectorize` instance (#3479).
+    pub fn is_vectorize(&self) -> bool {
+        self.base_unit == crate::firstparty::CLOUDFLARE_UNIT && self.base_cap == "Vectorize"
+    }
+
+    /// A `Vectorize` instance's `@dimensions`; `None` for any other kind.
+    pub fn vectorize_dimensions(&self) -> Option<i64> {
+        self.is_vectorize()
+            .then(|| self.number(crate::firstparty::VECTORIZE_DIMENSIONS_OPTION))
+            .flatten()
+    }
+
+    /// A `Vectorize` instance's `@metric`; `None` for any other kind.
+    pub fn vectorize_metric(&self) -> Option<&str> {
+        self.is_vectorize()
+            .then(|| self.option(crate::firstparty::VECTORIZE_METRIC_OPTION))
+            .flatten()
+    }
+
+    /// A `Vectorize` instance's `@indexed` entries as written (`name:type`);
+    /// empty when it has none or is another kind.
+    pub fn vectorize_indexed(&self) -> &[String] {
+        self.list(crate::firstparty::VECTORIZE_INDEXED_OPTION)
+    }
+
     /// Whether this is an `Email` instance (#3302).
     pub fn is_email(&self) -> bool {
         self.base_unit == crate::firstparty::CLOUDFLARE_UNIT && self.base_cap == "Email"

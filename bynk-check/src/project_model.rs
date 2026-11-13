@@ -1186,6 +1186,7 @@ pub(crate) fn instance_example(kind: &firstparty::Instantiable) -> String {
         "Email" => "Mail",
         "Postgres" => "Main",
         "MySql" => "Legacy",
+        "Vectorize" => "Docs",
         _ => "Archives",
     };
     let mut out = format!("capability {name} = {}", kind.capability);
@@ -1208,6 +1209,9 @@ fn option_sample(option: &str) -> &'static str {
         firstparty::EMAIL_ALLOWED_RECIPIENTS_OPTION | firstparty::EMAIL_ALLOWED_SENDERS_OPTION => {
             "[\"orders@shop.example\"]"
         }
+        firstparty::VECTORIZE_DIMENSIONS_OPTION => "768",
+        firstparty::VECTORIZE_METRIC_OPTION => "\"cosine\"",
+        firstparty::VECTORIZE_INDEXED_OPTION => "[\"category:string\"]",
         _ => "\"legacy-billing\"",
     }
 }
@@ -1337,6 +1341,10 @@ fn instance_option_value(
         }
     };
     if let OptionValue::List(items) = &value {
+        // #3479: a `Vectorize`'s `@indexed` entries are metadata indexes.
+        if base == "Vectorize" {
+            return vectorize_indexed_ok(items, ann, path, errors).then_some(value);
+        }
         // Every address is checked as the platform will see it (#3302).
         for item in items {
             if !is_email_address(item) {
@@ -1390,6 +1398,29 @@ fn instance_option_value(
                     .map(|j| format!("`\"{j}\"`"))
                     .collect::<Vec<_>>()
                     .join(" and ")
+            )),
+        );
+        return None;
+    }
+    // #3479 (DECISION A): `@metric` is one of a closed set.
+    if base == "Vectorize"
+        && option == crate::firstparty::VECTORIZE_METRIC_OPTION
+        && !crate::firstparty::VECTORIZE_METRICS.contains(&text.as_str())
+    {
+        errors.push_for(
+            Some(path),
+            CompileError::new(
+                "bynk.capability.invalid_option",
+                ann.span,
+                format!("`{text}` is not a distance metric a `{base}` index can use"),
+            )
+            .with_note(format!(
+                "the metrics are {}",
+                crate::firstparty::VECTORIZE_METRICS
+                    .iter()
+                    .map(|m| format!("`\"{m}\"`"))
+                    .collect::<Vec<_>>()
+                    .join(", ")
             )),
         );
         return None;
@@ -1471,6 +1502,73 @@ fn instance_option_value(
         return None;
     }
     Some(value)
+}
+
+/// #3479 (DECISION C): whether a `Vectorize`'s `@indexed` entries are a list of
+/// at most [`firstparty::VECTORIZE_MAX_INDEXED`] metadata indexes, each
+/// `name:type` with a type the platform indexes, none repeated. Pushes the
+/// error and returns `false` otherwise.
+fn vectorize_indexed_ok(
+    items: &[String],
+    ann: &bynk_syntax::ast::Annotation,
+    path: &std::path::Path,
+    errors: &mut ErrorSink,
+) -> bool {
+    let types = firstparty::VECTORIZE_INDEXED_TYPES;
+    let problem = if items.len() > firstparty::VECTORIZE_MAX_INDEXED {
+        Some(format!(
+            "an index has at most {} metadata indexes, and `@indexed` lists {}",
+            firstparty::VECTORIZE_MAX_INDEXED,
+            items.len()
+        ))
+    } else {
+        items.iter().enumerate().find_map(|(i, item)| {
+            let Some((name, ty)) = item.split_once(':') else {
+                return Some(format!("`{}` is not `name:type`", item.escape_debug()));
+            };
+            if !types.contains(&ty) {
+                return Some(format!(
+                    "`{}` is not a type a metadata index holds",
+                    ty.escape_debug()
+                ));
+            }
+            if !is_metadata_property(name) {
+                return Some(format!(
+                    "`{}` is not a metadata property a filter can name",
+                    name.escape_debug()
+                ));
+            }
+            items[..i]
+                .iter()
+                .any(|p| p.split_once(':').is_some_and(|(n, _)| n == name))
+                .then(|| format!("`{name}` is listed twice"))
+        })
+    };
+    let Some(message) = problem else {
+        return true;
+    };
+    errors.push_for(
+        Some(path),
+        CompileError::new("bynk.capability.invalid_option", ann.span, message).with_note(format!(
+            "write `@indexed([\"category:string\", \"year:number\"])`: at most {} entries, each `name:type` with the type {}",
+            firstparty::VECTORIZE_MAX_INDEXED,
+            types
+                .iter()
+                .map(|t| format!("`{t}`"))
+                .collect::<Vec<_>>()
+                .join(", ")
+        )),
+    );
+    false
+}
+
+/// Whether `name` is a metadata property a filter can name (#3479): not empty,
+/// at most 512 characters, no `"`, `.` or `|`, and not starting with `$`.
+fn is_metadata_property(name: &str) -> bool {
+    !name.is_empty()
+        && name.chars().count() <= 512
+        && !name.starts_with('$')
+        && !name.contains(['"', '.', '|'])
 }
 
 /// Whether `name` is a Cloudflare queue name ([`instance_option_value`]):
