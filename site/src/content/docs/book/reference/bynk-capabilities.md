@@ -93,11 +93,28 @@ on POST("/hooks/:id") (id: String) -> Effect[HttpResult[String]] by Visitor give
 ```
 
 `claim` records no outcome, so there is nothing to replay: use it when the work should run
-at most once. It is separate from `dedup`/`remember`, which never see a claim. A claim is
-not released if the work after it fails, so a retry of that delivery is told
-`AlreadyClaimed` until the window ends. The key is scoped to the calling handler as for
-`dedup`. The in-memory provider makes the claim atomic within one process; it is no more
-durable than `dedup`.
+at most once. It is separate from `dedup`/`remember`, which never see a claim.
+
+In a service handler, the compiler settles the claims the handler made when it exits:
+
+- **A failure releases the claim**, so a retry can claim again. A failure is a fault, a
+  returned `Err`, or an `HttpResult` that is a 5xx (`ServerError`, `ServiceUnavailable`
+  and the rest). A 4xx, or any other result, is a completed outcome, and the claim is held
+  for the full `expiresAfter`.
+- **A claim is a lease until it is settled.** It holds for at most 30 seconds, matching
+  the `waitUntil` limit, and only then for `expiresAfter`. If the instance dies before the
+  handler settles, the claim lapses and a retry can claim again. A handler that runs
+  longer than 30 seconds can be re-claimed by a concurrent retry while it is still running;
+  when it settles it leaves the retry's claim alone, releasing or confirming only a claim
+  that is still its own.
+
+The guarantee is **at-most-once completion, not exactly-once side effects**: work done
+before a failure, such as a call to another service, can repeat on the retry. Make those
+calls idempotent too. A `claim` outside a service handler (in an agent handler, say) is not
+settled: it is held for `expiresAfter` whether or not the work succeeds.
+
+The key is scoped to the calling handler as for `dedup`. The in-memory provider makes the
+claim atomic within one process; it is no more durable than `dedup`.
 
 The `key` you pass is automatically scoped to the calling handler's own qualified name
 before it reaches the provider — `Idempotency.dedup[T]("order-1")` (and `remember`, `claim`) inside `on call` of

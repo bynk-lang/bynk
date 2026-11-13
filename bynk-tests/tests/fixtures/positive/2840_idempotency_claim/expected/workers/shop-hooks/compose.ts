@@ -15,6 +15,12 @@ export function compose(env: Env) {
     async http_POST_hooks_Param_id(id: string) {
       return handlers.api.http_POST_hooks_Param_id(id, deps);
     },
+    async http_POST_flaky_Param_id(id: string) {
+      return handlers.api.http_POST_flaky_Param_id(id, deps);
+    },
+    async ledger(id: string) {
+      return handlers.ledger.call(id, deps);
+    },
     async http_POST_replay_Param_id(id: string) {
       return handlers.replay.http_POST_replay_Param_id(id, deps);
     },
