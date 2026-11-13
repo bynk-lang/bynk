@@ -226,6 +226,10 @@
             "link": "/book/guides/effects-and-capabilities/wrap-a-library/"
           },
           {
+            "label": "Run a model from a Worker",
+            "link": "/book/guides/effects-and-capabilities/run-a-model-from-a-worker/"
+          },
+          {
             "label": "Call Workers AI through an adapter",
             "link": "/book/guides/effects-and-capabilities/call-workers-ai-through-an-adapter/"
           },
