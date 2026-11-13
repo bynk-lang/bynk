@@ -491,7 +491,7 @@ Consuming it **locks the deployment unit to Cloudflare** (it cannot then target
 | **`Email`** *(experimental)* | `send(message: EmailMessage) -> Effect[Result[String, EmailError]]`. Used only through a named instance, which may restrict its senders and recipients; see [Outbound email](#outbound-email-email). |
 | **`Postgres`** *(experimental)* | `all(sql: String, params: List[PgValue]) -> Effect[Result[String, PgError]]` · `first(sql, params) -> Effect[Result[Option[String], PgError]]` · `run(sql, params) -> Effect[Result[PgRun, PgError]]` · `transaction(statements: List[PgStatement]) -> Effect[Result[List[PgRun], PgError]]`, and the compiler-lowered typed reads `select[T]` and `firstAs[T]`. Used only through a named instance; see [Postgres databases](#postgres-databases-postgres). |
 | **`MySql`** *(experimental)* | `all(sql: String, params: List[MySqlValue]) -> Effect[Result[String, MySqlError]]` · `first(sql, params) -> Effect[Result[Option[String], MySqlError]]` · `run(sql, params) -> Effect[Result[MySqlRun, MySqlError]]` · `transaction(statements: List[MySqlStatement]) -> Effect[Result[List[MySqlRun], MySqlError]]`, and the compiler-lowered typed reads `select[T]` and `firstAs[T]`. Takes an optional `@tls("…")`. Used only through a named instance; see [MySQL databases](#mysql-databases-mysql). |
-| **`Vectorize`** *(experimental)* | `upsert(vectors: List[Vector]) -> Effect[Result[Mutation, VectorError]]` · `insert(vectors) -> Effect[Result[Mutation, VectorError]]` · `query(vector: List[Float], options: QueryOptions) -> Effect[Result[List[VectorMatch], VectorError]]` · `getByIds(ids: List[String]) -> Effect[Result[List[Vector], VectorError]]` · `deleteByIds(ids) -> Effect[Result[Mutation, VectorError]]` · `describe() -> Effect[Result[IndexInfo, VectorError]]`. Used only through a named instance that states its dimensions and metric; see [Vector indexes](#vector-indexes-vectorize). |
+| **`Vectorize`** *(experimental)* | `upsert(vectors: List[Vector]) -> Effect[Result[Mutation, VectorError]]` · `insert(vectors) -> Effect[Result[Mutation, VectorError]]` · `upsertValue[M: Codable](vectors: List[VectorOf[M]]) -> Effect[Result[Mutation, VectorError]]` · `query(vector: List[Float], options: QueryOptions) -> Effect[Result[List[VectorMatch], VectorError]]` · `getByIds(ids: List[String]) -> Effect[Result[List[Vector], VectorError]]` · `deleteByIds(ids) -> Effect[Result[Mutation, VectorError]]` · `describe() -> Effect[Result[IndexInfo, VectorError]]`. Used only through a named instance that states its dimensions and metric; see [Vector indexes](#vector-indexes-vectorize). |
 | **`AiSearch`** *(experimental)* | `search(query: String, options: SearchOptions) -> Effect[Result[List[SearchHit], SearchError]]` · `answer(messages: List[ChatMessage], options: SearchOptions) -> Effect[Result[SearchAnswer, SearchError]]`. Used only through a named instance that names an existing AI Search instance; see [AI Search](#ai-search-aisearch). |
 
 `Kv` is backed by a Worker KV namespace bound as `env.KV`; the
@@ -1514,6 +1514,12 @@ does not merge values or metadata) and `insert` keeps an existing id's vector an
 writes only new ones. Metadata is a JSON object as text: write it with `Json.encode`
 and read it back with `Json.decode` in a second step, so a vector written by an older
 version of the program can be skipped or repaired instead of faulting the query.
+`upsertValue(vectors)` is `upsert` with typed metadata: a `VectorOf[M]` is a `Vector`
+whose `metadata` is an `Option[M]`, encoded by `M`'s codec as `Queue.sendValue` encodes
+a message (`M` is inferred from the argument), so `Docs.upsertValue([VectorOf { id,
+values, metadata: Some(meta) }])` writes what `upsert` writes with `Json.encode(meta)`.
+Metadata is a JSON object on the platform, so an `M` that does not encode to an object
+(a bare `String`, say) faults. Only writes are typed; reads stay as text. An `Option` field of `M` is written as a tagged object, as `Json.encode` writes it, so keep the properties you filter on non-`Option`.
 `query(vector, options)` returns the nearest matches, best first, as `VectorMatch`es
 with a `score` whose meaning depends on the metric (a larger cosine score is nearer;
 a smaller euclidean distance is nearer). `QueryOptions` carries `topK` (5 by default),

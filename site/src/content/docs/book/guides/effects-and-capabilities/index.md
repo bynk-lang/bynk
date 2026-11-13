@@ -28,6 +28,7 @@ Effects are explicit and capability-gated: a handler declares what it needs via
 - [Run a model from a Worker](/book/guides/effects-and-capabilities/run-a-model-from-a-worker/)
 - [Answer questions from your documents with AI Search](/book/guides/effects-and-capabilities/answer-questions-from-your-documents/)
 - [Call Workers AI through an adapter](/book/guides/effects-and-capabilities/call-workers-ai-through-an-adapter/)
+- [Search by meaning with Vectorize and Workers AI](/book/guides/effects-and-capabilities/search-by-meaning-with-vectorize/)
 - [Sign and verify data](/book/guides/effects-and-capabilities/sign-and-verify-data/)
 
 **See also:** [Reference — Capabilities & providers](/book/reference/capabilities/),

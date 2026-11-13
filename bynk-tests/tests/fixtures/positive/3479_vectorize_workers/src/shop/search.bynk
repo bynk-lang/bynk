@@ -6,7 +6,9 @@ context shop.search
 // used, so the Worker declares no `[[kv_namespaces]]`.
 
 consumes bynk
-consumes bynk.cloudflare { Kv, Vectorize, Vector, VectorError, QueryOptions, Condition, FilterOp, MetaValue, MetadataScope }
+consumes bynk.cloudflare { Kv, Vectorize, Vector, VectorOf, VectorError, QueryOptions, Condition, FilterOp, MetaValue, MetadataScope }
+
+type Meta = { category: String, year: Int }
 
 capability Docs = Vectorize @dimensions(32) @metric("cosine") @indexed(["category:string", "year:number"])
 capability Scratch = Vectorize @dimensions(64) @metric("euclidean")
@@ -17,6 +19,14 @@ service api from http {
 		match written {
 			Ok(mutation) => Ok(mutation.id),
 			Err(DimensionMismatch(message)) => ServerError(message),
+			Err(_) => ServerError("index unavailable"),
+		}
+	}
+
+	on PUT("/typed") (body: String) -> Effect[HttpResult[String]] by Visitor given Docs {
+		let written <- Docs.upsertValue([VectorOf { id: body, values: [0.1, 0.2, 0.3], metadata: Some(Meta { category: "faq", year: 2026 }) }])
+		match written {
+			Ok(mutation) => Ok(mutation.id),
 			Err(_) => ServerError("index unavailable"),
 		}
 	}

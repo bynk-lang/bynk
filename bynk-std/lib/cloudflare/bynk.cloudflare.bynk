@@ -68,6 +68,7 @@ adapter bynk.cloudflare {
 		MySqlStatement,
 		MySqlReadError,
 		Vector,
+		VectorOf,
 		MetaValue,
 		FilterOp,
 		Condition,
@@ -1202,6 +1203,22 @@ adapter bynk.cloudflare {
 	}
 
 	---
+	One vector to write with typed metadata: a `Vector` whose `metadata` is a
+	value of `M`, which `upsertValue` encodes with `M`'s codec. Reading is not
+	typed: `getByIds` and a query's matches give the metadata as text, so a
+	vector stored by an older version of `M` can be skipped or repaired.
+	Keep the properties a query filters on plain (not `Option`): an `Option` is
+	written as a tagged object, as `Json.encode` writes it, so a filter on it
+	would never match.
+	---
+	type VectorOf[M] = {
+		id: String,
+		values: List[Float],
+		metadata: Option[M] = None,
+		namespace: Option[String] = None,
+	}
+
+	---
 	A metadata value a `Condition` compares a property with: text, a number or
 	a flag.
 	---
@@ -1326,7 +1343,9 @@ adapter bynk.cloudflare {
 	Metadata indexes should exist before the vectors that carry the property.
 
 	`upsert` writes vectors, replacing any with the same id in full; `insert`
-	writes only vectors whose id is new. `query(vector, options)` returns the
+	writes only vectors whose id is new. `upsertValue(vectors)` is `upsert` with
+	the metadata of each `VectorOf[M]` encoded by `M`'s codec, as
+	`Queue.sendValue` encodes a message. `query(vector, options)` returns the
 	nearest matches, best first. `getByIds` reads vectors back, `deleteByIds`
 	removes them, and `describe` reports the index's dimensions and metric.
 	Metadata is JSON text: write it with `Json.encode` and read it with
@@ -1358,6 +1377,9 @@ adapter bynk.cloudflare {
 	capability Vectorize {
 		fn upsert(vectors: List[Vector]) -> Effect[Result[Mutation, VectorError]]
 		fn insert(vectors: List[Vector]) -> Effect[Result[Mutation, VectorError]]
+		fn upsertValue[M: Codable](
+			vectors: List[VectorOf[M]]
+		) -> Effect[Result[Mutation, VectorError]]
 		fn query(
 			vector: List[Float],
 			options: QueryOptions

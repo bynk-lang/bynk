@@ -2,15 +2,30 @@
 // context shop.retrieval
 
 import { Ok, Err, Some, None, type Result, type Option } from "../__bynk_runtime/result.js";
-import type { ValidationError } from "../__bynk_runtime/errors.js";
+import type { ValidationError, DecodeError } from "../__bynk_runtime/errors.js";
+import type { __JsonValue, __BoundaryError } from "../__bynk_runtime/boundary.js";
 
-import { IndexInfo, Mutation, QueryOptions, Vector, VectorError, VectorMatch } from "../bynk/cloudflare.js";
+import { IndexInfo, Mutation, QueryOptions, Vector, VectorError, VectorMatch, VectorOf } from "../bynk/cloudflare.js";
 
 import * as bynk_cloudflare from "../bynk/cloudflare.js";
+
+export interface Meta {
+  readonly category: string;
+  readonly year: number;
+}
+
+export const Meta = {
+};
 
 export type Docs = bynk_cloudflare.Vectorize;
 
 export const __DocsToken: symbol = globalThis.Symbol("Docs");
+
+export const typed = {
+  async call(vectors: readonly VectorOf<Meta>[], deps: { Docs: Docs }): globalThis.Promise<Result<Mutation, VectorError>> {
+    return deps.Docs.upsertValue(__serialise_List_VectorOf_Meta(vectors));
+  },
+};
 
 export const writer = {
   async call(vectors: readonly Vector[], deps: { Docs: Docs }): globalThis.Promise<Result<Mutation, VectorError>> {
@@ -54,6 +69,9 @@ export interface __ShopRetrievalDeps {
 
 export function __makeSurface(deps: __ShopRetrievalDeps) {
   return {
+    async typed(vectors: readonly VectorOf<Meta>[]): globalThis.Promise<Result<Mutation, VectorError>> {
+      return typed.call(vectors, deps);
+    },
     async writer(vectors: readonly Vector[]): globalThis.Promise<Result<Mutation, VectorError>> {
       return writer.call(vectors, deps);
     },
@@ -73,4 +91,186 @@ export function __makeSurface(deps: __ShopRetrievalDeps) {
       return describer.call(deps);
     },
   };
+}
+
+export function __serialise_Meta(value: Meta): __JsonValue {
+  return {
+    category: value.category as __JsonValue,
+    year: ((v: number) => { if (!globalThis.Number.isSafeInteger(v)) throw new globalThis.Error("Int outside the safe-integer range at boundary"); return v as __JsonValue; })(value.year),
+  };
+}
+
+export function __deserialise_Meta(json: __JsonValue, path: string = "$"): Result<Meta, __BoundaryError> {
+  if (typeof json !== "object" || json === null || globalThis.Array.isArray(json)) {
+    return Err({ kind: "StructuralMismatch", path, expected: "object", actual: typeof json });
+  }
+  const obj = json as { [k: string]: __JsonValue };
+  if (typeof obj["category"] !== "string") {
+    return Err({ kind: "StructuralMismatch", path: `${path}.category`, expected: "string", actual: typeof obj["category"] });
+  }
+  const __category = obj["category"];
+  if (typeof obj["year"] !== "number") {
+    return Err({ kind: "StructuralMismatch", path: `${path}.year`, expected: "number", actual: typeof obj["year"] });
+  }
+  if (!globalThis.Number.isSafeInteger(obj["year"])) {
+    return Err({ kind: "StructuralMismatch", path: `${path}.year`, expected: "safe integer", actual: String(obj["year"]) });
+  }
+  const __year = obj["year"];
+  return Ok({ category: __category, year: __year } as Meta);
+}
+
+
+export function __serialise_List_VectorOf_Meta(value: readonly VectorOf<Meta>[]): __JsonValue {
+  return value.map((v) => __serialise_VectorOf_Meta(v));
+}
+
+export function __deserialise_List_VectorOf_Meta(json: __JsonValue, path: string = "$"): Result<readonly VectorOf<Meta>[], __BoundaryError> {
+  if (!globalThis.Array.isArray(json)) {
+    return Err({ kind: "StructuralMismatch", path, expected: "array", actual: typeof json });
+  }
+  const out: VectorOf<Meta>[] = [];
+  for (let i = 0; i < json.length; i++) {
+  const item = json[i];
+  const __r_el = __deserialise_VectorOf_Meta(item, `${path}[${i}]`);
+  if (__r_el.tag === "Err") return __r_el;
+  const __el = __r_el.value;
+  out.push(__el as VectorOf<Meta>);
+  }
+  return Ok(out);
+}
+
+export function __serialise_VectorOf_Meta(value: VectorOf<Meta>): __JsonValue {
+  return {
+    id: value.id as __JsonValue,
+    values: __serialise_List_Float(value.values),
+    metadata: __serialise_Option_Meta(value.metadata),
+    namespace: __serialise_Option_String(value.namespace),
+  };
+}
+
+export function __deserialise_VectorOf_Meta(json: __JsonValue, path: string = "$"): Result<VectorOf<Meta>, __BoundaryError> {
+  if (typeof json !== "object" || json === null || globalThis.Array.isArray(json)) {
+    return Err({ kind: "StructuralMismatch", path, expected: "object", actual: typeof json });
+  }
+  const obj = json as { [k: string]: __JsonValue };
+  if (typeof obj["id"] !== "string") {
+    return Err({ kind: "StructuralMismatch", path: `${path}.id`, expected: "string", actual: typeof obj["id"] });
+  }
+  const __id = obj["id"];
+  const __r_values = __deserialise_List_Float(obj["values"], `${path}.values`);
+  if (__r_values.tag === "Err") return __r_values;
+  const __values = __r_values.value;
+  const __d_metadata: __JsonValue = "metadata" in obj ? obj["metadata"] : { kind: "None" };
+  const __r_metadata = __deserialise_Option_Meta(__d_metadata, `${path}.metadata`);
+  if (__r_metadata.tag === "Err") return __r_metadata;
+  const __metadata = __r_metadata.value;
+  const __d_namespace: __JsonValue = "namespace" in obj ? obj["namespace"] : { kind: "None" };
+  const __r_namespace = __deserialise_Option_String(__d_namespace, `${path}.namespace`);
+  if (__r_namespace.tag === "Err") return __r_namespace;
+  const __namespace = __r_namespace.value;
+  return Ok({ id: __id, values: __values, metadata: __metadata, namespace: __namespace } as VectorOf<Meta>);
+}
+
+export function __serialise_List_Float(value: readonly number[]): __JsonValue {
+  return value.map((v) => ((v: number) => { if (!globalThis.Number.isFinite(v)) throw new globalThis.Error("non-finite Float at boundary"); return v as __JsonValue; })(v));
+}
+
+export function __deserialise_List_Float(json: __JsonValue, path: string = "$"): Result<readonly number[], __BoundaryError> {
+  if (!globalThis.Array.isArray(json)) {
+    return Err({ kind: "StructuralMismatch", path, expected: "array", actual: typeof json });
+  }
+  const out: number[] = [];
+  for (let i = 0; i < json.length; i++) {
+  const item = json[i];
+  if (typeof item !== "number") {
+    return Err({ kind: "StructuralMismatch", path: `${path}[${i}]`, expected: "number", actual: typeof item });
+  }
+  if (!globalThis.Number.isFinite(item)) {
+    return Err({ kind: "StructuralMismatch", path: `${path}[${i}]`, expected: "finite number", actual: String(item) });
+  }
+  const __el = item;
+  out.push(__el as number);
+  }
+  return Ok(out);
+}
+
+export function __serialise_Option_Meta(value: Option<Meta>): __JsonValue {
+  if (value.tag === "Some") return { kind: "Some", value: __serialise_Meta(value.value) };
+  return { kind: "None" };
+}
+
+function __option_value_Meta(raw: __JsonValue, at: string): Result<unknown, __BoundaryError> {
+  const __r_v = __deserialise_Meta(raw, at);
+  if (__r_v.tag === "Err") return __r_v;
+  const __v = __r_v.value;
+  return Ok(__v);
+}
+
+export function __deserialise_Option_Meta(json: __JsonValue, path: string = "$"): Result<Option<Meta>, __BoundaryError> {
+  if (json === undefined || json === null) {
+    return Ok(None as Option<Meta>);
+  }
+  if (typeof json === "object" && !globalThis.Array.isArray(json)) {
+    const obj = json as { [k: string]: __JsonValue };
+    const __keys = globalThis.Object.keys(obj);
+    if (obj["kind"] === "None" && __keys.length === 1) {
+      return Ok(None as Option<Meta>);
+    }
+    if (obj["kind"] === "Some" && __keys.length === 2 && "value" in obj) {
+      const __t = __option_value_Meta(obj["value"], `${path}.value`);
+      if (__t.tag === "Err") {
+        return __t;
+      }
+      return Ok(Some(__t.value as Meta) as Option<Meta>);
+    }
+  }
+  const __b = __option_value_Meta(json, path);
+  if (__b.tag === "Ok") {
+    return Ok(Some(__b.value as Meta) as Option<Meta>);
+  }
+  if (__b.error.kind === "StructuralMismatch" && __b.error.path === path && !__b.error.expected.endsWith(" | null | {\"kind\": \"None\"} | {\"kind\": \"Some\", \"value\": ...}")) {
+    return Err({ ...__b.error, expected: __b.error.expected + " | null | {\"kind\": \"None\"} | {\"kind\": \"Some\", \"value\": ...}" });
+  }
+  return __b;
+}
+
+export function __serialise_Option_String(value: Option<string>): __JsonValue {
+  if (value.tag === "Some") return { kind: "Some", value: value.value as __JsonValue };
+  return { kind: "None" };
+}
+
+function __option_value_String(raw: __JsonValue, at: string): Result<unknown, __BoundaryError> {
+  if (typeof raw !== "string") {
+    return Err({ kind: "StructuralMismatch", path: at, expected: "string", actual: typeof raw });
+  }
+  const __v = raw;
+  return Ok(__v);
+}
+
+export function __deserialise_Option_String(json: __JsonValue, path: string = "$"): Result<Option<string>, __BoundaryError> {
+  if (json === undefined || json === null) {
+    return Ok(None as Option<string>);
+  }
+  if (typeof json === "object" && !globalThis.Array.isArray(json)) {
+    const obj = json as { [k: string]: __JsonValue };
+    const __keys = globalThis.Object.keys(obj);
+    if (obj["kind"] === "None" && __keys.length === 1) {
+      return Ok(None as Option<string>);
+    }
+    if (obj["kind"] === "Some" && __keys.length === 2 && "value" in obj) {
+      const __t = __option_value_String(obj["value"], `${path}.value`);
+      if (__t.tag === "Err") {
+        return __t;
+      }
+      return Ok(Some(__t.value as string) as Option<string>);
+    }
+  }
+  const __b = __option_value_String(json, path);
+  if (__b.tag === "Ok") {
+    return Ok(Some(__b.value as string) as Option<string>);
+  }
+  if (__b.error.kind === "StructuralMismatch" && __b.error.path === path && !__b.error.expected.endsWith(" | null | {\"kind\": \"None\"} | {\"kind\": \"Some\", \"value\": ...}")) {
+    return Err({ ...__b.error, expected: __b.error.expected + " | null | {\"kind\": \"None\"} | {\"kind\": \"Some\", \"value\": ...}" });
+  }
+  return __b;
 }
