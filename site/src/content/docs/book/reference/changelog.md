@@ -3,7 +3,7 @@ title: Version compatibility & changelog
 ---
 Bynk is pre-1.0 and developed in small, spec-first increments (see
 [Versioning & roadmap](/book/about/versioning-and-roadmap/)). This book is
-written against **v0.596**.
+written against **v0.597**.
 
 This page is a high-level summary of notable increments, not an exhaustive
 per-commit history. While Bynk is pre-1.0, increments may change behaviour.
@@ -28,6 +28,7 @@ per-commit history. While Bynk is pre-1.0, increments may change behaviour.
 
 | Version | Highlights |
 |---|---|
+| **v0.597.0** | Under `bynk dev` a `Vectorize` instance is bound, remotely, to the index `[dev.vectorize-index] <Capability> = "<index-name>"` names in `bynk.toml` and never to the deploy's, an instance with no entry is unbound and a call to it fails saying how to bind it, the first call checks the index against the declaration, and the first call prints a one-time warning that links to Cloudflare's pricing page unless `[dev] vectorize = "allow"` acknowledges it |
 | **v0.596.0** | `bynk.cloudflare` gains `AiSearch`, a linked instance kind for an existing AI Search instance named by a required `@instance`, with `search` and `answer`, a typed filter and typed errors, emitted as `[[ai_search]]`; every operation faults until stubbed in a test |
 | **v0.595.0** | In `bynk test` a `Vectorize` instance is an exact in-memory index built from its declaration (dimensions, metric, `@indexed`): it ranks by the platform's score semantics, keeps insert and upsert apart, partitions namespaces, applies all eight filter operators and the documented limits, and `stub` still replaces any operation; a write is visible at once, which production's asynchronous upserts are not |
 | **v0.594.1** | `Vectorize` `@dimensions` below 32 is refused at compile time (Cloudflare's minimum), and a deploy that creates a metadata index waits until it is listed before pushing the Worker |
