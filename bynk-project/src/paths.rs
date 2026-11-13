@@ -292,7 +292,7 @@ fn table_list(conj: &str) -> String {
 }
 
 /// The closest of `candidates` to `name`, if any is within two edits.
-pub(crate) fn did_you_mean<'a>(
+pub fn did_you_mean<'a>(
     name: &str,
     candidates: impl IntoIterator<Item = &'a str>,
 ) -> Option<&'a str> {

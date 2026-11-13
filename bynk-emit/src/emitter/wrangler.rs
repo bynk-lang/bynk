@@ -1117,6 +1117,7 @@ pub fn materialise_vectorize_index_names(
         .parse()
         .map_err(|e| format!("invalid wrangler.toml: {e}"))?;
     let mut changed = false;
+    let mut found = std::collections::BTreeSet::new();
     let item = if environment == "default" {
         doc.get_mut("vectorize")
     } else {
@@ -1125,14 +1126,13 @@ pub fn materialise_vectorize_index_names(
             .and_then(|e| e.get_mut("vectorize"))
     };
     let mut set = |entry: &mut dyn toml_edit::TableLike| {
-        let Some(name) = entry
-            .get("binding")
-            .and_then(|b| b.as_str())
-            .and_then(|b| names.get(b))
-            .cloned()
-        else {
+        let Some(binding) = entry.get("binding").and_then(|b| b.as_str()) else {
             return;
         };
+        let Some(name) = names.get(binding).cloned() else {
+            return;
+        };
+        found.insert(binding.to_string());
         if let Some(index) = entry.get_mut("index_name")
             && index.as_str() != Some(name.as_str())
         {
@@ -1152,6 +1152,17 @@ pub fn materialise_vectorize_index_names(
                 }
             }
         }
+    }
+    // An adopted binding with no stanza to name would bind the derived name.
+    if let Some(missing) = names.keys().find(|b| !found.contains(*b)) {
+        return Err(format!(
+            "no `[[vectorize]]` entry for `{missing}` in {}",
+            if environment == "default" {
+                "the configuration".to_string()
+            } else {
+                format!("`[env.{environment}]`")
+            }
+        ));
     }
     Ok(if changed {
         doc.to_string()
@@ -1646,6 +1657,17 @@ fn kv_entries(doc: &toml_edit::DocumentMut) -> impl Iterator<Item = (&str, &str)
 #[cfg(test)]
 mod vectorize_name_tests {
     use super::*;
+
+    #[test]
+    fn an_adopted_binding_with_no_stanza_is_an_error_not_a_silent_derived_name() {
+        let names = std::collections::BTreeMap::from([(
+            "VECTORIZE_DOCS".to_string(),
+            "docs-prod".to_string(),
+        )]);
+        let text = "name = \"w\"\n\n[env.production]\nname = \"w-production\"\n";
+        let err = materialise_vectorize_index_names(text, "production", &names).unwrap_err();
+        assert!(err.contains("VECTORIZE_DOCS"), "{err}");
+    }
 
     #[test]
     fn short_name_is_kebab_and_unhashed() {

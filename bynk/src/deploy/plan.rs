@@ -2537,10 +2537,11 @@ pub(crate) fn derive_plan<'a>(
                                 recorded_vectorize(lock, worker, &v.binding, environment);
                             PlanVectorize {
                                 binding: &v.binding,
-                                action: if recorded.is_some_and(|r| r.name == index) {
-                                    "reuse"
-                                } else if v.adopt.is_some() {
+                                action: if v.adopt.is_some() {
+                                    // Adopted stays `adopt` once recorded, as Hyperdrive's does.
                                     "adopt"
+                                } else if recorded.is_some_and(|r| r.name == index) {
+                                    "reuse"
                                 } else {
                                     "create"
                                 },
@@ -2931,7 +2932,7 @@ pub(crate) fn vectorize_index_problem(
     lock: &DeployLock,
     environment: &str,
 ) -> Option<String> {
-    let mut seen: BTreeMap<String, (&str, &str)> = BTreeMap::new();
+    let mut seen: BTreeMap<String, (&str, &str, bool)> = BTreeMap::new();
     for (worker, declared) in resources {
         for index in &declared.vectorize_indexes {
             let name = index.physical_name(environment);
@@ -2948,11 +2949,15 @@ pub(crate) fn vectorize_index_problem(
                     index.binding
                 ));
             }
-            if let Some((other_worker, other_binding)) =
-                seen.insert(name.clone(), (worker, &index.binding))
+            let adopted = index.adopt.is_some();
+            // Adopters may share an index (it is another system's, or
+            // another environment's); a created index is one capability's.
+            if let Some((other_worker, other_binding, other_adopted)) =
+                seen.insert(name.clone(), (worker, &index.binding, adopted))
+                && !(adopted && other_adopted)
             {
                 return Some(format!(
-                    "`{}` of `{worker}` and `{other_binding}` of `{other_worker}` would both be the Vectorize index `{name}`; index names are scoped to the account, so rename one capability",
+                    "`{}` of `{worker}` and `{other_binding}` of `{other_worker}` would both be the Vectorize index `{name}`; index names are scoped to the account, so rename one capability, or adopt the index for both in `[deploy.vectorize]`",
                     index.binding
                 ));
             }
@@ -2963,13 +2968,14 @@ pub(crate) fn vectorize_index_problem(
                     .flat_map(|(w, instances)| instances.iter().map(move |(b, r)| (w, b, r)))
                     .find(|(w, b, r)| {
                         r.name == name
+                            && !(r.adopted && adopted)
                             && (other_env != environment
                                 || w.as_str() != worker
                                 || **b != index.binding)
                     });
                 if let Some((other_worker, other_binding, _)) = clash {
                     return Some(format!(
-                        "`{}` of `{worker}` would be the Vectorize index `{name}`, which `{other_binding}` of `{other_worker}` already holds in environment `{other_env}`; index names are scoped to the account, so rename one capability",
+                        "`{}` of `{worker}` would be the Vectorize index `{name}`, which `{other_binding}` of `{other_worker}` already holds in environment `{other_env}`; index names are scoped to the account, so rename one capability, or adopt the index for both in `[deploy.vectorize]`",
                         index.binding
                     ));
                 }
@@ -3366,6 +3372,14 @@ pub(crate) mod tests {
         assert!(
             adopt.contains("vectorize adopt docs-prod (VECTORIZE_DOCS, 768, cosine"),
             "{adopt}"
+        );
+        // Once recorded, an adopted index is still planned as `adopt`.
+        let mut recorded = DeployLock::default();
+        recorded.record_vectorize("default", "shop", "VECTORIZE_DOCS", "docs-prod", true);
+        let again = plan_report(&plan_of(&order, &adopted, &recorded), DeployFormat::Short);
+        assert!(
+            again.contains("vectorize adopt docs-prod (VECTORIZE_DOCS, 768, cosine"),
+            "{again}"
         );
         // A staging deploy names the qualified index.
         let staging = derive_plan(

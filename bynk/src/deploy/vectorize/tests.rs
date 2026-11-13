@@ -480,3 +480,58 @@ fn an_adopted_name_the_platform_refuses_points_at_bynk_toml_not_the_capability()
         "{message}"
     );
 }
+
+fn adopting_decl(binding: &str, name: &str, adopt: &str) -> VectorizeDecl {
+    let mut d = decl(&[]);
+    d.binding = binding.into();
+    d.name = name.into();
+    d.adopt = Some(adopt.into());
+    d
+}
+
+#[test]
+fn adopters_may_share_an_index_but_a_created_one_may_not_be_shared() {
+    let shared = |a: VectorizeDecl, b: VectorizeDecl| {
+        BTreeMap::from([
+            (
+                "shop".to_string(),
+                Resources {
+                    vectorize_indexes: vec![a],
+                    ..Default::default()
+                },
+            ),
+            (
+                "blog".to_string(),
+                Resources {
+                    vectorize_indexes: vec![b],
+                    ..Default::default()
+                },
+            ),
+        ])
+    };
+    let lock = DeployLock::default();
+    let both = shared(
+        adopting_decl("VECTORIZE_DOCS", "shop-docs", "docs-shared"),
+        adopting_decl("VECTORIZE_DOCS", "blog-docs", "docs-shared"),
+    );
+    assert!(vectorize_index_problem(&both, &lock, "production").is_none());
+    // Another environment already recording the shared name is no clash either.
+    let mut recorded = DeployLock::default();
+    recorded.record_vectorize("staging", "shop", "VECTORIZE_DOCS", "docs-shared", true);
+    assert!(vectorize_index_problem(&both, &recorded, "production").is_none());
+}
+
+#[test]
+fn an_entry_naming_no_capability_is_refused_with_the_nearest_binding() {
+    let dir = std::env::temp_dir().join(format!("bynk-vz-typo-{}", std::process::id()));
+    std::fs::create_dir_all(&dir).unwrap();
+    std::fs::write(
+        dir.join("bynk.toml"),
+        "[project]\nname = \"shop\"\nversion = \"0.1.0\"\n\n[deploy.vectorize.Doc]\nindex = { production = \"docs-prod\" }\n",
+    )
+    .unwrap();
+    let mut all = BTreeMap::from([("shop".to_string(), resources(&[]))]);
+    assert!(apply_vectorize_adoptions(&dir, &mut all, "production").is_err());
+    assert_eq!(all["shop"].vectorize_indexes[0].adopt, None);
+    let _ = std::fs::remove_dir_all(&dir);
+}

@@ -636,7 +636,11 @@ index = { production = "docs-prod" }
 An adopted index must exist, since the deploy never creates it, and must match the
 declaration's `@dimensions` and `@metric`, since it never changes one; a mismatch
 fails the deploy. It is never deleted, even by `--prune`, and its name is used as
-written (no environment suffix). See [Deploy to
+written (no environment suffix). Capabilities and environments may adopt the same
+index. An entry that names no `Vectorize` capability in the project is an error,
+since the deploy would otherwise create a new, empty index beside the one you meant;
+an environment the entry does not name still creates its own, and the deploy says so.
+See [Deploy to
 Cloudflare](/book/guides/projects-build-and-deployment/deploy-to-cloudflare/#vectorize-indexes).
 
 ### Acknowledging a remote-only binding

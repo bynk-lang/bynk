@@ -270,6 +270,42 @@ pub(crate) fn apply_vectorize_adoptions(
         bynk_project::vectorize::try_read_vectorize_deploy(project_root).map_err(|e| {
             eprintln!("bynk: {e}");
         })?;
+    // An entry that names no declared capability would be silently ignored,
+    // and the deploy would create a fresh, empty index beside the one the team
+    // meant to adopt: refuse it, with the nearest binding when there is one.
+    let bindings: Vec<&str> = resources
+        .values()
+        .flat_map(|r| r.vectorize_indexes.iter().map(|d| d.binding.as_str()))
+        .collect();
+    for capability in settings.keys() {
+        if resources
+            .values()
+            .flat_map(|r| &r.vectorize_indexes)
+            .any(|d| d.matches_capability(capability))
+        {
+            continue;
+        }
+        let wanted = bynk_check::worker_bindings::instance_binding_name(
+            bynk_check::firstparty::VECTORIZE_BINDING_PREFIX,
+            capability,
+        );
+        let hint = bynk_project::paths::did_you_mean(&wanted, bindings.iter().copied())
+            .map(|b| format!("; did you mean the capability whose binding is `{b}`?"))
+            .unwrap_or_default();
+        eprintln!(
+            "bynk: `[deploy.vectorize.{capability}]` in bynk.toml names no `Vectorize` capability in this project{hint}; an entry that matches nothing would have the deploy create a new, empty index instead of adopting yours"
+        );
+        return Err(());
+    }
+    for (capability, entry) in &settings {
+        if !entry.index.contains_key(environment) {
+            let named: Vec<&str> = entry.index.keys().map(String::as_str).collect();
+            eprintln!(
+                "bynk: note: `[deploy.vectorize.{capability}]` adopts an index only for {}; under `{environment}` the deploy creates one",
+                named.join(", ")
+            );
+        }
+    }
     for declared in resources.values_mut() {
         for decl in &mut declared.vectorize_indexes {
             decl.adopt = settings
