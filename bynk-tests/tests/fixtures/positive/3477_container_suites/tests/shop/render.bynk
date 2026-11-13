@@ -1,0 +1,27 @@
+suite shop.render
+
+// #3477: an unstubbed operation faults, a stubbed `Ok` is what the handler
+// sees, and a typed error is matched.
+
+case "an unstubbed send faults" {
+	expect api.GET("/render/:name", "a") by Visitor faults
+}
+
+case "a stubbed send returns its response" {
+	stub Renderer.send(_, _) returns Ok(Response { status: 200, headers: Map.empty(), body: "<svg/>" })
+	let r <- api.GET("/render/:name", "a") by Visitor
+	expect r is Ok("<svg/>")
+	expect Renderer.send called once
+}
+
+case "an unavailable container is matched" {
+	stub Renderer.send(_, _) returns Err(Unavailable)
+	let r <- api.GET("/render/:name", "a") by Visitor
+	expect r is ServiceUnavailable("no capacity")
+}
+
+case "a failed start carries its message" {
+	stub Renderer.send(_, _) returns Err(StartFailed("the port never listened"))
+	let r <- api.GET("/render/:name", "a") by Visitor
+	expect r is ServerError("the port never listened")
+}

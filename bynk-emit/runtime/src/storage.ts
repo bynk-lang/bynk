@@ -1013,6 +1013,29 @@ export function makeIntegrationVectorize(binding: string): VectorizeIndex {
 }
 
 /**
+ * The Durable Object namespace of a `Container` instance (#3477), as the
+ * multi-Worker integration harness binds it as `env.<binding>`. There is no
+ * in-process container, so every call faults, naming the binding, until the
+ * case stubs the instance (`stub Renderer.send(_, _) returns …`). An in-memory
+ * echo is deliberately not offered: it would pass cases a real image fails.
+ */
+export function makeIntegrationContainer(binding: string): {
+  idFromName(name: string): string;
+  get(id: string): { fetch(request: unknown): Promise<never> };
+} {
+  return {
+    idFromName: (name) => name,
+    get: (id) => ({
+      fetch: async (): Promise<never> => {
+        throw new globalThis.Error(
+          `bynk: the \`${binding}\` container \`${id}\` is not stubbed, and a test never starts a container — stub the operation the case calls (for example \`stub <Name>.send(_, _) returns …\`)`,
+        );
+      },
+    }),
+  };
+}
+
+/**
  * A Secrets Store secret binding (#3301): Cloudflare's `secrets_store_secrets`
  * binding, which `WorkersStoredSecret` reads. `get` resolves to the secret's
  * value, so nothing that holds one may log it.

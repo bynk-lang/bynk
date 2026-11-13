@@ -1517,6 +1517,32 @@ pub const EXPLANATIONS: &[Explain] = &[
         anchor: "declare-the-dependency-and-call-the-service",
     },
     Explain {
+        code: "bynk.container.build_missing",
+        blurb: "A `Container` is built from a Dockerfile: `@build(\"dir\")` names the \
+                project-relative directory that holds it, and `bynk check` looks for \
+                `dir/Dockerfile`. A directory with no Dockerfile would fail only when \
+                `wrangler deploy` tried to build the image, so it is refused here. Create the \
+                Dockerfile, or correct the path. Bynk does not read or generate the Dockerfile, \
+                and the image must be built for `linux/amd64`.",
+        example: "capability Renderer = Container @build(\"containers/renderer\") @port(8080)\n\
+                  // ✗ containers/renderer/Dockerfile does not exist\n\n\
+                  // create containers/renderer/Dockerfile, beside the code it builds ✓",
+        page: "/book/reference/capabilities",
+        anchor: "derived-capabilities",
+    },
+    Explain {
+        code: "bynk.container.build_path",
+        blurb: "`@build` on a `Container` is a directory inside the project, written relative to \
+                the project root with `/` separators: `@build(\"containers/renderer\")`. An empty \
+                path, an absolute path, a drive path, a path with `\\` and a path that leaves the \
+                project with `..` are refused, so the build context can never reach outside the \
+                project and the emitted configuration stays a function of the source.",
+        example: "capability Renderer = Container @build(\"../renderer\") @port(8080)       // ✗ leaves the project\n\
+                  capability Renderer = Container @build(\"containers/renderer\") @port(8080) // ✓",
+        page: "/book/reference/capabilities",
+        anchor: "derived-capabilities",
+    },
+    Explain {
         code: "bynk.context.consumes_cycle",
         blurb: "Contexts may not form a circle of `consumes` clauses, whether directly or \
                 through others. `bynk deploy` takes the order in which to upload the Workers \
@@ -8600,6 +8626,14 @@ pub const REGISTRY: &[DiagnosticInfo] = &[
         "bynk.consumes.unknown_service",
         "Called a service the consumed context does not declare.",
         &["consumes_decl"],
+    ),
+    d(
+        "bynk.container.build_missing",
+        "A `Container`'s `@build` directory holds no `Dockerfile`, so there is no image to build.",
+    ),
+    d(
+        "bynk.container.build_path",
+        "A `Container`'s `@build` is not a directory inside the project: it is empty, absolute, uses `\\`, or leaves the project with `..`.",
     ),
     d(
         "bynk.context.consumes_cycle",

@@ -162,6 +162,12 @@ pub const FIRST_PARTY_DOCS: &[Entry] = &[
             "describe",
         ],
     ),
+    (
+        "bynk.cloudflare",
+        "Container",
+        "containers-container",
+        &["send", "receiveBytes", "sendBytes"],
+    ),
 ];
 
 /// The Book URL for the first-party capability a doc-link `name` (`Clock` or

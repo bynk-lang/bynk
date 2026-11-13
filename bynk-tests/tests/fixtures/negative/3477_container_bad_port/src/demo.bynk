@@ -1,0 +1,7 @@
+context demo
+
+// #3477: a port is a TCP port.
+
+consumes bynk.cloudflare { Container }
+
+capability Renderer = Container @build("containers/renderer") @port(70000)

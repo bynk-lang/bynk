@@ -492,6 +492,7 @@ Consuming it **locks the deployment unit to Cloudflare** (it cannot then target
 | **`Postgres`** *(experimental)* | `all(sql: String, params: List[PgValue]) -> Effect[Result[String, PgError]]` · `first(sql, params) -> Effect[Result[Option[String], PgError]]` · `run(sql, params) -> Effect[Result[PgRun, PgError]]` · `transaction(statements: List[PgStatement]) -> Effect[Result[List[PgRun], PgError]]`, and the compiler-lowered typed reads `select[T]` and `firstAs[T]`. Used only through a named instance; see [Postgres databases](#postgres-databases-postgres). |
 | **`MySql`** *(experimental)* | `all(sql: String, params: List[MySqlValue]) -> Effect[Result[String, MySqlError]]` · `first(sql, params) -> Effect[Result[Option[String], MySqlError]]` · `run(sql, params) -> Effect[Result[MySqlRun, MySqlError]]` · `transaction(statements: List[MySqlStatement]) -> Effect[Result[List[MySqlRun], MySqlError]]`, and the compiler-lowered typed reads `select[T]` and `firstAs[T]`. Takes an optional `@tls("…")`. Used only through a named instance; see [MySQL databases](#mysql-databases-mysql). |
 | **`Vectorize`** *(experimental)* | `upsert(vectors: List[Vector]) -> Effect[Result[Mutation, VectorError]]` · `insert(vectors) -> Effect[Result[Mutation, VectorError]]` · `query(vector: List[Float], options: QueryOptions) -> Effect[Result[List[VectorMatch], VectorError]]` · `getByIds(ids: List[String]) -> Effect[Result[List[Vector], VectorError]]` · `deleteByIds(ids) -> Effect[Result[Mutation, VectorError]]` · `describe() -> Effect[Result[IndexInfo, VectorError]]`. Used only through a named instance that states its dimensions and metric; see [Vector indexes](#vector-indexes-vectorize). |
+| **`Container`** *(experimental)* | `send(instance: String, req: Request) -> Effect[Result[Response, ContainerError]]` · `receiveBytes(instance, req) -> Effect[Result[BytesResponse, ContainerError]]` · `sendBytes(instance, req, body: Bytes) -> Effect[Result[BytesResponse, ContainerError]]`. Used only through a named instance that names its image and port; see [Containers](#containers-container). |
 
 `Kv` is backed by a Worker KV namespace bound as `env.KV`; the
 `[[kv_namespaces]]` stanza is derived for you.
@@ -1550,6 +1551,97 @@ reaches an index. Vectorize is a remote service on your Cloudflare account, so a
 may incur charges; see Cloudflare's [Vectorize pricing](https://developers.cloudflare.com/vectorize/platform/pricing/)
 for what applies, and put a `RateLimit` in front of any handler an anonymous caller
 can reach. `Vectorize` is experimental: list `"bynk.cloudflare.Vectorize"` under
+`[unstable] allow`.
+
+### Containers: `Container`
+
+`Container` runs a server from a Docker image on Cloudflare
+[Containers](https://developers.cloudflare.com/containers/) and reaches it over HTTP.
+It is used only through a named instance that names the image's build directory and
+the port the server listens on:
+
+```bynk,fragment
+consumes bynk
+consumes bynk.cloudflare { Container, ContainerError }
+
+capability Renderer = Container @build("containers/renderer") @port(8080) @sleepAfter(5.minutes) @instanceType("standard-1")
+
+service render from http {
+	on GET("/render/:tenant") (tenant: String) -> Effect[HttpResult[String]] by Visitor given Renderer {
+		let req = Request {
+			method: Get,
+			url: "http://renderer/render",
+			contentType: None,
+			authorization: None,
+			headers: Map.empty(),
+			body: None,
+		}
+		let res <- Renderer.send("tenant-\(tenant)", req)
+		match res {
+			Ok(r) => Ok(r.body),
+			Err(Unavailable) => ServiceUnavailable("no capacity"),
+			Err(_) => ServerError("render failed"),
+		}
+	}
+}
+```
+
+`capability Renderer = Container …` binds as `CONTAINER_RENDERER`, a Durable Object
+namespace whose class the compiler generates (`__Container_Renderer`). `@build` (a
+`String`) and `@port` (a TCP port, 1 to 65535) are required; a bare `given Container`
+is `bynk.capability.instance_only`. `@build` is the project-relative directory that holds the
+`Dockerfile`: it must stay inside the project (`bynk.container.build_path`) and hold a
+`Dockerfile` (`bynk.container.build_missing`). Bynk does not read or generate the
+Dockerfile, and the image must be built for `linux/amd64`.
+
+The optional annotations set how an instance starts. `@sleepAfter(d)` stops an idle
+container after `d` (a whole number of seconds, more than zero and at most 6 hours),
+applied each time the container starts. Left out, the platform stops the container
+shortly after the instance goes inactive, and Bynk states no figure. `@instanceType` is
+`"lite"` (the platform's default when none is given), `"standard-1"`, `"standard-2"`,
+`"standard-3"` or `"standard-4"`, passed as the instance type when the container
+starts. `@forward(["NAME", …])` names Worker secrets passed to the container's process
+as environment variables. Their values stay in the Worker's secrets: they are never
+written into source, config or the lock file, but every process and dependency in the
+image can read them and Bynk cannot scope them further. There is no `@maxInstances`:
+the platform has no per-application ceiling for these containers, so only the account's
+own limits apply, and `@sleepAfter` and a small `@instanceType` are the levers an
+author has.
+
+`send(instance, req)` sends `req` to the container named `instance` and returns its
+response; `receiveBytes` returns the body as `Bytes`, and `sendBytes` sends `body` as
+the request body (`req.body` must be `None`). `Request`, `Response` and `BytesResponse`
+are `bynk`'s, with the same header and body rules as `Fetch`, and the URL's host is not
+used for routing. `instance` names one container instance, one process: the same name
+reaches the same instance, and a new name starts a new one, so a handler can use one
+per tenant. A name is 1 to 256 bytes with no control character, otherwise the call
+faults before anything is sent; it is not a secret, because names appear in
+Cloudflare's dashboards and logs. The first call to an instance starts its container,
+which takes noticeable time, longer for a larger image, and a container's disk is
+ephemeral: a container is not storage. Bynk adds no queue: the container serves
+concurrent requests as its own server does. A slow call from inside an agent handler
+holds that agent's queue (ADR 0781), so call from a service and hand the result to the
+agent.
+
+A `ContainerError` is `StartFailed(message)` (the image would not start, or its port
+never listened), `Unavailable` (the platform would not start another instance, from
+the account's limits), `Timeout` or `Network`, returned as values. Cloudflare adds
+error cases over time, so a `match` over it needs a wildcard.
+
+A container has no internet access: Bynk always starts it with outbound access off,
+and there is no option to open it in this release. Containers must be pushed to
+Cloudflare's own registry; Docker Hub, Amazon ECR and Google Artifact Registry
+references are not supported for this kind of container. In a test every `Container`
+operation faults, naming the instance, until it is stubbed (`stub Renderer.send(_, _)
+returns …`), so a test never starts a container, and the system tier gives each Worker
+a binding that faults the same way.
+
+A running container costs money. See Cloudflare's
+[Containers pricing](https://developers.cloudflare.com/containers/pricing/) and
+[limits](https://developers.cloudflare.com/containers/platform/limits/) for what
+applies; Bynk states no rates. This release emits the configuration and the generated
+class: deploy with `wrangler deploy`, with Docker running and Wrangler 4.136.0 or later.
+`Container` is experimental: list `"bynk.cloudflare.Container"` under
 `[unstable] allow`.
 
 ### SQL databases: `D1`

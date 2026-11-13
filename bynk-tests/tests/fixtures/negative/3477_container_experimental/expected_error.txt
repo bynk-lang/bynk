@@ -1,0 +1,2 @@
+bynk.stability.experimental
+`bynk.cloudflare.Container` is experimental: it may change or disappear in any release

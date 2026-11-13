@@ -249,6 +249,17 @@ pub(super) fn context_bindings(
                     metric: d.vectorize_metric().unwrap_or_default().to_string(),
                     indexed: d.vectorize_indexed().to_vec(),
                 },
+                (firstparty::CLOUDFLARE_UNIT, "Container") => BindingSource::ContainerInstance {
+                    class_name: bynk_check::containers::container_class_name(&capability),
+                    capability,
+                    build: bynk_check::containers::normalise_build(
+                        d.container_build().unwrap_or_default(),
+                    ),
+                    port: d.container_port().unwrap_or_default(),
+                    sleep_after: d.container_sleep_after(),
+                    instance_type: d.container_instance_type().map(str::to_string),
+                    forward: d.container_forward().to_vec(),
+                },
                 (firstparty::CLOUDFLARE_UNIT, "Kv") => BindingSource::KvInstance { capability },
                 (unit, base) => {
                     unreachable!("`{unit}.{base}` is instantiable but has no binding kind")

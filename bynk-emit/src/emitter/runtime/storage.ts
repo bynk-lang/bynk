@@ -1013,6 +1013,29 @@ export function makeIntegrationVectorize(binding: string): VectorizeIndex {
 }
 
 /**
+ * The Durable Object namespace of a `Container` instance (#3477), as the
+ * multi-Worker integration harness binds it as `env.<binding>`. There is no
+ * in-process container, so every call faults, naming the binding, until the
+ * case stubs the instance (`stub Renderer.send(_, _) returns …`). An in-memory
+ * echo is deliberately not offered: it would pass cases a real image fails.
+ */
+export function makeIntegrationContainer(binding: string): {
+  idFromName(name: string): string;
+  get(id: string): { fetch(request: unknown): Promise<never> };
+} {
+  return {
+    idFromName: (name) => name,
+    get: (id) => ({
+      fetch: async (): Promise<never> => {
+        throw new globalThis.Error(
+          `bynk: the \`${binding}\` container \`${id}\` is not stubbed, and a test never starts a container — stub the operation the case calls (for example \`stub <Name>.send(_, _) returns …\`)`,
+        );
+      },
+    }),
+  };
+}
+
+/**
  * A Secrets Store secret binding (#3301): Cloudflare's `secrets_store_secrets`
  * binding, which `WorkersStoredSecret` reads. `get` resolves to the secret's
  * value, so nothing that holds one may log it.
@@ -1096,5 +1119,5 @@ export function makeIntegrationHyperdrive(binding: string): Hyperdrive {
 }
 
 // #1653: the `__` aliases emitted code imports.
-export { makeIntegrationAi as __makeIntegrationAi, makeIntegrationAnalytics as __makeIntegrationAnalytics, makeIntegrationD1 as __makeIntegrationD1, makeIntegrationEmail as __makeIntegrationEmail, makeIntegrationHyperdrive as __makeIntegrationHyperdrive, makeIntegrationKv as __makeIntegrationKv, makeIntegrationQueue as __makeIntegrationQueue, makeIntegrationR2 as __makeIntegrationR2, makeIntegrationRateLimit as __makeIntegrationRateLimit, makeIntegrationSecretsStoreSecret as __makeIntegrationSecretsStoreSecret, makeIntegrationVectorize as __makeIntegrationVectorize, makeIntegrationVersionMetadata as __makeIntegrationVersionMetadata, makeTestState as __makeTestState };
+export { makeIntegrationAi as __makeIntegrationAi, makeIntegrationContainer as __makeIntegrationContainer, makeIntegrationAnalytics as __makeIntegrationAnalytics, makeIntegrationD1 as __makeIntegrationD1, makeIntegrationEmail as __makeIntegrationEmail, makeIntegrationHyperdrive as __makeIntegrationHyperdrive, makeIntegrationKv as __makeIntegrationKv, makeIntegrationQueue as __makeIntegrationQueue, makeIntegrationR2 as __makeIntegrationR2, makeIntegrationRateLimit as __makeIntegrationRateLimit, makeIntegrationSecretsStoreSecret as __makeIntegrationSecretsStoreSecret, makeIntegrationVectorize as __makeIntegrationVectorize, makeIntegrationVersionMetadata as __makeIntegrationVersionMetadata, makeTestState as __makeTestState };
 export type { AnalyticsDataset as __AnalyticsDataset, D1Database as __D1Database, DurableObjectState as __DurableObjectState, Hyperdrive as __Hyperdrive, KVNamespace as __KVNamespace, QueueProducer as __QueueProducer, R2Bucket as __R2Bucket, RateLimiter as __RateLimiter, SecretsStoreSecret as __SecretsStoreSecret, SendEmail as __SendEmail, VectorizeIndex as __VectorizeIndex, WorkerAiBinding as __WorkerAiBinding, WorkerVersionMetadata as __WorkerVersionMetadata };

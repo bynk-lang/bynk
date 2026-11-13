@@ -1,0 +1,7 @@
+context demo
+
+// #3477: Container is experimental until it is allowed.
+
+consumes bynk.cloudflare { Container }
+
+capability Renderer = Container @build("containers/renderer") @port(8080)

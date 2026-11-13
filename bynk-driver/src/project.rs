@@ -2705,6 +2705,15 @@ fn run_checks(
         &mut errors,
     );
     let unit_tables = unit_tables;
+    // #3477: each `Container`'s `@build` directory holds a Dockerfile.
+    bynk_check::containers::phase_container_builds(
+        &groups,
+        &kinds,
+        &parsed,
+        &unit_tables,
+        project_root,
+        &mut errors,
+    );
 
     // -- 5b'. Collect `consumes` aliases (v0.6 §3.1). Each consuming context
     //         has an alias map: alias → consumed-context qualified name.

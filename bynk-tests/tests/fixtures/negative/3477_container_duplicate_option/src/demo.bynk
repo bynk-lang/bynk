@@ -1,0 +1,7 @@
+context demo
+
+// #3477: an option is given once.
+
+consumes bynk.cloudflare { Container }
+
+capability Renderer = Container @build("containers/renderer") @port(8080) @port(9090)

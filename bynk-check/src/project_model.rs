@@ -1187,6 +1187,7 @@ pub(crate) fn instance_example(kind: &firstparty::Instantiable) -> String {
         "Postgres" => "Main",
         "MySql" => "Legacy",
         "Vectorize" => "Docs",
+        "Container" => "Renderer",
         _ => "Archives",
     };
     let mut out = format!("capability {name} = {}", kind.capability);
@@ -1212,6 +1213,11 @@ fn option_sample(option: &str) -> &'static str {
         firstparty::VECTORIZE_DIMENSIONS_OPTION => "768",
         firstparty::VECTORIZE_METRIC_OPTION => "\"cosine\"",
         firstparty::VECTORIZE_INDEXED_OPTION => "[\"category:string\"]",
+        firstparty::CONTAINER_BUILD_OPTION => "\"containers/renderer\"",
+        firstparty::CONTAINER_PORT_OPTION => "8080",
+        firstparty::CONTAINER_SLEEP_AFTER_OPTION => "5.minutes",
+        firstparty::CONTAINER_INSTANCE_TYPE_OPTION => "\"lite\"",
+        firstparty::CONTAINER_FORWARD_OPTION => "[\"API_KEY\"]",
         _ => "\"legacy-billing\"",
     }
 }
@@ -1299,7 +1305,7 @@ fn instance_option_value(
             if out.is_empty() {
                 errors.push_for(
                     Some(path),
-                    invalid(arg.span, format!("`@{option}` takes at least one address")),
+                    invalid(arg.span, format!("`@{option}` takes at least one entry")),
                 );
                 return None;
             }
@@ -1332,6 +1338,22 @@ fn instance_option_value(
             );
             return None;
         }
+        (firstparty::OptionKind::PositiveInt, ExprKind::IntLit { value, .. })
+            if base == "Container"
+                && option == firstparty::CONTAINER_PORT_OPTION
+                && crate::containers::port_problem(*value).is_some() =>
+        {
+            errors.push_for(
+                Some(path),
+                CompileError::new(
+                    "bynk.capability.invalid_option",
+                    arg.span,
+                    format!("`@{option}` is not a port a `{base}` can listen on"),
+                )
+                .with_note("a port is a TCP port, 1 to 65535"),
+            );
+            return None;
+        }
         (firstparty::OptionKind::PositiveInt, ExprKind::IntLit { value, .. }) if *value > 0 => {
             OptionValue::Int(*value)
         }
@@ -1344,6 +1366,29 @@ fn instance_option_value(
                 ),
             );
             return None;
+        }
+        (firstparty::OptionKind::Duration, _) if base == "Container" => {
+            let seconds = match &arg.value.kind {
+                ExprKind::DurationLit { millis, .. } => {
+                    crate::containers::sleep_after_seconds(*millis)
+                }
+                _ => None,
+            };
+            let Some(seconds) = seconds else {
+                errors.push_for(
+                    Some(path),
+                    CompileError::new(
+                        "bynk.capability.invalid_option",
+                        arg.span,
+                        format!("`@{option}` is not a time a `{base}` can sleep after"),
+                    )
+                    .with_note(
+                        "write a whole number of seconds, more than zero and at most 6 hours, for example `5.minutes`",
+                    ),
+                );
+                return None;
+            };
+            OptionValue::Seconds(seconds)
         }
         (firstparty::OptionKind::Duration, ExprKind::DurationLit { millis, .. })
             if *millis % 1000 == 0 && firstparty::RATELIMIT_PERIODS.contains(&(*millis / 1000)) =>
@@ -1371,6 +1416,10 @@ fn instance_option_value(
         }
     };
     if let OptionValue::List(items) = &value {
+        // #3477: a `Container`'s `@forward` names Worker secrets.
+        if base == "Container" {
+            return container_forward_ok(items, ann, path, errors).then_some(value);
+        }
         // #3479: a `Vectorize`'s `@indexed` entries are metadata indexes.
         if base == "Vectorize" {
             return vectorize_indexed_ok(items, ann, path, errors).then_some(value);
@@ -1455,6 +1504,46 @@ fn instance_option_value(
         );
         return None;
     }
+    // #3477: a `Container`'s `@build` is a directory inside the project, and
+    // `@instanceType` one of a closed set.
+    if base == "Container" {
+        if option == firstparty::CONTAINER_BUILD_OPTION {
+            if let Some(problem) = crate::containers::build_path_problem(text) {
+                errors.push_for(
+                    Some(path),
+                    CompileError::new(
+                        "bynk.container.build_path",
+                        ann.span,
+                        format!("`@build(\"{}\")` {problem}", text.escape_debug()),
+                    )
+                    .with_note(
+                        "`@build` names the directory that holds the `Dockerfile`, relative to the project root, for example `@build(\"containers/renderer\")`",
+                    ),
+                );
+                return None;
+            }
+        } else if option == firstparty::CONTAINER_INSTANCE_TYPE_OPTION
+            && !firstparty::CONTAINER_INSTANCE_TYPES.contains(&text.as_str())
+        {
+            errors.push_for(
+                Some(path),
+                CompileError::new(
+                    "bynk.capability.invalid_option",
+                    ann.span,
+                    format!("`{text}` is not an instance type a `{base}` can start with"),
+                )
+                .with_note(format!(
+                    "the instance types are {}",
+                    firstparty::CONTAINER_INSTANCE_TYPES
+                        .iter()
+                        .map(|t| format!("`\"{t}\"`"))
+                        .collect::<Vec<_>>()
+                        .join(", ")
+                )),
+            );
+            return None;
+        }
+    }
     // Hyperdrive H5 (#3322, DECISION B): `@tls` is one of a closed set.
     if option == crate::firstparty::MYSQL_TLS_OPTION
         && !crate::firstparty::MYSQL_TLS_MODES
@@ -1532,6 +1621,27 @@ fn instance_option_value(
         return None;
     }
     Some(value)
+}
+
+/// #3477 (DECISION J): whether a `Container`'s `@forward` is a list of Worker
+/// secret names a process environment can hold. Pushes the error and returns
+/// `false` otherwise.
+fn container_forward_ok(
+    items: &[String],
+    ann: &bynk_syntax::ast::Annotation,
+    path: &std::path::Path,
+    errors: &mut ErrorSink,
+) -> bool {
+    let Some(message) = crate::containers::forward_problem(items) else {
+        return true;
+    };
+    errors.push_for(
+        Some(path),
+        CompileError::new("bynk.capability.invalid_option", ann.span, message).with_note(
+            "write `@forward([\"API_KEY\"])`: the names of Worker secrets, each a letter or `_` then letters, digits or `_`; their values are never written into source or config",
+        ),
+    );
+    false
 }
 
 /// #3479 (DECISION C): whether a `Vectorize`'s `@indexed` entries are a list of
