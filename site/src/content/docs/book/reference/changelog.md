@@ -3,7 +3,7 @@ title: Version compatibility & changelog
 ---
 Bynk is pre-1.0 and developed in small, spec-first increments (see
 [Versioning & roadmap](/book/about/versioning-and-roadmap/)). This book is
-written against **v0.581**.
+written against **v0.582**.
 
 This page is a high-level summary of notable increments, not an exhaustive
 per-commit history. While Bynk is pre-1.0, increments may change behaviour.
@@ -28,6 +28,7 @@ per-commit history. While Bynk is pre-1.0, increments may change behaviour.
 
 | Version | Highlights |
 |---|---|
+| **v0.582.0** | A service handler's `Idempotency.claim` is released when the handler fails and held for its full window when it completes, under a 30 s lease |
 | **v0.581.0** | A first-party capability operation can carry an internal `@onUndecodable(miss|fault)` annotation, refused in user code |
 | **v0.580.0** | Editor support for typed cookie writes (completion of a cookie record's fields and of `cookie`/`expire`, signature help), a guide section, and `examples/sessions` written from its cookie record |
 | **v0.579.0** | `Idempotency.claim(key, expiresAfter)` is an atomic first-delivery-wins claim, and the test double honours `expiresAfter` on the harness clock |
