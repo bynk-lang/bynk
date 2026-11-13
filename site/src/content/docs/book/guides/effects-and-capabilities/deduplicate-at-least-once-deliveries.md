@@ -74,8 +74,10 @@ not `body.id`.
 `claim` records no outcome, so a repeat is told only that it is a repeat. To give a repeat
 the *same answer* as the first delivery, use `dedup` and `remember`, which cache an
 outcome under a key. They are a plain check and then a write, so two simultaneous
-deliveries can both miss; today they are also held in each instance's memory. Where the
-work must run once, claim first.
+deliveries can both miss. The value must be `Codable`; on Cloudflare it is stored in the
+same D1 database as claims, so it survives restarts and is seen by every instance, and a
+stored value that no longer decodes counts as a miss. Where the work must run once, claim
+first.
 
 ## See also
 

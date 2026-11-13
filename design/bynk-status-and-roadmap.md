@@ -287,8 +287,9 @@ The forward plan lives in dedicated, domain-scoped docs:
   delivered as a stack of small increments rather than a track document: an atomic
   `Idempotency.claim` (released when a handler fails, under a 30 s lease), stored in an
   implicit per-Worker D1 database on Cloudflare, and proved on workerd and local D1.
-  `dedup`/`remember` stay per-instance until typed capability reads
-  ([#3458](https://github.com/bynk-lang/bynk/issues/3458)) land; settling a claim in an agent
+  `dedup`/`remember` take a `Codable` value (decoded through typed capability reads,
+  [#3458](https://github.com/bynk-lang/bynk/issues/3458)) and are durable in the same
+  database; settling a claim in an agent
   handler is [#3465](https://github.com/bynk-lang/bynk/issues/3465). It unblocks replay and
   ordering hints (#260).
 - **Editor tooling** — [`bynk-tooling-roadmap.md`](bynk-tooling-roadmap.md)
