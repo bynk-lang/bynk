@@ -822,6 +822,20 @@ type-level parameter with no runtime codec to specialise, so nothing at the
 call site lets `tsc` infer a return-position-only parameter — the call site
 therefore names the type argument explicitly too (`deps.Cap.op<SomeType>(…)`).
 
+An operation with `Codable` parameters is emitted without them in the interface
+(ADR 0696): each parameter that mentions one is `unknown`, a JSON value in the
+boundary encoding, and a type parameter that then occurs nowhere else is dropped. A
+**typed read** (#3458) does the same to its return: the interface returns
+`Promise<unknown>`, the provider replying with plain JSON and never receiving a
+codec. The **call site** wraps the call in `__bynkCapabilityReply(call, codec,
+{ capability, operation, type }, policy)` (`__bynk_runtime/codec.ts`), which decodes the
+reply as the instantiated `Effect` payload with that payload's codec. `policy` is the
+operation's declared `"fault"` (the promise rejects, with the capability, operation,
+type and `$.path` of the first mismatch) or `"miss"` (`console.warn`, then
+`None`). A provider that itself rejects rejects whichever the policy, and the value
+never appears in either message. A test double for such a capability keeps the JSON
+a write was given and returns it before the call-site decode.
+
 The **binding module is copied verbatim** into the output beside the adapter's
 emitted module, so its imports resolve and the gate checks it. It is checked as
 an ES module (see *Module format* in [§7.3.1](#731-types)). Its declared

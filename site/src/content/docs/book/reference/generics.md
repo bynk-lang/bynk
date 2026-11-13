@@ -366,10 +366,29 @@ hand-written TypeScript that receives plain JSON, never a codec, and the operati
 ABI does not grow. The type arguments are inferred from the arguments when they
 determine every parameter: `Queue.sendValue(order)`.
 
-A `Codable` parameter may appear in the operation's return type only in the standard
-library's own operations (a typed read): a capability you declare is refused with
-`bynk.generics.codable_op_return_not_first_party`, and returns plain data that you decode
-where you call it. As for any generic operation, it needs a provider written in
+### Typed reads
+
+A `Codable` parameter may appear in the operation's return type, as in
+`fn read[T: Codable](key: String) -> Effect[T]`, only in the standard library's own
+operations. The provider replies with plain JSON, and the **call site** decodes the
+reply whole as the type you instantiate (`Store.read[Receipt](key)`), mirroring how it
+encodes an argument. You always write that type argument, as nothing in the arguments
+determines it. A capability you declare is refused with
+`bynk.generics.codable_op_return_not_first_party`: return plain data and decode it where
+you call it, with `Json.decode[T]`.
+
+What a reply that does not decode means (a row written by an older deploy of a type
+that has since changed, say) is declared on each standard-library operation, never
+chosen by the caller:
+
+- by default the call **faults**, with a message naming the capability, operation, type
+  and path of the mismatch (never the value, which can be personal data):
+  `Store.read returned a value that does not decode as Receipt: at $.total: expected number, got string`;
+- an operation that declares a **miss** returns `None` instead, and logs a warning with
+  the same text to the runtime's console. It returns `Option[T]`, so the program already
+  handles "nothing usable here".
+
+Hover on an operation says which. As for any generic operation, a provider is written in
 TypeScript (`bynk.provider.generic_op_requires_external`).
 
 ## Where this is going
@@ -377,8 +396,8 @@ TypeScript (`bynk.provider.generic_op_requires_external`).
 `Eq`, `Ord`, `Key` and `Codable` are the constraints of the constrained-generics track.
 `Eq` replaced the equality requirement the compiler used to infer, so the requirement
 a caller must meet is declared in the callee's signature rather than discovered
-from an error. Typed reads from a capability (a `Codable` return type) and a codec for a
-generic type of your own over a type parameter are the open follow-ups.
+from an error. A codec for a generic type of your own over a type parameter, and typed reads for a
+capability you declare, are the open follow-ups.
 
 ## See also
 
