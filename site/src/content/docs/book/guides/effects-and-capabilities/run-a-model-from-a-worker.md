@@ -64,6 +64,8 @@ service ask from http {
 }
 ```
 
+The snippets that follow assume the `consumes` lines above.
+
 The model id is a plain string, so a model Cloudflare ships tomorrow works the
 day it appears. The text is untrusted input like any other: do not act on it as
 if you had written it. An empty `messages` is a fault; a request a model refuses

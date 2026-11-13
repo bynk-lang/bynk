@@ -199,8 +199,11 @@ it and delete the adapter, its two secrets and the `--secrets-file` entries:
 3. Replace each `Ai.complete(model, prompt)` with
    `Ai.generate(model, request)`, passing a `GenerateRequest` whose `messages`
    holds the prompt as a `User` message, and read `generation.text` where you
-   read the string. A model that needs another input shape goes through
-   `Ai.run(model, input)` with the JSON input as text.
+   read the string. `generate` leaves the length of the reply to the model's own
+   default unless you set `maxTokens`, so if the adapter's REST call set
+   `max_tokens`, set `maxTokens: Some(…)` to the same value. A model that needs
+   another input shape goes through `Ai.run(model, input)` with the JSON input as
+   text.
 4. Match the new `AiError` (`ModelNotFound`, `InvalidInput`, `QuotaExceeded`,
    `Overloaded`, `BadReply`, `AiFailed`) in place of the adapter's
    `Unavailable`, `BadReply` and `InvalidModel`, with a wildcard arm.
