@@ -1,0 +1,15 @@
+---
+level: minor
+changelog: `[dev] ai = "allow"` in `bynk.toml` acknowledges that `Ai` calls run remotely under `bynk dev`; without it the first call in a session prints a one-time warning that links to Cloudflare's pricing page, and the call goes ahead
+probes: emit_abi_shapes, ts_writes
+---
+
+## ADR: dev-remote-binding-acknowledgement
+title: A remote-only binding is acknowledged in `[dev]`, and `bynk dev` warns once instead of blocking
+summary: One per-binding-kind mechanism for bindings with no local simulation, with no billing specifics in any text
+
+**Context.** Workers AI has no local simulation: under `bynk dev`, a call runs the model on the developer's Cloudflare account and may incur charges. #3478 first proposed a gate (a flag and a manifest key, and a fault until given). The maintainer amended it: warn, do not block.
+
+**Decision.** `bynk dev` never gates a remote-only binding. The first call of a kind in a session prints one warning, from the provider, that the call runs on the developer's Cloudflare account and may incur charges, with a link to Cloudflare's pricing page; the call proceeds. `[dev] ai = "allow"` acknowledges the kind and silences the warning; any other value is a manifest error, and there is no command-line flag. The mechanism is shared and keyed per binding kind (`bynk_project::dev_ack::REMOTE_KINDS`: a `[dev]` key and a variable), so Vectorize and AI Search each add one entry and reuse it. `bynk dev` hands each served Worker `--var BYNK_DEV:1` and, for an acknowledged kind, `--var BYNK_DEV_ACK_<KIND>:allow`; the provider warns only when the first is set and the second is not. A deployed Worker has neither variable, so the warning cannot reach production, and the generated `wrangler.toml` is not touched. Checked on wrangler 4.161.0 that `--var` values reach the Worker's `env` under `wrangler dev`; no `remote = true` is needed, because the platform runs an AI binding remotely by itself. The warning is per Worker isolate and kind, so a rebuild that restarts the Worker can show it again. In `bynk test` the operations still fault until stubbed: no network calls from tests.
+
+**Consequences.** Tooling, diagnostics and documentation state no prices, allowances, billing dates or lists of billed operations; they link to Cloudflare's pages, so nothing goes stale when Cloudflare changes them.

@@ -867,6 +867,23 @@ export class WorkersVersion implements Version {
   }
 }
 
+// #3478: the one-time warning of a binding with no local simulation. `bynk dev`
+// sets `BYNK_DEV` on every Worker it serves, and `BYNK_DEV_ACK_<KIND>` to
+// `allow` when `bynk.toml`'s `[dev]` acknowledges the kind; a deployed Worker
+// has neither, so this never speaks in production. The call always proceeds.
+// Once per isolate and kind, so once per development session until a rebuild
+// restarts the Worker. It states no price and no allowance: Cloudflare's page
+// does, and stays current.
+const devRemoteNoticed = new Set<string>();
+function devRemoteNotice(env: unknown, kind: string, ackVar: string, service: string, pricingUrl: string): void {
+  const vars = env as Record<string, unknown> | undefined;
+  if (vars?.BYNK_DEV !== "1" || vars?.[ackVar] === "allow" || devRemoteNoticed.has(kind)) return;
+  devRemoteNoticed.add(kind);
+  console.warn(
+    `bynk dev: ${service} has no local simulation, so this call runs on your Cloudflare account and may incur charges. See ${pricingUrl} . To silence this warning, put ${kind} = "allow" under [dev] in bynk.toml.`,
+  );
+}
+
 // Workers AI (#3478): the one `[ai]` binding a Worker declares when it uses
 // `Ai`. A call runs the model on Cloudflare, so a failure is a platform
 // refusal to report as an `AiError`, never a fault; only a call that could
@@ -953,6 +970,7 @@ export class WorkersAi implements Ai {
     WorkersAi.checkModel(model);
     const body = WorkersAi.parseInput(input);
     const ai = this.ai();
+    devRemoteNotice(this.env, "ai", "BYNK_DEV_ACK_AI", "Workers AI", "https://developers.cloudflare.com/workers-ai/platform/pricing/");
     let reply: unknown;
     try {
       reply = await ai.run(model, body);

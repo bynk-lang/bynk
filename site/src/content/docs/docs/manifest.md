@@ -70,6 +70,9 @@ allow = []                  # experimental standard-library items to use
 [deploy.hyperdrive.Main]    # no default: a `Postgres` instance's Hyperdrive config
 connection_env = "MAIN_DATABASE_URL"   # the variable `bynk deploy` reads the connection string from
 
+[dev]
+ai = "allow"                # no default: silences `bynk dev`'s Workers AI cost warning
+
 [dev.hyperdrive.Main]       # no default: its local database under `bynk dev`
 connection_env = "MAIN_LOCAL_DATABASE_URL"
 
@@ -611,6 +614,33 @@ connection_env = "MAIN_LOCAL_DATABASE_URL"
 An entry needs a `connection_env`, a `config_id`, or both. See [Deploy to
 Cloudflare](/book/guides/projects-build-and-deployment/deploy-to-cloudflare/#postgres-databases-hyperdrive)
 and [Run locally](/book/guides/projects-build-and-deployment/run-locally/#a-local-postgres-database).
+
+### Acknowledging a remote-only binding
+
+Some bindings have no local simulation: under `bynk dev`, a call to Workers AI
+(`Ai`) runs on your Cloudflare account and may incur charges. `bynk dev` never
+blocks such a call. The first one in a session prints a one-time warning that
+links to Cloudflare's own pricing page, and the call goes ahead. A project that
+has read it acknowledges it in `[dev]`, which silences the warning:
+
+```toml
+[dev]
+ai = "allow"
+```
+
+| Key | Table | Type | Notes |
+|---|---|---|---|
+| `ai` | `[dev]` | `"allow"` | Acknowledges that `Ai` calls run remotely under `bynk dev`. The only value; any other is a manifest error. There is no command-line flag. |
+
+The key is per binding kind, so a later remote-only binding takes its own key
+and the same warning. `bynk dev` marks each Worker it serves with a `BYNK_DEV`
+variable and sets an acknowledged kind's variable (`BYNK_DEV_ACK_AI`), which the
+provider reads; a deployed Worker has neither, so the warning and the
+acknowledgement never apply to production. `bynk test` never reaches Workers AI:
+every `Ai` operation faults until it is stubbed. The warning is per Worker
+process, so a rebuild that restarts the Worker can show it again. `bynk dev`
+reads `[dev]` once, when it starts, so an acknowledgement added to a running
+session takes effect the next time `bynk dev` starts.
 
 ## `[unstable]`
 

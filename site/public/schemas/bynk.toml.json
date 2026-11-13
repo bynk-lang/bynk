@@ -156,6 +156,16 @@
       "additionalProperties": false,
       "description": "Settings `bynk dev` reads.",
       "properties": {
+        "ai": {
+          "description": "Acknowledges that Workers AI has no local simulation: under `bynk dev`\na call runs on your Cloudflare account and may incur charges. `bynk dev`\nwarns once, on the first call, unless this is `\"allow\"`. See Cloudflare's\nWorkers AI pricing page.",
+          "oneOf": [
+            {
+              "const": "allow",
+              "description": "Silence the warning.",
+              "type": "string"
+            }
+          ]
+        },
         "hyperdrive": {
           "additionalProperties": {
             "additionalProperties": false,
