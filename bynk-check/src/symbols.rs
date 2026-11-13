@@ -1884,6 +1884,7 @@ pub fn build_cross_context_info(
                         tr
                     },
                     codable_params: crate::checker::codable::codable_op_params(op),
+                    reply_policy: crate::checker::codable::op_reply_policy(op),
                 })
                 .collect();
             caps.insert(
@@ -1926,6 +1927,16 @@ pub fn build_cross_context_info(
         cookie_records: unit_tables
             .get(name)
             .map(crate::context_checks::cookie_records_of)
+            .unwrap_or_default(),
+        signed_cookie_names: unit_tables
+            .get(name)
+            .map(|t| {
+                t.actors
+                    .values()
+                    .filter_map(|a| crate::actors::signed_cookie_seam_of(a, None))
+                    .map(|seam| seam.cookie)
+                    .collect()
+            })
             .unwrap_or_default(),
     }
 }

@@ -1,0 +1,34 @@
+context demo.store
+
+consumes bynk.testing { TypedReads }
+
+type Receipt = { id: String, total: Int }
+type Legacy = { id: String }
+
+// #3458: a first-party operation whose `Effect[P]` payload mentions its
+// `Codable` parameter returns plain JSON, which the call site decodes as `P`.
+service stash {
+  on call(key: String, receipt: Receipt) -> Effect[()] given TypedReads {
+    TypedReads.write[Receipt](key, receipt)
+  }
+}
+
+service stashLegacy {
+  on call(key: String, legacy: Legacy) -> Effect[()] given TypedReads {
+    TypedReads.write[Legacy](key, legacy)
+  }
+}
+
+// `readOpt` declares an undecodable reply a miss.
+service find {
+  on call(key: String) -> Effect[Option[Receipt]] given TypedReads {
+    TypedReads.readOpt[Receipt](key)
+  }
+}
+
+// `read` declares nothing, so an undecodable reply faults.
+service need {
+  on call(key: String) -> Effect[Receipt] given TypedReads {
+    TypedReads.read[Receipt](key)
+  }
+}

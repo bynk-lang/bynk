@@ -252,6 +252,7 @@ pub(super) fn emit_test_module(
         all_doubles()
             .filter(|(owner, cap, _)| {
                 owner == bynk_check::firstparty::CRYPTO_UNIT
+                    || owner == bynk_check::firstparty::TESTING_UNIT
                     || real_provider_double_factory(owner, cap, pglite).is_some()
             })
             .map(|(owner, _, _)| owner),
@@ -261,11 +262,17 @@ pub(super) fn emit_test_module(
         // P4a (#2602): `bynk.cloudflare`'s binding is first-party, so it is
         // never in `binding_modules` (a test keeps its doubles); the `D1`
         // double imports it from its fixed path.
-        let first_party = (unit.as_str() == bynk_check::firstparty::CLOUDFLARE_UNIT).then(|| {
-            bynk_check::firstparty::CLOUDFLARE_BINDING_FILENAME
-                .trim_end_matches(".ts")
-                .to_string()
-        });
+        // #3458: so is `bynk.testing`'s, which is its own double.
+        let first_party_binding = match unit.as_str() {
+            bynk_check::firstparty::CLOUDFLARE_UNIT => {
+                Some(bynk_check::firstparty::CLOUDFLARE_BINDING_FILENAME)
+            }
+            bynk_check::firstparty::TESTING_UNIT => {
+                Some(bynk_check::firstparty::TESTING_BINDING_FILENAME)
+            }
+            _ => None,
+        };
+        let first_party = first_party_binding.map(|f| f.trim_end_matches(".ts").to_string());
         if let Some(module) = binding_modules.get(*unit).or(first_party.as_ref()) {
             stmts.push(TsStmt::decl(
                 TsDecl::ImportNamespace {

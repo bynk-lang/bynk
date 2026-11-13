@@ -31,6 +31,8 @@ bynk = { path = "../bynk" }
 bynk-driver.workspace = true
 bynk-emit.workspace = true
 clap.workspace = true
+# #3458: the corpus runs the `bynk.testing` support unit, which a release does not contain.
+bynk-std = { workspace = true, features = ["test-support"] }
 
 [dev-dependencies]
 serde_json.workspace = true

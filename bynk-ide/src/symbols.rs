@@ -2437,6 +2437,18 @@ pub(crate) fn describe_capability_op(c: &CapabilityDecl, op: &CapabilityOp) -> S
         type_ref_str(&op.return_type),
         c.name.name
     );
+    // #3458: a typed read decodes the provider's reply at the call site, so
+    // say what a reply that does not decode means: the policy the operation declares.
+    if let Some(policy) = bynk_check::checker::codable::typed_read_policy(op) {
+        out.push_str(match policy {
+            bynk_check::checker::codable::ReplyPolicy::Miss => {
+                "\nA typed read: the type argument is explicit, and a reply that does not decode is a miss (the call returns `None` and a warning is logged).\n"
+            }
+            bynk_check::checker::codable::ReplyPolicy::Fault => {
+                "\nA typed read: the type argument is explicit, and a reply that does not decode faults.\n"
+            }
+        });
+    }
     if let Some(doc) = &op.documentation {
         out.push('\n');
         out.push_str(doc);
@@ -3445,6 +3457,29 @@ pub fn type_ref_str(t: &TypeRef) -> String {
 
 #[cfg(test)]
 mod tests {
+    /// #3458: hover on a typed read says what a reply that does not decode means,
+    /// read off the operation's declared policy; any other operation says nothing.
+    #[test]
+    fn hover_on_a_typed_read_names_its_failure_policy() {
+        use bynk_syntax::ast::{CommonsItem, SourceUnit};
+        let src = "context bynk.t\n\ncapability Store {\n  fn find[T: Codable](k: String) -> Effect[Option[T]] @onUndecodable(miss)\n  fn need[T: Codable](k: String) -> Effect[T]\n  fn size() -> Effect[Int]\n}\n";
+        let toks = bynk_syntax::lexer::tokenize(src).expect("lexes");
+        let SourceUnit::Context(ctx) = bynk_syntax::parser::parse_unit(&toks, src).expect("parses")
+        else {
+            panic!("a context");
+        };
+        let Some(CommonsItem::Capability(cap)) = ctx.items.first() else {
+            panic!("a capability");
+        };
+        let hover = |op: &str| {
+            let op = cap.ops.iter().find(|o| o.name.name == op).expect("op");
+            describe_capability_op(cap, op)
+        };
+        assert!(hover("find").contains("is a miss"), "{}", hover("find"));
+        assert!(hover("need").contains("faults"), "{}", hover("need"));
+        assert!(!hover("size").contains("typed read"), "{}", hover("size"));
+    }
+
     #[test]
     fn hover_on_an_example_names_the_refinement() {
         let src = "commons c\n\ntype Code = String where Matches(\"[A-Z]{3}\") @example(\"ABC\")\n";

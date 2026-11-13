@@ -1352,6 +1352,11 @@ pub(super) fn platform_double(
         // included), so the double is the real provider, from the binding the
         // module imports as `bynk_crypto__binding`.
         ("bynk.crypto", "Crypto") => "  return new bynk_crypto__binding.CryptoProvider();\n".to_string(),
+        // #3458: `bynk.testing`'s in-memory typed-read store is already
+        // deterministic and does no I/O, and it keeps the JSON a `write` was
+        // given, so a case exercises the same encode, store and decode round
+        // trip the call sites do. The double is the real provider.
+        ("bynk.testing", "TypedReads") => "  return new bynk_testing__binding.MemoryTypedReads();\n".to_string(),
         ("bynk", "Secrets") => "  return {\n    async get() {\n      return None;\n    },\n  };\n".to_string(),
         ("bynk", "Locale") => "  return {\n    async current() {\n      return \"en\" as never;\n    },\n  };\n".to_string(),
         ("bynk", "Fetch") => "  return {\n    async send() {\n      throw new globalThis.Error(\"bynk: `Fetch.send` is not stubbed, and a test never reaches the network — add `stub Fetch.send(_) returns …`\");\n    },\n    async sendWith() {\n      throw new globalThis.Error(\"bynk: `Fetch.sendWith` is not stubbed, and a test never reaches the network — add `stub Fetch.sendWith(_, _) returns …`\");\n    },\n    async receiveBytes() {\n      throw new globalThis.Error(\"bynk: `Fetch.receiveBytes` is not stubbed, and a test never reaches the network — add `stub Fetch.receiveBytes(_, _) returns …`\");\n    },\n    async sendBytes() {\n      throw new globalThis.Error(\"bynk: `Fetch.sendBytes` is not stubbed, and a test never reaches the network — add `stub Fetch.sendBytes(_, _, _) returns …`\");\n    },\n    async receiveStream() {\n      throw new globalThis.Error(\"bynk: `Fetch.receiveStream` is not stubbed, and a test never reaches the network — add `stub Fetch.receiveStream(_, _) returns …`\");\n    },\n    async sendStream() {\n      throw new globalThis.Error(\"bynk: `Fetch.sendStream` is not stubbed, and a test never reaches the network — add `stub Fetch.sendStream(_, _, _) returns …`\");\n    },\n  };\n".to_string(),

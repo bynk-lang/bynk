@@ -336,6 +336,64 @@ pub fn codable_op_params(op: &bynk_syntax::ast::CapabilityOp) -> Vec<String> {
         .collect()
 }
 
+/// The internal annotation a first-party operation uses to declare what a reply
+/// that does not decode means (#3458): `@onUndecodable(miss)` or
+/// `@onUndecodable(fault)`. Not user-visible surface: the resolver refuses it
+/// outside the standard library.
+pub const REPLY_POLICY_ANNOTATION: &str = "onUndecodable";
+
+/// What a capability operation's reply that does not decode as its payload type
+/// means, declared per operation (#3458). The default is a fault.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum ReplyPolicy {
+    /// The call faults, naming the capability, operation, type and path.
+    Fault,
+    /// The call returns `None`, and a warning goes to the runtime console.
+    Miss,
+}
+
+/// The policy word an `@onUndecodable(...)` annotation carries, when it is a
+/// single bare `miss` or `fault`.
+pub fn reply_policy_word(ann: &bynk_syntax::ast::Annotation) -> Option<ReplyPolicy> {
+    let [arg] = ann.args.as_slice() else {
+        return None;
+    };
+    if arg.label.is_some() {
+        return None;
+    }
+    match &arg.value.kind {
+        bynk_syntax::ast::ExprKind::Ident(id) => match id.name.as_str() {
+            "miss" => Some(ReplyPolicy::Miss),
+            "fault" => Some(ReplyPolicy::Fault),
+            _ => None,
+        },
+        _ => None,
+    }
+}
+
+/// The failure policy an operation declares for an undecodable reply: its
+/// `@onUndecodable(..)` annotation, or a fault when it has none.
+pub fn op_reply_policy(op: &bynk_syntax::ast::CapabilityOp) -> ReplyPolicy {
+    op.annotations
+        .iter()
+        .find(|a| a.name.name == REPLY_POLICY_ANNOTATION)
+        .and_then(reply_policy_word)
+        .unwrap_or(ReplyPolicy::Fault)
+}
+
+/// The failure policy of a typed read, `None` for any other operation (#3458): one
+/// whose `Effect[P]` payload mentions a `Codable` type parameter of its own.
+/// Hover renders it, so the clause is read off the same rule the call site uses.
+pub fn typed_read_policy(op: &bynk_syntax::ast::CapabilityOp) -> Option<ReplyPolicy> {
+    let codable = codable_op_params(op);
+    match &op.return_type {
+        bynk_syntax::ast::TypeRef::Effect(payload, _) if mentions_any(payload, &codable) => {
+            Some(op_reply_policy(op))
+        }
+        _ => None,
+    }
+}
+
 /// How a call to a capability operation with `Codable` parameters is lowered:
 /// the provider receives plain JSON, never a witness (DECISION D).
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -350,6 +408,19 @@ pub struct CapEncoding {
     /// interface (those arguments are `unknown`), and so from a call's type
     /// arguments.
     pub keep_type_args: Vec<bool>,
+    /// Typed reads (#3458): set when the operation's `Effect[P]` payload `P`
+    /// mentions a `Codable` type parameter. The provider replies with plain
+    /// JSON and the call site decodes it as the instantiated `P`.
+    pub reply: Option<ReplyDecode>,
+}
+
+/// How a call site decodes the reply of a typed read (#3458).
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct ReplyDecode {
+    /// The instantiated payload `P` of the operation's `Effect[P]`, decoded whole.
+    pub payload: TyId,
+    /// What a reply that does not decode means, as the operation declares it.
+    pub policy: ReplyPolicy,
 }
 
 /// The encoding of a call to an operation, given its pattern parameter types
@@ -360,6 +431,7 @@ pub(crate) fn op_encoding(
     codable: &[String],
     params: &[TyId],
     ret: TyId,
+    policy: ReplyPolicy,
     subst: &HashMap<String, TyId>,
     tys: &Types,
 ) -> Option<Arc<CapEncoding>> {
@@ -381,10 +453,23 @@ pub(crate) fn op_encoding(
             super::equality::collect_vars(*p, tys, &mut kept);
         }
     }
-    super::equality::collect_vars(ret, tys, &mut kept);
+    // A payload that mentions a `Codable` parameter is decoded whole from plain
+    // JSON, so the interface returns `unknown` there and the parameter does not
+    // survive in it.
+    let reply = match &*tys.get(ret) {
+        Ty::Effect(payload) if mentions_codable(*payload) => Some(ReplyDecode {
+            payload: super::substitute(*payload, subst, tys),
+            policy,
+        }),
+        _ => None,
+    };
+    if reply.is_none() {
+        super::equality::collect_vars(ret, tys, &mut kept);
+    }
     Some(Arc::new(CapEncoding {
         encode,
         keep_type_args: type_params.iter().map(|tp| kept.contains(tp)).collect(),
+        reply,
     }))
 }
 
@@ -406,4 +491,19 @@ pub(crate) fn check_op_codable_args(
         }
     }
     true
+}
+
+/// #3458: the payload of a typed read is decoded whole, so the instantiated `P`
+/// of `Effect[P]` must be `Codable` too (`Result[T, FetchError]` is not).
+pub(crate) fn check_reply_codable(
+    op: &str,
+    span: Span,
+    codable: &[String],
+    wire: &CapEncoding,
+    ctx: &mut Ctx,
+) -> bool {
+    let (Some(reply), Some(param)) = (&wire.reply, codable.first()) else {
+        return true;
+    };
+    check_codable(ctx, reply.payload, span, &CodableSite::Op { op, param })
 }

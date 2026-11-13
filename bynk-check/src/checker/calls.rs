@@ -3,7 +3,7 @@
 //! Split out of `checker.rs` (v0.29.10) verbatim; the parent module
 //! re-exports these via `use calls::*`.
 
-use super::codable::{check_op_codable_args, op_encoding};
+use super::codable::{check_op_codable_args, check_reply_codable, op_encoding};
 use super::*;
 
 /// v0.39 (ADR 0072): record a parameter-name inlay hint for one call argument,
@@ -2069,22 +2069,16 @@ pub(crate) fn check_static_call(
             }
             return None;
         }
-        if let Some(wire) = op_encoding(
-            &op_clone.type_params,
-            &op_clone.codable_params,
-            &op_clone.params,
-            op_clone.return_ty,
+        if !record_capability_wire(
+            &op_clone,
+            (&type_name.name, &method.name),
+            span,
+            expr_id,
             &subst,
-            tys,
+            arg_tys.is_none().then_some(args),
+            ctx,
         ) {
-            ctx.callees.insert(
-                expr_id,
-                Callee::Capability {
-                    cap: type_name.name.clone(),
-                    op: method.name.clone(),
-                    wire: Some(wire),
-                },
-            );
+            return None;
         }
         for (i, (param_ty, arg)) in op_clone.params.iter().zip(args.iter()).enumerate() {
             let param_ty = substitute(*param_ty, &subst, tys);
@@ -6215,9 +6209,22 @@ fn check_cross_context_capability_call(
             &op.codable_params,
             &patterns,
             ret_pattern,
+            op.reply_policy,
             &subst,
             tys,
         ) {
+            if !check_reply_codable(
+                &format!("{consumed}.{cap}.{}", method.name),
+                method.span,
+                &op.codable_params,
+                &wire,
+                ctx,
+            ) {
+                for a in args {
+                    let _ = type_of(a, None, ctx);
+                }
+                return None;
+            }
             ctx.callees.insert(
                 expr_id,
                 Callee::CrossCap {
@@ -6826,6 +6833,70 @@ pub(crate) fn with_of_hint(
         "to make a `{name}` from a `{}`, use `{name}.of(value)`, which checks the value and returns a `Result`",
         base.name()
     ))
+}
+
+/// #3458: a typed read's instantiated payload must be `Codable`; on failure the
+/// arguments still get typed (`untyped`, when they were not already) so their own
+/// errors are reported.
+fn reply_codable_or_type_args(
+    op: &str,
+    span: Span,
+    codable: &[String],
+    wire: &super::codable::CapEncoding,
+    untyped: Option<&[Expr]>,
+    ctx: &mut Ctx,
+) -> bool {
+    if check_reply_codable(op, span, codable, wire, ctx) {
+        return true;
+    }
+    for a in untyped.unwrap_or_default() {
+        let _ = type_of(a, None, ctx);
+    }
+    false
+}
+
+/// Record how a same-context capability call encodes its `Codable` arguments
+/// and decodes a typed read's reply (#3458). `false` when the payload is not
+/// `Codable`; `untyped` are the arguments still to type for their own errors.
+fn record_capability_wire(
+    op: &CapabilityOpInfo,
+    (cap, name): (&str, &str),
+    span: Span,
+    expr_id: ExprId,
+    subst: &HashMap<String, TyId>,
+    untyped: Option<&[Expr]>,
+    ctx: &mut Ctx,
+) -> bool {
+    let Some(wire) = op_encoding(
+        &op.type_params,
+        &op.codable_params,
+        &op.params,
+        op.return_ty,
+        op.reply_policy,
+        subst,
+        ctx.tys,
+    ) else {
+        return true;
+    };
+    if !reply_codable_or_type_args(
+        &format!("{cap}.{name}"),
+        span,
+        &op.codable_params,
+        &wire,
+        untyped,
+        ctx,
+    ) {
+        return false;
+    }
+    ctx.callees.insert(
+        expr_id,
+        Callee::Capability {
+            cap: cap.to_string(),
+            op: name.to_string(),
+            wire: Some(wire),
+        },
+    );
+    true
 }
 
 #[cfg(test)]

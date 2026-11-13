@@ -2329,12 +2329,20 @@ impl<'a> Parser<'a> {
         self.expect(TokenKind::RParen, "to close the operation parameter list")?;
         self.expect(TokenKind::Arrow, "before the operation return type")?;
         let return_type = self.parse_type_ref("as the operation return type")?;
-        let end_span = return_type.span();
+        let mut end_span = return_type.span();
+        // #3458: internal `@name(arg)` annotations follow the return type.
+        let mut annotations = Vec::new();
+        while self.peek_kind() == Some(TokenKind::At) {
+            let ann = self.parse_annotation()?;
+            end_span = ann.span;
+            annotations.push(ann);
+        }
         Ok(CapabilityOp {
             name,
             type_params,
             params,
             return_type,
+            annotations,
             documentation: None,
             span: kw.span.merge(end_span),
             trivia: Trivia::default(),

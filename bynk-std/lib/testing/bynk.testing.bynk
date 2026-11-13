@@ -1,0 +1,39 @@
+---
+The toolchain's own test support: an in-memory store whose reads are typed, so
+the compiler's call-site decode of a first-party capability reply (#3458) is
+exercised end to end. It is experimental and not part of the language surface:
+no program is expected to depend on it, and it may change or go in any release.
+---
+adapter bynk.testing {
+	exports capability { TypedReads }
+
+	---
+	An in-memory store of JSON values. `write` stores the boundary encoding of
+	its value, so `read` and `readOpt` decode what a call put there: a value
+	stored as one type and read as another does not decode.
+	---
+	capability TypedReads {
+		---
+		Store the JSON text `json` under `key`, as it is, so a test can seed a
+		value no type would have written.
+		---
+		fn put(key: String, json: String) -> Effect[()]
+		---
+		Store the encoding of `value` under `key`.
+		---
+		fn write[T: Codable](key: String, value: T) -> Effect[()]
+		---
+		The value under `key`, decoded as `T`. A missing key, and a value that
+		does not decode as `T`, fault.
+		---
+		fn read[T: Codable](key: String) -> Effect[T]
+		---
+		The value under `key`, decoded as `T`. A missing key, and a value that
+		does not decode as `T`, are `None`: the value is read as a miss, and a
+		warning goes to the runtime console.
+		---
+		fn readOpt[T: Codable](key: String) -> Effect[Option[T]] @onUndecodable(miss)
+	}
+
+	provides TypedReads = MemoryTypedReads
+}
