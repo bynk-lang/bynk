@@ -1013,7 +1013,8 @@ export const VectorError = {
  * One retrieved chunk of an `AiSearch` instance: the chunk's `id`, its `score`
  * (0 to 1, larger is a closer match), its `text`, and where it came from: `key`
  * is the source file's path or the page's URL, `timestamp` the source item's
- * unix time when the platform reports one, and `metadata` the item's custom
+ * unix time in milliseconds when the platform reports one (a `timestamp`
+ * condition in `SearchOptions.filter` compares in the same unit), and `metadata` the item's custom
  * metadata as a JSON object in text (`None` when it has none). The text is
  * indexed content, so treat it as untrusted input.
  */

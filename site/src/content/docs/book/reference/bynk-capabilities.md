@@ -1597,7 +1597,7 @@ prints a one-time warning with a link to Cloudflare's pricing, unless the projec
 has acknowledged it with `ai-search = "allow"` under `[dev]` in `bynk.toml`.
 
 `search(query, options)` returns the best-matching chunks, best first, as `SearchHit`s
-(`id`, `score` from 0 to 1, `text`, `key` the source path or URL, `timestamp` and
+(`id`, `score` from 0 to 1, `text`, `key` the source path or URL, `timestamp` in unix milliseconds and
 `metadata` as JSON text when the item has them), for a handler that shows results or
 builds its own prompt with `Ai.generate`. `answer(messages, options)` retrieves the
 same way and has the instance's own generation model write the reply from the
