@@ -77,7 +77,7 @@ that count may only rise.
 
 ```toml
 [dependencies]
-bynk-model = "0.588"
+bynk-model = "0.589"
 ```
 
 ```rust,ignore
