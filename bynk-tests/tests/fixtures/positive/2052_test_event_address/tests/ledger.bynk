@@ -9,7 +9,7 @@ suite shop.ledger {
     let _ <- OnPlaced.event(e, env)
     let t <- Books("all").total()
     expect t == 1
-    expect Idempotency.remember called once
+    expect Idempotency.claim called 2 times
   }
 
   case "dedup holds at integration too" as integration {

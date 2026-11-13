@@ -145,7 +145,7 @@ async function test_an_event_delivered_twice_is_counted_once() {
     const __r1 = await __bynkEvent_OnPlaced(e, env, deps);
     const t = await __makeBooks("all").total(deps);
     if (!(t === 1)) { throw __bynkExpectFailure("tests/ledger.bynk:11:12", 596, 602, "expect t == 1\n  expected: t == 1\n  actual:   " + __bynkShow((t)) + " == " + __bynkShow((1))); }
-    if (!(((__obs.log["Idempotency.remember"] ?? []).length === (1)))) { throw __bynkExpectFailure("tests/ledger.bynk:12:12", 614, 646, "expect Idempotency.remember called once"); }
+    if (!(((__obs.log["Idempotency.claim"] ?? []).length === (2)))) { throw __bynkExpectFailure("tests/ledger.bynk:12:12", 614, 646, "expect Idempotency.claim called 2 times"); }
     return { pass: true };
   } catch (e) {
     if (e instanceof ExpectationError) {

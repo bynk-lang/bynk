@@ -2,7 +2,7 @@
 context shop.ledger
 
 consumes shop.order
-consumes bynk { Idempotency }
+consumes bynk { Idempotency, Claim }
 
 agent Books {
   key id: String
@@ -26,18 +26,12 @@ agent Books {
   }
 }
 
-// The events guide's idempotency idiom: dedup on the envelope's `eventId`.
+// The events guide's idempotency idiom: claim the envelope's `eventId`.
 service OnPlaced from Events(Placed) {
   on event(e: Placed, env: EventEnvelope) -> Effect[()] given Idempotency {
-    let seen <- Idempotency.dedup[Bool](env.eventId)
-    match seen {
-      Some(_) => (),
-      None => {
-        let _ <- Idempotency.remember[Bool](env.eventId, true, 7.days)
-        let _ <- Books("publisher").note(env.publisherId)
-        Books("all").bump()
-      }
-    }
+    let Claim.Claimed <- Idempotency.claim(env.eventId, 7.days) else { () }
+    let _ <- Books("publisher").note(env.publisherId)
+    Books("all").bump()
   }
 }
 
