@@ -71,11 +71,59 @@ it obvious, since a capability operation's own type parameter is never inferred 
 [Capabilities & providers](/book/reference/capabilities/#generic-operations)). Calling
 `dedup` alone does **not** cache anything — `remember` is what writes the entry, so
 forgetting to call it after a cache miss means that key is recomputed every time, not an
-error. The shipped provider is a single in-memory map, identical on every platform: state
-is lost on process restart, and there is no durability or multi-instance sharing yet — a
-durable, platform-native provider is a named but unfiled future direction (see
-[the retired track's closing summary](https://github.com/bynk-lang/bynk/blob/main/design/archive/retired-tracks.md)
-for why that's a separate axis from portability, not a variant of it).
+error. `dedup` and `remember` are an in-memory map in each provider instance, on every
+platform: state is lost on process restart and not shared between instances. A durable
+`dedup`/`remember` needs typed reads from a provider and is tracked separately
+([#3458](https://github.com/bynk-lang/bynk/issues/3458)); until then use `claim` for work
+that must run once.
+
+#### `claim`: first delivery wins
+
+`dedup` then `remember` is check-then-act: two deliveries of one key that arrive together
+can both miss and both run. `claim` is the race-free form. The first call for a key
+returns `Claimed`, and every later call within `expiresAfter` returns `AlreadyClaimed`:
+
+```bynk,ignore
+consumes bynk { Idempotency, Claim }
+
+on POST("/hooks/:id") (id: String) -> Effect[HttpResult[String]] by Visitor given Idempotency {
+  let Claim.Claimed <- Idempotency.claim(id, 7.days) else { Ok("duplicate") }
+  Ok("processed")
+}
+```
+
+`claim` records no outcome, so there is nothing to replay: use it when the work should run
+at most once. It is separate from `dedup`/`remember`, which never see a claim.
+
+In a service handler, the compiler settles the claims the handler made when it exits:
+
+- **A failure releases the claim**, so a retry can claim again. A failure is a fault, a
+  returned `Err`, or an `HttpResult` that is a 5xx (`ServerError`, `ServiceUnavailable`
+  and the rest). A 4xx, or any other result, is a completed outcome, and the claim is held
+  for the full `expiresAfter`.
+- **A claim is a lease until it is settled.** It holds for at most 30 seconds, matching
+  the `waitUntil` limit, and only then for `expiresAfter`. If the instance dies before the
+  handler settles, the claim lapses and a retry can claim again. A handler that runs
+  longer than 30 seconds can be re-claimed by a concurrent retry while it is still running;
+  when it settles it leaves the retry's claim alone, releasing or confirming only a claim
+  that is still its own.
+
+The guarantee is **at-most-once completion, not exactly-once side effects**: work done
+before a failure, such as a call to another service, can repeat on the retry. Make those
+calls idempotent too. A `claim` outside a service handler (in an agent handler, say) is not
+settled: it is held for `expiresAfter` whether or not the work succeeds.
+
+The key is scoped to the calling handler as for `dedup`.
+
+`claim` is **durable and shared on Cloudflare**. A Worker that calls it gets a D1 database
+with no declaration (see [the idempotency database](/book/guides/projects-build-and-deployment/deploy-to-cloudflare/#the-idempotency-database)),
+and the claim is one atomic `INSERT … ON CONFLICT` there: two deliveries of one key, on
+different isolates or after a restart, yield exactly one `Claimed`. A claim that has
+lapsed is taken over, and a few expired rows are deleted with each claim, so the table
+stays small. It costs one database round trip per `claim`. On Node and in the browser
+`claim` is atomic within one process and lost on restart, as `dedup` is. This is the
+Cloudflare platform's binding of the portable `Idempotency` capability, chosen by the
+build's platform, not by the author.
 
 #### `claim`: first delivery wins
 

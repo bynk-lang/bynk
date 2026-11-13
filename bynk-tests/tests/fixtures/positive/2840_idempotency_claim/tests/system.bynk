@@ -1,0 +1,17 @@
+// #2840: at `system`, the Worker runs the real Cloudflare provider against the
+// participant's own database, which starts with the compiler's claims migration.
+suite shop.hooks as system {
+  case "a claim is taken in the participant's database, once" {
+    let first <- api.POST("/hooks/:id", "wire-1") by Visitor
+    expect first is Ok("processed")
+    let again <- api.POST("/hooks/:id", "wire-1") by Visitor
+    expect again is Ok("duplicate")
+  }
+
+  case "a failed handler releases its claim over the wire" {
+    let first <- api.POST("/flaky/:id", "down") by Visitor
+    expect first is ServerError(_)
+    let retry <- api.POST("/flaky/:id", "down") by Visitor
+    expect retry is ServerError(_)
+  }
+}
