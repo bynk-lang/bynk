@@ -1,0 +1,7 @@
+# #3458: run by system/behaviour_fixtures.rs; see that file for the format.
+# A typed read decodes its reply as the instantiated payload: `readOpt` declares
+# an undecodable reply a miss (the third case), `read` declares nothing and
+# faults (the fourth, which must fail with the capability, operation, type and
+# path in its message).
+passed=3 failed=1
+fail a value stored as another type faults a read that declares no miss

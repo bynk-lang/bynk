@@ -20,3 +20,9 @@ path = "src/lib.rs"
 # track, #1940 Decision A). `bynk-check` reads these sources; it does not
 # contain them.
 [dependencies]
+
+[features]
+# The toolchain's own test support (`bynk.testing`, #3458): an experimental
+# in-memory adapter that exercises the call-site decode of a first-party
+# capability reply. Off in every released build; `bynk-tests` turns it on.
+test-support = []

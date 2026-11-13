@@ -1,0 +1,9 @@
+context api
+
+consumes registry
+
+service yank {
+  on call() -> Effect[Bool] given registry.Yanks {
+    registry.Yanks.set(true)
+  }
+}

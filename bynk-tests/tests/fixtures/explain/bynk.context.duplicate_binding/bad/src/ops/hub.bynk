@@ -1,0 +1,11 @@
+context ops.hub
+
+consumes bynk.cloudflare { Kv }
+consumes kv
+
+service intake {
+  on call(message: String) -> Effect[Int] given Kv {
+    let _ <- Kv.put(message, message)
+    kv.store(1)
+  }
+}

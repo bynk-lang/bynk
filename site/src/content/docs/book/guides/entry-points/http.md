@@ -284,6 +284,49 @@ Likewise, a `domain` on a cookie makes every subdomain receive it, so it warns
 error. Drop `domain` to keep a cookie to the host that set it. See
 [HTTP → Setting cookies](/book/reference/http/#setting-cookies).
 
+## Set a cookie from the record that reads it
+
+A cookie that a typed `cookies` record reads is written from that record, so its name and
+its value cannot drift from what the next request decodes:
+
+```bynk,fragment
+type Theme = enum { Light, Dark }
+type Prefs = {
+  theme: Theme = Light,
+  @name("__Host-visits") visits: Int = 0,
+}
+```
+
+```bynk,fragment
+on GET("/visit") (cookies: Prefs) -> Effect[HttpResult[String]] by v: Visitor {
+  let n = cookies.visits + 1
+  Ok("visit \(n)").withCookie(Prefs.visits.cookie(n))
+}
+
+on POST("/theme/dark") () -> Effect[HttpResult[String]] by v: Visitor {
+  Ok("dark").withCookie(Cookie { ...Prefs.theme.cookie(Dark), maxAge: Some(365.days) })
+}
+
+on POST("/theme/reset") () -> Effect[HttpResult[()]] by v: Visitor {
+  NoContent.withCookie(Prefs.theme.expire())
+}
+```
+
+`Prefs.theme.cookie(Dark)` is a `Cookie` named by the field's wire name (`theme`; for `visits`
+it is the `@name`, `__Host-visits`) and valued as the decoder reads it. Writing `dark` by hand
+in a literal `Cookie` would make every later request a `400`, because the decoder reads an
+enum by its exact variant name, so the compiler rejects it
+(`bynk.http.cookie_value_undecodable`). A literal `Cookie` that a record reads, even with a
+decodable value, draws a warning (`bynk.http.cookie_untyped_has_field`). Spread the typed cookie into a `Cookie { … }` literal
+for attributes (`maxAge`, `domain`, `path`, `sameSite`), and give `expire()` the same `Path`
+and `Domain` the cookie was set with. A cookie in no record is still written as a plain
+`Cookie { name, value }`.
+
+Decoding a cookie is not authenticating it: a `cookies` record reads what the browser sends,
+and anyone can send any value. To sign a user in, use a [signed cookie](/book/guides/actors/authenticate-with-a-signed-cookie/)
+(its session cookie cannot be written through a record). See
+[HTTP → Writing a cookie from its record](/book/reference/http/#typed-cookie-write).
+
 ## Secure by default (security headers)
 
 You don't have to do anything to get the one security header that matters for a

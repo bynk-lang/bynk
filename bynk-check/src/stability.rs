@@ -410,8 +410,11 @@ mod tests {
     #[test]
     fn the_shipped_policy_blocks_only_the_experimental_items() {
         let p = StabilityPolicy::for_project(None, &HashMap::new());
+        // `bynk.testing` (#3458) exists only with `bynk-std`'s `test-support` feature.
+        let mut shipped = p.experimental.clone();
+        shipped.retain(|i| i != bynk_std::TESTING_UNIT);
         assert_eq!(
-            p.experimental,
+            shipped,
             [
                 "bynk.Fetch.sendWith",
                 "bynk.Fetch.receiveBytes",
