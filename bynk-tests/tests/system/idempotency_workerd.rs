@@ -156,6 +156,20 @@ fn serve(dir: &Path, tmp: &Path, log: &str) -> Option<(wrangler::Wrangler, u16)>
     Some((server, port))
 }
 
+/// The `n` of `wrangler d1 execute --json`'s first result row (the JSON array
+/// starts at its first line beginning `[`, after any banner).
+fn claim_rows(output: &str) -> Option<i64> {
+    // The first JSON value from any `[`: wrangler may print a banner before it and
+    // a warning after it.
+    let parsed = output.match_indices('[').find_map(|(i, _)| {
+        serde_json::Deserializer::from_str(&output[i..])
+            .into_iter::<serde_json::Value>()
+            .next()?
+            .ok()
+    })?;
+    parsed.get(0)?.get("results")?.get(0)?.get("n")?.as_i64()
+}
+
 #[test]
 fn claims_are_atomic_in_d1_and_survive_a_restart_on_workerd() {
     if !tools::tool_exists("npx") && skip("`npx` is not on PATH") {
@@ -235,7 +249,8 @@ fn claims_are_atomic_in_d1_and_survive_a_restart_on_workerd() {
                 "concurrent claims: {won} processed and {lost} duplicate, expected 1 and 11: {answers:?}"
             ));
         }
-        // 2. The claim is a row in D1, not isolate memory.
+        // 2. The claim is exactly one row in D1, not isolate memory. (The readiness probe
+        //    claims `boot-probe`, so count `shared`'s row by its key.)
         match wrangler_run(
             &dir,
             &[
@@ -243,13 +258,17 @@ fn claims_are_atomic_in_d1_and_survive_a_restart_on_workerd() {
                 "execute",
                 "D1_IDEMPOTENCY",
                 "--local",
+                "--json",
                 "--command",
-                "SELECT count(*) AS n FROM idempotency_claims",
+                "SELECT count(*) AS n FROM idempotency_claims WHERE key LIKE '%::shared'",
             ],
         ) {
-            Ok(text)
-                if text.contains("\"n\": 1") || text.contains("n │") || text.contains(" 1 ") => {}
-            Ok(text) => failures.push(format!("expected one claim row in D1, got:\n{text}")),
+            Ok(text) => match claim_rows(&text) {
+                Some(1) => {}
+                other => failures.push(format!(
+                    "expected exactly one claim row for `shared` in D1, got {other:?} from:\n{text}"
+                )),
+            },
             Err(text) => failures.push(format!("could not read the claims table:\n{text}")),
         }
         drop(server);
@@ -275,10 +294,11 @@ fn claims_are_atomic_in_d1_and_survive_a_restart_on_workerd() {
         drop(server);
     }
     let first = fs::read_to_string(tmp.join("first.log")).unwrap_or_default();
+    let second = fs::read_to_string(tmp.join("second.log")).unwrap_or_default();
     let _ = fs::remove_dir_all(&tmp);
     assert!(
         failures.is_empty(),
-        "Idempotency.claim on workerd and local D1:\n{}\n--- wrangler log ---\n{first}",
+        "Idempotency.claim on workerd and local D1:\n{}\n--- first wrangler log ---\n{first}\n--- second wrangler log ---\n{second}",
         failures.join("\n")
     );
 }
