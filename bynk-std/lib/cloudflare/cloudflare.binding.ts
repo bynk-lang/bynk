@@ -1858,7 +1858,7 @@ export class WorkersVectorize implements Vectorize {
         id: v.id as string,
         values: v.values as readonly number[],
         metadata: metadata.some ? Some(JSON.stringify(metadata.value)) : None,
-        namespace: space.some ? Some(space.value as string) : None,
+        "namespace": space.some ? Some(space.value as string) : None,
       };
     });
     return this.write("upsert", decoded);
