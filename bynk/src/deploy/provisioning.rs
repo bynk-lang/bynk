@@ -184,6 +184,9 @@ pub(crate) fn deploy_one(
         &config,
         environment,
     )?;
+    // #3480: each AI Search instance, found before the run and recorded here.
+    // Nothing is created: the account owns it.
+    record_ai_search_links(worker, declared, lock, lock_path, environment)?;
     // P3 (#2342): each rate limiter's `namespace_id`, allocated in the ledger
     // (no account call: the id is ours to choose) and recorded before the
     // push, so an interrupted run never allocates a second one and resets

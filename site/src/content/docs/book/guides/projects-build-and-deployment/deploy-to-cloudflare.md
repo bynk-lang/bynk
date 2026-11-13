@@ -66,6 +66,7 @@ nothing speculative. If it isn't in the generated `wrangler.toml`, it isn't
 | `capability Sessions = Kv` | Creates a KV namespace of its own for that instance, and records its id |
 | `capability Archives = R2` | Creates an R2 bucket of its own for that instance, by name, and records it |
 | `capability Docs = Vectorize @dimensions(768) @metric("cosine")` | Creates the Vectorize index with that configuration if the account has none of its name, checks an existing one against it, and creates the `@indexed` metadata indexes before the push; it never recreates an index |
+| `capability Kb = AiSearch @instance("support-docs")` | Links to the AI Search instance of that name and records it; a missing instance fails the deploy, and the deploy never creates one |
 | `capability Main = Postgres` | Makes a Hyperdrive config from the connection string in the environment variable `[deploy.hyperdrive.Main]` names (or adopts a config you name by id), and records its id |
 | `capability PublishLimit = RateLimit …` | Allocates the limiter a `namespace_id` and records it; nothing is created on the account |
 | An `agent` | Nothing to create — the config declares its Durable Object class, and Cloudflare registers it |
@@ -876,6 +877,34 @@ your environment (see [Secrets](#secrets)). A stored secret is account-wide:
 shared across Workers, rotated once in the store, and Cloudflare-only. Use
 `bynk.Secrets` unless several Workers must share one value or you rotate it
 centrally.
+
+### AI Search instances
+
+An `AiSearch` instance
+(`capability Kb = AiSearch @instance("support-docs")`) queries an AI Search
+instance that someone configured: its data source, models and indexing are theirs,
+so deploy **links** it and never creates it. Before anything is pushed,
+`bynk deploy` asks the account for the instance named in `@instance` (in the
+default namespace) and records the link in `bynk.deploy.lock`; a missing instance
+fails the deploy, naming it:
+
+```
+bynk: `AI_SEARCH_KB` of `shop-ask` queries AI Search instance `support-docs`, which does not exist on this account. `bynk deploy` links to an instance and never creates one: create `support-docs` in the Cloudflare dashboard, with `wrangler` or with the REST API, or name the instance the account has
+```
+
+An instance the lookup shows as paused or disabled is a warning, not a failure:
+it still answers. The plan shows the binding as linked, with no action:
+
+```
+linked ai-search support-docs (AI_SEARCH_KB; not created)
+```
+
+`--dry-run` stays offline and does not ask. The lookup uses Cloudflare's API, so
+it needs `CLOUDFLARE_API_TOKEN` and `CLOUDFLARE_ACCOUNT_ID`, the token with the
+"AI Search: Edit" and "AI Search: Run" permissions (Cloudflare's reference names
+no read-only one); a refusal says so. The instance's name is used as declared in
+every environment, without an environment suffix, so a staging deploy reads the
+same instance as production, and `--prune` never touches one.
 
 ### Sender domains: Email Sending
 

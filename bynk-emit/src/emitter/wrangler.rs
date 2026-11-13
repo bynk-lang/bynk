@@ -1729,6 +1729,34 @@ pub fn retarget_services(
     })
 }
 
+/// #3480: the config `bynk dev` serves, where each `[[ai_search]]` entry also
+/// carries `remote = true`: AI Search has no local simulation, so wrangler
+/// proxies the binding to the deployed instance. Only ever applied to the
+/// development copy; the config `bynk deploy` reads never carries it. Unchanged
+/// text when there is no such entry.
+pub fn enable_remote_ai_search(text: &str) -> Result<String, String> {
+    let mut doc: toml_edit::DocumentMut = text
+        .parse()
+        .map_err(|e| format!("invalid wrangler.toml: {e}"))?;
+    let mut changed = false;
+    if let Some(entries) = doc
+        .get_mut("ai_search")
+        .and_then(|i| i.as_array_of_tables_mut())
+    {
+        for entry in entries.iter_mut() {
+            if entry.get("remote").and_then(|r| r.as_bool()) != Some(true) {
+                entry.insert("remote", toml_edit::value(true));
+                changed = true;
+            }
+        }
+    }
+    Ok(if changed {
+        doc.to_string()
+    } else {
+        text.to_string()
+    })
+}
+
 /// Each `[[kv_namespaces]]` entry's `(binding, id)`, in file order; an entry
 /// missing either is skipped.
 fn kv_entries(doc: &toml_edit::DocumentMut) -> impl Iterator<Item = (&str, &str)> {
@@ -1737,6 +1765,25 @@ fn kv_entries(doc: &toml_edit::DocumentMut) -> impl Iterator<Item = (&str, &str)
         .into_iter()
         .flatten()
         .filter_map(|t| Some((t.get("binding")?.as_str()?, t.get("id")?.as_str()?)))
+}
+
+#[cfg(test)]
+mod ai_search_dev_tests {
+    use super::*;
+
+    /// The development copy proxies each AI Search binding to the account;
+    /// text with no such binding is returned unchanged.
+    #[test]
+    fn the_development_copy_proxies_each_ai_search_binding() {
+        let text = "name = \"shop\"\n\n[[ai_search]]\nbinding = \"AI_SEARCH_KB\"\ninstance_name = \"support-docs\"\n\n[[ai_search]]\nbinding = \"AI_SEARCH_B\"\ninstance_name = \"b\"\n";
+        let out = enable_remote_ai_search(text).unwrap();
+        assert_eq!(out.matches("remote = true").count(), 2, "{out}");
+        assert!(out.contains("instance_name = \"support-docs\""));
+        assert_eq!(enable_remote_ai_search(&out).unwrap(), out);
+        let plain = "name = \"shop\"\n";
+        assert_eq!(enable_remote_ai_search(plain).unwrap(), plain);
+        assert!(enable_remote_ai_search("not = [valid").is_err());
+    }
 }
 
 #[cfg(test)]

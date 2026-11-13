@@ -1599,6 +1599,16 @@ service ask from http {
 `bynk.capability.instance_only`, and a missing or empty name is
 `bynk.capability.missing_option` or `bynk.capability.invalid_option`.
 
+`bynk deploy` links the instance and never creates it: it looks the instance up by
+name before anything is pushed, records it in `bynk.deploy.lock`, and fails, naming
+it, when it is missing; a paused instance is a warning. See [Deploy to
+Cloudflare](/book/guides/projects-build-and-deployment/deploy-to-cloudflare/#ai-search-instances).
+Under `bynk dev` the binding is proxied to the deployed instance (the development
+copy of `wrangler.toml` carries `remote = true`; the generated file the deploy reads
+does not), so a call runs on your Cloudflare account: the first one in a session
+prints a one-time warning with a link to Cloudflare's pricing, unless the project
+has acknowledged it with `ai-search = "allow"` under `[dev]` in `bynk.toml`.
+
 `search(query, options)` returns the best-matching chunks, best first, as `SearchHit`s
 (`id`, `score` from 0 to 1, `text`, `key` the source path or URL, `timestamp` in unix milliseconds and
 `metadata` as JSON text when the item has them), for a handler that shows results or

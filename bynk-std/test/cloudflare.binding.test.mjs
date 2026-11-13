@@ -2506,6 +2506,45 @@ t("WorkersVectorize: the first call under bynk dev checks the index against the 
   assert.equal(plain.calls.filter((c) => c.name === "describe").length, 0);
 });
 
+// #3480: AI Search is a remote-only binding of its own kind: its warning is
+// keyed `ai-search`, acknowledged by its own variable (not Workers AI's), once
+// per session, never in a deployment, and links to Cloudflare, not a price.
+t("WorkersAiSearch.search: warns once under bynk dev unless the project acknowledged ai-search, and never in a deployment", async () => {
+  const warnings = [];
+  const original = console.warn;
+  console.warn = (...args) => warnings.push(args.join(" "));
+  try {
+    const run = async (env) => new WorkersAiSearch({ AI_SEARCH_KB: fakeSearch(), ...env }, "AI_SEARCH_KB").search("q", sOpts());
+    assert.equal((await run({})).tag, "Ok");
+    assert.deepEqual(warnings, []);
+    // Workers AI's acknowledgement does not cover AI Search.
+    assert.equal((await run({ BYNK_DEV: "1", BYNK_DEV_ACK_AI: "allow" })).tag, "Ok");
+    assert.equal(warnings.length, 1);
+    assert.match(warnings[0], /may incur charges/);
+    assert.match(warnings[0], /https:\/\/developers\.cloudflare\.com\/ai-search\//);
+    assert.match(warnings[0], /ai-search = "allow"/);
+    assert.doesNotMatch(warnings[0], /\$|free/i);
+    // Once per session: a second call, even with no acknowledgement, is quiet.
+    assert.equal((await run({ BYNK_DEV: "1" })).tag, "Ok");
+    assert.equal(warnings.length, 1);
+  } finally {
+    console.warn = original;
+  }
+});
+
+t("WorkersAiSearch.answer: an acknowledged project is never warned", async () => {
+  const warnings = [];
+  const original = console.warn;
+  console.warn = (...args) => warnings.push(args.join(" "));
+  try {
+    const instance = new WorkersAiSearch({ AI_SEARCH_KB: fakeSearch(), BYNK_DEV: "1", BYNK_DEV_ACK_AI_SEARCH: "allow" }, "AI_SEARCH_KB");
+    assert.equal((await instance.answer([userMsg("q")], sOpts())).tag, "Ok");
+    assert.deepEqual(warnings, []);
+  } finally {
+    console.warn = original;
+  }
+});
+
 // #3479: `upsertValue[M]` arrives boundary-encoded, with an `Option` as `{ kind }`.
 t("WorkersVectorize.upsertValue: sends what upsert sends, from the call site's encoding", async () => {
   const index = fakeIndex();
