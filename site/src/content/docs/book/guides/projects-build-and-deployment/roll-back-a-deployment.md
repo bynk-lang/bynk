@@ -64,6 +64,17 @@ A revert replaces each reverted Worker's recorded contracts with the target's.
 Ids, queues and tombstones are untouched. If that changes the file, the command says so;
 commit it. Assets need nothing: they belong to the Worker version.
 
+## After a revert
+
+A rollback makes an older version live, so the Worker's latest *uploaded* version is
+no longer the deployed one. Cloudflare then refuses a plain `wrangler secret put`
+until a version is deployed. Use `wrangler versions secret put` followed by a
+version deployment, or deploy first.
+
+A version made live outside Bynk (`wrangler versions deploy`, the dashboard) is
+recorded by Cloudflare like a rollback, so `bynk revert` cannot find its upload and
+refuses. Name the version to go back to with `--to`.
+
 ## What it does not do
 
 It never changes stored data, deletes a version, or removes a resource. Cloudflare
