@@ -1,7 +1,7 @@
 ---
 level: minor
 changelog: `bynk.cloudflare` gains `Ai`, a one-per-Worker Workers AI capability whose `run(model, input)` runs any model over JSON text through the `[ai]` binding, with a typed `AiError`; every operation faults until stubbed in a test
-probes: emit_abi_shapes, ts_writes
+probes: emit_abi_shapes, emit_diagnostics, ts_writes
 ---
 
 ## ADR: workers-ai-capability
