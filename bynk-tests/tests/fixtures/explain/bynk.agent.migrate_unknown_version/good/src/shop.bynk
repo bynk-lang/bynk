@@ -1,0 +1,11 @@
+context shop
+
+agent Cart {
+  key id: String
+
+  store owner: Cell[String]
+
+  on call ping() -> Effect[Int] {
+    1
+  }
+}

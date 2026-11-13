@@ -1,0 +1,22 @@
+context chat
+
+type RoomId = opaque String
+type ServerFrame = { text: String }
+type ClientFrame = { text: String }
+
+service ChatGateway from websocket(in: ClientFrame, out: ServerFrame) {
+  on open (roomId: RoomId) -> Effect[()] by v: Visitor {
+    let _ <- Room(roomId).join(connection)
+    ()
+  }
+}
+
+agent Room {
+  key id: RoomId
+  store conns: Map[String, Connection[ServerFrame]]
+
+  on call join(conn: Connection[ServerFrame]) -> Effect[()] {
+    let _ <- conns.put("one", conn)
+    ()
+  }
+}

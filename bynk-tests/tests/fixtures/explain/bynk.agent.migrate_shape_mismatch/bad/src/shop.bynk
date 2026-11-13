@@ -1,0 +1,17 @@
+context shop
+
+type CartV1 = { owner: Int }
+
+agent Cart {
+  key id: String
+
+  store ownerName: Cell[String]
+  migrate from 1 (old: CartV1) {
+    ownerName := "x"
+    drop owner
+  }
+
+  on call ping() -> Effect[Int] {
+    1
+  }
+}

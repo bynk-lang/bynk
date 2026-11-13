@@ -2099,6 +2099,30 @@ emission (a name that is not a token, a value outside the cookie-octet set, an u
 faults the request. A response carrying a `Set-Cookie` is sent with `Cache-Control: private`
 whatever its `@cache` scope.
 
+**Typed cookie writes.** `R.f.cookie(v)` and `R.f.expire()`, where `R` is a record type, `f` one of
+its fields and `R.f` not a value on its own, are checker-typed forms answering a `Cookie`, recognised
+ahead of any other reading of the receiver; a static method `cookie` or `expire` declared on `R`
+takes precedence. `R` MUST be the type of the `cookies` parameter of some `on http` handler of the
+unit that writes the cookie (`bynk.http.cookie_field_not_cookie_record`) and `f` MUST be one of its
+fields (`bynk.http.cookie_field_unknown`). `cookie` takes exactly one argument and `expire` none
+(`bynk.http.cookie_field_arity`), and `f` MUST NOT be a `List` (`bynk.http.cookie_field_list`).
+`cookie(v)` checks `v` against `f`'s type (the `T` of an `Option[T]`) and answers a `Cookie` whose
+`name` is `f`'s wire name (its `@name`, else its own name) and whose `value` is `v` as the `cookies`
+decoder reads it: an `Int` its decimal digits, a `Bool` `true` or `false`, an enum its variant's
+name, anything else its text; every other attribute is the `Cookie` default. `expire()` answers the
+cookie with that name, an empty value, `maxAge: Some(0)` and an epoch `expires`. The field segment
+is a reference to the field for rename and go-to-definition.
+
+A cookie whose name is known at compile time is checked against the unit's records and actors. The
+`__Host-`/`__Secure-` and attribute rules of a `Cookie` literal apply equally to `Cookie { ...R.f.cookie(v), … }`
+and to a bare typed cookie, judged against the field's wire name. A cookie named like the session
+cookie of a `SignedCookie` actor of the unit MUST NOT be written as a typed write
+(`bynk.actor.signed_cookie_write_directly`) or an untyped `Cookie` literal
+(`bynk.actor.signed_cookie_write_literal`). An untyped literal named like a field of a `cookies` record
+of the unit draws a warning (`bynk.http.cookie_untyped_has_field`), and a literal `value` that field's
+decoder rejects (an enum other than a variant's exact name, an `Int` that is not a safe integer's
+digits, a `Bool` other than `true` or `false`) is refused (`bynk.http.cookie_value_undecodable`).
+
 **`@raw`.** A third handler annotation, `@raw(contentType: "<type>/<subtype>")` (or
 `"*/*"`), marks a handler's `body: Bytes` as the raw request body. It is legal only
 on a `POST`/`PUT`/`PATCH` handler with a `body` (`bynk.http.raw_on_bodyless`), at

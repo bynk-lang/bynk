@@ -46,6 +46,7 @@ pub use bynk_syntax::ast::ExprId;
 
 mod calls;
 pub mod codable;
+mod cookie_lints;
 mod d1;
 pub use d1::{BatchPosition, D1DecodeSite, D1SqlSite, RowLink};
 pub(crate) mod equality;
@@ -630,6 +631,14 @@ pub enum Callee {
     /// actor: the session cookie the actor mints, or its matching deletion.
     /// `issue` reads the `Clock` and is an `Effect`; `expire` is pure.
     SignedCookie { actor: String, issue: bool },
+    /// #3446: `Record.field.cookie(value)` / `Record.field.expire()` on a cookie record: the
+    /// `Cookie` the field's decoder reads back (named by its wire name, valued by the decoder's
+    /// leaf rules), or its matching deletion.
+    CookieField {
+        record: String,
+        field: String,
+        expire: bool,
+    },
     /// A built-in static constructor with no declaring type — `List.empty`,
     /// `Map.empty`, `Int.parse`/`Float.parse`, `Duration.millis`,
     /// `Instant.fromEpochMillis`, `Bytes.fromUtf8`/`fromBase64`/`empty`,
