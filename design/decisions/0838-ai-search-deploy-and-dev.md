@@ -1,12 +1,6 @@
----
-level: minor
-changelog: `bynk deploy` links each `AiSearch` instance by name, records it in the ledger and fails when it is missing, never creating one; `bynk dev` proxies the binding to the deployed instance with a one-time warning, silenced by `[dev] ai-search = "allow"`
-probes: emit_diagnostics
----
+# 0838 — AI Search instances are linked by the deploy, and bynk dev proxies them with a one-time warning
 
-## ADR: ai-search-deploy-and-dev
-title: AI Search instances are linked by the deploy, and bynk dev proxies them with a one-time warning
-summary: Slice AS2 of #3480: the deploy looks each instance up and fails when it is missing, and bynk dev warns once per binding kind and proceeds
+- **Status:** Accepted (v0.598)
 
 **Context.** An AI Search instance is owned by someone else, so the deploy cannot create it (#3301's rule, ADR 0802), and it has no local simulation, so `bynk dev` can only reach the deployed one.
 

@@ -3,7 +3,7 @@ title: Version compatibility & changelog
 ---
 Bynk is pre-1.0 and developed in small, spec-first increments (see
 [Versioning & roadmap](/book/about/versioning-and-roadmap/)). This book is
-written against **v0.597**.
+written against **v0.598**.
 
 This page is a high-level summary of notable increments, not an exhaustive
 per-commit history. While Bynk is pre-1.0, increments may change behaviour.
@@ -28,6 +28,7 @@ per-commit history. While Bynk is pre-1.0, increments may change behaviour.
 
 | Version | Highlights |
 |---|---|
+| **v0.598.0** | `bynk deploy` links each `AiSearch` instance by name, records it in the ledger and fails when it is missing, never creating one; `bynk dev` proxies the binding to the deployed instance with a one-time warning, silenced by `[dev] ai-search = "allow"` |
 | **v0.597.0** | Under `bynk dev` a `Vectorize` instance is bound, remotely, to the index `[dev.vectorize-index] <Capability> = "<index-name>"` names in `bynk.toml` and never to the deploy's, an instance with no entry is unbound and a call to it fails saying how to bind it, the first call checks the index against the declaration, and the first call prints a one-time warning that links to Cloudflare's pricing page unless `[dev] vectorize = "allow"` acknowledges it |
 | **v0.596.0** | `bynk.cloudflare` gains `AiSearch`, a linked instance kind for an existing AI Search instance named by a required `@instance`, with `search` and `answer`, a typed filter and typed errors, emitted as `[[ai_search]]`; every operation faults until stubbed in a test |
 | **v0.595.0** | In `bynk test` a `Vectorize` instance is an exact in-memory index built from its declaration (dimensions, metric, `@indexed`): it ranks by the platform's score semantics, keeps insert and upsert apart, partitions namespaces, applies all eight filter operators and the documented limits, and `stub` still replaces any operation; a write is visible at once, which production's asynchronous upserts are not |
