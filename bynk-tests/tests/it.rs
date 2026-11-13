@@ -357,6 +357,8 @@ mod system {
     mod http_recursive_body_behaviour;
     #[path = "http_security_behaviour.rs"]
     mod http_security_behaviour;
+    #[path = "idempotency_workerd.rs"]
+    mod idempotency_workerd;
     #[path = "inline_value_names.rs"]
     mod inline_value_names;
     #[path = "int_binding_arithmetic_behaviour.rs"]
