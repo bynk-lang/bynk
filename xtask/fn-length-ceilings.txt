@@ -75,5 +75,4 @@ bynk-check/src/context_checks.rs::reject_fn_types = 306
 bynk-check/src/project_model.rs::phase_messages_bundles = 306
 bynk-driver/src/project/tests_emit/test_cases.rs::emit_test_scope_setup = 305
 bynk-emit/src/emitter/lower.rs::lower_expr = 303
-bynk-emit/src/emitter/emit.rs::emit_agent_handlers = 301
 bynk-driver/src/project/tests_emit/property_tests.rs::emit_test_property_function = 300
