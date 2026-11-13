@@ -151,10 +151,27 @@ pub(crate) fn locate(deployments: &[Deployment], to: Option<&str>) -> Result<Loc
     })
 }
 
+/// The registered diagnostic code of each refusal (`bynk explain <code>`).
+mod code {
+    pub(super) const FACTS_MISSING: &str = "bynk.revert.facts_missing";
+    pub(super) const D1_SCHEMA_AHEAD: &str = "bynk.revert.database_schema_ahead";
+    pub(super) const AGENT_SCHEMA_OLDER: &str = "bynk.revert.agent_schema_older";
+    pub(super) const LAYOUT_OLDER: &str = "bynk.revert.layout_older";
+    pub(super) const CLASS_CHANGED: &str = "bynk.revert.class_changed";
+    pub(super) const CONTRACT_SKEW: &str = "bynk.revert.contract_skew";
+    pub(super) const ID_UNRECORDED: &str = "bynk.revert.id_unrecorded";
+    pub(super) const SECRET_CHANGED: &str = "bynk.revert.secret_changed";
+    pub(super) const HISTORY_UNPLACEABLE: &str = "bynk.revert.history_unplaceable";
+}
+
 /// One check's outcome.
 #[derive(Debug, Clone, PartialEq, Eq, Serialize)]
 pub(crate) struct Finding {
     pub(crate) check: &'static str,
+    /// The registered `bynk.revert.*` diagnostic code of a refusal, for scripts
+    /// to match on; absent from a passing check.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub(crate) code: Option<&'static str>,
     pub(crate) subject: String,
     /// `ok` or `refused`.
     pub(crate) verdict: &'static str,
@@ -165,14 +182,21 @@ impl Finding {
     fn ok(check: &'static str, subject: impl Into<String>, detail: impl Into<String>) -> Self {
         Finding {
             check,
+            code: None,
             subject: subject.into(),
             verdict: "ok",
             detail: detail.into(),
         }
     }
-    fn refused(check: &'static str, subject: impl Into<String>, why: impl Into<String>) -> Self {
+    fn refused(
+        check: &'static str,
+        code: &'static str,
+        subject: impl Into<String>,
+        why: impl Into<String>,
+    ) -> Self {
         Finding {
             check,
+            code: Some(code),
             subject: subject.into(),
             verdict: "refused",
             detail: why.into(),
@@ -275,6 +299,7 @@ pub(crate) fn evaluate(c: &Case<'_>) -> Vec<Finding> {
             Some(Err(e)) => {
                 out.push(Finding::refused(
                     "d1",
+                    code::D1_SCHEMA_AHEAD,
                     &binding,
                     format!("could not read the applied migrations: {e}"),
                 ));
@@ -283,6 +308,7 @@ pub(crate) fn evaluate(c: &Case<'_>) -> Vec<Finding> {
             None => {
                 out.push(Finding::refused(
                     "d1",
+                    code::D1_SCHEMA_AHEAD,
                     &binding,
                     "the applied migrations were not read",
                 ));
@@ -312,6 +338,7 @@ pub(crate) fn evaluate(c: &Case<'_>) -> Vec<Finding> {
             } else {
                 out.push(Finding::refused(
                     "d1",
+                    code::D1_SCHEMA_AHEAD,
                     &binding,
                     format!(
                         "the live version applied {files} after the target was built; migrations are forward-only, so the target may not run on this schema (if each is additive, `--accept-schema-ahead {binding}`)"
@@ -338,6 +365,7 @@ pub(crate) fn evaluate(c: &Case<'_>) -> Vec<Finding> {
             .collect();
         out.push(Finding::refused(
             "classes",
+            code::CLASS_CHANGED,
             c.worker,
             format!(
                 "the Durable Object classes differ (added since the target: [{}]; removed since: [{}]); Cloudflare cannot roll back across a class migration",
@@ -351,6 +379,7 @@ pub(crate) fn evaluate(c: &Case<'_>) -> Vec<Finding> {
         match (c.live.agents.get(class), c.target.agents.get(class)) {
             (Some(_), None) | (None, Some(_)) => out.push(Finding::refused(
                 "agent",
+                code::AGENT_SCHEMA_OLDER,
                 class.as_str(),
                 "the class is declared by only one of the two versions",
             )),
@@ -359,6 +388,7 @@ pub(crate) fn evaluate(c: &Case<'_>) -> Vec<Finding> {
                 if *tv < floor {
                     out.push(Finding::refused(
                         "agent",
+                        code::AGENT_SCHEMA_OLDER,
                         class.as_str(),
                         format!("the target writes schema v{tv}, below the class's floor v{floor} (a sweep raised it; instances there have no migration path)"),
                     ));
@@ -371,16 +401,19 @@ pub(crate) fn evaluate(c: &Case<'_>) -> Vec<Finding> {
                         )),
                         Some(Stored::Present) => out.push(Finding::refused(
                             "agent",
+                            code::AGENT_SCHEMA_OLDER,
                             class.as_str(),
                             format!("the target writes schema v{tv} but the live version wrote v{lv}, and stored instances exist; the target would fault on them (NewerSchema)"),
                         )),
                         Some(Stored::Unknown(why)) => out.push(Finding::refused(
                             "agent",
+                            code::AGENT_SCHEMA_OLDER,
                             class.as_str(),
                             format!("the target writes schema v{tv}, live v{lv}, and whether instances hold data is not known: {why}"),
                         )),
                         None => out.push(Finding::refused(
                             "agent",
+                            code::AGENT_SCHEMA_OLDER,
                             class.as_str(),
                             "stored data was not read",
                         )),
@@ -420,16 +453,19 @@ pub(crate) fn evaluate(c: &Case<'_>) -> Vec<Finding> {
                 Some(Stored::None) => {}
                 Some(Stored::Present) => out.push(Finding::refused(
                     "layout",
+                    code::LAYOUT_OLDER,
                     class.as_str(),
                     format!("the target writes storage layout {tl} but the live version wrote layout {ll}, and stored instances exist; the target cannot read them (NewerLayout), and a build without that check would orphan their entries"),
                 )),
                 Some(Stored::Unknown(why)) => out.push(Finding::refused(
                     "layout",
+                    code::LAYOUT_OLDER,
                     class.as_str(),
                     format!("the target writes storage layout {tl}, live {ll}, and whether instances hold data is not known: {why}"),
                 )),
                 None => out.push(Finding::refused(
                     "layout",
+                    code::LAYOUT_OLDER,
                     class.as_str(),
                     "stored data was not read",
                 )),
@@ -481,7 +517,12 @@ pub(crate) fn evaluate(c: &Case<'_>) -> Vec<Finding> {
             "no skew against the other live Workers",
         ));
     } else {
-        out.push(Finding::refused("contracts", c.worker, skew.join("; ")));
+        out.push(Finding::refused(
+            "contracts",
+            code::CONTRACT_SKEW,
+            c.worker,
+            skew.join("; "),
+        ));
     }
 
     // Resource ids: the target must bind what the ledger records now.
@@ -502,6 +543,7 @@ pub(crate) fn evaluate(c: &Case<'_>) -> Vec<Finding> {
     } else {
         out.push(Finding::refused(
             "ids",
+            code::ID_UNRECORDED,
             c.worker,
             format!(
                 "the target would bind a resource that has since been replaced: {}",
@@ -529,6 +571,7 @@ pub(crate) fn evaluate(c: &Case<'_>) -> Vec<Finding> {
     } else {
         out.push(Finding::refused(
             "secrets",
+            code::SECRET_CHANGED,
             c.worker,
             format!(
                 "{} secret change(s) since the target; a rollback may restore a secret (an edge key, say) its peers no longer accept (a `bynk migrate sweep` makes two; if only those, `--accept-secret-changes`)",
@@ -722,7 +765,12 @@ pub(crate) fn plan(
             Err(why) => {
                 early.insert(
                     worker.clone(),
-                    vec![Finding::refused("history", worker.as_str(), why)],
+                    vec![Finding::refused(
+                        "history",
+                        code::HISTORY_UNPLACEABLE,
+                        worker.as_str(),
+                        why,
+                    )],
                 );
                 continue;
             }
@@ -737,6 +785,7 @@ pub(crate) fn plan(
                 if l.is_none() {
                     findings.push(Finding::refused(
                         "facts",
+                        code::FACTS_MISSING,
                         &loc.live_version,
                         "the live version records no deploy facts (it predates `bynk revert`, or its record did not fit); redeploy the previous tag instead",
                     ));
@@ -744,6 +793,7 @@ pub(crate) fn plan(
                 if t.is_none() {
                     findings.push(Finding::refused(
                         "facts",
+                        code::FACTS_MISSING,
                         &loc.target_version,
                         "the target version records no deploy facts (it predates `bynk revert`, or its record did not fit); redeploy its tag instead",
                     ));
@@ -1392,6 +1442,39 @@ mod tests {
         }
     }
 
+    #[test]
+    fn every_refusal_code_is_registered_and_serialised_on_the_finding() {
+        for c in [
+            code::FACTS_MISSING,
+            code::D1_SCHEMA_AHEAD,
+            code::AGENT_SCHEMA_OLDER,
+            code::LAYOUT_OLDER,
+            code::CLASS_CHANGED,
+            code::CONTRACT_SKEW,
+            code::ID_UNRECORDED,
+            code::SECRET_CHANGED,
+            code::HISTORY_UNPLACEABLE,
+        ] {
+            assert!(
+                bynk_syntax::diagnostics::REGISTRY
+                    .iter()
+                    .any(|d| d.code == c),
+                "`{c}` is not in the diagnostics registry"
+            );
+            assert!(
+                bynk_syntax::diagnostics::explain(c).is_some(),
+                "`{c}` has no explanation"
+            );
+        }
+        let refused = Finding::refused("secrets", code::SECRET_CHANGED, "shop", "why");
+        assert_eq!(
+            serde_json::to_value(&refused).unwrap()["code"],
+            "bynk.revert.secret_changed"
+        );
+        let ok = serde_json::to_value(Finding::ok("secrets", "shop", "fine")).unwrap();
+        assert!(ok.get("code").is_none(), "a passing check carries no code");
+    }
+
     fn refusals(findings: &[Finding]) -> Vec<&Finding> {
         findings.iter().filter(|f| f.is_refusal()).collect()
     }
@@ -1429,6 +1512,7 @@ mod tests {
             .into_iter()
             .find(|x| x.check == "d1")
             .expect("a d1 refusal");
+        assert_eq!(d1.code, Some("bynk.revert.database_schema_ahead"));
         assert!(
             d1.detail.contains("0002_b.sql")
                 && d1.detail.contains("--accept-schema-ahead D1_ORDERS"),
@@ -1440,11 +1524,10 @@ mod tests {
         // An unread list is a refusal, never a pass.
         f.schema_ok.clear();
         f.applied.insert("D1_ORDERS".into(), Err("403".into()));
-        assert!(
-            f.run()
-                .iter()
-                .any(|x| x.check == "d1" && x.is_refusal() && x.detail.contains("403"))
-        );
+        assert!(f.run().iter().any(|x| x.check == "d1"
+            && x.code == Some("bynk.revert.database_schema_ahead")
+            && x.is_refusal()
+            && x.detail.contains("403")));
     }
 
     fn with_agent(v: i64) -> Facts {
@@ -1458,18 +1541,16 @@ mod tests {
     fn an_older_target_schema_is_refused_with_stored_data_or_unknown_and_passes_without() {
         let mut f = Fx::new(with_agent(3), with_agent(2));
         f.stored.insert("shop.Cart".into(), Stored::Present);
-        assert!(
-            f.run()
-                .iter()
-                .any(|x| x.check == "agent" && x.is_refusal() && x.detail.contains("NewerSchema"))
-        );
+        assert!(f.run().iter().any(|x| x.check == "agent"
+            && x.code == Some("bynk.revert.agent_schema_older")
+            && x.is_refusal()
+            && x.detail.contains("NewerSchema")));
         f.stored
             .insert("shop.Cart".into(), Stored::Unknown("lag".into()));
-        assert!(
-            f.run()
-                .iter()
-                .any(|x| x.check == "agent" && x.is_refusal() && x.detail.contains("not known"))
-        );
+        assert!(f.run().iter().any(|x| x.check == "agent"
+            && x.code == Some("bynk.revert.agent_schema_older")
+            && x.is_refusal()
+            && x.detail.contains("not known")));
         f.stored.insert("shop.Cart".into(), Stored::None);
         assert!(refusals(&f.run()).is_empty());
         // The same version, or a newer target, needs no look at the data.
@@ -1489,18 +1570,18 @@ mod tests {
         f.stored.insert("shop.Cart".into(), Stored::Present);
         let found = f.run();
         assert!(
-            found
-                .iter()
-                .any(|x| x.check == "layout" && x.is_refusal() && x.detail.contains("NewerLayout")),
+            found.iter().any(|x| x.check == "layout"
+                && x.code == Some("bynk.revert.layout_older")
+                && x.is_refusal()
+                && x.detail.contains("NewerLayout")),
             "{found:?}"
         );
         f.stored
             .insert("shop.Cart".into(), Stored::Unknown("lag".into()));
-        assert!(
-            f.run()
-                .iter()
-                .any(|x| x.check == "layout" && x.is_refusal() && x.detail.contains("not known"))
-        );
+        assert!(f.run().iter().any(|x| x.check == "layout"
+            && x.code == Some("bynk.revert.layout_older")
+            && x.is_refusal()
+            && x.detail.contains("not known")));
         f.stored.remove("shop.Cart");
         assert!(
             f.run()
@@ -1542,21 +1623,16 @@ mod tests {
         let mut f = Fx::new(with_agent(4), with_agent(2));
         f.stored.insert("shop.Cart".into(), Stored::None);
         f.floors.insert("shop.Cart".into(), 3);
-        assert!(
-            f.run()
-                .iter()
-                .any(|x| x.check == "agent" && x.detail.contains("floor v3"))
-        );
+        assert!(f.run().iter().any(|x| x.check == "agent"
+            && x.code == Some("bynk.revert.agent_schema_older")
+            && x.detail.contains("floor v3")));
         let added = Fx::new(
             facts(|f| f.classes = vec!["Cart".into(), "Wishlist".into()]),
             facts(|f| f.classes = vec!["Cart".into()]),
         );
-        assert!(
-            added
-                .run()
-                .iter()
-                .any(|x| x.check == "classes" && x.detail.contains("Wishlist"))
-        );
+        assert!(added.run().iter().any(|x| x.check == "classes"
+            && x.code == Some("bynk.revert.class_changed")
+            && x.detail.contains("Wishlist")));
     }
 
     #[test]
@@ -1581,6 +1657,7 @@ mod tests {
             .into_iter()
             .find(|x| x.check == "contracts")
             .expect("a contract refusal");
+        assert_eq!(c.code, Some("bynk.revert.contract_skew"));
         assert!(
             c.detail.contains("pay.charge") && c.detail.contains("old") && c.detail.contains("new"),
             "{}",
@@ -1605,6 +1682,7 @@ mod tests {
         let mut f = Fx::new(facts(|_| {}), target);
         f.lock.record_kv("default", "shop", "KV", "kv-new");
         assert!(f.run().iter().any(|x| x.check == "ids"
+            && x.code == Some("bynk.revert.id_unrecorded")
             && x.is_refusal()
             && x.detail.contains("kv-old")
             && x.detail.contains("kv-new")));
@@ -1622,11 +1700,9 @@ mod tests {
     fn secret_changes_since_the_target_are_refused_unless_accepted() {
         let mut f = Fx::new(facts(|_| {}), facts(|_| {}));
         f.secrets = 2;
-        assert!(
-            f.run()
-                .iter()
-                .any(|x| x.check == "secrets" && x.is_refusal())
-        );
+        assert!(f.run().iter().any(|x| x.check == "secrets"
+            && x.code == Some("bynk.revert.secret_changed")
+            && x.is_refusal()));
         f.secrets_ok = true;
         assert!(refusals(&f.run()).is_empty());
     }
@@ -1779,12 +1855,9 @@ mod tests {
         )
         .unwrap();
         assert!(!plan.ok);
-        assert!(
-            plan.workers[0]
-                .checks
-                .iter()
-                .any(|f| f.check == "facts" && f.detail.contains("redeploy"))
-        );
+        assert!(plan.workers[0].checks.iter().any(|f| f.check == "facts"
+            && f.code == Some("bynk.revert.facts_missing")
+            && f.detail.contains("redeploy")));
         assert!(api.rolled.borrow().is_empty());
         // And a live version without facts is refused alike.
         let mut none = account(&live, Some(&live));
@@ -1970,11 +2043,9 @@ mod tests {
             .iter()
             .find(|w| w.worker == "pay")
             .unwrap();
-        assert!(
-            pay.checks
-                .iter()
-                .any(|f| f.check == "history" && f.detail.contains("no earlier deployment"))
-        );
+        assert!(pay.checks.iter().any(|f| f.check == "history"
+            && f.code == Some("bynk.revert.history_unplaceable")
+            && f.detail.contains("no earlier deployment")));
         let shop = planned
             .plan
             .workers

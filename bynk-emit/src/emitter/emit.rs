@@ -7509,59 +7509,12 @@ fn emit_agent_handlers(
         // interleaved with direct `writeln!`s into `out` the way the
         // pre-conversion code was.
         let body_emits_directly = bynk_model::block_uses_emit(&h.body, &commons.callees);
-        let events_decl = format!(
-            "    const __events: globalThis.Array<{}> = [];",
-            crate::emitter::EVENTS_WIRE_EVENT_TS_TYPE
-        );
-        let flush = "    if (__events.length > 0) { await deps.__eventsDispatch(__events); }";
-        let mut raw_body = String::new();
-        let body_out_offset_in_raw;
-        if is_store_agent {
-            if writes_state {
-                writeln!(
-                    raw_body,
-                    "    const __state = {{ ...(await this.loadState()) }};"
-                )
-                .unwrap();
-                if body_emits_directly {
-                    writeln!(raw_body, "{events_decl}").unwrap();
-                }
-                writeln!(raw_body, "    const __result = await (async () => {{").unwrap();
-                body_out_offset_in_raw = raw_body.len();
-                raw_body.push_str(&body_out);
-                writeln!(raw_body, "    }})();").unwrap();
-                writeln!(raw_body, "    await this.commitState(__state);").unwrap();
-                if body_emits_directly {
-                    writeln!(raw_body, "{flush}").unwrap();
-                }
-                writeln!(raw_body, "    return __result;").unwrap();
-            } else if body_emits_directly {
-                writeln!(raw_body, "    const __state = await this.loadState();").unwrap();
-                writeln!(raw_body, "{events_decl}").unwrap();
-                writeln!(raw_body, "    const __result = await (async () => {{").unwrap();
-                body_out_offset_in_raw = raw_body.len();
-                raw_body.push_str(&body_out);
-                writeln!(raw_body, "    }})();").unwrap();
-                writeln!(raw_body, "{flush}").unwrap();
-                writeln!(raw_body, "    return __result;").unwrap();
-            } else {
-                writeln!(raw_body, "    const __state = await this.loadState();").unwrap();
-                body_out_offset_in_raw = raw_body.len();
-                raw_body.push_str(&body_out);
-            }
-        } else if body_emits_directly {
-            writeln!(raw_body, "    const currentState = await this.loadState();").unwrap();
-            writeln!(raw_body, "{events_decl}").unwrap();
-            writeln!(raw_body, "    const __result = await (async () => {{").unwrap();
-            body_out_offset_in_raw = raw_body.len();
-            raw_body.push_str(&body_out);
-            writeln!(raw_body, "    }})();").unwrap();
-            writeln!(raw_body, "{flush}").unwrap();
-            writeln!(raw_body, "    return __result;").unwrap();
-        } else {
-            writeln!(raw_body, "    const currentState = await this.loadState();").unwrap();
-            body_out_offset_in_raw = raw_body.len();
-            raw_body.push_str(&body_out);
+        let (mut raw_body, mut body_out_offset_in_raw) =
+            assemble_agent_raw_body(&body_out, is_store_agent, writes_state, body_emits_directly);
+        // #3465: an agent handler that claimed settles its claims after the state
+        // commit and the events flush, so a failure of either releases them.
+        if cx.claim_scope_used {
+            wrap_agent_claims(&mut raw_body, &mut body_out_offset_in_raw);
         }
         let handler_method = bynk_ts::TsClassMethod {
             name: method,
@@ -7587,6 +7540,64 @@ fn emit_agent_handlers(
         );
         writeln!(out).unwrap();
     }
+}
+
+/// One agent handler method's prologue + lowered body + epilogue (#3167), and
+/// the offset inside it at which the lowered body begins. A store handler that
+/// writes wraps its body in the implicit-commit closure; one that emits events
+/// directly flushes them after it.
+fn assemble_agent_raw_body(
+    body_out: &str,
+    is_store_agent: bool,
+    writes_state: bool,
+    body_emits_directly: bool,
+) -> (String, usize) {
+    let events_decl = format!(
+        "    const __events: globalThis.Array<{}> = [];",
+        crate::emitter::EVENTS_WIRE_EVENT_TS_TYPE
+    );
+    let flush = "    if (__events.length > 0) { await deps.__eventsDispatch(__events); }";
+    let mut raw = String::new();
+    let state_decl = if !is_store_agent {
+        "    const currentState = await this.loadState();"
+    } else if writes_state {
+        "    const __state = { ...(await this.loadState()) };"
+    } else {
+        "    const __state = await this.loadState();"
+    };
+    writeln!(raw, "{state_decl}").unwrap();
+    // Only a handler that wraps its body (a commit, or direct events) needs the closure.
+    if !writes_state && !body_emits_directly {
+        let offset = raw.len();
+        raw.push_str(body_out);
+        return (raw, offset);
+    }
+    if body_emits_directly {
+        writeln!(raw, "{events_decl}").unwrap();
+    }
+    writeln!(raw, "    const __result = await (async () => {{").unwrap();
+    let offset = raw.len();
+    raw.push_str(body_out);
+    writeln!(raw, "    }})();").unwrap();
+    if writes_state {
+        writeln!(raw, "    await this.commitState(__state);").unwrap();
+    }
+    if body_emits_directly {
+        writeln!(raw, "{flush}").unwrap();
+    }
+    writeln!(raw, "    return __result;").unwrap();
+    (raw, offset)
+}
+
+/// #3465: wrap a whole agent handler method body so the claims it made are
+/// settled once the state commit and events flush have run (a failure of either
+/// releases them). `offset` is where the lowered body begins in `raw`, moved to
+/// stay valid for the source map.
+fn wrap_agent_claims(raw: &mut String, offset: &mut usize) {
+    let (before, after) = crate::emitter::lower::claim_scope_wrapper(4);
+    raw.insert_str(0, &before);
+    raw.push_str(&after);
+    *offset += before.len();
 }
 
 /// What an agent class's dispatch methods depend on, decided while the class

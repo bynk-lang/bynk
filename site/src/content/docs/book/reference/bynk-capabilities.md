@@ -110,7 +110,7 @@ on POST("/hooks/:id") (id: String) -> Effect[HttpResult[String]] by Visitor give
 `claim` records no outcome, so there is nothing to replay: use it when the work should run
 at most once. It is separate from `dedup`/`remember`, which never see a claim.
 
-In a service handler, the compiler settles the claims the handler made when it exits:
+In a service handler or an agent handler, the compiler settles the claims the handler made when it exits:
 
 - **A failure releases the claim**, so a retry can claim again. A failure is a fault, a
   returned `Err`, or an `HttpResult` that is a 5xx (`ServerError`, `ServiceUnavailable`
@@ -125,8 +125,11 @@ In a service handler, the compiler settles the claims the handler made when it e
 
 The guarantee is **at-most-once completion, not exactly-once side effects**: work done
 before a failure, such as a call to another service, can repeat on the retry. Make those
-calls idempotent too. A `claim` outside a service handler (in an agent handler, say) is not
-settled: it is held for `expiresAfter` whether or not the work succeeds.
+calls idempotent too. A `claim` in a service handler or an agent handler is settled, an agent
+handler's after its state commit and events flush, so a failure of either releases it. A
+`claim` anywhere else is not settled: it is held for `expiresAfter` whether or not the
+work succeeds. Settling an agent's claim releases only the claim: state the handler wrote before
+returning an `Err` is still committed, and a retry repeats that write.
 
 The key is scoped to the calling handler as for `dedup`.
 
@@ -157,7 +160,7 @@ on POST("/hooks/:id") (id: String) -> Effect[HttpResult[String]] by Visitor give
 `claim` records no outcome, so there is nothing to replay: use it when the work should run
 at most once. It is separate from `dedup`/`remember`, which never see a claim.
 
-In a service handler, the compiler settles the claims the handler made when it exits:
+In a service handler or an agent handler, the compiler settles the claims the handler made when it exits:
 
 - **A failure releases the claim**, so a retry can claim again. A failure is a fault, a
   returned `Err`, or an `HttpResult` that is a 5xx (`ServerError`, `ServiceUnavailable`
@@ -172,8 +175,11 @@ In a service handler, the compiler settles the claims the handler made when it e
 
 The guarantee is **at-most-once completion, not exactly-once side effects**: work done
 before a failure, such as a call to another service, can repeat on the retry. Make those
-calls idempotent too. A `claim` outside a service handler (in an agent handler, say) is not
-settled: it is held for `expiresAfter` whether or not the work succeeds.
+calls idempotent too. A `claim` in a service handler or an agent handler is settled, an agent
+handler's after its state commit and events flush, so a failure of either releases it. A
+`claim` anywhere else is not settled: it is held for `expiresAfter` whether or not the
+work succeeds. Settling an agent's claim releases only the claim: state the handler wrote before
+returning an `Err` is still committed, and a retry repeats that write.
 
 The key is scoped to the calling handler as for `dedup`. The in-memory provider makes the
 claim atomic within one process; it is no more durable than `dedup`.
@@ -888,11 +894,7 @@ Workers AI is a remote service on your Cloudflare account, so a call may incur
 charges, and a model's reply is untrusted input like any other user text. See
 Cloudflare's [Workers AI pricing](https://developers.cloudflare.com/workers-ai/platform/pricing/)
 for what applies, and put a `RateLimit` in front of any handler an anonymous
-caller can reach. Workers AI has no local simulation, so under `bynk dev` a call
-runs the model on Cloudflare: it is not blocked, and the first one in a session
-prints a one-time warning with that link. `[dev] ai = "allow"` in `bynk.toml`
-silences it (see [Acknowledging a remote-only binding](/docs/manifest/#acknowledging-a-remote-only-binding)).
-In a test every `Ai` operation faults until it is stubbed
+caller can reach. In a test every `Ai` operation faults until it is stubbed
 (`stub Ai.run(_, _) returns …`), so a test never reaches Workers AI, and a
 `system` test's Workers behave the same. `Ai` is experimental: list
 `"bynk.cloudflare.Ai"` under `[unstable] allow`.
