@@ -835,6 +835,180 @@ export const AiError = {
 };
 
 /**
+ * One vector of a `Vectorize` index: its `id` (at most 64 bytes), its `values`
+ * (as many numbers as the index has dimensions), the `namespace` it lives in
+ * when it has one, and `metadata`, a JSON object as text (`Json.encode` writes
+ * it, `Json.decode` reads it back). A property can be filtered on only when
+ * the index declares it in `@indexed`.
+ */
+export interface Vector {
+  readonly id: string;
+  readonly values: readonly number[];
+  readonly metadata: Option<string>;
+  readonly namespace: Option<string>;
+}
+
+export const Vector = {
+};
+
+/**
+ * A metadata value a `Condition` compares a property with: text, a number or
+ * a flag.
+ */
+export type MetaValue =
+    { readonly tag: "MetaText"; readonly value: string }
+  | { readonly tag: "MetaNumber"; readonly value: number }
+  | { readonly tag: "MetaFlag"; readonly value: boolean };
+
+export const MetaValue = {
+  MetaText: (value: string): MetaValue => ({ tag: "MetaText", value }),
+  MetaNumber: (value: number): MetaValue => ({ tag: "MetaNumber", value }),
+  MetaFlag: (value: boolean): MetaValue => ({ tag: "MetaFlag", value }),
+};
+
+/**
+ * How a `Condition` compares a property with a value: equal, not equal, less
+ * than, at most, greater than, at least, one of a list, or none of a list.
+ * The platform allows a range over text or numbers only, and a lower and an
+ * upper bound on one property together, not other mixes; it refuses the
+ * rest as `VectorInvalidInput`.
+ */
+export type FilterOp =
+    { readonly tag: "FilterEq"; readonly value: MetaValue }
+  | { readonly tag: "FilterNe"; readonly value: MetaValue }
+  | { readonly tag: "FilterLt"; readonly value: MetaValue }
+  | { readonly tag: "FilterLte"; readonly value: MetaValue }
+  | { readonly tag: "FilterGt"; readonly value: MetaValue }
+  | { readonly tag: "FilterGte"; readonly value: MetaValue }
+  | { readonly tag: "FilterAnyOf"; readonly values: readonly MetaValue[] }
+  | { readonly tag: "FilterNoneOf"; readonly values: readonly MetaValue[] };
+
+export const FilterOp = {
+  FilterEq: (value: MetaValue): FilterOp => ({ tag: "FilterEq", value }),
+  FilterNe: (value: MetaValue): FilterOp => ({ tag: "FilterNe", value }),
+  FilterLt: (value: MetaValue): FilterOp => ({ tag: "FilterLt", value }),
+  FilterLte: (value: MetaValue): FilterOp => ({ tag: "FilterLte", value }),
+  FilterGt: (value: MetaValue): FilterOp => ({ tag: "FilterGt", value }),
+  FilterGte: (value: MetaValue): FilterOp => ({ tag: "FilterGte", value }),
+  FilterAnyOf: (values: readonly MetaValue[]): FilterOp => ({ tag: "FilterAnyOf", values }),
+  FilterNoneOf: (values: readonly MetaValue[]): FilterOp => ({ tag: "FilterNoneOf", values }),
+};
+
+/**
+ * One test of a `Vectorize` query: the metadata property `field` (a dot nests,
+ * as in `"author.name"`) against `op`. A query's conditions all have to hold.
+ * The property has to be declared in the index's `@indexed`, and a vector
+ * only matches once it was written after that index existed.
+ */
+export interface Condition {
+  readonly field: string;
+  readonly op: FilterOp;
+}
+
+export const Condition = {
+};
+
+/**
+ * How much metadata a `Vectorize` query returns: `Omit` none (the default),
+ * `Indexed` only the `@indexed` properties, `All` every property. `All` costs
+ * the platform more work and lowers how many matches one query may return.
+ */
+export type MetadataScope =
+    { readonly tag: "Omit" }
+  | { readonly tag: "Indexed" }
+  | { readonly tag: "All" };
+
+export const MetadataScope = {
+  Omit: { tag: "Omit" } as MetadataScope,
+  Indexed: { tag: "Indexed" } as MetadataScope,
+  All: { tag: "All" } as MetadataScope,
+};
+
+/**
+ * The options of `Vectorize.query`. `topK` is how many matches to return
+ * (5 unless set; the platform caps it, and caps it lower when `returnValues`
+ * is set or `returnMetadata` is `All`, and says so as `VectorInvalidInput`).
+ * `namespace` restricts the query to one namespace. `filter` is a list of
+ * conditions that must all hold.
+ */
+export interface QueryOptions {
+  readonly topK: number;
+  readonly returnValues: boolean;
+  readonly returnMetadata: MetadataScope;
+  readonly namespace: Option<string>;
+  readonly filter: readonly Condition[];
+}
+
+export const QueryOptions = {
+};
+
+/**
+ * One match of `Vectorize.query`: the vector's `id` and its `score`, whose
+ * meaning depends on the index's metric (a larger cosine score is nearer; a
+ * smaller euclidean distance is nearer). `values`, `metadata` (a JSON object
+ * as text) and `namespace` are present when the query asked for them and the
+ * vector has them.
+ */
+export interface VectorMatch {
+  readonly id: string;
+  readonly score: number;
+  readonly values: Option<readonly number[]>;
+  readonly metadata: Option<string>;
+  readonly namespace: Option<string>;
+}
+
+export const VectorMatch = {
+};
+
+/**
+ * The receipt of a write: its `id`. A write is asynchronous. It is queryable
+ * after the platform has processed it, which takes some seconds, so a handler
+ * that writes and then queries in the same request will not see its own write.
+ */
+export interface Mutation {
+  readonly id: string;
+}
+
+export const Mutation = {
+};
+
+/**
+ * An index's configuration, as `Vectorize.describe` reports it: its
+ * `dimensions` and its `metric`.
+ */
+export interface IndexInfo {
+  readonly dimensions: number;
+  readonly metric: string;
+}
+
+export const IndexInfo = {
+};
+
+/**
+ * Why a Vectorize call did not succeed. `DimensionMismatch` is a vector or
+ * query whose length is not the index's dimensions, with the platform's
+ * message; `VectorInvalidInput` is a request the platform refused as malformed
+ * or over a limit (a bad filter, too large a `topK`, too large a batch or too
+ * much metadata); `VectorRateLimited` is a rate limit, worth retrying later;
+ * `VectorFailed` is any other refusal, with the platform's message. The
+ * `Vector` prefix is because `InvalidInput` is `AiError`'s, `RateLimited`
+ * `EmailError`'s and `Failed` `SqlError`'s. Cloudflare adds error cases over
+ * time, so a `match` over this type needs a wildcard.
+ */
+export type VectorError =
+    { readonly tag: "DimensionMismatch"; readonly message: string }
+  | { readonly tag: "VectorInvalidInput"; readonly message: string }
+  | { readonly tag: "VectorRateLimited" }
+  | { readonly tag: "VectorFailed"; readonly message: string };
+
+export const VectorError = {
+  DimensionMismatch: (message: string): VectorError => ({ tag: "DimensionMismatch", message }),
+  VectorInvalidInput: (message: string): VectorError => ({ tag: "VectorInvalidInput", message }),
+  VectorRateLimited: { tag: "VectorRateLimited" } as VectorError,
+  VectorFailed: (message: string): VectorError => ({ tag: "VectorFailed", message }),
+};
+
+/**
  * A Cloudflare Workers KV namespace: a key/value store with optional per-entry
  * expiry and prefix listing.
  *
@@ -1347,6 +1521,52 @@ export interface MySql {
 
 export const __MySqlToken: symbol = globalThis.Symbol("MySql");
 
+/**
+ * A Vectorize index: vectors with an id, searched by similarity. Used only
+ * through a named instance that states the index's fixed shape,
+ * `capability Docs = Vectorize @dimensions(768) @metric("cosine")`, which
+ * binds as `VECTORIZE_DOCS`, a `[[vectorize]]` entry; both annotations are
+ * required, and a bare `given Vectorize` is refused. `@metric` is `"cosine"`,
+ * `"euclidean"` or `"dot-product"`. Experimental.
+ *
+ * An index's dimensions and metric cannot change once it exists, so they are
+ * written next to the code that depends on them. `@indexed(["category:string",
+ * "year:number"])` lists the metadata properties a query may filter on (at
+ * most 10, each `name:type` with the type `string`, `number` or `boolean`).
+ * Metadata indexes should exist before the vectors that carry the property.
+ *
+ * `upsert` writes vectors, replacing any with the same id in full; `insert`
+ * writes only vectors whose id is new. `query(vector, options)` returns the
+ * nearest matches, best first. `getByIds` reads vectors back, `deleteByIds`
+ * removes them, and `describe` reports the index's dimensions and metric.
+ * Metadata is JSON text: write it with `Json.encode` and read it with
+ * `Json.decode`, so a vector stored by an older version of the program can be
+ * skipped or repaired instead of failing the query. The embeddings of
+ * `Ai.embed` are the usual `values`; an index must be queried with the same
+ * model and pooling it was built with.
+ *
+ * A write returns a `Mutation` and is visible to queries only after the
+ * platform has processed it. Every operation gives a `VectorError` rather
+ * than faulting, except a call on an index that does not exist, which is a
+ * platform fault.
+ *
+ * Vectorize is a remote service on your Cloudflare account, so a call may be
+ * billed; see Cloudflare's Vectorize pricing page for what applies, and put a
+ * `RateLimit` in front of any handler an anonymous caller can reach. In a
+ * test every operation faults until `stub Docs.query(_, _) returns …`
+ * replaces it, so a test never reaches an index.
+ */
+export interface Vectorize {
+  upsert(vectors: readonly Vector[]): globalThis.Promise<Result<Mutation, VectorError>>;
+  insert(vectors: readonly Vector[]): globalThis.Promise<Result<Mutation, VectorError>>;
+  query(vector: readonly number[], options: QueryOptions): globalThis.Promise<Result<readonly VectorMatch[], VectorError>>;
+  getByIds(ids: readonly string[]): globalThis.Promise<Result<readonly Vector[], VectorError>>;
+  deleteByIds(ids: readonly string[]): globalThis.Promise<Result<Mutation, VectorError>>;
+  describe(): globalThis.Promise<Result<IndexInfo, VectorError>>;
+}
+
+export const __VectorizeToken: symbol = globalThis.Symbol("Vectorize");
+
 export function __serialise_AiError(value: AiError): __JsonValue {
   switch (value.tag) {
     case "ModelNotFound":
@@ -1455,6 +1675,28 @@ export function __deserialise_ChatRole(json: __JsonValue, path: string = "$"): R
     default:
       return Err({ kind: "StructuralMismatch", path, expected: "sum variant kind", actual: String(kind) });
   }
+}
+
+export function __serialise_Condition(value: Condition): __JsonValue {
+  return {
+    field: value.field as __JsonValue,
+    op: __serialise_FilterOp(value.op),
+  };
+}
+
+export function __deserialise_Condition(json: __JsonValue, path: string = "$"): Result<Condition, __BoundaryError> {
+  if (typeof json !== "object" || json === null || globalThis.Array.isArray(json)) {
+    return Err({ kind: "StructuralMismatch", path, expected: "object", actual: typeof json });
+  }
+  const obj = json as { [k: string]: __JsonValue };
+  if (typeof obj["field"] !== "string") {
+    return Err({ kind: "StructuralMismatch", path: `${path}.field`, expected: "string", actual: typeof obj["field"] });
+  }
+  const __field = obj["field"];
+  const __r_op = __deserialise_FilterOp(obj["op"], `${path}.op`);
+  if (__r_op.tag === "Err") return __r_op;
+  const __op = __r_op.value;
+  return Ok({ field: __field, op: __op } as Condition);
 }
 
 export function __serialise_DataPoint(value: DataPoint): __JsonValue {
@@ -1732,6 +1974,95 @@ export function __deserialise_EmailVerdict(json: __JsonValue, path: string = "$"
   }
 }
 
+export function __serialise_FilterOp(value: FilterOp): __JsonValue {
+  switch (value.tag) {
+    case "FilterEq": {
+      return { kind: "FilterEq", value: __serialise_MetaValue(value.value) };
+    }
+    case "FilterNe": {
+      return { kind: "FilterNe", value: __serialise_MetaValue(value.value) };
+    }
+    case "FilterLt": {
+      return { kind: "FilterLt", value: __serialise_MetaValue(value.value) };
+    }
+    case "FilterLte": {
+      return { kind: "FilterLte", value: __serialise_MetaValue(value.value) };
+    }
+    case "FilterGt": {
+      return { kind: "FilterGt", value: __serialise_MetaValue(value.value) };
+    }
+    case "FilterGte": {
+      return { kind: "FilterGte", value: __serialise_MetaValue(value.value) };
+    }
+    case "FilterAnyOf": {
+      return { kind: "FilterAnyOf", values: __serialise_List_MetaValue(value.values) };
+    }
+    case "FilterNoneOf": {
+      return { kind: "FilterNoneOf", values: __serialise_List_MetaValue(value.values) };
+    }
+  }
+}
+
+export function __deserialise_FilterOp(json: __JsonValue, path: string = "$"): Result<FilterOp, __BoundaryError> {
+  if (typeof json !== "object" || json === null || globalThis.Array.isArray(json)) {
+    return Err({ kind: "StructuralMismatch", path, expected: "object", actual: typeof json });
+  }
+  const obj = json as { [k: string]: __JsonValue };
+  const kind = obj["kind"];
+  switch (kind) {
+    case "FilterEq": {
+  const __r_value = __deserialise_MetaValue(obj["value"], `${path}.value`);
+  if (__r_value.tag === "Err") return __r_value;
+  const __value = __r_value.value;
+      return Ok({ tag: "FilterEq", value: __value } as FilterOp);
+    }
+    case "FilterNe": {
+  const __r_value = __deserialise_MetaValue(obj["value"], `${path}.value`);
+  if (__r_value.tag === "Err") return __r_value;
+  const __value = __r_value.value;
+      return Ok({ tag: "FilterNe", value: __value } as FilterOp);
+    }
+    case "FilterLt": {
+  const __r_value = __deserialise_MetaValue(obj["value"], `${path}.value`);
+  if (__r_value.tag === "Err") return __r_value;
+  const __value = __r_value.value;
+      return Ok({ tag: "FilterLt", value: __value } as FilterOp);
+    }
+    case "FilterLte": {
+  const __r_value = __deserialise_MetaValue(obj["value"], `${path}.value`);
+  if (__r_value.tag === "Err") return __r_value;
+  const __value = __r_value.value;
+      return Ok({ tag: "FilterLte", value: __value } as FilterOp);
+    }
+    case "FilterGt": {
+  const __r_value = __deserialise_MetaValue(obj["value"], `${path}.value`);
+  if (__r_value.tag === "Err") return __r_value;
+  const __value = __r_value.value;
+      return Ok({ tag: "FilterGt", value: __value } as FilterOp);
+    }
+    case "FilterGte": {
+  const __r_value = __deserialise_MetaValue(obj["value"], `${path}.value`);
+  if (__r_value.tag === "Err") return __r_value;
+  const __value = __r_value.value;
+      return Ok({ tag: "FilterGte", value: __value } as FilterOp);
+    }
+    case "FilterAnyOf": {
+  const __r_values = __deserialise_List_MetaValue(obj["values"], `${path}.values`);
+  if (__r_values.tag === "Err") return __r_values;
+  const __values = __r_values.value;
+      return Ok({ tag: "FilterAnyOf", values: __values } as FilterOp);
+    }
+    case "FilterNoneOf": {
+  const __r_values = __deserialise_List_MetaValue(obj["values"], `${path}.values`);
+  if (__r_values.tag === "Err") return __r_values;
+  const __values = __r_values.value;
+      return Ok({ tag: "FilterNoneOf", values: __values } as FilterOp);
+    }
+    default:
+      return Err({ kind: "StructuralMismatch", path, expected: "sum variant kind", actual: String(kind) });
+  }
+}
+
 export function __serialise_GenerateRequest(value: GenerateRequest): __JsonValue {
   return {
     messages: __serialise_List_ChatMessage(value.messages),
@@ -1891,6 +2222,32 @@ export function __deserialise_InboundEmail(json: __JsonValue, path: string = "$"
   }
   const __size = __d_size;
   return Ok({ from: __from, to: __to, subject: __subject, messageId: __messageId, headers: __headers, text: __text, html: __html, attachments: __attachments, size: __size } as InboundEmail);
+}
+
+export function __serialise_IndexInfo(value: IndexInfo): __JsonValue {
+  return {
+    dimensions: ((v: number) => { if (!globalThis.Number.isSafeInteger(v)) throw new globalThis.Error("Int outside the safe-integer range at boundary"); return v as __JsonValue; })(value.dimensions),
+    metric: value.metric as __JsonValue,
+  };
+}
+
+export function __deserialise_IndexInfo(json: __JsonValue, path: string = "$"): Result<IndexInfo, __BoundaryError> {
+  if (typeof json !== "object" || json === null || globalThis.Array.isArray(json)) {
+    return Err({ kind: "StructuralMismatch", path, expected: "object", actual: typeof json });
+  }
+  const obj = json as { [k: string]: __JsonValue };
+  if (typeof obj["dimensions"] !== "number") {
+    return Err({ kind: "StructuralMismatch", path: `${path}.dimensions`, expected: "number", actual: typeof obj["dimensions"] });
+  }
+  if (!globalThis.Number.isSafeInteger(obj["dimensions"])) {
+    return Err({ kind: "StructuralMismatch", path: `${path}.dimensions`, expected: "safe integer", actual: String(obj["dimensions"]) });
+  }
+  const __dimensions = obj["dimensions"];
+  if (typeof obj["metric"] !== "string") {
+    return Err({ kind: "StructuralMismatch", path: `${path}.metric`, expected: "string", actual: typeof obj["metric"] });
+  }
+  const __metric = obj["metric"];
+  return Ok({ dimensions: __dimensions, metric: __metric } as IndexInfo);
 }
 
 export function __serialise_KvEntry(value: KvEntry): __JsonValue {
@@ -2073,6 +2430,103 @@ export function __deserialise_KvPut(json: __JsonValue, path: string = "$"): Resu
   if (__r_metadata.tag === "Err") return __r_metadata;
   const __metadata = __r_metadata.value;
   return Ok({ expiration: __expiration, metadata: __metadata } as KvPut);
+}
+
+export function __serialise_MetaValue(value: MetaValue): __JsonValue {
+  switch (value.tag) {
+    case "MetaText": {
+      return { kind: "MetaText", value: value.value as __JsonValue };
+    }
+    case "MetaNumber": {
+      return { kind: "MetaNumber", value: ((v: number) => { if (!globalThis.Number.isFinite(v)) throw new globalThis.Error("non-finite Float at boundary"); return v as __JsonValue; })(value.value) };
+    }
+    case "MetaFlag": {
+      return { kind: "MetaFlag", value: value.value as __JsonValue };
+    }
+  }
+}
+
+export function __deserialise_MetaValue(json: __JsonValue, path: string = "$"): Result<MetaValue, __BoundaryError> {
+  if (typeof json !== "object" || json === null || globalThis.Array.isArray(json)) {
+    return Err({ kind: "StructuralMismatch", path, expected: "object", actual: typeof json });
+  }
+  const obj = json as { [k: string]: __JsonValue };
+  const kind = obj["kind"];
+  switch (kind) {
+    case "MetaText": {
+  if (typeof obj["value"] !== "string") {
+    return Err({ kind: "StructuralMismatch", path: `${path}.value`, expected: "string", actual: typeof obj["value"] });
+  }
+  const __value = obj["value"];
+      return Ok({ tag: "MetaText", value: __value } as MetaValue);
+    }
+    case "MetaNumber": {
+  if (typeof obj["value"] !== "number") {
+    return Err({ kind: "StructuralMismatch", path: `${path}.value`, expected: "number", actual: typeof obj["value"] });
+  }
+  if (!globalThis.Number.isFinite(obj["value"])) {
+    return Err({ kind: "StructuralMismatch", path: `${path}.value`, expected: "finite number", actual: String(obj["value"]) });
+  }
+  const __value = obj["value"];
+      return Ok({ tag: "MetaNumber", value: __value } as MetaValue);
+    }
+    case "MetaFlag": {
+  if (typeof obj["value"] !== "boolean") {
+    return Err({ kind: "StructuralMismatch", path: `${path}.value`, expected: "boolean", actual: typeof obj["value"] });
+  }
+  const __value = obj["value"];
+      return Ok({ tag: "MetaFlag", value: __value } as MetaValue);
+    }
+    default:
+      return Err({ kind: "StructuralMismatch", path, expected: "sum variant kind", actual: String(kind) });
+  }
+}
+
+export function __serialise_MetadataScope(value: MetadataScope): __JsonValue {
+  switch (value.tag) {
+    case "Omit":
+      return { kind: "Omit" };
+    case "Indexed":
+      return { kind: "Indexed" };
+    case "All":
+      return { kind: "All" };
+  }
+}
+
+export function __deserialise_MetadataScope(json: __JsonValue, path: string = "$"): Result<MetadataScope, __BoundaryError> {
+  if (typeof json !== "object" || json === null || globalThis.Array.isArray(json)) {
+    return Err({ kind: "StructuralMismatch", path, expected: "object", actual: typeof json });
+  }
+  const obj = json as { [k: string]: __JsonValue };
+  const kind = obj["kind"];
+  switch (kind) {
+    case "Omit":
+      return Ok({ tag: "Omit" } as MetadataScope);
+    case "Indexed":
+      return Ok({ tag: "Indexed" } as MetadataScope);
+    case "All":
+      return Ok({ tag: "All" } as MetadataScope);
+    default:
+      return Err({ kind: "StructuralMismatch", path, expected: "sum variant kind", actual: String(kind) });
+  }
+}
+
+export function __serialise_Mutation(value: Mutation): __JsonValue {
+  return {
+    id: value.id as __JsonValue,
+  };
+}
+
+export function __deserialise_Mutation(json: __JsonValue, path: string = "$"): Result<Mutation, __BoundaryError> {
+  if (typeof json !== "object" || json === null || globalThis.Array.isArray(json)) {
+    return Err({ kind: "StructuralMismatch", path, expected: "object", actual: typeof json });
+  }
+  const obj = json as { [k: string]: __JsonValue };
+  if (typeof obj["id"] !== "string") {
+    return Err({ kind: "StructuralMismatch", path: `${path}.id`, expected: "string", actual: typeof obj["id"] });
+  }
+  const __id = obj["id"];
+  return Ok({ id: __id } as Mutation);
 }
 
 export function __serialise_MySqlError(value: MySqlError): __JsonValue {
@@ -2626,6 +3080,49 @@ export function __deserialise_PgValue(json: __JsonValue, path: string = "$"): Re
   }
 }
 
+export function __serialise_QueryOptions(value: QueryOptions): __JsonValue {
+  return {
+    topK: ((v: number) => { if (!globalThis.Number.isSafeInteger(v)) throw new globalThis.Error("Int outside the safe-integer range at boundary"); return v as __JsonValue; })(value.topK),
+    returnValues: value.returnValues as __JsonValue,
+    returnMetadata: __serialise_MetadataScope(value.returnMetadata),
+    namespace: __serialise_Option_String(value.namespace),
+    filter: __serialise_List_Condition(value.filter),
+  };
+}
+
+export function __deserialise_QueryOptions(json: __JsonValue, path: string = "$"): Result<QueryOptions, __BoundaryError> {
+  if (typeof json !== "object" || json === null || globalThis.Array.isArray(json)) {
+    return Err({ kind: "StructuralMismatch", path, expected: "object", actual: typeof json });
+  }
+  const obj = json as { [k: string]: __JsonValue };
+  const __d_topK: __JsonValue = "topK" in obj ? obj["topK"] : 5;
+  if (typeof __d_topK !== "number") {
+    return Err({ kind: "StructuralMismatch", path: `${path}.topK`, expected: "number", actual: typeof __d_topK });
+  }
+  if (!globalThis.Number.isSafeInteger(__d_topK)) {
+    return Err({ kind: "StructuralMismatch", path: `${path}.topK`, expected: "safe integer", actual: String(__d_topK) });
+  }
+  const __topK = __d_topK;
+  const __d_returnValues: __JsonValue = "returnValues" in obj ? obj["returnValues"] : false;
+  if (typeof __d_returnValues !== "boolean") {
+    return Err({ kind: "StructuralMismatch", path: `${path}.returnValues`, expected: "boolean", actual: typeof __d_returnValues });
+  }
+  const __returnValues = __d_returnValues;
+  const __d_returnMetadata: __JsonValue = "returnMetadata" in obj ? obj["returnMetadata"] : { kind: "Omit" };
+  const __r_returnMetadata = __deserialise_MetadataScope(__d_returnMetadata, `${path}.returnMetadata`);
+  if (__r_returnMetadata.tag === "Err") return __r_returnMetadata;
+  const __returnMetadata = __r_returnMetadata.value;
+  const __d_namespace: __JsonValue = "namespace" in obj ? obj["namespace"] : { kind: "None" };
+  const __r_namespace = __deserialise_Option_String(__d_namespace, `${path}.namespace`);
+  if (__r_namespace.tag === "Err") return __r_namespace;
+  const __namespace = __r_namespace.value;
+  const __d_filter: __JsonValue = "filter" in obj ? obj["filter"] : [];
+  const __r_filter = __deserialise_List_Condition(__d_filter, `${path}.filter`);
+  if (__r_filter.tag === "Err") return __r_filter;
+  const __filter = __r_filter.value;
+  return Ok({ topK: __topK, returnValues: __returnValues, returnMetadata: __returnMetadata, namespace: __namespace, filter: __filter } as QueryOptions);
+}
+
 export function __serialise_QueueSend(value: QueueSend): __JsonValue {
   return {
     delay: __serialise_Option_Duration(value.delay),
@@ -3098,6 +3595,127 @@ export function __deserialise_TokenUsage(json: __JsonValue, path: string = "$"):
   return Ok({ promptTokens: __promptTokens, completionTokens: __completionTokens } as TokenUsage);
 }
 
+export function __serialise_Vector(value: Vector): __JsonValue {
+  return {
+    id: value.id as __JsonValue,
+    values: __serialise_List_Float(value.values),
+    metadata: __serialise_Option_String(value.metadata),
+    namespace: __serialise_Option_String(value.namespace),
+  };
+}
+
+export function __deserialise_Vector(json: __JsonValue, path: string = "$"): Result<Vector, __BoundaryError> {
+  if (typeof json !== "object" || json === null || globalThis.Array.isArray(json)) {
+    return Err({ kind: "StructuralMismatch", path, expected: "object", actual: typeof json });
+  }
+  const obj = json as { [k: string]: __JsonValue };
+  if (typeof obj["id"] !== "string") {
+    return Err({ kind: "StructuralMismatch", path: `${path}.id`, expected: "string", actual: typeof obj["id"] });
+  }
+  const __id = obj["id"];
+  const __r_values = __deserialise_List_Float(obj["values"], `${path}.values`);
+  if (__r_values.tag === "Err") return __r_values;
+  const __values = __r_values.value;
+  const __d_metadata: __JsonValue = "metadata" in obj ? obj["metadata"] : { kind: "None" };
+  const __r_metadata = __deserialise_Option_String(__d_metadata, `${path}.metadata`);
+  if (__r_metadata.tag === "Err") return __r_metadata;
+  const __metadata = __r_metadata.value;
+  const __d_namespace: __JsonValue = "namespace" in obj ? obj["namespace"] : { kind: "None" };
+  const __r_namespace = __deserialise_Option_String(__d_namespace, `${path}.namespace`);
+  if (__r_namespace.tag === "Err") return __r_namespace;
+  const __namespace = __r_namespace.value;
+  return Ok({ id: __id, values: __values, metadata: __metadata, namespace: __namespace } as Vector);
+}
+
+export function __serialise_VectorError(value: VectorError): __JsonValue {
+  switch (value.tag) {
+    case "DimensionMismatch": {
+      return { kind: "DimensionMismatch", message: value.message as __JsonValue };
+    }
+    case "VectorInvalidInput": {
+      return { kind: "VectorInvalidInput", message: value.message as __JsonValue };
+    }
+    case "VectorRateLimited":
+      return { kind: "VectorRateLimited" };
+    case "VectorFailed": {
+      return { kind: "VectorFailed", message: value.message as __JsonValue };
+    }
+  }
+}
+
+export function __deserialise_VectorError(json: __JsonValue, path: string = "$"): Result<VectorError, __BoundaryError> {
+  if (typeof json !== "object" || json === null || globalThis.Array.isArray(json)) {
+    return Err({ kind: "StructuralMismatch", path, expected: "object", actual: typeof json });
+  }
+  const obj = json as { [k: string]: __JsonValue };
+  const kind = obj["kind"];
+  switch (kind) {
+    case "DimensionMismatch": {
+  if (typeof obj["message"] !== "string") {
+    return Err({ kind: "StructuralMismatch", path: `${path}.message`, expected: "string", actual: typeof obj["message"] });
+  }
+  const __message = obj["message"];
+      return Ok({ tag: "DimensionMismatch", message: __message } as VectorError);
+    }
+    case "VectorInvalidInput": {
+  if (typeof obj["message"] !== "string") {
+    return Err({ kind: "StructuralMismatch", path: `${path}.message`, expected: "string", actual: typeof obj["message"] });
+  }
+  const __message = obj["message"];
+      return Ok({ tag: "VectorInvalidInput", message: __message } as VectorError);
+    }
+    case "VectorRateLimited":
+      return Ok({ tag: "VectorRateLimited" } as VectorError);
+    case "VectorFailed": {
+  if (typeof obj["message"] !== "string") {
+    return Err({ kind: "StructuralMismatch", path: `${path}.message`, expected: "string", actual: typeof obj["message"] });
+  }
+  const __message = obj["message"];
+      return Ok({ tag: "VectorFailed", message: __message } as VectorError);
+    }
+    default:
+      return Err({ kind: "StructuralMismatch", path, expected: "sum variant kind", actual: String(kind) });
+  }
+}
+
+export function __serialise_VectorMatch(value: VectorMatch): __JsonValue {
+  return {
+    id: value.id as __JsonValue,
+    score: ((v: number) => { if (!globalThis.Number.isFinite(v)) throw new globalThis.Error("non-finite Float at boundary"); return v as __JsonValue; })(value.score),
+    values: __serialise_Option_List_Float(value.values),
+    metadata: __serialise_Option_String(value.metadata),
+    namespace: __serialise_Option_String(value.namespace),
+  };
+}
+
+export function __deserialise_VectorMatch(json: __JsonValue, path: string = "$"): Result<VectorMatch, __BoundaryError> {
+  if (typeof json !== "object" || json === null || globalThis.Array.isArray(json)) {
+    return Err({ kind: "StructuralMismatch", path, expected: "object", actual: typeof json });
+  }
+  const obj = json as { [k: string]: __JsonValue };
+  if (typeof obj["id"] !== "string") {
+    return Err({ kind: "StructuralMismatch", path: `${path}.id`, expected: "string", actual: typeof obj["id"] });
+  }
+  const __id = obj["id"];
+  if (typeof obj["score"] !== "number") {
+    return Err({ kind: "StructuralMismatch", path: `${path}.score`, expected: "number", actual: typeof obj["score"] });
+  }
+  if (!globalThis.Number.isFinite(obj["score"])) {
+    return Err({ kind: "StructuralMismatch", path: `${path}.score`, expected: "finite number", actual: String(obj["score"]) });
+  }
+  const __score = obj["score"];
+  const __r_values = __deserialise_Option_List_Float(obj["values"], `${path}.values`);
+  if (__r_values.tag === "Err") return __r_values;
+  const __values = __r_values.value;
+  const __r_metadata = __deserialise_Option_String(obj["metadata"], `${path}.metadata`);
+  if (__r_metadata.tag === "Err") return __r_metadata;
+  const __metadata = __r_metadata.value;
+  const __r_namespace = __deserialise_Option_String(obj["namespace"], `${path}.namespace`);
+  if (__r_namespace.tag === "Err") return __r_namespace;
+  const __namespace = __r_namespace.value;
+  return Ok({ id: __id, score: __score, values: __values, metadata: __metadata, namespace: __namespace } as VectorMatch);
+}
+
 export function __serialise_WorkerVersion(value: WorkerVersion): __JsonValue {
   return {
     id: value.id as __JsonValue,
@@ -3264,6 +3882,25 @@ export function __deserialise_Map_String_String(json: __JsonValue, path: string 
   }
   const __v = entryV;
   out.set(__k as string, __v as string);
+  }
+  return Ok(out);
+}
+
+export function __serialise_List_MetaValue(value: readonly MetaValue[]): __JsonValue {
+  return value.map((v) => __serialise_MetaValue(v));
+}
+
+export function __deserialise_List_MetaValue(json: __JsonValue, path: string = "$"): Result<readonly MetaValue[], __BoundaryError> {
+  if (!globalThis.Array.isArray(json)) {
+    return Err({ kind: "StructuralMismatch", path, expected: "array", actual: typeof json });
+  }
+  const out: MetaValue[] = [];
+  for (let i = 0; i < json.length; i++) {
+  const item = json[i];
+  const __r_el = __deserialise_MetaValue(item, `${path}[${i}]`);
+  if (__r_el.tag === "Err") return __r_el;
+  const __el = __r_el.value;
+  out.push(__el as MetaValue);
   }
   return Ok(out);
 }
@@ -3579,6 +4216,25 @@ export function __deserialise_List_PgValue(json: __JsonValue, path: string = "$"
   return Ok(out);
 }
 
+export function __serialise_List_Condition(value: readonly Condition[]): __JsonValue {
+  return value.map((v) => __serialise_Condition(v));
+}
+
+export function __deserialise_List_Condition(json: __JsonValue, path: string = "$"): Result<readonly Condition[], __BoundaryError> {
+  if (!globalThis.Array.isArray(json)) {
+    return Err({ kind: "StructuralMismatch", path, expected: "array", actual: typeof json });
+  }
+  const out: Condition[] = [];
+  for (let i = 0; i < json.length; i++) {
+  const item = json[i];
+  const __r_el = __deserialise_Condition(item, `${path}[${i}]`);
+  if (__r_el.tag === "Err") return __r_el;
+  const __el = __r_el.value;
+  out.push(__el as Condition);
+  }
+  return Ok(out);
+}
+
 export function __serialise_List_R2Object(value: readonly R2Object[]): __JsonValue {
   return value.map((v) => __serialise_R2Object(v));
 }
@@ -3615,4 +4271,44 @@ export function __deserialise_List_SqlValue(json: __JsonValue, path: string = "$
   out.push(__el as SqlValue);
   }
   return Ok(out);
+}
+
+export function __serialise_Option_List_Float(value: Option<readonly number[]>): __JsonValue {
+  if (value.tag === "Some") return { kind: "Some", value: __serialise_List_Float(value.value) };
+  return { kind: "None" };
+}
+
+function __option_value_List_Float(raw: __JsonValue, at: string): Result<unknown, __BoundaryError> {
+  const __r_v = __deserialise_List_Float(raw, at);
+  if (__r_v.tag === "Err") return __r_v;
+  const __v = __r_v.value;
+  return Ok(__v);
+}
+
+export function __deserialise_Option_List_Float(json: __JsonValue, path: string = "$"): Result<Option<readonly number[]>, __BoundaryError> {
+  if (json === undefined || json === null) {
+    return Ok(None as Option<readonly number[]>);
+  }
+  if (typeof json === "object" && !globalThis.Array.isArray(json)) {
+    const obj = json as { [k: string]: __JsonValue };
+    const __keys = globalThis.Object.keys(obj);
+    if (obj["kind"] === "None" && __keys.length === 1) {
+      return Ok(None as Option<readonly number[]>);
+    }
+    if (obj["kind"] === "Some" && __keys.length === 2 && "value" in obj) {
+      const __t = __option_value_List_Float(obj["value"], `${path}.value`);
+      if (__t.tag === "Err") {
+        return __t;
+      }
+      return Ok(Some(__t.value as readonly number[]) as Option<readonly number[]>);
+    }
+  }
+  const __b = __option_value_List_Float(json, path);
+  if (__b.tag === "Ok") {
+    return Ok(Some(__b.value as readonly number[]) as Option<readonly number[]>);
+  }
+  if (__b.error.kind === "StructuralMismatch" && __b.error.path === path && !__b.error.expected.endsWith(" | null | {\"kind\": \"None\"} | {\"kind\": \"Some\", \"value\": ...}")) {
+    return Err({ ...__b.error, expected: __b.error.expected + " | null | {\"kind\": \"None\"} | {\"kind\": \"Some\", \"value\": ...}" });
+  }
+  return __b;
 }
