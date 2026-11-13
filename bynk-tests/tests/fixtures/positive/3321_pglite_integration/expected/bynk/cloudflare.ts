@@ -852,6 +852,25 @@ export const Vector = {
 };
 
 /**
+ * One vector to write with typed metadata: a `Vector` whose `metadata` is a
+ * value of `M`, which `upsertValue` encodes with `M`'s codec. Reading is not
+ * typed: `getByIds` and a query's matches give the metadata as text, so a
+ * vector stored by an older version of `M` can be skipped or repaired.
+ * Keep the properties a query filters on plain (not `Option`): an `Option` is
+ * written as a tagged object, as `Json.encode` writes it, so a filter on it
+ * would never match.
+ */
+export interface VectorOf<M> {
+  readonly id: string;
+  readonly values: readonly number[];
+  readonly metadata: Option<M>;
+  readonly namespace: Option<string>;
+}
+
+export const VectorOf = {
+};
+
+/**
  * A metadata value a `Condition` compares a property with: text, a number or
  * a flag.
  */
@@ -1659,7 +1678,9 @@ export const __MySqlToken: symbol = globalThis.Symbol("MySql");
  * Metadata indexes should exist before the vectors that carry the property.
  *
  * `upsert` writes vectors, replacing any with the same id in full; `insert`
- * writes only vectors whose id is new. `query(vector, options)` returns the
+ * writes only vectors whose id is new. `upsertValue(vectors)` is `upsert` with
+ * the metadata of each `VectorOf[M]` encoded by `M`'s codec, as
+ * `Queue.sendValue` encodes a message. `query(vector, options)` returns the
  * nearest matches, best first. `getByIds` reads vectors back, `deleteByIds`
  * removes them, and `describe` reports the index's dimensions and metric.
  * Metadata is JSON text: write it with `Json.encode` and read it with
@@ -1691,6 +1712,7 @@ export const __MySqlToken: symbol = globalThis.Symbol("MySql");
 export interface Vectorize {
   upsert(vectors: readonly Vector[]): globalThis.Promise<Result<Mutation, VectorError>>;
   insert(vectors: readonly Vector[]): globalThis.Promise<Result<Mutation, VectorError>>;
+  upsertValue(vectors: unknown): globalThis.Promise<Result<Mutation, VectorError>>;
   query(vector: readonly number[], options: QueryOptions): globalThis.Promise<Result<readonly VectorMatch[], VectorError>>;
   getByIds(ids: readonly string[]): globalThis.Promise<Result<readonly Vector[], VectorError>>;
   deleteByIds(ids: readonly string[]): globalThis.Promise<Result<Mutation, VectorError>>;

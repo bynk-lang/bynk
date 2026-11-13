@@ -2545,6 +2545,33 @@ t("WorkersAiSearch.answer: an acknowledged project is never warned", async () =>
   }
 });
 
+// #3479: `upsertValue[M]` arrives boundary-encoded, with an `Option` as `{ kind }`.
+t("WorkersVectorize.upsertValue: sends what upsert sends, from the call site's encoding", async () => {
+  const index = fakeIndex();
+  const wire = [
+    { id: "a", values: [0.1, 0.2], metadata: { kind: "Some", value: { category: "faq", year: 2026 } }, namespace: { kind: "Some", value: "ns" } },
+    { id: "b", values: [0.3, 0.4], metadata: { kind: "None" }, namespace: { kind: "None" } },
+  ];
+  assert.deepEqual(await vz(index).upsertValue(wire), { tag: "Ok", value: { id: "m-1" } });
+  const sent = index.calls[0];
+  assert.equal(sent.name, "upsert");
+  assert.deepEqual(sent.args[0], [
+    { id: "a", values: [0.1, 0.2], namespace: "ns", metadata: { category: "faq", year: 2026 } },
+    { id: "b", values: [0.3, 0.4] },
+  ]);
+  // The same platform call `upsert` makes for the same vectors.
+  const plain = fakeIndex();
+  await vz(plain).upsert([vec("a", { values: [0.1, 0.2], metadata: Some('{"category":"faq","year":2026}'), namespace: Some("ns") }), vec("b", { values: [0.3, 0.4] })]);
+  assert.deepEqual(plain.calls[0].args[0], sent.args[0]);
+});
+
+t("WorkersVectorize.upsertValue: metadata that is not a JSON object faults, as upsert's does", async () => {
+  const index = fakeIndex();
+  const wire = [{ id: "a", values: [0.1], metadata: { kind: "Some", value: "just text" }, namespace: { kind: "None" } }];
+  await assert.rejects(() => vz(index).upsertValue(wire), /must be a JSON object/);
+  assert.equal(index.calls.length, 0);
+});
+
 // #3477: `WorkersContainer`, against a fake of the Durable Object namespace the
 // generated class sits behind. The class itself (starting the container) is
 // tested in the runtime; here only what the provider sends and how it reads the

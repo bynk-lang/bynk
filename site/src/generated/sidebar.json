@@ -238,6 +238,10 @@
             "link": "/book/guides/effects-and-capabilities/call-workers-ai-through-an-adapter/"
           },
           {
+            "label": "Search by meaning with Vectorize and Workers AI",
+            "link": "/book/guides/effects-and-capabilities/search-by-meaning-with-vectorize/"
+          },
+          {
             "label": "Use more than one KV namespace",
             "link": "/book/guides/effects-and-capabilities/use-several-kv-namespaces/"
           },
