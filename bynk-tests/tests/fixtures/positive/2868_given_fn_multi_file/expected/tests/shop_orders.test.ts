@@ -115,8 +115,9 @@ async function test_a_given_fn_reaches_a_capability_no_handler_lists() {
     const __obs = { log: {} as globalThis.Record<string, { args: unknown[]; order: number }[]>, n: 0 };
     const deps = __bynkRecordDeps(__makeTestDeps(), { Audit: ["note"], Logger: ["debug", "error", "info", "log", "warn"], Meter: ["bump"] }, __obs);
     const { Tally, __makeTally, ack, announce, book, eachNote, place, positive, tally, tick } = __ns_shop_orders;
-    const { BytesResponse, Cookie, EventEnvelope, FetchError, FetchOptions, File, LogLevel, Method, Redirect, Request, Response, SameSite, StreamResponse, TimedOut, Uuid } = __ns_bynk;
+    const { BytesResponse, Claim, Cookie, EventEnvelope, FetchError, FetchOptions, File, LogLevel, Method, Redirect, Request, Response, SameSite, StreamResponse, TimedOut, Uuid } = __ns_bynk;
     type BytesResponse = __ns_bynk.BytesResponse;
+    type Claim = __ns_bynk.Claim;
     type Cookie = __ns_bynk.Cookie;
     type EventEnvelope = __ns_bynk.EventEnvelope;
     type FetchError = __ns_bynk.FetchError;
@@ -149,8 +150,9 @@ async function test_a_handler_path_through_given_functions() {
     __ns_shop_orders.__resetAgents();
     const deps = __makeTestDeps();
     const { Tally, __makeTally, ack, announce, book, eachNote, place, positive, tally, tick } = __ns_shop_orders;
-    const { BytesResponse, Cookie, EventEnvelope, FetchError, FetchOptions, File, LogLevel, Method, Redirect, Request, Response, SameSite, StreamResponse, TimedOut, Uuid } = __ns_bynk;
+    const { BytesResponse, Claim, Cookie, EventEnvelope, FetchError, FetchOptions, File, LogLevel, Method, Redirect, Request, Response, SameSite, StreamResponse, TimedOut, Uuid } = __ns_bynk;
     type BytesResponse = __ns_bynk.BytesResponse;
+    type Claim = __ns_bynk.Claim;
     type Cookie = __ns_bynk.Cookie;
     type EventEnvelope = __ns_bynk.EventEnvelope;
     type FetchError = __ns_bynk.FetchError;
@@ -183,8 +185,9 @@ async function test_a_capability_only_a_given_fn_lists_reaches_a_case() {
     const __obs = { log: {} as globalThis.Record<string, { args: unknown[]; order: number }[]>, n: 0 };
     const deps = __bynkRecordDeps(__makeTestDeps(), { Audit: ["note"], Logger: ["debug", "error", "info", "log", "warn"], Meter: ["bump"] }, __obs);
     const { Tally, __makeTally, ack, announce, book, eachNote, place, positive, tally, tick } = __ns_shop_orders;
-    const { BytesResponse, Cookie, EventEnvelope, FetchError, FetchOptions, File, LogLevel, Method, Redirect, Request, Response, SameSite, StreamResponse, TimedOut, Uuid } = __ns_bynk;
+    const { BytesResponse, Claim, Cookie, EventEnvelope, FetchError, FetchOptions, File, LogLevel, Method, Redirect, Request, Response, SameSite, StreamResponse, TimedOut, Uuid } = __ns_bynk;
     type BytesResponse = __ns_bynk.BytesResponse;
+    type Claim = __ns_bynk.Claim;
     type Cookie = __ns_bynk.Cookie;
     type EventEnvelope = __ns_bynk.EventEnvelope;
     type FetchError = __ns_bynk.FetchError;

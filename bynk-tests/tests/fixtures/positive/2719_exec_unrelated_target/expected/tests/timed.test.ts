@@ -230,8 +230,9 @@ async function test_the_timed_target() {
   try {
     const deps = __makeTestDeps();
     const { tick, ticks } = __ns_timed;
-    const { BytesResponse, Cookie, EventEnvelope, FetchError, FetchOptions, File, LogLevel, Method, Redirect, Request, Response, SameSite, StreamResponse, TimedOut, Uuid } = __ns_bynk;
+    const { BytesResponse, Claim, Cookie, EventEnvelope, FetchError, FetchOptions, File, LogLevel, Method, Redirect, Request, Response, SameSite, StreamResponse, TimedOut, Uuid } = __ns_bynk;
     type BytesResponse = __ns_bynk.BytesResponse;
+    type Claim = __ns_bynk.Claim;
     type Cookie = __ns_bynk.Cookie;
     type EventEnvelope = __ns_bynk.EventEnvelope;
     type FetchError = __ns_bynk.FetchError;

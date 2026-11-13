@@ -295,6 +295,19 @@ export const EventEnvelope = {
 };
 
 /**
+ * The outcome of an `Idempotency.claim`: `Claimed` for the first caller to
+ * claim a key, `AlreadyClaimed` for every later one while the claim lasts.
+ */
+export type Claim =
+    { readonly tag: "Claimed" }
+  | { readonly tag: "AlreadyClaimed" };
+
+export const Claim = {
+  Claimed: { tag: "Claimed" } as Claim,
+  AlreadyClaimed: { tag: "AlreadyClaimed" } as Claim,
+};
+
+/**
  * Reads the current wall-clock time, as Unix milliseconds.
  */
 export interface Clock {
@@ -391,10 +404,19 @@ export const __LocaleToken: symbol = globalThis.Symbol("Locale");
  * time. `expiresAfter` sets the retention window a call to `remember`
  * establishes. Slice 0 (ADR 0282): a single
  * in-memory provider, lost on process restart — no durability guarantee yet.
+ *
+ * `claim` is the race-free form: the first call for a key returns `Claimed`
+ * and every later call within `expiresAfter` returns `AlreadyClaimed`, as one
+ * step, so two concurrent deliveries cannot both be told they are first.
+ * `dedup` then `remember` is check-then-act, and two concurrent deliveries
+ * can both miss. A claim is not released if the work after it fails: the key
+ * stays claimed until it expires. `claim` records no outcome and is separate
+ * from `dedup`/`remember`.
  */
 export interface Idempotency {
   dedup<T>(key: string): globalThis.Promise<Option<T>>;
   remember<T>(key: string, value: T, expiresAfter: number): globalThis.Promise<void>;
+  claim(key: string, expiresAfter: number): globalThis.Promise<Claim>;
 }
 
 export const __IdempotencyToken: symbol = globalThis.Symbol("Idempotency");

@@ -62,6 +62,7 @@ type __Fetch_receiveStream_Call = { req: __ns_bynk.Request; options: __ns_bynk.F
 type __Fetch_sendStream_Call = { req: __ns_bynk.Request; body: AsyncIterable<globalThis.Uint8Array>; options: __ns_bynk.FetchOptions };
 type __Idempotency_dedup_Call = { key: string };
 type __Idempotency_remember_Call = { key: string; value: unknown; expiresAfter: number };
+type __Idempotency_claim_Call = { key: string; expiresAfter: number };
 type __Kv_get_Call = { key: string };
 type __Kv_put_Call = { key: string; value: string };
 type __Kv_putTtl_Call = { key: string; value: string; ttlSeconds: number };
@@ -93,8 +94,9 @@ class __Stub_Fetch {
     return true;
   }
   async send(req: __ns_bynk.Request): globalThis.Promise<Result<__ns_bynk.Response, __ns_bynk.FetchError>> {
-    const { BytesResponse, Cookie, EventEnvelope, FetchError, FetchOptions, File, LogLevel, Method, Redirect, Request, Response, SameSite, StreamResponse, TimedOut, Uuid } = __ns_bynk;
+    const { BytesResponse, Claim, Cookie, EventEnvelope, FetchError, FetchOptions, File, LogLevel, Method, Redirect, Request, Response, SameSite, StreamResponse, TimedOut, Uuid } = __ns_bynk;
     type BytesResponse = __ns_bynk.BytesResponse;
+    type Claim = __ns_bynk.Claim;
     type Cookie = __ns_bynk.Cookie;
     type EventEnvelope = __ns_bynk.EventEnvelope;
     type FetchError = __ns_bynk.FetchError;
@@ -172,8 +174,9 @@ class __Stub_Kv {
     return true;
   }
   async get(key: string): globalThis.Promise<Option<string>> {
-    const { BytesResponse, Cookie, EventEnvelope, FetchError, FetchOptions, File, LogLevel, Method, Redirect, Request, Response, SameSite, StreamResponse, TimedOut, Uuid } = __ns_bynk;
+    const { BytesResponse, Claim, Cookie, EventEnvelope, FetchError, FetchOptions, File, LogLevel, Method, Redirect, Request, Response, SameSite, StreamResponse, TimedOut, Uuid } = __ns_bynk;
     type BytesResponse = __ns_bynk.BytesResponse;
+    type Claim = __ns_bynk.Claim;
     type Cookie = __ns_bynk.Cookie;
     type EventEnvelope = __ns_bynk.EventEnvelope;
     type FetchError = __ns_bynk.FetchError;
@@ -290,13 +293,23 @@ function __bynkTest_Fetch(): __ns_bynk.Fetch {
 }
 
 function __bynkTest_Idempotency(): __ns_bynk.Idempotency {
-  const store = new globalThis.Map<string, unknown>();
+  const store = new globalThis.Map<string, { value: unknown; until: number }>();
+  const claims = new globalThis.Map<string, number>();
   return {
     async dedup(key) {
-      return (store.has(key) ? Some(store.get(key)) : None) as never;
+      const hit = store.get(key);
+      return (hit !== undefined && hit.until > 0 ? Some(hit.value) : None) as never;
     },
-    async remember(key, value) {
-      store.set(key, value);
+    async remember(key, value, expiresAfter) {
+      store.set(key, { value, until: 0 + expiresAfter });
+    },
+    async claim(key, expiresAfter) {
+      const until = claims.get(key);
+      if (until !== undefined && until > 0) {
+        return __ns_bynk.Claim.AlreadyClaimed;
+      }
+      claims.set(key, 0 + expiresAfter);
+      return __ns_bynk.Claim.Claimed;
     },
   };
 }
@@ -457,8 +470,9 @@ async function test_the_clock_reads_the_epoch() {
     type LocaleTag = __ns_bynk_locale_types.LocaleTag;
     type Message = __ns_bynk_locale_types.Message;
     type MessageArg = __ns_bynk_locale_types.MessageArg;
-    const { BytesResponse, Cookie, EventEnvelope, FetchError, FetchOptions, File, LogLevel, Method, Redirect, Request, Response, SameSite, StreamResponse, TimedOut, Uuid } = __ns_bynk;
+    const { BytesResponse, Claim, Cookie, EventEnvelope, FetchError, FetchOptions, File, LogLevel, Method, Redirect, Request, Response, SameSite, StreamResponse, TimedOut, Uuid } = __ns_bynk;
     type BytesResponse = __ns_bynk.BytesResponse;
+    type Claim = __ns_bynk.Claim;
     type Cookie = __ns_bynk.Cookie;
     type EventEnvelope = __ns_bynk.EventEnvelope;
     type FetchError = __ns_bynk.FetchError;
@@ -536,8 +550,9 @@ async function test_random_integers_come_from_a_fixed_seed() {
     type LocaleTag = __ns_bynk_locale_types.LocaleTag;
     type Message = __ns_bynk_locale_types.Message;
     type MessageArg = __ns_bynk_locale_types.MessageArg;
-    const { BytesResponse, Cookie, EventEnvelope, FetchError, FetchOptions, File, LogLevel, Method, Redirect, Request, Response, SameSite, StreamResponse, TimedOut, Uuid } = __ns_bynk;
+    const { BytesResponse, Claim, Cookie, EventEnvelope, FetchError, FetchOptions, File, LogLevel, Method, Redirect, Request, Response, SameSite, StreamResponse, TimedOut, Uuid } = __ns_bynk;
     type BytesResponse = __ns_bynk.BytesResponse;
+    type Claim = __ns_bynk.Claim;
     type Cookie = __ns_bynk.Cookie;
     type EventEnvelope = __ns_bynk.EventEnvelope;
     type FetchError = __ns_bynk.FetchError;
@@ -615,8 +630,9 @@ async function test_random_uuids_count_up() {
     type LocaleTag = __ns_bynk_locale_types.LocaleTag;
     type Message = __ns_bynk_locale_types.Message;
     type MessageArg = __ns_bynk_locale_types.MessageArg;
-    const { BytesResponse, Cookie, EventEnvelope, FetchError, FetchOptions, File, LogLevel, Method, Redirect, Request, Response, SameSite, StreamResponse, TimedOut, Uuid } = __ns_bynk;
+    const { BytesResponse, Claim, Cookie, EventEnvelope, FetchError, FetchOptions, File, LogLevel, Method, Redirect, Request, Response, SameSite, StreamResponse, TimedOut, Uuid } = __ns_bynk;
     type BytesResponse = __ns_bynk.BytesResponse;
+    type Claim = __ns_bynk.Claim;
     type Cookie = __ns_bynk.Cookie;
     type EventEnvelope = __ns_bynk.EventEnvelope;
     type FetchError = __ns_bynk.FetchError;
@@ -694,8 +710,9 @@ async function test_no_secret_is_set() {
     type LocaleTag = __ns_bynk_locale_types.LocaleTag;
     type Message = __ns_bynk_locale_types.Message;
     type MessageArg = __ns_bynk_locale_types.MessageArg;
-    const { BytesResponse, Cookie, EventEnvelope, FetchError, FetchOptions, File, LogLevel, Method, Redirect, Request, Response, SameSite, StreamResponse, TimedOut, Uuid } = __ns_bynk;
+    const { BytesResponse, Claim, Cookie, EventEnvelope, FetchError, FetchOptions, File, LogLevel, Method, Redirect, Request, Response, SameSite, StreamResponse, TimedOut, Uuid } = __ns_bynk;
     type BytesResponse = __ns_bynk.BytesResponse;
+    type Claim = __ns_bynk.Claim;
     type Cookie = __ns_bynk.Cookie;
     type EventEnvelope = __ns_bynk.EventEnvelope;
     type FetchError = __ns_bynk.FetchError;
@@ -773,8 +790,9 @@ async function test_the_locale_is_en() {
     type LocaleTag = __ns_bynk_locale_types.LocaleTag;
     type Message = __ns_bynk_locale_types.Message;
     type MessageArg = __ns_bynk_locale_types.MessageArg;
-    const { BytesResponse, Cookie, EventEnvelope, FetchError, FetchOptions, File, LogLevel, Method, Redirect, Request, Response, SameSite, StreamResponse, TimedOut, Uuid } = __ns_bynk;
+    const { BytesResponse, Claim, Cookie, EventEnvelope, FetchError, FetchOptions, File, LogLevel, Method, Redirect, Request, Response, SameSite, StreamResponse, TimedOut, Uuid } = __ns_bynk;
     type BytesResponse = __ns_bynk.BytesResponse;
+    type Claim = __ns_bynk.Claim;
     type Cookie = __ns_bynk.Cookie;
     type EventEnvelope = __ns_bynk.EventEnvelope;
     type FetchError = __ns_bynk.FetchError;
@@ -847,14 +865,15 @@ async function test_the_locale_is_en() {
 async function test_the_logger_records_without_printing() {
   try {
     const __obs = { log: {} as globalThis.Record<string, { args: unknown[]; order: number }[]>, n: 0 };
-    const deps = __bynkRecordDeps(__makeTestDeps(), { Clock: ["now"], Fetch: ["receiveBytes", "receiveStream", "send", "sendBytes", "sendStream", "sendWith"], Idempotency: ["dedup", "remember"], Kv: ["delete", "get", "getBytes", "getWith", "list", "listPage", "put", "putBytes", "putTtl", "putWith"], Locale: ["current"], Logger: ["debug", "error", "info", "log", "warn"], Random: ["bytes", "int", "uuid"], Secrets: ["get"] }, __obs);
+    const deps = __bynkRecordDeps(__makeTestDeps(), { Clock: ["now"], Fetch: ["receiveBytes", "receiveStream", "send", "sendBytes", "sendStream", "sendWith"], Idempotency: ["claim", "dedup", "remember"], Kv: ["delete", "get", "getBytes", "getWith", "list", "listPage", "put", "putBytes", "putTtl", "putWith"], Locale: ["current"], Logger: ["debug", "error", "info", "log", "warn"], Random: ["bytes", "int", "uuid"], Secrets: ["get"] }, __obs);
     const { clock, draws, greet, ids, locale, lookup, once, relay, secret, store } = __ns_demo_plat;
     const { LocaleTag, Message, MessageArg } = __ns_bynk_locale_types;
     type LocaleTag = __ns_bynk_locale_types.LocaleTag;
     type Message = __ns_bynk_locale_types.Message;
     type MessageArg = __ns_bynk_locale_types.MessageArg;
-    const { BytesResponse, Cookie, EventEnvelope, FetchError, FetchOptions, File, LogLevel, Method, Redirect, Request, Response, SameSite, StreamResponse, TimedOut, Uuid } = __ns_bynk;
+    const { BytesResponse, Claim, Cookie, EventEnvelope, FetchError, FetchOptions, File, LogLevel, Method, Redirect, Request, Response, SameSite, StreamResponse, TimedOut, Uuid } = __ns_bynk;
     type BytesResponse = __ns_bynk.BytesResponse;
+    type Claim = __ns_bynk.Claim;
     type Cookie = __ns_bynk.Cookie;
     type EventEnvelope = __ns_bynk.EventEnvelope;
     type FetchError = __ns_bynk.FetchError;
@@ -933,8 +952,9 @@ async function test_idempotency_remembers_within_a_case() {
     type LocaleTag = __ns_bynk_locale_types.LocaleTag;
     type Message = __ns_bynk_locale_types.Message;
     type MessageArg = __ns_bynk_locale_types.MessageArg;
-    const { BytesResponse, Cookie, EventEnvelope, FetchError, FetchOptions, File, LogLevel, Method, Redirect, Request, Response, SameSite, StreamResponse, TimedOut, Uuid } = __ns_bynk;
+    const { BytesResponse, Claim, Cookie, EventEnvelope, FetchError, FetchOptions, File, LogLevel, Method, Redirect, Request, Response, SameSite, StreamResponse, TimedOut, Uuid } = __ns_bynk;
     type BytesResponse = __ns_bynk.BytesResponse;
+    type Claim = __ns_bynk.Claim;
     type Cookie = __ns_bynk.Cookie;
     type EventEnvelope = __ns_bynk.EventEnvelope;
     type FetchError = __ns_bynk.FetchError;
@@ -1014,8 +1034,9 @@ async function test_idempotency_is_fresh_per_case() {
     type LocaleTag = __ns_bynk_locale_types.LocaleTag;
     type Message = __ns_bynk_locale_types.Message;
     type MessageArg = __ns_bynk_locale_types.MessageArg;
-    const { BytesResponse, Cookie, EventEnvelope, FetchError, FetchOptions, File, LogLevel, Method, Redirect, Request, Response, SameSite, StreamResponse, TimedOut, Uuid } = __ns_bynk;
+    const { BytesResponse, Claim, Cookie, EventEnvelope, FetchError, FetchOptions, File, LogLevel, Method, Redirect, Request, Response, SameSite, StreamResponse, TimedOut, Uuid } = __ns_bynk;
     type BytesResponse = __ns_bynk.BytesResponse;
+    type Claim = __ns_bynk.Claim;
     type Cookie = __ns_bynk.Cookie;
     type EventEnvelope = __ns_bynk.EventEnvelope;
     type FetchError = __ns_bynk.FetchError;
@@ -1088,14 +1109,15 @@ async function test_idempotency_is_fresh_per_case() {
 async function test_kv_is_in_memory() {
   try {
     const __obs = { log: {} as globalThis.Record<string, { args: unknown[]; order: number }[]>, n: 0 };
-    const deps = __bynkRecordDeps(__makeTestDeps(), { Clock: ["now"], Fetch: ["receiveBytes", "receiveStream", "send", "sendBytes", "sendStream", "sendWith"], Idempotency: ["dedup", "remember"], Kv: ["delete", "get", "getBytes", "getWith", "list", "listPage", "put", "putBytes", "putTtl", "putWith"], Locale: ["current"], Logger: ["debug", "error", "info", "log", "warn"], Random: ["bytes", "int", "uuid"], Secrets: ["get"] }, __obs);
+    const deps = __bynkRecordDeps(__makeTestDeps(), { Clock: ["now"], Fetch: ["receiveBytes", "receiveStream", "send", "sendBytes", "sendStream", "sendWith"], Idempotency: ["claim", "dedup", "remember"], Kv: ["delete", "get", "getBytes", "getWith", "list", "listPage", "put", "putBytes", "putTtl", "putWith"], Locale: ["current"], Logger: ["debug", "error", "info", "log", "warn"], Random: ["bytes", "int", "uuid"], Secrets: ["get"] }, __obs);
     const { clock, draws, greet, ids, locale, lookup, once, relay, secret, store } = __ns_demo_plat;
     const { LocaleTag, Message, MessageArg } = __ns_bynk_locale_types;
     type LocaleTag = __ns_bynk_locale_types.LocaleTag;
     type Message = __ns_bynk_locale_types.Message;
     type MessageArg = __ns_bynk_locale_types.MessageArg;
-    const { BytesResponse, Cookie, EventEnvelope, FetchError, FetchOptions, File, LogLevel, Method, Redirect, Request, Response, SameSite, StreamResponse, TimedOut, Uuid } = __ns_bynk;
+    const { BytesResponse, Claim, Cookie, EventEnvelope, FetchError, FetchOptions, File, LogLevel, Method, Redirect, Request, Response, SameSite, StreamResponse, TimedOut, Uuid } = __ns_bynk;
     type BytesResponse = __ns_bynk.BytesResponse;
+    type Claim = __ns_bynk.Claim;
     type Cookie = __ns_bynk.Cookie;
     type EventEnvelope = __ns_bynk.EventEnvelope;
     type FetchError = __ns_bynk.FetchError;
@@ -1174,8 +1196,9 @@ async function test_kv_is_fresh_per_case() {
     type LocaleTag = __ns_bynk_locale_types.LocaleTag;
     type Message = __ns_bynk_locale_types.Message;
     type MessageArg = __ns_bynk_locale_types.MessageArg;
-    const { BytesResponse, Cookie, EventEnvelope, FetchError, FetchOptions, File, LogLevel, Method, Redirect, Request, Response, SameSite, StreamResponse, TimedOut, Uuid } = __ns_bynk;
+    const { BytesResponse, Claim, Cookie, EventEnvelope, FetchError, FetchOptions, File, LogLevel, Method, Redirect, Request, Response, SameSite, StreamResponse, TimedOut, Uuid } = __ns_bynk;
     type BytesResponse = __ns_bynk.BytesResponse;
+    type Claim = __ns_bynk.Claim;
     type Cookie = __ns_bynk.Cookie;
     type EventEnvelope = __ns_bynk.EventEnvelope;
     type FetchError = __ns_bynk.FetchError;
@@ -1248,14 +1271,15 @@ async function test_kv_is_fresh_per_case() {
 async function test_a_stubbed_operation_answers__the_rest_reach_the_double() {
   try {
     const __obs = { log: {} as globalThis.Record<string, { args: unknown[]; order: number }[]>, n: 0 };
-    const deps = __bynkRecordDeps(__makeTestDeps("a stubbed operation answers; the rest reach the double"), { Clock: ["now"], Fetch: ["receiveBytes", "receiveStream", "send", "sendBytes", "sendStream", "sendWith"], Idempotency: ["dedup", "remember"], Kv: ["delete", "get", "getBytes", "getWith", "list", "listPage", "put", "putBytes", "putTtl", "putWith"], Locale: ["current"], Logger: ["debug", "error", "info", "log", "warn"], Random: ["bytes", "int", "uuid"], Secrets: ["get"] }, __obs);
+    const deps = __bynkRecordDeps(__makeTestDeps("a stubbed operation answers; the rest reach the double"), { Clock: ["now"], Fetch: ["receiveBytes", "receiveStream", "send", "sendBytes", "sendStream", "sendWith"], Idempotency: ["claim", "dedup", "remember"], Kv: ["delete", "get", "getBytes", "getWith", "list", "listPage", "put", "putBytes", "putTtl", "putWith"], Locale: ["current"], Logger: ["debug", "error", "info", "log", "warn"], Random: ["bytes", "int", "uuid"], Secrets: ["get"] }, __obs);
     const { clock, draws, greet, ids, locale, lookup, once, relay, secret, store } = __ns_demo_plat;
     const { LocaleTag, Message, MessageArg } = __ns_bynk_locale_types;
     type LocaleTag = __ns_bynk_locale_types.LocaleTag;
     type Message = __ns_bynk_locale_types.Message;
     type MessageArg = __ns_bynk_locale_types.MessageArg;
-    const { BytesResponse, Cookie, EventEnvelope, FetchError, FetchOptions, File, LogLevel, Method, Redirect, Request, Response, SameSite, StreamResponse, TimedOut, Uuid } = __ns_bynk;
+    const { BytesResponse, Claim, Cookie, EventEnvelope, FetchError, FetchOptions, File, LogLevel, Method, Redirect, Request, Response, SameSite, StreamResponse, TimedOut, Uuid } = __ns_bynk;
     type BytesResponse = __ns_bynk.BytesResponse;
+    type Claim = __ns_bynk.Claim;
     type Cookie = __ns_bynk.Cookie;
     type EventEnvelope = __ns_bynk.EventEnvelope;
     type FetchError = __ns_bynk.FetchError;
@@ -1329,14 +1353,15 @@ async function test_a_stubbed_operation_answers__the_rest_reach_the_double() {
 async function test_a_stubbed_fetch_answers_for_the_network() {
   try {
     const __obs = { log: {} as globalThis.Record<string, { args: unknown[]; order: number }[]>, n: 0 };
-    const deps = __bynkRecordDeps(__makeTestDeps("a stubbed fetch answers for the network"), { Clock: ["now"], Fetch: ["receiveBytes", "receiveStream", "send", "sendBytes", "sendStream", "sendWith"], Idempotency: ["dedup", "remember"], Kv: ["delete", "get", "getBytes", "getWith", "list", "listPage", "put", "putBytes", "putTtl", "putWith"], Locale: ["current"], Logger: ["debug", "error", "info", "log", "warn"], Random: ["bytes", "int", "uuid"], Secrets: ["get"] }, __obs);
+    const deps = __bynkRecordDeps(__makeTestDeps("a stubbed fetch answers for the network"), { Clock: ["now"], Fetch: ["receiveBytes", "receiveStream", "send", "sendBytes", "sendStream", "sendWith"], Idempotency: ["claim", "dedup", "remember"], Kv: ["delete", "get", "getBytes", "getWith", "list", "listPage", "put", "putBytes", "putTtl", "putWith"], Locale: ["current"], Logger: ["debug", "error", "info", "log", "warn"], Random: ["bytes", "int", "uuid"], Secrets: ["get"] }, __obs);
     const { clock, draws, greet, ids, locale, lookup, once, relay, secret, store } = __ns_demo_plat;
     const { LocaleTag, Message, MessageArg } = __ns_bynk_locale_types;
     type LocaleTag = __ns_bynk_locale_types.LocaleTag;
     type Message = __ns_bynk_locale_types.Message;
     type MessageArg = __ns_bynk_locale_types.MessageArg;
-    const { BytesResponse, Cookie, EventEnvelope, FetchError, FetchOptions, File, LogLevel, Method, Redirect, Request, Response, SameSite, StreamResponse, TimedOut, Uuid } = __ns_bynk;
+    const { BytesResponse, Claim, Cookie, EventEnvelope, FetchError, FetchOptions, File, LogLevel, Method, Redirect, Request, Response, SameSite, StreamResponse, TimedOut, Uuid } = __ns_bynk;
     type BytesResponse = __ns_bynk.BytesResponse;
+    type Claim = __ns_bynk.Claim;
     type Cookie = __ns_bynk.Cookie;
     type EventEnvelope = __ns_bynk.EventEnvelope;
     type FetchError = __ns_bynk.FetchError;
@@ -1410,14 +1435,15 @@ async function test_a_stubbed_fetch_answers_for_the_network() {
 async function test_a_fetch_double_sees_the_request_s_headers() {
   try {
     const __obs = { log: {} as globalThis.Record<string, { args: unknown[]; order: number }[]>, n: 0 };
-    const deps = __bynkRecordDeps(__makeTestDeps("a fetch double sees the request's headers"), { Clock: ["now"], Fetch: ["receiveBytes", "receiveStream", "send", "sendBytes", "sendStream", "sendWith"], Idempotency: ["dedup", "remember"], Kv: ["delete", "get", "getBytes", "getWith", "list", "listPage", "put", "putBytes", "putTtl", "putWith"], Locale: ["current"], Logger: ["debug", "error", "info", "log", "warn"], Random: ["bytes", "int", "uuid"], Secrets: ["get"] }, __obs);
+    const deps = __bynkRecordDeps(__makeTestDeps("a fetch double sees the request's headers"), { Clock: ["now"], Fetch: ["receiveBytes", "receiveStream", "send", "sendBytes", "sendStream", "sendWith"], Idempotency: ["claim", "dedup", "remember"], Kv: ["delete", "get", "getBytes", "getWith", "list", "listPage", "put", "putBytes", "putTtl", "putWith"], Locale: ["current"], Logger: ["debug", "error", "info", "log", "warn"], Random: ["bytes", "int", "uuid"], Secrets: ["get"] }, __obs);
     const { clock, draws, greet, ids, locale, lookup, once, relay, secret, store } = __ns_demo_plat;
     const { LocaleTag, Message, MessageArg } = __ns_bynk_locale_types;
     type LocaleTag = __ns_bynk_locale_types.LocaleTag;
     type Message = __ns_bynk_locale_types.Message;
     type MessageArg = __ns_bynk_locale_types.MessageArg;
-    const { BytesResponse, Cookie, EventEnvelope, FetchError, FetchOptions, File, LogLevel, Method, Redirect, Request, Response, SameSite, StreamResponse, TimedOut, Uuid } = __ns_bynk;
+    const { BytesResponse, Claim, Cookie, EventEnvelope, FetchError, FetchOptions, File, LogLevel, Method, Redirect, Request, Response, SameSite, StreamResponse, TimedOut, Uuid } = __ns_bynk;
     type BytesResponse = __ns_bynk.BytesResponse;
+    type Claim = __ns_bynk.Claim;
     type Cookie = __ns_bynk.Cookie;
     type EventEnvelope = __ns_bynk.EventEnvelope;
     type FetchError = __ns_bynk.FetchError;
@@ -1496,8 +1522,9 @@ async function test_an_unstubbed_fetch_faults_rather_than_reach_the_network() {
     type LocaleTag = __ns_bynk_locale_types.LocaleTag;
     type Message = __ns_bynk_locale_types.Message;
     type MessageArg = __ns_bynk_locale_types.MessageArg;
-    const { BytesResponse, Cookie, EventEnvelope, FetchError, FetchOptions, File, LogLevel, Method, Redirect, Request, Response, SameSite, StreamResponse, TimedOut, Uuid } = __ns_bynk;
+    const { BytesResponse, Claim, Cookie, EventEnvelope, FetchError, FetchOptions, File, LogLevel, Method, Redirect, Request, Response, SameSite, StreamResponse, TimedOut, Uuid } = __ns_bynk;
     type BytesResponse = __ns_bynk.BytesResponse;
+    type Claim = __ns_bynk.Claim;
     type Cookie = __ns_bynk.Cookie;
     type EventEnvelope = __ns_bynk.EventEnvelope;
     type FetchError = __ns_bynk.FetchError;
@@ -1575,8 +1602,9 @@ async function test_the_doubles_hold_at_the_integration_tier() {
     type LocaleTag = __ns_bynk_locale_types.LocaleTag;
     type Message = __ns_bynk_locale_types.Message;
     type MessageArg = __ns_bynk_locale_types.MessageArg;
-    const { BytesResponse, Cookie, EventEnvelope, FetchError, FetchOptions, File, LogLevel, Method, Redirect, Request, Response, SameSite, StreamResponse, TimedOut, Uuid } = __ns_bynk;
+    const { BytesResponse, Claim, Cookie, EventEnvelope, FetchError, FetchOptions, File, LogLevel, Method, Redirect, Request, Response, SameSite, StreamResponse, TimedOut, Uuid } = __ns_bynk;
     type BytesResponse = __ns_bynk.BytesResponse;
+    type Claim = __ns_bynk.Claim;
     type Cookie = __ns_bynk.Cookie;
     type EventEnvelope = __ns_bynk.EventEnvelope;
     type FetchError = __ns_bynk.FetchError;

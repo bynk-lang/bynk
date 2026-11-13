@@ -37,8 +37,9 @@ function __bynkShow(v: unknown): string {
 
 class __Stub_Locale {
   async current(): globalThis.Promise<__ns_bynk_locale_types.LocaleTag> {
-    const { BytesResponse, Cookie, EventEnvelope, FetchError, FetchOptions, File, LogLevel, Method, Redirect, Request, Response, SameSite, StreamResponse, TimedOut, Uuid } = __ns_bynk;
+    const { BytesResponse, Claim, Cookie, EventEnvelope, FetchError, FetchOptions, File, LogLevel, Method, Redirect, Request, Response, SameSite, StreamResponse, TimedOut, Uuid } = __ns_bynk;
     type BytesResponse = __ns_bynk.BytesResponse;
+    type Claim = __ns_bynk.Claim;
     type Cookie = __ns_bynk.Cookie;
     type EventEnvelope = __ns_bynk.EventEnvelope;
     type FetchError = __ns_bynk.FetchError;
@@ -102,8 +103,9 @@ async function test_renders_the_bundle_s_greeting_through_the_wrapper() {
     type Message = __ns_bynk_locale_types.Message;
     type MessageArg = __ns_bynk_locale_types.MessageArg;
     const { greet, render } = __ns_app_bundle;
-    const { BytesResponse, Cookie, EventEnvelope, FetchError, FetchOptions, File, LogLevel, Method, Redirect, Request, Response, SameSite, StreamResponse, TimedOut, Uuid } = __ns_bynk;
+    const { BytesResponse, Claim, Cookie, EventEnvelope, FetchError, FetchOptions, File, LogLevel, Method, Redirect, Request, Response, SameSite, StreamResponse, TimedOut, Uuid } = __ns_bynk;
     type BytesResponse = __ns_bynk.BytesResponse;
+    type Claim = __ns_bynk.Claim;
     type Cookie = __ns_bynk.Cookie;
     type EventEnvelope = __ns_bynk.EventEnvelope;
     type FetchError = __ns_bynk.FetchError;

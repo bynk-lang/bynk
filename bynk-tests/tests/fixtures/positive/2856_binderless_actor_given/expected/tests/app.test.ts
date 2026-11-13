@@ -55,8 +55,9 @@ async function test_a_binder_less_Bearer_route_that_takes_a_capability() {
     const deps = __makeTestDeps();
     const { UserId, api } = __ns_app;
     type UserId = __ns_app.UserId;
-    const { BytesResponse, Cookie, EventEnvelope, FetchError, FetchOptions, File, LogLevel, Method, Redirect, Request, Response, SameSite, StreamResponse, TimedOut, Uuid } = __ns_bynk;
+    const { BytesResponse, Claim, Cookie, EventEnvelope, FetchError, FetchOptions, File, LogLevel, Method, Redirect, Request, Response, SameSite, StreamResponse, TimedOut, Uuid } = __ns_bynk;
     type BytesResponse = __ns_bynk.BytesResponse;
+    type Claim = __ns_bynk.Claim;
     type Cookie = __ns_bynk.Cookie;
     type EventEnvelope = __ns_bynk.EventEnvelope;
     type FetchError = __ns_bynk.FetchError;
@@ -88,8 +89,9 @@ async function test_a_binding_Bearer_route_that_takes_a_capability() {
     const deps = __makeTestDeps();
     const { UserId, api } = __ns_app;
     type UserId = __ns_app.UserId;
-    const { BytesResponse, Cookie, EventEnvelope, FetchError, FetchOptions, File, LogLevel, Method, Redirect, Request, Response, SameSite, StreamResponse, TimedOut, Uuid } = __ns_bynk;
+    const { BytesResponse, Claim, Cookie, EventEnvelope, FetchError, FetchOptions, File, LogLevel, Method, Redirect, Request, Response, SameSite, StreamResponse, TimedOut, Uuid } = __ns_bynk;
     type BytesResponse = __ns_bynk.BytesResponse;
+    type Claim = __ns_bynk.Claim;
     type Cookie = __ns_bynk.Cookie;
     type EventEnvelope = __ns_bynk.EventEnvelope;
     type FetchError = __ns_bynk.FetchError;
@@ -121,8 +123,9 @@ async function test_a_binder_less_Bearer_route_without_a_capability() {
     const deps = __makeTestDeps();
     const { UserId, api } = __ns_app;
     type UserId = __ns_app.UserId;
-    const { BytesResponse, Cookie, EventEnvelope, FetchError, FetchOptions, File, LogLevel, Method, Redirect, Request, Response, SameSite, StreamResponse, TimedOut, Uuid } = __ns_bynk;
+    const { BytesResponse, Claim, Cookie, EventEnvelope, FetchError, FetchOptions, File, LogLevel, Method, Redirect, Request, Response, SameSite, StreamResponse, TimedOut, Uuid } = __ns_bynk;
     type BytesResponse = __ns_bynk.BytesResponse;
+    type Claim = __ns_bynk.Claim;
     type Cookie = __ns_bynk.Cookie;
     type EventEnvelope = __ns_bynk.EventEnvelope;
     type FetchError = __ns_bynk.FetchError;
