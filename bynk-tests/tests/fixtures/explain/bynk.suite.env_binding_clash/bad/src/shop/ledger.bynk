@@ -1,0 +1,13 @@
+context shop.ledger
+
+consumes bynk.cloudflare { Kv }
+
+service api from http {
+	on GET("/seen") () -> Effect[HttpResult[String]] by Visitor given Kv {
+		let v <- Kv.get("a")
+		match v {
+			Some(s) => Ok(s),
+			None => Ok("unseen"),
+		}
+	}
+}

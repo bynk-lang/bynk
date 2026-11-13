@@ -28,6 +28,7 @@ per-commit history. While Bynk is pre-1.0, increments may change behaviour.
 
 | Version | Highlights |
 |---|---|
+| **v0.577.2** | `bynk explain` gains explanations for six Workers-target codes (`capability.not_provided`, `capability.provider_agent_cross_context`, `context.duplicate_binding`, `ws.open_transfer_cross_file`, `ws.open_transfer_key`, `suite.env_binding_clash`) |
 | **v0.577.1** | The `MySql.run` range error is documented as leaving an autocommitted statement applied, and a transaction that hits it rolls back (tested) |
 | **v0.577.0** | A cookie is written from the record that reads it with `Prefs.theme.cookie(Dark)` and `Prefs.theme.expire()`, named by the field's wire name and valued as the decoder reads it |
 | **v0.576.3** | The `wrangler` commands `bynk deploy` prints (`secret put`, `delete`) and the guides name the detected package manager's runner (`pnpm dlx`, `bunx`, `npx`) |

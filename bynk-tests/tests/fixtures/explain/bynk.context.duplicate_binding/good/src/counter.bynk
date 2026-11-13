@@ -1,0 +1,7 @@
+context counter
+
+service store {
+  on call(n: Int) -> Effect[Int] {
+    Effect.pure(n)
+  }
+}

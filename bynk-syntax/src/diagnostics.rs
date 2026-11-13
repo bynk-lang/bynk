@@ -1086,6 +1086,32 @@ pub const EXPLANATIONS: &[Explain] = &[
         anchor: "derived-capabilities",
     },
     Explain {
+        code: "bynk.capability.not_provided",
+        blurb: "On the Workers target, each context is its own Worker, and a Worker builds every \
+                capability its handlers are given. A handler's `given Mailer` therefore needs a \
+                `provides Mailer = …` in the same context, which says what the capability does \
+                there. Without one the Worker has nothing to hand the handler, so the compiler \
+                refuses it here and does not leave it to fail in the generated TypeScript. The \
+                bundle target (the default) does not ask, because the host program can supply the \
+                capability when it builds the surface. A capability declared in another context is \
+                that context's to provide, and an exported capability with no provider has its own \
+                `bynk.exports.capability_not_provided`. Add a provider to the context, or build \
+                for `--target bundle`.",
+        example: "service notify {\n\
+                  \x20\x20on call(to: String) -> Effect[()] given Mailer {   // ✗ no `provides Mailer` in this context\n\
+                  \x20\x20\x20\x20Mailer.send(to)\n\
+                  \x20\x20}\n\
+                  }\n\
+                  \n\
+                  provides Mailer = Smtp {                              // ✓ a provider, so the Worker can build it\n\
+                  \x20\x20fn send(to: String) -> Effect[()] {\n\
+                  \x20\x20\x20\x20Effect.pure(())\n\
+                  \x20\x20}\n\
+                  }",
+        page: "/book/reference/capabilities",
+        anchor: "providing-a-capability",
+    },
+    Explain {
         code: "bynk.capability.op_arity",
         blurb: "A call to a capability operation passes exactly the parameters its declaration \
                 lists, so `Clock.now(1)` against `fn now() -> Effect[Int]` has one argument too \
@@ -1120,6 +1146,41 @@ pub const EXPLANATIONS: &[Explain] = &[
                 }",
         page: "/book/reference/capabilities",
         anchor: "declaring-a-capability",
+    },
+    Explain {
+        code: "bynk.capability.provider_agent_cross_context",
+        blurb: "On the Workers target, each context is its own Worker with its own `env`, and a \
+                Worker builds the capabilities its handlers are given. If a context requires a \
+                capability that another context provides, it builds that provider in its own \
+                Worker. When that provider constructs agents of the context it lives in, it needs \
+                the Durable Object bindings of that context, which the consumer's `env` does not \
+                have, so the build would fail, or `bynk dev` would quietly keep the agent's state \
+                in the isolate. The compiler refuses the requirement instead. Reach the agents \
+                through a service of the providing context, which runs in its own Worker beside \
+                its own bindings, or build for `--target bundle`, where every context shares one \
+                process.",
+        example: "// registry.bynk\n\
+                  provides Yanks = AgentYanks {\n\
+                  \x20\x20fn set(value: Bool) -> Effect[Bool] {\n\
+                  \x20\x20\x20\x20PackageIndex(\"x\").setYanked(value)   // the provider constructs `registry`'s own agent\n\
+                  \x20\x20}\n\
+                  }\n\
+                  \n\
+                  // api.bynk\n\
+                  service yank {\n\
+                  \x20\x20on call() -> Effect[Bool] given registry.Yanks {   // ✗ `api`'s Worker would build that provider\n\
+                  \x20\x20\x20\x20registry.Yanks.set(true)\n\
+                  \x20\x20}\n\
+                  }\n\
+                  \n\
+                  // api.bynk\n\
+                  service yank {\n\
+                  \x20\x20on call() -> Effect[Bool] {\n\
+                  \x20\x20\x20\x20registry.yank(true)                              // ✓ a service of `registry`, run in its own Worker\n\
+                  \x20\x20}\n\
+                  }",
+        page: "/book/reference/capabilities",
+        anchor: "cross-context-capabilities-exports-capability",
     },
     Explain {
         code: "bynk.capability.unknown_base",
@@ -1355,6 +1416,24 @@ pub const EXPLANATIONS: &[Explain] = &[
                   }",
         page: "/book/guides/projects-build-and-deployment/deploy-to-cloudflare",
         anchor: "",
+    },
+    Explain {
+        code: "bynk.context.duplicate_binding",
+        blurb: "A Worker's bindings share one `env`, so each name can be declared once. Bynk names \
+                the bindings after what the context declares: an agent, a consumed context, a \
+                derived capability, and the `Kv` namespace of `bynk.cloudflare`, whose binding is \
+                `KV`. Here the consumed context `kv` also becomes a Service Binding named `KV`, \
+                and the two would overwrite each other. Rename the declaration behind one of them. \
+                The error is on the one you can rename, not on the `bynk.cloudflare` clause. A \
+                bundle build has no bindings, so only the Workers target checks this.",
+        example: "// ops/hub.bynk\n\
+                  consumes bynk.cloudflare { Kv }   // the KV namespace is bound as `KV`\n\
+                  consumes kv                       // ✗ a Service Binding, also named `KV`\n\
+                  \n\
+                  // ops/hub.bynk\n\
+                  consumes counter                  // ✓ a binding named `COUNTER`",
+        page: "/book/guides/projects-build-and-deployment/cloudflare-workers",
+        anchor: "workers",
     },
     Explain {
         code: "bynk.context.external_construction",
@@ -5420,6 +5499,25 @@ pub const EXPLANATIONS: &[Explain] = &[
         anchor: "suite-types-consts",
     },
     Explain {
+        code: "bynk.suite.env_binding_clash",
+        blurb: "A `system` suite runs the participants as Workers, and an `env` entry is put on \
+                each Worker's `env`, beside the bindings that Worker already has: a Service \
+                Binding, a KV namespace, a Durable Object namespace, and the keys the test harness \
+                sets itself, such as a call edge's key or a foreign caller's secret. An entry with \
+                one of those names would replace the binding, so the compiler refuses it. Rename \
+                the variable. In this example `shop.ledger` consumes `Kv`, so its Worker already \
+                has a binding named `KV`.",
+        example: "consumes bynk.cloudflare { Kv }                  // `shop.ledger` has a binding named `KV`\n\
+                  \n\
+                  suite shop.ledger as system {\n\
+                  \x20\x20case \"an env entry may not replace a binding\" {\n\
+                  \x20\x20\x20\x20env { KV = \"not a namespace\" }              // ✗ `KV` is a binding of the Worker\n\
+                  \n\
+                  \x20\x20\x20\x20env { REGION = \"eu\" }                       // ✓ a name nothing else holds",
+        page: "/book/reference/testing",
+        anchor: "env",
+    },
+    Explain {
         code: "bynk.suite.env_not_literal",
         blurb: "A Worker's variables and secrets are strings, so an `env` entry's value must be a `String` literal, `NAME = \"value\"`, or the name of a `fixture` the same suite declares. A number, a call or any other expression is refused, since the value is fixed when the suite is compiled. Write it as a string, and parse a number in the code that reads it.",
         example: "env {\n    RETRIES = 3       // ✗ not a `String`\n}\n\nenv {\n    RETRIES = \"3\"     // ✓\n}",
@@ -7574,6 +7672,61 @@ pub const EXPLANATIONS: &[Explain] = &[
         example: "service gateway from websocket(in: Frame, out: Frame) {\n    on open (room: RoomId) -> Effect[()] by user: Member given Clock { … }   // ✗ no capabilities on `on open`\n}\n\nservice gateway from websocket(in: Frame, out: Frame) {\n    on open (room: RoomId) -> Effect[()] by user: Member { … }   // ✓ the agent's handler takes the `given`\n}",
         page: "/book/reference/websocket",
         anchor: "service-form",
+    },
+    Explain {
+        code: "bynk.ws.open_transfer_cross_file",
+        blurb: "On the Workers target, a `from websocket` service's `on open` is hosted inside the \
+                Durable Object of the agent it hands the connection to, and that method is emitted \
+                from the file the service and the agent share. When a context is split over \
+                several files, each is emitted on its own, so a service in one file that transfers \
+                to an agent in another would be routed to the agent's Durable Object and never \
+                handled there: the upgrade would answer `404`. The compiler refuses the layout. \
+                Put the service in the agent's file, or build for `--target bundle`, where the \
+                open is an ordinary method and the layout works.",
+        example: "// chat/gateway.bynk\n\
+                  service ChatGateway from websocket(in: ClientFrame, out: ServerFrame) {\n\
+                  \x20\x20on open (roomId: RoomId) -> Effect[()] by v: Visitor {   // ✗ `Room` is declared in another file\n\
+                  \x20\x20\x20\x20let _ <- Room(roomId).join(connection)\n\
+                  \x20\x20\x20\x20()\n\
+                  \x20\x20}\n\
+                  }\n\
+                  \n\
+                  // chat/room.bynk\n\
+                  agent Room {\n\
+                  \x20\x20key id: RoomId\n\
+                  }\n\
+                  \n\
+                  // chat/room.bynk\n\
+                  service ChatGateway from websocket(in: ClientFrame, out: ServerFrame) {   // ✓ in the agent's file\n\
+                  \x20\x20on open (roomId: RoomId) -> Effect[()] by v: Visitor {\n\
+                  \x20\x20\x20\x20let _ <- Room(roomId).join(connection)\n\
+                  \x20\x20\x20\x20()\n\
+                  \x20\x20}\n\
+                  }",
+        page: "/book/reference/websocket",
+        anchor: "platform-mapping",
+    },
+    Explain {
+        code: "bynk.ws.open_transfer_key",
+        blurb: "On Workers the upgrade is routed to the Durable Object that hosts the connection \
+                before the `on open` body runs, so the edge has to work out the agent's key on its \
+                own. A route parameter, a `const` of the context or of a commons it `uses`, or a \
+                literal can be evaluated there. A key computed in the body, such as a `let`, \
+                cannot, because the body has not run. Key the agent by a parameter of `on open`, a \
+                constant, or a literal. The bundle target runs the body first, so it does not \
+                check this.",
+        example: "on open () -> Effect[()] by v: Visitor {\n\
+                  \x20\x20let room = \"lobby\"\n\
+                  \x20\x20let _ <- Room(room).join(connection)          // ✗ `room` is bound in the body, which has not run yet\n\
+                  \x20\x20()\n\
+                  }\n\
+                  \n\
+                  on open () -> Effect[()] by v: Visitor {\n\
+                  \x20\x20let _ <- Room(\"lobby\").join(connection)       // ✓ a literal\n\
+                  \x20\x20()\n\
+                  }",
+        page: "/book/reference/websocket",
+        anchor: "platform-mapping",
     },
     Explain {
         code: "bynk.ws.open_transfer_shape",
