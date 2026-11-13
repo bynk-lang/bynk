@@ -1630,7 +1630,7 @@ error cases over time, so a `match` over it needs a wildcard.
 
 A container has no internet access: Bynk always starts it with outbound access off,
 and there is no option to open it in this release. Containers must be pushed to
-Cloudflare's own registry; Docker Hub, Amazon ECR and Google Artifact Registry
+Cloudflare's own registry; Docker Hub, Amazon ECR and Google's registry
 references are not supported for this kind of container. In a test every `Container`
 operation faults, naming the instance, until it is stubbed (`stub Renderer.send(_, _)
 returns …`), so a test never starts a container, and the system tier gives each Worker
