@@ -1975,6 +1975,28 @@ mod tests {
         }
     }
 
+    /// #3486: a contextual keyword is a field label wherever a field is
+    /// named, including as the *first* field of a record literal, which the
+    /// construction lookahead (two tokens after the `{`) used to refuse.
+    #[test]
+    fn contextual_keywords_open_a_record_literal() {
+        for kw in [
+            "asset", "case", "const", "embed", "event", "messages", "on", "suite",
+        ] {
+            let src = format!(
+                "commons x\n\ntype R = {{ {kw}: Int, other: Int }}\n\n\
+                 fn first() -> R {{\n  R {{ {kw}: 1, other: 2 }}\n}}\n\n\
+                 fn last() -> R {{\n  R {{ other: 2, {kw}: 1 }}\n}}\n"
+            );
+            let result = parse_str(&src);
+            assert!(
+                result.is_ok(),
+                "a record literal with `{kw}` as a field label must parse: {:?}",
+                result.err()
+            );
+        }
+    }
+
     #[test]
     fn recovery_skips_garbage_between_decls() {
         // Two `type` declarations separated by garbage. Recovery should
