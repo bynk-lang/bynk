@@ -1,12 +1,6 @@
----
-level: minor
-changelog: `bynk.cloudflare` gains `Ai`, a one-per-Worker Workers AI capability whose `run(model, input)` runs any model over JSON text through the `[ai]` binding, with a typed `AiError`; every operation faults until stubbed in a test
-probes: emit_abi_shapes, emit_diagnostics, ts_writes
----
+# 0833 — Workers AI is a one-per-Worker `Ai` capability: `run` over JSON text, typed operations layered on it
 
-## ADR: workers-ai-capability
-title: Workers AI is a one-per-Worker `Ai` capability: `run` over JSON text, typed operations layered on it
-summary: The `[ai]` singleton, its error type, the model-id rule and why typed reads are not used
+- **Status:** Accepted (v0.588)
 
 **Context.** Workers AI was reachable only through a REST adapter that spends a round trip, an account id and an API token (#3200). The in-Worker `[ai]` binding needs none of them, and the platform's payloads differ per model: a chat model takes `messages`, an embedding model `text`, an image model answers bytes. ADR 0045 forbids an untyped `Json` value, and #3300 (ADR 0798) added the one-per-Worker kind this binding fits.
 

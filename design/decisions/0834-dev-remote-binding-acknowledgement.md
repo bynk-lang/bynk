@@ -1,12 +1,6 @@
----
-level: minor
-changelog: `[dev] ai = "allow"` in `bynk.toml` acknowledges that `Ai` calls run remotely under `bynk dev`; without it the first call in a session prints a one-time warning that links to Cloudflare's pricing page, and the call goes ahead
-probes: emit_abi_shapes, ts_writes
----
+# 0834 — A remote-only binding is acknowledged in `[dev]`, and `bynk dev` warns once instead of blocking
 
-## ADR: dev-remote-binding-acknowledgement
-title: A remote-only binding is acknowledged in `[dev]`, and `bynk dev` warns once instead of blocking
-summary: One per-binding-kind mechanism for bindings with no local simulation, with no billing specifics in any text
+- **Status:** Accepted (v0.589)
 
 **Context.** Workers AI has no local simulation: under `bynk dev`, a call runs the model on the developer's Cloudflare account and may incur charges. #3478 first proposed a gate (a flag and a manifest key, and a fault until given). The maintainer amended it: warn, do not block.
 
