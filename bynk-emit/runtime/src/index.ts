@@ -13,6 +13,7 @@ export * from "./compare.ts";
 export * from "./int.ts";
 export * from "./errors.ts";
 export * from "./storage.ts";
+export * from "./vectorize.ts";
 export * from "./store.ts";
 export * from "./entries.ts";
 export * from "./boundary.ts";
