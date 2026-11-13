@@ -17,6 +17,7 @@ or a row links to no file. Summaries and statuses are curated by hand; the
 
 | # | Decision | Status |
 |---|---|---|
+| [0835](0835-workers-ai-run-stream.md) | **`Ai.runStream` passes a Workers AI model's streamed events through as text** (v0.591) — One element per Server-Sent Event, `[DONE]` consumed, the event shape left to the model | Accepted (v0.591) |
 | [0834](0834-dev-remote-binding-acknowledgement.md) | **A remote-only binding is acknowledged in `[dev]`, and `bynk dev` warns once instead of blocking** (v0.589) — One per-binding-kind mechanism for bindings with no local simulation, with no billing specifics in any text | Accepted (v0.589) |
 | [0833](0833-workers-ai-capability.md) | **Workers AI is a one-per-Worker `Ai` capability: `run` over JSON text, typed operations layered on it** (v0.588) — The `[ai]` singleton, its error type, the model-id rule and why typed reads are not used | Accepted (v0.588) |
 | [0832](0832-durable-idempotency-values.md) | **Idempotency's remembered values are Codable, stored as JSON, and durable on Cloudflare** (v0.587) — dedup/remember take a Codable T, read an undecodable entry as a miss, and store JSON in the implicit D1 database | Accepted (v0.587) |

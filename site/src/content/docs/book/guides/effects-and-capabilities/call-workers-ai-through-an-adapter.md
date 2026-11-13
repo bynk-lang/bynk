@@ -1,15 +1,19 @@
 ---
 title: Call Workers AI through an adapter
 ---
-**Goal:** run a Workers AI model from Bynk today, before the toolchain admits a
-Workers AI binding of its own ([#3184](https://github.com/bynk-lang/bynk/issues/3184)).
+**Goal:** run a Workers AI model over Cloudflare's REST API, for code that must
+run outside a Worker or that you want to keep portable.
+
+Inside a Worker, prefer the in-Worker binding: [`Ai`](/book/guides/effects-and-capabilities/run-a-model-from-a-worker/)
+needs no account id and no API token, and has typed `generate` and `embed` and a
+streamed reply. This guide is the portable route, and the [migration](#moving-to-the-ai-binding)
+below shows how to move a Worker's consumers to the binding.
 
 ## What is and is not reachable
 
-The generated `wrangler.toml` declares only the bindings Bynk derives from your
-source, so there is no `[ai]` binding for a hand-written adapter to read, and an
-adapter's binding receives only its `given` dependencies, not the Worker's `env`.
-What an adapter *can* do is call Workers AI's REST endpoint through the portable
+A hand-written adapter's binding receives only its `given` dependencies, not the
+Worker's `env`, so it cannot read the Worker's `[ai]` binding (that is what
+first-party `Ai` is for). What an adapter *can* do is call Workers AI's REST endpoint through the portable
 [`bynk.Fetch`](/book/reference/bynk-capabilities/) capability, authenticated with
 a token held in [`bynk.Secrets`](/book/reference/bynk-capabilities/). That is an
 ordinary [library adapter](/book/reference/adapters/): no new binding kind, and
@@ -111,7 +115,7 @@ context assistant {
 
 	service summarise {
 		on call(text: String) -> Effect[String] given Ai {
-			let reply <- Ai.complete("@cf/meta/llama-3.1-8b-instruct", "Summarise: \(text)")
+			let reply <- Ai.complete("@cf/meta/llama-3.2-1b-instruct", "Summarise: \(text)")
 			match reply {
 				Ok(summary) => summary,
 				Err(_) => "(no summary available)",
@@ -179,14 +183,39 @@ provides Ai = CloudflareAi given Fetch, Secrets {
 }
 ```
 
-## When the binding lands
+## Moving to the `Ai` binding
 
-A first-party Workers AI binding would replace the REST call with an in-Worker
-one and need no token. Until then this adapter is the supported route; moving to
-the binding later changes only the adapter, not its consumers.
+If your Worker can use the first-party binding, move the adapter's consumers to
+it and delete the adapter, its two secrets and the `--secrets-file` entries:
+
+1. In `bynk.toml`, allow the experimental capability:
+   `[unstable] allow = ["bynk.cloudflare.Ai"]`.
+2. In each consumer, replace `consumes workers_ai { Ai, AiError }` with
+   `consumes bynk.cloudflare { Ai, AiError }`. A context that consumes both for a
+   while is refused with `bynk.consumes.capability_name_clash`, because each
+   unit exports an `Ai`. Consume `bynk.cloudflare` without the braces instead, and
+   write `given bynk.cloudflare.Ai` and `bynk.cloudflare.Ai.generate(…)` until the
+   adapter is gone.
+3. Replace each `Ai.complete(model, prompt)` with
+   `Ai.generate(model, request)`, passing a `GenerateRequest` whose `messages`
+   holds the prompt as a `User` message, and read `generation.text` where you
+   read the string. `generate` leaves the length of the reply to the model's own
+   default unless you set `maxTokens`, so if the adapter's REST call set
+   `max_tokens`, set `maxTokens: Some(…)` to the same value. A model that needs
+   another input shape goes through `Ai.run(model, input)` with the JSON input as
+   text.
+4. Match the new `AiError` (`ModelNotFound`, `InvalidInput`, `QuotaExceeded`,
+   `Overloaded`, `BadReply`, `AiFailed`) in place of the adapter's
+   `Unavailable`, `BadReply` and `InvalidModel`, with a wildcard arm.
+5. In tests, replace `stub Ai.complete(_, _) returns …` with
+   `stub Ai.generate(_, _) returns …`.
+
+The adapter stays supported for code that runs outside a Worker, where there is no
+binding to read.
 
 ## See also
 
+- [Run a model from a Worker](/book/guides/effects-and-capabilities/run-a-model-from-a-worker/)
 - [Wrap a library as an adapter](/book/guides/effects-and-capabilities/wrap-a-library/)
 - [Adapters reference](/book/reference/adapters/)
 - [First-party `bynk` capabilities](/book/reference/bynk-capabilities/)

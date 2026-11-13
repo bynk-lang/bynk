@@ -1265,9 +1265,9 @@ function fakeAi(reply) {
 
 t("WorkersAi.run: passes the model and the parsed input, and returns the reply as JSON text", async () => {
   const ai = fakeAi({ response: "bonjour" });
-  const r = await new WorkersAi({ AI: ai }).run("@cf/meta/llama-3.1-8b-instruct", '{"prompt":"hi","max_tokens":8}');
+  const r = await new WorkersAi({ AI: ai }).run("@cf/meta/llama-3.2-1b-instruct", '{"prompt":"hi","max_tokens":8}');
   assert.deepEqual(r, { tag: "Ok", value: '{"response":"bonjour"}' });
-  assert.deepEqual(ai.calls, [{ model: "@cf/meta/llama-3.1-8b-instruct", input: { prompt: "hi", max_tokens: 8 } }]);
+  assert.deepEqual(ai.calls, [{ model: "@cf/meta/llama-3.2-1b-instruct", input: { prompt: "hi", max_tokens: 8 } }]);
 });
 
 t("WorkersAi.run: a documented platform code is a typed error, any other a failure with its message", async () => {
@@ -1289,6 +1289,25 @@ t("WorkersAi.run: a documented platform code is a typed error, any other a failu
   assert.deepEqual(await failure(new Error("input of 3003 tokens too long")), { tag: "AiFailed", message: "input of 3003 tokens too long" });
   // A number that merely sits in a longer one is not a code.
   assert.deepEqual(await failure(new Error("id 350071 failed")), { tag: "AiFailed", message: "id 350071 failed" });
+});
+
+// Observed on a real account (#3478, W39): the binding throws an `Error` named
+// `AiError` (constructor `InferenceUpstreamError`) with no `code` property and a
+// message that opens with the platform's code.
+t("WorkersAi.run: the error a live binding throws is read from its message, 5006 included", async () => {
+  class InferenceUpstreamError extends Error {
+    constructor(message) {
+      super(message);
+      this.name = "AiError";
+    }
+  }
+  const live = (message) => new InferenceUpstreamError(message);
+  const failure = async (e) => (await new WorkersAi({ AI: fakeAi(e) }).run("@cf/x/y", "{}")).error;
+  assert.equal("code" in live("5007: x"), false);
+  assert.deepEqual(await failure(live("5007: No such model @cf/nobody/no-such-model or task")), { tag: "ModelNotFound" });
+  assert.deepEqual(await failure(live("5028: @cf/x/y was deprecated on 2026-05-30. See the model catalog for alternatives: https://developers.cloudflare.com/workers-ai/models/")), { tag: "ModelNotFound" });
+  const rejected = "5006: Error: oneOf at '/' not met, 0 matches: required properties at '/' are 'prompt', required properties at '/' are 'messages'";
+  assert.deepEqual(await failure(live(rejected)), { tag: "InvalidInput", message: rejected });
 });
 
 t("WorkersAi.run: a live stream (input with stream: true) is cancelled and is a failure", async () => {
@@ -1323,7 +1342,7 @@ const request = (extra = {}) => ({ messages: [chat("User", "hi")], maxTokens: No
 t("WorkersAi.generate: sends the messages with lower-case roles and only the settings given, and reads text and usage", async () => {
   const ai = fakeAi({ response: "hello", usage: { prompt_tokens: 3, completion_tokens: 2, total_tokens: 5 } });
   const r = await new WorkersAi({ AI: ai }).generate(
-    "@cf/meta/llama-3.1-8b-instruct",
+    "@cf/meta/llama-3.2-1b-instruct",
     request({ messages: [chat("System", "be brief"), chat("User", "hi"), chat("Assistant", "hey")], maxTokens: Some(64), temperature: Some(0.5), topP: Some(0.9), seed: Some(7) }),
   );
   assert.deepEqual(r, { tag: "Ok", value: { text: "hello", usage: Some({ promptTokens: 3, completionTokens: 2 }) } });
@@ -1435,7 +1454,7 @@ const events = async (chunks, opts) => {
 
 t("WorkersAi.runStream: asks the model to stream and yields each event's data text, consuming [DONE]", async () => {
   const ai = fakeAi(sseBody(['data: {"response":"he"}\n\n', 'data: {"response":"llo"}\n\n', "data: [DONE]\n\n"]));
-  const r = await new WorkersAi({ AI: ai }).runStream("@cf/meta/llama-3.1-8b-instruct", '{"prompt":"hi","stream":false}');
+  const r = await new WorkersAi({ AI: ai }).runStream("@cf/meta/llama-3.2-1b-instruct", '{"prompt":"hi","stream":false}');
   assert.deepEqual(await collect(r.value), ['{"response":"he"}', '{"response":"llo"}']);
   // `stream: true` wins over whatever the input said.
   assert.deepEqual(ai.calls[0].input, { prompt: "hi", stream: true });

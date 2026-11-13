@@ -35,8 +35,8 @@ export function tokensOf(g: Generation): number {
 export const chat = {
   async http_GET_chat(deps: { Ai: bynk_cloudflare.Ai }): globalThis.Promise<HttpResult<Answer>> {
     const first = { role: ChatRole.User, content: "hello" };
-    const ask = { maxTokens: Some(64), messages: [first], temperature: { tag: "None" as const }, topP: { tag: "None" as const }, seed: { tag: "None" as const } };
-    const reply = await deps.Ai.generate("@cf/meta/llama-3.1-8b-instruct", ask);
+    const ask = { messages: [first], maxTokens: Some(64), temperature: { tag: "None" as const }, topP: { tag: "None" as const }, seed: { tag: "None" as const } };
+    const reply = await deps.Ai.generate("@cf/meta/llama-3.2-1b-instruct", ask);
     if (reply.tag === "Ok") {
       const g = reply.value;
       return HttpResult.Ok({ text: g.text, tokens: tokensOf(g) });

@@ -23,8 +23,8 @@ fn tokensOf(g: Generation) -> Int {
 service chat from http {
 	on GET("/chat") () -> Effect[HttpResult[Answer]] by Visitor given Ai {
 		let first = ChatMessage { role: ChatRole.User, content: "hello" }
-		let ask = GenerateRequest { maxTokens: Some(64), messages: [first] }
-		let reply <- Ai.generate("@cf/meta/llama-3.1-8b-instruct", ask)
+		let ask = GenerateRequest { messages: [first], maxTokens: Some(64) }
+		let reply <- Ai.generate("@cf/meta/llama-3.2-1b-instruct", ask)
 		match reply {
 			Ok(g) => Ok(Answer { text: g.text, tokens: tokensOf(g) }),
 			Err(BadReply(_)) => ServerError("the model answered oddly"),

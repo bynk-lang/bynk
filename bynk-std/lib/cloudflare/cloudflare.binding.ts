@@ -1018,7 +1018,11 @@ export class WorkersAi implements Ai {
   }
 
   // The platform's internal code (Workers AI errors page), from the error's
-  // `code` when it has one and otherwise from the code that opens its message (`5007: No such model …`, `AiGatewayError: 3040: …`). Anything
+  // `code` when it has one and otherwise from the code that opens its message.
+  // On a live account the binding throws an `Error` named `AiError` with no
+  // `code` property, so the message is the one that matters (#3478 W39). It
+  // also answers an input the model's schema rejects with `5006`, which the
+  // errors page does not list, alongside its documented `5004` (`5007: No such model …`, `AiGatewayError: 3040: …`). Anything
   // unrecognised is `AiFailed`, so a code Cloudflare adds never becomes a fault.
   private static code(e: unknown): number | undefined {
     const code = (e as { code?: unknown } | null)?.code;
@@ -1045,6 +1049,7 @@ export class WorkersAi implements Ai {
       case 3040:
         return { tag: "Overloaded" };
       case 5004:
+      case 5006:
       case 3003:
       case 3006:
         return { tag: "InvalidInput", message };

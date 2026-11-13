@@ -9,7 +9,7 @@ consumes bynk.cloudflare { Ai }
 
 service events from http {
 	on GET("/events") () -> Effect[HttpResult[String]] by Visitor given Ai {
-		let started <- Ai.runStream("@cf/meta/llama-3.1-8b-instruct", "{\"prompt\": \"hello\"}")
+		let started <- Ai.runStream("@cf/meta/llama-3.2-1b-instruct", "{\"prompt\": \"hello\"}")
 		match started {
 			Ok(s) => Streaming(s),
 			Err(_) => ServerError("model unavailable"),
