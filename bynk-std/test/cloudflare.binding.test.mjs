@@ -1387,6 +1387,100 @@ t("WorkersAi.embed: a reply that is not one list of numbers per text is a BadRep
   await assert.rejects(emb({}, []), /at least one text/);
 });
 
+// #3478: `runStream`, against a fake whose reply is a `ReadableStream` of the
+// bytes of a Server-Sent Events body, cut into the chunks the test chooses.
+const sseBody = (chunks, { failAfter, onCancel, hold } = {}) => {
+  const enc = new TextEncoder();
+  let i = 0;
+  return new ReadableStream({
+    pull(controller) {
+      if (failAfter !== undefined && i === failAfter) return controller.error(new Error("connection reset"));
+      if (i < chunks.length) controller.enqueue(typeof chunks[i] === "string" ? enc.encode(chunks[i]) : chunks[i]);
+      else if (hold) return new Promise(() => {});
+      else controller.close();
+      i += 1;
+    },
+    cancel() { onCancel?.(); },
+  });
+};
+const collect = async (iterable) => {
+  const out = [];
+  for await (const e of iterable) out.push(e);
+  return out;
+};
+const events = async (chunks, opts) => {
+  const r = await new WorkersAi({ AI: fakeAi(sseBody(chunks, opts)) }).runStream("@cf/x/y", "{}");
+  assert.equal(r.tag, "Ok");
+  return collect(r.value);
+};
+
+t("WorkersAi.runStream: asks the model to stream and yields each event's data text, consuming [DONE]", async () => {
+  const ai = fakeAi(sseBody(['data: {"response":"he"}\n\n', 'data: {"response":"llo"}\n\n', "data: [DONE]\n\n"]));
+  const r = await new WorkersAi({ AI: ai }).runStream("@cf/meta/llama-3.1-8b-instruct", '{"prompt":"hi","stream":false}');
+  assert.deepEqual(await collect(r.value), ['{"response":"he"}', '{"response":"llo"}']);
+  // `stream: true` wins over whatever the input said.
+  assert.deepEqual(ai.calls[0].input, { prompt: "hi", stream: true });
+});
+
+t("WorkersAi.runStream: decodes events however the bytes are cut, and accepts LF, CRLF and CR", async () => {
+  const whole = 'data: {"a":"é"}\r\n\r\ndata: two\n\ndata: three\r\r';
+  const bytes = new TextEncoder().encode(whole);
+  // One byte at a time: boundaries fall inside a multi-byte character and inside a CRLF.
+  const single = Array.from(bytes, (b) => new Uint8Array([b]));
+  assert.deepEqual(await events(single), ['{"a":"é"}', "two", "three"]);
+  assert.deepEqual(await events([whole]), ['{"a":"é"}', "two", "three"]);
+});
+
+t("WorkersAi.runStream: joins data lines, ignores other fields and comments, and gives a last event with no blank line after it", async () => {
+  assert.deepEqual(await events([": keep-alive\n", "event: message\nid: 7\nretry: 5\ndata: a\ndata: b\n\n", "data:c\n\n", "data: last"]), ["a\nb", "c", "last"]);
+  assert.deepEqual(await events(["\n\n\n: only a comment\n\n"]), []);
+  assert.deepEqual(await events([]), []);
+  // `[DONE]` ends the stream: nothing after it is read.
+  assert.deepEqual(await events(["data: one\n\ndata: [DONE]\n\ndata: late\n\n"]), ["one"]);
+});
+
+t("WorkersAi.runStream: a failure before the stream is an Err, a model that does not stream is AiFailed, and the binding faults on a bad input", async () => {
+  const run = (reply, input = "{}") => new WorkersAi({ AI: fakeAi(reply) }).runStream("@cf/x/y", input);
+  assert.deepEqual((await run(new Error("5007: No such model"))).error, { tag: "ModelNotFound" });
+  assert.deepEqual((await run(new Error("3036: used up"))).error, { tag: "QuotaExceeded" });
+  assert.equal((await run({ response: "not a stream" })).error.tag, "AiFailed");
+  await assert.rejects(run({}, "[1]"), /`input`/);
+  await assert.rejects(run({}, "{}").then(() => new WorkersAi({}).runStream("@cf/x/y", "{}")), /\[ai\]/);
+});
+
+t("WorkersAi.runStream: a failure after the first event faults the stream, after the events already given", async () => {
+  const r = await new WorkersAi({ AI: fakeAi(sseBody(["data: one\n\n", "data: two\n\n", "data: three\n\n"], { failAfter: 2 })) }).runStream("@cf/x/y", "{}");
+  const seen = [];
+  await assert.rejects(async () => { for await (const e of r.value) seen.push(e); }, /connection reset/);
+  assert.deepEqual(seen, ["one", "two"]);
+});
+
+t("WorkersAi.runStream: return() cancels at once even while a read is in flight, and the pending next() ends", async () => {
+  // A model that is only sending keep-alive comments: `next()` is parked in a
+  // read that yields no event. A generator would queue `return()` behind it.
+  let cancels = 0;
+  const body = sseBody([": keep-alive\n"], { hold: true, onCancel: () => { cancels += 1; } });
+  const r = await new WorkersAi({ AI: fakeAi(body) }).runStream("@cf/x/y", "{}");
+  const iterator = r.value[Symbol.asyncIterator]();
+  const pending = iterator.next();
+  await new Promise((resolve) => setTimeout(resolve, 20));
+  assert.deepEqual(await iterator.return(), { done: true, value: undefined });
+  assert.equal(cancels, 1);
+  assert.deepEqual(await pending, { done: true, value: undefined });
+  // Done stays done.
+  assert.deepEqual(await iterator.next(), { done: true, value: undefined });
+});
+
+t("WorkersAi.runStream: abandoning the stream, or reaching [DONE], cancels the model's", async () => {
+  let cancels = 0;
+  const onCancel = () => { cancels += 1; };
+  const abandoned = await new WorkersAi({ AI: fakeAi(sseBody(["data: one\n\n", "data: two\n\n"], { onCancel, hold: true })) }).runStream("@cf/x/y", "{}");
+  for await (const e of abandoned.value) { assert.equal(e, "one"); break; }
+  assert.equal(cancels, 1);
+  await events(["data: one\n\ndata: [DONE]\n\n"], { onCancel, hold: true });
+  assert.equal(cancels, 2);
+});
+
 // #3478: the one-time warning of a remote-only binding under `bynk dev`.
 t("WorkersAi.run: warns once under bynk dev unless the project acknowledged it, and never in a deployment", async () => {
   const warnings = [];

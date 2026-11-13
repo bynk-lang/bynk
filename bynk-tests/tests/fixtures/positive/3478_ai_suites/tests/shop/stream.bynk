@@ -1,0 +1,27 @@
+suite shop.stream
+
+// #3478: `runStream` faults until stubbed, and a stub gives the events the
+// handler re-serves as one streamed response. A refusal before the stream
+// starts is an `Err` the handler answers with an ordinary response.
+
+case "an unstubbed runStream faults" {
+	expect events.GET("/events") by Visitor faults
+}
+
+case "the model's events are re-served as a stream" {
+	stub Ai.runStream(_, _) returns Ok(Stream.of(["{\"response\":\"he\"}", "{\"response\":\"llo\"}"]))
+	let r <- events.GET("/events") by Visitor
+	match r {
+		Streaming(body) => {
+			let parts <- body.collect()
+			expect parts.length() == 2
+		}
+		_ => expect false
+	}
+}
+
+case "a refusal before the stream starts is an ordinary response" {
+	stub Ai.runStream(_, _) returns Err(QuotaExceeded)
+	let r <- events.GET("/events") by Visitor
+	expect r is ServerError("model unavailable")
+}
