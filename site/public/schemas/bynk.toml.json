@@ -143,6 +143,27 @@
           },
           "description": "Hyperdrive settings, keyed by the `Postgres` capability's name\n(`capability Main = Postgres` is `Main`).",
           "type": "object"
+        },
+        "vectorize": {
+          "additionalProperties": {
+            "additionalProperties": false,
+            "description": "One `Vectorize` capability's index at deploy.",
+            "properties": {
+              "index": {
+                "additionalProperties": {
+                  "type": "string"
+                },
+                "description": "Names of Vectorize indexes that already exist, by deployment\nenvironment (`default`, or an `--env` name). An environment listed here\nis adopted: `bynk deploy` checks its dimensions and metric against the\ndeclaration and never creates, changes or deletes it. Without an entry\nthe deploy creates the index.",
+                "type": "object"
+              }
+            },
+            "required": [
+              "index"
+            ],
+            "type": "object"
+          },
+          "description": "Vectorize settings, keyed by the `Vectorize` capability's name\n(`capability Docs = Vectorize …` is `Docs`).",
+          "type": "object"
         }
       },
       "type": "object",

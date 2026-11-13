@@ -579,6 +579,21 @@ vectors already stored need an upsert to be filterable on it. Removing one is
 reported and left in place, since a metadata index holds no data of its own but
 removing it would silently break a query that filters on it.
 
+To use an index that already exists (made by hand, or shared with another system),
+name it for an environment in `bynk.toml`:
+
+```toml
+[deploy.vectorize.Docs]
+index = { production = "docs-prod" }
+```
+
+Under `--env production` the plan says `vectorize adopt docs-prod (...)`. The index
+must exist (the deploy never creates an adopted one) and must match the
+declaration, which is checked the same way; a metadata index it lacks is reported
+with the `wrangler` command that makes it, not created. An adopted index keeps its
+own name, is recorded as adopted, and is never deleted, not even by `--prune`.
+Other environments still create theirs.
+
 A renamed or removed instance leaves its index recorded and reported as an orphan
 (`orphan vectorize shop-cart VECTORIZE_DOCS (shop-cart-docs; deleted by --prune)`).
 `--prune` deletes it behind the same confirmation as a KV namespace, naming the

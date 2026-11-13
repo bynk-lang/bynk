@@ -245,7 +245,9 @@ struct PlanVectorize<'a> {
     /// `VECTORIZE_<SNAKE>`.
     binding: &'a str,
     /// `create` (an index, or reusing one of its name already on the account
-    /// that matches) or `reuse` (the one the ledger recorded).
+    /// that matches), `adopt` (an existing index `bynk.toml` names, which is
+    /// never created, changed or deleted) or `reuse` (the one the ledger
+    /// recorded).
     action: &'static str,
     /// The index's account-facing name, [`vectorize_index_name`]d.
     index: String,
@@ -772,7 +774,7 @@ pub fn run(
     // Read spans the *whole* project even under `--context`: D4 needs the
     // selected context's binding targets to check they are live, and they are
     // by definition outside the selection.
-    let resources = match project_resources(&workers_dir, &available) {
+    let mut resources = match project_resources(&workers_dir, &available) {
         Ok(resources) => resources,
         Err(e) => {
             eprintln!("bynk: {e}");
@@ -1068,6 +1070,11 @@ pub fn run(
     // Review of #1974: names the account scopes (a namespace's title, a
     // bucket's, a database's, a dataset's) can coincide, so they are refused
     // before the plan, `--dry-run` included, not met as wrangler's own error.
+    // #3479: an index `bynk.toml` names for this environment is adopted, not
+    // created, so its name is known before the plan.
+    if apply_vectorize_adoptions(project_root, &mut resources, &opts.environment).is_err() {
+        return ExitCode::FAILURE;
+    }
     if let Some(message) = account_name_problem(&resources, &lock, &opts.environment) {
         eprintln!("bynk: {message}");
         return ExitCode::FAILURE;
@@ -2525,13 +2532,15 @@ pub(crate) fn derive_plan<'a>(
                         .vectorize_indexes
                         .iter()
                         .map(|v| {
-                            let index = vectorize_index_name(environment, &v.name);
+                            let index = v.physical_name(environment);
                             let recorded =
                                 recorded_vectorize(lock, worker, &v.binding, environment);
                             PlanVectorize {
                                 binding: &v.binding,
                                 action: if recorded.is_some_and(|r| r.name == index) {
                                     "reuse"
+                                } else if v.adopt.is_some() {
+                                    "adopt"
                                 } else {
                                     "create"
                                 },
@@ -2925,7 +2934,7 @@ pub(crate) fn vectorize_index_problem(
     let mut seen: BTreeMap<String, (&str, &str)> = BTreeMap::new();
     for (worker, declared) in resources {
         for index in &declared.vectorize_indexes {
-            let name = vectorize_index_name(environment, &index.name);
+            let name = index.physical_name(environment);
             if let Some(why) = vectorize_index_name_problem(&name) {
                 return Some(format!(
                     "Vectorize index `{name}` (`{}` of `{worker}`) cannot be created: {why}; rename the capability or the context",
@@ -3329,6 +3338,27 @@ pub(crate) mod tests {
         assert!(
             again.contains("vectorize reuse shop-docs (VECTORIZE_DOCS, 768, cosine; metadata indexes category:string)\n"),
             "{again}"
+        );
+        // An adopted index is named as it is on the account, and planned as an
+        // `adopt` until the ledger records it.
+        let mut adopted = project(vec![(
+            "shop",
+            Resources::default().vectorize_indexes(&[(
+                "VECTORIZE_DOCS",
+                "shop-docs",
+                768,
+                "cosine",
+                &["category:string"],
+            )]),
+        )]);
+        adopted.get_mut("shop").unwrap().vectorize_indexes[0].adopt = Some("docs-prod".into());
+        let adopt = plan_report(
+            &plan_of(&order, &adopted, &DeployLock::default()),
+            DeployFormat::Short,
+        );
+        assert!(
+            adopt.contains("vectorize adopt docs-prod (VECTORIZE_DOCS, 768, cosine"),
+            "{adopt}"
         );
         // A staging deploy names the qualified index.
         let staging = derive_plan(

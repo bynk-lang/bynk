@@ -70,6 +70,9 @@ allow = []                  # experimental standard-library items to use
 [deploy.hyperdrive.Main]    # no default: a `Postgres` instance's Hyperdrive config
 connection_env = "MAIN_DATABASE_URL"   # the variable `bynk deploy` reads the connection string from
 
+[deploy.vectorize.Docs]     # no default: a `Vectorize` instance's existing index
+index = { production = "docs-prod" }   # adopted for that environment, never created or deleted
+
 [dev]
 ai = "allow"                # no default: silences `bynk dev`'s Workers AI cost warning
 
@@ -614,6 +617,27 @@ connection_env = "MAIN_LOCAL_DATABASE_URL"
 An entry needs a `connection_env`, a `config_id`, or both. See [Deploy to
 Cloudflare](/book/guides/projects-build-and-deployment/deploy-to-cloudflare/#postgres-databases-hyperdrive)
 and [Run locally](/book/guides/projects-build-and-deployment/run-locally/#a-local-postgres-database).
+
+### Adopting an existing Vectorize index
+
+A `Vectorize` instance's index is created by the deploy. A team that already has
+one (made by hand, or shared with another system) names it instead, per
+deployment environment:
+
+```toml
+[deploy.vectorize.Docs]
+index = { production = "docs-prod" }
+```
+
+| Key | Table | Type | Notes |
+|---|---|---|---|
+| `index` | `[deploy.vectorize.<Capability>]` | table of strings | The name of an index that already exists, by deployment environment (`default`, or an `--env` name). That environment adopts it; any other creates the index as usual. A name is 1 to 64 lowercase letters, digits or `-`. |
+
+An adopted index must exist, since the deploy never creates it, and must match the
+declaration's `@dimensions` and `@metric`, since it never changes one; a mismatch
+fails the deploy. It is never deleted, even by `--prune`, and its name is used as
+written (no environment suffix). See [Deploy to
+Cloudflare](/book/guides/projects-build-and-deployment/deploy-to-cloudflare/#vectorize-indexes).
 
 ### Acknowledging a remote-only binding
 

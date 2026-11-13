@@ -39,6 +39,7 @@ pub mod paths;
 pub mod roots;
 pub mod schema_registry;
 pub mod snapshots;
+pub mod vectorize;
 pub mod workspace;
 
 mod diagnostics;

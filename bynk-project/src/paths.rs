@@ -159,6 +159,12 @@ pub enum ProjectPathsError {
         capability: String,
         reason: String,
     },
+    /// #3479: a `[deploy.vectorize.<Capability>]` entry that is not well formed.
+    BadVectorize {
+        table: &'static str,
+        capability: String,
+        reason: String,
+    },
     /// #3478: a `[dev]` acknowledgement (`ai = "allow"`) holding anything but
     /// `"allow"`.
     BadDevAck { key: String, reason: String },
@@ -226,7 +232,7 @@ pub const MANIFEST_TABLES: &[(&str, &[&str])] = &[
     ("fmt", &[]),
     ("lsp", &["diagnostics_mode", "diagnostics_debounce_ms"]),
     ("workers", &["compatibility_flags", "workers_dev"]),
-    ("deploy", &["hyperdrive"]),
+    ("deploy", &["hyperdrive", "vectorize"]),
     ("dev", &["hyperdrive", "ai"]),
     (
         "build",
@@ -382,6 +388,13 @@ impl std::fmt::Display for ProjectPathsError {
                 write!(f, "`[profile.{profile}]` {reason}")
             }
             ProjectPathsError::BadHyperdrive {
+                table,
+                capability,
+                reason,
+            } => {
+                write!(f, "`[{table}.{capability}]` {reason}")
+            }
+            ProjectPathsError::BadVectorize {
                 table,
                 capability,
                 reason,
@@ -575,7 +588,10 @@ pub fn check_manifest_str(content: &str) -> Result<(), ProjectPathsError> {
             }
             "package" => drop(crate::manifest::package_config_from(entries)?),
             "workspace" => drop(crate::manifest::workspace_config_from(entries)?),
-            "deploy" => drop(crate::hyperdrive::deploy_hyperdrive_from(entries)?),
+            "deploy" => {
+                drop(crate::hyperdrive::deploy_hyperdrive_from(entries)?);
+                drop(crate::vectorize::deploy_vectorize_from(entries)?);
+            }
             "dev" => {
                 drop(crate::hyperdrive::dev_hyperdrive_from(entries)?);
                 drop(crate::dev_ack::dev_acks_from(entries)?);

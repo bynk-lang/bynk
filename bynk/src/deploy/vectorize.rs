@@ -254,6 +254,118 @@ pub(crate) fn type_change_message(
     })
 }
 
+/// Name the indexes `bynk.toml` adopts for `environment` on the declarations
+/// (`[deploy.vectorize.<Capability>] index`). A capability with no entry for
+/// the environment is created by the deploy, as before. Prints why and fails
+/// when `bynk.toml` cannot be read.
+pub(crate) fn apply_vectorize_adoptions(
+    project_root: &Path,
+    resources: &mut BTreeMap<String, Resources>,
+    environment: &str,
+) -> Result<(), ()> {
+    if resources.values().all(|r| r.vectorize_indexes.is_empty()) {
+        return Ok(());
+    }
+    let settings =
+        bynk_project::vectorize::try_read_vectorize_deploy(project_root).map_err(|e| {
+            eprintln!("bynk: {e}");
+        })?;
+    for declared in resources.values_mut() {
+        for decl in &mut declared.vectorize_indexes {
+            decl.adopt = settings
+                .iter()
+                .find(|(capability, _)| decl.matches_capability(capability))
+                .and_then(|(_, entry)| entry.index.get(environment))
+                .cloned();
+        }
+    }
+    Ok(())
+}
+
+/// An adopted index: it has to exist (the deploy never creates it) and match
+/// the declaration (it never changes it). A metadata index it lacks is said,
+/// with the command that makes it, and not created: the index is not ours to
+/// change.
+fn adopt_index(
+    provenance: &Provenance,
+    project_root: &Path,
+    worker: &str,
+    decl: &VectorizeDecl,
+    name: &str,
+) -> Result<(), DeployFailure> {
+    let fail = |e: String| {
+        DeployFailure::driver(format!(
+            "could not check the adopted Vectorize index `{name}` for `{worker}`'s `{}`: {e}",
+            decl.binding
+        ))
+    };
+    if !index_exists(provenance, name, project_root).map_err(&fail)? {
+        return Err(DeployFailure::driver(format!(
+            "the Vectorize index `{name}`, which bynk.toml adopts for `{worker}`'s `{}`, does not exist on the account; an adopted index is never created, so create it with `wrangler vectorize create {name} --dimensions {} --metric {}`, or remove the `index` entry to have the deploy create one",
+            decl.binding, decl.dimensions, decl.metric
+        )));
+    }
+    let found = read_index_config(provenance, name, project_root).map_err(&fail)?;
+    if found.dimensions != decl.dimensions || found.metric != normalise_metric(&decl.metric) {
+        return Err(DeployFailure::driver(drift_message(
+            name,
+            worker,
+            &decl.binding,
+            &found,
+            decl,
+        )));
+    }
+    let existing = existing_metadata_indexes(provenance, name, project_root).map_err(&fail)?;
+    let (missing, _) = metadata_index_changes(&decl.indexed, &existing);
+    for entry in &missing {
+        if let Some((property, ty)) = entry.split_once(':') {
+            eprintln!(
+                "bynk: warning: the adopted index `{name}` has no metadata index for `{entry}`, so a query that filters on `{property}` matches nothing until you create one (`wrangler vectorize create-metadata-index {name} --propertyName {property} --type {ty}`) and write the vectors again"
+            );
+        }
+    }
+    Ok(())
+}
+
+/// An adopted index keeps the name it has on the account, not the derived one
+/// the generated config carries: written into `config` for `environment`.
+pub(crate) fn materialise_adopted_vectorize(
+    config: &Path,
+    worker: &str,
+    declared: &Resources,
+    environment: &str,
+) -> Result<(), DeployFailure> {
+    let adopted: BTreeMap<String, String> = declared
+        .vectorize_indexes
+        .iter()
+        .filter(|v| v.adopt.is_some())
+        .map(|v| (v.binding.clone(), v.physical_name(environment)))
+        .collect();
+    if adopted.is_empty() {
+        return Ok(());
+    }
+    let text = std::fs::read_to_string(config).map_err(|e| {
+        DeployFailure::driver(format!(
+            "could not read `{worker}`'s generated configuration: {e}"
+        ))
+    })?;
+    let patched = bynk_emit::emitter::wrangler::materialise_vectorize_index_names(
+        &text,
+        environment,
+        &adopted,
+    )
+    .map_err(|e| {
+        DeployFailure::driver(format!(
+            "could not name the adopted Vectorize indexes in `{worker}`'s configuration: {e}"
+        ))
+    })?;
+    std::fs::write(config, patched).map_err(|e| {
+        DeployFailure::driver(format!(
+            "could not write `{worker}`'s adopted Vectorize index names: {e}"
+        ))
+    })
+}
+
 /// Each `Vectorize` index of `worker`: created when the account has none of
 /// that name, checked against the declaration when it has (a mismatch fails the
 /// deploy and changes nothing), recorded in the ledger before the push, then its
@@ -268,7 +380,22 @@ pub(crate) fn provision_vectorize_indexes(
     environment: &str,
 ) -> Result<(), DeployFailure> {
     for decl in &declared.vectorize_indexes {
-        let physical = vectorize_index_name(environment, &decl.name);
+        let physical = decl.physical_name(environment);
+        if decl.adopt.is_some() {
+            adopt_index(provenance, project_root, worker, decl, &physical)?;
+            let already = recorded_vectorize(lock, worker, &decl.binding, environment)
+                .is_some_and(|r| r.name == physical && r.adopted);
+            if !already {
+                lock.record_vectorize(environment, worker, &decl.binding, &physical, true);
+                write_lock(lock_path, lock).map_err(|e| {
+                    DeployFailure::driver(format!(
+                        "adopted the Vectorize index `{physical}` but could not record it in {}: {e}",
+                        lock_path.display()
+                    ))
+                })?;
+            }
+            continue;
+        }
         let fail = |what: &str, e: String| {
             DeployFailure::driver(format!(
                 "could not {what} the Vectorize index `{physical}` for `{worker}`'s `{}`: {e}",
