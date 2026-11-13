@@ -9,15 +9,9 @@
 bynk.target.vendor_conflict: needs platform-native capabilities from two platforms, and only Cloudflare ships any today, so no program can raise it
 bynk.target.vendor_required: reported with no source file (the check is not attributed to the file of the `consumes` clause), so the example gate cannot tell which line it is on
 bynk.target.browser_bundle_only: a build-option error with no source position, so the example gate cannot tell which line it is on
-bynk.agent.class_conflict: the example gate never reads `bynk.schema.lock`; this code needs a recorded schema history (#3163, gate work: a fixture-supplied lock)
-bynk.agent.class_removed: the example gate never reads `bynk.schema.lock`; this code needs a recorded schema history (#3163, gate work: a fixture-supplied lock)
-bynk.agent.migrate_incomplete: the example gate never reads `bynk.schema.lock`; this code needs a recorded schema history (#3163, gate work: a fixture-supplied lock)
-bynk.agent.migrate_shape_mismatch: the example gate never reads `bynk.schema.lock`; this code needs a recorded schema history (#3163, gate work: a fixture-supplied lock)
-bynk.agent.migrate_unknown_version: the example gate never reads `bynk.schema.lock`; this code needs a recorded schema history (#3163, gate work: a fixture-supplied lock)
-bynk.agent.non_additive_state_change: the example gate never reads `bynk.schema.lock`; this code needs a recorded schema history (#3163, gate work: a fixture-supplied lock)
-bynk.agent.replaces_unknown: the example gate never reads `bynk.schema.lock`; this code needs a recorded schema history (#3163, gate work: a fixture-supplied lock)
-bynk.event.non_additive_schema_change: the example gate never reads `bynk.schema.lock`; this code needs a recorded schema history (#3163, gate work: a fixture-supplied lock)
-bynk.event.schema_version_mismatch: the example gate never reads `bynk.schema.lock`; this code needs a recorded schema history (#3163, gate work: a fixture-supplied lock)
+bynk.agent.class_removed: reported with no source position (the class is gone from source, so there is no line), so the example gate cannot tell which line it is on
+bynk.event.non_additive_schema_change: reported with no source file (the registry check is not attributed to the file that declares the event), so the example gate cannot tell which line it is on
+bynk.event.schema_version_mismatch: reported with no source file (the registry check is not attributed to the file that declares the event), so the example gate cannot tell which line it is on
 bynk.project.export_unknown: a manifest- or project-level diagnostic with no source line, which the example gate cannot mark
 bynk.project.unstable_unknown_item: a manifest- or project-level diagnostic with no source line, which the example gate cannot mark
 bynk.project.file_and_directory: a manifest- or project-level diagnostic with no source line, which the example gate cannot mark
