@@ -580,7 +580,7 @@ pub fn run(
     // user's own `wrangler dev` of it). Under `--remote` the bindings are the
     // account's, so there is nothing to stand in for.
     let remote = opts.wrangler_args.iter().any(|arg| arg == "--remote");
-    let stand_in_plans = plan_stand_ins(&workers_dir, &serving, &available, &opts, remote);
+    let stand_in_plans = plan_stand_ins(&workers_dir, &serving, &available, opts, remote);
     if !stand_in_plans.is_empty()
         && (passthrough_has(&opts.wrangler_args, "-c")
             || passthrough_has(&opts.wrangler_args, "--config"))
