@@ -28,6 +28,7 @@ per-commit history. While Bynk is pre-1.0, increments may change behaviour.
 
 | Version | Highlights |
 |---|---|
+| **v0.594.1** | `Vectorize` `@dimensions` below 32 is refused at compile time (Cloudflare's minimum), and a deploy that creates a metadata index waits until it is listed before pushing the Worker |
 | **v0.594.0** | `[deploy.vectorize.<Capability>] index` in `bynk.toml` adopts an existing Vectorize index per environment, which `bynk deploy` checks for dimension and metric drift and never creates, changes or deletes |
 | **v0.593.0** | `bynk deploy` creates each `Vectorize` index with its declared dimensions and metric, reuses a matching one, fails (never recreates) on a mismatch, creates `@indexed` metadata indexes before the push, and reports orphaned indexes that `--prune` deletes behind a confirmation |
 | **v0.592.0** | `bynk.cloudflare` gains `Vectorize`, an instance kind for a Vectorize index with required `@dimensions` and `@metric`, optional `@indexed`, a typed filter and typed errors, emitted as `[[vectorize]]`; every operation faults until stubbed in a test |
