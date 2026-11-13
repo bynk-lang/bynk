@@ -187,6 +187,16 @@
             }
           ]
         },
+        "ai-search": {
+          "description": "Acknowledges that AI Search has no local simulation: under `bynk dev`\na call goes to your deployed instance on your Cloudflare account and may\nincur charges. `bynk dev` warns once, on the first call, unless this is\n`\"allow\"`. See Cloudflare's AI Search pricing page.",
+          "oneOf": [
+            {
+              "const": "allow",
+              "description": "Silence the warning.",
+              "type": "string"
+            }
+          ]
+        },
         "hyperdrive": {
           "additionalProperties": {
             "additionalProperties": false,

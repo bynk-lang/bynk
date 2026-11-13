@@ -102,6 +102,15 @@ pub(crate) struct Environment {
     /// reads and a project without stored secrets writes the same file.
     #[serde(default, skip_serializing_if = "BTreeMap::is_empty")]
     pub(crate) stored_secret_links: BTreeMap<String, BTreeMap<String, StoredSecretLink>>,
+    /// #3480: each Worker's `AiSearch` instances, keyed by the instance's
+    /// binding (`AI_SEARCH_KB`): the account's instance the deploy linked it
+    /// to. Linked, never created, so there is nothing to orphan or prune. It
+    /// holds an instance's name only, and is refreshed by every deploy.
+    ///
+    /// Additive, `default`ed and omitted when empty, so an older ledger still
+    /// reads and a project without AI Search writes the same file.
+    #[serde(default, skip_serializing_if = "BTreeMap::is_empty")]
+    pub(crate) ai_search_links: BTreeMap<String, BTreeMap<String, AiSearchLink>>,
     /// P3 (#2342): each Worker's `RateLimit` instances, keyed by binding
     /// (`RATELIMIT_LOGIN_LIMIT`), as `kv_instances` is. The `namespace_id` is
     /// minted here, not by Cloudflare: a positive integer unique across every
@@ -265,6 +274,13 @@ pub(crate) struct HyperdrivePast {
     pub(crate) id: String,
     #[serde(default, skip_serializing_if = "std::ops::Not::not")]
     pub(crate) adopted: bool,
+}
+
+/// #3480: the AI Search instance an `AiSearch` binding was linked to.
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
+pub(crate) struct AiSearchLink {
+    /// The instance's name, as `@instance` wrote it.
+    pub(crate) instance: String,
 }
 
 /// #3301: the Secrets Store secret a `StoredSecret` binding was linked to.
@@ -970,6 +986,29 @@ impl DeployLock {
         true
     }
 
+    /// #3480: record the instance `worker`'s `AiSearch` `binding` was linked
+    /// to. `true` when that changed the ledger.
+    pub(crate) fn record_ai_search(
+        &mut self,
+        environment: &str,
+        worker: &str,
+        binding: &str,
+        link: AiSearchLink,
+    ) -> bool {
+        let links = self
+            .environments
+            .entry(environment.to_string())
+            .or_default()
+            .ai_search_links
+            .entry(worker.to_string())
+            .or_default();
+        if links.get(binding) == Some(&link) {
+            return false;
+        }
+        links.insert(binding.to_string(), link);
+        true
+    }
+
     /// P3 (#2342): the `namespace_id` for `worker`'s rate limiter `binding`
     /// in `environment`: the recorded one, else a new one — the first id from
     /// its [`ratelimit_seed`] upward (wrapping within the span) that no rate
@@ -1513,6 +1552,20 @@ pub(crate) fn recorded_stored_secret<'a>(
     lock.environments
         .get(environment)
         .and_then(|env| env.stored_secret_links.get(worker))
+        .and_then(|links| links.get(binding))
+}
+
+/// The instance recorded for `worker`'s `AiSearch` `binding` (#3480).
+#[cfg(test)]
+pub(crate) fn recorded_ai_search<'a>(
+    lock: &'a DeployLock,
+    worker: &str,
+    binding: &str,
+    environment: &str,
+) -> Option<&'a AiSearchLink> {
+    lock.environments
+        .get(environment)
+        .and_then(|env| env.ai_search_links.get(worker))
         .and_then(|links| links.get(binding))
 }
 
@@ -2215,6 +2268,7 @@ pub(crate) mod tests {
                         )]),
                     )]),
                     hyperdrive_instances: BTreeMap::new(),
+                    ai_search_links: BTreeMap::new(),
                     stored_secret_links: BTreeMap::from([(
                         "api".into(),
                         BTreeMap::from([(

@@ -42,6 +42,11 @@ pub const REMOTE_KINDS: &[RemoteKind] = &[
         key: "vectorize",
         var: "BYNK_DEV_ACK_VECTORIZE",
     },
+    // #3480: AI Search is its own kind, not covered by `ai`.
+    RemoteKind {
+        key: "ai-search",
+        var: "BYNK_DEV_ACK_AI_SEARCH",
+    },
 ];
 
 /// The variable `bynk dev` sets to `1` on every Worker it serves, so a
@@ -135,6 +140,11 @@ mod tests {
     #[test]
     fn allow_acknowledges_a_kind() {
         assert_eq!(acks("[dev]\nai = \"allow\"\n"), Ok(vec!["ai"]));
+        // #3480: AI Search is acknowledged on its own, not by `ai`.
+        assert_eq!(
+            acks("[dev]\nai-search = \"allow\"\n"),
+            Ok(vec!["ai-search"])
+        );
         assert_eq!(
             acks("[dev.hyperdrive.Main]\nconnection_env = \"X\"\n[dev]\n"),
             Ok(vec![])
