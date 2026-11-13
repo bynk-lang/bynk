@@ -1,12 +1,6 @@
----
-level: minor
-changelog: `Idempotency.claim` is durable and shared across isolates on Cloudflare, stored in the Worker's implicit D1 database
-probes: emit_abi_shapes, ts_writes
----
+# 0831 — A platform's binding of a portable capability may be durable; it is not a selectable provider
 
-## ADR: platform-binding-of-a-portable-capability
-title: A platform's binding of a portable capability may be durable; it is not a selectable provider
-summary: bynk.Idempotency's Cloudflare binding stores claims in D1, chosen by the build's platform, within ADR 0016
+- **Status:** Accepted (v0.586)
 
 **Context.** ADR 0016 dropped a portable infrastructure tier with selectable platform providers and a foreign-capability provision rule. #2840 wants `Idempotency.claim` to be durable on Cloudflare, which looked like it needed a way for a platform unit to supply a durable provider for a portable capability.
 

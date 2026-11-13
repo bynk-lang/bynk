@@ -17,6 +17,7 @@ or a row links to no file. Summaries and statuses are curated by hand; the
 
 | # | Decision | Status |
 |---|---|---|
+| [0831](0831-platform-binding-of-a-portable-capability.md) | **A platform's binding of a portable capability may be durable; it is not a selectable provider** (v0.586) — bynk.Idempotency's Cloudflare binding stores claims in D1, chosen by the build's platform, within ADR 0016 | Accepted (v0.586) |
 | [0830](0830-typed-capability-reads.md) | **A first-party capability operation may return its Codable parameter, decoded at the call site** (v0.583) — Lifts ADR 0696 decision 5 for the standard library's own operations, with the failure policy declared on each operation | Accepted (v0.583) |
 | [0829](0829-claim-release-and-lease.md) | **A handler's idempotency claim is released on failure and leased until it settles** (v0.582) — The compiler settles a service handler's claims on exit: release on failure, confirm otherwise, with a 30 s lease for an instance that dies | Accepted (v0.582) |
 | [0828](0828-typed-cookie-lints.md) | **The untyped cookie's lints, the typed name's prefix rules and the SignedCookie write refusals** (v0.578) — Warns where an untyped `Cookie` could be written from its record, refuses a value its decoder rejects, applies the cookie lints to the typed name, and keeps the `SignedCookie` cookie to its actor; extends ADR 0821's read-side refusal | Accepted (v0.578) |
