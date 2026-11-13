@@ -14,7 +14,7 @@ capability Answerer {
 
 provides Answerer = AiAnswerer given Ai {
 	fn answer(question: String) -> Effect[String] {
-		let reply <- Ai.run("@cf/meta/llama-3.1-8b-instruct", question)
+		let reply <- Ai.run("@cf/meta/llama-3.2-1b-instruct", question)
 		match reply {
 			Ok(text) => Effect.pure(text),
 			Err(_) => Effect.pure("unavailable"),
@@ -24,7 +24,7 @@ provides Answerer = AiAnswerer given Ai {
 
 service api from http {
 	on GET("/ask") () -> Effect[HttpResult[String]] by Visitor given Ai {
-		let reply <- Ai.run("@cf/meta/llama-3.1-8b-instruct", "{\"prompt\": \"hello\"}")
+		let reply <- Ai.run("@cf/meta/llama-3.2-1b-instruct", "{\"prompt\": \"hello\"}")
 		match reply {
 			Ok(text) => Ok(text),
 			Err(ModelNotFound) => NotFound,

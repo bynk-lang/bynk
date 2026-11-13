@@ -10,7 +10,7 @@ import * as bynk_cloudflare from "../../bynk/cloudflare.js";
 
 export const events = {
   async http_GET_events(deps: { Ai: bynk_cloudflare.Ai }): globalThis.Promise<HttpResult<string>> {
-    const started = await deps.Ai.runStream("@cf/meta/llama-3.1-8b-instruct", "{\"prompt\": \"hello\"}");
+    const started = await deps.Ai.runStream("@cf/meta/llama-3.2-1b-instruct", "{\"prompt\": \"hello\"}");
     switch (started.tag) {
       case "Ok": {
         const s = started.value;

@@ -6,7 +6,7 @@ consumes bynk.cloudflare { Ai }
 
 service s {
 	on call() -> Effect[String] given Ai {
-		let r <- Ai.run("@cf/meta/llama-3.1-8b-instruct", "{}")
+		let r <- Ai.run("@cf/meta/llama-3.2-1b-instruct", "{}")
 		match r {
 			Ok(text) => Effect.pure(text),
 			Err(_) => Effect.pure(""),

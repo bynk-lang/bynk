@@ -25,6 +25,7 @@ Effects are explicit and capability-gated: a handler declares what it needs via
 - [Connect an existing MySQL database](/book/guides/effects-and-capabilities/connect-an-existing-mysql-database/)
 - [Apply webhook events that arrive late, twice or out of order](/book/guides/effects-and-capabilities/apply-webhook-events-out-of-order/)
 - [Cache responses at Cloudflare's edge](/book/guides/effects-and-capabilities/cache-at-the-edge/)
+- [Run a model from a Worker](/book/guides/effects-and-capabilities/run-a-model-from-a-worker/)
 - [Call Workers AI through an adapter](/book/guides/effects-and-capabilities/call-workers-ai-through-an-adapter/)
 - [Sign and verify data](/book/guides/effects-and-capabilities/sign-and-verify-data/)
 
