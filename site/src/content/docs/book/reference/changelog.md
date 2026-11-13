@@ -28,6 +28,7 @@ per-commit history. While Bynk is pre-1.0, increments may change behaviour.
 
 | Version | Highlights |
 |---|---|
+| **v0.591.1** | The Book gains "Run a model from a Worker", a guide to the Workers AI `Ai` capability (`generate`, `embed`, `run`, `runStream`, errors, tests and `bynk dev`), and the REST adapter guide now ends with a migration to the binding |
 | **v0.591.0** | `Ai.runStream(model, input)` streams a Workers AI model's own events as a `Stream[String]`, ready to serve with `Streaming`; a refusal before the stream is an `Err`, a failure after it faults the stream, and a client that hangs up cancels the model |
 | **v0.590.1** | A record literal parses when its first field is named like a contextual keyword (`T { messages: … }`), as it already did in any later position |
 | **v0.590.0** | `Ai.generate` and `Ai.embed` are typed Workers AI operations for chat generation and text embeddings, returning concrete records and vectors, with a `BadReply` error for a reply that is not the shape promised |
