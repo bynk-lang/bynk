@@ -2278,6 +2278,11 @@ t("WorkersVectorize: the first call under bynk dev checks the index against the 
   assert.equal((await ok.upsert([vec("a")])).tag, "Ok");
   assert.equal((await ok.deleteByIds(["a"])).tag, "Ok");
   assert.equal(good.calls.filter((c) => c.name === "describe").length, 1);
+  // The check's own describe is reused by a first `describe()` call: one platform call, not two.
+  const once = fakeIndex({ describe: { dimensions: 3, metric: "cosine" } });
+  const first = new WorkersVectorize({ ...env(once, "3:cosine"), BYNK_DEV_INDEX_VECTORIZE_DOCS: "3:cosine" }, "VECTORIZE_DOCS");
+  assert.deepEqual((await first.describe()).value, { dimensions: 3, metric: "cosine" });
+  assert.equal(once.calls.filter((c) => c.name === "describe").length, 1);
   // Not under bynk dev (a deployment, or bynk test): no check at all.
   const plain = fakeIndex({ describe: { dimensions: 99, metric: "euclidean" } });
   assert.equal((await new WorkersVectorize({ VECTORIZE_DOCS: plain }, "VECTORIZE_DOCS").upsert([vec("a")])).tag, "Ok");

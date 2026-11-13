@@ -61,11 +61,13 @@ pub(crate) fn bind_for_dev(
     serving: &[String],
 ) -> Result<Bound, String> {
     let resources = crate::deploy::project_resources(workers_dir, all)?;
-    if resources.values().all(|r| r.vectorize_indexes.is_empty()) {
-        return Ok(Bound::default());
-    }
     let settings =
         bynk_project::vectorize::try_read_vectorize_dev(project_root).map_err(|e| e.to_string())?;
+    // An entry for a capability the project no longer has is still an error: a
+    // project with no `Vectorize` at all has nothing to bind but may not keep one.
+    if settings.is_empty() && resources.values().all(|r| r.vectorize_indexes.is_empty()) {
+        return Ok(Bound::default());
+    }
     let decls: Vec<&crate::deploy::VectorizeDecl> = resources
         .values()
         .flat_map(|r| r.vectorize_indexes.iter())
@@ -126,7 +128,33 @@ pub(crate) fn bind_for_dev(
             })?;
         }
     }
+    report.bound.sort();
+    report.bound.dedup();
+    report.unbound.sort();
+    report.unbound.dedup();
     Ok(report)
+}
+
+/// Unbind every `Vectorize` instance of the served Workers: the fallback when
+/// the bindings cannot be made (a rebuild whose `bynk.toml` no longer reads), so a
+/// development session never serves the deploy's derived index names. Each call
+/// to an instance then faults, as for an unbound one.
+pub(crate) fn unbind_all(workers_dir: &Path, serving: &[String]) -> Result<(), String> {
+    for worker in serving {
+        let path = workers_dir.join(worker).join("wrangler.toml");
+        let Ok(text) = std::fs::read_to_string(&path) else {
+            continue;
+        };
+        let patched = bynk_emit::emitter::wrangler::bind_vectorize_for_dev(
+            &text,
+            &BTreeMap::new(),
+            &BTreeMap::new(),
+        )?;
+        if patched != text {
+            std::fs::write(&path, patched).map_err(|e| e.to_string())?;
+        }
+    }
+    Ok(())
 }
 
 /// The note `bynk dev` prints once, or `None` when there was nothing to bind.
@@ -229,6 +257,39 @@ mod tests {
         );
         assert!(
             !config.contains("VECTORIZE_NOTES") && !config.contains("shop-docs"),
+            "{config}"
+        );
+        let _ = std::fs::remove_dir_all(&root);
+    }
+
+    #[test]
+    fn a_stale_entry_is_refused_even_when_the_project_has_no_vectorize() {
+        let root = std::env::temp_dir().join(format!("bynk-dev-vz-none-{}", std::process::id()));
+        let workers = root.join("out").join("workers");
+        std::fs::create_dir_all(workers.join("shop")).unwrap();
+        std::fs::write(
+            workers.join("shop").join("wrangler.toml"),
+            "name = \"shop\"\n",
+        )
+        .unwrap();
+        std::fs::write(
+            root.join("bynk.toml"),
+            "[project]\nname = \"shop\"\nversion = \"0.1.0\"\n\n[dev.vectorize-index]\nDocs = \"docs-dev\"\n",
+        )
+        .unwrap();
+        let all = vec!["shop".to_string()];
+        let err = bind_for_dev(&root, &workers, &all, &all).unwrap_err();
+        assert!(err.contains("names no `Vectorize` capability"), "{err}");
+        let _ = std::fs::remove_dir_all(&root);
+    }
+
+    #[test]
+    fn unbinding_everything_removes_every_stanza() {
+        let (root, workers) = project("[project]\nname = \"shop\"\nversion = \"0.1.0\"\n");
+        unbind_all(&workers, &["shop".to_string()]).unwrap();
+        let config = std::fs::read_to_string(workers.join("shop").join("wrangler.toml")).unwrap();
+        assert!(
+            !config.contains("vectorize") && !config.contains("shop-docs"),
             "{config}"
         );
         let _ = std::fs::remove_dir_all(&root);

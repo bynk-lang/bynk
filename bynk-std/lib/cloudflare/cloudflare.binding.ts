@@ -1669,10 +1669,10 @@ export class WorkersVectorize implements Vectorize {
   // as `BYNK_DEV_INDEX_<binding>`. The first call checks the index against it, so
   // a wrong index is a clear fault here and not a `DimensionMismatch` per vector.
   // A fault on every call until the index is right; checked once after that.
-  private async ready(index: VectorizeIndex): Promise<void> {
+  private async ready(index: VectorizeIndex): Promise<unknown> {
     const env = this.env as Record<string, unknown> | undefined;
     const declared = env?.BYNK_DEV === "1" ? env[`BYNK_DEV_INDEX_${this.binding}`] : undefined;
-    if (typeof declared !== "string" || devIndexChecked.has(this.binding)) return;
+    if (typeof declared !== "string" || devIndexChecked.has(this.binding)) return undefined;
     const [dimensions, metric] = declared.split(":");
     let raw: Record<string, unknown> | null | undefined;
     try {
@@ -1689,6 +1689,7 @@ export class WorkersVectorize implements Vectorize {
       );
     }
     devIndexChecked.add(this.binding);
+    return raw;
   }
 
   private static fault(why: string): never {
@@ -1903,9 +1904,10 @@ export class WorkersVectorize implements Vectorize {
   // an `IndexInfo`, so it is a `VectorFailed` that says what is missing.
   async describe(): Promise<Result<IndexInfo, VectorError>> {
     const index = this.index();
-    await this.ready(index);
+    // The first call under `bynk dev` has just described the index: reuse that.
+    const checked = (await this.ready(index)) as Record<string, unknown> | null | undefined;
     try {
-      const raw = (await index.describe()) as Record<string, unknown> | null | undefined;
+      const raw = checked ?? ((await index.describe()) as Record<string, unknown> | null | undefined);
       const config = ((raw?.config as Record<string, unknown> | undefined) ?? raw) as Record<string, unknown> | undefined;
       const dimensions = config?.dimensions;
       const metric = config?.metric;

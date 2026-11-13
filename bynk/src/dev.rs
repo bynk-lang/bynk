@@ -830,15 +830,25 @@ pub fn run(
                 if let Err(e) = point_at_stand_ins(&workers_dir, &stand_in_plans) {
                     eprintln!("bynk: could not bind the stand-ins for foreign Workers: {e}");
                 }
-                // The rebuilt configs name the derived indexes again.
-                bind_dev_vectorize(
+                // The rebuilt configs name the derived indexes again. If they
+                // cannot be rebound (`bynk.toml` no longer reads), unbind them: a
+                // development session never serves the deploy's index names.
+                if !bind_dev_vectorize(
                     project_root,
                     &workers_dir,
                     &available,
                     &serving,
                     remote,
                     false,
-                );
+                ) {
+                    let names: Vec<String> = serving.iter().map(|s| s.worker.clone()).collect();
+                    match crate::dev_vectorize::unbind_all(&workers_dir, &names) {
+                        Ok(()) => eprintln!(
+                            "bynk dev: Vectorize instances are unbound until `bynk.toml` is fixed; calls to them fail"
+                        ),
+                        Err(e) => eprintln!("bynk: could not unbind the Vectorize instances: {e}"),
+                    }
+                }
                 // P4b (#2608): a new migration is applied without a restart.
                 if !remote {
                     apply_local_migrations(
