@@ -1360,6 +1360,8 @@ t("WorkersAi.generate: a platform refusal is a typed error, and empty messages o
   assert.deepEqual((await ai(new Error("3040: busy")).generate("@cf/x/y", request())).error, { tag: "Overloaded" });
   await assert.rejects(ai({}).generate("@cf/x/y", request({ messages: [] })), /at least one message/);
   await assert.rejects(ai({}).generate("", request()), /not a model id/);
+  // A role this binding has no wire name for is refused, not sent as a guess.
+  await assert.rejects(ai({}).generate("@cf/x/y", request({ messages: [chat("ToolCall", "x")] })), /no wire name/);
 });
 
 t("WorkersAi.embed: sends the texts as a list and returns one vector per text in order", async () => {
@@ -1367,6 +1369,8 @@ t("WorkersAi.embed: sends the texts as a list and returns one vector per text in
   const r = await new WorkersAi({ AI: ai }).embed("@cf/baai/bge-base-en-v1.5", ["a", "b"]);
   assert.deepEqual(r, { tag: "Ok", value: [[0.1, 0.2, 0.3], [1, 2, 3]] });
   assert.deepEqual(ai.calls, [{ model: "@cf/baai/bge-base-en-v1.5", input: { text: ["a", "b"] } }]);
+  // No `shape` in the reply is fine: it is optional.
+  assert.equal((await new WorkersAi({ AI: fakeAi({ data: [[1, 2], [3, 4]] }) }).embed("@cf/x/y", ["a", "b"])).tag, "Ok");
   // One text is still a list, so the reply is always a list of vectors.
   const one = fakeAi({ data: [[1]] });
   await new WorkersAi({ AI: one }).embed("@cf/x/y", ["only"]);
@@ -1375,7 +1379,7 @@ t("WorkersAi.embed: sends the texts as a list and returns one vector per text in
 
 t("WorkersAi.embed: a reply that is not one list of numbers per text is a BadReply, a refusal a typed error, and an empty batch a fault", async () => {
   const emb = async (reply, texts = ["a", "b"]) => new WorkersAi({ AI: fakeAi(reply) }).embed("@cf/x/y", texts);
-  for (const bad of [{}, { data: "x" }, { data: [1, 2] }, { data: [[1], ["a"]] }, { data: [[1], [NaN]] }, { data: [[1]] }, { data: [[1], [2], [3]] }, [], "s", null]) {
+  for (const bad of [{}, { data: "x" }, { data: [1, 2] }, { data: [[1], ["a"]] }, { data: [[1], [NaN]] }, { data: [[1]] }, { data: [[1], [2], [3]] }, { data: [[], []] }, { data: [[1, 2], [3]] }, { shape: [2, 3], data: [[1, 2], [3, 4]] }, { shape: [3, 2], data: [[1, 2], [3, 4]] }, [], "s", null]) {
     assert.equal((await emb(bad)).error?.tag, "BadReply", JSON.stringify(bad));
   }
   assert.deepEqual((await emb(new Error("5004: Invalid data"))).error, { tag: "InvalidInput", message: "5004: Invalid data" });

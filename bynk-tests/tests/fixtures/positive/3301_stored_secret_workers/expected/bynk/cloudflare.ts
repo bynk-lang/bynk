@@ -1127,7 +1127,7 @@ export const __VersionToken: symbol = globalThis.Symbol("Version");
  *
  * `generate(model, request)` is chat-style text generation with the same
  * request and reply for every chat model, and `embed(model, texts)` gives one
- * vector per text, in order, for a text-embedding model such as
+ * vector per text, in order, all of one length, for a text-embedding model such as
  * `"@cf/baai/bge-base-en-v1.5"`. Both return `BadReply` when the platform
  * answers but not in the promised shape (a model that is not of that kind,
  * say). An empty `messages` or `texts` is a fault. `embed` does not check

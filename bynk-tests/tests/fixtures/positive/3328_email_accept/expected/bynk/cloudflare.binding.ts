@@ -1119,11 +1119,20 @@ export class WorkersAi implements Ai {
       : None;
   }
 
+  // The wire name of each role, spelled out: a role added to `ChatRole` later
+  // is refused here rather than sent under a name the platform does not know.
+  private static readonly ROLES: Readonly<Record<string, string>> = { System: "system", User: "user", Assistant: "assistant" };
+  private static role(tag: string): string {
+    const wire = WorkersAi.ROLES[tag];
+    if (wire === undefined) WorkersAi.fault(`the chat role ${tag} has no wire name in this binding`);
+    return wire;
+  }
+
   async generate(model: string, request: GenerateRequest): Promise<Result<Generation, AiError>> {
     WorkersAi.checkModel(model);
     if (request.messages.length === 0) WorkersAi.fault("`generate` needs at least one message in `messages`");
     const body: Record<string, unknown> = {
-      messages: request.messages.map((m) => ({ role: m.role.tag.toLowerCase(), content: m.content })),
+      messages: request.messages.map((m) => ({ role: WorkersAi.role(m.role.tag), content: m.content })),
     };
     if (request.maxTokens.tag === "Some") body.max_tokens = request.maxTokens.value;
     if (request.temperature.tag === "Some") body.temperature = request.temperature.value;
@@ -1152,6 +1161,17 @@ export class WorkersAi implements Ai {
     }
     if (data.length !== texts.length) {
       return WorkersAi.badReply(`embed: ${texts.length} texts gave ${data.length} embeddings`);
+    }
+    // One dimensionality for all of them, and not zero: a vector index takes
+    // nothing else, so a ragged or empty reply is not the shape promised.
+    const dimension = data[0].length;
+    if (dimension === 0 || !data.every((v) => v.length === dimension)) {
+      return WorkersAi.badReply("embed: the embeddings are empty or are not all the same length");
+    }
+    // `shape` is `[texts, dimension]` when the platform reports it.
+    const shape = out.shape;
+    if (Array.isArray(shape) && shape.length === 2 && (shape[0] !== texts.length || shape[1] !== dimension)) {
+      return WorkersAi.badReply(`embed: the reply's shape ${JSON.stringify(shape)} is not [${texts.length}, ${dimension}]`);
     }
     return Ok(data);
   }
