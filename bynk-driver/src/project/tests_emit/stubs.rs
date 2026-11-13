@@ -1488,7 +1488,12 @@ pub(super) fn platform_double(
                     "    async {op}() {{\n      throw new globalThis.Error(\"bynk: `Ai.{op}` is not stubbed, and a test never reaches Workers AI — add `stub Ai.{op}({args}) returns …`\");\n    }},\n"
                 )
             };
-            format!("  return {{\n{}  }};\n", op("run", "_, _"))
+            format!(
+                "  return {{\n{}{}{}  }};\n",
+                op("run", "_, _"),
+                op("generate", "_, _"),
+                op("embed", "_, _")
+            )
         }
         // #3301: a test never reads the account's Secrets Store, so each
         // instance faults until its `get` is stubbed. The message names the

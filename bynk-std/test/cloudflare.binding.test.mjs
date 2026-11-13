@@ -1317,6 +1317,72 @@ t("WorkersAi.run: a bad model id, an input that is not a JSON object and a missi
   await assert.rejects(new WorkersAi({}).run("@cf/x/y", "{}"), /\[ai\]/);
 });
 
+const chat = (role, content) => ({ role: { tag: role }, content });
+const request = (extra = {}) => ({ messages: [chat("User", "hi")], maxTokens: None, temperature: None, topP: None, seed: None, ...extra });
+
+t("WorkersAi.generate: sends the messages with lower-case roles and only the settings given, and reads text and usage", async () => {
+  const ai = fakeAi({ response: "hello", usage: { prompt_tokens: 3, completion_tokens: 2, total_tokens: 5 } });
+  const r = await new WorkersAi({ AI: ai }).generate(
+    "@cf/meta/llama-3.1-8b-instruct",
+    request({ messages: [chat("System", "be brief"), chat("User", "hi"), chat("Assistant", "hey")], maxTokens: Some(64), temperature: Some(0.5), topP: Some(0.9), seed: Some(7) }),
+  );
+  assert.deepEqual(r, { tag: "Ok", value: { text: "hello", usage: Some({ promptTokens: 3, completionTokens: 2 }) } });
+  assert.deepEqual(ai.calls[0].input, {
+    messages: [{ role: "system", content: "be brief" }, { role: "user", content: "hi" }, { role: "assistant", content: "hey" }],
+    max_tokens: 64,
+    temperature: 0.5,
+    top_p: 0.9,
+    seed: 7,
+  });
+  const plain = fakeAi({ response: "ok" });
+  await new WorkersAi({ AI: plain }).generate("@cf/x/y", request());
+  assert.deepEqual(plain.calls[0].input, { messages: [{ role: "user", content: "hi" }] });
+});
+
+t("WorkersAi.generate: a missing or odd usage is None, and a reply that is not text is a BadReply", async () => {
+  const gen = async (reply) => new WorkersAi({ AI: fakeAi(reply) }).generate("@cf/x/y", request());
+  assert.deepEqual((await gen({ response: "t" })).value, { text: "t", usage: None });
+  assert.deepEqual((await gen({ response: "t", usage: { prompt_tokens: "3" } })).value.usage, None);
+  assert.equal((await gen({ response: "" })).value.text, "");
+  for (const bad of [{}, { response: 5 }, { response: null, tool_calls: [] }, { response: { a: 1 } }, "text", null, [1], new Uint8Array(2)]) {
+    const r = await gen(bad);
+    assert.equal(r.error?.tag, "BadReply", JSON.stringify(bad));
+  }
+  let cancelled = false;
+  const r = await gen(new ReadableStream({ cancel() { cancelled = true; } }));
+  assert.equal(r.error.tag, "BadReply");
+  assert.equal(cancelled, true);
+});
+
+t("WorkersAi.generate: a platform refusal is a typed error, and empty messages or a bad model fault", async () => {
+  const ai = (e) => new WorkersAi({ AI: fakeAi(e) });
+  assert.deepEqual((await ai(new Error("5007: No such model")).generate("@cf/x/y", request())).error, { tag: "ModelNotFound" });
+  assert.deepEqual((await ai(new Error("3040: busy")).generate("@cf/x/y", request())).error, { tag: "Overloaded" });
+  await assert.rejects(ai({}).generate("@cf/x/y", request({ messages: [] })), /at least one message/);
+  await assert.rejects(ai({}).generate("", request()), /not a model id/);
+});
+
+t("WorkersAi.embed: sends the texts as a list and returns one vector per text in order", async () => {
+  const ai = fakeAi({ shape: [2, 3], data: [[0.1, 0.2, 0.3], [1, 2, 3]], pooling: "mean" });
+  const r = await new WorkersAi({ AI: ai }).embed("@cf/baai/bge-base-en-v1.5", ["a", "b"]);
+  assert.deepEqual(r, { tag: "Ok", value: [[0.1, 0.2, 0.3], [1, 2, 3]] });
+  assert.deepEqual(ai.calls, [{ model: "@cf/baai/bge-base-en-v1.5", input: { text: ["a", "b"] } }]);
+  // One text is still a list, so the reply is always a list of vectors.
+  const one = fakeAi({ data: [[1]] });
+  await new WorkersAi({ AI: one }).embed("@cf/x/y", ["only"]);
+  assert.deepEqual(one.calls[0].input, { text: ["only"] });
+});
+
+t("WorkersAi.embed: a reply that is not one list of numbers per text is a BadReply, a refusal a typed error, and an empty batch a fault", async () => {
+  const emb = async (reply, texts = ["a", "b"]) => new WorkersAi({ AI: fakeAi(reply) }).embed("@cf/x/y", texts);
+  for (const bad of [{}, { data: "x" }, { data: [1, 2] }, { data: [[1], ["a"]] }, { data: [[1], [NaN]] }, { data: [[1]] }, { data: [[1], [2], [3]] }, [], "s", null]) {
+    assert.equal((await emb(bad)).error?.tag, "BadReply", JSON.stringify(bad));
+  }
+  assert.deepEqual((await emb(new Error("5004: Invalid data"))).error, { tag: "InvalidInput", message: "5004: Invalid data" });
+  assert.deepEqual((await emb(new Error("3036: used up"))).error, { tag: "QuotaExceeded" });
+  await assert.rejects(emb({}, []), /at least one text/);
+});
+
 // #3478: the one-time warning of a remote-only binding under `bynk dev`.
 t("WorkersAi.run: warns once under bynk dev unless the project acknowledged it, and never in a deployment", async () => {
   const warnings = [];

@@ -486,7 +486,7 @@ Consuming it **locks the deployment unit to Cloudflare** (it cannot then target
 | **`RateLimit`** *(experimental)* | `allow(key: String) -> Effect[Bool]`. Used only through a named instance that sets its limit and window; see below. |
 | **`EdgeCache`** *(experimental)* | `purge(prefixes: List[String]) -> Effect[Bool]`. Used only through a named instance, at most one per context, which turns Cloudflare's edge cache on for the context's Worker; see below. |
 | **`Version`** *(experimental)* | `current() -> Effect[WorkerVersion]`. One per Worker, used bare; see [The running version](#the-running-version-version). |
-| **`Ai`** *(experimental)* | `run(model: String, input: String) -> Effect[Result[String, AiError]]`. One per Worker, used bare; see [Workers AI](#workers-ai-ai). |
+| **`Ai`** *(experimental)* | `run(model: String, input: String) -> Effect[Result[String, AiError]]` · `generate(model, request: GenerateRequest) -> Effect[Result[Generation, AiError]]` · `embed(model, texts: List[String]) -> Effect[Result[List[List[Float]], AiError]]`. One per Worker, used bare; see [Workers AI](#workers-ai-ai). |
 | **`StoredSecret`** *(experimental)* | `get() -> Effect[String]`. Used only through a named instance that names its store and its secret; see [Account secrets](#account-secrets-storedsecret). |
 | **`Email`** *(experimental)* | `send(message: EmailMessage) -> Effect[Result[String, EmailError]]`. Used only through a named instance, which may restrict its senders and recipients; see [Outbound email](#outbound-email-email). |
 | **`Postgres`** *(experimental)* | `all(sql: String, params: List[PgValue]) -> Effect[Result[String, PgError]]` · `first(sql, params) -> Effect[Result[Option[String], PgError]]` · `run(sql, params) -> Effect[Result[PgRun, PgError]]` · `transaction(statements: List[PgStatement]) -> Effect[Result[List[PgRun], PgError]]`, and the compiler-lowered typed reads `select[T]` and `firstAs[T]`. Used only through a named instance; see [Postgres databases](#postgres-databases-postgres). |
@@ -879,10 +879,40 @@ model id is a string, checked only for being 1 to 128 characters of
 `A-Z a-z 0-9 @ / . _ : -`; an `input` that is not a JSON object is a fault. A
 model that answers with binary data (an image, say) is `AiFailed`.
 
+`generate` and `embed` are typed for the two tasks whose shape is the same across
+models:
+
+```bynk,fragment
+type ChatRole = enum { System, User, Assistant }
+type ChatMessage = { role: ChatRole, content: String }
+type GenerateRequest = {
+	messages: List[ChatMessage],
+	maxTokens: Option[Int] = None,
+	temperature: Option[Float] = None,
+	topP: Option[Float] = None,
+	seed: Option[Int] = None,
+}
+type TokenUsage = { promptTokens: Int, completionTokens: Int }
+type Generation = { text: String, usage: Option[TokenUsage] }
+```
+
+`generate(model, request)` is chat-style generation: `request.messages` must not be
+empty (a fault), a setting left `None` is the model's own default, and the
+`Generation` has the model's `text` and, when the platform reported it, its token
+`usage`. `embed(model, texts)` embeds a batch and returns one vector per text, in
+order, which pairs with a vector index's `List[Float]` unchanged; an empty `texts`
+is a fault. `embed` does not check how many texts one call may carry, since the
+limit is the model's and drifts: a call over it is `InvalidInput`. The
+embeddings use the platform's default pooling, so an index built from them stays
+consistent. Both return `BadReply(message)` when the platform answers but not in
+the shape they promise (a model that is not of that kind, say), and never fault on
+it; `run` returns the model's JSON as given and cannot be a `BadReply`.
+
 An `AiError` is `ModelNotFound` (an id the platform does not know, or has
 retired), `InvalidInput(message)` (a request refused as malformed or too large),
 `QuotaExceeded` (a usage limit of the account, or a model its plan does not
-include), `Overloaded` (temporary capacity, worth retrying) or
+include), `Overloaded` (temporary capacity, worth retrying), `BadReply(message)`
+(`generate` and `embed` only: the reply was not the shape promised) or
 `AiFailed(message)` (anything else, with the platform's message). Cloudflare
 adds error codes over time, so a `match` over `AiError` needs a wildcard.
 

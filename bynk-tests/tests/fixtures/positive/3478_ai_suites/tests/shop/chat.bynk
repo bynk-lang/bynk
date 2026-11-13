@@ -1,0 +1,33 @@
+suite shop.chat
+
+// #3478: every typed operation faults until stubbed, and a stub is what the
+// handler sees, including the `BadReply` a binding would return.
+
+case "unstubbed generate and embed fault" {
+	expect chat.GET("/chat") by Visitor faults
+	expect chat.GET("/embed") by Visitor faults
+}
+
+case "a stubbed generation is read with its usage" {
+	stub Ai.generate(_, _) returns Ok(Generation { text: "hi", usage: Some(TokenUsage { promptTokens: 3, completionTokens: 2 }) })
+	let r <- chat.GET("/chat") by Visitor
+	expect r is Ok(Answer { text: "hi", tokens: 5, .. })
+}
+
+case "a missing usage is None" {
+	stub Ai.generate(_, _) returns Ok(Generation { text: "hi", usage: None })
+	let r <- chat.GET("/chat") by Visitor
+	expect r is Ok(Answer { text: "hi", tokens: 0, .. })
+}
+
+case "a bad reply is a value the handler matches" {
+	stub Ai.generate(_, _) returns Err(BadReply("generate: the reply has no text `response`"))
+	let r <- chat.GET("/chat") by Visitor
+	expect r is ServerError("the model answered oddly")
+}
+
+case "stubbed embeddings are counted" {
+	stub Ai.embed(_, _) returns Ok([[0.5, 0.25], [1.0, 2.0]])
+	let r <- chat.GET("/embed") by Visitor
+	expect r is Ok(2)
+}
