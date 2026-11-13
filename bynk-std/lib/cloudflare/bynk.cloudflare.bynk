@@ -964,14 +964,15 @@ adapter bynk.cloudflare {
 	say) is `AiFailed`: `run` carries JSON replies only.
 
 	`generate(model, request)` is chat-style text generation with the same
-	request and reply for every chat model, and `embed(model, texts)` gives one
-	vector per text, in order, all of one length, for a text-embedding model such as
-	`"@cf/baai/bge-base-en-v1.5"`. Both return `BadReply` when the platform
-	answers but not in the promised shape (a model that is not of that kind,
-	say). An empty `messages` or `texts` is a fault. `embed` does not check
-	how many texts one call may carry: the limit is the model's, and a call over
-	it is `InvalidInput`. The embeddings use the platform's default pooling, so
-	an index built from them stays consistent.
+	request and reply for every chat model: the text is read from the model's
+	`response`, or from `choices[0].message.content` for a model that answers in
+	that shape. `embed(model, texts)` gives one vector per text, in order, all of
+	one length, for a text-embedding model such as `"@cf/baai/bge-base-en-v1.5"`.
+	Both return `BadReply` when the platform answers but not in the promised
+	shape (a model that is not of that kind, say). An empty `messages` or `texts`
+	is a fault. `embed` does not check how many texts one call may carry: the
+	limit is the model's, and a call over it is `InvalidInput`. The embeddings use
+	the platform's default pooling, so an index built from them stays consistent.
 
 	`runStream(model, input)` is `run` with the reply streamed: the model's own
 	events, one element each, as the JSON text of that event (the shape is the

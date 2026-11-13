@@ -900,7 +900,8 @@ type Generation = { text: String, usage: Option[TokenUsage] }
 `generate(model, request)` is chat-style generation: `request.messages` must not be
 empty (a fault), a setting left `None` is the model's own default, and the
 `Generation` has the model's `text` and, when the platform reported it, its token
-`usage`. `embed(model, texts)` embeds a batch and returns one vector per text, in
+`usage`. The text comes from the model's `response`, or from
+`choices[0].message.content` for a model that answers in that shape instead. `embed(model, texts)` embeds a batch and returns one vector per text, in
 order and all the same length, which pairs with a vector index's `List[Float]` unchanged; an empty `texts`
 is a fault. `embed` does not check how many texts one call may carry, since the
 limit is the model's and drifts: a call over it is `InvalidInput`. The

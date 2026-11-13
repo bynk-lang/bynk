@@ -1292,6 +1292,25 @@ t("WorkersAi.run: a documented platform code is a typed error, any other a failu
   assert.deepEqual(await failure(new Error("id 350071 failed")), { tag: "AiFailed", message: "id 350071 failed" });
 });
 
+// Observed on a real account (#3478, W39): the binding throws an `Error` named
+// `AiError` (constructor `InferenceUpstreamError`) with no `code` property and a
+// message that opens with the platform's code.
+t("WorkersAi.run: the error a live binding throws is read from its message, 5006 included", async () => {
+  class InferenceUpstreamError extends Error {
+    constructor(message) {
+      super(message);
+      this.name = "AiError";
+    }
+  }
+  const live = (message) => new InferenceUpstreamError(message);
+  const failure = async (e) => (await new WorkersAi({ AI: fakeAi(e) }).run("@cf/x/y", "{}")).error;
+  assert.equal("code" in live("5007: x"), false);
+  assert.deepEqual(await failure(live("5007: No such model @cf/nobody/no-such-model or task")), { tag: "ModelNotFound" });
+  assert.deepEqual(await failure(live("5028: @cf/x/y was deprecated on 2026-05-30. See the model catalog for alternatives: https://developers.cloudflare.com/workers-ai/models/")), { tag: "ModelNotFound" });
+  const rejected = "5006: Error: oneOf at '/' not met, 0 matches: required properties at '/' are 'prompt', required properties at '/' are 'messages'";
+  assert.deepEqual(await failure(live(rejected)), { tag: "InvalidInput", message: rejected });
+});
+
 t("WorkersAi.run: a live stream (input with stream: true) is cancelled and is a failure", async () => {
   let cancelled = false;
   const stream = new ReadableStream({ cancel() { cancelled = true; } });
@@ -1353,6 +1372,27 @@ t("WorkersAi.generate: a missing or odd usage is None, and a reply that is not t
   const r = await gen(new ReadableStream({ cancel() { cancelled = true; } }));
   assert.equal(r.error.tag, "BadReply");
   assert.equal(cancelled, true);
+});
+
+// Shapes observed on a real account (#3478, W39) for a `messages` request.
+t("WorkersAi.generate: reads `choices[0].message.content` when there is no `response`, and prefers `response` when both are there", async () => {
+  const gen = async (reply) => new WorkersAi({ AI: fakeAi(reply) }).generate("@cf/x/y", request());
+  const usage = { prompt_tokens: 36, completion_tokens: 3, total_tokens: 39, prompt_tokens_details: { cached_tokens: 0 }, neurons: 0.09 };
+  // granite 4.0 micro: OpenAI-style only.
+  const granite = { id: "chatcmpl-1", object: "chat.completion", model: "@cf/ibm-granite/granite-4.0-h-micro", choices: [{ index: 0, message: { role: "assistant", content: "Hello!", refusal: null }, finish_reason: "stop" }], usage };
+  assert.deepEqual((await gen(granite)).value, { text: "Hello!", usage: Some({ promptTokens: 36, completionTokens: 3 }) });
+  // llama 3.1 8b fast: both; `response` is read.
+  const both = { ...granite, choices: [{ index: 0, message: { role: "assistant", content: "from choices" } }], response: "from response" };
+  assert.equal((await gen(both)).value.text, "from response");
+  // llama 3.2 1b: `response` only.
+  assert.equal((await gen({ response: "Hi", usage })).value.text, "Hi");
+  assert.deepEqual((await gen({ choices: [{ message: { content: "" } }] })).value, { text: "", usage: None });
+  // A `response` that is there but not text does not block the fallback.
+  assert.equal((await gen({ response: null, choices: [{ message: { content: "x" } }] })).value.text, "x");
+  // Neither shape is a BadReply: no content, or content that is not text.
+  for (const bad of [{ choices: [] }, { choices: [{}] }, { choices: [{ message: {} }] }, { choices: [{ message: { content: null } }] }, { choices: [{ message: { content: 5 } }] }, { choices: "x" }, { choices: [{ text: "completion shape" }] }]) {
+    assert.equal((await gen(bad)).error?.tag, "BadReply", JSON.stringify(bad));
+  }
 });
 
 t("WorkersAi.generate: a platform refusal is a typed error, and empty messages or a bad model fault", async () => {

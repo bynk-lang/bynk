@@ -1018,7 +1018,11 @@ export class WorkersAi implements Ai {
   }
 
   // The platform's internal code (Workers AI errors page), from the error's
-  // `code` when it has one and otherwise from the code that opens its message (`5007: No such model …`, `AiGatewayError: 3040: …`). Anything
+  // `code` when it has one and otherwise from the code that opens its message.
+  // On a live account the binding throws an `Error` named `AiError` with no
+  // `code` property, so the message is the one that matters (#3478 W39). It
+  // also answers an input the model's schema rejects with `5006`, which the
+  // errors page does not list, alongside its documented `5004` (`5007: No such model …`, `AiGatewayError: 3040: …`). Anything
   // unrecognised is `AiFailed`, so a code Cloudflare adds never becomes a fault.
   private static code(e: unknown): number | undefined {
     const code = (e as { code?: unknown } | null)?.code;
@@ -1045,6 +1049,7 @@ export class WorkersAi implements Ai {
       case 3040:
         return { tag: "Overloaded" };
       case 5004:
+      case 5006:
       case 3003:
       case 3006:
         return { tag: "InvalidInput", message };
@@ -1110,6 +1115,12 @@ export class WorkersAi implements Ai {
     return reply as Record<string, unknown>;
   }
 
+  private static choiceText(choices: unknown): string | undefined {
+    if (!Array.isArray(choices)) return undefined;
+    const content = (choices[0] as { message?: { content?: unknown } } | null | undefined)?.message?.content;
+    return typeof content === "string" ? content : undefined;
+  }
+
   private static usage(raw: unknown): Option<{ promptTokens: number; completionTokens: number }> {
     const u = raw as { prompt_tokens?: unknown; completion_tokens?: unknown } | null | undefined;
     const whole = (n: unknown): n is number => typeof n === "number" && Number.isInteger(n) && n >= 0;
@@ -1141,8 +1152,14 @@ export class WorkersAi implements Ai {
     if (reply.tag === "Err") return reply;
     const out = await WorkersAi.asObject(reply.value);
     if (typeof out === "string") return WorkersAi.badReply(`generate: ${out}`);
-    if (typeof out.response !== "string") return WorkersAi.badReply("generate: the reply has no text `response`");
-    return Ok({ text: out.response, usage: WorkersAi.usage(out.usage) });
+    // Two reply shapes for a `messages` request, both seen on a live account
+    // (#3478, W39): a top-level `response` string (llama 3.2 1b), and an
+    // OpenAI-style `choices[0].message.content` with no `response` (granite 4.0
+    // micro). Some models send both (llama 3.1 8b fast), then `response` wins.
+    // `usage` has the same field names in all of them.
+    const text = typeof out.response === "string" ? out.response : WorkersAi.choiceText(out.choices);
+    if (text === undefined) return WorkersAi.badReply("generate: the reply has neither a text `response` nor `choices[0].message.content`");
+    return Ok({ text, usage: WorkersAi.usage(out.usage) });
   }
 
   async embed(model: string, texts: readonly string[]): Promise<Result<readonly (readonly number[])[], AiError>> {
