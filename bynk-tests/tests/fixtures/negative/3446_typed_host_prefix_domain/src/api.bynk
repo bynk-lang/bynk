@@ -1,0 +1,13 @@
+context api
+
+consumes bynk { Cookie }
+
+type Prefs = {
+  @name("__Host-theme") theme: Option[String],
+}
+
+service api from http {
+  on GET("/a") (cookies: Prefs) -> Effect[HttpResult[String]] by v: Visitor {
+    Ok("x").withCookie(Cookie { ...Prefs.theme.cookie("dark"), domain: Some("example.com") })
+  }
+}

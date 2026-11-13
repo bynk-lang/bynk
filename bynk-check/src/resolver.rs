@@ -307,6 +307,9 @@ pub struct CrossContextInfo {
     /// #3446: the records some handler of the unit decodes as its `cookies` parameter (any file
     /// of the unit): the ones `Record.field.cookie(v)` may write.
     pub cookie_records: HashSet<String>,
+    /// #3446: the cookie names the unit's `SignedCookie` actors consume (their `cookie` key, else
+    /// the default): the cookies only `Actor.issue`/`expire` may write.
+    pub signed_cookie_names: HashSet<String>,
 }
 
 /// Snapshot of one exported capability in a consumed context, as needed for
@@ -1187,6 +1190,12 @@ pub fn resolve_file_record(
         .collect();
     for item in &resolved.commons.items {
         check_reserved_host_name(item, &mut sinks);
+        if let CommonsItem::Capability(c) = item {
+            let first_party = crate::firstparty::is_first_party_unit(&resolved.commons.name);
+            for op in &c.ops {
+                check_op_annotations(op, first_party, &mut sinks);
+            }
+        }
         match item {
             CommonsItem::Type(t) => {
                 sinks.refs.set_owner(&t.name.name);
@@ -1240,6 +1249,58 @@ pub fn resolve_file_record(
         Ok(())
     } else {
         Err(errors)
+    }
+}
+
+/// #3458: the only annotation a capability operation takes is the standard
+/// library's `@onUndecodable(miss|fault)`, so it is refused anywhere else, and
+/// in a first-party unit it must name a policy.
+fn check_op_annotations(op: &bynk_syntax::ast::CapabilityOp, first_party: bool, sinks: &mut Sinks) {
+    use crate::checker::codable::{REPLY_POLICY_ANNOTATION, reply_policy_word};
+    // A second policy would make the written order decide the behaviour.
+    if first_party
+        && op
+            .annotations
+            .iter()
+            .filter(|a| a.name.name == REPLY_POLICY_ANNOTATION)
+            .count()
+            > 1
+    {
+        sinks.push(CompileError::new(
+            "bynk.generics.internal_op_annotation",
+            op.annotations[1].span,
+            format!(
+                "capability operation `{}` declares `@{REPLY_POLICY_ANNOTATION}` more than once",
+                op.name.name
+            ),
+        ));
+    }
+    for ann in &op.annotations {
+        if !first_party {
+            sinks.push(
+                CompileError::new(
+                    "bynk.generics.internal_op_annotation",
+                    ann.span,
+                    format!(
+                        "`@{}` on capability operation `{}` is internal to the standard library",
+                        ann.name.name, op.name.name
+                    ),
+                )
+                .with_note("remove the annotation; capability operations take none in user code"),
+            );
+        } else if ann.name.name != REPLY_POLICY_ANNOTATION || reply_policy_word(ann).is_none() {
+            sinks.push(
+                CompileError::new(
+                    "bynk.generics.internal_op_annotation",
+                    ann.span,
+                    format!(
+                        "capability operation `{}` takes only `@{REPLY_POLICY_ANNOTATION}(miss)` or `@{REPLY_POLICY_ANNOTATION}(fault)`",
+                        op.name.name
+                    ),
+                )
+                .with_note("the one operation annotation is the failure policy of a typed read"),
+            );
+        }
     }
 }
 
@@ -4079,5 +4140,77 @@ mod guard_resolution_tests {
             "commons d\n\nfn g(o: Option[Int]) -> Int {\n  match o {\n    Some(v) if v > 0 => v\n    _ => 0\n  }\n}\n",
         )])
         .assert_clean();
+    }
+}
+
+#[cfg(test)]
+mod op_annotation_tests {
+    use crate::testkit::analyse;
+
+    fn unit(name: &str, annotation: &str) -> String {
+        format!(
+            "context {name}\n\ncapability Store {{\n  fn load[T: Codable](id: String) -> Effect[Option[T]] {annotation}\n}}\n"
+        )
+    }
+
+    /// #3458: a first-party unit (under the reserved `bynk` root) may declare
+    /// the reply policy, but only as `miss` or `fault`.
+    #[test]
+    fn a_first_party_operation_takes_only_a_reply_policy() {
+        analyse(&[("a.bynk", &unit("bynk.t", "@onUndecodable(skip)"))])
+            .assert_reports("bynk.generics.internal_op_annotation");
+        analyse(&[("a.bynk", &unit("bynk.t", "@other(miss)"))])
+            .assert_reports("bynk.generics.internal_op_annotation");
+        analyse(&[("a.bynk", &unit("bynk.t", "@onUndecodable(by: miss)"))])
+            .assert_reports("bynk.generics.internal_op_annotation");
+    }
+
+    /// Two policies are refused, and each valid spelling resolves cleanly.
+    #[test]
+    fn a_policy_is_declared_once_and_valid_spellings_are_clean() {
+        analyse(&[(
+            "a.bynk",
+            &unit("bynk.t", "@onUndecodable(miss) @onUndecodable(fault)"),
+        )])
+        .assert_reports("bynk.generics.internal_op_annotation");
+        for ok in ["@onUndecodable(miss)", "@onUndecodable(fault)", ""] {
+            let a = analyse(&[("a.bynk", &unit("bynk.t", ok))]);
+            assert!(
+                !a.categories()
+                    .contains(&"bynk.generics.internal_op_annotation"),
+                "{ok}: {}",
+                a.render()
+            );
+        }
+    }
+
+    /// The policy an operation declares: a fault by default, a miss or a fault when written.
+    #[test]
+    fn the_declared_policy_is_read_back() {
+        use crate::checker::codable::{ReplyPolicy, op_reply_policy};
+        let policy = |ann: &str| {
+            let src = unit("bynk.t", ann);
+            let toks = bynk_syntax::lexer::tokenize(&src).unwrap();
+            let bynk_syntax::ast::SourceUnit::Context(c) =
+                bynk_syntax::parser::parse_unit(&toks, &src).unwrap()
+            else {
+                panic!("a context")
+            };
+            let Some(bynk_syntax::ast::CommonsItem::Capability(cap)) = c.items.first() else {
+                panic!("a capability")
+            };
+            op_reply_policy(&cap.ops[0])
+        };
+        assert_eq!(policy(""), ReplyPolicy::Fault);
+        assert_eq!(policy("@onUndecodable(fault)"), ReplyPolicy::Fault);
+        assert_eq!(policy("@onUndecodable(miss)"), ReplyPolicy::Miss);
+        assert_eq!(policy("@onUndecodable(skip)"), ReplyPolicy::Fault);
+    }
+
+    /// A user unit may not declare one at all.
+    #[test]
+    fn a_user_operation_takes_no_annotation() {
+        analyse(&[("a.bynk", &unit("shop", "@onUndecodable(miss)"))])
+            .assert_reports("bynk.generics.internal_op_annotation");
     }
 }

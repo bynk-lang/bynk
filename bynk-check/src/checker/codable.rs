@@ -336,6 +336,51 @@ pub fn codable_op_params(op: &bynk_syntax::ast::CapabilityOp) -> Vec<String> {
         .collect()
 }
 
+/// The internal annotation a first-party operation uses to declare what a reply
+/// that does not decode means (#3458): `@onUndecodable(miss)` or
+/// `@onUndecodable(fault)`. Not user-visible surface: the resolver refuses it
+/// outside the standard library.
+pub const REPLY_POLICY_ANNOTATION: &str = "onUndecodable";
+
+/// What a capability operation's reply that does not decode as its payload type
+/// means, declared per operation (#3458). The default is a fault.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum ReplyPolicy {
+    /// The call faults, naming the capability, operation, type and path.
+    Fault,
+    /// The call returns `None`, and a warning goes to the runtime console.
+    Miss,
+}
+
+/// The policy word an `@onUndecodable(...)` annotation carries, when it is a
+/// single bare `miss` or `fault`.
+pub fn reply_policy_word(ann: &bynk_syntax::ast::Annotation) -> Option<ReplyPolicy> {
+    let [arg] = ann.args.as_slice() else {
+        return None;
+    };
+    if arg.label.is_some() {
+        return None;
+    }
+    match &arg.value.kind {
+        bynk_syntax::ast::ExprKind::Ident(id) => match id.name.as_str() {
+            "miss" => Some(ReplyPolicy::Miss),
+            "fault" => Some(ReplyPolicy::Fault),
+            _ => None,
+        },
+        _ => None,
+    }
+}
+
+/// The failure policy an operation declares for an undecodable reply: its
+/// `@onUndecodable(..)` annotation, or a fault when it has none.
+pub fn op_reply_policy(op: &bynk_syntax::ast::CapabilityOp) -> ReplyPolicy {
+    op.annotations
+        .iter()
+        .find(|a| a.name.name == REPLY_POLICY_ANNOTATION)
+        .and_then(reply_policy_word)
+        .unwrap_or(ReplyPolicy::Fault)
+}
+
 /// How a call to a capability operation with `Codable` parameters is lowered:
 /// the provider receives plain JSON, never a witness (DECISION D).
 #[derive(Debug, Clone, PartialEq, Eq)]

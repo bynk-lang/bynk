@@ -531,6 +531,20 @@ pub const EXPLANATIONS: &[Explain] = &[
         anchor: "signed-cookies",
     },
     Explain {
+        code: "bynk.actor.signed_cookie_write_directly",
+        blurb: "A `SignedCookie` actor's session cookie is minted by `Actor.issue(identity)`, which signs it with the actor's key, and removed by `Actor.expire()`, and the CSRF check keys off that actor. A cookie record's `R.field.cookie(v)` or `R.field.expire()` whose field is read under the session cookie's name would write or clear the credential without any of that, so it is refused. Keep the session cookie out of the record and use the actor's own members.",
+        example: "type Prefs = {\n  @name(\"__Host-session\") session: Option[String],\n  theme: Option[String],\n}\n\nOk(\"x\").withCookie(Prefs.session.cookie(\"forged\"))   // ✗ the session cookie\n\nOk(\"x\").withCookie(Prefs.theme.cookie(\"dark\"))        // ✓ another cookie",
+        page: "/book/reference/actors",
+        anchor: "signed-cookies",
+    },
+    Explain {
+        code: "bynk.actor.signed_cookie_write_literal",
+        blurb: "A `Cookie { name: \"__Host-session\", … }` literal named like a `SignedCookie` actor's session cookie would write or clear the credential by hand, without the actor's signing key, expiry or CSRF seam, so it is refused. Write it with `Actor.issue(identity)` and remove it with `Actor.expire()`.",
+        example: "Ok(\"x\").withCookie(Cookie { name: \"__Host-session\", value: \"forged\" })   // ✗ the actor's cookie\n\nOk(\"x\").withCookie(Cookie { name: \"theme\", value: \"dark\" })            // ✓ another cookie",
+        page: "/book/reference/actors",
+        anchor: "signed-cookies",
+    },
+    Explain {
         code: "bynk.actor.sum_requires_binder",
         blurb: "`by A | B` tries the actors in order and the first that verifies the caller wins. \
                 Which one that was is only known when a request arrives, so the handler learns it \
@@ -673,6 +687,25 @@ pub const EXPLANATIONS: &[Explain] = &[
         anchor: "anatomy",
     },
     Explain {
+        code: "bynk.agent.class_conflict",
+        blurb: "An agent class that bynk.schema.lock records can't just disappear from source: it \
+                must be given one fate, either `agent New replaces Old` (its data moves) or \
+                `removed agent Old` (its data is deleted). Giving a name two fates is a conflict: \
+                renamed twice, renamed and removed, or removed twice. A rename onto a class that \
+                already has recorded history of its own is also refused, since it would merge two \
+                histories and Cloudflare refuses a rename onto an existing namespace. Decide what \
+                becomes of the old class, and declare that once.",
+        example: "agent Basket replaces Cart {\n\
+                  \x20\x20key id: String\n\
+                  }\n\
+                  \n\
+                  agent Trolley replaces Cart {   // ✗ `Cart` is already renamed to `Basket`\n\
+                  \n\
+                  agent Trolley {                 // ✓ a class of its own",
+        page: "/book/reference/agents",
+        anchor: "renaming-and-removing-an-agent",
+    },
+    Explain {
         code: "bynk.agent.construction_arity",
         blurb: "An agent is addressed by its key, so constructing one takes exactly one \
                 argument: the value of its single `key` field. `Counter(\"a\")` names the \
@@ -776,6 +809,96 @@ pub const EXPLANATIONS: &[Explain] = &[
         anchor: "migrations",
     },
     Explain {
+        code: "bynk.agent.migrate_incomplete",
+        blurb: "A `migrate from N` step must account for every change between version `N` and the \
+                agent's current shape. A field that is gone has to be read through `old` or \
+                discarded on purpose with `drop`, and a field that changed type has to be \
+                assigned. Otherwise stored data would be carried over silently incomplete. A \
+                `Set`, `Log` or `Cache` field that changed can only be dropped, which starts it \
+                afresh. The message lists what the step leaves out. Read each removed field, \
+                `drop` the ones you mean to lose, and assign the retyped ones.",
+        example: "migrate from 1 (old: CartV1) {      // ✗ the removed `total` is neither read nor dropped\n\
+                  \x20\x20ownerName := old.owner\n\
+                  }\n\
+                  \n\
+                  migrate from 1 (old: CartV1) {\n\
+                  \x20\x20ownerName := old.owner\n\
+                  \x20\x20drop total                         // ✓ discarded on purpose\n\
+                  }",
+        page: "/book/reference/agents",
+        anchor: "migrations",
+    },
+    Explain {
+        code: "bynk.agent.migrate_shape_mismatch",
+        blurb: "A `migrate from N (old: T)` step reads a stored record through `T`, so `T` must \
+                describe the shape version `N` recorded in bynk.schema.lock, which is not \
+                necessarily the shape the code has now. The compiler checks each field of `T` \
+                against that record: its storage kind and its type must match what was stored, and \
+                a field the class never had is refused too. A `drop` of a field that exists \
+                neither then nor now is refused as well. Declare the old type exactly as version \
+                `N` stored it, and give a nested type that has changed since its own copy. Keep \
+                such types for the step alone.",
+        example: "type CartV1 = { owner: Int }      // ✗ version 1 recorded `owner` as a `String`\n\
+                  \n\
+                  type CartV1 = { owner: String }   // ✓ as version 1 stored it",
+        page: "/book/reference/agents",
+        anchor: "migrations",
+    },
+    Explain {
+        code: "bynk.agent.migrate_unknown_version",
+        blurb: "A migrate step reads an older recorded version of the agent's state and carries it \
+                to the current shape. bynk.schema.lock records the versions an agent class has \
+                had, so `from N` must name one of them below the current version, which needs no \
+                step. A step from the current version, or from one the lock never recorded, has \
+                nothing to read. The message gives the range the lock holds. A class with no \
+                history yet, and an unchanged shape, need no step at all. Change the shape first, \
+                build to record the new version, then write the step `from` the version it \
+                replaces.",
+        example: "agent Cart {\n\
+                  \x20\x20key id: String\n\
+                  \n\
+                  \x20\x20store owner: Cell[String]\n\
+                  \n\
+                  \x20\x20migrate from 1 (old: CartV1) {     // ✗ the lock records only version 1, the current one\n\
+                  \x20\x20\x20\x20owner := old.owner\n\
+                  \x20\x20}\n\
+                  }\n\
+                  \n\
+                  agent Cart {\n\
+                  \x20\x20key id: String\n\
+                  \n\
+                  \x20\x20store owner: Cell[String]          // ✓ unchanged since version 1, so no step is needed\n\
+                  }",
+        page: "/book/reference/agents",
+        anchor: "migrations",
+    },
+    Explain {
+        code: "bynk.agent.non_additive_state_change",
+        blurb: "bynk.schema.lock records the stored shape of every agent class, version by \
+                version, and a build compares the new shape against it. A deployed instance holds \
+                data in the recorded shape, so a change that data can still be read through, such \
+                as a new field, is additive and just bumps the version. A change it cannot be read \
+                through, such as a field removed, retyped or renamed, would orphan or misread what \
+                is stored, so the build refuses it. A rename looks like a removal plus an \
+                addition, and the message names the pairing it infers. Keep the old field and add \
+                the new one, or carry the data across with a `migrate from N` step, which records \
+                the change as a non-additive version.",
+        example: "agent Cart {                        // ✗ `owner` is gone: its stored value would be orphaned\n\
+                  \x20\x20key id: String\n\
+                  \n\
+                  \x20\x20store ownerName: Cell[String]\n\
+                  }\n\
+                  \n\
+                  agent Cart {\n\
+                  \x20\x20key id: String\n\
+                  \n\
+                  \x20\x20store owner: Cell[String]\n\
+                  \x20\x20store note: Cell[String]        // ✓ a new field is additive\n\
+                  }",
+        page: "/book/reference/agents",
+        anchor: "migrations",
+    },
+    Explain {
         code: "bynk.agent.outside_context",
         blurb: "An agent holds state, and a context is the unit that owns it. A `commons` is \
                 code shared between contexts, which each `uses` it, so it is not given an agent, \
@@ -803,6 +926,20 @@ pub const EXPLANATIONS: &[Explain] = &[
         code: "bynk.agent.replaces_live",
         blurb: "`agent New replaces Old` renames a class: `Old`'s stored data moves to `New`. While `Old` is still declared, both would claim that data, so it is refused. To rename, delete the `Old` declaration. If the two are separate classes, drop `replaces`. Each old name has one fate, as `bynk.agent.class_conflict` says.",
         example: "agent Cart { … }\nagent Basket replaces Cart { … }    // ✗ `Cart` is still declared\nagent Basket { … }                  // ✓ a separate class; delete `Cart` to rename it",
+        page: "/book/reference/agents",
+        anchor: "renaming-and-removing-an-agent",
+    },
+    Explain {
+        code: "bynk.agent.replaces_unknown",
+        blurb: "`agent New replaces Old` renames a class: `Old`'s stored data and its recorded \
+                history move to `New`. That only works for a class bynk.schema.lock records for \
+                this context, so a misspelt old name, or a class that was never built with this \
+                context, is refused rather than quietly starting `New` from nothing. Check the old \
+                name against the `[agents.\"…\"]` entries in the lock. The old class must also be \
+                gone from source, as `bynk.agent.replaces_live` requires.",
+        example: "agent Basket replaces Trolley {   // ✗ the lock records no class `shop.Trolley`\n\
+                  \n\
+                  agent Basket replaces Cart {      // ✓ a recorded class, and no longer declared",
         page: "/book/reference/agents",
         anchor: "renaming-and-removing-an-agent",
     },
@@ -1072,6 +1209,32 @@ pub const EXPLANATIONS: &[Explain] = &[
         anchor: "derived-capabilities",
     },
     Explain {
+        code: "bynk.capability.not_provided",
+        blurb: "On the Workers target, each context is its own Worker, and a Worker builds every \
+                capability its handlers are given. A handler's `given Mailer` therefore needs a \
+                `provides Mailer = …` in the same context, which says what the capability does \
+                there. Without one the Worker has nothing to hand the handler, so the compiler \
+                refuses it here and does not leave it to fail in the generated TypeScript. The \
+                bundle target (the default) does not ask, because the host program can supply the \
+                capability when it builds the surface. A capability declared in another context is \
+                that context's to provide, and an exported capability with no provider has its own \
+                `bynk.exports.capability_not_provided`. Add a provider to the context, or build \
+                for `--target bundle`.",
+        example: "service notify {\n\
+                  \x20\x20on call(to: String) -> Effect[()] given Mailer {   // ✗ no `provides Mailer` in this context\n\
+                  \x20\x20\x20\x20Mailer.send(to)\n\
+                  \x20\x20}\n\
+                  }\n\
+                  \n\
+                  provides Mailer = Smtp {                              // ✓ a provider, so the Worker can build it\n\
+                  \x20\x20fn send(to: String) -> Effect[()] {\n\
+                  \x20\x20\x20\x20Effect.pure(())\n\
+                  \x20\x20}\n\
+                  }",
+        page: "/book/reference/capabilities",
+        anchor: "providing-a-capability",
+    },
+    Explain {
         code: "bynk.capability.op_arity",
         blurb: "A call to a capability operation passes exactly the parameters its declaration \
                 lists, so `Clock.now(1)` against `fn now() -> Effect[Int]` has one argument too \
@@ -1106,6 +1269,41 @@ pub const EXPLANATIONS: &[Explain] = &[
                 }",
         page: "/book/reference/capabilities",
         anchor: "declaring-a-capability",
+    },
+    Explain {
+        code: "bynk.capability.provider_agent_cross_context",
+        blurb: "On the Workers target, each context is its own Worker with its own `env`, and a \
+                Worker builds the capabilities its handlers are given. If a context requires a \
+                capability that another context provides, it builds that provider in its own \
+                Worker. When that provider constructs agents of the context it lives in, it needs \
+                the Durable Object bindings of that context, which the consumer's `env` does not \
+                have, so the build would fail, or `bynk dev` would quietly keep the agent's state \
+                in the isolate. The compiler refuses the requirement instead. Reach the agents \
+                through a service of the providing context, which runs in its own Worker beside \
+                its own bindings, or build for `--target bundle`, where every context shares one \
+                process.",
+        example: "// registry.bynk\n\
+                  provides Yanks = AgentYanks {\n\
+                  \x20\x20fn set(value: Bool) -> Effect[Bool] {\n\
+                  \x20\x20\x20\x20PackageIndex(\"x\").setYanked(value)   // the provider constructs `registry`'s own agent\n\
+                  \x20\x20}\n\
+                  }\n\
+                  \n\
+                  // api.bynk\n\
+                  service yank {\n\
+                  \x20\x20on call() -> Effect[Bool] given registry.Yanks {   // ✗ `api`'s Worker would build that provider\n\
+                  \x20\x20\x20\x20registry.Yanks.set(true)\n\
+                  \x20\x20}\n\
+                  }\n\
+                  \n\
+                  // api.bynk\n\
+                  service yank {\n\
+                  \x20\x20on call() -> Effect[Bool] {\n\
+                  \x20\x20\x20\x20registry.yank(true)                              // ✓ a service of `registry`, run in its own Worker\n\
+                  \x20\x20}\n\
+                  }",
+        page: "/book/reference/capabilities",
+        anchor: "cross-context-capabilities-exports-capability",
     },
     Explain {
         code: "bynk.capability.unknown_base",
@@ -1341,6 +1539,24 @@ pub const EXPLANATIONS: &[Explain] = &[
                   }",
         page: "/book/guides/projects-build-and-deployment/deploy-to-cloudflare",
         anchor: "",
+    },
+    Explain {
+        code: "bynk.context.duplicate_binding",
+        blurb: "A Worker's bindings share one `env`, so each name can be declared once. Bynk names \
+                the bindings after what the context declares: an agent, a consumed context, a \
+                derived capability, and the `Kv` namespace of `bynk.cloudflare`, whose binding is \
+                `KV`. Here the consumed context `kv` also becomes a Service Binding named `KV`, \
+                and the two would overwrite each other. Rename the declaration behind one of them. \
+                The error is on the one you can rename, not on the `bynk.cloudflare` clause. A \
+                bundle build has no bindings, so only the Workers target checks this.",
+        example: "// ops/hub.bynk\n\
+                  consumes bynk.cloudflare { Kv }   // the KV namespace is bound as `KV`\n\
+                  consumes kv                       // ✗ a Service Binding, also named `KV`\n\
+                  \n\
+                  // ops/hub.bynk\n\
+                  consumes counter                  // ✓ a binding named `COUNTER`",
+        page: "/book/guides/projects-build-and-deployment/cloudflare-workers",
+        anchor: "workers",
     },
     Explain {
         code: "bynk.context.external_construction",
@@ -2121,6 +2337,13 @@ pub const EXPLANATIONS: &[Explain] = &[
         anchor: "generic-sums",
     },
     Explain {
+        code: "bynk.generics.internal_op_annotation",
+        blurb: "A capability operation's reply policy, `@onUndecodable(miss)` or `@onUndecodable(fault)`, says what a reply that does not decode as the operation's payload type means. It belongs to the standard library's own operations, where the provider is reviewed with the runtime, so a capability you declare takes no annotation. Remove it.",
+        example: "capability Store {\n    fn load(id: String) -> Effect[Option[String]] @onUndecodable(miss)   // ✗ internal\n}\n\ncapability Store {\n    fn load(id: String) -> Effect[Option[String]]                    // ✓\n}",
+        page: "/book/reference/generics",
+        anchor: "capability-operations-take-key-and-codable",
+    },
+    Explain {
         code: "bynk.generics.method_on_generic_type",
         blurb: "A static method on a generic type (one with no `self`) is generic over the type's parameters, and \
                 a call has to be able to fix each of them: from its arguments, from the type the call is \
@@ -2590,6 +2813,20 @@ pub const EXPLANATIONS: &[Explain] = &[
         example: "Created(\"ok\").withCookie(Cookie { name: \"__Secure-sid\", value: \"a\", secure: false })   // ✗\n\nCreated(\"ok\").withCookie(Cookie { name: \"__Secure-sid\", value: \"a\" })                  // ✓",
         page: "/book/reference/http",
         anchor: "setting-cookies",
+    },
+    Explain {
+        code: "bynk.http.cookie_untyped_has_field",
+        blurb: "`Cookie { name: \"theme\", value: \"Dark\" }` is a cookie in no record, but here the record `Prefs` reads that cookie by that name, so the name and the value are written twice with nothing relating them: a renamed field or a changed type leaves the write valid and wrong. It is a warning. Write it from the record, `Prefs.theme.cookie(Dark)`, which is named by the field's wire name and valued as its decoder reads it; keep the attributes by spreading it into a `Cookie` literal. Where the literal is only a name and a value that provably decodes, the quick-fix does the rewrite.",
+        example: "Ok(\"x\").withCookie(Cookie { name: \"theme\", value: \"Dark\" })   // ⚠ `Prefs` reads this cookie\n\nOk(\"x\").withCookie(Prefs.theme.cookie(Dark))                       // ✓",
+        page: "/book/reference/http",
+        anchor: "typed-cookie-write",
+    },
+    Explain {
+        code: "bynk.http.cookie_value_undecodable",
+        blurb: "An untyped `Cookie` literal is named for a field of a `cookies` record, so the next request is read by that field's decoder, and its literal value is one the decoder rejects (an enum is read by its exact, case-sensitive variant name, an `Int` by its digits, a `Bool` by `true` or `false`). The write compiles and is sent, and then every later request is answered `400`. It is an error. Write the cookie from the record, `Prefs.theme.cookie(Dark)`, which checks the value against the field.",
+        example: "Ok(\"x\").withCookie(Cookie { name: \"mode\", value: \"dark\" })   // ✗ `Mode` is read as `Light` or `Dark`\n\nOk(\"x\").withCookie(Cookie { name: \"mode\", value: \"Dark\" })   // ✓",
+        page: "/book/reference/http",
+        anchor: "typed-cookie-write",
     },
     Explain {
         code: "bynk.http.cookies_field_not_stringy",
@@ -5392,6 +5629,25 @@ pub const EXPLANATIONS: &[Explain] = &[
         anchor: "suite-types-consts",
     },
     Explain {
+        code: "bynk.suite.env_binding_clash",
+        blurb: "A `system` suite runs the participants as Workers, and an `env` entry is put on \
+                each Worker's `env`, beside the bindings that Worker already has: a Service \
+                Binding, a KV namespace, a Durable Object namespace, and the keys the test harness \
+                sets itself, such as a call edge's key or a foreign caller's secret. An entry with \
+                one of those names would replace the binding, so the compiler refuses it. Rename \
+                the variable. In this example `shop.ledger` consumes `Kv`, so its Worker already \
+                has a binding named `KV`.",
+        example: "consumes bynk.cloudflare { Kv }                  // `shop.ledger` has a binding named `KV`\n\
+                  \n\
+                  suite shop.ledger as system {\n\
+                  \x20\x20case \"an env entry may not replace a binding\" {\n\
+                  \x20\x20\x20\x20env { KV = \"not a namespace\" }              // ✗ `KV` is a binding of the Worker\n\
+                  \n\
+                  \x20\x20\x20\x20env { REGION = \"eu\" }                       // ✓ a name nothing else holds",
+        page: "/book/reference/testing",
+        anchor: "env",
+    },
+    Explain {
         code: "bynk.suite.env_not_literal",
         blurb: "A Worker's variables and secrets are strings, so an `env` entry's value must be a `String` literal, `NAME = \"value\"`, or the name of a `fixture` the same suite declares. A number, a call or any other expression is refused, since the value is fixed when the suite is compiled. Write it as a string, and parse a number in the code that reads it.",
         example: "env {\n    RETRIES = 3       // ✗ not a `String`\n}\n\nenv {\n    RETRIES = \"3\"     // ✓\n}",
@@ -7548,6 +7804,61 @@ pub const EXPLANATIONS: &[Explain] = &[
         anchor: "service-form",
     },
     Explain {
+        code: "bynk.ws.open_transfer_cross_file",
+        blurb: "On the Workers target, a `from websocket` service's `on open` is hosted inside the \
+                Durable Object of the agent it hands the connection to, and that method is emitted \
+                from the file the service and the agent share. When a context is split over \
+                several files, each is emitted on its own, so a service in one file that transfers \
+                to an agent in another would be routed to the agent's Durable Object and never \
+                handled there: the upgrade would answer `404`. The compiler refuses the layout. \
+                Put the service in the agent's file, or build for `--target bundle`, where the \
+                open is an ordinary method and the layout works.",
+        example: "// chat/gateway.bynk\n\
+                  service ChatGateway from websocket(in: ClientFrame, out: ServerFrame) {\n\
+                  \x20\x20on open (roomId: RoomId) -> Effect[()] by v: Visitor {   // ✗ `Room` is declared in another file\n\
+                  \x20\x20\x20\x20let _ <- Room(roomId).join(connection)\n\
+                  \x20\x20\x20\x20()\n\
+                  \x20\x20}\n\
+                  }\n\
+                  \n\
+                  // chat/room.bynk\n\
+                  agent Room {\n\
+                  \x20\x20key id: RoomId\n\
+                  }\n\
+                  \n\
+                  // chat/room.bynk\n\
+                  service ChatGateway from websocket(in: ClientFrame, out: ServerFrame) {   // ✓ in the agent's file\n\
+                  \x20\x20on open (roomId: RoomId) -> Effect[()] by v: Visitor {\n\
+                  \x20\x20\x20\x20let _ <- Room(roomId).join(connection)\n\
+                  \x20\x20\x20\x20()\n\
+                  \x20\x20}\n\
+                  }",
+        page: "/book/reference/websocket",
+        anchor: "platform-mapping",
+    },
+    Explain {
+        code: "bynk.ws.open_transfer_key",
+        blurb: "On Workers the upgrade is routed to the Durable Object that hosts the connection \
+                before the `on open` body runs, so the edge has to work out the agent's key on its \
+                own. A route parameter, a `const` of the context or of a commons it `uses`, or a \
+                literal can be evaluated there. A key computed in the body, such as a `let`, \
+                cannot, because the body has not run. Key the agent by a parameter of `on open`, a \
+                constant, or a literal. The bundle target runs the body first, so it does not \
+                check this.",
+        example: "on open () -> Effect[()] by v: Visitor {\n\
+                  \x20\x20let room = \"lobby\"\n\
+                  \x20\x20let _ <- Room(room).join(connection)          // ✗ `room` is bound in the body, which has not run yet\n\
+                  \x20\x20()\n\
+                  }\n\
+                  \n\
+                  on open () -> Effect[()] by v: Visitor {\n\
+                  \x20\x20let _ <- Room(\"lobby\").join(connection)       // ✓ a literal\n\
+                  \x20\x20()\n\
+                  }",
+        page: "/book/reference/websocket",
+        anchor: "platform-mapping",
+    },
+    Explain {
         code: "bynk.ws.open_transfer_shape",
         blurb: "A WebSocket `on open` must hand its `connection` to exactly one agent, unconditionally, as `Room(room).join(user.identity, connection)`. On Workers the upgrade is routed to that agent's Durable Object, which holds the connection, so it needs a single target the compiler can find. Neither none nor several will do, and a transfer inside an `if` or a `match` is not found. A connection left undisposed is `bynk.held.leak`; a transfer whose key the edge cannot compute is `bynk.ws.open_transfer_key`.",
         example: "service gateway from websocket(in: Frame, out: Frame) {\n    on open (room: RoomId) -> Effect[()] by user: Member {   // ✗ `connection` is never transferred\n        let _ <- connection.close()\n        ()\n    }\n}\n\nservice gateway from websocket(in: Frame, out: Frame) {\n    on open (room: RoomId) -> Effect[()] by user: Member {\n        let _ <- Room(room).join(user.identity, connection)   // ✓ handed to one agent\n        ()\n    }\n}",
@@ -7805,6 +8116,14 @@ pub const REGISTRY: &[DiagnosticInfo] = &[
         "bynk.actor.signed_cookie_unprefixed",
         "A `SignedCookie` `cookie` does not start with `__Host-` (warning).",
     )),
+    d(
+        "bynk.actor.signed_cookie_write_directly",
+        "A cookie record's typed write names the session cookie that a `SignedCookie` actor consumes.",
+    ),
+    d(
+        "bynk.actor.signed_cookie_write_literal",
+        "An untyped `Cookie` literal is named like a `SignedCookie` actor's session cookie.",
+    ),
     d(
         "bynk.actor.sum_requires_binder",
         "A multi-actor sum `by` clause has no binder to match the resolved actor.",
@@ -8648,6 +8967,11 @@ pub const REGISTRY: &[DiagnosticInfo] = &[
         &["type_decl"],
     ),
     dg(
+        "bynk.generics.internal_op_annotation",
+        "A capability operation carries an annotation outside the standard library, or a first-party operation's is not `@onUndecodable(miss)` or `@onUndecodable(fault)`: the reply policy of a typed read is internal to first-party operations (#3458).",
+        &["capability_op"],
+    ),
+    dg(
         "bynk.generics.method_on_generic_type",
         "A *static* method on a generic type never mentions one of the type's parameters in its parameter or return types, so no call could determine it from the arguments or the expected type. Mention the parameter in the signature, or make the method a free function (constrained-generics slice 4; instance methods are supported, #594).",
         &["fn_decl"],
@@ -8886,6 +9210,16 @@ pub const REGISTRY: &[DiagnosticInfo] = &[
     dg(
         "bynk.http.cookie_secure_prefix",
         "A `__Secure-` cookie literal is not `secure`.",
+        &["http_handler"],
+    ),
+    warn(dg(
+        "bynk.http.cookie_untyped_has_field",
+        "An untyped `Cookie` literal is named like a field of a cookie record of the unit (a warning).",
+        &["http_handler"],
+    )),
+    dg(
+        "bynk.http.cookie_value_undecodable",
+        "An untyped `Cookie` literal's value is one the record field that reads that cookie would reject.",
         &["http_handler"],
     ),
     dg(

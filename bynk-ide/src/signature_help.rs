@@ -177,6 +177,10 @@ pub fn resolve_label(
     files: Option<&HashMap<PathBuf, String>>,
 ) -> Option<String> {
     if let Some((recv, member)) = callee.rsplit_once('.') {
+        // #3446: `Record.field.cookie` / `Record.field.expire` on a cookie record.
+        if let Some((record, field)) = recv.split_once('.') {
+            return cookie_field_label(record, field, member, doc_text, files);
+        }
         // Built-in type statics — already display-ready signature strings.
         if let Some((_, statics)) = BUILTIN_STATICS.iter().find(|(n, _)| *n == recv)
             && let Some((_, sig)) = statics.iter().find(|(n, _)| *n == member)
@@ -237,6 +241,29 @@ pub fn resolve_label(
         "unreachable" | "todo" => Some(format!("{callee}(message: String) -> never returns")),
         _ => None,
     })
+}
+
+/// #3446: the signature of `Record.field.cookie(value)` and `Record.field.expire()`.
+fn cookie_field_label(
+    record: &str,
+    field: &str,
+    member: &str,
+    doc_text: &str,
+    files: Option<&HashMap<PathBuf, String>>,
+) -> Option<String> {
+    let fields = crate::completion::cookie_record_fields_of(record, doc_text, files)?;
+    let (_, ty, _) = fields.into_iter().find(|(n, _, _)| n == field)?;
+    match member {
+        "cookie" => {
+            let value = match &ty {
+                bynk_syntax::ast::TypeRef::Option(inner, _) => type_ref_str(inner),
+                other => type_ref_str(other),
+            };
+            Some(format!("cookie(value: {value}) -> Cookie"))
+        }
+        "expire" => Some("expire() -> Cookie".to_string()),
+        _ => None,
+    }
 }
 
 fn resolve_qualified(
@@ -678,6 +705,27 @@ mod tests {
         let other =
             "context a\n\nactor Admin { auth = Bearer(secret = \"K\"), identity = String }\n";
         assert_eq!(resolve_label("Admin.issue", other, None), None);
+    }
+
+    #[test]
+    fn a_cookie_record_field_has_cookie_and_expire_signatures() {
+        let doc = "context a.b\ntype Prefs = { visits: Option[Int] }\nservice s from http {\n  on GET(\"/p\") (cookies: Prefs) -> Effect[HttpResult[String]] by v: Visitor { Ok(\"x\") }\n}\n";
+        assert_eq!(
+            resolve_label("Prefs.visits.cookie", doc, None).as_deref(),
+            Some("cookie(value: Int) -> Cookie")
+        );
+        assert_eq!(
+            resolve_label("Prefs.visits.expire", doc, None).as_deref(),
+            Some("expire() -> Cookie")
+        );
+        assert_eq!(resolve_label("Prefs.nope.cookie", doc, None), None);
+        // a record no handler takes as `cookies` has no cookie signatures
+        let plain = "context a.b\ntype P = { x: Int }\n";
+        assert_eq!(resolve_label("P.x.cookie", plain, None), None);
+        // the call context names the whole chain as the callee
+        let call = "  Ok(\"x\").withCookie(Prefs.visits.cookie(";
+        let ctx = call_context(call, call.len()).expect("a call");
+        assert_eq!(ctx.callee, "Prefs.visits.cookie");
     }
 
     #[test]

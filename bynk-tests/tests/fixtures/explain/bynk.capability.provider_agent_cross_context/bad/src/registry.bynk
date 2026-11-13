@@ -1,0 +1,23 @@
+context registry
+
+exports capability { Yanks }
+
+agent PackageIndex {
+  key name: String
+
+  store yanked: Cell[Bool]
+
+  on call setYanked(value: Bool) -> Effect[Bool] {
+    let changed = yanked != value
+    yanked := value
+    Effect.pure(changed)
+  }
+}
+
+capability Yanks { fn set(value: Bool) -> Effect[Bool] }
+
+provides Yanks = AgentYanks {
+  fn set(value: Bool) -> Effect[Bool] {
+    PackageIndex("x").setYanked(value)
+  }
+}

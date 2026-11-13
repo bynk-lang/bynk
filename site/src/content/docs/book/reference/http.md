@@ -485,6 +485,9 @@ or warned about:
 | `bynk.http.cookie_script_readable` | `httpOnly: false` (a warning) |
 | `bynk.http.cookie_domain_widens` | a `domain` on a cookie whose name is not `__Host-` (a warning): every subdomain receives it |
 | `bynk.http.cookie_cross_site_without_credentials` | a service attaches a `SameSite.Unrestricted` cookie but has no `cors { credentials: true }` (a warning): a cross-origin `fetch` can never send it back |
+| `bynk.http.cookie_untyped_has_field` | an untyped `Cookie` literal named like a field of a `cookies` record of the unit (a warning): write it with `Record.field.cookie(v)`, which the quick-fix does where it can |
+| `bynk.http.cookie_value_undecodable` | the same literal, with a `value` that field's decoder rejects (`"dark"` for an enum read as `Dark`) |
+| `bynk.actor.signed_cookie_write_literal` | a literal named like a `SignedCookie` actor's session cookie: only `Actor.issue` and `Actor.expire` write it |
 | `bynk.http.cache_public_reads_cookies` | `@cache(scope: public)` on a handler that takes `cookies` |
 
 Only a literal is judged. A computed cookie is checked when it is sent: a name that is not
@@ -540,7 +543,13 @@ The record must be the `cookies` parameter of an `on http` handler in this unit
 (`bynk.http.cookie_field_unknown`), `cookie` takes the one value and `expire` none
 (`bynk.http.cookie_field_arity`), and a `List` field is refused, since a repeated name is
 several `Set-Cookie` lines (`bynk.http.cookie_field_list`). `Prefs.theme` alone is not a value.
-A cookie in no record is still written as a plain `Cookie { name, value }`.
+The prefix and attribute rules above apply to a typed cookie too, judged against the field's
+wire name: `Cookie { ...Prefs.visits.cookie(n), domain: Some("example.com") }` for a
+`__Host-visits` field is `bynk.http.cookie_host_prefix`. The session cookie of a `SignedCookie`
+actor cannot be written through a record (`bynk.actor.signed_cookie_write_directly`) or a
+literal (`bynk.actor.signed_cookie_write_literal`); only `Actor.issue` and `Actor.expire` write it.
+A cookie in no record is still written as a plain `Cookie { name, value }`; where a record reads
+the name, the literal draws `bynk.http.cookie_untyped_has_field`.
 
 A response that sets a cookie is one user's, so a `public` cache may not keep it: at
 runtime a response carrying `Set-Cookie` is always sent `Cache-Control: private`, and a

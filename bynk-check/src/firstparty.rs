@@ -7,6 +7,13 @@
 
 pub use bynk_std::*;
 
+/// Whether a unit is first-party: the `bynk` root namespace is reserved for the
+/// toolchain (`bynk.namespace.reserved`), so a unit under it is the standard
+/// library's own (#3458).
+pub fn is_first_party_unit(name: &bynk_syntax::ast::QualifiedName) -> bool {
+    name.parts.first().is_some_and(|p| p.name == "bynk")
+}
+
 /// Whether a parsed unit reaches `reach`: it is a context that declares a
 /// service of the protocol `reach` names, or an instance of the capability it
 /// names. Decided on the parsed declarations, so a comment or a string literal
