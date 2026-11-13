@@ -126,6 +126,20 @@ struct DevTable {
     /// Local Hyperdrive connection strings, keyed by the `Postgres`
     /// capability's name.
     hyperdrive: Option<std::collections::BTreeMap<String, DevHyperdriveEntry>>,
+    /// Acknowledges that Workers AI has no local simulation: under `bynk dev`
+    /// a call runs on your Cloudflare account and may incur charges. `bynk dev`
+    /// warns once, on the first call, unless this is `"allow"`. See Cloudflare's
+    /// Workers AI pricing page.
+    ai: Option<DevAck>,
+}
+
+/// The one value a `[dev]` acknowledgement takes.
+#[derive(JsonSchema)]
+#[allow(dead_code)]
+enum DevAck {
+    /// Silence the warning.
+    #[serde(rename = "allow")]
+    Allow,
 }
 
 /// One `Postgres` capability's connection string under `bynk dev`.

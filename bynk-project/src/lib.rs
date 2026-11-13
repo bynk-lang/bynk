@@ -24,6 +24,7 @@
 pub mod assets;
 pub mod consistency;
 pub mod contracts_lock;
+pub mod dev_ack;
 pub mod discovery;
 pub mod graph;
 pub mod hyperdrive;

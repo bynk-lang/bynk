@@ -888,7 +888,11 @@ Workers AI is a remote service on your Cloudflare account, so a call may incur
 charges, and a model's reply is untrusted input like any other user text. See
 Cloudflare's [Workers AI pricing](https://developers.cloudflare.com/workers-ai/platform/pricing/)
 for what applies, and put a `RateLimit` in front of any handler an anonymous
-caller can reach. In a test every `Ai` operation faults until it is stubbed
+caller can reach. Workers AI has no local simulation, so under `bynk dev` a call
+runs the model on Cloudflare: it is not blocked, and the first one in a session
+prints a one-time warning with that link. `[dev] ai = "allow"` in `bynk.toml`
+silences it (see [Acknowledging a remote-only binding](/docs/manifest/#acknowledging-a-remote-only-binding)).
+In a test every `Ai` operation faults until it is stubbed
 (`stub Ai.run(_, _) returns …`), so a test never reaches Workers AI, and a
 `system` test's Workers behave the same. `Ai` is experimental: list
 `"bynk.cloudflare.Ai"` under `[unstable] allow`.

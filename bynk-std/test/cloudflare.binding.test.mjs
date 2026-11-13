@@ -1306,6 +1306,34 @@ t("WorkersAi.run: a bad model id, an input that is not a JSON object and a missi
   await assert.rejects(new WorkersAi({}).run("@cf/x/y", "{}"), /\[ai\]/);
 });
 
+// #3478: the one-time warning of a remote-only binding under `bynk dev`.
+t("WorkersAi.run: warns once under bynk dev unless the project acknowledged it, and never in a deployment", async () => {
+  const warnings = [];
+  const original = console.warn;
+  console.warn = (...args) => warnings.push(args.join(" "));
+  try {
+    const run = async (env) => new WorkersAi({ AI: fakeAi({ response: "x" }), ...env }).run("@cf/x/y", "{}");
+    // Deployed: neither variable, so silence.
+    assert.equal((await run({})).tag, "Ok");
+    assert.deepEqual(warnings, []);
+    // Acknowledged: `[dev] ai = "allow"` sets the variable.
+    assert.equal((await run({ BYNK_DEV: "1", BYNK_DEV_ACK_AI: "allow" })).tag, "Ok");
+    assert.deepEqual(warnings, []);
+    // `bynk dev` without it: the call goes ahead, with a warning that links to Cloudflare and states no price.
+    assert.equal((await run({ BYNK_DEV: "1" })).tag, "Ok");
+    assert.equal(warnings.length, 1);
+    assert.match(warnings[0], /may incur charges/);
+    assert.match(warnings[0], /https:\/\/developers\.cloudflare\.com\/workers-ai\/platform\/pricing\//);
+    assert.match(warnings[0], /ai = "allow"/);
+    assert.doesNotMatch(warnings[0], /\$|free|neuron/i);
+    // Once: a second call says nothing more.
+    assert.equal((await run({ BYNK_DEV: "1" })).tag, "Ok");
+    assert.equal(warnings.length, 1);
+  } finally {
+    console.warn = original;
+  }
+});
+
 // #3301: `WorkersStoredSecret`, against a fake of Cloudflare's Secrets Store
 // secret binding: `{ get() }`, which resolves the secret's value.
 t("WorkersStoredSecret.get: reads the instance's own binding and returns the value unchanged", async () => {

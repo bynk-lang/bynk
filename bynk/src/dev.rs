@@ -688,6 +688,10 @@ pub fn run(
     else {
         return ExitCode::FAILURE;
     };
+    // #3478: `BYNK_DEV` and the acknowledged remote-only kinds, as `--var`s.
+    let Some(dev_vars) = dev_vars_for(project_root) else {
+        return ExitCode::FAILURE;
+    };
     let rewriter = std::sync::Arc::new(crate::logs::Rewriter::new(&build_dir));
     let mut children: Vec<(String, Served)> = Vec::new();
     let mut pumps: Vec<std::thread::JoinHandle<()>> = Vec::new();
@@ -712,6 +716,7 @@ pub fn run(
             .map(Vec::as_slice)
             .unwrap_or_default();
         cmd.args(serve_args(s, keys));
+        cmd.args(&dev_vars);
         cmd.args(local.session_args(&s.worker, &opts.wrangler_args));
         for arg in &opts.wrangler_args {
             cmd.arg(arg);
@@ -1808,6 +1813,32 @@ fn serve_args(s: &Serving, edge_keys: &[String]) -> Vec<String> {
     args
 }
 
+/// #3478: the `--var`s of [`dev_var_args`] for `project_root`'s `[dev]`
+/// acknowledgements, or `None` after printing why not.
+fn dev_vars_for(project_root: &Path) -> Option<Vec<String>> {
+    match bynk_project::dev_ack::try_read_dev_acks(project_root) {
+        Ok(acks) => Some(dev_var_args(&acks)),
+        Err(e) => {
+            eprintln!("bynk: {e}");
+            None
+        }
+    }
+}
+
+/// #3478: the `--var`s every served Worker gets: `BYNK_DEV` marks a
+/// development session, and each acknowledged remote-only kind (`[dev] ai =
+/// "allow"`) sets its variable to `allow`, which its provider reads to stay
+/// quiet. A deployed Worker has none of them.
+fn dev_var_args(acks: &std::collections::BTreeSet<&'static str>) -> Vec<String> {
+    use bynk_project::dev_ack::{ALLOW, DEV_VAR, REMOTE_KINDS};
+    let mut args = vec!["--var".to_string(), format!("{DEV_VAR}:1")];
+    for kind in REMOTE_KINDS.iter().filter(|k| acks.contains(k.key)) {
+        args.push("--var".to_string());
+        args.push(format!("{}:{ALLOW}", kind.var));
+    }
+    args
+}
+
 /// The start-up report: which context answers on which URL, plus the inspector
 /// notice under `--inspect`. Pure and deterministic, so it is golden-pinned in
 /// the style of ADR 0096 §Exit — unlike the `wrangler dev` streams it precedes.
@@ -1871,6 +1902,18 @@ pub fn serving_report(serving: &[Serving]) -> String {
 
 #[cfg(test)]
 mod tests {
+    /// #3478: every served Worker is marked as a development session, and an
+    /// acknowledged remote-only kind sets its own variable to `allow`.
+    #[test]
+    fn dev_vars_mark_the_session_and_carry_acknowledgements() {
+        use std::collections::BTreeSet;
+        assert_eq!(dev_var_args(&BTreeSet::new()), ["--var", "BYNK_DEV:1"]);
+        assert_eq!(
+            dev_var_args(&BTreeSet::from(["ai"])),
+            ["--var", "BYNK_DEV:1", "--var", "BYNK_DEV_ACK_AI:allow"]
+        );
+    }
+
     use super::*;
     use bynk_driver::npm_install::PackageManager;
 

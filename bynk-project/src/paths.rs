@@ -159,6 +159,9 @@ pub enum ProjectPathsError {
         capability: String,
         reason: String,
     },
+    /// #3478: a `[dev]` acknowledgement (`ai = "allow"`) holding anything but
+    /// `"allow"`.
+    BadDevAck { key: String, reason: String },
     /// #2138: a `[test.targets.<name>]` entry that is not well formed.
     BadTestTarget { target: String, reason: String },
     /// #3321: a `[test] postgres` value that is not one the key accepts.
@@ -224,7 +227,7 @@ pub const MANIFEST_TABLES: &[(&str, &[&str])] = &[
     ("lsp", &["diagnostics_mode", "diagnostics_debounce_ms"]),
     ("workers", &["compatibility_flags", "workers_dev"]),
     ("deploy", &["hyperdrive"]),
-    ("dev", &["hyperdrive"]),
+    ("dev", &["hyperdrive", "ai"]),
     (
         "build",
         &["out", "target", "platform", "emit", "package_manager"],
@@ -384,6 +387,9 @@ impl std::fmt::Display for ProjectPathsError {
                 reason,
             } => {
                 write!(f, "`[{table}.{capability}]` {reason}")
+            }
+            ProjectPathsError::BadDevAck { key, reason } => {
+                write!(f, "`[dev]` `{key}` {reason}")
             }
             ProjectPathsError::BadTestTarget { target, reason } => {
                 write!(f, "`[test.targets.{target}]` {reason}")
@@ -570,7 +576,10 @@ pub fn check_manifest_str(content: &str) -> Result<(), ProjectPathsError> {
             "package" => drop(crate::manifest::package_config_from(entries)?),
             "workspace" => drop(crate::manifest::workspace_config_from(entries)?),
             "deploy" => drop(crate::hyperdrive::deploy_hyperdrive_from(entries)?),
-            "dev" => drop(crate::hyperdrive::dev_hyperdrive_from(entries)?),
+            "dev" => {
+                drop(crate::hyperdrive::dev_hyperdrive_from(entries)?);
+                drop(crate::dev_ack::dev_acks_from(entries)?);
+            }
             _ => {}
         }
     }
