@@ -3,6 +3,8 @@
 //! answers with are the ones `parse_*` reads; whether Cloudflare's wrangler
 //! prints them is not something a test can pin.
 
+#![cfg_attr(not(unix), allow(unused))]
+
 use super::*;
 use std::path::PathBuf;
 
@@ -24,10 +26,12 @@ fn resources(indexed: &[&str]) -> Resources {
 }
 
 /// A directory holding a fake `wrangler` and the JSON it answers with.
+#[cfg(unix)]
 struct Fake {
     dir: PathBuf,
 }
 
+#[cfg(unix)]
 impl Fake {
     fn new(tag: &str, list: &str, get: &str, meta: &str) -> Self {
         let dir = std::env::temp_dir().join(format!("bynk-vz-{tag}-{}", std::process::id()));
@@ -119,6 +123,7 @@ fn metadata_index_changes_are_additions_and_removals() {
     assert_eq!((missing, removed), (d(&["a:string"]), d(&["c:boolean"])));
 }
 
+#[cfg(unix)]
 #[test]
 fn a_missing_index_is_created_with_its_configuration_then_its_metadata_indexes() {
     let fake = Fake::new("create", "[]", MATCHING, "[]");
@@ -147,6 +152,7 @@ fn a_missing_index_is_created_with_its_configuration_then_its_metadata_indexes()
     );
 }
 
+#[cfg(unix)]
 #[test]
 fn a_matching_index_is_reused_and_never_created_again() {
     let fake = Fake::new(
@@ -171,6 +177,7 @@ fn a_matching_index_is_reused_and_never_created_again() {
     );
 }
 
+#[cfg(unix)]
 #[test]
 fn a_dimension_or_metric_mismatch_fails_and_changes_nothing() {
     for found in [
@@ -204,6 +211,7 @@ fn a_dimension_or_metric_mismatch_fails_and_changes_nothing() {
     }
 }
 
+#[cfg(unix)]
 #[test]
 fn an_unreadable_configuration_fails_rather_than_passing() {
     let fake = Fake::new("opaque", r#"[{"name":"shop-docs"}]"#, "{}", "[]");
@@ -216,6 +224,7 @@ fn an_unreadable_configuration_fails_rather_than_passing() {
     );
 }
 
+#[cfg(unix)]
 #[test]
 fn a_later_metadata_index_is_created_and_a_removed_one_is_left() {
     let fake = Fake::new(
@@ -236,6 +245,7 @@ fn a_later_metadata_index_is_created_and_a_removed_one_is_left() {
     assert!(calls.iter().all(|c| !c.contains("delete-metadata-index")));
 }
 
+#[cfg(unix)]
 #[test]
 fn pruning_deletes_an_existing_index_and_is_quiet_about_one_already_gone() {
     let fake = Fake::new("prune", r#"[{"name":"shop-old"}]"#, MATCHING, "[]");
