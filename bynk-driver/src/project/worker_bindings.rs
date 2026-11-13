@@ -14,7 +14,7 @@ use bynk_check::firstparty::{self, Platform};
 
 use super::{
     BuildTarget, ErrorSink, ParsedFile, UnitKind, UnitTable, bare_singletons_of_context,
-    native_platforms_of_context, unit_table_uses_emit,
+    native_platforms_of_context, unit_table_uses_claim, unit_table_uses_emit,
 };
 use bynk_emit::emitter::agent_cross_context_targets;
 use bynk_emit::emitter::wrangler::{
@@ -186,6 +186,9 @@ pub(super) fn context_bindings(
     // ([`contexts_singletons`]' entry).
     singletons: &[String],
     uses_emit: bool,
+    // W30 (#2840): whether the context calls `Idempotency.claim`, so its Worker
+    // declares the implicit database that holds the claims.
+    uses_claim: bool,
 ) -> Vec<WorkerBinding> {
     let consumes = service_targets(called, own_event_routes);
     let agents: Vec<String> = table.agents.keys().cloned().collect();
@@ -255,7 +258,10 @@ pub(super) fn context_bindings(
         })
         .collect();
     instances.sort_by(|a, b| a.0.cmp(b.0));
-    let instances: Vec<WorkerBinding> = instances.into_iter().map(|(_, b)| b).collect();
+    let mut instances: Vec<WorkerBinding> = instances.into_iter().map(|(_, b)| b).collect();
+    if uses_claim {
+        instances.push(bynk_check::worker_bindings::idempotency_binding());
+    }
     let singletons: Vec<WorkerBinding> = singletons.iter().map(|c| singleton_binding(c)).collect();
     worker_bindings(
         &agents,
@@ -325,6 +331,7 @@ pub(super) fn all_context_bindings(
                 needs_kv(&context_native, ctx),
                 singletons_of(&context_singletons, ctx),
                 unit_table_uses_emit(table, unit_callees.get(ctx)),
+                unit_table_uses_claim(table, unit_callees.get(ctx), unit_flattened.get(ctx)),
             ),
         );
     }

@@ -375,25 +375,7 @@ pub fn emit_wrangler_toml(
             //
             // P4b (#2608): a database with migrations names their copy beside
             // this file, which `wrangler d1 migrations apply` reads.
-            BindingSource::D1Database { .. } => {
-                let database = d1_database_name(&worker_dir_name(context), &binding.name);
-                let mut entries = vec![
-                    TomlEntry::kv("binding", name),
-                    TomlEntry::kv("database_name", TomlValue::str(database.clone())),
-                    TomlEntry::with_comment(
-                        "database_id",
-                        TomlValue::str(d1_database_id_placeholder(&binding.name)),
-                        "set at deploy time",
-                    ),
-                ];
-                if d1_migrations.get(&database).is_some_and(|f| !f.is_empty()) {
-                    entries.push(TomlEntry::kv(
-                        "migrations_dir",
-                        TomlValue::str(format!("{D1_MIGRATIONS_DIR}/{database}")),
-                    ));
-                }
-                TomlBlock::array_table("d1_databases", entries)
-            }
+            BindingSource::D1Database { .. } => d1_block(context, binding, name, d1_migrations),
             BindingSource::StoredSecret { store, secret, .. } => {
                 stored_secret_block(name, store, secret)
             }
@@ -521,6 +503,35 @@ pub fn emit_wrangler_toml(
     }
 
     doc
+}
+
+/// P4a (#2602), P4b (#2608): a `D1` database's `[[d1_databases]]` entry: its
+/// derived name, the placeholder id `bynk deploy` fills, and the copy of its
+/// migrations beside the file when it has any (a project's own, or the
+/// compiler's for the implicit idempotency database, W30 #2840).
+fn d1_block(
+    context: &str,
+    binding: &WorkerBinding,
+    name: TomlValue,
+    d1_migrations: &bynk_check::d1_migrations::D1Migrations,
+) -> TomlBlock {
+    let database = d1_database_name(&worker_dir_name(context), &binding.name);
+    let mut entries = vec![
+        TomlEntry::kv("binding", name),
+        TomlEntry::kv("database_name", TomlValue::str(database.clone())),
+        TomlEntry::with_comment(
+            "database_id",
+            TomlValue::str(d1_database_id_placeholder(&binding.name)),
+            "set at deploy time",
+        ),
+    ];
+    if !bynk_check::d1_migrations::migrations_of(d1_migrations, &database, binding).is_empty() {
+        entries.push(TomlEntry::kv(
+            "migrations_dir",
+            TomlValue::str(format!("{D1_MIGRATIONS_DIR}/{database}")),
+        ));
+    }
+    TomlBlock::array_table("d1_databases", entries)
 }
 
 /// Every binding a Worker's `wrangler.toml` declares, in emission order:

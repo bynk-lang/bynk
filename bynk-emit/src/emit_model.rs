@@ -912,6 +912,40 @@ pub fn unit_table_uses_emit(
     found
 }
 
+/// W30 (#2840): does any body in this unit call the first-party
+/// `Idempotency.claim`? A Worker that does declares the implicit database that
+/// holds its claims. `flattened` is the unit's flattened-consume map
+/// (`consumes bynk { Idempotency }` makes `Idempotency` a local name for the
+/// `bynk` capability), so a same-named capability from another unit does not
+/// count, as for the key scoping in `scope_idempotency_key`.
+pub fn unit_table_uses_claim(
+    table: &UnitTable,
+    callees: Option<&HashMap<ExprId, bynk_check::checker::Callee>>,
+    flattened: Option<&HashMap<String, String>>,
+) -> bool {
+    let Some(callees) = callees else {
+        return false;
+    };
+    let mut found = false;
+    emitter::walk_unit_table_bodies(table, &mut |e| {
+        use bynk_check::checker::Callee;
+        if !found {
+            found = match callees.get(&e.id) {
+                Some(Callee::Capability { cap, op, .. }) => {
+                    cap == "Idempotency"
+                        && op == "claim"
+                        && flattened.and_then(|f| f.get(cap)).map(String::as_str) == Some("bynk")
+                }
+                Some(Callee::CrossCap { unit, cap, op, .. }) => {
+                    unit == "bynk" && cap == "Idempotency" && op == "claim"
+                }
+                _ => false,
+            };
+        }
+    });
+    found
+}
+
 // -- Small tree-construction helpers (#1327) ------------------------------
 //
 // Mirrors `workers.rs`'s/`workers_entry.rs`'s/`tests_emit.rs`'s own local

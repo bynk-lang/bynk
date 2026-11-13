@@ -172,9 +172,10 @@ pub(super) fn emit_integration_harness<'a>(
                 // P4b (#2608) runs its migrations on it first.
                 BindingSource::D1Database { .. } => call(
                     ident("__makeIntegrationD1"),
-                    d1_migrations_args(d1_migrations.get(&d1_database_name(
-                        &bynk_project::worker_dir_name(p),
-                        &binding.name,
+                    d1_migrations_args(Some(&bynk_check::d1_migrations::migrations_of(
+                        d1_migrations,
+                        &d1_database_name(&bynk_project::worker_dir_name(p), &binding.name),
+                        binding,
                     ))),
                 ),
                 // #3301: the account's store is never reached in a test, so
