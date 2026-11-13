@@ -1,13 +1,6 @@
----
-level: minor
-changelog: `Idempotency.dedup` and `remember` take a `Codable` value and are durable and shared across isolates on Cloudflare, in the Worker's implicit D1 database; an undecodable stored value reads as a miss
-probes: emit_abi_shapes, ts_writes
-breaking: `Idempotency.dedup[T]` and `remember[T]` now require `T: Codable` (bynk.types.not_codable otherwise), so `dedup[()]`/`remember[(), ()]`, the presence-marker idiom, is refused: use `Idempotency.claim(key, …)` for a key-only check, or `dedup[Bool]`/`remember[Bool]` for a cached marker. A Worker that calls `dedup`/`remember` now gets an implicit D1 database (`<worker>-idempotency`) created by `bynk deploy`, and starts with an empty cache.
----
+# 0832 — Idempotency's remembered values are Codable, stored as JSON, and durable on Cloudflare
 
-## ADR: durable-idempotency-values
-title: Idempotency's remembered values are Codable, stored as JSON, and durable on Cloudflare
-summary: dedup/remember take a Codable T, read an undecodable entry as a miss, and store JSON in the implicit D1 database
+- **Status:** Accepted (v0.587)
 
 **Context.** Until now `dedup[T]`/`remember[T]` accepted any `T` and kept the value as a raw JavaScript object in each provider instance's memory, so they were lost on restart and unshared. A durable store must serialise the value, and typed capability reads (ADR 0830, #3458) now let a first-party operation return its `Codable` parameter, decoded at the call site. The maintainer decided on #2840 that the cached type must be `Codable`, stored through the existing Json codec, with an undecodable stored value read as a miss.
 

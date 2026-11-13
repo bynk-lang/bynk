@@ -17,6 +17,7 @@ or a row links to no file. Summaries and statuses are curated by hand; the
 
 | # | Decision | Status |
 |---|---|---|
+| [0832](0832-durable-idempotency-values.md) | **Idempotency's remembered values are Codable, stored as JSON, and durable on Cloudflare** (v0.587) — dedup/remember take a Codable T, read an undecodable entry as a miss, and store JSON in the implicit D1 database | Accepted (v0.587) |
 | [0831](0831-platform-binding-of-a-portable-capability.md) | **A platform's binding of a portable capability may be durable; it is not a selectable provider** (v0.586) — bynk.Idempotency's Cloudflare binding stores claims in D1, chosen by the build's platform, within ADR 0016 | Accepted (v0.586) |
 | [0830](0830-typed-capability-reads.md) | **A first-party capability operation may return its Codable parameter, decoded at the call site** (v0.583) — Lifts ADR 0696 decision 5 for the standard library's own operations, with the failure policy declared on each operation | Accepted (v0.583) |
 | [0829](0829-claim-release-and-lease.md) | **A handler's idempotency claim is released on failure and leased until it settles** (v0.582) — The compiler settles a service handler's claims on exit: release on failure, confirm otherwise, with a 30 s lease for an instance that dies | Accepted (v0.582) |

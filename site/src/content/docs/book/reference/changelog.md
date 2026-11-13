@@ -3,7 +3,7 @@ title: Version compatibility & changelog
 ---
 Bynk is pre-1.0 and developed in small, spec-first increments (see
 [Versioning & roadmap](/book/about/versioning-and-roadmap/)). This book is
-written against **v0.586**.
+written against **v0.587**.
 
 This page is a high-level summary of notable increments, not an exhaustive
 per-commit history. While Bynk is pre-1.0, increments may change behaviour.
@@ -28,6 +28,7 @@ per-commit history. While Bynk is pre-1.0, increments may change behaviour.
 
 | Version | Highlights |
 |---|---|
+| **v0.587.0** | `Idempotency.dedup` and `remember` take a `Codable` value and are durable and shared across isolates on Cloudflare, in the Worker's implicit D1 database; an undecodable stored value reads as a miss |
 | **v0.586.0** | `Idempotency.claim` is durable and shared across isolates on Cloudflare, stored in the Worker's implicit D1 database |
 | **v0.585.0** | A Worker that calls `Idempotency.claim` declares an implicit D1 database for its claims, which `bynk deploy` and `bynk dev` provision with no author action |
 | **v0.584.0** | `Idempotency.claim(key, expiresAfter)` is an atomic first-delivery-wins claim, and the test double honours `expiresAfter` on the harness clock |
