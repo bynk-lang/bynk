@@ -10,7 +10,7 @@ import type {
   StreamResponse,
 } from "./bynk.js";
 import type { FetchError } from "./bynk.js";
-import { Uuid } from "./bynk.js";
+import { Claim, Uuid } from "./bynk.js";
 import { LocaleTag } from "./bynk/locale/types.js";
 import { None, Some, type Option, type Result } from "./__bynk_runtime/result.js";
 
@@ -153,6 +153,8 @@ export class LocaleProvider implements Locale {
 export class IdempotencyProvider implements Idempotency {
   private deps: { Clock: Clock };
   private store = new Map<string, { value: unknown; expiresAt: number }>();
+  // `claim` keeps its own map: a claim records no outcome, and `dedup` never sees it.
+  private claims = new Map<string, number>();
   constructor(deps: { Clock: Clock }) {
     this.deps = deps;
   }
@@ -164,5 +166,16 @@ export class IdempotencyProvider implements Idempotency {
   async remember<T>(key: string, value: T, expiresAfter: number): Promise<void> {
     const now = await this.deps.Clock.now();
     this.store.set(key, { value, expiresAt: now + expiresAfter });
+  }
+  // The read of the clock is the only `await`; the check and the set that follow
+  // it run in one synchronous step, so two concurrent claims cannot both win.
+  async claim(key: string, expiresAfter: number): Promise<Claim> {
+    const now = await this.deps.Clock.now();
+    const until = this.claims.get(key);
+    if (until !== undefined && until > now) {
+      return Claim.AlreadyClaimed;
+    }
+    this.claims.set(key, now + expiresAfter);
+    return Claim.Claimed;
   }
 }

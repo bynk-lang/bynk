@@ -57,7 +57,7 @@ pub const FIRST_PARTY_DOCS: &[Entry] = &[
         "bynk",
         "Idempotency",
         "the-idempotency-capability",
-        &["dedup", "remember"],
+        &["dedup", "remember", "claim"],
     ),
     ("bynk", "Events", "the-events-capability", &["emit"]),
     (

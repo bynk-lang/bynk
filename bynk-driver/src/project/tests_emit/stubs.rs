@@ -963,6 +963,30 @@ function __bynkOverlay(base: unknown, stub: object, cap: string): unknown {
 }
 ";
 
+/// `Idempotency`'s double: an in-memory store whose entries and claims expire
+/// on the clock `Clock.now()` reads (`__NOW__`, substituted as for `Kv`; `__CLAIM__` is the module's `Claim`), so a
+/// test that `advance`s the harness clock sees a window lapse.
+pub(super) const IDEMPOTENCY_DOUBLE_BODY: &str = r#"  const store = new globalThis.Map<string, { value: unknown; until: number }>();
+  const claims = new globalThis.Map<string, number>();
+  return {
+    async dedup(key) {
+      const hit = store.get(key);
+      return (hit !== undefined && hit.until > __NOW__ ? Some(hit.value) : None) as never;
+    },
+    async remember(key, value, expiresAfter) {
+      store.set(key, { value, until: __NOW__ + expiresAfter });
+    },
+    async claim(key, expiresAfter) {
+      const until = claims.get(key);
+      if (until !== undefined && until > __NOW__) {
+        return __CLAIM__.AlreadyClaimed;
+      }
+      claims.set(key, __NOW__ + expiresAfter);
+      return __CLAIM__.Claimed;
+    },
+  };
+"#;
+
 /// P1 (#2590): the body of `bynk.cloudflare`'s `Kv` unit-tier double
 /// ([`platform_double`]). Expiry is kept and listed, not enforced, as on the
 /// integration tier, on the clock `Clock.now()` reads (`__NOW__`, substituted
@@ -1305,7 +1329,12 @@ pub(super) fn platform_double(
         ("bynk", "Secrets") => "  return {\n    async get() {\n      return None;\n    },\n  };\n".to_string(),
         ("bynk", "Locale") => "  return {\n    async current() {\n      return \"en\" as never;\n    },\n  };\n".to_string(),
         ("bynk", "Fetch") => "  return {\n    async send() {\n      throw new globalThis.Error(\"bynk: `Fetch.send` is not stubbed, and a test never reaches the network — add `stub Fetch.send(_) returns …`\");\n    },\n    async sendWith() {\n      throw new globalThis.Error(\"bynk: `Fetch.sendWith` is not stubbed, and a test never reaches the network — add `stub Fetch.sendWith(_, _) returns …`\");\n    },\n    async receiveBytes() {\n      throw new globalThis.Error(\"bynk: `Fetch.receiveBytes` is not stubbed, and a test never reaches the network — add `stub Fetch.receiveBytes(_, _) returns …`\");\n    },\n    async sendBytes() {\n      throw new globalThis.Error(\"bynk: `Fetch.sendBytes` is not stubbed, and a test never reaches the network — add `stub Fetch.sendBytes(_, _, _) returns …`\");\n    },\n    async receiveStream() {\n      throw new globalThis.Error(\"bynk: `Fetch.receiveStream` is not stubbed, and a test never reaches the network — add `stub Fetch.receiveStream(_, _) returns …`\");\n    },\n    async sendStream() {\n      throw new globalThis.Error(\"bynk: `Fetch.sendStream` is not stubbed, and a test never reaches the network — add `stub Fetch.sendStream(_, _, _) returns …`\");\n    },\n  };\n".to_string(),
-        ("bynk", "Idempotency") => "  const store = new globalThis.Map<string, unknown>();\n  return {\n    async dedup(key) {\n      return (store.has(key) ? Some(store.get(key)) : None) as never;\n    },\n    async remember(key, value) {\n      store.set(key, value);\n    },\n  };\n".to_string(),
+        ("bynk", "Idempotency") => IDEMPOTENCY_DOUBLE_BODY
+            .replace(
+                "__NOW__",
+                if harness_clock { "__bynkClockNow" } else { "0" },
+            )
+            .replace("__CLAIM__", &format!("{ns}.Claim")),
         // P1 (#2590): values are bytes (text is its UTF-8, so the two views
         // agree as on the platform), with metadata and an expiry beside them;
         // the new operations check the platform's limits as `WorkersKv` does.
