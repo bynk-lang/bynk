@@ -3,7 +3,7 @@ title: Version compatibility & changelog
 ---
 Bynk is pre-1.0 and developed in small, spec-first increments (see
 [Versioning & roadmap](/book/about/versioning-and-roadmap/)). This book is
-written against **v0.590**.
+written against **v0.591**.
 
 This page is a high-level summary of notable increments, not an exhaustive
 per-commit history. While Bynk is pre-1.0, increments may change behaviour.
@@ -28,6 +28,7 @@ per-commit history. While Bynk is pre-1.0, increments may change behaviour.
 
 | Version | Highlights |
 |---|---|
+| **v0.591.0** | `Ai.runStream(model, input)` streams a Workers AI model's own events as a `Stream[String]`, ready to serve with `Streaming`; a refusal before the stream is an `Err`, a failure after it faults the stream, and a client that hangs up cancels the model |
 | **v0.590.1** | A record literal parses when its first field is named like a contextual keyword (`T { messages: … }`), as it already did in any later position |
 | **v0.590.0** | `Ai.generate` and `Ai.embed` are typed Workers AI operations for chat generation and text embeddings, returning concrete records and vectors, with a `BadReply` error for a reply that is not the shape promised |
 | **v0.589.0** | `[dev] ai = "allow"` in `bynk.toml` acknowledges that `Ai` calls run remotely under `bynk dev`; without it the first call in a session prints a one-time warning that links to Cloudflare's pricing page, and the call goes ahead |
