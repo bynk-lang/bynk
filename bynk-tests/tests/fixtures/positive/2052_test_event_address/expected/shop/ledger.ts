@@ -8,7 +8,7 @@ import { __readStored, __commitStored, __noteClock } from "../__bynk_runtime/ent
 import { __rehydrationViolation, __reportUnknownStoredKeys, __checkStoredLayout, type __JsonValue, type __BoundaryError } from "../__bynk_runtime/boundary.js";
 import { type __DurableObjectNamespace, __StateRegistry, __makeAgent } from "../__bynk_runtime/agent.js";
 
-import { EventEnvelope } from "../bynk.js";
+import { Claim, EventEnvelope } from "../bynk.js";
 import { Placed } from "./order.js";
 
 import * as bynk from "../bynk.js";
@@ -92,18 +92,28 @@ export function __makeBooks(key: string, env?: { BOOKS?: __DurableObjectNamespac
 
 export const OnPlaced = {
   async event(e: Placed, env: EventEnvelope, deps: { Idempotency: bynk.Idempotency }): globalThis.Promise<void> {
-    const seen = await deps.Idempotency.dedup<void>(`shop.ledger.OnPlaced.event::${env.eventId}`);
-    switch (seen.tag) {
-      case "Some": {
-        return undefined;
-      }
-      case "None": {
-        const __r0 = await deps.Idempotency.remember<void>(`shop.ledger.OnPlaced.event::${env.eventId}`, undefined, 604800000);
-        const __r1 = await __makeBooks("publisher").note(env.publisherId, deps);
+    const __claims = (deps.Idempotency as unknown as { __track?: () => { note<C>(k: string, c: C, t: number): C; lease(t: number): number; settle(r: unknown, threw: boolean): globalThis.Promise<void> } }).__track?.() ?? { note: <C>(_k: string, c: C, _t: number) => c, lease: (t: number) => t, settle: async (_r: unknown, _threw: boolean) => {} };
+    let __r;
+    try {
+    __r = await (async () => {
+    const __letElse699 = await (await (async (__k: string, __t: number) => __claims.note(__k, await deps.Idempotency.claim(__k, __claims.lease(__t)), __t))(`shop.ledger.OnPlaced.event::${env.eventId}`, 604800000));
+    switch (__letElse699.tag) {
+      case "Claimed": {
+        const __r0 = await __makeBooks("publisher").note(env.publisherId, deps);
         return __makeBooks("all").bump(deps);
+      }
+      default: {
+        return undefined;
       }
     }
     throw new globalThis.Error("non-exhaustive match");
+    })();
+    } catch (__e) {
+      await __claims.settle(undefined, true);
+      throw __e;
+    }
+    await __claims.settle(__r, false);
+    return __r;
   },
 };
 

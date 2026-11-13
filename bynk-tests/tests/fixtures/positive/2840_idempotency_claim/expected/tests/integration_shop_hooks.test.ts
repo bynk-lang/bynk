@@ -47,7 +47,7 @@ function __buildHarness() {
   const env___ns_shop_hooks: any = {};
   env___ns_shop_hooks.__bynkClock = __bynkClock;
   env___ns_shop_hooks.BYNK_CALL_FROM_INTEGRATION = "bynk-local-call-key";
-  env___ns_shop_hooks.D1_IDEMPOTENCY = __makeIntegrationD1([["0001_idempotency_claims.sql", "CREATE TABLE idempotency_claims (\n  key TEXT PRIMARY KEY NOT NULL,\n  expires_at INTEGER NOT NULL\n);\n\nCREATE INDEX idempotency_claims_expires_at ON idempotency_claims (expires_at);\n"]]);
+  env___ns_shop_hooks.D1_IDEMPOTENCY = __makeIntegrationD1([["0001_idempotency_claims.sql", "CREATE TABLE idempotency_claims (\n  key TEXT PRIMARY KEY NOT NULL,\n  expires_at INTEGER NOT NULL\n);\n\nCREATE INDEX idempotency_claims_expires_at ON idempotency_claims (expires_at);\n"], ["0002_idempotency_values.sql", "CREATE TABLE idempotency_values (\n  key TEXT PRIMARY KEY NOT NULL,\n  value TEXT NOT NULL,\n  expires_at INTEGER NOT NULL\n);\n\nCREATE INDEX idempotency_values_expires_at ON idempotency_values (expires_at);\n"]]);
   const rootEnv: any = {};
   rootEnv.BYNK_CALL_TO_SHOP__HOOKS = "bynk-local-call-key";
   rootEnv.SHOP_HOOKS = { fetch: (req: globalThis.Request) => worker___ns_shop_hooks.fetch(req, env___ns_shop_hooks) } as __ServiceBinding;
@@ -117,6 +117,36 @@ async function __sysdrive_wrongmethod_replay(method: string, path: string) {
   const __res = await __h.env.SHOP_HOOKS.fetch(__req);
   return __responseToHttpOutcome(__res, (__j: __JsonValue) => Ok(__j as never));
 }
+async function __sysdrive_skew_http_POST_receipt_Param_id(id: string, __extraHeaders: { get(name: string): { readonly tag: "Some"; readonly value: string } | { readonly tag: "None" }; bearer(): { readonly tag: "Some"; readonly value: string } | { readonly tag: "None" }; clientIp(): { readonly tag: "Some"; readonly value: string } | { readonly tag: "None" } } | undefined, __sub: string) {
+  const __h = __makeHarness();
+  const __req = new globalThis.Request(`https://test/receipt/${id}`, { method: "POST", headers: { ...(__extraHeaders ? __requestHeaderPairs(__extraHeaders, true) : {}), }, });
+  const __res = await __h.env.SHOP_HOOKS.fetch(__req);
+  return __responseToHttpResult(__res, (__j: __JsonValue) => ((__v) => typeof __v === "string" ? Ok(__v) : Err({ kind: "StructuralMismatch", path: "$", expected: "string", actual: typeof __v } as __BoundaryError))(__j));
+}
+async function __sysdrive_raw_skew_http_POST_receipt_Param_id(id: string, __extraHeaders: { get(name: string): { readonly tag: "Some"; readonly value: string } | { readonly tag: "None" }; bearer(): { readonly tag: "Some"; readonly value: string } | { readonly tag: "None" }; clientIp(): { readonly tag: "Some"; readonly value: string } | { readonly tag: "None" } } | undefined, __sub: string) {
+  const __h = __makeHarness();
+  const __req = new globalThis.Request(`https://test/receipt/${id}`, { method: "POST", headers: { ...(__extraHeaders ? __requestHeaderPairs(__extraHeaders, true) : {}), }, });
+  const __res = await __h.env.SHOP_HOOKS.fetch(__req);
+  return __responseToHttpOutcome(__res, (__j: __JsonValue) => ((__v) => typeof __v === "string" ? Ok(__v) : Err({ kind: "StructuralMismatch", path: "$", expected: "string", actual: typeof __v } as __BoundaryError))(__j));
+}
+async function __sysdrive_skew_http_POST_skew_Param_id_Param_mode(id: string, mode: string, __extraHeaders: { get(name: string): { readonly tag: "Some"; readonly value: string } | { readonly tag: "None" }; bearer(): { readonly tag: "Some"; readonly value: string } | { readonly tag: "None" }; clientIp(): { readonly tag: "Some"; readonly value: string } | { readonly tag: "None" } } | undefined, __sub: string) {
+  const __h = __makeHarness();
+  const __req = new globalThis.Request(`https://test/skew/${id}/${mode}`, { method: "POST", headers: { ...(__extraHeaders ? __requestHeaderPairs(__extraHeaders, true) : {}), }, });
+  const __res = await __h.env.SHOP_HOOKS.fetch(__req);
+  return __responseToHttpResult(__res, (__j: __JsonValue) => ((__v) => typeof __v === "string" ? Ok(__v) : Err({ kind: "StructuralMismatch", path: "$", expected: "string", actual: typeof __v } as __BoundaryError))(__j));
+}
+async function __sysdrive_raw_skew_http_POST_skew_Param_id_Param_mode(id: string, mode: string, __extraHeaders: { get(name: string): { readonly tag: "Some"; readonly value: string } | { readonly tag: "None" }; bearer(): { readonly tag: "Some"; readonly value: string } | { readonly tag: "None" }; clientIp(): { readonly tag: "Some"; readonly value: string } | { readonly tag: "None" } } | undefined, __sub: string) {
+  const __h = __makeHarness();
+  const __req = new globalThis.Request(`https://test/skew/${id}/${mode}`, { method: "POST", headers: { ...(__extraHeaders ? __requestHeaderPairs(__extraHeaders, true) : {}), }, });
+  const __res = await __h.env.SHOP_HOOKS.fetch(__req);
+  return __responseToHttpOutcome(__res, (__j: __JsonValue) => ((__v) => typeof __v === "string" ? Ok(__v) : Err({ kind: "StructuralMismatch", path: "$", expected: "string", actual: typeof __v } as __BoundaryError))(__j));
+}
+async function __sysdrive_wrongmethod_skew(method: string, path: string) {
+  const __h = __makeHarness();
+  const __req = new globalThis.Request(`https://test${path}`, { method });
+  const __res = await __h.env.SHOP_HOOKS.fetch(__req);
+  return __responseToHttpOutcome(__res, (__j: __JsonValue) => Ok(__j as never));
+}
 
 async function test_a_claim_is_taken_in_the_participant_s_database__once() {
   try {
@@ -154,6 +184,44 @@ async function test_a_failed_handler_releases_its_claim_over_the_wire() {
   }
 }
 
+async function test_a_remembered_value_is_stored_in_the_participant_s_database_and_read_back() {
+  try {
+    __bynkHarness = undefined;
+    __bynkClockNow = 0;
+    const deps = __makeHarness();
+    const first = await __sysdrive_skew_http_POST_receipt_Param_id("wire-r", undefined, "");
+    if (!(((__c: boolean) => __c)(first.tag === "Ok" && first.value === "stored"))) { throw __bynkExpectFailure("tests/system.bynk:20:12", 867, 888, "expect first is Ok(\"stored\")"); }
+    const again = await __sysdrive_skew_http_POST_receipt_Param_id("wire-r", undefined, "");
+    if (!(((__c: boolean) => __c)(again.tag === "Ok" && again.value === "hit wire-r:42"))) { throw __bynkExpectFailure("tests/system.bynk:22:12", 964, 992, "expect again is Ok(\"hit wire-r:42\")"); }
+    return { pass: true };
+  } catch (e) {
+    if (e instanceof ExpectationError) {
+      return { pass: false, error: { message: e.message, location: e.location } };
+    }
+    return { pass: false, error: { message: String(e), location: "unknown", violation: __bynkViolationOf(e) } };
+  }
+}
+
+async function test_a_stored_value_that_does_not_decode_reads_as_a_miss_over_the_wire() {
+  try {
+    __bynkHarness = undefined;
+    __bynkClockNow = 0;
+    const deps = __makeHarness();
+    const text = await __sysdrive_skew_http_POST_skew_Param_id_Param_mode("wire-s", "text", undefined, "");
+    if (!(((__c: boolean) => __c)(text.tag === "Ok" && text.value === "stored"))) { throw __bynkExpectFailure("tests/system.bynk:27:12", 1160, 1180, "expect text is Ok(\"stored\")"); }
+    const asInt = await __sysdrive_skew_http_POST_skew_Param_id_Param_mode("wire-s", "int", undefined, "");
+    if (!(((__c: boolean) => __c)(asInt.tag === "Ok" && asInt.value === "stored"))) { throw __bynkExpectFailure("tests/system.bynk:29:12", 1266, 1287, "expect asInt is Ok(\"stored\")"); }
+    const intAgain = await __sysdrive_skew_http_POST_skew_Param_id_Param_mode("wire-s", "int", undefined, "");
+    if (!(((__c: boolean) => __c)(intAgain.tag === "Ok" && intAgain.value === "hit 7"))) { throw __bynkExpectFailure("tests/system.bynk:31:12", 1376, 1399, "expect intAgain is Ok(\"hit 7\")"); }
+    return { pass: true };
+  } catch (e) {
+    if (e instanceof ExpectationError) {
+      return { pass: false, error: { message: e.message, location: e.location } };
+    }
+    return { pass: false, error: { message: String(e), location: "unknown", violation: __bynkViolationOf(e) } };
+  }
+}
+
 type CaseResult = {
   name: string;
   pass: boolean;
@@ -168,7 +236,7 @@ const __bynkCasePerformance = (globalThis as unknown as { performance?: { now():
 const __bynkCaseNow = (): number => (__bynkCasePerformance ? __bynkCasePerformance.now() : Date.now());
 const __bynkCaseSince = (started: number): number => Math.round((__bynkCaseNow() - started) * 100) / 100;
 
-export const __bynkCases: readonly string[] = ["a claim is taken in the participant's database, once", "a failed handler releases its claim over the wire"];
+export const __bynkCases: readonly string[] = ["a claim is taken in the participant's database, once", "a failed handler releases its claim over the wire", "a remembered value is stored in the participant's database and read back", "a stored value that does not decode reads as a miss over the wire"];
 
 export async function run(only?: string, onCase?: (a0: CaseResult) => void) {
   const results = [];
@@ -182,6 +250,18 @@ export async function run(only?: string, onCase?: (a0: CaseResult) => void) {
   if (want("a failed handler releases its claim over the wire")) {
     const started = __bynkCaseNow();
     const r = { name: "a failed handler releases its claim over the wire", ...(await test_a_failed_handler_releases_its_claim_over_the_wire()), durationMs: __bynkCaseSince(started) };
+    results.push(r);
+    if (onCase) onCase(r);
+  }
+  if (want("a remembered value is stored in the participant's database and read back")) {
+    const started = __bynkCaseNow();
+    const r = { name: "a remembered value is stored in the participant's database and read back", ...(await test_a_remembered_value_is_stored_in_the_participant_s_database_and_read_back()), durationMs: __bynkCaseSince(started) };
+    results.push(r);
+    if (onCase) onCase(r);
+  }
+  if (want("a stored value that does not decode reads as a miss over the wire")) {
+    const started = __bynkCaseNow();
+    const r = { name: "a stored value that does not decode reads as a miss over the wire", ...(await test_a_stored_value_that_does_not_decode_reads_as_a_miss_over_the_wire()), durationMs: __bynkCaseSince(started) };
     results.push(r);
     if (onCase) onCase(r);
   }

@@ -894,7 +894,7 @@ export function surfaceSuite(name, b, rt, bynk, shape) {
 
   t("IdempotencyProvider.dedup: is None for a key never remembered", async () => {
     const idem = new b.IdempotencyProvider({ Clock: fakeClock(1_000) });
-    assert.deepEqual(await idem.dedup("never"), None);
+    assert.deepEqual(await idem.dedup("never"), { kind: "None" });
   });
 
   t("IdempotencyProvider.dedup: answers a remembered value until it expires", async () => {
@@ -902,9 +902,19 @@ export function surfaceSuite(name, b, rt, bynk, shape) {
     const idem = new b.IdempotencyProvider({ Clock: clock });
     await idem.remember("k", { order: 7 }, 500);
     clock.t = 1_499;
-    assert.deepEqual(await idem.dedup("k"), Some({ order: 7 }));
+    assert.deepEqual(await idem.dedup("k"), { kind: "Some", value: { order: 7 } });
     clock.t = 1_500;
-    assert.deepEqual(await idem.dedup("k"), None, "expired exactly at now + expiresAfter");
+    assert.deepEqual(await idem.dedup("k"), { kind: "None" }, "expired exactly at now + expiresAfter");
+  });
+
+  t("IdempotencyProvider.dedup: is the JSON of what remember was given, and a stored null is not a miss", async () => {
+    const idem = new b.IdempotencyProvider({ Clock: fakeClock(0) });
+    await idem.remember("n", null, 100);
+    assert.deepEqual(await idem.dedup("n"), { kind: "Some", value: null });
+    const original = { items: [1, 2] };
+    await idem.remember("o", original, 100);
+    original.items.push(3); // what was stored is a copy, as a wire would carry it
+    assert.deepEqual(await idem.dedup("o"), { kind: "Some", value: { items: [1, 2] } });
   });
 
   t("IdempotencyProvider.remember: a later remember replaces the value and restarts the window", async () => {
@@ -914,7 +924,7 @@ export function surfaceSuite(name, b, rt, bynk, shape) {
     clock.t = 90;
     await idem.remember("k", "second", 100);
     clock.t = 150;
-    assert.deepEqual(await idem.dedup("k"), Some("second"));
+    assert.deepEqual(await idem.dedup("k"), { kind: "Some", value: "second" });
   });
 
   t("IdempotencyProvider.claim: the first claim wins, a repeat is AlreadyClaimed until it lapses", async () => {
@@ -937,7 +947,7 @@ export function surfaceSuite(name, b, rt, bynk, shape) {
     const idem = new b.IdempotencyProvider({ Clock: fakeClock(0) });
     await idem.remember("k", 1, 100);
     assert.equal((await idem.claim("k", 100)).tag, "Claimed");
-    assert.deepEqual(await idem.dedup("other"), None);
+    assert.deepEqual(await idem.dedup("other"), { kind: "None" });
   });
 
   t("IdempotencyProvider.__track: a failed handler releases its claim, so a retry claims again", async () => {

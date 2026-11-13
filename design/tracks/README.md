@@ -237,7 +237,7 @@ decisions, the named follow-ons — is kept for the record in
   mechanical dedup for at-least-once delivery. `given Idempotency` is two ordinary generic capability
   methods, `dedup[T]` and `remember[T]` (ADRs 0281, 0282), with one in-memory provider and every key
   prefixed by the calling handler's qualified name (ADR 0283). The event-subscriber idiom is a
-  documented convention (ADR 0294). The durable provider was out of scope here and followed under [#2840](https://github.com/bynk-lang/bynk/issues/2840): an atomic `claim` operation, durable on Cloudflare in an implicit D1 database (`dedup`/`remember` stay per-instance until typed capability reads, [#3458](https://github.com/bynk-lang/bynk/issues/3458)). Shipped v0.236.0–v0.237.0.
+  documented convention (ADR 0294). The durable provider was out of scope here and followed under [#2840](https://github.com/bynk-lang/bynk/issues/2840): an atomic `claim` operation, durable on Cloudflare in an implicit D1 database (`dedup`/`remember` take a `Codable` value and are durable in the same database, through typed capability reads, [#3458](https://github.com/bynk-lang/bynk/issues/3458)). Shipped v0.236.0–v0.237.0.
   Retired 2 November 2026.
 - **`patterns.md`** — spine [#2616](https://github.com/bynk-lang/bynk/issues/2616):
   destructuring and richer patterns. Records are matched and destructured by field, always open

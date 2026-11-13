@@ -75,4 +75,25 @@ suite shop.hooks {
     let again <- ledger.call("good")
     expect again is Ok("duplicate")
   }
+
+  case "a value round-trips through the generic helper" {
+    let first <- skew.POST("/receipt/:id", "r1") by Visitor
+    expect first is Ok("stored")
+    let again <- skew.POST("/receipt/:id", "r1") by Visitor
+    expect again is Ok("hit r1:42")
+    let other <- skew.POST("/receipt/:id", "r2") by Visitor
+    expect other is Ok("stored")
+  }
+
+  case "a stored value that does not decode as the type asked for is a miss" {
+    let text <- skew.POST("/skew/:id/:mode", "s1", "text") by Visitor
+    expect text is Ok("stored")
+    let again <- skew.POST("/skew/:id/:mode", "s1", "text") by Visitor
+    expect again is Ok("hit text")
+    // Read as an Int, the stored text does not decode: a miss, which then stores the Int.
+    let asInt <- skew.POST("/skew/:id/:mode", "s1", "int") by Visitor
+    expect asInt is Ok("stored")
+    let intAgain <- skew.POST("/skew/:id/:mode", "s1", "int") by Visitor
+    expect intAgain is Ok("hit 7")
+  }
 }

@@ -2,13 +2,37 @@
 // context shop.hooks
 
 import { Ok, Err, Some, None, type Result, type Option } from "../../__bynk_runtime/result.js";
-import type { ValidationError } from "../../__bynk_runtime/errors.js";
+import type { ValidationError, DecodeError } from "../../__bynk_runtime/errors.js";
 import { type __JsonValue, type __BoundaryError, type __ServiceBinding, __callService, __boundaryError } from "../../__bynk_runtime/boundary.js";
+import { __bynkCapabilityReply, __bynkCodecOption } from "../../__bynk_runtime/codec.js";
 import { HttpResult } from "../../__bynk_runtime/httpresult.js";
 
 import { Claim } from "../../bynk.js";
 
 import * as bynk from "../../bynk.js";
+
+export interface Receipt {
+  readonly id: string;
+  readonly total: number;
+}
+
+export const Receipt = {
+};
+
+export async function once<T>(key: string, value: T, __codec_T: { encode: (v: T) => __JsonValue; decode: (j: __JsonValue, path: string) => Result<T, __BoundaryError> }, deps: { Idempotency: bynk.Idempotency }): globalThis.Promise<Option<T>> {
+  const seen = await __bynkCapabilityReply(deps.Idempotency.dedup(`shop.hooks.fn.once::${key}`), __bynkCodecOption(__codec_T), { capability: "Idempotency", operation: "dedup", type: "Option[T]" }, "miss");
+  switch (seen.tag) {
+    case "Some": {
+      const v = seen.value;
+      return Some(v);
+    }
+    case "None": {
+      const __r0 = await deps.Idempotency.remember(`shop.hooks.fn.once::${key}`, __codec_T.encode(value), 3600000);
+      return None;
+    }
+  }
+  throw new globalThis.Error("non-exhaustive match");
+}
 
 export const api = {
   async http_POST_hooks_Param_id(id: string, deps: { Idempotency: bynk.Idempotency }): globalThis.Promise<HttpResult<string>> {
@@ -61,14 +85,14 @@ export const api = {
 
 export const replay = {
   async http_POST_replay_Param_id(id: string, deps: { Idempotency: bynk.Idempotency }): globalThis.Promise<HttpResult<string>> {
-    const cached = await deps.Idempotency.dedup<string>(`shop.hooks.replay.http_POST_replay_Param_id::${id}`);
+    const cached = await __bynkCapabilityReply(deps.Idempotency.dedup(`shop.hooks.replay.http_POST_replay_Param_id::${id}`), { encode: __serialise_Option_String, decode: __deserialise_Option_String }, { capability: "Idempotency", operation: "dedup", type: "Option[String]" }, "miss");
     switch (cached.tag) {
       case "Some": {
         const v = cached.value;
         return HttpResult.Ok(v);
       }
       case "None": {
-        const __r0 = await deps.Idempotency.remember<string>(`shop.hooks.replay.http_POST_replay_Param_id::${id}`, "computed", 3600000);
+        const __r0 = await deps.Idempotency.remember(`shop.hooks.replay.http_POST_replay_Param_id::${id}`, "computed" as __JsonValue, 3600000);
         return HttpResult.Ok("fresh");
       }
     }
@@ -102,6 +126,49 @@ export const ledger = {
   },
 };
 
+export const skew = {
+  async http_POST_receipt_Param_id(id: string, deps: { Idempotency: bynk.Idempotency }): globalThis.Promise<HttpResult<string>> {
+    const r = await once(id, { id: id, total: 42 }, { encode: __serialise_Receipt, decode: __deserialise_Receipt }, deps);
+    switch (r.tag) {
+      case "Some": {
+        const v = r.value;
+        return HttpResult.Ok(`hit ${String(v.id)}:${String(v.total)}`);
+      }
+      case "None": {
+        return HttpResult.Ok("stored");
+      }
+    }
+    throw new globalThis.Error("non-exhaustive match");
+  },
+  async http_POST_skew_Param_id_Param_mode(id: string, mode: string, deps: { Idempotency: bynk.Idempotency }): globalThis.Promise<HttpResult<string>> {
+    if (mode === "text") {
+      const t = await once(id, "text", { encode: (__v: string) => __v as __JsonValue, decode: (__j: __JsonValue, __p: string) => { if (typeof __j !== "string") { return Err({ kind: "StructuralMismatch", path: __p, expected: "string", actual: typeof __j }); } const __v = __j; return Ok(__v as string); } }, deps);
+      switch (t.tag) {
+        case "Some": {
+          const v = t.value;
+          return HttpResult.Ok(`hit ${String(v)}`);
+        }
+        case "None": {
+          return HttpResult.Ok("stored");
+        }
+      }
+      throw new globalThis.Error("non-exhaustive match");
+    } else {
+      const n = await once(id, 7, { encode: (__v: number) => ((v: number) => { if (!globalThis.Number.isSafeInteger(v)) throw new globalThis.Error("Int outside the safe-integer range at boundary"); return v as __JsonValue; })(__v), decode: (__j: __JsonValue, __p: string) => { if (typeof __j !== "number") { return Err({ kind: "StructuralMismatch", path: __p, expected: "number", actual: typeof __j }); } if (!globalThis.Number.isSafeInteger(__j)) { return Err({ kind: "StructuralMismatch", path: __p, expected: "safe integer", actual: String(__j) }); } const __v = __j; return Ok(__v as number); } }, deps);
+      switch (n.tag) {
+        case "Some": {
+          const v = n.value;
+          return HttpResult.Ok(`hit ${String(v)}`);
+        }
+        case "None": {
+          return HttpResult.Ok("stored");
+        }
+      }
+      throw new globalThis.Error("non-exhaustive match");
+    }
+  },
+};
+
 export function __serialise_Result_String_String(value: Result<string, string>): __JsonValue {
   if (value.tag === "Ok") return { kind: "Ok", value: value.value as __JsonValue };
   return { kind: "Err", error: value.error as __JsonValue };
@@ -126,4 +193,72 @@ export function __deserialise_Result_String_String(json: __JsonValue, path: stri
     return Ok(Err(__e) as Result<string, string>);
   }
   return Err({ kind: "StructuralMismatch", path, expected: "Ok | Err", actual: String(obj["kind"]) });
+}
+
+export function __serialise_Receipt(value: Receipt): __JsonValue {
+  return {
+    id: value.id as __JsonValue,
+    total: ((v: number) => { if (!globalThis.Number.isSafeInteger(v)) throw new globalThis.Error("Int outside the safe-integer range at boundary"); return v as __JsonValue; })(value.total),
+  };
+}
+
+export function __deserialise_Receipt(json: __JsonValue, path: string = "$"): Result<Receipt, __BoundaryError> {
+  if (typeof json !== "object" || json === null || globalThis.Array.isArray(json)) {
+    return Err({ kind: "StructuralMismatch", path, expected: "object", actual: typeof json });
+  }
+  const obj = json as { [k: string]: __JsonValue };
+  if (typeof obj["id"] !== "string") {
+    return Err({ kind: "StructuralMismatch", path: `${path}.id`, expected: "string", actual: typeof obj["id"] });
+  }
+  const __id = obj["id"];
+  if (typeof obj["total"] !== "number") {
+    return Err({ kind: "StructuralMismatch", path: `${path}.total`, expected: "number", actual: typeof obj["total"] });
+  }
+  if (!globalThis.Number.isSafeInteger(obj["total"])) {
+    return Err({ kind: "StructuralMismatch", path: `${path}.total`, expected: "safe integer", actual: String(obj["total"]) });
+  }
+  const __total = obj["total"];
+  return Ok({ id: __id, total: __total } as Receipt);
+}
+
+
+export function __serialise_Option_String(value: Option<string>): __JsonValue {
+  if (value.tag === "Some") return { kind: "Some", value: value.value as __JsonValue };
+  return { kind: "None" };
+}
+
+function __option_value_String(raw: __JsonValue, at: string): Result<unknown, __BoundaryError> {
+  if (typeof raw !== "string") {
+    return Err({ kind: "StructuralMismatch", path: at, expected: "string", actual: typeof raw });
+  }
+  const __v = raw;
+  return Ok(__v);
+}
+
+export function __deserialise_Option_String(json: __JsonValue, path: string = "$"): Result<Option<string>, __BoundaryError> {
+  if (json === undefined || json === null) {
+    return Ok(None as Option<string>);
+  }
+  if (typeof json === "object" && !globalThis.Array.isArray(json)) {
+    const obj = json as { [k: string]: __JsonValue };
+    const __keys = globalThis.Object.keys(obj);
+    if (obj["kind"] === "None" && __keys.length === 1) {
+      return Ok(None as Option<string>);
+    }
+    if (obj["kind"] === "Some" && __keys.length === 2 && "value" in obj) {
+      const __t = __option_value_String(obj["value"], `${path}.value`);
+      if (__t.tag === "Err") {
+        return __t;
+      }
+      return Ok(Some(__t.value as string) as Option<string>);
+    }
+  }
+  const __b = __option_value_String(json, path);
+  if (__b.tag === "Ok") {
+    return Ok(Some(__b.value as string) as Option<string>);
+  }
+  if (__b.error.kind === "StructuralMismatch" && __b.error.path === path && !__b.error.expected.endsWith(" | null | {\"kind\": \"None\"} | {\"kind\": \"Some\", \"value\": ...}")) {
+    return Err({ ...__b.error, expected: __b.error.expected + " | null | {\"kind\": \"None\"} | {\"kind\": \"Some\", \"value\": ...}" });
+  }
+  return __b;
 }

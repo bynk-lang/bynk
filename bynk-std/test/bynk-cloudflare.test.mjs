@@ -30,6 +30,7 @@ function claimsDatabase(sqlSource) {
     sql,
     bind: (...values) => statement(sql, values),
     run: () => db.prepare(sql).run(...bound),
+    first: async () => db.prepare(sql).get(...bound) ?? null,
   });
   let failWhen = null;
   return {
@@ -51,10 +52,13 @@ function claimsDatabase(sqlSource) {
       }
     },
     rows: () => db.prepare("SELECT key, expires_at FROM idempotency_claims ORDER BY key").all(),
+    valueKeys: () => db.prepare("SELECT key FROM idempotency_values ORDER BY key").all().map((r) => r.key),
   };
 }
 
-const MIGRATION = readFileSync(new URL("./0001_idempotency_claims.sql", import.meta.url), "utf8");
+const MIGRATION =
+  readFileSync(new URL("./0001_idempotency_claims.sql", import.meta.url), "utf8") +
+  readFileSync(new URL("./0002_idempotency_values.sql", import.meta.url), "utf8");
 
 function clock(start) {
   return { t: start, async now() { return this.t; } };
@@ -171,4 +175,60 @@ d1("__track: confirming a claim whose lapsed row was swept restores it", async (
   assert.deepEqual(db.rows().map((r) => r.key), ["elsewhere"], "the lapsed row was swept");
   await scope.settle({ tag: "Ok" }, false);
   assert.equal((await other.claim("k", 1)).tag, "AlreadyClaimed", "the slow handler's confirm holds");
+});
+
+d1("dedup: with a database, a remembered value is durable, shared between instances and expires", async () => {
+  const db = claimsDatabase(MIGRATION);
+  const c = clock(1_000);
+  const env = { D1_IDEMPOTENCY: db };
+  const a = new binding.IdempotencyProvider({ Clock: c }, env);
+  const b = new binding.IdempotencyProvider({ Clock: c }, env);
+  assert.deepEqual(await a.dedup("k"), { kind: "None" });
+  await a.remember("k", { order: 7, tags: ["x"] }, 500);
+  assert.deepEqual(await b.dedup("k"), { kind: "Some", value: { order: 7, tags: ["x"] } });
+  c.t = 1_499;
+  assert.deepEqual((await b.dedup("k")).kind, "Some");
+  c.t = 1_500;
+  assert.deepEqual(await b.dedup("k"), { kind: "None" }, "expired exactly at now + expiresAfter");
+});
+
+d1("remember: with a database, a later remember replaces the value and restarts the window; null is a value", async () => {
+  const db = claimsDatabase(MIGRATION);
+  const c = clock(0);
+  const idem = new binding.IdempotencyProvider({ Clock: c }, { D1_IDEMPOTENCY: db });
+  await idem.remember("k", "first", 100);
+  c.t = 90;
+  await idem.remember("k", "second", 100);
+  c.t = 150;
+  assert.deepEqual(await idem.dedup("k"), { kind: "Some", value: "second" });
+  await idem.remember("n", null, 100);
+  assert.deepEqual(await idem.dedup("n"), { kind: "Some", value: null });
+});
+
+d1("remember: with a database, expired values of other keys are swept, and claims are separate", async () => {
+  const db = claimsDatabase(MIGRATION);
+  const c = clock(0);
+  const idem = new binding.IdempotencyProvider({ Clock: c }, { D1_IDEMPOTENCY: db });
+  await idem.remember("old", 1, 10);
+  assert.equal((await idem.claim("old", 1_000)).tag, "Claimed", "a claim does not see a remembered value");
+  c.t = 100;
+  await idem.remember("new", 2, 10);
+  assert.deepEqual(db.valueKeys(), ["new"]);
+});
+
+d1("dedup: a stored value that is not JSON reads as a miss; remember skips an oversized value", async () => {
+  const db = claimsDatabase(MIGRATION);
+  const c = clock(0);
+  const idem = new binding.IdempotencyProvider({ Clock: c }, { D1_IDEMPOTENCY: db });
+  await db.batch([db.prepare("INSERT INTO idempotency_values (key, value, expires_at) VALUES (?1, ?2, ?3)").bind("bad", "{not json", 1_000)]);
+  assert.deepEqual(await idem.dedup("bad"), { kind: "None" });
+  const warn = console.warn;
+  console.warn = () => {};
+  try {
+    await idem.remember("big", "x".repeat(1_100_000), 100);
+  } finally {
+    console.warn = warn;
+  }
+  assert.deepEqual(await idem.dedup("big"), { kind: "None" });
+  assert.deepEqual(db.valueKeys(), ["bad"]);
 });

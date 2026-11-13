@@ -1327,7 +1327,7 @@ fresh for each case:
 | `Locale` | `current()` is `"en"` |
 | `Logger` | records every level (`log` too), prints nothing |
 | `Events` | records, delivers nothing |
-| `Idempotency` | in memory; `remember`'s and `claim`'s `expiresAfter` are honoured on the harness clock at `unit` (the real clock at `integration`), so `advance Clock` lapses a window |
+| `Idempotency` | in memory; `remember`'s and `claim`'s `expiresAfter` are honoured on the harness clock at `unit` (the real clock at `integration`), so `advance Clock` lapses a window; `dedup` and `remember` store the JSON the call encodes, so a value written as one type and read as another is a miss |
 | `Kv` | in memory, values kept as bytes with their metadata; `putTtl`'s TTL and `putWith`'s expiry are kept and listed but not enforced; the new operations check the platform's limits, and `listPage` pages in key order |
 | `R2` | each instance an in-memory bucket, honouring `putWith`'s conditions, metadata and `list`'s paging |
 | `RateLimit` | each instance counts calls per key over windows of its `@period`, allowing `@limit` per window — on the harness clock at `unit`, the real clock at `integration` |

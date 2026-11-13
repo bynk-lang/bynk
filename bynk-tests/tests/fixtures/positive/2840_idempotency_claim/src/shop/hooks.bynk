@@ -42,3 +42,46 @@ service ledger {
     if id == "bad" { Err("rejected") } else { Ok("done") }
   }
 }
+
+// A generic helper reads and writes through a rigid `T: Codable`: the call site encodes
+// and decodes with the caller's witness for `T`. The key is scoped to the calling body
+// (here this function), so a value is read back by the body that wrote it.
+fn once[T: Codable](key: String, value: T) -> Effect[Option[T]] given Idempotency {
+  let seen <- Idempotency.dedup[T](key)
+  match seen {
+    Some(v) => Some(v),
+    None => {
+      let _ <- Idempotency.remember[T](key, value, 1.hours)
+      None
+    },
+  }
+}
+
+type Receipt = { id: String, total: Int }
+
+service skew from http {
+  on POST("/receipt/:id") (id: String) -> Effect[HttpResult[String]] by Visitor given Idempotency {
+    let r <- once[Receipt](id, Receipt { id: id, total: 42 })
+    match r {
+      Some(v) => Ok("hit \(v.id):\(v.total)"),
+      None => Ok("stored"),
+    }
+  }
+
+  // A stored value that no longer decodes as the type asked for reads as a miss.
+  on POST("/skew/:id/:mode") (id: String, mode: String) -> Effect[HttpResult[String]] by Visitor given Idempotency {
+    if mode == "text" {
+      let t <- once[String](id, "text")
+      match t {
+        Some(v) => Ok("hit \(v)"),
+        None => Ok("stored"),
+      }
+    } else {
+      let n <- once[Int](id, 7)
+      match n {
+        Some(v) => Ok("hit \(v)"),
+        None => Ok("stored"),
+      }
+    }
+  }
+}

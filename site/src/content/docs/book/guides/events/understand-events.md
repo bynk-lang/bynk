@@ -120,18 +120,13 @@ An `on event` handler may declare a second, optional parameter —
 context commerce.notifications
 
 consumes commerce.order
-consumes bynk { Idempotency }
+consumes bynk { Idempotency, Claim }
 
 service OnPayment from Events(PaymentConfirmed) {
 	on event(e: PaymentConfirmed, env: EventEnvelope) -> Effect[()] given Idempotency {
-		let seen <- Idempotency.dedup[()](env.eventId)
-		match seen {
-			Some(_) => (),
-			None => {
-				// react to e here, exactly once per eventId
-				let _ <- Idempotency.remember[()](env.eventId, (), 7.days)
-			},
-		}
+		let Claim.Claimed <- Idempotency.claim(env.eventId, 7.days) else { () }
+		// react to e here, once per eventId
+		()
 	}
 }
 ```
@@ -151,12 +146,14 @@ for it:
   `"commerce.order"`) every time.
 
 **The idempotency idiom.** Delivery is at-least-once (see below) — an
-effectful subscriber that must not double-apply an emission dedups on
+effectful subscriber that must not double-apply an emission claims
 `env.eventId` using the already-documented
 [`Idempotency`](/book/reference/bynk-capabilities/) capability, exactly as
-shown above. This is the ordinary `dedup`/`remember` pair, not new syntax —
+shown above. `claim` is atomic and is released if the handler fails, so a
+redelivery after a failure runs the work again, and one after success is
+skipped. This is the ordinary capability, not new syntax —
 `env.eventId` is just a `String` key like any other, and two different
-subscriber services deduping the same `eventId` never collide (each
+subscriber services claiming the same `eventId` never collide (each
 handler's key is scoped to its own qualified name automatically). A
 subscriber that only reads or transforms state, taking no effect, is
 trivially idempotent already and needs no `env` parameter at all.
@@ -168,7 +165,7 @@ when one is present, or `1` for a brand-new event with neither.
 **Testing the idiom.** A test case delivers an event straight to a
 subscriber with `svc.event(e)` or `svc.event(e, env)`, at the `unit` or
 `integration` tier. It runs the subscriber's pattern filter and `via schema(N)`
-guard as delivery does, so delivering the same envelope twice checks the dedup:
+guard as delivery does, so delivering the same envelope twice checks the claim:
 
 ```bynk,fragment
 suite commerce.notifications {
@@ -182,7 +179,7 @@ suite commerce.notifications {
 		}
 		let _ <- OnPayment.event(e, env)
 		let _ <- OnPayment.event(e, env)
-		expect Idempotency.remember called once
+		expect Idempotency.claim called 2 times
 	}
 }
 ```
@@ -500,10 +497,10 @@ replay from, or ordering across *concurrent* invocations of the same
 publishing agent — measured, not assumed, and found not to hold. A subscriber
 that needs a total order across concurrent publishes must carry its own
 sequence number in the event payload. A subscriber that must not double-apply
-a redelivered emission dedups on `env.eventId` via `Idempotency` (see "The
-envelope, and idempotent handling", above) — though only up to that
-capability's current, in-memory limit, since a duplicate delivered across an
-isolate restart is not deduped until a durable provider exists.
+a redelivered emission claims `env.eventId` via `Idempotency` (see "The
+envelope, and idempotent handling", above); on Cloudflare the claim is durable
+and shared, so a duplicate delivered to another isolate, or after a restart, is
+still skipped.
 
 **See also:**
 [First-party `bynk` capabilities](/book/reference/bynk-capabilities/),

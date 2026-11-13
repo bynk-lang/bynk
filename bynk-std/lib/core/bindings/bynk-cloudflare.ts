@@ -472,7 +472,7 @@ function claimFailed(result: unknown): boolean {
 // The part of a D1 database `claim` uses (#2840), declared here rather than
 // imported: this binding takes the Worker `env` as a plain value.
 interface IdempotencyD1 {
-  prepare(sql: string): { bind(...values: unknown[]): unknown };
+  prepare(sql: string): { bind(...values: unknown[]): { first<T>(): Promise<T | null> } };
   batch(statements: unknown[]): Promise<Array<{ meta: { changes?: number } }>>;
 }
 
@@ -486,20 +486,18 @@ const CLAIM_SWEEP_BATCH = 20;
 
 // How many claims an instance remembers (or, in memory, keeps past their expiry) before it drops the
 // oldest, so a long-lived isolate does not grow with every unique key.
+// D1 caps a row at about 2 MB; stay well under it so a `remember` never fails on size.
+const REMEMBER_MAX_CHARS = 1_000_000;
 const CLAIM_TRACKED_MAX = 10_000;
 
 // Idempotency capability track (ADR 0282, #2840).
 //
-// `dedup` and `remember` are an in-memory map per instance: lost on restart and not
-// shared between isolates, with lazy eviction (an expired entry is overwritten on its
-// next read, `Cache`'s check-on-read model, decision 0113). Durable, typed reads wait
-// for #3458.
-//
-// `claim` is durable and shared when the Worker has the implicit D1 database the
-// compiler declares for a Worker that calls it (`env.D1_IDEMPOTENCY`): one
-// `INSERT … ON CONFLICT DO UPDATE … WHERE expires_at <= now` is the atomic
-// first-writer-wins, and the row count says who won. Without an `env` (a unit test
-// of the provider) it is an in-memory map, as on Node and in the browser.
+// `dedup`, `remember` and `claim` are durable and shared between isolates when the Worker has
+// the implicit D1 database the compiler declares for a Worker that calls the capability
+// (`env.D1_IDEMPOTENCY`). `claim` is one `INSERT … ON CONFLICT DO UPDATE … WHERE expires_at <=
+// now`, the atomic first-writer-wins, whose row count says who won; `remember` upserts the
+// value's JSON, and `dedup` reads it back while it has not expired. Without an `env` (a unit
+// test of the provider) they are in memory, as on Node and in the browser.
 export class IdempotencyProvider implements Idempotency {
   private deps: { Clock: Clock };
   private env?: unknown;
@@ -513,14 +511,56 @@ export class IdempotencyProvider implements Idempotency {
     this.deps = deps;
     this.env = env;
   }
-  async dedup<T>(key: string): Promise<Option<T>> {
+  // `dedup` and `remember` carry JSON (#2840): the call site encodes the value `remember`
+  // is given and decodes the reply, so a stored value is whatever a wire would carry. A
+  // reply is the encoding of an `Option`, which cannot be mistaken for a stored `null`.
+  // With the Worker's implicit D1 database they are durable and shared between isolates;
+  // without an `env` (a unit test of the provider) they are an in-memory map.
+  async dedup(key: string): Promise<unknown> {
     const now = await this.deps.Clock.now();
-    const hit = this.store.get(key);
-    return hit !== undefined && hit.expiresAt > now ? Some(hit.value as T) : None;
+    const db = this.d1();
+    if (db === undefined) {
+      const hit = this.store.get(key);
+      return hit !== undefined && hit.expiresAt > now ? { kind: "Some", value: hit.value } : { kind: "None" };
+    }
+    const row = await db
+      .prepare("SELECT value FROM idempotency_values WHERE key = ?1 AND expires_at > ?2")
+      .bind(key, now)
+      .first<{ value: string }>();
+    if (row === null || row === undefined) return { kind: "None" };
+    try {
+      return { kind: "Some", value: JSON.parse(row.value) };
+    } catch {
+      // Not JSON (only an out-of-band write can leave this): a miss, as the contract says.
+      return { kind: "None" };
+    }
   }
-  async remember<T>(key: string, value: T, expiresAfter: number): Promise<void> {
+  async remember(key: string, value: unknown, expiresAfter: number): Promise<void> {
     const now = await this.deps.Clock.now();
-    this.store.set(key, { value, expiresAt: now + expiresAfter });
+    const json = JSON.stringify(value);
+    const db = this.d1();
+    // `dedup` is a cache: a value too large for a D1 row is not remembered (and says so)
+    // rather than failing the handler that computed it.
+    if (db !== undefined && json.length > REMEMBER_MAX_CHARS) {
+      console.warn(`bynk.Idempotency.remember: value for \`${key}\` is too large to store (${json.length} chars); not remembered`);
+      return;
+    }
+    if (db === undefined) {
+      this.store.set(key, { value: JSON.parse(json), expiresAt: now + expiresAfter });
+      return;
+    }
+    await db.batch([
+      db
+        .prepare(
+          "INSERT INTO idempotency_values (key, value, expires_at) VALUES (?1, ?2, ?3) ON CONFLICT (key) DO UPDATE SET value = excluded.value, expires_at = excluded.expires_at",
+        )
+        .bind(key, json, now + expiresAfter),
+      db
+        .prepare(
+          `DELETE FROM idempotency_values WHERE key IN (SELECT key FROM idempotency_values WHERE expires_at <= ?1 LIMIT ${CLAIM_SWEEP_BATCH})`,
+        )
+        .bind(now),
+    ]);
   }
 
   // The claims database, or `undefined` without a Worker `env`. A Worker with an `env`

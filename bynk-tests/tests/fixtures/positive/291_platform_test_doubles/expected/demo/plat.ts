@@ -2,7 +2,9 @@
 // context demo.plat
 
 import { Ok, Err, Some, None, type Result, type Option } from "../__bynk_runtime/result.js";
-import type { ValidationError } from "../__bynk_runtime/errors.js";
+import type { ValidationError, DecodeError } from "../__bynk_runtime/errors.js";
+import type { __JsonValue, __BoundaryError } from "../__bynk_runtime/boundary.js";
+import { __bynkCapabilityReply } from "../__bynk_runtime/codec.js";
 
 import { Method, Request } from "../bynk.js";
 
@@ -53,13 +55,13 @@ export const greet = {
 
 export const once = {
   async call(key: string, deps: { Idempotency: bynk.Idempotency }): globalThis.Promise<boolean> {
-    const seen = await deps.Idempotency.dedup<boolean>(`demo.plat.once.call::${key}`);
+    const seen = await __bynkCapabilityReply(deps.Idempotency.dedup(`demo.plat.once.call::${key}`), { encode: __serialise_Option_Bool, decode: __deserialise_Option_Bool }, { capability: "Idempotency", operation: "dedup", type: "Option[Bool]" }, "miss");
     switch (seen.tag) {
       case "Some": {
         return false;
       }
       case "None": {
-        const __r0 = await deps.Idempotency.remember<boolean>(`demo.plat.once.call::${key}`, true, 3600000);
+        const __r0 = await deps.Idempotency.remember(`demo.plat.once.call::${key}`, true as __JsonValue, 3600000);
         return true;
       }
     }
@@ -140,4 +142,45 @@ export function __makeSurface(deps: __DemoPlatDeps) {
       return relay.call(url, deps);
     },
   };
+}
+
+export function __serialise_Option_Bool(value: Option<boolean>): __JsonValue {
+  if (value.tag === "Some") return { kind: "Some", value: value.value as __JsonValue };
+  return { kind: "None" };
+}
+
+function __option_value_Bool(raw: __JsonValue, at: string): Result<unknown, __BoundaryError> {
+  if (typeof raw !== "boolean") {
+    return Err({ kind: "StructuralMismatch", path: at, expected: "boolean", actual: typeof raw });
+  }
+  const __v = raw;
+  return Ok(__v);
+}
+
+export function __deserialise_Option_Bool(json: __JsonValue, path: string = "$"): Result<Option<boolean>, __BoundaryError> {
+  if (json === undefined || json === null) {
+    return Ok(None as Option<boolean>);
+  }
+  if (typeof json === "object" && !globalThis.Array.isArray(json)) {
+    const obj = json as { [k: string]: __JsonValue };
+    const __keys = globalThis.Object.keys(obj);
+    if (obj["kind"] === "None" && __keys.length === 1) {
+      return Ok(None as Option<boolean>);
+    }
+    if (obj["kind"] === "Some" && __keys.length === 2 && "value" in obj) {
+      const __t = __option_value_Bool(obj["value"], `${path}.value`);
+      if (__t.tag === "Err") {
+        return __t;
+      }
+      return Ok(Some(__t.value as boolean) as Option<boolean>);
+    }
+  }
+  const __b = __option_value_Bool(json, path);
+  if (__b.tag === "Ok") {
+    return Ok(Some(__b.value as boolean) as Option<boolean>);
+  }
+  if (__b.error.kind === "StructuralMismatch" && __b.error.path === path && !__b.error.expected.endsWith(" | null | {\"kind\": \"None\"} | {\"kind\": \"Some\", \"value\": ...}")) {
+    return Err({ ...__b.error, expected: __b.error.expected + " | null | {\"kind\": \"None\"} | {\"kind\": \"Some\", \"value\": ...}" });
+  }
+  return __b;
 }

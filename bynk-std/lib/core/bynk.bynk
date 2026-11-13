@@ -320,8 +320,12 @@ adapter bynk {
 	reserved keyword), which the caller must call to actually cache anything
 	— a `dedup` miss with no matching `remember` call simply recomputes every
 	time. `expiresAfter` sets the retention window a call to `remember`
-	establishes. Slice 0 (ADR 0282): a single
-	in-memory provider, lost on process restart — no durability guarantee yet.
+	establishes. The cached type `T` must be `Codable`: the value is stored as
+	its JSON encoding, and a stored value that no longer decodes as `T` (an
+	older deploy wrote it as another shape) reads as a miss, not a fault. On
+	Cloudflare they are durable and shared across isolates (in the Worker's
+	implicit D1 database); on Node and in the browser they are an in-memory
+	map, lost on restart.
 
 	`claim` is the race-free form: the first call for a key returns `Claimed`
 	and every later call within `expiresAfter` returns `AlreadyClaimed`, as one
@@ -334,8 +338,8 @@ adapter bynk {
 	lapses. `claim` records no outcome and is separate from `dedup`/`remember`.
 	---
 	capability Idempotency {
-		fn dedup[T](key: String) -> Effect[Option[T]]
-		fn remember[T](key: String, value: T, expiresAfter: Duration) -> Effect[()]
+		fn dedup[T: Codable](key: String) -> Effect[Option[T]] @onUndecodable(miss)
+		fn remember[T: Codable](key: String, value: T, expiresAfter: Duration) -> Effect[()]
 		fn claim(key: String, expiresAfter: Duration) -> Effect[Claim]
 	}
 

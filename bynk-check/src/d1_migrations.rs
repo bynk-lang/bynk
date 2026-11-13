@@ -47,15 +47,22 @@ pub const IDEMPOTENCY_BINDING: &str = "D1_IDEMPOTENCY";
 
 /// W30 (#2840): the migration files the compiler owns for an implicit database
 /// (the author writes no SQL), by its `binding`; `None` for any other binding.
-/// The claims table holds one row per claimed key and the time it lapses.
+/// `idempotency_claims` holds one row per claimed key and the time it lapses;
+/// `idempotency_values` one per remembered key: its JSON value and the time it lapses.
 pub fn implicit_migrations(
     binding: &crate::worker_bindings::WorkerBinding,
 ) -> Option<Vec<MigrationFile>> {
     is_implicit_idempotency(binding).then(|| {
-        vec![MigrationFile {
-            name: "0001_idempotency_claims.sql".to_string(),
-            sql: "CREATE TABLE idempotency_claims (\n  key TEXT PRIMARY KEY NOT NULL,\n  expires_at INTEGER NOT NULL\n);\n\nCREATE INDEX idempotency_claims_expires_at ON idempotency_claims (expires_at);\n".to_string(),
-        }]
+        vec![
+            MigrationFile {
+                name: "0001_idempotency_claims.sql".to_string(),
+                sql: "CREATE TABLE idempotency_claims (\n  key TEXT PRIMARY KEY NOT NULL,\n  expires_at INTEGER NOT NULL\n);\n\nCREATE INDEX idempotency_claims_expires_at ON idempotency_claims (expires_at);\n".to_string(),
+            },
+            MigrationFile {
+                name: "0002_idempotency_values.sql".to_string(),
+                sql: "CREATE TABLE idempotency_values (\n  key TEXT PRIMARY KEY NOT NULL,\n  value TEXT NOT NULL,\n  expires_at INTEGER NOT NULL\n);\n\nCREATE INDEX idempotency_values_expires_at ON idempotency_values (expires_at);\n".to_string(),
+            },
+        ]
     })
 }
 
@@ -399,8 +406,9 @@ mod tests {
         );
         let files = implicit_migrations(&crate::worker_bindings::idempotency_binding())
             .expect("the compiler owns it");
-        assert_eq!(files.len(), 1);
+        assert_eq!(files.len(), 2);
         assert!(files[0].sql.contains("CREATE TABLE idempotency_claims"));
+        assert!(files[1].sql.contains("CREATE TABLE idempotency_values"));
         // A project's own `capability Idempotency = D1` is bound as `D1_IDEMPOTENCY`
         // too, but is not the implicit database: it keeps its own migrations.
         let own = crate::worker_bindings::WorkerBinding {

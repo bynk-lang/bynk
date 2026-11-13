@@ -39,6 +39,17 @@ service api from http {
 \t\tlet Claim.Claimed <- Idempotency.claim(id, 1.hours) else { Ok(\"duplicate\") }
 \t\tOk(\"processed\")
 \t}
+
+\ton GET(\"/seen/:id\") (id: String) -> Effect[HttpResult[String]] by Visitor given Idempotency {
+\t\tlet seen <- Idempotency.dedup[String](id)
+\t\tmatch seen {
+\t\t\tSome(v) => Ok(v),
+\t\t\tNone => {
+\t\t\t\tlet _ <- Idempotency.remember[String](id, \"remembered\", 1.hours)
+\t\t\t\tOk(\"fresh\")
+\t\t\t},
+\t\t}
+\t}
 }
 ";
 
@@ -249,6 +260,17 @@ fn claims_are_atomic_in_d1_and_survive_a_restart_on_workerd() {
                 "concurrent claims: {won} processed and {lost} duplicate, expected 1 and 11: {answers:?}"
             ));
         }
+        // The remembered value is stored through the same database (`dedup`, then
+        // `remember`, then `dedup` again sees it).
+        for (path, expected) in [
+            ("/seen/durable", "\"fresh\""),
+            ("/seen/durable", "\"remembered\""),
+        ] {
+            match get(port, path) {
+                Ok((200, body)) if body == expected => {}
+                other => failures.push(format!("{path}: {other:?}, expected {expected}")),
+            }
+        }
         // 2. The claim is exactly one row in D1, not isolate memory. (The readiness probe
         //    claims `boot-probe`, so count `shared`'s row by its key.)
         match wrangler_run(
@@ -283,6 +305,8 @@ fn claims_are_atomic_in_d1_and_survive_a_restart_on_workerd() {
         for (path, expected) in [
             ("/claim/shared", "\"duplicate\""),
             ("/claim/other", "\"processed\""),
+            // A remembered value survives the restart too, decoded as it was written.
+            ("/seen/durable", "\"remembered\""),
         ] {
             match get(port, path) {
                 Ok((200, body)) if body == expected => {}

@@ -2,10 +2,11 @@
 // context shop.dedupe
 
 import { Ok, Err, Some, None, type Result, type Option } from "../__bynk_runtime/result.js";
-import type { ValidationError } from "../__bynk_runtime/errors.js";
+import type { ValidationError, DecodeError } from "../__bynk_runtime/errors.js";
 import type { __DurableObjectState } from "../__bynk_runtime/storage.js";
 import { __readStored, __commitStored, __noteClock } from "../__bynk_runtime/entries.js";
 import { __rehydrationViolation, __reportUnknownStoredKeys, __checkStoredLayout, type __JsonValue, type __BoundaryError } from "../__bynk_runtime/boundary.js";
+import { __bynkCapabilityReply } from "../__bynk_runtime/codec.js";
 import { type __DurableObjectNamespace, __StateRegistry, __makeAgent } from "../__bynk_runtime/agent.js";
 
 import * as bynk from "../bynk.js";
@@ -53,14 +54,14 @@ export class Ledger {
     const __state = { ...(await this.loadState()) };
     const __result = await (async () => {
       const __r0 = await (() => { __state.total = ((n: number) => n + 1)(__state.total); return undefined; })();
-      const cached = await deps.Idempotency.dedup<string>(`shop.dedupe.Ledger.bump::${"same-key"}`);
+      const cached = await __bynkCapabilityReply(deps.Idempotency.dedup(`shop.dedupe.Ledger.bump::${"same-key"}`), { encode: __serialise_Option_String, decode: __deserialise_Option_String }, { capability: "Idempotency", operation: "dedup", type: "Option[String]" }, "miss");
       switch (cached.tag) {
         case "Some": {
           const v = cached.value;
           return v;
         }
         case "None": {
-          const __r1 = await deps.Idempotency.remember<string>(`shop.dedupe.Ledger.bump::${"same-key"}`, "ledger-value", 3600000);
+          const __r1 = await deps.Idempotency.remember(`shop.dedupe.Ledger.bump::${"same-key"}`, "ledger-value" as __JsonValue, 3600000);
           return "ledger-value";
         }
       }
@@ -78,14 +79,14 @@ export function __makeLedger(key: string, env?: { LEDGER?: __DurableObjectNamesp
 
 export const alpha = {
   async call(deps: { Idempotency: bynk.Idempotency }): globalThis.Promise<string> {
-    const cached = await deps.Idempotency.dedup<string>(`shop.dedupe.alpha.call::${"same-key"}`);
+    const cached = await __bynkCapabilityReply(deps.Idempotency.dedup(`shop.dedupe.alpha.call::${"same-key"}`), { encode: __serialise_Option_String, decode: __deserialise_Option_String }, { capability: "Idempotency", operation: "dedup", type: "Option[String]" }, "miss");
     switch (cached.tag) {
       case "Some": {
         const v = cached.value;
         return v;
       }
       case "None": {
-        const __r0 = await deps.Idempotency.remember<string>(`shop.dedupe.alpha.call::${"same-key"}`, "alpha-value", 3600000);
+        const __r0 = await deps.Idempotency.remember(`shop.dedupe.alpha.call::${"same-key"}`, "alpha-value" as __JsonValue, 3600000);
         return "alpha-value";
       }
     }
@@ -95,14 +96,14 @@ export const alpha = {
 
 export const beta = {
   async call(deps: { Idempotency: bynk.Idempotency }): globalThis.Promise<string> {
-    const cached = await deps.Idempotency.dedup<string>(`shop.dedupe.beta.call::${"same-key"}`);
+    const cached = await __bynkCapabilityReply(deps.Idempotency.dedup(`shop.dedupe.beta.call::${"same-key"}`), { encode: __serialise_Option_String, decode: __deserialise_Option_String }, { capability: "Idempotency", operation: "dedup", type: "Option[String]" }, "miss");
     switch (cached.tag) {
       case "Some": {
         const v = cached.value;
         return v;
       }
       case "None": {
-        const __r0 = await deps.Idempotency.remember<string>(`shop.dedupe.beta.call::${"same-key"}`, "beta-value", 3600000);
+        const __r0 = await deps.Idempotency.remember(`shop.dedupe.beta.call::${"same-key"}`, "beta-value" as __JsonValue, 3600000);
         return "beta-value";
       }
     }
@@ -127,4 +128,45 @@ export function __makeSurface(deps: __ShopDedupeDeps) {
       return beta.call(deps);
     },
   };
+}
+
+export function __serialise_Option_String(value: Option<string>): __JsonValue {
+  if (value.tag === "Some") return { kind: "Some", value: value.value as __JsonValue };
+  return { kind: "None" };
+}
+
+function __option_value_String(raw: __JsonValue, at: string): Result<unknown, __BoundaryError> {
+  if (typeof raw !== "string") {
+    return Err({ kind: "StructuralMismatch", path: at, expected: "string", actual: typeof raw });
+  }
+  const __v = raw;
+  return Ok(__v);
+}
+
+export function __deserialise_Option_String(json: __JsonValue, path: string = "$"): Result<Option<string>, __BoundaryError> {
+  if (json === undefined || json === null) {
+    return Ok(None as Option<string>);
+  }
+  if (typeof json === "object" && !globalThis.Array.isArray(json)) {
+    const obj = json as { [k: string]: __JsonValue };
+    const __keys = globalThis.Object.keys(obj);
+    if (obj["kind"] === "None" && __keys.length === 1) {
+      return Ok(None as Option<string>);
+    }
+    if (obj["kind"] === "Some" && __keys.length === 2 && "value" in obj) {
+      const __t = __option_value_String(obj["value"], `${path}.value`);
+      if (__t.tag === "Err") {
+        return __t;
+      }
+      return Ok(Some(__t.value as string) as Option<string>);
+    }
+  }
+  const __b = __option_value_String(json, path);
+  if (__b.tag === "Ok") {
+    return Ok(Some(__b.value as string) as Option<string>);
+  }
+  if (__b.error.kind === "StructuralMismatch" && __b.error.path === path && !__b.error.expected.endsWith(" | null | {\"kind\": \"None\"} | {\"kind\": \"Some\", \"value\": ...}")) {
+    return Err({ ...__b.error, expected: __b.error.expected + " | null | {\"kind\": \"None\"} | {\"kind\": \"Some\", \"value\": ...}" });
+  }
+  return __b;
 }

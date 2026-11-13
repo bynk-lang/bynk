@@ -4,7 +4,7 @@
 import { Ok, Err, Some, None, type Result, type Option } from "../__bynk_runtime/result.js";
 import type { ValidationError } from "../__bynk_runtime/errors.js";
 
-import { EventEnvelope } from "../bynk.js";
+import { Claim, EventEnvelope } from "../bynk.js";
 import { PaymentConfirmed } from "./order.js";
 
 import * as bynk from "../bynk.js";
@@ -12,18 +12,28 @@ import * as commerce_order from "./order.js";
 
 export const OnPayment = {
   async event(e: PaymentConfirmed, env: EventEnvelope, deps: { Idempotency: bynk.Idempotency; Logger: bynk.Logger }): globalThis.Promise<void> {
-    const seen = await deps.Idempotency.dedup<void>(`commerce.notifications.OnPayment.event::${env.eventId}`);
-    switch (seen.tag) {
-      case "Some": {
+    const __claims = (deps.Idempotency as unknown as { __track?: () => { note<C>(k: string, c: C, t: number): C; lease(t: number): number; settle(r: unknown, threw: boolean): globalThis.Promise<void> } }).__track?.() ?? { note: <C>(_k: string, c: C, _t: number) => c, lease: (t: number) => t, settle: async (_r: unknown, _threw: boolean) => {} };
+    let __r;
+    try {
+    __r = await (async () => {
+    const __letElse250 = await (await (async (__k: string, __t: number) => __claims.note(__k, await deps.Idempotency.claim(__k, __claims.lease(__t)), __t))(`commerce.notifications.OnPayment.event::${env.eventId}`, 604800000));
+    switch (__letElse250.tag) {
+      case "Claimed": {
+        const __r0 = await deps.Logger.info(e.orderId);
         return undefined;
       }
-      case "None": {
-        const __r0 = await deps.Logger.info(e.orderId);
-        const __r1 = await deps.Idempotency.remember<void>(`commerce.notifications.OnPayment.event::${env.eventId}`, undefined, 604800000);
+      default: {
         return undefined;
       }
     }
     throw new globalThis.Error("non-exhaustive match");
+    })();
+    } catch (__e) {
+      await __claims.settle(undefined, true);
+      throw __e;
+    }
+    await __claims.settle(__r, false);
+    return __r;
   },
 };
 

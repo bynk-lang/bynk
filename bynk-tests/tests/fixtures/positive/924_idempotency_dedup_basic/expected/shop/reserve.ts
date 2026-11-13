@@ -2,7 +2,9 @@
 // context shop.reserve
 
 import { Ok, Err, Some, None, type Result, type Option } from "../__bynk_runtime/result.js";
-import type { ValidationError } from "../__bynk_runtime/errors.js";
+import type { ValidationError, DecodeError } from "../__bynk_runtime/errors.js";
+import type { __JsonValue, __BoundaryError } from "../__bynk_runtime/boundary.js";
+import { __bynkCapabilityReply } from "../__bynk_runtime/codec.js";
 
 import * as bynk from "../bynk.js";
 
@@ -16,7 +18,7 @@ export const ReserveOutcome = {
 
 export const ordering = {
   async call(orderId: string, deps: { Idempotency: bynk.Idempotency }): globalThis.Promise<ReserveOutcome> {
-    const cached = await deps.Idempotency.dedup<ReserveOutcome>(`shop.reserve.ordering.call::${orderId}`);
+    const cached = await __bynkCapabilityReply(deps.Idempotency.dedup(`shop.reserve.ordering.call::${orderId}`), { encode: __serialise_Option_ReserveOutcome, decode: __deserialise_Option_ReserveOutcome }, { capability: "Idempotency", operation: "dedup", type: "Option[ReserveOutcome]" }, "miss");
     switch (cached.tag) {
       case "Some": {
         const outcome = cached.value;
@@ -24,7 +26,7 @@ export const ordering = {
       }
       case "None": {
         const outcome = { orderId: orderId, reserved: true };
-        const __r0 = await deps.Idempotency.remember<ReserveOutcome>(`shop.reserve.ordering.call::${orderId}`, outcome, 86400000);
+        const __r0 = await deps.Idempotency.remember(`shop.reserve.ordering.call::${orderId}`, __serialise_ReserveOutcome(outcome), 86400000);
         return outcome;
       }
     }
@@ -42,4 +44,68 @@ export function __makeSurface(deps: __ShopReserveDeps) {
       return ordering.call(orderId, deps);
     },
   };
+}
+
+export function __serialise_ReserveOutcome(value: ReserveOutcome): __JsonValue {
+  return {
+    orderId: value.orderId as __JsonValue,
+    reserved: value.reserved as __JsonValue,
+  };
+}
+
+export function __deserialise_ReserveOutcome(json: __JsonValue, path: string = "$"): Result<ReserveOutcome, __BoundaryError> {
+  if (typeof json !== "object" || json === null || globalThis.Array.isArray(json)) {
+    return Err({ kind: "StructuralMismatch", path, expected: "object", actual: typeof json });
+  }
+  const obj = json as { [k: string]: __JsonValue };
+  if (typeof obj["orderId"] !== "string") {
+    return Err({ kind: "StructuralMismatch", path: `${path}.orderId`, expected: "string", actual: typeof obj["orderId"] });
+  }
+  const __orderId = obj["orderId"];
+  if (typeof obj["reserved"] !== "boolean") {
+    return Err({ kind: "StructuralMismatch", path: `${path}.reserved`, expected: "boolean", actual: typeof obj["reserved"] });
+  }
+  const __reserved = obj["reserved"];
+  return Ok({ orderId: __orderId, reserved: __reserved } as ReserveOutcome);
+}
+
+
+export function __serialise_Option_ReserveOutcome(value: Option<ReserveOutcome>): __JsonValue {
+  if (value.tag === "Some") return { kind: "Some", value: __serialise_ReserveOutcome(value.value) };
+  return { kind: "None" };
+}
+
+function __option_value_ReserveOutcome(raw: __JsonValue, at: string): Result<unknown, __BoundaryError> {
+  const __r_v = __deserialise_ReserveOutcome(raw, at);
+  if (__r_v.tag === "Err") return __r_v;
+  const __v = __r_v.value;
+  return Ok(__v);
+}
+
+export function __deserialise_Option_ReserveOutcome(json: __JsonValue, path: string = "$"): Result<Option<ReserveOutcome>, __BoundaryError> {
+  if (json === undefined || json === null) {
+    return Ok(None as Option<ReserveOutcome>);
+  }
+  if (typeof json === "object" && !globalThis.Array.isArray(json)) {
+    const obj = json as { [k: string]: __JsonValue };
+    const __keys = globalThis.Object.keys(obj);
+    if (obj["kind"] === "None" && __keys.length === 1) {
+      return Ok(None as Option<ReserveOutcome>);
+    }
+    if (obj["kind"] === "Some" && __keys.length === 2 && "value" in obj) {
+      const __t = __option_value_ReserveOutcome(obj["value"], `${path}.value`);
+      if (__t.tag === "Err") {
+        return __t;
+      }
+      return Ok(Some(__t.value as ReserveOutcome) as Option<ReserveOutcome>);
+    }
+  }
+  const __b = __option_value_ReserveOutcome(json, path);
+  if (__b.tag === "Ok") {
+    return Ok(Some(__b.value as ReserveOutcome) as Option<ReserveOutcome>);
+  }
+  if (__b.error.kind === "StructuralMismatch" && __b.error.path === path && !__b.error.expected.endsWith(" | null | {\"kind\": \"None\"} | {\"kind\": \"Some\", \"value\": ...}")) {
+    return Err({ ...__b.error, expected: __b.error.expected + " | null | {\"kind\": \"None\"} | {\"kind\": \"Some\", \"value\": ...}" });
+  }
+  return __b;
 }

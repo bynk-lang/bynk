@@ -912,13 +912,13 @@ pub fn unit_table_uses_emit(
     found
 }
 
-/// W30 (#2840): does any body in this unit call the first-party
-/// `Idempotency.claim`? A Worker that does declares the implicit database that
-/// holds its claims. `flattened` is the unit's flattened-consume map
+/// W30 (#2840): does any body in this unit call the first-party `Idempotency`
+/// (`claim`, `dedup` or `remember`)? A Worker that does declares the implicit
+/// database that holds its claims and remembered values. `flattened` is the unit's flattened-consume map
 /// (`consumes bynk { Idempotency }` makes `Idempotency` a local name for the
 /// `bynk` capability), so a same-named capability from another unit does not
 /// count, as for the key scoping in `scope_idempotency_key`.
-pub fn unit_table_uses_claim(
+pub fn unit_table_uses_idempotency(
     table: &UnitTable,
     callees: Option<&HashMap<ExprId, bynk_check::checker::Callee>>,
     flattened: Option<&HashMap<String, String>>,
@@ -933,11 +933,13 @@ pub fn unit_table_uses_claim(
             found = match callees.get(&e.id) {
                 Some(Callee::Capability { cap, op, .. }) => {
                     cap == "Idempotency"
-                        && op == "claim"
+                        && matches!(op.as_str(), "claim" | "dedup" | "remember")
                         && flattened.and_then(|f| f.get(cap)).map(String::as_str) == Some("bynk")
                 }
                 Some(Callee::CrossCap { unit, cap, op, .. }) => {
-                    unit == "bynk" && cap == "Idempotency" && op == "claim"
+                    unit == "bynk"
+                        && cap == "Idempotency"
+                        && matches!(op.as_str(), "claim" | "dedup" | "remember")
                 }
                 _ => false,
             };

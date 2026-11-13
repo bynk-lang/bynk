@@ -26,5 +26,11 @@ export function compose(env: Env) {
     async http_POST_replay_Param_id(id: string) {
       return handlers.replay.http_POST_replay_Param_id(id, deps);
     },
+    async http_POST_receipt_Param_id(id: string) {
+      return handlers.skew.http_POST_receipt_Param_id(id, deps);
+    },
+    async http_POST_skew_Param_id_Param_mode(id: string, mode: string) {
+      return handlers.skew.http_POST_skew_Param_id_Param_mode(id, mode, deps);
+    },
   };
 }

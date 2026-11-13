@@ -404,8 +404,12 @@ export const __LocaleToken: symbol = globalThis.Symbol("Locale");
  * reserved keyword), which the caller must call to actually cache anything
  * — a `dedup` miss with no matching `remember` call simply recomputes every
  * time. `expiresAfter` sets the retention window a call to `remember`
- * establishes. Slice 0 (ADR 0282): a single
- * in-memory provider, lost on process restart — no durability guarantee yet.
+ * establishes. The cached type `T` must be `Codable`: the value is stored as
+ * its JSON encoding, and a stored value that no longer decodes as `T` (an
+ * older deploy wrote it as another shape) reads as a miss, not a fault. On
+ * Cloudflare they are durable and shared across isolates (in the Worker's
+ * implicit D1 database); on Node and in the browser they are an in-memory
+ * map, lost on restart.
  *
  * `claim` is the race-free form: the first call for a key returns `Claimed`
  * and every later call within `expiresAfter` returns `AlreadyClaimed`, as one
@@ -418,8 +422,8 @@ export const __LocaleToken: symbol = globalThis.Symbol("Locale");
  * lapses. `claim` records no outcome and is separate from `dedup`/`remember`.
  */
 export interface Idempotency {
-  dedup<T>(key: string): globalThis.Promise<Option<T>>;
-  remember<T>(key: string, value: T, expiresAfter: number): globalThis.Promise<void>;
+  dedup(key: string): globalThis.Promise<unknown>;
+  remember(key: string, value: unknown, expiresAfter: number): globalThis.Promise<void>;
   claim(key: string, expiresAfter: number): globalThis.Promise<Claim>;
 }
 
