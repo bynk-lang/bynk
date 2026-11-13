@@ -421,6 +421,28 @@ pub(crate) struct VectorizeDecl {
     pub(crate) metric: String,
     /// The `@indexed` entries as written (`name:type`).
     pub(crate) indexed: Vec<String>,
+    /// The name of an existing index `bynk.toml` adopts for this run's
+    /// environment (`[deploy.vectorize.<Cap>] index`), or `None` when the
+    /// deploy creates it. Set per run, never read from the generated config.
+    pub(crate) adopt: Option<String>,
+}
+
+impl VectorizeDecl {
+    /// Whether `capability` (as `bynk.toml` names it, `Docs`) is this binding's.
+    pub(crate) fn matches_capability(&self, capability: &str) -> bool {
+        bynk_check::worker_bindings::instance_binding_name(
+            bynk_check::firstparty::VECTORIZE_BINDING_PREFIX,
+            capability,
+        ) == self.binding
+    }
+
+    /// The index's name on the account in `environment`: the adopted one as
+    /// written, or the derived name qualified for the environment.
+    pub(crate) fn physical_name(&self, environment: &str) -> String {
+        self.adopt
+            .clone()
+            .unwrap_or_else(|| vectorize_index_name(environment, &self.name))
+    }
 }
 
 /// The provisioning surface one context's closure locks it to.
@@ -789,6 +811,7 @@ fn read_resources(config: &Path, project_workers: &[String]) -> Result<Resources
                 dimensions: entry.dimensions,
                 metric: entry.metric.clone(),
                 indexed: entry.indexed.clone(),
+                adopt: None,
             })
         })
         .collect::<Result<_, String>>()?;
@@ -1624,6 +1647,7 @@ pub(crate) mod tests {
                         dimensions: *dimensions,
                         metric: metric.to_string(),
                         indexed: indexed.iter().map(|s| s.to_string()).collect(),
+                        adopt: None,
                     },
                 )
                 .collect();
@@ -2556,6 +2580,7 @@ state = "deleted"
                 dimensions: 768,
                 metric: "cosine".into(),
                 indexed: vec!["category:string".into()],
+                adopt: None,
             }]
         );
 
