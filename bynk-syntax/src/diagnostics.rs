@@ -1524,9 +1524,8 @@ pub const EXPLANATIONS: &[Explain] = &[
                 `wrangler deploy` tried to build the image, so it is refused here. Create the \
                 Dockerfile, or correct the path. Bynk does not read or generate the Dockerfile, \
                 and the image must be built for `linux/amd64`.",
-        example: "capability Renderer = Container @build(\"containers/renderer\") @port(8080)\n\
-                  // ✗ containers/renderer/Dockerfile does not exist\n\n\
-                  // create containers/renderer/Dockerfile, beside the code it builds ✓",
+        example: "capability Renderer = Container @build(\"containers/renderer\") @port(8080)    // ✗ containers/renderer/Dockerfile does not exist\n\
+                  capability Renderer = Container @build(\"containers/renderer\") @port(8080)    // ✓ once containers/renderer/Dockerfile exists",
         page: "/book/reference/capabilities",
         anchor: "derived-capabilities",
     },
