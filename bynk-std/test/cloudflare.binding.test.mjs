@@ -1291,6 +1291,25 @@ t("WorkersAi.run: a documented platform code is a typed error, any other a failu
   assert.deepEqual(await failure(new Error("id 350071 failed")), { tag: "AiFailed", message: "id 350071 failed" });
 });
 
+// Observed on a real account (#3478, W39): the binding throws an `Error` named
+// `AiError` (constructor `InferenceUpstreamError`) with no `code` property and a
+// message that opens with the platform's code.
+t("WorkersAi.run: the error a live binding throws is read from its message, 5006 included", async () => {
+  class InferenceUpstreamError extends Error {
+    constructor(message) {
+      super(message);
+      this.name = "AiError";
+    }
+  }
+  const live = (message) => new InferenceUpstreamError(message);
+  const failure = async (e) => (await new WorkersAi({ AI: fakeAi(e) }).run("@cf/x/y", "{}")).error;
+  assert.equal("code" in live("5007: x"), false);
+  assert.deepEqual(await failure(live("5007: No such model @cf/nobody/no-such-model or task")), { tag: "ModelNotFound" });
+  assert.deepEqual(await failure(live("5028: @cf/x/y was deprecated on 2026-05-30. See the model catalog for alternatives: https://developers.cloudflare.com/workers-ai/models/")), { tag: "ModelNotFound" });
+  const rejected = "5006: Error: oneOf at '/' not met, 0 matches: required properties at '/' are 'prompt', required properties at '/' are 'messages'";
+  assert.deepEqual(await failure(live(rejected)), { tag: "InvalidInput", message: rejected });
+});
+
 t("WorkersAi.run: a live stream (input with stream: true) is cancelled and is a failure", async () => {
   let cancelled = false;
   const stream = new ReadableStream({ cancel() { cancelled = true; } });
