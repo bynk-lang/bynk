@@ -3,7 +3,7 @@ title: Version compatibility & changelog
 ---
 Bynk is pre-1.0 and developed in small, spec-first increments (see
 [Versioning & roadmap](/book/about/versioning-and-roadmap/)). This book is
-written against **v0.577**.
+written against **v0.578**.
 
 This page is a high-level summary of notable increments, not an exhaustive
 per-commit history. While Bynk is pre-1.0, increments may change behaviour.
@@ -28,6 +28,11 @@ per-commit history. While Bynk is pre-1.0, increments may change behaviour.
 
 | Version | Highlights |
 |---|---|
+| **v0.578.2** | `bynk revert` tells you to use `--to` when the live version was made live outside bynk, and the rollback guide covers setting secrets after a revert |
+| **v0.578.1** | `bynk explain` gains explanations for six agent schema-evolution codes (`agent.non_additive_state_change`, `agent.migrate_shape_mismatch`, `agent.migrate_incomplete`, `agent.migrate_unknown_version`, `agent.replaces_unknown`, `agent.class_conflict`) |
+| **v0.578.0** | An untyped `Cookie` literal named for a cookie record's field is warned about and its undecodable value refused; the `SignedCookie` cookie cannot be written by hand or from a record, and the typed name is judged by the prefix rules |
+| **v0.577.3** | `bynk revert` keeps a reverted Worker's contract shapes, so a later skew is still classified as compatible or breaking; `bynk.deploy.lock` files shapes by hash in a pruned `contract_shapes` table, and an older lock's per-Worker shapes are moved into it on read |
+| **v0.577.2** | `bynk explain` gains explanations for six Workers-target codes (`capability.not_provided`, `capability.provider_agent_cross_context`, `context.duplicate_binding`, `ws.open_transfer_cross_file`, `ws.open_transfer_key`, `suite.env_binding_clash`) |
 | **v0.577.1** | The `MySql.run` range error is documented as leaving an autocommitted statement applied, and a transaction that hits it rolls back (tested) |
 | **v0.577.0** | A cookie is written from the record that reads it with `Prefs.theme.cookie(Dark)` and `Prefs.theme.expire()`, named by the field's wire name and valued as the decoder reads it |
 | **v0.576.3** | The `wrangler` commands `bynk deploy` prints (`secret put`, `delete`) and the guides name the detected package manager's runner (`pnpm dlx`, `bunx`, `npx`) |

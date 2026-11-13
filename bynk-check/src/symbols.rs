@@ -1927,6 +1927,16 @@ pub fn build_cross_context_info(
             .get(name)
             .map(crate::context_checks::cookie_records_of)
             .unwrap_or_default(),
+        signed_cookie_names: unit_tables
+            .get(name)
+            .map(|t| {
+                t.actors
+                    .values()
+                    .filter_map(|a| crate::actors::signed_cookie_seam_of(a, None))
+                    .map(|seam| seam.cookie)
+                    .collect()
+            })
+            .unwrap_or_default(),
     }
 }
 
