@@ -422,7 +422,7 @@ pub(crate) fn emit_block_as_function_body_with_return(
     cx.tail_slot = prev_slot;
     cx.return_ty = prev;
     // W30 (#2840): a service handler that claimed settles its claims on exit.
-    if cx.claim_scope_used && cx.tracks_claims() {
+    if cx.claim_scope_used && cx.wraps_claims_in_body() {
         let (before, after) = claim_scope_wrapper(indent);
         out.insert_str(start, &before);
         out.push_str(&after);
@@ -2348,7 +2348,7 @@ fn tracked_claim_call(cap_expr: &str, args: &[String], cx: &mut LowerCtx) -> Str
 /// returned `Err` or a 5xx `HttpResult` does too; any other outcome confirms
 /// them. Returns the text to put before and after the body, which is left
 /// where it is so its source-map checkpoints stay valid.
-fn claim_scope_wrapper(indent: usize) -> (String, String) {
+pub(crate) fn claim_scope_wrapper(indent: usize) -> (String, String) {
     let pad = " ".repeat(indent);
     let before = format!(
         "{pad}const __claims = (deps.Idempotency as unknown as {{ __track?: () => {{ note<C>(k: string, c: C, t: number): C; lease(t: number): number; settle(r: unknown, threw: boolean): globalThis.Promise<void> }} }}).__track?.() ?? {{ note: <C>(_k: string, c: C, _t: number) => c, lease: (t: number) => t, settle: async (_r: unknown, _threw: boolean) => {{}} }};\n{pad}let __r;\n{pad}try {{\n{pad}__r = await (async () => {{\n"

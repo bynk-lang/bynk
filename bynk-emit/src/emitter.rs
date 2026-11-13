@@ -5482,10 +5482,20 @@ impl<'a> LowerCtx<'a> {
 
     /// W30 (#2840): whether a first-party `Idempotency.claim` here is recorded
     /// in the handler's claim scope so it can be released or confirmed on exit.
-    /// Only a service handler's body is wrapped, so only there is a claim
-    /// tracked; anywhere else (an agent handler, a provider) it is a plain call
-    /// held for its full window.
+    /// A service handler's body and an agent handler's method body are wrapped
+    /// (#3465); anywhere else (a provider) it is a plain call held for its full
+    /// window.
     pub(crate) fn tracks_claims(&self) -> bool {
+        matches!(
+            self.mode,
+            BodyMode::ServiceHandler { .. } | BodyMode::AgentHandler { .. }
+        )
+    }
+
+    /// Whether the lowered body is itself wrapped in the claim scope. A service
+    /// handler's is; an agent handler's scope wraps the whole method instead, so
+    /// settlement follows the state commit.
+    pub(crate) fn wraps_claims_in_body(&self) -> bool {
         matches!(self.mode, BodyMode::ServiceHandler { .. })
     }
 

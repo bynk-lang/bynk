@@ -1,0 +1,23 @@
+suite shop.gate {
+  case "a completed agent claim stays claimed" {
+    let first <- gate.call("g1", "ok")
+    expect first is Ok("done")
+    let again <- gate.call("g1", "ok")
+    expect again is Ok("duplicate")
+  }
+
+  case "an agent handler that fails releases its claim" {
+    let first <- gate.call("g1", "bad")
+    expect first is Err("rejected")
+    let retry <- gate.call("g1", "bad")
+    expect retry is Err("rejected")
+  }
+
+  case "a completed agent claim outlasts the lease" {
+    let first <- gate.call("g1", "ok")
+    expect first is Ok("done")
+    advance Clock by 10.minutes
+    let again <- gate.call("g1", "ok")
+    expect again is Ok("duplicate")
+  }
+}
