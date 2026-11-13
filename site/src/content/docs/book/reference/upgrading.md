@@ -17,6 +17,10 @@ here broke nothing, or its author did not say so: please
 
 <!-- stamp:breaking-entries -->
 
+## v0.583.0
+
+A user-declared capability operation whose return type mentions a `Codable` type parameter was `bynk.generics.codable_op_return`; it is now `bynk.generics.codable_op_return_not_first_party`. Return plain data, such as a `String`, and decode it where you call the operation with `Json.decode[T]`.
+
 ## v0.582.0
 
 A `claim` in a service handler that fails (a fault, a returned `Err`, or a 5xx `HttpResult`) is now released, so a retry can claim again; before this change a claim was held for its whole window whatever the outcome.

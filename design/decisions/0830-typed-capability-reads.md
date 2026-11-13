@@ -1,13 +1,6 @@
----
-level: minor
-changelog: A first-party capability operation may return a type that mentions its `Codable` parameter, decoded at the call site with a per-operation failure policy
-probes: diagnostic_coverage, explained_codes, emit_diagnostics, ts_writes
-breaking: A user-declared capability operation whose return type mentions a `Codable` type parameter was `bynk.generics.codable_op_return`; it is now `bynk.generics.codable_op_return_not_first_party`. Return plain data, such as a `String`, and decode it where you call the operation with `Json.decode[T]`.
----
+# 0830 — A first-party capability operation may return its Codable parameter, decoded at the call site
 
-## ADR: typed-capability-reads
-title: A first-party capability operation may return its Codable parameter, decoded at the call site
-summary: Lifts ADR 0696 decision 5 for the standard library's own operations, with the failure policy declared on each operation
+- **Status:** Accepted (v0.583)
 
 **Context.** ADR 0696 decision 5 made a `Codable` type parameter in a capability operation's return type an error (`bynk.generics.codable_op_return`), because decoding a provider's reply raises what a failed decode of stored data means, which that slice did not answer. Writes worked (`Queue.sendValue[T: Codable]`); reads did not. The durable `Idempotency.dedup`/`remember` (#2840) needs one. The maintainer accepted #3458: the rule is general, the first-party providers are the only ones that may use it, and the failure policy is declared on each operation rather than inferred from its return shape.
 
