@@ -1,12 +1,6 @@
----
-level: minor
-changelog: A Worker with a `Container` instance gets a `[[containers]]` entry (`durable_object` scheduling, an image built from `@build`), a generated Durable Object class that starts the container on its first call with egress off, applies `@sleepAfter`, `@instanceType` and `@forward`, and proxies to its port, and the Book gains "Run a container from a Worker"
-probes: emit_abi_shapes, ts_writes
----
+# 0839 — A container's class is built by a runtime function and its image from a Dockerfile path
 
-## ADR: container-runtime-and-config
-title: A container's class is built by a runtime function and its image from a Dockerfile path
-summary: Decisions B, D, F and J of #3477 for slice C1: the `[[containers]]` stanza, the class generated from literals, the readiness wait, and where build paths point
+- **Status:** Accepted (v0.600)
 
 **Context.** Under the `durable_object` scheduling policy the application entry takes only `class_name`, `scheduling_policy` and an `images` map; Wrangler rejects `image`, `max_instances` and `instance_type` on it. `start()` requires an `image` (a value of `ctx.container.images`) and `enableInternet`, returns before the container is ready, and a Durable Object that restarts begins without an inactivity timeout. The output directory is `[build] out` or any `--out`, so the path from a Worker's output directory to the project is not fixed by the layout.
 

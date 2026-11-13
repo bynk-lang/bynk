@@ -1,12 +1,6 @@
----
-level: minor
-changelog: `bynk.cloudflare` gains `Container`, an instance kind for a container run from a Docker image, with required `@build` and `@port`, optional `@sleepAfter`, `@instanceType` and `@forward`, typed errors, emitted as a Durable Object binding and `exports` entry; every operation faults until stubbed in a test
-probes: emit_abi_shapes, emit_diagnostics, ts_writes, diagnostic_coverage, explained_codes
----
+# 0840 — Container is an instance kind that runs a Docker image as a Durable Object class
 
-## ADR: container-instance-kind
-title: Container is an instance kind that runs a Docker image as a Durable Object class
-summary: Decisions A, D, E, F and J of #3477 for slice C1: a named instance with a build directory and a port, closed egress, no instance ceiling, a built-in container API and no npm dependency
+- **Status:** Accepted (v0.601)
 
 **Context.** Cloudflare Containers run a Docker image as the container of a Durable Object class. Under the `durable_object` scheduling policy there is no per-application instance ceiling, no package is needed (`@cloudflare/containers` is deprecated in favour of `ctx.container`), and egress is open unless `start()` says otherwise. The image is built and pushed by `wrangler deploy`, which needs Docker, so nothing Bynk deploys itself changes here.
 

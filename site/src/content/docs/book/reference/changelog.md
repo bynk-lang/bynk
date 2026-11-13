@@ -3,7 +3,7 @@ title: Version compatibility & changelog
 ---
 Bynk is pre-1.0 and developed in small, spec-first increments (see
 [Versioning & roadmap](/book/about/versioning-and-roadmap/)). This book is
-written against **v0.599**.
+written against **v0.601**.
 
 This page is a high-level summary of notable increments, not an exhaustive
 per-commit history. While Bynk is pre-1.0, increments may change behaviour.
@@ -28,6 +28,8 @@ per-commit history. While Bynk is pre-1.0, increments may change behaviour.
 
 | Version | Highlights |
 |---|---|
+| **v0.601.0** | `bynk.cloudflare` gains `Container`, an instance kind for a container run from a Docker image, with required `@build` and `@port`, optional `@sleepAfter`, `@instanceType` and `@forward`, typed errors, emitted as a Durable Object binding and `exports` entry; every operation faults until stubbed in a test |
+| **v0.600.0** | A Worker with a `Container` instance gets a `[[containers]]` entry (`durable_object` scheduling, an image built from `@build`), a generated Durable Object class that starts the container on its first call with egress off, applies `@sleepAfter`, `@instanceType` and `@forward`, and proxies to its port, and the Book gains "Run a container from a Worker" |
 | **v0.599.0** | `Vectorize` gains `upsertValue[M: Codable](vectors: List[VectorOf[M]])`, which writes vectors whose metadata is a value of your own type, encoded by its codec as `upsert` with `Json.encode` would (reads stay as text so a stale vector can be skipped), and the Book gains the guide "Search by meaning with Vectorize and Workers AI" |
 | **v0.598.0** | `bynk deploy` links each `AiSearch` instance by name, records it in the ledger and fails when it is missing, never creating one; `bynk dev` proxies the binding to the deployed instance with a one-time warning, silenced by `[dev] ai-search = "allow"` |
 | **v0.597.0** | Under `bynk dev` a `Vectorize` instance is bound, remotely, to the index `[dev.vectorize-index] <Capability> = "<index-name>"` names in `bynk.toml` and never to the deploy's, an instance with no entry is unbound and a call to it fails saying how to bind it, the first call checks the index against the declaration, and the first call prints a one-time warning that links to Cloudflare's pricing page unless `[dev] vectorize = "allow"` acknowledges it |

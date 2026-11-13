@@ -17,6 +17,8 @@ or a row links to no file. Summaries and statuses are curated by hand; the
 
 | # | Decision | Status |
 |---|---|---|
+| [0840](0840-container-instance-kind.md) | **Container is an instance kind that runs a Docker image as a Durable Object class** (v0.601) — Decisions A, D, E, F and J of #3477 for slice C1: a named instance with a build directory and a port, closed egress, no instance ceiling, a built-in container API and no npm dependency | Accepted (v0.601) |
+| [0839](0839-container-runtime-and-config.md) | **A container's class is built by a runtime function and its image from a Dockerfile path** (v0.600) — Decisions B, D, F and J of #3477 for slice C1: the `[[containers]]` stanza, the class generated from literals, the readiness wait, and where build paths point | Accepted (v0.600) |
 | [0838](0838-ai-search-deploy-and-dev.md) | **AI Search instances are linked by the deploy, and bynk dev proxies them with a one-time warning** (v0.598) — Slice AS2 of #3480: the deploy looks each instance up and fails when it is missing, and bynk dev warns once per binding kind and proceeds | Accepted (v0.598) |
 | [0837](0837-ai-search-instance-kind.md) | **AiSearch is a linked instance kind that the deploy finds and never creates** (v0.596) — Decisions A–J of #3480: a named, linked instance, search and answer over query and messages, shared chat and filter types, errors as values, stub-only in tests | Accepted (v0.596) |
 | [0836](0836-vectorize-instance-kind.md) | **Vectorize is an instance kind with a fixed index shape and a typed filter** (v0.592) — Decisions A–K of #3479: a named instance with required dimensions and metric, a deploy-created never-recreated index, a typed filter, errors as values | Accepted (v0.592) |
