@@ -485,6 +485,9 @@ or warned about:
 | `bynk.http.cookie_script_readable` | `httpOnly: false` (a warning) |
 | `bynk.http.cookie_domain_widens` | a `domain` on a cookie whose name is not `__Host-` (a warning): every subdomain receives it |
 | `bynk.http.cookie_cross_site_without_credentials` | a service attaches a `SameSite.Unrestricted` cookie but has no `cors { credentials: true }` (a warning): a cross-origin `fetch` can never send it back |
+| `bynk.http.cookie_untyped_has_field` | an untyped `Cookie` literal named like a field of a `cookies` record of the unit (a warning): write it with `Record.field.cookie(v)`, which the quick-fix does where it can |
+| `bynk.http.cookie_value_undecodable` | the same literal, with a `value` that field's decoder rejects (`"dark"` for an enum read as `Dark`) |
+| `bynk.actor.signed_cookie_write_literal` | a literal named like a `SignedCookie` actor's session cookie: only `Actor.issue` and `Actor.expire` write it |
 | `bynk.http.cache_public_reads_cookies` | `@cache(scope: public)` on a handler that takes `cookies` |
 
 Only a literal is judged. A computed cookie is checked when it is sent: a name that is not
@@ -501,6 +504,52 @@ on POST("/logout") () -> Effect[HttpResult[()]] by v: Visitor {
   NoContent.clearCookie(Cookie { name: "sid", value: "" })
 }
 ```
+
+#### Writing a cookie from its record {#typed-cookie-write}
+
+A name and a value written by hand are not tied to the record that reads the cookie. When
+the cookie is a field of a `cookies` record, write it from the field instead:
+
+```bynk,fragment
+type Theme = enum { Light, Dark }
+type Prefs = {
+  theme: Theme = Light,
+  @name("__Host-visits") visits: Int = 0,
+}
+```
+
+```bynk,fragment
+on POST("/theme/dark") () -> Effect[HttpResult[String]] by v: Visitor {
+  Ok("dark").withCookie(Cookie { ...Prefs.theme.cookie(Dark), maxAge: Some(365.days) })
+}
+
+on POST("/theme/reset") () -> Effect[HttpResult[()]] by v: Visitor {
+  NoContent.withCookie(Prefs.theme.expire())
+}
+```
+
+`Prefs.theme.cookie(Dark)` is a `Cookie` named by the field's wire name (its `@name`, here
+`__Host-visits` for `visits`) and valued as the `cookies` decoder reads it: an `Int` is its
+digits, a `Bool` is `true` or `false`, an enum is its variant's name, and a `String`, a
+refined or opaque type over one, and a `Decimal` are their text. An `Option[T]` field takes a
+`T`. Every attribute is the `Cookie` default, so give others by spreading it into a `Cookie`
+literal. `Prefs.theme.expire()` is the deletion `Cookie` (empty, `Max-Age=0`, epoch
+`Expires`, default `Path` and no `Domain`; a cookie written with another `Path` or `Domain`
+needs the same on its deletion). Renaming the field renames the write, and a value of the
+wrong type is a type error at the write, not a `400` on the next request.
+
+The record must be the `cookies` parameter of an `on http` handler in this unit
+(`bynk.http.cookie_field_not_cookie_record`), the field must exist
+(`bynk.http.cookie_field_unknown`), `cookie` takes the one value and `expire` none
+(`bynk.http.cookie_field_arity`), and a `List` field is refused, since a repeated name is
+several `Set-Cookie` lines (`bynk.http.cookie_field_list`). `Prefs.theme` alone is not a value.
+The prefix and attribute rules above apply to a typed cookie too, judged against the field's
+wire name: `Cookie { ...Prefs.visits.cookie(n), domain: Some("example.com") }` for a
+`__Host-visits` field is `bynk.http.cookie_host_prefix`. The session cookie of a `SignedCookie`
+actor cannot be written through a record (`bynk.actor.signed_cookie_write_directly`) or a
+literal (`bynk.actor.signed_cookie_write_literal`); only `Actor.issue` and `Actor.expire` write it.
+A cookie in no record is still written as a plain `Cookie { name, value }`; where a record reads
+the name, the literal draws `bynk.http.cookie_untyped_has_field`.
 
 A response that sets a cookie is one user's, so a `public` cache may not keep it: at
 runtime a response carrying `Set-Cookie` is always sent `Cache-Control: private`, and a

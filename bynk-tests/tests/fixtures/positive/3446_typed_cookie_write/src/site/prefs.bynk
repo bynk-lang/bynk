@@ -1,0 +1,42 @@
+context site.prefs
+
+consumes bynk { Cookie }
+
+// #3446: a cookie is written from the record that reads it. `Prefs.theme.cookie(Dark)` is
+// named by the field's wire name and valued as the decoder reads it, so the write cannot
+// disagree with the read.
+
+type Theme = enum { Light, Dark }
+type Qty = Int where Positive
+
+type Prefs = {
+	theme: Theme = Light,
+	@name("__Host-visits") visits: Int = 0,
+	price: Option[Decimal],
+	dark: Bool = false,
+	qty: Option[Qty],
+	note: Option[String],
+}
+
+service site from http {
+	on GET("/visit") (cookies: Prefs) -> Effect[HttpResult[String]] by v: Visitor {
+		Ok("visit").withCookie(Prefs.visits.cookie(cookies.visits + 1))
+	}
+
+	on POST("/theme/dark") () -> Effect[HttpResult[String]] by v: Visitor {
+		Ok("dark").withCookie(Cookie { ...Prefs.theme.cookie(Dark), maxAge: Some(365.days) })
+	}
+
+	on POST("/leaves") () -> Effect[HttpResult[()]] by v: Visitor {
+		NoContent
+			.withCookie(Prefs.price.cookie(1.50d))
+			.withCookie(Prefs.dark.cookie(true))
+			.withCookie(Prefs.visits.cookie(42))
+			.withCookie(Prefs.qty.cookie(7))
+			.withCookie(Prefs.note.cookie("hello"))
+	}
+
+	on POST("/theme/reset") () -> Effect[HttpResult[()]] by v: Visitor {
+		NoContent.withCookie(Prefs.theme.expire())
+	}
+}

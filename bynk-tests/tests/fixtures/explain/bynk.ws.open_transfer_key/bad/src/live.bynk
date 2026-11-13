@@ -1,0 +1,21 @@
+context live
+
+type Frame = { text: String }
+
+agent Room {
+  key id: String
+  store conns: Map[String, Connection[Frame]]
+
+  on call join(conn: Connection[Frame]) -> Effect[()] {
+    let _ <- conns.put("one", conn)
+    ()
+  }
+}
+
+service feed from websocket(in: Frame, out: Frame) {
+  on open () -> Effect[()] by v: Visitor {
+    let room = "lobby"
+    let _ <- Room(room).join(connection)
+    ()
+  }
+}

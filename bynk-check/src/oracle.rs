@@ -170,6 +170,8 @@ pub(crate) fn cross_context(c: &CrossContextInfo) -> String {
         consumed_type_aliases,
         callee_type_aliases,
         callee_alias_keys,
+        cookie_records,
+        signed_cookie_names,
     } = c;
     fn two_level<V: Debug>(map: &HashMap<String, HashMap<String, V>>) -> String {
         sorted_lines(
@@ -213,6 +215,14 @@ pub(crate) fn cross_context(c: &CrossContextInfo) -> String {
         ),
         format!("callee_type_aliases={{{}}}", two_level(callee_type_aliases)),
         format!("callee_alias_keys={{{}}}", two_level(callee_alias_keys)),
+        format!(
+            "cookie_records={:?}",
+            sorted_lines(cookie_records.iter().cloned())
+        ),
+        format!(
+            "signed_cookie_names={:?}",
+            sorted_lines(signed_cookie_names.iter().cloned())
+        ),
     ]
     .join(" ")
 }

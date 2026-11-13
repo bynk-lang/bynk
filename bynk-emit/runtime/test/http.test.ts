@@ -40,6 +40,7 @@ import {
   multipartForm,
   multipartObject,
   cookieObject,
+  cookieValue,
   cookiePairs,
   cookieString,
   parseSetCookie,
@@ -1141,7 +1142,7 @@ test("multipartMediaTypeMatches: the media type only; a missing boundary is the 
 // #3277: a handler's `cookies`.
 const cookieRequest = (header: string | null) =>
   new Request("https://test/me", { headers: header === null ? {} : { cookie: header } });
-const CK = (name: string, kind: "string" | "int" | "bool" | "enum", list = false, option = false) =>
+const CK = (name: string, kind: "string" | "decimal" | "int" | "bool" | "enum", list = false, option = false) =>
   ({ name, kind, list, option }) as const;
 
 test("cookiePairs: RFC 6265 pairs, trimmed, quotes dropped, no percent-decoding", () => {
@@ -1167,6 +1168,37 @@ test("cookieObject: reads declared cookies, ignoring unknown ones", () => {
     CK("tag", "string", true),
   ]);
   assert.deepEqual(r, { ok: true, value: { sid: { kind: "Some", value: "abc" }, n: 7, tag: ["x", "y"] } });
+});
+
+// #3446: the typed cookie write's value text is the inverse of the decoder's leaf rules: a cookie
+// written for a value reads back as that value, for every leaf kind the decoder has.
+test("cookieValue: every leaf kind decodes back to the value written", () => {
+  const cases: ReadonlyArray<{
+    kind: "string" | "decimal" | "int" | "bool" | "enum";
+    written: unknown;
+    read: unknown;
+  }> = [
+    { kind: "int", written: 42, read: 42 },
+    { kind: "int", written: -7, read: -7 },
+    { kind: "int", written: 0, read: 0 },
+    { kind: "bool", written: true, read: true },
+    { kind: "bool", written: false, read: false },
+    { kind: "enum", written: { tag: "Dark" }, read: { kind: "Dark" } },
+    { kind: "string", written: "hello", read: "hello" },
+    { kind: "string", written: "", read: "" },
+    // a refined or opaque string, an `Int`-based refined type: their base text
+    { kind: "string", written: "__Host-abc_123", read: "__Host-abc_123" },
+    // a `Decimal` arrives already rendered
+    { kind: "decimal", written: "1.50", read: "1.50" },
+  ];
+  for (const c of cases) {
+    const text = cookieValue(c.kind, c.written);
+    const plain = cookieObject(cookieRequest(`k=${text}`), [CK("k", c.kind)]);
+    assert.deepEqual(plain, { ok: true, value: { k: c.read } }, `${c.kind} ${JSON.stringify(c.written)}`);
+    // an `Option` field takes the value as a `Some`
+    const opt = cookieObject(cookieRequest(`k=${text}`), [CK("k", c.kind, false, true)]);
+    assert.deepEqual(opt, { ok: true, value: { k: { kind: "Some", value: c.read } } });
+  }
 });
 
 test("cookieObject: an absent header is no cookies", () => {

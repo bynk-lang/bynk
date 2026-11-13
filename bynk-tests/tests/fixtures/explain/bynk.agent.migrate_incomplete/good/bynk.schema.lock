@@ -1,0 +1,31 @@
+version = 2
+
+[events]
+
+[agents."shop.Cart"]
+version = 1
+floor = 1
+
+[[agents."shop.Cart".shapes]]
+version = 1
+additive = false
+
+[[agents."shop.Cart".shapes.fields]]
+name = "owner"
+kind = "Cell"
+type = "String"
+refinement = "String"
+
+[[agents."shop.Cart".shapes.fields.paths]]
+path = "owner"
+type = "String"
+
+[[agents."shop.Cart".shapes.fields]]
+name = "total"
+kind = "Cell"
+type = "Int"
+refinement = "Int"
+
+[[agents."shop.Cart".shapes.fields.paths]]
+path = "total"
+type = "Int"
