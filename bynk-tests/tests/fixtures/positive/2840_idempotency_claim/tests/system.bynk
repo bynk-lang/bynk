@@ -14,4 +14,20 @@ suite shop.hooks as system {
     let retry <- api.POST("/flaky/:id", "down") by Visitor
     expect retry is ServerError(_)
   }
+
+  case "a remembered value is stored in the participant's database and read back" {
+    let first <- skew.POST("/receipt/:id", "wire-r") by Visitor
+    expect first is Ok("stored")
+    let again <- skew.POST("/receipt/:id", "wire-r") by Visitor
+    expect again is Ok("hit wire-r:42")
+  }
+
+  case "a stored value that does not decode reads as a miss over the wire" {
+    let text <- skew.POST("/skew/:id/:mode", "wire-s", "text") by Visitor
+    expect text is Ok("stored")
+    let asInt <- skew.POST("/skew/:id/:mode", "wire-s", "int") by Visitor
+    expect asInt is Ok("stored")
+    let intAgain <- skew.POST("/skew/:id/:mode", "wire-s", "int") by Visitor
+    expect intAgain is Ok("hit 7")
+  }
 }

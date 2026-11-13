@@ -124,12 +124,12 @@ consumes bynk { Idempotency }
 
 service OnPayment from Events(PaymentConfirmed) {
 	on event(e: PaymentConfirmed, env: EventEnvelope) -> Effect[()] given Idempotency {
-		let seen <- Idempotency.dedup[()](env.eventId)
+		let seen <- Idempotency.dedup[Bool](env.eventId)
 		match seen {
 			Some(_) => (),
 			None => {
 				// react to e here, exactly once per eventId
-				let _ <- Idempotency.remember[()](env.eventId, (), 7.days)
+				let _ <- Idempotency.remember[Bool](env.eventId, true, 7.days)
 			},
 		}
 	}

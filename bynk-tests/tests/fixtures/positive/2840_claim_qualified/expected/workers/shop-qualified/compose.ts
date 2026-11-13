@@ -17,5 +17,8 @@ export function compose(env: Env) {
     async http_GET_claim_Param_id(id: string) {
       return handlers.api.http_GET_claim_Param_id(id, deps);
     },
+    async http_GET_seen_Param_id(id: string) {
+      return handlers.api.http_GET_seen_Param_id(id, deps);
+    },
   };
 }

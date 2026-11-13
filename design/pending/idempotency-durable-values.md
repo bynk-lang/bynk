@@ -1,0 +1,16 @@
+---
+level: minor
+changelog: `Idempotency.dedup` and `remember` take a `Codable` value and are durable and shared across isolates on Cloudflare, in the Worker's implicit D1 database; an undecodable stored value reads as a miss
+probes: emit_abi_shapes, ts_writes
+breaking: `Idempotency.dedup[T]` and `remember[T]` now require `T: Codable` (bynk.types.not_codable otherwise), so `dedup[()]`/`remember[(), ()]`, the presence-marker idiom, is refused: cache a `Bool` (`dedup[Bool]`, `remember[Bool](key, true, …)`). A Worker that calls `dedup`/`remember` now gets an implicit D1 database (`<worker>-idempotency`) created by `bynk deploy`, and starts with an empty cache.
+---
+
+## ADR: durable-idempotency-values
+title: Idempotency's remembered values are Codable, stored as JSON, and durable on Cloudflare
+summary: dedup/remember take a Codable T, read an undecodable entry as a miss, and store JSON in the implicit D1 database
+
+**Context.** Until now `dedup[T]`/`remember[T]` accepted any `T` and kept the value as a raw JavaScript object in each provider instance's memory, so they were lost on restart and unshared. A durable store must serialise the value, and typed capability reads (ADR 0830, #3458) now let a first-party operation return its `Codable` parameter, decoded at the call site. The maintainer decided on #2840 that the cached type must be `Codable`, stored through the existing Json codec, with an undecodable stored value read as a miss.
+
+**Decision.** `dedup[T: Codable](key) -> Effect[Option[T]] @onUndecodable(miss)` and `remember[T: Codable](key, value: T, expiresAfter)`. The call site encodes the value `remember` is given and decodes `dedup`'s reply with the instantiated type's codec (ADR 0696, ADR 0830), so every provider stores and returns plain JSON: the reply is the encoding of an `Option` (`{"kind":"Some","value":…}` or `{"kind":"None"}`), so a stored `null` is never mistaken for a miss. A stored value that does not decode as the type asked for (an older deploy wrote another shape) is a miss with a console warning, not a fault, since `dedup` is a cache and the next `remember` replaces the entry. On Cloudflare the provider keeps values in the Worker's implicit D1 database (a second compiler-owned migration, `idempotency_values`), which a Worker now gets when it calls any `Idempotency` operation, not only `claim`; expired rows are swept in bounded batches with each write. The in-memory providers on Node and in the browser, and the test double, store the same JSON, so a test runs the round trip production does.
+
+**Consequences.** `()` is not `Codable`, so the `dedup[()]` presence-marker idiom (the events guide's) becomes `dedup[Bool]` with `remember(…, true, …)`; this is the one source-breaking change. `dedup` then `remember` is still check-then-act (use `claim` for work that must run once). The key is still scoped to the calling body, so a helper function that wraps only `dedup` and one that wraps only `remember` do not meet; a single generic function reading and writing through `T: Codable` does. A Worker that used `dedup`/`remember` gains a D1 database on its next deploy and starts with an empty cache. `Idempotency` is the first non-test consumer of typed reads, exercised by fixtures through a rigid `T: Codable` witness and through the qualified `bynk.Idempotency` name.

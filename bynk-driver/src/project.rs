@@ -2225,12 +2225,10 @@ fn check_unit_files(
             let keep = match c {
                 bynk_check::checker::Callee::Cross { .. } => true,
                 bynk_check::checker::Callee::Capability { cap, op, .. } => {
-                    (cap == "Events" && op == "emit") || (cap == "Idempotency" && op == "claim")
+                    (cap == "Events" && op == "emit") || cap == "Idempotency"
                 }
-                // W30 (#2840): `claim` through a consumed context's qualified name.
-                bynk_check::checker::Callee::CrossCap { cap, op, .. } => {
-                    cap == "Idempotency" && op == "claim"
-                }
+                // W30 (#2840): an `Idempotency` call through a consumed context's qualified name.
+                bynk_check::checker::Callee::CrossCap { cap, .. } => cap == "Idempotency",
                 _ => false,
             };
             keep.then(|| (*id, c.clone()))
@@ -3723,7 +3721,7 @@ fn build_output(
                     needs_kv,
                     worker_bindings::singletons_of(&context_singletons, ctx_name),
                     ctx_uses_emit,
-                    unit_table_uses_claim(
+                    unit_table_uses_idempotency(
                         table,
                         unit_callees.get(ctx_name),
                         unit_flattened.get(ctx_name),

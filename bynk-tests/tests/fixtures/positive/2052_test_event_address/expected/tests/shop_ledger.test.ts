@@ -60,12 +60,15 @@ function __bynkTest_Idempotency(): __ns_bynk.Idempotency {
   const store = new globalThis.Map<string, { value: unknown; until: number }>();
   const claims = new globalThis.Map<string, number>();
   return {
+    // `dedup` and `remember` carry JSON: the call site encodes what `remember` is given and
+    // decodes the reply, so a case runs the round trip production does (a value written as
+    // one type and read as another reads as a miss).
     async dedup(key: string) {
       const hit = store.get(key);
-      return (hit !== undefined && hit.until > 0 ? Some(hit.value) : None) as never;
+      return hit !== undefined && hit.until > 0 ? { kind: "Some", value: hit.value } : { kind: "None" };
     },
     async remember(key: string, value: unknown, expiresAfter: number) {
-      store.set(key, { value, until: 0 + expiresAfter });
+      store.set(key, { value: globalThis.JSON.parse(globalThis.JSON.stringify(value)), until: 0 + expiresAfter });
     },
     async claim(key: string, expiresAfter: number) {
       const until = claims.get(key);

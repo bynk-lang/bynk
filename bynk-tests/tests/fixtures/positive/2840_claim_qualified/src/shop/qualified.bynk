@@ -9,4 +9,15 @@ service api from http {
 		let _ <- bynk.Idempotency.claim(id, 1.hours)
 		Ok("claimed")
 	}
+
+	on GET("/seen/:id") (id: String) -> Effect[HttpResult[String]] by Visitor given bynk.Idempotency {
+		let seen <- bynk.Idempotency.dedup[String](id)
+		match seen {
+			Some(v) => Ok(v),
+			None => {
+				let _ <- bynk.Idempotency.remember[String](id, "first", 1.hours)
+				Ok("fresh")
+			},
+		}
+	}
 }

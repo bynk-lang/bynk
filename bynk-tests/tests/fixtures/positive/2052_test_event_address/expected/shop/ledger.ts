@@ -2,10 +2,11 @@
 // context shop.ledger
 
 import { Ok, Err, Some, None, type Result, type Option } from "../__bynk_runtime/result.js";
-import type { ValidationError } from "../__bynk_runtime/errors.js";
+import type { ValidationError, DecodeError } from "../__bynk_runtime/errors.js";
 import type { __DurableObjectState } from "../__bynk_runtime/storage.js";
 import { __readStored, __commitStored, __noteClock } from "../__bynk_runtime/entries.js";
 import { __rehydrationViolation, __reportUnknownStoredKeys, __checkStoredLayout, type __JsonValue, type __BoundaryError } from "../__bynk_runtime/boundary.js";
+import { __bynkCapabilityReply } from "../__bynk_runtime/codec.js";
 import { type __DurableObjectNamespace, __StateRegistry, __makeAgent } from "../__bynk_runtime/agent.js";
 
 import { EventEnvelope } from "../bynk.js";
@@ -92,13 +93,13 @@ export function __makeBooks(key: string, env?: { BOOKS?: __DurableObjectNamespac
 
 export const OnPlaced = {
   async event(e: Placed, env: EventEnvelope, deps: { Idempotency: bynk.Idempotency }): globalThis.Promise<void> {
-    const seen = await deps.Idempotency.dedup<void>(`shop.ledger.OnPlaced.event::${env.eventId}`);
+    const seen = await __bynkCapabilityReply(deps.Idempotency.dedup(`shop.ledger.OnPlaced.event::${env.eventId}`), { encode: __serialise_Option_Bool, decode: __deserialise_Option_Bool }, { capability: "Idempotency", operation: "dedup", type: "Option[Bool]" }, "miss");
     switch (seen.tag) {
       case "Some": {
         return undefined;
       }
       case "None": {
-        const __r0 = await deps.Idempotency.remember<void>(`shop.ledger.OnPlaced.event::${env.eventId}`, undefined, 604800000);
+        const __r0 = await deps.Idempotency.remember(`shop.ledger.OnPlaced.event::${env.eventId}`, true as __JsonValue, 604800000);
         const __r1 = await __makeBooks("publisher").note(env.publisherId, deps);
         return __makeBooks("all").bump(deps);
       }
@@ -139,4 +140,45 @@ export interface __ShopLedgerDeps {
 export function __makeSurface(deps: __ShopLedgerDeps) {
   return {
   };
+}
+
+export function __serialise_Option_Bool(value: Option<boolean>): __JsonValue {
+  if (value.tag === "Some") return { kind: "Some", value: value.value as __JsonValue };
+  return { kind: "None" };
+}
+
+function __option_value_Bool(raw: __JsonValue, at: string): Result<unknown, __BoundaryError> {
+  if (typeof raw !== "boolean") {
+    return Err({ kind: "StructuralMismatch", path: at, expected: "boolean", actual: typeof raw });
+  }
+  const __v = raw;
+  return Ok(__v);
+}
+
+export function __deserialise_Option_Bool(json: __JsonValue, path: string = "$"): Result<Option<boolean>, __BoundaryError> {
+  if (json === undefined || json === null) {
+    return Ok(None as Option<boolean>);
+  }
+  if (typeof json === "object" && !globalThis.Array.isArray(json)) {
+    const obj = json as { [k: string]: __JsonValue };
+    const __keys = globalThis.Object.keys(obj);
+    if (obj["kind"] === "None" && __keys.length === 1) {
+      return Ok(None as Option<boolean>);
+    }
+    if (obj["kind"] === "Some" && __keys.length === 2 && "value" in obj) {
+      const __t = __option_value_Bool(obj["value"], `${path}.value`);
+      if (__t.tag === "Err") {
+        return __t;
+      }
+      return Ok(Some(__t.value as boolean) as Option<boolean>);
+    }
+  }
+  const __b = __option_value_Bool(json, path);
+  if (__b.tag === "Ok") {
+    return Ok(Some(__b.value as boolean) as Option<boolean>);
+  }
+  if (__b.error.kind === "StructuralMismatch" && __b.error.path === path && !__b.error.expected.endsWith(" | null | {\"kind\": \"None\"} | {\"kind\": \"Some\", \"value\": ...}")) {
+    return Err({ ...__b.error, expected: __b.error.expected + " | null | {\"kind\": \"None\"} | {\"kind\": \"Some\", \"value\": ...}" });
+  }
+  return __b;
 }
