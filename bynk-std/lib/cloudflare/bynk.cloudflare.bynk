@@ -1273,13 +1273,18 @@ adapter bynk.cloudflare {
 	after the platform has processed it, which takes some seconds, so a handler
 	that writes and then queries in the same request will not see its own write.
 	---
-	type Mutation = { id: String }
+	type Mutation = {
+		id: String,
+	}
 
 	---
 	An index's configuration, as `Vectorize.describe` reports it: its
 	`dimensions` and its `metric`.
 	---
-	type IndexInfo = { dimensions: Int, metric: String }
+	type IndexInfo = {
+		dimensions: Int,
+		metric: String,
+	}
 
 	---
 	Why a Vectorize call did not succeed. `DimensionMismatch` is a vector or

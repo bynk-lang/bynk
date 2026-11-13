@@ -1690,7 +1690,7 @@ export class WorkersVectorize implements Vectorize {
   }
 
   private static incomingValues(raw: unknown): Option<readonly number[]> {
-    return Array.isArray(raw) || ArrayBuffer.isView(raw) ? Some(Array.from(raw as ArrayLike<number>)) : None;
+    return Array.isArray(raw) || ArrayBuffer.isView(raw) ? Some(Array.from(raw as unknown as number[])) : None;
   }
 
   private static mutation(raw: unknown): Result<Mutation, VectorError> {
@@ -1816,7 +1816,7 @@ export class WorkersVectorize implements Vectorize {
       return Ok(
         (found ?? []).map((v) => ({
           id: String(v.id),
-          values: Array.from((v.values ?? []) as ArrayLike<number>),
+          values: Array.from((v.values ?? []) as unknown as number[]),
           metadata: WorkersVectorize.incomingMetadata(v.metadata),
           namespace: typeof v.namespace === "string" ? Some(v.namespace) : None,
         })),

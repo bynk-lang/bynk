@@ -4,9 +4,13 @@ changelog: `bynk.cloudflare` gains `Vectorize`, an instance kind for a Vectorize
 probes: emit_abi_shapes, emit_diagnostics, ts_writes
 ---
 
-## ADR: Vectorize as an instance kind
+## ADR: vectorize-instance-kind
+title: Vectorize is an instance kind with a fixed index shape and a typed filter
+summary: Decisions A–K of #3479: a named instance with required dimensions and metric, a deploy-created never-recreated index, a typed filter, errors as values
 
-Records decisions A–K of #3479. A: `Vectorize` is a named instance with
+**Context.** An index's dimensions and metric cannot change after creation, the index is project-owned state, and writes are asynchronous.
+
+**Decision.** Records decisions A–K of #3479. A: `Vectorize` is a named instance with
 required `@dimensions` and `@metric` (a closed set), because an index's
 configuration cannot change after creation. B: the deploy creates the index
 and never recreates it, and a mismatch fails the deploy (slice V2). C:
@@ -19,3 +23,5 @@ filter is a closed typed list of conditions. G: errors are values, with the
 other error types. H: writes return a `Mutation`. I: `bynk dev` binds only a
 named index (V2). J: the in-memory exact test double (V3); until then every
 operation faults until stubbed. K: pairing with `Ai.embed` is documentation.
+
+**Consequences.** Experimental, so no 1.0 promise. A program that does not use `Vectorize` emits byte-identically. The deploy, `bynk dev` and the in-memory double follow in later slices.
