@@ -2973,6 +2973,10 @@ pub(crate) fn describe_derived_capability(
     if d.base.name == "StoredSecret" {
         out.push_str("\nEmits `[[secrets_store_secrets]]`: a distinct instance of `StoredSecret`, reading the secret in the Secrets Store the declaration names. `bynk deploy` links it (it resolves the store's id and checks the secret exists, and creates neither) and fails when either is missing.\n");
     }
+    // #3480: an AI Search instance, linked by deploy and never created.
+    if d.base.name == "AiSearch" {
+        out.push_str("\nEmits `[[ai_search]]`: a distinct instance of `AiSearch`, querying the AI Search instance `@instance` names, in every environment. `bynk deploy` links it (it looks the instance up and records it, and creates nothing) and fails when it is missing; `bynk dev` proxies it to the deployed instance.\n");
+    }
     // #3302: outbound email, restricted by its annotations.
     if d.base.name == "Email" {
         out.push_str("\nEmits `[[send_email]]`, keyed by `name`, with the instance's `@to`, `@allowedRecipients` and `@allowedSenders` as `destination_address`, `allowed_destination_addresses` and `allowed_sender_addresses`. `bynk deploy` checks each `@allowedSenders` domain has Email Sending enabled on the account, and never configures one. A call that breaks a platform limit or sets a reserved header faults before it is sent.\n");

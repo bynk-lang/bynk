@@ -49,6 +49,9 @@ struct WranglerConfig {
     /// #3301: the `[[secrets_store_secrets]]` of the `StoredSecret` instances.
     #[serde(default)]
     secrets_store_secrets: Vec<StoredSecretBinding>,
+    /// #3480: the `[[ai_search]]` of the `AiSearch` instances.
+    #[serde(default)]
+    ai_search: Vec<AiSearchBinding>,
     /// #3302: the `[[send_email]]` of the `Email` instances.
     #[serde(default)]
     send_email: Vec<SendEmailBinding>,
@@ -66,6 +69,14 @@ struct SendEmailBinding {
     /// the instance is unrestricted.
     #[serde(default)]
     allowed_sender_addresses: Vec<String>,
+}
+
+#[derive(Debug, Deserialize)]
+struct AiSearchBinding {
+    /// `AI_SEARCH_<SNAKE>`: the instance's binding.
+    binding: String,
+    /// The account's instance, as `@instance` wrote it.
+    instance_name: String,
 }
 
 #[derive(Debug, Deserialize)]
@@ -244,6 +255,18 @@ pub(crate) struct AnalyticsDecl {
     pub(crate) binding: String,
     /// The derived name before any environment qualification.
     pub(crate) name: String,
+}
+
+/// #3480: one `AiSearch` instance, as the emitted config declares it. Linked,
+/// never created: the instance's data source, models and indexing belong to
+/// whoever configured it, so the deploy finds it and fails when it is missing.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub(crate) struct AiSearchDecl {
+    /// `AI_SEARCH_<SNAKE>`, the key the ledger records the link under.
+    pub(crate) binding: String,
+    /// The instance's name, as `@instance` wrote it, used as written in
+    /// every environment.
+    pub(crate) instance: String,
 }
 
 /// #3301: one `StoredSecret` instance, as the emitted config declares it.
@@ -518,6 +541,11 @@ pub(crate) struct Resources {
     /// config before the push; nothing is created, and nothing is deleted
     /// when an instance goes.
     pub(crate) stored_secrets: Vec<StoredSecretDecl>,
+    /// #3480: the instances of the `AiSearch` instances, in binding order.
+    /// Linked as stored secrets are: looked up by name before the push and
+    /// recorded in the ledger; nothing is created, and nothing is deleted
+    /// when an instance goes.
+    pub(crate) ai_search: Vec<AiSearchDecl>,
     /// #3302: the `@allowedSenders` of the `Email` instances that have any, in
     /// binding order. Only checked (each domain must be enabled for Email
     /// Sending on the account); nothing is created, recorded or deleted.
@@ -610,6 +638,7 @@ impl Default for Resources {
             ratelimits: Vec::new(),
             analytics_datasets: Vec::new(),
             stored_secrets: Vec::new(),
+            ai_search: Vec::new(),
             email_senders: Vec::new(),
             email_addresses: Vec::new(),
             declared_secrets: Vec::new(),
@@ -837,6 +866,15 @@ fn read_resources(config: &Path, project_workers: &[String]) -> Result<Resources
         })
         .collect();
     stored_secrets.sort_by(|a, b| a.binding.cmp(&b.binding));
+    let mut ai_search: Vec<AiSearchDecl> = parsed
+        .ai_search
+        .into_iter()
+        .map(|s| AiSearchDecl {
+            binding: s.binding,
+            instance: s.instance_name,
+        })
+        .collect();
+    ai_search.sort_by(|a, b| a.binding.cmp(&b.binding));
     let mut email_senders: Vec<EmailSendersDecl> = parsed
         .send_email
         .into_iter()
@@ -918,6 +956,7 @@ fn read_resources(config: &Path, project_workers: &[String]) -> Result<Resources
         ratelimits,
         analytics_datasets,
         stored_secrets,
+        ai_search,
         email_senders,
         email_addresses: {
             let mut addresses = parsed.addresses;
@@ -1593,6 +1632,17 @@ pub(crate) mod tests {
                     binding: binding.to_string(),
                     store: store.to_string(),
                     secret: secret.to_string(),
+                })
+                .collect();
+            self
+        }
+        /// Derived `AiSearch` instances, as `(binding, instance)` (#3480).
+        pub(crate) fn ai_search(mut self, instances: &[(&str, &str)]) -> Self {
+            self.ai_search = instances
+                .iter()
+                .map(|(binding, instance)| AiSearchDecl {
+                    binding: binding.to_string(),
+                    instance: instance.to_string(),
                 })
                 .collect();
             self

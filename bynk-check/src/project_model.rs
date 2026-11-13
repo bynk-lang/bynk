@@ -1495,9 +1495,9 @@ fn instance_option_value(
         );
         return None;
     }
-    // #3480: the instance is a path segment of the REST call that links it, so
-    // it is not empty and has no character a name never has. (The platform's
-    // own naming rules are not read here: they are its to enforce.)
+    // #3480: the instance is a path segment of the REST call that links it, and
+    // Cloudflare's API documents an instance id as 1 to 64 lowercase letters,
+    // digits, hyphens and underscores.
     if base == "AiSearch"
         && option == crate::firstparty::AI_SEARCH_INSTANCE_OPTION
         && !is_ai_search_instance_name(text)
@@ -1510,7 +1510,7 @@ fn instance_option_value(
                 format!("`{text}` is not an instance name a `{base}` can reach"),
             )
             .with_note(
-                "an instance name is 1 to 64 letters, digits, `-` or `_`, as written in the Cloudflare dashboard",
+                "an instance name is 1 to 64 lowercase letters, digits, `-` or `_`, the form Cloudflare's API documents",
             ),
         );
         return None;
@@ -1672,7 +1672,7 @@ fn is_ai_search_instance_name(name: &str) -> bool {
     (1..=64).contains(&name.len())
         && name
             .bytes()
-            .all(|b| b.is_ascii_alphanumeric() || b == b'-' || b == b'_')
+            .all(|b| b.is_ascii_lowercase() || b.is_ascii_digit() || b == b'-' || b == b'_')
 }
 
 /// Whether `name` is a Cloudflare Worker name ([`instance_option_value`]).
