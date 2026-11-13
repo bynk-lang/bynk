@@ -1,0 +1,34 @@
+suite shop.hooks {
+  case "the first delivery is processed and a repeat is a duplicate" {
+    let first <- api.POST("/hooks/:id", "d1") by Visitor
+    expect first is Ok("processed")
+    let again <- api.POST("/hooks/:id", "d1") by Visitor
+    expect again is Ok("duplicate")
+  }
+
+  case "another key is its own claim" {
+    let a <- api.POST("/hooks/:id", "d1") by Visitor
+    expect a is Ok("processed")
+    let b <- api.POST("/hooks/:id", "d2") by Visitor
+    expect b is Ok("processed")
+  }
+
+  case "a claim lapses after its window" {
+    let first <- api.POST("/hooks/:id", "d1") by Visitor
+    expect first is Ok("processed")
+    advance Clock by 61.minutes
+    let later <- api.POST("/hooks/:id", "d1") by Visitor
+    expect later is Ok("processed")
+  }
+
+  // The double honours `remember`'s window on the harness clock.
+  case "a remembered value lapses after its window" {
+    let first <- replay.POST("/replay/:id", "r1") by Visitor
+    expect first is Ok("fresh")
+    let hit <- replay.POST("/replay/:id", "r1") by Visitor
+    expect hit is Ok("computed")
+    advance Clock by 61.minutes
+    let after <- replay.POST("/replay/:id", "r1") by Visitor
+    expect after is Ok("fresh")
+  }
+}
