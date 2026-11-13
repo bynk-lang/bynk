@@ -3,7 +3,7 @@ title: Version compatibility & changelog
 ---
 Bynk is pre-1.0 and developed in small, spec-first increments (see
 [Versioning & roadmap](/book/about/versioning-and-roadmap/)). This book is
-written against **v0.593**.
+written against **v0.594**.
 
 This page is a high-level summary of notable increments, not an exhaustive
 per-commit history. While Bynk is pre-1.0, increments may change behaviour.
@@ -28,6 +28,7 @@ per-commit history. While Bynk is pre-1.0, increments may change behaviour.
 
 | Version | Highlights |
 |---|---|
+| **v0.594.0** | `[deploy.vectorize.<Capability>] index` in `bynk.toml` adopts an existing Vectorize index per environment, which `bynk deploy` checks for dimension and metric drift and never creates, changes or deletes |
 | **v0.593.0** | `bynk deploy` creates each `Vectorize` index with its declared dimensions and metric, reuses a matching one, fails (never recreates) on a mismatch, creates `@indexed` metadata indexes before the push, and reports orphaned indexes that `--prune` deletes behind a confirmation |
 | **v0.592.0** | `bynk.cloudflare` gains `Vectorize`, an instance kind for a Vectorize index with required `@dimensions` and `@metric`, optional `@indexed`, a typed filter and typed errors, emitted as `[[vectorize]]`; every operation faults until stubbed in a test |
 | **v0.591.3** | `Ai.generate` reads the reply text from `choices[0].message.content` when a model sends no `response`, as granite does; `response` still wins when both are there |
