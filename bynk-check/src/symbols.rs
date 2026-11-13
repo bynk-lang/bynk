@@ -910,6 +910,14 @@ impl DerivedInstance {
         self.base_unit == crate::firstparty::CLOUDFLARE_UNIT && self.base_cap == "Email"
     }
 
+    /// The AI Search instance an `AiSearch` declaration names (#3480), as
+    /// written; `None` for any other kind.
+    pub fn ai_search_instance(&self) -> Option<&str> {
+        (self.base_unit == crate::firstparty::CLOUDFLARE_UNIT && self.base_cap == "AiSearch")
+            .then(|| self.option(crate::firstparty::AI_SEARCH_INSTANCE_OPTION))
+            .flatten()
+    }
+
     /// Whether this is a `StoredSecret` instance (#3301).
     pub fn is_stored_secret(&self) -> bool {
         self.base_unit == crate::firstparty::CLOUDFLARE_UNIT && self.base_cap == "StoredSecret"

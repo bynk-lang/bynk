@@ -1,0 +1,2 @@
+bynk.capability.unknown_option
+`@model` is not an option of a `AiSearch` instance

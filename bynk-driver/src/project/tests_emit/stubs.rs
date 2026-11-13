@@ -1496,23 +1496,26 @@ pub(super) fn platform_double(
                 op("runStream", "_, _")
             )
         }
-        // #3479: a test never reaches an index, so each instance faults until
-        // its operation is stubbed. (The in-memory index is a later slice.)
+        // #3479: the real `WorkersVectorize` over an exact in-memory index built
+        // from the instance's declaration, so a retrieval flow (store, filter,
+        // rank) runs in a test. Ranking is exact and a write is visible at once,
+        // which production's approximate, eventually consistent index is not.
+        // `stub Docs.query(_, _) returns …` still replaces an operation.
         ("bynk.cloudflare", "Vectorize") => {
-            let op = |op: &str, args: &str| {
+            return Some(format!(
+                "function __bynkTest_{name}(dimensions: number = 1, metric: string = \"cosine\", indexed: readonly string[] = []): {ns}.{cap} {{\n  return new bynk_cloudflare__binding.WorkersVectorize({{ INDEX: __makeIntegrationVectorize(dimensions, metric, indexed) }}, \"INDEX\");\n}}\n"
+            ));
+        }
+        // #3480: a test never reaches AI Search, so each instance faults until
+        // its operation is stubbed (no double could keep the service's
+        // contract: chunking, embeddings and ranking are the service).
+        ("bynk.cloudflare", "AiSearch") => {
+            let op = |op: &str| {
                 format!(
-                    "    async {op}() {{\n      throw new globalThis.Error(\"bynk: `{name}.{op}` is not stubbed, and a test never reaches a Vectorize index — add `stub {name}.{op}({args}) returns …`\");\n    }},\n"
+                    "    async {op}() {{\n      throw new globalThis.Error(\"bynk: `{name}.{op}` is not stubbed, and a test never reaches AI Search — add `stub {name}.{op}(_, _) returns …`\");\n    }},\n"
                 )
             };
-            format!(
-                "  return {{\n{}{}{}{}{}{}  }};\n",
-                op("upsert", "_"),
-                op("insert", "_"),
-                op("query", "_, _"),
-                op("getByIds", "_"),
-                op("deleteByIds", "_"),
-                op("describe", "")
-            )
+            format!("  return {{\n{}{}  }};\n", op("search"), op("answer"))
         }
         // #3477: a test never starts a container, so each operation faults,
         // naming the instance it was asked for, until it is stubbed. There is

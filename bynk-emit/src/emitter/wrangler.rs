@@ -387,19 +387,11 @@ pub fn emit_wrangler_toml(
             // environment-qualifies and creates (never recreates). The binding
             // names the index; its dimensions, metric and metadata indexes are
             // the deploy's, not this stanza's.
-            BindingSource::VectorizeIndex { .. } => TomlBlock::array_table(
-                "vectorize",
-                vec![
-                    TomlEntry::kv("binding", name),
-                    TomlEntry::kv(
-                        "index_name",
-                        TomlValue::str(vectorize_index_name(
-                            &worker_dir_name(context),
-                            &binding.name,
-                        )),
-                    ),
-                ],
-            ),
+            BindingSource::VectorizeIndex { .. } => vectorize_block(context, binding, name),
+            // #3480: the account's instance, named as the declaration writes it
+            // (in every environment). `bynk deploy` checks it exists and never
+            // creates it.
+            BindingSource::AiSearchInstance { instance, .. } => ai_search_block(name, instance),
             // #3300: a one-per-Worker capability's plain table, holding only
             // its fixed binding name (`[version_metadata]`).
             BindingSource::Singleton { capability } => {
@@ -674,6 +666,13 @@ pub fn worker_bindings(
             .filter(|b| matches!(b.source, BindingSource::ContainerInstance { .. }))
             .cloned(),
     );
+    // #3480: the AI Search instances, after the Vectorize indexes.
+    bindings.extend(
+        instances
+            .iter()
+            .filter(|b| matches!(b.source, BindingSource::AiSearchInstance { .. }))
+            .cloned(),
+    );
     // #3300: the one-per-Worker bindings, after the databases.
     bindings.extend(singletons.iter().cloned());
     // Events track, slice 0 (spine #936, ADR 0284): a context whose handlers
@@ -717,6 +716,34 @@ pub(crate) fn handler_bindings(consumed: &[String], agents: &[String]) -> Vec<Wo
         .map(|t| service_binding(t))
         .chain(agents.into_iter().map(|a| agent_binding(a)))
         .collect()
+}
+
+/// #3479: the `[[vectorize]]` entry of a `Vectorize` instance.
+fn vectorize_block(context: &str, binding: &WorkerBinding, name: TomlValue) -> TomlBlock {
+    TomlBlock::array_table(
+        "vectorize",
+        vec![
+            TomlEntry::kv("binding", name),
+            TomlEntry::kv(
+                "index_name",
+                TomlValue::str(vectorize_index_name(
+                    &worker_dir_name(context),
+                    &binding.name,
+                )),
+            ),
+        ],
+    )
+}
+
+/// #3480: the `[[ai_search]]` entry of an `AiSearch` instance.
+fn ai_search_block(binding: TomlValue, instance: &str) -> TomlBlock {
+    TomlBlock::array_table(
+        "ai_search",
+        vec![
+            TomlEntry::kv("binding", binding),
+            TomlEntry::kv("instance_name", TomlValue::str(instance.to_string())),
+        ],
+    )
 }
 
 /// #3301: the `[[secrets_store_secrets]]` entry of a `StoredSecret`: the secret
@@ -818,6 +845,7 @@ pub(crate) fn binding_ts_type(source: &BindingSource) -> &'static str {
         BindingSource::StoredSecret { .. } => "__SecretsStoreSecret",
         BindingSource::Email { .. } => "__SendEmail",
         BindingSource::VectorizeIndex { .. } => "__VectorizeIndex",
+        BindingSource::AiSearchInstance { .. } => "__AiSearchInstance",
         BindingSource::Postgres { .. } | BindingSource::MySql { .. } => "__Hyperdrive",
         BindingSource::Singleton { capability } => match capability.as_str() {
             "Version" => "__WorkerVersionMetadata",
@@ -967,6 +995,63 @@ fn set_string_preserving_decor(item: &mut toml_edit::Item, s: &str) {
     let mut new_value = toml_edit::Value::from(s);
     *new_value.decor_mut() = decor;
     *item = toml_edit::Item::Value(new_value);
+}
+
+/// #3479: a Worker's generated `wrangler.toml` for `bynk dev`. A `Vectorize`
+/// has no local simulation, so each `[[vectorize]]` entry whose binding is in
+/// `dev` is pointed at that index of the developer's own with `remote = true`,
+/// and the entries not in it are removed: the instance is unbound, and a call
+/// to it faults saying how to bind it. `[vars]` gains one `<binding> =
+/// "<dimensions>:<metric>"` per bound index (`declared`), which the binding
+/// checks the index against on its first call. `dev` and `declared` are keyed
+/// by binding. The text is unchanged when there is no `[[vectorize]]`.
+pub fn bind_vectorize_for_dev(
+    text: &str,
+    dev: &std::collections::BTreeMap<String, String>,
+    declared: &std::collections::BTreeMap<String, String>,
+) -> Result<String, String> {
+    let mut doc: toml_edit::DocumentMut = text
+        .parse()
+        .map_err(|e| format!("invalid wrangler.toml: {e}"))?;
+    let Some(tables) = doc
+        .get_mut("vectorize")
+        .and_then(|i| i.as_array_of_tables_mut())
+    else {
+        return Ok(text.to_string());
+    };
+    tables.retain(|t| {
+        t.get("binding")
+            .and_then(|b| b.as_str())
+            .is_some_and(|b| dev.contains_key(b))
+    });
+    for table in tables.iter_mut() {
+        let Some(binding) = table.get("binding").and_then(|b| b.as_str()) else {
+            continue;
+        };
+        let Some(index) = dev.get(binding).cloned() else {
+            continue;
+        };
+        table["index_name"] = toml_edit::value(index);
+        table["remote"] = toml_edit::value(true);
+    }
+    if tables.is_empty() {
+        doc.remove("vectorize");
+    }
+    if !declared.is_empty() {
+        let vars = doc
+            .entry("vars")
+            .or_insert_with(|| toml_edit::Item::Table(toml_edit::Table::new()));
+        let Some(vars) = vars.as_table_like_mut() else {
+            return Err("`vars` in wrangler.toml is not a table".to_string());
+        };
+        for (binding, value) in declared {
+            vars.insert(
+                &format!("BYNK_DEV_INDEX_{binding}"),
+                toml_edit::value(value.as_str()),
+            );
+        }
+    }
+    Ok(doc.to_string())
 }
 
 /// The deploy-time placeholder a `[[kv_namespaces]]` entry for `binding`
@@ -1714,6 +1799,39 @@ fn kv_entries(doc: &toml_edit::DocumentMut) -> impl Iterator<Item = (&str, &str)
 #[cfg(test)]
 mod vectorize_name_tests {
     use super::*;
+
+    #[test]
+    fn dev_binds_the_named_index_remotely_and_unbinds_the_rest() {
+        let text = "name = \"w\"\n\n[[vectorize]]\nbinding = \"VECTORIZE_DOCS\"\nindex_name = \"w-docs\"\n\n[[vectorize]]\nbinding = \"VECTORIZE_OTHER\"\nindex_name = \"w-other\"\n";
+        let dev = std::collections::BTreeMap::from([(
+            "VECTORIZE_DOCS".to_string(),
+            "docs-dev".to_string(),
+        )]);
+        let declared = std::collections::BTreeMap::from([(
+            "VECTORIZE_DOCS".to_string(),
+            "768:cosine".to_string(),
+        )]);
+        let out = bind_vectorize_for_dev(text, &dev, &declared).unwrap();
+        assert!(
+            out.contains("index_name = \"docs-dev\"") && out.contains("remote = true"),
+            "{out}"
+        );
+        assert!(
+            !out.contains("VECTORIZE_OTHER") && !out.contains("w-docs"),
+            "{out}"
+        );
+        assert!(
+            out.contains("BYNK_DEV_INDEX_VECTORIZE_DOCS = \"768:cosine\""),
+            "{out}"
+        );
+        // Nothing bound leaves no stanza at all; no Vectorize leaves the text.
+        let none = bind_vectorize_for_dev(text, &Default::default(), &Default::default()).unwrap();
+        assert!(!none.contains("[[vectorize]]"), "{none}");
+        assert_eq!(
+            bind_vectorize_for_dev("name = \"w\"\n", &dev, &declared).unwrap(),
+            "name = \"w\"\n"
+        );
+    }
 
     #[test]
     fn an_adopted_binding_with_no_stanza_is_an_error_not_a_silent_derived_name() {

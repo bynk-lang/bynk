@@ -436,6 +436,7 @@ mod tests {
                 "bynk.cloudflare.MySql",
                 "bynk.cloudflare.Vectorize",
                 "bynk.cloudflare.Container",
+                "bynk.cloudflare.AiSearch",
                 "bynk.cloudflare.Kv.getWith",
                 "bynk.cloudflare.Kv.putWith",
                 "bynk.cloudflare.Kv.getBytes",

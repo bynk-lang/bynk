@@ -3044,7 +3044,7 @@ fn qualified_ts_type_ref(r: &TypeRef) -> TsType {
 /// `type __X` import entries, then the driver a `Postgres` instance is given.
 fn platform_binding_imports(bindings: &[WorkerBinding]) -> Vec<String> {
     let binds = |kind: fn(&BindingSource) -> bool| bindings.iter().any(|b| kind(&b.source));
-    let kinds: [(crate::emitter::wrangler::BindingKind, &str); 12] = [
+    let kinds: [(crate::emitter::wrangler::BindingKind, &str); 13] = [
         (
             |s| matches!(s, BindingSource::Kv | BindingSource::KvInstance { .. }),
             "__KVNamespace",
@@ -3086,6 +3086,10 @@ fn platform_binding_imports(bindings: &[WorkerBinding]) -> Vec<String> {
         (
             |s| matches!(s, BindingSource::VectorizeIndex { .. }),
             "__VectorizeIndex",
+        ),
+        (
+            |s| matches!(s, BindingSource::AiSearchInstance { .. }),
+            "__AiSearchInstance",
         ),
         (|s| singleton_is(s, "Version"), "__WorkerVersionMetadata"),
         (|s| singleton_is(s, "Ai"), "__WorkerAiBinding"),

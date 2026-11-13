@@ -33,10 +33,16 @@ pub struct RemoteKind {
 }
 
 /// The remote-only binding kinds, by `[dev]` key.
-pub const REMOTE_KINDS: &[RemoteKind] = &[RemoteKind {
-    key: "ai",
-    var: "BYNK_DEV_ACK_AI",
-}];
+pub const REMOTE_KINDS: &[RemoteKind] = &[
+    RemoteKind {
+        key: "ai",
+        var: "BYNK_DEV_ACK_AI",
+    },
+    RemoteKind {
+        key: "vectorize",
+        var: "BYNK_DEV_ACK_VECTORIZE",
+    },
+];
 
 /// The variable `bynk dev` sets to `1` on every Worker it serves, so a
 /// provider can tell a development session from a deployment. A deployed

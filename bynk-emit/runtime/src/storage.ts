@@ -977,39 +977,28 @@ export function makeIntegrationAi(): WorkerAiBinding {
 }
 
 /**
- * A Vectorize index binding (#3479): Cloudflare's `vectorize` binding, which
- * `WorkersVectorize` reads. Vectors and results are the platform's own shapes
- * (`id`, `values`, `namespace`, `metadata`, `matches`); a write answers a
- * `{ mutationId }`, and takes effect once the platform has processed it.
+ * An AI Search instance binding (#3480): Cloudflare's `ai_search` binding,
+ * which `WorkersAiSearch` reads. Requests and replies are the platform's own
+ * shapes (`ai_search_options`, `chunks`, `choices`), and the binding is the
+ * instance itself, so its methods are called directly.
  */
-export interface VectorizeIndex {
-  upsert(vectors: Record<string, unknown>[]): Promise<unknown>;
-  insert(vectors: Record<string, unknown>[]): Promise<unknown>;
-  query(vector: number[], options: Record<string, unknown>): Promise<unknown>;
-  getByIds(ids: string[]): Promise<unknown>;
-  deleteByIds(ids: string[]): Promise<unknown>;
-  describe(): Promise<unknown>;
+export interface AiSearchInstance {
+  search(request: Record<string, unknown>): Promise<unknown>;
+  chatCompletions(request: Record<string, unknown>): Promise<unknown>;
 }
 
 /**
- * The Vectorize binding of a multi-Worker integration test participant, bound
- * as its `env.<binding>`. A test never reaches an index, so every operation
+ * The AI Search binding of a multi-Worker integration test participant, bound
+ * as its `env.<binding>`. A test never reaches AI Search, so every operation
  * faults, naming the binding, until the case stubs the capability's operation.
  */
-export function makeIntegrationVectorize(binding: string): VectorizeIndex {
+export function makeIntegrationAiSearch(binding: string): AiSearchInstance {
   const unstubbed = async (): Promise<never> => {
     throw new globalThis.Error(
-      `bynk: the \`${binding}\` Vectorize binding is not stubbed, and a test never reaches an index — stub the operation the case calls (for example \`stub <Name>.query(_, _) returns …\`)`,
+      `bynk: the \`${binding}\` AI Search binding is not stubbed, and a test never reaches AI Search — stub the operation the case calls (for example \`stub <Name>.search(_, _) returns …\`)`,
     );
   };
-  return {
-    upsert: unstubbed,
-    insert: unstubbed,
-    query: unstubbed,
-    getByIds: unstubbed,
-    deleteByIds: unstubbed,
-    describe: unstubbed,
-  };
+  return { search: unstubbed, chatCompletions: unstubbed };
 }
 
 /**

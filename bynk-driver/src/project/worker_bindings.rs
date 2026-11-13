@@ -261,6 +261,10 @@ pub(super) fn context_bindings(
                     instance_type: d.container_instance_type().map(str::to_string),
                     forward: d.container_forward().to_vec(),
                 },
+                (firstparty::CLOUDFLARE_UNIT, "AiSearch") => BindingSource::AiSearchInstance {
+                    capability,
+                    instance: d.ai_search_instance().unwrap_or_default().to_string(),
+                },
                 (firstparty::CLOUDFLARE_UNIT, "Kv") => BindingSource::KvInstance { capability },
                 (unit, base) => {
                     unreachable!("`{unit}.{base}` is instantiable but has no binding kind")

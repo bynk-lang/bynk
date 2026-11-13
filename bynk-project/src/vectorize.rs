@@ -12,6 +12,16 @@
 //!
 //! An adopted index is checked against the declaration for drift and is never
 //! created, changed or deleted by `bynk deploy`.
+//!
+//! Under `bynk dev` a `Vectorize` has no local simulation, so a Worker reaches
+//! an index of the developer's own, named per capability and never the deploy's:
+//!
+//! ```toml
+//! [dev.vectorize-index]
+//! Docs = "docs-dev"
+//! ```
+//!
+//! A capability with no entry is unbound under `bynk dev`.
 
 use crate::discovery::read_source;
 use crate::paths::{ProjectPathsError, did_you_mean};
@@ -155,9 +165,93 @@ pub fn try_read_vectorize_deploy(
     try_read_vectorize_deploy_with(project_root, &overlay)
 }
 
+/// The `[dev.vectorize-index]` entries, by capability name: the index of the
+/// developer's own that `bynk dev` binds for each.
+pub type VectorizeDevIndexes = BTreeMap<String, String>;
+
+/// The `[dev]` table's `vectorize-index` entries.
+pub fn dev_vectorize_index_from(
+    dev: &toml::Table,
+) -> Result<VectorizeDevIndexes, ProjectPathsError> {
+    let mut out = VectorizeDevIndexes::new();
+    let Some(value) = dev.get("vectorize-index") else {
+        return Ok(out);
+    };
+    let table = "dev.vectorize-index";
+    let all = value.as_table().ok_or_else(|| {
+        bad(
+            table,
+            "…",
+            "must be a table of capability to index name, like `Docs = \"docs-dev\"`".to_string(),
+        )
+    })?;
+    for (capability, name) in all {
+        let name = name.as_str().filter(|n| is_index_name(n)).ok_or_else(|| {
+            bad(
+                table,
+                capability,
+                "must be the name of a Vectorize index of your own: 1 to 64 lowercase letters, digits or `-`, not starting or ending with `-`, as `wrangler vectorize list` shows".to_string(),
+            )
+        })?;
+        out.insert(capability.clone(), name.to_string());
+    }
+    Ok(out)
+}
+
+/// Read `bynk.toml`'s `[dev.vectorize-index]` entries, honouring `overlay`. No
+/// manifest, or none of the table, is empty.
+pub fn try_read_vectorize_dev_with(
+    project_root: &Path,
+    overlay: &HashMap<PathBuf, String>,
+) -> Result<VectorizeDevIndexes, ProjectPathsError> {
+    let Ok(content) = read_source(&project_root.join("bynk.toml"), overlay) else {
+        return Ok(VectorizeDevIndexes::new());
+    };
+    let doc = content
+        .parse::<toml::Table>()
+        .map_err(|_| ProjectPathsError::Malformed)?;
+    match doc.get("dev").and_then(|v| v.as_table()) {
+        Some(t) => dev_vectorize_index_from(t),
+        None => Ok(VectorizeDevIndexes::new()),
+    }
+}
+
+/// [`try_read_vectorize_dev_with`], reading `bynk.toml` from disk.
+pub fn try_read_vectorize_dev(
+    project_root: &Path,
+) -> Result<VectorizeDevIndexes, ProjectPathsError> {
+    let path = project_root.join("bynk.toml");
+    let overlay = match std::fs::read_to_string(&path) {
+        Ok(text) => HashMap::from([(path, text)]),
+        Err(_) => HashMap::new(),
+    };
+    try_read_vectorize_dev_with(project_root, &overlay)
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn a_dev_index_is_named_per_capability() {
+        let dev = |text: &str| {
+            let doc: toml::Table = text.parse().unwrap();
+            dev_vectorize_index_from(doc["dev"].as_table().unwrap()).map_err(|e| e.to_string())
+        };
+        let read = dev("[dev.vectorize-index]\nDocs = \"docs-dev\"\n").unwrap();
+        assert_eq!(read["Docs"], "docs-dev");
+        assert!(dev("[dev]\n").unwrap().is_empty());
+        let err = dev("[dev.vectorize-index]\nDocs = \"Docs_Dev\"\n").unwrap_err();
+        assert!(
+            err.contains("Docs") && err.contains("name of a Vectorize index"),
+            "{err}"
+        );
+        assert!(
+            dev("[dev]\nvectorize-index = 3\n")
+                .unwrap_err()
+                .contains("table of capability")
+        );
+    }
 
     fn deploy(text: &str) -> Result<VectorizeDeployConfig, String> {
         let doc: toml::Table = text.parse().unwrap();

@@ -1,0 +1,114 @@
+suite shop.retrieval
+
+// #3479: the double ranks exactly (smaller euclidean distance is nearer),
+// enforces the declaration (dimensions, `@indexed`), and keeps insert and
+// upsert apart. A write is visible at once, unlike production.
+
+case "an empty index returns no matches" {
+	let r <- reader.call([0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0], QueryOptions {})
+	expect r == Ok([])
+}
+
+case "a write returns deterministic mutation ids and is queryable at once" {
+	let first <- writer.call([Vector { id: "a", values: [3.0, 4.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0] }])
+	expect first == Ok(Mutation { id: "m1" })
+	let second <- writer.call([Vector { id: "b", values: [0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0] }])
+	expect second == Ok(Mutation { id: "m2" })
+	let r <- reader.call([0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0], QueryOptions { topK: 2 })
+	expect r == Ok([
+		VectorMatch { id: "b", score: 0.0, values: None, metadata: None, namespace: None },
+		VectorMatch { id: "a", score: 5.0, values: None, metadata: None, namespace: None },
+	])
+}
+
+case "topK limits the matches" {
+	let _ <- writer.call([Vector { id: "a", values: [1.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0] }, Vector { id: "b", values: [2.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0] }, Vector { id: "c", values: [3.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0] }])
+	let r <- reader.call([0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0], QueryOptions { topK: 1 })
+	expect r == Ok([VectorMatch { id: "a", score: 1.0, values: None, metadata: None, namespace: None }])
+}
+
+case "a vector of the wrong length is a DimensionMismatch" {
+	let r <- writer.call([Vector { id: "a", values: [1.0, 2.0, 3.0] }])
+	expect r is Err(DimensionMismatch(_))
+	let q <- reader.call([1.0], QueryOptions {})
+	expect q is Err(DimensionMismatch(_))
+}
+
+case "upsert replaces a vector in full and insert keeps the first" {
+	let _ <- writer.call([Vector { id: "a", values: [1.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0], metadata: Some("{\"category\":\"faq\"}") }])
+	let _ <- writer.call([Vector { id: "a", values: [2.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0] }])
+	let replaced <- fetcher.call(["a"])
+	expect replaced == Ok([Vector { id: "a", values: [2.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0], metadata: None, namespace: None }])
+	let _ <- inserter.call([Vector { id: "a", values: [9.0, 9.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0] }, Vector { id: "b", values: [1.0, 1.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0] }])
+	let kept <- fetcher.call(["a", "b", "missing"])
+	expect kept == Ok([
+		Vector { id: "a", values: [2.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0], metadata: None, namespace: None },
+		Vector { id: "b", values: [1.0, 1.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0], metadata: None, namespace: None },
+	])
+}
+
+case "deleteByIds removes vectors" {
+	let _ <- writer.call([Vector { id: "a", values: [1.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0] }, Vector { id: "b", values: [2.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0] }])
+	let removed <- remover.call(["a"])
+	expect removed == Ok(Mutation { id: "m2" })
+	let left <- fetcher.call(["a", "b"])
+	expect left == Ok([Vector { id: "b", values: [2.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0], metadata: None, namespace: None }])
+}
+
+case "namespaces partition the index" {
+	let _ <- writer.call([Vector { id: "a", values: [1.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0], namespace: Some("blue") }, Vector { id: "b", values: [1.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0] }])
+	let blue <- reader.call([1.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0], QueryOptions { namespace: Some("blue") })
+	expect blue == Ok([VectorMatch { id: "a", score: 0.0, values: None, metadata: None, namespace: Some("blue") }])
+	// Whether a query naming no namespace also searches these is not documented,
+	// so the double faults rather than guess.
+	expect reader.call([1.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0], QueryOptions {}) faults
+}
+
+case "a filter selects by an indexed property" {
+	let _ <- writer.call([
+		Vector { id: "a", values: [1.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0], metadata: Some("{\"category\":\"faq\",\"year\":2024}") },
+		Vector { id: "b", values: [2.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0], metadata: Some("{\"category\":\"blog\",\"year\":2026}") },
+		Vector { id: "c", values: [3.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0], metadata: Some("{\"category\":\"faq\",\"year\":2026}") },
+	])
+	let faq <- reader.call([0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0], QueryOptions { filter: [Condition { field: "category", op: FilterEq(MetaText("faq")) }] })
+	expect faq == Ok([
+		VectorMatch { id: "a", score: 1.0, values: None, metadata: None, namespace: None },
+		VectorMatch { id: "c", score: 3.0, values: None, metadata: None, namespace: None },
+	])
+	let recent <- reader.call([0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0], QueryOptions { filter: [Condition { field: "year", op: FilterGte(MetaNumber(2025.0)) }, Condition { field: "category", op: FilterEq(MetaText("faq")) }] })
+	expect recent == Ok([VectorMatch { id: "c", score: 3.0, values: None, metadata: None, namespace: None }])
+}
+
+case "returnMetadata Indexed returns only the indexed properties" {
+	let _ <- writer.call([Vector { id: "a", values: [1.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0], metadata: Some("{\"category\":\"faq\",\"note\":\"x\"}") }])
+	let indexed <- reader.call([0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0], QueryOptions { returnMetadata: MetadataScope.Indexed })
+	expect indexed == Ok([VectorMatch { id: "a", score: 1.0, values: None, metadata: Some("{\"category\":\"faq\"}"), namespace: None }])
+	let all <- reader.call([0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0], QueryOptions { returnMetadata: MetadataScope.All })
+	expect all == Ok([VectorMatch { id: "a", score: 1.0, values: None, metadata: Some("{\"category\":\"faq\",\"note\":\"x\"}"), namespace: None }])
+}
+
+case "a filter on a property that is not indexed faults, naming the difference" {
+	expect reader.call([0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0], QueryOptions { filter: [Condition { field: "note", op: FilterEq(MetaText("x")) }] }) faults
+}
+
+case "a filter the platform refuses is an InvalidInput value" {
+	let r <- reader.call([0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0], QueryOptions { filter: [Condition { field: "", op: FilterEq(MetaText("x")) }] })
+	expect r is Err(VectorInvalidInput(_))
+}
+
+case "a limit is an InvalidInput value" {
+	let r <- reader.call([0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0], QueryOptions { topK: 101 })
+	expect r is Err(VectorInvalidInput(_))
+}
+
+case "describe reports the declaration" {
+	let r <- describer.call()
+	expect r == Ok(IndexInfo { dimensions: 32, metric: "euclidean" })
+}
+
+case "a stub still replaces an operation" {
+	stub Docs.query(_, _) returns Ok([])
+	let _ <- writer.call([Vector { id: "a", values: [1.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0] }])
+	let r <- reader.call([1.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0], QueryOptions {})
+	expect r == Ok([])
+}
