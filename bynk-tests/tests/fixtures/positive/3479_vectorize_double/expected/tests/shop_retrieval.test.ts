@@ -47,6 +47,8 @@ class __Stub_Docs {
     return true;
   }
   async query(vector: readonly number[], options: __ns_bynk_cloudflare.QueryOptions): globalThis.Promise<Result<readonly __ns_bynk_cloudflare.VectorMatch[], __ns_bynk_cloudflare.VectorError>> {
+    const { Meta } = __ns_shop_retrieval;
+    type Meta = __ns_shop_retrieval.Meta;
     const { BytesResponse, Claim, Cookie, EventEnvelope, FetchError, FetchOptions, File, LogLevel, Method, Redirect, Request, Response, SameSite, StreamResponse, TimedOut, Uuid } = __ns_bynk;
     type BytesResponse = __ns_bynk.BytesResponse;
     type Claim = __ns_bynk.Claim;
@@ -64,7 +66,7 @@ class __Stub_Docs {
     type StreamResponse = __ns_bynk.StreamResponse;
     type TimedOut = __ns_bynk.TimedOut;
     type Uuid = __ns_bynk.Uuid;
-    const { AiError, ChatMessage, ChatRole, Condition, DataPoint, DmarcVerdict, EmailAttachment, EmailError, EmailMessage, EmailReply, EmailVerdict, FilterOp, GenerateRequest, Generation, InboundAttachment, InboundEmail, IndexInfo, KvEntry, KvExpiration, KvGet, KvKey, KvList, KvListing, KvPut, MetaValue, MetadataScope, Mutation, MySqlError, MySqlReadError, MySqlRun, MySqlStatement, MySqlValue, PgError, PgReadError, PgRun, PgStatement, PgValue, QueryOptions, QueueSend, R2Body, R2Condition, R2Listing, R2Object, R2Part, R2Put, R2Upload, R2UploadOptions, SenderIdentity, SqlError, SqlReadError, SqlRun, SqlStatement, SqlValue, TokenUsage, Vector, VectorError, VectorMatch, WorkerVersion } = __ns_bynk_cloudflare;
+    const { AiError, ChatMessage, ChatRole, Condition, DataPoint, DmarcVerdict, EmailAttachment, EmailError, EmailMessage, EmailReply, EmailVerdict, FilterOp, GenerateRequest, Generation, InboundAttachment, InboundEmail, IndexInfo, KvEntry, KvExpiration, KvGet, KvKey, KvList, KvListing, KvPut, MetaValue, MetadataScope, Mutation, MySqlError, MySqlReadError, MySqlRun, MySqlStatement, MySqlValue, PgError, PgReadError, PgRun, PgStatement, PgValue, QueryOptions, QueueSend, R2Body, R2Condition, R2Listing, R2Object, R2Part, R2Put, R2Upload, R2UploadOptions, SenderIdentity, SqlError, SqlReadError, SqlRun, SqlStatement, SqlValue, TokenUsage, Vector, VectorError, VectorMatch, VectorOf, WorkerVersion } = __ns_bynk_cloudflare;
     type AiError = __ns_bynk_cloudflare.AiError;
     type ChatMessage = __ns_bynk_cloudflare.ChatMessage;
     type ChatRole = __ns_bynk_cloudflare.ChatRole;
@@ -122,6 +124,7 @@ class __Stub_Docs {
     type Vector = __ns_bynk_cloudflare.Vector;
     type VectorError = __ns_bynk_cloudflare.VectorError;
     type VectorMatch = __ns_bynk_cloudflare.VectorMatch;
+    type VectorOf<M> = __ns_bynk_cloudflare.VectorOf<M>;
     type WorkerVersion = __ns_bynk_cloudflare.WorkerVersion;
     if (this.__case === "a stub still replaces an operation") {
       return Ok([]);
@@ -166,7 +169,8 @@ function __makeTestDeps(__case?: string) {
 async function test_an_empty_index_returns_no_matches() {
   try {
     const deps = __makeTestDeps();
-    const { describer, fetcher, inserter, reader, remover, writer } = __ns_shop_retrieval;
+    const { Meta, describer, fetcher, inserter, reader, remover, typed, writer } = __ns_shop_retrieval;
+    type Meta = __ns_shop_retrieval.Meta;
     const { BytesResponse, Claim, Cookie, EventEnvelope, FetchError, FetchOptions, File, LogLevel, Method, Redirect, Request, Response, SameSite, StreamResponse, TimedOut, Uuid } = __ns_bynk;
     type BytesResponse = __ns_bynk.BytesResponse;
     type Claim = __ns_bynk.Claim;
@@ -184,7 +188,7 @@ async function test_an_empty_index_returns_no_matches() {
     type StreamResponse = __ns_bynk.StreamResponse;
     type TimedOut = __ns_bynk.TimedOut;
     type Uuid = __ns_bynk.Uuid;
-    const { AiError, ChatMessage, ChatRole, Condition, DataPoint, DmarcVerdict, EmailAttachment, EmailError, EmailMessage, EmailReply, EmailVerdict, FilterOp, GenerateRequest, Generation, InboundAttachment, InboundEmail, IndexInfo, KvEntry, KvExpiration, KvGet, KvKey, KvList, KvListing, KvPut, MetaValue, MetadataScope, Mutation, MySqlError, MySqlReadError, MySqlRun, MySqlStatement, MySqlValue, PgError, PgReadError, PgRun, PgStatement, PgValue, QueryOptions, QueueSend, R2Body, R2Condition, R2Listing, R2Object, R2Part, R2Put, R2Upload, R2UploadOptions, SenderIdentity, SqlError, SqlReadError, SqlRun, SqlStatement, SqlValue, TokenUsage, Vector, VectorError, VectorMatch, WorkerVersion } = __ns_bynk_cloudflare;
+    const { AiError, ChatMessage, ChatRole, Condition, DataPoint, DmarcVerdict, EmailAttachment, EmailError, EmailMessage, EmailReply, EmailVerdict, FilterOp, GenerateRequest, Generation, InboundAttachment, InboundEmail, IndexInfo, KvEntry, KvExpiration, KvGet, KvKey, KvList, KvListing, KvPut, MetaValue, MetadataScope, Mutation, MySqlError, MySqlReadError, MySqlRun, MySqlStatement, MySqlValue, PgError, PgReadError, PgRun, PgStatement, PgValue, QueryOptions, QueueSend, R2Body, R2Condition, R2Listing, R2Object, R2Part, R2Put, R2Upload, R2UploadOptions, SenderIdentity, SqlError, SqlReadError, SqlRun, SqlStatement, SqlValue, TokenUsage, Vector, VectorError, VectorMatch, VectorOf, WorkerVersion } = __ns_bynk_cloudflare;
     type AiError = __ns_bynk_cloudflare.AiError;
     type ChatMessage = __ns_bynk_cloudflare.ChatMessage;
     type ChatRole = __ns_bynk_cloudflare.ChatRole;
@@ -242,6 +246,7 @@ async function test_an_empty_index_returns_no_matches() {
     type Vector = __ns_bynk_cloudflare.Vector;
     type VectorError = __ns_bynk_cloudflare.VectorError;
     type VectorMatch = __ns_bynk_cloudflare.VectorMatch;
+    type VectorOf<M> = __ns_bynk_cloudflare.VectorOf<M>;
     type WorkerVersion = __ns_bynk_cloudflare.WorkerVersion;
     const r = await reader.call([0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0], { topK: 5, returnValues: false, returnMetadata: { tag: "Omit" as const }, namespace: { tag: "None" as const }, filter: [] }, deps);
     if (!(__bynkEq(r, Ok([])))) { throw __bynkExpectFailure("tests/shop/retrieval.bynk:9:9", 489, 500, "expect r == Ok([])\n  expected: r == Ok([])\n  actual:   " + __bynkShow((r)) + " == " + __bynkShow((Ok([])))); }
@@ -258,7 +263,8 @@ async function test_an_empty_index_returns_no_matches() {
 async function test_a_write_returns_deterministic_mutation_ids_and_is_queryable_at_once() {
   try {
     const deps = __makeTestDeps();
-    const { describer, fetcher, inserter, reader, remover, writer } = __ns_shop_retrieval;
+    const { Meta, describer, fetcher, inserter, reader, remover, typed, writer } = __ns_shop_retrieval;
+    type Meta = __ns_shop_retrieval.Meta;
     const { BytesResponse, Claim, Cookie, EventEnvelope, FetchError, FetchOptions, File, LogLevel, Method, Redirect, Request, Response, SameSite, StreamResponse, TimedOut, Uuid } = __ns_bynk;
     type BytesResponse = __ns_bynk.BytesResponse;
     type Claim = __ns_bynk.Claim;
@@ -276,7 +282,7 @@ async function test_a_write_returns_deterministic_mutation_ids_and_is_queryable_
     type StreamResponse = __ns_bynk.StreamResponse;
     type TimedOut = __ns_bynk.TimedOut;
     type Uuid = __ns_bynk.Uuid;
-    const { AiError, ChatMessage, ChatRole, Condition, DataPoint, DmarcVerdict, EmailAttachment, EmailError, EmailMessage, EmailReply, EmailVerdict, FilterOp, GenerateRequest, Generation, InboundAttachment, InboundEmail, IndexInfo, KvEntry, KvExpiration, KvGet, KvKey, KvList, KvListing, KvPut, MetaValue, MetadataScope, Mutation, MySqlError, MySqlReadError, MySqlRun, MySqlStatement, MySqlValue, PgError, PgReadError, PgRun, PgStatement, PgValue, QueryOptions, QueueSend, R2Body, R2Condition, R2Listing, R2Object, R2Part, R2Put, R2Upload, R2UploadOptions, SenderIdentity, SqlError, SqlReadError, SqlRun, SqlStatement, SqlValue, TokenUsage, Vector, VectorError, VectorMatch, WorkerVersion } = __ns_bynk_cloudflare;
+    const { AiError, ChatMessage, ChatRole, Condition, DataPoint, DmarcVerdict, EmailAttachment, EmailError, EmailMessage, EmailReply, EmailVerdict, FilterOp, GenerateRequest, Generation, InboundAttachment, InboundEmail, IndexInfo, KvEntry, KvExpiration, KvGet, KvKey, KvList, KvListing, KvPut, MetaValue, MetadataScope, Mutation, MySqlError, MySqlReadError, MySqlRun, MySqlStatement, MySqlValue, PgError, PgReadError, PgRun, PgStatement, PgValue, QueryOptions, QueueSend, R2Body, R2Condition, R2Listing, R2Object, R2Part, R2Put, R2Upload, R2UploadOptions, SenderIdentity, SqlError, SqlReadError, SqlRun, SqlStatement, SqlValue, TokenUsage, Vector, VectorError, VectorMatch, VectorOf, WorkerVersion } = __ns_bynk_cloudflare;
     type AiError = __ns_bynk_cloudflare.AiError;
     type ChatMessage = __ns_bynk_cloudflare.ChatMessage;
     type ChatRole = __ns_bynk_cloudflare.ChatRole;
@@ -334,6 +340,7 @@ async function test_a_write_returns_deterministic_mutation_ids_and_is_queryable_
     type Vector = __ns_bynk_cloudflare.Vector;
     type VectorError = __ns_bynk_cloudflare.VectorError;
     type VectorMatch = __ns_bynk_cloudflare.VectorMatch;
+    type VectorOf<M> = __ns_bynk_cloudflare.VectorOf<M>;
     type WorkerVersion = __ns_bynk_cloudflare.WorkerVersion;
     const first = await writer.call([{ id: "a", values: [3.0, 4.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0], metadata: { tag: "None" as const }, namespace: { tag: "None" as const } }], deps);
     if (!(__bynkEq(first, Ok({ id: "m1" })))) { throw __bynkExpectFailure("tests/shop/retrieval.bynk:14:9", 807, 841, "expect first == Ok(Mutation { id: \"m1\" })\n  expected: first == Ok(Mutation { id: \"m1\" })\n  actual:   " + __bynkShow((first)) + " == " + __bynkShow((Ok({ id: "m1" })))); }
@@ -354,7 +361,8 @@ async function test_a_write_returns_deterministic_mutation_ids_and_is_queryable_
 async function test_topK_limits_the_matches() {
   try {
     const deps = __makeTestDeps();
-    const { describer, fetcher, inserter, reader, remover, writer } = __ns_shop_retrieval;
+    const { Meta, describer, fetcher, inserter, reader, remover, typed, writer } = __ns_shop_retrieval;
+    type Meta = __ns_shop_retrieval.Meta;
     const { BytesResponse, Claim, Cookie, EventEnvelope, FetchError, FetchOptions, File, LogLevel, Method, Redirect, Request, Response, SameSite, StreamResponse, TimedOut, Uuid } = __ns_bynk;
     type BytesResponse = __ns_bynk.BytesResponse;
     type Claim = __ns_bynk.Claim;
@@ -372,7 +380,7 @@ async function test_topK_limits_the_matches() {
     type StreamResponse = __ns_bynk.StreamResponse;
     type TimedOut = __ns_bynk.TimedOut;
     type Uuid = __ns_bynk.Uuid;
-    const { AiError, ChatMessage, ChatRole, Condition, DataPoint, DmarcVerdict, EmailAttachment, EmailError, EmailMessage, EmailReply, EmailVerdict, FilterOp, GenerateRequest, Generation, InboundAttachment, InboundEmail, IndexInfo, KvEntry, KvExpiration, KvGet, KvKey, KvList, KvListing, KvPut, MetaValue, MetadataScope, Mutation, MySqlError, MySqlReadError, MySqlRun, MySqlStatement, MySqlValue, PgError, PgReadError, PgRun, PgStatement, PgValue, QueryOptions, QueueSend, R2Body, R2Condition, R2Listing, R2Object, R2Part, R2Put, R2Upload, R2UploadOptions, SenderIdentity, SqlError, SqlReadError, SqlRun, SqlStatement, SqlValue, TokenUsage, Vector, VectorError, VectorMatch, WorkerVersion } = __ns_bynk_cloudflare;
+    const { AiError, ChatMessage, ChatRole, Condition, DataPoint, DmarcVerdict, EmailAttachment, EmailError, EmailMessage, EmailReply, EmailVerdict, FilterOp, GenerateRequest, Generation, InboundAttachment, InboundEmail, IndexInfo, KvEntry, KvExpiration, KvGet, KvKey, KvList, KvListing, KvPut, MetaValue, MetadataScope, Mutation, MySqlError, MySqlReadError, MySqlRun, MySqlStatement, MySqlValue, PgError, PgReadError, PgRun, PgStatement, PgValue, QueryOptions, QueueSend, R2Body, R2Condition, R2Listing, R2Object, R2Part, R2Put, R2Upload, R2UploadOptions, SenderIdentity, SqlError, SqlReadError, SqlRun, SqlStatement, SqlValue, TokenUsage, Vector, VectorError, VectorMatch, VectorOf, WorkerVersion } = __ns_bynk_cloudflare;
     type AiError = __ns_bynk_cloudflare.AiError;
     type ChatMessage = __ns_bynk_cloudflare.ChatMessage;
     type ChatRole = __ns_bynk_cloudflare.ChatRole;
@@ -430,6 +438,7 @@ async function test_topK_limits_the_matches() {
     type Vector = __ns_bynk_cloudflare.Vector;
     type VectorError = __ns_bynk_cloudflare.VectorError;
     type VectorMatch = __ns_bynk_cloudflare.VectorMatch;
+    type VectorOf<M> = __ns_bynk_cloudflare.VectorOf<M>;
     type WorkerVersion = __ns_bynk_cloudflare.WorkerVersion;
     const __r0 = await writer.call([{ id: "a", values: [1.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0], metadata: { tag: "None" as const }, namespace: { tag: "None" as const } }, { id: "b", values: [2.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0], metadata: { tag: "None" as const }, namespace: { tag: "None" as const } }, { id: "c", values: [3.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0], metadata: { tag: "None" as const }, namespace: { tag: "None" as const } }], deps);
     const r = await reader.call([0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0], { topK: 1, returnValues: false, returnMetadata: { tag: "Omit" as const }, namespace: { tag: "None" as const }, filter: [] }, deps);
@@ -447,7 +456,8 @@ async function test_topK_limits_the_matches() {
 async function test_a_vector_of_the_wrong_length_is_a_DimensionMismatch() {
   try {
     const deps = __makeTestDeps();
-    const { describer, fetcher, inserter, reader, remover, writer } = __ns_shop_retrieval;
+    const { Meta, describer, fetcher, inserter, reader, remover, typed, writer } = __ns_shop_retrieval;
+    type Meta = __ns_shop_retrieval.Meta;
     const { BytesResponse, Claim, Cookie, EventEnvelope, FetchError, FetchOptions, File, LogLevel, Method, Redirect, Request, Response, SameSite, StreamResponse, TimedOut, Uuid } = __ns_bynk;
     type BytesResponse = __ns_bynk.BytesResponse;
     type Claim = __ns_bynk.Claim;
@@ -465,7 +475,7 @@ async function test_a_vector_of_the_wrong_length_is_a_DimensionMismatch() {
     type StreamResponse = __ns_bynk.StreamResponse;
     type TimedOut = __ns_bynk.TimedOut;
     type Uuid = __ns_bynk.Uuid;
-    const { AiError, ChatMessage, ChatRole, Condition, DataPoint, DmarcVerdict, EmailAttachment, EmailError, EmailMessage, EmailReply, EmailVerdict, FilterOp, GenerateRequest, Generation, InboundAttachment, InboundEmail, IndexInfo, KvEntry, KvExpiration, KvGet, KvKey, KvList, KvListing, KvPut, MetaValue, MetadataScope, Mutation, MySqlError, MySqlReadError, MySqlRun, MySqlStatement, MySqlValue, PgError, PgReadError, PgRun, PgStatement, PgValue, QueryOptions, QueueSend, R2Body, R2Condition, R2Listing, R2Object, R2Part, R2Put, R2Upload, R2UploadOptions, SenderIdentity, SqlError, SqlReadError, SqlRun, SqlStatement, SqlValue, TokenUsage, Vector, VectorError, VectorMatch, WorkerVersion } = __ns_bynk_cloudflare;
+    const { AiError, ChatMessage, ChatRole, Condition, DataPoint, DmarcVerdict, EmailAttachment, EmailError, EmailMessage, EmailReply, EmailVerdict, FilterOp, GenerateRequest, Generation, InboundAttachment, InboundEmail, IndexInfo, KvEntry, KvExpiration, KvGet, KvKey, KvList, KvListing, KvPut, MetaValue, MetadataScope, Mutation, MySqlError, MySqlReadError, MySqlRun, MySqlStatement, MySqlValue, PgError, PgReadError, PgRun, PgStatement, PgValue, QueryOptions, QueueSend, R2Body, R2Condition, R2Listing, R2Object, R2Part, R2Put, R2Upload, R2UploadOptions, SenderIdentity, SqlError, SqlReadError, SqlRun, SqlStatement, SqlValue, TokenUsage, Vector, VectorError, VectorMatch, VectorOf, WorkerVersion } = __ns_bynk_cloudflare;
     type AiError = __ns_bynk_cloudflare.AiError;
     type ChatMessage = __ns_bynk_cloudflare.ChatMessage;
     type ChatRole = __ns_bynk_cloudflare.ChatRole;
@@ -523,6 +533,7 @@ async function test_a_vector_of_the_wrong_length_is_a_DimensionMismatch() {
     type Vector = __ns_bynk_cloudflare.Vector;
     type VectorError = __ns_bynk_cloudflare.VectorError;
     type VectorMatch = __ns_bynk_cloudflare.VectorMatch;
+    type VectorOf<M> = __ns_bynk_cloudflare.VectorOf<M>;
     type WorkerVersion = __ns_bynk_cloudflare.WorkerVersion;
     const r = await writer.call([{ id: "a", values: [1.0, 2.0, 3.0], metadata: { tag: "None" as const }, namespace: { tag: "None" as const } }], deps);
     if (!(((__c: boolean) => __c)(r.tag === "Err" && r.error.tag === "DimensionMismatch"))) { throw __bynkExpectFailure("tests/shop/retrieval.bynk:32:9", 2592, 2622, "expect r is Err(DimensionMismatch(_))"); }
@@ -541,7 +552,8 @@ async function test_a_vector_of_the_wrong_length_is_a_DimensionMismatch() {
 async function test_upsert_replaces_a_vector_in_full_and_insert_keeps_the_first() {
   try {
     const deps = __makeTestDeps();
-    const { describer, fetcher, inserter, reader, remover, writer } = __ns_shop_retrieval;
+    const { Meta, describer, fetcher, inserter, reader, remover, typed, writer } = __ns_shop_retrieval;
+    type Meta = __ns_shop_retrieval.Meta;
     const { BytesResponse, Claim, Cookie, EventEnvelope, FetchError, FetchOptions, File, LogLevel, Method, Redirect, Request, Response, SameSite, StreamResponse, TimedOut, Uuid } = __ns_bynk;
     type BytesResponse = __ns_bynk.BytesResponse;
     type Claim = __ns_bynk.Claim;
@@ -559,7 +571,7 @@ async function test_upsert_replaces_a_vector_in_full_and_insert_keeps_the_first(
     type StreamResponse = __ns_bynk.StreamResponse;
     type TimedOut = __ns_bynk.TimedOut;
     type Uuid = __ns_bynk.Uuid;
-    const { AiError, ChatMessage, ChatRole, Condition, DataPoint, DmarcVerdict, EmailAttachment, EmailError, EmailMessage, EmailReply, EmailVerdict, FilterOp, GenerateRequest, Generation, InboundAttachment, InboundEmail, IndexInfo, KvEntry, KvExpiration, KvGet, KvKey, KvList, KvListing, KvPut, MetaValue, MetadataScope, Mutation, MySqlError, MySqlReadError, MySqlRun, MySqlStatement, MySqlValue, PgError, PgReadError, PgRun, PgStatement, PgValue, QueryOptions, QueueSend, R2Body, R2Condition, R2Listing, R2Object, R2Part, R2Put, R2Upload, R2UploadOptions, SenderIdentity, SqlError, SqlReadError, SqlRun, SqlStatement, SqlValue, TokenUsage, Vector, VectorError, VectorMatch, WorkerVersion } = __ns_bynk_cloudflare;
+    const { AiError, ChatMessage, ChatRole, Condition, DataPoint, DmarcVerdict, EmailAttachment, EmailError, EmailMessage, EmailReply, EmailVerdict, FilterOp, GenerateRequest, Generation, InboundAttachment, InboundEmail, IndexInfo, KvEntry, KvExpiration, KvGet, KvKey, KvList, KvListing, KvPut, MetaValue, MetadataScope, Mutation, MySqlError, MySqlReadError, MySqlRun, MySqlStatement, MySqlValue, PgError, PgReadError, PgRun, PgStatement, PgValue, QueryOptions, QueueSend, R2Body, R2Condition, R2Listing, R2Object, R2Part, R2Put, R2Upload, R2UploadOptions, SenderIdentity, SqlError, SqlReadError, SqlRun, SqlStatement, SqlValue, TokenUsage, Vector, VectorError, VectorMatch, VectorOf, WorkerVersion } = __ns_bynk_cloudflare;
     type AiError = __ns_bynk_cloudflare.AiError;
     type ChatMessage = __ns_bynk_cloudflare.ChatMessage;
     type ChatRole = __ns_bynk_cloudflare.ChatRole;
@@ -617,6 +629,7 @@ async function test_upsert_replaces_a_vector_in_full_and_insert_keeps_the_first(
     type Vector = __ns_bynk_cloudflare.Vector;
     type VectorError = __ns_bynk_cloudflare.VectorError;
     type VectorMatch = __ns_bynk_cloudflare.VectorMatch;
+    type VectorOf<M> = __ns_bynk_cloudflare.VectorOf<M>;
     type WorkerVersion = __ns_bynk_cloudflare.WorkerVersion;
     const __r0 = await writer.call([{ id: "a", values: [1.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0], metadata: Some("{\"category\":\"faq\"}"), namespace: { tag: "None" as const } }], deps);
     const __r1 = await writer.call([{ id: "a", values: [2.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0], metadata: { tag: "None" as const }, namespace: { tag: "None" as const } }], deps);
@@ -638,7 +651,8 @@ async function test_upsert_replaces_a_vector_in_full_and_insert_keeps_the_first(
 async function test_deleteByIds_removes_vectors() {
   try {
     const deps = __makeTestDeps();
-    const { describer, fetcher, inserter, reader, remover, writer } = __ns_shop_retrieval;
+    const { Meta, describer, fetcher, inserter, reader, remover, typed, writer } = __ns_shop_retrieval;
+    type Meta = __ns_shop_retrieval.Meta;
     const { BytesResponse, Claim, Cookie, EventEnvelope, FetchError, FetchOptions, File, LogLevel, Method, Redirect, Request, Response, SameSite, StreamResponse, TimedOut, Uuid } = __ns_bynk;
     type BytesResponse = __ns_bynk.BytesResponse;
     type Claim = __ns_bynk.Claim;
@@ -656,7 +670,7 @@ async function test_deleteByIds_removes_vectors() {
     type StreamResponse = __ns_bynk.StreamResponse;
     type TimedOut = __ns_bynk.TimedOut;
     type Uuid = __ns_bynk.Uuid;
-    const { AiError, ChatMessage, ChatRole, Condition, DataPoint, DmarcVerdict, EmailAttachment, EmailError, EmailMessage, EmailReply, EmailVerdict, FilterOp, GenerateRequest, Generation, InboundAttachment, InboundEmail, IndexInfo, KvEntry, KvExpiration, KvGet, KvKey, KvList, KvListing, KvPut, MetaValue, MetadataScope, Mutation, MySqlError, MySqlReadError, MySqlRun, MySqlStatement, MySqlValue, PgError, PgReadError, PgRun, PgStatement, PgValue, QueryOptions, QueueSend, R2Body, R2Condition, R2Listing, R2Object, R2Part, R2Put, R2Upload, R2UploadOptions, SenderIdentity, SqlError, SqlReadError, SqlRun, SqlStatement, SqlValue, TokenUsage, Vector, VectorError, VectorMatch, WorkerVersion } = __ns_bynk_cloudflare;
+    const { AiError, ChatMessage, ChatRole, Condition, DataPoint, DmarcVerdict, EmailAttachment, EmailError, EmailMessage, EmailReply, EmailVerdict, FilterOp, GenerateRequest, Generation, InboundAttachment, InboundEmail, IndexInfo, KvEntry, KvExpiration, KvGet, KvKey, KvList, KvListing, KvPut, MetaValue, MetadataScope, Mutation, MySqlError, MySqlReadError, MySqlRun, MySqlStatement, MySqlValue, PgError, PgReadError, PgRun, PgStatement, PgValue, QueryOptions, QueueSend, R2Body, R2Condition, R2Listing, R2Object, R2Part, R2Put, R2Upload, R2UploadOptions, SenderIdentity, SqlError, SqlReadError, SqlRun, SqlStatement, SqlValue, TokenUsage, Vector, VectorError, VectorMatch, VectorOf, WorkerVersion } = __ns_bynk_cloudflare;
     type AiError = __ns_bynk_cloudflare.AiError;
     type ChatMessage = __ns_bynk_cloudflare.ChatMessage;
     type ChatRole = __ns_bynk_cloudflare.ChatRole;
@@ -714,6 +728,7 @@ async function test_deleteByIds_removes_vectors() {
     type Vector = __ns_bynk_cloudflare.Vector;
     type VectorError = __ns_bynk_cloudflare.VectorError;
     type VectorMatch = __ns_bynk_cloudflare.VectorMatch;
+    type VectorOf<M> = __ns_bynk_cloudflare.VectorOf<M>;
     type WorkerVersion = __ns_bynk_cloudflare.WorkerVersion;
     const __r0 = await writer.call([{ id: "a", values: [1.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0], metadata: { tag: "None" as const }, namespace: { tag: "None" as const } }, { id: "b", values: [2.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0], metadata: { tag: "None" as const }, namespace: { tag: "None" as const } }], deps);
     const removed = await remover.call(["a"], deps);
@@ -733,7 +748,8 @@ async function test_deleteByIds_removes_vectors() {
 async function test_namespaces_partition_the_index() {
   try {
     const deps = __makeTestDeps();
-    const { describer, fetcher, inserter, reader, remover, writer } = __ns_shop_retrieval;
+    const { Meta, describer, fetcher, inserter, reader, remover, typed, writer } = __ns_shop_retrieval;
+    type Meta = __ns_shop_retrieval.Meta;
     const { BytesResponse, Claim, Cookie, EventEnvelope, FetchError, FetchOptions, File, LogLevel, Method, Redirect, Request, Response, SameSite, StreamResponse, TimedOut, Uuid } = __ns_bynk;
     type BytesResponse = __ns_bynk.BytesResponse;
     type Claim = __ns_bynk.Claim;
@@ -751,7 +767,7 @@ async function test_namespaces_partition_the_index() {
     type StreamResponse = __ns_bynk.StreamResponse;
     type TimedOut = __ns_bynk.TimedOut;
     type Uuid = __ns_bynk.Uuid;
-    const { AiError, ChatMessage, ChatRole, Condition, DataPoint, DmarcVerdict, EmailAttachment, EmailError, EmailMessage, EmailReply, EmailVerdict, FilterOp, GenerateRequest, Generation, InboundAttachment, InboundEmail, IndexInfo, KvEntry, KvExpiration, KvGet, KvKey, KvList, KvListing, KvPut, MetaValue, MetadataScope, Mutation, MySqlError, MySqlReadError, MySqlRun, MySqlStatement, MySqlValue, PgError, PgReadError, PgRun, PgStatement, PgValue, QueryOptions, QueueSend, R2Body, R2Condition, R2Listing, R2Object, R2Part, R2Put, R2Upload, R2UploadOptions, SenderIdentity, SqlError, SqlReadError, SqlRun, SqlStatement, SqlValue, TokenUsage, Vector, VectorError, VectorMatch, WorkerVersion } = __ns_bynk_cloudflare;
+    const { AiError, ChatMessage, ChatRole, Condition, DataPoint, DmarcVerdict, EmailAttachment, EmailError, EmailMessage, EmailReply, EmailVerdict, FilterOp, GenerateRequest, Generation, InboundAttachment, InboundEmail, IndexInfo, KvEntry, KvExpiration, KvGet, KvKey, KvList, KvListing, KvPut, MetaValue, MetadataScope, Mutation, MySqlError, MySqlReadError, MySqlRun, MySqlStatement, MySqlValue, PgError, PgReadError, PgRun, PgStatement, PgValue, QueryOptions, QueueSend, R2Body, R2Condition, R2Listing, R2Object, R2Part, R2Put, R2Upload, R2UploadOptions, SenderIdentity, SqlError, SqlReadError, SqlRun, SqlStatement, SqlValue, TokenUsage, Vector, VectorError, VectorMatch, VectorOf, WorkerVersion } = __ns_bynk_cloudflare;
     type AiError = __ns_bynk_cloudflare.AiError;
     type ChatMessage = __ns_bynk_cloudflare.ChatMessage;
     type ChatRole = __ns_bynk_cloudflare.ChatRole;
@@ -809,6 +825,7 @@ async function test_namespaces_partition_the_index() {
     type Vector = __ns_bynk_cloudflare.Vector;
     type VectorError = __ns_bynk_cloudflare.VectorError;
     type VectorMatch = __ns_bynk_cloudflare.VectorMatch;
+    type VectorOf<M> = __ns_bynk_cloudflare.VectorOf<M>;
     type WorkerVersion = __ns_bynk_cloudflare.WorkerVersion;
     const __r0 = await writer.call([{ id: "a", values: [1.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0], namespace: Some("blue"), metadata: { tag: "None" as const } }, { id: "b", values: [1.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0], metadata: { tag: "None" as const }, namespace: { tag: "None" as const } }], deps);
     const blue = await reader.call([1.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0], { namespace: Some("blue"), topK: 5, returnValues: false, returnMetadata: { tag: "Omit" as const }, filter: [] }, deps);
@@ -827,7 +844,8 @@ async function test_namespaces_partition_the_index() {
 async function test_a_filter_selects_by_an_indexed_property() {
   try {
     const deps = __makeTestDeps();
-    const { describer, fetcher, inserter, reader, remover, writer } = __ns_shop_retrieval;
+    const { Meta, describer, fetcher, inserter, reader, remover, typed, writer } = __ns_shop_retrieval;
+    type Meta = __ns_shop_retrieval.Meta;
     const { BytesResponse, Claim, Cookie, EventEnvelope, FetchError, FetchOptions, File, LogLevel, Method, Redirect, Request, Response, SameSite, StreamResponse, TimedOut, Uuid } = __ns_bynk;
     type BytesResponse = __ns_bynk.BytesResponse;
     type Claim = __ns_bynk.Claim;
@@ -845,7 +863,7 @@ async function test_a_filter_selects_by_an_indexed_property() {
     type StreamResponse = __ns_bynk.StreamResponse;
     type TimedOut = __ns_bynk.TimedOut;
     type Uuid = __ns_bynk.Uuid;
-    const { AiError, ChatMessage, ChatRole, Condition, DataPoint, DmarcVerdict, EmailAttachment, EmailError, EmailMessage, EmailReply, EmailVerdict, FilterOp, GenerateRequest, Generation, InboundAttachment, InboundEmail, IndexInfo, KvEntry, KvExpiration, KvGet, KvKey, KvList, KvListing, KvPut, MetaValue, MetadataScope, Mutation, MySqlError, MySqlReadError, MySqlRun, MySqlStatement, MySqlValue, PgError, PgReadError, PgRun, PgStatement, PgValue, QueryOptions, QueueSend, R2Body, R2Condition, R2Listing, R2Object, R2Part, R2Put, R2Upload, R2UploadOptions, SenderIdentity, SqlError, SqlReadError, SqlRun, SqlStatement, SqlValue, TokenUsage, Vector, VectorError, VectorMatch, WorkerVersion } = __ns_bynk_cloudflare;
+    const { AiError, ChatMessage, ChatRole, Condition, DataPoint, DmarcVerdict, EmailAttachment, EmailError, EmailMessage, EmailReply, EmailVerdict, FilterOp, GenerateRequest, Generation, InboundAttachment, InboundEmail, IndexInfo, KvEntry, KvExpiration, KvGet, KvKey, KvList, KvListing, KvPut, MetaValue, MetadataScope, Mutation, MySqlError, MySqlReadError, MySqlRun, MySqlStatement, MySqlValue, PgError, PgReadError, PgRun, PgStatement, PgValue, QueryOptions, QueueSend, R2Body, R2Condition, R2Listing, R2Object, R2Part, R2Put, R2Upload, R2UploadOptions, SenderIdentity, SqlError, SqlReadError, SqlRun, SqlStatement, SqlValue, TokenUsage, Vector, VectorError, VectorMatch, VectorOf, WorkerVersion } = __ns_bynk_cloudflare;
     type AiError = __ns_bynk_cloudflare.AiError;
     type ChatMessage = __ns_bynk_cloudflare.ChatMessage;
     type ChatRole = __ns_bynk_cloudflare.ChatRole;
@@ -903,6 +921,7 @@ async function test_a_filter_selects_by_an_indexed_property() {
     type Vector = __ns_bynk_cloudflare.Vector;
     type VectorError = __ns_bynk_cloudflare.VectorError;
     type VectorMatch = __ns_bynk_cloudflare.VectorMatch;
+    type VectorOf<M> = __ns_bynk_cloudflare.VectorOf<M>;
     type WorkerVersion = __ns_bynk_cloudflare.WorkerVersion;
     const __r0 = await writer.call([{ id: "a", values: [1.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0], metadata: Some("{\"category\":\"faq\",\"year\":2024}"), namespace: { tag: "None" as const } }, { id: "b", values: [2.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0], metadata: Some("{\"category\":\"blog\",\"year\":2026}"), namespace: { tag: "None" as const } }, { id: "c", values: [3.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0], metadata: Some("{\"category\":\"faq\",\"year\":2026}"), namespace: { tag: "None" as const } }], deps);
     const faq = await reader.call([0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0], { filter: [{ field: "category", op: FilterOp.FilterEq(MetaValue.MetaText("faq")) }], topK: 5, returnValues: false, returnMetadata: { tag: "Omit" as const }, namespace: { tag: "None" as const } }, deps);
@@ -922,7 +941,8 @@ async function test_a_filter_selects_by_an_indexed_property() {
 async function test_returnMetadata_Indexed_returns_only_the_indexed_properties() {
   try {
     const deps = __makeTestDeps();
-    const { describer, fetcher, inserter, reader, remover, writer } = __ns_shop_retrieval;
+    const { Meta, describer, fetcher, inserter, reader, remover, typed, writer } = __ns_shop_retrieval;
+    type Meta = __ns_shop_retrieval.Meta;
     const { BytesResponse, Claim, Cookie, EventEnvelope, FetchError, FetchOptions, File, LogLevel, Method, Redirect, Request, Response, SameSite, StreamResponse, TimedOut, Uuid } = __ns_bynk;
     type BytesResponse = __ns_bynk.BytesResponse;
     type Claim = __ns_bynk.Claim;
@@ -940,7 +960,7 @@ async function test_returnMetadata_Indexed_returns_only_the_indexed_properties()
     type StreamResponse = __ns_bynk.StreamResponse;
     type TimedOut = __ns_bynk.TimedOut;
     type Uuid = __ns_bynk.Uuid;
-    const { AiError, ChatMessage, ChatRole, Condition, DataPoint, DmarcVerdict, EmailAttachment, EmailError, EmailMessage, EmailReply, EmailVerdict, FilterOp, GenerateRequest, Generation, InboundAttachment, InboundEmail, IndexInfo, KvEntry, KvExpiration, KvGet, KvKey, KvList, KvListing, KvPut, MetaValue, MetadataScope, Mutation, MySqlError, MySqlReadError, MySqlRun, MySqlStatement, MySqlValue, PgError, PgReadError, PgRun, PgStatement, PgValue, QueryOptions, QueueSend, R2Body, R2Condition, R2Listing, R2Object, R2Part, R2Put, R2Upload, R2UploadOptions, SenderIdentity, SqlError, SqlReadError, SqlRun, SqlStatement, SqlValue, TokenUsage, Vector, VectorError, VectorMatch, WorkerVersion } = __ns_bynk_cloudflare;
+    const { AiError, ChatMessage, ChatRole, Condition, DataPoint, DmarcVerdict, EmailAttachment, EmailError, EmailMessage, EmailReply, EmailVerdict, FilterOp, GenerateRequest, Generation, InboundAttachment, InboundEmail, IndexInfo, KvEntry, KvExpiration, KvGet, KvKey, KvList, KvListing, KvPut, MetaValue, MetadataScope, Mutation, MySqlError, MySqlReadError, MySqlRun, MySqlStatement, MySqlValue, PgError, PgReadError, PgRun, PgStatement, PgValue, QueryOptions, QueueSend, R2Body, R2Condition, R2Listing, R2Object, R2Part, R2Put, R2Upload, R2UploadOptions, SenderIdentity, SqlError, SqlReadError, SqlRun, SqlStatement, SqlValue, TokenUsage, Vector, VectorError, VectorMatch, VectorOf, WorkerVersion } = __ns_bynk_cloudflare;
     type AiError = __ns_bynk_cloudflare.AiError;
     type ChatMessage = __ns_bynk_cloudflare.ChatMessage;
     type ChatRole = __ns_bynk_cloudflare.ChatRole;
@@ -998,6 +1018,7 @@ async function test_returnMetadata_Indexed_returns_only_the_indexed_properties()
     type Vector = __ns_bynk_cloudflare.Vector;
     type VectorError = __ns_bynk_cloudflare.VectorError;
     type VectorMatch = __ns_bynk_cloudflare.VectorMatch;
+    type VectorOf<M> = __ns_bynk_cloudflare.VectorOf<M>;
     type WorkerVersion = __ns_bynk_cloudflare.WorkerVersion;
     const __r0 = await writer.call([{ id: "a", values: [1.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0], metadata: Some("{\"category\":\"faq\",\"note\":\"x\"}"), namespace: { tag: "None" as const } }], deps);
     const indexed = await reader.call([0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0], { returnMetadata: MetadataScope.Indexed, topK: 5, returnValues: false, namespace: { tag: "None" as const }, filter: [] }, deps);
@@ -1017,7 +1038,8 @@ async function test_returnMetadata_Indexed_returns_only_the_indexed_properties()
 async function test_a_filter_on_a_property_that_is_not_indexed_faults__naming_the_difference() {
   try {
     const deps = __makeTestDeps();
-    const { describer, fetcher, inserter, reader, remover, writer } = __ns_shop_retrieval;
+    const { Meta, describer, fetcher, inserter, reader, remover, typed, writer } = __ns_shop_retrieval;
+    type Meta = __ns_shop_retrieval.Meta;
     const { BytesResponse, Claim, Cookie, EventEnvelope, FetchError, FetchOptions, File, LogLevel, Method, Redirect, Request, Response, SameSite, StreamResponse, TimedOut, Uuid } = __ns_bynk;
     type BytesResponse = __ns_bynk.BytesResponse;
     type Claim = __ns_bynk.Claim;
@@ -1035,7 +1057,7 @@ async function test_a_filter_on_a_property_that_is_not_indexed_faults__naming_th
     type StreamResponse = __ns_bynk.StreamResponse;
     type TimedOut = __ns_bynk.TimedOut;
     type Uuid = __ns_bynk.Uuid;
-    const { AiError, ChatMessage, ChatRole, Condition, DataPoint, DmarcVerdict, EmailAttachment, EmailError, EmailMessage, EmailReply, EmailVerdict, FilterOp, GenerateRequest, Generation, InboundAttachment, InboundEmail, IndexInfo, KvEntry, KvExpiration, KvGet, KvKey, KvList, KvListing, KvPut, MetaValue, MetadataScope, Mutation, MySqlError, MySqlReadError, MySqlRun, MySqlStatement, MySqlValue, PgError, PgReadError, PgRun, PgStatement, PgValue, QueryOptions, QueueSend, R2Body, R2Condition, R2Listing, R2Object, R2Part, R2Put, R2Upload, R2UploadOptions, SenderIdentity, SqlError, SqlReadError, SqlRun, SqlStatement, SqlValue, TokenUsage, Vector, VectorError, VectorMatch, WorkerVersion } = __ns_bynk_cloudflare;
+    const { AiError, ChatMessage, ChatRole, Condition, DataPoint, DmarcVerdict, EmailAttachment, EmailError, EmailMessage, EmailReply, EmailVerdict, FilterOp, GenerateRequest, Generation, InboundAttachment, InboundEmail, IndexInfo, KvEntry, KvExpiration, KvGet, KvKey, KvList, KvListing, KvPut, MetaValue, MetadataScope, Mutation, MySqlError, MySqlReadError, MySqlRun, MySqlStatement, MySqlValue, PgError, PgReadError, PgRun, PgStatement, PgValue, QueryOptions, QueueSend, R2Body, R2Condition, R2Listing, R2Object, R2Part, R2Put, R2Upload, R2UploadOptions, SenderIdentity, SqlError, SqlReadError, SqlRun, SqlStatement, SqlValue, TokenUsage, Vector, VectorError, VectorMatch, VectorOf, WorkerVersion } = __ns_bynk_cloudflare;
     type AiError = __ns_bynk_cloudflare.AiError;
     type ChatMessage = __ns_bynk_cloudflare.ChatMessage;
     type ChatRole = __ns_bynk_cloudflare.ChatRole;
@@ -1093,6 +1115,7 @@ async function test_a_filter_on_a_property_that_is_not_indexed_faults__naming_th
     type Vector = __ns_bynk_cloudflare.Vector;
     type VectorError = __ns_bynk_cloudflare.VectorError;
     type VectorMatch = __ns_bynk_cloudflare.VectorMatch;
+    type VectorOf<M> = __ns_bynk_cloudflare.VectorOf<M>;
     type WorkerVersion = __ns_bynk_cloudflare.WorkerVersion;
     if (!((await (async () => { try { await (reader.call([0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0], { filter: [{ field: "note", op: FilterOp.FilterEq(MetaValue.MetaText("x")) }], topK: 5, returnValues: false, returnMetadata: { tag: "Omit" as const }, namespace: { tag: "None" as const } }, deps)); return false; } catch (__e) { if (__e instanceof ExpectationError) { throw __e; } return true; } })()))) { throw __bynkExpectFailure("tests/shop/retrieval.bynk:91:9", 9362, 9627, "expect reader.call([0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0], QueryOptions { filter: [Condition { field: \"note\", op: FilterEq(MetaText(\"x\")) }] }) faults\n  the call returned without faulting"); }
     return { pass: true };
@@ -1108,7 +1131,8 @@ async function test_a_filter_on_a_property_that_is_not_indexed_faults__naming_th
 async function test_a_filter_the_platform_refuses_is_an_InvalidInput_value() {
   try {
     const deps = __makeTestDeps();
-    const { describer, fetcher, inserter, reader, remover, writer } = __ns_shop_retrieval;
+    const { Meta, describer, fetcher, inserter, reader, remover, typed, writer } = __ns_shop_retrieval;
+    type Meta = __ns_shop_retrieval.Meta;
     const { BytesResponse, Claim, Cookie, EventEnvelope, FetchError, FetchOptions, File, LogLevel, Method, Redirect, Request, Response, SameSite, StreamResponse, TimedOut, Uuid } = __ns_bynk;
     type BytesResponse = __ns_bynk.BytesResponse;
     type Claim = __ns_bynk.Claim;
@@ -1126,7 +1150,7 @@ async function test_a_filter_the_platform_refuses_is_an_InvalidInput_value() {
     type StreamResponse = __ns_bynk.StreamResponse;
     type TimedOut = __ns_bynk.TimedOut;
     type Uuid = __ns_bynk.Uuid;
-    const { AiError, ChatMessage, ChatRole, Condition, DataPoint, DmarcVerdict, EmailAttachment, EmailError, EmailMessage, EmailReply, EmailVerdict, FilterOp, GenerateRequest, Generation, InboundAttachment, InboundEmail, IndexInfo, KvEntry, KvExpiration, KvGet, KvKey, KvList, KvListing, KvPut, MetaValue, MetadataScope, Mutation, MySqlError, MySqlReadError, MySqlRun, MySqlStatement, MySqlValue, PgError, PgReadError, PgRun, PgStatement, PgValue, QueryOptions, QueueSend, R2Body, R2Condition, R2Listing, R2Object, R2Part, R2Put, R2Upload, R2UploadOptions, SenderIdentity, SqlError, SqlReadError, SqlRun, SqlStatement, SqlValue, TokenUsage, Vector, VectorError, VectorMatch, WorkerVersion } = __ns_bynk_cloudflare;
+    const { AiError, ChatMessage, ChatRole, Condition, DataPoint, DmarcVerdict, EmailAttachment, EmailError, EmailMessage, EmailReply, EmailVerdict, FilterOp, GenerateRequest, Generation, InboundAttachment, InboundEmail, IndexInfo, KvEntry, KvExpiration, KvGet, KvKey, KvList, KvListing, KvPut, MetaValue, MetadataScope, Mutation, MySqlError, MySqlReadError, MySqlRun, MySqlStatement, MySqlValue, PgError, PgReadError, PgRun, PgStatement, PgValue, QueryOptions, QueueSend, R2Body, R2Condition, R2Listing, R2Object, R2Part, R2Put, R2Upload, R2UploadOptions, SenderIdentity, SqlError, SqlReadError, SqlRun, SqlStatement, SqlValue, TokenUsage, Vector, VectorError, VectorMatch, VectorOf, WorkerVersion } = __ns_bynk_cloudflare;
     type AiError = __ns_bynk_cloudflare.AiError;
     type ChatMessage = __ns_bynk_cloudflare.ChatMessage;
     type ChatRole = __ns_bynk_cloudflare.ChatRole;
@@ -1184,6 +1208,7 @@ async function test_a_filter_the_platform_refuses_is_an_InvalidInput_value() {
     type Vector = __ns_bynk_cloudflare.Vector;
     type VectorError = __ns_bynk_cloudflare.VectorError;
     type VectorMatch = __ns_bynk_cloudflare.VectorMatch;
+    type VectorOf<M> = __ns_bynk_cloudflare.VectorOf<M>;
     type WorkerVersion = __ns_bynk_cloudflare.WorkerVersion;
     const r = await reader.call([0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0], { filter: [{ field: "", op: FilterOp.FilterEq(MetaValue.MetaText("x")) }], topK: 5, returnValues: false, returnMetadata: { tag: "Omit" as const }, namespace: { tag: "None" as const } }, deps);
     if (!(((__c: boolean) => __c)(r.tag === "Err" && r.error.tag === "VectorInvalidInput"))) { throw __bynkExpectFailure("tests/shop/retrieval.bynk:96:9", 9968, 9999, "expect r is Err(VectorInvalidInput(_))"); }
@@ -1200,7 +1225,8 @@ async function test_a_filter_the_platform_refuses_is_an_InvalidInput_value() {
 async function test_a_limit_is_an_InvalidInput_value() {
   try {
     const deps = __makeTestDeps();
-    const { describer, fetcher, inserter, reader, remover, writer } = __ns_shop_retrieval;
+    const { Meta, describer, fetcher, inserter, reader, remover, typed, writer } = __ns_shop_retrieval;
+    type Meta = __ns_shop_retrieval.Meta;
     const { BytesResponse, Claim, Cookie, EventEnvelope, FetchError, FetchOptions, File, LogLevel, Method, Redirect, Request, Response, SameSite, StreamResponse, TimedOut, Uuid } = __ns_bynk;
     type BytesResponse = __ns_bynk.BytesResponse;
     type Claim = __ns_bynk.Claim;
@@ -1218,7 +1244,7 @@ async function test_a_limit_is_an_InvalidInput_value() {
     type StreamResponse = __ns_bynk.StreamResponse;
     type TimedOut = __ns_bynk.TimedOut;
     type Uuid = __ns_bynk.Uuid;
-    const { AiError, ChatMessage, ChatRole, Condition, DataPoint, DmarcVerdict, EmailAttachment, EmailError, EmailMessage, EmailReply, EmailVerdict, FilterOp, GenerateRequest, Generation, InboundAttachment, InboundEmail, IndexInfo, KvEntry, KvExpiration, KvGet, KvKey, KvList, KvListing, KvPut, MetaValue, MetadataScope, Mutation, MySqlError, MySqlReadError, MySqlRun, MySqlStatement, MySqlValue, PgError, PgReadError, PgRun, PgStatement, PgValue, QueryOptions, QueueSend, R2Body, R2Condition, R2Listing, R2Object, R2Part, R2Put, R2Upload, R2UploadOptions, SenderIdentity, SqlError, SqlReadError, SqlRun, SqlStatement, SqlValue, TokenUsage, Vector, VectorError, VectorMatch, WorkerVersion } = __ns_bynk_cloudflare;
+    const { AiError, ChatMessage, ChatRole, Condition, DataPoint, DmarcVerdict, EmailAttachment, EmailError, EmailMessage, EmailReply, EmailVerdict, FilterOp, GenerateRequest, Generation, InboundAttachment, InboundEmail, IndexInfo, KvEntry, KvExpiration, KvGet, KvKey, KvList, KvListing, KvPut, MetaValue, MetadataScope, Mutation, MySqlError, MySqlReadError, MySqlRun, MySqlStatement, MySqlValue, PgError, PgReadError, PgRun, PgStatement, PgValue, QueryOptions, QueueSend, R2Body, R2Condition, R2Listing, R2Object, R2Part, R2Put, R2Upload, R2UploadOptions, SenderIdentity, SqlError, SqlReadError, SqlRun, SqlStatement, SqlValue, TokenUsage, Vector, VectorError, VectorMatch, VectorOf, WorkerVersion } = __ns_bynk_cloudflare;
     type AiError = __ns_bynk_cloudflare.AiError;
     type ChatMessage = __ns_bynk_cloudflare.ChatMessage;
     type ChatRole = __ns_bynk_cloudflare.ChatRole;
@@ -1276,6 +1302,7 @@ async function test_a_limit_is_an_InvalidInput_value() {
     type Vector = __ns_bynk_cloudflare.Vector;
     type VectorError = __ns_bynk_cloudflare.VectorError;
     type VectorMatch = __ns_bynk_cloudflare.VectorMatch;
+    type VectorOf<M> = __ns_bynk_cloudflare.VectorOf<M>;
     type WorkerVersion = __ns_bynk_cloudflare.WorkerVersion;
     const r = await reader.call([0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0], { topK: 101, returnValues: false, returnMetadata: { tag: "Omit" as const }, namespace: { tag: "None" as const }, filter: [] }, deps);
     if (!(((__c: boolean) => __c)(r.tag === "Err" && r.error.tag === "VectorInvalidInput"))) { throw __bynkExpectFailure("tests/shop/retrieval.bynk:101:9", 10265, 10296, "expect r is Err(VectorInvalidInput(_))"); }
@@ -1292,7 +1319,8 @@ async function test_a_limit_is_an_InvalidInput_value() {
 async function test_describe_reports_the_declaration() {
   try {
     const deps = __makeTestDeps();
-    const { describer, fetcher, inserter, reader, remover, writer } = __ns_shop_retrieval;
+    const { Meta, describer, fetcher, inserter, reader, remover, typed, writer } = __ns_shop_retrieval;
+    type Meta = __ns_shop_retrieval.Meta;
     const { BytesResponse, Claim, Cookie, EventEnvelope, FetchError, FetchOptions, File, LogLevel, Method, Redirect, Request, Response, SameSite, StreamResponse, TimedOut, Uuid } = __ns_bynk;
     type BytesResponse = __ns_bynk.BytesResponse;
     type Claim = __ns_bynk.Claim;
@@ -1310,7 +1338,7 @@ async function test_describe_reports_the_declaration() {
     type StreamResponse = __ns_bynk.StreamResponse;
     type TimedOut = __ns_bynk.TimedOut;
     type Uuid = __ns_bynk.Uuid;
-    const { AiError, ChatMessage, ChatRole, Condition, DataPoint, DmarcVerdict, EmailAttachment, EmailError, EmailMessage, EmailReply, EmailVerdict, FilterOp, GenerateRequest, Generation, InboundAttachment, InboundEmail, IndexInfo, KvEntry, KvExpiration, KvGet, KvKey, KvList, KvListing, KvPut, MetaValue, MetadataScope, Mutation, MySqlError, MySqlReadError, MySqlRun, MySqlStatement, MySqlValue, PgError, PgReadError, PgRun, PgStatement, PgValue, QueryOptions, QueueSend, R2Body, R2Condition, R2Listing, R2Object, R2Part, R2Put, R2Upload, R2UploadOptions, SenderIdentity, SqlError, SqlReadError, SqlRun, SqlStatement, SqlValue, TokenUsage, Vector, VectorError, VectorMatch, WorkerVersion } = __ns_bynk_cloudflare;
+    const { AiError, ChatMessage, ChatRole, Condition, DataPoint, DmarcVerdict, EmailAttachment, EmailError, EmailMessage, EmailReply, EmailVerdict, FilterOp, GenerateRequest, Generation, InboundAttachment, InboundEmail, IndexInfo, KvEntry, KvExpiration, KvGet, KvKey, KvList, KvListing, KvPut, MetaValue, MetadataScope, Mutation, MySqlError, MySqlReadError, MySqlRun, MySqlStatement, MySqlValue, PgError, PgReadError, PgRun, PgStatement, PgValue, QueryOptions, QueueSend, R2Body, R2Condition, R2Listing, R2Object, R2Part, R2Put, R2Upload, R2UploadOptions, SenderIdentity, SqlError, SqlReadError, SqlRun, SqlStatement, SqlValue, TokenUsage, Vector, VectorError, VectorMatch, VectorOf, WorkerVersion } = __ns_bynk_cloudflare;
     type AiError = __ns_bynk_cloudflare.AiError;
     type ChatMessage = __ns_bynk_cloudflare.ChatMessage;
     type ChatRole = __ns_bynk_cloudflare.ChatRole;
@@ -1368,6 +1396,7 @@ async function test_describe_reports_the_declaration() {
     type Vector = __ns_bynk_cloudflare.Vector;
     type VectorError = __ns_bynk_cloudflare.VectorError;
     type VectorMatch = __ns_bynk_cloudflare.VectorMatch;
+    type VectorOf<M> = __ns_bynk_cloudflare.VectorOf<M>;
     type WorkerVersion = __ns_bynk_cloudflare.WorkerVersion;
     const r = await describer.call(deps);
     if (!(__bynkEq(r, Ok({ dimensions: 32, metric: "euclidean" })))) { throw __bynkExpectFailure("tests/shop/retrieval.bynk:106:9", 10377, 10435, "expect r == Ok(IndexInfo { dimensions: 32, metric: \"euclidean\" })\n  expected: r == Ok(IndexInfo { dimensions: 32, metric: \"euclidean\" })\n  actual:   " + __bynkShow((r)) + " == " + __bynkShow((Ok({ dimensions: 32, metric: "euclidean" })))); }
@@ -1384,7 +1413,8 @@ async function test_describe_reports_the_declaration() {
 async function test_a_stub_still_replaces_an_operation() {
   try {
     const deps = __makeTestDeps("a stub still replaces an operation");
-    const { describer, fetcher, inserter, reader, remover, writer } = __ns_shop_retrieval;
+    const { Meta, describer, fetcher, inserter, reader, remover, typed, writer } = __ns_shop_retrieval;
+    type Meta = __ns_shop_retrieval.Meta;
     const { BytesResponse, Claim, Cookie, EventEnvelope, FetchError, FetchOptions, File, LogLevel, Method, Redirect, Request, Response, SameSite, StreamResponse, TimedOut, Uuid } = __ns_bynk;
     type BytesResponse = __ns_bynk.BytesResponse;
     type Claim = __ns_bynk.Claim;
@@ -1402,7 +1432,7 @@ async function test_a_stub_still_replaces_an_operation() {
     type StreamResponse = __ns_bynk.StreamResponse;
     type TimedOut = __ns_bynk.TimedOut;
     type Uuid = __ns_bynk.Uuid;
-    const { AiError, ChatMessage, ChatRole, Condition, DataPoint, DmarcVerdict, EmailAttachment, EmailError, EmailMessage, EmailReply, EmailVerdict, FilterOp, GenerateRequest, Generation, InboundAttachment, InboundEmail, IndexInfo, KvEntry, KvExpiration, KvGet, KvKey, KvList, KvListing, KvPut, MetaValue, MetadataScope, Mutation, MySqlError, MySqlReadError, MySqlRun, MySqlStatement, MySqlValue, PgError, PgReadError, PgRun, PgStatement, PgValue, QueryOptions, QueueSend, R2Body, R2Condition, R2Listing, R2Object, R2Part, R2Put, R2Upload, R2UploadOptions, SenderIdentity, SqlError, SqlReadError, SqlRun, SqlStatement, SqlValue, TokenUsage, Vector, VectorError, VectorMatch, WorkerVersion } = __ns_bynk_cloudflare;
+    const { AiError, ChatMessage, ChatRole, Condition, DataPoint, DmarcVerdict, EmailAttachment, EmailError, EmailMessage, EmailReply, EmailVerdict, FilterOp, GenerateRequest, Generation, InboundAttachment, InboundEmail, IndexInfo, KvEntry, KvExpiration, KvGet, KvKey, KvList, KvListing, KvPut, MetaValue, MetadataScope, Mutation, MySqlError, MySqlReadError, MySqlRun, MySqlStatement, MySqlValue, PgError, PgReadError, PgRun, PgStatement, PgValue, QueryOptions, QueueSend, R2Body, R2Condition, R2Listing, R2Object, R2Part, R2Put, R2Upload, R2UploadOptions, SenderIdentity, SqlError, SqlReadError, SqlRun, SqlStatement, SqlValue, TokenUsage, Vector, VectorError, VectorMatch, VectorOf, WorkerVersion } = __ns_bynk_cloudflare;
     type AiError = __ns_bynk_cloudflare.AiError;
     type ChatMessage = __ns_bynk_cloudflare.ChatMessage;
     type ChatRole = __ns_bynk_cloudflare.ChatRole;
@@ -1460,10 +1490,109 @@ async function test_a_stub_still_replaces_an_operation() {
     type Vector = __ns_bynk_cloudflare.Vector;
     type VectorError = __ns_bynk_cloudflare.VectorError;
     type VectorMatch = __ns_bynk_cloudflare.VectorMatch;
+    type VectorOf<M> = __ns_bynk_cloudflare.VectorOf<M>;
     type WorkerVersion = __ns_bynk_cloudflare.WorkerVersion;
     const __r0 = await writer.call([{ id: "a", values: [1.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0], metadata: { tag: "None" as const }, namespace: { tag: "None" as const } }], deps);
     const r = await reader.call([1.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0], { topK: 5, returnValues: false, returnMetadata: { tag: "Omit" as const }, namespace: { tag: "None" as const }, filter: [] }, deps);
     if (!(__bynkEq(r, Ok([])))) { throw __bynkExpectFailure("tests/shop/retrieval.bynk:113:9", 10944, 10955, "expect r == Ok([])\n  expected: r == Ok([])\n  actual:   " + __bynkShow((r)) + " == " + __bynkShow((Ok([])))); }
+    return { pass: true };
+  } catch (e) {
+    if (e instanceof ExpectationError) {
+      return { pass: false, error: { message: e.message, location: e.location } };
+    }
+    return { pass: false, error: { message: String(e), location: "unknown", violation: __bynkViolationOf(e) } };
+  }
+}
+
+// case tier: unit
+async function test_upsertValue_encodes_typed_metadata_as_upsert_would__and_a_filter_finds_it() {
+  try {
+    const deps = __makeTestDeps();
+    const { Meta, describer, fetcher, inserter, reader, remover, typed, writer } = __ns_shop_retrieval;
+    type Meta = __ns_shop_retrieval.Meta;
+    const { BytesResponse, Claim, Cookie, EventEnvelope, FetchError, FetchOptions, File, LogLevel, Method, Redirect, Request, Response, SameSite, StreamResponse, TimedOut, Uuid } = __ns_bynk;
+    type BytesResponse = __ns_bynk.BytesResponse;
+    type Claim = __ns_bynk.Claim;
+    type Cookie = __ns_bynk.Cookie;
+    type EventEnvelope = __ns_bynk.EventEnvelope;
+    type FetchError = __ns_bynk.FetchError;
+    type FetchOptions = __ns_bynk.FetchOptions;
+    type File = __ns_bynk.File;
+    type LogLevel = __ns_bynk.LogLevel;
+    type Method = __ns_bynk.Method;
+    type Redirect = __ns_bynk.Redirect;
+    type Request = __ns_bynk.Request;
+    type Response = __ns_bynk.Response;
+    type SameSite = __ns_bynk.SameSite;
+    type StreamResponse = __ns_bynk.StreamResponse;
+    type TimedOut = __ns_bynk.TimedOut;
+    type Uuid = __ns_bynk.Uuid;
+    const { AiError, ChatMessage, ChatRole, Condition, DataPoint, DmarcVerdict, EmailAttachment, EmailError, EmailMessage, EmailReply, EmailVerdict, FilterOp, GenerateRequest, Generation, InboundAttachment, InboundEmail, IndexInfo, KvEntry, KvExpiration, KvGet, KvKey, KvList, KvListing, KvPut, MetaValue, MetadataScope, Mutation, MySqlError, MySqlReadError, MySqlRun, MySqlStatement, MySqlValue, PgError, PgReadError, PgRun, PgStatement, PgValue, QueryOptions, QueueSend, R2Body, R2Condition, R2Listing, R2Object, R2Part, R2Put, R2Upload, R2UploadOptions, SenderIdentity, SqlError, SqlReadError, SqlRun, SqlStatement, SqlValue, TokenUsage, Vector, VectorError, VectorMatch, VectorOf, WorkerVersion } = __ns_bynk_cloudflare;
+    type AiError = __ns_bynk_cloudflare.AiError;
+    type ChatMessage = __ns_bynk_cloudflare.ChatMessage;
+    type ChatRole = __ns_bynk_cloudflare.ChatRole;
+    type Condition = __ns_bynk_cloudflare.Condition;
+    type DataPoint = __ns_bynk_cloudflare.DataPoint;
+    type DmarcVerdict = __ns_bynk_cloudflare.DmarcVerdict;
+    type EmailAttachment = __ns_bynk_cloudflare.EmailAttachment;
+    type EmailError = __ns_bynk_cloudflare.EmailError;
+    type EmailMessage = __ns_bynk_cloudflare.EmailMessage;
+    type EmailReply = __ns_bynk_cloudflare.EmailReply;
+    type EmailVerdict = __ns_bynk_cloudflare.EmailVerdict;
+    type FilterOp = __ns_bynk_cloudflare.FilterOp;
+    type GenerateRequest = __ns_bynk_cloudflare.GenerateRequest;
+    type Generation = __ns_bynk_cloudflare.Generation;
+    type InboundAttachment = __ns_bynk_cloudflare.InboundAttachment;
+    type InboundEmail = __ns_bynk_cloudflare.InboundEmail;
+    type IndexInfo = __ns_bynk_cloudflare.IndexInfo;
+    type KvEntry = __ns_bynk_cloudflare.KvEntry;
+    type KvExpiration = __ns_bynk_cloudflare.KvExpiration;
+    type KvGet = __ns_bynk_cloudflare.KvGet;
+    type KvKey = __ns_bynk_cloudflare.KvKey;
+    type KvList = __ns_bynk_cloudflare.KvList;
+    type KvListing = __ns_bynk_cloudflare.KvListing;
+    type KvPut = __ns_bynk_cloudflare.KvPut;
+    type MetaValue = __ns_bynk_cloudflare.MetaValue;
+    type MetadataScope = __ns_bynk_cloudflare.MetadataScope;
+    type Mutation = __ns_bynk_cloudflare.Mutation;
+    type MySqlError = __ns_bynk_cloudflare.MySqlError;
+    type MySqlReadError = __ns_bynk_cloudflare.MySqlReadError;
+    type MySqlRun = __ns_bynk_cloudflare.MySqlRun;
+    type MySqlStatement = __ns_bynk_cloudflare.MySqlStatement;
+    type MySqlValue = __ns_bynk_cloudflare.MySqlValue;
+    type PgError = __ns_bynk_cloudflare.PgError;
+    type PgReadError = __ns_bynk_cloudflare.PgReadError;
+    type PgRun = __ns_bynk_cloudflare.PgRun;
+    type PgStatement = __ns_bynk_cloudflare.PgStatement;
+    type PgValue = __ns_bynk_cloudflare.PgValue;
+    type QueryOptions = __ns_bynk_cloudflare.QueryOptions;
+    type QueueSend = __ns_bynk_cloudflare.QueueSend;
+    type R2Body = __ns_bynk_cloudflare.R2Body;
+    type R2Condition = __ns_bynk_cloudflare.R2Condition;
+    type R2Listing = __ns_bynk_cloudflare.R2Listing;
+    type R2Object = __ns_bynk_cloudflare.R2Object;
+    type R2Part = __ns_bynk_cloudflare.R2Part;
+    type R2Put = __ns_bynk_cloudflare.R2Put;
+    type R2Upload = __ns_bynk_cloudflare.R2Upload;
+    type R2UploadOptions = __ns_bynk_cloudflare.R2UploadOptions;
+    type SenderIdentity = __ns_bynk_cloudflare.SenderIdentity;
+    type SqlError = __ns_bynk_cloudflare.SqlError;
+    type SqlReadError = __ns_bynk_cloudflare.SqlReadError;
+    type SqlRun = __ns_bynk_cloudflare.SqlRun;
+    type SqlStatement = __ns_bynk_cloudflare.SqlStatement;
+    type SqlValue = __ns_bynk_cloudflare.SqlValue;
+    type TokenUsage = __ns_bynk_cloudflare.TokenUsage;
+    type Vector = __ns_bynk_cloudflare.Vector;
+    type VectorError = __ns_bynk_cloudflare.VectorError;
+    type VectorMatch = __ns_bynk_cloudflare.VectorMatch;
+    type VectorOf<M> = __ns_bynk_cloudflare.VectorOf<M>;
+    type WorkerVersion = __ns_bynk_cloudflare.WorkerVersion;
+    const written = await typed.call([{ id: "a", values: [1.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0], metadata: Some({ category: "faq", year: 2026 }), namespace: { tag: "None" as const } }, { id: "b", values: [2.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0], metadata: { tag: "None" as const }, namespace: { tag: "None" as const } }], deps);
+    if (!(__bynkEq(written, Ok({ id: "m1" })))) { throw __bynkExpectFailure("tests/shop/retrieval.bynk:121:9", 11525, 11561, "expect written == Ok(Mutation { id: \"m1\" })\n  expected: written == Ok(Mutation { id: \"m1\" })\n  actual:   " + __bynkShow((written)) + " == " + __bynkShow((Ok({ id: "m1" })))); }
+    const back = await fetcher.call(["a", "b"], deps);
+    if (!(__bynkEq(back, Ok([{ id: "a", values: [1.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0], metadata: Some("{\"category\":\"faq\",\"year\":2026}"), namespace: None }, { id: "b", values: [2.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0], metadata: None, namespace: None }])))) { throw __bynkExpectFailure("tests/shop/retrieval.bynk:123:9", 11608, 12114, "expect back == Ok([\n\t\tVector { id: \"a\", values: [1.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0], metadata: Some(\"{\\\"category\\\":\\\"faq\\\",\\\"year\\\":2026}\"), namespace: None },\n\t\tVector { id: \"b\", values: [2.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0], metadata: None, namespace: None },\n\t])\n  expected: back == Ok([\n\t\tVector { id: \"a\", values: [1.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0], metadata: Some(\"{\\\"category\\\":\\\"faq\\\",\\\"year\\\":2026}\"), namespace: None },\n\t\tVector { id: \"b\", values: [2.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0], metadata: None, namespace: None },\n\t])\n  actual:   " + __bynkShow((back)) + " == " + __bynkShow((Ok([{ id: "a", values: [1.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0], metadata: Some("{\"category\":\"faq\",\"year\":2026}"), namespace: None }, { id: "b", values: [2.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0], metadata: None, namespace: None }])))); }
+    const faq = await reader.call([0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0], { filter: [{ field: "category", op: FilterOp.FilterEq(MetaValue.MetaText("faq")) }], topK: 5, returnValues: false, returnMetadata: { tag: "Omit" as const }, namespace: { tag: "None" as const } }, deps);
+    if (!(__bynkEq(faq, Ok([{ id: "a", score: 1.0, values: None, metadata: None, namespace: None }])))) { throw __bynkExpectFailure("tests/shop/retrieval.bynk:128:9", 12400, 12495, "expect faq == Ok([VectorMatch { id: \"a\", score: 1.0, values: None, metadata: None, namespace: None }])\n  expected: faq == Ok([VectorMatch { id: \"a\", score: 1.0, values: None, metadata: None, namespace: None }])\n  actual:   " + __bynkShow((faq)) + " == " + __bynkShow((Ok([{ id: "a", score: 1.0, values: None, metadata: None, namespace: None }])))); }
     return { pass: true };
   } catch (e) {
     if (e instanceof ExpectationError) {
@@ -1487,7 +1616,7 @@ const __bynkCasePerformance = (globalThis as unknown as { performance?: { now():
 const __bynkCaseNow = (): number => (__bynkCasePerformance ? __bynkCasePerformance.now() : Date.now());
 const __bynkCaseSince = (started: number): number => Math.round((__bynkCaseNow() - started) * 100) / 100;
 
-export const __bynkCases: readonly string[] = ["an empty index returns no matches", "a write returns deterministic mutation ids and is queryable at once", "topK limits the matches", "a vector of the wrong length is a DimensionMismatch", "upsert replaces a vector in full and insert keeps the first", "deleteByIds removes vectors", "namespaces partition the index", "a filter selects by an indexed property", "returnMetadata Indexed returns only the indexed properties", "a filter on a property that is not indexed faults, naming the difference", "a filter the platform refuses is an InvalidInput value", "a limit is an InvalidInput value", "describe reports the declaration", "a stub still replaces an operation"];
+export const __bynkCases: readonly string[] = ["an empty index returns no matches", "a write returns deterministic mutation ids and is queryable at once", "topK limits the matches", "a vector of the wrong length is a DimensionMismatch", "upsert replaces a vector in full and insert keeps the first", "deleteByIds removes vectors", "namespaces partition the index", "a filter selects by an indexed property", "returnMetadata Indexed returns only the indexed properties", "a filter on a property that is not indexed faults, naming the difference", "a filter the platform refuses is an InvalidInput value", "a limit is an InvalidInput value", "describe reports the declaration", "a stub still replaces an operation", "upsertValue encodes typed metadata as upsert would, and a filter finds it"];
 
 export async function run(only?: string, onCase?: (a0: CaseResult) => void) {
   const results = [];
@@ -1573,6 +1702,12 @@ export async function run(only?: string, onCase?: (a0: CaseResult) => void) {
   if (want("a stub still replaces an operation")) {
     const started = __bynkCaseNow();
     const r = { name: "a stub still replaces an operation", ...(await test_a_stub_still_replaces_an_operation()), durationMs: __bynkCaseSince(started) };
+    results.push(r);
+    if (onCase) onCase(r);
+  }
+  if (want("upsertValue encodes typed metadata as upsert would, and a filter finds it")) {
+    const started = __bynkCaseNow();
+    const r = { name: "upsertValue encodes typed metadata as upsert would, and a filter finds it", ...(await test_upsertValue_encodes_typed_metadata_as_upsert_would__and_a_filter_finds_it()), durationMs: __bynkCaseSince(started) };
     results.push(r);
     if (onCase) onCase(r);
   }

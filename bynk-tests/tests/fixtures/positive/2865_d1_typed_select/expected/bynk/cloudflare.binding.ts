@@ -1802,6 +1802,30 @@ export class WorkersVectorize implements Vectorize {
     return this.write("insert", vectors);
   }
 
+  // `upsertValue[M: Codable]`: the call site has encoded the whole list with the
+  // boundary codec, so each vector arrives as `{ id, values, metadata, namespace }`
+  // with an `Option` as `{ kind: "Some", value }` or `{ kind: "None" }`. Each
+  // metadata value goes through `JSON.stringify` to the text `upsert` takes, so
+  // the platform receives exactly what `upsert` with `Json.encode(metadata)`
+  // would send: a metadata value that is not a JSON object is a fault there too.
+  async upsertValue(vectors: unknown): Promise<Result<Mutation, VectorError>> {
+    const option = (raw: unknown): { some: boolean; value?: unknown } => {
+      const o = raw as { kind?: unknown; value?: unknown } | null | undefined;
+      return o?.kind === "Some" ? { some: true, value: o.value } : { some: false };
+    };
+    const decoded: Vector[] = (vectors as readonly Record<string, unknown>[]).map((v) => {
+      const metadata = option(v.metadata);
+      const space = option(v["namespace"]);
+      return {
+        id: v.id as string,
+        values: v.values as readonly number[],
+        metadata: metadata.some ? Some(JSON.stringify(metadata.value)) : None,
+        namespace: space.some ? Some(space.value as string) : None,
+      };
+    });
+    return this.write("upsert", decoded);
+  }
+
   async query(vector: readonly number[], options: QueryOptions): Promise<Result<readonly VectorMatch[], VectorError>> {
     const index = this.index();
     const filter = WorkersVectorize.filter(options.filter);

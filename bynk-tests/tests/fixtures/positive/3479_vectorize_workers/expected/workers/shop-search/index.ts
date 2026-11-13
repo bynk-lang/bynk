@@ -67,6 +67,22 @@ export default {
           return __applySecurityHeaders(__httpResultToResponse(result, (__v: string) => __v as __JsonValue), __security_api);
         }
       }
+      {
+        if (method === "PUT" && path === "/typed") {
+          __route = "PUT /typed";
+          let __body_json: __JsonValue;
+          try {
+            __body_json = (await request.json()) as __JsonValue;
+          } catch {
+            return __applySecurityHeaders(new globalThis.Response(globalThis.JSON.stringify({ kind: "MalformedJson", details: "Invalid request body" }), { status: 400, headers: { "content-type": "application/json" } }), __security_api);
+          }
+          const __r_body = ((__v) => typeof __v === "string" ? Ok(__v) : Err({ kind: "StructuralMismatch", path: "$", expected: "string", actual: typeof __v } as __BoundaryError))(__body_json);
+          if (__r_body.tag === "Err") return __applySecurityHeaders(new globalThis.Response(globalThis.JSON.stringify(__r_body.error), { status: 400, headers: { "content-type": "application/json" } }), __security_api);
+          const body = __r_body.value;
+          const result = await surface.http_PUT_typed(body);
+          return __applySecurityHeaders(__httpResultToResponse(result, (__v: string) => __v as __JsonValue), __security_api);
+        }
+      }
       if (path === "/doc") {
         const __status = method === "OPTIONS" ? 204 : 405;
         const __res = new globalThis.Response(null, { status: __status, headers: { allow: "OPTIONS, PUT" } });
@@ -80,6 +96,11 @@ export default {
       if (path === "/search") {
         const __status = method === "OPTIONS" ? 204 : 405;
         const __res = new globalThis.Response(null, { status: __status, headers: { allow: "GET, HEAD, OPTIONS" } });
+        return __applySecurityHeaders(__res, __security_api);
+      }
+      if (path === "/typed") {
+        const __status = method === "OPTIONS" ? 204 : 405;
+        const __res = new globalThis.Response(null, { status: __status, headers: { allow: "OPTIONS, PUT" } });
         return __applySecurityHeaders(__res, __security_api);
       }
       return new globalThis.Response("Not Found", { status: 404 });

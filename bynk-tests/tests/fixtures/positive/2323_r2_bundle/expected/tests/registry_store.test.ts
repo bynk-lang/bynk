@@ -101,7 +101,7 @@ class __Stub_Archives {
     return true;
   }
   async get(key: string): globalThis.Promise<Option<globalThis.Uint8Array>> {
-    const { AiError, ChatMessage, ChatRole, Condition, DataPoint, DmarcVerdict, EmailAttachment, EmailError, EmailMessage, EmailReply, EmailVerdict, FilterOp, GenerateRequest, Generation, InboundAttachment, InboundEmail, IndexInfo, KvEntry, KvExpiration, KvGet, KvKey, KvList, KvListing, KvPut, MetaValue, MetadataScope, Mutation, MySqlError, MySqlReadError, MySqlRun, MySqlStatement, MySqlValue, PgError, PgReadError, PgRun, PgStatement, PgValue, QueryOptions, QueueSend, R2Body, R2Condition, R2Listing, R2Object, R2Part, R2Put, R2Upload, R2UploadOptions, SenderIdentity, SqlError, SqlReadError, SqlRun, SqlStatement, SqlValue, TokenUsage, Vector, VectorError, VectorMatch, WorkerVersion } = __ns_bynk_cloudflare;
+    const { AiError, ChatMessage, ChatRole, Condition, DataPoint, DmarcVerdict, EmailAttachment, EmailError, EmailMessage, EmailReply, EmailVerdict, FilterOp, GenerateRequest, Generation, InboundAttachment, InboundEmail, IndexInfo, KvEntry, KvExpiration, KvGet, KvKey, KvList, KvListing, KvPut, MetaValue, MetadataScope, Mutation, MySqlError, MySqlReadError, MySqlRun, MySqlStatement, MySqlValue, PgError, PgReadError, PgRun, PgStatement, PgValue, QueryOptions, QueueSend, R2Body, R2Condition, R2Listing, R2Object, R2Part, R2Put, R2Upload, R2UploadOptions, SenderIdentity, SqlError, SqlReadError, SqlRun, SqlStatement, SqlValue, TokenUsage, Vector, VectorError, VectorMatch, VectorOf, WorkerVersion } = __ns_bynk_cloudflare;
     type AiError = __ns_bynk_cloudflare.AiError;
     type ChatMessage = __ns_bynk_cloudflare.ChatMessage;
     type ChatRole = __ns_bynk_cloudflare.ChatRole;
@@ -159,6 +159,7 @@ class __Stub_Archives {
     type Vector = __ns_bynk_cloudflare.Vector;
     type VectorError = __ns_bynk_cloudflare.VectorError;
     type VectorMatch = __ns_bynk_cloudflare.VectorMatch;
+    type VectorOf<M> = __ns_bynk_cloudflare.VectorOf<M>;
     type WorkerVersion = __ns_bynk_cloudflare.WorkerVersion;
     if (this.__case === "a stubbed instance answers") {
       return Some(new globalThis.TextEncoder().encode("stubbed"));
@@ -628,7 +629,7 @@ async function test_an_object_round_trips() {
   try {
     const deps = __makeTestDeps();
     const { archive, fetch, names, remove, size, swap, write } = __ns_registry_store;
-    const { AiError, ChatMessage, ChatRole, Condition, DataPoint, DmarcVerdict, EmailAttachment, EmailError, EmailMessage, EmailReply, EmailVerdict, FilterOp, GenerateRequest, Generation, InboundAttachment, InboundEmail, IndexInfo, KvEntry, KvExpiration, KvGet, KvKey, KvList, KvListing, KvPut, MetaValue, MetadataScope, Mutation, MySqlError, MySqlReadError, MySqlRun, MySqlStatement, MySqlValue, PgError, PgReadError, PgRun, PgStatement, PgValue, QueryOptions, QueueSend, R2Body, R2Condition, R2Listing, R2Object, R2Part, R2Put, R2Upload, R2UploadOptions, SenderIdentity, SqlError, SqlReadError, SqlRun, SqlStatement, SqlValue, TokenUsage, Vector, VectorError, VectorMatch, WorkerVersion } = __ns_bynk_cloudflare;
+    const { AiError, ChatMessage, ChatRole, Condition, DataPoint, DmarcVerdict, EmailAttachment, EmailError, EmailMessage, EmailReply, EmailVerdict, FilterOp, GenerateRequest, Generation, InboundAttachment, InboundEmail, IndexInfo, KvEntry, KvExpiration, KvGet, KvKey, KvList, KvListing, KvPut, MetaValue, MetadataScope, Mutation, MySqlError, MySqlReadError, MySqlRun, MySqlStatement, MySqlValue, PgError, PgReadError, PgRun, PgStatement, PgValue, QueryOptions, QueueSend, R2Body, R2Condition, R2Listing, R2Object, R2Part, R2Put, R2Upload, R2UploadOptions, SenderIdentity, SqlError, SqlReadError, SqlRun, SqlStatement, SqlValue, TokenUsage, Vector, VectorError, VectorMatch, VectorOf, WorkerVersion } = __ns_bynk_cloudflare;
     type AiError = __ns_bynk_cloudflare.AiError;
     type ChatMessage = __ns_bynk_cloudflare.ChatMessage;
     type ChatRole = __ns_bynk_cloudflare.ChatRole;
@@ -686,6 +687,7 @@ async function test_an_object_round_trips() {
     type Vector = __ns_bynk_cloudflare.Vector;
     type VectorError = __ns_bynk_cloudflare.VectorError;
     type VectorMatch = __ns_bynk_cloudflare.VectorMatch;
+    type VectorOf<M> = __ns_bynk_cloudflare.VectorOf<M>;
     type WorkerVersion = __ns_bynk_cloudflare.WorkerVersion;
     const stored = await archive.call("a", new globalThis.TextEncoder().encode("hello"), deps);
     if (!(stored)) { throw __bynkExpectFailure("tests/registry/store.bynk:8:9", 237, 243, "expect stored"); }
@@ -707,7 +709,7 @@ async function test_an_absent_only_write_refuses_an_existing_key() {
   try {
     const deps = __makeTestDeps();
     const { archive, fetch, names, remove, size, swap, write } = __ns_registry_store;
-    const { AiError, ChatMessage, ChatRole, Condition, DataPoint, DmarcVerdict, EmailAttachment, EmailError, EmailMessage, EmailReply, EmailVerdict, FilterOp, GenerateRequest, Generation, InboundAttachment, InboundEmail, IndexInfo, KvEntry, KvExpiration, KvGet, KvKey, KvList, KvListing, KvPut, MetaValue, MetadataScope, Mutation, MySqlError, MySqlReadError, MySqlRun, MySqlStatement, MySqlValue, PgError, PgReadError, PgRun, PgStatement, PgValue, QueryOptions, QueueSend, R2Body, R2Condition, R2Listing, R2Object, R2Part, R2Put, R2Upload, R2UploadOptions, SenderIdentity, SqlError, SqlReadError, SqlRun, SqlStatement, SqlValue, TokenUsage, Vector, VectorError, VectorMatch, WorkerVersion } = __ns_bynk_cloudflare;
+    const { AiError, ChatMessage, ChatRole, Condition, DataPoint, DmarcVerdict, EmailAttachment, EmailError, EmailMessage, EmailReply, EmailVerdict, FilterOp, GenerateRequest, Generation, InboundAttachment, InboundEmail, IndexInfo, KvEntry, KvExpiration, KvGet, KvKey, KvList, KvListing, KvPut, MetaValue, MetadataScope, Mutation, MySqlError, MySqlReadError, MySqlRun, MySqlStatement, MySqlValue, PgError, PgReadError, PgRun, PgStatement, PgValue, QueryOptions, QueueSend, R2Body, R2Condition, R2Listing, R2Object, R2Part, R2Put, R2Upload, R2UploadOptions, SenderIdentity, SqlError, SqlReadError, SqlRun, SqlStatement, SqlValue, TokenUsage, Vector, VectorError, VectorMatch, VectorOf, WorkerVersion } = __ns_bynk_cloudflare;
     type AiError = __ns_bynk_cloudflare.AiError;
     type ChatMessage = __ns_bynk_cloudflare.ChatMessage;
     type ChatRole = __ns_bynk_cloudflare.ChatRole;
@@ -765,6 +767,7 @@ async function test_an_absent_only_write_refuses_an_existing_key() {
     type Vector = __ns_bynk_cloudflare.Vector;
     type VectorError = __ns_bynk_cloudflare.VectorError;
     type VectorMatch = __ns_bynk_cloudflare.VectorMatch;
+    type VectorOf<M> = __ns_bynk_cloudflare.VectorOf<M>;
     type WorkerVersion = __ns_bynk_cloudflare.WorkerVersion;
     const first = await archive.call("a", new globalThis.TextEncoder().encode("one"), deps);
     const second = await archive.call("a", new globalThis.TextEncoder().encode("two"), deps);
@@ -786,7 +789,7 @@ async function test_an_etag_match_write_swaps_only_the_current_version() {
   try {
     const deps = __makeTestDeps();
     const { archive, fetch, names, remove, size, swap, write } = __ns_registry_store;
-    const { AiError, ChatMessage, ChatRole, Condition, DataPoint, DmarcVerdict, EmailAttachment, EmailError, EmailMessage, EmailReply, EmailVerdict, FilterOp, GenerateRequest, Generation, InboundAttachment, InboundEmail, IndexInfo, KvEntry, KvExpiration, KvGet, KvKey, KvList, KvListing, KvPut, MetaValue, MetadataScope, Mutation, MySqlError, MySqlReadError, MySqlRun, MySqlStatement, MySqlValue, PgError, PgReadError, PgRun, PgStatement, PgValue, QueryOptions, QueueSend, R2Body, R2Condition, R2Listing, R2Object, R2Part, R2Put, R2Upload, R2UploadOptions, SenderIdentity, SqlError, SqlReadError, SqlRun, SqlStatement, SqlValue, TokenUsage, Vector, VectorError, VectorMatch, WorkerVersion } = __ns_bynk_cloudflare;
+    const { AiError, ChatMessage, ChatRole, Condition, DataPoint, DmarcVerdict, EmailAttachment, EmailError, EmailMessage, EmailReply, EmailVerdict, FilterOp, GenerateRequest, Generation, InboundAttachment, InboundEmail, IndexInfo, KvEntry, KvExpiration, KvGet, KvKey, KvList, KvListing, KvPut, MetaValue, MetadataScope, Mutation, MySqlError, MySqlReadError, MySqlRun, MySqlStatement, MySqlValue, PgError, PgReadError, PgRun, PgStatement, PgValue, QueryOptions, QueueSend, R2Body, R2Condition, R2Listing, R2Object, R2Part, R2Put, R2Upload, R2UploadOptions, SenderIdentity, SqlError, SqlReadError, SqlRun, SqlStatement, SqlValue, TokenUsage, Vector, VectorError, VectorMatch, VectorOf, WorkerVersion } = __ns_bynk_cloudflare;
     type AiError = __ns_bynk_cloudflare.AiError;
     type ChatMessage = __ns_bynk_cloudflare.ChatMessage;
     type ChatRole = __ns_bynk_cloudflare.ChatRole;
@@ -844,6 +847,7 @@ async function test_an_etag_match_write_swaps_only_the_current_version() {
     type Vector = __ns_bynk_cloudflare.Vector;
     type VectorError = __ns_bynk_cloudflare.VectorError;
     type VectorMatch = __ns_bynk_cloudflare.VectorMatch;
+    type VectorOf<M> = __ns_bynk_cloudflare.VectorOf<M>;
     type WorkerVersion = __ns_bynk_cloudflare.WorkerVersion;
     const etag = await write.call("idx", new globalThis.TextEncoder().encode("v1"), deps);
     const stale = await swap.call("idx", "nope", new globalThis.TextEncoder().encode("v2"), deps);
@@ -864,7 +868,7 @@ async function test_delete_is_idempotent_and_list_pages_by_prefix() {
   try {
     const deps = __makeTestDeps();
     const { archive, fetch, names, remove, size, swap, write } = __ns_registry_store;
-    const { AiError, ChatMessage, ChatRole, Condition, DataPoint, DmarcVerdict, EmailAttachment, EmailError, EmailMessage, EmailReply, EmailVerdict, FilterOp, GenerateRequest, Generation, InboundAttachment, InboundEmail, IndexInfo, KvEntry, KvExpiration, KvGet, KvKey, KvList, KvListing, KvPut, MetaValue, MetadataScope, Mutation, MySqlError, MySqlReadError, MySqlRun, MySqlStatement, MySqlValue, PgError, PgReadError, PgRun, PgStatement, PgValue, QueryOptions, QueueSend, R2Body, R2Condition, R2Listing, R2Object, R2Part, R2Put, R2Upload, R2UploadOptions, SenderIdentity, SqlError, SqlReadError, SqlRun, SqlStatement, SqlValue, TokenUsage, Vector, VectorError, VectorMatch, WorkerVersion } = __ns_bynk_cloudflare;
+    const { AiError, ChatMessage, ChatRole, Condition, DataPoint, DmarcVerdict, EmailAttachment, EmailError, EmailMessage, EmailReply, EmailVerdict, FilterOp, GenerateRequest, Generation, InboundAttachment, InboundEmail, IndexInfo, KvEntry, KvExpiration, KvGet, KvKey, KvList, KvListing, KvPut, MetaValue, MetadataScope, Mutation, MySqlError, MySqlReadError, MySqlRun, MySqlStatement, MySqlValue, PgError, PgReadError, PgRun, PgStatement, PgValue, QueryOptions, QueueSend, R2Body, R2Condition, R2Listing, R2Object, R2Part, R2Put, R2Upload, R2UploadOptions, SenderIdentity, SqlError, SqlReadError, SqlRun, SqlStatement, SqlValue, TokenUsage, Vector, VectorError, VectorMatch, VectorOf, WorkerVersion } = __ns_bynk_cloudflare;
     type AiError = __ns_bynk_cloudflare.AiError;
     type ChatMessage = __ns_bynk_cloudflare.ChatMessage;
     type ChatRole = __ns_bynk_cloudflare.ChatRole;
@@ -922,6 +926,7 @@ async function test_delete_is_idempotent_and_list_pages_by_prefix() {
     type Vector = __ns_bynk_cloudflare.Vector;
     type VectorError = __ns_bynk_cloudflare.VectorError;
     type VectorMatch = __ns_bynk_cloudflare.VectorMatch;
+    type VectorOf<M> = __ns_bynk_cloudflare.VectorOf<M>;
     type WorkerVersion = __ns_bynk_cloudflare.WorkerVersion;
     const __r0 = await archive.call("p/1", new globalThis.TextEncoder().encode("x"), deps);
     const __r1 = await archive.call("p/2", new globalThis.TextEncoder().encode("y"), deps);
@@ -944,7 +949,7 @@ async function test_instances_are_separate() {
   try {
     const deps = __makeTestDeps();
     const { archive, fetch, names, remove, size, swap, write } = __ns_registry_store;
-    const { AiError, ChatMessage, ChatRole, Condition, DataPoint, DmarcVerdict, EmailAttachment, EmailError, EmailMessage, EmailReply, EmailVerdict, FilterOp, GenerateRequest, Generation, InboundAttachment, InboundEmail, IndexInfo, KvEntry, KvExpiration, KvGet, KvKey, KvList, KvListing, KvPut, MetaValue, MetadataScope, Mutation, MySqlError, MySqlReadError, MySqlRun, MySqlStatement, MySqlValue, PgError, PgReadError, PgRun, PgStatement, PgValue, QueryOptions, QueueSend, R2Body, R2Condition, R2Listing, R2Object, R2Part, R2Put, R2Upload, R2UploadOptions, SenderIdentity, SqlError, SqlReadError, SqlRun, SqlStatement, SqlValue, TokenUsage, Vector, VectorError, VectorMatch, WorkerVersion } = __ns_bynk_cloudflare;
+    const { AiError, ChatMessage, ChatRole, Condition, DataPoint, DmarcVerdict, EmailAttachment, EmailError, EmailMessage, EmailReply, EmailVerdict, FilterOp, GenerateRequest, Generation, InboundAttachment, InboundEmail, IndexInfo, KvEntry, KvExpiration, KvGet, KvKey, KvList, KvListing, KvPut, MetaValue, MetadataScope, Mutation, MySqlError, MySqlReadError, MySqlRun, MySqlStatement, MySqlValue, PgError, PgReadError, PgRun, PgStatement, PgValue, QueryOptions, QueueSend, R2Body, R2Condition, R2Listing, R2Object, R2Part, R2Put, R2Upload, R2UploadOptions, SenderIdentity, SqlError, SqlReadError, SqlRun, SqlStatement, SqlValue, TokenUsage, Vector, VectorError, VectorMatch, VectorOf, WorkerVersion } = __ns_bynk_cloudflare;
     type AiError = __ns_bynk_cloudflare.AiError;
     type ChatMessage = __ns_bynk_cloudflare.ChatMessage;
     type ChatRole = __ns_bynk_cloudflare.ChatRole;
@@ -1002,6 +1007,7 @@ async function test_instances_are_separate() {
     type Vector = __ns_bynk_cloudflare.Vector;
     type VectorError = __ns_bynk_cloudflare.VectorError;
     type VectorMatch = __ns_bynk_cloudflare.VectorMatch;
+    type VectorOf<M> = __ns_bynk_cloudflare.VectorOf<M>;
     type WorkerVersion = __ns_bynk_cloudflare.WorkerVersion;
     const __r0 = await write.call("a", new globalThis.TextEncoder().encode("idx"), deps);
     const body = await fetch.call("a", deps);
@@ -1021,7 +1027,7 @@ async function test_a_stubbed_instance_answers() {
     const __obs = { log: {} as globalThis.Record<string, { args: unknown[]; order: number }[]>, n: 0 };
     const deps = __bynkRecordDeps(__makeTestDeps("a stubbed instance answers"), { Archives: ["abortUpload", "completeUpload", "createUpload", "delete", "get", "getStream", "head", "list", "put", "putStream", "putStreamWith", "putWith", "uploadPart"], Indexes: ["abortUpload", "completeUpload", "createUpload", "delete", "get", "getStream", "head", "list", "put", "putStream", "putStreamWith", "putWith", "uploadPart"], R2: ["abortUpload", "completeUpload", "createUpload", "delete", "get", "getStream", "head", "list", "put", "putStream", "putStreamWith", "putWith", "uploadPart"] }, __obs);
     const { archive, fetch, names, remove, size, swap, write } = __ns_registry_store;
-    const { AiError, ChatMessage, ChatRole, Condition, DataPoint, DmarcVerdict, EmailAttachment, EmailError, EmailMessage, EmailReply, EmailVerdict, FilterOp, GenerateRequest, Generation, InboundAttachment, InboundEmail, IndexInfo, KvEntry, KvExpiration, KvGet, KvKey, KvList, KvListing, KvPut, MetaValue, MetadataScope, Mutation, MySqlError, MySqlReadError, MySqlRun, MySqlStatement, MySqlValue, PgError, PgReadError, PgRun, PgStatement, PgValue, QueryOptions, QueueSend, R2Body, R2Condition, R2Listing, R2Object, R2Part, R2Put, R2Upload, R2UploadOptions, SenderIdentity, SqlError, SqlReadError, SqlRun, SqlStatement, SqlValue, TokenUsage, Vector, VectorError, VectorMatch, WorkerVersion } = __ns_bynk_cloudflare;
+    const { AiError, ChatMessage, ChatRole, Condition, DataPoint, DmarcVerdict, EmailAttachment, EmailError, EmailMessage, EmailReply, EmailVerdict, FilterOp, GenerateRequest, Generation, InboundAttachment, InboundEmail, IndexInfo, KvEntry, KvExpiration, KvGet, KvKey, KvList, KvListing, KvPut, MetaValue, MetadataScope, Mutation, MySqlError, MySqlReadError, MySqlRun, MySqlStatement, MySqlValue, PgError, PgReadError, PgRun, PgStatement, PgValue, QueryOptions, QueueSend, R2Body, R2Condition, R2Listing, R2Object, R2Part, R2Put, R2Upload, R2UploadOptions, SenderIdentity, SqlError, SqlReadError, SqlRun, SqlStatement, SqlValue, TokenUsage, Vector, VectorError, VectorMatch, VectorOf, WorkerVersion } = __ns_bynk_cloudflare;
     type AiError = __ns_bynk_cloudflare.AiError;
     type ChatMessage = __ns_bynk_cloudflare.ChatMessage;
     type ChatRole = __ns_bynk_cloudflare.ChatRole;
@@ -1079,6 +1085,7 @@ async function test_a_stubbed_instance_answers() {
     type Vector = __ns_bynk_cloudflare.Vector;
     type VectorError = __ns_bynk_cloudflare.VectorError;
     type VectorMatch = __ns_bynk_cloudflare.VectorMatch;
+    type VectorOf<M> = __ns_bynk_cloudflare.VectorOf<M>;
     type WorkerVersion = __ns_bynk_cloudflare.WorkerVersion;
     const body = await fetch.call("anything", deps);
     if (!(__bynkEq(body, Some(new globalThis.TextEncoder().encode("stubbed"))))) { throw __bynkExpectFailure("tests/registry/store.bynk:51:9", 1503, 1542, "expect body == Some(Bytes.fromUtf8(\"stubbed\"))\n  expected: body == Some(Bytes.fromUtf8(\"stubbed\"))\n  actual:   " + __bynkShow((body)) + " == " + __bynkShow((Some(new globalThis.TextEncoder().encode("stubbed"))))); }
@@ -1097,7 +1104,7 @@ async function test_instances_are_separate_at_integration() {
   try {
     const deps = __makeTestDeps();
     const { archive, fetch, names, remove, size, swap, write } = __ns_registry_store;
-    const { AiError, ChatMessage, ChatRole, Condition, DataPoint, DmarcVerdict, EmailAttachment, EmailError, EmailMessage, EmailReply, EmailVerdict, FilterOp, GenerateRequest, Generation, InboundAttachment, InboundEmail, IndexInfo, KvEntry, KvExpiration, KvGet, KvKey, KvList, KvListing, KvPut, MetaValue, MetadataScope, Mutation, MySqlError, MySqlReadError, MySqlRun, MySqlStatement, MySqlValue, PgError, PgReadError, PgRun, PgStatement, PgValue, QueryOptions, QueueSend, R2Body, R2Condition, R2Listing, R2Object, R2Part, R2Put, R2Upload, R2UploadOptions, SenderIdentity, SqlError, SqlReadError, SqlRun, SqlStatement, SqlValue, TokenUsage, Vector, VectorError, VectorMatch, WorkerVersion } = __ns_bynk_cloudflare;
+    const { AiError, ChatMessage, ChatRole, Condition, DataPoint, DmarcVerdict, EmailAttachment, EmailError, EmailMessage, EmailReply, EmailVerdict, FilterOp, GenerateRequest, Generation, InboundAttachment, InboundEmail, IndexInfo, KvEntry, KvExpiration, KvGet, KvKey, KvList, KvListing, KvPut, MetaValue, MetadataScope, Mutation, MySqlError, MySqlReadError, MySqlRun, MySqlStatement, MySqlValue, PgError, PgReadError, PgRun, PgStatement, PgValue, QueryOptions, QueueSend, R2Body, R2Condition, R2Listing, R2Object, R2Part, R2Put, R2Upload, R2UploadOptions, SenderIdentity, SqlError, SqlReadError, SqlRun, SqlStatement, SqlValue, TokenUsage, Vector, VectorError, VectorMatch, VectorOf, WorkerVersion } = __ns_bynk_cloudflare;
     type AiError = __ns_bynk_cloudflare.AiError;
     type ChatMessage = __ns_bynk_cloudflare.ChatMessage;
     type ChatRole = __ns_bynk_cloudflare.ChatRole;
@@ -1155,6 +1162,7 @@ async function test_instances_are_separate_at_integration() {
     type Vector = __ns_bynk_cloudflare.Vector;
     type VectorError = __ns_bynk_cloudflare.VectorError;
     type VectorMatch = __ns_bynk_cloudflare.VectorMatch;
+    type VectorOf<M> = __ns_bynk_cloudflare.VectorOf<M>;
     type WorkerVersion = __ns_bynk_cloudflare.WorkerVersion;
     const __r0 = await write.call("a", new globalThis.TextEncoder().encode("idx"), deps);
     const body = await fetch.call("a", deps);

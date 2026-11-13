@@ -4,9 +4,17 @@ context shop.retrieval
 // from its declaration, so a retrieval flow (store, filter, rank) runs.
 
 consumes bynk
-consumes bynk.cloudflare { Vectorize, Vector, VectorError, VectorMatch, QueryOptions, Condition, FilterOp, MetaValue, MetadataScope, Mutation, IndexInfo }
+consumes bynk.cloudflare { Vectorize, Vector, VectorOf, VectorError, VectorMatch, QueryOptions, Condition, FilterOp, MetaValue, MetadataScope, Mutation, IndexInfo }
 
 capability Docs = Vectorize @dimensions(32) @metric("euclidean") @indexed(["category:string", "year:number"])
+
+type Meta = { category: String, year: Int }
+
+service typed {
+	on call(vectors: List[VectorOf[Meta]]) -> Effect[Result[Mutation, VectorError]] given Docs {
+		Docs.upsertValue(vectors)
+	}
+}
 
 service writer {
 	on call(vectors: List[Vector]) -> Effect[Result[Mutation, VectorError]] given Docs {

@@ -156,6 +156,7 @@ pub const FIRST_PARTY_DOCS: &[Entry] = &[
         &[
             "upsert",
             "insert",
+            "upsertValue",
             "query",
             "getByIds",
             "deleteByIds",

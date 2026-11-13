@@ -19,6 +19,9 @@ export function compose(env: Env) {
     async http_PUT_doc(body: string) {
       return handlers.api.http_PUT_doc(body, deps);
     },
+    async http_PUT_typed(body: string) {
+      return handlers.api.http_PUT_typed(body, deps);
+    },
     async http_GET_search() {
       return handlers.api.http_GET_search(deps);
     },
