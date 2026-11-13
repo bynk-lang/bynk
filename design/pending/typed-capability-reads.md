@@ -1,7 +1,7 @@
 ---
 level: minor
 changelog: A first-party capability operation may return a type that mentions its `Codable` parameter, decoded at the call site with a per-operation failure policy
-probes: diagnostic_coverage, explained_codes, emit_diagnostics
+probes: diagnostic_coverage, explained_codes, emit_diagnostics, ts_writes
 breaking: A user-declared capability operation whose return type mentions a `Codable` type parameter was `bynk.generics.codable_op_return`; it is now `bynk.generics.codable_op_return_not_first_party`. Return plain data, such as a `String`, and decode it where you call the operation with `Json.decode[T]`.
 ---
 
