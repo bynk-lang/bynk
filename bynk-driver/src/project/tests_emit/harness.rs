@@ -235,6 +235,12 @@ pub(super) fn emit_integration_harness<'a>(
                         },
                     ],
                 ),
+                // #3480: a test never reaches AI Search, so the binding faults,
+                // naming itself, until the case stubs the instance.
+                BindingSource::AiSearchInstance { .. } => call(
+                    ident("__makeIntegrationAiSearch"),
+                    vec![str_lit(&binding.name)],
+                ),
                 // #3300: a fixed version, the same for every participant.
                 BindingSource::Singleton { capability } if capability == "Version" => {
                     call(ident("__makeIntegrationVersionMetadata"), vec![])

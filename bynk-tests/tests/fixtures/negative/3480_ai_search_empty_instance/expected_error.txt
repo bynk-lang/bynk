@@ -1,0 +1,2 @@
+bynk.capability.invalid_option
+`` is not an instance name a `AiSearch` can reach

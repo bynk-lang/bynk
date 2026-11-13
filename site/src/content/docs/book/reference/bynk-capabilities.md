@@ -492,6 +492,7 @@ Consuming it **locks the deployment unit to Cloudflare** (it cannot then target
 | **`Postgres`** *(experimental)* | `all(sql: String, params: List[PgValue]) -> Effect[Result[String, PgError]]` · `first(sql, params) -> Effect[Result[Option[String], PgError]]` · `run(sql, params) -> Effect[Result[PgRun, PgError]]` · `transaction(statements: List[PgStatement]) -> Effect[Result[List[PgRun], PgError]]`, and the compiler-lowered typed reads `select[T]` and `firstAs[T]`. Used only through a named instance; see [Postgres databases](#postgres-databases-postgres). |
 | **`MySql`** *(experimental)* | `all(sql: String, params: List[MySqlValue]) -> Effect[Result[String, MySqlError]]` · `first(sql, params) -> Effect[Result[Option[String], MySqlError]]` · `run(sql, params) -> Effect[Result[MySqlRun, MySqlError]]` · `transaction(statements: List[MySqlStatement]) -> Effect[Result[List[MySqlRun], MySqlError]]`, and the compiler-lowered typed reads `select[T]` and `firstAs[T]`. Takes an optional `@tls("…")`. Used only through a named instance; see [MySQL databases](#mysql-databases-mysql). |
 | **`Vectorize`** *(experimental)* | `upsert(vectors: List[Vector]) -> Effect[Result[Mutation, VectorError]]` · `insert(vectors) -> Effect[Result[Mutation, VectorError]]` · `query(vector: List[Float], options: QueryOptions) -> Effect[Result[List[VectorMatch], VectorError]]` · `getByIds(ids: List[String]) -> Effect[Result[List[Vector], VectorError]]` · `deleteByIds(ids) -> Effect[Result[Mutation, VectorError]]` · `describe() -> Effect[Result[IndexInfo, VectorError]]`. Used only through a named instance that states its dimensions and metric; see [Vector indexes](#vector-indexes-vectorize). |
+| **`AiSearch`** *(experimental)* | `search(query: String, options: SearchOptions) -> Effect[Result[List[SearchHit], SearchError]]` · `answer(messages: List[ChatMessage], options: SearchOptions) -> Effect[Result[SearchAnswer, SearchError]]`. Used only through a named instance that names an existing AI Search instance; see [AI Search](#ai-search-aisearch). |
 
 `Kv` is backed by a Worker KV namespace bound as `env.KV`; the
 `[[kv_namespaces]]` stanza is derived for you.
@@ -1557,6 +1558,76 @@ any operation. Vectorize is a remote service on your Cloudflare account, so a ca
 may incur charges; see Cloudflare's [Vectorize pricing](https://developers.cloudflare.com/vectorize/platform/pricing/)
 for what applies, and put a `RateLimit` in front of any handler an anonymous caller
 can reach. `Vectorize` is experimental: list `"bynk.cloudflare.Vectorize"` under
+`[unstable] allow`.
+
+### AI Search: `AiSearch`
+
+`AiSearch` is a Cloudflare [AI Search](https://developers.cloudflare.com/ai-search/)
+instance: a managed retrieval service that indexes a data source (an R2 bucket, a
+website, files uploaded to it) and answers from it. Unlike a `Vectorize` index, an
+instance is configured and owned by someone (its data source, models, chunking and
+sync), so Bynk never creates it: you make it in the Cloudflare dashboard, with
+`wrangler` or the REST API, and the Worker only queries it. It is used only through a
+named instance that names it:
+
+```bynk,fragment
+consumes bynk
+consumes bynk.cloudflare { AiSearch, ChatMessage, User, SearchOptions }
+
+capability Kb = AiSearch @instance("support-docs")
+
+service ask from http {
+	on POST("/ask") (body: String) -> Effect[HttpResult[String]] by Visitor given Kb {
+		let reply <- Kb.answer([ChatMessage { role: ChatRole.User, content: body }], SearchOptions {})
+		match reply {
+			Ok(a) => Ok(a.text),
+			Err(_) => ServerError("search unavailable"),
+		}
+	}
+}
+```
+
+`capability Kb = AiSearch @instance("support-docs")` binds as `AI_SEARCH_KB`, an
+`[[ai_search]]` entry naming the instance as written, in every environment.
+`@instance("…")` is required; a bare `given AiSearch` is
+`bynk.capability.instance_only`, and a missing or empty name is
+`bynk.capability.missing_option` or `bynk.capability.invalid_option`.
+
+`search(query, options)` returns the best-matching chunks, best first, as `SearchHit`s
+(`id`, `score` from 0 to 1, `text`, `key` the source path or URL, `timestamp` in unix milliseconds and
+`metadata` as JSON text when the item has them), for a handler that shows results or
+builds its own prompt with `Ai.generate`. `answer(messages, options)` retrieves the
+same way and has the instance's own generation model write the reply from the
+conversation, which must not be empty; a `SearchAnswer` is `{ text, hits, usage }`. The
+generation model is the instance's setting and a call cannot override it. Retrieved
+text and generated answers are untrusted input.
+
+`SearchOptions` carries `maxResults` (1 to 50), `matchThreshold` (0 to 1) and
+`retrieval` (`Vector`, `Keyword` or `Hybrid`), each `None` to leave the platform's
+default; `rewriteQuery` and `rerank`; and `filter`, a list of the same typed
+`Condition`s `Vectorize` takes, which must all hold, over the items' `folder`,
+`timestamp` and `filename` and the instance's custom metadata. A text value is
+matched on its first 64 bytes only. The binding refuses an out-of-range option, or a
+filter the platform cannot take (an empty attribute name, a leading `$`, a range over
+a flag, or conditions on one attribute that are not one lower and one upper bound), as
+`SearchInvalidInput`.
+
+A `SearchError` is `SearchInvalidInput(message)`, `SearchRateLimited` (worth retrying
+later), `SearchQuotaExceeded` or `SearchFailed(message)` (anything else, and a reply
+that is not the shape the operation promises), the `Search` prefix because the other
+names belong to other error types. Cloudflare adds error cases over time, so a
+`match` over `SearchError` needs a wildcard. A call on an instance that does not
+exist is a platform fault. A freshly written file is not searchable until the instance
+has indexed it, and a query against an instance that has indexed nothing is an empty
+list, not an error.
+
+In a test every `AiSearch` operation faults until it is stubbed
+(`stub Kb.search(_, _) returns …`), so a test never reaches AI Search; `Vectorize` has
+an in-memory double for retrieval logic a test wants to run. AI Search is a remote
+service on your Cloudflare account, so a call may incur charges; see Cloudflare's
+[AI Search pricing](https://developers.cloudflare.com/ai-search/platform/limits-pricing/)
+for what applies, and put a `RateLimit` in front of any handler an anonymous caller
+can reach. `AiSearch` is experimental: list `"bynk.cloudflare.AiSearch"` under
 `[unstable] allow`.
 
 ### SQL databases: `D1`

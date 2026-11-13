@@ -3,7 +3,7 @@ title: Version compatibility & changelog
 ---
 Bynk is pre-1.0 and developed in small, spec-first increments (see
 [Versioning & roadmap](/book/about/versioning-and-roadmap/)). This book is
-written against **v0.594**.
+written against **v0.596**.
 
 This page is a high-level summary of notable increments, not an exhaustive
 per-commit history. While Bynk is pre-1.0, increments may change behaviour.
@@ -28,6 +28,8 @@ per-commit history. While Bynk is pre-1.0, increments may change behaviour.
 
 | Version | Highlights |
 |---|---|
+| **v0.596.0** | `bynk.cloudflare` gains `AiSearch`, a linked instance kind for an existing AI Search instance named by a required `@instance`, with `search` and `answer`, a typed filter and typed errors, emitted as `[[ai_search]]`; every operation faults until stubbed in a test |
+| **v0.595.0** | In `bynk test` a `Vectorize` instance is an exact in-memory index built from its declaration (dimensions, metric, `@indexed`): it ranks by the platform's score semantics, keeps insert and upsert apart, partitions namespaces, applies all eight filter operators and the documented limits, and `stub` still replaces any operation; a write is visible at once, which production's asynchronous upserts are not |
 | **v0.594.1** | `Vectorize` `@dimensions` below 32 is refused at compile time (Cloudflare's minimum), and a deploy that creates a metadata index waits until it is listed before pushing the Worker |
 | **v0.594.0** | `[deploy.vectorize.<Capability>] index` in `bynk.toml` adopts an existing Vectorize index per environment, which `bynk deploy` checks for dimension and metric drift and never creates, changes or deletes |
 | **v0.593.0** | `bynk deploy` creates each `Vectorize` index with its declared dimensions and metric, reuses a matching one, fails (never recreates) on a mismatch, creates `@indexed` metadata indexes before the push, and reports orphaned indexes that `--prune` deletes behind a confirmation |

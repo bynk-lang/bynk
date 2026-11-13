@@ -387,19 +387,11 @@ pub fn emit_wrangler_toml(
             // environment-qualifies and creates (never recreates). The binding
             // names the index; its dimensions, metric and metadata indexes are
             // the deploy's, not this stanza's.
-            BindingSource::VectorizeIndex { .. } => TomlBlock::array_table(
-                "vectorize",
-                vec![
-                    TomlEntry::kv("binding", name),
-                    TomlEntry::kv(
-                        "index_name",
-                        TomlValue::str(vectorize_index_name(
-                            &worker_dir_name(context),
-                            &binding.name,
-                        )),
-                    ),
-                ],
-            ),
+            BindingSource::VectorizeIndex { .. } => vectorize_block(context, binding, name),
+            // #3480: the account's instance, named as the declaration writes it
+            // (in every environment). `bynk deploy` checks it exists and never
+            // creates it.
+            BindingSource::AiSearchInstance { instance, .. } => ai_search_block(name, instance),
             // #3300: a one-per-Worker capability's plain table, holding only
             // its fixed binding name (`[version_metadata]`).
             BindingSource::Singleton { capability } => {
@@ -665,6 +657,13 @@ pub fn worker_bindings(
             .filter(|b| matches!(b.source, BindingSource::VectorizeIndex { .. }))
             .cloned(),
     );
+    // #3480: the AI Search instances, after the Vectorize indexes.
+    bindings.extend(
+        instances
+            .iter()
+            .filter(|b| matches!(b.source, BindingSource::AiSearchInstance { .. }))
+            .cloned(),
+    );
     // #3300: the one-per-Worker bindings, after the databases.
     bindings.extend(singletons.iter().cloned());
     // Events track, slice 0 (spine #936, ADR 0284): a context whose handlers
@@ -708,6 +707,34 @@ pub(crate) fn handler_bindings(consumed: &[String], agents: &[String]) -> Vec<Wo
         .map(|t| service_binding(t))
         .chain(agents.into_iter().map(|a| agent_binding(a)))
         .collect()
+}
+
+/// #3479: the `[[vectorize]]` entry of a `Vectorize` instance.
+fn vectorize_block(context: &str, binding: &WorkerBinding, name: TomlValue) -> TomlBlock {
+    TomlBlock::array_table(
+        "vectorize",
+        vec![
+            TomlEntry::kv("binding", name),
+            TomlEntry::kv(
+                "index_name",
+                TomlValue::str(vectorize_index_name(
+                    &worker_dir_name(context),
+                    &binding.name,
+                )),
+            ),
+        ],
+    )
+}
+
+/// #3480: the `[[ai_search]]` entry of an `AiSearch` instance.
+fn ai_search_block(binding: TomlValue, instance: &str) -> TomlBlock {
+    TomlBlock::array_table(
+        "ai_search",
+        vec![
+            TomlEntry::kv("binding", binding),
+            TomlEntry::kv("instance_name", TomlValue::str(instance.to_string())),
+        ],
+    )
 }
 
 /// #3301: the `[[secrets_store_secrets]]` entry of a `StoredSecret`: the secret
@@ -809,6 +836,7 @@ pub(crate) fn binding_ts_type(source: &BindingSource) -> &'static str {
         BindingSource::StoredSecret { .. } => "__SecretsStoreSecret",
         BindingSource::Email { .. } => "__SendEmail",
         BindingSource::VectorizeIndex { .. } => "__VectorizeIndex",
+        BindingSource::AiSearchInstance { .. } => "__AiSearchInstance",
         BindingSource::Postgres { .. } | BindingSource::MySql { .. } => "__Hyperdrive",
         BindingSource::Singleton { capability } => match capability.as_str() {
             "Version" => "__WorkerVersionMetadata",

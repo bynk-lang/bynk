@@ -16,6 +16,7 @@ adapter bynk.cloudflare {
 		Postgres,
 		MySql,
 		Vectorize,
+		AiSearch,
 	}
 	exports transparent {
 		KvExpiration,
@@ -76,6 +77,11 @@ adapter bynk.cloudflare {
 		Mutation,
 		IndexInfo,
 		VectorError,
+		SearchHit,
+		RetrievalType,
+		SearchOptions,
+		SearchAnswer,
+		SearchError,
 	}
 
 	---
@@ -1361,6 +1367,126 @@ adapter bynk.cloudflare {
 		fn describe() -> Effect[Result[IndexInfo, VectorError]]
 	}
 
+	---
+	One retrieved chunk of an `AiSearch` instance: the chunk's `id`, its `score`
+	(0 to 1, larger is a closer match), its `text`, and where it came from: `key`
+	is the source file's path or the page's URL, `timestamp` the source item's
+	unix time in milliseconds when the platform reports one (a `timestamp`
+	condition in `SearchOptions.filter` compares in the same unit), and `metadata` the item's custom
+	metadata as a JSON object in text (`None` when it has none). The text is
+	indexed content, so treat it as untrusted input.
+	---
+	type SearchHit = {
+		id: String,
+		score: Float,
+		text: String,
+		key: String,
+		timestamp: Option[Int],
+		metadata: Option[String],
+	}
+
+	---
+	How an `AiSearch` query finds chunks: by `Vector` (meaning), by `Keyword`
+	(words), or `Hybrid`, both together. The platform's default is `Hybrid`.
+	---
+	type RetrievalType = enum { Vector, Keyword, Hybrid }
+
+	---
+	The options of `AiSearch.search` and `AiSearch.answer` (for `answer` they
+	shape its retrieval step). A setting left `None` or `false` leaves the
+	platform's own default in place: `maxResults` is how many chunks to return
+	(1 to 50, 10 unless set), `matchThreshold` the least score a chunk may have
+	(0 to 1, 0.4 unless set), and `retrieval` how chunks are found. `rewriteQuery`
+	has the instance rewrite the question for better retrieval, and `rerank`
+	has it reorder the chunks with a reranking model; both use the models the
+	platform picks. `filter` is a list of conditions on the items' attributes
+	(`folder`, `timestamp`, `filename`) and on the instance's custom metadata
+	(at most five fields), and every condition must hold. A text value is
+	matched on its first 64 bytes only. Out-of-range values are refused as
+	`SearchInvalidInput`.
+	---
+	type SearchOptions = {
+		maxResults: Option[Int] = None,
+		matchThreshold: Option[Float] = None,
+		retrieval: Option[RetrievalType] = None,
+		rewriteQuery: Bool = false,
+		rerank: Bool = false,
+		filter: List[Condition] = [],
+	}
+
+	---
+	The reply of `AiSearch.answer`: the generated `text`, which is untrusted
+	input, the `hits` it was grounded on, and the `usage` of the generation when
+	the platform reported it.
+	---
+	type SearchAnswer = {
+		text: String,
+		hits: List[SearchHit],
+		usage: Option[TokenUsage],
+	}
+
+	---
+	Why an AI Search call did not give a reply. `SearchInvalidInput` is a
+	request the platform refused as malformed or out of range (a bad filter or
+	option), with its message; `SearchRateLimited` is a rate limit, worth
+	retrying later; `SearchQuotaExceeded` is a usage limit of the account;
+	`SearchFailed` is any other refusal, or a reply that is not the shape the
+	operation promises, with a message. The `Search` prefix is because
+	`InvalidInput` is `AiError`'s, `RateLimited` `EmailError`'s, `QuotaExceeded`
+	`AiError`'s and `Failed` `SqlError`'s. Cloudflare adds error cases over time,
+	so a `match` over this type needs a wildcard.
+	---
+	type SearchError =
+		| SearchInvalidInput(message: String)
+		| SearchRateLimited
+		| SearchQuotaExceeded
+		| SearchFailed(message: String)
+
+	---
+	An AI Search instance: a managed retrieval service that indexes a data source
+	(an R2 bucket, a website, files uploaded to it) and answers from it. Used
+	only through a named instance that names it,
+	`capability Kb = AiSearch @instance("support-docs")`, which binds as
+	`AI_SEARCH_KB`, an `[[ai_search]]` entry; the annotation is required, and a
+	bare `given AiSearch` is refused. Experimental.
+
+	The instance is not created by Bynk. It is configured by whoever owns it (the
+	data source, the models, the chunking, how it is kept in sync), so you create
+	it in the Cloudflare dashboard, with `wrangler` or the REST API, and the
+	Worker only queries it. The name is used as written in every environment.
+	To fill an instance backed by an R2 bucket, write the files with `R2.put`;
+	the instance indexes them on its own schedule, so a freshly written file is
+	not searchable at once, and a query against an instance that has indexed
+	nothing yet is an empty list, not an error.
+
+	`search(query, options)` returns the best-matching chunks, best first, for a
+	handler that shows results or builds its own prompt (with `Ai.generate`).
+	`answer(messages, options)` retrieves the same way and has the instance's own
+	generation model write the reply from the conversation, which must not be
+	empty; a `SearchAnswer` carries the text, the chunks it used and the token usage.
+	The generation model is the instance's setting and a call cannot override
+	it. Every operation gives a `SearchError` rather than faulting, except a call
+	on an instance that does not exist, which is a platform fault.
+
+	AI Search is a remote service on your Cloudflare account, so a call may be
+	billed; see Cloudflare's AI Search pricing page for what applies, and put a
+	`RateLimit` in front of any handler an anonymous caller can reach. Under
+	`bynk dev` a call goes to the deployed instance on Cloudflare. In a test every
+	operation faults until `stub Kb.search(_, _) returns …` replaces it, so a test
+	never reaches AI Search; to test retrieval logic, use `Vectorize`, which
+	has an in-memory double.
+	---
+	capability AiSearch {
+		fn search(
+			query: String,
+			options: SearchOptions
+		) -> Effect[Result[List[SearchHit], SearchError]]
+		fn answer(
+			messages: List[ChatMessage],
+			options: SearchOptions
+		) -> Effect[Result[SearchAnswer, SearchError]]
+	}
+
 	provides Kv = WorkersKv
 
 	provides Service = WorkersService
@@ -1390,4 +1516,6 @@ adapter bynk.cloudflare {
 	provides MySql = WorkersMySql
 
 	provides Vectorize = WorkersVectorize
+
+	provides AiSearch = WorkersAiSearch
 }

@@ -977,6 +977,31 @@ export function makeIntegrationAi(): WorkerAiBinding {
 }
 
 /**
+ * An AI Search instance binding (#3480): Cloudflare's `ai_search` binding,
+ * which `WorkersAiSearch` reads. Requests and replies are the platform's own
+ * shapes (`ai_search_options`, `chunks`, `choices`), and the binding is the
+ * instance itself, so its methods are called directly.
+ */
+export interface AiSearchInstance {
+  search(request: Record<string, unknown>): Promise<unknown>;
+  chatCompletions(request: Record<string, unknown>): Promise<unknown>;
+}
+
+/**
+ * The AI Search binding of a multi-Worker integration test participant, bound
+ * as its `env.<binding>`. A test never reaches AI Search, so every operation
+ * faults, naming the binding, until the case stubs the capability's operation.
+ */
+export function makeIntegrationAiSearch(binding: string): AiSearchInstance {
+  const unstubbed = async (): Promise<never> => {
+    throw new globalThis.Error(
+      `bynk: the \`${binding}\` AI Search binding is not stubbed, and a test never reaches AI Search — stub the operation the case calls (for example \`stub <Name>.search(_, _) returns …\`)`,
+    );
+  };
+  return { search: unstubbed, chatCompletions: unstubbed };
+}
+
+/**
  * A Secrets Store secret binding (#3301): Cloudflare's `secrets_store_secrets`
  * binding, which `WorkersStoredSecret` reads. `get` resolves to the secret's
  * value, so nothing that holds one may log it.
