@@ -71,11 +71,26 @@ it obvious, since a capability operation's own type parameter is never inferred 
 [Capabilities & providers](/book/reference/capabilities/#generic-operations)). Calling
 `dedup` alone does **not** cache anything — `remember` is what writes the entry, so
 forgetting to call it after a cache miss means that key is recomputed every time, not an
-error. `dedup` and `remember` are an in-memory map in each provider instance, on every
-platform: state is lost on process restart and not shared between instances. A durable
-`dedup`/`remember` needs typed reads from a provider and is tracked separately
-([#3458](https://github.com/bynk-lang/bynk/issues/3458)); until then use `claim` for work
-that must run once.
+error.
+
+The cached type must be **`Codable`**: the value is stored as its JSON encoding, so a
+function, an effect or `()` is a compile error at the call site (cache a `Bool` as a presence
+marker rather than `()`). A stored value that no longer decodes as the type you ask for, such
+as one an older deploy wrote with another shape, reads as a **miss** (`None`), with a warning
+on the runtime console, not as a fault: `dedup` is a cache, and the next `remember` replaces
+the entry.
+
+On **Cloudflare** `dedup`, `remember` and `claim` are durable and shared between isolates: a
+Worker that calls any of them gets a D1 database with no declaration (see
+[the idempotency database](/book/guides/projects-build-and-deployment/deploy-to-cloudflare/#the-idempotency-database)),
+holding claims and remembered values, and each call costs one round trip to it. On Node and
+in the browser they are an in-memory map, lost on restart and not shared between instances.
+`dedup` then `remember` is still check-then-act: use `claim` for work that must run once.
+
+A remembered value larger than about 1 MB is not stored on Cloudflare (a warning is logged
+and the handler carries on), because `dedup` is a cache. Keys are scoped to the calling
+function or handler, so a generic helper that wraps `dedup`/`remember` shares one key space
+across every caller of that helper: include whatever tells the callers apart in the key.
 
 #### `claim`: first delivery wins
 
@@ -118,9 +133,8 @@ returning an `Err` is still committed, and a retry repeats that write.
 
 The key is scoped to the calling handler as for `dedup`.
 
-`claim` is **durable and shared on Cloudflare**. A Worker that calls it gets a D1 database
-with no declaration (see [the idempotency database](/book/guides/projects-build-and-deployment/deploy-to-cloudflare/#the-idempotency-database)),
-and the claim is one atomic `INSERT … ON CONFLICT` there: two deliveries of one key, on
+`claim` is atomic on Cloudflare: the claim is one `INSERT … ON CONFLICT` in the Worker's D1
+database, so two deliveries of one key, on
 different isolates or after a restart, yield exactly one `Claimed`. A claim that has
 lapsed is taken over, and a few expired rows are deleted with each claim, so the table
 stays small. It costs one database round trip per `claim`. On Node and in the browser

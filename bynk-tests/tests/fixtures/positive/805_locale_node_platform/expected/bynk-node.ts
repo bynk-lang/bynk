@@ -433,14 +433,17 @@ export class IdempotencyProvider implements Idempotency {
   constructor(deps: { Clock: Clock }) {
     this.deps = deps;
   }
-  async dedup<T>(key: string): Promise<Option<T>> {
+  // `dedup` and `remember` carry JSON (#2840): the call site encodes the value `remember`
+  // is given and decodes the reply, so a stored value is whatever a wire would carry. A
+  // reply is the encoding of an `Option`, which cannot be mistaken for a stored `null`.
+  async dedup(key: string): Promise<unknown> {
     const now = await this.deps.Clock.now();
     const hit = this.store.get(key);
-    return hit !== undefined && hit.expiresAt > now ? Some(hit.value as T) : None;
+    return hit !== undefined && hit.expiresAt > now ? { kind: "Some", value: hit.value } : { kind: "None" };
   }
-  async remember<T>(key: string, value: T, expiresAfter: number): Promise<void> {
+  async remember(key: string, value: unknown, expiresAfter: number): Promise<void> {
     const now = await this.deps.Clock.now();
-    this.store.set(key, { value, expiresAt: now + expiresAfter });
+    this.store.set(key, { value: JSON.parse(JSON.stringify(value)), expiresAt: now + expiresAfter });
   }
   // The read of the clock is the only `await`; the check and the set that follow
   // it run in one synchronous step, so two concurrent claims cannot both win.

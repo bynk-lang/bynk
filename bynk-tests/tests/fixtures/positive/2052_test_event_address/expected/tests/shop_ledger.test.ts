@@ -60,12 +60,15 @@ function __bynkTest_Idempotency(): __ns_bynk.Idempotency {
   const store = new globalThis.Map<string, { value: unknown; until: number }>();
   const claims = new globalThis.Map<string, number>();
   return {
+    // `dedup` and `remember` carry JSON: the call site encodes what `remember` is given and
+    // decodes the reply, so a case runs the round trip production does (a value written as
+    // one type and read as another reads as a miss).
     async dedup(key: string) {
       const hit = store.get(key);
-      return (hit !== undefined && hit.until > 0 ? Some(hit.value) : None) as never;
+      return hit !== undefined && hit.until > 0 ? { kind: "Some", value: hit.value } : { kind: "None" };
     },
     async remember(key: string, value: unknown, expiresAfter: number) {
-      store.set(key, { value, until: 0 + expiresAfter });
+      store.set(key, { value: globalThis.JSON.parse(globalThis.JSON.stringify(value)), until: 0 + expiresAfter });
     },
     async claim(key: string, expiresAfter: number) {
       const until = claims.get(key);
@@ -142,7 +145,7 @@ async function test_an_event_delivered_twice_is_counted_once() {
     const __r1 = await __bynkEvent_OnPlaced(e, env, deps);
     const t = await __makeBooks("all").total(deps);
     if (!(t === 1)) { throw __bynkExpectFailure("tests/ledger.bynk:11:12", 596, 602, "expect t == 1\n  expected: t == 1\n  actual:   " + __bynkShow((t)) + " == " + __bynkShow((1))); }
-    if (!(((__obs.log["Idempotency.remember"] ?? []).length === (1)))) { throw __bynkExpectFailure("tests/ledger.bynk:12:12", 614, 646, "expect Idempotency.remember called once"); }
+    if (!(((__obs.log["Idempotency.claim"] ?? []).length === (2)))) { throw __bynkExpectFailure("tests/ledger.bynk:12:12", 614, 646, "expect Idempotency.claim called 2 times"); }
     return { pass: true };
   } catch (e) {
     if (e instanceof ExpectationError) {

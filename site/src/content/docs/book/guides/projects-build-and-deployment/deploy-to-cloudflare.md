@@ -650,20 +650,22 @@ apply, so wrangler doesn't ask again.
 
 #### The idempotency database
 
-A Worker that calls [`Idempotency.claim`](/book/reference/bynk-capabilities/#the-idempotency-capability)
-gets a database with no declaration: `<worker>-idempotency`, bound as
-`D1_IDEMPOTENCY`, which holds its claims. It is provisioned, adopted and recorded like
+A Worker that calls [`Idempotency`](/book/reference/bynk-capabilities/#the-idempotency-capability)
+(`claim`, `dedup` or `remember`) gets a database with no declaration: `<worker>-idempotency`,
+bound as `D1_IDEMPOTENCY`, which holds its claims and remembered values. It is provisioned, adopted and recorded like
 any other, and the plan lists it:
 
 ```
 d1 create shop-hooks-idempotency (D1_IDEMPOTENCY)
-d1 migrate shop-hooks-idempotency (1 file; pending ones applied before the push)
+d1 migrate shop-hooks-idempotency (2 files; pending ones applied before the push)
 deploy shop-hooks
 ```
 
-The compiler owns its schema (one table of claimed keys and when each lapses): you write no
-SQL and add no `migrations/` folder. A Worker that only uses `dedup` and `remember` gets no
-database.
+The compiler owns its schema (a table of claimed keys and when each lapses, and one of
+remembered keys, their JSON values and when each lapses): you write no SQL and add no
+`migrations/` folder. A Worker that never calls `Idempotency` gets no database. A Worker that
+used `dedup` and `remember` before this database existed gets one on its next deploy, and
+starts with an empty cache: what its instances held in memory is not carried over.
 
 ### Postgres databases: Hyperdrive
 

@@ -47,7 +47,23 @@ export default {
           return method === "HEAD" ? __headResponse(__response) : __response;
         }
       }
+      {
+        const __m = __matchPath("/seen/:id", path);
+        if ((method === "GET" || method === "HEAD") && __m) {
+          __route = "GET /seen/:id";
+          const __raw_id = __m.params["id"];
+          const id = __raw_id;
+          const result = await surface.http_GET_seen_Param_id(id);
+          const __response = __applySecurityHeaders(__notModifiedIfMatch(__httpResultToResponse(result, (__v: string) => __v as __JsonValue, { weakEtag: true }), request), __security_api);
+          return method === "HEAD" ? __headResponse(__response) : __response;
+        }
+      }
       if (__matchPath("/claim/:id", path) !== null) {
+        const __status = method === "OPTIONS" ? 204 : 405;
+        const __res = new globalThis.Response(null, { status: __status, headers: { allow: "GET, HEAD, OPTIONS" } });
+        return __applySecurityHeaders(__res, __security_api);
+      }
+      if (__matchPath("/seen/:id", path) !== null) {
         const __status = method === "OPTIONS" ? 204 : 405;
         const __res = new globalThis.Response(null, { status: __status, headers: { allow: "GET, HEAD, OPTIONS" } });
         return __applySecurityHeaders(__res, __security_api);

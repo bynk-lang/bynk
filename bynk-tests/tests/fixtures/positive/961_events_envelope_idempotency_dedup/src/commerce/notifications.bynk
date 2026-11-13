@@ -1,17 +1,11 @@
 context commerce.notifications
 
 consumes commerce.order
-consumes bynk { Idempotency, Logger }
+consumes bynk { Idempotency, Claim, Logger }
 
 service OnPayment from Events(PaymentConfirmed) {
   on event(e: PaymentConfirmed, env: EventEnvelope) -> Effect[()] given Idempotency, Logger {
-    let seen <- Idempotency.dedup[()](env.eventId)
-    match seen {
-      Some(_) => (),
-      None => {
-        let _ <- Logger.info(e.orderId)
-        let _ <- Idempotency.remember[()](env.eventId, (), 7.days)
-      }
-    }
+    let Claim.Claimed <- Idempotency.claim(env.eventId, 7.days) else { () }
+    let _ <- Logger.info(e.orderId)
   }
 }
