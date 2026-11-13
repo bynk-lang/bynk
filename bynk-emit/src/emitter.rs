@@ -1186,6 +1186,10 @@ fn collect_json_codec_roots(commons: &TypedCommons) -> Vec<TypeRef> {
                     for ty in w.encode.iter().flatten() {
                         push_ground(*ty, &mut roots);
                     }
+                    // #3458: a typed read decodes its reply as the payload.
+                    if let Some(reply) = &w.reply {
+                        push_ground(reply.payload, &mut roots);
+                    }
                 }
                 // #2865: a typed `D1` read decodes its row (or `List` of rows).
                 Some(bynk_check::checker::Callee::D1Select { row, first, .. }) => {

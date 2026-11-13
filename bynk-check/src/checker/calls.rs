@@ -3,7 +3,7 @@
 //! Split out of `checker.rs` (v0.29.10) verbatim; the parent module
 //! re-exports these via `use calls::*`.
 
-use super::codable::{check_op_codable_args, op_encoding};
+use super::codable::{check_op_codable_args, check_reply_codable, op_encoding};
 use super::*;
 
 /// v0.39 (ADR 0072): record a parameter-name inlay hint for one call argument,
@@ -2074,9 +2074,24 @@ pub(crate) fn check_static_call(
             &op_clone.codable_params,
             &op_clone.params,
             op_clone.return_ty,
+            op_clone.reply_policy,
             &subst,
             tys,
         ) {
+            if !check_reply_codable(
+                &format!("{}.{}", type_name.name, method.name),
+                span,
+                &op_clone.codable_params,
+                &wire,
+                ctx,
+            ) {
+                if arg_tys.is_none() {
+                    for a in args {
+                        let _ = type_of(a, None, ctx);
+                    }
+                }
+                return None;
+            }
             ctx.callees.insert(
                 expr_id,
                 Callee::Capability {
@@ -6217,9 +6232,22 @@ fn check_cross_context_capability_call(
             &op.codable_params,
             &patterns,
             ret_pattern,
+            op.reply_policy,
             &subst,
             tys,
         ) {
+            if !check_reply_codable(
+                &format!("{consumed}.{cap}.{}", method.name),
+                method.span,
+                &op.codable_params,
+                &wire,
+                ctx,
+            ) {
+                for a in args {
+                    let _ = type_of(a, None, ctx);
+                }
+                return None;
+            }
             ctx.callees.insert(
                 expr_id,
                 Callee::CrossCap {

@@ -404,6 +404,20 @@ const CRYPTO_NODE_BINDING: &str = include_str!("../lib/crypto/crypto-node.bindin
 /// context (R14.5): outside one it throws, loudly, rather than degrade.
 const CRYPTO_BROWSER_BINDING: &str = include_str!("../lib/crypto/crypto-browser.binding.ts");
 
+/// The unit name of the toolchain's test-support adapter (#3458): an in-memory
+/// store whose reads are typed, which exercises the call-site decode of a
+/// first-party capability reply. Experimental and not part of the language.
+pub const TESTING_UNIT: &str = "bynk.testing";
+
+/// `bynk.testing`, the typed-read test support.
+pub const BYNK_TESTING_SRC: &str = include_str!("../lib/testing/bynk.testing.bynk");
+
+/// The output path of `bynk.testing`'s binding, beside its emitted `bynk/testing.ts`.
+pub const TESTING_BINDING_FILENAME: &str = "bynk/testing.binding.ts";
+
+/// The binding for `bynk.testing`: platform-free, an in-memory map.
+const TESTING_BINDING: &str = include_str!("../lib/testing/testing.binding.ts");
+
 /// The opaque key types `bynk.crypto` exports. A value of one holds a
 /// non-extractable platform key, so it is never stored, persisted, logged or
 /// sent (`bynk.types.key_at_boundary`), as a `Stream` is not. The checker finds
@@ -1084,6 +1098,25 @@ pub const UNITS: &[Unit] = &[
         instantiable: &[],
         singletons: &[],
     },
+    Unit {
+        name: TESTING_UNIT,
+        kind: UnitKind::Adapter,
+        identity_path: "bynk/testing.bynk",
+        source: BYNK_TESTING_SRC,
+        binding: Binding::Fixed {
+            filename: TESTING_BINDING_FILENAME,
+            source: TESTING_BINDING,
+        },
+        id_block: 10,
+        platform: None,
+        env_providers: &[],
+        // The toolchain's own test support: no promise, and a project must opt in.
+        stability: Stability::Experimental,
+        experimental: &[],
+        extensible: &[],
+        instantiable: &[],
+        singletons: &[],
+    },
 ];
 
 /// The registry entry for `name`, if it is a first-party unit.
@@ -1662,7 +1695,7 @@ mod tests {
     #[test]
     fn the_shipped_stability_is_pinned() {
         for u in UNITS {
-            let expected = if u.name == CRYPTO_UNIT {
+            let expected = if u.name == CRYPTO_UNIT || u.name == TESTING_UNIT {
                 Stability::Experimental
             } else {
                 Stability::Stable
@@ -1694,7 +1727,8 @@ mod tests {
                 "bynk.cloudflare.Kv.getBytes",
                 "bynk.cloudflare.Kv.putBytes",
                 "bynk.cloudflare.Kv.listPage",
-                "bynk.crypto"
+                "bynk.crypto",
+                "bynk.testing"
             ]
         );
         let extensible: Vec<(&str, &str)> = UNITS
@@ -1779,6 +1813,7 @@ mod tests {
                 ("bynk.crypto", 7),
                 ("bynk.url", 8),
                 ("bynk.set", 9),
+                ("bynk.testing", 10),
             ]
         );
         let mut sorted: Vec<u32> = UNITS.iter().map(|u| u.id_block).collect();
@@ -1805,6 +1840,7 @@ mod tests {
                 "bynk.crypto",
                 "bynk.url",
                 "bynk.set",
+                "bynk.testing",
             ]
         );
         for (unit, (name, source)) in UNITS.iter().zip(FIRSTPARTY_SOURCES) {

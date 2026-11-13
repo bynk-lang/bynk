@@ -2093,8 +2093,8 @@ pub const EXPLANATIONS: &[Explain] = &[
         anchor: "capability-operations-take-key-and-codable",
     },
     Explain {
-        code: "bynk.generics.codable_op_return",
-        blurb: "A `Codable` parameter of a capability operation is encoded at the call site, so the provider receives plain JSON. Decoding the provider's reply back into `T` would have to say what a failed decode of stored data means, and that is not settled, so `T` may not appear in the return type. Return plain data, such as a `String`, and decode it where the call is made.",
+        code: "bynk.generics.codable_op_return_not_first_party",
+        blurb: "A `Codable` parameter of a capability operation is encoded at the call site, so the provider receives plain JSON. Putting `T` in the return type asks the call site to decode the provider's reply back into `T`, and that is accepted only for the standard library's own operations, whose providers are reviewed with the runtime and which declare what a reply that does not decode means. A capability you declare returns plain data, such as a `String`, and you decode it where the call is made with `Json.decode`.",
         example: "capability Store {\n    fn load[T: Codable](id: String) -> Effect[Option[T]]   // ✗ `T` in the return type\n}\n\ncapability Store {\n    fn load(id: String) -> Effect[Option[String]]          // ✓ plain data back\n}",
         page: "/book/reference/generics",
         anchor: "capability-operations-take-key-and-codable",
@@ -8607,8 +8607,8 @@ pub const REGISTRY: &[DiagnosticInfo] = &[
         &["capability_op"],
     ),
     dg(
-        "bynk.generics.codable_op_return",
-        "A capability operation\'s `Codable` type parameter appears in its return type. A `Codable` parameter is encoded at the call site; decoding a provider\'s reply raises a question this slice does not answer (what a failed decode of stored data means), so typed reads are deferred (constrained-generics slice 3).",
+        "bynk.generics.codable_op_return_not_first_party",
+        "A user-declared capability operation's `Codable` type parameter appears in its return type. A typed read, the call site decoding the provider's reply as the instantiated payload, is accepted only for the standard library's own operations (#3458, lifting ADR 0696 decision 5).",
         &["capability_op"],
     ),
     dg(

@@ -3172,6 +3172,8 @@ pub struct CapabilityOpInfo {
     pub return_ty: TyId,
     /// Slice 3: the op's type parameters declared `Codable`.
     pub codable_params: Vec<String>,
+    /// #3458: what an undecodable reply means for a typed read, as declared.
+    pub reply_policy: codable::ReplyPolicy,
     /// #2634: for a flattened cross-unit operation, `(unit, type name, in a
     /// parameter)` of the
     /// first type in its signature that the consumer binds to a structurally

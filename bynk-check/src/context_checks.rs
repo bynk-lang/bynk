@@ -55,6 +55,7 @@ pub fn build_capability_op_info(
         return_ty: checker::resolve_type_ref_in(&op.return_type, types, &vars, tys)
             .unwrap_or_else(|| tys.intern(Ty::Unit)),
         codable_params: checker::codable::codable_op_params(op),
+        reply_policy: checker::codable::op_reply_policy(op),
         boundary_conflict: None,
     }
 }
@@ -781,6 +782,7 @@ pub fn check_context_declarations(
                     param_names: op.params.iter().map(|(n, _)| n.clone()).collect(),
                     return_ty,
                     codable_params: op.codable_params.clone(),
+                    reply_policy: op.reply_policy,
                     boundary_conflict: conflict,
                 }
             })

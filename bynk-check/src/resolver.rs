@@ -336,6 +336,8 @@ pub struct CrossContextCapabilityOp {
     pub return_type: TypeRef,
     /// Slice 3: the op's type parameters declared `Codable`.
     pub codable_params: Vec<String>,
+    /// #3458: what an undecodable reply means for a typed read, as declared.
+    pub reply_policy: crate::checker::codable::ReplyPolicy,
 }
 
 /// Snapshot of one service in a consumed context, as needed for v0.6
@@ -1250,7 +1252,56 @@ pub fn resolve_file_record(
 /// library's `@onUndecodable(miss|fault)`, so it is refused anywhere else, and
 /// in a first-party unit it must name a policy.
 fn check_op_annotations(op: &bynk_syntax::ast::CapabilityOp, first_party: bool, sinks: &mut Sinks) {
-    use crate::checker::codable::{REPLY_POLICY_ANNOTATION, reply_policy_word};
+    use crate::checker::codable::{
+        REPLY_POLICY_ANNOTATION, ReplyPolicy, codable_op_params, mentions_any, op_reply_policy,
+        reply_policy_word,
+    };
+    use bynk_syntax::ast::TypeRef;
+    // #3458: a typed read (a `Codable` parameter in the return type) is a
+    // first-party operation's. The provider replies with plain JSON that the
+    // call site decodes, and what a reply that does not decode means is
+    // declared on the operation, so a provider that could return anything is
+    // not accepted yet.
+    let codable = codable_op_params(op);
+    if mentions_any(&op.return_type, &codable) {
+        if !first_party {
+            sinks.push(
+                CompileError::new(
+                    "bynk.generics.codable_op_return_not_first_party",
+                    op.return_type.span(),
+                    format!(
+                        "the return type of capability operation `{}` mentions a `Codable` type parameter, but only the standard library's capabilities may do that",
+                        op.name.name
+                    ),
+                )
+                .with_note(
+                    "typed reads are accepted only for the standard library's own capabilities for now; return `String` and decode with `Json.decode[T]` at the call site",
+                ),
+            );
+        } else if !matches!(op.return_type, TypeRef::Effect(..)) {
+            sinks.push(CompileError::new(
+                "bynk.generics.internal_op_annotation",
+                op.return_type.span(),
+                format!(
+                    "a typed read, `{}`, returns `Effect[..]` over its `Codable` payload",
+                    op.name.name
+                ),
+            ));
+        }
+    }
+    if first_party
+        && op_reply_policy(op) == ReplyPolicy::Miss
+        && !matches!(&op.return_type, TypeRef::Effect(inner, _) if matches!(**inner, TypeRef::Option(..)))
+    {
+        sinks.push(CompileError::new(
+            "bynk.generics.internal_op_annotation",
+            op.return_type.span(),
+            format!(
+                "`@{REPLY_POLICY_ANNOTATION}(miss)` on `{}` needs an `Effect[Option[..]]` return: a miss is `None`",
+                op.name.name
+            ),
+        ));
+    }
     for ann in &op.annotations {
         if !first_party {
             sinks.push(
@@ -1376,25 +1427,6 @@ fn check_signature_refs(
                         )
                         .with_note(
                             "capability operations take only `Key` and `Codable` bounds; remove the `: …`",
-                        ),
-                    );
-                }
-                // Decoding a provider's reply raises a question this slice does
-                // not answer (what a failed decode of stored data means), so a
-                // `Codable` parameter may not appear in the return type.
-                let codable = crate::checker::codable::codable_op_params(op);
-                if crate::checker::codable::mentions_any(&op.return_type, &codable) {
-                    sinks.push(
-                        CompileError::new(
-                            "bynk.generics.codable_op_return",
-                            op.return_type.span(),
-                            format!(
-                                "the return type of capability operation `{}` mentions a `Codable` type parameter",
-                                op.name.name
-                            ),
-                        )
-                        .with_note(
-                            "a `Codable` parameter is encoded at the call site; decoding a provider's reply is not supported yet — return `String` or `Json`-free data and decode at the call site with `Json.decode`",
                         ),
                     );
                 }
@@ -4139,6 +4171,35 @@ mod op_annotation_tests {
             .assert_reports("bynk.generics.internal_op_annotation");
         analyse(&[("a.bynk", &unit("bynk.t", "@onUndecodable(by: miss)"))])
             .assert_reports("bynk.generics.internal_op_annotation");
+    }
+
+    /// #3458: a typed read, a `Codable` parameter in the `Effect` payload, is a
+    /// first-party operation's: it resolves cleanly there, and is refused in a
+    /// user unit.
+    #[test]
+    fn a_typed_read_is_first_party_only() {
+        let first_party = analyse(&[("a.bynk", &unit("bynk.t", "@onUndecodable(miss)"))]);
+        for refused in [
+            "bynk.generics.codable_op_return_not_first_party",
+            "bynk.generics.internal_op_annotation",
+        ] {
+            assert!(
+                !first_party.categories().contains(&refused),
+                "a first-party typed read is accepted, got:\n{}",
+                first_party.render()
+            );
+        }
+        analyse(&[("a.bynk", &unit("shop", ""))])
+            .assert_reports("bynk.generics.codable_op_return_not_first_party");
+    }
+
+    /// A miss is `None`, so it needs an `Option` payload; a typed read returns an `Effect`.
+    #[test]
+    fn a_miss_needs_an_option_payload_and_a_typed_read_an_effect() {
+        let src = "context bynk.t\n\ncapability Store {\n  fn load[T: Codable](id: String) -> Effect[T] @onUndecodable(miss)\n}\n";
+        analyse(&[("a.bynk", src)]).assert_reports("bynk.generics.internal_op_annotation");
+        let src = "context bynk.t\n\ncapability Store {\n  fn load[T: Codable](id: String) -> Option[T]\n}\n";
+        analyse(&[("a.bynk", src)]).assert_reports("bynk.generics.internal_op_annotation");
     }
 
     /// A user unit may not declare one at all.

@@ -1884,6 +1884,7 @@ pub fn build_cross_context_info(
                         tr
                     },
                     codable_params: crate::checker::codable::codable_op_params(op),
+                    reply_policy: crate::checker::codable::op_reply_policy(op),
                 })
                 .collect();
             caps.insert(

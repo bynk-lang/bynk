@@ -2510,6 +2510,14 @@ pub(crate) fn emit_capability(
                     optional: false,
                 })
                 .collect();
+            // #3458: a typed read's `Effect[P]` payload mentions a `Codable`
+            // parameter, so the provider replies with plain JSON that the call
+            // site decodes: the interface returns `unknown` there.
+            let typed_read = matches!(
+                &op.return_type,
+                bynk_syntax::ast::TypeRef::Effect(payload, _)
+                    if bynk_check::checker::codable::mentions_any(payload, &codable)
+            );
             // A type parameter that only occurs in encoded parameters is not in
             // the interface (nothing would use it).
             let kept: Vec<String> = op
@@ -2529,10 +2537,11 @@ pub(crate) fn emit_capability(
                                     std::slice::from_ref(tp),
                                 )
                             })
-                        || bynk_check::checker::codable::mentions_any(
-                            &op.return_type,
-                            std::slice::from_ref(tp),
-                        )
+                        || (!typed_read
+                            && bynk_check::checker::codable::mentions_any(
+                                &op.return_type,
+                                std::slice::from_ref(tp),
+                            ))
                 })
                 .collect();
             // #926 (Decision C): a genuine generic TS interface method, no
@@ -2545,7 +2554,14 @@ pub(crate) fn emit_capability(
                 name: op.name.name.clone(),
                 generics: kept,
                 params,
-                ret: ts_ty_to_ts_type(sig.return_ty, &commons.ty_intern),
+                ret: if typed_read {
+                    bynk_ts::TsType::named_with_args(
+                        "globalThis.Promise",
+                        vec![bynk_ts::TsType::named("unknown")],
+                    )
+                } else {
+                    ts_ty_to_ts_type(sig.return_ty, &commons.ty_intern)
+                },
                 doc: op.documentation.as_deref().map(str::to_owned),
             }
         })
