@@ -5275,7 +5275,7 @@ pub const EXPLANATIONS: &[Explain] = &[
         code: "bynk.revert.agent_schema_older",
         blurb: "Agent state is stamped with the schema version of the build that wrote it, and older code faults with `NewerSchema` on records written by newer code. `bynk revert` therefore refuses to go back to a build with an older schema version while stored instances exist, while they are not known to be absent, or when the target is below the class's schema floor. The listing of stored objects lags a write by minutes, so within 30 minutes of the live deploy an empty listing counts as unknown. Deploy a fix forward instead.",
         example: "bynk revert --dry-run\n\
-\x20\x20agent     Cart         refused: the target writes schema 1, the live version writes 2, and stored instances exist\n\
+\x20\x20agent     Cart         refused: the target writes schema v1, the live version v2, and stored instances exist\n\
 \n\
 bynk deploy   # fix forward",
         page: "/book/guides/projects-build-and-deployment/roll-back-a-deployment",
