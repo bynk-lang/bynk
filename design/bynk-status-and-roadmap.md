@@ -282,6 +282,15 @@ The forward plan lives in dedicated, domain-scoped docs:
   ([#2683](https://github.com/bynk-lang/bynk/issues/2683)); race (`a.race(b)`) has
   shipped ([#2711](https://github.com/bynk-lang/bynk/issues/2711)); `within` in a
   function awaits [#2682](https://github.com/bynk-lang/bynk/issues/2682).
+- **Durable idempotency** — [#2840](https://github.com/bynk-lang/bynk/issues/2840), the
+  first item on the road to the 1.0 validation bar ([#3055](https://github.com/bynk-lang/bynk/issues/3055)),
+  delivered as a stack of small increments rather than a track document: an atomic
+  `Idempotency.claim` (released when a handler fails, under a 30 s lease), stored in an
+  implicit per-Worker D1 database on Cloudflare, and proved on workerd and local D1.
+  `dedup`/`remember` stay per-instance until typed capability reads
+  ([#3458](https://github.com/bynk-lang/bynk/issues/3458)) land; settling a claim in an agent
+  handler is [#3465](https://github.com/bynk-lang/bynk/issues/3465). It unblocks replay and
+  ordering hints (#260).
 - **Editor tooling** — [`bynk-tooling-roadmap.md`](bynk-tooling-roadmap.md)
   (LSP + VS Code); the LSP track completed (ADRs 0093–0095,
   [`bynk-lsp-spec.md`](bynk-lsp-spec.md); remainder in issues #257/#258).
