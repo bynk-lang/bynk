@@ -20,4 +20,27 @@ suite shop.gate {
     let again <- gate.call("g1", "ok")
     expect again is Ok("duplicate")
   }
+
+  // The claim is settled after the commit, so a commit that faults releases it: a retry
+  // claims again (and faults again) instead of being told it is a duplicate.
+  case "a failed state commit releases the claim" {
+    expect Gate("g2").burst("b1") faults
+    expect Gate("g2").burst("b1") faults
+  }
+
+  // A returned `Err` still commits the state written before it; only the claim is released.
+  case "a returned Err keeps its state write and releases the claim" {
+    let first <- gate.call("g3", "bad")
+    expect first is Err("rejected")
+    let retry <- gate.call("g3", "bad")
+    expect retry is Err("rejected")
+  }
+
+  // The key is scoped to the handler, not the agent instance.
+  case "a claim is shared across instances of the agent" {
+    let first <- gate.call("g4", "shared")
+    expect first is Ok("done")
+    let other <- gate.call("g5", "shared")
+    expect other is Ok("duplicate")
+  }
 }

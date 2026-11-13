@@ -2,7 +2,7 @@
 // context shop.gate
 
 import { Ok, Err, Some, None, type Result, type Option } from "../../__bynk_runtime/result.js";
-import type { ValidationError } from "../../__bynk_runtime/errors.js";
+import { type ValidationError, __invariantViolation } from "../../__bynk_runtime/errors.js";
 import type { __DurableObjectState } from "../../__bynk_runtime/storage.js";
 import { __readStored, __commitStored, __noteClock } from "../../__bynk_runtime/entries.js";
 import { __rehydrationViolation, __reportUnknownStoredKeys, __checkStoredLayout, type __JsonValue, type __BoundaryError, type __ServiceBinding, __callService, __boundaryError } from "../../__bynk_runtime/boundary.js";
@@ -57,6 +57,10 @@ export class Gate {
   }
 
   private async commitState(s: GateState): globalThis.Promise<void> {
+    if (!(s.taken < 50)) {
+      globalThis.console.error("InvariantViolation Gate.under_limit", { agent: "Gate", invariant: "under_limit" });
+      throw __invariantViolation("Gate", "under_limit", "invariant", "src/shop/gate.bynk:14:13");
+    }
     await __commitStored(this, this.state.storage, __encodeGateState(s), __entryFieldsOfGate, s);
   }
 
@@ -67,11 +71,41 @@ export class Gate {
     __r = await (async () => {
     const __state = { ...(await this.loadState()) };
     const __result = await (async () => {
-      const __letElse450 = await (await (async (__k: string, __t: number) => __claims.note(__k, await deps.Idempotency.claim(__k, __claims.lease(__t)), __t))(`shop.gate.Gate.take::${job}`, 3600000));
-      switch (__letElse450.tag) {
+      const __letElse487 = await (await (async (__k: string, __t: number) => __claims.note(__k, await deps.Idempotency.claim(__k, __claims.lease(__t)), __t))(`shop.gate.Gate.take::${job}`, 3600000));
+      switch (__letElse487.tag) {
         case "Claimed": {
           const __r0 = await (() => { __state.taken = ((n: number) => n + 1)(__state.taken); return undefined; })();
           return (job === "bad" ? Err("rejected") : Ok("done"));
+        }
+        default: {
+          return Ok("duplicate");
+        }
+      }
+      throw new globalThis.Error("non-exhaustive match");
+    })();
+    await this.commitState(__state);
+    return __result;
+    })();
+    } catch (__e) {
+      await __claims.settle(undefined, true);
+      throw __e;
+    }
+    await __claims.settle(__r, false);
+    return __r;
+  }
+
+  async burst(job: string, deps: { Idempotency: bynk.Idempotency }): globalThis.Promise<Result<string, string>> {
+    const __claims = (deps.Idempotency as unknown as { __track?: () => { note<C>(k: string, c: C, t: number): C; lease(t: number): number; settle(r: unknown, threw: boolean): globalThis.Promise<void> } }).__track?.() ?? { note: <C>(_k: string, c: C, _t: number) => c, lease: (t: number) => t, settle: async (_r: unknown, _threw: boolean) => {} };
+    let __r;
+    try {
+    __r = await (async () => {
+    const __state = { ...(await this.loadState()) };
+    const __result = await (async () => {
+      const __letElse838 = await (await (async (__k: string, __t: number) => __claims.note(__k, await deps.Idempotency.claim(__k, __claims.lease(__t)), __t))(`shop.gate.Gate.burst::${job}`, 3600000));
+      switch (__letElse838.tag) {
+        case "Claimed": {
+          __state.taken = 99;
+          return Ok("done");
         }
         default: {
           return Ok("duplicate");
@@ -107,6 +141,7 @@ export class Gate {
 
 const __GateWire: __AgentWire = {
   take: { args: [{ enc: (__v: string) => __v as __JsonValue, dec: (__j: __JsonValue) => ((__v) => typeof __v === "string" ? Ok(__v) : Err({ kind: "StructuralMismatch", path: "$", expected: "string", actual: typeof __v } as __BoundaryError))(__j) }], result: { enc: __serialise_Result_String_String, dec: __deserialise_Result_String_String } },
+  burst: { args: [{ enc: (__v: string) => __v as __JsonValue, dec: (__j: __JsonValue) => ((__v) => typeof __v === "string" ? Ok(__v) : Err({ kind: "StructuralMismatch", path: "$", expected: "string", actual: typeof __v } as __BoundaryError))(__j) }], result: { enc: __serialise_Result_String_String, dec: __deserialise_Result_String_String } },
 };
 
 export function __makeGate(key: string, env?: { GATE?: __DurableObjectNamespace }): Gate {

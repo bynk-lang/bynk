@@ -113,7 +113,8 @@ before a failure, such as a call to another service, can repeat on the retry. Ma
 calls idempotent too. A `claim` in a service handler or an agent handler is settled, an agent
 handler's after its state commit and events flush, so a failure of either releases it. A
 `claim` anywhere else is not settled: it is held for `expiresAfter` whether or not the
-work succeeds.
+work succeeds. Settling an agent's claim releases only the claim: state the handler wrote before
+returning an `Err` is still committed, and a retry repeats that write.
 
 The key is scoped to the calling handler as for `dedup`.
 
@@ -163,7 +164,8 @@ before a failure, such as a call to another service, can repeat on the retry. Ma
 calls idempotent too. A `claim` in a service handler or an agent handler is settled, an agent
 handler's after its state commit and events flush, so a failure of either releases it. A
 `claim` anywhere else is not settled: it is held for `expiresAfter` whether or not the
-work succeeds.
+work succeeds. Settling an agent's claim releases only the claim: state the handler wrote before
+returning an `Err` is still committed, and a retry repeats that write.
 
 The key is scoped to the calling handler as for `dedup`. The in-memory provider makes the
 claim atomic within one process; it is no more durable than `dedup`.

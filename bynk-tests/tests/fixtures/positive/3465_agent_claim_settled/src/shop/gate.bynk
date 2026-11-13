@@ -11,10 +11,19 @@ agent Gate {
   key id: String
   store taken: Cell[Int] = 0
 
+  invariant under_limit: taken < 50
+
   on call take(job: String) -> Effect[Result[String, String]] given Idempotency {
     let Claim.Claimed <- Idempotency.claim(job, 1.hours) else { Ok("duplicate") }
     let _ <- taken.update((n) => n + 1)
     if job == "bad" { Err("rejected") } else { Ok("done") }
+  }
+
+  // The state commit itself fails (the invariant), after the body has returned.
+  on call burst(job: String) -> Effect[Result[String, String]] given Idempotency {
+    let Claim.Claimed <- Idempotency.claim(job, 1.hours) else { Ok("duplicate") }
+    taken := 99
+    Ok("done")
   }
 }
 
