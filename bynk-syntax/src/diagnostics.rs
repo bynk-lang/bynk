@@ -5272,6 +5272,96 @@ pub const EXPLANATIONS: &[Explain] = &[
         anchor: "",
     },
     Explain {
+        code: "bynk.revert.agent_schema_older",
+        blurb: "Agent state is stamped with the schema version of the build that wrote it, and older code faults with `NewerSchema` on records written by newer code. `bynk revert` therefore refuses to go back to a build with an older schema version while stored instances exist, while they are not known to be absent, or when the target is below the class's schema floor. The listing of stored objects lags a write by minutes, so within 30 minutes of the live deploy an empty listing counts as unknown. Deploy a fix forward instead.",
+        example: "bynk revert --dry-run\n\
+\x20\x20agent     Cart         refused: the target writes schema 1, the live version writes 2, and stored instances exist\n\
+\n\
+bynk deploy   # fix forward",
+        page: "/book/guides/projects-build-and-deployment/roll-back-a-deployment",
+        anchor: "what-it-refuses",
+    },
+    Explain {
+        code: "bynk.revert.class_changed",
+        blurb: "Cloudflare applies Durable Object class additions, removals and renames as migrations, and it cannot roll back across one. If the set of classes differs between the live version and the target, `bynk revert` refuses. Redeploy forward, with the class set you want, instead.",
+        example: "bynk revert --dry-run\n\
+\x20\x20classes   shop-orders  refused: the Durable Object classes differ between the two versions\n\
+\n\
+bynk deploy   # redeploy forward",
+        page: "/book/guides/projects-build-and-deployment/roll-back-a-deployment",
+        anchor: "what-it-refuses",
+    },
+    Explain {
+        code: "bynk.revert.contract_skew",
+        blurb: "Contexts call each other under contract hashes. Reverting one Worker can leave it expecting, or providing, a contract that another live Worker does not, and the runtime would refuse the calls. The check judges the result as if every selected Worker were reverted together, using the post-revert lock. Revert the whole project, or redeploy forward. See `bynk.deploy.contract_skew` for the same skew at deploy time.",
+        example: "bynk revert --dry-run --context shop.orders\n\
+\x20\x20contracts shop-orders  refused: the target no longer matches shop-payment\n\
+\n\
+bynk revert   # the whole project, so the contexts revert together",
+        page: "/book/guides/projects-build-and-deployment/roll-back-a-deployment",
+        anchor: "what-it-refuses",
+    },
+    Explain {
+        code: "bynk.revert.database_schema_ahead",
+        blurb: "D1 migrations only move forward. If the live version applied a migration the target was not built against, the older code would meet a schema it was never written for. Bynk cannot judge a migration's SQL, so it refuses. If every such migration is additive, assert it per database with `--accept-schema-ahead <binding>`; otherwise deploy a fix forward. The same refusal is given when the applied migrations could not be read, because an unread list is never taken to be empty.",
+        example: "bynk revert --dry-run\n\
+\x20\x20d1        DB           refused: the live version applied 0003_add_index.sql after the target was built\n\
+\n\
+bynk revert --accept-schema-ahead DB   # only if each such migration is additive",
+        page: "/book/guides/projects-build-and-deployment/roll-back-a-deployment",
+        anchor: "what-it-refuses",
+    },
+    Explain {
+        code: "bynk.revert.facts_missing",
+        blurb: "`bynk revert` reads the deploy facts that every `bynk deploy` records on the Worker version it pushes. Without them on both the live version and the target it cannot tell what changed in between, and every unknown is a refusal. A version deployed before facts were recorded, or one pushed outside Bynk, has none. Redeploy the version you want from its tag with `git checkout <tag> && bynk deploy`.",
+        example: "bynk revert --dry-run\n\
+\x20\x20facts     shop-orders  refused: the target version records no deploy facts\n\
+\n\
+git checkout v1.4.0 && bynk deploy   # redeploy the previous tag instead",
+        page: "/book/guides/projects-build-and-deployment/roll-back-a-deployment",
+        anchor: "what-it-refuses",
+    },
+    Explain {
+        code: "bynk.revert.history_unplaceable",
+        blurb: "`bynk revert` finds the target in the Worker's deployment history: by default the deployment before the live code's own upload, or the version named by `--to`. It refuses that Worker when it cannot place the live version or the target: a Worker first added in the bad release has nothing before it, the live upload is out of the listed history, a gradual deployment is in progress, or the history could not be read. A version made live outside Bynk has no upload deployment to step back from; name the version to go back to with `--to`. The plan still judges the other Workers.",
+        example: "bynk revert --dry-run --context shop.orders\n\
+\x20\x20history   shop-orders  refused: the live version is a gradual deployment\n\
+\n\
+bynk revert --context shop.orders --to <version>",
+        page: "/book/guides/projects-build-and-deployment/roll-back-a-deployment",
+        anchor: "what-it-refuses",
+    },
+    Explain {
+        code: "bynk.revert.id_unrecorded",
+        blurb: "The target version binds resources (KV namespaces, databases, limiters) by id. If the deploy lock no longer records the same id for a binding, the resource was re-provisioned since, and the older code would bind one that is no longer yours. `bynk revert` refuses. Redeploy forward.",
+        example: "bynk revert --dry-run\n\
+\x20\x20ids       shop-orders  refused: the target would bind a resource that has since been replaced\n\
+\n\
+bynk deploy   # redeploy forward",
+        page: "/book/guides/projects-build-and-deployment/roll-back-a-deployment",
+        anchor: "what-it-refuses",
+    },
+    Explain {
+        code: "bynk.revert.layout_older",
+        blurb: "A layout is how an agent's state is placed in storage, and each version's deploy facts record which one it writes. Code that writes an older layout than the live version cannot read records in the newer one: a build with the layout check faults them as `NewerLayout`, and one without it would orphan their entries. `bynk revert` refuses while stored instances exist or are not known to be absent. Deploy a fix forward.",
+        example: "bynk revert --dry-run\n\
+\x20\x20layout    Cart         refused: the target writes layout 1, the live version writes layout 2, and stored instances exist\n\
+\n\
+bynk deploy   # fix forward",
+        page: "/book/guides/projects-build-and-deployment/roll-back-a-deployment",
+        anchor: "what-it-refuses",
+    },
+    Explain {
+        code: "bynk.revert.secret_changed",
+        blurb: "A rollback can restore the old value of a secret that was rotated after the target was live, and its peers no longer accept that value. `bynk revert` counts the secret changes between the target and now and refuses if there are any. After a `bynk migrate sweep`, whose two changes touch only its own temporary key, pass `--accept-secret-changes`. A secret rotated before the release you are leaving is kept and does not count.",
+        example: "bynk revert --dry-run\n\
+\x20\x20secrets   shop-orders  refused: 2 secret change(s) since the target\n\
+\n\
+bynk revert --accept-secret-changes   # only after a `bynk migrate sweep`",
+        page: "/book/guides/projects-build-and-deployment/roll-back-a-deployment",
+        anchor: "what-it-refuses",
+    },
+    Explain {
         code: "bynk.send.deprecated",
         blurb: "`~>` is deprecated: `e.detach()` says the same thing as an ordinary effect statement, works for any `Effect[T]` and inside a lambda, `forEach` or helper, and reports a fault or an `Err` instead of losing it. A warning, not an error: `bynk check --fix` rewrites each `~> e` to `do e.detach()`. `~>` will be removed in the next release, after which it is a parse error. For a unit effect that does not need to outlive the handler, plain `do e` is enough; `Logger` calls finish before they return.",
         example: "on call bump() -> Effect[()] given Logger {\n    ~> Logger.info(\"bump\")             // ⚠ deprecated\n    Effect.pure(())\n}\n\n\
@@ -10537,6 +10627,42 @@ pub const REGISTRY: &[DiagnosticInfo] = &[
     d(
         "bynk.resolve.unknown_type",
         "Referenced a type that does not exist.",
+    ),
+    d(
+        "bynk.revert.agent_schema_older",
+        "`bynk revert` refused because the target writes an older agent schema version than the live one while stored instances exist, are not known to be absent, or the target is below the class's floor, so the older code would fault on newer records.",
+    ),
+    d(
+        "bynk.revert.class_changed",
+        "`bynk revert` refused because a Durable Object class was added, removed or renamed between the live version and the target, and Cloudflare cannot roll back across a class migration.",
+    ),
+    d(
+        "bynk.revert.contract_skew",
+        "`bynk revert` refused because the target's contracts would no longer match another live Worker, judged as if every selected Worker were reverted together.",
+    ),
+    d(
+        "bynk.revert.database_schema_ahead",
+        "`bynk revert` refused because the live version applied D1 migrations the target was not built against, or the applied migrations could not be read; migrations only move forward, so the older code may not run on the newer schema.",
+    ),
+    d(
+        "bynk.revert.facts_missing",
+        "`bynk revert` refused because the live version or the target version carries no deploy facts (`BYNK_DEPLOY_FACTS`), or the facts could not be read, so nothing can be checked against them.",
+    ),
+    d(
+        "bynk.revert.history_unplaceable",
+        "`bynk revert` refused for one Worker because its deployment history cannot be placed: it has no earlier deployment, the live upload is outside the listed history, a gradual deployment is in progress, or the history could not be read.",
+    ),
+    d(
+        "bynk.revert.id_unrecorded",
+        "`bynk revert` refused because the target binds a KV namespace, database or limiter that the deploy lock no longer records, usually because the resource was re-provisioned since.",
+    ),
+    d(
+        "bynk.revert.layout_older",
+        "`bynk revert` refused because the target writes an older agent storage layout than the live one while stored instances exist or are not known to be absent, so the older code could not read the newer records.",
+    ),
+    d(
+        "bynk.revert.secret_changed",
+        "`bynk revert` refused because a secret changed after the target was live, so the rollback could restore an old secret value that its peers no longer accept.",
     ),
     warn(d(
         "bynk.secrets.computed_name",
