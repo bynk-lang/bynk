@@ -3,7 +3,7 @@ title: Version compatibility & changelog
 ---
 Bynk is pre-1.0 and developed in small, spec-first increments (see
 [Versioning & roadmap](/book/about/versioning-and-roadmap/)). This book is
-written against **v0.583**.
+written against **v0.585**.
 
 This page is a high-level summary of notable increments, not an exhaustive
 per-commit history. While Bynk is pre-1.0, increments may change behaviour.
@@ -28,6 +28,8 @@ per-commit history. While Bynk is pre-1.0, increments may change behaviour.
 
 | Version | Highlights |
 |---|---|
+| **v0.585.0** | A Worker that calls `Idempotency.claim` declares an implicit D1 database for its claims, which `bynk deploy` and `bynk dev` provision with no author action |
+| **v0.584.0** | `Idempotency.claim(key, expiresAfter)` is an atomic first-delivery-wins claim, and the test double honours `expiresAfter` on the harness clock |
 | **v0.583.0** | A first-party capability operation may return a type that mentions its `Codable` parameter, decoded at the call site with a per-operation failure policy |
 | **v0.582.0** | A service handler's `Idempotency.claim` is released when the handler fails and held for its full window when it completes, under a 30 s lease |
 | **v0.581.0** | A first-party capability operation can carry an internal `@onUndecodable(miss|fault)` annotation, refused in user code |
