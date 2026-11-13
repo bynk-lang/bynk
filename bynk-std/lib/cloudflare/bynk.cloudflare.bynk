@@ -10,6 +10,7 @@ adapter bynk.cloudflare {
 		EdgeCache,
 		D1,
 		Version,
+		Ai,
 		StoredSecret,
 		Email,
 		Postgres,
@@ -39,6 +40,7 @@ adapter bynk.cloudflare {
 		SqlError,
 		SqlReadError,
 		WorkerVersion,
+		AiError,
 		EmailAttachment,
 		EmailMessage,
 		EmailError,
@@ -863,6 +865,50 @@ adapter bynk.cloudflare {
 	}
 
 	---
+	Why a Workers AI call did not give a reply. `ModelNotFound` is a model id
+	the platform does not know, or has retired; `InvalidInput` is a request the
+	platform refused as malformed or too large, with its message; `QuotaExceeded`
+	is a usage limit of the account, or a model its plan does not include, so
+	back off or change the plan; `Overloaded` is the platform's temporary
+	capacity, worth retrying; `AiFailed` is any other refusal, with the
+	platform's message (the `Ai` prefix because `Failed` is `SqlError`'s).
+	Cloudflare adds error codes over time, so a `match` over this type needs
+	a wildcard.
+	---
+	type AiError =
+		| ModelNotFound
+		| InvalidInput(message: String)
+		| QuotaExceeded
+		| Overloaded
+		| AiFailed(message: String)
+
+	---
+	Workers AI, from the Worker's `[ai]` binding: it needs no API token and no
+	account id. It is bound once per Worker, so it is used bare (`given Ai`)
+	and has no named instances. Only a Worker that uses it declares the
+	binding.
+
+	`run(model, input)` runs any model by its id (`"@cf/meta/llama-3.1-8b-instruct"`).
+	`input` is the model's JSON input as text, and the reply is the model's JSON
+	output as text, so a model Cloudflare ships tomorrow works today: build the
+	input with `Json.encode` and read the reply with `Json.decode`. An `input`
+	that is not a JSON object, or a `model` that is empty or has characters an
+	id never has, is a fault. A model that answers with binary data (an image,
+	say) is `AiFailed`: `run` carries JSON replies only.
+
+	Workers AI is a remote service on your Cloudflare account, so a call
+	may be billed, and a model's reply is untrusted input like any other
+	user text. See Cloudflare's Workers AI pricing page for what applies,
+	and put a `RateLimit` in front of any handler an anonymous caller can reach.
+	Under `bynk dev` a call runs the model on Cloudflare. In a test every
+	operation faults until `stub Ai.run(_, _) returns …` replaces it, so a
+	test never reaches Workers AI.
+	---
+	capability Ai {
+		fn run(model: String, input: String) -> Effect[Result[String, AiError]]
+	}
+
+	---
 	One secret of a Cloudflare Secrets Store, read as `StripeKey.get()`. A
 	Secrets Store is account-scoped: its secrets are shared across Workers,
 	rotated centrally and bound one per binding, which is what separates this
@@ -1059,6 +1105,8 @@ adapter bynk.cloudflare {
 	provides D1 = WorkersD1
 
 	provides Version = WorkersVersion
+
+	provides Ai = WorkersAi
 
 	provides StoredSecret = WorkersStoredSecret
 

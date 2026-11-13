@@ -1,0 +1,15 @@
+context demo
+
+// #3478: `Ai` is experimental, so using it needs `[unstable] allow`.
+
+consumes bynk.cloudflare { Ai }
+
+service s {
+	on call() -> Effect[String] given Ai {
+		let r <- Ai.run("@cf/meta/llama-3.1-8b-instruct", "{}")
+		match r {
+			Ok(text) => Effect.pure(text),
+			Err(_) => Effect.pure(""),
+		}
+	}
+}

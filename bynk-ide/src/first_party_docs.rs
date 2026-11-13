@@ -124,6 +124,7 @@ pub const FIRST_PARTY_DOCS: &[Entry] = &[
         "the-running-version-version",
         &["current"],
     ),
+    ("bynk.cloudflare", "Ai", "workers-ai-ai", &["run"]),
     (
         "bynk.cloudflare",
         "StoredSecret",

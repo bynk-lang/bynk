@@ -1,0 +1,7 @@
+context demo
+
+// #3478: `Ai` is bound once per Worker, so it has no named instances.
+
+consumes bynk.cloudflare { Ai }
+
+capability Chat = Ai

@@ -9,6 +9,7 @@
 // `WorkersD1` (standard-library P4a, #2602) against a database fake,
 // `WorkersEdgeCache` (L7, #2414) against an execution context fake, and
 // `WorkersVersion` (#3300) against a Version metadata fake, and
+// `WorkersAi` (#3478) against a Workers AI binding fake, and
 // `WorkersStoredSecret` (#3301) against a Secrets Store secret fake, and
 // `WorkersEmail` (#3302) against a `send_email` binding fake, and
 // `WorkersPostgres` (Hyperdrive H1, #3318) against a driver-executor fake (the
@@ -25,7 +26,7 @@
 
 import { test } from "node:test";
 import assert from "node:assert/strict";
-import { WorkersAnalytics, WorkersD1, WorkersEdgeCache, WorkersEmail, WorkersKv, WorkersMySql, WorkersPostgres, WorkersQueue, WorkersR2, WorkersRateLimit, WorkersService, WorkersStoredSecret, WorkersVersion } from "./bynk/cloudflare.binding.js";
+import { WorkersAi, WorkersAnalytics, WorkersD1, WorkersEdgeCache, WorkersEmail, WorkersKv, WorkersMySql, WorkersPostgres, WorkersQueue, WorkersR2, WorkersRateLimit, WorkersService, WorkersStoredSecret, WorkersVersion } from "./bynk/cloudflare.binding.js";
 import { Method, FetchError } from "./bynk.js";
 import { Some, None } from "./__bynk_runtime/result.js";
 
@@ -1242,6 +1243,67 @@ t("WorkersVersion.current: a missing binding or an unreadable timestamp faults",
   await assert.rejects(new WorkersVersion({}).current(), /\[version_metadata\]/);
   const bad = { CF_VERSION_METADATA: { id: "x", tag: "", timestamp: "yesterday" } };
   await assert.rejects(new WorkersVersion(bad).current(), /not a date/);
+});
+
+// #3478: `WorkersAi`, against a fake of Cloudflare's AI binding: `run(model,
+// input)` resolves the model's output, or rejects with an error whose message
+// carries the platform's internal code (the Workers AI errors page gives the
+// codes, not the thrown object's fields, so both a numeric `code` and a code in
+// the message are read).
+function fakeAi(reply) {
+  const calls = [];
+  return {
+    calls,
+    async run(model, input) {
+      calls.push({ model, input });
+      if (reply instanceof Error) throw reply;
+      if (reply?.throws !== undefined) throw reply.throws;
+      return reply;
+    },
+  };
+}
+
+t("WorkersAi.run: passes the model and the parsed input, and returns the reply as JSON text", async () => {
+  const ai = fakeAi({ response: "bonjour" });
+  const r = await new WorkersAi({ AI: ai }).run("@cf/meta/llama-3.1-8b-instruct", '{"prompt":"hi","max_tokens":8}');
+  assert.deepEqual(r, { tag: "Ok", value: '{"response":"bonjour"}' });
+  assert.deepEqual(ai.calls, [{ model: "@cf/meta/llama-3.1-8b-instruct", input: { prompt: "hi", max_tokens: 8 } }]);
+});
+
+t("WorkersAi.run: a documented platform code is a typed error, any other a failure with its message", async () => {
+  const failure = async (e) => (await new WorkersAi({ AI: fakeAi(e) }).run("@cf/x/y", "{}")).error;
+  assert.deepEqual(await failure(new Error("5007: No such model `@cf/x/y` or task")), { tag: "ModelNotFound" });
+  assert.deepEqual(await failure(new Error("3042: The model name is invalid")), { tag: "ModelNotFound" });
+  assert.deepEqual(await failure(new Error("5028: `@cf/x/y` was deprecated")), { tag: "ModelNotFound" });
+  assert.deepEqual(await failure(new Error("3036: used up")), { tag: "QuotaExceeded" });
+  assert.deepEqual(await failure(new Error("5035: requires a plan")), { tag: "QuotaExceeded" });
+  assert.deepEqual(await failure(new Error("3040: Capacity temporarily exceeded")), { tag: "Overloaded" });
+  assert.deepEqual(await failure(new Error("AiError: 3040: Capacity temporarily exceeded")), { tag: "Overloaded" });
+  assert.deepEqual(await failure(Object.assign(new Error("bad"), { code: 5004 })), { tag: "InvalidInput", message: "bad" });
+  assert.deepEqual(await failure(Object.assign(new Error("bad"), { code: "3006" })), { tag: "InvalidInput", message: "bad" });
+  assert.deepEqual(await failure(new Error("3007: Request timeout")), { tag: "AiFailed", message: "3007: Request timeout" });
+  assert.deepEqual(await failure(new Error("something new")), { tag: "AiFailed", message: "something new" });
+  assert.deepEqual(await failure({ throws: "odd" }), { tag: "AiFailed", message: "odd" });
+  // A number that merely sits in a longer one is not a code.
+  assert.deepEqual(await failure(new Error("id 350071 failed")), { tag: "AiFailed", message: "id 350071 failed" });
+});
+
+t("WorkersAi.run: a binary reply is a failure, not a fault", async () => {
+  for (const bytes of [new Uint8Array([1, 2]), new ArrayBuffer(2), new ReadableStream()]) {
+    const r = await new WorkersAi({ AI: fakeAi(bytes) }).run("@cf/x/y", "{}");
+    assert.deepEqual(r.error, { tag: "AiFailed", message: "model returned binary data; run supports JSON replies only" });
+  }
+});
+
+t("WorkersAi.run: a bad model id, an input that is not a JSON object and a missing binding fault", async () => {
+  const ai = new WorkersAi({ AI: fakeAi({}) });
+  for (const model of ["", "has space", "a".repeat(129), "bad\u00e9"]) {
+    await assert.rejects(ai.run(model, "{}"), /not a model id/);
+  }
+  for (const input of ["not json", "[1]", "3", "null", '"s"']) {
+    await assert.rejects(ai.run("@cf/x/y", input), /`input`/);
+  }
+  await assert.rejects(new WorkersAi({}).run("@cf/x/y", "{}"), /\[ai\]/);
 });
 
 // #3301: `WorkersStoredSecret`, against a fake of Cloudflare's Secrets Store

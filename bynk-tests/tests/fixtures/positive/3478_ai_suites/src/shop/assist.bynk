@@ -1,0 +1,40 @@
+context shop.assist
+
+// #3478: `Ai` is one binding per Worker, `[ai]` bound as `AI`, reached by a
+// handler and through a local provider's `given`. `Kv` is consumed but never
+// used, so the Worker declares no `[[kv_namespaces]]`: reaching `Ai` must not
+// imply the bare namespace.
+
+consumes bynk
+consumes bynk.cloudflare { Kv, Ai, AiError }
+
+capability Answerer {
+	fn answer(question: String) -> Effect[String]
+}
+
+provides Answerer = AiAnswerer given Ai {
+	fn answer(question: String) -> Effect[String] {
+		let reply <- Ai.run("@cf/meta/llama-3.1-8b-instruct", question)
+		match reply {
+			Ok(text) => Effect.pure(text),
+			Err(_) => Effect.pure("unavailable"),
+		}
+	}
+}
+
+service api from http {
+	on GET("/ask") () -> Effect[HttpResult[String]] by Visitor given Ai {
+		let reply <- Ai.run("@cf/meta/llama-3.1-8b-instruct", "{\"prompt\": \"hello\"}")
+		match reply {
+			Ok(text) => Ok(text),
+			Err(ModelNotFound) => NotFound,
+			Err(_) => ServerError("model unavailable"),
+		}
+	}
+}
+
+service about {
+	on call(question: String) -> Effect[String] given Answerer {
+		Answerer.answer(question)
+	}
+}

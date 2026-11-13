@@ -1,0 +1,10 @@
+context shop.plain
+
+// #3478: a Worker that never reaches `Ai` declares no `[ai]` stanza, though
+// its project consumes it elsewhere.
+
+service ping {
+	on call() -> Effect[String] {
+		Effect.pure("pong")
+	}
+}

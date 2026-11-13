@@ -1,0 +1,10 @@
+{
+  "version": 1,
+  "provides": {
+    "ping": "da0e4883e49f04d6"
+  },
+  "expects": {},
+  "provides_shapes": {
+    "ping": "Svc(\"ping\",Ret(B(\"String\")))"
+  }
+}

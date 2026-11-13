@@ -4,7 +4,7 @@
 
 use super::*;
 use bynk_emit::emitter::RuntimeUse;
-use bynk_emit::emitter::wrangler::{BindingSource, WorkerBinding};
+use bynk_emit::emitter::wrangler::{BindingSource, WorkerBinding, singleton_is};
 // #1759: every namespace a test module imports, from one definition.
 use bynk_check::checker::Types;
 use bynk_check::d1_migrations::{D1Migrations, pglite_on};
@@ -784,7 +784,7 @@ fn platform_binding_factories(
     binds: &dyn Fn(fn(&BindingSource) -> bool) -> bool,
     pglite: bool,
 ) -> Vec<String> {
-    let kinds: [(bynk_emit::emitter::wrangler::BindingKind, &str); 10] = [
+    let kinds: [(bynk_emit::emitter::wrangler::BindingKind, &str); 11] = [
         (
             |s| matches!(s, BindingSource::Kv | BindingSource::KvInstance { .. }),
             "__makeIntegrationKv",
@@ -827,9 +827,10 @@ fn platform_binding_factories(
             "__makeIntegrationHyperdrive",
         ),
         (
-            |s| matches!(s, BindingSource::Singleton { .. }),
+            |s| singleton_is(s, "Version"),
             "__makeIntegrationVersionMetadata",
         ),
+        (|s| singleton_is(s, "Ai"), "__makeIntegrationAi"),
     ];
     kinds
         .into_iter()

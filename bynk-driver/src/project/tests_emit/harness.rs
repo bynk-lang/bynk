@@ -218,8 +218,15 @@ pub(super) fn emit_integration_harness<'a>(
                 // #3302: an in-memory outbox per participant.
                 BindingSource::Email { .. } => call(ident("__makeIntegrationEmail"), vec![]),
                 // #3300: a fixed version, the same for every participant.
-                BindingSource::Singleton { .. } => {
+                BindingSource::Singleton { capability } if capability == "Version" => {
                     call(ident("__makeIntegrationVersionMetadata"), vec![])
+                }
+                // #3478: a Workers AI binding that faults until stubbed.
+                BindingSource::Singleton { capability } if capability == "Ai" => {
+                    call(ident("__makeIntegrationAi"), vec![])
+                }
+                BindingSource::Singleton { capability } => {
+                    unreachable!("singleton `{capability}` has no integration binding")
                 }
                 // Interop I5 (#1972): the foreign Worker is not here, so its
                 // binding answers as `bynk dev`'s default double does.

@@ -1,0 +1,9 @@
+// #3478: at `system`, each participant Worker binds an AI binding that
+// faults until stubbed, so the call comes back as an error response from the
+// deployed Worker and never reaches Workers AI.
+suite shop.assist as system {
+	case "the participant's binding never reaches Workers AI" {
+		let r <- api.GET("/ask") by Visitor
+		expect r is ServerError(_)
+	}
+}

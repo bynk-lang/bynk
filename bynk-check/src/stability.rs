@@ -429,6 +429,7 @@ mod tests {
                 "bynk.cloudflare.Queue",
                 "bynk.cloudflare.Analytics",
                 "bynk.cloudflare.Version",
+                "bynk.cloudflare.Ai",
                 "bynk.cloudflare.StoredSecret",
                 "bynk.cloudflare.Email",
                 "bynk.cloudflare.Postgres",
