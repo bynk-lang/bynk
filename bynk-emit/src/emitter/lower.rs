@@ -2257,6 +2257,37 @@ fn encode_capability_args(
     }
 }
 
+/// Typed capability reads (#3458): a call to an operation whose `Effect[P]`
+/// payload mentions a `Codable` parameter gets the provider's plain-JSON reply
+/// decoded as the instantiated `P`, whole, with the codec of `P`. What a reply
+/// that does not decode means is the operation's declared policy (a fault, or a
+/// miss for an `Option` payload); the runtime helper applies it. Other calls
+/// are returned as they are.
+fn decode_capability_reply(
+    call: String,
+    wire: Option<&bynk_check::checker::codable::CapEncoding>,
+    cap: &str,
+    op: &str,
+    cx: &LowerCtx,
+) -> String {
+    use bynk_check::checker::codable::ReplyPolicy;
+    let Some(reply) = wire.and_then(|w| w.reply.as_ref()) else {
+        return call;
+    };
+    cx.runtime_use().note_cmp("__bynkCapabilityReply");
+    let policy = match reply.policy {
+        ReplyPolicy::Fault => "fault",
+        ReplyPolicy::Miss => "miss",
+    };
+    format!(
+        "__bynkCapabilityReply({call}, {}, {{ capability: \"{}\", operation: \"{}\", type: \"{}\" }}, \"{policy}\")",
+        cx.codec(reply.payload),
+        escape_ts_string(cap),
+        escape_ts_string(op),
+        escape_ts_string(&reply.payload.display(cx.commons().tys())),
+    )
+}
+
 /// #934 (call-site key scoping): `Idempotency.dedup[T](key)` and
 /// `Idempotency.remember[T](key, value, expiresAfter)` and
 /// `Idempotency.claim(key, expiresAfter)` all take the
@@ -2627,13 +2658,20 @@ fn lower_cross_context_call(
         }
         let wire = capability_wire(e, cx);
         encode_capability_args(wire.as_deref(), &mut args_lowered, cx);
-        return Some(format!(
+        let call = format!(
             "{}.{}.{}{}({})",
             cx.cap_deps_expr(),
             cap,
             method.name,
             capability_call_type_args_ts(type_args, wire.as_deref()),
             args_lowered.join(", ")
+        );
+        return Some(decode_capability_reply(
+            call,
+            wire.as_deref(),
+            &cap,
+            &method.name,
+            cx,
         ));
     }
     // v0.6 cross-context service call: receiver is an alias or the
@@ -2749,12 +2787,21 @@ fn lower_capability_call(
             Some(Callee::Capability { cap, .. }) if *cap == id.name
         )
     {
-        let args_lowered: Vec<String> = args.iter().map(|a| pre.lower(a, cx)).collect();
-        return Some(format!(
+        let mut args_lowered: Vec<String> = args.iter().map(|a| pre.lower(a, cx)).collect();
+        let wire = capability_wire(e, cx);
+        encode_capability_args(wire.as_deref(), &mut args_lowered, cx);
+        let call = format!(
             "deps.{}.{}({})",
             id.name,
             method.name,
             args_lowered.join(", ")
+        );
+        return Some(decode_capability_reply(
+            call,
+            wire.as_deref(),
+            &id.name,
+            &method.name,
+            cx,
         ));
     }
     // Capability call: receiver is a bare ident naming a declared
@@ -2786,13 +2833,20 @@ fn lower_capability_call(
         }
         let wire = capability_wire(e, cx);
         encode_capability_args(wire.as_deref(), &mut args_lowered, cx);
-        return Some(format!(
+        let call = format!(
             "{}.{}.{}{}({})",
             cx.cap_deps_expr(),
             id.name,
             method.name,
             capability_call_type_args_ts(type_args, wire.as_deref()),
             args_lowered.join(", ")
+        );
+        return Some(decode_capability_reply(
+            call,
+            wire.as_deref(),
+            &id.name,
+            &method.name,
+            cx,
         ));
     }
     None

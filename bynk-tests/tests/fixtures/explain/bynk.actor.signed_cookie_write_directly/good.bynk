@@ -1,0 +1,22 @@
+context shop
+
+consumes bynk { Cookie }
+
+type UserId = String where NonEmpty
+
+type Prefs = {
+  @name("__Host-session") session: Option[String],
+  theme: Option[String],
+}
+
+actor User { auth = SignedCookie(secret = "SESSION_KEY", ttl = 12.hours), identity = UserId }
+
+service api from http {
+  on GET("/a") (cookies: Prefs) -> Effect[HttpResult[String]] by v: Visitor {
+    Ok("x").withCookie(Prefs.theme.cookie("dark"))
+  }
+
+  on GET("/me") () -> Effect[HttpResult[String]] by who: User {
+    Ok("x")
+  }
+}

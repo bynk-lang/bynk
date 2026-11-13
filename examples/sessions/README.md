@@ -18,17 +18,18 @@ What it shows:
 
 - **A session in a cookie** — `POST /sessions` mints an unguessable token with
   `Random.bytes(16).toBase64Url()` and returns it with
-  `Created("ok").withCookie(Cookie { name: "__Host-sid", value: token, maxAge: Some(30.minutes) })`.
-  The `Cookie` defaults are the safe ones (`Secure`, `HttpOnly`, `SameSite=Lax`,
-  `Path=/`). `GET /me` reads it back through a typed `cookies: SessionCookies`
-  record whose field is `@name("__Host-sid") sid: Option[Token]`: a hyphenated name cannot be
+  `Created("ok").withCookie(Cookie { ...SessionCookies.sid.cookie(token), maxAge: Some(30.minutes) })`:
+  the cookie is written from the record that reads it, so its name (`__Host-sid`, the field's
+  `@name`) and its value (the token) cannot drift from what `GET /me` decodes. The `Cookie`
+  defaults are the safe ones (`Secure`, `HttpOnly`, `SameSite=Lax`, `Path=/`). `GET /me` reads it
+  back through a typed `cookies: SessionCookies` record whose field is `@name("__Host-sid") sid: Option[Token]`: a hyphenated name cannot be
   a field name, so `@name` gives the field the key the browser sends, and the router checks the
   token against its refinement before the handler runs (a malformed cookie is a `400`).
   `POST /logout` reads the raw `cookies: RequestCookies` view instead, so it clears the cookie
   whatever it holds, even one the typed record would refuse. The `__Host-` prefix binds the
   cookie to this origin, and the compiler checks it: a `Cookie` literal with that name must
   be `secure`, have `path: "/"` and no `domain`. Logout ends the session and clears the
-  cookie with `clearCookie`.
+  cookie with `SessionCookies.sid.expire()`, the matching deletion.
 
 - **Testing expiry without waiting** — under `bynk test` the platform `Clock`
   is a deterministic test double that reads the epoch. A case moves time on with

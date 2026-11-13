@@ -759,7 +759,8 @@ if the type arguments cannot be resolved there it is
 `bynk.generics.ambiguous_instantiation`.
 
 A bound on a generic capability operation's
-type parameter is `bynk.generics.bound_on_capability_op`, and a `where` entry
+type parameter is `bynk.generics.bound_on_capability_op` (only `Key` and `Codable`
+are accepted there), and a `where` entry
 that names no type parameter of the method or its receiver type is
 `bynk.generics.unknown_where_param`. A bound on a type declaration is checked
 where the type is applied to a written type argument: `type Set2[T: Eq]` rejects
@@ -768,6 +769,25 @@ where the type is applied to a written type argument: `type Set2[T: Eq]` rejects
 function (the receiver type's parameters first, then the method's own, in
 declaration order), which the caller builds from the concrete type; it is
 internal and not part of the published ABI.
+
+**Typed capability reads** (#3458, lifting ADR 0696 decision 5). A capability
+operation's `Effect[P]` payload `P` MAY mention one of the operation's `Codable`
+type parameters, but only in a **first-party** capability (a unit under the reserved
+`bynk` root); in a user-declared one it is `bynk.generics.codable_op_return_not_first_party`.
+The provider replies with the boundary encoding of `P` as plain JSON; the call site
+decodes the reply **whole**, with the codec of the instantiated `P`, so `Option[T]`,
+`List[T]`, `Result[T, E]` and `T` are one rule. The instantiated `P` MUST be `Codable`
+(`bynk.types.not_codable`), and a type parameter that occurs only in the return type
+is given explicitly at the call (`Store.read[Receipt](key)`), since nothing infers it.
+What a reply that does not decode means is **declared per operation**: by default a
+**fault**, the effect rejecting with `Cap.op returned a value that does not decode as P:
+at <path>: expected …` (naming the capability, operation, instantiated type and path,
+never the value); with the internal `@onUndecodable(miss)` a **miss**, where the call
+returns `None` and a warning goes to the runtime console, which requires an
+`Effect[Option[..]]` return. `@onUndecodable(fault)` spells the default. The
+annotation is `bynk.generics.internal_op_annotation` outside a first-party unit, or
+when malformed or when `miss` is declared on another return shape. Nothing is derived
+from the return shape.
 
 {{#grammar-semantics if_expr}}
 
@@ -2092,6 +2112,16 @@ decoder reads it: an `Int` its decimal digits, a `Bool` `true` or `false`, an en
 name, anything else its text; every other attribute is the `Cookie` default. `expire()` answers the
 cookie with that name, an empty value, `maxAge: Some(0)` and an epoch `expires`. The field segment
 is a reference to the field for rename and go-to-definition.
+
+A cookie whose name is known at compile time is checked against the unit's records and actors. The
+`__Host-`/`__Secure-` and attribute rules of a `Cookie` literal apply equally to `Cookie { ...R.f.cookie(v), … }`
+and to a bare typed cookie, judged against the field's wire name. A cookie named like the session
+cookie of a `SignedCookie` actor of the unit MUST NOT be written as a typed write
+(`bynk.actor.signed_cookie_write_directly`) or an untyped `Cookie` literal
+(`bynk.actor.signed_cookie_write_literal`). An untyped literal named like a field of a `cookies` record
+of the unit draws a warning (`bynk.http.cookie_untyped_has_field`), and a literal `value` that field's
+decoder rejects (an enum other than a variant's exact name, an `Int` that is not a safe integer's
+digits, a `Bool` other than `true` or `false`) is refused (`bynk.http.cookie_value_undecodable`).
 
 **`@raw`.** A third handler annotation, `@raw(contentType: "<type>/<subtype>")` (or
 `"*/*"`), marks a handler's `body: Bytes` as the raw request body. It is legal only

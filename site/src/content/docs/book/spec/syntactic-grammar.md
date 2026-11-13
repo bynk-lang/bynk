@@ -523,10 +523,14 @@ distinct instance of the base. Well-formedness: §5.5.
 {{#grammar capability_op}}
 
 One operation in a capability: `fn`, a name, an optional `[T, …]` type-parameter
-list (v0.235, ADR 0281), parameters, `->`, and a return type — no body. A type
-parameter is resolved only from an explicit type argument at the call site
-(`Cap.op[SomeType](…)`), never inferred, and carries no bound
-(`bynk.generics.bound_on_capability_op`). Well-formedness: §5.
+list (v0.235, ADR 0281), parameters, `->`, a return type, and zero or more
+`@name(arg)` **annotations** — no body. A type parameter is resolved from an
+explicit type argument at the call site (`Cap.op[SomeType](…)`), or inferred from
+the arguments of an operation with `Codable` parameters, and carries no bound but
+`Key` and `Codable` (`bynk.generics.bound_on_capability_op`). The one annotation is
+`@onUndecodable(miss)` or `@onUndecodable(fault)`, the failure policy of a typed
+read ([§5.2](/book/spec/static-semantics/)); it is internal to the standard library
+and is `bynk.generics.internal_op_annotation` anywhere else. Well-formedness: §5.
 
 ### §4.3.8 provider_decl
 

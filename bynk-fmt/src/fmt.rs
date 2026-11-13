@@ -2042,6 +2042,10 @@ impl<'a> Formatter<'a> {
                 f.format_params(&op.params, false, reserve);
                 f.push(" -> ");
                 f.format_type_ref(&op.return_type);
+                // #3458: internal annotations stay on the operation's line.
+                for ann in &op.annotations {
+                    f.push(&format!(" {}", annotation_to_string(ann)));
+                }
                 f.emit_trailing_comment_or_newline(op.trivia.trailing.as_deref());
             }
             // #1756: the comments before the closing `}`, after a blank line.

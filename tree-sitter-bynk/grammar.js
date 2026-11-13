@@ -818,6 +818,9 @@ module.exports = grammar({
         ")",
         "->",
         field("return_type", $._type_ref),
+        // #3458: internal `@name(arg)` annotations (a first-party typed read's
+        // failure policy); the checker refuses them outside the std library.
+        repeat(field("annotation", $.store_annotation)),
       ),
 
     // message-bundles track, slice 1 (#859): `messages "<tag>" @reference {

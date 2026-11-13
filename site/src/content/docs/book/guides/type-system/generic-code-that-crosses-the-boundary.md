@@ -63,8 +63,10 @@ call, as `sendBatch` does.
 
 ## What to know
 
-- A `Codable` type parameter may not appear in an operation's return type
-  (`bynk.generics.codable_op_return`): decoding a provider's reply is not supported yet.
+- A `Codable` type parameter may appear in an operation's return type only in the
+  standard library's own operations. In a capability you declare it is
+  `bynk.generics.codable_op_return_not_first_party`: return plain data and decode it
+  where you call the operation.
 - If you forget the bound, `bynk check --fix` adds it
   ([`bynk.generics.missing_codable_bound`](/book/troubleshooting/generics-missing-codable-bound/)).
 

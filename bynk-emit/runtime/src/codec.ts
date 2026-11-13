@@ -154,3 +154,51 @@ export function __bynkCodecResult<T, E>(ct: __BynkCodec<T>, ce: __BynkCodec<E>):
     },
   };
 }
+
+// Typed capability reads (#3458): where a first-party operation's reply is
+// decoded as the payload type a call instantiates. The provider returns plain
+// JSON; the call site hands it, with the payload's codec, to the helper below.
+
+/** Where a typed read happened, named in the fault or warning a reply that does not decode becomes. */
+export interface __BynkReplySite {
+  readonly capability: string;
+  readonly operation: string;
+  /** The instantiated payload type, as the source spells it. */
+  readonly type: string;
+}
+
+/** Why a reply did not decode: the error's path and what was expected, never the value (it can be personal data). */
+function replyFailure(e: BoundaryError): string {
+  switch (e.kind) {
+    case "StructuralMismatch":
+      return `at ${e.path}: expected ${e.expected}, got ${e.actual}`;
+    case "RefinementViolation":
+      return `at ${e.path}: ${e.violation.message}`;
+    case "MalformedJson":
+      return `malformed JSON: ${e.details}`;
+    case "Transport":
+      return `transport failure: ${e.details}`;
+  }
+}
+
+/**
+ * Decode a typed read's reply as the payload of `codec`. A reply that does not decode is, by the
+ * operation's declared policy, a fault (`policy: "fault"`, the default: the promise rejects with
+ * the capability, operation, type and path) or a miss (`policy: "miss"`, for an `Option` payload:
+ * a warning on the runtime console and `None`, so a stale or hand-edited value reads as absent).
+ */
+export async function __bynkCapabilityReply<T>(
+  reply: Promise<unknown>,
+  codec: __BynkCodec<T>,
+  site: __BynkReplySite,
+  policy: "fault" | "miss",
+): Promise<T> {
+  const decoded = codec.decode((await reply) as JsonValue, "$");
+  if (decoded.tag === "Ok") return decoded.value;
+  const message = `${site.capability}.${site.operation} returned a value that does not decode as ${site.type}: ${replyFailure(decoded.error)}`;
+  if (policy === "miss") {
+    globalThis.console.warn(`bynk: warning: ${message}; read as a miss`);
+    return None as unknown as T;
+  }
+  throw new globalThis.Error(`bynk: ${message}`);
+}

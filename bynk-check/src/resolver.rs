@@ -307,6 +307,9 @@ pub struct CrossContextInfo {
     /// #3446: the records some handler of the unit decodes as its `cookies` parameter (any file
     /// of the unit): the ones `Record.field.cookie(v)` may write.
     pub cookie_records: HashSet<String>,
+    /// #3446: the cookie names the unit's `SignedCookie` actors consume (their `cookie` key, else
+    /// the default): the cookies only `Actor.issue`/`expire` may write.
+    pub signed_cookie_names: HashSet<String>,
 }
 
 /// Snapshot of one exported capability in a consumed context, as needed for
@@ -339,6 +342,8 @@ pub struct CrossContextCapabilityOp {
     pub return_type: TypeRef,
     /// Slice 3: the op's type parameters declared `Codable`.
     pub codable_params: Vec<String>,
+    /// #3458: what an undecodable reply means for a typed read, as declared.
+    pub reply_policy: crate::checker::codable::ReplyPolicy,
 }
 
 /// Snapshot of one service in a consumed context, as needed for v0.6
@@ -1187,6 +1192,12 @@ pub fn resolve_file_record(
         .collect();
     for item in &resolved.commons.items {
         check_reserved_host_name(item, &mut sinks);
+        if let CommonsItem::Capability(c) = item {
+            let first_party = crate::firstparty::is_first_party_unit(&resolved.commons.name);
+            for op in &c.ops {
+                check_op_annotations(op, first_party, &mut sinks);
+            }
+        }
         match item {
             CommonsItem::Type(t) => {
                 sinks.refs.set_owner(&t.name.name);
@@ -1240,6 +1251,129 @@ pub fn resolve_file_record(
         Ok(())
     } else {
         Err(errors)
+    }
+}
+
+/// #3458: the only annotation a capability operation takes is the standard
+/// library's `@onUndecodable(miss|fault)`, so it is refused anywhere else, and
+/// in a first-party unit it must name a policy.
+fn check_op_annotations(op: &bynk_syntax::ast::CapabilityOp, first_party: bool, sinks: &mut Sinks) {
+    use crate::checker::codable::{
+        REPLY_POLICY_ANNOTATION, ReplyPolicy, codable_op_params, mentions_any, op_reply_policy,
+        reply_policy_word,
+    };
+    use bynk_syntax::ast::TypeRef;
+    // #3458: a typed read (a `Codable` parameter in the return type) is a
+    // first-party operation's. The provider replies with plain JSON that the
+    // call site decodes, and what a reply that does not decode means is
+    // declared on the operation, so a provider that could return anything is
+    // not accepted yet.
+    let codable = codable_op_params(op);
+    if mentions_any(&op.return_type, &codable) {
+        if !first_party {
+            sinks.push(
+                CompileError::new(
+                    "bynk.generics.codable_op_return_not_first_party",
+                    op.return_type.span(),
+                    format!(
+                        "the return type of capability operation `{}` mentions a `Codable` type parameter, but only the standard library's capabilities may do that",
+                        op.name.name
+                    ),
+                )
+                .with_note(
+                    "typed reads are accepted only for the standard library's own capabilities for now; return `String` and decode with `Json.decode[T]` at the call site",
+                ),
+            );
+        } else if !matches!(op.return_type, TypeRef::Effect(..)) {
+            sinks.push(CompileError::new(
+                "bynk.generics.internal_op_annotation",
+                op.return_type.span(),
+                format!(
+                    "a typed read, `{}`, returns `Effect[..]` over its `Codable` payload",
+                    op.name.name
+                ),
+            ));
+        }
+    }
+    // A policy only governs a typed read; on any other operation it would look
+    // in force and do nothing.
+    if first_party
+        && op
+            .annotations
+            .iter()
+            .any(|a| a.name.name == REPLY_POLICY_ANNOTATION)
+        && crate::checker::codable::typed_read_policy(op).is_none()
+    {
+        sinks.push(CompileError::new(
+            "bynk.generics.internal_op_annotation",
+            op.span,
+            format!(
+                "`@{REPLY_POLICY_ANNOTATION}` on `{}`, which is not a typed read (no `Codable` parameter in its `Effect` payload)",
+                op.name.name
+            ),
+        ));
+    }
+    if first_party
+        && op_reply_policy(op) == ReplyPolicy::Miss
+        && !matches!(&op.return_type, TypeRef::Effect(inner, _) if matches!(**inner, TypeRef::Option(..)))
+    {
+        sinks.push(CompileError::new(
+            "bynk.generics.internal_op_annotation",
+            op.return_type.span(),
+            format!(
+                "`@{REPLY_POLICY_ANNOTATION}(miss)` on `{}` needs an `Effect[Option[..]]` return: a miss is `None`",
+                op.name.name
+            ),
+        ));
+    }
+    // A second policy would make the written order decide the behaviour.
+    if first_party
+        && op
+            .annotations
+            .iter()
+            .filter(|a| a.name.name == REPLY_POLICY_ANNOTATION)
+            .count()
+            > 1
+    {
+        sinks.push(CompileError::new(
+            "bynk.generics.internal_op_annotation",
+            op.annotations
+                .iter()
+                .filter(|a| a.name.name == REPLY_POLICY_ANNOTATION)
+                .nth(1)
+                .map_or(op.span, |a| a.span),
+            format!(
+                "capability operation `{}` declares `@{REPLY_POLICY_ANNOTATION}` more than once",
+                op.name.name
+            ),
+        ));
+    }
+    for ann in &op.annotations {
+        if !first_party {
+            sinks.push(
+                CompileError::new(
+                    "bynk.generics.internal_op_annotation",
+                    ann.span,
+                    format!(
+                        "`@{}` on capability operation `{}` is internal to the standard library",
+                        ann.name.name, op.name.name
+                    ),
+                )
+                .with_note("remove the annotation; capability operations take none in user code"),
+            );
+        } else if ann.name.name != REPLY_POLICY_ANNOTATION || reply_policy_word(ann).is_none() {
+            sinks.push(
+                CompileError::new(
+                    "bynk.generics.internal_op_annotation",
+                    ann.span,
+                    format!(
+                        "capability operation `{}` takes only `@{REPLY_POLICY_ANNOTATION}(miss)` or `@{REPLY_POLICY_ANNOTATION}(fault)`",
+                        op.name.name
+                    ),
+                )
+                .with_note("the one operation annotation is the failure policy of a typed read"),
+            );
+        }
     }
 }
 
@@ -1339,25 +1473,6 @@ fn check_signature_refs(
                         )
                         .with_note(
                             "capability operations take only `Key` and `Codable` bounds; remove the `: …`",
-                        ),
-                    );
-                }
-                // Decoding a provider's reply raises a question this slice does
-                // not answer (what a failed decode of stored data means), so a
-                // `Codable` parameter may not appear in the return type.
-                let codable = crate::checker::codable::codable_op_params(op);
-                if crate::checker::codable::mentions_any(&op.return_type, &codable) {
-                    sinks.push(
-                        CompileError::new(
-                            "bynk.generics.codable_op_return",
-                            op.return_type.span(),
-                            format!(
-                                "the return type of capability operation `{}` mentions a `Codable` type parameter",
-                                op.name.name
-                            ),
-                        )
-                        .with_note(
-                            "a `Codable` parameter is encoded at the call site; decoding a provider's reply is not supported yet — return `String` or `Json`-free data and decode at the call site with `Json.decode`",
                         ),
                     );
                 }
@@ -4079,5 +4194,113 @@ mod guard_resolution_tests {
             "commons d\n\nfn g(o: Option[Int]) -> Int {\n  match o {\n    Some(v) if v > 0 => v\n    _ => 0\n  }\n}\n",
         )])
         .assert_clean();
+    }
+}
+
+#[cfg(test)]
+mod op_annotation_tests {
+    use crate::testkit::analyse;
+
+    fn unit(name: &str, annotation: &str) -> String {
+        format!(
+            "context {name}\n\ncapability Store {{\n  fn load[T: Codable](id: String) -> Effect[Option[T]] {annotation}\n}}\n"
+        )
+    }
+
+    /// #3458: a first-party unit (under the reserved `bynk` root) may declare
+    /// the reply policy, but only as `miss` or `fault`.
+    #[test]
+    fn a_first_party_operation_takes_only_a_reply_policy() {
+        analyse(&[("a.bynk", &unit("bynk.t", "@onUndecodable(skip)"))])
+            .assert_reports("bynk.generics.internal_op_annotation");
+        analyse(&[("a.bynk", &unit("bynk.t", "@other(miss)"))])
+            .assert_reports("bynk.generics.internal_op_annotation");
+        analyse(&[("a.bynk", &unit("bynk.t", "@onUndecodable(by: miss)"))])
+            .assert_reports("bynk.generics.internal_op_annotation");
+    }
+
+    /// #3458: a typed read, a `Codable` parameter in the `Effect` payload, is a
+    /// first-party operation's: it resolves cleanly there, and is refused in a
+    /// user unit.
+    #[test]
+    fn a_typed_read_is_first_party_only() {
+        let first_party = analyse(&[("a.bynk", &unit("bynk.t", "@onUndecodable(miss)"))]);
+        for refused in [
+            "bynk.generics.codable_op_return_not_first_party",
+            "bynk.generics.internal_op_annotation",
+        ] {
+            assert!(
+                !first_party.categories().contains(&refused),
+                "a first-party typed read is accepted, got:\n{}",
+                first_party.render()
+            );
+        }
+        analyse(&[("a.bynk", &unit("shop", ""))])
+            .assert_reports("bynk.generics.codable_op_return_not_first_party");
+    }
+
+    /// A miss is `None`, so it needs an `Option` payload; a typed read returns an `Effect`.
+    #[test]
+    fn a_miss_needs_an_option_payload_and_a_typed_read_an_effect() {
+        let src = "context bynk.t\n\ncapability Store {\n  fn load[T: Codable](id: String) -> Effect[T] @onUndecodable(miss)\n}\n";
+        analyse(&[("a.bynk", src)]).assert_reports("bynk.generics.internal_op_annotation");
+        let src = "context bynk.t\n\ncapability Store {\n  fn load[T: Codable](id: String) -> Option[T]\n}\n";
+        analyse(&[("a.bynk", src)]).assert_reports("bynk.generics.internal_op_annotation");
+    }
+
+    /// Two policies are refused, and each valid spelling resolves cleanly.
+    #[test]
+    fn a_policy_is_declared_once_and_valid_spellings_are_clean() {
+        analyse(&[(
+            "a.bynk",
+            &unit("bynk.t", "@onUndecodable(miss) @onUndecodable(fault)"),
+        )])
+        .assert_reports("bynk.generics.internal_op_annotation");
+        for ok in ["@onUndecodable(miss)", "@onUndecodable(fault)", ""] {
+            let a = analyse(&[("a.bynk", &unit("bynk.t", ok))]);
+            assert!(
+                !a.categories()
+                    .contains(&"bynk.generics.internal_op_annotation"),
+                "{ok}: {}",
+                a.render()
+            );
+        }
+    }
+
+    /// The policy an operation declares: a fault by default, a miss or a fault when written.
+    #[test]
+    fn the_declared_policy_is_read_back() {
+        use crate::checker::codable::{ReplyPolicy, op_reply_policy};
+        let policy = |ann: &str| {
+            let src = unit("bynk.t", ann);
+            let toks = bynk_syntax::lexer::tokenize(&src).unwrap();
+            let bynk_syntax::ast::SourceUnit::Context(c) =
+                bynk_syntax::parser::parse_unit(&toks, &src).unwrap()
+            else {
+                panic!("a context")
+            };
+            let Some(bynk_syntax::ast::CommonsItem::Capability(cap)) = c.items.first() else {
+                panic!("a capability")
+            };
+            op_reply_policy(&cap.ops[0])
+        };
+        assert_eq!(policy(""), ReplyPolicy::Fault);
+        assert_eq!(policy("@onUndecodable(fault)"), ReplyPolicy::Fault);
+        assert_eq!(policy("@onUndecodable(miss)"), ReplyPolicy::Miss);
+        assert_eq!(policy("@onUndecodable(skip)"), ReplyPolicy::Fault);
+    }
+
+    /// A policy on an operation that is not a typed read is refused: it would do nothing.
+    #[test]
+    fn a_policy_needs_a_typed_read() {
+        let src = "context bynk.t\n\ncapability Store {\n  fn f() -> Effect[Option[String]] @onUndecodable(miss)\n}\n";
+        analyse(&[("a.bynk", src)]).assert_reports("bynk.generics.internal_op_annotation");
+    }
+
+    /// A user unit may not declare one at all.
+    #[test]
+    fn a_user_operation_takes_no_annotation() {
+        analyse(&[("a.bynk", &unit("shop", "@onUndecodable(miss)"))])
+            .assert_reports("bynk.generics.internal_op_annotation");
     }
 }
