@@ -28,6 +28,7 @@ per-commit history. While Bynk is pre-1.0, increments may change behaviour.
 
 | Version | Highlights |
 |---|---|
+| **v0.578.2** | `bynk revert` tells you to use `--to` when the live version was made live outside bynk, and the rollback guide covers setting secrets after a revert |
 | **v0.578.1** | `bynk explain` gains explanations for six agent schema-evolution codes (`agent.non_additive_state_change`, `agent.migrate_shape_mismatch`, `agent.migrate_incomplete`, `agent.migrate_unknown_version`, `agent.replaces_unknown`, `agent.class_conflict`) |
 | **v0.578.0** | An untyped `Cookie` literal named for a cookie record's field is warned about and its undecodable value refused; the `SignedCookie` cookie cannot be written by hand or from a record, and the typed name is judged by the prefix rules |
 | **v0.577.3** | `bynk revert` keeps a reverted Worker's contract shapes, so a later skew is still classified as compatible or breaking; `bynk.deploy.lock` files shapes by hash in a pruned `contract_shapes` table, and an older lock's per-Worker shapes are moved into it on read |
