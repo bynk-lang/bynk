@@ -183,7 +183,7 @@ fn create_metadata_index(
     let (property, ty) = entry
         .split_once(':')
         .ok_or_else(|| format!("`{entry}` is not `name:type`"))?;
-    vectorize_command(
+    match vectorize_command(
         provenance,
         &[
             "create-metadata-index",
@@ -194,8 +194,13 @@ fn create_metadata_index(
             ty,
         ],
         project_root,
-    )
-    .map(|_| ())
+    ) {
+        Ok(_) => Ok(()),
+        // Listed between the listing and this request (Cloudflare builds them
+        // asynchronously): the property is there, which is what was wanted.
+        Err(e) if e.contains("metadata index already exists") => Ok(()),
+        Err(e) => Err(e),
+    }
 }
 
 /// How the deploy waits for new metadata indexes to be listed: the first delay,

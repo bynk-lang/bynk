@@ -1,0 +1,7 @@
+context demo
+
+// #3479: @dimensions is at least 32: 31 is refused, 32 is the smallest index Cloudflare creates.
+
+consumes bynk.cloudflare { Vectorize }
+
+capability Docs = Vectorize @dimensions(31) @metric("cosine")

@@ -43,7 +43,7 @@ impl Fake {
         let script = dir.join("wrangler");
         std::fs::write(
             &script,
-            "#!/bin/sh\nd=$(dirname \"$0\")\necho \"$@\" >> \"$d/calls.log\"\n[ \"$1\" = vectorize ] || exit 2\ncase \"$2\" in\n  list) cat \"$d/list.json\";;\n  get) cat \"$d/get.json\";;\n  create-metadata-index) touch \"$d/created\";;\n  list-metadata-index)\n    if [ -f \"$d/created\" ]; then\n      n=$(cat \"$d/polls\" 2>/dev/null || echo 0); echo $((n+1)) > \"$d/polls\"\n      if [ -f \"$d/after.$n.json\" ]; then cat \"$d/after.$n.json\"; elif [ -f \"$d/after.json\" ]; then cat \"$d/after.json\"; else cat \"$d/meta.json\"; fi\n    else cat \"$d/meta.json\"; fi;;\n  *) exit 0;;\nesac\n",
+            "#!/bin/sh\nd=$(dirname \"$0\")\necho \"$@\" >> \"$d/calls.log\"\n[ \"$1\" = vectorize ] || exit 2\ncase \"$2\" in\n  list) cat \"$d/list.json\";;\n  get) cat \"$d/get.json\";;\n  create-metadata-index) touch \"$d/created\"; if [ -f \"$d/exists\" ]; then echo \"metadata index already exists for this name [code: 40004]\" >&2; exit 1; fi;;\n  list-metadata-index)\n    if [ -f \"$d/created\" ]; then\n      n=$(cat \"$d/polls\" 2>/dev/null || echo 0); echo $((n+1)) > \"$d/polls\"\n      if [ -f \"$d/after.$n.json\" ]; then cat \"$d/after.$n.json\"; elif [ -f \"$d/after.json\" ]; then cat \"$d/after.json\"; else cat \"$d/meta.json\"; fi\n    else cat \"$d/meta.json\"; fi;;\n  *) exit 0;;\nesac\n",
         )
         .unwrap();
         #[cfg(unix)]
@@ -456,4 +456,20 @@ fn a_deploy_that_creates_no_metadata_index_does_not_wait() {
     fake.run(&resources(&["category:string"]), &mut lock, "default")
         .unwrap();
     assert_eq!(fake.polls(), 1, "{:?}", fake.calls());
+}
+
+#[cfg(unix)]
+#[test]
+fn a_metadata_index_listed_between_the_listing_and_the_create_is_not_a_failure() {
+    // Cloudflare answers `already exists` for a property that has just become
+    // listed; the deploy goes on to wait for it rather than failing.
+    let fake = Fake::new("exists", "[]", MATCHING, "[]");
+    std::fs::write(fake.dir.join("exists"), "").unwrap();
+    fake.after(
+        None,
+        r#"[{"propertyName":"category","indexType":"String"}]"#,
+    );
+    let mut lock = DeployLock::default();
+    fake.run(&resources(&["category:string"]), &mut lock, "default")
+        .unwrap();
 }
