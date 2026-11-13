@@ -517,7 +517,7 @@ pub struct Unit {
 }
 
 /// A platform capability with exactly one binding per Worker (#3300): Version
-/// metadata's `[version_metadata]`, and later Workers AI's `[ai]`.
+/// metadata's `[version_metadata]` and Workers AI's `[ai]`.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub struct Singleton {
     /// The capability's name in its unit (`Version`).
@@ -707,6 +707,10 @@ pub const EMAIL_ALLOWED_SENDERS_OPTION: &str = "allowedSenders";
 /// the name Cloudflare's own documentation uses.
 pub const VERSION_BINDING_NAME: &str = "CF_VERSION_METADATA";
 
+/// The Worker binding of the `Ai` capability (#3478): Workers AI's binding,
+/// `[ai] binding = "AI"`, the name Cloudflare's own documentation uses.
+pub const AI_BINDING_NAME: &str = "AI";
+
 /// The prefix an `EdgeCache` instance's binding name would carry (first-party
 /// registry L7, #2414). Workers Cache is a Worker-wide `[cache]` setting with
 /// no `env` binding, so the name is never emitted: the instance is built from
@@ -797,6 +801,7 @@ pub const UNITS: &[Unit] = &[
             "WorkersAnalytics",
             "WorkersD1",
             "WorkersVersion",
+            "WorkersAi",
             "WorkersStoredSecret",
             "WorkersEmail",
             "WorkersPostgres",
@@ -812,6 +817,7 @@ pub const UNITS: &[Unit] = &[
         // P2 (#2578): Queue too, until a first-party service has sent on it.
         // P3b (#2582): Analytics too, until a first-party service writes to it.
         // Version metadata (#3300) too, until a first-party service reports it.
+        // Workers AI (#3478) too, until a first-party service has called a model.
         // Secrets Store (#3301) too, until a first-party service reads one.
         // Outbound email (#3302) too: Email Service carries no GA label.
         // Hyperdrive H1 (#3318): `Postgres` too, until a first-party service
@@ -829,6 +835,7 @@ pub const UNITS: &[Unit] = &[
             "Queue",
             "Analytics",
             "Version",
+            "Ai",
             "StoredSecret",
             "Email",
             "Postgres",
@@ -844,6 +851,7 @@ pub const UNITS: &[Unit] = &[
             "KvExpiration",
             "SqlError",
             "EmailError",
+            "AiError",
             "PgError",
             "MySqlError",
         ],
@@ -966,11 +974,19 @@ pub const UNITS: &[Unit] = &[
         ],
         // Version metadata (#3300): the running Worker version's id, tag and
         // creation time, one binding per Worker.
-        singletons: &[Singleton {
-            capability: "Version",
-            binding: VERSION_BINDING_NAME,
-            wrangler_table: "version_metadata",
-        }],
+        singletons: &[
+            Singleton {
+                capability: "Version",
+                binding: VERSION_BINDING_NAME,
+                wrangler_table: "version_metadata",
+            },
+            // Workers AI (#3478): one `[ai]` binding per Worker, no instances.
+            Singleton {
+                capability: "Ai",
+                binding: AI_BINDING_NAME,
+                wrangler_table: "ai",
+            },
+        ],
     },
     Unit {
         name: LIST_UNIT,
@@ -1539,12 +1555,15 @@ mod tests {
             .collect();
         assert_eq!(
             shipped,
-            [(
-                "bynk.cloudflare",
-                "Version",
-                "CF_VERSION_METADATA",
-                "version_metadata"
-            )]
+            [
+                (
+                    "bynk.cloudflare",
+                    "Version",
+                    "CF_VERSION_METADATA",
+                    "version_metadata"
+                ),
+                ("bynk.cloudflare", "Ai", "AI", "ai"),
+            ]
         );
         for u in UNITS {
             for s in u.singletons {
@@ -1725,6 +1744,7 @@ mod tests {
                 "bynk.cloudflare.Queue",
                 "bynk.cloudflare.Analytics",
                 "bynk.cloudflare.Version",
+                "bynk.cloudflare.Ai",
                 "bynk.cloudflare.StoredSecret",
                 "bynk.cloudflare.Email",
                 "bynk.cloudflare.Postgres",
@@ -1751,6 +1771,7 @@ mod tests {
                 ("bynk.cloudflare", "KvExpiration"),
                 ("bynk.cloudflare", "SqlError"),
                 ("bynk.cloudflare", "EmailError"),
+                ("bynk.cloudflare", "AiError"),
                 ("bynk.cloudflare", "PgError"),
                 ("bynk.cloudflare", "MySqlError"),
                 ("bynk.crypto", "Digest"),

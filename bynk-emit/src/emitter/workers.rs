@@ -17,6 +17,7 @@ use crate::emit_model::{ImportExt, LocaleNegotiationArgs};
 use crate::emitter::http_handler_method_name_ir;
 use crate::emitter::wrangler::{
     BindingSource, WorkerBinding, agent_binding, binding_ts_type, events_fanout_binding,
+    singleton_is,
 };
 use crate::emitter::{
     BOUNDARY_CODEC_RUNTIME_IMPORTS, BYTES_RUNTIME_IMPORTS, JSON_CODEC_RUNTIME_IMPORTS, RuntimeUse,
@@ -3041,7 +3042,7 @@ fn qualified_ts_type_ref(r: &TypeRef) -> TsType {
 /// `type __X` import entries, then the driver a `Postgres` instance is given.
 fn platform_binding_imports(bindings: &[WorkerBinding]) -> Vec<String> {
     let binds = |kind: fn(&BindingSource) -> bool| bindings.iter().any(|b| kind(&b.source));
-    let kinds: [(crate::emitter::wrangler::BindingKind, &str); 10] = [
+    let kinds: [(crate::emitter::wrangler::BindingKind, &str); 11] = [
         (
             |s| matches!(s, BindingSource::Kv | BindingSource::KvInstance { .. }),
             "__KVNamespace",
@@ -3080,10 +3081,8 @@ fn platform_binding_imports(bindings: &[WorkerBinding]) -> Vec<String> {
             },
             "__Hyperdrive",
         ),
-        (
-            |s| matches!(s, BindingSource::Singleton { .. }),
-            "__WorkerVersionMetadata",
-        ),
+        (|s| singleton_is(s, "Version"), "__WorkerVersionMetadata"),
+        (|s| singleton_is(s, "Ai"), "__WorkerAiBinding"),
     ];
     let mut imports: Vec<String> = kinds
         .into_iter()

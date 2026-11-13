@@ -486,6 +486,7 @@ Consuming it **locks the deployment unit to Cloudflare** (it cannot then target
 | **`RateLimit`** *(experimental)* | `allow(key: String) -> Effect[Bool]`. Used only through a named instance that sets its limit and window; see below. |
 | **`EdgeCache`** *(experimental)* | `purge(prefixes: List[String]) -> Effect[Bool]`. Used only through a named instance, at most one per context, which turns Cloudflare's edge cache on for the context's Worker; see below. |
 | **`Version`** *(experimental)* | `current() -> Effect[WorkerVersion]`. One per Worker, used bare; see [The running version](#the-running-version-version). |
+| **`Ai`** *(experimental)* | `run(model: String, input: String) -> Effect[Result[String, AiError]]`. One per Worker, used bare; see [Workers AI](#workers-ai-ai). |
 | **`StoredSecret`** *(experimental)* | `get() -> Effect[String]`. Used only through a named instance that names its store and its secret; see [Account secrets](#account-secrets-storedsecret). |
 | **`Email`** *(experimental)* | `send(message: EmailMessage) -> Effect[Result[String, EmailError]]`. Used only through a named instance, which may restrict its senders and recipients; see [Outbound email](#outbound-email-email). |
 | **`Postgres`** *(experimental)* | `all(sql: String, params: List[PgValue]) -> Effect[Result[String, PgError]]` · `first(sql, params) -> Effect[Result[Option[String], PgError]]` · `run(sql, params) -> Effect[Result[PgRun, PgError]]` · `transaction(statements: List[PgStatement]) -> Effect[Result[List[PgRun], PgError]]`, and the compiler-lowered typed reads `select[T]` and `firstAs[T]`. Used only through a named instance; see [Postgres databases](#postgres-databases-postgres). |
@@ -845,6 +846,58 @@ version (id `"test"`, no tag, `deployed` at the epoch), so a result never
 depends on when or where the test runs, and `stub Version.current() returns …`
 gives another. A `system` test's Workers report id `"integration"`. `Version` is
 experimental: list `"bynk.cloudflare.Version"` under `[unstable] allow`.
+
+### Workers AI: `Ai`
+
+`Ai` runs a model on Cloudflare's [Workers AI](https://developers.cloudflare.com/workers-ai/)
+through the Worker's `[ai]` binding, which needs no API token and no account id.
+A Worker has one such binding, so `Ai` is used bare, with no named instances
+(`capability Chat = Ai` is `bynk.capability.base_not_instantiable`):
+
+```bynk,fragment
+consumes bynk
+consumes bynk.cloudflare { Ai, AiError }
+
+service translate from http {
+	on POST("/translate") (text: String) -> Effect[HttpResult[String]] by Visitor given Ai {
+		let reply <- Ai.run("@cf/meta/m2m100-1.2b", Json.encode(TranslateIn { text: text, source_lang: "en", target_lang: "fr" }))
+		match reply {
+			Ok(json) => Ok(json),
+			Err(ModelNotFound) => NotFound,
+			Err(_) => ServerError("model unavailable"),
+		}
+	}
+}
+```
+
+`run(model, input)` runs any model by its id. `input` is the model's JSON input
+as text and the reply is the model's JSON output as text, so a model Cloudflare
+ships tomorrow works today: build the input with `Json.encode` and read the
+reply with `Json.decode` in a second step, which returns a matchable error
+instead of faulting when a model's output is not the shape you expected. The
+model id is a string, checked only for being 1 to 128 characters of
+`A-Z a-z 0-9 @ / . _ : -`; an `input` that is not a JSON object is a fault. A
+model that answers with binary data (an image, say) is `AiFailed`.
+
+An `AiError` is `ModelNotFound` (an id the platform does not know, or has
+retired), `InvalidInput(message)` (a request refused as malformed or too large),
+`QuotaExceeded` (a usage limit of the account, or a model its plan does not
+include), `Overloaded` (temporary capacity, worth retrying) or
+`AiFailed(message)` (anything else, with the platform's message). Cloudflare
+adds error codes over time, so a `match` over `AiError` needs a wildcard.
+
+A Worker whose code reaches `Ai`, directly or through a provider's `given`,
+declares `[ai]` bound as `env.AI`; one that does not declares nothing. There is
+nothing for `bynk deploy` to create.
+
+Workers AI is a remote service on your Cloudflare account, so a call may incur
+charges, and a model's reply is untrusted input like any other user text. See
+Cloudflare's [Workers AI pricing](https://developers.cloudflare.com/workers-ai/platform/pricing/)
+for what applies, and put a `RateLimit` in front of any handler an anonymous
+caller can reach. In a test every `Ai` operation faults until it is stubbed
+(`stub Ai.run(_, _) returns …`), so a test never reaches Workers AI, and a
+`system` test's Workers behave the same. `Ai` is experimental: list
+`"bynk.cloudflare.Ai"` under `[unstable] allow`.
 
 ### Account secrets: `StoredSecret`
 

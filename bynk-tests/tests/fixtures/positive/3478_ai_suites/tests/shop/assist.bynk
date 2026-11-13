@@ -1,0 +1,27 @@
+suite shop.assist
+
+// #3478: a test never reaches Workers AI. `run` faults until it is stubbed,
+// and a stubbed reply (or error) is what the handler sees.
+
+case "an unstubbed run faults" {
+	expect api.GET("/ask") by Visitor faults
+}
+
+case "a stubbed reply is returned" {
+	stub Ai.run(_, _) returns Ok("{\"response\": \"hi\"}")
+	let r <- api.GET("/ask") by Visitor
+	expect r is Ok("{\"response\": \"hi\"}")
+	expect Ai.run called once
+}
+
+case "a stubbed error is matched" {
+	stub Ai.run(_, _) returns Err(ModelNotFound)
+	let r <- api.GET("/ask") by Visitor
+	expect r is NotFound
+}
+
+case "a provider reaches the model through its given" {
+	stub Ai.run(_, _) returns Err(Overloaded)
+	let s <- about.call("why?")
+	expect s == "unavailable"
+}

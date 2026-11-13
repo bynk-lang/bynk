@@ -760,6 +760,13 @@ fn email_block(name: TomlValue, source: &BindingSource) -> TomlBlock {
     TomlBlock::array_table("send_email", entries)
 }
 
+/// Whether `source` is the one-per-Worker binding of `capability` (#3300,
+/// #3478): the kind test for a singleton, whose runtime type and test double
+/// differ per capability.
+pub fn singleton_is(source: &BindingSource, capability: &str) -> bool {
+    matches!(source, BindingSource::Singleton { capability: c } if c == capability)
+}
+
 /// A test of a binding's kind (`|s| matches!(s, BindingSource::Kv)`), as
 /// the tables pairing each platform-resource kind with what it needs use.
 pub type BindingKind = fn(&BindingSource) -> bool;
@@ -780,6 +787,7 @@ pub(crate) fn binding_ts_type(source: &BindingSource) -> &'static str {
         BindingSource::Postgres { .. } | BindingSource::MySql { .. } => "__Hyperdrive",
         BindingSource::Singleton { capability } => match capability.as_str() {
             "Version" => "__WorkerVersionMetadata",
+            "Ai" => "__WorkerAiBinding",
             other => unreachable!("singleton `{other}` has no `env` type"),
         },
         BindingSource::Agent { .. } | BindingSource::EventsFanout { .. } => {

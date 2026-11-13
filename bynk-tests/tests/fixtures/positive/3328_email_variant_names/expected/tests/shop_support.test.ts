@@ -42,7 +42,8 @@ async function test_every_verdict_name_resolves_to_EmailVerdict() {
   try {
     const deps = __makeTestDeps();
     const { support } = __ns_shop_support;
-    const { DataPoint, DmarcVerdict, EmailAttachment, EmailError, EmailMessage, EmailReply, EmailVerdict, InboundAttachment, InboundEmail, KvEntry, KvExpiration, KvGet, KvKey, KvList, KvListing, KvPut, MySqlError, MySqlReadError, MySqlRun, MySqlStatement, MySqlValue, PgError, PgReadError, PgRun, PgStatement, PgValue, QueueSend, R2Body, R2Condition, R2Listing, R2Object, R2Part, R2Put, R2Upload, R2UploadOptions, SenderIdentity, SqlError, SqlReadError, SqlRun, SqlStatement, SqlValue, WorkerVersion } = __ns_bynk_cloudflare;
+    const { AiError, DataPoint, DmarcVerdict, EmailAttachment, EmailError, EmailMessage, EmailReply, EmailVerdict, InboundAttachment, InboundEmail, KvEntry, KvExpiration, KvGet, KvKey, KvList, KvListing, KvPut, MySqlError, MySqlReadError, MySqlRun, MySqlStatement, MySqlValue, PgError, PgReadError, PgRun, PgStatement, PgValue, QueueSend, R2Body, R2Condition, R2Listing, R2Object, R2Part, R2Put, R2Upload, R2UploadOptions, SenderIdentity, SqlError, SqlReadError, SqlRun, SqlStatement, SqlValue, WorkerVersion } = __ns_bynk_cloudflare;
+    type AiError = __ns_bynk_cloudflare.AiError;
     type DataPoint = __ns_bynk_cloudflare.DataPoint;
     type DmarcVerdict = __ns_bynk_cloudflare.DmarcVerdict;
     type EmailAttachment = __ns_bynk_cloudflare.EmailAttachment;

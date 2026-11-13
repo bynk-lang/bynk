@@ -1479,6 +1479,17 @@ pub(super) fn platform_double(
         // epoch), so a case's result never depends on the deployment;
         // `stub Version.current() returns …` gives another.
         ("bynk.cloudflare", "Version") => "  return {\n    async current() {\n      return { id: \"test\", tag: None, deployed: 0 } as never;\n    },\n  };\n".to_string(),
+        // #3478: a test never reaches Workers AI, so every operation faults
+        // until stubbed. There is no fake model: a fabricated reply would make
+        // a test pass for the wrong reason.
+        ("bynk.cloudflare", "Ai") => {
+            let op = |op: &str, args: &str| {
+                format!(
+                    "    async {op}() {{\n      throw new globalThis.Error(\"bynk: `Ai.{op}` is not stubbed, and a test never reaches Workers AI — add `stub Ai.{op}({args}) returns …`\");\n    }},\n"
+                )
+            };
+            format!("  return {{\n{}  }};\n", op("run", "_, _"))
+        }
         // #3301: a test never reads the account's Secrets Store, so each
         // instance faults until its `get` is stubbed. The message names the
         // instance and never a value: there is none to name.

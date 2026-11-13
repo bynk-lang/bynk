@@ -82,7 +82,8 @@ class __Stub_Billing {
     type StreamResponse = __ns_bynk.StreamResponse;
     type TimedOut = __ns_bynk.TimedOut;
     type Uuid = __ns_bynk.Uuid;
-    const { DataPoint, DmarcVerdict, EmailAttachment, EmailError, EmailMessage, EmailReply, EmailVerdict, InboundAttachment, InboundEmail, KvEntry, KvExpiration, KvGet, KvKey, KvList, KvListing, KvPut, MySqlError, MySqlReadError, MySqlRun, MySqlStatement, MySqlValue, PgError, PgReadError, PgRun, PgStatement, PgValue, QueueSend, R2Body, R2Condition, R2Listing, R2Object, R2Part, R2Put, R2Upload, R2UploadOptions, SenderIdentity, SqlError, SqlReadError, SqlRun, SqlStatement, SqlValue, WorkerVersion } = __ns_bynk_cloudflare;
+    const { AiError, DataPoint, DmarcVerdict, EmailAttachment, EmailError, EmailMessage, EmailReply, EmailVerdict, InboundAttachment, InboundEmail, KvEntry, KvExpiration, KvGet, KvKey, KvList, KvListing, KvPut, MySqlError, MySqlReadError, MySqlRun, MySqlStatement, MySqlValue, PgError, PgReadError, PgRun, PgStatement, PgValue, QueueSend, R2Body, R2Condition, R2Listing, R2Object, R2Part, R2Put, R2Upload, R2UploadOptions, SenderIdentity, SqlError, SqlReadError, SqlRun, SqlStatement, SqlValue, WorkerVersion } = __ns_bynk_cloudflare;
+    type AiError = __ns_bynk_cloudflare.AiError;
     type DataPoint = __ns_bynk_cloudflare.DataPoint;
     type DmarcVerdict = __ns_bynk_cloudflare.DmarcVerdict;
     type EmailAttachment = __ns_bynk_cloudflare.EmailAttachment;
@@ -162,7 +163,8 @@ class __Stub_Ledger {
     type StreamResponse = __ns_bynk.StreamResponse;
     type TimedOut = __ns_bynk.TimedOut;
     type Uuid = __ns_bynk.Uuid;
-    const { DataPoint, DmarcVerdict, EmailAttachment, EmailError, EmailMessage, EmailReply, EmailVerdict, InboundAttachment, InboundEmail, KvEntry, KvExpiration, KvGet, KvKey, KvList, KvListing, KvPut, MySqlError, MySqlReadError, MySqlRun, MySqlStatement, MySqlValue, PgError, PgReadError, PgRun, PgStatement, PgValue, QueueSend, R2Body, R2Condition, R2Listing, R2Object, R2Part, R2Put, R2Upload, R2UploadOptions, SenderIdentity, SqlError, SqlReadError, SqlRun, SqlStatement, SqlValue, WorkerVersion } = __ns_bynk_cloudflare;
+    const { AiError, DataPoint, DmarcVerdict, EmailAttachment, EmailError, EmailMessage, EmailReply, EmailVerdict, InboundAttachment, InboundEmail, KvEntry, KvExpiration, KvGet, KvKey, KvList, KvListing, KvPut, MySqlError, MySqlReadError, MySqlRun, MySqlStatement, MySqlValue, PgError, PgReadError, PgRun, PgStatement, PgValue, QueueSend, R2Body, R2Condition, R2Listing, R2Object, R2Part, R2Put, R2Upload, R2UploadOptions, SenderIdentity, SqlError, SqlReadError, SqlRun, SqlStatement, SqlValue, WorkerVersion } = __ns_bynk_cloudflare;
+    type AiError = __ns_bynk_cloudflare.AiError;
     type DataPoint = __ns_bynk_cloudflare.DataPoint;
     type DmarcVerdict = __ns_bynk_cloudflare.DmarcVerdict;
     type EmailAttachment = __ns_bynk_cloudflare.EmailAttachment;
@@ -283,7 +285,8 @@ async function test_a_stubbed_instance_answers() {
     type StreamResponse = __ns_bynk.StreamResponse;
     type TimedOut = __ns_bynk.TimedOut;
     type Uuid = __ns_bynk.Uuid;
-    const { DataPoint, DmarcVerdict, EmailAttachment, EmailError, EmailMessage, EmailReply, EmailVerdict, InboundAttachment, InboundEmail, KvEntry, KvExpiration, KvGet, KvKey, KvList, KvListing, KvPut, MySqlError, MySqlReadError, MySqlRun, MySqlStatement, MySqlValue, PgError, PgReadError, PgRun, PgStatement, PgValue, QueueSend, R2Body, R2Condition, R2Listing, R2Object, R2Part, R2Put, R2Upload, R2UploadOptions, SenderIdentity, SqlError, SqlReadError, SqlRun, SqlStatement, SqlValue, WorkerVersion } = __ns_bynk_cloudflare;
+    const { AiError, DataPoint, DmarcVerdict, EmailAttachment, EmailError, EmailMessage, EmailReply, EmailVerdict, InboundAttachment, InboundEmail, KvEntry, KvExpiration, KvGet, KvKey, KvList, KvListing, KvPut, MySqlError, MySqlReadError, MySqlRun, MySqlStatement, MySqlValue, PgError, PgReadError, PgRun, PgStatement, PgValue, QueueSend, R2Body, R2Condition, R2Listing, R2Object, R2Part, R2Put, R2Upload, R2UploadOptions, SenderIdentity, SqlError, SqlReadError, SqlRun, SqlStatement, SqlValue, WorkerVersion } = __ns_bynk_cloudflare;
+    type AiError = __ns_bynk_cloudflare.AiError;
     type DataPoint = __ns_bynk_cloudflare.DataPoint;
     type DmarcVerdict = __ns_bynk_cloudflare.DmarcVerdict;
     type EmailAttachment = __ns_bynk_cloudflare.EmailAttachment;
@@ -361,7 +364,8 @@ async function test_a_failing_call_is_the_instance_s_error() {
     type StreamResponse = __ns_bynk.StreamResponse;
     type TimedOut = __ns_bynk.TimedOut;
     type Uuid = __ns_bynk.Uuid;
-    const { DataPoint, DmarcVerdict, EmailAttachment, EmailError, EmailMessage, EmailReply, EmailVerdict, InboundAttachment, InboundEmail, KvEntry, KvExpiration, KvGet, KvKey, KvList, KvListing, KvPut, MySqlError, MySqlReadError, MySqlRun, MySqlStatement, MySqlValue, PgError, PgReadError, PgRun, PgStatement, PgValue, QueueSend, R2Body, R2Condition, R2Listing, R2Object, R2Part, R2Put, R2Upload, R2UploadOptions, SenderIdentity, SqlError, SqlReadError, SqlRun, SqlStatement, SqlValue, WorkerVersion } = __ns_bynk_cloudflare;
+    const { AiError, DataPoint, DmarcVerdict, EmailAttachment, EmailError, EmailMessage, EmailReply, EmailVerdict, InboundAttachment, InboundEmail, KvEntry, KvExpiration, KvGet, KvKey, KvList, KvListing, KvPut, MySqlError, MySqlReadError, MySqlRun, MySqlStatement, MySqlValue, PgError, PgReadError, PgRun, PgStatement, PgValue, QueueSend, R2Body, R2Condition, R2Listing, R2Object, R2Part, R2Put, R2Upload, R2UploadOptions, SenderIdentity, SqlError, SqlReadError, SqlRun, SqlStatement, SqlValue, WorkerVersion } = __ns_bynk_cloudflare;
+    type AiError = __ns_bynk_cloudflare.AiError;
     type DataPoint = __ns_bynk_cloudflare.DataPoint;
     type DmarcVerdict = __ns_bynk_cloudflare.DmarcVerdict;
     type EmailAttachment = __ns_bynk_cloudflare.EmailAttachment;
@@ -438,7 +442,8 @@ async function test_an_instance_is_stubbed_under_its_own_name_at_integration() {
     type StreamResponse = __ns_bynk.StreamResponse;
     type TimedOut = __ns_bynk.TimedOut;
     type Uuid = __ns_bynk.Uuid;
-    const { DataPoint, DmarcVerdict, EmailAttachment, EmailError, EmailMessage, EmailReply, EmailVerdict, InboundAttachment, InboundEmail, KvEntry, KvExpiration, KvGet, KvKey, KvList, KvListing, KvPut, MySqlError, MySqlReadError, MySqlRun, MySqlStatement, MySqlValue, PgError, PgReadError, PgRun, PgStatement, PgValue, QueueSend, R2Body, R2Condition, R2Listing, R2Object, R2Part, R2Put, R2Upload, R2UploadOptions, SenderIdentity, SqlError, SqlReadError, SqlRun, SqlStatement, SqlValue, WorkerVersion } = __ns_bynk_cloudflare;
+    const { AiError, DataPoint, DmarcVerdict, EmailAttachment, EmailError, EmailMessage, EmailReply, EmailVerdict, InboundAttachment, InboundEmail, KvEntry, KvExpiration, KvGet, KvKey, KvList, KvListing, KvPut, MySqlError, MySqlReadError, MySqlRun, MySqlStatement, MySqlValue, PgError, PgReadError, PgRun, PgStatement, PgValue, QueueSend, R2Body, R2Condition, R2Listing, R2Object, R2Part, R2Put, R2Upload, R2UploadOptions, SenderIdentity, SqlError, SqlReadError, SqlRun, SqlStatement, SqlValue, WorkerVersion } = __ns_bynk_cloudflare;
+    type AiError = __ns_bynk_cloudflare.AiError;
     type DataPoint = __ns_bynk_cloudflare.DataPoint;
     type DmarcVerdict = __ns_bynk_cloudflare.DmarcVerdict;
     type EmailAttachment = __ns_bynk_cloudflare.EmailAttachment;

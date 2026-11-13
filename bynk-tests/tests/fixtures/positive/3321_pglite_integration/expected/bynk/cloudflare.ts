@@ -736,6 +736,32 @@ export const WorkerVersion = {
 };
 
 /**
+ * Why a Workers AI call did not give a reply. `ModelNotFound` is a model id
+ * the platform does not know, or has retired; `InvalidInput` is a request the
+ * platform refused as malformed or too large, with its message; `QuotaExceeded`
+ * is a usage limit of the account, or a model its plan does not include, so
+ * back off or change the plan; `Overloaded` is the platform's temporary
+ * capacity, worth retrying; `AiFailed` is any other refusal, with the
+ * platform's message (the `Ai` prefix because `Failed` is `SqlError`'s).
+ * Cloudflare adds error codes over time, so a `match` over this type needs
+ * a wildcard.
+ */
+export type AiError =
+    { readonly tag: "ModelNotFound" }
+  | { readonly tag: "InvalidInput"; readonly message: string }
+  | { readonly tag: "QuotaExceeded" }
+  | { readonly tag: "Overloaded" }
+  | { readonly tag: "AiFailed"; readonly message: string };
+
+export const AiError = {
+  ModelNotFound: { tag: "ModelNotFound" } as AiError,
+  InvalidInput: (message: string): AiError => ({ tag: "InvalidInput", message }),
+  QuotaExceeded: { tag: "QuotaExceeded" } as AiError,
+  Overloaded: { tag: "Overloaded" } as AiError,
+  AiFailed: (message: string): AiError => ({ tag: "AiFailed", message }),
+};
+
+/**
  * A Cloudflare Workers KV namespace: a key/value store with optional per-entry
  * expiry and prefix listing.
  *
@@ -1013,6 +1039,34 @@ export interface Version {
 export const __VersionToken: symbol = globalThis.Symbol("Version");
 
 /**
+ * Workers AI, from the Worker's `[ai]` binding: it needs no API token and no
+ * account id. It is bound once per Worker, so it is used bare (`given Ai`)
+ * and has no named instances. Only a Worker that uses it declares the
+ * binding.
+ *
+ * `run(model, input)` runs any model by its id (`"@cf/meta/llama-3.1-8b-instruct"`).
+ * `input` is the model's JSON input as text, and the reply is the model's JSON
+ * output as text, so a model Cloudflare ships tomorrow works today: build the
+ * input with `Json.encode` and read the reply with `Json.decode`. An `input`
+ * that is not a JSON object, or a `model` that is empty or has characters an
+ * id never has, is a fault. A model that answers with binary data (an image,
+ * say) is `AiFailed`: `run` carries JSON replies only.
+ *
+ * Workers AI is a remote service on your Cloudflare account, so a call
+ * may be billed, and a model's reply is untrusted input like any other
+ * user text. See Cloudflare's Workers AI pricing page for what applies,
+ * and put a `RateLimit` in front of any handler an anonymous caller can reach.
+ * Under `bynk dev` a call runs the model on Cloudflare. In a test every
+ * operation faults until `stub Ai.run(_, _) returns …` replaces it, so a
+ * test never reaches Workers AI.
+ */
+export interface Ai {
+  run(model: string, input: string): globalThis.Promise<Result<string, AiError>>;
+}
+
+export const __AiToken: symbol = globalThis.Symbol("Ai");
+
+/**
  * One secret of a Cloudflare Secrets Store, read as `StripeKey.get()`. A
  * Secrets Store is account-scoped: its secrets are shared across Workers,
  * rotated centrally and bound one per binding, which is what separates this
@@ -1194,6 +1248,55 @@ export interface MySql {
 }
 
 export const __MySqlToken: symbol = globalThis.Symbol("MySql");
+
+export function __serialise_AiError(value: AiError): __JsonValue {
+  switch (value.tag) {
+    case "ModelNotFound":
+      return { kind: "ModelNotFound" };
+    case "InvalidInput": {
+      return { kind: "InvalidInput", message: value.message as __JsonValue };
+    }
+    case "QuotaExceeded":
+      return { kind: "QuotaExceeded" };
+    case "Overloaded":
+      return { kind: "Overloaded" };
+    case "AiFailed": {
+      return { kind: "AiFailed", message: value.message as __JsonValue };
+    }
+  }
+}
+
+export function __deserialise_AiError(json: __JsonValue, path: string = "$"): Result<AiError, __BoundaryError> {
+  if (typeof json !== "object" || json === null || globalThis.Array.isArray(json)) {
+    return Err({ kind: "StructuralMismatch", path, expected: "object", actual: typeof json });
+  }
+  const obj = json as { [k: string]: __JsonValue };
+  const kind = obj["kind"];
+  switch (kind) {
+    case "ModelNotFound":
+      return Ok({ tag: "ModelNotFound" } as AiError);
+    case "InvalidInput": {
+  if (typeof obj["message"] !== "string") {
+    return Err({ kind: "StructuralMismatch", path: `${path}.message`, expected: "string", actual: typeof obj["message"] });
+  }
+  const __message = obj["message"];
+      return Ok({ tag: "InvalidInput", message: __message } as AiError);
+    }
+    case "QuotaExceeded":
+      return Ok({ tag: "QuotaExceeded" } as AiError);
+    case "Overloaded":
+      return Ok({ tag: "Overloaded" } as AiError);
+    case "AiFailed": {
+  if (typeof obj["message"] !== "string") {
+    return Err({ kind: "StructuralMismatch", path: `${path}.message`, expected: "string", actual: typeof obj["message"] });
+  }
+  const __message = obj["message"];
+      return Ok({ tag: "AiFailed", message: __message } as AiError);
+    }
+    default:
+      return Err({ kind: "StructuralMismatch", path, expected: "sum variant kind", actual: String(kind) });
+  }
+}
 
 export function __serialise_DataPoint(value: DataPoint): __JsonValue {
   return {

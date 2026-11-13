@@ -952,6 +952,31 @@ export function makeIntegrationVersionMetadata(): WorkerVersionMetadata {
 }
 
 /**
+ * Workers AI (#3478): Cloudflare's AI binding, which `WorkersAi` reads. `run`
+ * takes the model id and its input object, and answers the model's output (a
+ * JSON value, or bytes or a stream for a model that sends those).
+ */
+export interface WorkerAiBinding {
+  run(model: string, input: Record<string, unknown>): Promise<unknown>;
+}
+
+/**
+ * The AI binding of a multi-Worker integration test participant, bound as its
+ * `env.AI`. A test never reaches Workers AI, so `run` faults until the case
+ * stubs the capability's operation. There is no fake model: a fabricated reply
+ * would make a test pass for the wrong reason.
+ */
+export function makeIntegrationAi(): WorkerAiBinding {
+  return {
+    async run(): Promise<unknown> {
+      throw new globalThis.Error(
+        "bynk: `Ai.run` is not stubbed, and a test never reaches Workers AI — add `stub Ai.run(_, _) returns …`",
+      );
+    },
+  };
+}
+
+/**
  * A Secrets Store secret binding (#3301): Cloudflare's `secrets_store_secrets`
  * binding, which `WorkersStoredSecret` reads. `get` resolves to the secret's
  * value, so nothing that holds one may log it.
@@ -1035,5 +1060,5 @@ export function makeIntegrationHyperdrive(binding: string): Hyperdrive {
 }
 
 // #1653: the `__` aliases emitted code imports.
-export { makeIntegrationAnalytics as __makeIntegrationAnalytics, makeIntegrationD1 as __makeIntegrationD1, makeIntegrationEmail as __makeIntegrationEmail, makeIntegrationHyperdrive as __makeIntegrationHyperdrive, makeIntegrationKv as __makeIntegrationKv, makeIntegrationQueue as __makeIntegrationQueue, makeIntegrationR2 as __makeIntegrationR2, makeIntegrationRateLimit as __makeIntegrationRateLimit, makeIntegrationSecretsStoreSecret as __makeIntegrationSecretsStoreSecret, makeIntegrationVersionMetadata as __makeIntegrationVersionMetadata, makeTestState as __makeTestState };
-export type { AnalyticsDataset as __AnalyticsDataset, D1Database as __D1Database, DurableObjectState as __DurableObjectState, Hyperdrive as __Hyperdrive, KVNamespace as __KVNamespace, QueueProducer as __QueueProducer, R2Bucket as __R2Bucket, RateLimiter as __RateLimiter, SecretsStoreSecret as __SecretsStoreSecret, SendEmail as __SendEmail, WorkerVersionMetadata as __WorkerVersionMetadata };
+export { makeIntegrationAi as __makeIntegrationAi, makeIntegrationAnalytics as __makeIntegrationAnalytics, makeIntegrationD1 as __makeIntegrationD1, makeIntegrationEmail as __makeIntegrationEmail, makeIntegrationHyperdrive as __makeIntegrationHyperdrive, makeIntegrationKv as __makeIntegrationKv, makeIntegrationQueue as __makeIntegrationQueue, makeIntegrationR2 as __makeIntegrationR2, makeIntegrationRateLimit as __makeIntegrationRateLimit, makeIntegrationSecretsStoreSecret as __makeIntegrationSecretsStoreSecret, makeIntegrationVersionMetadata as __makeIntegrationVersionMetadata, makeTestState as __makeTestState };
+export type { AnalyticsDataset as __AnalyticsDataset, D1Database as __D1Database, DurableObjectState as __DurableObjectState, Hyperdrive as __Hyperdrive, KVNamespace as __KVNamespace, QueueProducer as __QueueProducer, R2Bucket as __R2Bucket, RateLimiter as __RateLimiter, SecretsStoreSecret as __SecretsStoreSecret, SendEmail as __SendEmail, WorkerAiBinding as __WorkerAiBinding, WorkerVersionMetadata as __WorkerVersionMetadata };

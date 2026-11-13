@@ -952,6 +952,31 @@ export function makeIntegrationVersionMetadata(): WorkerVersionMetadata {
 }
 
 /**
+ * Workers AI (#3478): Cloudflare's AI binding, which `WorkersAi` reads. `run`
+ * takes the model id and its input object, and answers the model's output (a
+ * JSON value, or bytes or a stream for a model that sends those).
+ */
+export interface WorkerAiBinding {
+  run(model: string, input: Record<string, unknown>): Promise<unknown>;
+}
+
+/**
+ * The AI binding of a multi-Worker integration test participant, bound as its
+ * `env.AI`. A test never reaches Workers AI, so `run` faults until the case
+ * stubs the capability's operation. There is no fake model: a fabricated reply
+ * would make a test pass for the wrong reason.
+ */
+export function makeIntegrationAi(): WorkerAiBinding {
+  return {
+    async run(): Promise<unknown> {
+      throw new globalThis.Error(
+        "bynk: `Ai.run` is not stubbed, and a test never reaches Workers AI — add `stub Ai.run(_, _) returns …`",
+      );
+    },
+  };
+}
+
+/**
  * A Secrets Store secret binding (#3301): Cloudflare's `secrets_store_secrets`
  * binding, which `WorkersStoredSecret` reads. `get` resolves to the secret's
  * value, so nothing that holds one may log it.
