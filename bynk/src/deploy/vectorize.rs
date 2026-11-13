@@ -207,11 +207,12 @@ pub(crate) struct Pacing {
     pub(crate) timeout: Duration,
 }
 
-/// Three minutes is several times what a metadata index was seen to take.
+/// Five minutes: a metadata index was seen to take from 30 seconds to 144, and a
+/// false timeout costs more than waiting.
 pub(crate) const METADATA_INDEX_PACING: Pacing = Pacing {
     first: Duration::from_secs(3),
     longest: Duration::from_secs(15),
-    timeout: Duration::from_secs(180),
+    timeout: Duration::from_secs(300),
 };
 
 /// Poll `list-metadata-index` until every entry of `wanted` (`name:type`) is
