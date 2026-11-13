@@ -2093,13 +2093,6 @@ pub const EXPLANATIONS: &[Explain] = &[
         anchor: "capability-operations-take-key-and-codable",
     },
     Explain {
-        code: "bynk.generics.internal_op_annotation",
-        blurb: "A capability operation's reply policy, `@onUndecodable(miss)` or `@onUndecodable(fault)`, says what a reply that does not decode as the operation's payload type means. It belongs to the standard library's own operations, where the provider is reviewed with the runtime, so a capability you declare takes no annotation. Remove it.",
-        example: "capability Store {\n    fn load(id: String) -> Effect[Option[String]] @onUndecodable(miss)   // ✗ internal\n}\n\ncapability Store {\n    fn load(id: String) -> Effect[Option[String]]                    // ✓\n}",
-        page: "/book/reference/generics",
-        anchor: "capability-operations-take-key-and-codable",
-    },
-    Explain {
         code: "bynk.generics.codable_op_return",
         blurb: "A `Codable` parameter of a capability operation is encoded at the call site, so the provider receives plain JSON. Decoding the provider's reply back into `T` would have to say what a failed decode of stored data means, and that is not settled, so `T` may not appear in the return type. Return plain data, such as a `String`, and decode it where the call is made.",
         example: "capability Store {\n    fn load[T: Codable](id: String) -> Effect[Option[T]]   // ✗ `T` in the return type\n}\n\ncapability Store {\n    fn load(id: String) -> Effect[Option[String]]          // ✓ plain data back\n}",
@@ -2126,6 +2119,13 @@ pub const EXPLANATIONS: &[Explain] = &[
         example: "type PayError = enum { Declined }\n\ntype Failure[T] =\n    | Payment(reason: PayError)\n    | Other(value: T)\n    embeds PayError as Payment    // ✗ a generic sum cannot embed\n\ntype Failure[T] =\n    | Payment(reason: PayError)\n    | Other(value: T)             // ✓ no `embeds`; wrap with `.mapErr(Payment)`",
         page: "/book/reference/types",
         anchor: "generic-sums",
+    },
+    Explain {
+        code: "bynk.generics.internal_op_annotation",
+        blurb: "A capability operation's reply policy, `@onUndecodable(miss)` or `@onUndecodable(fault)`, says what a reply that does not decode as the operation's payload type means. It belongs to the standard library's own operations, where the provider is reviewed with the runtime, so a capability you declare takes no annotation. Remove it.",
+        example: "capability Store {\n    fn load(id: String) -> Effect[Option[String]] @onUndecodable(miss)   // ✗ internal\n}\n\ncapability Store {\n    fn load(id: String) -> Effect[Option[String]]                    // ✓\n}",
+        page: "/book/reference/generics",
+        anchor: "capability-operations-take-key-and-codable",
     },
     Explain {
         code: "bynk.generics.method_on_generic_type",
@@ -8607,11 +8607,6 @@ pub const REGISTRY: &[DiagnosticInfo] = &[
         &["capability_op"],
     ),
     dg(
-        "bynk.generics.internal_op_annotation",
-        "A capability operation carries an annotation outside the standard library, or a first-party operation's is not `@onUndecodable(miss)` or `@onUndecodable(fault)`: the reply policy of a typed read is internal to first-party operations (#3458).",
-        &["capability_op"],
-    ),
-    dg(
         "bynk.generics.codable_op_return",
         "A capability operation\'s `Codable` type parameter appears in its return type. A `Codable` parameter is encoded at the call site; decoding a provider\'s reply raises a question this slice does not answer (what a failed decode of stored data means), so typed reads are deferred (constrained-generics slice 3).",
         &["capability_op"],
@@ -8630,6 +8625,11 @@ pub const REGISTRY: &[DiagnosticInfo] = &[
         "bynk.generics.generic_sum_embeds",
         "A generic sum type carries an `embeds` clause; embedding into a generic sum is not supported (#593).",
         &["type_decl"],
+    ),
+    dg(
+        "bynk.generics.internal_op_annotation",
+        "A capability operation carries an annotation outside the standard library, or a first-party operation's is not `@onUndecodable(miss)` or `@onUndecodable(fault)`: the reply policy of a typed read is internal to first-party operations (#3458).",
+        &["capability_op"],
     ),
     dg(
         "bynk.generics.method_on_generic_type",
