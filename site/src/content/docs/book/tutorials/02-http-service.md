@@ -189,7 +189,7 @@ bynk dev
 
 It comes up on `http://localhost:8787`. Under the hood the emitted
 `out/workers/shortener/` directory is a standard Cloudflare Worker, so you can
-also run it the manual way — `cd out/workers/shortener && npx wrangler dev`. See
+also run it the manual way — `cd out/workers/shortener && npx wrangler dev` (`pnpm dlx wrangler dev` under pnpm, `bunx wrangler dev` under bun). See
 [Run your project locally](/book/guides/projects-build-and-deployment/run-locally/)
 for more.
 

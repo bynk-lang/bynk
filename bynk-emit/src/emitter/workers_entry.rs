@@ -2677,7 +2677,7 @@ struct MultipartSpec {
 
 /// #2854: the wire kind of one query-string value of type `r`, as the runtime's
 /// `QueryField.kind` names it.
-fn query_leaf_kind(
+pub(crate) fn query_leaf_kind(
     r: &TypeRef,
     types: &std::collections::HashMap<String, std::sync::Arc<bynk_syntax::ast::TypeDecl>>,
     allow_file: bool,
