@@ -18,18 +18,15 @@ adapter bynk.testing {
 		value no type would have written.
 		---
 		fn put(key: String, json: String) -> Effect[()]
-
 		---
 		Store the encoding of `value` under `key`.
 		---
 		fn write[T: Codable](key: String, value: T) -> Effect[()]
-
 		---
 		The value under `key`, decoded as `T`. A missing key, and a value that
 		does not decode as `T`, fault.
 		---
 		fn read[T: Codable](key: String) -> Effect[T]
-
 		---
 		The value under `key`, decoded as `T`. A missing key, and a value that
 		does not decode as `T`, are `None`: the value is read as a miss, and a
