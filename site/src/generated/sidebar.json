@@ -262,6 +262,10 @@
             "link": "/book/guides/effects-and-capabilities/rate-limit-a-route/"
           },
           {
+            "label": "Deduplicate at-least-once deliveries",
+            "link": "/book/guides/effects-and-capabilities/deduplicate-at-least-once-deliveries/"
+          },
+          {
             "label": "Send transactional email",
             "link": "/book/guides/effects-and-capabilities/send-transactional-email/"
           },

@@ -68,6 +68,7 @@
     - [Connect an existing MySQL database](guides/effects-and-capabilities/connect-an-existing-mysql-database.md)
     - [Apply webhook events that arrive late, twice or out of order](guides/effects-and-capabilities/apply-webhook-events-out-of-order.md)
     - [Rate-limit a route](guides/effects-and-capabilities/rate-limit-a-route.md)
+    - [Deduplicate at-least-once deliveries](guides/effects-and-capabilities/deduplicate-at-least-once-deliveries.md)
     - [Send transactional email](guides/effects-and-capabilities/send-transactional-email.md)
     - [Cache responses at Cloudflare's edge](guides/effects-and-capabilities/cache-at-the-edge.md)
     - [Sign and verify data](guides/effects-and-capabilities/sign-and-verify-data.md)

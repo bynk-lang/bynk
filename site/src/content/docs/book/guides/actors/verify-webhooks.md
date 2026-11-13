@@ -75,8 +75,8 @@ rejects (fail-closed) a request whose timestamp is not a finite number within
 without a `timestamp` is a compile error.
 
 The replay window *bounds* replay; it does not *eliminate* it. Full event
-deduplication (by event id) is the job of an idempotency capability — out of
-scope here.
+deduplication (by event id) is the job of the `Idempotency` capability: see
+[Deduplicate at-least-once deliveries](/book/guides/effects-and-capabilities/deduplicate-at-least-once-deliveries/).
 
 ## Test the webhook end to end
 
