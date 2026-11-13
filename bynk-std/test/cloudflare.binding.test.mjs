@@ -1284,8 +1284,19 @@ t("WorkersAi.run: a documented platform code is a typed error, any other a failu
   assert.deepEqual(await failure(new Error("3007: Request timeout")), { tag: "AiFailed", message: "3007: Request timeout" });
   assert.deepEqual(await failure(new Error("something new")), { tag: "AiFailed", message: "something new" });
   assert.deepEqual(await failure({ throws: "odd" }), { tag: "AiFailed", message: "odd" });
+  // Only a code that opens the message is one: a number elsewhere in it is not.
+  assert.deepEqual(await failure(new Error("Model @cf/x/foo-3040 failed")), { tag: "AiFailed", message: "Model @cf/x/foo-3040 failed" });
+  assert.deepEqual(await failure(new Error("input of 3003 tokens too long")), { tag: "AiFailed", message: "input of 3003 tokens too long" });
   // A number that merely sits in a longer one is not a code.
   assert.deepEqual(await failure(new Error("id 350071 failed")), { tag: "AiFailed", message: "id 350071 failed" });
+});
+
+t("WorkersAi.run: a live stream (input with stream: true) is cancelled and is a failure", async () => {
+  let cancelled = false;
+  const stream = new ReadableStream({ cancel() { cancelled = true; } });
+  const r = await new WorkersAi({ AI: fakeAi(stream) }).run("@cf/x/y", '{"stream":true}');
+  assert.equal(r.tag, "Err");
+  assert.equal(cancelled, true);
 });
 
 t("WorkersAi.run: a binary reply is a failure, not a fault", async () => {
