@@ -873,6 +873,7 @@ export class WorkersVersion implements Version {
 // restarts the Worker. It states no price and no allowance: Cloudflare's page
 // does, and stays current.
 const devRemoteNoticed = new Set<string>();
+const devIndexChecked = new Set<string>();
 function devRemoteNotice(env: unknown, kind: string, ackVar: string, service: string, pricingUrl: string): void {
   const vars = env as Record<string, unknown> | undefined;
   if (vars?.BYNK_DEV !== "1" || vars?.[ackVar] === "allow" || devRemoteNoticed.has(kind)) return;
@@ -1645,11 +1646,50 @@ export class WorkersVectorize implements Vectorize {
   private index(): VectorizeIndex {
     const index = (this.env as Record<string, VectorizeIndex | undefined> | undefined)?.[this.binding];
     if (!index) {
+      if ((this.env as Record<string, unknown> | undefined)?.BYNK_DEV === "1") {
+        const capability = this.binding
+          .replace(/^VECTORIZE_/, "")
+          .split("_")
+          .map((w) => w.charAt(0) + w.slice(1).toLowerCase())
+          .join("");
+        throw new Error(
+          `bynk.cloudflare.Vectorize: \`${capability}\` has no development index: set \`[dev.vectorize-index] ${capability} = "<index-name>"\` in bynk.toml to an index of your own (it must already exist with the declaration's dimensions and metric)`,
+        );
+      }
       throw new Error(
         `bynk.cloudflare.Vectorize requires a Vectorize binding (env.${this.binding}) — deploy with the generated [[vectorize]] wrangler stanza`,
       );
     }
+    devRemoteNotice(this.env, "vectorize", "BYNK_DEV_ACK_VECTORIZE", "Vectorize", "https://developers.cloudflare.com/vectorize/platform/pricing/");
     return index;
+  }
+
+  // Under `bynk dev` the index is one of the developer's own, bound with
+  // `remote = true`; `bynk dev` writes the declaration's `<dimensions>:<metric>`
+  // as `BYNK_DEV_INDEX_<binding>`. The first call checks the index against it, so
+  // a wrong index is a clear fault here and not a `DimensionMismatch` per vector.
+  // A fault on every call until the index is right; checked once after that.
+  private async ready(index: VectorizeIndex): Promise<unknown> {
+    const env = this.env as Record<string, unknown> | undefined;
+    const declared = env?.BYNK_DEV === "1" ? env[`BYNK_DEV_INDEX_${this.binding}`] : undefined;
+    if (typeof declared !== "string" || devIndexChecked.has(this.binding)) return undefined;
+    const [dimensions, metric] = declared.split(":");
+    let raw: Record<string, unknown> | null | undefined;
+    try {
+      raw = (await index.describe()) as Record<string, unknown> | null | undefined;
+    } catch (e) {
+      WorkersVectorize.fault(
+        `could not reach the development index bound to ${this.binding}: ${e instanceof Error ? e.message : String(e)}. It must already exist (bynk dev never creates one) with the declaration's dimensions and metric`,
+      );
+    }
+    const config = ((raw?.config as Record<string, unknown> | undefined) ?? raw) as Record<string, unknown> | undefined;
+    if (String(config?.dimensions) !== dimensions || config?.metric !== metric) {
+      WorkersVectorize.fault(
+        `the development index bound to ${this.binding} has ${String(config?.dimensions)} dimensions and the ${String(config?.metric)} metric, but the declaration says ${dimensions} and ${metric}; bind an index with the declaration's configuration under [dev.vectorize-index]`,
+      );
+    }
+    devIndexChecked.add(this.binding);
+    return raw;
   }
 
   private static fault(why: string): never {
@@ -1783,6 +1823,7 @@ export class WorkersVectorize implements Vectorize {
 
   private async write(op: "upsert" | "insert", vectors: readonly Vector[]): Promise<Result<Mutation, VectorError>> {
     const index = this.index();
+    await this.ready(index);
     const body = WorkersVectorize.outgoing(vectors);
     try {
       return WorkersVectorize.mutation(await index[op](body));
@@ -1801,6 +1842,7 @@ export class WorkersVectorize implements Vectorize {
 
   async query(vector: readonly number[], options: QueryOptions): Promise<Result<readonly VectorMatch[], VectorError>> {
     const index = this.index();
+    await this.ready(index);
     const filter = WorkersVectorize.filter(options.filter);
     if (filter.tag === "Err") return filter;
     const scope = WorkersVectorize.SCOPES[options.returnMetadata.tag];
@@ -1831,6 +1873,7 @@ export class WorkersVectorize implements Vectorize {
 
   async getByIds(ids: readonly string[]): Promise<Result<readonly Vector[], VectorError>> {
     const index = this.index();
+    await this.ready(index);
     try {
       const found = (await index.getByIds([...ids])) as Record<string, unknown>[] | null | undefined;
       return Ok(
@@ -1848,6 +1891,7 @@ export class WorkersVectorize implements Vectorize {
 
   async deleteByIds(ids: readonly string[]): Promise<Result<Mutation, VectorError>> {
     const index = this.index();
+    await this.ready(index);
     try {
       return WorkersVectorize.mutation(await index.deleteByIds([...ids]));
     } catch (e) {
@@ -1860,8 +1904,10 @@ export class WorkersVectorize implements Vectorize {
   // an `IndexInfo`, so it is a `VectorFailed` that says what is missing.
   async describe(): Promise<Result<IndexInfo, VectorError>> {
     const index = this.index();
+    // The first call under `bynk dev` has just described the index: reuse that.
+    const checked = (await this.ready(index)) as Record<string, unknown> | null | undefined;
     try {
-      const raw = (await index.describe()) as Record<string, unknown> | null | undefined;
+      const raw = checked ?? ((await index.describe()) as Record<string, unknown> | null | undefined);
       const config = ((raw?.config as Record<string, unknown> | undefined) ?? raw) as Record<string, unknown> | undefined;
       const dimensions = config?.dimensions;
       const metric = config?.metric;
