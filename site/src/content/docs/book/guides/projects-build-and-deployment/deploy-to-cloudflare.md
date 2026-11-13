@@ -65,6 +65,7 @@ nothing speculative. If it isn't in the generated `wrangler.toml`, it isn't
 | `consumes bynk.cloudflare { Kv }` | Creates a KV namespace and records its id |
 | `capability Sessions = Kv` | Creates a KV namespace of its own for that instance, and records its id |
 | `capability Archives = R2` | Creates an R2 bucket of its own for that instance, by name, and records it |
+| `capability Docs = Vectorize @dimensions(768) @metric("cosine")` | Creates the Vectorize index with that configuration if the account has none of its name, checks an existing one against it, and creates the `@indexed` metadata indexes before the push; it never recreates an index |
 | `capability Main = Postgres` | Makes a Hyperdrive config from the connection string in the environment variable `[deploy.hyperdrive.Main]` names (or adopts a config you name by id), and records its id |
 | `capability PublishLimit = RateLimit …` | Allocates the limiter a `namespace_id` and records it; nothing is created on the account |
 | An `agent` | Nothing to create — the config declares its Durable Object class, and Cloudflare registers it |
@@ -545,6 +546,43 @@ data. The old bucket stays in the ledger and is reported as an orphan
 (`orphan r2 shop-cart R2_INDEXES (shop-cart-indexes, jurisdiction fedramp; not deleted)`)
 until you remove its entry. `bynk dev -- --remote` binds the recorded buckets and refuses one no
 deploy has created.
+
+### Vectorize indexes
+
+Each [`Vectorize` instance](/book/reference/bynk-capabilities/#vector-indexes-vectorize)
+(`capability Docs = Vectorize @dimensions(768) @metric("cosine")`) is an index of
+its own, which the deploy creates because it is state your project owns. The plan
+says `create` the first time and `reuse` after:
+
+```
+vectorize create shop-cart-docs (VECTORIZE_DOCS, 768, cosine; metadata indexes category:string)
+```
+
+An index is named `<worker>-<capability>`, with an environment suffix under
+`--env`, and made with `wrangler vectorize create` in the dimensions and metric the
+declaration states. Cloudflare takes a kebab-cased name of at most 64 bytes; a name
+the environment suffix would push past that, or two instances would share, is an
+error naming the instance.
+
+An index's dimensions and metric cannot change once it exists, and recreating it
+would delete every vector in it, so **the deploy never recreates one**. Every
+deploy checks an existing index against the declaration; on a mismatch it fails
+before pushing anything, naming both configurations, and changes nothing. Rename
+the instance to get a new index, change the declaration back, or delete the
+index by hand and reindex.
+
+The `@indexed` metadata indexes are created straight after the index and before the
+Worker that writes vectors is pushed, because a vector written before its
+property's index existed is not covered by it until it is written again. Adding an
+entry to `@indexed` later creates the new metadata index and prints a warning that
+vectors already stored need an upsert to be filterable on it. Removing one is
+reported and left in place, since a metadata index holds no data of its own but
+removing it would silently break a query that filters on it.
+
+A renamed or removed instance leaves its index recorded and reported as an orphan
+(`orphan vectorize shop-cart VECTORIZE_DOCS (shop-cart-docs; deleted by --prune)`).
+`--prune` deletes it behind the same confirmation as a KV namespace, naming the
+index and saying its vectors go too. It is never deleted otherwise.
 
 ### Rate limiters
 
@@ -1163,8 +1201,8 @@ redeploy shop-cart
 The data is not moved. Copy it across before you prune the old namespace. This is a plain diff against your current source; it
 never calls Cloudflare, so it works under `--dry-run` too.
 
-Pass `--prune` to delete what's reported — KV namespaces, queues and the
-Hyperdrive configs a deploy made, never a Worker. It does not touch Worker versions or static assets: Cloudflare
+Pass `--prune` to delete what's reported — KV namespaces, queues, Vectorize
+indexes and the Hyperdrive configs a deploy made, never a Worker. It does not touch Worker versions or static assets: Cloudflare
 owns those, and an asset lives as long as a version that serves it. Anything that
 holds data (a D1 database, an R2 bucket) is only ever listed:
 

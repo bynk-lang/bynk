@@ -1,1 +1,2 @@
 bynk.capability.invalid_option
+not a metadata property

@@ -1302,6 +1302,25 @@ fn instance_option_value(
             );
             return None;
         }
+        (firstparty::OptionKind::PositiveInt, ExprKind::IntLit { value, .. })
+            if base == "Vectorize"
+                && option == firstparty::VECTORIZE_DIMENSIONS_OPTION
+                && *value > firstparty::VECTORIZE_MAX_DIMENSIONS =>
+        {
+            errors.push_for(
+                Some(path),
+                CompileError::new(
+                    "bynk.capability.invalid_option",
+                    arg.span,
+                    format!(
+                        "`@{option}` is at most {} for a `{base}` index",
+                        firstparty::VECTORIZE_MAX_DIMENSIONS
+                    ),
+                )
+                .with_note("Cloudflare's published limit on dimensions per vector"),
+            );
+            return None;
+        }
         (firstparty::OptionKind::PositiveInt, ExprKind::IntLit { value, .. }) if *value > 0 => {
             OptionValue::Int(*value)
         }
@@ -1562,13 +1581,14 @@ fn vectorize_indexed_ok(
     false
 }
 
-/// Whether `name` is a metadata property a filter can name (#3479): not empty,
-/// at most 512 characters, no `"`, `.` or `|`, and not starting with `$`.
+/// Whether `name` is a metadata property a filter can name (#3479): a dotted
+/// path whose every segment is non-empty, has no `"` or `|` and does not start
+/// with `$`, at most 512 characters in all. A dot nests (`author.name`).
 fn is_metadata_property(name: &str) -> bool {
-    !name.is_empty()
-        && name.chars().count() <= 512
-        && !name.starts_with('$')
-        && !name.contains(['"', '.', '|'])
+    name.chars().count() <= 512
+        && name
+            .split('.')
+            .all(|seg| !seg.is_empty() && !seg.starts_with('$') && !seg.contains(['"', '|']))
 }
 
 /// Whether `name` is a Cloudflare queue name ([`instance_option_value`]):
@@ -7826,5 +7846,24 @@ fn display_canonical_names(error: &mut CompileError) {
         if label.contains('$') {
             *label = bynk_project::display_names(label);
         }
+    }
+}
+
+#[cfg(test)]
+mod metadata_property_tests {
+    use super::is_metadata_property;
+
+    #[test]
+    fn a_dot_nests_and_each_segment_is_checked() {
+        assert!(is_metadata_property("category"));
+        assert!(is_metadata_property("author.name"));
+        assert!(!is_metadata_property(""));
+        assert!(!is_metadata_property("a..b"));
+        assert!(!is_metadata_property(".a"));
+        assert!(!is_metadata_property("a."));
+        assert!(!is_metadata_property("$x"));
+        assert!(!is_metadata_property("a.$x"));
+        assert!(!is_metadata_property("a\"b"));
+        assert!(!is_metadata_property(&"x".repeat(513)));
     }
 }

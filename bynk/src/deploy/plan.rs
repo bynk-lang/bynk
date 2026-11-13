@@ -100,6 +100,9 @@ struct ContextPlan<'a> {
     /// P5 (#2323): one line per R2 bucket the Worker binds, in binding order.
     #[serde(skip_serializing_if = "Vec::is_empty")]
     r2: Vec<PlanR2<'a>>,
+    /// #3479: one line per Vectorize index the Worker binds, in binding order.
+    #[serde(skip_serializing_if = "Vec::is_empty")]
+    vectorize: Vec<PlanVectorize<'a>>,
     /// P4a (#2602): one line per D1 database the Worker binds, in binding
     /// order.
     #[serde(skip_serializing_if = "Vec::is_empty")]
@@ -231,6 +234,26 @@ struct PlanR2<'a> {
     bucket: String,
     #[serde(skip_serializing_if = "Option::is_none")]
     jurisdiction: Option<&'a str>,
+}
+
+/// #3479: one Vectorize index. The name is the identity and the configuration
+/// is fixed at creation, so `reuse` is a plain statement of the ledger; the
+/// plan is offline, so whether an existing index still matches is checked by
+/// the deploy, which fails on a mismatch.
+#[derive(Debug, Serialize)]
+struct PlanVectorize<'a> {
+    /// `VECTORIZE_<SNAKE>`.
+    binding: &'a str,
+    /// `create` (an index, or reusing one of its name already on the account
+    /// that matches) or `reuse` (the one the ledger recorded).
+    action: &'static str,
+    /// The index's account-facing name, [`vectorize_index_name`]d.
+    index: String,
+    dimensions: i64,
+    metric: &'a str,
+    /// The metadata indexes created before any vector.
+    #[serde(skip_serializing_if = "<[_]>::is_empty")]
+    indexed: &'a [String],
 }
 
 /// P4a (#2602): one D1 database.
@@ -2107,6 +2130,19 @@ pub(crate) fn plan_report(plan: &Plan<'_>, format: DeployFormat) -> String {
                         .unwrap_or_default()
                 ));
             }
+            for v in &plan.shown_orphans.vectorize {
+                out.push_str(&format!(
+                    "orphan vectorize {} {} ({}{})\n",
+                    v.worker,
+                    v.binding,
+                    v.index,
+                    if v.adopted {
+                        "; adopted, never deleted"
+                    } else {
+                        "; deleted by --prune"
+                    }
+                ));
+            }
             for d1 in &plan.shown_orphans.d1 {
                 out.push_str(&format!(
                     "orphan d1 {} {} ({}; not deleted)\n",
@@ -2153,6 +2189,16 @@ pub(crate) fn plan_report(plan: &Plan<'_>, format: DeployFormat) -> String {
                         out.push_str(" — the old bucket and its objects stay where they are");
                     }
                     out.push('\n');
+                }
+                for v in &context.vectorize {
+                    out.push_str(&format!(
+                        "vectorize {} {} ({}, {}, {}",
+                        v.action, v.index, v.binding, v.dimensions, v.metric
+                    ));
+                    if !v.indexed.is_empty() {
+                        out.push_str(&format!("; metadata indexes {}", v.indexed.join(", ")));
+                    }
+                    out.push_str(")\n");
                 }
                 for d1 in &context.d1 {
                     out.push_str(&format!(
@@ -2359,6 +2405,7 @@ fn account_name_problem(
 ) -> Option<String> {
     kv_title_collision(resources, lock, environment)
         .or_else(|| r2_bucket_problem(resources, lock, environment))
+        .or_else(|| vectorize_index_problem(resources, lock, environment))
         .or_else(|| d1_database_problem(resources, lock, environment))
         .or_else(|| analytics_dataset_problem(resources, lock, environment))
 }
@@ -2472,6 +2519,27 @@ pub(crate) fn derive_plan<'a>(
                             action: r2_action(lock, worker, bucket, environment),
                             bucket: r2_bucket_name(environment, &bucket.name),
                             jurisdiction: bucket.jurisdiction.as_deref(),
+                        })
+                        .collect(),
+                    vectorize: declared
+                        .vectorize_indexes
+                        .iter()
+                        .map(|v| {
+                            let index = vectorize_index_name(environment, &v.name);
+                            let recorded =
+                                recorded_vectorize(lock, worker, &v.binding, environment);
+                            PlanVectorize {
+                                binding: &v.binding,
+                                action: if recorded.is_some_and(|r| r.name == index) {
+                                    "reuse"
+                                } else {
+                                    "create"
+                                },
+                                index,
+                                dimensions: v.dimensions,
+                                metric: &v.metric,
+                                indexed: &v.indexed,
+                            }
                         })
                         .collect(),
                     d1: declared
@@ -2844,6 +2912,57 @@ pub(crate) fn analytics_dataset_problem(
     None
 }
 
+/// #3479: why the indexes the build declares cannot all be made in
+/// `environment`, or `None`: a name Cloudflare would refuse (the environment's
+/// suffix can push a derived name past 64 bytes), or one name for two
+/// instances, which would silently share an index. Checked within the build and
+/// against every index the ledger records in any environment.
+pub(crate) fn vectorize_index_problem(
+    resources: &BTreeMap<String, Resources>,
+    lock: &DeployLock,
+    environment: &str,
+) -> Option<String> {
+    let mut seen: BTreeMap<String, (&str, &str)> = BTreeMap::new();
+    for (worker, declared) in resources {
+        for index in &declared.vectorize_indexes {
+            let name = vectorize_index_name(environment, &index.name);
+            if let Some(why) = vectorize_index_name_problem(&name) {
+                return Some(format!(
+                    "Vectorize index `{name}` (`{}` of `{worker}`) cannot be created: {why}; rename the capability or the context",
+                    index.binding
+                ));
+            }
+            if let Some((other_worker, other_binding)) =
+                seen.insert(name.clone(), (worker, &index.binding))
+            {
+                return Some(format!(
+                    "`{}` of `{worker}` and `{other_binding}` of `{other_worker}` would both be the Vectorize index `{name}`; index names are scoped to the account, so rename one capability",
+                    index.binding
+                ));
+            }
+            for (other_env, env) in &lock.environments {
+                let clash = env
+                    .vectorize_instances
+                    .iter()
+                    .flat_map(|(w, instances)| instances.iter().map(move |(b, r)| (w, b, r)))
+                    .find(|(w, b, r)| {
+                        r.name == name
+                            && (other_env != environment
+                                || w.as_str() != worker
+                                || **b != index.binding)
+                    });
+                if let Some((other_worker, other_binding, _)) = clash {
+                    return Some(format!(
+                        "`{}` of `{worker}` would be the Vectorize index `{name}`, which `{other_binding}` of `{other_worker}` already holds in environment `{other_env}`; index names are scoped to the account, so rename one capability",
+                        index.binding
+                    ));
+                }
+            }
+        }
+    }
+    None
+}
+
 pub(crate) fn r2_bucket_problem(
     resources: &BTreeMap<String, Resources>,
     lock: &DeployLock,
@@ -3177,6 +3296,50 @@ pub(crate) mod tests {
             false,
             "default",
         )
+    }
+
+    // ---- #3479: Vectorize indexes ----
+
+    #[test]
+    fn the_plan_names_each_index_its_shape_and_its_orphans() {
+        let order = names(&["shop"]);
+        let declared = project(vec![(
+            "shop",
+            Resources::default().vectorize_indexes(&[(
+                "VECTORIZE_DOCS",
+                "shop-docs",
+                768,
+                "cosine",
+                &["category:string"],
+            )]),
+        )]);
+        let mut lock = DeployLock::default();
+        lock.record_vectorize("default", "shop", "VECTORIZE_OLD", "shop-old", false);
+        let fresh = plan_report(&plan_of(&order, &declared, &lock), DeployFormat::Short);
+        assert!(
+            fresh.contains("vectorize create shop-docs (VECTORIZE_DOCS, 768, cosine; metadata indexes category:string)\n"),
+            "{fresh}"
+        );
+        assert!(
+            fresh.contains("orphan vectorize shop VECTORIZE_OLD (shop-old; deleted by --prune)\n"),
+            "{fresh}"
+        );
+        lock.record_vectorize("default", "shop", "VECTORIZE_DOCS", "shop-docs", false);
+        let again = plan_report(&plan_of(&order, &declared, &lock), DeployFormat::Short);
+        assert!(
+            again.contains("vectorize reuse shop-docs (VECTORIZE_DOCS, 768, cosine; metadata indexes category:string)\n"),
+            "{again}"
+        );
+        // A staging deploy names the qualified index.
+        let staging = derive_plan(
+            &order,
+            &declared,
+            &DeployLock::default(),
+            &SecretSource::default(),
+            false,
+            "staging",
+        );
+        assert_eq!(staging.contexts[0].vectorize[0].index, "shop-docs-staging");
     }
 
     // ---- P5 (#2323): R2 buckets ----
