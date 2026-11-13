@@ -484,6 +484,10 @@ const IDEMPOTENCY_D1_BINDING = "D1_IDEMPOTENCY";
 // grow without bound: a bounded batch, in the same round trip.
 const CLAIM_SWEEP_BATCH = 20;
 
+// How many claims an instance remembers (or, in memory, keeps past their expiry) before it drops the
+// oldest, so a long-lived isolate does not grow with every unique key.
+const CLAIM_TRACKED_MAX = 10_000;
+
 // Idempotency capability track (ADR 0282, #2840).
 //
 // `dedup` and `remember` are an in-memory map per instance: lost on restart and not
@@ -533,6 +537,15 @@ export class IdempotencyProvider implements Idempotency {
     return db;
   }
 
+  // In-memory claims past their expiry are dropped once the map is large, so unique keys
+  // do not accumulate for the life of the isolate.
+  private pruneClaims(now: number): void {
+    if (this.claims.size <= CLAIM_TRACKED_MAX) return;
+    for (const [key, until] of this.claims) {
+      if (until <= now) this.claims.delete(key);
+    }
+  }
+
   async claim(key: string, expiresAfter: number): Promise<Claim> {
     const now = await this.deps.Clock.now();
     const until = now + expiresAfter;
@@ -542,8 +555,9 @@ export class IdempotencyProvider implements Idempotency {
       // it run in one synchronous step, so two concurrent claims cannot both win.
       const held = this.claims.get(key);
       if (held !== undefined && held > now) return Claim.AlreadyClaimed;
+      this.pruneClaims(now);
       this.claims.set(key, until);
-      this.written.set(key, until);
+      this.trackWritten(key, until);
       return Claim.Claimed;
     }
     const [claimed] = await db.batch([
@@ -559,11 +573,14 @@ export class IdempotencyProvider implements Idempotency {
         .bind(now),
     ]);
     if ((claimed.meta.changes ?? 0) === 0) return Claim.AlreadyClaimed;
-    this.written.set(key, until);
+    this.trackWritten(key, until);
     return Claim.Claimed;
   }
 
   // Release a claim, or move it to `until`, only while its expiry is still `was`.
+  // Confirming a claim whose row is gone (swept after its lease lapsed, with no retry
+  // having taken the key) puts it back, so a slow handler confirms whether or not other
+  // traffic happened to sweep it: the in-memory path never sweeps.
   private async settleClaim(key: string, was: number, until: number | undefined): Promise<void> {
     const db = this.d1();
     if (db === undefined) {
@@ -572,12 +589,32 @@ export class IdempotencyProvider implements Idempotency {
       else this.claims.set(key, until);
       return;
     }
-    const sql =
-      until === undefined
-        ? "DELETE FROM idempotency_claims WHERE key = ?1 AND expires_at = ?2"
-        : "UPDATE idempotency_claims SET expires_at = ?3 WHERE key = ?1 AND expires_at = ?2";
-    const statement = db.prepare(sql);
-    await db.batch([until === undefined ? statement.bind(key, was) : statement.bind(key, was, until)]);
+    if (until === undefined) {
+      await db.batch([
+        db.prepare("DELETE FROM idempotency_claims WHERE key = ?1 AND expires_at = ?2").bind(key, was),
+      ]);
+      return;
+    }
+    await db.batch([
+      db
+        .prepare("UPDATE idempotency_claims SET expires_at = ?3 WHERE key = ?1 AND expires_at = ?2")
+        .bind(key, was, until),
+      db
+        .prepare("INSERT INTO idempotency_claims (key, expires_at) VALUES (?1, ?2) ON CONFLICT (key) DO NOTHING")
+        .bind(key, until),
+    ]);
+  }
+
+  // Remember what this instance wrote for a key, for a handler's scope to settle against. Bounded:
+  // a claim made outside a scope is never settled, and keys are usually unique, so the oldest
+  // entries are dropped past a cap (a dropped entry only means that claim is left to lapse).
+  private trackWritten(key: string, until: number): void {
+    this.written.delete(key);
+    this.written.set(key, until);
+    if (this.written.size > CLAIM_TRACKED_MAX) {
+      const oldest = this.written.keys().next().value;
+      if (oldest !== undefined) this.written.delete(oldest);
+    }
   }
 
   // Hidden from the capability (#2840): a handler that claims takes a scope, which
@@ -601,8 +638,17 @@ export class IdempotencyProvider implements Idempotency {
       settle: async (result: unknown, threw: boolean): Promise<void> => {
         const failed = threw || claimFailed(result);
         const now = await this.deps.Clock.now();
+        // Best effort, key by key: an unsettled claim lapses with its lease, so a database
+        // error here must not turn a handler that already did its work into a failure, replace
+        // the handler's own error, or leave the keys after it unsettled.
         for (const h of held) {
-          await this.settleClaim(h.key, h.until, failed ? undefined : now + h.expiresAfter);
+          try {
+            await this.settleClaim(h.key, h.until, failed ? undefined : now + h.expiresAfter);
+          } catch (e) {
+            console.error(`bynk.Idempotency: could not settle the claim for ${h.key}: ${String(e)}`);
+          } finally {
+            this.written.delete(h.key);
+          }
         }
       },
     };
