@@ -1,0 +1,7 @@
+context demo
+
+// #3479: every segment of a dotted @indexed path is non-empty.
+
+consumes bynk.cloudflare { Vectorize }
+
+capability Docs = Vectorize @dimensions(3) @metric("cosine") @indexed(["a..b:string"])

@@ -727,6 +727,10 @@ pub const VECTORIZE_INDEXED_TYPES: &[&str] = &["string", "number", "boolean"];
 /// The most metadata indexes one index carries.
 pub const VECTORIZE_MAX_INDEXED: usize = 10;
 
+/// The most dimensions a Cloudflare Vectorize vector can have (its published
+/// limit); `@dimensions` above it is refused at compile time.
+pub const VECTORIZE_MAX_DIMENSIONS: i64 = 1536;
+
 /// The Worker binding of the `Version` capability (#3300): Cloudflare's
 /// Version metadata binding, `[version_metadata] binding = "CF_VERSION_METADATA"`,
 /// the name Cloudflare's own documentation uses.
