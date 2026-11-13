@@ -580,25 +580,7 @@ pub fn run(
     // user's own `wrangler dev` of it). Under `--remote` the bindings are the
     // account's, so there is nothing to stand in for.
     let remote = opts.wrangler_args.iter().any(|arg| arg == "--remote");
-    let mut stand_in_plans: Vec<(String, Vec<StandIn>)> = Vec::new();
-    let mut bound_foreign: Vec<String> = Vec::new();
-    for s in &serving {
-        let config = std::fs::read_to_string(workers_dir.join(&s.worker).join("wrangler.toml"))
-            .unwrap_or_default();
-        let foreign = foreign_services(&config, &available);
-        bound_foreign.extend(foreign.iter().map(|(_, w)| w.clone()));
-        let planned = stand_ins(&foreign, &opts.local_workers);
-        if !remote && !planned.is_empty() {
-            stand_in_plans.push((s.worker.clone(), planned));
-        }
-    }
-    for local in &opts.local_workers {
-        if !bound_foreign.contains(local) {
-            eprintln!(
-                "bynk: warning: `--local-worker {local}` names no Worker the served contexts bind with a `Service` instance."
-            );
-        }
-    }
+    let stand_in_plans = plan_stand_ins(&workers_dir, &serving, &available, &opts, remote);
     if !stand_in_plans.is_empty()
         && (passthrough_has(&opts.wrangler_args, "-c")
             || passthrough_has(&opts.wrangler_args, "--config"))
@@ -830,35 +812,15 @@ pub fn run(
                 if let Err(e) = point_at_stand_ins(&workers_dir, &stand_in_plans) {
                     eprintln!("bynk: could not bind the stand-ins for foreign Workers: {e}");
                 }
-                // The rebuilt configs name the derived indexes again. If they
-                // cannot be rebound (`bynk.toml` no longer reads), unbind them: a
-                // development session never serves the deploy's index names.
-                if !bind_dev_vectorize(
+                // The rebuilt configs name the derived indexes again.
+                bind_dev_vectorize(
                     project_root,
                     &workers_dir,
                     &available,
                     &serving,
                     remote,
                     false,
-                ) {
-                    let names: Vec<String> = serving.iter().map(|s| s.worker.clone()).collect();
-                    match crate::dev_vectorize::unbind_all(&workers_dir, &names) {
-                        Ok(()) => eprintln!(
-                            "bynk dev: Vectorize instances are unbound until `bynk.toml` is fixed; calls to them fail"
-                        ),
-                        Err(e) => eprintln!("bynk: could not unbind the Vectorize instances: {e}"),
-                    }
-                }
-                // P4b (#2608): a new migration is applied without a restart.
-                if !remote {
-                    apply_local_migrations(
-                        &probe.provenance,
-                        &workers_dir,
-                        &serving,
-                        &opts.wrangler_args,
-                        &mut applied,
-                    );
-                }
+                );
                 eprintln!("bynk dev: rebuilt");
                 emit(opts.format, &DevEvent::RebuildOk);
             } else {
@@ -898,6 +860,38 @@ fn materialise_remote_state(
     true
 }
 
+/// Interop I5 (#1972): each served Worker's stand-ins for the foreign Workers
+/// it binds, none under `--remote`. Warns for a `--local-worker` that names no
+/// Worker the served contexts bind.
+fn plan_stand_ins(
+    workers_dir: &Path,
+    serving: &[Serving],
+    available: &[String],
+    opts: &DevOptions,
+    remote: bool,
+) -> Vec<(String, Vec<StandIn>)> {
+    let mut stand_in_plans: Vec<(String, Vec<StandIn>)> = Vec::new();
+    let mut bound_foreign: Vec<String> = Vec::new();
+    for s in serving {
+        let config = std::fs::read_to_string(workers_dir.join(&s.worker).join("wrangler.toml"))
+            .unwrap_or_default();
+        let foreign = foreign_services(&config, available);
+        bound_foreign.extend(foreign.iter().map(|(_, w)| w.clone()));
+        let planned = stand_ins(&foreign, &opts.local_workers);
+        if !remote && !planned.is_empty() {
+            stand_in_plans.push((s.worker.clone(), planned));
+        }
+    }
+    for local in &opts.local_workers {
+        if !bound_foreign.contains(local) {
+            eprintln!(
+                "bynk: warning: `--local-worker {local}` names no Worker the served contexts bind with a `Service` instance."
+            );
+        }
+    }
+    stand_in_plans
+}
+
 /// #3479: bind the served Workers' `Vectorize` instances for development
 /// (see [`crate::dev_vectorize`]), printing why not on a failure and, when
 /// `announce`, the one note of what is bound. `--remote` keeps the account's
@@ -923,6 +917,16 @@ fn bind_dev_vectorize(
         }
         Err(e) => {
             eprintln!("bynk: {e}");
+            // A rebuild's configs name the deploy's indexes again: never serve
+            // them. Unbound, a call to an instance faults until `bynk.toml` reads.
+            if !announce {
+                match crate::dev_vectorize::unbind_all(workers_dir, &names) {
+                    Ok(()) => eprintln!(
+                        "bynk dev: Vectorize instances are unbound until `bynk.toml` is fixed; calls to them fail"
+                    ),
+                    Err(e) => eprintln!("bynk: could not unbind the Vectorize instances: {e}"),
+                }
+            }
             false
         }
     }
