@@ -931,7 +931,8 @@ yielded. A refusal before the stream starts (an unknown model, a usage limit) is
 the `Err`, so the handler can answer with an ordinary response; a failure after
 the first event faults the stream and aborts the response, as a failing producer
 does. A model that does not stream is `AiFailed`. A client that hangs up cancels
-the model's stream, once the Worker next writes to it. Like every `Stream`, the
+the model's stream, once the Worker next writes to it. A stream a handler never
+reads or serves is never cancelled, as with any `Stream`: read it or serve it. Like every `Stream`, the
 result is read once and cannot cross a service boundary: the handler that calls
 `runStream` is the one that serves it.
 

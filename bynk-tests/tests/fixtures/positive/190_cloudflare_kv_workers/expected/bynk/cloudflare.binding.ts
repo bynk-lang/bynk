@@ -941,17 +941,18 @@ function sseEvents(body: ReadableStream<Uint8Array>): AsyncIterableIterator<stri
     if (!closed) line("");
     closed = true;
   };
-  const end = { done: true, value: undefined } as const;
+  type Step = { done: false; value: string } | { done: true; value: undefined };
+  const end: Step = { done: true, value: undefined };
   return {
     [Symbol.asyncIterator]() {
       return this;
     },
-    async next(): Promise<IteratorResult<string>> {
+    async next(): Promise<Step> {
       for (;;) {
         const event = queue.shift();
         if (event !== undefined) return { done: false, value: event };
         if (closed) return end;
-        let read: ReadableStreamReadResult<Uint8Array>;
+        let read: Awaited<ReturnType<typeof reader.read>>;
         try {
           read = await reader.read();
         } catch (e) {
@@ -963,7 +964,7 @@ function sseEvents(body: ReadableStream<Uint8Array>): AsyncIterableIterator<stri
         else feed(read.value);
       }
     },
-    async return(): Promise<IteratorResult<string>> {
+    async return(): Promise<Step> {
       closed = true;
       queue.length = 0;
       await release();

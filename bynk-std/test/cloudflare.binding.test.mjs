@@ -1455,6 +1455,22 @@ t("WorkersAi.runStream: a failure after the first event faults the stream, after
   assert.deepEqual(seen, ["one", "two"]);
 });
 
+t("WorkersAi.runStream: return() cancels at once even while a read is in flight, and the pending next() ends", async () => {
+  // A model that is only sending keep-alive comments: `next()` is parked in a
+  // read that yields no event. A generator would queue `return()` behind it.
+  let cancels = 0;
+  const body = sseBody([": keep-alive\n"], { hold: true, onCancel: () => { cancels += 1; } });
+  const r = await new WorkersAi({ AI: fakeAi(body) }).runStream("@cf/x/y", "{}");
+  const iterator = r.value[Symbol.asyncIterator]();
+  const pending = iterator.next();
+  await new Promise((resolve) => setTimeout(resolve, 20));
+  assert.deepEqual(await iterator.return(), { done: true, value: undefined });
+  assert.equal(cancels, 1);
+  assert.deepEqual(await pending, { done: true, value: undefined });
+  // Done stays done.
+  assert.deepEqual(await iterator.next(), { done: true, value: undefined });
+});
+
 t("WorkersAi.runStream: abandoning the stream, or reaching [DONE], cancels the model's", async () => {
   let cancels = 0;
   const onCancel = () => { cancels += 1; };
