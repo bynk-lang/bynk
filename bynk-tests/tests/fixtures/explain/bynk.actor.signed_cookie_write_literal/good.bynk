@@ -1,0 +1,17 @@
+context shop
+
+consumes bynk { Cookie }
+
+type UserId = String where NonEmpty
+
+actor User { auth = SignedCookie(secret = "SESSION_KEY", ttl = 12.hours), identity = UserId }
+
+service api from http {
+  on GET("/a") () -> Effect[HttpResult[String]] by v: Visitor {
+    Ok("x").withCookie(Cookie { name: "theme", value: "dark" })
+  }
+
+  on GET("/me") () -> Effect[HttpResult[String]] by who: User {
+    Ok("x")
+  }
+}

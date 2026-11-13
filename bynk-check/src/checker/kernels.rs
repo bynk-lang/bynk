@@ -1801,15 +1801,10 @@ pub(crate) fn check_bytes_kernel_method(
 /// literal is judged: a computed field is left to the runtime backstop.
 fn lint_cookie_literal(arg: &Expr, ctx: &mut Ctx) {
     use bynk_syntax::ast::ExprKind;
-    let ExprKind::RecordConstruction {
-        type_name, fields, ..
-    } = &arg.kind
-    else {
+    let Some(shape) = super::cookie_lints::CookieShape::of(arg, ctx) else {
         return;
     };
-    if type_name.name != "Cookie" {
-        return;
-    }
+    let fields = shape.fields;
     let field = |name: &str| {
         fields
             .iter()
@@ -1846,7 +1841,7 @@ fn lint_cookie_literal(arg: &Expr, ctx: &mut Ctx) {
             "`Partitioned` requires `Secure`; remove `secure: false`",
         );
     }
-    if let Some(ExprKind::StrLit(name)) = field("name").map(|e| &e.kind) {
+    if let Some(name) = shape.name.as_deref() {
         if name.to_ascii_lowercase().starts_with("__host-") {
             let has_domain = matches!(
                 field("domain").map(|e| &e.kind),
@@ -1877,10 +1872,10 @@ fn lint_cookie_literal(arg: &Expr, ctx: &mut Ctx) {
     }
     // #3329: a `Domain` attribute opens the cookie to every subdomain. A literal
     // `__Host-` name is already judged above (an error), so only the rest warn.
-    let host_named = matches!(
-        field("name").map(|e| &e.kind),
-        Some(ExprKind::StrLit(n)) if n.to_ascii_lowercase().starts_with("__host-")
-    );
+    let host_named = shape
+        .name
+        .as_deref()
+        .is_some_and(|n| n.to_ascii_lowercase().starts_with("__host-"));
     if !host_named
         && let Some(d) = field("domain")
         && matches!(d.kind, ExprKind::Some(_) | ExprKind::Call { .. })
@@ -1906,6 +1901,7 @@ fn lint_cookie_literal(arg: &Expr, ctx: &mut Ctx) {
             .with_note("keep `httpOnly` on unless a script genuinely needs to read the cookie"),
         );
     }
+    super::cookie_lints::check(&shape, arg, ctx);
 }
 
 /// #3277: the `Cookie` record of the `bynk` adapter, parsed once from the

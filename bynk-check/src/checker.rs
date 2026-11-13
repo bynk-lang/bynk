@@ -46,6 +46,7 @@ pub use bynk_syntax::ast::ExprId;
 
 mod calls;
 pub mod codable;
+mod cookie_lints;
 mod d1;
 pub use d1::{BatchPosition, D1DecodeSite, D1SqlSite, RowLink};
 pub(crate) mod equality;
