@@ -2341,7 +2341,7 @@ t("WorkersAiSearch.search: an out-of-range option or an unsendable filter is Sea
 
 t("WorkersAiSearch.search: a filter's every operator takes the platform's $ spelling", async () => {
   const instance = fakeSearch();
-  const op = (tag, value) => ({ field: "k", op: { tag, value } });
+  const op = (tag, value) => ({ field: "k", op: Array.isArray(value) ? { tag, values: value } : { tag, value } });
   const sent = async (condition) => {
     instance.calls.length = 0;
     await as(instance).search("q", sOpts({ filter: [condition] }));
@@ -2358,7 +2358,7 @@ t("WorkersAiSearch.search: a query against an empty index is an empty list", asy
 });
 
 t("WorkersAiSearch.search: a reply that is not the documented shape is SearchFailed, never a fault", async () => {
-  for (const reply of [null, "text", {}, { chunks: "no" }, { chunks: [{ id: "a" }] }, { chunks: [chunkOf("a", { item: {} })] }]) {
+  for (const reply of [42, "text", {}, { chunks: "no" }, { chunks: [{ id: "a" }] }, { chunks: [chunkOf("a", { item: {} })] }]) {
     const got = await as(fakeSearch({ search: reply })).search("q", sOpts());
     assert.equal(got.error.tag, "SearchFailed");
     assert.match(got.error.message, /^unexpected reply from AI Search: /);
@@ -2413,7 +2413,7 @@ t("WorkersAiSearch.answer: a reply with no usage or chunks still answers", async
 });
 
 t("WorkersAiSearch.answer: a reply that is not the documented shape is SearchFailed, never a fault", async () => {
-  for (const reply of [null, {}, { choices: [] }, { choices: [{ message: { content: 7 } }] }, { choices: [{ message: { content: "x" } }], chunks: "no" }]) {
+  for (const reply of [42, {}, { choices: [] }, { choices: [{ message: { content: 7 } }] }, { choices: [{ message: { content: "x" } }], chunks: "no" }]) {
     const got = await as(fakeSearch({ chatCompletions: reply })).answer([userMsg("q")], sOpts());
     assert.equal(got.error.tag, "SearchFailed");
     assert.match(got.error.message, /^unexpected reply from AI Search: /);
