@@ -179,7 +179,7 @@ export function makeIntegrationVectorize(
         refuse(`vector id ${JSON.stringify(id)} must be 1 to ${VECTORIZE_LIMITS.idBytes} bytes`);
       }
       if (values.length !== dimensions) {
-        refuse(`vector ${JSON.stringify(id)} has ${values.length} dimensions, but the index has ${dimensions}`);
+        refuse(`dimension mismatch: vector ${JSON.stringify(id)} has ${values.length} dimensions, but the index has ${dimensions}`);
       }
       const space = v["namespace"] as string | undefined;
       if (space !== undefined && bytes(space) > VECTORIZE_LIMITS.namespaceBytes) {
@@ -207,7 +207,7 @@ export function makeIntegrationVectorize(
 
     async query(vector, options) {
       if (vector.length !== dimensions) {
-        refuse(`query vector has ${vector.length} dimensions, but the index has ${dimensions}`);
+        refuse(`dimension mismatch: query vector has ${vector.length} dimensions, but the index has ${dimensions}`);
       }
       const topK = (options.topK as number | undefined) ?? 5;
       const returnValues = options.returnValues === true;
