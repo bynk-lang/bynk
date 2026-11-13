@@ -759,7 +759,8 @@ if the type arguments cannot be resolved there it is
 `bynk.generics.ambiguous_instantiation`.
 
 A bound on a generic capability operation's
-type parameter is `bynk.generics.bound_on_capability_op`, and a `where` entry
+type parameter is `bynk.generics.bound_on_capability_op` (only `Key` and `Codable`
+are accepted there), and a `where` entry
 that names no type parameter of the method or its receiver type is
 `bynk.generics.unknown_where_param`. A bound on a type declaration is checked
 where the type is applied to a written type argument: `type Set2[T: Eq]` rejects
@@ -768,6 +769,25 @@ where the type is applied to a written type argument: `type Set2[T: Eq]` rejects
 function (the receiver type's parameters first, then the method's own, in
 declaration order), which the caller builds from the concrete type; it is
 internal and not part of the published ABI.
+
+**Typed capability reads** (#3458, lifting ADR 0696 decision 5). A capability
+operation's `Effect[P]` payload `P` MAY mention one of the operation's `Codable`
+type parameters, but only in a **first-party** capability (a unit under the reserved
+`bynk` root); in a user-declared one it is `bynk.generics.codable_op_return_not_first_party`.
+The provider replies with the boundary encoding of `P` as plain JSON; the call site
+decodes the reply **whole**, with the codec of the instantiated `P`, so `Option[T]`,
+`List[T]`, `Result[T, E]` and `T` are one rule. The instantiated `P` MUST be `Codable`
+(`bynk.types.not_codable`), and a type parameter that occurs only in the return type
+is given explicitly at the call (`Store.read[Receipt](key)`), since nothing infers it.
+What a reply that does not decode means is **declared per operation**: by default a
+**fault**, the effect rejecting with `Cap.op returned a value that does not decode as P:
+at <path>: expected …` (naming the capability, operation, instantiated type and path,
+never the value); with the internal `@onUndecodable(miss)` a **miss**, where the call
+returns `None` and a warning goes to the runtime console, which requires an
+`Effect[Option[..]]` return. `@onUndecodable(fault)` spells the default. The
+annotation is `bynk.generics.internal_op_annotation` outside a first-party unit, or
+when malformed or when `miss` is declared on another return shape. Nothing is derived
+from the return shape.
 
 {{#grammar-semantics if_expr}}
 
