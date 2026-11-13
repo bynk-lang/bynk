@@ -2936,8 +2936,15 @@ pub(crate) fn vectorize_index_problem(
         for index in &declared.vectorize_indexes {
             let name = index.physical_name(environment);
             if let Some(why) = vectorize_index_name_problem(&name) {
+                // #3479: an adopted name is the developer's, so the remedy is
+                // the `bynk.toml` entry, not the capability's name.
+                let remedy = if index.adopt.is_some() {
+                    "name an index whose name the platform takes in `[deploy.vectorize]`"
+                } else {
+                    "rename the capability or the context"
+                };
                 return Some(format!(
-                    "Vectorize index `{name}` (`{}` of `{worker}`) cannot be created: {why}; rename the capability or the context",
+                    "Vectorize index `{name}` (`{}` of `{worker}`) cannot be used: {why}; {remedy}",
                     index.binding
                 ));
             }

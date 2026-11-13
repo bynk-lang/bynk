@@ -461,3 +461,22 @@ fn bynk_toml_adopts_per_environment_by_capability() {
     );
     let _ = std::fs::remove_dir_all(&dir);
 }
+
+#[test]
+fn an_adopted_name_the_platform_refuses_points_at_bynk_toml_not_the_capability() {
+    let mut adopted = decl(&[]);
+    adopted.adopt = Some("A_Bad_Name".repeat(8));
+    let resources = BTreeMap::from([(
+        "shop".to_string(),
+        Resources {
+            vectorize_indexes: vec![adopted],
+            ..Default::default()
+        },
+    )]);
+    let message = vectorize_index_problem(&resources, &DeployLock::default(), "production")
+        .expect("a refused adopted name");
+    assert!(
+        message.contains("[deploy.vectorize]") && !message.contains("rename the capability"),
+        "{message}"
+    );
+}
