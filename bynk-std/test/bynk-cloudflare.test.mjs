@@ -27,12 +27,19 @@ function claimsDatabase(sqlSource) {
   const db = new sqlite.DatabaseSync(":memory:");
   db.exec(sqlSource);
   const statement = (sql, bound) => ({
+    sql,
     bind: (...values) => statement(sql, values),
     run: () => db.prepare(sql).run(...bound),
   });
+  let failWhen = null;
   return {
     prepare: (sql) => statement(sql, []),
+    // Make every batch that has a statement matching `pattern` throw, as a D1 outage would.
+    failOn: (pattern) => {
+      failWhen = pattern;
+    },
     async batch(statements) {
+      if (failWhen && statements.some((s) => failWhen.test(s.sql))) throw new Error("D1 is unavailable");
       db.exec("BEGIN");
       try {
         const out = statements.map((s) => ({ meta: { changes: Number(s.run().changes) } }));
@@ -126,4 +133,42 @@ d1("__track: with a database, a slow handler leaves the retry's claim alone", as
   second.__track().note("k", await second.claim("k", 30_000), 1_000_000);
   await slow.settle({ tag: "Err" }, false);
   assert.equal((await second.claim("k", 30_000)).tag, "AlreadyClaimed");
+});
+
+d1("__track: a database error while settling does not fail the handler or skip the other claims", async () => {
+  const db = claimsDatabase(MIGRATION);
+  const c = clock(0);
+  const idem = new binding.IdempotencyProvider({ Clock: c }, { D1_IDEMPOTENCY: db });
+  const scope = idem.__track();
+  scope.note("a", await idem.claim("a", scope.lease(1_000_000)), 1_000_000);
+  scope.note("b", await idem.claim("b", scope.lease(1_000_000)), 1_000_000);
+  const logged = [];
+  const original = console.error;
+  console.error = (...args) => logged.push(args.join(" "));
+  try {
+    db.failOn(/^UPDATE|^DELETE/);
+    await scope.settle({ tag: "Ok" }, false); // resolves: the handler's outcome is kept
+    await scope.settle(undefined, true);
+  } finally {
+    console.error = original;
+  }
+  assert.ok(logged.length >= 2, "each failed key is logged");
+  db.failOn(null);
+  c.t = 30_000;
+  assert.equal((await idem.claim("a", 1)).tag, "Claimed", "an unsettled claim lapses with its lease");
+});
+
+d1("__track: confirming a claim whose lapsed row was swept restores it", async () => {
+  const db = claimsDatabase(MIGRATION);
+  const c = clock(0);
+  const env = { D1_IDEMPOTENCY: db };
+  const slow = new binding.IdempotencyProvider({ Clock: c }, env);
+  const other = new binding.IdempotencyProvider({ Clock: c }, env);
+  const scope = slow.__track();
+  scope.note("k", await slow.claim("k", scope.lease(1_000_000)), 1_000_000);
+  c.t = 40_000; // the lease lapsed
+  await other.claim("elsewhere", 1_000); // another claim sweeps the expired row
+  assert.deepEqual(db.rows().map((r) => r.key), ["elsewhere"], "the lapsed row was swept");
+  await scope.settle({ tag: "Ok" }, false);
+  assert.equal((await other.claim("k", 1)).tag, "AlreadyClaimed", "the slow handler's confirm holds");
 });

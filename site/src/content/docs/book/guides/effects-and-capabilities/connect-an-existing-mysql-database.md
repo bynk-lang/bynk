@@ -62,7 +62,7 @@ service orders from http {
 ```
 
 MySQL has no `RETURNING`, so `run` reports the `AUTO_INCREMENT` id it inserted as
-`insertId` (an id past 2^53 is not an `Int`, so `run` answers `MySqlFailed` instead of a `0`). `all` and `first` return the rows as JSON text, for `Json.decode`:
+`insertId` (an id past 2^53 is not an `Int`, so `run` answers `MySqlFailed` instead of a `0`; the statement has still run, so do not retry on it blindly). `all` and `first` return the rows as JSON text, for `Json.decode`:
 `BIGINT` and `DECIMAL` columns arrive as strings, a `TINYINT(1)` as `true` or
 `false`, a `BLOB` as base64, a `JSON` column nested. A `DATETIME` or `TIMESTAMP`
 arrives as the server's text, `2026-11-12 09:30:00`, with no zone: read it as a
