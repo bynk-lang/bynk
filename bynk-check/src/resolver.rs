@@ -1295,6 +1295,24 @@ fn check_op_annotations(op: &bynk_syntax::ast::CapabilityOp, first_party: bool, 
             ));
         }
     }
+    // A policy only governs a typed read; on any other operation it would look
+    // in force and do nothing.
+    if first_party
+        && op
+            .annotations
+            .iter()
+            .any(|a| a.name.name == REPLY_POLICY_ANNOTATION)
+        && crate::checker::codable::typed_read_policy(op).is_none()
+    {
+        sinks.push(CompileError::new(
+            "bynk.generics.internal_op_annotation",
+            op.span,
+            format!(
+                "`@{REPLY_POLICY_ANNOTATION}` on `{}`, which is not a typed read (no `Codable` parameter in its `Effect` payload)",
+                op.name.name
+            ),
+        ));
+    }
     if first_party
         && op_reply_policy(op) == ReplyPolicy::Miss
         && !matches!(&op.return_type, TypeRef::Effect(inner, _) if matches!(**inner, TypeRef::Option(..)))
@@ -1319,7 +1337,11 @@ fn check_op_annotations(op: &bynk_syntax::ast::CapabilityOp, first_party: bool, 
     {
         sinks.push(CompileError::new(
             "bynk.generics.internal_op_annotation",
-            op.annotations[1].span,
+            op.annotations
+                .iter()
+                .filter(|a| a.name.name == REPLY_POLICY_ANNOTATION)
+                .nth(1)
+                .map_or(op.span, |a| a.span),
             format!(
                 "capability operation `{}` declares `@{REPLY_POLICY_ANNOTATION}` more than once",
                 op.name.name
@@ -4266,6 +4288,13 @@ mod op_annotation_tests {
         assert_eq!(policy("@onUndecodable(fault)"), ReplyPolicy::Fault);
         assert_eq!(policy("@onUndecodable(miss)"), ReplyPolicy::Miss);
         assert_eq!(policy("@onUndecodable(skip)"), ReplyPolicy::Fault);
+    }
+
+    /// A policy on an operation that is not a typed read is refused: it would do nothing.
+    #[test]
+    fn a_policy_needs_a_typed_read() {
+        let src = "context bynk.t\n\ncapability Store {\n  fn f() -> Effect[Option[String]] @onUndecodable(miss)\n}\n";
+        analyse(&[("a.bynk", src)]).assert_reports("bynk.generics.internal_op_annotation");
     }
 
     /// A user unit may not declare one at all.
