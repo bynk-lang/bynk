@@ -1354,6 +1354,25 @@ t("WorkersAi.generate: a missing or odd usage is None, and a reply that is not t
   assert.equal(cancelled, true);
 });
 
+// Shapes observed on a real account (#3478, W39) for a `messages` request.
+t("WorkersAi.generate: reads `choices[0].message.content` when there is no `response`, and prefers `response` when both are there", async () => {
+  const gen = async (reply) => new WorkersAi({ AI: fakeAi(reply) }).generate("@cf/x/y", request());
+  const usage = { prompt_tokens: 36, completion_tokens: 3, total_tokens: 39, prompt_tokens_details: { cached_tokens: 0 }, neurons: 0.09 };
+  // granite 4.0 micro: OpenAI-style only.
+  const granite = { id: "chatcmpl-1", object: "chat.completion", model: "@cf/ibm-granite/granite-4.0-h-micro", choices: [{ index: 0, message: { role: "assistant", content: "Hello!", refusal: null }, finish_reason: "stop" }], usage };
+  assert.deepEqual((await gen(granite)).value, { text: "Hello!", usage: Some({ promptTokens: 36, completionTokens: 3 }) });
+  // llama 3.1 8b fast: both; `response` is read.
+  const both = { ...granite, choices: [{ index: 0, message: { role: "assistant", content: "from choices" } }], response: "from response" };
+  assert.equal((await gen(both)).value.text, "from response");
+  // llama 3.2 1b: `response` only.
+  assert.equal((await gen({ response: "Hi", usage })).value.text, "Hi");
+  assert.deepEqual((await gen({ choices: [{ message: { content: "" } }] })).value, { text: "", usage: None });
+  // Neither shape is a BadReply: no content, or content that is not text.
+  for (const bad of [{ choices: [] }, { choices: [{}] }, { choices: [{ message: {} }] }, { choices: [{ message: { content: null } }] }, { choices: [{ message: { content: 5 } }] }, { choices: "x" }, { choices: [{ text: "completion shape" }] }]) {
+    assert.equal((await gen(bad)).error?.tag, "BadReply", JSON.stringify(bad));
+  }
+});
+
 t("WorkersAi.generate: a platform refusal is a typed error, and empty messages or a bad model fault", async () => {
   const ai = (e) => new WorkersAi({ AI: fakeAi(e) });
   assert.deepEqual((await ai(new Error("5007: No such model")).generate("@cf/x/y", request())).error, { tag: "ModelNotFound" });
