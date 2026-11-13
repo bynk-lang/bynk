@@ -619,6 +619,18 @@ pub fn run(
         eprintln!("bynk: could not bind the stand-ins for foreign Workers: {e}");
         return ExitCode::FAILURE;
     }
+    // #3479: each `Vectorize` instance is bound to the index `[dev.vectorize-index]`
+    // names, or left unbound.
+    if !bind_dev_vectorize(
+        project_root,
+        &workers_dir,
+        &available,
+        &serving,
+        remote,
+        true,
+    ) {
+        return ExitCode::FAILURE;
+    }
 
     // 4. Serve — one `wrangler dev` per context, each from inside its own worker
     //    dir (the emitted `index.ts` imports `../../runtime.js`, so cwd must be
@@ -818,6 +830,15 @@ pub fn run(
                 if let Err(e) = point_at_stand_ins(&workers_dir, &stand_in_plans) {
                     eprintln!("bynk: could not bind the stand-ins for foreign Workers: {e}");
                 }
+                // The rebuilt configs name the derived indexes again.
+                bind_dev_vectorize(
+                    project_root,
+                    &workers_dir,
+                    &available,
+                    &serving,
+                    remote,
+                    false,
+                );
                 // P4b (#2608): a new migration is applied without a restart.
                 if !remote {
                     apply_local_migrations(
@@ -865,6 +886,36 @@ fn materialise_remote_state(
         }
     }
     true
+}
+
+/// #3479: bind the served Workers' `Vectorize` instances for development
+/// (see [`crate::dev_vectorize`]), printing why not on a failure and, when
+/// `announce`, the one note of what is bound. `--remote` keeps the account's
+/// deployed names, so it binds nothing. `false` after printing why not.
+fn bind_dev_vectorize(
+    project_root: &Path,
+    workers_dir: &Path,
+    available: &[String],
+    serving: &[Serving],
+    remote: bool,
+    announce: bool,
+) -> bool {
+    if remote {
+        return true;
+    }
+    let names: Vec<String> = serving.iter().map(|s| s.worker.clone()).collect();
+    match crate::dev_vectorize::bind_for_dev(project_root, workers_dir, available, &names) {
+        Ok(bound) => {
+            if announce && let Some(note) = crate::dev_vectorize::report_note(&bound) {
+                eprintln!("{note}");
+            }
+            true
+        }
+        Err(e) => {
+            eprintln!("bynk: {e}");
+            false
+        }
+    }
 }
 
 /// #3319: the local connection strings of the served Workers' `Postgres`
@@ -1918,6 +1969,16 @@ mod tests {
         assert_eq!(
             dev_var_args(&BTreeSet::from(["ai"])),
             ["--var", "BYNK_DEV:1", "--var", "BYNK_DEV_ACK_AI:allow"]
+        );
+        // #3479: Vectorize shares the mechanism, under its own key and variable.
+        assert_eq!(
+            dev_var_args(&BTreeSet::from(["vectorize"])),
+            [
+                "--var",
+                "BYNK_DEV:1",
+                "--var",
+                "BYNK_DEV_ACK_VECTORIZE:allow"
+            ]
         );
     }
 

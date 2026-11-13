@@ -204,6 +204,23 @@
           },
           "description": "Local Hyperdrive connection strings, keyed by the `Postgres`\ncapability's name.",
           "type": "object"
+        },
+        "vectorize": {
+          "description": "Acknowledges that Vectorize has no local simulation: under `bynk dev` a\ncall runs against your own index on your Cloudflare account and may\nincur charges. `bynk dev` warns once, on the first call, unless this is\n`\"allow\"`. See Cloudflare's Vectorize pricing page.",
+          "oneOf": [
+            {
+              "const": "allow",
+              "description": "Silence the warning.",
+              "type": "string"
+            }
+          ]
+        },
+        "vectorize-index": {
+          "additionalProperties": {
+            "type": "string"
+          },
+          "description": "The Vectorize index of your own that `bynk dev` binds, keyed by the\n`Vectorize` capability's name (`Docs = \"docs-dev\"`). It must already\nexist with the declaration's dimensions and metric: `bynk dev` never\ncreates one, and never uses the deploy's derived name. A capability\nwith no entry is unbound under `bynk dev`.",
+          "type": "object"
         }
       },
       "type": "object",
