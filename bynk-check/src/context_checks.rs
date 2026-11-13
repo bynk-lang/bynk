@@ -5563,6 +5563,28 @@ enum RequestSurface {
     Form,
 }
 
+/// #3446: the records a handler of this unit decodes as its `cookies` parameter, in any file
+/// of the unit. `Record.field.cookie(v)` is legal only on one of these: the decoder it must agree
+/// with is then in the unit that writes the cookie.
+pub(crate) fn cookie_records_of(table: &UnitTable) -> HashSet<String> {
+    let mut out = HashSet::new();
+    for service in table.services.values() {
+        for h in &service.handlers {
+            if !matches!(h.kind, HandlerKind::Http { .. }) {
+                continue;
+            }
+            for p in &h.params {
+                if p.name.name == "cookies"
+                    && let TypeRef::Named(id) = &p.type_ref
+                {
+                    out.insert(id.name.clone());
+                }
+            }
+        }
+    }
+    out
+}
+
 /// RFC 9110 `token`: a cookie name is one.
 fn is_http_token(s: &str) -> bool {
     !s.is_empty()

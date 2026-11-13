@@ -1801,15 +1801,10 @@ pub(crate) fn check_bytes_kernel_method(
 /// literal is judged: a computed field is left to the runtime backstop.
 fn lint_cookie_literal(arg: &Expr, ctx: &mut Ctx) {
     use bynk_syntax::ast::ExprKind;
-    let ExprKind::RecordConstruction {
-        type_name, fields, ..
-    } = &arg.kind
-    else {
+    let Some(shape) = super::cookie_lints::CookieShape::of(arg, ctx) else {
         return;
     };
-    if type_name.name != "Cookie" {
-        return;
-    }
+    let fields = shape.fields;
     let field = |name: &str| {
         fields
             .iter()
@@ -1846,7 +1841,7 @@ fn lint_cookie_literal(arg: &Expr, ctx: &mut Ctx) {
             "`Partitioned` requires `Secure`; remove `secure: false`",
         );
     }
-    if let Some(ExprKind::StrLit(name)) = field("name").map(|e| &e.kind) {
+    if let Some(name) = shape.name.as_deref() {
         if name.to_ascii_lowercase().starts_with("__host-") {
             let has_domain = matches!(
                 field("domain").map(|e| &e.kind),
@@ -1877,10 +1872,10 @@ fn lint_cookie_literal(arg: &Expr, ctx: &mut Ctx) {
     }
     // #3329: a `Domain` attribute opens the cookie to every subdomain. A literal
     // `__Host-` name is already judged above (an error), so only the rest warn.
-    let host_named = matches!(
-        field("name").map(|e| &e.kind),
-        Some(ExprKind::StrLit(n)) if n.to_ascii_lowercase().starts_with("__host-")
-    );
+    let host_named = shape
+        .name
+        .as_deref()
+        .is_some_and(|n| n.to_ascii_lowercase().starts_with("__host-"));
     if !host_named
         && let Some(d) = field("domain")
         && matches!(d.kind, ExprKind::Some(_) | ExprKind::Call { .. })
@@ -1906,6 +1901,7 @@ fn lint_cookie_literal(arg: &Expr, ctx: &mut Ctx) {
             .with_note("keep `httpOnly` on unless a script genuinely needs to read the cookie"),
         );
     }
+    super::cookie_lints::check(&shape, arg, ctx);
 }
 
 /// #3277: the `Cookie` record of the `bynk` adapter, parsed once from the
@@ -2091,6 +2087,174 @@ pub(crate) fn check_signed_cookie_call(
         );
     }
     Some(Some(tys.intern(Ty::Effect(cookie))))
+}
+
+/// A call that mints or removes a cookie: `Actor.issue`/`Actor.expire` on a `SignedCookie` actor
+/// (#3386) or `Record.field.cookie(v)`/`.expire()` on a cookie record (#3446).
+pub(crate) fn check_cookie_call(
+    receiver: &Expr,
+    method: &Ident,
+    args: &[Expr],
+    span: Span,
+    expr_id: ExprId,
+    ctx: &mut Ctx,
+) -> Option<Option<TyId>> {
+    check_signed_cookie_call(receiver, method, args, span, expr_id, ctx)
+        .or_else(|| check_cookie_field_call(receiver, method, args, span, expr_id, ctx))
+}
+
+/// #3446: type `Record.field.cookie(value)` and `Record.field.expire()` on a cookie record: the
+/// `Cookie` whose name is the field's wire name and whose value is the field's value as its
+/// decoder reads it, and the matching deletion. The call is recognised syntactically, ahead of
+/// cross-context resolution, as `Actor.issue` is; `Record.field` on its own is not a value.
+/// Returns `None` when the receiver is not such a form, leaving the call to the other rules; a
+/// record's own static `cookie`/`expire` takes precedence, as anywhere else.
+pub(crate) fn check_cookie_field_call(
+    receiver: &Expr,
+    method: &Ident,
+    args: &[Expr],
+    span: Span,
+    expr_id: ExprId,
+    ctx: &mut Ctx,
+) -> Option<Option<TyId>> {
+    use bynk_syntax::ast::TypeBody;
+    let expire = match method.name.as_str() {
+        "cookie" => false,
+        "expire" => true,
+        _ => return None,
+    };
+    let ExprKind::FieldAccess {
+        receiver: head,
+        field,
+    } = &receiver.kind
+    else {
+        return None;
+    };
+    let ExprKind::Ident(record) = &head.kind else {
+        return None;
+    };
+    if ctx.lookup(record.name.as_str()).is_some() {
+        return None;
+    }
+    let decl = ctx.input.types.get(&record.name).cloned()?;
+    let TypeBody::Record(body) = &decl.body else {
+        return None;
+    };
+    if ctx
+        .input
+        .methods
+        .get(&record.name)
+        .is_some_and(|m| m.statics.contains_key(&method.name))
+    {
+        return None;
+    }
+    let tys = ctx.tys;
+    let skip_args = |ctx: &mut Ctx| {
+        for a in args {
+            let _ = type_of(a, None, ctx);
+        }
+    };
+    let call = format!("{}.{}.{}", record.name, field.name, method.name);
+    if !ctx
+        .input
+        .cross_context
+        .cookie_records
+        .contains(&record.name)
+    {
+        ctx.errors.push(
+            CompileError::new(
+                "bynk.http.cookie_field_not_cookie_record",
+                receiver.span,
+                format!(
+                    "`{}` is not the `cookies` record of an `on http` handler in this unit, so `{call}` has no decoder to agree with",
+                    record.name
+                ),
+            )
+            .with_note(
+                "a typed cookie is named and encoded as its record's decoder reads it; write an untyped `Cookie { name, value }` for a cookie in no record",
+            ),
+        );
+        skip_args(ctx);
+        return Some(None);
+    }
+    let Some(f) = body.fields.iter().find(|f| f.name.name == field.name) else {
+        let names: Vec<&str> = body.fields.iter().map(|f| f.name.name.as_str()).collect();
+        ctx.errors.push(
+            CompileError::new(
+                "bynk.http.cookie_field_unknown",
+                field.span,
+                format!("`{}` has no field `{}`", record.name, field.name),
+            )
+            .with_note(format!("its fields are {}", names.join(", "))),
+        );
+        skip_args(ctx);
+        return Some(None);
+    };
+    // The field segment is an ordinary use of the field: rename and go-to-definition follow it.
+    ctx.refs.record(record.span, SymbolKind::Type, &record.name);
+    ctx.refs.record(
+        field.span,
+        SymbolKind::Field,
+        &format!("{}.{}", record.name, f.name.name),
+    );
+    let want = usize::from(!expire);
+    if args.len() != want {
+        ctx.errors.push(
+            CompileError::new(
+                "bynk.http.cookie_field_arity",
+                span,
+                format!(
+                    "`{call}` takes {}, got {}",
+                    if expire {
+                        "no arguments".to_string()
+                    } else {
+                        "one argument: the value to write".to_string()
+                    },
+                    args.len()
+                ),
+            )
+            .with_note("write `Prefs.theme.cookie(Dark)` to set it and `Prefs.theme.expire()` to remove it"),
+        );
+        skip_args(ctx);
+        return Some(None);
+    }
+    if matches!(f.type_ref, bynk_syntax::ast::TypeRef::List(..)) {
+        ctx.errors.push(
+            CompileError::new(
+                "bynk.http.cookie_field_list",
+                field.span,
+                format!(
+                    "`{}` is a `List` field: a repeated cookie name is several `Set-Cookie` lines, which one `Cookie` cannot be",
+                    field.name
+                ),
+            )
+            .with_note("write an untyped `Cookie { name, value }` for each, with `withCookie`"),
+        );
+        skip_args(ctx);
+        return Some(None);
+    }
+    let cookie = bynk_cookie_ty(ctx)?;
+    ctx.callees.insert(
+        expr_id,
+        Callee::CookieField {
+            record: record.name.clone(),
+            field: field.name.clone(),
+            expire,
+        },
+    );
+    if !expire {
+        // An `Option[T]` field takes a `T`: the call is a *set*; `None` is `expire`.
+        let value_ref = match &f.type_ref {
+            bynk_syntax::ast::TypeRef::Option(inner, _) => inner.as_ref(),
+            other => other,
+        };
+        if let Some(want) = resolve_type_ref(value_ref, &ctx.input.types, tys) {
+            check_arg(&args[0], want, &format!("the value of `{call}`"), ctx);
+        } else {
+            let _ = type_of(&args[0], None, ctx);
+        }
+    }
+    Some(Some(cookie))
 }
 
 /// #3277: type a method on an `HttpResult[T]`. `withCookie(c)` and `clearCookie(c)`
