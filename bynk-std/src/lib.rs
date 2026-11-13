@@ -1832,6 +1832,7 @@ mod tests {
                 ("bynk.cloudflare", "ChatRole"),
                 ("bynk.cloudflare", "PgError"),
                 ("bynk.cloudflare", "MySqlError"),
+                ("bynk.cloudflare", "VectorError"),
                 ("bynk.crypto", "Digest"),
                 ("bynk.crypto", "Signature"),
                 ("bynk.crypto", "CryptoError"),
