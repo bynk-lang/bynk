@@ -900,12 +900,12 @@ type Generation = { text: String, usage: Option[TokenUsage] }
 empty (a fault), a setting left `None` is the model's own default, and the
 `Generation` has the model's `text` and, when the platform reported it, its token
 `usage`. `embed(model, texts)` embeds a batch and returns one vector per text, in
-order, which pairs with a vector index's `List[Float]` unchanged; an empty `texts`
+order and all the same length, which pairs with a vector index's `List[Float]` unchanged; an empty `texts`
 is a fault. `embed` does not check how many texts one call may carry, since the
 limit is the model's and drifts: a call over it is `InvalidInput`. The
 embeddings use the platform's default pooling, so an index built from them stays
 consistent. Both return `BadReply(message)` when the platform answers but not in
-the shape they promise (a model that is not of that kind, say), and never fault on
+the shape they promise (a model that is not of that kind, or an embedding reply whose vectors are empty or of different lengths), and never fault on
 it; `run` returns the model's JSON as given and cannot be a `BadReply`.
 
 An `AiError` is `ModelNotFound` (an id the platform does not know, or has
