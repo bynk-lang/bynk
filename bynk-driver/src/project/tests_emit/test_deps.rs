@@ -9,6 +9,28 @@ use bynk_check::test_suites::{self, ResolvedStub};
 use bynk_emit::emitter::emit::test_scaffold_ns as test_ns;
 use bynk_ts::{TsBindingName, TsDecl, TsExpr, TsLit, TsObjectEntry, TsParam, TsStmt, TsType};
 
+/// The arguments a derived capability's test double is built with: P3 (#2342) a
+/// rate limiter's limit and window, #3479 a `Vectorize` index's dimensions,
+/// metric and `@indexed` entries, so the double enforces its declaration. None
+/// for any other kind (and for the bare capability, whose double takes
+/// defaults).
+fn double_args(derived: Option<&bynk_check::symbols::DerivedInstance>) -> Vec<TsExpr> {
+    if let Some((limit, period)) = derived.and_then(|d| d.rate_limit()) {
+        return vec![num_lit(limit.to_string()), num_lit(period.to_string())];
+    }
+    match derived.filter(|d| d.is_vectorize()) {
+        Some(d) => vec![
+            num_lit(d.vectorize_dimensions().unwrap_or_default().to_string()),
+            str_lit(d.vectorize_metric().unwrap_or_default()),
+            TsExpr::Array {
+                items: d.vectorize_indexed().iter().map(str_lit).collect(),
+                multiline: false,
+            },
+        ],
+        None => Vec::new(),
+    }
+}
+
 /// #1479: returns the real [`TsStmt`] itself (was pre-printed `String`) — the
 /// one real declaration this function ever built; its caller now prints it
 /// directly via `bynk_ts::print_stmt`, the same shape it always used, just
@@ -192,14 +214,7 @@ pub(super) fn emit_test_deps(
                 let derived = unit_tables.get(unit).and_then(|t| t.derived.get(cap));
                 let (owner, base) = derived.map_or((unit, cap), |d| (&d.base_unit, &d.base_cap));
                 doubles.push((owner.clone(), base.clone(), cap.clone()));
-                // P3 (#2342): a rate limiter's double is told its instance's
-                // limit and window.
-                let args = match derived.and_then(|d| d.rate_limit()) {
-                    Some((limit, period)) => {
-                        vec![num_lit(limit.to_string()), num_lit(period.to_string())]
-                    }
-                    None => Vec::new(),
-                };
+                let args = double_args(derived);
                 Some(call(ident(format!("__bynkTest_{cap}")), args))
             }
             TopDep::Placeholder => None,

@@ -977,42 +977,6 @@ export function makeIntegrationAi(): WorkerAiBinding {
 }
 
 /**
- * A Vectorize index binding (#3479): Cloudflare's `vectorize` binding, which
- * `WorkersVectorize` reads. Vectors and results are the platform's own shapes
- * (`id`, `values`, `namespace`, `metadata`, `matches`); a write answers a
- * `{ mutationId }`, and takes effect once the platform has processed it.
- */
-export interface VectorizeIndex {
-  upsert(vectors: Record<string, unknown>[]): Promise<unknown>;
-  insert(vectors: Record<string, unknown>[]): Promise<unknown>;
-  query(vector: number[], options: Record<string, unknown>): Promise<unknown>;
-  getByIds(ids: string[]): Promise<unknown>;
-  deleteByIds(ids: string[]): Promise<unknown>;
-  describe(): Promise<unknown>;
-}
-
-/**
- * The Vectorize binding of a multi-Worker integration test participant, bound
- * as its `env.<binding>`. A test never reaches an index, so every operation
- * faults, naming the binding, until the case stubs the capability's operation.
- */
-export function makeIntegrationVectorize(binding: string): VectorizeIndex {
-  const unstubbed = async (): Promise<never> => {
-    throw new globalThis.Error(
-      `bynk: the \`${binding}\` Vectorize binding is not stubbed, and a test never reaches an index — stub the operation the case calls (for example \`stub <Name>.query(_, _) returns …\`)`,
-    );
-  };
-  return {
-    upsert: unstubbed,
-    insert: unstubbed,
-    query: unstubbed,
-    getByIds: unstubbed,
-    deleteByIds: unstubbed,
-    describe: unstubbed,
-  };
-}
-
-/**
  * A Secrets Store secret binding (#3301): Cloudflare's `secrets_store_secrets`
  * binding, which `WorkersStoredSecret` reads. `get` resolves to the secret's
  * value, so nothing that holds one may log it.
