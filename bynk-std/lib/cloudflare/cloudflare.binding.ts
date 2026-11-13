@@ -1663,7 +1663,10 @@ export class WorkersVectorize implements Vectorize {
   // a fault.
   private static failure(e: unknown): VectorError {
     const message = e instanceof Error ? e.message : String(e);
-    if ((/\bindex\b.*(not found|does not exist)|no such index/i.test(message) && !/metadata/i.test(message))) {
+    // The test double's own faults (a filter it does not model) are not the
+    // platform's refusals, and are not a handler's to act on.
+    if (message.startsWith("bynk:")) throw e instanceof Error ? e : new Error(message);
+    if (/\bindex\b.*(not found|does not exist)|no such index/i.test(message) && !/metadata/i.test(message)) {
       throw e instanceof Error ? e : new Error(message);
     }
     if (/dimensions?\b.*(mismatch|does not match|expected)|(mismatch|expected).*\bdimensions?\b/i.test(message)) return { tag: "DimensionMismatch", message };

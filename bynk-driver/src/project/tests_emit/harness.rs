@@ -217,11 +217,23 @@ pub(super) fn emit_integration_harness<'a>(
                 }
                 // #3302: an in-memory outbox per participant.
                 BindingSource::Email { .. } => call(ident("__makeIntegrationEmail"), vec![]),
-                // #3479: a test never reaches an index, so the binding faults,
-                // naming itself, until the case stubs the instance.
-                BindingSource::VectorizeIndex { .. } => call(
+                // #3479: each instance its own in-memory exact index, built from
+                // its declaration.
+                BindingSource::VectorizeIndex {
+                    dimensions,
+                    metric,
+                    indexed,
+                    ..
+                } => call(
                     ident("__makeIntegrationVectorize"),
-                    vec![str_lit(&binding.name)],
+                    vec![
+                        num_lit(dimensions.to_string()),
+                        str_lit(metric),
+                        TsExpr::Array {
+                            items: indexed.iter().map(str_lit).collect(),
+                            multiline: false,
+                        },
+                    ],
                 ),
                 // #3480: a test never reaches AI Search, so the binding faults,
                 // naming itself, until the case stubs the instance.

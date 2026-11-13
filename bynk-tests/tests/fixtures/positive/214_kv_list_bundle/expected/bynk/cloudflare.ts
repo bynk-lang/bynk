@@ -1652,9 +1652,18 @@ export const __MySqlToken: symbol = globalThis.Symbol("MySql");
  *
  * Vectorize is a remote service on your Cloudflare account, so a call may be
  * billed; see Cloudflare's Vectorize pricing page for what applies, and put a
- * `RateLimit` in front of any handler an anonymous caller can reach. In a
- * test every operation faults until `stub Docs.query(_, _) returns …`
- * replaces it, so a test never reaches an index.
+ * `RateLimit` in front of any handler an anonymous caller can reach.
+ *
+ * In a test each instance is an in-memory index built from its declaration,
+ * so a test never reaches Cloudflare and a retrieval flow (store, filter,
+ * rank) runs. It ranks exactly where production ranks approximately, and a
+ * write is visible at once where production takes some seconds; those are
+ * its two differences. It enforces the dimensions, namespaces, insert versus
+ * upsert, all eight filter operators and the platform limits as of
+ * 2026-11-13 (a limit it refuses is a `VectorInvalidInput`). A filter on a
+ * property that is not in `@indexed` faults, naming the difference, because
+ * production silently matches nothing for it. `stub Docs.query(_, _) returns …`
+ * still replaces any operation.
  */
 export interface Vectorize {
   upsert(vectors: readonly Vector[]): globalThis.Promise<Result<Mutation, VectorError>>;

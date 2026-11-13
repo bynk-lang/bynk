@@ -40,6 +40,7 @@ fn real_provider_double_factory(owner: &str, cap: &str, pglite: bool) -> Option<
     match cap {
         "D1" => Some("__makeIntegrationD1"),
         "Email" => Some("__makeIntegrationEmail"),
+        "Vectorize" => Some("__makeIntegrationVectorize"),
         // #3321: only when the project opts in (`[test] postgres = "pglite"`).
         "Postgres" if pglite => Some("__makeIntegrationPostgres"),
         _ => None,

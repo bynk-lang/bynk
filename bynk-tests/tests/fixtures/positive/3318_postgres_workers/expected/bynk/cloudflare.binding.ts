@@ -4,7 +4,8 @@ import type { Ai, AiError, AiSearch, SearchAnswer, Analytics, Condition, D1, Dat
 import type { FetchError, Request as FetchRequest, Response as FetchResponse } from "../bynk.js";
 import { FetchProvider } from "../bynk-cloudflare.js";
 import { Err, None, Ok, Some, type Option, type Result } from "../__bynk_runtime/result.js";
-import type { AnalyticsDataset, D1Database, D1PreparedStatement, D1Result, KVNamespace, QueueProducer, R2Bucket, R2MultipartUpload, R2ObjectMeta, RateLimiter, SecretsStoreSecret, SendEmail, VectorizeIndex, WorkerAiBinding, AiSearchInstance, WorkerVersionMetadata } from "../__bynk_runtime/storage.js";
+import type { AnalyticsDataset, D1Database, D1PreparedStatement, D1Result, KVNamespace, QueueProducer, R2Bucket, R2MultipartUpload, R2ObjectMeta, RateLimiter, SecretsStoreSecret, SendEmail, WorkerAiBinding, AiSearchInstance, WorkerVersionMetadata } from "../__bynk_runtime/storage.js";
+import type { VectorizeIndex } from "../__bynk_runtime/vectorize.js";
 import { claimStream } from "../__bynk_runtime/http.js";
 
 export class WorkersKv implements Kv {
@@ -1665,7 +1666,10 @@ export class WorkersVectorize implements Vectorize {
   // a fault.
   private static failure(e: unknown): VectorError {
     const message = e instanceof Error ? e.message : String(e);
-    if ((/\bindex\b.*(not found|does not exist)|no such index/i.test(message) && !/metadata/i.test(message))) {
+    // The test double's own faults (a filter it does not model) are not the
+    // platform's refusals, and are not a handler's to act on.
+    if (message.startsWith("bynk:")) throw e instanceof Error ? e : new Error(message);
+    if (/\bindex\b.*(not found|does not exist)|no such index/i.test(message) && !/metadata/i.test(message)) {
       throw e instanceof Error ? e : new Error(message);
     }
     if (/dimensions?\b.*(mismatch|does not match|expected)|(mismatch|expected).*\bdimensions?\b/i.test(message)) return { tag: "DimensionMismatch", message };

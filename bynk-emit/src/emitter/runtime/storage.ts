@@ -977,67 +977,6 @@ export function makeIntegrationAi(): WorkerAiBinding {
 }
 
 /**
- * A Vectorize index binding (#3479): Cloudflare's `vectorize` binding, which
- * `WorkersVectorize` reads. Vectors and results are the platform's own shapes
- * (`id`, `values`, `namespace`, `metadata`, `matches`); a write answers a
- * `{ mutationId }`, and takes effect once the platform has processed it.
- */
-export interface VectorizeIndex {
-  upsert(vectors: Record<string, unknown>[]): Promise<unknown>;
-  insert(vectors: Record<string, unknown>[]): Promise<unknown>;
-  query(vector: number[], options: Record<string, unknown>): Promise<unknown>;
-  getByIds(ids: string[]): Promise<unknown>;
-  deleteByIds(ids: string[]): Promise<unknown>;
-  describe(): Promise<unknown>;
-}
-
-/**
- * The Vectorize binding of a multi-Worker integration test participant, bound
- * as its `env.<binding>`. A test never reaches an index, so every operation
- * faults, naming the binding, until the case stubs the capability's operation.
- */
-export function makeIntegrationVectorize(binding: string): VectorizeIndex {
-  const unstubbed = async (): Promise<never> => {
-    throw new globalThis.Error(
-      `bynk: the \`${binding}\` Vectorize binding is not stubbed, and a test never reaches an index — stub the operation the case calls (for example \`stub <Name>.query(_, _) returns …\`)`,
-    );
-  };
-  return {
-    upsert: unstubbed,
-    insert: unstubbed,
-    query: unstubbed,
-    getByIds: unstubbed,
-    deleteByIds: unstubbed,
-    describe: unstubbed,
-  };
-}
-
-/**
- * An AI Search instance binding (#3480): Cloudflare's `ai_search` binding,
- * which `WorkersAiSearch` reads. Requests and replies are the platform's own
- * shapes (`ai_search_options`, `chunks`, `choices`), and the binding is the
- * instance itself, so its methods are called directly.
- */
-export interface AiSearchInstance {
-  search(request: Record<string, unknown>): Promise<unknown>;
-  chatCompletions(request: Record<string, unknown>): Promise<unknown>;
-}
-
-/**
- * The AI Search binding of a multi-Worker integration test participant, bound
- * as its `env.<binding>`. A test never reaches AI Search, so every operation
- * faults, naming the binding, until the case stubs the capability's operation.
- */
-export function makeIntegrationAiSearch(binding: string): AiSearchInstance {
-  const unstubbed = async (): Promise<never> => {
-    throw new globalThis.Error(
-      `bynk: the \`${binding}\` AI Search binding is not stubbed, and a test never reaches AI Search — stub the operation the case calls (for example \`stub <Name>.search(_, _) returns …\`)`,
-    );
-  };
-  return { search: unstubbed, chatCompletions: unstubbed };
-}
-
-/**
  * A Secrets Store secret binding (#3301): Cloudflare's `secrets_store_secrets`
  * binding, which `WorkersStoredSecret` reads. `get` resolves to the secret's
  * value, so nothing that holds one may log it.
@@ -1121,5 +1060,5 @@ export function makeIntegrationHyperdrive(binding: string): Hyperdrive {
 }
 
 // #1653: the `__` aliases emitted code imports.
-export { makeIntegrationAi as __makeIntegrationAi, makeIntegrationAnalytics as __makeIntegrationAnalytics, makeIntegrationD1 as __makeIntegrationD1, makeIntegrationEmail as __makeIntegrationEmail, makeIntegrationHyperdrive as __makeIntegrationHyperdrive, makeIntegrationKv as __makeIntegrationKv, makeIntegrationQueue as __makeIntegrationQueue, makeIntegrationR2 as __makeIntegrationR2, makeIntegrationRateLimit as __makeIntegrationRateLimit, makeIntegrationSecretsStoreSecret as __makeIntegrationSecretsStoreSecret, makeIntegrationAiSearch as __makeIntegrationAiSearch, makeIntegrationVectorize as __makeIntegrationVectorize, makeIntegrationVersionMetadata as __makeIntegrationVersionMetadata, makeTestState as __makeTestState };
-export type { AiSearchInstance as __AiSearchInstance, AnalyticsDataset as __AnalyticsDataset, D1Database as __D1Database, DurableObjectState as __DurableObjectState, Hyperdrive as __Hyperdrive, KVNamespace as __KVNamespace, QueueProducer as __QueueProducer, R2Bucket as __R2Bucket, RateLimiter as __RateLimiter, SecretsStoreSecret as __SecretsStoreSecret, SendEmail as __SendEmail, VectorizeIndex as __VectorizeIndex, WorkerAiBinding as __WorkerAiBinding, WorkerVersionMetadata as __WorkerVersionMetadata };
+export { makeIntegrationAi as __makeIntegrationAi, makeIntegrationAnalytics as __makeIntegrationAnalytics, makeIntegrationD1 as __makeIntegrationD1, makeIntegrationEmail as __makeIntegrationEmail, makeIntegrationHyperdrive as __makeIntegrationHyperdrive, makeIntegrationKv as __makeIntegrationKv, makeIntegrationQueue as __makeIntegrationQueue, makeIntegrationR2 as __makeIntegrationR2, makeIntegrationRateLimit as __makeIntegrationRateLimit, makeIntegrationSecretsStoreSecret as __makeIntegrationSecretsStoreSecret, makeIntegrationVersionMetadata as __makeIntegrationVersionMetadata, makeTestState as __makeTestState };
+export type { AnalyticsDataset as __AnalyticsDataset, D1Database as __D1Database, DurableObjectState as __DurableObjectState, Hyperdrive as __Hyperdrive, KVNamespace as __KVNamespace, QueueProducer as __QueueProducer, R2Bucket as __R2Bucket, RateLimiter as __RateLimiter, SecretsStoreSecret as __SecretsStoreSecret, SendEmail as __SendEmail, WorkerAiBinding as __WorkerAiBinding, WorkerVersionMetadata as __WorkerVersionMetadata };
