@@ -1386,6 +1386,8 @@ t("WorkersAi.generate: reads `choices[0].message.content` when there is no `resp
   // llama 3.2 1b: `response` only.
   assert.equal((await gen({ response: "Hi", usage })).value.text, "Hi");
   assert.deepEqual((await gen({ choices: [{ message: { content: "" } }] })).value, { text: "", usage: None });
+  // A `response` that is there but not text does not block the fallback.
+  assert.equal((await gen({ response: null, choices: [{ message: { content: "x" } }] })).value.text, "x");
   // Neither shape is a BadReply: no content, or content that is not text.
   for (const bad of [{ choices: [] }, { choices: [{}] }, { choices: [{ message: {} }] }, { choices: [{ message: { content: null } }] }, { choices: [{ message: { content: 5 } }] }, { choices: "x" }, { choices: [{ text: "completion shape" }] }]) {
     assert.equal((await gen(bad)).error?.tag, "BadReply", JSON.stringify(bad));
