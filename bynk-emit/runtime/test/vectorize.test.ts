@@ -77,7 +77,6 @@ test("filters: operators, dotted keys, namespaces, and the indexed-only metadata
   await index.upsert([
     { id: "a", values: [1], metadata: { category: "faq", year: 2024, author: { name: "ann" }, live: true, note: "n" } },
     { id: "b", values: [2], metadata: { category: "blog", year: 2026, author: { name: "bob" }, live: false } },
-    { id: "c", values: [3], metadata: { category: "faq", year: 2026, author: { name: "ann" }, live: true }, namespace: "ns" },
   ]);
   const q = async (filter: Record<string, unknown>, extra: Record<string, unknown> = {}) =>
     ids(await index.query([0], { filter, ...extra }));
@@ -89,9 +88,10 @@ test("filters: operators, dotted keys, namespaces, and the indexed-only metadata
   assert.deepEqual(await q({ year: { $gt: 2023, $lt: 2025 } }), ["a"]);
   assert.deepEqual(await q({ "author.name": "ann" }), ["a"]);
   assert.deepEqual(await q({ live: false }), ["b"]);
-  assert.deepEqual(await q({ category: "faq" }, { namespace: "ns" }), ["c"]);
   const scoped = (await index.query([0], { returnMetadata: "indexed" })) as { matches: { metadata: Record<string, unknown> }[] };
   assert.equal("note" in scoped.matches[0].metadata, false);
+  // A dotted indexed property is returned nested, as the platform returns it.
+  assert.deepEqual(scoped.matches[0].metadata.author, { name: "ann" });
   const all = (await index.query([0], { returnMetadata: "all" })) as { matches: { metadata: Record<string, unknown> }[] };
   assert.equal(all.matches[0].metadata.note, "n");
 });
@@ -101,4 +101,30 @@ test("a filter on a property that is not indexed faults, naming the difference; 
   await assert.rejects(() => index.query([0], { filter: { note: "x" } }), /^Error: bynk: the Vectorize test double does not model a filter on `note`/);
   await assert.rejects(() => index.query([0], { filter: {} }), /non-empty/);
   await assert.rejects(() => index.query([0], { filter: { "$bad": 1 } }), /invalid filter key/);
+});
+
+test("a namespace partitions the index, and a query naming none over namespaced vectors faults", async () => {
+  const index = makeIntegrationVectorize(1, "euclidean", ["category:string"]);
+  await index.upsert([
+    { id: "a", values: [1], metadata: { category: "faq" } },
+    { id: "c", values: [3], metadata: { category: "faq" }, namespace: "ns" },
+  ]);
+  assert.deepEqual(ids(await index.query([0], { namespace: "ns" })), ["c"]);
+  await assert.rejects(() => index.query([0], {}), /does not model a query that names no namespace/);
+});
+
+test("a malformed filter is refused whatever the index holds", async () => {
+  const empty = makeIntegrationVectorize(1, "euclidean", ["category:string"]);
+  await assert.rejects(() => empty.query([0], { filter: { category: { $between: [1, 2] } } }), /unknown filter operator/);
+  await assert.rejects(() => empty.query([0], { filter: { category: { $in: "faq" } } }), /takes a list/);
+  await assert.rejects(() => empty.query([0], { filter: { category: {} } }), /must not be empty/);
+});
+
+test("metadata returned is a copy: changing it does not change the index", async () => {
+  const index = makeIntegrationVectorize(1, "euclidean", ["category:string"]);
+  await index.upsert([{ id: "a", values: [1], metadata: { category: "faq" } }]);
+  const got = (await index.getByIds(["a"])) as { metadata: Record<string, unknown> }[];
+  got[0].metadata.category = "changed";
+  const again = (await index.getByIds(["a"])) as { metadata: Record<string, unknown> }[];
+  assert.equal(again[0].metadata.category, "faq");
 });

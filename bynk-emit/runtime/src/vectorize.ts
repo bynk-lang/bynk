@@ -135,12 +135,47 @@ function matches(stored: Stored, filter: Record<string, unknown>): boolean {
   });
 }
 
+// The indexed properties of `metadata`, each dotted path read and nested again
+// (`author.name` keeps `{ author: { name } }`), as the platform returns them.
+function indexedOnly(metadata: Record<string, unknown>, indexed: ReadonlySet<string>): Record<string, unknown> {
+  const out: Record<string, unknown> = {};
+  for (const path of indexed) {
+    const value = property(metadata, path);
+    if (value === undefined) continue;
+    const parts = path.split(".");
+    let at = out;
+    for (const part of parts.slice(0, -1)) {
+      const next = at[part];
+      at = (next !== null && typeof next === "object" ? next : (at[part] = {})) as Record<string, unknown>;
+    }
+    at[parts[parts.length - 1]] = structuredClone(value);
+  }
+  return out;
+}
+
+const OPERATORS = new Set(["$eq", "$ne", "$in", "$nin", "$lt", "$lte", "$gt", "$gte"]);
+
+// A condition's operators and operands, checked before any vector is matched,
+// so a malformed filter is refused whatever the index holds.
+function checkCondition(key: string, condition: unknown): void {
+  if (condition === null || typeof condition !== "object" || Array.isArray(condition)) return;
+  const entries = Object.entries(condition as Record<string, unknown>);
+  if (entries.length === 0) refuse(`the condition for ${JSON.stringify(key)} must not be empty`);
+  for (const [op, operand] of entries) {
+    if (!OPERATORS.has(op)) refuse(`unknown filter operator ${op}`);
+    if ((op === "$in" || op === "$nin") && !Array.isArray(operand)) {
+      refuse(`${op} takes a list of values`);
+    }
+  }
+}
+
 function checkFilter(filter: Record<string, unknown>, indexed: ReadonlySet<string>): void {
   if (Object.keys(filter).length === 0) refuse("filter must be a non-empty object");
   if (bytes(JSON.stringify(filter)) >= VECTORIZE_LIMITS.filterBytes) {
     refuse(`filter exceeds the maximum of ${VECTORIZE_LIMITS.filterBytes} bytes`);
   }
-  for (const key of Object.keys(filter)) {
+  for (const [key, condition] of Object.entries(filter)) {
+    checkCondition(key, condition);
     if (key === "" || key.includes('"') || key.startsWith("$") || key.length > VECTORIZE_LIMITS.filterKeyChars) {
       refuse(`invalid filter key ${JSON.stringify(key)}`);
     }
@@ -221,6 +256,13 @@ export function makeIntegrationVectorize(
       const filter = options.filter as Record<string, unknown> | undefined;
       if (filter !== undefined) checkFilter(filter, indexedNames);
       const space = options["namespace"] as string | undefined;
+      // Cloudflare's pages do not say whether a query that names no namespace
+      // also searches the namespaced vectors, so the double does not guess.
+      if (space === undefined && [...vectors.values()].some((v) => v.space !== undefined)) {
+        unmodelled(
+          "does not model a query that names no namespace over an index that holds namespaced vectors: the platform does not document whether it searches them. Name the namespace, or stub the query",
+        );
+      }
       const nearest = metric === "cosine" ? -1 : 1;
       const ranked = [...vectors.values()]
         .filter((v) => v.space === space && (filter === undefined || matches(v, filter)))
@@ -234,10 +276,7 @@ export function makeIntegrationVectorize(
           if (returnValues) m.values = [...v.values];
           if (v.space !== undefined) m["namespace"] = v.space;
           if (v.metadata !== undefined && scope !== "none") {
-            m.metadata =
-              scope === "all"
-                ? v.metadata
-                : Object.fromEntries(Object.entries(v.metadata).filter(([k]) => indexedNames.has(k)));
+            m.metadata = scope === "all" ? structuredClone(v.metadata) : indexedOnly(v.metadata, indexedNames);
           }
           return m;
         }),
@@ -248,7 +287,7 @@ export function makeIntegrationVectorize(
       return ids
         .map((id) => vectors.get(id))
         .filter((v): v is Stored => v !== undefined)
-        .map((v) => ({ id: v.id, values: [...v.values], "namespace": v.space, metadata: v.metadata }));
+        .map((v) => ({ id: v.id, values: [...v.values], "namespace": v.space, metadata: structuredClone(v.metadata) }));
     },
 
     async deleteByIds(ids) {
