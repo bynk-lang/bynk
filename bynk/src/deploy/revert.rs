@@ -26,7 +26,9 @@ pub(crate) struct Deployment {
     pub(crate) id: String,
     /// RFC 3339.
     pub(crate) created_on: String,
-    /// `annotations["workers/triggered_by"]`: `upload`, `secret`, `rollback`…
+    /// `annotations["workers/triggered_by"]`: `upload`, `secret`, `deployment`…
+    /// Cloudflare reports a rollback (`wrangler rollback`, so `bynk revert`) as
+    /// `deployment`, not `rollback` (#3112).
     pub(crate) trigger: Option<String>,
     /// `(version id, percentage)`.
     pub(crate) versions: Vec<(String, u32)>,
@@ -125,7 +127,7 @@ pub(crate) fn locate(deployments: &[Deployment], to: Option<&str>) -> Result<Loc
                         && !d.is_rollback()
                         && d.sole_version() == Some(live_code_version.as_str())
                 })
-                .ok_or("the live version's own upload is out of the listed history, so what preceded it cannot be told")?;
+                .ok_or("the live version's own upload is out of the listed history, so what preceded it cannot be told (a version made live by `wrangler versions deploy` or the dashboard has no upload deployment: name the target with `--to`)")?;
             if upload + 1 >= deployments.len() {
                 return Err("there is no earlier deployment in the Worker's listed history".into());
             }
@@ -1306,6 +1308,19 @@ mod tests {
                 .contains("no earlier deployment")
         );
         assert!(locate(&[], None).is_err());
+    }
+
+    #[test]
+    fn a_version_deployed_outside_bynk_is_refused_with_the_to_hint() {
+        // #3112: `wrangler versions deploy` and the dashboard record trigger
+        // `deployment`, the same as a rollback, so the only deployment carrying
+        // the live version reads as a re-activation and has no upload.
+        let h = [dep("d2", "deployment", "v2"), dep("d1", "upload", "v1")];
+        let err = locate(&h, None).unwrap_err();
+        assert!(err.contains("own upload is out of the listed history"));
+        assert!(err.contains("--to"), "the refusal names the way out: {err}");
+        // And it is the way out: `--to` names the earlier version.
+        assert_eq!(locate(&h, Some("v1")).unwrap().target_version, "v1");
     }
 
     #[test]
