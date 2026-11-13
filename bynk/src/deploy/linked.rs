@@ -14,6 +14,12 @@
 //! linked in spirit and has its own warn-only code (`foreign_worker_warnings`);
 //! it moves onto this path in a follow-up, not here.
 //!
+//! An `AiSearch` instance (#3480) is linked the same way: by the name
+//! `@instance` gives, looked up before anything is pushed, recorded in the
+//! ledger, and a missing one stops the run. Nothing is created: the
+//! instance's data source, models and indexing belong to whoever configured
+//! it.
+//!
 //! Only names and ids cross the wire. A secret's *value* is never asked for,
 //! so it cannot reach the plan, the ledger, the generated config or a log.
 
@@ -180,6 +186,186 @@ pub(crate) fn link_stored_secrets(
     } else {
         Err(problems)
     }
+}
+
+/// What an AI Search instance lookup found, as far as the deploy cares.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub(crate) enum InstanceState {
+    /// No instance of that name in the default namespace.
+    Missing,
+    /// It exists. `warning` says why it may not answer as expected, when the
+    /// lookup shows it (paused or disabled), never a reason to stop.
+    Found { warning: Option<String> },
+}
+
+/// The account's AI Search instances, as far as linking needs them. A trait so
+/// the resolution is tested against a fake and the REST client against a stub.
+pub(crate) trait AiSearchInstances {
+    fn instance(&self, name: &str) -> Result<InstanceState, String>;
+}
+
+/// The permissions a token needs for the AI Search REST API. The docs name
+/// these two for every request and list no read-only permission, so the
+/// message names both.
+pub(crate) const AI_SEARCH_TOKEN_SCOPE: &str = "AI Search: Edit and AI Search: Run";
+
+/// Cloudflare's REST API, for the AI Search instance lookup.
+pub(crate) struct RestAiSearch {
+    pub(crate) rest: Rest,
+}
+
+impl RestAiSearch {
+    /// A client for the account in `CLOUDFLARE_ACCOUNT_ID`, or a message
+    /// naming the missing variable and the permissions the token needs.
+    pub(crate) fn from_env() -> Result<Self, String> {
+        let credentials = Credentials::from_env_for(
+            "link an AI Search instance",
+            &format!(
+                "an API token with \"{AI_SEARCH_TOKEN_SCOPE}\" (a `wrangler login` session is not enough: the lookup calls Cloudflare's API directly)"
+            ),
+        )?;
+        Ok(Self {
+            rest: Rest {
+                agent: live::agent()?,
+                credentials,
+                base: live::API.to_string(),
+            },
+        })
+    }
+}
+
+/// The instance's lookup answer, read from the REST `result`: `paused` and
+/// `enable` are the documented flags. Cloudflare does not document the values
+/// of `status`, so it is not interpreted.
+fn instance_state(body: &serde_json::Value) -> InstanceState {
+    let result = &body["result"];
+    let warning = if result["paused"].as_bool() == Some(true) {
+        Some("it is paused, so its indexing is not running (a search resumes it)".to_string())
+    } else if result["enable"].as_bool() == Some(false) {
+        Some("it is disabled".to_string())
+    } else {
+        None
+    };
+    InstanceState::Found { warning }
+}
+
+impl AiSearchInstances for RestAiSearch {
+    fn instance(&self, name: &str) -> Result<InstanceState, String> {
+        match self
+            .rest
+            .get(&format!("/ai-search/namespaces/default/instances/{name}"))
+        {
+            Ok(body) => Ok(instance_state(&body)),
+            // Cloudflare's documented answer for an instance that is not there
+            // is code 7002 (`ai_search_not_found`). Any other 404 (a wrong
+            // account id, a moved route) is not "missing", so it falls through
+            // with what Cloudflare said.
+            Err(said) if said.contains("\"code\":7002") => Ok(InstanceState::Missing),
+            Err(said) if super::destinations::is_denied(&said) => Err(format!(
+                "{said} (the token needs the \"{AI_SEARCH_TOKEN_SCOPE}\" permissions, on this account, to find an instance)"
+            )),
+            Err(said) => Err(said),
+        }
+    }
+}
+
+/// The warnings and problems of linking every `(worker, binding)` of `order`
+/// to its AI Search instance, asking `search` once per instance name. Every
+/// problem is collected, not just the first. A missing instance is a problem;
+/// a paused or disabled one is a warning, since it still answers.
+pub(crate) fn link_ai_search(
+    order: &[String],
+    resources: &BTreeMap<String, Resources>,
+    search: &dyn AiSearchInstances,
+) -> (Vec<String>, Vec<String>) {
+    let mut asked: BTreeMap<String, Result<InstanceState, String>> = BTreeMap::new();
+    let (mut warnings, mut problems) = (Vec::new(), Vec::new());
+    for worker in order {
+        for decl in &resources[worker].ai_search {
+            let who = format!("`{}` of `{worker}`", decl.binding);
+            let found = asked
+                .entry(decl.instance.clone())
+                .or_insert_with(|| search.instance(&decl.instance))
+                .clone();
+            match found {
+                Ok(InstanceState::Found { warning: None }) => {}
+                Ok(InstanceState::Found {
+                    warning: Some(why),
+                }) => warnings.push(format!(
+                    "bynk: warning: {who} queries AI Search instance `{}`, but {why}",
+                    decl.instance
+                )),
+                Ok(InstanceState::Missing) => problems.push(format!(
+                    "{who} queries AI Search instance `{name}`, which does not exist on this account. `bynk deploy` links to an instance and never creates one: create `{name}` in the Cloudflare dashboard, with `wrangler` or with the REST API, or name the instance the account has",
+                    name = decl.instance
+                )),
+                Err(said) => problems.push(format!(
+                    "{who} queries AI Search instance `{}`; could not look it up: {said}",
+                    decl.instance
+                )),
+            }
+        }
+    }
+    (warnings, problems)
+}
+
+/// The AI Search lookups a run does before it confirms: each instance of
+/// `order` found on the account, warnings printed, `false` (after printing
+/// every problem) when any is missing, so the run stops with nothing pushed.
+pub(crate) fn link_ai_search_for_run(
+    order: &[String],
+    resources: &BTreeMap<String, Resources>,
+) -> bool {
+    if !order.iter().any(|w| !resources[w].ai_search.is_empty()) {
+        return true;
+    }
+    let search = match RestAiSearch::from_env() {
+        Ok(search) => search,
+        Err(e) => {
+            eprintln!("bynk: {e}");
+            return false;
+        }
+    };
+    let (warnings, problems) = link_ai_search(order, resources, &search);
+    for warning in &warnings {
+        eprintln!("{warning}");
+    }
+    for problem in &problems {
+        eprintln!("bynk: {problem}");
+    }
+    problems.is_empty()
+}
+
+/// Record the instances `worker`'s `AiSearch` bindings were linked to, before
+/// the push. Looked up in [`link_ai_search_for_run`], which stops the run when
+/// one is missing, so reaching here means each was found.
+pub(crate) fn record_ai_search_links(
+    worker: &str,
+    declared: &Resources,
+    lock: &mut DeployLock,
+    lock_path: &Path,
+    environment: &str,
+) -> Result<(), DeployFailure> {
+    let mut changed = false;
+    for decl in &declared.ai_search {
+        changed |= lock.record_ai_search(
+            environment,
+            worker,
+            &decl.binding,
+            AiSearchLink {
+                instance: decl.instance.clone(),
+            },
+        );
+    }
+    if changed {
+        write_lock(lock_path, lock).map_err(|e| {
+            DeployFailure::driver(format!(
+                "linked `{worker}`'s AI Search instances but could not record them in {}: {e}",
+                lock_path.display()
+            ))
+        })?;
+    }
+    Ok(())
 }
 
 /// The account lookups a run does before it confirms: every stored secret of
@@ -462,6 +648,48 @@ mod tests {
         assert!(seen.iter().all(|s| s.ends_with("Bearer tok")), "{seen:?}");
     }
 
+    #[test]
+    fn the_rest_client_reads_an_instance_and_a_not_found_answer() {
+        let (base, seen) = stub(vec![
+            (
+                "/ai-search/namespaces/default/instances/support-docs",
+                r#"{"success":true,"result":{"id":"support-docs","paused":true}}"#.into(),
+            ),
+            (
+                "/ai-search/namespaces/default/instances/denied",
+                r#"{"success":false,"errors":[{"code":10000,"message":"Authentication error"}],"result":{}}"#.into(),
+            ),
+            (
+                "/ai-search/namespaces/default/instances/absent",
+                r#"{"success":false,"errors":[{"code":7002,"message":"ai_search_not_found"}],"result":{}}"#.into(),
+            ),
+        ]);
+        let api = RestAiSearch { rest: rest(base) };
+        assert!(matches!(
+            api.instance("support-docs").unwrap(),
+            InstanceState::Found { warning: Some(_) }
+        ));
+        // A refusal of the token names the permissions; a 404 that is not 7002
+        // is not "missing", and nothing else is quietly swallowed.
+        let denied = api.instance("denied").unwrap_err();
+        assert!(
+            denied.contains("AI Search: Edit and AI Search: Run"),
+            "{denied}"
+        );
+        let other = api.instance("elsewhere").unwrap_err();
+        assert!(
+            other.contains("could not") || other.contains("7003"),
+            "{other}"
+        );
+        assert_eq!(api.instance("absent").unwrap(), InstanceState::Missing);
+        let seen = seen.lock().unwrap();
+        assert!(
+            seen[0].starts_with("/accounts/acct/ai-search/namespaces/default/instances/"),
+            "{seen:?}"
+        );
+        assert!(seen.iter().all(|s| s.ends_with("Bearer tok")), "{seen:?}");
+    }
+
     fn scratch(name: &str) -> std::path::PathBuf {
         let dir = std::env::temp_dir().join(format!("bynk-linked-{name}-{}", std::process::id()));
         let _ = std::fs::remove_dir_all(&dir);
@@ -563,5 +791,167 @@ mod tests {
         let (order, resources) = project(&[("shop", &[])]);
         assert!(!any_stored_secrets(&order, &resources));
         assert_eq!(link_for_run(&order, &resources), Some(BTreeMap::new()));
+    }
+
+    // ---- #3480: AI Search instances are linked, never created ----
+
+    struct FakeSearch(Vec<(&'static str, InstanceState)>, RefCell<Vec<String>>);
+
+    impl AiSearchInstances for FakeSearch {
+        fn instance(&self, name: &str) -> Result<InstanceState, String> {
+            self.1.borrow_mut().push(name.to_string());
+            Ok(self
+                .0
+                .iter()
+                .find(|(n, _)| *n == name)
+                .map(|(_, s)| s.clone())
+                .unwrap_or(InstanceState::Missing))
+        }
+    }
+
+    fn search_project(
+        workers: &[(&str, &[(&str, &str)])],
+    ) -> (Vec<String>, BTreeMap<String, Resources>) {
+        let order = workers.iter().map(|(w, _)| w.to_string()).collect();
+        let resources = workers
+            .iter()
+            .map(|(w, instances)| (w.to_string(), Resources::default().ai_search(instances)))
+            .collect();
+        (order, resources)
+    }
+
+    #[test]
+    fn a_found_instance_links_and_is_asked_once_per_name() {
+        let (order, resources) = search_project(&[
+            ("shop-ask", &[("AI_SEARCH_KB", "support-docs")]),
+            ("shop-faq", &[("AI_SEARCH_DOCS", "support-docs")]),
+        ]);
+        let fake = FakeSearch(
+            vec![("support-docs", InstanceState::Found { warning: None })],
+            RefCell::new(Vec::new()),
+        );
+        let (warnings, problems) = link_ai_search(&order, &resources, &fake);
+        assert!(warnings.is_empty() && problems.is_empty());
+        assert_eq!(*fake.1.borrow(), ["support-docs"]);
+    }
+
+    #[test]
+    fn every_missing_instance_is_named_at_once_and_none_is_created() {
+        let (order, resources) = search_project(&[(
+            "shop-ask",
+            &[
+                ("AI_SEARCH_KB", "support-docs"),
+                ("AI_SEARCH_OLD", "old-docs"),
+            ],
+        )]);
+        let fake = FakeSearch(vec![], RefCell::new(Vec::new()));
+        let (_, problems) = link_ai_search(&order, &resources, &fake);
+        assert_eq!(problems.len(), 2, "{problems:?}");
+        assert!(
+            problems[0].contains("`AI_SEARCH_KB` of `shop-ask`")
+                && problems[0].contains("`support-docs`")
+        );
+        assert!(problems[0].contains("never creates one"));
+        assert!(problems[1].contains("`old-docs`"));
+    }
+
+    #[test]
+    fn a_paused_instance_is_a_warning_not_a_failure() {
+        let (order, resources) =
+            search_project(&[("shop-ask", &[("AI_SEARCH_KB", "support-docs")])]);
+        let fake = FakeSearch(
+            vec![(
+                "support-docs",
+                InstanceState::Found {
+                    warning: Some(
+                        "it is paused, so its indexing is not running (a search resumes it)".into(),
+                    ),
+                },
+            )],
+            RefCell::new(Vec::new()),
+        );
+        let (warnings, problems) = link_ai_search(&order, &resources, &fake);
+        assert!(problems.is_empty());
+        assert_eq!(warnings.len(), 1);
+        assert!(warnings[0].contains("support-docs") && warnings[0].contains("paused"));
+    }
+
+    #[test]
+    fn the_lookup_answer_is_read_from_the_documented_flags() {
+        let state =
+            |result: serde_json::Value| instance_state(&serde_json::json!({ "result": result }));
+        assert_eq!(
+            state(serde_json::json!({ "id": "x", "status": "anything" })),
+            InstanceState::Found { warning: None }
+        );
+        let InstanceState::Found { warning: Some(w) } =
+            state(serde_json::json!({ "paused": true }))
+        else {
+            panic!("paused warns");
+        };
+        assert!(w.contains("paused"));
+        // Paused is said before disabled when both hold.
+        let InstanceState::Found { warning: Some(w) } =
+            state(serde_json::json!({ "paused": true, "enable": false }))
+        else {
+            panic!("paused and disabled warns");
+        };
+        assert!(w.contains("paused") && !w.contains("disabled"));
+        let InstanceState::Found { warning: Some(w) } =
+            state(serde_json::json!({ "enable": false }))
+        else {
+            panic!("disabled warns");
+        };
+        assert!(w.contains("disabled"));
+    }
+
+    #[test]
+    fn a_failed_lookup_is_a_problem_naming_the_instance_not_a_missing_one() {
+        struct Refusing;
+        impl AiSearchInstances for Refusing {
+            fn instance(&self, _: &str) -> Result<InstanceState, String> {
+                Err("GET /ai-search/namespaces/default/instances/support-docs: Cloudflare answered 500 []".into())
+            }
+        }
+        let (order, resources) =
+            search_project(&[("shop-ask", &[("AI_SEARCH_KB", "support-docs")])]);
+        let (warnings, problems) = link_ai_search(&order, &resources, &Refusing);
+        assert!(warnings.is_empty());
+        assert_eq!(problems.len(), 1, "{problems:?}");
+        assert!(
+            problems[0].contains("could not look it up") && problems[0].contains("answered 500")
+        );
+        assert!(!problems[0].contains("does not exist"));
+    }
+
+    #[test]
+    fn a_run_with_no_ai_search_instance_asks_nothing() {
+        let (order, resources) = search_project(&[("shop-ask", &[])]);
+        assert!(link_ai_search_for_run(&order, &resources));
+    }
+
+    #[test]
+    fn linking_records_the_instance_and_a_repeat_is_not_a_change() {
+        let declared = Resources::default().ai_search(&[("AI_SEARCH_KB", "support-docs")]);
+        let dir = std::env::temp_dir().join(format!("bynk-ai-search-{}", std::process::id()));
+        std::fs::create_dir_all(&dir).unwrap();
+        let path = dir.join("bynk.deploy.lock");
+        let mut lock = DeployLock::default();
+        record_ai_search_links("shop-ask", &declared, &mut lock, &path, "production").unwrap();
+        assert_eq!(
+            recorded_ai_search(&lock, "shop-ask", "AI_SEARCH_KB", "production"),
+            Some(&AiSearchLink {
+                instance: "support-docs".into()
+            })
+        );
+        assert!(!lock.record_ai_search(
+            "production",
+            "shop-ask",
+            "AI_SEARCH_KB",
+            AiSearchLink {
+                instance: "support-docs".into()
+            }
+        ));
+        std::fs::remove_dir_all(&dir).ok();
     }
 }

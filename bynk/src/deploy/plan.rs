@@ -129,6 +129,12 @@ struct ContextPlan<'a> {
     /// plan, which stays offline under `--dry-run`, does not claim it.
     #[serde(skip_serializing_if = "Vec::is_empty")]
     stored_secrets: Vec<PlanStoredSecret<'a>>,
+    /// #3480: one line per AI Search instance the Worker queries, in binding
+    /// order. Linked: found on the account before the push, never created,
+    /// never deleted, and asked after authenticating, so the plan does not
+    /// claim it exists.
+    #[serde(skip_serializing_if = "Vec::is_empty")]
+    ai_search: Vec<PlanAiSearch<'a>>,
     /// #1796: one line per Durable Object class the push declares in
     /// `exports`, in class-name order. Empty for a context with no agent and
     /// no events fan-out.
@@ -177,6 +183,14 @@ struct ContextPlan<'a> {
     /// refused unless `--prune` confirms it ([`confirm_address_removals`]).
     #[serde(skip_serializing_if = "Vec::is_empty")]
     removed_email_addresses: Vec<String>,
+}
+
+/// #3480: one `AiSearch` instance's link. No action: `bynk deploy` neither
+/// creates nor changes the instance.
+#[derive(Debug, Serialize)]
+struct PlanAiSearch<'a> {
+    binding: &'a str,
+    instance: &'a str,
 }
 
 /// #3301: one `StoredSecret` instance's link. No action: `bynk deploy`
@@ -1156,6 +1170,10 @@ pub fn run(
     let Some(linked_stores) = link_for_run(&order, &resources) else {
         return ExitCode::FAILURE;
     };
+    // #3480: an AI Search instance too: found by name, never created.
+    if !link_ai_search_for_run(&order, &resources) {
+        return ExitCode::FAILURE;
+    }
     // #3319: the Hyperdrive API client, checked here, before the confirmation,
     // so a missing token costs nothing.
     let Ok(hyperdrive_api) = hyperdrive::api_for_run(
@@ -2261,6 +2279,13 @@ pub(crate) fn plan_report(plan: &Plan<'_>, format: DeployFormat) -> String {
                         secret.binding, secret.secret, secret.store
                     ));
                 }
+                // #3480: linked, not provisioned — the account owns it.
+                for search in &context.ai_search {
+                    out.push_str(&format!(
+                        "linked ai-search {} ({}; not created)\n",
+                        search.instance, search.binding
+                    ));
+                }
                 // Interop I5 (#1972): bound, not provisioned — the Worker is
                 // not Bynk's, so the line says so rather than an action.
                 for service in &context.foreign_services {
@@ -2628,6 +2653,14 @@ pub(crate) fn derive_plan<'a>(
                             binding: &s.binding,
                             store: &s.store,
                             secret: &s.secret,
+                        })
+                        .collect(),
+                    ai_search: declared
+                        .ai_search
+                        .iter()
+                        .map(|s| PlanAiSearch {
+                            binding: &s.binding,
+                            instance: &s.instance,
                         })
                         .collect(),
                     durable_objects: declared
@@ -3814,6 +3847,38 @@ pub(crate) mod tests {
         let json: serde_json::Value =
             serde_json::from_str(&plan_report(&plan, DeployFormat::Json)).unwrap();
         assert!(json["contexts"][0].get("stored_secrets").is_none());
+    }
+
+    // ---- #3480: AI Search instances are linked, never created ----
+
+    #[test]
+    fn an_ai_search_instance_is_a_linked_plan_line_with_no_action() {
+        let resources = project(vec![(
+            "shop-ask",
+            Resources::default().ai_search(&[("AI_SEARCH_KB", "support-docs")]),
+        )]);
+        let order = names(&["shop-ask"]);
+        let plan = plan_of(&order, &resources, &DeployLock::default());
+        assert_eq!(
+            plan_report(&plan, DeployFormat::Short),
+            "linked ai-search support-docs (AI_SEARCH_KB; not created)\ndeploy shop-ask\n"
+        );
+        let json: serde_json::Value =
+            serde_json::from_str(&plan_report(&plan, DeployFormat::Json)).unwrap();
+        assert_eq!(
+            json["contexts"][0]["ai_search"],
+            serde_json::json!([{
+                "binding": "AI_SEARCH_KB",
+                "instance": "support-docs"
+            }])
+        );
+        // A project without one has no such key, so the machine surface of
+        // every existing project is unchanged.
+        let plain = project(vec![("shop-ask", Resources::default())]);
+        let plan = plan_of(&order, &plain, &DeployLock::default());
+        let json: serde_json::Value =
+            serde_json::from_str(&plan_report(&plan, DeployFormat::Json)).unwrap();
+        assert!(json["contexts"][0].get("ai_search").is_none());
     }
 
     // ---- #3328: Email Routing rules, reconciled by wrangler ----

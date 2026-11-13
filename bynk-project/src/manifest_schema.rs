@@ -159,6 +159,12 @@ struct DevTable {
     /// with no entry is unbound under `bynk dev`.
     #[serde(rename = "vectorize-index")]
     vectorize_index: Option<std::collections::BTreeMap<String, String>>,
+    /// Acknowledges that AI Search has no local simulation: under `bynk dev`
+    /// a call goes to your deployed instance on your Cloudflare account and may
+    /// incur charges. `bynk dev` warns once, on the first call, unless this is
+    /// `"allow"`. See Cloudflare's AI Search pricing page.
+    #[serde(rename = "ai-search")]
+    ai_search: Option<DevAck>,
 }
 
 /// The one value a `[dev]` acknowledgement takes.

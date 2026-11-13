@@ -76,6 +76,7 @@ index = { production = "docs-prod" }   # adopted for that environment, never cre
 [dev]
 ai = "allow"                # no default: silences `bynk dev`'s Workers AI cost warning
 vectorize = "allow"         # no default: silences `bynk dev`'s Vectorize cost warning
+ai-search = "allow"         # no default: silences `bynk dev`'s AI Search cost warning
 
 [dev.vectorize-index]       # no default: the index of your own `bynk dev` binds, per capability
 Docs = "docs-dev"
@@ -650,7 +651,8 @@ Cloudflare](/book/guides/projects-build-and-deployment/deploy-to-cloudflare/#vec
 ### Acknowledging a remote-only binding
 
 Some bindings have no local simulation: under `bynk dev`, a call to Workers AI
-(`Ai`) or to a Vectorize index runs on your Cloudflare account and may incur charges. `bynk dev` never
+(`Ai`), to AI Search (`AiSearch`, which goes to your deployed instance) or to a Vectorize index runs on
+your Cloudflare account and may incur charges. `bynk dev` never
 blocks such a call. The first one in a session prints a one-time warning that
 links to Cloudflare's own pricing page, and the call goes ahead. A project that
 has read it acknowledges it in `[dev]`, which silences the warning:
@@ -665,10 +667,11 @@ vectorize = "allow"
 |---|---|---|---|
 | `ai` | `[dev]` | `"allow"` | Acknowledges that `Ai` calls run remotely under `bynk dev`. The only value; any other is a manifest error. There is no command-line flag. |
 | `vectorize` | `[dev]` | `"allow"` | The same for `Vectorize` calls. |
+| `ai-search` | `[dev]` | `"allow"` | Acknowledges that `AiSearch` calls go to your deployed AI Search instance under `bynk dev`, which has no local simulation. Separate from `ai`. The only value; any other is a manifest error. |
 
 The key is per binding kind, so a later remote-only binding takes its own key
 and the same warning. `bynk dev` marks each Worker it serves with a `BYNK_DEV`
-variable and sets an acknowledged kind's variable (`BYNK_DEV_ACK_AI`, `BYNK_DEV_ACK_VECTORIZE`), which the
+variable and sets an acknowledged kind's variable (`BYNK_DEV_ACK_AI`, `BYNK_DEV_ACK_VECTORIZE`, `BYNK_DEV_ACK_AI_SEARCH`), which the
 provider reads; a deployed Worker has neither, so the warning and the
 acknowledgement never apply to production. `bynk test` never reaches Workers AI:
 every `Ai` operation faults until it is stubbed. The warning is per Worker
