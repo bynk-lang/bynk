@@ -62,6 +62,15 @@ pub(crate) struct Environment {
     /// reads and a project without R2 writes the same file.
     #[serde(default, skip_serializing_if = "BTreeMap::is_empty")]
     pub(crate) r2_instances: BTreeMap<String, BTreeMap<String, R2Bucket>>,
+    /// #3479: each Worker's `Vectorize` instances (`capability Docs =
+    /// Vectorize …`), keyed by the instance's binding (`VECTORIZE_DOCS`). An
+    /// index's name is its identity and its configuration is fixed at
+    /// creation, so the record is the name it was created (or adopted) under.
+    ///
+    /// Additive, `default`ed and omitted when empty, so an older ledger still
+    /// reads and a project without Vectorize writes the same file.
+    #[serde(default, skip_serializing_if = "BTreeMap::is_empty")]
+    pub(crate) vectorize_instances: BTreeMap<String, BTreeMap<String, VectorizeRecord>>,
     /// P4a (#2602): each Worker's `D1` instances (`capability Orders = D1`),
     /// keyed by the instance's binding (`D1_ORDERS`), as `kv_instances` is:
     /// the database's account-facing name and the id Cloudflare minted for it
@@ -274,6 +283,31 @@ pub(crate) struct StoredSecretLink {
 pub(crate) struct D1Past {
     pub(crate) name: String,
     pub(crate) id: String,
+}
+
+/// #3479: one Vectorize index of a binding, as the account names it.
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
+pub(crate) struct VectorizeRecord {
+    /// The index's account-facing name, environment-qualified.
+    pub(crate) name: String,
+    /// `true` when the project named an existing index rather than having this
+    /// deploy create one. An adopted index is checked for drift and never
+    /// created, changed or deleted.
+    #[serde(default, skip_serializing_if = "std::ops::Not::not")]
+    pub(crate) adopted: bool,
+    /// Indexes this binding used to have, under another name. They hold
+    /// vectors, so they stay recorded (and are reported as orphans) until
+    /// pruned or removed by hand.
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub(crate) superseded: Vec<VectorizePast>,
+}
+
+/// An index a binding no longer uses (see [`VectorizeRecord::superseded`]).
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
+pub(crate) struct VectorizePast {
+    pub(crate) name: String,
+    #[serde(default, skip_serializing_if = "std::ops::Not::not")]
+    pub(crate) adopted: bool,
 }
 
 /// A bucket a binding no longer uses (see [`R2Bucket::superseded`]).
@@ -744,6 +778,72 @@ impl DeployLock {
         );
     }
 
+    /// #3479: record the index `worker`'s `Vectorize` `binding` is bound to.
+    /// An index this replaces under another name is not forgotten: its vectors
+    /// are still there (unless it was adopted, which was never the project's).
+    pub(crate) fn record_vectorize(
+        &mut self,
+        environment: &str,
+        worker: &str,
+        binding: &str,
+        name: &str,
+        adopted: bool,
+    ) {
+        let instances = self
+            .environments
+            .entry(environment.to_string())
+            .or_default()
+            .vectorize_instances
+            .entry(worker.to_string())
+            .or_default();
+        let mut superseded = Vec::new();
+        if let Some(old) = instances.remove(binding) {
+            superseded = old.superseded;
+            if old.name != name && !old.adopted {
+                superseded.push(VectorizePast {
+                    name: old.name,
+                    adopted: old.adopted,
+                });
+            }
+        }
+        instances.insert(
+            binding.to_string(),
+            VectorizeRecord {
+                name: name.to_string(),
+                adopted,
+                superseded,
+            },
+        );
+    }
+
+    /// #3479: drop an index from the ledger once `--prune` deleted it, whether
+    /// it was the live one (its Worker or capability is gone) or a superseded
+    /// one.
+    pub(crate) fn forget_vectorize(
+        &mut self,
+        environment: &str,
+        worker: &str,
+        binding: &str,
+        name: &str,
+    ) {
+        let Some(instances) = self
+            .environments
+            .get_mut(environment)
+            .and_then(|env| env.vectorize_instances.get_mut(worker))
+        else {
+            return;
+        };
+        if instances.get(binding).is_some_and(|r| r.name == name) {
+            instances.remove(binding);
+        } else if let Some(record) = instances.get_mut(binding) {
+            record.superseded.retain(|past| past.name != name);
+        }
+        if instances.is_empty() {
+            let env = self.environments.get_mut(environment).expect("present");
+            env.vectorize_instances.remove(worker);
+        }
+    }
+
     /// P4a (#2602): record the database this project created (or adopted, when
     /// one of its name was already there) for `worker`'s `D1` `binding`.
     pub(crate) fn record_d1(
@@ -1007,6 +1107,11 @@ pub(crate) struct Orphans {
     /// refuses to delete a non-empty one anyway).
     #[serde(skip_serializing_if = "Vec::is_empty")]
     pub(crate) r2: Vec<OrphanR2>,
+    /// #3479: recorded Vectorize indexes the build no longer declares. An
+    /// index holds vectors, so `--prune` deletes one only behind its
+    /// confirmation (as for KV); an adopted one is only ever reported.
+    #[serde(skip_serializing_if = "Vec::is_empty")]
+    pub(crate) vectorize: Vec<OrphanVectorize>,
     /// P4a (#2602): recorded D1 databases the build no longer declares.
     /// Reported only, as buckets are: a database holds data.
     #[serde(skip_serializing_if = "Vec::is_empty")]
@@ -1040,6 +1145,18 @@ pub(crate) struct OrphanR2 {
     pub(crate) bucket: String,
     #[serde(skip_serializing_if = "Option::is_none")]
     pub(crate) jurisdiction: Option<String>,
+}
+
+/// One recorded Vectorize index the build no longer declares (#3479): a
+/// capability removed or renamed, an index replaced, or a whole Worker gone.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize)]
+pub(crate) struct OrphanVectorize {
+    pub(crate) worker: String,
+    pub(crate) binding: String,
+    /// The index's name on the account.
+    pub(crate) index: String,
+    /// An adopted index is not the project's to delete.
+    pub(crate) adopted: bool,
 }
 
 /// One recorded D1 database the build no longer declares (P4a, #2602): a
@@ -1085,7 +1202,10 @@ impl Orphans {
     /// `confirm_prune`'s prompt at all — `Delete 0 resource(s)?` is a bug,
     /// not a valid state.
     pub(crate) fn has_prunable(&self) -> bool {
-        !self.kv.is_empty() || !self.queues.is_empty() || self.hyperdrive.iter().any(|h| !h.adopted)
+        !self.kv.is_empty()
+            || !self.queues.is_empty()
+            || self.hyperdrive.iter().any(|h| !h.adopted)
+            || self.vectorize.iter().any(|v| !v.adopted)
     }
 
     /// These orphans as the account names them under `environment`, for the
@@ -1116,6 +1236,7 @@ impl Orphans {
                 .collect(),
             d1: self.d1.clone(),
             hyperdrive: self.hyperdrive.clone(),
+            vectorize: self.vectorize.clone(),
             workers: self
                 .workers
                 .iter()
@@ -1208,6 +1329,32 @@ pub(crate) fn find_orphans(
             })
         }))
         .collect();
+    // #3479: an index likewise, with its Worker or on its own; one a changed
+    // name left behind is an orphan while its binding is live, too.
+    let vectorize_orphans = env
+        .vectorize_instances
+        .iter()
+        .flat_map(|(worker, instances)| {
+            instances.iter().flat_map(move |(binding, record)| {
+                let live = resources
+                    .get(worker)
+                    .is_some_and(|r| r.vectorize_indexes.iter().any(|v| &v.binding == binding));
+                let main = (!live).then(|| OrphanVectorize {
+                    worker: worker.clone(),
+                    binding: binding.clone(),
+                    index: record.name.clone(),
+                    adopted: record.adopted,
+                });
+                main.into_iter()
+                    .chain(record.superseded.iter().map(move |past| OrphanVectorize {
+                        worker: worker.clone(),
+                        binding: binding.clone(),
+                        index: past.name.clone(),
+                        adopted: past.adopted,
+                    }))
+            })
+        })
+        .collect();
     // P4a (#2602): a database likewise, with its Worker or on its own.
     let d1_orphans = env
         .d1_instances
@@ -1269,6 +1416,7 @@ pub(crate) fn find_orphans(
         .collect();
     Orphans {
         r2: r2_orphans,
+        vectorize: vectorize_orphans,
         d1: d1_orphans,
         hyperdrive: hyperdrive_orphans,
         // The bare namespace likewise: with its Worker, or on its own once
@@ -1309,6 +1457,19 @@ pub(crate) fn recorded_r2<'a>(
     lock.environments
         .get(environment)
         .and_then(|env| env.r2_instances.get(worker))
+        .and_then(|instances| instances.get(binding))
+}
+
+/// The index recorded for `worker`'s `Vectorize` `binding` (#3479).
+pub(crate) fn recorded_vectorize<'a>(
+    lock: &'a DeployLock,
+    worker: &str,
+    binding: &str,
+    environment: &str,
+) -> Option<&'a VectorizeRecord> {
+    lock.environments
+        .get(environment)
+        .and_then(|env| env.vectorize_instances.get(worker))
         .and_then(|instances| instances.get(binding))
 }
 
@@ -1728,9 +1889,18 @@ pub(crate) fn confirm_prune(yes: bool, orphans: &Orphans, environment: &str) -> 
             h.config, h.worker, h.binding
         );
     }
+    // #3479: an index the deploy made, with its vectors; an adopted one is not
+    // the project's to delete.
+    let vectorize: Vec<_> = orphans.vectorize.iter().filter(|v| !v.adopted).collect();
+    for v in &vectorize {
+        eprintln!(
+            "bynk: will delete Vectorize index `{}` of `{}`'s `{}`, and every vector in it",
+            v.index, v.worker, v.binding
+        );
+    }
     confirm_deletion_prompt(
         yes,
-        orphans.kv.len() + orphans.queues.len() + hyperdrive.len(),
+        orphans.kv.len() + orphans.queues.len() + hyperdrive.len() + vectorize.len(),
     )
 }
 
@@ -1786,6 +1956,24 @@ pub(crate) fn prune_orphans(
         write_lock(lock_path, lock).map_err(|e| {
             DeployFailure::driver(format!(
                 "deleted {what} but could not record it in {}: {e}",
+                lock_path.display()
+            ))
+        })?;
+    }
+    // #3479: each orphaned index the deploy made (never an adopted one), named
+    // as the account has it; gone already is success, as for a queue.
+    for orphan in orphans.vectorize.iter().filter(|o| !o.adopted) {
+        delete_vectorize_index(provenance, &orphan.index, project_root).map_err(|e| {
+            DeployFailure::driver(format!(
+                "could not delete the orphaned Vectorize index `{}` of `{}`'s `{}`: {e}",
+                orphan.index, orphan.worker, orphan.binding
+            ))
+        })?;
+        lock.forget_vectorize(environment, &orphan.worker, &orphan.binding, &orphan.index);
+        write_lock(lock_path, lock).map_err(|e| {
+            DeployFailure::driver(format!(
+                "deleted the orphaned Vectorize index `{}` but could not record it in {}: {e}",
+                orphan.index,
                 lock_path.display()
             ))
         })?;
@@ -1984,6 +2172,7 @@ pub(crate) mod tests {
                         "api".into(),
                         BTreeMap::from([("KV_SESSIONS".into(), KvNamespace { id: "s".into() })]),
                     )]),
+                    vectorize_instances: BTreeMap::new(),
                     ratelimit_instances: BTreeMap::from([(
                         "api".into(),
                         BTreeMap::from([(

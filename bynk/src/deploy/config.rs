@@ -33,6 +33,9 @@ struct WranglerConfig {
     /// P4a (#2602): the `[[d1_databases]]` of the `D1` instances.
     #[serde(default)]
     d1_databases: Vec<D1DatabaseBinding>,
+    /// #3479: the `[[vectorize]]` of the `Vectorize` instances.
+    #[serde(default)]
+    vectorize: Vec<VectorizeStanza>,
     /// #3319: the `[[hyperdrive]]` of the `Postgres` instances.
     #[serde(default)]
     hyperdrive: Vec<HyperdriveStanza>,
@@ -175,6 +178,50 @@ struct Export {
 pub(crate) struct DurableObject {
     pub(crate) class: String,
     pub(crate) storage: String,
+}
+
+#[derive(Debug, Deserialize)]
+struct VectorizeStanza {
+    /// `VECTORIZE_<SNAKE>`: the instance's binding.
+    binding: String,
+    /// The unqualified derived index name, which [`vectorize_index_name`]
+    /// environment-qualifies.
+    index_name: String,
+}
+
+/// #3479: `bynk-vectorize.json` beside a Worker's config: each index's
+/// dimensions, metric and metadata indexes, which the stanza does not carry.
+#[derive(Debug, Deserialize)]
+struct VectorizeManifest {
+    version: u32,
+    #[serde(default)]
+    vectorize: Vec<VectorizeManifestEntry>,
+}
+
+#[derive(Debug, Deserialize)]
+struct VectorizeManifestEntry {
+    binding: String,
+    dimensions: i64,
+    metric: String,
+    #[serde(default)]
+    indexed: Vec<String>,
+}
+
+/// Read the Vectorize manifest beside `worker_dir`'s config, if there is one.
+/// A version this deploy does not know is refused rather than guessed: an index
+/// made with the wrong dimensions cannot be corrected.
+fn read_vectorize_manifest(worker_dir: &Path) -> Result<Vec<VectorizeManifestEntry>, String> {
+    let name = bynk_emit::emitter::wrangler::VECTORIZE_MANIFEST;
+    let path = worker_dir.join(name);
+    if !path.exists() {
+        return Ok(Vec::new());
+    }
+    let text = std::fs::read_to_string(&path).map_err(|e| e.to_string())?;
+    let manifest: VectorizeManifest = serde_json::from_str(&text).map_err(|e| e.to_string())?;
+    if manifest.version != bynk_emit::emitter::wrangler::VECTORIZE_MANIFEST_VERSION {
+        return Err(format!("unsupported {name} version {}", manifest.version));
+    }
+    Ok(manifest.vectorize)
 }
 
 #[derive(Debug, Deserialize)]
@@ -360,6 +407,22 @@ pub(crate) struct R2Decl {
     pub(crate) jurisdiction: Option<String>,
 }
 
+/// #3479: one `Vectorize` instance's index, as the emitted config and manifest
+/// declare it. The name is the identity (as for a bucket), and the
+/// configuration is fixed at creation: the deploy creates the index with it,
+/// checks an existing one against it, and never recreates.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub(crate) struct VectorizeDecl {
+    /// `VECTORIZE_<SNAKE>`, the key the ledger records the index under.
+    pub(crate) binding: String,
+    /// The derived name before any environment qualification.
+    pub(crate) name: String,
+    pub(crate) dimensions: i64,
+    pub(crate) metric: String,
+    /// The `@indexed` entries as written (`name:type`).
+    pub(crate) indexed: Vec<String>,
+}
+
 /// The provisioning surface one context's closure locks it to.
 #[derive(Debug, PartialEq, Eq)]
 pub(crate) struct Resources {
@@ -404,6 +467,12 @@ pub(crate) struct Resources {
     /// created by name (the name is the identity), recorded in the ledger, and
     /// reported, never deleted, when its instance goes.
     pub(crate) r2_buckets: Vec<R2Decl>,
+    /// #3479: the indexes of the `Vectorize` instances, in binding order. Each
+    /// is created by name with its fixed configuration, its metadata indexes
+    /// created before any vector, and checked against the account on every
+    /// deploy; a mismatch fails the deploy. Reported, never deleted unless
+    /// `--prune` is confirmed, when its instance goes.
+    pub(crate) vectorize_indexes: Vec<VectorizeDecl>,
     /// P4a (#2602): the databases of the `D1` instances, in binding order.
     /// Each is created by name, its minted id recorded in the ledger and
     /// written into the config before the push; reported, never deleted, when
@@ -513,6 +582,7 @@ impl Default for Resources {
             needs_kv: false,
             kv_instances: Vec::new(),
             r2_buckets: Vec::new(),
+            vectorize_indexes: Vec::new(),
             d1_databases: Vec::new(),
             hyperdrive: Vec::new(),
             ratelimits: Vec::new(),
@@ -698,6 +768,31 @@ fn read_resources(config: &Path, project_workers: &[String]) -> Result<Resources
         })
         .collect();
     r2_buckets.sort_by(|a, b| a.binding.cmp(&b.binding));
+    let configured = read_vectorize_manifest(config.parent().unwrap_or(Path::new(".")))?;
+    let mut vectorize_indexes: Vec<VectorizeDecl> = parsed
+        .vectorize
+        .into_iter()
+        .map(|v| {
+            let entry = configured
+                .iter()
+                .find(|c| c.binding == v.binding)
+                .ok_or_else(|| {
+                    format!(
+                        "{} does not state the configuration of `{}`, so the index cannot be created or checked",
+                        bynk_emit::emitter::wrangler::VECTORIZE_MANIFEST,
+                        v.binding
+                    )
+                })?;
+            Ok(VectorizeDecl {
+                binding: v.binding,
+                name: v.index_name,
+                dimensions: entry.dimensions,
+                metric: entry.metric.clone(),
+                indexed: entry.indexed.clone(),
+            })
+        })
+        .collect::<Result<_, String>>()?;
+    vectorize_indexes.sort_by(|a, b| a.binding.cmp(&b.binding));
     let mut ratelimits: Vec<String> = parsed.ratelimits.into_iter().map(|r| r.name).collect();
     ratelimits.sort();
     let mut analytics_datasets: Vec<AnalyticsDecl> = parsed
@@ -794,6 +889,7 @@ fn read_resources(config: &Path, project_workers: &[String]) -> Result<Resources
             instances
         },
         r2_buckets,
+        vectorize_indexes,
         d1_databases,
         hyperdrive,
         ratelimits,
@@ -1020,6 +1116,31 @@ pub(crate) fn r2_bucket_name(environment: &str, name: &str) -> String {
     env_qualify(environment, name)
 }
 
+/// #3479: the name a `Vectorize` instance's index has in `environment`: its
+/// derived name, qualified as [`env_qualify`] does.
+pub(crate) fn vectorize_index_name(environment: &str, name: &str) -> String {
+    env_qualify(environment, name)
+}
+
+/// #3479: why `name` cannot be an index name (Cloudflare takes a kebab-cased
+/// name of at most 64 bytes), or `None`. Checked on the qualified name, which
+/// the environment suffix can push over the limit.
+pub(crate) fn vectorize_index_name_problem(name: &str) -> Option<&'static str> {
+    if name.is_empty() || name.len() > 64 {
+        return Some("it must be 1 to 64 bytes");
+    }
+    if !name
+        .bytes()
+        .all(|b| b.is_ascii_lowercase() || b.is_ascii_digit() || b == b'-')
+    {
+        return Some("it may hold only lowercase letters, digits and hyphens");
+    }
+    if name.starts_with('-') || name.ends_with('-') {
+        return Some("it may not start or end with a hyphen");
+    }
+    None
+}
+
 /// P3b (#2582): the name an `Analytics` instance's dataset has in
 /// `environment`: its derived name, qualified as [`env_qualify`] does but with
 /// `_` (`shop_cart_signups_staging`), since the dataset is a SQL table name.
@@ -1221,6 +1342,25 @@ pub(crate) fn synthesise_environment_block(
             }
         }
         env_block.insert("r2_buckets".to_string(), toml::Value::Array(buckets));
+    }
+
+    // #3479: each index under its environment-qualified name.
+    if let Some(toml::Value::Array(indexes)) = doc.get("vectorize") {
+        let mut indexes = indexes.clone();
+        for index in &mut indexes {
+            if let toml::Value::Table(t) = index
+                && let Some(name) = t
+                    .get("index_name")
+                    .and_then(toml::Value::as_str)
+                    .map(str::to_owned)
+            {
+                t.insert(
+                    "index_name".to_string(),
+                    toml::Value::String(vectorize_index_name(environment, &name)),
+                );
+            }
+        }
+        env_block.insert("vectorize".to_string(), toml::Value::Array(indexes));
     }
 
     // P4a (#2602): each database as the deploy materialised it, under this
@@ -1467,6 +1607,25 @@ pub(crate) mod tests {
                     name: name.to_string(),
                     migrations: Vec::new(),
                 })
+                .collect();
+            self
+        }
+
+        pub(crate) fn vectorize_indexes(
+            mut self,
+            indexes: &[(&str, &str, i64, &str, &[&str])],
+        ) -> Self {
+            self.vectorize_indexes = indexes
+                .iter()
+                .map(
+                    |(binding, name, dimensions, metric, indexed)| VectorizeDecl {
+                        binding: binding.to_string(),
+                        name: name.to_string(),
+                        dimensions: *dimensions,
+                        metric: metric.to_string(),
+                        indexed: indexed.iter().map(|s| s.to_string()).collect(),
+                    },
+                )
                 .collect();
             self
         }
@@ -2355,6 +2514,66 @@ state = "deleted"
             err.contains("`exports.Cart`") && err.contains("`storage`"),
             "{err}"
         );
+    }
+
+    /// #3479: an index's name comes from the config's `[[vectorize]]` and its
+    /// configuration from the manifest beside it; a stanza the manifest does not
+    /// state is an error (an index made with a guessed shape cannot be corrected),
+    /// and a named environment's block carries the qualified name.
+    #[test]
+    fn a_vectorize_index_is_read_from_the_config_and_its_manifest() {
+        let dir = std::env::temp_dir().join(format!(
+            "bynk-vectorize-manifest-{}-{}",
+            std::process::id(),
+            std::time::SystemTime::now()
+                .duration_since(std::time::UNIX_EPOCH)
+                .unwrap()
+                .as_nanos()
+        ));
+        std::fs::create_dir_all(&dir).unwrap();
+        let config = dir.join("wrangler.toml");
+        let text = "name = \"shop\"\n\n[[vectorize]]\nbinding = \"VECTORIZE_DOCS\"\nindex_name = \"shop-docs\"\n";
+        std::fs::write(&config, text).unwrap();
+
+        let error = read_resources(&config, &[]).unwrap_err();
+        assert!(
+            error.contains("does not state the configuration of `VECTORIZE_DOCS`"),
+            "{error}"
+        );
+
+        let manifest = dir.join(bynk_emit::emitter::wrangler::VECTORIZE_MANIFEST);
+        std::fs::write(
+            &manifest,
+            "{ \"version\": 1, \"vectorize\": [{ \"binding\": \"VECTORIZE_DOCS\", \"dimensions\": 768, \"metric\": \"cosine\", \"indexed\": [\"category:string\"] }] }",
+        )
+        .unwrap();
+        let read = read_resources(&config, &[]).unwrap();
+        assert_eq!(
+            read.vectorize_indexes,
+            [VectorizeDecl {
+                binding: "VECTORIZE_DOCS".into(),
+                name: "shop-docs".into(),
+                dimensions: 768,
+                metric: "cosine".into(),
+                indexed: vec!["category:string".into()],
+            }]
+        );
+
+        std::fs::write(&manifest, "{ \"version\": 2 }").unwrap();
+        let error = read_resources(&config, &[]).unwrap_err();
+        assert!(
+            error.contains("unsupported bynk-vectorize.json version 2"),
+            "{error}"
+        );
+
+        let synthesised =
+            synthesise_environment_block(text, "staging", &BTreeMap::new(), &BTreeSet::new())
+                .unwrap();
+        assert!(
+            synthesised.contains("index_name = \"shop-docs-staging\""),
+            "{synthesised}"
+        );
+        let _ = std::fs::remove_dir_all(&dir);
     }
 
     /// Hyperdrive H5 (#3322): a binding the Hyperdrive manifest lists is MySQL's,

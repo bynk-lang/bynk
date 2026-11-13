@@ -1,0 +1,7 @@
+{
+  "version": 1,
+  "vectorize": [
+    { "binding": "VECTORIZE_DOCS", "dimensions": 3, "metric": "cosine", "indexed": ["category:string", "year:number"] },
+    { "binding": "VECTORIZE_SCRATCH", "dimensions": 2, "metric": "euclidean", "indexed": [] }
+  ]
+}

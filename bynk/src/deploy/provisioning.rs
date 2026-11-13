@@ -150,6 +150,17 @@ pub(crate) fn deploy_one(
         lock_path,
         environment,
     )?;
+    // #3479: each `Vectorize` index, created with its fixed configuration or
+    // checked against it, and its metadata indexes made before any vector.
+    provision_vectorize_indexes(
+        provenance,
+        project_root,
+        worker,
+        declared,
+        lock,
+        lock_path,
+        environment,
+    )?;
     provision_d1_databases(
         provenance,
         project_root,
@@ -1167,7 +1178,7 @@ fn queue_exists(provenance: &Provenance, name: &str, project_root: &Path) -> boo
 /// Everything a failed wrangler call said, both streams, never empty — a
 /// non-zero exit with nothing to say must still read as something rather than
 /// as a dangling colon.
-fn wrangler_said(output: &std::process::Output) -> String {
+pub(crate) fn wrangler_said(output: &std::process::Output) -> String {
     let stderr = String::from_utf8_lossy(&output.stderr);
     let stdout = String::from_utf8_lossy(&output.stdout);
     let said: Vec<&str> = [stderr.trim(), stdout.trim()]
