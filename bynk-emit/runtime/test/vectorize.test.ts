@@ -128,3 +128,10 @@ test("metadata returned is a copy: changing it does not change the index", async
   const again = (await index.getByIds(["a"])) as { metadata: Record<string, unknown> }[];
   assert.equal(again[0].metadata.category, "faq");
 });
+
+test("a path segment such as __proto__ never touches Object.prototype", async () => {
+  const index = makeIntegrationVectorize(1, "euclidean", ["__proto__.polluted:string", "a.__proto__:string"]);
+  await index.upsert([{ id: "a", values: [1], metadata: JSON.parse('{"__proto__":{"polluted":"yes"},"a":{"__proto__":"x"}}') }]);
+  await index.query([0], { returnMetadata: "indexed" });
+  assert.equal(({} as Record<string, unknown>).polluted, undefined);
+});

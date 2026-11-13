@@ -90,7 +90,7 @@ function score(metric: string, query: number[], values: number[]): number {
 function property(metadata: Record<string, unknown> | undefined, path: string): unknown {
   let at: unknown = metadata;
   for (const part of path.split(".")) {
-    if (at === null || typeof at !== "object" || !(part in (at as object))) return undefined;
+    if (at === null || typeof at !== "object" || !Object.prototype.hasOwnProperty.call(at, part)) return undefined;
     at = (at as Record<string, unknown>)[part];
   }
   return at;
@@ -135,6 +135,10 @@ function matches(stored: Stored, filter: Record<string, unknown>): boolean {
   });
 }
 
+function define(target: Record<string, unknown>, key: string, value: unknown): void {
+  Object.defineProperty(target, key, { value, enumerable: true, writable: true, configurable: true });
+}
+
 // The indexed properties of `metadata`, each dotted path read and nested again
 // (`author.name` keeps `{ author: { name } }`), as the platform returns them.
 function indexedOnly(metadata: Record<string, unknown>, indexed: ReadonlySet<string>): Record<string, unknown> {
@@ -142,13 +146,15 @@ function indexedOnly(metadata: Record<string, unknown>, indexed: ReadonlySet<str
   for (const path of indexed) {
     const value = property(metadata, path);
     if (value === undefined) continue;
+    // Own properties only, set by definition: a path segment such as
+    // `__proto__` never reaches (or writes to) `Object.prototype`.
     const parts = path.split(".");
     let at = out;
     for (const part of parts.slice(0, -1)) {
-      const next = at[part];
-      at = (next !== null && typeof next === "object" ? next : (at[part] = {})) as Record<string, unknown>;
+      if (!Object.prototype.hasOwnProperty.call(at, part)) define(at, part, {});
+      at = at[part] as Record<string, unknown>;
     }
-    at[parts[parts.length - 1]] = structuredClone(value);
+    define(at, parts[parts.length - 1], structuredClone(value));
   }
   return out;
 }
