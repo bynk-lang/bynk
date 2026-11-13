@@ -1,0 +1,45 @@
+context shop.retrieval
+
+// #3479: a `Vectorize` instance is an in-memory exact index in a test, built
+// from its declaration, so a retrieval flow (store, filter, rank) runs.
+
+consumes bynk
+consumes bynk.cloudflare { Vectorize, Vector, VectorError, VectorMatch, QueryOptions, Condition, FilterOp, MetaValue, MetadataScope, Mutation, IndexInfo }
+
+capability Docs = Vectorize @dimensions(2) @metric("euclidean") @indexed(["category:string", "year:number"])
+
+service writer {
+	on call(vectors: List[Vector]) -> Effect[Result[Mutation, VectorError]] given Docs {
+		Docs.upsert(vectors)
+	}
+}
+
+service inserter {
+	on call(vectors: List[Vector]) -> Effect[Result[Mutation, VectorError]] given Docs {
+		Docs.insert(vectors)
+	}
+}
+
+service reader {
+	on call(vector: List[Float], options: QueryOptions) -> Effect[Result[List[VectorMatch], VectorError]] given Docs {
+		Docs.query(vector, options)
+	}
+}
+
+service fetcher {
+	on call(ids: List[String]) -> Effect[Result[List[Vector], VectorError]] given Docs {
+		Docs.getByIds(ids)
+	}
+}
+
+service remover {
+	on call(ids: List[String]) -> Effect[Result[Mutation, VectorError]] given Docs {
+		Docs.deleteByIds(ids)
+	}
+}
+
+service describer {
+	on call() -> Effect[Result[IndexInfo, VectorError]] given Docs {
+		Docs.describe()
+	}
+}

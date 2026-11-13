@@ -4,7 +4,8 @@ import type { Ai, AiError, Analytics, Condition, D1, DataPoint, EdgeCache, Email
 import type { FetchError, Request as FetchRequest, Response as FetchResponse } from "../bynk.js";
 import { FetchProvider } from "../bynk-cloudflare.js";
 import { Err, None, Ok, Some, type Option, type Result } from "../__bynk_runtime/result.js";
-import type { AnalyticsDataset, D1Database, D1PreparedStatement, D1Result, KVNamespace, QueueProducer, R2Bucket, R2MultipartUpload, R2ObjectMeta, RateLimiter, SecretsStoreSecret, SendEmail, VectorizeIndex, WorkerAiBinding, WorkerVersionMetadata } from "../__bynk_runtime/storage.js";
+import type { AnalyticsDataset, D1Database, D1PreparedStatement, D1Result, KVNamespace, QueueProducer, R2Bucket, R2MultipartUpload, R2ObjectMeta, RateLimiter, SecretsStoreSecret, SendEmail, WorkerAiBinding, WorkerVersionMetadata } from "../__bynk_runtime/storage.js";
+import type { VectorizeIndex } from "../__bynk_runtime/vectorize.js";
 import { claimStream } from "../__bynk_runtime/http.js";
 
 export class WorkersKv implements Kv {
@@ -1648,6 +1649,9 @@ export class WorkersVectorize implements Vectorize {
   // a fault.
   private static failure(e: unknown): VectorError {
     const message = e instanceof Error ? e.message : String(e);
+    // The test double's own faults (a filter it does not model) are not the
+    // platform's refusals, and are not a handler's to act on.
+    if (message.startsWith("bynk:")) throw e instanceof Error ? e : new Error(message);
     if (/index.*(not found|does not exist)|no such index/i.test(message)) {
       throw e instanceof Error ? e : new Error(message);
     }

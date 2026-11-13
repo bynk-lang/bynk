@@ -1543,9 +1543,16 @@ does not exist is a platform fault: the deploy creates the index.
 
 A Worker whose code reaches a `Vectorize` instance declares `[[vectorize]]` with
 `binding` and `index_name`, the index named for the context and the capability
-(`shop.cart`'s `Docs` is `shop-cart-docs`). In a test every `Vectorize` operation
-faults until it is stubbed (`stub Docs.query(_, _) returns …`), so a test never
-reaches an index. Vectorize is a remote service on your Cloudflare account, so a call
+(`shop.cart`'s `Docs` is `shop-cart-docs`). (`shop.cart`'s `Docs` is `shop-cart-docs`). In a test each `Vectorize` instance is
+an exact in-memory index built from its declaration, so a test never reaches
+Cloudflare and a retrieval flow runs end to end. It ranks exactly where production
+ranks approximately, and a write is visible at once where production takes some
+seconds; those are its two differences. It enforces the dimensions, namespaces,
+insert versus upsert, all eight filter operators and the platform's limits as read
+on 13 November 2026 (a limit it refuses is `VectorInvalidInput`); a filter on a
+property that is not in `@indexed` faults, naming the difference, since production
+silently matches nothing for it. `stub Docs.query(_, _) returns …` still replaces
+any operation. Vectorize is a remote service on your Cloudflare account, so a call
 may incur charges; see Cloudflare's [Vectorize pricing](https://developers.cloudflare.com/vectorize/platform/pricing/)
 for what applies, and put a `RateLimit` in front of any handler an anonymous caller
 can reach. `Vectorize` is experimental: list `"bynk.cloudflare.Vectorize"` under

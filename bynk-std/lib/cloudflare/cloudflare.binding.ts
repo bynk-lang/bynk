@@ -1646,6 +1646,9 @@ export class WorkersVectorize implements Vectorize {
   // a fault.
   private static failure(e: unknown): VectorError {
     const message = e instanceof Error ? e.message : String(e);
+    // The test double's own faults (a filter it does not model) are not the
+    // platform's refusals, and are not a handler's to act on.
+    if (message.startsWith("bynk:")) throw e instanceof Error ? e : new Error(message);
     if (/index.*(not found|does not exist)|no such index/i.test(message)) {
       throw e instanceof Error ? e : new Error(message);
     }
