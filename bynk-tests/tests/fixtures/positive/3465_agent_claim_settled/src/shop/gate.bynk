@@ -1,0 +1,36 @@
+---
+#3465: a `claim` in an agent handler is settled like a service handler's: released when
+the handler returns an `Err`, kept for its full window when it completes. The handler
+also writes state, so settlement runs after the implicit commit.
+---
+context shop.gate
+
+consumes bynk { Idempotency, Claim }
+
+agent Gate {
+  key id: String
+  store taken: Cell[Int] = 0
+
+  invariant under_limit: taken < 50
+
+  on call take(job: String) -> Effect[Result[String, String]] given Idempotency {
+    let Claim.Claimed <- Idempotency.claim(job, 1.hours) else { Ok("duplicate") }
+    let _ <- taken.update((n) => n + 1)
+    if job == "bad" { Err("rejected") } else { Ok("done") }
+  }
+
+  // The state commit itself fails (the invariant), after the body has returned.
+  on call burst(job: String) -> Effect[Result[String, String]] given Idempotency {
+    let Claim.Claimed <- Idempotency.claim(job, 1.hours) else { Ok("duplicate") }
+    taken := 99
+    Ok("done")
+  }
+}
+
+service gate {
+  on call(id: String, job: String) -> Effect[Result[String, String]] {
+    let g = Gate(id)
+    let r <- g.take(job)
+    r
+  }
+}
