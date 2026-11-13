@@ -1,0 +1,18 @@
+context shop.stream
+
+// #3478: `runStream` hands back the model's own events, one element each. A
+// failure before the stream starts is an `Err`, so the handler can answer with
+// an ordinary response; the stream is served by the handler that called it.
+
+consumes bynk
+consumes bynk.cloudflare { Ai }
+
+service events from http {
+	on GET("/events") () -> Effect[HttpResult[String]] by Visitor given Ai {
+		let started <- Ai.runStream("@cf/meta/llama-3.1-8b-instruct", "{\"prompt\": \"hello\"}")
+		match started {
+			Ok(s) => Streaming(s),
+			Err(_) => ServerError("model unavailable"),
+		}
+	}
+}

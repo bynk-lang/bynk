@@ -1133,6 +1133,18 @@ export const __VersionToken: symbol = globalThis.Symbol("Version");
  * it is `InvalidInput`. The embeddings use the platform's default pooling, so
  * an index built from them stays consistent.
  *
+ * `runStream(model, input)` is `run` with the reply streamed: the model's own
+ * events, one element each, as the JSON text of that event (the shape is the
+ * model's, so a handler that wants text deltas maps the stream and decodes each
+ * event). The binding asks the model to stream; the terminal `[DONE]` marker
+ * is consumed, not yielded. A refusal before the stream starts (an unknown
+ * model, a usage limit) is the `Err`, so a handler can answer with an ordinary
+ * response; a failure after the first event faults the stream, as a failing
+ * producer aborts any stream. A model that does not stream is `AiFailed`. Like
+ * every `Stream`, it is read once and cannot cross a service boundary: the
+ * handler that calls `runStream` is the one that serves it, as in
+ * `Streaming(events)`.
+ *
  * Workers AI is a remote service on your Cloudflare account, so a call
  * may be billed, and a model's reply is untrusted input like any other
  * user text. See Cloudflare's Workers AI pricing page for what applies,
@@ -1145,6 +1157,7 @@ export interface Ai {
   run(model: string, input: string): globalThis.Promise<Result<string, AiError>>;
   generate(model: string, request: GenerateRequest): globalThis.Promise<Result<Generation, AiError>>;
   embed(model: string, texts: readonly string[]): globalThis.Promise<Result<readonly (readonly number[])[], AiError>>;
+  runStream(model: string, input: string): globalThis.Promise<Result<AsyncIterable<string>, AiError>>;
 }
 
 export const __AiToken: symbol = globalThis.Symbol("Ai");

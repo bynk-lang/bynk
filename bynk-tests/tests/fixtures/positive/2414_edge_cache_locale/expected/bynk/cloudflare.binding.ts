@@ -884,6 +884,94 @@ function devRemoteNotice(env: unknown, kind: string, ackVar: string, service: st
   );
 }
 
+// #3478: the events of a Server-Sent Events body, each as its `data` text, as
+// they arrive. Per the SSE format: events end at a blank line, a line may end
+// in LF, CRLF or CR, `data:` lines join with a line feed, and `event:`, `id:`,
+// `retry:` and `:` comment lines carry no data. The terminal `[DONE]` marker
+// ends the stream and is not yielded. A read that fails faults the stream after
+// the events already given.
+//
+// An iterator of its own, not a generator, so that `return()` (an abandoned
+// response, a client that hung up) cancels the model's stream at once: a
+// generator would queue it behind a read in flight, and a model that is only
+// sending keep-alive comments would never let it run.
+function sseEvents(body: ReadableStream<Uint8Array>): AsyncIterableIterator<string> {
+  const reader = body.getReader();
+  const decoder = new TextDecoder();
+  const queue: string[] = [];
+  let data: string[] = [];
+  let pending = "";
+  let closed = false;
+  const release = () => reader.cancel().catch(() => {});
+  const line = (text: string): void => {
+    if (text === "") {
+      if (data.length === 0) return;
+      const event = data.join("\n");
+      data = [];
+      if (event === "[DONE]") {
+        closed = true;
+        void release();
+      } else {
+        queue.push(event);
+      }
+      return;
+    }
+    if (text.startsWith(":")) return;
+    const colon = text.indexOf(":");
+    const field = colon === -1 ? text : text.slice(0, colon);
+    if (field === "data") {
+      const value = colon === -1 ? "" : text.slice(colon + 1);
+      data.push(value.startsWith(" ") ? value.slice(1) : value);
+    }
+  };
+  const feed = (chunk: Uint8Array): void => {
+    pending += decoder.decode(chunk, { stream: true });
+    // A CR at the very end may be the first half of a CRLF: keep it for now.
+    const lines = pending.split(/\r\n|\n|\r(?!$)/);
+    pending = lines.pop() ?? "";
+    for (const text of lines) {
+      if (closed) return;
+      line(text);
+    }
+  };
+  const finish = (): void => {
+    // A last event the stream ended without a blank line after.
+    pending += decoder.decode();
+    if (pending !== "" && !closed) line(pending.replace(/\r$/, ""));
+    if (!closed) line("");
+    closed = true;
+  };
+  const end = { done: true, value: undefined } as const;
+  return {
+    [Symbol.asyncIterator]() {
+      return this;
+    },
+    async next(): Promise<IteratorResult<string>> {
+      for (;;) {
+        const event = queue.shift();
+        if (event !== undefined) return { done: false, value: event };
+        if (closed) return end;
+        let read: ReadableStreamReadResult<Uint8Array>;
+        try {
+          read = await reader.read();
+        } catch (e) {
+          closed = true;
+          throw e;
+        }
+        if (closed) continue;
+        if (read.done) finish();
+        else feed(read.value);
+      }
+    },
+    async return(): Promise<IteratorResult<string>> {
+      closed = true;
+      queue.length = 0;
+      await release();
+      return end;
+    },
+  };
+}
+
 // Workers AI (#3478): the one `[ai]` binding a Worker declares when it uses
 // `Ai`. A call runs the model on Cloudflare, so a failure is a platform
 // refusal to report as an `AiError`, never a fault; only a call that could
@@ -992,6 +1080,18 @@ export class WorkersAi implements Ai {
       return Err({ tag: "AiFailed", message: "model returned binary data; run supports JSON replies only" });
     }
     return Ok(JSON.stringify(value === undefined ? null : value));
+  }
+
+  async runStream(model: string, input: string): Promise<Result<AsyncIterable<string>, AiError>> {
+    WorkersAi.checkModel(model);
+    const body = WorkersAi.parseInput(input);
+    // The binding streams when the model's input says so.
+    const reply = await this.call(model, { ...body, stream: true });
+    if (reply.tag === "Err") return reply;
+    if (!(reply.value instanceof ReadableStream)) {
+      return Err({ tag: "AiFailed", message: "the model did not return a stream; runStream needs a model that streams" });
+    }
+    return Ok(sseEvents(reply.value));
   }
 
   private static badReply(what: string): Result<never, AiError> {

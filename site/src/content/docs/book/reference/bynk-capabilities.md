@@ -486,7 +486,7 @@ Consuming it **locks the deployment unit to Cloudflare** (it cannot then target
 | **`RateLimit`** *(experimental)* | `allow(key: String) -> Effect[Bool]`. Used only through a named instance that sets its limit and window; see below. |
 | **`EdgeCache`** *(experimental)* | `purge(prefixes: List[String]) -> Effect[Bool]`. Used only through a named instance, at most one per context, which turns Cloudflare's edge cache on for the context's Worker; see below. |
 | **`Version`** *(experimental)* | `current() -> Effect[WorkerVersion]`. One per Worker, used bare; see [The running version](#the-running-version-version). |
-| **`Ai`** *(experimental)* | `run(model: String, input: String) -> Effect[Result[String, AiError]]` · `generate(model, request: GenerateRequest) -> Effect[Result[Generation, AiError]]` · `embed(model, texts: List[String]) -> Effect[Result[List[List[Float]], AiError]]`. One per Worker, used bare; see [Workers AI](#workers-ai-ai). |
+| **`Ai`** *(experimental)* | `run(model: String, input: String) -> Effect[Result[String, AiError]]` · `generate(model, request: GenerateRequest) -> Effect[Result[Generation, AiError]]` · `embed(model, texts: List[String]) -> Effect[Result[List[List[Float]], AiError]]` · `runStream(model, input: String) -> Effect[Result[Stream[String], AiError]]`. One per Worker, used bare; see [Workers AI](#workers-ai-ai). |
 | **`StoredSecret`** *(experimental)* | `get() -> Effect[String]`. Used only through a named instance that names its store and its secret; see [Account secrets](#account-secrets-storedsecret). |
 | **`Email`** *(experimental)* | `send(message: EmailMessage) -> Effect[Result[String, EmailError]]`. Used only through a named instance, which may restrict its senders and recipients; see [Outbound email](#outbound-email-email). |
 | **`Postgres`** *(experimental)* | `all(sql: String, params: List[PgValue]) -> Effect[Result[String, PgError]]` · `first(sql, params) -> Effect[Result[Option[String], PgError]]` · `run(sql, params) -> Effect[Result[PgRun, PgError]]` · `transaction(statements: List[PgStatement]) -> Effect[Result[List[PgRun], PgError]]`, and the compiler-lowered typed reads `select[T]` and `firstAs[T]`. Used only through a named instance; see [Postgres databases](#postgres-databases-postgres). |
@@ -907,6 +907,33 @@ embeddings use the platform's default pooling, so an index built from them stays
 consistent. Both return `BadReply(message)` when the platform answers but not in
 the shape they promise (a model that is not of that kind, say), and never fault on
 it; `run` returns the model's JSON as given and cannot be a `BadReply`.
+
+`runStream(model, input)` is `run` with the reply streamed, for serving a model's
+output as it is produced:
+
+```bynk,fragment
+service chat from http {
+	on GET("/chat") () -> Effect[HttpResult[String]] by Visitor given Ai {
+		let started <- Ai.runStream("@cf/meta/llama-3.1-8b-instruct", "{\"prompt\": \"Tell me a story\"}")
+		match started {
+			Ok(events) => Streaming(events),
+			Err(_) => ServerError("model unavailable"),
+		}
+	}
+}
+```
+
+Each element is one event of the model's own stream, as the JSON text of that
+event, so the client sees what Workers AI sends (the shape is the model's: a
+handler that wants text deltas maps the stream and decodes each event). The
+binding asks the model to stream; the terminal `[DONE]` marker is consumed, not
+yielded. A refusal before the stream starts (an unknown model, a usage limit) is
+the `Err`, so the handler can answer with an ordinary response; a failure after
+the first event faults the stream and aborts the response, as a failing producer
+does. A model that does not stream is `AiFailed`. A client that hangs up cancels
+the model's stream, once the Worker next writes to it. Like every `Stream`, the
+result is read once and cannot cross a service boundary: the handler that calls
+`runStream` is the one that serves it.
 
 An `AiError` is `ModelNotFound` (an id the platform does not know, or has
 retired), `InvalidInput(message)` (a request refused as malformed or too large),
