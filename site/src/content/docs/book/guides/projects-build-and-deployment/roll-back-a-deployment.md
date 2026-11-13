@@ -72,8 +72,11 @@ until a version is deployed. Use `wrangler versions secret put` followed by a
 version deployment, or deploy first.
 
 A version made live outside Bynk (`wrangler versions deploy`, the dashboard) is
-recorded by Cloudflare like a rollback, so `bynk revert` cannot find its upload and
-refuses. Name the version to go back to with `--to`.
+recorded by Cloudflare like a rollback. If it never had an upload deployment,
+`bynk revert` cannot find one and refuses. If it was ever deployed by upload,
+`bynk revert` treats the live deployment as a rollback to that version and goes back
+to what preceded that upload, which may not be what you meant. In either case, name
+the version to go back to with `--to`.
 
 ## What it does not do
 
