@@ -32,7 +32,7 @@ Declare the instance by name:
 context shop.support
 
 consumes bynk
-consumes bynk.cloudflare { AiSearch, ChatMessage, ChatRole, SearchOptions }
+consumes bynk.cloudflare { AiSearch, ChatMessage, ChatRole, Condition, FilterEq, MetaText, RetrievalType, SearchOptions }
 
 capability Kb = AiSearch @instance("support-docs")
 ```
