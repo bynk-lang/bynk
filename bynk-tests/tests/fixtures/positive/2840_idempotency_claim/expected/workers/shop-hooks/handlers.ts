@@ -12,7 +12,11 @@ import * as bynk from "../../bynk.js";
 
 export const api = {
   async http_POST_hooks_Param_id(id: string, deps: { Idempotency: bynk.Idempotency }): globalThis.Promise<HttpResult<string>> {
-    const __letElse184 = await deps.Idempotency.claim(`shop.hooks.api.http_POST_hooks_Param_id::${id}`, 3600000);
+    const __claims = (deps.Idempotency as unknown as { __track?: () => { note<C>(k: string, c: C, t: number): C; lease(t: number): number; settle(r: unknown, threw: boolean): globalThis.Promise<void> } }).__track?.() ?? { note: <C>(_k: string, c: C, _t: number) => c, lease: (t: number) => t, settle: async (_r: unknown, _threw: boolean) => {} };
+    let __r;
+    try {
+    __r = await (async () => {
+    const __letElse184 = await (await (async (__k: string, __t: number) => __claims.note(__k, await deps.Idempotency.claim(__k, __claims.lease(__t)), __t))(`shop.hooks.api.http_POST_hooks_Param_id::${id}`, 3600000));
     switch (__letElse184.tag) {
       case "Claimed": {
         return HttpResult.Ok("processed");
@@ -22,6 +26,36 @@ export const api = {
       }
     }
     throw new globalThis.Error("non-exhaustive match");
+    })();
+    } catch (__e) {
+      await __claims.settle(undefined, true);
+      throw __e;
+    }
+    await __claims.settle(__r, false);
+    return __r;
+  },
+  async http_POST_flaky_Param_id(id: string, deps: { Idempotency: bynk.Idempotency }): globalThis.Promise<HttpResult<string>> {
+    const __claims = (deps.Idempotency as unknown as { __track?: () => { note<C>(k: string, c: C, t: number): C; lease(t: number): number; settle(r: unknown, threw: boolean): globalThis.Promise<void> } }).__track?.() ?? { note: <C>(_k: string, c: C, _t: number) => c, lease: (t: number) => t, settle: async (_r: unknown, _threw: boolean) => {} };
+    let __r;
+    try {
+    __r = await (async () => {
+    const __letElse504 = await (await (async (__k: string, __t: number) => __claims.note(__k, await deps.Idempotency.claim(__k, __claims.lease(__t)), __t))(`shop.hooks.api.http_POST_flaky_Param_id::${id}`, 3600000));
+    switch (__letElse504.tag) {
+      case "Claimed": {
+        return (id === "down" ? HttpResult.ServerError("upstream down") : (id === "invalid" ? HttpResult.BadRequest("invalid payload") : HttpResult.Ok("processed")));
+      }
+      default: {
+        return HttpResult.Ok("duplicate");
+      }
+    }
+    throw new globalThis.Error("non-exhaustive match");
+    })();
+    } catch (__e) {
+      await __claims.settle(undefined, true);
+      throw __e;
+    }
+    await __claims.settle(__r, false);
+    return __r;
   },
 };
 
@@ -41,3 +75,55 @@ export const replay = {
     throw new globalThis.Error("non-exhaustive match");
   },
 };
+
+export const ledger = {
+  async call(id: string, deps: { Idempotency: bynk.Idempotency }): globalThis.Promise<Result<string, string>> {
+    const __claims = (deps.Idempotency as unknown as { __track?: () => { note<C>(k: string, c: C, t: number): C; lease(t: number): number; settle(r: unknown, threw: boolean): globalThis.Promise<void> } }).__track?.() ?? { note: <C>(_k: string, c: C, _t: number) => c, lease: (t: number) => t, settle: async (_r: unknown, _threw: boolean) => {} };
+    let __r;
+    try {
+    __r = await (async () => {
+    const __letElse1240 = await (await (async (__k: string, __t: number) => __claims.note(__k, await deps.Idempotency.claim(__k, __claims.lease(__t)), __t))(`shop.hooks.ledger.call::${id}`, 3600000));
+    switch (__letElse1240.tag) {
+      case "Claimed": {
+        return (id === "bad" ? Err("rejected") : Ok("done"));
+      }
+      default: {
+        return Ok("duplicate");
+      }
+    }
+    throw new globalThis.Error("non-exhaustive match");
+    })();
+    } catch (__e) {
+      await __claims.settle(undefined, true);
+      throw __e;
+    }
+    await __claims.settle(__r, false);
+    return __r;
+  },
+};
+
+export function __serialise_Result_String_String(value: Result<string, string>): __JsonValue {
+  if (value.tag === "Ok") return { kind: "Ok", value: value.value as __JsonValue };
+  return { kind: "Err", error: value.error as __JsonValue };
+}
+
+export function __deserialise_Result_String_String(json: __JsonValue, path: string = "$"): Result<Result<string, string>, __BoundaryError> {
+  if (typeof json !== "object" || json === null || globalThis.Array.isArray(json)) {
+    return Err({ kind: "StructuralMismatch", path, expected: "object", actual: typeof json });
+  }
+  const obj = json as { [k: string]: __JsonValue };
+  if (obj["kind"] === "Ok") {
+  if (typeof obj["value"] !== "string") {
+    return Err({ kind: "StructuralMismatch", path: `${path}.value`, expected: "string", actual: typeof obj["value"] });
+  }
+  const __v = obj["value"];
+    return Ok(Ok(__v) as Result<string, string>);
+  } else if (obj["kind"] === "Err") {
+  if (typeof obj["error"] !== "string") {
+    return Err({ kind: "StructuralMismatch", path: `${path}.error`, expected: "string", actual: typeof obj["error"] });
+  }
+  const __e = obj["error"];
+    return Ok(Err(__e) as Result<string, string>);
+  }
+  return Err({ kind: "StructuralMismatch", path, expected: "Ok | Err", actual: String(obj["kind"]) });
+}

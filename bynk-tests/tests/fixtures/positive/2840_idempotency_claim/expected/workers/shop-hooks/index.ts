@@ -32,11 +32,41 @@ export default {
         if (__wire !== null && __wire !== "1") return new globalThis.Response(globalThis.JSON.stringify({ kind: "UnsupportedWireVersion", accepted: [1] }), { status: 400, headers: { "content-type": "application/json" } });
         const servicePath = path.slice("/_bynk/call/".length);
         switch (servicePath) {
+          case "ledger": {
+            __route = "call ledger";
+            const __contract = request.headers.get("X-Bynk-Contract");
+            if (__contract !== "48f0a78810606341") {
+              globalThis.console.error("ContractMismatch shop.hooks call ledger", { service: "ledger", expected: "48f0a78810606341", actual: globalThis.String(__contract).slice(0, 16) });
+              return new globalThis.Response(globalThis.JSON.stringify({ kind: "ContractMismatch", service: "ledger", expected: "48f0a78810606341", actual: __contract }), { status: 409, headers: { "content-type": "application/json" } });
+            }
+            let args: __JsonValue;
+            try {
+              args = globalThis.JSON.parse(__body) as __JsonValue;
+            } catch {
+              return new globalThis.Response(globalThis.JSON.stringify({ kind: "MalformedJson", details: "Invalid request body" }), { status: 400, headers: { "content-type": "application/json" } });
+            }
+            const __r_id = ((__v) => typeof __v === "string" ? Ok(__v) : Err({ kind: "StructuralMismatch", path: "$", expected: "string", actual: typeof __v } as __BoundaryError))(args);
+            if (__r_id.tag === "Err") return new globalThis.Response(globalThis.JSON.stringify(__r_id.error), { status: 400, headers: { "content-type": "application/json" } });
+            const id = __r_id.value;
+            const result = await surface.ledger(id);
+            const body = handlers.__serialise_Result_String_String(result);
+            return new globalThis.Response(globalThis.JSON.stringify(body), { status: 200, headers: { "content-type": "application/json" } });
+          }
           default:
             return new globalThis.Response("Not found", { status: 404 });
         }
       }
 
+      {
+        const __m = __matchPath("/flaky/:id", path);
+        if (method === "POST" && __m) {
+          __route = "POST /flaky/:id";
+          const __raw_id = __m.params["id"];
+          const id = __raw_id;
+          const result = await surface.http_POST_flaky_Param_id(id);
+          return __applySecurityHeaders(__httpResultToResponse(result, (__v: string) => __v as __JsonValue), __security_api);
+        }
+      }
       {
         const __m = __matchPath("/hooks/:id", path);
         if (method === "POST" && __m) {
@@ -56,6 +86,11 @@ export default {
           const result = await surface.http_POST_replay_Param_id(id);
           return __applySecurityHeaders(__httpResultToResponse(result, (__v: string) => __v as __JsonValue), __security_replay);
         }
+      }
+      if (__matchPath("/flaky/:id", path) !== null) {
+        const __status = method === "OPTIONS" ? 204 : 405;
+        const __res = new globalThis.Response(null, { status: __status, headers: { allow: "OPTIONS, POST" } });
+        return __applySecurityHeaders(__res, __security_api);
       }
       if (__matchPath("/hooks/:id", path) !== null) {
         const __status = method === "OPTIONS" ? 204 : 405;

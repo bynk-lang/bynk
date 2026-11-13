@@ -409,9 +409,11 @@ export const __LocaleToken: symbol = globalThis.Symbol("Locale");
  * and every later call within `expiresAfter` returns `AlreadyClaimed`, as one
  * step, so two concurrent deliveries cannot both be told they are first.
  * `dedup` then `remember` is check-then-act, and two concurrent deliveries
- * can both miss. A claim is not released if the work after it fails: the key
- * stays claimed until it expires. `claim` records no outcome and is separate
- * from `dedup`/`remember`.
+ * can both miss. In a service handler a claim is released if the handler fails
+ * (a fault, a returned `Err`, or a 5xx `HttpResult`), so a retry can claim
+ * again, and is held for the full `expiresAfter` otherwise. Until the handler
+ * settles it holds for 30 seconds only, so a claim whose instance died
+ * lapses. `claim` records no outcome and is separate from `dedup`/`remember`.
  */
 export interface Idempotency {
   dedup<T>(key: string): globalThis.Promise<Option<T>>;
