@@ -1911,12 +1911,15 @@ export class WorkersAiSearch implements AiSearch {
   // not a value: the deploy checks it exists, so a handler cannot act on it.
   private static failure(e: unknown): SearchError {
     const message = e instanceof Error ? e.message : String(e);
-    if (/\binstance\b.*(not found|does not exist)|no such instance/i.test(message)) {
+    // Only the instance itself missing: a message that *opens* with the
+    // instance and its name, so a message about something else of it (a model,
+    // a source bucket, "… for instance X was not found") stays a value.
+    if (/^\s*(?:(?:ai.?search|\w+error:)\s*:?\s*)?instance\s+["'`]?[\w.-]*["'`]?\s+(?:was |is )?(?:not found|does not exist)\b|^\s*no such instance\b/i.test(message)) {
       throw e instanceof Error ? e : new Error(message);
     }
     if (/rate.?limit|too many requests|\b429\b/i.test(message)) return { tag: "SearchRateLimited" };
     if (/quota|usage limit|exceeded your|payment required|\b402\b/i.test(message)) return { tag: "SearchQuotaExceeded" };
-    if (/invalid|must be|out of range|not allowed|too (large|many|long)|\b400\b/i.test(message)) {
+    if (/invalid (?:filter|option|query|request|parameter|argument|input|message)s?\b|must be|out of range|not allowed|too (?:large|many|long)|\b400\b/i.test(message)) {
       return { tag: "SearchInvalidInput", message };
     }
     return { tag: "SearchFailed", message };

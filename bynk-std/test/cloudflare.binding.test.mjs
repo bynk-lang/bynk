@@ -2383,8 +2383,25 @@ t("WorkersAiSearch.search: the platform's refusals map by message, and anything 
   assert.deepEqual((await failing("something new")).error, { tag: "SearchFailed", message: "something new" });
 });
 
+t("WorkersAiSearch.search: a message about something else of the instance stays a value, not a fault", async () => {
+  const failing = (message) => as(fakeSearch({ search: new Error(message) })).search("q", sOpts());
+  for (const message of [
+    "The generation model configured for instance support-docs was not found",
+    "instance support-docs: source bucket not found",
+  ]) {
+    assert.deepEqual((await failing(message)).error, { tag: "SearchFailed", message });
+  }
+  // An auth or upstream problem is not a malformed request.
+  for (const message of ["Invalid API token", "invalid binding", "invalid response from upstream"]) {
+    assert.equal((await failing(message)).error.tag, "SearchFailed", message);
+  }
+  assert.equal((await failing("invalid filter: unknown operator")).error.tag, "SearchInvalidInput");
+});
+
 t("WorkersAiSearch.search: an instance that is not there is a fault, as is a missing binding", async () => {
   await assert.rejects(as(fakeSearch({ search: new Error("Instance support-docs not found") })).search("q", sOpts()), /not found/);
+  await assert.rejects(as(fakeSearch({ search: new Error("instance `support-docs` does not exist") })).search("q", sOpts()), /does not exist/);
+  await assert.rejects(as(fakeSearch({ search: new Error("No such instance") })).search("q", sOpts()), /No such instance/);
   await assert.rejects(new WorkersAiSearch({}, "AI_SEARCH_KB").search("q", sOpts()), /requires an AI Search binding/);
 });
 
