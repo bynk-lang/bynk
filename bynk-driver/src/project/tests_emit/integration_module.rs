@@ -784,7 +784,7 @@ fn platform_binding_factories(
     binds: &dyn Fn(fn(&BindingSource) -> bool) -> bool,
     pglite: bool,
 ) -> Vec<String> {
-    let kinds: [(bynk_emit::emitter::wrangler::BindingKind, &str); 11] = [
+    let kinds: [(bynk_emit::emitter::wrangler::BindingKind, &str); 12] = [
         (
             |s| matches!(s, BindingSource::Kv | BindingSource::KvInstance { .. }),
             "__makeIntegrationKv",
@@ -825,6 +825,10 @@ fn platform_binding_factories(
                 )
             },
             "__makeIntegrationHyperdrive",
+        ),
+        (
+            |s| matches!(s, BindingSource::VectorizeIndex { .. }),
+            "__makeIntegrationVectorize",
         ),
         (
             |s| singleton_is(s, "Version"),

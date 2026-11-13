@@ -10,6 +10,7 @@
 // `WorkersEdgeCache` (L7, #2414) against an execution context fake, and
 // `WorkersVersion` (#3300) against a Version metadata fake, and
 // `WorkersAi` (#3478) against a Workers AI binding fake, and
+// `WorkersVectorize` (#3479) against a Vectorize index fake, and
 // `WorkersStoredSecret` (#3301) against a Secrets Store secret fake, and
 // `WorkersEmail` (#3302) against a `send_email` binding fake, and
 // `WorkersPostgres` (Hyperdrive H1, #3318) against a driver-executor fake (the
@@ -26,7 +27,7 @@
 
 import { test } from "node:test";
 import assert from "node:assert/strict";
-import { WorkersAi, WorkersAnalytics, WorkersD1, WorkersEdgeCache, WorkersEmail, WorkersKv, WorkersMySql, WorkersPostgres, WorkersQueue, WorkersR2, WorkersRateLimit, WorkersService, WorkersStoredSecret, WorkersVersion } from "./bynk/cloudflare.binding.js";
+import { WorkersAi, WorkersAnalytics, WorkersD1, WorkersEdgeCache, WorkersEmail, WorkersKv, WorkersMySql, WorkersPostgres, WorkersQueue, WorkersR2, WorkersRateLimit, WorkersService, WorkersStoredSecret, WorkersVectorize, WorkersVersion } from "./bynk/cloudflare.binding.js";
 import { Method, FetchError } from "./bynk.js";
 import { Some, None } from "./__bynk_runtime/result.js";
 
@@ -2106,4 +2107,128 @@ t("WorkersMySql.transaction: a failure is the result; an empty list is Ok([]) an
   assert.equal(empty.calls.length, 0);
   await assert.rejects(() => new WorkersMySql({}, "HYPERDRIVE_LEGACY", empty.execute).transaction([]), /requires a Hyperdrive binding/);
   await assert.rejects(() => new WorkersMySql({ HYPERDRIVE_LEGACY: MY_BINDING }, "HYPERDRIVE_LEGACY").transaction([{ sql: "x", params: [] }]), /needs the MySQL driver/);
+});
+
+// #3479: `WorkersVectorize`, against a fake of Cloudflare's Vectorize binding.
+// The error messages the platform throws are not documented, so the mapping is
+// pinned here against messages of the shapes the binding recognises.
+function fakeIndex(over = {}) {
+  const calls = [];
+  const rec = (name, reply) => async (...args) => {
+    calls.push({ name, args });
+    if (over[name] instanceof Error) throw over[name];
+    return over[name] ?? reply;
+  };
+  return {
+    calls,
+    upsert: rec("upsert", { mutationId: "m-1" }),
+    insert: rec("insert", { mutationId: "m-2" }),
+    query: rec("query", { count: 0, matches: [] }),
+    getByIds: rec("getByIds", []),
+    deleteByIds: rec("deleteByIds", { mutationId: "m-3" }),
+    describe: rec("describe", { dimensions: 3, metric: "cosine" }),
+  };
+}
+const vec = (id, extra = {}) => ({ id, values: [0.1, 0.2, 0.3], metadata: None, namespace: None, ...extra });
+const opts = (over = {}) => ({ topK: 5, returnValues: false, returnMetadata: { tag: "Omit" }, namespace: None, filter: [], ...over });
+const eq = (field, v) => ({ field, op: { tag: "FilterEq", value: v } });
+const metaText = (value) => ({ tag: "MetaText", value });
+const metaNum = (value) => ({ tag: "MetaNumber", value });
+const range = (field, tag, value) => ({ field, op: { tag, value: metaNum(value) } });
+const vz = (index) => new WorkersVectorize({ VECTORIZE_DOCS: index }, "VECTORIZE_DOCS");
+
+t("WorkersVectorize.upsert: sends the platform's vectors and returns the mutation id", async () => {
+  const index = fakeIndex();
+  const r = await vz(index).upsert([vec("a", { metadata: Some('{"category":"faq"}'), namespace: Some("ns") }), vec("b")]);
+  assert.deepEqual(r, { tag: "Ok", value: { id: "m-1" } });
+  assert.deepEqual(index.calls[0].args[0], [
+    { id: "a", values: [0.1, 0.2, 0.3], namespace: "ns", metadata: { category: "faq" } },
+    { id: "b", values: [0.1, 0.2, 0.3] },
+  ]);
+});
+
+t("WorkersVectorize.insert: sends new vectors and returns the mutation id", async () => {
+  const index = fakeIndex();
+  assert.deepEqual(await vz(index).insert([vec("c")]), { tag: "Ok", value: { id: "m-2" } });
+  assert.equal(index.calls[0].name, "insert");
+});
+
+t("WorkersVectorize.upsert: metadata that is not a JSON object faults; a missing binding faults", async () => {
+  await assert.rejects(() => vz(fakeIndex()).upsert([vec("a", { metadata: Some("nope") })]), /not JSON text/);
+  await assert.rejects(() => vz(fakeIndex()).upsert([vec("a", { metadata: Some("[1]") })]), /must be a JSON object/);
+  await assert.rejects(() => new WorkersVectorize({}, "VECTORIZE_DOCS").describe(), /\[\[vectorize\]\]/);
+});
+
+t("WorkersVectorize: a platform refusal is a typed error, an unknown index a fault", async () => {
+  const err = async (message) => (await vz(fakeIndex({ upsert: new Error(message) })).upsert([vec("a")])).error;
+  assert.deepEqual(await err("expected 768 dimensions, got 3"), { tag: "DimensionMismatch", message: "expected 768 dimensions, got 3" });
+  assert.deepEqual(await err("429 Too Many Requests"), { tag: "VectorRateLimited" });
+  assert.deepEqual(await err("batch is too large"), { tag: "VectorInvalidInput", message: "batch is too large" });
+  assert.deepEqual(await err("something else"), { tag: "VectorFailed", message: "something else" });
+  await assert.rejects(() => err("index not found"), /index not found/);
+});
+
+t("WorkersVectorize.query: builds the platform's options and filter, and shapes the matches", async () => {
+  const index = fakeIndex({
+    query: { matches: [{ id: "a", score: 0.9, values: [1, 2], metadata: { c: "faq" }, namespace: "ns" }, { id: "b", score: 0.5 }] },
+  });
+  const filter = [
+    eq("category", metaText("faq")),
+    range("year", "FilterGte", 2020),
+    range("year", "FilterLt", 2030),
+    { field: "tag", op: { tag: "FilterAnyOf", values: [metaText("x"), metaText("y")] } },
+  ];
+  const r = await vz(index).query([1, 2, 3], opts({ topK: 3, returnMetadata: { tag: "Indexed" }, namespace: Some("ns"), filter }));
+  assert.deepEqual(index.calls[0].args, [
+    [1, 2, 3],
+    {
+      topK: 3,
+      returnValues: false,
+      returnMetadata: "indexed",
+      namespace: "ns",
+      filter: { category: { $eq: "faq" }, year: { $gte: 2020, $lt: 2030 }, tag: { $in: ["x", "y"] } },
+    },
+  ]);
+  assert.deepEqual(r.value, [
+    { id: "a", score: 0.9, values: Some([1, 2]), metadata: Some('{"c":"faq"}'), namespace: Some("ns") },
+    { id: "b", score: 0.5, values: None, metadata: None, namespace: None },
+  ]);
+  // No conditions, no filter key.
+  await vz(index).query([1], opts());
+  assert.equal("filter" in index.calls[1].args[1], false);
+});
+
+t("WorkersVectorize.query: a filter the platform cannot take is VectorInvalidInput and no call is made", async () => {
+  const index = fakeIndex();
+  const refused = async (filter) => (await vz(index).query([1], opts({ filter }))).error;
+  for (const filter of [
+    [eq("", metaText("x"))],
+    [eq('a"b', metaText("x"))],
+    [eq("$and", metaText("x"))],
+    [eq("k".repeat(513), metaText("x"))],
+    [eq("f", { tag: "MetaFlag", value: true }), eq("f", metaText("x"))],
+    [range("n", "FilterGt", 1), range("n", "FilterGte", 2)],
+    [{ field: "f", op: { tag: "FilterGt", value: { tag: "MetaFlag", value: true } } }],
+  ]) {
+    assert.equal((await refused(filter)).tag, "VectorInvalidInput");
+  }
+  assert.equal(index.calls.length, 0);
+});
+
+t("WorkersVectorize.getByIds: reads vectors back with values and metadata", async () => {
+  const index = fakeIndex({ getByIds: [{ id: "a", values: new Float32Array([0.5]), metadata: { k: 1 } }] });
+  const got = await vz(index).getByIds(["a"]);
+  assert.deepEqual(got.value, [{ id: "a", values: [0.5], metadata: Some('{"k":1}'), namespace: None }]);
+});
+
+t("WorkersVectorize.deleteByIds: returns the mutation id", async () => {
+  assert.deepEqual(await vz(fakeIndex()).deleteByIds(["a"]), { tag: "Ok", value: { id: "m-3" } });
+});
+
+t("WorkersVectorize.describe: reads the configuration from the top level or under config", async () => {
+  assert.deepEqual(await vz(fakeIndex()).describe(), { tag: "Ok", value: { dimensions: 3, metric: "cosine" } });
+  const nested = fakeIndex({ describe: { config: { dimensions: 8, metric: "euclidean" } } });
+  assert.deepEqual((await vz(nested).describe()).value, { dimensions: 8, metric: "euclidean" });
+  const bare = fakeIndex({ describe: { vectorCount: 1 } });
+  assert.equal((await vz(bare).describe()).error.tag, "VectorFailed");
 });

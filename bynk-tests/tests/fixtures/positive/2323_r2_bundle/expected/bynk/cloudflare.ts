@@ -833,6 +833,180 @@ export const AiError = {
 };
 
 /**
+ * One vector of a `Vectorize` index: its `id` (at most 64 bytes), its `values`
+ * (as many numbers as the index has dimensions), the `namespace` it lives in
+ * when it has one, and `metadata`, a JSON object as text (`Json.encode` writes
+ * it, `Json.decode` reads it back). A property can be filtered on only when
+ * the index declares it in `@indexed`.
+ */
+export interface Vector {
+  readonly id: string;
+  readonly values: readonly number[];
+  readonly metadata: Option<string>;
+  readonly namespace: Option<string>;
+}
+
+export const Vector = {
+};
+
+/**
+ * A metadata value a `Condition` compares a property with: text, a number or
+ * a flag.
+ */
+export type MetaValue =
+    { readonly tag: "MetaText"; readonly value: string }
+  | { readonly tag: "MetaNumber"; readonly value: number }
+  | { readonly tag: "MetaFlag"; readonly value: boolean };
+
+export const MetaValue = {
+  MetaText: (value: string): MetaValue => ({ tag: "MetaText", value }),
+  MetaNumber: (value: number): MetaValue => ({ tag: "MetaNumber", value }),
+  MetaFlag: (value: boolean): MetaValue => ({ tag: "MetaFlag", value }),
+};
+
+/**
+ * How a `Condition` compares a property with a value: equal, not equal, less
+ * than, at most, greater than, at least, one of a list, or none of a list.
+ * The platform allows a range over text or numbers only, and a lower and an
+ * upper bound on one property together, not other mixes; it refuses the
+ * rest as `VectorInvalidInput`.
+ */
+export type FilterOp =
+    { readonly tag: "FilterEq"; readonly value: MetaValue }
+  | { readonly tag: "FilterNe"; readonly value: MetaValue }
+  | { readonly tag: "FilterLt"; readonly value: MetaValue }
+  | { readonly tag: "FilterLte"; readonly value: MetaValue }
+  | { readonly tag: "FilterGt"; readonly value: MetaValue }
+  | { readonly tag: "FilterGte"; readonly value: MetaValue }
+  | { readonly tag: "FilterAnyOf"; readonly values: readonly MetaValue[] }
+  | { readonly tag: "FilterNoneOf"; readonly values: readonly MetaValue[] };
+
+export const FilterOp = {
+  FilterEq: (value: MetaValue): FilterOp => ({ tag: "FilterEq", value }),
+  FilterNe: (value: MetaValue): FilterOp => ({ tag: "FilterNe", value }),
+  FilterLt: (value: MetaValue): FilterOp => ({ tag: "FilterLt", value }),
+  FilterLte: (value: MetaValue): FilterOp => ({ tag: "FilterLte", value }),
+  FilterGt: (value: MetaValue): FilterOp => ({ tag: "FilterGt", value }),
+  FilterGte: (value: MetaValue): FilterOp => ({ tag: "FilterGte", value }),
+  FilterAnyOf: (values: readonly MetaValue[]): FilterOp => ({ tag: "FilterAnyOf", values }),
+  FilterNoneOf: (values: readonly MetaValue[]): FilterOp => ({ tag: "FilterNoneOf", values }),
+};
+
+/**
+ * One test of a `Vectorize` query: the metadata property `field` (its
+ * name has no `.`; a nested property is not supported yet) against `op`. A query's conditions all have to hold.
+ * The property has to be declared in the index's `@indexed`, and a vector
+ * only matches once it was written after that index existed.
+ */
+export interface Condition {
+  readonly field: string;
+  readonly op: FilterOp;
+}
+
+export const Condition = {
+};
+
+/**
+ * How much metadata a `Vectorize` query returns: `Omit` none (the default),
+ * `Indexed` only the `@indexed` properties, `All` every property. `All` costs
+ * the platform more work and lowers how many matches one query may return.
+ */
+export type MetadataScope =
+    { readonly tag: "Omit" }
+  | { readonly tag: "Indexed" }
+  | { readonly tag: "All" };
+
+export const MetadataScope = {
+  Omit: { tag: "Omit" } as MetadataScope,
+  Indexed: { tag: "Indexed" } as MetadataScope,
+  All: { tag: "All" } as MetadataScope,
+};
+
+/**
+ * The options of `Vectorize.query`. `topK` is how many matches to return
+ * (5 unless set; the platform caps it, and caps it lower when `returnValues`
+ * is set or `returnMetadata` is `All`, and says so as `VectorInvalidInput`).
+ * `namespace` restricts the query to one namespace. `filter` is a list of
+ * conditions that must all hold.
+ */
+export interface QueryOptions {
+  readonly topK: number;
+  readonly returnValues: boolean;
+  readonly returnMetadata: MetadataScope;
+  readonly namespace: Option<string>;
+  readonly filter: readonly Condition[];
+}
+
+export const QueryOptions = {
+};
+
+/**
+ * One match of `Vectorize.query`: the vector's `id` and its `score`, whose
+ * meaning depends on the index's metric (a larger cosine score is nearer; a
+ * smaller euclidean distance is nearer). `values`, `metadata` (a JSON object
+ * as text) and `namespace` are present when the query asked for them and the
+ * vector has them.
+ */
+export interface VectorMatch {
+  readonly id: string;
+  readonly score: number;
+  readonly values: Option<readonly number[]>;
+  readonly metadata: Option<string>;
+  readonly namespace: Option<string>;
+}
+
+export const VectorMatch = {
+};
+
+/**
+ * The receipt of a write: its `id`. A write is asynchronous. It is queryable
+ * after the platform has processed it, which takes some seconds, so a handler
+ * that writes and then queries in the same request will not see its own write.
+ */
+export interface Mutation {
+  readonly id: string;
+}
+
+export const Mutation = {
+};
+
+/**
+ * An index's configuration, as `Vectorize.describe` reports it: its
+ * `dimensions` and its `metric`.
+ */
+export interface IndexInfo {
+  readonly dimensions: number;
+  readonly metric: string;
+}
+
+export const IndexInfo = {
+};
+
+/**
+ * Why a Vectorize call did not succeed. `DimensionMismatch` is a vector or
+ * query whose length is not the index's dimensions, with the platform's
+ * message; `VectorInvalidInput` is a request the platform refused as malformed
+ * or over a limit (a bad filter, too large a `topK`, too large a batch or too
+ * much metadata); `VectorRateLimited` is a rate limit, worth retrying later;
+ * `VectorFailed` is any other refusal, with the platform's message. The
+ * `Vector` prefix is because `InvalidInput` is `AiError`'s, `RateLimited`
+ * `EmailError`'s and `Failed` `SqlError`'s. Cloudflare adds error cases over
+ * time, so a `match` over this type needs a wildcard.
+ */
+export type VectorError =
+    { readonly tag: "DimensionMismatch"; readonly message: string }
+  | { readonly tag: "VectorInvalidInput"; readonly message: string }
+  | { readonly tag: "VectorRateLimited" }
+  | { readonly tag: "VectorFailed"; readonly message: string };
+
+export const VectorError = {
+  DimensionMismatch: (message: string): VectorError => ({ tag: "DimensionMismatch", message }),
+  VectorInvalidInput: (message: string): VectorError => ({ tag: "VectorInvalidInput", message }),
+  VectorRateLimited: { tag: "VectorRateLimited" } as VectorError,
+  VectorFailed: (message: string): VectorError => ({ tag: "VectorFailed", message }),
+};
+
+/**
  * A Cloudflare Workers KV namespace: a key/value store with optional per-entry
  * expiry and prefix listing.
  *
@@ -1345,3 +1519,49 @@ export interface MySql {
 }
 
 export const __MySqlToken: symbol = globalThis.Symbol("MySql");
+
+/**
+ * A Vectorize index: vectors with an id, searched by similarity. Used only
+ * through a named instance that states the index's fixed shape,
+ * `capability Docs = Vectorize @dimensions(768) @metric("cosine")`, which
+ * binds as `VECTORIZE_DOCS`, a `[[vectorize]]` entry; both annotations are
+ * required, and a bare `given Vectorize` is refused. `@metric` is `"cosine"`,
+ * `"euclidean"` or `"dot-product"`. Experimental.
+ *
+ * An index's dimensions and metric cannot change once it exists, so they are
+ * written next to the code that depends on them. `@indexed(["category:string",
+ * "year:number"])` lists the metadata properties a query may filter on (at
+ * most 10, each `name:type` with the type `string`, `number` or `boolean`).
+ * Metadata indexes should exist before the vectors that carry the property.
+ *
+ * `upsert` writes vectors, replacing any with the same id in full; `insert`
+ * writes only vectors whose id is new. `query(vector, options)` returns the
+ * nearest matches, best first. `getByIds` reads vectors back, `deleteByIds`
+ * removes them, and `describe` reports the index's dimensions and metric.
+ * Metadata is JSON text: write it with `Json.encode` and read it with
+ * `Json.decode`, so a vector stored by an older version of the program can be
+ * skipped or repaired instead of failing the query. The embeddings of
+ * `Ai.embed` are the usual `values`; an index must be queried with the same
+ * model and pooling it was built with.
+ *
+ * A write returns a `Mutation` and is visible to queries only after the
+ * platform has processed it. Every operation gives a `VectorError` rather
+ * than faulting, except a call on an index that does not exist, which is a
+ * platform fault.
+ *
+ * Vectorize is a remote service on your Cloudflare account, so a call may be
+ * billed; see Cloudflare's Vectorize pricing page for what applies, and put a
+ * `RateLimit` in front of any handler an anonymous caller can reach. In a
+ * test every operation faults until `stub Docs.query(_, _) returns …`
+ * replaces it, so a test never reaches an index.
+ */
+export interface Vectorize {
+  upsert(vectors: readonly Vector[]): globalThis.Promise<Result<Mutation, VectorError>>;
+  insert(vectors: readonly Vector[]): globalThis.Promise<Result<Mutation, VectorError>>;
+  query(vector: readonly number[], options: QueryOptions): globalThis.Promise<Result<readonly VectorMatch[], VectorError>>;
+  getByIds(ids: readonly string[]): globalThis.Promise<Result<readonly Vector[], VectorError>>;
+  deleteByIds(ids: readonly string[]): globalThis.Promise<Result<Mutation, VectorError>>;
+  describe(): globalThis.Promise<Result<IndexInfo, VectorError>>;
+}
+
+export const __VectorizeToken: symbol = globalThis.Symbol("Vectorize");

@@ -1,0 +1,7 @@
+context demo
+
+// #3479: an @indexed property name cannot start with a dollar.
+
+consumes bynk.cloudflare { Vectorize }
+
+capability Docs = Vectorize @dimensions(3) @metric("cosine") @indexed(["$x:string"])

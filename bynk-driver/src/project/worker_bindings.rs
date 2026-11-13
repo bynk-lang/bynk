@@ -243,6 +243,12 @@ pub(super) fn context_bindings(
                     allowed_recipients: d.email_allowed_recipients().to_vec(),
                     allowed_senders: d.email_allowed_senders().to_vec(),
                 },
+                (firstparty::CLOUDFLARE_UNIT, "Vectorize") => BindingSource::VectorizeIndex {
+                    capability,
+                    dimensions: d.vectorize_dimensions().unwrap_or_default(),
+                    metric: d.vectorize_metric().unwrap_or_default().to_string(),
+                    indexed: d.vectorize_indexed().to_vec(),
+                },
                 (firstparty::CLOUDFLARE_UNIT, "Kv") => BindingSource::KvInstance { capability },
                 (unit, base) => {
                     unreachable!("`{unit}.{base}` is instantiable but has no binding kind")

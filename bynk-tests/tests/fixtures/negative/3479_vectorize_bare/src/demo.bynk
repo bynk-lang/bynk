@@ -1,0 +1,11 @@
+context demo
+
+// #3479: a bare use of an instance-only kind.
+
+consumes bynk.cloudflare { Vectorize }
+
+service api from http {
+	on GET("/x") () -> Effect[HttpResult[String]] by Visitor given Vectorize {
+		Ok("x")
+	}
+}

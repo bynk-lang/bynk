@@ -1,0 +1,2 @@
+bynk.capability.invalid_option
+an index has at most 10 metadata indexes, and `@indexed` lists 11

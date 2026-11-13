@@ -1,0 +1,7 @@
+context demo
+
+// #3479: an @indexed entry has a type the platform indexes.
+
+consumes bynk.cloudflare { Vectorize }
+
+capability Docs = Vectorize @dimensions(3) @metric("cosine") @indexed(["category:text"])

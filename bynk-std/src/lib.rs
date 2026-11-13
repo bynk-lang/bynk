@@ -702,6 +702,31 @@ pub const EMAIL_ALLOWED_RECIPIENTS_OPTION: &str = "allowedRecipients";
 /// verified for sending on the account (#3302 Decision D).
 pub const EMAIL_ALLOWED_SENDERS_OPTION: &str = "allowedSenders";
 
+/// The Worker binding prefix of a `Vectorize` instance (#3479): `capability
+/// Docs = Vectorize @dimensions(768) @metric("cosine")` binds as
+/// `VECTORIZE_DOCS`, a `[[vectorize]]` entry naming the index.
+pub const VECTORIZE_BINDING_PREFIX: &str = "VECTORIZE";
+
+/// A `Vectorize` instance's vector length. Fixed when the index is created
+/// and never changeable after, so the declaration states it (#3479 A).
+pub const VECTORIZE_DIMENSIONS_OPTION: &str = "dimensions";
+
+/// A `Vectorize` instance's distance metric, one of [`VECTORIZE_METRICS`].
+pub const VECTORIZE_METRIC_OPTION: &str = "metric";
+
+/// The metadata properties of a `Vectorize` instance a query may filter on,
+/// each written `name:type` (#3479 C).
+pub const VECTORIZE_INDEXED_OPTION: &str = "indexed";
+
+/// The distance metrics an index is created with.
+pub const VECTORIZE_METRICS: &[&str] = &["cosine", "euclidean", "dot-product"];
+
+/// The types a metadata index holds.
+pub const VECTORIZE_INDEXED_TYPES: &[&str] = &["string", "number", "boolean"];
+
+/// The most metadata indexes one index carries.
+pub const VECTORIZE_MAX_INDEXED: usize = 10;
+
 /// The Worker binding of the `Version` capability (#3300): Cloudflare's
 /// Version metadata binding, `[version_metadata] binding = "CF_VERSION_METADATA"`,
 /// the name Cloudflare's own documentation uses.
@@ -806,6 +831,7 @@ pub const UNITS: &[Unit] = &[
             "WorkersEmail",
             "WorkersPostgres",
             "WorkersMySql",
+            "WorkersVectorize",
         ],
         stability: Stability::Stable,
         // Interop I5 (#1972): a Service Binding to a non-Bynk Worker is new
@@ -840,6 +866,7 @@ pub const UNITS: &[Unit] = &[
             "Email",
             "Postgres",
             "MySql",
+            "Vectorize",
             "Kv.getWith",
             "Kv.putWith",
             "Kv.getBytes",
@@ -855,6 +882,7 @@ pub const UNITS: &[Unit] = &[
             "ChatRole",
             "PgError",
             "MySqlError",
+            "VectorError",
         ],
         instantiable: &[
             Instantiable {
@@ -969,6 +997,20 @@ pub const UNITS: &[Unit] = &[
                 binding_prefix: MYSQL_BINDING_PREFIX,
                 options: &[(MYSQL_TLS_OPTION, OptionKind::Str)],
                 required: &[],
+                bare: false,
+                linked: false,
+            },
+            // #3479: the index is project-owned state, so `bynk deploy` creates
+            // it from these (never linked); both fixed at creation, so required.
+            Instantiable {
+                capability: "Vectorize",
+                binding_prefix: VECTORIZE_BINDING_PREFIX,
+                options: &[
+                    (VECTORIZE_DIMENSIONS_OPTION, OptionKind::PositiveInt),
+                    (VECTORIZE_METRIC_OPTION, OptionKind::Str),
+                    (VECTORIZE_INDEXED_OPTION, OptionKind::StrList),
+                ],
+                required: &[VECTORIZE_DIMENSIONS_OPTION, VECTORIZE_METRIC_OPTION],
                 bare: false,
                 linked: false,
             },
@@ -1629,7 +1671,8 @@ mod tests {
                 ("bynk.cloudflare", "StoredSecret", "SECRET"),
                 ("bynk.cloudflare", "Email", "EMAIL"),
                 ("bynk.cloudflare", "Postgres", "HYPERDRIVE"),
-                ("bynk.cloudflare", "MySql", "HYPERDRIVE")
+                ("bynk.cloudflare", "MySql", "HYPERDRIVE"),
+                ("bynk.cloudflare", "Vectorize", "VECTORIZE")
             ]
         );
         let kv = instantiable("bynk.cloudflare", "Kv").expect("Kv is instantiable");
@@ -1692,6 +1735,18 @@ mod tests {
         assert!(my.required.is_empty() && !my.bare && !my.linked);
         assert_eq!(MYSQL_BINDING_PREFIX, POSTGRES_BINDING_PREFIX);
         assert_eq!(MYSQL_TLS_MODES[0], ("required", "REQUIRED"));
+        // #3479: a Vectorize instance states the index's fixed configuration,
+        // both required; the metadata indexes are optional. Never bare, and
+        // created by the deploy, so not linked.
+        let vec = instantiable("bynk.cloudflare", "Vectorize").expect("Vectorize is instantiable");
+        assert_eq!(
+            vec.option_names().collect::<Vec<_>>(),
+            ["dimensions", "metric", "indexed"]
+        );
+        assert_eq!(vec.option_kind("dimensions"), Some(OptionKind::PositiveInt));
+        assert_eq!(vec.option_kind("indexed"), Some(OptionKind::StrList));
+        assert_eq!(vec.required, ["dimensions", "metric"]);
+        assert!(!vec.bare && !vec.linked);
         let pg = instantiable("bynk.cloudflare", "Postgres").expect("Postgres is instantiable");
         assert!(pg.options.is_empty() && pg.required.is_empty() && !pg.bare && !pg.linked);
         for u in UNITS {
@@ -1750,6 +1805,7 @@ mod tests {
                 "bynk.cloudflare.Email",
                 "bynk.cloudflare.Postgres",
                 "bynk.cloudflare.MySql",
+                "bynk.cloudflare.Vectorize",
                 "bynk.cloudflare.Kv.getWith",
                 "bynk.cloudflare.Kv.putWith",
                 "bynk.cloudflare.Kv.getBytes",
@@ -1776,6 +1832,7 @@ mod tests {
                 ("bynk.cloudflare", "ChatRole"),
                 ("bynk.cloudflare", "PgError"),
                 ("bynk.cloudflare", "MySqlError"),
+                ("bynk.cloudflare", "VectorError"),
                 ("bynk.crypto", "Digest"),
                 ("bynk.crypto", "Signature"),
                 ("bynk.crypto", "CryptoError"),

@@ -1,0 +1,2 @@
+bynk.capability.invalid_option
+`manhattan` is not a distance metric a `Vectorize` index can use

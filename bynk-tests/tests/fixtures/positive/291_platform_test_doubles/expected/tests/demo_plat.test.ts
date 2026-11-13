@@ -111,10 +111,11 @@ class __Stub_Fetch {
     type StreamResponse = __ns_bynk.StreamResponse;
     type TimedOut = __ns_bynk.TimedOut;
     type Uuid = __ns_bynk.Uuid;
-    const { AiError, ChatMessage, ChatRole, DataPoint, DmarcVerdict, EmailAttachment, EmailError, EmailMessage, EmailReply, EmailVerdict, GenerateRequest, Generation, InboundAttachment, InboundEmail, KvEntry, KvExpiration, KvGet, KvKey, KvList, KvListing, KvPut, MySqlError, MySqlReadError, MySqlRun, MySqlStatement, MySqlValue, PgError, PgReadError, PgRun, PgStatement, PgValue, QueueSend, R2Body, R2Condition, R2Listing, R2Object, R2Part, R2Put, R2Upload, R2UploadOptions, SenderIdentity, SqlError, SqlReadError, SqlRun, SqlStatement, SqlValue, TokenUsage, WorkerVersion } = __ns_bynk_cloudflare;
+    const { AiError, ChatMessage, ChatRole, Condition, DataPoint, DmarcVerdict, EmailAttachment, EmailError, EmailMessage, EmailReply, EmailVerdict, FilterOp, GenerateRequest, Generation, InboundAttachment, InboundEmail, IndexInfo, KvEntry, KvExpiration, KvGet, KvKey, KvList, KvListing, KvPut, MetaValue, MetadataScope, Mutation, MySqlError, MySqlReadError, MySqlRun, MySqlStatement, MySqlValue, PgError, PgReadError, PgRun, PgStatement, PgValue, QueryOptions, QueueSend, R2Body, R2Condition, R2Listing, R2Object, R2Part, R2Put, R2Upload, R2UploadOptions, SenderIdentity, SqlError, SqlReadError, SqlRun, SqlStatement, SqlValue, TokenUsage, Vector, VectorError, VectorMatch, WorkerVersion } = __ns_bynk_cloudflare;
     type AiError = __ns_bynk_cloudflare.AiError;
     type ChatMessage = __ns_bynk_cloudflare.ChatMessage;
     type ChatRole = __ns_bynk_cloudflare.ChatRole;
+    type Condition = __ns_bynk_cloudflare.Condition;
     type DataPoint = __ns_bynk_cloudflare.DataPoint;
     type DmarcVerdict = __ns_bynk_cloudflare.DmarcVerdict;
     type EmailAttachment = __ns_bynk_cloudflare.EmailAttachment;
@@ -122,10 +123,12 @@ class __Stub_Fetch {
     type EmailMessage = __ns_bynk_cloudflare.EmailMessage;
     type EmailReply = __ns_bynk_cloudflare.EmailReply;
     type EmailVerdict = __ns_bynk_cloudflare.EmailVerdict;
+    type FilterOp = __ns_bynk_cloudflare.FilterOp;
     type GenerateRequest = __ns_bynk_cloudflare.GenerateRequest;
     type Generation = __ns_bynk_cloudflare.Generation;
     type InboundAttachment = __ns_bynk_cloudflare.InboundAttachment;
     type InboundEmail = __ns_bynk_cloudflare.InboundEmail;
+    type IndexInfo = __ns_bynk_cloudflare.IndexInfo;
     type KvEntry = __ns_bynk_cloudflare.KvEntry;
     type KvExpiration = __ns_bynk_cloudflare.KvExpiration;
     type KvGet = __ns_bynk_cloudflare.KvGet;
@@ -133,6 +136,9 @@ class __Stub_Fetch {
     type KvList = __ns_bynk_cloudflare.KvList;
     type KvListing = __ns_bynk_cloudflare.KvListing;
     type KvPut = __ns_bynk_cloudflare.KvPut;
+    type MetaValue = __ns_bynk_cloudflare.MetaValue;
+    type MetadataScope = __ns_bynk_cloudflare.MetadataScope;
+    type Mutation = __ns_bynk_cloudflare.Mutation;
     type MySqlError = __ns_bynk_cloudflare.MySqlError;
     type MySqlReadError = __ns_bynk_cloudflare.MySqlReadError;
     type MySqlRun = __ns_bynk_cloudflare.MySqlRun;
@@ -143,6 +149,7 @@ class __Stub_Fetch {
     type PgRun = __ns_bynk_cloudflare.PgRun;
     type PgStatement = __ns_bynk_cloudflare.PgStatement;
     type PgValue = __ns_bynk_cloudflare.PgValue;
+    type QueryOptions = __ns_bynk_cloudflare.QueryOptions;
     type QueueSend = __ns_bynk_cloudflare.QueueSend;
     type R2Body = __ns_bynk_cloudflare.R2Body;
     type R2Condition = __ns_bynk_cloudflare.R2Condition;
@@ -159,6 +166,9 @@ class __Stub_Fetch {
     type SqlStatement = __ns_bynk_cloudflare.SqlStatement;
     type SqlValue = __ns_bynk_cloudflare.SqlValue;
     type TokenUsage = __ns_bynk_cloudflare.TokenUsage;
+    type Vector = __ns_bynk_cloudflare.Vector;
+    type VectorError = __ns_bynk_cloudflare.VectorError;
+    type VectorMatch = __ns_bynk_cloudflare.VectorMatch;
     type WorkerVersion = __ns_bynk_cloudflare.WorkerVersion;
     if (this.__case === "a stubbed fetch answers for the network") {
       return Ok({ status: 204, headers: new globalThis.Map<string, string>(), body: "" });
@@ -197,10 +207,11 @@ class __Stub_Kv {
     type StreamResponse = __ns_bynk.StreamResponse;
     type TimedOut = __ns_bynk.TimedOut;
     type Uuid = __ns_bynk.Uuid;
-    const { AiError, ChatMessage, ChatRole, DataPoint, DmarcVerdict, EmailAttachment, EmailError, EmailMessage, EmailReply, EmailVerdict, GenerateRequest, Generation, InboundAttachment, InboundEmail, KvEntry, KvExpiration, KvGet, KvKey, KvList, KvListing, KvPut, MySqlError, MySqlReadError, MySqlRun, MySqlStatement, MySqlValue, PgError, PgReadError, PgRun, PgStatement, PgValue, QueueSend, R2Body, R2Condition, R2Listing, R2Object, R2Part, R2Put, R2Upload, R2UploadOptions, SenderIdentity, SqlError, SqlReadError, SqlRun, SqlStatement, SqlValue, TokenUsage, WorkerVersion } = __ns_bynk_cloudflare;
+    const { AiError, ChatMessage, ChatRole, Condition, DataPoint, DmarcVerdict, EmailAttachment, EmailError, EmailMessage, EmailReply, EmailVerdict, FilterOp, GenerateRequest, Generation, InboundAttachment, InboundEmail, IndexInfo, KvEntry, KvExpiration, KvGet, KvKey, KvList, KvListing, KvPut, MetaValue, MetadataScope, Mutation, MySqlError, MySqlReadError, MySqlRun, MySqlStatement, MySqlValue, PgError, PgReadError, PgRun, PgStatement, PgValue, QueryOptions, QueueSend, R2Body, R2Condition, R2Listing, R2Object, R2Part, R2Put, R2Upload, R2UploadOptions, SenderIdentity, SqlError, SqlReadError, SqlRun, SqlStatement, SqlValue, TokenUsage, Vector, VectorError, VectorMatch, WorkerVersion } = __ns_bynk_cloudflare;
     type AiError = __ns_bynk_cloudflare.AiError;
     type ChatMessage = __ns_bynk_cloudflare.ChatMessage;
     type ChatRole = __ns_bynk_cloudflare.ChatRole;
+    type Condition = __ns_bynk_cloudflare.Condition;
     type DataPoint = __ns_bynk_cloudflare.DataPoint;
     type DmarcVerdict = __ns_bynk_cloudflare.DmarcVerdict;
     type EmailAttachment = __ns_bynk_cloudflare.EmailAttachment;
@@ -208,10 +219,12 @@ class __Stub_Kv {
     type EmailMessage = __ns_bynk_cloudflare.EmailMessage;
     type EmailReply = __ns_bynk_cloudflare.EmailReply;
     type EmailVerdict = __ns_bynk_cloudflare.EmailVerdict;
+    type FilterOp = __ns_bynk_cloudflare.FilterOp;
     type GenerateRequest = __ns_bynk_cloudflare.GenerateRequest;
     type Generation = __ns_bynk_cloudflare.Generation;
     type InboundAttachment = __ns_bynk_cloudflare.InboundAttachment;
     type InboundEmail = __ns_bynk_cloudflare.InboundEmail;
+    type IndexInfo = __ns_bynk_cloudflare.IndexInfo;
     type KvEntry = __ns_bynk_cloudflare.KvEntry;
     type KvExpiration = __ns_bynk_cloudflare.KvExpiration;
     type KvGet = __ns_bynk_cloudflare.KvGet;
@@ -219,6 +232,9 @@ class __Stub_Kv {
     type KvList = __ns_bynk_cloudflare.KvList;
     type KvListing = __ns_bynk_cloudflare.KvListing;
     type KvPut = __ns_bynk_cloudflare.KvPut;
+    type MetaValue = __ns_bynk_cloudflare.MetaValue;
+    type MetadataScope = __ns_bynk_cloudflare.MetadataScope;
+    type Mutation = __ns_bynk_cloudflare.Mutation;
     type MySqlError = __ns_bynk_cloudflare.MySqlError;
     type MySqlReadError = __ns_bynk_cloudflare.MySqlReadError;
     type MySqlRun = __ns_bynk_cloudflare.MySqlRun;
@@ -229,6 +245,7 @@ class __Stub_Kv {
     type PgRun = __ns_bynk_cloudflare.PgRun;
     type PgStatement = __ns_bynk_cloudflare.PgStatement;
     type PgValue = __ns_bynk_cloudflare.PgValue;
+    type QueryOptions = __ns_bynk_cloudflare.QueryOptions;
     type QueueSend = __ns_bynk_cloudflare.QueueSend;
     type R2Body = __ns_bynk_cloudflare.R2Body;
     type R2Condition = __ns_bynk_cloudflare.R2Condition;
@@ -245,6 +262,9 @@ class __Stub_Kv {
     type SqlStatement = __ns_bynk_cloudflare.SqlStatement;
     type SqlValue = __ns_bynk_cloudflare.SqlValue;
     type TokenUsage = __ns_bynk_cloudflare.TokenUsage;
+    type Vector = __ns_bynk_cloudflare.Vector;
+    type VectorError = __ns_bynk_cloudflare.VectorError;
+    type VectorMatch = __ns_bynk_cloudflare.VectorMatch;
     type WorkerVersion = __ns_bynk_cloudflare.WorkerVersion;
     if (this.__case === "a stubbed operation answers; the rest reach the double") {
       return Some("stubbed");
@@ -528,10 +548,11 @@ async function test_the_clock_reads_the_epoch() {
     type StreamResponse = __ns_bynk.StreamResponse;
     type TimedOut = __ns_bynk.TimedOut;
     type Uuid = __ns_bynk.Uuid;
-    const { AiError, ChatMessage, ChatRole, DataPoint, DmarcVerdict, EmailAttachment, EmailError, EmailMessage, EmailReply, EmailVerdict, GenerateRequest, Generation, InboundAttachment, InboundEmail, KvEntry, KvExpiration, KvGet, KvKey, KvList, KvListing, KvPut, MySqlError, MySqlReadError, MySqlRun, MySqlStatement, MySqlValue, PgError, PgReadError, PgRun, PgStatement, PgValue, QueueSend, R2Body, R2Condition, R2Listing, R2Object, R2Part, R2Put, R2Upload, R2UploadOptions, SenderIdentity, SqlError, SqlReadError, SqlRun, SqlStatement, SqlValue, TokenUsage, WorkerVersion } = __ns_bynk_cloudflare;
+    const { AiError, ChatMessage, ChatRole, Condition, DataPoint, DmarcVerdict, EmailAttachment, EmailError, EmailMessage, EmailReply, EmailVerdict, FilterOp, GenerateRequest, Generation, InboundAttachment, InboundEmail, IndexInfo, KvEntry, KvExpiration, KvGet, KvKey, KvList, KvListing, KvPut, MetaValue, MetadataScope, Mutation, MySqlError, MySqlReadError, MySqlRun, MySqlStatement, MySqlValue, PgError, PgReadError, PgRun, PgStatement, PgValue, QueryOptions, QueueSend, R2Body, R2Condition, R2Listing, R2Object, R2Part, R2Put, R2Upload, R2UploadOptions, SenderIdentity, SqlError, SqlReadError, SqlRun, SqlStatement, SqlValue, TokenUsage, Vector, VectorError, VectorMatch, WorkerVersion } = __ns_bynk_cloudflare;
     type AiError = __ns_bynk_cloudflare.AiError;
     type ChatMessage = __ns_bynk_cloudflare.ChatMessage;
     type ChatRole = __ns_bynk_cloudflare.ChatRole;
+    type Condition = __ns_bynk_cloudflare.Condition;
     type DataPoint = __ns_bynk_cloudflare.DataPoint;
     type DmarcVerdict = __ns_bynk_cloudflare.DmarcVerdict;
     type EmailAttachment = __ns_bynk_cloudflare.EmailAttachment;
@@ -539,10 +560,12 @@ async function test_the_clock_reads_the_epoch() {
     type EmailMessage = __ns_bynk_cloudflare.EmailMessage;
     type EmailReply = __ns_bynk_cloudflare.EmailReply;
     type EmailVerdict = __ns_bynk_cloudflare.EmailVerdict;
+    type FilterOp = __ns_bynk_cloudflare.FilterOp;
     type GenerateRequest = __ns_bynk_cloudflare.GenerateRequest;
     type Generation = __ns_bynk_cloudflare.Generation;
     type InboundAttachment = __ns_bynk_cloudflare.InboundAttachment;
     type InboundEmail = __ns_bynk_cloudflare.InboundEmail;
+    type IndexInfo = __ns_bynk_cloudflare.IndexInfo;
     type KvEntry = __ns_bynk_cloudflare.KvEntry;
     type KvExpiration = __ns_bynk_cloudflare.KvExpiration;
     type KvGet = __ns_bynk_cloudflare.KvGet;
@@ -550,6 +573,9 @@ async function test_the_clock_reads_the_epoch() {
     type KvList = __ns_bynk_cloudflare.KvList;
     type KvListing = __ns_bynk_cloudflare.KvListing;
     type KvPut = __ns_bynk_cloudflare.KvPut;
+    type MetaValue = __ns_bynk_cloudflare.MetaValue;
+    type MetadataScope = __ns_bynk_cloudflare.MetadataScope;
+    type Mutation = __ns_bynk_cloudflare.Mutation;
     type MySqlError = __ns_bynk_cloudflare.MySqlError;
     type MySqlReadError = __ns_bynk_cloudflare.MySqlReadError;
     type MySqlRun = __ns_bynk_cloudflare.MySqlRun;
@@ -560,6 +586,7 @@ async function test_the_clock_reads_the_epoch() {
     type PgRun = __ns_bynk_cloudflare.PgRun;
     type PgStatement = __ns_bynk_cloudflare.PgStatement;
     type PgValue = __ns_bynk_cloudflare.PgValue;
+    type QueryOptions = __ns_bynk_cloudflare.QueryOptions;
     type QueueSend = __ns_bynk_cloudflare.QueueSend;
     type R2Body = __ns_bynk_cloudflare.R2Body;
     type R2Condition = __ns_bynk_cloudflare.R2Condition;
@@ -576,6 +603,9 @@ async function test_the_clock_reads_the_epoch() {
     type SqlStatement = __ns_bynk_cloudflare.SqlStatement;
     type SqlValue = __ns_bynk_cloudflare.SqlValue;
     type TokenUsage = __ns_bynk_cloudflare.TokenUsage;
+    type Vector = __ns_bynk_cloudflare.Vector;
+    type VectorError = __ns_bynk_cloudflare.VectorError;
+    type VectorMatch = __ns_bynk_cloudflare.VectorMatch;
     type WorkerVersion = __ns_bynk_cloudflare.WorkerVersion;
     const t = await clock.call(deps);
     if (!(t === 0)) { throw __bynkExpectFailure("tests/demo/plat.bynk:8:10", 238, 244, "expect t == 0\n  expected: t == 0\n  actual:   " + __bynkShow((t)) + " == " + __bynkShow((0))); }
@@ -614,10 +644,11 @@ async function test_random_integers_come_from_a_fixed_seed() {
     type StreamResponse = __ns_bynk.StreamResponse;
     type TimedOut = __ns_bynk.TimedOut;
     type Uuid = __ns_bynk.Uuid;
-    const { AiError, ChatMessage, ChatRole, DataPoint, DmarcVerdict, EmailAttachment, EmailError, EmailMessage, EmailReply, EmailVerdict, GenerateRequest, Generation, InboundAttachment, InboundEmail, KvEntry, KvExpiration, KvGet, KvKey, KvList, KvListing, KvPut, MySqlError, MySqlReadError, MySqlRun, MySqlStatement, MySqlValue, PgError, PgReadError, PgRun, PgStatement, PgValue, QueueSend, R2Body, R2Condition, R2Listing, R2Object, R2Part, R2Put, R2Upload, R2UploadOptions, SenderIdentity, SqlError, SqlReadError, SqlRun, SqlStatement, SqlValue, TokenUsage, WorkerVersion } = __ns_bynk_cloudflare;
+    const { AiError, ChatMessage, ChatRole, Condition, DataPoint, DmarcVerdict, EmailAttachment, EmailError, EmailMessage, EmailReply, EmailVerdict, FilterOp, GenerateRequest, Generation, InboundAttachment, InboundEmail, IndexInfo, KvEntry, KvExpiration, KvGet, KvKey, KvList, KvListing, KvPut, MetaValue, MetadataScope, Mutation, MySqlError, MySqlReadError, MySqlRun, MySqlStatement, MySqlValue, PgError, PgReadError, PgRun, PgStatement, PgValue, QueryOptions, QueueSend, R2Body, R2Condition, R2Listing, R2Object, R2Part, R2Put, R2Upload, R2UploadOptions, SenderIdentity, SqlError, SqlReadError, SqlRun, SqlStatement, SqlValue, TokenUsage, Vector, VectorError, VectorMatch, WorkerVersion } = __ns_bynk_cloudflare;
     type AiError = __ns_bynk_cloudflare.AiError;
     type ChatMessage = __ns_bynk_cloudflare.ChatMessage;
     type ChatRole = __ns_bynk_cloudflare.ChatRole;
+    type Condition = __ns_bynk_cloudflare.Condition;
     type DataPoint = __ns_bynk_cloudflare.DataPoint;
     type DmarcVerdict = __ns_bynk_cloudflare.DmarcVerdict;
     type EmailAttachment = __ns_bynk_cloudflare.EmailAttachment;
@@ -625,10 +656,12 @@ async function test_random_integers_come_from_a_fixed_seed() {
     type EmailMessage = __ns_bynk_cloudflare.EmailMessage;
     type EmailReply = __ns_bynk_cloudflare.EmailReply;
     type EmailVerdict = __ns_bynk_cloudflare.EmailVerdict;
+    type FilterOp = __ns_bynk_cloudflare.FilterOp;
     type GenerateRequest = __ns_bynk_cloudflare.GenerateRequest;
     type Generation = __ns_bynk_cloudflare.Generation;
     type InboundAttachment = __ns_bynk_cloudflare.InboundAttachment;
     type InboundEmail = __ns_bynk_cloudflare.InboundEmail;
+    type IndexInfo = __ns_bynk_cloudflare.IndexInfo;
     type KvEntry = __ns_bynk_cloudflare.KvEntry;
     type KvExpiration = __ns_bynk_cloudflare.KvExpiration;
     type KvGet = __ns_bynk_cloudflare.KvGet;
@@ -636,6 +669,9 @@ async function test_random_integers_come_from_a_fixed_seed() {
     type KvList = __ns_bynk_cloudflare.KvList;
     type KvListing = __ns_bynk_cloudflare.KvListing;
     type KvPut = __ns_bynk_cloudflare.KvPut;
+    type MetaValue = __ns_bynk_cloudflare.MetaValue;
+    type MetadataScope = __ns_bynk_cloudflare.MetadataScope;
+    type Mutation = __ns_bynk_cloudflare.Mutation;
     type MySqlError = __ns_bynk_cloudflare.MySqlError;
     type MySqlReadError = __ns_bynk_cloudflare.MySqlReadError;
     type MySqlRun = __ns_bynk_cloudflare.MySqlRun;
@@ -646,6 +682,7 @@ async function test_random_integers_come_from_a_fixed_seed() {
     type PgRun = __ns_bynk_cloudflare.PgRun;
     type PgStatement = __ns_bynk_cloudflare.PgStatement;
     type PgValue = __ns_bynk_cloudflare.PgValue;
+    type QueryOptions = __ns_bynk_cloudflare.QueryOptions;
     type QueueSend = __ns_bynk_cloudflare.QueueSend;
     type R2Body = __ns_bynk_cloudflare.R2Body;
     type R2Condition = __ns_bynk_cloudflare.R2Condition;
@@ -662,6 +699,9 @@ async function test_random_integers_come_from_a_fixed_seed() {
     type SqlStatement = __ns_bynk_cloudflare.SqlStatement;
     type SqlValue = __ns_bynk_cloudflare.SqlValue;
     type TokenUsage = __ns_bynk_cloudflare.TokenUsage;
+    type Vector = __ns_bynk_cloudflare.Vector;
+    type VectorError = __ns_bynk_cloudflare.VectorError;
+    type VectorMatch = __ns_bynk_cloudflare.VectorMatch;
     type WorkerVersion = __ns_bynk_cloudflare.WorkerVersion;
     const xs = await draws.call(deps);
     if (!(__bynkEq(xs, [156, 731]))) { throw __bynkExpectFailure("tests/demo/plat.bynk:13:10", 330, 346, "expect xs == [156, 731]\n  expected: xs == [156, 731]\n  actual:   " + __bynkShow((xs)) + " == " + __bynkShow(([156, 731]))); }
@@ -700,10 +740,11 @@ async function test_random_uuids_count_up() {
     type StreamResponse = __ns_bynk.StreamResponse;
     type TimedOut = __ns_bynk.TimedOut;
     type Uuid = __ns_bynk.Uuid;
-    const { AiError, ChatMessage, ChatRole, DataPoint, DmarcVerdict, EmailAttachment, EmailError, EmailMessage, EmailReply, EmailVerdict, GenerateRequest, Generation, InboundAttachment, InboundEmail, KvEntry, KvExpiration, KvGet, KvKey, KvList, KvListing, KvPut, MySqlError, MySqlReadError, MySqlRun, MySqlStatement, MySqlValue, PgError, PgReadError, PgRun, PgStatement, PgValue, QueueSend, R2Body, R2Condition, R2Listing, R2Object, R2Part, R2Put, R2Upload, R2UploadOptions, SenderIdentity, SqlError, SqlReadError, SqlRun, SqlStatement, SqlValue, TokenUsage, WorkerVersion } = __ns_bynk_cloudflare;
+    const { AiError, ChatMessage, ChatRole, Condition, DataPoint, DmarcVerdict, EmailAttachment, EmailError, EmailMessage, EmailReply, EmailVerdict, FilterOp, GenerateRequest, Generation, InboundAttachment, InboundEmail, IndexInfo, KvEntry, KvExpiration, KvGet, KvKey, KvList, KvListing, KvPut, MetaValue, MetadataScope, Mutation, MySqlError, MySqlReadError, MySqlRun, MySqlStatement, MySqlValue, PgError, PgReadError, PgRun, PgStatement, PgValue, QueryOptions, QueueSend, R2Body, R2Condition, R2Listing, R2Object, R2Part, R2Put, R2Upload, R2UploadOptions, SenderIdentity, SqlError, SqlReadError, SqlRun, SqlStatement, SqlValue, TokenUsage, Vector, VectorError, VectorMatch, WorkerVersion } = __ns_bynk_cloudflare;
     type AiError = __ns_bynk_cloudflare.AiError;
     type ChatMessage = __ns_bynk_cloudflare.ChatMessage;
     type ChatRole = __ns_bynk_cloudflare.ChatRole;
+    type Condition = __ns_bynk_cloudflare.Condition;
     type DataPoint = __ns_bynk_cloudflare.DataPoint;
     type DmarcVerdict = __ns_bynk_cloudflare.DmarcVerdict;
     type EmailAttachment = __ns_bynk_cloudflare.EmailAttachment;
@@ -711,10 +752,12 @@ async function test_random_uuids_count_up() {
     type EmailMessage = __ns_bynk_cloudflare.EmailMessage;
     type EmailReply = __ns_bynk_cloudflare.EmailReply;
     type EmailVerdict = __ns_bynk_cloudflare.EmailVerdict;
+    type FilterOp = __ns_bynk_cloudflare.FilterOp;
     type GenerateRequest = __ns_bynk_cloudflare.GenerateRequest;
     type Generation = __ns_bynk_cloudflare.Generation;
     type InboundAttachment = __ns_bynk_cloudflare.InboundAttachment;
     type InboundEmail = __ns_bynk_cloudflare.InboundEmail;
+    type IndexInfo = __ns_bynk_cloudflare.IndexInfo;
     type KvEntry = __ns_bynk_cloudflare.KvEntry;
     type KvExpiration = __ns_bynk_cloudflare.KvExpiration;
     type KvGet = __ns_bynk_cloudflare.KvGet;
@@ -722,6 +765,9 @@ async function test_random_uuids_count_up() {
     type KvList = __ns_bynk_cloudflare.KvList;
     type KvListing = __ns_bynk_cloudflare.KvListing;
     type KvPut = __ns_bynk_cloudflare.KvPut;
+    type MetaValue = __ns_bynk_cloudflare.MetaValue;
+    type MetadataScope = __ns_bynk_cloudflare.MetadataScope;
+    type Mutation = __ns_bynk_cloudflare.Mutation;
     type MySqlError = __ns_bynk_cloudflare.MySqlError;
     type MySqlReadError = __ns_bynk_cloudflare.MySqlReadError;
     type MySqlRun = __ns_bynk_cloudflare.MySqlRun;
@@ -732,6 +778,7 @@ async function test_random_uuids_count_up() {
     type PgRun = __ns_bynk_cloudflare.PgRun;
     type PgStatement = __ns_bynk_cloudflare.PgStatement;
     type PgValue = __ns_bynk_cloudflare.PgValue;
+    type QueryOptions = __ns_bynk_cloudflare.QueryOptions;
     type QueueSend = __ns_bynk_cloudflare.QueueSend;
     type R2Body = __ns_bynk_cloudflare.R2Body;
     type R2Condition = __ns_bynk_cloudflare.R2Condition;
@@ -748,6 +795,9 @@ async function test_random_uuids_count_up() {
     type SqlStatement = __ns_bynk_cloudflare.SqlStatement;
     type SqlValue = __ns_bynk_cloudflare.SqlValue;
     type TokenUsage = __ns_bynk_cloudflare.TokenUsage;
+    type Vector = __ns_bynk_cloudflare.Vector;
+    type VectorError = __ns_bynk_cloudflare.VectorError;
+    type VectorMatch = __ns_bynk_cloudflare.VectorMatch;
     type WorkerVersion = __ns_bynk_cloudflare.WorkerVersion;
     const xs = await ids.call(deps);
     if (!(__bynkEq(xs, ["00000000-0000-4000-8000-000000000001", "00000000-0000-4000-8000-000000000002"]))) { throw __bynkExpectFailure("tests/demo/plat.bynk:18:10", 413, 499, "expect xs == [\"00000000-0000-4000-8000-000000000001\", \"00000000-0000-4000-8000-000000000002\"]\n  expected: xs == [\"00000000-0000-4000-8000-000000000001\", \"00000000-0000-4000-8000-000000000002\"]\n  actual:   " + __bynkShow((xs)) + " == " + __bynkShow((["00000000-0000-4000-8000-000000000001", "00000000-0000-4000-8000-000000000002"]))); }
@@ -786,10 +836,11 @@ async function test_no_secret_is_set() {
     type StreamResponse = __ns_bynk.StreamResponse;
     type TimedOut = __ns_bynk.TimedOut;
     type Uuid = __ns_bynk.Uuid;
-    const { AiError, ChatMessage, ChatRole, DataPoint, DmarcVerdict, EmailAttachment, EmailError, EmailMessage, EmailReply, EmailVerdict, GenerateRequest, Generation, InboundAttachment, InboundEmail, KvEntry, KvExpiration, KvGet, KvKey, KvList, KvListing, KvPut, MySqlError, MySqlReadError, MySqlRun, MySqlStatement, MySqlValue, PgError, PgReadError, PgRun, PgStatement, PgValue, QueueSend, R2Body, R2Condition, R2Listing, R2Object, R2Part, R2Put, R2Upload, R2UploadOptions, SenderIdentity, SqlError, SqlReadError, SqlRun, SqlStatement, SqlValue, TokenUsage, WorkerVersion } = __ns_bynk_cloudflare;
+    const { AiError, ChatMessage, ChatRole, Condition, DataPoint, DmarcVerdict, EmailAttachment, EmailError, EmailMessage, EmailReply, EmailVerdict, FilterOp, GenerateRequest, Generation, InboundAttachment, InboundEmail, IndexInfo, KvEntry, KvExpiration, KvGet, KvKey, KvList, KvListing, KvPut, MetaValue, MetadataScope, Mutation, MySqlError, MySqlReadError, MySqlRun, MySqlStatement, MySqlValue, PgError, PgReadError, PgRun, PgStatement, PgValue, QueryOptions, QueueSend, R2Body, R2Condition, R2Listing, R2Object, R2Part, R2Put, R2Upload, R2UploadOptions, SenderIdentity, SqlError, SqlReadError, SqlRun, SqlStatement, SqlValue, TokenUsage, Vector, VectorError, VectorMatch, WorkerVersion } = __ns_bynk_cloudflare;
     type AiError = __ns_bynk_cloudflare.AiError;
     type ChatMessage = __ns_bynk_cloudflare.ChatMessage;
     type ChatRole = __ns_bynk_cloudflare.ChatRole;
+    type Condition = __ns_bynk_cloudflare.Condition;
     type DataPoint = __ns_bynk_cloudflare.DataPoint;
     type DmarcVerdict = __ns_bynk_cloudflare.DmarcVerdict;
     type EmailAttachment = __ns_bynk_cloudflare.EmailAttachment;
@@ -797,10 +848,12 @@ async function test_no_secret_is_set() {
     type EmailMessage = __ns_bynk_cloudflare.EmailMessage;
     type EmailReply = __ns_bynk_cloudflare.EmailReply;
     type EmailVerdict = __ns_bynk_cloudflare.EmailVerdict;
+    type FilterOp = __ns_bynk_cloudflare.FilterOp;
     type GenerateRequest = __ns_bynk_cloudflare.GenerateRequest;
     type Generation = __ns_bynk_cloudflare.Generation;
     type InboundAttachment = __ns_bynk_cloudflare.InboundAttachment;
     type InboundEmail = __ns_bynk_cloudflare.InboundEmail;
+    type IndexInfo = __ns_bynk_cloudflare.IndexInfo;
     type KvEntry = __ns_bynk_cloudflare.KvEntry;
     type KvExpiration = __ns_bynk_cloudflare.KvExpiration;
     type KvGet = __ns_bynk_cloudflare.KvGet;
@@ -808,6 +861,9 @@ async function test_no_secret_is_set() {
     type KvList = __ns_bynk_cloudflare.KvList;
     type KvListing = __ns_bynk_cloudflare.KvListing;
     type KvPut = __ns_bynk_cloudflare.KvPut;
+    type MetaValue = __ns_bynk_cloudflare.MetaValue;
+    type MetadataScope = __ns_bynk_cloudflare.MetadataScope;
+    type Mutation = __ns_bynk_cloudflare.Mutation;
     type MySqlError = __ns_bynk_cloudflare.MySqlError;
     type MySqlReadError = __ns_bynk_cloudflare.MySqlReadError;
     type MySqlRun = __ns_bynk_cloudflare.MySqlRun;
@@ -818,6 +874,7 @@ async function test_no_secret_is_set() {
     type PgRun = __ns_bynk_cloudflare.PgRun;
     type PgStatement = __ns_bynk_cloudflare.PgStatement;
     type PgValue = __ns_bynk_cloudflare.PgValue;
+    type QueryOptions = __ns_bynk_cloudflare.QueryOptions;
     type QueueSend = __ns_bynk_cloudflare.QueueSend;
     type R2Body = __ns_bynk_cloudflare.R2Body;
     type R2Condition = __ns_bynk_cloudflare.R2Condition;
@@ -834,6 +891,9 @@ async function test_no_secret_is_set() {
     type SqlStatement = __ns_bynk_cloudflare.SqlStatement;
     type SqlValue = __ns_bynk_cloudflare.SqlValue;
     type TokenUsage = __ns_bynk_cloudflare.TokenUsage;
+    type Vector = __ns_bynk_cloudflare.Vector;
+    type VectorError = __ns_bynk_cloudflare.VectorError;
+    type VectorMatch = __ns_bynk_cloudflare.VectorMatch;
     type WorkerVersion = __ns_bynk_cloudflare.WorkerVersion;
     const s = await secret.call("API_KEY", deps);
     if (!(((__c: boolean) => __c)(s.tag === "None"))) { throw __bynkExpectFailure("tests/demo/plat.bynk:23:10", 572, 581, "expect s is None"); }
@@ -872,10 +932,11 @@ async function test_the_locale_is_en() {
     type StreamResponse = __ns_bynk.StreamResponse;
     type TimedOut = __ns_bynk.TimedOut;
     type Uuid = __ns_bynk.Uuid;
-    const { AiError, ChatMessage, ChatRole, DataPoint, DmarcVerdict, EmailAttachment, EmailError, EmailMessage, EmailReply, EmailVerdict, GenerateRequest, Generation, InboundAttachment, InboundEmail, KvEntry, KvExpiration, KvGet, KvKey, KvList, KvListing, KvPut, MySqlError, MySqlReadError, MySqlRun, MySqlStatement, MySqlValue, PgError, PgReadError, PgRun, PgStatement, PgValue, QueueSend, R2Body, R2Condition, R2Listing, R2Object, R2Part, R2Put, R2Upload, R2UploadOptions, SenderIdentity, SqlError, SqlReadError, SqlRun, SqlStatement, SqlValue, TokenUsage, WorkerVersion } = __ns_bynk_cloudflare;
+    const { AiError, ChatMessage, ChatRole, Condition, DataPoint, DmarcVerdict, EmailAttachment, EmailError, EmailMessage, EmailReply, EmailVerdict, FilterOp, GenerateRequest, Generation, InboundAttachment, InboundEmail, IndexInfo, KvEntry, KvExpiration, KvGet, KvKey, KvList, KvListing, KvPut, MetaValue, MetadataScope, Mutation, MySqlError, MySqlReadError, MySqlRun, MySqlStatement, MySqlValue, PgError, PgReadError, PgRun, PgStatement, PgValue, QueryOptions, QueueSend, R2Body, R2Condition, R2Listing, R2Object, R2Part, R2Put, R2Upload, R2UploadOptions, SenderIdentity, SqlError, SqlReadError, SqlRun, SqlStatement, SqlValue, TokenUsage, Vector, VectorError, VectorMatch, WorkerVersion } = __ns_bynk_cloudflare;
     type AiError = __ns_bynk_cloudflare.AiError;
     type ChatMessage = __ns_bynk_cloudflare.ChatMessage;
     type ChatRole = __ns_bynk_cloudflare.ChatRole;
+    type Condition = __ns_bynk_cloudflare.Condition;
     type DataPoint = __ns_bynk_cloudflare.DataPoint;
     type DmarcVerdict = __ns_bynk_cloudflare.DmarcVerdict;
     type EmailAttachment = __ns_bynk_cloudflare.EmailAttachment;
@@ -883,10 +944,12 @@ async function test_the_locale_is_en() {
     type EmailMessage = __ns_bynk_cloudflare.EmailMessage;
     type EmailReply = __ns_bynk_cloudflare.EmailReply;
     type EmailVerdict = __ns_bynk_cloudflare.EmailVerdict;
+    type FilterOp = __ns_bynk_cloudflare.FilterOp;
     type GenerateRequest = __ns_bynk_cloudflare.GenerateRequest;
     type Generation = __ns_bynk_cloudflare.Generation;
     type InboundAttachment = __ns_bynk_cloudflare.InboundAttachment;
     type InboundEmail = __ns_bynk_cloudflare.InboundEmail;
+    type IndexInfo = __ns_bynk_cloudflare.IndexInfo;
     type KvEntry = __ns_bynk_cloudflare.KvEntry;
     type KvExpiration = __ns_bynk_cloudflare.KvExpiration;
     type KvGet = __ns_bynk_cloudflare.KvGet;
@@ -894,6 +957,9 @@ async function test_the_locale_is_en() {
     type KvList = __ns_bynk_cloudflare.KvList;
     type KvListing = __ns_bynk_cloudflare.KvListing;
     type KvPut = __ns_bynk_cloudflare.KvPut;
+    type MetaValue = __ns_bynk_cloudflare.MetaValue;
+    type MetadataScope = __ns_bynk_cloudflare.MetadataScope;
+    type Mutation = __ns_bynk_cloudflare.Mutation;
     type MySqlError = __ns_bynk_cloudflare.MySqlError;
     type MySqlReadError = __ns_bynk_cloudflare.MySqlReadError;
     type MySqlRun = __ns_bynk_cloudflare.MySqlRun;
@@ -904,6 +970,7 @@ async function test_the_locale_is_en() {
     type PgRun = __ns_bynk_cloudflare.PgRun;
     type PgStatement = __ns_bynk_cloudflare.PgStatement;
     type PgValue = __ns_bynk_cloudflare.PgValue;
+    type QueryOptions = __ns_bynk_cloudflare.QueryOptions;
     type QueueSend = __ns_bynk_cloudflare.QueueSend;
     type R2Body = __ns_bynk_cloudflare.R2Body;
     type R2Condition = __ns_bynk_cloudflare.R2Condition;
@@ -920,6 +987,9 @@ async function test_the_locale_is_en() {
     type SqlStatement = __ns_bynk_cloudflare.SqlStatement;
     type SqlValue = __ns_bynk_cloudflare.SqlValue;
     type TokenUsage = __ns_bynk_cloudflare.TokenUsage;
+    type Vector = __ns_bynk_cloudflare.Vector;
+    type VectorError = __ns_bynk_cloudflare.VectorError;
+    type VectorMatch = __ns_bynk_cloudflare.VectorMatch;
     type WorkerVersion = __ns_bynk_cloudflare.WorkerVersion;
     const l = await locale.call(deps);
     if (!(l === "en")) { throw __bynkExpectFailure("tests/demo/plat.bynk:28:10", 645, 654, "expect l == \"en\"\n  expected: l == \"en\"\n  actual:   " + __bynkShow((l)) + " == " + __bynkShow(("en"))); }
@@ -959,10 +1029,11 @@ async function test_the_logger_records_without_printing() {
     type StreamResponse = __ns_bynk.StreamResponse;
     type TimedOut = __ns_bynk.TimedOut;
     type Uuid = __ns_bynk.Uuid;
-    const { AiError, ChatMessage, ChatRole, DataPoint, DmarcVerdict, EmailAttachment, EmailError, EmailMessage, EmailReply, EmailVerdict, GenerateRequest, Generation, InboundAttachment, InboundEmail, KvEntry, KvExpiration, KvGet, KvKey, KvList, KvListing, KvPut, MySqlError, MySqlReadError, MySqlRun, MySqlStatement, MySqlValue, PgError, PgReadError, PgRun, PgStatement, PgValue, QueueSend, R2Body, R2Condition, R2Listing, R2Object, R2Part, R2Put, R2Upload, R2UploadOptions, SenderIdentity, SqlError, SqlReadError, SqlRun, SqlStatement, SqlValue, TokenUsage, WorkerVersion } = __ns_bynk_cloudflare;
+    const { AiError, ChatMessage, ChatRole, Condition, DataPoint, DmarcVerdict, EmailAttachment, EmailError, EmailMessage, EmailReply, EmailVerdict, FilterOp, GenerateRequest, Generation, InboundAttachment, InboundEmail, IndexInfo, KvEntry, KvExpiration, KvGet, KvKey, KvList, KvListing, KvPut, MetaValue, MetadataScope, Mutation, MySqlError, MySqlReadError, MySqlRun, MySqlStatement, MySqlValue, PgError, PgReadError, PgRun, PgStatement, PgValue, QueryOptions, QueueSend, R2Body, R2Condition, R2Listing, R2Object, R2Part, R2Put, R2Upload, R2UploadOptions, SenderIdentity, SqlError, SqlReadError, SqlRun, SqlStatement, SqlValue, TokenUsage, Vector, VectorError, VectorMatch, WorkerVersion } = __ns_bynk_cloudflare;
     type AiError = __ns_bynk_cloudflare.AiError;
     type ChatMessage = __ns_bynk_cloudflare.ChatMessage;
     type ChatRole = __ns_bynk_cloudflare.ChatRole;
+    type Condition = __ns_bynk_cloudflare.Condition;
     type DataPoint = __ns_bynk_cloudflare.DataPoint;
     type DmarcVerdict = __ns_bynk_cloudflare.DmarcVerdict;
     type EmailAttachment = __ns_bynk_cloudflare.EmailAttachment;
@@ -970,10 +1041,12 @@ async function test_the_logger_records_without_printing() {
     type EmailMessage = __ns_bynk_cloudflare.EmailMessage;
     type EmailReply = __ns_bynk_cloudflare.EmailReply;
     type EmailVerdict = __ns_bynk_cloudflare.EmailVerdict;
+    type FilterOp = __ns_bynk_cloudflare.FilterOp;
     type GenerateRequest = __ns_bynk_cloudflare.GenerateRequest;
     type Generation = __ns_bynk_cloudflare.Generation;
     type InboundAttachment = __ns_bynk_cloudflare.InboundAttachment;
     type InboundEmail = __ns_bynk_cloudflare.InboundEmail;
+    type IndexInfo = __ns_bynk_cloudflare.IndexInfo;
     type KvEntry = __ns_bynk_cloudflare.KvEntry;
     type KvExpiration = __ns_bynk_cloudflare.KvExpiration;
     type KvGet = __ns_bynk_cloudflare.KvGet;
@@ -981,6 +1054,9 @@ async function test_the_logger_records_without_printing() {
     type KvList = __ns_bynk_cloudflare.KvList;
     type KvListing = __ns_bynk_cloudflare.KvListing;
     type KvPut = __ns_bynk_cloudflare.KvPut;
+    type MetaValue = __ns_bynk_cloudflare.MetaValue;
+    type MetadataScope = __ns_bynk_cloudflare.MetadataScope;
+    type Mutation = __ns_bynk_cloudflare.Mutation;
     type MySqlError = __ns_bynk_cloudflare.MySqlError;
     type MySqlReadError = __ns_bynk_cloudflare.MySqlReadError;
     type MySqlRun = __ns_bynk_cloudflare.MySqlRun;
@@ -991,6 +1067,7 @@ async function test_the_logger_records_without_printing() {
     type PgRun = __ns_bynk_cloudflare.PgRun;
     type PgStatement = __ns_bynk_cloudflare.PgStatement;
     type PgValue = __ns_bynk_cloudflare.PgValue;
+    type QueryOptions = __ns_bynk_cloudflare.QueryOptions;
     type QueueSend = __ns_bynk_cloudflare.QueueSend;
     type R2Body = __ns_bynk_cloudflare.R2Body;
     type R2Condition = __ns_bynk_cloudflare.R2Condition;
@@ -1007,6 +1084,9 @@ async function test_the_logger_records_without_printing() {
     type SqlStatement = __ns_bynk_cloudflare.SqlStatement;
     type SqlValue = __ns_bynk_cloudflare.SqlValue;
     type TokenUsage = __ns_bynk_cloudflare.TokenUsage;
+    type Vector = __ns_bynk_cloudflare.Vector;
+    type VectorError = __ns_bynk_cloudflare.VectorError;
+    type VectorMatch = __ns_bynk_cloudflare.VectorMatch;
     type WorkerVersion = __ns_bynk_cloudflare.WorkerVersion;
     const __r0 = await greet.call("ann", deps);
     if (!((((__obs.log["Logger.info"] ?? []).filter((__c: { args: unknown[] }) => { const { msg } = { msg: __c.args[0] } as __Logger_info_Call; return (msg === "hello ann"); }).length) === (1)))) { throw __bynkExpectFailure("tests/demo/plat.bynk:33:10", 741, 788, "expect Logger.info called once with msg == \"hello ann\""); }
@@ -1046,10 +1126,11 @@ async function test_idempotency_remembers_within_a_case() {
     type StreamResponse = __ns_bynk.StreamResponse;
     type TimedOut = __ns_bynk.TimedOut;
     type Uuid = __ns_bynk.Uuid;
-    const { AiError, ChatMessage, ChatRole, DataPoint, DmarcVerdict, EmailAttachment, EmailError, EmailMessage, EmailReply, EmailVerdict, GenerateRequest, Generation, InboundAttachment, InboundEmail, KvEntry, KvExpiration, KvGet, KvKey, KvList, KvListing, KvPut, MySqlError, MySqlReadError, MySqlRun, MySqlStatement, MySqlValue, PgError, PgReadError, PgRun, PgStatement, PgValue, QueueSend, R2Body, R2Condition, R2Listing, R2Object, R2Part, R2Put, R2Upload, R2UploadOptions, SenderIdentity, SqlError, SqlReadError, SqlRun, SqlStatement, SqlValue, TokenUsage, WorkerVersion } = __ns_bynk_cloudflare;
+    const { AiError, ChatMessage, ChatRole, Condition, DataPoint, DmarcVerdict, EmailAttachment, EmailError, EmailMessage, EmailReply, EmailVerdict, FilterOp, GenerateRequest, Generation, InboundAttachment, InboundEmail, IndexInfo, KvEntry, KvExpiration, KvGet, KvKey, KvList, KvListing, KvPut, MetaValue, MetadataScope, Mutation, MySqlError, MySqlReadError, MySqlRun, MySqlStatement, MySqlValue, PgError, PgReadError, PgRun, PgStatement, PgValue, QueryOptions, QueueSend, R2Body, R2Condition, R2Listing, R2Object, R2Part, R2Put, R2Upload, R2UploadOptions, SenderIdentity, SqlError, SqlReadError, SqlRun, SqlStatement, SqlValue, TokenUsage, Vector, VectorError, VectorMatch, WorkerVersion } = __ns_bynk_cloudflare;
     type AiError = __ns_bynk_cloudflare.AiError;
     type ChatMessage = __ns_bynk_cloudflare.ChatMessage;
     type ChatRole = __ns_bynk_cloudflare.ChatRole;
+    type Condition = __ns_bynk_cloudflare.Condition;
     type DataPoint = __ns_bynk_cloudflare.DataPoint;
     type DmarcVerdict = __ns_bynk_cloudflare.DmarcVerdict;
     type EmailAttachment = __ns_bynk_cloudflare.EmailAttachment;
@@ -1057,10 +1138,12 @@ async function test_idempotency_remembers_within_a_case() {
     type EmailMessage = __ns_bynk_cloudflare.EmailMessage;
     type EmailReply = __ns_bynk_cloudflare.EmailReply;
     type EmailVerdict = __ns_bynk_cloudflare.EmailVerdict;
+    type FilterOp = __ns_bynk_cloudflare.FilterOp;
     type GenerateRequest = __ns_bynk_cloudflare.GenerateRequest;
     type Generation = __ns_bynk_cloudflare.Generation;
     type InboundAttachment = __ns_bynk_cloudflare.InboundAttachment;
     type InboundEmail = __ns_bynk_cloudflare.InboundEmail;
+    type IndexInfo = __ns_bynk_cloudflare.IndexInfo;
     type KvEntry = __ns_bynk_cloudflare.KvEntry;
     type KvExpiration = __ns_bynk_cloudflare.KvExpiration;
     type KvGet = __ns_bynk_cloudflare.KvGet;
@@ -1068,6 +1151,9 @@ async function test_idempotency_remembers_within_a_case() {
     type KvList = __ns_bynk_cloudflare.KvList;
     type KvListing = __ns_bynk_cloudflare.KvListing;
     type KvPut = __ns_bynk_cloudflare.KvPut;
+    type MetaValue = __ns_bynk_cloudflare.MetaValue;
+    type MetadataScope = __ns_bynk_cloudflare.MetadataScope;
+    type Mutation = __ns_bynk_cloudflare.Mutation;
     type MySqlError = __ns_bynk_cloudflare.MySqlError;
     type MySqlReadError = __ns_bynk_cloudflare.MySqlReadError;
     type MySqlRun = __ns_bynk_cloudflare.MySqlRun;
@@ -1078,6 +1164,7 @@ async function test_idempotency_remembers_within_a_case() {
     type PgRun = __ns_bynk_cloudflare.PgRun;
     type PgStatement = __ns_bynk_cloudflare.PgStatement;
     type PgValue = __ns_bynk_cloudflare.PgValue;
+    type QueryOptions = __ns_bynk_cloudflare.QueryOptions;
     type QueueSend = __ns_bynk_cloudflare.QueueSend;
     type R2Body = __ns_bynk_cloudflare.R2Body;
     type R2Condition = __ns_bynk_cloudflare.R2Condition;
@@ -1094,6 +1181,9 @@ async function test_idempotency_remembers_within_a_case() {
     type SqlStatement = __ns_bynk_cloudflare.SqlStatement;
     type SqlValue = __ns_bynk_cloudflare.SqlValue;
     type TokenUsage = __ns_bynk_cloudflare.TokenUsage;
+    type Vector = __ns_bynk_cloudflare.Vector;
+    type VectorError = __ns_bynk_cloudflare.VectorError;
+    type VectorMatch = __ns_bynk_cloudflare.VectorMatch;
     type WorkerVersion = __ns_bynk_cloudflare.WorkerVersion;
     const first = await once.call("k", deps);
     const second = await once.call("k", deps);
@@ -1134,10 +1224,11 @@ async function test_idempotency_is_fresh_per_case() {
     type StreamResponse = __ns_bynk.StreamResponse;
     type TimedOut = __ns_bynk.TimedOut;
     type Uuid = __ns_bynk.Uuid;
-    const { AiError, ChatMessage, ChatRole, DataPoint, DmarcVerdict, EmailAttachment, EmailError, EmailMessage, EmailReply, EmailVerdict, GenerateRequest, Generation, InboundAttachment, InboundEmail, KvEntry, KvExpiration, KvGet, KvKey, KvList, KvListing, KvPut, MySqlError, MySqlReadError, MySqlRun, MySqlStatement, MySqlValue, PgError, PgReadError, PgRun, PgStatement, PgValue, QueueSend, R2Body, R2Condition, R2Listing, R2Object, R2Part, R2Put, R2Upload, R2UploadOptions, SenderIdentity, SqlError, SqlReadError, SqlRun, SqlStatement, SqlValue, TokenUsage, WorkerVersion } = __ns_bynk_cloudflare;
+    const { AiError, ChatMessage, ChatRole, Condition, DataPoint, DmarcVerdict, EmailAttachment, EmailError, EmailMessage, EmailReply, EmailVerdict, FilterOp, GenerateRequest, Generation, InboundAttachment, InboundEmail, IndexInfo, KvEntry, KvExpiration, KvGet, KvKey, KvList, KvListing, KvPut, MetaValue, MetadataScope, Mutation, MySqlError, MySqlReadError, MySqlRun, MySqlStatement, MySqlValue, PgError, PgReadError, PgRun, PgStatement, PgValue, QueryOptions, QueueSend, R2Body, R2Condition, R2Listing, R2Object, R2Part, R2Put, R2Upload, R2UploadOptions, SenderIdentity, SqlError, SqlReadError, SqlRun, SqlStatement, SqlValue, TokenUsage, Vector, VectorError, VectorMatch, WorkerVersion } = __ns_bynk_cloudflare;
     type AiError = __ns_bynk_cloudflare.AiError;
     type ChatMessage = __ns_bynk_cloudflare.ChatMessage;
     type ChatRole = __ns_bynk_cloudflare.ChatRole;
+    type Condition = __ns_bynk_cloudflare.Condition;
     type DataPoint = __ns_bynk_cloudflare.DataPoint;
     type DmarcVerdict = __ns_bynk_cloudflare.DmarcVerdict;
     type EmailAttachment = __ns_bynk_cloudflare.EmailAttachment;
@@ -1145,10 +1236,12 @@ async function test_idempotency_is_fresh_per_case() {
     type EmailMessage = __ns_bynk_cloudflare.EmailMessage;
     type EmailReply = __ns_bynk_cloudflare.EmailReply;
     type EmailVerdict = __ns_bynk_cloudflare.EmailVerdict;
+    type FilterOp = __ns_bynk_cloudflare.FilterOp;
     type GenerateRequest = __ns_bynk_cloudflare.GenerateRequest;
     type Generation = __ns_bynk_cloudflare.Generation;
     type InboundAttachment = __ns_bynk_cloudflare.InboundAttachment;
     type InboundEmail = __ns_bynk_cloudflare.InboundEmail;
+    type IndexInfo = __ns_bynk_cloudflare.IndexInfo;
     type KvEntry = __ns_bynk_cloudflare.KvEntry;
     type KvExpiration = __ns_bynk_cloudflare.KvExpiration;
     type KvGet = __ns_bynk_cloudflare.KvGet;
@@ -1156,6 +1249,9 @@ async function test_idempotency_is_fresh_per_case() {
     type KvList = __ns_bynk_cloudflare.KvList;
     type KvListing = __ns_bynk_cloudflare.KvListing;
     type KvPut = __ns_bynk_cloudflare.KvPut;
+    type MetaValue = __ns_bynk_cloudflare.MetaValue;
+    type MetadataScope = __ns_bynk_cloudflare.MetadataScope;
+    type Mutation = __ns_bynk_cloudflare.Mutation;
     type MySqlError = __ns_bynk_cloudflare.MySqlError;
     type MySqlReadError = __ns_bynk_cloudflare.MySqlReadError;
     type MySqlRun = __ns_bynk_cloudflare.MySqlRun;
@@ -1166,6 +1262,7 @@ async function test_idempotency_is_fresh_per_case() {
     type PgRun = __ns_bynk_cloudflare.PgRun;
     type PgStatement = __ns_bynk_cloudflare.PgStatement;
     type PgValue = __ns_bynk_cloudflare.PgValue;
+    type QueryOptions = __ns_bynk_cloudflare.QueryOptions;
     type QueueSend = __ns_bynk_cloudflare.QueueSend;
     type R2Body = __ns_bynk_cloudflare.R2Body;
     type R2Condition = __ns_bynk_cloudflare.R2Condition;
@@ -1182,6 +1279,9 @@ async function test_idempotency_is_fresh_per_case() {
     type SqlStatement = __ns_bynk_cloudflare.SqlStatement;
     type SqlValue = __ns_bynk_cloudflare.SqlValue;
     type TokenUsage = __ns_bynk_cloudflare.TokenUsage;
+    type Vector = __ns_bynk_cloudflare.Vector;
+    type VectorError = __ns_bynk_cloudflare.VectorError;
+    type VectorMatch = __ns_bynk_cloudflare.VectorMatch;
     type WorkerVersion = __ns_bynk_cloudflare.WorkerVersion;
     const first = await once.call("k", deps);
     if (!(first === true)) { throw __bynkExpectFailure("tests/demo/plat.bynk:46:10", 1062, 1075, "expect first == true\n  expected: first == true\n  actual:   " + __bynkShow((first)) + " == " + __bynkShow((true))); }
@@ -1221,10 +1321,11 @@ async function test_kv_is_in_memory() {
     type StreamResponse = __ns_bynk.StreamResponse;
     type TimedOut = __ns_bynk.TimedOut;
     type Uuid = __ns_bynk.Uuid;
-    const { AiError, ChatMessage, ChatRole, DataPoint, DmarcVerdict, EmailAttachment, EmailError, EmailMessage, EmailReply, EmailVerdict, GenerateRequest, Generation, InboundAttachment, InboundEmail, KvEntry, KvExpiration, KvGet, KvKey, KvList, KvListing, KvPut, MySqlError, MySqlReadError, MySqlRun, MySqlStatement, MySqlValue, PgError, PgReadError, PgRun, PgStatement, PgValue, QueueSend, R2Body, R2Condition, R2Listing, R2Object, R2Part, R2Put, R2Upload, R2UploadOptions, SenderIdentity, SqlError, SqlReadError, SqlRun, SqlStatement, SqlValue, TokenUsage, WorkerVersion } = __ns_bynk_cloudflare;
+    const { AiError, ChatMessage, ChatRole, Condition, DataPoint, DmarcVerdict, EmailAttachment, EmailError, EmailMessage, EmailReply, EmailVerdict, FilterOp, GenerateRequest, Generation, InboundAttachment, InboundEmail, IndexInfo, KvEntry, KvExpiration, KvGet, KvKey, KvList, KvListing, KvPut, MetaValue, MetadataScope, Mutation, MySqlError, MySqlReadError, MySqlRun, MySqlStatement, MySqlValue, PgError, PgReadError, PgRun, PgStatement, PgValue, QueryOptions, QueueSend, R2Body, R2Condition, R2Listing, R2Object, R2Part, R2Put, R2Upload, R2UploadOptions, SenderIdentity, SqlError, SqlReadError, SqlRun, SqlStatement, SqlValue, TokenUsage, Vector, VectorError, VectorMatch, WorkerVersion } = __ns_bynk_cloudflare;
     type AiError = __ns_bynk_cloudflare.AiError;
     type ChatMessage = __ns_bynk_cloudflare.ChatMessage;
     type ChatRole = __ns_bynk_cloudflare.ChatRole;
+    type Condition = __ns_bynk_cloudflare.Condition;
     type DataPoint = __ns_bynk_cloudflare.DataPoint;
     type DmarcVerdict = __ns_bynk_cloudflare.DmarcVerdict;
     type EmailAttachment = __ns_bynk_cloudflare.EmailAttachment;
@@ -1232,10 +1333,12 @@ async function test_kv_is_in_memory() {
     type EmailMessage = __ns_bynk_cloudflare.EmailMessage;
     type EmailReply = __ns_bynk_cloudflare.EmailReply;
     type EmailVerdict = __ns_bynk_cloudflare.EmailVerdict;
+    type FilterOp = __ns_bynk_cloudflare.FilterOp;
     type GenerateRequest = __ns_bynk_cloudflare.GenerateRequest;
     type Generation = __ns_bynk_cloudflare.Generation;
     type InboundAttachment = __ns_bynk_cloudflare.InboundAttachment;
     type InboundEmail = __ns_bynk_cloudflare.InboundEmail;
+    type IndexInfo = __ns_bynk_cloudflare.IndexInfo;
     type KvEntry = __ns_bynk_cloudflare.KvEntry;
     type KvExpiration = __ns_bynk_cloudflare.KvExpiration;
     type KvGet = __ns_bynk_cloudflare.KvGet;
@@ -1243,6 +1346,9 @@ async function test_kv_is_in_memory() {
     type KvList = __ns_bynk_cloudflare.KvList;
     type KvListing = __ns_bynk_cloudflare.KvListing;
     type KvPut = __ns_bynk_cloudflare.KvPut;
+    type MetaValue = __ns_bynk_cloudflare.MetaValue;
+    type MetadataScope = __ns_bynk_cloudflare.MetadataScope;
+    type Mutation = __ns_bynk_cloudflare.Mutation;
     type MySqlError = __ns_bynk_cloudflare.MySqlError;
     type MySqlReadError = __ns_bynk_cloudflare.MySqlReadError;
     type MySqlRun = __ns_bynk_cloudflare.MySqlRun;
@@ -1253,6 +1359,7 @@ async function test_kv_is_in_memory() {
     type PgRun = __ns_bynk_cloudflare.PgRun;
     type PgStatement = __ns_bynk_cloudflare.PgStatement;
     type PgValue = __ns_bynk_cloudflare.PgValue;
+    type QueryOptions = __ns_bynk_cloudflare.QueryOptions;
     type QueueSend = __ns_bynk_cloudflare.QueueSend;
     type R2Body = __ns_bynk_cloudflare.R2Body;
     type R2Condition = __ns_bynk_cloudflare.R2Condition;
@@ -1269,6 +1376,9 @@ async function test_kv_is_in_memory() {
     type SqlStatement = __ns_bynk_cloudflare.SqlStatement;
     type SqlValue = __ns_bynk_cloudflare.SqlValue;
     type TokenUsage = __ns_bynk_cloudflare.TokenUsage;
+    type Vector = __ns_bynk_cloudflare.Vector;
+    type VectorError = __ns_bynk_cloudflare.VectorError;
+    type VectorMatch = __ns_bynk_cloudflare.VectorMatch;
     type WorkerVersion = __ns_bynk_cloudflare.WorkerVersion;
     const r = await store.call("a", "1", deps);
     if (!(__bynkEq(r, Some("1")))) { throw __bynkExpectFailure("tests/demo/plat.bynk:51:10", 1145, 1159, "expect r == Some(\"1\")\n  expected: r == Some(\"1\")\n  actual:   " + __bynkShow((r)) + " == " + __bynkShow((Some("1")))); }
@@ -1308,10 +1418,11 @@ async function test_kv_is_fresh_per_case() {
     type StreamResponse = __ns_bynk.StreamResponse;
     type TimedOut = __ns_bynk.TimedOut;
     type Uuid = __ns_bynk.Uuid;
-    const { AiError, ChatMessage, ChatRole, DataPoint, DmarcVerdict, EmailAttachment, EmailError, EmailMessage, EmailReply, EmailVerdict, GenerateRequest, Generation, InboundAttachment, InboundEmail, KvEntry, KvExpiration, KvGet, KvKey, KvList, KvListing, KvPut, MySqlError, MySqlReadError, MySqlRun, MySqlStatement, MySqlValue, PgError, PgReadError, PgRun, PgStatement, PgValue, QueueSend, R2Body, R2Condition, R2Listing, R2Object, R2Part, R2Put, R2Upload, R2UploadOptions, SenderIdentity, SqlError, SqlReadError, SqlRun, SqlStatement, SqlValue, TokenUsage, WorkerVersion } = __ns_bynk_cloudflare;
+    const { AiError, ChatMessage, ChatRole, Condition, DataPoint, DmarcVerdict, EmailAttachment, EmailError, EmailMessage, EmailReply, EmailVerdict, FilterOp, GenerateRequest, Generation, InboundAttachment, InboundEmail, IndexInfo, KvEntry, KvExpiration, KvGet, KvKey, KvList, KvListing, KvPut, MetaValue, MetadataScope, Mutation, MySqlError, MySqlReadError, MySqlRun, MySqlStatement, MySqlValue, PgError, PgReadError, PgRun, PgStatement, PgValue, QueryOptions, QueueSend, R2Body, R2Condition, R2Listing, R2Object, R2Part, R2Put, R2Upload, R2UploadOptions, SenderIdentity, SqlError, SqlReadError, SqlRun, SqlStatement, SqlValue, TokenUsage, Vector, VectorError, VectorMatch, WorkerVersion } = __ns_bynk_cloudflare;
     type AiError = __ns_bynk_cloudflare.AiError;
     type ChatMessage = __ns_bynk_cloudflare.ChatMessage;
     type ChatRole = __ns_bynk_cloudflare.ChatRole;
+    type Condition = __ns_bynk_cloudflare.Condition;
     type DataPoint = __ns_bynk_cloudflare.DataPoint;
     type DmarcVerdict = __ns_bynk_cloudflare.DmarcVerdict;
     type EmailAttachment = __ns_bynk_cloudflare.EmailAttachment;
@@ -1319,10 +1430,12 @@ async function test_kv_is_fresh_per_case() {
     type EmailMessage = __ns_bynk_cloudflare.EmailMessage;
     type EmailReply = __ns_bynk_cloudflare.EmailReply;
     type EmailVerdict = __ns_bynk_cloudflare.EmailVerdict;
+    type FilterOp = __ns_bynk_cloudflare.FilterOp;
     type GenerateRequest = __ns_bynk_cloudflare.GenerateRequest;
     type Generation = __ns_bynk_cloudflare.Generation;
     type InboundAttachment = __ns_bynk_cloudflare.InboundAttachment;
     type InboundEmail = __ns_bynk_cloudflare.InboundEmail;
+    type IndexInfo = __ns_bynk_cloudflare.IndexInfo;
     type KvEntry = __ns_bynk_cloudflare.KvEntry;
     type KvExpiration = __ns_bynk_cloudflare.KvExpiration;
     type KvGet = __ns_bynk_cloudflare.KvGet;
@@ -1330,6 +1443,9 @@ async function test_kv_is_fresh_per_case() {
     type KvList = __ns_bynk_cloudflare.KvList;
     type KvListing = __ns_bynk_cloudflare.KvListing;
     type KvPut = __ns_bynk_cloudflare.KvPut;
+    type MetaValue = __ns_bynk_cloudflare.MetaValue;
+    type MetadataScope = __ns_bynk_cloudflare.MetadataScope;
+    type Mutation = __ns_bynk_cloudflare.Mutation;
     type MySqlError = __ns_bynk_cloudflare.MySqlError;
     type MySqlReadError = __ns_bynk_cloudflare.MySqlReadError;
     type MySqlRun = __ns_bynk_cloudflare.MySqlRun;
@@ -1340,6 +1456,7 @@ async function test_kv_is_fresh_per_case() {
     type PgRun = __ns_bynk_cloudflare.PgRun;
     type PgStatement = __ns_bynk_cloudflare.PgStatement;
     type PgValue = __ns_bynk_cloudflare.PgValue;
+    type QueryOptions = __ns_bynk_cloudflare.QueryOptions;
     type QueueSend = __ns_bynk_cloudflare.QueueSend;
     type R2Body = __ns_bynk_cloudflare.R2Body;
     type R2Condition = __ns_bynk_cloudflare.R2Condition;
@@ -1356,6 +1473,9 @@ async function test_kv_is_fresh_per_case() {
     type SqlStatement = __ns_bynk_cloudflare.SqlStatement;
     type SqlValue = __ns_bynk_cloudflare.SqlValue;
     type TokenUsage = __ns_bynk_cloudflare.TokenUsage;
+    type Vector = __ns_bynk_cloudflare.Vector;
+    type VectorError = __ns_bynk_cloudflare.VectorError;
+    type VectorMatch = __ns_bynk_cloudflare.VectorMatch;
     type WorkerVersion = __ns_bynk_cloudflare.WorkerVersion;
     const r = await lookup.call("a", deps);
     if (!(((__c: boolean) => __c)(r.tag === "None"))) { throw __bynkExpectFailure("tests/demo/plat.bynk:57:10", 1274, 1283, "expect r is None"); }
@@ -1395,10 +1515,11 @@ async function test_a_stubbed_operation_answers__the_rest_reach_the_double() {
     type StreamResponse = __ns_bynk.StreamResponse;
     type TimedOut = __ns_bynk.TimedOut;
     type Uuid = __ns_bynk.Uuid;
-    const { AiError, ChatMessage, ChatRole, DataPoint, DmarcVerdict, EmailAttachment, EmailError, EmailMessage, EmailReply, EmailVerdict, GenerateRequest, Generation, InboundAttachment, InboundEmail, KvEntry, KvExpiration, KvGet, KvKey, KvList, KvListing, KvPut, MySqlError, MySqlReadError, MySqlRun, MySqlStatement, MySqlValue, PgError, PgReadError, PgRun, PgStatement, PgValue, QueueSend, R2Body, R2Condition, R2Listing, R2Object, R2Part, R2Put, R2Upload, R2UploadOptions, SenderIdentity, SqlError, SqlReadError, SqlRun, SqlStatement, SqlValue, TokenUsage, WorkerVersion } = __ns_bynk_cloudflare;
+    const { AiError, ChatMessage, ChatRole, Condition, DataPoint, DmarcVerdict, EmailAttachment, EmailError, EmailMessage, EmailReply, EmailVerdict, FilterOp, GenerateRequest, Generation, InboundAttachment, InboundEmail, IndexInfo, KvEntry, KvExpiration, KvGet, KvKey, KvList, KvListing, KvPut, MetaValue, MetadataScope, Mutation, MySqlError, MySqlReadError, MySqlRun, MySqlStatement, MySqlValue, PgError, PgReadError, PgRun, PgStatement, PgValue, QueryOptions, QueueSend, R2Body, R2Condition, R2Listing, R2Object, R2Part, R2Put, R2Upload, R2UploadOptions, SenderIdentity, SqlError, SqlReadError, SqlRun, SqlStatement, SqlValue, TokenUsage, Vector, VectorError, VectorMatch, WorkerVersion } = __ns_bynk_cloudflare;
     type AiError = __ns_bynk_cloudflare.AiError;
     type ChatMessage = __ns_bynk_cloudflare.ChatMessage;
     type ChatRole = __ns_bynk_cloudflare.ChatRole;
+    type Condition = __ns_bynk_cloudflare.Condition;
     type DataPoint = __ns_bynk_cloudflare.DataPoint;
     type DmarcVerdict = __ns_bynk_cloudflare.DmarcVerdict;
     type EmailAttachment = __ns_bynk_cloudflare.EmailAttachment;
@@ -1406,10 +1527,12 @@ async function test_a_stubbed_operation_answers__the_rest_reach_the_double() {
     type EmailMessage = __ns_bynk_cloudflare.EmailMessage;
     type EmailReply = __ns_bynk_cloudflare.EmailReply;
     type EmailVerdict = __ns_bynk_cloudflare.EmailVerdict;
+    type FilterOp = __ns_bynk_cloudflare.FilterOp;
     type GenerateRequest = __ns_bynk_cloudflare.GenerateRequest;
     type Generation = __ns_bynk_cloudflare.Generation;
     type InboundAttachment = __ns_bynk_cloudflare.InboundAttachment;
     type InboundEmail = __ns_bynk_cloudflare.InboundEmail;
+    type IndexInfo = __ns_bynk_cloudflare.IndexInfo;
     type KvEntry = __ns_bynk_cloudflare.KvEntry;
     type KvExpiration = __ns_bynk_cloudflare.KvExpiration;
     type KvGet = __ns_bynk_cloudflare.KvGet;
@@ -1417,6 +1540,9 @@ async function test_a_stubbed_operation_answers__the_rest_reach_the_double() {
     type KvList = __ns_bynk_cloudflare.KvList;
     type KvListing = __ns_bynk_cloudflare.KvListing;
     type KvPut = __ns_bynk_cloudflare.KvPut;
+    type MetaValue = __ns_bynk_cloudflare.MetaValue;
+    type MetadataScope = __ns_bynk_cloudflare.MetadataScope;
+    type Mutation = __ns_bynk_cloudflare.Mutation;
     type MySqlError = __ns_bynk_cloudflare.MySqlError;
     type MySqlReadError = __ns_bynk_cloudflare.MySqlReadError;
     type MySqlRun = __ns_bynk_cloudflare.MySqlRun;
@@ -1427,6 +1553,7 @@ async function test_a_stubbed_operation_answers__the_rest_reach_the_double() {
     type PgRun = __ns_bynk_cloudflare.PgRun;
     type PgStatement = __ns_bynk_cloudflare.PgStatement;
     type PgValue = __ns_bynk_cloudflare.PgValue;
+    type QueryOptions = __ns_bynk_cloudflare.QueryOptions;
     type QueueSend = __ns_bynk_cloudflare.QueueSend;
     type R2Body = __ns_bynk_cloudflare.R2Body;
     type R2Condition = __ns_bynk_cloudflare.R2Condition;
@@ -1443,6 +1570,9 @@ async function test_a_stubbed_operation_answers__the_rest_reach_the_double() {
     type SqlStatement = __ns_bynk_cloudflare.SqlStatement;
     type SqlValue = __ns_bynk_cloudflare.SqlValue;
     type TokenUsage = __ns_bynk_cloudflare.TokenUsage;
+    type Vector = __ns_bynk_cloudflare.Vector;
+    type VectorError = __ns_bynk_cloudflare.VectorError;
+    type VectorMatch = __ns_bynk_cloudflare.VectorMatch;
     type WorkerVersion = __ns_bynk_cloudflare.WorkerVersion;
     const r = await store.call("a", "1", deps);
     if (!(__bynkEq(r, Some("stubbed")))) { throw __bynkExpectFailure("tests/demo/plat.bynk:65:10", 1579, 1599, "expect r == Some(\"stubbed\")\n  expected: r == Some(\"stubbed\")\n  actual:   " + __bynkShow((r)) + " == " + __bynkShow((Some("stubbed")))); }
@@ -1483,10 +1613,11 @@ async function test_a_stubbed_fetch_answers_for_the_network() {
     type StreamResponse = __ns_bynk.StreamResponse;
     type TimedOut = __ns_bynk.TimedOut;
     type Uuid = __ns_bynk.Uuid;
-    const { AiError, ChatMessage, ChatRole, DataPoint, DmarcVerdict, EmailAttachment, EmailError, EmailMessage, EmailReply, EmailVerdict, GenerateRequest, Generation, InboundAttachment, InboundEmail, KvEntry, KvExpiration, KvGet, KvKey, KvList, KvListing, KvPut, MySqlError, MySqlReadError, MySqlRun, MySqlStatement, MySqlValue, PgError, PgReadError, PgRun, PgStatement, PgValue, QueueSend, R2Body, R2Condition, R2Listing, R2Object, R2Part, R2Put, R2Upload, R2UploadOptions, SenderIdentity, SqlError, SqlReadError, SqlRun, SqlStatement, SqlValue, TokenUsage, WorkerVersion } = __ns_bynk_cloudflare;
+    const { AiError, ChatMessage, ChatRole, Condition, DataPoint, DmarcVerdict, EmailAttachment, EmailError, EmailMessage, EmailReply, EmailVerdict, FilterOp, GenerateRequest, Generation, InboundAttachment, InboundEmail, IndexInfo, KvEntry, KvExpiration, KvGet, KvKey, KvList, KvListing, KvPut, MetaValue, MetadataScope, Mutation, MySqlError, MySqlReadError, MySqlRun, MySqlStatement, MySqlValue, PgError, PgReadError, PgRun, PgStatement, PgValue, QueryOptions, QueueSend, R2Body, R2Condition, R2Listing, R2Object, R2Part, R2Put, R2Upload, R2UploadOptions, SenderIdentity, SqlError, SqlReadError, SqlRun, SqlStatement, SqlValue, TokenUsage, Vector, VectorError, VectorMatch, WorkerVersion } = __ns_bynk_cloudflare;
     type AiError = __ns_bynk_cloudflare.AiError;
     type ChatMessage = __ns_bynk_cloudflare.ChatMessage;
     type ChatRole = __ns_bynk_cloudflare.ChatRole;
+    type Condition = __ns_bynk_cloudflare.Condition;
     type DataPoint = __ns_bynk_cloudflare.DataPoint;
     type DmarcVerdict = __ns_bynk_cloudflare.DmarcVerdict;
     type EmailAttachment = __ns_bynk_cloudflare.EmailAttachment;
@@ -1494,10 +1625,12 @@ async function test_a_stubbed_fetch_answers_for_the_network() {
     type EmailMessage = __ns_bynk_cloudflare.EmailMessage;
     type EmailReply = __ns_bynk_cloudflare.EmailReply;
     type EmailVerdict = __ns_bynk_cloudflare.EmailVerdict;
+    type FilterOp = __ns_bynk_cloudflare.FilterOp;
     type GenerateRequest = __ns_bynk_cloudflare.GenerateRequest;
     type Generation = __ns_bynk_cloudflare.Generation;
     type InboundAttachment = __ns_bynk_cloudflare.InboundAttachment;
     type InboundEmail = __ns_bynk_cloudflare.InboundEmail;
+    type IndexInfo = __ns_bynk_cloudflare.IndexInfo;
     type KvEntry = __ns_bynk_cloudflare.KvEntry;
     type KvExpiration = __ns_bynk_cloudflare.KvExpiration;
     type KvGet = __ns_bynk_cloudflare.KvGet;
@@ -1505,6 +1638,9 @@ async function test_a_stubbed_fetch_answers_for_the_network() {
     type KvList = __ns_bynk_cloudflare.KvList;
     type KvListing = __ns_bynk_cloudflare.KvListing;
     type KvPut = __ns_bynk_cloudflare.KvPut;
+    type MetaValue = __ns_bynk_cloudflare.MetaValue;
+    type MetadataScope = __ns_bynk_cloudflare.MetadataScope;
+    type Mutation = __ns_bynk_cloudflare.Mutation;
     type MySqlError = __ns_bynk_cloudflare.MySqlError;
     type MySqlReadError = __ns_bynk_cloudflare.MySqlReadError;
     type MySqlRun = __ns_bynk_cloudflare.MySqlRun;
@@ -1515,6 +1651,7 @@ async function test_a_stubbed_fetch_answers_for_the_network() {
     type PgRun = __ns_bynk_cloudflare.PgRun;
     type PgStatement = __ns_bynk_cloudflare.PgStatement;
     type PgValue = __ns_bynk_cloudflare.PgValue;
+    type QueryOptions = __ns_bynk_cloudflare.QueryOptions;
     type QueueSend = __ns_bynk_cloudflare.QueueSend;
     type R2Body = __ns_bynk_cloudflare.R2Body;
     type R2Condition = __ns_bynk_cloudflare.R2Condition;
@@ -1531,6 +1668,9 @@ async function test_a_stubbed_fetch_answers_for_the_network() {
     type SqlStatement = __ns_bynk_cloudflare.SqlStatement;
     type SqlValue = __ns_bynk_cloudflare.SqlValue;
     type TokenUsage = __ns_bynk_cloudflare.TokenUsage;
+    type Vector = __ns_bynk_cloudflare.Vector;
+    type VectorError = __ns_bynk_cloudflare.VectorError;
+    type VectorMatch = __ns_bynk_cloudflare.VectorMatch;
     type WorkerVersion = __ns_bynk_cloudflare.WorkerVersion;
     const s = await relay.call("https://example.test", deps);
     if (!(s === 204)) { throw __bynkExpectFailure("tests/demo/plat.bynk:72:10", 1825, 1833, "expect s == 204\n  expected: s == 204\n  actual:   " + __bynkShow((s)) + " == " + __bynkShow((204))); }
@@ -1571,10 +1711,11 @@ async function test_a_fetch_double_sees_the_request_s_headers() {
     type StreamResponse = __ns_bynk.StreamResponse;
     type TimedOut = __ns_bynk.TimedOut;
     type Uuid = __ns_bynk.Uuid;
-    const { AiError, ChatMessage, ChatRole, DataPoint, DmarcVerdict, EmailAttachment, EmailError, EmailMessage, EmailReply, EmailVerdict, GenerateRequest, Generation, InboundAttachment, InboundEmail, KvEntry, KvExpiration, KvGet, KvKey, KvList, KvListing, KvPut, MySqlError, MySqlReadError, MySqlRun, MySqlStatement, MySqlValue, PgError, PgReadError, PgRun, PgStatement, PgValue, QueueSend, R2Body, R2Condition, R2Listing, R2Object, R2Part, R2Put, R2Upload, R2UploadOptions, SenderIdentity, SqlError, SqlReadError, SqlRun, SqlStatement, SqlValue, TokenUsage, WorkerVersion } = __ns_bynk_cloudflare;
+    const { AiError, ChatMessage, ChatRole, Condition, DataPoint, DmarcVerdict, EmailAttachment, EmailError, EmailMessage, EmailReply, EmailVerdict, FilterOp, GenerateRequest, Generation, InboundAttachment, InboundEmail, IndexInfo, KvEntry, KvExpiration, KvGet, KvKey, KvList, KvListing, KvPut, MetaValue, MetadataScope, Mutation, MySqlError, MySqlReadError, MySqlRun, MySqlStatement, MySqlValue, PgError, PgReadError, PgRun, PgStatement, PgValue, QueryOptions, QueueSend, R2Body, R2Condition, R2Listing, R2Object, R2Part, R2Put, R2Upload, R2UploadOptions, SenderIdentity, SqlError, SqlReadError, SqlRun, SqlStatement, SqlValue, TokenUsage, Vector, VectorError, VectorMatch, WorkerVersion } = __ns_bynk_cloudflare;
     type AiError = __ns_bynk_cloudflare.AiError;
     type ChatMessage = __ns_bynk_cloudflare.ChatMessage;
     type ChatRole = __ns_bynk_cloudflare.ChatRole;
+    type Condition = __ns_bynk_cloudflare.Condition;
     type DataPoint = __ns_bynk_cloudflare.DataPoint;
     type DmarcVerdict = __ns_bynk_cloudflare.DmarcVerdict;
     type EmailAttachment = __ns_bynk_cloudflare.EmailAttachment;
@@ -1582,10 +1723,12 @@ async function test_a_fetch_double_sees_the_request_s_headers() {
     type EmailMessage = __ns_bynk_cloudflare.EmailMessage;
     type EmailReply = __ns_bynk_cloudflare.EmailReply;
     type EmailVerdict = __ns_bynk_cloudflare.EmailVerdict;
+    type FilterOp = __ns_bynk_cloudflare.FilterOp;
     type GenerateRequest = __ns_bynk_cloudflare.GenerateRequest;
     type Generation = __ns_bynk_cloudflare.Generation;
     type InboundAttachment = __ns_bynk_cloudflare.InboundAttachment;
     type InboundEmail = __ns_bynk_cloudflare.InboundEmail;
+    type IndexInfo = __ns_bynk_cloudflare.IndexInfo;
     type KvEntry = __ns_bynk_cloudflare.KvEntry;
     type KvExpiration = __ns_bynk_cloudflare.KvExpiration;
     type KvGet = __ns_bynk_cloudflare.KvGet;
@@ -1593,6 +1736,9 @@ async function test_a_fetch_double_sees_the_request_s_headers() {
     type KvList = __ns_bynk_cloudflare.KvList;
     type KvListing = __ns_bynk_cloudflare.KvListing;
     type KvPut = __ns_bynk_cloudflare.KvPut;
+    type MetaValue = __ns_bynk_cloudflare.MetaValue;
+    type MetadataScope = __ns_bynk_cloudflare.MetadataScope;
+    type Mutation = __ns_bynk_cloudflare.Mutation;
     type MySqlError = __ns_bynk_cloudflare.MySqlError;
     type MySqlReadError = __ns_bynk_cloudflare.MySqlReadError;
     type MySqlRun = __ns_bynk_cloudflare.MySqlRun;
@@ -1603,6 +1749,7 @@ async function test_a_fetch_double_sees_the_request_s_headers() {
     type PgRun = __ns_bynk_cloudflare.PgRun;
     type PgStatement = __ns_bynk_cloudflare.PgStatement;
     type PgValue = __ns_bynk_cloudflare.PgValue;
+    type QueryOptions = __ns_bynk_cloudflare.QueryOptions;
     type QueueSend = __ns_bynk_cloudflare.QueueSend;
     type R2Body = __ns_bynk_cloudflare.R2Body;
     type R2Condition = __ns_bynk_cloudflare.R2Condition;
@@ -1619,6 +1766,9 @@ async function test_a_fetch_double_sees_the_request_s_headers() {
     type SqlStatement = __ns_bynk_cloudflare.SqlStatement;
     type SqlValue = __ns_bynk_cloudflare.SqlValue;
     type TokenUsage = __ns_bynk_cloudflare.TokenUsage;
+    type Vector = __ns_bynk_cloudflare.Vector;
+    type VectorError = __ns_bynk_cloudflare.VectorError;
+    type VectorMatch = __ns_bynk_cloudflare.VectorMatch;
     type WorkerVersion = __ns_bynk_cloudflare.WorkerVersion;
     const s = await relay.call("https://example.test", deps);
     if (!(s === 200)) { throw __bynkExpectFailure("tests/demo/plat.bynk:80:10", 2184, 2192, "expect s == 200\n  expected: s == 200\n  actual:   " + __bynkShow((s)) + " == " + __bynkShow((200))); }
@@ -1658,10 +1808,11 @@ async function test_an_unstubbed_fetch_faults_rather_than_reach_the_network() {
     type StreamResponse = __ns_bynk.StreamResponse;
     type TimedOut = __ns_bynk.TimedOut;
     type Uuid = __ns_bynk.Uuid;
-    const { AiError, ChatMessage, ChatRole, DataPoint, DmarcVerdict, EmailAttachment, EmailError, EmailMessage, EmailReply, EmailVerdict, GenerateRequest, Generation, InboundAttachment, InboundEmail, KvEntry, KvExpiration, KvGet, KvKey, KvList, KvListing, KvPut, MySqlError, MySqlReadError, MySqlRun, MySqlStatement, MySqlValue, PgError, PgReadError, PgRun, PgStatement, PgValue, QueueSend, R2Body, R2Condition, R2Listing, R2Object, R2Part, R2Put, R2Upload, R2UploadOptions, SenderIdentity, SqlError, SqlReadError, SqlRun, SqlStatement, SqlValue, TokenUsage, WorkerVersion } = __ns_bynk_cloudflare;
+    const { AiError, ChatMessage, ChatRole, Condition, DataPoint, DmarcVerdict, EmailAttachment, EmailError, EmailMessage, EmailReply, EmailVerdict, FilterOp, GenerateRequest, Generation, InboundAttachment, InboundEmail, IndexInfo, KvEntry, KvExpiration, KvGet, KvKey, KvList, KvListing, KvPut, MetaValue, MetadataScope, Mutation, MySqlError, MySqlReadError, MySqlRun, MySqlStatement, MySqlValue, PgError, PgReadError, PgRun, PgStatement, PgValue, QueryOptions, QueueSend, R2Body, R2Condition, R2Listing, R2Object, R2Part, R2Put, R2Upload, R2UploadOptions, SenderIdentity, SqlError, SqlReadError, SqlRun, SqlStatement, SqlValue, TokenUsage, Vector, VectorError, VectorMatch, WorkerVersion } = __ns_bynk_cloudflare;
     type AiError = __ns_bynk_cloudflare.AiError;
     type ChatMessage = __ns_bynk_cloudflare.ChatMessage;
     type ChatRole = __ns_bynk_cloudflare.ChatRole;
+    type Condition = __ns_bynk_cloudflare.Condition;
     type DataPoint = __ns_bynk_cloudflare.DataPoint;
     type DmarcVerdict = __ns_bynk_cloudflare.DmarcVerdict;
     type EmailAttachment = __ns_bynk_cloudflare.EmailAttachment;
@@ -1669,10 +1820,12 @@ async function test_an_unstubbed_fetch_faults_rather_than_reach_the_network() {
     type EmailMessage = __ns_bynk_cloudflare.EmailMessage;
     type EmailReply = __ns_bynk_cloudflare.EmailReply;
     type EmailVerdict = __ns_bynk_cloudflare.EmailVerdict;
+    type FilterOp = __ns_bynk_cloudflare.FilterOp;
     type GenerateRequest = __ns_bynk_cloudflare.GenerateRequest;
     type Generation = __ns_bynk_cloudflare.Generation;
     type InboundAttachment = __ns_bynk_cloudflare.InboundAttachment;
     type InboundEmail = __ns_bynk_cloudflare.InboundEmail;
+    type IndexInfo = __ns_bynk_cloudflare.IndexInfo;
     type KvEntry = __ns_bynk_cloudflare.KvEntry;
     type KvExpiration = __ns_bynk_cloudflare.KvExpiration;
     type KvGet = __ns_bynk_cloudflare.KvGet;
@@ -1680,6 +1833,9 @@ async function test_an_unstubbed_fetch_faults_rather_than_reach_the_network() {
     type KvList = __ns_bynk_cloudflare.KvList;
     type KvListing = __ns_bynk_cloudflare.KvListing;
     type KvPut = __ns_bynk_cloudflare.KvPut;
+    type MetaValue = __ns_bynk_cloudflare.MetaValue;
+    type MetadataScope = __ns_bynk_cloudflare.MetadataScope;
+    type Mutation = __ns_bynk_cloudflare.Mutation;
     type MySqlError = __ns_bynk_cloudflare.MySqlError;
     type MySqlReadError = __ns_bynk_cloudflare.MySqlReadError;
     type MySqlRun = __ns_bynk_cloudflare.MySqlRun;
@@ -1690,6 +1846,7 @@ async function test_an_unstubbed_fetch_faults_rather_than_reach_the_network() {
     type PgRun = __ns_bynk_cloudflare.PgRun;
     type PgStatement = __ns_bynk_cloudflare.PgStatement;
     type PgValue = __ns_bynk_cloudflare.PgValue;
+    type QueryOptions = __ns_bynk_cloudflare.QueryOptions;
     type QueueSend = __ns_bynk_cloudflare.QueueSend;
     type R2Body = __ns_bynk_cloudflare.R2Body;
     type R2Condition = __ns_bynk_cloudflare.R2Condition;
@@ -1706,6 +1863,9 @@ async function test_an_unstubbed_fetch_faults_rather_than_reach_the_network() {
     type SqlStatement = __ns_bynk_cloudflare.SqlStatement;
     type SqlValue = __ns_bynk_cloudflare.SqlValue;
     type TokenUsage = __ns_bynk_cloudflare.TokenUsage;
+    type Vector = __ns_bynk_cloudflare.Vector;
+    type VectorError = __ns_bynk_cloudflare.VectorError;
+    type VectorMatch = __ns_bynk_cloudflare.VectorMatch;
     type WorkerVersion = __ns_bynk_cloudflare.WorkerVersion;
     const s = await relay.call("https://example.test", deps);
     if (!(s === 0)) { throw __bynkExpectFailure("tests/demo/plat.bynk:86:10", 2408, 2414, "expect s == 0\n  expected: s == 0\n  actual:   " + __bynkShow((s)) + " == " + __bynkShow((0))); }
@@ -1744,10 +1904,11 @@ async function test_the_doubles_hold_at_the_integration_tier() {
     type StreamResponse = __ns_bynk.StreamResponse;
     type TimedOut = __ns_bynk.TimedOut;
     type Uuid = __ns_bynk.Uuid;
-    const { AiError, ChatMessage, ChatRole, DataPoint, DmarcVerdict, EmailAttachment, EmailError, EmailMessage, EmailReply, EmailVerdict, GenerateRequest, Generation, InboundAttachment, InboundEmail, KvEntry, KvExpiration, KvGet, KvKey, KvList, KvListing, KvPut, MySqlError, MySqlReadError, MySqlRun, MySqlStatement, MySqlValue, PgError, PgReadError, PgRun, PgStatement, PgValue, QueueSend, R2Body, R2Condition, R2Listing, R2Object, R2Part, R2Put, R2Upload, R2UploadOptions, SenderIdentity, SqlError, SqlReadError, SqlRun, SqlStatement, SqlValue, TokenUsage, WorkerVersion } = __ns_bynk_cloudflare;
+    const { AiError, ChatMessage, ChatRole, Condition, DataPoint, DmarcVerdict, EmailAttachment, EmailError, EmailMessage, EmailReply, EmailVerdict, FilterOp, GenerateRequest, Generation, InboundAttachment, InboundEmail, IndexInfo, KvEntry, KvExpiration, KvGet, KvKey, KvList, KvListing, KvPut, MetaValue, MetadataScope, Mutation, MySqlError, MySqlReadError, MySqlRun, MySqlStatement, MySqlValue, PgError, PgReadError, PgRun, PgStatement, PgValue, QueryOptions, QueueSend, R2Body, R2Condition, R2Listing, R2Object, R2Part, R2Put, R2Upload, R2UploadOptions, SenderIdentity, SqlError, SqlReadError, SqlRun, SqlStatement, SqlValue, TokenUsage, Vector, VectorError, VectorMatch, WorkerVersion } = __ns_bynk_cloudflare;
     type AiError = __ns_bynk_cloudflare.AiError;
     type ChatMessage = __ns_bynk_cloudflare.ChatMessage;
     type ChatRole = __ns_bynk_cloudflare.ChatRole;
+    type Condition = __ns_bynk_cloudflare.Condition;
     type DataPoint = __ns_bynk_cloudflare.DataPoint;
     type DmarcVerdict = __ns_bynk_cloudflare.DmarcVerdict;
     type EmailAttachment = __ns_bynk_cloudflare.EmailAttachment;
@@ -1755,10 +1916,12 @@ async function test_the_doubles_hold_at_the_integration_tier() {
     type EmailMessage = __ns_bynk_cloudflare.EmailMessage;
     type EmailReply = __ns_bynk_cloudflare.EmailReply;
     type EmailVerdict = __ns_bynk_cloudflare.EmailVerdict;
+    type FilterOp = __ns_bynk_cloudflare.FilterOp;
     type GenerateRequest = __ns_bynk_cloudflare.GenerateRequest;
     type Generation = __ns_bynk_cloudflare.Generation;
     type InboundAttachment = __ns_bynk_cloudflare.InboundAttachment;
     type InboundEmail = __ns_bynk_cloudflare.InboundEmail;
+    type IndexInfo = __ns_bynk_cloudflare.IndexInfo;
     type KvEntry = __ns_bynk_cloudflare.KvEntry;
     type KvExpiration = __ns_bynk_cloudflare.KvExpiration;
     type KvGet = __ns_bynk_cloudflare.KvGet;
@@ -1766,6 +1929,9 @@ async function test_the_doubles_hold_at_the_integration_tier() {
     type KvList = __ns_bynk_cloudflare.KvList;
     type KvListing = __ns_bynk_cloudflare.KvListing;
     type KvPut = __ns_bynk_cloudflare.KvPut;
+    type MetaValue = __ns_bynk_cloudflare.MetaValue;
+    type MetadataScope = __ns_bynk_cloudflare.MetadataScope;
+    type Mutation = __ns_bynk_cloudflare.Mutation;
     type MySqlError = __ns_bynk_cloudflare.MySqlError;
     type MySqlReadError = __ns_bynk_cloudflare.MySqlReadError;
     type MySqlRun = __ns_bynk_cloudflare.MySqlRun;
@@ -1776,6 +1942,7 @@ async function test_the_doubles_hold_at_the_integration_tier() {
     type PgRun = __ns_bynk_cloudflare.PgRun;
     type PgStatement = __ns_bynk_cloudflare.PgStatement;
     type PgValue = __ns_bynk_cloudflare.PgValue;
+    type QueryOptions = __ns_bynk_cloudflare.QueryOptions;
     type QueueSend = __ns_bynk_cloudflare.QueueSend;
     type R2Body = __ns_bynk_cloudflare.R2Body;
     type R2Condition = __ns_bynk_cloudflare.R2Condition;
@@ -1792,6 +1959,9 @@ async function test_the_doubles_hold_at_the_integration_tier() {
     type SqlStatement = __ns_bynk_cloudflare.SqlStatement;
     type SqlValue = __ns_bynk_cloudflare.SqlValue;
     type TokenUsage = __ns_bynk_cloudflare.TokenUsage;
+    type Vector = __ns_bynk_cloudflare.Vector;
+    type VectorError = __ns_bynk_cloudflare.VectorError;
+    type VectorMatch = __ns_bynk_cloudflare.VectorMatch;
     type WorkerVersion = __ns_bynk_cloudflare.WorkerVersion;
     const t = await clock.call(deps);
     const s = await secret.call("API_KEY", deps);

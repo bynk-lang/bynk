@@ -1,0 +1,7 @@
+context demo
+
+// #3479: the metric is required.
+
+consumes bynk.cloudflare { Vectorize }
+
+capability Docs = Vectorize @dimensions(3)

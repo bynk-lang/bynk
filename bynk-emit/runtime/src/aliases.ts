@@ -19,7 +19,7 @@ import { fault, invariantViolation } from "./errors.ts";
 import { applyCache, applyCors, applyEdgeCache, applySecurityHeaders, cookieObject, cookieString, cookieValue, corsPreflightResponse, csrfAllowed, edgeCacheGuard, formDecode, formMediaTypeMatches, formObject, formString, headResponse, httpResultToResponse, matchPath, mediaTypeMatches, multipartForm, multipartMediaTypeMatches, multipartObject, noStore, notModifiedIfMatch, queryObject, queryString, renderRejection, requestHeaderPairs, requestCookies, requestCookiesHeader, requestBodyStream, requestHeaders, requestQuery, requestQuerySearch, responseToHttpOutcome, responseToHttpResult, responseToUnauthOutcome, sessionCookieOf, untilBodyTooLarge, varyAcceptLanguage, withPlainJson, type CorsPolicy, type SecurityPolicy } from "./http.ts";
 import { formatIcuDate, formatIcuNumber, selectPluralArm } from "./messages.ts";
 import { StoreCache, StoreLog, StoreMap, StoreSet, fillHeld, fillLog, fillMap, fillSet, wireEntries, wireHeld, wireHeldOrder, wireLog, wireMap, wirePostings, wireSet } from "./store.ts";
-import { makeIntegrationAi, makeIntegrationAnalytics, makeIntegrationD1, makeIntegrationEmail, makeIntegrationHyperdrive, makeIntegrationKv, makeIntegrationQueue, makeIntegrationR2, makeIntegrationRateLimit, makeIntegrationSecretsStoreSecret, makeIntegrationVersionMetadata, makeTestState, type AnalyticsDataset, type D1Database, type DurableObjectState, type Hyperdrive, type KVNamespace, type QueueProducer, type R2Bucket, type RateLimiter, type SecretsStoreSecret, type SendEmail, type WorkerAiBinding, type WorkerVersionMetadata } from "./storage.ts";
+import { makeIntegrationAi, makeIntegrationAnalytics, makeIntegrationD1, makeIntegrationEmail, makeIntegrationHyperdrive, makeIntegrationKv, makeIntegrationQueue, makeIntegrationR2, makeIntegrationRateLimit, makeIntegrationSecretsStoreSecret, makeIntegrationVectorize, makeIntegrationVersionMetadata, makeTestState, type AnalyticsDataset, type D1Database, type DurableObjectState, type Hyperdrive, type KVNamespace, type QueueProducer, type R2Bucket, type RateLimiter, type SecretsStoreSecret, type SendEmail, type VectorizeIndex, type WorkerAiBinding, type WorkerVersionMetadata } from "./storage.ts";
 
 export {
   AGENT_WIRE_PASS as __AGENT_WIRE_PASS,
@@ -86,6 +86,7 @@ export {
   makeIntegrationR2 as __makeIntegrationR2,
   makeIntegrationRateLimit as __makeIntegrationRateLimit,
   makeIntegrationSecretsStoreSecret as __makeIntegrationSecretsStoreSecret,
+  makeIntegrationVectorize as __makeIntegrationVectorize,
   makeIntegrationVersionMetadata as __makeIntegrationVersionMetadata,
   makeTestState as __makeTestState,
   matchPath as __matchPath,
@@ -176,6 +177,7 @@ export type {
   RateLimiter as __RateLimiter,
   SecretsStoreSecret as __SecretsStoreSecret,
   SendEmail as __SendEmail,
+  VectorizeIndex as __VectorizeIndex,
   WorkerAiBinding as __WorkerAiBinding,
   WorkerVersionMetadata as __WorkerVersionMetadata,
   SecurityPolicy as __SecurityPolicy,

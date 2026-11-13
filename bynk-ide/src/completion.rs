@@ -5255,7 +5255,8 @@ fn Box.size(self) -> Int { 1 }
                 "StoredSecret",
                 "Email",
                 "Postgres",
-                "MySql"
+                "MySql",
+                "Vectorize"
             ]
         );
         let narrowed: Vec<String> = instance_declaration_completions("capability L = Ra")

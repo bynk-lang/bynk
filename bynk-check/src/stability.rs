@@ -434,6 +434,7 @@ mod tests {
                 "bynk.cloudflare.Email",
                 "bynk.cloudflare.Postgres",
                 "bynk.cloudflare.MySql",
+                "bynk.cloudflare.Vectorize",
                 "bynk.cloudflare.Kv.getWith",
                 "bynk.cloudflare.Kv.putWith",
                 "bynk.cloudflare.Kv.getBytes",

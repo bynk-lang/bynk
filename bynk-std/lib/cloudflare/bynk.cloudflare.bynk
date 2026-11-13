@@ -15,6 +15,7 @@ adapter bynk.cloudflare {
 		Email,
 		Postgres,
 		MySql,
+		Vectorize,
 	}
 	exports transparent {
 		KvExpiration,
@@ -65,6 +66,16 @@ adapter bynk.cloudflare {
 		MySqlRun,
 		MySqlStatement,
 		MySqlReadError,
+		Vector,
+		MetaValue,
+		FilterOp,
+		Condition,
+		MetadataScope,
+		QueryOptions,
+		VectorMatch,
+		Mutation,
+		IndexInfo,
+		VectorError,
 	}
 
 	---
@@ -1170,6 +1181,176 @@ adapter bynk.cloudflare {
 		) -> Effect[Result[List[MySqlRun], MySqlError]]
 	}
 
+	---
+	One vector of a `Vectorize` index: its `id` (at most 64 bytes), its `values`
+	(as many numbers as the index has dimensions), the `namespace` it lives in
+	when it has one, and `metadata`, a JSON object as text (`Json.encode` writes
+	it, `Json.decode` reads it back). A property can be filtered on only when
+	the index declares it in `@indexed`.
+	---
+	type Vector = {
+		id: String,
+		values: List[Float],
+		metadata: Option[String] = None,
+		namespace: Option[String] = None,
+	}
+
+	---
+	A metadata value a `Condition` compares a property with: text, a number or
+	a flag.
+	---
+	type MetaValue =
+		| MetaText(value: String)
+		| MetaNumber(value: Float)
+		| MetaFlag(value: Bool)
+
+	---
+	How a `Condition` compares a property with a value: equal, not equal, less
+	than, at most, greater than, at least, one of a list, or none of a list.
+	The platform allows a range over text or numbers only, and a lower and an
+	upper bound on one property together, not other mixes; it refuses the
+	rest as `VectorInvalidInput`.
+	---
+	type FilterOp =
+		| FilterEq(value: MetaValue)
+		| FilterNe(value: MetaValue)
+		| FilterLt(value: MetaValue)
+		| FilterLte(value: MetaValue)
+		| FilterGt(value: MetaValue)
+		| FilterGte(value: MetaValue)
+		| FilterAnyOf(values: List[MetaValue])
+		| FilterNoneOf(values: List[MetaValue])
+
+	---
+	One test of a `Vectorize` query: the metadata property `field` (its
+	name has no `.`; a nested property is not supported yet) against `op`. A query's conditions all have to hold.
+	The property has to be declared in the index's `@indexed`, and a vector
+	only matches once it was written after that index existed.
+	---
+	type Condition = {
+		field: String,
+		op: FilterOp,
+	}
+
+	---
+	How much metadata a `Vectorize` query returns: `Omit` none (the default),
+	`Indexed` only the `@indexed` properties, `All` every property. `All` costs
+	the platform more work and lowers how many matches one query may return.
+	---
+	type MetadataScope = enum { Omit, Indexed, All }
+
+	---
+	The options of `Vectorize.query`. `topK` is how many matches to return
+	(5 unless set; the platform caps it, and caps it lower when `returnValues`
+	is set or `returnMetadata` is `All`, and says so as `VectorInvalidInput`).
+	`namespace` restricts the query to one namespace. `filter` is a list of
+	conditions that must all hold.
+	---
+	type QueryOptions = {
+		topK: Int = 5,
+		returnValues: Bool = false,
+		returnMetadata: MetadataScope = MetadataScope.Omit,
+		namespace: Option[String] = None,
+		filter: List[Condition] = [],
+	}
+
+	---
+	One match of `Vectorize.query`: the vector's `id` and its `score`, whose
+	meaning depends on the index's metric (a larger cosine score is nearer; a
+	smaller euclidean distance is nearer). `values`, `metadata` (a JSON object
+	as text) and `namespace` are present when the query asked for them and the
+	vector has them.
+	---
+	type VectorMatch = {
+		id: String,
+		score: Float,
+		values: Option[List[Float]],
+		metadata: Option[String],
+		namespace: Option[String],
+	}
+
+	---
+	The receipt of a write: its `id`. A write is asynchronous. It is queryable
+	after the platform has processed it, which takes some seconds, so a handler
+	that writes and then queries in the same request will not see its own write.
+	---
+	type Mutation = {
+		id: String,
+	}
+
+	---
+	An index's configuration, as `Vectorize.describe` reports it: its
+	`dimensions` and its `metric`.
+	---
+	type IndexInfo = {
+		dimensions: Int,
+		metric: String,
+	}
+
+	---
+	Why a Vectorize call did not succeed. `DimensionMismatch` is a vector or
+	query whose length is not the index's dimensions, with the platform's
+	message; `VectorInvalidInput` is a request the platform refused as malformed
+	or over a limit (a bad filter, too large a `topK`, too large a batch or too
+	much metadata); `VectorRateLimited` is a rate limit, worth retrying later;
+	`VectorFailed` is any other refusal, with the platform's message. The
+	`Vector` prefix is because `InvalidInput` is `AiError`'s, `RateLimited`
+	`EmailError`'s and `Failed` `SqlError`'s. Cloudflare adds error cases over
+	time, so a `match` over this type needs a wildcard.
+	---
+	type VectorError =
+		| DimensionMismatch(message: String)
+		| VectorInvalidInput(message: String)
+		| VectorRateLimited
+		| VectorFailed(message: String)
+
+	---
+	A Vectorize index: vectors with an id, searched by similarity. Used only
+	through a named instance that states the index's fixed shape,
+	`capability Docs = Vectorize @dimensions(768) @metric("cosine")`, which
+	binds as `VECTORIZE_DOCS`, a `[[vectorize]]` entry; both annotations are
+	required, and a bare `given Vectorize` is refused. `@metric` is `"cosine"`,
+	`"euclidean"` or `"dot-product"`. Experimental.
+
+	An index's dimensions and metric cannot change once it exists, so they are
+	written next to the code that depends on them. `@indexed(["category:string",
+	"year:number"])` lists the metadata properties a query may filter on (at
+	most 10, each `name:type` with the type `string`, `number` or `boolean`).
+	Metadata indexes should exist before the vectors that carry the property.
+
+	`upsert` writes vectors, replacing any with the same id in full; `insert`
+	writes only vectors whose id is new. `query(vector, options)` returns the
+	nearest matches, best first. `getByIds` reads vectors back, `deleteByIds`
+	removes them, and `describe` reports the index's dimensions and metric.
+	Metadata is JSON text: write it with `Json.encode` and read it with
+	`Json.decode`, so a vector stored by an older version of the program can be
+	skipped or repaired instead of failing the query. The embeddings of
+	`Ai.embed` are the usual `values`; an index must be queried with the same
+	model and pooling it was built with.
+
+	A write returns a `Mutation` and is visible to queries only after the
+	platform has processed it. Every operation gives a `VectorError` rather
+	than faulting, except a call on an index that does not exist, which is a
+	platform fault.
+
+	Vectorize is a remote service on your Cloudflare account, so a call may be
+	billed; see Cloudflare's Vectorize pricing page for what applies, and put a
+	`RateLimit` in front of any handler an anonymous caller can reach. In a
+	test every operation faults until `stub Docs.query(_, _) returns …`
+	replaces it, so a test never reaches an index.
+	---
+	capability Vectorize {
+		fn upsert(vectors: List[Vector]) -> Effect[Result[Mutation, VectorError]]
+		fn insert(vectors: List[Vector]) -> Effect[Result[Mutation, VectorError]]
+		fn query(
+			vector: List[Float],
+			options: QueryOptions
+		) -> Effect[Result[List[VectorMatch], VectorError]]
+		fn getByIds(ids: List[String]) -> Effect[Result[List[Vector], VectorError]]
+		fn deleteByIds(ids: List[String]) -> Effect[Result[Mutation, VectorError]]
+		fn describe() -> Effect[Result[IndexInfo, VectorError]]
+	}
+
 	provides Kv = WorkersKv
 
 	provides Service = WorkersService
@@ -1197,4 +1378,6 @@ adapter bynk.cloudflare {
 	provides Postgres = WorkersPostgres
 
 	provides MySql = WorkersMySql
+
+	provides Vectorize = WorkersVectorize
 }

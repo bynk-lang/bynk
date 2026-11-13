@@ -1,0 +1,7 @@
+context demo
+
+// #3479: an index has at most ten metadata indexes.
+
+consumes bynk.cloudflare { Vectorize }
+
+capability Docs = Vectorize @dimensions(3) @metric("cosine") @indexed(["a:string", "b:string", "c:string", "d:string", "e:string", "f:string", "g:string", "h:string", "i:string", "j:string", "k:string"])

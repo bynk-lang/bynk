@@ -1,0 +1,2 @@
+bynk.capability.unknown_option
+`@preset` is not an option of a `Vectorize` instance

@@ -1,0 +1,44 @@
+context shop.search
+
+// #3479: a `Vectorize` instance states its index's fixed shape. Each instance
+// binds as `VECTORIZE_<NAME>`, a `[[vectorize]]` entry naming the index, and
+// only a Worker that reaches one declares it. `Kv` is consumed but never
+// used, so the Worker declares no `[[kv_namespaces]]`.
+
+consumes bynk
+consumes bynk.cloudflare { Kv, Vectorize, Vector, VectorError, QueryOptions, Condition, FilterOp, MetaValue, MetadataScope }
+
+capability Docs = Vectorize @dimensions(3) @metric("cosine") @indexed(["category:string", "year:number"])
+capability Scratch = Vectorize @dimensions(2) @metric("euclidean")
+
+service api from http {
+	on PUT("/doc") (body: String) -> Effect[HttpResult[String]] by Visitor given Docs {
+		let written <- Docs.upsert([Vector { id: body, values: [0.1, 0.2, 0.3], metadata: Some("{\"category\":\"faq\",\"year\":2026}") }])
+		match written {
+			Ok(mutation) => Ok(mutation.id),
+			Err(DimensionMismatch(message)) => ServerError(message),
+			Err(_) => ServerError("index unavailable"),
+		}
+	}
+
+	on GET("/search") () -> Effect[HttpResult[String]] by Visitor given Docs {
+		let hits <- Docs.query([0.1, 0.2, 0.3], QueryOptions {
+			topK: 3,
+			returnMetadata: MetadataScope.Indexed,
+			filter: [Condition { field: "category", op: FilterEq(MetaText("faq")) }],
+		})
+		match hits {
+			Ok(found) => Ok(Json.encode(found)),
+			Err(VectorInvalidInput(message)) => ServerError(message),
+			Err(_) => ServerError("search unavailable"),
+		}
+	}
+
+	on DELETE("/scratch") () -> Effect[HttpResult[String]] by Visitor given Scratch {
+		let removed <- Scratch.deleteByIds(["a", "b"])
+		match removed {
+			Ok(mutation) => Ok(mutation.id),
+			Err(_) => ServerError("index unavailable"),
+		}
+	}
+}
