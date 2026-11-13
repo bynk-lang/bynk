@@ -7,7 +7,7 @@ title: Diagnostic index
 
 Every diagnostic code the compiler can emit, with a one-line summary of the cause, grouped by category. For step-by-step cause-and-fix guidance on the most common ones, see the [troubleshooting guides](/book/troubleshooting/). For a code with a curated explanation, `bynk explain <code>` prints it in a terminal, and in VS Code the diagnostic's **Explain** quick fix (or **Bynk: Explain Diagnostic Code…**) shows the same text in a panel, offline.
 
-There are **857** codes in total.
+There are **861** codes in total.
 
 ## Agents
 
@@ -214,6 +214,8 @@ There are **857** codes in total.
 | [`bynk.http.cookie_samesite_none_insecure`](/book/reference/http/#setting-cookies) | A cookie literal with `sameSite: SameSite.Unrestricted` is not `secure`. | [`http_handler`](/book/reference/grammar/#rule-http_handler) | — |
 | `bynk.http.cookie_script_readable` | A cookie literal sets `httpOnly: false`, so page scripts can read it (warning). | [`http_handler`](/book/reference/grammar/#rule-http_handler) | Warning |
 | [`bynk.http.cookie_secure_prefix`](/book/reference/http/#setting-cookies) | A `__Secure-` cookie literal is not `secure`. | [`http_handler`](/book/reference/grammar/#rule-http_handler) | — |
+| [`bynk.http.cookie_untyped_has_field`](/book/reference/http/#typed-cookie-write) | An untyped `Cookie` literal is named like a field of a cookie record of the unit (a warning). | [`http_handler`](/book/reference/grammar/#rule-http_handler) | Warning |
+| [`bynk.http.cookie_value_undecodable`](/book/reference/http/#typed-cookie-write) | An untyped `Cookie` literal's value is one the record field that reads that cookie would reject. | [`http_handler`](/book/reference/grammar/#rule-http_handler) | — |
 | [`bynk.http.cookies_field_not_stringy`](/book/reference/http/#cookies) | A field of an HTTP handler's `cookies` record has a type a cookie cannot carry. | [`http_handler`](/book/reference/grammar/#rule-http_handler) | — |
 | [`bynk.http.cookies_not_http`](/book/reference/http/#request-cookies) | A `RequestCookies` appears on a handler that is not an HTTP route. | [`http_handler`](/book/reference/grammar/#rule-http_handler) | — |
 | [`bynk.http.cookies_wrong_type`](/book/reference/http/#cookies) | An HTTP handler's `cookies` parameter is not a record type. |  | — |
@@ -375,6 +377,8 @@ There are **857** codes in total.
 | [`bynk.actor.signed_cookie_ttl_long`](/book/reference/actors/#signed-cookies) | A `SignedCookie` `ttl` is longer than 30 days (warning). |  | Warning |
 | [`bynk.actor.signed_cookie_unknown_key`](/book/reference/actors/#signed-cookies) | A `SignedCookie` config has a key outside the closed set. |  | — |
 | [`bynk.actor.signed_cookie_unprefixed`](/book/reference/actors/#signed-cookies) | A `SignedCookie` `cookie` does not start with `__Host-` (warning). |  | Warning |
+| [`bynk.actor.signed_cookie_write_directly`](/book/reference/actors/#signed-cookies) | A cookie record's typed write names the session cookie that a `SignedCookie` actor consumes. |  | — |
+| [`bynk.actor.signed_cookie_write_literal`](/book/reference/actors/#signed-cookies) | An untyped `Cookie` literal is named like a `SignedCookie` actor's session cookie. |  | — |
 | [`bynk.actor.sum_requires_binder`](/book/reference/actors/#the-by-clause) | A multi-actor sum `by` clause has no binder to match the resolved actor. |  | — |
 | [`bynk.actor.unknown_actor`](/book/reference/actors/#prelude-actors) | A handler's `by` clause names an actor that is not declared. |  | — |
 | [`bynk.actor.unknown_scheme`](/book/reference/actors/#schemes) | An actor declares an authentication scheme that is not compiler-known. |  | — |

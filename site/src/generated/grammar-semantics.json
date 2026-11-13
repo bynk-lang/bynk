@@ -974,6 +974,14 @@
       "summary": "A `__Secure-` cookie literal is not `secure`."
     },
     {
+      "code": "bynk.http.cookie_untyped_has_field",
+      "summary": "An untyped `Cookie` literal is named like a field of a cookie record of the unit (a warning)."
+    },
+    {
+      "code": "bynk.http.cookie_value_undecodable",
+      "summary": "An untyped `Cookie` literal's value is one the record field that reads that cookie would reject."
+    },
+    {
       "code": "bynk.http.cookies_field_not_stringy",
       "summary": "A field of an HTTP handler's `cookies` record has a type a cookie cannot carry."
     },

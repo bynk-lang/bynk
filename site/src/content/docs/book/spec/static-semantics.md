@@ -2093,6 +2093,16 @@ name, anything else its text; every other attribute is the `Cookie` default. `ex
 cookie with that name, an empty value, `maxAge: Some(0)` and an epoch `expires`. The field segment
 is a reference to the field for rename and go-to-definition.
 
+A cookie whose name is known at compile time is checked against the unit's records and actors. The
+`__Host-`/`__Secure-` and attribute rules of a `Cookie` literal apply equally to `Cookie { ...R.f.cookie(v), … }`
+and to a bare typed cookie, judged against the field's wire name. A cookie named like the session
+cookie of a `SignedCookie` actor of the unit MUST NOT be written as a typed write
+(`bynk.actor.signed_cookie_write_directly`) or an untyped `Cookie` literal
+(`bynk.actor.signed_cookie_write_literal`). An untyped literal named like a field of a `cookies` record
+of the unit draws a warning (`bynk.http.cookie_untyped_has_field`), and a literal `value` that field's
+decoder rejects (an enum other than a variant's exact name, an `Int` that is not a safe integer's
+digits, a `Bool` other than `true` or `false`) is refused (`bynk.http.cookie_value_undecodable`).
+
 **`@raw`.** A third handler annotation, `@raw(contentType: "<type>/<subtype>")` (or
 `"*/*"`), marks a handler's `body: Bytes` as the raw request body. It is legal only
 on a `POST`/`PUT`/`PATCH` handler with a `body` (`bynk.http.raw_on_bodyless`), at
