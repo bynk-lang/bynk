@@ -506,6 +506,19 @@ fn stage_binding_files(
             debug_metadata: None,
         });
     }
+    // #3479: each `Vectorize` index's configuration, for `bynk deploy` to
+    // create the index with and check it against.
+    if let Some(manifest) = emitter::wrangler::emit_vectorize_manifest(bindings) {
+        compiled.push(StagedFile {
+            output_path: PathBuf::from(format!(
+                "workers/{dashes}/{}",
+                emitter::wrangler::VECTORIZE_MANIFEST
+            )),
+            document: Document::Json(manifest),
+            source_map: None,
+            debug_metadata: None,
+        });
+    }
     for binding in bindings {
         if !matches!(
             binding.source,

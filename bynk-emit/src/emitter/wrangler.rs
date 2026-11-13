@@ -1033,6 +1033,70 @@ pub fn analytics_dataset_name(worker: &str, binding: &str) -> String {
         .replace('-', "_")
 }
 
+/// #3479: the file beside a Worker's `wrangler.toml` that states each
+/// `[[vectorize]]` binding's index configuration. `wrangler.toml`'s stanza
+/// names only the index; its dimensions, metric and metadata indexes are what
+/// `bynk deploy` creates it with and checks it against, and Cloudflare cannot
+/// change them afterwards. Written only for a Worker with a `Vectorize`
+/// instance, so any other project's output is unchanged.
+pub const VECTORIZE_MANIFEST: &str = "bynk-vectorize.json";
+
+/// The manifest's version. A reader refuses one it does not know.
+pub const VECTORIZE_MANIFEST_VERSION: u32 = 1;
+
+/// The `bynk-vectorize.json` of a Worker with `bindings`, or `None` when it
+/// has no `Vectorize` instance.
+pub fn emit_vectorize_manifest(bindings: &[WorkerBinding]) -> Option<String> {
+    let entries: Vec<String> = bindings
+        .iter()
+        .filter_map(|b| match &b.source {
+            BindingSource::VectorizeIndex {
+                dimensions,
+                metric,
+                indexed,
+                ..
+            } => Some(format!(
+                "    {{ \"binding\": {}, \"dimensions\": {dimensions}, \"metric\": {}, \"indexed\": [{}] }}",
+                bynk_project::json_string(&b.name),
+                bynk_project::json_string(metric),
+                indexed
+                    .iter()
+                    .map(|i| bynk_project::json_string(i))
+                    .collect::<Vec<_>>()
+                    .join(", "),
+            )),
+            _ => None,
+        })
+        .collect();
+    if entries.is_empty() {
+        return None;
+    }
+    Some(format!(
+        "{{\n  \"version\": {VECTORIZE_MANIFEST_VERSION},\n  \"vectorize\": [\n{}\n  ]\n}}\n",
+        entries.join(",\n")
+    ))
+}
+
+/// A generated `wrangler.toml`'s `[[vectorize]]` entries as `(binding,
+/// index_name)`, in file order; an entry missing either is skipped.
+pub fn vectorize_index_entries(text: &str) -> Result<Vec<(String, String)>, String> {
+    let doc: toml_edit::DocumentMut = text
+        .parse()
+        .map_err(|e| format!("invalid wrangler.toml: {e}"))?;
+    Ok(doc
+        .get("vectorize")
+        .and_then(|i| i.as_array_of_tables())
+        .into_iter()
+        .flatten()
+        .filter_map(|t| {
+            Some((
+                t.get("binding")?.as_str()?.to_string(),
+                t.get("index_name")?.as_str()?.to_string(),
+            ))
+        })
+        .collect())
+}
+
 /// P4b (#2608): the directory beside a Worker's `wrangler.toml` holding its
 /// `D1` databases' migrations, one subdirectory per database, as the
 /// project's own `migrations/` folder does.
@@ -1855,6 +1919,69 @@ mod binding_tests {
             }
         );
         assert_eq!(later.source, BindingSource::Kv);
+    }
+}
+
+#[cfg(test)]
+mod vectorize_manifest_tests {
+    use super::*;
+
+    fn index(name: &str, indexed: &[&str]) -> WorkerBinding {
+        WorkerBinding {
+            name: name.to_string(),
+            source: BindingSource::VectorizeIndex {
+                capability: "Docs".to_string(),
+                dimensions: 768,
+                metric: "cosine".to_string(),
+                indexed: indexed.iter().map(|s| s.to_string()).collect(),
+            },
+        }
+    }
+
+    /// #3479: the manifest states each index's configuration, and a Worker with
+    /// no `Vectorize` instance gets no file.
+    #[test]
+    fn the_manifest_states_each_indexs_configuration() {
+        assert_eq!(emit_vectorize_manifest(&[]), None);
+        let text = emit_vectorize_manifest(&[
+            index("VECTORIZE_DOCS", &["category:string", "year:number"]),
+            index("VECTORIZE_PLAIN", &[]),
+        ])
+        .expect("two indexes");
+        assert!(text.contains(
+            "{ \"binding\": \"VECTORIZE_DOCS\", \"dimensions\": 768, \"metric\": \"cosine\", \"indexed\": [\"category:string\", \"year:number\"] }"
+        ));
+        assert!(text.contains("\"binding\": \"VECTORIZE_PLAIN\", \"dimensions\": 768, \"metric\": \"cosine\", \"indexed\": []"));
+    }
+
+    /// The index entries are read back from a generated config by binding.
+    #[test]
+    fn index_entries_are_read_from_the_config() {
+        let toml = "name = \"shop\"\n\n[[vectorize]]\nbinding = \"VECTORIZE_DOCS\"\nindex_name = \"shop-docs\"\n";
+        assert_eq!(
+            vectorize_index_entries(toml).unwrap(),
+            [("VECTORIZE_DOCS".to_string(), "shop-docs".to_string())]
+        );
+    }
+
+    /// A derived name longer than Cloudflare's 64 bytes keeps its head and ends
+    /// in a stable hash; a short one is as derived.
+    #[test]
+    fn the_derived_name_respects_the_length_limit() {
+        assert_eq!(
+            vectorize_index_name("shop-cart", "VECTORIZE_DOCS"),
+            "shop-cart-docs"
+        );
+        let long = vectorize_index_name(&"a".repeat(80), "VECTORIZE_DOCS");
+        assert_eq!(long.len(), 64);
+        assert_eq!(
+            long,
+            vectorize_index_name(&"a".repeat(80), "VECTORIZE_DOCS")
+        );
+        assert_ne!(
+            long,
+            vectorize_index_name(&"a".repeat(81), "VECTORIZE_DOCS")
+        );
     }
 }
 

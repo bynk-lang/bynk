@@ -58,6 +58,7 @@ mod provisioning;
 mod revert;
 mod secrets;
 mod senders;
+mod vectorize;
 
 use config::*;
 use destinations::*;
@@ -69,6 +70,7 @@ use plan::*;
 use provisioning::*;
 use secrets::*;
 use senders::*;
+use vectorize::*;
 
 // External facade: the paths `main.rs` and `dev.rs` already use must keep
 // resolving exactly as they did before the split.
