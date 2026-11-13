@@ -20,3 +20,19 @@ storage = "sqlite"
 type = "durable-object"
 storage = "sqlite"
 
+[[containers]]
+class_name = "__Container_Renderer"
+scheduling_policy = "durable_object"
+
+[containers.images.Renderer]
+dockerfile = "../../../containers/renderer/Dockerfile"
+build_context = "../../../containers/renderer"
+
+[[containers]]
+class_name = "__Container_Thumbs"
+scheduling_policy = "durable_object"
+
+[containers.images.Thumbs]
+dockerfile = "../../../containers/thumbs/Dockerfile"
+build_context = "../../../containers/thumbs"
+

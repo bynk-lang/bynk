@@ -7,6 +7,8 @@ import { __matchPath, __httpResultToResponse, __headResponse, __notModifiedIfMat
 import { compose, type Env } from "./compose.js";
 import * as handlers from "./handlers.js";
 
+export { __Container_Renderer, __Container_Thumbs } from "./containers.js";
+
 function __bynkReportFault(ctx: { waitUntil(promise: globalThis.Promise<unknown>): void } | undefined, e: unknown): void {
   if (ctx === undefined) return;
   const fault = globalThis.Promise.reject(e);
