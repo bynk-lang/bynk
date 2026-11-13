@@ -28,6 +28,7 @@ per-commit history. While Bynk is pre-1.0, increments may change behaviour.
 
 | Version | Highlights |
 |---|---|
+| **v0.591.3** | `Ai.generate` reads the reply text from `choices[0].message.content` when a model sends no `response`, as granite does; `response` still wins when both are there |
 | **v0.591.2** | A Workers AI input the model's schema rejects (platform code `5006`) is `InvalidInput`, not `AiFailed`, as observed on a real account |
 | **v0.591.1** | The Book gains "Run a model from a Worker", a guide to the Workers AI `Ai` capability (`generate`, `embed`, `run`, `runStream`, errors, tests and `bynk dev`), and the REST adapter guide now ends with a migration to the binding |
 | **v0.591.0** | `Ai.runStream(model, input)` streams a Workers AI model's own events as a `Stream[String]`, ready to serve with `Streaming`; a refusal before the stream is an `Err`, a failure after it faults the stream, and a client that hangs up cancels the model |
