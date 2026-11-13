@@ -1115,7 +1115,7 @@ export const __VersionToken: symbol = globalThis.Symbol("Version");
  * and has no named instances. Only a Worker that uses it declares the
  * binding.
  *
- * `run(model, input)` runs any model by its id (`"@cf/meta/llama-3.1-8b-instruct"`).
+ * `run(model, input)` runs any model by its id (`"@cf/meta/llama-3.2-1b-instruct"`).
  * `input` is the model's JSON input as text, and the reply is the model's JSON
  * output as text, so a model Cloudflare ships tomorrow works today: build the
  * input with `Json.encode` and read the reply with `Json.decode`. An `input`

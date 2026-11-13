@@ -914,7 +914,7 @@ output as it is produced:
 ```bynk,fragment
 service chat from http {
 	on GET("/chat") () -> Effect[HttpResult[String]] by Visitor given Ai {
-		let started <- Ai.runStream("@cf/meta/llama-3.1-8b-instruct", "{\"prompt\": \"Tell me a story\"}")
+		let started <- Ai.runStream("@cf/meta/llama-3.2-1b-instruct", "{\"prompt\": \"Tell me a story\"}")
 		match started {
 			Ok(events) => Streaming(events),
 			Err(_) => ServerError("model unavailable"),
@@ -925,7 +925,9 @@ service chat from http {
 
 Each element is one event of the model's own stream, as the JSON text of that
 event, so the client sees what Workers AI sends (the shape is the model's: a
-handler that wants text deltas maps the stream and decodes each event). The
+handler that wants text deltas maps the stream and decodes each event; for a
+chat model the events observed on a real account carry a `response` text delta,
+which Cloudflare does not document). The
 binding asks the model to stream; the terminal `[DONE]` marker is consumed, not
 yielded. A refusal before the stream starts (an unknown model, a usage limit) is
 the `Err`, so the handler can answer with an ordinary response; a failure after

@@ -115,7 +115,7 @@ context assistant {
 
 	service summarise {
 		on call(text: String) -> Effect[String] given Ai {
-			let reply <- Ai.complete("@cf/meta/llama-3.1-8b-instruct", "Summarise: \(text)")
+			let reply <- Ai.complete("@cf/meta/llama-3.2-1b-instruct", "Summarise: \(text)")
 			match reply {
 				Ok(summary) => summary,
 				Err(_) => "(no summary available)",

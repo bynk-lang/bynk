@@ -18,7 +18,7 @@ export class AiAnswerer implements Answerer {
   private deps: { Ai: bynk_cloudflare.Ai };
   constructor(deps: { Ai: bynk_cloudflare.Ai }) { this.deps = deps; }
   async answer(question: string): globalThis.Promise<string> {
-    const reply = await this.deps.Ai.run("@cf/meta/llama-3.1-8b-instruct", question);
+    const reply = await this.deps.Ai.run("@cf/meta/llama-3.2-1b-instruct", question);
     switch (reply.tag) {
       case "Ok": {
         const text = reply.value;
@@ -36,7 +36,7 @@ export const __AiAnswererProvider = { token: __AnswererToken, factory: (deps: { 
 
 export const api = {
   async http_GET_ask(deps: { Ai: bynk_cloudflare.Ai }): globalThis.Promise<HttpResult<string>> {
-    const reply = await deps.Ai.run("@cf/meta/llama-3.1-8b-instruct", "{\"prompt\": \"hello\"}");
+    const reply = await deps.Ai.run("@cf/meta/llama-3.2-1b-instruct", "{\"prompt\": \"hello\"}");
     if (reply.tag === "Ok") {
       const text = reply.value;
       return HttpResult.Ok(text);

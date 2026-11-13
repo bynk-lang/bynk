@@ -54,7 +54,7 @@ service ask from http {
 			],
 			maxTokens: Some(128),
 		}
-		let reply <- Ai.generate("@cf/meta/llama-3.1-8b-instruct", request)
+		let reply <- Ai.generate("@cf/meta/llama-3.2-1b-instruct", request)
 		match reply {
 			Ok(generation) => Ok(generation.text),
 			Err(ModelNotFound) => NotFound,
@@ -131,7 +131,7 @@ and the client sees what Workers AI sends:
 ```bynk,fragment
 service chat from http {
 	on GET("/story") () -> Effect[HttpResult[String]] by Visitor given Ai {
-		let started <- Ai.runStream("@cf/meta/llama-3.1-8b-instruct", "{\"prompt\": \"Tell me a story\"}")
+		let started <- Ai.runStream("@cf/meta/llama-3.2-1b-instruct", "{\"prompt\": \"Tell me a story\"}")
 		match started {
 			Ok(events) => Streaming(events),
 			Err(_) => ServerError("the model is unavailable"),
@@ -144,8 +144,12 @@ A refusal before the stream starts (an unknown model, a usage limit) is the
 `Err`, so the handler can answer with an ordinary response. A failure after the
 first event faults the stream and aborts the response, as a failing producer does
 for any stream. A handler that wants text rather than events maps the stream and
-decodes each event; the shape of an event is the model's, so check the model's
-page. A stream is read once and cannot cross a service boundary, so the handler
+decodes each event. The shape of an event is the model's: for a chat model, a
+run on a real account showed each event as a JSON object with a `response` text
+delta (and a padding field `p`), the last JSON event also carrying the
+cumulative `usage`, and the stream ending with `data: [DONE]`. That is observed,
+not documented by Cloudflare, so check the model's page and do not build on
+fields it does not name. A stream is read once and cannot cross a service boundary, so the handler
 that calls `runStream` is the one that serves it.
 
 ## Answer the errors
