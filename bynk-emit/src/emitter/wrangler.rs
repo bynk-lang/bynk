@@ -474,15 +474,10 @@ pub fn emit_wrangler_toml(
             ],
         ));
     }
-    // #3477: each container's application, after the `exports` it names. Only
-    // `class_name`, `scheduling_policy` and the `images` map belong here: under
-    // the `durable_object` policy Wrangler rejects `image`, `max_instances` and
-    // `instance_type` on the entry (the instance type is passed to `start()`).
-    for binding in bindings {
-        if let BindingSource::ContainerInstance { .. } = &binding.source {
-            container_blocks(&binding.source, &mut doc);
-        }
-    }
+    // #3477: each container's application, after the `exports` it names.
+    bindings
+        .iter()
+        .for_each(|b| container_blocks(&b.source, &mut doc));
     let mut tombstones_sorted: Vec<(&str, Option<&str>)> = tombstones
         .renamed
         .iter()
