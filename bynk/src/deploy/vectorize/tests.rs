@@ -43,7 +43,7 @@ impl Fake {
         let script = dir.join("wrangler");
         std::fs::write(
             &script,
-            "#!/bin/sh\nd=$(dirname \"$0\")\necho \"$@\" >> \"$d/calls.log\"\n[ \"$1\" = vectorize ] || exit 2\ncase \"$2\" in\n  list) cat \"$d/list.json\";;\n  get) cat \"$d/get.json\";;\n  list-metadata-index) cat \"$d/meta.json\";;\n  *) exit 0;;\nesac\n",
+            "#!/bin/sh\nd=$(dirname \"$0\")\necho \"$@\" >> \"$d/calls.log\"\n[ \"$1\" = vectorize ] || exit 2\ncase \"$2\" in\n  list) cat \"$d/list.json\";;\n  get) cat \"$d/get.json\";;\n  create-metadata-index) touch \"$d/created\";;\n  list-metadata-index)\n    if [ -f \"$d/created\" ]; then\n      n=$(cat \"$d/polls\" 2>/dev/null || echo 0); echo $((n+1)) > \"$d/polls\"\n      if [ -f \"$d/after.$n.json\" ]; then cat \"$d/after.$n.json\"; elif [ -f \"$d/after.json\" ]; then cat \"$d/after.json\"; else cat \"$d/meta.json\"; fi\n    else cat \"$d/meta.json\"; fi;;\n  *) exit 0;;\nesac\n",
         )
         .unwrap();
         #[cfg(unix)]
@@ -66,14 +66,48 @@ impl Fake {
             .collect()
     }
 
+    /// What `list-metadata-index` answers once a `create-metadata-index` has
+    /// run, as a `n`th poll (`Some(n)`) or from then on (`None`).
+    fn after(&self, poll: Option<usize>, json: &str) {
+        let name = poll.map_or("after.json".to_string(), |n| format!("after.{n}.json"));
+        std::fs::write(self.dir.join(name), json).unwrap();
+    }
+
+    fn polls(&self) -> usize {
+        self.calls()
+            .iter()
+            .filter(|c| c.contains("list-metadata-index"))
+            .count()
+    }
+
+    /// Run with a pace a test can afford: 1 ms steps, a 300 ms timeout.
     fn run(
         &self,
         declared: &Resources,
         lock: &mut DeployLock,
         environment: &str,
     ) -> Result<(), DeployFailure> {
+        self.run_paced(
+            declared,
+            lock,
+            environment,
+            Pacing {
+                first: Duration::from_millis(1),
+                longest: Duration::from_millis(4),
+                timeout: Duration::from_millis(300),
+            },
+        )
+    }
+
+    fn run_paced(
+        &self,
+        declared: &Resources,
+        lock: &mut DeployLock,
+        environment: &str,
+        pacing: Pacing,
+    ) -> Result<(), DeployFailure> {
         let lock_path = self.dir.join("bynk.lock");
-        provision_vectorize_indexes(
+        provision_vectorize_indexes_paced(
             &self.provenance(),
             &self.dir,
             "shop",
@@ -81,6 +115,7 @@ impl Fake {
             lock,
             &lock_path,
             environment,
+            pacing,
         )
     }
 }
@@ -127,6 +162,10 @@ fn metadata_index_changes_are_additions_and_removals() {
 #[test]
 fn a_missing_index_is_created_with_its_configuration_then_its_metadata_indexes() {
     let fake = Fake::new("create", "[]", MATCHING, "[]");
+    fake.after(
+        None,
+        r#"[{"propertyName":"category","indexType":"String"},{"propertyName":"year","indexType":"Number"}]"#,
+    );
     let mut lock = DeployLock::default();
     fake.run(
         &resources(&["category:string", "year:number"]),
@@ -143,6 +182,8 @@ fn a_missing_index_is_created_with_its_configuration_then_its_metadata_indexes()
             "vectorize list-metadata-index shop-docs --json",
             "vectorize create-metadata-index shop-docs --propertyName category --type string",
             "vectorize create-metadata-index shop-docs --propertyName year --type number",
+            // The deploy waits for both to be listed before it returns.
+            "vectorize list-metadata-index shop-docs --json",
         ]
     );
     let recorded = recorded_vectorize(&lock, "shop", "VECTORIZE_DOCS", "default").unwrap();
@@ -232,6 +273,10 @@ fn a_later_metadata_index_is_created_and_a_removed_one_is_left() {
         r#"[{"name":"shop-docs"}]"#,
         MATCHING,
         r#"[{"propertyName":"old","indexType":"string"}]"#,
+    );
+    fake.after(
+        None,
+        r#"[{"propertyName":"old","indexType":"string"},{"propertyName":"year","indexType":"Number"}]"#,
     );
     let mut lock = DeployLock::default();
     fake.run(&resources(&["year:number"]), &mut lock, "default")
@@ -339,4 +384,76 @@ fn a_retyped_metadata_index_is_refused_before_anything_is_created() {
     // A plain addition or removal is not a retype.
     let (m, r) = metadata_index_changes(&d(&["a:string"]), &d(&["b:string"]));
     assert_eq!(type_change_message("shop-docs", &m, &r), None);
+}
+
+#[cfg(unix)]
+#[test]
+fn it_waits_for_every_new_metadata_index_to_be_listed_before_returning() {
+    // `create-metadata-index` only enqueues: the listing is empty for two
+    // polls, then holds one of the two, then both.
+    let fake = Fake::new("wait", "[]", MATCHING, "[]");
+    fake.after(Some(0), "[]");
+    fake.after(Some(1), "[]");
+    fake.after(
+        Some(2),
+        r#"[{"propertyName":"category","indexType":"String"}]"#,
+    );
+    fake.after(
+        None,
+        r#"[{"propertyName":"category","indexType":"String"},{"propertyName":"author.name","indexType":"String"}]"#,
+    );
+    let mut lock = DeployLock::default();
+    fake.run(
+        &resources(&["category:string", "author.name:string"]),
+        &mut lock,
+        "default",
+    )
+    .unwrap();
+    // One poll before the creations, then four after: 0, 1, 2 (partial), 3.
+    assert_eq!(fake.polls(), 5, "{:?}", fake.calls());
+}
+
+#[cfg(unix)]
+#[test]
+fn an_index_that_never_appears_fails_the_deploy_and_says_to_run_it_again() {
+    let fake = Fake::new("timeout", "[]", MATCHING, "[]");
+    // The listing never catches up.
+    fake.after(None, "[]");
+    let mut lock = DeployLock::default();
+    let err = fake
+        .run_paced(
+            &resources(&["category:string"]),
+            &mut lock,
+            "default",
+            Pacing {
+                first: Duration::from_millis(1),
+                longest: Duration::from_millis(2),
+                timeout: Duration::from_millis(40),
+            },
+        )
+        .unwrap_err();
+    let message = format!("{err:?}");
+    assert!(message.contains("category:string"), "{message}");
+    assert!(message.contains("not listed"), "{message}");
+    assert!(message.contains("was not pushed"), "{message}");
+    // The index itself was created and recorded, so a re-run resumes.
+    assert!(
+        recorded_vectorize(&lock, "shop", "VECTORIZE_DOCS", "default").is_some(),
+        "the created index is recorded even when the wait times out"
+    );
+}
+
+#[cfg(unix)]
+#[test]
+fn a_deploy_that_creates_no_metadata_index_does_not_wait() {
+    let fake = Fake::new(
+        "nowait",
+        r#"[{"name":"shop-docs"}]"#,
+        MATCHING,
+        r#"[{"propertyName":"category","indexType":"String"}]"#,
+    );
+    let mut lock = DeployLock::default();
+    fake.run(&resources(&["category:string"]), &mut lock, "default")
+        .unwrap();
+    assert_eq!(fake.polls(), 1, "{:?}", fake.calls());
 }

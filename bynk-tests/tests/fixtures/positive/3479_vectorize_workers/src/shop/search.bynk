@@ -8,8 +8,8 @@ context shop.search
 consumes bynk
 consumes bynk.cloudflare { Kv, Vectorize, Vector, VectorError, QueryOptions, Condition, FilterOp, MetaValue, MetadataScope }
 
-capability Docs = Vectorize @dimensions(3) @metric("cosine") @indexed(["category:string", "year:number"])
-capability Scratch = Vectorize @dimensions(2) @metric("euclidean")
+capability Docs = Vectorize @dimensions(32) @metric("cosine") @indexed(["category:string", "year:number"])
+capability Scratch = Vectorize @dimensions(64) @metric("euclidean")
 
 service api from http {
 	on PUT("/doc") (body: String) -> Effect[HttpResult[String]] by Visitor given Docs {

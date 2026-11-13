@@ -4,4 +4,4 @@ context demo
 
 consumes bynk.cloudflare { Vectorize }
 
-capability Docs = Vectorize @dimensions(3)
+capability Docs = Vectorize @dimensions(32)
