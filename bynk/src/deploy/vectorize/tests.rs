@@ -13,6 +13,7 @@ fn decl(indexed: &[&str]) -> VectorizeDecl {
         dimensions: 768,
         metric: "cosine".into(),
         indexed: indexed.iter().map(|s| s.to_string()).collect(),
+        adopt: None,
     }
 }
 
@@ -296,4 +297,120 @@ fn a_name_the_environment_pushes_over_the_limit_is_an_error_naming_the_instance(
         message.contains("VECTORIZE_DOCS") && message.contains("1 to 64 bytes"),
         "{message}"
     );
+}
+
+fn adopting(name: &str, indexed: &[&str]) -> Resources {
+    let mut declared = resources(indexed);
+    declared.vectorize_indexes[0].adopt = Some(name.to_string());
+    declared
+}
+
+#[test]
+fn an_adopted_index_that_matches_is_recorded_as_adopted_and_never_touched() {
+    let fake = Fake::new(
+        "adopt",
+        r#"[{"name":"docs-prod"}]"#,
+        MATCHING,
+        r#"[{"propertyName":"category","indexType":"string"}]"#,
+    );
+    let mut lock = DeployLock::default();
+    fake.run(
+        &adopting("docs-prod", &["category:string"]),
+        &mut lock,
+        "production",
+    )
+    .unwrap();
+    let recorded = recorded_vectorize(&lock, "shop", "VECTORIZE_DOCS", "production").unwrap();
+    assert_eq!(
+        (recorded.name.as_str(), recorded.adopted),
+        ("docs-prod", true)
+    );
+    // Looked at, never created, changed or deleted.
+    assert!(
+        fake.calls()
+            .iter()
+            .all(|c| !c.contains("create") && !c.contains("delete")),
+        "{:?}",
+        fake.calls()
+    );
+}
+
+#[test]
+fn an_adopted_index_that_is_missing_fails_and_is_not_created() {
+    let fake = Fake::new("adopt-missing", "[]", MATCHING, "[]");
+    let mut lock = DeployLock::default();
+    let failure = fake
+        .run(&adopting("docs-prod", &[]), &mut lock, "production")
+        .unwrap_err();
+    assert!(
+        failure.message.contains("does not exist on the account"),
+        "{}",
+        failure.message
+    );
+    assert!(
+        failure
+            .message
+            .contains("an adopted index is never created")
+    );
+    assert!(fake.calls().iter().all(|c| !c.contains("create")));
+    assert!(recorded_vectorize(&lock, "shop", "VECTORIZE_DOCS", "production").is_none());
+}
+
+#[test]
+fn an_adopted_index_that_drifted_fails_and_a_missing_metadata_index_is_not_created() {
+    let drifted = Fake::new(
+        "adopt-drift",
+        r#"[{"name":"docs-prod"}]"#,
+        r#"{"config":{"dimensions":3,"metric":"cosine"}}"#,
+        "[]",
+    );
+    let mut lock = DeployLock::default();
+    let failure = drifted
+        .run(&adopting("docs-prod", &[]), &mut lock, "production")
+        .unwrap_err();
+    assert!(
+        failure.message.contains("has 3 dimensions"),
+        "{}",
+        failure.message
+    );
+
+    // A metadata index the adopted index lacks is said, not made.
+    let lacking = Fake::new("adopt-meta", r#"[{"name":"docs-prod"}]"#, MATCHING, "[]");
+    lacking
+        .run(
+            &adopting("docs-prod", &["category:string"]),
+            &mut DeployLock::default(),
+            "production",
+        )
+        .unwrap();
+    assert!(lacking.calls().iter().all(|c| !c.contains("create")));
+}
+
+#[test]
+fn bynk_toml_adopts_per_environment_by_capability() {
+    let dir = std::env::temp_dir().join(format!("bynk-vz-adopt-toml-{}", std::process::id()));
+    std::fs::create_dir_all(&dir).unwrap();
+    std::fs::write(
+        dir.join("bynk.toml"),
+        "[project]\nname = \"shop\"\nversion = \"0.1.0\"\n\n[deploy.vectorize.Docs]\nindex = { production = \"docs-prod\" }\n",
+    )
+    .unwrap();
+    let mut all = BTreeMap::from([("shop".to_string(), resources(&[]))]);
+    apply_vectorize_adoptions(&dir, &mut all, "production").unwrap();
+    assert_eq!(
+        all["shop"].vectorize_indexes[0].adopt.as_deref(),
+        Some("docs-prod")
+    );
+    assert_eq!(
+        all["shop"].vectorize_indexes[0].physical_name("production"),
+        "docs-prod"
+    );
+    // Another environment is created by the deploy, under the qualified name.
+    apply_vectorize_adoptions(&dir, &mut all, "staging").unwrap();
+    assert_eq!(all["shop"].vectorize_indexes[0].adopt, None);
+    assert_eq!(
+        all["shop"].vectorize_indexes[0].physical_name("staging"),
+        "shop-docs-staging"
+    );
+    let _ = std::fs::remove_dir_all(&dir);
 }

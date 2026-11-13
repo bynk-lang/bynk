@@ -99,6 +99,22 @@ struct DeployTable {
     /// Hyperdrive settings, keyed by the `Postgres` capability's name
     /// (`capability Main = Postgres` is `Main`).
     hyperdrive: Option<std::collections::BTreeMap<String, DeployHyperdriveEntry>>,
+    /// Vectorize settings, keyed by the `Vectorize` capability's name
+    /// (`capability Docs = Vectorize …` is `Docs`).
+    vectorize: Option<std::collections::BTreeMap<String, DeployVectorizeEntry>>,
+}
+
+/// One `Vectorize` capability's index at deploy.
+#[derive(JsonSchema)]
+#[serde(deny_unknown_fields)]
+#[allow(dead_code)]
+struct DeployVectorizeEntry {
+    /// Names of Vectorize indexes that already exist, by deployment
+    /// environment (`default`, or an `--env` name). An environment listed here
+    /// is adopted: `bynk deploy` checks its dimensions and metric against the
+    /// declaration and never creates, changes or deletes it. Without an entry
+    /// the deploy creates the index.
+    index: std::collections::BTreeMap<String, String>,
 }
 
 /// One `Postgres` capability's Hyperdrive config at deploy.
