@@ -256,15 +256,14 @@ impl AiSearchInstances for RestAiSearch {
             .get(&format!("/ai-search/namespaces/default/instances/{name}"))
         {
             Ok(body) => Ok(instance_state(&body)),
-            // Cloudflare answers 404 with code 7002 (`ai_search_not_found`).
-            Err(said) if said.contains("answered 404") || said.contains("\"code\":7002") => {
-                Ok(InstanceState::Missing)
-            }
-            Err(said) if said.contains("answered 401") || said.contains("answered 403") => {
-                Err(format!(
-                    "{said} (the token needs the \"{AI_SEARCH_TOKEN_SCOPE}\" permissions, on this account, to find an instance)"
-                ))
-            }
+            // Cloudflare's documented answer for an instance that is not there
+            // is code 7002 (`ai_search_not_found`). Any other 404 (a wrong
+            // account id, a moved route) is not "missing", so it falls through
+            // with what Cloudflare said.
+            Err(said) if said.contains("\"code\":7002") => Ok(InstanceState::Missing),
+            Err(said) if super::destinations::is_denied(&said) => Err(format!(
+                "{said} (the token needs the \"{AI_SEARCH_TOKEN_SCOPE}\" permissions, on this account, to find an instance)"
+            )),
             Err(said) => Err(said),
         }
     }
@@ -657,6 +656,10 @@ mod tests {
                 r#"{"success":true,"result":{"id":"support-docs","paused":true}}"#.into(),
             ),
             (
+                "/ai-search/namespaces/default/instances/denied",
+                r#"{"success":false,"errors":[{"code":10000,"message":"Authentication error"}],"result":{}}"#.into(),
+            ),
+            (
                 "/ai-search/namespaces/default/instances/absent",
                 r#"{"success":false,"errors":[{"code":7002,"message":"ai_search_not_found"}],"result":{}}"#.into(),
             ),
@@ -666,6 +669,18 @@ mod tests {
             api.instance("support-docs").unwrap(),
             InstanceState::Found { warning: Some(_) }
         ));
+        // A refusal of the token names the permissions; a 404 that is not 7002
+        // is not "missing", and nothing else is quietly swallowed.
+        let denied = api.instance("denied").unwrap_err();
+        assert!(
+            denied.contains("AI Search: Edit and AI Search: Run"),
+            "{denied}"
+        );
+        let other = api.instance("elsewhere").unwrap_err();
+        assert!(
+            other.contains("could not") || other.contains("7003"),
+            "{other}"
+        );
         assert_eq!(api.instance("absent").unwrap(), InstanceState::Missing);
         let seen = seen.lock().unwrap();
         assert!(
@@ -875,12 +890,38 @@ mod tests {
             panic!("paused warns");
         };
         assert!(w.contains("paused"));
+        // Paused is said before disabled when both hold.
+        let InstanceState::Found { warning: Some(w) } =
+            state(serde_json::json!({ "paused": true, "enable": false }))
+        else {
+            panic!("paused and disabled warns");
+        };
+        assert!(w.contains("paused") && !w.contains("disabled"));
         let InstanceState::Found { warning: Some(w) } =
             state(serde_json::json!({ "enable": false }))
         else {
             panic!("disabled warns");
         };
         assert!(w.contains("disabled"));
+    }
+
+    #[test]
+    fn a_failed_lookup_is_a_problem_naming_the_instance_not_a_missing_one() {
+        struct Refusing;
+        impl AiSearchInstances for Refusing {
+            fn instance(&self, _: &str) -> Result<InstanceState, String> {
+                Err("GET /ai-search/namespaces/default/instances/support-docs: Cloudflare answered 500 []".into())
+            }
+        }
+        let (order, resources) =
+            search_project(&[("shop-ask", &[("AI_SEARCH_KB", "support-docs")])]);
+        let (warnings, problems) = link_ai_search(&order, &resources, &Refusing);
+        assert!(warnings.is_empty());
+        assert_eq!(problems.len(), 1, "{problems:?}");
+        assert!(
+            problems[0].contains("could not look it up") && problems[0].contains("answered 500")
+        );
+        assert!(!problems[0].contains("does not exist"));
     }
 
     #[test]
