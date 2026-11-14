@@ -4517,8 +4517,8 @@ pub const EXPLANATIONS: &[Explain] = &[
     Explain {
         code: "bynk.parse.removed_send_arrow",
         blurb: "`~>` was removed. It started an effect and carried on without waiting, which `e.detach()` now says as an ordinary effect statement: it works for any `Effect[T]`, inside a lambda, `forEach` or helper, and reports a fault or an `Err` instead of losing it. Write `do e.detach()` where you wrote `~> e`. For a unit effect that does not need to outlive the handler, plain `do e` is enough, since `Logger` calls finish before they return. On v0.603.x, `bynk check --fix` rewrites each `~> e` for you. See the Book's Upgrading page.",
-        example: "on call bump() -> Effect[()] given Logger {\n    ~> Logger.info(\"bump\")                  // ✗ removed\n    Effect.pure(())\n}\n\n\
-                  on call bump() -> Effect[()] given Logger {\n    do Logger.info(\"bump\").detach()   // ✓ an ordinary statement\n    Effect.pure(())\n}",
+        example: "service api from http {\n    on GET(\"/\") () -> Effect[HttpResult[String]] by Visitor given Logger {\n        ~> Logger.info(\"served\")                    // ✗ removed\n        Ok(\"ok\")\n    }\n}\n\n\
+                  service api from http {\n    on GET(\"/\") () -> Effect[HttpResult[String]] by Visitor given Logger {\n        do Logger.info(\"served\").detach()    // ✓ an ordinary statement\n        Ok(\"ok\")\n    }\n}",
         page: "/book/reference/capabilities",
         anchor: "detach",
     },
