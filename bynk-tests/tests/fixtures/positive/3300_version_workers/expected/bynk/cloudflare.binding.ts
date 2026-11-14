@@ -1718,8 +1718,8 @@ export class WorkersVectorize implements Vectorize {
       throw e instanceof Error ? e : new Error(message);
     }
     // The platform's numbered codes, present in every message observed: 40012 is
-    // a dimension error, 40025 a `topK` over the limit.
-    if (/\(code = 40012\)/.test(message)) return { tag: "DimensionMismatch", message };
+    // an invalid vector (a dimension error when the message says so), 40025 a `topK` over the limit.
+    if (/\(code = 40012\)/.test(message) && /dimension/i.test(message)) return { tag: "DimensionMismatch", message };
     if (/\(code = 40025\)/.test(message)) return { tag: "VectorInvalidInput", message };
     if (/dimensions?\b.*(mismatch|does not match|expected)|(mismatch|expected).*\bdimensions?\b/i.test(message)) return { tag: "DimensionMismatch", message };
     if (/rate.?limit|too many requests|\b429\b/i.test(message)) return { tag: "VectorRateLimited" };
