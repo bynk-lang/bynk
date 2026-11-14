@@ -3,7 +3,7 @@ title: Version compatibility & changelog
 ---
 Bynk is pre-1.0 and developed in small, spec-first increments (see
 [Versioning & roadmap](/book/about/versioning-and-roadmap/)). This book is
-written against **v0.605**.
+written against **v0.606**.
 
 This page is a high-level summary of notable increments, not an exhaustive
 per-commit history. While Bynk is pre-1.0, increments may change behaviour.
@@ -28,6 +28,8 @@ per-commit history. While Bynk is pre-1.0, increments may change behaviour.
 
 | Version | Highlights |
 |---|---|
+| **v0.606.0** | Naming a standard-library type (or a bare variant of one of its sums) that a braced `consumes` does not list is the warning `bynk.consumes.type_not_selected`, and `bynk check --fix` adds the name to the braces; an error follows in a later release (#3536) |
+| **v0.605.1** | A selective `consumes` no longer lets the standard-library types it did not list clash with a suite's types or make a context's own variant ambiguous (`Claim`, `Claimed`, `ContainerError`'s `Unavailable`) |
 | **v0.605.0** | Remove the `~>` send, deprecated since v0.603.10 for `e.detach()`; a program that still uses it is refused with `bynk.parse.removed_send_arrow`, and the `bynk.send.*` codes are retired |
 | **v0.604.0** | `bynk check --fix=<code>[,<code>…]` applies only the fixes of the named diagnostic codes, hints included, and refuses an unknown code with the nearest real one |
 | **v0.603.11** | `bynk check --fix` applies only the fixes of diagnostics `check` shows, names the code each file's edits fixed, and no longer binds a bare statement with `let _ =` |

@@ -1,12 +1,6 @@
----
-level: minor
-changelog: Naming a standard-library type (or a bare variant of one of its sums) that a braced `consumes` does not list is the warning `bynk.consumes.type_not_selected`, and `bynk check --fix` adds the name to the braces; an error follows in a later release (#3536)
-probes: emit_diagnostics, diagnostic_coverage, explained_codes
----
+# 0845 — A braced `consumes` of a first-party unit brings into scope only the names it lists
 
-## ADR: braced-consumes-lists-what-is-in-scope
-title: A braced `consumes` of a first-party unit brings into scope only the names it lists
-summary: Unlisted standard-library types are not clash or ambiguity candidates; naming one is a deprecation warning with a fix, then an error
+- **Status:** Accepted (v0.606)
 
 **Context.** `consumes bynk { Logger }` brought every type `bynk` exports into scope, so adding a standard-library export (`Claim`, `ContainerError`) broke correct programs that never asked for it: a suite `type Claim`, or a bare `Unavailable(…)` of the program's own sum, clashed or became ambiguous (#3536).
 
