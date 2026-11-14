@@ -2392,7 +2392,7 @@ t("WorkersAiSearch.search: a message about something else of the instance stays 
     assert.deepEqual((await failing(message)).error, { tag: "SearchFailed", message });
   }
   // An auth or upstream problem is not a malformed request.
-  for (const message of ["Invalid API token", "invalid binding", "invalid response from upstream"]) {
+  for (const message of ["Invalid API token", "invalid binding", "invalid response from upstream", "API token must have the AI Search: Run permission"]) {
     assert.equal((await failing(message)).error.tag, "SearchFailed", message);
   }
   assert.equal((await failing("invalid filter: unknown operator")).error.tag, "SearchInvalidInput");

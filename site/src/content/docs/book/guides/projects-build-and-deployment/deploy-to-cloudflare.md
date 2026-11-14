@@ -900,7 +900,7 @@ Any other status is named and nothing is claimed about it. The plan shows the
 binding as a link to be made, with no action:
 
 ```
-will link ai-search support-docs (AI_SEARCH_KB; not created; existence is checked by a real deploy, not a dry run)
+will link ai-search support-docs (AI_SEARCH_KB; not created; not checked in a dry run)
 ```
 
 `--dry-run` stays offline and does not ask (plans are built offline,

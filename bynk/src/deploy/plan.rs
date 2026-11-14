@@ -2281,11 +2281,12 @@ pub(crate) fn plan_report(plan: &Plan<'_>, format: DeployFormat) -> String {
                 }
                 // #3480: linked, not provisioned — the account owns it. The
                 // plan is built offline (#3494), so it has not looked the
-                // instance up: it says "will link", never "linked", and a real
-                // deploy is what checks that the instance exists.
+                // instance up: it says "will link", never "linked", and only a real
+                // deploy checks that the instance exists. The same line prints
+                // on a real run, before that lookup, so it is worded for both.
                 for search in &context.ai_search {
                     out.push_str(&format!(
-                        "will link ai-search {} ({}; not created; existence is checked by a real deploy, not a dry run)\n",
+                        "will link ai-search {} ({}; not created; not checked in a dry run)\n",
                         search.instance, search.binding
                     ));
                 }
@@ -3864,7 +3865,7 @@ pub(crate) mod tests {
         let plan = plan_of(&order, &resources, &DeployLock::default());
         assert_eq!(
             plan_report(&plan, DeployFormat::Short),
-            "will link ai-search support-docs (AI_SEARCH_KB; not created; existence is checked by a real deploy, not a dry run)\ndeploy shop-ask\n"
+            "will link ai-search support-docs (AI_SEARCH_KB; not created; not checked in a dry run)\ndeploy shop-ask\n"
         );
         let json: serde_json::Value =
             serde_json::from_str(&plan_report(&plan, DeployFormat::Json)).unwrap();
