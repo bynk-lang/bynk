@@ -510,7 +510,7 @@ Type-check a `.bynk` file or project without writing output. Runs the compiler
 pipeline **in-process**.
 
 ```text
-bynk check [INPUT] [--format rich|short] [--fix] [--emit] [--each] [--locked] [--offline]
+bynk check [INPUT] [--format rich|short] [--fix[=CODE,…]] [--emit] [--each] [--locked] [--offline]
 ```
 
 | Argument | Default | Meaning |
@@ -518,7 +518,7 @@ bynk check [INPUT] [--format rich|short] [--fix] [--emit] [--each] [--locked] [-
 | `INPUT` | `.` | A `.bynk` file, or a project root directory (a `bynk.toml` or `src/` subdir selects project mode; otherwise the directory is itself the source tree). |
 | `--format` | `rich` | `rich` is the source-context rendering; `short` emits one terse `path:line:col: severity[category]: message` line per diagnostic, for the VS Code problem-matcher, CI, and scripts. In both, `path` is the file as you'd type it from the working directory (the input you passed, joined with the file's place in it), the same path `fmt` reports. `rich` is coloured only when stderr is a terminal and `NO_COLOR` is unset or empty; `FORCE_COLOR` or `CLICOLOR_FORCE` set to anything but empty or `0` colours it without a terminal (for `less -R` or a CI log); `0` doesn't turn colour off on a terminal, `NO_COLOR` does, and it wins over both. `rich` cuts a source line longer than 400 bytes to a window around its labels, marked `…`. |
 
-| `--fix` | off | Apply the machine-applicable fix suggestions to the sources, in place, before checking. See [Applying fixes](#applying-fixes). |
+| `--fix[=CODE,…]` | off | Apply the machine-applicable fix suggestions to the sources, in place, before checking. With `=CODE` (comma-separated, or repeated), only those diagnostic codes' fixes. See [Applying fixes](#applying-fixes). |
 | `--emit` | off | After a passing check, generate the Workers TypeScript into a temporary directory and type-check it with `tsc`. See [Type-checking the generated code](#type-checking-the-generated-code). Needs a project directory, and `tsc` (with Node.js). |
 | `--each` | off | Check each project directly inside a directory that has no `bynk.toml`. See [A directory of projects](#a-directory-of-projects). |
 
@@ -599,8 +599,18 @@ never one with placeholders for you to fill in.
 bynk check --fix
 bynk check --fix --format short
 bynk check --fix src/shop.bynk
+bynk check --fix=bynk.given.unused_capability
 ```
 
+- **`--fix=<code>` takes one migration at a time.** `--fix=bynk.types.inverted_range`
+  takes only the fixes of that code, and `--fix=<a>,<b>` (or `--fix=<a> --fix=<b>`)
+  of several; the value needs the `=`. Use it where an upgrade note names a code.
+  Naming a code asks for its fixes, so a hint `check` hides (such as
+  `bynk.parse.let_else_staircase`) is fixed when you name it, and plain `--fix`
+  still leaves hints alone. An editor-only quick fix, one that changes meaning
+  you must choose, is never taken. A code that is not a real diagnostic code is
+  refused before anything is read, naming the nearest real one; a real code with
+  nothing to fix writes nothing. The rest of the rules below apply unchanged.
 - **It repeats until nothing more applies.** A fix can expose another fixable
   diagnostic (adding a capability to an agent handler's `given` makes a provider
   that calls it short of the same capability), so each round re-checks the
@@ -614,7 +624,8 @@ bynk check --fix src/shop.bynk
 - **It writes only files that change, in place, and does not format.** A file
   with nothing to fix keeps its modification time. Run [`bynk fmt`](#bynk-fmt)
   afterwards if you want both. One line per file written precedes the report:
-  `fixed: src/shop.bynk (3 edits)`.
+  `fixed: src/shop.bynk: bynk.given.unused_capability ×3`, naming each code
+  and how many of its diagnostics were fixed.
 - **A directory you cannot write to** is only noticed when its file is written, so a
   failure there can come after earlier files were written.
 - **There is no dry run.** Review with `git diff` and undo with `git checkout`.

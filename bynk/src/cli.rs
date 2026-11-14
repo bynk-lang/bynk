@@ -352,9 +352,18 @@ pub enum Command {
         /// "fix all" applies, repeated until none remain. Writes only files
         /// that change, does not format, and writes nothing if applying the
         /// fixes would leave a problem that needs a human. What remains is
-        /// reported as usual.
-        #[arg(long)]
-        fix: bool,
+        /// reported as usual. `--fix=<code>[,<code>…]` takes only the fixes of
+        /// the named diagnostic codes (a hint's too, when named): for a single
+        /// migration, such as an upgrade note's one change. An unknown code is
+        /// an error that names the nearest real one (#3537).
+        #[arg(
+            long,
+            value_name = "CODE",
+            num_args = 0..,
+            require_equals = true,
+            value_delimiter = ','
+        )]
+        fix: Option<Vec<String>>,
         /// After a passing check, generate the Workers TypeScript into a
         /// temporary directory and type-check it with `tsc` (#3068). A failure
         /// is reported as `bynk.codegen.tsc_failed` at the Bynk source the

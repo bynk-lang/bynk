@@ -1227,7 +1227,24 @@ fn atomic_write(path: &Path, contents: &str) -> std::io::Result<()> {
 /// #2642: `fix` first applies the machine-applicable suggestions ([`fix`]) to
 /// the input, or to each workspace member in turn, then reports what remains
 /// as an ordinary check does. A refused or failed fix fails the run.
-pub fn run_check(prog: &str, input: &Path, short: bool, fix: bool, each: bool) -> ExitCode {
+///
+/// #3537: `fix` is `None` for no fixing, `Some(&[])` for `--fix` (every
+/// diagnostic `check` shows) and `Some(codes)` for `--fix=<code>,…`, which
+/// takes only those codes' fixes. An unknown code is refused before any work.
+pub fn run_check(
+    prog: &str,
+    input: &Path,
+    short: bool,
+    fix: Option<&[String]>,
+    each: bool,
+) -> ExitCode {
+    let scope = match fix.map(fix::Scope::codes).transpose() {
+        Ok(scope) => scope,
+        Err(message) => {
+            eprintln!("{prog}: --fix: {message}");
+            return ExitCode::FAILURE;
+        }
+    };
     // #2207 (decision C): at a workspace root, check every member in order.
     // Every member runs, and the run fails if any does. `rich` heads each
     // member's report with its path; `short` adds no headers, and its paths
@@ -1256,12 +1273,12 @@ pub fn run_check(prog: &str, input: &Path, short: bool, fix: bool, each: bool) -
         // #2642: plan every member before writing any, so a refusal in one
         // leaves the whole workspace untouched.
         let mut failed = false;
-        if fix {
+        if let Some(scope) = &scope {
             let named: Vec<(&Path, String)> = members
                 .iter()
                 .map(|m| (m.as_path(), format!("{prog}: {}", shown(m))))
                 .collect();
-            failed |= !fix::fix_all(prog, &named);
+            failed |= !fix::fix_all(prog, scope, &named);
         }
         for member in &members {
             if !short {
@@ -1275,7 +1292,9 @@ pub fn run_check(prog: &str, input: &Path, short: bool, fix: bool, each: bool) -
             ExitCode::SUCCESS
         };
     }
-    let fixed = !fix || fix::fix_all(prog, &[(input, prog.to_string())]);
+    let fixed = scope
+        .as_ref()
+        .is_none_or(|scope| fix::fix_all(prog, scope, &[(input, prog.to_string())]));
     if check_one(prog, input, short, None) && fixed {
         ExitCode::SUCCESS
     } else {

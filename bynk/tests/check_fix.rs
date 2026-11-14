@@ -488,3 +488,192 @@ fn fix_touches_only_what_check_reports() {
     assert!(read(&sends).contains("match a {"));
     assert_eq!(read(&guard), ONE_ARMED_IF);
 }
+
+// ---- #3537: `--fix=<code>` ----
+
+const AGE: &str = "commons app.age\n\ntype Age = Int where InRange(120, 0)\n";
+const AGE_FIXED: &str = "commons app.age\n\ntype Age = Int where InRange(0, 120)\n";
+
+const STAIRCASE: &str = "\
+commons app.stairs
+
+fn read(a: Option[Int], b: Option[Int]) -> Result[Int, String] {
+  match a {
+    None => Err(\"a\"),
+    Some(x) => match b {
+      None => Err(\"b\"),
+      Some(y) => Ok(x + y),
+    },
+  }
+}
+";
+
+/// Three files, each with a different fix: an inverted range and an unused
+/// capability (both shown by `check`), and a staircase (a hint it hides).
+fn scoped_project(name: &str) -> PathBuf {
+    let root = scratch(name);
+    write(&root.join("src/app/age.bynk"), AGE);
+    write(&root.join("src/app/unused.bynk"), UNUSED);
+    write(&root.join("src/app/stairs.bynk"), STAIRCASE);
+    root
+}
+
+#[test]
+fn a_named_code_takes_only_its_fixes() {
+    let root = scoped_project("named");
+    let (code, err) = run(
+        &bynk(),
+        &root,
+        &["check", "--fix=bynk.types.inverted_range"],
+        &[],
+    );
+    assert_eq!(code, 0, "{err}");
+    assert!(
+        err.contains("fixed: src/app/age.bynk: bynk.types.inverted_range ×1"),
+        "{err}"
+    );
+    assert_eq!(read(&root.join("src/app/age.bynk")), AGE_FIXED);
+    // The other shown fix and the hint are left alone.
+    assert_eq!(read(&root.join("src/app/unused.bynk")), UNUSED);
+    assert_eq!(read(&root.join("src/app/stairs.bynk")), STAIRCASE);
+}
+
+#[test]
+fn several_codes_may_be_listed_or_repeated() {
+    for args in [
+        &[
+            "check",
+            "--fix=bynk.types.inverted_range,bynk.given.unused_capability",
+        ][..],
+        &[
+            "check",
+            "--fix=bynk.types.inverted_range",
+            "--fix=bynk.given.unused_capability",
+        ][..],
+    ] {
+        let root = scoped_project("several");
+        let (code, err) = run(&bynk(), &root, args, &[]);
+        assert_eq!(code, 0, "{err}");
+        assert_eq!(read(&root.join("src/app/age.bynk")), AGE_FIXED);
+        assert_eq!(read(&root.join("src/app/unused.bynk")), UNUSED_FIXED);
+        assert_eq!(read(&root.join("src/app/stairs.bynk")), STAIRCASE);
+    }
+}
+
+#[test]
+fn a_hint_is_fixed_only_when_its_code_is_named() {
+    let root = scoped_project("hint");
+    let (_, err) = run(&bynk(), &root, &["check", "--fix"], &[]);
+    assert!(
+        !err.contains("stairs.bynk"),
+        "plain --fix leaves a hint: {err}"
+    );
+    assert_eq!(read(&root.join("src/app/stairs.bynk")), STAIRCASE);
+    let (code, err) = run(
+        &bynk(),
+        &root,
+        &["check", "--fix=bynk.parse.let_else_staircase"],
+        &[],
+    );
+    assert_eq!(code, 0, "{err}");
+    assert!(
+        err.contains("fixed: src/app/stairs.bynk: bynk.parse.let_else_staircase ×1"),
+        "{err}"
+    );
+    assert!(read(&root.join("src/app/stairs.bynk")).contains("let Some(x) = a else"));
+}
+
+#[test]
+fn an_unknown_code_is_refused_with_the_nearest_real_one() {
+    let root = scoped_project("unknown");
+    let (code, err) = run(
+        &bynk(),
+        &root,
+        &["check", "--fix=bynk.types.inverted_rang"],
+        &[],
+    );
+    assert_ne!(code, 0, "{err}");
+    assert!(
+        err.contains("unknown diagnostic code `bynk.types.inverted_rang`")
+            && err.contains("did you mean `bynk.types.inverted_range`?"),
+        "{err}"
+    );
+    // Refused before any work: nothing written.
+    assert_eq!(read(&root.join("src/app/age.bynk")), AGE);
+    assert_eq!(read(&root.join("src/app/unused.bynk")), UNUSED);
+}
+
+#[test]
+fn a_code_with_nothing_to_fix_writes_nothing() {
+    let root = scoped_project("nothing");
+    let (code, err) = run(&bynk(), &root, &["check", "--fix=bynk.fault.todo"], &[]);
+    // The inverted range is still an error, so the check that follows fails.
+    assert_ne!(code, 0, "{err}");
+    assert!(!err.contains("fixed:"), "{err}");
+    assert_eq!(read(&root.join("src/app/age.bynk")), AGE);
+}
+
+#[test]
+fn an_unknown_code_with_no_near_match_points_at_the_diagnostics_index() {
+    let root = scoped_project("far");
+    let (code, err) = run(&bynk(), &root, &["check", "--fix=nope"], &[]);
+    assert_ne!(code, 0, "{err}");
+    assert!(
+        err.contains("unknown diagnostic code `nope`")
+            && err.contains("/book/reference/diagnostics/")
+            && !err.contains("bynk explain"),
+        "{err}"
+    );
+    assert_eq!(read(&root.join("src/app/age.bynk")), AGE);
+}
+
+/// An empty value (a script with an empty `$CODE`) must never widen to a full
+/// `--fix`.
+#[test]
+fn an_empty_code_is_refused_not_widened_to_every_fix() {
+    for arg in ["--fix=", "--fix=,", "--fix=bynk.types.inverted_range,"] {
+        let root = scoped_project("empty");
+        let (code, err) = run(&bynk(), &root, &["check", arg], &[]);
+        assert_ne!(code, 0, "{arg}: {err}");
+        assert!(err.contains("unknown diagnostic code ``"), "{arg}: {err}");
+        assert_eq!(read(&root.join("src/app/age.bynk")), AGE, "{arg}");
+        assert_eq!(read(&root.join("src/app/unused.bynk")), UNUSED, "{arg}");
+    }
+}
+
+#[test]
+fn a_named_code_at_a_workspace_root_applies_to_every_member() {
+    let root = scratch("named-workspace");
+    write(
+        &root.join("bynk.toml"),
+        "[workspace]\nmembers = [\"packages/*\"]\n",
+    );
+    for name in ["a", "b"] {
+        write(
+            &root.join(format!("packages/{name}/bynk.toml")),
+            &format!("[package]\nname = \"acme/{name}\"\n"),
+        );
+        write(
+            &root.join(format!("packages/{name}/src/app/unused.bynk")),
+            UNUSED,
+        );
+        write(&root.join(format!("packages/{name}/src/app/age.bynk")), AGE);
+    }
+    let (_, err) = run(
+        &bynk(),
+        &root,
+        &["check", "--fix=bynk.given.unused_capability"],
+        &[],
+    );
+    for name in ["a", "b"] {
+        assert_eq!(
+            read(&root.join(format!("packages/{name}/src/app/unused.bynk"))),
+            UNUSED_FIXED
+        );
+        assert_eq!(
+            read(&root.join(format!("packages/{name}/src/app/age.bynk"))),
+            AGE
+        );
+    }
+    assert!(!err.contains("inverted_range ×"), "{err}");
+}

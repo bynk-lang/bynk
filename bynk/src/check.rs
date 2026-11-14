@@ -11,13 +11,19 @@ use std::process::ExitCode;
 use crate::cli::CheckFormatArg;
 
 /// Run `bynk check`.
-pub fn run(input: PathBuf, format: CheckFormatArg, fix: bool, emit: bool, each: bool) -> ExitCode {
+pub fn run(
+    input: PathBuf,
+    format: CheckFormatArg,
+    fix: Option<Vec<String>>,
+    emit: bool,
+    each: bool,
+) -> ExitCode {
     let short = format == CheckFormatArg::Short;
     if emit && !input.is_dir() {
         eprintln!("bynk check: `--emit` takes a project directory, not a single file");
         return ExitCode::FAILURE;
     }
-    let checked = bynk_driver::run_check("bynk", &input, short, fix, each);
+    let checked = bynk_driver::run_check("bynk", &input, short, fix.as_deref(), each);
     // #3068: `--emit` type-checks the generated TypeScript, but only for a
     // program that passed the check; a failed check has nothing to emit.
     if emit && checked == ExitCode::SUCCESS {
