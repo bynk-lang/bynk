@@ -188,10 +188,20 @@ impl<'a> Parser<'a> {
             err = err
                 .with_note("`do <call>` is the shorter form for a call that returns `Effect[()]`");
         }
+        // #3537: `let _ <-` runs an effect and fails to type-check on a pure
+        // value, so it is safe to apply mechanically. `let _ =` is only a guess
+        // that the value is not an effect: on an `Effect` (a one-armed `if`
+        // around a capability call, say) it silently stops the effect running.
+        // That changes meaning the author must choose, so it is a quick fix only.
+        let applicability = if effectful {
+            Applicability::MachineApplicable
+        } else {
+            Applicability::MaybeIncorrect
+        };
         Some(err.with_suggestion(
             format!("bind the value with `{}`", binder.trim_end()),
             vec![(at, binder.to_string())],
-            Applicability::MachineApplicable,
+            applicability,
         ))
     }
 
