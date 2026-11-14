@@ -28,6 +28,7 @@ per-commit history. While Bynk is pre-1.0, increments may change behaviour.
 
 | Version | Highlights |
 |---|---|
+| **v0.603.2** | A Vectorize index name follows Cloudflare's rules, so underscores are accepted and a leading digit is refused |
 | **v0.603.1** | A Vectorize deploy call refused with Cloudflare's `Authentication error [code: 10000]` now names the permission the token needs |
 | **v0.603.0** | `bynk dev` runs a `Container` under Docker through `wrangler dev` and, without Docker, warns once and starts with containers off so a call faults naming Docker; `--remote` is refused for a container Worker, and a container Worker needs Wrangler 4.136.0 or later under `bynk dev` |
 | **v0.602.1** | Vectorize fixes from a real-account check (#3479): `describe` and the `bynk dev` first-call check work against a real index (`IndexInfo.metric` is an `Option`), a query naming no namespace returns every namespace's vectors in the test double, and a `topK` over the limit is `VectorInvalidInput` |
