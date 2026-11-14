@@ -22,6 +22,7 @@ use std::collections::{BTreeMap, BTreeSet, HashMap};
 use std::path::{Path, PathBuf};
 
 use crate::project;
+use bynk_syntax::Severity;
 use bynk_syntax::error::CompileError;
 use bynk_syntax::fix::{apply, lone_fix, select};
 use bynk_syntax::span::Span;
@@ -50,6 +51,8 @@ pub struct FixedFile {
     pub fixed: String,
     /// Edits taken across every pass.
     pub edits: usize,
+    /// How many diagnostics' fixes were taken, per diagnostic code (#3537).
+    pub codes: BTreeMap<&'static str, usize>,
     /// The edits the first pass took: what `source.fixAll.bynk` would apply
     /// to the same file.
     pub first_pass: Vec<(Span, String)>,
@@ -114,6 +117,7 @@ fn fixpoint(
 ) -> Result<FixPlan, Refusal> {
     let original = sources.clone();
     let mut edit_counts: HashMap<PathBuf, usize> = HashMap::new();
+    let mut code_counts: HashMap<PathBuf, BTreeMap<&'static str, usize>> = HashMap::new();
     let mut first_pass: HashMap<PathBuf, Vec<(Span, String)>> = HashMap::new();
     let mut codes: BTreeSet<&'static str> = BTreeSet::new();
     let mut passes = 0;
@@ -158,6 +162,10 @@ fn fixpoint(
             let text = &sources[&path];
             let fixed = apply(text, &selection.edits);
             *edit_counts.entry(path.clone()).or_default() += selection.edits.len();
+            let counts = code_counts.entry(path.clone()).or_default();
+            for code in &selection.categories {
+                *counts.entry(code).or_default() += 1;
+            }
             if passes == 1 {
                 first_pass.insert(path.clone(), selection.edits);
             }
@@ -174,6 +182,7 @@ fn fixpoint(
         .map(|(path, fixed)| FixedFile {
             original: original[&path].clone(),
             edits: edit_counts.get(&path).copied().unwrap_or(0),
+            codes: code_counts.remove(&path).unwrap_or_default(),
             first_pass: first_pass.remove(&path).unwrap_or_default(),
             fixed,
             path,
@@ -228,6 +237,13 @@ fn gate(before: &[Found], after: &[Found], fixless_only: bool) -> Result<(), Ref
     Ok(())
 }
 
+/// #3537: `--fix` applies only what `check` would show. A hint (the
+/// `let … else` staircase, say) is an editor suggestion that `check` leaves out,
+/// so its fix is never taken here, and it is held out of the gate too.
+fn shown_by_check(error: &CompileError) -> bool {
+    Severity::for_error(error) != Severity::Hint
+}
+
 /// `path` without `.` components, so `./src/a.bynk` and `src/a.bynk` match.
 fn normal(path: &Path) -> PathBuf {
     path.components()
@@ -247,6 +263,7 @@ pub fn plan_file(input: &Path) -> Option<Result<FixPlan, Refusal>> {
             bynk_emit::check_with_warnings(&sources[&key], &filename);
         diagnostics
             .into_iter()
+            .filter(shown_by_check)
             .map(|error| Found {
                 file: Some(key.clone()),
                 error,
@@ -268,6 +285,7 @@ pub fn plan_project(input: &Path) -> Option<Result<FixPlan, Refusal>> {
         check
             .errors
             .into_iter()
+            .filter(|ae| shown_by_check(&ae.error))
             .map(|ae| Found {
                 file: ae
                     .source_path
@@ -327,14 +345,19 @@ pub(crate) fn fix_all(prog: &str, inputs: &[(&Path, String)]) -> bool {
             eprintln!("{prog}: --fix: write `{}`: {e}", shown(&file.path));
             return false;
         }
-        let n = file.edits;
-        eprintln!(
-            "fixed: {} ({n} edit{})",
-            shown(&file.path),
-            if n == 1 { "" } else { "s" }
-        );
+        eprintln!("fixed: {}: {}", shown(&file.path), codes_line(&file.codes));
     }
     true
+}
+
+/// `bynk.send.deprecated ×3, bynk.lex.legacy_comment ×1`: which code each edit
+/// of a file fixed.
+fn codes_line(codes: &BTreeMap<&'static str, usize>) -> String {
+    codes
+        .iter()
+        .map(|(code, n)| format!("{code} ×{n}"))
+        .collect::<Vec<_>>()
+        .join(", ")
 }
 
 #[cfg(test)]

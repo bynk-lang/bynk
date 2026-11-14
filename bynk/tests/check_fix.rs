@@ -259,7 +259,7 @@ fn a_cascade_converges_and_ends_clean() {
     );
     // Two edits, one per pass, in the one file; the untouched file is not
     // listed and not rewritten.
-    assert!(err.contains("fixed: src/app/relay.bynk (2 edits)"), "{err}");
+    assert!(err.contains("fixed: src/app/relay.bynk: bynk.given.undeclared_capability ×1, bynk.provider.agent_call_undeclared_capability ×1"), "{err}");
     assert!(!err.contains("clean.bynk"), "{err}");
     assert_eq!(mtime(&root.join("src/app/clean.bynk")), clean_before);
     // The tree is clean afterwards, with nothing more to fix.
@@ -316,7 +316,10 @@ fn fixing_a_single_file() {
         read(&root.join("age.bynk")),
         "commons app.age\n\ntype Age = Int where InRange(0, 120)\n"
     );
-    assert!(err.contains("fixed: age.bynk (2 edits)"), "{err}");
+    assert!(
+        err.contains("fixed: age.bynk: bynk.types.inverted_range ×1"),
+        "{err}"
+    );
 }
 
 #[test]
@@ -345,7 +348,7 @@ fn a_workspace_root_fixes_every_member() {
         );
         assert!(
             err.contains(&format!(
-                "fixed: packages/{name}/src/app/unused.bynk (1 edit)"
+                "fixed: packages/{name}/src/app/unused.bynk: bynk.given.unused_capability ×1"
             )),
             "{err}"
         );
@@ -372,7 +375,9 @@ fn each_fixes_every_project_of_a_directory() {
             UNUSED_FIXED
         );
         assert!(
-            err.contains(&format!("fixed: {name}/src/app/unused.bynk (1 edit)")),
+            err.contains(&format!(
+                "fixed: {name}/src/app/unused.bynk: bynk.given.unused_capability ×1"
+            )),
             "{err}"
         );
     }
@@ -414,4 +419,71 @@ fn a_refusal_in_one_member_writes_nothing_in_any() {
     assert!(!err.contains("fixed:"), "{err}");
     assert_eq!(read(&fixable), UNUSED);
     assert_eq!(mtime(&fixable), before);
+}
+
+// ---- #3537: `--fix` applies only what `check` shows ----
+
+/// Two `~>` sends (the deprecated spelling, `bynk.send.deprecated`), and a nested
+/// `match` staircase that `check` only offers as an editor hint.
+const SENDS_AND_STAIRCASE: &str = "\
+commons app.sends
+
+fn keep(e: Effect[()]) -> Effect[()] { e }
+
+fn twice(ping: Effect[()]) -> Effect[Int] {
+  ~> ping
+  ~> keep(ping)
+  Effect.pure(2)
+}
+
+fn read(a: Option[Int], b: Option[Int]) -> Result[Int, String] {
+  match a {
+    None => Err(\"a\"),
+    Some(x) => match b {
+      None => Err(\"b\"),
+      Some(y) => Ok(x + y),
+    },
+  }
+}
+";
+
+/// A one-armed `if` as a bare statement: rejected, and not for `--fix` to bind.
+const ONE_ARMED_IF: &str = "\
+commons app.guard
+
+fn greet(name: String) -> Effect[()] {
+  if name == \"world\" { Effect.pure(()) }
+  Effect.pure(())
+}
+";
+
+#[test]
+fn fix_touches_only_what_check_reports() {
+    let root = scratch("scope");
+    let sends = root.join("src/app/sends.bynk");
+    let guard = root.join("src/app/guard.bynk");
+    write(&sends, SENDS_AND_STAIRCASE);
+    write(&guard, ONE_ARMED_IF);
+    let (_, shown) = run(&bynk(), &root, &["check", "."], &[]);
+    assert!(shown.contains("bynk.send.deprecated"), "{shown}");
+    assert!(
+        !shown.contains("let_else_staircase"),
+        "a hint is not shown: {shown}"
+    );
+    let (_, err) = run(&bynk(), &root, &["check", "--fix"], &[]);
+    assert!(
+        err.contains("fixed: src/app/sends.bynk: bynk.send.deprecated ×2"),
+        "{err}"
+    );
+    assert!(
+        !err.contains("guard.bynk (") && !err.contains("fixed: src/app/guard"),
+        "{err}"
+    );
+    // Only the `~>` lines changed.
+    let expected = SENDS_AND_STAIRCASE
+        .replace("~> ping", "do ping.detach()")
+        .replace("~> keep(ping)", "do keep(ping).detach()");
+    assert_eq!(read(&sends), expected);
+    assert!(read(&sends).contains("match a {"));
+    assert_eq!(read(&guard), ONE_ARMED_IF);
 }
