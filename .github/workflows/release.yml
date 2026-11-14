@@ -228,6 +228,14 @@ jobs:
   # planned leg passed, or when `plan` found nothing left to run. A `test`
   # that is skipped for any other reason (a failed `plan`) is red, so a gate
   # that could not decide never reads as a pass.
+  #
+  # Every job below that depends on this one, directly or through another job,
+  # carries an explicit `!cancelled() && needs.<job>.result == 'success'`
+  # condition instead of the implicit `success()`. The implicit form is false
+  # when ANY job in the dependency chain was skipped, so the skipped `test`
+  # silently skipped every build and publish job: v0.603.9's tag push finished
+  # green and published nothing. Naming each `needs` result ignores the
+  # skipped `test` while still requiring what the job itself waits on.
   tests-passed:
     name: Test suite passed
     needs: [plan, test]
@@ -254,7 +262,7 @@ jobs:
   binaries:
     name: Build ${{ matrix.target }}
     needs: [verify, tests-passed]
-    if: github.event_name == 'push' # tag push only — not the manual registry-publish dispatch
+    if: ${{ !cancelled() && needs.verify.result == 'success' && needs.tests-passed.result == 'success' && github.event_name == 'push' }} # tag push only — not the manual registry-publish dispatch
     runs-on: ${{ matrix.os }}
     timeout-minutes: 45
     strategy:
@@ -337,7 +345,7 @@ jobs:
   web-assets:
     name: Build the browser artefacts
     needs: [verify, tests-passed]
-    if: github.event_name == 'push' # tag push only — not the manual registry-publish dispatch
+    if: ${{ !cancelled() && needs.verify.result == 'success' && needs.tests-passed.result == 'success' && github.event_name == 'push' }} # tag push only — not the manual registry-publish dispatch
     runs-on: ubuntu-latest
     timeout-minutes: 30
     steps:
@@ -380,7 +388,7 @@ jobs:
   registry-core-wasm:
     name: Build the registry admission module
     needs: [verify, tests-passed]
-    if: github.event_name == 'push' # tag push only - not the manual registry-publish dispatch
+    if: ${{ !cancelled() && needs.verify.result == 'success' && needs.tests-passed.result == 'success' && github.event_name == 'push' }} # tag push only — not the manual registry-publish dispatch
     runs-on: ubuntu-latest
     timeout-minutes: 30
     steps:
@@ -413,7 +421,7 @@ jobs:
   editor-contract:
     name: Build the editor contract
     needs: [verify, tests-passed]
-    if: github.event_name == 'push' # tag push only — not the manual registry-publish dispatch
+    if: ${{ !cancelled() && needs.verify.result == 'success' && needs.tests-passed.result == 'success' && github.event_name == 'push' }} # tag push only — not the manual registry-publish dispatch
     runs-on: ubuntu-latest
     timeout-minutes: 20
     steps:
@@ -441,7 +449,7 @@ jobs:
   release-notes:
     name: Release notes (upgrading section)
     needs: [verify]
-    if: github.event_name == 'push'
+    if: ${{ !cancelled() && needs.verify.result == 'success' && github.event_name == 'push' }}
     runs-on: ubuntu-latest
     timeout-minutes: 15
     permissions:
@@ -473,7 +481,7 @@ jobs:
   github-release:
     name: Publish GitHub Release
     needs: [binaries, web-assets, registry-core-wasm, editor-contract, release-notes]
-    if: github.event_name == 'push' # tag push only — not the manual registry-publish dispatch
+    if: ${{ !cancelled() && needs.binaries.result == 'success' && needs.web-assets.result == 'success' && needs.registry-core-wasm.result == 'success' && needs.editor-contract.result == 'success' && needs.release-notes.result == 'success' && github.event_name == 'push' }} # tag push only — not the manual registry-publish dispatch
     runs-on: ubuntu-latest
     timeout-minutes: 20
     permissions:
@@ -541,7 +549,7 @@ jobs:
   canary:
     name: Notify the org canary
     needs: github-release
-    if: github.event_name == 'push' # a tag push; the GitHub Release exists
+    if: ${{ !cancelled() && needs.github-release.result == 'success' && github.event_name == 'push' }} # a tag push; the GitHub Release exists
     runs-on: ubuntu-latest
     timeout-minutes: 10
     permissions: {} # the App token does the dispatching
@@ -598,7 +606,7 @@ jobs:
   publish-crates:
     name: Publish to crates.io
     needs: [verify, tests-passed]
-    if: ${{ github.event_name == 'push' || (github.event_name == 'workflow_dispatch' && inputs.publish_crates) }}
+    if: ${{ !cancelled() && needs.verify.result == 'success' && needs.tests-passed.result == 'success' && (github.event_name == 'push' || (github.event_name == 'workflow_dispatch' && inputs.publish_crates)) }}
     runs-on: ubuntu-latest
     timeout-minutes: 40
     permissions:
@@ -638,7 +646,7 @@ jobs:
   publish-npm:
     name: Publish to npm
     needs: [verify, tests-passed]
-    if: ${{ github.event_name == 'push' || (github.event_name == 'workflow_dispatch' && inputs.publish_npm) }}
+    if: ${{ !cancelled() && needs.verify.result == 'success' && needs.tests-passed.result == 'success' && (github.event_name == 'push' || (github.event_name == 'workflow_dispatch' && inputs.publish_npm)) }}
     runs-on: ubuntu-latest
     timeout-minutes: 20
     permissions:
@@ -681,3 +689,39 @@ jobs:
           else
             npm publish --access public --provenance
           fi
+
+  # The run's own verdict on a tag push. Every job above is skipped, not failed,
+  # when something upstream goes wrong in a way a job condition can mistake for
+  # "nothing to do" (that is how v0.603.9 published nothing and still finished
+  # green). This job runs whatever happened and is red unless every build and
+  # publish job a tag push expects actually succeeded, so a release that ships
+  # nothing can never be a green run. Add a job to the release, add it here.
+  release-complete:
+    name: Release complete
+    needs:
+      - verify
+      - tests-passed
+      - binaries
+      - web-assets
+      - registry-core-wasm
+      - editor-contract
+      - release-notes
+      - github-release
+      - canary
+      - publish-crates
+      - publish-npm
+    if: ${{ always() && github.event_name == 'push' }}
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - name: Every release job succeeded
+        env:
+          NEEDS: ${{ toJSON(needs) }}
+        run: |
+          bad="$(jq -r 'to_entries[] | select(.value.result != "success") | "\(.key)=\(.value.result)"' <<<"$NEEDS")"
+          if [ -n "$bad" ]; then
+            echo "::error::$GITHUB_REF_NAME was not fully released; these jobs did not succeed:"
+            echo "$bad"
+            exit 1
+          fi
+          echo "every release job succeeded for $GITHUB_REF_NAME"
