@@ -170,11 +170,13 @@ pub fn diagnose(tb: &dyn Toolbox, ctx: &Context, opts: &DoctorOptions) -> Report
         let node = detect_node(tb, root, ctx.node_floor);
         let wrangler = detect_wrangler(tb, root);
         let packages = detect_package_manager(tb, root);
-        let docker = detect_docker(tb, root.is_some_and(declares_container));
-        capabilities.push(capability(
-            Capability::Deploy,
-            vec![node, wrangler, packages, docker],
-        ));
+        let mut rows = vec![node, wrangler, packages];
+        // #3477: only a project that declares a container has a use for Docker,
+        // so only its report carries the row.
+        if root.is_some_and(declares_container) {
+            rows.push(detect_docker(tb));
+        }
+        capabilities.push(capability(Capability::Deploy, rows));
     }
     if want(Capability::Editor) {
         let lsp = detect_plain(
@@ -528,11 +530,11 @@ pub(crate) fn declares_container(root: &std::path::Path) -> bool {
 }
 
 /// #3477: Docker, which `bynk deploy` needs only to build a `Container`'s image
-/// from its Dockerfile (an adopted image needs none). A project with no
-/// container never uses it, so for it the row only informs; for a project that
-/// declares one, a missing or stopped Docker is a warning (not a failure, since
-/// the deploy may adopt an image), worth knowing before a deploy that needs it.
-fn detect_docker(tb: &dyn Toolbox, needed: bool) -> Row {
+/// from its Dockerfile (an adopted image needs none). Listed only for a project
+/// that declares a container ([`declares_container`]); a missing or stopped
+/// Docker is a warning, not a failure, since the deploy may adopt an image
+/// instead. Worth knowing before a deploy that needs it.
+fn detect_docker(tb: &dyn Toolbox) -> Row {
     const REMEDY: &str = "needed only to build a Container's image at deploy: start Docker, or adopt a prebuilt image in bynk.toml ([deploy.containers.<Capability>])";
     let probe = probe::detect(
         tb,
@@ -547,13 +549,14 @@ fn detect_docker(tb: &dyn Toolbox, needed: bool) -> Row {
         Provenance::Path(path) | Provenance::ProjectLocal(path) => Some(path.clone()),
         _ => None,
     };
+    let warn = |detail: String| Row {
+        label: "docker".into(),
+        level: Level::Warn,
+        detail,
+        remedy: Some(REMEDY.into()),
+    };
     let Some(path) = path.filter(|_| probe.is_present()) else {
-        return Row {
-            label: "docker".into(),
-            level: if needed { Level::Warn } else { Level::Ok },
-            detail: "not found".into(),
-            remedy: needed.then(|| REMEDY.into()),
-        };
+        return warn("not found".into());
     };
     if tb.docker_daemon_running(&path) {
         Row {
@@ -563,12 +566,7 @@ fn detect_docker(tb: &dyn Toolbox, needed: bool) -> Row {
             remedy: None,
         }
     } else {
-        Row {
-            label: "docker".into(),
-            level: if needed { Level::Warn } else { Level::Ok },
-            detail: format!("{} (no daemon running)", present_detail(&probe)),
-            remedy: needed.then(|| REMEDY.into()),
-        }
+        warn(format!("{} (no daemon running)", present_detail(&probe)))
     }
 }
 

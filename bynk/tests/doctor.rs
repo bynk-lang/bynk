@@ -772,15 +772,20 @@ fn project_with(source: &str) -> (PathBuf, Context) {
 const CONTAINER_SOURCE: &str = "context shop.render\n\nconsumes bynk.cloudflare { Container }\n\ncapability Renderer = Container @build(\"containers/render\") @port(8080)\n";
 const PLAIN_SOURCE: &str = "context shop.render\n\nservice api from http {\n}\n";
 
-/// A project with no container only learns whether Docker is there: the row is
-/// informational, so a missing Docker does not warn.
+/// A project with no container has no use for Docker, so its report carries no
+/// docker row at all, whatever is installed.
 #[test]
-fn a_project_without_a_container_is_not_warned_about_docker() {
+fn a_project_without_a_container_has_no_docker_row() {
     let (dir, c) = project_with(PLAIN_SOURCE);
-    let report = doctor::diagnose(&Fake::default(), &c, &bare());
-    let row = docker_row(&report);
-    assert_eq!(row.level, Level::Ok);
-    assert!(row.detail.contains("not found"), "{}", row.detail);
+    for fake in [Fake::default(), Fake::default().with_docker(true)] {
+        let report = doctor::diagnose(&fake, &c, &bare());
+        assert!(
+            cap(&report, Capability::Deploy)
+                .rows
+                .iter()
+                .all(|row| row.label != "docker")
+        );
+    }
     let _ = std::fs::remove_dir_all(&dir);
 }
 
