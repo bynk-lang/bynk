@@ -17,6 +17,10 @@ here broke nothing, or its author did not say so: please
 
 <!-- stamp:breaking-entries -->
 
+## v0.603.8
+
+A project with an inbound email service has `postal-mime` 4.2.0 in its `bynk.lock` and `package.json` now (was 4.1.4). A build run with `--locked` is refused with `bynk.package.lock_out_of_date` ("`bynk.lock` is out of date with the manifests, and `--locked` was given") until you run `bynk fetch` and commit the lock.
+
 ## v0.603.6
 
 `bynk doctor`, `bynk dev` and `bynk deploy` now want wrangler 4.162.0 or newer: an older one is warned about, and `bynk deploy` refuses to push a context with an agent on it (`bynk: wrangler X is older than 4.162.0 …`); upgrade with `npm install -g wrangler@4`.
