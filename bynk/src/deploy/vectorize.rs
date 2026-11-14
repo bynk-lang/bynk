@@ -450,11 +450,22 @@ fn adopt_index(
     for entry in &missing {
         if let Some((property, ty)) = entry.split_once(':') {
             eprintln!(
-                "bynk: warning: the adopted index `{name}` has no metadata index for `{entry}`, so a query that filters on `{property}` matches nothing until you create one (`wrangler vectorize create-metadata-index {name} --propertyName {property} --type {ty}`) and write the vectors again"
+                "{}",
+                unlisted_metadata_index_warning(name, entry, property, ty)
             );
         }
     }
     Ok(())
+}
+
+/// #3511: the warning for a metadata index an adopted index does not list. It
+/// says "not listed", not "has none": Cloudflare builds a metadata index
+/// asynchronously, so one another deploy has only just enqueued is not listed
+/// yet, and a claim that it is missing would be a false alarm.
+fn unlisted_metadata_index_warning(name: &str, entry: &str, property: &str, ty: &str) -> String {
+    format!(
+        "bynk: warning: the adopted index `{name}` does not list a metadata index for `{entry}` yet. If you or another deploy has just created it, Cloudflare may still be building it (it can take a few minutes): check `wrangler vectorize list-metadata-index {name}` before acting. Until it is listed, a query that filters on `{property}` matches nothing; if it never appears, create it (`wrangler vectorize create-metadata-index {name} --propertyName {property} --type {ty}`) and write the vectors again"
+    )
 }
 
 /// An adopted index keeps the name it has on the account, not the derived one

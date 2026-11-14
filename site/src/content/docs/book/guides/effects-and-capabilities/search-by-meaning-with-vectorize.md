@@ -153,6 +153,14 @@ platform processes it asynchronously: a write takes some seconds to be visible t
 queries. A handler that writes and then queries in the same request will not see
 its own write, and nothing in your code should depend on it.
 
+Expect transient empty results too. Reads stay eventually consistent even after
+the index reports a write as processed: for about a minute, repeating the same
+query can alternate between the full result and an empty one. A test or a
+handler that waits for a write and then queries once can still see `[]`, so
+retry before concluding that a vector is missing. The same goes for a metadata
+index: it is built asynchronously, and a filter on a property that is not yet
+listed matches nothing.
+
 ## Answer the errors
 
 A `VectorError` is a platform refusal a handler can act on:
