@@ -14,9 +14,9 @@
 //!   that has an image to build checks for one before it authenticates or asks
 //!   for confirmation, and names the container, the missing tool and the two
 //!   ways out. A deploy whose containers are all adopted needs none.
-//! - **The floor.** A container Worker needs wrangler
-//!   [`bynk_emit::WRANGLER_CONTAINERS_MIN`]; the floor everyone else needs
-//!   ([`bynk_emit::WRANGLER_MIN`]) does not move.
+//! - **No floor of its own.** The `durable_object` container policy needs wrangler
+//!   4.136.0; [`bynk_emit::WRANGLER_MIN`], which every deploy is held to, is past it
+//!   (`a_container_needs_no_floor_beyond_the_general_one` keeps it so).
 //!
 //! Bynk's `--dry-run` shows the plan and builds nothing: it never delegates to
 //! `wrangler deploy --dry-run`, which builds a Dockerfile image.
@@ -97,24 +97,20 @@ pub(crate) fn apply_container_adoptions(
     Ok(())
 }
 
-/// What a deploy checks for its containers before it authenticates: a wrangler
-/// new enough for the policy ([`containers_floor_refusal`]), then Docker for an
-/// image to build ([`docker_refusal`]). `None` when there is nothing to refuse.
+/// What a deploy checks for its containers before it authenticates: Docker for
+/// an image to build ([`docker_refusal`]). `None` when there is nothing to
+/// refuse. The wrangler floor is the general one, checked for every Worker.
 pub(crate) fn container_refusals(
     tb: &dyn Toolbox,
-    probe: &probe::Probe,
-    manager: bynk_driver::npm_install::PackageManager,
     order: &[String],
     resources: &BTreeMap<String, Resources>,
 ) -> Option<String> {
-    containers_floor_refusal(probe, manager, order, resources).or_else(|| {
-        let bin = docker_binary(std::env::var("WRANGLER_DOCKER_BIN").ok().as_deref());
-        let path = resolve_docker(tb, &bin);
-        let docker = path
-            .as_deref()
-            .map(|path| (path, tb.docker_daemon_running(path)));
-        docker_refusal(docker, order, resources)
-    })
+    let bin = docker_binary(std::env::var("WRANGLER_DOCKER_BIN").ok().as_deref());
+    let path = resolve_docker(tb, &bin);
+    let docker = path
+        .as_deref()
+        .map(|path| (path, tb.docker_daemon_running(path)));
+    docker_refusal(docker, order, resources)
 }
 
 /// The container engine CLI wrangler will run: `WRANGLER_DOCKER_BIN` when it is
@@ -161,32 +157,6 @@ pub(crate) fn docker_refusal(
     Some(format!(
         "bynk: `{worker}`'s container `{}` is built from `{}/Dockerfile` at deploy, which needs Docker, and {problem}.\n  Start Docker, or run a prebuilt image instead: push it to Cloudflare's registry and name it in bynk.toml,\n    [deploy.containers.{}]\n    image = {{ <environment> = \"registry.cloudflare.com/<ACCOUNT_ID>/<REPOSITORY>@sha256:<DIGEST>\" }}",
         container.capability, container.build, container.capability
-    ))
-}
-
-/// The refusal a deploy gets when a Worker declares a container and the wrangler
-/// that would push it is older than [`bynk_emit::WRANGLER_CONTAINERS_MIN`], which
-/// refuses the `durable_object` scheduling policy the generated configuration
-/// uses. Only a container Worker is held to it. `None` when no Worker has a
-/// container, or when the version cannot be judged without running npx.
-pub(crate) fn containers_floor_refusal(
-    probe: &probe::Probe,
-    manager: bynk_driver::npm_install::PackageManager,
-    order: &[String],
-    resources: &BTreeMap<String, Resources>,
-) -> Option<String> {
-    let version = probe.version?;
-    let min = probe::Version::parse(bynk_emit::WRANGLER_CONTAINERS_MIN)?;
-    if (version.major, version.minor, version.patch) >= (min.major, min.minor, min.patch) {
-        return None;
-    }
-    let worker = order
-        .iter()
-        .find(|worker| !resources[*worker].containers.is_empty())?;
-    Some(format!(
-        "bynk: wrangler {version} is older than {}, the first that accepts the `durable_object` scheduling policy the container of `{worker}` is configured with; the push would fail. Upgrade with `{}`.",
-        bynk_emit::WRANGLER_CONTAINERS_MIN,
-        doctor::wrangler_upgrade_remedy(probe, manager)
     ))
 }
 
@@ -401,55 +371,16 @@ mod tests {
         );
     }
 
-    fn wrangler(version: Option<probe::Version>) -> probe::Probe {
-        probe::Probe {
-            tool: "wrangler".to_string(),
-            version,
-            provenance: Provenance::Path("/usr/bin/wrangler".into()),
-        }
-    }
-
-    fn v(major: u32, minor: u32, patch: u32) -> probe::Version {
-        probe::Version {
-            major,
-            minor,
-            patch,
-        }
-    }
-
+    /// The `durable_object` container policy needs wrangler 4.136.0, and a container
+    /// Worker is held to no floor beyond the general one, so the general one must
+    /// stay at or past it.
     #[test]
-    fn a_container_worker_needs_the_containers_floor_and_no_other_does() {
-        let manager = bynk_driver::npm_install::PackageManager::Npm;
-        let with = resources(vec![decl("Renderer", None, None)]);
-        let refusal =
-            containers_floor_refusal(&wrangler(Some(v(4, 120, 1))), manager, &order(), &with)
-                .unwrap();
-        assert!(refusal.contains("4.136.0"), "{refusal}");
-        assert!(refusal.contains("`shop-render`"), "{refusal}");
-        assert!(refusal.contains("npm install -g wrangler@4"), "{refusal}");
-        for ok in [v(4, 136, 0), v(4, 140, 2), v(5, 0, 0)] {
-            assert_eq!(
-                containers_floor_refusal(&wrangler(Some(ok)), manager, &order(), &with),
-                None,
-                "{ok}"
-            );
-        }
-        // A Worker with no container is held to the lower floor only: the one the
-        // `exports` check applies, not this one.
-        let without = resources(Vec::new());
-        assert_eq!(
-            containers_floor_refusal(&wrangler(Some(v(4, 120, 1))), manager, &order(), &without),
-            None
-        );
-        // A version that cannot be judged without running npx is not guessed.
-        assert_eq!(
-            containers_floor_refusal(&wrangler(None), manager, &order(), &with),
-            None
-        );
-        assert_eq!(
-            bynk_emit::WRANGLER_MIN,
-            "4.120.1",
-            "the general floor does not move"
+    fn a_container_needs_no_floor_beyond_the_general_one() {
+        let general = probe::Version::parse(bynk_emit::WRANGLER_MIN).unwrap();
+        assert!(
+            (general.major, general.minor, general.patch) >= (4, 136, 0),
+            "WRANGLER_MIN {} is below 4.136.0, the first wrangler that accepts the container policy: restore a floor for container Workers",
+            bynk_emit::WRANGLER_MIN
         );
     }
 
@@ -484,22 +415,14 @@ mod tests {
 
     #[test]
     fn a_stopped_daemon_refuses_a_built_container_but_not_an_adopted_one() {
-        let manager = bynk_driver::npm_install::PackageManager::Npm;
-        let probe = wrangler(Some(v(4, 140, 0)));
         let built = resources(vec![decl("Renderer", None, None)]);
         let adopted = resources(vec![decl("Renderer", None, Some(IMAGE))]);
         let stopped = Stub { daemon: false };
-        let refusal = container_refusals(&stopped, &probe, manager, &order(), &built).unwrap();
+        let refusal = container_refusals(&stopped, &order(), &built).unwrap();
         assert!(refusal.contains("Docker"), "{refusal}");
-        assert_eq!(
-            container_refusals(&stopped, &probe, manager, &order(), &adopted),
-            None
-        );
+        assert_eq!(container_refusals(&stopped, &order(), &adopted), None);
         let running = Stub { daemon: true };
-        assert_eq!(
-            container_refusals(&running, &probe, manager, &order(), &built),
-            None
-        );
+        assert_eq!(container_refusals(&running, &order(), &built), None);
         assert_eq!(
             resolve_docker(&running, "podman"),
             Some("/bin/podman".into())

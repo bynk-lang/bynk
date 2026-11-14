@@ -7,10 +7,9 @@
 //!
 //! - **`--remote` is refused** for a Worker that has a container: remote
 //!   bindings are not documented for containers, so it would be a guess.
-//! - **The wrangler floor.** A container Worker needs
-//!   [`bynk_emit::WRANGLER_CONTAINERS_MIN`], the first wrangler that accepts the
-//!   `durable_object` scheduling policy and runs it locally; an older one is
-//!   refused with the version named. Every other Worker keeps the general floor.
+//! - **No floor of its own.** The `durable_object` scheduling policy needs
+//!   wrangler 4.136.0, and the general floor ([`bynk_emit::WRANGLER_MIN`]) is past
+//!   it, so a container Worker needs nothing further.
 //! - **Docker.** With a running Docker daemon the container runs for real, and
 //!   the first start builds the image, which can take minutes, so a note says
 //!   which container is building. Without one, `bynk dev` warns once, naming the
@@ -24,7 +23,7 @@
 use std::collections::BTreeMap;
 use std::path::Path;
 
-use crate::probe::{self, Toolbox};
+use crate::probe::Toolbox;
 
 /// The served Workers that have a container, by worker directory, each with its
 /// containers' capability names (`Renderer`), read from the build's
@@ -90,28 +89,6 @@ pub(crate) fn remote_refusal(containers: &Containers, remote: bool) -> Option<St
     })
 }
 
-/// The refusal a served container Worker gets below
-/// [`bynk_emit::WRANGLER_CONTAINERS_MIN`], with the version named. `None` when
-/// no served Worker has a container or the version cannot be judged without
-/// running npx.
-pub(crate) fn floor_refusal(
-    probe: &probe::Probe,
-    manager: bynk_driver::npm_install::PackageManager,
-    containers: &Containers,
-) -> Option<String> {
-    let version = probe.version?;
-    let min = probe::Version::parse(bynk_emit::WRANGLER_CONTAINERS_MIN)?;
-    if (version.major, version.minor, version.patch) >= (min.major, min.minor, min.patch) {
-        return None;
-    }
-    let worker = containers.keys().next()?;
-    Some(format!(
-        "bynk: wrangler {version} is older than {}, the first that runs the `durable_object` container policy `{worker}` is configured with under `wrangler dev`. Upgrade with `{}`.",
-        bynk_emit::WRANGLER_CONTAINERS_MIN,
-        crate::doctor::wrangler_upgrade_remedy(probe, manager)
-    ))
-}
-
 /// Whether Docker is there to run a container.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub(crate) enum Docker {
@@ -164,27 +141,17 @@ pub(crate) fn building_note(containers: &Containers) -> Option<String> {
     })
 }
 
-/// What `bynk dev` does about containers once wrangler is resolved: refuse a
-/// wrangler below the containers floor, then look for Docker. `Ok(true)` when
-/// containers are off for this session (the one warning is printed here),
-/// `Ok(false)` when they will run (the build note is printed), and `Err` with
-/// the refusal.
-pub(crate) fn prepare(
-    tb: &dyn Toolbox,
-    probe: &probe::Probe,
-    manager: bynk_driver::npm_install::PackageManager,
-    containers: &Containers,
-) -> Result<bool, String> {
-    if let Some(refusal) = floor_refusal(probe, manager, containers) {
-        return Err(refusal);
-    }
+/// What `bynk dev` does about containers once wrangler is resolved: look for
+/// Docker. `true` when containers are off for this session (the one warning is
+/// printed here), `false` when they will run (the build note is printed).
+pub(crate) fn session(tb: &dyn Toolbox, containers: &Containers) -> bool {
     let state = docker(tb);
     if let Some(warning) = docker_warning(state, containers) {
         eprintln!("{warning}");
     } else if let Some(note) = building_note(containers) {
         eprintln!("{note}");
     }
-    Ok(state != Docker::Running && !containers.is_empty())
+    state != Docker::Running && !containers.is_empty()
 }
 
 /// The served Workers' containers, or `None` after printing why not: `--remote`
@@ -202,18 +169,6 @@ pub(crate) fn for_session(
         return None;
     }
     Some(containers)
-}
-
-/// [`prepare`], printing a refusal; `None` after one.
-pub(crate) fn session(
-    tb: &dyn Toolbox,
-    probe: &probe::Probe,
-    manager: bynk_driver::npm_install::PackageManager,
-    containers: &Containers,
-) -> Option<bool> {
-    prepare(tb, probe, manager, containers)
-        .map_err(|refusal| eprintln!("{refusal}"))
-        .ok()
 }
 
 /// [`off_args`] for `worker` when containers are off and it has one; none
@@ -258,7 +213,7 @@ mod tests {
         fn in_dir(&self, _: &Path, _: &str) -> Option<PathBuf> {
             None
         }
-        fn version(&self, _: &Path) -> Option<probe::Version> {
+        fn version(&self, _: &Path) -> Option<crate::probe::Version> {
             None
         }
         fn npx_available(&self) -> bool {
@@ -268,20 +223,11 @@ mod tests {
 
     #[test]
     fn a_session_without_docker_turns_containers_off_for_the_container_worker_only() {
-        let probe = probe::Probe {
-            tool: "wrangler".to_string(),
-            version: probe::Version::parse("4.140.0"),
-            provenance: probe::Provenance::Path(PathBuf::from("/bin/wrangler")),
-        };
-        let manager = bynk_driver::npm_install::PackageManager::Npm;
         let with = containers();
-        assert_eq!(session(&NoDocker, &probe, manager, &with), Some(true));
+        assert!(session(&NoDocker, &with));
         assert!(!off_args_for(true, &with, "shop-render").is_empty());
         assert!(off_args_for(true, &with, "shop-other").is_empty());
-        assert_eq!(
-            session(&NoDocker, &probe, manager, &Containers::new()),
-            Some(false)
-        );
+        assert!(!session(&NoDocker, &Containers::new()));
     }
 
     #[test]

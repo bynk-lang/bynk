@@ -661,11 +661,8 @@ pub fn run(
         return ExitCode::FAILURE;
     }
 
-    // #3477: the containers floor, then Docker: containers off when it is absent.
-    let Some(containers_off) = crate::dev_containers::session(tb, &probe, manager, &containers)
-    else {
-        return ExitCode::FAILURE;
-    };
+    // #3477: Docker: containers off when it is absent.
+    let containers_off = crate::dev_containers::session(tb, &containers);
 
     if !warm_up_wrangler(&probe.provenance, serving.len()) {
         return ExitCode::FAILURE;
@@ -1717,7 +1714,7 @@ fn collect_bynk_files(dir: &Path, excludes: &[PathBuf], visit: &mut dyn FnMut(&P
 }
 
 /// #1732: the warning `bynk dev` prints before serving with a wrangler older
-/// than [`bynk_emit::WRANGLER_MIN`]. Its `workerd` refuses the pinned
+/// than [`bynk_emit::WRANGLER_MIN`]. An older `workerd` can refuse the pinned
 /// compatibility date outright, and wrangler's own error says nothing about
 /// Bynk, so this names the cause and the fix first. A warning, not a refusal:
 /// the version is `doctor`'s judgement, and the wrangler itself has the last
@@ -1730,9 +1727,9 @@ pub fn wrangler_age_notice(
         .version
         .filter(|_| doctor::wrangler_below_min(probe))?;
     Some(format!(
-        "bynk: warning: wrangler {v} is older than {}, the first whose runtime serves \
-         compatibility date {}; `wrangler dev` will refuse it. Upgrade with \
-         `{}`.",
+        "bynk: warning: wrangler {v} is older than {}, the oldest this Bynk release supports; \
+         an older runtime may refuse compatibility date {}, and `wrangler dev` then exits. \
+         Upgrade with `{}`.",
         bynk_emit::WRANGLER_MIN,
         bynk_emit::COMPATIBILITY_DATE,
         doctor::wrangler_upgrade_remedy(probe, manager)

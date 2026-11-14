@@ -311,7 +311,7 @@ fn wrangler_is_checked_against_the_compatibility_date_minimum() {
     assert_eq!(level, Level::Warn, "{}", row.detail);
     assert!(
         row.detail.contains(&format!(
-            "below {}: `bynk dev` can't serve compatibility date {date}",
+            "below {}, the oldest this Bynk release supports: `bynk dev` may not serve compatibility date {date}",
             bynk_emit::WRANGLER_MIN
         )),
         "{}",

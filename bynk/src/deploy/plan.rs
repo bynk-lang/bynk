@@ -1951,7 +1951,8 @@ pub(crate) fn foreign_binding_maybe_set_notice(
 
 /// Everything a push needs of the installed tools, refused before authenticating
 /// so it costs no call: the wrangler floor for a Durable Object class
-/// ([`wrangler_floor_refusal`]), then a container's ([`container_refusals`]).
+/// (a container is one; [`wrangler_floor_refusal`]), then a container's Docker
+/// ([`container_refusals`]).
 fn preflight_refusal(
     tb: &dyn Toolbox,
     probe: &probe::Probe,
@@ -1960,7 +1961,7 @@ fn preflight_refusal(
     resources: &BTreeMap<String, Resources>,
 ) -> Option<String> {
     wrangler_floor_refusal(probe, manager, order, resources)
-        .or_else(|| container_refusals(tb, probe, manager, order, resources))
+        .or_else(|| container_refusals(tb, order, resources))
 }
 
 /// #1796: the refusal a deploy gets when a context it pushes declares a
@@ -1989,8 +1990,10 @@ pub(crate) fn wrangler_floor_refusal(
         .iter()
         .find(|worker| !resources[*worker].durable_objects.is_empty())?;
     Some(format!(
-        "bynk: wrangler {version} is older than {}, the first that reads the Durable Object \
-         `exports` `{worker}` declares; the push would fail. Upgrade with `{}`.",
+        "bynk: wrangler {version} is older than {}, the oldest this Bynk release supports \
+         (`{worker}` declares Durable Object `exports`, which wrangler reads from 4.107.0, and an \
+         older wrangler is untested against the generated configuration); the push is not \
+         attempted. Upgrade with `{}`.",
         bynk_emit::WRANGLER_MIN,
         doctor::wrangler_upgrade_remedy(probe, manager)
     ))

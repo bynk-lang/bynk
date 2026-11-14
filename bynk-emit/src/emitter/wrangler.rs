@@ -54,21 +54,19 @@ pub fn compatibility_flags(extra: &[String]) -> (Vec<String>, Vec<String>) {
     (flags, duplicates)
 }
 
-/// #1732: the oldest wrangler whose bundled `workerd` serves
-/// [`COMPATIBILITY_DATE`]. An older `workerd` refuses a newer date outright
-/// (`wrangler dev` exits: "This Worker requires compatibility date …"), so
-/// `bynk doctor` warns about a wrangler below this. Set by the same
-/// compatibility-date review that sets the date (Part 3's lag rule keeps it at
-/// least three months old). `bynk-emit/tests/compat_date_policy.rs` checks the
-/// policy doc names both.
-pub const WRANGLER_MIN: &str = "4.120.1";
-
-/// #3477 (slice C2): the oldest wrangler that accepts a container whose class
-/// runs under the `durable_object` scheduling policy, and runs it under
-/// `wrangler dev`. Below it the policy value is refused by the configuration
-/// schema. Only a Worker that declares a `Container` needs it, so
-/// [`WRANGLER_MIN`] does not move.
-pub const WRANGLER_CONTAINERS_MIN: &str = "4.136.0";
+/// #1732: the wrangler minimum. `bynk doctor` warns about a wrangler below it,
+/// and `bynk dev` prints the same warning before serving.
+///
+/// It was the oldest wrangler whose bundled `workerd` serves
+/// [`COMPATIBILITY_DATE`]: an older `workerd` refuses a newer date outright
+/// (`wrangler dev` exits: "This Worker requires compatibility date …"). Until
+/// v1.0.0 it instead tracks the newest wrangler at each release (the toolchain
+/// policy in `design/bynk-release-discipline.md` Part 3), which is never older
+/// than the one that serves the date. It is also past every feature a generated
+/// Worker needs, including the `durable_object` container policy (4.136.0), so
+/// no feature has a floor of its own. `bynk-emit/tests/compat_date_policy.rs`
+/// checks the policy doc names it.
+pub const WRANGLER_MIN: &str = "4.162.0";
 
 /// #3477 (slice C3): the `wrangler dev --var` that tells a generated container
 /// class its containers are off (`bynk dev` without Docker), so a call faults
