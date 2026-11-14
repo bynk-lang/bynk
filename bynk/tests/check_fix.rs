@@ -470,7 +470,8 @@ fn fix_touches_only_what_check_reports() {
         !shown.contains("let_else_staircase"),
         "a hint is not shown: {shown}"
     );
-    let (_, err) = run(&bynk(), &root, &["check", "--fix"], &[]);
+    let (code, err) = run(&bynk(), &root, &["check", "--fix"], &[]);
+    assert_ne!(code, 0, "guard.bynk is still an error: {err}");
     assert!(
         err.contains("fixed: src/app/sends.bynk: bynk.send.deprecated ×2"),
         "{err}"

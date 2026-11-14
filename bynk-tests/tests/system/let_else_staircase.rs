@@ -13,13 +13,25 @@ fn hints(source: &str) -> Vec<bynk_syntax::CompileError> {
     all.into_iter().filter(|e| e.category == CODE).collect()
 }
 
+/// The edits of the hints' fixes, sorted. A hint is an editor quick fix that a
+/// batch (`fix::edits`, `--fix`) never takes (#3537), so take them directly.
+fn hint_edits(hints: &[bynk_syntax::CompileError]) -> Vec<(bynk_syntax::span::Span, String)> {
+    let mut edits: Vec<_> = hints
+        .iter()
+        .filter_map(bynk_syntax::fix::lone_fix)
+        .flat_map(|s| s.edits.clone())
+        .collect();
+    edits.sort_by_key(|(span, _)| (span.start, span.end));
+    edits
+}
+
 /// `source` with the only hint's fix applied.
 fn fixed(source: &str) -> String {
     let found = hints(source);
     let [hint] = found.as_slice() else {
         panic!("expected one hint, got {}", found.len());
     };
-    let edits = bynk_syntax::fix::edits(source, [hint]);
+    let edits = hint_edits(std::slice::from_ref(hint));
     bynk_syntax::fix::apply(source, &edits)
 }
 
@@ -155,7 +167,7 @@ fn f(a: Option[Int], b: Option[Int], c: Option[Int], d: Option[Int]) -> Int {
 }",
     );
     let found = hints(&src);
-    let edits = bynk_syntax::fix::edits(&src, found.iter());
+    let edits = hint_edits(&found);
     let out = bynk_syntax::fix::apply(&src, &edits);
     assert!(
         bynk_emit::check_with_warnings(&out, "t.bynk").is_ok(),

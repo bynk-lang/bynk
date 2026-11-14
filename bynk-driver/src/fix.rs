@@ -350,8 +350,8 @@ pub(crate) fn fix_all(prog: &str, inputs: &[(&Path, String)]) -> bool {
     true
 }
 
-/// `bynk.send.deprecated ×3, bynk.lex.legacy_comment ×1`: which code each edit
-/// of a file fixed.
+/// `bynk.send.deprecated ×3, bynk.lex.legacy_comment ×1`: how many diagnostics
+/// of each code had their fix taken in a file.
 fn codes_line(codes: &BTreeMap<&'static str, usize>) -> String {
     codes
         .iter()
