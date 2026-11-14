@@ -28,6 +28,7 @@ per-commit history. While Bynk is pre-1.0, increments may change behaviour.
 
 | Version | Highlights |
 |---|---|
+| **v0.603.3** | AI Search fixes from a real-account check (#3480): an empty query or message is `SearchInvalidInput`, the paused-instance warning is worded per status and no longer says a search resumes it, and a dry-run plan says "will link" because it does not look the instance up |
 | **v0.603.2** | A Vectorize index name follows Cloudflare's rules, so underscores are accepted and a leading digit is refused |
 | **v0.603.1** | A Vectorize deploy call refused with Cloudflare's `Authentication error [code: 10000]` now names the permission the token needs |
 | **v0.603.0** | `bynk dev` runs a `Container` under Docker through `wrangler dev` and, without Docker, warns once and starts with containers off so a call faults naming Docker; `--remote` is refused for a container Worker, and a container Worker needs Wrangler 4.136.0 or later under `bynk dev` |
