@@ -122,6 +122,27 @@
       "additionalProperties": false,
       "description": "Where `bynk deploy` gets each `Postgres` capability's Hyperdrive config.\nNo table holds a connection string: it is a secret, and `bynk.toml` is\ncommitted.",
       "properties": {
+        "containers": {
+          "additionalProperties": {
+            "additionalProperties": false,
+            "description": "One `Container` capability's image at deploy.",
+            "properties": {
+              "image": {
+                "additionalProperties": {
+                  "type": "string"
+                },
+                "description": "Prebuilt images by deployment environment (`default`, or an `--env`\nname), each `registry.cloudflare.com/<ACCOUNT_ID>/<REPOSITORY>@sha256:<DIGEST>`:\nin Cloudflare's own registry and named by digest. An environment listed\nhere runs that image and is never built, so the deploy needs no Docker;\nwithout an entry the image is built from `@build`'s Dockerfile.",
+                "type": "object"
+              }
+            },
+            "required": [
+              "image"
+            ],
+            "type": "object"
+          },
+          "description": "Container settings, keyed by the `Container` capability's name\n(`capability Renderer = Container …` is `Renderer`).",
+          "type": "object"
+        },
         "hyperdrive": {
           "additionalProperties": {
             "additionalProperties": false,
