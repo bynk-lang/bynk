@@ -28,6 +28,7 @@ per-commit history. While Bynk is pre-1.0, increments may change behaviour.
 
 | Version | Highlights |
 |---|---|
+| **v0.603.4** | A negative fixture covers `bynk.exec.unavailable` for a function that calls `detach`, reached from a WebSocket handler |
 | **v0.603.3** | AI Search fixes from a real-account check (#3480): an empty query or message is `SearchInvalidInput`, the paused-instance warning is worded per status and no longer says a search resumes it, and a dry-run plan says "will link" because it does not look the instance up |
 | **v0.603.2** | A Vectorize index name follows Cloudflare's rules, so underscores are accepted and a leading digit is refused |
 | **v0.603.1** | A Vectorize deploy call refused with Cloudflare's `Authentication error [code: 10000]` now names the permission the token needs |
