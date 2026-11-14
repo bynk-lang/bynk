@@ -1544,7 +1544,9 @@ handler that writes and then queries in the same request will not see its own wr
 `getByIds` reads vectors back with their values and metadata. `describe` reports the
 index's `dimensions`; its `metric` is an `Option[String]`, `None` because the
 platform's `describe` does not report one (the declaration states it, so the metric
-of a bound index cannot be checked at run time).
+of a bound index cannot be checked at run time, so create a development index
+with the declared metric: under `bynk dev` only its dimensions are checked, and a
+different metric would quietly change scores and ordering).
 
 A `VectorError` is `DimensionMismatch(message)`, `VectorInvalidInput(message)`,
 `VectorRateLimited` (worth retrying later) or `VectorFailed(message)` (anything else,
