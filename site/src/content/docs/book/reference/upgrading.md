@@ -21,6 +21,10 @@ here broke nothing, or its author did not say so: please
 
 `~>` is removed; run `bynk check --fix` on v0.603.x first, or rewrite `~> e` as `e.detach()` (written `do e.detach()` as a statement). A program that still contains `~>` fails with `bynk.parse.removed_send_arrow`.
 
+## v0.603.10
+
+The release added the standard-library names `Claim`, `Claimed` and `AlreadyClaimed` (`bynk`) and `ContainerError`'s variants `StartFailed`, `Unavailable`, `Timeout` and `Network` (`bynk.cloudflare`). They were in scope for any `consumes bynk` or `consumes bynk.cloudflare`, even a selective one, so a suite `type Claim` or `type Claimed` was refused with `bynk.suite.type_name_clash`, `firstAs[Claim]` in a suite read the standard-library enum (`bynk.types.sql_row_shape`), and a bare `Unavailable(…)` of your own sum was `bynk.resolve.ambiguous_variant`. Rename the declaration or qualify the variant (`ClaudeOutcome.Unavailable(…)`); a later release no longer counts names a `consumes` braces do not list.
+
 ## v0.603.8
 
 A project with an inbound email service has `postal-mime` 4.2.0 in its `bynk.lock` and `package.json` now (was 4.1.4). A build run with `--locked` is refused with `bynk.package.lock_out_of_date` ("`bynk.lock` is out of date with the manifests, and `--locked` was given") until you run `bynk fetch` and commit the lock.
