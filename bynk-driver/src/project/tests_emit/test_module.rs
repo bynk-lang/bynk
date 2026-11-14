@@ -364,7 +364,7 @@ pub(super) fn emit_test_module(
             None,
         ));
     }
-    // #1994: a target whose handlers use `~>` gets the execution-context
+    // #1994: a target whose handlers use `detach` gets the execution-context
     // double its deps carry as `__exec`, and the settle helper that awaits
     // the collected `waitUntil` promises after each addressed call.
     if uses_send {
@@ -1458,7 +1458,7 @@ pub(super) fn event_delivery_helpers(
 }
 
 /// #1994: the test double for the Worker's `ExecutionContext` — a `waitUntil`
-/// that collects the promises a `~>` send hands it, and (L7, #2414) a `cache`
+/// that collects the promises a `detach` send hands it, and (L7, #2414) a `cache`
 /// that records each `EdgeCache` purge and accepts it unless `succeeds` is
 /// cleared — and `__bynkSettle`, which
 /// awaits them after an addressed handler call, so a case's expectations see
@@ -1551,7 +1551,7 @@ pub(super) fn block_uses_advance(b: &Block) -> bool {
 }
 
 /// #1994: whether a context target has a handler that hands work to the
-/// execution context (`~>`, `within` or `race`, directly or through a function it
+/// execution context (`detach`, `within` or `race`, directly or through a function it
 /// calls, #2719), so its handlers' `deps` require `__exec` — the same gate the Worker entry and
 /// `compose` thread the request's execution context on.
 pub(super) fn target_uses_send(

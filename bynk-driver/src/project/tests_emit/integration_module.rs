@@ -241,7 +241,7 @@ pub(super) fn emit_integration_module(
         stmts.push(TsStmt::raw(text.clone(), None));
     }
 
-    // #1994: a participant whose handlers send with `~>` is driven with a
+    // #1994: a participant whose handlers send with `detach` is driven with a
     // collecting execution context, settled before its response returns.
     // L7 (#2414): so is one with an `EdgeCache` instance, which purges
     // through that context's `cache` double.

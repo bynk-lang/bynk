@@ -1,7 +1,7 @@
 //! #2719: which functions need the execution context, and where one is not
 //! available to give them.
 //!
-//! `~>`, `e.detach()`, `e.within(d)` and `a.race(b)` hand work to the execution context's
+//! `e.detach()`, `e.within(d)` and `a.race(b)` hand work to the execution context's
 //! `waitUntil`. A service handler reaches it as `deps.__exec`; a function has
 //! no `deps`, so a function whose body (or a function it calls, or names as a
 //! value) uses one of the three takes it as a hidden trailing parameter. This
@@ -13,8 +13,7 @@
 //! The set is built after type checking, from what the checker resolved: a
 //! `within` or `race` counts only when the checker recorded it as the kernel
 //! method on an `Effect` receiver (`Callee::Kernel`), never by name, so a user
-//! type's own `race` method puts nothing in the set. A `~>` is a
-//! [`Statement`] variant, so it cannot be shadowed and is read syntactically.
+//! type's own `race` method puts nothing in the set.
 //!
 //! Members are keyed by their declaration's [`Span`]: the file id is unique
 //! across a build (dependency packages included), so a callee reached through
@@ -55,7 +54,7 @@ pub enum Why {
 pub struct ExecPlan {
     fns: HashMap<Span, Why>,
     handlers: HashSet<Span>,
-    /// The subset that reaches a `within` or `race` (not only a `~>`): what puts
+    /// The subset that reaches a `within` or `race` (not only a `detach`): what puts
     /// a test module on virtual time, because those register timers on the
     /// harness clock.
     timed_fns: HashSet<Span>,
@@ -69,7 +68,7 @@ impl ExecPlan {
     }
 
     /// Whether this service handler's `deps` carry `__exec`: its body uses
-    /// `~>`, `within` or `race`, or calls or names a function that does.
+    /// `detach`, `within` or `race`, or calls or names a function that does.
     pub fn handler_needs(&self, h: &Handler) -> bool {
         self.handlers.contains(&h.span)
     }
@@ -373,14 +372,11 @@ fn scan_expr(e: &bynk_syntax::ast::Expr, callees: &HashMap<ExprId, &Callee>, tys
 fn scan_with<'a>(
     callees: &HashMap<ExprId, &Callee>,
     tys: &Types,
-    walk: impl FnOnce(&mut dyn FnMut(Hit<'a>)),
+    walk: impl FnOnce(&mut dyn FnMut(&'a bynk_syntax::ast::Expr)),
 ) -> Facts {
     let mut facts = Facts::default();
-    walk(&mut |hit| match hit {
-        Hit::Send(span) => {
-            facts.direct.get_or_insert(("~>", span));
-        }
-        Hit::Expr(e) => match callees.get(&e.id) {
+    walk(&mut |e| {
+        match callees.get(&e.id) {
             Some(Callee::Kernel {
                 recv,
                 op: KernelOp::Effect(op),
@@ -403,32 +399,23 @@ fn scan_with<'a>(
                 at: e.span,
             }),
             _ => {}
-        },
+        }
     });
     facts
 }
 
-enum Hit<'a> {
-    Send(Span),
-    Expr(&'a bynk_syntax::ast::Expr),
-}
-
-/// Every send statement and expression of `b`, lambdas included. A block
+/// Every expression of `b`, lambdas included. A block
 /// reached through [`expr_children`] would lose its statements' kind, so
 /// `Block`, `If` and `Match` are descended by hand, as `block_needs_exec` does.
-fn visit_block<'a>(b: &'a Block, f: &mut dyn FnMut(Hit<'a>)) {
+fn visit_block<'a>(b: &'a Block, f: &mut dyn FnMut(&'a bynk_syntax::ast::Expr)) {
     for s in &b.statements {
         visit_stmt(s, f);
     }
     visit_expr(&b.tail, f);
 }
 
-fn visit_stmt<'a>(s: &'a Statement, f: &mut dyn FnMut(Hit<'a>)) {
+fn visit_stmt<'a>(s: &'a Statement, f: &mut dyn FnMut(&'a bynk_syntax::ast::Expr)) {
     match s {
-        Statement::Send(send) => {
-            f(Hit::Send(send.span));
-            visit_expr(&send.value, f);
-        }
         Statement::Let(l) | Statement::EffectLet(l) => visit_expr(&l.value, f),
         Statement::Expect(a) => visit_expr(&a.value, f),
         Statement::Do(d) => visit_expr(&d.value, f),
@@ -442,8 +429,8 @@ fn visit_stmt<'a>(s: &'a Statement, f: &mut dyn FnMut(Hit<'a>)) {
     }
 }
 
-fn visit_expr<'a>(e: &'a bynk_syntax::ast::Expr, f: &mut dyn FnMut(Hit<'a>)) {
-    f(Hit::Expr(e));
+fn visit_expr<'a>(e: &'a bynk_syntax::ast::Expr, f: &mut dyn FnMut(&'a bynk_syntax::ast::Expr)) {
+    f(e);
     match &e.kind {
         ExprKind::Block(b) => visit_block(b, f),
         ExprKind::If {

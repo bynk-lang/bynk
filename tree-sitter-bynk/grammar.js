@@ -1522,7 +1522,6 @@ module.exports = grammar({
         $.let_stmt,
         $.effect_let_stmt,
         $.let_else_stmt,
-        $.effect_send_stmt,
         $.do_stmt,
         $.assign_stmt,
         $.advance_stmt,
@@ -1642,8 +1641,6 @@ module.exports = grammar({
         ),
         ),
       ),
-    // v0.79: `~> expr` — an asynchronous fire-and-forget send (no binder).
-    effect_send_stmt: ($) => seq("~>", field("value", $._expression)),
     // v0.146 (ADR 0170): `do expr` — perform a unit effect as a statement
     // (the binder-free `let _ <- expr` for an `Effect[()]`).
     do_stmt: ($) => seq("do", field("value", $._expression)),
@@ -1679,7 +1676,6 @@ module.exports = grammar({
       choice(
         $.let_stmt,
         $.effect_let_stmt,
-        $.effect_send_stmt,
         $.do_stmt,
         $.assign_stmt,
         $.advance_stmt,

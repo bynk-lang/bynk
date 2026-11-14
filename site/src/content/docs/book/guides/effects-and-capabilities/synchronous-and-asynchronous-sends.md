@@ -130,20 +130,13 @@ On the Bundle target the compose root runs the effect and reports a failure, but
 it does not keep a host alive: a Bundle host may exit before a detached effect
 finishes.
 
-## The old spelling, `~>`
+## The removed spelling, `~>`
 
-Before `detach`, the spelling was `~> e`. It is deprecated
-([`bynk.send.deprecated`](/book/reference/diagnostics/)) and `bynk check --fix`
-rewrites each one to `do e.detach()`.
-
-### The error gate
-
-`~>` still accepts only an `Effect[()]` operand: a reply with a value or an error would vanish, so a
-send of one is rejected ([`bynk.send.requires_unit`](/book/reference/diagnostics/)),
-and likewise `~>` of a store operation or in an agent handler
-([`bynk.send.store_op`](/book/reference/diagnostics/),
-[`bynk.send.in_agent_handler`](/book/reference/diagnostics/)). `detach` has no such
-gate, because a failure is reported rather than dropped.
+Before `detach`, the spelling was `~> e`. It is removed: a program that uses it is refused with
+[`bynk.parse.removed_send_arrow`](/book/reference/diagnostics/), which names the replacement.
+Write `do e.detach()`. On v0.603.x, `bynk check --fix` rewrites each one for you; see
+[Upgrading](/book/reference/upgrading/). Unlike `~>`, `detach` accepts an effect of any type,
+because a failure is reported rather than dropped.
 
 **See also:** [Understand the capability model](/book/guides/effects-and-capabilities/understand-the-capability-model/),
 [Reference: detaching an effect](/book/reference/capabilities/#detach).

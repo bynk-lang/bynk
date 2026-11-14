@@ -130,7 +130,7 @@ impl<'a> Parser<'a> {
     /// #3161: the diagnostic for an expression written as a statement.
     ///
     /// A block has no expression statements: each statement is a `let`, `do`,
-    /// `~>`, `expect`, `:=` and so on, and the last expression is the block's
+    /// `expect`, `:=` and so on, and the last expression is the block's
     /// value. An expression followed, on a later line, by something that starts
     /// another statement or expression is therefore a bare statement, whose
     /// value would be discarded. `None` when `expr` is the block's value (the
@@ -722,7 +722,7 @@ impl<'a> Parser<'a> {
     }
 
     /// v0.81: true when the next two tokens are `<ident> :=` — a `Cell` write
-    /// statement, which (unlike `let`/`commit`/`~>`) is led by an identifier.
+    /// statement, which (unlike `let`/`commit`) is led by an identifier.
     /// #2137: `advance <Ident> by …` opens an `advance` statement. `advance` is
     /// contextual, and `<Ident> <Ident> by` is no other statement or
     /// expression (`by` is reserved), so the lookahead is unambiguous.
@@ -984,13 +984,7 @@ impl<'a> Parser<'a> {
         }
         if self.peek_kind() == Some(TokenKind::TildeArrow) {
             let kw = self.expect(TokenKind::TildeArrow, "to start an async send statement")?;
-            let value = self.parse_expr()?;
-            let span = kw.span.merge(value.span);
-            return Ok(Statement::Send(SendStmt {
-                value,
-                span,
-                trivia: Trivia::default(),
-            }));
+            return Err(removed_send_arrow_error(kw.span));
         }
         if self.peek_kind() == Some(TokenKind::Do) {
             // v0.146 (ADR 0170): `do e` — perform a unit effect as a statement.
@@ -1393,12 +1387,25 @@ enum LetElseOtherwise {
     Arms(Vec<MatchArm>),
 }
 
+/// #3443: the error for the removed `~>` send, which `e.detach()` replaced
+/// (#3437). `~>` is still lexed so that the refusal can say what to write;
+/// there is no fix, because the operand is not parsed.
+fn removed_send_arrow_error(span: Span) -> CompileError {
+    CompileError::new(
+        "bynk.parse.removed_send_arrow",
+        span,
+        "`~>` was removed; write `do e.detach()` instead of `~> e`",
+    )
+    .with_note(
+        "`e.detach()` stops waiting for `e` as `~>` did, for any `Effect[T]`, and reports a fault or an `Err` instead of losing it; for a unit effect that need not outlive the handler, plain `do e` is enough. See \"Upgrading\" in the Book (`/book/reference/upgrading/`)",
+    )
+}
+
 /// Set a statement's own leading and trailing comments.
 fn attach_trivia(stmt: &mut Statement, leading: Vec<Comment>, trailing: Option<String>) {
     let trivia = match stmt {
         Statement::Let(l) | Statement::EffectLet(l) => &mut l.trivia,
         Statement::Expect(a) => &mut a.trivia,
-        Statement::Send(s) => &mut s.trivia,
         Statement::Do(d) => &mut d.trivia,
         Statement::Assign(a) => &mut a.trivia,
         Statement::Advance(a) => &mut a.trivia,

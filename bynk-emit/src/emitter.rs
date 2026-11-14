@@ -802,7 +802,7 @@ pub fn emit_project(
 }
 
 /// Whether a service's `on call` handler hands work to the execution context
-/// (`~>`, `within` or `race`, directly or through the functions it calls or
+/// (`detach`, `within` or `race`, directly or through the functions it calls or
 /// names, #2719), so the Bundle target's `__makeSurface` deps must carry the
 /// execution context (`deps.__exec`) it forwards to the handler. The set is the
 /// checker's ([`bynk_check::exec_plan::ExecPlan`]), computed from what it
@@ -2994,9 +2994,6 @@ fn collect_refs_in_stmt(
         Statement::Expect(a) => {
             collect_refs_in_expr(&a.value, local_to_file, commons, ctx, out);
         }
-        Statement::Send(s) => {
-            collect_refs_in_expr(&s.value, local_to_file, commons, ctx, out);
-        }
         Statement::Do(d) => {
             collect_refs_in_expr(&d.value, local_to_file, commons, ctx, out);
         }
@@ -5015,7 +5012,7 @@ pub(crate) enum BodyMode {
         /// `"call"` for an `on call` handler and the emitted method name
         /// (`http_handler_method_name_ir`) for an http route.
         sum_handlers: HashSet<(String, String)>,
-        /// #1994: the target has a handler that sends with `~>`, so `deps`
+        /// #1994: the target has a handler that sends with `detach`, so `deps`
         /// carries the `__exec` double and each addressed service call is
         /// wrapped in `__bynkSettle(deps, …)`.
         settle_sends: bool,
@@ -5864,7 +5861,7 @@ impl<'a> LowerCtx<'a> {
         matches!(&self.mode, BodyMode::TestCase { .. })
     }
 
-    /// #1994: whether an addressed test-service call settles the `~>` sends
+    /// #1994: whether an addressed test-service call settles the `detach` sends
     /// its handler handed `deps.__exec`.
     pub(crate) fn test_settles_sends(&self) -> bool {
         matches!(

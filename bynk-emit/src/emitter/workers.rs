@@ -300,7 +300,7 @@ pub fn emit_worker_compose(
     // first-party `Clock` reads the harness clock (`ProviderNamespaces::Workers`).
     harness_clock: bool,
     // #2719: whether any of this context's service handlers hands work to the
-    // execution context (`~>`, `within` or `race`, directly or through the
+    // execution context (`detach`, `within` or `race`, directly or through the
     // functions it calls), so `compose` takes the request's and threads its
     // `waitUntil` into `deps.__exec`. From the checker's needs-context set.
     ctx_uses_send: bool,
@@ -561,7 +561,7 @@ pub fn emit_worker_compose(
         .collect();
     sorted_consumes.sort();
 
-    // v0.79: if any handler in this context uses `~>`, `compose` also takes the
+    // v0.79: if any handler in this context uses `detach`, `compose` also takes the
     // request's execution context and threads its `waitUntil` into `deps.__exec`.
 
     // -- Build the `compose` function's own body (Decision A/B: real nodes
@@ -627,7 +627,7 @@ pub fn emit_worker_compose(
         deps_entries.push(TsObjectEntry::Shorthand("env".to_string()));
     }
     deps_entries.extend(session_deps_entry(table));
-    // v0.79: the execution context rides in `deps.__exec` for `~>` sends.
+    // v0.79: the execution context rides in `deps.__exec` for `detach` sends.
     if ctx_uses_send {
         deps_entries.push(TsObjectEntry::Prop("__exec".to_string(), ident("exec")));
     }
@@ -662,7 +662,7 @@ pub fn emit_worker_compose(
     // (a *double* space, not the tight `"{}"` the ordinary single-line
     // `TsExpr::Object` empty-entries shortcut renders), a real, reachable
     // shape (a Worker with no providers/cross-caps/consumed services/agents,
-    // no `~>`, no events — `941_http_result_float_bytes_serialise` and
+    // no `detach`, no events — `941_http_result_float_bytes_serialise` and
     // several other real fixtures hit exactly this). The shortcut itself is
     // correct and stays unchanged for every *other* real call site (e.g.
     // `events_fanout.rs`'s own `(env ?? {})`, which genuinely wants the
@@ -928,7 +928,7 @@ pub fn emit_worker_compose(
     // Locale capability track, slice 2 (#882): `request` is threaded
     // independently of `exec` — the two-way independence matters because
     // `scheduled`/`queue` (which never have a `request`) may still use
-    // `~>` (`exec`), and a `fetch`-only Worker with no message bundle needs
+    // `detach` (`exec`), and a `fetch`-only Worker with no message bundle needs
     // neither.
     if needs_request {
         compose_params.push(TsParam {

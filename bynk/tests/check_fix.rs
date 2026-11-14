@@ -423,18 +423,13 @@ fn a_refusal_in_one_member_writes_nothing_in_any() {
 
 // ---- #3537: `--fix` applies only what `check` shows ----
 
-/// Two `~>` sends (the deprecated spelling, `bynk.send.deprecated`), and a nested
-/// `match` staircase that `check` only offers as an editor hint.
+/// Two legacy `--` comments (`bynk.lex.legacy_comment`, machine-applicable), and a
+/// nested `match` staircase that `check` only offers as an editor hint.
 const SENDS_AND_STAIRCASE: &str = "\
 commons app.sends
 
-fn keep(e: Effect[()]) -> Effect[()] { e }
-
-fn twice(ping: Effect[()]) -> Effect[Int] {
-  ~> ping
-  ~> keep(ping)
-  Effect.pure(2)
-}
+-- first
+fn one() -> Int { 1 }  -- second
 
 fn read(a: Option[Int], b: Option[Int]) -> Result[Int, String] {
   match a {
@@ -465,7 +460,7 @@ fn fix_touches_only_what_check_reports() {
     write(&sends, SENDS_AND_STAIRCASE);
     write(&guard, ONE_ARMED_IF);
     let (_, shown) = run(&bynk(), &root, &["check", "."], &[]);
-    assert!(shown.contains("bynk.send.deprecated"), "{shown}");
+    assert!(shown.contains("bynk.lex.legacy_comment"), "{shown}");
     assert!(
         !shown.contains("let_else_staircase"),
         "a hint is not shown: {shown}"
@@ -473,17 +468,17 @@ fn fix_touches_only_what_check_reports() {
     let (code, err) = run(&bynk(), &root, &["check", "--fix"], &[]);
     assert_ne!(code, 0, "guard.bynk is still an error: {err}");
     assert!(
-        err.contains("fixed: src/app/sends.bynk: bynk.send.deprecated ×2"),
+        err.contains("fixed: src/app/sends.bynk: bynk.lex.legacy_comment ×2"),
         "{err}"
     );
     assert!(
         !err.contains("guard.bynk (") && !err.contains("fixed: src/app/guard"),
         "{err}"
     );
-    // Only the `~>` lines changed.
+    // Only the legacy comments changed.
     let expected = SENDS_AND_STAIRCASE
-        .replace("~> ping", "do ping.detach()")
-        .replace("~> keep(ping)", "do keep(ping).detach()");
+        .replace("-- first", "// first")
+        .replace("-- second", "// second");
     assert_eq!(read(&sends), expected);
     assert!(read(&sends).contains("match a {"));
     assert_eq!(read(&guard), ONE_ARMED_IF);
