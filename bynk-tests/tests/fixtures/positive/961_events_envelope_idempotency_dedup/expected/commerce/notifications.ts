@@ -16,8 +16,8 @@ export const OnPayment = {
     let __r;
     try {
     __r = await (async () => {
-    const __letElse250 = await (await (async (__k: string, __t: number) => __claims.note(__k, await deps.Idempotency.claim(__k, __claims.lease(__t)), __t))(`commerce.notifications.OnPayment.event::${env.eventId}`, 604800000));
-    switch (__letElse250.tag) {
+    const __letElse265 = await (await (async (__k: string, __t: number) => __claims.note(__k, await deps.Idempotency.claim(__k, __claims.lease(__t)), __t))(`commerce.notifications.OnPayment.event::${env.eventId}`, 604800000));
+    switch (__letElse265.tag) {
       case "Claimed": {
         const __r0 = await deps.Logger.info(e.orderId);
         return undefined;

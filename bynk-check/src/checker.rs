@@ -895,6 +895,9 @@ pub struct TypedCommons {
     /// S3 (#1963): the extensible first-party enums in scope, carried from
     /// [`ResolvedCommons::extensible_enums`] for the same per-handler checks.
     pub extensible_enums: HashSet<String>,
+    /// #3536: carried from [`ResolvedCommons::unselected_types`] for the same
+    /// per-handler checks.
+    pub unselected_types: HashSet<String>,
     /// S3 (#1963): carried from [`ResolvedCommons::stability`] for the same
     /// per-handler checks.
     pub stability: crate::stability::UnitStability,
@@ -940,6 +943,7 @@ impl TypedCommons {
             consts: HashMap::new(),
             shadowed_imports: HashMap::new(),
             extensible_enums: HashSet::new(),
+            unselected_types: HashSet::new(),
             stability: Default::default(),
             exec_plan: Default::default(),
         }
@@ -1378,6 +1382,7 @@ pub fn check_record_in(
                 consts: input.consts,
                 shadowed_imports: input.shadowed_imports,
                 extensible_enums: input.extensible_enums,
+                unselected_types: input.unselected_types,
                 stability: input.stability,
                 exec_plan: Default::default(),
             }),
@@ -1406,6 +1411,7 @@ pub fn check_record_in(
                 consts: input.consts,
                 shadowed_imports: input.shadowed_imports,
                 extensible_enums: input.extensible_enums,
+                unselected_types: input.unselected_types,
                 stability: input.stability,
                 exec_plan: Default::default(),
             }),

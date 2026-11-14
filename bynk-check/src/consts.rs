@@ -146,13 +146,16 @@ pub fn builtin_name_error(c: &ConstDecl) -> Option<CompileError> {
 pub fn variant_conflict_error(
     c: &ConstDecl,
     types: &HashMap<String, Arc<TypeDecl>>,
+    unselected: &std::collections::HashSet<String>,
 ) -> Option<CompileError> {
+    // #3536: a sum a braced `consumes` leaves out is not in scope to clash with.
     let mut owners: Vec<&TypeDecl> = types
         .values()
         .map(Arc::as_ref)
         .filter(|t| {
-            matches!(&t.body, TypeBody::Sum(s)
-                if s.variants.iter().any(|v| v.name.name == c.name.name))
+            !unselected.contains(&t.name.name)
+                && matches!(&t.body, TypeBody::Sum(s)
+                    if s.variants.iter().any(|v| v.name.name == c.name.name))
         })
         .collect();
     owners.sort_by(|a, b| a.name.name.cmp(&b.name.name));

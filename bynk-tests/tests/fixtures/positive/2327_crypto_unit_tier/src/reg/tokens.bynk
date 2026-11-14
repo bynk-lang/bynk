@@ -1,7 +1,7 @@
 context reg.tokens
 
 consumes bynk { Random }
-consumes bynk.crypto { Crypto }
+consumes bynk.crypto { Crypto, Digest, Signature }
 
 // K4: the first-party registry's publish-token and index-signing shapes.
 

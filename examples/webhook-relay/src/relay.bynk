@@ -1,6 +1,6 @@
 context relay
 
-consumes bynk { Fetch, Logger, Secrets }
+consumes bynk { Fetch, Logger, Secrets, Request, Method }
 
 ---
 The webhook payload we accept. Parsed from the request body — but only *after*

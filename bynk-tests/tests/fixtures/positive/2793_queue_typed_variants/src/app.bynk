@@ -1,6 +1,6 @@
 context app
 
-consumes bynk.cloudflare { Queue }
+consumes bynk.cloudflare { Queue, QueueSend }
 
 type Placed = {
 	id: String,

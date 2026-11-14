@@ -5,7 +5,7 @@ context sessions
 // binary values, and `listPage` a page at a time.
 
 consumes bynk { Clock }
-consumes bynk.cloudflare { Kv }
+consumes bynk.cloudflare { Kv, KvPut, KvExpiration, KvGet, KvList, KvListing }
 
 capability Blobs = Kv
 

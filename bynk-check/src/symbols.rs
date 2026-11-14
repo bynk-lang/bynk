@@ -496,6 +496,18 @@ pub struct UnitTable {
     /// #2887: the exported types this unit renames with `consumes U { T as
     /// Alias }`, keyed by the alias. Recorded by [`record_flattened_caps`].
     pub consumed_type_aliases: HashMap<String, ConsumedTypeAlias>,
+    /// #3536: the types of the first-party units this unit consumes with a
+    /// braced list (`consumes bynk { Logger }`) that the list does not name.
+    /// A selective `consumes` brings in only what it lists, so these are not
+    /// candidates for a name clash or a bare-variant lookup, and a declaration
+    /// of this unit's own wins over them. Recorded by
+    /// [`record_unselected_consumed_types`].
+    pub unselected_consumed_types: std::collections::BTreeSet<String>,
+    /// #3536: every type of those units the braces do not list, including the
+    /// ones a listed capability's signatures reach (which stay in scope as
+    /// values, so [`UnitTable::unselected_consumed_types`] leaves them out).
+    /// What `bynk.consumes.type_not_selected` is reported against.
+    pub unlisted_consumed_types: std::collections::BTreeSet<String>,
     /// S4a (#1966): the derived capabilities (`capability Sessions = Kv`)
     /// this context declares, by name, once resolved to their base by
     /// [`crate::project_model::phase_resolve_derived`]. Each is also in
@@ -531,6 +543,11 @@ pub(crate) fn sorted_methods(
 }
 
 impl UnitTable {
+    /// #3536: [`UnitTable::unselected_consumed_types`] as a set.
+    pub fn unselected_names(&self) -> std::collections::HashSet<String> {
+        self.unselected_consumed_types.iter().cloned().collect()
+    }
+
     /// The parts of this table that are **not** a function of the unit's own
     /// files (#3243 S2.3b): everything `phase_symbol_tables` builds from a unit's
     /// own sources is covered by hashing those sources, so a file-check digest
@@ -567,12 +584,16 @@ impl UnitTable {
             // Filled in from other units.
             flattened_caps,
             consumed_type_aliases,
+            unselected_consumed_types,
+            unlisted_consumed_types,
             derived,
         } = self;
         (
             *kind,
             sorted(flattened_caps),
             sorted(consumed_type_aliases),
+            unselected_consumed_types,
+            unlisted_consumed_types,
             sorted(derived),
         )
     }
@@ -958,6 +979,141 @@ pub fn record_flattened_caps(
             t.consumed_type_aliases = aliases.clone();
         }
     }
+}
+
+/// #3536: record, on each unit's table, the types of its first-party consumed
+/// units that its braces leave out. A bare `consumes bynk` (or one stated bare
+/// in any of the unit's files) is the whole-module form and leaves nothing out;
+/// a braced list brings in only the names it lists, so every other type of that
+/// unit is *unselected*. Types stay resolvable (the deprecation window of
+/// `bynk.consumes.type_not_selected`), but are neither clash nor ambiguity
+/// candidates, and the unit's own declarations win over them.
+pub type ConsumeSelections = HashMap<String, Vec<(String, Option<Vec<String>>)>>;
+
+pub fn record_unselected_consumed_types(
+    unit_tables: &mut HashMap<String, UnitTable>,
+    consumes: &ConsumeSelections,
+) {
+    type Sets = std::collections::BTreeSet<String>;
+    let mut out: HashMap<String, (Sets, Sets)> = HashMap::new();
+    for (unit, clauses) in consumes {
+        // target -> Some(listed names) | None for the whole-module form.
+        let mut selection: HashMap<&str, Option<std::collections::HashSet<&str>>> = HashMap::new();
+        for (target, names) in clauses {
+            if !is_first_party_name(target) {
+                continue;
+            }
+            match (names, selection.get_mut(target.as_str())) {
+                (None, _) => {
+                    selection.insert(target, None);
+                }
+                (Some(_), Some(None)) => {}
+                (Some(names), Some(Some(listed))) => {
+                    listed.extend(names.iter().map(String::as_str))
+                }
+                (Some(names), None) => {
+                    selection.insert(target, Some(names.iter().map(String::as_str).collect()));
+                }
+            }
+        }
+        for (target, listed) in selection {
+            let (Some(listed), Some(table)) = (listed, unit_tables.get(target)) else {
+                continue;
+            };
+            let unlisted: Vec<&String> = table
+                .types
+                .keys()
+                .filter(|t| !listed.contains(t.as_str()))
+                .collect();
+            // A listed capability's signatures use types that must keep meaning
+            // the standard library's, so a declaration of the unit's own
+            // cannot silently take their name.
+            let reached = signature_types(table, &listed);
+            let entry = out.entry(unit.clone()).or_default();
+            entry.0.extend(unlisted.iter().map(|t| (*t).clone()));
+            entry.1.extend(
+                unlisted
+                    .into_iter()
+                    .filter(|t| !reached.contains(*t))
+                    .cloned(),
+            );
+        }
+    }
+    for (unit, (unlisted, unselected)) in out {
+        if let Some(t) = unit_tables.get_mut(&unit) {
+            t.unlisted_consumed_types = unlisted;
+            t.unselected_consumed_types = unselected;
+        }
+    }
+}
+
+/// The types of `table` that the signatures of the capabilities `listed`
+/// names mention, and that those types' own fields and payloads reach.
+fn signature_types(
+    table: &UnitTable,
+    listed: &std::collections::HashSet<&str>,
+) -> std::collections::HashSet<String> {
+    fn names(r: &TypeRef, out: &mut Vec<String>) {
+        match r {
+            TypeRef::Named(id) => out.push(id.name.clone()),
+            TypeRef::App { name, args, .. } => {
+                out.push(name.name.clone());
+                args.iter().for_each(|a| names(a, out));
+            }
+            TypeRef::Result(a, b, _) | TypeRef::Map(a, b, _) => {
+                names(a, out);
+                names(b, out);
+            }
+            TypeRef::Option(t, _)
+            | TypeRef::Effect(t, _)
+            | TypeRef::HttpResult(t, _)
+            | TypeRef::List(t, _)
+            | TypeRef::Set(t, _)
+            | TypeRef::Query(t, _)
+            | TypeRef::Stream(t, _)
+            | TypeRef::Connection(t, _)
+            | TypeRef::History(t, _) => names(t, out),
+            TypeRef::Fn(params, ret, _) => {
+                params.iter().for_each(|p| names(p, out));
+                names(ret, out);
+            }
+            _ => {}
+        }
+    }
+    let mut todo: Vec<String> = Vec::new();
+    for cap in table
+        .capabilities
+        .values()
+        .filter(|c| listed.contains(c.name.name.as_str()))
+    {
+        for op in &cap.ops {
+            op.params.iter().for_each(|p| names(&p.type_ref, &mut todo));
+            names(&op.return_type, &mut todo);
+        }
+    }
+    let mut seen = std::collections::HashSet::new();
+    while let Some(n) = todo.pop() {
+        if !seen.insert(n.clone()) {
+            continue;
+        }
+        match table.types.get(&n).map(|t| &t.body) {
+            Some(TypeBody::Record(r)) => {
+                r.fields.iter().for_each(|f| names(&f.type_ref, &mut todo))
+            }
+            Some(TypeBody::Sum(s)) => s
+                .variants
+                .iter()
+                .flat_map(|v| &v.payload)
+                .for_each(|p| names(&p.type_ref, &mut todo)),
+            _ => {}
+        }
+    }
+    seen
+}
+
+/// Whether a unit name is under the reserved `bynk` root: the toolchain's own.
+pub(crate) fn is_first_party_name(unit: &str) -> bool {
+    unit == "bynk" || unit.starts_with("bynk.")
 }
 
 /// #696: each table-construction diagnostic is attributed to the project-relative

@@ -42,6 +42,9 @@ pub(super) fn emit_test_scope_setup(
     // scoped to a suite.
     suite: Option<usize>,
     hidden: &BTreeMap<String, String>,
+    // #3536: the declaring suite's own `type`s. One named like a first-party
+    // type the target's braces leave out replaces it in the case's scope.
+    suite_types: &[bynk_syntax::ast::TypeDecl],
 ) -> HashSet<String> {
     // #2024: every name this setup binds in the runner's scope, returned so the
     // body's lowering renames a case `let` that would redeclare one.
@@ -175,31 +178,7 @@ pub(super) fn emit_test_scope_setup(
     // body can reference them unqualified. The target's types and fns are
     // exported from its namespace by the production emitter.
     if let Some(table) = unit_tables.get(target_name) {
-        // #1883, slice 3: the target's assets are exported constants too.
-        let mut names: Vec<String> = table
-            .types
-            .keys()
-            .chain(table.fns.keys())
-            .chain(table.assets.keys())
-            .chain(table.embeds.keys())
-            .chain(table.consts.keys())
-            .cloned()
-            .collect();
-        // For contexts, also bring services and providers into scope.
-        let extras: Vec<String> = table
-            .services
-            .keys()
-            .chain(table.agents.keys())
-            .cloned()
-            .collect();
-        names.extend(extras);
-        // v0.9.2: bring each agent's construction factory into scope so a test
-        // body's `AgentName(key)` lowers to `__makeAgentName(key)`.
-        for agent in table.agents.keys() {
-            names.push(bynk_emit::emitter::agent_factory_name(agent));
-        }
-        names.sort();
-        names.dedup();
+        let names = target_scope_names(table);
         let type_names = aliased_types(table, |_| true);
         bound.extend(names.iter().cloned());
         bynk_emit::emitter::extend_printed_at(
@@ -244,7 +223,12 @@ pub(super) fn emit_test_scope_setup(
             );
             if let Some(table) = unit_tables.get(q) {
                 // #2702: not a consumed context's `private` types.
-                let types = aliased_types(table, |n| is_public_type(table, n));
+                // #3536: a suite type of the name of a first-party type the
+                // target's braces leave out is the name's meaning here.
+                let types = aliased_types(table, |n| {
+                    is_public_type(table, n)
+                        && !suite_replaces_left_out(unit_tables, target_name, suite_types, n)
+                });
                 let names: Vec<String> = types.iter().map(|(n, _)| n.clone()).collect();
                 // #2887: the types this target renames from `q` bind as their aliases.
                 let renames: HashMap<String, String> = unit_tables
@@ -370,6 +354,52 @@ pub(super) fn async_test_runner_fn(
         },
         None,
     )
+}
+
+/// The names the target's own module exports that a case's scope binds
+/// unqualified: its types, fns, assets, embeds, consts, services and agents,
+/// and each agent's construction factory, sorted.
+fn target_scope_names(table: &UnitTable) -> Vec<String> {
+    // #1883, slice 3: the target's assets are exported constants too.
+    let mut names: Vec<String> = table
+        .types
+        .keys()
+        .chain(table.fns.keys())
+        .chain(table.assets.keys())
+        .chain(table.embeds.keys())
+        .chain(table.consts.keys())
+        .cloned()
+        .collect();
+    // For contexts, also bring services and providers into scope.
+    let extras: Vec<String> = table
+        .services
+        .keys()
+        .chain(table.agents.keys())
+        .cloned()
+        .collect();
+    names.extend(extras);
+    // v0.9.2: bring each agent's construction factory into scope so a test
+    // body's `AgentName(key)` lowers to `__makeAgentName(key)`.
+    for agent in table.agents.keys() {
+        names.push(bynk_emit::emitter::agent_factory_name(agent));
+    }
+    names.sort();
+    names.dedup();
+    names
+}
+
+/// #3536: whether a suite `type` named `name` replaces the first-party type of
+/// that name the target's braces leave out.
+pub(super) fn suite_replaces_left_out(
+    unit_tables: &HashMap<String, UnitTable>,
+    target_name: &str,
+    suite_types: &[bynk_syntax::ast::TypeDecl],
+    name: &String,
+) -> bool {
+    unit_tables.get(target_name).is_some_and(|t| {
+        t.unselected_consumed_types.contains(name)
+            && suite_types.iter().any(|s| s.name.name == *name)
+    })
 }
 
 /// #3111: the local codecs the runner's lowered body reached for beyond the
@@ -559,6 +589,7 @@ pub(super) fn emit_test_case_function(
         scoped.then_some(case.name.as_str()),
         suite,
         hidden,
+        suite_fns.types,
     );
     let mut typed = synthetic_typed_commons_for_target(
         target_name,
@@ -567,6 +598,7 @@ pub(super) fn emit_test_case_function(
         unit_consumes,
         hidden,
         tys,
+        suite_fns.types,
     );
     // v0.117: re-type-check the case body (with the call-record types registered)
     // so the lowering has full expr types — collection kernels, notably a

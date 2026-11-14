@@ -1503,6 +1503,13 @@ pub const EXPLANATIONS: &[Explain] = &[
         anchor: "rename-an-exported-type-that-clashes-with-one-of-yours",
     },
     Explain {
+        code: "bynk.consumes.type_not_selected",
+        blurb: "A braced `consumes U { A, B }` brings into scope only the names it lists, so the standard library can add a type without changing what an existing program means. Naming a type of `U` (or a bare variant of one of its sums) that the braces leave out still resolves for now, and is a warning; `bynk check --fix` adds the name to the braces. A later release makes it an error. A bare `consumes U`, with no braces, brings in the whole module.",
+        example: "consumes bynk { Logger }                   // ✗ `TimedOut` is not listed\n\nconsumes bynk { Logger, TimedOut }          // ✓\n\nfn at(t: TimedOut) -> Bool {\n    true\n}",
+        page: "/book/guides/program-structure/consume-services",
+        anchor: "rename-an-exported-type-that-clashes-with-one-of-yours",
+    },
+    Explain {
         code: "bynk.consumes.unknown_context",
         blurb: "A `consumes` clause is how one context states that it depends on another, so it has to name a context in the project, and no unit of that name exists. Check the spelling against the `context` line of the unit you mean.",
         example: "// pay.bynk\ncontext pay\n\n// shop.bynk\ncontext shop\n\nconsumes paymnet                 // ✗ no context `paymnet`\nconsumes pay                     // ✓ the context's declared name",
@@ -8598,6 +8605,11 @@ pub const REGISTRY: &[DiagnosticInfo] = &[
         "`consumes U { T as Alias }` names a type `U` does not export.",
         &["consumes_decl"],
     ),
+    warn(dg(
+        "bynk.consumes.type_not_selected",
+        "A type (or a bare variant of a sum) of a consumed first-party unit is named, but the unit's braced `consumes` does not list it (a warning; an error in a later release).",
+        &["consumes_decl"],
+    )),
     dg(
         "bynk.consumes.unknown_context",
         "`consumes` names a context that does not exist.",

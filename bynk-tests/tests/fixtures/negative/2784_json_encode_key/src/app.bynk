@@ -1,6 +1,6 @@
 context app
 
-consumes bynk.crypto { Crypto }
+consumes bynk.crypto { Crypto, Signature }
 
 // #2784: a key is never sent, so `Json.encode` refuses it.
 service probe {

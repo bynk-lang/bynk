@@ -5,7 +5,7 @@ context room
 // `bynkc/tests/par_gate_workerd.rs`), so it is legal here as anywhere else; the
 // `store` read before the block and the `:=` write after it stay sequential.
 
-consumes bynk { Fetch }
+consumes bynk { Fetch, Request, Method }
 
 agent Room {
   key id: String

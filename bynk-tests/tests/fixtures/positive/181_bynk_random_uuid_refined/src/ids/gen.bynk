@@ -1,6 +1,6 @@
 context ids.gen
 
-consumes bynk { Random }
+consumes bynk { Random, Uuid }
 
 service generate {
   on call() -> Effect[Uuid] given Random {

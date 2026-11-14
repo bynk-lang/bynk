@@ -1,0 +1,22 @@
+context shop.claims
+
+// #3536: a selective `consumes` brings in only what its braces list. The
+// standard-library names this file did not list (`Claim`, `Claimed` and
+// `AlreadyClaimed` from `bynk`, `ContainerError` and its `Unavailable` from
+// `bynk.cloudflare`) are not in scope, so they neither clash with a suite's
+// types nor make this context's own `Unavailable` ambiguous.
+
+consumes bynk { Logger }
+consumes bynk.cloudflare { D1 }
+
+type Outcome = | Done(n: Int) | Unavailable(reason: String)
+
+service probe {
+	on call(n: Int) -> Effect[Outcome] {
+		if n > 0 {
+			Done(n)
+		} else {
+			Unavailable("none")
+		}
+	}
+}

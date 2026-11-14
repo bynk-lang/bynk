@@ -1,0 +1,22 @@
+---
+#3536: a suite's own `type Claim` and `type Claimed` are not refused, nor does
+`Unavailable` read as ambiguous, for names the context never listed.
+---
+suite shop.claims
+
+type Claim = { n: Int }
+
+type Claimed = { calls: Int }
+
+case "suite types named like unlisted standard-library names" {
+	let k = Claim { n: 2 }
+	let c = Claimed { calls: 1 }
+	expect c.calls + k.n == 3
+}
+
+case "a bare variant of the context's own sum" {
+	let r <- probe.call(0)
+	expect r == Unavailable("none")
+	let d <- probe.call(4)
+	expect d == Done(4)
+}

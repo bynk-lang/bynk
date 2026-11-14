@@ -774,6 +774,10 @@ pub fn phase_resolve_derived(
     unit_tables: &mut HashMap<String, UnitTable>,
     errors: &mut ErrorSink,
 ) {
+    // #3536: recorded here, the phase that already holds the groups, kinds,
+    // parsed files and mutable tables of both pipelines.
+    let selections = consume_selections(groups, kinds, parsed);
+    crate::symbols::record_unselected_consumed_types(unit_tables, &selections);
     for (name, indices) in groups {
         for &i in indices {
             if parsed[i].is_synthetic() {
@@ -2795,6 +2799,36 @@ pub fn phase_resolve_uses(
         unit_uses.insert(name.clone(), uses_targets);
     }
     unit_uses
+}
+
+/// #3536: each context's or adapter's `consumes` clauses as `(target, listed
+/// names)` — `None` for the whole-module form (no braces), `Some(names)` for a
+/// braced list — across all the unit's files, for
+/// [`crate::symbols::record_unselected_consumed_types`].
+pub fn consume_selections(
+    groups: &BTreeMap<String, Vec<usize>>,
+    kinds: &BTreeMap<String, UnitKind>,
+    parsed: &[ParsedFile],
+) -> crate::symbols::ConsumeSelections {
+    let mut out = HashMap::new();
+    for (name, indices) in groups {
+        if !matches!(kinds.get(name), Some(UnitKind::Context | UnitKind::Adapter)) {
+            continue;
+        }
+        let clauses: Vec<(String, Option<Vec<String>>)> = indices
+            .iter()
+            .flat_map(|&i| parsed[i].consumes())
+            .map(|c| {
+                let names = c
+                    .selected
+                    .as_ref()
+                    .map(|items| items.iter().map(|n| n.name.name.clone()).collect());
+                (c.target.joined(), names)
+            })
+            .collect();
+        out.insert(name.clone(), clauses);
+    }
+    out
 }
 
 /// Phase 5b: resolve each unit's `consumes` clauses (target exists, is a context
@@ -5875,6 +5909,16 @@ pub fn merge_consumed_exports(
             let local_value = crate::symbols::local_value_kind(&unit_info[name].table, type_name)
                 .map(|(kind, _)| kind)
                 .filter(|kind| !matches!(*kind, "type" | "event"));
+            // #3536: a type the braces leave out is not in scope as a name of
+            // its own, so a declaration of this unit's wins over it, silently.
+            if unit_info[name]
+                .table
+                .unselected_consumed_types
+                .contains(type_name)
+                && (combined_types.contains_key(type_name) || local_value.is_some())
+            {
+                continue;
+            }
             if combined_types.contains_key(type_name) || local_value.is_some() {
                 // Name conflict between local/uses and consumed export.
                 let consumes_site = consumes_span_of(parsed, &unit_info[name].files, t);
@@ -6971,6 +7015,8 @@ mod native_platform_closure_tests {
             events: StdHashMap::new(),
             flattened_caps: StdHashMap::new(),
             consumed_type_aliases: StdHashMap::new(),
+            unselected_consumed_types: Default::default(),
+            unlisted_consumed_types: Default::default(),
             assets: StdHashMap::new(),
             embeds: StdHashMap::new(),
             consts: StdHashMap::new(),
@@ -7650,6 +7696,21 @@ mod consumes_alias_tests {
         assert_eq!(a.resolves_to("app.bynk", "Digest { total").unit, "report");
     }
 
+    /// #3536: braces that list only `Clock` do not bring `Method` in, and no
+    /// listed capability's signature reaches it, so the unit's own `Method` is
+    /// not in conflict with the standard library's.
+    #[test]
+    fn an_unlisted_export_yields_to_the_units_own_type() {
+        let src = app(
+            "consumes bynk { Clock }",
+            "type Method = | Fetch | Skip\n\nfn pick() -> Method { Fetch }",
+        );
+        run(&[REPORT, ("app.bynk", &src)]).assert_clean();
+    }
+
+    /// A type a listed capability's signatures use is still the standard
+    /// library's, so the unit's own type of that name still conflicts, with a
+    /// note that names the way out.
     #[test]
     fn the_unaliased_form_still_clashes_with_a_note_that_names_the_way_out() {
         let src = app(

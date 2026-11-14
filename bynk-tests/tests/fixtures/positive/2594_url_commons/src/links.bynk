@@ -4,7 +4,7 @@ context links
 // #2594: `bynk.url` over the two percent-encoding kernel methods: parse,
 // format, the query-string helpers, and building a Fetch URL.
 
-consumes bynk { Fetch }
+consumes bynk { Fetch, Request, Method }
 
 fn hostOf(s: String) -> String {
 	parse(s).map((u) => u.host).getOrElse("-")

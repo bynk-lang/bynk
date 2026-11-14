@@ -4,7 +4,7 @@ context shop.stock
 // type; the author's literal starts at `FROM`.
 
 consumes bynk
-consumes bynk.cloudflare { D1 }
+consumes bynk.cloudflare { D1, SqlValue, SqlReadError, SqlError }
 
 capability Stock = D1
 

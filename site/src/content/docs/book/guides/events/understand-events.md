@@ -120,7 +120,7 @@ An `on event` handler may declare a second, optional parameter —
 context commerce.notifications
 
 consumes commerce.order
-consumes bynk { Idempotency, Claim }
+consumes bynk { Idempotency, Claim, EventEnvelope }
 
 service OnPayment from Events(PaymentConfirmed) {
 	on event(e: PaymentConfirmed, env: EventEnvelope) -> Effect[()] given Idempotency {

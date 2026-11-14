@@ -4,7 +4,7 @@ context shop.flags
 // every statement's SQL is a literal, its data bound as `SqlValue`s.
 
 consumes bynk
-consumes bynk.cloudflare { D1 }
+consumes bynk.cloudflare { D1, SqlRun, SqlError, SqlValue, SqlStatement }
 
 capability Flags = D1
 

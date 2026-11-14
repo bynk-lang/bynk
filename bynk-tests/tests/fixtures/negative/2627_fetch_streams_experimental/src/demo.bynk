@@ -1,6 +1,6 @@
 context demo
 
-consumes bynk { Fetch }
+consumes bynk { Fetch, Request, FetchOptions, Redirect }
 
 // #2627: `Fetch.sendStream` ships experimental, though `Fetch` is stable.
 service probe {

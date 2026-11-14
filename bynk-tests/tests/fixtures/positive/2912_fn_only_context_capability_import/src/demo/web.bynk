@@ -1,6 +1,6 @@
 context demo.web
 
-consumes bynk { Fetch }
+consumes bynk { Fetch, Request, Method }
 
 fn probe(url: String) -> Effect[Int] given Fetch {
 	let r <- Fetch.send(Request { method: Method.Get, url: url, contentType: None, authorization: None, headers: Map.empty(), body: None })

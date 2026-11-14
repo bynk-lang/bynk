@@ -109,17 +109,17 @@ export const loose = {
 
 export const looseOne = {
   async call(deps: { Stock: Stock }): globalThis.Promise<string> {
-    const __letElse1936 = await (async () => { const __decode = (__s: string): Result<Loose, DecodeError> => { let __j: __JsonValue; try { __j = globalThis.JSON.parse(__s) as __JsonValue; } catch (__e) { return Err({ kind: "Malformed", path: "$", message: String(__e) }); } const __r = __deserialise_Loose(__j, "$"); if (__r.tag === "Ok") return Ok(__r.value as Loose); const __be = __r.error; return Err({ kind: __be.kind, path: (__be.kind === "StructuralMismatch" || __be.kind === "RefinementViolation") ? __be.path : "$", message: __be.kind === "StructuralMismatch" ? `expected ${__be.expected}, got ${String(__be.actual)}` : __be.kind === "RefinementViolation" ? __be.violation.message : __be.details }); }; const __r = await deps.Stock.first("SELECT \"id\", \"qty\" FROM items ORDER BY id", []); if (__r.tag === "Err") return Err({ tag: "Sql" as const, error: __r.error }); if (__r.value.tag === "None") return Ok(None); const __d = __decode(__r.value.value); return __d.tag === "Ok" ? Ok(Some(__d.value)) : Err({ tag: "Decode" as const, error: __d.error }); })();
-    if (__letElse1936.tag === "Ok") {
-      const row = __letElse1936.value;
+    const __letElse1970 = await (async () => { const __decode = (__s: string): Result<Loose, DecodeError> => { let __j: __JsonValue; try { __j = globalThis.JSON.parse(__s) as __JsonValue; } catch (__e) { return Err({ kind: "Malformed", path: "$", message: String(__e) }); } const __r = __deserialise_Loose(__j, "$"); if (__r.tag === "Ok") return Ok(__r.value as Loose); const __be = __r.error; return Err({ kind: __be.kind, path: (__be.kind === "StructuralMismatch" || __be.kind === "RefinementViolation") ? __be.path : "$", message: __be.kind === "StructuralMismatch" ? `expected ${__be.expected}, got ${String(__be.actual)}` : __be.kind === "RefinementViolation" ? __be.violation.message : __be.details }); }; const __r = await deps.Stock.first("SELECT \"id\", \"qty\" FROM items ORDER BY id", []); if (__r.tag === "Err") return Err({ tag: "Sql" as const, error: __r.error }); if (__r.value.tag === "None") return Ok(None); const __d = __decode(__r.value.value); return __d.tag === "Ok" ? Ok(Some(__d.value)) : Err({ tag: "Decode" as const, error: __d.error }); })();
+    if (__letElse1970.tag === "Ok") {
+      const row = __letElse1970.value;
       return "ok";
     }
-    if (__letElse1936.tag === "Err" && __letElse1936.error.tag === "Sql") {
-      const e = __letElse1936.error.error;
+    if (__letElse1970.tag === "Err" && __letElse1970.error.tag === "Sql") {
+      const e = __letElse1970.error.error;
       return sqlText(e);
     }
-    if (__letElse1936.tag === "Err" && __letElse1936.error.tag === "Decode") {
-      const e = __letElse1936.error.error;
+    if (__letElse1970.tag === "Err" && __letElse1970.error.tag === "Decode") {
+      const e = __letElse1970.error.error;
       return jsonText(e);
     }
     throw new globalThis.Error("non-exhaustive match");

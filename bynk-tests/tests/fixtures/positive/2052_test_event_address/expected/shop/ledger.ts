@@ -96,8 +96,8 @@ export const OnPlaced = {
     let __r;
     try {
     __r = await (async () => {
-    const __letElse699 = await (await (async (__k: string, __t: number) => __claims.note(__k, await deps.Idempotency.claim(__k, __claims.lease(__t)), __t))(`shop.ledger.OnPlaced.event::${env.eventId}`, 604800000));
-    switch (__letElse699.tag) {
+    const __letElse714 = await (await (async (__k: string, __t: number) => __claims.note(__k, await deps.Idempotency.claim(__k, __claims.lease(__t)), __t))(`shop.ledger.OnPlaced.event::${env.eventId}`, 604800000));
+    switch (__letElse714.tag) {
       case "Claimed": {
         const __r0 = await __makeBooks("publisher").note(env.publisherId, deps);
         return __makeBooks("all").bump(deps);

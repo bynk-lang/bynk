@@ -3,7 +3,7 @@ context mirror
 // #2586: `Fetch.sendWith` with a timeout and a manual redirect, the new
 // `Method` variants, and every `Logger` level, structured `log` included.
 
-consumes bynk { Fetch, Logger }
+consumes bynk { Fetch, Logger, Request, Method, FetchOptions, Redirect, LogLevel, FetchError }
 
 service probe {
 	on call(url: String) -> Effect[Int] given Fetch, Logger {

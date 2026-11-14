@@ -231,6 +231,13 @@ pub struct ResolvedCommons {
     /// from its provenance (`check_pipeline`) and carried to every check built
     /// from it. Empty unless set with [`ResolvedCommons::with_extensible_enums`].
     pub extensible_enums: HashSet<String>,
+    /// #3536: the names of types in scope that a braced `consumes` of a
+    /// first-party unit leaves out (`consumes bynk { Logger }` leaves out
+    /// `Claim`). Still resolvable while `bynk.consumes.type_not_selected` is a
+    /// warning, but never a name-clash or bare-variant ambiguity candidate: a
+    /// declaration of the unit's own wins. Empty unless set with
+    /// [`ResolvedCommons::with_unselected_types`].
+    pub unselected_types: HashSet<String>,
     /// Standard-library S3 (#1963): the unit's stability facts — the project's
     /// `[unstable]` policy and the imports it blocks. Set with
     /// [`ResolvedCommons::with_stability`]; the default blocks nothing.
@@ -480,6 +487,7 @@ impl ResolvedCommons {
             consts: HashMap::new(),
             shadowed_imports: HashMap::new(),
             extensible_enums: HashSet::new(),
+            unselected_types: HashSet::new(),
             stability: Default::default(),
         }
     }
@@ -525,6 +533,20 @@ impl ResolvedCommons {
     pub fn with_shadowed_imports(mut self, shadowed: HashMap<String, ShadowedImport>) -> Self {
         self.shadowed_imports = shadowed;
         self
+    }
+
+    /// #3536: set [`ResolvedCommons::unselected_types`].
+    pub fn with_unselected_types(mut self, names: HashSet<String>) -> Self {
+        self.unselected_types = names;
+        self
+    }
+
+    /// Carry the per-unit scope facts of a checked unit
+    /// ([`ResolvedCommons::extensible_enums`], [`ResolvedCommons::unselected_types`])
+    /// onto the rebuilt per-handler view.
+    pub fn with_scope_facts_of(self, typed: &crate::checker::TypedCommons) -> Self {
+        self.with_extensible_enums(typed.extensible_enums.clone())
+            .with_unselected_types(typed.unselected_types.clone())
     }
 
     /// S3 (#1963): set [`ResolvedCommons::extensible_enums`].
@@ -594,6 +616,42 @@ pub fn resolve(commons: Commons) -> Result<ResolvedCommons, Vec<CompileError>> {
     } else {
         Err(errors)
     }
+}
+
+/// Single-file mode has no `uses`, so the visible assets (#1883), embeds
+/// (#2387) and constants (#2617) are exactly the ones declared here, the first
+/// declaration of a name winning as in the unit table; a second is reported by
+/// `assets::single_file_asset_errors`, `embeds::single_file_embed_errors` and
+/// `consts::single_file_const_errors`.
+fn single_file_values(
+    commons: &Commons,
+) -> (
+    HashMap<String, AssetDecl>,
+    HashMap<String, EmbedDecl>,
+    HashMap<String, ConstDecl>,
+) {
+    let (mut assets, mut embeds, mut consts) = (HashMap::new(), HashMap::new(), HashMap::new());
+    for item in &commons.items {
+        match item {
+            CommonsItem::Asset(a) => {
+                assets
+                    .entry(a.name.name.clone())
+                    .or_insert_with(|| a.clone());
+            }
+            CommonsItem::Embed(e) => {
+                embeds
+                    .entry(e.name.name.clone())
+                    .or_insert_with(|| e.clone());
+            }
+            CommonsItem::Const(c) => {
+                consts
+                    .entry(c.name.name.clone())
+                    .or_insert_with(|| c.clone());
+            }
+            _ => {}
+        }
+    }
+    (assets, embeds, consts)
 }
 
 /// [`resolve`], returning the symbol table *with* every resolve error rather
@@ -813,40 +871,7 @@ pub fn resolve_recovering(commons: Commons) -> (ResolvedCommons, Vec<CompileErro
         }
     }
 
-    // #1883, slice 1a: single-file mode has no `uses`, so the visible assets
-    // are exactly the ones declared here.
-    // The first declaration of a name wins, as in the unit table; a second is
-    // `bynk.asset.duplicate` (`assets::single_file_asset_errors`).
-    let mut local_assets: HashMap<String, AssetDecl> = HashMap::new();
-    for item in &commons.items {
-        if let CommonsItem::Asset(a) = item {
-            local_assets
-                .entry(a.name.name.clone())
-                .or_insert_with(|| a.clone());
-        }
-    }
-
-    // #2387, slice 1: likewise the embeds, first declaration winning
-    // (`embeds::single_file_embed_errors` reports a second).
-    let mut local_embeds: HashMap<String, EmbedDecl> = HashMap::new();
-    for item in &commons.items {
-        if let CommonsItem::Embed(e) = item {
-            local_embeds
-                .entry(e.name.name.clone())
-                .or_insert_with(|| e.clone());
-        }
-    }
-
-    // #2617: likewise the constants, first declaration winning
-    // (`consts::single_file_const_errors` reports a second).
-    let mut local_consts: HashMap<String, ConstDecl> = HashMap::new();
-    for item in &commons.items {
-        if let CommonsItem::Const(c) = item {
-            local_consts
-                .entry(c.name.name.clone())
-                .or_insert_with(|| c.clone());
-        }
-    }
+    let (local_assets, local_embeds, local_consts) = single_file_values(&commons);
 
     // Second pass: validate references inside type-refs and function bodies.
     let mut refs = RefSink::new(); // single-file mode: no recording context.
@@ -929,6 +954,7 @@ pub fn resolve_recovering(commons: Commons) -> (ResolvedCommons, Vec<CompileErro
             consts: local_consts,
             shadowed_imports: HashMap::new(),
             extensible_enums: HashSet::new(),
+            unselected_types: HashSet::new(),
             stability: Default::default(),
         };
         (resolved, errors)
@@ -1209,7 +1235,7 @@ pub fn resolve_file_record(
             }
             CommonsItem::Fn(f) => {
                 sinks.refs.set_owner(f.name.display());
-                check_fn_refs(
+                check_fn_refs_with(
                     f,
                     &resolved.types,
                     &resolved.fns,
@@ -1218,18 +1244,20 @@ pub fn resolve_file_record(
                     &resolved.embeds,
                     &resolved.consts,
                     &resolved.shadowed_imports,
+                    &resolved.unselected_types,
                     &declared_caps,
                     &mut sinks,
                 );
             }
             CommonsItem::Const(c) => {
                 sinks.refs.set_owner(&c.name.name);
-                check_const_refs(
+                check_const_refs_with(
                     c,
                     &resolved.types,
                     &resolved.fns,
                     &resolved.methods,
                     &resolved.consts,
+                    &resolved.unselected_types,
                     &mut sinks,
                 );
             }
@@ -1832,6 +1860,7 @@ fn check_type_decl_refs(t: &TypeDecl, types: &HashMap<String, Arc<TypeDecl>>, er
     }
 }
 
+/// [`check_fn_refs_with`] for a unit with no braced `consumes` to leave a type out.
 #[allow(clippy::too_many_arguments)]
 fn check_fn_refs(
     f: &FnDecl,
@@ -1842,6 +1871,48 @@ fn check_fn_refs(
     embeds: &HashMap<String, EmbedDecl>,
     consts: &HashMap<String, ConstDecl>,
     shadowed: &HashMap<String, ShadowedImport>,
+    declared_caps: &HashSet<String>,
+    errors: &mut Sinks,
+) {
+    let none = HashSet::new();
+    check_fn_refs_with(
+        f,
+        types,
+        fns,
+        methods,
+        assets,
+        embeds,
+        consts,
+        shadowed,
+        &none,
+        declared_caps,
+        errors,
+    );
+}
+
+/// [`check_const_refs_with`] for a unit with no braced `consumes` to leave a type out.
+fn check_const_refs(
+    c: &ConstDecl,
+    types: &HashMap<String, Arc<TypeDecl>>,
+    fns: &HashMap<String, Arc<FnDecl>>,
+    methods: &HashMap<String, MethodTable>,
+    consts: &HashMap<String, ConstDecl>,
+    errors: &mut Sinks,
+) {
+    check_const_refs_with(c, types, fns, methods, consts, &HashSet::new(), errors);
+}
+
+#[allow(clippy::too_many_arguments)]
+fn check_fn_refs_with(
+    f: &FnDecl,
+    types: &HashMap<String, Arc<TypeDecl>>,
+    fns: &HashMap<String, Arc<FnDecl>>,
+    methods: &HashMap<String, MethodTable>,
+    assets: &HashMap<String, AssetDecl>,
+    embeds: &HashMap<String, EmbedDecl>,
+    consts: &HashMap<String, ConstDecl>,
+    shadowed: &HashMap<String, ShadowedImport>,
+    unselected: &HashSet<String>,
     declared_caps: &HashSet<String>,
     errors: &mut Sinks,
 ) {
@@ -1962,6 +2033,7 @@ fn check_fn_refs(
         embeds,
         consts,
         shadowed,
+        unselected,
         caps: &caps,
         given: &f.given,
         cap_advice: &cap_advice,
@@ -2009,12 +2081,13 @@ fn given_cap_chain(receiver: &Expr, given: &[CapRef], shadowed: &dyn Fn(&str) ->
 /// what is in scope. The initialiser has no parameters or bindings, so this is
 /// the function walk over an empty scope; whether the initialiser is *static*
 /// is the checker's call (`consts::static_error`).
-fn check_const_refs(
+fn check_const_refs_with(
     c: &ConstDecl,
     types: &HashMap<String, Arc<TypeDecl>>,
     fns: &HashMap<String, Arc<FnDecl>>,
     methods: &HashMap<String, MethodTable>,
     consts: &HashMap<String, ConstDecl>,
+    unselected: &HashSet<String>,
     errors: &mut Sinks,
 ) {
     let type_params = HashSet::new();
@@ -2032,6 +2105,7 @@ fn check_const_refs(
         embeds: &embeds,
         consts,
         shadowed: &shadowed,
+        unselected,
         caps: &HashSet::new(),
         given: &[],
         cap_advice: "",
@@ -2045,18 +2119,24 @@ fn check_const_refs(
 /// #1807, #1814: the walk the naming gates share: every place source writes
 /// a type name, reporting each one that names a hidden type. See
 /// [`check_hidden_type_names`] for what is walked.
+/// How a [`Gate`] reports a gated name written at an identifier, given its owner.
+type GateReport<'a> = dyn Fn(&Ident, &str) -> CompileError + 'a;
+
 struct Gate<'a> {
     /// Each gated type name, with its owning unit.
     hidden: &'a std::collections::BTreeMap<String, String>,
     /// #1814: the error for a gated name written at `id`, given its owner. A
     /// unit and a suite name the `uses` that would admit a hidden type
     /// differently; a shadowed import is a conflict instead (#1927).
-    report: &'a dyn Fn(&Ident, &str) -> CompileError,
+    report: &'a GateReport<'a>,
     /// #1927: each bare variant whose construction is gated, with its sum's
     /// name. Empty for #1807's hidden types, whose bare variants are values
     /// typed by their position; a shadowed sum's construction emits its type's
     /// name, which the local declaration has taken.
     variants: std::collections::BTreeMap<String, String>,
+    /// #3536: set, [`Gate::variants`] are reported through it wherever a bare
+    /// variant is *written* — constructed or matched — as the sum it names.
+    variant_report: Option<&'a GateReport<'a>>,
     /// #1927: for a shadowed type, the local declaration of each name, which
     /// answers a receiver it can serve (`svc.GET(…)` in a suite, `logo.url`).
     /// `None` for #1807's hidden types, which nothing local shares a name with.
@@ -2089,6 +2169,10 @@ impl Gate<'_> {
         let Some(sum) = self.variants.get(&id.name) else {
             return;
         };
+        if let Some(report) = self.variant_report {
+            self.errors.push(report(id, sum));
+            return;
+        }
         let Some(s) = self.locals.and_then(|l| l.get(sum)) else {
             return;
         };
@@ -2186,6 +2270,8 @@ impl Gate<'_> {
             } => {
                 if let Some(tn) = type_name {
                     self.name(tn);
+                } else if self.variant_report.is_some() {
+                    self.bare_variant(variant);
                 } else if bindings.is_empty() {
                     // A bare, payload-less pattern may name a refined type
                     // rather than a variant: `s is Repo` tests a refinement.
@@ -2360,6 +2446,7 @@ pub fn check_hidden_type_names(
         hidden,
         report: &report,
         variants: Default::default(),
+        variant_report: None,
         locals: None,
         errors: Vec::new(),
     };
@@ -2377,6 +2464,86 @@ fn hidden_type_error(id: &Ident, note: String) -> CompileError {
         format!("unknown type `{}`", id.name),
     )
     .with_note(note)
+}
+
+/// #3536: `bynk.consumes.type_not_selected`, for each place a unit's source
+/// writes the name of a first-party type (or a bare variant of a first-party
+/// sum) that its braced `consumes` does not list. The braces say what is in
+/// scope, so naming anything else is deprecated: it still resolves, as a
+/// warning, and carries a fix that adds the name to the braces when the
+/// `consumes` clause is in the same file. `consumes` is this file's clauses.
+pub fn check_unselected_type_names(
+    items: &[CommonsItem],
+    resolved: &ResolvedCommons,
+    unlisted: &std::collections::BTreeSet<String>,
+    consumes: &[ConsumesDecl],
+) -> Vec<CompileError> {
+    let from = |n: &String| {
+        resolved
+            .imported_from
+            .get(n)
+            .filter(|u| crate::symbols::is_first_party_name(u))
+    };
+    let mut gated = std::collections::BTreeMap::new();
+    let mut variants = std::collections::BTreeMap::new();
+    for name in unlisted.iter().filter(|n| from(n).is_some()) {
+        gated.insert(name.clone(), resolved.imported_from[name].clone());
+        if let Some(TypeBody::Sum(sum)) = resolved.types.get(name).map(|t| &t.body) {
+            variants.extend(
+                sum.variants
+                    .iter()
+                    .map(|v| (v.name.name.clone(), name.clone())),
+            );
+        }
+    }
+    // A variant another sum in scope declares is that sum's, not this one's.
+    variants.retain(|v, sum| {
+        !resolved.types.iter().any(|(n, t)| {
+            n != sum
+                && !gated.contains_key(n)
+                && matches!(&t.body, TypeBody::Sum(s) if s.variants.iter().any(|x| x.name.name == *v))
+        })
+    });
+    let warn = |id: &Ident, name: &str, owner: &str| {
+        let message = if id.name == name {
+            format!("`{name}` is not in scope: `consumes {owner}` does not list it")
+        } else {
+            format!(
+                "`{}` is a variant of `{name}`, which `consumes {owner}` does not list",
+                id.name
+            )
+        };
+        let mut e = CompileError::new("bynk.consumes.type_not_selected", id.span, message)
+            .with_note(format!(
+                "a braced `consumes` brings into scope only the names it lists; add `{name}` to `consumes {owner} {{ … }}`. This will be an error in a later release"
+            ));
+        if let Some((at, owner_clause)) = consumes
+            .iter()
+            .filter(|c| c.target.joined() == owner && c.span.file == id.span.file)
+            .find_map(|c| c.selected.as_ref()?.last().map(|last| (last, c)))
+        {
+            let end = at.alias.as_ref().map_or(at.name.span.end, |a| a.span.end);
+            let _ = owner_clause;
+            e = e.with_suggestion(
+                format!("add `{name}` to `consumes {owner}`"),
+                vec![(Span::new_in(id.span.file, end, end), format!(", {name}"))],
+                bynk_syntax::error::Applicability::MachineApplicable,
+            );
+        }
+        e
+    };
+    let report = |id: &Ident, owner: &str| warn(id, &id.name, owner);
+    let variant_report = |id: &Ident, sum: &str| warn(id, sum, &resolved.imported_from[sum]);
+    let mut g = Gate {
+        hidden: &gated,
+        report: &report,
+        variants,
+        variant_report: Some(&variant_report),
+        locals: None,
+        errors: Vec::new(),
+    };
+    gate_items(&mut g, items);
+    g.errors
 }
 
 /// #1927: the naming gate for a `uses`-imported type the unit hides behind
@@ -2402,6 +2569,7 @@ pub fn check_shadowed_type_names(
         hidden: &gated,
         report: &report,
         variants,
+        variant_report: None,
         locals: Some(shadowed),
         errors: Vec::new(),
     };
@@ -2549,6 +2717,7 @@ pub fn check_hidden_type_names_in_suite(
         hidden,
         report: &report,
         variants: Default::default(),
+        variant_report: None,
         locals: None,
         errors: Vec::new(),
     };
@@ -2570,6 +2739,7 @@ pub fn check_shadowed_type_names_in_suite(
         hidden: &gated,
         report: &report,
         variants,
+        variant_report: None,
         locals: Some(shadowed),
         errors: Vec::new(),
     };
@@ -3259,6 +3429,8 @@ struct RefCheckCtx<'a, 'b> {
     consts: &'a HashMap<String, ConstDecl>,
     /// #1925: imports a local declaration of another kind hides.
     shadowed: &'a HashMap<String, ShadowedImport>,
+    /// #3536: first-party types a braced `consumes` leaves out.
+    unselected: &'a HashSet<String>,
     /// #2868: the capabilities a `given` function names: an identifier that is
     /// one is a capability receiver (`Logger.error(…)`), typed by the checker.
     caps: &'a HashSet<String>,
@@ -3489,7 +3661,7 @@ fn check_expr_references(expr: &Expr, cx: &mut RefCheckCtx) {
                 // v0.9: predeclared HttpResult variant (e.g. `NoContent`,
                 // `Unauthorized`). The checker validates payload arity and
                 // expected-type disambiguation.
-            } else if let Some(sum_owner) = find_unique_variant_owner(&id.name, cx.types) {
+            } else if let Some(sum_owner) = find_unique_variant_owner(&id.name, cx) {
                 // It's a bare variant reference. We treat it as a valid
                 // expression in resolver — the type checker will assign
                 // the correct sum type. Mark with no error.
@@ -3547,7 +3719,7 @@ fn check_expr_references(expr: &Expr, cx: &mut RefCheckCtx) {
             } else if cx.embeds.contains_key(&id.name) {
                 // #2387, slice 1: an embed name is a `String` value; the
                 // checker types it (`check_ident`).
-            } else if find_ambiguous_variant_owners(&id.name, cx.types).len() > 1 {
+            } else if find_ambiguous_variant_owners(&id.name, cx).len() > 1 {
                 // #3344: a name several sums declare is settled by the
                 // expected type, which only the checker knows; it reports
                 // `bynk.resolve.ambiguous_variant` when nothing picks one.
@@ -3620,7 +3792,7 @@ fn check_expr_references(expr: &Expr, cx: &mut RefCheckCtx) {
                 }
                 None => {
                     // Maybe it's a variant constructor with a payload (e.g., `Placed(at, total)`).
-                    let owners = find_ambiguous_variant_owners(&name.name, cx.types);
+                    let owners = find_ambiguous_variant_owners(&name.name, cx);
                     if http_variant(&name.name).is_some() {
                         // v0.9: predeclared HttpResult variant constructor.
                     } else if owners.len() == 1 {
@@ -4129,11 +4301,8 @@ fn collect_pattern_bindings(pattern: &Pattern, into: &mut HashMap<String, ()>) {
 /// Find the unique sum type that owns a given variant name. Returns None
 /// if no type owns it; ignores cases of multiple owners (those are
 /// reported via `find_ambiguous_variant_owners`).
-fn find_unique_variant_owner<'a>(
-    name: &str,
-    types: &'a HashMap<String, Arc<TypeDecl>>,
-) -> Option<&'a TypeDecl> {
-    let owners = find_ambiguous_variant_owners(name, types);
+fn find_unique_variant_owner<'a>(name: &str, cx: &RefCheckCtx<'a, '_>) -> Option<&'a TypeDecl> {
+    let owners = find_ambiguous_variant_owners(name, cx);
     if owners.len() == 1 {
         Some(owners[0])
     } else {
@@ -4141,19 +4310,41 @@ fn find_unique_variant_owner<'a>(
     }
 }
 
-fn find_ambiguous_variant_owners<'a>(
+fn find_ambiguous_variant_owners<'a>(name: &str, cx: &RefCheckCtx<'a, '_>) -> Vec<&'a TypeDecl> {
+    bare_variant_owners(name, cx.types, cx.unselected)
+        .into_iter()
+        .map(|t| t.as_ref())
+        .collect()
+}
+
+/// The sums a bare variant name may mean (#3536). A sum a braced `consumes`
+/// leaves out (`unselected`) is not a candidate beside the sums in scope, so a
+/// user's own `Unavailable` is never ambiguous with a standard-library one it
+/// did not ask for. It is the answer only when nothing in scope declares the
+/// name: such a use still resolves while `bynk.consumes.type_not_selected` is a
+/// warning, and is the error once that becomes one.
+pub(crate) fn bare_variant_owners<'a>(
     name: &str,
     types: &'a HashMap<String, Arc<TypeDecl>>,
-) -> Vec<&'a TypeDecl> {
-    let mut out = Vec::new();
+    unselected: &HashSet<String>,
+) -> Vec<&'a Arc<TypeDecl>> {
+    let (mut in_scope, mut left_out) = (Vec::new(), Vec::new());
     for t in types.values() {
         if let TypeBody::Sum(s) = &t.body
             && s.variants.iter().any(|v| v.name.name == name)
         {
-            out.push(t.as_ref());
+            if unselected.contains(&t.name.name) {
+                left_out.push(t);
+            } else {
+                in_scope.push(t);
+            }
         }
     }
-    out
+    if in_scope.is_empty() {
+        left_out
+    } else {
+        in_scope
+    }
 }
 
 /// #1848: a match-arm guard is resolved like every other expression, in its

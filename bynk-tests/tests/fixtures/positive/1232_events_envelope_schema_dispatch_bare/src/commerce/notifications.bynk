@@ -1,7 +1,7 @@
 context commerce.notifications
 
 consumes commerce.order
-consumes bynk { Logger }
+consumes bynk { Logger, EventEnvelope }
 
 // P6.x (#1232): `OnV1`'s handler stays bare (`on event(e: E)`, no declared
 // `env: EventEnvelope`) but its protocol carries `via schema(N)` —

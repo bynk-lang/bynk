@@ -1,6 +1,6 @@
 context demo.plat
 
-consumes bynk { Clock, Random, Secrets, Locale, Logger, Fetch, Idempotency }
+consumes bynk { Clock, Random, Secrets, Locale, Logger, Fetch, Idempotency, Request, Method }
 consumes bynk.cloudflare { Kv }
 uses bynk.locale.types
 

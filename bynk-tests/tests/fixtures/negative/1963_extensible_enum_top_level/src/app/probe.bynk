@@ -1,7 +1,7 @@
 // #1963: `Method` is extensible, so a top-level match on it needs a wildcard.
 context app.probe
 
-consumes bynk { Fetch }
+consumes bynk { Fetch, Method }
 
 fn verb(m: Method) -> String {
 	match m {

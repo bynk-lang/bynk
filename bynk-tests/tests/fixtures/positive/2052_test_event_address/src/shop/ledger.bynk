@@ -2,7 +2,7 @@
 context shop.ledger
 
 consumes shop.order
-consumes bynk { Idempotency, Claim }
+consumes bynk { Idempotency, Claim, EventEnvelope }
 
 agent Books {
   key id: String
