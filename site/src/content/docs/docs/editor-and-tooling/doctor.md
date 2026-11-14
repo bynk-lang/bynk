@@ -69,7 +69,7 @@ newer one. `bynk test --inspect` checks its own minor floor on top of that: Node
 An installed `wrangler` older than **4.162.0** is a warning too:
 
 ```text
-    wrangler — v4.100.0 (path), below 4.162.0, the oldest this Bynk release supports: `bynk dev` may not serve compatibility date 2026-08-04, and agents can't deploy
+    wrangler — v4.100.0 (path), below 4.162.0, the oldest this Bynk release supports: `bynk dev` may not serve compatibility date 2026-08-11, and agents can't deploy
       ↳ fix: npm install -g wrangler@4
 ```
 
