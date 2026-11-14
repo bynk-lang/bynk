@@ -2166,6 +2166,12 @@ t("WorkersVectorize: a platform refusal is a typed error, an unknown index a fau
   assert.deepEqual(await err("429 Too Many Requests"), { tag: "VectorRateLimited" });
   assert.deepEqual(await err("batch is too large"), { tag: "VectorInvalidInput", message: "batch is too large" });
   assert.deepEqual(await err("something else"), { tag: "VectorFailed", message: "something else" });
+  // The platform's own messages, as observed on a real index (#3479).
+  const topK = "VECTOR_QUERY_ERROR (code = 40025): with returnValues=true or returnMetadata=all, max top K is 50, but got 500; ";
+  assert.deepEqual(await err(topK), { tag: "VectorInvalidInput", message: topK });
+  const dims = "VECTOR_UPSERT_ERROR (code = 40012): invalid vector at index 0, expected 32 dimensions, and got 2 dimensions;";
+  assert.deepEqual(await err(dims), { tag: "DimensionMismatch", message: dims });
+  assert.equal((await err("VECTOR_QUERY_ERROR (code = 40025): max top K is 50")).tag, "VectorInvalidInput");
   await assert.rejects(() => err("index not found"), /index not found/);
 });
 
@@ -2227,9 +2233,12 @@ t("WorkersVectorize.deleteByIds: returns the mutation id", async () => {
 });
 
 t("WorkersVectorize.describe: reads the configuration from the top level or under config", async () => {
-  assert.deepEqual(await vz(fakeIndex()).describe(), { tag: "Ok", value: { dimensions: 3, metric: "cosine" } });
+  assert.deepEqual(await vz(fakeIndex()).describe(), { tag: "Ok", value: { dimensions: 3, metric: { tag: "Some", value: "cosine" } } });
   const nested = fakeIndex({ describe: { config: { dimensions: 8, metric: "euclidean" } } });
-  assert.deepEqual((await vz(nested).describe()).value, { dimensions: 8, metric: "euclidean" });
+  assert.deepEqual((await vz(nested).describe()).value, { dimensions: 8, metric: { tag: "Some", value: "euclidean" } });
+  // The real reply (observed on a real index, #3479) has no metric: `None`.
+  const real = fakeIndex({ describe: { dimensions: 32, vectorCount: 1, processedUpToDatetime: "d", processedUpToMutation: "m" } });
+  assert.deepEqual(await vz(real).describe(), { tag: "Ok", value: { dimensions: 32, metric: { tag: "None" } } });
   const bare = fakeIndex({ describe: { vectorCount: 1 } });
   assert.equal((await vz(bare).describe()).error.tag, "VectorFailed");
 });
@@ -2498,8 +2507,16 @@ t("WorkersVectorize: the first call under bynk dev checks the index against the 
   // The check's own describe is reused by a first `describe()` call: one platform call, not two.
   const once = fakeIndex({ describe: { dimensions: 3, metric: "cosine" } });
   const first = new WorkersVectorize({ ...env(once, "3:cosine"), BYNK_DEV_INDEX_VECTORIZE_DOCS: "3:cosine" }, "VECTORIZE_DOCS");
-  assert.deepEqual((await first.describe()).value, { dimensions: 3, metric: "cosine" });
+  assert.deepEqual((await first.describe()).value, { dimensions: 3, metric: { tag: "Some", value: "cosine" } });
   assert.equal(once.calls.filter((c) => c.name === "describe").length, 1);
+  // A real `describe()` reports no metric: only the dimensions are compared, and the call goes ahead.
+  // (Each uses its own binding: a passed check is remembered per binding.)
+  const named = (binding, index, declared) => ({ [binding]: index, BYNK_DEV: "1", BYNK_DEV_ACK_VECTORIZE: "allow", [`BYNK_DEV_INDEX_${binding}`]: declared });
+  const real = fakeIndex({ describe: { dimensions: 3, vectorCount: 0, processedUpToMutation: "m" } });
+  const live = new WorkersVectorize(named("VECTORIZE_REAL", real, "3:cosine"), "VECTORIZE_REAL");
+  assert.equal((await live.upsert([vec("a")])).tag, "Ok");
+  const realWrong = new WorkersVectorize(named("VECTORIZE_REALWRONG", fakeIndex({ describe: { dimensions: 8, vectorCount: 0 } }), "3:cosine"), "VECTORIZE_REALWRONG");
+  await assert.rejects(() => realWrong.upsert([vec("a")]), /has 8 dimensions, but the declaration says 3;/);
   // Not under bynk dev (a deployment, or bynk test): no check at all.
   const plain = fakeIndex({ describe: { dimensions: 99, metric: "euclidean" } });
   assert.equal((await new WorkersVectorize({ VECTORIZE_DOCS: plain }, "VECTORIZE_DOCS").upsert([vec("a")])).tag, "Ok");

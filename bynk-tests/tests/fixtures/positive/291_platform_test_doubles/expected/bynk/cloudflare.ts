@@ -992,11 +992,12 @@ export const Mutation = {
 
 /**
  * An index's configuration, as `Vectorize.describe` reports it: its
- * `dimensions` and its `metric`.
+ * `dimensions`, and its `metric` when the platform reports one (a real index's
+ * `describe` does not, so it is normally `None`; the declaration states it).
  */
 export interface IndexInfo {
   readonly dimensions: number;
-  readonly metric: string;
+  readonly metric: Option<string>;
 }
 
 export const IndexInfo = {

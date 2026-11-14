@@ -59,9 +59,9 @@ case "namespaces partition the index" {
 	let _ <- writer.call([Vector { id: "a", values: [1.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0], namespace: Some("blue") }, Vector { id: "b", values: [1.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0] }])
 	let blue <- reader.call([1.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0], QueryOptions { namespace: Some("blue") })
 	expect blue == Ok([VectorMatch { id: "a", score: 0.0, values: None, metadata: None, namespace: Some("blue") }])
-	// Whether a query naming no namespace also searches these is not documented,
-	// so the double faults rather than guess.
-	expect reader.call([1.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0], QueryOptions {}) faults
+	// A query naming no namespace searches every namespace (observed on a real index, #3479).
+	let all <- reader.call([1.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0], QueryOptions {})
+	expect all == Ok([VectorMatch { id: "a", score: 0.0, values: None, metadata: None, namespace: Some("blue") }, VectorMatch { id: "b", score: 0.0, values: None, metadata: None, namespace: None }])
 }
 
 case "a filter selects by an indexed property" {
@@ -101,9 +101,9 @@ case "a limit is an InvalidInput value" {
 	expect r is Err(VectorInvalidInput(_))
 }
 
-case "describe reports the declaration" {
+case "describe reports the dimensions and no metric, as a real index does" {
 	let r <- describer.call()
-	expect r == Ok(IndexInfo { dimensions: 32, metric: "euclidean" })
+	expect r == Ok(IndexInfo { dimensions: 32, metric: None })
 }
 
 case "a stub still replaces an operation" {

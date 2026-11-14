@@ -262,16 +262,11 @@ export function makeIntegrationVectorize(
       const filter = options.filter as Record<string, unknown> | undefined;
       if (filter !== undefined) checkFilter(filter, indexedNames);
       const space = options["namespace"] as string | undefined;
-      // Cloudflare's pages do not say whether a query that names no namespace
-      // also searches the namespaced vectors, so the double does not guess.
-      if (space === undefined && [...vectors.values()].some((v) => v.space !== undefined)) {
-        unmodelled(
-          "does not model a query that names no namespace over an index that holds namespaced vectors: the platform does not document whether it searches them. Name the namespace, or stub the query",
-        );
-      }
+      // A query that names no namespace searches every vector, namespaced or
+      // not (observed on a real index, #3479); naming one restricts it.
       const nearest = metric === "cosine" ? -1 : 1;
       const ranked = [...vectors.values()]
-        .filter((v) => v.space === space && (filter === undefined || matches(v, filter)))
+        .filter((v) => (space === undefined || v.space === space) && (filter === undefined || matches(v, filter)))
         .map((v) => ({ v, score: score(metric, vector, v.values) }))
         .sort((a, b) => nearest * (a.score - b.score))
         .slice(0, topK);
@@ -302,7 +297,8 @@ export function makeIntegrationVectorize(
     },
 
     async describe() {
-      return { dimensions, metric };
+      // The real `describe()` reports no `metric`; neither does the double.
+      return { dimensions, vectorCount: vectors.size };
     },
   };
 }

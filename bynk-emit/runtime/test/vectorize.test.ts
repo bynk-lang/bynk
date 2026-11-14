@@ -103,14 +103,14 @@ test("a filter on a property that is not indexed faults, naming the difference; 
   await assert.rejects(() => index.query([0], { filter: { "$bad": 1 } }), /invalid filter key/);
 });
 
-test("a namespace partitions the index, and a query naming none over namespaced vectors faults", async () => {
+test("a namespace partitions the index, and a query naming none returns the union", async () => {
   const index = makeIntegrationVectorize(1, "euclidean", ["category:string"]);
   await index.upsert([
     { id: "a", values: [1], metadata: { category: "faq" } },
     { id: "c", values: [3], metadata: { category: "faq" }, namespace: "ns" },
   ]);
   assert.deepEqual(ids(await index.query([0], { namespace: "ns" })), ["c"]);
-  await assert.rejects(() => index.query([0], {}), /does not model a query that names no namespace/);
+  assert.deepEqual(ids(await index.query([0], {})).sort(), ["a", "c"]);
 });
 
 test("a malformed filter is refused whatever the index holds", async () => {
