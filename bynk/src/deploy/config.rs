@@ -2646,7 +2646,14 @@ state = "deleted"
     #[test]
     fn vectorize_names_follow_cloudflares_observed_rules() {
         // #3496: the verdicts Cloudflare gave a real account (#3479).
-        for ok in ["revertprobe-app-docs", "probe_underscore", "my_index", "a"] {
+        // A trailing underscore was not probed; it is accepted deliberately.
+        for ok in [
+            "revertprobe-app-docs",
+            "probe_underscore",
+            "my_index",
+            "a",
+            "a_",
+        ] {
             assert_eq!(vectorize_index_name_problem(ok), None, "{ok}");
         }
         for bad in [
