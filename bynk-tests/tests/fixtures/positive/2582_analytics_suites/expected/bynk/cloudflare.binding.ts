@@ -2204,6 +2204,7 @@ type ContainerObjects = {
 };
 
 const CONTAINER_ERROR_HEADER = "bynk-container-error";
+const CONTAINER_FAULT_HEADER = "bynk-container-fault";
 const CONTAINER_NAME_MAX_BYTES = 256;
 const CONTAINER_DEFAULT_OPTIONS = { timeout: None, redirect: { tag: "Follow" } } as unknown as FetchOptions;
 
@@ -2264,8 +2265,15 @@ export class WorkersContainer implements Container {
     const objects = this.objects();
     const stub = objects.get(objects.idFromName(instance));
     let reported: ContainerError | undefined;
+    let fault: string | undefined;
     const provider = new FetchProvider(async (url, init) => {
       const res = await stub.fetch(new globalThis.Request(url, init));
+      // A fault, not an error value: `bynk dev` without Docker, where no answer a
+      // handler could give is honest. The class's message names what to do.
+      if (res.headers.has(CONTAINER_FAULT_HEADER)) {
+        fault = (await res.text()).slice(0, 512);
+        return new globalThis.Response(null, { status: res.status });
+      }
       if (res.headers.has(CONTAINER_ERROR_HEADER)) {
         reported = WorkersContainer.reported(res, (await res.text()).slice(0, 512));
         // The body is spent: hand `FetchProvider` an empty response, which it
@@ -2275,6 +2283,7 @@ export class WorkersContainer implements Container {
       return res;
     });
     const out = await run(provider);
+    if (fault !== undefined) throw new Error(`bynk.cloudflare.Container.${op}: ${fault}`);
     if (reported !== undefined) return Err(reported);
     if (out.tag === "Ok") return Ok(out.value);
     switch (out.error.tag) {

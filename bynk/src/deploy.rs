@@ -46,7 +46,7 @@ const LOCK_FILE: &str = "bynk.deploy.lock";
 use bynk_emit::emitter::wrangler::KV_NAMESPACE_ID_PLACEHOLDER;
 
 mod config;
-mod containers;
+pub(crate) mod containers;
 mod destinations;
 mod facts;
 mod graph;

@@ -285,6 +285,8 @@ mod system {
     mod compile_sources_stdin;
     #[path = "compile_strips_suites.rs"]
     mod compile_strips_suites;
+    #[path = "container_workerd.rs"]
+    mod container_workerd;
     #[path = "contract_behaviour.rs"]
     mod contract_behaviour;
     #[path = "coverage_behaviour.rs"]
