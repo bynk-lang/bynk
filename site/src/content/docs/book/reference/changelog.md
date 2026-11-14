@@ -28,6 +28,7 @@ per-commit history. While Bynk is pre-1.0, increments may change behaviour.
 
 | Version | Highlights |
 |---|---|
+| **v0.603.9** | Hover on `Idempotency` and its operations names the provider each platform selects, D1-backed on Cloudflare and in-memory on Node and in the browser |
 | **v0.603.8** | Inbound email parses with `postal-mime` 4.2.0 (was 4.1.4), so a project with an email service has its `bynk.lock` row and installed package move to it |
 | **v0.603.7** | Every emitted Worker now targets compatibility date `2026-08-11` |
 | **v0.603.6** | The wrangler minimum is now 4.162.0, the newest, and the Containers floor of 4.136.0 is gone, since the general minimum is past it; the runtime tests move `yaml` to 2.9.1 |
