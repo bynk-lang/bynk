@@ -28,6 +28,7 @@ per-commit history. While Bynk is pre-1.0, increments may change behaviour.
 
 | Version | Highlights |
 |---|---|
+| **v0.603.10** | v0.603.9's tag published no artefacts (every build and publish job was skipped); this is the release that ships them, and a tag push that publishes nothing now fails the run |
 | **v0.603.9** | Hover on `Idempotency` and its operations names the provider each platform selects, D1-backed on Cloudflare and in-memory on Node and in the browser |
 | **v0.603.8** | Inbound email parses with `postal-mime` 4.2.0 (was 4.1.4), so a project with an email service has its `bynk.lock` row and installed package move to it |
 | **v0.603.7** | Every emitted Worker now targets compatibility date `2026-08-11` |
