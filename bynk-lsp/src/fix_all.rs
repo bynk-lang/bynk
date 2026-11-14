@@ -255,7 +255,8 @@ mod tests {
         );
         let out = fixed(text);
         assert!(out.contains("let _ <- Logger.info(\"hi\")"), "{out}");
-        assert!(out.contains("let _ = g(1)"), "{out}");
+        // #3537: the `let _ =` guess may drop an effect, so fix-all leaves it.
+        assert!(!out.contains("let _ = g(1)"), "{out}");
         let uri = Url::parse("file:///a.bynk").unwrap();
         let fixes =
             crate::code_actions::quick_fixes(text, &diagnostics, bare[0].error.span, &uri, Some(1));

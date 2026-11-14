@@ -3259,11 +3259,17 @@ mod tests {
 
     /// Apply a parse error's first suggestion to `src`.
     fn apply_fix(src: &str, err: &CompileError) -> String {
-        let s = &err.suggestions[0];
         assert_eq!(
-            s.applicability,
+            err.suggestions[0].applicability,
             crate::error::Applicability::MachineApplicable
         );
+        apply_quick_fix(src, err)
+    }
+
+    /// Apply the first suggestion whatever its applicability: a quick fix the
+    /// editor offers, which `--fix` and fix-all would not take.
+    fn apply_quick_fix(src: &str, err: &CompileError) -> String {
+        let s = &err.suggestions[0];
         let mut edits = s.edits.clone();
         edits.sort_by_key(|(span, _)| std::cmp::Reverse(span.start));
         let mut out = src.to_string();
@@ -3312,7 +3318,7 @@ mod tests {
             let src = format!("commons x\n\nfn f() -> Int {{\n  {call}\n  1\n}}\n");
             let errs = parse_str(&src).expect_err(call);
             assert_eq!(errs[0].category, BARE, "{call}: {errs:?}");
-            let fixed = apply_fix(&src, &errs[0]);
+            let fixed = apply_quick_fix(&src, &errs[0]);
             assert!(
                 fixed.contains(&format!("let _ = {call}")),
                 "{call}: {fixed}"
@@ -3325,8 +3331,13 @@ mod tests {
         let src = "commons x\n\nfn f() -> Int {\n  g(1)\n  let y = 2\n  y\n}\n";
         let errs = parse_str(src).expect_err("bare call");
         assert_eq!(errs[0].category, BARE, "{errs:?}");
+        // #3537: `let _ =` may drop an effect, so it is never taken mechanically.
         assert_eq!(
-            apply_fix(src, &errs[0]),
+            errs[0].suggestions[0].applicability,
+            crate::error::Applicability::MaybeIncorrect
+        );
+        assert_eq!(
+            apply_quick_fix(src, &errs[0]),
             "commons x\n\nfn f() -> Int {\n  let _ = g(1)\n  let y = 2\n  y\n}\n"
         );
     }
