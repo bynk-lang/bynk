@@ -277,15 +277,37 @@ impl Toolbox for SystemToolbox {
     }
 
     fn docker_daemon_running(&self, path: &Path) -> bool {
-        Command::new(path)
+        // A wedged Docker Desktop or an unreachable `DOCKER_HOST` can leave
+        // `docker info` waiting for a long time; past the bound it counts as
+        // no daemon running.
+        let Ok(mut child) = Command::new(path)
             .arg("info")
             .stdin(std::process::Stdio::null())
             .stdout(std::process::Stdio::null())
             .stderr(std::process::Stdio::null())
-            .status()
-            .is_ok_and(|status| status.success())
+            .spawn()
+        else {
+            return false;
+        };
+        let deadline = std::time::Instant::now() + DOCKER_INFO_TIMEOUT;
+        loop {
+            match child.try_wait() {
+                Ok(Some(status)) => return status.success(),
+                Ok(None) if std::time::Instant::now() < deadline => {
+                    std::thread::sleep(std::time::Duration::from_millis(50));
+                }
+                _ => {
+                    let _ = child.kill();
+                    let _ = child.wait();
+                    return false;
+                }
+            }
+        }
     }
 }
+
+/// How long `docker info` may take before the daemon counts as not running.
+const DOCKER_INFO_TIMEOUT: std::time::Duration = std::time::Duration::from_secs(10);
 
 #[cfg(test)]
 mod tests {

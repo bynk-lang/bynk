@@ -76,8 +76,9 @@ pub(crate) struct Environment {
     /// `[deploy.containers.<Cap>] image` named for this environment when it was
     /// last pushed. A container built from its Dockerfile has no entry, because
     /// the image is `wrangler`'s to make and the ledger records nothing it does
-    /// not own. What it is for: a changed or dropped adoption is shown in the
-    /// plan, and `bynk revert` says which image a restored Worker takes for new
+    /// not own. It holds the image the last deploy attempt named, written before
+    /// the push, so a push that then failed still shows here. What it is for: a
+    /// changed or dropped adoption is shown in the plan, and `bynk revert` says which image a restored Worker takes for new
     /// starts.
     ///
     /// Additive, `default`ed and omitted when empty, so an older ledger still
