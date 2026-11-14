@@ -541,6 +541,14 @@ impl ResolvedCommons {
         self
     }
 
+    /// Carry the per-unit scope facts of a checked unit
+    /// ([`ResolvedCommons::extensible_enums`], [`ResolvedCommons::unselected_types`])
+    /// onto the rebuilt per-handler view.
+    pub fn with_scope_facts_of(self, typed: &crate::checker::TypedCommons) -> Self {
+        self.with_extensible_enums(typed.extensible_enums.clone())
+            .with_unselected_types(typed.unselected_types.clone())
+    }
+
     /// S3 (#1963): set [`ResolvedCommons::extensible_enums`].
     pub fn with_extensible_enums(mut self, names: HashSet<String>) -> Self {
         self.extensible_enums = names;
@@ -870,6 +878,7 @@ pub fn resolve_recovering(commons: Commons) -> (ResolvedCommons, Vec<CompileErro
     };
     for item in &commons.items {
         check_reserved_host_name(item, &mut sinks);
+        let no_unselected = &HashSet::new();
         match item {
             CommonsItem::Type(t) => {
                 check_type_decl_refs(t, &types, &mut sinks);
@@ -888,7 +897,7 @@ pub fn resolve_recovering(commons: Commons) -> (ResolvedCommons, Vec<CompileErro
                     &local_consts,
                     // A single file has no `uses` imports to shadow.
                     &HashMap::new(),
-                    &HashSet::new(),
+                    no_unselected,
                     &HashSet::new(),
                     &mut sinks,
                 );
@@ -900,7 +909,7 @@ pub fn resolve_recovering(commons: Commons) -> (ResolvedCommons, Vec<CompileErro
                     &fns,
                     &methods,
                     &local_consts,
-                    &HashSet::new(),
+                    no_unselected,
                     &mut sinks,
                 );
             }
@@ -3524,9 +3533,7 @@ fn check_expr_references(expr: &Expr, cx: &mut RefCheckCtx) {
                 // v0.9: predeclared HttpResult variant (e.g. `NoContent`,
                 // `Unauthorized`). The checker validates payload arity and
                 // expected-type disambiguation.
-            } else if let Some(sum_owner) =
-                find_unique_variant_owner(&id.name, cx.types, cx.unselected)
-            {
+            } else if let Some(sum_owner) = find_unique_variant_owner(&id.name, cx) {
                 // It's a bare variant reference. We treat it as a valid
                 // expression in resolver — the type checker will assign
                 // the correct sum type. Mark with no error.
@@ -3584,7 +3591,7 @@ fn check_expr_references(expr: &Expr, cx: &mut RefCheckCtx) {
             } else if cx.embeds.contains_key(&id.name) {
                 // #2387, slice 1: an embed name is a `String` value; the
                 // checker types it (`check_ident`).
-            } else if find_ambiguous_variant_owners(&id.name, cx.types, cx.unselected).len() > 1 {
+            } else if find_ambiguous_variant_owners(&id.name, cx).len() > 1 {
                 // #3344: a name several sums declare is settled by the
                 // expected type, which only the checker knows; it reports
                 // `bynk.resolve.ambiguous_variant` when nothing picks one.
@@ -3657,7 +3664,7 @@ fn check_expr_references(expr: &Expr, cx: &mut RefCheckCtx) {
                 }
                 None => {
                     // Maybe it's a variant constructor with a payload (e.g., `Placed(at, total)`).
-                    let owners = find_ambiguous_variant_owners(&name.name, cx.types, cx.unselected);
+                    let owners = find_ambiguous_variant_owners(&name.name, cx);
                     if http_variant(&name.name).is_some() {
                         // v0.9: predeclared HttpResult variant constructor.
                     } else if owners.len() == 1 {
@@ -4166,12 +4173,8 @@ fn collect_pattern_bindings(pattern: &Pattern, into: &mut HashMap<String, ()>) {
 /// Find the unique sum type that owns a given variant name. Returns None
 /// if no type owns it; ignores cases of multiple owners (those are
 /// reported via `find_ambiguous_variant_owners`).
-fn find_unique_variant_owner<'a>(
-    name: &str,
-    types: &'a HashMap<String, Arc<TypeDecl>>,
-    unselected: &HashSet<String>,
-) -> Option<&'a TypeDecl> {
-    let owners = find_ambiguous_variant_owners(name, types, unselected);
+fn find_unique_variant_owner<'a>(name: &str, cx: &RefCheckCtx<'a, '_>) -> Option<&'a TypeDecl> {
+    let owners = find_ambiguous_variant_owners(name, cx);
     if owners.len() == 1 {
         Some(owners[0])
     } else {
@@ -4179,12 +4182,8 @@ fn find_unique_variant_owner<'a>(
     }
 }
 
-fn find_ambiguous_variant_owners<'a>(
-    name: &str,
-    types: &'a HashMap<String, Arc<TypeDecl>>,
-    unselected: &HashSet<String>,
-) -> Vec<&'a TypeDecl> {
-    bare_variant_owners(name, types, unselected)
+fn find_ambiguous_variant_owners<'a>(name: &str, cx: &RefCheckCtx<'a, '_>) -> Vec<&'a TypeDecl> {
+    bare_variant_owners(name, cx.types, cx.unselected)
         .into_iter()
         .map(|t| t.as_ref())
         .collect()

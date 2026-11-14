@@ -249,13 +249,10 @@ pub(super) fn emit_test_scope_setup(
                 // #2702: not a consumed context's `private` types.
                 // #3536: a suite type of the name of a first-party type the
                 // target's braces leave out is the name's meaning here.
-                let left_out = |n: &String| {
-                    unit_tables.get(target_name).is_some_and(|t| {
-                        t.unselected_consumed_types.contains(n)
-                            && suite_types.iter().any(|s| s.name.name == *n)
-                    })
-                };
-                let types = aliased_types(table, |n| is_public_type(table, n) && !left_out(n));
+                let types = aliased_types(table, |n| {
+                    is_public_type(table, n)
+                        && !suite_replaces_left_out(unit_tables, target_name, suite_types, n)
+                });
                 let names: Vec<String> = types.iter().map(|(n, _)| n.clone()).collect();
                 // #2887: the types this target renames from `q` bind as their aliases.
                 let renames: HashMap<String, String> = unit_tables
@@ -381,6 +378,20 @@ pub(super) fn async_test_runner_fn(
         },
         None,
     )
+}
+
+/// #3536: whether a suite `type` named `name` replaces the first-party type of
+/// that name the target's braces leave out.
+pub(super) fn suite_replaces_left_out(
+    unit_tables: &HashMap<String, UnitTable>,
+    target_name: &str,
+    suite_types: &[bynk_syntax::ast::TypeDecl],
+    name: &String,
+) -> bool {
+    unit_tables.get(target_name).is_some_and(|t| {
+        t.unselected_consumed_types.contains(name)
+            && suite_types.iter().any(|s| s.name.name == *name)
+    })
 }
 
 /// #3111: the local codecs the runner's lowered body reached for beyond the

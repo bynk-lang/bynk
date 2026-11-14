@@ -774,6 +774,10 @@ pub fn phase_resolve_derived(
     unit_tables: &mut HashMap<String, UnitTable>,
     errors: &mut ErrorSink,
 ) {
+    // #3536: recorded here, the phase that already holds the groups, kinds,
+    // parsed files and mutable tables of both pipelines.
+    let selections = consume_selections(groups, kinds, parsed);
+    crate::symbols::record_unselected_consumed_types(unit_tables, &selections);
     for (name, indices) in groups {
         for &i in indices {
             if parsed[i].is_synthetic() {

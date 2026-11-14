@@ -538,6 +538,11 @@ pub(crate) fn sorted_methods(
 }
 
 impl UnitTable {
+    /// #3536: [`UnitTable::unselected_consumed_types`] as a set.
+    pub fn unselected_names(&self) -> std::collections::HashSet<String> {
+        self.unselected_consumed_types.iter().cloned().collect()
+    }
+
     /// The parts of this table that are **not** a function of the unit's own
     /// files (#3243 S2.3b): everything `phase_symbol_tables` builds from a unit's
     /// own sources is covered by hashing those sources, so a file-check digest

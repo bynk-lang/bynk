@@ -702,22 +702,9 @@ pub fn check_file_core(
     .with_shadowed_imports(crate::project_model::shadowed_imports(name, unit_info))
     // S3 (#1963): which names in scope are a first-party extensible enum,
     // decided here, where the unit's full provenance is known.
-    .with_extensible_enums(
-        imported_from
-            .iter()
-            .filter(|(n, unit)| crate::firstparty::is_extensible(unit, n))
-            .map(|(n, _)| n.clone())
-            .collect(),
-    )
+    .with_extensible_enums(extensible_names(imported_from))
     // #3536: the first-party types this unit's braces leave out.
-    .with_unselected_types(
-        unit_info[name]
-            .table
-            .unselected_consumed_types
-            .iter()
-            .cloned()
-            .collect(),
-    )
+    .with_unselected_types(unit_info[name].table.unselected_names())
     // S3 (#1963): the project's policy, and this unit's blocked imports. A
     // first-party unit's own bodies are the library's business, never the
     // project's opt-in, so they check under a policy that blocks nothing.
@@ -995,6 +982,15 @@ pub fn check_file_core(
         typed,
         cross_context: cross_context_for_file,
     })
+}
+
+/// S3 (#1963): which of the names in scope are a first-party extensible enum.
+fn extensible_names(imported_from: &HashMap<String, String>) -> HashSet<String> {
+    imported_from
+        .iter()
+        .filter(|(n, unit)| crate::firstparty::is_extensible(unit, n))
+        .map(|(n, _)| n.clone())
+        .collect()
 }
 
 #[cfg(test)]
