@@ -102,6 +102,22 @@ struct DeployTable {
     /// Vectorize settings, keyed by the `Vectorize` capability's name
     /// (`capability Docs = Vectorize …` is `Docs`).
     vectorize: Option<std::collections::BTreeMap<String, DeployVectorizeEntry>>,
+    /// Container settings, keyed by the `Container` capability's name
+    /// (`capability Renderer = Container …` is `Renderer`).
+    containers: Option<std::collections::BTreeMap<String, DeployContainerEntry>>,
+}
+
+/// One `Container` capability's image at deploy.
+#[derive(JsonSchema)]
+#[serde(deny_unknown_fields)]
+#[allow(dead_code)]
+struct DeployContainerEntry {
+    /// Prebuilt images by deployment environment (`default`, or an `--env`
+    /// name), each `registry.cloudflare.com/<ACCOUNT_ID>/<REPOSITORY>@sha256:<DIGEST>`:
+    /// in Cloudflare's own registry and named by digest. An environment listed
+    /// here runs that image and is never built, so the deploy needs no Docker;
+    /// without an entry the image is built from `@build`'s Dockerfile.
+    image: std::collections::BTreeMap<String, String>,
 }
 
 /// One `Vectorize` capability's index at deploy.

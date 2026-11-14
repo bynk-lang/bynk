@@ -287,6 +287,25 @@ fn recorded_id(
 pub(crate) fn evaluate(c: &Case<'_>) -> Vec<Finding> {
     let mut out = Vec::new();
 
+    // #3477: a rollback restores the version's image map, which a *new* start
+    // reads; an instance that is already running keeps the image it started
+    // with and takes no part in application-wide rollouts. Said for each
+    // container the target carries, so a revert is not taken to replace a
+    // running one. Read from the Cloudflare docs, not yet seen on a real
+    // account.
+    for class in c
+        .target
+        .classes
+        .iter()
+        .filter(|class| class.starts_with(bynk_check::containers::CONTAINER_CLASS_PREFIX))
+    {
+        out.push(Finding::ok(
+            "container",
+            class,
+            "warning: the rollback restores the image for new starts only; instances already running keep the image they started with until they stop",
+        ));
+    }
+
     // D1 migrations are forward-only (ADR 0664).
     for binding in databases_to_read(c.live, c.target) {
         let target_files = c.target.migrations.get(&binding);
@@ -1477,6 +1496,42 @@ mod tests {
 
     fn refusals(findings: &[Finding]) -> Vec<&Finding> {
         findings.iter().filter(|f| f.is_refusal()).collect()
+    }
+
+    /// #3477: reverting a Worker whose target carries a container warns that the
+    /// rollback restores the image for new starts only. It is not a refusal, and
+    /// a Worker with no container gets no such line.
+    #[test]
+    fn a_container_in_the_target_is_warned_about_and_not_refused() {
+        let with = |classes: &[&str]| {
+            facts(|f| f.classes = classes.iter().map(|c| c.to_string()).collect())
+        };
+        let both = with(&["__Container_Renderer", "Cart"]);
+        let findings = Fx::new(both.clone(), both).run();
+        let containers: Vec<&Finding> =
+            findings.iter().filter(|f| f.check == "container").collect();
+        assert_eq!(containers.len(), 1, "{findings:?}");
+        assert_eq!(containers[0].subject, "__Container_Renderer");
+        assert!(!containers[0].is_refusal());
+        assert!(
+            containers[0].detail.contains("new starts only")
+                || containers[0].detail.contains("for new starts only"),
+            "{}",
+            containers[0].detail
+        );
+        assert!(
+            containers[0]
+                .detail
+                .contains("keep the image they started with")
+        );
+        assert!(refusals(&findings).is_empty());
+        let plain = with(&["Cart"]);
+        assert!(
+            Fx::new(plain.clone(), plain)
+                .run()
+                .iter()
+                .all(|f| f.check != "container")
+        );
     }
 
     #[test]

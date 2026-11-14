@@ -167,6 +167,12 @@ pub trait Toolbox {
     fn version(&self, path: &Path) -> Option<Version>;
     /// Is `npx` itself available to provision packages on demand?
     fn npx_available(&self) -> bool;
+    /// #3477: does the Docker CLI at `path` reach a running daemon (`docker
+    /// info` succeeds)? Building a container image needs one. The default says
+    /// yes, so a fake that does not model Docker is not made to fail.
+    fn docker_daemon_running(&self, _path: &Path) -> bool {
+        true
+    }
 }
 
 /// Detect a single tool: project-local first (it wins over a global install),
@@ -268,6 +274,16 @@ impl Toolbox for SystemToolbox {
 
     fn npx_available(&self) -> bool {
         which::which(OsStr::new("npx")).is_ok()
+    }
+
+    fn docker_daemon_running(&self, path: &Path) -> bool {
+        Command::new(path)
+            .arg("info")
+            .stdin(std::process::Stdio::null())
+            .stdout(std::process::Stdio::null())
+            .stderr(std::process::Stdio::null())
+            .status()
+            .is_ok_and(|status| status.success())
     }
 }
 

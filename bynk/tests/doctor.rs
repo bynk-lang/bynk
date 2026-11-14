@@ -23,6 +23,8 @@ struct Fake {
     project_local: HashMap<String, PathBuf>,
     versions: HashMap<PathBuf, Version>,
     npx: bool,
+    /// #3477: whether a Docker daemon answers (`docker info`).
+    docker_running: bool,
 }
 
 impl Fake {
@@ -46,6 +48,15 @@ impl Fake {
         self.npx = true;
         self
     }
+    fn with_docker(mut self, running: bool) -> Self {
+        self = self.path_tool(
+            "docker",
+            "/usr/bin/docker",
+            Some(Version::parse("27.0.1").unwrap()),
+        );
+        self.docker_running = running;
+        self
+    }
 }
 
 impl Toolbox for Fake {
@@ -65,6 +76,9 @@ impl Toolbox for Fake {
     }
     fn npx_available(&self) -> bool {
         self.npx
+    }
+    fn docker_daemon_running(&self, _path: &Path) -> bool {
+        self.docker_running
     }
 }
 
@@ -721,4 +735,98 @@ fn doctor_follows_the_projects_package_manager() {
         "{:?}",
         wrangler.remedy
     );
+}
+
+// ---------------------------------------------------------------------------
+// #3477: the Docker row
+// ---------------------------------------------------------------------------
+
+fn docker_row(report: &doctor::Report) -> doctor::Row {
+    cap(report, Capability::Deploy)
+        .rows
+        .iter()
+        .find(|row| row.label == "docker")
+        .expect("a docker row")
+        .clone()
+}
+
+fn project_with(source: &str) -> (PathBuf, Context) {
+    let dir = std::env::temp_dir().join(format!(
+        "bynk-doctor-docker-{}-{}",
+        std::process::id(),
+        source.len()
+    ));
+    let _ = std::fs::remove_dir_all(&dir);
+    std::fs::create_dir_all(dir.join("src")).unwrap();
+    std::fs::write(
+        dir.join("bynk.toml"),
+        "[project]\nname = \"x\"\nversion = \"0.1.0\"\n",
+    )
+    .unwrap();
+    std::fs::write(dir.join("src/render.bynk"), source).unwrap();
+    let mut c = ctx(false);
+    c.project_root = Some(dir.clone());
+    (dir, c)
+}
+
+const CONTAINER_SOURCE: &str = "context shop.render\n\nconsumes bynk.cloudflare { Container }\n\ncapability Renderer = Container @build(\"containers/render\") @port(8080)\n";
+const PLAIN_SOURCE: &str = "context shop.render\n\nservice api from http {\n}\n";
+
+/// A project with no container only learns whether Docker is there: the row is
+/// informational, so a missing Docker does not warn.
+#[test]
+fn a_project_without_a_container_is_not_warned_about_docker() {
+    let (dir, c) = project_with(PLAIN_SOURCE);
+    let report = doctor::diagnose(&Fake::default(), &c, &bare());
+    let row = docker_row(&report);
+    assert_eq!(row.level, Level::Ok);
+    assert!(row.detail.contains("not found"), "{}", row.detail);
+    let _ = std::fs::remove_dir_all(&dir);
+}
+
+/// A project that declares one is warned, with the two ways out, when Docker is
+/// missing or its daemon is not running, and is quiet when it runs. Never a
+/// failure: the deploy may adopt an image instead.
+#[test]
+fn a_project_with_a_container_is_warned_when_docker_is_missing_or_stopped() {
+    let (dir, c) = project_with(CONTAINER_SOURCE);
+    let missing = docker_row(&doctor::diagnose(&Fake::default(), &c, &bare()));
+    assert_eq!(missing.level, Level::Warn);
+    let remedy = missing.remedy.as_deref().unwrap_or_default();
+    assert!(
+        remedy.contains("start Docker") && remedy.contains("[deploy.containers."),
+        "{remedy}"
+    );
+    let stopped = docker_row(&doctor::diagnose(
+        &Fake::default().with_docker(false),
+        &c,
+        &bare(),
+    ));
+    assert_eq!(stopped.level, Level::Warn);
+    assert!(
+        stopped.detail.contains("no daemon running"),
+        "{}",
+        stopped.detail
+    );
+    let running = docker_row(&doctor::diagnose(
+        &Fake::default().with_docker(true),
+        &c,
+        &bare(),
+    ));
+    assert_eq!(running.level, Level::Ok);
+    assert!(
+        running.detail.contains("daemon running"),
+        "{}",
+        running.detail
+    );
+    assert!(!report_fails(&doctor::diagnose(
+        &Fake::default(),
+        &c,
+        &bare()
+    )));
+    let _ = std::fs::remove_dir_all(&dir);
+}
+
+fn report_fails(report: &doctor::Report) -> bool {
+    report.exit_nonzero(&bare())
 }
