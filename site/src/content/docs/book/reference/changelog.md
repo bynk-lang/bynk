@@ -3,7 +3,7 @@ title: Version compatibility & changelog
 ---
 Bynk is pre-1.0 and developed in small, spec-first increments (see
 [Versioning & roadmap](/book/about/versioning-and-roadmap/)). This book is
-written against **v0.603**.
+written against **v0.604**.
 
 This page is a high-level summary of notable increments, not an exhaustive
 per-commit history. While Bynk is pre-1.0, increments may change behaviour.
@@ -28,6 +28,7 @@ per-commit history. While Bynk is pre-1.0, increments may change behaviour.
 
 | Version | Highlights |
 |---|---|
+| **v0.604.0** | `bynk check --fix=<code>[,<code>…]` applies only the fixes of the named diagnostic codes, hints included, and refuses an unknown code with the nearest real one |
 | **v0.603.11** | `bynk check --fix` applies only the fixes of diagnostics `check` shows, names the code each file's edits fixed, and no longer binds a bare statement with `let _ =` |
 | **v0.603.10** | v0.603.9's tag published no artefacts (every build and publish job was skipped); this is the release that ships them, and a tag push that publishes nothing now fails the run |
 | **v0.603.9** | Hover on `Idempotency` and its operations names the provider each platform selects, D1-backed on Cloudflare and in-memory on Node and in the browser |

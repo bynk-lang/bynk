@@ -1,11 +1,6 @@
----
-level: minor
-changelog: `bynk check --fix=<code>[,<code>…]` applies only the fixes of the named diagnostic codes, hints included, and refuses an unknown code with the nearest real one
----
+# 0844 — `check --fix=<code>` narrows a fix run to the named diagnostic codes
 
-## ADR: check-fix-by-code
-title: `check --fix=<code>` narrows a fix run to the named diagnostic codes
-summary: A repeatable, comma-separated filter on `--fix`; naming a code asks for its fixes, a hint's included
+- **Status:** Accepted (v0.604)
 
 **Context.** `--fix` applies every fix of every diagnostic `check` shows (#3537), which is more than an upgrade note wants: a release that deprecates one construct should be able to say "run `bynk check --fix=<code>`" and change nothing else.
 
