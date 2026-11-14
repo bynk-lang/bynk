@@ -1,7 +1,7 @@
 ---
 level: minor
 changelog: Naming a standard-library type (or a bare variant of one of its sums) that a braced `consumes` does not list is the warning `bynk.consumes.type_not_selected`, and `bynk check --fix` adds the name to the braces; an error follows in a later release (#3536)
-probes: emit_diagnostics, diagnostic_coverage
+probes: emit_diagnostics, diagnostic_coverage, explained_codes
 ---
 
 ## ADR: braced-consumes-lists-what-is-in-scope

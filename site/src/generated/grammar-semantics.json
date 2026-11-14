@@ -504,6 +504,10 @@
       "summary": "`consumes U { T as Alias }` names a type `U` does not export."
     },
     {
+      "code": "bynk.consumes.type_not_selected",
+      "summary": "A type (or a bare variant of a sum) of a consumed first-party unit is named, but the unit's braced `consumes` does not list it (a warning; an error in a later release)."
+    },
+    {
       "code": "bynk.consumes.unknown_context",
       "summary": "`consumes` names a context that does not exist."
     },

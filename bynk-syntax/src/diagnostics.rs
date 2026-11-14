@@ -1489,13 +1489,6 @@ pub const EXPLANATIONS: &[Explain] = &[
         anchor: "rename-an-exported-type-that-clashes-with-one-of-yours",
     },
     Explain {
-        code: "bynk.consumes.type_not_selected",
-        blurb: "A braced `consumes U { A, B }` brings into scope only the names it lists, so the standard library can add a type without changing what an existing program means. Naming a type of `U` (or a bare variant of one of its sums) that the braces leave out still resolves for now, and is a warning; `bynk check --fix` adds the name to the braces. A later release makes it an error. A bare `consumes U`, with no braces, brings in the whole module.",
-        example: "consumes bynk { Logger }                   // ✗ `TimedOut` is not listed\n\nconsumes bynk { Logger, TimedOut }          // ✓\n\nfn at(t: TimedOut) -> Bool {\n    true\n}",
-        page: "/book/guides/program-structure/consume-services",
-        anchor: "rename-an-exported-type-that-clashes-with-one-of-yours",
-    },
-    Explain {
         code: "bynk.consumes.type_alias_repeated",
         blurb: "A type is in scope under one name, so it is selected once in a file: the alias is that name. Selecting it twice, or both bare and aliased, would leave two names for it. Keep one selection. The bare selection of a type is not needed, since `consumes payment` already brings every exported type into scope.",
         example: "// shop.bynk\ncontext shop\n\nconsumes payment { AuthId as A, AuthId as B }   // ✗ `AuthId` aliased twice\n\nconsumes payment { AuthId as Auth }             // ✓ one alias",
@@ -1506,6 +1499,13 @@ pub const EXPLANATIONS: &[Explain] = &[
         code: "bynk.consumes.type_alias_unknown_export",
         blurb: "`consumes payment { AuthId as Auth }` brings a type that `payment` exports in under another name, so the type has to be one it exports. A misspelt name, or a type that `payment` keeps to itself, is the usual cause. Correct the name, or ask `payment` to export the type.",
         example: "// shop.bynk\ncontext shop\n\nconsumes payment { AuthIdd as Auth }   // ✗ `payment` exports no `AuthIdd`\n\nconsumes payment { AuthId as Auth }    // ✓ a type it exports",
+        page: "/book/guides/program-structure/consume-services",
+        anchor: "rename-an-exported-type-that-clashes-with-one-of-yours",
+    },
+    Explain {
+        code: "bynk.consumes.type_not_selected",
+        blurb: "A braced `consumes U { A, B }` brings into scope only the names it lists, so the standard library can add a type without changing what an existing program means. Naming a type of `U` (or a bare variant of one of its sums) that the braces leave out still resolves for now, and is a warning; `bynk check --fix` adds the name to the braces. A later release makes it an error. A bare `consumes U`, with no braces, brings in the whole module.",
+        example: "consumes bynk { Logger }                   // ✗ `TimedOut` is not listed\n\nconsumes bynk { Logger, TimedOut }          // ✓\n\nfn at(t: TimedOut) -> Bool {\n    true\n}",
         page: "/book/guides/program-structure/consume-services",
         anchor: "rename-an-exported-type-that-clashes-with-one-of-yours",
     },
@@ -8595,11 +8595,6 @@ pub const REGISTRY: &[DiagnosticInfo] = &[
         "A `consumes U { T as Alias }` alias collides with a type or value in scope, or with another alias.",
         &["consumes_decl"],
     ),
-    warn(dg(
-        "bynk.consumes.type_not_selected",
-        "A type (or a bare variant of a sum) of a consumed first-party unit is named, but the unit's braced `consumes` does not list it (a warning; an error in a later release).",
-        &["consumes_decl"],
-    )),
     dg(
         "bynk.consumes.type_alias_repeated",
         "An exported type is aliased more than once, or is selected both bare and aliased, in `consumes U { … }`.",
@@ -8610,6 +8605,11 @@ pub const REGISTRY: &[DiagnosticInfo] = &[
         "`consumes U { T as Alias }` names a type `U` does not export.",
         &["consumes_decl"],
     ),
+    warn(dg(
+        "bynk.consumes.type_not_selected",
+        "A type (or a bare variant of a sum) of a consumed first-party unit is named, but the unit's braced `consumes` does not list it (a warning; an error in a later release).",
+        &["consumes_decl"],
+    )),
     dg(
         "bynk.consumes.unknown_context",
         "`consumes` names a context that does not exist.",

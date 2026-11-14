@@ -761,19 +761,7 @@ pub fn check_file_core(
             .get_or_insert_with(Vec::new)
             .extend(shadowed_named);
     }
-    // #3536: naming a first-party type the unit's braces do not list still
-    // resolves, with a warning (and a fix) while the rule is being introduced.
-    // The standard library's own units are not the user's code to migrate.
-    if !crate::firstparty::is_first_party_unit(&resolved.commons.name) {
-        errors.extend_for(
-            Some(&pf.identity_path()),
-            resolver::check_unselected_type_names(
-                &resolved.commons.items,
-                &resolved,
-                pf.consumes(),
-            ),
-        );
-    }
+    warn_unselected_type_names(&resolved, pf, errors);
     let item_spans: Vec<bynk_syntax::span::Span> =
         resolved.commons.items.iter().map(|i| i.span()).collect();
     // The unit's own span is this file's, even when it has no items of its own
@@ -1004,6 +992,19 @@ fn extensible_names(imported_from: &HashMap<String, String>) -> HashSet<String> 
         .filter(|(n, unit)| crate::firstparty::is_extensible(unit, n))
         .map(|(n, _)| n.clone())
         .collect()
+}
+
+/// #3536: naming a first-party type the unit's braces do not list still
+/// resolves, with a warning (and a fix) while the rule is being introduced. The
+/// standard library's own units are not the user's code to migrate.
+fn warn_unselected_type_names(resolved: &ResolvedCommons, pf: &ParsedFile, errors: &mut ErrorSink) {
+    if crate::firstparty::is_first_party_unit(&resolved.commons.name) {
+        return;
+    }
+    errors.extend_for(
+        Some(&pf.identity_path()),
+        resolver::check_unselected_type_names(&resolved.commons.items, resolved, pf.consumes()),
+    );
 }
 
 #[cfg(test)]
