@@ -1,12 +1,6 @@
----
-level: minor
-changelog: `bynk deploy` plans a `Container` (its image source and instance type), checks for Docker only when it must build an image, can run a prebuilt image named in `[deploy.containers.<Capability>]`, refuses a container Worker below Wrangler 4.136.0, and `bynk revert` and `bynk doctor` know about containers
-probes: emit_abi_shapes, ts_writes, diagnostic_coverage
----
+# 0841 — A container deploys through wrangler, with Docker checked first and an image adoptable per environment
 
-## ADR: container-deploy
-title: A container deploys through wrangler, with Docker checked first and an image adoptable per environment
-summary: Decisions C and G of #3477 for slice C2: no ledger id and no REST calls, a Docker preflight, digest-pinned image adoption, a 4.136.0 floor for container Workers only, and a rollback note
+- **Status:** Accepted (v0.602)
 
 **Context.** The container application is created and updated by `wrangler deploy` from the `[[containers]]` stanza, which builds a Dockerfile image with Docker and pushes it to Cloudflare's registry. `wrangler deploy --dry-run` builds too, so it needs Docker and would break `bynk deploy --dry-run`'s offline guarantee. Under the `durable_object` policy only Cloudflare's registry is supported, by digest. The `image` map is uploaded with the Worker version, and a running instance keeps the image it started with. Wrangler 4.120.1 refuses the policy value.
 

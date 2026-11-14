@@ -17,6 +17,7 @@ or a row links to no file. Summaries and statuses are curated by hand; the
 
 | # | Decision | Status |
 |---|---|---|
+| [0841](0841-container-deploy.md) | **A container deploys through wrangler, with Docker checked first and an image adoptable per environment** (v0.602) — Decisions C and G of #3477 for slice C2: no ledger id and no REST calls, a Docker preflight, digest-pinned image adoption, a 4.136.0 floor for container Workers only, and a rollback note | Accepted (v0.602) |
 | [0840](0840-container-instance-kind.md) | **Container is an instance kind that runs a Docker image as a Durable Object class** (v0.601) — Decisions A, D, E, F and J of #3477 for slice C1: a named instance with a build directory and a port, closed egress, no instance ceiling, a built-in container API and no npm dependency | Accepted (v0.601) |
 | [0839](0839-container-runtime-and-config.md) | **A container's class is built by a runtime function and its image from a Dockerfile path** (v0.600) — Decisions B, D, F and J of #3477 for slice C1: the `[[containers]]` stanza, the class generated from literals, the readiness wait, and where build paths point | Accepted (v0.600) |
 | [0838](0838-ai-search-deploy-and-dev.md) | **AI Search instances are linked by the deploy, and bynk dev proxies them with a one-time warning** (v0.598) — Slice AS2 of #3480: the deploy looks each instance up and fails when it is missing, and bynk dev warns once per binding kind and proceeds | Accepted (v0.598) |
