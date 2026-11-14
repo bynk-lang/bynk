@@ -3212,9 +3212,6 @@ pub enum Statement {
     /// `expect expr` — verify a Bool predicate at test runtime (v0.7; renamed
     /// from `assert` in v0.112). Only valid inside test case bodies.
     Expect(ExpectStmt),
-    /// `~> expr` — an asynchronous fire-and-forget send (v0.79). The caller does
-    /// not await the reply; legal only when the reply is `Effect[()]`. No binder.
-    Send(SendStmt),
     /// `do expr` — an effect-performing expression statement (v0.146, ADR 0170).
     /// Runs an `Effect[T]` and discards its result — the binder-free sugar for
     /// `let _ <- expr`. Legal only in an effectful body; the operand MUST be an
@@ -3241,7 +3238,6 @@ impl Statement {
         match self {
             Statement::Let(l) | Statement::EffectLet(l) => l.span,
             Statement::Expect(a) => a.span,
-            Statement::Send(s) => s.span,
             Statement::Do(d) => d.span,
             Statement::Assign(a) => a.span,
             Statement::Advance(a) => a.span,
@@ -3389,14 +3385,6 @@ impl Expr {
 /// the author wrote. Editor surfaces (inlay hints, locals, symbols) skip these.
 pub fn is_generated_binding(name: &str) -> bool {
     name.starts_with("__")
-}
-
-#[derive(Debug, Clone)]
-pub struct SendStmt {
-    /// The send target — a recipient call, e.g. `Logger.info(msg)`.
-    pub value: Expr,
-    pub span: Span,
-    pub trivia: Trivia,
 }
 
 /// `do expr` — an effect-performing expression statement (v0.146, ADR 0170).
@@ -4385,7 +4373,6 @@ pub fn statement_exprs<'a>(s: &'a Statement, out: &mut Vec<&'a Expr>) {
             out.push(&l.value)
         }
         Statement::Expect(a) => out.push(&a.value),
-        Statement::Send(snd) => out.push(&snd.value),
         Statement::Do(d) => out.push(&d.value),
         Statement::Assign(a) => out.push(&a.value),
         Statement::Advance(a) => out.push(&a.amount),
@@ -4943,7 +4930,7 @@ fn f(x: Int) -> Int {
   let bb = R { ...r, a: x }
   let cc = Effect.pure(x)
   let dd = [x]
-  ~> L.log(x)
+  do L.log(x).detach()
   do s.put(x)
   cell := x
   x
@@ -5031,11 +5018,6 @@ fn f(x: Int) -> Int {
                 span: _,
                 trivia: _,
             }) => out.push(("expect.value", value)),
-            Statement::Send(SendStmt {
-                value,
-                span: _,
-                trivia: _,
-            }) => out.push(("send.value", value)),
             Statement::Do(DoStmt {
                 value,
                 span: _,
@@ -5293,7 +5275,6 @@ fn f(x: Int) -> Int {
         "let<-.value",
         "let<-.identity",
         "expect.value",
-        "send.value",
         "do.value",
         "assign.value",
     ];

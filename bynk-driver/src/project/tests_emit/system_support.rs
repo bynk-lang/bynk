@@ -1712,7 +1712,7 @@ pub(super) fn service_binding_forward(worker_ident: &str, env_ident: &str, sends
         ty: Some(TsType::named("globalThis.Request")),
         optional: false,
     };
-    // #1994: a Worker whose handlers send with `~>` takes the execution
+    // #1994: a Worker whose handlers send with `detach` takes the execution
     // context as `fetch`'s third argument; the harness hands it a collecting
     // double and settles the sends before the response reaches the case.
     let forward = if sends {

@@ -280,7 +280,7 @@ pub(super) fn emit_test_deps(
     if !surface_entries.is_empty() {
         entries.push(("surface".to_string(), TsExpr::object(surface_entries)));
     }
-    // #1994/#2683: the execution context a `~>`-sending handler hands its promise to,
+    // #1994/#2683: the execution context a `detach`-ing handler hands its promise to,
     // plus, on a virtual-time module, the harness's timers (`within` reads them).
     let virtual_time = module_is_virtual_time(target_name, target_kind, stubs, unit_tables);
     if target_uses_send(target_name, target_kind, unit_tables) {

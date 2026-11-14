@@ -1,0 +1,6 @@
+commons m
+
+fn run(ping: Effect[()]) -> Effect[()] {
+	~> ping
+	Effect.pure(())
+}

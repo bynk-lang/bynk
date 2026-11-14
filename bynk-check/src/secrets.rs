@@ -203,7 +203,7 @@ pub fn worker_secret_reads(
 /// Every expression in a handler body.
 ///
 /// Reuses `statement_exprs` rather than matching `Statement` here: a
-/// `Secrets.get` in a `let`, an `expect`, a `~>` send or a bare `do` is still a
+/// `Secrets.get` in a `let`, an `expect` or a bare `do` is still a
 /// read, and re-enumerating the statement kinds would be a second place to
 /// forget one the day a new kind lands.
 fn walk_block(block: &Block, reads: &mut SecretReads, warnings: &mut Vec<CompileError>) {

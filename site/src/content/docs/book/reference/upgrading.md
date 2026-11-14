@@ -17,6 +17,10 @@ here broke nothing, or its author did not say so: please
 
 <!-- stamp:breaking-entries -->
 
+## v0.605.0
+
+`~>` is removed; run `bynk check --fix` on v0.603.x first, or rewrite `~> e` as `e.detach()` (written `do e.detach()` as a statement). A program that still contains `~>` fails with `bynk.parse.removed_send_arrow`.
+
 ## v0.603.8
 
 A project with an inbound email service has `postal-mime` 4.2.0 in its `bynk.lock` and `package.json` now (was 4.1.4). A build run with `--locked` is refused with `bynk.package.lock_out_of_date` ("`bynk.lock` is out of date with the manifests, and `--locked` was given") until you run `bynk fetch` and commit the lock.

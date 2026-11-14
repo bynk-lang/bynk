@@ -90,7 +90,7 @@ pub struct Message {
 pub enum MessageKind {
     Call,
     Return,
-    /// `~>` fire-and-forget — no paired `Return`.
+    /// `e.detach()` fire-and-forget — no paired `Return`.
     Send,
     /// #2194: an agent handler's write to its own state — a `:=` or a
     /// mutating store operation (`items.put(…)`, `count.update(…)`). Not a
@@ -145,13 +145,13 @@ pub struct Branch {
 }
 
 /// Whether an expression sits directly under an effect operator
-/// (`<-`/`~>`/`do`) — only then can it be a lifeline call, since a bare
+/// (`<-`/`do`) — only then can it be a lifeline call, since a bare
 /// (pure) `let` cannot bind an `Effect[_]` value in this language.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 enum Arrow {
     /// `let x <- expr` / `do expr` — awaited; a Call+Return pair.
     Awaited,
-    /// `~> expr` — fire-and-forget; a Send only.
+    /// `expr.detach()` — fire-and-forget; a Send only.
     FireAndForget,
 }
 
@@ -408,13 +408,6 @@ impl<'a> Builder<'a> {
             Statement::Do(d) => {
                 self.walk_value(&d.value, current_block, depth, Some(Arrow::Awaited), false)
             }
-            Statement::Send(s) => self.walk_value(
-                &s.value,
-                current_block,
-                depth,
-                Some(Arrow::FireAndForget),
-                false,
-            ),
             Statement::Let(l) => {
                 self.walk_value(&l.value, current_block, depth, None, false);
                 self.bound.push(l.name.name.clone());
@@ -450,7 +443,7 @@ impl<'a> Builder<'a> {
         ret: bool,
     ) {
         let inner = peel_paren(expr);
-        // #3437: `e.detach()` is the asynchronous arrow, as `~> e` is: the call it
+        // #3437: `e.detach()` is the asynchronous arrow, as the removed `~> e` was: the call it
         // wraps is drawn without a return. Read from the shape (the walk has no
         // types), and only under `do` or `<-`, where an effect is awaited.
         if arrow == Some(Arrow::Awaited)
@@ -1098,7 +1091,7 @@ fn double(x: Int) -> Int {
 
 service fireService {
   on call(n: Int) -> Effect[()] given Logger {
-    ~> Logger.info("hi")
+    do Logger.info("hi").detach()
     Effect.pure(())
   }
 }
@@ -1136,29 +1129,7 @@ service nestedService {
             .expect("sequence_info entry for misc")
     }
 
-    /// #3437: `do e.detach()` is the same asynchronous arrow as `~> e`: a Send,
-    /// with no paired Return.
-    #[test]
-    fn detach_is_a_fire_and_forget_send() {
-        let src = MISC_SRC.replace("~> Logger.info(\"hi\")", "do Logger.info(\"hi\").detach()");
-        assert_ne!(src, MISC_SRC);
-        let root = setup_project("misc-detach", &[("misc.bynk", &src)]);
-        let diag = crate::testkit::diagnose_project(&root);
-        let info = misc_info(&diag);
-
-        let ctx = parse_context(&src);
-        let svc = find_service(&ctx, "fireService");
-        let model = sequence_model(
-            &svc.handlers[0],
-            HandlerOwner::Service("fireService"),
-            &svc.default_given,
-            svc.default_by.as_ref(),
-            Some(&info),
-        );
-        assert_eq!(model.messages.len(), 1, "a detach has no paired Return");
-        assert_eq!(model.messages[0].kind, MessageKind::Send);
-    }
-
+    /// #3437: `do e.detach()` is the asynchronous arrow.
     #[test]
     fn fire_and_forget_send_has_no_paired_return() {
         let root = setup_project("misc-send", &[("misc.bynk", MISC_SRC)]);
@@ -1335,7 +1306,7 @@ consumes bynk { Logger }
 service guardSvc {
   on call(flag: Bool) -> Effect[()] given Logger {
     if flag {
-      ~> Logger.info("hi")
+      do Logger.info("hi").detach()
     }
   }
 }
@@ -1386,7 +1357,7 @@ service routeSvc {
         assert_eq!(
             gm.blocks[0].branches[0].message_ids.len(),
             1,
-            "the `~>` Send"
+            "the `detach` Send"
         );
 
         // `route`: a `match` whose arms yield distinct values — each captured

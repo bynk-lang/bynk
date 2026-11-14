@@ -1279,19 +1279,13 @@ it, so its effects are awaited (`let _ <- e`, `do e`). A `detach` of the agent's
 write is staged and committed atomically at the handler boundary, so there is
 nothing to detach without waiting for — write it as `do field.op(…)`.
 
-**The asynchronous send `~>` (deprecated, #3437).** `~> e` (§4.8.5) is the older spelling. It
-MUST be applied to an `Effect` (`bynk.send.non_effect`) whose reply is `Effect[()]` — the **error
-gate** (`bynk.send.requires_unit`) — and has the same position rules, under `bynk.send.in_pure_context`,
-`bynk.send.in_agent_handler` and `bynk.send.store_op`. It warns, `bynk.send.deprecated`, and
-`bynk check --fix` rewrites it to `do e.detach()`. It lowers through the same reporter, so its
-failures are reported too. It is removed in the next release.
-
-A send MAY occur in an effectful `fn` or method (#2719): the function takes the execution
-context from its caller. See *The execution context in functions* below.
+**The asynchronous send `~>` (removed, #3443).** `~> e` was the older spelling of
+`do e.detach()`. It is removed: the parser refuses it with `bynk.parse.removed_send_arrow`
+(§4.8.5), which names the replacement. The position rules above are those of `detach`.
 
 A **`do` statement** (`do e`, §4.8.6) performs an effect without a binder: it
 MUST occur in an effectful position (`bynk.effect.do_in_pure_context`) and MUST
-be applied to an `Effect[T]` (`bynk.effect.do_on_non_effect`). Unlike a send,
+be applied to an `Effect[T]` (`bynk.effect.do_on_non_effect`). Unlike a detached effect,
 the effect *is* awaited and joins the enclosing computation, so a fault in it
 rejects the enclosing handler exactly as for `let x <- e`. `do e` is `let _ <- e`
 for every `T` that is not a `Result`. When `T` is a `Result` (including one reached by instantiating a generic
@@ -1308,8 +1302,7 @@ completes when all have settled. It MUST occur in an effectful position
 and `do e`; each binding is checked exactly as the same statement written outside
 the block, against the scope *outside* it. Anything else is
 `bynk.par.invalid_statement`, naming the statement: a `let` with a refutable
-pattern and an `else`, a plain `let` (it has no effect to overlap), `~>` (a
-fire-and-forget send has nothing to join; a `do e.detach()` is an ordinary `do`), `:=` or a mutating `store` operation
+pattern and an `else`, a plain `let` (it has no effect to overlap), `:=` or a mutating `store` operation
 (`store` writes stay sequential), `expect`, `advance`, a nested `par`, and an
 empty block. A `?` in a binding is `bynk.par.question_in_join` (a `?` inside a
 lambda belongs to the lambda). This is permanent: `?` takes a `Result` value, not
@@ -1405,10 +1398,10 @@ method, as `within` may. Its argument is consumed
 by the call, so the unawaited-effect check (`bynk.effect.unbound_effect`) does not flag
 it. The `race` of a `race`, or of a `within`, composes: `a.race(b).within(d)`.
 
-**The execution context in functions (#2719).** `detach`, `~>`, `within` and `race` MAY occur in
+**The execution context in functions (#2719).** `detach`, `within and `race` MAY occur in
 an effectful `fn` or method. A function takes the execution context from its caller, so
 the compiler works out which functions need it: the **needs-context set** holds every
-effectful function whose body (a lambda in it included) uses `~>`, or a `detach`, `within` or
+effectful function whose body (a lambda in it included) uses a `detach`, `within` or
 `race` the checker resolved as the kernel method on an `Effect` receiver (never by
 name: a user type's own `race` method puts nothing in the set), or that calls a function
 in the set, or names one as a value. It is a fixed point over the whole build,
@@ -1418,7 +1411,7 @@ handler included), a Bundle `on call` handler, a lambda written in either, anoth
 function in the set, or a test `case` body. A call or a reference to such a function in
 an **agent handler**, a **WebSocket handler** or a **provider operation** MUST be refused
 (`bynk.exec.unavailable`), with a note naming the chain of functions down to the
-construct. A direct `detach`, `~>`, `within` or `race` written in a test `case` body remains
+construct. A direct `detach`, `within` or `race` written in a test `case` body remains
 refused.
 
 **Implicit unit tail (§4.8.1).** A block with no trailing expression has value

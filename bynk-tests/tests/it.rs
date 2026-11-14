@@ -119,14 +119,14 @@ mod integration {
     mod reference_index;
     #[path = "refinement_index.rs"]
     mod refinement_index;
+    #[path = "removed_send_arrow.rs"]
+    mod removed_send_arrow;
     #[path = "requirements_ledger.rs"]
     mod requirements_ledger;
     #[path = "reserved_builtin_type_name.rs"]
     mod reserved_builtin_type_name;
     #[path = "semantic_tokens_index.rs"]
     mod semantic_tokens_index;
-    #[path = "send_deprecation_fix.rs"]
-    mod send_deprecation_fix;
     #[path = "snippets.rs"]
     mod snippets;
     #[path = "source_map.rs"]

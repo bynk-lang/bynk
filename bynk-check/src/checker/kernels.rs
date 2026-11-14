@@ -2707,7 +2707,7 @@ pub(crate) fn check_string_kernel_method(
 /// `waitUntil` (it is never cancelled, track Q7), so each is legal only where a
 /// service handler's `deps` supply that context: a service handler's body,
 /// lambdas included, or a function's (#2719), which takes it as a hidden
-/// trailing parameter. An agent handler (like `~>`, #2017), a WebSocket
+/// trailing parameter. An agent handler (#2017), a WebSocket
 /// handler and a provider body are refused. The check order is agent handler, pure context,
 /// then outside a handler, so each position reports the remedy that applies to
 /// it. Returns whether the call was refused; `codes` are the agent-handler,
@@ -2862,7 +2862,7 @@ pub(crate) fn check_effect_within_method(
 /// waiting: the effect is already running (effects are eager promises), so the
 /// call registers it with the execution context's `waitUntil` and completes at
 /// once. A failure (a fault, or an `Err` for a `Result` payload) is reported by
-/// the runtime, never lost. Legal wherever `~>` is: it is refused in an agent
+/// the runtime, never lost. It is refused in an agent
 /// handler (no execution context; ADR 0487), in a store operation (a store write
 /// is part of the handler's atomic commit) and outside an effectful body. A
 /// function using it joins the needs-context set beside `within` and `race`.

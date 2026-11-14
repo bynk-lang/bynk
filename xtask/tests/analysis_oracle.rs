@@ -7,7 +7,7 @@
 //!
 //! - every project under `examples/`, then again with the memo warm; and
 //! - seeded random edit sequences on the benchmark generator's two project
-//!   shapes plus a commons whose function body can gain a `~>` (the cross-unit
+//!   shapes plus a commons whose function body can gain a `detach` (the cross-unit
 //!   body fact, #2719, that a signature-only key would miss),
 //!
 //! and asserts the two [`canonical_report`]s are identical after every step.
@@ -186,7 +186,7 @@ impl Project {
         ));
         let _ = std::fs::remove_dir_all(&root);
         let mut files = generate_project_shaped(shape, contexts, groups);
-        // A commons whose function body can gain a `~>`, and contexts that call
+        // A commons whose function body can gain a `detach`, and contexts that call
         // it from an agent handler: an edit to a body in one unit changes the
         // diagnostic in another (#2719).
         files.push((
@@ -284,13 +284,13 @@ fn random_edit(project: &mut Project, rng: &mut Rng, step: usize) -> String {
             )
         }),
         // The body fact that crosses units: the commons function gains or loses a
-        // `~>`. It edits `util.bynk` itself, whatever file was drawn as `target`.
+        // `detach`. It edits `util.bynk` itself, whatever file was drawn as `target`.
         5 => {
             let util = project.root.join("src/util.bynk");
             let util_text = project.overlay[&util].clone();
-            toggle(&util_text, "let _ <- f(n)", "~> f(n)").map(|t| {
+            toggle(&util_text, "let _ <- f(n)", "do f(n).detach()").map(|t| {
                 project.overlay.insert(util, t);
-                (None, "toggle `~>` in the commons function body")
+                (None, "toggle `detach` in the commons function body")
             })
         }
         // A comment before everything: every span in the file shifts.
@@ -408,9 +408,10 @@ fn the_report_distinguishes_a_changed_diagnostic() {
     // The commons edit changes another unit's diagnostics, and the report sees it.
     let util = project.root.join("src/util.bynk");
     let util_text = project.overlay[&util].clone();
-    project
-        .overlay
-        .insert(util, util_text.replacen("let _ <- f(n)", "~> f(n)", 1));
+    project.overlay.insert(
+        util,
+        util_text.replacen("let _ <- f(n)", "do f(n).detach()", 1),
+    );
     let leaked = canonical_report(&analyse_project(&roots, &project.overlay, &SchemaLock::Off));
     assert_ne!(
         after, leaked,

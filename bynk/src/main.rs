@@ -452,7 +452,7 @@ fn run() -> ExitCode {
             if !prepare(&root, bynk::fetch::FetchOptions::default()) {
                 return ExitCode::FAILURE;
             }
-            if run_check(root.clone(), CheckFormatArg::Short, false, false, false)
+            if run_check(root.clone(), CheckFormatArg::Short, None, false, false)
                 != ExitCode::SUCCESS
             {
                 eprintln!("bynk: not published: the package doesn't check");
@@ -1010,7 +1010,7 @@ fn run_deploy(path: PathBuf, opts: DeployOptions) -> ExitCode {
 fn run_check(
     input: PathBuf,
     format: CheckFormatArg,
-    fix: bool,
+    fix: Option<Vec<String>>,
     emit: bool,
     each: bool,
 ) -> ExitCode {

@@ -58,12 +58,31 @@ pub fn edits<'a>(
 
 /// [`edits`], also naming the diagnostics the edits came from.
 pub fn select<'a>(text: &str, errors: impl IntoIterator<Item = &'a CompileError>) -> Selection {
+    // #3537: a hint is not shown by `check`, so a batch never takes its fix;
+    // it stays an individual quick fix in the editor.
+    pick(text, errors, |e| Severity::for_error(e) != Severity::Hint)
+}
+
+/// [`select`] restricted to the diagnostics whose code is in `codes` (#3537,
+/// `check --fix=<code>`). Naming a code is asking for its fixes, so a hint's
+/// fix is taken when its code is named.
+pub fn select_codes<'a>(
+    text: &str,
+    errors: impl IntoIterator<Item = &'a CompileError>,
+    codes: &[String],
+) -> Selection {
+    pick(text, errors, |e| codes.iter().any(|c| c == e.category))
+}
+
+fn pick<'a>(
+    text: &str,
+    errors: impl IntoIterator<Item = &'a CompileError>,
+    admit: impl Fn(&CompileError) -> bool,
+) -> Selection {
     let mut taken: Vec<(Span, String)> = Vec::new();
     let mut categories = Vec::new();
     for e in errors {
-        // #3537: a hint is not shown by `check`, so a batch never takes its fix;
-        // it stays an individual quick fix in the editor.
-        if Severity::for_error(e) == Severity::Hint {
+        if !admit(e) {
             continue;
         }
         let Some(s) = lone_fix(e) else {
@@ -277,6 +296,27 @@ mod tests {
             .with_suggestion("flatten", vec![(Span::new(0, 2), "a".to_string())], M);
         assert_eq!(Severity::for_error(&hint), Severity::Hint);
         assert!(edits(TEXT, &[hint]).is_empty());
+    }
+
+    #[test]
+    fn named_codes_select_only_those_diagnostics_hints_included() {
+        let hint = CompileError::new("bynk.parse.let_else_staircase", Span::new(0, 2), "msg")
+            .with_suggestion("flatten", vec![(Span::new(0, 2), "a".to_string())], M);
+        let other = diag((10, 12), &[(&[((10, 12), "b")], M)]);
+        let errors = [hint, other];
+        let only = |codes: &[&str]| {
+            let codes: Vec<String> = codes.iter().map(|c| c.to_string()).collect();
+            select_codes(TEXT, &errors, &codes).edits
+        };
+        assert_eq!(
+            only(&["bynk.test"]),
+            vec![(Span::new(10, 12), "b".to_string())]
+        );
+        assert_eq!(
+            only(&["bynk.parse.let_else_staircase"]),
+            vec![(Span::new(0, 2), "a".to_string())]
+        );
+        assert!(only(&["bynk.nothing"]).is_empty());
     }
 
     #[test]

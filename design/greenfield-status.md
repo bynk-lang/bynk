@@ -13,20 +13,20 @@ Track slice T0.0 (#999); `ts_writes`/`ts_any` added by P7.0 (#1296); `verbatim_o
 | `options_sources` | yes | present |
 | `hoist_sinks` | yes | 0 |
 | `span_keyed_maps` | yes | 6 |
-| `emit_diagnostics` | yes | bynk-emit=3/3, bynk-driver=14/21, bynk-check=722/796 (true/naive) |
+| `emit_diagnostics` | yes | bynk-emit=3/3, bynk-driver=14/21, bynk-check=716/790 (true/naive) |
 | `ide_emit_edge` | yes | absent |
 | `ast_importers` | yes | 10 |
 | `emit_abi_shapes` | yes | 88 (bynk-browser.ts:Claim, bynk-cloudflare.ts:Claim, bynk-cloudflare.ts:negotiateLocale, bynk-cloudflare.ts:byteStreamBody, bynk-cloudflare.ts:claimStream, bynk-node.ts:Claim, bynk-node.ts:byteStreamBody, bynk-node.ts:claimStream, cloudflare.binding.ts:Ai, cloudflare.binding.ts:AiError, cloudflare.binding.ts:AiSearch, cloudflare.binding.ts:SearchAnswer, cloudflare.binding.ts:Analytics, cloudflare.binding.ts:Condition, cloudflare.binding.ts:Container, cloudflare.binding.ts:ContainerError, cloudflare.binding.ts:D1, cloudflare.binding.ts:DataPoint, cloudflare.binding.ts:EdgeCache, cloudflare.binding.ts:Email, cloudflare.binding.ts:EmailError, cloudflare.binding.ts:EmailMessage, cloudflare.binding.ts:FilterOp, cloudflare.binding.ts:ChatMessage, cloudflare.binding.ts:GenerateRequest, cloudflare.binding.ts:Generation, cloudflare.binding.ts:IndexInfo, cloudflare.binding.ts:KvEntry, cloudflare.binding.ts:KvExpiration, cloudflare.binding.ts:KvGet, cloudflare.binding.ts:KvKey, cloudflare.binding.ts:KvList, cloudflare.binding.ts:KvListing, cloudflare.binding.ts:KvPut, cloudflare.binding.ts:MetaValue, cloudflare.binding.ts:Mutation, cloudflare.binding.ts:MySql, cloudflare.binding.ts:MySqlError, cloudflare.binding.ts:MySqlRun, cloudflare.binding.ts:MySqlStatement, cloudflare.binding.ts:MySqlValue, cloudflare.binding.ts:PgError, cloudflare.binding.ts:PgRun, cloudflare.binding.ts:PgStatement, cloudflare.binding.ts:PgValue, cloudflare.binding.ts:Postgres, cloudflare.binding.ts:QueryOptions, cloudflare.binding.ts:Queue, cloudflare.binding.ts:QueueSend, cloudflare.binding.ts:R2, cloudflare.binding.ts:R2Body, cloudflare.binding.ts:R2Listing, cloudflare.binding.ts:R2Object, cloudflare.binding.ts:R2Part, cloudflare.binding.ts:R2Put, cloudflare.binding.ts:R2Upload, cloudflare.binding.ts:R2UploadOptions, cloudflare.binding.ts:RateLimit, cloudflare.binding.ts:SearchError, cloudflare.binding.ts:SearchHit, cloudflare.binding.ts:SearchOptions, cloudflare.binding.ts:SqlError, cloudflare.binding.ts:SqlRun, cloudflare.binding.ts:SqlStatement, cloudflare.binding.ts:SqlValue, cloudflare.binding.ts:StoredSecret, cloudflare.binding.ts:Vector, cloudflare.binding.ts:VectorError, cloudflare.binding.ts:VectorMatch, cloudflare.binding.ts:Vectorize, cloudflare.binding.ts:Version, cloudflare.binding.ts:WorkerVersion, cloudflare.binding.ts:claimStream, cloudflare.binding.ts:AnalyticsDataset, cloudflare.binding.ts:D1Database, cloudflare.binding.ts:D1PreparedStatement, cloudflare.binding.ts:D1Result, cloudflare.binding.ts:QueueProducer, cloudflare.binding.ts:R2Bucket, cloudflare.binding.ts:R2MultipartUpload, cloudflare.binding.ts:R2ObjectMeta, cloudflare.binding.ts:RateLimiter, cloudflare.binding.ts:SecretsStoreSecret, cloudflare.binding.ts:SendEmail, cloudflare.binding.ts:VectorizeIndex, cloudflare.binding.ts:WorkerAiBinding, cloudflare.binding.ts:AiSearchInstance, cloudflare.binding.ts:WorkerVersionMetadata) |
-| `ts_writes` | yes | 1362 |
+| `ts_writes` | yes | 1360 |
 | `ts_any` | yes | 37 |
 | `verbatim_origins` | yes | 2 |
 | `verbatim_sites` | yes | 15 |
 | `incremental_query_types` | yes | unit_signature present; shared_cache migrated; stability_test present; definition/project levels absent (deleted by #1537) |
 | `unconsumed_ir_items` | yes | 0 |
-| `diagnostic_coverage` | yes | unasserted=23 (asserted 851/874) |
+| `diagnostic_coverage` | yes | unasserted=23 (asserted 846/869) |
 | `model_readers_beyond_emit` | yes | 7 (bynk-model::EntryHandler, bynk-model::EntryParam, bynk-model::EntryShape, bynk-model::IrHandlerKind, bynk-model::IrHttpMethod, bynk-model::entry_handlers, bynk-model::lower_handler_kind_ir) |
 | `unused_deps` | yes | 0 |
-| `explained_codes` | yes | explained=769 (of 874) |
+| `explained_codes` | yes | explained=764 (of 869) |
 | `wildcard_arms` | no (trend) | 356 |
 | `keep_in_sync` | no (trend) | 202 |
 | `test_density` | no (trend) | bynk=16.0%, bynk-check=14.2%, bynk-driver=24.3%, bynk-emit=12.9%, bynk-fmt=17.1%, bynk-grammar=33.2%, bynk-ide=41.8%, bynk-ir=0.0%, bynk-lower=66.1%, bynk-lsp=38.4%, bynk-project=36.6%, bynk-render=45.2%, bynk-std=49.7%, bynk-strip=55.9%, bynk-syntax=15.3%, bynk-testkit=0.0%, bynk-ts=53.7%, bynk-wasm=45.6%, bynkc=0.0%, xtask=40.0% |

@@ -111,7 +111,7 @@ value; it is a statement. These are refused:
 
 | In the block | Code | Why |
 |---|---|---|
-| a plain `let`, `~>`, `:=` or a `store` write, `expect`, `advance`, a nested `par`, a `let … else`, or nothing at all | `bynk.par.invalid_statement` | each has no effect to overlap, nothing to join, or must stay sequential |
+| a plain `let`, `:=` or a `store` write, `expect`, `advance`, a nested `par`, a `let … else`, or nothing at all | `bynk.par.invalid_statement` | each has no effect to overlap, nothing to join, or must stay sequential |
 | `?` in a binding | `bynk.par.question_in_join` | `?` takes a `Result`, not an effect: bind the `Result` in the block and apply `?` after it (`let user = userR?`), where the first `Err` in source order propagates; compute a `?` on an argument before the block |
 | a binding that mentions a name another binding of the block binds, or two bindings of one name | `bynk.par.sibling_name` | the bindings run together, so none can read a sibling's result; the rule holds even where the name would resolve to an outer binding |
 
@@ -162,7 +162,7 @@ actually stop. An effect that already returns a `Result` gains a second layer.
 |---|---|---|
 | an agent handler, a lambda in one included | `bynk.within.in_agent_handler` | no execution context to hand the abandoned effect to |
 | a provider operation, a WebSocket handler or a test `case` body | `bynk.within.outside_handler` | none of them has an execution context (a WebSocket handler runs in the connection's Durable Object). An effectful `fn` or method is allowed: it takes the context from its caller (#2719) |
-| a call to, or a reference to, a function that uses `within`, `race`, `detach` or `~>`, from an agent handler, a WebSocket handler or a provider operation | `bynk.exec.unavailable` | the note names the chain of calls down to the construct |
+| a call to, or a reference to, a function that uses `within`, `race` or `detach`, from an agent handler, a WebSocket handler or a provider operation | `bynk.exec.unavailable` | the note names the chain of calls down to the construct |
 | a pure body | `bynk.within.in_pure_context` | it needs an effectful body |
 | a unit that does not consume `bynk` | `bynk.within.timed_out_not_in_scope` | `TimedOut` is `bynk`'s |
 

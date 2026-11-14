@@ -1386,7 +1386,7 @@ implicit value `()` (unit) — the parser synthesises a `()` tail (v0.146, ADR
 
 {{#grammar _statement}}
 
-A statement: a `let`, an effectful `let`, a deprecated asynchronous send (`~>`), a `do`
+A statement: a `let`, an effectful `let`, a `do`
 effect statement, a `:=` store write, a `par` block, or an assertion.
 
 ### §4.8.3 let_stmt
@@ -1453,23 +1453,21 @@ form. An `else` after a plain binding is
 the `else` belongs to that `if`, so parenthesise such a value. Meaning and
 well-formedness: §5.6.
 
-### §4.8.5 effect_send_stmt
+### §4.8.5 The removed `~>` send
 
-{{#grammar effect_send_stmt}}
-
-`~>` and an effect expression — an **asynchronous send**, **deprecated** (#3437) in favour of
-`do e.detach()`, an ordinary `do_stmt` (§4.8.6) whose operand is the kernel method `detach`. Unlike an
-`effect_let_stmt` it carries **no binder**: the reply is not awaited and nothing
-is bound. Well-formedness — including the requirement that the reply be
-`Effect[()]` (the error gate): §5.
+The asynchronous send `~> e` is **removed** (#3443); this section keeps its number so that
+references to the later sections stay stable. There is no production for it. The lexer still
+reads `~>`, only so that the parser can refuse it with `bynk.parse.removed_send_arrow`, which
+names the replacement: `do e.detach()`, an ordinary `do_stmt` (§4.8.6) whose operand is the
+kernel method `detach` (§5.5). See *Upgrading* in the Book.
 
 ### §4.8.6 do_stmt (v0.146)
 
 {{#grammar do_stmt}}
 
-`do` and an effect expression — an **effect statement** (ADR 0170). Like an
-`effect_send_stmt` it carries **no binder**; unlike it, the effect *is* awaited
-and joins the enclosing computation. The binder-free spelling of `let _ <- e`
+`do` and an effect expression — an **effect statement** (ADR 0170). Like
+`effect_let_stmt` it awaits the effect and joins the enclosing computation, but it carries
+**no binder**. The binder-free spelling of `let _ <- e`
 for any effect whose result is not a `Result`. Well-formedness — including the
 requirement that the operand be an `Effect[T]` with `T` not a `Result` (a
 `Result` keeps the explicit `let _ <- e`): §5.

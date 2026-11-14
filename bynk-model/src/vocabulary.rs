@@ -530,7 +530,7 @@ impl IrHttpMethod {
 /// lambdas, and any other expression position (a `Paren`, an `Ok`/`Err`
 /// wrapper, a `Call`/`RecordConstruction` argument, a `BinOp` operand, …)?
 /// Gates release-at-commit buffer threading (`deps.__events`) so a handler
-/// that never emits keeps byte-identical output, mirroring `block_uses_send`'s
+/// that never emits keeps byte-identical output, mirroring the old send gate's
 /// gate on `deps.__exec`.
 ///
 /// Driven off the exhaustive `walk_block_exprs`/`walk_exprs` visitor rather
@@ -548,15 +548,13 @@ impl IrHttpMethod {
 /// visited call site instead of a bare-`Ident("Events")`-receiver name
 /// match. Was deliberately syntactic before this — this function's own
 /// prior doc comment named the locally-shadowed-`Events` false positive an
-/// "accepted approximation," matching `block_uses_send`'s own precedent —
+/// "accepted approximation," matching the old send gate's own precedent —
 /// but that approximation stopped being harmless once `crate::project::
 /// unit_table_uses_emit` (the project-wide compose-gating twin this
 /// function's own callers must agree with) became precise first: the two
 /// disagreeing on exactly the shadowed case produces a real `tsc` type
 /// error (a `deps.__eventsDispatch` call site with nothing supplying it),
-/// not just an unused interface field. `block_uses_send` needs no matching
-/// fix — a `~>` send is a real `Statement::Send` AST variant, not a method
-/// call that could be shadowed, so it was never approximate to begin with.
+/// not just an unused interface field.
 pub fn block_uses_emit(b: &Block, callees: &HashMap<ExprId, bynk_check::checker::Callee>) -> bool {
     let mut found = false;
     walk_block_exprs(b, &mut |e| {

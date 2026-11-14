@@ -491,7 +491,6 @@ pub fn body_writes_state(body: &Block, program: &TypedCommons) -> bool {
             Statement::Assign(_) => true,
             Statement::Let(l) | Statement::EffectLet(l) => expr(&l.value, program),
             Statement::Expect(a) => expr(&a.value, program),
-            Statement::Send(s) => expr(&s.value, program),
             Statement::Do(d) => expr(&d.value, program),
             Statement::Advance(a) => expr(&a.amount, program),
             Statement::Par(p) => p.statements.iter().any(|s| stmt(s, program)),

@@ -3935,13 +3935,13 @@ mod tests {
     #[test]
     fn par_block_admits_statements_for_the_checker_to_refuse() {
         let b = body_block(
-            "par {\n    let a = 1\n    ~> notify()\n    par {\n      do x()\n    }\n  }\n  1",
+            "par {\n    let a = 1\n    do notify().detach()\n    par {\n      do x()\n    }\n  }\n  1",
         );
         let Statement::Par(p) = &b.statements[0] else {
             panic!("expected a par block");
         };
         assert!(matches!(&p.statements[0], Statement::Let(_)));
-        assert!(matches!(&p.statements[1], Statement::Send(_)));
+        assert!(matches!(&p.statements[1], Statement::Do(_)));
         assert!(matches!(&p.statements[2], Statement::Par(_)));
     }
 

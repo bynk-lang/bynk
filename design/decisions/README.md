@@ -17,6 +17,7 @@ or a row links to no file. Summaries and statuses are curated by hand; the
 
 | # | Decision | Status |
 |---|---|---|
+| [0844](0844-check-fix-by-code.md) | **`check --fix=<code>` narrows a fix run to the named diagnostic codes** (v0.604) — A repeatable, comma-separated filter on `--fix`; naming a code asks for its fixes, a hint's included | Accepted (v0.604) |
 | [0843](0843-fix-applies-only-shown-diagnostics.md) | **Batch fixes (`check --fix`, fix-all) take only the fixes of diagnostics `check` shows** (v0.603.11) — Hints are skipped by the shared selection rule; the bare-statement `let _ =` fix is a quick fix only | Accepted (v0.603.11) |
 | [0842](0842-container-dev.md) | **bynk dev runs containers under Docker, and without it starts them off so a call faults naming Docker** (v0.603) — Decision H of #3477 for slice C3: the Docker probe, `--enable-containers=false` (confirmed to apply under the `durable_object` policy), the `BYNK_CONTAINERS_UNAVAILABLE` fault, the `--remote` refusal and the dev floor | Accepted (v0.603) |
 | [0841](0841-container-deploy.md) | **A container deploys through wrangler, with Docker checked first and an image adoptable per environment** (v0.602) — Decisions C and G of #3477 for slice C2: no ledger id and no REST calls, a Docker preflight, digest-pinned image adoption, a 4.136.0 floor for container Workers only, and a rollback note | Accepted (v0.602) |

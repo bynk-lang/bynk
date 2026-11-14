@@ -210,7 +210,7 @@ A module that declares no constant emits exactly as before.
 | `?` | a check-and-early-return: on a `Result`, `if (r.tag === "Err") return r;` (or, when a declared embedding converts the error (v0.154), `return Err(F.V(r.error));`); on an `Option` in an HttpResult handler (v0.153), `if (o.tag === "None") return HttpResult.NotFound;` — then the expression is the `Ok`/`Some` payload |
 | `unreachable(m)` / `todo(m)` (#2620) | a call of the runtime's `never`-returning `__fault("Unreachable" \| "Todo", m, "path:line:col")` ([§7.4](/book/spec/runtime-library/)): it throws, so it is an expression of any type, and inside an async body it rejects the effect |
 | `<-` | `await` |
-| `e.detach()` (and the deprecated `~> e`) | `__bynkDetach(<e>, deps.__exec, "path:line:col"[, "<ErrType>"])` — hands the running effect to `waitUntil` and reports a failure (§7.4.17); the type name is passed only when `e` is an `Effect[Result[_, E]]` |
+| `e.detach()` | `__bynkDetach(<e>, deps.__exec, "path:line:col"[, "<ErrType>"])` — hands the running effect to `waitUntil` and reports a failure (§7.4.17); the type name is passed only when `e` is an `Effect[Result[_, E]]` |
 | `e.within(d)` | `__bynkWithin(<e>, <ms>, deps.__exec)` — races the effect against a timer and yields `Ok(value)` or `Err({ after })`; the handler receives `__exec` when its body calls `within`, as it does for `detach` (§7.4.14) |
 | `a.race(b)` | `__bynkRace([<a>, <b>], deps.__exec)` — resolves with the first effect to succeed and hands the others to `waitUntil`; a chain `a.race(b).race(c)` is one call over `[a, b, c]`; the handler receives `__exec` when its body calls `race`, as for `within` (§7.4.15) |
 | `par { let a <- e1  let b <- e2 }` | `const [a, b] = await __bynkSettleAll([() => e1, () => e2]);` — the join calls the thunks in source order, issuing each effect before either is awaited; a `do` binding takes a hole in the pattern (§7.4.13) |
@@ -280,7 +280,7 @@ identifier as for `<-`, and the names are bound only after every expression is
 lowered. The join is imported only by a module that has a `par` block, so every
 other module emits byte-for-byte as before. The `parTraverse` family imports it too, in a module with no `par` block.
 
-A **detached effect** (`e.detach()`, and the deprecated `~> e`, §4.8.5) lowers on the Workers target to
+A **detached effect** (`e.detach()`) lowers on the Workers target to
 `__bynkDetach(<effect>, deps.__exec, <site>)`: the effect's `Promise` is handed to the
 execution context's `waitUntil` rather than awaited, so it settles *after* the
 handler returns its response instead of being cancelled with it. The execution
