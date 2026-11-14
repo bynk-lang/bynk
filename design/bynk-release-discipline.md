@@ -184,7 +184,7 @@ compiler's output. Until #1677 the only guidance was "bump cautiously", with no
 trigger for a bump. The date stayed at `2024-11-01` for 23 months, falling
 further behind the runtime that Cloudflare and the local `workerd` actually
 test. The first review under this policy, at the `v0.303.4` release, moved it
-to `2026-07-01`; the review at the Hyperdrive H0 work ([#3317](https://github.com/bynk-lang/bynk/issues/3317)) moved it to `2026-08-04`.
+to `2026-07-01`; the review at the Hyperdrive H0 work ([#3317](https://github.com/bynk-lang/bynk/issues/3317)) moved it to `2026-08-04`; the review at the toolchain-dependency sweep of 14 November 2026 moved it to `2026-08-11`, the newest date a wrangler released at least three months earlier (4.123.0, workerd 1.20260811.1) supports.
 
 ### The decision
 
@@ -216,7 +216,7 @@ the new date.** The recommended option of #1677's Decision A.
    **The review also sets the wrangler minimum** (#1732): `WRANGLER_MIN`, beside
    `COMPATIBILITY_DATE`, is the oldest wrangler Bynk supports, and it is never
    older than the one whose `workerd` serves the date. It's currently `4.162.0`
-   for `2026-08-04` (see *Toolchain dependencies until v1.0.0*, below, for why it
+   for `2026-08-11` (see *Toolchain dependencies until v1.0.0*, below, for why it
    is the newest wrangler and not the oldest that serves the date).
    `bynk doctor` warns about an installed wrangler below it, and `bynk dev`
    prints the same warning before serving. `bynk-emit/tests/compat_date_policy.rs` fails until this section,
