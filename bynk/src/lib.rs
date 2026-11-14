@@ -32,6 +32,7 @@ pub mod cli;
 pub mod compile;
 pub mod deploy;
 pub mod dev;
+mod dev_containers;
 mod dev_hyperdrive;
 mod dev_vectorize;
 pub mod diagnostics;

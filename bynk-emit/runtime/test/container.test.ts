@@ -2,6 +2,8 @@ import { test } from "node:test";
 import assert from "node:assert/strict";
 import {
   CONTAINER_ERROR_HEADER,
+  CONTAINER_FAULT_HEADER,
+  CONTAINERS_UNAVAILABLE_VAR,
   containerClass,
   resumeContainer,
   type ContainerHandle,
@@ -170,4 +172,23 @@ test("a container's own responses pass through, 5xx included, and cannot forge t
   assert.equal(res.headers.get(CONTAINER_ERROR_HEADER), null);
   assert.equal(res.headers.get("x-a"), "1");
   assert.equal(await res.text(), "boom");
+});
+
+test("under `bynk dev` without Docker the class faults naming Docker, and starts nothing", async () => {
+  const { handle, calls } = fakeContainer();
+  const res = await make(settings(), handle, { [CONTAINERS_UNAVAILABLE_VAR]: "docker" }).fetch(
+    new Request("http://r/"),
+  );
+  assert.equal(res.status, 500);
+  assert.equal(res.headers.get(CONTAINER_FAULT_HEADER), "docker");
+  assert.equal(res.headers.get(CONTAINER_ERROR_HEADER), null);
+  const text = await res.text();
+  assert.match(text, /Docker/);
+  assert.match(text, /`Renderer`/);
+  assert.deepEqual(calls, []);
+  // And without a `ctx.container` at all (what `wrangler dev --enable-containers=false` gives).
+  const bare = await new (containerClass(settings()))({}, { [CONTAINERS_UNAVAILABLE_VAR]: "docker" }).fetch(
+    new Request("http://r/"),
+  );
+  assert.equal(bare.headers.get(CONTAINER_FAULT_HEADER), "docker");
 });

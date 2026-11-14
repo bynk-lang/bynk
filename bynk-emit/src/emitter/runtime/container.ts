@@ -18,6 +18,20 @@
 export const CONTAINER_ERROR_HEADER = "bynk-container-error";
 
 /**
+ * The header that marks a response as a *fault*: a call that cannot work in this
+ * environment whatever the data, which the provider throws rather than returning
+ * as a `ContainerError` value. `bynk dev` without Docker is the one case.
+ */
+export const CONTAINER_FAULT_HEADER = "bynk-container-fault";
+
+/**
+ * The `bynk dev` variable that says containers are off here. `bynk dev` sets it
+ * (to the reason, `docker`) on a Worker it starts without Docker, with
+ * `wrangler dev --enable-containers=false`, so `ctx.container` is absent.
+ */
+export const CONTAINERS_UNAVAILABLE_VAR = "BYNK_CONTAINERS_UNAVAILABLE";
+
+/**
  * What a `Container` declaration fixes. `image` is the key of the image in the
  * Worker's `[containers.images]` map (the capability's name), `port` the one
  * port the server listens on, `sleepAfterSeconds` the inactivity timeout when
@@ -54,6 +68,18 @@ export interface ContainerState {
 }
 
 type ContainerEnv = Readonly<Record<string, unknown>>;
+
+/**
+ * The fault a call gets under `bynk dev` when containers are off: it names the
+ * container, Docker, and the way out. The platform could not run it, and no
+ * value a handler can answer would be honest, so it faults.
+ */
+function unavailableFault(image: string): Response {
+  return new Response(
+    `bynk dev: the container \`${image}\` is not running because Docker is not available, so \`bynk dev\` started with containers off — start Docker and restart \`bynk dev\`, or stub the call in a test`,
+    { status: 500, headers: { [CONTAINER_FAULT_HEADER]: "docker", "content-type": "text/plain" } },
+  );
+}
 
 /** How long a call waits for a started container's port to answer. */
 export const CONTAINER_READY_TIMEOUT_MS = 30_000;
@@ -212,6 +238,7 @@ export function containerClass(settings: ContainerSettings): new (state: Contain
       resumeContainer(state, settings);
     }
     async fetch(request: Request): Promise<Response> {
+      if (typeof this.env[CONTAINERS_UNAVAILABLE_VAR] === "string") return unavailableFault(settings.image);
       const up = await ensureContainerRunning(this.state, this.env, settings);
       if (up.failure !== undefined) return failure(up.failure);
       return proxyToContainer(this.state.container as ContainerHandle, settings, request, up.started);

@@ -231,8 +231,8 @@ pub use bynk_check::wire_format;
 pub use bynk_check::wire_format::{EDGE_FROM_PREFIX, EDGE_TO_PREFIX, edge_key_from, edge_key_to};
 
 pub use emitter::wrangler::{
-    COMPATIBILITY_DATE, DEFAULT_COMPATIBILITY_FLAGS, WRANGLER_CONTAINERS_MIN, WRANGLER_MIN,
-    compatibility_flags,
+    COMPATIBILITY_DATE, CONTAINERS_UNAVAILABLE_VAR, DEFAULT_COMPATIBILITY_FLAGS,
+    WRANGLER_CONTAINERS_MIN, WRANGLER_MIN, compatibility_flags,
 };
 
 // `write_output`/`write_document` moved to `bynk-driver` (#1047, R2.3/

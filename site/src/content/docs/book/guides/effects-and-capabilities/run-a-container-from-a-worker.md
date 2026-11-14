@@ -13,7 +13,7 @@ in `bynk.toml`:
 allow = ["bynk.cloudflare.Container"]
 ```
 
-`bynk deploy` handles containers; `bynk dev` does not yet start them.
+`bynk deploy` and `bynk dev` both handle containers.
 
 ## Write the image
 
@@ -115,6 +115,24 @@ written outside it is refused (`bynk.container.output_outside_project`). A runni
 container costs money: see Cloudflare's
 [Containers pricing](https://developers.cloudflare.com/containers/pricing/) page,
 which this guide does not repeat.
+
+## Run it locally
+
+`bynk dev` runs the container under Docker on your machine, through `wrangler dev`:
+there is no remote call, and none of the cost warnings the remote-only kinds print.
+Wrangler must be 4.136.0 or later for a Worker with a container (an older one is
+refused with the version named). With Docker running, the first start builds each
+image, which can take minutes, and `bynk dev` says which container is building;
+Wrangler decides when a changed Dockerfile is built again.
+
+Without Docker, `bynk dev` warns once, naming the containers, and starts those
+Workers with containers off. The Worker still serves, and a call to a container
+**faults**, with a message that names Docker, rather than failing as an obscure
+start error. Start Docker and restart `bynk dev` to run it. `bynk dev --remote`
+is refused for a Worker with a container, because remote bindings are not
+documented for containers. A container's request limit under `bynk dev` is
+whatever your Docker allows: there is no instance ceiling locally, as there is
+none on the platform.
 
 ## Test it
 

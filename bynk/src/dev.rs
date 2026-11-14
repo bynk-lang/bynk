@@ -421,6 +421,26 @@ pub struct Serving {
     pub inspect: bool,
 }
 
+/// #837 review: once `--remote` reads a ledger section by `--env`, a
+/// `-- --env`/`-- --environment` passthrough would silently diverge — `bynk`
+/// materialises one environment's KV id while Wrangler actually connects to a
+/// different one. Checked only when `--remote` is present, since `--env` is
+/// otherwise inert (nothing reads the ledger without it). Prints the conflict
+/// and returns `true` when there is one.
+fn remote_env_conflict(opts: &DevOptions) -> bool {
+    if !opts.wrangler_args.iter().any(|arg| arg == "--remote") {
+        return false;
+    }
+    let Some(conflict) = crate::deploy::conflicting_env_passthrough(&opts.wrangler_args) else {
+        return false;
+    };
+    eprintln!(
+        "bynk: `--env {}` conflicts with `{conflict}` after `--` — pass one or the other, not both",
+        opts.environment
+    );
+    true
+}
+
 /// Orchestrate a local dev session: pre-flight, compile, select the worker, and
 /// hand off to `wrangler dev`. Returns wrangler's own exit code on a clean
 /// hand-off, or a pre-flight/build failure code before serving.
@@ -430,18 +450,7 @@ pub fn run(
     node_floor: (u32, u32),
     opts: &DevOptions,
 ) -> ExitCode {
-    // #837 review: once `--remote` reads a ledger section by `--env`, a
-    // `-- --env`/`-- --environment` passthrough would silently diverge —
-    // `bynk` materialises one environment's KV id while Wrangler actually
-    // connects to a different one. Checked only when `--remote` is present,
-    // since `--env` is otherwise inert (nothing reads the ledger without it).
-    if opts.wrangler_args.iter().any(|arg| arg == "--remote")
-        && let Some(conflict) = crate::deploy::conflicting_env_passthrough(&opts.wrangler_args)
-    {
-        eprintln!(
-            "bynk: `--env {}` conflicts with `{conflict}` after `--` — pass one or the other, not both",
-            opts.environment
-        );
+    if remote_env_conflict(opts) {
         return ExitCode::FAILURE;
     }
 
@@ -566,6 +575,13 @@ pub fn run(
         return ExitCode::FAILURE;
     }
 
+    // #3477: a container Worker runs under Docker here, never `--remote`.
+    let Some(containers) =
+        crate::dev_containers::for_session(&workers_dir, &serving, &opts.wrangler_args)
+    else {
+        return ExitCode::FAILURE;
+    };
+
     // Remote dev reads the real Cloudflare ids, unlike Miniflare's local mode,
     // from the deploy ledger immediately before Wrangler runs.
     if opts.wrangler_args.iter().any(|arg| arg == "--remote")
@@ -637,6 +653,12 @@ pub fn run(
         eprintln!("bynk: wrangler not found (run `bynk doctor --only deploy`)");
         return ExitCode::FAILURE;
     }
+
+    // #3477: the containers floor, then Docker: containers off when it is absent.
+    let Some(containers_off) = crate::dev_containers::session(tb, &probe, manager, &containers)
+    else {
+        return ExitCode::FAILURE;
+    };
 
     if !warm_up_wrangler(&probe.provenance, serving.len()) {
         return ExitCode::FAILURE;
@@ -712,6 +734,11 @@ pub fn run(
             .unwrap_or_default();
         cmd.args(serve_args(s, keys));
         cmd.args(&dev_vars);
+        cmd.args(crate::dev_containers::off_args_for(
+            containers_off,
+            &containers,
+            &s.worker,
+        ));
         cmd.args(local.session_args(&s.worker, &opts.wrangler_args));
         for arg in &opts.wrangler_args {
             cmd.arg(arg);
