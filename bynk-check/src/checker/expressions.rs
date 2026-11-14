@@ -301,12 +301,11 @@ pub(crate) fn check_ident(
         return None;
     }
     // Bare variant of a unique-owner sum type (nullary variants).
-    let owners: Vec<&std::sync::Arc<TypeDecl>> = ctx
-        .input
-        .types
-        .values()
-        .filter(|t| matches!(&t.body, TypeBody::Sum(s) if s.variants.iter().any(|v| v.name.name == id.name)))
-        .collect();
+    let owners: Vec<&std::sync::Arc<TypeDecl>> = crate::resolver::bare_variant_owners(
+        &id.name,
+        &ctx.input.types,
+        &ctx.input.unselected_types,
+    );
     // #3344: several sums in scope share the name; the expected type picks one.
     if let Some(owner) = variant_owner(&owners, expected, ctx.tys).map(|o| o.as_ref())
         && let TypeBody::Sum(s) = &owner.body

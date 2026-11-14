@@ -2751,6 +2751,10 @@ fn run_checks(
         &unit_flattened,
         &unit_type_aliases,
     );
+    bynk_check::symbols::record_unselected_consumed_types(
+        &mut unit_tables,
+        &project_model::consume_selections(&groups, &kinds, &parsed),
+    );
     bynk_check::project_model::phase_resolve_derived(
         &groups,
         &kinds,

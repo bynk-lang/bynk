@@ -1282,10 +1282,18 @@ fn fixture_as_embed(f: &FixtureDecl) -> EmbedDecl {
 pub fn add_suite_fns(resolved: &mut ResolvedCommons, items: SuiteItems<'_>) {
     // #3066: the suite's own types and constants join its view the same way.
     for t in items.types {
-        resolved
-            .types
-            .entry(t.name.name.clone())
-            .or_insert_with(|| Arc::new(t.clone()));
+        // #3536: a suite type wins over a standard-library type the target's
+        // braces leave out, which is not in scope under its own name.
+        if resolved.unselected_types.remove(&t.name.name) {
+            resolved
+                .types
+                .insert(t.name.name.clone(), Arc::new(t.clone()));
+        } else {
+            resolved
+                .types
+                .entry(t.name.name.clone())
+                .or_insert_with(|| Arc::new(t.clone()));
+        }
         resolved.local_type_names.insert(t.name.name.clone());
     }
     for c in items.consts {
@@ -1348,7 +1356,14 @@ pub fn add_suite_fns_to_typed(typed: &mut checker::TypedCommons, suite_fns: &[Fn
 fn bound_value_names(resolved: &ResolvedCommons, target: Option<&UnitTable>) -> HashSet<String> {
     let mut names: HashSet<String> = HashSet::new();
     names.extend(resolved.fns.keys().cloned());
-    names.extend(resolved.types.keys().cloned());
+    // #3536: a type the target's braces leave out is not a name in scope.
+    names.extend(
+        resolved
+            .types
+            .keys()
+            .filter(|n| !resolved.unselected_types.contains(*n))
+            .cloned(),
+    );
     names.extend(resolved.consts.keys().cloned());
     names.extend(resolved.embeds.keys().cloned());
     names.extend(resolved.assets.keys().cloned());
@@ -1387,7 +1402,9 @@ pub fn check_suite_decls(
     }
     let mut taken = bound_value_names(resolved, target);
     for t in resolved.types.values() {
-        if let TypeBody::Sum(s) = &t.body {
+        if let TypeBody::Sum(s) = &t.body
+            && !resolved.unselected_types.contains(&t.name.name)
+        {
             taken.extend(s.variants.iter().map(|v| v.name.name.clone()));
         }
     }
@@ -5413,6 +5430,8 @@ pub fn build_privileged_resolved(
     .with_assets(assets)
     .with_embeds(embeds)
     .with_consts(consts)
+    // #3536: the first-party types the target's braces leave out.
+    .with_unselected_types(local.unselected_consumed_types.iter().cloned().collect())
     // #1925: the imports the target hides, so a case naming one reports the
     // conflict as the target's own code would.
     .with_shadowed_imports(crate::project_model::shadowed_imports_in(

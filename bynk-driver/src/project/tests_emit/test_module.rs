@@ -83,6 +83,13 @@ pub(super) fn emit_test_module(
     // and boundary-codec paths. What those reach for is recorded here as they emit
     // and injected into the import line as a post-pass, the same shape
     // `emit_project` and `emit_worker_entry` use.
+    // #3536: every suite type of this module, so a name a suite declares is not
+    // also a first-party type the target's braces leave out.
+    let all_suite_types: Vec<bynk_syntax::ast::TypeDecl> = indices
+        .iter()
+        .filter_map(|&i| parsed[i].test())
+        .flat_map(|d| d.types.iter().cloned())
+        .collect();
     let runtime_use = RuntimeUse::default();
     // #2991: a suite calling `Json.encodePlain` needs its own `Option` encoders to
     // carry the plain branch.
@@ -92,6 +99,7 @@ pub(super) fn emit_test_module(
         unit_tables,
         unit_uses,
         unit_consumes,
+        &all_suite_types,
     ));
     let _ = exports_visibility;
     let ext = import_ext.as_str();
@@ -838,6 +846,7 @@ pub(super) fn emit_test_module(
         unit_consumes,
         hidden,
         tys,
+        &all_suite_types,
     );
     let suite_type_names: HashSet<String> = indices
         .iter()

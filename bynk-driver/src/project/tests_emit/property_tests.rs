@@ -53,6 +53,7 @@ pub(super) fn emit_test_property_function(
         None,
         suite,
         hidden,
+        suite_fns.types,
     );
 
     // Generator descriptors, one per binding, over the target's privileged type
@@ -111,6 +112,7 @@ pub(super) fn emit_test_property_function(
         unit_consumes,
         hidden,
         tys,
+        suite_fns.types,
     );
     let roots_mark = runtime_use.json_codec_roots_len();
     // #2834: the suite's helpers, declared ahead of the `where` filter and body.
@@ -362,6 +364,7 @@ pub(super) fn emit_test_history_property_function(
         None,
         suite,
         hidden,
+        suite_fns.types,
     );
 
     let Some((run_var, agent_name)) = prop_history_binding(prop) else {
@@ -395,6 +398,7 @@ pub(super) fn emit_test_history_property_function(
         unit_consumes,
         hidden,
         tys,
+        suite_fns.types,
     );
     let mut handler_descs: Vec<TsExpr> = Vec::new();
     if let Some((mut resolved, _)) = test_suites::build_privileged_resolved(
@@ -665,6 +669,7 @@ pub(super) fn emit_contract_attack_function(
         None,
         None,
         hidden,
+        &[],
     );
     let _ = target_kind;
 
@@ -738,6 +743,7 @@ pub(super) fn emit_contract_attack_function(
             unit_consumes,
             hidden,
             tys,
+            &[],
         );
         let cross = bynk_check::resolver::CrossContextInfo::default();
         let synth = Block {

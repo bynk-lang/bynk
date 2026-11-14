@@ -709,6 +709,15 @@ pub fn check_file_core(
             .map(|(n, _)| n.clone())
             .collect(),
     )
+    // #3536: the first-party types this unit's braces leave out.
+    .with_unselected_types(
+        unit_info[name]
+            .table
+            .unselected_consumed_types
+            .iter()
+            .cloned()
+            .collect(),
+    )
     // S3 (#1963): the project's policy, and this unit's blocked imports. A
     // first-party unit's own bodies are the library's business, never the
     // project's opt-in, so they check under a policy that blocks nothing.

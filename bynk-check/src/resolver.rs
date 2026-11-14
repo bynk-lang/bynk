@@ -231,6 +231,13 @@ pub struct ResolvedCommons {
     /// from its provenance (`check_pipeline`) and carried to every check built
     /// from it. Empty unless set with [`ResolvedCommons::with_extensible_enums`].
     pub extensible_enums: HashSet<String>,
+    /// #3536: the names of types in scope that a braced `consumes` of a
+    /// first-party unit leaves out (`consumes bynk { Logger }` leaves out
+    /// `Claim`). Still resolvable while `bynk.consumes.type_not_selected` is a
+    /// warning, but never a name-clash or bare-variant ambiguity candidate: a
+    /// declaration of the unit's own wins. Empty unless set with
+    /// [`ResolvedCommons::with_unselected_types`].
+    pub unselected_types: HashSet<String>,
     /// Standard-library S3 (#1963): the unit's stability facts — the project's
     /// `[unstable]` policy and the imports it blocks. Set with
     /// [`ResolvedCommons::with_stability`]; the default blocks nothing.
@@ -480,6 +487,7 @@ impl ResolvedCommons {
             consts: HashMap::new(),
             shadowed_imports: HashMap::new(),
             extensible_enums: HashSet::new(),
+            unselected_types: HashSet::new(),
             stability: Default::default(),
         }
     }
@@ -524,6 +532,12 @@ impl ResolvedCommons {
     /// another kind shadow ([`crate::project_model::shadowed_imports`]).
     pub fn with_shadowed_imports(mut self, shadowed: HashMap<String, ShadowedImport>) -> Self {
         self.shadowed_imports = shadowed;
+        self
+    }
+
+    /// #3536: set [`ResolvedCommons::unselected_types`].
+    pub fn with_unselected_types(mut self, names: HashSet<String>) -> Self {
+        self.unselected_types = names;
         self
     }
 
@@ -875,11 +889,20 @@ pub fn resolve_recovering(commons: Commons) -> (ResolvedCommons, Vec<CompileErro
                     // A single file has no `uses` imports to shadow.
                     &HashMap::new(),
                     &HashSet::new(),
+                    &HashSet::new(),
                     &mut sinks,
                 );
             }
             CommonsItem::Const(c) => {
-                check_const_refs(c, &types, &fns, &methods, &local_consts, &mut sinks);
+                check_const_refs(
+                    c,
+                    &types,
+                    &fns,
+                    &methods,
+                    &local_consts,
+                    &HashSet::new(),
+                    &mut sinks,
+                );
             }
             // v0.5 items' bodies are resolved via a separate context-level
             // pass; their signatures here (#1679).
@@ -929,6 +952,7 @@ pub fn resolve_recovering(commons: Commons) -> (ResolvedCommons, Vec<CompileErro
             consts: local_consts,
             shadowed_imports: HashMap::new(),
             extensible_enums: HashSet::new(),
+            unselected_types: HashSet::new(),
             stability: Default::default(),
         };
         (resolved, errors)
@@ -1218,6 +1242,7 @@ pub fn resolve_file_record(
                     &resolved.embeds,
                     &resolved.consts,
                     &resolved.shadowed_imports,
+                    &resolved.unselected_types,
                     &declared_caps,
                     &mut sinks,
                 );
@@ -1230,6 +1255,7 @@ pub fn resolve_file_record(
                     &resolved.fns,
                     &resolved.methods,
                     &resolved.consts,
+                    &resolved.unselected_types,
                     &mut sinks,
                 );
             }
@@ -1842,6 +1868,7 @@ fn check_fn_refs(
     embeds: &HashMap<String, EmbedDecl>,
     consts: &HashMap<String, ConstDecl>,
     shadowed: &HashMap<String, ShadowedImport>,
+    unselected: &HashSet<String>,
     declared_caps: &HashSet<String>,
     errors: &mut Sinks,
 ) {
@@ -1962,6 +1989,7 @@ fn check_fn_refs(
         embeds,
         consts,
         shadowed,
+        unselected,
         caps: &caps,
         given: &f.given,
         cap_advice: &cap_advice,
@@ -2015,6 +2043,7 @@ fn check_const_refs(
     fns: &HashMap<String, Arc<FnDecl>>,
     methods: &HashMap<String, MethodTable>,
     consts: &HashMap<String, ConstDecl>,
+    unselected: &HashSet<String>,
     errors: &mut Sinks,
 ) {
     let type_params = HashSet::new();
@@ -2032,6 +2061,7 @@ fn check_const_refs(
         embeds: &embeds,
         consts,
         shadowed: &shadowed,
+        unselected,
         caps: &HashSet::new(),
         given: &[],
         cap_advice: "",
@@ -3259,6 +3289,8 @@ struct RefCheckCtx<'a, 'b> {
     consts: &'a HashMap<String, ConstDecl>,
     /// #1925: imports a local declaration of another kind hides.
     shadowed: &'a HashMap<String, ShadowedImport>,
+    /// #3536: first-party types a braced `consumes` leaves out.
+    unselected: &'a HashSet<String>,
     /// #2868: the capabilities a `given` function names: an identifier that is
     /// one is a capability receiver (`Logger.error(…)`), typed by the checker.
     caps: &'a HashSet<String>,
@@ -3492,7 +3524,9 @@ fn check_expr_references(expr: &Expr, cx: &mut RefCheckCtx) {
                 // v0.9: predeclared HttpResult variant (e.g. `NoContent`,
                 // `Unauthorized`). The checker validates payload arity and
                 // expected-type disambiguation.
-            } else if let Some(sum_owner) = find_unique_variant_owner(&id.name, cx.types) {
+            } else if let Some(sum_owner) =
+                find_unique_variant_owner(&id.name, cx.types, cx.unselected)
+            {
                 // It's a bare variant reference. We treat it as a valid
                 // expression in resolver — the type checker will assign
                 // the correct sum type. Mark with no error.
@@ -3550,7 +3584,7 @@ fn check_expr_references(expr: &Expr, cx: &mut RefCheckCtx) {
             } else if cx.embeds.contains_key(&id.name) {
                 // #2387, slice 1: an embed name is a `String` value; the
                 // checker types it (`check_ident`).
-            } else if find_ambiguous_variant_owners(&id.name, cx.types).len() > 1 {
+            } else if find_ambiguous_variant_owners(&id.name, cx.types, cx.unselected).len() > 1 {
                 // #3344: a name several sums declare is settled by the
                 // expected type, which only the checker knows; it reports
                 // `bynk.resolve.ambiguous_variant` when nothing picks one.
@@ -3623,7 +3657,7 @@ fn check_expr_references(expr: &Expr, cx: &mut RefCheckCtx) {
                 }
                 None => {
                     // Maybe it's a variant constructor with a payload (e.g., `Placed(at, total)`).
-                    let owners = find_ambiguous_variant_owners(&name.name, cx.types);
+                    let owners = find_ambiguous_variant_owners(&name.name, cx.types, cx.unselected);
                     if http_variant(&name.name).is_some() {
                         // v0.9: predeclared HttpResult variant constructor.
                     } else if owners.len() == 1 {
@@ -4135,8 +4169,9 @@ fn collect_pattern_bindings(pattern: &Pattern, into: &mut HashMap<String, ()>) {
 fn find_unique_variant_owner<'a>(
     name: &str,
     types: &'a HashMap<String, Arc<TypeDecl>>,
+    unselected: &HashSet<String>,
 ) -> Option<&'a TypeDecl> {
-    let owners = find_ambiguous_variant_owners(name, types);
+    let owners = find_ambiguous_variant_owners(name, types, unselected);
     if owners.len() == 1 {
         Some(owners[0])
     } else {
@@ -4147,16 +4182,42 @@ fn find_unique_variant_owner<'a>(
 fn find_ambiguous_variant_owners<'a>(
     name: &str,
     types: &'a HashMap<String, Arc<TypeDecl>>,
+    unselected: &HashSet<String>,
 ) -> Vec<&'a TypeDecl> {
-    let mut out = Vec::new();
+    bare_variant_owners(name, types, unselected)
+        .into_iter()
+        .map(|t| t.as_ref())
+        .collect()
+}
+
+/// The sums a bare variant name may mean (#3536). A sum a braced `consumes`
+/// leaves out (`unselected`) is not a candidate beside the sums in scope, so a
+/// user's own `Unavailable` is never ambiguous with a standard-library one it
+/// did not ask for. It is the answer only when nothing in scope declares the
+/// name: such a use still resolves while `bynk.consumes.type_not_selected` is a
+/// warning, and is the error once that becomes one.
+pub(crate) fn bare_variant_owners<'a>(
+    name: &str,
+    types: &'a HashMap<String, Arc<TypeDecl>>,
+    unselected: &HashSet<String>,
+) -> Vec<&'a Arc<TypeDecl>> {
+    let (mut in_scope, mut left_out) = (Vec::new(), Vec::new());
     for t in types.values() {
         if let TypeBody::Sum(s) = &t.body
             && s.variants.iter().any(|v| v.name.name == name)
         {
-            out.push(t.as_ref());
+            if unselected.contains(&t.name.name) {
+                left_out.push(t);
+            } else {
+                in_scope.push(t);
+            }
         }
     }
-    out
+    if in_scope.is_empty() {
+        left_out
+    } else {
+        in_scope
+    }
 }
 
 /// #1848: a match-arm guard is resolved like every other expression, in its

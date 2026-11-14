@@ -413,6 +413,7 @@ pub(super) fn integration_typed_commons(
         consts: HashMap::new(),
         shadowed_imports: HashMap::new(),
         extensible_enums: Default::default(),
+        unselected_types: Default::default(),
         stability: Default::default(),
         exec_plan: Default::default(),
     }
@@ -764,8 +765,16 @@ pub(super) fn json_codec_qual_for_target(
     unit_tables: &HashMap<String, UnitTable>,
     unit_uses: &HashMap<String, Vec<String>>,
     unit_consumes: &HashMap<String, Vec<String>>,
+    // #3536: the suites' own `type`s; one named like a first-party type the
+    // target's braces leave out is the suite's, never that type's namespace.
+    suite_types: &[bynk_syntax::ast::TypeDecl],
 ) -> HashMap<String, String> {
     let mut qual = HashMap::new();
+    let left_out = |n: &String| {
+        unit_tables.get(target_name).is_some_and(|t| {
+            t.unselected_consumed_types.contains(n) && suite_types.iter().any(|s| s.name.name == *n)
+        })
+    };
     // #2702: only the target's own types are all visible (a unit-tier suite sees
     // its target's private declarations, ADR 0683 decision I); another unit's
     // `private` type is not in scope, so it must not claim a name.
@@ -774,7 +783,7 @@ pub(super) fn json_codec_qual_for_target(
             let ns = test_ns(u);
             if let Some(table) = unit_tables.get(u) {
                 for n in table.types.keys() {
-                    if own || is_public_type(table, n) {
+                    if own || is_public_type(table, n) && !left_out(n) {
                         qual.entry(n.clone()).or_insert_with(|| format!("{ns}."));
                     }
                 }

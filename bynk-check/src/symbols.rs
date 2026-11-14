@@ -496,6 +496,13 @@ pub struct UnitTable {
     /// #2887: the exported types this unit renames with `consumes U { T as
     /// Alias }`, keyed by the alias. Recorded by [`record_flattened_caps`].
     pub consumed_type_aliases: HashMap<String, ConsumedTypeAlias>,
+    /// #3536: the types of the first-party units this unit consumes with a
+    /// braced list (`consumes bynk { Logger }`) that the list does not name.
+    /// A selective `consumes` brings in only what it lists, so these are not
+    /// candidates for a name clash or a bare-variant lookup, and a declaration
+    /// of this unit's own wins over them. Recorded by
+    /// [`record_unselected_consumed_types`].
+    pub unselected_consumed_types: std::collections::BTreeSet<String>,
     /// S4a (#1966): the derived capabilities (`capability Sessions = Kv`)
     /// this context declares, by name, once resolved to their base by
     /// [`crate::project_model::phase_resolve_derived`]. Each is also in
@@ -567,12 +574,14 @@ impl UnitTable {
             // Filled in from other units.
             flattened_caps,
             consumed_type_aliases,
+            unselected_consumed_types,
             derived,
         } = self;
         (
             *kind,
             sorted(flattened_caps),
             sorted(consumed_type_aliases),
+            unselected_consumed_types,
             sorted(derived),
         )
     }
@@ -958,6 +967,65 @@ pub fn record_flattened_caps(
             t.consumed_type_aliases = aliases.clone();
         }
     }
+}
+
+/// #3536: record, on each unit's table, the types of its first-party consumed
+/// units that its braces leave out. A bare `consumes bynk` (or one stated bare
+/// in any of the unit's files) is the whole-module form and leaves nothing out;
+/// a braced list brings in only the names it lists, so every other type of that
+/// unit is *unselected*. Types stay resolvable (the deprecation window of
+/// `bynk.consumes.type_not_selected`), but are neither clash nor ambiguity
+/// candidates, and the unit's own declarations win over them.
+pub type ConsumeSelections = HashMap<String, Vec<(String, Option<Vec<String>>)>>;
+
+pub fn record_unselected_consumed_types(
+    unit_tables: &mut HashMap<String, UnitTable>,
+    consumes: &ConsumeSelections,
+) {
+    let mut out: HashMap<String, std::collections::BTreeSet<String>> = HashMap::new();
+    for (unit, clauses) in consumes {
+        // target -> Some(listed names) | None for the whole-module form.
+        let mut selection: HashMap<&str, Option<std::collections::HashSet<&str>>> = HashMap::new();
+        for (target, names) in clauses {
+            if !is_first_party_name(target) {
+                continue;
+            }
+            match (names, selection.get_mut(target.as_str())) {
+                (None, _) => {
+                    selection.insert(target, None);
+                }
+                (Some(_), Some(None)) => {}
+                (Some(names), Some(Some(listed))) => {
+                    listed.extend(names.iter().map(String::as_str))
+                }
+                (Some(names), None) => {
+                    selection.insert(target, Some(names.iter().map(String::as_str).collect()));
+                }
+            }
+        }
+        for (target, listed) in selection {
+            let (Some(listed), Some(table)) = (listed, unit_tables.get(target)) else {
+                continue;
+            };
+            out.entry(unit.clone()).or_default().extend(
+                table
+                    .types
+                    .keys()
+                    .filter(|t| !listed.contains(t.as_str()))
+                    .cloned(),
+            );
+        }
+    }
+    for (unit, names) in out {
+        if let Some(t) = unit_tables.get_mut(&unit) {
+            t.unselected_consumed_types = names;
+        }
+    }
+}
+
+/// Whether a unit name is under the reserved `bynk` root: the toolchain's own.
+pub(crate) fn is_first_party_name(unit: &str) -> bool {
+    unit == "bynk" || unit.starts_with("bynk.")
 }
 
 /// #696: each table-construction diagnostic is attributed to the project-relative

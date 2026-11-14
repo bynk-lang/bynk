@@ -2050,6 +2050,7 @@ mod tests {
                 .collect(),
             flattened_caps: StdHashMap::new(),
             consumed_type_aliases: StdHashMap::new(),
+            unselected_consumed_types: Default::default(),
             assets: StdHashMap::new(),
             embeds: StdHashMap::new(),
             consts: StdHashMap::new(),

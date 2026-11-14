@@ -604,6 +604,10 @@ fn analyse_project_inner(
     );
     let mut unit_tables = unit_tables;
     crate::symbols::record_flattened_caps(&mut unit_tables, &unit_flattened, &unit_type_aliases);
+    crate::symbols::record_unselected_consumed_types(
+        &mut unit_tables,
+        &project_model::consume_selections(&groups, &kinds, &parsed),
+    );
     crate::project_model::phase_resolve_derived(
         &groups,
         &kinds,

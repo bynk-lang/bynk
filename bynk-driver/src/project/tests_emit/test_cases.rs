@@ -42,6 +42,9 @@ pub(super) fn emit_test_scope_setup(
     // scoped to a suite.
     suite: Option<usize>,
     hidden: &BTreeMap<String, String>,
+    // #3536: the declaring suite's own `type`s. One named like a first-party
+    // type the target's braces leave out replaces it in the case's scope.
+    suite_types: &[bynk_syntax::ast::TypeDecl],
 ) -> HashSet<String> {
     // #2024: every name this setup binds in the runner's scope, returned so the
     // body's lowering renames a case `let` that would redeclare one.
@@ -244,7 +247,15 @@ pub(super) fn emit_test_scope_setup(
             );
             if let Some(table) = unit_tables.get(q) {
                 // #2702: not a consumed context's `private` types.
-                let types = aliased_types(table, |n| is_public_type(table, n));
+                // #3536: a suite type of the name of a first-party type the
+                // target's braces leave out is the name's meaning here.
+                let left_out = |n: &String| {
+                    unit_tables.get(target_name).is_some_and(|t| {
+                        t.unselected_consumed_types.contains(n)
+                            && suite_types.iter().any(|s| s.name.name == *n)
+                    })
+                };
+                let types = aliased_types(table, |n| is_public_type(table, n) && !left_out(n));
                 let names: Vec<String> = types.iter().map(|(n, _)| n.clone()).collect();
                 // #2887: the types this target renames from `q` bind as their aliases.
                 let renames: HashMap<String, String> = unit_tables
@@ -559,6 +570,7 @@ pub(super) fn emit_test_case_function(
         scoped.then_some(case.name.as_str()),
         suite,
         hidden,
+        suite_fns.types,
     );
     let mut typed = synthetic_typed_commons_for_target(
         target_name,
@@ -567,6 +579,7 @@ pub(super) fn emit_test_case_function(
         unit_consumes,
         hidden,
         tys,
+        suite_fns.types,
     );
     // v0.117: re-type-check the case body (with the call-record types registered)
     // so the lowering has full expr types — collection kernels, notably a

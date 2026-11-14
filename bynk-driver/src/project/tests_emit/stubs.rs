@@ -555,6 +555,7 @@ pub(super) fn lower_stub_value_block(
         unit_consumes,
         hidden,
         tys,
+        items.types,
     );
     let block = test_suites::value_block(e);
     let mut helpers: Vec<String> = Vec::new();
@@ -693,6 +694,9 @@ pub(super) fn synthetic_typed_commons_for_target(
     unit_consumes: &HashMap<String, Vec<String>>,
     hidden: &BTreeMap<String, String>,
     tys: &Arc<checker::Types>,
+    // #3536: the declaring suite's own `type`s. One named like a first-party
+    // type the target's braces leave out is not that type in the case's scope.
+    suite_types: &[bynk_syntax::ast::TypeDecl],
 ) -> checker::TypedCommons {
     let table = unit_tables.get(target_name).cloned().unwrap_or_default();
     let table_plan = Arc::clone(&table.exec_plan);
@@ -719,7 +723,9 @@ pub(super) fn synthetic_typed_commons_for_target(
     for unit in unit_consumes.get(target_name).into_iter().flatten() {
         if let Some(t) = unit_tables.get(unit) {
             for (n, d) in &t.types {
-                if d.private.is_none() {
+                let shadowed = table.unselected_consumed_types.contains(n)
+                    && suite_types.iter().any(|s| s.name.name == *n);
+                if d.private.is_none() && !shadowed {
                     types.entry(n.clone()).or_insert_with(|| d.clone());
                 }
             }
@@ -823,6 +829,7 @@ pub(super) fn synthetic_typed_commons_for_target(
         consts: HashMap::new(),
         shadowed_imports: HashMap::new(),
         extensible_enums: Default::default(),
+        unselected_types: Default::default(),
         stability: Default::default(),
         exec_plan: table_plan,
     }

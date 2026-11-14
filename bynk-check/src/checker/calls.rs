@@ -545,7 +545,11 @@ pub fn check_const_decl(
     locals: &mut LocalsSink,
 ) {
     errors.extend(crate::consts::name_case_error(c));
-    errors.extend(crate::consts::variant_conflict_error(c, &input.types));
+    errors.extend(crate::consts::variant_conflict_error(
+        c,
+        &input.types,
+        &input.unselected_types,
+    ));
     if let Some(err) = crate::consts::static_error(c, &input.consts, &input.types) {
         errors.push(err);
         return;
@@ -921,12 +925,11 @@ pub(crate) fn check_call(
     // Could be a bare variant constructor with payload. Borrow the matching
     // sum decls' own `Arc`s (a pointer bump each, no full-body clones); the
     // ambiguity check below reuses the same list.
-    let owners: Vec<&Arc<TypeDecl>> = ctx
-        .input
-        .types
-        .values()
-        .filter(|t| matches!(&t.body, TypeBody::Sum(s) if s.variants.iter().any(|v| v.name.name == name.name)))
-        .collect();
+    let owners: Vec<&Arc<TypeDecl>> = crate::resolver::bare_variant_owners(
+        &name.name,
+        &ctx.input.types,
+        &ctx.input.unselected_types,
+    );
     // #3344: several sums in scope share the name; the expected type picks one.
     if let Some(sum) = variant_owner(&owners, expected, tys) {
         ctx.callees.insert(
