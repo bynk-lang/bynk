@@ -1,8 +1,0 @@
-commons demo
-
-fn fetch() -> Effect[Int] { Effect.pure(1) }
-
-fn run() -> Effect[()] {
-  let _ <- fetch()
-  Effect.pure(())
-}

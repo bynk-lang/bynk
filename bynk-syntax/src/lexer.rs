@@ -272,9 +272,10 @@ pub enum TokenKind {
     /// `<-` — Effect bind operator (v0.5).
     #[token("<-")]
     LArrow,
-    /// `~>` — asynchronous fire-and-forget send marker (v0.79). A leading
-    /// statement marker, never on the RHS of a `let`; distinct from `<-` so the
-    /// call site shows whether the caller waits.
+    /// `~>` — the removed fire-and-forget send marker (v0.79; removed in favour
+    /// of `e.detach()`, #3443). Still lexed, and only so that the parser can
+    /// refuse it with `bynk.parse.removed_send_arrow` instead of a generic
+    /// "unexpected character" error. No production accepts it.
     #[token("~>")]
     TildeArrow,
     /// `:=` — Cell write (v0.81, storage track). A handler statement

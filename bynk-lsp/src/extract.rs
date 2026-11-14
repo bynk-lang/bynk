@@ -27,7 +27,7 @@
 //! "select these lines" gesture matches); a selection that doesn't align
 //! falls back to the single-expression algorithm above unchanged. A run that
 //! stops before the tail synthesises a `fn … -> ()` — or `-> Effect[()]`
-//! when the run itself performs an effect, so `~>`/`do`/`<-` stay legal in
+//! when the run itself performs an effect, so `do`/`<-` stay legal in
 //! the lifted body — with no explicit tail, the same implicit-unit-tail
 //! shape the parser already synthesises for any statements-only block
 //! (v0.146, ADR 0170); the call site becomes `let _ = …(…)` (or `do …(…)`
@@ -1172,7 +1172,7 @@ fn leaks_a_binding(
 /// deep). The shared shape behind [`stmts_contain_effect_stmt`] and
 /// [`stmts_contain_assign_stmt`]: both need "does this run perform/contain
 /// X, however deeply nested" and neither can stop at the run's direct
-/// top-level statements — a `~>`/`do`/`<-` or a `:=` can equally sit inside
+/// top-level statements — a `do`/`<-` or a `:=` can equally sit inside
 /// an `if`/`match` branch that one of the run's own `let`s evaluates.
 fn stmts_match(stmts: &[Statement], pred: &impl Fn(&Statement) -> bool) -> bool {
     stmts.iter().any(|s| pred(s) || stmt_value_matches(s, pred))
@@ -1259,7 +1259,7 @@ fn expr_matches(e: &Expr, pred: &impl Fn(&Statement) -> bool) -> bool {
 }
 
 /// Whether any of `stmts` is (or contains, arbitrarily nested through
-/// `if`/`match`/block sub-expressions) a `~>`/`do`/`<-` statement — the three
+/// `if`/`match`/block sub-expressions) a `do`/`<-` statement — the two
 /// forms legal only in an effectful body (`ctx.effectful`, gated on the
 /// enclosing return type being `Effect[_]`). Decides whether a tail-excluded
 /// run's synthesised `fn` must return `Effect[()]` — so those forms stay
@@ -1268,7 +1268,7 @@ fn stmts_contain_effect_stmt(stmts: &[Statement]) -> bool {
     stmts_match(stmts, &|s| {
         matches!(
             s,
-            Statement::EffectLet(_) | Statement::Send(_) | Statement::Do(_) | Statement::Par(_)
+            Statement::EffectLet(_) | Statement::Do(_) | Statement::Par(_)
         )
     })
 }
@@ -2033,7 +2033,7 @@ mod tests {
                 // own `let`, not a direct top-level statement in the run —
                 // `stmts_contain_assign_stmt` must recurse to catch it, the
                 // same way `stmts_contain_effect_stmt` already does for
-                // `~>`/`do`/`<-`.
+                // `do`/`<-`.
                 let src = concat!(
                     "context c\n\n",
                     "fn f(cond: Bool) -> Int {\n",

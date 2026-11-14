@@ -3455,7 +3455,7 @@ pub(crate) fn emit_service(
             // A binder-less Bearer/Oidc, or no seam at all — nothing to widen.
             ActorSeamIr::Oidc(_) | ActorSeamIr::None => {}
         }
-        // v0.79: a handler whose body uses `~>` receives the execution context
+        // v0.79: a handler whose body uses `detach` receives the execution context
         // (`__exec`) in its deps, so the fire-and-forget send can hand its promise
         // to `waitUntil`. Gated on the body so non-sending handlers are unchanged.
         if commons.exec_plan.handler_needs(handler) {
@@ -3484,7 +3484,7 @@ pub(crate) fn emit_service(
         // layer, which already knows how to build any capability's
         // provider; the handler itself only needs to hand its buffered
         // `__events` to whatever composed it. Mirrors `__exec`'s threading
-        // for `~>` exactly. Gated on more than this handler's own body: a
+        // for `detach` exactly. Gated on more than this handler's own body: a
         // handler with no direct `Events.emit` call but that invokes a
         // *local agent* method which itself emits (`Ledger(id).bump(...)`)
         // still needs `__eventsDispatch` threaded through, to hand onward —
@@ -4145,7 +4145,7 @@ fn emit_context_deps_interface(
         ));
     }
     // #2683: a surface `on call` handler that calls `within` (or sends with
-    // `~>`) forwards `deps` to a handler that requires `__exec`, so the
+    // `detach`) forwards `deps` to a handler that requires `__exec`, so the
     // surface's `deps` carry it; the compose root supplies it.
     if commons.commons.items.iter().any(|i| match i {
         CommonsItem::Service(s) => s

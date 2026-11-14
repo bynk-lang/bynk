@@ -7,7 +7,7 @@ title: Diagnostic index
 
 Every diagnostic code the compiler can emit, with a one-line summary of the cause, grouped by category. For step-by-step cause-and-fix guidance on the most common ones, see the [troubleshooting guides](/book/troubleshooting/). For a code with a curated explanation, `bynk explain <code>` prints it in a terminal, and in VS Code the diagnostic's **Explain** quick fix (or **Bynk: Explain Diagnostic Code…**) shows the same text in a panel, offline.
 
-There are **874** codes in total.
+There are **869** codes in total.
 
 ## Agents
 
@@ -436,7 +436,7 @@ There are **874** codes in total.
 | `bynk.event.schema_version_mismatch` | An event's `@schema(N)` annotation disagrees with the version the schema registry computes from the event's build history. |  | — |
 | [`bynk.event.unknown_annotation`](/book/guides/events/understand-events/#asserting-a-schema-version-with-scheman) | An `event` declaration carried an `@`-annotation other than `@schema` — event annotations are a closed set. |  | — |
 | [`bynk.event.unknown_subscription`](/book/guides/events/understand-events/#the-three-pieces) | A `from Events(E)` subscription named `E`, which is not a declared event in this context or any consumed context. |  | — |
-| [`bynk.exec.unavailable`](/book/reference/capabilities/#within) | A call to, or reference to, a function that hands work to the execution context (`~>`, `detach`, `within` or `race`, directly or through the functions it calls) appears where no execution context exists: an agent handler, a WebSocket handler or a provider operation. |  | — |
+| [`bynk.exec.unavailable`](/book/reference/capabilities/#within) | A call to, or reference to, a function that hands work to the execution context (`detach`, `within` or `race`, directly or through the functions it calls) appears where no execution context exists: an agent handler, a WebSocket handler or a provider operation. |  | — |
 | `bynk.fault.todo` | A `todo(message)` placeholder: the code type-checks but faults when it runs. A non-failing warning, so `check --deny-warnings` refuses unfinished code in CI (warning). |  | Warning |
 | [`bynk.fixture.binary_content`](/book/reference/fixtures/#what-the-text-is) | A suite's `fixture` names a file that contains a NUL byte, so it is binary, not text. | [`fixture_decl`](/book/reference/grammar/#rule-fixture_decl) | — |
 | [`bynk.fixture.duplicate`](/book/reference/fixtures/#declaring-a-fixture) | A suite declares two `fixture`s of the same name. | [`fixture_decl`](/book/reference/grammar/#rule-fixture_decl) | — |
@@ -514,7 +514,7 @@ There are **874** codes in total.
 | `bynk.package.unsafe_source` | A git dependency's URL or revision looks like a command-line option, or uses a transport other than `https`, `ssh` (or `file`, from the project's own manifests). |  | — |
 | [`bynk.package.unsupported_in_dependency`](/book/reference/assets/#declaring-an-asset) | A dependency declares an `asset` or an `embed`, which would resolve against the consuming project's `assets/` or `embeds/`; a per-package namespace for either isn't designed yet. |  | — |
 | `bynk.package.version_conflict` | One package is reached at two different git revisions (or from git and a path); a build, or a workspace, holds one copy of each package. |  | — |
-| [`bynk.par.invalid_statement`](/book/reference/capabilities/#par) | A `par { … }` block holds a statement other than `let x <- e` or `do e`: a refutable `let … else`, a plain `let`, `~>`, `:=` or a store write, `expect`, `advance`, a nested `par`, or anything that is not a statement. | [`par_stmt`](/book/reference/grammar/#rule-par_stmt) | — |
+| [`bynk.par.invalid_statement`](/book/reference/capabilities/#par) | A `par { … }` block holds a statement other than `let x <- e` or `do e`: a refutable `let … else`, a plain `let`, `:=` or a store write, `expect`, `advance`, a nested `par`, or anything that is not a statement. | [`par_stmt`](/book/reference/grammar/#rule-par_stmt) | — |
 | [`bynk.par.question_in_join`](/book/reference/capabilities/#par) | A `?` appears inside a `par { … }` binding. `?` takes a `Result` value, not an effect, so a binding's own result is unwrapped after the block (`let user = userR?`), where the `?` lines run in source order; a `?` on an argument is computed before the block. | [`par_stmt`](/book/reference/grammar/#rule-par_stmt) | — |
 | [`bynk.par.sibling_name`](/book/reference/capabilities/#par) | A `par { … }` binding mentions a name another binding in the same block binds, or binds a name twice. The bindings run together, so none can read a sibling's result; the rule holds even where the name would resolve to an outer binding. | [`par_stmt`](/book/reference/grammar/#rule-par_stmt) | — |
 | `bynk.par.single_binding` | A `par { … }` block has a single binding, which is a plain `let x <- e` with extra syntax (warning). | [`par_stmt`](/book/reference/grammar/#rule-par_stmt) | Warning |
@@ -549,12 +549,6 @@ There are **874** codes in total.
 | [`bynk.revert.layout_older`](/book/guides/projects-build-and-deployment/roll-back-a-deployment/#what-it-refuses) | `bynk revert` refused because the target writes an older agent storage layout than the live one while stored instances exist or are not known to be absent, so the older code could not read the newer records. |  | — |
 | [`bynk.revert.secret_changed`](/book/guides/projects-build-and-deployment/roll-back-a-deployment/#what-it-refuses) | `bynk revert` refused because a secret changed after the target was live, so the rollback could restore an old secret value that its peers no longer accept. |  | — |
 | `bynk.secrets.computed_name` | A `bynk.Secrets` read names its secret with a computed expression rather than a literal, so `bynk deploy` cannot plan it (warning). |  | Warning |
-| [`bynk.send.deprecated`](/book/reference/capabilities/#detach) | The `~>` send is deprecated in favour of `do e.detach()` (warning; auto-fixable). | [`effect_send_stmt`](/book/reference/grammar/#rule-effect_send_stmt) | Warning |
-| [`bynk.send.in_agent_handler`](/book/spec/static-semantics/) | A `~>` send was used in an agent handler, which has no execution context to keep a fire-and-forget send alive. | [`effect_send_stmt`](/book/reference/grammar/#rule-effect_send_stmt) | — |
-| [`bynk.send.in_pure_context`](/book/reference/capabilities/#capabilities-in-functions) | A `~>` send was used in a pure (non-effectful) context. | [`effect_send_stmt`](/book/reference/grammar/#rule-effect_send_stmt) | — |
-| [`bynk.send.non_effect`](/book/guides/effects-and-capabilities/synchronous-and-asynchronous-sends/#the-error-gate) | A `~>` send was applied to a non-`Effect` value. | [`effect_send_stmt`](/book/reference/grammar/#rule-effect_send_stmt) | — |
-| [`bynk.send.requires_unit`](/book/guides/effects-and-capabilities/synchronous-and-asynchronous-sends/#the-error-gate) | A `~>` send targets an operation whose reply is not `Effect[()]`. | [`effect_send_stmt`](/book/reference/grammar/#rule-effect_send_stmt) | — |
-| [`bynk.send.store_op`](/book/guides/effects-and-capabilities/synchronous-and-asynchronous-sends/#not-in-an-agent-handler) | A `~>` send targets an agent store operation, which is part of the handler's atomic commit and cannot be sent without waiting. | [`effect_send_stmt`](/book/reference/grammar/#rule-effect_send_stmt) | — |
 | [`bynk.store.annotation_kind_mismatch`](/book/reference/agents/#storage-annotations) | A storage annotation is used on a kind it does not apply to (e.g. `@ttl` on a `Map`). |  | — |
 | [`bynk.store.annotation_unsupported`](/book/reference/agents/#storage-annotations) | A known storage annotation that nothing acts on yet (`@bounded`) is used; the others (`@ttl`, `@retain`, `@indexed`) are functional. |  | — |
 | [`bynk.store.cache_needs_clock`](/book/reference/agents/#storage-kinds-and-their-operations) | A handler performs a `Cache` operation (TTL expiry reads the clock) without declaring `given Clock`. |  | — |
@@ -708,6 +702,7 @@ There are **874** codes in total.
 | [`bynk.parse.record_pattern_in_is_unparenthesised`](/book/spec/syntactic-grammar/#4711-record_pattern) | A record pattern after `is` is not parenthesised — write `x is (T { f, .. })`. | [`record_pattern`](/book/reference/grammar/#rule-record_pattern) | — |
 | [`bynk.parse.record_pattern_without_rest`](/book/reference/types/#record-patterns) | A record pattern does not end with `..`; every record pattern is open. | [`record_pattern`](/book/reference/grammar/#rule-record_pattern) | — |
 | [`bynk.parse.refined_pattern_inner`](/book/spec/syntactic-grammar/#4710-refined_pattern) | A refined pattern's inner form is something other than `_`. | [`refined_pattern`](/book/reference/grammar/#rule-refined_pattern) | — |
+| [`bynk.parse.removed_send_arrow`](/book/reference/capabilities/#detach) | The `~>` send was removed; write `do e.detach()`. | [`do_stmt`](/book/reference/grammar/#rule-do_stmt) | — |
 | [`bynk.parse.reserved_keyword`](/book/reference/keywords/#hard-keywords) | A reserved keyword was used as an identifier. | [`identifier`](/book/reference/grammar/#rule-identifier) | — |
 | [`bynk.parse.self_outside_method`](/book/spec/syntactic-grammar/) | `self` is the first parameter of a free function; only a method declaration, `fn Type.method(self, …)`, has a receiver. | [`self_expr`](/book/reference/grammar/#rule-self_expr) | — |
 | [`bynk.parse.storage_after_phase`](/book/reference/agents/#declaration) | Agent storage (`state` / `store`) is declared after the invariants or handlers. |  | — |

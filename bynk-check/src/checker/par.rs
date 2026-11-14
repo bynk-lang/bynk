@@ -92,7 +92,6 @@ pub(super) fn check_par(p: &ParStmt, scope_end: usize, ctx: &mut Ctx) {
                 let what = match other {
                     Statement::Let(_) => "a plain `let`, which has no effect to overlap",
                     Statement::Expect(_) => "`expect`",
-                    Statement::Send(_) => "`~>`, which is fire-and-forget and has nothing to join",
                     Statement::Assign(_) => "`:=`, since `store` writes stay sequential",
                     Statement::Advance(_) => "`advance`",
                     Statement::Par(_) => "a nested `par`",

@@ -255,7 +255,7 @@ enum SettleKind {
 
 /// Fails closed: only a pure `let` is `Other` and only an `expect` is
 /// `Expect`, and either is `Unsafe` if it holds an unsafe address. An
-/// effectful statement (`<-`, `do`, `~>`, `:=`, `advance`) is `Safe` only
+/// effectful statement (`<-`, `do`, `:=`, `advance`) is `Safe` only
 /// when its value *is* a safe address and holds no other; anything else ends
 /// the segment, so a retry can never re-run a write. A missed retry is the
 /// price; a repeated `POST` against a real deployment would not be.
@@ -1185,33 +1185,6 @@ fn emit_statement(out: &mut String, stmt: &Statement, cx: &mut LowerCtx, indent:
                 write_line(out, indent, s);
             }
             write_line(out, indent, &format!("__bynkAdvanceClock({amount});"));
-        }
-        Statement::Send(s) => {
-            // v0.79: `~> expr` — fire-and-forget. The reply is `Effect[()]` and is
-            // never awaited. On the Workers target the immediate tier hands the
-            // promise to the execution context's `waitUntil`, so it settles after
-            // the handler returns rather than being killed with the response. The
-            // execution context rides in `deps.__exec` (threaded by `compose`).
-            let mut pre = Pre::new();
-            let value = pre.lower(&s.value, cx);
-            for st in pre.stmts() {
-                write_line(out, indent, st);
-            }
-            // #3437: `~>` lowers through the same helper as `e.detach()`, so its
-            // faults are labelled and a failure is reported. Its operand is
-            // `Effect[()]`, so there is no `Err` to name.
-            cx.note_detach();
-            let site = cx
-                .assert_loc()
-                .map(|_| expect_location(cx, s.span.start))
-                .or_else(|| crate::emitter::fault_source_location(s.span.start))
-                .map(|l| crate::emitter::escape_ts_string(&l))
-                .unwrap_or_else(|| format!("offset {}", s.span.start));
-            write_line(
-                out,
-                indent,
-                &format!("__bynkDetach({value}, {}, \"{site}\");", cx.exec_expr()),
-            );
         }
         Statement::Do(d) => {
             // v0.146 (ADR 0170): `do expr` → `await expr;`. The binder-free
@@ -3248,7 +3221,7 @@ fn lower_test_service_call(
         && cx.is_test_service(&id.name)
         && !cx.is_local(&id.name)
     {
-        // #1994: a target whose handlers send with `~>` settles each addressed
+        // #1994: a target whose handlers send with `detach` settles each addressed
         // call — awaits the promises the handler handed `deps.__exec.waitUntil`
         // — so the case's expectations see the sends' effects.
         let settles = cx.test_settles_sends();

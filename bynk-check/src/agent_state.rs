@@ -507,7 +507,6 @@ fn stmt_commits(s: &Statement, store: &HashMap<String, String>, bound: &mut Vec<
             c
         }
         Statement::Expect(a) => expr_commits(&a.value, store, bound),
-        Statement::Send(s) => expr_commits(&s.value, store, bound),
         Statement::Do(d) => expr_commits(&d.value, store, bound),
         Statement::Advance(a) => expr_commits(&a.amount, store, bound),
         Statement::Par(p) => p
@@ -826,7 +825,6 @@ impl Walker<'_> {
             }
             Statement::Do(d) => self.walk_expr(&d.value, paths, false),
             Statement::Expect(e) => self.walk_expr(&e.value, paths, false),
-            Statement::Send(s) => self.walk_expr(&s.value, paths, false),
             Statement::Advance(a) => self.walk_expr(&a.amount, paths, false),
             Statement::Par(p) => p
                 .statements

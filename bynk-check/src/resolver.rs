@@ -3327,9 +3327,6 @@ fn check_statement_references(stmt: &Statement, cx: &mut RefCheckCtx) {
         Statement::Expect(a) => {
             check_expr_references(&a.value, cx);
         }
-        Statement::Send(s) => {
-            check_expr_references(&s.value, cx);
-        }
         Statement::Do(d) => {
             check_expr_references(&d.value, cx);
         }

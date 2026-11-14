@@ -733,7 +733,7 @@ pub fn emit_worker_entry(
         None,
     ));
 
-    // v0.79: if any handler uses `~>`, each entry point captures the runtime's
+    // v0.79: if any handler uses `detach`, each entry point captures the runtime's
     // execution context and threads it into `compose`, so a fire-and-forget send
     // can hand its promise to `waitUntil`. Otherwise the signatures are unchanged.
     let exec_params: Vec<TsParam> = if ctx_uses_send {
