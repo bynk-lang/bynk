@@ -421,6 +421,13 @@ pub struct Serving {
     pub inspect: bool,
 }
 
+/// Whether the forwarded wrangler arguments ask for remote mode: `--remote`,
+/// its `-r` alias, or `--remote=true`.
+pub(crate) fn is_remote(args: &[String]) -> bool {
+    args.iter()
+        .any(|arg| matches!(arg.as_str(), "--remote" | "-r" | "--remote=true"))
+}
+
 /// #837 review: once `--remote` reads a ledger section by `--env`, a
 /// `-- --env`/`-- --environment` passthrough would silently diverge — `bynk`
 /// materialises one environment's KV id while Wrangler actually connects to a
@@ -428,7 +435,7 @@ pub struct Serving {
 /// otherwise inert (nothing reads the ledger without it). Prints the conflict
 /// and returns `true` when there is one.
 fn remote_env_conflict(opts: &DevOptions) -> bool {
-    if !opts.wrangler_args.iter().any(|arg| arg == "--remote") {
+    if !is_remote(&opts.wrangler_args) {
         return false;
     }
     let Some(conflict) = crate::deploy::conflicting_env_passthrough(&opts.wrangler_args) else {
@@ -584,7 +591,7 @@ pub fn run(
 
     // Remote dev reads the real Cloudflare ids, unlike Miniflare's local mode,
     // from the deploy ledger immediately before Wrangler runs.
-    if opts.wrangler_args.iter().any(|arg| arg == "--remote")
+    if is_remote(&opts.wrangler_args)
         && !materialise_remote_state(project_root, &workers_dir, &serving, &opts.environment)
     {
         return ExitCode::FAILURE;
@@ -595,7 +602,7 @@ pub fn run(
     // `--local-worker` names the Worker (the dev registry then reaches the
     // user's own `wrangler dev` of it). Under `--remote` the bindings are the
     // account's, so there is nothing to stand in for.
-    let remote = opts.wrangler_args.iter().any(|arg| arg == "--remote");
+    let remote = is_remote(&opts.wrangler_args);
     let stand_in_plans = plan_stand_ins(&workers_dir, &serving, &available, opts, remote);
     if !stand_in_plans.is_empty()
         && (passthrough_has(&opts.wrangler_args, "-c")

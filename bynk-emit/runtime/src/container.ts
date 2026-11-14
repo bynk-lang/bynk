@@ -207,7 +207,10 @@ export async function proxyToContainer(
         ...(body !== undefined ? { body } : {}),
       });
       const headers = new Headers(res.headers);
+      // Both markers are the class's own: a container must not be able to
+      // forge a platform fault or a failure value with a header of its choosing.
       headers.delete(CONTAINER_ERROR_HEADER);
+      headers.delete(CONTAINER_FAULT_HEADER);
       return new Response(res.body, { status: res.status, statusText: res.statusText, headers });
     } catch (e) {
       if (!started) {

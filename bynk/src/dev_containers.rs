@@ -196,7 +196,7 @@ pub(crate) fn for_session(
 ) -> Option<Containers> {
     let names: Vec<String> = serving.iter().map(|s| s.worker.clone()).collect();
     let containers = served_containers(workers_dir, &names);
-    let remote = wrangler_args.iter().any(|arg| arg == "--remote");
+    let remote = crate::dev::is_remote(wrangler_args);
     if let Some(refusal) = remote_refusal(&containers, remote) {
         eprintln!("{refusal}");
         return None;
@@ -240,12 +240,60 @@ pub(crate) fn off_args() -> Vec<String> {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use std::path::PathBuf;
 
     fn containers() -> Containers {
         BTreeMap::from([(
             "shop-render".to_string(),
             vec!["Renderer".to_string(), "Thumbs".to_string()],
         )])
+    }
+
+    struct NoDocker;
+
+    impl Toolbox for NoDocker {
+        fn on_path(&self, _: &str) -> Option<PathBuf> {
+            None
+        }
+        fn in_dir(&self, _: &Path, _: &str) -> Option<PathBuf> {
+            None
+        }
+        fn version(&self, _: &Path) -> Option<probe::Version> {
+            None
+        }
+        fn npx_available(&self) -> bool {
+            false
+        }
+    }
+
+    #[test]
+    fn a_session_without_docker_turns_containers_off_for_the_container_worker_only() {
+        let probe = probe::Probe {
+            tool: "wrangler".to_string(),
+            version: probe::Version::parse("4.140.0"),
+            provenance: probe::Provenance::Path(PathBuf::from("/bin/wrangler")),
+        };
+        let manager = bynk_driver::npm_install::PackageManager::Npm;
+        let with = containers();
+        assert_eq!(session(&NoDocker, &probe, manager, &with), Some(true));
+        assert!(!off_args_for(true, &with, "shop-render").is_empty());
+        assert!(off_args_for(true, &with, "shop-other").is_empty());
+        assert_eq!(
+            session(&NoDocker, &probe, manager, &Containers::new()),
+            Some(false)
+        );
+    }
+
+    #[test]
+    fn remote_is_recognised_in_its_alias_forms() {
+        let args = |a: &[&str]| a.iter().map(|s| s.to_string()).collect::<Vec<_>>();
+        for yes in ["--remote", "-r", "--remote=true"] {
+            assert!(crate::dev::is_remote(&args(&[yes])), "{yes}");
+        }
+        assert!(!crate::dev::is_remote(&args(&[
+            "--port=1",
+            "--remote=false"
+        ])));
     }
 
     #[test]

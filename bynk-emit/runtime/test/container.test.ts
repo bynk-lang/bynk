@@ -174,6 +174,15 @@ test("a container's own responses pass through, 5xx included, and cannot forge t
   assert.equal(await res.text(), "boom");
 });
 
+test("a container cannot forge the platform fault header either", async () => {
+  const { handle } = fakeContainer({
+    answer: () => new Response("hi", { headers: { [CONTAINER_FAULT_HEADER]: "docker" } }),
+  });
+  const res = await make(settings(), handle).fetch(new Request("http://r/"));
+  assert.equal(res.headers.get(CONTAINER_FAULT_HEADER), null);
+  assert.equal(await res.text(), "hi");
+});
+
 test("under `bynk dev` without Docker the class faults naming Docker, and starts nothing", async () => {
   const { handle, calls } = fakeContainer();
   const res = await make(settings(), handle, { [CONTAINERS_UNAVAILABLE_VAR]: "docker" }).fetch(

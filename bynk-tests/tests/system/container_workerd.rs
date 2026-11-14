@@ -290,7 +290,7 @@ fn a_real_container_serves_send_on_workerd() {
                 "/ping/a: expected the container's answer, got {first:?}"
             )];
         };
-        if started.trim().parse::<u64>().is_err() {
+        if started.trim().trim_matches('"').parse::<u64>().is_err() {
             failures.push(format!("/ping/a: not a start time: {started:?}"));
         }
         // The same name reaches the same instance.

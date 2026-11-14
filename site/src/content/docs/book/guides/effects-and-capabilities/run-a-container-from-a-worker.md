@@ -123,7 +123,9 @@ there is no remote call, and none of the cost warnings the remote-only kinds pri
 Wrangler must be 4.136.0 or later for a Worker with a container (an older one is
 refused with the version named). With Docker running, the first start builds each
 image, which can take minutes, and `bynk dev` says which container is building;
-Wrangler decides when a changed Dockerfile is built again.
+Wrangler decides when a changed Dockerfile is built again. `bynk dev` looks for
+Docker and for containers once, when it starts: restart it after adding the first
+`Container` to a Worker that is already being served.
 
 Without Docker, `bynk dev` warns once, naming the containers, and starts those
 Workers with containers off. The Worker still serves, and a call to a container
