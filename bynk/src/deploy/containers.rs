@@ -22,6 +22,7 @@
 //! `wrangler deploy --dry-run`, which builds a Dockerfile image.
 
 use super::*;
+use std::path::PathBuf;
 
 /// Name what `bynk.toml` adopts for `environment` on the declarations: the
 /// Vectorize indexes, then the container images.
@@ -107,12 +108,32 @@ pub(crate) fn container_refusals(
     resources: &BTreeMap<String, Resources>,
 ) -> Option<String> {
     containers_floor_refusal(probe, manager, order, resources).or_else(|| {
-        let path = tb.on_path("docker");
+        let bin = docker_binary(std::env::var("WRANGLER_DOCKER_BIN").ok().as_deref());
+        let path = resolve_docker(tb, &bin);
         let docker = path
             .as_deref()
             .map(|path| (path, tb.docker_daemon_running(path)));
         docker_refusal(docker, order, resources)
     })
+}
+
+/// The container engine CLI wrangler will run: `WRANGLER_DOCKER_BIN` when it is
+/// set and not blank (wrangler 4.136.0's own override, for Podman or a Docker
+/// off the `PATH`), else `docker`.
+fn docker_binary(over: Option<&str>) -> String {
+    over.map(str::trim)
+        .filter(|bin| !bin.is_empty())
+        .unwrap_or("docker")
+        .to_string()
+}
+
+/// Resolves the engine CLI: a path (anything with a separator) as given when it
+/// exists, a bare name on the `PATH`.
+fn resolve_docker(tb: &dyn Toolbox, bin: &str) -> Option<PathBuf> {
+    if bin.contains(['/', '\\']) {
+        return Path::new(bin).is_file().then(|| PathBuf::from(bin));
+    }
+    tb.on_path(bin)
 }
 
 /// The refusal a deploy gets when a container has an image to build and Docker
@@ -430,6 +451,60 @@ mod tests {
             "4.120.1",
             "the general floor does not move"
         );
+    }
+
+    #[test]
+    fn the_engine_cli_is_wranglers_override_or_docker() {
+        assert_eq!(docker_binary(None), "docker");
+        assert_eq!(docker_binary(Some("  ")), "docker");
+        assert_eq!(docker_binary(Some(" podman ")), "podman");
+    }
+
+    struct Stub {
+        daemon: bool,
+    }
+
+    impl Toolbox for Stub {
+        fn on_path(&self, tool: &str) -> Option<PathBuf> {
+            (tool == "docker" || tool == "podman").then(|| PathBuf::from(format!("/bin/{tool}")))
+        }
+        fn in_dir(&self, _: &Path, _: &str) -> Option<PathBuf> {
+            None
+        }
+        fn version(&self, _: &Path) -> Option<probe::Version> {
+            None
+        }
+        fn npx_available(&self) -> bool {
+            false
+        }
+        fn docker_daemon_running(&self, _: &Path) -> bool {
+            self.daemon
+        }
+    }
+
+    #[test]
+    fn a_stopped_daemon_refuses_a_built_container_but_not_an_adopted_one() {
+        let manager = bynk_driver::npm_install::PackageManager::Npm;
+        let probe = wrangler(Some(v(4, 140, 0)));
+        let built = resources(vec![decl("Renderer", None, None)]);
+        let adopted = resources(vec![decl("Renderer", None, Some(IMAGE))]);
+        let stopped = Stub { daemon: false };
+        let refusal = container_refusals(&stopped, &probe, manager, &order(), &built).unwrap();
+        assert!(refusal.contains("Docker"), "{refusal}");
+        assert_eq!(
+            container_refusals(&stopped, &probe, manager, &order(), &adopted),
+            None
+        );
+        let running = Stub { daemon: true };
+        assert_eq!(
+            container_refusals(&running, &probe, manager, &order(), &built),
+            None
+        );
+        assert_eq!(
+            resolve_docker(&running, "podman"),
+            Some("/bin/podman".into())
+        );
+        assert_eq!(resolve_docker(&running, "/no/such/engine"), None);
     }
 
     #[test]

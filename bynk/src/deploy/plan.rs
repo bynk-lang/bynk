@@ -1949,19 +1949,6 @@ pub(crate) fn foreign_binding_maybe_set_notice(
     )
 }
 
-/// #1796: the refusal a deploy gets when a context it pushes declares a
-/// Durable Object class and the wrangler that would push it is older than
-/// [`bynk_emit::WRANGLER_MIN`].
-///
-/// Below that floor wrangler doesn't read the `exports` map the emitter
-/// declares every class in, so the push would carry Durable Object bindings
-/// with no namespace behind them and fail with Cloudflare's own error, which
-/// says nothing about the version. `doctor`'s wrangler row only *warns* about
-/// the floor, because a project with no agent still deploys on an older
-/// wrangler. This is where the project is known, so this is where the floor
-/// becomes a hard requirement. `None` when nothing pushed declares a class, or
-/// when the version can't be judged without running npx
-/// ([`doctor::wrangler_below_min`]'s own rule).
 /// Everything a push needs of the installed tools, refused before authenticating
 /// so it costs no call: the wrangler floor for a Durable Object class
 /// ([`wrangler_floor_refusal`]), then a container's ([`container_refusals`]).
@@ -1976,6 +1963,19 @@ fn preflight_refusal(
         .or_else(|| container_refusals(tb, probe, manager, order, resources))
 }
 
+/// #1796: the refusal a deploy gets when a context it pushes declares a
+/// Durable Object class and the wrangler that would push it is older than
+/// [`bynk_emit::WRANGLER_MIN`].
+///
+/// Below that floor wrangler doesn't read the `exports` map the emitter
+/// declares every class in, so the push would carry Durable Object bindings
+/// with no namespace behind them and fail with Cloudflare's own error, which
+/// says nothing about the version. `doctor`'s wrangler row only *warns* about
+/// the floor, because a project with no agent still deploys on an older
+/// wrangler. This is where the project is known, so this is where the floor
+/// becomes a hard requirement. `None` when nothing pushed declares a class, or
+/// when the version can't be judged without running npx
+/// ([`doctor::wrangler_below_min`]'s own rule).
 pub(crate) fn wrangler_floor_refusal(
     probe: &probe::Probe,
     manager: bynk_driver::npm_install::PackageManager,

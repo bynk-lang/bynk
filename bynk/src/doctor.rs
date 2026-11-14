@@ -520,7 +520,10 @@ pub(crate) fn declares_container(root: &std::path::Path) -> bool {
                 name.ends_with(".bynk")
                     && std::fs::read_to_string(&path).is_ok_and(|text| {
                         text.lines().any(|l| {
-                            l.trim_start().starts_with("capability ") && l.contains("= Container")
+                            l.trim_start().starts_with("capability ")
+                                && l.split_once("= Container").is_some_and(|(_, rest)| {
+                                    !rest.starts_with(|c: char| c.is_alphanumeric() || c == '_')
+                                })
                         })
                     })
             }
