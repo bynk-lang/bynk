@@ -668,3 +668,16 @@ fn an_entry_naming_no_capability_is_refused_with_the_nearest_binding() {
     assert_eq!(all["shop"].vectorize_indexes[0].adopt, None);
     let _ = std::fs::remove_dir_all(&dir);
 }
+
+#[test]
+fn the_unlisted_metadata_index_warning_allows_for_one_still_being_built() {
+    // #3511: it must not claim the index is missing outright.
+    let said = unlisted_metadata_index_warning("docs", "year:number", "year", "number");
+    assert!(said.contains("does not list"), "{said}");
+    assert!(said.contains("still be building"), "{said}");
+    assert!(
+        said.contains("create-metadata-index docs --propertyName year --type number"),
+        "{said}"
+    );
+    assert!(!said.contains("has no metadata index"), "{said}");
+}
