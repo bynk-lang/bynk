@@ -3903,6 +3903,33 @@ mod tests {
         assert!(describe_firstparty_symbol("DoesNotExist").is_none());
     }
 
+    /// #3481: hovering `Idempotency`, or one of its operations, names the provider
+    /// each platform selects: D1-backed on Cloudflare, in-memory on Node and in the
+    /// browser. The text is static and names both, so it needs no project platform.
+    #[test]
+    fn idempotency_hover_names_the_provider_for_each_platform() {
+        let capability = describe_firstparty_symbol("Idempotency").expect("`Idempotency` hovers");
+        assert!(capability.contains("D1-backed"), "{capability}");
+        assert!(capability.contains("Cloudflare"), "{capability}");
+        assert!(
+            capability.contains("`<worker>-idempotency`"),
+            "{capability}"
+        );
+        assert!(
+            capability.contains("in-memory") && capability.contains("Node and in the browser"),
+            "{capability}"
+        );
+        for op in ["dedup", "remember", "claim"] {
+            let hover =
+                describe_firstparty_symbol(&format!("Idempotency.{op}")).unwrap_or_default();
+            assert!(
+                hover.contains("D1-backed on Cloudflare")
+                    && hover.contains("in-memory on Node and in the browser"),
+                "`{op}`: {hover}"
+            );
+        }
+    }
+
     #[test]
     fn unit_reference_spans_finds_uses_and_consumes_targets() {
         // Slice 6b: the clickable ranges for document links — `uses`/`consumes`
