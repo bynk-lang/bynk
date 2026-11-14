@@ -1,6 +1,6 @@
 context mirror
 
-consumes bynk { Fetch }
+consumes bynk { Fetch, Request, Method }
 
 service body {
 	on call(url: String) -> Effect[String] given Fetch {

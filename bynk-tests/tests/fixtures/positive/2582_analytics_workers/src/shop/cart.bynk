@@ -6,7 +6,7 @@ context shop.cart
 // one reached by a handler, the other through a local provider's `given`.
 
 consumes bynk
-consumes bynk.cloudflare { Analytics }
+consumes bynk.cloudflare { Analytics, DataPoint }
 
 ---
 Sign-ups by plan and channel.

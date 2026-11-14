@@ -5,7 +5,7 @@ any of them out. `FetchOptions {}` is `send`'s behaviour.
 ---
 context mirror
 
-consumes bynk { Fetch }
+consumes bynk { Fetch, Request, Method, FetchOptions }
 
 fn request(url: String) -> Request {
 	Request { method: Get, url: url, contentType: None, authorization: None, headers: Map.empty(), body: None }

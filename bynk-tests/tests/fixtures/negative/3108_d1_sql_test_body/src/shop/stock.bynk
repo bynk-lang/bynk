@@ -1,7 +1,7 @@
 context shop.stock
 
 consumes bynk
-consumes bynk.cloudflare { D1 }
+consumes bynk.cloudflare { D1, SqlValue }
 
 capability Stock = D1
 

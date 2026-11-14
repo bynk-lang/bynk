@@ -5,7 +5,7 @@ context mirror
 // `consumes` by `bynk.consumes.name_conflict`, so only an unexported name can
 // collide; see `2634_flattened_cap_collision_*`.)
 
-consumes bynk { Fetch }
+consumes bynk { Fetch, Request, Method, FetchOptions, Redirect }
 
 service note {
 	on call(url: String) -> Effect[Int] given Fetch {

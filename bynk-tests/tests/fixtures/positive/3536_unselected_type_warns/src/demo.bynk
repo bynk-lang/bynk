@@ -1,0 +1,18 @@
+context demo
+
+// #3536: `TimedOut` and the variants of `Claim` are not listed, so naming them
+// still resolves but is a `bynk.consumes.type_not_selected` warning; `bynk check
+// --fix` adds `TimedOut` and `Claim` to the braces.
+
+consumes bynk { Logger }
+
+fn at(t: TimedOut) -> Bool {
+    true
+}
+
+fn won(r: Claim) -> Bool {
+    match r {
+        Claimed => true
+        AlreadyClaimed => false
+    }
+}

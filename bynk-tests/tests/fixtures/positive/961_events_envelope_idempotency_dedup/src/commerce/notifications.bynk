@@ -1,7 +1,7 @@
 context commerce.notifications
 
 consumes commerce.order
-consumes bynk { Idempotency, Claim, Logger }
+consumes bynk { Idempotency, Claim, Logger, EventEnvelope }
 
 service OnPayment from Events(PaymentConfirmed) {
   on event(e: PaymentConfirmed, env: EventEnvelope) -> Effect[()] given Idempotency, Logger {

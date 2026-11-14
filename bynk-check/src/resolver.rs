@@ -2096,6 +2096,9 @@ struct Gate<'a> {
     /// typed by their position; a shadowed sum's construction emits its type's
     /// name, which the local declaration has taken.
     variants: std::collections::BTreeMap<String, String>,
+    /// #3536: set, [`Gate::variants`] are reported through it wherever a bare
+    /// variant is *written* — constructed or matched — as the sum it names.
+    variant_report: Option<&'a dyn Fn(&Ident, &str) -> CompileError>,
     /// #1927: for a shadowed type, the local declaration of each name, which
     /// answers a receiver it can serve (`svc.GET(…)` in a suite, `logo.url`).
     /// `None` for #1807's hidden types, which nothing local shares a name with.
@@ -2128,6 +2131,10 @@ impl Gate<'_> {
         let Some(sum) = self.variants.get(&id.name) else {
             return;
         };
+        if let Some(report) = self.variant_report {
+            self.errors.push(report(id, sum));
+            return;
+        }
         let Some(s) = self.locals.and_then(|l| l.get(sum)) else {
             return;
         };
@@ -2225,6 +2232,8 @@ impl Gate<'_> {
             } => {
                 if let Some(tn) = type_name {
                     self.name(tn);
+                } else if self.variant_report.is_some() {
+                    self.bare_variant(variant);
                 } else if bindings.is_empty() {
                     // A bare, payload-less pattern may name a refined type
                     // rather than a variant: `s is Repo` tests a refinement.
@@ -2399,6 +2408,7 @@ pub fn check_hidden_type_names(
         hidden,
         report: &report,
         variants: Default::default(),
+        variant_report: None,
         locals: None,
         errors: Vec::new(),
     };
@@ -2416,6 +2426,81 @@ fn hidden_type_error(id: &Ident, note: String) -> CompileError {
         format!("unknown type `{}`", id.name),
     )
     .with_note(note)
+}
+
+/// #3536: `bynk.consumes.type_not_selected`, for each place a unit's source
+/// writes the name of a first-party type (or a bare variant of a first-party
+/// sum) that its braced `consumes` does not list. The braces say what is in
+/// scope, so naming anything else is deprecated: it still resolves, as a
+/// warning, and carries a fix that adds the name to the braces when the
+/// `consumes` clause is in the same file. `consumes` is this file's clauses.
+pub fn check_unselected_type_names(
+    items: &[CommonsItem],
+    resolved: &ResolvedCommons,
+    consumes: &[ConsumesDecl],
+) -> Vec<CompileError> {
+    let from = |n: &String| {
+        resolved
+            .imported_from
+            .get(n)
+            .filter(|u| crate::symbols::is_first_party_name(u))
+    };
+    let mut gated = std::collections::BTreeMap::new();
+    let mut variants = std::collections::BTreeMap::new();
+    for name in resolved.unselected_types.iter().filter(|n| from(n).is_some()) {
+        gated.insert(name.clone(), resolved.imported_from[name].clone());
+        if let Some(TypeBody::Sum(sum)) = resolved.types.get(name).map(|t| &t.body) {
+            variants.extend(sum.variants.iter().map(|v| (v.name.name.clone(), name.clone())));
+        }
+    }
+    // A variant another sum in scope declares is that sum's, not this one's.
+    variants.retain(|v, sum| {
+        !resolved.types.iter().any(|(n, t)| {
+            n != sum
+                && !gated.contains_key(n)
+                && matches!(&t.body, TypeBody::Sum(s) if s.variants.iter().any(|x| x.name.name == *v))
+        })
+    });
+    let warn = |id: &Ident, name: &str, owner: &str| {
+        let message = if id.name == name {
+            format!("`{name}` is not in scope: `consumes {owner}` does not list it")
+        } else {
+            format!(
+                "`{}` is a variant of `{name}`, which `consumes {owner}` does not list",
+                id.name
+            )
+        };
+        let mut e = CompileError::new("bynk.consumes.type_not_selected", id.span, message)
+            .with_note(format!(
+                "a braced `consumes` brings into scope only the names it lists; add `{name}` to `consumes {owner} {{ … }}`. This will be an error in a later release"
+            ));
+        if let Some((at, owner_clause)) = consumes
+            .iter()
+            .filter(|c| c.target.joined() == owner && c.span.file == id.span.file)
+            .find_map(|c| c.selected.as_ref()?.last().map(|last| (last, c)))
+        {
+            let end = at.alias.as_ref().map_or(at.name.span.end, |a| a.span.end);
+            let _ = owner_clause;
+            e = e.with_suggestion(
+                format!("add `{name}` to `consumes {owner}`"),
+                vec![(Span::new_in(id.span.file, end, end), format!(", {name}"))],
+                bynk_syntax::error::Applicability::MachineApplicable,
+            );
+        }
+        e
+    };
+    let report = |id: &Ident, owner: &str| warn(id, &id.name, owner);
+    let variant_report = |id: &Ident, sum: &str| warn(id, sum, &resolved.imported_from[sum]);
+    let mut g = Gate {
+        hidden: &gated,
+        report: &report,
+        variants,
+        variant_report: Some(&variant_report),
+        locals: None,
+        errors: Vec::new(),
+    };
+    gate_items(&mut g, items);
+    g.errors
 }
 
 /// #1927: the naming gate for a `uses`-imported type the unit hides behind
@@ -2441,6 +2526,7 @@ pub fn check_shadowed_type_names(
         hidden: &gated,
         report: &report,
         variants,
+        variant_report: None,
         locals: Some(shadowed),
         errors: Vec::new(),
     };
@@ -2588,6 +2674,7 @@ pub fn check_hidden_type_names_in_suite(
         hidden,
         report: &report,
         variants: Default::default(),
+        variant_report: None,
         locals: None,
         errors: Vec::new(),
     };
@@ -2609,6 +2696,7 @@ pub fn check_shadowed_type_names_in_suite(
         hidden: &gated,
         report: &report,
         variants,
+        variant_report: None,
         locals: Some(shadowed),
         errors: Vec::new(),
     };

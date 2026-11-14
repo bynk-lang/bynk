@@ -5,7 +5,7 @@ context shop.orders
 // table, writes with every `SqlValue`, and decodes the rows it reads back.
 
 consumes bynk
-consumes bynk.cloudflare { D1 }
+consumes bynk.cloudflare { D1, SqlRun, SqlError, SqlValue, SqlStatement }
 
 capability Orders = D1
 

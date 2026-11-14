@@ -32,7 +32,7 @@ binding, never passed by callers.
 ```bynk,fragment
 adapter workers_ai {
 	binding "./workers_ai.binding.ts"
-	consumes bynk { Fetch, Secrets }
+	consumes bynk { Fetch, Secrets, Request }
 	exports capability { Ai }
 	exports transparent { AiError }
 
@@ -143,7 +143,7 @@ and leaves decoding to the caller:
 ```bynk
 context assistant.ai
 
-consumes bynk { Fetch, Secrets }
+consumes bynk { Fetch, Secrets, Request }
 
 capability Ai {
 	fn run(model: String, body: String) -> Effect[Result[String, String]]

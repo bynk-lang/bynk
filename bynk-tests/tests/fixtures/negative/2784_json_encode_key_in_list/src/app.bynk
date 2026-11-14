@@ -1,6 +1,6 @@
 context app
 
-consumes bynk.crypto { Crypto }
+consumes bynk.crypto { Crypto, VerifyKey }
 
 // #2784: the refusal holds at any depth.
 fn encode(keys: List[VerifyKey]) -> String {

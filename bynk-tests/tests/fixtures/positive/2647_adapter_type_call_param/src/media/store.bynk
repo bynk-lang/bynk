@@ -1,6 +1,6 @@
 context media.store
 
-consumes bynk.cloudflare { R2 }
+consumes bynk.cloudflare { R2, R2Upload }
 
 capability Videos = R2
 

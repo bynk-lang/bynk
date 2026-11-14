@@ -1,6 +1,6 @@
 context web
 
-consumes bynk { Fetch }
+consumes bynk { Fetch, Request, Method }
 
 service probe {
 	on call(url: String) -> Effect[Int] given Fetch {

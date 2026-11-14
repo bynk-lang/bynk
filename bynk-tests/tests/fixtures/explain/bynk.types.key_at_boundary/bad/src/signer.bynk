@@ -1,6 +1,6 @@
 context signer
 
-consumes bynk.crypto { Crypto }
+consumes bynk.crypto { Crypto, SigningKey }
 
 type Credentials = {
     owner: String,

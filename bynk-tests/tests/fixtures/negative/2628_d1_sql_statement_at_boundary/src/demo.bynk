@@ -1,6 +1,6 @@
 context demo
 
-consumes bynk.cloudflare { D1 }
+consumes bynk.cloudflare { D1, SqlStatement, SqlRun, SqlError }
 
 capability Orders = D1
 

@@ -1586,7 +1586,7 @@ named instance that names it:
 
 ```bynk,fragment
 consumes bynk
-consumes bynk.cloudflare { AiSearch, ChatMessage, User, SearchOptions }
+consumes bynk.cloudflare { AiSearch, ChatMessage, ChatRole, SearchOptions }
 
 capability Kb = AiSearch @instance("support-docs")
 
@@ -2184,7 +2184,7 @@ covers one, at any depth, needs a wildcard:
 ```bynk,fail=bynk.types.extensible_match_needs_wildcard
 context app.probe
 
-consumes bynk { Fetch }
+consumes bynk { Fetch, Request }
 
 service probe {
 	on call(url: String) -> Effect[String] given Fetch {
@@ -2212,7 +2212,7 @@ variant arrives:
 ```bynk
 context app.probe
 
-consumes bynk { Fetch }
+consumes bynk { Fetch, Request }
 
 service probe {
 	on call(url: String) -> Effect[String] given Fetch {

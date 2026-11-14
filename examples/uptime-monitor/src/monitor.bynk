@@ -1,7 +1,7 @@
 context monitor
 
 uses status
-consumes bynk { Fetch, Logger }
+consumes bynk { Fetch, Logger, Request, Method }
 consumes bynk.cloudflare { Kv }  // locks this unit to Cloudflare
 
 ---

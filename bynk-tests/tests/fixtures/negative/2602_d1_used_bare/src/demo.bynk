@@ -1,6 +1,6 @@
 context demo
 
-consumes bynk.cloudflare { D1 }
+consumes bynk.cloudflare { D1, SqlError }
 
 // #2602: a bare `D1` names no database.
 service probe {

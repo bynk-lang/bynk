@@ -3,7 +3,7 @@ context mirror
 // #2604: `Fetch.receiveBytes` downloads a body as raw bytes and
 // `Fetch.sendBytes` uploads one; `decodeUtf8` reads a body that is text.
 
-consumes bynk { Fetch }
+consumes bynk { Fetch, FetchOptions, Redirect, Request, Method, FetchError }
 
 service copy {
 	on call(source: String, target: String) -> Effect[Int] given Fetch {

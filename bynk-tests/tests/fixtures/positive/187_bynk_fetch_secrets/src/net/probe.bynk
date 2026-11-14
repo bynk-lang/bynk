@@ -1,6 +1,6 @@
 context net.probe
 
-consumes bynk { Fetch, Secrets }
+consumes bynk { Fetch, Secrets, Method, Request }
 
 service probe {
   on call(url: String) -> Effect[Int] given Fetch, Secrets {

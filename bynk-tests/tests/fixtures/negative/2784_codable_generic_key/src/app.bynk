@@ -1,6 +1,6 @@
 context app
 
-consumes bynk.crypto { Crypto }
+consumes bynk.crypto { Crypto, Signature }
 
 fn enc[T: Codable](v: T) -> String {
 	Json.encode(v)

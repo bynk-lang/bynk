@@ -2435,6 +2435,16 @@ name MUST NOT collide with a locally declared capability or with a name
 flattened from another unit (`bynk.consumes.capability_name_clash`) — a clash is
 resolved by the qualified `given b.Cap` form or an alias.
 
+A braced `consumes` of a first-party unit (`bynk`, `bynk.cloudflare`, …) brings
+into scope only the names it lists: a type the braces leave out, and its
+variants, are not candidates for a name clash (`bynk.suite.type_name_clash`,
+`bynk.consumes.name_conflict`) or for bare-variant resolution
+(`bynk.resolve.ambiguous_variant`), and a declaration of the unit's own takes
+the name. A bare `consumes U` brings in the whole module. Naming a type that
+the braces leave out, or a bare variant of one of its sums, is deprecated: it
+still resolves, as the warning `bynk.consumes.type_not_selected`, whose fix adds
+the name to the braces; a later release makes it an error.
+
 An **adapter's** `consumes` is further restricted: it MUST use the
 capability-selection form — an adapter has no services to call, so the
 whole-unit and aliased forms are rejected
