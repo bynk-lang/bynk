@@ -7705,7 +7705,7 @@ mod consumes_alias_tests {
             "consumes bynk { Clock }",
             "type Method = | Fetch | Skip\n\nfn pick() -> Method { Fetch }",
         );
-        run(&[("app.bynk", &src)]).assert_clean();
+        run(&[REPORT, ("app.bynk", &src)]).assert_clean();
     }
 
     /// A type a listed capability's signatures use is still the standard
