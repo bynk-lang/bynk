@@ -115,7 +115,19 @@ fn vectorize_command(
     if output.status.success() {
         Ok(String::from_utf8_lossy(&output.stdout).into_owned())
     } else {
-        Err(wrangler_said(&output))
+        Err(with_permission_hint(wrangler_said(&output)))
+    }
+}
+
+/// #3495: Cloudflare answers a token without the Vectorize permission with a
+/// bare `Authentication error [code: 10000]`. Name the permission that call
+/// needs (it covered create, list, get, delete and both metadata-index calls
+/// when checked against a real account); any other message is returned as is.
+fn with_permission_hint(said: String) -> String {
+    if said.contains("code: 10000") {
+        format!("{said}\n  hint: the API token needs the Account > Vectorize > Edit permission")
+    } else {
+        said
     }
 }
 

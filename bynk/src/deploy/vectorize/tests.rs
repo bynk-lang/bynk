@@ -668,3 +668,15 @@ fn an_entry_naming_no_capability_is_refused_with_the_nearest_binding() {
     assert_eq!(all["shop"].vectorize_indexes[0].adopt, None);
     let _ = std::fs::remove_dir_all(&dir);
 }
+
+#[test]
+fn a_bare_authentication_error_names_the_permission_needed() {
+    // #3495
+    let said = "Authentication error [code: 10000]".to_string();
+    let hinted = with_permission_hint(said.clone());
+    assert!(hinted.starts_with(&said), "{hinted}");
+    assert!(hinted.contains("Account > Vectorize > Edit"), "{hinted}");
+    // Any other failure is passed through untouched.
+    let other = "index not found [code: 3002]".to_string();
+    assert_eq!(with_permission_hint(other.clone()), other);
+}
