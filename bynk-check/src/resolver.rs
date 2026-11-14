@@ -2084,13 +2084,16 @@ fn check_const_refs(
 /// #1807, #1814: the walk the naming gates share: every place source writes
 /// a type name, reporting each one that names a hidden type. See
 /// [`check_hidden_type_names`] for what is walked.
+/// How a [`Gate`] reports a gated name written at an identifier, given its owner.
+type GateReport<'a> = dyn Fn(&Ident, &str) -> CompileError + 'a;
+
 struct Gate<'a> {
     /// Each gated type name, with its owning unit.
     hidden: &'a std::collections::BTreeMap<String, String>,
     /// #1814: the error for a gated name written at `id`, given its owner. A
     /// unit and a suite name the `uses` that would admit a hidden type
     /// differently; a shadowed import is a conflict instead (#1927).
-    report: &'a dyn Fn(&Ident, &str) -> CompileError,
+    report: &'a GateReport<'a>,
     /// #1927: each bare variant whose construction is gated, with its sum's
     /// name. Empty for #1807's hidden types, whose bare variants are values
     /// typed by their position; a shadowed sum's construction emits its type's
@@ -2098,7 +2101,7 @@ struct Gate<'a> {
     variants: std::collections::BTreeMap<String, String>,
     /// #3536: set, [`Gate::variants`] are reported through it wherever a bare
     /// variant is *written* — constructed or matched — as the sum it names.
-    variant_report: Option<&'a dyn Fn(&Ident, &str) -> CompileError>,
+    variant_report: Option<&'a GateReport<'a>>,
     /// #1927: for a shadowed type, the local declaration of each name, which
     /// answers a receiver it can serve (`svc.GET(…)` in a suite, `logo.url`).
     /// `None` for #1807's hidden types, which nothing local shares a name with.
@@ -2447,10 +2450,18 @@ pub fn check_unselected_type_names(
     };
     let mut gated = std::collections::BTreeMap::new();
     let mut variants = std::collections::BTreeMap::new();
-    for name in resolved.unselected_types.iter().filter(|n| from(n).is_some()) {
+    for name in resolved
+        .unselected_types
+        .iter()
+        .filter(|n| from(n).is_some())
+    {
         gated.insert(name.clone(), resolved.imported_from[name].clone());
         if let Some(TypeBody::Sum(sum)) = resolved.types.get(name).map(|t| &t.body) {
-            variants.extend(sum.variants.iter().map(|v| (v.name.name.clone(), name.clone())));
+            variants.extend(
+                sum.variants
+                    .iter()
+                    .map(|v| (v.name.name.clone(), name.clone())),
+            );
         }
     }
     // A variant another sum in scope declares is that sum's, not this one's.

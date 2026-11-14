@@ -767,7 +767,11 @@ pub fn check_file_core(
     if !crate::firstparty::is_first_party_unit(&resolved.commons.name) {
         errors.extend_for(
             Some(&pf.identity_path()),
-            resolver::check_unselected_type_names(&resolved.commons.items, &resolved, pf.consumes()),
+            resolver::check_unselected_type_names(
+                &resolved.commons.items,
+                &resolved,
+                pf.consumes(),
+            ),
         );
     }
     let item_spans: Vec<bynk_syntax::span::Span> =
