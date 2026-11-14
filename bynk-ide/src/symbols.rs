@@ -3909,15 +3909,16 @@ mod tests {
     #[test]
     fn idempotency_hover_names_the_provider_for_each_platform() {
         let capability = describe_firstparty_symbol("Idempotency").expect("`Idempotency` hovers");
-        for hover in [&capability] {
-            assert!(hover.contains("D1-backed"), "{hover}");
-            assert!(hover.contains("Cloudflare"), "{hover}");
-            assert!(hover.contains("`<worker>-idempotency`"), "{hover}");
-            assert!(
-                hover.contains("in-memory") && hover.contains("Node and in the browser"),
-                "{hover}"
-            );
-        }
+        assert!(capability.contains("D1-backed"), "{capability}");
+        assert!(capability.contains("Cloudflare"), "{capability}");
+        assert!(
+            capability.contains("`<worker>-idempotency`"),
+            "{capability}"
+        );
+        assert!(
+            capability.contains("in-memory") && capability.contains("Node and in the browser"),
+            "{capability}"
+        );
         for op in ["dedup", "remember", "claim"] {
             let hover =
                 describe_firstparty_symbol(&format!("Idempotency.{op}")).unwrap_or_default();
