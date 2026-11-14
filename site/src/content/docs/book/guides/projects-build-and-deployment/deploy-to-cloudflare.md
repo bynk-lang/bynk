@@ -66,6 +66,7 @@ nothing speculative. If it isn't in the generated `wrangler.toml`, it isn't
 | `capability Sessions = Kv` | Creates a KV namespace of its own for that instance, and records its id |
 | `capability Archives = R2` | Creates an R2 bucket of its own for that instance, by name, and records it |
 | `capability Docs = Vectorize @dimensions(768) @metric("cosine")` | Creates the Vectorize index with that configuration if the account has none of its name, checks an existing one against it, and creates the `@indexed` metadata indexes before the push; it never recreates an index |
+| `capability Renderer = Container @build("containers/render") @port(8080)` | Nothing of its own: `wrangler deploy` builds the image from the Dockerfile and creates the container application. `bynk deploy` plans it, needs Docker only when it must build, and can run a prebuilt image you name in `bynk.toml` instead |
 | `capability Kb = AiSearch @instance("support-docs")` | Links to the AI Search instance of that name and records it; a missing instance fails the deploy, and the deploy never creates one |
 | `capability Main = Postgres` | Makes a Hyperdrive config from the connection string in the environment variable `[deploy.hyperdrive.Main]` names (or adopts a config you name by id), and records its id |
 | `capability PublishLimit = RateLimit …` | Allocates the limiter a `namespace_id` and records it; nothing is created on the account |
@@ -616,6 +617,68 @@ A renamed or removed instance leaves its index recorded and reported as an orpha
 (`orphan vectorize shop-cart VECTORIZE_DOCS (shop-cart-docs; deleted by --prune)`).
 `--prune` deletes it behind the same confirmation as a KV namespace, naming the
 index and saying its vectors go too. It is never deleted otherwise.
+
+### Containers
+
+Each [`Container` instance](/book/reference/bynk-capabilities/#containers-container)
+(`capability Renderer = Container @build("containers/render") @port(8080)`) is a
+Durable Object class backed by a Docker image. `bynk deploy` neither builds nor
+pushes the image: it hands the Worker to `wrangler deploy`, which builds the image
+from the Dockerfile `@build` names, pushes it to Cloudflare's registry and creates
+or updates the container application. The plan says so, and names where the image
+comes from and the instance type Bynk passes when the container starts:
+
+```text
+container __Container_Renderer (image: build from containers/render; instance standard-1; reconciled by Cloudflare)
+```
+
+The plan states no price. A running container costs money; see Cloudflare's
+[Containers pricing](https://developers.cloudflare.com/containers/pricing/) and
+[limits](https://developers.cloudflare.com/containers/platform/limits/) pages.
+
+**Docker.** Building an image needs a running Docker daemon. A deploy with an image
+to build checks for one before it authenticates or asks for confirmation, and if
+there is none it stops, naming the container, the missing tool and the two ways
+out: start Docker, or run a prebuilt image. `bynk deploy --dry-run` shows the plan
+and builds nothing, so it never needs Docker; it does not call `wrangler deploy
+--dry-run`, which builds a Dockerfile image. `bynk doctor` has a `docker` row under
+`deploy`; it only warns when the project declares a container. In CI, a hosted
+runner has Docker, so the deploy builds there. A setup that only runs `wrangler
+versions upload` neither builds nor rolls out an image, so deploy with `bynk
+deploy`.
+
+**Wrangler.** A Worker with a container needs wrangler 4.136.0 or later, the first
+that accepts the `durable_object` scheduling policy the generated configuration
+uses; an older one is refused before authenticating, with the version named. A
+project with no container still needs only the general minimum.
+
+**Adopting a prebuilt image.** A team that builds elsewhere, or deploys from a
+machine without Docker, names an image per environment in `bynk.toml`, as the
+Hyperdrive and Vectorize sections do:
+
+```toml
+[deploy.containers.Renderer]
+image = { production = "registry.cloudflare.com/<ACCOUNT_ID>/renderer@sha256:<DIGEST>" }
+```
+
+The image has to be in Cloudflare's own registry and named by digest: Docker Hub,
+Amazon ECR and Google's registry are not supported for this kind of container, and
+a tag is not a digest. Under `--env production` the plan says `image: adopted
+registry.cloudflare.com/…` and nothing is built; another environment still builds.
+The deploy rewrites the generated `[containers.images.Renderer]` entry to that
+`image` for the run, records the reference in `bynk.deploy.lock`, and shows a
+changed or dropped adoption on the next plan (`was adopted …`). An entry that names
+no container of the project is refused, as an entry that matches nothing would
+build an image you meant to adopt.
+
+**Reverting.** `bynk revert` of a Worker with a container says that the rollback
+restores the image for *new* starts only: instances already running keep the image
+they started with until they stop. This is read from Cloudflare's documentation and
+has not been confirmed on a real account.
+
+**Orphans.** A renamed capability is a new class and an orphaned one, so the push
+fails loudly as it does for an agent (ADR 0443). Nothing here tombstones a
+container class.
 
 ### Rate limiters
 
