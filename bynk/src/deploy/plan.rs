@@ -1117,12 +1117,7 @@ pub fn run(
     // before the plan, `--dry-run` included, not met as wrangler's own error.
     // #3479: an index `bynk.toml` names for this environment is adopted, not
     // created, so its name is known before the plan.
-    if apply_vectorize_adoptions(project_root, &mut resources, &opts.environment).is_err() {
-        return ExitCode::FAILURE;
-    }
-    // #3477: an image `bynk.toml` names for this environment is adopted, not
-    // built, so whether this run builds anything is known before the plan.
-    if apply_container_adoptions(project_root, &mut resources, &opts.environment).is_err() {
+    if apply_adoptions(project_root, &mut resources, &opts.environment).is_err() {
         return ExitCode::FAILURE;
     }
     if let Some(message) = account_name_problem(&resources, &lock, &opts.environment) {
@@ -1181,21 +1176,7 @@ pub fn run(
     }
     let (manager, probe) = probe::detect_in_project(tb, "wrangler", project_root);
     // #1796: before authenticating, so the refusal costs no network call.
-    if let Some(refusal) = wrangler_floor_refusal(&probe, manager, &order, &resources) {
-        eprintln!("{refusal}");
-        return ExitCode::FAILURE;
-    }
-    // #3477: a container Worker needs a newer wrangler, and an image to build
-    // needs Docker: both refused before authenticating, so they cost no call.
-    if let Some(refusal) = containers_floor_refusal(&probe, manager, &order, &resources) {
-        eprintln!("{refusal}");
-        return ExitCode::FAILURE;
-    }
-    let docker_path = tb.on_path("docker");
-    let docker = docker_path
-        .as_deref()
-        .map(|path| (path, tb.docker_daemon_running(path)));
-    if let Some(refusal) = docker_refusal(docker, &order, &resources) {
+    if let Some(refusal) = preflight_refusal(tb, &probe, manager, &order, &resources) {
         eprintln!("{refusal}");
         return ExitCode::FAILURE;
     }
@@ -1981,6 +1962,20 @@ pub(crate) fn foreign_binding_maybe_set_notice(
 /// becomes a hard requirement. `None` when nothing pushed declares a class, or
 /// when the version can't be judged without running npx
 /// ([`doctor::wrangler_below_min`]'s own rule).
+/// Everything a push needs of the installed tools, refused before authenticating
+/// so it costs no call: the wrangler floor for a Durable Object class
+/// ([`wrangler_floor_refusal`]), then a container's ([`container_refusals`]).
+fn preflight_refusal(
+    tb: &dyn Toolbox,
+    probe: &probe::Probe,
+    manager: bynk_driver::npm_install::PackageManager,
+    order: &[String],
+    resources: &BTreeMap<String, Resources>,
+) -> Option<String> {
+    wrangler_floor_refusal(probe, manager, order, resources)
+        .or_else(|| container_refusals(tb, probe, manager, order, resources))
+}
+
 pub(crate) fn wrangler_floor_refusal(
     probe: &probe::Probe,
     manager: bynk_driver::npm_install::PackageManager,

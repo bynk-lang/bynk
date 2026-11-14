@@ -23,6 +23,17 @@
 
 use super::*;
 
+/// Name what `bynk.toml` adopts for `environment` on the declarations: the
+/// Vectorize indexes, then the container images.
+pub(crate) fn apply_adoptions(
+    project_root: &Path,
+    resources: &mut BTreeMap<String, Resources>,
+    environment: &str,
+) -> Result<(), ()> {
+    apply_vectorize_adoptions(project_root, resources, environment)?;
+    apply_container_adoptions(project_root, resources, environment)
+}
+
 /// Name the images `bynk.toml` adopts for `environment` on the declarations
 /// (`[deploy.containers.<Capability>] image`). A capability with no entry for
 /// the environment is built from its Dockerfile. Prints why and fails when
@@ -83,6 +94,25 @@ pub(crate) fn apply_container_adoptions(
         }
     }
     Ok(())
+}
+
+/// What a deploy checks for its containers before it authenticates: a wrangler
+/// new enough for the policy ([`containers_floor_refusal`]), then Docker for an
+/// image to build ([`docker_refusal`]). `None` when there is nothing to refuse.
+pub(crate) fn container_refusals(
+    tb: &dyn Toolbox,
+    probe: &probe::Probe,
+    manager: bynk_driver::npm_install::PackageManager,
+    order: &[String],
+    resources: &BTreeMap<String, Resources>,
+) -> Option<String> {
+    containers_floor_refusal(probe, manager, order, resources).or_else(|| {
+        let path = tb.on_path("docker");
+        let docker = path
+            .as_deref()
+            .map(|path| (path, tb.docker_daemon_running(path)));
+        docker_refusal(docker, order, resources)
+    })
 }
 
 /// The refusal a deploy gets when a container has an image to build and Docker
@@ -174,6 +204,29 @@ pub(crate) fn materialise_adopted_containers(
     std::fs::write(config, patched).map_err(|e| {
         DeployFailure::driver(format!(
             "could not write `{worker}`'s adopted container images: {e}"
+        ))
+    })
+}
+
+/// An adopted container image replaces the Dockerfile `wrangler` would build,
+/// in the configuration it is about to read, and is recorded before the push.
+pub(crate) fn adopt_containers_for_push(
+    config: &Path,
+    worker: &str,
+    declared: &Resources,
+    lock: &mut DeployLock,
+    lock_path: &Path,
+    environment: &str,
+) -> Result<(), DeployFailure> {
+    materialise_adopted_containers(config, worker, declared, environment)?;
+    if declared.containers.is_empty() {
+        return Ok(());
+    }
+    record_container_images(lock, worker, declared, environment);
+    write_lock(lock_path, lock).map_err(|e| {
+        DeployFailure::driver(format!(
+            "could not record the container images of `{worker}` in {}: {e}",
+            lock_path.display()
         ))
     })
 }

@@ -304,18 +304,7 @@ pub(crate) fn deploy_one(
     }
     // #3479: an adopted index keeps the name it has on the account.
     materialise_adopted_vectorize(&config, worker, declared, environment)?;
-    // #3477: an adopted container image replaces the Dockerfile `wrangler` would
-    // build, in the configuration it is about to read; recorded before the push.
-    materialise_adopted_containers(&config, worker, declared, environment)?;
-    if !declared.containers.is_empty() {
-        record_container_images(lock, worker, declared, environment);
-        write_lock(lock_path, lock).map_err(|e| {
-            DeployFailure::driver(format!(
-                "could not record the container images of `{worker}` in {}: {e}",
-                lock_path.display()
-            ))
-        })?;
-    }
+    adopt_containers_for_push(&config, worker, declared, lock, lock_path, environment)?;
     // P4b (#2608): each database's pending migrations, applied once it is
     // bound (and, for a named environment, once `[env.<name>]` binds it) and
     // before the push, so the new code never meets the old schema. Wrangler

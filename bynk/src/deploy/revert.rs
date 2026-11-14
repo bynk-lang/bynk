@@ -284,27 +284,30 @@ fn recorded_id(
 
 /// Every check for one Worker. A refusal is any finding with verdict
 /// `refused`; nothing here is advisory.
-pub(crate) fn evaluate(c: &Case<'_>) -> Vec<Finding> {
-    let mut out = Vec::new();
-
-    // #3477: a rollback restores the version's image map, which a *new* start
-    // reads; an instance that is already running keeps the image it started
-    // with and takes no part in application-wide rollouts. Said for each
-    // container the target carries, so a revert is not taken to replace a
-    // running one. Read from the Cloudflare docs, not yet seen on a real
-    // account.
-    for class in c
-        .target
+/// #3477: a rollback restores the version's image map, which a *new* start
+/// reads; an instance that is already running keeps the image it started with
+/// and takes no part in application-wide rollouts. Said for each container the
+/// target carries, so a revert is not taken to replace a running one. Read from
+/// the Cloudflare docs, not yet seen on a real account.
+fn container_rollback_notes(target: &Facts) -> Vec<Finding> {
+    target
         .classes
         .iter()
         .filter(|class| class.starts_with(bynk_check::containers::CONTAINER_CLASS_PREFIX))
-    {
-        out.push(Finding::ok(
-            "container",
-            class,
-            "warning: the rollback restores the image for new starts only; instances already running keep the image they started with until they stop",
-        ));
-    }
+        .map(|class| {
+            Finding::ok(
+                "container",
+                class,
+                "warning: the rollback restores the image for new starts only; instances already running keep the image they started with until they stop",
+            )
+        })
+        .collect()
+}
+
+pub(crate) fn evaluate(c: &Case<'_>) -> Vec<Finding> {
+    let mut out = Vec::new();
+
+    out.extend(container_rollback_notes(c.target));
 
     // D1 migrations are forward-only (ADR 0664).
     for binding in databases_to_read(c.live, c.target) {
