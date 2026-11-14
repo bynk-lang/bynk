@@ -49,7 +49,7 @@ compiler: in-process
 |---|---|---|
 | **compile / check / fmt** | nothing — the compiler is built into `bynk` | always available |
 | **`bynk test`** | Node ≥ 22.13 **and** `tsc` (TypeScript 7) or `tsx` | you can't run `test` blocks |
-| **dev / deploy** | Node ≥ 22.13 **and** `wrangler` (4.120.1 or newer for `bynk dev`) | you can't deploy to Cloudflare |
+| **dev / deploy** | Node ≥ 22.13 **and** `wrangler` (4.162.0 or newer) | you can't deploy to Cloudflare |
 | **editor** *(optional)* | `bynk-lsp` | a note — editor features only |
 | **build-from-source** *(optional)* | a Rust toolchain | shown only inside the Bynk repo |
 
@@ -66,16 +66,17 @@ reported as a warning, `v20.11.0 below floor (≥ 22.13)`, with the fix to insta
 newer one. `bynk test --inspect` checks its own minor floor on top of that: Node
 ≥ 22.6 to run, ≥ 22.18 for source-mapped breakpoints.
 
-An installed `wrangler` older than **4.120.1** is a warning too:
+An installed `wrangler` older than **4.162.0** is a warning too:
 
 ```text
-    wrangler — v4.100.0 (path), below 4.120.1: `bynk dev` can't serve compatibility date 2026-08-04, and agents can't deploy
+    wrangler — v4.100.0 (path), below 4.162.0, the oldest this Bynk release supports: `bynk dev` may not serve compatibility date 2026-08-04, and agents can't deploy
       ↳ fix: npm install -g wrangler@4
 ```
 
-Every generated `wrangler.toml` pins a `compatibility_date`, and an older
-wrangler's runtime refuses a newer date outright. It doesn't fall back, so
-`bynk dev` would fail. `bynk dev` prints the same warning before it serves. A
+Until v1.0.0 the minimum tracks the newest wrangler at each Bynk release. Every
+generated `wrangler.toml` pins a `compatibility_date`, and an older wrangler's
+runtime can refuse a newer date outright. It doesn't fall back, so `bynk dev`
+would fail. `bynk dev` prints the same warning before it serves. A
 wrangler that `doctor` would fetch with `npx` can't be versioned without running
 it. If `bynk dev` then fails with "This Worker requires
 compatibility date …", the npx cache holds an older wrangler: clear
@@ -85,8 +86,9 @@ wrangler@4`.)
 
 An older wrangler also can't deploy an agent. Every generated `wrangler.toml`
 declares its Durable Object classes in an `exports` map, which wrangler reads
-from 4.107.0, so `bynk deploy` refuses to push a context with an agent on an
-older one, naming the version and the fix. A project with no agent still
+from 4.107.0, and the generated configuration is untested below the minimum, so
+`bynk deploy` refuses to push a context with an agent on an older one, naming
+the version and the fix. A project with no agent still
 deploys, which is why `doctor` keeps this a warning rather than failing
 `--only deploy`.
 

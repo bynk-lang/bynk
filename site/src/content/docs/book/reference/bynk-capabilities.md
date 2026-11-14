@@ -1741,7 +1741,7 @@ A running container costs money. See Cloudflare's
 [Containers pricing](https://developers.cloudflare.com/containers/pricing/) and
 [limits](https://developers.cloudflare.com/containers/platform/limits/) for what
 applies; Bynk states no rates. This release emits the configuration and the generated
-class: deploy with `wrangler deploy`, with Docker running and Wrangler 4.136.0 or later.
+class: deploy with `wrangler deploy`, with Docker running.
 `Container` is experimental: list `"bynk.cloudflare.Container"` under
 `[unstable] allow`.
 

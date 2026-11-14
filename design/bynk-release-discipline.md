@@ -214,10 +214,12 @@ the new date.** The recommended option of #1677's Decision A.
    `1.YYYYMMDD.n` names the newest date it supports.
 
    **The review also sets the wrangler minimum** (#1732): `WRANGLER_MIN`, beside
-   `COMPATIBILITY_DATE`, is the oldest wrangler whose `workerd` serves the date.
-   It's currently `4.120.1` for `2026-08-04`. `bynk doctor` warns about an
-   installed wrangler below it, and `bynk dev` prints the same warning before
-   serving. `bynk-emit/tests/compat_date_policy.rs` fails until this section,
+   `COMPATIBILITY_DATE`, is the oldest wrangler Bynk supports, and it is never
+   older than the one whose `workerd` serves the date. It's currently `4.162.0`
+   for `2026-08-04` (see *Toolchain dependencies until v1.0.0*, below, for why it
+   is the newest wrangler and not the oldest that serves the date).
+   `bynk doctor` warns about an installed wrangler below it, and `bynk dev`
+   prints the same warning before serving. `bynk-emit/tests/compat_date_policy.rs` fails until this section,
    the doctor guide and the emission reference all name the current pair.
 2. **Gate.** The bump lands as its own PR. Before it merges, the full suite runs
    with `BYNK_REQUIRE_WORKERD=1` on the new date, so the workerd smokes exercise
@@ -236,6 +238,34 @@ the new date.** The recommended option of #1677's Decision A.
 3. **Record.** A bump changes what every deployed Worker runs under, so it
    carries a changelog entry. It needs an ADR only when a flag changes
    behaviour a Bynk program can observe.
+
+### Toolchain dependencies until v1.0.0
+
+**Until v1.0.0, Bynk tracks current versions of its toolchain dependencies, and
+each release reviews them.** The review, beside the compatibility date, is:
+
+- **`WRANGLER_MIN`** moves to the newest wrangler (`npm view wrangler version`).
+  No feature has a floor of its own: a feature that needs a particular wrangler
+  (the `durable_object` container policy needs 4.136.0) is covered by the general
+  one, and a test keeps it so. A raised floor is a `breaking:` line in the
+  increment's pending file, because `bynk doctor`, `bynk dev` and `bynk deploy`
+  start refusing or warning about an older wrangler.
+- **The other pinned dependencies** (the runtime and `bynk-std` npm packages, the
+  TypeScript floor, the Node floor, the miniflare and workerd pins) move to their
+  newest compatible release where that is safe. A major version, or a Node floor
+  that would drop a Node still in support, is its own decision and is not part of
+  the sweep.
+- **Rust crates** are left to the normal dependency updates.
+
+This is a pre-1.0 policy: nothing outside this repository's corpus depends on an
+older toolchain, so a floor that moves with the ecosystem costs less than
+supporting a window of old versions. From v1.0.0 a floor change follows the
+milestone's stability promise instead, and this section gives way to it.
+
+The compatibility date does not follow the same rule: it still moves only by the
+lag rule above, since a date only the newest wrangler supports would break the
+developers whose wrangler lags, whatever the minimum says. The lag rule is the
+reason the date can sit behind the minimum.
 
 ### Why at releases
 

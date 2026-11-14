@@ -344,7 +344,7 @@ fn detect_runner(tb: &dyn Toolbox, root: Option<&std::path::Path>) -> Row {
 }
 
 /// #1732: an installed wrangler older than [`bynk_emit::WRANGLER_MIN`], whose
-/// `workerd` therefore refuses the pinned [`bynk_emit::COMPATIBILITY_DATE`].
+/// `workerd` may therefore refuse the pinned [`bynk_emit::COMPATIBILITY_DATE`].
 /// `false` for an npx-provisioned or unversioned wrangler, which can't be
 /// judged without running it. Shared by `doctor`'s row and `bynk dev`'s notice.
 pub fn wrangler_below_min(probe: &Probe) -> bool {
@@ -377,13 +377,14 @@ fn tool_manager(tb: &dyn Toolbox, root: Option<&std::path::Path>) -> PackageMana
     })
 }
 
-/// #1732: wrangler, checked against [`bynk_emit::WRANGLER_MIN`], the oldest
-/// whose `workerd` serves the [`bynk_emit::COMPATIBILITY_DATE`] every generated
-/// `wrangler.toml` pins. An older one's `workerd` refuses the date, so
-/// `bynk dev` fails. It also doesn't read the Durable Object `exports` map
-/// (#1796), so a project with an agent can't deploy on it, and `bynk deploy`
-/// refuses one that would push a class (`deploy::plan::wrangler_floor_refusal`).
-/// A project with no agent still deploys (Cloudflare accepts any past date).
+/// #1732: wrangler, checked against [`bynk_emit::WRANGLER_MIN`], the oldest this
+/// release supports (it serves the [`bynk_emit::COMPATIBILITY_DATE`] every
+/// generated `wrangler.toml` pins). An older one's `workerd` may refuse the date,
+/// so `bynk dev` fails. Below it, `bynk deploy` also refuses to push a Durable
+/// Object class (`deploy::plan::wrangler_floor_refusal`), since an older wrangler
+/// is untested against the generated configuration (#1796: it reads the `exports`
+/// map only from 4.107.0). A project with no agent still deploys (Cloudflare
+/// accepts any past date).
 /// Doctor doesn't know which kind of project it is, so this stays a warning,
 /// not a failure, and `doctor --only deploy` doesn't go red on a toolchain
 /// that deploys an agent-free project. An npx-provisioned wrangler's version isn't known
@@ -416,7 +417,7 @@ fn detect_wrangler(tb: &dyn Toolbox, root: Option<&std::path::Path>) -> Row {
             label: "wrangler".into(),
             level: Level::Warn,
             detail: format!(
-                "{}, below {min}: `bynk dev` can't serve compatibility date {date}, and agents can't deploy",
+                "{}, below {min}, the oldest this Bynk release supports: `bynk dev` may not serve compatibility date {date}, and agents can't deploy",
                 present_detail(&probe)
             ),
             remedy: Some(remedy),

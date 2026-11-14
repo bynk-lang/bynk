@@ -1802,7 +1802,7 @@ export const __AiSearchToken: symbol = globalThis.Symbol("AiSearch");
  * call from inside an agent handler holds that agent's queue, so call from a
  * service and hand the result to the agent.
  *
- * Deploy with `wrangler deploy` (Docker running, Wrangler 4.136.0 or later).
+ * Deploy with `wrangler deploy` (Docker running).
  * In a test every operation faults until `stub Renderer.send(_, _) returns …`
  * replaces it, so a test never starts a container.
  */

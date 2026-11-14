@@ -95,8 +95,7 @@ needs.
 
 `bynk deploy` plans the container, checks for Docker when it has an image to
 build, and hands the Worker to `wrangler deploy`, which builds and pushes the image
-and creates the application. Docker must be running, and wrangler must be 4.136.0
-or later (an older one is refused with the version named). Without Docker, push a
+and creates the application. Docker must be running. Without Docker, push a
 prebuilt image to Cloudflare's registry and adopt it in `bynk.toml`:
 
 ```toml
@@ -120,8 +119,7 @@ which this guide does not repeat.
 
 `bynk dev` runs the container under Docker on your machine, through `wrangler dev`:
 there is no remote call, and none of the cost warnings the remote-only kinds print.
-Wrangler must be 4.136.0 or later for a Worker with a container (an older one is
-refused with the version named). With Docker running, the first start builds each
+With Docker running, the first start builds each
 image, which can take minutes, and `bynk dev` says which container is building;
 Wrangler decides when a changed Dockerfile is built again. `bynk dev` looks for
 Docker and for containers once, when it starts: restart it after adding the first

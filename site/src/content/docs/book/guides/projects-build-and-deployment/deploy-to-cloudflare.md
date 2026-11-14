@@ -648,10 +648,9 @@ runner has Docker, so the deploy builds there. A setup that only runs `wrangler
 versions upload` neither builds nor rolls out an image, so deploy with `bynk
 deploy`.
 
-**Wrangler.** A Worker with a container needs wrangler 4.136.0 or later, the first
-that accepts the `durable_object` scheduling policy the generated configuration
-uses; an older one is refused before authenticating, with the version named. A
-project with no container still needs only the general minimum.
+**Wrangler.** A Worker with a container needs no more of wrangler than any other
+Worker: the general minimum is past the first version that accepts the
+`durable_object` scheduling policy the generated configuration uses (4.136.0).
 
 **Adopting a prebuilt image.** A team that builds elsewhere, or deploys from a
 machine without Docker, names an image per environment in `bynk.toml`, as the
@@ -1009,7 +1008,7 @@ gets its addresses in the Worker's `wrangler.toml`, as wrangler's top-level
 addresses = ["*@shop.example", "support@shop.example"]
 ```
 
-`wrangler deploy` (4.113.0 or later; Bynk requires 4.120.1) reconciles the
+`wrangler deploy` (4.113.0 or later; Bynk requires 4.162.0) reconciles the
 account's Email Routing rules to that list, so an address a service claims has a
 rule that delivers to the Worker, and one that is no longer listed loses its rule.
 The list applies to every environment, so it is top-level and never copied into
