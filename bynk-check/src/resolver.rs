@@ -618,6 +618,42 @@ pub fn resolve(commons: Commons) -> Result<ResolvedCommons, Vec<CompileError>> {
     }
 }
 
+/// Single-file mode has no `uses`, so the visible assets (#1883), embeds
+/// (#2387) and constants (#2617) are exactly the ones declared here, the first
+/// declaration of a name winning as in the unit table; a second is reported by
+/// `assets::single_file_asset_errors`, `embeds::single_file_embed_errors` and
+/// `consts::single_file_const_errors`.
+fn single_file_values(
+    commons: &Commons,
+) -> (
+    HashMap<String, AssetDecl>,
+    HashMap<String, EmbedDecl>,
+    HashMap<String, ConstDecl>,
+) {
+    let (mut assets, mut embeds, mut consts) = (HashMap::new(), HashMap::new(), HashMap::new());
+    for item in &commons.items {
+        match item {
+            CommonsItem::Asset(a) => {
+                assets
+                    .entry(a.name.name.clone())
+                    .or_insert_with(|| a.clone());
+            }
+            CommonsItem::Embed(e) => {
+                embeds
+                    .entry(e.name.name.clone())
+                    .or_insert_with(|| e.clone());
+            }
+            CommonsItem::Const(c) => {
+                consts
+                    .entry(c.name.name.clone())
+                    .or_insert_with(|| c.clone());
+            }
+            _ => {}
+        }
+    }
+    (assets, embeds, consts)
+}
+
 /// [`resolve`], returning the symbol table *with* every resolve error rather
 /// than instead of it (#1663, Decision A). A resolve error is local to the
 /// declaration it is in, so the checker can still check every declaration —
@@ -835,40 +871,7 @@ pub fn resolve_recovering(commons: Commons) -> (ResolvedCommons, Vec<CompileErro
         }
     }
 
-    // #1883, slice 1a: single-file mode has no `uses`, so the visible assets
-    // are exactly the ones declared here.
-    // The first declaration of a name wins, as in the unit table; a second is
-    // `bynk.asset.duplicate` (`assets::single_file_asset_errors`).
-    let mut local_assets: HashMap<String, AssetDecl> = HashMap::new();
-    for item in &commons.items {
-        if let CommonsItem::Asset(a) = item {
-            local_assets
-                .entry(a.name.name.clone())
-                .or_insert_with(|| a.clone());
-        }
-    }
-
-    // #2387, slice 1: likewise the embeds, first declaration winning
-    // (`embeds::single_file_embed_errors` reports a second).
-    let mut local_embeds: HashMap<String, EmbedDecl> = HashMap::new();
-    for item in &commons.items {
-        if let CommonsItem::Embed(e) = item {
-            local_embeds
-                .entry(e.name.name.clone())
-                .or_insert_with(|| e.clone());
-        }
-    }
-
-    // #2617: likewise the constants, first declaration winning
-    // (`consts::single_file_const_errors` reports a second).
-    let mut local_consts: HashMap<String, ConstDecl> = HashMap::new();
-    for item in &commons.items {
-        if let CommonsItem::Const(c) = item {
-            local_consts
-                .entry(c.name.name.clone())
-                .or_insert_with(|| c.clone());
-        }
-    }
+    let (local_assets, local_embeds, local_consts) = single_file_values(&commons);
 
     // Second pass: validate references inside type-refs and function bodies.
     let mut refs = RefSink::new(); // single-file mode: no recording context.
@@ -878,7 +881,6 @@ pub fn resolve_recovering(commons: Commons) -> (ResolvedCommons, Vec<CompileErro
     };
     for item in &commons.items {
         check_reserved_host_name(item, &mut sinks);
-        let no_unselected = &HashSet::new();
         match item {
             CommonsItem::Type(t) => {
                 check_type_decl_refs(t, &types, &mut sinks);
@@ -897,21 +899,12 @@ pub fn resolve_recovering(commons: Commons) -> (ResolvedCommons, Vec<CompileErro
                     &local_consts,
                     // A single file has no `uses` imports to shadow.
                     &HashMap::new(),
-                    no_unselected,
                     &HashSet::new(),
                     &mut sinks,
                 );
             }
             CommonsItem::Const(c) => {
-                check_const_refs(
-                    c,
-                    &types,
-                    &fns,
-                    &methods,
-                    &local_consts,
-                    no_unselected,
-                    &mut sinks,
-                );
+                check_const_refs(c, &types, &fns, &methods, &local_consts, &mut sinks);
             }
             // v0.5 items' bodies are resolved via a separate context-level
             // pass; their signatures here (#1679).
@@ -1242,7 +1235,7 @@ pub fn resolve_file_record(
             }
             CommonsItem::Fn(f) => {
                 sinks.refs.set_owner(f.name.display());
-                check_fn_refs(
+                check_fn_refs_with(
                     f,
                     &resolved.types,
                     &resolved.fns,
@@ -1258,7 +1251,7 @@ pub fn resolve_file_record(
             }
             CommonsItem::Const(c) => {
                 sinks.refs.set_owner(&c.name.name);
-                check_const_refs(
+                check_const_refs_with(
                     c,
                     &resolved.types,
                     &resolved.fns,
@@ -1867,8 +1860,50 @@ fn check_type_decl_refs(t: &TypeDecl, types: &HashMap<String, Arc<TypeDecl>>, er
     }
 }
 
+/// [`check_fn_refs_with`] for a unit with no braced `consumes` to leave a type out.
 #[allow(clippy::too_many_arguments)]
 fn check_fn_refs(
+    f: &FnDecl,
+    types: &HashMap<String, Arc<TypeDecl>>,
+    fns: &HashMap<String, Arc<FnDecl>>,
+    methods: &HashMap<String, MethodTable>,
+    assets: &HashMap<String, AssetDecl>,
+    embeds: &HashMap<String, EmbedDecl>,
+    consts: &HashMap<String, ConstDecl>,
+    shadowed: &HashMap<String, ShadowedImport>,
+    declared_caps: &HashSet<String>,
+    errors: &mut Sinks,
+) {
+    let none = HashSet::new();
+    check_fn_refs_with(
+        f,
+        types,
+        fns,
+        methods,
+        assets,
+        embeds,
+        consts,
+        shadowed,
+        &none,
+        declared_caps,
+        errors,
+    );
+}
+
+/// [`check_const_refs_with`] for a unit with no braced `consumes` to leave a type out.
+fn check_const_refs(
+    c: &ConstDecl,
+    types: &HashMap<String, Arc<TypeDecl>>,
+    fns: &HashMap<String, Arc<FnDecl>>,
+    methods: &HashMap<String, MethodTable>,
+    consts: &HashMap<String, ConstDecl>,
+    errors: &mut Sinks,
+) {
+    check_const_refs_with(c, types, fns, methods, consts, &HashSet::new(), errors);
+}
+
+#[allow(clippy::too_many_arguments)]
+fn check_fn_refs_with(
     f: &FnDecl,
     types: &HashMap<String, Arc<TypeDecl>>,
     fns: &HashMap<String, Arc<FnDecl>>,
@@ -2046,7 +2081,7 @@ fn given_cap_chain(receiver: &Expr, given: &[CapRef], shadowed: &dyn Fn(&str) ->
 /// what is in scope. The initialiser has no parameters or bindings, so this is
 /// the function walk over an empty scope; whether the initialiser is *static*
 /// is the checker's call (`consts::static_error`).
-fn check_const_refs(
+fn check_const_refs_with(
     c: &ConstDecl,
     types: &HashMap<String, Arc<TypeDecl>>,
     fns: &HashMap<String, Arc<FnDecl>>,
@@ -2440,6 +2475,7 @@ fn hidden_type_error(id: &Ident, note: String) -> CompileError {
 pub fn check_unselected_type_names(
     items: &[CommonsItem],
     resolved: &ResolvedCommons,
+    unlisted: &std::collections::BTreeSet<String>,
     consumes: &[ConsumesDecl],
 ) -> Vec<CompileError> {
     let from = |n: &String| {
@@ -2450,11 +2486,7 @@ pub fn check_unselected_type_names(
     };
     let mut gated = std::collections::BTreeMap::new();
     let mut variants = std::collections::BTreeMap::new();
-    for name in resolved
-        .unselected_types
-        .iter()
-        .filter(|n| from(n).is_some())
-    {
+    for name in unlisted.iter().filter(|n| from(n).is_some()) {
         gated.insert(name.clone(), resolved.imported_from[name].clone());
         if let Some(TypeBody::Sum(sum)) = resolved.types.get(name).map(|t| &t.body) {
             variants.extend(

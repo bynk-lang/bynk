@@ -783,7 +783,7 @@ pub(super) fn json_codec_qual_for_target(
             let ns = test_ns(u);
             if let Some(table) = unit_tables.get(u) {
                 for n in table.types.keys() {
-                    if own || is_public_type(table, n) && !left_out(n) {
+                    if own || (is_public_type(table, n) && !left_out(n)) {
                         qual.entry(n.clone()).or_insert_with(|| format!("{ns}."));
                     }
                 }

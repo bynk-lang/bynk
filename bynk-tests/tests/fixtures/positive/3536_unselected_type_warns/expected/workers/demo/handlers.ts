@@ -6,6 +6,24 @@ import type { ValidationError } from "../../__bynk_runtime/errors.js";
 import { type __JsonValue, type __BoundaryError, type __ServiceBinding, __callService, __boundaryError } from "../../__bynk_runtime/boundary.js";
 
 import { Claim, TimedOut } from "../../bynk.js";
+import { ContainerError } from "../../bynk/cloudflare.js";
+
+export type Outcome =
+    { readonly tag: "Done"; readonly n: number }
+  | { readonly tag: "Unavailable" };
+
+export const Outcome = {
+  Done: (n: number): Outcome => ({ tag: "Done", n }),
+  Unavailable: { tag: "Unavailable" } as Outcome,
+};
+
+export function mine(): Outcome {
+  return Outcome.Unavailable;
+}
+
+export function theirs(): ContainerError {
+  return ContainerError.Unavailable;
+}
 
 export function at(t: TimedOut): boolean {
   return true;

@@ -178,31 +178,7 @@ pub(super) fn emit_test_scope_setup(
     // body can reference them unqualified. The target's types and fns are
     // exported from its namespace by the production emitter.
     if let Some(table) = unit_tables.get(target_name) {
-        // #1883, slice 3: the target's assets are exported constants too.
-        let mut names: Vec<String> = table
-            .types
-            .keys()
-            .chain(table.fns.keys())
-            .chain(table.assets.keys())
-            .chain(table.embeds.keys())
-            .chain(table.consts.keys())
-            .cloned()
-            .collect();
-        // For contexts, also bring services and providers into scope.
-        let extras: Vec<String> = table
-            .services
-            .keys()
-            .chain(table.agents.keys())
-            .cloned()
-            .collect();
-        names.extend(extras);
-        // v0.9.2: bring each agent's construction factory into scope so a test
-        // body's `AgentName(key)` lowers to `__makeAgentName(key)`.
-        for agent in table.agents.keys() {
-            names.push(bynk_emit::emitter::agent_factory_name(agent));
-        }
-        names.sort();
-        names.dedup();
+        let names = target_scope_names(table);
         let type_names = aliased_types(table, |_| true);
         bound.extend(names.iter().cloned());
         bynk_emit::emitter::extend_printed_at(
@@ -378,6 +354,38 @@ pub(super) fn async_test_runner_fn(
         },
         None,
     )
+}
+
+/// The names the target's own module exports that a case's scope binds
+/// unqualified: its types, fns, assets, embeds, consts, services and agents,
+/// and each agent's construction factory, sorted.
+fn target_scope_names(table: &UnitTable) -> Vec<String> {
+    // #1883, slice 3: the target's assets are exported constants too.
+    let mut names: Vec<String> = table
+        .types
+        .keys()
+        .chain(table.fns.keys())
+        .chain(table.assets.keys())
+        .chain(table.embeds.keys())
+        .chain(table.consts.keys())
+        .cloned()
+        .collect();
+    // For contexts, also bring services and providers into scope.
+    let extras: Vec<String> = table
+        .services
+        .keys()
+        .chain(table.agents.keys())
+        .cloned()
+        .collect();
+    names.extend(extras);
+    // v0.9.2: bring each agent's construction factory into scope so a test
+    // body's `AgentName(key)` lowers to `__makeAgentName(key)`.
+    for agent in table.agents.keys() {
+        names.push(bynk_emit::emitter::agent_factory_name(agent));
+    }
+    names.sort();
+    names.dedup();
+    names
 }
 
 /// #3536: whether a suite `type` named `name` replaces the first-party type of

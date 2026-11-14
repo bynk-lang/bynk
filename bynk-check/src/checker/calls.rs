@@ -931,7 +931,14 @@ pub(crate) fn check_call(
         &ctx.input.unselected_types,
     );
     // #3344: several sums in scope share the name; the expected type picks one.
-    if let Some(sum) = variant_owner(&owners, expected, tys) {
+    let left_out = left_out_variant_owner(
+        &name.name,
+        &ctx.input.types,
+        &ctx.input.unselected_types,
+        expected,
+        tys,
+    );
+    if let Some(sum) = left_out.or_else(|| variant_owner(&owners, expected, tys)) {
         ctx.callees.insert(
             expr_id,
             Callee::Ctor {

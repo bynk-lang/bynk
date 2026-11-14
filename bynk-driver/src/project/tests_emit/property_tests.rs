@@ -14,6 +14,30 @@ use bynk_syntax::ast::{
 use bynk_ts::{TsArrowBody, TsBindingName, TsExpr, TsLit, TsParam, TsStmt, TsType};
 use std::sync::Arc;
 
+/// One generator descriptor per binding of a `property`, over the target's
+/// privileged type view `resolved` (so refined and opaque constructors resolve).
+fn binding_gen_entries(
+    prop: &PropertyDecl,
+    resolved: Option<&ResolvedCommons>,
+    tys: &Arc<Types>,
+) -> Vec<TsExpr> {
+    prop.forall
+        .bindings
+        .iter()
+        .map(|b| {
+            let bg = resolved
+                .and_then(|r| checker::resolve_type_ref(&b.type_ref, &r.types, tys).map(|t| (t, r)))
+                .map(|(t, r)| binding_gen(t, &r.types, tys))
+                .unwrap_or(BindingGen {
+                    boundaries: Vec::new(),
+                    gen_ts: ident("undefined"),
+                    shrink: TsExpr::array(vec![]),
+                });
+            gen_descriptor_entry(Some(str_lit(b.name.name.clone())), &bg)
+        })
+        .collect()
+}
+
 /// v0.114: emit one async runner for a generative `property` — the binding
 /// generators, the `where` filter and predicate body as closures over the
 /// generated tuple, and the `__bynkRunProperty` call that draws cases, shrinks a
@@ -79,23 +103,7 @@ pub(super) fn emit_test_property_function(
     // itself, not a same-line text change, and a wrong guess here risks a
     // real `tsc --strict` failure specifically on the shrink helpers' own
     // typed parameters.
-    let gens: Vec<TsExpr> = prop
-        .forall
-        .bindings
-        .iter()
-        .map(|b| {
-            let bg = resolved
-                .as_ref()
-                .and_then(|r| checker::resolve_type_ref(&b.type_ref, &r.types, tys).map(|t| (t, r)))
-                .map(|(t, r)| binding_gen(t, &r.types, tys))
-                .unwrap_or(BindingGen {
-                    boundaries: Vec::new(),
-                    gen_ts: ident("undefined"),
-                    shrink: TsExpr::array(vec![]),
-                });
-            gen_descriptor_entry(Some(str_lit(b.name.name.clone())), &bg)
-        })
-        .collect();
+    let gens = binding_gen_entries(prop, resolved.as_ref(), tys);
     let gens_stmt = TsStmt::const_stmt(
         TsBindingName::Ident("__gens".to_string()),
         None,

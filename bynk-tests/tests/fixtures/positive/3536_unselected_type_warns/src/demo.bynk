@@ -5,6 +5,19 @@ context demo
 // --fix` adds `TimedOut` and `Claim` to the braces.
 
 consumes bynk { Logger }
+consumes bynk.cloudflare { D1 }
+
+type Outcome = | Done(n: Int) | Unavailable
+
+// The expected type picks the sum: this is the user's own `Unavailable`, and the
+// one below is `ContainerError`'s, which the braces do not list.
+fn mine() -> Outcome {
+    Unavailable
+}
+
+fn theirs() -> ContainerError {
+    Unavailable
+}
 
 fn at(t: TimedOut) -> Bool {
     true
