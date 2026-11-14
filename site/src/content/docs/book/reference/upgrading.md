@@ -23,7 +23,7 @@ here broke nothing, or its author did not say so: please
 
 ## v0.603.10
 
-The release added the standard-library names `Claim`, `Claimed` and `AlreadyClaimed` (`bynk`) and `ContainerError`'s variants `StartFailed`, `Unavailable`, `Timeout` and `Network` (`bynk.cloudflare`). They were in scope for any `consumes bynk` or `consumes bynk.cloudflare`, even a selective one, so a suite `type Claim` or `type Claimed` was refused with `bynk.suite.type_name_clash`, `firstAs[Claim]` in a suite read the standard-library enum (`bynk.types.sql_row_shape`), and a bare `Unavailable(…)` of your own sum was `bynk.resolve.ambiguous_variant`. Rename the declaration or qualify the variant (`ClaudeOutcome.Unavailable(…)`); a later release no longer counts names a `consumes` braces do not list.
+The release added the standard-library names `Claim`, `Claimed` and `AlreadyClaimed` (`bynk`) and `ContainerError`'s variants `StartFailed`, `Unavailable`, `Timeout` and `Network` (`bynk.cloudflare`). They were in scope for any `consumes bynk` or `consumes bynk.cloudflare`, even a selective one, so a suite `type Claim` or `type Claimed` was refused with `bynk.suite.type_name_clash`, `firstAs[Claim]` in a suite read the standard-library enum (`bynk.types.sql_row_shape`), and a bare `Unavailable(…)` of your own sum was `bynk.resolve.ambiguous_variant`. Rename the declaration, or qualify the variant (`ClaudeOutcome.Unavailable(…)`).
 
 ## v0.603.8
 
