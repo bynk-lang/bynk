@@ -956,14 +956,20 @@ fails the deploy, naming it:
 bynk: `AI_SEARCH_KB` of `shop-ask` queries AI Search instance `support-docs`, which does not exist on this account. `bynk deploy` links to an instance and never creates one: create `support-docs` in the Cloudflare dashboard, with `wrangler` or with the REST API, or name the instance the account has
 ```
 
-An instance the lookup shows as paused or disabled is a warning, not a failure:
-it still answers. The plan shows the binding as linked, with no action:
+An instance the lookup shows as paused or disabled is a warning, not a failure.
+For a paused instance the warning names its `status`. One whose status is
+`paused_user` has its indexing stopped, and a search does not resume it (a
+search against it still answered when checked), so resume it in the dashboard.
+Any other status is named and nothing is claimed about it. The plan shows the
+binding as a link to be made, with no action:
 
 ```
-linked ai-search support-docs (AI_SEARCH_KB; not created)
+will link ai-search support-docs (AI_SEARCH_KB; not created; not checked in a dry run)
 ```
 
-`--dry-run` stays offline and does not ask. The lookup uses Cloudflare's API, so
+`--dry-run` stays offline and does not ask (plans are built offline,
+[#3494](https://github.com/bynk-lang/bynk/issues/3494)), so the plan says "will
+link" and has not verified that the instance exists or whether it is paused. The lookup uses Cloudflare's API, so
 it needs `CLOUDFLARE_API_TOKEN` and `CLOUDFLARE_ACCOUNT_ID`, the token with the
 "AI Search: Edit" and "AI Search: Run" permissions (Cloudflare's reference names
 no read-only one); a refusal says so. The instance's name is used as declared in

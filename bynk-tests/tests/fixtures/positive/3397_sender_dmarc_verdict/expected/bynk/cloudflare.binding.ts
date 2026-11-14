@@ -2007,7 +2007,7 @@ export class WorkersAiSearch implements AiSearch {
     }
     if (/rate.?limit|too many requests|\b429\b/i.test(message)) return { tag: "SearchRateLimited" };
     if (/quota|usage limit|exceeded your|payment required|\b402\b/i.test(message)) return { tag: "SearchQuotaExceeded" };
-    if (/invalid (?:filter|option|query|request|parameter|argument|input|message)s?\b|must be|out of range|not allowed|too (?:large|many|long)|\b400\b/i.test(message)) {
+    if (/invalid (?:filter|option|query|request|parameter|argument|input|message)s?\b|must be|must have non-empty|too small: expected|out of range|not allowed|too (?:large|many|long)|\b400\b/i.test(message)) {
       return { tag: "SearchInvalidInput", message };
     }
     return { tag: "SearchFailed", message };

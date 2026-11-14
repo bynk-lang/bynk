@@ -236,17 +236,36 @@ impl RestAiSearch {
 
 /// The instance's lookup answer, read from the REST `result`: `paused` and
 /// `enable` are the documented flags. Cloudflare does not document the values
-/// of `status`, so it is not interpreted.
+/// of `status`; a real-account check (#3480) saw `waiting`, `index_source` and
+/// `paused_user`. Only `paused_user` is worded from that observation: indexing
+/// was not running, and searches and answers still worked but did not resume
+/// it. Any other status of a paused instance is named but not interpreted.
 fn instance_state(body: &serde_json::Value) -> InstanceState {
     let result = &body["result"];
     let warning = if result["paused"].as_bool() == Some(true) {
-        Some("it is paused, so its indexing is not running (a search resumes it)".to_string())
+        Some(paused_warning(result["status"].as_str()))
     } else if result["enable"].as_bool() == Some(false) {
         Some("it is disabled".to_string())
     } else {
         None
     };
     InstanceState::Found { warning }
+}
+
+/// What a paused instance's warning says, by its reported `status`.
+fn paused_warning(status: Option<&str>) -> String {
+    match status {
+        Some("paused_user") => "it is paused by a user (status `paused_user`), so its indexing is not running; \
+             a search does not resume it, so resume it in the Cloudflare dashboard (searches still answered when checked)"
+            .to_string(),
+        Some(other) => format!(
+            "it is paused (status `{other}`), so its indexing may not be running; \
+             check its state in the Cloudflare dashboard"
+        ),
+        None => "it is paused, so its indexing may not be running; \
+             check its state in the Cloudflare dashboard"
+            .to_string(),
+    }
 }
 
 impl AiSearchInstances for RestAiSearch {
@@ -863,9 +882,7 @@ mod tests {
             vec![(
                 "support-docs",
                 InstanceState::Found {
-                    warning: Some(
-                        "it is paused, so its indexing is not running (a search resumes it)".into(),
-                    ),
+                    warning: Some(paused_warning(Some("paused_user"))),
                 },
             )],
             RefCell::new(Vec::new()),
@@ -889,7 +906,21 @@ mod tests {
         else {
             panic!("paused warns");
         };
-        assert!(w.contains("paused"));
+        assert!(w.contains("paused") && !w.contains("resumes"));
+        // `paused_user` is worded from what a real account showed (#3480).
+        let InstanceState::Found { warning: Some(w) } =
+            state(serde_json::json!({ "paused": true, "status": "paused_user" }))
+        else {
+            panic!("paused_user warns");
+        };
+        assert!(w.contains("`paused_user`") && w.contains("does not resume"));
+        // Any other status is named, and nothing is claimed about it.
+        let InstanceState::Found { warning: Some(w) } =
+            state(serde_json::json!({ "paused": true, "status": "index_source" }))
+        else {
+            panic!("paused warns");
+        };
+        assert!(w.contains("`index_source`") && !w.contains("resume"));
         // Paused is said before disabled when both hold.
         let InstanceState::Found { warning: Some(w) } =
             state(serde_json::json!({ "paused": true, "enable": false }))
