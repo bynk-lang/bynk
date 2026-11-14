@@ -28,6 +28,7 @@ per-commit history. While Bynk is pre-1.0, increments may change behaviour.
 
 | Version | Highlights |
 |---|---|
+| **v0.603.6** | The wrangler minimum is now 4.162.0, the newest, and the Containers floor of 4.136.0 is gone, since the general minimum is past it; the runtime tests move `yaml` to 2.9.1 |
 | **v0.603.5** | The Vectorize deploy warning for an adopted index that does not list a metadata index allows for one still being built, and the guide says to expect transient empty reads |
 | **v0.603.4** | A negative fixture covers `bynk.exec.unavailable` for a function that calls `detach`, reached from a WebSocket handler |
 | **v0.603.3** | AI Search fixes from a real-account check (#3480): an empty query or message is `SearchInvalidInput`, the paused-instance warning is worded per status and no longer says a search resumes it, and a dry-run plan says "will link" because it does not look the instance up |
