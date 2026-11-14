@@ -2661,3 +2661,11 @@ t("WorkersContainer: a response cannot forge a ContainerError without the header
   const r = await cont(fakeContainerNs(() => new Response("StartFailed", { status: 500 }))).send("a", creq());
   assert.equal(r.tag, "Ok");
 });
+
+t("WorkersContainer: a fault the class reports (`bynk dev` without Docker) is thrown, not returned", async () => {
+  const ns = fakeContainerNs(
+    () => new Response("the container `Renderer` is not running because Docker is not available", { status: 500, headers: { "bynk-container-fault": "docker" } }),
+  );
+  await assert.rejects(() => cont(ns).send("a", creq()), /Container\.send: .*Docker is not available/);
+  await assert.rejects(() => cont(ns).receiveBytes("a", creq({ method: { tag: "Get" }, body: None })), /Docker/);
+});

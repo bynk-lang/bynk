@@ -17,6 +17,7 @@ or a row links to no file. Summaries and statuses are curated by hand; the
 
 | # | Decision | Status |
 |---|---|---|
+| [0842](0842-container-dev.md) | **bynk dev runs containers under Docker, and without it starts them off so a call faults naming Docker** (v0.603) — Decision H of #3477 for slice C3: the Docker probe, `--enable-containers=false` (confirmed to apply under the `durable_object` policy), the `BYNK_CONTAINERS_UNAVAILABLE` fault, the `--remote` refusal and the dev floor | Accepted (v0.603) |
 | [0841](0841-container-deploy.md) | **A container deploys through wrangler, with Docker checked first and an image adoptable per environment** (v0.602) — Decisions C and G of #3477 for slice C2: no ledger id and no REST calls, a Docker preflight, digest-pinned image adoption, a 4.136.0 floor for container Workers only, and a rollback note | Accepted (v0.602) |
 | [0840](0840-container-instance-kind.md) | **Container is an instance kind that runs a Docker image as a Durable Object class** (v0.601) — Decisions A, D, E, F and J of #3477 for slice C1: a named instance with a build directory and a port, closed egress, no instance ceiling, a built-in container API and no npm dependency | Accepted (v0.601) |
 | [0839](0839-container-runtime-and-config.md) | **A container's class is built by a runtime function and its image from a Dockerfile path** (v0.600) — Decisions B, D, F and J of #3477 for slice C1: the `[[containers]]` stanza, the class generated from literals, the readiness wait, and where build paths point | Accepted (v0.600) |

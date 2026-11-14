@@ -681,3 +681,15 @@ fn the_unlisted_metadata_index_warning_allows_for_one_still_being_built() {
     );
     assert!(!said.contains("has no metadata index"), "{said}");
 }
+
+#[test]
+fn a_bare_authentication_error_names_the_permission_needed() {
+    // #3495
+    let said = "Authentication error [code: 10000]".to_string();
+    let hinted = with_permission_hint(said.clone());
+    assert!(hinted.starts_with(&said), "{hinted}");
+    assert!(hinted.contains("Account > Vectorize > Edit"), "{hinted}");
+    // Any other failure is passed through untouched.
+    let other = "index not found [code: 3002]".to_string();
+    assert_eq!(with_permission_hint(other.clone()), other);
+}

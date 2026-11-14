@@ -70,6 +70,12 @@ pub const WRANGLER_MIN: &str = "4.120.1";
 /// [`WRANGLER_MIN`] does not move.
 pub const WRANGLER_CONTAINERS_MIN: &str = "4.136.0";
 
+/// #3477 (slice C3): the `wrangler dev --var` that tells a generated container
+/// class its containers are off (`bynk dev` without Docker), so a call faults
+/// naming Docker. The runtime's own copy is `CONTAINERS_UNAVAILABLE_VAR`
+/// (`container.ts`); a test keeps the two equal.
+pub const CONTAINERS_UNAVAILABLE_VAR: &str = "BYNK_CONTAINERS_UNAVAILABLE";
+
 /// Events track, slice 0 (spine #936, ADR 0284): the class name of a
 /// publishing context's fan-out Durable Object (`emitter::events_fanout`).
 /// Shared with `emitter::workers` (the `Env` field name + `deps.
@@ -2559,6 +2565,19 @@ mod containers_tests {
             source: BindingSource::Kv,
         };
         assert_eq!(emit_containers_manifest(&[kv]), None);
+    }
+
+    /// #3477: the variable `bynk dev` sets and the one the generated class reads
+    /// are the same name, which the runtime states once of its own.
+    #[test]
+    fn the_unavailable_variable_is_the_one_the_runtime_reads() {
+        let runtime = include_str!("runtime/container.ts");
+        assert!(
+            runtime.contains(&format!(
+                "CONTAINERS_UNAVAILABLE_VAR = \"{CONTAINERS_UNAVAILABLE_VAR}\""
+            )),
+            "container.ts reads another name than `bynk dev` sets"
+        );
     }
 
     const CONFIG: &str = r#"name = "shop-render"

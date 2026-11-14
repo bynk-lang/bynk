@@ -562,9 +562,10 @@ vectorize create shop-cart-docs (VECTORIZE_DOCS, 768, cosine; metadata indexes c
 
 An index is named `<worker>-<capability>`, with an environment suffix under
 `--env`, and made with `wrangler vectorize create` in the dimensions and metric the
-declaration states. Cloudflare takes a kebab-cased name of at most 64 bytes; a name
-the environment suffix would push past that, or two instances would share, is an
-error naming the instance.
+declaration states. Cloudflare takes 1 to 64 bytes of lowercase letters, digits,
+hyphens and underscores, starting with a letter; a name the environment suffix
+would push past that, or two instances would share, is an error naming the
+instance.
 
 An index's dimensions and metric cannot change once it exists, and recreating it
 would delete every vector in it, so **the deploy never recreates one**. Every

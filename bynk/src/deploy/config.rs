@@ -1279,21 +1279,28 @@ pub(crate) fn vectorize_index_name(environment: &str, name: &str) -> String {
     env_qualify(environment, name)
 }
 
-/// #3479: why `name` cannot be an index name (Cloudflare takes a kebab-cased
-/// name of at most 64 bytes), or `None`. Checked on the qualified name, which
-/// the environment suffix can push over the limit.
+/// #3479, #3496: why `name` cannot be an index name, or `None`. Cloudflare
+/// takes 1 to 64 bytes of lowercase letters, digits, hyphens and underscores,
+/// starting with a letter (observed against a real account on #3479:
+/// `probe_underscore` is accepted; `9probe-leading-digit`, `Probe-Upper` and
+/// `probe.dot` are refused). Checked on the qualified name, which the
+/// environment suffix can push over the limit. A trailing hyphen was not
+/// probed, so it stays refused.
 pub(crate) fn vectorize_index_name_problem(name: &str) -> Option<&'static str> {
     if name.is_empty() || name.len() > 64 {
         return Some("it must be 1 to 64 bytes");
     }
     if !name
         .bytes()
-        .all(|b| b.is_ascii_lowercase() || b.is_ascii_digit() || b == b'-')
+        .all(|b| b.is_ascii_lowercase() || b.is_ascii_digit() || b == b'-' || b == b'_')
     {
-        return Some("it may hold only lowercase letters, digits and hyphens");
+        return Some("it may hold only lowercase letters, digits, hyphens and underscores");
     }
-    if name.starts_with('-') || name.ends_with('-') {
-        return Some("it may not start or end with a hyphen");
+    if !name.starts_with(|c: char| c.is_ascii_lowercase()) {
+        return Some("it must start with a lowercase letter");
+    }
+    if name.ends_with('-') {
+        return Some("it may not end with a hyphen");
     }
     None
 }
@@ -2634,6 +2641,34 @@ state = "deleted"
             r2_bucket_name("default", "registry-store-indexes"),
             "registry-store-indexes"
         );
+    }
+
+    #[test]
+    fn vectorize_names_follow_cloudflares_observed_rules() {
+        // #3496: the verdicts Cloudflare gave a real account (#3479).
+        // A trailing underscore was not probed; it is accepted deliberately.
+        for ok in [
+            "revertprobe-app-docs",
+            "probe_underscore",
+            "my_index",
+            "a",
+            "a_",
+        ] {
+            assert_eq!(vectorize_index_name_problem(ok), None, "{ok}");
+        }
+        for bad in [
+            "9probe-leading-digit",
+            "Probe-Upper",
+            "probe.dot",
+            "",
+            "-a",
+            "a-",
+            "_a",
+        ] {
+            assert!(vectorize_index_name_problem(bad).is_some(), "{bad}");
+        }
+        assert!(vectorize_index_name_problem(&"a".repeat(65)).is_some());
+        assert_eq!(vectorize_index_name_problem(&"a".repeat(64)), None);
     }
 
     #[test]
