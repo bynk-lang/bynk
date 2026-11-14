@@ -994,11 +994,12 @@ export const Mutation = {
 
 /**
  * An index's configuration, as `Vectorize.describe` reports it: its
- * `dimensions` and its `metric`.
+ * `dimensions`, and its `metric` when the platform reports one (a real index's
+ * `describe` does not, so it is normally `None`; the declaration states it).
  */
 export interface IndexInfo {
   readonly dimensions: number;
-  readonly metric: string;
+  readonly metric: Option<string>;
 }
 
 export const IndexInfo = {
@@ -2514,7 +2515,7 @@ export function __deserialise_InboundEmail(json: __JsonValue, path: string = "$"
 export function __serialise_IndexInfo(value: IndexInfo): __JsonValue {
   return {
     dimensions: ((v: number) => { if (!globalThis.Number.isSafeInteger(v)) throw new globalThis.Error("Int outside the safe-integer range at boundary"); return v as __JsonValue; })(value.dimensions),
-    metric: value.metric as __JsonValue,
+    metric: __serialise_Option_String(value.metric),
   };
 }
 
@@ -2530,10 +2531,9 @@ export function __deserialise_IndexInfo(json: __JsonValue, path: string = "$"): 
     return Err({ kind: "StructuralMismatch", path: `${path}.dimensions`, expected: "safe integer", actual: String(obj["dimensions"]) });
   }
   const __dimensions = obj["dimensions"];
-  if (typeof obj["metric"] !== "string") {
-    return Err({ kind: "StructuralMismatch", path: `${path}.metric`, expected: "string", actual: typeof obj["metric"] });
-  }
-  const __metric = obj["metric"];
+  const __r_metric = __deserialise_Option_String(obj["metric"], `${path}.metric`);
+  if (__r_metric.tag === "Err") return __r_metric;
+  const __metric = __r_metric.value;
   return Ok({ dimensions: __dimensions, metric: __metric } as IndexInfo);
 }
 

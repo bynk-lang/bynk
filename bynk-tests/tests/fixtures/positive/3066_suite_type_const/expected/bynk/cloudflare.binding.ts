@@ -1656,7 +1656,7 @@ export class WorkersVectorize implements Vectorize {
           .map((w) => w.charAt(0) + w.slice(1).toLowerCase())
           .join("");
         throw new Error(
-          `bynk.cloudflare.Vectorize: \`${capability}\` has no development index: set \`[dev.vectorize-index] ${capability} = "<index-name>"\` in bynk.toml to an index of your own (it must already exist with the declaration's dimensions and metric)`,
+          `bynk.cloudflare.Vectorize: \`${capability}\` has no development index: set \`[dev.vectorize-index] ${capability} = "<index-name>"\` in bynk.toml to an index of your own (it must already exist with the declaration's dimensions; its metric cannot be checked from here)`,
         );
       }
       throw new Error(
@@ -1682,13 +1682,18 @@ export class WorkersVectorize implements Vectorize {
       raw = (await index.describe()) as Record<string, unknown> | null | undefined;
     } catch (e) {
       WorkersVectorize.fault(
-        `could not reach the development index bound to ${this.binding}: ${e instanceof Error ? e.message : String(e)}. It must already exist (bynk dev never creates one) with the declaration's dimensions and metric`,
+        `could not reach the development index bound to ${this.binding}: ${e instanceof Error ? e.message : String(e)}. It must already exist (bynk dev never creates one) with the declaration's dimensions`,
       );
     }
     const config = ((raw?.config as Record<string, unknown> | undefined) ?? raw) as Record<string, unknown> | undefined;
-    if (String(config?.dimensions) !== dimensions || config?.metric !== metric) {
+    // Compare only what the platform reports. A real `describe()` carries
+    // `dimensions` but no `metric` (observed on a real index, #3479), so the
+    // metric is checked only when a reply happens to carry one; otherwise the
+    // metric of the development index cannot be verified here and is skipped.
+    const reportsMetric = typeof config?.metric === "string";
+    if (String(config?.dimensions) !== dimensions || (reportsMetric && config?.metric !== metric)) {
       WorkersVectorize.fault(
-        `the development index bound to ${this.binding} has ${String(config?.dimensions)} dimensions and the ${String(config?.metric)} metric, but the declaration says ${dimensions} and ${metric}; bind an index with the declaration's configuration under [dev.vectorize-index]`,
+        `the development index bound to ${this.binding} has ${String(config?.dimensions)} dimensions${reportsMetric ? ` and the ${String(config?.metric)} metric` : ""}, but the declaration says ${dimensions}${reportsMetric ? ` and ${metric}` : ""}; bind an index with the declaration's configuration under [dev.vectorize-index]`,
       );
     }
     devIndexChecked.add(this.binding);
@@ -1712,9 +1717,13 @@ export class WorkersVectorize implements Vectorize {
     if (/\bindex\b.*(not found|does not exist)|no such index/i.test(message) && !/metadata/i.test(message)) {
       throw e instanceof Error ? e : new Error(message);
     }
+    // The platform's numbered codes, present in every message observed: 40012 is
+    // a dimension error, 40025 a `topK` over the limit.
+    if (/\(code = 40012\)/.test(message)) return { tag: "DimensionMismatch", message };
+    if (/\(code = 40025\)/.test(message)) return { tag: "VectorInvalidInput", message };
     if (/dimensions?\b.*(mismatch|does not match|expected)|(mismatch|expected).*\bdimensions?\b/i.test(message)) return { tag: "DimensionMismatch", message };
     if (/rate.?limit|too many requests|\b429\b/i.test(message)) return { tag: "VectorRateLimited" };
-    if (/invalid|too (large|many|long)|exceed|must be|not allowed|maximum|limit/i.test(message)) {
+    if (/invalid|too (large|many|long)|exceed|must be|not allowed|maximum|max top ?k|limit/i.test(message)) {
       return { tag: "VectorInvalidInput", message };
     }
     return { tag: "VectorFailed", message };
@@ -1927,8 +1936,8 @@ export class WorkersVectorize implements Vectorize {
   }
 
   // `describe()` reports the configuration, read from the top level or under
-  // `config` (the platform has used both). A reply with no metric cannot make
-  // an `IndexInfo`, so it is a `VectorFailed` that says what is missing.
+  // `config` (the platform has used both). The real reply carries `dimensions`
+  // but no `metric`, so the metric is `None` unless a reply names one.
   async describe(): Promise<Result<IndexInfo, VectorError>> {
     const index = this.index();
     // The first call under `bynk dev` has just described the index: reuse that.
@@ -1938,10 +1947,10 @@ export class WorkersVectorize implements Vectorize {
       const config = ((raw?.config as Record<string, unknown> | undefined) ?? raw) as Record<string, unknown> | undefined;
       const dimensions = config?.dimensions;
       const metric = config?.metric;
-      if (typeof dimensions !== "number" || typeof metric !== "string") {
-        return Err({ tag: "VectorFailed", message: "describe did not report the index's dimensions and metric" });
+      if (typeof dimensions !== "number") {
+        return Err({ tag: "VectorFailed", message: "describe did not report the index's dimensions" });
       }
-      return Ok({ dimensions, metric });
+      return Ok({ dimensions, metric: typeof metric === "string" ? Some(metric) : None });
     } catch (e) {
       return Err(WorkersVectorize.failure(e));
     }

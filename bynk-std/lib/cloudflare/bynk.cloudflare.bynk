@@ -1306,11 +1306,12 @@ adapter bynk.cloudflare {
 
 	---
 	An index's configuration, as `Vectorize.describe` reports it: its
-	`dimensions` and its `metric`.
+	`dimensions`, and its `metric` when the platform reports one (a real index's
+	`describe` does not, so it is normally `None`; the declaration states it).
 	---
 	type IndexInfo = {
 		dimensions: Int,
-		metric: String,
+		metric: Option[String],
 	}
 
 	---

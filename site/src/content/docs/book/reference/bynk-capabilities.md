@@ -1534,14 +1534,17 @@ the data (an empty property name, one with a double quote or a leading `$`, one 
 512 characters, a range over a flag, or conditions on one property that are not one
 lower and one upper bound) as `VectorInvalidInput`; the limits that drift (the
 filter's size, `topK`, a batch, metadata) are the platform's to say, and come back as
-`VectorInvalidInput(message)` as well. A property can be filtered on only when it is
+`VectorInvalidInput(message)` as well (a `topK` over the limit, for one: the platform
+refuses a `topK` over 50 with `returnValues` or `returnMetadata: All`). A property can be filtered on only when it is
 in `@indexed` and the vector was written after the metadata index existed.
 
 A write (`upsert`, `insert`, `deleteByIds`) returns a `Mutation { id }` and is
 queryable only once the platform has processed it, which takes some seconds: a
 handler that writes and then queries in the same request will not see its own write.
-`getByIds` reads vectors back with their values and metadata, and `describe` reports
-the index's `dimensions` and `metric`.
+`getByIds` reads vectors back with their values and metadata. `describe` reports the
+index's `dimensions`; its `metric` is an `Option[String]`, `None` because the
+platform's `describe` does not report one (the declaration states it, so the metric
+of a bound index cannot be checked at run time).
 
 A `VectorError` is `DimensionMismatch(message)`, `VectorInvalidInput(message)`,
 `VectorRateLimited` (worth retrying later) or `VectorFailed(message)` (anything else,
@@ -1556,7 +1559,9 @@ A Worker whose code reaches a `Vectorize` instance declares `[[vectorize]]` with
 an exact in-memory index built from its declaration, so a test never reaches
 Cloudflare and a retrieval flow runs end to end. It ranks exactly where production
 ranks approximately, and a write is visible at once where production takes some
-seconds; those are its two differences. It enforces the dimensions, namespaces,
+seconds; those are its two differences. A query that names no namespace returns the vectors of every namespace, as on the
+platform, and one that names a namespace returns only that namespace's. It enforces
+the dimensions, namespaces,
 insert versus upsert, all eight filter operators and the platform's limits as read
 on 13 November 2026 (a limit it refuses is `VectorInvalidInput`); a filter on a
 property that is not in `@indexed` faults, naming the difference, since production
