@@ -13,9 +13,7 @@ in `bynk.toml`:
 allow = ["bynk.cloudflare.Container"]
 ```
 
-This release emits the Worker's configuration and the generated class. Deploying
-is done by hand with `wrangler deploy`; `bynk deploy` and `bynk dev` do not yet
-know about containers.
+`bynk deploy` handles containers; `bynk dev` does not yet start them.
 
 ## Write the image
 
@@ -93,21 +91,28 @@ secrets and is never written to source, configuration or the lock file, but ever
 process and dependency in the image can read it, so forward only what the image
 needs.
 
-## Deploy it by hand
+## Deploy it
 
-`bynk build --target workers` writes the Worker's `wrangler.toml` with a Durable
-Object binding, its `exports` entry and a `[[containers]]` entry whose image is
-built from the directory you named. Deploy with `wrangler deploy` from the
-Worker's output directory: Docker must be running, and Wrangler must be 4.136.0 or
-later. The `[[containers]]` entry names its build paths from the Worker's output
-directory back to the project, computed from the directory the build is written
-to, so `bynk build --out <dir>` works for any directory inside the project. A
-build written outside the project is refused (`bynk.container.output_outside_project`),
-naming each container and both paths, because the paths could not be written.
+`bynk deploy` plans the container, checks for Docker when it has an image to
+build, and hands the Worker to `wrangler deploy`, which builds and pushes the image
+and creates the application. Docker must be running, and wrangler must be 4.136.0
+or later (an older one is refused with the version named). Without Docker, push a
+prebuilt image to Cloudflare's registry and adopt it in `bynk.toml`:
 
-Images are pushed to Cloudflare's registry by `wrangler`; Docker Hub, Amazon ECR
-and Google's registry references are not supported for this kind of
-container. A running container costs money: see Cloudflare's
+```toml
+[deploy.containers.Renderer]
+image = { production = "registry.cloudflare.com/<ACCOUNT_ID>/renderer@sha256:<DIGEST>" }
+```
+
+The image must be named by digest and be in Cloudflare's registry; Docker Hub,
+Amazon ECR and Google's registry are not supported for this kind of container.
+[Deploy to Cloudflare](/book/guides/projects-build-and-deployment/deploy-to-cloudflare/#containers)
+covers the plan, the Docker check, adoption, CI and `bynk revert`. The
+`[[containers]]` entry names its build paths from the Worker's output directory
+back to the project, computed from the directory the build is written to, so
+`bynk build --out <dir>` works for any directory inside the project; a build
+written outside it is refused (`bynk.container.output_outside_project`). A running
+container costs money: see Cloudflare's
 [Containers pricing](https://developers.cloudflare.com/containers/pricing/) page,
 which this guide does not repeat.
 

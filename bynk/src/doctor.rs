@@ -170,10 +170,13 @@ pub fn diagnose(tb: &dyn Toolbox, ctx: &Context, opts: &DoctorOptions) -> Report
         let node = detect_node(tb, root, ctx.node_floor);
         let wrangler = detect_wrangler(tb, root);
         let packages = detect_package_manager(tb, root);
-        capabilities.push(capability(
-            Capability::Deploy,
-            vec![node, wrangler, packages],
-        ));
+        let mut rows = vec![node, wrangler, packages];
+        // #3477: only a project that declares a container has a use for Docker,
+        // so only its report carries the row.
+        if root.is_some_and(declares_container) {
+            rows.push(detect_docker(tb));
+        }
+        capabilities.push(capability(Capability::Deploy, rows));
     }
     if want(Capability::Editor) {
         let lsp = detect_plain(
@@ -490,6 +493,83 @@ fn detect_package_manager(tb: &dyn Toolbox, root: Option<&std::path::Path>) -> R
             detail: format!("none found ({e})"),
             remedy: None,
         },
+    }
+}
+
+/// Whether the project declares a `Container` (`capability X = Container …`):
+/// a text scan of its `.bynk` files, which skips dependency, build and VCS
+/// directories. A comment that spells the declaration counts, which only makes
+/// the Docker row louder than it needs to be.
+pub(crate) fn declares_container(root: &std::path::Path) -> bool {
+    fn walk(dir: &std::path::Path, depth: usize) -> bool {
+        let Ok(entries) = std::fs::read_dir(dir) else {
+            return false;
+        };
+        entries.flatten().any(|entry| {
+            let path = entry.path();
+            let name = entry.file_name();
+            let name = name.to_string_lossy();
+            if path.is_dir() {
+                depth < 8
+                    && !matches!(
+                        name.as_ref(),
+                        "node_modules" | "target" | "out" | "dist" | ".git"
+                    )
+                    && walk(&path, depth + 1)
+            } else {
+                name.ends_with(".bynk")
+                    && std::fs::read_to_string(&path).is_ok_and(|text| {
+                        text.lines().any(|l| {
+                            l.trim_start().starts_with("capability ")
+                                && l.split_once("= Container").is_some_and(|(_, rest)| {
+                                    !rest.starts_with(|c: char| c.is_alphanumeric() || c == '_')
+                                })
+                        })
+                    })
+            }
+        })
+    }
+    walk(root, 0)
+}
+
+/// #3477: Docker, which `bynk deploy` needs only to build a `Container`'s image
+/// from its Dockerfile (an adopted image needs none). Listed only for a project
+/// that declares a container ([`declares_container`]); a missing or stopped
+/// Docker is a warning, not a failure, since the deploy may adopt an image
+/// instead. Worth knowing before a deploy that needs it.
+fn detect_docker(tb: &dyn Toolbox) -> Row {
+    const REMEDY: &str = "needed only to build a Container's image at deploy: start Docker, or adopt a prebuilt image in bynk.toml ([deploy.containers.<Capability>])";
+    let probe = probe::detect(
+        tb,
+        "docker",
+        DetectOpts {
+            project_root: None,
+            allow_npx: false,
+            manager: None,
+        },
+    );
+    let path = match &probe.provenance {
+        Provenance::Path(path) | Provenance::ProjectLocal(path) => Some(path.clone()),
+        _ => None,
+    };
+    let warn = |detail: String| Row {
+        label: "docker".into(),
+        level: Level::Warn,
+        detail,
+        remedy: Some(REMEDY.into()),
+    };
+    let Some(path) = path.filter(|_| probe.is_present()) else {
+        return warn("not found".into());
+    };
+    if tb.docker_daemon_running(&path) {
+        Row {
+            label: "docker".into(),
+            level: Level::Ok,
+            detail: format!("{} (daemon running)", present_detail(&probe)),
+            remedy: None,
+        }
+    } else {
+        warn(format!("{} (no daemon running)", present_detail(&probe)))
     }
 }
 

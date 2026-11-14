@@ -63,6 +63,13 @@ pub fn compatibility_flags(extra: &[String]) -> (Vec<String>, Vec<String>) {
 /// policy doc names both.
 pub const WRANGLER_MIN: &str = "4.120.1";
 
+/// #3477 (slice C2): the oldest wrangler that accepts a container whose class
+/// runs under the `durable_object` scheduling policy, and runs it under
+/// `wrangler dev`. Below it the policy value is refused by the configuration
+/// schema. Only a Worker that declares a `Container` needs it, so
+/// [`WRANGLER_MIN`] does not move.
+pub const WRANGLER_CONTAINERS_MIN: &str = "4.136.0";
+
 /// Events track, slice 0 (spine #936, ADR 0284): the class name of a
 /// publishing context's fan-out Durable Object (`emitter::events_fanout`).
 /// Shared with `emitter::workers` (the `Env` field name + `deps.
@@ -1244,6 +1251,105 @@ pub fn vectorize_index_entries(text: &str) -> Result<Vec<(String, String)>, Stri
         .collect())
 }
 
+/// The name of the manifest beside a Worker's `wrangler.toml` that states what
+/// `[[containers]]` does not: each container's capability, `@build` directory and
+/// `@instanceType`, which `bynk deploy` plans and checks from.
+pub const CONTAINERS_MANIFEST: &str = "bynk-containers.json";
+
+/// The version of [`CONTAINERS_MANIFEST`]'s layout.
+pub const CONTAINERS_MANIFEST_VERSION: u32 = 1;
+
+/// #3477 (slice C2): [`CONTAINERS_MANIFEST`] for a Worker's bindings, or `None`
+/// when it has no container. `instance_type` is `null` when the declaration
+/// gives none, which the platform runs as `lite`.
+pub fn emit_containers_manifest(bindings: &[WorkerBinding]) -> Option<String> {
+    let entries: Vec<String> = bindings
+        .iter()
+        .filter_map(|b| match &b.source {
+            BindingSource::ContainerInstance {
+                capability,
+                class_name,
+                build,
+                instance_type,
+                ..
+            } => Some(format!(
+                "    {{ \"capability\": {}, \"class\": {}, \"build\": {}, \"instance_type\": {} }}",
+                bynk_project::json_string(capability),
+                bynk_project::json_string(class_name),
+                bynk_project::json_string(build),
+                instance_type
+                    .as_deref()
+                    .map_or_else(|| "null".to_string(), bynk_project::json_string),
+            )),
+            _ => None,
+        })
+        .collect();
+    if entries.is_empty() {
+        return None;
+    }
+    Some(format!(
+        "{{\n  \"version\": {CONTAINERS_MANIFEST_VERSION},\n  \"containers\": [\n{}\n  ]\n}}\n",
+        entries.join(",\n")
+    ))
+}
+
+/// #3477 (slice C2): `text` with each adopted container image named in the
+/// `[containers.images.<capability>]` entry of `environment` (the top level for
+/// `default`, else `[env.<name>]`): the entry's `dockerfile`, `build_context`
+/// and `build_vars` go, and `image` takes the digest-pinned reference, so
+/// `wrangler` builds nothing for it. `images` maps a capability to its
+/// reference. An adopted capability with no entry to rewrite is an error: it
+/// would be built after all.
+pub fn materialise_adopted_container_images(
+    text: &str,
+    environment: &str,
+    images: &std::collections::BTreeMap<String, String>,
+) -> Result<String, String> {
+    let mut doc: toml_edit::DocumentMut = text
+        .parse()
+        .map_err(|e| format!("invalid wrangler.toml: {e}"))?;
+    let item = if environment == "default" {
+        doc.get_mut("containers")
+    } else {
+        doc.get_mut("env")
+            .and_then(|e| e.get_mut(environment))
+            .and_then(|e| e.get_mut("containers"))
+    };
+    let mut found = std::collections::BTreeSet::new();
+    if let Some(tables) = item.and_then(|i| i.as_array_of_tables_mut()) {
+        for application in tables.iter_mut() {
+            let Some(map) = application
+                .get_mut("images")
+                .and_then(|i| i.as_table_like_mut())
+            else {
+                continue;
+            };
+            for (capability, reference) in images {
+                let Some(entry) = map.get_mut(capability).and_then(|e| e.as_table_like_mut())
+                else {
+                    continue;
+                };
+                found.insert(capability.clone());
+                for key in ["dockerfile", "build_context", "build_vars"] {
+                    entry.remove(key);
+                }
+                entry.insert("image", toml_edit::value(reference.as_str()));
+            }
+        }
+    }
+    if let Some(missing) = images.keys().find(|c| !found.contains(*c)) {
+        return Err(format!(
+            "no `containers.images.{missing}` entry in {}",
+            if environment == "default" {
+                "the configuration".to_string()
+            } else {
+                format!("`[env.{environment}]`")
+            }
+        ));
+    }
+    Ok(doc.to_string())
+}
+
 /// #3479: point `[[vectorize]]` entries at the indexes `bynk.toml` adopts,
 /// structurally, by binding. An adopted index keeps the name it has on the
 /// account (never the derived, environment-qualified one), so it is written
@@ -2405,5 +2511,126 @@ mod hyperdrive_manifest_tests {
         assert!(!text.contains("HYPERDRIVE_MAIN"), "{text}");
         // Names and modes only: never a connection string or a URL.
         assert!(!text.contains("://") && !text.contains('@'), "{text}");
+    }
+}
+
+#[cfg(test)]
+mod containers_tests {
+    use super::*;
+
+    fn container(capability: &str, instance_type: Option<&str>) -> WorkerBinding {
+        WorkerBinding {
+            name: format!("CONTAINER_{}", capability.to_ascii_uppercase()),
+            source: BindingSource::ContainerInstance {
+                capability: capability.to_string(),
+                class_name: format!("__Container_{capability}"),
+                build: "containers/render".to_string(),
+                root_from_worker: "../../..".to_string(),
+                port: 8080,
+                sleep_after: None,
+                instance_type: instance_type.map(str::to_string),
+                forward: Vec::new(),
+            },
+        }
+    }
+
+    /// #3477: the manifest states each container's capability, build directory
+    /// and instance type (`null` for the platform's default), and a Worker with
+    /// no container gets none, so its output is unchanged.
+    #[test]
+    fn the_manifest_lists_each_container() {
+        let text = emit_containers_manifest(&[
+            container("Renderer", Some("standard-1")),
+            container("Thumbs", None),
+        ])
+        .expect("a manifest");
+        assert!(
+            text.contains(&format!("\"version\": {CONTAINERS_MANIFEST_VERSION}")),
+            "{text}"
+        );
+        assert!(text.contains(
+            "{ \"capability\": \"Renderer\", \"class\": \"__Container_Renderer\", \"build\": \"containers/render\", \"instance_type\": \"standard-1\" }"
+        ), "{text}");
+        assert!(text.contains(
+            "{ \"capability\": \"Thumbs\", \"class\": \"__Container_Thumbs\", \"build\": \"containers/render\", \"instance_type\": null }"
+        ), "{text}");
+        let kv = WorkerBinding {
+            name: "KV".to_string(),
+            source: BindingSource::Kv,
+        };
+        assert_eq!(emit_containers_manifest(&[kv]), None);
+    }
+
+    const CONFIG: &str = r#"name = "shop-render"
+
+[[containers]]
+class_name = "__Container_Renderer"
+scheduling_policy = "durable_object"
+
+[containers.images.Renderer]
+dockerfile = "../../../containers/render/Dockerfile"
+build_context = "../../../containers/render"
+
+[env.staging]
+name = "shop-render-staging"
+
+[[env.staging.containers]]
+class_name = "__Container_Renderer"
+scheduling_policy = "durable_object"
+
+[env.staging.containers.images.Renderer]
+dockerfile = "../../../containers/render/Dockerfile"
+build_context = "../../../containers/render"
+"#;
+
+    const IMAGE: &str = "registry.cloudflare.com/abc123/renderer@sha256:0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef";
+
+    fn adopt() -> std::collections::BTreeMap<String, String> {
+        [("Renderer".to_string(), IMAGE.to_string())]
+            .into_iter()
+            .collect()
+    }
+
+    /// #3477: an adopted image replaces the Dockerfile in the environment's own
+    /// block (the top level for `default`), and the other environment keeps
+    /// building.
+    #[test]
+    fn an_adopted_image_replaces_the_dockerfile_in_its_environment_only() {
+        let top = materialise_adopted_container_images(CONFIG, "default", &adopt()).unwrap();
+        let doc: toml::Table = top.parse().unwrap();
+        let images = &doc["containers"][0]["images"]["Renderer"];
+        assert_eq!(images["image"].as_str(), Some(IMAGE));
+        assert!(images.get("dockerfile").is_none() && images.get("build_context").is_none());
+        assert!(
+            doc["env"]["staging"]["containers"][0]["images"]["Renderer"]
+                .get("dockerfile")
+                .is_some(),
+            "{top}"
+        );
+        let staging = materialise_adopted_container_images(CONFIG, "staging", &adopt()).unwrap();
+        let doc: toml::Table = staging.parse().unwrap();
+        assert_eq!(
+            doc["env"]["staging"]["containers"][0]["images"]["Renderer"]["image"].as_str(),
+            Some(IMAGE)
+        );
+        assert!(
+            doc["containers"][0]["images"]["Renderer"]
+                .get("dockerfile")
+                .is_some()
+        );
+    }
+
+    /// An adopted capability with nothing to rewrite would be built after all,
+    /// so it is an error rather than a silent no-op.
+    #[test]
+    fn an_adoption_with_no_entry_to_rewrite_is_refused() {
+        let other: std::collections::BTreeMap<String, String> =
+            [("Missing".to_string(), IMAGE.to_string())]
+                .into_iter()
+                .collect();
+        let err = materialise_adopted_container_images(CONFIG, "default", &other).unwrap_err();
+        assert!(err.contains("containers.images.Missing"), "{err}");
+        let err = materialise_adopted_container_images(CONFIG, "qa", &adopt()).unwrap_err();
+        assert!(err.contains("`[env.qa]`"), "{err}");
     }
 }

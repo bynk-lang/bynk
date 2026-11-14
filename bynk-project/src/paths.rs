@@ -159,6 +159,12 @@ pub enum ProjectPathsError {
         capability: String,
         reason: String,
     },
+    /// #3477: a `[deploy.containers.<Capability>]` entry that is not well formed.
+    BadContainers {
+        table: &'static str,
+        capability: String,
+        reason: String,
+    },
     /// #3479: a `[deploy.vectorize.<Capability>]` entry that is not well formed.
     BadVectorize {
         table: &'static str,
@@ -232,7 +238,7 @@ pub const MANIFEST_TABLES: &[(&str, &[&str])] = &[
     ("fmt", &[]),
     ("lsp", &["diagnostics_mode", "diagnostics_debounce_ms"]),
     ("workers", &["compatibility_flags", "workers_dev"]),
-    ("deploy", &["hyperdrive", "vectorize"]),
+    ("deploy", &["hyperdrive", "vectorize", "containers"]),
     (
         "dev",
         &[
@@ -397,6 +403,13 @@ impl std::fmt::Display for ProjectPathsError {
                 write!(f, "`[profile.{profile}]` {reason}")
             }
             ProjectPathsError::BadHyperdrive {
+                table,
+                capability,
+                reason,
+            } => {
+                write!(f, "`[{table}.{capability}]` {reason}")
+            }
+            ProjectPathsError::BadContainers {
                 table,
                 capability,
                 reason,
@@ -600,6 +613,7 @@ pub fn check_manifest_str(content: &str) -> Result<(), ProjectPathsError> {
             "deploy" => {
                 drop(crate::hyperdrive::deploy_hyperdrive_from(entries)?);
                 drop(crate::vectorize::deploy_vectorize_from(entries)?);
+                drop(crate::containers::deploy_containers_from(entries)?);
             }
             "dev" => {
                 drop(crate::hyperdrive::dev_hyperdrive_from(entries)?);

@@ -36,6 +36,9 @@ struct WranglerConfig {
     /// #3479: the `[[vectorize]]` of the `Vectorize` instances.
     #[serde(default)]
     vectorize: Vec<VectorizeStanza>,
+    /// #3477: the `[[containers]]` of the `Container` instances.
+    #[serde(default)]
+    containers: Vec<ContainerStanza>,
     /// #3319: the `[[hyperdrive]]` of the `Postgres` instances.
     #[serde(default)]
     hyperdrive: Vec<HyperdriveStanza>,
@@ -189,6 +192,46 @@ struct Export {
 pub(crate) struct DurableObject {
     pub(crate) class: String,
     pub(crate) storage: String,
+}
+
+/// #3477: one `[[containers]]` entry: the class whose container it runs.
+#[derive(Debug, Deserialize)]
+struct ContainerStanza {
+    class_name: String,
+}
+
+/// #3477: `bynk-containers.json` beside a Worker's config: each container's
+/// capability, `@build` directory and `@instanceType`, which the stanza does
+/// not carry.
+#[derive(Debug, Deserialize)]
+struct ContainersManifest {
+    version: u32,
+    #[serde(default)]
+    containers: Vec<ContainersManifestEntry>,
+}
+
+#[derive(Debug, Deserialize)]
+struct ContainersManifestEntry {
+    capability: String,
+    class: String,
+    build: String,
+    #[serde(default)]
+    instance_type: Option<String>,
+}
+
+/// Read the containers manifest beside `worker_dir`'s config, if there is one.
+fn read_containers_manifest(worker_dir: &Path) -> Result<Vec<ContainersManifestEntry>, String> {
+    let name = bynk_emit::emitter::wrangler::CONTAINERS_MANIFEST;
+    let path = worker_dir.join(name);
+    if !path.exists() {
+        return Ok(Vec::new());
+    }
+    let text = std::fs::read_to_string(&path).map_err(|e| e.to_string())?;
+    let manifest: ContainersManifest = serde_json::from_str(&text).map_err(|e| e.to_string())?;
+    if manifest.version != bynk_emit::emitter::wrangler::CONTAINERS_MANIFEST_VERSION {
+        return Err(format!("unsupported {name} version {}", manifest.version));
+    }
+    Ok(manifest.containers)
 }
 
 #[derive(Debug, Deserialize)]
@@ -468,6 +511,26 @@ impl VectorizeDecl {
     }
 }
 
+/// #3477: one `Container` instance, as the emitted config and manifest declare
+/// it. The image is built by `wrangler deploy` from `build`, or adopted from
+/// `bynk.toml` for an environment, in which case nothing is built.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub(crate) struct ContainerDecl {
+    /// The capability's name (`Renderer`): the key of its image, and what
+    /// `[deploy.containers.<Capability>]` names.
+    pub(crate) capability: String,
+    /// The generated Durable Object class.
+    pub(crate) class: String,
+    /// The `@build` directory, relative to the project root.
+    pub(crate) build: String,
+    /// `@instanceType`, or `None` for the platform's default (`lite`).
+    pub(crate) instance_type: Option<String>,
+    /// The digest-pinned image `bynk.toml` adopts for this run's environment
+    /// (`[deploy.containers.<Cap>] image`), or `None` when it is built. Set per
+    /// run, never read from the generated config.
+    pub(crate) adopt: Option<String>,
+}
+
 /// The provisioning surface one context's closure locks it to.
 #[derive(Debug, PartialEq, Eq)]
 pub(crate) struct Resources {
@@ -518,6 +581,11 @@ pub(crate) struct Resources {
     /// deploy; a mismatch fails the deploy. Reported, never deleted unless
     /// `--prune` is confirmed, when its instance goes.
     pub(crate) vectorize_indexes: Vec<VectorizeDecl>,
+    /// #3477: the containers of the `Container` instances, by class name. Each
+    /// is built or adopted at the push, which `wrangler deploy` reconciles; the
+    /// deploy only plans it, needs Docker for it when it must build, and records
+    /// an adopted image.
+    pub(crate) containers: Vec<ContainerDecl>,
     /// P4a (#2602): the databases of the `D1` instances, in binding order.
     /// Each is created by name, its minted id recorded in the ledger and
     /// written into the config before the push; reported, never deleted, when
@@ -633,6 +701,7 @@ impl Default for Resources {
             kv_instances: Vec::new(),
             r2_buckets: Vec::new(),
             vectorize_indexes: Vec::new(),
+            containers: Vec::new(),
             d1_databases: Vec::new(),
             hyperdrive: Vec::new(),
             ratelimits: Vec::new(),
@@ -845,6 +914,31 @@ fn read_resources(config: &Path, project_workers: &[String]) -> Result<Resources
         })
         .collect::<Result<_, String>>()?;
     vectorize_indexes.sort_by(|a, b| a.binding.cmp(&b.binding));
+    let manifest = read_containers_manifest(config.parent().unwrap_or(Path::new(".")))?;
+    let mut containers: Vec<ContainerDecl> = parsed
+        .containers
+        .into_iter()
+        .map(|stanza| {
+            let entry = manifest
+                .iter()
+                .find(|c| c.class == stanza.class_name)
+                .ok_or_else(|| {
+                    format!(
+                        "{} does not describe the container of `{}`, so it cannot be planned or adopted",
+                        bynk_emit::emitter::wrangler::CONTAINERS_MANIFEST,
+                        stanza.class_name
+                    )
+                })?;
+            Ok(ContainerDecl {
+                capability: entry.capability.clone(),
+                class: entry.class.clone(),
+                build: entry.build.clone(),
+                instance_type: entry.instance_type.clone(),
+                adopt: None,
+            })
+        })
+        .collect::<Result<_, String>>()?;
+    containers.sort_by(|a, b| a.class.cmp(&b.class));
     let mut ratelimits: Vec<String> = parsed.ratelimits.into_iter().map(|r| r.name).collect();
     ratelimits.sort();
     let mut analytics_datasets: Vec<AnalyticsDecl> = parsed
@@ -951,6 +1045,7 @@ fn read_resources(config: &Path, project_workers: &[String]) -> Result<Resources
         },
         r2_buckets,
         vectorize_indexes,
+        containers,
         d1_databases,
         hyperdrive,
         ratelimits,
@@ -1423,6 +1518,14 @@ pub(crate) fn synthesise_environment_block(
             }
         }
         env_block.insert("vectorize".to_string(), toml::Value::Array(indexes));
+    }
+
+    // #3477: each container's application as emitted (an adopted image already
+    // materialised by `materialise_adopted_container_images`). Like `exports`,
+    // it is copied so the `[env.<name>]` block states the container its class
+    // runs rather than leaning on an inheritance rule.
+    if let Some(containers) = doc.get("containers") {
+        env_block.insert("containers".to_string(), containers.clone());
     }
 
     // P4a (#2602): each database as the deploy materialised it, under this
@@ -2594,6 +2697,65 @@ state = "deleted"
     /// configuration from the manifest beside it; a stanza the manifest does not
     /// state is an error (an index made with a guessed shape cannot be corrected),
     /// and a named environment's block carries the qualified name.
+    /// #3477: a container is read from the config's `[[containers]]` and its
+    /// manifest, which states what the stanza does not; the `[env.<name>]` block
+    /// copies the application, and the config alone does not describe a container.
+    #[test]
+    fn a_container_is_read_from_the_config_and_its_manifest() {
+        let dir = std::env::temp_dir().join(format!(
+            "bynk-containers-manifest-{}-{}",
+            std::process::id(),
+            std::time::SystemTime::now()
+                .duration_since(std::time::UNIX_EPOCH)
+                .unwrap()
+                .as_nanos()
+        ));
+        std::fs::create_dir_all(&dir).unwrap();
+        let config = dir.join("wrangler.toml");
+        let text = "name = \"shop\"\n\n[[containers]]\nclass_name = \"__Container_Renderer\"\nscheduling_policy = \"durable_object\"\n\n[containers.images.Renderer]\ndockerfile = \"../../../containers/render/Dockerfile\"\nbuild_context = \"../../../containers/render\"\n";
+        std::fs::write(&config, text).unwrap();
+
+        let error = read_resources(&config, &[]).unwrap_err();
+        assert!(
+            error.contains("does not describe the container of `__Container_Renderer`"),
+            "{error}"
+        );
+
+        let manifest = dir.join(bynk_emit::emitter::wrangler::CONTAINERS_MANIFEST);
+        std::fs::write(
+            &manifest,
+            "{ \"version\": 1, \"containers\": [{ \"capability\": \"Renderer\", \"class\": \"__Container_Renderer\", \"build\": \"containers/render\", \"instance_type\": \"standard-1\" }] }",
+        )
+        .unwrap();
+        let read = read_resources(&config, &[]).unwrap();
+        assert_eq!(
+            read.containers,
+            [ContainerDecl {
+                capability: "Renderer".into(),
+                class: "__Container_Renderer".into(),
+                build: "containers/render".into(),
+                instance_type: Some("standard-1".into()),
+                adopt: None,
+            }]
+        );
+
+        std::fs::write(&manifest, "{ \"version\": 2 }").unwrap();
+        let error = read_resources(&config, &[]).unwrap_err();
+        assert!(
+            error.contains("unsupported bynk-containers.json version 2"),
+            "{error}"
+        );
+
+        let synthesised =
+            synthesise_environment_block(text, "staging", &BTreeMap::new(), &BTreeSet::new())
+                .unwrap();
+        let doc: toml::Table = synthesised.parse().unwrap();
+        let copied = &doc["env"]["staging"]["containers"][0];
+        assert_eq!(copied["scheduling_policy"].as_str(), Some("durable_object"));
+        assert!(copied["images"]["Renderer"].get("dockerfile").is_some());
+        let _ = std::fs::remove_dir_all(&dir);
+    }
+
     #[test]
     fn a_vectorize_index_is_read_from_the_config_and_its_manifest() {
         let dir = std::env::temp_dir().join(format!(

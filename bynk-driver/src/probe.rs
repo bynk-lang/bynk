@@ -167,6 +167,12 @@ pub trait Toolbox {
     fn version(&self, path: &Path) -> Option<Version>;
     /// Is `npx` itself available to provision packages on demand?
     fn npx_available(&self) -> bool;
+    /// #3477: does the Docker CLI at `path` reach a running daemon (`docker
+    /// info` succeeds)? Building a container image needs one. The default says
+    /// yes, so a fake that does not model Docker is not made to fail.
+    fn docker_daemon_running(&self, _path: &Path) -> bool {
+        true
+    }
 }
 
 /// Detect a single tool: project-local first (it wins over a global install),
@@ -269,7 +275,39 @@ impl Toolbox for SystemToolbox {
     fn npx_available(&self) -> bool {
         which::which(OsStr::new("npx")).is_ok()
     }
+
+    fn docker_daemon_running(&self, path: &Path) -> bool {
+        // A wedged Docker Desktop or an unreachable `DOCKER_HOST` can leave
+        // `docker info` waiting for a long time; past the bound it counts as
+        // no daemon running.
+        let Ok(mut child) = Command::new(path)
+            .arg("info")
+            .stdin(std::process::Stdio::null())
+            .stdout(std::process::Stdio::null())
+            .stderr(std::process::Stdio::null())
+            .spawn()
+        else {
+            return false;
+        };
+        let deadline = std::time::Instant::now() + DOCKER_INFO_TIMEOUT;
+        loop {
+            match child.try_wait() {
+                Ok(Some(status)) => return status.success(),
+                Ok(None) if std::time::Instant::now() < deadline => {
+                    std::thread::sleep(std::time::Duration::from_millis(50));
+                }
+                _ => {
+                    let _ = child.kill();
+                    let _ = child.wait();
+                    return false;
+                }
+            }
+        }
+    }
 }
+
+/// How long `docker info` may take before the daemon counts as not running.
+const DOCKER_INFO_TIMEOUT: std::time::Duration = std::time::Duration::from_secs(10);
 
 #[cfg(test)]
 mod tests {

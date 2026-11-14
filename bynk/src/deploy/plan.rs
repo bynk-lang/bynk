@@ -139,6 +139,11 @@ struct ContextPlan<'a> {
     /// `exports`, in class-name order. Empty for a context with no agent and
     /// no events fan-out.
     durable_objects: Vec<PlanDurableObject<'a>>,
+    /// #3477: one line per container, in class-name order: where its image comes
+    /// from and the instance type Bynk passes when it starts. The application
+    /// itself is `wrangler deploy`'s to reconcile, which the line says.
+    #[serde(skip_serializing_if = "Vec::is_empty")]
+    containers: Vec<PlanContainer<'a>>,
     /// State-migrations S3 (#2248): each class an `agent New replaces Old`
     /// renames — the push moves its stored data. In old-name order.
     #[serde(
@@ -366,6 +371,32 @@ struct PlanDurableObject<'a> {
     /// D1's principle). A consumer reading the plan learns that this line is
     /// not a claim that the namespace exists or doesn't, without having to
     /// know the ADR.
+    reconciled_by: &'static str,
+}
+
+/// #3477: one container the push declares.
+#[derive(Debug, Serialize)]
+struct PlanContainer<'a> {
+    /// The generated Durable Object class.
+    class: &'a str,
+    /// The capability's name, the key `[deploy.containers.<Cap>]` takes.
+    capability: &'a str,
+    /// The `@build` directory the image is built from when it is not adopted.
+    build: &'a str,
+    /// The digest-pinned image adopted for this environment, if any. When
+    /// present nothing is built.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    adopted: Option<&'a str>,
+    /// The image the ledger recorded this container as adopted when it was last
+    /// pushed, when it is not the one in `adopted` (a changed or dropped
+    /// adoption). Informational: the push starts new instances on the new image.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    previously_adopted: Option<String>,
+    /// The instance type passed to `start()`: `@instanceType`, else the
+    /// platform's default (`lite`).
+    instance: &'a str,
+    /// Always `Cloudflare`: the application is `wrangler deploy`'s to create
+    /// and update, not Bynk's, as for a Durable Object class.
     reconciled_by: &'static str,
 }
 
@@ -1086,7 +1117,7 @@ pub fn run(
     // before the plan, `--dry-run` included, not met as wrangler's own error.
     // #3479: an index `bynk.toml` names for this environment is adopted, not
     // created, so its name is known before the plan.
-    if apply_vectorize_adoptions(project_root, &mut resources, &opts.environment).is_err() {
+    if apply_adoptions(project_root, &mut resources, &opts.environment).is_err() {
         return ExitCode::FAILURE;
     }
     if let Some(message) = account_name_problem(&resources, &lock, &opts.environment) {
@@ -1145,7 +1176,7 @@ pub fn run(
     }
     let (manager, probe) = probe::detect_in_project(tb, "wrangler", project_root);
     // #1796: before authenticating, so the refusal costs no network call.
-    if let Some(refusal) = wrangler_floor_refusal(&probe, manager, &order, &resources) {
+    if let Some(refusal) = preflight_refusal(tb, &probe, manager, &order, &resources) {
         eprintln!("{refusal}");
         return ExitCode::FAILURE;
     }
@@ -1918,6 +1949,20 @@ pub(crate) fn foreign_binding_maybe_set_notice(
     )
 }
 
+/// Everything a push needs of the installed tools, refused before authenticating
+/// so it costs no call: the wrangler floor for a Durable Object class
+/// ([`wrangler_floor_refusal`]), then a container's ([`container_refusals`]).
+fn preflight_refusal(
+    tb: &dyn Toolbox,
+    probe: &probe::Probe,
+    manager: bynk_driver::npm_install::PackageManager,
+    order: &[String],
+    resources: &BTreeMap<String, Resources>,
+) -> Option<String> {
+    wrangler_floor_refusal(probe, manager, order, resources)
+        .or_else(|| container_refusals(tb, probe, manager, order, resources))
+}
+
 /// #1796: the refusal a deploy gets when a context it pushes declares a
 /// Durable Object class and the wrangler that would push it is older than
 /// [`bynk_emit::WRANGLER_MIN`].
@@ -2317,6 +2362,22 @@ pub(crate) fn plan_report(plan: &Plan<'_>, format: DeployFormat) -> String {
                         object.class, object.storage, object.reconciled_by
                     ));
                 }
+                // #3477: each container, naming where its image comes from and
+                // the instance type passed at start, so the size is visible
+                // before the confirmation. The rates are Cloudflare's to state.
+                for container in &context.containers {
+                    let mut image = match container.adopted {
+                        Some(reference) => format!("adopted {reference}"),
+                        None => format!("build from {}", container.build),
+                    };
+                    if let Some(was) = &container.previously_adopted {
+                        image.push_str(&format!(", was adopted {was}"));
+                    }
+                    out.push_str(&format!(
+                        "container {} (image: {image}; instance {}; reconciled by {})\n",
+                        container.class, container.instance, container.reconciled_by
+                    ));
+                }
                 // State-migrations S3 (#2248): the declared class renames and
                 // deletions, stated for what they do to stored data.
                 for rename in &context.renamed_durable_objects {
@@ -2669,6 +2730,26 @@ pub(crate) fn derive_plan<'a>(
                         .map(|object| PlanDurableObject {
                             class: &object.class,
                             storage: &object.storage,
+                            reconciled_by: "Cloudflare",
+                        })
+                        .collect(),
+                    containers: declared
+                        .containers
+                        .iter()
+                        .map(|c| PlanContainer {
+                            class: &c.class,
+                            capability: &c.capability,
+                            build: &c.build,
+                            adopted: c.adopt.as_deref(),
+                            previously_adopted: recorded_container_image(
+                                lock,
+                                worker,
+                                &c.capability,
+                                environment,
+                            )
+                            .filter(|was| Some(*was) != c.adopt.as_deref())
+                            .map(str::to_string),
+                            instance: c.instance_type.as_deref().unwrap_or("lite"),
                             reconciled_by: "Cloudflare",
                         })
                         .collect(),
@@ -3328,6 +3409,59 @@ pub(crate) mod tests {
                 value: key.to_string(),
                 minted: false
             }
+        );
+    }
+
+    /// #3477: the plan names each container's image source and instance type,
+    /// says whose it is to reconcile, shows a changed adoption, and states no
+    /// price.
+    #[test]
+    fn the_plan_names_a_containers_image_instance_and_owner() {
+        use crate::deploy::containers::tests_support::decl;
+        let order = names(&["shop"]);
+        let image = "registry.cloudflare.com/abc123/renderer@sha256:0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef";
+        let mut declared = project(vec![(
+            "shop",
+            Resources {
+                containers: vec![
+                    decl("Renderer", Some("standard-1"), None),
+                    decl("Thumbs", None, Some(image)),
+                ],
+                ..Resources::default()
+            },
+        )]);
+        let text = plan_report(
+            &plan_of(&order, &declared, &DeployLock::default()),
+            DeployFormat::Short,
+        );
+        assert!(
+            text.contains("container __Container_Renderer (image: build from containers/render; instance standard-1; reconciled by Cloudflare)\n"),
+            "{text}"
+        );
+        assert!(
+            text.contains(&format!(
+                "container __Container_Thumbs (image: adopted {image}; instance lite; reconciled by Cloudflare)\n"
+            )),
+            "{text}"
+        );
+        // A recorded adoption that is dropped shows beside the new line.
+        let mut recorded = DeployLock::default();
+        recorded.record_container_image("default", "shop", "Renderer", Some(image));
+        declared.get_mut("shop").unwrap().containers[0].adopt = None;
+        let again = plan_report(&plan_of(&order, &declared, &recorded), DeployFormat::Short);
+        assert!(
+            again.contains(&format!(
+                "image: build from containers/render, was adopted {image};"
+            )),
+            "{again}"
+        );
+        // The JSON plan carries the same facts, and no rate or allowance.
+        let json = plan_report(&plan_of(&order, &declared, &recorded), DeployFormat::Json);
+        assert!(json.contains("\"containers\""), "{json}");
+        assert!(json.contains("\"reconciled_by\": \"Cloudflare\""), "{json}");
+        assert!(
+            !text.contains('$') && !text.to_lowercase().contains("billed"),
+            "{text}"
         );
     }
 

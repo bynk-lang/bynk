@@ -304,6 +304,7 @@ pub(crate) fn deploy_one(
     }
     // #3479: an adopted index keeps the name it has on the account.
     materialise_adopted_vectorize(&config, worker, declared, environment)?;
+    adopt_containers_for_push(&config, worker, declared, lock, lock_path, environment)?;
     // P4b (#2608): each database's pending migrations, applied once it is
     // bound (and, for a named environment, once `[env.<name>]` binds it) and
     // before the push, so the new code never meets the old schema. Wrangler

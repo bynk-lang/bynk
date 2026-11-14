@@ -73,6 +73,9 @@ connection_env = "MAIN_DATABASE_URL"   # the variable `bynk deploy` reads the co
 [deploy.vectorize.Docs]     # no default: a `Vectorize` instance's existing index
 index = { production = "docs-prod" }   # adopted for that environment, never created or deleted
 
+[deploy.containers.Renderer]   # no default: a `Container` instance's prebuilt image
+image = { production = "registry.cloudflare.com/<ACCOUNT_ID>/renderer@sha256:<DIGEST>" }   # run for that environment, never built
+
 [dev]
 ai = "allow"                # no default: silences `bynk dev`'s Workers AI cost warning
 vectorize = "allow"         # no default: silences `bynk dev`'s Vectorize cost warning
@@ -647,6 +650,24 @@ since the deploy would otherwise create a new, empty index beside the one you me
 an environment the entry does not name still creates its own, and the deploy says so.
 See [Deploy to
 Cloudflare](/book/guides/projects-build-and-deployment/deploy-to-cloudflare/#vectorize-indexes).
+
+### Containers
+
+A `Container` instance's image is built from its Dockerfile by `wrangler deploy`,
+which needs Docker. A team that builds elsewhere, or deploys from a machine
+without Docker, names a prebuilt image instead, per deployment environment:
+
+```toml
+[deploy.containers.Renderer]
+image = { production = "registry.cloudflare.com/<ACCOUNT_ID>/renderer@sha256:<DIGEST>" }
+```
+
+| Key | Table | Type | Notes |
+|---|---|---|---|
+| `image` | `[deploy.containers.<Capability>]` | table of strings | The digest-pinned image to run, by deployment environment (`default`, or an `--env` name), in Cloudflare's registry: `registry.cloudflare.com/<ACCOUNT_ID>/<REPOSITORY>@sha256:<64 hex digits>`. That environment runs it and builds nothing, so the deploy needs no Docker; any other environment builds from `@build`. Other registries and tags are not supported for this kind of container. |
+
+An entry that names no `Container` capability in the project is an error. The
+adopted reference is recorded in `bynk.deploy.lock`.
 
 ### Acknowledging a remote-only binding
 

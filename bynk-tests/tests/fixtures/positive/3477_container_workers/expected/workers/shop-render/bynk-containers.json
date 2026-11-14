@@ -1,0 +1,7 @@
+{
+  "version": 1,
+  "containers": [
+    { "capability": "Renderer", "class": "__Container_Renderer", "build": "containers/renderer", "instance_type": "standard-1" },
+    { "capability": "Thumbs", "class": "__Container_Thumbs", "build": "containers/thumbs", "instance_type": null }
+  ]
+}

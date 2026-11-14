@@ -532,6 +532,19 @@ fn stage_binding_files(
             debug_metadata: None,
         });
     }
+    // #3477: each container's capability, build directory and instance type,
+    // for `bynk deploy` to plan from and to adopt an image against.
+    if let Some(manifest) = emitter::wrangler::emit_containers_manifest(bindings) {
+        compiled.push(StagedFile {
+            output_path: PathBuf::from(format!(
+                "workers/{dashes}/{}",
+                emitter::wrangler::CONTAINERS_MANIFEST
+            )),
+            document: Document::Json(manifest),
+            source_map: None,
+            debug_metadata: None,
+        });
+    }
     for binding in bindings {
         if !matches!(
             binding.source,

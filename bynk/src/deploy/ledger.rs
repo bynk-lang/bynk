@@ -71,6 +71,20 @@ pub(crate) struct Environment {
     /// reads and a project without Vectorize writes the same file.
     #[serde(default, skip_serializing_if = "BTreeMap::is_empty")]
     pub(crate) vectorize_instances: BTreeMap<String, BTreeMap<String, VectorizeRecord>>,
+    /// #3477: each Worker's adopted container images, keyed by the `Container`
+    /// capability's name (`Renderer`): the digest-pinned reference
+    /// `[deploy.containers.<Cap>] image` named for this environment when it was
+    /// last pushed. A container built from its Dockerfile has no entry, because
+    /// the image is `wrangler`'s to make and the ledger records nothing it does
+    /// not own. It holds the image the last deploy attempt named, written before
+    /// the push, so a push that then failed still shows here. What it is for: a
+    /// changed or dropped adoption is shown in the plan, and `bynk revert` says which image a restored Worker takes for new
+    /// starts.
+    ///
+    /// Additive, `default`ed and omitted when empty, so an older ledger still
+    /// reads and a project without an adopted image writes the same file.
+    #[serde(default, skip_serializing_if = "BTreeMap::is_empty")]
+    pub(crate) container_images: BTreeMap<String, BTreeMap<String, String>>,
     /// P4a (#2602): each Worker's `D1` instances (`capability Orders = D1`),
     /// keyed by the instance's binding (`D1_ORDERS`), as `kv_instances` is:
     /// the database's account-facing name and the id Cloudflare minted for it
@@ -836,6 +850,40 @@ impl DeployLock {
         );
     }
 
+    /// #3477: record that `worker`'s `Container` `capability` runs the adopted
+    /// `image` in `environment`, or, with `None`, that it is built again (the
+    /// adoption was dropped).
+    pub(crate) fn record_container_image(
+        &mut self,
+        environment: &str,
+        worker: &str,
+        capability: &str,
+        image: Option<&str>,
+    ) {
+        match image {
+            Some(image) => {
+                self.environments
+                    .entry(environment.to_string())
+                    .or_default()
+                    .container_images
+                    .entry(worker.to_string())
+                    .or_default()
+                    .insert(capability.to_string(), image.to_string());
+            }
+            None => {
+                let Some(env) = self.environments.get_mut(environment) else {
+                    return;
+                };
+                if let Some(images) = env.container_images.get_mut(worker) {
+                    images.remove(capability);
+                    if images.is_empty() {
+                        env.container_images.remove(worker);
+                    }
+                }
+            }
+        }
+    }
+
     /// #3479: drop an index from the ledger once `--prune` deleted it, whether
     /// it was the live one (its Worker or capability is gone) or a superseded
     /// one.
@@ -1501,6 +1549,21 @@ pub(crate) fn recorded_r2<'a>(
         .get(environment)
         .and_then(|env| env.r2_instances.get(worker))
         .and_then(|instances| instances.get(binding))
+}
+
+/// The adopted image recorded for `worker`'s `Container` `capability` in
+/// `environment` (#3477).
+pub(crate) fn recorded_container_image<'a>(
+    lock: &'a DeployLock,
+    worker: &str,
+    capability: &str,
+    environment: &str,
+) -> Option<&'a str> {
+    lock.environments
+        .get(environment)
+        .and_then(|env| env.container_images.get(worker))
+        .and_then(|images| images.get(capability))
+        .map(String::as_str)
 }
 
 /// The index recorded for `worker`'s `Vectorize` `binding` (#3479).
@@ -2230,6 +2293,7 @@ pub(crate) mod tests {
                         BTreeMap::from([("KV_SESSIONS".into(), KvNamespace { id: "s".into() })]),
                     )]),
                     vectorize_instances: BTreeMap::new(),
+                    container_images: BTreeMap::new(),
                     ratelimit_instances: BTreeMap::from([(
                         "api".into(),
                         BTreeMap::from([(

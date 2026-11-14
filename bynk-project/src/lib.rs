@@ -23,6 +23,7 @@
 
 pub mod assets;
 pub mod consistency;
+pub mod containers;
 pub mod contracts_lock;
 pub mod dev_ack;
 pub mod discovery;
