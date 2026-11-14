@@ -2396,6 +2396,14 @@ t("WorkersAiSearch.search: a message about something else of the instance stays 
     assert.equal((await failing(message)).error.tag, "SearchFailed", message);
   }
   assert.equal((await failing("invalid filter: unknown operator")).error.tag, "SearchInvalidInput");
+  // The platform's own messages for an empty query and an empty message, as
+  // observed on a real instance (#3480).
+  for (const message of [
+    "AiSearchError: Too small: expected string to have >=1 characters",
+    "AiSearchError: All user messages must have non-empty content",
+  ]) {
+    assert.deepEqual((await failing(message)).error, { tag: "SearchInvalidInput", message });
+  }
 });
 
 t("WorkersAiSearch.search: an instance that is not there is a fault, as is a missing binding", async () => {
