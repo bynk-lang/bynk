@@ -53,19 +53,21 @@ service placeOrder {
 
 ## Rename an exported type that clashes with one of yours
 
-A braced `consumes bynk.crypto { Crypto }` brings into scope only what it lists.
-`bynk.crypto` exports `Digest`, `Signature`, `CryptoError`, `SigningKey` and
-`VerifyKey`, but a context that has its own `Digest` and lists only `Crypto` has
-no clash: its own `Digest` is the one in scope, and the standard library can add
-a type without changing what your program means. Naming a standard-library type
-the braces do not list still works for now, as the warning
-`bynk.consumes.type_not_selected` (`bynk check --fix` adds the name), and will be
-an error in a later release. A bare `consumes bynk.crypto`, with no braces,
-brings in the whole module.
+`consumes U { … }` brings into scope the names it lists, and the types its
+listed capabilities' signatures use. `bynk.crypto` exports `Digest`,
+`Signature`, `CryptoError`, `SigningKey` and `VerifyKey`, and `Crypto`'s
+operations use all of them, so a context that also has its own `Digest` (from a
+`uses` commons, or declared locally) is `bynk.consumes.name_conflict`.
 
-A context that *lists* an exported type its own declaration shares a name with
-(or one from a context it consumes without braces) is
-`bynk.consumes.name_conflict`. Rename the consumed type in the braces with `as`.
+A type the listed capabilities do *not* use is out of scope: `consumes bynk
+{ Clock }` does not bring in `Method`, so a context with its own `Method` has no
+clash, and the standard library can add a type without changing what your
+program means. Naming a standard-library type the braces do not list still works
+for now, as the warning `bynk.consumes.type_not_selected` (`bynk check --fix`
+adds the name), and will be an error in a later release. A bare `consumes
+bynk`, with no braces, brings in the whole module.
+
+Rename the consumed type in the braces with `as`.
 It is then in scope only under the alias, and the clash goes away:
 
 ```bynk,fragment

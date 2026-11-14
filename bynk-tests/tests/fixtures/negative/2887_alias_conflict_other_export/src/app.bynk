@@ -1,5 +1,5 @@
 context app
 
-consumes bynk.crypto { Crypto, Digest as Signature, Signature }
+consumes bynk.crypto { Crypto, Digest as Signature }
 
 fn one() -> Int { 1 }

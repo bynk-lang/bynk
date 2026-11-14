@@ -2436,8 +2436,8 @@ flattened from another unit (`bynk.consumes.capability_name_clash`) — a clash 
 resolved by the qualified `given b.Cap` form or an alias.
 
 A braced `consumes` of a first-party unit (`bynk`, `bynk.cloudflare`, …) brings
-into scope only the names it lists: a type the braces leave out, and its
-variants, are not candidates for a name clash (`bynk.suite.type_name_clash`,
+into scope only the names it lists, and the types its listed capabilities'
+signatures use. Any other type, and its variants, are not candidates for a name clash (`bynk.suite.type_name_clash`,
 `bynk.consumes.name_conflict`) or for bare-variant resolution
 (`bynk.resolve.ambiguous_variant`), and a declaration of the unit's own takes
 the name. A bare `consumes U` brings in the whole module. Naming a type that

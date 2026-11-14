@@ -7696,21 +7696,25 @@ mod consumes_alias_tests {
         assert_eq!(a.resolves_to("app.bynk", "Digest { total").unit, "report");
     }
 
-    /// #3536: braces that do not list `Digest` do not bring it in, so the unit's
-    /// own `Digest` is not in conflict with it.
+    /// #3536: braces that list only `Clock` do not bring `Method` in, and no
+    /// listed capability's signature reaches it, so the unit's own `Method` is
+    /// not in conflict with the standard library's.
     #[test]
     fn an_unlisted_export_yields_to_the_units_own_type() {
         let src = app(
-            "consumes bynk.crypto { Crypto }",
-            "fn empty() -> Digest { Digest { total: 0 } }",
+            "consumes bynk { Clock }",
+            "type Method = | Fetch | Skip\n\nfn pick() -> Method { Fetch }",
         );
-        run(&[REPORT, ("app.bynk", &src)]).assert_clean();
+        run(&[("app.bynk", &src)]).assert_clean();
     }
 
+    /// A type a listed capability's signatures use is still the standard
+    /// library's, so the unit's own type of that name still conflicts, with a
+    /// note that names the way out.
     #[test]
     fn the_unaliased_form_still_clashes_with_a_note_that_names_the_way_out() {
         let src = app(
-            "consumes bynk.crypto { Crypto, Digest }",
+            "consumes bynk.crypto { Crypto }",
             "fn empty() -> Digest { Digest { total: 0 } }",
         );
         let a = run(&[REPORT, ("app.bynk", &src)]);
