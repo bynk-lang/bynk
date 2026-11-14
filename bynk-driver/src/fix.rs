@@ -72,9 +72,10 @@ impl Scope {
                     Some(real) => {
                         format!("unknown diagnostic code `{code}`; did you mean `{real}`?")
                     }
-                    None => {
-                        format!("unknown diagnostic code `{code}`; `bynk explain` lists the codes")
-                    }
+                    None => format!(
+                        "unknown diagnostic code `{code}`; every code is listed at {}/book/reference/diagnostics/",
+                        bynk_syntax::diagnostics::BOOK_BASE_URL
+                    ),
                 });
             }
         }

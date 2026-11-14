@@ -612,3 +612,68 @@ fn a_code_with_nothing_to_fix_writes_nothing() {
     assert!(!err.contains("fixed:"), "{err}");
     assert_eq!(read(&root.join("src/app/age.bynk")), AGE);
 }
+
+#[test]
+fn an_unknown_code_with_no_near_match_points_at_the_diagnostics_index() {
+    let root = scoped_project("far");
+    let (code, err) = run(&bynk(), &root, &["check", "--fix=nope"], &[]);
+    assert_ne!(code, 0, "{err}");
+    assert!(
+        err.contains("unknown diagnostic code `nope`")
+            && err.contains("/book/reference/diagnostics/")
+            && !err.contains("bynk explain"),
+        "{err}"
+    );
+    assert_eq!(read(&root.join("src/app/age.bynk")), AGE);
+}
+
+/// An empty value (a script with an empty `$CODE`) must never widen to a full
+/// `--fix`.
+#[test]
+fn an_empty_code_is_refused_not_widened_to_every_fix() {
+    for arg in ["--fix=", "--fix=,", "--fix=bynk.types.inverted_range,"] {
+        let root = scoped_project("empty");
+        let (code, err) = run(&bynk(), &root, &["check", arg], &[]);
+        assert_ne!(code, 0, "{arg}: {err}");
+        assert!(err.contains("unknown diagnostic code ``"), "{arg}: {err}");
+        assert_eq!(read(&root.join("src/app/age.bynk")), AGE, "{arg}");
+        assert_eq!(read(&root.join("src/app/unused.bynk")), UNUSED, "{arg}");
+    }
+}
+
+#[test]
+fn a_named_code_at_a_workspace_root_applies_to_every_member() {
+    let root = scratch("named-workspace");
+    write(
+        &root.join("bynk.toml"),
+        "[workspace]\nmembers = [\"packages/*\"]\n",
+    );
+    for name in ["a", "b"] {
+        write(
+            &root.join(format!("packages/{name}/bynk.toml")),
+            &format!("[package]\nname = \"acme/{name}\"\n"),
+        );
+        write(
+            &root.join(format!("packages/{name}/src/app/unused.bynk")),
+            UNUSED,
+        );
+        write(&root.join(format!("packages/{name}/src/app/age.bynk")), AGE);
+    }
+    let (_, err) = run(
+        &bynk(),
+        &root,
+        &["check", "--fix=bynk.given.unused_capability"],
+        &[],
+    );
+    for name in ["a", "b"] {
+        assert_eq!(
+            read(&root.join(format!("packages/{name}/src/app/unused.bynk"))),
+            UNUSED_FIXED
+        );
+        assert_eq!(
+            read(&root.join(format!("packages/{name}/src/app/age.bynk"))),
+            AGE
+        );
+    }
+    assert!(!err.contains("inverted_range ×"), "{err}");
+}
