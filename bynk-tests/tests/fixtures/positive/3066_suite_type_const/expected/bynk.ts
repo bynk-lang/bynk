@@ -406,10 +406,12 @@ export const __LocaleToken: symbol = globalThis.Symbol("Locale");
  * time. `expiresAfter` sets the retention window a call to `remember`
  * establishes. The cached type `T` must be `Codable`: the value is stored as
  * its JSON encoding, and a stored value that no longer decodes as `T` (an
- * older deploy wrote it as another shape) reads as a miss, not a fault. On
- * Cloudflare they are durable and shared across isolates (in the Worker's
- * implicit D1 database); on Node and in the browser they are an in-memory
- * map, lost on restart.
+ * older deploy wrote it as another shape) reads as a miss, not a fault.
+ *
+ * **Provider.** The provider follows the build's platform. On Cloudflare it
+ * is D1-backed: durable and shared across isolates, in the Worker's implicit
+ * `<worker>-idempotency` database. On Node and in the browser it is
+ * in-memory, lost on restart.
  *
  * `claim` is the race-free form: the first call for a key returns `Claimed`
  * and every later call within `expiresAfter` returns `AlreadyClaimed`, as one
@@ -422,8 +424,29 @@ export const __LocaleToken: symbol = globalThis.Symbol("Locale");
  * lapses. `claim` records no outcome and is separate from `dedup`/`remember`.
  */
 export interface Idempotency {
+  /**
+   * Checks for a cached outcome under `key`; a miss is `None`.
+   *
+   * The provider follows the build's platform: D1-backed on Cloudflare
+   * (durable and shared across isolates, in the Worker's `<worker>-idempotency`
+   * database), in-memory on Node and in the browser (lost on restart).
+   */
   dedup(key: string): globalThis.Promise<unknown>;
+  /**
+   * Caches `value` under `key` for `expiresAfter`.
+   *
+   * The provider follows the build's platform: D1-backed on Cloudflare
+   * (durable and shared across isolates, in the Worker's `<worker>-idempotency`
+   * database), in-memory on Node and in the browser (lost on restart).
+   */
   remember(key: string, value: unknown, expiresAfter: number): globalThis.Promise<void>;
+  /**
+   * Claims `key` for `expiresAfter`: `Claimed` to the first caller, `AlreadyClaimed` after.
+   *
+   * The provider follows the build's platform: D1-backed on Cloudflare
+   * (durable and shared across isolates, in the Worker's `<worker>-idempotency`
+   * database), in-memory on Node and in the browser (lost on restart).
+   */
   claim(key: string, expiresAfter: number): globalThis.Promise<Claim>;
 }
 
