@@ -380,10 +380,11 @@ fn tool_manager(tb: &dyn Toolbox, root: Option<&std::path::Path>) -> PackageMana
 /// #1732: wrangler, checked against [`bynk_emit::WRANGLER_MIN`], the oldest this
 /// release supports (it serves the [`bynk_emit::COMPATIBILITY_DATE`] every
 /// generated `wrangler.toml` pins). An older one's `workerd` may refuse the date,
-/// so `bynk dev` fails. It may also doesn't read the Durable Object `exports` map
-/// (#1796), so a project with an agent can't deploy on it, and `bynk deploy`
-/// refuses one that would push a class (`deploy::plan::wrangler_floor_refusal`).
-/// A project with no agent still deploys (Cloudflare accepts any past date).
+/// so `bynk dev` fails. Below it, `bynk deploy` also refuses to push a Durable
+/// Object class (`deploy::plan::wrangler_floor_refusal`), since an older wrangler
+/// is untested against the generated configuration (#1796: it reads the `exports`
+/// map only from 4.107.0). A project with no agent still deploys (Cloudflare
+/// accepts any past date).
 /// Doctor doesn't know which kind of project it is, so this stays a warning,
 /// not a failure, and `doctor --only deploy` doesn't go red on a toolchain
 /// that deploys an agent-free project. An npx-provisioned wrangler's version isn't known
