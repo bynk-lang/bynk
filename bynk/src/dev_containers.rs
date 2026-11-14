@@ -118,13 +118,16 @@ pub(crate) enum Docker {
     Running,
     /// The CLI is installed but no daemon answers.
     Stopped,
-    /// There is no `docker` on the `PATH`.
+    /// There is no `docker` on the `PATH` (or at `WRANGLER_DOCKER_BIN`).
     Missing,
 }
 
 /// Look for Docker the way `bynk doctor` does.
 pub(crate) fn docker(tb: &dyn Toolbox) -> Docker {
-    match tb.on_path("docker") {
+    let bin = crate::deploy::containers::docker_binary(
+        std::env::var("WRANGLER_DOCKER_BIN").ok().as_deref(),
+    );
+    match crate::deploy::containers::resolve_docker(tb, &bin) {
         None => Docker::Missing,
         Some(path) if tb.docker_daemon_running(&path) => Docker::Running,
         Some(_) => Docker::Stopped,

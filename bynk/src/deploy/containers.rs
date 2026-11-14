@@ -120,7 +120,7 @@ pub(crate) fn container_refusals(
 /// The container engine CLI wrangler will run: `WRANGLER_DOCKER_BIN` when it is
 /// set and not blank (wrangler 4.136.0's own override, for Podman or a Docker
 /// off the `PATH`), else `docker`.
-fn docker_binary(over: Option<&str>) -> String {
+pub(crate) fn docker_binary(over: Option<&str>) -> String {
     over.map(str::trim)
         .filter(|bin| !bin.is_empty())
         .unwrap_or("docker")
@@ -129,7 +129,7 @@ fn docker_binary(over: Option<&str>) -> String {
 
 /// Resolves the engine CLI: a path (anything with a separator) as given when it
 /// exists, a bare name on the `PATH`.
-fn resolve_docker(tb: &dyn Toolbox, bin: &str) -> Option<PathBuf> {
+pub(crate) fn resolve_docker(tb: &dyn Toolbox, bin: &str) -> Option<PathBuf> {
     if bin.contains(['/', '\\']) {
         return Path::new(bin).is_file().then(|| PathBuf::from(bin));
     }
