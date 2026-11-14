@@ -413,7 +413,7 @@ fn a_first_party_npm_package_is_a_lock_row_that_needs_no_approval() {
     assert_eq!(code, 0, "{out}");
     let lock = std::fs::read_to_string(root.join("bynk.lock")).unwrap();
     assert!(
-        lock.contains("[[npm]]\npackage = \"postal-mime\"\nrange = \"4.2.1\"\nrequired-by = [\"bynk-std\"]\nfirst-party = true\n"),
+        lock.contains("[[npm]]\npackage = \"postal-mime\"\nrange = \"4.2.0\"\nrequired-by = [\"bynk-std\"]\nfirst-party = true\n"),
         "{lock}"
     );
     assert!(!lock.contains("approved"), "{lock}");

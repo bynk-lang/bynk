@@ -134,7 +134,7 @@ pub const FIRST_PARTY_NPM: &[FirstPartyNpm] = &[
     // Inbound email (#3328): `email.ts` parses the raw message with it.
     FirstPartyNpm {
         package: "postal-mime",
-        version: "4.2.1",
+        version: "4.2.0",
         runtime_module: "email",
         reached_by: Reach::ServiceProtocol("email"),
     },

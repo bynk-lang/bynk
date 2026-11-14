@@ -1,6 +1,6 @@
 {
   "type": "module",
   "dependencies": {
-    "postal-mime": "4.2.1"
+    "postal-mime": "4.2.0"
   }
 }
