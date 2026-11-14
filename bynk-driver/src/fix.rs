@@ -24,7 +24,7 @@ use std::path::{Path, PathBuf};
 use crate::project;
 use bynk_syntax::Severity;
 use bynk_syntax::error::CompileError;
-use bynk_syntax::fix::{apply, lone_fix, select};
+use bynk_syntax::fix::{apply, lone_fix, select, select_codes};
 use bynk_syntax::span::Span;
 
 use crate::{atomic_write, shown, try_project_options};
@@ -40,6 +40,63 @@ type Sources = HashMap<PathBuf, String>;
 struct Found {
     file: Option<PathBuf>,
     error: CompileError,
+}
+
+/// Which diagnostics' fixes a run may take (#3537).
+///
+/// By default every diagnostic `check` shows. `check --fix=<code>[,<code>…]`
+/// narrows that to the named codes, and naming a code is asking for it, so a
+/// hint's fix is taken when its code is named. The gate still sees every shown
+/// diagnostic, so a narrowed run refuses on the same grounds a full one does.
+#[derive(Debug, Clone, Default, PartialEq, Eq)]
+pub struct Scope {
+    codes: Vec<String>,
+}
+
+impl Scope {
+    /// Every diagnostic `check` shows.
+    pub fn shown() -> Self {
+        Self::default()
+    }
+
+    /// Only the named diagnostic codes, each of which must be a real code. An
+    /// unknown one is refused with the nearest real code, if there is one.
+    pub fn codes(codes: &[String]) -> Result<Self, String> {
+        for code in codes {
+            if bynk_syntax::diagnostics::lookup(code).is_none() {
+                let nearest = bynk_project::paths::did_you_mean(
+                    code,
+                    bynk_syntax::diagnostics::REGISTRY.iter().map(|d| d.code),
+                );
+                return Err(match nearest {
+                    Some(real) => {
+                        format!("unknown diagnostic code `{code}`; did you mean `{real}`?")
+                    }
+                    None => {
+                        format!("unknown diagnostic code `{code}`; `bynk explain` lists the codes")
+                    }
+                });
+            }
+        }
+        Ok(Self {
+            codes: codes.to_vec(),
+        })
+    }
+
+    fn select(&self, text: &str, errors: Vec<&CompileError>) -> bynk_syntax::fix::Selection {
+        if self.codes.is_empty() {
+            select(text, errors)
+        } else {
+            select_codes(text, errors, &self.codes)
+        }
+    }
+
+    /// The diagnostic is in what the run works over: shown by `check`, or a
+    /// hint the user named.
+    fn includes(&self, error: &CompileError) -> bool {
+        Severity::for_error(error) != Severity::Hint
+            || self.codes.iter().any(|c| c == error.category)
+    }
 }
 
 /// A file the run changed.
@@ -113,6 +170,7 @@ impl std::fmt::Display for Refusal {
 /// Run the fixpoint over `sources`, diagnosing each state with `diagnose`.
 fn fixpoint(
     mut sources: Sources,
+    scope: &Scope,
     diagnose: impl Fn(&Sources) -> Vec<Found>,
 ) -> Result<FixPlan, Refusal> {
     let original = sources.clone();
@@ -137,7 +195,7 @@ fn fixpoint(
         let mut picks = Vec::new();
         for (path, errors) in by_file {
             if let Some(text) = sources.get(path) {
-                let selection = select(text, errors);
+                let selection = scope.select(text, errors);
                 if !selection.edits.is_empty() {
                     picks.push((path.clone(), selection));
                 }
@@ -237,13 +295,6 @@ fn gate(before: &[Found], after: &[Found], fixless_only: bool) -> Result<(), Ref
     Ok(())
 }
 
-/// #3537: `--fix` applies only what `check` would show. A hint (the
-/// `let … else` staircase, say) is an editor suggestion that `check` leaves out,
-/// so its fix is never taken here, and it is held out of the gate too.
-fn shown_by_check(error: &CompileError) -> bool {
-    Severity::for_error(error) != Severity::Hint
-}
-
 /// `path` without `.` components, so `./src/a.bynk` and `src/a.bynk` match.
 fn normal(path: &Path) -> PathBuf {
     path.components()
@@ -251,19 +302,29 @@ fn normal(path: &Path) -> PathBuf {
         .collect()
 }
 
+/// [`plan_file_in`] over every diagnostic `check` shows.
+pub fn plan_file(input: &Path) -> Option<Result<FixPlan, Refusal>> {
+    plan_file_in(input, &Scope::shown())
+}
+
+/// [`plan_project_in`] over every diagnostic `check` shows.
+pub fn plan_project(input: &Path) -> Option<Result<FixPlan, Refusal>> {
+    plan_project_in(input, &Scope::shown())
+}
+
 /// Plan the fixes for a single `.bynk` file. `None` when the file cannot be
 /// read: `check` reports that.
-pub fn plan_file(input: &Path) -> Option<Result<FixPlan, Refusal>> {
+pub fn plan_file_in(input: &Path, scope: &Scope) -> Option<Result<FixPlan, Refusal>> {
     let text = std::fs::read_to_string(input).ok()?;
     let filename = shown(input);
     let key = input.to_path_buf();
     let sources = Sources::from([(key.clone(), text)]);
-    Some(fixpoint(sources, |sources| {
+    Some(fixpoint(sources, scope, |sources| {
         let (Ok(diagnostics) | Err(diagnostics)) =
             bynk_emit::check_with_warnings(&sources[&key], &filename);
         diagnostics
             .into_iter()
-            .filter(shown_by_check)
+            .filter(|e| scope.includes(e))
             .map(|error| Found {
                 file: Some(key.clone()),
                 error,
@@ -274,18 +335,18 @@ pub fn plan_file(input: &Path) -> Option<Result<FixPlan, Refusal>> {
 
 /// Plan the fixes for a project rooted at `input`. `None` when the project
 /// cannot be set up (a bad manifest, an unreadable lock): `check` reports that.
-pub fn plan_project(input: &Path) -> Option<Result<FixPlan, Refusal>> {
+pub fn plan_project_in(input: &Path, scope: &Scope) -> Option<Result<FixPlan, Refusal>> {
     let options = try_project_options(input).ok()?;
     let options = options.schema_registry(crate::schema_lock::read_only(input).ok()?);
     let sources = options.sources.clone()?;
     let keys: HashMap<PathBuf, PathBuf> = sources.keys().map(|k| (normal(k), k.clone())).collect();
-    Some(fixpoint(sources, |sources| {
+    Some(fixpoint(sources, scope, |sources| {
         let check = project::check_project(&options.clone().sources(sources.clone()));
         let root = check.display_root;
         check
             .errors
             .into_iter()
-            .filter(|ae| shown_by_check(&ae.error))
+            .filter(|ae| scope.includes(&ae.error))
             .map(|ae| Found {
                 file: ae
                     .source_path
@@ -298,11 +359,11 @@ pub fn plan_project(input: &Path) -> Option<Result<FixPlan, Refusal>> {
 
 /// Plan the fixes for one file or project. `None` for a setup problem
 /// (unreadable input, bad manifest) that `check` reports.
-fn plan_input(input: &Path) -> Option<Result<FixPlan, Refusal>> {
+fn plan_input(input: &Path, scope: &Scope) -> Option<Result<FixPlan, Refusal>> {
     if input.is_dir() {
-        plan_project(input)
+        plan_project_in(input, scope)
     } else {
-        plan_file(input)
+        plan_file_in(input, scope)
     }
 }
 
@@ -312,11 +373,11 @@ fn plan_input(input: &Path) -> Option<Result<FixPlan, Refusal>> {
 /// was. `named` is how each input is named in a message. Returns `false` when
 /// the run was refused or could not write; the caller's ordinary report
 /// follows either way.
-pub(crate) fn fix_all(prog: &str, inputs: &[(&Path, String)]) -> bool {
+pub(crate) fn fix_all(prog: &str, scope: &Scope, inputs: &[(&Path, String)]) -> bool {
     let mut plans = Vec::new();
     let mut refused = false;
     for (input, named) in inputs {
-        match plan_input(input) {
+        match plan_input(input, scope) {
             Some(Ok(plan)) => plans.push(plan),
             Some(Err(refusal)) => {
                 eprintln!("{named}: --fix: {refusal}");
@@ -381,15 +442,19 @@ mod tests {
     }
 
     fn run(text: &str, diagnose: impl Fn(&str) -> Vec<CompileError>) -> Result<FixPlan, Refusal> {
-        fixpoint(Sources::from([(key(), text.to_string())]), |sources| {
-            diagnose(&sources[&key()])
-                .into_iter()
-                .map(|error| Found {
-                    file: Some(key()),
-                    error,
-                })
-                .collect()
-        })
+        fixpoint(
+            Sources::from([(key(), text.to_string())]),
+            &Scope::shown(),
+            |sources| {
+                diagnose(&sources[&key()])
+                    .into_iter()
+                    .map(|error| Found {
+                        file: Some(key()),
+                        error,
+                    })
+                    .collect()
+            },
+        )
     }
 
     #[test]
