@@ -1,12 +1,6 @@
----
-level: minor
-changelog: `bynk dev` runs a `Container` under Docker through `wrangler dev` and, without Docker, warns once and starts with containers off so a call faults naming Docker; `--remote` is refused for a container Worker, and a container Worker needs Wrangler 4.136.0 or later under `bynk dev`
-probes: emit_abi_shapes, ts_writes
----
+# 0842 — bynk dev runs containers under Docker, and without it starts them off so a call faults naming Docker
 
-## ADR: container-dev
-title: bynk dev runs containers under Docker, and without it starts them off so a call faults naming Docker
-summary: Decision H of #3477 for slice C3: the Docker probe, `--enable-containers=false` (confirmed to apply under the `durable_object` policy), the `BYNK_CONTAINERS_UNAVAILABLE` fault, the `--remote` refusal and the dev floor
+- **Status:** Accepted (v0.603)
 
 **Context.** A container runs under Docker on the developer's machine, started by `wrangler dev` when the Worker first asks, so there is no remote call and the cost acknowledgement of the remote-only kinds does not apply. Wrangler has `enable_containers` (default true) and, at 4.136.0, `--enable-containers=false`. The proposal left open whether the flag applies under the `durable_object` policy. It does: `wrangler dev --enable-containers=false` starts a container Worker with no Docker, and the Durable Object's `ctx.container` is then absent (observed on workerd, wrangler 4.136.0 and the current 4.x, with an `image` entry; without the flag it stopped asking for a Cloudflare API token, to fetch the registry image). `--remote` support for containers is not documented.
 

@@ -3,7 +3,7 @@ title: Version compatibility & changelog
 ---
 Bynk is pre-1.0 and developed in small, spec-first increments (see
 [Versioning & roadmap](/book/about/versioning-and-roadmap/)). This book is
-written against **v0.602**.
+written against **v0.603**.
 
 This page is a high-level summary of notable increments, not an exhaustive
 per-commit history. While Bynk is pre-1.0, increments may change behaviour.
@@ -28,6 +28,7 @@ per-commit history. While Bynk is pre-1.0, increments may change behaviour.
 
 | Version | Highlights |
 |---|---|
+| **v0.603.0** | `bynk dev` runs a `Container` under Docker through `wrangler dev` and, without Docker, warns once and starts with containers off so a call faults naming Docker; `--remote` is refused for a container Worker, and a container Worker needs Wrangler 4.136.0 or later under `bynk dev` |
 | **v0.602.1** | Vectorize fixes from a real-account check (#3479): `describe` and the `bynk dev` first-call check work against a real index (`IndexInfo.metric` is an `Option`), a query naming no namespace returns every namespace's vectors in the test double, and a `topK` over the limit is `VectorInvalidInput` |
 | **v0.602.0** | `bynk deploy` plans a `Container` (its image source and instance type), checks for Docker only when it must build an image, can run a prebuilt image named in `[deploy.containers.<Capability>]`, refuses a container Worker below Wrangler 4.136.0, and `bynk revert` and `bynk doctor` know about containers |
 | **v0.601.0** | `bynk.cloudflare` gains `Container`, an instance kind for a container run from a Docker image, with required `@build` and `@port`, optional `@sleepAfter`, `@instanceType` and `@forward`, typed errors, emitted as a Durable Object binding and `exports` entry; every operation faults until stubbed in a test |
