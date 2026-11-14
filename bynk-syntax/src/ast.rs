@@ -5275,7 +5275,6 @@ fn f(x: Int) -> Int {
         "let<-.value",
         "let<-.identity",
         "expect.value",
-        "send.value",
         "do.value",
         "assign.value",
     ];
