@@ -1,0 +1,10 @@
+context probe
+
+consumes bynk { Logger }
+
+service api from http {
+    on GET("/") () -> Effect[HttpResult[String]] by Visitor given Logger {
+        ~> Logger.info("served")
+        Ok("ok")
+    }
+}

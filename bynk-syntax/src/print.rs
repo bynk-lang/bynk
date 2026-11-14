@@ -859,7 +859,6 @@ fn stmt_to_string(s: &Statement) -> String {
                 escape_string(&c.name)
             ))
         ),
-        Statement::Send(s) => format!("~> {}", expr_with_prec(&s.value, 0)),
         Statement::Do(d) => format!("do {}", expr_with_prec(&d.value, 0)),
         Statement::Assign(a) => format!("{} := {}", a.target.name, expr_with_prec(&a.value, 0)),
         Statement::Advance(a) => {

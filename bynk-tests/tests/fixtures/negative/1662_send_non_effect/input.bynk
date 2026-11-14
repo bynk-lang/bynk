@@ -1,9 +1,0 @@
-commons demo
-
-// #1662: `~>` on a call that is not an `Effect`.
-fn g() -> Int { 1 }
-
-fn f() -> Effect[()] {
-  ~> g()
-  Effect.pure(())
-}

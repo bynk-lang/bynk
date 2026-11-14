@@ -570,6 +570,10 @@
     {
       "code": "bynk.effect.do_on_non_effect",
       "summary": "A `do` statement was applied to a non-`Effect` value."
+    },
+    {
+      "code": "bynk.parse.removed_send_arrow",
+      "summary": "The `~>` send was removed; write `do e.detach()`."
     }
   ],
   "effect_let_stmt": [
@@ -584,32 +588,6 @@
     {
       "code": "bynk.parse.let_else_on_binding",
       "summary": "An `else` follows a plain `let name = …` binding, which matches every value, so the `else` could never run."
-    }
-  ],
-  "effect_send_stmt": [
-    {
-      "code": "bynk.send.deprecated",
-      "summary": "The `~>` send is deprecated in favour of `do e.detach()` (warning; auto-fixable)."
-    },
-    {
-      "code": "bynk.send.in_agent_handler",
-      "summary": "A `~>` send was used in an agent handler, which has no execution context to keep a fire-and-forget send alive."
-    },
-    {
-      "code": "bynk.send.in_pure_context",
-      "summary": "A `~>` send was used in a pure (non-effectful) context."
-    },
-    {
-      "code": "bynk.send.non_effect",
-      "summary": "A `~>` send was applied to a non-`Effect` value."
-    },
-    {
-      "code": "bynk.send.requires_unit",
-      "summary": "A `~>` send targets an operation whose reply is not `Effect[()]`."
-    },
-    {
-      "code": "bynk.send.store_op",
-      "summary": "A `~>` send targets an agent store operation, which is part of the handler's atomic commit and cannot be sent without waiting."
     }
   ],
   "enum_type": [
@@ -1337,7 +1315,7 @@
   "par_stmt": [
     {
       "code": "bynk.par.invalid_statement",
-      "summary": "A `par { … }` block holds a statement other than `let x <- e` or `do e`: a refutable `let … else`, a plain `let`, `~>`, `:=` or a store write, `expect`, `advance`, a nested `par`, or anything that is not a statement."
+      "summary": "A `par { … }` block holds a statement other than `let x <- e` or `do e`: a refutable `let … else`, a plain `let`, `:=` or a store write, `expect`, `advance`, a nested `par`, or anything that is not a statement."
     },
     {
       "code": "bynk.par.question_in_join",

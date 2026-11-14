@@ -1838,7 +1838,7 @@ pub const EXPLANATIONS: &[Explain] = &[
     },
     Explain {
         code: "bynk.detach.in_pure_context",
-        blurb: "`detach` hands a running effect to the execution context, and only an effectful body has effects to run: a pure function never runs one. Change the enclosing function's return type to `Effect[…]`. The same rule holds for `bynk.within.in_pure_context`, `bynk.race.in_pure_context` and `bynk.send.in_pure_context`.",
+        blurb: "`detach` hands a running effect to the execution context, and only an effectful body has effects to run: a pure function never runs one. Change the enclosing function's return type to `Effect[…]`. The same rule holds for `bynk.within.in_pure_context` and `bynk.race.in_pure_context`.",
         example: "fn twice(ping: Effect[()], n: Int) -> Int {\n    let _ = ping.detach()   // ✗ the body is pure\n    n * 2\n}\n\n\
                   fn twice(ping: Effect[()], n: Int) -> Effect[Int] {   // ✓ an effectful body\n    do ping.detach()\n    Effect.pure(n * 2)\n}",
         page: "/book/reference/capabilities",
@@ -2171,7 +2171,7 @@ pub const EXPLANATIONS: &[Explain] = &[
     },
     Explain {
         code: "bynk.exec.unavailable",
-        blurb: "A function that uses `~>`, `detach`, `within` or `race` hands work to the execution context, which a service handler has. An agent handler, a WebSocket handler, a provider operation, a function that is not effectful and a `const`, `store` or predicate initialiser do not. Calling such a function from one of those, directly or through other functions, or naming it as a value, is refused. The note gives the chain of calls down to the construct. Make the call in a service handler, and pass what it returns on.",
+        blurb: "A function that uses `detach`, `within` or `race` hands work to the execution context, which a service handler has. An agent handler, a WebSocket handler, a provider operation, a function that is not effectful and a `const`, `store` or predicate initialiser do not. Calling such a function from one of those, directly or through other functions, or naming it as a value, is refused. The note gives the chain of calls down to the construct. Make the call in a service handler, and pass what it returns on.",
         example: "fn bounded(e: Effect[Int]) -> Effect[Bool] { … }\n\nagent Counter {\n    key id: String\n    store n: Cell[Int] = 0\n\n    on call check() -> Effect[Bool] {\n        bounded(Effect.pure(1))    // ✗ an agent handler has no execution context\n    }\n}\n\nservice api {\n    on call() -> Effect[Bool] {\n        bounded(Effect.pure(1))    // ✓ a service handler has\n    }\n}",
         page: "/book/reference/capabilities",
         anchor: "within",
@@ -3773,7 +3773,7 @@ pub const EXPLANATIONS: &[Explain] = &[
     },
     Explain {
         code: "bynk.par.invalid_statement",
-        blurb: "A `par { … }` block issues all its bindings together and waits for them, so it holds only `let x <- e` and `do e`. Anything else has no effect to overlap, nothing to join, or must stay in order: a plain `let`, `~>`, `:=` or a `store` write, `expect`, `advance`, a nested `par`, a `let … else`, a bare expression (write `do e`) and an empty block. Store writes stay sequential; for `parTraverse` closures the rule is `bynk.par.store_write_in_closure`. Move the statement before or after the block; the names a block binds are in scope after its closing brace. See also `bynk.par.sibling_name` (a binding reading another binding of the same block) and the warning `bynk.par.single_binding`.",
+        blurb: "A `par { … }` block issues all its bindings together and waits for them, so it holds only `let x <- e` and `do e`. Anything else has no effect to overlap, nothing to join, or must stay in order: a plain `let`, `:=` or a `store` write, `expect`, `advance`, a nested `par`, a `let … else`, a bare expression (write `do e`) and an empty block. Store writes stay sequential; for `parTraverse` closures the rule is `bynk.par.store_write_in_closure`. Move the statement before or after the block; the names a block binds are in scope after its closing brace. See also `bynk.par.sibling_name` (a binding reading another binding of the same block) and the warning `bynk.par.single_binding`.",
         example: "par {\n  let a <- Users.get(id)\n  let b = 1   // ✗ a plain `let` has no effect to overlap\n}\n\nlet b = 1   // ✓ compute it before the block\npar {\n  let a <- Users.get(id)\n  let c <- Users.get(b)\n}",
         page: "/book/reference/capabilities",
         anchor: "par",
@@ -3813,7 +3813,7 @@ pub const EXPLANATIONS: &[Explain] = &[
     Explain {
         code: "bynk.parse.bare_expression_statement",
         blurb: "A block has no expression statements: each statement is a `let`, `do`, \
-                `~>`, `expect`, `:=` and so on, and the last expression is the block's \
+                `expect`, `:=` and so on, and the last expression is the block's \
                 value. An expression written on its own line with more of the block after \
                 it would have its value thrown away, so the compiler asks you to say what \
                 happens to it. Bind it: `let _ = expr` when you only want to discard a \
@@ -4515,6 +4515,14 @@ pub const EXPLANATIONS: &[Explain] = &[
         anchor: "4710-refined_pattern",
     },
     Explain {
+        code: "bynk.parse.removed_send_arrow",
+        blurb: "`~>` was removed. It started an effect and carried on without waiting, which `e.detach()` now says as an ordinary effect statement: it works for any `Effect[T]`, inside a lambda, `forEach` or helper, and reports a fault or an `Err` instead of losing it. Write `do e.detach()` where you wrote `~> e`. For a unit effect that does not need to outlive the handler, plain `do e` is enough, since `Logger` calls finish before they return. On v0.603.x, `bynk check --fix` rewrites each `~> e` for you. See the Book's Upgrading page.",
+        example: "on call bump() -> Effect[()] given Logger {\n    ~> Logger.info(\"bump\")                  // ✗ removed\n    Effect.pure(())\n}\n\n\
+                  on call bump() -> Effect[()] given Logger {\n    do Logger.info(\"bump\").detach()   // ✓ an ordinary statement\n    Effect.pure(())\n}",
+        page: "/book/reference/capabilities",
+        anchor: "detach",
+    },
+    Explain {
         code: "bynk.parse.reserved_keyword",
         blurb: "A hard keyword (`type`, `fn`, `match`, `Int` and so on) was \
                 written where a name is expected: a parameter, a `let` binding, an \
@@ -4859,7 +4867,7 @@ pub const EXPLANATIONS: &[Explain] = &[
     },
     Explain {
         code: "bynk.race.in_pure_context",
-        blurb: "`race` starts two effects and hands the loser to the execution context, and only an effectful body has one: a pure function never runs an effect at all. Change the enclosing function's return type to `Effect[…]` so its body can run it. The same rule holds for `bynk.within.in_pure_context` and `bynk.send.in_pure_context`.",
+        blurb: "`race` starts two effects and hands the loser to the execution context, and only an effectful body has one: a pure function never runs an effect at all. Change the enclosing function's return type to `Effect[…]` so its body can run it. The same rule holds for `bynk.within.in_pure_context`.",
         example: "fn first(a: Effect[Int], b: Effect[Int]) -> Int {\n    let c = a.race(b)   // ✗ the body is pure\n    0\n}\n\nfn first(a: Effect[Int], b: Effect[Int]) -> Effect[Int] {   // ✓ an effectful body\n    a.race(b)\n}",
         page: "/book/reference/capabilities",
         anchor: "race",
@@ -5403,50 +5411,6 @@ bynk deploy   # fix forward",
 bynk revert --accept-secret-changes   # only after a `bynk migrate sweep`",
         page: "/book/guides/projects-build-and-deployment/roll-back-a-deployment",
         anchor: "what-it-refuses",
-    },
-    Explain {
-        code: "bynk.send.deprecated",
-        blurb: "`~>` is deprecated: `e.detach()` says the same thing as an ordinary effect statement, works for any `Effect[T]` and inside a lambda, `forEach` or helper, and reports a fault or an `Err` instead of losing it. A warning, not an error: `bynk check --fix` rewrites each `~> e` to `do e.detach()`. `~>` will be removed in the next release, after which it is a parse error. For a unit effect that does not need to outlive the handler, plain `do e` is enough; `Logger` calls finish before they return.",
-        example: "on call bump() -> Effect[()] given Logger {\n    ~> Logger.info(\"bump\")             // ⚠ deprecated\n    Effect.pure(())\n}\n\n\
-                  on call bump() -> Effect[()] given Logger {\n    do Logger.info(\"bump\").detach()   // ✓ the same, as an ordinary statement\n    Effect.pure(())\n}",
-        page: "/book/reference/capabilities",
-        anchor: "detach",
-    },
-    Explain {
-        code: "bynk.send.in_agent_handler",
-        blurb: "`~>` starts an effect and lets the handler carry on, so something must keep the effect alive after the handler returns. A service handler has an execution context that does. An agent handler runs inside the agent's own object, with no such context, and its effects are awaited so that they finish with the handler. So the send is refused, and so is one inside a closure there. Await it instead, with `do` for an `Effect[()]` or `let _ <-`, or move the send to the service handler that calls the agent. A `~>` of a store operation is `bynk.send.store_op`.",
-        example: "on call bump() -> Effect[()] given Logger {\n    ~> Logger.info(\"bump\")      // ✗ an agent handler cannot send\n    do count.update((n) => n + 1)\n}\n\n\
-                  on call bump() -> Effect[()] given Logger {\n    do Logger.info(\"bump\")      // ✓ awaited, so it finishes with the handler\n    do count.update((n) => n + 1)\n}",
-        page: "/book/spec/static-semantics",
-        anchor: "",
-    },
-    Explain {
-        code: "bynk.send.in_pure_context",
-        blurb: "A `~>` send starts an effect and does not wait for it, so it can only appear in a body that runs effects: one that returns `Effect[…]`. A pure function never runs one, so there would be nothing to send. Change the enclosing function's return type to `Effect[…]`. The same rule holds for `bynk.within.in_pure_context` and `bynk.race.in_pure_context`.",
-        example: "fn twice(ping: Effect[()], n: Int) -> Int {\n    ~> ping   // ✗ the body is pure\n    n * 2\n}\n\nfn twice(ping: Effect[()], n: Int) -> Effect[Int] {   // ✓ an effectful body\n    ~> ping\n    Effect.pure(n * 2)\n}",
-        page: "/book/reference/capabilities",
-        anchor: "capabilities-in-functions",
-    },
-    Explain {
-        code: "bynk.send.non_effect",
-        blurb: "`~>` sends an effectful call without waiting for it, so what follows it must be an `Effect`. A plain value such as an `Int` has nothing to run and nothing to send. If the call is meant to be a plain call, drop the `~>`; if it is meant to be sent, make the function return `Effect[()]`. A send of an effect with a reply is `bynk.send.requires_unit`.",
-        example: "fn total() -> Int { 1 }\n\nfn run() -> Effect[()] {\n    ~> total()   // ✗ `total` returns an `Int`, not an `Effect`\n    Effect.pure(())\n}\n\nfn total() -> Effect[()] { Effect.pure(()) }\n\nfn run() -> Effect[()] {\n    ~> total()   // ✓ an `Effect[()]`\n    Effect.pure(())\n}",
-        page: "/book/guides/effects-and-capabilities/synchronous-and-asynchronous-sends",
-        anchor: "the-error-gate",
-    },
-    Explain {
-        code: "bynk.send.requires_unit",
-        blurb: "`~>` never waits, so it throws away whatever the call returns. Bynk therefore lets it send only an operation whose reply is `Effect[()]`: an `Effect[Int]`, or one carrying a `Result`, would lose its value or its error with no trace. To use the reply, or to discard it on purpose, await the call with `let r <- …` or `let _ <- …`. For a value that is not an `Effect` at all see `bynk.send.non_effect`.",
-        example: "fn fetch() -> Effect[Int] { Effect.pure(1) }\n\nfn run() -> Effect[()] {\n    ~> fetch()   // ✗ the `Int` reply would vanish\n    Effect.pure(())\n}\n\nfn run() -> Effect[()] {\n    let _ <- fetch()   // ✓ awaited, the reply discarded on purpose\n    Effect.pure(())\n}",
-        page: "/book/guides/effects-and-capabilities/synchronous-and-asynchronous-sends",
-        anchor: "the-error-gate",
-    },
-    Explain {
-        code: "bynk.send.store_op",
-        blurb: "In an agent handler, a store write is not a message to send: it is staged and committed atomically with the rest of the handler, so there is nothing for `~>` to leave running. `~>` is refused there for any call, and a store operation gets its own code to point at the fix. Drop the `~>` and write `do field.op(…)`, or `let _ <- field.op(…)`; the write is committed with the handler. For a send that is not a store operation see `bynk.send.in_agent_handler`.",
-        example: "on call bump() -> Effect[()] {\n    ~> count.update((n) => n + 1)   // ✗ a store write is not sent\n}\n\non call bump() -> Effect[()] {\n    do count.update((n) => n + 1)   // ✓ staged, committed with the handler\n}",
-        page: "/book/guides/effects-and-capabilities/synchronous-and-asynchronous-sends",
-        anchor: "not-in-an-agent-handler",
     },
     Explain {
         code: "bynk.service.missing_from",
@@ -7896,7 +7860,7 @@ bynk revert --accept-secret-changes   # only after a `bynk migrate sweep`",
     },
     Explain {
         code: "bynk.within.in_pure_context",
-        blurb: "`within` hands the effect it abandons on a timeout to the execution context, and only an effectful body has one: a pure function never runs an effect at all. Change the enclosing function's return type to `Effect[…]` so its body can run it. The same rule holds for `bynk.race.in_pure_context` and `bynk.send.in_pure_context`.",
+        blurb: "`within` hands the effect it abandons on a timeout to the execution context, and only an effectful body has one: a pure function never runs an effect at all. Change the enclosing function's return type to `Effect[…]` so its body can run it. The same rule holds for `bynk.race.in_pure_context`.",
         example: "fn bounded(e: Effect[Int]) -> Int {\n    let r = e.within(1.seconds)   // ✗ the body is pure\n    0\n}\n\nfn bounded(e: Effect[Int]) -> Effect[Result[Int, TimedOut]] {   // ✓ an effectful body\n    e.within(1.seconds)\n}",
         page: "/book/reference/capabilities",
         anchor: "within",
@@ -8968,7 +8932,7 @@ pub const REGISTRY: &[DiagnosticInfo] = &[
     ),
     d(
         "bynk.exec.unavailable",
-        "A call to, or reference to, a function that hands work to the execution context (`~>`, `detach`, `within` or `race`, directly or through the functions it calls) appears where no execution context exists: an agent handler, a WebSocket handler or a provider operation.",
+        "A call to, or reference to, a function that hands work to the execution context (`detach`, `within` or `race`, directly or through the functions it calls) appears where no execution context exists: an agent handler, a WebSocket handler or a provider operation.",
     ),
     dg(
         "bynk.expect.faults_not_effect",
@@ -9904,7 +9868,7 @@ pub const REGISTRY: &[DiagnosticInfo] = &[
     ),
     dg(
         "bynk.par.invalid_statement",
-        "A `par { … }` block holds a statement other than `let x <- e` or `do e`: a refutable `let … else`, a plain `let`, `~>`, `:=` or a store write, `expect`, `advance`, a nested `par`, or anything that is not a statement.",
+        "A `par { … }` block holds a statement other than `let x <- e` or `do e`: a refutable `let … else`, a plain `let`, `:=` or a store write, `expect`, `advance`, a nested `par`, or anything that is not a statement.",
         &["par_stmt"],
     ),
     dg(
@@ -10173,6 +10137,11 @@ pub const REGISTRY: &[DiagnosticInfo] = &[
         "bynk.parse.refined_pattern_inner",
         "A refined pattern's inner form is something other than `_`.",
         &["refined_pattern"],
+    ),
+    dg(
+        "bynk.parse.removed_send_arrow",
+        "The `~>` send was removed; write `do e.detach()`.",
+        &["do_stmt"],
     ),
     dg(
         "bynk.parse.reserved_keyword",
@@ -10723,36 +10692,6 @@ pub const REGISTRY: &[DiagnosticInfo] = &[
         "bynk.secrets.computed_name",
         "A `bynk.Secrets` read names its secret with a computed expression rather than a literal, so `bynk deploy` cannot plan it (warning).",
     )),
-    warn(dg(
-        "bynk.send.deprecated",
-        "The `~>` send is deprecated in favour of `do e.detach()` (warning; auto-fixable).",
-        &["effect_send_stmt"],
-    )),
-    dg(
-        "bynk.send.in_agent_handler",
-        "A `~>` send was used in an agent handler, which has no execution context to keep a fire-and-forget send alive.",
-        &["effect_send_stmt"],
-    ),
-    dg(
-        "bynk.send.in_pure_context",
-        "A `~>` send was used in a pure (non-effectful) context.",
-        &["effect_send_stmt"],
-    ),
-    dg(
-        "bynk.send.non_effect",
-        "A `~>` send was applied to a non-`Effect` value.",
-        &["effect_send_stmt"],
-    ),
-    dg(
-        "bynk.send.requires_unit",
-        "A `~>` send targets an operation whose reply is not `Effect[()]`.",
-        &["effect_send_stmt"],
-    ),
-    dg(
-        "bynk.send.store_op",
-        "A `~>` send targets an agent store operation, which is part of the handler's atomic commit and cannot be sent without waiting.",
-        &["effect_send_stmt"],
-    ),
     dg(
         "bynk.service.missing_from",
         "A `from`-less service has a handler other than `on call`.",

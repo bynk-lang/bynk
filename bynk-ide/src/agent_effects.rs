@@ -168,7 +168,6 @@ impl Walker<'_> {
             }
             Statement::Do(d) => self.walk_expr(&d.value, paths, false),
             Statement::Expect(e) => self.walk_expr(&e.value, paths, false),
-            Statement::Send(s) => self.walk_expr(&s.value, paths, false),
             Statement::Advance(a) => self.walk_expr(&a.amount, paths, false),
             Statement::Assign(a) => {
                 let mut paths = self.walk_expr(&a.value, paths, false);

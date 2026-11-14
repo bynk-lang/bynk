@@ -1719,7 +1719,6 @@ fn body_performs_effects(e: &Expr, ctx: &Ctx) -> bool {
                         return true;
                     }
                 }
-                Statement::Send(_) => return true,
                 Statement::Do(_) => return true,
                 Statement::Assign(a) => {
                     if body_performs_effects(&a.value, ctx) {

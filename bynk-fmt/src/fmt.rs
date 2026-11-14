@@ -2773,10 +2773,6 @@ impl<'a> Formatter<'a> {
                     ));
                 }
             }
-            Statement::Send(s) => {
-                self.push("~> ");
-                self.format_expr(&s.value);
-            }
             Statement::Do(d) => {
                 self.push("do ");
                 self.format_expr(&d.value);
@@ -3564,7 +3560,6 @@ fn statement_trivia(s: &Statement) -> &Trivia {
     match s {
         Statement::Let(l) | Statement::EffectLet(l) => &l.trivia,
         Statement::Expect(a) => &a.trivia,
-        Statement::Send(s) => &s.trivia,
         Statement::Do(d) => &d.trivia,
         Statement::Assign(a) => &a.trivia,
         Statement::Advance(a) => &a.trivia,

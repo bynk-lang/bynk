@@ -1,8 +1,0 @@
-commons demo
-
-fn total() -> Int { 1 }
-
-fn run() -> Effect[()] {
-  ~> total()
-  Effect.pure(())
-}
