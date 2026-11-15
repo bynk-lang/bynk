@@ -30,7 +30,7 @@
 //! implicit request.
 
 use std::collections::HashMap;
-use std::path::PathBuf;
+use std::path::{Path, PathBuf};
 use std::process::ExitCode;
 use std::time::Duration;
 
@@ -68,15 +68,129 @@ pub struct EvalRequest {
     pub timeout: Duration,
 }
 
+/// One diagnostic of a snippet that does not check.
+#[derive(Debug, Clone, PartialEq, serde::Serialize)]
+pub struct EvalDiagnostic {
+    /// The file it is in, as the project names it; absent for the snippet
+    /// itself, whose `line` and `col` are then the snippet's own (1-based).
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub file: Option<String>,
+    pub line: u32,
+    pub col: u32,
+    /// `"error"`, `"warning"` or `"hint"`.
+    pub severity: String,
+    /// The diagnostic's code, `bynk.types.let_annotation_mismatch`.
+    pub code: String,
+    pub message: String,
+}
+
+/// The result document `bynk eval` prints: `{"value", "type", "diagnostics"}`,
+/// and an `error` when the snippet ran to no value.
+#[derive(Debug, Clone, PartialEq, serde::Serialize)]
+pub struct EvalReport {
+    /// The wire shape of the snippet's last expression; `null` when there is
+    /// none (and when the expression is the unit value, which `type` tells).
+    pub value: Option<Value>,
+    /// That expression's type, or `null` with no value.
+    #[serde(rename = "type")]
+    pub ty: Option<String>,
+    /// Why the snippet did not check, one entry each; empty otherwise.
+    pub diagnostics: Vec<EvalDiagnostic>,
+    /// Absent when there is a value or `diagnostics` says why not.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub error: Option<EvalError>,
+}
+
+/// A snippet that checked but ran to no value.
+#[derive(Debug, Clone, PartialEq, serde::Serialize)]
+pub struct EvalError {
+    /// `"runtime"` (a refusal, a failed `expect`, an unstubbed capability),
+    /// `"timeout"`, or `"setup"` (no such unit, no runner).
+    pub kind: &'static str,
+    pub message: String,
+}
+
+impl EvalReport {
+    /// Whether the snippet produced a value.
+    pub fn succeeded(&self) -> bool {
+        self.ty.is_some()
+    }
+}
+
+impl From<EvalOutcome> for EvalReport {
+    fn from(outcome: EvalOutcome) -> Self {
+        let none = |diagnostics, error| EvalReport {
+            value: None,
+            ty: None,
+            diagnostics,
+            error,
+        };
+        let error = |kind, message| none(Vec::new(), Some(EvalError { kind, message }));
+        match outcome {
+            EvalOutcome::Value { value, ty } => EvalReport {
+                value: Some(value),
+                ty: Some(ty),
+                diagnostics: Vec::new(),
+                error: None,
+            },
+            EvalOutcome::Diagnostics(diagnostics) => none(diagnostics, None),
+            EvalOutcome::Failed(message) => error("runtime", message),
+            EvalOutcome::TimedOut(message) => error("timeout", message),
+            EvalOutcome::Error(message) => error("setup", message),
+        }
+    }
+}
+
+/// The `--format short` line `line` as a diagnostic. A line with no location
+/// (`error[code]: message`) has line and column 0.
+fn parse_diagnostic(line: &str, synthetic: &str, prefix: usize) -> Option<EvalDiagnostic> {
+    let (location, rest) = [": error[", ": warning[", ": hint["]
+        .iter()
+        .find_map(|marker| {
+            line.find(marker)
+                .map(|at| (Some(&line[..at]), &line[at + 2..]))
+        })
+        .or_else(|| {
+            ["error[", "warning[", "hint["]
+                .iter()
+                .any(|m| line.starts_with(m))
+                .then_some((None, line))
+        })?;
+    let (severity, rest) = rest.split_once('[')?;
+    let (code, message) = rest.split_once("]: ")?;
+    let (mut file, mut line_no, mut col) = (None, 0u32, 0u32);
+    if let Some(location) = location {
+        let mut parts = location.rsplitn(3, ':');
+        col = parts.next()?.parse().ok()?;
+        line_no = parts.next()?.parse().ok()?;
+        let path = parts.next()?;
+        if Path::new(path).file_name().and_then(|n| n.to_str()) == Some(synthetic) {
+            // The snippet's own line; the first carries the generated opening.
+            if line_no == 1 {
+                col = col.saturating_sub(prefix as u32).max(1);
+            }
+        } else {
+            file = Some(path.to_string());
+        }
+    }
+    Some(EvalDiagnostic {
+        file,
+        line: line_no,
+        col,
+        severity: severity.to_string(),
+        code: code.to_string(),
+        message: message.to_string(),
+    })
+}
+
 /// What an evaluation produced.
 #[derive(Debug, Clone, PartialEq)]
 pub enum EvalOutcome {
     /// The snippet ran. `value` is the wire shape of its last expression and
     /// `ty` that expression's type.
     Value { value: Value, ty: String },
-    /// The project or the snippet did not compile: the diagnostics, one line
-    /// each.
-    Diagnostics(Vec<String>),
+    /// The project or the snippet did not compile: the diagnostics.
+    Diagnostics(Vec<EvalDiagnostic>),
     /// The snippet compiled and ran, but a failure stopped it (a refused
     /// refined-type construction, an `expect` that did not hold, a capability
     /// with no stub).
@@ -143,28 +257,36 @@ fn header_lines(snippet: &str) -> usize {
 
 /// The synthetic suite for `snippet`, targeting `unit`: the snippet's own
 /// lines, with the suite and case openings added to the first and last header
-/// lines and the closers after the last line.
-pub fn suite_text(unit: &str, snippet: &str) -> String {
+/// lines and the closers after the last line. Also how many characters the
+/// generated opening adds to the first line.
+pub fn suite_text(unit: &str, snippet: &str) -> (String, usize) {
     let header = header_lines(snippet);
     let mut lines: Vec<String> = snippet.lines().map(str::to_string).collect();
     if lines.is_empty() {
         lines.push(String::new());
     }
     let open = format!("case \"{EVAL_CASE}\" {{");
-    if header == 0 {
-        lines[0] = format!("suite {unit} {{ {open} {}", lines[0]);
+    let prefix = if header == 0 {
+        format!("suite {unit} {{ {open} ")
     } else {
-        lines[0] = format!("suite {unit} {{ {}", lines[0]);
         lines[header - 1].push_str(&format!(" {open}"));
-    }
+        format!("suite {unit} {{ ")
+    };
+    lines[0] = format!("{prefix}{}", lines[0]);
     let mut text = lines.join("\n");
     text.push_str("\n} }\n");
-    text
+    (text, prefix.len())
 }
 
 /// Run `request`: the snippet's value, or why there is none.
 pub fn evaluate(request: &EvalRequest) -> EvalOutcome {
-    let options = match crate::try_project_options(&request.input) {
+    // Absolute, so the synthetic file's key is inside the root an overlay is
+    // judged against, however the project was named.
+    let input = request
+        .input
+        .canonicalize()
+        .unwrap_or_else(|_| request.input.clone());
+    let options = match crate::try_project_options(&input) {
         Ok(o) => o,
         Err(e) => return EvalOutcome::Error(e.to_string()),
     };
@@ -187,7 +309,13 @@ pub fn evaluate(request: &EvalRequest) -> EvalOutcome {
         synthetic = key.with_file_name(format!("{stem}.eval{n}.bynk"));
     }
     let mut overlay = request.buffers.clone();
-    overlay.insert(synthetic, suite_text(&request.unit, &request.snippet));
+    let (text, prefix) = suite_text(&request.unit, &request.snippet);
+    let synthetic_name = synthetic
+        .file_name()
+        .unwrap_or_default()
+        .to_string_lossy()
+        .into_owned();
+    overlay.insert(synthetic, text);
     let args = TestArgs {
         no_run: false,
         format: TestFormat::Json,
@@ -195,14 +323,14 @@ pub fn evaluate(request: &EvalRequest) -> EvalOutcome {
         case: vec![EVAL_CASE.to_string()],
         run_timeout: Some(request.timeout),
         overlay: Some(overlay),
-        ..TestArgs::discovery(request.input.clone())
+        ..TestArgs::discovery(input)
     };
     let (code, text) = crate::test_stream::capture(|| run_test("bynk", args));
-    interpret(code, &text)
+    interpret(code, &text, &synthetic_name, prefix)
 }
 
 /// What the `bynk test --format json` document `text` says about the snippet.
-fn interpret(code: ExitCode, text: &str) -> EvalOutcome {
+fn interpret(code: ExitCode, text: &str, synthetic: &str, prefix: usize) -> EvalOutcome {
     let Ok(doc) = serde_json::from_str::<Value>(text) else {
         return EvalOutcome::Error(format!("the test run said: {}", text.trim()));
     };
@@ -216,7 +344,14 @@ fn interpret(code: ExitCode, text: &str) -> EvalOutcome {
     };
     let message = doc["error"]["message"].as_str().map(str::to_string);
     match doc["error"]["kind"].as_str() {
-        Some("compile") => return EvalOutcome::Diagnostics(lines("diagnostics")),
+        Some("compile") => {
+            return EvalOutcome::Diagnostics(
+                lines("diagnostics")
+                    .iter()
+                    .filter_map(|l| parse_diagnostic(l, synthetic, prefix))
+                    .collect(),
+            );
+        }
         Some("timeout") => {
             return EvalOutcome::TimedOut(message.unwrap_or_else(|| "timed out".to_string()));
         }
@@ -252,14 +387,16 @@ fn interpret(code: ExitCode, text: &str) -> EvalOutcome {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use std::path::Path;
 
     #[test]
     fn a_snippet_without_a_header_is_all_case_body() {
         assert_eq!(header_lines("let x = 1\nx + 1"), 0);
         assert_eq!(
             suite_text("demo.calc", "double(21)"),
-            "suite demo.calc { case \"bynk eval\" { double(21)\n} }\n"
+            (
+                "suite demo.calc { case \"bynk eval\" { double(21)\n} }\n".to_string(),
+                "suite demo.calc { case \"bynk eval\" { ".len()
+            )
         );
     }
 
@@ -269,7 +406,7 @@ mod tests {
             "consumes shop.order { Placed }\n// a stub\nstub Clock.now() returns 0\nlet x = 1\nx";
         assert_eq!(header_lines(snippet), 3);
         assert_eq!(
-            suite_text("demo.calc", snippet),
+            suite_text("demo.calc", snippet).0,
             "suite demo.calc { consumes shop.order { Placed }\n// a stub\nstub Clock.now() returns 0 case \"bynk eval\" {\nlet x = 1\nx\n} }\n"
         );
     }
@@ -405,13 +542,14 @@ let res <- Fetch.send(Request { method: Get, url: \"https://example.com\", conte
     fn a_snippet_that_does_not_check_reports_diagnostics() {
         let root = project("diag");
         match eval(&root, "let x: Int = \"oops\"\nx") {
-            EvalOutcome::Diagnostics(lines) => {
-                assert!(
-                    lines
-                        .iter()
-                        .any(|l| l.contains("bynk.types.let_annotation_mismatch")),
-                    "{lines:?}"
-                );
+            EvalOutcome::Diagnostics(found) => {
+                // In the snippet, on its line, at the column in the snippet.
+                let d = found
+                    .iter()
+                    .find(|d| d.code == "bynk.types.let_annotation_mismatch")
+                    .unwrap_or_else(|| panic!("{found:?}"));
+                assert_eq!((d.file.as_deref(), d.line, d.col), (None, 1, 14));
+                assert_eq!(d.severity, "error");
             }
             other => panic!("expected diagnostics, got {other:?}"),
         }
@@ -450,5 +588,26 @@ let res <- Fetch.send(Request { method: Get, url: \"https://example.com\", conte
             timeout: Duration::from_secs(5),
         });
         assert!(matches!(outcome, EvalOutcome::Error(_)), "{outcome:?}");
+    }
+
+    #[test]
+    fn a_short_line_is_a_diagnostic() {
+        let d = parse_diagnostic(
+            "/p/src/demo.eval.bynk:2:5: error[bynk.resolve.unknown_name]: unknown name `x`",
+            "demo.eval.bynk",
+            10,
+        )
+        .unwrap();
+        assert_eq!((d.file, d.line, d.col), (None, 2, 5));
+        let d = parse_diagnostic(
+            "src/demo.bynk:7:1: warning[a.b]: odd: really",
+            "demo.eval.bynk",
+            10,
+        )
+        .unwrap();
+        assert_eq!(d.file.as_deref(), Some("src/demo.bynk"));
+        assert_eq!(d.message, "odd: really");
+        let d = parse_diagnostic("error[a.b]: no place", "demo.eval.bynk", 10).unwrap();
+        assert_eq!((d.line, d.col), (0, 0));
     }
 }

@@ -28,7 +28,7 @@ pub const COMMAND_GROUPS: &[(&str, &[&str])] = &[
     (
         "Project",
         &[
-            "new", "check", "fmt", "test", "build", "compile", "openapi", "client", "token",
+            "new", "check", "fmt", "test", "eval", "build", "compile", "openapi", "client", "token",
         ],
     ),
     (
@@ -606,6 +606,43 @@ pub enum Command {
     Test {
         #[command(flatten)]
         args: Box<bynk_driver::test_runner::TestArgs>,
+        #[command(flatten)]
+        lock: LockArgs,
+    },
+    /// Evaluate a snippet in a unit's scope and print its value as JSON.
+    ///
+    /// Compiles and runs the snippet as a synthetic test case in a suite for
+    /// `--unit`, under the test runtime, and prints
+    /// `{"value": <wire shape>, "type": "…", "diagnostics": […]}` (#3585). The
+    /// snippet is `--expr`, or stdin; its last expression is the value. Leading
+    /// `consumes` and `stub` lines belong to the suite, so a snippet that uses
+    /// another unit `consumes` it, as a suite does. A capability the snippet
+    /// calls needs a `stub`; nothing reaches the network. Each evaluation is
+    /// independent: send earlier cells' `let`s again ahead of the snippet.
+    ///
+    /// Runs in-process, with the build and runner of `bynk test`; requires
+    /// `tsc` (with Node.js) or `tsx` on PATH. The exit status is zero only when
+    /// there is a value.
+    Eval {
+        /// Project directory. Defaults to the current directory.
+        #[arg(default_value = ".")]
+        input: PathBuf,
+        /// The unit (a `commons` or `context`, by dotted name) whose scope the
+        /// snippet is evaluated in.
+        #[arg(long)]
+        unit: String,
+        /// The snippet. When absent it is read from stdin.
+        #[arg(long)]
+        expr: Option<String>,
+        /// Evaluate against the unsaved buffers given as JSON on stdin, as
+        /// `bynk compile --sources-stdin` does: `{ "<absolute path>": "<text>" }`.
+        /// Stdin then holds the buffers, so the snippet must be `--expr`.
+        #[arg(long)]
+        sources_stdin: bool,
+        /// Kill the evaluation after this many seconds and report it timed
+        /// out.
+        #[arg(long, value_name = "SECONDS", default_value_t = crate::eval::default_timeout_secs(), value_parser = clap::value_parser!(u64).range(1..))]
+        timeout: u64,
         #[command(flatten)]
         lock: LockArgs,
     },

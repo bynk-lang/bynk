@@ -274,6 +274,25 @@ fn run() -> ExitCode {
             }
             prepared.finish(run_test(*args))
         }
+        Command::Eval {
+            input,
+            unit,
+            expr,
+            sources_stdin,
+            timeout,
+            lock,
+        } => {
+            if !prepare(&input, lock.options()) {
+                return ExitCode::FAILURE;
+            }
+            bynk::eval::run(bynk::eval::EvalArgs {
+                input,
+                unit,
+                expr,
+                sources_stdin,
+                timeout: Some(timeout),
+            })
+        }
         Command::Fetch { path, lock, format } => {
             if matches!(format, bynk::cli::DeployFormatArg::Json) {
                 return fetch_json(&path, lock.options());

@@ -14,7 +14,7 @@ summary: `bynk eval` builds on the doc-example path; stateless, stub-only, expli
 
 1. *Same scope as a suite.* The snippet sees the unit's declarations and the `stub`s it writes. Its leading `consumes` and `stub` lines are the suite's own; a snippet `consumes` what it uses from other units, as a suite file does (ADR 0849).
 2. *Stateless.* Each evaluation is independent. A client that wants an earlier cell's `let`s sends them again ahead of the snippet.
-3. *No real I/O.* The test runtime refuses a platform capability that has no `stub`, and the evaluation reports the refusal. Only the unit's own capabilities are in scope.
+3. *No real I/O.* The test runtime refuses a platform capability that reaches outside (`Fetch`, a database, a secret store) when it has no `stub`, and the evaluation reports the refusal; `Clock`, `Random` and `Logger` run as the in-memory doubles every test gets. Only the unit's own capabilities are in scope.
 4. *Bounded.* A run is killed after a time limit and reported as timed out.
 5. *Explicit and local, not implicit.* An evaluation is a request to run code the user wrote in their own workspace, at the trust level of `bynk test`. ADR 0638 is not overturned: the refined-type explorer keeps evaluating compiler-generated predicates in the editor, because a hover must not build and run a project, while a notebook cell is an explicit instruction to do so.
 
