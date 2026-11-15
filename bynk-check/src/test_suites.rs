@@ -1846,38 +1846,13 @@ fn check_test_bodies(
         let Some(test_decl) = parsed[i].test() else {
             continue;
         };
-        errors.extend(resolver::check_hidden_type_names_in_suite(
-            test_decl,
-            Some(target_name),
-            &hidden,
-        ));
-        // #1927: nor a type the target hides behind its own value.
-        errors.extend(resolver::check_shadowed_type_names_in_suite(
-            test_decl,
-            &target_shadowed.0,
-            &target_shadowed.1,
-        ));
-        // #3536: nor a type or capability its own `consumes` does not bring in.
-        errors.extend(warn_unselected_suite_types(
+        let maps = (unit_tables, unit_uses, unit_consumes, unit_consumes_aliases);
+        errors.extend(suite_naming_errors(
             test_decl,
             &parsed[i],
-            &suite_import_owners(
-                test_decl,
-                target_name,
-                unit_tables,
-                unit_uses,
-                unit_consumes,
-            ),
-            &target_shadowed.1,
-            unit_consumes
-                .get(target_name)
-                .map_or(&[][..], Vec::as_slice),
-            unit_tables
-                .get(target_name)
-                .map_or(&HashMap::new(), |t| &t.flattened_caps),
-            unit_consumes_aliases
-                .get(target_name)
-                .map_or(&HashMap::new(), |a| a),
+            target_name,
+            maps,
+            (&hidden, &target_shadowed),
         ));
         // v0.25: test-case edges record in the test file, resolving bare
         // names through the *target* unit's namespace.
@@ -5498,6 +5473,68 @@ fn suite_import_owners(
         }
     }
     owners
+}
+
+/// The naming gates a unit suite goes through before its cases are checked: a
+/// type reached only through an imported declaration is hidden (#1814), one the
+/// target hides behind its own value is shadowed (#1927), and (#3536) a type,
+/// capability or service the suite's own `consumes` does not bring in warns.
+fn suite_naming_errors(
+    suite: &SuiteDecl,
+    pf: &ParsedFile,
+    target: &str,
+    maps: (
+        &HashMap<String, UnitTable>,
+        &HashMap<String, Vec<String>>,
+        &HashMap<String, Vec<String>>,
+        &HashMap<String, HashMap<String, String>>,
+    ),
+    (hidden, shadowed): (
+        &std::collections::BTreeMap<String, String>,
+        &(
+            HashMap<String, crate::resolver::ShadowedImport>,
+            HashMap<String, Arc<TypeDecl>>,
+        ),
+    ),
+) -> Vec<CompileError> {
+    let mut errors = resolver::check_hidden_type_names_in_suite(suite, Some(target), hidden);
+    errors.extend(resolver::check_shadowed_type_names_in_suite(
+        suite,
+        &shadowed.0,
+        &shadowed.1,
+    ));
+    errors.extend(warn_unselected_suite_imports(
+        suite,
+        pf,
+        target,
+        maps,
+        &shadowed.1,
+    ));
+    errors
+}
+
+/// #3536: [`warn_unselected_suite_types`] for the suite `suite` of `target`,
+/// reading what it consumes from the project's maps (tables, `uses`,
+/// `consumes`, aliases).
+fn warn_unselected_suite_imports(
+    suite: &SuiteDecl,
+    pf: &ParsedFile,
+    target: &str,
+    maps: (
+        &HashMap<String, UnitTable>,
+        &HashMap<String, Vec<String>>,
+        &HashMap<String, Vec<String>>,
+        &HashMap<String, HashMap<String, String>>,
+    ),
+    types: &HashMap<String, Arc<TypeDecl>>,
+) -> Vec<CompileError> {
+    let (unit_tables, unit_uses, unit_consumes, unit_consumes_aliases) = maps;
+    let owners = suite_import_owners(suite, target, unit_tables, unit_uses, unit_consumes);
+    let consumed = unit_consumes.get(target).map_or(&[][..], Vec::as_slice);
+    let none = HashMap::new();
+    let caps = unit_tables.get(target).map_or(&none, |t| &t.flattened_caps);
+    let aliases = unit_consumes_aliases.get(target).unwrap_or(&none);
+    warn_unselected_suite_types(suite, pf, &owners, types, consumed, caps, aliases)
 }
 
 /// #3536: `bynk.consumes.type_not_selected` for a suite file: its own `consumes`
