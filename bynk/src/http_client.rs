@@ -7,9 +7,8 @@
 //! generator's input (`bynk_emit::emitter::http_client`) and writes the result.
 //!
 //! A route the first version cannot represent faithfully is named and left out,
-//! never emitted wrong: a form, multipart or raw body, a typed `cookies` record, a
-//! raw or streamed response, and a route guarded by a request signature (the
-//! client holds no secret). Later slices of #3508 add them.
+//! never emitted wrong: a raw `RequestQuery` or `RequestCookies` view, and a route
+//! guarded by a request signature (the client holds no secret).
 
 use std::path::{Path, PathBuf};
 use std::process::ExitCode;
@@ -476,9 +475,6 @@ fn route_of(
 
 /// The route's features this version cannot represent, if any.
 fn unsupported(info: &ContextBoundaryInfo, h: &Handler) -> Result<(), String> {
-    if h.raw_content_type().is_some() {
-        return Err("a `@raw` body is not supported yet".to_string());
-    }
     if h.params
         .iter()
         .any(|p| p.name.name == "query" && matches!(p.type_ref, TypeRef::RequestQuery(_)))
@@ -502,6 +498,14 @@ fn unsupported(info: &ContextBoundaryInfo, h: &Handler) -> Result<(), String> {
 
 /// How the route reads its `body`: JSON, unless it is a `@form` or `@multipart` one.
 fn body_kind(h: &Handler) -> BodyKind {
+    if h.annotations.iter().any(|a| a.name.name == "raw") {
+        return BodyKind::Raw {
+            content_type: h
+                .raw_content_type()
+                .filter(|ct| *ct != "*/*")
+                .map(str::to_string),
+        };
+    }
     let note = |name: &str| h.annotations.iter().any(|a| a.name.name == name);
     if note("multipart") {
         BodyKind::Multipart
@@ -546,16 +550,12 @@ fn replies_of(model: &WireContractModel, _json: JsonOptions) -> Result<Vec<Reply
                 HttpVariantPayload::Message => ReplyPayload::Message,
                 HttpVariantPayload::Location => ReplyPayload::Location,
                 HttpVariantPayload::None => ReplyPayload::None,
-                HttpVariantPayload::Streamed
-                | HttpVariantPayload::Raw
-                | HttpVariantPayload::RawTagged
+                HttpVariantPayload::Streamed => ReplyPayload::Events,
+                HttpVariantPayload::RawTagged => ReplyPayload::RawTagged,
+                HttpVariantPayload::Raw if resp.variant == "Raw" => ReplyPayload::RawEtag,
+                HttpVariantPayload::Raw
                 | HttpVariantPayload::RawStreamed
-                | HttpVariantPayload::RawError => {
-                    return Err(format!(
-                        "the route can answer `{}`, a raw or streamed body, which is not supported yet",
-                        resp.variant
-                    ));
-                }
+                | HttpVariantPayload::RawError => ReplyPayload::Raw,
             }
         };
         out.push(ReplyInput {

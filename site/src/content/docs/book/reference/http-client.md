@@ -10,8 +10,8 @@ way in.
 
 :::note
 `bynk client` is **experimental**. The generated module's member names and shape
-may change in a minor version until it is stabilised. Raw bodies and streamed
-responses are not generated yet; see [Routes left out](#routes-left-out).
+may change in a minor version until it is stabilised. See [Routes left out](#routes-left-out)
+for what it does not generate.
 :::
 
 This is the third surface a contract takes. [`bynk openapi`](/docs/tooling/bynk-openapi/)
@@ -142,6 +142,8 @@ documents for the route: the declared success when the handler can return it, ea
 | `Conflict("…")`, `BadRequest("…")` and the other message variants | `{ status, kind, error: string }` |
 | a redirect | `{ status, kind, location: string }` |
 | the boundary's `400` | `{ status: 400, kind: "StructuralMismatch", error: BoundaryError }` |
+| `Raw`, `RawTagged`, `RawCreated`, `RawStreamed`, `RawError` | `{ status, kind, contentType, body, bytes(), text() }`, with `etag` where the server sends one; see [Raw bodies](#raw-bodies-and-streams) |
+| `Streaming(s)` | `{ status, kind, events: AsyncIterable<string> }`; see [Server-sent events](#server-sent-events) |
 
 `kind` is the `HttpResult` variant's name. Two answers can share a status (the
 boundary's `400` and a handler's own `BadRequest`); both are members, told apart by
@@ -291,12 +293,72 @@ A `Set-Cookie` in a response reaches the browser only through the framework's
 server, which must forward it; a script cannot read it. The `Cookie` header of an
 incoming browser request must likewise be forwarded explicitly by the caller.
 
+## Raw bodies and streams
+
+A `@raw` route's `body` is the caller's bytes, which Bynk does not own the form of (so no
+codec runs): `Uint8Array | ArrayBuffer | Blob | ReadableStream<Uint8Array>`. It is sent
+under the content type the route declares, whatever `headers` holds; a route declared
+`@raw(contentType: "*/*")` names none, so the caller's own is sent. A `ReadableStream` is a
+streamed upload, which `fetch` takes only with `duplex: "half"` (the client sets it) and
+which Chromium-based browsers, Node and Workers can make; other browsers cannot, so pass
+a `Blob` or bytes there.
+
+An answer whose body the author owns (`Raw`, `RawTagged`, `RawCreated`, `RawStreamed`,
+`RawError`) is not read or decoded. Its member is
+
+```ts
+{ status, kind, contentType: string, etag?: string | null,
+  body: ReadableStream<Uint8Array> | null, bytes(): Promise<Uint8Array>, text(): Promise<string> }
+```
+
+`body` is the response's own stream, so a large download is not buffered; `bytes()` and
+`text()` read the same body, so use one of the three, once. `etag` is present where the
+route can send one: a `string` when every raw answer at that status is a `RawTagged`, and
+`string | null` where a `Raw` can answer (a small `GET` of a `Raw` carries a weak `ETag` the
+server made). `RawError` answers the status its handler names; only a literal status is in
+the route's set, as `bynk openapi` reports it.
+
+The wire cannot tell one raw answer from another at the same status, so they are one
+member, whose `kind` is the union of the variants that can make it. A status that also
+answers in JSON (a `404` message, the boundary's `400`) is told apart by its content type:
+`application/json` is the JSON answer, any other body, a missing content type included, is the raw one.
+So a raw body that is itself `application/json`, at a status that also has a bodiless or message
+answer, is read as that answer. At runtime a raw member's `kind` is the first variant listed for
+its status (a `Raw` before a `RawTagged`), whichever the server made, since the wire cannot say;
+its `etag` is the header, as sent. A raw answer that should carry an `ETag` and does not (a
+`RawTagged`'s status, with none sent) is `Unexpected`, with the body's text.
+
+### Server-sent events
+
+`Streaming(s)` takes a `Stream[String]`, so an event is a `string` and nothing is decoded.
+The server writes each element as one event: a `data:` line for each line of the element,
+then a blank line, under `content-type: text/event-stream`, and nothing else (no `event:`,
+`id:` or `retry:`, no comments). The client reads the body with `fetch`, not `EventSource`
+(which cannot send headers or a body), and yields each event's `data`:
+
+```ts
+const res = await api.orders.getTicks();
+if (res.status === 200) {
+  for await (const tick of res.events) console.log(tick);
+}
+```
+
+The reader follows the specification, so it also reads a stream another server wrote: CRLF,
+LF or CR line ends, `data:` with or without the space, comments and other fields ignored.
+An event the stream ends in the middle of is dropped. Breaking out of the loop, or aborting
+the call with a `signal`, cancels the body. The body is read only when iteration starts: a member
+that is never iterated leaves the response open until the `signal` aborts it, so check the
+`status` first and abort what you will not read. A stream that fails after its status was sent
+cannot become a `CallFailure`: the iteration throws a `StreamFailure` (exported, with `reason`
+holding what the body rejected with), the one place the client throws. Two edges are the server's framing: an
+element containing a bare `\r` is split by a reader (the server splits on `\n` only), so it
+does not round-trip, and an empty element is an event with empty data.
+
 ## Routes left out
 
 A route the client cannot yet represent faithfully is named on stderr and left out,
-never generated wrong: a `@raw` body, a raw `query: RequestQuery` or `cookies:
-RequestCookies` view, a route that can answer a raw or streamed body, a route guarded by a request
-signature (the client holds no secret), and a route whose types hold an `Option`
+never generated wrong: a raw `query: RequestQuery` or `cookies: RequestCookies` view,
+a route guarded by a request signature (the client holds no secret), and a route whose types hold an `Option`
 inside a `Map`, a `Set` or a `Result`. If every selected route is left out the
 command fails.
 

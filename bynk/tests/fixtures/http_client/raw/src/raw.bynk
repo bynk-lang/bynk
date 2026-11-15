@@ -1,0 +1,94 @@
+context raw
+
+service api from http {
+	limits { maxBody: 4096 }
+
+	// A raw upload: the octets as sent, under the declared type.
+	@raw(contentType: "application/vnd.bynk.blob")
+	on PUT("/blob/:name") (name: String, body: Bytes) -> Effect[HttpResult[String]] by v: Visitor {
+		Ok("\(name) \(body.toBase64())")
+	}
+
+	// Any content type: the caller's own is sent.
+	@raw(contentType: "*/*")
+	on POST("/any") (body: Bytes) -> Effect[HttpResult[String]] by v: Visitor {
+		Ok(body.toBase64())
+	}
+
+	// A small raw download: a weak `ETag` comes with it on a `GET`.
+	on GET("/logo") () -> Effect[HttpResult[()]] by v: Visitor {
+		Raw(Bytes.fromUtf8("<svg/>"), "image/svg+xml")
+	}
+
+	// A raw download with the handler's own validator.
+	on GET("/doc/:name") (name: String) -> Effect[HttpResult[()]] by v: Visitor {
+		if name == "gone" {
+			NotFound
+		} else {
+			RawTagged(Bytes.fromUtf8("doc \(name)"), "text/plain", "\"v1\"")
+		}
+	}
+
+	// A raw download streamed chunk by chunk.
+	on GET("/chunks") () -> Effect[HttpResult[()]] by v: Visitor {
+		RawStreamed(
+			Stream.of([Bytes.fromUtf8("one,"), Bytes.fromUtf8(""), Bytes.fromUtf8("two,"), Bytes.fromUtf8("three")]),
+			"text/csv"
+		)
+	}
+
+	// A raw answer at a creation status, and an author-chosen error.
+	on POST("/made/:name") (name: String, body: String) -> Effect[HttpResult[()]] by v: Visitor {
+		if name == "taken" {
+			RawError(Conflict, Bytes.fromUtf8("taken"), "text/plain")
+		} else {
+			RawCreated(Bytes.fromUtf8("made \(name): \(body)"), "text/plain")
+		}
+	}
+
+	// Server-sent events: each stream element is one event.
+	on GET("/ticks") () -> Effect[HttpResult[()]] by v: Visitor {
+		Streaming(Stream.of(["tick-1", "two\nlines", "", "tick-4"]).take(4))
+	}
+
+	// An element holding a bare carriage return.
+	on GET("/cr") () -> Effect[HttpResult[()]] by v: Visitor {
+		Streaming(Stream.of(["a\rb"]).take(1))
+	}
+
+	// A streamed answer beside a refusal before the stream starts.
+	on GET("/feed/:mode") (mode: String) -> Effect[HttpResult[()]] by v: Visitor {
+		if mode == "live" {
+			Streaming(Stream.of(["a", "b"]).take(2))
+		} else {
+			NotFound
+		}
+	}
+
+	// A JSON answer and a raw one at the same status: told apart by content type.
+	on GET("/either/:mode") (mode: String) -> Effect[HttpResult[String]] by v: Visitor {
+		if mode == "raw" {
+			Raw(Bytes.fromUtf8("plain"), "text/plain")
+		} else {
+			Ok("json")
+		}
+	}
+
+	// Two raw variants at one status are one member.
+	on GET("/two/:mode") (mode: String) -> Effect[HttpResult[()]] by v: Visitor {
+		if mode == "tagged" {
+			RawTagged(Bytes.fromUtf8("t"), "text/plain", "\"t1\"")
+		} else {
+			Raw(Bytes.fromUtf8("r"), "text/plain")
+		}
+	}
+
+	// A raw answer and a bodiless one at one status.
+	on GET("/gone/:mode") (mode: String) -> Effect[HttpResult[()]] by v: Visitor {
+		if mode == "raw" {
+			RawError(NotFound, Bytes.fromUtf8("{\"why\":1}"), "application/json")
+		} else {
+			NotFound
+		}
+	}
+}
