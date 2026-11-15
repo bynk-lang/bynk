@@ -680,6 +680,11 @@ show("upload-invalid", await c.api.postUpload({ title: "", caption: null, photo:
 
 show("prefs", await c.api.getPrefs({ theme: "dark", lang: "fr" }));
 show("prefs-default", await c.api.getPrefs({ theme: "light" }));
+// Where `document` exists a script cannot set `Cookie`: refused, not silently lost.
+globalThis.document = {};
+show("prefs-browser", await c.api.getPrefs({ theme: "dark" }));
+show("origin-in-browser", await c.api.getOrigin());
+delete globalThis.document;
 show("origin-none", await c.api.getOrigin());
 const withOrigin = createClient({ baseUrl: "http://api.test", fetch: viaWorker, origin: "https://app.test" });
 show("origin", await withOrigin.api.getOrigin());
@@ -741,6 +746,18 @@ fn forms_multipart_and_cookies_round_trip_against_a_real_worker() {
     assert_eq!(
         line(&out, "prefs-default"),
         r#"{"status":200,"kind":"Ok","body":"light|-|1"}"#
+    );
+    // A browser drops a `Cookie` header, so typed cookies there are refused up front.
+    let l = line(&out, "prefs-browser");
+    assert!(
+        l.starts_with(r#"{"kind":"Invalid","error":{"kind":"StructuralMismatch","path":"cookies""#)
+            && l.contains("credentials"),
+        "{l}"
+    );
+    assert_eq!(
+        line(&out, "origin-in-browser"),
+        r#"{"status":200,"kind":"Ok","body":"none"}"#,
+        "a call with no typed cookies is untouched in a browser"
     );
     // `origin` reaches the wire as `Origin`; without it the request carries none.
     assert_eq!(

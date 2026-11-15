@@ -730,9 +730,9 @@ nothing. It exits non-zero when the project has no `from http` service, when
 `--service` names none, when `--check` or `--layout dir` has no path to work on,
 when two routes of a service would share a function name,
 and when every selected route is one this version cannot represent. A route it
-cannot represent (a `@form`, `@multipart` or `@raw` body, a typed `cookies`
-record, a raw or streamed response, a request-signature route, an `Option` inside a
-`Map`, `Set` or `Result`) is named on stderr and left out.
+cannot represent (a `@raw` body, a raw `query` or `cookies` view, a raw or streamed
+response, a request-signature route, an `Option` inside a `Map`, `Set` or `Result`) is
+named on stderr and left out.
 
 ---
 

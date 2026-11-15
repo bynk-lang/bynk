@@ -464,9 +464,8 @@ pub enum Command {
     /// `--out` is given. The project must check clean. Experimental: member names
     /// may change in a minor version until it is stabilised.
     ///
-    /// Routes the first version cannot represent (forms, multipart and raw bodies,
-    /// typed cookies, raw and streamed responses) are named on stderr and left
-    /// out. `bynk openapi` is the language-neutral contract and stays.
+    /// Routes the client cannot represent yet (raw bodies, raw and streamed
+    /// responses) are named on stderr and left out. `bynk openapi` is the language-neutral contract and stays.
     Client {
         /// Project directory (or any path inside it). Defaults to the current
         /// directory.
