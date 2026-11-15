@@ -40,8 +40,12 @@ pub enum SymbolKind {
     /// handler's `by` clause.
     Actor,
     /// (ADR 0069 follow-on, #304): an agent handler, keyed by the compound
-    /// name `"Agent.handler"`. Service handlers have no per-handler name
-    /// (`Handler.method_name` is `None`) so only agent dispatch is covered.
+    /// name `"Agent.handler"`. #3582: a service's callable handlers too — an
+    /// `on call` handler keyed `"service.call"` and an `on http` route keyed
+    /// `"service.POST /orders"` (method and path). Those are *call-only*
+    /// symbols (see [`SymbolEntry::call_only`]): they exist so call hierarchy
+    /// has a callee, and stay out of tokens, lenses, rename and workspace
+    /// symbols.
     Handler,
     /// A `messages <tag> { ... }` bundle, keyed by its `tag` (message-bundles
     /// track, slice 1).
@@ -55,6 +59,18 @@ pub enum SymbolKind {
     /// #2617: a `const Name: Type = …` declaration — a value of its annotated
     /// type, keyed by its name in the declaring unit.
     Const,
+}
+
+impl SymbolKey {
+    /// #3582: how call hierarchy names a `Handler` symbol. An HTTP route is
+    /// named by method and path (`POST /orders`, as the sequence and
+    /// wire-contract models label it); any other handler keeps its key name.
+    pub fn handler_display_name(&self) -> &str {
+        match self.name.split_once('.') {
+            Some((_, route)) if self.kind == SymbolKind::Handler && route.contains(' ') => route,
+            _ => &self.name,
+        }
+    }
 }
 
 impl SymbolKind {
@@ -259,6 +275,12 @@ pub struct SymbolEntry {
     pub refs: Vec<SiteRef>,
     /// v0.28 (ADR 0057): semantic-token modifiers, set from the declaration.
     pub modifiers: SymbolModifiers,
+    /// #3582: a service handler (`on call` / `on http`) — a symbol that exists
+    /// only as a call-hierarchy callee. Its definition (the `on` keyword) resolves
+    /// only through [`ProjectIndex::call_symbol_at`]; [`ProjectIndex::symbol_at`]
+    /// skips it (its call-site refs share a span with the `Service` ref), and
+    /// tokens, lenses and workspace symbols skip the symbol altogether.
+    pub call_only: bool,
 }
 
 /// v0.34 (ADR 0067): one resolved caller→callee call edge — a reference
@@ -267,9 +289,11 @@ pub struct SymbolEntry {
 /// call hierarchy: incoming calls group edges by `callee`, outgoing by
 /// `caller`. v0.36 (ADR 0069): `Fn` and `Method` callees/callers. #304:
 /// `CapabilityOp` and agent `Handler` callees/callers too — every index
-/// symbol capable of holding a call site is now a callee. Service
-/// cross-context dispatch remains the one uncovered relation (no per-handler
-/// index symbol to be its callee).
+/// symbol capable of holding a call site is now a callee. #3582: service
+/// cross-context dispatch is covered as well — a `pay.charge(…)` call (plain or
+/// through a `consumes … as` alias) is an edge from the calling owner to the
+/// consumed service's `on call` `Handler` symbol, in addition to the
+/// service-level `Service` reference that Find References reads.
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct CallEdge {
     pub caller: SymbolKey,
@@ -347,12 +371,33 @@ impl ProjectIndex {
     /// `offset` within `path`. Spans are half-open; name segments never
     /// overlap, so the first hit is the only hit.
     pub fn symbol_at(&self, path: &Path, offset: usize) -> Option<(&SymbolKey, &SiteRef)> {
+        self.symbol_at_impl(path, offset, false)
+    }
+
+    /// #3582: [`symbol_at`](Self::symbol_at), but a call-only service handler's
+    /// definition (its `on` keyword) resolves too. Call hierarchy only.
+    pub fn call_symbol_at(&self, path: &Path, offset: usize) -> Option<(&SymbolKey, &SiteRef)> {
+        self.symbol_at_impl(path, offset, true)
+    }
+
+    fn symbol_at_impl(
+        &self,
+        path: &Path,
+        offset: usize,
+        include_call_only: bool,
+    ) -> Option<(&SymbolKey, &SiteRef)> {
         for (key, entry) in &self.symbols {
+            if entry.call_only && !include_call_only {
+                continue;
+            }
             if let Some(def) = &entry.def
                 && def.path == path
                 && def.span.range().contains(&offset)
             {
                 return Some((key, def));
+            }
+            if entry.call_only {
+                continue; // its refs duplicate the `Service` ref's span
             }
             for site in &entry.refs {
                 if site.path == path && site.span.range().contains(&offset) {
@@ -458,6 +503,8 @@ pub struct IndexBuilder {
     /// only, no usable def site (synthetic files are not on disk). Edges
     /// qualifying here route into [`ProjectIndex::foreign_refs`].
     first_party_defs: HashMap<SymbolKey, SymbolModifiers>,
+    /// #3582: keys registered through [`IndexBuilder::add_call_only_def`].
+    call_only: HashSet<SymbolKey>,
     /// (unit, owner display name) → declaring file, for span re-attribution.
     /// Includes methods (`"T.m"`), which are not index symbols.
     owner_files: HashMap<(String, String), PathBuf>,
@@ -501,6 +548,19 @@ impl IndexBuilder {
         self.owner_keys
             .insert((unit.to_string(), name.to_string()), key.clone());
         self.defs.insert(key, (site, modifiers));
+    }
+
+    /// #3582: register a service handler as a call-only symbol (see
+    /// [`SymbolEntry::call_only`]). Like a leaf def it takes over no owner entry:
+    /// the enclosing owner of a call inside it stays the service.
+    pub fn add_call_only_def(&mut self, unit: &str, name: &str, site: SiteRef) {
+        let key = SymbolKey {
+            unit: unit.to_string(),
+            kind: SymbolKind::Handler,
+            name: name.to_string(),
+        };
+        self.call_only.insert(key.clone());
+        self.defs.insert(key, (site, SymbolModifiers::default()));
     }
 
     /// #1883: register a symbol that can never enclose a call site (an
@@ -598,6 +658,7 @@ impl IndexBuilder {
                     def: Some(def.clone()),
                     refs: Vec::new(),
                     modifiers: *modifiers,
+                    call_only: self.call_only.contains(key),
                 },
             );
         }

@@ -314,6 +314,7 @@ pub fn assemble_index(
                         site(&s.name),
                         symbol_modifiers(&unit, None),
                     );
+                    add_service_handler_defs(&mut builder, &unit, &pf.identity_path(), s);
                 }
                 CommonsItem::Agent(a) => {
                     builder.add_def(
@@ -414,6 +415,40 @@ pub fn assemble_index(
         }
     }
     builder.build(refs.edges)
+}
+
+/// #3582: a service's callable handlers — `on call` and each `on http` route —
+/// as call-only `Handler` symbols keyed `"service.call"` / `"service.POST /path"`,
+/// so a cross-context call has a handler to be an edge to. The definition site is
+/// the handler's leading `on` keyword (or its first annotation); no other handler
+/// kind can be called or is named by method and path.
+fn add_service_handler_defs(
+    builder: &mut crate::index::IndexBuilder,
+    unit: &str,
+    path: &std::path::Path,
+    service: &ServiceDecl,
+) {
+    for h in &service.handlers {
+        let label = match &h.kind {
+            HandlerKind::Call => "call".to_string(),
+            HandlerKind::Http { method, path } => format!("{} {path}", method.as_str()),
+            _ => continue,
+        };
+        let lead = h
+            .annotations
+            .first()
+            .map_or(2, |a| a.span.end - a.span.start);
+        let mut span = h.span;
+        span.end = span.start + lead;
+        builder.add_call_only_def(
+            unit,
+            &format!("{}.{label}", service.name.name),
+            SiteRef {
+                path: path.to_path_buf(),
+                span,
+            },
+        );
+    }
 }
 
 /// v0.28 (ADR 0057): a symbol's semantic-token modifiers from its

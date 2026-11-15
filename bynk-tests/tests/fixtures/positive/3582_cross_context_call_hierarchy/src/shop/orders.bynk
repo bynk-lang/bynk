@@ -1,0 +1,17 @@
+context shop.orders
+
+consumes shop.pay
+
+service place {
+  on call(total: Int) -> Effect[Result[Int, Int]] {
+    let paid <- shop.pay.charge(total)
+    paid
+  }
+}
+
+service api from http {
+  on POST("/orders") (body: Int) -> Effect[HttpResult[Int]] by who: Visitor {
+    let _ <- shop.pay.charge(body)
+    Ok(body)
+  }
+}

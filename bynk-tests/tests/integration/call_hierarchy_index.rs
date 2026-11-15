@@ -141,3 +141,75 @@ fn call_graph_records_capability_op_and_agent_handler_callees() {
         "outgoing calls mirror incoming off the same table"
     );
 }
+
+fn cross_context_fixture_root() -> PathBuf {
+    Path::new(env!("CARGO_MANIFEST_DIR"))
+        .join("tests/fixtures/positive/3582_cross_context_call_hierarchy/src")
+}
+
+/// #3582: a cross-context service call is an edge to the consumed service's
+/// `on call` handler — through a plain `consumes` and a `consumes … as` alias —
+/// and an `on http` route that makes one is an owner like any other.
+#[test]
+fn call_graph_records_cross_context_service_handlers() {
+    let index = analyse(&cross_context_fixture_root());
+
+    let charge = key("shop.pay", SymbolKind::Handler, "charge.call");
+    let place = key("shop.orders", SymbolKind::Service, "place");
+    let api = key("shop.orders", SymbolKind::Service, "api");
+    let invoice = key("shop.billing", SymbolKind::Service, "invoice");
+
+    let callers: Vec<&SymbolKey> = index.calls_into(&charge).map(|e| &e.caller).collect();
+    assert_eq!(callers.len(), 3, "direct, http-route and aliased callers");
+    for expected in [&place, &api, &invoice] {
+        assert!(callers.contains(&expected), "missing caller {expected:?}");
+    }
+    assert_eq!(index.calls_from(&invoice).count(), 1, "alias resolves");
+    assert_eq!(
+        index.calls_from(&invoice).next().map(|e| &e.callee),
+        Some(&charge)
+    );
+}
+
+/// #3582: the route handler is an index symbol named by method and path, with
+/// the unit as detail; and Find References on the service is unchanged — the
+/// `Service` refs still cover every cross-context caller, the call-only handler
+/// is never the symbol under a call-site cursor.
+#[test]
+fn service_handler_is_call_only_and_service_refs_unchanged() {
+    let index = analyse(&cross_context_fixture_root());
+
+    let route = key("shop.orders", SymbolKind::Handler, "api.POST /orders");
+    assert!(index.symbols[&route].call_only);
+    assert_eq!(route.handler_display_name(), "POST /orders");
+
+    let charge_svc = key("shop.pay", SymbolKind::Service, "charge");
+    let entry = &index.symbols[&charge_svc];
+    assert!(!entry.call_only);
+    assert_eq!(
+        entry.refs.len(),
+        3,
+        "one Service ref per cross-context call"
+    );
+
+    // The cursor on every call site still resolves to the service.
+    for site in &entry.refs {
+        let (k, _) = index
+            .symbol_at(&site.path, site.span.start)
+            .expect("symbol at call site");
+        assert_eq!(k, &charge_svc);
+    }
+}
+
+/// #3582: call hierarchy opens on a handler's `on` keyword; every other query
+/// (`symbol_at`: hover, references, rename) does not see the call-only symbol.
+#[test]
+fn handler_resolves_for_call_hierarchy_only() {
+    let index = analyse(&cross_context_fixture_root());
+    let route = key("shop.orders", SymbolKind::Handler, "api.POST /orders");
+    let def = index.symbols[&route].def.clone().expect("def");
+    let (k, _) = bynk_ide::index_queries::prepare_call_hierarchy(&index, &def.path, def.span.start)
+        .expect("prepare at `on`");
+    assert_eq!(k, &route);
+    assert!(index.symbol_at(&def.path, def.span.start).is_none());
+}

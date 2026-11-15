@@ -234,7 +234,7 @@ fn new_entry_point_reports_no_errors_on_a_clean_project() {
     units.sort();
     assert_eq!(units, vec!["demo.shared", "demo.svc"]);
     assert_eq!(analysed.snapshots.len(), 2);
-    assert_eq!(analysed.index.symbols.len(), 8);
+    assert_eq!(analysed.index.symbols.len(), 9); // #3582: + the service`s `on call` handler
     assert_eq!(analysed.index.calls.len(), 1);
     assert_eq!(analysed.index.impls.len(), 1);
 

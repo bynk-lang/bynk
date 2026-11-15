@@ -2302,7 +2302,7 @@ impl Backend {
     ) -> Option<CallHierarchyItem> {
         let location = Self::site_to_location(analysis, def)?;
         Some(CallHierarchyItem {
-            name: key.name.clone(),
+            name: key.handler_display_name().to_string(),
             kind: lsp_symbol_kind(key.kind),
             tags: None,
             detail: Some(key.unit.clone()),
