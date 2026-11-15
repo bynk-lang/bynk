@@ -28,6 +28,7 @@ per-commit history. While Bynk is pre-1.0, increments may change behaviour.
 
 | Version | Highlights |
 |---|---|
+| **v0.626.1** | Call hierarchy covers cross-context service calls, through `consumes … as` aliases too (#3582) |
 | **v0.626.0** | An `on http` handler takes a fifth special parameter, `cf: RequestCf`, the optional facts Cloudflare derived about the connection (Cloudflare-only, experimental) |
 | **v0.625.3** | `bynk/architectureModel` lists each event's emitters and subscribers and each handler's capability use (`given`, with the suites that `stub` it) |
 | **v0.625.2** | The `bynk/sequenceModel` request gives each `alt` branch a source `range` |

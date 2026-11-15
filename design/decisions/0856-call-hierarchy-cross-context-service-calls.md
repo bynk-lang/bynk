@@ -1,11 +1,6 @@
----
-level: patch
-changelog: Call hierarchy covers cross-context service calls, through `consumes … as` aliases too (#3582)
----
+# 0856 — Service handlers are call-only index symbols, so call hierarchy covers cross-context calls
 
-## ADR: call-hierarchy-cross-context-service-calls
-title: Service handlers are call-only index symbols, so call hierarchy covers cross-context calls
-summary: A service's `on call` and `on http` handlers become `SymbolKind::Handler` symbols, and a cross-context call is an edge to one
+- **Status:** Accepted (v0.626.1)
 
 **Context.** Call hierarchy (ADR 0067, 0069) covered every call relation but the one that matters most for architecture: a call from one context into another's service. It was recorded only as a `Service` reference, and service handlers had no index symbol to be a callee (#3582).
 
