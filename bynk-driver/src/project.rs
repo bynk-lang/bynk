@@ -2597,6 +2597,9 @@ fn platform_lock_phase(
     if !errors.is_empty() {
         return;
     }
+    // A malformed `[deploy.workers]` is reported when the project loads, before
+    // this phase runs, so a table that cannot be read here is not a silent
+    // loss of grouping.
     let worker_groups =
         bynk_project::worker_groups::try_read_worker_groups_with(project_root, overlay)
             .unwrap_or_default();

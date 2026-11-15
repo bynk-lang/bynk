@@ -5348,9 +5348,11 @@ pub fn phase_platform_lock(
                             b.1,
                         ),
                     )
-                    .with_note(
-                        "split the consumers into separate deployment units (`--target workers`), or remove one of the platform-native dependencies",
-                    ),
+                    .with_note(if group.is_some() {
+                        "the members of a `[deploy.workers]` group share one Worker: move the conflicting contexts into different groups (or out of any group), or remove one of the platform-native dependencies"
+                    } else {
+                        "split the consumers into separate deployment units (`--target workers`), or remove one of the platform-native dependencies"
+                    }),
                 );
             }
         }

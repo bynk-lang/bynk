@@ -205,3 +205,49 @@ fn members_that_each_declare_an_agent_of_one_name_collide() {
     assert!(ok, "separate Workers may each declare `Cart`:\n{out}");
     let _ = fs::remove_dir_all(&root);
 }
+
+fn plain_context(name: &str) -> String {
+    format!(
+        "context {name}\n\nservice probe {{\n\ton call() -> Effect[Int] {{\n\t\tEffect.pure(1)\n\t}}\n}}\n"
+    )
+}
+
+/// A group is one deployment unit, so a platform-native member locks the whole
+/// Worker, and the diagnostic names the group, not a context.
+#[test]
+fn the_platform_lock_names_the_group() {
+    let root = std::env::temp_dir().join(format!("bynk-deploy-groups-lock-{}", std::process::id()));
+    write_project(&root, WORKERS_TARGET);
+    fs::write(
+        root.join("src/shop/orders.bynk"),
+        archive_context("shop.orders", ""),
+    )
+    .unwrap();
+    fs::write(
+        root.join("src/shop/payment.bynk"),
+        plain_context("shop.payment"),
+    )
+    .unwrap();
+
+    let (ok, out) = run(&root, &["build", "--platform", "node"]);
+    assert!(!ok, "{out}");
+    assert!(out.contains("bynk.target.vendor_required"), "{out}");
+    assert!(
+        out.contains("Worker group `core` uses the platform-native capabilities"),
+        "{out}"
+    );
+
+    // Ungrouped, the same context is named as before.
+    fs::write(
+        root.join("bynk.toml"),
+        format!("{UNSTABLE_R2}[build]\ntarget = \"workers\"\n"),
+    )
+    .unwrap();
+    let (ok, out) = run(&root, &["build", "--platform", "node"]);
+    assert!(!ok, "{out}");
+    assert!(
+        out.contains("context `shop.orders` uses the platform-native capabilities"),
+        "{out}"
+    );
+    let _ = fs::remove_dir_all(&root);
+}
