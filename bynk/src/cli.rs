@@ -28,7 +28,7 @@ pub const COMMAND_GROUPS: &[(&str, &[&str])] = &[
     (
         "Project",
         &[
-            "new", "check", "fmt", "test", "build", "compile", "openapi", "token",
+            "new", "check", "fmt", "test", "build", "compile", "openapi", "client", "token",
         ],
     ),
     (
@@ -446,6 +446,39 @@ pub enum Command {
         /// Compile the unsaved buffers given as JSON on stdin (see above).
         #[arg(long)]
         sources_stdin: bool,
+        #[command(flatten)]
+        lock: LockArgs,
+    },
+    /// Write a typed TypeScript client for the HTTP services.
+    ///
+    /// One module a front end (SvelteKit, Next.js, anything that can `fetch`)
+    /// imports (#3508): one function per `from http` route, the boundary types as
+    /// TypeScript types, and the same refinement checks the server runs, on the
+    /// way out and on the way in. Each call returns a union of the route's own
+    /// responses keyed by `status`, or a `CallFailure`; nothing is thrown for an
+    /// HTTP status. An optional value is `T | null`.
+    ///
+    /// The module carries a small browser-safe runtime, so it needs nothing
+    /// installed. Pass it your own `fetch`, a `baseUrl` and `headers`:
+    /// `createClient({ baseUrl, fetch, headers })`. Writes to stdout unless
+    /// `--out` is given. The project must check clean. Experimental: member names
+    /// may change in a minor version until it is stabilised.
+    ///
+    /// Routes the first version cannot represent (forms, multipart and raw bodies,
+    /// typed cookies, raw and streamed responses) are named on stderr and left
+    /// out. `bynk openapi` is the language-neutral contract and stays.
+    Client {
+        /// Project directory (or any path inside it). Defaults to the current
+        /// directory.
+        #[arg(default_value = ".")]
+        input: PathBuf,
+        /// Write the module to FILE (a `.ts` file) instead of stdout.
+        #[arg(short, long)]
+        out: Option<PathBuf>,
+        /// Generate only this `from http` service (`Name` or `unit.Name`); may be
+        /// given more than once. Defaults to every one.
+        #[arg(long)]
+        service: Vec<String>,
         #[command(flatten)]
         lock: LockArgs,
     },

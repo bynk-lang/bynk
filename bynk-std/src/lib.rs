@@ -140,11 +140,11 @@ pub const FIRST_PARTY_NPM: &[FirstPartyNpm] = &[
     },
     // Hyperdrive H1 (#3318): `postgres.ts` is the driver seam of `Postgres`,
     // handed to the binding by a Worker's compose, so only a Worker with a
-    // `Postgres` instance carries the package. Pinned at the version ADR 0799 A
-    // measured.
+    // `Postgres` instance carries the package. 4.0.0, the newest 4.x that was
+    // 14 days old when #3529 moved it from 3.4.5 (the version ADR 0799 A measured).
     FirstPartyNpm {
         package: "postgres",
-        version: "3.4.5",
+        version: "4.0.0",
         runtime_module: "postgres",
         reached_by: Reach::CapabilityInstance("Postgres"),
     },

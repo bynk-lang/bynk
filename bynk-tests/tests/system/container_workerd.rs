@@ -79,13 +79,6 @@ COPY server.js /server.js
 CMD [\"node\", \"/server.js\"]
 ";
 
-fn free_port() -> u16 {
-    std::net::TcpListener::bind("127.0.0.1:0")
-        .and_then(|l| l.local_addr())
-        .map(|a| a.port())
-        .expect("a free local port")
-}
-
 /// A skip that `var` turns into a failure.
 fn skip(var: &str, reason: &str) -> bool {
     if require::is_required(var) {
@@ -193,7 +186,7 @@ fn run(
         dir.join("index.js").is_file() && dir.join("wrangler.toml").is_file(),
         "expected out/workers/box-smoke"
     );
-    let (port, inspector_port) = (free_port(), free_port());
+    let [port, inspector_port] = wrangler::ports::free_ports();
     let log_path = tmp.join("wrangler.log");
     let out_log = fs::File::create(&log_path).unwrap();
     let err_log = out_log.try_clone().unwrap();

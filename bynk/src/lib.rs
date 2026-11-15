@@ -40,6 +40,7 @@ pub mod doctor;
 pub mod explain;
 pub mod fetch;
 pub mod fmt;
+pub mod http_client;
 #[cfg(windows)]
 pub mod job;
 pub mod logs;
