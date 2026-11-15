@@ -5513,6 +5513,199 @@ pub fn phase_unprovided_capabilities(
     }
 }
 
+/// Each unit's resolved calls, by expression: the slice of the checker's
+/// [`checker::Callee`] map the composition-root predicate reads. The driver
+/// keeps one per unit for emission; [`crate::analysis`] gathers the same
+/// slice from the files it checks, so `bynk check` and the editor decide
+/// whether a bundle has a composition root from the same facts.
+pub type UnitCallees = HashMap<String, HashMap<ExprId, checker::Callee>>;
+
+/// Whether a resolved call is `Events.emit`, the one callee
+/// [`unit_table_uses_emit`] looks for. `Events.emit[...]` dispatches through
+/// the ordinary capability-call path (`checker/calls.rs`).
+pub fn is_events_emit(callee: &checker::Callee) -> bool {
+    matches!(callee, checker::Callee::Capability { cap, op, .. } if cap == "Events" && op == "emit")
+}
+
+/// Events track, slice 0 (spine #936): does any handler or provider op in
+/// this unit emit? Reads the checker's own resolved `Callee` for every
+/// expression in every service handler, agent handler and provider op, not
+/// the receiver's spelling, so a local type that shadows `Events` does not
+/// count (`1204_events_emit_shadowed_by_local_type`).
+///
+/// `callees` is `None` only for a unit whose own check never ran. Every
+/// caller runs on an otherwise-clean program, where every unit was checked,
+/// and a silent `false` would disable the emitter's events wiring with no
+/// diagnostic, so it is a `debug_assert` rather than a quiet default.
+pub fn unit_table_uses_emit(
+    table: &UnitTable,
+    callees: Option<&HashMap<ExprId, checker::Callee>>,
+) -> bool {
+    let Some(callees) = callees else {
+        debug_assert!(
+            false,
+            "unit_table_uses_emit: no Callee map for a checked unit"
+        );
+        return false;
+    };
+    let bodies = table
+        .services
+        .values()
+        .flat_map(|s| s.handlers.iter().map(|h| &h.body))
+        .chain(
+            table
+                .agents
+                .values()
+                .flat_map(|a| a.handlers.iter().map(|h| &h.body)),
+        )
+        .chain(
+            table
+                .providers
+                .values()
+                .flat_map(|p| p.ops.iter().map(|op| &op.body)),
+        );
+    let mut stack: Vec<&Expr> = Vec::new();
+    for body in bodies {
+        for s in &body.statements {
+            statement_exprs(s, &mut stack);
+        }
+        stack.push(&body.tail);
+    }
+    while let Some(e) = stack.pop() {
+        if callees.get(&e.id).is_some_and(is_events_emit) {
+            return true;
+        }
+        stack.extend(expr_children(e));
+    }
+    false
+}
+
+/// The context that makes a bundle emit its composition root (`compose.ts`,
+/// `composeApp`) and what it does that needs one, phrased to follow the
+/// context's name, or `None` when the bundle has no root. Shared by the
+/// driver's `emit_composition_root` and [`phase_bundle_composition_unprovided`]
+/// (which both `bynk check` and the editor's analysis run), so the check and
+/// the emitter cannot disagree about whether there is a root: `composeApp`
+/// builds every context's deps itself, so once there is one the host cannot
+/// supply a capability through `__makeSurface(deps)`, and a required local
+/// capability needs a provider, as it does on Workers.
+pub fn composition_root_trigger(
+    kinds: &BTreeMap<String, UnitKind>,
+    unit_consumes: &HashMap<String, Vec<String>>,
+    unit_consumes_aliases: &HashMap<String, HashMap<String, String>>,
+    unit_tables: &HashMap<String, UnitTable>,
+    unit_callees: &UnitCallees,
+    unit_flattened: &HashMap<String, HashMap<String, String>>,
+) -> Option<(String, String)> {
+    // Identify contexts that consume something whose surface has services.
+    // Sorted, so the context named is the same on every run.
+    let mut consumers: Vec<(&String, &Vec<String>)> = unit_consumes.iter().collect();
+    consumers.sort();
+    for (name, targets) in consumers {
+        if kinds.get(name) != Some(&UnitKind::Context) {
+            continue;
+        }
+        if let Some(t) = targets.iter().find(|t| {
+            unit_tables
+                .get(*t)
+                .is_some_and(|other| !other.services.is_empty())
+        }) {
+            return Some((name.clone(), format!("consumes `{t}`, which has services")));
+        }
+    }
+    // v0.15: also compose when a context uses a consumed context's capability
+    // (in a handler or in a provider's `given`) — the consumer must instantiate
+    // the provided capability's provider locally.
+    for (name, kind) in kinds {
+        if *kind != UnitKind::Context {
+            continue;
+        }
+        let Some(table) = unit_tables.get(name) else {
+            continue;
+        };
+        let consumed = unit_consumes.get(name).cloned().unwrap_or_default();
+        let aliases = unit_consumes_aliases.get(name).cloned().unwrap_or_default();
+        let flattened = unit_flattened.get(name).cloned().unwrap_or_default();
+        let uses_cross_cap = !handler_cross_caps(table, &consumed, &aliases, &flattened).is_empty()
+            || table.providers.values().any(|p| {
+                p.given.iter().any(|g| {
+                    g.is_cross_context()
+                        // v0.18: a bare given flattened from `consumes U
+                        // { Cap }` is cross-unit too — its provider lives
+                        // in the consumed unit.
+                        || (g.prefix().is_none() && flattened.contains_key(g.key()))
+                })
+            });
+        // Events track, slice 0 (spine #936): a context whose handlers emit
+        // needs its own `__eventsDispatch` closure built by compose
+        // (§ `discover_event_subscribers`) even when it consumes nothing and
+        // no other context consumes it — `Events` is filtered out of
+        // `handler_cross_caps` (there is no `EventsProvider`), so without
+        // this check a publish-only context would never get a compose entry
+        // and its service would simply never be called. S4a (#1966): a
+        // derived capability's instance is its base's platform provider,
+        // built by compose like a flattened one.
+        let because = if uses_cross_cap {
+            "is given a capability another unit provides"
+        } else if unit_table_uses_emit(table, unit_callees.get(name)) {
+            "emits events"
+        } else if !table.derived.is_empty() {
+            "derives a capability"
+        } else {
+            continue;
+        };
+        return Some((name.clone(), because.to_string()));
+    }
+    None
+}
+
+/// On the bundle target a context's required local capability may be left to
+/// the host, which supplies it through `__makeSurface(deps)`, but only while
+/// the bundle has no composition root ([`composition_root_trigger`]):
+/// `composeApp` builds the deps of every context it composes
+/// ([`composed_in_bundle_root`]), so once a context brings a root in, a
+/// capability with no provider is the Workers gap again. Raised at the
+/// `given` rather than left to `tsc` against `compose.ts`
+/// (`bynk.codegen.tsc_failed`). Called by the driver's `run_checks` and by
+/// [`crate::analysis`], after the per-unit checks (it reads `unit_callees`),
+/// and only on an otherwise-clean program: a unit that failed to check has no
+/// callee map, and the root is only emitted for a clean one.
+#[allow(clippy::too_many_arguments)]
+pub fn phase_bundle_composition_unprovided(
+    target: BuildTarget,
+    parsed: &[ParsedFile],
+    groups: &BTreeMap<String, Vec<usize>>,
+    kinds: &BTreeMap<String, UnitKind>,
+    unit_consumes: &HashMap<String, Vec<String>>,
+    unit_consumes_aliases: &HashMap<String, HashMap<String, String>>,
+    unit_tables: &HashMap<String, UnitTable>,
+    unit_callees: &UnitCallees,
+    unit_flattened: &HashMap<String, HashMap<String, String>>,
+    errors: &mut ErrorSink,
+) {
+    if target != BuildTarget::Bundle || !errors.is_empty() {
+        return;
+    }
+    let Some((trigger, because)) = composition_root_trigger(
+        kinds,
+        unit_consumes,
+        unit_consumes_aliases,
+        unit_tables,
+        unit_callees,
+        unit_flattened,
+    ) else {
+        return;
+    };
+    phase_unprovided_capabilities(
+        &UnprovidedReason::BundleComposition { trigger, because },
+        parsed,
+        groups,
+        kinds,
+        unit_tables,
+        errors,
+    );
+}
+
 /// #2306: on the Workers target, a `from websocket` service's `on open` is hosted
 /// inside the Durable Object of the agent it transfers the connection to, and
 /// that method is emitted from the file the *service* and agent share. A context
