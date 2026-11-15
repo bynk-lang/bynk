@@ -160,7 +160,11 @@ fn call_graph_records_cross_context_service_handlers() {
     let invoice = key("shop.billing", SymbolKind::Service, "invoice");
 
     let callers: Vec<&SymbolKey> = index.calls_into(&charge).map(|e| &e.caller).collect();
-    assert_eq!(callers.len(), 3, "direct, http-route and aliased callers");
+    assert_eq!(
+        callers.len(),
+        4,
+        "direct, two http-route and aliased callers"
+    );
     for expected in [&place, &api, &invoice] {
         assert!(callers.contains(&expected), "missing caller {expected:?}");
     }
@@ -188,7 +192,7 @@ fn service_handler_is_call_only_and_service_refs_unchanged() {
     assert!(!entry.call_only);
     assert_eq!(
         entry.refs.len(),
-        3,
+        4,
         "one Service ref per cross-context call"
     );
 
@@ -212,4 +216,14 @@ fn handler_resolves_for_call_hierarchy_only() {
         .expect("prepare at `on`");
     assert_eq!(k, &route);
     assert!(index.symbol_at(&def.path, def.span.start).is_none());
+
+    // An annotated route anchors on its `on` keyword, not its `@cache(…)`.
+    let cached = key("shop.orders", SymbolKind::Handler, "api.GET /orders");
+    let def = index.symbols[&cached].def.clone().expect("def");
+    let text =
+        std::fs::read_to_string(cross_context_fixture_root().join("shop/orders.bynk")).unwrap();
+    assert_eq!(&text[def.span.range()], "on");
+    let (k, _) = bynk_ide::index_queries::prepare_call_hierarchy(&index, &def.path, def.span.start)
+        .expect("prepare at `on` of an annotated route");
+    assert_eq!(k, &cached);
 }

@@ -19,6 +19,10 @@ export const api = {
     const __r0 = await deps.surface.pay.charge(body);
     return HttpResult.Ok(body);
   },
+  async http_GET_orders(deps: { surface: { pay: globalThis.ReturnType<typeof shop_pay.__makeSurface> } }): globalThis.Promise<HttpResult<number>> {
+    const __r0 = await deps.surface.pay.charge(1);
+    return HttpResult.Ok(1);
+  },
 };
 
 export interface __ShopOrdersDeps {

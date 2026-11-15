@@ -14,4 +14,10 @@ service api from http {
     let _ <- shop.pay.charge(body)
     Ok(body)
   }
+
+  @cache(maxAge: 60.seconds, scope: public)
+  on GET("/orders") () -> Effect[HttpResult[Int]] by who: Visitor {
+    let _ <- shop.pay.charge(1)
+    Ok(1)
+  }
 }

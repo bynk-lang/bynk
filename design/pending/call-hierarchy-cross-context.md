@@ -1,7 +1,6 @@
 ---
 level: patch
 changelog: Call hierarchy covers cross-context service calls, through `consumes … as` aliases too (#3582)
-probes: diagnostic_coverage
 ---
 
 ## ADR: call-hierarchy-cross-context-service-calls
