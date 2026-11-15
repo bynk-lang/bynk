@@ -1,12 +1,6 @@
----
-level: minor
-probes: emit_diagnostics, diagnostic_coverage, explained_codes
-changelog: A `system` or `integration` case can read a participant's test D1 database with `D1.peek(<participant>.<Capability>)`, a read-only handle whose SQL is checked against the migrations (checker half)
----
+# 0852 — A case reads a participant's test D1 database through a read-only `D1.peek` handle
 
-## ADR: d1-peek-read-only-test-handle
-title: A case reads a participant's test D1 database through a read-only `D1.peek` handle
-summary: A case-only built-in reaches behind the system boundary to read, never write, the database the app wrote
+- **Status:** Accepted (v0.620)
 
 **Context.** A `system` case drives the whole deployable app through its real boundaries
 (ADR 0153, ADR 0207), so it cannot name a capability: `Orders.all(…)` there is
