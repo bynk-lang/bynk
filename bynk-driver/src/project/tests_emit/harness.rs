@@ -252,21 +252,9 @@ pub(super) fn emit_integration_harness<'a>(
                     ident("__makeIntegrationContainer"),
                     vec![str_lit(&binding.name)],
                 ),
-                // #3300: a fixed version, the same for every participant.
-                BindingSource::Singleton { capability } if capability == "Version" => {
-                    call(ident("__makeIntegrationVersionMetadata"), vec![])
-                }
-                // #3478: a Workers AI binding that faults until stubbed.
-                BindingSource::Singleton { capability } if capability == "Ai" => {
-                    call(ident("__makeIntegrationAi"), vec![])
-                }
-                // #3515: an Images binding that faults until stubbed.
-                BindingSource::Singleton { capability } if capability == "Images" => {
-                    call(ident("__makeIntegrationImages"), vec![])
-                }
-                BindingSource::Singleton { capability } => {
-                    unreachable!("singleton `{capability}` has no integration binding")
-                }
+                // One-per-Worker bindings: a fixed version (#3300), and Workers AI
+                // (#3478) and Images (#3515), which fault until stubbed.
+                BindingSource::Singleton { capability } => singleton_integration_double(capability),
                 // Interop I5 (#1972): the foreign Worker is not here, so its
                 // binding answers as `bynk dev`'s default double does.
                 BindingSource::ForeignService { worker, .. } => {
@@ -829,4 +817,20 @@ mod tests {
     // identically-named function also carries), so the same cases apply,
     // ported to operate on a `Vec<String>` of already-real import names
     // instead of an `import { ... } from "...";` text line.
+}
+
+/// The integration double of a one-per-Worker binding, as the participant's
+/// `env` holds it: the same for every participant, or faulting until the case
+/// stubs the operation.
+fn singleton_integration_double(capability: &str) -> TsExpr {
+    let factory = match capability {
+        // #3300: a fixed version.
+        "Version" => "__makeIntegrationVersionMetadata",
+        // #3478: a Workers AI binding that faults until stubbed.
+        "Ai" => "__makeIntegrationAi",
+        // #3515: an Images binding that faults until stubbed.
+        "Images" => "__makeIntegrationImages",
+        other => unreachable!("singleton `{other}` has no integration binding"),
+    };
+    call(ident(factory), vec![])
 }
