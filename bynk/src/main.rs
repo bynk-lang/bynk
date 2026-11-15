@@ -274,35 +274,8 @@ fn run() -> ExitCode {
             }
             prepared.finish(run_test(*args))
         }
-        Command::Eval {
-            input,
-            unit,
-            expr,
-            sources_stdin,
-            timeout,
-            lock,
-        } => {
-            if !prepare(&input, lock.options()) {
-                return ExitCode::FAILURE;
-            }
-            bynk::eval::run(bynk::eval::EvalArgs {
-                input,
-                unit,
-                expr,
-                sources_stdin,
-                timeout: Some(timeout),
-            })
-        }
-        Command::Fetch { path, lock, format } => {
-            if matches!(format, bynk::cli::DeployFormatArg::Json) {
-                return fetch_json(&path, lock.options());
-            }
-            if prepare_offering_approval(&path, lock.options()) {
-                ExitCode::SUCCESS
-            } else {
-                ExitCode::FAILURE
-            }
-        }
+        Command::Eval { args, lock } => run_eval(args, lock),
+        Command::Fetch { path, lock, format } => run_fetch(&path, lock, format),
         Command::Update { names, path } => {
             let opts = bynk::fetch::FetchOptions {
                 locked: false,
@@ -645,6 +618,30 @@ fn project_root(input: &Path, lock: bynk::fetch::FetchOptions) -> Option<PathBuf
 /// #2240: resolve, fetch and lock the dependencies of the project holding
 /// `input` before a command compiles it. Prints the failure and returns
 /// `false` when it can't; a single file outside any project needs nothing.
+/// `bynk fetch`: the lock file, as JSON when asked.
+fn run_fetch(
+    path: &Path,
+    lock: bynk::cli::LockArgs,
+    format: bynk::cli::DeployFormatArg,
+) -> ExitCode {
+    if matches!(format, bynk::cli::DeployFormatArg::Json) {
+        return fetch_json(path, lock.options());
+    }
+    if prepare_offering_approval(path, lock.options()) {
+        ExitCode::SUCCESS
+    } else {
+        ExitCode::FAILURE
+    }
+}
+
+/// `bynk eval`: bring the project's dependencies up to date, then evaluate.
+fn run_eval(args: bynk::cli::EvalCommand, lock: bynk::cli::LockArgs) -> ExitCode {
+    if !prepare(&args.input, lock.options()) {
+        return ExitCode::FAILURE;
+    }
+    bynk::eval::run(args)
+}
+
 fn prepare(input: &Path, opts: bynk::fetch::FetchOptions) -> bool {
     let Some(project_root) = find_project_root(input) else {
         return true;

@@ -21,6 +21,34 @@ pub struct Cli {
     pub command: Command,
 }
 
+/// The flags of `bynk eval` (#3585).
+#[derive(clap::Args, Debug, Clone)]
+pub struct EvalCommand {
+    /// Project directory. Defaults to the current directory.
+    #[arg(default_value = ".")]
+    pub input: PathBuf,
+    /// The unit (a `commons` or `context`, by dotted name) whose scope the
+    /// snippet is evaluated in.
+    #[arg(long)]
+    pub unit: String,
+    /// The snippet. When absent it is read from stdin.
+    #[arg(long)]
+    pub expr: Option<String>,
+    /// Evaluate against the unsaved buffers given as JSON on stdin, as
+    /// `bynk compile --sources-stdin` does: `{ "<absolute path>": "<text>" }`.
+    /// Stdin then holds the buffers, so the snippet must be `--expr`.
+    #[arg(long)]
+    pub sources_stdin: bool,
+    /// Build the suite for this unit in, and evaluate the snippet inside it, so
+    /// the suite's `stub`s apply. By default the project's own suites are left
+    /// out. Repeat the flag to build the suites of several units in.
+    #[arg(long, value_name = "UNIT")]
+    pub suite: Vec<String>,
+    /// Kill the evaluation after this many seconds and report it timed out.
+    #[arg(long, value_name = "SECONDS", default_value_t = crate::eval::default_timeout_secs(), value_parser = clap::value_parser!(u64).range(1..))]
+    pub timeout: u64,
+}
+
 /// The headings `bynk --help` sorts its subcommands under, in order. clap has
 /// no subcommand headings of its own, so [`command`] renders this listing into
 /// the help template; every visible subcommand must appear exactly once.
@@ -620,29 +648,17 @@ pub enum Command {
     /// calls needs a `stub`; nothing reaches the network. Each evaluation is
     /// independent: send earlier cells' `let`s again ahead of the snippet.
     ///
+    /// The project's own suites are left out of the build, so a suite that does
+    /// not compile cannot block an evaluation. `--suite <UNIT>` builds that
+    /// unit's suite in and puts the snippet inside it, so the suite's `stub`s
+    /// and `fn`s apply; its errors are then reported.
+    ///
     /// Runs in-process, with the build and runner of `bynk test`; requires
     /// `tsc` (with Node.js) or `tsx` on PATH. The exit status is zero only when
     /// there is a value.
     Eval {
-        /// Project directory. Defaults to the current directory.
-        #[arg(default_value = ".")]
-        input: PathBuf,
-        /// The unit (a `commons` or `context`, by dotted name) whose scope the
-        /// snippet is evaluated in.
-        #[arg(long)]
-        unit: String,
-        /// The snippet. When absent it is read from stdin.
-        #[arg(long)]
-        expr: Option<String>,
-        /// Evaluate against the unsaved buffers given as JSON on stdin, as
-        /// `bynk compile --sources-stdin` does: `{ "<absolute path>": "<text>" }`.
-        /// Stdin then holds the buffers, so the snippet must be `--expr`.
-        #[arg(long)]
-        sources_stdin: bool,
-        /// Kill the evaluation after this many seconds and report it timed
-        /// out.
-        #[arg(long, value_name = "SECONDS", default_value_t = crate::eval::default_timeout_secs(), value_parser = clap::value_parser!(u64).range(1..))]
-        timeout: u64,
+        #[command(flatten)]
+        args: EvalCommand,
         #[command(flatten)]
         lock: LockArgs,
     },

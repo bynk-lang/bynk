@@ -4,22 +4,11 @@
 //! buffers and prints the result.
 
 use std::io::Read as _;
-use std::path::PathBuf;
 use std::process::ExitCode;
 use std::time::Duration;
 
+use crate::cli::EvalCommand;
 use bynk_driver::eval::{DEFAULT_TIMEOUT, EvalReport, EvalRequest, evaluate};
-
-/// What `bynk eval` was asked.
-pub struct EvalArgs {
-    pub input: PathBuf,
-    pub unit: String,
-    /// The snippet from `--expr`; read from stdin when absent.
-    pub expr: Option<String>,
-    pub sources_stdin: bool,
-    /// The time limit in seconds; the default when absent.
-    pub timeout: Option<u64>,
-}
 
 /// The seconds `--timeout` defaults to.
 pub fn default_timeout_secs() -> u64 {
@@ -49,12 +38,13 @@ fn refuse(message: impl Into<String>) -> ExitCode {
 }
 
 /// Run `bynk eval`.
-pub fn run(args: EvalArgs) -> ExitCode {
-    let EvalArgs {
+pub fn run(args: EvalCommand) -> ExitCode {
+    let EvalCommand {
         input,
         unit,
         expr,
         sources_stdin,
+        suite,
         timeout,
     } = args;
     // Stdin has one use: the sources document or the snippet.
@@ -80,13 +70,14 @@ pub fn run(args: EvalArgs) -> ExitCode {
     if snippet.trim().is_empty() {
         return refuse("there is nothing to evaluate: give `--expr`, or a snippet on stdin");
     }
-    let timeout = timeout.map_or(DEFAULT_TIMEOUT, Duration::from_secs);
+    let timeout = Duration::from_secs(timeout);
     print(
         &evaluate(&EvalRequest {
             input,
             unit,
             snippet,
             buffers,
+            suites: suite,
             timeout,
         })
         .into(),

@@ -201,3 +201,59 @@ fn an_unknown_unit_is_refused() {
     assert!(!ok);
     assert_eq!(doc["error"]["kind"], "setup");
 }
+
+fn write_suite(root: &PathBuf, text: &str) {
+    std::fs::create_dir_all(root.join("tests")).unwrap();
+    std::fs::write(root.join("tests/demo.bynk"), text).unwrap();
+}
+
+#[test]
+fn the_projects_own_suites_are_left_out_by_default() {
+    let root = project("own_suites");
+    write_suite(
+        &root,
+        "suite demo {\n  case \"broken\" {\n    let x: Int = \"no\"\n    expect x == 1\n  }\n}\n",
+    );
+    let (ok, doc) = eval(&root, &["--unit", "demo", "--expr", "double(21)"], "");
+    assert!(ok, "{doc}");
+    assert_eq!(doc["value"], 42);
+}
+
+#[test]
+fn a_named_suite_is_built_in_so_its_stubs_apply() {
+    let root = project("named");
+    write_suite(
+        &root,
+        "suite demo {\n  consumes bynk { Fetch, Request, Method, Response }\n  stub Fetch.send(_) returns Ok(Response { status: 204, headers: Map.empty(), body: \"\" })\n}\n",
+    );
+    let snippet = format!("{FETCH}{SEND}");
+    let (ok, doc) = eval(
+        &root,
+        &["--unit", "demo", "--suite", "demo", "--expr", &snippet],
+        "",
+    );
+    assert!(ok, "{doc}");
+    assert_eq!(doc["value"]["value"]["status"], 204);
+}
+
+#[test]
+fn a_named_suite_that_does_not_compile_is_reported() {
+    let root = project("named_broken");
+    write_suite(
+        &root,
+        "suite demo {\n  case \"b\" {\n    let x: Int = \"no\"\n  }\n}\n",
+    );
+    let (ok, doc) = eval(
+        &root,
+        &["--unit", "demo", "--suite", "demo", "--expr", "1"],
+        "",
+    );
+    assert!(!ok);
+    assert!(
+        doc["diagnostics"][0]["file"]
+            .as_str()
+            .unwrap()
+            .ends_with("demo.bynk"),
+        "{doc}"
+    );
+}
