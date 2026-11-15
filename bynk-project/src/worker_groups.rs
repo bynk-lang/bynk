@@ -236,13 +236,22 @@ fn group_from(key: &str, value: &toml::Value) -> Result<WorkerGroup, ProjectPath
     })
 }
 
+/// A route or domain with its host lowercased (hostnames are case-insensitive;
+/// a path is not), so two spellings of one host are one claim.
+fn normalised_host(pattern: &str) -> String {
+    match pattern.split_once('/') {
+        Some((host, path)) => format!("{}/{path}", host.to_ascii_lowercase()),
+        None => pattern.to_ascii_lowercase(),
+    }
+}
+
 /// The rules across groups: a context in one group only, a script name used
 /// once, and a route or custom domain claimed once.
 fn check_across(groups: &WorkerGroups) -> Result<(), ProjectPathsError> {
     let mut context_owner: BTreeMap<&str, &str> = BTreeMap::new();
     let mut script_owner: BTreeMap<&str, &str> = BTreeMap::new();
-    let mut route_owner: BTreeMap<&str, &str> = BTreeMap::new();
-    let mut domain_owner: BTreeMap<&str, &str> = BTreeMap::new();
+    let mut route_owner: BTreeMap<String, &str> = BTreeMap::new();
+    let mut domain_owner: BTreeMap<String, &str> = BTreeMap::new();
     for (key, group) in groups {
         for context in &group.contexts {
             if let Some(first) = context_owner.insert(context, key) {
@@ -264,7 +273,7 @@ fn check_across(groups: &WorkerGroups) -> Result<(), ProjectPathsError> {
             ));
         }
         for route in &group.routes {
-            if let Some(first) = route_owner.insert(route, key) {
+            if let Some(first) = route_owner.insert(normalised_host(route), key) {
                 return Err(bad(
                     key,
                     format!(
@@ -274,7 +283,7 @@ fn check_across(groups: &WorkerGroups) -> Result<(), ProjectPathsError> {
             }
         }
         for domain in &group.custom_domains {
-            if let Some(first) = domain_owner.insert(domain, key) {
+            if let Some(first) = domain_owner.insert(normalised_host(domain), key) {
                 return Err(bad(
                     key,
                     format!(
@@ -295,9 +304,8 @@ pub fn deploy_workers_from(deploy: &toml::Table) -> Result<WorkerGroups, Project
     };
     let all = value.as_table().ok_or_else(|| {
         bad(
-            "…",
-            "`[deploy.workers]` must be a table of Workers, like `[deploy.workers.core]`"
-                .to_string(),
+            "",
+            "must be a table of Workers, like `[deploy.workers.core]`".to_string(),
         )
     })?;
     for (key, value) in all {
@@ -367,7 +375,12 @@ pub fn validate_against(groups: &WorkerGroups, units: &ProjectUnits<'_>) -> Vec<
         .contexts
         .iter()
         .filter(|c| !grouped.contains(c.as_str()))
-        .map(|c| (crate::paths::worker_dir_name(c), c.as_str()))
+        .map(|c| {
+            (
+                crate::paths::worker_dir_name(c).to_ascii_lowercase(),
+                c.as_str(),
+            )
+        })
         .collect();
     for (key, group) in groups {
         for context in &group.contexts {

@@ -437,6 +437,9 @@ impl std::fmt::Display for ProjectPathsError {
             } => {
                 write!(f, "`[{table}.{capability}]` {reason}")
             }
+            ProjectPathsError::BadWorkerGroup { key, reason } if key.is_empty() => {
+                write!(f, "`[deploy.workers]` {reason}")
+            }
             ProjectPathsError::BadWorkerGroup { key, reason } => {
                 write!(f, "`[deploy.workers.{key}]` {reason}")
             }

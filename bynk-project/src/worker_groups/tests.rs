@@ -165,16 +165,45 @@ fn groups_are_checked_against_the_projects_units() {
 
 #[test]
 fn the_manifest_validator_reads_the_table() {
+    use crate::paths::check_manifest_str;
     // `[deploy.workers]` is a known `[deploy]` key, so the whole-manifest check
-    // accepts it and refuses a bad group.
-    let root = std::env::temp_dir().join(format!("bynk-wg-{}", std::process::id()));
-    std::fs::create_dir_all(&root).unwrap();
-    std::fs::write(
-        root.join("bynk.toml"),
-        "[deploy.workers.core]\ncontexts = []\n",
-    )
-    .unwrap();
-    let err = try_read_worker_groups(&root).unwrap_err().to_string();
+    // accepts a good group and refuses a bad one.
+    assert!(check_manifest_str("[deploy.workers.core]\ncontexts = [\"shop.orders\"]\n").is_ok());
+    let err = check_manifest_str("[deploy.workers.core]\ncontexts = []\n")
+        .unwrap_err()
+        .to_string();
     assert!(err.contains("bynk.deploy.empty_group"), "{err}");
-    std::fs::remove_dir_all(&root).ok();
+    let err = check_manifest_str("[deploy]\nworkers = 1\n")
+        .unwrap_err()
+        .to_string();
+    assert!(
+        err.starts_with("`[deploy.workers]` must be a table"),
+        "{err}"
+    );
+}
+
+#[test]
+fn names_and_hosts_compare_case_insensitively() {
+    // A hostname in two spellings is one claim.
+    let err = read(
+        "[deploy.workers.a]\ncontexts = [\"x.y\"]\ncustom_domains = [\"Pay.Example.com\"]\n\
+         [deploy.workers.b]\ncontexts = [\"x.z\"]\ncustom_domains = [\"pay.example.com\"]\n",
+    )
+    .unwrap_err()
+    .to_string();
+    assert!(err.contains("bynk.deploy.duplicate_hostname"), "{err}");
+    // `Shop.orders` is the implicit Worker `Shop-orders`, which is `shop-orders`
+    // on a case-insensitive filesystem and on Cloudflare.
+    let contexts = set(&["Shop.orders", "x.y"]);
+    let others = set(&[]);
+    let units = ProjectUnits {
+        contexts: &contexts,
+        other_units: &others,
+    };
+    let issues = validate_against(
+        &read("[deploy.workers.shop-orders]\ncontexts = [\"x.y\"]\n").unwrap(),
+        &units,
+    );
+    assert_eq!(issues.len(), 1, "{issues:?}");
+    assert_eq!(issues[0].code, "bynk.deploy.group_name_conflict");
 }
