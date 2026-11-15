@@ -1,0 +1,2 @@
+# exact
+bynk.capability.not_provided	src/shop/orders.bynk:10:66

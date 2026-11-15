@@ -35,7 +35,12 @@ A capability a context declares and requires with `given` needs a provider in
 that context when you build for Workers: a Worker's composition root builds
 every capability its handlers are given (`bynk.capability.not_provided`). On the
 bundle target a capability with no provider is left to the host, which supplies
-it through `__makeSurface(deps)`.
+it through `__makeSurface(deps)`, unless the bundle has a composition root
+(`composeApp`). A bundle has one once any context consumes another context's
+service or capability, emits events, or derives a capability, and `composeApp`
+builds every context itself, so each required capability then needs a provider
+there too. A test `stub` doesn't count: it replaces the provider only in the
+cases that stub it.
 
 ## Using a capability
 

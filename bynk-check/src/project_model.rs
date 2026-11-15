@@ -5385,6 +5385,54 @@ pub fn phase_workers_unprovided_capabilities(
     if target != BuildTarget::Workers {
         return;
     }
+    phase_unprovided_capabilities(
+        &UnprovidedReason::Workers,
+        parsed,
+        groups,
+        kinds,
+        unit_tables,
+        errors,
+    );
+}
+
+/// Why a context's required local capability has to have a provider in it,
+/// which is what the `bynk.capability.not_provided` message and note say.
+pub enum UnprovidedReason {
+    /// #1822: each context is a Worker, which builds every capability its
+    /// handlers are given.
+    Workers,
+    /// A bundle with a composition root: `composeApp` builds every context's
+    /// deps itself, so the host has no `__makeSurface(deps)` call to supply a
+    /// capability through. `trigger` is the context that brings the root in,
+    /// and `because` what it does that needs one (for example "consumes the
+    /// services of `shop.stock`"). Without this check the gap reached `tsc`
+    /// as a member missing from a `__makeSurface` argument in `compose.ts`,
+    /// reported as a compiler bug (`bynk.codegen.tsc_failed`).
+    BundleComposition { trigger: String, because: String },
+}
+
+/// Whether a bundle's composition root builds this context: `composeApp`
+/// makes a deps object only to feed a context's `__makeSurface`, so a context
+/// with no services (agents, capabilities or providers only) is left to the
+/// host. Shared by the driver's `emit_composition_root` and
+/// [`phase_unprovided_capabilities`], so the check refuses exactly the
+/// contexts the root builds.
+pub fn composed_in_bundle_root(table: &UnitTable) -> bool {
+    !table.services.is_empty()
+}
+
+/// The shared body of the Workers and bundle-composition checks: each
+/// context's required local capability (a `given` on a service or agent
+/// handler, or on a provider) that has no provider, once per capability, at
+/// its first `given`.
+pub fn phase_unprovided_capabilities(
+    reason: &UnprovidedReason,
+    parsed: &[ParsedFile],
+    groups: &BTreeMap<String, Vec<usize>>,
+    kinds: &BTreeMap<String, UnitKind>,
+    unit_tables: &HashMap<String, UnitTable>,
+    errors: &mut ErrorSink,
+) {
     for (name, indices) in groups {
         if kinds.get(name) != Some(&UnitKind::Context) {
             continue;
@@ -5392,6 +5440,11 @@ pub fn phase_workers_unprovided_capabilities(
         let Some(table) = unit_tables.get(name) else {
             continue;
         };
+        if matches!(reason, UnprovidedReason::BundleComposition { .. })
+            && !composed_in_bundle_root(table)
+        {
+            continue;
+        }
         // #1882 review: once per capability, at its first `given`, however
         // many handlers require it.
         let mut reported: HashSet<String> = HashSet::new();
@@ -5426,21 +5479,35 @@ pub fn phase_workers_unprovided_capabilities(
                 {
                     continue;
                 }
-                errors.push_for(
-                    Some(&parsed[i].identity_path()),
-                    CompileError::new(
+                let cap_name = &cap.name.name;
+                let error = match reason {
+                    UnprovidedReason::Workers => CompileError::new(
                         "bynk.capability.not_provided",
                         cap.span,
                         format!(
-                            "capability `{}` is required here but has no provider in context `{name}`; a Worker builds every capability its handlers are given",
-                            cap.name.name
+                            "capability `{cap_name}` is required here but has no provider in context `{name}`; a Worker builds every capability its handlers are given"
                         ),
                     )
                     .with_note(format!(
-                        "add `provides {} = …` to `{name}`, or build for `--target bundle`, where the host supplies it",
-                        cap.name.name
+                        "add `provides {cap_name} = …` to `{name}`, or build for `--target bundle`, where the host supplies it"
                     )),
-                );
+                    UnprovidedReason::BundleComposition { trigger, because } => {
+                        CompileError::new(
+                            "bynk.capability.not_provided",
+                            cap.span,
+                            format!(
+                                "capability `{cap_name}` is required here but has no provider in context `{name}`; this program's composition root builds every context, so nothing else can supply it"
+                            ),
+                        )
+                        .with_note(format!(
+                            "`{trigger}` {because}, so the bundle has a composition root (`composeApp`), which builds `{name}` with the providers it declares"
+                        ))
+                        .with_note(format!(
+                            "add `provides {cap_name} = …` to `{name}`; a test `stub` replaces it in the cases that stub it, but the program still needs one"
+                        ))
+                    }
+                };
+                errors.push_for(Some(&parsed[i].identity_path()), error);
             }
         }
     }
