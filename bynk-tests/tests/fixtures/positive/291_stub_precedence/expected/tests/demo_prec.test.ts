@@ -335,8 +335,8 @@ async function test_a_suite_stub_beats_the_double() {
     type VectorOf<M> = __ns_bynk_cloudflare.VectorOf<M>;
     type WorkerVersion = __ns_bynk_cloudflare.WorkerVersion;
     const r = await store.call("a", "1", deps);
-    if (!(__bynkEq(r, Some("suite")))) { throw __bynkExpectFailure("tests/demo/prec.bynk:8:12", 296, 314, "expect r == Some(\"suite\")\n  expected: r == Some(\"suite\")\n  actual:   " + __bynkShow((r)) + " == " + __bynkShow((Some("suite")))); }
-    if (!(((__obs.log["Kv.put"] ?? []).length === (1)))) { throw __bynkExpectFailure("tests/demo/prec.bynk:9:12", 326, 344, "expect Kv.put called once"); }
+    if (!(__bynkEq(r, Some("suite")))) { throw __bynkExpectFailure("tests/demo/prec.bynk:9:12", 330, 348, "expect r == Some(\"suite\")\n  expected: r == Some(\"suite\")\n  actual:   " + __bynkShow((r)) + " == " + __bynkShow((Some("suite")))); }
+    if (!(((__obs.log["Kv.put"] ?? []).length === (1)))) { throw __bynkExpectFailure("tests/demo/prec.bynk:10:12", 360, 378, "expect Kv.put called once"); }
     return { pass: true };
   } catch (e) {
     if (e instanceof ExpectationError) {
@@ -418,7 +418,7 @@ async function test_a_case_stub_beats_the_suite_stub() {
     type VectorOf<M> = __ns_bynk_cloudflare.VectorOf<M>;
     type WorkerVersion = __ns_bynk_cloudflare.WorkerVersion;
     const r = await store.call("a", "1", deps);
-    if (!(__bynkEq(r, Some("case")))) { throw __bynkExpectFailure("tests/demo/prec.bynk:15:12", 479, 496, "expect r == Some(\"case\")\n  expected: r == Some(\"case\")\n  actual:   " + __bynkShow((r)) + " == " + __bynkShow((Some("case")))); }
+    if (!(__bynkEq(r, Some("case")))) { throw __bynkExpectFailure("tests/demo/prec.bynk:16:12", 513, 530, "expect r == Some(\"case\")\n  expected: r == Some(\"case\")\n  actual:   " + __bynkShow((r)) + " == " + __bynkShow((Some("case")))); }
     return { pass: true };
   } catch (e) {
     if (e instanceof ExpectationError) {
@@ -500,7 +500,7 @@ async function test_a_later_case_sees_the_suite_stub_again() {
     type VectorOf<M> = __ns_bynk_cloudflare.VectorOf<M>;
     type WorkerVersion = __ns_bynk_cloudflare.WorkerVersion;
     const r = await store.call("a", "1", deps);
-    if (!(__bynkEq(r, Some("suite")))) { throw __bynkExpectFailure("tests/demo/prec.bynk:20:12", 597, 615, "expect r == Some(\"suite\")\n  expected: r == Some(\"suite\")\n  actual:   " + __bynkShow((r)) + " == " + __bynkShow((Some("suite")))); }
+    if (!(__bynkEq(r, Some("suite")))) { throw __bynkExpectFailure("tests/demo/prec.bynk:21:12", 631, 649, "expect r == Some(\"suite\")\n  expected: r == Some(\"suite\")\n  actual:   " + __bynkShow((r)) + " == " + __bynkShow((Some("suite")))); }
     return { pass: true };
   } catch (e) {
     if (e instanceof ExpectationError) {

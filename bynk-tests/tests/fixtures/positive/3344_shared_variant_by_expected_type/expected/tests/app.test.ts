@@ -91,7 +91,7 @@ async function test_a_stubbed_bare_variant_builds_the_operation_s_error_sum() {
     type DbError = __ns_mail.DbError;
     type MailError = __ns_mail.MailError;
     const r = await go.call("a", deps);
-    if (!(r === "mail: down")) { throw __bynkExpectFailure("tests/app.bynk:8:10", 188, 205, "expect r == \"mail: down\"\n  expected: r == \"mail: down\"\n  actual:   " + __bynkShow((r)) + " == " + __bynkShow(("mail: down"))); }
+    if (!(r === "mail: down")) { throw __bynkExpectFailure("tests/app.bynk:8:10", 196, 213, "expect r == \"mail: down\"\n  expected: r == \"mail: down\"\n  actual:   " + __bynkShow((r)) + " == " + __bynkShow(("mail: down"))); }
     return { pass: true };
   } catch (e) {
     if (e instanceof ExpectationError) {
@@ -112,7 +112,7 @@ async function test_return_type__annotation__parameter_and_constant_each_pick_th
     type DbError = __ns_mail.DbError;
     type MailError = __ns_mail.MailError;
     const r = await local.call(deps);
-    if (!(r === "mail: mail / db: db / mail: arg / red paint / red light / red paint")) { throw __bynkExpectFailure("tests/app.bynk:13:10", 317, 391, "expect r == \"mail: mail / db: db / mail: arg / red paint / red light / red paint\"\n  expected: r == \"mail: mail / db: db / mail: arg / red paint / red light / red paint\"\n  actual:   " + __bynkShow((r)) + " == " + __bynkShow(("mail: mail / db: db / mail: arg / red paint / red light / red paint"))); }
+    if (!(r === "mail: mail / db: db / mail: arg / red paint / red light / red paint")) { throw __bynkExpectFailure("tests/app.bynk:13:10", 325, 399, "expect r == \"mail: mail / db: db / mail: arg / red paint / red light / red paint\"\n  expected: r == \"mail: mail / db: db / mail: arg / red paint / red light / red paint\"\n  actual:   " + __bynkShow((r)) + " == " + __bynkShow(("mail: mail / db: db / mail: arg / red paint / red light / red paint"))); }
     return { pass: true };
   } catch (e) {
     if (e instanceof ExpectationError) {

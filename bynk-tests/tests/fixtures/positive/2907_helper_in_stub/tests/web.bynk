@@ -1,5 +1,5 @@
 suite web {
-	consumes bynk { FetchError, Response }
+	consumes bynk { FetchError, Response, Fetch }
 	fn reply(status: Int) -> Result[Response, FetchError] {
 		Ok(Response { status: status, headers: Map.empty(), body: "" })
 	}

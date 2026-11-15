@@ -1,6 +1,6 @@
 suite app
 
-consumes mail { MailError }
+consumes mail { MailError, Mailer }
 
 // #3344: `audit` fails with a `String`, so its type settles neither sum that
 // declares `Failed`. The value is reported as ambiguous, not folded into

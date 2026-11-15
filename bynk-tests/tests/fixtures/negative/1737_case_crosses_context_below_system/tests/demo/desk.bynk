@@ -7,6 +7,8 @@ rebinds a service's name with `let` are controls and stay silent.
 ---
 suite demo.desk
 
+consumes demo.vault
+
 case "a unit case through a service that crosses" {
   let n <- check.call(5)
   expect n == 5

@@ -1857,7 +1857,7 @@ fn check_test_bodies(
             &target_shadowed.0,
             &target_shadowed.1,
         ));
-        // #3536: nor a type its own `consumes` does not bring in.
+        // #3536: nor a type or capability its own `consumes` does not bring in.
         errors.extend(warn_unselected_suite_types(
             test_decl,
             &parsed[i],
@@ -1872,6 +1872,12 @@ fn check_test_bodies(
             unit_consumes
                 .get(target_name)
                 .map_or(&[][..], Vec::as_slice),
+            unit_tables
+                .get(target_name)
+                .map_or(&HashMap::new(), |t| &t.flattened_caps),
+            unit_consumes_aliases
+                .get(target_name)
+                .map_or(&HashMap::new(), |a| a),
         ));
         // v0.25: test-case edges record in the test file, resolving bare
         // names through the *target* unit's namespace.
@@ -5502,6 +5508,8 @@ fn warn_unselected_suite_types(
     owners: &std::collections::BTreeMap<String, String>,
     types: &HashMap<String, Arc<TypeDecl>>,
     consumed: &[String],
+    caps: &HashMap<String, String>,
+    aliases: &HashMap<String, String>,
 ) -> Vec<CompileError> {
     let consumed: std::collections::BTreeSet<String> = consumed.iter().cloned().collect();
     let file = resolver::FileConsumes {
@@ -5510,7 +5518,20 @@ fn warn_unselected_suite_types(
         clauses: &suite.consumes,
         insert_at: new_suite_consumes_position(suite, pf.source()),
     };
-    resolver::check_unselected_type_names_in_suite(suite, owners, types, &file)
+    let mut found = resolver::check_unselected_type_names_in_suite(suite, owners, types, &file);
+    let caps = caps.iter().map(|(n, o)| (n.clone(), o.clone())).collect();
+    found.extend(resolver::check_unselected_capabilities_in_suite(
+        suite, &caps, &file,
+    ));
+    let prefixes = consumed
+        .iter()
+        .map(|u| (u.clone(), u.clone()))
+        .chain(aliases.iter().map(|(a, u)| (a.clone(), u.clone())))
+        .collect();
+    found.extend(resolver::check_unconsumed_unit_calls_in_suite(
+        suite, &prefixes, &file,
+    ));
+    found
 }
 
 /// Where a `consumes` line a suite lacks is inserted: after its last `uses` or

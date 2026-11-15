@@ -1,6 +1,6 @@
 suite mirror
 
-consumes bynk { FetchError, Response }
+consumes bynk { FetchError, Response, Fetch }
 
 --- A captured upstream reply, stubbed in as the response body.
 fixture reply = "fixtures/upstream.json"

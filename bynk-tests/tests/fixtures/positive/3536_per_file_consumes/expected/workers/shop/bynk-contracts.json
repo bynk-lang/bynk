@@ -1,0 +1,21 @@
+{
+  "version": 1,
+  "provides": {
+    "checkout": "5f29f4b0501678ac",
+    "refund": "7922f0f9192d76fe"
+  },
+  "expects": {
+    "pay": {
+      "charge": "f30c066e8f631491"
+    }
+  },
+  "provides_shapes": {
+    "checkout": "Svc(\"checkout\",Ret(B(\"Int\")))",
+    "refund": "Svc(\"refund\",Ret(B(\"Int\")))"
+  },
+  "expects_shapes": {
+    "pay": {
+      "charge": "Svc(\"charge\",P(\"amount\",B(\"Int\")),Ret(B(\"Int\")))"
+    }
+  }
+}

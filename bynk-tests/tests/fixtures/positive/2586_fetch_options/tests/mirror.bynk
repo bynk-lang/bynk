@@ -1,6 +1,6 @@
 suite mirror
 
-consumes bynk { FetchError, Method, Response }
+consumes bynk { FetchError, Method, Response, Fetch }
 
 // #2586: `sendWith` stubs as `send` does; every Logger level is observed.
 

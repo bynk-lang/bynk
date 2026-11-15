@@ -1,6 +1,6 @@
 suite mirror
 
-consumes bynk { BytesResponse, FetchError, Method }
+consumes bynk { BytesResponse, FetchError, Method, Fetch }
 
 // #2604: `receiveBytes` and `sendBytes` stub as `send` does.
 

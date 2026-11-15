@@ -1,6 +1,6 @@
 suite shop.stream
 
-consumes bynk.cloudflare { AiError }
+consumes bynk.cloudflare { AiError, Ai }
 
 // #3478: `runStream` faults until stubbed, and a stub gives the events the
 // handler re-serves as one streamed response. A refusal before the stream

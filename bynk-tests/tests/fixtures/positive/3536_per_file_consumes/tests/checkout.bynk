@@ -1,0 +1,10 @@
+suite shop
+
+// A suite file consumes what it names too: it does not inherit the target's
+// clauses, so `Claim` and `Claimed` warn here.
+
+case "a claim is held" {
+  let c: Claim = Claimed
+  expect late(TimedOut { after: 1.seconds }) == true
+  expect c == Claimed
+}

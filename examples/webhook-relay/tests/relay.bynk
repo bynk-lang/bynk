@@ -1,6 +1,6 @@
 suite relay
 
-consumes bynk { FetchError, Response }
+consumes bynk { FetchError, Response, Secrets, Fetch }
 
 // Every step of the handler runs on a platform capability, so each case drives
 // it against the deterministic test doubles `bynk test` provides: `Secrets`

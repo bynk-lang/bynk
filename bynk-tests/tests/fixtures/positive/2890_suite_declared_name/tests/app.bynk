@@ -1,7 +1,7 @@
 suite app
 
 consumes lib { Code }
-consumes bynk.crypto { Digest }
+consumes bynk.crypto { Digest, Crypto }
 
 // #2890: a suite is not a consuming context, so a case names a consumed type
 // by the name its unit declares, not by `app`'s alias.

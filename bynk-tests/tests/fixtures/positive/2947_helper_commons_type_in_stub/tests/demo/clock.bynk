@@ -2,6 +2,8 @@
 // value (#2907), so the stub's method must bring that commons into scope.
 suite demo.clock
 
+consumes bynk { Clock }
+
 fn item() -> Item {
 	bump(Item { n: 0 })
 }

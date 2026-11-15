@@ -108,7 +108,7 @@ async function test_a_case_names_the_context_type_by_its_declared_name() {
     type SigningKey = __ns_bynk_crypto.SigningKey;
     type VerifyKey = __ns_bynk_crypto.VerifyKey;
     const r = await echo.call(Code.Alpha, deps);
-    if (!(__bynkEq(r, Code.Alpha))) { throw __bynkExpectFailure("tests/app.bynk:10:10", 302, 317, "expect r == Code.Alpha\n  expected: r == Code.Alpha\n  actual:   " + __bynkShow((r)) + " == " + __bynkShow((Code.Alpha))); }
+    if (!(__bynkEq(r, Code.Alpha))) { throw __bynkExpectFailure("tests/app.bynk:10:10", 310, 325, "expect r == Code.Alpha\n  expected: r == Code.Alpha\n  actual:   " + __bynkShow((r)) + " == " + __bynkShow((Code.Alpha))); }
     return { pass: true };
   } catch (e) {
     if (e instanceof ExpectationError) {
@@ -135,7 +135,7 @@ async function test_a_case_names_the_adapter_type_by_its_declared_name() {
     type SigningKey = __ns_bynk_crypto.SigningKey;
     type VerifyKey = __ns_bynk_crypto.VerifyKey;
     const h = await hashing.call("abc", deps);
-    if (!(h === "736861")) { throw __bynkExpectFailure("tests/app.bynk:16:10", 490, 503, "expect h == \"736861\"\n  expected: h == \"736861\"\n  actual:   " + __bynkShow((h)) + " == " + __bynkShow(("736861"))); }
+    if (!(h === "736861")) { throw __bynkExpectFailure("tests/app.bynk:16:10", 498, 511, "expect h == \"736861\"\n  expected: h == \"736861\"\n  actual:   " + __bynkShow((h)) + " == " + __bynkShow(("736861"))); }
     return { pass: true };
   } catch (e) {
     if (e instanceof ExpectationError) {

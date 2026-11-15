@@ -1018,6 +1018,20 @@ fn warn_unselected_type_names(
         Some(&pf.identity_path()),
         resolver::check_unselected_type_names(&resolved.commons.items, resolved, &file),
     );
+    errors.extend_for(
+        Some(&pf.identity_path()),
+        resolver::check_unselected_capabilities(&resolved.commons.items, &info.flattened, &file),
+    );
+    let prefixes: std::collections::BTreeMap<String, String> = info
+        .consumes
+        .iter()
+        .map(|u| (u.clone(), u.clone()))
+        .chain(info.aliases.iter().map(|(a, u)| (a.clone(), u.clone())))
+        .collect();
+    errors.extend_for(
+        Some(&pf.identity_path()),
+        resolver::check_unconsumed_unit_calls(&resolved.commons.items, &prefixes, &file),
+    );
 }
 
 /// Where a `consumes` line the file lacks is inserted ([`resolver::new_consumes_position`]).

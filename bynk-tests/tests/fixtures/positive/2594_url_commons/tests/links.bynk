@@ -1,6 +1,6 @@
 suite links
 
-consumes bynk { Response }
+consumes bynk { Response, Fetch }
 
 // #2594: what `bynk.url` reads, writes and refuses.
 

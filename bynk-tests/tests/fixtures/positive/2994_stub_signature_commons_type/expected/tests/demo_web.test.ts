@@ -127,7 +127,7 @@ async function test_a_stub_over_a_capability_whose_type_the_context_does_not_use
     type TimedOut = __ns_bynk.TimedOut;
     type Uuid = __ns_bynk.Uuid;
     const r = await api.call(deps);
-    if (!(r === "hello")) { throw __bynkExpectFailure("tests/demo/web.bynk:8:9", 291, 303, "expect r == \"hello\"\n  expected: r == \"hello\"\n  actual:   " + __bynkShow((r)) + " == " + __bynkShow(("hello"))); }
+    if (!(r === "hello")) { throw __bynkExpectFailure("tests/demo/web.bynk:10:9", 317, 329, "expect r == \"hello\"\n  expected: r == \"hello\"\n  actual:   " + __bynkShow((r)) + " == " + __bynkShow(("hello"))); }
     return { pass: true };
   } catch (e) {
     if (e instanceof ExpectationError) {

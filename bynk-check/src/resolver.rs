@@ -2141,6 +2141,14 @@ struct Gate<'a> {
     /// answers a receiver it can serve (`svc.GET(…)` in a suite, `logo.url`).
     /// `None` for #1807's hidden types, which nothing local shares a name with.
     locals: Option<&'a HashMap<String, ShadowedImport>>,
+    /// #3536: the names gated are capabilities, which are also written in
+    /// `given` clauses, `provides` and a derived capability's base, and in a
+    /// suite's `stub` clauses; a type gate does not walk those.
+    caps: bool,
+    /// #3536: the units a cross-context call names, by the prefix it writes
+    /// (`pay`, `shop.pay`, or an alias), each with its unit; a method call on
+    /// one is reported through [`Gate::report`] with the prefix as the name.
+    units: Option<&'a std::collections::BTreeMap<String, String>>,
     errors: Vec<CompileError>,
 }
 impl Gate<'_> {
@@ -2155,6 +2163,35 @@ impl Gate<'_> {
             "service" => method.is_some(),
             "asset" => field.is_some_and(|f| f.name == "url"),
             _ => false,
+        }
+    }
+    /// #3536: a capability named in a `given` clause (a qualified `B.Cap` names
+    /// its unit and is not a flattened name).
+    fn givens(&mut self, given: &[CapRef]) {
+        if self.caps {
+            for c in given.iter().filter(|c| c.context.is_none()) {
+                self.name(&c.name);
+            }
+        }
+    }
+    /// #3536: a call `pay.charge(…)` on a unit named by its prefix.
+    fn unit_call(&mut self, receiver: &Expr) {
+        let Some(units) = self.units else { return };
+        let Some(path) = qualified_path(receiver) else {
+            return;
+        };
+        if let Some(owner) = units.get(&path) {
+            let id = Ident {
+                name: path,
+                span: receiver.span,
+            };
+            self.errors.push((self.report)(&id, owner));
+        }
+    }
+    /// #3536: a capability named where a declaration refers to one.
+    fn capability(&mut self, id: &Ident) {
+        if self.caps {
+            self.name(id);
         }
     }
     fn name(&mut self, id: &Ident) {
@@ -2380,6 +2417,7 @@ impl Gate<'_> {
                 {
                     self.name(id);
                 }
+                self.unit_call(receiver);
                 for t in type_args {
                     self.type_ref(t);
                 }
@@ -2448,6 +2486,8 @@ pub fn check_hidden_type_names(
         variants: Default::default(),
         variant_report: None,
         locals: None,
+        caps: false,
+        units: None,
         errors: Vec::new(),
     };
     gate_items(&mut g, items);
@@ -2563,7 +2603,124 @@ pub fn check_unselected_type_names(
         .filter(|(_, owner)| file.consumed.contains(*owner))
         .map(|(n, o)| (n.clone(), o.clone()))
         .collect();
-    unselected_gate(&owners, &resolved.types, file, |g| gate_items(g, items))
+    unselected_gate(Names::Types, &owners, &resolved.types, file, |g| {
+        gate_items(g, items)
+    })
+}
+
+/// #3536: `bynk.consumes.capability_not_selected`, the same rule for the
+/// capabilities a braced `consumes U { Cap }` flattens into the unit's namespace:
+/// naming one (a `given` clause, a call, `provides`, a derived capability's
+/// base) in a file whose own `consumes` does not list it. `flattened` is the
+/// unit's capabilities, each with its owner.
+pub fn check_unselected_capabilities(
+    items: &[CommonsItem],
+    flattened: &HashMap<String, String>,
+    file: &FileConsumes<'_>,
+) -> Vec<CompileError> {
+    let owners = flattened
+        .iter()
+        .map(|(n, o)| (n.clone(), o.clone()))
+        .collect();
+    unselected_gate(Names::Capabilities, &owners, &HashMap::new(), file, |g| {
+        gate_items(g, items)
+    })
+}
+
+/// #3536: [`check_unselected_capabilities`] for a unit suite, whose `stub`
+/// clauses and cases name its target's flattened capabilities.
+pub fn check_unselected_capabilities_in_suite(
+    suite: &SuiteDecl,
+    owners: &std::collections::BTreeMap<String, String>,
+    file: &FileConsumes<'_>,
+) -> Vec<CompileError> {
+    unselected_gate(Names::Capabilities, owners, &HashMap::new(), file, |g| {
+        gate_suite(g, suite)
+    })
+}
+
+/// The dotted path an expression of identifiers and field accesses writes
+/// (`pay`, `shop.pay`), or `None` for anything else.
+fn qualified_path(e: &Expr) -> Option<String> {
+    match &e.kind {
+        ExprKind::Ident(id) => Some(id.name.clone()),
+        ExprKind::FieldAccess { receiver, field } => {
+            Some(format!("{}.{}", qualified_path(receiver)?, field.name))
+        }
+        _ => None,
+    }
+}
+
+/// #3536: `bynk.consumes.unit_not_consumed`, the same rule for a cross-context
+/// call (`pay.charge(…)`): the file that writes it must itself `consumes` the
+/// unit, in any form. `prefixes` maps each prefix a call may write (the unit's
+/// name, or the alias of a `consumes U as A`) to the unit. The fix adds
+/// `consumes U` to this file.
+pub fn check_unconsumed_unit_calls(
+    items: &[CommonsItem],
+    prefixes: &std::collections::BTreeMap<String, String>,
+    file: &FileConsumes<'_>,
+) -> Vec<CompileError> {
+    unit_gate(prefixes, file, |g| gate_items(g, items))
+}
+
+/// [`check_unconsumed_unit_calls`] for a unit suite.
+pub fn check_unconsumed_unit_calls_in_suite(
+    suite: &SuiteDecl,
+    prefixes: &std::collections::BTreeMap<String, String>,
+    file: &FileConsumes<'_>,
+) -> Vec<CompileError> {
+    unit_gate(prefixes, file, |g| gate_suite(g, suite))
+}
+
+fn unit_gate(
+    prefixes: &std::collections::BTreeMap<String, String>,
+    file: &FileConsumes<'_>,
+    walk: impl FnOnce(&mut Gate<'_>),
+) -> Vec<CompileError> {
+    let missing: std::collections::BTreeMap<String, String> = prefixes
+        .iter()
+        .filter(|(_, unit)| !file.clauses.iter().any(|c| c.target.joined() == **unit))
+        .map(|(p, u)| (p.clone(), u.clone()))
+        .collect();
+    let report = |id: &Ident, unit: &str| {
+        let mut e = CompileError::new(
+            "bynk.consumes.unit_not_consumed",
+            id.span,
+            format!("`{}` is not in scope: this file does not `consumes {unit}`", id.name),
+        )
+        .with_note(format!(
+            "imports are per file: a call to another unit's service is in scope in a file that itself `consumes` it. Add `consumes {unit}` to this file. This will be an error in a later release"
+        ));
+        if let Some((offset, separator)) = &file.insert_at {
+            let at = Span::new_in(id.span.file, *offset, *offset);
+            e = e.with_suggestion(
+                format!("add `consumes {unit}` to this file"),
+                vec![(at, format!("{separator}consumes {unit}"))],
+                Applicability::MachineApplicable,
+            );
+        }
+        e
+    };
+    let mut g = Gate {
+        hidden: &std::collections::BTreeMap::new(),
+        report: &report,
+        variants: Default::default(),
+        variant_report: None,
+        locals: None,
+        caps: false,
+        units: Some(&missing),
+        errors: Vec::new(),
+    };
+    walk(&mut g);
+    g.errors
+}
+
+/// What a per-file gate is about.
+#[derive(Clone, Copy)]
+enum Names {
+    Types,
+    Capabilities,
 }
 
 /// #3536: [`check_unselected_type_names`] for a unit suite. `owners` maps each
@@ -2575,13 +2732,14 @@ pub fn check_unselected_type_names_in_suite(
     types: &HashMap<String, Arc<TypeDecl>>,
     file: &FileConsumes<'_>,
 ) -> Vec<CompileError> {
-    unselected_gate(owners, types, file, |g| gate_suite(g, suite))
+    unselected_gate(Names::Types, owners, types, file, |g| gate_suite(g, suite))
 }
 
 /// The gate both walk through: every name in `owners` this file's own clauses
 /// do not bring in is warned on where `walk` meets it, along with the bare
 /// variants of its sums.
 fn unselected_gate(
+    names: Names,
     owners: &std::collections::BTreeMap<String, String>,
     types: &HashMap<String, Arc<TypeDecl>>,
     file: &FileConsumes<'_>,
@@ -2615,7 +2773,9 @@ fn unselected_gate(
         } else {
             format!("this file does not `consumes {owner}`")
         };
-        let message = if id.name == name {
+        let message = if matches!(names, Names::Capabilities) {
+            format!("capability `{name}` is not in scope: {why}")
+        } else if id.name == name {
             format!("`{name}` is not in scope: {why}")
         } else {
             format!(
@@ -2625,7 +2785,11 @@ fn unselected_gate(
         };
         hits.borrow_mut()
             .push((name.to_string(), owner.to_string()));
-        CompileError::new("bynk.consumes.type_not_selected", id.span, message).with_note(format!(
+        let code = match names {
+            Names::Types => "bynk.consumes.type_not_selected",
+            Names::Capabilities => "bynk.consumes.capability_not_selected",
+        };
+        CompileError::new(code, id.span, message).with_note(format!(
             "imports are per file: a name from another unit is in scope in a file that itself `consumes` it, and in a braced list only if it is listed. Add `{name}` to this file's `consumes {owner} {{ … }}`. This will be an error in a later release"
         ))
     };
@@ -2637,6 +2801,8 @@ fn unselected_gate(
         variants,
         variant_report: Some(&variant_report),
         locals: None,
+        caps: matches!(names, Names::Capabilities),
+        units: None,
         errors: Vec::new(),
     };
     walk(&mut g);
@@ -2726,6 +2892,8 @@ pub fn check_shadowed_type_names(
         variants,
         variant_report: None,
         locals: Some(shadowed),
+        caps: false,
+        units: None,
         errors: Vec::new(),
     };
     gate_items(&mut g, items);
@@ -2756,7 +2924,7 @@ fn shadowed_type_gate(
 
 /// Walk every item of a unit through `g`.
 fn gate_items(g: &mut Gate<'_>, items: &[CommonsItem]) {
-    if g.hidden.is_empty() {
+    if g.hidden.is_empty() && g.units.is_none() {
         return;
     }
     for item in items {
@@ -2767,15 +2935,21 @@ fn gate_items(g: &mut Gate<'_>, items: &[CommonsItem]) {
                 if let FnName::Method { type_name, .. } = &f.name {
                     g.name(type_name);
                 }
+                g.givens(&f.given);
                 g.signature(&f.params, &f.return_type);
                 g.block(&f.body);
             }
             CommonsItem::Capability(c) => {
+                if let Some(d) = &c.derived {
+                    g.capability(&d.base);
+                }
                 for op in &c.ops {
                     g.signature(&op.params, &op.return_type);
                 }
             }
             CommonsItem::Provider(p) => {
+                g.capability(&p.capability);
+                g.givens(&p.given);
                 for op in &p.ops {
                     g.signature(&op.params, &op.return_type);
                     g.block(&op.body);
@@ -2794,7 +2968,9 @@ fn gate_items(g: &mut Gate<'_>, items: &[CommonsItem]) {
                     | ServiceProtocol::Queue { .. }
                     | ServiceProtocol::Email { .. } => {}
                 }
+                g.givens(&s.default_given);
                 for h in &s.handlers {
+                    g.givens(&h.given);
                     g.signature(&h.params, &h.return_type);
                     g.block(&h.body);
                 }
@@ -2810,6 +2986,7 @@ fn gate_items(g: &mut Gate<'_>, items: &[CommonsItem]) {
                     }
                 }
                 for h in &a.handlers {
+                    g.givens(&h.given);
                     g.signature(&h.params, &h.return_type);
                     g.block(&h.body);
                 }
@@ -2874,6 +3051,8 @@ pub fn check_hidden_type_names_in_suite(
         variants: Default::default(),
         variant_report: None,
         locals: None,
+        caps: false,
+        units: None,
         errors: Vec::new(),
     };
     gate_suite(&mut g, suite);
@@ -2896,6 +3075,8 @@ pub fn check_shadowed_type_names_in_suite(
         variants,
         variant_report: None,
         locals: Some(shadowed),
+        caps: false,
+        units: None,
         errors: Vec::new(),
     };
     gate_suite(&mut g, suite);
@@ -2904,10 +3085,11 @@ pub fn check_shadowed_type_names_in_suite(
 
 /// Walk every stub, case and property of `suite` through `g`.
 fn gate_suite(g: &mut Gate<'_>, suite: &SuiteDecl) {
-    if g.hidden.is_empty() {
+    if g.hidden.is_empty() && g.units.is_none() {
         return;
     }
     let stub = |g: &mut Gate<'_>, s: &StubClause| {
+        g.capability(&s.capability);
         for a in &s.args {
             if let ArgPattern::Value(e) = a {
                 g.expr(e);
