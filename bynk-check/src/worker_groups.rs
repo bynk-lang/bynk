@@ -73,6 +73,9 @@ mod tests {
             ("shop.orders".to_string(), UnitKind::Context),
             ("shop.pricing".to_string(), UnitKind::Context),
             ("shop.payment".to_string(), UnitKind::Context),
+            // A first-party unit is a context in `kinds`, but never the
+            // project's own, so it is undeclared.
+            ("bynk.cloudflare".to_string(), UnitKind::Context),
         ])
     }
 
