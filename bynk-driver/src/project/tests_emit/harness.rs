@@ -794,6 +794,22 @@ pub(super) fn json_codec_qual_for_target(
     qual
 }
 
+/// The integration double of a one-per-Worker binding, as the participant's
+/// `env` holds it: the same for every participant, or faulting until the case
+/// stubs the operation.
+fn singleton_integration_double(capability: &str) -> TsExpr {
+    let factory = match capability {
+        // #3300: a fixed version.
+        "Version" => "__makeIntegrationVersionMetadata",
+        // #3478: a Workers AI binding that faults until stubbed.
+        "Ai" => "__makeIntegrationAi",
+        // #3515: an Images binding that faults until stubbed.
+        "Images" => "__makeIntegrationImages",
+        other => unreachable!("singleton `{other}` has no integration binding"),
+    };
+    call(ident(factory), vec![])
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -817,20 +833,4 @@ mod tests {
     // identically-named function also carries), so the same cases apply,
     // ported to operate on a `Vec<String>` of already-real import names
     // instead of an `import { ... } from "...";` text line.
-}
-
-/// The integration double of a one-per-Worker binding, as the participant's
-/// `env` holds it: the same for every participant, or faulting until the case
-/// stubs the operation.
-fn singleton_integration_double(capability: &str) -> TsExpr {
-    let factory = match capability {
-        // #3300: a fixed version.
-        "Version" => "__makeIntegrationVersionMetadata",
-        // #3478: a Workers AI binding that faults until stubbed.
-        "Ai" => "__makeIntegrationAi",
-        // #3515: an Images binding that faults until stubbed.
-        "Images" => "__makeIntegrationImages",
-        other => unreachable!("singleton `{other}` has no integration binding"),
-    };
-    call(ident(factory), vec![])
 }
