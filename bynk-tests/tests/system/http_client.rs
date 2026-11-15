@@ -1011,6 +1011,23 @@ try { for await (const e of (await broken.api.getTicks()).events) cut.push(e); }
 show("p-cut", cut);
 // A body that is not what the route answers is `Unexpected`, with the text.
 show("html", await createClient({ baseUrl: "http://x", fetch: async () => new Response("<p>", { status: 200, headers: { "content-type": "text/html" } }) }).api.getTicks());
+// A status that answers in JSON and raw: the content type says which. A missing one is raw.
+const member = async (r) => r.status === 200 && r.kind === "Raw" ? { kind: r.kind, ct: r.contentType, text: await r.text() } : r;
+show("either-json", await c.api.getEitherByMode("json"));
+show("either-raw", await member(await c.api.getEitherByMode("raw")));
+const stub = (make) => createClient({ baseUrl: "http://x", fetch: async () => make() }).api;
+show("either-stub-json", await stub(() => new Response('"hello"', { status: 200, headers: { "content-type": "application/json; charset=utf-8" } })).getEitherByMode("x"));
+show("either-stub-none", await member(await stub(() => new Response(new Uint8Array([104, 105]), { status: 200 })).getEitherByMode("x")));
+// Two raw variants at a status are one member, and its `kind` is the first of them.
+const two = await c.api.getTwoByMode("tagged");
+show("two-tagged", { status: two.status, kind: two.kind, etag: two.etag, text: await two.text() });
+const one = await c.api.getTwoByMode("raw");
+show("two-raw", { status: one.status, kind: one.kind, etag: /^W\//.test(one.etag ?? "") ? "weak" : one.etag, text: await one.text() });
+// A raw body beside a bodiless answer at its status that arrives as JSON is the bodiless one; as anything else, the raw one.
+show("gone-bodiless", await c.api.getGoneByMode("raw"));
+show("gone-stub", (await stub(() => new Response("x", { status: 404, headers: { "content-type": "text/plain" } })).getGoneByMode("raw")).kind);
+// A `RawTagged` the server did not give an `ETag` is `Unexpected`, with the text.
+show("tagged-no-etag", await stub(() => new Response("body", { status: 200, headers: { "content-type": "text/plain" } })).getDocByName("a"));
 console.log("requests", JSON.stringify(sent));
 "#;
 
@@ -1072,6 +1089,36 @@ fn check_raw(out: &str) {
     assert_eq!(v("p-empty"), r#"["",""]"#);
     assert_eq!(v("p-split"), r#"["\u20ac"]"#.replace("\\u20ac", "€"));
     assert_eq!(v("p-cut"), r#"["one","StreamFailure cut"]"#);
+    assert_eq!(
+        v("either-json"),
+        r#"{"status":200,"kind":"Ok","body":"json"}"#
+    );
+    assert_eq!(
+        v("either-raw"),
+        r#"{"kind":"Raw","ct":"text/plain","text":"plain"}"#
+    );
+    assert_eq!(
+        v("either-stub-json"),
+        r#"{"status":200,"kind":"Ok","body":"hello"}"#
+    );
+    assert_eq!(
+        v("either-stub-none"),
+        r#"{"kind":"Raw","ct":"","text":"hi"}"#
+    );
+    assert_eq!(
+        v("two-tagged"),
+        r#"{"status":200,"kind":"Raw","etag":"\"t1\"","text":"t"}"#
+    );
+    assert_eq!(
+        v("two-raw"),
+        r#"{"status":200,"kind":"Raw","etag":"weak","text":"r"}"#
+    );
+    assert_eq!(v("gone-bodiless"), r#"{"status":404,"kind":"NotFound"}"#);
+    assert_eq!(v("gone-stub"), r#""RawError""#);
+    assert_eq!(
+        v("tagged-no-etag"),
+        r#"{"kind":"Unexpected","status":200,"text":"body"}"#
+    );
     assert_eq!(
         v("html"),
         r#"{"kind":"Unexpected","status":200,"text":"<p>"}"#

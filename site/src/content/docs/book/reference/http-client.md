@@ -321,7 +321,12 @@ the route's set, as `bynk openapi` reports it.
 The wire cannot tell one raw answer from another at the same status, so they are one
 member, whose `kind` is the union of the variants that can make it. A status that also
 answers in JSON (a `404` message, the boundary's `400`) is told apart by its content type:
-`application/json` is the JSON answer, any other body is the raw one.
+`application/json` is the JSON answer, any other body, a missing content type included, is the raw one.
+So a raw body that is itself `application/json`, at a status that also has a bodiless or message
+answer, is read as that answer. At runtime a raw member's `kind` is the first variant listed for
+its status (a `Raw` before a `RawTagged`), whichever the server made, since the wire cannot say;
+its `etag` is the header, as sent. A raw answer that should carry an `ETag` and does not (a
+`RawTagged`'s status, with none sent) is `Unexpected`, with the body's text.
 
 ### Server-sent events
 
@@ -341,7 +346,9 @@ if (res.status === 200) {
 The reader follows the specification, so it also reads a stream another server wrote: CRLF,
 LF or CR line ends, `data:` with or without the space, comments and other fields ignored.
 An event the stream ends in the middle of is dropped. Breaking out of the loop, or aborting
-the call with a `signal`, cancels the body. A stream that fails after its status was sent
+the call with a `signal`, cancels the body. The body is read only when iteration starts: a member
+that is never iterated leaves the response open until the `signal` aborts it, so check the
+`status` first and abort what you will not read. A stream that fails after its status was sent
 cannot become a `CallFailure`: the iteration throws a `StreamFailure` (exported, with `reason`
 holding what the body rejected with), the one place the client throws. Two edges are the server's framing: an
 element containing a bare `\r` is split by a reader (the server splits on `\n` only), so it
