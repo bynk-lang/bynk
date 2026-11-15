@@ -1,12 +1,6 @@
----
-level: minor
-changelog: `bynk client` gains `--check` (a CI drift gate), `--layout dir` (four modules) and `[build.client]` in `bynk.toml`, which `bynk build` writes and `bynk client` takes its flags from (#3508 slice BC2)
-probes: ts_writes
----
+# 0847 — `bynk client`: the drift check, the directory layout and `[build.client]`
 
-## ADR: bynk-client-drift-layout-and-manifest
-title: `bynk client`: the drift check, the directory layout and `[build.client]`
-summary: `--check` compares a written client with the generated one, `--layout dir` splits it in four, and `[build.client]` lets `bynk build` write it and `bynk client` default its flags
+- **Status:** Accepted (v0.608)
 
 **Context.** BC1 of #3508 shipped `bynk client`, which writes a typed TypeScript client for a project's `from http` services. A committed generated file goes stale when the API changes, and a team wants CI to say so, to split the module when one file is unwieldy, and to have `bynk build` keep it written. The proposal's Decision A fixed all three; this increment is slice BC2.
 
