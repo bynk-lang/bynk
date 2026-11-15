@@ -3408,35 +3408,18 @@ fn run_checks(
     // #696/#1659: integration-suite diagnostics, attributed the same way.
     errors.extend_attributed_by_span(&parsed, integration_errors);
 
-    // On the bundle target a context's required local capability may be left
-    // to the host, which supplies it through `__makeSurface(deps)`, but only
-    // while the bundle has no composition root: `composeApp` builds every
-    // context's deps itself, so once a context brings one in, a capability
-    // with no provider is the Workers gap again. Raised here, at the `given`,
-    // rather than left to `tsc` against `compose.ts`
-    // (`bynk.codegen.tsc_failed`). Needs `unit_callees`, so after step 8, and
-    // only on an otherwise-clean program: a unit that failed to check has no
-    // callee map, and the composition root is only emitted for a clean one.
-    if target == BuildTarget::Bundle
-        && errors.is_empty()
-        && let Some((trigger, because)) = composition_root_trigger(
-            &kinds,
-            &unit_consumes,
-            &unit_consumes_aliases,
-            &unit_tables,
-            &unit_callees,
-            &unit_flattened,
-        )
-    {
-        project_model::phase_unprovided_capabilities(
-            &project_model::UnprovidedReason::BundleComposition { trigger, because },
-            &parsed,
-            &groups,
-            &kinds,
-            &unit_tables,
-            &mut errors,
-        );
-    }
+    phase_bundle_composition_unprovided(
+        target,
+        &parsed,
+        &groups,
+        &kinds,
+        &unit_consumes,
+        &unit_consumes_aliases,
+        &unit_tables,
+        &unit_callees,
+        &unit_flattened,
+        &mut errors,
+    );
 
     // v0.19 (decisions 0017/0024): platform-lock enforcement. A deployment
     // unit whose in-process closure reaches a platform-native capability is
@@ -4616,6 +4599,52 @@ fn plan_agent_given_deps(
 /// the comparison never reaches the appended `:`.
 fn deps_entry_sort_key(key: &str) -> String {
     format!("{key}:")
+}
+
+/// On the bundle target a context's required local capability may be left to
+/// the host, which supplies it through `__makeSurface(deps)`, but only while
+/// the bundle has no composition root: `composeApp` builds the deps of every
+/// context it composes ([`project_model::composed_in_bundle_root`]), so once a
+/// context brings a root in, a capability with no provider is the Workers gap
+/// again. Raised at the `given` rather than left to `tsc` against
+/// `compose.ts` (`bynk.codegen.tsc_failed`). Needs `unit_callees`, so it runs
+/// after the per-unit checks, and only on an otherwise-clean program: a unit
+/// that failed to check has no callee map, and the root is only emitted for a
+/// clean one.
+#[allow(clippy::too_many_arguments)]
+fn phase_bundle_composition_unprovided(
+    target: BuildTarget,
+    parsed: &[ParsedFile],
+    groups: &BTreeMap<String, Vec<usize>>,
+    kinds: &BTreeMap<String, UnitKind>,
+    unit_consumes: &HashMap<String, Vec<String>>,
+    unit_consumes_aliases: &HashMap<String, HashMap<String, String>>,
+    unit_tables: &HashMap<String, UnitTable>,
+    unit_callees: &HashMap<String, HashMap<ExprId, bynk_check::checker::Callee>>,
+    unit_flattened: &HashMap<String, HashMap<String, String>>,
+    errors: &mut ErrorSink,
+) {
+    if target != BuildTarget::Bundle || !errors.is_empty() {
+        return;
+    }
+    let Some((trigger, because)) = composition_root_trigger(
+        kinds,
+        unit_consumes,
+        unit_consumes_aliases,
+        unit_tables,
+        unit_callees,
+        unit_flattened,
+    ) else {
+        return;
+    };
+    project_model::phase_unprovided_capabilities(
+        &project_model::UnprovidedReason::BundleComposition { trigger, because },
+        parsed,
+        groups,
+        kinds,
+        unit_tables,
+        errors,
+    );
 }
 
 /// The context that makes a bundle emit its composition root (`compose.ts`,
