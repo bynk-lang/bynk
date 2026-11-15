@@ -91,6 +91,15 @@ export interface ClientOptions {
    * credentialed CORS origin, and a server call carries neither by itself.
    */
   readonly origin?: string;
+  /**
+   * Send the route's contract hash as `X-Bynk-Contract`, so a server's log can tell which
+   * contract a caller was generated for. Informational: nothing rejects a mismatch. Off by
+   * default, because a custom header makes a cross-origin browser call preflighted, and the
+   * server's `Access-Control-Allow-Headers` is only `content-type` (and `Authorization` on a
+   * Bearer route) unless the service's `cors { allowHeaders: [...] }` lists `x-bynk-contract`.
+   * A server-side call has no preflight and can turn it on freely.
+   */
+  readonly sendContract?: boolean;
 }
 
 /**
@@ -108,13 +117,14 @@ export interface FetchBinding {
  * fails ("Illegal invocation"); this does it right. A binding ignores the host of the URL
  * it is given but needs a valid one, so `baseUrl` is an inert one unless you give another.
  * A binding call carries no `Origin` or `Sec-Fetch-Site`: a route that changes state under
- * a signed cookie needs `origin` too.
+ * a signed cookie needs `origin` too. It also sets `sendContract`, since a binding call has
+ * no preflight to refuse the header (override it after the spread to turn it off).
  */
 export function viaBinding(
   binding: FetchBinding,
   baseUrl: string = "https://bynk.invalid",
-): { readonly baseUrl: string; readonly fetch: typeof globalThis.fetch } {
-  return { baseUrl, fetch: ((input, init) => binding.fetch(input, init)) as typeof globalThis.fetch };
+): { readonly baseUrl: string; readonly fetch: typeof globalThis.fetch; readonly sendContract: true } {
+  return { baseUrl, sendContract: true, fetch: ((input, init) => binding.fetch(input, init)) as typeof globalThis.fetch };
 }
 
 /** What one reply of a route is. */
@@ -131,6 +141,8 @@ export interface __Reply {
 export interface __Route {
   readonly method: string;
   readonly path: string;
+  /** The hash of what this client acts on for the route (see `API_CONTRACTS`). */
+  readonly contract?: string;
   readonly replies: { readonly [status: number]: readonly __Reply[] };
   /**
    * How a raw or streamed answer is read: set (to `__streamed`) only on a route that can
@@ -298,6 +310,7 @@ async function __headers(
   options: ClientOptions,
   init: globalThis.RequestInit | undefined,
   request: __Request,
+  route: __Route,
 ): Promise<globalThis.Headers> {
   const configured = typeof options.headers === "function" ? await options.headers() : options.headers;
   const headers = new globalThis.Headers(configured);
@@ -317,6 +330,7 @@ async function __headers(
     headers.set("cookie", have === null || have === "" ? request.cookies : `${have}; ${request.cookies}`);
   }
   if (options.origin !== undefined) headers.set("origin", options.origin);
+  if (options.sendContract === true && route.contract !== undefined) headers.set("x-bynk-contract", route.contract);
   return headers;
 }
 
@@ -527,7 +541,7 @@ export async function __call(
   let text: string;
   let streamed: unknown;
   try {
-    const headers = await __headers(options, init, request);
+    const headers = await __headers(options, init, request, route);
     const sent: globalThis.RequestInit & { duplex?: "half" } = { ...init, method: route.method, headers };
     if (options.credentials !== undefined && sent.credentials === undefined) sent.credentials = options.credentials;
     if (request.body !== undefined) sent.body = globalThis.JSON.stringify(request.body);
@@ -653,10 +667,18 @@ export type GetGoneByModeResponse =
   | { readonly status: 404; readonly kind: "NotFound" }
   | { readonly status: 404; readonly kind: "RawError"; readonly contentType: string; readonly body: globalThis.ReadableStream<globalThis.Uint8Array> | null; readonly bytes: () => globalThis.Promise<globalThis.Uint8Array>; readonly text: () => globalThis.Promise<string> };
 
+/**
+ * What `GET /contract` answers, by `status`.
+ */
+export type GetContractResponse =
+    { readonly status: 200; readonly kind: "Ok"; readonly body: string }
+  | { readonly status: 400; readonly kind: "StructuralMismatch"; readonly error: BoundaryError };
+
 
 const __route_api_putBlobByName: __Route = {
   method: "PUT",
   path: "/blob/:name",
+  contract: "2e5adccd6e203411",
   replies: {
     200: [{ kind: "Ok", body: "value", decode: (__j: __JsonValue) => ((__v) => typeof __v === "string" ? Ok(__v) : Err({ kind: "StructuralMismatch", path: "$", expected: "string", actual: typeof __v } as __BoundaryError))(__j) }],
     400: [{ kind: "StructuralMismatch", body: "boundary" }],
@@ -668,6 +690,7 @@ const __route_api_putBlobByName: __Route = {
 const __route_api_postAny: __Route = {
   method: "POST",
   path: "/any",
+  contract: "b3916c13802b3413",
   replies: {
     200: [{ kind: "Ok", body: "value", decode: (__j: __JsonValue) => ((__v) => typeof __v === "string" ? Ok(__v) : Err({ kind: "StructuralMismatch", path: "$", expected: "string", actual: typeof __v } as __BoundaryError))(__j) }],
     400: [{ kind: "StructuralMismatch", body: "boundary" }],
@@ -679,6 +702,7 @@ const __route_api_postAny: __Route = {
 const __route_api_getLogo: __Route = {
   method: "GET",
   path: "/logo",
+  contract: "36f73b79c07168da",
   replies: {
     200: [{ kind: "Raw", body: "raw", etag: "maybe" }],
   },
@@ -688,6 +712,7 @@ const __route_api_getLogo: __Route = {
 const __route_api_getDocByName: __Route = {
   method: "GET",
   path: "/doc/:name",
+  contract: "e1a3e7420b9489df",
   replies: {
     200: [{ kind: "RawTagged", body: "raw", etag: "required" }],
     400: [{ kind: "StructuralMismatch", body: "boundary" }],
@@ -699,6 +724,7 @@ const __route_api_getDocByName: __Route = {
 const __route_api_getChunks: __Route = {
   method: "GET",
   path: "/chunks",
+  contract: "d892f3cb141268b3",
   replies: {
     200: [{ kind: "RawStreamed", body: "raw" }],
   },
@@ -708,6 +734,7 @@ const __route_api_getChunks: __Route = {
 const __route_api_postMadeByName: __Route = {
   method: "POST",
   path: "/made/:name",
+  contract: "dba9c76a62b6fa39",
   replies: {
     201: [{ kind: "RawCreated", body: "raw" }],
     400: [{ kind: "StructuralMismatch", body: "boundary" }],
@@ -719,6 +746,7 @@ const __route_api_postMadeByName: __Route = {
 const __route_api_getTicks: __Route = {
   method: "GET",
   path: "/ticks",
+  contract: "51500504e77fb16f",
   replies: {
     200: [{ kind: "Streaming", body: "events" }],
   },
@@ -728,6 +756,7 @@ const __route_api_getTicks: __Route = {
 const __route_api_getCr: __Route = {
   method: "GET",
   path: "/cr",
+  contract: "a0d7949e54f72c42",
   replies: {
     200: [{ kind: "Streaming", body: "events" }],
   },
@@ -737,6 +766,7 @@ const __route_api_getCr: __Route = {
 const __route_api_getFeedByMode: __Route = {
   method: "GET",
   path: "/feed/:mode",
+  contract: "80ff3ff70fff834c",
   replies: {
     200: [{ kind: "Streaming", body: "events" }],
     400: [{ kind: "StructuralMismatch", body: "boundary" }],
@@ -748,6 +778,7 @@ const __route_api_getFeedByMode: __Route = {
 const __route_api_getOrigin: __Route = {
   method: "GET",
   path: "/origin",
+  contract: "9b5bc1bd95601bb9",
   replies: {
     200: [{ kind: "Ok", body: "value", decode: (__j: __JsonValue) => ((__v) => typeof __v === "string" ? Ok(__v) : Err({ kind: "StructuralMismatch", path: "$", expected: "string", actual: typeof __v } as __BoundaryError))(__j) }],
     400: [{ kind: "StructuralMismatch", body: "boundary" }],
@@ -757,6 +788,7 @@ const __route_api_getOrigin: __Route = {
 const __route_api_getCookie: __Route = {
   method: "GET",
   path: "/cookie",
+  contract: "cd9408927dc7bc05",
   replies: {
     200: [{ kind: "Ok", body: "value", decode: (__j: __JsonValue) => ((__v) => typeof __v === "string" ? Ok(__v) : Err({ kind: "StructuralMismatch", path: "$", expected: "string", actual: typeof __v } as __BoundaryError))(__j) }],
     400: [{ kind: "StructuralMismatch", body: "boundary" }],
@@ -766,6 +798,7 @@ const __route_api_getCookie: __Route = {
 const __route_api_getEitherByMode: __Route = {
   method: "GET",
   path: "/either/:mode",
+  contract: "dfd48f5faa990838",
   replies: {
     200: [{ kind: "Ok", body: "value", decode: (__j: __JsonValue) => ((__v) => typeof __v === "string" ? Ok(__v) : Err({ kind: "StructuralMismatch", path: "$", expected: "string", actual: typeof __v } as __BoundaryError))(__j) }, { kind: "Raw", body: "raw", etag: "maybe" }],
     400: [{ kind: "StructuralMismatch", body: "boundary" }],
@@ -776,6 +809,7 @@ const __route_api_getEitherByMode: __Route = {
 const __route_api_getTwoByMode: __Route = {
   method: "GET",
   path: "/two/:mode",
+  contract: "f5f49ce7197ca7a9",
   replies: {
     200: [{ kind: "Raw", body: "raw", etag: "maybe" }],
     400: [{ kind: "StructuralMismatch", body: "boundary" }],
@@ -786,6 +820,7 @@ const __route_api_getTwoByMode: __Route = {
 const __route_api_getGoneByMode: __Route = {
   method: "GET",
   path: "/gone/:mode",
+  contract: "07a3852a388c9274",
   replies: {
     400: [{ kind: "StructuralMismatch", body: "boundary" }],
     404: [{ kind: "NotFound", body: "none" }, { kind: "RawError", body: "raw" }],
@@ -793,6 +828,45 @@ const __route_api_getGoneByMode: __Route = {
   streamed: __streamed,
 };
 
+const __route_api_getContract: __Route = {
+  method: "GET",
+  path: "/contract",
+  contract: "7808b1ba09f8bc6d",
+  replies: {
+    200: [{ kind: "Ok", body: "value", decode: (__j: __JsonValue) => ((__v) => typeof __v === "string" ? Ok(__v) : Err({ kind: "StructuralMismatch", path: "$", expected: "string", actual: typeof __v } as __BoundaryError))(__j) }],
+    400: [{ kind: "StructuralMismatch", body: "boundary" }],
+  },
+};
+
+
+/**
+ * The contract of each service and route this client was generated for: a hash of
+ * what a client acts on (the route's method and path, what it takes, what it can
+ * answer). It moves when that does and not for a handler's body. Informational: log
+ * it, compare it with the server's, or send it with `sendContract`.
+ */
+export const API_CONTRACTS = {
+  api: {
+    service: "54dcdb645d40ee11",
+    routes: {
+      putBlobByName: "2e5adccd6e203411",
+      postAny: "b3916c13802b3413",
+      getLogo: "36f73b79c07168da",
+      getDocByName: "e1a3e7420b9489df",
+      getChunks: "d892f3cb141268b3",
+      postMadeByName: "dba9c76a62b6fa39",
+      getTicks: "51500504e77fb16f",
+      getCr: "a0d7949e54f72c42",
+      getFeedByMode: "80ff3ff70fff834c",
+      getOrigin: "9b5bc1bd95601bb9",
+      getCookie: "cd9408927dc7bc05",
+      getEitherByMode: "dfd48f5faa990838",
+      getTwoByMode: "f5f49ce7197ca7a9",
+      getGoneByMode: "07a3852a388c9274",
+      getContract: "7808b1ba09f8bc6d",
+    },
+  },
+} as const;
 
 /**
  * The client: one property per service, one function per route. Each returns
@@ -859,6 +933,10 @@ export function createClient(options: ClientOptions = {}) {
         __call(options, init, __route_api_getGoneByMode, () => {
           return Ok({ params: { "mode": globalThis.String(mode) } });
         }) as globalThis.Promise<GetGoneByModeResponse | CallFailure>,
+      getContract: (init?: globalThis.RequestInit): globalThis.Promise<GetContractResponse | CallFailure> =>
+        __call(options, init, __route_api_getContract, () => {
+          return Ok({ params: {  } });
+        }) as globalThis.Promise<GetContractResponse | CallFailure>,
     },
   } as const;
 }

@@ -234,6 +234,15 @@ export interface ClientOptions {
    * credentialed CORS origin, and a server call carries neither by itself.
    */
   readonly origin?: string;
+  /**
+   * Send the route's contract hash as `X-Bynk-Contract`, so a server's log can tell which
+   * contract a caller was generated for. Informational: nothing rejects a mismatch. Off by
+   * default, because a custom header makes a cross-origin browser call preflighted, and the
+   * server's `Access-Control-Allow-Headers` is only `content-type` (and `Authorization` on a
+   * Bearer route) unless the service's `cors { allowHeaders: [...] }` lists `x-bynk-contract`.
+   * A server-side call has no preflight and can turn it on freely.
+   */
+  readonly sendContract?: boolean;
 }
 
 /**
@@ -251,13 +260,14 @@ export interface FetchBinding {
  * fails ("Illegal invocation"); this does it right. A binding ignores the host of the URL
  * it is given but needs a valid one, so `baseUrl` is an inert one unless you give another.
  * A binding call carries no `Origin` or `Sec-Fetch-Site`: a route that changes state under
- * a signed cookie needs `origin` too.
+ * a signed cookie needs `origin` too. It also sets `sendContract`, since a binding call has
+ * no preflight to refuse the header (override it after the spread to turn it off).
  */
 export function viaBinding(
   binding: FetchBinding,
   baseUrl: string = "https://bynk.invalid",
-): { readonly baseUrl: string; readonly fetch: typeof globalThis.fetch } {
-  return { baseUrl, fetch: ((input, init) => binding.fetch(input, init)) as typeof globalThis.fetch };
+): { readonly baseUrl: string; readonly fetch: typeof globalThis.fetch; readonly sendContract: true } {
+  return { baseUrl, sendContract: true, fetch: ((input, init) => binding.fetch(input, init)) as typeof globalThis.fetch };
 }
 
 /** What one reply of a route is. */
@@ -274,6 +284,8 @@ export interface __Reply {
 export interface __Route {
   readonly method: string;
   readonly path: string;
+  /** The hash of what this client acts on for the route (see `API_CONTRACTS`). */
+  readonly contract?: string;
   readonly replies: { readonly [status: number]: readonly __Reply[] };
   /**
    * How a raw or streamed answer is read: set (to `__streamed`) only on a route that can
@@ -441,6 +453,7 @@ async function __headers(
   options: ClientOptions,
   init: globalThis.RequestInit | undefined,
   request: __Request,
+  route: __Route,
 ): Promise<globalThis.Headers> {
   const configured = typeof options.headers === "function" ? await options.headers() : options.headers;
   const headers = new globalThis.Headers(configured);
@@ -460,6 +473,7 @@ async function __headers(
     headers.set("cookie", have === null || have === "" ? request.cookies : `${have}; ${request.cookies}`);
   }
   if (options.origin !== undefined) headers.set("origin", options.origin);
+  if (options.sendContract === true && route.contract !== undefined) headers.set("x-bynk-contract", route.contract);
   return headers;
 }
 
@@ -670,7 +684,7 @@ export async function __call(
   let text: string;
   let streamed: unknown;
   try {
-    const headers = await __headers(options, init, request);
+    const headers = await __headers(options, init, request, route);
     const sent: globalThis.RequestInit & { duplex?: "half" } = { ...init, method: route.method, headers };
     if (options.credentials !== undefined && sent.credentials === undefined) sent.credentials = options.credentials;
     if (request.body !== undefined) sent.body = globalThis.JSON.stringify(request.body);
@@ -1089,6 +1103,7 @@ export function __deserialise_List_File(json: __JsonValue, path: string = "$"): 
 const __route_api_postNotes: __Route = {
   method: "POST",
   path: "/notes",
+  contract: "02ffc49f0f50fa3d",
   replies: {
     200: [{ kind: "Ok", body: "value", decode: (__j: __JsonValue) => ((__v) => typeof __v === "string" ? Ok(__v) : Err({ kind: "StructuralMismatch", path: "$", expected: "string", actual: typeof __v } as __BoundaryError))(__j) }],
     400: [{ kind: "StructuralMismatch", body: "boundary" }],
@@ -1099,6 +1114,7 @@ const __route_api_postNotes: __Route = {
 const __route_api_postUpload: __Route = {
   method: "POST",
   path: "/upload",
+  contract: "f97755165e28a732",
   replies: {
     200: [{ kind: "Ok", body: "value", decode: (__j: __JsonValue) => ((__v) => typeof __v === "string" ? Ok(__v) : Err({ kind: "StructuralMismatch", path: "$", expected: "string", actual: typeof __v } as __BoundaryError))(__j) }],
     400: [{ kind: "StructuralMismatch", body: "boundary" }],
@@ -1110,6 +1126,7 @@ const __route_api_postUpload: __Route = {
 const __route_api_getPrefs: __Route = {
   method: "GET",
   path: "/prefs",
+  contract: "0ddac1a6cd1ffcba",
   replies: {
     200: [{ kind: "Ok", body: "value", decode: (__j: __JsonValue) => ((__v) => typeof __v === "string" ? Ok(__v) : Err({ kind: "StructuralMismatch", path: "$", expected: "string", actual: typeof __v } as __BoundaryError))(__j) }],
     400: [{ kind: "StructuralMismatch", body: "boundary" }],
@@ -1119,12 +1136,31 @@ const __route_api_getPrefs: __Route = {
 const __route_api_getOrigin: __Route = {
   method: "GET",
   path: "/origin",
+  contract: "9b5bc1bd95601bb9",
   replies: {
     200: [{ kind: "Ok", body: "value", decode: (__j: __JsonValue) => ((__v) => typeof __v === "string" ? Ok(__v) : Err({ kind: "StructuralMismatch", path: "$", expected: "string", actual: typeof __v } as __BoundaryError))(__j) }],
     400: [{ kind: "StructuralMismatch", body: "boundary" }],
   },
 };
 
+
+/**
+ * The contract of each service and route this client was generated for: a hash of
+ * what a client acts on (the route's method and path, what it takes, what it can
+ * answer). It moves when that does and not for a handler's body. Informational: log
+ * it, compare it with the server's, or send it with `sendContract`.
+ */
+export const API_CONTRACTS = {
+  api: {
+    service: "d386d4b18c423bb5",
+    routes: {
+      postNotes: "02ffc49f0f50fa3d",
+      postUpload: "f97755165e28a732",
+      getPrefs: "0ddac1a6cd1ffcba",
+      getOrigin: "9b5bc1bd95601bb9",
+    },
+  },
+} as const;
 
 /**
  * The client: one property per service, one function per route. Each returns

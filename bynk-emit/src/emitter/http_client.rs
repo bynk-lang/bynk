@@ -37,6 +37,7 @@ use std::collections::{BTreeMap, BTreeSet, HashMap};
 use std::fmt;
 use std::sync::Arc;
 
+use bynk_check::contract;
 use bynk_check::project_model::TypeDecl;
 use bynk_check::wire::TypeBody;
 use bynk_check::wire::TypeRef;
@@ -297,7 +298,7 @@ fn viable_routes(input: &HttpClientInput) -> Result<(HttpClientInput, Vec<String
         out.routes.clear();
         for (r, rp) in s.routes.iter().zip(&sp.routes) {
             let (convs, holds) = (trial.convs.clone(), trial.holds.clone());
-            match trial.route(&sp.key, r, rp) {
+            match trial.route(&sp.key, r, rp, &s.types) {
                 Ok(_) => out.routes.push(r.clone()),
                 Err(e) => {
                     (trial.convs, trial.holds) = (convs, holds);
@@ -835,16 +836,29 @@ impl Gen {
         let mut glue = String::new();
         let mut unions: Vec<TsStmt> = Vec::new();
         let mut client = String::new();
+        let mut contracts = String::new();
         for (s, sp) in input.services.iter().zip(&plan.services) {
             client.push_str(&format!("    {}: {{\n", property(&sp.key)));
+            let mut hashes: Vec<(String, String)> = Vec::new();
             for (r, rp) in s.routes.iter().zip(&sp.routes) {
-                let route = self.route(&sp.key, r, rp)?;
+                let route = self.route(&sp.key, r, rp, &s.types)?;
+                hashes.push((rp.function.clone(), route.hash.clone()));
                 glue.push_str(&route.constant);
                 unions.extend(route.response_type.into_iter().flatten());
                 unions.extend(route.arg_types);
                 client.push_str(&route.method);
             }
             client.push_str("    },\n");
+            let all: Vec<String> = hashes.iter().map(|(_, h)| h.clone()).collect();
+            contracts.push_str(&format!(
+                "  {}: {{\n    service: \"{}\",\n    routes: {{\n",
+                property(&sp.key),
+                contract::http_service_contract_hash(&all)
+            ));
+            for (function, hash) in &hashes {
+                contracts.push_str(&format!("      {}: \"{hash}\",\n", property(function)));
+            }
+            contracts.push_str("    },\n  },\n");
         }
 
         // Boundary types, public then wire, then the codecs over the wire ones.
@@ -907,6 +921,12 @@ impl Gen {
         let mut index: Vec<TsStmt> = vec![TsStmt::raw(glue, None)];
         index.push(TsStmt::raw(
             format!(
+                "/**\n * The contract of each service and route this client was generated for: a hash of\n * what a client acts on (the route's method and path, what it takes, what it can\n * answer). It moves when that does and not for a handler's body. Informational: log\n * it, compare it with the server's, or send it with `sendContract`.\n */\nexport const API_CONTRACTS = {{\n{contracts}}} as const;\n"
+            ),
+            None,
+        ));
+        index.push(TsStmt::raw(
+            format!(
                 "/**\n * The client: one property per service, one function per route. Each returns\n * the route's own response, a union keyed by `status`, or a `CallFailure`.\n */\nexport function createClient(options: ClientOptions = {{}}) {{\n  return {{\n{client}  }} as const;\n}}\n\n/** The client `createClient` makes. */\nexport type Client = ReturnType<typeof createClient>;\n"
             ),
             None,
@@ -935,8 +955,10 @@ impl Gen {
         service: &str,
         r: &RouteInput,
         rp: &RoutePlan,
+        types: &HashMap<String, Arc<TypeDecl>>,
     ) -> Result<RouteText, ClientError> {
         let ident = format!("__route_{}_{}", sanitise(service), rp.function);
+        let hash = contract::http_route_contract_hash(&Self::contract_of(r), types);
         let success = r.success.as_ref().map(|t| self.renamed(t));
         let replies = self.replies(r, &success)?;
 
@@ -1079,7 +1101,7 @@ impl Gen {
             by_status.entry(*status).or_default().push(entry);
         }
         let mut constant = format!(
-            "const {ident}: __Route = {{\n  method: \"{}\",\n  path: \"{}\",\n  replies: {{\n",
+            "const {ident}: __Route = {{\n  method: \"{}\",\n  path: \"{}\",\n  contract: \"{hash}\",\n  replies: {{\n",
             r.method, r.path
         );
         for (status, entries) in &by_status {
@@ -1129,6 +1151,7 @@ impl Gen {
             sep = if signature.is_empty() { "" } else { ", " },
         );
         Ok(RouteText {
+            hash,
             constant,
             method,
             response_type,
@@ -1190,6 +1213,63 @@ impl Gen {
             RawEtag::Maybe
         } else {
             RawEtag::None
+        }
+    }
+
+    /// What a client of `r` acts on, for its contract hash.
+    fn contract_of(r: &RouteInput) -> contract::HttpRouteContract {
+        let params = r
+            .params
+            .iter()
+            .map(|p| match p {
+                ParamInput::Path { name, ty } => contract::HttpRouteParam {
+                    kind: "path".to_string(),
+                    name: name.clone(),
+                    ty: Some(ty.clone()),
+                    detail: None,
+                },
+                ParamInput::Query { ty } => contract::HttpRouteParam {
+                    kind: "query".to_string(),
+                    name: "query".to_string(),
+                    ty: Some(ty.clone()),
+                    detail: None,
+                },
+                ParamInput::Cookies { ty } => contract::HttpRouteParam {
+                    kind: "cookies".to_string(),
+                    name: "cookies".to_string(),
+                    ty: Some(ty.clone()),
+                    detail: None,
+                },
+                ParamInput::Body { ty, kind } => {
+                    let (kind, ty, detail) = match kind {
+                        BodyKind::Json => ("body-json", Some(ty.clone()), None),
+                        BodyKind::Form => ("body-form", Some(ty.clone()), None),
+                        BodyKind::Multipart => ("body-multipart", Some(ty.clone()), None),
+                        BodyKind::Raw { content_type } => (
+                            "body-raw",
+                            None,
+                            Some(content_type.clone().unwrap_or_else(|| "*/*".to_string())),
+                        ),
+                    };
+                    contract::HttpRouteParam {
+                        kind: kind.to_string(),
+                        name: "body".to_string(),
+                        ty,
+                        detail,
+                    }
+                }
+            })
+            .collect();
+        contract::HttpRouteContract {
+            method: r.method.clone(),
+            path: r.path.clone(),
+            params,
+            success: r.success.clone(),
+            replies: r
+                .replies
+                .iter()
+                .map(|x| (x.status, x.variant.clone(), format!("{:?}", x.payload)))
+                .collect(),
         }
     }
 
@@ -1540,6 +1620,8 @@ impl RecordArg {
 type Variant = (String, Vec<(String, TypeRef)>);
 
 struct RouteText {
+    /// The route's contract hash.
+    hash: String,
     constant: String,
     method: String,
     response_type: Option<Vec<TsStmt>>,

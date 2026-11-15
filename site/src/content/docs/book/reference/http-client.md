@@ -405,6 +405,53 @@ The client's types use the DOM `fetch` types (`Request`, `Response`, `Headers`),
 SvelteKit or Next.js project has; a project that loads only `@cloudflare/workers-types`
 without the DOM library needs the DOM library added for the generated file.
 
+## Contracts and drift
+
+The module carries the contract it was generated for:
+
+```ts
+export const WIRE_VERSION = "1";
+export const API_CONTRACTS = {
+  orders: { service: "9f2c…", routes: { getOrderById: "41b0…" } },
+} as const;
+```
+
+A route's hash is FNV-1a over the facts a client acts on: its method and path, what it takes
+(each path, `query`, `cookies` and `body` parameter, with its type as it is on the wire, so
+refinements, opaque types and `@name` keys count), and what it can answer (each status, variant
+and kind of body). It moves when that does and **not** for a handler's body, a doc comment, the
+order of a record's fields or a CORS change. A service's hash is the hash of its routes' hashes,
+sorted. The hash is the compiler's skew detector, not a security control.
+
+`WIRE_VERSION` is the wire format's version. The HTTP JSON encoding follows wire version 1, the
+same version the cross-context format has, since both are read from the same wire model.
+
+**Informational only.** Nothing rejects a mismatch, on the client or the server. A public API's
+browsers and cached bundles lag the server for days, so a hard refusal would turn every additive
+deploy into an outage for stale tabs. A stale client shows as `Unexpected` (a status or body the
+route no longer matches); the hash is there to be compared, logged and checked in CI with
+[`bynk client --check`](/docs/tooling/bynk-client/).
+
+### Sending the hash
+
+`createClient({ sendContract: true })` sends each call's route hash as `X-Bynk-Contract`, so a
+server's log can tell which contract its callers were generated for. It is **off by default**: a
+custom header makes a cross-origin browser call preflighted, and a service's
+`Access-Control-Allow-Headers` is only `content-type` (and `authorization` on a Bearer route)
+unless its `cors` block lists more, so the preflight would refuse the call. To send it from a
+browser, list it, remembering that an explicit `headers:` list replaces the default:
+
+```bynk
+cors {
+  origins: ["https://app.example.com"],
+  headers: ["content-type", "authorization", "x-bynk-contract"],
+}
+```
+
+A server-side call (a framework's server, Node) has no preflight and can set it freely, and
+`viaBinding(...)` turns it on for a Service Binding call (override it with `sendContract: false`
+after the spread). The server ignores the header on a `from http` route.
+
 ## Routes left out
 
 A route the client cannot yet represent faithfully is named on stderr and left out,
