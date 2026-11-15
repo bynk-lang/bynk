@@ -397,6 +397,8 @@ async function* __events(response: globalThis.Response): globalThis.AsyncGenerat
   const reader = response.body.getReader();
   const decoder = new globalThis.TextDecoder();
   let buffer = "";
+  // Where the unread text may next hold a line end: what was scanned before holds none.
+  let scanned = 0;
   let data: string[] = [];
   try {
     for (;;) {
@@ -409,11 +411,15 @@ async function* __events(response: globalThis.Response): globalThis.AsyncGenerat
       const { value, done } = chunk;
       buffer += done ? decoder.decode() : decoder.decode(value, { stream: true });
       let start = 0;
-      for (let i = 0; i < buffer.length; i++) {
+      let held = -1;
+      for (let i = scanned; i < buffer.length; i++) {
         const c = buffer[i];
         if (c !== "\n" && c !== "\r") continue;
         // A CR at the end of the text may be the first half of a CRLF: wait for more.
-        if (c === "\r" && i + 1 === buffer.length && !done) break;
+        if (c === "\r" && i + 1 === buffer.length && !done) {
+          held = i;
+          break;
+        }
         const line = buffer.slice(start, i);
         if (c === "\r" && buffer[i + 1] === "\n") i++;
         start = i + 1;
@@ -432,6 +438,7 @@ async function* __events(response: globalThis.Response): globalThis.AsyncGenerat
           }
         }
       }
+      scanned = (held < 0 ? buffer.length : held) - start;
       buffer = buffer.slice(start);
       if (done) return;
     }
@@ -461,7 +468,8 @@ export function __streamed(route: __Route, response: globalThis.Response): unkno
   };
   if (raw.etag !== undefined) {
     const etag = response.headers.get("etag");
-    if (etag === null && raw.etag === "required") return { kind: "Unexpected", status, text: "" } satisfies CallFailure;
+    // A tag the server always sends, missing: the call reads as a stale one, with the body's text.
+    if (etag === null && raw.etag === "required") return undefined;
     reply.etag = etag;
   }
   reply.body = response.body;
@@ -622,6 +630,29 @@ export type GetCookieResponse =
     { readonly status: 200; readonly kind: "Ok"; readonly body: string }
   | { readonly status: 400; readonly kind: "StructuralMismatch"; readonly error: BoundaryError };
 
+/**
+ * What `GET /either/:mode` answers, by `status`.
+ */
+export type GetEitherByModeResponse =
+    { readonly status: 200; readonly kind: "Ok"; readonly body: string }
+  | { readonly status: 200; readonly kind: "Raw"; readonly contentType: string; readonly etag: string | null; readonly body: globalThis.ReadableStream<globalThis.Uint8Array> | null; readonly bytes: () => globalThis.Promise<globalThis.Uint8Array>; readonly text: () => globalThis.Promise<string> }
+  | { readonly status: 400; readonly kind: "StructuralMismatch"; readonly error: BoundaryError };
+
+/**
+ * What `GET /two/:mode` answers, by `status`.
+ */
+export type GetTwoByModeResponse =
+    { readonly status: 200; readonly kind: "Raw" | "RawTagged"; readonly contentType: string; readonly etag: string | null; readonly body: globalThis.ReadableStream<globalThis.Uint8Array> | null; readonly bytes: () => globalThis.Promise<globalThis.Uint8Array>; readonly text: () => globalThis.Promise<string> }
+  | { readonly status: 400; readonly kind: "StructuralMismatch"; readonly error: BoundaryError };
+
+/**
+ * What `GET /gone/:mode` answers, by `status`.
+ */
+export type GetGoneByModeResponse =
+    { readonly status: 400; readonly kind: "StructuralMismatch"; readonly error: BoundaryError }
+  | { readonly status: 404; readonly kind: "NotFound" }
+  | { readonly status: 404; readonly kind: "RawError"; readonly contentType: string; readonly body: globalThis.ReadableStream<globalThis.Uint8Array> | null; readonly bytes: () => globalThis.Promise<globalThis.Uint8Array>; readonly text: () => globalThis.Promise<string> };
+
 
 const __route_api_putBlobByName: __Route = {
   method: "PUT",
@@ -732,6 +763,36 @@ const __route_api_getCookie: __Route = {
   },
 };
 
+const __route_api_getEitherByMode: __Route = {
+  method: "GET",
+  path: "/either/:mode",
+  replies: {
+    200: [{ kind: "Ok", body: "value", decode: (__j: __JsonValue) => ((__v) => typeof __v === "string" ? Ok(__v) : Err({ kind: "StructuralMismatch", path: "$", expected: "string", actual: typeof __v } as __BoundaryError))(__j) }, { kind: "Raw", body: "raw", etag: "maybe" }],
+    400: [{ kind: "StructuralMismatch", body: "boundary" }],
+  },
+  streamed: __streamed,
+};
+
+const __route_api_getTwoByMode: __Route = {
+  method: "GET",
+  path: "/two/:mode",
+  replies: {
+    200: [{ kind: "Raw", body: "raw", etag: "maybe" }],
+    400: [{ kind: "StructuralMismatch", body: "boundary" }],
+  },
+  streamed: __streamed,
+};
+
+const __route_api_getGoneByMode: __Route = {
+  method: "GET",
+  path: "/gone/:mode",
+  replies: {
+    400: [{ kind: "StructuralMismatch", body: "boundary" }],
+    404: [{ kind: "NotFound", body: "none" }, { kind: "RawError", body: "raw" }],
+  },
+  streamed: __streamed,
+};
+
 
 /**
  * The client: one property per service, one function per route. Each returns
@@ -786,6 +847,18 @@ export function createClient(options: ClientOptions = {}) {
         __call(options, init, __route_api_getCookie, () => {
           return Ok({ params: {  } });
         }) as globalThis.Promise<GetCookieResponse | CallFailure>,
+      getEitherByMode: (mode: string, init?: globalThis.RequestInit): globalThis.Promise<GetEitherByModeResponse | CallFailure> =>
+        __call(options, init, __route_api_getEitherByMode, () => {
+          return Ok({ params: { "mode": globalThis.String(mode) } });
+        }) as globalThis.Promise<GetEitherByModeResponse | CallFailure>,
+      getTwoByMode: (mode: string, init?: globalThis.RequestInit): globalThis.Promise<GetTwoByModeResponse | CallFailure> =>
+        __call(options, init, __route_api_getTwoByMode, () => {
+          return Ok({ params: { "mode": globalThis.String(mode) } });
+        }) as globalThis.Promise<GetTwoByModeResponse | CallFailure>,
+      getGoneByMode: (mode: string, init?: globalThis.RequestInit): globalThis.Promise<GetGoneByModeResponse | CallFailure> =>
+        __call(options, init, __route_api_getGoneByMode, () => {
+          return Ok({ params: { "mode": globalThis.String(mode) } });
+        }) as globalThis.Promise<GetGoneByModeResponse | CallFailure>,
     },
   } as const;
 }

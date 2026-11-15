@@ -80,4 +80,31 @@ service api from http {
 			None => Ok("none")
 		}
 	}
+
+	// A JSON answer and a raw one at the same status: told apart by content type.
+	on GET("/either/:mode") (mode: String) -> Effect[HttpResult[String]] by v: Visitor {
+		if mode == "raw" {
+			Raw(Bytes.fromUtf8("plain"), "text/plain")
+		} else {
+			Ok("json")
+		}
+	}
+
+	// Two raw variants at one status are one member.
+	on GET("/two/:mode") (mode: String) -> Effect[HttpResult[()]] by v: Visitor {
+		if mode == "tagged" {
+			RawTagged(Bytes.fromUtf8("t"), "text/plain", "\"t1\"")
+		} else {
+			Raw(Bytes.fromUtf8("r"), "text/plain")
+		}
+	}
+
+	// A raw answer and a bodiless one at one status.
+	on GET("/gone/:mode") (mode: String) -> Effect[HttpResult[()]] by v: Visitor {
+		if mode == "raw" {
+			RawError(NotFound, Bytes.fromUtf8("{\"why\":1}"), "application/json")
+		} else {
+			NotFound
+		}
+	}
 }

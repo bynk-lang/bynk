@@ -691,6 +691,8 @@ async function* __events(response: globalThis.Response): globalThis.AsyncGenerat
   const reader = response.body.getReader();
   const decoder = new globalThis.TextDecoder();
   let buffer = "";
+  // Where the unread text may next hold a line end: what was scanned before holds none.
+  let scanned = 0;
   let data: string[] = [];
   try {
     for (;;) {
@@ -703,11 +705,15 @@ async function* __events(response: globalThis.Response): globalThis.AsyncGenerat
       const { value, done } = chunk;
       buffer += done ? decoder.decode() : decoder.decode(value, { stream: true });
       let start = 0;
-      for (let i = 0; i < buffer.length; i++) {
+      let held = -1;
+      for (let i = scanned; i < buffer.length; i++) {
         const c = buffer[i];
         if (c !== "\n" && c !== "\r") continue;
         // A CR at the end of the text may be the first half of a CRLF: wait for more.
-        if (c === "\r" && i + 1 === buffer.length && !done) break;
+        if (c === "\r" && i + 1 === buffer.length && !done) {
+          held = i;
+          break;
+        }
         const line = buffer.slice(start, i);
         if (c === "\r" && buffer[i + 1] === "\n") i++;
         start = i + 1;
@@ -726,6 +732,7 @@ async function* __events(response: globalThis.Response): globalThis.AsyncGenerat
           }
         }
       }
+      scanned = (held < 0 ? buffer.length : held) - start;
       buffer = buffer.slice(start);
       if (done) return;
     }
@@ -755,7 +762,8 @@ export function __streamed(route: __Route, response: globalThis.Response): unkno
   };
   if (raw.etag !== undefined) {
     const etag = response.headers.get("etag");
-    if (etag === null && raw.etag === "required") return { kind: "Unexpected", status, text: "" } satisfies CallFailure;
+    // A tag the server always sends, missing: the call reads as a stale one, with the body's text.
+    if (etag === null && raw.etag === "required") return undefined;
     reply.etag = etag;
   }
   reply.body = response.body;
