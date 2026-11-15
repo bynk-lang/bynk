@@ -17,6 +17,7 @@ or a row links to no file. Summaries and statuses are curated by hand; the
 
 | # | Decision | Status |
 |---|---|---|
+| [0851](0851-bynk-client-service-binding.md) | **`bynk client`: calling a Bynk Worker through a Service Binding** (v0.616) — A Service Binding's `fetch` has `fetch`'s shape, so the client's `fetch` option is the seam and `viaBinding` calls the binding correctly, with no second transport option | Accepted (v0.616) |
 | [0850](0850-bynk-client-raw-bodies-and-streams.md) | **`bynk client`: raw bodies, raw answers and server-sent events** (v0.615) — A `@raw` body is the caller's bytes under the declared type, a raw answer hands over the response body untouched, and `Streaming` is an async iterable of the events the server frames | Accepted (v0.615) |
 | [0849](0849-per-file-consumes.md) | **`consumes` is per file: a file's imports are what its own `consumes` clauses bring in** (v0.612.1) — Declarations are shared across a unit's files, imports are not; suites follow the same rule; amends the braces-only scope | Accepted (v0.612.1) |
 | [0848](0848-bynk-client-forms-multipart-and-cookies.md) | **`bynk client`: `@form`, `@multipart` and typed `cookies`** (v0.609) — Form and multipart bodies are encoded by the server's own leaf rules with file parts as `Blob`, typed cookies are a `Cookie` header refused in a browser, and `Origin` from a Worker is verified | Accepted (v0.609) |
