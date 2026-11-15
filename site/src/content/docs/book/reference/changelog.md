@@ -3,7 +3,7 @@ title: Version compatibility & changelog
 ---
 Bynk is pre-1.0 and developed in small, spec-first increments (see
 [Versioning & roadmap](/book/about/versioning-and-roadmap/)). This book is
-written against **v0.622**.
+written against **v0.623**.
 
 This page is a high-level summary of notable increments, not an exhaustive
 per-commit history. While Bynk is pre-1.0, increments may change behaviour.
@@ -28,6 +28,7 @@ per-commit history. While Bynk is pre-1.0, increments may change behaviour.
 
 | Version | Highlights |
 |---|---|
+| **v0.623.0** | A `system` or `integration` case can run `D1.peek` reads against the participant's in-memory test database, which refuses every write at run time (harness half) |
 | **v0.622.1** | A Workers build places each context's generated files through a `WorkerLayout`, the identity layout for now, ahead of `[deploy.workers]` groups sharing a directory (#3562, G2b) |
 | **v0.622.0** | The platform lock treats a `[deploy.workers.<key>]` group as one deployment unit, the union of its members' native platforms, as a Worker is one unit (#3562, G2a) |
 | **v0.621.0** | `bynk build` refuses a `[deploy.workers.<key>]` group whose members declare different bindings under one name; identical declarations share one binding (#3562, G2a) |
