@@ -1,7 +1,6 @@
 ---
 level: patch
 changelog: The `bynk/sequenceModel` request gives each `alt` branch a source `range`
-probes:
 ---
 
 ## ADR: sequence-branch-span
