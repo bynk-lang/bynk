@@ -355,32 +355,229 @@ pub(crate) fn link_ai_search_for_run(
     problems.is_empty()
 }
 
-/// The lookups of the account's named resources a run does before it confirms: each AI Search
-/// instance found, and (#3513 A) each mTLS certificate. `false` when either stops the run.
-pub(crate) fn link_named_resources_for_run(
-    order: &[String],
-    resources: &BTreeMap<String, Resources>,
-) -> bool {
-    let search = link_ai_search_for_run(order, resources);
-    let mtls = link_mtls_for_run(order, resources);
-    search && mtls
+/// One mTLS certificate of the account, as far as linking needs it. The list endpoint also
+/// returns the certificate's body and more; none of that is read, and no key material is ever
+/// requested (#3513 A).
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub(crate) struct MtlsRecord {
+    pub(crate) id: String,
+    /// Optional in Cloudflare's record ("only used for human readability"): a certificate with
+    /// no name cannot be linked by name.
+    pub(crate) name: Option<String>,
+    /// A CA certificate (`ca: true`, a BYO-CA for zone client auth): it has no private key, so a
+    /// Worker cannot present it.
+    pub(crate) ca: bool,
+    /// When it expires, as Cloudflare reports it (RFC 3339), when it does.
+    pub(crate) expires_on: Option<String>,
 }
 
-/// #3513 A: the lookup an `MtlsCertificate` binding needs is not built yet, so a run that
-/// declares one stops here, with nothing pushed, rather than push a certificate's name as its
-/// id. Replaced by the certificate resolver.
-pub(crate) fn link_mtls_for_run(order: &[String], resources: &BTreeMap<String, Resources>) -> bool {
-    let mut ok = true;
+/// The account's mTLS certificates, as far as linking needs them. A trait so the resolution is
+/// tested against a fake and the REST client against a stub.
+pub(crate) trait MtlsCertificates {
+    fn list(&self) -> Result<Vec<MtlsRecord>, String>;
+}
+
+/// The permission a token needs to list mTLS certificates (Cloudflare's list endpoint accepts
+/// either of the read and write forms).
+pub(crate) const MTLS_TOKEN_SCOPE: &str = "SSL and Certificates: Read";
+
+/// Cloudflare's REST API, for the mTLS certificate listing.
+pub(crate) struct RestMtls {
+    pub(crate) rest: Rest,
+}
+
+impl RestMtls {
+    /// A client for the account in `CLOUDFLARE_ACCOUNT_ID`, or a message naming the missing
+    /// variable and the permission the token needs.
+    pub(crate) fn from_env() -> Result<Self, String> {
+        let credentials = Credentials::from_env_for(
+            "link an mTLS certificate",
+            &format!(
+                "an API token with \"{MTLS_TOKEN_SCOPE}\" (a `wrangler login` session is not enough: the lookup calls Cloudflare's API directly)"
+            ),
+        )?;
+        Ok(Self {
+            rest: Rest {
+                agent: live::agent()?,
+                credentials,
+                base: live::API.to_string(),
+            },
+        })
+    }
+}
+
+/// The records of one page of the listing, reading only the fields linking needs.
+fn mtls_records(body: &serde_json::Value) -> Vec<MtlsRecord> {
+    body["result"]
+        .as_array()
+        .into_iter()
+        .flatten()
+        .filter_map(|e| {
+            Some(MtlsRecord {
+                id: e["id"].as_str()?.to_string(),
+                name: e["name"].as_str().map(str::to_string),
+                ca: e["ca"].as_bool().unwrap_or(false),
+                expires_on: e["expires_on"].as_str().map(str::to_string),
+            })
+        })
+        .collect()
+}
+
+impl MtlsCertificates for RestMtls {
+    fn list(&self) -> Result<Vec<MtlsRecord>, String> {
+        let mut out = Vec::new();
+        for page in 1.. {
+            let body = self
+                .rest
+                .get(&format!("/mtls_certificates?per_page=100&page={page}"))
+                .map_err(|said| {
+                    if super::destinations::is_denied(&said) {
+                        format!(
+                            "{said} (the token needs the \"{MTLS_TOKEN_SCOPE}\" permission, on this account, to find a certificate)"
+                        )
+                    } else {
+                        said
+                    }
+                })?;
+            let records = mtls_records(&body);
+            let n = records.len();
+            out.extend(records);
+            let pages = body["result_info"]["total_pages"].as_u64().unwrap_or(1);
+            if n == 0 || page >= pages {
+                break;
+            }
+        }
+        Ok(out)
+    }
+}
+
+/// How far ahead of its expiry a certificate is worth a warning, in days.
+const MTLS_EXPIRY_WARNING_DAYS: i64 = 30;
+
+/// What to say about a certificate's expiry, if anything: it has expired, or does within
+/// [`MTLS_EXPIRY_WARNING_DAYS`]. A Worker bound to an expired certificate deploys fine and fails
+/// at call time, so the deploy is the useful moment. `None` for a date that is not RFC 3339.
+fn mtls_expiry_warning(expires_on: &str, now: time::OffsetDateTime) -> Option<String> {
+    let expires =
+        time::OffsetDateTime::parse(expires_on, &time::format_description::well_known::Rfc3339)
+            .ok()?;
+    let days = (expires - now).whole_days();
+    if expires <= now {
+        Some(format!("it expired on {expires_on}"))
+    } else if days < MTLS_EXPIRY_WARNING_DAYS {
+        Some(format!("it expires on {expires_on}, in {days} days"))
+    } else {
+        None
+    }
+}
+
+/// The certificates linked, and the warnings and problems of linking every `(worker, binding)`
+/// of `order` to its account certificate by name. Every problem is collected, not just the first.
+/// A name matches client certificates only (never a CA, which a Worker cannot present); no match
+/// and more than one are problems; an expired or soon-expiring certificate is a warning, since
+/// the deploy itself is not what fails.
+pub(crate) struct MtlsLinks {
+    /// `(worker, binding)` to the certificate's id.
+    pub(crate) linked: BTreeMap<(String, String), String>,
+    pub(crate) warnings: Vec<String>,
+    pub(crate) problems: Vec<String>,
+}
+
+pub(crate) fn link_mtls(
+    order: &[String],
+    resources: &BTreeMap<String, Resources>,
+    certificates: &dyn MtlsCertificates,
+    now: time::OffsetDateTime,
+) -> MtlsLinks {
+    let mut links = MtlsLinks {
+        linked: BTreeMap::new(),
+        warnings: Vec::new(),
+        problems: Vec::new(),
+    };
+    let mut listed: Option<Result<Vec<MtlsRecord>, String>> = None;
     for worker in order {
         for decl in &resources[worker].mtls_certificates {
-            eprintln!(
-                "bynk: `{worker}` declares the mTLS certificate `{}` (binding {}), but `bynk deploy` cannot resolve a certificate's id yet, so the Worker would be pushed with its name where Cloudflare expects an id; remove the `MtlsCertificate` instance from the deploy until the resolver lands",
-                decl.certificate, decl.binding
-            );
-            ok = false;
+            let who = format!("`{}` of `{worker}`", decl.binding);
+            let records = listed.get_or_insert_with(|| certificates.list());
+            let records = match records {
+                Ok(records) => records,
+                Err(said) => {
+                    links.problems.push(format!(
+                        "{who} presents mTLS certificate `{}`; could not look it up: {said}",
+                        decl.certificate
+                    ));
+                    continue;
+                }
+            };
+            let named: Vec<&MtlsRecord> = records
+                .iter()
+                .filter(|r| r.name.as_deref() == Some(decl.certificate.as_str()))
+                .collect();
+            let clients: Vec<&&MtlsRecord> = named.iter().filter(|r| !r.ca).collect();
+            match clients.as_slice() {
+                [one] => {
+                    if let Some(why) = one
+                        .expires_on
+                        .as_deref()
+                        .and_then(|d| mtls_expiry_warning(d, now))
+                    {
+                        links.warnings.push(format!(
+                            "bynk: warning: {who} presents mTLS certificate `{}`, but {why}; a call fails at the handshake once it has",
+                            decl.certificate
+                        ));
+                    }
+                    links
+                        .linked
+                        .insert((worker.clone(), decl.binding.clone()), one.id.clone());
+                }
+                [] if !named.is_empty() => links.problems.push(format!(
+                    "{who} presents mTLS certificate `{name}`, but the only certificate of that name on this account is a CA certificate, which has no private key for a Worker to present. Upload the client certificate with its key (`wrangler mtls-certificate upload --cert … --key … --name {name}`), or name one the account has",
+                    name = decl.certificate
+                )),
+                [] => links.problems.push(format!(
+                    "{who} presents mTLS certificate `{name}`, which does not exist on this account. `bynk deploy` links to a certificate and never uploads one, so its private key never passes through Bynk: upload it with `wrangler mtls-certificate upload --cert … --key … --name {name}`, the dashboard or the API, or name the certificate the account has",
+                    name = decl.certificate
+                )),
+                many => links.problems.push(format!(
+                    "{who} presents mTLS certificate `{name}`, which names more than one client certificate on this account ({}), so it cannot be linked by name",
+                    many.iter().map(|r| r.id.as_str()).collect::<Vec<_>>().join(", "),
+                    name = decl.certificate
+                )),
+            }
         }
     }
-    ok
+    links
+}
+
+/// The mTLS lookups a run does before it confirms: each certificate of `order` resolved to its id,
+/// warnings printed, `None` (after printing every problem) when any is missing, ambiguous or
+/// could not be looked up, so the run stops with nothing pushed. Nothing is asked of Cloudflare
+/// when no Worker declares a certificate.
+pub(crate) fn link_mtls_for_run(
+    order: &[String],
+    resources: &BTreeMap<String, Resources>,
+) -> Option<BTreeMap<(String, String), String>> {
+    if !order
+        .iter()
+        .any(|w| !resources[w].mtls_certificates.is_empty())
+    {
+        return Some(BTreeMap::new());
+    }
+    let client = match RestMtls::from_env() {
+        Ok(client) => client,
+        Err(e) => {
+            eprintln!("bynk: {e}");
+            return None;
+        }
+    };
+    let links = link_mtls(order, resources, &client, time::OffsetDateTime::now_utc());
+    for warning in &links.warnings {
+        eprintln!("{warning}");
+    }
+    for problem in &links.problems {
+        eprintln!("bynk: {problem}");
+    }
+    links.problems.is_empty().then_some(links.linked)
 }
 
 /// Record the instances `worker`'s `AiSearch` bindings were linked to, before
@@ -415,10 +612,10 @@ pub(crate) fn record_ai_search_links(
     Ok(())
 }
 
-/// The account lookups a run does before it confirms: every stored secret of
-/// `order` resolved against the account, and (#3302) every `@allowedSenders`
-/// domain checked, each problem printed, `None` when any was found (the run
-/// stops there, with nothing pushed).
+/// The account lookups a run does before it confirms: every stored secret and (#3513 A) every mTLS
+/// certificate of `order` resolved against the account, and (#3302) every `@allowedSenders` domain
+/// checked, each problem printed, `None` when any was found (the run stops there, with nothing
+/// pushed). The ids come back by `(worker, binding)`.
 pub(crate) fn link_for_run(
     order: &[String],
     resources: &BTreeMap<String, Resources>,
@@ -426,6 +623,19 @@ pub(crate) fn link_for_run(
     if !check_senders_for_run(order, resources) {
         return None;
     }
+    // The ids of the linked resources, by `(worker, binding)`: a binding's name is its kind's
+    // own, so the Secrets Store ids and the mTLS certificate ids (#3513 A) share one map.
+    let mut linked = link_stored_secrets_for_run(order, resources)?;
+    linked.extend(link_mtls_for_run(order, resources)?);
+    Some(linked)
+}
+
+/// The Secrets Stores of `order`'s stored secrets resolved to their ids, each problem printed,
+/// `None` when any was found (the run stops there, with nothing pushed).
+fn link_stored_secrets_for_run(
+    order: &[String],
+    resources: &BTreeMap<String, Resources>,
+) -> Option<BTreeMap<(String, String), String>> {
     if !any_stored_secrets(order, resources) {
         return Some(BTreeMap::new());
     }
@@ -492,6 +702,88 @@ pub(crate) fn record_links(
     if !store_ids.is_empty() && !materialise_stored_secret_stores(config, &store_ids) {
         return Err(DeployFailure::driver(format!(
             "could not materialise the Secrets Store ids into `{worker}`'s generated configuration"
+        )));
+    }
+    Ok(())
+}
+
+/// Record what `worker`'s linked resources (stored secrets, mTLS certificates, AI Search instances)
+/// were linked to, before the push, writing the ids into its generated config. All were looked up
+/// in [`link_for_run`] and [`link_ai_search_for_run`], which stop the run when one is missing.
+pub(crate) fn record_linked_resources(
+    worker: &str,
+    declared: &Resources,
+    linked: &BTreeMap<(String, String), String>,
+    lock: &mut DeployLock,
+    lock_path: &Path,
+    config: &Path,
+    environment: &str,
+) -> Result<(), DeployFailure> {
+    record_links(
+        worker,
+        declared,
+        linked,
+        lock,
+        lock_path,
+        config,
+        environment,
+    )?;
+    record_mtls_links(
+        worker,
+        declared,
+        linked,
+        lock,
+        lock_path,
+        config,
+        environment,
+    )?;
+    record_ai_search_links(worker, declared, lock, lock_path, environment)
+}
+
+/// Record the certificates `worker`'s `MtlsCertificate` bindings were linked to, and write their ids
+/// into its generated config, before the push. Linked in [`link_mtls`], so a binding with no id
+/// here is a bug, not a user error. Only a certificate's name and id are recorded: no key
+/// material crossed the wire, so none can be written.
+pub(crate) fn record_mtls_links(
+    worker: &str,
+    declared: &Resources,
+    linked: &BTreeMap<(String, String), String>,
+    lock: &mut DeployLock,
+    lock_path: &Path,
+    config: &Path,
+    environment: &str,
+) -> Result<(), DeployFailure> {
+    let mut ids = BTreeMap::new();
+    let mut changed = false;
+    for decl in &declared.mtls_certificates {
+        let Some(id) = linked.get(&(worker.to_string(), decl.binding.clone())) else {
+            return Err(DeployFailure::driver(format!(
+                "`{}` of `{worker}` was not linked to an mTLS certificate before the push",
+                decl.binding
+            )));
+        };
+        changed |= lock.record_mtls_certificate(
+            environment,
+            worker,
+            &decl.binding,
+            MtlsCertificateLink {
+                certificate: decl.certificate.clone(),
+                certificate_id: id.clone(),
+            },
+        );
+        ids.insert(decl.binding.clone(), id.clone());
+    }
+    if changed {
+        write_lock(lock_path, lock).map_err(|e| {
+            DeployFailure::driver(format!(
+                "linked `{worker}`'s mTLS certificates but could not record them in {}: {e}",
+                lock_path.display()
+            ))
+        })?;
+    }
+    if !ids.is_empty() && !materialise_mtls_certificates(config, &ids) {
+        return Err(DeployFailure::driver(format!(
+            "could not materialise the mTLS certificate ids into `{worker}`'s generated configuration"
         )));
     }
     Ok(())
@@ -1014,16 +1306,280 @@ mod tests {
         std::fs::remove_dir_all(&dir).ok();
     }
 
-    /// #3513 A: until the certificate resolver exists, a run that declares an mTLS binding stops
-    /// before anything is pushed, and one that declares none is not held up.
     #[test]
-    fn an_mtls_binding_stops_the_run_until_the_resolver_exists() {
-        let with = BTreeMap::from([(
-            "shop".to_string(),
-            Resources::default().mtls_certificates(&[("MTLS_BACKEND", "acme-client")]),
+    fn linking_records_the_certificate_binds_its_id_and_a_repeat_is_not_a_change() {
+        let declared = Resources::default().mtls_certificates(&[("MTLS_BACKEND", "acme-client")]);
+        let dir = std::env::temp_dir().join(format!("bynk-mtls-{}", std::process::id()));
+        std::fs::create_dir_all(&dir).unwrap();
+        let path = dir.join("bynk.deploy.lock");
+        let config = dir.join("wrangler.toml");
+        std::fs::write(
+            &config,
+            "name = \"shop-backend\"\n\n[[mtls_certificates]]\nbinding = \"MTLS_BACKEND\"\ncertificate_id = \"acme-client\" # the certificate's name\n",
+        )
+        .unwrap();
+        let linked = BTreeMap::from([(
+            ("shop".to_string(), "MTLS_BACKEND".to_string()),
+            "c-123".to_string(),
         )]);
-        assert!(!link_mtls_for_run(&["shop".to_string()], &with));
-        let without = BTreeMap::from([("shop".to_string(), Resources::default())]);
-        assert!(link_mtls_for_run(&["shop".to_string()], &without));
+        let mut lock = DeployLock::default();
+        record_mtls_links(
+            "shop",
+            &declared,
+            &linked,
+            &mut lock,
+            &path,
+            &config,
+            "production",
+        )
+        .unwrap();
+        let link = MtlsCertificateLink {
+            certificate: "acme-client".into(),
+            certificate_id: "c-123".into(),
+        };
+        assert_eq!(
+            recorded_mtls_certificate(&lock, "shop", "MTLS_BACKEND", "production"),
+            Some(&link)
+        );
+        // The id replaced the name in the config the push reads, and nothing else changed.
+        let text = std::fs::read_to_string(&config).unwrap();
+        assert!(
+            text.contains("certificate_id = \"c-123\" # the certificate's name"),
+            "{text}"
+        );
+        assert!(!lock.record_mtls_certificate("production", "shop", "MTLS_BACKEND", link));
+        // The ledger carries a name and an id, never key material, and omits the section when empty.
+        let written = std::fs::read_to_string(&path).unwrap();
+        assert!(written.contains("mtls_certificate_links"), "{written}");
+        assert!(
+            !written.contains("PRIVATE") && !written.contains("private_key"),
+            "{written}"
+        );
+        assert!(
+            !serde_json::to_string(&DeployLock::default())
+                .unwrap()
+                .contains("mtls_certificate_links")
+        );
+        // A binding the run did not link is a bug, named.
+        let err = record_mtls_links(
+            "shop",
+            &declared,
+            &BTreeMap::new(),
+            &mut lock,
+            &path,
+            &config,
+            "production",
+        )
+        .unwrap_err();
+        assert!(format!("{err:?}").contains("was not linked"), "{err:?}");
+        std::fs::remove_dir_all(&dir).ok();
+    }
+
+    // ---- #3513 A: an mTLS certificate is linked by name, never uploaded ----
+
+    fn cert(id: &str, name: Option<&str>, ca: bool, expires: Option<&str>) -> MtlsRecord {
+        MtlsRecord {
+            id: id.into(),
+            name: name.map(str::to_string),
+            ca,
+            expires_on: expires.map(str::to_string),
+        }
+    }
+
+    struct FakeCerts(Result<Vec<MtlsRecord>, String>, RefCell<usize>);
+    impl MtlsCertificates for FakeCerts {
+        fn list(&self) -> Result<Vec<MtlsRecord>, String> {
+            *self.1.borrow_mut() += 1;
+            self.0.clone()
+        }
+    }
+
+    fn mtls_project(binding_certs: &[(&str, &str)]) -> (Vec<String>, BTreeMap<String, Resources>) {
+        (
+            vec!["shop".to_string()],
+            BTreeMap::from([(
+                "shop".to_string(),
+                Resources::default().mtls_certificates(binding_certs),
+            )]),
+        )
+    }
+
+    fn at(date: &str) -> time::OffsetDateTime {
+        time::OffsetDateTime::parse(date, &time::format_description::well_known::Rfc3339).unwrap()
+    }
+
+    #[test]
+    fn a_named_client_certificate_links_to_its_id_with_one_listing() {
+        let (order, resources) =
+            mtls_project(&[("MTLS_A", "acme"), ("MTLS_B", "acme"), ("MTLS_C", "ops")]);
+        let certs = FakeCerts(
+            Ok(vec![
+                cert("c1", Some("acme"), false, Some("2122-01-01T00:00:00Z")),
+                cert("c2", Some("ops"), false, None),
+                cert("c3", None, false, None),
+            ]),
+            RefCell::new(0),
+        );
+        let links = link_mtls(&order, &resources, &certs, at("2026-11-15T00:00:00Z"));
+        assert!(
+            links.problems.is_empty() && links.warnings.is_empty(),
+            "{:?}",
+            links.problems
+        );
+        assert_eq!(links.linked[&("shop".into(), "MTLS_A".into())], "c1");
+        assert_eq!(links.linked[&("shop".into(), "MTLS_B".into())], "c1");
+        assert_eq!(links.linked[&("shop".into(), "MTLS_C".into())], "c2");
+        assert_eq!(
+            *certs.1.borrow(),
+            1,
+            "the account is listed once, not per binding"
+        );
+    }
+
+    #[test]
+    fn a_missing_certificate_is_a_problem_that_says_where_to_upload_one() {
+        let (order, resources) = mtls_project(&[("MTLS_A", "acme")]);
+        let certs = FakeCerts(
+            Ok(vec![cert("c1", Some("other"), false, None)]),
+            RefCell::new(0),
+        );
+        let links = link_mtls(&order, &resources, &certs, at("2026-11-15T00:00:00Z"));
+        assert_eq!(links.problems.len(), 1);
+        let p = &links.problems[0];
+        assert!(p.contains("`acme`") && p.contains("does not exist"), "{p}");
+        assert!(p.contains("wrangler mtls-certificate upload"), "{p}");
+        assert!(p.contains("never uploads"), "{p}");
+        assert!(links.linked.is_empty());
+    }
+
+    #[test]
+    fn two_client_certificates_with_one_name_are_a_problem_naming_both_ids() {
+        let (order, resources) = mtls_project(&[("MTLS_A", "acme")]);
+        let certs = FakeCerts(
+            Ok(vec![
+                cert("c1", Some("acme"), false, None),
+                cert("c2", Some("acme"), false, None),
+            ]),
+            RefCell::new(0),
+        );
+        let links = link_mtls(&order, &resources, &certs, at("2026-11-15T00:00:00Z"));
+        assert!(links.problems[0].contains("c1, c2"), "{:?}", links.problems);
+        assert!(links.linked.is_empty());
+    }
+
+    #[test]
+    fn a_ca_certificate_is_never_linked_and_is_named_as_one() {
+        let (order, resources) = mtls_project(&[("MTLS_A", "acme")]);
+        // Only a CA carries the name: a distinct problem, not "does not exist".
+        let only_ca = FakeCerts(
+            Ok(vec![cert("c1", Some("acme"), true, None)]),
+            RefCell::new(0),
+        );
+        let links = link_mtls(&order, &resources, &only_ca, at("2026-11-15T00:00:00Z"));
+        assert!(
+            links.problems[0].contains("CA certificate"),
+            "{:?}",
+            links.problems
+        );
+        // A CA beside the client certificate is not an ambiguity: the client one is linked.
+        let both = FakeCerts(
+            Ok(vec![
+                cert("c1", Some("acme"), true, None),
+                cert("c2", Some("acme"), false, None),
+            ]),
+            RefCell::new(0),
+        );
+        let links = link_mtls(&order, &resources, &both, at("2026-11-15T00:00:00Z"));
+        assert!(links.problems.is_empty(), "{:?}", links.problems);
+        assert_eq!(links.linked[&("shop".into(), "MTLS_A".into())], "c2");
+    }
+
+    #[test]
+    fn an_expired_or_soon_expiring_certificate_is_a_warning_not_a_failure() {
+        let (order, resources) = mtls_project(&[("MTLS_A", "acme")]);
+        let now = at("2026-11-15T00:00:00Z");
+        for (expires, says) in [
+            ("2026-11-01T00:00:00Z", "it expired on"),
+            ("2026-11-30T00:00:00Z", "in 15 days"),
+        ] {
+            let certs = FakeCerts(
+                Ok(vec![cert("c1", Some("acme"), false, Some(expires))]),
+                RefCell::new(0),
+            );
+            let links = link_mtls(&order, &resources, &certs, now);
+            assert!(links.problems.is_empty(), "{:?}", links.problems);
+            assert_eq!(links.linked.len(), 1, "still linked");
+            assert!(links.warnings[0].contains(says), "{:?}", links.warnings);
+        }
+        // Far off, or a date that is not RFC 3339, says nothing.
+        for expires in ["2030-01-01T00:00:00Z", "tomorrow"] {
+            let certs = FakeCerts(
+                Ok(vec![cert("c1", Some("acme"), false, Some(expires))]),
+                RefCell::new(0),
+            );
+            assert!(
+                link_mtls(&order, &resources, &certs, now)
+                    .warnings
+                    .is_empty()
+            );
+        }
+    }
+
+    #[test]
+    fn a_failed_listing_is_a_problem_per_binding_naming_the_certificate() {
+        let (order, resources) = mtls_project(&[("MTLS_A", "acme"), ("MTLS_B", "ops")]);
+        let certs = FakeCerts(Err("GET /mtls_certificates: boom".into()), RefCell::new(0));
+        let links = link_mtls(&order, &resources, &certs, at("2026-11-15T00:00:00Z"));
+        assert_eq!(links.problems.len(), 2);
+        assert!(links.problems[0].contains("could not look it up: GET /mtls_certificates: boom"));
+        assert_eq!(
+            *certs.1.borrow(),
+            1,
+            "the account is asked once, and its answer (a failure too) serves every binding"
+        );
+    }
+
+    #[test]
+    fn the_rest_client_follows_every_page_and_reads_only_what_linking_needs() {
+        let (base, seen) = stub(vec![
+            (
+                "/mtls_certificates?per_page=100&page=1",
+                r#"{"success":true,"result":[{"id":"c1","name":"acme","ca":false,"expires_on":"2122-10-29T16:59:47Z","certificates":"-----BEGIN CERTIFICATE-----"}],"result_info":{"total_pages":2}}"#.into(),
+            ),
+            (
+                "/mtls_certificates?per_page=100&page=2",
+                r#"{"success":true,"result":[{"id":"c2","ca":true}],"result_info":{"total_pages":2}}"#.into(),
+            ),
+        ]);
+        let api = RestMtls { rest: rest(base) };
+        assert_eq!(
+            api.list().unwrap(),
+            vec![
+                cert("c1", Some("acme"), false, Some("2122-10-29T16:59:47Z")),
+                cert("c2", None, true, None),
+            ]
+        );
+        let seen = seen.lock().unwrap();
+        assert!(
+            seen[0].starts_with("/accounts/acct/mtls_certificates?"),
+            "{seen:?}"
+        );
+    }
+
+    #[test]
+    fn a_refused_token_names_the_permission_it_needs() {
+        let (base, _) = stub(vec![(
+            "/mtls_certificates?per_page=100&page=1",
+            r#"{"success":false,"errors":[{"code":10000,"message":"Authentication error"}],"result":[]}"#.into(),
+        )]);
+        let said = RestMtls { rest: rest(base) }.list().unwrap_err();
+        assert!(said.contains(MTLS_TOKEN_SCOPE), "{said}");
+    }
+
+    #[test]
+    fn a_run_with_no_certificate_asks_nothing_and_links_nothing() {
+        let order = vec!["shop".to_string()];
+        let resources = BTreeMap::from([("shop".to_string(), Resources::default())]);
+        assert_eq!(link_mtls_for_run(&order, &resources), Some(BTreeMap::new()));
     }
 }

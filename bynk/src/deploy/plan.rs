@@ -135,6 +135,11 @@ struct ContextPlan<'a> {
     /// claim it exists.
     #[serde(skip_serializing_if = "Vec::is_empty")]
     ai_search: Vec<PlanAiSearch<'a>>,
+    /// #3513 A: one line per mTLS certificate the Worker presents, in binding order. Linked: found
+    /// on the account before the push and never uploaded, and asked after authenticating, so the
+    /// plan, which stays offline under `--dry-run`, does not claim it exists.
+    #[serde(skip_serializing_if = "Vec::is_empty")]
+    mtls_certificates: Vec<PlanMtlsCertificate<'a>>,
     /// #1796: one line per Durable Object class the push declares in
     /// `exports`, in class-name order. Empty for a context with no agent and
     /// no events fan-out.
@@ -196,6 +201,14 @@ struct ContextPlan<'a> {
 struct PlanAiSearch<'a> {
     binding: &'a str,
     instance: &'a str,
+}
+
+/// #3513 A: one `MtlsCertificate` instance's link. No action: `bynk deploy` neither uploads nor
+/// changes the certificate.
+#[derive(Debug, Serialize)]
+struct PlanMtlsCertificate<'a> {
+    binding: &'a str,
+    certificate: &'a str,
 }
 
 /// #3301: one `StoredSecret` instance's link. No action: `bynk deploy`
@@ -1201,9 +1214,8 @@ pub fn run(
     let Some(linked_stores) = link_for_run(&order, &resources) else {
         return ExitCode::FAILURE;
     };
-    // #3480: an AI Search instance too: found by name, never created. So is an mTLS certificate
-    // (#3513 A).
-    if !link_named_resources_for_run(&order, &resources) {
+    // #3480: an AI Search instance too: found by name, never created.
+    if !link_ai_search_for_run(&order, &resources) {
         return ExitCode::FAILURE;
     }
     // #3319: the Hyperdrive API client, checked here, before the confirmation,
@@ -2339,6 +2351,14 @@ pub(crate) fn plan_report(plan: &Plan<'_>, format: DeployFormat) -> String {
                         search.instance, search.binding
                     ));
                 }
+                // #3513 A: linked the same way, and worded for the same reason: the plan has
+                // not looked the certificate up.
+                for cert in &context.mtls_certificates {
+                    out.push_str(&format!(
+                        "will link mtls-certificate {} ({}; not created; not checked in a dry run)\n",
+                        cert.certificate, cert.binding
+                    ));
+                }
                 // Interop I5 (#1972): bound, not provisioned — the Worker is
                 // not Bynk's, so the line says so rather than an action.
                 for service in &context.foreign_services {
@@ -2730,6 +2750,14 @@ pub(crate) fn derive_plan<'a>(
                         .map(|s| PlanAiSearch {
                             binding: &s.binding,
                             instance: &s.instance,
+                        })
+                        .collect(),
+                    mtls_certificates: declared
+                        .mtls_certificates
+                        .iter()
+                        .map(|c| PlanMtlsCertificate {
+                            binding: &c.binding,
+                            certificate: &c.certificate,
                         })
                         .collect(),
                     durable_objects: declared
@@ -3989,6 +4017,37 @@ pub(crate) mod tests {
         let json: serde_json::Value =
             serde_json::from_str(&plan_report(&plan, DeployFormat::Json)).unwrap();
         assert!(json["contexts"][0].get("stored_secrets").is_none());
+    }
+
+    // ---- #3513 A: mTLS certificates are linked, never uploaded ----
+
+    #[test]
+    fn an_mtls_certificate_is_a_linked_plan_line_with_no_action() {
+        let resources = project(vec![(
+            "shop-backend",
+            Resources::default().mtls_certificates(&[("MTLS_BACKEND", "acme-client")]),
+        )]);
+        let order = names(&["shop-backend"]);
+        let plan = plan_of(&order, &resources, &DeployLock::default());
+        assert_eq!(
+            plan_report(&plan, DeployFormat::Short),
+            "will link mtls-certificate acme-client (MTLS_BACKEND; not created; not checked in a dry run)\ndeploy shop-backend\n"
+        );
+        let json: serde_json::Value =
+            serde_json::from_str(&plan_report(&plan, DeployFormat::Json)).unwrap();
+        assert_eq!(
+            json["contexts"][0]["mtls_certificates"],
+            serde_json::json!([{
+                "binding": "MTLS_BACKEND",
+                "certificate": "acme-client"
+            }])
+        );
+        // A project without one has no such key, so its machine surface is unchanged.
+        let plain = project(vec![("shop-backend", Resources::default())]);
+        let plan = plan_of(&order, &plain, &DeployLock::default());
+        let json: serde_json::Value =
+            serde_json::from_str(&plan_report(&plan, DeployFormat::Json)).unwrap();
+        assert!(json["contexts"][0].get("mtls_certificates").is_none());
     }
 
     // ---- #3480: AI Search instances are linked, never created ----

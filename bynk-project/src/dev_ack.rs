@@ -47,6 +47,11 @@ pub const REMOTE_KINDS: &[RemoteKind] = &[
         key: "ai-search",
         var: "BYNK_DEV_ACK_AI_SEARCH",
     },
+    // #3513 A: an mTLS certificate binding runs on Cloudflare under `bynk dev`.
+    RemoteKind {
+        key: "mtls",
+        var: "BYNK_DEV_ACK_MTLS",
+    },
 ];
 
 /// The variable `bynk dev` sets to `1` on every Worker it serves, so a

@@ -317,6 +317,53 @@ t("WorkersMtls.send: each instance reads its own binding", async () => {
   assert.equal(b.sent.length, 1);
 });
 
+t("WorkersMtls.receiveBytes: reads the response body as bytes, over the binding", async () => {
+  const cert = fakeService(() => new Response(new Uint8Array([0, 255, 7]), { status: 200 }));
+  const res = await new WorkersMtls({ MTLS_BACKEND: cert }, "MTLS_BACKEND").receiveBytes(mtlsRequest());
+  assert.equal(res.tag, "Ok");
+  assert.deepEqual([...res.value.body], [0, 255, 7]);
+  assert.equal(cert.sent.length, 1);
+});
+
+t("WorkersMtls.sendBytes: sends a Bytes body over the binding", async () => {
+  const cert = fakeService(() => new Response("ok", { status: 200 }));
+  const res = await new WorkersMtls({ MTLS_BACKEND: cert }, "MTLS_BACKEND").sendBytes(
+    mtlsRequest({ method: Method.Post }),
+    new Uint8Array([1, 2, 3]),
+  );
+  assert.equal(res.tag, "Ok");
+  assert.equal(cert.sent[0].method, "POST");
+  assert.equal(cert.sent[0].body, "\u0001\u0002\u0003");
+});
+
+t("WorkersMtls.sendBytes: a refused header is Err(InvalidHeader), and nothing is sent", async () => {
+  const cert = fakeService();
+  const res = await new WorkersMtls({ MTLS_BACKEND: cert }, "MTLS_BACKEND").sendBytes(
+    mtlsRequest({ method: Method.Post, headers: new Map([["host", "elsewhere"]]) }),
+    new Uint8Array([1]),
+  );
+  assert.deepEqual(res, { tag: "Err", error: FetchError.InvalidHeader });
+  assert.equal(cert.sent.length, 0);
+});
+
+t("WorkersMtls.send: a dev notice names no price, and is silenced by the acknowledgement", async () => {
+  const warned = [];
+  const warn = console.warn;
+  console.warn = (m) => warned.push(m);
+  try {
+    const cert = fakeService();
+    const dev = { MTLS_BACKEND: cert, BYNK_DEV: "1" };
+    await new WorkersMtls(dev, "MTLS_BACKEND").send(mtlsRequest());
+    await new WorkersMtls(dev, "MTLS_BACKEND").send(mtlsRequest());
+    assert.equal(warned.length, 1, "once");
+    assert.match(warned[0], /mTLS certificate binding has no local simulation/);
+    assert.match(warned[0], /mtls = "allow" under \[dev\]/);
+    assert.doesNotMatch(warned[0], /charge|price|pricing|\$/i);
+  } finally {
+    console.warn = warn;
+  }
+});
+
 t("WorkersMtls.send: a missing binding names it", async () => {
   await assert.rejects(
     new WorkersMtls({}, "MTLS_BACKEND").send(mtlsRequest()),

@@ -44,7 +44,36 @@ export default {
           return method === "HEAD" ? __headResponse(__response) : __response;
         }
       }
+      {
+        if ((method === "GET" || method === "HEAD") && path === "/orders/raw") {
+          __route = "GET /orders/raw";
+          const result = await surface.http_GET_orders_raw();
+          const __response = __applySecurityHeaders(__notModifiedIfMatch(__httpResultToResponse(result, (__v: number) => ((v: number) => { if (!globalThis.Number.isSafeInteger(v)) throw new globalThis.Error("Int outside the safe-integer range at boundary"); return v as __JsonValue; })(__v), { weakEtag: true }), request), __security_api);
+          return method === "HEAD" ? __headResponse(__response) : __response;
+        }
+      }
+      {
+        if (method === "POST" && path === "/orders") {
+          __route = "POST /orders";
+          let __body_json: __JsonValue;
+          try {
+            __body_json = (await request.json()) as __JsonValue;
+          } catch {
+            return __applySecurityHeaders(new globalThis.Response(globalThis.JSON.stringify({ kind: "MalformedJson", details: "Invalid request body" }), { status: 400, headers: { "content-type": "application/json" } }), __security_api);
+          }
+          const __r_body = ((__v) => typeof __v === "string" ? Ok(__v) : Err({ kind: "StructuralMismatch", path: "$", expected: "string", actual: typeof __v } as __BoundaryError))(__body_json);
+          if (__r_body.tag === "Err") return __applySecurityHeaders(new globalThis.Response(globalThis.JSON.stringify(__r_body.error), { status: 400, headers: { "content-type": "application/json" } }), __security_api);
+          const body = __r_body.value;
+          const result = await surface.http_POST_orders(body);
+          return __applySecurityHeaders(__httpResultToResponse(result, (__v: number) => ((v: number) => { if (!globalThis.Number.isSafeInteger(v)) throw new globalThis.Error("Int outside the safe-integer range at boundary"); return v as __JsonValue; })(__v)), __security_api);
+        }
+      }
       if (path === "/orders") {
+        const __status = method === "OPTIONS" ? 204 : 405;
+        const __res = new globalThis.Response(null, { status: __status, headers: { allow: "GET, HEAD, OPTIONS, POST" } });
+        return __applySecurityHeaders(__res, __security_api);
+      }
+      if (path === "/orders/raw") {
         const __status = method === "OPTIONS" ? 204 : 405;
         const __res = new globalThis.Response(null, { status: __status, headers: { allow: "GET, HEAD, OPTIONS" } });
         return __applySecurityHeaders(__res, __security_api);

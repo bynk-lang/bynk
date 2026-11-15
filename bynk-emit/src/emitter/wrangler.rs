@@ -1693,6 +1693,43 @@ pub fn materialise_stored_secret_stores(
     })
 }
 
+/// #3513 A: point `[[mtls_certificates]]` entries at their certificates' ids, structurally, by
+/// binding. Unchanged text when nothing differs.
+pub fn materialise_mtls_certificates(
+    text: &str,
+    certificates: &std::collections::BTreeMap<String, String>,
+) -> Result<String, String> {
+    let mut doc: toml_edit::DocumentMut = text
+        .parse()
+        .map_err(|e| format!("invalid wrangler.toml: {e}"))?;
+    let mut changed = false;
+    if let Some(entries) = doc
+        .get_mut("mtls_certificates")
+        .and_then(|i| i.as_array_of_tables_mut())
+    {
+        for entry in entries.iter_mut() {
+            let Some(id) = entry
+                .get("binding")
+                .and_then(|b| b.as_str())
+                .and_then(|b| certificates.get(b))
+            else {
+                continue;
+            };
+            if let Some(item) = entry.get_mut("certificate_id")
+                && item.as_str() != Some(id.as_str())
+            {
+                set_string_preserving_decor(item, id);
+                changed = true;
+            }
+        }
+    }
+    Ok(if changed {
+        doc.to_string()
+    } else {
+        text.to_string()
+    })
+}
+
 /// A generated `wrangler.toml`'s `[[r2_buckets]]` entries as `(binding,
 /// bucket_name, jurisdiction)`, in file order; an entry missing a binding or
 /// a name is skipped.
@@ -1953,6 +1990,47 @@ pub fn enable_remote_ai_search(text: &str) -> Result<String, String> {
     })
 }
 
+/// #3513 A: the binding of each `[[mtls_certificates]]` entry, in file order.
+pub fn mtls_certificate_bindings(text: &str) -> Result<Vec<String>, String> {
+    let doc: toml_edit::DocumentMut = text
+        .parse()
+        .map_err(|e| format!("invalid wrangler.toml: {e}"))?;
+    Ok(doc
+        .get("mtls_certificates")
+        .and_then(|i| i.as_array_of_tables())
+        .into_iter()
+        .flatten()
+        .filter_map(|t| Some(t.get("binding")?.as_str()?.to_string()))
+        .collect())
+}
+
+/// #3513 A: the config `bynk dev` serves, where each `[[mtls_certificates]]` entry also carries
+/// `remote = true`: there is no local simulation of an mTLS binding, so wrangler runs it on
+/// Cloudflare. Only ever applied to the development copy; the config `bynk deploy` reads never
+/// carries it. Unchanged text when there is no such entry.
+pub fn enable_remote_mtls(text: &str) -> Result<String, String> {
+    let mut doc: toml_edit::DocumentMut = text
+        .parse()
+        .map_err(|e| format!("invalid wrangler.toml: {e}"))?;
+    let mut changed = false;
+    if let Some(entries) = doc
+        .get_mut("mtls_certificates")
+        .and_then(|i| i.as_array_of_tables_mut())
+    {
+        for entry in entries.iter_mut() {
+            if entry.get("remote").and_then(|r| r.as_bool()) != Some(true) {
+                entry.insert("remote", toml_edit::value(true));
+                changed = true;
+            }
+        }
+    }
+    Ok(if changed {
+        doc.to_string()
+    } else {
+        text.to_string()
+    })
+}
+
 /// Each `[[kv_namespaces]]` entry's `(binding, id)`, in file order; an entry
 /// missing either is skipped.
 fn kv_entries(doc: &toml_edit::DocumentMut) -> impl Iterator<Item = (&str, &str)> {
@@ -1961,6 +2039,53 @@ fn kv_entries(doc: &toml_edit::DocumentMut) -> impl Iterator<Item = (&str, &str)
         .into_iter()
         .flatten()
         .filter_map(|t| Some((t.get("binding")?.as_str()?, t.get("id")?.as_str()?)))
+}
+
+#[cfg(test)]
+mod mtls_tests {
+    use super::*;
+
+    const CONFIG: &str = "name = \"shop\"\n\n[[mtls_certificates]]\nbinding = \"MTLS_BACKEND\"\ncertificate_id = \"acme-client\" # the certificate's name\n\n[[mtls_certificates]]\nbinding = \"MTLS_OTHER\"\ncertificate_id = \"ops\"\n";
+
+    #[test]
+    fn the_stanza_names_the_certificate_and_a_binding_lists_each_entry() {
+        assert_eq!(
+            mtls_certificate_bindings(CONFIG).unwrap(),
+            ["MTLS_BACKEND", "MTLS_OTHER"]
+        );
+        assert!(
+            mtls_certificate_bindings("name = \"shop\"\n")
+                .unwrap()
+                .is_empty()
+        );
+    }
+
+    #[test]
+    fn materialising_replaces_only_the_linked_bindings_ids_and_keeps_the_comment() {
+        let ids =
+            std::collections::BTreeMap::from([("MTLS_BACKEND".to_string(), "c-123".to_string())]);
+        let out = materialise_mtls_certificates(CONFIG, &ids).unwrap();
+        assert!(
+            out.contains("certificate_id = \"c-123\" # the certificate's name"),
+            "{out}"
+        );
+        assert!(out.contains("certificate_id = \"ops\""), "{out}");
+        // A repeat changes nothing.
+        assert_eq!(materialise_mtls_certificates(&out, &ids).unwrap(), out);
+        assert!(materialise_mtls_certificates("not = [valid", &ids).is_err());
+    }
+
+    #[test]
+    fn the_development_copy_runs_each_binding_on_the_account() {
+        let out = enable_remote_mtls(CONFIG).unwrap();
+        assert_eq!(out.matches("remote = true").count(), 2, "{out}");
+        assert_eq!(enable_remote_mtls(&out).unwrap(), out);
+        let plain = "name = \"shop\"\n";
+        assert_eq!(enable_remote_mtls(plain).unwrap(), plain);
+        assert!(enable_remote_mtls("not = [valid").is_err());
+        // The config the deploy reads is the original, which never carries it.
+        assert!(!CONFIG.contains("remote"));
+    }
 }
 
 #[cfg(test)]

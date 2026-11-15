@@ -975,6 +975,40 @@ no read-only one); a refusal says so. The instance's name is used as declared in
 every environment, without an environment suffix, so a staging deploy reads the
 same instance as production, and `--prune` never touches one.
 
+### mTLS certificates
+
+An `MtlsCertificate` instance
+(`capability Backend = MtlsCertificate @certificate("acme-client")`) presents a client
+certificate to an origin that requires mutual TLS. The certificate is uploaded to the
+account by whoever owns it, with its private key, so deploy **links** it and never
+uploads it: the key never passes through Bynk. Before anything is pushed,
+`bynk deploy` lists the account's mTLS certificates, matches the name in
+`@certificate`, writes the certificate's id into the Worker's configuration and
+records the link in `bynk.deploy.lock` (a name and an id, never key material). A
+certificate that is not there fails the deploy, naming it and where to upload one:
+
+```
+bynk: `MTLS_BACKEND` of `shop-backend` presents mTLS certificate `acme-client`, which does not exist on this account. `bynk deploy` links to a certificate and never uploads one, so its private key never passes through Bynk: upload it with `wrangler mtls-certificate upload --cert … --key … --name acme-client`, the dashboard or the API, or name the certificate the account has
+```
+
+Every problem is reported together. A name that two client certificates carry fails the
+deploy naming both ids. The account's list also holds CA certificates, which have no private
+key for a Worker to present, so a name matches client certificates only, and a name carried
+only by a CA is its own message. A certificate that has expired, or expires within 30 days, is
+a warning and not a failure, since the Worker deploys fine and fails at the handshake once the
+certificate has expired. The plan shows the binding as a link to be made, with no action:
+
+```
+will link mtls-certificate acme-client (MTLS_BACKEND; not created; not checked in a dry run)
+```
+
+`--dry-run` stays offline and does not ask, so the plan says "will link" and has not verified
+that the certificate exists. The lookup uses Cloudflare's API, so it needs
+`CLOUDFLARE_API_TOKEN` and `CLOUDFLARE_ACCOUNT_ID`, the token with the "SSL and Certificates:
+Read" permission; a refusal says so. The certificate's name is used as declared in every
+environment, so a staging deploy presents the same certificate as production, and `--prune`
+never touches a link.
+
 ### Sender domains: Email Sending
 
 An `Email` instance with `@allowedSenders`

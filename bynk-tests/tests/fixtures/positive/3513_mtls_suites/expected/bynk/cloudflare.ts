@@ -1862,8 +1862,10 @@ export const __ContainerToken: symbol = globalThis.Symbol("Container");
  *
  * The certificate is uploaded to the account by its owner (Wrangler's
  * `mtls-certificate upload`, the dashboard or the API) and is named there;
- * `@certificate` names it, as written in every environment. Bynk never uploads
- * a certificate: its private key never reaches Bynk or the Worker.
+ * `@certificate` names it, as written in every environment. The deploy links to
+ * it by that name and never uploads it: its private key never reaches Bynk or
+ * the Worker. A name that no uploaded client certificate carries, or that more
+ * than one carries, fails the deploy with the problem named.
  *
  * `send` has `Fetch.send`'s shape and rules: the same `Request` (its headers
  * checked the same way, refused as `InvalidHeader` before anything is sent),
@@ -1876,14 +1878,22 @@ export const __ContainerToken: symbol = globalThis.Symbol("Container");
  * Cloudflare does not support presenting a certificate to an origin that is a
  * proxied zone on Cloudflare; the call fails with a `520`. See Cloudflare's
  * mTLS bindings page for the current rules. There is no local simulation of
- * the binding, and `bynkc test` faults until the call is stubbed, so a test
- * never reaches the origin.
+ * the binding: `bynk dev` runs it on Cloudflare, once you allow it, and
+ * `bynkc test` faults until the call is stubbed, so a test never reaches the
+ * origin.
  *
- * `Request`, `Response` and `FetchError` are `bynk`'s types, so a context that
- * calls `send` also writes `consumes bynk` to name them.
+ * `receiveBytes` and `sendBytes` are `Fetch`'s byte forms over the same
+ * certificate: the response body as `Bytes`, and a `Bytes` request body (which
+ * `req.body` must then leave `None`), each with `Fetch`'s defaults for the
+ * timeout and redirects.
+ *
+ * `Request`, `Response`, `BytesResponse` and `FetchError` are `bynk`'s types, so
+ * a context that calls them also writes `consumes bynk` to name them.
  */
 export interface MtlsCertificate {
   send(req: Request): globalThis.Promise<Result<Response, FetchError>>;
+  receiveBytes(req: Request): globalThis.Promise<Result<BytesResponse, FetchError>>;
+  sendBytes(req: Request, body: globalThis.Uint8Array): globalThis.Promise<Result<BytesResponse, FetchError>>;
 }
 
 export const __MtlsCertificateToken: symbol = globalThis.Symbol("MtlsCertificate");

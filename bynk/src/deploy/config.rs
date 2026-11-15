@@ -1419,6 +1419,27 @@ pub(crate) fn materialise_stored_secret_stores(
     std::fs::write(path, patched).is_ok()
 }
 
+/// #3513 A: materialise each linked `MtlsCertificate`'s certificate id into the generated config at
+/// `path`, by binding. A named environment's block copies the stanza from here
+/// ([`synthesise_environment_block`]).
+pub(crate) fn materialise_mtls_certificates(
+    path: &Path,
+    certificates: &BTreeMap<String, String>,
+) -> bool {
+    let Ok(text) = std::fs::read_to_string(path) else {
+        return false;
+    };
+    let Ok(patched) =
+        bynk_emit::emitter::wrangler::materialise_mtls_certificates(&text, certificates)
+    else {
+        return false;
+    };
+    if patched == text {
+        return true;
+    }
+    std::fs::write(path, patched).is_ok()
+}
+
 /// P5 (#2323): why `name` cannot be an R2 bucket's, or `None` when it can.
 /// R2 takes 3 to 63 characters of lowercase letters, digits and hyphens, not
 /// starting or ending with a hyphen. Checked at plan time, so a derived name
