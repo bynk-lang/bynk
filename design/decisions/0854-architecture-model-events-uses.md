@@ -1,11 +1,6 @@
----
-level: patch
-changelog: `bynk/architectureModel` lists each event's emitters and subscribers and each handler's capability use (`given`, with the suites that `stub` it)
----
+# 0854 — `bynk/architectureModel` carries event emitters and subscribers and each handler's capability use
 
-## ADR: architecture-model-events-uses
-title: `bynk/architectureModel` carries event emitters and subscribers and each handler's capability use
-summary: The architecture model extends one request with additive `events` and per-node `uses` sections, read from the checker's resolved view
+- **Status:** Accepted (v0.625.3)
 
 **Context.** Event subscriptions were computed only to be validated, and a handler's resolved `given` was read only for the sequence diagram. A client asking "who emits this event?" or "what can this context touch?" could only search text, which breaks on aliases and `consumes` qualification (#3583).
 

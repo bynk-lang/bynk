@@ -1,12 +1,6 @@
----
-level: minor
-changelog: An `on http` handler takes a fifth special parameter, `cf: RequestCf`, the optional facts Cloudflare derived about the connection (Cloudflare-only, experimental)
-probes: diagnostic_coverage, emit_diagnostics, explained_codes
----
+# 0855 — `request.cf` is a fifth special handler parameter, `cf: RequestCf`
 
-## ADR: request-cf-handler-parameter
-title: `request.cf` is a fifth special handler parameter, `cf: RequestCf`
-summary: A record of optional Cloudflare-derived request facts, never a fault when absent, skipped by the client and OpenAPI
+- **Status:** Accepted (v0.626)
 
 **Context.** Cloudflare derives facts about a request's connection (country, colo,
 ASN, TLS version) and exposes them as `request.cf`. Bynk had one such fact,
