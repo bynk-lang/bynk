@@ -14,6 +14,9 @@
 //!   secret really comes from the environment, not a fixed test value;
 //! - a case a remote run can't honour (`advance Clock`) refuses the run, and
 //!   `--skip-unsupported` skips it, naming why;
+//! - a case that reads a participant's test database with `D1.peek` (#3147) is
+//!   refused like the others, and skipped under `--skip-unsupported`: a
+//!   deployment has no in-process database;
 //! - a bare URL, an unknown name, a `production = true` target and a missing
 //!   secret are each refused before any request.
 //!
@@ -502,5 +505,88 @@ fn unsafe_targets_are_refused_before_any_request() {
         assert!(message.contains(needle), "{args:?}: {message}");
         assert!(!dir.join("out").exists(), "{args:?}: nothing is built");
     }
+    let _ = fs::remove_dir_all(&dir);
+}
+
+/// #3147: `D1.peek` reads the participant's in-process test database, which a
+/// deployment has none of, so a case that uses it is refused against a target
+/// (`bynk.test.remote_unsupported_peek`), like the other cases a real runtime
+/// can't honour, and skipped with its reason under `--skip-unsupported`, while
+/// the rest of the suite runs.
+#[test]
+fn a_case_that_peeks_is_refused_or_skipped_against_a_target() {
+    if !runner_available() {
+        return;
+    }
+    let dir = scratch("peek");
+    let source = SOURCE.replacen(
+        "context shop.api\n",
+        "context shop.api\n\nconsumes bynk.cloudflare { D1 }\n\ncapability Notes = D1\n",
+        1,
+    );
+    let suite = r#"suite shop.api as system {
+  case "a created item is counted over the wire" {
+    let item <- api.POST("/cart", Item { sku: "w" }) by User("alice")
+    expect item is Created(_)
+    let n <- api.GET("/cart/size") by User("alice")
+    expect n is Ok(1)
+  }
+  case "the database is read" {
+    let db = D1.peek(shop.api.Notes)
+    let rows <- db.all("SELECT 1", [])
+    expect rows is Ok(_)
+  }
+}
+"#;
+    let target = |port: u16| {
+        format!(
+            "[test.targets.local]\nurl.shop-api = \"http://127.0.0.1:{port}\"\nsecrets = [\"AUTH_SECRET\"]\n"
+        )
+    };
+    // In process first, which writes the Worker the stand-in serves: both
+    // cases pass, the peeking one reading the real test database.
+    let proj = project(&dir, &[suite], "");
+    fs::write(proj.join("src/shop/api.bynk"), &source).unwrap();
+    let (ok, stdout, stderr) = bynk_test(&proj, &dir.join("build/out"), &[], &[]);
+    assert!(ok, "the in-process run passes\n{stdout}\n{stderr}");
+    assert_eq!(json(&stdout, &stderr)["passed"], 2, "{stdout}");
+
+    let (_stand_in, port) = start_stand_in(&dir, &dir.join("build/out-js"), "deployed-secret");
+    let proj = project(&dir, &[suite], &target(port));
+    fs::write(proj.join("src/shop/api.bynk"), &source).unwrap();
+    let (ok, stdout, stderr) = bynk_test(
+        &proj,
+        &dir.join("refused/out"),
+        &["--against", "local"],
+        &[("AUTH_SECRET", "deployed-secret")],
+    );
+    assert!(!ok, "the peeking case refuses the run");
+    assert!(
+        json(&stdout, &stderr)["error"]["diagnostics"]
+            .to_string()
+            .contains("bynk.test.remote_unsupported_peek"),
+        "{stdout}"
+    );
+    // ...and `--skip-unsupported` skips it, saying why.
+    let (ok, stdout, stderr) = bynk_test(
+        &proj,
+        &dir.join("remote/out"),
+        &["--against", "local", "--skip-unsupported"],
+        &[("AUTH_SECRET", "deployed-secret")],
+    );
+    let doc = json(&stdout, &stderr);
+    assert!(
+        ok,
+        "the other case passes, and none fails\n{stdout}\n{stderr}"
+    );
+    assert_eq!(doc["passed"], 1, "{doc}");
+    assert_eq!(doc["failed"], 0, "{doc}");
+    assert_eq!(doc["skipped"], 1, "{doc}");
+    let cases = doc["suites"].to_string();
+    assert!(
+        cases.contains("\"skipped\"")
+            && cases.contains("reads a participant's database with `D1.peek`"),
+        "{doc}"
+    );
     let _ = fs::remove_dir_all(&dir);
 }
