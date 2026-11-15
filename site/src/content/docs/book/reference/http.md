@@ -977,9 +977,28 @@ service archives from http {
 - **Answering without reading** is allowed: the unread body is discarded when the request
   ends. A client that is still sending a large body may see a reset instead of the
   response. A handler cannot read the request after it has returned, so read first, then
-  answer. Do not build a response from the request stream (a streamed echo through
-  `RawStreamed`): workerd allows it on its own, but it failed under `wrangler dev`'s
-  proxy, and it is not checked on Cloudflare's edge.
+  answer.
+- **Do not build a response from the request stream.** A handler that returns
+  `RawStreamed(body, …)`, or `RawStreamed(body.map(f), …)`, with the request's own `body`
+  (a streamed echo or transform) **passes its `bynk test` cases at every tier and then
+  fails under `wrangler dev`**. Nothing warns you: the compiler does not follow the stream
+  into the response, and the test runner has no proxy in front of the handler.
+  - *What happens.* With the pinned Wrangler (4.162.0 at the time of writing), a client that
+    sends a 256 KiB chunked body and then reads the response gets a `500`. The dev server logs `Uncaught TypeError: This
+    ReadableStream is currently locked to a reader` and `Error inside ProxyWorker … Network
+    connection lost`. The same route, reading the body to the end with `collect()` and then
+    answering, returns `200`.
+  - *What is not known.* Whether the fault is `wrangler dev`'s proxy or workerd itself, and
+    whether it also happens on Cloudflare's edge. Driving Miniflare directly (no dev proxy)
+    streamed 8 MiB back intact, and workerd separately refuses a read of the request body
+    after the response has been sent (`Can't read from request stream after response has
+    been sent`). Neither has been checked on a deployed Worker.
+  - *What to do.* Read the body (`collect()`, or hand it to a capability such as
+    `R2.putStream`) and then answer, as the `/archives/:name` example above does. To echo
+    bytes back, answer from what you collected. If a streamed answer is the point, take the
+    stream from a capability, not from the request.
+  - *Why there is no warning.* It is unconfirmed on the edge, and a diagnostic would be a new
+    one; see [#3396](https://github.com/bynk-lang/bynk/issues/3396) for the status.
 - **Retries and idempotency.** A request body cannot be replayed, so a client that retries
   sends it again. Take an [`Idempotency`](/book/reference/bynk-capabilities/#the-idempotency-capability)
   key from the request's head (a path segment or a header), not the body.
