@@ -2414,7 +2414,7 @@ impl Drop for LocalMySql {
 const MYSQL_SOURCE: &str = r#"context my.smoke
 
 consumes bynk
-consumes bynk.cloudflare { MySql, MySqlError, MySqlValue, MySqlRun, MySqlStatement }
+consumes bynk.cloudflare { MySql, MySqlError, MySqlReadError, MySqlValue, MySqlRun, MySqlStatement }
 
 capability Main = MySql
 capability Refused = MySql
