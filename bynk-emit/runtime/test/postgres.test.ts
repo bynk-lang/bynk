@@ -24,7 +24,7 @@ function fake(answer: (call: Call) => unknown) {
   const factory: PgFactory = (url, options) => {
     opened.push({ url, options });
     return {
-      // Mirrors postgres.js 3.4.5's `workerd` `sql.unsafe`: without an options
+      // Mirrors postgres.js's `sql.unsafe` (4.x, and 3.4.5's `workerd` build): without an options
       // argument the query is not prepared, which is the case the guard exists for.
       unsafe(sql: string, params: readonly unknown[], options: { prepare: boolean }) {
         const call: Call = { sql, params, options };
@@ -99,6 +99,9 @@ test("one connection per statement, opened with the connection string, ended aft
   assert.equal(f.opened[0]!.url, URL_WITH_SECRET);
   assert.equal(f.opened[0]!.options.max, 1);
   assert.equal(f.opened[0]!.options.fetch_types, false);
+  // postgres.js 4 types parameters on the server unless asked (3.x typed them from JavaScript):
+  // `infer: true` keeps `PgTimestamp`, `PgBoolean` and `PgBytea` binding as documented.
+  assert.equal(f.opened[0]!.options.infer, true);
   assert.equal(f.ended(), 2);
 });
 
@@ -459,4 +462,25 @@ test("only a connection string in the double's scheme can be registered", async 
     transaction: async () => ({ ok: true as const, rowCounts: [] }),
   });
   assert.throws(() => registerPgTestDouble("postgres://app:pw@db.example/shop", noop), /only a test double's connection string/);
+});
+
+// The premise of the guard above, read from the installed driver (ADR 0799 A): an
+// `unsafe` without the option is an unnamed, unprepared statement, so the option is
+// what makes Hyperdrive see the prepared statement it caches. A query is lazy: this
+// connects to nothing. If a driver upgrade changes the default, this fails and the
+// ADR's measurement needs another look.
+test("the installed postgres.js leaves sql.unsafe unprepared unless prepare: true is passed", async () => {
+  const { default: postgres } = (await import("postgres")) as unknown as {
+    default: (url: string, options: Record<string, unknown>) => {
+      unsafe(sql: string, params?: unknown[], options?: Record<string, unknown>): { options: { prepare?: boolean } };
+      end(options?: { timeout?: number }): Promise<void>;
+    };
+  };
+  const sql = postgres("postgres://user@127.0.0.1:1/db", { max: 1, fetch_types: false });
+  try {
+    assert.equal(sql.unsafe("select $1", ["x"]).options.prepare, false, "the default must still be unprepared");
+    assert.equal(sql.unsafe("select $1", ["x"], { prepare: true }).options.prepare, true);
+  } finally {
+    await sql.end({ timeout: 0 });
+  }
 });

@@ -613,6 +613,10 @@
         "link": "/book/reference/typescript-client/"
       },
       {
+        "label": "HTTP client",
+        "link": "/book/reference/http-client/"
+      },
+      {
         "label": "Diagnostic index",
         "link": "/book/reference/diagnostics/"
       },

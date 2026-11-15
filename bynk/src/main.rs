@@ -164,25 +164,35 @@ fn run() -> ExitCode {
             }
             prepared.finish(run_check(input, format, fix, emit, each))
         }
+        Command::Client {
+            input,
+            out,
+            service,
+            layout,
+            check,
+            lock,
+        } => match project_root(&input, lock.options()) {
+            Some(root) => bynk::http_client::run(
+                &root,
+                bynk::http_client::Request {
+                    services: &service,
+                    out: out.as_deref(),
+                    layout: layout.map(Into::into),
+                    check,
+                },
+            ),
+            None => ExitCode::FAILURE,
+        },
         Command::Openapi {
             input,
             service,
             out,
             format,
             lock,
-        } => {
-            if !prepare(&input, lock.options()) {
-                return ExitCode::FAILURE;
-            }
-            let Some(root) = find_project_root(&input) else {
-                eprintln!(
-                    "bynk: no `bynk.toml` found in `{}` or above; run from a project",
-                    input.display()
-                );
-                return ExitCode::FAILURE;
-            };
-            bynk::openapi::run(&root, service.as_deref(), out.as_deref(), format)
-        }
+        } => match project_root(&input, lock.options()) {
+            Some(root) => bynk::openapi::run(&root, service.as_deref(), out.as_deref(), format),
+            None => ExitCode::FAILURE,
+        },
         Command::Token {
             actor,
             sub,
@@ -223,22 +233,17 @@ fn run() -> ExitCode {
             emit,
             profile,
             lock,
-        } => {
-            if !prepare(&input, lock.options()) {
-                return ExitCode::FAILURE;
-            }
-            bynk_driver::run_build(
-                "bynk",
-                bynk_driver::BuildArgs {
-                    input,
-                    out,
-                    target,
-                    platform,
-                    emit,
-                    profile,
-                },
-            )
-        }
+        } => run_build_command(
+            bynk_driver::BuildArgs {
+                input,
+                out,
+                target,
+                platform,
+                emit,
+                profile,
+            },
+            lock.options(),
+        ),
         Command::Compile {
             input,
             output,
@@ -586,6 +591,36 @@ fn fetch_json(input: &Path, opts: bynk::fetch::FetchOptions) -> ExitCode {
             ExitCode::FAILURE
         }
     }
+}
+
+/// `bynk build`, then the client when `[build.client]` asks for one (#3508).
+fn run_build_command(args: bynk_driver::BuildArgs, lock: bynk::fetch::FetchOptions) -> ExitCode {
+    if !prepare(&args.input, lock) {
+        return ExitCode::FAILURE;
+    }
+    let input = args.input.clone();
+    let code = bynk_driver::run_build("bynk", args);
+    match find_project_root(&input) {
+        Some(root) if code == ExitCode::SUCCESS => bynk::http_client::write_configured(&root),
+        _ => code,
+    }
+}
+
+/// Prepare the project's dependencies and find its root, or say why not: the
+/// start of every command that reads a project's checked model (`openapi`,
+/// `client`).
+fn project_root(input: &Path, lock: bynk::fetch::FetchOptions) -> Option<PathBuf> {
+    if !prepare(input, lock) {
+        return None;
+    }
+    let root = find_project_root(input);
+    if root.is_none() {
+        eprintln!(
+            "bynk: no `bynk.toml` found in `{}` or above; run from a project",
+            input.display()
+        );
+    }
+    root
 }
 
 /// #2240: resolve, fetch and lock the dependencies of the project holding

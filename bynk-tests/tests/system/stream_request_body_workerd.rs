@@ -257,14 +257,6 @@ fn request(
     })
 }
 
-/// A port nothing is listening on: bind port 0, read what the OS chose, release it.
-fn free_port() -> u16 {
-    std::net::TcpListener::bind("127.0.0.1:0")
-        .and_then(|l| l.local_addr())
-        .expect("the OS hands out a free port")
-        .port()
-}
-
 fn chunks_of(total: usize, each: usize) -> Vec<Vec<u8>> {
     (0..total.div_ceil(each))
         .map(|i| vec![(i % 251) as u8; each.min(total - i * each)])
@@ -314,7 +306,7 @@ fn a_streamed_raw_body_is_counted_left_unread_and_sent_to_r2_on_workerd() {
     // band here would have collided with `workers_runtime_smoke`'s 10 000 to 25 000
     // spans, or `agent_serialise_workerd`'s 6 000 to 9 996). One port for the Worker and
     // one for its V8 inspector.
-    let (port, inspector_port) = (free_port(), free_port());
+    let [port, inspector_port] = wrangler::ports::free_ports();
     let log_path = tmp.join("wrangler.log");
     let out_log = fs::File::create(&log_path).unwrap();
     let err_log = out_log.try_clone().unwrap();

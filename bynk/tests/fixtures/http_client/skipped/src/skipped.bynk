@@ -1,0 +1,24 @@
+context skipped
+
+type Note = { text: String }
+
+service api from http {
+  on GET("/ping") () -> Effect[HttpResult[String]] by v: Visitor {
+    Ok("pong")
+  }
+
+  @raw(contentType: "application/octet-stream")
+  @limit(maxBody: 1024)
+  on POST("/blob") (body: Bytes) -> Effect[HttpResult[()]] by v: Visitor {
+    HttpResult.NoContent
+  }
+
+  @form
+  on POST("/note") (body: Note) -> Effect[HttpResult[()]] by v: Visitor {
+    HttpResult.NoContent
+  }
+
+  on GET("/raw") (query: RequestQuery) -> Effect[HttpResult[String]] by v: Visitor {
+    Ok("raw")
+  }
+}

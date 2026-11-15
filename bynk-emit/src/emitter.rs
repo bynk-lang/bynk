@@ -71,6 +71,7 @@ pub mod client;
 pub mod containers;
 pub mod contracts;
 pub(crate) mod events_fanout;
+pub mod http_client;
 pub mod secrets;
 pub mod serialisation;
 pub mod toml_doc;

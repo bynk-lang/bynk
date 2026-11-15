@@ -8,6 +8,36 @@
       "additionalProperties": false,
       "description": "Defaults for `bynk build`, which takes no flags. A flag overrides its key.\n`bynk compile` and `bynk dev`/`deploy`/`test` do not read this table.",
       "properties": {
+        "client": {
+          "additionalProperties": false,
+          "description": "Where `bynk build` writes the typed TypeScript client for the project's\n`from http` services (#3508). Absent, `bynk build` writes none.",
+          "properties": {
+            "layout": {
+              "default": "file",
+              "description": "`\"file\"` writes one module; `\"dir\"` writes `index.ts`, `types.ts`,\n`codecs.ts` and `runtime.ts`. Default: `\"file\"`.",
+              "enum": [
+                "file",
+                "dir"
+              ],
+              "type": "string"
+            },
+            "out": {
+              "description": "Where to write the client, relative to the project root: a `.ts` file with\n`layout = \"file\"`, a directory with `layout = \"dir\"`. It may leave the\nproject, since a front end often lives beside the Bynk project.",
+              "type": "string"
+            },
+            "service": {
+              "description": "The `from http` services to include, as `Name` or `unit.Name`. Default:\nevery one.",
+              "items": {
+                "type": "string"
+              },
+              "type": "array"
+            }
+          },
+          "required": [
+            "out"
+          ],
+          "type": "object"
+        },
         "emit": {
           "default": "ts",
           "description": "The artefact language: `\"ts\"` (typed TypeScript) or `\"js\"` (types\nstripped). Default: `\"ts\"`.",

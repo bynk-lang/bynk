@@ -17,6 +17,9 @@ use std::process::Command;
 use std::sync::atomic::{AtomicU32, Ordering};
 use std::time::{Duration, Instant};
 
+#[path = "../../bynk-tests/tests/support/ports.rs"]
+mod ports;
+
 fn have(tool: &str) -> bool {
     Command::new(tool)
         .arg("--version")
@@ -32,16 +35,6 @@ fn tmp() -> PathBuf {
         std::process::id(),
         C.fetch_add(1, Ordering::Relaxed)
     ))
-}
-
-/// Two distinct localhost TCP ports that are free when asked. Both are bound to
-/// `:0` at once, so the OS can't hand out the same port twice, then read back
-/// and released.
-fn free_ports() -> (u16, u16) {
-    let bind = || std::net::TcpListener::bind("127.0.0.1:0").expect("bind an ephemeral port");
-    let (a, b) = (bind(), bind());
-    let port = |l: &std::net::TcpListener| l.local_addr().expect("local addr").port();
-    (port(&a), port(&b))
 }
 
 /// #2069: stops `wrangler` and everything it started, and nothing else.
@@ -137,7 +130,7 @@ fn workerd_breakpoint_in_bynk_handler_binds_and_pauses() {
     // derived port could already be held by another process, such as a workerd
     // a past run leaked. Then wrangler exits at once, and the inspector probe
     // reaches *that* process's inspector instead.
-    let (inspector_port, app_port) = free_ports();
+    let [inspector_port, app_port] = ports::free_ports();
 
     let mut cmd = Command::new("wrangler");
     // #2069: its own process group, so cleanup can stop wrangler *and* the

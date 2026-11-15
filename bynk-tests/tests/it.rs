@@ -343,6 +343,8 @@ mod system {
     mod history_behaviour;
     #[path = "http_caching_behaviour.rs"]
     mod http_caching_behaviour;
+    #[path = "http_client.rs"]
+    mod http_client;
     #[path = "http_edge_cache_behaviour.rs"]
     mod http_edge_cache_behaviour;
     #[path = "http_limits_behaviour.rs"]

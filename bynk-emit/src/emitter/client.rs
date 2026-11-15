@@ -154,29 +154,32 @@ fn client_services(
     out
 }
 
-/// The client for `ctx_name`, or `None` when no foreign caller may call any of
-/// its services. `own_types` is the context's own type namespace
-/// (`combined_types_for`), the table its contract hashes are computed in.
-pub fn emit_client(
-    ctx_name: &str,
-    table: &UnitTable,
-    own_types: &HashMap<String, Arc<TypeDecl>>,
-) -> Option<TsProgram> {
-    let services = client_services(table, own_types);
-    if services.is_empty() {
-        return None;
-    }
-    let actors: BTreeSet<&String> = services.iter().flat_map(|s| s.admits.iter()).collect();
+/// What [`surface_closure`] computes: the codec closure of a set of boundary
+/// roots with every type that would clash with a generated surface (or is filed
+/// under a qualified key) renamed to the plain name a reader sees.
+pub(super) struct SurfaceClosure {
+    /// The type table with the renames applied.
+    pub types: HashMap<String, Arc<TypeDecl>>,
+    /// Old name to new name, for the types that were renamed.
+    pub subst: HashMap<String, String>,
+    /// The named types the roots reach, renamed.
+    pub names: Vec<String>,
+    /// The generic instantiations the roots reach, renamed.
+    pub insts: Vec<serialisation::GenericInst>,
+    /// The generic declarations among them, renamed.
+    pub generic_bases: BTreeSet<String>,
+}
 
-    // The codec closure of every exposed signature, in the callee's own
-    // namespace: the same roots a Bynk consumer collects for the services it
-    // calls (`emit_consumed_context_helpers`).
-    let mut roots: Vec<TypeRef> = Vec::new();
-    for s in &services {
-        roots.extend(s.svc.params.iter().map(|(_, t)| t.clone()));
-        roots.push(s.svc.return_type.clone());
-    }
-    let (closure, insts) = serialisation::collect_codec_closure(&roots, own_types);
+/// The codec closure of `roots` over `own_types`, with a boundary type named
+/// like one of the generated `surface` names renamed (`Client` to `Client_`),
+/// never the surface, so the surface reads the same for every project. The
+/// foreign-caller client and the HTTP client (`bynk client`) share it.
+pub(super) fn surface_closure(
+    roots: &[TypeRef],
+    own_types: &HashMap<String, Arc<TypeDecl>>,
+    surface: &[&str],
+) -> SurfaceClosure {
+    let (closure, insts) = serialisation::collect_codec_closure(roots, own_types);
     let mut generic_bases: BTreeSet<String> = BTreeSet::new();
     for i in &insts {
         if let serialisation::GenericInst::RecordInst { name, .. }
@@ -185,10 +188,6 @@ pub fn emit_client(
             generic_bases.insert(name.clone());
         }
     }
-
-    // A boundary type named like the client's surface is renamed here, in a
-    // copy of the table, roots and closure; its contract hash was computed
-    // above from the original, as the callee computes it.
     let mut declared: BTreeSet<String> = closure.iter().cloned().collect();
     declared.extend(generic_bases.iter().cloned());
     let mut subst: HashMap<String, String> = HashMap::new();
@@ -200,9 +199,9 @@ pub fn emit_client(
         // trailing `_` only when that name is already taken.
         let plain = bynk_check::symbols::display_type_name(name);
         let qualified = plain != name.as_str();
-        if qualified || SURFACE_TYPES.contains(&name.as_str()) {
+        if qualified || surface.contains(&name.as_str()) {
             let mut to = plain.to_string();
-            while SURFACE_TYPES.contains(&to.as_str()) || taken.contains(&to) {
+            while surface.contains(&to.as_str()) || taken.contains(&to) {
                 to.push('_');
             }
             taken.insert(to.clone());
@@ -235,6 +234,48 @@ pub fn emit_client(
         .into_iter()
         .map(|n| subst.get(&n).cloned().unwrap_or(n))
         .collect();
+    SurfaceClosure {
+        types,
+        subst,
+        names,
+        insts,
+        generic_bases,
+    }
+}
+
+/// The client for `ctx_name`, or `None` when no foreign caller may call any of
+/// its services. `own_types` is the context's own type namespace
+/// (`combined_types_for`), the table its contract hashes are computed in.
+pub fn emit_client(
+    ctx_name: &str,
+    table: &UnitTable,
+    own_types: &HashMap<String, Arc<TypeDecl>>,
+) -> Option<TsProgram> {
+    let services = client_services(table, own_types);
+    if services.is_empty() {
+        return None;
+    }
+    let actors: BTreeSet<&String> = services.iter().flat_map(|s| s.admits.iter()).collect();
+
+    // The codec closure of every exposed signature, in the callee's own
+    // namespace: the same roots a Bynk consumer collects for the services it
+    // calls (`emit_consumed_context_helpers`).
+    let mut roots: Vec<TypeRef> = Vec::new();
+    for s in &services {
+        roots.extend(s.svc.params.iter().map(|(_, t)| t.clone()));
+        roots.push(s.svc.return_type.clone());
+    }
+    // A boundary type named like the client's surface is renamed here, in a
+    // copy of the table, roots and closure; its contract hash was computed
+    // above from the original, as the callee computes it.
+    let SurfaceClosure {
+        types,
+        subst,
+        names,
+        insts,
+        generic_bases,
+    } = surface_closure(&roots, own_types, SURFACE_TYPES);
+    let renamed = |t: &TypeRef| serialisation::rename_type_ref(t, &subst);
 
     // Every boundary type is declared in this module, under its own name, so
     // a whole-name qualifier (#1846's form) names it bare while still

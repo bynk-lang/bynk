@@ -9,6 +9,10 @@ arguments and decodes the result with the codec a Bynk caller uses. The
 [wire format](/book/reference/wire-format/) underneath stays a detail behind
 it.
 
+A browser or a framework's server calling a `from http` route uses the
+[HTTP client](/book/reference/http-client/) instead: this one signs every call
+with a per-edge secret, which has no place in a browser bundle.
+
 For a walk-through, see
 [Adopt Bynk beside a TypeScript Worker](/book/guides/projects-build-and-deployment/adopt-beside-a-typescript-worker/).
 
