@@ -609,7 +609,7 @@ pub enum Command {
         #[command(flatten)]
         lock: LockArgs,
     },
-    /// Evaluate a snippet in a unit's scope and print its value as JSON.
+    /// Evaluate a snippet in a unit's scope; print its value.
     ///
     /// Compiles and runs the snippet as a synthetic test case in a suite for
     /// `--unit`, under the test runtime, and prints
