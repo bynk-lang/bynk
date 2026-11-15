@@ -168,9 +168,19 @@ fn run() -> ExitCode {
             input,
             out,
             service,
+            layout,
+            check,
             lock,
         } => match project_root(&input, lock.options()) {
-            Some(root) => bynk::http_client::run(&root, &service, out.as_deref()),
+            Some(root) => bynk::http_client::run(
+                &root,
+                bynk::http_client::Request {
+                    services: &service,
+                    out: out.as_deref(),
+                    layout: layout.map(Into::into),
+                    check,
+                },
+            ),
             None => ExitCode::FAILURE,
         },
         Command::Openapi {
@@ -223,22 +233,17 @@ fn run() -> ExitCode {
             emit,
             profile,
             lock,
-        } => {
-            if !prepare(&input, lock.options()) {
-                return ExitCode::FAILURE;
-            }
-            bynk_driver::run_build(
-                "bynk",
-                bynk_driver::BuildArgs {
-                    input,
-                    out,
-                    target,
-                    platform,
-                    emit,
-                    profile,
-                },
-            )
-        }
+        } => run_build_command(
+            bynk_driver::BuildArgs {
+                input,
+                out,
+                target,
+                platform,
+                emit,
+                profile,
+            },
+            lock.options(),
+        ),
         Command::Compile {
             input,
             output,
@@ -585,6 +590,19 @@ fn fetch_json(input: &Path, opts: bynk::fetch::FetchOptions) -> ExitCode {
             eprintln!("bynk: {e}");
             ExitCode::FAILURE
         }
+    }
+}
+
+/// `bynk build`, then the client when `[build.client]` asks for one (#3508).
+fn run_build_command(args: bynk_driver::BuildArgs, lock: bynk::fetch::FetchOptions) -> ExitCode {
+    if !prepare(&args.input, lock) {
+        return ExitCode::FAILURE;
+    }
+    let input = args.input.clone();
+    let code = bynk_driver::run_build("bynk", args);
+    match find_project_root(&input) {
+        Some(root) if code == ExitCode::SUCCESS => bynk::http_client::write_configured(&root),
+        _ => code,
     }
 }
 

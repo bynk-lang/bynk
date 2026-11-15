@@ -710,22 +710,29 @@ surface is in the [HTTP client reference](/book/reference/http-client/), and a
 recipe in [Generate a typed client for your front end](/docs/tooling/bynk-client/).
 
 ```text
-bynk client [INPUT] [--service NAME]... [--out FILE] [--locked] [--offline]
+bynk client [INPUT] [--service NAME]... [--out PATH] [--layout file|dir] [--check] [--locked] [--offline]
 ```
 
 | Argument | Default | Meaning |
 |---|---|---|
 | `INPUT` | `.` | A project directory, or any path inside one. |
 | `--service` | every service | Generate only this `from http` service, as `Name` or `unit.Name`. May be given more than once. |
-| `--out`, `-o` | stdout | Write the module to this file instead of stdout. |
+| `--out`, `-o` | stdout | Write the client to this path instead of stdout: a file, or with `--layout dir` a directory. |
+| `--layout` | `file` | `file` writes one module; `dir` writes `index.ts`, `types.ts`, `codecs.ts` and `runtime.ts` into `--out`. |
+| `--check` | off | Write nothing. Compare the client at `--out` with the one the project generates, and exit non-zero, naming the first differing line, when it is stale or missing. The CI drift gate. |
+
+A flag left out takes its value from [`[build.client]`](/docs/manifest/#buildclient)
+in `bynk.toml`, when the project has one, so `bynk client --check` needs no
+arguments there. `bynk build` writes the client that table names.
 
 The project must check clean; otherwise the command lists the errors and writes
 nothing. It exits non-zero when the project has no `from http` service, when
-`--service` names none, when two routes of a service would share a function name,
+`--service` names none, when `--check` or `--layout dir` has no path to work on,
+when two routes of a service would share a function name,
 and when every selected route is one this version cannot represent. A route it
-cannot represent (a `@form`, `@multipart` or `@raw` body, a typed `cookies`
-record, a raw or streamed response, a request-signature route, an `Option` inside a
-`Map`, `Set` or `Result`) is named on stderr and left out.
+cannot represent (a `@raw` body, a raw `query` or `cookies` view, a raw or streamed
+response, a request-signature route, an `Option` inside a `Map`, `Set` or `Result`) is
+named on stderr and left out.
 
 ---
 
