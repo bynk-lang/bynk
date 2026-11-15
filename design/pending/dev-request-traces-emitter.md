@@ -1,5 +1,6 @@
 ---
 level: patch
+probes: ts_writes
 changelog: A build can record per-request traces (the emitter and runtime half of `bynk dev --trace-events`); deploy output is unchanged
 ---
 
