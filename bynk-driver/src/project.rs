@@ -4588,6 +4588,32 @@ fn deps_entry_sort_key(key: &str) -> String {
     format!("{key}:")
 }
 
+/// #2683: a `call` handler that calls `within` (or sends) reads `deps.__exec`.
+/// The bundle has no platform execution context, so what it is handed is kept
+/// alive by the process; a fault in it, with no handler left to raise it to, is
+/// reported by the same reporter `e.detach()` uses (#3541), not a logger of the
+/// shim's own. `None` when no handler of the context needs one.
+fn bundle_process_exec_entry(table: &UnitTable) -> Option<(String, TsExpr)> {
+    table
+        .services
+        .values()
+        .any(|s| {
+            s.handlers
+                .iter()
+                .any(|h| bynk_emit::emitter::call_handler_needs_exec(&table.exec_plan, h))
+        })
+        .then(|| ("__exec".to_string(), ident("__bynkProcessExec()")))
+}
+
+/// The composition root's import of `__bynkProcessExec` from the runtime.
+fn process_exec_import() -> Vec<TsStmt> {
+    emitter::runtime_files::runtime_import_stmts(
+        false,
+        &["__bynkProcessExec".to_string()],
+        "./runtime.js",
+    )
+}
+
 #[allow(clippy::too_many_arguments)]
 fn emit_composition_root(
     groups: &BTreeMap<String, Vec<usize>>,
@@ -4908,18 +4934,9 @@ fn emit_composition_root(
             };
             deps_entries.push(("__eventsDispatch".to_string(), arrow));
         }
-        // #2683: a `call` handler that calls `within` (or sends) reads
-        // `deps.__exec`. The bundle has no platform execution context, so what
-        // it is handed is kept alive by the process; a fault in it, with no
-        // handler left to raise it to, is reported by the same reporter
-        // `e.detach()` uses (#3541), not a logger of the shim's own.
-        if table.services.values().any(|s| {
-            s.handlers
-                .iter()
-                .any(|h| bynk_emit::emitter::call_handler_needs_exec(&table.exec_plan, h))
-        }) {
+        if let Some(entry) = bundle_process_exec_entry(table) {
             process_exec_used = true;
-            deps_entries.push(("__exec".to_string(), ident("__bynkProcessExec()")));
+            deps_entries.push(entry);
         }
         deps_entries.sort_by_cached_key(|(k, _)| deps_entry_sort_key(k));
 
@@ -5037,13 +5054,7 @@ fn emit_composition_root(
     ));
     program.push(TsStmt::comment("composition root", None));
     if process_exec_used {
-        for stmt in emitter::runtime_files::runtime_import_stmts(
-            false,
-            &["__bynkProcessExec".to_string()],
-            "./runtime.js",
-        ) {
-            program.push(stmt);
-        }
+        program.stmts.extend(process_exec_import());
     }
 
     // Import every context as a namespace.
