@@ -22,7 +22,7 @@ BIN_DIR="/usr/local/bin"
 # The npm versions bynk is verified against, pinned exactly (bump deliberately):
 # wrangler 4 (bynk_emit::WRANGLER_MIN) and TypeScript 7
 # (bynk_emit::TYPESCRIPT_MAJOR_TESTED).
-WRANGLER_SPEC="wrangler@4.151.1"
+WRANGLER_SPEC="wrangler@4.162.0"
 TYPESCRIPT_SPEC="typescript@7.0.2"
 
 die() {
