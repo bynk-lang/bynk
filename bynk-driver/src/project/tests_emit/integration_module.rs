@@ -443,6 +443,9 @@ pub(super) fn emit_integration_module(
             {
                 errors.push(warning);
             }
+            // Before the refusals below, on purpose: a case that peeks never
+            // runs against a target, so nothing else it does (an `advance`, an
+            // `env` the target disagrees with) is reported for it either.
             if let Some(skip) = peek_skip(input.case, &callees) {
                 skipped.push(skip);
                 return false;
