@@ -2561,6 +2561,23 @@ fn manifest_unit_diagnostics(
     }
 }
 
+/// The parsed files, each unit's files, and each unit's kind: what
+/// [`platform_lock_phase`] reads the units' sources from.
+type LockSources<'a> = (
+    &'a [ParsedFile],
+    &'a BTreeMap<String, Vec<usize>>,
+    &'a BTreeMap<String, UnitKind>,
+);
+
+/// Each unit's symbol table, `consumes`, `consumes` aliases and flattened names:
+/// what [`platform_lock_phase`] walks the provider closure with.
+type LockTables<'a> = (
+    &'a HashMap<String, UnitTable>,
+    &'a HashMap<String, Vec<String>>,
+    &'a HashMap<String, HashMap<String, String>>,
+    &'a HashMap<String, HashMap<String, String>>,
+);
+
 /// v0.19 (decisions 0017/0024): platform-lock enforcement. A deployment unit
 /// whose in-process closure reaches a platform-native capability is locked to
 /// that platform; the selected `--platform` must match. A unit is a context
@@ -2573,17 +2590,8 @@ fn platform_lock_phase(
     target: BuildTarget,
     platform: Platform,
     (project_root, overlay): (&Path, &HashMap<PathBuf, String>),
-    (parsed, groups, kinds): (
-        &[ParsedFile],
-        &BTreeMap<String, Vec<usize>>,
-        &BTreeMap<String, UnitKind>,
-    ),
-    (unit_tables, unit_consumes, unit_consumes_aliases, unit_flattened): (
-        &HashMap<String, UnitTable>,
-        &HashMap<String, Vec<String>>,
-        &HashMap<String, HashMap<String, String>>,
-        &HashMap<String, HashMap<String, String>>,
-    ),
+    (parsed, groups, kinds): LockSources<'_>,
+    (unit_tables, unit_consumes, unit_consumes_aliases, unit_flattened): LockTables<'_>,
     errors: &mut ErrorSink,
 ) {
     if !errors.is_empty() {
