@@ -76,7 +76,7 @@ service placeOrder {
 
 A second file of `orders` that also calls `payment.authorise`, or writes
 `given Clock`, needs its own `consumes payment` and `consumes bynk { Clock }`.
-Until a later release makes it an error, a file that does not warns
+A file that does not is an error
 (`bynk.consumes.unit_not_consumed`, `bynk.consumes.capability_not_selected`,
 `bynk.consumes.type_not_selected`), and one command adds the clauses to every
 file that needs them:
@@ -99,9 +99,8 @@ operations use all of them, so a context that also has its own `Digest` (from a
 A type the listed capabilities do *not* use is out of scope: `consumes bynk
 { Clock }` does not bring in `Method`, so a context with its own `Method` has no
 clash, and the standard library can add a type without changing what your
-program means. Naming a standard-library type the braces do not list still works
-for now, as the warning `bynk.consumes.type_not_selected` (`bynk check --fix`
-adds the name), and will be an error in a later release. The same goes for a
+program means. Naming a standard-library type the braces do not list is the error
+`bynk.consumes.type_not_selected` (`bynk check --fix` adds the name). The same goes for a
 file whose own `consumes` does not bring the type in, as above. A bare `consumes
 bynk`, with no braces, brings in the whole module for the file that writes it.
 

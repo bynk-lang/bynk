@@ -125,7 +125,7 @@ service trigger {
 const SOURCE_NOTIFICATIONS: &str = r#"context commerce.notifications
 
 consumes commerce.order
-consumes bynk { Logger }
+consumes bynk { Logger, EventEnvelope }
 
 service SubscriberA from Events(Tick) {
   on event(e: Tick, env: EventEnvelope) -> Effect[()] given Logger {

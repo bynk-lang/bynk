@@ -1,0 +1,1 @@
+bynk.consumes.capability_not_selected capability `Clock` is not in scope

@@ -1,0 +1,7 @@
+suite shop
+
+// A suite file consumes what it names: the target's clauses are not inherited.
+case "won" {
+    let c: Claim = Claimed
+    expect won(c) == true
+}

@@ -1,5 +1,8 @@
 context shop
 
+consumes bynk { TimedOut, Clock }
+consumes pay
+
 fn overdue(t: TimedOut) -> Bool {
   true
 }

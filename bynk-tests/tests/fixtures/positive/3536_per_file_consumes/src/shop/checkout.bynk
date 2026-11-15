@@ -1,8 +1,7 @@
 context shop
 
-// #3536: imports are per file. This file consumes everything it names; the
-// sibling `refund.bynk` consumes nothing, so what it names still resolves but
-// warns, once for each kind of name: a type, a capability, a call.
+// #3536: imports are per file. Each file of this context consumes everything it
+// names, repeating the clauses; the unit's dependencies are their union.
 
 consumes bynk { Clock, TimedOut }
 consumes pay

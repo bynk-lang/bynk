@@ -215,6 +215,45 @@
           },
           "description": "Vectorize settings, keyed by the `Vectorize` capability's name\n(`capability Docs = Vectorize …` is `Docs`).",
           "type": "object"
+        },
+        "workers": {
+          "additionalProperties": {
+            "additionalProperties": false,
+            "description": "One group: the contexts that are deployed as one Worker.",
+            "properties": {
+              "contexts": {
+                "description": "The members, as qualified context names (`shop.orders`). Each context\nis in one group only; there are no globs, so adding a context to a\ngroup is a visible change here.",
+                "items": {
+                  "type": "string"
+                },
+                "type": "array"
+              },
+              "custom_domains": {
+                "description": "Custom domains the Worker is attached to, like `pay.example.com`.",
+                "items": {
+                  "type": "string"
+                },
+                "type": "array"
+              },
+              "name": {
+                "description": "The Worker's script name on Cloudflare: 1 to 63 lowercase letters,\ndigits or `-`. Default: the group's key. The key stays the group's\nidentity (its ledger entry, `--worker` selector and `workers/<key>/`\ndirectory); changing the key or the name makes a different Worker.",
+                "type": "string"
+              },
+              "routes": {
+                "description": "Route patterns the Worker is attached to, like `pay.example.com/*`.",
+                "items": {
+                  "type": "string"
+                },
+                "type": "array"
+              }
+            },
+            "required": [
+              "contexts"
+            ],
+            "type": "object"
+          },
+          "description": "Worker groups, keyed by the group's identity: which contexts share one\nWorker. A context in no group stays its own Worker, named by its\ndashed name.",
+          "type": "object"
         }
       },
       "type": "object",

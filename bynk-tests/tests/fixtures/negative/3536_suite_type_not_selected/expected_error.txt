@@ -1,0 +1,1 @@
+bynk.consumes.type_not_selected `Claim` is not in scope: this file does not `consumes bynk`

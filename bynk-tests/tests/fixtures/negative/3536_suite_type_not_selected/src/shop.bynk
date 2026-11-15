@@ -1,0 +1,10 @@
+context shop
+
+consumes bynk { Claim }
+
+fn won(r: Claim) -> Bool {
+    match r {
+        Claimed => true
+        AlreadyClaimed => false
+    }
+}

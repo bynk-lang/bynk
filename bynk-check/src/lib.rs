@@ -87,5 +87,6 @@ pub mod wire;
 pub mod wire_default;
 pub mod wire_format;
 pub mod worker_bindings;
+pub mod worker_groups;
 
 pub use firstparty::Platform;
