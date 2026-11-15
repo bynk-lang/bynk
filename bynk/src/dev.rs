@@ -2755,12 +2755,15 @@ mod tests {
         .unwrap();
         let rewriter = crate::logs::Rewriter::new(&build);
         let stack = format!(
-            "Error: boom\\n    at http_GET (file://{}/handlers.ts:2:5)",
+            "Error: boom\n    at http_GET (file://{}/handlers.ts:2:5)",
             worker.display()
         );
-        let line = format!(
-            "\u{1b}[34m[wrangler:inf]\u{1b}[0m __bynk_trace:{{\"id\":\"r1\",\"parent\":\"p0\",\"route\":\"GET /\",\"status\":500,\"duration_ms\":2.0,\"steps\":[],\"truncated\":false,\"fault\":\"{stack}\"}}"
-        );
+        // Built with `serde_json`, so a Windows path's backslashes are escaped.
+        let json = serde_json::json!({
+            "id": "r1", "parent": "p0", "route": "GET /", "status": 500, "duration_ms": 2.0,
+            "steps": [], "truncated": false, "fault": stack,
+        });
+        let line = format!("\u{1b}[34m[wrangler:inf]\u{1b}[0m __bynk_trace:{json}");
         let event = request_event("shop", &rewriter, &line).expect("a trace line");
         let _ = std::fs::remove_dir_all(&build);
         let DevEvent::Request {
