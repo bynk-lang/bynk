@@ -75,6 +75,30 @@ export interface ClientOptions {
   readonly origin?: string;
 }
 
+/**
+ * A Cloudflare Service Binding (`env.API`), or anything with a `fetch` method that takes
+ * what `fetch` does.
+ */
+export interface FetchBinding {
+  fetch(input: globalThis.RequestInfo | globalThis.URL, init?: globalThis.RequestInit): globalThis.Promise<globalThis.Response>;
+}
+
+/**
+ * `ClientOptions` that send every call through a Service Binding instead of the network,
+ * for a front end whose server runs on Cloudflare: `createClient({ ...viaBinding(env.API) })`.
+ * The binding's `fetch` must be called as a method, so passing `env.API.fetch` itself
+ * fails ("Illegal invocation"); this does it right. A binding ignores the host of the URL
+ * it is given but needs a valid one, so `baseUrl` is an inert one unless you give another.
+ * A binding call carries no `Origin` or `Sec-Fetch-Site`: a route that changes state under
+ * a signed cookie needs `origin` too.
+ */
+export function viaBinding(
+  binding: FetchBinding,
+  baseUrl: string = "https://bynk.invalid",
+): { readonly baseUrl: string; readonly fetch: typeof globalThis.fetch } {
+  return { baseUrl, fetch: ((input, init) => binding.fetch(input, init)) as typeof globalThis.fetch };
+}
+
 /** What one reply of a route is. */
 export interface __Reply {
   readonly kind: string;

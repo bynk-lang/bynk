@@ -93,6 +93,30 @@ export interface ClientOptions {
   readonly origin?: string;
 }
 
+/**
+ * A Cloudflare Service Binding (`env.API`), or anything with a `fetch` method that takes
+ * what `fetch` does.
+ */
+export interface FetchBinding {
+  fetch(input: globalThis.RequestInfo | globalThis.URL, init?: globalThis.RequestInit): globalThis.Promise<globalThis.Response>;
+}
+
+/**
+ * `ClientOptions` that send every call through a Service Binding instead of the network,
+ * for a front end whose server runs on Cloudflare: `createClient({ ...viaBinding(env.API) })`.
+ * The binding's `fetch` must be called as a method, so passing `env.API.fetch` itself
+ * fails ("Illegal invocation"); this does it right. A binding ignores the host of the URL
+ * it is given but needs a valid one, so `baseUrl` is an inert one unless you give another.
+ * A binding call carries no `Origin` or `Sec-Fetch-Site`: a route that changes state under
+ * a signed cookie needs `origin` too.
+ */
+export function viaBinding(
+  binding: FetchBinding,
+  baseUrl: string = "https://bynk.invalid",
+): { readonly baseUrl: string; readonly fetch: typeof globalThis.fetch } {
+  return { baseUrl, fetch: ((input, init) => binding.fetch(input, init)) as typeof globalThis.fetch };
+}
+
 /** What one reply of a route is. */
 export interface __Reply {
   readonly kind: string;
@@ -584,6 +608,20 @@ export type GetFeedByModeResponse =
   | { readonly status: 400; readonly kind: "StructuralMismatch"; readonly error: BoundaryError }
   | { readonly status: 404; readonly kind: "NotFound" };
 
+/**
+ * What `GET /origin` answers, by `status`.
+ */
+export type GetOriginResponse =
+    { readonly status: 200; readonly kind: "Ok"; readonly body: string }
+  | { readonly status: 400; readonly kind: "StructuralMismatch"; readonly error: BoundaryError };
+
+/**
+ * What `GET /cookie` answers, by `status`.
+ */
+export type GetCookieResponse =
+    { readonly status: 200; readonly kind: "Ok"; readonly body: string }
+  | { readonly status: 400; readonly kind: "StructuralMismatch"; readonly error: BoundaryError };
+
 
 const __route_api_putBlobByName: __Route = {
   method: "PUT",
@@ -676,6 +714,24 @@ const __route_api_getFeedByMode: __Route = {
   streamed: __streamed,
 };
 
+const __route_api_getOrigin: __Route = {
+  method: "GET",
+  path: "/origin",
+  replies: {
+    200: [{ kind: "Ok", body: "value", decode: (__j: __JsonValue) => ((__v) => typeof __v === "string" ? Ok(__v) : Err({ kind: "StructuralMismatch", path: "$", expected: "string", actual: typeof __v } as __BoundaryError))(__j) }],
+    400: [{ kind: "StructuralMismatch", body: "boundary" }],
+  },
+};
+
+const __route_api_getCookie: __Route = {
+  method: "GET",
+  path: "/cookie",
+  replies: {
+    200: [{ kind: "Ok", body: "value", decode: (__j: __JsonValue) => ((__v) => typeof __v === "string" ? Ok(__v) : Err({ kind: "StructuralMismatch", path: "$", expected: "string", actual: typeof __v } as __BoundaryError))(__j) }],
+    400: [{ kind: "StructuralMismatch", body: "boundary" }],
+  },
+};
+
 
 /**
  * The client: one property per service, one function per route. Each returns
@@ -722,6 +778,14 @@ export function createClient(options: ClientOptions = {}) {
         __call(options, init, __route_api_getFeedByMode, () => {
           return Ok({ params: { "mode": globalThis.String(mode) } });
         }) as globalThis.Promise<GetFeedByModeResponse | CallFailure>,
+      getOrigin: (init?: globalThis.RequestInit): globalThis.Promise<GetOriginResponse | CallFailure> =>
+        __call(options, init, __route_api_getOrigin, () => {
+          return Ok({ params: {  } });
+        }) as globalThis.Promise<GetOriginResponse | CallFailure>,
+      getCookie: (init?: globalThis.RequestInit): globalThis.Promise<GetCookieResponse | CallFailure> =>
+        __call(options, init, __route_api_getCookie, () => {
+          return Ok({ params: {  } });
+        }) as globalThis.Promise<GetCookieResponse | CallFailure>,
     },
   } as const;
 }
