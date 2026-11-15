@@ -30,6 +30,7 @@ import { test } from "node:test";
 import assert from "node:assert/strict";
 import { WorkersAi, WorkersAiSearch, WorkersAnalytics, WorkersContainer, WorkersD1, WorkersEdgeCache, WorkersEmail, WorkersKv, WorkersMySql, WorkersPostgres, WorkersQueue, WorkersR2, WorkersRateLimit, WorkersService, WorkersStoredSecret, WorkersVectorize, WorkersVersion } from "./bynk/cloudflare.binding.js";
 import { Method, FetchError } from "./bynk.js";
+import { __makeIntegrationAi, __makeIntegrationAiSearch, __makeIntegrationContainer, __makeIntegrationHyperdrive, __makeIntegrationSecretsStoreSecret } from "./__bynk_runtime/storage.js";
 import { Some, None } from "./__bynk_runtime/result.js";
 
 function fakeKv(pageSize = 2) {
@@ -2676,4 +2677,35 @@ t("WorkersContainer: a fault the class reports (`bynk dev` without Docker) is th
   );
   await assert.rejects(() => cont(ns).send("a", creq()), /Container\.send: .*Docker is not available/);
   await assert.rejects(() => cont(ns).receiveBytes("a", creq({ method: { tag: "Get" }, body: None })), /Docker/);
+});
+
+// #3589: the integration doubles' "not stubbed" fault (marked `bynkNotStubbed`)
+// must fault the case. Each binding below is driven against the real double,
+// and a binding that catches platform failures as `Err` must not catch it.
+t("WorkersAi: an unstubbed integration double faults every operation, never an Err", async () => {
+  const ai = new WorkersAi({ AI: __makeIntegrationAi() });
+  const notStubbed = /`Ai` binding is not stubbed/;
+  await assert.rejects(ai.run("@cf/x/y", "{}"), notStubbed);
+  await assert.rejects(ai.generate("@cf/x/y", { messages: [chat("User", "hi")], maxTokens: None, temperature: None, topP: None, seed: None }), notStubbed);
+  await assert.rejects(ai.embed("@cf/x/y", ["a"]), notStubbed);
+  await assert.rejects(ai.runStream("@cf/x/y", "{}"), notStubbed);
+});
+
+t("WorkersAiSearch: an unstubbed integration double faults search and answer, never an Err", async () => {
+  const instance = new WorkersAiSearch({ AI_SEARCH_KB: __makeIntegrationAiSearch("AI_SEARCH_KB") }, "AI_SEARCH_KB");
+  await assert.rejects(instance.search("q", sOpts()), /`AI_SEARCH_KB` AI Search binding is not stubbed/);
+  await assert.rejects(instance.answer([userMsg("q")], sOpts()), /`AI_SEARCH_KB` AI Search binding is not stubbed/);
+});
+
+t("WorkersContainer: an unstubbed integration double faults send and receiveBytes, never an Err", async () => {
+  const c = new WorkersContainer({ CONTAINER_RENDERER: __makeIntegrationContainer("CONTAINER_RENDERER") }, "CONTAINER_RENDERER");
+  await assert.rejects(c.send("a", creq()), /container `a` is not stubbed/);
+  await assert.rejects(c.receiveBytes("a", creq({ method: { tag: "Get" }, body: None })), /container `a` is not stubbed/);
+});
+
+t("WorkersStoredSecret, WorkersPostgres and WorkersMySql: an unstubbed integration double faults", async () => {
+  const env = { SECRET_K: __makeIntegrationSecretsStoreSecret("SECRET_K"), HYPERDRIVE_MAIN: __makeIntegrationHyperdrive("HYPERDRIVE_MAIN") };
+  await assert.rejects(new WorkersStoredSecret(env, "SECRET_K").get(), /`SECRET_K` has no value in a test/);
+  await assert.rejects(new WorkersPostgres(env, "HYPERDRIVE_MAIN", async () => assert.fail("not reached")).all("select 1", []), /Hyperdrive binding `HYPERDRIVE_MAIN` has no database/);
+  await assert.rejects(new WorkersMySql(env, "HYPERDRIVE_MAIN", async () => assert.fail("not reached")).all("select 1", []), /Hyperdrive binding `HYPERDRIVE_MAIN` has no database/);
 });

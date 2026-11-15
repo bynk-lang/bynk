@@ -585,6 +585,7 @@ pub(crate) const RUNTIME_EXPORTS: &[(&str, &str)] = &[
     ("makeWorkersAgent", "agent"),
     ("mapKey", "entries"),
     ("mapPrefix", "entries"),
+    ("markNotStubbed", "storage"),
     ("matchPath", "http"),
     ("mediaTypeMatches", "http"),
     ("metaKey", "entries"),

@@ -974,6 +974,18 @@ export function makeIntegrationVersionMetadata(): WorkerVersionMetadata {
 }
 
 /**
+ * The marker every integration double puts on the fault it throws for an
+ * unstubbed call (#3589). A binding in `bynk.cloudflare` that maps a platform
+ * failure to an `Err` rethrows an error that carries it (`bynkNotStubbed ===
+ * true`), so an unstubbed call faults the case and a handler's `Err(_)`
+ * fallback cannot swallow it. Defined once, here; #3578's `Images` double uses
+ * the same property.
+ */
+export function markNotStubbed(message: string): Error {
+  return Object.assign(new globalThis.Error(message), { bynkNotStubbed: true });
+}
+
+/**
  * Workers AI (#3478): Cloudflare's AI binding, which `WorkersAi` reads. `run`
  * takes the model id and its input object, and answers the model's output (a
  * JSON value, or bytes or a stream for a model that sends those).
@@ -991,7 +1003,7 @@ export interface WorkerAiBinding {
 export function makeIntegrationAi(): WorkerAiBinding {
   return {
     async run(): Promise<unknown> {
-      throw new globalThis.Error(
+      throw markNotStubbed(
         "bynk: the `Ai` binding is not stubbed, and a test never reaches Workers AI — stub the operation the case calls (`stub Ai.run(_, _) returns …`)",
       );
     },
@@ -1016,7 +1028,7 @@ export interface AiSearchInstance {
  */
 export function makeIntegrationAiSearch(binding: string): AiSearchInstance {
   const unstubbed = async (): Promise<never> => {
-    throw new globalThis.Error(
+    throw markNotStubbed(
       `bynk: the \`${binding}\` AI Search binding is not stubbed, and a test never reaches AI Search — stub the operation the case calls (for example \`stub <Name>.search(_, _) returns …\`)`,
     );
   };
@@ -1038,7 +1050,7 @@ export function makeIntegrationContainer(binding: string): {
     idFromName: (name) => name,
     get: (id) => ({
       fetch: async (): Promise<never> => {
-        throw new globalThis.Error(
+        throw markNotStubbed(
           `bynk: the \`${binding}\` container \`${id}\` is not stubbed, and a test never starts a container — stub the operation the case calls (for example \`stub <Name>.send(_, _) returns …\`)`,
         );
       },
@@ -1064,7 +1076,7 @@ export interface SecretsStoreSecret {
 export function makeIntegrationSecretsStoreSecret(binding: string): SecretsStoreSecret {
   return {
     async get(): Promise<string> {
-      throw new globalThis.Error(
+      throw markNotStubbed(
         `bynk: Secrets Store binding \`${binding}\` has no value in a test, which never reads the account's store — add \`stub <Capability>.get() returns …\``,
       );
     },
@@ -1122,7 +1134,7 @@ export interface Hyperdrive {
 export function makeIntegrationHyperdrive(binding: string): Hyperdrive {
   return {
     get connectionString(): string {
-      throw new globalThis.Error(
+      throw markNotStubbed(
         `bynk: Hyperdrive binding \`${binding}\` has no database in a test, which never reaches a database — add \`stub <Capability>.all(_, _) returns …\` (or \`first\` or \`run\`)`,
       );
     },
