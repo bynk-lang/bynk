@@ -59,19 +59,17 @@ fn module(path: &Path, extra: &[&str]) -> String {
 }
 
 /// The header names the compiler's version, which a golden must not pin: it would go
-/// stale at every release.
+/// stale at every release. Only the version is replaced, so the rest of the header (the
+/// reference URL) and the file's line endings stay under the byte-for-byte check, and a
+/// header that did not carry the real version would fail to match here.
 fn versionless(text: &str) -> String {
-    text.lines()
-        .map(|l| {
-            if l.starts_with("// bynk ") && l.contains(". Regenerate with `bynk client`;") {
-                "// bynk <version>. Regenerate with `bynk client`; see https://bynk-lang.org/book/reference/http-client/".to_string()
-            } else {
-                l.to_string()
-            }
-        })
-        .collect::<Vec<_>>()
-        .join("\n")
-        + "\n"
+    let header = format!("// bynk {}. ", env!("CARGO_PKG_VERSION"));
+    assert!(
+        text.contains(&header),
+        "the header names the compiler's version: {:?}",
+        text.lines().nth(1)
+    );
+    text.replacen(&header, "// bynk <version>. ", 1)
 }
 
 fn golden(name: &str, actual: &str) {
