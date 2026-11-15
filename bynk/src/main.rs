@@ -164,25 +164,25 @@ fn run() -> ExitCode {
             }
             prepared.finish(run_check(input, format, fix, emit, each))
         }
+        Command::Client {
+            input,
+            out,
+            service,
+            lock,
+        } => match project_root(&input, lock.options()) {
+            Some(root) => bynk::http_client::run(&root, &service, out.as_deref()),
+            None => ExitCode::FAILURE,
+        },
         Command::Openapi {
             input,
             service,
             out,
             format,
             lock,
-        } => {
-            if !prepare(&input, lock.options()) {
-                return ExitCode::FAILURE;
-            }
-            let Some(root) = find_project_root(&input) else {
-                eprintln!(
-                    "bynk: no `bynk.toml` found in `{}` or above; run from a project",
-                    input.display()
-                );
-                return ExitCode::FAILURE;
-            };
-            bynk::openapi::run(&root, service.as_deref(), out.as_deref(), format)
-        }
+        } => match project_root(&input, lock.options()) {
+            Some(root) => bynk::openapi::run(&root, service.as_deref(), out.as_deref(), format),
+            None => ExitCode::FAILURE,
+        },
         Command::Token {
             actor,
             sub,
@@ -586,6 +586,23 @@ fn fetch_json(input: &Path, opts: bynk::fetch::FetchOptions) -> ExitCode {
             ExitCode::FAILURE
         }
     }
+}
+
+/// Prepare the project's dependencies and find its root, or say why not: the
+/// start of every command that reads a project's checked model (`openapi`,
+/// `client`).
+fn project_root(input: &Path, lock: bynk::fetch::FetchOptions) -> Option<PathBuf> {
+    if !prepare(input, lock) {
+        return None;
+    }
+    let root = find_project_root(input);
+    if root.is_none() {
+        eprintln!(
+            "bynk: no `bynk.toml` found in `{}` or above; run from a project",
+            input.display()
+        );
+    }
+    root
 }
 
 /// #2240: resolve, fetch and lock the dependencies of the project holding

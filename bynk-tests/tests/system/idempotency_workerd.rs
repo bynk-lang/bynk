@@ -61,13 +61,6 @@ fn skip(reason: &str) -> bool {
     true
 }
 
-fn free_port() -> u16 {
-    std::net::TcpListener::bind("127.0.0.1:0")
-        .and_then(|l| l.local_addr())
-        .map(|a| a.port())
-        .expect("a free local port")
-}
-
 /// `GET path` on `port`, as `(status, body)`.
 fn get(port: u16, path: &str) -> Result<(u16, String), String> {
     let addr = format!("127.0.0.1:{port}");
@@ -125,8 +118,7 @@ fn wrangler_run(dir: &Path, args: &[&str]) -> Result<String, String> {
 /// Start `wrangler dev` in `dir` and wait until it serves; `None` (after a skip)
 /// when it never does.
 fn serve(dir: &Path, tmp: &Path, log: &str) -> Option<(wrangler::Wrangler, u16)> {
-    let port = free_port();
-    let inspector = free_port();
+    let [port, inspector] = wrangler::ports::free_ports();
     let log_path = tmp.join(log);
     let out_log = fs::File::create(&log_path).unwrap();
     let err_log = out_log.try_clone().unwrap();

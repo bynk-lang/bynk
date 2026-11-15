@@ -15,6 +15,8 @@ use std::time::{Duration, Instant};
 
 #[path = "support/dev_child.rs"]
 mod dev_child;
+#[path = "../../bynk-tests/tests/support/ports.rs"]
+mod ports;
 
 use dev_child::Group;
 
@@ -30,15 +32,6 @@ fn skip(reason: &str) -> bool {
 fn unavailable() -> bool {
     (!dev_child::have("node") || !(dev_child::have("wrangler") || dev_child::have("npx")))
         && skip("`node`, and `wrangler` or `npx`, are not available")
-}
-
-/// A free localhost port, as the OS reports it right now.
-fn free_port() -> u16 {
-    std::net::TcpListener::bind("127.0.0.1:0")
-        .expect("bind an ephemeral port")
-        .local_addr()
-        .expect("local addr")
-        .port()
 }
 
 /// A one-context project under a fresh temp dir; returns the project root.
@@ -73,7 +66,7 @@ fn start(proj: &Path, extra: &[String]) -> Session {
         cmd.arg("dev")
             .arg(proj)
             .arg("--base-port")
-            .arg(free_port().to_string())
+            .arg(ports::free_port().to_string())
             .arg("--ready-json")
             .arg(&ready)
             .args(extra)
@@ -130,7 +123,7 @@ fn an_explicit_inspect_port_reaches_wrangler_for_a_single_context() {
     if unavailable() {
         return;
     }
-    let port = free_port();
+    let port = ports::free_port();
     let proj = project("explicit");
     let mut sessions = [start(&proj, &["--inspect-port".into(), port.to_string()])];
     wait_ready(&mut sessions);
