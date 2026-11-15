@@ -2261,7 +2261,10 @@ fn check_unit_files(
                     bynk_check::checker::Callee::Ctor { sum, tag } => {
                         tag == "Forward" && sum.name.name == "EmailVerdict"
                     }
-                    _ => false,
+                    // `Events.emit`: whether the bundle has a composition
+                    // root (`project_model::phase_bundle_composition_unprovided`),
+                    // which `bynk check` decides as the build does.
+                    c => project_model::is_events_emit(c),
                 };
                 keep.then(|| (*id, c.clone()))
             }));
@@ -3408,7 +3411,7 @@ fn run_checks(
     // #696/#1659: integration-suite diagnostics, attributed the same way.
     errors.extend_attributed_by_span(&parsed, integration_errors);
 
-    phase_bundle_composition_unprovided(
+    project_model::phase_bundle_composition_unprovided(
         target,
         &parsed,
         &groups,
@@ -4627,130 +4630,6 @@ fn process_exec_import() -> Vec<TsStmt> {
     )
 }
 
-/// On the bundle target a context's required local capability may be left to
-/// the host, which supplies it through `__makeSurface(deps)`, but only while
-/// the bundle has no composition root: `composeApp` builds the deps of every
-/// context it composes ([`project_model::composed_in_bundle_root`]), so once a
-/// context brings a root in, a capability with no provider is the Workers gap
-/// again. Raised at the `given` rather than left to `tsc` against
-/// `compose.ts` (`bynk.codegen.tsc_failed`). Needs `unit_callees`, so it runs
-/// after the per-unit checks, and only on an otherwise-clean program: a unit
-/// that failed to check has no callee map, and the root is only emitted for a
-/// clean one.
-#[allow(clippy::too_many_arguments)]
-fn phase_bundle_composition_unprovided(
-    target: BuildTarget,
-    parsed: &[ParsedFile],
-    groups: &BTreeMap<String, Vec<usize>>,
-    kinds: &BTreeMap<String, UnitKind>,
-    unit_consumes: &HashMap<String, Vec<String>>,
-    unit_consumes_aliases: &HashMap<String, HashMap<String, String>>,
-    unit_tables: &HashMap<String, UnitTable>,
-    unit_callees: &HashMap<String, HashMap<ExprId, bynk_check::checker::Callee>>,
-    unit_flattened: &HashMap<String, HashMap<String, String>>,
-    errors: &mut ErrorSink,
-) {
-    if target != BuildTarget::Bundle || !errors.is_empty() {
-        return;
-    }
-    let Some((trigger, because)) = composition_root_trigger(
-        kinds,
-        unit_consumes,
-        unit_consumes_aliases,
-        unit_tables,
-        unit_callees,
-        unit_flattened,
-    ) else {
-        return;
-    };
-    project_model::phase_unprovided_capabilities(
-        &project_model::UnprovidedReason::BundleComposition { trigger, because },
-        parsed,
-        groups,
-        kinds,
-        unit_tables,
-        errors,
-    );
-}
-
-/// The context that makes a bundle emit its composition root (`compose.ts`,
-/// `composeApp`) and what it does that needs one, phrased to follow the
-/// context's name, or `None` when the bundle has no root. Shared by
-/// [`emit_composition_root`] and the bundle's `bynk.capability.not_provided`
-/// check: `composeApp` builds every context's deps itself, so once
-/// there is a root the host cannot supply a capability through
-/// `__makeSurface(deps)`, and a required local capability needs a provider,
-/// as it does on Workers.
-fn composition_root_trigger(
-    kinds: &BTreeMap<String, UnitKind>,
-    unit_consumes: &HashMap<String, Vec<String>>,
-    unit_consumes_aliases: &HashMap<String, HashMap<String, String>>,
-    unit_tables: &HashMap<String, UnitTable>,
-    unit_callees: &HashMap<String, HashMap<ExprId, bynk_check::checker::Callee>>,
-    unit_flattened: &HashMap<String, HashMap<String, String>>,
-) -> Option<(String, String)> {
-    // Identify contexts that consume something whose surface has services.
-    // Sorted, so the context named is the same on every run.
-    let mut consumers: Vec<(&String, &Vec<String>)> = unit_consumes.iter().collect();
-    consumers.sort();
-    for (name, targets) in consumers {
-        if kinds.get(name) != Some(&UnitKind::Context) {
-            continue;
-        }
-        if let Some(t) = targets.iter().find(|t| {
-            unit_tables
-                .get(*t)
-                .is_some_and(|other| !other.services.is_empty())
-        }) {
-            return Some((name.clone(), format!("consumes `{t}`, which has services")));
-        }
-    }
-    // v0.15: also compose when a context uses a consumed context's capability
-    // (in a handler or in a provider's `given`) — the consumer must instantiate
-    // the provided capability's provider locally.
-    for (name, kind) in kinds {
-        if *kind != UnitKind::Context {
-            continue;
-        }
-        let Some(table) = unit_tables.get(name) else {
-            continue;
-        };
-        let consumed = unit_consumes.get(name).cloned().unwrap_or_default();
-        let aliases = unit_consumes_aliases.get(name).cloned().unwrap_or_default();
-        let flattened = unit_flattened.get(name).cloned().unwrap_or_default();
-        let uses_cross_cap = !handler_cross_caps(table, &consumed, &aliases, &flattened).is_empty()
-            || table.providers.values().any(|p| {
-                p.given.iter().any(|g| {
-                    g.is_cross_context()
-                        // v0.18: a bare given flattened from `consumes U
-                        // { Cap }` is cross-unit too — its provider lives
-                        // in the consumed unit.
-                        || (g.prefix().is_none() && flattened.contains_key(g.key()))
-                })
-            });
-        // Events track, slice 0 (spine #936): a context whose handlers emit
-        // needs its own `__eventsDispatch` closure built by compose
-        // (§ `discover_event_subscribers`) even when it consumes nothing and
-        // no other context consumes it — `Events` is filtered out of
-        // `handler_cross_caps` (there is no `EventsProvider`), so without
-        // this check a publish-only context would never get a compose entry
-        // and its service would simply never be called. S4a (#1966): a
-        // derived capability's instance is its base's platform provider,
-        // built by compose like a flattened one.
-        let because = if uses_cross_cap {
-            "is given a capability another unit provides"
-        } else if unit_table_uses_emit(table, unit_callees.get(name)) {
-            "emits events"
-        } else if !table.derived.is_empty() {
-            "derives a capability"
-        } else {
-            continue;
-        };
-        return Some((name.clone(), because.to_string()));
-    }
-    None
-}
-
 #[allow(clippy::too_many_arguments)]
 fn emit_composition_root(
     groups: &BTreeMap<String, Vec<usize>>,
@@ -4776,7 +4655,7 @@ fn emit_composition_root(
     // own per-Worker fan-out wiring, so it is shared rather than rebuilt).
     event_subscribers: &BTreeMap<(String, String), Vec<(String, String)>>,
 ) -> Option<TsProgram> {
-    composition_root_trigger(
+    project_model::composition_root_trigger(
         kinds,
         unit_consumes,
         unit_consumes_aliases,

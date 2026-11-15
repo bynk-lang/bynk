@@ -135,7 +135,7 @@ pub enum ParamInput {
 }
 
 /// How a route reads its `body`.
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+#[derive(Debug, Clone, PartialEq, Eq)]
 pub enum BodyKind {
     /// JSON, the default.
     Json,
@@ -143,6 +143,9 @@ pub enum BodyKind {
     Form,
     /// `@multipart`: `multipart/form-data`.
     Multipart,
+    /// `@raw`: the caller's bytes, sent as written under the author's content type
+    /// (`None` for the wildcard `*/*`, which names none).
+    Raw { content_type: Option<String> },
 }
 
 /// One answer a route can make, in `bynk openapi`'s terms.
@@ -169,6 +172,29 @@ pub enum ReplyPayload {
     BoundaryError,
     /// The boundary's own `413`/`415` body: `{ kind, details }`.
     BoundaryRefusal,
+    /// An author-owned body, untouched (`RawCreated`, `RawStreamed`, `RawError`).
+    Raw,
+    /// A `Raw`: untouched, and on a small `GET` carrying a weak `ETag` the server made.
+    RawEtag,
+    /// A `RawTagged`: untouched, with the `ETag` its handler chose.
+    RawTagged,
+    /// A `Streaming` answer: server-sent events, each a `string`.
+    Events,
+}
+
+/// What a raw member says of the `ETag`.
+#[derive(Clone, Copy)]
+enum RawEtag {
+    None,
+    Maybe,
+    Required,
+}
+
+impl ReplyPayload {
+    /// Whether the body is the caller's to read, not the client's to decode.
+    fn is_raw(self) -> bool {
+        matches!(self, Self::Raw | Self::RawEtag | Self::RawTagged)
+    }
 }
 
 /// Why a client cannot be generated.
@@ -916,7 +942,18 @@ impl Gen {
 
         // The response union.
         let mut members: Vec<TsType> = Vec::new();
+        let mut raw_done: Vec<u16> = Vec::new();
         for (status, variant, payload) in &replies {
+            if payload.is_raw() {
+                // The wire cannot tell one raw answer from another at a status, so they
+                // are one member, named by every variant that can make it.
+                if raw_done.contains(status) {
+                    continue;
+                }
+                raw_done.push(*status);
+                members.push(self.raw_member(*status, &replies));
+                continue;
+            }
             let mut fields = vec![
                 TsTypeMember::readonly_prop("status", TsType::named(status.to_string())),
                 TsTypeMember::readonly_prop("kind", TsType::named(format!("\"{variant}\""))),
@@ -956,7 +993,16 @@ impl Gen {
                         ]),
                     ));
                 }
+                ReplyPayload::Events => {
+                    fields.push(TsTypeMember::readonly_prop(
+                        "events",
+                        TsType::named("globalThis.AsyncIterable<string>"),
+                    ));
+                }
                 ReplyPayload::None => {}
+                ReplyPayload::Raw | ReplyPayload::RawEtag | ReplyPayload::RawTagged => {
+                    unreachable!("a raw reply is built by `raw_member`")
+                }
             }
             members.push(TsType::Object(fields));
         }
@@ -983,7 +1029,29 @@ impl Gen {
 
         // The route constant: its replies and how to decode them.
         let mut by_status: BTreeMap<u16, Vec<String>> = BTreeMap::new();
+        let mut raw_seen: Vec<u16> = Vec::new();
         for (status, variant, payload) in &replies {
+            if payload.is_raw() {
+                if raw_seen.contains(status) {
+                    continue;
+                }
+                raw_seen.push(*status);
+                let group: Vec<&ReplyPayload> = replies
+                    .iter()
+                    .filter(|(s, _, p)| s == status && p.is_raw())
+                    .map(|(_, _, p)| p)
+                    .collect();
+                let etag = match Self::raw_etag(&group) {
+                    RawEtag::None => "",
+                    RawEtag::Maybe => ", etag: \"maybe\"",
+                    RawEtag::Required => ", etag: \"required\"",
+                };
+                by_status
+                    .entry(*status)
+                    .or_default()
+                    .push(format!("{{ kind: \"{variant}\", body: \"raw\"{etag} }}"));
+                continue;
+            }
             let entry = match payload {
                 ReplyPayload::Value => {
                     let t = success.clone().expect("a value reply has a success type");
@@ -1002,6 +1070,7 @@ impl Gen {
                         ReplyPayload::Message => "message",
                         ReplyPayload::Location => "location",
                         ReplyPayload::BoundaryError | ReplyPayload::BoundaryRefusal => "boundary",
+                        ReplyPayload::Events => "events",
                         _ => "none",
                     };
                     format!("{{ kind: \"{variant}\", body: \"{body}\" }}")
@@ -1016,7 +1085,14 @@ impl Gen {
         for (status, entries) in &by_status {
             constant.push_str(&format!("    {status}: [{}],\n", entries.join(", ")));
         }
-        constant.push_str("  },\n};\n\n");
+        constant.push_str("  },\n");
+        if replies
+            .iter()
+            .any(|(_, _, p)| p.is_raw() || *p == ReplyPayload::Events)
+        {
+            constant.push_str("  streamed: __streamed,\n");
+        }
+        constant.push_str("};\n\n");
 
         // The function: its parameters and the encoding of each.
         let (signature, build, arg_types) = self.encoding(r, rp)?;
@@ -1058,6 +1134,63 @@ impl Gen {
             response_type,
             arg_types,
         })
+    }
+
+    /// The one union member for the raw answers at `status`: the body left to the
+    /// caller, as a stream with `bytes()` and `text()` over the same body.
+    fn raw_member(&self, status: u16, replies: &[(u16, String, ReplyPayload)]) -> TsType {
+        let group: Vec<&(u16, String, ReplyPayload)> = replies
+            .iter()
+            .filter(|(s, _, p)| *s == status && p.is_raw())
+            .collect();
+        let kinds = group
+            .iter()
+            .map(|(_, v, _)| format!("\"{v}\""))
+            .collect::<Vec<_>>()
+            .join(" | ");
+        let payloads: Vec<&ReplyPayload> = group.iter().map(|(_, _, p)| p).collect();
+        let mut fields = vec![
+            TsTypeMember::readonly_prop("status", TsType::named(status.to_string())),
+            TsTypeMember::readonly_prop("kind", TsType::named(kinds)),
+            TsTypeMember::readonly_prop("contentType", TsType::named("string")),
+        ];
+        match Self::raw_etag(&payloads) {
+            RawEtag::None => {}
+            RawEtag::Maybe => fields.push(TsTypeMember::readonly_prop(
+                "etag",
+                TsType::named("string | null"),
+            )),
+            RawEtag::Required => {
+                fields.push(TsTypeMember::readonly_prop("etag", TsType::named("string")))
+            }
+        }
+        fields.push(TsTypeMember::readonly_prop(
+            "body",
+            TsType::named("globalThis.ReadableStream<globalThis.Uint8Array> | null"),
+        ));
+        fields.push(TsTypeMember::readonly_prop(
+            "bytes",
+            TsType::named("() => globalThis.Promise<globalThis.Uint8Array>"),
+        ));
+        fields.push(TsTypeMember::readonly_prop(
+            "text",
+            TsType::named("() => globalThis.Promise<string>"),
+        ));
+        TsType::Object(fields)
+    }
+
+    /// Whether the raw answers of one status carry an `ETag` the caller can rely on.
+    fn raw_etag(group: &[&ReplyPayload]) -> RawEtag {
+        if group.iter().all(|p| matches!(p, ReplyPayload::RawTagged)) {
+            RawEtag::Required
+        } else if group
+            .iter()
+            .any(|p| matches!(p, ReplyPayload::RawEtag | ReplyPayload::RawTagged))
+        {
+            RawEtag::Maybe
+        } else {
+            RawEtag::None
+        }
     }
 
     /// The replies as `(status, kind, payload)`, in a stable order, none twice.
@@ -1152,6 +1285,19 @@ impl Gen {
                     let arg = self.multipart_arg(&ty)?;
                     build.push_str(&arg);
                     entries.push("multipart: __form".to_string());
+                }
+                ParamInput::Body {
+                    kind: BodyKind::Raw { content_type },
+                    ..
+                } => {
+                    signature.push(
+                        "body: globalThis.Uint8Array | globalThis.ArrayBuffer | globalThis.Blob | globalThis.ReadableStream<globalThis.Uint8Array>"
+                            .to_string(),
+                    );
+                    entries.push("raw: body".to_string());
+                    if let Some(ct) = content_type {
+                        entries.push(format!("rawType: {ct:?}"));
+                    }
                 }
                 ParamInput::Query { ty } => {
                     let ty = self.renamed(ty);

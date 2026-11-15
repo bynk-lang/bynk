@@ -65,7 +65,8 @@ of one module. See the [HTTP client reference](/book/reference/http-client/#layo
 | Documentation, a Swagger UI, a client in another language, a gateway | [`bynk openapi`](/docs/tooling/bynk-openapi/) |
 | A Worker that is not Bynk calling an `on call` service | the [TypeScript client](/book/reference/typescript-client/) |
 
-`@form` and `@multipart` bodies are generated (a file part is a `Blob`), and a typed
-`cookies` record is written as a `Cookie` header for server-side calls. Routes the
-client cannot represent yet (raw bodies, raw and streamed responses) are named on
-stderr and left out.
+`@form` and `@multipart` bodies are generated (a file part is a `Blob`), a typed
+`cookies` record is written as a `Cookie` header for server-side calls, a `@raw` body
+is the caller's bytes, and raw and streamed answers (server-sent events included) are
+the caller's to read. A route the client cannot represent (a raw `RequestQuery` or
+`RequestCookies` view, a signed route) is named on stderr and left out.
