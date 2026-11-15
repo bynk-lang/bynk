@@ -1,0 +1,1 @@
+bynk.http.cf_wrong_type

@@ -142,6 +142,14 @@ pub struct Branch {
     /// (`if`/`match`/block) that is itself already rendered as nested
     /// structure — a note duplicating it would be noise.
     pub reply: Option<String>,
+    /// #3584: the source extent of the arm this branch came from, so a client
+    /// can link a branch to its source or project coverage onto it. For an
+    /// `if`, the `then` branch runs from the `if` keyword to the end of its
+    /// body, and the `else` branch is its block (the AST records no `else`
+    /// keyword span). For a `match`, the arm from its pattern to its end. An
+    /// else-less `if` emits only the `then` branch (an `opt`), so there is no
+    /// synthesised branch to span.
+    pub span: Span,
 }
 
 /// Whether an expression sits directly under an effect operator
@@ -536,6 +544,10 @@ impl<'a> Builder<'a> {
             label: bynk_fmt::expr_to_string(cond),
             message_ids: then_ids,
             reply: self.branch_reply(&then_block.tail),
+            span: Span {
+                end: then_block.span.end,
+                ..span
+            },
         }];
         // An else-less `if` has a synthesised `()` else block: no messages, no
         // nested blocks, no outcome. Rendering it as a second (empty) branch
@@ -549,6 +561,7 @@ impl<'a> Builder<'a> {
                 label: "otherwise".to_string(),
                 message_ids: (else_start..self.messages.len()).collect(),
                 reply: self.branch_reply(&else_block.tail),
+                span: else_block.span,
             });
         }
         self.blocks[id as usize].branches = branches;
@@ -620,6 +633,7 @@ impl<'a> Builder<'a> {
                 label: pattern_summary(&arm.pattern),
                 message_ids: (start..self.messages.len()).collect(),
                 reply,
+                span: arm.span,
             });
         }
         self.blocks[id as usize].branches = branches;
@@ -1378,6 +1392,85 @@ service routeSvc {
             .map(|b| b.reply.as_deref())
             .collect();
         assert_eq!(replies, vec![Some("100"), Some("x")]);
+    }
+
+    // -- #3584: each branch carries the source extent of its arm.
+    const SPAN_SRC: &str = r#"context spans
+
+service spanSvc {
+  on call(x: Int) -> Effect[Int] {
+    if x > 0 {
+      1
+    } else {
+      2
+    }
+  }
+
+  on call(y: Int) -> Effect[Int] {
+    match y {
+      0 => 100
+      n if n > 5 => {
+        n
+      }
+      _ => {}
+    }
+  }
+
+  on call(z: Bool) -> Effect[()] {
+    if z {
+      ()
+    }
+  }
+}
+"#;
+
+    fn branch_texts(src: &str, handler: usize) -> Vec<String> {
+        let ctx = parse_context(src);
+        let svc = find_service(&ctx, "spanSvc");
+        let model = sequence_model(
+            &svc.handlers[handler],
+            HandlerOwner::Service("spanSvc"),
+            &svc.default_given,
+            svc.default_by.as_ref(),
+            None,
+        );
+        model.blocks[0]
+            .branches
+            .iter()
+            .map(|b| src[b.span.start..b.span.end].to_string())
+            .collect()
+    }
+
+    #[test]
+    fn if_else_branches_span_their_arms() {
+        let t = branch_texts(SPAN_SRC, 0);
+        assert_eq!(t.len(), 2);
+        assert!(
+            t[0].starts_with("if x > 0 {") && t[0].ends_with('}'),
+            "{t:?}"
+        );
+        assert!(t[0].contains('1') && !t[0].contains("else"), "{t:?}");
+        assert!(t[1].starts_with('{') && t[1].contains('2'), "{t:?}");
+    }
+
+    #[test]
+    fn match_arms_span_pattern_through_body() {
+        let t = branch_texts(SPAN_SRC, 1);
+        assert_eq!(t.len(), 3);
+        assert_eq!(t[0], "0 => 100");
+        assert!(
+            t[1].starts_with("n if n > 5 => {") && t[1].ends_with('}'),
+            "{t:?}"
+        );
+        // An empty arm still has a span, covering its pattern.
+        assert_eq!(t[2], "_ => {}");
+    }
+
+    #[test]
+    fn else_less_if_has_one_branch_spanning_the_then_arm() {
+        let t = branch_texts(SPAN_SRC, 2);
+        assert_eq!(t.len(), 1, "no synthesised else branch is emitted");
+        assert!(t[0].starts_with("if z {") && t[0].ends_with('}'), "{t:?}");
     }
 
     // -- #2194: an agent's *own* handler — state writes as notes.

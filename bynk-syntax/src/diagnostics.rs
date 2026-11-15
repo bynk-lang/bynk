@@ -2813,6 +2813,13 @@ pub const EXPLANATIONS: &[Explain] = &[
         anchor: "caching",
     },
     Explain {
+        code: "bynk.http.cf_wrong_type",
+        blurb: "`cf` is the name the router reserves for what Cloudflare derived about the request's connection (its country, colo, ASN and the like), so a parameter called `cf` must be typed `RequestCf`, the record from `bynk.cloudflare` whose fields are all optional. Any other type has nothing to be filled from. Retype the parameter and import the type with `consumes bynk.cloudflare { RequestCf }`; that import is also what locks the deployment unit to Cloudflare. An input of your own needs another name, and a name that is neither a path parameter nor one of the reserved ones is `bynk.http.extra_param`. A `:cf` path segment stays a path parameter.",
+        example: "on GET(\"/hello\") (cf: String) -> Effect[HttpResult[String]] by v: Visitor { … }      // ✗\n\non GET(\"/hello\") (cf: RequestCf) -> Effect[HttpResult[String]] by v: Visitor { … }   // ✓",
+        page: "/book/reference/http",
+        anchor: "request-cf",
+    },
+    Explain {
         code: "bynk.http.cookie_cross_site_without_credentials",
         blurb: "A cookie with `SameSite=None` (`SameSite.Unrestricted`) exists to travel on cross-site requests, and a browser attaches cookies to a cross-origin `fetch` only when the request is credentialed and the response carries `Access-Control-Allow-Credentials: true`. A service with no `cors` policy, or one with `credentials: false`, never sends that header, so a cross-origin `fetch` can never send the cookie back. This is a warning, because a `SameSite=None` cookie is still sent on top-level cross-site navigations, cross-site form posts and in embeds (SSO and payment callbacks, widgets), none of which needs CORS. If a page on another origin must send it back with `fetch`, declare `cors { origins: [...], credentials: true }` (the origins must be exact, not `[\"*\"]`), or use `SameSite.Lax` if the cookie need not cross sites at all.",
         example: "service api from http {\n  on POST(\"/login\") () -> Effect[HttpResult[String]] by v: Visitor {\n    Created(\"ok\").withCookie(Cookie { name: \"sid\", value: \"a\", sameSite: SameSite.Unrestricted })   // ⚠ no `cors { credentials: true }`\n  }\n}\n\nservice api from http {\n  cors { origins: [\"https://app.example.com\"], credentials: true }   // ✓\n  …\n}",
@@ -9436,6 +9443,11 @@ pub const REGISTRY: &[DiagnosticInfo] = &[
     d(
         "bynk.http.cache_unknown_arg",
         "A `@cache` annotation has an argument outside the closed set (`maxAge`/`scope`/`immutable`).",
+    ),
+    dg(
+        "bynk.http.cf_wrong_type",
+        "An HTTP handler's `cf` parameter is not typed `RequestCf`.",
+        &["http_handler"],
     ),
     warn(dg(
         "bynk.http.cookie_cross_site_without_credentials",

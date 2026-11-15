@@ -74,7 +74,7 @@ pub fn workspace_symbols<'a>(
     let mut out: Vec<_> = index
         .symbols
         .iter()
-        .filter(|(k, _)| q.is_empty() || k.name.to_lowercase().contains(&q))
+        .filter(|(k, e)| !e.call_only && (q.is_empty() || k.name.to_lowercase().contains(&q)))
         .filter_map(|(k, e)| e.def.as_ref().map(|d| (k, d)))
         .collect();
     out.sort_by(|a, b| (&a.0.name, &a.0.unit).cmp(&(&b.0.name, &b.0.unit)));
@@ -89,6 +89,7 @@ pub fn code_lenses<'a>(index: &'a ProjectIndex, path: &Path) -> Vec<(&'a SiteRef
     let mut out: Vec<(&SiteRef, &[SiteRef])> = index
         .symbols
         .values()
+        .filter(|e| !e.call_only)
         .filter_map(|e| {
             let def = e.def.as_ref()?;
             (def.path == path).then_some((def, e.refs.as_slice()))
@@ -179,7 +180,9 @@ pub fn prepare_call_hierarchy<'a>(
     path: &Path,
     offset: usize,
 ) -> Option<(&'a SymbolKey, &'a SiteRef)> {
-    definition_at(index, path, offset)
+    // #3582: also a service handler's `on` keyword.
+    let (key, _) = index.call_symbol_at(path, offset)?;
+    Some((key, index.symbols.get(key)?.def.as_ref()?))
 }
 
 /// Group `edges` by the key returned by `pick`, attach each grouped symbol's

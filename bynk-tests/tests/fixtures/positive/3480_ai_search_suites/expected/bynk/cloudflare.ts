@@ -229,6 +229,43 @@ export const QueueSend = {
 };
 
 /**
+ * What Cloudflare knows about the connection of an `on http` request, as a
+ * handler's `cf: RequestCf` parameter. Every field is optional and defaults
+ * to `None`: Cloudflare derives them, a platform or a test may not supply
+ * them, and a field of an unexpected shape is `None`, never a fault. A
+ * handler that declares `cf` is therefore written once and works where
+ * `request.cf` is absent.
+ *
+ * These facts come from the client's IP address, so they can be personal
+ * data, and they are best-effort: a VPN or a proxy makes them wrong. The
+ * fields are Cloudflare's `request.cf` properties
+ * (https://developers.cloudflare.com/workers/runtime-apis/request/); a
+ * field is added later as a defaulted field. `latitude` and `longitude` are
+ * numeric strings on the platform and are read as `Float`; `isEuCountry` is
+ * `Some(true)` where Cloudflare reports the country as in the EU.
+ */
+export interface RequestCf {
+  readonly country: Option<string>;
+  readonly continent: Option<string>;
+  readonly city: Option<string>;
+  readonly region: Option<string>;
+  readonly regionCode: Option<string>;
+  readonly postalCode: Option<string>;
+  readonly timezone: Option<string>;
+  readonly latitude: Option<number>;
+  readonly longitude: Option<number>;
+  readonly colo: Option<string>;
+  readonly asn: Option<number>;
+  readonly asOrganization: Option<string>;
+  readonly httpProtocol: Option<string>;
+  readonly tlsVersion: Option<string>;
+  readonly isEuCountry: Option<boolean>;
+}
+
+export const RequestCf = {
+};
+
+/**
  * One event written to an `Analytics` dataset. `index` is the sampling key
  * (at most 96 bytes; `None` samples the dataset as a whole), `blobs` are
  * text dimensions (at most 20, totalling at most 16 KB), and `doubles` are
