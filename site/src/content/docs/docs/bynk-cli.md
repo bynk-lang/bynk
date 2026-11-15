@@ -1337,6 +1337,78 @@ reaches the case, which sees a `CalleeFaulted` or a response that is not `Ok`. A
 
 ---
 
+## `bynk eval`
+
+Evaluate a snippet in a unit's scope against the project, and print the value it
+ends in as JSON (#3585). It is what an editor notebook runs for a cell, and the
+guide [Try an expression against your project](/book/guides/testing/try-an-expression/)
+walks through it.
+
+```text
+bynk eval [INPUT] --unit UNIT [--expr SNIPPET] [--sources-stdin] [--suite UNIT]... [--timeout SECONDS] [--locked] [--offline]
+```
+
+| Argument | Default | Meaning |
+|---|---|---|
+| `INPUT` | `.` | Project root directory. |
+| `--unit UNIT` | required | The `commons` or `context`, by dotted name, whose scope the snippet is evaluated in. |
+| `--expr SNIPPET` | stdin | The snippet. Without it, the snippet is read from standard input. |
+| `--sources-stdin` | off | Evaluate against unsaved buffers: a JSON object `{ "<absolute path>": "<text>" }` on stdin wins over the files on disk, as for [`bynk compile`](#bynk-compile) (ADR 0626). Stdin then holds the buffers, so the snippet must be `--expr`; asking for both is an error. |
+| `--suite UNIT` | — | Build the suite for `UNIT` into the evaluation and put the snippet inside it, so the suite's `stub`s, `fn`s and fixtures apply. Repeat the flag for several units. A suite that does not compile is reported. A suite that is not a unit-tier suite is refused. |
+| `--timeout SECONDS` | `60` | Kill the evaluation after this many seconds and report it as timed out. |
+
+**How it runs.** The snippet becomes the body of one `case` in a synthetic `suite`
+for `--unit`, and is built and run by the build and runner `bynk test` uses
+(`tsc` with Node.js, or `tsx`, on `PATH`). The `case`'s last expression is
+encoded as the wire shape `Json.encode` gives it and reported with its type.
+Each evaluation is **independent**: an earlier cell's `let`s are sent again
+ahead of the snippet. The snippet sees the unit's declarations and what a suite
+for that unit sees. Its leading `consumes` and `stub` lines (with the blank and
+`//` lines among them) belong to the suite, and the rest is the case, so it
+`consumes` what it uses from other units, as a suite file does.
+
+**No real I/O.** A capability that reaches outside the process (`Fetch`, a
+database, a secret store) is refused unless it has a `stub`, in the snippet or in
+a suite named with `--suite`; `Clock`, `Random` and `Logger` are the in-memory
+doubles every test has. By default the project's own suites are left out of the
+build, so a suite that does not compile cannot stop an evaluation.
+
+This is an explicit, local run of code the user wrote in their own workspace, at
+the trust level of `bynk test`. It does not change how the refined-type explorer
+evaluates a hover (ADR 0638).
+
+**Result.** One document on stdout, in this order:
+
+```json
+{"value": <wire shape>, "type": "Result[Percent, ValidationError]", "diagnostics": []}
+```
+
+| Field | Meaning |
+|---|---|
+| `value` | The wire shape of the snippet's last expression, or `null` when there is none. |
+| `type` | That expression's type, or `null` when there is no value. A value with no wire shape (a bare effect) has a `type` and no `value`, and reports an `error`. |
+| `diagnostics` | When the snippet or the project does not check: one entry each of `line`, `col` (1-based, in the snippet), `severity`, `code` and `message`. An entry in another file adds its `file`, with that file's own line and column. Empty otherwise. |
+| `error` | Present only when the snippet checked but produced no value: `kind` is `runtime` (a refusal, a failed `expect`, an unstubbed capability), `timeout` or `setup` (no such unit, a bad flag combination), and `message` says why. |
+
+**Exit code** — `0` when there is a value (a refused refined-type construction,
+`{"kind":"Err",…}`, is a value), `1` otherwise.
+
+**Timing.** An evaluation is a build and a run of the project, in process, so its
+cost is that of a one-case `bynk test`. It is not incremental: each evaluation
+compiles the whole project again, and what is reused between runs is the `out`
+directory and the installed npm packages. Measured with a release build on a
+4-core Linux machine with Node 22 and a global `tsc`, for a project of one unit
+and one of six units:
+
+| | Time |
+|---|---|
+| First evaluation, empty `out` | 0.8 – 0.9 s |
+| Later evaluations | 0.7 – 0.9 s |
+| `bynk test` on the six-unit project, for comparison | 0.9 s |
+
+A project that needs npm packages (a first-party adapter, say) pays their
+installation once, on the first evaluation, as `bynk test` does.
+
 ## Dependencies: `bynk.lock`, `--locked` and `--offline`
 
 Before `bynk check`, `bynk test`, `bynk dev` and `bynk deploy` compile, they
