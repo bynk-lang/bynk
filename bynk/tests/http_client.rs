@@ -152,7 +152,8 @@ fn a_route_this_version_cannot_represent_is_named_and_left_out() {
     assert!(ok, "{stderr}");
     assert!(stderr.contains("skipped `POST /blob` of `api`: a `@raw` body"));
     assert!(stderr.contains("skipped `POST /note` of `api`: a `@form` or `@multipart` body"));
-    assert!(stdout.contains("getPing"));
+    assert!(stderr.contains("skipped `GET /raw` of `api`: a raw `query: RequestQuery`"));
+    assert!(stdout.contains("getPing") && !stdout.contains("getRaw"));
     assert!(!stdout.contains("postBlob") && !stdout.contains("postNote"));
 }
 

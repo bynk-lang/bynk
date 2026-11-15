@@ -261,6 +261,7 @@ show("list-null", await c.api.getOrders({ tags: ["q"], sku: null, limit: 3 }));
 show("get", await c.api.getOrderById("abc"));
 show("search", await c.api.getSearch({ q: "a b&c", page: 2 }));
 show("delete", await c.api.deleteOrderById("x/y"));
+show("dots", [await c.api.getOrderById(".."), await c.api.getOrderById(".")]);
 
 // What the server refuses and the client did not: a field the client does not know.
 const lax = createClient({
@@ -346,6 +347,12 @@ fn check_rich(out: &str, base: &str) {
         r#"{"status":200,"kind":"Ok","body":"a b&c"}"#
     );
     assert_eq!(line(out, "delete"), r#"{"status":204,"kind":"NoContent"}"#);
+    // A `.` or `..` path parameter would be collapsed by the URL parser, so it is
+    // refused as a value, and nothing is sent.
+    assert_eq!(
+        line(out, "dots"),
+        r#"[{"kind":"Invalid","error":{"kind":"StructuralMismatch","path":"path.id","expected":"a path segment","actual":".."}},{"kind":"Invalid","error":{"kind":"StructuralMismatch","path":"path.id","expected":"a path segment","actual":"."}}]"#
+    );
     // The boundary's own `400`, which the client did not foresee, is typed.
     let server_400 = line(out, "server-400");
     assert!(

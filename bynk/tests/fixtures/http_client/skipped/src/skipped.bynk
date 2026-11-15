@@ -17,4 +17,8 @@ service api from http {
   on POST("/note") (body: Note) -> Effect[HttpResult[()]] by v: Visitor {
     HttpResult.NoContent
   }
+
+  on GET("/raw") (query: RequestQuery) -> Effect[HttpResult[String]] by v: Visitor {
+    Ok("raw")
+  }
 }

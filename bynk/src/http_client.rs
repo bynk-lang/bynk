@@ -250,6 +250,12 @@ fn unsupported(info: &ContextBoundaryInfo, h: &Handler) -> Result<(), String> {
     if h.raw_content_type().is_some() {
         return Err("a `@raw` body is not supported yet".to_string());
     }
+    if h.params
+        .iter()
+        .any(|p| p.name.name == "query" && matches!(p.type_ref, TypeRef::RequestQuery(_)))
+    {
+        return Err("a raw `query: RequestQuery` is not supported yet".to_string());
+    }
     if note("form") || note("multipart") {
         return Err("a `@form` or `@multipart` body is not supported yet".to_string());
     }

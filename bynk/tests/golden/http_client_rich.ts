@@ -568,6 +568,17 @@ export async function __call(
   } catch (e) {
     return __invalid(e);
   }
+  // `.` and `..` survive percent-encoding and a URL parser collapses them (as `%2e`
+  // too), which would send the call to another route: refuse them as the value they
+  // are, never as a path.
+  for (const [name, value] of globalThis.Object.entries(request.params ?? {})) {
+    if (value === "." || value === "..") {
+      return {
+        kind: "Invalid",
+        error: { kind: "StructuralMismatch", path: `path.${name}`, expected: "a path segment", actual: value },
+      } satisfies CallFailure;
+    }
+  }
   const send = options.fetch ?? globalThis.fetch;
   const hasBody = request.body !== undefined;
   let response: globalThis.Response;
