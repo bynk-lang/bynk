@@ -1821,12 +1821,25 @@ fn free_local_port() -> Option<u16> {
 /// listening on, so `bynk dev` can say so instead of leaving it to wrangler's
 /// `Address already in use`.
 fn inspector_port_in_use(serving: &[Serving]) -> Option<u16> {
-    serving.iter().filter_map(|s| s.inspector_port).find(|p| {
-        matches!(
-            std::net::TcpListener::bind(("127.0.0.1", *p)),
-            Err(e) if e.kind() == std::io::ErrorKind::AddrInUse
-        )
-    })
+    first_inspector_port_where(serving, port_is_in_use)
+}
+
+/// The first inspector port in the allocation for which `in_use` holds. The
+/// probe is a parameter so a test can say "this port is free" without relying
+/// on the OS leaving a port it just released alone (#3526).
+fn first_inspector_port_where(serving: &[Serving], in_use: impl Fn(u16) -> bool) -> Option<u16> {
+    serving
+        .iter()
+        .filter_map(|s| s.inspector_port)
+        .find(|p| in_use(*p))
+}
+
+/// Whether binding `port` on localhost fails because something holds it.
+fn port_is_in_use(port: u16) -> bool {
+    matches!(
+        std::net::TcpListener::bind(("127.0.0.1", port)),
+        Err(e) if e.kind() == std::io::ErrorKind::AddrInUse
+    )
 }
 
 /// #1957: whether to install wrangler once before spawning the contexts. Only
@@ -2216,6 +2229,7 @@ mod tests {
 
     #[test]
     fn a_taken_inspector_port_is_found() {
+        // The listener is held for the whole test, so the port stays taken.
         let held = std::net::TcpListener::bind("127.0.0.1:0").unwrap();
         let taken = held.local_addr().unwrap().port();
         let given = DevOptions {
@@ -2224,12 +2238,24 @@ mod tests {
         };
         let lone = allocate(&names(&["links"]), None, &given);
         assert_eq!(inspector_port_in_use(&lone), Some(taken));
-        drop(held);
-        assert_eq!(inspector_port_in_use(&lone), None);
         // A worker with no inspector port has nothing to find.
         let plain = allocate(&names(&["links"]), None, &DevOptions::default());
         assert_eq!(inspector_port_in_use(&plain), None);
         assert!(free_local_port().is_some());
+    }
+
+    #[test]
+    fn a_free_inspector_port_is_not_reported() {
+        // #3526: this used to drop the listener and assert the port was then
+        // free, which fails whenever a parallel test's `bind(":0")` is handed
+        // the port just released. The probe says "free" without the OS.
+        let given = DevOptions {
+            inspect_port: Some(9300),
+            ..Default::default()
+        };
+        let lone = allocate(&names(&["links"]), None, &given);
+        assert_eq!(first_inspector_port_where(&lone, |_| false), None);
+        assert_eq!(first_inspector_port_where(&lone, |p| p == 9300), Some(9300));
     }
 
     // ---- #552: multi-context selection ------------------------------------
