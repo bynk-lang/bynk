@@ -117,7 +117,9 @@ A deployment answers only on its public `http` routes. A case that moves the
 clock, addresses an `on call` service, delivers a queue message, runs a cron
 handler, or fetches an asset is refused with a `bynk.test.remote_unsupported_*`
 diagnostic. Add `--skip-unsupported` to skip such cases instead; each is named,
-with the reason, and counted as skipped.
+with the reason, and counted as skipped. A case that reads a participant's
+database with [`D1.peek`](/book/guides/testing/check-what-the-app-stored/) is
+always skipped, with no flag: a deployment has no in-process database to read.
 
 The in-process run stays the gate: it is deterministic, fast, and checks
 everything. Run against a real system to catch what only the platform can

@@ -1531,6 +1531,8 @@ case "placing an order stores it" {
   participant's migrations applied.
 - **It is local.** Under `bynk test --against`, a case that uses it is skipped
   (`bynk.test.remote_unsupported_peek` in the skip's code), not failed.
+- **A guide.** [Check what a request stored](/book/guides/testing/check-what-the-app-stored/)
+  walks through an example.
 - **Seeding is not part of it.** Starting a case from a known row is tracked in
   [#3563](https://github.com/bynk-lang/bynk/issues/3563).
 
