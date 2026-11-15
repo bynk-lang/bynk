@@ -999,6 +999,57 @@ export function makeIntegrationAi(): WorkerAiBinding {
 }
 
 /**
+ * Cloudflare Images (#3515): the `images` binding, which `WorkersImages` reads.
+ * `input` starts a pipeline over the image's bytes; `transform` and `draw`
+ * chain, and `output` finishes with the format. The result's `image()` is the
+ * bytes as a stream and `contentType()` the type they were written with.
+ */
+export interface WorkerImagesTransformer {
+  transform(options: Record<string, unknown>): WorkerImagesTransformer;
+  draw(overlay: WorkerImagesTransformer, options?: Record<string, unknown>): WorkerImagesTransformer;
+  output(options: Record<string, unknown>): Promise<WorkerImagesResult>;
+}
+export interface WorkerImagesResult {
+  image(): ReadableStream<Uint8Array>;
+  contentType(): string;
+}
+export interface WorkerImagesBinding {
+  input(stream: ReadableStream<Uint8Array>): WorkerImagesTransformer;
+  info(
+    stream: ReadableStream<Uint8Array>,
+  ): Promise<{ format: string; fileSize?: number; width?: number; height?: number }>;
+}
+
+/**
+ * The Images binding of a multi-Worker integration test participant, bound as
+ * its `env.IMAGES`. A test never reaches Cloudflare Images, so `input` faults
+ * until the case stubs the capability's operation. There is no fake transform:
+ * an image handed back unchanged would make a test pass for the wrong reason.
+ */
+// The double's fault carries `bynkNotStubbed`, which `WorkersImages` rethrows
+// instead of mapping to an `ImagesError`: an unstubbed call must fault, not
+// come back as a value a handler's fallback would swallow.
+function notStubbed(stub: string): Error {
+  return Object.assign(
+    new globalThis.Error(
+      `bynk: the \`Images\` binding is not stubbed, and a test never reaches Cloudflare Images — stub the operation the case calls (${stub})`,
+    ),
+    { bynkNotStubbed: true },
+  );
+}
+
+export function makeIntegrationImages(): WorkerImagesBinding {
+  return {
+    async info(): Promise<never> {
+      throw notStubbed("`stub Images.info(_) returns …`");
+    },
+    input(): WorkerImagesTransformer {
+      throw notStubbed("`stub Images.transform(_, _, _) returns …`");
+    },
+  };
+}
+
+/**
  * An AI Search instance binding (#3480): Cloudflare's `ai_search` binding,
  * which `WorkersAiSearch` reads. Requests and replies are the platform's own
  * shapes (`ai_search_options`, `chunks`, `choices`), and the binding is the
@@ -1145,5 +1196,5 @@ export function makeIntegrationHyperdrive(binding: string): Hyperdrive {
 }
 
 // #1653: the `__` aliases emitted code imports.
-export { makeIntegrationAi as __makeIntegrationAi, makeIntegrationContainer as __makeIntegrationContainer, makeIntegrationAnalytics as __makeIntegrationAnalytics, makeIntegrationD1 as __makeIntegrationD1, makeIntegrationEmail as __makeIntegrationEmail, makeIntegrationHyperdrive as __makeIntegrationHyperdrive, makeIntegrationKv as __makeIntegrationKv, makeIntegrationQueue as __makeIntegrationQueue, makeIntegrationR2 as __makeIntegrationR2, makeIntegrationRateLimit as __makeIntegrationRateLimit, makeIntegrationSecretsStoreSecret as __makeIntegrationSecretsStoreSecret, makeIntegrationAiSearch as __makeIntegrationAiSearch, makeIntegrationMtls as __makeIntegrationMtls, makeIntegrationVersionMetadata as __makeIntegrationVersionMetadata, makeTestState as __makeTestState };
-export type { AiSearchInstance as __AiSearchInstance, AnalyticsDataset as __AnalyticsDataset, D1Database as __D1Database, DurableObjectState as __DurableObjectState, Hyperdrive as __Hyperdrive, KVNamespace as __KVNamespace, QueueProducer as __QueueProducer, R2Bucket as __R2Bucket, RateLimiter as __RateLimiter, SecretsStoreSecret as __SecretsStoreSecret, SendEmail as __SendEmail, WorkerAiBinding as __WorkerAiBinding, WorkerVersionMetadata as __WorkerVersionMetadata };
+export { makeIntegrationAi as __makeIntegrationAi, makeIntegrationImages as __makeIntegrationImages, makeIntegrationContainer as __makeIntegrationContainer, makeIntegrationAnalytics as __makeIntegrationAnalytics, makeIntegrationD1 as __makeIntegrationD1, makeIntegrationEmail as __makeIntegrationEmail, makeIntegrationHyperdrive as __makeIntegrationHyperdrive, makeIntegrationKv as __makeIntegrationKv, makeIntegrationQueue as __makeIntegrationQueue, makeIntegrationR2 as __makeIntegrationR2, makeIntegrationRateLimit as __makeIntegrationRateLimit, makeIntegrationSecretsStoreSecret as __makeIntegrationSecretsStoreSecret, makeIntegrationAiSearch as __makeIntegrationAiSearch, makeIntegrationMtls as __makeIntegrationMtls, makeIntegrationVersionMetadata as __makeIntegrationVersionMetadata, makeTestState as __makeTestState };
+export type { AiSearchInstance as __AiSearchInstance, AnalyticsDataset as __AnalyticsDataset, D1Database as __D1Database, DurableObjectState as __DurableObjectState, Hyperdrive as __Hyperdrive, KVNamespace as __KVNamespace, QueueProducer as __QueueProducer, R2Bucket as __R2Bucket, RateLimiter as __RateLimiter, SecretsStoreSecret as __SecretsStoreSecret, SendEmail as __SendEmail, WorkerAiBinding as __WorkerAiBinding, WorkerImagesBinding as __WorkerImagesBinding, WorkerVersionMetadata as __WorkerVersionMetadata };

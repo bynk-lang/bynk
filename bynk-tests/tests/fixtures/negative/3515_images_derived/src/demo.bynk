@@ -1,0 +1,7 @@
+context demo
+
+// #3515: `Images` is bound once per Worker, so it has no named instances.
+
+consumes bynk.cloudflare { Images }
+
+capability Resizer = Images
