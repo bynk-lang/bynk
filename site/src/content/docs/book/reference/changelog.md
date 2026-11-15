@@ -28,6 +28,7 @@ per-commit history. While Bynk is pre-1.0, increments may change behaviour.
 
 | Version | Highlights |
 |---|---|
+| **v0.616.1** | A Bundle build reports a detached fault through the same reporter as `e.detach()`, and a detached `Err` in a cron or queue handler is counted in `detached_failures` under `bynk test` |
 | **v0.616.0** | `bynk client`'s generated module exports `viaBinding`, which sends a client's calls through a Cloudflare Service Binding, with a verified recipe for SvelteKit and Next.js on Cloudflare (#3508 slice BC5) |
 | **v0.615.0** | `bynk client` generates `@raw` request bodies and the raw and streamed answers (`Raw`, `RawTagged`, `RawCreated`, `RawStreamed`, `RawError`, and `Streaming` as an async iterable of server-sent events) (#3508 slice BC4) |
 | **v0.614.1** | The editor now shows `bynk.capability.not_provided` in a bundle with a composition root, at the same `given` and with the same message as `bynk check`. `bynk check` also raises it when the only thing that brings the root in is a context that emits events (`Events.emit`); before, only `bynk test` and `bynk build` failed, with `tsc` errors in `compose.ts` |
