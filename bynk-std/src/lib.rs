@@ -910,6 +910,7 @@ pub const UNITS: &[Unit] = &[
         // Outbound email (#3302) too: Email Service carries no GA label.
         // Hyperdrive H1 (#3318): `Postgres` too, until a first-party service
         // has run on it; its records are stable and `PgError` is extensible.
+        // `request.cf` (#3513 C): `RequestCf` too, until a first-party service reads it.
         // P1 (#2590): the new operations of the stable `Kv`, until a service
         // has used them.
         // D1 shipped experimental (P4a, #2602) and graduated in P4d (#2652)
@@ -931,6 +932,7 @@ pub const UNITS: &[Unit] = &[
             "Vectorize",
             "Container",
             "AiSearch",
+            "RequestCf",
             "Kv.getWith",
             "Kv.putWith",
             "Kv.getBytes",

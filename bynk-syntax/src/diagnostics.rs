@@ -3029,6 +3029,13 @@ pub const EXPLANATIONS: &[Explain] = &[
         anchor: "form-bodies",
     },
     Explain {
+        code: "bynk.http.cf_wrong_type",
+        blurb: "`cf` is the name the router reserves for what Cloudflare derived about the request's connection (its country, colo, ASN and the like), so a parameter called `cf` must be typed `RequestCf`, the record from `bynk.cloudflare` whose fields are all optional. Any other type has nothing to be filled from. Retype the parameter and import the type with `consumes bynk.cloudflare { RequestCf }`; that import is also what locks the deployment unit to Cloudflare. An input of your own needs another name, and a name that is neither a path parameter nor one of the reserved ones is `bynk.http.extra_param`. A `:cf` path segment stays a path parameter.",
+        example: "on GET(\"/hello\") (cf: String) -> Effect[HttpResult[String]] by v: Visitor { … }      // ✗\n\non GET(\"/hello\") (cf: RequestCf) -> Effect[HttpResult[String]] by v: Visitor { … }   // ✓",
+        page: "/book/reference/http",
+        anchor: "request-cf",
+    },
+    Explain {
         code: "bynk.http.headers_wrong_type",
         blurb: "`headers` is the name the router reserves for the request's headers, so a parameter called `headers` must be typed `RequestHeaders`, the read-only view with `get(name)`, `bearer()` and `clientIp()`. Any other type has nothing to be filled from. Retype the parameter. An input of your own needs another name, and a name that is neither a path parameter nor one of the reserved ones is `bynk.http.extra_param`.",
         example: "on GET(\"/whoami\") (headers: String) -> Effect[HttpResult[String]] by v: Visitor { … }           // ✗\n\non GET(\"/whoami\") (headers: RequestHeaders) -> Effect[HttpResult[String]] by v: Visitor { … }   // ✓",
@@ -9582,6 +9589,11 @@ pub const REGISTRY: &[DiagnosticInfo] = &[
         "bynk.http.header_question_not_found",
         "`?` on `RequestHeaders.get(…)` in an `HttpResult` handler answers `404 NotFound` for a missing header, where `400` is meant (warning; auto-fixable to a `let … else` that answers `BadRequest`).",
     )),
+    dg(
+        "bynk.http.cf_wrong_type",
+        "An HTTP handler's `cf` parameter is not typed `RequestCf`.",
+        &["http_handler"],
+    ),
     dg(
         "bynk.http.headers_wrong_type",
         "An HTTP handler's `headers` parameter is not typed `RequestHeaders`.",

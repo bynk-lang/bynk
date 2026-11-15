@@ -1121,6 +1121,16 @@ pub fn emit_worker_entry(
     }) {
         imports.push("__requestCookies".to_string());
     }
+    // #3513 C: a route taking `cf: RequestCf` reads `request.cf`.
+    if http_routes.iter().any(|r| {
+        !r.path.split('/').any(|seg| seg == ":cf")
+            && r.handler.params.iter().any(|p| {
+                p.name.name == "cf"
+                    && matches!(&p.type_ref, TypeRef::Named(id) if id.name == "RequestCf")
+            })
+    }) {
+        imports.push("__cfObject".to_string());
+    }
     // #2341 (decision C): a service with `on rejected` renders its rejections.
     if http_routes.iter().any(|r| r.rejected.is_some()) {
         imports.push("__renderRejection".to_string());
@@ -3317,6 +3327,29 @@ fn emit_http_route_dispatch(
             ));
             guarded.push(const_("query", member(ident("__r_query"), "value")));
             call_args.push(ident("query"));
+            continue;
+        }
+        // #3513 C: `cf` is what Cloudflare derived about the connection, read off
+        // `request.cf` into the record; a missing or odd field is `None`.
+        if pname == "cf"
+            && !route.path.split('/').any(|seg| seg == ":cf")
+            && matches!(&p.type_ref, TypeRef::Named(id) if id.name == "RequestCf")
+        {
+            let dser = deserialise_call(&p.type_ref, "__cfObject(request)", "cf", ru);
+            guarded.push(const_("__r_cf", dser));
+            // `__cfObject` keeps only fields the record accepts, so this does not
+            // reject; the arm is what narrows the `Result` for the compiler.
+            guarded.push(if_(
+                strict_eq(member(ident("__r_cf"), "tag"), str_lit("Err")),
+                return_(Some(stamp_rejection(
+                    json_response(member(ident("__r_cf"), "error"), 400),
+                    cors_const,
+                    security_const,
+                    rejected,
+                ))),
+            ));
+            guarded.push(const_("cf", member(ident("__r_cf"), "value")));
+            call_args.push(ident("cf"));
             continue;
         }
         if bind_cookies_param(

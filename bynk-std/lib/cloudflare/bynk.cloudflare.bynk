@@ -36,6 +36,7 @@ adapter bynk.cloudflare {
 		R2UploadOptions,
 		R2Part,
 		QueueSend,
+		RequestCf,
 		DataPoint,
 		SqlValue,
 		SqlStatement,
@@ -314,6 +315,40 @@ adapter bynk.cloudflare {
 	---
 	type QueueSend = {
 		delay: Option[Duration] = None,
+	}
+
+	---
+	What Cloudflare knows about the connection of an `on http` request, as a
+	handler's `cf: RequestCf` parameter. Every field is optional and defaults
+	to `None`: Cloudflare derives them, a platform or a test may not supply
+	them, and a field of an unexpected shape is `None`, never a fault. A
+	handler that declares `cf` is therefore written once and works where
+	`request.cf` is absent.
+
+	These facts come from the client's IP address, so they can be personal
+	data, and they are best-effort: a VPN or a proxy makes them wrong. The
+	fields are Cloudflare's `request.cf` properties
+	(https://developers.cloudflare.com/workers/runtime-apis/request/); a
+	field is added later as a defaulted field. `latitude` and `longitude` are
+	numeric strings on the platform and are read as `Float`; `isEuCountry` is
+	`Some(true)` where Cloudflare reports the country as in the EU.
+	---
+	type RequestCf = {
+		country: Option[String] = None,
+		continent: Option[String] = None,
+		city: Option[String] = None,
+		region: Option[String] = None,
+		regionCode: Option[String] = None,
+		postalCode: Option[String] = None,
+		timezone: Option[String] = None,
+		latitude: Option[Float] = None,
+		longitude: Option[Float] = None,
+		colo: Option[String] = None,
+		asn: Option[Int] = None,
+		asOrganization: Option[String] = None,
+		httpProtocol: Option[String] = None,
+		tlsVersion: Option[String] = None,
+		isEuCountry: Option[Bool] = None,
 	}
 
 	---

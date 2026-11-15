@@ -5420,6 +5420,24 @@ fn validate_http_handler(
         if is_cookies {
             validate_cookies_param(p, types, errors);
         }
+        // #3513 C: `cf` is what Cloudflare derived about the connection, and must be
+        // typed `RequestCf` (from `bynk.cloudflare`).
+        let is_cf = !is_path && p.name.name == "cf";
+        if is_cf && !matches!(&p.type_ref, TypeRef::Named(id) if id.name == "RequestCf") {
+            errors.push(
+                CompileError::new(
+                    "bynk.http.cf_wrong_type",
+                    p.type_ref.span(),
+                    format!(
+                        "an HTTP handler's `cf` parameter must be typed `RequestCf` (got `{}`)",
+                        ts_type_ref_display(&p.type_ref),
+                    ),
+                )
+                .with_note(
+                    "`cf: RequestCf` gives the handler what Cloudflare derived about the request; import it with `consumes bynk.cloudflare { RequestCf }`",
+                ),
+            );
+        }
         // #3276: the `body` of a `@form` handler is a record of form leaves.
         if is_body
             && let Some(kind) = handler
@@ -5459,18 +5477,18 @@ fn validate_http_handler(
                 ),
             );
         }
-        if !is_path && !is_body && !is_headers && !is_query && !is_cookies {
+        if !is_path && !is_body && !is_headers && !is_query && !is_cookies && !is_cf {
             errors.push(
                 CompileError::new(
                     "bynk.http.extra_param",
                     p.span,
                     format!(
-                        "handler parameter `{}` is not a path parameter and is not named `body`, `headers`, `query` or `cookies`",
+                        "handler parameter `{}` is not a path parameter and is not named `body`, `headers`, `query`, `cookies` or `cf`",
                         p.name.name
                     ),
                 )
                 .with_note(
-                    "HTTP handler parameters must match a `:name` path segment, or be named `body`, `headers`, `query` or `cookies`",
+                    "HTTP handler parameters must match a `:name` path segment, or be named `body`, `headers`, `query`, `cookies` or `cf`",
                 ),
             );
         }
