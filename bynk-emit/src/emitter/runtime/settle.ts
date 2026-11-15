@@ -256,3 +256,30 @@ export function __bynkDetach(
   return Promise.resolve();
 }
 
+// #3541: the execution context a Bundle (Node) composition root hands a handler.
+//
+// A bundle has no platform to record an exception, so the process keeps what is
+// handed to `waitUntil` alive and reports a fault the way `__bynkDetach`'s other
+// report does: one structured `console.error` record in the shape `Logger.log`
+// writes, labelled with the detach site (the `detachedAt` that `__bynkDetach` put
+// on the reason; empty for an effect abandoned by `within`, which has no site).
+// An `Err` from `__bynkDetach` needs no hook here: with no `report` it already
+// writes its own record.
+export function __bynkProcessExec(): __BynkDetachExec {
+  return {
+    waitUntil(promise: Promise<unknown>): void {
+      promise.catch((reason: unknown) => {
+        const site = typeof reason === "object" && reason !== null ? (reason as { detachedAt?: unknown }).detachedAt : undefined;
+        console.error({
+          message: "a detached effect faulted",
+          level: "error",
+          fields: {
+            site: typeof site === "string" ? site : "",
+            error: reason instanceof Error ? reason.message : String(reason),
+          },
+        });
+      });
+    },
+  };
+}
+

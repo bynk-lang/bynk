@@ -1,6 +1,6 @@
 import test from "node:test";
 import assert from "node:assert/strict";
-import { __bynkDetach } from "../src/settle.ts";
+import { __bynkDetach, __bynkProcessExec } from "../src/settle.ts";
 import type { __BynkDetachReport } from "../src/settle.ts";
 
 // #3437: `e.detach()` hands a running effect to `waitUntil` and reports a failure.
@@ -98,4 +98,51 @@ test("a frozen or non-object fault is still passed on", async () => {
   await __bynkDetach(Promise.reject("plain"), e, "s:1:1");
   await assert.rejects(e.handed[0]!, (x) => x === frozen);
   await assert.rejects(e.handed[1]!, (x) => x === "plain");
+});
+
+// #3541: the Bundle composition root's execution context reports a fault the way a
+// detached one is reported elsewhere: one structured record, labelled with the site.
+async function recording(run: () => Promise<void>): Promise<unknown[]> {
+  const records: unknown[] = [];
+  const original = console.error;
+  console.error = (r: unknown) => void records.push(r);
+  try {
+    await run();
+  } finally {
+    console.error = original;
+  }
+  return records;
+}
+
+test("the bundle exec reports a detached fault with its site", async () => {
+  const records = await recording(async () => {
+    const exec = __bynkProcessExec();
+    await __bynkDetach(Promise.reject(new Error("boom")), exec, "s:4:2");
+    await new Promise((r) => setImmediate(r));
+  });
+  assert.deepEqual(records, [
+    { message: "a detached effect faulted", level: "error", fields: { site: "s:4:2", error: "boom" } },
+  ]);
+});
+
+test("the bundle exec reports an abandoned fault with no site, and a non-Error reason", async () => {
+  const records = await recording(async () => {
+    const exec = __bynkProcessExec();
+    exec.waitUntil(Promise.reject("plain"));
+    await new Promise((r) => setImmediate(r));
+  });
+  assert.deepEqual(records, [
+    { message: "a detached effect faulted", level: "error", fields: { site: "", error: "plain" } },
+  ]);
+});
+
+test("a detached Err through the bundle exec is the same record as everywhere else", async () => {
+  const records = await recording(async () => {
+    const exec = __bynkProcessExec();
+    await __bynkDetach(Promise.resolve({ tag: "Err", error: { tag: "Refused" } }), exec, "s:1:1", "MailError");
+    await new Promise((r) => setImmediate(r));
+  });
+  assert.deepEqual(records, [
+    { message: "a detached effect returned Err", level: "error", fields: { site: "s:1:1", type: "MailError", variant: "Refused" } },
+  ]);
 });

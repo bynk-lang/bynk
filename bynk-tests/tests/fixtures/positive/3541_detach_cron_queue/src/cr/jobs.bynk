@@ -1,0 +1,25 @@
+context cr.jobs
+
+type Refused = | Refused
+
+type Delivery = { id: String }
+
+// #3541: an effect that fails with an `Err`, detached from a cron and a queue handler.
+fn refuse() -> Effect[Result[(), Refused]] {
+	Err(Refused)
+}
+
+service sweeper from cron {
+	on schedule("*/5 * * * *") (at: Int) -> Effect[Result[(), String]] {
+		do refuse().detach()
+		Ok(())
+	}
+}
+
+service deliveries from queue("deliveries") {
+	on message(d: Delivery) -> Effect[QueueResult] {
+		do refuse().detach()
+		do refuse().detach()
+		Ack
+	}
+}

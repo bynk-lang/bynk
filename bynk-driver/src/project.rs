@@ -4724,6 +4724,8 @@ fn emit_composition_root(
     }
 
     let mut body: Vec<TsStmt> = Vec::new();
+    // #3541: whether a context took the bundle's process execution context.
+    let mut process_exec_used = false;
 
     for ctx_name in &ordered {
         if kinds.get(ctx_name.as_str()) != Some(&UnitKind::Context) {
@@ -4909,16 +4911,15 @@ fn emit_composition_root(
         // #2683: a `call` handler that calls `within` (or sends) reads
         // `deps.__exec`. The bundle has no platform execution context, so what
         // it is handed is kept alive by the process; a fault in it, with no
-        // handler left to raise it to, is logged.
+        // handler left to raise it to, is reported by the same reporter
+        // `e.detach()` uses (#3541), not a logger of the shim's own.
         if table.services.values().any(|s| {
             s.handlers
                 .iter()
                 .any(|h| bynk_emit::emitter::call_handler_needs_exec(&table.exec_plan, h))
         }) {
-            deps_entries.push((
-                "__exec".to_string(),
-                ident("{ waitUntil(promise: globalThis.Promise<unknown>): void { promise.catch((e) => globalThis.console.error(\"an abandoned effect failed\", String(e))); } }"),
-            ));
+            process_exec_used = true;
+            deps_entries.push(("__exec".to_string(), ident("__bynkProcessExec()")));
         }
         deps_entries.sort_by_cached_key(|(k, _)| deps_entry_sort_key(k));
 
@@ -5035,6 +5036,15 @@ fn emit_composition_root(
         None,
     ));
     program.push(TsStmt::comment("composition root", None));
+    if process_exec_used {
+        for stmt in emitter::runtime_files::runtime_import_stmts(
+            false,
+            &["__bynkProcessExec".to_string()],
+            "./runtime.js",
+        ) {
+            program.push(stmt);
+        }
+    }
 
     // Import every context as a namespace.
     for ctx_name in &contexts {
