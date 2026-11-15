@@ -2539,6 +2539,28 @@ fn d1_phase(
     (migrations, d1_sql)
 }
 
+/// The manifest checks that need the project's units, read as the editor reads
+/// them (`bynk_check::analysis::analyse_project`): `[package] exports` names
+/// only commons and adapters the project declares (#2207, packaging slice 1,
+/// decision D), and `[deploy.workers]` groups only contexts it declares (#3562).
+fn manifest_unit_diagnostics(
+    project_root: &Path,
+    overlay: &HashMap<PathBuf, String>,
+    kinds: &BTreeMap<String, UnitKind>,
+    errors: &mut ErrorSink,
+) {
+    let found = bynk_check::exports::manifest_diagnostics(Some(project_root), overlay, kinds)
+        .into_iter()
+        .chain(bynk_check::worker_groups::manifest_diagnostics(
+            Some(project_root),
+            overlay,
+            kinds,
+        ));
+    for err in found {
+        errors.push_for(Some(Path::new(bynk_check::stability::MANIFEST)), err);
+    }
+}
+
 #[allow(clippy::too_many_arguments)]
 fn run_checks(
     // R3.9 (#1113): one `(root, prefix)` pair per `Roots::trees` entry, not a
@@ -2720,12 +2742,7 @@ fn run_checks(
     //       fire — see that function's own doc comment. --
     let (groups, kinds, test_groups, integration_groups, adapter_bindings, npm_deps) =
         project_model::phase_group(&parsed, trees, platform, &injected, overlay, &mut errors);
-    // #2207 (packaging slice 1, decision D): `[package] exports` names only
-    // commons and adapters this project declares — read as the editor reads it
-    // (`bynk_check::analysis::analyse_project`).
-    for err in bynk_check::exports::manifest_diagnostics(Some(project_root), overlay, &kinds) {
-        errors.push_for(Some(Path::new(bynk_check::stability::MANIFEST)), err);
-    }
+    manifest_unit_diagnostics(project_root, overlay, &kinds, &mut errors);
     // -- 4. Build per-unit combined symbol tables. --
     // -- 4-5. Symbol tables, `uses` resolution, and (#3445) the constants named by
     //         literal-only annotation arguments, resolved ahead of every reader. --
