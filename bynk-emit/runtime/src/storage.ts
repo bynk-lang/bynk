@@ -999,6 +999,41 @@ export function makeIntegrationAi(): WorkerAiBinding {
 }
 
 /**
+ * Cloudflare Images (#3515): the `images` binding, which `WorkersImages` reads.
+ * `input` starts a pipeline over the image's bytes; `transform` and `draw`
+ * chain, and `output` finishes with the format. The result's `image()` is the
+ * bytes as a stream and `contentType()` the type they were written with.
+ */
+export interface WorkerImagesTransformer {
+  transform(options: Record<string, unknown>): WorkerImagesTransformer;
+  draw(overlay: WorkerImagesTransformer, options?: Record<string, unknown>): WorkerImagesTransformer;
+  output(options: Record<string, unknown>): Promise<WorkerImagesResult>;
+}
+export interface WorkerImagesResult {
+  image(): ReadableStream<Uint8Array>;
+  contentType(): string;
+}
+export interface WorkerImagesBinding {
+  input(stream: ReadableStream<Uint8Array>): WorkerImagesTransformer;
+}
+
+/**
+ * The Images binding of a multi-Worker integration test participant, bound as
+ * its `env.IMAGES`. A test never reaches Cloudflare Images, so `input` faults
+ * until the case stubs the capability's operation. There is no fake transform:
+ * an image handed back unchanged would make a test pass for the wrong reason.
+ */
+export function makeIntegrationImages(): WorkerImagesBinding {
+  return {
+    input(): WorkerImagesTransformer {
+      throw new globalThis.Error(
+        "bynk: the `Images` binding is not stubbed, and a test never reaches Cloudflare Images — stub the operation the case calls (`stub Images.transform(_, _, _) returns …`)",
+      );
+    },
+  };
+}
+
+/**
  * An AI Search instance binding (#3480): Cloudflare's `ai_search` binding,
  * which `WorkersAiSearch` reads. Requests and replies are the platform's own
  * shapes (`ai_search_options`, `chunks`, `choices`), and the binding is the

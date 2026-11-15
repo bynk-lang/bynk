@@ -1,0 +1,45 @@
+context shop.thumbs
+
+// #3515: `Images` is one binding per Worker, `[images]` bound as `IMAGES`,
+// reached by a handler and through a local provider's `given`. `Kv` is
+// consumed but never used, so the Worker declares no `[[kv_namespaces]]`:
+// reaching `Images` must not imply the bare namespace.
+
+consumes bynk
+consumes bynk.cloudflare { Kv, Images, ImagesError, ImageFormat, ImageFit, TransformOptions, OutputOptions, Overlay }
+
+capability Thumbnailer {
+	fn thumb(image: Bytes) -> Effect[Option[Bytes]]
+}
+
+provides Thumbnailer = ImagesThumbnailer given Images {
+	fn thumb(image: Bytes) -> Effect[Option[Bytes]] {
+		let r <- Images.transform(image, TransformOptions { width: Some(64), height: Some(64) }, OutputOptions { format: ImageFormat.Webp })
+		match r {
+			Ok(img) => Effect.pure(Some(img.body)),
+			Err(_) => Effect.pure(None),
+		}
+	}
+}
+
+service avatars from http {
+	@raw(contentType: "*/*")
+	@limit(maxBody: 1048576)
+	on POST("/avatar") (body: Bytes) -> Effect[HttpResult[String]] by Visitor given Images {
+		let logo = Overlay { image: body, opacity: Some(0.5), bottom: Some(8), right: Some(8) }
+		let options = TransformOptions { width: Some(256), height: Some(256), fit: Some(ImageFit.Cover), rotate: Some(90), overlays: [logo] }
+		let r <- Images.transform(body, options, OutputOptions { format: ImageFormat.Webp, quality: Some(80) })
+		match r {
+			Ok(img) => Raw(img.body, img.contentType),
+			Err(InvalidImage(m)) => BadRequest(m),
+			Err(ImageTooLarge) => BadRequest("image too large"),
+			Err(_) => ServerError("could not process image"),
+		}
+	}
+}
+
+service about {
+	on call(image: Bytes) -> Effect[Option[Bytes]] given Thumbnailer {
+		Thumbnailer.thumb(image)
+	}
+}

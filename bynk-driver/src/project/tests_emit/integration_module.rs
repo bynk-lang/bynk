@@ -852,7 +852,7 @@ fn platform_binding_factories(
     binds: &dyn Fn(fn(&BindingSource) -> bool) -> bool,
     pglite: bool,
 ) -> Vec<String> {
-    let kinds: [(bynk_emit::emitter::wrangler::BindingKind, &str); 14] = [
+    let kinds: [(bynk_emit::emitter::wrangler::BindingKind, &str); 15] = [
         (
             |s| matches!(s, BindingSource::Kv | BindingSource::KvInstance { .. }),
             "__makeIntegrationKv",
@@ -911,6 +911,7 @@ fn platform_binding_factories(
             "__makeIntegrationVersionMetadata",
         ),
         (|s| singleton_is(s, "Ai"), "__makeIntegrationAi"),
+        (|s| singleton_is(s, "Images"), "__makeIntegrationImages"),
     ];
     kinds
         .into_iter()

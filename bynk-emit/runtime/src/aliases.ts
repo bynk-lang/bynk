@@ -20,7 +20,7 @@ import { fault, invariantViolation } from "./errors.ts";
 import { applyCache, applyCors, applyEdgeCache, applySecurityHeaders, cookieObject, cookieString, cookieValue, corsPreflightResponse, csrfAllowed, edgeCacheGuard, formDecode, formMediaTypeMatches, formObject, formString, headResponse, httpResultToResponse, matchPath, mediaTypeMatches, multipartForm, multipartMediaTypeMatches, multipartObject, noStore, notModifiedIfMatch, queryObject, queryString, renderRejection, requestHeaderPairs, requestCookies, requestCookiesHeader, requestBodyStream, requestHeaders, requestQuery, requestQuerySearch, responseToHttpOutcome, responseToHttpResult, responseToUnauthOutcome, sessionCookieOf, untilBodyTooLarge, varyAcceptLanguage, withPlainJson, type CorsPolicy, type SecurityPolicy } from "./http.ts";
 import { formatIcuDate, formatIcuNumber, selectPluralArm } from "./messages.ts";
 import { StoreCache, StoreLog, StoreMap, StoreSet, fillHeld, fillLog, fillMap, fillSet, wireEntries, wireHeld, wireHeldOrder, wireLog, wireMap, wirePostings, wireSet } from "./store.ts";
-import { makeIntegrationAi, makeIntegrationAiSearch, makeIntegrationContainer, makeIntegrationAnalytics, makeIntegrationD1, makeIntegrationEmail, makeIntegrationHyperdrive, makeIntegrationKv, makeIntegrationQueue, makeIntegrationR2, makeIntegrationRateLimit, makeIntegrationSecretsStoreSecret, makeIntegrationVersionMetadata, makeTestState, type AiSearchInstance, type AnalyticsDataset, type D1Database, type DurableObjectState, type Hyperdrive, type KVNamespace, type QueueProducer, type R2Bucket, type RateLimiter, type SecretsStoreSecret, type SendEmail, type WorkerAiBinding, type WorkerVersionMetadata } from "./storage.ts";
+import { makeIntegrationAi, makeIntegrationImages, makeIntegrationAiSearch, makeIntegrationContainer, makeIntegrationAnalytics, makeIntegrationD1, makeIntegrationEmail, makeIntegrationHyperdrive, makeIntegrationKv, makeIntegrationQueue, makeIntegrationR2, makeIntegrationRateLimit, makeIntegrationSecretsStoreSecret, makeIntegrationVersionMetadata, makeTestState, type AiSearchInstance, type AnalyticsDataset, type D1Database, type DurableObjectState, type Hyperdrive, type KVNamespace, type QueueProducer, type R2Bucket, type RateLimiter, type SecretsStoreSecret, type SendEmail, type WorkerAiBinding, type WorkerImagesBinding, type WorkerVersionMetadata } from "./storage.ts";
 import { makeIntegrationVectorize, type VectorizeIndex } from "./vectorize.ts";
 
 export {
@@ -79,6 +79,7 @@ export {
   makeAgent as __makeAgent,
   makeIntegrationDoNamespace as __makeIntegrationDoNamespace,
   makeIntegrationAi as __makeIntegrationAi,
+  makeIntegrationImages as __makeIntegrationImages,
   makeIntegrationContainer as __makeIntegrationContainer,
   makeIntegrationAnalytics as __makeIntegrationAnalytics,
   makeIntegrationD1 as __makeIntegrationD1,
@@ -185,6 +186,7 @@ export type {
   SendEmail as __SendEmail,
   VectorizeIndex as __VectorizeIndex,
   WorkerAiBinding as __WorkerAiBinding,
+  WorkerImagesBinding as __WorkerImagesBinding,
   WorkerVersionMetadata as __WorkerVersionMetadata,
   SecurityPolicy as __SecurityPolicy,
   ServiceBinding as __ServiceBinding,

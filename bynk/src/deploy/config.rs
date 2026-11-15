@@ -1593,6 +1593,12 @@ pub(crate) fn synthesise_environment_block(
         env_block.insert("version_metadata".to_string(), version_metadata.clone());
     }
 
+    // #3515: the Images binding, likewise: it names no resource, and an
+    // environment without it faults on the first `Images.transform`.
+    if let Some(images) = doc.get("images") {
+        env_block.insert("images".to_string(), images.clone());
+    }
+
     // P3 (#2342): the rate limiters, copied as the top level has them. The
     // push materialises this environment's `namespace_id`s into the top
     // level before this block is synthesised from it, so they are already
@@ -1967,6 +1973,9 @@ id = "<KV_NAMESPACE_ID>" # set at deploy time
 [version_metadata]
 binding = "CF_VERSION_METADATA"
 
+[images]
+binding = "IMAGES"
+
 [[send_email]]
 name = "EMAIL_MAIL"
 allowed_sender_addresses = ["orders@shop.example"]
@@ -2115,6 +2124,12 @@ max_batch_size = 10
             env["version_metadata"]["binding"].as_str(),
             Some("CF_VERSION_METADATA"),
             "the Version metadata binding is repeated, or `Version.current()` faults in the environment"
+        );
+        // #3515: likewise the Images binding.
+        assert_eq!(
+            env["images"]["binding"].as_str(),
+            Some("IMAGES"),
+            "the Images binding is repeated, or `Images.transform` faults in the environment"
         );
         assert_eq!(
             env["services"][0]["service"].as_str(),

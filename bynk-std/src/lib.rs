@@ -796,6 +796,11 @@ pub const VERSION_BINDING_NAME: &str = "CF_VERSION_METADATA";
 /// `[ai] binding = "AI"`, the name Cloudflare's own documentation uses.
 pub const AI_BINDING_NAME: &str = "AI";
 
+/// The Worker binding of the `Images` capability (#3515): Cloudflare Images'
+/// binding, `[images] binding = "IMAGES"`, the name Cloudflare's own
+/// documentation uses.
+pub const IMAGES_BINDING_NAME: &str = "IMAGES";
+
 /// The prefix an `EdgeCache` instance's binding name would carry (first-party
 /// registry L7, #2414). Workers Cache is a Worker-wide `[cache]` setting with
 /// no `env` binding, so the name is never emitted: the instance is built from
@@ -887,6 +892,7 @@ pub const UNITS: &[Unit] = &[
             "WorkersD1",
             "WorkersVersion",
             "WorkersAi",
+            "WorkersImages",
             "WorkersStoredSecret",
             "WorkersEmail",
             "WorkersPostgres",
@@ -906,6 +912,7 @@ pub const UNITS: &[Unit] = &[
         // P3b (#2582): Analytics too, until a first-party service writes to it.
         // Version metadata (#3300) too, until a first-party service reports it.
         // Workers AI (#3478) too, until a first-party service has called a model.
+        // Cloudflare Images (#3515) too, until a first-party service has resized one.
         // Secrets Store (#3301) too, until a first-party service reads one.
         // Outbound email (#3302) too: Email Service carries no GA label.
         // Hyperdrive H1 (#3318): `Postgres` too, until a first-party service
@@ -924,6 +931,7 @@ pub const UNITS: &[Unit] = &[
             "Analytics",
             "Version",
             "Ai",
+            "Images",
             "StoredSecret",
             "Email",
             "Postgres",
@@ -943,6 +951,9 @@ pub const UNITS: &[Unit] = &[
             "SqlError",
             "EmailError",
             "AiError",
+            "ImageFormat",
+            "ImageFit",
+            "ImagesError",
             "ChatRole",
             "PgError",
             "MySqlError",
@@ -1123,6 +1134,12 @@ pub const UNITS: &[Unit] = &[
                 capability: "Ai",
                 binding: AI_BINDING_NAME,
                 wrangler_table: "ai",
+            },
+            // Cloudflare Images (#3515): one `[images]` binding per Worker.
+            Singleton {
+                capability: "Images",
+                binding: IMAGES_BINDING_NAME,
+                wrangler_table: "images",
             },
         ],
     },
@@ -1701,6 +1718,7 @@ mod tests {
                     "version_metadata"
                 ),
                 ("bynk.cloudflare", "Ai", "AI", "ai"),
+                ("bynk.cloudflare", "Images", "IMAGES", "images"),
             ]
         );
         for u in UNITS {
@@ -1917,6 +1935,7 @@ mod tests {
                 "bynk.cloudflare.Analytics",
                 "bynk.cloudflare.Version",
                 "bynk.cloudflare.Ai",
+                "bynk.cloudflare.Images",
                 "bynk.cloudflare.StoredSecret",
                 "bynk.cloudflare.Email",
                 "bynk.cloudflare.Postgres",
@@ -1947,6 +1966,9 @@ mod tests {
                 ("bynk.cloudflare", "SqlError"),
                 ("bynk.cloudflare", "EmailError"),
                 ("bynk.cloudflare", "AiError"),
+                ("bynk.cloudflare", "ImageFormat"),
+                ("bynk.cloudflare", "ImageFit"),
+                ("bynk.cloudflare", "ImagesError"),
                 ("bynk.cloudflare", "ChatRole"),
                 ("bynk.cloudflare", "PgError"),
                 ("bynk.cloudflare", "MySqlError"),

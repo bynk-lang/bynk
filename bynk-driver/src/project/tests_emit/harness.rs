@@ -255,6 +255,10 @@ pub(super) fn emit_integration_harness<'a>(
                 BindingSource::Singleton { capability } if capability == "Ai" => {
                     call(ident("__makeIntegrationAi"), vec![])
                 }
+                // #3515: an Images binding that faults until stubbed.
+                BindingSource::Singleton { capability } if capability == "Images" => {
+                    call(ident("__makeIntegrationImages"), vec![])
+                }
                 BindingSource::Singleton { capability } => {
                     unreachable!("singleton `{capability}` has no integration binding")
                 }
