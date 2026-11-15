@@ -78,3 +78,9 @@ bynk.wasm.strip_failed: a tool failure or compiler bug, not a program error
 bynk.fmt.comment_loss: a tool failure or compiler bug, not a program error
 bynk.fmt.mixed_comment_syntax: a tool failure or compiler bug, not a program error
 bynk.fmt.roundtrip: a tool failure or compiler bug, not a program error
+bynk.deploy.context_in_two_groups: a manifest-level diagnostic (a `bynk.toml` `[deploy.workers]` error) with no source line, which the example gate cannot mark
+bynk.deploy.duplicate_hostname: a manifest-level diagnostic (a `bynk.toml` `[deploy.workers]` error) with no source line, which the example gate cannot mark
+bynk.deploy.empty_group: a manifest-level diagnostic (a `bynk.toml` `[deploy.workers]` error) with no source line, which the example gate cannot mark
+bynk.deploy.group_name_conflict: a manifest-level diagnostic (a `bynk.toml` `[deploy.workers]` error) with no source line, which the example gate cannot mark
+bynk.deploy.not_a_context: a manifest-level diagnostic (a `bynk.toml` `[deploy.workers]` error) with no source line, which the example gate cannot mark
+bynk.deploy.unknown_context: a manifest-level diagnostic (a `bynk.toml` `[deploy.workers]` error) with no source line, which the example gate cannot mark

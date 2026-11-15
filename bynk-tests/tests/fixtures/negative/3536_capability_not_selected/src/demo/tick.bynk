@@ -1,0 +1,12 @@
+context demo
+
+consumes bynk { Logger }
+
+// Imports are per file: `Clock` is flattened into the unit by `clock.bynk`'s
+// braces, but this file does not list it.
+service tick {
+    on call() -> Effect[Int] given Clock {
+        let _ <- Clock.now()
+        Effect.pure(1)
+    }
+}

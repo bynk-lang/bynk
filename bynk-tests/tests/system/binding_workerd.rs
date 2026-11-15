@@ -43,7 +43,7 @@ const REQUIRE_ENV: &str = "BYNK_REQUIRE_WORKERD";
 
 const SOURCE: &str = "context kv.smoke
 
-consumes bynk.cloudflare { Kv }
+consumes bynk.cloudflare { Kv, KvPut, KvGet, KvList, KvExpiration }
 
 capability Sessions = Kv
 capability PriceCache = Kv
@@ -777,7 +777,7 @@ fn workers_ratelimit_counts_on_workerd() {
 const QUEUE_SOURCE: &str = "context q.smoke
 
 consumes bynk
-consumes bynk.cloudflare { Kv, Queue, InboundEmail, EmailVerdict, EmailReply, DmarcVerdict, SenderIdentity }
+consumes bynk.cloudflare { Kv, Queue, QueueSend, InboundEmail, EmailVerdict, EmailReply, DmarcVerdict, SenderIdentity }
 
 type Placed = {
 \tid: String,
@@ -1133,7 +1133,7 @@ fn seed_local_secret(dir: &std::path::Path) -> Option<String> {
 const ANALYTICS_SOURCE: &str = "context a.smoke
 
 consumes bynk
-consumes bynk.cloudflare { Analytics, Version, StoredSecret, Email, EmailMessage, EmailAttachment }
+consumes bynk.cloudflare { DataPoint, Analytics, Version, StoredSecret, Email, EmailMessage, EmailAttachment }
 
 capability Mail = Email @allowedSenders([\"orders@smoke.example\"])
 capability Signups = Analytics
@@ -1269,7 +1269,7 @@ fn workers_analytics_writes_on_workerd() {
 const D1_SOURCE: &str = "context d.smoke
 
 consumes bynk
-consumes bynk.cloudflare { D1 }
+consumes bynk.cloudflare { D1, SqlValue, SqlStatement, SqlError }
 
 capability Orders = D1
 
@@ -1378,7 +1378,7 @@ fn workers_d1_round_trips_on_workerd() {
 const D1_MIGRATIONS_SOURCE: &str = "context m.smoke
 
 consumes bynk
-consumes bynk.cloudflare { D1 }
+consumes bynk.cloudflare { D1, SqlValue, SqlStatement, SqlError }
 
 capability Items = D1
 
@@ -1512,7 +1512,7 @@ fn fetch_source(upstream: u16) -> String {
     format!(
         "context f.smoke
 
-consumes bynk {{ Fetch }}
+consumes bynk {{ Fetch, Request, Method, FetchOptions, Redirect, FetchError }}
 
 service api from http {{
 \ton GET(\"/go/:path/:manual/:wait\") (path: String, manual: String, wait: String) -> Effect[HttpResult[String]] by Visitor given Fetch {{
@@ -1780,7 +1780,7 @@ fn fetch_bytes_source(upstream: u16, streams: u16) -> String {
     format!(
         "context fb.smoke
 
-consumes bynk {{ Fetch }}
+consumes bynk {{ Fetch, Request, Method, FetchOptions, Redirect, FetchError }}
 
 service api from http {{
 \ton GET(\"/round\") () -> Effect[HttpResult[String]] by Visitor given Fetch {{
@@ -2414,7 +2414,7 @@ impl Drop for LocalMySql {
 const MYSQL_SOURCE: &str = r#"context my.smoke
 
 consumes bynk
-consumes bynk.cloudflare { MySql, MySqlError, MySqlValue, MySqlRun, MySqlStatement }
+consumes bynk.cloudflare { MySql, MySqlError, MySqlReadError, MySqlValue, MySqlRun, MySqlStatement }
 
 capability Main = MySql
 capability Refused = MySql
@@ -2668,7 +2668,7 @@ fn workers_mysql_runs_through_hyperdrive_on_workerd() {
 const AI_SOURCE: &str = "context ai.smoke
 
 consumes bynk
-consumes bynk.cloudflare { Ai }
+consumes bynk.cloudflare { Ai, AiError }
 
 service api from http {
 \ton GET(\"/ready\") () -> Effect[HttpResult[String]] by Visitor {

@@ -107,7 +107,7 @@ const TSCONFIG_JSON: &str = r#"{
 const SOURCE_NOTIFICATIONS: &str = r#"context commerce.notifications
 
 consumes commerce.order
-consumes bynk { Logger }
+consumes bynk { Logger, EventEnvelope }
 
 service OnV1 from Events(PaymentConfirmed) via schema(1) {
   on event(e: PaymentConfirmed) -> Effect[()] given Logger {
@@ -149,7 +149,7 @@ service markPaid {{
 const SOURCE_NOTIFICATIONS_RANGES: &str = r#"context commerce.notifications
 
 consumes commerce.order
-consumes bynk { Logger }
+consumes bynk { Logger, EventEnvelope }
 
 service OnExactlyV1 from Events(PaymentConfirmed) via schema(1) {
   on event(e: PaymentConfirmed) -> Effect[()] given Logger {

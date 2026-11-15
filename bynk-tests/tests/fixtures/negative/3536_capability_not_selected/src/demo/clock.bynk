@@ -1,0 +1,7 @@
+context demo
+
+consumes bynk { Clock }
+
+fn zero() -> Int {
+    0
+}

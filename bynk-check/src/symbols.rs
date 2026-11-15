@@ -985,8 +985,8 @@ pub fn record_flattened_caps(
 /// units that its braces leave out. A bare `consumes bynk` (or one stated bare
 /// in any of the unit's files) is the whole-module form and leaves nothing out;
 /// a braced list brings in only the names it lists, so every other type of that
-/// unit is *unselected*. Types stay resolvable (the deprecation window of
-/// `bynk.consumes.type_not_selected`), but are neither clash nor ambiguity
+/// unit is *unselected*. Types stay resolvable, so that `bynk.consumes.type_not_selected` can
+/// report them with a fix rather than as an unknown name, but are neither clash nor ambiguity
 /// candidates, and the unit's own declarations win over them.
 pub type ConsumeSelections = HashMap<String, Vec<(String, Option<Vec<String>>)>>;
 

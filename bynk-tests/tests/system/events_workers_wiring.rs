@@ -416,7 +416,7 @@ fn workers_events_pattern_leaves_fanout_routing_unchanged() {
 const SOURCE_NOTIFICATIONS_ENVELOPE: &str = r#"context commerce.notifications
 
 consumes commerce.order
-consumes bynk { Logger }
+consumes bynk { Logger, EventEnvelope }
 
 service OnPayment from Events(PaymentConfirmed) {
   on event(e: PaymentConfirmed, env: EventEnvelope) -> Effect[()] given Logger {

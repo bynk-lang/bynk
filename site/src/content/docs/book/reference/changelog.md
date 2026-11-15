@@ -3,7 +3,7 @@ title: Version compatibility & changelog
 ---
 Bynk is pre-1.0 and developed in small, spec-first increments (see
 [Versioning & roadmap](/book/about/versioning-and-roadmap/)). This book is
-written against **v0.616**.
+written against **v0.619**.
 
 This page is a high-level summary of notable increments, not an exhaustive
 per-commit history. While Bynk is pre-1.0, increments may change behaviour.
@@ -28,6 +28,9 @@ per-commit history. While Bynk is pre-1.0, increments may change behaviour.
 
 | Version | Highlights |
 |---|---|
+| **v0.619.0** | Naming a type, capability or service that the file's own `consumes` does not bring in is now an error (`bynk.consumes.type_not_selected`, `bynk.consumes.capability_not_selected`, `bynk.consumes.unit_not_consumed`), with the same fixes (#3536) |
+| **v0.618.0** | `bynk check` and `bynk build` refuse a `[deploy.workers.<key>]` group that names an undeclared unit, a unit that is not a `context`, or a key that is an ungrouped context's Worker, in the editor too (#3562, G1) |
+| **v0.617.0** | `bynk.toml` reads and validates a `[deploy.workers.<key>]` table of Worker groups (#3562, G1); the build does not use it yet |
 | **v0.616.1** | A Bundle build reports a detached fault through the same reporter as `e.detach()`, and a detached `Err` in a cron or queue handler is counted in `detached_failures` under `bynk test` |
 | **v0.616.0** | `bynk client`'s generated module exports `viaBinding`, which sends a client's calls through a Cloudflare Service Binding, with a verified recipe for SvelteKit and Next.js on Cloudflare (#3508 slice BC5) |
 | **v0.615.0** | `bynk client` generates `@raw` request bodies and the raw and streamed answers (`Raw`, `RawTagged`, `RawCreated`, `RawStreamed`, `RawError`, and `Streaming` as an async iterable of server-sent events) (#3508 slice BC4) |
