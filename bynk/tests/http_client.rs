@@ -238,8 +238,8 @@ fn a_directory_layout_writes_four_files_that_import_each_other() {
     // Each file imports what it uses from the others, types marked as types, and
     // the index re-exports the public surface.
     let index = read("index.ts");
-    assert!(index.contains("from \"./runtime\";") && index.contains("from \"./codecs\";"));
-    assert!(index.contains("export * from \"./types\";"));
+    assert!(index.contains("from \"./runtime.js\";") && index.contains("from \"./codecs.js\";"));
+    assert!(index.contains("export * from \"./types.js\";"));
     assert!(index.contains("export function createClient("));
     assert!(read("runtime.ts").contains("export async function __call("));
     assert!(read("types.ts").contains("export interface Order {"));

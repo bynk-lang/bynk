@@ -55,8 +55,9 @@ instead, `--out` naming it: `index.ts` (the client and the public surface),
 encoders and decoders) and `runtime.ts` (the inlined runtime). Each file imports
 exactly what it uses from the others, with type-only imports marked as such, so it
 passes a build with `verbatimModuleSyntax`, `isolatedModules` and `noUnusedLocals`.
-The imports have no extension (`"./types"`), which a bundler resolves (Vite,
-SvelteKit, Next.js); a strict Node ESM loader needs a build step.
+The imports end in `.js` (`"./types.js"`), which TypeScript resolves to the `.ts`
+files under both `bundler` and `node16`/`nodenext` resolution, so the same output
+works in Vite, SvelteKit and Next.js and in strict Node ESM.
 
 ### Keeping it current
 

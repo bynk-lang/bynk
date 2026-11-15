@@ -2,12 +2,12 @@
 // bynk <version>. Regenerate with `bynk client`; see https://bynk-lang.org/book/reference/http-client/
 // Experimental: member names and the shape of this module may change in a minor version until it is stabilised.
 
-import { type CallFailure, type ClientOptions, Err, type JsonValue, Ok, type __BoundaryError, type __JsonValue, type __Route, __call, __checked, __nullToOpt, __optToNull, __queryString, __then } from "./runtime";
-import { type DeleteOrderByIdResponse, type GetOrderByIdResponse, type GetOrdersQuery, type GetOrdersResponse, type GetSearchQuery, type GetSearchResponse, type NewOrder, type OrderId, type PostOrdersResponse } from "./types";
-import { __deserialise_Filter, __deserialise_NewOrder, __deserialise_Option_Event, __deserialise_Order, __deserialise_OrderId, __deserialise_Page_String, __deserialise_Search, __serialise_List_String, __serialise_NewOrder, __serialise_Option_Int, __serialise_Option_Sku, __serialise_OrderId, __toPublic_Event, __toPublic_Order, __toPublic_Page_String, __toWire_NewOrder } from "./codecs";
+import { type CallFailure, type ClientOptions, Err, type JsonValue, Ok, type __BoundaryError, type __JsonValue, type __Route, __call, __checked, __nullToOpt, __optToNull, __queryString, __then } from "./runtime.js";
+import { type DeleteOrderByIdResponse, type GetOrderByIdResponse, type GetOrdersQuery, type GetOrdersResponse, type GetSearchQuery, type GetSearchResponse, type NewOrder, type OrderId, type PostOrdersResponse } from "./types.js";
+import { __deserialise_Filter, __deserialise_NewOrder, __deserialise_Option_Event, __deserialise_Order, __deserialise_OrderId, __deserialise_Page_String, __deserialise_Search, __serialise_List_String, __serialise_NewOrder, __serialise_Option_Int, __serialise_Option_Sku, __serialise_OrderId, __toPublic_Event, __toPublic_Order, __toPublic_Page_String, __toWire_NewOrder } from "./codecs.js";
 
-export * from "./types";
-export * from "./runtime";
+export * from "./types.js";
+export * from "./runtime.js";
 
 const __route_api_postOrders: __Route = {
   method: "POST",

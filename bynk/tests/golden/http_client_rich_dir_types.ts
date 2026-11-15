@@ -2,7 +2,7 @@
 // bynk <version>. Regenerate with `bynk client`; see https://bynk-lang.org/book/reference/http-client/
 // Experimental: member names and the shape of this module may change in a minor version until it is stabilised.
 
-import { type BoundaryError, type Option } from "./runtime";
+import { type BoundaryError, type Option } from "./runtime.js";
 
 export type Event =
     { readonly tag: "Opened"; readonly by: string | null }

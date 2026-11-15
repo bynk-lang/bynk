@@ -1377,7 +1377,7 @@ fn assemble(input: &HttpClientInput, parts: Parts, layout: Layout) -> Vec<(Strin
                 (
                     "index.ts",
                     format!(
-                        "export * from \"./types\";\nexport * from \"./runtime\";\n\n{}",
+                        "export * from \"./types.js\";\nexport * from \"./runtime.js\";\n\n{}",
                         parts.index
                     ),
                 ),
@@ -1453,7 +1453,7 @@ fn imports_for(file: &str, text: &str, declared: &BTreeMap<String, (&str, bool)>
         if let Some(names) = by_file.get(from) {
             let module = from.trim_end_matches(".ts");
             out.push_str(&format!(
-                "import {{ {} }} from \"./{module}\";\n",
+                "import {{ {} }} from \"./{module}.js\";\n",
                 names.join(", ")
             ));
         }

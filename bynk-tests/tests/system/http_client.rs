@@ -185,8 +185,11 @@ fn every_generated_client_passes_tsc_strict() {
 /// The directory layout is `tsc --strict` clean too, under the strictest module
 /// settings a front end may set (`verbatimModuleSyntax`, `isolatedModules`), so an
 /// import of a type that is not marked as one, or an unused one, is caught here.
+/// Its imports end in `.js`, which resolves to the `.ts` files under `bundler`
+/// (Vite, SvelteKit, Next.js) and under `nodenext` (strict Node ESM) alike, so
+/// both are checked.
 #[test]
-fn the_directory_layout_passes_tsc_strict() {
+fn the_directory_layout_passes_tsc_strict_under_bundler_and_nodenext() {
     if skip_without_tools() {
         return;
     }
@@ -206,29 +209,48 @@ fn the_directory_layout_passes_tsc_strict() {
             "bynk client --layout dir failed:\n{}",
             String::from_utf8_lossy(&out.stderr)
         );
-        fs::write(
-            api.join("tsconfig.json"),
-            TSCONFIG
-                .replace("\"files\": [\"api.ts\"]", "\"files\": [\"index.ts\"]")
-                .replace(
-                    "\"skipLibCheck\": false",
-                    "\"skipLibCheck\": false, \"verbatimModuleSyntax\": true, \"isolatedModules\": true, \"noEmit\": true",
-                )
-                .replace("\"outDir\": \"dist\",", ""),
-        )
-        .unwrap();
-        let tsc = tools::tsc_command()
-            .expect("checked")
-            .arg("-p")
-            .arg(&api)
-            .output()
-            .expect("run tsc");
-        assert!(
-            tsc.status.success(),
-            "the `{name}` directory client does not pass `tsc --strict`:\n{}{}",
-            String::from_utf8_lossy(&tsc.stdout),
-            String::from_utf8_lossy(&tsc.stderr)
-        );
+        // A `nodenext` build reads a `.ts` file as ESM only under a package of
+        // `"type": "module"`.
+        fs::write(api.join("package.json"), "{\"type\":\"module\"}\n").unwrap();
+        for (module, resolution) in [("ES2022", "bundler"), ("NodeNext", "nodenext")] {
+            fs::write(
+                api.join("tsconfig.json"),
+                format!(
+                    r#"{{
+  "compilerOptions": {{
+    "strict": true,
+    "target": "ES2022",
+    "module": "{module}",
+    "moduleResolution": "{resolution}",
+    "lib": ["ES2022", "DOM"],
+    "types": [],
+    "noUnusedLocals": true,
+    "noUnusedParameters": true,
+    "exactOptionalPropertyTypes": true,
+    "verbatimModuleSyntax": true,
+    "isolatedModules": true,
+    "noEmit": true,
+    "skipLibCheck": false
+  }},
+  "files": ["index.ts"]
+}}
+"#
+                ),
+            )
+            .unwrap();
+            let tsc = tools::tsc_command()
+                .expect("checked")
+                .arg("-p")
+                .arg(&api)
+                .output()
+                .expect("run tsc");
+            assert!(
+                tsc.status.success(),
+                "the `{name}` directory client does not pass `tsc --strict` under `{resolution}`:\n{}{}",
+                String::from_utf8_lossy(&tsc.stdout),
+                String::from_utf8_lossy(&tsc.stderr)
+            );
+        }
         let _ = fs::remove_dir_all(&dir);
     }
 }
