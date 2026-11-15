@@ -73,6 +73,14 @@ mod stub {
         ) -> Vec<CompileError> {
             Vec::new()
         }
+        pub fn check_peek_sites(
+            &self,
+            _: &HashMap<String, UnitTable>,
+            _: &HashMap<ExprId, Callee>,
+            _: Option<&str>,
+        ) -> Vec<CompileError> {
+            Vec::new()
+        }
     }
 }
 
