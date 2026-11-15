@@ -197,6 +197,26 @@ lines.
 > CDP client must set it (`Origin: http://localhost`), or the connection is
 > rejected with `400 Bad Request`.
 
+## See what a request did (`--trace-events`)
+
+`bynk dev --trace-events` writes one JSON `request` event per request to stdout,
+with the route, the status, how long it took, and the steps it took: the calls
+to other contexts, the agent calls and the capability ops, each with the `.bynk`
+line that made it.
+
+```sh
+bynk dev --trace-events
+```
+
+```json
+{"event":"request","context":"shop-orders","route":"POST /orders","status":201,"duration_ms":12.4,"steps":[{"kind":"call","target":"shop.payment.authorise","span":{"file":"src/shop/orders.bynk","line":23,"col":14},"ms":3.1,"outcome":"ok"}],"truncated":false,"fault":null}
+```
+
+It implies `--format json`, so stdout carries events only. The steps hold no
+argument values, so nothing you passed to a call reaches the output. Traces are
+for `bynk dev` only: a deployed Worker records nothing. See [Request
+traces](/docs/bynk-cli/#request-traces) for every field.
+
 ## From VS Code
 
 The [VS Code extension](/docs/tooling/vscode-bynk/) runs `bynk dev` for you.

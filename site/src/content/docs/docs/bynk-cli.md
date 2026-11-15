@@ -200,7 +200,7 @@ locally](/book/guides/projects-build-and-deployment/run-locally/) for a worked
 walkthrough.
 
 ```text
-bynk dev [PATH] [--context NAME]... [--base-port N] [--inspect] [--inspect-port N] [--local-worker NAME]... [--format human|json] [--log-events] [--rewrite-frames] [--ready-json FILE] [--no-install] [-- <wrangler args>]
+bynk dev [PATH] [--context NAME]... [--base-port N] [--inspect] [--inspect-port N] [--local-worker NAME]... [--format human|json] [--log-events] [--trace-events] [--rewrite-frames] [--ready-json FILE] [--no-install] [-- <wrangler args>]
 ```
 
 `bynk dev` serves one project, so it refuses to run at a
@@ -218,7 +218,8 @@ run it inside a member.
 | `--local-worker NAME` | none | A Worker outside the project, named by a [`Service` instance](/book/guides/effects-and-capabilities/call-a-foreign-worker/) (`@worker("NAME")`), to reach in your own locally running `wrangler dev` of it instead of the stand-in `bynk dev` binds by default. **Repeatable.** A name no served context binds is warned about. |
 | `--format human\|json` | `human` | `human` is the readable stream on stderr. `json` adds one JSON lifecycle event per line on stdout (see [Lifecycle events](#lifecycle-events)), and moves `wrangler dev`'s own stdout to stderr so stdout carries only events. |
 | `--log-events` | off | With `--format json`, also write each line a worker prints as a `log` event (see [Worker logs](#worker-logs)). |
-| `--rewrite-frames` | off | Rewrite stack frames to `.bynk` locations even on a terminal (see [Worker logs](#worker-logs)). Implied by `--log-events`. |
+| `--trace-events` | off | Write one `request` event per request a worker serves: its route, status, duration and the steps it took (see [Request traces](#request-traces)). Implies `--format json` and `--rewrite-frames`. |
+| `--rewrite-frames` | off | Rewrite stack frames to `.bynk` locations even on a terminal (see [Worker logs](#worker-logs)). Implied by `--log-events` and `--trace-events`. |
 | `--ready-json FILE` | none | Once every served context answers an HTTP probe, write `{ "<worker>": "<url>" }` to `FILE` (see [Readiness](#readiness)). A stale `FILE` is removed at start, and `FILE` is removed when the session stops. |
 | `-- <wrangler args>` | — | Everything after `--` is forwarded to `wrangler dev` verbatim (e.g. `-- --var K:V`). Ports are the driver's to allocate: passing `-- --port` or `-- --inspector-port` against an allocation is an error naming the flag that owns it. A single context with no `--inspect` or `--inspect-port` leaves `-- --inspector-port N` yours. |
 
@@ -289,6 +290,7 @@ new ones may be added, and existing ones keep their meaning.
 | `rebuild_ok` | The rebuild succeeded; the workers hot-reload. | — |
 | `rebuild_failed` | The rebuild failed. Its diagnostics are on stderr, and the last good build keeps serving. | — |
 | `stopped` | The session ended. | `code`: the exit code `bynk dev` returns. |
+| `request` | A worker served a request. Only under `--trace-events`. | See [Request traces](#request-traces). |
 | `log` | A worker printed a line. Only under `--log-events`. | `context`: the worker directory that printed it. `level`: `info`, `warn` or `error`. `text`: the line, without colour, with any stack frame already at its `.bynk` location. |
 
 ```json
@@ -334,6 +336,52 @@ line with `[ERROR]`, `✘`, `Uncaught` or an `…Error:` headline is `error`,
 `[WARNING]` or `▲` is `warn`, and the rest `info`. A frame takes the level of
 the line it continues. The VS Code extension reads these for its
 [Bynk Logs](/docs/tooling/vscode-bynk/) view.
+
+### Request traces
+
+`--trace-events` builds the workers with per-request recording (a dev build
+only: `bynk deploy` and `bynk compile` never record) and writes one `request`
+event for each request a worker serves, so an editor can show what a request
+did. Draw it over the handler's sequence diagram with the `span` of each step.
+
+```json
+{"event":"request","context":"shop-orders","id":"5d5e…","route":"POST /orders","status":201,"duration_ms":12.4,"steps":[{"kind":"call","target":"shop.payment.authorise","span":{"file":"src/shop/orders.bynk","line":23,"col":14},"ms":3.1,"outcome":"ok"},{"kind":"agent","target":"Ledger.tally","span":{"file":"src/shop/orders.bynk","line":27,"col":22},"ms":1.2,"outcome":"ok"}],"truncated":false,"fault":null}
+```
+
+| Field | Meaning |
+|---|---|
+| `context` | The worker directory that served the request, as in `serving`. |
+| `id` | This request's id. |
+| `route` | `<METHOD> <path>`, the path as requested. |
+| `status` | The response status. A fault answers `500`. |
+| `duration_ms` | From the request arriving to the response being ready. |
+| `steps` | What the request did, in call order (below). |
+| `truncated` | `true` when more steps happened than are listed. At most 200 steps are kept. |
+| `fault` | `null`, or `{ "message", "frames" }`: the error's first line, and its stack frames, with frames into generated code at their `.bynk` location. |
+
+A step is `{ "kind", "target", "span", "ms", "outcome" }`:
+
+- `kind` is `capability` (an op on a capability in `given`), `call` (a call to
+  another context) or `agent` (a method call on an agent).
+- `target` is what was called: `Db.query`, `shop.payment.authorise`,
+  `Ledger.tally`.
+- `span` is the `.bynk` call site, `{ "file", "line", "col" }` (project-relative
+  path, 1-based line and column), or `null`.
+- `ms` is how long the call took.
+- `outcome` is `ok`, `fault` (it threw or was rejected), or `pending` (it had not
+  settled when the response was ready).
+
+A step carries **no argument values**: only kinds, targets, spans, timings and
+outcomes. The record closes when the response is ready, so work that continues
+afterwards (`waitUntil`, a streamed body) is not in it. A call to another
+context is one step here; the callee's own request is a separate `request`
+event, from its own worker.
+
+The recorder finds the request's record through `AsyncLocalStorage`, so a traced
+build adds the `nodejs_als` compatibility flag to each worker's `wrangler.toml`.
+It does not add it when `[workers] compatibility_flags` already lists
+`nodejs_als` or `nodejs_compat`. Recording only observes: a call returns and
+throws what it would have.
 
 ### Readiness
 
