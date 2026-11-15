@@ -1,7 +1,7 @@
 ---
 level: minor
 changelog: `bynk.cloudflare` gains `Images`, a one-per-Worker capability over Cloudflare's `images` binding, with `transform` and `info` over `Bytes` (experimental; #3515)
-probes: diagnostic_coverage
+probes: emit_diagnostics, emit_abi_shapes, ts_writes
 ---
 
 ## ADR: images-capability
