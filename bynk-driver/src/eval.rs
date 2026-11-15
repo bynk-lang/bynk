@@ -239,13 +239,7 @@ fn header_lines(snippet: &str) -> usize {
             break;
         }
         if depth > 0 || trimmed.starts_with("consumes ") || trimmed.starts_with("stub ") {
-            for c in trimmed.chars() {
-                match c {
-                    '{' | '(' | '[' => depth += 1,
-                    '}' | ')' | ']' => depth -= 1,
-                    _ => {}
-                }
-            }
+            depth += bracket_delta(trimmed);
             if depth <= 0 {
                 depth = 0;
                 end = i + 1;
@@ -253,6 +247,27 @@ fn header_lines(snippet: &str) -> usize {
         }
     }
     end
+}
+
+/// How many more brackets `line` opens than it closes, leaving out those in a
+/// string literal and in a `//` comment.
+fn bracket_delta(line: &str) -> i32 {
+    let mut delta = 0;
+    let mut in_string = false;
+    let mut chars = line.chars().peekable();
+    while let Some(c) = chars.next() {
+        match c {
+            '\\' if in_string => {
+                chars.next();
+            }
+            '"' => in_string = !in_string,
+            '/' if !in_string && chars.peek() == Some(&'/') => break,
+            '{' | '(' | '[' if !in_string => delta += 1,
+            '}' | ')' | ']' if !in_string => delta -= 1,
+            _ => {}
+        }
+    }
+    delta
 }
 
 /// The synthetic suite for `snippet`, targeting `unit`: the snippet's own
@@ -291,8 +306,21 @@ pub fn evaluate(request: &EvalRequest) -> EvalOutcome {
         Err(e) => return EvalOutcome::Error(e.to_string()),
     };
     // The project's sources, with the buffers laid over them, to find the unit.
+    // A buffer is matched to a project file by canonical path, as the overlay
+    // is, however either was spelled.
+    let buffers: HashMap<PathBuf, String> = request
+        .buffers
+        .iter()
+        .map(|(path, text)| {
+            (
+                path.canonicalize().unwrap_or_else(|_| path.clone()),
+                text.clone(),
+            )
+        })
+        .collect();
     let mut sources = options.sources.clone().unwrap_or_default();
-    sources.extend(request.buffers.clone());
+    sources.retain(|k, _| !buffers.contains_key(&k.canonicalize().unwrap_or_else(|_| k.clone())));
+    sources.extend(buffers.clone());
     let Some(key) = unit_file(&sources, &request.unit) else {
         return EvalOutcome::Error(format!(
             "no `commons` or `context` named `{}` in the project",
@@ -308,7 +336,7 @@ pub fn evaluate(request: &EvalRequest) -> EvalOutcome {
         n += 1;
         synthetic = key.with_file_name(format!("{stem}.eval{n}.bynk"));
     }
-    let mut overlay = request.buffers.clone();
+    let mut overlay = buffers;
     let (text, prefix) = suite_text(&request.unit, &request.snippet);
     let synthetic_name = synthetic
         .file_name()
@@ -363,9 +391,15 @@ fn interpret(code: ExitCode, text: &str, synthetic: &str, prefix: usize) -> Eval
         None => {}
     }
     if let Some(eval) = doc.get("eval") {
-        return EvalOutcome::Value {
-            value: eval["value"].clone(),
-            ty: eval["type"].as_str().unwrap_or_default().to_string(),
+        let ty = eval["type"].as_str().unwrap_or_default().to_string();
+        return match eval.get("value") {
+            Some(value) => EvalOutcome::Value {
+                value: value.clone(),
+                ty,
+            },
+            None => EvalOutcome::Failed(format!(
+                "the snippet ran, but its value, of type `{ty}`, has no wire shape to report"
+            )),
         };
     }
     let failure = doc["suites"]
@@ -461,13 +495,29 @@ consumes bynk { Fetch, Request, Method, Response }
 let res <- Fetch.send(Request { method: Get, url: \"https://example.com\", contentType: None, authorization: None, headers: Map.empty(), body: None })
 ";
 
-    fn project(tag: &str) -> PathBuf {
+    /// A scratch project, removed when dropped.
+    struct Project(PathBuf);
+
+    impl std::ops::Deref for Project {
+        type Target = Path;
+        fn deref(&self) -> &Path {
+            &self.0
+        }
+    }
+
+    impl Drop for Project {
+        fn drop(&mut self) {
+            let _ = std::fs::remove_dir_all(&self.0);
+        }
+    }
+
+    fn project(tag: &str) -> Project {
         let root = std::env::temp_dir().join(format!("bynk_eval_{tag}_{}", std::process::id()));
         let _ = std::fs::remove_dir_all(&root);
         std::fs::create_dir_all(root.join("src")).unwrap();
         std::fs::write(root.join("bynk.toml"), "[project]\nname = \"p\"\n").unwrap();
         std::fs::write(root.join("src/demo.bynk"), UNIT).unwrap();
-        root.canonicalize().unwrap()
+        Project(root.canonicalize().unwrap())
     }
 
     fn eval_with(root: &Path, snippet: &str, timeout: Duration) -> EvalOutcome {
@@ -530,8 +580,7 @@ let res <- Fetch.send(Request { method: Get, url: \"https://example.com\", conte
         }
         // Stubbed in the preamble, it answers.
         let stubbed = format!(
-            "{}stub Fetch.send(_) returns Ok(Response {{ status: 204, headers: Map.empty(), body: \"\" }})\n{}",
-            "", FETCH
+            "stub Fetch.send(_) returns Ok(Response {{ status: 204, headers: Map.empty(), body: \"\" }})\n{FETCH}"
         );
         let (v, _) = value(eval(&root, &format!("{stubbed}res")));
         assert_eq!(v["kind"], "Ok");
@@ -568,7 +617,7 @@ let res <- Fetch.send(Request { method: Get, url: \"https://example.com\", conte
         let file = root.join("src/demo.bynk");
         let edited = UNIT.replace("n * 2", "n * 3");
         let outcome = evaluate(&EvalRequest {
-            input: root.clone(),
+            input: root.to_path_buf(),
             unit: "demo".to_string(),
             snippet: "double(2)".to_string(),
             buffers: HashMap::from([(file, edited)]),
@@ -581,7 +630,7 @@ let res <- Fetch.send(Request { method: Get, url: \"https://example.com\", conte
     fn an_unknown_unit_is_an_error() {
         let root = project("unknown");
         let outcome = evaluate(&EvalRequest {
-            input: root,
+            input: root.to_path_buf(),
             unit: "nope".to_string(),
             snippet: "1".to_string(),
             buffers: HashMap::new(),
@@ -609,5 +658,22 @@ let res <- Fetch.send(Request { method: Get, url: \"https://example.com\", conte
         assert_eq!(d.message, "odd: really");
         let d = parse_diagnostic("error[a.b]: no place", "demo.eval.bynk", 10).unwrap();
         assert_eq!((d.line, d.col), (0, 0));
+    }
+
+    #[test]
+    fn brackets_in_strings_and_comments_do_not_extend_a_clause() {
+        let snippet = "stub Fetch.send(_) returns Ok(Response { status: 200, headers: Map.empty(), body: \"(\" })\nconsumes a.b // (old)\nlet x = 1\nx";
+        assert_eq!(header_lines(snippet), 2);
+    }
+
+    #[test]
+    fn a_value_with_no_wire_shape_says_so() {
+        let root = project("shapeless");
+        match eval(&root, "Effect.pure(1)") {
+            EvalOutcome::Failed(message) => {
+                assert!(message.contains("no wire shape"), "{message}");
+            }
+            other => panic!("expected a report of no wire shape, got {other:?}"),
+        }
     }
 }

@@ -61,7 +61,9 @@ pub struct TestRun {
 /// expression (what `Json.encode` gives it) and that expression's type.
 #[derive(Debug, Clone, PartialEq, Serialize)]
 pub struct EvalValue {
-    pub value: serde_json::Value,
+    /// Absent when the value has no wire shape to report.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub value: Option<serde_json::Value>,
     #[serde(rename = "type")]
     pub ty: String,
 }
@@ -627,8 +629,8 @@ pub fn parse_ndjson(stdout: &str) -> ParsedRun {
                 }
             }
             Some("eval-value") => {
-                run.eval = value.get("value").map(|v| EvalValue {
-                    value: v.clone(),
+                run.eval = Some(EvalValue {
+                    value: value.get("value").cloned(),
                     ty: str_field(&value, "valueType"),
                 });
             }
