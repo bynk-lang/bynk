@@ -761,7 +761,7 @@ pub fn check_file_core(
             .get_or_insert_with(Vec::new)
             .extend(shadowed_named);
     }
-    warn_unselected_type_names(&resolved, pf, &unit_info[name].table, errors);
+    warn_unselected_type_names(&resolved, pf, &unit_info[name], errors);
     let item_spans: Vec<bynk_syntax::span::Span> =
         resolved.commons.items.iter().map(|i| i.span()).collect();
     // The unit's own span is this file's, even when it has no items of its own
@@ -994,27 +994,54 @@ fn extensible_names(imported_from: &HashMap<String, String>) -> HashSet<String> 
         .collect()
 }
 
-/// #3536: naming a first-party type the unit's braces do not list still
-/// resolves, with a warning (and a fix) while the rule is being introduced. The
-/// standard library's own units are not the user's code to migrate.
+/// #3536: naming a type this file's own `consumes` does not bring in still
+/// resolves, with a warning (and a fix that edits this file) while the rule is
+/// being introduced. The standard library's own units are not the user's code to
+/// migrate.
 fn warn_unselected_type_names(
     resolved: &ResolvedCommons,
     pf: &ParsedFile,
-    table: &crate::symbols::UnitTable,
+    info: &crate::project_model::UnitInfo,
     errors: &mut ErrorSink,
 ) {
     if crate::firstparty::is_first_party_unit(&resolved.commons.name) {
         return;
     }
+    let consumed: std::collections::BTreeSet<String> = info.consumes.iter().cloned().collect();
+    let file = resolver::FileConsumes {
+        consumed: &consumed,
+        aliases: &info.table.consumed_type_aliases,
+        clauses: pf.consumes(),
+        insert_at: new_consumes_position(pf),
+    };
     errors.extend_for(
         Some(&pf.identity_path()),
-        resolver::check_unselected_type_names(
-            &resolved.commons.items,
-            resolved,
-            &table.unlisted_consumed_types,
-            pf.consumes(),
-        ),
+        resolver::check_unselected_type_names(&resolved.commons.items, resolved, &file),
     );
+}
+
+/// Where a `consumes` line the file lacks is inserted: after its last `uses` or
+/// `consumes` clause (the parser wants them ahead of every declaration), else
+/// after the `context` header of a headerless file. A braced header has no such
+/// place without reading the source, so it gets no fix.
+fn new_consumes_position(pf: &ParsedFile) -> Option<(usize, &'static str)> {
+    let last = pf
+        .uses()
+        .iter()
+        .map(|u| u.span.end)
+        .chain(pf.consumes().iter().map(|c| c.span.end))
+        .max();
+    if let Some(end) = last {
+        return Some((end, "\n"));
+    }
+    match pf.unit() {
+        bynk_syntax::ast::SourceUnit::Context(c)
+            if c.form == bynk_syntax::ast::CommonsForm::Fragment =>
+        {
+            Some((c.name.span.end, "\n\n"))
+        }
+        _ => None,
+    }
 }
 
 #[cfg(test)]

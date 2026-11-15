@@ -1,6 +1,6 @@
 context forecast.lookup
 
-consumes weather { Weather }
+consumes weather { Weather, Report, WeatherError }
 
 service lookup {
   on call(city: String) -> Effect[Result[Report, WeatherError]] given Weather {

@@ -53,6 +53,8 @@ mod integration {
     mod check_format_short;
     #[path = "comment_syntax_fixes.rs"]
     mod comment_syntax_fixes;
+    #[path = "consumes_per_file.rs"]
+    mod consumes_per_file;
     #[path = "contract_hash.rs"]
     mod contract_hash;
     #[path = "debug_metadata.rs"]

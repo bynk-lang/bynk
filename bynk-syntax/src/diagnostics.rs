@@ -1504,8 +1504,8 @@ pub const EXPLANATIONS: &[Explain] = &[
     },
     Explain {
         code: "bynk.consumes.type_not_selected",
-        blurb: "A braced `consumes U { A, B }` brings into scope only the names it lists, so the standard library can add a type without changing what an existing program means. Naming a type of `U` (or a bare variant of one of its sums) that the braces leave out still resolves for now, and is a warning; `bynk check --fix` adds the name to the braces. A later release makes it an error. A bare `consumes U`, with no braces, brings in the whole module.",
-        example: "consumes bynk { Logger }                   // ✗ `TimedOut` is not listed\n\nconsumes bynk { Logger, TimedOut }          // ✓\n\nfn at(t: TimedOut) -> Bool {\n    true\n}",
+        blurb: "Imports are per file. A unit's own declarations are shared by all its files, but a name from another unit, a type or a bare variant of one of its sums, is in scope only in a file that itself has a `consumes` bringing it in, and where the list is braced, only if it is listed. Naming a type that this file's own `consumes` does not bring in still resolves for now, and is a warning, whether the clause lists other names or only another file of the unit consumes the unit; `bynk check --fix=bynk.consumes.type_not_selected` adds the name to this file's `consumes`, or adds one. A later release makes it an error. A bare `consumes U`, with no braces, brings in all of `U`'s names for that file.",
+        example: "// shop/context.bynk\nconsumes bynk { Logger }                   // ✗ `TimedOut` is not listed\n\nconsumes bynk { Logger, TimedOut }          // ✓\n\nfn at(t: TimedOut) -> Bool {\n    true\n}\n\n// shop/audit.bynk, another file of the same context\nfn late(t: TimedOut) -> Bool {   // ✗ this file does not consume `bynk`\n    true\n}\n\nconsumes bynk { TimedOut }        // ✓ each file consumes what it names",
         page: "/book/guides/program-structure/consume-services",
         anchor: "rename-an-exported-type-that-clashes-with-one-of-yours",
     },
@@ -8607,7 +8607,7 @@ pub const REGISTRY: &[DiagnosticInfo] = &[
     ),
     warn(dg(
         "bynk.consumes.type_not_selected",
-        "A type (or a bare variant of a sum) of a consumed first-party unit is named, but the unit's braced `consumes` does not list it (a warning; an error in a later release).",
+        "A type (or a bare variant of a sum) of a consumed unit is named in a file whose own `consumes` does not bring it in: it lists other names, or only another file of the unit consumes the unit (a warning; an error in a later release).",
         &["consumes_decl"],
     )),
     dg(
