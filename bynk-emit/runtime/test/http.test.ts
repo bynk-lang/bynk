@@ -5,6 +5,7 @@ import { join } from "node:path";
 import assert from "node:assert/strict";
 import {
   matchPath,
+  cfObject,
   httpResultToResponse,
   headResponse,
   claimStream,
@@ -1619,4 +1620,41 @@ test("untilBodyTooLarge: a handler's value, an overrun as tooLarge, any other fa
   assert.deepEqual(await untilBodyTooLarge(Promise.resolve(7)), { tooLarge: false, value: 7 });
   assert.deepEqual(await untilBodyTooLarge(Promise.reject(new BodyTooLarge(3))), { tooLarge: true });
   await assert.rejects(() => untilBodyTooLarge(Promise.reject(new Error("boom"))), /boom/);
+});
+
+// #3513 (C): `cf: RequestCf` is read off `request.cf`, keeping what is present and well-shaped.
+function requestWithCf(cf: unknown): Request {
+  const r = new Request("https://example.com/");
+  Object.defineProperty(r, "cf", { value: cf });
+  return r;
+}
+
+test("cfObject: an absent request.cf is empty", () => {
+  assert.deepEqual(cfObject(new Request("https://example.com/")), {});
+  assert.deepEqual(cfObject(requestWithCf(null)), {});
+});
+
+test("cfObject: strings and the ASN are kept", () => {
+  assert.deepEqual(
+    cfObject(requestWithCf({ country: "GB", colo: "LHR", asn: 395747, timezone: "Europe/London", unknown: 1 })),
+    { country: "GB", colo: "LHR", asn: 395747, timezone: "Europe/London" },
+  );
+});
+
+test("cfObject: latitude and longitude are numeric strings on the platform", () => {
+  assert.deepEqual(cfObject(requestWithCf({ latitude: "30.27130", longitude: "-97.74260" })), {
+    latitude: 30.2713,
+    longitude: -97.7426,
+  });
+  assert.deepEqual(cfObject(requestWithCf({ latitude: "north", longitude: "" })), {});
+});
+
+test("cfObject: a field of the wrong shape is left out, never a fault", () => {
+  assert.deepEqual(cfObject(requestWithCf({ country: 7, colo: null, asn: "1", city: {} })), {});
+});
+
+test("cfObject: isEUCountry is \"1\" in the EU and otherwise omitted or false", () => {
+  assert.deepEqual(cfObject(requestWithCf({ isEUCountry: "1" })), { isEuCountry: true });
+  assert.deepEqual(cfObject(requestWithCf({ isEUCountry: false })), { isEuCountry: false });
+  assert.deepEqual(cfObject(requestWithCf({})), {});
 });

@@ -3,7 +3,7 @@ title: Version compatibility & changelog
 ---
 Bynk is pre-1.0 and developed in small, spec-first increments (see
 [Versioning & roadmap](/book/about/versioning-and-roadmap/)). This book is
-written against **v0.625**.
+written against **v0.626**.
 
 This page is a high-level summary of notable increments, not an exhaustive
 per-commit history. While Bynk is pre-1.0, increments may change behaviour.
@@ -28,6 +28,8 @@ per-commit history. While Bynk is pre-1.0, increments may change behaviour.
 
 | Version | Highlights |
 |---|---|
+| **v0.626.0** | An `on http` handler takes a fifth special parameter, `cf: RequestCf`, the optional facts Cloudflare derived about the connection (Cloudflare-only, experimental) |
+| **v0.625.3** | `bynk/architectureModel` lists each event's emitters and subscribers and each handler's capability use (`given`, with the suites that `stub` it) |
 | **v0.625.2** | The `bynk/sequenceModel` request gives each `alt` branch a source `range` |
 | **v0.625.1** | `bynk deploy --env` copies the `ai` and `ai_search` bindings into the environment block, so a Workers AI or AI Search Worker is no longer unbound there (#3577) |
 | **v0.625.0** | `bynk build` refuses a `[deploy.workers.<key>]` group whose members declare a service of the same name, and, for now, one with more than one publishing member (#3562, G2b) |

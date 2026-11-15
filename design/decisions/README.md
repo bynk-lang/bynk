@@ -17,6 +17,8 @@ or a row links to no file. Summaries and statuses are curated by hand; the
 
 | # | Decision | Status |
 |---|---|---|
+| [0855](0855-request-cf-handler-parameter.md) | **`request.cf` is a fifth special handler parameter, `cf: RequestCf`** (v0.626) — A record of optional Cloudflare-derived request facts, never a fault when absent, skipped by the client and OpenAPI | Accepted (v0.626) |
+| [0854](0854-architecture-model-events-uses.md) | **`bynk/architectureModel` carries event emitters and subscribers and each handler's capability use** (v0.625.3) — The architecture model extends one request with additive `events` and per-node `uses` sections, read from the checker's resolved view | Accepted (v0.625.3) |
 | [0853](0853-sequence-branch-span.md) | **Each sequence-model branch carries its arm's source span** (v0.625.2) — Additive `Branch.span` and `WireBranch.range`, so clients can link or cover a branch | Accepted (v0.625.2) |
 | [0852](0852-d1-peek-read-only-test-handle.md) | **A case reads a participant's test D1 database through a read-only `D1.peek` handle** (v0.620) — A case-only built-in reaches behind the system boundary to read, never write, the database the app wrote | Accepted (v0.620) |
 | [0851](0851-bynk-client-service-binding.md) | **`bynk client`: calling a Bynk Worker through a Service Binding** (v0.616) — A Service Binding's `fetch` has `fetch`'s shape, so the client's `fetch` option is the seam and `viaBinding` calls the binding correctly, with no second transport option | Accepted (v0.616) |

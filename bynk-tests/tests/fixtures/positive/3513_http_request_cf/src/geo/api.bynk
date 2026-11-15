@@ -1,0 +1,30 @@
+context geo.api
+
+consumes bynk.cloudflare { RequestCf }
+
+service api from http {
+	// `cf` is what Cloudflare derived about the connection; every field is optional.
+	on GET("/hello") (cf: RequestCf) -> Effect[HttpResult[String]] by v: Visitor {
+		match cf.country {
+			Some("GB") => Ok("Hello")
+			_ => Ok("Hi")
+		}
+	}
+
+	// `cf` sits anywhere among the parameters, beside a path parameter and `headers`.
+	on GET("/greet/:name") (name: String, cf: RequestCf, headers: RequestHeaders) -> Effect[HttpResult[String]] by v: Visitor {
+		match cf.colo {
+			Some(colo) => Ok("\(name) via \(colo)")
+			None => Ok(name)
+		}
+	}
+
+	on GET("/eu") (cf: RequestCf) -> Effect[HttpResult[Bool]] by v: Visitor {
+		Ok(cf.isEuCountry == Some(true))
+	}
+
+	// A `:cf` path segment stays a path parameter.
+	on GET("/by/:cf") (cf: String) -> Effect[HttpResult[String]] by v: Visitor {
+		Ok(cf)
+	}
+}
