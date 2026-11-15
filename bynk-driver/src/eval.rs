@@ -219,23 +219,27 @@ pub enum EvalOutcome {
     Error(String),
 }
 
+/// The unit `text` declares, when it parses without an error. A warning the
+/// parser reports (a lint) does not stop a unit being found.
+fn parse_clean(text: &str) -> Option<SourceUnit> {
+    let tokens = tokenize(text).ok()?;
+    let (unit, errors) = parse_unit_with_recovery(&tokens, text);
+    errors
+        .iter()
+        .all(|e| bynk_syntax::Severity::for_error(e) != bynk_syntax::Severity::Error)
+        .then_some(unit)
+        .flatten()
+}
+
 /// The key, in `sources`, of the file that declares the unit `unit`.
 fn unit_file(sources: &HashMap<PathBuf, String>, unit: &str) -> Option<PathBuf> {
     let mut keys: Vec<&PathBuf> = sources.keys().collect();
     keys.sort();
     keys.into_iter()
-        .find(|key| {
-            let source = &sources[*key];
-            let Ok(tokens) = tokenize(source) else {
-                return false;
-            };
-            let (parsed, errors) = parse_unit_with_recovery(&tokens, source);
-            errors.is_empty()
-                && match parsed {
-                    Some(SourceUnit::Commons(c)) => c.name.joined() == unit,
-                    Some(SourceUnit::Context(c)) => c.name.joined() == unit,
-                    _ => false,
-                }
+        .find(|key| match parse_clean(&sources[*key]) {
+            Some(SourceUnit::Commons(c)) => c.name.joined() == unit,
+            Some(SourceUnit::Context(c)) => c.name.joined() == unit,
+            _ => false,
         })
         .cloned()
 }
@@ -255,10 +259,7 @@ fn left_out_suites(
 ) -> HashMap<PathBuf, String> {
     let mut out = HashMap::new();
     for (key, text) in sources {
-        let target = match tokenize(text)
-            .ok()
-            .and_then(|tokens| parse_unit_with_recovery(&tokens, text).0)
-        {
+        let target = match parse_clean(text) {
             Some(SourceUnit::Suite(suite)) => Some(suite.target.joined()),
             Some(_) => None,
             // A suite that does not parse is still left out, as the target's.
@@ -381,12 +382,10 @@ fn host_suite(
     keys.sort();
     for key in keys {
         let text = &sources[key];
-        let Ok(tokens) = tokenize(text) else { continue };
-        let (Some(SourceUnit::Suite(suite)), errors) = parse_unit_with_recovery(&tokens, text)
-        else {
+        let Some(SourceUnit::Suite(suite)) = parse_clean(text) else {
             continue;
         };
-        if suite.target.joined() != unit || !errors.is_empty() {
+        if suite.target.joined() != unit {
             continue;
         }
         if suite
@@ -663,11 +662,15 @@ let res <- Fetch.send(Request { method: Get, url: \"https://example.com\", conte
     }
 
     fn project(tag: &str) -> Project {
+        project_with(tag, UNIT)
+    }
+
+    fn project_with(tag: &str, unit: &str) -> Project {
         let root = std::env::temp_dir().join(format!("bynk_eval_{tag}_{}", std::process::id()));
         let _ = std::fs::remove_dir_all(&root);
         std::fs::create_dir_all(root.join("src")).unwrap();
         std::fs::write(root.join("bynk.toml"), "[project]\nname = \"p\"\n").unwrap();
-        std::fs::write(root.join("src/demo.bynk"), UNIT).unwrap();
+        std::fs::write(root.join("src/demo.bynk"), unit).unwrap();
         Project(root.canonicalize().unwrap())
     }
 
@@ -913,5 +916,29 @@ suite demo {
             }
             other => panic!("expected the suite's diagnostics, got {other:?}"),
         }
+    }
+
+    #[test]
+    fn a_unit_the_parser_only_warns_about_is_found() {
+        // Three nested `match`es draw a lint from the parser, not an error.
+        let unit = "\
+context demo
+
+fn sum(a: Option[Int], b: Option[Int], c: Option[Int]) -> Int {
+  match a {
+    Some(x) => match b {
+      Some(y) => match c {
+        Some(z) => x + y + z
+        None => 0
+      }
+      None => 0
+    }
+    None => 0
+  }
+}
+";
+        let root = project_with("lint", unit);
+        let (v, _) = value(eval(&root, "sum(Some(1), Some(2), Some(3))"));
+        assert_eq!(v, serde_json::json!(6));
     }
 }
