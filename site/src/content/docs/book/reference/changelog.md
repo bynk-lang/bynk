@@ -3,7 +3,7 @@ title: Version compatibility & changelog
 ---
 Bynk is pre-1.0 and developed in small, spec-first increments (see
 [Versioning & roadmap](/book/about/versioning-and-roadmap/)). This book is
-written against **v0.610**.
+written against **v0.611**.
 
 This page is a high-level summary of notable increments, not an exhaustive
 per-commit history. While Bynk is pre-1.0, increments may change behaviour.
@@ -28,6 +28,7 @@ per-commit history. While Bynk is pre-1.0, increments may change behaviour.
 
 | Version | Highlights |
 |---|---|
+| **v0.611.0** | In a bundle with a composition root, a context that requires a capability it declares (`given Warehouse`) but has no `provides Warehouse = …` for is now `bynk.capability.not_provided` at the `given`, as on Workers. `composeApp` builds every context's deps itself, so the gap reached `tsc` against `compose.ts` (TS2345) and was reported as a compiler bug (`bynk.codegen.tsc_failed`) by `bynk test` and `bynk build`, while `bynk check` passed. A bundle without a composition root still leaves the capability to the host |
 | **v0.610.0** | `consumes` is per file (warning stage): naming a type, or a bare variant of a sum, that a unit exports in a file whose own `consumes` does not bring it in is `bynk.consumes.type_not_selected`, for the standard library and for the project's own contexts alike, and `bynk check --fix=bynk.consumes.type_not_selected` adds it to that file's `consumes`, in any fragment of a split unit; an error follows in a later release (#3536) |
 | **v0.609.0** | `bynk client` generates `@form` and `@multipart` bodies (a file part is a `Blob`) and typed `cookies` records, and the system tier verifies that a Worker-hosted server may set `Origin` through the client (#3508 slice BC3) |
 | **v0.608.0** | `bynk client` gains `--check` (a CI drift gate), `--layout dir` (four modules) and `[build.client]` in `bynk.toml`, which `bynk build` writes and `bynk client` takes its flags from (#3508 slice BC2) |
