@@ -7,7 +7,7 @@ title: Diagnostic index
 
 Every diagnostic code the compiler can emit, with a one-line summary of the cause, grouped by category. For step-by-step cause-and-fix guidance on the most common ones, see the [troubleshooting guides](/book/troubleshooting/). For a code with a curated explanation, `bynk explain <code>` prints it in a terminal, and in VS Code the diagnostic's **Explain** quick fix (or **Bynk: Explain Diagnostic Code…**) shows the same text in a panel, offline.
 
-There are **884** codes in total.
+There are **887** codes in total.
 
 ## Agents
 
@@ -417,7 +417,9 @@ There are **884** codes in total.
 | `bynk.deploy.empty_group` | A `[deploy.workers.<key>]` group lists no context. |  | — |
 | `bynk.deploy.foreign_contract_skew` | A build breaks the contract a declared foreign caller's client was generated at, as pinned in `bynk.foreign.toml`, so `bynk deploy` refuses to ship it. |  | — |
 | `bynk.deploy.group_name_conflict` | A `[deploy.workers.<key>]` group's key or script name is another group's, or is the Worker of a context in no group. |  | — |
+| `bynk.deploy.multiple_publishers` | More than one member of a `[deploy.workers.<key>]` group publishes events. A temporary restriction: each publisher has its own events fan-out class, and it goes when a group's fan-out is merged. |  | — |
 | `bynk.deploy.not_a_context` | A `[deploy.workers.<key>]` group lists a unit that is not a `context`; only contexts are deployed as Workers. |  | — |
+| `bynk.deploy.service_name_conflict` | Two members of one `[deploy.workers.<key>]` group declare a service of the same name; a Worker answers its members' services by name. |  | — |
 | `bynk.deploy.unknown_context` | A `[deploy.workers.<key>]` group lists a context the project does not declare. |  | — |
 | [`bynk.detach.in_agent_handler`](/book/reference/capabilities/#detach) | A `detach` was used in an agent handler, which has no execution context to keep a detached effect alive. | [`method_call`](/book/reference/grammar/#rule-method_call) | — |
 | [`bynk.detach.in_pure_context`](/book/reference/capabilities/#detach) | A `detach` was used in a pure (non-effectful) context. | [`method_call`](/book/reference/grammar/#rule-method_call) | — |
@@ -614,6 +616,7 @@ There are **884** codes in total.
 | `bynk.test.remote_unsupported_asset` | A `system` case fetches an asset with `svc.GET(asset)`, which a run against a real runtime (`bynk test --against`) can't honour: the fetch is answered in process. | [`case`](/book/reference/grammar/#rule-case) | — |
 | `bynk.test.remote_unsupported_call` | A `system` case addresses an `on call` service, which a run against a real runtime (`bynk test --against`) can't honour: the service is internal, and each call is signed for one caller. | [`case`](/book/reference/grammar/#rule-case) | — |
 | `bynk.test.remote_unsupported_env` | A `system` case's `env` disagrees with the named target it would run against (`bynk test --against`): it sets a secret, sets a name the target doesn't declare under `vars` or declares with another value, or leaves unset a name the target declares. | [`case`](/book/reference/grammar/#rule-case) | — |
+| `bynk.test.remote_unsupported_peek` | A `system` case reads a participant's test database with `D1.peek`, which a run against a real runtime (`bynk test --against`) can't honour: a deployment has no in-process database. | [`case`](/book/reference/grammar/#rule-case) | — |
 | `bynk.test.remote_unsupported_queue` | A `system` case delivers a queue message with `q.message(m)`, which a run against a real runtime (`bynk test --against`) can't honour: no public wire reaches a queue consumer. | [`case`](/book/reference/grammar/#rule-case) | — |
 | `bynk.test.remote_unsupported_schedule` | A `system` case runs a cron handler with `svc.schedule(…)`, which a run against a real runtime (`bynk test --against`) can't honour: no public wire reaches a cron handler. | [`case`](/book/reference/grammar/#rule-case) | — |
 | [`bynk.test.service_bad_address`](/book/reference/testing/#suite-blocks) | A test body addresses a service the wrong way for its protocol (e.g. an http route without a leading path string). | [`case`](/book/reference/grammar/#rule-case) | — |
