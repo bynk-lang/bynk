@@ -741,7 +741,7 @@ pub struct HttpRouteParam {
 
 /// The canonical normal form of one `from http` route, as a client sees it.
 ///
-/// Every type is canonicalised as it appears on the wire (the same [`canon_type`] the
+/// Every type is canonicalised as it appears on the wire (the same `canon_type` the
 /// `on call` contract uses, so a record's fields are sorted, predicates are a set and
 /// a generic is substituted), in the namespace of the route's own service. The
 /// replies are a sorted set. What is *not* in it is what a client does not act on: a
