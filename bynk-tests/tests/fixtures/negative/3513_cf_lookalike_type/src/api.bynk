@@ -1,0 +1,9 @@
+context api
+
+type RequestCf = { country: String }
+
+service api from http {
+  on GET("/x") (cf: RequestCf) -> Effect[HttpResult[String]] by v: Visitor {
+    Ok(cf.country)
+  }
+}

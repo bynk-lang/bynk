@@ -47,6 +47,7 @@ pub fn canonical_report(analysis: &ProjectAnalysis) -> String {
         capability_paths,
         unit_sources,
         sequence_info,
+        architecture_facts,
         boundary_info,
         doc_scope,
         contract_diff,
@@ -129,6 +130,11 @@ pub fn canonical_report(analysis: &ProjectAnalysis) -> String {
                 sorted_map(agents).join("; ")
             )
         })),
+    );
+    section(
+        &mut out,
+        "architecture_facts",
+        vec![format!("{architecture_facts:?}")],
     );
     section(
         &mut out,

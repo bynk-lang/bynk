@@ -1143,23 +1143,7 @@ pub fn emit_worker_entry(
     {
         imports.push("__mediaTypeMatches".to_string());
     }
-    // #2341 (decision A): a route taking `headers` builds them from the request.
-    if http_routes.iter().any(|r| {
-        r.handler
-            .params
-            .iter()
-            .any(|p| p.name.name == "headers" && matches!(p.type_ref, TypeRef::RequestHeaders(_)))
-    }) {
-        imports.push("__requestHeaders".to_string());
-    }
-    // #2854: a route taking `query` decodes it (typed) or views it (raw).
-    if http_routes.iter().any(|r| r.query_fields.is_some()) {
-        imports.push("__queryObject".to_string());
-    }
-    // #3277: a route taking `cookies` decodes the `Cookie` header.
-    if http_routes.iter().any(|r| r.cookies_fields.is_some()) {
-        imports.push("__cookieObject".to_string());
-    }
+    push_request_param_imports(&http_routes, &mut imports);
     // #3276: a `@multipart` route checks its `Content-Type` and reads its parts.
     if http_routes
         .iter()
@@ -1176,23 +1160,7 @@ pub fn emit_worker_entry(
         imports.push("__formMediaTypeMatches".to_string());
         imports.push("__formObject".to_string());
     }
-    if http_routes.iter().any(|r| {
-        r.handler
-            .params
-            .iter()
-            .any(|p| p.name.name == "query" && matches!(p.type_ref, TypeRef::RequestQuery(_)))
-    }) {
-        imports.push("__requestQuery".to_string());
-    }
-    // #3277: a route taking the raw `cookies` view builds it off the request.
-    if http_routes.iter().any(|r| {
-        r.handler
-            .params
-            .iter()
-            .any(|p| p.name.name == "cookies" && matches!(p.type_ref, TypeRef::RequestCookies(_)))
-    }) {
-        imports.push("__requestCookies".to_string());
-    }
+    push_request_view_imports(&http_routes, &mut imports);
     // #2341 (decision C): a service with `on rejected` renders its rejections.
     if http_routes.iter().any(|r| r.rejected.is_some()) {
         imports.push("__renderRejection".to_string());
@@ -2860,6 +2828,54 @@ fn request_headers_arg(route: &HttpRoute) -> TsExpr {
     call(ident("__requestHeaders"), args)
 }
 
+/// #3513 C: `cf` is what Cloudflare derived about the connection, read off `request.cf`
+/// into the `RequestCf` record; a missing or oddly shaped property is `None`.
+fn bind_cf_param(
+    route: &HttpRoute,
+    p: &bynk_syntax::ast::Param,
+    guarded: &mut Vec<TsStmt>,
+    call_args: &mut Vec<TsExpr>,
+    (cors_const, security_const, rejected): (Option<&str>, Option<&str>, Option<&str>),
+    ru: &RuntimeUse,
+) -> bool {
+    if route.path.split('/').any(|seg| seg == ":cf")
+        || !matches!(&p.type_ref, TypeRef::Named(id) if id.name == "RequestCf")
+    {
+        return false;
+    }
+    let dser = deserialise_call(&p.type_ref, "__cfObject(request)", "cf", ru);
+    guarded.push(const_("__r_cf", dser));
+    // `__cfObject` keeps only fields the record accepts, so this does not reject; the arm
+    // is what narrows the `Result` for the compiler.
+    guarded.push(if_(
+        strict_eq(member(ident("__r_cf"), "tag"), str_lit("Err")),
+        return_(Some(stamp_rejection(
+            json_response(member(ident("__r_cf"), "error"), 400),
+            cors_const,
+            security_const,
+            rejected,
+        ))),
+    ));
+    guarded.push(const_("cf", member(ident("__r_cf"), "value")));
+    call_args.push(ident("cf"));
+    true
+}
+
+/// The request-reading parameters that bind a record: `cf`, and `cookies`.
+fn bind_request_record_param(
+    route: &HttpRoute,
+    p: &bynk_syntax::ast::Param,
+    guarded: &mut Vec<TsStmt>,
+    call_args: &mut Vec<TsExpr>,
+    wrappers: (Option<&str>, Option<&str>, Option<&str>),
+    ru: &RuntimeUse,
+) -> bool {
+    if p.name.name == "cf" {
+        return bind_cf_param(route, p, guarded, call_args, wrappers, ru);
+    }
+    bind_cookies_param(route, p, guarded, call_args, wrappers, ru)
+}
+
 fn bind_cookies_param(
     route: &HttpRoute,
     p: &bynk_syntax::ast::Param,
@@ -3385,7 +3401,7 @@ fn emit_http_route_dispatch(
             call_args.push(ident("query"));
             continue;
         }
-        if bind_cookies_param(
+        if bind_request_record_param(
             route,
             p,
             &mut guarded,
@@ -3892,6 +3908,58 @@ fn emit_http_route_dispatch(
 
     inner.push(if_(route_cond, block(guarded)));
     block(inner)
+}
+
+/// #2341, #2854, #3277: the runtime imports for a route's `headers`, typed `query` and typed `cookies` parameters.
+fn push_request_param_imports(http_routes: &[HttpRoute], imports: &mut Vec<String>) {
+    // #2341 (decision A): a route taking `headers` builds them from the request.
+    if http_routes.iter().any(|r| {
+        r.handler
+            .params
+            .iter()
+            .any(|p| p.name.name == "headers" && matches!(p.type_ref, TypeRef::RequestHeaders(_)))
+    }) {
+        imports.push("__requestHeaders".to_string());
+    }
+    // #2854: a route taking `query` decodes it (typed) or views it (raw).
+    if http_routes.iter().any(|r| r.query_fields.is_some()) {
+        imports.push("__queryObject".to_string());
+    }
+    // #3277: a route taking `cookies` decodes the `Cookie` header.
+    if http_routes.iter().any(|r| r.cookies_fields.is_some()) {
+        imports.push("__cookieObject".to_string());
+    }
+}
+
+/// #2854, #3277, #3513: the runtime imports for a route's raw `query` and `cookies` views, and for `cf: RequestCf`.
+fn push_request_view_imports(http_routes: &[HttpRoute], imports: &mut Vec<String>) {
+    if http_routes.iter().any(|r| {
+        r.handler
+            .params
+            .iter()
+            .any(|p| p.name.name == "query" && matches!(p.type_ref, TypeRef::RequestQuery(_)))
+    }) {
+        imports.push("__requestQuery".to_string());
+    }
+    // #3277: a route taking the raw `cookies` view builds it off the request.
+    if http_routes.iter().any(|r| {
+        r.handler
+            .params
+            .iter()
+            .any(|p| p.name.name == "cookies" && matches!(p.type_ref, TypeRef::RequestCookies(_)))
+    }) {
+        imports.push("__requestCookies".to_string());
+    }
+    // #3513 C: a route taking `cf: RequestCf` reads `request.cf`.
+    if http_routes.iter().any(|r| {
+        !r.path.split('/').any(|seg| seg == ":cf")
+            && r.handler.params.iter().any(|p| {
+                p.name.name == "cf"
+                    && matches!(&p.type_ref, TypeRef::Named(id) if id.name == "RequestCf")
+            })
+    }) {
+        imports.push("__cfObject".to_string());
+    }
 }
 
 /// #3380: the runtime imports a context's streamed `@raw` bodies need: the
