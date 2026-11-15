@@ -1,0 +1,6 @@
+suite shop.orders as system {
+  case "peeks" {
+    let ok = D1.peek(shop.orders.Orders)
+    expect true
+  }
+}

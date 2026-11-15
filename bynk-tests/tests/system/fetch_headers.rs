@@ -42,7 +42,7 @@ fn tool_exists(name: &str) -> bool {
 
 const CONTEXT: &str = "context net.probe
 
-consumes bynk { Fetch }
+consumes bynk { Fetch, Request, Method, FetchOptions, Redirect, FetchError }
 
 service api from http {
 \ton GET(\"/conflict\") () -> Effect[HttpResult[String]] by Visitor given Fetch {

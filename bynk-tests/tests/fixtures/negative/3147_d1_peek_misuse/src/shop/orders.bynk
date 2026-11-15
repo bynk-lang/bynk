@@ -1,0 +1,13 @@
+context shop.orders
+
+consumes bynk
+consumes bynk.cloudflare { D1, Kv }
+
+capability Orders = D1
+capability Sessions = Kv
+
+service api from http {
+  on GET("/hello") () -> Effect[HttpResult[String]] by v: Visitor {
+    Ok("hi")
+  }
+}

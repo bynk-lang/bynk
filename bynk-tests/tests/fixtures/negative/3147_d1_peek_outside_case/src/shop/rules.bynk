@@ -1,0 +1,6 @@
+context shop.rules
+
+fn bad() -> Int {
+  let db = D1.peek(shop.orders.Orders)
+  1
+}

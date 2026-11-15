@@ -233,8 +233,8 @@ pub struct ResolvedCommons {
     pub extensible_enums: HashSet<String>,
     /// #3536: the names of types in scope that a braced `consumes` of a
     /// first-party unit leaves out (`consumes bynk { Logger }` leaves out
-    /// `Claim`). Still resolvable while `bynk.consumes.type_not_selected` is a
-    /// warning, but never a name-clash or bare-variant ambiguity candidate: a
+    /// `Claim`). Still resolvable, so `bynk.consumes.type_not_selected` reports
+    /// it with a fix, but never a name-clash or bare-variant ambiguity candidate: a
     /// declaration of the unit's own wins. Empty unless set with
     /// [`ResolvedCommons::with_unselected_types`].
     pub unselected_types: HashSet<String>,
@@ -2412,7 +2412,10 @@ impl Gate<'_> {
                 type_args,
                 ..
             } => {
+                // #3147: `D1.peek(…)` is a case-only built-in, not a use of the
+                // `D1` capability, so it needs no `consumes bynk.cloudflare`.
                 if let ExprKind::Ident(id) = &receiver.kind
+                    && !(id.name == "D1" && method.name == "peek")
                     && !self.local_receiver(id, Some(method), None)
                 {
                     self.name(id);
@@ -2606,8 +2609,8 @@ fn indent_after(source: &str, at: usize) -> String {
 /// writes the name of a type (or a bare variant of a sum) that a unit it
 /// consumes exports and that **this file's own** `consumes` does not bring in:
 /// either it lists other names, or only another file of the unit consumes the
-/// unit. Imports are per file, so naming anything else is deprecated: it still
-/// resolves, as a warning, and carries a fix that edits this file's `consumes`:
+/// unit. Imports are per file, so naming anything else
+/// is an error, and carries a fix that edits this file's `consumes`:
 /// extend the clause it has, or add one.
 pub fn check_unselected_type_names(
     items: &[CommonsItem],
@@ -2707,7 +2710,7 @@ fn unit_gate(
             format!("`{}` is not in scope: this file does not `consumes {unit}`", id.name),
         )
         .with_note(format!(
-            "imports are per file: a call to another unit's service is in scope in a file that itself `consumes` it. Add `consumes {unit}` to this file. This will be an error in a later release"
+            "imports are per file: a call to another unit's service is in scope in a file that itself `consumes` it. Add `consumes {unit}` to this file."
         ));
         if let Some((offset, separator)) = &file.insert_at {
             let at = Span::new_in(id.span.file, *offset, *offset);
@@ -2788,7 +2791,7 @@ fn unselected_gate(
         (usize, usize),
         (String, String),
     >::new());
-    let warn = |id: &Ident, name: &str, owner: &str| {
+    let report_name = |id: &Ident, name: &str, owner: &str| {
         let why = if file.clauses.iter().any(|c| c.target.joined() == owner) {
             format!("this file's `consumes {owner}` does not list it")
         } else {
@@ -2813,11 +2816,11 @@ fn unselected_gate(
             Names::Capabilities => "bynk.consumes.capability_not_selected",
         };
         CompileError::new(code, id.span, message).with_note(format!(
-            "imports are per file: a name from another unit is in scope in a file that itself `consumes` it, and in a braced list only if it is listed. Add `{name}` to this file's `consumes {owner} {{ … }}`. This will be an error in a later release"
+            "imports are per file: a name from another unit is in scope in a file that itself `consumes` it, and in a braced list only if it is listed. Add `{name}` to this file's `consumes {owner} {{ … }}`."
         ))
     };
-    let report = |id: &Ident, owner: &str| warn(id, &id.name, owner);
-    let variant_report = |id: &Ident, sum: &str| warn(id, sum, &owners[sum]);
+    let report = |id: &Ident, owner: &str| report_name(id, &id.name, owner);
+    let variant_report = |id: &Ident, sum: &str| report_name(id, sum, &owners[sum]);
     let mut g = Gate {
         hidden: &gated,
         report: &report,
@@ -2833,10 +2836,10 @@ fn unselected_gate(
     attach_consumes_fixes(errors, &hits.into_inner(), file)
 }
 
-/// #3536: give each [`check_unselected_type_names`] warning a fix that edits the
+/// #3536: give each [`check_unselected_type_names`] error a fix that edits the
 /// file it is in. A file with a braced clause for the owner gains `, Name` in
 /// it; one with none gains a line listing **every** name it needs from that
-/// owner, so the warnings share one edit and the batch applies it once.
+/// owner, so the errors share one edit and the batch applies it once.
 fn attach_consumes_fixes(
     errors: Vec<CompileError>,
     hits: &std::collections::BTreeMap<(usize, usize), (String, String)>,
@@ -3889,6 +3892,60 @@ fn check_statement_references(stmt: &Statement, cx: &mut RefCheckCtx) {
     }
 }
 
+/// v0.9: `HttpResult.Variant(args)`, the qualified `HttpResult` constructor.
+/// Reports an unknown variant, and says whether `receiver.method(args)` was one.
+fn check_http_result_call(
+    receiver: &Expr,
+    method: &Ident,
+    args: &[Expr],
+    cx: &mut RefCheckCtx,
+) -> bool {
+    let ExprKind::Ident(id) = &receiver.kind else {
+        return false;
+    };
+    if name_in_scope(&id.name, cx.params, &cx.scopes) || id.name != "HttpResult" {
+        return false;
+    }
+    if http_variant(&method.name).is_none() {
+        cx.errors.push(CompileError::new(
+            "bynk.resolve.unknown_static_member",
+            method.span,
+            format!("`HttpResult` has no variant named `{}`", method.name),
+        ));
+    }
+    for a in args {
+        check_expr_references(a, cx);
+    }
+    true
+}
+
+/// #3147: `D1.peek(…)` reads a participant's test database, from an
+/// `integration` or `system` case. A function body is none: report it, and say
+/// whether `receiver.method` was it.
+fn refuse_peek_in_fn(receiver: &Expr, method: &Ident, cx: &mut RefCheckCtx) -> bool {
+    let ExprKind::Ident(id) = &receiver.kind else {
+        return false;
+    };
+    if id.name != "D1"
+        || method.name != "peek"
+        || name_in_scope(&id.name, cx.params, &cx.scopes)
+        || cx.types.contains_key(&id.name)
+    {
+        return false;
+    }
+    cx.errors.push(
+        CompileError::new(
+            "bynk.test.peek_outside_case",
+            receiver.span.merge(method.span),
+            "`D1.peek` is only valid inside an `integration` or `system` case",
+        )
+        .with_note(
+            "it reads a participant's test database, which only those tiers stand up; the deployed app has no such handle",
+        ),
+    );
+    true
+}
+
 #[allow(clippy::too_many_lines)]
 fn check_expr_references(expr: &Expr, cx: &mut RefCheckCtx) {
     match &expr.kind {
@@ -4414,21 +4471,10 @@ fn check_expr_references(expr: &Expr, cx: &mut RefCheckCtx) {
                 }
                 return;
             }
-            // v0.9: `HttpResult.Variant(args)` — qualified HttpResult constructor.
-            if let ExprKind::Ident(id) = &receiver.kind
-                && !name_in_scope(&id.name, cx.params, &cx.scopes)
-                && id.name == "HttpResult"
-            {
-                if http_variant(&method.name).is_none() {
-                    cx.errors.push(CompileError::new(
-                        "bynk.resolve.unknown_static_member",
-                        method.span,
-                        format!("`HttpResult` has no variant named `{}`", method.name),
-                    ));
-                }
-                for a in args {
-                    check_expr_references(a, cx);
-                }
+            if refuse_peek_in_fn(receiver, method, cx) {
+                return;
+            }
+            if check_http_result_call(receiver, method, args, cx) {
                 return;
             }
             // v0.20b: `List.empty()` / `Map.empty()` — qualified statics on
@@ -4679,8 +4725,7 @@ fn find_ambiguous_variant_owners<'a>(name: &str, cx: &RefCheckCtx<'a, '_>) -> Ve
 /// leaves out (`unselected`) is not a candidate beside the sums in scope, so a
 /// user's own `Unavailable` is never ambiguous with a standard-library one it
 /// did not ask for. It is the answer only when nothing in scope declares the
-/// name: such a use still resolves while `bynk.consumes.type_not_selected` is a
-/// warning, and is the error once that becomes one.
+/// name: such a use resolves and is reported as `bynk.consumes.type_not_selected`.
 pub(crate) fn bare_variant_owners<'a>(
     name: &str,
     types: &'a HashMap<String, Arc<TypeDecl>>,

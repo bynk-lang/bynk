@@ -1,0 +1,31 @@
+context demo
+
+// #3536: the braces mean what they say. `TimedOut`, `Claim` (and so its
+// variants) and `ContainerError` are listed here; leaving one out is a
+// `bynk.consumes.type_not_selected` error, and `bynk check --fix` adds it.
+
+consumes bynk { Logger, TimedOut, Claim }
+consumes bynk.cloudflare { D1, ContainerError }
+
+type Outcome = | Done(n: Int) | Unavailable
+
+// The expected type picks the sum: this is the user's own `Unavailable`, and the
+// one below is `ContainerError`'s, which the braces do not list.
+fn mine() -> Outcome {
+    Unavailable
+}
+
+fn theirs() -> ContainerError {
+    Unavailable
+}
+
+fn at(t: TimedOut) -> Bool {
+    true
+}
+
+fn won(r: Claim) -> Bool {
+    match r {
+        Claimed => true
+        AlreadyClaimed => false
+    }
+}

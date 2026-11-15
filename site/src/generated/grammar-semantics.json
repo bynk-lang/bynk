@@ -304,6 +304,26 @@
       "summary": "A case drives `by Nobody` at a route with no Bearer, `Oidc` or Signature actor (alone, or as a member of an actor sum) (e.g. a public `Visitor` route) — there is no auth seam to reject the missing credential."
     },
     {
+      "code": "bynk.test.peek_not_a_database",
+      "summary": "`D1.peek` names a capability that is not derived from `D1`; only a D1 binding has a test database to read."
+    },
+    {
+      "code": "bynk.test.peek_not_bound",
+      "summary": "`D1.peek` is used anywhere but as the value of a `let`; the handle is what a case reads through."
+    },
+    {
+      "code": "bynk.test.peek_outside_case",
+      "summary": "`D1.peek` is used outside an `integration` or `system` case; only those tiers stand up a participant's test database."
+    },
+    {
+      "code": "bynk.test.peek_unknown_capability",
+      "summary": "`D1.peek` names a participant or a capability that the suite does not have."
+    },
+    {
+      "code": "bynk.test.peek_write",
+      "summary": "A `D1.peek` handle is asked to write, by a write operation (`run`, `batch`) or by a statement that would write; the handle is read-only."
+    },
+    {
       "code": "bynk.test.principal_identity_mismatch",
       "summary": "A call-site `by <Actor>` acts as an actor whose identity is incompatible with the addressed handler's actor, or names no member of the handler's actor sum."
     },
@@ -469,7 +489,7 @@
     },
     {
       "code": "bynk.consumes.capability_not_selected",
-      "summary": "A capability a consumed unit exports is named (a `given` clause, a call, `provides`, a `stub`) in a file whose own `consumes` does not list it (a warning; an error in a later release)."
+      "summary": "A capability a consumed unit exports is named (a `given` clause, a call, `provides`, a `stub`) in a file whose own `consumes` does not list it."
     },
     {
       "code": "bynk.consumes.name_conflict",
@@ -509,11 +529,11 @@
     },
     {
       "code": "bynk.consumes.type_not_selected",
-      "summary": "A type (or a bare variant of a sum) of a consumed unit is named in a file whose own `consumes` does not bring it in: it lists other names, or only another file of the unit consumes the unit (a warning; an error in a later release)."
+      "summary": "A type (or a bare variant of a sum) of a consumed unit is named in a file whose own `consumes` does not bring it in: it lists other names, or only another file of the unit consumes the unit."
     },
     {
       "code": "bynk.consumes.unit_not_consumed",
-      "summary": "A call to another unit's service is written in a file whose own `consumes` does not name that unit (a warning; an error in a later release)."
+      "summary": "A call to another unit's service is written in a file whose own `consumes` does not name that unit."
     },
     {
       "code": "bynk.consumes.unknown_context",

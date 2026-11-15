@@ -1256,11 +1256,11 @@ case "a held claim" {
   (`Response` through a `Fetch` stub) need listing in the suite as well.
 - **Suite types win.** A suite's own `type` still takes the name over an unlisted
   standard-library type, as it does for a unit.
-- **This release warns.** A suite file that names something its own `consumes`
-  does not bring in still compiles, with `bynk.consumes.type_not_selected`,
-  `bynk.consumes.capability_not_selected` or `bynk.consumes.unit_not_consumed`;
-  `bynk check --fix=<code>` adds the clause to the suite file. A later release
-  makes them errors.
+- **Naming what the suite does not consume is an error.** A suite file that
+  names something its own `consumes` does not bring in is
+  `bynk.consumes.type_not_selected`, `bynk.consumes.capability_not_selected` or
+  `bynk.consumes.unit_not_consumed`; `bynk check --fix=<code>` adds the clause to
+  the suite file.
 
 ## Test input from a file — `fixture` {#fixtures}
 
@@ -1487,6 +1487,47 @@ case "a hold older than fifteen minutes has expired" {
   `Instant.fromEpochMillis(0)`, is warned about
   (`bynk.test.remote_clock_dependent`): compare instants the run produced
   (`expires > created`) instead.
+
+## Reading a participant's database {#peek-a-database}
+
+A `system` case drives the whole app through its real boundaries, so it cannot
+name a capability: `Orders.all(…)` there is `bynk.resolve.unknown_name`. To check
+what a request stored, `D1.peek` gives the case a **read-only handle** on one
+participant's test D1 database:
+
+```bynk,fragment
+case "placing an order stores it" {
+  let r <- api.POST("/orders", "A1") by User("bob")
+  expect r is Ok(_)
+
+  let db = D1.peek(shop.orders.Orders)
+  let rows <- db.all("SELECT sku, qty FROM orders WHERE owner = ?1", [Text("bob")])
+  expect rows is Ok(_)
+}
+```
+
+- **It names a participant and its D1 capability**, as
+  `D1.peek(<participant>.<Capability>)`. It is valid only in an `integration` or
+  `system` case (`bynk.test.peek_outside_case`), on a capability derived from
+  `D1` (`bynk.test.peek_not_a_database`) that the participant declares
+  (`bynk.test.peek_unknown_capability`).
+- **It is bound by `let`**: `let db = D1.peek(…)`, then `db.all(…)`. A `D1.peek`
+  anywhere else is `bynk.test.peek_not_bound`.
+- **It offers the reads**, with the capability's own signatures: `all`, `first`,
+  and `select[T]` / `firstAs[T]`. A literal statement is checked against the
+  migrations' schema like any other D1 call. The `D1` value types (`SqlValue` and
+  the rest) are in scope in the case, with no `consumes`.
+- **It is read-only.** `run` and `batch`, and any statement that would write
+  (`INSERT`, `UPDATE`, `DELETE`, a schema change), are `bynk.test.peek_write`.
+  The leading keyword is enough to refuse one, so this holds under
+  `[check] d1_sql = false` too; with the schema, a write the keyword hides
+  (`WITH … DELETE`) is found from the prepared statement. To get state into the
+  database, drive the app.
+- **It reads the database the app wrote.** It is the same in-memory database
+  the participant's own D1 calls run against in this case, with the
+  participant's migrations applied.
+- **Seeding is not part of it.** Starting a case from a known row is tracked in
+  [#3563](https://github.com/bynk-lang/bynk/issues/3563).
 
 ## `Val[T]` — value fabrication {#val}
 
