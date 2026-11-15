@@ -24,6 +24,8 @@ fn no_port_is_issued_twice_across_threads() {
     assert_eq!(all.iter().collect::<HashSet<_>>().len(), all.len());
 }
 
+// Pins that an issued port is bindable. It shares the cross-process window the
+// helper documents, so it is very unlikely, not impossible, to flake.
 #[test]
 fn an_issued_port_can_be_bound_by_the_child_that_receives_it() {
     let port = ports::free_port();

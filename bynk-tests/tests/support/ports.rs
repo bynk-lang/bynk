@@ -13,9 +13,13 @@
 //!   port one test has released and not yet used is a port another test's
 //!   `bind(":0")` may be given.
 //!
-//! [`free_port`] removes both. Every port it returns has been recorded in a
+//! [`free_port`] removes both, among callers of the helper. Every port it returns has been recorded in a
 //! process-wide set, so it is never handed out twice in one process, and a
 //! whole batch ([`free_ports`]) is bound at once so a batch is distinct.
+//!
+//! A test that still binds `127.0.0.1:0` directly (an upstream listener it serves
+//! itself) is outside the registry, and may be given a port that was issued and
+//! released before its child bound it; the odds are low for the same reason as below.
 //!
 //! What this cannot remove is the gap between returning the port and the child
 //! binding it, because the child process binds it, not us, and a listener can't
