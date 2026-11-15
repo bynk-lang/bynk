@@ -359,6 +359,7 @@ pub(crate) const RUNTIME_EXPORTS: &[(&str, &str)] = &[
     ("__bynkPercentDecode", "url"),
     ("__bynkPercentEncode", "url"),
     ("__bynkPgRow", "time"),
+    ("__bynkProcessExec", "settle"),
     ("__bynkRace", "settle"),
     ("__bynkSetInsert", "keys"),
     ("__bynkSetOf", "keys"),
