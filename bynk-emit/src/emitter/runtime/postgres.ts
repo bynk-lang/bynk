@@ -8,13 +8,14 @@
 //
 // What this module owns, so that one place is tested against a fake `postgres`:
 //
-//   1. **`prepare: true` on every `sql.unsafe` call** (ADR 0799 A). In
-//      postgres.js 3.4.5's `workerd` build `sql.unsafe()` defaults to
-//      `prepare: false`, which makes it send type-discovery messages before each
-//      query that Hyperdrive does not cache. The two calls below (a statement's,
-//      and a transaction's `tx.unsafe`, #3320) are the only `unsafe` calls in the
-//      runtime, and `postgres.test.ts` fails if any call reaches the driver
-//      without the option.
+//   1. **`prepare: true` on every `sql.unsafe` call** (ADR 0799 A). `sql.unsafe()`
+//      defaults to `prepare: false` (postgres.js 3.4.5's `workerd` build, where
+//      ADR 0799 A measured it, and 4.x's `src/index.js`, which its `workerd` build
+//      `src/cf.js` wraps): an unnamed statement, which on 3.4.5 made the driver send
+//      type-discovery messages before each query that Hyperdrive does not cache.
+//      The two calls below (a statement's, and a transaction's `tx.unsafe`, #3320)
+//      are the only `unsafe` calls in the runtime, and `postgres.test.ts` fails if
+//      any call reaches the driver without the option.
 //   2. **The connection**, opened from the binding's `connectionString` for one
 //      statement and ended before the statement's outcome is returned. A
 //      Worker may not carry an I/O object (a socket) from one request into
@@ -268,8 +269,9 @@ export function jsonRow(row: Record<string, unknown>): Record<string, unknown> {
  * outcome returns, whether it succeeded or not.
  */
 export function makePgExecute(factory: PgFactory): PgExecute {
-  // `max: 1`: one statement needs one connection. `fetch_types: false` is the
-  // `workerd` build's default, written down so it is not left to it.
+  // `max: 1`: one statement needs one connection. `fetch_types: false` skips the
+  // driver's own type lookup (a query against `pg_type` on a new connection); 4.x
+  // defaults it to `true` on every runtime, so it is written down here.
   const open = (connectionString: string): PgSql => factory(connectionString, { max: 1, fetch_types: false, types: PG_TYPES });
   const close = async (client: PgSql | undefined): Promise<void> => {
     if (client === undefined) return;
