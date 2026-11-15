@@ -2782,9 +2782,12 @@ fn unselected_gate(
                 && matches!(&t.body, TypeBody::Sum(s) if s.variants.iter().any(|x| x.name.name == *v))
         })
     });
-    // Each report's name this file must list and its owner, by the span it is
-    // reported at.
-    let hits = std::cell::RefCell::new(HashMap::<Span, (String, String)>::new());
+    // Each report's name this file must list and its owner, by the byte range it
+    // is reported at (one file's, so the range identifies the site).
+    let hits = std::cell::RefCell::new(std::collections::BTreeMap::<
+        (usize, usize),
+        (String, String),
+    >::new());
     let warn = |id: &Ident, name: &str, owner: &str| {
         let why = if file.clauses.iter().any(|c| c.target.joined() == owner) {
             format!("this file's `consumes {owner}` does not list it")
@@ -2801,8 +2804,10 @@ fn unselected_gate(
                 id.name
             )
         };
-        hits.borrow_mut()
-            .insert(id.span, (name.to_string(), owner.to_string()));
+        hits.borrow_mut().insert(
+            (id.span.start, id.span.end),
+            (name.to_string(), owner.to_string()),
+        );
         let code = match names {
             Names::Types => "bynk.consumes.type_not_selected",
             Names::Capabilities => "bynk.consumes.capability_not_selected",
@@ -2834,7 +2839,7 @@ fn unselected_gate(
 /// owner, so the warnings share one edit and the batch applies it once.
 fn attach_consumes_fixes(
     errors: Vec<CompileError>,
-    hits: &HashMap<Span, (String, String)>,
+    hits: &std::collections::BTreeMap<(usize, usize), (String, String)>,
     file: &FileConsumes<'_>,
 ) -> Vec<CompileError> {
     let mut needed: std::collections::BTreeMap<&str, std::collections::BTreeSet<&str>> =
@@ -2846,7 +2851,7 @@ fn attach_consumes_fixes(
     errors
         .into_iter()
         .map(|e| {
-            let Some((name, owner)) = hits.get(&e.span) else {
+            let Some((name, owner)) = hits.get(&(e.span.start, e.span.end)) else {
                 return e;
             };
             let own = || file.clauses.iter().filter(|c| c.target.joined() == *owner);
