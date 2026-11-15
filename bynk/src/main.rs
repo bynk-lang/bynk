@@ -66,9 +66,7 @@ fn run() -> ExitCode {
             no_install,
             format,
             ready_json,
-            log_events,
-            trace_events,
-            rewrite_frames,
+            stream,
             wrangler_args,
         } => {
             if !prepare(&path, lock.options()) {
@@ -85,11 +83,11 @@ fn run() -> ExitCode {
                     local_workers,
                     no_install,
                     wrangler_args,
-                    format: dev_format(format, trace_events),
+                    format: dev_format(format, stream.trace_events),
                     ready_json,
-                    log_events,
-                    trace_events,
-                    rewrite_frames,
+                    log_events: stream.log_events,
+                    trace_events: stream.trace_events,
+                    rewrite_frames: stream.rewrite_frames,
                 },
             )
         }

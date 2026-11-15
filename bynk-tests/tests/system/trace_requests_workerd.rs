@@ -272,9 +272,10 @@ fn recording_changes_no_outcome_and_prints_one_spanned_trace_per_request() {
     }
     let tmp = std::env::temp_dir().join(format!("bynk-trace-requests-{}", std::process::id()));
     let _ = fs::remove_dir_all(&tmp);
-    // Eight ports (two runs of two servers and two inspectors), in a band clear
-    // of the other workerd tests'.
-    let base = 59_000 + 8 * (std::process::id() % 400) as u16;
+    // Eight ports (two runs of two servers and two inspectors). 53_000..55_000 is
+    // the span the other workerd tests' bands (20_000 to 52_999 and 55_000 up)
+    // leave free; as with theirs, a pid-derived offset keeps parallel runs apart.
+    let base = 53_000 + 8 * (std::process::id() % 250) as u16;
     let plain = match serve(&tmp.join("plain"), false, base) {
         Some(r) => r,
         None if skip("the plain run did not answer (likely no network to provision wrangler)") => {

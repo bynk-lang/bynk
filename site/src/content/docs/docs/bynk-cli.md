@@ -383,6 +383,10 @@ context under `bynk dev --trace-events` to see both sides: a callee served
 without it prints no event, and the caller's step still names the `request` it
 sent.
 
+`bynk dev` takes a worker's output line as a trace when it carries the
+`__bynk_trace:` prefix followed by valid trace JSON, so a line of your own that
+happens to do so is read as one.
+
 The recorder finds the request's record through `AsyncLocalStorage`, so a traced
 build adds the `nodejs_als` compatibility flag to each worker's `wrangler.toml`.
 It does not add it when `[workers] compatibility_flags` already lists

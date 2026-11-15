@@ -18,8 +18,10 @@ the `.bynk` spans that only the toolchain can attach to a call. The track is
 - **Recording sits at the emitter's call sites, with spans passed in.** A traced
   build wraps a cross-context call, an agent call and a capability op in
   `__traceStep(kind, target, span)(call)`. The call is the wrapper's argument, so
-  its arguments evaluate where they always did, and a step takes its place in
-  call order. There are no per-statement hooks. A capability op is wrapped at
+  its arguments evaluate where they always did. A step begins, and its clock
+  starts, when the wrapped expression starts evaluating, so steps are in the
+  order their calls begin; an effectful call is bound with `<-` and so is hoisted
+  out of argument position. There are no per-statement hooks. A capability op is wrapped at
   its lowered call site, not through a deps proxy, because only the call site
   knows the span.
 - **The trace leaves the Worker as one stdout line.** The generated `fetch` moves
@@ -47,5 +49,7 @@ the `.bynk` spans that only the toolchain can attach to a call. The track is
 sites and the `fetch` wrapper, so a behavioural fixture runs the same suite with
 recording on and off and compares outcomes (slice 1c). The `fault` of a request
 is the error's stack, in generated-code coordinates; the driver maps its frames
-to `.bynk` spans as it does for `log` events. A synchronous throw while a wrapped
-call's arguments evaluate leaves its step `pending` rather than `fault`.
+to `.bynk` spans as it does for `log` events. A synchronous throw from a wrapped
+call or its arguments leaves its step `pending` rather than `fault`. A wrapped
+site returns a derived promise, so it must be awaited as it is; an RPC stub's
+pipelining is not carried over.

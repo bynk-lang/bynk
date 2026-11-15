@@ -209,7 +209,7 @@ bynk dev --trace-events
 ```
 
 ```json
-{"event":"request","context":"shop-orders","parent":null,"route":"POST /orders","status":201,"duration_ms":12.4,"steps":[{"kind":"call","target":"shop.payment.authorise","span":{"file":"src/shop/orders.bynk","line":23,"col":14},"ms":3.1,"outcome":"ok","request":"9a41…"}],"truncated":false,"fault":null}
+{"event":"request","context":"shop-orders","id":"5d5e…","parent":null,"route":"POST /orders","status":201,"duration_ms":12.4,"steps":[{"kind":"call","target":"shop.payment.authorise","span":{"file":"src/shop/orders.bynk","line":23,"col":14},"ms":3.1,"outcome":"ok","request":"9a41…"}],"truncated":false,"fault":null}
 ```
 
 A call to another context is one step, and the callee's own request is its own
