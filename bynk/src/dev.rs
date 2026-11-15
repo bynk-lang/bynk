@@ -146,6 +146,10 @@ pub enum DevEvent {
         context: String,
         /// This request's id.
         id: String,
+        /// The id of the request that made this one, when it is a cross-context
+        /// call from another worker (that request's `call` step carries this one's
+        /// id as its `request`); `null` for a request from outside.
+        parent: Option<String>,
         /// `<METHOD> <path>`.
         route: String,
         status: u16,
@@ -1185,6 +1189,7 @@ fn emit_request(worker: &str, rewriter: &crate::logs::Rewriter, line: &str) -> b
         &DevEvent::Request {
             context: worker.to_string(),
             id: t.id,
+            parent: t.parent,
             route: t.route,
             status: t.status,
             duration_ms: t.duration_ms,
@@ -2707,6 +2712,7 @@ mod tests {
         let event = DevEvent::Request {
             context: "shop-orders".into(),
             id: "r1".into(),
+            parent: Some("p0".into()),
             route: "POST /orders".into(),
             status: 201,
             duration_ms: 12.5,
@@ -2720,13 +2726,14 @@ mod tests {
                 }),
                 ms: 3.5,
                 outcome: "ok".into(),
+                request: Some("c1".into()),
             }],
             truncated: false,
             fault: None,
         };
         assert_eq!(
             event_line(&event),
-            r#"{"event":"request","context":"shop-orders","id":"r1","route":"POST /orders","status":201,"duration_ms":12.5,"steps":[{"kind":"call","target":"shop.payment.authorise","span":{"file":"src/shop/orders.bynk","line":23,"col":14},"ms":3.5,"outcome":"ok"}],"truncated":false,"fault":null}"#
+            r#"{"event":"request","context":"shop-orders","id":"r1","parent":"p0","route":"POST /orders","status":201,"duration_ms":12.5,"steps":[{"kind":"call","target":"shop.payment.authorise","span":{"file":"src/shop/orders.bynk","line":23,"col":14},"ms":3.5,"outcome":"ok","request":"c1"}],"truncated":false,"fault":null}"#
         );
     }
 

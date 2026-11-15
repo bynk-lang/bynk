@@ -1,6 +1,15 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
-import { TRACE_PREFIX, TRACE_STEP_LIMIT, traceFault, traceFetch, traceStep } from "../src/trace.ts";
+import {
+  TRACE_PARENT_HEADER,
+  TRACE_PREFIX,
+  TRACE_REQUEST_HEADER,
+  TRACE_STEP_LIMIT,
+  traceBinding,
+  traceFault,
+  traceFetch,
+  traceStep,
+} from "../src/trace.ts";
 
 const span = { file: "src/shop.bynk", line: 14, col: 5 };
 
@@ -114,4 +123,74 @@ test("concurrent requests keep their own steps", async () => {
   }
   const parsed = lines.map((l) => JSON.parse(l.slice(TRACE_PREFIX.length)));
   for (const r of parsed) assert.deepEqual(r.steps.map((s: { target: string }) => s.target), [`${r.context}.op`]);
+});
+
+// The lines `traceFetch` prints while `body` runs, parsed.
+async function lines(body: () => Promise<void>): Promise<Array<Record<string, unknown>>> {
+  const out: string[] = [];
+  const log = globalThis.console.log;
+  globalThis.console.log = (...a: unknown[]) => void out.push(String(a[0]));
+  try {
+    await body();
+  } finally {
+    globalThis.console.log = log;
+  }
+  return out.map((l) => JSON.parse(l.slice(TRACE_PREFIX.length)));
+}
+
+test("a call carries its ids to the callee, whose record names its parent", async () => {
+  let callee: ((request: Request) => Promise<Response>) | undefined;
+  const binding = { fetch: (request: Request) => callee!(request) };
+  const got = await lines(async () => {
+    // The callee Worker: serves the internal request under its own record.
+    callee = (request) =>
+      traceFetch("callee", async () => new Response("ok"), request, {}, {});
+    await traceFetch(
+      "caller",
+      async () => {
+        // As the emitter emits it: begin the step, then wrap the binding.
+        await traceStep("call", "callee.op", span)(
+          traceBinding(binding).fetch(new Request("http://internal/_bynk/call/op", { method: "POST", body: "x" })),
+        );
+        return new Response("ok");
+      },
+      new Request("http://x/go"),
+      {},
+      {},
+    );
+  });
+  const calleeLine = got.find((l) => l.context === "callee")!;
+  const callerLine = got.find((l) => l.context === "caller")!;
+  const step = (callerLine.steps as Array<Record<string, unknown>>)[0]!;
+  assert.equal(calleeLine.parent, callerLine.id);
+  assert.equal(calleeLine.id, step.request, "the step names the callee's request id");
+  assert.equal(callerLine.parent, null);
+});
+
+test("a request from outside has no parent, and a binding outside a request is untouched", async () => {
+  const got = await lines(async () => {
+    await traceFetch("only", async () => new Response("ok"), new Request("http://x/"), {}, {});
+  });
+  assert.equal(got[0]!.parent, null);
+  const binding = { fetch: async (_: Request) => new Response("ok") };
+  assert.equal(traceBinding(binding), binding);
+  void TRACE_PARENT_HEADER;
+  void TRACE_REQUEST_HEADER;
+});
+
+test("only a call step carries a request id", async () => {
+  const got = await lines(async () => {
+    await traceFetch(
+      "c",
+      async () => {
+        traceStep("capability", "Db.q", null)(1);
+        traceStep("agent", "A.m", null)(1);
+        return new Response("ok");
+      },
+      new Request("http://x/"),
+      {},
+      {},
+    );
+  });
+  for (const s of got[0]!.steps as Array<Record<string, unknown>>) assert.equal(s.request, undefined);
 });

@@ -373,12 +373,46 @@ fn recording_changes_no_outcome_and_prints_one_spanned_trace_per_request() {
         logs()
     );
 
-    // The callee, serving the internal call, prints a trace of its own.
+    // The callee, serving the internal call, prints a trace of its own, and it
+    // names the caller's request as its parent: the caller's `call` step carries
+    // the callee's request id, and the callee's record carries the caller's.
     let callee = traces(&traced.callee_log);
-    assert!(
-        callee.iter().any(|t| t["context"] == "tr.callee"),
-        "the callee prints its own trace\n{}",
+    let call_step = ok["steps"]
+        .as_array()
+        .unwrap()
+        .iter()
+        .find(|s| s["kind"] == "call")
+        .unwrap();
+    let child_id = call_step["request"]
+        .as_str()
+        .expect("a call step names its callee's request");
+    let child = callee
+        .iter()
+        .find(|t| t["id"] == child_id)
+        .unwrap_or_else(|| panic!("no callee trace with id {child_id}\n{}", logs()));
+    assert_eq!(child["context"], "tr.callee");
+    assert_eq!(child["route"], "POST /_bynk/call/square");
+    assert_eq!(
+        child["parent"],
+        ok["id"],
+        "the callee names its caller's request\n{}",
         logs()
     );
+    // The caller's own request came from outside, so it has no parent.
+    assert_eq!(ok["parent"], serde_json::Value::Null);
+    // The faulting call is stitched too: its callee's record is the 500.
+    let fault_child_id = faulted["steps"]
+        .as_array()
+        .unwrap()
+        .iter()
+        .find(|s| s["kind"] == "call")
+        .and_then(|s| s["request"].as_str())
+        .expect("the faulting call step names its callee's request");
+    let fault_child = callee
+        .iter()
+        .find(|t| t["id"] == fault_child_id)
+        .unwrap_or_else(|| panic!("no callee trace with id {fault_child_id}\n{}", logs()));
+    assert_eq!(fault_child["status"], 500);
+    assert_eq!(fault_child["parent"], faulted["id"]);
     let _ = fs::remove_dir_all(&tmp);
 }
