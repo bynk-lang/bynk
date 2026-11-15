@@ -64,7 +64,7 @@ that just needs bytes (golden fixtures, `bynk-wasm`'s JS-facing API).
 
 ```toml
 [dependencies]
-bynk-ts = "0.624"
+bynk-ts = "0.625"
 ```
 
 ```rust
