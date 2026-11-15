@@ -85,3 +85,4 @@ bynk.deploy.empty_group: a manifest-level diagnostic (a `bynk.toml` `[deploy.wor
 bynk.deploy.group_name_conflict: a manifest-level diagnostic (a `bynk.toml` `[deploy.workers]` error) with no source line, which the example gate cannot mark
 bynk.deploy.not_a_context: a manifest-level diagnostic (a `bynk.toml` `[deploy.workers]` error) with no source line, which the example gate cannot mark
 bynk.deploy.unknown_context: a manifest-level diagnostic (a `bynk.toml` `[deploy.workers]` error) with no source line, which the example gate cannot mark
+bynk.deploy.binding_collision: a project-level diagnostic over a `[deploy.workers]` group in `bynk.toml` and two contexts' sources, which the single-file example gate cannot mark

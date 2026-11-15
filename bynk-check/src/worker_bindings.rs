@@ -370,6 +370,70 @@ pub fn phase_duplicate_bindings(
     }
 }
 
+/// Whether two identical declarations of `source` in different members of a
+/// group are one shared binding. A resource is identified by its declaration
+/// (a capability and its options), so identical ones share. An agent is not: its
+/// binding holds only the class's name, but its class is the code of the context
+/// that declares it, so two members' agents of one name are two classes.
+fn shareable(source: &BindingSource) -> bool {
+    !matches!(source, BindingSource::Agent { .. })
+}
+
+/// `bynk.deploy.binding_collision` (#3562): the members of a Worker group share
+/// one `wrangler.toml` and one `env`, so a binding name two members both
+/// declare is one binding when their declarations are identical (the same kind
+/// and options, so the point of co-location is shared state) and an error when
+/// they differ. `bindings` holds each context's bindings
+/// ([`phase_duplicate_bindings`] reports a name one context repeats). One error
+/// per clash, at the later member's declaration, naming both members and both
+/// sources.
+pub fn phase_group_binding_collisions(
+    worker_groups: &bynk_project::worker_groups::WorkerGroups,
+    parsed: &[ParsedFile],
+    groups: &BTreeMap<String, Vec<usize>>,
+    bindings: &BTreeMap<String, Vec<WorkerBinding>>,
+    errors: &mut ErrorSink,
+) {
+    for (key, group) in worker_groups {
+        let mut first: HashMap<&str, (&str, &WorkerBinding)> = HashMap::new();
+        for ctx in &group.contexts {
+            let indices = groups.get(ctx).map(Vec::as_slice).unwrap_or_default();
+            for binding in bindings.get(ctx).into_iter().flatten() {
+                let Some(&(earlier_ctx, earlier)) = first.get(binding.name.as_str()) else {
+                    first.insert(&binding.name, (ctx, binding));
+                    continue;
+                };
+                if earlier_ctx == ctx
+                    || (shareable(&binding.source) && earlier.source == binding.source)
+                {
+                    continue;
+                }
+                let (file, span) = declared_at(parsed, indices, binding)
+                    .or_else(|| context_header(parsed, indices))
+                    .map_or((None, Span::default()), |(file, span)| (Some(file), span));
+                errors.push_for(
+                    file.as_deref(),
+                    CompileError::new(
+                        "bynk.deploy.binding_collision",
+                        span,
+                        format!(
+                            "contexts `{earlier_ctx}` and `{ctx}` share Worker `{key}`, which would declare two different bindings named `{}`: {} (from `{earlier_ctx}`) and {} (from `{ctx}`)",
+                            binding.name,
+                            earlier.source.describe(),
+                            binding.source.describe(),
+                        ),
+                    )
+                    .with_note(if shareable(&binding.source) {
+                        "members of one Worker share its bindings: give both contexts the same declaration so they share one binding, or rename one capability"
+                    } else {
+                        "a Durable Object class belongs to the context that declares it, whatever its name, so two members cannot each declare one with the same name: rename one of the agents"
+                    }),
+                );
+            }
+        }
+    }
+}
+
 /// Where the context declares the source of `binding`: an agent's name, or
 /// the `consumes` clause naming a context (or `bynk.cloudflare`, for the KV
 /// namespace). `None` for a source with no declaration of its own: the events
@@ -470,5 +534,142 @@ mod tests {
                 .all(|(earlier, _)| *earlier == &bindings[0])
         );
         assert_eq!(duplicates[1].1, &bindings[2]);
+    }
+
+    fn kv(name: &str, capability: &str) -> WorkerBinding {
+        WorkerBinding {
+            name: name.to_string(),
+            source: BindingSource::KvInstance {
+                capability: capability.to_string(),
+            },
+        }
+    }
+
+    fn r2(name: &str, jurisdiction: Option<&str>) -> WorkerBinding {
+        WorkerBinding {
+            name: name.to_string(),
+            source: BindingSource::R2Instance {
+                capability: "Archives".to_string(),
+                jurisdiction: jurisdiction.map(str::to_string),
+            },
+        }
+    }
+
+    fn collisions(
+        members: &[&str],
+        bindings: &[(&str, Vec<WorkerBinding>)],
+    ) -> Vec<(String, String)> {
+        let table = format!(
+            "[deploy.workers.core]\ncontexts = [{}]\n",
+            members
+                .iter()
+                .map(|m| format!("\"{m}\""))
+                .collect::<Vec<_>>()
+                .join(", ")
+        );
+        let root = std::path::Path::new("/project");
+        let overlay = HashMap::from([(root.join("bynk.toml"), table)]);
+        let worker_groups =
+            bynk_project::worker_groups::try_read_worker_groups_with(root, &overlay).unwrap();
+        let bindings: BTreeMap<String, Vec<WorkerBinding>> = bindings
+            .iter()
+            .map(|(ctx, b)| (ctx.to_string(), b.clone()))
+            .collect();
+        let mut errors = ErrorSink::new();
+        phase_group_binding_collisions(
+            &worker_groups,
+            &[],
+            &BTreeMap::new(),
+            &bindings,
+            &mut errors,
+        );
+        errors
+            .into_all()
+            .into_iter()
+            .map(|e| (e.error.category.to_string(), e.error.message))
+            .collect()
+    }
+
+    /// Identical declarations in two members are one binding.
+    #[test]
+    fn identical_declarations_share_one_binding() {
+        assert!(
+            collisions(
+                &["a.x", "a.y"],
+                &[
+                    ("a.x", vec![kv("KV_MAIN", "Main")]),
+                    ("a.y", vec![kv("KV_MAIN", "Main")]),
+                ],
+            )
+            .is_empty()
+        );
+    }
+
+    /// The same name with different options is a collision, naming both members.
+    #[test]
+    fn differing_declarations_collide() {
+        let found = collisions(
+            &["a.x", "a.y"],
+            &[
+                ("a.x", vec![r2("ARCHIVES", None)]),
+                ("a.y", vec![r2("ARCHIVES", Some("eu"))]),
+            ],
+        );
+        assert_eq!(found.len(), 1, "{found:?}");
+        assert_eq!(found[0].0, "bynk.deploy.binding_collision");
+        assert!(
+            found[0].1.contains("`a.x` and `a.y` share Worker `core`"),
+            "{}",
+            found[0].1
+        );
+    }
+
+    /// A name one member repeats is the existing per-context error, not this one;
+    /// a context outside the group is not checked against it.
+    #[test]
+    fn only_clashes_between_members_are_reported() {
+        assert!(
+            collisions(
+                &["a.x", "a.y"],
+                &[
+                    (
+                        "a.x",
+                        vec![r2("ARCHIVES", None), r2("ARCHIVES", Some("eu"))]
+                    ),
+                    ("a.z", vec![r2("ARCHIVES", Some("eu"))]),
+                ],
+            )
+            .is_empty()
+        );
+    }
+
+    fn agent(name: &str) -> WorkerBinding {
+        WorkerBinding {
+            name: format!("AGENT_{}", name.to_uppercase()),
+            source: BindingSource::Agent {
+                class_name: name.to_string(),
+            },
+        }
+    }
+
+    /// An agent binding holds only the class name, so equal bindings can be two
+    /// different classes: two members each declaring `Cart` collide, though
+    /// their bindings compare equal.
+    #[test]
+    fn same_named_agents_in_two_members_collide() {
+        let found = collisions(
+            &["a.x", "a.y"],
+            &[("a.x", vec![agent("Cart")]), ("a.y", vec![agent("Cart")])],
+        );
+        assert_eq!(found.len(), 1, "{found:?}");
+        assert_eq!(found[0].0, "bynk.deploy.binding_collision");
+        // Agents of different names do not.
+        assert!(
+            collisions(
+                &["a.x", "a.y"],
+                &[("a.x", vec![agent("Cart")]), ("a.y", vec![agent("Order")])],
+            )
+            .is_empty()
+        );
     }
 }
