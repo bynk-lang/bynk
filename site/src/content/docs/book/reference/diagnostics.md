@@ -7,7 +7,7 @@ title: Diagnostic index
 
 Every diagnostic code the compiler can emit, with a one-line summary of the cause, grouped by category. For step-by-step cause-and-fix guidance on the most common ones, see the [troubleshooting guides](/book/troubleshooting/). For a code with a curated explanation, `bynk explain <code>` prints it in a terminal, and in VS Code the diagnostic's **Explain** quick fix (or **Bynk: Explain Diagnostic Code…**) shows the same text in a panel, offline.
 
-There are **877** codes in total.
+There are **878** codes in total.
 
 ## Agents
 
@@ -607,6 +607,7 @@ There are **877** codes in total.
 | `bynk.test.remote_unsupported_asset` | A `system` case fetches an asset with `svc.GET(asset)`, which a run against a real runtime (`bynk test --against`) can't honour: the fetch is answered in process. | [`case`](/book/reference/grammar/#rule-case) | — |
 | `bynk.test.remote_unsupported_call` | A `system` case addresses an `on call` service, which a run against a real runtime (`bynk test --against`) can't honour: the service is internal, and each call is signed for one caller. | [`case`](/book/reference/grammar/#rule-case) | — |
 | `bynk.test.remote_unsupported_env` | A `system` case's `env` disagrees with the named target it would run against (`bynk test --against`): it sets a secret, sets a name the target doesn't declare under `vars` or declares with another value, or leaves unset a name the target declares. | [`case`](/book/reference/grammar/#rule-case) | — |
+| `bynk.test.remote_unsupported_peek` | A `system` case reads a participant's test database with `D1.peek`, which a run against a real runtime (`bynk test --against`) can't honour: a deployment has no in-process database. The case is skipped, naming why, and is neither run nor failed. | [`case`](/book/reference/grammar/#rule-case) | — |
 | `bynk.test.remote_unsupported_queue` | A `system` case delivers a queue message with `q.message(m)`, which a run against a real runtime (`bynk test --against`) can't honour: no public wire reaches a queue consumer. | [`case`](/book/reference/grammar/#rule-case) | — |
 | `bynk.test.remote_unsupported_schedule` | A `system` case runs a cron handler with `svc.schedule(…)`, which a run against a real runtime (`bynk test --against`) can't honour: no public wire reaches a cron handler. | [`case`](/book/reference/grammar/#rule-case) | — |
 | [`bynk.test.service_bad_address`](/book/reference/testing/#suite-blocks) | A test body addresses a service the wrong way for its protocol (e.g. an http route without a leading path string). | [`case`](/book/reference/grammar/#rule-case) | — |

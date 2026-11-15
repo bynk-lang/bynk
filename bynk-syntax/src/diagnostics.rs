@@ -11202,6 +11202,11 @@ pub const REGISTRY: &[DiagnosticInfo] = &[
         &["case"],
     ),
     dg(
+        "bynk.test.remote_unsupported_peek",
+        "A `system` case reads a participant's test database with `D1.peek`, which a run against a real runtime (`bynk test --against`) can't honour: a deployment has no in-process database. The case is skipped, naming why, and is neither run nor failed.",
+        &["case"],
+    ),
+    dg(
         "bynk.test.remote_unsupported_queue",
         "A `system` case delivers a queue message with `q.message(m)`, which a run against a real runtime (`bynk test --against`) can't honour: no public wire reaches a queue consumer.",
         &["case"],

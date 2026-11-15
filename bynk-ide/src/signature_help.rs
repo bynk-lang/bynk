@@ -181,6 +181,10 @@ pub fn resolve_label(
         if let Some((record, field)) = recv.split_once('.') {
             return cookie_field_label(record, field, member, doc_text, files);
         }
+        // #3147: `D1.peek(…)`, a case's handle on a participant's database.
+        if callee == "D1.peek" {
+            return Some(crate::completion::D1_PEEK_SIGNATURE.to_string());
+        }
         // Built-in type statics — already display-ready signature strings.
         if let Some((_, statics)) = BUILTIN_STATICS.iter().find(|(n, _)| *n == recv)
             && let Some((_, sig)) = statics.iter().find(|(n, _)| *n == member)
@@ -617,6 +621,11 @@ mod tests {
             )
         );
         assert!(resolve_label("Orders.firstAs", DOC, None).is_some());
+        // #3147: and the case-only `D1.peek`, which is no operation.
+        assert!(
+            resolve_label("D1.peek", DOC, None)
+                .is_some_and(|l| l.starts_with("peek(<participant>"))
+        );
         assert!(resolve_label("Orders.all", DOC, None).is_some());
     }
 

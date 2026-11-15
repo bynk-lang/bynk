@@ -13,6 +13,27 @@ use bynk_emit::emitter::emit::test_scaffold_ns as test_ns;
 use bynk_ts::{SourceMapBuilder, TsDecl, TsExpr, TsProgram, TsStmt};
 use std::sync::Arc;
 
+/// #3147: `D1.peek` reads a participant's in-process test database, which a
+/// deployment has none of. Such a case is skipped against a target, saying
+/// why, never refused and never run: reaching a deployed D1 would make a test
+/// run touch a real database.
+fn peek_skip(
+    case: &Case,
+    callees: &HashMap<ExprId, bynk_check::checker::Callee>,
+) -> Option<crate::project::RemoteSkip> {
+    callees
+        .values()
+        .any(|c| matches!(c, bynk_check::checker::Callee::D1Peek { .. }))
+        .then(|| crate::project::RemoteSkip {
+            case: case.name.clone(),
+            code: "bynk.test.remote_unsupported_peek".to_string(),
+            reason: format!(
+                "case `\"{}\"` reads a participant's database with `D1.peek`: it needs the local test database",
+                case.name
+            ),
+        })
+}
+
 /// Emit a single integration-test module plus its [`RunnableTest`] pointer.
 /// The module imports each participant's workers-mode handler namespace (for
 /// serialise/deserialise) and Worker entry (for dispatch), builds an in-process
@@ -421,6 +442,10 @@ pub(super) fn emit_integration_module(
             if let Some(warning) = test_suites::remote_clock_dependent(input.case, &expr_types, tys)
             {
                 errors.push(warning);
+            }
+            if let Some(skip) = peek_skip(input.case, &callees) {
+                skipped.push(skip);
+                return false;
             }
             // #2138 (§3.7): and, against a named target, its `env` must agree
             // with the target's `vars`. Under `dev` the runner applies `env`

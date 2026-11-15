@@ -1027,6 +1027,14 @@ mod tests {
         );
     }
 
+    /// #3147: the case-only `D1.peek` hovers with its signature.
+    #[test]
+    fn d1_peek_hovers_with_its_signature() {
+        let src = "suite shop.orders as system\n\ncase \"c\" {\n  let db = D1.peek(shop.orders.Orders)\n  expect true\n}\n";
+        let h = hover_at(src, "peek", 0).expect("`peek` hovers");
+        assert!(h.contains("peek(<participant>.<Capability>)"), "{h}");
+    }
+
     /// #2866: the built-in `ValidationError` hovers with its fields, not `value`.
     #[test]
     fn validation_error_hovers_with_its_fields() {

@@ -536,7 +536,10 @@ from a target named under `[test.targets]` in `bynk.toml`, signing with
 secrets read from the environment. Only the public `http` routes are
 reachable there, so a case that moves the clock, addresses an `on call`
 service, delivers a queue message, runs a cron handler, or fetches an asset is refused (`bynk.test.remote_unsupported_*`), or skipped under
-`--skip-unsupported`. See
+`--skip-unsupported`. A case that reads a participant's database with
+[`D1.peek`](#peek-a-database) is always skipped, naming why (`needs the local
+test database`), with no flag: a deployment has no in-process database, and
+reaching a deployed one would make a test run touch real data. See
 [Running against a deployment](/docs/bynk-cli/#running-against-a-deployment).
 
 ### The run's identity — `run.id` {#run-id}
@@ -1526,6 +1529,8 @@ case "placing an order stores it" {
 - **It reads the database the app wrote.** It is the same in-memory database
   the participant's own D1 calls run against in this case, with the
   participant's migrations applied.
+- **It is local.** Under `bynk test --against`, a case that uses it is skipped
+  (`bynk.test.remote_unsupported_peek` in the skip's code), not failed.
 - **Seeding is not part of it.** Starting a case from a known row is tracked in
   [#3563](https://github.com/bynk-lang/bynk/issues/3563).
 
