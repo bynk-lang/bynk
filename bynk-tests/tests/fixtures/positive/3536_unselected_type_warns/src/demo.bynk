@@ -4,8 +4,8 @@ context demo
 // still resolves but is a `bynk.consumes.type_not_selected` warning; `bynk check
 // --fix` adds `TimedOut` and `Claim` to the braces.
 
-consumes bynk { Logger, TimedOut, Claim }
-consumes bynk.cloudflare { D1, ContainerError }
+consumes bynk { Logger }
+consumes bynk.cloudflare { D1 }
 
 type Outcome = | Done(n: Int) | Unavailable
 

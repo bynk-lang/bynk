@@ -1,7 +1,7 @@
 context demo.ledger
 
 consumes bynk
-consumes bynk.cloudflare { D1 }
+consumes bynk.cloudflare { D1, SqlValue }
 
 capability Db = D1
 

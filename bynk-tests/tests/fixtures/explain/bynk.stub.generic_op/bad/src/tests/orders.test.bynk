@@ -1,4 +1,5 @@
 suite demo.orders {
+  consumes idempotency { Idempotency }
   stub Idempotency.dedup(_) returns None
 
   case "reserve returns the cached value" {
