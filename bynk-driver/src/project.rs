@@ -2561,6 +2561,52 @@ fn manifest_unit_diagnostics(
     }
 }
 
+/// v0.19 (decisions 0017/0024): platform-lock enforcement. A deployment unit
+/// whose in-process closure reaches a platform-native capability is locked to
+/// that platform; the selected `--platform` must match. A unit is a context
+/// under `workers`, or a `[deploy.workers]` group of them (#3562, which share
+/// a Worker). Run only on otherwise-clean programs: the closure walk recurses
+/// the provider graph, whose acyclicity the earlier checks establish. P5.3:
+/// relocated to `bynk_check::project_model::phase_platform_lock` — this crate is
+/// a caller, not an owner.
+fn platform_lock_phase(
+    target: BuildTarget,
+    platform: Platform,
+    (project_root, overlay): (&Path, &HashMap<PathBuf, String>),
+    (parsed, groups, kinds): (
+        &[ParsedFile],
+        &BTreeMap<String, Vec<usize>>,
+        &BTreeMap<String, UnitKind>,
+    ),
+    (unit_tables, unit_consumes, unit_consumes_aliases, unit_flattened): (
+        &HashMap<String, UnitTable>,
+        &HashMap<String, Vec<String>>,
+        &HashMap<String, HashMap<String, String>>,
+        &HashMap<String, HashMap<String, String>>,
+    ),
+    errors: &mut ErrorSink,
+) {
+    if !errors.is_empty() {
+        return;
+    }
+    let worker_groups =
+        bynk_project::worker_groups::try_read_worker_groups_with(project_root, overlay)
+            .unwrap_or_default();
+    project_model::phase_platform_lock(
+        target,
+        platform,
+        parsed,
+        groups,
+        kinds,
+        unit_tables,
+        unit_consumes,
+        unit_consumes_aliases,
+        unit_flattened,
+        &worker_groups,
+        errors,
+    );
+}
+
 #[allow(clippy::too_many_arguments)]
 fn run_checks(
     // R3.9 (#1113): one `(root, prefix)` pair per `Roots::trees` entry, not a
@@ -3441,27 +3487,19 @@ fn run_checks(
         &mut errors,
     );
 
-    // v0.19 (decisions 0017/0024): platform-lock enforcement. A deployment
-    // unit whose in-process closure reaches a platform-native capability is
-    // locked to that platform; the selected `--platform` must match. Run only
-    // on otherwise-clean programs: the closure walk recurses the provider
-    // graph, whose acyclicity the earlier checks establish. P5.3: relocated
-    // to `bynk_check::project_model::phase_platform_lock` — this crate is a
-    // caller, not an owner.
-    if errors.is_empty() {
-        project_model::phase_platform_lock(
-            target,
-            platform,
-            &parsed,
-            &groups,
-            &kinds,
+    platform_lock_phase(
+        target,
+        platform,
+        (project_root, overlay),
+        (&parsed, &groups, &kinds),
+        (
             &unit_tables,
             &unit_consumes,
             &unit_consumes_aliases,
             &unit_flattened,
-            &mut errors,
-        );
-    }
+        ),
+        &mut errors,
+    );
     // On Workers, each Worker's binding names are unique. Gated the same way:
     // the KV input walks the same provider graph.
     if errors.is_empty()

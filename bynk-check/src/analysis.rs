@@ -1206,6 +1206,7 @@ fn phase_clean_program_checks(
             unit_consumes,
             unit_consumes_aliases,
             unit_flattened,
+            &bynk_project::worker_groups::WorkerGroups::new(),
             errors,
         );
     }
