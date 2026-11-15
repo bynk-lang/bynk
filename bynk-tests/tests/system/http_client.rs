@@ -934,7 +934,7 @@ fn a_worker_hosted_server_can_set_origin_through_the_client() {
 }
 
 const RAW_DRIVER: &str = r#"
-import { createClient, StreamFailure } from "./dist/api.js";
+import { createClient, StreamFailure, API_CONTRACTS } from "./dist/api.js";
 const sent = [];
 const viaWorker = async (url, init) => {
   sent.push(`${init.method} ${url.replace(BASE, "")} ${new Headers(init.headers).get("content-type") ?? "-"} duplex=${init.duplex ?? "-"}`);
@@ -1028,6 +1028,12 @@ show("gone-bodiless", await c.api.getGoneByMode("raw"));
 show("gone-stub", (await stub(() => new Response("x", { status: 404, headers: { "content-type": "text/plain" } })).getGoneByMode("raw")).kind);
 // A `RawTagged` the server did not give an `ETag` is `Unexpected`, with the text.
 show("tagged-no-etag", await stub(() => new Response("body", { status: 200, headers: { "content-type": "text/plain" } })).getDocByName("a"));
+// The contract hash is sent only when asked for, and the server ignores it on every route.
+show("contract-off", await c.api.getContract());
+const sending = createClient({ baseUrl: BASE, fetch: viaWorker, sendContract: true });
+const sentHash = await sending.api.getContract();
+show("contract-on", { same: sentHash.body === API_CONTRACTS.api.routes.getContract, len: sentHash.body.length });
+show("contract-other-routes", [(await sending.api.getOrigin()).status, (await sending.api.putBlobByName("a", new Uint8Array([1]))).status, (await (await sending.api.getTicks()).events[Symbol.asyncIterator]().next()).value]);
 console.log("requests", JSON.stringify(sent));
 "#;
 
@@ -1120,6 +1126,12 @@ fn check_raw(out: &str) {
         r#"{"kind":"Unexpected","status":200,"text":"body"}"#
     );
     assert_eq!(
+        v("contract-off"),
+        r#"{"status":200,"kind":"Ok","body":"none"}"#
+    );
+    assert_eq!(v("contract-on"), r#"{"same":true,"len":16}"#);
+    assert_eq!(v("contract-other-routes"), r#"[200,200,"tick-1"]"#);
+    assert_eq!(
         v("html"),
         r#"{"kind":"Unexpected","status":200,"text":"<p>"}"#
     );
@@ -1192,7 +1204,7 @@ fn raw_bodies_and_streams_round_trip_under_workerd() {
 
 /// The front end's Worker: the generated client over a Service Binding to the Bynk
 /// Worker. It reports what each call saw, as JSON.
-const BINDING_WORKER: &str = r#"import { createClient, viaBinding, StreamFailure } from "./api";
+const BINDING_WORKER: &str = r#"import { createClient, viaBinding, StreamFailure, API_CONTRACTS } from "./api";
 
 interface Env { readonly API: { fetch(input: RequestInfo | URL, init?: RequestInit): Promise<Response> } }
 
@@ -1213,6 +1225,11 @@ export default {
     // The method detached from its binding is the trap `viaBinding` avoids.
     const detached = await createClient({ baseUrl: "https://bynk.invalid", fetch: env.API.fetch as typeof fetch }).api.getOrigin();
     out.detached = detached.kind;
+    // A binding call has no preflight, so `viaBinding` sends the contract by itself; a caller can turn it off.
+    const sent = await api.getContract();
+    out.contractSent = sent.status === 200 && sent.body === API_CONTRACTS.api.routes.getContract;
+    const off = await createClient({ ...viaBinding(env.API), sendContract: false }).api.getContract();
+    out.contractOff = off.status === 200 ? off.body : off.status;
     out.streamFailureExported = typeof StreamFailure;
     return new Response(JSON.stringify(out), { headers: { "content-type": "application/json" } });
   },
