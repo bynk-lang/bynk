@@ -134,14 +134,6 @@ service api from http {
 /// 65_536 is taken (the last, 10, by the D1 migrations smoke, #2608).
 const FREE_PORTS: u16 = u16::MAX;
 
-/// A port nothing is listening on, as the operating system hands one out.
-fn free_port() -> u16 {
-    std::net::TcpListener::bind("127.0.0.1:0")
-        .and_then(|l| l.local_addr())
-        .map(|a| a.port())
-        .expect("a free local port")
-}
-
 fn skip(reason: &str) -> bool {
     if require::is_required(REQUIRE_ENV) {
         panic!("{REQUIRE_ENV} is set but {reason}");
@@ -290,7 +282,8 @@ fn run_smoke_with(
     // of all pids, so the Fetch smokes use 8 and 9 (#2604), and the D1
     // migrations smoke 10, the last band below port 65_536 (#2608).
     let (port, inspector_port) = if band == FREE_PORTS {
-        (free_port(), free_port())
+        let [port, inspector_port] = wrangler::ports::free_ports();
+        (port, inspector_port)
     } else {
         let port = 20_000 + 2 * (std::process::id() % 2_000) as u16 + 4_000 * band;
         (port, port + 1)
@@ -2001,7 +1994,7 @@ impl LocalPostgres {
         };
         let server = Self {
             bin,
-            port: free_port(),
+            port: wrangler::ports::free_port(),
             dir,
             user,
         };
@@ -2362,7 +2355,7 @@ impl LocalMySql {
         }
         let socket = dir.join("mysql.sock");
         let mut me = Self {
-            port: free_port(),
+            port: wrangler::ports::free_port(),
             dir: Some(dir),
             server: None,
         };
