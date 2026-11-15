@@ -3414,8 +3414,11 @@ fn run_checks(
     // context's deps itself, so once a context brings one in, a capability
     // with no provider is the Workers gap again. Raised here, at the `given`,
     // rather than left to `tsc` against `compose.ts`
-    // (`bynk.codegen.tsc_failed`). Needs `unit_callees`, so after step 8.
+    // (`bynk.codegen.tsc_failed`). Needs `unit_callees`, so after step 8, and
+    // only on an otherwise-clean program: a unit that failed to check has no
+    // callee map, and the composition root is only emitted for a clean one.
     if target == BuildTarget::Bundle
+        && errors.is_empty()
         && let Some((trigger, because)) = composition_root_trigger(
             &kinds,
             &unit_consumes,
