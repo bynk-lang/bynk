@@ -1,0 +1,8 @@
+context demo
+
+consumes bynk { Logger }
+
+// `TimedOut` is not listed in the braces: the braces mean what they say.
+fn at(t: TimedOut) -> Bool {
+    true
+}

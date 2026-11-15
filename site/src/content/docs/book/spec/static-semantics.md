@@ -2451,12 +2451,10 @@ signatures use. Any other type, and its variants, are not candidates for a name 
 (`bynk.resolve.ambiguous_variant`), and a declaration of the unit's own takes
 the name.
 
-In this release a name a file uses without its own `consumes` bringing it in is
-deprecated: it still resolves, as a warning, and a later release makes it an
-error. A type, or a bare variant of a sum, is `bynk.consumes.type_not_selected`; a
+A name a file uses without its own `consumes` bringing it in is an error. A type, or a bare variant of a sum, is `bynk.consumes.type_not_selected`; a
 flattened capability named in a `given` clause, a call, `provides` or a suite's
 `stub` is `bynk.consumes.capability_not_selected`; a call to another unit's
-service is `bynk.consumes.unit_not_consumed`. Each warning's fix edits the file
+service is `bynk.consumes.unit_not_consumed`. Each error's fix edits the file
 it is reported in, so `bynk check --fix=<code>` migrates every file of a split
 unit and every suite.
 

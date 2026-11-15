@@ -761,7 +761,7 @@ pub fn check_file_core(
             .get_or_insert_with(Vec::new)
             .extend(shadowed_named);
     }
-    warn_unselected_type_names(&resolved, pf, &unit_info[name], errors);
+    check_unselected_imports(&resolved, pf, &unit_info[name], errors);
     let item_spans: Vec<bynk_syntax::span::Span> =
         resolved.commons.items.iter().map(|i| i.span()).collect();
     // The unit's own span is this file's, even when it has no items of its own
@@ -994,11 +994,10 @@ fn extensible_names(imported_from: &HashMap<String, String>) -> HashSet<String> 
         .collect()
 }
 
-/// #3536: naming a type this file's own `consumes` does not bring in still
-/// resolves, with a warning (and a fix that edits this file) while the rule is
-/// being introduced. The standard library's own units are not the user's code to
+/// #3536: naming a type, capability or service this file's own `consumes` does
+/// not bring in is an error, with a fix that edits this file. The standard library's own units are not the user's code to
 /// migrate.
-fn warn_unselected_type_names(
+fn check_unselected_imports(
     resolved: &ResolvedCommons,
     pf: &ParsedFile,
     info: &crate::project_model::UnitInfo,

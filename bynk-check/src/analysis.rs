@@ -580,6 +580,14 @@ fn analyse_project_inner(
         errors.push_for(Some(Path::new(crate::stability::MANIFEST)), err);
     }
 
+    // #3562: `[deploy.workers]` groups name only contexts the project declares,
+    // read the way the build reads them.
+    for err in
+        crate::worker_groups::manifest_diagnostics(Some(roots.project_root()), overlay, &kinds)
+    {
+        errors.push_for(Some(Path::new(crate::stability::MANIFEST)), err);
+    }
+
     // -- 4. Per-unit combined symbol tables. --
     // -- 4-5. Symbol tables, `uses` resolution, and (#3445) the constants named by
     //         literal-only annotation arguments, resolved ahead of every reader. --
