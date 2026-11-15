@@ -15,8 +15,8 @@ use std::path::{Path, PathBuf};
 use std::process::ExitCode;
 
 use bynk_emit::emitter::http_client::{
-    ClientError, HttpClientInput, Layout, ParamInput, ReplyInput, ReplyPayload, RouteInput,
-    ServiceInput, emit_http_client,
+    BodyKind, ClientError, HttpClientInput, Layout, ParamInput, ReplyInput, ReplyPayload,
+    RouteInput, ServiceInput, emit_http_client,
 };
 use bynk_ide::wire_contract::{
     BoundaryKind, IrHttpMethod, ResponseOrigin, WireContractModel, real_context_count,
@@ -401,6 +401,7 @@ fn route_of(
         if name == "body" {
             params.push(ParamInput::Body {
                 ty: p.type_ref.clone(),
+                kind: body_kind(h),
             });
         } else if in_path.contains(&name) {
             params.push(ParamInput::Path {
@@ -411,8 +412,12 @@ fn route_of(
             params.push(ParamInput::Query {
                 ty: p.type_ref.clone(),
             });
+        } else if name == "cookies" && matches!(p.type_ref, TypeRef::Named(_)) {
+            params.push(ParamInput::Cookies {
+                ty: p.type_ref.clone(),
+            });
         }
-        // The raw `query` view and `headers` declare nothing a caller supplies.
+        // The raw `query` and `cookies` views and `headers` declare nothing a caller supplies.
     }
     let success = match success_of(h) {
         Some(TypeRef::Unit(_)) | None => None,
@@ -430,7 +435,6 @@ fn route_of(
 
 /// The route's features this version cannot represent, if any.
 fn unsupported(info: &ContextBoundaryInfo, h: &Handler) -> Result<(), String> {
-    let note = |name: &str| h.annotations.iter().any(|a| a.name.name == name);
     if h.raw_content_type().is_some() {
         return Err("a `@raw` body is not supported yet".to_string());
     }
@@ -440,11 +444,11 @@ fn unsupported(info: &ContextBoundaryInfo, h: &Handler) -> Result<(), String> {
     {
         return Err("a raw `query: RequestQuery` is not supported yet".to_string());
     }
-    if note("form") || note("multipart") {
-        return Err("a `@form` or `@multipart` body is not supported yet".to_string());
-    }
-    if h.params.iter().any(|p| p.name.name == "cookies") {
-        return Err("a typed `cookies` record is not supported yet".to_string());
+    if h.params
+        .iter()
+        .any(|p| p.name.name == "cookies" && matches!(p.type_ref, TypeRef::RequestCookies(_)))
+    {
+        return Err("a raw `cookies: RequestCookies` is not supported yet".to_string());
     }
     if bynk_check::actors::signature_seam_for(h, &info.actors).is_some() {
         return Err(
@@ -453,6 +457,18 @@ fn unsupported(info: &ContextBoundaryInfo, h: &Handler) -> Result<(), String> {
         );
     }
     Ok(())
+}
+
+/// How the route reads its `body`: JSON, unless it is a `@form` or `@multipart` one.
+fn body_kind(h: &Handler) -> BodyKind {
+    let note = |name: &str| h.annotations.iter().any(|a| a.name.name == name);
+    if note("multipart") {
+        BodyKind::Multipart
+    } else if note("form") {
+        BodyKind::Form
+    } else {
+        BodyKind::Json
+    }
 }
 
 /// `Effect[HttpResult[T]]` or `HttpResult[T]` to `T`.

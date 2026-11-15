@@ -99,6 +99,11 @@ fn the_rich_project_client_is_pinned() {
 }
 
 #[test]
+fn the_forms_project_client_is_pinned() {
+    golden("http_client_forms.ts", &module(&fixture("forms"), &[]));
+}
+
+#[test]
 fn the_output_is_byte_identical_between_runs() {
     let a = module(&fixture("rich"), &[]);
     let b = module(&fixture("rich"), &[]);
@@ -166,10 +171,12 @@ fn a_route_this_version_cannot_represent_is_named_and_left_out() {
     let (ok, stdout, stderr) = client(&[fixture("skipped").to_str().unwrap()]);
     assert!(ok, "{stderr}");
     assert!(stderr.contains("skipped `POST /blob` of `api`: a `@raw` body"));
-    assert!(stderr.contains("skipped `POST /note` of `api`: a `@form` or `@multipart` body"));
+    // A `@form` body is generated now (BC3), so it is not among the routes left out.
+    assert!(!stderr.contains("/note"), "{stderr}");
+    assert!(stdout.contains("postNote"));
     assert!(stderr.contains("skipped `GET /raw` of `api`: a raw `query: RequestQuery`"));
     assert!(stdout.contains("getPing") && !stdout.contains("getRaw"));
-    assert!(!stdout.contains("postBlob") && !stdout.contains("postNote"));
+    assert!(!stdout.contains("postBlob"));
 }
 
 #[test]

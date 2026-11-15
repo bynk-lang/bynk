@@ -59,6 +59,12 @@ const SURFACE_TYPES: &[&str] = &[
     "ValidationError",
 ];
 
+/// The wire shape of the standard `File`, a `@multipart` file part.
+const FILE_TYPE: &str = "export interface __Wire_File {\n  readonly filename: Option<string>;\n  readonly contentType: string;\n  readonly bytes: globalThis.Uint8Array;\n}\n";
+
+/// A file part's codec, which only the stand-in a multipart check passes reaches.
+const FILE_CODEC: &str = "export function __serialise_File(value: __Wire_File): __JsonValue {\n  return {\n    filename: value.filename.tag === \"Some\" ? { kind: \"Some\", value: value.filename.value } : { kind: \"None\" },\n    contentType: value.contentType,\n    bytes: __bynkBytesToBase64(value.bytes),\n  };\n}\n\nexport function __deserialise_File(json: __JsonValue, path: string = \"$\"): Result<__Wire_File, __BoundaryError> {\n  if (typeof json !== \"object\" || json === null || globalThis.Array.isArray(json)) {\n    return Err({ kind: \"StructuralMismatch\", path, expected: \"object\", actual: typeof json });\n  }\n  return Ok(json as unknown as __Wire_File);\n}\n";
+
 /// The prefix of a boundary type's wire declaration, the shape its codec makes.
 const WIRE_PREFIX: &str = "__Wire_";
 
@@ -120,10 +126,23 @@ pub struct RouteInput {
 pub enum ParamInput {
     /// A path segment, typed.
     Path { name: String, ty: TypeRef },
-    /// The JSON body.
-    Body { ty: TypeRef },
+    /// The body, in the form its route reads it.
+    Body { ty: TypeRef, kind: BodyKind },
     /// The typed `query` record, whose type is a named record.
     Query { ty: TypeRef },
+    /// The typed `cookies` record, whose type is a named record.
+    Cookies { ty: TypeRef },
+}
+
+/// How a route reads its `body`.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum BodyKind {
+    /// JSON, the default.
+    Json,
+    /// `@form`: `application/x-www-form-urlencoded`.
+    Form,
+    /// `@multipart`: `multipart/form-data`.
+    Multipart,
 }
 
 /// One answer a route can make, in `bynk openapi`'s terms.
@@ -226,8 +245,9 @@ fn closure_of(input: &HttpClientInput) -> Result<SurfaceClosure, ClientError> {
             for p in &r.params {
                 match p {
                     ParamInput::Path { ty, .. }
-                    | ParamInput::Body { ty }
-                    | ParamInput::Query { ty } => roots.push(ty.clone()),
+                    | ParamInput::Body { ty, .. }
+                    | ParamInput::Query { ty }
+                    | ParamInput::Cookies { ty } => roots.push(ty.clone()),
                 }
             }
             roots.extend(r.success.iter().cloned());
@@ -310,6 +330,8 @@ struct RoutePlan {
     response: String,
     /// The query argument's type name, when the route takes one.
     query: Option<String>,
+    /// The cookies argument's type name, when the route takes one.
+    cookies: Option<String>,
 }
 
 /// One declared boundary type, as the two declarations need it.
@@ -405,10 +427,16 @@ impl Gen {
                     .iter()
                     .any(|p| matches!(p, ParamInput::Query { .. }));
                 let query = has_query.then(|| unique(format!("{stem}Query"), &mut taken));
+                let has_cookies = r
+                    .params
+                    .iter()
+                    .any(|p| matches!(p, ParamInput::Cookies { .. }));
+                let cookies = has_cookies.then(|| unique(format!("{stem}Cookies"), &mut taken));
                 routes.push(RoutePlan {
                     function,
                     response,
                     query,
+                    cookies,
                 });
             }
             services.push(ServicePlan { key, routes });
@@ -445,8 +473,29 @@ impl Gen {
                     args.iter().map(|a| self.public_type(a)).collect();
                 TsType::named_with_args(name.name.clone(), args?)
             }
+            // A `@multipart` file part: the standard `File` is a `Blob` here, which
+            // is what a `File` input yields, and what `fetch` appends.
+            TypeRef::Named(id) if self.is_file(&id.name) => TsType::named("globalThis.Blob"),
             other => super::ts_type_ref_qualified_multi_ts_type(other, &HashMap::new()),
         })
+    }
+
+    /// Whether `name` is the standard library's `File`, the part of a `@multipart`
+    /// body that carries a file (`bynk.File`: `filename`, `contentType`, `bytes`).
+    fn is_file(&self, name: &str) -> bool {
+        if bynk_check::symbols::display_type_name(name) != "File" {
+            return false;
+        }
+        match self.sc.types.get(name).map(|d| &d.body) {
+            // The standard `File` is declared by the `bynk` unit, which a service's
+            // own type table does not hold.
+            None => true,
+            Some(TypeBody::Record(r)) => {
+                let fields: Vec<&str> = r.fields.iter().map(|f| f.name.name.as_str()).collect();
+                fields == ["filename", "contentType", "bytes"]
+            }
+            Some(_) => false,
+        }
     }
 
     /// The type a codec makes and takes.
@@ -766,7 +815,7 @@ impl Gen {
                 let route = self.route(&sp.key, r, rp)?;
                 glue.push_str(&route.constant);
                 unions.extend(route.response_type.into_iter().flatten());
-                unions.extend(route.query_type.into_iter().flatten());
+                unions.extend(route.arg_types);
                 client.push_str(&route.method);
             }
             client.push_str("    },\n");
@@ -790,6 +839,10 @@ impl Gen {
         type_names.dedup();
         for public in [true, false] {
             for name in &type_names {
+                // A file part is a `Blob` to the caller: it has no public declaration.
+                if public && self.is_file(name) {
+                    continue;
+                }
                 if let Some(decl) = self.sc.types.get(name) {
                     stmts.extend(self.declare(name, decl, public)?);
                 }
@@ -797,6 +850,13 @@ impl Gen {
         }
         stmts.extend(unions);
         let mut codecs: Vec<TsStmt> = Vec::new();
+        // A file part has no codec in the project's own table: the caller's bytes
+        // are not the client's to encode, so its wire form is a stand-in the decoder
+        // accepts, and the part itself goes into the `FormData`.
+        if self.sc.names.iter().any(|n| self.is_file(n)) {
+            stmts.push(TsStmt::raw(FILE_TYPE.to_string(), None));
+            codecs.push(TsStmt::raw(FILE_CODEC.to_string(), None));
+        }
         let types = self.sc.types.clone();
         codecs.extend(serialisation::decls_as_stmts(
             serialisation::emit_helpers_for_owner_qualified(
@@ -959,7 +1019,7 @@ impl Gen {
         constant.push_str("  },\n};\n\n");
 
         // The function: its parameters and the encoding of each.
-        let (signature, build, query_type) = self.encoding(r, rp)?;
+        let (signature, build, arg_types) = self.encoding(r, rp)?;
         let init =
             if r.params.iter().any(
                 |p| matches!(p, ParamInput::Path { name, .. } if super::ts_ident(name) == "init"),
@@ -996,7 +1056,7 @@ impl Gen {
             constant,
             method,
             response_type,
-            query_type,
+            arg_types,
         })
     }
 
@@ -1021,20 +1081,18 @@ impl Gen {
         Ok(out)
     }
 
-    /// The parameter list, the body of the encoding thunk and, for a route taking
-    /// a `query`, that argument's type.
+    /// The parameter list, the body of the encoding thunk and the types of the
+    /// arguments the route takes beyond the boundary's own (`query`, `cookies`).
     fn encoding(
         &mut self,
         r: &RouteInput,
         rp: &RoutePlan,
-    ) -> Result<(String, String, Option<Vec<TsStmt>>), ClientError> {
+    ) -> Result<(String, String, Vec<TsStmt>), ClientError> {
         let mut signature: Vec<String> = Vec::new();
         let mut build = String::new();
         let mut params = Vec::new();
-        let mut body_entry = None;
-        let mut query_entry = None;
-        let mut query_type = None;
-        let mut optional_query = false;
+        let mut entries: Vec<String> = Vec::new();
+        let mut arg_types: Vec<TsStmt> = Vec::new();
         for p in &r.params {
             match p {
                 ParamInput::Path { name, ty } => {
@@ -1058,7 +1116,10 @@ impl Gen {
                     };
                     params.push(format!("\"{name}\": {checked}"));
                 }
-                ParamInput::Body { ty } => {
+                ParamInput::Body {
+                    ty,
+                    kind: BodyKind::Json,
+                } => {
                     let ty = self.renamed(ty);
                     signature.push(format!("body: {}", self.public_text(&ty)?));
                     let wired = self.convert(&ty, Dir::ToWire, "body", 0)?;
@@ -1070,67 +1131,187 @@ impl Gen {
                     build.push_str(&format!(
                         "          const __b = __checked({ser}, {de}, \"$\");\n          if (__b.tag === \"Err\") return __b;\n"
                     ));
-                    body_entry = Some("body: __b.value".to_string());
+                    entries.push("body: __b.value".to_string());
+                }
+                ParamInput::Body {
+                    ty,
+                    kind: BodyKind::Form,
+                } => {
+                    let ty = self.renamed(ty);
+                    signature.push(format!("body: {}", self.public_text(&ty)?));
+                    let arg = self.record_arg(&ty, "body", "body", None)?;
+                    build.push_str(&arg.text);
+                    entries.push(format!("form: __formString(__w_body, [{}])", arg.specs));
+                }
+                ParamInput::Body {
+                    ty,
+                    kind: BodyKind::Multipart,
+                } => {
+                    let ty = self.renamed(ty);
+                    signature.push(format!("body: {}", self.multipart_type(&ty)?));
+                    let arg = self.multipart_arg(&ty)?;
+                    build.push_str(&arg);
+                    entries.push("multipart: __form".to_string());
                 }
                 ParamInput::Query { ty } => {
                     let ty = self.renamed(ty);
                     let name = rp.query.clone().expect("a query route has a query type");
-                    let (decl, text, optional) = self.query(&ty, &name)?;
-                    optional_query = optional;
-                    query_type = Some(decl);
-                    build.push_str(&text);
-                    query_entry = Some("query: __qs".to_string());
-                    signature.push(if optional {
-                        format!("query: {name} = {{}}")
-                    } else {
-                        format!("query: {name}")
-                    });
+                    let arg = self.record_arg(&ty, "query", "query", Some(&name))?;
+                    build.push_str(&arg.text);
+                    entries.push(format!("query: __queryString(__w_query, [{}])", arg.specs));
+                    signature.push(arg.parameter("query", &name));
+                    arg_types.extend(arg.decl);
+                }
+                ParamInput::Cookies { ty } => {
+                    let ty = self.renamed(ty);
+                    let name = rp
+                        .cookies
+                        .clone()
+                        .expect("a cookies route has a cookies type");
+                    let arg = self.record_arg(&ty, "cookies", "cookies", Some(&name))?;
+                    build.push_str(&arg.text);
+                    entries.push(format!(
+                        "cookies: __cookieString(__w_cookies, [{}])",
+                        arg.specs
+                    ));
+                    signature.push(arg.parameter("cookies", &name));
+                    arg_types.extend(arg.decl);
                 }
             }
         }
-        let _ = optional_query;
-        let mut entries = vec![format!("params: {{ {} }}", params.join(", "))];
-        entries.extend(query_entry);
-        entries.extend(body_entry);
+        entries.insert(0, format!("params: {{ {} }}", params.join(", ")));
         build.push_str(&format!(
             "          return Ok({{ {} }});\n",
             entries.join(", ")
         ));
-        Ok((signature.join(", "), build, query_type))
+        Ok((signature.join(", "), build, arg_types))
     }
 
-    /// The `query` argument's type, the code that writes and checks its wire form,
-    /// and whether the argument may be left out.
-    fn query(
-        &mut self,
-        record: &TypeRef,
-        name: &str,
-    ) -> Result<(Vec<TsStmt>, String, bool), ClientError> {
+    /// The type of a `@multipart` body: the record's public type, its file parts
+    /// `Blob`s.
+    fn multipart_type(&self, record: &TypeRef) -> Result<String, ClientError> {
+        self.public_text(record)
+    }
+
+    /// The statements that write a `@multipart` body: its text fields and file parts
+    /// into a `FormData`, after the record's own decoder has checked the fields (a
+    /// file part stands in as an empty file, since its bytes are the caller's).
+    fn multipart_arg(&mut self, record: &TypeRef) -> Result<String, ClientError> {
         let TypeRef::Named(id) = record else {
-            return fail("a `query` parameter is a record");
+            return fail("a `@multipart` body is a record");
         };
         let Some(decl) = self.sc.types.get(&id.name).cloned() else {
-            return fail(format!("the `query` record `{}` is not declared", id.name));
+            return fail("the `@multipart` record is not declared");
         };
         let TypeBody::Record(rec) = &decl.body else {
-            return fail("a `query` parameter is a record");
+            return fail("a `@multipart` body is a record");
+        };
+        let mut text = String::from(
+            "          const __w_body: { [k: string]: JsonValue } = {};\n          const __form = new globalThis.FormData();\n",
+        );
+        let mut parts = String::new();
+        let mut specs = Vec::new();
+        for f in &rec.fields {
+            let fname = f.name.name.clone();
+            let key = format!("{fname:?}");
+            let wire = f.wire_name().unwrap_or_else(|| fname.clone());
+            let wire_key = format!("{wire:?}");
+            let (inner, list, option) = match &f.type_ref {
+                TypeRef::List(i, _) => (i.as_ref(), true, false),
+                TypeRef::Option(i, _) => (i.as_ref(), false, true),
+                other => (other, false, false),
+            };
+            let is_file = matches!(inner, TypeRef::Named(i) if self.is_file(&i.name));
+            if !is_file {
+                let wired = self.convert(&f.type_ref, Dir::ToWire, &format!("body.{fname}"), 0)?;
+                let ser = bynk_ts::print_expr(&serialisation::serialise_expr_via(
+                    &f.type_ref,
+                    &wired,
+                    "",
+                    &self.ru,
+                ));
+                text.push_str(&format!("          __w_body[{key}] = {ser};\n"));
+                let w = f
+                    .wire_name()
+                    .map(|w| format!(", wire: {w:?}"))
+                    .unwrap_or_default();
+                specs.push(format!("{{ name: {key}{w} }}"));
+                continue;
+            }
+            // A file part: an empty file stands in for the decoder, and the blob is appended.
+            let stub = "{ filename: { kind: \"None\" }, contentType: \"\", bytes: \"\" }";
+            let (check, append) = match (list, option) {
+                (true, _) => (
+                    format!("body.{fname}.map(() => ({stub}))"),
+                    format!(
+                        "          for (const part of body.{fname}) __form.append({wire_key}, part, __fileName(part));\n"
+                    ),
+                ),
+                (_, true) => (
+                    format!(
+                        "body.{fname} === null || body.{fname} === undefined ? {{ kind: \"None\" }} : {{ kind: \"Some\", value: {stub} }}"
+                    ),
+                    format!(
+                        "          if (body.{fname} !== null && body.{fname} !== undefined) __form.append({wire_key}, body.{fname}, __fileName(body.{fname}));\n"
+                    ),
+                ),
+                _ => (
+                    stub.to_string(),
+                    format!(
+                        "          __form.append({wire_key}, body.{fname}, __fileName(body.{fname}));\n"
+                    ),
+                ),
+            };
+            text.push_str(&format!("          __w_body[{key}] = {check};\n"));
+            parts.push_str(&append);
+        }
+        let de = bynk_ts::print_expr(&serialisation::deserialise_ref_via(record, "", &self.ru));
+        text.push_str(&format!(
+            "          const __c_body = __checked(__w_body, {de}, \"body\");\n          if (__c_body.tag === \"Err\") return __c_body;\n          __appendText(__form, __formString(__w_body, [{}]));\n",
+            specs.join(", ")
+        ));
+        text.push_str(&parts);
+        Ok(text)
+    }
+
+    /// A record argument (`query`, `cookies` or a `@form` body): each field written
+    /// into its wire form, then checked by the record's own decoder, so a
+    /// refinement is refused before sending and a default is the server's to fill.
+    /// With a `custom` type name the argument is its own interface, where a field that
+    /// is an `Option` or has a default may be left out; without one the argument is
+    /// the record's public type and every field is given.
+    fn record_arg(
+        &mut self,
+        record: &TypeRef,
+        arg: &str,
+        at: &str,
+        custom: Option<&str>,
+    ) -> Result<RecordArg, ClientError> {
+        let TypeRef::Named(id) = record else {
+            return fail(format!("a `{arg}` parameter is a record"));
+        };
+        let Some(decl) = self.sc.types.get(&id.name).cloned() else {
+            return fail(format!("the `{arg}` record `{}` is not declared", id.name));
+        };
+        let TypeBody::Record(rec) = &decl.body else {
+            return fail(format!("a `{arg}` parameter is a record"));
         };
         let mut members = Vec::new();
-        let mut text = String::from("          const __w: { [k: string]: JsonValue } = {};\n");
+        let mut text = format!("          const __w_{arg}: {{ [k: string]: JsonValue }} = {{}};\n");
         let mut specs = Vec::new();
         let mut all_optional = true;
         for f in &rec.fields {
             let fname = f.name.name.clone();
-            let optional = matches!(f.type_ref, TypeRef::Option(..)) || f.init.is_some();
+            let optional =
+                custom.is_some() && (matches!(f.type_ref, TypeRef::Option(..)) || f.init.is_some());
             all_optional &= optional;
-            let ty = self.public_type(&f.type_ref)?;
             members.push(TsTypeMember::Prop {
                 name: fname.clone(),
-                ty,
+                ty: self.public_type(&f.type_ref)?,
                 optional,
                 readonly: true,
             });
-            let wired = self.convert(&f.type_ref, Dir::ToWire, &format!("query.{fname}"), 0)?;
+            let wired = self.convert(&f.type_ref, Dir::ToWire, &format!("{arg}.{fname}"), 0)?;
             let ser = bynk_ts::print_expr(&serialisation::serialise_expr_via(
                 &f.type_ref,
                 &wired,
@@ -1140,10 +1321,10 @@ impl Gen {
             let key = format!("{fname:?}");
             if optional {
                 text.push_str(&format!(
-                    "          if (query.{fname} !== undefined) __w[{key}] = {ser};\n"
+                    "          if ({arg}.{fname} !== undefined) __w_{arg}[{key}] = {ser};\n"
                 ));
             } else {
-                text.push_str(&format!("          __w[{key}] = {ser};\n"));
+                text.push_str(&format!("          __w_{arg}[{key}] = {ser};\n"));
             }
             let wire = f
                 .wire_name()
@@ -1153,24 +1334,62 @@ impl Gen {
         }
         let de = bynk_ts::print_expr(&serialisation::deserialise_ref_via(record, "", &self.ru));
         text.push_str(&format!(
-            "          const __qc = __checked(__w, {de}, \"query\");\n          if (__qc.tag === \"Err\") return __qc;\n          const __qs = __queryString(__w, [{}]);\n",
-            specs.join(", ")
+            "          const __c_{arg} = __checked(__w_{arg}, {de}, \"{at}\");\n          if (__c_{arg}.tag === \"Err\") return __c_{arg};\n"
         ));
-        let mut d = TsStmt::decl(
-            TsDecl::Export(Box::new(TsDecl::Interface {
-                name: name.to_string(),
-                type_params: Vec::new(),
-                members,
-            })),
-            None,
-        );
-        d.no_blank_before = true;
-        let doc = TsStmt::doc_comment(
-            "The `query` of the call: a field left out is absent from the query string."
-                .to_string(),
-            None,
-        );
-        Ok((vec![doc, d], text, all_optional))
+        let declared = custom.map(|name| {
+            let mut d = TsStmt::decl(
+                TsDecl::Export(Box::new(TsDecl::Interface {
+                    name: name.to_string(),
+                    type_params: Vec::new(),
+                    members,
+                })),
+                None,
+            );
+            d.no_blank_before = true;
+            vec![
+                TsStmt::doc_comment(
+                    format!(
+                        "The `{arg}` of the call: a field left out is absent from the {}.",
+                        if arg == "query" {
+                            "query string"
+                        } else {
+                            "`Cookie` header"
+                        }
+                    ),
+                    None,
+                ),
+                d,
+            ]
+        });
+        Ok(RecordArg {
+            decl: declared.into_iter().flatten().collect(),
+            text,
+            specs: specs.join(", "),
+            all_optional,
+        })
+    }
+}
+
+/// A record argument's type, its encoding and what that needs.
+struct RecordArg {
+    /// The argument's own interface, when it has one.
+    decl: Vec<TsStmt>,
+    /// The statements that write and check its wire form.
+    text: String,
+    /// The `QueryField`s that name each field's wire key.
+    specs: String,
+    /// Whether every field may be left out, so the argument may be.
+    all_optional: bool,
+}
+
+impl RecordArg {
+    /// The parameter, `name: Type`, or `name: Type = {}` when it may be left out.
+    fn parameter(&self, name: &str, ty: &str) -> String {
+        if self.all_optional {
+            format!("{name}: {ty} = {{}}")
+        } else {
+            format!("{name}: {ty}")
+        }
     }
 }
 
@@ -1180,7 +1399,7 @@ struct RouteText {
     constant: String,
     method: String,
     response_type: Option<Vec<TsStmt>>,
-    query_type: Option<Vec<TsStmt>>,
+    arg_types: Vec<TsStmt>,
 }
 
 // ---------------------------------------------------------------------

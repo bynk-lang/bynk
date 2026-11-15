@@ -170,6 +170,7 @@ fn every_generated_client_passes_tsc_strict() {
     for (name, project) in [
         ("one", fixture("one")),
         ("rich", fixture("rich")),
+        ("forms", fixture("forms")),
         ("shapes", shapes_project()),
         ("plain", plain_project()),
     ] {
@@ -193,7 +194,11 @@ fn the_directory_layout_passes_tsc_strict_under_bundler_and_nodenext() {
     if skip_without_tools() {
         return;
     }
-    for (name, project) in [("rich", fixture("rich")), ("shapes", shapes_project())] {
+    for (name, project) in [
+        ("rich", fixture("rich")),
+        ("forms", fixture("forms")),
+        ("shapes", shapes_project()),
+    ] {
         let dir = scratch(&format!("dir-{name}"));
         let proj = dir.join("project");
         copy_project(&project, &proj);
@@ -650,5 +655,210 @@ fn the_client_round_trips_every_route_under_workerd() {
     );
     wrangler::stop_all(&mut wranglers);
     check_rich(&out, &base);
+    let _ = fs::remove_dir_all(&dir);
+}
+
+const FORMS_DRIVER: &str = r#"
+import { createClient } from "./dist/api.js";
+const sent = [];
+const viaWorker = async (url, init) => {
+  const body = init.body;
+  sent.push(`${init.method} ${url} ${new Headers(init.headers).get("content-type") ?? "-"} ${typeof body === "string" ? body : body === undefined ? "-" : body.constructor.name} cookie=${new Headers(init.headers).get("cookie") ?? "-"}`);
+  return call(url, init);
+};
+const show = (label, v) => console.log(label, JSON.stringify(v));
+const c = createClient({ baseUrl: "http://api.test", fetch: viaWorker });
+
+show("note", await c.api.postNotes({ title: "Hi there", body: null, tags: ["a", "b"], pinned: true, rank: 3 }));
+show("note-some", await c.api.postNotes({ title: "T", body: "x y&z", tags: [], pinned: false, rank: null }));
+show("note-invalid", await c.api.postNotes({ title: "", body: null, tags: [], pinned: false, rank: null }));
+
+const png = new File([new Uint8Array([1, 2, 3])], "p.png", { type: "image/png" });
+show("upload", await c.api.postUpload({ title: "T", caption: null, photo: png, cover: null, extras: [new Blob(["x"]), new Blob(["yy"])] }));
+show("upload-cover", await c.api.postUpload({ title: "T", caption: "cap", photo: png, cover: new Blob(["abcd"]), extras: [] }));
+show("upload-invalid", await c.api.postUpload({ title: "", caption: null, photo: png, cover: null, extras: [] }));
+
+show("prefs", await c.api.getPrefs({ theme: "dark", lang: "fr" }));
+show("prefs-default", await c.api.getPrefs({ theme: "light" }));
+show("origin-none", await c.api.getOrigin());
+const withOrigin = createClient({ baseUrl: "http://api.test", fetch: viaWorker, origin: "https://app.test" });
+show("origin", await withOrigin.api.getOrigin());
+console.log("requests", JSON.stringify(sent));
+"#;
+
+#[test]
+fn forms_multipart_and_cookies_round_trip_against_a_real_worker() {
+    if skip_without_tools() {
+        return;
+    }
+    let dir = scratch("forms");
+    let proj = dir.join("project");
+    copy_project(&fixture("forms"), &proj);
+    generate(&proj, &dir, &[]);
+    compile_worker(&proj, &dir);
+    tsc(&dir, "the `forms` client");
+    let driver = format!("{IN_PROCESS}{FORMS_DRIVER}").replace("workers/rich/", "workers/forms/");
+    let out = run_driver(&dir, &driver, &[]);
+
+    // A `@form` body: a `List` repeats its key, an `Option` is its value or absent.
+    assert_eq!(
+        line(&out, "note"),
+        r#"{"status":200,"kind":"Ok","body":"Hi there|-|2|true|3"}"#
+    );
+    assert_eq!(
+        line(&out, "note-some"),
+        r#"{"status":200,"kind":"Ok","body":"T|x y&z|0|false|-"}"#
+    );
+    // A refinement is refused before sending, rooted at `body` as the server's is.
+    let l = line(&out, "note-invalid");
+    assert!(
+        l.starts_with(
+            r#"{"kind":"Invalid","error":{"kind":"RefinementViolation","path":"body.title""#
+        ),
+        "{l}"
+    );
+    // `@multipart`: text fields and file parts reach the handler as they were given.
+    assert_eq!(
+        line(&out, "upload"),
+        r#"{"status":200,"kind":"Ok","body":"T|-|p.png|image/png|3|-|2"}"#
+    );
+    assert_eq!(
+        line(&out, "upload-cover"),
+        r#"{"status":200,"kind":"Ok","body":"T|cap|p.png|image/png|3|4|0"}"#
+    );
+    let l = line(&out, "upload-invalid");
+    assert!(
+        l.starts_with(
+            r#"{"kind":"Invalid","error":{"kind":"RefinementViolation","path":"body.title""#
+        ),
+        "{l}"
+    );
+    // Typed `cookies`: the `Cookie` header, a `@name` as its name, a default left to the server.
+    assert_eq!(
+        line(&out, "prefs"),
+        r#"{"status":200,"kind":"Ok","body":"dark|fr|1"}"#
+    );
+    assert_eq!(
+        line(&out, "prefs-default"),
+        r#"{"status":200,"kind":"Ok","body":"light|-|1"}"#
+    );
+    // `origin` reaches the wire as `Origin`; without it the request carries none.
+    assert_eq!(
+        line(&out, "origin-none"),
+        r#"{"status":200,"kind":"Ok","body":"none"}"#
+    );
+    assert_eq!(
+        line(&out, "origin"),
+        r#"{"status":200,"kind":"Ok","body":"https://app.test"}"#
+    );
+    let requests = line(&out, "requests");
+    for expected in [
+        r#"POST http://api.test/notes application/x-www-form-urlencoded title=Hi+there&tags=a&tags=b&pinned=true&rank=3 cookie=-"#,
+        "POST http://api.test/upload - FormData",
+        "GET http://api.test/prefs - - cookie=theme=dark; lang-pref=fr",
+    ] {
+        assert!(requests.contains(expected), "{expected} not in {requests}");
+    }
+    let _ = fs::remove_dir_all(&dir);
+}
+
+/// A server's `fetch`, in a Worker, calling a Bynk route with `origin` set.
+const ORIGIN_WORKER: &str = r#"import { createClient } from "./api";
+
+export default {
+  async fetch(request: Request): Promise<Response> {
+    const base = new URL(request.url).searchParams.get("base") ?? "";
+    const client = createClient({ baseUrl: base, origin: "https://app.example" });
+    return new Response(JSON.stringify(await client.api.getOrigin()));
+  },
+};
+"#;
+
+/// #3508's open fact: whether a framework's server, hosted in a Worker, may set `Origin`
+/// on an outgoing `fetch`. A browser forbids it; a server runtime generally does not.
+/// The generated client runs inside a real `workerd` here, calls a Bynk Worker with
+/// `origin` set, and the route answers with the `Origin` header it received.
+#[test]
+fn a_worker_hosted_server_can_set_origin_through_the_client() {
+    if skip_without_tools() {
+        return;
+    }
+    if !tools::tool_exists("npx") && skip_workerd("`npx` is not on PATH") {
+        return;
+    }
+    let dir = scratch("origin");
+    let proj = dir.join("project");
+    copy_project(&fixture("forms"), &proj);
+    compile_worker(&proj, &dir);
+    // The server Worker's repository: the client as a front end commits it, and a
+    // handler that calls it.
+    let web = dir.join("web");
+    fs::create_dir_all(&web).unwrap();
+    generate(&proj, &web, &[]);
+    fs::write(web.join("worker.ts"), ORIGIN_WORKER).unwrap();
+    fs::write(
+        web.join("wrangler.toml"),
+        "name = \"origin-probe\"\nmain = \"worker.ts\"\ncompatibility_date = \"2026-08-11\"\n",
+    )
+    .unwrap();
+
+    let pid = std::process::id();
+    let base = 62_000 + 4 * (pid % 900) as u16;
+    let (bynk_port, web_port) = (base, base + 1);
+    let spawn = |cwd: &Path, port: u16, log: &str| {
+        let out_log = fs::File::create(dir.join(log)).unwrap();
+        let err_log = out_log.try_clone().unwrap();
+        wrangler::Wrangler::spawn(
+            tools::base_command("npx")
+                .args(["-y", wrangler::SPEC, "dev"])
+                .args([
+                    "--port",
+                    &port.to_string(),
+                    "--inspector-port",
+                    &(port + 2).to_string(),
+                ])
+                .current_dir(cwd)
+                .stdout(Stdio::from(out_log))
+                .stderr(Stdio::from(err_log)),
+            &dir.join("registry"),
+        )
+    };
+    let (a, b) = (
+        spawn(&dir.join("out/workers/forms"), bynk_port, "bynk.log"),
+        spawn(&web, web_port, "web.log"),
+    );
+    let (Ok(a), Ok(b)) = (a, b) else {
+        skip_workerd("could not launch npx");
+        return;
+    };
+    let mut wranglers = vec![a, b];
+    let path = format!("/?base=http://127.0.0.1:{bynk_port}");
+    let deadline = Instant::now() + Duration::from_secs(180);
+    let answer = loop {
+        if let Ok(r) = get(web_port, &path)
+            && r.contains("\"status\":200")
+        {
+            break r;
+        }
+        if Instant::now() > deadline {
+            let logs = format!(
+                "{}\n{}",
+                fs::read_to_string(dir.join("bynk.log")).unwrap_or_default(),
+                fs::read_to_string(dir.join("web.log")).unwrap_or_default()
+            );
+            wrangler::stop_all(&mut wranglers);
+            skip_workerd(&format!(
+                "the Workers did not answer within the boot window (likely no network to provision {})\n{logs}",
+                wrangler::SPEC
+            ));
+            return;
+        }
+        std::thread::sleep(Duration::from_millis(500));
+    };
+    wrangler::stop_all(&mut wranglers);
+    assert!(
+        answer.contains(r#""body":"https://app.example""#),
+        "a Worker's `fetch` set `Origin` through the client, and the route saw it:\n{answer}"
+    );
     let _ = fs::remove_dir_all(&dir);
 }

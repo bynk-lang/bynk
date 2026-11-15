@@ -406,7 +406,14 @@ export interface __Route {
 export interface __Request {
   readonly params?: { readonly [name: string]: string };
   readonly query?: string;
+  /** A JSON body. */
   readonly body?: JsonValue;
+  /** A `@form` body: `application/x-www-form-urlencoded` text. */
+  readonly form?: string;
+  /** A `@multipart` body. */
+  readonly multipart?: globalThis.FormData;
+  /** The `Cookie` header's value. A browser sets its own and ignores this. */
+  readonly cookies?: string;
 }
 
 /** The result of `f` over an `Ok`, an `Err` unchanged. */
@@ -470,6 +477,37 @@ export function __queryString(wire: JsonValue, fields: readonly __QueryField[]):
   return text === "" ? "" : `?${text}`;
 }
 
+/** A `form` body's text: the same as a query string without its `?`. */
+export function __formString(wire: JsonValue, fields: readonly __QueryField[]): string {
+  return __queryString(wire, fields).slice(1);
+}
+
+/**
+ * A `cookies` record's wire form as the `Cookie` header's value (`a=1; b=x; b=y`),
+ * `""` when every field is absent. A cookie's value is not decoded, so it is
+ * written raw.
+ */
+export function __cookieString(wire: JsonValue, fields: readonly __QueryField[]): string {
+  const query = __queryString(wire, fields);
+  const pairs: string[] = [];
+  new globalThis.URLSearchParams(query.slice(1)).forEach((value, name) => pairs.push(`${name}=${value}`));
+  return pairs.join("; ");
+}
+
+/** The text parts of a `@multipart` body: `a=1&b=x` read back into `form`. */
+export function __appendText(form: globalThis.FormData, text: string): void {
+  new globalThis.URLSearchParams(text).forEach((value, name) => form.append(name, value));
+}
+
+/**
+ * The file name a part is sent under: a `File`'s own, else `"blob"`, which is what a
+ * browser names a bare `Blob`. A part with no name at all would be read back as text.
+ */
+export function __fileName(part: globalThis.Blob): string {
+  const name = (part as { readonly name?: unknown }).name;
+  return typeof name === "string" && name !== "" ? name : "blob";
+}
+
 /** A value that broke a boundary on its way out, as the `Invalid` failure it is. */
 function __invalid(e: unknown): CallFailure {
   const details = e instanceof globalThis.Error ? e.message : globalThis.String(e);
@@ -492,12 +530,15 @@ function __url(options: ClientOptions, route: __Route, request: __Request): stri
 async function __headers(
   options: ClientOptions,
   init: globalThis.RequestInit | undefined,
-  hasBody: boolean,
+  request: __Request,
 ): Promise<globalThis.Headers> {
   const configured = typeof options.headers === "function" ? await options.headers() : options.headers;
   const headers = new globalThis.Headers(configured);
   new globalThis.Headers(init?.headers).forEach((value, name) => headers.set(name, value));
-  if (hasBody && !headers.has("content-type")) headers.set("content-type", "application/json");
+  // A multipart body names its own boundary, so `fetch` sets its content type.
+  const type = request.form !== undefined ? "application/x-www-form-urlencoded" : request.body !== undefined ? "application/json" : undefined;
+  if (type !== undefined && !headers.has("content-type")) headers.set("content-type", type);
+  if (request.cookies !== undefined && request.cookies !== "") headers.set("cookie", request.cookies);
   if (options.origin !== undefined) headers.set("origin", options.origin);
   return headers;
 }
@@ -580,14 +621,15 @@ export async function __call(
     }
   }
   const send = options.fetch ?? globalThis.fetch;
-  const hasBody = request.body !== undefined;
   let response: globalThis.Response;
   let text: string;
   try {
-    const headers = await __headers(options, init, hasBody);
+    const headers = await __headers(options, init, request);
     const sent: globalThis.RequestInit = { ...init, method: route.method, headers };
     if (options.credentials !== undefined && sent.credentials === undefined) sent.credentials = options.credentials;
-    if (hasBody) sent.body = globalThis.JSON.stringify(request.body);
+    if (request.body !== undefined) sent.body = globalThis.JSON.stringify(request.body);
+    else if (request.form !== undefined) sent.body = request.form;
+    else if (request.multipart !== undefined) sent.body = request.multipart;
     response = await send(__url(options, route, request), sent);
     text = await response.text();
   } catch (cause) {
@@ -1293,15 +1335,14 @@ export function createClient(options: ClientOptions = {}) {
         }) as globalThis.Promise<PostOrdersResponse | CallFailure>,
       getOrders: (query: GetOrdersQuery, init?: globalThis.RequestInit): globalThis.Promise<GetOrdersResponse | CallFailure> =>
         __call(options, init, __route_api_getOrders, () => {
-          const __w: { [k: string]: JsonValue } = {};
-          if (query.sku !== undefined) __w["sku"] = __serialise_Option_Sku(__nullToOpt(query.sku, (x0) => x0));
-          if (query.limit !== undefined) __w["limit"] = ((v: number) => { if (!globalThis.Number.isSafeInteger(v)) throw new globalThis.Error("Int outside the safe-integer range at boundary"); return v as __JsonValue; })(query.limit);
-          __w["tags"] = __serialise_List_String(query.tags);
-          if (query.since !== undefined) __w["since"] = __serialise_Option_Int(__nullToOpt(query.since, (x0) => x0));
-          const __qc = __checked(__w, __deserialise_Filter, "query");
-          if (__qc.tag === "Err") return __qc;
-          const __qs = __queryString(__w, [{ name: "sku" }, { name: "limit" }, { name: "tags" }, { name: "since" }]);
-          return Ok({ params: {  }, query: __qs });
+          const __w_query: { [k: string]: JsonValue } = {};
+          if (query.sku !== undefined) __w_query["sku"] = __serialise_Option_Sku(__nullToOpt(query.sku, (x0) => x0));
+          if (query.limit !== undefined) __w_query["limit"] = ((v: number) => { if (!globalThis.Number.isSafeInteger(v)) throw new globalThis.Error("Int outside the safe-integer range at boundary"); return v as __JsonValue; })(query.limit);
+          __w_query["tags"] = __serialise_List_String(query.tags);
+          if (query.since !== undefined) __w_query["since"] = __serialise_Option_Int(__nullToOpt(query.since, (x0) => x0));
+          const __c_query = __checked(__w_query, __deserialise_Filter, "query");
+          if (__c_query.tag === "Err") return __c_query;
+          return Ok({ params: {  }, query: __queryString(__w_query, [{ name: "sku" }, { name: "limit" }, { name: "tags" }, { name: "since" }]) });
         }) as globalThis.Promise<GetOrdersResponse | CallFailure>,
       getOrderById: (id: OrderId, init?: globalThis.RequestInit): globalThis.Promise<GetOrderByIdResponse | CallFailure> =>
         __call(options, init, __route_api_getOrderById, () => {
@@ -1311,13 +1352,12 @@ export function createClient(options: ClientOptions = {}) {
         }) as globalThis.Promise<GetOrderByIdResponse | CallFailure>,
       getSearch: (query: GetSearchQuery, init?: globalThis.RequestInit): globalThis.Promise<GetSearchResponse | CallFailure> =>
         __call(options, init, __route_api_getSearch, () => {
-          const __w: { [k: string]: JsonValue } = {};
-          __w["q"] = query.q as __JsonValue;
-          if (query.page !== undefined) __w["page"] = __serialise_Option_Int(__nullToOpt(query.page, (x0) => x0));
-          const __qc = __checked(__w, __deserialise_Search, "query");
-          if (__qc.tag === "Err") return __qc;
-          const __qs = __queryString(__w, [{ name: "q" }, { name: "page", wire: "x-page" }]);
-          return Ok({ params: {  }, query: __qs });
+          const __w_query: { [k: string]: JsonValue } = {};
+          __w_query["q"] = query.q as __JsonValue;
+          if (query.page !== undefined) __w_query["page"] = __serialise_Option_Int(__nullToOpt(query.page, (x0) => x0));
+          const __c_query = __checked(__w_query, __deserialise_Search, "query");
+          if (__c_query.tag === "Err") return __c_query;
+          return Ok({ params: {  }, query: __queryString(__w_query, [{ name: "q" }, { name: "page", wire: "x-page" }]) });
         }) as globalThis.Promise<GetSearchResponse | CallFailure>,
       deleteOrderById: (id: OrderId, init?: globalThis.RequestInit): globalThis.Promise<DeleteOrderByIdResponse | CallFailure> =>
         __call(options, init, __route_api_deleteOrderById, () => {

@@ -73,15 +73,14 @@ export function createClient(options: ClientOptions = {}) {
         }) as globalThis.Promise<PostOrdersResponse | CallFailure>,
       getOrders: (query: GetOrdersQuery, init?: globalThis.RequestInit): globalThis.Promise<GetOrdersResponse | CallFailure> =>
         __call(options, init, __route_api_getOrders, () => {
-          const __w: { [k: string]: JsonValue } = {};
-          if (query.sku !== undefined) __w["sku"] = __serialise_Option_Sku(__nullToOpt(query.sku, (x0) => x0));
-          if (query.limit !== undefined) __w["limit"] = ((v: number) => { if (!globalThis.Number.isSafeInteger(v)) throw new globalThis.Error("Int outside the safe-integer range at boundary"); return v as __JsonValue; })(query.limit);
-          __w["tags"] = __serialise_List_String(query.tags);
-          if (query.since !== undefined) __w["since"] = __serialise_Option_Int(__nullToOpt(query.since, (x0) => x0));
-          const __qc = __checked(__w, __deserialise_Filter, "query");
-          if (__qc.tag === "Err") return __qc;
-          const __qs = __queryString(__w, [{ name: "sku" }, { name: "limit" }, { name: "tags" }, { name: "since" }]);
-          return Ok({ params: {  }, query: __qs });
+          const __w_query: { [k: string]: JsonValue } = {};
+          if (query.sku !== undefined) __w_query["sku"] = __serialise_Option_Sku(__nullToOpt(query.sku, (x0) => x0));
+          if (query.limit !== undefined) __w_query["limit"] = ((v: number) => { if (!globalThis.Number.isSafeInteger(v)) throw new globalThis.Error("Int outside the safe-integer range at boundary"); return v as __JsonValue; })(query.limit);
+          __w_query["tags"] = __serialise_List_String(query.tags);
+          if (query.since !== undefined) __w_query["since"] = __serialise_Option_Int(__nullToOpt(query.since, (x0) => x0));
+          const __c_query = __checked(__w_query, __deserialise_Filter, "query");
+          if (__c_query.tag === "Err") return __c_query;
+          return Ok({ params: {  }, query: __queryString(__w_query, [{ name: "sku" }, { name: "limit" }, { name: "tags" }, { name: "since" }]) });
         }) as globalThis.Promise<GetOrdersResponse | CallFailure>,
       getOrderById: (id: OrderId, init?: globalThis.RequestInit): globalThis.Promise<GetOrderByIdResponse | CallFailure> =>
         __call(options, init, __route_api_getOrderById, () => {
@@ -91,13 +90,12 @@ export function createClient(options: ClientOptions = {}) {
         }) as globalThis.Promise<GetOrderByIdResponse | CallFailure>,
       getSearch: (query: GetSearchQuery, init?: globalThis.RequestInit): globalThis.Promise<GetSearchResponse | CallFailure> =>
         __call(options, init, __route_api_getSearch, () => {
-          const __w: { [k: string]: JsonValue } = {};
-          __w["q"] = query.q as __JsonValue;
-          if (query.page !== undefined) __w["page"] = __serialise_Option_Int(__nullToOpt(query.page, (x0) => x0));
-          const __qc = __checked(__w, __deserialise_Search, "query");
-          if (__qc.tag === "Err") return __qc;
-          const __qs = __queryString(__w, [{ name: "q" }, { name: "page", wire: "x-page" }]);
-          return Ok({ params: {  }, query: __qs });
+          const __w_query: { [k: string]: JsonValue } = {};
+          __w_query["q"] = query.q as __JsonValue;
+          if (query.page !== undefined) __w_query["page"] = __serialise_Option_Int(__nullToOpt(query.page, (x0) => x0));
+          const __c_query = __checked(__w_query, __deserialise_Search, "query");
+          if (__c_query.tag === "Err") return __c_query;
+          return Ok({ params: {  }, query: __queryString(__w_query, [{ name: "q" }, { name: "page", wire: "x-page" }]) });
         }) as globalThis.Promise<GetSearchResponse | CallFailure>,
       deleteOrderById: (id: OrderId, init?: globalThis.RequestInit): globalThis.Promise<DeleteOrderByIdResponse | CallFailure> =>
         __call(options, init, __route_api_deleteOrderById, () => {
