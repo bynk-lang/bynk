@@ -1348,14 +1348,12 @@ impl Gen {
             d.no_blank_before = true;
             vec![
                 TsStmt::doc_comment(
-                    format!(
-                        "The `{arg}` of the call: a field left out is absent from the {}.",
-                        if arg == "query" {
-                            "query string"
-                        } else {
-                            "`Cookie` header"
-                        }
-                    ),
+                    if arg == "query" {
+                        "The `query` of the call: a field left out is absent from the query string."
+                            .to_string()
+                    } else {
+                        "The `cookies` of the call, sent as its `Cookie` header: a field left out is\nabsent. **For a server-side call** (a framework's server, a Worker, Node). A\nbrowser sets its own `Cookie` header and drops one a script writes, so a call\nmade where `document` exists with cookies given returns `CallFailure` `Invalid`\nrather than lose them; a page uses `credentials: \"include\"` instead.".to_string()
+                    },
                     None,
                 ),
                 d,

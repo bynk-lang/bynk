@@ -297,6 +297,24 @@ export async function __call(
   } catch (e) {
     return __invalid(e);
   }
+  // A browser manages its own cookies and drops a `Cookie` header a script sets, so
+  // a call that would silently lose its typed cookies is refused instead. A page
+  // sends its cookies with `credentials: "include"`.
+  if (
+    request.cookies !== undefined &&
+    request.cookies !== "" &&
+    typeof (globalThis as { readonly document?: unknown }).document !== "undefined"
+  ) {
+    return {
+      kind: "Invalid",
+      error: {
+        kind: "StructuralMismatch",
+        path: "cookies",
+        expected: "no typed cookies in a browser: it sets its own (pass `credentials: \"include\"`)",
+        actual: request.cookies,
+      },
+    } satisfies CallFailure;
+  }
   // `.` and `..` survive percent-encoding and a URL parser collapses them (as `%2e`
   // too), which would send the call to another route: refuse them as the value they
   // are, never as a path.
