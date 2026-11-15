@@ -134,3 +134,79 @@ fn a_suite_file_gets_its_own_consumes() {
     }
     assert!(fix(&dir).files.is_empty());
 }
+
+/// The fix leaves a trailing comment on the line it was written on, and writes
+/// an alias as `Original as Alias`.
+#[test]
+fn a_trailing_comment_stays_and_an_alias_is_written_out() {
+    let dir = project(
+        "alias",
+        &[
+            (
+                "src/pay.bynk",
+                "context pay\n\nexports transparent { Receipt }\n\ntype Receipt = { id: String }\n",
+            ),
+            (
+                "src/shop/context.bynk",
+                "context shop\n\nconsumes pay { Receipt as PayReceipt }   // receipts\n\nfn a(d: PayReceipt) -> Bool {\n    true\n}\n",
+            ),
+            (
+                "src/shop/other.bynk",
+                "context shop\n\nconsumes bynk { Logger }   // logging\n\nfn b(d: PayReceipt) -> Bool {\n    true\n}\n",
+            ),
+        ],
+    );
+    let plan = fix(&dir);
+    let [other] = plan.files.as_slice() else {
+        panic!("one file changes: {plan:?}");
+    };
+    assert_eq!(
+        other.fixed,
+        "context shop\n\nconsumes bynk { Logger }   // logging\nconsumes pay { Receipt as PayReceipt }\n\nfn b(d: PayReceipt) -> Bool {\n    true\n}\n"
+    );
+}
+
+/// A project-owned context is an owner like any other: a file that lists one of
+/// its types extends its clause, one with no clause gains one.
+#[test]
+fn a_project_context_is_an_owner_and_a_clause_is_extended() {
+    let dir = project(
+        "owner",
+        &[
+            (
+                "src/pay.bynk",
+                "context pay\n\nexports transparent { Receipt, Refund }\n\ntype Receipt = { id: String }\n\ntype Refund = { id: String }\n",
+            ),
+            (
+                "src/shop/context.bynk",
+                "context shop\n\nconsumes pay { Receipt }\n\nfn a(r: Receipt) -> Bool {\n    true\n}\n",
+            ),
+            (
+                "src/shop/refunds.bynk",
+                "context shop\n\nconsumes pay { Receipt }\n\nfn b(r: Receipt, f: Refund) -> Bool {\n    true\n}\n",
+            ),
+            (
+                "src/shop/none.bynk",
+                "context shop\n\nfn c(r: Receipt) -> Bool {\n    true\n}\n",
+            ),
+        ],
+    );
+    let plan = fix(&dir);
+    let fixed = |suffix: &str| {
+        plan.files
+            .iter()
+            .find(|f| f.path.ends_with(suffix))
+            .map(|f| f.fixed.clone())
+    };
+    assert!(
+        fixed("refunds.bynk")
+            .unwrap()
+            .contains("consumes pay { Receipt, Refund }\n")
+    );
+    assert!(
+        fixed("none.bynk")
+            .unwrap()
+            .contains("consumes pay { Receipt }\n")
+    );
+    assert!(fixed("context.bynk").is_none());
+}

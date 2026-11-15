@@ -2564,16 +2564,33 @@ pub fn new_consumes_position(
         } else {
             String::new()
         };
-        return Some((end, format!("\n{lead}")));
+        return Some((past_trailing_comment(source, end), format!("\n{lead}")));
     }
     if !braced {
-        return Some((header_end, "\n\n".to_string()));
+        let at = past_trailing_comment(source, header_end);
+        return Some((at, "\n\n".to_string()));
     }
     let rest = source.get(header_end..)?;
     let open = header_end + (rest.len() - rest.trim_start().len());
     source[open..].starts_with('{').then_some(())?;
     let lead = indent_after(source, open + 1);
-    Some((open + 1, format!("\n{lead}")))
+    Some((past_trailing_comment(source, open + 1), format!("\n{lead}")))
+}
+
+/// `at`, or the end of its line when all that follows `at` on the line is a
+/// comment, so a line inserted here leaves the comment on the line it was
+/// written on instead of taking it over.
+fn past_trailing_comment(source: &str, at: usize) -> usize {
+    let Some(rest) = source.get(at..) else {
+        return at;
+    };
+    let line = rest.split('\n').next().unwrap_or("");
+    let trimmed = line.trim();
+    if trimmed.is_empty() || trimmed.starts_with("//") || trimmed.starts_with("--") {
+        at + line.trim_end_matches('\r').len()
+    } else {
+        at
+    }
 }
 
 /// The indent of the first non-blank line after `at`, or two spaces.
@@ -2765,8 +2782,9 @@ fn unselected_gate(
                 && matches!(&t.body, TypeBody::Sum(s) if s.variants.iter().any(|x| x.name.name == *v))
         })
     });
-    // Each report, in order: the name this file must list and its owner.
-    let hits = std::cell::RefCell::new(Vec::<(String, String)>::new());
+    // Each report's name this file must list and its owner, by the span it is
+    // reported at.
+    let hits = std::cell::RefCell::new(HashMap::<Span, (String, String)>::new());
     let warn = |id: &Ident, name: &str, owner: &str| {
         let why = if file.clauses.iter().any(|c| c.target.joined() == owner) {
             format!("this file's `consumes {owner}` does not list it")
@@ -2784,7 +2802,7 @@ fn unselected_gate(
             )
         };
         hits.borrow_mut()
-            .push((name.to_string(), owner.to_string()));
+            .insert(id.span, (name.to_string(), owner.to_string()));
         let code = match names {
             Names::Types => "bynk.consumes.type_not_selected",
             Names::Capabilities => "bynk.consumes.capability_not_selected",
@@ -2807,11 +2825,7 @@ fn unselected_gate(
     };
     walk(&mut g);
     let errors = std::mem::take(&mut g.errors);
-    let hits = hits.into_inner();
-    if errors.len() != hits.len() {
-        return errors;
-    }
-    attach_consumes_fixes(errors, &hits, file)
+    attach_consumes_fixes(errors, &hits.into_inner(), file)
 }
 
 /// #3536: give each [`check_unselected_type_names`] warning a fix that edits the
@@ -2820,19 +2834,21 @@ fn unselected_gate(
 /// owner, so the warnings share one edit and the batch applies it once.
 fn attach_consumes_fixes(
     errors: Vec<CompileError>,
-    hits: &[(String, String)],
+    hits: &HashMap<Span, (String, String)>,
     file: &FileConsumes<'_>,
 ) -> Vec<CompileError> {
     let mut needed: std::collections::BTreeMap<&str, std::collections::BTreeSet<&str>> =
         Default::default();
-    for (name, owner) in hits {
+    for (name, owner) in hits.values() {
         needed.entry(owner).or_default().insert(name);
     }
     let applicable = bynk_syntax::error::Applicability::MachineApplicable;
     errors
         .into_iter()
-        .zip(hits)
-        .map(|(e, (name, owner))| {
+        .map(|e| {
+            let Some((name, owner)) = hits.get(&e.span) else {
+                return e;
+            };
             let own = || file.clauses.iter().filter(|c| c.target.joined() == *owner);
             let extend = own().find_map(|c| c.selected.as_ref()?.last());
             if let Some(last) = extend {
