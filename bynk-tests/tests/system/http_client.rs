@@ -873,7 +873,7 @@ fn a_worker_hosted_server_can_set_origin_through_the_client() {
     .unwrap();
 
     let pid = std::process::id();
-    let base = 62_000 + 4 * (pid % 900) as u16;
+    let base = 56_000 + 4 * (pid % 900) as u16;
     let (bynk_port, web_port) = (base, base + 1);
     let spawn = |cwd: &Path, port: u16, log: &str| {
         let out_log = fs::File::create(dir.join(log)).unwrap();
@@ -1187,5 +1187,153 @@ fn raw_bodies_and_streams_round_trip_under_workerd() {
     );
     wrangler::stop_all(&mut wranglers);
     check_raw(&out);
+    let _ = fs::remove_dir_all(&dir);
+}
+
+/// The front end's Worker: the generated client over a Service Binding to the Bynk
+/// Worker. It reports what each call saw, as JSON.
+const BINDING_WORKER: &str = r#"import { createClient, viaBinding, StreamFailure } from "./api";
+
+interface Env { readonly API: { fetch(input: RequestInfo | URL, init?: RequestInit): Promise<Response> } }
+
+export default {
+  async fetch(_request: Request, env: Env): Promise<Response> {
+    const out: Record<string, unknown> = {};
+    const api = createClient({ ...viaBinding(env.API) }).api;
+    out.put = await api.putBlobByName("a", new Uint8Array([0, 255, 7, 128]));
+    const logo = await api.getLogo();
+    out.logo = logo.status === 200 ? { kind: logo.kind, text: await logo.text() } : logo;
+    const ticks = await api.getTicks();
+    const events: string[] = [];
+    if (ticks.status === 200) for await (const e of ticks.events) events.push(e);
+    out.events = events;
+    out.originNone = await api.getOrigin();
+    out.origin = await createClient({ ...viaBinding(env.API), origin: "https://app.example" }).api.getOrigin();
+    out.cookie = await createClient({ ...viaBinding(env.API), headers: { cookie: "sid=1" } }).api.getCookie();
+    // The method detached from its binding is the trap `viaBinding` avoids.
+    const detached = await createClient({ baseUrl: "https://bynk.invalid", fetch: env.API.fetch as typeof fetch }).api.getOrigin();
+    out.detached = detached.kind;
+    out.streamFailureExported = typeof StreamFailure;
+    return new Response(JSON.stringify(out), { headers: { "content-type": "application/json" } });
+  },
+};
+"#;
+
+/// #3508 slice BC5: the client over a Service Binding, as a framework server on
+/// Cloudflare calls a Bynk Worker. Two `wrangler dev` processes under real `workerd`,
+/// the front end bound to the API by `[[services]]`.
+#[test]
+fn the_client_calls_a_bynk_worker_through_a_service_binding() {
+    if skip_without_tools() {
+        return;
+    }
+    if !tools::tool_exists("npx") && skip_workerd("`npx` is not on PATH") {
+        return;
+    }
+    let dir = scratch("binding");
+    let proj = dir.join("project");
+    copy_project(&fixture("raw"), &proj);
+    compile_worker(&proj, &dir);
+    let api_dir = dir.join("out/workers/raw");
+    let api_toml = fs::read_to_string(api_dir.join("wrangler.toml")).unwrap();
+    let api_name = api_toml
+        .lines()
+        .find_map(|l| l.strip_prefix("name = "))
+        .expect("the Worker has a name")
+        .trim()
+        .trim_matches('"')
+        .to_string();
+    let web = dir.join("web");
+    fs::create_dir_all(&web).unwrap();
+    generate(&proj, &web, &[]);
+    fs::write(web.join("worker.ts"), BINDING_WORKER).unwrap();
+    fs::write(
+        web.join("wrangler.toml"),
+        format!(
+            "name = \"binding-probe\"\nmain = \"worker.ts\"\ncompatibility_date = \"2026-08-11\"\n\n[[services]]\nbinding = \"API\"\nservice = \"{api_name}\"\n"
+        ),
+    )
+    .unwrap();
+
+    let pid = std::process::id();
+    let base = 60_000 + 4 * (pid % 900) as u16;
+    let (api_port, web_port) = (base, base + 1);
+    let spawn = |cwd: &Path, port: u16, log: &str| {
+        let out_log = fs::File::create(dir.join(log)).unwrap();
+        let err_log = out_log.try_clone().unwrap();
+        wrangler::Wrangler::spawn(
+            tools::base_command("npx")
+                .args(["-y", wrangler::SPEC, "dev"])
+                .args([
+                    "--port",
+                    &port.to_string(),
+                    "--inspector-port",
+                    &(port + 2).to_string(),
+                ])
+                .current_dir(cwd)
+                .stdout(Stdio::from(out_log))
+                .stderr(Stdio::from(err_log)),
+            &dir.join("registry"),
+        )
+    };
+    // The API first, so the binding finds it in the dev registry.
+    let Ok(a) = spawn(&api_dir, api_port, "api.log") else {
+        skip_workerd("could not launch npx");
+        return;
+    };
+    let mut wranglers = vec![a];
+    let deadline = Instant::now() + Duration::from_secs(180);
+    while !get(api_port, "/logo").is_ok_and(|r| r.contains("200 OK")) {
+        if Instant::now() > deadline {
+            let log = fs::read_to_string(dir.join("api.log")).unwrap_or_default();
+            wrangler::stop_all(&mut wranglers);
+            skip_workerd(&format!("the API Worker did not answer in time\n{log}"));
+            return;
+        }
+        std::thread::sleep(Duration::from_millis(500));
+    }
+    let Ok(b) = spawn(&web, web_port, "web.log") else {
+        wrangler::stop_all(&mut wranglers);
+        skip_workerd("could not launch npx");
+        return;
+    };
+    wranglers.push(b);
+    let answer = loop {
+        if let Ok(r) = get(web_port, "/")
+            && r.contains("\"put\"")
+        {
+            break r;
+        }
+        if Instant::now() > deadline {
+            let logs = format!(
+                "{}\n{}",
+                fs::read_to_string(dir.join("api.log")).unwrap_or_default(),
+                fs::read_to_string(dir.join("web.log")).unwrap_or_default()
+            );
+            wrangler::stop_all(&mut wranglers);
+            skip_workerd(&format!("the front end did not answer in time\n{logs}"));
+            return;
+        }
+        std::thread::sleep(Duration::from_millis(500));
+    };
+    wrangler::stop_all(&mut wranglers);
+    let json = answer.split("\r\n\r\n").nth(1).unwrap_or(&answer);
+    let v: serde_json::Value =
+        serde_json::from_str(json.trim()).unwrap_or_else(|e| panic!("{e}: {answer}"));
+    assert_eq!(v["put"]["body"], "a AP8HgA==", "{answer}");
+    assert_eq!(v["logo"]["text"], "<svg/>", "{answer}");
+    assert_eq!(
+        v["events"],
+        serde_json::json!(["tick-1", "two\nlines", "", "tick-4"]),
+        "{answer}"
+    );
+    // A binding call carries no `Origin` of its own; the option sets one.
+    assert_eq!(v["originNone"]["body"], "none", "{answer}");
+    assert_eq!(v["origin"]["body"], "https://app.example", "{answer}");
+    assert_eq!(v["cookie"]["body"], "sid=1", "{answer}");
+    assert_eq!(
+        v["detached"], "Transport",
+        "a detached `fetch` fails as a Transport failure: {answer}"
+    );
     let _ = fs::remove_dir_all(&dir);
 }

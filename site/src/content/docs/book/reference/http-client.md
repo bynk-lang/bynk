@@ -354,6 +354,57 @@ holding what the body rejected with), the one place the client throws. Two edges
 element containing a bare `\r` is split by a reader (the server splits on `\n` only), so it
 does not round-trip, and an empty element is an event with empty data.
 
+## Calling through a Service Binding
+
+A front end whose server runs on Cloudflare can reach a Bynk Worker without the public
+network: no public hop, no CORS, no egress. A Service Binding's `fetch` takes what `fetch`
+does, so the client's `fetch` option is the whole seam; `viaBinding` fills it in:
+
+```ts
+import { createClient, viaBinding } from "./api";
+
+const api = createClient({ ...viaBinding(env.API) }).orders;
+```
+
+`viaBinding(binding, baseUrl?)` returns `{ baseUrl, fetch }`. It calls the binding's `fetch`
+as a method, which a binding needs: `fetch: env.API.fetch` fails ("Illegal invocation"), as
+a `Transport` failure. A binding ignores the host of the URL it is given but Cloudflare
+requires a valid, fully qualified one, so `baseUrl` is the inert `https://bynk.invalid`
+unless you pass another; a Worker sees it in `request.url`. A binding is for the server
+only, since it exists only in a Worker: a browser keeps using `baseUrl`.
+
+Declare the binding in the front end's `wrangler.toml`, naming the Bynk Worker:
+
+```toml
+[[services]]
+binding = "API"
+service = "orders-api"
+```
+
+Where the binding comes from depends on the framework (read from the adapters' own code, at
+the versions named; the frameworks' documentation pages were not reachable when this was
+written):
+
+| Framework | Reaching `env.API` |
+|---|---|
+| SvelteKit, `@sveltejs/adapter-cloudflare` 8 (Kit 3) | `import { env } from "cloudflare:workers"`; not available in a prerenderable route |
+| SvelteKit, `@sveltejs/adapter-cloudflare` 7 (Kit 2) | `platform.env.API` in `load`, actions and endpoints |
+| Next.js, `@opennextjs/cloudflare` 1.x | `getCloudflareContext().env.API`; `await getCloudflareContext({ async: true })` in a static route; `initOpenNextCloudflareForDev()` in `next.config` for `next dev`; add `API` to the `CloudflareEnv` interface for its type |
+
+Streaming works through a binding: the response arrives as headers first, with the body
+still coming, and `events` and `body` read it as they do over the network.
+
+**Authentication.** A binding call bypasses the browser, so it carries no `Origin` and no
+`Sec-Fetch-Site`. A route that changes state under a signed cookie therefore answers `403`
+unless the call names an origin, exactly as a server-side `fetch` does (see
+[Cookies and CSRF](#cookies-and-csrf)): pass `origin` with one of the service's credentialed
+CORS origins. Forward the browser's `Cookie` header with `headers`. The front end's own
+server must authenticate its caller, because the Bynk Worker no longer sees the browser.
+
+The client's types use the DOM `fetch` types (`Request`, `Response`, `Headers`), which a
+SvelteKit or Next.js project has; a project that loads only `@cloudflare/workers-types`
+without the DOM library needs the DOM library added for the generated file.
+
 ## Routes left out
 
 A route the client cannot yet represent faithfully is named on stderr and left out,

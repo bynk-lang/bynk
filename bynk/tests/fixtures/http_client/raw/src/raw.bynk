@@ -65,6 +65,22 @@ service api from http {
 		}
 	}
 
+	// The `Origin` header the call arrived with, `none` when it carried none.
+	on GET("/origin") (headers: RequestHeaders) -> Effect[HttpResult[String]] by v: Visitor {
+		match headers.get("origin") {
+			Some(o) => Ok(o)
+			None => Ok("none")
+		}
+	}
+
+	// The `Cookie` header as it arrived, for a server-side caller's typed cookies.
+	on GET("/cookie") (headers: RequestHeaders) -> Effect[HttpResult[String]] by v: Visitor {
+		match headers.get("cookie") {
+			Some(c) => Ok(c)
+			None => Ok("none")
+		}
+	}
+
 	// A JSON answer and a raw one at the same status: told apart by content type.
 	on GET("/either/:mode") (mode: String) -> Effect[HttpResult[String]] by v: Visitor {
 		if mode == "raw" {
