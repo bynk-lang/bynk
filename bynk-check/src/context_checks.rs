@@ -3237,14 +3237,7 @@ fn check_service_decls(
     // #3343: `@name("…")` on the fields of a request record.
     validate_field_names(table, &typed.types, &typed.consts, errors);
 
-    // #3513 C: `cf` takes the standard library's `RequestCf` and no look-alike a
-    // unit declares or imports from elsewhere, so the platform lock and the
-    // unstable gate (both keyed to the import) cannot be bypassed.
-    let cf_is_std = cross_context
-        .consumed_types
-        .get("bynk.cloudflare")
-        .is_some_and(|t| t.contains_key("RequestCf"))
-        && !table.types.contains_key("RequestCf");
+    let cf_is_std = cf_type_is_std(cross_context, table);
     // v0.9: validate HTTP handler shape and check for duplicate routes
     // across all services in this context.
     let mut route_first_span: HashMap<(HttpMethod, String), Span> = HashMap::new();
@@ -5572,6 +5565,18 @@ fn is_query_leaf(r: &TypeRef, types: &HashMap<String, Arc<TypeDecl>>) -> bool {
         },
         _ => false,
     }
+}
+
+/// #3513 C: whether this unit's `RequestCf` is the standard library's: consumed from
+/// `bynk.cloudflare`, and not a type the unit declares itself. `cf` takes only that one,
+/// so a look-alike cannot bypass the platform lock and the unstable gate, which are both
+/// keyed to the import.
+fn cf_type_is_std(cross_context: &resolver::CrossContextInfo, table: &UnitTable) -> bool {
+    cross_context
+        .consumed_types
+        .get("bynk.cloudflare")
+        .is_some_and(|t| t.contains_key("RequestCf"))
+        && !table.types.contains_key("RequestCf")
 }
 
 /// #2854: whether `r` is a legal field type of a typed `query` record: a leaf,
