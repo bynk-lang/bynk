@@ -220,7 +220,7 @@ fn check_handle_op(
         .and_then(|e| e.participants.get(&handle.participant))
         .and_then(|c| c.get(&handle.cap))
         .cloned();
-    let Some(info) = info else { return None };
+    let info = info?;
     if !READ_OPS.contains(&method.name.as_str()) {
         if WRITE_OPS.contains(&method.name.as_str()) {
             refuse(
