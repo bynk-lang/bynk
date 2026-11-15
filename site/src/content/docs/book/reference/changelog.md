@@ -3,7 +3,7 @@ title: Version compatibility & changelog
 ---
 Bynk is pre-1.0 and developed in small, spec-first increments (see
 [Versioning & roadmap](/book/about/versioning-and-roadmap/)). This book is
-written against **v0.621**.
+written against **v0.622**.
 
 This page is a high-level summary of notable increments, not an exhaustive
 per-commit history. While Bynk is pre-1.0, increments may change behaviour.
@@ -28,6 +28,7 @@ per-commit history. While Bynk is pre-1.0, increments may change behaviour.
 
 | Version | Highlights |
 |---|---|
+| **v0.622.0** | The platform lock treats a `[deploy.workers.<key>]` group as one deployment unit, the union of its members' native platforms, as a Worker is one unit (#3562, G2a) |
 | **v0.621.0** | `bynk build` refuses a `[deploy.workers.<key>]` group whose members declare different bindings under one name; identical declarations share one binding (#3562, G2a) |
 | **v0.620.0** | A `system` or `integration` case can read a participant's test D1 database with `D1.peek(<participant>.<Capability>)`, a read-only handle whose SQL is checked against the migrations (checker half) |
 | **v0.619.0** | Naming a type, capability or service that the file's own `consumes` does not bring in is now an error (`bynk.consumes.type_not_selected`, `bynk.consumes.capability_not_selected`, `bynk.consumes.unit_not_consumed`), with the same fixes (#3536) |
