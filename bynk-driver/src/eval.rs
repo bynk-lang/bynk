@@ -244,9 +244,13 @@ fn unit_file(sources: &HashMap<PathBuf, String>, unit: &str) -> Option<PathBuf> 
         .cloned()
 }
 
-/// What stands in for a suite file left out of the build: a suite of no cases.
+/// What stands in for a suite file left out of the build: a suite of one case
+/// that is never selected. (A suite with no case emits a module that does not
+/// type-check.)
 fn left_out(target: &str) -> String {
-    format!("// left out of this `bynk eval` build\nsuite {target} {{}}\n")
+    format!(
+        "// left out of this `bynk eval` build\nsuite {target} {{ case \"left out\" {{ expect 1 == 1 }} }}\n"
+    )
 }
 
 /// A stand-in for every suite of `sources` that is not among `keep` (by target
@@ -884,6 +888,18 @@ suite demo {
             &root,
             "suite demo {\n  case \"broken\" {\n    let x: Int = \"no\"\n    expect x == 1\n  }\n}\n",
         );
+        // Another unit's suite, left out as well, still builds a module that
+        // type-checks beside the evaluation's.
+        std::fs::write(
+            root.join("src/other.bynk"),
+            "commons other\n\nfn one() -> Int {\n  1\n}\n",
+        )
+        .unwrap();
+        std::fs::write(
+            root.join("tests/other.bynk"),
+            "suite other {\n  case \"one\" {\n    expect one() == 1\n  }\n}\n",
+        )
+        .unwrap();
         assert_eq!(value(eval(&root, "double(2)")).0, serde_json::json!(4));
     }
 
