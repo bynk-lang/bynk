@@ -1427,7 +1427,7 @@ mod tests {
         model
     }
 
-    const D1_UNIT: &str = "context demo\n\nconsumes bynk.cloudflare { D1 }\n\ncapability Orders = D1\n\n\
+    const D1_UNIT: &str = "context demo\n\nconsumes bynk.cloudflare { D1, SqlValue }\n\ncapability Orders = D1\n\n\
         const BIG: String = \"select id from orders where total > 1 and id = ?1\"\n\
         const ALIAS: String = BIG\n\
         const PROSE: String = \"DELETE <b>x</b> FROM here WHERE a > 1 AND b < 2\"\n\n\

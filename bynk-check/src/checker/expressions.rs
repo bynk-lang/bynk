@@ -1895,8 +1895,8 @@ pub(crate) fn variant_owner<'a, D: AsRef<TypeDecl>>(
 /// #3536: the sum an expected type names, when it is one a braced `consumes`
 /// leaves out (`unselected`) and it declares the bare variant `name`. The
 /// expected type settles it as it settles #3344's shared names, so a name that
-/// still resolves while `bynk.consumes.type_not_selected` is a warning builds
-/// the sum the position asks for, even when a sum in scope shares the variant.
+/// resolves, to be reported as `bynk.consumes.type_not_selected` (with its fix),
+/// builds the sum the position asks for, even when a sum in scope shares the variant.
 pub(crate) fn left_out_variant_owner<'a>(
     name: &str,
     types: &'a std::collections::HashMap<String, std::sync::Arc<TypeDecl>>,

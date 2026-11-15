@@ -7,7 +7,7 @@ title: Diagnostic index
 
 Every diagnostic code the compiler can emit, with a one-line summary of the cause, grouped by category. For step-by-step cause-and-fix guidance on the most common ones, see the [troubleshooting guides](/book/troubleshooting/). For a code with a curated explanation, `bynk explain <code>` prints it in a terminal, and in VS Code the diagnostic's **Explain** quick fix (or **Bynk: Explain Diagnostic Code…**) shows the same text in a panel, offline.
 
-There are **878** codes in total.
+There are **884** codes in total.
 
 ## Agents
 
@@ -79,7 +79,7 @@ There are **878** codes in total.
 |---|---|---|---|
 | [`bynk.consumes.alias_conflict`](/book/guides/program-structure/consume-services/#use-an-alias) | Two `consumes` aliases collide. | [`consumes_decl`](/book/reference/grammar/#rule-consumes_decl) | — |
 | [`bynk.consumes.capability_name_clash`](/book/guides/effects-and-capabilities/share-across-contexts/#consume-it-with-a-qualified-given) | Two flattened `consumes U { Cap }` capabilities collide, or one clashes with a local capability. | [`consumes_decl`](/book/reference/grammar/#rule-consumes_decl) | — |
-| [`bynk.consumes.capability_not_selected`](/book/guides/program-structure/consume-services/#rename-an-exported-type-that-clashes-with-one-of-yours) | A capability a consumed unit exports is named (a `given` clause, a call, `provides`, a `stub`) in a file whose own `consumes` does not list it (a warning; an error in a later release). | [`consumes_decl`](/book/reference/grammar/#rule-consumes_decl) | Warning |
+| [`bynk.consumes.capability_not_selected`](/book/guides/program-structure/consume-services/#rename-an-exported-type-that-clashes-with-one-of-yours) | A capability a consumed unit exports is named (a `given` clause, a call, `provides`, a `stub`) in a file whose own `consumes` does not list it. | [`consumes_decl`](/book/reference/grammar/#rule-consumes_decl) | — |
 | [`bynk.consumes.name_conflict`](/book/guides/program-structure/consume-services/#rename-an-exported-type-that-clashes-with-one-of-yours) | A `consumes` name collides with another name in scope. | [`consumes_decl`](/book/reference/grammar/#rule-consumes_decl) | — |
 | [`bynk.consumes.self_reference`](/book/guides/program-structure/consume-services/#declare-the-dependency-and-call-the-service) | A context `consumes` itself. | [`consumes_decl`](/book/reference/grammar/#rule-consumes_decl) | — |
 | [`bynk.consumes.service_arity`](/book/guides/program-structure/consume-services/#declare-the-dependency-and-call-the-service) | A consumed service was called with the wrong number of arguments. | [`consumes_decl`](/book/reference/grammar/#rule-consumes_decl) | — |
@@ -89,8 +89,8 @@ There are **878** codes in total.
 | [`bynk.consumes.type_alias_conflict`](/book/guides/program-structure/consume-services/#rename-an-exported-type-that-clashes-with-one-of-yours) | A `consumes U { T as Alias }` alias collides with a type or value in scope, or with another alias. | [`consumes_decl`](/book/reference/grammar/#rule-consumes_decl) | — |
 | [`bynk.consumes.type_alias_repeated`](/book/guides/program-structure/consume-services/#rename-an-exported-type-that-clashes-with-one-of-yours) | An exported type is aliased more than once, or is selected both bare and aliased, in `consumes U { … }`. | [`consumes_decl`](/book/reference/grammar/#rule-consumes_decl) | — |
 | [`bynk.consumes.type_alias_unknown_export`](/book/guides/program-structure/consume-services/#rename-an-exported-type-that-clashes-with-one-of-yours) | `consumes U { T as Alias }` names a type `U` does not export. | [`consumes_decl`](/book/reference/grammar/#rule-consumes_decl) | — |
-| [`bynk.consumes.type_not_selected`](/book/guides/program-structure/consume-services/#rename-an-exported-type-that-clashes-with-one-of-yours) | A type (or a bare variant of a sum) of a consumed unit is named in a file whose own `consumes` does not bring it in: it lists other names, or only another file of the unit consumes the unit (a warning; an error in a later release). | [`consumes_decl`](/book/reference/grammar/#rule-consumes_decl) | Warning |
-| [`bynk.consumes.unit_not_consumed`](/book/guides/program-structure/consume-services/#declare-the-dependency-and-call-the-service) | A call to another unit's service is written in a file whose own `consumes` does not name that unit (a warning; an error in a later release). | [`consumes_decl`](/book/reference/grammar/#rule-consumes_decl) | Warning |
+| [`bynk.consumes.type_not_selected`](/book/guides/program-structure/consume-services/#rename-an-exported-type-that-clashes-with-one-of-yours) | A type (or a bare variant of a sum) of a consumed unit is named in a file whose own `consumes` does not bring it in: it lists other names, or only another file of the unit consumes the unit. | [`consumes_decl`](/book/reference/grammar/#rule-consumes_decl) | — |
+| [`bynk.consumes.unit_not_consumed`](/book/guides/program-structure/consume-services/#declare-the-dependency-and-call-the-service) | A call to another unit's service is written in a file whose own `consumes` does not name that unit. | [`consumes_decl`](/book/reference/grammar/#rule-consumes_decl) | — |
 | [`bynk.consumes.unknown_context`](/book/guides/program-structure/consume-services/#declare-the-dependency-and-call-the-service) | `consumes` names a context that does not exist. | [`consumes_decl`](/book/reference/grammar/#rule-consumes_decl) | — |
 | [`bynk.consumes.unknown_service`](/book/guides/program-structure/consume-services/#declare-the-dependency-and-call-the-service) | Called a service the consumed context does not declare. | [`consumes_decl`](/book/reference/grammar/#rule-consumes_decl) | — |
 
@@ -410,8 +410,14 @@ There are **878** codes in total.
 | [`bynk.d1.sql_invalid`](/book/reference/bynk-capabilities/#sql-checked-against-the-migrations) | A literal D1 statement does not prepare against the schema the binding's migrations build: a syntax error, or an unknown table or column. |  | — |
 | [`bynk.d1.sql_param_count`](/book/reference/bynk-capabilities/#sql-checked-against-the-migrations) | A literal D1 statement uses a different number of bound parameters (`?N`) than the list literal passed with it holds. |  | — |
 | [`bynk.dependency.path_outside_root`](/book/guides/projects-build-and-deployment/share-code-between-projects/#what-the-checks-catch) | A path dependency declared by a dependency resolves outside the workspace; a dependency's own path dependencies are honoured only between members of one workspace. |  | — |
+| `bynk.deploy.context_in_two_groups` | A context is listed in two `[deploy.workers.<key>]` groups; a context is deployed in one Worker only. |  | — |
 | `bynk.deploy.contract_skew` | A worker was compiled against a contract its live dependencies no longer provide, or no longer provides the contract its live callers were compiled against, so `bynk deploy --context` refuses to ship it. |  | — |
+| `bynk.deploy.duplicate_hostname` | A route or custom domain is claimed twice across `[deploy.workers.<key>]` groups. |  | — |
+| `bynk.deploy.empty_group` | A `[deploy.workers.<key>]` group lists no context. |  | — |
 | `bynk.deploy.foreign_contract_skew` | A build breaks the contract a declared foreign caller's client was generated at, as pinned in `bynk.foreign.toml`, so `bynk deploy` refuses to ship it. |  | — |
+| `bynk.deploy.group_name_conflict` | A `[deploy.workers.<key>]` group's key or script name is another group's, or is the Worker of a context in no group. |  | — |
+| `bynk.deploy.not_a_context` | A `[deploy.workers.<key>]` group lists a unit that is not a `context`; only contexts are deployed as Workers. |  | — |
+| `bynk.deploy.unknown_context` | A `[deploy.workers.<key>]` group lists a context the project does not declare. |  | — |
 | [`bynk.detach.in_agent_handler`](/book/reference/capabilities/#detach) | A `detach` was used in an agent handler, which has no execution context to keep a detached effect alive. | [`method_call`](/book/reference/grammar/#rule-method_call) | — |
 | [`bynk.detach.in_pure_context`](/book/reference/capabilities/#detach) | A `detach` was used in a pure (non-effectful) context. | [`method_call`](/book/reference/grammar/#rule-method_call) | — |
 | [`bynk.detach.store_op`](/book/reference/capabilities/#detach) | A `detach` targets an agent store operation, which is part of the handler's atomic commit and cannot be detached. | [`method_call`](/book/reference/grammar/#rule-method_call) | — |

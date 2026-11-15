@@ -1259,11 +1259,11 @@ case "a held claim" {
   (`Response` through a `Fetch` stub) need listing in the suite as well.
 - **Suite types win.** A suite's own `type` still takes the name over an unlisted
   standard-library type, as it does for a unit.
-- **This release warns.** A suite file that names something its own `consumes`
-  does not bring in still compiles, with `bynk.consumes.type_not_selected`,
-  `bynk.consumes.capability_not_selected` or `bynk.consumes.unit_not_consumed`;
-  `bynk check --fix=<code>` adds the clause to the suite file. A later release
-  makes them errors.
+- **Naming what the suite does not consume is an error.** A suite file that
+  names something its own `consumes` does not bring in is
+  `bynk.consumes.type_not_selected`, `bynk.consumes.capability_not_selected` or
+  `bynk.consumes.unit_not_consumed`; `bynk check --fix=<code>` adds the clause to
+  the suite file.
 
 ## Test input from a file — `fixture` {#fixtures}
 
