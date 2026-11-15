@@ -3401,6 +3401,7 @@ fn run_checks(
         &mut emitted_barrels,
         &test_asset_files,
         &d1_migrations,
+        d1_sql.as_deref(),
         context_bindings.as_ref(),
         &event_subscribers,
         remote_tests,

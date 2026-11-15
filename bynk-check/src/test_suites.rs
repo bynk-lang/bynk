@@ -606,6 +606,8 @@ pub fn phase_integration_bodies(
     errors: &mut Vec<CompileError>,
     refs: &mut RefSink,
     tys: &Arc<Types>,
+    // #3147: the migrations' schemas, which a `D1.peek` read is prepared against.
+    d1_sql: Option<&crate::d1_sql::D1Sql>,
 ) -> HashMap<String, resolver::CrossContextInfo> {
     let mut ready: HashMap<String, resolver::CrossContextInfo> = HashMap::new();
 
@@ -957,6 +959,13 @@ pub fn phase_integration_bodies(
                     )
                     .1
                 };
+                if let Some(d1_sql) = d1_sql {
+                    body_errs.extend(d1_sql.check_peek_sites(
+                        unit_tables,
+                        &case_callees,
+                        Some(parsed[first].source()),
+                    ));
+                }
                 check_faults_tier(case, case_effective_tier(case, d), &mut body_errs);
                 check_snapshot_placement(case, true, &mut body_errs);
                 check_event_address_tier(
@@ -1142,7 +1151,16 @@ pub fn typecheck_integration_case_body(
         return_ty,
         case.span,
         HashMap::new(),
-        checker::CapabilityCtx::default(),
+        checker::CapabilityCtx {
+            // #3147: a case may `D1.peek` its participants' databases.
+            peek_env: Some(Arc::new(peek_env(
+                participants,
+                unit_tables,
+                &resolved,
+                tys,
+            ))),
+            ..Default::default()
+        },
         // Slice B: a `system` case addresses the target's own service (`api.POST`)
         // and names a principal (`by User(...)`), so the checker needs the
         // target's services and actors — the same resolution the unit tier does.
@@ -1165,6 +1183,45 @@ pub fn typecheck_integration_case_body(
         },
     );
     (expr_types, callees)
+}
+
+/// #3147: each participant's capabilities, for `D1.peek` to name.
+fn peek_env(
+    participants: &[String],
+    unit_tables: &HashMap<String, UnitTable>,
+    resolved: &ResolvedCommons,
+    tys: &Arc<Types>,
+) -> checker::peek::PeekEnv {
+    let mut env = checker::peek::PeekEnv::default();
+    for p in participants {
+        let Some(table) = unit_tables.get(p) else {
+            continue;
+        };
+        let caps = table
+            .capabilities
+            .iter()
+            .map(|(name, decl)| {
+                let ops = decl
+                    .ops
+                    .iter()
+                    .map(|op| build_capability_op_info(op, &resolved.types, tys))
+                    .collect();
+                (
+                    name.clone(),
+                    checker::CapabilityInfo {
+                        name: name.clone(),
+                        ops,
+                        derived_from: crate::context_checks::derived_from(
+                            decl,
+                            &resolved.cross_context.flattened_caps,
+                        ),
+                    },
+                )
+            })
+            .collect();
+        env.participants.insert(p.clone(), caps);
+    }
+    env
 }
 
 /// The harness-root [`ResolvedCommons`] a `system` case (or a suite helper) is
@@ -3792,6 +3849,7 @@ fn typecheck_case_body_recording(
             given_used: HashSet::new(),
             given_entries: Vec::new(),
             given_anchor: None,
+            ..Default::default()
         },
         target_test_services(
             Some(target_name),
@@ -4858,6 +4916,7 @@ fn check_property_body(
             given_used: HashSet::new(),
             given_entries: Vec::new(),
             given_anchor: None,
+            ..Default::default()
         },
         target_test_services(
             Some(target_name),
@@ -5340,6 +5399,24 @@ pub fn integration_view(
             "DmarcVerdict",
             "SenderIdentity",
         ] {
+            if let Some(decl) = cloudflare.types.get(name) {
+                view.types
+                    .entry(name.to_string())
+                    .or_insert_with(|| decl.clone());
+            }
+        }
+    }
+    // #3147: a case `D1.peek`s a participant's database and binds the values of
+    // its statements, so the `D1` types are in scope where a participant has one.
+    let has_d1 = participants.iter().any(|p| {
+        unit_tables.get(p).is_some_and(|t| {
+            t.derived
+                .values()
+                .any(|d| d.base_unit == crate::firstparty::CLOUDFLARE_UNIT && d.base_cap == "D1")
+        })
+    });
+    if has_d1 && let Some(cloudflare) = unit_tables.get(crate::firstparty::CLOUDFLARE_UNIT) {
+        for name in ["SqlValue", "SqlError", "SqlRun", "SqlStatement"] {
             if let Some(decl) = cloudflare.types.get(name) {
                 view.types
                     .entry(name.to_string())

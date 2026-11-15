@@ -1021,6 +1021,7 @@ fn analyse_project_inner(
         &mut integration_errors,
         &mut refs,
         tys,
+        d1_sql.as_deref(),
     );
     errors.extend_attributed_by_span(&parsed, integration_errors);
 

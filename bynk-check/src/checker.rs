@@ -48,6 +48,7 @@ mod calls;
 pub mod codable;
 mod cookie_lints;
 mod d1;
+pub mod peek;
 pub use d1::{BatchPosition, D1DecodeSite, D1SqlSite, RowLink};
 pub(crate) mod equality;
 pub mod keying;
@@ -1798,6 +1799,7 @@ pub fn check_handler_body(
             given_used: HashSet::new(),
             given_entries: given_entries.clone(),
             given_anchor,
+            ..Default::default()
         },
         in_test_body: false,
         oidc_binder,
@@ -2134,6 +2136,7 @@ pub fn check_invariants(
                 given_used: HashSet::new(),
                 given_entries: Vec::new(),
                 given_anchor: None,
+                ..Default::default()
             },
             in_test_body: false,
             oidc_binder: None,
@@ -2290,6 +2293,7 @@ pub(crate) fn check_contracts(
                 given_used: HashSet::new(),
                 given_entries: Vec::new(),
                 given_anchor: None,
+                ..Default::default()
             },
             in_test_body: false,
             oidc_binder: None,
@@ -2526,6 +2530,7 @@ pub fn check_transitions(
                 given_used: HashSet::new(),
                 given_entries: Vec::new(),
                 given_anchor: None,
+                ..Default::default()
             },
             in_test_body: false,
             oidc_binder: None,
@@ -2719,6 +2724,7 @@ pub fn check_migrations(
                 given_used: HashSet::new(),
                 given_entries: Vec::new(),
                 given_anchor: None,
+                ..Default::default()
             },
             in_test_body: false,
             oidc_binder: None,
@@ -2935,6 +2941,13 @@ pub struct CapabilityCtx {
     /// where the clause lives elsewhere (a provider's `provides … given`
     /// line); the fix is then offered only when entries already exist.
     pub given_anchor: Option<Span>,
+    /// #3147: the participants' D1 capabilities a case may `D1.peek`. `Some`
+    /// only while checking an `integration` or `system` case.
+    pub peek_env: Option<Arc<peek::PeekEnv>>,
+    /// #3147: each resolved `D1.peek(…)` expression, by identity.
+    pub peek_resolved: HashMap<ExprId, peek::PeekHandle>,
+    /// #3147: the case-local names bound to a peek handle.
+    pub peek_handles: HashMap<String, peek::PeekHandle>,
 }
 
 /// v0.178 (Slice 0, #662) / v0.182 (Slice A, #664): the shape a test body needs
@@ -4461,6 +4474,7 @@ pub(super) fn bind_effect_let(
             );
         }
         ctx.bind(l.name.name.clone(), final_ty);
+        peek::forget(&l.name.name, ctx);
         d1::link_effect_let(l, ctx);
     }
 }
@@ -4501,6 +4515,7 @@ pub(crate) fn type_of_block(block: &Block, expected: Option<TyId>, ctx: &mut Ctx
                     r
                 });
                 let rhs_ty = type_of(&l.value, annot_ty, ctx);
+                peek::note_let(&l.name.name, &l.value, ctx);
                 par::note_let_lambda(l, ctx);
                 check_unbound_effects(&l.value, false, ctx);
                 let final_ty = match (annot_ty, rhs_ty) {

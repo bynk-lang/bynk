@@ -273,6 +273,67 @@ mod native {
             }))
         }
 
+        /// #3147: check every `D1.peek` read the callees recorded, each against
+        /// its own participant's migrations; and refuse one that would write,
+        /// as the prepared statement's `readonly` flag says.
+        pub fn check_peek_sites(
+            &self,
+            unit_tables: &HashMap<String, UnitTable>,
+            callees: &HashMap<ExprId, Callee>,
+            source: Option<&str>,
+        ) -> Vec<CompileError> {
+            let mut sites: BTreeMap<(usize, usize), &D1SqlSite> = BTreeMap::new();
+            for callee in callees.values() {
+                let site: &D1SqlSite = match callee {
+                    Callee::D1Sql(site) => site,
+                    Callee::Const(_, Some(site)) => site,
+                    _ => continue,
+                };
+                if site.peek.is_some() {
+                    sites.insert((site.span.start, site.span.end), site);
+                }
+            }
+            let mut out = Vec::new();
+            for site in sites.values() {
+                let Some(participant) = site.peek.as_deref() else {
+                    continue;
+                };
+                let Some(instance) = unit_tables
+                    .get(participant)
+                    .and_then(|t| t.derived.get(&site.cap))
+                    .filter(|d| is_d1(d))
+                else {
+                    continue;
+                };
+                let database = d1_database_name(
+                    &bynk_project::worker_dir_name(participant),
+                    &instance.binding,
+                );
+                let Some(conn) = self.schemas.get(&database) else {
+                    continue;
+                };
+                let conn = conn.lock().unwrap_or_else(|e| e.into_inner());
+                if let Some(err) = check_site(&conn, site, &database, source) {
+                    out.push(err);
+                } else if conn.prepare(&site.text).is_ok_and(|stmt| !stmt.readonly()) {
+                    out.push(
+                        CompileError::new(
+                            "bynk.test.peek_write",
+                            site.span,
+                            format!(
+                                "the SQL of `D1.peek` reads, but this statement of `{}.{}` would write",
+                                site.cap, site.op
+                            ),
+                        )
+                        .with_note(
+                            "a peeked database is read-only: a case makes the app write by driving the app",
+                        ),
+                    );
+                }
+            }
+            out
+        }
+
         /// Check every literal statement the unit's call sites recorded.
         pub fn check_unit(
             &self,
@@ -298,6 +359,11 @@ mod native {
                     Callee::Const(_, Some(site)) => site,
                     _ => continue,
                 };
+                // #3147: a `D1.peek` read belongs to its participant's database,
+                // checked by `check_peek_sites`.
+                if site.peek.is_some() {
+                    continue;
+                }
                 sites.insert((site.span.start, site.span.end), site);
             }
             let worker = bynk_project::worker_dir_name(unit);
@@ -1004,6 +1070,7 @@ mod tests {
             passed: None,
             literal: literal.map(|(l, o)| (l.to_string(), o)),
             batch: None,
+            peek: None,
         }
     }
 
@@ -1035,6 +1102,7 @@ mod tests {
         crate::checker::D1SqlSite {
             op: "batch".into(),
             batch: Some(crate::checker::BatchPosition { group: 7, index }),
+            peek: None,
             // A distinct span per statement, as in source.
             ..site(text, None, (index * 100, index * 100 + 50))
         }

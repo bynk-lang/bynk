@@ -2412,7 +2412,10 @@ impl Gate<'_> {
                 type_args,
                 ..
             } => {
+                // #3147: `D1.peek(…)` is a case-only built-in, not a use of the
+                // `D1` capability, so it needs no `consumes bynk.cloudflare`.
                 if let ExprKind::Ident(id) = &receiver.kind
+                    && !(id.name == "D1" && method.name == "peek")
                     && !self.local_receiver(id, Some(method), None)
                 {
                     self.name(id);
@@ -4412,6 +4415,26 @@ fn check_expr_references(expr: &Expr, cx: &mut RefCheckCtx) {
                 for a in args {
                     check_expr_references(a, cx);
                 }
+                return;
+            }
+            // #3147: `D1.peek(…)` reads a participant's test database, from an
+            // `integration` or `system` case. A function body is none.
+            if let ExprKind::Ident(id) = &receiver.kind
+                && id.name == "D1"
+                && method.name == "peek"
+                && !name_in_scope(&id.name, cx.params, &cx.scopes)
+                && !cx.types.contains_key(&id.name)
+            {
+                cx.errors.push(
+                    CompileError::new(
+                        "bynk.test.peek_outside_case",
+                        receiver.span.merge(method.span),
+                        "`D1.peek` is only valid inside an `integration` or `system` case",
+                    )
+                    .with_note(
+                        "it reads a participant's test database, which only those tiers stand up; the deployed app has no such handle",
+                    ),
+                );
                 return;
             }
             // v0.9: `HttpResult.Variant(args)` — qualified HttpResult constructor.

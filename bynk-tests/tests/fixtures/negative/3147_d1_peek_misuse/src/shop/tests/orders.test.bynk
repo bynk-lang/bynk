@@ -1,0 +1,14 @@
+suite shop.orders as system
+
+consumes bynk.cloudflare { SqlValue }
+
+case "a handle reads, and only reads" {
+  let db = D1.peek(shop.orders.Orders)
+  let ok <- db.all("SELECT id, qty FROM orders WHERE owner = ?1", [Text("bob")])
+  let w1 <- db.run("DELETE FROM orders WHERE owner = ?1", [Text("bob")])
+  let w2 <- db.all("DELETE FROM orders WHERE owner = ?1", [Text("bob")])
+  let bad <- db.all("SELECT nope FROM orders", [Text("bob")])
+  let kv = D1.peek(shop.orders.Sessions)
+  let missing = D1.peek(shop.orders.Missing)
+  expect ok is Ok(_)
+}
