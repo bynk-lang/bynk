@@ -73,11 +73,19 @@ function now(): number {
 /**
  * Begin one step on the current request and return the function that settles
  * it: `traceStep(kind, target, span)(call)`. The emitter wraps a call
- * expression as the argument, so arguments evaluate (and may contain `await`)
- * exactly where they did, and the step takes its place in call order. A result
- * that is a promise is timed to its settlement; the value or error passes
- * through untouched. A step still unsettled when the response is ready is
- * reported as `pending`. Outside a traced request this returns the identity.
+ * expression as the argument, so its arguments evaluate (and may contain
+ * `await`) exactly where they did. The step begins, and its clock starts, when
+ * the wrapped expression starts evaluating, so steps are in the order their
+ * calls begin. An effectful call is bound with `<-` and so is hoisted out of
+ * argument position; an argument that were itself a traced call would list after
+ * the call it is an argument to, and be inside its timing.
+ *
+ * A result that is a promise is timed to its settlement and returned as a
+ * derived promise, so a wrapped site must be awaited as it is (an RPC stub's
+ * pipelining and disposal are not carried over). The value or error passes
+ * through untouched. A step still unsettled when the response is ready, or whose
+ * call or arguments threw synchronously, is reported as `pending`. Outside a
+ * traced request this returns the identity.
  */
 export function traceStep(
   kind: TraceStepKind,
