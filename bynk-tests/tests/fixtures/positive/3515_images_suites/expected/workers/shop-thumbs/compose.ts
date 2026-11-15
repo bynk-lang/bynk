@@ -21,5 +21,8 @@ export function compose(env: Env) {
     async http_POST_avatar(body: globalThis.Uint8Array) {
       return handlers.avatars.http_POST_avatar(body, deps);
     },
+    async http_POST_probe(body: globalThis.Uint8Array) {
+      return handlers.probe.http_POST_probe(body, deps);
+    },
   };
 }

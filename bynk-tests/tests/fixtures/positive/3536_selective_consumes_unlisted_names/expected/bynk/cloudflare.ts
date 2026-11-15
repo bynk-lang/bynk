@@ -835,16 +835,18 @@ export const AiError = {
 };
 
 /**
- * The format an image is written in. `Jpeg`, `Png`, `Webp`, `Avif` and `Gif`
- * are the formats `Images.transform` can write. Cloudflare adds formats over
- * time, so a `match` over this type needs a wildcard.
+ * The format of a raster image. `Jpeg`, `Png`, `Webp`, `Avif` and `Gif` are
+ * the formats `Images.transform` can write; `Heic` is read only, so asking
+ * for it as an output is `InvalidImage`. Cloudflare adds formats over time, so
+ * a `match` over this type needs a wildcard.
  */
 export type ImageFormat =
     { readonly tag: "Jpeg" }
   | { readonly tag: "Png" }
   | { readonly tag: "Webp" }
   | { readonly tag: "Avif" }
-  | { readonly tag: "Gif" };
+  | { readonly tag: "Gif" }
+  | { readonly tag: "Heic" };
 
 export const ImageFormat = {
   Jpeg: { tag: "Jpeg" } as ImageFormat,
@@ -852,6 +854,7 @@ export const ImageFormat = {
   Webp: { tag: "Webp" } as ImageFormat,
   Avif: { tag: "Avif" } as ImageFormat,
   Gif: { tag: "Gif" } as ImageFormat,
+  Heic: { tag: "Heic" } as ImageFormat,
 };
 
 /**
@@ -877,6 +880,20 @@ export const ImageFit = {
   Crop: { tag: "Crop" } as ImageFit,
   Pad: { tag: "Pad" } as ImageFit,
   Squeeze: { tag: "Squeeze" } as ImageFit,
+};
+
+/**
+ * What `Images.info` reads from an image: `Raster` with its `format`, its
+ * `width` and `height` in pixels and its `size` in bytes, or `Svg`, which the
+ * platform reports without dimensions because it is not a grid of pixels.
+ */
+export type ImageInfo =
+    { readonly tag: "Raster"; readonly format: ImageFormat; readonly width: number; readonly height: number; readonly size: number }
+  | { readonly tag: "Svg" };
+
+export const ImageInfo = {
+  Raster: (format: ImageFormat, width: number, height: number, size: number): ImageInfo => ({ tag: "Raster", format, width, height, size }),
+  Svg: { tag: "Svg" } as ImageInfo,
 };
 
 /**
@@ -1624,6 +1641,10 @@ export const __AiToken: symbol = globalThis.Symbol("Ai");
  * (`given Images`) and has no named instances. Only a Worker that uses it
  * declares the binding.
  *
+ * `info(image)` reads an image's format and size without transforming it, and
+ * Cloudflare does not bill it. An empty or non-image input is `InvalidImage`,
+ * and a format this type does not name is `ImagesFailed`.
+ *
  * `transform(image, options, output)` reads `image` (any format the platform
  * reads, at most 20 MB), applies `options` and writes the result as `output`
  * says. The result is buffered whole. The image is untrusted input: an upload
@@ -1646,6 +1667,7 @@ export const __AiToken: symbol = globalThis.Symbol("Ai");
  * returns …` replaces it, so a test never reaches the platform.
  */
 export interface Images {
+  info(image: globalThis.Uint8Array): globalThis.Promise<Result<ImageInfo, ImagesError>>;
   transform(image: globalThis.Uint8Array, options: TransformOptions, output: OutputOptions): globalThis.Promise<Result<ImageResult, ImagesError>>;
 }
 
@@ -2633,6 +2655,8 @@ export function __serialise_ImageFormat(value: ImageFormat): __JsonValue {
       return { kind: "Avif" };
     case "Gif":
       return { kind: "Gif" };
+    case "Heic":
+      return { kind: "Heic" };
   }
 }
 
@@ -2653,6 +2677,59 @@ export function __deserialise_ImageFormat(json: __JsonValue, path: string = "$")
       return Ok({ tag: "Avif" } as ImageFormat);
     case "Gif":
       return Ok({ tag: "Gif" } as ImageFormat);
+    case "Heic":
+      return Ok({ tag: "Heic" } as ImageFormat);
+    default:
+      return Err({ kind: "StructuralMismatch", path, expected: "sum variant kind", actual: String(kind) });
+  }
+}
+
+export function __serialise_ImageInfo(value: ImageInfo): __JsonValue {
+  switch (value.tag) {
+    case "Raster": {
+      return { kind: "Raster", format: __serialise_ImageFormat(value.format), width: ((v: number) => { if (!globalThis.Number.isSafeInteger(v)) throw new globalThis.Error("Int outside the safe-integer range at boundary"); return v as __JsonValue; })(value.width), height: ((v: number) => { if (!globalThis.Number.isSafeInteger(v)) throw new globalThis.Error("Int outside the safe-integer range at boundary"); return v as __JsonValue; })(value.height), size: ((v: number) => { if (!globalThis.Number.isSafeInteger(v)) throw new globalThis.Error("Int outside the safe-integer range at boundary"); return v as __JsonValue; })(value.size) };
+    }
+    case "Svg":
+      return { kind: "Svg" };
+  }
+}
+
+export function __deserialise_ImageInfo(json: __JsonValue, path: string = "$"): Result<ImageInfo, __BoundaryError> {
+  if (typeof json !== "object" || json === null || globalThis.Array.isArray(json)) {
+    return Err({ kind: "StructuralMismatch", path, expected: "object", actual: typeof json });
+  }
+  const obj = json as { [k: string]: __JsonValue };
+  const kind = obj["kind"];
+  switch (kind) {
+    case "Raster": {
+  const __r_format = __deserialise_ImageFormat(obj["format"], `${path}.format`);
+  if (__r_format.tag === "Err") return __r_format;
+  const __format = __r_format.value;
+  if (typeof obj["width"] !== "number") {
+    return Err({ kind: "StructuralMismatch", path: `${path}.width`, expected: "number", actual: typeof obj["width"] });
+  }
+  if (!globalThis.Number.isSafeInteger(obj["width"])) {
+    return Err({ kind: "StructuralMismatch", path: `${path}.width`, expected: "safe integer", actual: String(obj["width"]) });
+  }
+  const __width = obj["width"];
+  if (typeof obj["height"] !== "number") {
+    return Err({ kind: "StructuralMismatch", path: `${path}.height`, expected: "number", actual: typeof obj["height"] });
+  }
+  if (!globalThis.Number.isSafeInteger(obj["height"])) {
+    return Err({ kind: "StructuralMismatch", path: `${path}.height`, expected: "safe integer", actual: String(obj["height"]) });
+  }
+  const __height = obj["height"];
+  if (typeof obj["size"] !== "number") {
+    return Err({ kind: "StructuralMismatch", path: `${path}.size`, expected: "number", actual: typeof obj["size"] });
+  }
+  if (!globalThis.Number.isSafeInteger(obj["size"])) {
+    return Err({ kind: "StructuralMismatch", path: `${path}.size`, expected: "safe integer", actual: String(obj["size"]) });
+  }
+  const __size = obj["size"];
+      return Ok({ tag: "Raster", format: __format, width: __width, height: __height, size: __size } as ImageInfo);
+    }
+    case "Svg":
+      return Ok({ tag: "Svg" } as ImageInfo);
     default:
       return Err({ kind: "StructuralMismatch", path, expected: "sum variant kind", actual: String(kind) });
   }

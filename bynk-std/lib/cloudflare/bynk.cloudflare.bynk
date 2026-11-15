@@ -47,6 +47,7 @@ adapter bynk.cloudflare {
 		AiError,
 		ImageFormat,
 		ImageFit,
+		ImageInfo,
 		Overlay,
 		TransformOptions,
 		OutputOptions,
@@ -1019,11 +1020,12 @@ adapter bynk.cloudflare {
 	}
 
 	---
-	The format an image is written in. `Jpeg`, `Png`, `Webp`, `Avif` and `Gif`
-	are the formats `Images.transform` can write. Cloudflare adds formats over
-	time, so a `match` over this type needs a wildcard.
+	The format of a raster image. `Jpeg`, `Png`, `Webp`, `Avif` and `Gif` are
+	the formats `Images.transform` can write; `Heic` is read only, so asking
+	for it as an output is `InvalidImage`. Cloudflare adds formats over time, so
+	a `match` over this type needs a wildcard.
 	---
-	type ImageFormat = enum { Jpeg, Png, Webp, Avif, Gif }
+	type ImageFormat = enum { Jpeg, Png, Webp, Avif, Gif, Heic }
 
 	---
 	How a resize fits the image to `width` and `height`. `ScaleDown` (the
@@ -1034,6 +1036,15 @@ adapter bynk.cloudflare {
 	a `match` over this type needs a wildcard.
 	---
 	type ImageFit = enum { ScaleDown, Contain, Cover, Crop, Pad, Squeeze }
+
+	---
+	What `Images.info` reads from an image: `Raster` with its `format`, its
+	`width` and `height` in pixels and its `size` in bytes, or `Svg`, which the
+	platform reports without dimensions because it is not a grid of pixels.
+	---
+	type ImageInfo =
+		| Raster(format: ImageFormat, width: Int, height: Int, size: Int)
+		| Svg
 
 	---
 	An image drawn over the one being transformed, from its `image` bytes. The
@@ -1114,6 +1125,10 @@ adapter bynk.cloudflare {
 	(`given Images`) and has no named instances. Only a Worker that uses it
 	declares the binding.
 
+	`info(image)` reads an image's format and size without transforming it, and
+	Cloudflare does not bill it. An empty or non-image input is `InvalidImage`,
+	and a format this type does not name is `ImagesFailed`.
+
 	`transform(image, options, output)` reads `image` (any format the platform
 	reads, at most 20 MB), applies `options` and writes the result as `output`
 	says. The result is buffered whole. The image is untrusted input: an upload
@@ -1136,6 +1151,7 @@ adapter bynk.cloudflare {
 	returns …` replaces it, so a test never reaches the platform.
 	---
 	capability Images {
+		fn info(image: Bytes) -> Effect[Result[ImageInfo, ImagesError]]
 		fn transform(
 			image: Bytes,
 			options: TransformOptions,

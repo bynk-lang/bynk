@@ -22,6 +22,7 @@ export default {
     const method = request.method;
     const surface = compose(env);
     const __security_avatars: __SecurityPolicy = { nosniff: true, hstsMaxAgeSecs: null };
+    const __security_probe: __SecurityPolicy = { nosniff: true, hstsMaxAgeSecs: null };
     let __route: string = "request";
     try {
       if (path.startsWith("/_bynk/call/")) {
@@ -78,10 +79,36 @@ export default {
           return __applySecurityHeaders(__httpResultToResponse(result, (__v: string) => __v as __JsonValue), __security_avatars);
         }
       }
+      {
+        if (method === "POST" && path === "/probe") {
+          __route = "POST /probe";
+          const __contentLength = request.headers.get("content-length");
+          if (__contentLength !== null && globalThis.Number(__contentLength) > 1048576) {
+            return __applySecurityHeaders(new globalThis.Response(globalThis.JSON.stringify({ kind: "PayloadTooLarge", details: "request body exceeds 1048576 bytes" }), { status: 413, headers: { "content-type": "application/json" } }), __security_probe);
+          }
+          let __bytes: globalThis.Uint8Array | undefined;
+          try {
+            __bytes = await __readBodyCapped(request, 1048576);
+          } catch {
+            return __applySecurityHeaders(new globalThis.Response(globalThis.JSON.stringify({ kind: "MalformedJson", details: "Invalid request body" }), { status: 400, headers: { "content-type": "application/json" } }), __security_probe);
+          }
+          if (__bytes === undefined) {
+            return __applySecurityHeaders(new globalThis.Response(globalThis.JSON.stringify({ kind: "PayloadTooLarge", details: "request body exceeds 1048576 bytes" }), { status: 413, headers: { "content-type": "application/json" } }), __security_probe);
+          }
+          const body = __bytes;
+          const result = await surface.http_POST_probe(body);
+          return __applySecurityHeaders(__httpResultToResponse(result, (__v: string) => __v as __JsonValue), __security_probe);
+        }
+      }
       if (path === "/avatar") {
         const __status = method === "OPTIONS" ? 204 : 405;
         const __res = new globalThis.Response(null, { status: __status, headers: { allow: "OPTIONS, POST" } });
         return __applySecurityHeaders(__res, __security_avatars);
+      }
+      if (path === "/probe") {
+        const __status = method === "OPTIONS" ? 204 : 405;
+        const __res = new globalThis.Response(null, { status: __status, headers: { allow: "OPTIONS, POST" } });
+        return __applySecurityHeaders(__res, __security_probe);
       }
       return new globalThis.Response("Not Found", { status: 404 });
     } catch (e) {

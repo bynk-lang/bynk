@@ -6,7 +6,7 @@ context shop.thumbs
 // reaching `Images` must not imply the bare namespace.
 
 consumes bynk
-consumes bynk.cloudflare { Kv, Images, ImagesError, ImageFormat, ImageFit, TransformOptions, OutputOptions, Overlay }
+consumes bynk.cloudflare { Kv, Images, ImagesError, ImageFormat, ImageFit, ImageInfo, TransformOptions, OutputOptions, Overlay }
 
 capability Thumbnailer {
 	fn thumb(image: Bytes) -> Effect[Option[Bytes]]
@@ -34,6 +34,20 @@ service avatars from http {
 			Err(InvalidImage(m)) => BadRequest(m),
 			Err(ImageTooLarge) => BadRequest("image too large"),
 			Err(_) => ServerError("could not process image"),
+		}
+	}
+}
+
+service probe from http {
+	@raw(contentType: "*/*")
+	@limit(maxBody: 1048576)
+	on POST("/probe") (body: Bytes) -> Effect[HttpResult[String]] by Visitor given Images {
+		let r <- Images.info(body)
+		match r {
+			Ok(Raster(f, w, h, size)) => Ok("\(w)x\(h) \(size)"),
+			Ok(Svg) => Ok("svg"),
+			Err(InvalidImage(m)) => BadRequest(m),
+			Err(_) => ServerError("could not read image"),
 		}
 	}
 }

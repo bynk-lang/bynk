@@ -833,16 +833,18 @@ export const AiError = {
 };
 
 /**
- * The format an image is written in. `Jpeg`, `Png`, `Webp`, `Avif` and `Gif`
- * are the formats `Images.transform` can write. Cloudflare adds formats over
- * time, so a `match` over this type needs a wildcard.
+ * The format of a raster image. `Jpeg`, `Png`, `Webp`, `Avif` and `Gif` are
+ * the formats `Images.transform` can write; `Heic` is read only, so asking
+ * for it as an output is `InvalidImage`. Cloudflare adds formats over time, so
+ * a `match` over this type needs a wildcard.
  */
 export type ImageFormat =
     { readonly tag: "Jpeg" }
   | { readonly tag: "Png" }
   | { readonly tag: "Webp" }
   | { readonly tag: "Avif" }
-  | { readonly tag: "Gif" };
+  | { readonly tag: "Gif" }
+  | { readonly tag: "Heic" };
 
 export const ImageFormat = {
   Jpeg: { tag: "Jpeg" } as ImageFormat,
@@ -850,6 +852,7 @@ export const ImageFormat = {
   Webp: { tag: "Webp" } as ImageFormat,
   Avif: { tag: "Avif" } as ImageFormat,
   Gif: { tag: "Gif" } as ImageFormat,
+  Heic: { tag: "Heic" } as ImageFormat,
 };
 
 /**
@@ -875,6 +878,20 @@ export const ImageFit = {
   Crop: { tag: "Crop" } as ImageFit,
   Pad: { tag: "Pad" } as ImageFit,
   Squeeze: { tag: "Squeeze" } as ImageFit,
+};
+
+/**
+ * What `Images.info` reads from an image: `Raster` with its `format`, its
+ * `width` and `height` in pixels and its `size` in bytes, or `Svg`, which the
+ * platform reports without dimensions because it is not a grid of pixels.
+ */
+export type ImageInfo =
+    { readonly tag: "Raster"; readonly format: ImageFormat; readonly width: number; readonly height: number; readonly size: number }
+  | { readonly tag: "Svg" };
+
+export const ImageInfo = {
+  Raster: (format: ImageFormat, width: number, height: number, size: number): ImageInfo => ({ tag: "Raster", format, width, height, size }),
+  Svg: { tag: "Svg" } as ImageInfo,
 };
 
 /**
@@ -1622,6 +1639,10 @@ export const __AiToken: symbol = globalThis.Symbol("Ai");
  * (`given Images`) and has no named instances. Only a Worker that uses it
  * declares the binding.
  *
+ * `info(image)` reads an image's format and size without transforming it, and
+ * Cloudflare does not bill it. An empty or non-image input is `InvalidImage`,
+ * and a format this type does not name is `ImagesFailed`.
+ *
  * `transform(image, options, output)` reads `image` (any format the platform
  * reads, at most 20 MB), applies `options` and writes the result as `output`
  * says. The result is buffered whole. The image is untrusted input: an upload
@@ -1644,6 +1665,7 @@ export const __AiToken: symbol = globalThis.Symbol("Ai");
  * returns …` replaces it, so a test never reaches the platform.
  */
 export interface Images {
+  info(image: globalThis.Uint8Array): globalThis.Promise<Result<ImageInfo, ImagesError>>;
   transform(image: globalThis.Uint8Array, options: TransformOptions, output: OutputOptions): globalThis.Promise<Result<ImageResult, ImagesError>>;
 }
 

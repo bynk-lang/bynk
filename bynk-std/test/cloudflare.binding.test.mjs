@@ -1278,7 +1278,15 @@ function fakeImages(opts = {}) {
       };
     },
   });
-  return { calls, input: (stream) => chain(stream, []) };
+  return {
+    calls,
+    input: (stream) => chain(stream, []),
+    async info(stream) {
+      calls.push({ info: await read(stream) });
+      if (opts.throws !== undefined) throw opts.throws;
+      return opts.info;
+    },
+  };
 }
 const imgOpts = (o = {}) => ({ width: None, height: None, fit: None, rotate: None, blur: None, overlays: [], ...o });
 const outOpts = (o = {}) => ({ format: { tag: "Webp" }, quality: None, ...o });
@@ -1355,6 +1363,38 @@ t("WorkersImages.transform: a platform error is mapped by its code, any other is
   assert.deepEqual(await failure(new Error("id 9412 failed")), { tag: "ImagesFailed", message: "id 9412 failed" });
   assert.deepEqual(await failure(new Error("something new")), { tag: "ImagesFailed", message: "something new" });
   assert.deepEqual(await failure("odd"), { tag: "ImagesFailed", message: "odd" });
+});
+
+t("WorkersImages.info: a raster image is its format and size, an SVG has none", async () => {
+  const info = async (reply) => new WorkersImages({ IMAGES: fakeImages({ info: reply }) }).info(IMG);
+  const raster = (mime, format) => info({ format: mime, fileSize: 1234, width: 640, height: 480 }).then((r) => [r, format]);
+  for (const [mime, tag] of [["image/jpeg", "Jpeg"], ["image/png", "Png"], ["image/webp", "Webp"], ["image/avif", "Avif"], ["image/gif", "Gif"], ["image/heic", "Heic"]]) {
+    const [r] = await raster(mime, tag);
+    assert.deepEqual(r, { tag: "Ok", value: { tag: "Raster", format: { tag: tag }, width: 640, height: 480, size: 1234 } });
+  }
+  assert.deepEqual(await info({ format: "image/svg+xml" }), { tag: "Ok", value: { tag: "Svg" } });
+  // A format `ImageFormat` does not name, or a raster with no size, is a failure, not a guess.
+  assert.deepEqual((await info({ format: "image/jxl", fileSize: 1, width: 1, height: 1 })).error.tag, "ImagesFailed");
+  assert.deepEqual((await info({ format: "image/png" })).error.tag, "ImagesFailed");
+});
+
+t("WorkersImages.info: an empty image is InvalidImage without calling the platform, and a platform error maps by code", async () => {
+  const images = fakeImages({ info: { format: "image/png", fileSize: 1, width: 1, height: 1 } });
+  assert.deepEqual(await new WorkersImages({ IMAGES: images }).info(new Uint8Array(0)), { tag: "Err", error: { tag: "InvalidImage", message: "the image is empty" } });
+  assert.deepEqual(images.calls, []);
+  const coded = (code) => Object.assign(new Error("boom"), { name: "ImagesError", code });
+  const failure = async (e) => (await new WorkersImages({ IMAGES: fakeImages({ throws: e }) }).info(IMG)).error;
+  assert.deepEqual(await failure(coded(9412)), { tag: "InvalidImage", message: "boom" });
+  assert.deepEqual(await failure(coded(9413)), { tag: "ImageTooLarge" });
+  assert.deepEqual(await failure(coded(9520)), { tag: "UnsupportedImage" });
+  assert.deepEqual(await failure(new Error("odd")), { tag: "ImagesFailed", message: "odd" });
+});
+
+t("WorkersImages.transform: Heic is read-only, so asking for it as an output is InvalidImage", async () => {
+  const images = fakeImages();
+  const r = await new WorkersImages({ IMAGES: images }).transform(IMG, imgOpts(), outOpts({ format: { tag: "Heic" } }));
+  assert.deepEqual(r, { tag: "Err", error: { tag: "InvalidImage", message: "Heic cannot be written as an output format" } });
+  assert.deepEqual(images.calls, []);
 });
 
 t("WorkersImages: a Worker without the binding faults, naming the stanza", async () => {

@@ -1,7 +1,7 @@
 suite shop.thumbs
 
 consumes bynk
-consumes bynk.cloudflare { Images, ImageResult, ImagesError }
+consumes bynk.cloudflare { Images, ImageResult, ImagesError, ImageInfo, ImageFormat }
 
 // #3515: a test never reaches Cloudflare Images. `transform` faults until it
 // is stubbed, and a stubbed result (or error) is what the handler sees. There
@@ -29,4 +29,20 @@ case "a provider reaches Images through its given" {
 	stub Images.transform(_, _, _) returns Err(ImageTooLarge)
 	let r <- about.call(Bytes.fromUtf8("x"))
 	expect r is None
+}
+
+case "an unstubbed info faults" {
+	expect probe.POST("/probe", Bytes.fromUtf8("x")) by Visitor faults
+}
+
+case "a stubbed raster info is read" {
+	stub Images.info(_) returns Ok(Raster(ImageFormat.Png, 640, 480, 1234))
+	let r <- probe.POST("/probe", Bytes.fromUtf8("x")) by Visitor
+	expect r is Ok("640x480 1234")
+}
+
+case "a stubbed svg has no dimensions" {
+	stub Images.info(_) returns Ok(Svg)
+	let r <- probe.POST("/probe", Bytes.fromUtf8("x")) by Visitor
+	expect r is Ok("svg")
 }

@@ -60,6 +60,30 @@ export const avatars = {
   },
 };
 
+export const probe = {
+  async http_POST_probe(body: globalThis.Uint8Array, deps: { Images: bynk_cloudflare.Images }): globalThis.Promise<HttpResult<string>> {
+    const r = await deps.Images.info(body);
+    if (r.tag === "Ok" && r.value.tag === "Raster") {
+      const f = r.value.format;
+      const w = r.value.width;
+      const h = r.value.height;
+      const size = r.value.size;
+      return HttpResult.Ok(`${String(w)}x${String(h)} ${String(size)}`);
+    }
+    if (r.tag === "Ok" && r.value.tag === "Svg") {
+      return HttpResult.Ok("svg");
+    }
+    if (r.tag === "Err" && r.error.tag === "InvalidImage") {
+      const m = r.error.message;
+      return HttpResult.BadRequest(m);
+    }
+    if (r.tag === "Err") {
+      return HttpResult.ServerError("could not read image");
+    }
+    throw new globalThis.Error("non-exhaustive match");
+  },
+};
+
 export const about = {
   async call(image: globalThis.Uint8Array, deps: { Thumbnailer: Thumbnailer }): globalThis.Promise<Option<globalThis.Uint8Array>> {
     return deps.Thumbnailer.thumb(image);

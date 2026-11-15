@@ -1512,7 +1512,11 @@ pub(super) fn platform_double(
                     "    async {op}() {{\n      throw new globalThis.Error(\"bynk: `Images.{op}` is not stubbed, and a test never reaches Cloudflare Images — add `stub Images.{op}({args}) returns …`\");\n    }},\n"
                 )
             };
-            format!("  return {{\n{}  }};\n", op("transform", "_, _, _"))
+            format!(
+                "  return {{\n{}{}  }};\n",
+                op("info", "_"),
+                op("transform", "_, _, _")
+            )
         }
         // #3479: the real `WorkersVectorize` over an exact in-memory index built
         // from the instance's declaration, so a retrieval flow (store, filter,

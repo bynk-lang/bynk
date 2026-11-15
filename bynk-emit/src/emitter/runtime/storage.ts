@@ -1015,6 +1015,9 @@ export interface WorkerImagesResult {
 }
 export interface WorkerImagesBinding {
   input(stream: ReadableStream<Uint8Array>): WorkerImagesTransformer;
+  info(
+    stream: ReadableStream<Uint8Array>,
+  ): Promise<{ format: string; fileSize?: number; width?: number; height?: number }>;
 }
 
 /**
@@ -1025,6 +1028,11 @@ export interface WorkerImagesBinding {
  */
 export function makeIntegrationImages(): WorkerImagesBinding {
   return {
+    async info(): Promise<never> {
+      throw new globalThis.Error(
+        "bynk: the `Images` binding is not stubbed, and a test never reaches Cloudflare Images — stub the operation the case calls (`stub Images.info(_) returns …`)",
+      );
+    },
     input(): WorkerImagesTransformer {
       throw new globalThis.Error(
         "bynk: the `Images` binding is not stubbed, and a test never reaches Cloudflare Images — stub the operation the case calls (`stub Images.transform(_, _, _) returns …`)",
