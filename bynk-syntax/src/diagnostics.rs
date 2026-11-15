@@ -8762,12 +8762,36 @@ pub const REGISTRY: &[DiagnosticInfo] = &[
         "A path dependency declared by a dependency resolves outside the workspace; a dependency's own path dependencies are honoured only between members of one workspace.",
     ),
     d(
+        "bynk.deploy.context_in_two_groups",
+        "A context is listed in two `[deploy.workers.<key>]` groups; a context is deployed in one Worker only.",
+    ),
+    d(
         "bynk.deploy.contract_skew",
         "A worker was compiled against a contract its live dependencies no longer provide, or no longer provides the contract its live callers were compiled against, so `bynk deploy --context` refuses to ship it.",
     ),
     d(
+        "bynk.deploy.duplicate_hostname",
+        "A route or custom domain is claimed twice across `[deploy.workers.<key>]` groups.",
+    ),
+    d(
+        "bynk.deploy.empty_group",
+        "A `[deploy.workers.<key>]` group lists no context.",
+    ),
+    d(
         "bynk.deploy.foreign_contract_skew",
         "A build breaks the contract a declared foreign caller's client was generated at, as pinned in `bynk.foreign.toml`, so `bynk deploy` refuses to ship it.",
+    ),
+    d(
+        "bynk.deploy.group_name_conflict",
+        "A `[deploy.workers.<key>]` group's key or script name is another group's, or is the Worker of a context in no group.",
+    ),
+    d(
+        "bynk.deploy.not_a_context",
+        "A `[deploy.workers.<key>]` group lists a unit that is not a `context`; only contexts are deployed as Workers.",
+    ),
+    d(
+        "bynk.deploy.unknown_context",
+        "A `[deploy.workers.<key>]` group lists a context the project does not declare.",
     ),
     dg(
         "bynk.detach.in_agent_handler",
