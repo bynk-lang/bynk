@@ -3,7 +3,7 @@ title: Version compatibility & changelog
 ---
 Bynk is pre-1.0 and developed in small, spec-first increments (see
 [Versioning & roadmap](/book/about/versioning-and-roadmap/)). This book is
-written against **v0.611**.
+written against **v0.614**.
 
 This page is a high-level summary of notable increments, not an exhaustive
 per-commit history. While Bynk is pre-1.0, increments may change behaviour.
@@ -28,6 +28,10 @@ per-commit history. While Bynk is pre-1.0, increments may change behaviour.
 
 | Version | Highlights |
 |---|---|
+| **v0.614.0** | A suite file may have its own `consumes`, and a suite file consumes what it names: naming a type that the suite's own `consumes` does not bring in (the target's clauses are not inherited) is `bynk.consumes.type_not_selected`, with a fix that edits the suite file (#3536) |
+| **v0.613.0** | `consumes` is per file (warning stage): naming a type, or a bare variant of a sum, that a unit exports in a file whose own `consumes` does not bring it in is `bynk.consumes.type_not_selected`, for the standard library and for the project's own contexts alike, and `bynk check --fix=bynk.consumes.type_not_selected` adds it to that file's `consumes`, in any fragment of a split unit; an error follows in a later release (#3536) |
+| **v0.612.1** | Documents per-file `consumes` (#3536): the language reference, the Book's suite and consume guides, and an ADR that amends the braces-only decision |
+| **v0.612.0** | Capabilities and cross-context calls are per file too (warning stage): naming a flattened capability (`given Cap`, `Cap.op`, `provides`, a suite's `stub`) or calling another unit's service in a file whose own `consumes` does not bring it in is `bynk.consumes.capability_not_selected` or `bynk.consumes.unit_not_consumed`, with a fix that edits that file; the unit's dependencies are still the union of its files' `consumes` (#3536) |
 | **v0.611.0** | In a bundle with a composition root, a context that requires a capability it declares (`given Warehouse`) but has no `provides Warehouse = …` for is now `bynk.capability.not_provided` at the `given`, as on Workers. `composeApp` builds every context's deps itself, so the gap reached `tsc` against `compose.ts` (TS2345) and was reported as a compiler bug (`bynk.codegen.tsc_failed`) by `bynk test` and `bynk build`, while `bynk check` passed. A bundle without a composition root still leaves the capability to the host |
 | **v0.610.0** | `consumes` is per file (warning stage): naming a type, or a bare variant of a sum, that a unit exports in a file whose own `consumes` does not bring it in is `bynk.consumes.type_not_selected`, for the standard library and for the project's own contexts alike, and `bynk check --fix=bynk.consumes.type_not_selected` adds it to that file's `consumes`, in any fragment of a split unit; an error follows in a later release (#3536) |
 | **v0.609.0** | `bynk client` generates `@form` and `@multipart` bodies (a file part is a `Blob`) and typed `cookies` records, and the system tier verifies that a Worker-hosted server may set `Origin` through the client (#3508 slice BC3) |

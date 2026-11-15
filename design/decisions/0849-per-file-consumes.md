@@ -1,12 +1,6 @@
----
-level: patch
-changelog: Documents per-file `consumes` (#3536): the language reference, the Book's suite and consume guides, and an ADR that amends the braces-only decision
-probes: explained_codes
----
+# 0849 — `consumes` is per file: a file's imports are what its own `consumes` clauses bring in
 
-## ADR: per-file-consumes
-title: `consumes` is per file: a file's imports are what its own `consumes` clauses bring in
-summary: Declarations are shared across a unit's files, imports are not; suites follow the same rule; amends the braces-only scope
+- **Status:** Accepted (v0.612.1)
 
 **Context.** [ADR 0845](0845-braced-consumes-lists-what-is-in-scope.md) made the braces of `consumes bynk { … }` mean what they say, for the first-party units only, and for the unit as a whole: a `consumes` in any file of a split context counted for every file. Stage 1 left two gaps, found when the next stage was explored on github-hooks, shop, showcase and the guides (#3536). The fix attached to `bynk.consumes.type_not_selected` was a silent no-op in a sibling fragment, because the clause is in another file. And a suite had no `consumes` of its own, so its names came from its target's braces. The maintainer's decision on the issue is that Bynk has one rule for every `consumes`.
 
