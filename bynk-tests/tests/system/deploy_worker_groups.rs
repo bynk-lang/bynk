@@ -13,8 +13,8 @@ const MANIFEST_ONE_GROUP: &str =
     "[deploy.workers.core]\ncontexts = [\"shop.orders\", \"shop.payment\"]\nname = \"acme-core\"\n";
 
 const COMMONS: &str = "commons money {\n\tfn dbl(n: Int) -> Int { n + n }\n}\n";
-const ORDERS: &str = "context shop.orders\n\nservice probe {\n\ton call() -> Effect[Int] {\n\t\tEffect.pure(1)\n\t}\n}\n";
-const PAYMENT: &str = "context shop.payment\n\nservice probe {\n\ton call() -> Effect[Int] {\n\t\tEffect.pure(2)\n\t}\n}\n";
+const ORDERS: &str = "context shop.orders\n\nservice orders_probe {\n\ton call() -> Effect[Int] {\n\t\tEffect.pure(1)\n\t}\n}\n";
+const PAYMENT: &str = "context shop.payment\n\nservice payment_probe {\n\ton call() -> Effect[Int] {\n\t\tEffect.pure(2)\n\t}\n}\n";
 
 fn check(root: &std::path::Path) -> (bool, String) {
     run(root, &["check", "--format", "short"])
@@ -121,8 +121,9 @@ const UNSTABLE_R2: &str = "[unstable]\nallow = [\"bynk.cloudflare.R2\"]\n\n";
 const WORKERS_TARGET: &str = "[unstable]\nallow = [\"bynk.cloudflare.R2\"]\n\n[build]\ntarget = \"workers\"\n\n[deploy.workers.core]\ncontexts = [\"shop.orders\", \"shop.payment\"]\n";
 
 fn archive_context(name: &str, options: &str) -> String {
+    let service = format!("probe_{}", name.replace('.', "_"));
     format!(
-        "context {name}\n\nconsumes bynk.cloudflare {{ R2 }}\n\ncapability Archives = R2{options}\n\nservice probe {{\n\ton call() -> Effect[Int] {{\n\t\tEffect.pure(1)\n\t}}\n}}\n"
+        "context {name}\n\nconsumes bynk.cloudflare {{ R2 }}\n\ncapability Archives = R2{options}\n\nservice {service} {{\n\ton call() -> Effect[Int] {{\n\t\tEffect.pure(1)\n\t}}\n}}\n"
     )
 }
 
@@ -170,8 +171,9 @@ fn members_with_different_bindings_under_one_name_collide() {
 }
 
 fn agent_context(name: &str) -> String {
+    let service = format!("probe_{}", name.replace('.', "_"));
     format!(
-        "context {name}\n\nagent Cart {{\n\tkey id: String\n\tstore n: Cell[Int] = 0\n\n\ton call bump() -> Effect[Int] {{ Effect.pure(1) }}\n}}\n\nservice probe {{\n\ton call() -> Effect[Int] {{\n\t\tEffect.pure(1)\n\t}}\n}}\n"
+        "context {name}\n\nagent Cart {{\n\tkey id: String\n\tstore n: Cell[Int] = 0\n\n\ton call bump() -> Effect[Int] {{ Effect.pure(1) }}\n}}\n\nservice {service} {{\n\ton call() -> Effect[Int] {{\n\t\tEffect.pure(1)\n\t}}\n}}\n"
     )
 }
 
@@ -207,8 +209,9 @@ fn members_that_each_declare_an_agent_of_one_name_collide() {
 }
 
 fn plain_context(name: &str) -> String {
+    let service = format!("probe_{}", name.replace('.', "_"));
     format!(
-        "context {name}\n\nservice probe {{\n\ton call() -> Effect[Int] {{\n\t\tEffect.pure(1)\n\t}}\n}}\n"
+        "context {name}\n\nservice {service} {{\n\ton call() -> Effect[Int] {{\n\t\tEffect.pure(1)\n\t}}\n}}\n"
     )
 }
 
@@ -249,5 +252,72 @@ fn the_platform_lock_names_the_group() {
         out.contains("context `shop.orders` uses the platform-native capabilities"),
         "{out}"
     );
+    let _ = fs::remove_dir_all(&root);
+}
+
+/// A Worker answers its members' services by name, so two members of one group
+/// cannot each declare a service of one name.
+#[test]
+fn members_that_each_declare_a_service_of_one_name_collide() {
+    let root = std::env::temp_dir().join(format!("bynk-deploy-groups-svc-{}", std::process::id()));
+    write_project(&root, WORKERS_TARGET);
+    let same = |name: &str| {
+        format!(
+            "context {name}\n\nservice probe {{\n\ton call() -> Effect[Int] {{\n\t\tEffect.pure(1)\n\t}}\n}}\n"
+        )
+    };
+    fs::write(root.join("src/shop/orders.bynk"), same("shop.orders")).unwrap();
+    fs::write(root.join("src/shop/payment.bynk"), same("shop.payment")).unwrap();
+    let (ok, out) = build(&root);
+    assert!(!ok, "{out}");
+    assert!(out.contains("bynk.deploy.service_name_conflict"), "{out}");
+
+    // Ungrouped, each context's Worker has its own `probe`.
+    fs::write(
+        root.join("bynk.toml"),
+        format!("{UNSTABLE_R2}[build]\ntarget = \"workers\"\n"),
+    )
+    .unwrap();
+    let (ok, out) = build(&root);
+    assert!(ok, "separate Workers may each declare `probe`:\n{out}");
+    let _ = fs::remove_dir_all(&root);
+}
+
+fn publisher_context(name: &str, event: &str) -> String {
+    let service = format!("probe_{}", name.replace('.', "_"));
+    format!(
+        "context {name}\n\nexports transparent {{ {event} }}\nconsumes bynk {{ Events }}\n\nevent {event} = {{\n\ttag: String,\n}}\n\nservice {service} {{\n\ton call() -> Effect[()] given Events {{\n\t\tlet _ <- Events.emit[{event}]({event} {{ tag: \"x\" }})\n\t\tEffect.pure(())\n\t}}\n}}\n"
+    )
+}
+
+/// Temporary: each publisher has its own events fan-out class, so a group may
+/// have one publishing member only.
+#[test]
+fn a_group_with_two_publishing_members_is_refused_for_now() {
+    let root = std::env::temp_dir().join(format!("bynk-deploy-groups-pub-{}", std::process::id()));
+    write_project(&root, WORKERS_TARGET);
+    fs::write(
+        root.join("src/shop/orders.bynk"),
+        publisher_context("shop.orders", "Placed"),
+    )
+    .unwrap();
+    fs::write(
+        root.join("src/shop/payment.bynk"),
+        publisher_context("shop.payment", "Paid"),
+    )
+    .unwrap();
+    let (ok, out) = build(&root);
+    assert!(!ok, "{out}");
+    assert!(out.contains("bynk.deploy.multiple_publishers"), "{out}");
+    assert!(out.contains("temporary"), "{out}");
+
+    // One publisher, with a member that publishes nothing, is fine.
+    fs::write(
+        root.join("src/shop/payment.bynk"),
+        plain_context("shop.payment"),
+    )
+    .unwrap();
+    let (ok, out) = build(&root);
+    assert!(ok, "one publishing member is allowed:\n{out}");
     let _ = fs::remove_dir_all(&root);
 }
