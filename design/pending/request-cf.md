@@ -1,7 +1,7 @@
 ---
 level: minor
 changelog: An `on http` handler takes a fifth special parameter, `cf: RequestCf`, the optional facts Cloudflare derived about the connection (Cloudflare-only, experimental)
-probes: diagnostic_coverage
+probes: diagnostic_coverage, emit_diagnostics, explained_codes
 ---
 
 ## ADR: request-cf-handler-parameter
