@@ -3464,10 +3464,15 @@ fn run_checks(
     }
     // On Workers, each Worker's binding names are unique. Gated the same way:
     // the KV input walks the same provider graph.
-    if errors.is_empty()
-        && let Some(bindings) = &context_bindings
-    {
-        worker_bindings::phase_duplicate_bindings(target, &parsed, &groups, bindings, &mut errors);
+    if let Some(bindings) = context_bindings.as_ref().filter(|_| errors.is_empty()) {
+        worker_bindings::phase_duplicate_bindings(
+            target,
+            (project_root, overlay),
+            &parsed,
+            &groups,
+            bindings,
+            &mut errors,
+        );
     }
 
     // v0.176 (#642): the `Bytes`-at-a-workers-boundary guard (ADR 0142 D8) is
