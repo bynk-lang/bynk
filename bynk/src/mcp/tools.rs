@@ -593,6 +593,34 @@ fn get_architecture(ws: &Workspace, args: &Value) -> Result<String, String> {
             ws.display(&root)
         ));
     }
+    if let Some(c) = context.as_deref()
+        && !model.nodes.iter().any(|n| n.name == c)
+    {
+        let mut names: Vec<_> = model.nodes.iter().map(|n| n.name.as_str()).collect();
+        names.sort_unstable();
+        return Err(format!(
+            "No context or adapter named `{c}`. Known: {}.",
+            names.join(", ")
+        ));
+    }
+    if let Some(e) = event.as_deref()
+        && !model.events.iter().any(|ev| render::event_matches(ev, e))
+    {
+        let mut names: Vec<_> = model
+            .events
+            .iter()
+            .map(|ev| format!("{}.{}", ev.owner, ev.name))
+            .collect();
+        names.sort_unstable();
+        return Err(format!(
+            "No event named `{e}`. Known: {}.",
+            if names.is_empty() {
+                "none".into()
+            } else {
+                names.join(", ")
+            }
+        ));
+    }
     let at = Locator {
         ws,
         project: &project,
@@ -607,7 +635,7 @@ fn get_architecture(ws: &Workspace, args: &Value) -> Result<String, String> {
             },
         ),
         MAX_CHARS,
-        None,
+        Some("Pass `context` or `event` to expand just one."),
     ))
 }
 

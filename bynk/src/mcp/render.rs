@@ -188,8 +188,6 @@ pub fn documentation(model: &DocModel, locs: &[String]) -> String {
     format!("{}\n", out.join("\n").trim_end())
 }
 
-/// `bynk_get_architecture`: the project's units, what each declares, and the
-/// `consumes` edges between them.
 /// What the architecture tool expands (#3600): a context's per-handler
 /// capability uses, and an event's emitters and subscribers. Everything else is
 /// summarised as counts and names, so a large project stays inside the cap.
@@ -201,6 +199,8 @@ pub struct ArchExpand<'a> {
     pub event: Option<&'a str>,
 }
 
+/// `bynk_get_architecture`: the project's units, what each declares, the
+/// `consumes` edges between them, and its events and capability uses.
 pub fn architecture(model: &ArchModel, at: &Locator<'_>, expand: ArchExpand<'_>) -> String {
     let mut out = vec![
         format!(
@@ -365,7 +365,7 @@ fn delivery_word(d: bynk_check::architecture_facts::DeliveryKind) -> &'static st
     }
 }
 
-fn event_matches(e: &bynk_ide::architecture::ArchEvent, want: &str) -> bool {
+pub fn event_matches(e: &bynk_ide::architecture::ArchEvent, want: &str) -> bool {
     want == e.name || want == format!("{}.{}", e.owner, e.name)
 }
 

@@ -568,4 +568,24 @@ case "ping" {
         assert!(out.contains("from the service's default_given"), "{out}");
         assert!(!out.contains("subscribed by"), "{out}");
     }
+
+    #[test]
+    fn an_unmatched_context_or_event_is_an_error() {
+        let p = project("arch-ev-miss");
+        for (k, v) in [("context", "nope"), ("event", "Nope")] {
+            let replies = session(
+                &p.0,
+                &[
+                    json!({"jsonrpc":"2.0","id":1,"method":"initialize","params":{
+                        "protocolVersion":"2025-06-18","capabilities":{},
+                        "clientInfo":{"name":"test","version":"0"}}}),
+                    json!({"jsonrpc":"2.0","method":"notifications/initialized"}),
+                    call(2, "bynk_get_architecture", json!({ k: v })),
+                ],
+            );
+            let (out, err) = text(&replies[1]);
+            assert!(err, "{out}");
+            assert!(out.contains("Known:"), "{out}");
+        }
+    }
 }
