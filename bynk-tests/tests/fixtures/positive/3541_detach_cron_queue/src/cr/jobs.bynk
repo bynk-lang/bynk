@@ -9,9 +9,19 @@ fn refuse() -> Effect[Result[(), Refused]] {
 	Err(Refused)
 }
 
+fn faulty() -> Effect[()] {
+	unreachable("detached boom")
+}
+
 service sweeper from cron {
 	on schedule("*/5 * * * *") (at: Int) -> Effect[Result[(), String]] {
 		do refuse().detach()
+		Ok(())
+	}
+
+	// A detached fault is reported too, and does not fail the handler.
+	on schedule("0 * * * *") (at: Int) -> Effect[Result[(), String]] {
+		do faulty().detach()
 		Ok(())
 	}
 }

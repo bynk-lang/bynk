@@ -121,7 +121,17 @@ test("the bundle exec reports a detached fault with its site", async () => {
     await new Promise((r) => setImmediate(r));
   });
   assert.deepEqual(records, [
-    { message: "a detached effect faulted", level: "error", fields: { site: "s:4:2", error: "boom" } },
+    { message: "a detached effect faulted", level: "error", fields: { site: "s:4:2", error: "Error: boom" } },
+  ]);
+});
+
+test("the bundle exec keeps the error name, as the shim it replaces did", async () => {
+  const records = await recording(async () => {
+    __bynkProcessExec().waitUntil(Promise.reject(new TypeError("bad")));
+    await new Promise((r) => setImmediate(r));
+  });
+  assert.deepEqual(records, [
+    { message: "a detached effect faulted", level: "error", fields: { site: "", error: "TypeError: bad" } },
   ]);
 });
 

@@ -163,6 +163,10 @@ async function __sysdrive_schedule_sweeper_0(at: number) {
   const __h = __makeHarness();
   return __bynkScheduled<Awaited<ReturnType<typeof __ns_cr_jobs.sweeper.cron_sweeper_0>>>("*/5 * * * *", (exec) => worker___ns_cr_jobs.scheduled({ cron: "*/5 * * * *", scheduledTime: at }, __h.env___ns_cr_jobs, exec));
 }
+async function __sysdrive_schedule_sweeper_1(at: number) {
+  const __h = __makeHarness();
+  return __bynkScheduled<Awaited<ReturnType<typeof __ns_cr_jobs.sweeper.cron_sweeper_1>>>("0 * * * *", (exec) => worker___ns_cr_jobs.scheduled({ cron: "0 * * * *", scheduledTime: at }, __h.env___ns_cr_jobs, exec));
+}
 
 async function test_a_detached_Err_in_a_cron_handler_is_reported() {
   try {
@@ -180,13 +184,29 @@ async function test_a_detached_Err_in_a_cron_handler_is_reported() {
   }
 }
 
+async function test_a_detached_fault_in_a_cron_handler_is_reported() {
+  try {
+    __bynkHarness = undefined;
+    __bynkClockNow = 0;
+    const deps = __makeHarness();
+    const r = await __sysdrive_schedule_sweeper_1(0);
+    if (!(((__c: boolean) => __c)(r.tag === "Ok"))) { throw __bynkExpectFailure("tests/jobs.bynk:11:10", 429, 439, "expect r is Ok(_)"); }
+    return { pass: true };
+  } catch (e) {
+    if (e instanceof ExpectationError) {
+      return { pass: false, error: { message: e.message, location: e.location } };
+    }
+    return { pass: false, error: { message: String(e), location: "unknown", violation: __bynkViolationOf(e) } };
+  }
+}
+
 async function test_a_detached_Err_in_a_queue_consumer_is_reported() {
   try {
     __bynkHarness = undefined;
     __bynkClockNow = 0;
     const deps = __makeHarness();
     const r = await __sysdrive_message_deliveries({ id: "d1" });
-    if (!(((__c: boolean) => __c)(r.tag === "Ack"))) { throw __bynkExpectFailure("tests/jobs.bynk:11:10", 438, 446, "expect r is Ack"); }
+    if (!(((__c: boolean) => __c)(r.tag === "Ack"))) { throw __bynkExpectFailure("tests/jobs.bynk:16:10", 563, 571, "expect r is Ack"); }
     return { pass: true };
   } catch (e) {
     if (e instanceof ExpectationError) {
@@ -210,7 +230,7 @@ const __bynkCasePerformance = (globalThis as unknown as { performance?: { now():
 const __bynkCaseNow = (): number => (__bynkCasePerformance ? __bynkCasePerformance.now() : Date.now());
 const __bynkCaseSince = (started: number): number => Math.round((__bynkCaseNow() - started) * 100) / 100;
 
-export const __bynkCases: readonly string[] = ["a detached Err in a cron handler is reported", "a detached Err in a queue consumer is reported"];
+export const __bynkCases: readonly string[] = ["a detached Err in a cron handler is reported", "a detached fault in a cron handler is reported", "a detached Err in a queue consumer is reported"];
 
 export async function run(only?: string, onCase?: (a0: CaseResult) => void) {
   const results = [];
@@ -218,6 +238,12 @@ export async function run(only?: string, onCase?: (a0: CaseResult) => void) {
   if (want("a detached Err in a cron handler is reported")) {
     const started = __bynkCaseNow();
     const r = { name: "a detached Err in a cron handler is reported", ...(await test_a_detached_Err_in_a_cron_handler_is_reported()), durationMs: __bynkCaseSince(started) };
+    results.push(r);
+    if (onCase) onCase(r);
+  }
+  if (want("a detached fault in a cron handler is reported")) {
+    const started = __bynkCaseNow();
+    const r = { name: "a detached fault in a cron handler is reported", ...(await test_a_detached_fault_in_a_cron_handler_is_reported()), durationMs: __bynkCaseSince(started) };
     results.push(r);
     if (onCase) onCase(r);
   }

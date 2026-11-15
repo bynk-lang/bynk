@@ -821,7 +821,8 @@ fn a_detached_failure_in_a_cron_or_queue_handler_is_counted() {
             .and_then(|c| c["detached_failures"].as_u64())
             .unwrap_or(0)
     };
-    assert_eq!(count("cron handler"), 1);
+    assert_eq!(count("Err in a cron handler"), 1);
+    assert_eq!(count("fault in a cron handler"), 1);
     assert_eq!(count("queue consumer"), 2);
     let _ = std::fs::remove_dir_all(&scratch);
 }

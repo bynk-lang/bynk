@@ -16,5 +16,8 @@ export function compose(env: Env, exec: { waitUntil(promise: globalThis.Promise<
     async cron_sweeper_0(at: number) {
       return handlers.sweeper.cron_sweeper_0(at, deps);
     },
+    async cron_sweeper_1(at: number) {
+      return handlers.sweeper.cron_sweeper_1(at, deps);
+    },
   };
 }

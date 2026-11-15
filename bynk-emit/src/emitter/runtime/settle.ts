@@ -275,7 +275,7 @@ export function __bynkProcessExec(): __BynkDetachExec {
           level: "error",
           fields: {
             site: typeof site === "string" ? site : "",
-            error: reason instanceof Error ? reason.message : String(reason),
+            error: String(reason),
           },
         });
       });

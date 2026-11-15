@@ -3,7 +3,7 @@
 
 import { Ok, Err, Some, None, type Result, type Option } from "../../__bynk_runtime/result.js";
 import { __bynkDetach } from "../../__bynk_runtime/settle.js";
-import type { ValidationError } from "../../__bynk_runtime/errors.js";
+import { type ValidationError, __fault } from "../../__bynk_runtime/errors.js";
 import { type __JsonValue, type __BoundaryError, type __ServiceBinding, __callService, __boundaryError } from "../../__bynk_runtime/boundary.js";
 import { QueueResult } from "../../__bynk_runtime/queue.js";
 
@@ -25,17 +25,25 @@ export async function refuse(): globalThis.Promise<Result<void, Refused>> {
   return Err(Refused.Refused);
 }
 
+export async function faulty(): globalThis.Promise<void> {
+  return __fault("Unreachable", "detached boom", "src/cr/jobs.bynk:13:2");
+}
+
 export const sweeper = {
   async cron_sweeper_0(at: number, deps: { __exec: { waitUntil(promise: globalThis.Promise<unknown>): void } }): globalThis.Promise<Result<void, string>> {
-    await __bynkDetach(refuse(), deps.__exec, "src/cr/jobs.bynk:14:6", "Refused");
+    await __bynkDetach(refuse(), deps.__exec, "src/cr/jobs.bynk:18:6", "Refused");
+    return Ok(undefined);
+  },
+  async cron_sweeper_1(at: number, deps: { __exec: { waitUntil(promise: globalThis.Promise<unknown>): void } }): globalThis.Promise<Result<void, string>> {
+    await __bynkDetach(faulty(), deps.__exec, "src/cr/jobs.bynk:24:6");
     return Ok(undefined);
   },
 };
 
 export const deliveries = {
   async queue_deliveries_0(d: Delivery, deps: { __exec: { waitUntil(promise: globalThis.Promise<unknown>): void } }): globalThis.Promise<QueueResult> {
-    await __bynkDetach(refuse(), deps.__exec, "src/cr/jobs.bynk:21:6", "Refused");
-    await __bynkDetach(refuse(), deps.__exec, "src/cr/jobs.bynk:22:6", "Refused");
+    await __bynkDetach(refuse(), deps.__exec, "src/cr/jobs.bynk:31:6", "Refused");
+    await __bynkDetach(refuse(), deps.__exec, "src/cr/jobs.bynk:32:6", "Refused");
     return QueueResult.Ack;
   },
 };

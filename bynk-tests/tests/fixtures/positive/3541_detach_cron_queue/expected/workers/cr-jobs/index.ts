@@ -50,6 +50,12 @@ export default {
         if (result.tag === "Err") globalThis.console.error("cron */5 * * * * failed", result.error);
         return;
       }
+      case "0 * * * *": {
+        const result = await surface.cron_sweeper_1(event.scheduledTime);
+        ctx.__bynkResult = result;
+        if (result.tag === "Err") globalThis.console.error("cron 0 * * * * failed", result.error);
+        return;
+      }
       default:
         return;
     }

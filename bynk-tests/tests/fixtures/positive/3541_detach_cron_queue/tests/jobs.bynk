@@ -6,6 +6,11 @@ suite cr.jobs as system {
 		expect r is Ok(_)
 	}
 
+	case "a detached fault in a cron handler is reported" {
+		let r <- sweeper.schedule("0 * * * *", 0)
+		expect r is Ok(_)
+	}
+
 	case "a detached Err in a queue consumer is reported" {
 		let r <- deliveries.message(Delivery { id: "d1" })
 		expect r is Ack
