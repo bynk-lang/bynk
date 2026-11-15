@@ -537,7 +537,7 @@ fn per_unit_infos(
             },
         );
         let contract_types =
-            crate::symbols::contract_types_for(name, unit_tables, unit_uses, &unit_consumes).0;
+            crate::symbols::contract_types_for(name, unit_tables, unit_uses, unit_consumes).0;
         // Recorded even when empty: a context that dropped its last `on call`
         // service still has a Worker whose live contracts it no longer provides.
         contract_diff.services.insert(
