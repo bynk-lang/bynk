@@ -903,7 +903,7 @@ export class WorkersImages implements Images {
 
   // What `info` reads: every format `ImageFormat` names, including the ones
   // `transform` cannot write.
-  private static readonly READ: Readonly<Record<string, string>> = {
+  private static readonly READ: Readonly<Record<string, ImageFormat["tag"]>> = {
     "image/jpeg": "Jpeg",
     "image/png": "Png",
     "image/webp": "Webp",
