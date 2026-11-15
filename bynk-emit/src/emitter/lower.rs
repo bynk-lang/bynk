@@ -5248,17 +5248,23 @@ fn form_encode_wire(pre: &mut Pre, arg: &Expr, cx: &mut LowerCtx) -> Option<Stri
 /// `Json.encode` text and its type, as one NDJSON line. `None` when the value's
 /// type is unknown to the lowering, so the case runs without reporting.
 fn eval_value_line(pre: &mut Pre, tail: &Expr, cx: &mut LowerCtx) -> Option<String> {
-    let json = json_encode_text(pre, tail, cx, false)?;
+    let ty = cx.commons().expr_types.get(&tail.id).map(|te| te.ty)?;
+    let shown = bynk_check::symbols::display_type_names_in(&cx.commons().tys().display(ty));
+    let shown = bynk_project::json_string(&shown);
+    let head = format!(
+        "globalThis.console.log('{{\"type\":\"eval-value\",\"valueType\":' + globalThis.JSON.stringify({shown})"
+    );
+    // A value with no wire shape (a function, say) still reports its type, and
+    // no value.
+    let Some(json) = json_encode_text(pre, tail, cx, false) else {
+        let _ = pre.lower(tail, cx);
+        return Some(format!("{head} + '}}');"));
+    };
     // The encoder names `JsonValue` and `BoundaryError`, whether or not the
     // value's type needs a closure of codecs of its own.
     cx.runtime_use().note_json_codec();
     cx.runtime_use().note_boundary_codec();
-    let ty = cx.commons().expr_types.get(&tail.id).map(|te| te.ty)?;
-    let shown = bynk_check::symbols::display_type_names_in(&cx.commons().tys().display(ty));
-    let shown = bynk_project::json_string(&shown);
-    Some(format!(
-        "globalThis.console.log('{{\"type\":\"eval-value\",\"valueType\":' + globalThis.JSON.stringify({shown}) + ',\"value\":' + {json} + '}}');"
-    ))
+    Some(format!("{head} + ',\"value\":' + {json} + '}}');"))
 }
 
 /// `Json.encode(arg)`'s text: `globalThis.JSON.stringify(<serialised arg>)`, with
