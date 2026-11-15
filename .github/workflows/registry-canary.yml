@@ -73,7 +73,7 @@ jobs:
           bynk fmt --check .
           bynk check
           bynk test
-          for check in read-path publish accounts trusted limits export withdraw; do
+          for check in read-path publish publication accounts trusted limits export withdraw; do
             echo "::group::check-$check"
             "scripts/check-$check.sh"
             echo "::endgroup::"
