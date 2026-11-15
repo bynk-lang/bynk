@@ -1,10 +1,11 @@
 ---
 level: patch
-changelog: Design: the VS Code extension's diagram views move from Mermaid to a first-party renderer in UML notation (model-diagrams track)
+changelog: Design: a plan to move the VS Code extension's diagram views from Mermaid to a first-party renderer in UML notation (model-diagrams track, settling)
 ---
 
 ## ADR: model-views-first-party-uml-renderer
 title: The extension's model views render through a first-party diagram engine in UML notation, not Mermaid
+status: Proposed
 summary: Model → diagram IR → layout (own grid for sequence, ELK for structure) → SVG, in the webview, in UML 2.5 with a Bynk profile
 
 **Context.** The VS Code extension draws the sequence diagram (#846), the
@@ -59,8 +60,8 @@ unchanged.
 
 - Click-to-code becomes a lookup by identity. `participant-map.ts`,
   `state-map.ts` and the DOM-order zips are deleted as their views migrate.
-- The Mermaid-mechanics consequences of ADRs 0258, 0274, 0302 and 0536 are
-  superseded. Their model decisions stand.
+- The Mermaid-rendering consequences of ADRs 0258, 0261, 0274, 0275, 0302
+  and 0536 are superseded. Their model decisions stand.
 - `check-bundle.mjs` gains a diagram-bundle budget.
 - New behaviour is possible because the engine owns the drawing: foldable
   fragments, sticky lifelines, two-way cursor sync, `ref` drill-down, and a
@@ -73,6 +74,7 @@ unchanged.
 
 ## ADR: diagram-models-are-complete
 title: The server's diagram models are complete; the client decides how much to show
+status: Proposed
 summary: Retire `MAX_BLOCK_DEPTH` as a presentation cut — ship the full block tree with depth, fold in the client
 
 **Context.** `bynk-ide::sequence` stops classifying at `MAX_BLOCK_DEPTH = 2`

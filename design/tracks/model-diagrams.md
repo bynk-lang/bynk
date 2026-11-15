@@ -12,15 +12,16 @@
   axes (§1.2).
 - **Governing records:**
   - [ADR 0258](../decisions/0258-sequence-diagram-lifeline-classifier.md):
-    what is a lifeline. Unchanged.
+    what is a lifeline. The classifier stands; its Mermaid rendering is
+    superseded (§10).
   - [ADR 0261](../decisions/0261-sequence-diagram-nested-block-branch-tracking.md),
     [ADR 0274](../decisions/0274-sequence-diagram-branch-outcomes.md) and
     [ADR 0275](../decisions/0275-sequence-diagram-principal-actor.md): the
     sequence model's blocks, branch outcomes and principal actor. The *model*
-    decisions stand; their Mermaid-specific consequences are superseded (§9).
+    decisions stand; their Mermaid-specific consequences are superseded (§10).
   - [ADR 0302](../decisions/0302-architecture-map-node-granularity.md): the
-    architecture map's context-level nodes with expansion on demand. This is
-    revisited by §7.
+    architecture map's context-level nodes with expansion on demand. The
+    granularity stands (§7.3); its Mermaid mechanics are superseded (§10).
   - [ADR 0536](../decisions/0536-agent-state-view.md): the agent state view
     and its mapping back to source without Mermaid `click`.
   - [ADR 0269](../decisions/0269-documentation-view-webview-substrate-and-links.md):
@@ -520,10 +521,11 @@ entry path.
   separate increment *may* use the engine headlessly, with the fixed-metric
   measurer from §4.3, to put generated diagrams of real handlers into
   `bynk doc` output or the Book. That is out of this track's scope (Q6).
-- **The superseded consequences** are the Mermaid-mechanics paragraphs of ADRs
-  0258, 0274, 0302 and 0536 (the DOM-order zip, the participant `x` sort, the
-  `flowchart-<id>` lookup, `state-<id>-<n>` and `edge<n>`). Their *model*
-  decisions are untouched. LSP spec §3.23 and §3.25 are updated in place, by
+- **The superseded consequences** are the Mermaid-rendering parts of six ADRs:
+  0258, 0261, 0274, 0275, 0302 and 0536. That covers rendering as Mermaid
+  text, the DOM-order zip, `noteOrder`, the `actor` keyword, the participant
+  `x` sort, the `flowchart-<id>` lookup, `state-<id>-<n>` and `edge<n>`. Their
+  *model* decisions are untouched. LSP spec §3.23 and §3.25 are updated in place, by
   the slices that change them.
 
 ## 11. Decisions
@@ -608,7 +610,9 @@ Slices 2 and 3 can run in parallel, as can 3 and 4.
 ## 14. Front-loaded ADRs
 
 These are drafted in `design/pending/model-diagrams-first-party-renderer.md`,
-and stamped on merge of this doc:
+and stamped on merge of this doc with status **Proposed**, because Q1 can
+still change D1. The slice that resolves the settling questions moves them to
+Accepted:
 
 - **The model views render through a first-party engine in UML notation.**
   This is D1, D3 and D6. It supersedes the Mermaid-mechanics consequences
