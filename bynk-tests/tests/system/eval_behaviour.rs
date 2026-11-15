@@ -2,7 +2,7 @@
 //! value, as JSON, with the project's unsaved buffers honoured.
 
 use std::io::Write;
-use std::path::PathBuf;
+use std::path::{Path, PathBuf};
 use std::process::{Command, Stdio};
 
 const UNIT: &str = "\
@@ -49,7 +49,7 @@ fn project(tag: &str) -> PathBuf {
 
 /// Run `bynk eval` in `root` with `args`, `stdin` on its standard input: the
 /// exit status and the document it printed.
-fn eval(root: &PathBuf, args: &[&str], stdin: &str) -> (bool, serde_json::Value) {
+fn eval(root: &Path, args: &[&str], stdin: &str) -> (bool, serde_json::Value) {
     let mut child = Command::new(env!("CARGO_BIN_EXE_bynk-under-test"))
         .arg("eval")
         .arg(root)
@@ -202,7 +202,7 @@ fn an_unknown_unit_is_refused() {
     assert_eq!(doc["error"]["kind"], "setup");
 }
 
-fn write_suite(root: &PathBuf, text: &str) {
+fn write_suite(root: &Path, text: &str) {
     std::fs::create_dir_all(root.join("tests")).unwrap();
     std::fs::write(root.join("tests/demo.bynk"), text).unwrap();
 }
