@@ -168,8 +168,33 @@ fn fail<T>(message: impl Into<String>) -> Result<T, ClientError> {
     Err(ClientError(message.into()))
 }
 
-/// The module for `input`.
-pub fn emit_http_client(input: &HttpClientInput) -> Result<String, ClientError> {
+/// The module, and the routes it leaves out with why.
+#[derive(Debug, Clone)]
+pub struct Emitted {
+    pub text: String,
+    /// `` `GET /x` of `service`: why ``, one per route left out.
+    pub skipped: Vec<String>,
+}
+
+/// The module for `input`. A route whose types have no `T | null` form (an `Option`
+/// inside a `Map`, `Set` or `Result`, or an `Option[Option[T]]`) is left out and
+/// named, never emitted wrong.
+pub fn emit_http_client(input: &HttpClientInput) -> Result<Emitted, ClientError> {
+    let (kept, skipped) = viable_routes(input)?;
+    if kept.services.is_empty() {
+        return fail(format!(
+            "no route of the selected services is one this version of `bynk client` can represent{}",
+            skipped.iter().map(|s| format!("\n  {s}")).collect::<String>()
+        ));
+    }
+    let mut gen_ = Gen::new(closure_of(&kept)?);
+    let plan = gen_.plan(&kept)?;
+    let text = gen_.emit(&kept, &plan)?;
+    Ok(Emitted { text, skipped })
+}
+
+/// The codec closure of every route of `input`.
+fn closure_of(input: &HttpClientInput) -> Result<SurfaceClosure, ClientError> {
     let own_types = merge_types(&input.services)?;
     let mut roots: Vec<TypeRef> = Vec::new();
     for s in &input.services {
@@ -184,10 +209,30 @@ pub fn emit_http_client(input: &HttpClientInput) -> Result<String, ClientError> 
             roots.extend(r.success.iter().cloned());
         }
     }
-    let sc = surface_closure(&roots, &own_types, SURFACE_TYPES);
-    let mut gen_ = Gen::new(sc);
-    let plan = gen_.plan(input)?;
-    gen_.emit(input, &plan)
+    Ok(surface_closure(&roots, &own_types, SURFACE_TYPES))
+}
+
+/// `input` without the routes that cannot be generated, and a note for each of those.
+fn viable_routes(input: &HttpClientInput) -> Result<(HttpClientInput, Vec<String>), ClientError> {
+    let mut trial = Gen::new(closure_of(input)?);
+    let plan = trial.plan(input)?;
+    let mut kept = input.clone();
+    let mut skipped = Vec::new();
+    for ((s, sp), out) in input.services.iter().zip(&plan.services).zip(&mut kept.services) {
+        out.routes.clear();
+        for (r, rp) in s.routes.iter().zip(&sp.routes) {
+            let (convs, holds) = (trial.convs.clone(), trial.holds.clone());
+            match trial.route(&sp.key, r, rp) {
+                Ok(_) => out.routes.push(r.clone()),
+                Err(e) => {
+                    (trial.convs, trial.holds) = (convs, holds);
+                    skipped.push(format!("`{} {}` of `{}`: {e}", r.method, r.path, s.name));
+                }
+            }
+        }
+    }
+    kept.services.retain(|s| !s.routes.is_empty());
+    Ok((kept, skipped))
 }
 
 /// Every service's types in one table. Two services of different units may name
@@ -1017,7 +1062,7 @@ impl Gen {
                     let de =
                         bynk_ts::print_expr(&serialisation::deserialise_ref_via(&ty, "", &self.ru));
                     build.push_str(&format!(
-                        "          const __b = __checked({ser}, {de}, \"body\");\n          if (__b.tag === \"Err\") return __b;\n"
+                        "          const __b = __checked({ser}, {de}, \"$\");\n          if (__b.tag === \"Err\") return __b;\n"
                     ));
                     body_entry = Some("body: __b.value".to_string());
                 }
@@ -1115,7 +1160,7 @@ impl Gen {
         );
         d.no_blank_before = true;
         let doc = TsStmt::doc_comment(
-            format!("The query string of a `{name}` call. A field left out is absent."),
+            "The `query` of the call: a field left out is absent from the query string.".to_string(),
             None,
         );
         Ok((vec![doc, d], text, all_optional))

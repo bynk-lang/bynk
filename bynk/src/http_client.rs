@@ -130,8 +130,12 @@ pub fn generate(analysis: &ProjectDiagnostics, want: &[&str]) -> Result<Client, 
         services,
         compiler_version: env!("CARGO_PKG_VERSION").to_string(),
     };
-    let text = emit_http_client(&input).map_err(Error::Generate)?;
-    Ok(Client { text, skipped })
+    let emitted = emit_http_client(&input).map_err(Error::Generate)?;
+    skipped.extend(emitted.skipped);
+    Ok(Client {
+        text: emitted.text,
+        skipped,
+    })
 }
 
 /// A service's routes this version represents; the others go to `skipped`.
