@@ -46,6 +46,7 @@ fn rate_limiter_is_one_node_with_a_bound_capability_and_no_dangling_edge() {
         &diag.unit_sources,
         &snaps,
         &diag.sequence_info,
+        &diag.architecture_facts,
     );
 
     assert_eq!(model.nodes.len(), 1);
@@ -150,6 +151,7 @@ fn two_context_project_has_a_consumes_edge_with_a_selected_capability_label() {
         &diag.unit_sources,
         &snaps,
         &diag.sequence_info,
+        &diag.architecture_facts,
     );
     let wire = architecture_request::to_wire(&model, &root, &snaps);
 

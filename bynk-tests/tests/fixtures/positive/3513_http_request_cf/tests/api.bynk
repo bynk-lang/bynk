@@ -1,0 +1,41 @@
+suite geo.api {
+	consumes bynk.cloudflare { RequestCf }
+
+	case "the record literal is the builder" {
+		let gb <- api.GET("/hello", RequestCf { country: Some("GB") })
+		expect gb is Ok("Hello")
+		let other <- api.GET("/hello", RequestCf { country: Some("FR") })
+		expect other is Ok("Hi")
+	}
+
+	case "an empty record is a request with no Cloudflare metadata" {
+		let r <- api.GET("/hello", RequestCf {})
+		expect r is Ok("Hi")
+	}
+
+	case "cf sits beside a path parameter and headers" {
+		let r <- api.GET("/greet/:name", "ada", RequestCf { colo: Some("LHR") }, RequestHeaders.empty())
+		expect r is Ok("ada via LHR")
+	}
+
+	case "isEuCountry is a Bool" {
+		let eu <- api.GET("/eu", RequestCf { isEuCountry: Some(true) })
+		expect eu is Ok(true)
+		let non <- api.GET("/eu", RequestCf {})
+		expect non is Ok(false)
+	}
+
+	case "a :cf path segment is a path parameter" {
+		let r <- api.GET("/by/:cf", "x")
+		expect r is Ok("x")
+	}
+}
+
+suite geo.api as system {
+	consumes bynk.cloudflare { RequestCf }
+
+	case "cf is whatever the platform supplies, so no value is asserted" {
+		let r <- api.GET("/hello", RequestCf {})
+		expect r is Ok(_)
+	}
+}
