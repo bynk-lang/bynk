@@ -2937,8 +2937,7 @@ pub(crate) fn emit_provider(
         module.consumed_type_declared = ctx.consumed_type_aliases.clone();
         module.consumed_context_types = ctx.consumed_context_types();
         module.target = ctx.target;
-        module.in_bynk_unit = ctx.commons_name == "bynk";
-        module.trace = ctx.trace.clone();
+        module.note_unit(ctx);
         let body_smb = RefCell::new(SourceMapBuilder::new());
         let mut cx = LowerCtx::new(
             module,
@@ -3276,8 +3275,7 @@ pub(crate) fn emit_service(
             None
         };
         let mut module = ModuleCtx::new(commons, &ctx.cross_context, &ctx.runtime_use);
-        module.in_bynk_unit = ctx.commons_name == "bynk";
-        module.trace = ctx.trace.clone();
+        module.note_unit(ctx);
         module.agent_method_givens = ctx.agent_method_givens.clone();
         module.agent_called_contexts = ctx.agent_called_contexts.clone();
         module.event_schema_versions = ctx.event_schema_versions.clone();
@@ -7387,8 +7385,7 @@ fn emit_agent_handlers(
             .map(|m| m.name.clone())
             .unwrap_or_else(|| "call".to_string());
         let mut module = ModuleCtx::new(commons, &ctx.cross_context, &ctx.runtime_use);
-        module.in_bynk_unit = ctx.commons_name == "bynk";
-        module.trace = ctx.trace.clone();
+        module.note_unit(ctx);
         // #1960: the body lowers for the build target, as a service body
         // does, so a cross-context call reads the Service Binding its `deps`
         // type names.
@@ -9156,8 +9153,7 @@ fn emit_ws_do_method(
     }
     let body_smb = RefCell::new(SourceMapBuilder::new());
     let mut module = ModuleCtx::new(commons, &ctx.cross_context, &ctx.runtime_use);
-    module.in_bynk_unit = ctx.commons_name == "bynk";
-    module.trace = ctx.trace.clone();
+    module.note_unit(ctx);
     module.agent_method_givens = ctx.agent_method_givens.clone();
     module.agent_called_contexts = ctx.agent_called_contexts.clone();
     module.event_schema_versions = ctx.event_schema_versions.clone();
