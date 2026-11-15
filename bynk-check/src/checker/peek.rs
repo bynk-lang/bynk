@@ -68,7 +68,7 @@ fn local_name(participant: &str, cap: &str) -> String {
 }
 
 /// Whether `cap` is the name of a peeked capability on `deps` (see
-/// [`local_name`]), as a call on a handle records it.
+/// `local_name`), as a call on a handle records it.
 pub const LOCAL_PREFIX: &str = "__peek_";
 
 /// The dotted path an expression spells (`shop.orders.Orders`), as segments.
