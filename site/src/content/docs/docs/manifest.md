@@ -79,6 +79,9 @@ index = { production = "docs-prod" }   # adopted for that environment, never cre
 [deploy.containers.Renderer]   # no default: a `Container` instance's prebuilt image
 image = { production = "registry.cloudflare.com/<ACCOUNT_ID>/renderer@sha256:<DIGEST>" }   # run for that environment, never built
 
+[deploy.workers.core]       # no default: contexts that share one Worker
+contexts = ["shop.orders", "shop.pricing"]   # qualified names, each context in one group only
+
 [dev]
 ai = "allow"                # no default: silences `bynk dev`'s Workers AI cost warning
 vectorize = "allow"         # no default: silences `bynk dev`'s Vectorize cost warning
@@ -525,8 +528,8 @@ Apart from `package_manager`, only `bynk build` reads this table. `bynk compile`
 flags, and `bynk dev`, `bynk deploy` and `bynk test` fix their own topology and
 output directory (and read `package_manager` alone), so editing `[build]` never changes what is deployed or what
 the editor's *Show Compiled Output* view shows. The table describes the
-artefact; how contexts map to deployment units belongs to `[deploy]`, which is
-reserved.
+artefact; how contexts map to deployment units belongs to
+[`[deploy.workers]`](#worker-groups).
 
 ### `[build.client]`
 
@@ -693,6 +696,49 @@ image = { production = "registry.cloudflare.com/<ACCOUNT_ID>/renderer@sha256:<DI
 
 An entry that names no `Container` capability in the project is an error. The
 adopted reference is recorded in `bynk.deploy.lock`.
+
+### Worker groups
+
+Under the `workers` target a context is one Worker. A **group** puts several
+contexts in one Worker, so a handful that belong together need not each cost a
+Worker and a network hop. A context named in no group stays its own Worker
+under its dashed name, so a project with no `[deploy.workers]` table is
+unchanged.
+
+```toml
+[deploy.workers.core]
+contexts = ["shop.orders", "shop.catalogue", "shop.pricing"]
+
+[deploy.workers.payments]
+contexts = ["shop.payment"]
+name = "acme-payments"
+routes = ["pay.example.com/*"]
+```
+
+| Key | Table | Type | Notes |
+|---|---|---|---|
+| `contexts` | `[deploy.workers.<key>]` | array of strings | Required. The members, as qualified context names. Each context is in one group only, and there are no globs, so adding a context to a group is a visible change here. |
+| `name` | `[deploy.workers.<key>]` | string | The Worker's script name on Cloudflare: 1 to 63 lowercase letters, digits or `-`. Default: the key. |
+| `routes` | `[deploy.workers.<key>]` | array of strings | Route patterns the Worker is attached to, like `pay.example.com/*`: a host (a leading `*.` is allowed), then `/` and a path, with no scheme. |
+| `custom_domains` | `[deploy.workers.<key>]` | array of strings | Custom domains the Worker is attached to, like `pay.example.com`. No scheme, path or wildcard. |
+
+The **key** is the group's identity: its entry in `bynk.deploy.lock`, its
+`--worker` selector and its `workers/<key>/` directory. `name` only changes
+the script's name on Cloudflare. A key is 1 to 63 lowercase letters, digits or
+`-`. A group of one context carries `name`, `routes` and `custom_domains` for
+that context's Worker, as a group of several does.
+
+The manifest refuses a group that is empty, a context in two groups, two
+groups whose Workers would share a script name, and a route or custom domain
+that appears twice (the same host with different paths is two routes). Checked
+against the project, it also refuses a context the project does not declare
+(`bynk.deploy.unknown_context`), a unit that is not a `context`
+(`bynk.deploy.not_a_context`: a `commons` or an adapter is not deployed), and
+a key or name that is the Worker of a context in no group
+(`bynk.deploy.group_name_conflict`).
+
+This slice reads and validates the table; the build and `bynk deploy` do not
+yet emit a Worker per group.
 
 ### Acknowledging a remote-only binding
 
