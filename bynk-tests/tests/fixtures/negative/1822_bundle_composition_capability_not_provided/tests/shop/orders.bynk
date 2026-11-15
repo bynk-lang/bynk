@@ -1,0 +1,7 @@
+suite shop.orders
+
+case "reserve is stubbed" {
+	stub Warehouse.reserve(_) returns "id-1"
+	let r <- orders.POST("/r") by Visitor
+	expect r is Ok("id-1")
+}

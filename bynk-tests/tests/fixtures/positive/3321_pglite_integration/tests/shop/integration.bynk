@@ -1,4 +1,5 @@
 suite shop.orders as integration {
+	consumes bynk.cloudflare { PgError }
 	case "the Worker's statements run on a real Postgres" {
 		let a <- api.POST("/orders") by Visitor
 		expect a is Ok("inserted")

@@ -6,6 +6,7 @@ combines a real `Locale.current()` call with a message-bundle's own
 `uses bynk.locale` anywhere in `app.web` itself.
 ---
 suite app.web as unit {
+  consumes bynk { Locale }
   stub Locale.current() returns "en"
 
   case "renders the bundle's greeting through the wrapper" {

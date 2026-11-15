@@ -1,5 +1,7 @@
 suite shop.stock
 
+consumes bynk.cloudflare { SqlValue }
+
 // #3108: a literal D1 statement in a test body is prepared against the
 // migrations' schema, as in a production body.
 case "a case reads a column the table lacks" {

@@ -1,0 +1,17 @@
+// An agent-only context: the composition root builds no deps for a context
+// without services, so the host still supplies `Clock` and nothing is raised.
+context shop.ledger
+
+capability Clock {
+	fn now() -> Effect[Int]
+}
+
+agent Book {
+	key id: String
+
+	store entries: Cell[Int]
+
+	on call stamp() -> Effect[Int] given Clock {
+		Clock.now()
+	}
+}

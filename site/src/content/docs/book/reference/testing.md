@@ -1227,6 +1227,41 @@ case "a count reads back as a typed row" {
   emitted outside the runner, so it cannot name a suite type or constant. Build
   the value in a case, or use a helper `fn`.
 
+## What a suite consumes — `consumes` {#suite-consumes}
+
+A suite file consumes what it names, as a unit's file does. It sees all of its
+target's own declarations, but a name from another unit (a type, a capability it
+`stub`s, a service it calls) is in scope only through a `consumes` in **that suite
+file**. The target's `consumes` clauses are not inherited, and a suite split
+across files needs a clause in each file that names the thing.
+
+```bynk,fragment
+suite shop.checkout
+
+consumes bynk { Claim }
+consumes bynk.cloudflare { D1 }
+
+case "a held claim" {
+	let c: Claim = Claimed
+	expect c == Claimed
+}
+```
+
+- **Where.** After any `uses`, before the first `stub`, `env`, `fixture`, `type`,
+  `const`, `fn`, `case` or `property` of a fragment-form suite; anywhere among the
+  members of a braced one.
+- **What a clause may list.** Anything the target's consumed unit exports: types,
+  whose variants come with them, and capabilities. A bare `consumes U` brings in
+  all of `U`'s names for this file. Types a listed capability's signatures use
+  (`Response` through a `Fetch` stub) need listing in the suite as well.
+- **Suite types win.** A suite's own `type` still takes the name over an unlisted
+  standard-library type, as it does for a unit.
+- **This release warns.** A suite file that names something its own `consumes`
+  does not bring in still compiles, with `bynk.consumes.type_not_selected`,
+  `bynk.consumes.capability_not_selected` or `bynk.consumes.unit_not_consumed`;
+  `bynk check --fix=<code>` adds the clause to the suite file. A later release
+  makes them errors.
+
 ## Test input from a file — `fixture` {#fixtures}
 
 A suite reads a project file's text into a `String` constant with a `fixture`

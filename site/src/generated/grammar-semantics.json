@@ -468,6 +468,10 @@
       "summary": "Two flattened `consumes U { Cap }` capabilities collide, or one clashes with a local capability."
     },
     {
+      "code": "bynk.consumes.capability_not_selected",
+      "summary": "A capability a consumed unit exports is named (a `given` clause, a call, `provides`, a `stub`) in a file whose own `consumes` does not list it (a warning; an error in a later release)."
+    },
+    {
       "code": "bynk.consumes.name_conflict",
       "summary": "A `consumes` name collides with another name in scope."
     },
@@ -505,7 +509,11 @@
     },
     {
       "code": "bynk.consumes.type_not_selected",
-      "summary": "A type (or a bare variant of a sum) of a consumed first-party unit is named, but the unit's braced `consumes` does not list it (a warning; an error in a later release)."
+      "summary": "A type (or a bare variant of a sum) of a consumed unit is named in a file whose own `consumes` does not bring it in: it lists other names, or only another file of the unit consumes the unit (a warning; an error in a later release)."
+    },
+    {
+      "code": "bynk.consumes.unit_not_consumed",
+      "summary": "A call to another unit's service is written in a file whose own `consumes` does not name that unit (a warning; an error in a later release)."
     },
     {
       "code": "bynk.consumes.unknown_context",
@@ -853,7 +861,7 @@
     },
     {
       "code": "bynk.capability.not_provided",
-      "summary": "On the Workers target, a capability a context requires has no provider in it."
+      "summary": "A capability a context requires has no provider in it, on the Workers target or in a bundle with a composition root."
     },
     {
       "code": "bynk.capability.provider_agent_cross_context",

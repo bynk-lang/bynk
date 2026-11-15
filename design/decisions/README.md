@@ -17,6 +17,9 @@ or a row links to no file. Summaries and statuses are curated by hand; the
 
 | # | Decision | Status |
 |---|---|---|
+| [0849](0849-per-file-consumes.md) | **`consumes` is per file: a file's imports are what its own `consumes` clauses bring in** (v0.612.1) — Declarations are shared across a unit's files, imports are not; suites follow the same rule; amends the braces-only scope | Accepted (v0.612.1) |
+| [0848](0848-bynk-client-forms-multipart-and-cookies.md) | **`bynk client`: `@form`, `@multipart` and typed `cookies`** (v0.609) — Form and multipart bodies are encoded by the server's own leaf rules with file parts as `Blob`, typed cookies are a `Cookie` header refused in a browser, and `Origin` from a Worker is verified | Accepted (v0.609) |
+| [0847](0847-bynk-client-drift-layout-and-manifest.md) | **`bynk client`: the drift check, the directory layout and `[build.client]`** (v0.608) — `--check` compares a written client with the generated one, `--layout dir` splits it in four, and `[build.client]` lets `bynk build` write it and `bynk client` default its flags | Accepted (v0.608) |
 | [0846](0846-bynk-client-typed-typescript-client.md) | **`bynk client`, a typed TypeScript client for `from http` services** (v0.607) — A generated single-file module with an inlined runtime, optional values as `T | null`, refinements checked on encode and decode, and per-route response unions | Accepted (v0.607) |
 | [0845](0845-braced-consumes-lists-what-is-in-scope.md) | **A braced `consumes` of a first-party unit brings into scope only the names it lists** (v0.606) — Unlisted standard-library types are not clash or ambiguity candidates; naming one is a deprecation warning with a fix, then an error | Accepted (v0.606) |
 | [0844](0844-check-fix-by-code.md) | **`check --fix=<code>` narrows a fix run to the named diagnostic codes** (v0.604) — A repeatable, comma-separated filter on `--fix`; naming a code asks for its fixes, a hint's included | Accepted (v0.604) |

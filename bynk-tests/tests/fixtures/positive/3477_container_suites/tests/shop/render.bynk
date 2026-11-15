@@ -1,5 +1,8 @@
 suite shop.render
 
+consumes bynk { Response }
+consumes bynk.cloudflare { ContainerError }
+
 // #3477: an unstubbed operation faults, a stubbed `Ok` is what the handler
 // sees, and a typed error is matched.
 

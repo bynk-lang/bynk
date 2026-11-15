@@ -1,4 +1,5 @@
 suite shop.support {
+  consumes bynk.cloudflare { EmailVerdict, InboundEmail }
   case "the named service is the default Sender's" {
     let r <- support.message(InboundEmail { from: "a@b.example", to: "support@shop.example" })
     expect r is Forward("team@shop.example")

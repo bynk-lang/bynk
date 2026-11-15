@@ -1,12 +1,6 @@
----
-level: minor
-changelog: `bynk client` generates `@form` and `@multipart` bodies (a file part is a `Blob`) and typed `cookies` records, and the system tier verifies that a Worker-hosted server may set `Origin` through the client (#3508 slice BC3)
-probes: ts_writes
----
+# 0848 — `bynk client`: `@form`, `@multipart` and typed `cookies`
 
-## ADR: bynk-client-forms-multipart-and-cookies
-title: `bynk client`: `@form`, `@multipart` and typed `cookies`
-summary: Form and multipart bodies are encoded by the server's own leaf rules with file parts as `Blob`, typed cookies are a `Cookie` header refused in a browser, and `Origin` from a Worker is verified
+- **Status:** Accepted (v0.609)
 
 **Context.** BC1 and BC2 of #3508 left out the routes whose request is not JSON and path: a `@form` or `@multipart` body and a typed `cookies` record. The proposal's Decision F fixed their shape and Decision E left one fact unverified: whether a framework's server, hosted in a Worker, may set `Origin` on an outgoing `fetch`, which the signed-cookie CSRF seam (#3386) needs. This is slice BC3.
 

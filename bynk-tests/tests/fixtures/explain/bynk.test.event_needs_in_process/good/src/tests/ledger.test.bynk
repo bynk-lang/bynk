@@ -1,4 +1,5 @@
 suite shop.ledger {
+  consumes shop.order { Placed }
   case "a placed order is booked" {
     let _ <- OnPlaced.event(Placed { id: "o1" })
   }

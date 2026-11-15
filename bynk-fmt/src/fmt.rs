@@ -951,6 +951,7 @@ impl<'a> Formatter<'a> {
                 self.indented(|f| {
                     f.format_test_body(
                         &t.uses,
+                        &t.consumes,
                         &t.envs,
                         &t.stubs,
                         &t.fixtures,
@@ -971,6 +972,7 @@ impl<'a> Formatter<'a> {
                 self.newline();
                 self.format_test_body(
                     &t.uses,
+                    &t.consumes,
                     &t.envs,
                     &t.stubs,
                     &t.fixtures,
@@ -989,6 +991,7 @@ impl<'a> Formatter<'a> {
     fn format_test_body(
         &mut self,
         uses: &[UsesDecl],
+        consumes: &[ConsumesDecl],
         envs: &[EnvClause],
         stubs: &[StubClause],
         fixtures: &[FixtureDecl],
@@ -1007,6 +1010,14 @@ impl<'a> Formatter<'a> {
             self.emit_leading_comments(&u.trivia.leading);
             self.push(&format!("uses {}", u.target.joined()));
             self.emit_trailing_comment_or_newline(u.trivia.trailing.as_deref());
+            first = false;
+        }
+        // #3536: consecutive `consumes` lines stay together, as in a unit's header.
+        for (i, c) in consumes.iter().enumerate() {
+            if !first && i == 0 {
+                self.newline();
+            }
+            self.format_consumes(c, i > 0);
             first = false;
         }
         for e in envs {
@@ -3868,6 +3879,19 @@ mod tests {
         assert_eq!(
             out,
             "suite shop\n\nuses money\n\nproperty \"p1\" {\n\tfor all a: Int {\n\t\texpect a == a\n\t}\n}\n\ncase \"c1\" {\n\texpect true\n}\n\nproperty \"p2\" {\n\tfor all a: Int {\n\t\texpect a == a\n\t}\n}\n"
+        );
+        assert_eq!(format_source(&out, &FormatOptions::default()).unwrap(), out);
+    }
+
+    /// #3536: a suite file's `consumes` clauses follow its `uses`, stay together
+    /// as a unit's header lines do, and survive a second format.
+    #[test]
+    fn a_suite_keeps_its_consumes_clauses_together() {
+        let src = "suite shop as unit\nconsumes bynk { Claim }\nconsumes bynk.cloudflare { D1 }\ncase \"c\" { expect true }\n";
+        let out = format_source(src, &FormatOptions::default()).unwrap();
+        assert_eq!(
+            out,
+            "suite shop as unit\n\nconsumes bynk { Claim }\nconsumes bynk.cloudflare { D1 }\n\ncase \"c\" {\n\texpect true\n}\n"
         );
         assert_eq!(format_source(&out, &FormatOptions::default()).unwrap(), out);
     }

@@ -1,5 +1,7 @@
 suite shop.orders
 
+consumes bynk.cloudflare { SqlError, SqlRun }
+
 // #2602: the unit double is real SQLite, so statements run as on D1.
 
 case "rows written with every SqlValue decode back" {

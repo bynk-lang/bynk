@@ -2,6 +2,7 @@
 // target's own handlers may (`shop.ledger` writes `Domestic` for
 // `shop.order`'s `Region.Domestic`). Each lowers to `Region.Domestic`.
 suite shop.ledger {
+  consumes shop.order { Order, Region }
   case "a bare consumed variant in a record literal" {
     let o = Order { id: "o1", region: Domestic }
     let d <- isDomestic.call(o)

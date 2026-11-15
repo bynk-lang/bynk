@@ -1,0 +1,2 @@
+bynk.capability.not_provided capability `Warehouse` is required here but has no provider in context `shop.orders`; this program's composition root builds every context
+# exact

@@ -1,4 +1,5 @@
 suite shop.ledger {
+  consumes shop.order { Cancelled }
   case "a cancellation" {
     let _ <- OnPlaced.event(Cancelled { id: "o1" })
   }

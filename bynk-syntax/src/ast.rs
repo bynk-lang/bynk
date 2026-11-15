@@ -432,6 +432,11 @@ pub struct SuiteDecl {
     pub target: QualifiedName,
     /// `uses` clauses brought in by this test fragment.
     pub uses: Vec<UsesDecl>,
+    /// #3536: `consumes` clauses of this suite file. Imports are per file: a
+    /// name from another unit (a type, a capability) is in scope in a suite
+    /// file only if its own `consumes` brings it in; the suite's target's
+    /// clauses are not inherited.
+    pub consumes: Vec<ConsumesDecl>,
     /// v0.118: suite-scoped `stub` clauses — per-seam provider overrides
     /// applied to every case (a case-scoped `stub` takes precedence). Formerly
     /// the punned `provides` stub; renamed to `stub` in the keyword-hygiene

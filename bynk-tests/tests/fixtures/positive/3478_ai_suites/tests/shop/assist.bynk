@@ -1,5 +1,7 @@
 suite shop.assist
 
+consumes bynk.cloudflare { AiError, Ai }
+
 // #3478: a test never reaches Workers AI. `run` faults until it is stubbed,
 // and a stubbed reply (or error) is what the handler sees.
 

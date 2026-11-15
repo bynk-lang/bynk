@@ -48,7 +48,7 @@ async function test_encodes_a_consumed_record_with_an_enum_field() {
     type Order = __ns_shop_order.Order;
     type Region = __ns_shop_order.Region;
     const order = (deps as any).surface?.order;
-    if (!(globalThis.JSON.stringify(__serialise_Order({ id: "o1", region: Region.Domestic })) === "{\"id\":\"o1\",\"region\":{\"kind\":\"Domestic\"}}")) { throw __bynkExpectFailure("tests/ledger.bynk:6:12", 301, 406, "expect Json.encode(Order { id: \"o1\", region: Domestic }) == \"{\\\"id\\\":\\\"o1\\\",\\\"region\\\":{\\\"kind\\\":\\\"Domestic\\\"}}\"\n  expected: Json.encode(Order { id: \"o1\", region: Domestic }) == \"{\\\"id\\\":\\\"o1\\\",\\\"region\\\":{\\\"kind\\\":\\\"Domestic\\\"}}\"\n  actual:   " + __bynkShow((globalThis.JSON.stringify(__serialise_Order({ id: "o1", region: Region.Domestic })))) + " == " + __bynkShow(("{\"id\":\"o1\",\"region\":{\"kind\":\"Domestic\"}}"))); }
+    if (!(globalThis.JSON.stringify(__serialise_Order({ id: "o1", region: Region.Domestic })) === "{\"id\":\"o1\",\"region\":{\"kind\":\"Domestic\"}}")) { throw __bynkExpectFailure("tests/ledger.bynk:7:12", 341, 446, "expect Json.encode(Order { id: \"o1\", region: Domestic }) == \"{\\\"id\\\":\\\"o1\\\",\\\"region\\\":{\\\"kind\\\":\\\"Domestic\\\"}}\"\n  expected: Json.encode(Order { id: \"o1\", region: Domestic }) == \"{\\\"id\\\":\\\"o1\\\",\\\"region\\\":{\\\"kind\\\":\\\"Domestic\\\"}}\"\n  actual:   " + __bynkShow((globalThis.JSON.stringify(__serialise_Order({ id: "o1", region: Region.Domestic })))) + " == " + __bynkShow(("{\"id\":\"o1\",\"region\":{\"kind\":\"Domestic\"}}"))); }
     return { pass: true };
   } catch (e) {
     if (e instanceof ExpectationError) {
@@ -71,10 +71,10 @@ async function test_decodes_a_consumed_record_with_an_enum_field() {
         switch (__d.tag) {
           case "Ok": {
             const o = __d.value;
-            return __bynkExpect((__bynkEq(o.region, Region.International)), "tests/ledger.bynk:11:23", 584, 609, "expect o.region == International");
+            return __bynkExpect((__bynkEq(o.region, Region.International)), "tests/ledger.bynk:12:23", 624, 649, "expect o.region == International");
           }
           case "Err": {
-            return __bynkExpect((false), "tests/ledger.bynk:12:24", 633, 638, "expect false");
+            return __bynkExpect((false), "tests/ledger.bynk:13:24", 673, 678, "expect false");
           }
         }
         throw new globalThis.Error("non-exhaustive match");
@@ -101,10 +101,10 @@ async function test_decodes_a_consumed_enum() {
         switch (__d.tag) {
           case "Ok": {
             const r = __d.value;
-            return __bynkExpect((__bynkEq(r, Region.Domestic)), "tests/ledger.bynk:18:23", 767, 780, "expect r == Domestic");
+            return __bynkExpect((__bynkEq(r, Region.Domestic)), "tests/ledger.bynk:19:23", 807, 820, "expect r == Domestic");
           }
           case "Err": {
-            return __bynkExpect((false), "tests/ledger.bynk:19:24", 804, 809, "expect false");
+            return __bynkExpect((false), "tests/ledger.bynk:20:24", 844, 849, "expect false");
           }
         }
         throw new globalThis.Error("non-exhaustive match");

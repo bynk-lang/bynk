@@ -2435,15 +2435,30 @@ name MUST NOT collide with a locally declared capability or with a name
 flattened from another unit (`bynk.consumes.capability_name_clash`) — a clash is
 resolved by the qualified `given b.Cap` form or an alias.
 
+**Imports are per file.** A unit's own declarations are in scope in every file
+of the unit, but a name from another unit (a standard-library unit, a context of
+the project or an adapter) is in scope in a file only if that file's own
+`consumes` brings it in: a bare `consumes U` brings in all of `U`'s names, a
+braced list only the names it lists (an alias is per file too). The unit's
+dependencies (wiring, deploy order, the `consumes` graph) are the union of its
+files' `consumes`, so two files may consume the same unit. A suite file follows
+the same rule with its own `consumes`; it does not inherit its target's.
+
 A braced `consumes` of a first-party unit (`bynk`, `bynk.cloudflare`, …) brings
 into scope only the names it lists, and the types its listed capabilities'
 signatures use. Any other type, and its variants, are not candidates for a name clash (`bynk.suite.type_name_clash`,
 `bynk.consumes.name_conflict`) or for bare-variant resolution
 (`bynk.resolve.ambiguous_variant`), and a declaration of the unit's own takes
-the name. A bare `consumes U` brings in the whole module. Naming a type that
-the braces leave out, or a bare variant of one of its sums, is deprecated: it
-still resolves, as the warning `bynk.consumes.type_not_selected`, whose fix adds
-the name to the braces; a later release makes it an error.
+the name.
+
+In this release a name a file uses without its own `consumes` bringing it in is
+deprecated: it still resolves, as a warning, and a later release makes it an
+error. A type, or a bare variant of a sum, is `bynk.consumes.type_not_selected`; a
+flattened capability named in a `given` clause, a call, `provides` or a suite's
+`stub` is `bynk.consumes.capability_not_selected`; a call to another unit's
+service is `bynk.consumes.unit_not_consumed`. Each warning's fix edits the file
+it is reported in, so `bynk check --fix=<code>` migrates every file of a split
+unit and every suite.
 
 An **adapter's** `consumes` is further restricted: it MUST use the
 capability-selection form — an adapter has no services to call, so the

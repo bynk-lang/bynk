@@ -2,6 +2,8 @@
 // (`LocaleTag`); the context does not `uses` that namespace.
 suite demo.web
 
+consumes bynk { Locale }
+
 case "a stub over a capability whose type the context does not use" {
 	stub Locale.current() returns "pl"
 	let r <- api.call()

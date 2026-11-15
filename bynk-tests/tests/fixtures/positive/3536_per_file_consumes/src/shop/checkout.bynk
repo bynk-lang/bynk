@@ -1,0 +1,19 @@
+context shop
+
+// #3536: imports are per file. This file consumes everything it names; the
+// sibling `refund.bynk` consumes nothing, so what it names still resolves but
+// warns, once for each kind of name: a type, a capability, a call.
+
+consumes bynk { Clock, TimedOut }
+consumes pay
+
+fn late(t: TimedOut) -> Bool {
+  true
+}
+
+service checkout {
+  on call() -> Effect[Int] given Clock {
+    let _ <- Clock.now()
+    pay.charge(1)
+  }
+}

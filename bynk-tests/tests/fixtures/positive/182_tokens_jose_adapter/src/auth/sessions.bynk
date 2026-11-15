@@ -1,6 +1,6 @@
 context auth.sessions
 
-consumes tokens { Jwt }
+consumes tokens { Jwt, Claims }
 
 service login {
   on call() -> Effect[String] given Jwt {

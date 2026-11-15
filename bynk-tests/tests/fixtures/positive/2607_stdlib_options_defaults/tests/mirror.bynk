@@ -3,6 +3,8 @@
 ---
 suite mirror
 
+consumes bynk { Redirect, Response, Fetch }
+
 case "an empty options record is send's behaviour" {
 	stub Fetch.sendWith(_, _) returns Ok(Response { status: 200, headers: Map.empty(), body: "" })
 	let n <- plain.call("https://upstream.test/")

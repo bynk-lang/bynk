@@ -114,10 +114,10 @@ async function test_a_reply_carries_the_content() {
         switch (__d.tag) {
           case "Reply": {
             const m = __d.message;
-            return __bynkExpect((__bynkEq(m.text, Some("We have your message about order."))), "tests/support.bynk:5:26", 212, 263, "expect m.text == Some(\"We have your message about order.\")");
+            return __bynkExpect((__bynkEq(m.text, Some("We have your message about order."))), "tests/support.bynk:6:26", 282, 333, "expect m.text == Some(\"We have your message about order.\")");
           }
           default: {
-            return __bynkExpect((false), "tests/support.bynk:6:19", 282, 287, "expect false");
+            return __bynkExpect((false), "tests/support.bynk:7:19", 352, 357, "expect false");
           }
         }
         throw new globalThis.Error("non-exhaustive match");
@@ -203,7 +203,7 @@ async function test_a_reply_is_a_value() {
     type VectorOf<M> = __ns_bynk_cloudflare.VectorOf<M>;
     type WorkerVersion = __ns_bynk_cloudflare.WorkerVersion;
     const r = await ((__m: any) => support.queue_support_0(__m, { ...deps, identity: { address: __m.from, dmarc: { tag: "DmarcNone" } } }))({ from: "a@b.example", to: "support@shop.example", subject: "order", messageId: "", headers: new globalThis.Map(), text: { tag: "None" as const }, html: { tag: "None" as const }, attachments: [], size: 0 });
-    if (!(((__c: boolean) => __c)(r.tag === "Reply" && r.message.subject.tag === "None"))) { throw __bynkExpectFailure("tests/support.bynk:12:12", 453, 497, "expect r is Reply(EmailReply { subject: None, .. })"); }
+    if (!(((__c: boolean) => __c)(r.tag === "Reply" && r.message.subject.tag === "None"))) { throw __bynkExpectFailure("tests/support.bynk:13:12", 523, 567, "expect r is Reply(EmailReply { subject: None, .. })"); }
     return { pass: true };
   } catch (e) {
     if (e instanceof ExpectationError) {
