@@ -24,6 +24,7 @@ export default {
     const __security_avatars: __SecurityPolicy = { nosniff: true, hstsMaxAgeSecs: null };
     const __security_probe: __SecurityPolicy = { nosniff: true, hstsMaxAgeSecs: null };
     const __security_safe: __SecurityPolicy = { nosniff: true, hstsMaxAgeSecs: null };
+    const __security_streams: __SecurityPolicy = { nosniff: true, hstsMaxAgeSecs: null };
     let __route: string = "request";
     try {
       if (path.startsWith("/_bynk/call/")) {
@@ -102,6 +103,27 @@ export default {
         }
       }
       {
+        if (method === "POST" && path === "/resize") {
+          __route = "POST /resize";
+          const __contentLength = request.headers.get("content-length");
+          if (__contentLength !== null && globalThis.Number(__contentLength) > 1048576) {
+            return __applySecurityHeaders(new globalThis.Response(globalThis.JSON.stringify({ kind: "PayloadTooLarge", details: "request body exceeds 1048576 bytes" }), { status: 413, headers: { "content-type": "application/json" } }), __security_streams);
+          }
+          let __bytes: globalThis.Uint8Array | undefined;
+          try {
+            __bytes = await __readBodyCapped(request, 1048576);
+          } catch {
+            return __applySecurityHeaders(new globalThis.Response(globalThis.JSON.stringify({ kind: "MalformedJson", details: "Invalid request body" }), { status: 400, headers: { "content-type": "application/json" } }), __security_streams);
+          }
+          if (__bytes === undefined) {
+            return __applySecurityHeaders(new globalThis.Response(globalThis.JSON.stringify({ kind: "PayloadTooLarge", details: "request body exceeds 1048576 bytes" }), { status: 413, headers: { "content-type": "application/json" } }), __security_streams);
+          }
+          const body = __bytes;
+          const result = await surface.http_POST_resize(body);
+          return __applySecurityHeaders(__httpResultToResponse(result, (__v: void) => null), __security_streams);
+        }
+      }
+      {
         if (method === "POST" && path === "/safe") {
           __route = "POST /safe";
           const __contentLength = request.headers.get("content-length");
@@ -131,6 +153,11 @@ export default {
         const __status = method === "OPTIONS" ? 204 : 405;
         const __res = new globalThis.Response(null, { status: __status, headers: { allow: "OPTIONS, POST" } });
         return __applySecurityHeaders(__res, __security_probe);
+      }
+      if (path === "/resize") {
+        const __status = method === "OPTIONS" ? 204 : 405;
+        const __res = new globalThis.Response(null, { status: __status, headers: { allow: "OPTIONS, POST" } });
+        return __applySecurityHeaders(__res, __security_streams);
       }
       if (path === "/safe") {
         const __status = method === "OPTIONS" ? 204 : 405;
