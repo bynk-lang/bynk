@@ -77,7 +77,7 @@ pub fn run(args: EvalCommand) -> ExitCode {
             unit,
             snippet,
             buffers,
-            suites: suite,
+            suites: suite.into_iter().collect(),
             timeout,
         })
         .into(),
