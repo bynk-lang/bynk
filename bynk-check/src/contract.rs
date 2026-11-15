@@ -1624,6 +1624,13 @@ mod tests {
         let (r, t) = route(base);
         let h = http_route_contract_hash(&r, &t);
         assert_eq!(h.len(), 16);
+        // Pinned absolutely: a change to `canon_type` or to this form moves every route's
+        // hash, and a generated client carries it, so that is a decision, not a side effect.
+        assert_eq!(
+            http_route_normal_form(&r, &t),
+            "POST /orders | body-json body: Order{qty: Int, sku: String} | ok: Order{qty: Int, sku: String} | replies: 201:Created:Value,400:StructuralMismatch:BoundaryError"
+        );
+        assert_eq!(h, "0f4346f8f1c4f893");
         // Field order, replies order and a repeated reply are not contract changes.
         let (_, reordered) = route("commons x\n\ntype Order = { qty: Int, sku: String }\n");
         assert_eq!(h, http_route_contract_hash(&r, &reordered));

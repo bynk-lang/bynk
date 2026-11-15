@@ -192,6 +192,23 @@ enum RawEtag {
 }
 
 impl ReplyPayload {
+    /// The payload's name in a contract hash: spelt out, so renaming a variant of this
+    /// enum does not move every route's hash.
+    fn name(self) -> &'static str {
+        match self {
+            Self::Value => "Value",
+            Self::Message => "Message",
+            Self::Location => "Location",
+            Self::None => "None",
+            Self::BoundaryError => "BoundaryError",
+            Self::BoundaryRefusal => "BoundaryRefusal",
+            Self::Raw => "Raw",
+            Self::RawEtag => "RawEtag",
+            Self::RawTagged => "RawTagged",
+            Self::Events => "Events",
+        }
+    }
+
     /// Whether the body is the caller's to read, not the client's to decode.
     fn is_raw(self) -> bool {
         matches!(self, Self::Raw | Self::RawEtag | Self::RawTagged)
@@ -1268,7 +1285,7 @@ impl Gen {
             replies: r
                 .replies
                 .iter()
-                .map(|x| (x.status, x.variant.clone(), format!("{:?}", x.payload)))
+                .map(|x| (x.status, x.variant.clone(), x.payload.name().to_string()))
                 .collect(),
         }
     }

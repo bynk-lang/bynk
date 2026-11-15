@@ -239,7 +239,8 @@ export interface ClientOptions {
    * contract a caller was generated for. Informational: nothing rejects a mismatch. Off by
    * default, because a custom header makes a cross-origin browser call preflighted, and the
    * server's `Access-Control-Allow-Headers` is only `content-type` (and `Authorization` on a
-   * Bearer route) unless the service's `cors { allowHeaders: [...] }` lists `x-bynk-contract`.
+   * Bearer route) unless the service's `cors { headers: [...] }` lists `x-bynk-contract` (an
+   * explicit list replaces the default).
    * A server-side call has no preflight and can turn it on freely.
    */
   readonly sendContract?: boolean;
