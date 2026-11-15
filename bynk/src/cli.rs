@@ -193,6 +193,16 @@ pub enum Command {
         /// workers' logs per context and level. Implies `--rewrite-frames`.
         #[arg(long, requires = "format")]
         log_events: bool,
+        /// Write one `request` event per request a worker serves (its route,
+        /// status, duration and the steps it took: capability ops, cross-context
+        /// calls and agent calls, each with its `.bynk` span), so an editor can show
+        /// what a request did. Implies `--format json` and `--rewrite-frames`.
+        /// Builds the workers with the recording on, and adds the `nodejs_als`
+        /// compatibility flag unless the project already lists `nodejs_compat` or
+        /// `nodejs_als`. Steps carry no argument values. Dev builds only: a deploy
+        /// build never records.
+        #[arg(long)]
+        trace_events: bool,
         /// Rewrite stack frames in the workers' output to `.bynk` locations
         /// even on a terminal. Off a terminal (an editor task, CI) it is
         /// always done; on one, wrangler's output is left attached so its

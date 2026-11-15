@@ -67,6 +67,7 @@ fn run() -> ExitCode {
             format,
             ready_json,
             log_events,
+            trace_events,
             rewrite_frames,
             wrangler_args,
         } => {
@@ -84,9 +85,15 @@ fn run() -> ExitCode {
                     local_workers,
                     no_install,
                     wrangler_args,
-                    format: format.into(),
+                    // `--trace-events` writes events, so it implies `--format json`.
+                    format: if trace_events {
+                        bynk::dev::DevFormat::Json
+                    } else {
+                        format.into()
+                    },
                     ready_json,
                     log_events,
+                    trace_events,
                     rewrite_frames,
                 },
             )
