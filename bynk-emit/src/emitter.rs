@@ -68,6 +68,7 @@ use bynk_syntax::ast::{
 };
 
 pub mod client;
+pub mod http_client;
 pub mod containers;
 pub mod contracts;
 pub(crate) mod events_fanout;
