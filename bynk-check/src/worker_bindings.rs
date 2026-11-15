@@ -370,6 +370,15 @@ pub fn phase_duplicate_bindings(
     }
 }
 
+/// Whether two identical declarations of `source` in different members of a
+/// group are one shared binding. A resource is identified by its declaration
+/// (a capability and its options), so identical ones share. An agent is not: its
+/// binding holds only the class's name, but its class is the code of the context
+/// that declares it, so two members' agents of one name are two classes.
+fn shareable(source: &BindingSource) -> bool {
+    !matches!(source, BindingSource::Agent { .. })
+}
+
 /// `bynk.deploy.binding_collision` (#3562): the members of a Worker group share
 /// one `wrangler.toml` and one `env`, so a binding name two members both
 /// declare is one binding when their declarations are identical (the same kind
@@ -394,7 +403,9 @@ pub fn phase_group_binding_collisions(
                     first.insert(&binding.name, (ctx, binding));
                     continue;
                 };
-                if earlier_ctx == ctx || earlier.source == binding.source {
+                if earlier_ctx == ctx
+                    || (shareable(&binding.source) && earlier.source == binding.source)
+                {
                     continue;
                 }
                 let (file, span) = declared_at(parsed, indices, binding)
@@ -412,9 +423,11 @@ pub fn phase_group_binding_collisions(
                             binding.source.describe(),
                         ),
                     )
-                    .with_note(
-                        "members of one Worker share its bindings: give both contexts the same declaration so they share one binding, or rename one capability",
-                    ),
+                    .with_note(if shareable(&binding.source) {
+                        "members of one Worker share its bindings: give both contexts the same declaration so they share one binding, or rename one capability"
+                    } else {
+                        "a Durable Object class belongs to the context that declares it, whatever its name, so two members cannot each declare one with the same name: rename one of the agents"
+                    }),
                 );
             }
         }
@@ -625,6 +638,36 @@ mod tests {
                     ),
                     ("a.z", vec![r2("ARCHIVES", Some("eu"))]),
                 ],
+            )
+            .is_empty()
+        );
+    }
+
+    fn agent(name: &str) -> WorkerBinding {
+        WorkerBinding {
+            name: format!("AGENT_{}", name.to_uppercase()),
+            source: BindingSource::Agent {
+                class_name: name.to_string(),
+            },
+        }
+    }
+
+    /// An agent binding holds only the class name, so equal bindings can be two
+    /// different classes: two members each declaring `Cart` collide, though
+    /// their bindings compare equal.
+    #[test]
+    fn same_named_agents_in_two_members_collide() {
+        let found = collisions(
+            &["a.x", "a.y"],
+            &[("a.x", vec![agent("Cart")]), ("a.y", vec![agent("Cart")])],
+        );
+        assert_eq!(found.len(), 1, "{found:?}");
+        assert_eq!(found[0].0, "bynk.deploy.binding_collision");
+        // Agents of different names do not.
+        assert!(
+            collisions(
+                &["a.x", "a.y"],
+                &[("a.x", vec![agent("Cart")]), ("a.y", vec![agent("Order")])],
             )
             .is_empty()
         );

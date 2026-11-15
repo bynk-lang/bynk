@@ -168,3 +168,40 @@ fn members_with_different_bindings_under_one_name_collide() {
     assert!(ok, "separate Workers may differ:\n{out}");
     let _ = fs::remove_dir_all(&root);
 }
+
+fn agent_context(name: &str) -> String {
+    format!(
+        "context {name}\n\nagent Cart {{\n\tkey id: String\n\tstore n: Cell[Int] = 0\n\n\ton call bump() -> Effect[Int] {{ Effect.pure(1) }}\n}}\n\nservice probe {{\n\ton call() -> Effect[Int] {{\n\t\tEffect.pure(1)\n\t}}\n}}\n"
+    )
+}
+
+#[test]
+fn members_that_each_declare_an_agent_of_one_name_collide() {
+    let root =
+        std::env::temp_dir().join(format!("bynk-deploy-groups-agent-{}", std::process::id()));
+    write_project(&root, WORKERS_TARGET);
+    fs::write(
+        root.join("src/shop/orders.bynk"),
+        agent_context("shop.orders"),
+    )
+    .unwrap();
+    fs::write(
+        root.join("src/shop/payment.bynk"),
+        agent_context("shop.payment"),
+    )
+    .unwrap();
+    let (ok, out) = build(&root);
+    assert!(!ok, "{out}");
+    assert!(out.contains("bynk.deploy.binding_collision"), "{out}");
+    assert!(out.contains("rename one of the agents"), "{out}");
+
+    // Ungrouped, each context's Worker has its own `Cart` class.
+    fs::write(
+        root.join("bynk.toml"),
+        format!("{UNSTABLE_R2}[build]\ntarget = \"workers\"\n"),
+    )
+    .unwrap();
+    let (ok, out) = build(&root);
+    assert!(ok, "separate Workers may each declare `Cart`:\n{out}");
+    let _ = fs::remove_dir_all(&root);
+}
