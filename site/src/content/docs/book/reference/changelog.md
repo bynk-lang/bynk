@@ -28,6 +28,7 @@ per-commit history. While Bynk is pre-1.0, increments may change behaviour.
 
 | Version | Highlights |
 |---|---|
+| **v0.614.1** | The editor now shows `bynk.capability.not_provided` in a bundle with a composition root, at the same `given` and with the same message as `bynk check`. `bynk check` also raises it when the only thing that brings the root in is a context that emits events (`Events.emit`); before, only `bynk test` and `bynk build` failed, with `tsc` errors in `compose.ts` |
 | **v0.614.0** | A suite file may have its own `consumes`, and a suite file consumes what it names: naming a type that the suite's own `consumes` does not bring in (the target's clauses are not inherited) is `bynk.consumes.type_not_selected`, with a fix that edits the suite file (#3536) |
 | **v0.613.0** | `consumes` is per file (warning stage): naming a type, or a bare variant of a sum, that a unit exports in a file whose own `consumes` does not bring it in is `bynk.consumes.type_not_selected`, for the standard library and for the project's own contexts alike, and `bynk check --fix=bynk.consumes.type_not_selected` adds it to that file's `consumes`, in any fragment of a split unit; an error follows in a later release (#3536) |
 | **v0.612.1** | Documents per-file `consumes` (#3536): the language reference, the Book's suite and consume guides, and an ADR that amends the braces-only decision |
