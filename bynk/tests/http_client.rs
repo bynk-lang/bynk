@@ -445,10 +445,9 @@ fn build_writes_the_client_the_manifest_asks_for_and_otherwise_nothing() {
     }
     walk(&without, &mut files);
     assert!(
-        files
-            .iter()
-            .all(|f| f.extension().is_none_or(|e| e != "ts")
-                || f.to_string_lossy().contains("/out/")),
+        files.iter().all(|f| f.extension().is_none_or(|e| e != "ts")
+            || f.strip_prefix(&without)
+                .is_ok_and(|rel| rel.starts_with("out"))),
         "a project without `[build.client]` gains no client: {files:?}"
     );
 }
