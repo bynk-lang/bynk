@@ -990,7 +990,15 @@ fn client_config_from(
     let nothing = path
         .components()
         .all(|c| matches!(c, std::path::Component::CurDir));
-    if path.is_absolute() || nothing {
+    // A root or a drive makes a path absolute (`/abs`, `C:\\abs`), and on Windows `/abs`
+    // has no drive, so `is_absolute` alone would let it by.
+    let rooted = path.components().any(|c| {
+        matches!(
+            c,
+            std::path::Component::RootDir | std::path::Component::Prefix(_)
+        )
+    });
+    if path.is_absolute() || rooted || nothing {
         return Err(bad(
             "client.out",
             "must be a path relative to the project root, not the root itself",
