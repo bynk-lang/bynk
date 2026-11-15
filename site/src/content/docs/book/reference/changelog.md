@@ -28,6 +28,7 @@ per-commit history. While Bynk is pre-1.0, increments may change behaviour.
 
 | Version | Highlights |
 |---|---|
+| **v0.626.2** | Design: a plan to move the VS Code extension's diagram views from Mermaid to a first-party renderer in UML notation (model-diagrams track, settling) |
 | **v0.626.1** | Call hierarchy covers cross-context service calls, through `consumes … as` aliases too (#3582) |
 | **v0.626.0** | An `on http` handler takes a fifth special parameter, `cf: RequestCf`, the optional facts Cloudflare derived about the connection (Cloudflare-only, experimental) |
 | **v0.625.3** | `bynk/architectureModel` lists each event's emitters and subscribers and each handler's capability use (`given`, with the suites that `stub` it) |

@@ -17,6 +17,8 @@ or a row links to no file. Summaries and statuses are curated by hand; the
 
 | # | Decision | Status |
 |---|---|---|
+| [0858](0858-diagram-models-are-complete.md) | **The server's diagram models are complete; the client decides how much to show** (v0.626.2) — Retire `MAX_BLOCK_DEPTH` as a presentation cut — ship the full block tree with depth, fold in the client | Proposed (v0.626.2) |
+| [0857](0857-model-views-first-party-uml-renderer.md) | **The extension's model views render through a first-party diagram engine in UML notation, not Mermaid** (v0.626.2) — Model → diagram IR → layout (own grid for sequence, ELK for structure) → SVG, in the webview, in UML 2.5 with a Bynk profile | Proposed (v0.626.2) |
 | [0856](0856-call-hierarchy-cross-context-service-calls.md) | **Service handlers are call-only index symbols, so call hierarchy covers cross-context calls** (v0.626.1) — A service's `on call` and `on http` handlers become `SymbolKind::Handler` symbols, and a cross-context call is an edge to one | Accepted (v0.626.1) |
 | [0855](0855-request-cf-handler-parameter.md) | **`request.cf` is a fifth special handler parameter, `cf: RequestCf`** (v0.626) — A record of optional Cloudflare-derived request facts, never a fault when absent, skipped by the client and OpenAPI | Accepted (v0.626) |
 | [0854](0854-architecture-model-events-uses.md) | **`bynk/architectureModel` carries event emitters and subscribers and each handler's capability use** (v0.625.3) — The architecture model extends one request with additive `events` and per-node `uses` sections, read from the checker's resolved view | Accepted (v0.625.3) |
