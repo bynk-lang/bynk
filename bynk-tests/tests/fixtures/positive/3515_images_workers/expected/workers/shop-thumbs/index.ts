@@ -23,6 +23,7 @@ export default {
     const surface = compose(env);
     const __security_avatars: __SecurityPolicy = { nosniff: true, hstsMaxAgeSecs: null };
     const __security_probe: __SecurityPolicy = { nosniff: true, hstsMaxAgeSecs: null };
+    const __security_safe: __SecurityPolicy = { nosniff: true, hstsMaxAgeSecs: null };
     let __route: string = "request";
     try {
       if (path.startsWith("/_bynk/call/")) {
@@ -100,6 +101,27 @@ export default {
           return __applySecurityHeaders(__httpResultToResponse(result, (__v: string) => __v as __JsonValue), __security_probe);
         }
       }
+      {
+        if (method === "POST" && path === "/safe") {
+          __route = "POST /safe";
+          const __contentLength = request.headers.get("content-length");
+          if (__contentLength !== null && globalThis.Number(__contentLength) > 1048576) {
+            return __applySecurityHeaders(new globalThis.Response(globalThis.JSON.stringify({ kind: "PayloadTooLarge", details: "request body exceeds 1048576 bytes" }), { status: 413, headers: { "content-type": "application/json" } }), __security_safe);
+          }
+          let __bytes: globalThis.Uint8Array | undefined;
+          try {
+            __bytes = await __readBodyCapped(request, 1048576);
+          } catch {
+            return __applySecurityHeaders(new globalThis.Response(globalThis.JSON.stringify({ kind: "MalformedJson", details: "Invalid request body" }), { status: 400, headers: { "content-type": "application/json" } }), __security_safe);
+          }
+          if (__bytes === undefined) {
+            return __applySecurityHeaders(new globalThis.Response(globalThis.JSON.stringify({ kind: "PayloadTooLarge", details: "request body exceeds 1048576 bytes" }), { status: 413, headers: { "content-type": "application/json" } }), __security_safe);
+          }
+          const body = __bytes;
+          const result = await surface.http_POST_safe(body);
+          return __applySecurityHeaders(__httpResultToResponse(result, (__v: string) => __v as __JsonValue), __security_safe);
+        }
+      }
       if (path === "/avatar") {
         const __status = method === "OPTIONS" ? 204 : 405;
         const __res = new globalThis.Response(null, { status: __status, headers: { allow: "OPTIONS, POST" } });
@@ -109,6 +131,11 @@ export default {
         const __status = method === "OPTIONS" ? 204 : 405;
         const __res = new globalThis.Response(null, { status: __status, headers: { allow: "OPTIONS, POST" } });
         return __applySecurityHeaders(__res, __security_probe);
+      }
+      if (path === "/safe") {
+        const __status = method === "OPTIONS" ? 204 : 405;
+        const __res = new globalThis.Response(null, { status: __status, headers: { allow: "OPTIONS, POST" } });
+        return __applySecurityHeaders(__res, __security_safe);
       }
       return new globalThis.Response("Not Found", { status: 404 });
     } catch (e) {

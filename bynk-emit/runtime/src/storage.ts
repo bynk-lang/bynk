@@ -1026,17 +1026,25 @@ export interface WorkerImagesBinding {
  * until the case stubs the capability's operation. There is no fake transform:
  * an image handed back unchanged would make a test pass for the wrong reason.
  */
+// The double's fault carries `bynkNotStubbed`, which `WorkersImages` rethrows
+// instead of mapping to an `ImagesError`: an unstubbed call must fault, not
+// come back as a value a handler's fallback would swallow.
+function notStubbed(stub: string): Error {
+  return Object.assign(
+    new globalThis.Error(
+      `bynk: the \`Images\` binding is not stubbed, and a test never reaches Cloudflare Images — stub the operation the case calls (${stub})`,
+    ),
+    { bynkNotStubbed: true },
+  );
+}
+
 export function makeIntegrationImages(): WorkerImagesBinding {
   return {
     async info(): Promise<never> {
-      throw new globalThis.Error(
-        "bynk: the `Images` binding is not stubbed, and a test never reaches Cloudflare Images — stub the operation the case calls (`stub Images.info(_) returns …`)",
-      );
+      throw notStubbed("`stub Images.info(_) returns …`");
     },
     input(): WorkerImagesTransformer {
-      throw new globalThis.Error(
-        "bynk: the `Images` binding is not stubbed, and a test never reaches Cloudflare Images — stub the operation the case calls (`stub Images.transform(_, _, _) returns …`)",
-      );
+      throw notStubbed("`stub Images.transform(_, _, _) returns …`");
     },
   };
 }

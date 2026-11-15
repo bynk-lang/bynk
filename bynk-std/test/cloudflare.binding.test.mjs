@@ -1350,7 +1350,9 @@ t("WorkersImages.transform: a platform error is mapped by its code, any other is
   assert.deepEqual(await failure(coded(9412, "not an image")), { tag: "InvalidImage", message: "not an image" });
   assert.deepEqual(await failure(coded(9401)), { tag: "InvalidImage", message: "boom" });
   assert.deepEqual(await failure(coded(9432)), { tag: "InvalidImage", message: "boom" });
-  assert.deepEqual(await failure(coded(9402)), { tag: "ImageTooLarge" });
+  // 9402 is "too large or the connection was interrupted": only a message about size is the caller's.
+  assert.deepEqual(await failure(coded(9402, "The image is too large")), { tag: "ImageTooLarge" });
+  assert.deepEqual(await failure(coded(9402, "connection interrupted")), { tag: "ImagesFailed", message: "connection interrupted" });
   assert.deepEqual(await failure(coded(9413)), { tag: "ImageTooLarge" });
   assert.deepEqual(await failure(coded(9520)), { tag: "UnsupportedImage" });
   assert.deepEqual(await failure(coded(9422, "usage limit")), { tag: "ImagesFailed", message: "usage limit" });
@@ -1395,6 +1397,16 @@ t("WorkersImages.transform: Heic is read-only, so asking for it as an output is 
   const r = await new WorkersImages({ IMAGES: images }).transform(IMG, imgOpts(), outOpts({ format: { tag: "Heic" } }));
   assert.deepEqual(r, { tag: "Err", error: { tag: "InvalidImage", message: "Heic cannot be written as an output format" } });
   assert.deepEqual(images.calls, []);
+});
+
+t("WorkersImages.transform: the integration double's not-stubbed fault is rethrown, not returned as an error", async () => {
+  const notStubbed = Object.assign(new Error("bynk: the `Images` binding is not stubbed"), { bynkNotStubbed: true });
+  const wb = new WorkersImages({ IMAGES: fakeImages({ throws: notStubbed, info: undefined }) });
+  await assert.rejects(wb.transform(IMG, imgOpts(), outOpts()), /not stubbed/);
+  await assert.rejects(wb.info(IMG), /not stubbed/);
+  // An unknown fit is refused before the platform, like an unknown format.
+  const r = await new WorkersImages({ IMAGES: fakeImages() }).transform(IMG, imgOpts({ fit: Some({ tag: "Zoom" }) }), outOpts());
+  assert.deepEqual(r, { tag: "Err", error: { tag: "InvalidImage", message: "the fit Zoom has no wire name in this binding" } });
 });
 
 t("WorkersImages: a Worker without the binding faults, naming the stanza", async () => {

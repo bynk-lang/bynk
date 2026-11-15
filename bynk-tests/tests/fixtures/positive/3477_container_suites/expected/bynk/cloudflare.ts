@@ -966,7 +966,8 @@ export const ImageResult = {
  * Why an `Images` call did not give an image. `InvalidImage` is an input that
  * is not an image, or an option the call cannot honour, with the reason;
  * `UnsupportedImage` is a format the platform cannot read or write;
- * `ImageTooLarge` is an image over the platform's size or area limit; and
+ * `ImageTooLarge` is an image over the platform's size or area limit (a
+ * connection the platform lost mid-call is `ImagesFailed`, worth a retry); and
  * `ImagesFailed` is any other refusal, with the platform's message (the
  * `Image` prefix because `InvalidInput` is `AiError`'s and `Failed` is
  * `SqlError`'s). Cloudflare adds error codes over time, so a `match` over this

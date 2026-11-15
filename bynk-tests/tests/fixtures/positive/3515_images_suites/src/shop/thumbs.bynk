@@ -52,6 +52,20 @@ service probe from http {
 	}
 }
 
+service safe from http {
+	// A handler with a fallback: an unstubbed binding must still fault here,
+	// not be swallowed by `Err(_)`.
+	@raw(contentType: "*/*")
+	@limit(maxBody: 1048576)
+	on POST("/safe") (body: Bytes) -> Effect[HttpResult[String]] by Visitor given Images {
+		let r <- Images.info(body)
+		match r {
+			Ok(_) => Ok("image"),
+			Err(_) => Ok("fallback"),
+		}
+	}
+}
+
 service about {
 	on call(image: Bytes) -> Effect[Option[Bytes]] given Thumbnailer {
 		Thumbnailer.thumb(image)

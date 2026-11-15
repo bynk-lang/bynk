@@ -24,5 +24,8 @@ export function compose(env: Env) {
     async http_POST_probe(body: globalThis.Uint8Array) {
       return handlers.probe.http_POST_probe(body, deps);
     },
+    async http_POST_safe(body: globalThis.Uint8Array) {
+      return handlers.safe.http_POST_safe(body, deps);
+    },
   };
 }

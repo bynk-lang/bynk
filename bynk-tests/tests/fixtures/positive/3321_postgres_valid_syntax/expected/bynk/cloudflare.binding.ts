@@ -940,6 +940,8 @@ export class WorkersImages implements Images {
   }
 
   private static failure(e: unknown): ImagesError {
+    // The integration double's "not stubbed" fault is a fault, not a refusal.
+    if ((e as { bynkNotStubbed?: unknown } | null)?.bynkNotStubbed === true) throw e;
     const message = e instanceof Error ? e.message : String(e);
     switch (WorkersImages.code(e)) {
       case 9412: // the input is not an image
@@ -947,6 +949,9 @@ export class WorkersImages implements Images {
       case 9432: // the request was rejected as invalid
         return { tag: "InvalidImage", message };
       case 9402: // too large, or the connection was interrupted
+        // Only a message that says size is a caller's mistake; an interrupted
+        // connection is the platform's, and worth a retry.
+        return /too large|too big|exceeds/i.test(message) ? { tag: "ImageTooLarge" } : { tag: "ImagesFailed", message };
       case 9413: // over the maximum image area
         return { tag: "ImageTooLarge" };
       case 9520:
@@ -978,6 +983,9 @@ export class WorkersImages implements Images {
     if (options.rotate.tag === "Some" && ![90, 180, 270].includes(options.rotate.value)) {
       return `rotate must be 90, 180 or 270, not ${options.rotate.value}`;
     }
+    if (options.fit.tag === "Some" && WorkersImages.FIT[options.fit.value.tag] === undefined) {
+      return `the fit ${options.fit.value.tag} has no wire name in this binding`;
+    }
     if (WorkersImages.MIME[output.format.tag] === undefined) {
       return `${output.format.tag} cannot be written as an output format`;
     }
@@ -1005,14 +1013,10 @@ export class WorkersImages implements Images {
     const t: Record<string, unknown> = {};
     if (options.width.tag === "Some") t.width = options.width.value;
     if (options.height.tag === "Some") t.height = options.height.value;
-    if (options.fit.tag === "Some") t.fit = WorkersImages.FIT[options.fit.value.tag] ?? WorkersImages.unknownFit(options.fit.value.tag);
+    if (options.fit.tag === "Some") t.fit = WorkersImages.FIT[options.fit.value.tag];
     if (options.rotate.tag === "Some") t.rotate = options.rotate.value;
     if (options.blur.tag === "Some") t.blur = options.blur.value;
     return t;
-  }
-
-  private static unknownFit(tag: string): never {
-    throw new Error(`bynk.cloudflare.Images: the fit ${tag} has no wire name in this binding`);
   }
 
   private static drawOptions(o: Overlay): Record<string, unknown> {

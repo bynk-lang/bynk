@@ -84,6 +84,21 @@ export const probe = {
   },
 };
 
+export const safe = {
+  async http_POST_safe(body: globalThis.Uint8Array, deps: { Images: bynk_cloudflare.Images }): globalThis.Promise<HttpResult<string>> {
+    const r = await deps.Images.info(body);
+    switch (r.tag) {
+      case "Ok": {
+        return HttpResult.Ok("image");
+      }
+      case "Err": {
+        return HttpResult.Ok("fallback");
+      }
+    }
+    throw new globalThis.Error("non-exhaustive match");
+  },
+};
+
 export const about = {
   async call(image: globalThis.Uint8Array, deps: { Thumbnailer: Thumbnailer }): globalThis.Promise<Option<globalThis.Uint8Array>> {
     return deps.Thumbnailer.thumb(image);
