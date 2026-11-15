@@ -1539,6 +1539,9 @@ pub(super) fn platform_double(
             };
             format!("  return {{\n{}{}  }};\n", op("search"), op("answer"))
         }
+        // #3513 A: a test never presents a certificate to an origin, so each instance faults
+        // until its `send` is stubbed. A fake origin would pass cases the real handshake fails.
+        ("bynk.cloudflare", "MtlsCertificate") => format!("  return {{\n    async send() {{\n      throw new globalThis.Error(\"bynk: `{name}.send` is not stubbed, and a test never reaches the origin — add `stub {name}.send(_) returns …`\");\n    }},\n  }};\n"),
         // #3477: a test never starts a container, so each operation faults,
         // naming the instance it was asked for, until it is stubbed. There is
         // no in-memory echo: it would pass cases a real image fails.

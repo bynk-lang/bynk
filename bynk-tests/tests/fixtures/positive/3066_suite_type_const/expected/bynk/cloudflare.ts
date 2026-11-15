@@ -2046,6 +2046,43 @@ export interface Container {
 
 export const __ContainerToken: symbol = globalThis.Symbol("Container");
 
+/**
+ * An outbound call that presents one of your account's client certificates, for
+ * an origin that requires mutual TLS: the server proves its identity and so
+ * does the Worker, during the handshake. Used only through a named instance
+ * that names the certificate,
+ * `capability Backend = MtlsCertificate @certificate("acme-client")`, which
+ * binds as `MTLS_BACKEND`; a bare `given MtlsCertificate` names no certificate
+ * and is refused.
+ *
+ * The certificate is uploaded to the account by its owner (Wrangler's
+ * `mtls-certificate upload`, the dashboard or the API) and is named there;
+ * `@certificate` names it, as written in every environment. Bynk never uploads
+ * a certificate: its private key never reaches Bynk or the Worker.
+ *
+ * `send` has `Fetch.send`'s shape and rules: the same `Request` (its headers
+ * checked the same way, refused as `InvalidHeader` before anything is sent),
+ * the same `Response`, and `Network` when the call itself fails, which includes
+ * a handshake the origin refuses. Unlike `Service`, the URL's host is the
+ * destination: this is a real outbound call, and the certificate is presented
+ * to whatever origin the URL names. A status the origin returns, 5xx included,
+ * is an `Ok` response.
+ *
+ * Cloudflare does not support presenting a certificate to an origin that is a
+ * proxied zone on Cloudflare; the call fails with a `520`. See Cloudflare's
+ * mTLS bindings page for the current rules. There is no local simulation of
+ * the binding, and `bynkc test` faults until the call is stubbed, so a test
+ * never reaches the origin.
+ *
+ * `Request`, `Response` and `FetchError` are `bynk`'s types, so a context that
+ * calls `send` also writes `consumes bynk` to name them.
+ */
+export interface MtlsCertificate {
+  send(req: Request): globalThis.Promise<Result<Response, FetchError>>;
+}
+
+export const __MtlsCertificateToken: symbol = globalThis.Symbol("MtlsCertificate");
+
 export function __serialise_AiError(value: AiError): __JsonValue {
   switch (value.tag) {
     case "ModelNotFound":
