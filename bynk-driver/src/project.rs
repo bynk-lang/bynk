@@ -2561,6 +2561,63 @@ fn manifest_unit_diagnostics(
     }
 }
 
+/// The parsed files, each unit's files, and each unit's kind: what
+/// [`platform_lock_phase`] reads the units' sources from.
+type LockSources<'a> = (
+    &'a [ParsedFile],
+    &'a BTreeMap<String, Vec<usize>>,
+    &'a BTreeMap<String, UnitKind>,
+);
+
+/// Each unit's symbol table, `consumes`, `consumes` aliases and flattened names:
+/// what [`platform_lock_phase`] walks the provider closure with.
+type LockTables<'a> = (
+    &'a HashMap<String, UnitTable>,
+    &'a HashMap<String, Vec<String>>,
+    &'a HashMap<String, HashMap<String, String>>,
+    &'a HashMap<String, HashMap<String, String>>,
+);
+
+/// v0.19 (decisions 0017/0024): platform-lock enforcement. A deployment unit
+/// whose in-process closure reaches a platform-native capability is locked to
+/// that platform; the selected `--platform` must match. A unit is a context
+/// under `workers`, or a `[deploy.workers]` group of them (#3562, which share
+/// a Worker). Run only on otherwise-clean programs: the closure walk recurses
+/// the provider graph, whose acyclicity the earlier checks establish. P5.3:
+/// relocated to `bynk_check::project_model::phase_platform_lock` — this crate is
+/// a caller, not an owner.
+fn platform_lock_phase(
+    target: BuildTarget,
+    platform: Platform,
+    (project_root, overlay): (&Path, &HashMap<PathBuf, String>),
+    (parsed, groups, kinds): LockSources<'_>,
+    (unit_tables, unit_consumes, unit_consumes_aliases, unit_flattened): LockTables<'_>,
+    errors: &mut ErrorSink,
+) {
+    if !errors.is_empty() {
+        return;
+    }
+    // A malformed `[deploy.workers]` is reported when the project loads, before
+    // this phase runs, so a table that cannot be read here is not a silent
+    // loss of grouping.
+    let worker_groups =
+        bynk_project::worker_groups::try_read_worker_groups_with(project_root, overlay)
+            .unwrap_or_default();
+    project_model::phase_platform_lock(
+        target,
+        platform,
+        parsed,
+        groups,
+        kinds,
+        unit_tables,
+        unit_consumes,
+        unit_consumes_aliases,
+        unit_flattened,
+        &worker_groups,
+        errors,
+    );
+}
+
 #[allow(clippy::too_many_arguments)]
 fn run_checks(
     // R3.9 (#1113): one `(root, prefix)` pair per `Roots::trees` entry, not a
@@ -3441,27 +3498,19 @@ fn run_checks(
         &mut errors,
     );
 
-    // v0.19 (decisions 0017/0024): platform-lock enforcement. A deployment
-    // unit whose in-process closure reaches a platform-native capability is
-    // locked to that platform; the selected `--platform` must match. Run only
-    // on otherwise-clean programs: the closure walk recurses the provider
-    // graph, whose acyclicity the earlier checks establish. P5.3: relocated
-    // to `bynk_check::project_model::phase_platform_lock` — this crate is a
-    // caller, not an owner.
-    if errors.is_empty() {
-        project_model::phase_platform_lock(
-            target,
-            platform,
-            &parsed,
-            &groups,
-            &kinds,
+    platform_lock_phase(
+        target,
+        platform,
+        (project_root, overlay),
+        (&parsed, &groups, &kinds),
+        (
             &unit_tables,
             &unit_consumes,
             &unit_consumes_aliases,
             &unit_flattened,
-            &mut errors,
-        );
-    }
+        ),
+        &mut errors,
+    );
     // On Workers, each Worker's binding names are unique. Gated the same way:
     // the KV input walks the same provider graph.
     if let Some(bindings) = context_bindings.as_ref().filter(|_| errors.is_empty()) {
