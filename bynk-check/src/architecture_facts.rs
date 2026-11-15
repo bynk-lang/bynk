@@ -119,6 +119,7 @@ pub struct UseFact {
     /// The unit that declares it: this unit, a consumed one, or `bynk`.
     pub provider_unit: Option<String>,
     /// Written on the service header (`default_given`), not on the handler.
+    /// Always `false` for a provider operation, whose `given` is its provider's.
     pub inherited: bool,
     /// The `given` entry.
     pub site: FactSite,
@@ -320,7 +321,7 @@ impl<'a> UnitCx<'a> {
                         };
                         self.emits(&member, &op.body, &site, events);
                         uses.push(HandlerUsesFact {
-                            uses: self.use_facts(&p.given, op.span, &site),
+                            uses: self.use_facts(&p.given, None, &site),
                             member,
                         });
                     }
@@ -378,7 +379,7 @@ impl<'a> UnitCx<'a> {
         }
         self.emits(&member, &h.body, site, events);
         uses.push(HandlerUsesFact {
-            uses: self.use_facts(&h.given, h.span, site),
+            uses: self.use_facts(&h.given, Some(h.span), site),
             member,
         });
     }
@@ -386,7 +387,7 @@ impl<'a> UnitCx<'a> {
     fn use_facts(
         &self,
         given: &[CapRef],
-        handler_span: Span,
+        handler_span: Option<Span>,
         site: &dyn Fn(Span) -> FactSite,
     ) -> Vec<UseFact> {
         given
@@ -394,7 +395,8 @@ impl<'a> UnitCx<'a> {
             .map(|c| UseFact {
                 capability: c.key().to_string(),
                 provider_unit: self.resolve_cap(c),
-                inherited: c.span.start < handler_span.start || c.span.end > handler_span.end,
+                inherited: handler_span
+                    .is_some_and(|h| c.span.start < h.start || c.span.end > h.end),
                 site: site(c.span),
             })
             .collect()

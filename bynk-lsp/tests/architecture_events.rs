@@ -21,6 +21,18 @@ exports transparent { Pinged }
 
 event Pinged = { n: Qty }
 
+capability Audit {
+  fn note() -> Effect[()]
+}
+
+provides Audit = Ledger given Clock, Events {
+  fn note() -> Effect[()] {
+    let _ <- Clock.now()
+    let _ <- Events.emit[Pinged](Pinged { n: 1 })
+    Effect.pure(())
+  }
+}
+
 service api from http by Visitor given Clock, Events {
   on POST("/ping") () -> Effect[HttpResult[String]] {
     let _ <- Clock.now()
@@ -40,6 +52,23 @@ const LISTENER: &str = r#"context ev.listener
 consumes ev.emitter
 
 service OnPing from Events(Pinged) {
+  on event(e: Pinged) -> Effect[()] { () }
+}
+"#;
+
+const FILTERED: &str = r#"context ev.filtered
+
+consumes ev.emitter
+
+service Seven from Events(Pinged { n: 7, .. }) {
+  on event(e: Pinged) -> Effect[()] { () }
+}
+
+service Versioned from Events(Pinged) via schema(1) {
+  on event(e: Pinged) -> Effect[()] { () }
+}
+
+service Both from Events(Pinged { n: 7, .. }) via schema(1) {
   on event(e: Pinged) -> Effect[()] { () }
 }
 "#;
@@ -73,6 +102,7 @@ fn project(name: &str) -> (PathBuf, ProjectDiagnostics, HashMap<PathBuf, String>
         ("ev/emitter.bynk", EMITTER),
         ("ev/listener.bynk", LISTENER),
         ("ev/auditor.bynk", AUDITOR),
+        ("ev/filtered.bynk", FILTERED),
         ("ev/emitter.test.bynk", SUITE),
     ] {
         let p = root.join(rel);
@@ -113,8 +143,13 @@ fn event_lists_its_emitter_and_both_subscribers_across_units() {
         ("ev.emitter", "Pinged")
     );
 
-    assert_eq!(ev.emitters.len(), 1);
-    let e = &ev.emitters[0];
+    // The `POST /ping` handler and the `Ledger.note` provider operation emit.
+    assert_eq!(ev.emitters.len(), 2);
+    let e = ev
+        .emitters
+        .iter()
+        .find(|e| e.member.kind == "service")
+        .unwrap();
     assert_eq!(e.member.unit, "ev.emitter");
     assert_eq!(e.member.kind, "service");
     assert_eq!(e.member.container, "api");
@@ -138,7 +173,10 @@ fn event_lists_its_emitter_and_both_subscribers_across_units() {
         subs,
         vec![
             ("ev.auditor", "OnPing", "all"),
-            ("ev.listener", "OnPing", "all")
+            ("ev.filtered", "Both", "patternSchema"),
+            ("ev.filtered", "Seven", "pattern"),
+            ("ev.filtered", "Versioned", "schema"),
+            ("ev.listener", "OnPing", "all"),
         ]
     );
     assert!(
@@ -219,4 +257,25 @@ fn existing_fields_are_unchanged_by_the_new_sections() {
         }
     }
     assert!(json["edges"].is_array() && json["events"].is_array());
+}
+
+#[test]
+fn a_provider_operation_is_a_member_whose_uses_are_never_inherited() {
+    let (wire, _) = wire("provider");
+    let node = wire.nodes.iter().find(|n| n.name == "ev.emitter").unwrap();
+    let op = node
+        .uses
+        .iter()
+        .find(|u| u.member.kind == "provider")
+        .expect("the provider operation is a member");
+    assert_eq!(
+        (op.member.container.as_str(), op.member.handler.as_str()),
+        ("Ledger", "note")
+    );
+    let caps: Vec<(&str, bool)> = op
+        .uses
+        .iter()
+        .map(|u| (u.capability.as_str(), u.inherited))
+        .collect();
+    assert_eq!(caps, vec![("Clock", false), ("Events", false)]);
 }
