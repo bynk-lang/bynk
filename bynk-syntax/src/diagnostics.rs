@@ -8892,8 +8892,16 @@ pub const REGISTRY: &[DiagnosticInfo] = &[
         "A `[deploy.workers.<key>]` group's key or script name is another group's, or is the Worker of a context in no group.",
     ),
     d(
+        "bynk.deploy.multiple_publishers",
+        "More than one member of a `[deploy.workers.<key>]` group publishes events. A temporary restriction: each publisher has its own events fan-out class, and it goes when a group's fan-out is merged.",
+    ),
+    d(
         "bynk.deploy.not_a_context",
         "A `[deploy.workers.<key>]` group lists a unit that is not a `context`; only contexts are deployed as Workers.",
+    ),
+    d(
+        "bynk.deploy.service_name_conflict",
+        "Two members of one `[deploy.workers.<key>]` group declare a service of the same name; a Worker answers its members' services by name.",
     ),
     d(
         "bynk.deploy.unknown_context",

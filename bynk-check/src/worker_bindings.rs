@@ -395,6 +395,8 @@ pub fn phase_group_binding_collisions(
     errors: &mut ErrorSink,
 ) {
     for (key, group) in worker_groups {
+        group_service_names(key, &group.contexts, parsed, groups, errors);
+        group_publishers(key, &group.contexts, parsed, groups, bindings, errors);
         let mut first: HashMap<&str, (&str, &WorkerBinding)> = HashMap::new();
         for ctx in &group.contexts {
             let indices = groups.get(ctx).map(Vec::as_slice).unwrap_or_default();
@@ -432,6 +434,96 @@ pub fn phase_group_binding_collisions(
             }
         }
     }
+}
+
+/// `bynk.deploy.service_name_conflict` (#3562): a service is reached by its name
+/// (`/_bynk/call/<service>` carries no context), and a Worker answers every
+/// member's services, so two members of one group cannot each declare a service
+/// of one name. One error per repeat, at the later member's service.
+fn group_service_names(
+    key: &str,
+    members: &[String],
+    parsed: &[ParsedFile],
+    groups: &BTreeMap<String, Vec<usize>>,
+    errors: &mut ErrorSink,
+) {
+    let mut first: HashMap<String, &str> = HashMap::new();
+    for ctx in members {
+        let indices = groups.get(ctx).map(Vec::as_slice).unwrap_or_default();
+        for &i in indices {
+            let SourceUnit::Context(c) = parsed[i].unit() else {
+                continue;
+            };
+            for item in &c.items {
+                let CommonsItem::Service(service) = item else {
+                    continue;
+                };
+                let name = &service.name.name;
+                match first.get(name.as_str()) {
+                    None => {
+                        first.insert(name.clone(), ctx);
+                    }
+                    Some(earlier) if *earlier != ctx.as_str() => {
+                        errors.push_for(
+                            Some(&parsed[i].identity_path()),
+                            CompileError::new(
+                                "bynk.deploy.service_name_conflict",
+                                service.name.span,
+                                format!(
+                                    "contexts `{earlier}` and `{ctx}` share Worker `{key}`, and both declare a service named `{name}`"
+                                ),
+                            )
+                            .with_note(
+                                "a Worker answers its members' services by name, so each service name must be unique within a group: rename one of the services, or put the contexts in different groups",
+                            ),
+                        );
+                    }
+                    Some(_) => {}
+                }
+            }
+        }
+    }
+}
+
+/// `bynk.deploy.multiple_publishers` (#3562): a context that publishes events has
+/// its own events fan-out class, and a Worker has one, so a group with two
+/// publishing members would emit two classes of one name. A **temporary**
+/// restriction: the group's fan-out is to become one class routing every member's
+/// events, and this check goes when it does. One error, at the second publisher.
+fn group_publishers(
+    key: &str,
+    members: &[String],
+    parsed: &[ParsedFile],
+    groups: &BTreeMap<String, Vec<usize>>,
+    bindings: &BTreeMap<String, Vec<WorkerBinding>>,
+    errors: &mut ErrorSink,
+) {
+    let publishes = |ctx: &String| {
+        bindings.get(ctx).is_some_and(|b| {
+            b.iter()
+                .any(|b| matches!(b.source, BindingSource::EventsFanout { .. }))
+        })
+    };
+    let mut publishers = members.iter().filter(|c| publishes(c));
+    let (Some(first), Some(second)) = (publishers.next(), publishers.next()) else {
+        return;
+    };
+    let indices = groups.get(second).map(Vec::as_slice).unwrap_or_default();
+    let (file, span) = context_header(parsed, indices)
+        .map_or((None, Span::default()), |(file, span)| (Some(file), span));
+    errors.push_for(
+        file.as_deref(),
+        CompileError::new(
+            "bynk.deploy.multiple_publishers",
+            span,
+            format!(
+                "contexts `{first}` and `{second}` share Worker `{key}`, and both publish events"
+            ),
+        )
+        .with_note(
+            "for now a Worker group has at most one publishing member, because each publisher has its own events fan-out class; this restriction is temporary, and goes when a group's fan-out is merged. Put the publishers in different groups, or give one of them its own Worker",
+        ),
+    );
 }
 
 /// Where the context declares the source of `binding`: an agent's name, or
