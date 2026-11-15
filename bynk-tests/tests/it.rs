@@ -145,6 +145,8 @@ mod integration {
     mod suggestions;
     #[path = "suite_diagnostics_attributed.rs"]
     mod suite_diagnostics_attributed;
+    #[path = "trace_requests.rs"]
+    mod trace_requests;
     #[path = "wire_shape_drift.rs"]
     mod wire_shape_drift;
     #[path = "write_output_reconciliation_behaviour.rs"]
