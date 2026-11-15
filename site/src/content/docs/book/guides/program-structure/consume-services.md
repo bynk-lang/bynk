@@ -51,6 +51,43 @@ service placeOrder {
 }
 ```
 
+## Consume in every file that names it
+
+A context can be split over several files that share its declarations, but
+`consumes` is not shared: **each file consumes what it names.** A name from
+another context or from the standard library is in scope in a file only if that
+file has a `consumes` for it, and where the list is braced, only if it is
+listed. Two files can consume the same thing; the context depends on the union
+of what its files consume.
+
+```bynk,fragment
+context orders
+
+consumes bynk { Clock }
+consumes payment
+
+service placeOrder {
+	on call(total: Int) -> Effect[Result[Int, Int]] given Clock {
+		let _ <- payment.authorise(total)
+		Ok(total)
+	}
+}
+```
+
+A second file of `orders` that also calls `payment.authorise`, or writes
+`given Clock`, needs its own `consumes payment` and `consumes bynk { Clock }`.
+Until a later release makes it an error, a file that does not warns
+(`bynk.consumes.unit_not_consumed`, `bynk.consumes.capability_not_selected`,
+`bynk.consumes.type_not_selected`), and one command adds the clauses to every
+file that needs them:
+
+```sh
+bynk check --fix=bynk.consumes.type_not_selected,bynk.consumes.capability_not_selected,bynk.consumes.unit_not_consumed
+```
+
+A suite file consumes what it names in the same way: see
+[what a suite consumes](/book/reference/testing/#suite-consumes).
+
 ## Rename an exported type that clashes with one of yours
 
 `consumes U { … }` brings into scope the names it lists, and the types its
@@ -64,8 +101,9 @@ A type the listed capabilities do *not* use is out of scope: `consumes bynk
 clash, and the standard library can add a type without changing what your
 program means. Naming a standard-library type the braces do not list still works
 for now, as the warning `bynk.consumes.type_not_selected` (`bynk check --fix`
-adds the name), and will be an error in a later release. A bare `consumes
-bynk`, with no braces, brings in the whole module.
+adds the name), and will be an error in a later release. The same goes for a
+file whose own `consumes` does not bring the type in, as above. A bare `consumes
+bynk`, with no braces, brings in the whole module for the file that writes it.
 
 Rename the consumed type in the braces with `as`.
 It is then in scope only under the alias, and the clash goes away:
