@@ -6283,7 +6283,9 @@ mod event_address_tests {
             ("shop/ledger.bynk", &ledger("consumes shop.order", "")),
             (
                 "shop/tests/ledger.test.bynk",
-                &suite("    let _ <- OnPlaced.event(Placed { id: \"o1\" })"),
+                // #3536: a suite consumes what it names.
+                &suite("    let _ <- OnPlaced.event(Placed { id: \"o1\" })")
+                    .replace("{\n  case", "{\n  consumes shop.order\n  case"),
             ),
         ]);
         a.assert_clean();
