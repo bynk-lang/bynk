@@ -99,6 +99,9 @@ test("one connection per statement, opened with the connection string, ended aft
   assert.equal(f.opened[0]!.url, URL_WITH_SECRET);
   assert.equal(f.opened[0]!.options.max, 1);
   assert.equal(f.opened[0]!.options.fetch_types, false);
+  // postgres.js 4 types parameters on the server unless asked (3.x typed them from JavaScript):
+  // `infer: true` keeps `PgTimestamp`, `PgBoolean` and `PgBytea` binding as documented.
+  assert.equal(f.opened[0]!.options.infer, true);
   assert.equal(f.ended(), 2);
 });
 

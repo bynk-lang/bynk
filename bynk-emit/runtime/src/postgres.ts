@@ -272,7 +272,13 @@ export function makePgExecute(factory: PgFactory): PgExecute {
   // `max: 1`: one statement needs one connection. `fetch_types: false` skips the
   // driver's own type lookup (a query against `pg_type` on a new connection); 4.x
   // defaults it to `true` on every runtime, so it is written down here.
-  const open = (connectionString: string): PgSql => factory(connectionString, { max: 1, fetch_types: false, types: PG_TYPES });
+  // `infer: true` is postgres.js 3's typing, which 4.x made opt-in: a `Date` binds
+  // as `timestamptz`, a boolean as `boolean` and bytes as `bytea`, as the `PgValue`
+  // variants document. Without it the server types such a parameter from the query,
+  // so `date_trunc('day', $1)` with a `PgTimestamp` is an error and a `PgBoolean`
+  // in a select list reads back as text. 3.x ignores the option.
+  const open = (connectionString: string): PgSql =>
+    factory(connectionString, { max: 1, fetch_types: false, infer: true, types: PG_TYPES });
   const close = async (client: PgSql | undefined): Promise<void> => {
     if (client === undefined) return;
     try {
