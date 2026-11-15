@@ -983,8 +983,8 @@ service archives from http {
   (a streamed echo or transform) **passes its `bynk test` cases at every tier and then
   fails under `wrangler dev`**. Nothing warns you: the compiler does not follow the stream
   into the response, and the test runner has no proxy in front of the handler.
-  - *What happens.* With Wrangler 4.162.0, a client that sends a 256 KiB chunked body and
-    then reads the response gets a `500`. The dev server logs `Uncaught TypeError: This
+  - *What happens.* With the pinned Wrangler (4.162.0 at the time of writing), a client that
+    sends a 256 KiB chunked body and then reads the response gets a `500`. The dev server logs `Uncaught TypeError: This
     ReadableStream is currently locked to a reader` and `Error inside ProxyWorker … Network
     connection lost`. The same route, reading the body to the end with `collect()` and then
     answering, returns `200`.
@@ -997,10 +997,8 @@ service archives from http {
     `R2.putStream`) and then answer, as the `/archives/:name` example above does. To echo
     bytes back, answer from what you collected. If a streamed answer is the point, take the
     stream from a capability, not from the request.
-  - *Why a warning is not added.* The behaviour is unconfirmed on the edge, and a
-    diagnostic would have to follow the stream through `map` and `take` into the response.
-    That is a new diagnostic, which needs a proposal, and it is worth proposing only if a
-    deployed Worker fails too. Until then this page is the guard.
+  - *Why there is no warning.* It is unconfirmed on the edge, and a diagnostic would be a new
+    one; see [#3396](https://github.com/bynk-lang/bynk/issues/3396) for the status.
 - **Retries and idempotency.** A request body cannot be replayed, so a client that retries
   sends it again. Take an [`Idempotency`](/book/reference/bynk-capabilities/#the-idempotency-capability)
   key from the request's head (a path segment or a header), not the body.
