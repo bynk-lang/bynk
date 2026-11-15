@@ -1215,11 +1215,15 @@ pub const EXPLANATIONS: &[Explain] = &[
                 `provides Mailer = …` in the same context, which says what the capability does \
                 there. Without one the Worker has nothing to hand the handler, so the compiler \
                 refuses it here and does not leave it to fail in the generated TypeScript. The \
-                bundle target (the default) does not ask, because the host program can supply the \
-                capability when it builds the surface. A capability declared in another context is \
+                bundle target (the default) asks only when the program has a composition root \
+                (`composeApp`), which it has once a context consumes another context's service or \
+                capability, emits events, or derives a capability: `composeApp` builds every \
+                context itself, so nothing else can supply the capability, and a test `stub` \
+                covers only the cases that stub it. Without a root, the host program can supply \
+                the capability when it builds the surface. A capability declared in another context is \
                 that context's to provide, and an exported capability with no provider has its own \
-                `bynk.exports.capability_not_provided`. Add a provider to the context, or build \
-                for `--target bundle`.",
+                `bynk.exports.capability_not_provided`. Add a provider to the context, or, on \
+                Workers, build for `--target bundle` when the bundle has no composition root.",
         example: "service notify {\n\
                   \x20\x20on call(to: String) -> Effect[()] given Mailer {   // ✗ no `provides Mailer` in this context\n\
                   \x20\x20\x20\x20Mailer.send(to)\n\
@@ -8481,7 +8485,7 @@ pub const REGISTRY: &[DiagnosticInfo] = &[
     ),
     dg(
         "bynk.capability.not_provided",
-        "On the Workers target, a capability a context requires has no provider in it.",
+        "A capability a context requires has no provider in it, on the Workers target or in a bundle with a composition root.",
         &["given_clause"],
     ),
     dg(

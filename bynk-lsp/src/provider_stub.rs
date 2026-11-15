@@ -5,10 +5,10 @@
 //!
 //! It is offered as a quick fix on `bynk.exports.capability_not_provided`
 //! (an exported capability with no provider), and as a `refactor` with the
-//! cursor on the capability's name. The Workers-only
-//! `bynk.capability.not_provided` is never raised in the editor, whose
-//! analysis runs as the bundle target, so the refactor is what covers a
-//! required capability.
+//! cursor on the capability's name. `bynk.capability.not_provided` is never
+//! raised in the editor: its analysis runs as the bundle target, and does not
+//! work out whether the bundle has a composition root, the one case where the
+//! bundle raises it. So the refactor is what covers a required capability.
 //!
 //! The language has no placeholder expression, so a stub body must be a value
 //! that type-checks (DECISION B re-checks the edit). Each body is a default of

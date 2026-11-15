@@ -853,7 +853,7 @@
     },
     {
       "code": "bynk.capability.not_provided",
-      "summary": "On the Workers target, a capability a context requires has no provider in it."
+      "summary": "A capability a context requires has no provider in it, on the Workers target or in a bundle with a composition root."
     },
     {
       "code": "bynk.capability.provider_agent_cross_context",

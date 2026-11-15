@@ -1,0 +1,14 @@
+// #1822 on the bundle target: `shop.front` consumes `shop.stock`'s service, so
+// the bundle has a composition root, and `composeApp` builds every context's
+// deps, `shop.orders` included. `Warehouse` has no provider here, and the
+// suite's `stub` covers only its cases, so it is refused at the `given`, not
+// left to `tsc` against `compose.ts` (`bynk.codegen.tsc_failed`).
+context shop.orders
+consumes bynk { Logger }
+capability Warehouse { fn reserve(sku: String) -> Effect[String] }
+service orders from http {
+	on POST("/r") () -> Effect[HttpResult[String]] by Visitor given Warehouse {
+		let id <- Warehouse.reserve("x")
+		Ok(id)
+	}
+}

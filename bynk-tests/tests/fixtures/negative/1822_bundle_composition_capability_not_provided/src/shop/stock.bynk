@@ -1,0 +1,4 @@
+context shop.stock
+service count {
+	on call() -> Effect[Int] { 1 }
+}
