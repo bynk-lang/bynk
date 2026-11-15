@@ -1,0 +1,107 @@
+//! `[deploy.workers.<key>]` groups name only contexts the project declares
+//! (#3562, slice G1). The check needs the project's units, so it runs at
+//! `check` time, and the build and the editor read the table the same way:
+//! this runs one project through both.
+
+use bynk_driver::project::Roots;
+use std::collections::{BTreeSet, HashMap};
+use std::fs;
+use std::process::Command;
+
+const MANIFEST: &str = "[deploy.workers.core]\ncontexts = [\"shop.orders\", \"shop.ordres\", \"money\"]\n\n[deploy.workers.shop-payment]\ncontexts = [\"shop.orders\"]\n";
+const MANIFEST_ONE_GROUP: &str =
+    "[deploy.workers.core]\ncontexts = [\"shop.orders\", \"shop.payment\"]\nname = \"acme-core\"\n";
+
+const COMMONS: &str = "commons money {\n\tfn dbl(n: Int) -> Int { n + n }\n}\n";
+const ORDERS: &str = "context shop.orders\n\nservice probe {\n\ton call() -> Effect[Int] {\n\t\tEffect.pure(1)\n\t}\n}\n";
+const PAYMENT: &str = "context shop.payment\n\nservice probe {\n\ton call() -> Effect[Int] {\n\t\tEffect.pure(2)\n\t}\n}\n";
+
+fn check(root: &std::path::Path) -> (bool, String) {
+    let checked = Command::new(env!("CARGO_BIN_EXE_bynk-under-test"))
+        .args(["check", "--format", "short"])
+        .arg(root)
+        .output()
+        .expect("run bynk");
+    let out = format!(
+        "{}{}",
+        String::from_utf8_lossy(&checked.stdout),
+        String::from_utf8_lossy(&checked.stderr)
+    );
+    (checked.status.success(), out)
+}
+
+fn write_project(root: &std::path::Path, manifest: &str) {
+    let _ = fs::remove_dir_all(root);
+    fs::create_dir_all(root.join("src/shop")).unwrap();
+    fs::write(root.join("bynk.toml"), manifest).unwrap();
+    fs::write(root.join("src/money.bynk"), COMMONS).unwrap();
+    fs::write(root.join("src/shop/orders.bynk"), ORDERS).unwrap();
+    fs::write(root.join("src/shop/payment.bynk"), PAYMENT).unwrap();
+}
+
+/// The group diagnostics' codes.
+fn codes(found: impl IntoIterator<Item = String>) -> BTreeSet<String> {
+    found
+        .into_iter()
+        .filter(|code| code.starts_with("bynk.deploy."))
+        .collect()
+}
+
+#[test]
+fn a_context_in_two_groups_fails_check() {
+    let root = std::env::temp_dir().join(format!("bynk-deploy-groups-two-{}", std::process::id()));
+    write_project(&root, MANIFEST);
+    let (ok, out) = check(&root);
+    assert!(!ok, "{out}");
+    assert!(out.contains("bynk.deploy.context_in_two_groups"), "{out}");
+    let _ = fs::remove_dir_all(&root);
+}
+
+#[test]
+fn a_group_of_declared_contexts_checks_clean() {
+    let root = std::env::temp_dir().join(format!("bynk-deploy-groups-ok-{}", std::process::id()));
+    write_project(&root, MANIFEST_ONE_GROUP);
+    let (ok, out) = check(&root);
+    assert!(ok, "{out}");
+    let _ = fs::remove_dir_all(&root);
+}
+
+#[test]
+fn the_build_and_the_editor_refuse_the_same_members() {
+    let manifest =
+        "[deploy.workers.core]\ncontexts = [\"shop.orders\", \"shop.ordres\", \"money\"]\n";
+    let root = std::env::temp_dir().join(format!("bynk-deploy-groups-bad-{}", std::process::id()));
+    write_project(&root, manifest);
+
+    let (ok, out) = check(&root);
+    assert!(!ok, "{out}");
+    let build = codes(out.lines().filter_map(|line| {
+        let (_, rest) = line.split_once('[')?;
+        let (code, _) = rest.split_once("]: ")?;
+        Some(code.to_string())
+    }));
+
+    let paths = bynk_driver::project::try_read_project_paths(&root).expect("the manifest reads");
+    let overlay = HashMap::from([
+        (root.join("bynk.toml"), manifest.to_string()),
+        (root.join("src/money.bynk"), COMMONS.to_string()),
+        (root.join("src/shop/orders.bynk"), ORDERS.to_string()),
+        (root.join("src/shop/payment.bynk"), PAYMENT.to_string()),
+    ]);
+    let analysis = bynk_check::analysis::analyse_project(
+        &Roots::Split {
+            project_root: root.clone(),
+            paths,
+        },
+        &overlay,
+        &bynk_driver::project::SchemaLock::Off,
+    );
+    let editor = codes(analysis.errors.iter().map(|a| a.error.category.to_string()));
+    let expected = BTreeSet::from([
+        "bynk.deploy.not_a_context".to_string(),
+        "bynk.deploy.unknown_context".to_string(),
+    ]);
+    assert_eq!(build, expected, "the build's report:\n{out}");
+    assert_eq!(editor, expected, "the editor's analysis");
+    let _ = fs::remove_dir_all(&root);
+}

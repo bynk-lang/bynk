@@ -299,6 +299,8 @@ mod system {
     mod cross_file_label_behaviour;
     #[path = "debug_inspect.rs"]
     mod debug_inspect;
+    #[path = "deploy_worker_groups.rs"]
+    mod deploy_worker_groups;
     #[path = "detach_workerd.rs"]
     mod detach_workerd;
     #[path = "deterministic_diagnostic_order_behaviour.rs"]

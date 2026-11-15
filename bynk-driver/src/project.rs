@@ -2726,6 +2726,12 @@ fn run_checks(
     for err in bynk_check::exports::manifest_diagnostics(Some(project_root), overlay, &kinds) {
         errors.push_for(Some(Path::new(bynk_check::stability::MANIFEST)), err);
     }
+    // #3562: `[deploy.workers]` groups name only contexts the project declares,
+    // read as the editor reads them (`bynk_check::analysis::analyse_project`).
+    for err in bynk_check::worker_groups::manifest_diagnostics(Some(project_root), overlay, &kinds)
+    {
+        errors.push_for(Some(Path::new(bynk_check::stability::MANIFEST)), err);
+    }
     // -- 4. Build per-unit combined symbol tables. --
     // -- 4-5. Symbol tables, `uses` resolution, and (#3445) the constants named by
     //         literal-only annotation arguments, resolved ahead of every reader. --

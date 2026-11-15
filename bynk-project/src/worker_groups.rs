@@ -315,14 +315,20 @@ pub fn deploy_workers_from(deploy: &toml::Table) -> Result<WorkerGroups, Project
     Ok(out)
 }
 
-/// Read `bynk.toml`'s `[deploy.workers]` groups, honouring `overlay`. No
-/// manifest, or none of the table, is empty.
+/// Read `bynk.toml`'s `[deploy.workers]` groups, honouring `overlay` (an
+/// open, unsaved buffer) and otherwise reading the manifest from disk, as
+/// `read_package_config` does. No manifest, or none of the table, is empty.
 pub fn try_read_worker_groups_with(
     project_root: &Path,
     overlay: &HashMap<PathBuf, String>,
 ) -> Result<WorkerGroups, ProjectPathsError> {
-    let Ok(content) = read_source(&project_root.join("bynk.toml"), overlay) else {
-        return Ok(WorkerGroups::new());
+    let manifest = project_root.join("bynk.toml");
+    let content = match read_source(&manifest, overlay) {
+        Ok(text) => text,
+        Err(_) => match std::fs::read_to_string(&manifest) {
+            Ok(text) => text,
+            Err(_) => return Ok(WorkerGroups::new()),
+        },
     };
     let doc = content
         .parse::<toml::Table>()
@@ -335,12 +341,7 @@ pub fn try_read_worker_groups_with(
 
 /// [`try_read_worker_groups_with`], reading `bynk.toml` from disk.
 pub fn try_read_worker_groups(project_root: &Path) -> Result<WorkerGroups, ProjectPathsError> {
-    let path = project_root.join("bynk.toml");
-    let overlay = match std::fs::read_to_string(&path) {
-        Ok(text) => HashMap::from([(path, text)]),
-        Err(_) => HashMap::new(),
-    };
-    try_read_worker_groups_with(project_root, &overlay)
+    try_read_worker_groups_with(project_root, &HashMap::new())
 }
 
 /// A rule the groups break against the project's contexts.
