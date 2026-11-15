@@ -179,16 +179,19 @@ export async function traceFetch<E, C>(
   ctx: C,
 ): Promise<Response> {
   const als = requestScope();
+  const url = new globalThis.URL(request.url);
+  // The ids ride only on an internal call between Workers, so a request from
+  // outside cannot choose its own id or claim a parent.
+  const internal = url.pathname.startsWith("/_bynk/call/");
   const record: TraceRecord = {
-    id: request.headers.get(TRACE_REQUEST_HEADER) ?? globalThis.crypto.randomUUID(),
-    parent: request.headers.get(TRACE_PARENT_HEADER),
+    id: (internal ? request.headers.get(TRACE_REQUEST_HEADER) : null) ?? globalThis.crypto.randomUUID(),
+    parent: internal ? request.headers.get(TRACE_PARENT_HEADER) : null,
     last: undefined,
     steps: [],
     truncated: false,
     fault: null,
   };
   const started = now();
-  const url = new globalThis.URL(request.url);
   const flush = (status: number): void => {
     globalThis.console.log(
       TRACE_PREFIX +

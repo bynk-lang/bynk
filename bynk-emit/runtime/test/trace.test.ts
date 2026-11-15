@@ -194,3 +194,19 @@ test("only a call step carries a request id", async () => {
   });
   for (const s of got[0]!.steps as Array<Record<string, unknown>>) assert.equal(s.request, undefined);
 });
+
+test("a request from outside cannot choose its id or claim a parent", async () => {
+  const got = await lines(async () => {
+    await traceFetch(
+      "c",
+      async () => new Response("ok"),
+      new Request("http://x/orders", {
+        headers: { [TRACE_REQUEST_HEADER]: "forged-id", [TRACE_PARENT_HEADER]: "forged-parent" },
+      }),
+      {},
+      {},
+    );
+  });
+  assert.notEqual(got[0]!.id, "forged-id");
+  assert.equal(got[0]!.parent, null);
+});
