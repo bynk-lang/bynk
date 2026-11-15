@@ -1168,31 +1168,33 @@ pub(crate) fn forward_lines_with(
     }
 }
 
-/// #3580: turn a trace line a worker printed into a [`DevEvent::Request`],
-/// mapping its fault's frames to `.bynk` locations. `false` for a line that is
-/// not a trace (or is malformed), which is then forwarded like any other.
-fn emit_request(worker: &str, rewriter: &crate::logs::Rewriter, line: &str) -> bool {
-    let plain = crate::logs::strip_ansi(line);
-    let Some(t) = crate::trace::parse(&plain) else {
-        return false;
-    };
+/// #3580: a trace line a worker printed as a [`DevEvent::Request`], with its
+/// fault's frames mapped to `.bynk` locations, or `None` for a line that is not a
+/// trace (or is malformed), which is then forwarded like any other.
+fn request_event(worker: &str, rewriter: &crate::logs::Rewriter, line: &str) -> Option<DevEvent> {
+    let t = crate::trace::parse(&crate::logs::strip_ansi(line))?;
     let fault = t
         .fault
         .as_deref()
         .map(|stack| crate::trace::fault(stack, |l| rewriter.rewrite(worker, l)));
-    emit(
-        DevFormat::Json,
-        &DevEvent::Request {
-            context: worker.to_string(),
-            id: t.id,
-            route: t.route,
-            status: t.status,
-            duration_ms: t.duration_ms,
-            steps: t.steps,
-            truncated: t.truncated,
-            fault,
-        },
-    );
+    Some(DevEvent::Request {
+        context: worker.to_string(),
+        id: t.id,
+        route: t.route,
+        status: t.status,
+        duration_ms: t.duration_ms,
+        steps: t.steps,
+        truncated: t.truncated,
+        fault,
+    })
+}
+
+/// Write the [`DevEvent::Request`] for `line`; `false` when it is not a trace.
+fn emit_request(worker: &str, rewriter: &crate::logs::Rewriter, line: &str) -> bool {
+    let Some(event) = request_event(worker, rewriter, line) else {
+        return false;
+    };
+    emit(DevFormat::Json, &event);
     true
 }
 
@@ -2728,6 +2730,47 @@ mod tests {
             event_line(&event),
             r#"{"event":"request","context":"shop-orders","id":"r1","route":"POST /orders","status":201,"duration_ms":12.5,"steps":[{"kind":"call","target":"shop.payment.authorise","span":{"file":"src/shop/orders.bynk","line":23,"col":14},"ms":3.5,"outcome":"ok"}],"truncated":false,"fault":null}"#
         );
+    }
+
+    /// The real path from a printed line to the event: colour codes and a host
+    /// prefix are tolerated, and a fault's frames are rewritten through the
+    /// worker's own source map to `.bynk` locations.
+    #[test]
+    fn a_printed_trace_becomes_a_request_event_with_its_frames_mapped() {
+        let build = std::env::temp_dir().join(format!("bynk-trace-event-{}", std::process::id()));
+        let _ = std::fs::remove_dir_all(&build);
+        let worker = build.join("workers").join("shop");
+        std::fs::create_dir_all(&worker).unwrap();
+        std::fs::write(
+            worker.join("handlers.ts.map"),
+            r#"{"version":3,"sources":["/p/src/shop.bynk"],"mappings":";AASA"}"#,
+        )
+        .unwrap();
+        let rewriter = crate::logs::Rewriter::new(&build);
+        let stack = format!(
+            "Error: boom\\n    at http_GET (file://{}/handlers.ts:2:5)",
+            worker.display()
+        );
+        let line = format!(
+            "\u{1b}[34m[wrangler:inf]\u{1b}[0m __bynk_trace:{{\"id\":\"r1\",\"route\":\"GET /\",\"status\":500,\"duration_ms\":2.0,\"steps\":[],\"truncated\":false,\"fault\":\"{stack}\"}}"
+        );
+        let event = request_event("shop", &rewriter, &line).expect("a trace line");
+        let _ = std::fs::remove_dir_all(&build);
+        let DevEvent::Request {
+            context,
+            id,
+            status,
+            fault,
+            ..
+        } = event
+        else {
+            panic!("not a request event");
+        };
+        assert_eq!((context.as_str(), id.as_str(), status), ("shop", "r1", 500));
+        let fault = fault.expect("the fault is carried");
+        assert_eq!(fault.message, "Error: boom");
+        assert_eq!(fault.frames, ["at http_GET (/p/src/shop.bynk:10:1)"]);
+        assert!(request_event("shop", &rewriter, "plain output").is_none());
     }
 
     /// A trace line is consumed before the frame rewriter and never forwarded;
