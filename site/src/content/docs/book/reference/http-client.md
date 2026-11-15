@@ -441,7 +441,7 @@ custom header makes a cross-origin browser call preflighted, and a service's
 unless its `cors` block lists more, so the preflight would refuse the call. To send it from a
 browser, list it, remembering that an explicit `headers:` list replaces the default:
 
-```bynk
+```bynk,ignore
 cors {
   origins: ["https://app.example.com"],
   headers: ["content-type", "authorization", "x-bynk-contract"],
