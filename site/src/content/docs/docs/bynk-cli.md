@@ -377,6 +377,10 @@ afterwards (`waitUntil`, a streamed body) is not in it. A call to another
 context is one step here; the callee's own request is a separate `request`
 event, from its own worker.
 
+`bynk dev` takes a worker's output line as a trace when it carries the
+`__bynk_trace:` prefix followed by valid trace JSON, so a line of your own that
+happens to do so is read as one.
+
 The recorder finds the request's record through `AsyncLocalStorage`, so a traced
 build adds the `nodejs_als` compatibility flag to each worker's `wrangler.toml`.
 It does not add it when `[workers] compatibility_flags` already lists

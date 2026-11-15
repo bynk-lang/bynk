@@ -209,7 +209,7 @@ bynk dev --trace-events
 ```
 
 ```json
-{"event":"request","context":"shop-orders","route":"POST /orders","status":201,"duration_ms":12.4,"steps":[{"kind":"call","target":"shop.payment.authorise","span":{"file":"src/shop/orders.bynk","line":23,"col":14},"ms":3.1,"outcome":"ok"}],"truncated":false,"fault":null}
+{"event":"request","context":"shop-orders","id":"5d5e…","route":"POST /orders","status":201,"duration_ms":12.4,"steps":[{"kind":"call","target":"shop.payment.authorise","span":{"file":"src/shop/orders.bynk","line":23,"col":14},"ms":3.1,"outcome":"ok"}],"truncated":false,"fault":null}
 ```
 
 It implies `--format json`, so stdout carries events only. The steps hold no
