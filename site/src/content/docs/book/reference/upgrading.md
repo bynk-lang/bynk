@@ -17,6 +17,10 @@ here broke nothing, or its author did not say so: please
 
 <!-- stamp:breaking-entries -->
 
+## v0.606.1
+
+A project with a `Postgres` instance has `postgres` 4.0.0 in its `bynk.lock` and `package.json` now (was 3.4.5). A build run with `--locked` is refused with `bynk.package.lock_out_of_date` ("`bynk.lock` is out of date with the manifests, and `--locked` was given") until you run `bynk fetch` and commit the lock. Bynk keeps postgres.js 3's parameter typing (`infer: true`), so `PgTimestamp`, `PgBoolean` and `PgBytea` bind as documented. One difference remains: a statement with several commands and no parameters (`create table a(…); create table b(…)`) now reports an empty row for each command and a `rowCount` of the commands, where it reported none and 0; a single statement is unchanged.
+
 ## v0.605.0
 
 `~>` is removed; run `bynk check --fix` on v0.603.x first, or rewrite `~> e` as `e.detach()` (written `do e.detach()` as a statement). A program that still contains `~>` fails with `bynk.parse.removed_send_arrow`.

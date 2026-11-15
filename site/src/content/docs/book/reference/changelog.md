@@ -28,6 +28,7 @@ per-commit history. While Bynk is pre-1.0, increments may change behaviour.
 
 | Version | Highlights |
 |---|---|
+| **v0.606.1** | A `Postgres` instance runs on `postgres` 4.0.0 (was 3.4.5), so a project with one has its `bynk.lock` row and installed package move to it |
 | **v0.606.0** | Naming a standard-library type (or a bare variant of one of its sums) that a braced `consumes` does not list is the warning `bynk.consumes.type_not_selected`, and `bynk check --fix` adds the name to the braces; an error follows in a later release (#3536) |
 | **v0.605.1** | A selective `consumes` no longer lets the standard-library types it did not list clash with a suite's types or make a context's own variant ambiguous (`Claim`, `Claimed`, `ContainerError`'s `Unavailable`) |
 | **v0.605.0** | Remove the `~>` send, deprecated since v0.603.10 for `e.detach()`; a program that still uses it is refused with `bynk.parse.removed_send_arrow`, and the `bynk.send.*` codes are retired |
