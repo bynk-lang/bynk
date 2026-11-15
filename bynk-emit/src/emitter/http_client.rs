@@ -184,7 +184,10 @@ pub fn emit_http_client(input: &HttpClientInput) -> Result<Emitted, ClientError>
     if kept.services.is_empty() {
         return fail(format!(
             "no route of the selected services is one this version of `bynk client` can represent{}",
-            skipped.iter().map(|s| format!("\n  {s}")).collect::<String>()
+            skipped
+                .iter()
+                .map(|s| format!("\n  {s}"))
+                .collect::<String>()
         ));
     }
     let mut gen_ = Gen::new(closure_of(&kept)?);
@@ -218,7 +221,12 @@ fn viable_routes(input: &HttpClientInput) -> Result<(HttpClientInput, Vec<String
     let plan = trial.plan(input)?;
     let mut kept = input.clone();
     let mut skipped = Vec::new();
-    for ((s, sp), out) in input.services.iter().zip(&plan.services).zip(&mut kept.services) {
+    for ((s, sp), out) in input
+        .services
+        .iter()
+        .zip(&plan.services)
+        .zip(&mut kept.services)
+    {
         out.routes.clear();
         for (r, rp) in s.routes.iter().zip(&sp.routes) {
             let (convs, holds) = (trial.convs.clone(), trial.holds.clone());
@@ -237,9 +245,7 @@ fn viable_routes(input: &HttpClientInput) -> Result<(HttpClientInput, Vec<String
 
 /// Every service's types in one table. Two services of different units may name
 /// a type alike; one file cannot hold both.
-fn merge_types(
-    services: &[ServiceInput],
-) -> Result<HashMap<String, Arc<TypeDecl>>, ClientError> {
+fn merge_types(services: &[ServiceInput]) -> Result<HashMap<String, Arc<TypeDecl>>, ClientError> {
     let mut out: HashMap<String, Arc<TypeDecl>> = HashMap::new();
     let mut owner: HashMap<String, &str> = HashMap::new();
     for s in services {
@@ -253,7 +259,9 @@ fn merge_types(
                     if !Arc::ptr_eq(prev, decl) && format!("{prev:?}") != format!("{decl:?}") {
                         return fail(format!(
                             "`{}` and `{}` declare different types named `{}`; one client module cannot hold both. Generate them one at a time with `--service`",
-                            owner[name], s.unit, bynk_check::symbols::display_type_name(name)
+                            owner[name],
+                            s.unit,
+                            bynk_check::symbols::display_type_name(name)
                         ));
                     }
                 }
@@ -371,7 +379,10 @@ impl Gen {
                     pascal(&function)
                 };
                 let response = unique(format!("{stem}Response"), &mut taken);
-                let has_query = r.params.iter().any(|p| matches!(p, ParamInput::Query { .. }));
+                let has_query = r
+                    .params
+                    .iter()
+                    .any(|p| matches!(p, ParamInput::Query { .. }));
                 let query = has_query.then(|| unique(format!("{stem}Query"), &mut taken));
                 routes.push(RoutePlan {
                     function,
@@ -405,10 +416,9 @@ impl Gen {
                 "ReadonlyMap",
                 vec![self.public_type(k)?, self.public_type(v)?],
             ),
-            TypeRef::Result(a, b, _) => TsType::named_with_args(
-                "Result",
-                vec![self.public_type(a)?, self.public_type(b)?],
-            ),
+            TypeRef::Result(a, b, _) => {
+                TsType::named_with_args("Result", vec![self.public_type(a)?, self.public_type(b)?])
+            }
             TypeRef::App { name, args, .. } => {
                 let args: Result<Vec<TsType>, ClientError> =
                     args.iter().map(|a| self.public_type(a)).collect();
@@ -599,7 +609,10 @@ impl Gen {
                             .collect(),
                     ))
                 } else {
-                    Some((false, bynk_check::wire::sum_inst_variants(decl, args, types)?))
+                    Some((
+                        false,
+                        bynk_check::wire::sum_inst_variants(decl, args, types)?,
+                    ))
                 }
             }
             _ => None,
@@ -802,7 +815,9 @@ impl Gen {
         // `result` is always there; `keys` reads `decimal`.
         let mut want = vec![false; OPTIONAL_MODULES.len()];
         for (i, (_, source)) in OPTIONAL_MODULES.iter().enumerate() {
-            want[i] = exported_names(source).iter().any(|n| body.contains(n.as_str()));
+            want[i] = exported_names(source)
+                .iter()
+                .any(|n| body.contains(n.as_str()));
         }
         if want[3] {
             want[1] = true;
@@ -862,7 +877,10 @@ impl Gen {
                     fields.push(TsTypeMember::readonly_prop("body", self.public_type(t)?));
                 }
                 ReplyPayload::Message => {
-                    fields.push(TsTypeMember::readonly_prop("error", TsType::named("string")));
+                    fields.push(TsTypeMember::readonly_prop(
+                        "error",
+                        TsType::named("string"),
+                    ));
                 }
                 ReplyPayload::Location => {
                     fields.push(TsTypeMember::readonly_prop(
@@ -906,10 +924,7 @@ impl Gen {
             d.no_blank_before = true;
             Some(vec![
                 TsStmt::doc_comment(
-                    format!(
-                        "What `{} {}` answers, by `status`.",
-                        r.method, r.path
-                    ),
+                    format!("What `{} {}` answers, by `status`.", r.method, r.path),
                     None,
                 ),
                 d,
@@ -955,15 +970,14 @@ impl Gen {
 
         // The function: its parameters and the encoding of each.
         let (signature, build, query_type) = self.encoding(r, rp)?;
-        let init = if r
-            .params
-            .iter()
-            .any(|p| matches!(p, ParamInput::Path { name, .. } if super::ts_ident(name) == "init"))
-        {
-            "init_"
-        } else {
-            "init"
-        };
+        let init =
+            if r.params.iter().any(
+                |p| matches!(p, ParamInput::Path { name, .. } if super::ts_ident(name) == "init"),
+            ) {
+                "init_"
+            } else {
+                "init"
+            };
         let ret = if replies.is_empty() {
             "CallFailure".to_string()
         } else {
@@ -975,7 +989,9 @@ impl Gen {
             .map(|d| {
                 let mut text = String::from("      /**\n");
                 for line in d.lines() {
-                    text.push_str(&format!("       * {}\n", line.trim_end()).replace(" * \n", " *\n"));
+                    text.push_str(
+                        &format!("       * {}\n", line.trim_end()).replace(" * \n", " *\n"),
+                    );
                 }
                 text.push_str("       */\n");
                 text
@@ -1160,7 +1176,8 @@ impl Gen {
         );
         d.no_blank_before = true;
         let doc = TsStmt::doc_comment(
-            "The `query` of the call: a field left out is absent from the query string.".to_string(),
+            "The `query` of the call: a field left out is absent from the query string."
+                .to_string(),
             None,
         );
         Ok((vec![doc, d], text, all_optional))
@@ -1254,10 +1271,9 @@ fn unique(mut name: String, taken: &mut BTreeSet<String>) -> String {
 
 /// A property name: bare when it is an identifier, quoted otherwise.
 fn property(name: &str) -> String {
-    let ident = name
-        .chars()
-        .enumerate()
-        .all(|(i, c)| c == '_' || c == '$' || c.is_ascii_alphabetic() || (i > 0 && c.is_ascii_digit()));
+    let ident = name.chars().enumerate().all(|(i, c)| {
+        c == '_' || c == '$' || c.is_ascii_alphabetic() || (i > 0 && c.is_ascii_digit())
+    });
     if ident {
         name.to_string()
     } else {
@@ -1297,4 +1313,87 @@ fn strip_imports(source: &str) -> String {
         out.push('\n');
     }
     out
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn a_route_is_named_from_its_method_and_path() {
+        for (method, path, name) in [
+            ("GET", "/orders/:id", "getOrderById"),
+            ("POST", "/orders", "postOrders"),
+            ("DELETE", "/orders/:sku", "deleteOrderBySku"),
+            ("GET", "/orders/:sku/lines/:line", "getOrderBySkuLineByLine"),
+            ("GET", "/", "getRoot"),
+            ("GET", "/health-check", "getHealthCheck"),
+            ("GET", "/categories/:id", "getCategoryById"),
+            ("GET", "/address/:id", "getAddressById"),
+            (
+                "PUT",
+                "/v1/user_profiles/:user.id",
+                "putV1UserProfileByUserId",
+            ),
+        ] {
+            assert_eq!(function_name(method, path), name, "{method} {path}");
+        }
+    }
+
+    #[test]
+    fn a_name_not_taken_gains_underscores_until_it_is() {
+        let mut taken: BTreeSet<String> = ["Order".to_string(), "Order_".to_string()].into();
+        assert_eq!(unique("Order".to_string(), &mut taken), "Order__");
+        assert_eq!(unique("Order".to_string(), &mut taken), "Order___");
+        assert_eq!(unique("Fresh".to_string(), &mut taken), "Fresh");
+    }
+
+    #[test]
+    fn a_property_is_quoted_only_when_it_must_be() {
+        assert_eq!(property("orders"), "orders");
+        assert_eq!(property("unit_Name"), "unit_Name");
+        assert_eq!(property("a.b"), "\"a.b\"");
+    }
+
+    /// The runtime's own `BoundaryError`, `JsonValue` and `ValidationError`
+    /// are the ones the server's boundary speaks: this module restates them, so
+    /// they must not drift.
+    #[test]
+    fn the_inlined_boundary_types_are_the_runtimes() {
+        let boundary = include_str!("../../runtime/src/boundary.ts");
+        let errors = include_str!("../../runtime/src/errors.ts");
+        let block = |source: &str, start: &str, end: &str| -> String {
+            let from = source
+                .find(start)
+                .unwrap_or_else(|| panic!("`{start}` in source"));
+            let to = source[from..]
+                .find(end)
+                .unwrap_or_else(|| panic!("`{end}`"))
+                + from;
+            source[from..to + end.len()].to_string()
+        };
+        for (source, start, end) in [
+            (
+                boundary,
+                "export type JsonValue =",
+                "{ [k: string]: JsonValue };",
+            ),
+            (
+                boundary,
+                "export type BoundaryError =",
+                "status: number; readonly details: string };",
+            ),
+            (
+                errors,
+                "export interface ValidationError {",
+                "readonly value: unknown;\n}",
+            ),
+        ] {
+            let want = block(source, start, end);
+            assert!(
+                RUNTIME.contains(&want),
+                "http_client_runtime.ts restates a runtime type that has changed:\n{want}"
+            );
+        }
+    }
 }

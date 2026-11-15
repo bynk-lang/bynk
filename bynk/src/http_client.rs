@@ -118,7 +118,11 @@ pub fn generate(analysis: &ProjectDiagnostics, want: &[&str]) -> Result<Client, 
         services.push(ServiceInput {
             unit: sel.unit.to_string(),
             name: sel.service.name.name.clone(),
-            doc: sel.service.documentation.as_ref().map(|d| d.text.trim().to_string()),
+            doc: sel
+                .service
+                .documentation
+                .as_ref()
+                .map(|d| d.text.trim().to_string()),
             types: sel.info.types.clone(),
             routes,
         });
@@ -203,7 +207,10 @@ fn route_of(
     path: &str,
 ) -> Result<RouteInput, String> {
     unsupported(sel.info, h)?;
-    let in_path: Vec<&str> = path.split('/').filter_map(|s| s.strip_prefix(':')).collect();
+    let in_path: Vec<&str> = path
+        .split('/')
+        .filter_map(|s| s.strip_prefix(':'))
+        .collect();
     let mut params = Vec::new();
     for p in &h.params {
         let name = p.name.name.as_str();

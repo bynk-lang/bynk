@@ -15,6 +15,10 @@
 //!   and a refinement the server refuses, a transport failure and a stale client's
 //!   unexpected status. A second project answers in plain JSON.
 //!
+//! `the_client_round_trips_every_route_under_workerd` runs the same driver over the
+//! network against the Worker under `wrangler dev` (`BYNK_REQUIRE_WORKERD=1` makes
+//! its skip a failure).
+//!
 //! Skips loudly without `node` or `tsc`; `BYNK_REQUIRE_TSC=1` turns the skip into
 //! a failure, as the other Node-driven suites do.
 
@@ -22,10 +26,14 @@
 mod require;
 #[path = "../tools/mod.rs"]
 mod tools;
+#[path = "../wrangler/mod.rs"]
+mod wrangler;
 
 use std::fs;
+use std::io::{Read, Write};
 use std::path::{Path, PathBuf};
-use std::process::Command;
+use std::process::{Command, Stdio};
+use std::time::{Duration, Instant};
 
 const REQUIRE_ENV: &str = "BYNK_REQUIRE_TSC";
 
@@ -93,7 +101,11 @@ fn copy_project(src: &Path, into: &Path) {
     // A corpus fixture is a bare source tree; a project has a manifest.
     let manifest = into.join("bynk.toml");
     if !manifest.exists() {
-        fs::write(manifest, "[project]\nname = \"fixture\"\nversion = \"0.1.0\"\n").unwrap();
+        fs::write(
+            manifest,
+            "[project]\nname = \"fixture\"\nversion = \"0.1.0\"\n",
+        )
+        .unwrap();
     }
 }
 
@@ -188,12 +200,13 @@ fn compile_worker(project: &Path, dir: &Path) {
 
 /// Run `driver` (an ES module) in `dir` against the compiled Worker and the
 /// client built by `tsc`; returns its stdout.
-fn run_driver(dir: &Path, driver: &str) -> String {
+fn run_driver(dir: &Path, driver: &str, env: &[(&str, &str)]) -> String {
     fs::write(dir.join("dist/package.json"), "{\"type\":\"module\"}\n").unwrap();
     fs::write(dir.join("drive.mjs"), driver).unwrap();
     let run = Command::new("node")
         .arg("drive.mjs")
         .current_dir(dir)
+        .envs(env.iter().copied())
         .output()
         .expect("run node");
     let stdout = String::from_utf8_lossy(&run.stdout).into_owned();
@@ -214,17 +227,28 @@ fn line<'a>(stdout: &'a str, label: &str) -> &'a str {
         .unwrap_or_else(|| panic!("no `{label}` line in:\n{stdout}"))
 }
 
-const RICH_DRIVER: &str = r#"
+/// How a driver reaches the Worker: in process, or over the network to `wrangler dev`.
+const IN_PROCESS: &str = r#"
 import worker from "./out/workers/rich/index.js";
+const BASE = "http://api.test";
+const call = (url, init) => worker.fetch(new Request(url, init), {});
+"#;
+
+const NETWORK: &str = r#"
+const BASE = process.env.BASE;
+const call = (url, init) => fetch(url, init);
+"#;
+
+const RICH_DRIVER: &str = r#"
 import { createClient } from "./dist/api.js";
 const sent = [];
 const viaWorker = async (url, init) => {
   sent.push(`${init.method} ${url}${init.body ? " " + init.body : ""}`);
-  return worker.fetch(new Request(url, init), {});
+  return call(url, init);
 };
 const show = (label, v) =>
   console.log(label, JSON.stringify(v, (_k, x) => (typeof x === "bigint" ? `${x}n` : x)));
-const c = createClient({ baseUrl: "http://api.test/", fetch: viaWorker });
+const c = createClient({ baseUrl: BASE + "/", fetch: viaWorker });
 
 show("create", await c.api.postOrders({ sku: "A1", qty: 2, note: null, tags: [] }));
 show("create-note", await c.api.postOrders({ sku: "A1", qty: 2, note: "hi", tags: ["a"] }));
@@ -240,11 +264,11 @@ show("delete", await c.api.deleteOrderById("x/y"));
 
 // What the server refuses and the client did not: a field the client does not know.
 const lax = createClient({
-  baseUrl: "http://api.test",
+  baseUrl: BASE,
   fetch: async (url, init) => {
     const body = JSON.parse(init.body);
     body.qty = 0;
-    return worker.fetch(new Request(url, { ...init, body: JSON.stringify(body) }), {});
+    return call(url, { ...init, body: JSON.stringify(body) });
   },
 });
 show("server-400", await lax.api.postOrders({ sku: "A1", qty: 1, note: null, tags: [] }));
@@ -269,29 +293,18 @@ console.log("headers", auth[0]);
 console.log("requests", JSON.stringify(sent));
 "#;
 
-#[test]
-fn the_client_round_trips_every_route_against_a_real_worker() {
-    if skip_without_tools() {
-        return;
-    }
-    let dir = scratch("rich");
-    let proj = dir.join("project");
-    copy_project(&fixture("rich"), &proj);
-    generate(&proj, &dir, &[]);
-    compile_worker(&proj, &dir);
-    tsc(&dir, "the `rich` client");
-    let out = run_driver(&dir, RICH_DRIVER);
-
+/// What the rich driver must have printed, against a Worker answering at `base`.
+fn check_rich(out: &str, base: &str) {
     // `Option` is `T | null` in both directions, and an opaque id, an `Instant`
     // and a `Decimal` come back decoded.
     assert_eq!(
-        line(&out, "create"),
+        line(out, "create"),
         r#"{"status":201,"kind":"Created","body":{"id":"o-1","sku":"A1","qty":2,"note":null,"placedAt":1700000000000,"price":{"coefficient":"1250n","scale":2}}}"#
     );
-    assert!(line(&out, "create-note").contains(r#""note":"hi""#));
+    assert!(line(out, "create-note").contains(r#""note":"hi""#));
     // A status the handler answers by name is a typed member.
     assert_eq!(
-        line(&out, "conflict"),
+        line(out, "conflict"),
         r#"{"status":409,"kind":"Conflict","error":"too many"}"#
     );
     // A refinement is refused before sending, with the server's own message.
@@ -305,7 +318,7 @@ fn the_client_round_trips_every_route_against_a_real_worker() {
             "length must be at most 10",
         ),
     ] {
-        let l = line(&out, label);
+        let l = line(out, label);
         assert!(
             l.starts_with(r#"{"kind":"Invalid","error":{"kind":"RefinementViolation""#)
                 && l.contains(&format!(r#""path":"{path}""#))
@@ -316,60 +329,78 @@ fn the_client_round_trips_every_route_against_a_real_worker() {
     // Typed query: a `List` repeats its key, an `Option` is its value or absent,
     // a default is left to the server, a `@name` is the wire key.
     assert_eq!(
-        line(&out, "list"),
+        line(out, "list"),
         r#"{"status":200,"kind":"Ok","body":{"items":["x","y"],"next":5}}"#
     );
     assert_eq!(
-        line(&out, "list-null"),
+        line(out, "list-null"),
         r#"{"status":200,"kind":"Ok","body":{"items":["q"],"next":null}}"#
     );
     // An `Option` of a sum, decoded to the value.
     assert_eq!(
-        line(&out, "get"),
+        line(out, "get"),
         r#"{"status":200,"kind":"Ok","body":{"tag":"Opened","by":"ann"}}"#
     );
     assert_eq!(
-        line(&out, "search"),
+        line(out, "search"),
         r#"{"status":200,"kind":"Ok","body":"a b&c"}"#
     );
-    assert_eq!(line(&out, "delete"), r#"{"status":204,"kind":"NoContent"}"#);
+    assert_eq!(line(out, "delete"), r#"{"status":204,"kind":"NoContent"}"#);
     // The boundary's own `400`, which the client did not foresee, is typed.
-    let server_400 = line(&out, "server-400");
+    let server_400 = line(out, "server-400");
     assert!(
-        server_400.starts_with(r#"{"status":400,"kind":"StructuralMismatch","error":{"kind":"RefinementViolation""#)
-            && server_400.contains(r#""path":"$.qty""#),
+        server_400.starts_with(
+            r#"{"status":400,"kind":"StructuralMismatch","error":{"kind":"RefinementViolation""#
+        ) && server_400.contains(r#""path":"$.qty""#),
         "{server_400}"
     );
     // Failures are returned, never thrown.
     assert_eq!(
-        line(&out, "transport"),
+        line(out, "transport"),
         r#"{"kind":"Transport","cause":"Error: down"}"#
     );
     assert_eq!(
-        line(&out, "unexpected"),
+        line(out, "unexpected"),
         r#"{"kind":"Unexpected","status":418,"text":"nope"}"#
     );
     // A body that no longer decodes is a stale client's `Unexpected`, with why.
     assert_eq!(
-        line(&out, "drift"),
+        line(out, "drift"),
         r#"{"kind":"Unexpected","status":201,"path":"$.id"}"#
     );
     // `headers`, a per-call header and `origin` reach the wire.
     assert_eq!(
-        line(&out, "headers"),
+        line(out, "headers"),
         "authorization,Bearer t;origin,https://app.test;x-extra,1"
     );
-    let requests = line(&out, "requests");
+    let requests = line(out, "requests");
     for expected in [
-        r#"POST http://api.test/orders {\"sku\":\"A1\",\"qty\":2,\"note\":{\"kind\":\"None\"},\"tags\":[]}"#,
-        "GET http://api.test/orders?tags=x&tags=y&since=5",
-        "GET http://api.test/orders?limit=3&tags=q",
-        "GET http://api.test/orders/abc",
-        "GET http://api.test/search?q=a+b%26c&x-page=2",
-        "DELETE http://api.test/orders/x%2Fy",
+        format!(
+            r#"POST {base}/orders {{\"sku\":\"A1\",\"qty\":2,\"note\":{{\"kind\":\"None\"}},\"tags\":[]}}"#
+        ),
+        format!("GET {base}/orders?tags=x&tags=y&since=5"),
+        format!("GET {base}/orders?limit=3&tags=q"),
+        format!("GET {base}/orders/abc"),
+        format!("GET {base}/search?q=a+b%26c&x-page=2"),
+        format!("DELETE {base}/orders/x%2Fy"),
     ] {
-        assert!(requests.contains(expected), "{expected} not in {requests}");
+        assert!(requests.contains(&expected), "{expected} not in {requests}");
     }
+}
+
+#[test]
+fn the_client_round_trips_every_route_against_a_real_worker() {
+    if skip_without_tools() {
+        return;
+    }
+    let dir = scratch("rich");
+    let proj = dir.join("project");
+    copy_project(&fixture("rich"), &proj);
+    generate(&proj, &dir, &[]);
+    compile_worker(&proj, &dir);
+    tsc(&dir, "the `rich` client");
+    let out = run_driver(&dir, &format!("{IN_PROCESS}{RICH_DRIVER}"), &[]);
+    check_rich(&out, "http://api.test");
     let _ = fs::remove_dir_all(&dir);
 }
 
@@ -410,15 +441,134 @@ fn a_plain_json_route_and_a_tagged_one_decode_to_the_same_null() {
         .next()
         .unwrap()
         .file_name();
-    let driver = PLAIN_DRIVER.replace("workers/api/", &format!("workers/{}/", worker.to_string_lossy()));
+    let driver = PLAIN_DRIVER.replace(
+        "workers/api/",
+        &format!("workers/{}/", worker.to_string_lossy()),
+    );
     tsc(&dir, "the `plain` client");
-    let out = run_driver(&dir, &driver);
-    assert_eq!(line(&out, "top"), r#"{"status":200,"kind":"Ok","body":null}"#);
-    assert_eq!(line(&out, "tagged"), r#"{"status":200,"kind":"Ok","body":"t"}"#);
-    assert_eq!(line(&out, "filtered"), r#"{"status":200,"kind":"Ok","body":4}"#);
-    assert_eq!(line(&out, "filtered-none"), r#"{"status":200,"kind":"Ok","body":null}"#);
-    assert_eq!(line(&out, "legacy"), r#"{"status":200,"kind":"Ok","body":"t"}"#);
-    assert_eq!(line(&out, "legacy-plain"), r#"{"status":200,"kind":"Ok","body":"p"}"#);
+    let out = run_driver(&dir, &driver, &[]);
+    assert_eq!(
+        line(&out, "top"),
+        r#"{"status":200,"kind":"Ok","body":null}"#
+    );
+    assert_eq!(
+        line(&out, "tagged"),
+        r#"{"status":200,"kind":"Ok","body":"t"}"#
+    );
+    assert_eq!(
+        line(&out, "filtered"),
+        r#"{"status":200,"kind":"Ok","body":4}"#
+    );
+    assert_eq!(
+        line(&out, "filtered-none"),
+        r#"{"status":200,"kind":"Ok","body":null}"#
+    );
+    assert_eq!(
+        line(&out, "legacy"),
+        r#"{"status":200,"kind":"Ok","body":"t"}"#
+    );
+    assert_eq!(
+        line(&out, "legacy-plain"),
+        r#"{"status":200,"kind":"Ok","body":"p"}"#
+    );
     assert_eq!(line(&out, "keys"), "getFiltered,getTagged,getTop");
+    let _ = fs::remove_dir_all(&dir);
+}
+
+/// `GET path` on `port`: the response, or why there is none yet.
+fn get(port: u16, path: &str) -> Result<String, String> {
+    let addr = format!("127.0.0.1:{port}");
+    let mut stream = std::net::TcpStream::connect_timeout(
+        &addr.parse().map_err(|e| format!("{e}"))?,
+        Duration::from_secs(2),
+    )
+    .map_err(|e| e.to_string())?;
+    stream
+        .set_read_timeout(Some(Duration::from_secs(20)))
+        .map_err(|e| e.to_string())?;
+    let request = format!("GET {path} HTTP/1.1\r\nHost: {addr}\r\nConnection: close\r\n\r\n");
+    stream
+        .write_all(request.as_bytes())
+        .map_err(|e| e.to_string())?;
+    let mut response = String::new();
+    stream
+        .read_to_string(&mut response)
+        .map_err(|e| e.to_string())?;
+    Ok(response)
+}
+
+fn skip_workerd(reason: &str) -> bool {
+    tools::skip(
+        "HTTP CLIENT (WORKERD)",
+        require::is_required("BYNK_REQUIRE_WORKERD"),
+        "BYNK_REQUIRE_WORKERD",
+        reason,
+    )
+}
+
+#[test]
+fn the_client_round_trips_every_route_under_workerd() {
+    if skip_without_tools() {
+        return;
+    }
+    if !tools::tool_exists("npx") && skip_workerd("`npx` is not on PATH") {
+        return;
+    }
+    let dir = scratch("workerd");
+    let proj = dir.join("project");
+    copy_project(&fixture("rich"), &proj);
+    generate(&proj, &dir, &[]);
+    compile_worker(&proj, &dir);
+    tsc(&dir, "the `rich` client");
+
+    // Its own band, clear of the other smokes'.
+    let pid = std::process::id();
+    let port = 61_000 + 2 * (pid % 2_000) as u16;
+    let log = dir.join("wrangler.log");
+    let out_log = fs::File::create(&log).unwrap();
+    let err_log = out_log.try_clone().unwrap();
+    let spawned = wrangler::Wrangler::spawn(
+        tools::base_command("npx")
+            .args(["-y", wrangler::SPEC, "dev"])
+            .args([
+                "--port",
+                &port.to_string(),
+                "--inspector-port",
+                &(port + 1).to_string(),
+            ])
+            .current_dir(dir.join("out/workers/rich"))
+            .stdout(Stdio::from(out_log))
+            .stderr(Stdio::from(err_log)),
+        &dir.join("registry"),
+    );
+    let Ok(wrangler) = spawned else {
+        skip_workerd("could not launch npx");
+        return;
+    };
+    let mut wranglers = vec![wrangler];
+    let deadline = Instant::now() + Duration::from_secs(180);
+    loop {
+        if get(port, "/search?q=up").is_ok_and(|r| r.contains("200 OK")) {
+            break;
+        }
+        if Instant::now() > deadline {
+            let log = fs::read_to_string(&log).unwrap_or_default();
+            wrangler::stop_all(&mut wranglers);
+            skip_workerd(&format!(
+                "the Worker did not answer within the boot window (likely no network to provision {})\n{log}",
+                wrangler::SPEC
+            ));
+            return;
+        }
+        std::thread::sleep(Duration::from_millis(500));
+    }
+    let base = format!("http://127.0.0.1:{port}");
+    let out = run_driver(
+        &dir,
+        &format!("{NETWORK}{RICH_DRIVER}"),
+        &[("BASE", base.as_str())],
+    );
+    wrangler::stop_all(&mut wranglers);
+    check_rich(&out, &base);
     let _ = fs::remove_dir_all(&dir);
 }

@@ -135,7 +135,11 @@ fn a_project_that_does_not_check_is_refused() {
         "[project]\nname = \"broken\"\nversion = \"0.1.0\"\n",
     )
     .unwrap();
-    std::fs::write(dir.join("src/broken.bynk"), "context broken\n\ntype = oops\n").unwrap();
+    std::fs::write(
+        dir.join("src/broken.bynk"),
+        "context broken\n\ntype = oops\n",
+    )
+    .unwrap();
     let (ok, stdout, stderr) = client(&[dir.to_str().unwrap()]);
     assert!(!ok);
     assert!(stdout.is_empty());
@@ -161,7 +165,11 @@ fn a_project_with_no_http_service_is_refused() {
         "[project]\nname = \"none\"\nversion = \"0.1.0\"\n",
     )
     .unwrap();
-    std::fs::write(dir.join("src/none.bynk"), "context none\n\ntype Id = String\n").unwrap();
+    std::fs::write(
+        dir.join("src/none.bynk"),
+        "context none\n\ntype Id = String\n",
+    )
+    .unwrap();
     let (ok, _, stderr) = client(&[dir.to_str().unwrap()]);
     assert!(!ok);
     assert!(stderr.contains("no `from http` service"), "{stderr}");
