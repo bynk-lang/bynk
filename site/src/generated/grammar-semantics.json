@@ -948,6 +948,10 @@
       "summary": "A `@cache(scope: public)` handler takes a `cookies` parameter, so a shared cache could replay one user's response to another."
     },
     {
+      "code": "bynk.http.cf_wrong_type",
+      "summary": "An HTTP handler's `cf` parameter is not typed `RequestCf`."
+    },
+    {
       "code": "bynk.http.cookie_cross_site_without_credentials",
       "summary": "A service attaches a `SameSite.Unrestricted` cookie but declares no `cors { credentials: true }`, so a cross-origin `fetch` can never send it back (warning)."
     },

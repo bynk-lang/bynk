@@ -35,6 +35,7 @@ pub use bynk_check::analysis::ContextBoundaryInfo;
 /// carries build-only concerns), `ContextSequenceInfo`'s fields are already
 /// IDE-appropriate as-is, so this is a plain re-export rather than a lowering.
 pub use bynk_check::analysis::ContextSequenceInfo;
+pub use bynk_check::architecture_facts::{ArchitectureFacts, DeliveryKind, MemberKind};
 pub use bynk_project::LabelFile;
 /// #2081: how a caller hands [`diagnose_project_with`] the project's
 /// `bynk.schema.lock` (ADR 0321's type, shared with the build).
@@ -220,6 +221,8 @@ pub struct ProjectDiagnostics {
     /// tables the sequence-diagram query classifies handler calls against.
     /// See `bynk_check::analysis::ProjectAnalysis::sequence_info`.
     pub sequence_info: HashMap<String, ContextSequenceInfo>,
+    /// #3583: see `bynk_check::analysis::ProjectAnalysis::architecture_facts`.
+    pub architecture_facts: bynk_check::architecture_facts::ArchitectureFacts,
     /// #855: qualified context/adapter unit name → the combined type table
     /// and service/agent tables the wire-contract peek resolves a handler's
     /// boundary shape and cross-context hash against.
@@ -400,6 +403,7 @@ fn diagnostics_of(analysis: bynk_check::analysis::ProjectAnalysis) -> ProjectDia
         capability_paths,
         unit_sources,
         sequence_info,
+        architecture_facts,
         boundary_info,
         doc_scope,
         contract_diff,
@@ -442,6 +446,7 @@ fn diagnostics_of(analysis: bynk_check::analysis::ProjectAnalysis) -> ProjectDia
         locals,
         unit_sources,
         sequence_info,
+        architecture_facts,
         boundary_info,
         doc_scope,
         contract_diff,

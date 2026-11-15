@@ -12,6 +12,7 @@ schedules, queue messages, WebSocket connections, and inbound email.
 - [Receive email](/book/guides/entry-points/receive-email/)
 - [Serve a page from an HTML file](/book/guides/entry-points/serve-a-page/)
 - [Accept an HTML form](/book/guides/entry-points/accept-a-form/)
+- [Branch on the caller's country](/book/guides/entry-points/branch-on-the-callers-country/)
 - [Accept a file upload](/book/guides/entry-points/accept-a-file-upload/)
 - [Stream a large upload](/book/guides/entry-points/stream-a-large-upload/)
 

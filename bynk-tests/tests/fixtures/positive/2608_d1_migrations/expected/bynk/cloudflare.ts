@@ -231,6 +231,43 @@ export const QueueSend = {
 };
 
 /**
+ * What Cloudflare knows about the connection of an `on http` request, as a
+ * handler's `cf: RequestCf` parameter. Every field is optional and defaults
+ * to `None`: Cloudflare derives them, a platform or a test may not supply
+ * them, and a field of an unexpected shape is `None`, never a fault. A
+ * handler that declares `cf` is therefore written once and works where
+ * `request.cf` is absent.
+ *
+ * These facts come from the client's IP address, so they can be personal
+ * data, and they are best-effort: a VPN or a proxy makes them wrong. The
+ * fields are Cloudflare's `request.cf` properties
+ * (https://developers.cloudflare.com/workers/runtime-apis/request/); a
+ * field is added later as a defaulted field. `latitude` and `longitude` are
+ * numeric strings on the platform and are read as `Float`; `isEuCountry` is
+ * `Some(true)` where Cloudflare reports the country as in the EU.
+ */
+export interface RequestCf {
+  readonly country: Option<string>;
+  readonly continent: Option<string>;
+  readonly city: Option<string>;
+  readonly region: Option<string>;
+  readonly regionCode: Option<string>;
+  readonly postalCode: Option<string>;
+  readonly timezone: Option<string>;
+  readonly latitude: Option<number>;
+  readonly longitude: Option<number>;
+  readonly colo: Option<string>;
+  readonly asn: Option<number>;
+  readonly asOrganization: Option<string>;
+  readonly httpProtocol: Option<string>;
+  readonly tlsVersion: Option<string>;
+  readonly isEuCountry: Option<boolean>;
+}
+
+export const RequestCf = {
+};
+
+/**
  * One event written to an `Analytics` dataset. `index` is the sampling key
  * (at most 96 bytes; `None` samples the dataset as a whole), `blobs` are
  * text dimensions (at most 20, totalling at most 16 KB), and `doubles` are
@@ -3629,6 +3666,94 @@ export function __deserialise_R2UploadOptions(json: __JsonValue, path: string = 
   return Ok({ contentType: __contentType, metadata: __metadata } as R2UploadOptions);
 }
 
+export function __serialise_RequestCf(value: RequestCf): __JsonValue {
+  return {
+    country: __serialise_Option_String(value.country),
+    continent: __serialise_Option_String(value.continent),
+    city: __serialise_Option_String(value.city),
+    region: __serialise_Option_String(value.region),
+    regionCode: __serialise_Option_String(value.regionCode),
+    postalCode: __serialise_Option_String(value.postalCode),
+    timezone: __serialise_Option_String(value.timezone),
+    latitude: __serialise_Option_Float(value.latitude),
+    longitude: __serialise_Option_Float(value.longitude),
+    colo: __serialise_Option_String(value.colo),
+    asn: __serialise_Option_Int(value.asn),
+    asOrganization: __serialise_Option_String(value.asOrganization),
+    httpProtocol: __serialise_Option_String(value.httpProtocol),
+    tlsVersion: __serialise_Option_String(value.tlsVersion),
+    isEuCountry: __serialise_Option_Bool(value.isEuCountry),
+  };
+}
+
+export function __deserialise_RequestCf(json: __JsonValue, path: string = "$"): Result<RequestCf, __BoundaryError> {
+  if (typeof json !== "object" || json === null || globalThis.Array.isArray(json)) {
+    return Err({ kind: "StructuralMismatch", path, expected: "object", actual: typeof json });
+  }
+  const obj = json as { [k: string]: __JsonValue };
+  const __d_country: __JsonValue = "country" in obj ? obj["country"] : { kind: "None" };
+  const __r_country = __deserialise_Option_String(__d_country, `${path}.country`);
+  if (__r_country.tag === "Err") return __r_country;
+  const __country = __r_country.value;
+  const __d_continent: __JsonValue = "continent" in obj ? obj["continent"] : { kind: "None" };
+  const __r_continent = __deserialise_Option_String(__d_continent, `${path}.continent`);
+  if (__r_continent.tag === "Err") return __r_continent;
+  const __continent = __r_continent.value;
+  const __d_city: __JsonValue = "city" in obj ? obj["city"] : { kind: "None" };
+  const __r_city = __deserialise_Option_String(__d_city, `${path}.city`);
+  if (__r_city.tag === "Err") return __r_city;
+  const __city = __r_city.value;
+  const __d_region: __JsonValue = "region" in obj ? obj["region"] : { kind: "None" };
+  const __r_region = __deserialise_Option_String(__d_region, `${path}.region`);
+  if (__r_region.tag === "Err") return __r_region;
+  const __region = __r_region.value;
+  const __d_regionCode: __JsonValue = "regionCode" in obj ? obj["regionCode"] : { kind: "None" };
+  const __r_regionCode = __deserialise_Option_String(__d_regionCode, `${path}.regionCode`);
+  if (__r_regionCode.tag === "Err") return __r_regionCode;
+  const __regionCode = __r_regionCode.value;
+  const __d_postalCode: __JsonValue = "postalCode" in obj ? obj["postalCode"] : { kind: "None" };
+  const __r_postalCode = __deserialise_Option_String(__d_postalCode, `${path}.postalCode`);
+  if (__r_postalCode.tag === "Err") return __r_postalCode;
+  const __postalCode = __r_postalCode.value;
+  const __d_timezone: __JsonValue = "timezone" in obj ? obj["timezone"] : { kind: "None" };
+  const __r_timezone = __deserialise_Option_String(__d_timezone, `${path}.timezone`);
+  if (__r_timezone.tag === "Err") return __r_timezone;
+  const __timezone = __r_timezone.value;
+  const __d_latitude: __JsonValue = "latitude" in obj ? obj["latitude"] : { kind: "None" };
+  const __r_latitude = __deserialise_Option_Float(__d_latitude, `${path}.latitude`);
+  if (__r_latitude.tag === "Err") return __r_latitude;
+  const __latitude = __r_latitude.value;
+  const __d_longitude: __JsonValue = "longitude" in obj ? obj["longitude"] : { kind: "None" };
+  const __r_longitude = __deserialise_Option_Float(__d_longitude, `${path}.longitude`);
+  if (__r_longitude.tag === "Err") return __r_longitude;
+  const __longitude = __r_longitude.value;
+  const __d_colo: __JsonValue = "colo" in obj ? obj["colo"] : { kind: "None" };
+  const __r_colo = __deserialise_Option_String(__d_colo, `${path}.colo`);
+  if (__r_colo.tag === "Err") return __r_colo;
+  const __colo = __r_colo.value;
+  const __d_asn: __JsonValue = "asn" in obj ? obj["asn"] : { kind: "None" };
+  const __r_asn = __deserialise_Option_Int(__d_asn, `${path}.asn`);
+  if (__r_asn.tag === "Err") return __r_asn;
+  const __asn = __r_asn.value;
+  const __d_asOrganization: __JsonValue = "asOrganization" in obj ? obj["asOrganization"] : { kind: "None" };
+  const __r_asOrganization = __deserialise_Option_String(__d_asOrganization, `${path}.asOrganization`);
+  if (__r_asOrganization.tag === "Err") return __r_asOrganization;
+  const __asOrganization = __r_asOrganization.value;
+  const __d_httpProtocol: __JsonValue = "httpProtocol" in obj ? obj["httpProtocol"] : { kind: "None" };
+  const __r_httpProtocol = __deserialise_Option_String(__d_httpProtocol, `${path}.httpProtocol`);
+  if (__r_httpProtocol.tag === "Err") return __r_httpProtocol;
+  const __httpProtocol = __r_httpProtocol.value;
+  const __d_tlsVersion: __JsonValue = "tlsVersion" in obj ? obj["tlsVersion"] : { kind: "None" };
+  const __r_tlsVersion = __deserialise_Option_String(__d_tlsVersion, `${path}.tlsVersion`);
+  if (__r_tlsVersion.tag === "Err") return __r_tlsVersion;
+  const __tlsVersion = __r_tlsVersion.value;
+  const __d_isEuCountry: __JsonValue = "isEuCountry" in obj ? obj["isEuCountry"] : { kind: "None" };
+  const __r_isEuCountry = __deserialise_Option_Bool(__d_isEuCountry, `${path}.isEuCountry`);
+  if (__r_isEuCountry.tag === "Err") return __r_isEuCountry;
+  const __isEuCountry = __r_isEuCountry.value;
+  return Ok({ country: __country, continent: __continent, city: __city, region: __region, regionCode: __regionCode, postalCode: __postalCode, timezone: __timezone, latitude: __latitude, longitude: __longitude, colo: __colo, asn: __asn, asOrganization: __asOrganization, httpProtocol: __httpProtocol, tlsVersion: __tlsVersion, isEuCountry: __isEuCountry } as RequestCf);
+}
+
 export function __serialise_RetrievalType(value: RetrievalType): __JsonValue {
   switch (value.tag) {
     case "Vector":
@@ -4728,6 +4853,47 @@ export function __deserialise_List_R2Object(json: __JsonValue, path: string = "$
   out.push(__el as R2Object);
   }
   return Ok(out);
+}
+
+export function __serialise_Option_Bool(value: Option<boolean>): __JsonValue {
+  if (value.tag === "Some") return { kind: "Some", value: value.value as __JsonValue };
+  return { kind: "None" };
+}
+
+function __option_value_Bool(raw: __JsonValue, at: string): Result<unknown, __BoundaryError> {
+  if (typeof raw !== "boolean") {
+    return Err({ kind: "StructuralMismatch", path: at, expected: "boolean", actual: typeof raw });
+  }
+  const __v = raw;
+  return Ok(__v);
+}
+
+export function __deserialise_Option_Bool(json: __JsonValue, path: string = "$"): Result<Option<boolean>, __BoundaryError> {
+  if (json === undefined || json === null) {
+    return Ok(None as Option<boolean>);
+  }
+  if (typeof json === "object" && !globalThis.Array.isArray(json)) {
+    const obj = json as { [k: string]: __JsonValue };
+    const __keys = globalThis.Object.keys(obj);
+    if (obj["kind"] === "None" && __keys.length === 1) {
+      return Ok(None as Option<boolean>);
+    }
+    if (obj["kind"] === "Some" && __keys.length === 2 && "value" in obj) {
+      const __t = __option_value_Bool(obj["value"], `${path}.value`);
+      if (__t.tag === "Err") {
+        return __t;
+      }
+      return Ok(Some(__t.value as boolean) as Option<boolean>);
+    }
+  }
+  const __b = __option_value_Bool(json, path);
+  if (__b.tag === "Ok") {
+    return Ok(Some(__b.value as boolean) as Option<boolean>);
+  }
+  if (__b.error.kind === "StructuralMismatch" && __b.error.path === path && !__b.error.expected.endsWith(" | null | {\"kind\": \"None\"} | {\"kind\": \"Some\", \"value\": ...}")) {
+    return Err({ ...__b.error, expected: __b.error.expected + " | null | {\"kind\": \"None\"} | {\"kind\": \"Some\", \"value\": ...}" });
+  }
+  return __b;
 }
 
 export function __serialise_List_SearchHit(value: readonly SearchHit[]): __JsonValue {

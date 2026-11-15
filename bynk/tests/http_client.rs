@@ -524,3 +524,48 @@ fn a_directory_layout_notes_files_a_replaced_layout_left_behind() {
         "{stderr}"
     );
 }
+
+/// #3513 (C): `cf: RequestCf` is not a caller's input, so the client's function takes the path
+/// parameter and no `cf`.
+#[test]
+fn a_cf_parameter_is_not_an_argument() {
+    let dir = scratch("cf");
+    std::fs::create_dir_all(dir.join("src")).unwrap();
+    std::fs::write(
+        dir.join("bynk.toml"),
+        r#"[project]
+name = "geo"
+version = "0.1.0"
+
+[unstable]
+allow = ["bynk.cloudflare.RequestCf"]
+"#,
+    )
+    .unwrap();
+    std::fs::write(
+        dir.join("src/geo.bynk"),
+        r#"context geo
+
+consumes bynk.cloudflare { RequestCf }
+
+service api from http {
+	on GET("/hello/:name") (name: String, cf: RequestCf) -> Effect[HttpResult[String]] by v: Visitor {
+		match cf.country {
+			Some(c) => Ok("\(name) from \(c)")
+			None => Ok(name)
+		}
+	}
+}
+"#,
+    )
+    .unwrap();
+    let text = module(&dir, &[]);
+    assert!(
+        text.contains("(name: string, init?: globalThis.RequestInit)"),
+        "{text}"
+    );
+    assert!(
+        !text.contains("RequestCf") && !text.contains("cf:"),
+        "{text}"
+    );
+}
