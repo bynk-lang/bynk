@@ -1205,6 +1205,10 @@ pub fn run(
     if !link_ai_search_for_run(&order, &resources) {
         return ExitCode::FAILURE;
     }
+    // #3513 A: and an mTLS certificate, which the deploy cannot resolve yet.
+    if !link_mtls_for_run(&order, &resources) {
+        return ExitCode::FAILURE;
+    }
     // #3319: the Hyperdrive API client, checked here, before the confirmation,
     // so a missing token costs nothing.
     let Ok(hyperdrive_api) = hyperdrive::api_for_run(

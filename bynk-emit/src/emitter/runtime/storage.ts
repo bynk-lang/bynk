@@ -1026,13 +1026,13 @@ export function makeIntegrationAiSearch(binding: string): AiSearchInstance {
 /**
  * The mTLS certificate binding of a multi-Worker integration test participant (#3513 A), bound
  * as its `env.<binding>`. A test never reaches an origin, so `fetch` faults, naming the
- * binding, until the case stubs the capability's `send`.
+ * instance, until the case stubs its `send`.
  */
-export function makeIntegrationMtls(binding: string): { fetch(request: unknown): Promise<never> } {
+export function makeIntegrationMtls(instance: string): { fetch(request: unknown): Promise<never> } {
   return {
     fetch: async (): Promise<never> => {
       throw new globalThis.Error(
-        `bynk: the \`${binding}\` mTLS certificate binding is not stubbed, and a test never reaches the origin — add \`stub <Name>.send(_) returns …\``,
+        `bynk: \`${instance}.send\` is not stubbed, and a test never reaches the origin — add \`stub ${instance}.send(_) returns …\``,
       );
     },
   };

@@ -55,6 +55,9 @@ struct WranglerConfig {
     /// #3480: the `[[ai_search]]` of the `AiSearch` instances.
     #[serde(default)]
     ai_search: Vec<AiSearchBinding>,
+    /// #3513 A: the `[[mtls_certificates]]` of the `MtlsCertificate` instances.
+    #[serde(default)]
+    mtls_certificates: Vec<MtlsCertificateBinding>,
     /// #3302: the `[[send_email]]` of the `Email` instances.
     #[serde(default)]
     send_email: Vec<SendEmailBinding>,
@@ -72,6 +75,15 @@ struct SendEmailBinding {
     /// the instance is unrestricted.
     #[serde(default)]
     allowed_sender_addresses: Vec<String>,
+}
+
+#[derive(Debug, Deserialize)]
+struct MtlsCertificateBinding {
+    /// `MTLS_<SNAKE>`: the instance's binding.
+    binding: String,
+    /// The certificate's name, as `@certificate` wrote it, until the deploy replaces it
+    /// with the id it resolves.
+    certificate_id: String,
 }
 
 #[derive(Debug, Deserialize)]
@@ -310,6 +322,17 @@ pub(crate) struct AiSearchDecl {
     /// The instance's name, as `@instance` wrote it, used as written in
     /// every environment.
     pub(crate) instance: String,
+}
+
+/// #3513 A: one `MtlsCertificate` instance, as the emitted config declares it. The certificate
+/// belongs to whoever uploaded it, so the deploy finds it by name and never uploads it.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub(crate) struct MtlsCertificateDecl {
+    /// `MTLS_<SNAKE>`, the key the ledger records the link under.
+    pub(crate) binding: String,
+    /// The certificate's name, as `@certificate` wrote it, used as written in every
+    /// environment.
+    pub(crate) certificate: String,
 }
 
 /// #3301: one `StoredSecret` instance, as the emitted config declares it.
@@ -614,6 +637,8 @@ pub(crate) struct Resources {
     /// recorded in the ledger; nothing is created, and nothing is deleted
     /// when an instance goes.
     pub(crate) ai_search: Vec<AiSearchDecl>,
+    /// #3513 A: the `MtlsCertificate` instances, linked by name and never uploaded.
+    pub(crate) mtls_certificates: Vec<MtlsCertificateDecl>,
     /// #3302: the `@allowedSenders` of the `Email` instances that have any, in
     /// binding order. Only checked (each domain must be enabled for Email
     /// Sending on the account); nothing is created, recorded or deleted.
@@ -708,6 +733,7 @@ impl Default for Resources {
             analytics_datasets: Vec::new(),
             stored_secrets: Vec::new(),
             ai_search: Vec::new(),
+            mtls_certificates: Vec::new(),
             email_senders: Vec::new(),
             email_addresses: Vec::new(),
             declared_secrets: Vec::new(),
@@ -969,6 +995,15 @@ fn read_resources(config: &Path, project_workers: &[String]) -> Result<Resources
         })
         .collect();
     ai_search.sort_by(|a, b| a.binding.cmp(&b.binding));
+    let mut mtls_certificates: Vec<MtlsCertificateDecl> = parsed
+        .mtls_certificates
+        .into_iter()
+        .map(|c| MtlsCertificateDecl {
+            binding: c.binding,
+            certificate: c.certificate_id,
+        })
+        .collect();
+    mtls_certificates.sort_by(|a, b| a.binding.cmp(&b.binding));
     let mut email_senders: Vec<EmailSendersDecl> = parsed
         .send_email
         .into_iter()
@@ -1052,6 +1087,7 @@ fn read_resources(config: &Path, project_workers: &[String]) -> Result<Resources
         analytics_datasets,
         stored_secrets,
         ai_search,
+        mtls_certificates,
         email_senders,
         email_addresses: {
             let mut addresses = parsed.addresses;
@@ -1773,6 +1809,17 @@ pub(crate) mod tests {
                 .map(|(binding, instance)| AiSearchDecl {
                     binding: binding.to_string(),
                     instance: instance.to_string(),
+                })
+                .collect();
+            self
+        }
+        /// Derived `MtlsCertificate` instances, as `(binding, certificate)` (#3513 A).
+        pub(crate) fn mtls_certificates(mut self, instances: &[(&str, &str)]) -> Self {
+            self.mtls_certificates = instances
+                .iter()
+                .map(|(binding, certificate)| MtlsCertificateDecl {
+                    binding: binding.to_string(),
+                    certificate: certificate.to_string(),
                 })
                 .collect();
             self

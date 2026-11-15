@@ -52,6 +52,7 @@ and all held; the checks added the details marked below.
 
 **Consequences.** A program that does not consume `MtlsCertificate` emits byte-identically
 apart from the standard library's `cloudflare.ts`. Until the deploy slice lands, `bynk deploy`
-does not resolve the certificate name, so a Worker with an `MtlsCertificate` binding should
-not be deployed with this alone; the kind is experimental for that reason too. Per-environment
+cannot resolve the certificate name to an id, so it refuses a Worker that declares an
+`MtlsCertificate` before anything is pushed, rather than send Cloudflare a name where it expects
+an id; the slice that adds the resolver removes the refusal. Per-environment
 certificate names are not in v1 (A7); a `[deploy.mtls.<Cap>]` override is the follow-on.

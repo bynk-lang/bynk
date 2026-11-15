@@ -1259,7 +1259,7 @@ fn mtls_certificate_error(
         CompileError::new(
             "bynk.capability.invalid_option",
             span,
-            format!("`{text}` is not a certificate name a `{base}` can reach"),
+            format!("{text:?} is not a certificate name a `{base}` can reach"),
         )
         .with_note(
             "name the certificate as it was uploaded to the account (`wrangler mtls-certificate list` shows it), for example `@certificate(\"acme-client\")`",

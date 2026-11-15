@@ -1613,7 +1613,9 @@ service orders from http {
 is the certificate's **name** as it was uploaded to the account, never its id, so an
 id stays out of source; it is used as written in every environment, and an empty name
 is refused (`bynk.capability.invalid_option`). The generated stanza carries the name in
-`certificate_id`, which `bynk deploy` replaces with the id it resolves.
+`certificate_id`. Resolving the name to the certificate's id is the deploy's job and is not
+built yet, so `bynk deploy` refuses a Worker that declares an `MtlsCertificate` until it is,
+rather than push a name where Cloudflare expects an id.
 
 `send` has [`Fetch.send`](#the-portable-surface--bynk)'s shape and rules: the same
 `Request` (its headers checked the same way), the same `Response`, and `Network` when the

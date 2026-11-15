@@ -1826,11 +1826,9 @@ export const __ContainerToken: symbol = globalThis.Symbol("Container");
  * and is refused.
  *
  * The certificate is uploaded to the account by its owner (Wrangler's
- * `mtls-certificate upload`, the dashboard or the API) and is named there. The
- * deploy links to it by that name, in every environment, and never uploads it:
- * the private key never reaches Bynk or the Worker. A name that no uploaded
- * client certificate carries, or that more than one carries, fails the deploy
- * with the problem named.
+ * `mtls-certificate upload`, the dashboard or the API) and is named there;
+ * `@certificate` names it, as written in every environment. Bynk never uploads
+ * a certificate: its private key never reaches Bynk or the Worker.
  *
  * `send` has `Fetch.send`'s shape and rules: the same `Request` (its headers
  * checked the same way, refused as `InvalidHeader` before anything is sent),
@@ -1843,9 +1841,8 @@ export const __ContainerToken: symbol = globalThis.Symbol("Container");
  * Cloudflare does not support presenting a certificate to an origin that is a
  * proxied zone on Cloudflare; the call fails with a `520`. See Cloudflare's
  * mTLS bindings page for the current rules. There is no local simulation of
- * the binding: `bynk dev` runs it on Cloudflare, once you allow it, and
- * `bynkc test` faults until the call is stubbed, so a test never reaches the
- * origin.
+ * the binding, and `bynkc test` faults until the call is stubbed, so a test
+ * never reaches the origin.
  *
  * `Request`, `Response` and `FetchError` are `bynk`'s types, so a context that
  * calls `send` also writes `consumes bynk` to name them.
