@@ -7,7 +7,7 @@ title: Diagnostic index
 
 Every diagnostic code the compiler can emit, with a one-line summary of the cause, grouped by category. For step-by-step cause-and-fix guidance on the most common ones, see the [troubleshooting guides](/book/troubleshooting/). For a code with a curated explanation, `bynk explain <code>` prints it in a terminal, and in VS Code the diagnostic's **Explain** quick fix (or **Bynk: Explain Diagnostic Code…**) shows the same text in a panel, offline.
 
-There are **876** codes in total.
+There are **877** codes in total.
 
 ## Agents
 
@@ -593,6 +593,7 @@ There are **876** codes in total.
 | [`bynk.test.no_subject_needs_oidc_route`](/book/reference/testing/#failure-principals) | A case drives `by NoSubject` at an address that is not an http route with an `Oidc` actor; it sends correctly signed tokens whose `sub` is empty and whose `sub` is missing, so only an `Oidc` seam can refuse them. | [`case`](/book/reference/grammar/#rule-case) | — |
 | [`bynk.test.nobody_needs_secured_route`](/book/reference/testing/#failure-principals) | A case drives `by Nobody` at a route with no Bearer, `Oidc` or Signature actor (alone, or as a member of an actor sum) (e.g. a public `Visitor` route) — there is no auth seam to reject the missing credential. | [`case`](/book/reference/grammar/#rule-case) | — |
 | [`bynk.test.peek_not_a_database`](/book/reference/testing/#peek-a-database) | `D1.peek` names a capability that is not derived from `D1`; only a D1 binding has a test database to read. | [`case`](/book/reference/grammar/#rule-case) | — |
+| [`bynk.test.peek_not_bound`](/book/reference/testing/#peek-a-database) | `D1.peek` is used anywhere but as the value of a `let`; the handle is what a case reads through. | [`case`](/book/reference/grammar/#rule-case) | — |
 | [`bynk.test.peek_outside_case`](/book/reference/testing/#peek-a-database) | `D1.peek` is used outside an `integration` or `system` case; only those tiers stand up a participant's test database. | [`case`](/book/reference/grammar/#rule-case) | — |
 | [`bynk.test.peek_unknown_capability`](/book/reference/testing/#peek-a-database) | `D1.peek` names a participant or a capability that the suite does not have. | [`case`](/book/reference/grammar/#rule-case) | — |
 | [`bynk.test.peek_write`](/book/reference/testing/#peek-a-database) | A `D1.peek` handle is asked to write, by a write operation (`run`, `batch`) or by a statement that would write; the handle is read-only. | [`case`](/book/reference/grammar/#rule-case) | — |

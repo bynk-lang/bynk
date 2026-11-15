@@ -2405,14 +2405,6 @@ fn lower_method_call(
     pre.finish(call)
 }
 
-/// #3147: whether `name` is a case-local `D1.peek` handle, held on `deps`.
-fn is_peek_handle(name: &str, cx: &LowerCtx) -> bool {
-    cx.commons()
-        .callees
-        .values()
-        .any(|c| matches!(c, Callee::D1Peek { local, .. } if local == name))
-}
-
 /// #3147: lower `D1.peek(<participant>.<Cap>)` in an integration or `system`
 /// case, or `None` when the call is not one. It holds the participant's own
 /// capability over its test database, read-only, as `deps.<local>`: the same
@@ -2488,11 +2480,12 @@ fn lower_d1_select_call(
             .expect("a checked D1 select row type has a JSON decoder");
         {
             let params = pre.lower(params, cx);
-            let deps = if cx.in_test_case() || is_peek_handle(&cap, cx) {
-                "deps".to_string()
-            } else {
-                cx.cap_deps_expr().to_string()
-            };
+            let deps =
+                if cx.in_test_case() || cap.starts_with(bynk_check::checker::peek::LOCAL_PREFIX) {
+                    "deps".to_string()
+                } else {
+                    cx.cap_deps_expr().to_string()
+                };
             let sql = escape_ts_string(&sql);
             let (op, decode) = if first {
                 (
@@ -2786,7 +2779,7 @@ fn lower_capability_call(
     // as a capability operation, but a case body is no handler and has no
     // `given` set for the branch below to read.
     if let ExprKind::Ident(id) = &receiver.kind
-        && (cx.in_test_case() || is_peek_handle(&id.name, cx))
+        && cx.in_test_case()
         && matches!(
             cx.commons().callee(e.id),
             Some(Callee::Capability { cap, .. }) if *cap == id.name
@@ -2805,6 +2798,24 @@ fn lower_capability_call(
             call,
             wire.as_deref(),
             &id.name,
+            &method.name,
+            cx,
+        ));
+    }
+    // #3147: a read through a `D1.peek` handle, whatever the handle is called:
+    // the call is recorded on the capability the case holds as `deps.<cap>`.
+    if let Some(Callee::Capability { cap, .. }) = cx.commons().callee(e.id)
+        && cap.starts_with(bynk_check::checker::peek::LOCAL_PREFIX)
+    {
+        let cap = cap.clone();
+        let mut args_lowered: Vec<String> = args.iter().map(|a| pre.lower(a, cx)).collect();
+        let wire = capability_wire(e, cx);
+        encode_capability_args(wire.as_deref(), &mut args_lowered, cx);
+        let call = format!("deps.{cap}.{}({})", method.name, args_lowered.join(", "));
+        return Some(decode_capability_reply(
+            call,
+            wire.as_deref(),
+            &cap,
             &method.name,
             cx,
         ));

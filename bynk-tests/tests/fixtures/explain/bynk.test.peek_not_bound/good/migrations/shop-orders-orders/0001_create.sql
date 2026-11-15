@@ -1,0 +1,1 @@
+CREATE TABLE orders (id TEXT PRIMARY KEY, owner TEXT NOT NULL);

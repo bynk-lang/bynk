@@ -29,12 +29,16 @@ Accepted in #3147.
 - **Misuse is refused**, each with its own code: outside such a case
   (`bynk.test.peek_outside_case`), a capability that is not derived from `D1`
   (`bynk.test.peek_not_a_database`), a participant or capability the suite does not have
-  (`bynk.test.peek_unknown_capability`).
+  (`bynk.test.peek_unknown_capability`), and a `D1.peek` that is not the value of a `let`
+  (`bynk.test.peek_not_bound`).
 - **Read-only by construction.** `run` and `batch` are refused on the handle, and a
-  statement that would write is refused (`bynk.test.peek_write`): at check time, from the
-  prepared statement's `readonly` flag, for a literal or `const` SQL argument (SQL is
-  literal-only for `all`, `first`, `select` and `firstAs`, so no statement escapes this),
-  and again at run time by the harness.
+  statement that would write is refused (`bynk.test.peek_write`). SQL is literal-only for
+  `all`, `first`, `select` and `firstAs`, so every statement is seen at check time: by its
+  leading keyword (`INSERT`, `UPDATE`, `DELETE`, a schema change), which needs no schema and
+  so holds under `[check] d1_sql = false`; and, where the migrations' schema is there, from
+  the prepared statement's `readonly` flag, which also finds `WITH … DELETE`. The harness
+  refuses a write again at run time, so a statement neither check could see is still
+  refused.
 - **Schema-checked.** A peeked statement is prepared against its own participant's
   migrations, as the app's own D1 statements are.
 - **One object.** The handle reads the same database object the app's `env` holds, so it
@@ -48,5 +52,8 @@ Accepted in #3147.
 **Consequences.** A `system` case can assert on what the app stored without the app growing a
 route for it. The `D1` value types (`SqlValue`, `SqlError`, `SqlRun`, `SqlStatement`) are in
 a `system` case's scope wherever a participant has a D1 capability, so a case can write the
-parameters of a statement. The handle is not a first-class value: it has no type a program
-can write, and cannot be passed or returned. Editor support follows in a later slice.
+parameters of a statement. The handle is a value of a type no program can write
+(`D1Peek[<participant>.<Capability>]`), tracked by that type, so a name that shadows it in a
+lambda, a pattern or an inner block is the new binding's. It can be copied (`let other = db`)
+and closed over, but not passed to a function, which could not name its type. Editor support
+follows in a later slice.
