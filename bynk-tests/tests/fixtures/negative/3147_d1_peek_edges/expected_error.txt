@@ -1,0 +1,7 @@
+# exact
+bynk.test.peek_write the SQL of `D1.peek` reads, but this statement of `db.all` would write
+bynk.test.peek_write the SQL of `D1.peek` reads, but this statement of `db.all` would write
+bynk.test.peek_write the SQL of `D1.peek` reads, but this statement of `Orders.all` would write
+bynk.d1.sql_invalid the SQL of `Orders.firstAs` doesn't prepare: Multiple statements provided
+bynk.types.method_not_found the built-in `Int` type has no method `first` — the kernel is `toFloat`, `toString`, `abs`, `min`, `max`, `clamp`, `div`, `rem`, `mod`, `pow`, `and`, `or`, `xor`, `andNot`, `shl`, `shr`
+bynk.test.peek_not_bound `D1.peek` is bound with `let`, and is used only through the handle it binds

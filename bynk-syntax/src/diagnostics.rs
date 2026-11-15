@@ -6106,6 +6106,101 @@ bynk revert --accept-secret-changes   # only after a `bynk migrate sweep`",
         anchor: "failure-principals",
     },
     Explain {
+        code: "bynk.test.peek_not_a_database",
+        blurb: "`D1.peek` reads a D1 database, so it names a capability derived \
+                from `D1` (`capability Orders = D1`). A capability on another \
+                binding, such as `Kv`, has no database for it to read.",
+        example: "// shop/orders.bynk\n\
+                  capability Orders = D1\n\
+                  capability Sessions = Kv\n\
+                  \n\
+                  // tests/orders.test.bynk\n\
+                  suite shop.orders as system {\n\
+                  \x20\x20case \"peeks\" {\n\
+                  \x20\x20\x20\x20let db = D1.peek(shop.orders.Sessions)   // ✗ a `Kv`, not a `D1`\n\
+                  \x20\x20\x20\x20let ok = D1.peek(shop.orders.Orders)     // ✓\n\
+                  \x20\x20\x20\x20expect true\n\
+                  \x20\x20}\n\
+                  }",
+        page: "/book/reference/testing",
+        anchor: "peek-a-database",
+    },
+    Explain {
+        code: "bynk.test.peek_not_bound",
+        blurb: "`D1.peek(<participant>.<Capability>)` stands as the value of a \
+                `let`, and the case reads through the handle that binds. A \
+                `D1.peek` anywhere else, as an argument or the receiver of a \
+                call, has no handle to keep.",
+        example: "// tests/orders.test.bynk\n\
+                  suite shop.orders as system {\n\
+                  \x20\x20case \"peeks\" {\n\
+                  \x20\x20\x20\x20let rows <- D1.peek(shop.orders.Orders).all(\"SELECT id FROM orders\", [])   // ✗ the handle is not bound\n\
+                  \x20\x20\x20\x20let db = D1.peek(shop.orders.Orders)                                      // ✓\n\
+                  \x20\x20\x20\x20expect true\n\
+                  \x20\x20}\n\
+                  }",
+        page: "/book/reference/testing",
+        anchor: "peek-a-database",
+    },
+    Explain {
+        code: "bynk.test.peek_outside_case",
+        blurb: "`D1.peek(<participant>.<Capability>)` gives an `integration` or \
+                `system` case a read-only handle on a participant's test \
+                database. Only those tiers stand one up, so the handle is \
+                refused in a `unit` case, a `property`, and in the app's own \
+                code. A `unit` case reads the capability it stubs.",
+        example: "// tests/orders.test.bynk\n\
+                  suite shop.orders {\n\
+                  \x20\x20case \"peeks\" {\n\
+                  \x20\x20\x20\x20let db = D1.peek(shop.orders.Orders)   // ✗ a unit suite has no participant database\n\
+                  \x20\x20\x20\x20expect true\n\
+                  \x20\x20}\n\
+                  }\n\
+                  \n\
+                  suite shop.orders as system {\n\
+                  \x20\x20case \"peeks\" {\n\
+                  \x20\x20\x20\x20let db = D1.peek(shop.orders.Orders)   // ✓\n\
+                  \x20\x20\x20\x20expect true\n\
+                  \x20\x20}\n\
+                  }",
+        page: "/book/reference/testing",
+        anchor: "peek-a-database",
+    },
+    Explain {
+        code: "bynk.test.peek_unknown_capability",
+        blurb: "`D1.peek` names a capability as `<participant>.<Capability>`, \
+                where the participant is one of the suite's and declares the \
+                capability. The participant or the capability is not one.",
+        example: "// tests/orders.test.bynk\n\
+                  suite shop.orders as system {\n\
+                  \x20\x20case \"peeks\" {\n\
+                  \x20\x20\x20\x20let db = D1.peek(shop.orders.Missing)   // ✗ `shop.orders` declares no `Missing`\n\
+                  \x20\x20\x20\x20let ok = D1.peek(shop.orders.Orders)    // ✓\n\
+                  \x20\x20\x20\x20expect true\n\
+                  \x20\x20}\n\
+                  }",
+        page: "/book/reference/testing",
+        anchor: "peek-a-database",
+    },
+    Explain {
+        code: "bynk.test.peek_write",
+        blurb: "A `D1.peek` handle is read-only: it offers `all`, `first`, \
+                `select[T]` and `firstAs[T]`, and a statement that would write \
+                (`INSERT`, `UPDATE`, `DELETE`, a schema change) is refused, as is \
+                `run` or `batch`. A case makes the app write by driving the app.",
+        example: "// tests/orders.test.bynk\n\
+                  suite shop.orders as system {\n\
+                  \x20\x20case \"peeks\" {\n\
+                  \x20\x20\x20\x20let db = D1.peek(shop.orders.Orders)\n\
+                  \x20\x20\x20\x20let a <- db.all(\"DELETE FROM orders\", [])   // ✗ the statement writes\n\
+                  \x20\x20\x20\x20let r <- db.all(\"SELECT id FROM orders\", [])   // ✓\n\
+                  \x20\x20\x20\x20expect true\n\
+                  \x20\x20}\n\
+                  }",
+        page: "/book/reference/testing",
+        anchor: "peek-a-database",
+    },
+    Explain {
         code: "bynk.test.principal_claims_not_oidc",
         blurb: "`TokenClaims.of([…])` supplies the claims an `Oidc` actor's token \
                 carries, which the handler reads and the actor's rules check. A \
@@ -11054,6 +11149,31 @@ pub const REGISTRY: &[DiagnosticInfo] = &[
     dg(
         "bynk.test.nobody_needs_secured_route",
         "A case drives `by Nobody` at a route with no Bearer, `Oidc` or Signature actor (alone, or as a member of an actor sum) (e.g. a public `Visitor` route) — there is no auth seam to reject the missing credential.",
+        &["case"],
+    ),
+    dg(
+        "bynk.test.peek_not_a_database",
+        "`D1.peek` names a capability that is not derived from `D1`; only a D1 binding has a test database to read.",
+        &["case"],
+    ),
+    dg(
+        "bynk.test.peek_not_bound",
+        "`D1.peek` is used anywhere but as the value of a `let`; the handle is what a case reads through.",
+        &["case"],
+    ),
+    dg(
+        "bynk.test.peek_outside_case",
+        "`D1.peek` is used outside an `integration` or `system` case; only those tiers stand up a participant's test database.",
+        &["case"],
+    ),
+    dg(
+        "bynk.test.peek_unknown_capability",
+        "`D1.peek` names a participant or a capability that the suite does not have.",
+        &["case"],
+    ),
+    dg(
+        "bynk.test.peek_write",
+        "A `D1.peek` handle is asked to write, by a write operation (`run`, `batch`) or by a statement that would write; the handle is read-only.",
         &["case"],
     ),
     d(

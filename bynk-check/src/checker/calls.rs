@@ -315,6 +315,7 @@ pub(crate) fn check_fn_in(
                     given_used: HashSet::new(),
                     given_entries,
                     given_anchor: Some(f.return_type.span()),
+                    ..Default::default()
                 }
             }
             // #2868: a plain effectful function in a context has no `given`, but
@@ -3065,6 +3066,11 @@ pub(crate) fn check_method_call(
     if type_args_pending && !value_receiver {
         reject_method_type_args(method, args, span, ctx);
         return None;
+    }
+    if let Some(r) = super::peek::check_peek_call(
+        receiver, method, type_args, args, span, expected, expr_id, ctx,
+    ) {
+        return r;
     }
     if let Some(r) = super::kernels::check_cookie_call(receiver, method, args, span, expr_id, ctx) {
         return r;

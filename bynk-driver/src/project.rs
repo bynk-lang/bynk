@@ -3417,7 +3417,7 @@ fn run_checks(
         &groups,
         &mut emitted_barrels,
         &test_asset_files,
-        &d1_migrations,
+        tests_emit::IntegrationD1::new(&d1_migrations, d1_sql.as_deref()),
         context_bindings.as_ref(),
         &event_subscribers,
         remote_tests,

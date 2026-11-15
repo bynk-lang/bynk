@@ -1,0 +1,7 @@
+suite shop.orders as system {
+  case "peeks" {
+    let db = D1.peek(shop.orders.Orders)
+    let r <- db.all("SELECT id FROM orders", [])
+    expect true
+  }
+}
