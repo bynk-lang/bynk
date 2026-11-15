@@ -170,6 +170,75 @@ fn block(stmts: Vec<TsStmt>) -> TsStmt {
     TsStmt::block(stmts, None)
 }
 
+/// #3580: the runtime names a traced entry imports.
+fn trace_imports(trace: bool) -> Vec<String> {
+    if trace {
+        vec!["__traceFetch".to_string(), "__traceFault".to_string()]
+    } else {
+        Vec::new()
+    }
+}
+
+/// What `fetch`'s catch does with a fault (#1825): log it, report it, and answer
+/// the bare 500. #3580: a traced build also hands the fault to the request's record.
+fn fault_handler(context: &str, trace: bool) -> Vec<TsStmt> {
+    let mut handler = vec![expr_stmt(method_call(
+        ident("globalThis.console"),
+        "error",
+        vec![
+            TsExpr::template_lit(
+                vec![format!("{context} "), " faulted".to_string()],
+                vec![ident("__route")],
+            ),
+            fault_detail("e"),
+        ],
+    ))];
+    if trace {
+        handler.push(expr_stmt(call(ident("__traceFault"), vec![ident("e")])));
+    }
+    handler.push(report_fault());
+    handler.push(return_(Some(call(
+        ident("__faultResponse"),
+        vec![str_lit(context.to_string()), ident("__route")],
+    ))));
+    handler
+}
+
+/// #3580: a traced build moves the dispatch (with any edge-cache guard) into
+/// `__bynkTracedFetch`, and `fetch` serves each request under a record that
+/// prints one `__bynk_trace:` line as the response is ready. Returns `fetch`'s
+/// new body.
+fn traced_fetch(
+    context: &str,
+    header_decls: &mut Vec<TsStmt>,
+    fetch_params: &[TsParam],
+    fetch_return: &Option<TsType>,
+    fetch_body: Vec<TsStmt>,
+) -> Vec<TsStmt> {
+    header_decls.push(TsStmt::decl(
+        TsDecl::Function {
+            name: "__bynkTracedFetch".to_string(),
+            generics: Vec::new(),
+            params: fetch_params.to_vec(),
+            return_type: fetch_return.clone(),
+            body: fetch_body,
+            is_async: true,
+            inline: false,
+        },
+        None,
+    ));
+    vec![return_(Some(call(
+        ident("__traceFetch"),
+        vec![
+            str_lit(context.to_string()),
+            ident("__bynkTracedFetch"),
+            ident("request"),
+            ident("env"),
+            ident("ctx"),
+        ],
+    )))]
+}
+
 /// #1825: `__route = "<what>";`, naming the dispatch `fetch`'s fault log
 /// reports.
 fn set_fault_route(what: String) -> TsStmt {
@@ -719,6 +788,8 @@ pub fn emit_worker_entry(
     // query field typed by an imported refined type or enum resolves to its real
     // wire kind rather than falling through to `string`.
     visible_types: &std::collections::HashMap<String, std::sync::Arc<bynk_syntax::ast::TypeDecl>>,
+    // #3580: wrap `fetch` in the request recorder (`bynk dev --trace-events` only).
+    trace: bool,
 ) -> TsProgram {
     let mut program = TsProgram::new();
     // Which conditional runtime helpers the entry's own inbound/outbound codecs
@@ -999,6 +1070,7 @@ pub fn emit_worker_entry(
     if !migratable.is_empty() {
         imports.push("__sweepAgentInstances".to_string());
     }
+    imports.extend(trace_imports(trace));
     if has_http {
         imports.push("__matchPath".to_string());
         imports.push("__httpResultToResponse".to_string());
@@ -1782,24 +1854,7 @@ pub fn emit_worker_entry(
     fetch_body.push(try_catch_stmt(
         try_body,
         Some("e"),
-        vec![
-            expr_stmt(method_call(
-                ident("globalThis.console"),
-                "error",
-                vec![
-                    TsExpr::template_lit(
-                        vec![format!("{context} "), " faulted".to_string()],
-                        vec![ident("__route")],
-                    ),
-                    fault_detail("e"),
-                ],
-            )),
-            report_fault(),
-            return_(Some(call(
-                ident("__faultResponse"),
-                vec![str_lit(context.to_string()), ident("__route")],
-            ))),
-        ],
+        fault_handler(context, trace),
     ));
 
     let fetch_return = Some(TsType::named_with_args(
@@ -1833,6 +1888,17 @@ pub fn emit_worker_entry(
                 )),
             ],
         )))]
+    } else {
+        fetch_body
+    };
+    let fetch_body = if trace {
+        traced_fetch(
+            context,
+            &mut header_decls,
+            &fetch_params,
+            &fetch_return,
+            fetch_body,
+        )
     } else {
         fetch_body
     };
