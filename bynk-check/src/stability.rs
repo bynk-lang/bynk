@@ -430,6 +430,7 @@ mod tests {
                 "bynk.cloudflare.Analytics",
                 "bynk.cloudflare.Version",
                 "bynk.cloudflare.Ai",
+                "bynk.cloudflare.Images",
                 "bynk.cloudflare.StoredSecret",
                 "bynk.cloudflare.Email",
                 "bynk.cloudflare.Postgres",
