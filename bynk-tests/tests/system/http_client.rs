@@ -934,7 +934,7 @@ fn a_worker_hosted_server_can_set_origin_through_the_client() {
 }
 
 const RAW_DRIVER: &str = r#"
-import { createClient } from "./dist/api.js";
+import { createClient, StreamFailure } from "./dist/api.js";
 const sent = [];
 const viaWorker = async (url, init) => {
   sent.push(`${init.method} ${url.replace(BASE, "")} ${new Headers(init.headers).get("content-type") ?? "-"} duplex=${init.duplex ?? "-"}`);
@@ -1007,7 +1007,7 @@ show("cr", crEvents);
 // A body that fails rejects the iteration.
 const broken = createClient({ baseUrl: "http://x", fetch: async () => new Response(new ReadableStream({ start(k) { k.enqueue(new TextEncoder().encode("data: one\n\n")); }, pull() { throw new Error("cut"); } }), { status: 200, headers: { "content-type": "text/event-stream" } }) });
 const cut = [];
-try { for await (const e of (await broken.api.getTicks()).events) cut.push(e); } catch (e) { cut.push("threw " + e.message); }
+try { for await (const e of (await broken.api.getTicks()).events) cut.push(e); } catch (e) { cut.push((e instanceof StreamFailure ? "StreamFailure " : "other ") + e.reason.message); }
 show("p-cut", cut);
 // A body that is not what the route answers is `Unexpected`, with the text.
 show("html", await createClient({ baseUrl: "http://x", fetch: async () => new Response("<p>", { status: 200, headers: { "content-type": "text/html" } }) }).api.getTicks());
@@ -1071,7 +1071,7 @@ fn check_raw(out: &str) {
     assert_eq!(v("p-open"), r#"["kept"]"#);
     assert_eq!(v("p-empty"), r#"["",""]"#);
     assert_eq!(v("p-split"), r#"["\u20ac"]"#.replace("\\u20ac", "€"));
-    assert_eq!(v("p-cut"), r#"["one","threw cut"]"#);
+    assert_eq!(v("p-cut"), r#"["one","StreamFailure cut"]"#);
     assert_eq!(
         v("html"),
         r#"{"kind":"Unexpected","status":200,"text":"<p>"}"#

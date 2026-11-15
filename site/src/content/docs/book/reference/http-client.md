@@ -342,7 +342,8 @@ The reader follows the specification, so it also reads a stream another server w
 LF or CR line ends, `data:` with or without the space, comments and other fields ignored.
 An event the stream ends in the middle of is dropped. Breaking out of the loop, or aborting
 the call with a `signal`, cancels the body. A stream that fails after its status was sent
-cannot become a `CallFailure`: the iteration rejects. Two edges are the server's framing: an
+cannot become a `CallFailure`: the iteration throws a `StreamFailure` (exported, with `reason`
+holding what the body rejected with), the one place the client throws. Two edges are the server's framing: an
 element containing a bare `\r` is split by a reader (the server splits on `\n` only), so it
 does not round-trip, and an empty element is an event with empty data.
 

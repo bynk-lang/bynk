@@ -496,11 +496,25 @@ function __classify(route: __Route, response: globalThis.Response, text: string)
 }
 
 /**
+ * What iterating a call's `events` throws when the stream fails after its status was
+ * sent (a dropped connection, an abort): the one place the client throws, because by
+ * then there is no `CallFailure` left to return. `reason` is what the body rejected with.
+ */
+export class StreamFailure extends globalThis.Error {
+  readonly reason: unknown;
+  constructor(reason: unknown) {
+    super("the event stream failed");
+    this.name = "StreamFailure";
+    this.reason = reason;
+  }
+}
+
+/**
  * The events of a `text/event-stream` body, each one the `data` of an event as the
  * server wrote it. Lines end in CRLF, LF or CR; a `data` line adds a line to the event;
  * a blank line ends it; comments and every other field are ignored; an event the
  * stream ends in the middle of is dropped. Cancelling the iteration (a `break`, or
- * the call's `signal`) cancels the body. A body that fails rejects the iteration.
+ * the call's `signal`) cancels the body. A body that fails throws a `StreamFailure` from the iteration.
  */
 async function* __events(response: globalThis.Response): globalThis.AsyncGenerator<string, void, undefined> {
   if (response.body === null) return;
@@ -510,7 +524,13 @@ async function* __events(response: globalThis.Response): globalThis.AsyncGenerat
   let data: string[] = [];
   try {
     for (;;) {
-      const { value, done } = await reader.read();
+      let chunk: globalThis.ReadableStreamReadResult<globalThis.Uint8Array>;
+      try {
+        chunk = await reader.read();
+      } catch (reason) {
+        throw new StreamFailure(reason);
+      }
+      const { value, done } = chunk;
       buffer += done ? decoder.decode() : decoder.decode(value, { stream: true });
       let start = 0;
       for (let i = 0; i < buffer.length; i++) {
