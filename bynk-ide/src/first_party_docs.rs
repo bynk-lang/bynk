@@ -175,6 +175,12 @@ pub const FIRST_PARTY_DOCS: &[Entry] = &[
         "ai-search-aisearch",
         &["search", "answer"],
     ),
+    (
+        "bynk.cloudflare",
+        "MtlsCertificate",
+        "mutual-tls-mtlscertificate",
+        &["send"],
+    ),
 ];
 
 /// The Book URL for the first-party capability a doc-link `name` (`Clock` or

@@ -2977,6 +2977,10 @@ pub(crate) fn describe_derived_capability(
     if d.base.name == "AiSearch" {
         out.push_str("\nEmits `[[ai_search]]`: a distinct instance of `AiSearch`, querying the AI Search instance `@instance` names, in every environment. `bynk deploy` links it (it looks the instance up and records it, and creates nothing) and fails when it is missing; `bynk dev` proxies it to the deployed instance.\n");
     }
+    // #3513 A: a client certificate, linked by deploy and never uploaded.
+    if d.base.name == "MtlsCertificate" {
+        out.push_str("\nEmits `[[mtls_certificates]]`: a distinct instance of `MtlsCertificate`, whose `send` presents the account's client certificate `@certificate` names to the origin the URL names, in every environment. Bynk never uploads a certificate: its private key never reaches Bynk.\n");
+    }
     // #3302: outbound email, restricted by its annotations.
     if d.base.name == "Email" {
         out.push_str("\nEmits `[[send_email]]`, keyed by `name`, with the instance's `@to`, `@allowedRecipients` and `@allowedSenders` as `destination_address`, `allowed_destination_addresses` and `allowed_sender_addresses`. `bynk deploy` checks each `@allowedSenders` domain has Email Sending enabled on the account, and never configures one. A call that breaks a platform limit or sets a reserved header faults before it is sent.\n");

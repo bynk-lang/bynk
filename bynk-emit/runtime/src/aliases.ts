@@ -21,7 +21,7 @@ import { applyCache, applyCors, applyEdgeCache, applySecurityHeaders, cfObject, 
 import { traceFault, traceFetch, traceStep, type TraceSpan } from "./trace.ts";
 import { formatIcuDate, formatIcuNumber, selectPluralArm } from "./messages.ts";
 import { StoreCache, StoreLog, StoreMap, StoreSet, fillHeld, fillLog, fillMap, fillSet, wireEntries, wireHeld, wireHeldOrder, wireLog, wireMap, wirePostings, wireSet } from "./store.ts";
-import { makeIntegrationAi, makeIntegrationAiSearch, makeIntegrationContainer, makeIntegrationAnalytics, makeIntegrationD1, makeIntegrationEmail, makeIntegrationHyperdrive, makeIntegrationKv, makeIntegrationQueue, makeIntegrationR2, makeIntegrationRateLimit, makeIntegrationSecretsStoreSecret, makeIntegrationVersionMetadata, makeTestState, type AiSearchInstance, type AnalyticsDataset, type D1Database, type DurableObjectState, type Hyperdrive, type KVNamespace, type QueueProducer, type R2Bucket, type RateLimiter, type SecretsStoreSecret, type SendEmail, type WorkerAiBinding, type WorkerVersionMetadata } from "./storage.ts";
+import { makeIntegrationAi, makeIntegrationAiSearch, makeIntegrationContainer, makeIntegrationAnalytics, makeIntegrationD1, makeIntegrationEmail, makeIntegrationHyperdrive, makeIntegrationKv, makeIntegrationMtls, makeIntegrationQueue, makeIntegrationR2, makeIntegrationRateLimit, makeIntegrationSecretsStoreSecret, makeIntegrationVersionMetadata, makeTestState, type AiSearchInstance, type AnalyticsDataset, type D1Database, type DurableObjectState, type Hyperdrive, type KVNamespace, type QueueProducer, type R2Bucket, type RateLimiter, type SecretsStoreSecret, type SendEmail, type WorkerAiBinding, type WorkerVersionMetadata } from "./storage.ts";
 import { makeIntegrationVectorize, type VectorizeIndex } from "./vectorize.ts";
 
 export {
@@ -91,6 +91,7 @@ export {
   makeIntegrationRateLimit as __makeIntegrationRateLimit,
   makeIntegrationSecretsStoreSecret as __makeIntegrationSecretsStoreSecret,
   makeIntegrationAiSearch as __makeIntegrationAiSearch,
+  makeIntegrationMtls as __makeIntegrationMtls,
   makeIntegrationVectorize as __makeIntegrationVectorize,
   makeIntegrationVersionMetadata as __makeIntegrationVersionMetadata,
   makeTestState as __makeTestState,
