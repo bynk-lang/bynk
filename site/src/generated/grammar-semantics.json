@@ -308,6 +308,10 @@
       "summary": "`D1.peek` names a capability that is not derived from `D1`; only a D1 binding has a test database to read."
     },
     {
+      "code": "bynk.test.peek_not_bound",
+      "summary": "`D1.peek` is used anywhere but as the value of a `let`; the handle is what a case reads through."
+    },
+    {
       "code": "bynk.test.peek_outside_case",
       "summary": "`D1.peek` is used outside an `integration` or `system` case; only those tiers stand up a participant's test database."
     },

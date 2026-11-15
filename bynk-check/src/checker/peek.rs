@@ -9,15 +9,33 @@
 //! like any other D1 call. A write is refused: by operation here, and by the
 //! prepared statement's `readonly` flag in [`crate::d1_sql`] (and at run time).
 //!
-//! The handle is a case-local value (`let db = D1.peek(shop.orders.Orders)`)
-//! whose only use is as the receiver of those four operations.
+//! The handle is a case-local value, bound by `let` (`let db =
+//! D1.peek(shop.orders.Orders)`, `bynk.test.peek_not_bound` otherwise), whose
+//! only use is as the receiver of those four operations.
 
 use super::*;
 use std::collections::BTreeMap;
 
-/// The type of a peek handle. It has no declaration and cannot be written in
-/// source; it exists so the binding has a name to show in a hint.
-pub const PEEK_TYPE: &str = "D1Peek";
+/// The type of a peek handle: `D1Peek[shop.orders.Orders]`, one per peeked
+/// capability. It has no declaration and cannot be written in source. The
+/// handle is tracked by this type, so a binding that shadows it, in a lambda,
+/// a pattern or an inner block, is the new binding's, and one that leaves scope
+/// leaves the outer one as it was.
+const PEEK_TYPE: &str = "D1Peek";
+
+fn peek_type_name(participant: &str, cap: &str) -> String {
+    format!("{PEEK_TYPE}[{participant}.{cap}]")
+}
+
+/// The participant and capability a handle type names.
+fn parse_peek_type(name: &str) -> Option<(String, String)> {
+    let path = name
+        .strip_prefix(PEEK_TYPE)?
+        .strip_prefix('[')?
+        .strip_suffix(']')?;
+    let (participant, cap) = path.rsplit_once('.')?;
+    Some((participant.to_string(), cap.to_string()))
+}
 
 /// The operations a handle offers: the reads, as the capability declares them.
 const READ_OPS: &[&str] = &["all", "first", "select", "firstAs"];
@@ -33,13 +51,6 @@ pub struct PeekEnv {
     pub participants: BTreeMap<String, BTreeMap<String, CapabilityInfo>>,
 }
 
-/// What a peek handle names: a participant and its D1 capability.
-#[derive(Debug, Clone)]
-pub struct PeekHandle {
-    pub participant: String,
-    pub cap: String,
-}
-
 /// The dotted path an expression spells (`shop.orders.Orders`), as segments.
 fn path_of(e: &Expr) -> Option<Vec<String>> {
     match &e.kind {
@@ -51,6 +62,44 @@ fn path_of(e: &Expr) -> Option<Vec<String>> {
         }
         _ => None,
     }
+}
+
+/// Whether `sql` begins with a statement that writes, by its leading keyword.
+/// It needs no schema, so it holds under `[check] d1_sql = false`; a write it
+/// cannot see from the keyword (`WITH … DELETE`) is found from the prepared
+/// statement's `readonly` flag when the schema is there, and at run time.
+pub(crate) fn begins_with_write(sql: &str) -> bool {
+    let mut rest = sql;
+    loop {
+        rest = rest.trim_start();
+        if let Some(after) = rest.strip_prefix("--") {
+            rest = after.split_once('\n').map_or("", |(_, tail)| tail);
+        } else if let Some(after) = rest.strip_prefix("/*") {
+            rest = after.split_once("*/").map_or("", |(_, tail)| tail);
+        } else {
+            break;
+        }
+    }
+    let word: String = rest
+        .chars()
+        .take_while(char::is_ascii_alphabetic)
+        .collect::<String>()
+        .to_ascii_uppercase();
+    matches!(
+        word.as_str(),
+        "INSERT"
+            | "UPDATE"
+            | "DELETE"
+            | "REPLACE"
+            | "CREATE"
+            | "DROP"
+            | "ALTER"
+            | "VACUUM"
+            | "REINDEX"
+            | "ANALYZE"
+            | "ATTACH"
+            | "DETACH"
+    )
 }
 
 fn is_d1(info: &CapabilityInfo) -> bool {
@@ -74,14 +123,17 @@ pub(super) fn check_peek_call(
     let ExprKind::Ident(root) = &receiver.kind else {
         return None;
     };
-    if ctx.lookup(&root.name).is_some() {
-        let handle = ctx.caps.peek_handles.get(&root.name).cloned()?;
+    if let Some(ty) = ctx.lookup(&root.name) {
+        let handle = match &*ctx.tys.get(ty) {
+            Ty::Named { name, .. } => parse_peek_type(name),
+            _ => None,
+        }?;
         return Some(check_handle_op(
             &handle, root, method, type_args, args, span, expected, expr_id, ctx,
         ));
     }
     if root.name == "D1" && method.name == "peek" && !ctx.input.types.contains_key("D1") {
-        return Some(check_create(receiver, method, args, span, expr_id, ctx));
+        return Some(check_create(args, span, expr_id, ctx));
     }
     None
 }
@@ -91,14 +143,7 @@ fn refuse(code: &'static str, span: Span, message: String, note: &str, ctx: &mut
         .push(CompileError::new(code, span, message).with_note(note.to_string()));
 }
 
-fn check_create(
-    receiver: &Expr,
-    method: &Ident,
-    args: &[Expr],
-    span: Span,
-    expr_id: ExprId,
-    ctx: &mut Ctx,
-) -> Option<TyId> {
+fn check_create(args: &[Expr], span: Span, expr_id: ExprId, ctx: &mut Ctx) -> Option<TyId> {
     let tys = ctx.tys;
     let Some(env) = ctx.caps.peek_env.clone() else {
         refuse(
@@ -110,7 +155,19 @@ fn check_create(
         );
         return None;
     };
-    let _ = (receiver, method);
+    // The handle is a value of its own, held by a `let`: the emitted case
+    // keeps it under a name made from that binding.
+    if ctx.caps.peek_let_value != Some(expr_id) {
+        refuse(
+            "bynk.test.peek_not_bound",
+            span,
+            "`D1.peek` is bound with `let`, and is used only through the handle it binds"
+                .to_string(),
+            "write `let db = D1.peek(<participant>.<Capability>)` and call `db.all(…)`",
+            ctx,
+        );
+        return None;
+    }
     let [arg] = args else {
         refuse(
             "bynk.test.peek_unknown_capability",
@@ -176,34 +233,21 @@ fn check_create(
         );
         return None;
     }
-    ctx.caps
-        .peek_resolved
-        .insert(expr_id, PeekHandle { participant, cap });
-    let _ = span;
     Some(tys.intern(Ty::Named {
-        name: PEEK_TYPE.to_string(),
+        name: peek_type_name(&participant, &cap),
         kind: NamedKind::Record,
         args: Vec::new(),
     }))
 }
 
-/// A `let` binding's value: if it is a resolved `D1.peek(…)`, the name is a
-/// handle from here on; any other binding of the name ends one.
-pub(super) fn note_let(name: &str, value: &Expr, ctx: &mut Ctx) {
-    ctx.caps.peek_handles.remove(name);
-    if let Some(h) = ctx.caps.peek_resolved.get(&value.id).cloned() {
-        ctx.caps.peek_handles.insert(name.to_string(), h);
-    }
-}
-
-/// The effect-`let` form (`let x <- …`) can only end a handle's name.
-pub(super) fn forget(name: &str, ctx: &mut Ctx) {
-    ctx.caps.peek_handles.remove(name);
+/// The value of a plain `let`, which is where a `D1.peek` may stand.
+pub(super) fn expect_let(value: &Expr, ctx: &mut Ctx) {
+    ctx.caps.peek_let_value = Some(value.id);
 }
 
 #[allow(clippy::too_many_arguments)]
 fn check_handle_op(
-    handle: &PeekHandle,
+    handle: &(String, String),
     receiver: &Ident,
     method: &Ident,
     type_args: &[TypeRef],
@@ -213,12 +257,13 @@ fn check_handle_op(
     expr_id: ExprId,
     ctx: &mut Ctx,
 ) -> Option<TyId> {
+    let (participant, cap) = handle;
     let info = ctx
         .caps
         .peek_env
         .as_ref()
-        .and_then(|e| e.participants.get(&handle.participant))
-        .and_then(|c| c.get(&handle.cap))
+        .and_then(|e| e.participants.get(participant))
+        .and_then(|c| c.get(cap))
         .cloned();
     let info = info?;
     if !READ_OPS.contains(&method.name.as_str()) {
@@ -248,9 +293,9 @@ fn check_handle_op(
         return None;
     }
     // The ordinary capability call, over the participant's own signatures.
-    let present = ctx.caps.capabilities.insert(handle.cap.clone(), info);
+    let present = ctx.caps.capabilities.insert(cap.clone(), info);
     let name = Ident {
-        name: handle.cap.clone(),
+        name: cap.clone(),
         span: receiver.span,
     };
     let out = super::calls::check_static_call(
@@ -258,11 +303,28 @@ fn check_handle_op(
     );
     match present {
         Some(p) => {
-            ctx.caps.capabilities.insert(handle.cap.clone(), p);
+            ctx.caps.capabilities.insert(cap.clone(), p);
         }
         None => {
-            ctx.caps.capabilities.remove(&handle.cap);
+            ctx.caps.capabilities.remove(cap);
         }
+    }
+    // A statement that writes is refused whether or not there is a schema to
+    // prepare it against.
+    if let Some(sql) = args.first()
+        && let Some(text) = super::d1::sql_literal_text(sql, ctx)
+        && begins_with_write(&text)
+    {
+        refuse(
+            "bynk.test.peek_write",
+            sql.span,
+            format!(
+                "the SQL of `D1.peek` reads, but this statement of `{}.{}` would write",
+                receiver.name, method.name
+            ),
+            "a peeked database is read-only: a case makes the app write by driving the app",
+            ctx,
+        );
     }
     // The statement is the participant's: the project phase prepares it
     // against that participant's migrations, and refuses a write.
@@ -275,7 +337,7 @@ fn check_handle_op(
             _ => None,
         };
         if let Some(site) = site {
-            site.peek = Some(handle.participant.clone());
+            site.peek = Some(participant.clone());
         }
     }
     out

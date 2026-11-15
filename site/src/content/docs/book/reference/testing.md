@@ -1511,12 +1511,18 @@ case "placing an order stores it" {
   `system` case (`bynk.test.peek_outside_case`), on a capability derived from
   `D1` (`bynk.test.peek_not_a_database`) that the participant declares
   (`bynk.test.peek_unknown_capability`).
+- **It is bound by `let`**: `let db = D1.peek(…)`, then `db.all(…)`. A `D1.peek`
+  anywhere else is `bynk.test.peek_not_bound`.
 - **It offers the reads**, with the capability's own signatures: `all`, `first`,
   and `select[T]` / `firstAs[T]`. A literal statement is checked against the
-  migrations' schema like any other D1 call.
+  migrations' schema like any other D1 call. The `D1` value types (`SqlValue` and
+  the rest) are in scope in the case, with no `consumes`.
 - **It is read-only.** `run` and `batch`, and any statement that would write
   (`INSERT`, `UPDATE`, `DELETE`, a schema change), are `bynk.test.peek_write`.
-  To get state into the database, drive the app.
+  The leading keyword is enough to refuse one, so this holds under
+  `[check] d1_sql = false` too; with the schema, a write the keyword hides
+  (`WITH … DELETE`) is found from the prepared statement. To get state into the
+  database, drive the app.
 - **It reads the database the app wrote.** It is the same in-memory database
   the participant's own D1 calls run against in this case, with the
   participant's migrations applied.

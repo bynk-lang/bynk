@@ -1,7 +1,5 @@
 suite shop.orders as system
 
-consumes bynk.cloudflare { SqlValue }
-
 case "a handle reads, and only reads" {
   let db = D1.peek(shop.orders.Orders)
   let ok <- db.all("SELECT id, qty FROM orders WHERE owner = ?1", [Text("bob")])

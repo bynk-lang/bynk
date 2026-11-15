@@ -5462,7 +5462,13 @@ pub fn integration_view(
         })
     });
     if has_d1 && let Some(cloudflare) = unit_tables.get(crate::firstparty::CLOUDFLARE_UNIT) {
-        for name in ["SqlValue", "SqlError", "SqlRun", "SqlStatement"] {
+        for name in [
+            "SqlValue",
+            "SqlError",
+            "SqlReadError",
+            "SqlRun",
+            "SqlStatement",
+        ] {
             if let Some(decl) = cloudflare.types.get(name) {
                 view.types
                     .entry(name.to_string())

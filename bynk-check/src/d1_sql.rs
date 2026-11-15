@@ -323,7 +323,9 @@ mod native {
                 let conn = conn.lock().unwrap_or_else(|e| e.into_inner());
                 if let Some(err) = check_site(&conn, site, &database, source) {
                     out.push(err);
-                } else if conn.prepare(&site.text).is_ok_and(|stmt| !stmt.readonly()) {
+                } else if !crate::checker::peek::begins_with_write(&site.text)
+                    && conn.prepare(&site.text).is_ok_and(|stmt| !stmt.readonly())
+                {
                     out.push(
                         CompileError::new(
                             "bynk.test.peek_write",

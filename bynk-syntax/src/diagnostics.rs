@@ -6126,6 +6126,23 @@ bynk revert --accept-secret-changes   # only after a `bynk migrate sweep`",
         anchor: "peek-a-database",
     },
     Explain {
+        code: "bynk.test.peek_not_bound",
+        blurb: "`D1.peek(<participant>.<Capability>)` stands as the value of a \
+                `let`, and the case reads through the handle that binds. A \
+                `D1.peek` anywhere else, as an argument or the receiver of a \
+                call, has no handle to keep.",
+        example: "// tests/orders.test.bynk\n\
+                  suite shop.orders as system {\n\
+                  \x20\x20case \"peeks\" {\n\
+                  \x20\x20\x20\x20let rows <- D1.peek(shop.orders.Orders).all(\"SELECT id FROM orders\", [])   // ✗ the handle is not bound\n\
+                  \x20\x20\x20\x20let db = D1.peek(shop.orders.Orders)                                      // ✓\n\
+                  \x20\x20\x20\x20expect true\n\
+                  \x20\x20}\n\
+                  }",
+        page: "/book/reference/testing",
+        anchor: "peek-a-database",
+    },
+    Explain {
         code: "bynk.test.peek_outside_case",
         blurb: "`D1.peek(<participant>.<Capability>)` gives an `integration` or \
                 `system` case a read-only handle on a participant's test \
@@ -11113,6 +11130,11 @@ pub const REGISTRY: &[DiagnosticInfo] = &[
     dg(
         "bynk.test.peek_not_a_database",
         "`D1.peek` names a capability that is not derived from `D1`; only a D1 binding has a test database to read.",
+        &["case"],
+    ),
+    dg(
+        "bynk.test.peek_not_bound",
+        "`D1.peek` is used anywhere but as the value of a `let`; the handle is what a case reads through.",
         &["case"],
     ),
     dg(
