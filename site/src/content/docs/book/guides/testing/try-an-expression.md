@@ -21,7 +21,7 @@ commons shop.money
 type Percent = Int where InRange(0, 100)
 
 fn discount(cents: Int, off: Percent) -> Int {
-  cents - cents * off / 100
+	cents - cents * off / 100
 }
 ```
 
