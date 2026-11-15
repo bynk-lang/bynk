@@ -28,6 +28,7 @@ per-commit history. While Bynk is pre-1.0, increments may change behaviour.
 
 | Version | Highlights |
 |---|---|
+| **v0.625.1** | `bynk deploy --env` copies the `ai` and `ai_search` bindings into the environment block, so a Workers AI or AI Search Worker is no longer unbound there (#3577) |
 | **v0.625.0** | `bynk build` refuses a `[deploy.workers.<key>]` group whose members declare a service of the same name, and, for now, one with more than one publishing member (#3562, G2b) |
 | **v0.624.0** | A case that reads a participant's database with `D1.peek` is refused under `bynk test --against`, or skipped naming why with `--skip-unsupported`, and `D1.peek` has hover, completion and signature help |
 | **v0.623.0** | A `system` or `integration` case can run `D1.peek` reads against the participant's in-memory test database, which refuses every write at run time (harness half) |
