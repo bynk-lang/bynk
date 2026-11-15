@@ -17,6 +17,7 @@ or a row links to no file. Summaries and statuses are curated by hand; the
 
 | # | Decision | Status |
 |---|---|---|
+| [0853](0853-sequence-branch-span.md) | **Each sequence-model branch carries its arm's source span** (v0.625.2) — Additive `Branch.span` and `WireBranch.range`, so clients can link or cover a branch | Accepted (v0.625.2) |
 | [0852](0852-d1-peek-read-only-test-handle.md) | **A case reads a participant's test D1 database through a read-only `D1.peek` handle** (v0.620) — A case-only built-in reaches behind the system boundary to read, never write, the database the app wrote | Accepted (v0.620) |
 | [0851](0851-bynk-client-service-binding.md) | **`bynk client`: calling a Bynk Worker through a Service Binding** (v0.616) — A Service Binding's `fetch` has `fetch`'s shape, so the client's `fetch` option is the seam and `viaBinding` calls the binding correctly, with no second transport option | Accepted (v0.616) |
 | [0850](0850-bynk-client-raw-bodies-and-streams.md) | **`bynk client`: raw bodies, raw answers and server-sent events** (v0.615) — A `@raw` body is the caller's bytes under the declared type, a raw answer hands over the response body untouched, and `Streaming` is an async iterable of the events the server frames | Accepted (v0.615) |

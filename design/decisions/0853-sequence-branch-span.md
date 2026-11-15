@@ -1,11 +1,6 @@
----
-level: patch
-changelog: The `bynk/sequenceModel` request gives each `alt` branch a source `range`
----
+# 0853 — Each sequence-model branch carries its arm's source span
 
-## ADR: sequence-branch-span
-title: Each sequence-model branch carries its arm's source span
-summary: Additive `Branch.span` and `WireBranch.range`, so clients can link or cover a branch
+- **Status:** Accepted (v0.625.2)
 
 **Context.** An `AltBlock` had a span but its `Branch`es did not (#3584), so a client
 could not link a branch to its source or mark it covered, and an empty branch had no
