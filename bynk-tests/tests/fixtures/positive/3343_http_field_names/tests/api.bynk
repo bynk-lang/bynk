@@ -1,4 +1,5 @@
 suite web.api {
+	consumes bynk { File }
 	case "a renamed cookies field reaches the handler under its own name" {
 		let r <- api.GET("/me", Session { sid: Some("abc"), theme: "dark" })
 		expect r is Ok("abc dark")

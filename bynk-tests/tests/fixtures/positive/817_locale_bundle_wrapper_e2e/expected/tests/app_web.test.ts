@@ -121,7 +121,7 @@ async function test_renders_the_bundle_s_greeting_through_the_wrapper() {
     type TimedOut = __ns_bynk.TimedOut;
     type Uuid = __ns_bynk.Uuid;
     const g = await greeting.call(deps);
-    if (!(g === "Hello")) { throw __bynkExpectFailure("tests/web.test.bynk:13:12", 498, 510, "expect g == \"Hello\"\n  expected: g == \"Hello\"\n  actual:   " + __bynkShow((g)) + " == " + __bynkShow(("Hello"))); }
+    if (!(g === "Hello")) { throw __bynkExpectFailure("tests/web.test.bynk:14:12", 525, 537, "expect g == \"Hello\"\n  expected: g == \"Hello\"\n  actual:   " + __bynkShow((g)) + " == " + __bynkShow(("Hello"))); }
     return { pass: true };
   } catch (e) {
     if (e instanceof ExpectationError) {

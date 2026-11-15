@@ -5,6 +5,7 @@ output is always `code` plus a deterministic, key-sorted rendering of
 multiple params (proving sort-by-key, not insertion order).
 ---
 suite app.greet as unit {
+  consumes bynk { Locale }
   stub Locale.current() returns "en"
 
   case "no params renders just the code" {

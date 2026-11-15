@@ -7,7 +7,7 @@ title: Diagnostic index
 
 Every diagnostic code the compiler can emit, with a one-line summary of the cause, grouped by category. For step-by-step cause-and-fix guidance on the most common ones, see the [troubleshooting guides](/book/troubleshooting/). For a code with a curated explanation, `bynk explain <code>` prints it in a terminal, and in VS Code the diagnostic's **Explain** quick fix (or **Bynk: Explain Diagnostic Code…**) shows the same text in a panel, offline.
 
-There are **870** codes in total.
+There are **872** codes in total.
 
 ## Agents
 
@@ -79,6 +79,7 @@ There are **870** codes in total.
 |---|---|---|---|
 | [`bynk.consumes.alias_conflict`](/book/guides/program-structure/consume-services/#use-an-alias) | Two `consumes` aliases collide. | [`consumes_decl`](/book/reference/grammar/#rule-consumes_decl) | — |
 | [`bynk.consumes.capability_name_clash`](/book/guides/effects-and-capabilities/share-across-contexts/#consume-it-with-a-qualified-given) | Two flattened `consumes U { Cap }` capabilities collide, or one clashes with a local capability. | [`consumes_decl`](/book/reference/grammar/#rule-consumes_decl) | — |
+| [`bynk.consumes.capability_not_selected`](/book/guides/program-structure/consume-services/#rename-an-exported-type-that-clashes-with-one-of-yours) | A capability a consumed unit exports is named (a `given` clause, a call, `provides`, a `stub`) in a file whose own `consumes` does not list it (a warning; an error in a later release). | [`consumes_decl`](/book/reference/grammar/#rule-consumes_decl) | Warning |
 | [`bynk.consumes.name_conflict`](/book/guides/program-structure/consume-services/#rename-an-exported-type-that-clashes-with-one-of-yours) | A `consumes` name collides with another name in scope. | [`consumes_decl`](/book/reference/grammar/#rule-consumes_decl) | — |
 | [`bynk.consumes.self_reference`](/book/guides/program-structure/consume-services/#declare-the-dependency-and-call-the-service) | A context `consumes` itself. | [`consumes_decl`](/book/reference/grammar/#rule-consumes_decl) | — |
 | [`bynk.consumes.service_arity`](/book/guides/program-structure/consume-services/#declare-the-dependency-and-call-the-service) | A consumed service was called with the wrong number of arguments. | [`consumes_decl`](/book/reference/grammar/#rule-consumes_decl) | — |
@@ -89,6 +90,7 @@ There are **870** codes in total.
 | [`bynk.consumes.type_alias_repeated`](/book/guides/program-structure/consume-services/#rename-an-exported-type-that-clashes-with-one-of-yours) | An exported type is aliased more than once, or is selected both bare and aliased, in `consumes U { … }`. | [`consumes_decl`](/book/reference/grammar/#rule-consumes_decl) | — |
 | [`bynk.consumes.type_alias_unknown_export`](/book/guides/program-structure/consume-services/#rename-an-exported-type-that-clashes-with-one-of-yours) | `consumes U { T as Alias }` names a type `U` does not export. | [`consumes_decl`](/book/reference/grammar/#rule-consumes_decl) | — |
 | [`bynk.consumes.type_not_selected`](/book/guides/program-structure/consume-services/#rename-an-exported-type-that-clashes-with-one-of-yours) | A type (or a bare variant of a sum) of a consumed unit is named in a file whose own `consumes` does not bring it in: it lists other names, or only another file of the unit consumes the unit (a warning; an error in a later release). | [`consumes_decl`](/book/reference/grammar/#rule-consumes_decl) | Warning |
+| [`bynk.consumes.unit_not_consumed`](/book/guides/program-structure/consume-services/#declare-the-dependency-and-call-the-service) | A call to another unit's service is written in a file whose own `consumes` does not name that unit (a warning; an error in a later release). | [`consumes_decl`](/book/reference/grammar/#rule-consumes_decl) | Warning |
 | [`bynk.consumes.unknown_context`](/book/guides/program-structure/consume-services/#declare-the-dependency-and-call-the-service) | `consumes` names a context that does not exist. | [`consumes_decl`](/book/reference/grammar/#rule-consumes_decl) | — |
 | [`bynk.consumes.unknown_service`](/book/guides/program-structure/consume-services/#declare-the-dependency-and-call-the-service) | Called a service the consumed context does not declare. | [`consumes_decl`](/book/reference/grammar/#rule-consumes_decl) | — |
 

@@ -1,5 +1,7 @@
 suite events
 
+consumes bynk { Clock }
+
 // `append` and the time-window routes read the platform `Clock`, so these cases
 // run them against `bynk test`'s deterministic one, which reads the epoch
 // unless a case stubs it: every appended entry lands at the epoch, and a window

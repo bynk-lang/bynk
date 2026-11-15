@@ -1,4 +1,5 @@
 suite upload.api {
+	consumes bynk { File }
 	case "a multipart body reaches the handler as a record" {
 		match Bytes.fromBase64("UE5H") {
 			Some(png) => {

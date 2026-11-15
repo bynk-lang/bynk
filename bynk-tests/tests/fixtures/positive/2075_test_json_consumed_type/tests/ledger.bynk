@@ -2,6 +2,7 @@
 // context's record (with an enum field) and enum. The module generates their
 // codecs, which name the types through `shop.order`'s namespace.
 suite shop.ledger {
+  consumes shop.order { Order, Region }
   case "encodes a consumed record with an enum field" {
     expect Json.encode(Order { id: "o1", region: Domestic }) == "{\"id\":\"o1\",\"region\":{\"kind\":\"Domestic\"}}"
   }

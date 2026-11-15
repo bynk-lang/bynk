@@ -136,7 +136,7 @@ async function test_the_aliased_enum_is_passed_to_the_capability() {
     type SigningKey = __ns_bynk_crypto.SigningKey;
     type VerifyKey = __ns_bynk_crypto.VerifyKey;
     const h = await hashing.call("abc", deps);
-    if (!(h === "ba7816bf8f01cfea414140de5dae2223b00361a396177a9cb410ff61f20015ad")) { throw __bynkExpectFailure("tests/app.bynk:5:10", 105, 176, "expect h == \"ba7816bf8f01cfea414140de5dae2223b00361a396177a9cb410ff61f20015ad\"\n  expected: h == \"ba7816bf8f01cfea414140de5dae2223b00361a396177a9cb410ff61f20015ad\"\n  actual:   " + __bynkShow((h)) + " == " + __bynkShow(("ba7816bf8f01cfea414140de5dae2223b00361a396177a9cb410ff61f20015ad"))); }
+    if (!(h === "ba7816bf8f01cfea414140de5dae2223b00361a396177a9cb410ff61f20015ad")) { throw __bynkExpectFailure("tests/app.bynk:7:10", 138, 209, "expect h == \"ba7816bf8f01cfea414140de5dae2223b00361a396177a9cb410ff61f20015ad\"\n  expected: h == \"ba7816bf8f01cfea414140de5dae2223b00361a396177a9cb410ff61f20015ad\"\n  actual:   " + __bynkShow((h)) + " == " + __bynkShow(("ba7816bf8f01cfea414140de5dae2223b00361a396177a9cb410ff61f20015ad"))); }
     return { pass: true };
   } catch (e) {
     if (e instanceof ExpectationError) {
@@ -160,7 +160,7 @@ async function test_the_commons_Digest_is_untouched() {
     type SigningKey = __ns_bynk_crypto.SigningKey;
     type VerifyKey = __ns_bynk_crypto.VerifyKey;
     const n = await total.call(deps);
-    if (!(n === 0)) { throw __bynkExpectFailure("tests/app.bynk:10:10", 254, 260, "expect n == 0\n  expected: n == 0\n  actual:   " + __bynkShow((n)) + " == " + __bynkShow((0))); }
+    if (!(n === 0)) { throw __bynkExpectFailure("tests/app.bynk:12:10", 287, 293, "expect n == 0\n  expected: n == 0\n  actual:   " + __bynkShow((n)) + " == " + __bynkShow((0))); }
     return { pass: true };
   } catch (e) {
     if (e instanceof ExpectationError) {
@@ -184,7 +184,7 @@ async function test_the_aliased_enum_matches_and_constructs() {
     type SigningKey = __ns_bynk_crypto.SigningKey;
     type VerifyKey = __ns_bynk_crypto.VerifyKey;
     const n = await name.call(deps);
-    if (!(n === "sha384")) { throw __bynkExpectFailure("tests/app.bynk:15:10", 345, 358, "expect n == \"sha384\"\n  expected: n == \"sha384\"\n  actual:   " + __bynkShow((n)) + " == " + __bynkShow(("sha384"))); }
+    if (!(n === "sha384")) { throw __bynkExpectFailure("tests/app.bynk:17:10", 378, 391, "expect n == \"sha384\"\n  expected: n == \"sha384\"\n  actual:   " + __bynkShow((n)) + " == " + __bynkShow(("sha384"))); }
     return { pass: true };
   } catch (e) {
     if (e instanceof ExpectationError) {
@@ -209,8 +209,8 @@ async function test_a_stubbed_digest_is_observed() {
     type SigningKey = __ns_bynk_crypto.SigningKey;
     type VerifyKey = __ns_bynk_crypto.VerifyKey;
     const h = await hashing.call("abc", deps);
-    if (!(h === "73747562626564")) { throw __bynkExpectFailure("tests/app.bynk:21:10", 501, 522, "expect h == \"73747562626564\"\n  expected: h == \"73747562626564\"\n  actual:   " + __bynkShow((h)) + " == " + __bynkShow(("73747562626564"))); }
-    if (!(((__obs.log["Crypto.digest"] ?? []).length === (1)))) { throw __bynkExpectFailure("tests/app.bynk:22:10", 532, 557, "expect Crypto.digest called once"); }
+    if (!(h === "73747562626564")) { throw __bynkExpectFailure("tests/app.bynk:23:10", 534, 555, "expect h == \"73747562626564\"\n  expected: h == \"73747562626564\"\n  actual:   " + __bynkShow((h)) + " == " + __bynkShow(("73747562626564"))); }
+    if (!(((__obs.log["Crypto.digest"] ?? []).length === (1)))) { throw __bynkExpectFailure("tests/app.bynk:24:10", 565, 590, "expect Crypto.digest called once"); }
     return { pass: true };
   } catch (e) {
     if (e instanceof ExpectationError) {
@@ -234,7 +234,7 @@ async function test_a_stub_can_match_on_the_aliased_variant() {
     type SigningKey = __ns_bynk_crypto.SigningKey;
     type VerifyKey = __ns_bynk_crypto.VerifyKey;
     const h = await hashing.call("abc", deps);
-    if (!(h === "736861")) { throw __bynkExpectFailure("tests/app.bynk:28:10", 725, 738, "expect h == \"736861\"\n  expected: h == \"736861\"\n  actual:   " + __bynkShow((h)) + " == " + __bynkShow(("736861"))); }
+    if (!(h === "736861")) { throw __bynkExpectFailure("tests/app.bynk:30:10", 758, 771, "expect h == \"736861\"\n  expected: h == \"736861\"\n  actual:   " + __bynkShow((h)) + " == " + __bynkShow(("736861"))); }
     return { pass: true };
   } catch (e) {
     if (e instanceof ExpectationError) {

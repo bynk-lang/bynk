@@ -1,5 +1,7 @@
 suite shop.orders
 
+consumes bynk.cloudflare { EmailError }
+
 case "a send needs no stub, is recorded and answers a deterministic id" {
 	let r <- receipts.call("buyer@example.com")
 	expect r == Ok("test-message-1")

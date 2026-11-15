@@ -1846,16 +1846,13 @@ fn check_test_bodies(
         let Some(test_decl) = parsed[i].test() else {
             continue;
         };
-        errors.extend(resolver::check_hidden_type_names_in_suite(
+        let maps = (unit_tables, unit_uses, unit_consumes, unit_consumes_aliases);
+        errors.extend(suite_naming_errors(
             test_decl,
-            Some(target_name),
-            &hidden,
-        ));
-        // #1927: nor a type the target hides behind its own value.
-        errors.extend(resolver::check_shadowed_type_names_in_suite(
-            test_decl,
-            &target_shadowed.0,
-            &target_shadowed.1,
+            &parsed[i],
+            target_name,
+            maps,
+            (&hidden, &target_shadowed),
         ));
         // v0.25: test-case edges record in the test file, resolving bare
         // names through the *target* unit's namespace.
@@ -5445,6 +5442,167 @@ pub fn build_privileged_resolved(
     Some((resolved, reach))
 }
 
+/// #3536: each type a unit the suite's target consumes exports, with that unit,
+/// leaving out the names the target (or a commons it `uses`) or the suite
+/// declares itself, which win.
+fn suite_import_owners(
+    suite: &SuiteDecl,
+    target: &str,
+    unit_tables: &HashMap<String, UnitTable>,
+    unit_uses: &HashMap<String, Vec<String>>,
+    unit_consumes: &HashMap<String, Vec<String>>,
+) -> std::collections::BTreeMap<String, String> {
+    let own = |n: &String| {
+        unit_tables
+            .get(target)
+            .is_some_and(|t| t.types.contains_key(n))
+            || unit_uses
+                .get(target)
+                .into_iter()
+                .flatten()
+                .any(|u| unit_tables.get(u).is_some_and(|t| t.types.contains_key(n)))
+            || suite.types.iter().any(|t| t.name.name == *n)
+    };
+    let mut owners = std::collections::BTreeMap::new();
+    for unit in unit_consumes.get(target).into_iter().flatten() {
+        let Some(table) = unit_tables.get(unit) else {
+            continue;
+        };
+        // Two consumed units exporting one name is a clash the target itself
+        // reports; here the first unit owns it, so a suite that consumes the
+        // other's version still warns (a rare edge, left to the error stage).
+        for name in table.types.keys().filter(|n| !own(n)) {
+            owners.entry(name.clone()).or_insert_with(|| unit.clone());
+        }
+    }
+    owners
+}
+
+/// The project's unit tables, `uses`, `consumes` and `consumes` aliases.
+type ProjectMaps<'a> = (
+    &'a HashMap<String, UnitTable>,
+    &'a HashMap<String, Vec<String>>,
+    &'a HashMap<String, Vec<String>>,
+    &'a HashMap<String, HashMap<String, String>>,
+);
+
+/// What a target hides behind its own values: the shadowed imports, and the
+/// target's types.
+type TargetShadowed = (
+    HashMap<String, crate::resolver::ShadowedImport>,
+    HashMap<String, Arc<TypeDecl>>,
+);
+
+/// The naming gates a unit suite goes through before its cases are checked: a
+/// type reached only through an imported declaration is hidden (#1814), one the
+/// target hides behind its own value is shadowed (#1927), and (#3536) a type,
+/// capability or service the suite's own `consumes` does not bring in warns.
+fn suite_naming_errors(
+    suite: &SuiteDecl,
+    pf: &ParsedFile,
+    target: &str,
+    maps: ProjectMaps<'_>,
+    (hidden, shadowed): (&std::collections::BTreeMap<String, String>, &TargetShadowed),
+) -> Vec<CompileError> {
+    let mut errors = resolver::check_hidden_type_names_in_suite(suite, Some(target), hidden);
+    errors.extend(resolver::check_shadowed_type_names_in_suite(
+        suite,
+        &shadowed.0,
+        &shadowed.1,
+    ));
+    errors.extend(warn_unselected_suite_imports(
+        suite,
+        pf,
+        target,
+        maps,
+        &shadowed.1,
+    ));
+    errors
+}
+
+/// #3536: [`warn_unselected_suite_types`] for the suite `suite` of `target`,
+/// reading what it consumes from the project's maps (tables, `uses`,
+/// `consumes`, aliases).
+fn warn_unselected_suite_imports(
+    suite: &SuiteDecl,
+    pf: &ParsedFile,
+    target: &str,
+    maps: ProjectMaps<'_>,
+    types: &HashMap<String, Arc<TypeDecl>>,
+) -> Vec<CompileError> {
+    let (unit_tables, unit_uses, unit_consumes, unit_consumes_aliases) = maps;
+    let owners = suite_import_owners(suite, target, unit_tables, unit_uses, unit_consumes);
+    let consumed = unit_consumes.get(target).map_or(&[][..], Vec::as_slice);
+    let none = HashMap::new();
+    let caps = unit_tables.get(target).map_or(&none, |t| &t.flattened_caps);
+    let aliases = unit_consumes_aliases.get(target).unwrap_or(&none);
+    warn_unselected_suite_types(suite, pf, &owners, types, consumed, caps, aliases)
+}
+
+/// #3536: `bynk.consumes.type_not_selected` for a suite file: its own `consumes`
+/// clauses are what bring a name from another unit into scope, not the target's.
+fn warn_unselected_suite_types(
+    suite: &SuiteDecl,
+    pf: &ParsedFile,
+    owners: &std::collections::BTreeMap<String, String>,
+    types: &HashMap<String, Arc<TypeDecl>>,
+    consumed: &[String],
+    caps: &HashMap<String, String>,
+    aliases: &HashMap<String, String>,
+) -> Vec<CompileError> {
+    let consumed: std::collections::BTreeSet<String> = consumed.iter().cloned().collect();
+    let file = resolver::FileConsumes {
+        consumed: &consumed,
+        // A suite-side alias (`consumes x { T as U }`) is not modelled in the
+        // warning stage: an alias names a type of the target's table, so naming
+        // one in a suite is not warned. A follow-up if suites may alias.
+        aliases: &HashMap::new(),
+        clauses: &suite.consumes,
+        insert_at: new_suite_consumes_position(suite, pf.source()),
+    };
+    let mut found = resolver::check_unselected_type_names_in_suite(suite, owners, types, &file);
+    let caps = caps.iter().map(|(n, o)| (n.clone(), o.clone())).collect();
+    found.extend(resolver::check_unselected_capabilities_in_suite(
+        suite, &caps, &file,
+    ));
+    let prefixes = consumed
+        .iter()
+        .map(|u| (u.clone(), u.clone()))
+        .chain(aliases.iter().map(|(a, u)| (a.clone(), u.clone())))
+        .collect();
+    found.extend(resolver::check_unconsumed_unit_calls_in_suite(
+        suite, &prefixes, &file,
+    ));
+    found
+}
+
+/// Where a `consumes` line a suite lacks is inserted: after its last `uses` or
+/// `consumes`, else after its `suite <target> [as <tier>]` header
+/// ([`resolver::new_consumes_position`]).
+fn new_suite_consumes_position(suite: &SuiteDecl, source: &str) -> Option<(usize, String)> {
+    let last = suite
+        .uses
+        .iter()
+        .map(|u| u.span.end)
+        .chain(suite.consumes.iter().map(|c| c.span.end))
+        .max();
+    let mut end = suite.target.span.end;
+    let rest = source.get(end..)?;
+    let after_blank = rest.trim_start_matches([' ', '\t']);
+    if let Some(tier) = after_blank
+        .strip_prefix("as")
+        .filter(|t| t.starts_with([' ', '\t']))
+    {
+        let word = tier.trim_start_matches([' ', '\t']);
+        let len = word
+            .find(|c: char| !c.is_ascii_alphanumeric() && c != '_')
+            .unwrap_or(word.len());
+        end = source.len() - word.len() + len;
+    }
+    let braced = suite.form == CommonsForm::Brace;
+    resolver::new_consumes_position(source, last, end, braced)
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -6188,7 +6346,9 @@ mod event_address_tests {
             ("shop/ledger.bynk", &ledger("consumes shop.order", "")),
             (
                 "shop/tests/ledger.test.bynk",
-                &suite("    let _ <- OnPlaced.event(Placed { id: \"o1\" })"),
+                // #3536: a suite consumes what it names.
+                &suite("    let _ <- OnPlaced.event(Placed { id: \"o1\" })")
+                    .replace("{\n  case", "{\n  consumes shop.order\n  case"),
             ),
         ]);
         a.assert_clean();

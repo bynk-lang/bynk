@@ -1018,30 +1018,37 @@ fn warn_unselected_type_names(
         Some(&pf.identity_path()),
         resolver::check_unselected_type_names(&resolved.commons.items, resolved, &file),
     );
+    errors.extend_for(
+        Some(&pf.identity_path()),
+        resolver::check_unselected_capabilities(&resolved.commons.items, &info.flattened, &file),
+    );
+    let prefixes: std::collections::BTreeMap<String, String> = info
+        .consumes
+        .iter()
+        .map(|u| (u.clone(), u.clone()))
+        .chain(info.aliases.iter().map(|(a, u)| (a.clone(), u.clone())))
+        .collect();
+    errors.extend_for(
+        Some(&pf.identity_path()),
+        resolver::check_unconsumed_unit_calls(&resolved.commons.items, &prefixes, &file),
+    );
 }
 
-/// Where a `consumes` line the file lacks is inserted: after its last `uses` or
-/// `consumes` clause (the parser wants them ahead of every declaration), else
-/// after the `context` header of a headerless file. A braced header has no such
-/// place without reading the source, so it gets no fix.
-fn new_consumes_position(pf: &ParsedFile) -> Option<(usize, &'static str)> {
+/// Where a `consumes` line the file lacks is inserted ([`resolver::new_consumes_position`]).
+fn new_consumes_position(pf: &ParsedFile) -> Option<(usize, String)> {
     let last = pf
         .uses()
         .iter()
         .map(|u| u.span.end)
         .chain(pf.consumes().iter().map(|c| c.span.end))
         .max();
-    if let Some(end) = last {
-        return Some((end, "\n"));
-    }
-    match pf.unit() {
-        bynk_syntax::ast::SourceUnit::Context(c)
-            if c.form == bynk_syntax::ast::CommonsForm::Fragment =>
-        {
-            Some((c.name.span.end, "\n\n"))
-        }
-        _ => None,
-    }
+    use bynk_syntax::ast::{CommonsForm, SourceUnit};
+    let (name_end, form) = match pf.unit() {
+        SourceUnit::Context(c) => (c.name.span.end, c.form),
+        SourceUnit::Adapter(a) => (a.name.span.end, a.form),
+        _ => return None,
+    };
+    resolver::new_consumes_position(pf.source(), last, name_end, form == CommonsForm::Brace)
 }
 
 #[cfg(test)]

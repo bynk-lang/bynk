@@ -629,7 +629,7 @@ async function test_the_clock_reads_the_epoch() {
     type VectorOf<M> = __ns_bynk_cloudflare.VectorOf<M>;
     type WorkerVersion = __ns_bynk_cloudflare.WorkerVersion;
     const t = await clock.call(deps);
-    if (!(t === 0)) { throw __bynkExpectFailure("tests/demo/plat.bynk:8:10", 238, 244, "expect t == 0\n  expected: t == 0\n  actual:   " + __bynkShow((t)) + " == " + __bynkShow((0))); }
+    if (!(t === 0)) { throw __bynkExpectFailure("tests/demo/plat.bynk:11:10", 305, 311, "expect t == 0\n  expected: t == 0\n  actual:   " + __bynkShow((t)) + " == " + __bynkShow((0))); }
     return { pass: true };
   } catch (e) {
     if (e instanceof ExpectationError) {
@@ -732,7 +732,7 @@ async function test_random_integers_come_from_a_fixed_seed() {
     type VectorOf<M> = __ns_bynk_cloudflare.VectorOf<M>;
     type WorkerVersion = __ns_bynk_cloudflare.WorkerVersion;
     const xs = await draws.call(deps);
-    if (!(__bynkEq(xs, [156, 731]))) { throw __bynkExpectFailure("tests/demo/plat.bynk:13:10", 330, 346, "expect xs == [156, 731]\n  expected: xs == [156, 731]\n  actual:   " + __bynkShow((xs)) + " == " + __bynkShow(([156, 731]))); }
+    if (!(__bynkEq(xs, [156, 731]))) { throw __bynkExpectFailure("tests/demo/plat.bynk:16:10", 397, 413, "expect xs == [156, 731]\n  expected: xs == [156, 731]\n  actual:   " + __bynkShow((xs)) + " == " + __bynkShow(([156, 731]))); }
     return { pass: true };
   } catch (e) {
     if (e instanceof ExpectationError) {
@@ -835,7 +835,7 @@ async function test_random_uuids_count_up() {
     type VectorOf<M> = __ns_bynk_cloudflare.VectorOf<M>;
     type WorkerVersion = __ns_bynk_cloudflare.WorkerVersion;
     const xs = await ids.call(deps);
-    if (!(__bynkEq(xs, ["00000000-0000-4000-8000-000000000001", "00000000-0000-4000-8000-000000000002"]))) { throw __bynkExpectFailure("tests/demo/plat.bynk:18:10", 413, 499, "expect xs == [\"00000000-0000-4000-8000-000000000001\", \"00000000-0000-4000-8000-000000000002\"]\n  expected: xs == [\"00000000-0000-4000-8000-000000000001\", \"00000000-0000-4000-8000-000000000002\"]\n  actual:   " + __bynkShow((xs)) + " == " + __bynkShow((["00000000-0000-4000-8000-000000000001", "00000000-0000-4000-8000-000000000002"]))); }
+    if (!(__bynkEq(xs, ["00000000-0000-4000-8000-000000000001", "00000000-0000-4000-8000-000000000002"]))) { throw __bynkExpectFailure("tests/demo/plat.bynk:21:10", 480, 566, "expect xs == [\"00000000-0000-4000-8000-000000000001\", \"00000000-0000-4000-8000-000000000002\"]\n  expected: xs == [\"00000000-0000-4000-8000-000000000001\", \"00000000-0000-4000-8000-000000000002\"]\n  actual:   " + __bynkShow((xs)) + " == " + __bynkShow((["00000000-0000-4000-8000-000000000001", "00000000-0000-4000-8000-000000000002"]))); }
     return { pass: true };
   } catch (e) {
     if (e instanceof ExpectationError) {
@@ -938,7 +938,7 @@ async function test_no_secret_is_set() {
     type VectorOf<M> = __ns_bynk_cloudflare.VectorOf<M>;
     type WorkerVersion = __ns_bynk_cloudflare.WorkerVersion;
     const s = await secret.call("API_KEY", deps);
-    if (!(((__c: boolean) => __c)(s.tag === "None"))) { throw __bynkExpectFailure("tests/demo/plat.bynk:23:10", 572, 581, "expect s is None"); }
+    if (!(((__c: boolean) => __c)(s.tag === "None"))) { throw __bynkExpectFailure("tests/demo/plat.bynk:26:10", 639, 648, "expect s is None"); }
     return { pass: true };
   } catch (e) {
     if (e instanceof ExpectationError) {
@@ -1041,7 +1041,7 @@ async function test_the_locale_is_en() {
     type VectorOf<M> = __ns_bynk_cloudflare.VectorOf<M>;
     type WorkerVersion = __ns_bynk_cloudflare.WorkerVersion;
     const l = await locale.call(deps);
-    if (!(l === "en")) { throw __bynkExpectFailure("tests/demo/plat.bynk:28:10", 645, 654, "expect l == \"en\"\n  expected: l == \"en\"\n  actual:   " + __bynkShow((l)) + " == " + __bynkShow(("en"))); }
+    if (!(l === "en")) { throw __bynkExpectFailure("tests/demo/plat.bynk:31:10", 712, 721, "expect l == \"en\"\n  expected: l == \"en\"\n  actual:   " + __bynkShow((l)) + " == " + __bynkShow(("en"))); }
     return { pass: true };
   } catch (e) {
     if (e instanceof ExpectationError) {
@@ -1145,8 +1145,8 @@ async function test_the_logger_records_without_printing() {
     type VectorOf<M> = __ns_bynk_cloudflare.VectorOf<M>;
     type WorkerVersion = __ns_bynk_cloudflare.WorkerVersion;
     const __r0 = await greet.call("ann", deps);
-    if (!((((__obs.log["Logger.info"] ?? []).filter((__c: { args: unknown[] }) => { const { msg } = { msg: __c.args[0] } as __Logger_info_Call; return (msg === "hello ann"); }).length) === (1)))) { throw __bynkExpectFailure("tests/demo/plat.bynk:33:10", 741, 788, "expect Logger.info called once with msg == \"hello ann\""); }
-    if (!(((__obs.log["Logger.error"] ?? []).length === 0))) { throw __bynkExpectFailure("tests/demo/plat.bynk:34:10", 798, 823, "expect Logger.error never called"); }
+    if (!((((__obs.log["Logger.info"] ?? []).filter((__c: { args: unknown[] }) => { const { msg } = { msg: __c.args[0] } as __Logger_info_Call; return (msg === "hello ann"); }).length) === (1)))) { throw __bynkExpectFailure("tests/demo/plat.bynk:36:10", 808, 855, "expect Logger.info called once with msg == \"hello ann\""); }
+    if (!(((__obs.log["Logger.error"] ?? []).length === 0))) { throw __bynkExpectFailure("tests/demo/plat.bynk:37:10", 865, 890, "expect Logger.error never called"); }
     return { pass: true };
   } catch (e) {
     if (e instanceof ExpectationError) {
@@ -1250,8 +1250,8 @@ async function test_idempotency_remembers_within_a_case() {
     type WorkerVersion = __ns_bynk_cloudflare.WorkerVersion;
     const first = await once.call("k", deps);
     const second = await once.call("k", deps);
-    if (!(first === true)) { throw __bynkExpectFailure("tests/demo/plat.bynk:40:10", 942, 955, "expect first == true\n  expected: first == true\n  actual:   " + __bynkShow((first)) + " == " + __bynkShow((true))); }
-    if (!(second === false)) { throw __bynkExpectFailure("tests/demo/plat.bynk:41:10", 965, 980, "expect second == false\n  expected: second == false\n  actual:   " + __bynkShow((second)) + " == " + __bynkShow((false))); }
+    if (!(first === true)) { throw __bynkExpectFailure("tests/demo/plat.bynk:43:10", 1009, 1022, "expect first == true\n  expected: first == true\n  actual:   " + __bynkShow((first)) + " == " + __bynkShow((true))); }
+    if (!(second === false)) { throw __bynkExpectFailure("tests/demo/plat.bynk:44:10", 1032, 1047, "expect second == false\n  expected: second == false\n  actual:   " + __bynkShow((second)) + " == " + __bynkShow((false))); }
     return { pass: true };
   } catch (e) {
     if (e instanceof ExpectationError) {
@@ -1354,7 +1354,7 @@ async function test_idempotency_is_fresh_per_case() {
     type VectorOf<M> = __ns_bynk_cloudflare.VectorOf<M>;
     type WorkerVersion = __ns_bynk_cloudflare.WorkerVersion;
     const first = await once.call("k", deps);
-    if (!(first === true)) { throw __bynkExpectFailure("tests/demo/plat.bynk:46:10", 1062, 1075, "expect first == true\n  expected: first == true\n  actual:   " + __bynkShow((first)) + " == " + __bynkShow((true))); }
+    if (!(first === true)) { throw __bynkExpectFailure("tests/demo/plat.bynk:49:10", 1129, 1142, "expect first == true\n  expected: first == true\n  actual:   " + __bynkShow((first)) + " == " + __bynkShow((true))); }
     return { pass: true };
   } catch (e) {
     if (e instanceof ExpectationError) {
@@ -1458,8 +1458,8 @@ async function test_kv_is_in_memory() {
     type VectorOf<M> = __ns_bynk_cloudflare.VectorOf<M>;
     type WorkerVersion = __ns_bynk_cloudflare.WorkerVersion;
     const r = await store.call("a", "1", deps);
-    if (!(__bynkEq(r, Some("1")))) { throw __bynkExpectFailure("tests/demo/plat.bynk:51:10", 1145, 1159, "expect r == Some(\"1\")\n  expected: r == Some(\"1\")\n  actual:   " + __bynkShow((r)) + " == " + __bynkShow((Some("1")))); }
-    if (!((((__obs.log["Kv.put"] ?? []).filter((__c: { args: unknown[] }) => { const { key, value } = { key: __c.args[0], value: __c.args[1] } as __Kv_put_Call; return (key === "a"); }).length) === (1)))) { throw __bynkExpectFailure("tests/demo/plat.bynk:52:10", 1169, 1203, "expect Kv.put called once with key == \"a\""); }
+    if (!(__bynkEq(r, Some("1")))) { throw __bynkExpectFailure("tests/demo/plat.bynk:54:10", 1212, 1226, "expect r == Some(\"1\")\n  expected: r == Some(\"1\")\n  actual:   " + __bynkShow((r)) + " == " + __bynkShow((Some("1")))); }
+    if (!((((__obs.log["Kv.put"] ?? []).filter((__c: { args: unknown[] }) => { const { key, value } = { key: __c.args[0], value: __c.args[1] } as __Kv_put_Call; return (key === "a"); }).length) === (1)))) { throw __bynkExpectFailure("tests/demo/plat.bynk:55:10", 1236, 1270, "expect Kv.put called once with key == \"a\""); }
     return { pass: true };
   } catch (e) {
     if (e instanceof ExpectationError) {
@@ -1562,7 +1562,7 @@ async function test_kv_is_fresh_per_case() {
     type VectorOf<M> = __ns_bynk_cloudflare.VectorOf<M>;
     type WorkerVersion = __ns_bynk_cloudflare.WorkerVersion;
     const r = await lookup.call("a", deps);
-    if (!(((__c: boolean) => __c)(r.tag === "None"))) { throw __bynkExpectFailure("tests/demo/plat.bynk:57:10", 1274, 1283, "expect r is None"); }
+    if (!(((__c: boolean) => __c)(r.tag === "None"))) { throw __bynkExpectFailure("tests/demo/plat.bynk:60:10", 1341, 1350, "expect r is None"); }
     return { pass: true };
   } catch (e) {
     if (e instanceof ExpectationError) {
@@ -1666,8 +1666,8 @@ async function test_a_stubbed_operation_answers__the_rest_reach_the_double() {
     type VectorOf<M> = __ns_bynk_cloudflare.VectorOf<M>;
     type WorkerVersion = __ns_bynk_cloudflare.WorkerVersion;
     const r = await store.call("a", "1", deps);
-    if (!(__bynkEq(r, Some("stubbed")))) { throw __bynkExpectFailure("tests/demo/plat.bynk:65:10", 1579, 1599, "expect r == Some(\"stubbed\")\n  expected: r == Some(\"stubbed\")\n  actual:   " + __bynkShow((r)) + " == " + __bynkShow((Some("stubbed")))); }
-    if (!(((__obs.log["Kv.put"] ?? []).length === (1)))) { throw __bynkExpectFailure("tests/demo/plat.bynk:66:10", 1609, 1627, "expect Kv.put called once"); }
+    if (!(__bynkEq(r, Some("stubbed")))) { throw __bynkExpectFailure("tests/demo/plat.bynk:68:10", 1646, 1666, "expect r == Some(\"stubbed\")\n  expected: r == Some(\"stubbed\")\n  actual:   " + __bynkShow((r)) + " == " + __bynkShow((Some("stubbed")))); }
+    if (!(((__obs.log["Kv.put"] ?? []).length === (1)))) { throw __bynkExpectFailure("tests/demo/plat.bynk:69:10", 1676, 1694, "expect Kv.put called once"); }
     return { pass: true };
   } catch (e) {
     if (e instanceof ExpectationError) {
@@ -1771,8 +1771,8 @@ async function test_a_stubbed_fetch_answers_for_the_network() {
     type VectorOf<M> = __ns_bynk_cloudflare.VectorOf<M>;
     type WorkerVersion = __ns_bynk_cloudflare.WorkerVersion;
     const s = await relay.call("https://example.test", deps);
-    if (!(s === 204)) { throw __bynkExpectFailure("tests/demo/plat.bynk:72:10", 1825, 1833, "expect s == 204\n  expected: s == 204\n  actual:   " + __bynkShow((s)) + " == " + __bynkShow((204))); }
-    if (!((((__obs.log["Fetch.send"] ?? []).filter((__c: { args: unknown[] }) => { const { req } = { req: __c.args[0] } as __Fetch_send_Call; return (req.url === "https://example.test"); }).length) === (1)))) { throw __bynkExpectFailure("tests/demo/plat.bynk:73:10", 1843, 1904, "expect Fetch.send called once with req.url == \"https://example.test\""); }
+    if (!(s === 204)) { throw __bynkExpectFailure("tests/demo/plat.bynk:75:10", 1892, 1900, "expect s == 204\n  expected: s == 204\n  actual:   " + __bynkShow((s)) + " == " + __bynkShow((204))); }
+    if (!((((__obs.log["Fetch.send"] ?? []).filter((__c: { args: unknown[] }) => { const { req } = { req: __c.args[0] } as __Fetch_send_Call; return (req.url === "https://example.test"); }).length) === (1)))) { throw __bynkExpectFailure("tests/demo/plat.bynk:76:10", 1910, 1971, "expect Fetch.send called once with req.url == \"https://example.test\""); }
     return { pass: true };
   } catch (e) {
     if (e instanceof ExpectationError) {
@@ -1876,8 +1876,8 @@ async function test_a_fetch_double_sees_the_request_s_headers() {
     type VectorOf<M> = __ns_bynk_cloudflare.VectorOf<M>;
     type WorkerVersion = __ns_bynk_cloudflare.WorkerVersion;
     const s = await relay.call("https://example.test", deps);
-    if (!(s === 200)) { throw __bynkExpectFailure("tests/demo/plat.bynk:80:10", 2184, 2192, "expect s == 200\n  expected: s == 200\n  actual:   " + __bynkShow((s)) + " == " + __bynkShow((200))); }
-    if (!((((__obs.log["Fetch.send"] ?? []).filter((__c: { args: unknown[] }) => { const { req } = { req: __c.args[0] } as __Fetch_send_Call; return (__bynkEq(((__m: ReadonlyMap<string, string>, __k: string) => __m.has(__k) ? Some(__m.get(__k) as string) : None)(req.headers, "user-agent"), Some("bynk-demo/1.0"))); }).length) === (1)))) { throw __bynkExpectFailure("tests/demo/plat.bynk:81:10", 2202, 2284, "expect Fetch.send called once with req.headers.get(\"user-agent\") == Some(\"bynk-demo/1.0\")"); }
+    if (!(s === 200)) { throw __bynkExpectFailure("tests/demo/plat.bynk:83:10", 2251, 2259, "expect s == 200\n  expected: s == 200\n  actual:   " + __bynkShow((s)) + " == " + __bynkShow((200))); }
+    if (!((((__obs.log["Fetch.send"] ?? []).filter((__c: { args: unknown[] }) => { const { req } = { req: __c.args[0] } as __Fetch_send_Call; return (__bynkEq(((__m: ReadonlyMap<string, string>, __k: string) => __m.has(__k) ? Some(__m.get(__k) as string) : None)(req.headers, "user-agent"), Some("bynk-demo/1.0"))); }).length) === (1)))) { throw __bynkExpectFailure("tests/demo/plat.bynk:84:10", 2269, 2351, "expect Fetch.send called once with req.headers.get(\"user-agent\") == Some(\"bynk-demo/1.0\")"); }
     return { pass: true };
   } catch (e) {
     if (e instanceof ExpectationError) {
@@ -1980,7 +1980,7 @@ async function test_an_unstubbed_fetch_faults_rather_than_reach_the_network() {
     type VectorOf<M> = __ns_bynk_cloudflare.VectorOf<M>;
     type WorkerVersion = __ns_bynk_cloudflare.WorkerVersion;
     const s = await relay.call("https://example.test", deps);
-    if (!(s === 0)) { throw __bynkExpectFailure("tests/demo/plat.bynk:86:10", 2408, 2414, "expect s == 0\n  expected: s == 0\n  actual:   " + __bynkShow((s)) + " == " + __bynkShow((0))); }
+    if (!(s === 0)) { throw __bynkExpectFailure("tests/demo/plat.bynk:89:10", 2475, 2481, "expect s == 0\n  expected: s == 0\n  actual:   " + __bynkShow((s)) + " == " + __bynkShow((0))); }
     return { pass: true };
   } catch (e) {
     if (e instanceof ExpectationError) {
@@ -2084,8 +2084,8 @@ async function test_the_doubles_hold_at_the_integration_tier() {
     type WorkerVersion = __ns_bynk_cloudflare.WorkerVersion;
     const t = await clock.call(deps);
     const s = await secret.call("API_KEY", deps);
-    if (!(t === 0)) { throw __bynkExpectFailure("tests/demo/plat.bynk:92:10", 2550, 2556, "expect t == 0\n  expected: t == 0\n  actual:   " + __bynkShow((t)) + " == " + __bynkShow((0))); }
-    if (!(((__c: boolean) => __c)(s.tag === "None"))) { throw __bynkExpectFailure("tests/demo/plat.bynk:93:10", 2566, 2575, "expect s is None"); }
+    if (!(t === 0)) { throw __bynkExpectFailure("tests/demo/plat.bynk:95:10", 2617, 2623, "expect t == 0\n  expected: t == 0\n  actual:   " + __bynkShow((t)) + " == " + __bynkShow((0))); }
+    if (!(((__c: boolean) => __c)(s.tag === "None"))) { throw __bynkExpectFailure("tests/demo/plat.bynk:96:10", 2633, 2642, "expect s is None"); }
     return { pass: true };
   } catch (e) {
     if (e instanceof ExpectationError) {

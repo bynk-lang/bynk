@@ -1,0 +1,3 @@
+bynk.consumes.type_not_selected
+bynk.consumes.capability_not_selected
+bynk.consumes.unit_not_consumed

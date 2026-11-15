@@ -1,5 +1,7 @@
 suite shop.orders
 
+consumes bynk.cloudflare { SqlError, SqlRun }
+
 // #2608: each case's database starts with the migrations applied.
 
 case "a unit database starts migrated and seeded" {

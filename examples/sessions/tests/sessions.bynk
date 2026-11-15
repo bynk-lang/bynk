@@ -1,5 +1,7 @@
 suite sessions
 
+consumes bynk { Clock }
+
 // The cache consults the platform `Clock`, so these cases run against
 // `bynk test`'s deterministic one: it reads the epoch unless a case stubs it,
 // which is what makes expiry testable without waiting.

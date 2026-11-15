@@ -383,7 +383,7 @@ async function test_an_unstubbed_search_faults() {
     type VectorMatch = __ns_bynk_cloudflare.VectorMatch;
     type VectorOf<M> = __ns_bynk_cloudflare.VectorOf<M>;
     type WorkerVersion = __ns_bynk_cloudflare.WorkerVersion;
-    if (!((await (async () => { try { await (api.http_POST_search("refunds", deps)); return false; } catch (__e) { if (__e instanceof ExpectationError) { throw __e; } return true; } })()))) { throw __bynkExpectFailure("tests/shop/ask.bynk:7:9", 176, 224, "expect api.POST(\"/search\", \"refunds\") by Visitor faults\n  the call returned without faulting"); }
+    if (!((await (async () => { try { await (api.http_POST_search("refunds", deps)); return false; } catch (__e) { if (__e instanceof ExpectationError) { throw __e; } return true; } })()))) { throw __bynkExpectFailure("tests/shop/ask.bynk:9:9", 232, 280, "expect api.POST(\"/search\", \"refunds\") by Visitor faults\n  the call returned without faulting"); }
     return { pass: true };
   } catch (e) {
     if (e instanceof ExpectationError) {
@@ -481,7 +481,7 @@ async function test_an_unstubbed_answer_faults() {
     type VectorMatch = __ns_bynk_cloudflare.VectorMatch;
     type VectorOf<M> = __ns_bynk_cloudflare.VectorOf<M>;
     type WorkerVersion = __ns_bynk_cloudflare.WorkerVersion;
-    if (!((await (async () => { try { await (api.http_POST_ask("refunds", deps)); return false; } catch (__e) { if (__e instanceof ExpectationError) { throw __e; } return true; } })()))) { throw __bynkExpectFailure("tests/shop/ask.bynk:11:9", 272, 317, "expect api.POST(\"/ask\", \"refunds\") by Visitor faults\n  the call returned without faulting"); }
+    if (!((await (async () => { try { await (api.http_POST_ask("refunds", deps)); return false; } catch (__e) { if (__e instanceof ExpectationError) { throw __e; } return true; } })()))) { throw __bynkExpectFailure("tests/shop/ask.bynk:13:9", 328, 373, "expect api.POST(\"/ask\", \"refunds\") by Visitor faults\n  the call returned without faulting"); }
     return { pass: true };
   } catch (e) {
     if (e instanceof ExpectationError) {
@@ -581,8 +581,8 @@ async function test_a_stubbed_search_is_returned() {
     type VectorOf<M> = __ns_bynk_cloudflare.VectorOf<M>;
     type WorkerVersion = __ns_bynk_cloudflare.WorkerVersion;
     const r = await api.http_POST_search("refunds", deps);
-    if (!(((__c: boolean) => __c)(r.tag === "Ok" && r.value === "[]"))) { throw __bynkExpectFailure("tests/shop/ask.bynk:17:9", 456, 469, "expect r is Ok(\"[]\")"); }
-    if (!(((__obs.log["Kb.search"] ?? []).length === (1)))) { throw __bynkExpectFailure("tests/shop/ask.bynk:18:9", 478, 499, "expect Kb.search called once"); }
+    if (!(((__c: boolean) => __c)(r.tag === "Ok" && r.value === "[]"))) { throw __bynkExpectFailure("tests/shop/ask.bynk:19:9", 512, 525, "expect r is Ok(\"[]\")"); }
+    if (!(((__obs.log["Kb.search"] ?? []).length === (1)))) { throw __bynkExpectFailure("tests/shop/ask.bynk:20:9", 534, 555, "expect Kb.search called once"); }
     return { pass: true };
   } catch (e) {
     if (e instanceof ExpectationError) {
@@ -681,7 +681,7 @@ async function test_a_stubbed_answer_is_returned() {
     type VectorOf<M> = __ns_bynk_cloudflare.VectorOf<M>;
     type WorkerVersion = __ns_bynk_cloudflare.WorkerVersion;
     const r = await api.http_POST_ask("refunds", deps);
-    if (!(((__c: boolean) => __c)(r.tag === "Ok" && r.value === "Within 30 days."))) { throw __bynkExpectFailure("tests/shop/ask.bynk:24:9", 696, 722, "expect r is Ok(\"Within 30 days.\")"); }
+    if (!(((__c: boolean) => __c)(r.tag === "Ok" && r.value === "Within 30 days."))) { throw __bynkExpectFailure("tests/shop/ask.bynk:26:9", 752, 778, "expect r is Ok(\"Within 30 days.\")"); }
     return { pass: true };
   } catch (e) {
     if (e instanceof ExpectationError) {
@@ -780,7 +780,7 @@ async function test_a_rate_limit_is_matched() {
     type VectorOf<M> = __ns_bynk_cloudflare.VectorOf<M>;
     type WorkerVersion = __ns_bynk_cloudflare.WorkerVersion;
     const r = await api.http_POST_ask("refunds", deps);
-    if (!(((__c: boolean) => __c)(r.tag === "ServerError" && r.message === "busy"))) { throw __bynkExpectFailure("tests/shop/ask.bynk:30:9", 869, 893, "expect r is ServerError(\"busy\")"); }
+    if (!(((__c: boolean) => __c)(r.tag === "ServerError" && r.message === "busy"))) { throw __bynkExpectFailure("tests/shop/ask.bynk:32:9", 925, 949, "expect r is ServerError(\"busy\")"); }
     return { pass: true };
   } catch (e) {
     if (e instanceof ExpectationError) {

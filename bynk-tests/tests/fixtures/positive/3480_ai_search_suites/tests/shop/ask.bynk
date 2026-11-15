@@ -1,5 +1,7 @@
 suite shop.ask
 
+consumes bynk.cloudflare { SearchAnswer, SearchError }
+
 // #3480: an unstubbed operation faults, a stubbed `Ok` is what the handler
 // sees, and a typed error is matched.
 

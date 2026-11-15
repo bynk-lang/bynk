@@ -1,5 +1,7 @@
 suite greet
 
+consumes bynk { Secrets }
+
 // #1975: a suite on an adapter tests its binding, so the binding runs at
 // every tier; its `given` takes the tier's doubles, and a `stub` on one.
 case "the binding reads its secret" {

@@ -1,0 +1,12 @@
+context shop
+
+fn overdue(t: TimedOut) -> Bool {
+  true
+}
+
+service refund {
+  on call() -> Effect[Int] given Clock {
+    let _ <- Clock.now()
+    pay.charge(2)
+  }
+}

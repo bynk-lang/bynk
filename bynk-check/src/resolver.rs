@@ -2141,6 +2141,14 @@ struct Gate<'a> {
     /// answers a receiver it can serve (`svc.GET(…)` in a suite, `logo.url`).
     /// `None` for #1807's hidden types, which nothing local shares a name with.
     locals: Option<&'a HashMap<String, ShadowedImport>>,
+    /// #3536: the names gated are capabilities, which are also written in
+    /// `given` clauses, `provides` and a derived capability's base, and in a
+    /// suite's `stub` clauses; a type gate does not walk those.
+    caps: bool,
+    /// #3536: the units a cross-context call names, by the prefix it writes
+    /// (`pay`, `shop.pay`, or an alias), each with its unit; a method call on
+    /// one is reported through [`Gate::report`] with the prefix as the name.
+    units: Option<&'a std::collections::BTreeMap<String, String>>,
     errors: Vec<CompileError>,
 }
 impl Gate<'_> {
@@ -2155,6 +2163,35 @@ impl Gate<'_> {
             "service" => method.is_some(),
             "asset" => field.is_some_and(|f| f.name == "url"),
             _ => false,
+        }
+    }
+    /// #3536: a capability named in a `given` clause (a qualified `B.Cap` names
+    /// its unit and is not a flattened name).
+    fn givens(&mut self, given: &[CapRef]) {
+        if self.caps {
+            for c in given.iter().filter(|c| c.context.is_none()) {
+                self.name(&c.name);
+            }
+        }
+    }
+    /// #3536: a call `pay.charge(…)` on a unit named by its prefix.
+    fn unit_call(&mut self, receiver: &Expr) {
+        let Some(units) = self.units else { return };
+        let Some(path) = qualified_path(receiver) else {
+            return;
+        };
+        if let Some(owner) = units.get(&path) {
+            let id = Ident {
+                name: path,
+                span: receiver.span,
+            };
+            self.errors.push((self.report)(&id, owner));
+        }
+    }
+    /// #3536: a capability named where a declaration refers to one.
+    fn capability(&mut self, id: &Ident) {
+        if self.caps {
+            self.name(id);
         }
     }
     fn name(&mut self, id: &Ident) {
@@ -2380,6 +2417,7 @@ impl Gate<'_> {
                 {
                     self.name(id);
                 }
+                self.unit_call(receiver);
                 for t in type_args {
                     self.type_ref(t);
                 }
@@ -2448,6 +2486,8 @@ pub fn check_hidden_type_names(
         variants: Default::default(),
         variant_report: None,
         locals: None,
+        caps: false,
+        units: None,
         errors: Vec::new(),
     };
     gate_items(&mut g, items);
@@ -2480,7 +2520,7 @@ pub struct FileConsumes<'a> {
     /// the owner (offset, and the line break that precedes it): after its last
     /// `uses` or `consumes`, else after its header. `None` when the form has no
     /// safe place (a braced header).
-    pub insert_at: Option<(usize, &'static str)>,
+    pub insert_at: Option<(usize, String)>,
 }
 
 impl FileConsumes<'_> {
@@ -2507,6 +2547,61 @@ impl FileConsumes<'_> {
     }
 }
 
+/// #3536: where a `consumes` line a file lacks is inserted, with the line break
+/// (and indent) that precedes it. After the file's last `uses` or `consumes`
+/// clause (the parser wants them ahead of every declaration); else after its
+/// header, which is the text up to `header_end`, then the `{` of a braced file.
+/// `None` when a braced file's `{` is not where it should be.
+pub fn new_consumes_position(
+    source: &str,
+    last_clause_end: Option<usize>,
+    header_end: usize,
+    braced: bool,
+) -> Option<(usize, String)> {
+    if let Some(end) = last_clause_end {
+        let lead = if braced {
+            indent_after(source, end)
+        } else {
+            String::new()
+        };
+        return Some((past_trailing_comment(source, end), format!("\n{lead}")));
+    }
+    if !braced {
+        let at = past_trailing_comment(source, header_end);
+        return Some((at, "\n\n".to_string()));
+    }
+    let rest = source.get(header_end..)?;
+    let open = header_end + (rest.len() - rest.trim_start().len());
+    source[open..].starts_with('{').then_some(())?;
+    let lead = indent_after(source, open + 1);
+    Some((past_trailing_comment(source, open + 1), format!("\n{lead}")))
+}
+
+/// `at`, or the end of its line when all that follows `at` on the line is a
+/// comment, so a line inserted here leaves the comment on the line it was
+/// written on instead of taking it over.
+fn past_trailing_comment(source: &str, at: usize) -> usize {
+    let Some(rest) = source.get(at..) else {
+        return at;
+    };
+    let line = rest.split('\n').next().unwrap_or("");
+    let trimmed = line.trim();
+    if trimmed.is_empty() || trimmed.starts_with("//") || trimmed.starts_with("--") {
+        at + line.trim_end_matches('\r').len()
+    } else {
+        at
+    }
+}
+
+/// The indent of the first non-blank line after `at`, or two spaces.
+fn indent_after(source: &str, at: usize) -> String {
+    source
+        .get(at..)
+        .and_then(|rest| rest.split('\n').skip(1).find(|l| !l.trim().is_empty()))
+        .map_or("  ", |l| &l[..l.len() - l.trim_start().len()])
+        .to_string()
+}
+
 /// #3536: `bynk.consumes.type_not_selected`, for each place a file's source
 /// writes the name of a type (or a bare variant of a sum) that a unit it
 /// consumes exports and that **this file's own** `consumes` does not bring in:
@@ -2519,15 +2614,159 @@ pub fn check_unselected_type_names(
     resolved: &ResolvedCommons,
     file: &FileConsumes<'_>,
 ) -> Vec<CompileError> {
-    let mut gated = std::collections::BTreeMap::new();
-    let mut variants = std::collections::BTreeMap::new();
-    let consumed_names = resolved
+    let owners = resolved
         .imported_from
         .iter()
-        .filter(|(_, owner)| file.consumed.contains(*owner));
-    for (name, owner) in consumed_names.filter(|(n, o)| !file.lists(o, n)) {
+        .filter(|(_, owner)| file.consumed.contains(*owner))
+        .map(|(n, o)| (n.clone(), o.clone()))
+        .collect();
+    unselected_gate(Names::Types, &owners, &resolved.types, file, |g| {
+        gate_items(g, items)
+    })
+}
+
+/// #3536: `bynk.consumes.capability_not_selected`, the same rule for the
+/// capabilities a braced `consumes U { Cap }` flattens into the unit's namespace:
+/// naming one (a `given` clause, a call, `provides`, a derived capability's
+/// base) in a file whose own `consumes` does not list it. `flattened` is the
+/// unit's capabilities, each with its owner.
+pub fn check_unselected_capabilities(
+    items: &[CommonsItem],
+    flattened: &HashMap<String, String>,
+    file: &FileConsumes<'_>,
+) -> Vec<CompileError> {
+    let owners = flattened
+        .iter()
+        .map(|(n, o)| (n.clone(), o.clone()))
+        .collect();
+    unselected_gate(Names::Capabilities, &owners, &HashMap::new(), file, |g| {
+        gate_items(g, items)
+    })
+}
+
+/// #3536: [`check_unselected_capabilities`] for a unit suite, whose `stub`
+/// clauses and cases name its target's flattened capabilities.
+pub fn check_unselected_capabilities_in_suite(
+    suite: &SuiteDecl,
+    owners: &std::collections::BTreeMap<String, String>,
+    file: &FileConsumes<'_>,
+) -> Vec<CompileError> {
+    unselected_gate(Names::Capabilities, owners, &HashMap::new(), file, |g| {
+        gate_suite(g, suite)
+    })
+}
+
+/// The dotted path an expression of identifiers and field accesses writes
+/// (`pay`, `shop.pay`), or `None` for anything else.
+fn qualified_path(e: &Expr) -> Option<String> {
+    match &e.kind {
+        ExprKind::Ident(id) => Some(id.name.clone()),
+        ExprKind::FieldAccess { receiver, field } => {
+            Some(format!("{}.{}", qualified_path(receiver)?, field.name))
+        }
+        _ => None,
+    }
+}
+
+/// #3536: `bynk.consumes.unit_not_consumed`, the same rule for a cross-context
+/// call (`pay.charge(…)`): the file that writes it must itself `consumes` the
+/// unit, in any form. `prefixes` maps each prefix a call may write (the unit's
+/// name, or the alias of a `consumes U as A`) to the unit. The fix adds
+/// `consumes U` to this file.
+pub fn check_unconsumed_unit_calls(
+    items: &[CommonsItem],
+    prefixes: &std::collections::BTreeMap<String, String>,
+    file: &FileConsumes<'_>,
+) -> Vec<CompileError> {
+    unit_gate(prefixes, file, |g| gate_items(g, items))
+}
+
+/// [`check_unconsumed_unit_calls`] for a unit suite.
+pub fn check_unconsumed_unit_calls_in_suite(
+    suite: &SuiteDecl,
+    prefixes: &std::collections::BTreeMap<String, String>,
+    file: &FileConsumes<'_>,
+) -> Vec<CompileError> {
+    unit_gate(prefixes, file, |g| gate_suite(g, suite))
+}
+
+fn unit_gate(
+    prefixes: &std::collections::BTreeMap<String, String>,
+    file: &FileConsumes<'_>,
+    walk: impl FnOnce(&mut Gate<'_>),
+) -> Vec<CompileError> {
+    let missing: std::collections::BTreeMap<String, String> = prefixes
+        .iter()
+        .filter(|(_, unit)| !file.clauses.iter().any(|c| c.target.joined() == **unit))
+        .map(|(p, u)| (p.clone(), u.clone()))
+        .collect();
+    let report = |id: &Ident, unit: &str| {
+        let mut e = CompileError::new(
+            "bynk.consumes.unit_not_consumed",
+            id.span,
+            format!("`{}` is not in scope: this file does not `consumes {unit}`", id.name),
+        )
+        .with_note(format!(
+            "imports are per file: a call to another unit's service is in scope in a file that itself `consumes` it. Add `consumes {unit}` to this file. This will be an error in a later release"
+        ));
+        if let Some((offset, separator)) = &file.insert_at {
+            let at = Span::new_in(id.span.file, *offset, *offset);
+            e = e.with_suggestion(
+                format!("add `consumes {unit}` to this file"),
+                vec![(at, format!("{separator}consumes {unit}"))],
+                Applicability::MachineApplicable,
+            );
+        }
+        e
+    };
+    let mut g = Gate {
+        hidden: &std::collections::BTreeMap::new(),
+        report: &report,
+        variants: Default::default(),
+        variant_report: None,
+        locals: None,
+        caps: false,
+        units: Some(&missing),
+        errors: Vec::new(),
+    };
+    walk(&mut g);
+    g.errors
+}
+
+/// What a per-file gate is about.
+#[derive(Clone, Copy)]
+enum Names {
+    Types,
+    Capabilities,
+}
+
+/// #3536: [`check_unselected_type_names`] for a unit suite. `owners` maps each
+/// type a unit the suite's target consumes exports, except those the target or
+/// the suite declares itself, to that unit; `types` is the suite's view.
+pub fn check_unselected_type_names_in_suite(
+    suite: &SuiteDecl,
+    owners: &std::collections::BTreeMap<String, String>,
+    types: &HashMap<String, Arc<TypeDecl>>,
+    file: &FileConsumes<'_>,
+) -> Vec<CompileError> {
+    unselected_gate(Names::Types, owners, types, file, |g| gate_suite(g, suite))
+}
+
+/// The gate both walk through: every name in `owners` this file's own clauses
+/// do not bring in is warned on where `walk` meets it, along with the bare
+/// variants of its sums.
+fn unselected_gate(
+    names: Names,
+    owners: &std::collections::BTreeMap<String, String>,
+    types: &HashMap<String, Arc<TypeDecl>>,
+    file: &FileConsumes<'_>,
+    walk: impl FnOnce(&mut Gate<'_>),
+) -> Vec<CompileError> {
+    let mut gated = std::collections::BTreeMap::new();
+    let mut variants = std::collections::BTreeMap::new();
+    for (name, owner) in owners.iter().filter(|(n, o)| !file.lists(o, n)) {
         gated.insert(name.clone(), owner.clone());
-        if let Some(TypeBody::Sum(sum)) = resolved.types.get(name).map(|t| &t.body) {
+        if let Some(TypeBody::Sum(sum)) = types.get(name).map(|t| &t.body) {
             variants.extend(
                 sum.variants
                     .iter()
@@ -2537,21 +2776,27 @@ pub fn check_unselected_type_names(
     }
     // A variant another sum in scope declares is that sum's, not this one's.
     variants.retain(|v, sum| {
-        !resolved.types.iter().any(|(n, t)| {
+        !types.iter().any(|(n, t)| {
             n != sum
                 && !gated.contains_key(n)
                 && matches!(&t.body, TypeBody::Sum(s) if s.variants.iter().any(|x| x.name.name == *v))
         })
     });
-    // Each report, in order: the name this file must list and its owner.
-    let hits = std::cell::RefCell::new(Vec::<(String, String)>::new());
+    // Each report's name this file must list and its owner, by the byte range it
+    // is reported at (one file's, so the range identifies the site).
+    let hits = std::cell::RefCell::new(std::collections::BTreeMap::<
+        (usize, usize),
+        (String, String),
+    >::new());
     let warn = |id: &Ident, name: &str, owner: &str| {
         let why = if file.clauses.iter().any(|c| c.target.joined() == owner) {
             format!("this file's `consumes {owner}` does not list it")
         } else {
             format!("this file does not `consumes {owner}`")
         };
-        let message = if id.name == name {
+        let message = if matches!(names, Names::Capabilities) {
+            format!("capability `{name}` is not in scope: {why}")
+        } else if id.name == name {
             format!("`{name}` is not in scope: {why}")
         } else {
             format!(
@@ -2559,29 +2804,33 @@ pub fn check_unselected_type_names(
                 id.name
             )
         };
-        hits.borrow_mut()
-            .push((name.to_string(), owner.to_string()));
-        CompileError::new("bynk.consumes.type_not_selected", id.span, message).with_note(format!(
+        hits.borrow_mut().insert(
+            (id.span.start, id.span.end),
+            (name.to_string(), owner.to_string()),
+        );
+        let code = match names {
+            Names::Types => "bynk.consumes.type_not_selected",
+            Names::Capabilities => "bynk.consumes.capability_not_selected",
+        };
+        CompileError::new(code, id.span, message).with_note(format!(
             "imports are per file: a name from another unit is in scope in a file that itself `consumes` it, and in a braced list only if it is listed. Add `{name}` to this file's `consumes {owner} {{ … }}`. This will be an error in a later release"
         ))
     };
     let report = |id: &Ident, owner: &str| warn(id, &id.name, owner);
-    let variant_report = |id: &Ident, sum: &str| warn(id, sum, &resolved.imported_from[sum]);
+    let variant_report = |id: &Ident, sum: &str| warn(id, sum, &owners[sum]);
     let mut g = Gate {
         hidden: &gated,
         report: &report,
         variants,
         variant_report: Some(&variant_report),
         locals: None,
+        caps: matches!(names, Names::Capabilities),
+        units: None,
         errors: Vec::new(),
     };
-    gate_items(&mut g, items);
+    walk(&mut g);
     let errors = std::mem::take(&mut g.errors);
-    let hits = hits.into_inner();
-    if errors.len() != hits.len() {
-        return errors;
-    }
-    attach_consumes_fixes(errors, &hits, file)
+    attach_consumes_fixes(errors, &hits.into_inner(), file)
 }
 
 /// #3536: give each [`check_unselected_type_names`] warning a fix that edits the
@@ -2590,19 +2839,21 @@ pub fn check_unselected_type_names(
 /// owner, so the warnings share one edit and the batch applies it once.
 fn attach_consumes_fixes(
     errors: Vec<CompileError>,
-    hits: &[(String, String)],
+    hits: &std::collections::BTreeMap<(usize, usize), (String, String)>,
     file: &FileConsumes<'_>,
 ) -> Vec<CompileError> {
     let mut needed: std::collections::BTreeMap<&str, std::collections::BTreeSet<&str>> =
         Default::default();
-    for (name, owner) in hits {
+    for (name, owner) in hits.values() {
         needed.entry(owner).or_default().insert(name);
     }
     let applicable = bynk_syntax::error::Applicability::MachineApplicable;
     errors
         .into_iter()
-        .zip(hits)
-        .map(|(e, (name, owner))| {
+        .map(|e| {
+            let Some((name, owner)) = hits.get(&(e.span.start, e.span.end)) else {
+                return e;
+            };
             let own = || file.clauses.iter().filter(|c| c.target.joined() == *owner);
             let extend = own().find_map(|c| c.selected.as_ref()?.last());
             if let Some(last) = extend {
@@ -2618,9 +2869,10 @@ fn attach_consumes_fixes(
                     applicable,
                 );
             }
-            let Some((offset, separator)) = file.insert_at else {
+            let Some((offset, separator)) = &file.insert_at else {
                 return e;
             };
+            let offset = *offset;
             let list = needed[owner.as_str()]
                 .iter()
                 .map(|n| file.item(owner, n))
@@ -2661,6 +2913,8 @@ pub fn check_shadowed_type_names(
         variants,
         variant_report: None,
         locals: Some(shadowed),
+        caps: false,
+        units: None,
         errors: Vec::new(),
     };
     gate_items(&mut g, items);
@@ -2691,7 +2945,7 @@ fn shadowed_type_gate(
 
 /// Walk every item of a unit through `g`.
 fn gate_items(g: &mut Gate<'_>, items: &[CommonsItem]) {
-    if g.hidden.is_empty() {
+    if g.hidden.is_empty() && g.units.is_none() {
         return;
     }
     for item in items {
@@ -2702,15 +2956,21 @@ fn gate_items(g: &mut Gate<'_>, items: &[CommonsItem]) {
                 if let FnName::Method { type_name, .. } = &f.name {
                     g.name(type_name);
                 }
+                g.givens(&f.given);
                 g.signature(&f.params, &f.return_type);
                 g.block(&f.body);
             }
             CommonsItem::Capability(c) => {
+                if let Some(d) = &c.derived {
+                    g.capability(&d.base);
+                }
                 for op in &c.ops {
                     g.signature(&op.params, &op.return_type);
                 }
             }
             CommonsItem::Provider(p) => {
+                g.capability(&p.capability);
+                g.givens(&p.given);
                 for op in &p.ops {
                     g.signature(&op.params, &op.return_type);
                     g.block(&op.body);
@@ -2729,7 +2989,9 @@ fn gate_items(g: &mut Gate<'_>, items: &[CommonsItem]) {
                     | ServiceProtocol::Queue { .. }
                     | ServiceProtocol::Email { .. } => {}
                 }
+                g.givens(&s.default_given);
                 for h in &s.handlers {
+                    g.givens(&h.given);
                     g.signature(&h.params, &h.return_type);
                     g.block(&h.body);
                 }
@@ -2745,6 +3007,7 @@ fn gate_items(g: &mut Gate<'_>, items: &[CommonsItem]) {
                     }
                 }
                 for h in &a.handlers {
+                    g.givens(&h.given);
                     g.signature(&h.params, &h.return_type);
                     g.block(&h.body);
                 }
@@ -2809,6 +3072,8 @@ pub fn check_hidden_type_names_in_suite(
         variants: Default::default(),
         variant_report: None,
         locals: None,
+        caps: false,
+        units: None,
         errors: Vec::new(),
     };
     gate_suite(&mut g, suite);
@@ -2831,6 +3096,8 @@ pub fn check_shadowed_type_names_in_suite(
         variants,
         variant_report: None,
         locals: Some(shadowed),
+        caps: false,
+        units: None,
         errors: Vec::new(),
     };
     gate_suite(&mut g, suite);
@@ -2839,10 +3106,11 @@ pub fn check_shadowed_type_names_in_suite(
 
 /// Walk every stub, case and property of `suite` through `g`.
 fn gate_suite(g: &mut Gate<'_>, suite: &SuiteDecl) {
-    if g.hidden.is_empty() {
+    if g.hidden.is_empty() && g.units.is_none() {
         return;
     }
     let stub = |g: &mut Gate<'_>, s: &StubClause| {
+        g.capability(&s.capability);
         for a in &s.args {
             if let ArgPattern::Value(e) = a {
                 g.expr(e);
@@ -4580,5 +4848,65 @@ mod op_annotation_tests {
     fn a_user_operation_takes_no_annotation() {
         analyse(&[("a.bynk", &unit("shop", "@onUndecodable(miss)"))])
             .assert_reports("bynk.generics.internal_op_annotation");
+    }
+}
+
+#[cfg(test)]
+mod consumes_position_tests {
+    use super::new_consumes_position;
+
+    fn insert(src: &str, last: Option<&str>, header: &str, braced: bool) -> Option<String> {
+        let header_end = src.find(header).unwrap() + header.len();
+        let last_end = last.map(|l| src.find(l).unwrap() + l.len());
+        let (at, sep) = new_consumes_position(src, last_end, header_end, braced)?;
+        Some(format!("{}{sep}X{}", &src[..at], &src[at..]))
+    }
+
+    /// A headerless file takes the clause after its header, a blank line away.
+    #[test]
+    fn a_fragment_gets_a_blank_line_after_its_header() {
+        let src = "context a\n\nfn f() -> Int { 1 }\n";
+        assert_eq!(
+            insert(src, None, "context a", false).unwrap(),
+            "context a\n\nX\n\nfn f() -> Int { 1 }\n"
+        );
+    }
+
+    /// A braced file takes it after the `{`, indented like the first member.
+    #[test]
+    fn a_braced_file_takes_the_clause_after_the_brace_at_the_members_indent() {
+        let src = "suite shop as unit {\n    case \"c\" {\n    }\n}\n";
+        assert_eq!(
+            insert(src, None, "as unit", true).unwrap(),
+            "suite shop as unit {\n    X\n    case \"c\" {\n    }\n}\n"
+        );
+    }
+
+    /// Beside an existing clause, the new line takes the next line's indent.
+    #[test]
+    fn a_new_line_follows_the_last_clause_at_the_next_lines_indent() {
+        let src = "suite s {\n  uses m\n  case \"c\" { }\n}\n";
+        assert_eq!(
+            insert(src, Some("uses m"), "suite s", true).unwrap(),
+            "suite s {\n  uses m\n  X\n  case \"c\" { }\n}\n"
+        );
+    }
+
+    /// When the clause is the last line before `}`, that line is the brace, so
+    /// the new line has no indent: only cosmetic, and the formatter repairs it.
+    #[test]
+    fn a_last_clause_before_the_closing_brace_gets_no_indent() {
+        let src = "suite s {\n  uses m\n}\n";
+        assert_eq!(
+            insert(src, Some("uses m"), "suite s", true).unwrap(),
+            "suite s {\n  uses m\nX\n}\n"
+        );
+    }
+
+    /// A braced file whose header is not followed by `{` has no safe place.
+    #[test]
+    fn a_header_not_followed_by_a_brace_gets_no_position() {
+        let src = "suite s as unit\n\ncase \"c\" { }\n";
+        assert!(insert(src, None, "as unit", true).is_none());
     }
 }

@@ -174,7 +174,7 @@ async function test_the_real_binding_runs_at_the_integration_tier() {
     type TimedOut = __ns_bynk.TimedOut;
     type Uuid = __ns_bynk.Uuid;
     const s = await welcome.call("ann", deps);
-    if (!(s === "hi, ann at 0")) { throw __bynkExpectFailure("tests/app.bynk:9:9", 387, 406, "expect s == \"hi, ann at 0\"\n  expected: s == \"hi, ann at 0\"\n  actual:   " + __bynkShow((s)) + " == " + __bynkShow(("hi, ann at 0"))); }
+    if (!(s === "hi, ann at 0")) { throw __bynkExpectFailure("tests/app.bynk:12:9", 441, 460, "expect s == \"hi, ann at 0\"\n  expected: s == \"hi, ann at 0\"\n  actual:   " + __bynkShow((s)) + " == " + __bynkShow(("hi, ann at 0"))); }
     return { pass: true };
   } catch (e) {
     if (e instanceof ExpectationError) {
@@ -207,7 +207,7 @@ async function test_the_unit_tier_stubs_the_adapter() {
     type TimedOut = __ns_bynk.TimedOut;
     type Uuid = __ns_bynk.Uuid;
     const s = await welcome.call("ann", deps);
-    if (!(s === "stubbed")) { throw __bynkExpectFailure("tests/app.bynk:16:9", 594, 608, "expect s == \"stubbed\"\n  expected: s == \"stubbed\"\n  actual:   " + __bynkShow((s)) + " == " + __bynkShow(("stubbed"))); }
+    if (!(s === "stubbed")) { throw __bynkExpectFailure("tests/app.bynk:19:9", 648, 662, "expect s == \"stubbed\"\n  expected: s == \"stubbed\"\n  actual:   " + __bynkShow((s)) + " == " + __bynkShow(("stubbed"))); }
     return { pass: true };
   } catch (e) {
     if (e instanceof ExpectationError) {
@@ -240,7 +240,7 @@ async function test_a_case_calls_a_capability_directly() {
     type TimedOut = __ns_bynk.TimedOut;
     type Uuid = __ns_bynk.Uuid;
     const s = await deps.Greeter.hello("ann");
-    if (!(s === "direct")) { throw __bynkExpectFailure("tests/app.bynk:23:9", 788, 801, "expect s == \"direct\"\n  expected: s == \"direct\"\n  actual:   " + __bynkShow((s)) + " == " + __bynkShow(("direct"))); }
+    if (!(s === "direct")) { throw __bynkExpectFailure("tests/app.bynk:26:9", 842, 855, "expect s == \"direct\"\n  expected: s == \"direct\"\n  actual:   " + __bynkShow((s)) + " == " + __bynkShow(("direct"))); }
     return { pass: true };
   } catch (e) {
     if (e instanceof ExpectationError) {

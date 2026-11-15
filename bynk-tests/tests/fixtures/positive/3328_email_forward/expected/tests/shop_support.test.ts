@@ -109,7 +109,7 @@ async function test_a_refund_goes_to_billing() {
     type VectorOf<M> = __ns_bynk_cloudflare.VectorOf<M>;
     type WorkerVersion = __ns_bynk_cloudflare.WorkerVersion;
     const r = await ((__m: any) => support.queue_support_0(__m, { ...deps, identity: { address: __m.from, dmarc: { tag: "DmarcNone" } } }))({ from: "a@b.example", to: "support@shop.example", subject: "refund", messageId: "", headers: new globalThis.Map(), text: { tag: "None" as const }, html: { tag: "None" as const }, attachments: [], size: 0 });
-    if (!(((__c: boolean) => __c)(r.tag === "Forward" && r.to === "billing@shop.example"))) { throw __bynkExpectFailure("tests/support.bynk:4:12", 182, 218, "expect r is Forward(\"billing@shop.example\")"); }
+    if (!(((__c: boolean) => __c)(r.tag === "Forward" && r.to === "billing@shop.example"))) { throw __bynkExpectFailure("tests/support.bynk:5:12", 240, 276, "expect r is Forward(\"billing@shop.example\")"); }
     return { pass: true };
   } catch (e) {
     if (e instanceof ExpectationError) {
@@ -195,10 +195,10 @@ async function test_anything_else_goes_to_the_team() {
         switch (__d.tag) {
           case "Forward": {
             const dest = __d.to;
-            return __bynkExpect((dest === "team@shop.example"), "tests/support.bynk:10:31", 423, 450, "expect dest == \"team@shop.example\"");
+            return __bynkExpect((dest === "team@shop.example"), "tests/support.bynk:11:31", 481, 508, "expect dest == \"team@shop.example\"");
           }
           default: {
-            return __bynkExpect((false), "tests/support.bynk:11:19", 469, 474, "expect false");
+            return __bynkExpect((false), "tests/support.bynk:12:19", 527, 532, "expect false");
           }
         }
         throw new globalThis.Error("non-exhaustive match");

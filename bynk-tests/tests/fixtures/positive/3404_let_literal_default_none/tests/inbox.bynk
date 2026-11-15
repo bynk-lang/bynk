@@ -1,5 +1,7 @@
 suite helpdesk.inbox
 
+consumes bynk.cloudflare { EmailVerdict, InboundEmail }
+
 case "a let-bound message passed to a function" {
 	let none: Map[String, String] = Map.empty()
 	let ooo = InboundEmail {

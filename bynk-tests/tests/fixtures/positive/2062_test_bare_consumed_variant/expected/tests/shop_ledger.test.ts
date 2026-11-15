@@ -49,7 +49,7 @@ async function test_a_bare_consumed_variant_in_a_record_literal() {
     const order = (deps as any).surface?.order;
     const o = { id: "o1", region: Region.Domestic };
     const d = await isDomestic.call(o, deps);
-    if (!(d)) { throw __bynkExpectFailure("tests/ledger.bynk:8:12", 378, 379, "expect d"); }
+    if (!(d)) { throw __bynkExpectFailure("tests/ledger.bynk:9:12", 418, 419, "expect d"); }
     return { pass: true };
   } catch (e) {
     if (e instanceof ExpectationError) {
@@ -69,7 +69,7 @@ async function test_a_bare_consumed_variant_in_a_comparison() {
     type Region = __ns_shop_order.Region;
     const order = (deps as any).surface?.order;
     const o = await domestic.call("o2", deps);
-    if (!(__bynkEq(o.region, Region.Domestic))) { throw __bynkExpectFailure("tests/ledger.bynk:13:12", 495, 515, "expect o.region == Domestic\n  expected: o.region == Domestic\n  actual:   " + __bynkShow((o.region)) + " == " + __bynkShow((Region.Domestic))); }
+    if (!(__bynkEq(o.region, Region.Domestic))) { throw __bynkExpectFailure("tests/ledger.bynk:14:12", 535, 555, "expect o.region == Domestic\n  expected: o.region == Domestic\n  actual:   " + __bynkShow((o.region)) + " == " + __bynkShow((Region.Domestic))); }
     return { pass: true };
   } catch (e) {
     if (e instanceof ExpectationError) {
@@ -100,7 +100,7 @@ async function test_a_bare_consumed_variant_as_a_value_and_a_pattern() {
         }
         throw new globalThis.Error("non-exhaustive match");
       })(r);
-    if (!(label === "abroad")) { throw __bynkExpectFailure("tests/ledger.bynk:22:12", 709, 726, "expect label == \"abroad\"\n  expected: label == \"abroad\"\n  actual:   " + __bynkShow((label)) + " == " + __bynkShow(("abroad"))); }
+    if (!(label === "abroad")) { throw __bynkExpectFailure("tests/ledger.bynk:23:12", 749, 766, "expect label == \"abroad\"\n  expected: label == \"abroad\"\n  actual:   " + __bynkShow((label)) + " == " + __bynkShow(("abroad"))); }
     return { pass: true };
   } catch (e) {
     if (e instanceof ExpectationError) {

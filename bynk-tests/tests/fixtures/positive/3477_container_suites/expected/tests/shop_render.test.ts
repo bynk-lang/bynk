@@ -304,7 +304,7 @@ async function test_an_unstubbed_send_faults() {
     type VectorMatch = __ns_bynk_cloudflare.VectorMatch;
     type VectorOf<M> = __ns_bynk_cloudflare.VectorOf<M>;
     type WorkerVersion = __ns_bynk_cloudflare.WorkerVersion;
-    if (!((await (async () => { try { await (api.http_GET_render_Param_name("a", deps)); return false; } catch (__e) { if (__e instanceof ExpectationError) { throw __e; } return true; } })()))) { throw __bynkExpectFailure("tests/shop/render.bynk:7:9", 177, 224, "expect api.GET(\"/render/:name\", \"a\") by Visitor faults\n  the call returned without faulting"); }
+    if (!((await (async () => { try { await (api.http_GET_render_Param_name("a", deps)); return false; } catch (__e) { if (__e instanceof ExpectationError) { throw __e; } return true; } })()))) { throw __bynkExpectFailure("tests/shop/render.bynk:10:9", 249, 296, "expect api.GET(\"/render/:name\", \"a\") by Visitor faults\n  the call returned without faulting"); }
     return { pass: true };
   } catch (e) {
     if (e instanceof ExpectationError) {
@@ -404,8 +404,8 @@ async function test_a_stubbed_send_returns_its_response() {
     type VectorOf<M> = __ns_bynk_cloudflare.VectorOf<M>;
     type WorkerVersion = __ns_bynk_cloudflare.WorkerVersion;
     const r = await api.http_GET_render_Param_name("a", deps);
-    if (!(((__c: boolean) => __c)(r.tag === "Ok" && r.value === "<svg/>"))) { throw __bynkExpectFailure("tests/shop/render.bynk:13:9", 433, 450, "expect r is Ok(\"<svg/>\")"); }
-    if (!(((__obs.log["Renderer.send"] ?? []).length === (1)))) { throw __bynkExpectFailure("tests/shop/render.bynk:14:9", 459, 484, "expect Renderer.send called once"); }
+    if (!(((__c: boolean) => __c)(r.tag === "Ok" && r.value === "<svg/>"))) { throw __bynkExpectFailure("tests/shop/render.bynk:16:9", 505, 522, "expect r is Ok(\"<svg/>\")"); }
+    if (!(((__obs.log["Renderer.send"] ?? []).length === (1)))) { throw __bynkExpectFailure("tests/shop/render.bynk:17:9", 531, 556, "expect Renderer.send called once"); }
     return { pass: true };
   } catch (e) {
     if (e instanceof ExpectationError) {
@@ -504,7 +504,7 @@ async function test_an_unavailable_container_is_matched() {
     type VectorOf<M> = __ns_bynk_cloudflare.VectorOf<M>;
     type WorkerVersion = __ns_bynk_cloudflare.WorkerVersion;
     const r = await api.http_GET_render_Param_name("a", deps);
-    if (!(((__c: boolean) => __c)(r.tag === "ServiceUnavailable" && r.message === "no capacity"))) { throw __bynkExpectFailure("tests/shop/render.bynk:20:9", 643, 681, "expect r is ServiceUnavailable(\"no capacity\")"); }
+    if (!(((__c: boolean) => __c)(r.tag === "ServiceUnavailable" && r.message === "no capacity"))) { throw __bynkExpectFailure("tests/shop/render.bynk:23:9", 715, 753, "expect r is ServiceUnavailable(\"no capacity\")"); }
     return { pass: true };
   } catch (e) {
     if (e instanceof ExpectationError) {
@@ -603,7 +603,7 @@ async function test_a_failed_start_carries_its_message() {
     type VectorOf<M> = __ns_bynk_cloudflare.VectorOf<M>;
     type WorkerVersion = __ns_bynk_cloudflare.WorkerVersion;
     const r = await api.http_GET_render_Param_name("a", deps);
-    if (!(((__c: boolean) => __c)(r.tag === "ServerError" && r.message === "the port never listened"))) { throw __bynkExpectFailure("tests/shop/render.bynk:26:9", 866, 909, "expect r is ServerError(\"the port never listened\")"); }
+    if (!(((__c: boolean) => __c)(r.tag === "ServerError" && r.message === "the port never listened"))) { throw __bynkExpectFailure("tests/shop/render.bynk:29:9", 938, 981, "expect r is ServerError(\"the port never listened\")"); }
     return { pass: true };
   } catch (e) {
     if (e instanceof ExpectationError) {
