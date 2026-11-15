@@ -1424,7 +1424,7 @@ pub const EXPLANATIONS: &[Explain] = &[
     },
     Explain {
         code: "bynk.consumes.capability_not_selected",
-        blurb: "Imports are per file, for capabilities as for types. A braced `consumes U { Cap }` brings the capability `Cap` into scope as a bare name, but only in the file that writes it: a `given Cap` clause, a call `Cap.op(…)`, a `provides Cap = …`, a derived capability's base, or a suite's `stub Cap.op`. A file that names one its own `consumes` does not list still resolves for now, and is a warning; `bynk check --fix=bynk.consumes.capability_not_selected` adds the name to this file's `consumes`, or adds one. A later release makes it an error. The unit's wiring and deploy order still follow the union of its files' `consumes`.",
+        blurb: "Imports are per file, for capabilities as for types. A braced `consumes U { Cap }` brings the capability `Cap` into scope as a bare name, but only in the file that writes it: a `given Cap` clause, a call `Cap.op(…)`, a `provides Cap = …`, a derived capability's base, or a suite's `stub Cap.op`. A file that names one its own `consumes` does not list is an error; `bynk check --fix=bynk.consumes.capability_not_selected` adds the name to this file's `consumes`, or adds one. The unit's wiring and deploy order still follow the union of its files' `consumes`.",
         example: "// shop/context.bynk\nconsumes bynk { Clock }\n\n// shop/audit.bynk, another file of the same context\nservice stamp {\n    on call() -> Effect[Instant] given Clock {   // ✗ this file does not consume `bynk`\n        Clock.now()\n    }\n}\n\nconsumes bynk { Clock }                          // ✓ each file consumes what it names",
         page: "/book/guides/program-structure/consume-services",
         anchor: "rename-an-exported-type-that-clashes-with-one-of-yours",
@@ -1515,14 +1515,14 @@ pub const EXPLANATIONS: &[Explain] = &[
     },
     Explain {
         code: "bynk.consumes.type_not_selected",
-        blurb: "Imports are per file. A unit's own declarations are shared by all its files, but a name from another unit, a type or a bare variant of one of its sums, is in scope only in a file that itself has a `consumes` bringing it in, and where the list is braced, only if it is listed. Naming a type that this file's own `consumes` does not bring in still resolves for now, and is a warning, whether the clause lists other names or only another file of the unit consumes the unit; `bynk check --fix=bynk.consumes.type_not_selected` adds the name to this file's `consumes`, or adds one. A later release makes it an error. A bare `consumes U`, with no braces, brings in all of `U`'s names for that file.",
+        blurb: "Imports are per file. A unit's own declarations are shared by all its files, but a name from another unit, a type or a bare variant of one of its sums, is in scope only in a file that itself has a `consumes` bringing it in, and where the list is braced, only if it is listed. Naming a type that this file's own `consumes` does not bring in is an error, whether the clause lists other names or only another file of the unit consumes the unit; `bynk check --fix=bynk.consumes.type_not_selected` adds the name to this file's `consumes`, or adds one. A bare `consumes U`, with no braces, brings in all of `U`'s names for that file.",
         example: "// shop/context.bynk\nconsumes bynk { Logger }                   // ✗ `TimedOut` is not listed\n\nconsumes bynk { Logger, TimedOut }          // ✓\n\nfn at(t: TimedOut) -> Bool {\n    true\n}\n\n// shop/audit.bynk, another file of the same context\nfn late(t: TimedOut) -> Bool {   // ✗ this file does not consume `bynk`\n    true\n}\n\nconsumes bynk { TimedOut }        // ✓ each file consumes what it names",
         page: "/book/guides/program-structure/consume-services",
         anchor: "rename-an-exported-type-that-clashes-with-one-of-yours",
     },
     Explain {
         code: "bynk.consumes.unit_not_consumed",
-        blurb: "Imports are per file. A call to another unit's service (`pay.charge(…)`, or through the alias of `consumes pay as P`) is in scope only in a file that itself `consumes` that unit, in any form, even when another file of the same context does. The call still resolves for now, and is a warning; `bynk check --fix=bynk.consumes.unit_not_consumed` adds `consumes <unit>` to this file. A later release makes it an error. The unit's wiring and deploy order still follow the union of its files' `consumes`.",
+        blurb: "Imports are per file. A call to another unit's service (`pay.charge(…)`, or through the alias of `consumes pay as P`) is in scope only in a file that itself `consumes` that unit, in any form, even when another file of the same context does. A call from a file that does not is an error; `bynk check --fix=bynk.consumes.unit_not_consumed` adds `consumes <unit>` to this file. The unit's wiring and deploy order still follow the union of its files' `consumes`.",
         example: "// shop/checkout.bynk\nconsumes pay\n\nservice checkout {\n    on call() -> Effect[Int] {\n        pay.charge(1)\n    }\n}\n\n// shop/refund.bynk, another file of the same context\nservice refund {\n    on call() -> Effect[Int] {\n        pay.charge(2)   // ✗ this file does not consume `pay`\n    }\n}\n\nconsumes pay            // ✓ each file consumes what it names",
         page: "/book/guides/program-structure/consume-services",
         anchor: "declare-the-dependency-and-call-the-service",
@@ -8578,11 +8578,11 @@ pub const REGISTRY: &[DiagnosticInfo] = &[
         "Two flattened `consumes U { Cap }` capabilities collide, or one clashes with a local capability.",
         &["consumes_decl"],
     ),
-    warn(dg(
+    dg(
         "bynk.consumes.capability_not_selected",
-        "A capability a consumed unit exports is named (a `given` clause, a call, `provides`, a `stub`) in a file whose own `consumes` does not list it (a warning; an error in a later release).",
+        "A capability a consumed unit exports is named (a `given` clause, a call, `provides`, a `stub`) in a file whose own `consumes` does not list it.",
         &["consumes_decl"],
-    )),
+    ),
     dg(
         "bynk.consumes.name_conflict",
         "A `consumes` name collides with another name in scope.",
@@ -8628,16 +8628,16 @@ pub const REGISTRY: &[DiagnosticInfo] = &[
         "`consumes U { T as Alias }` names a type `U` does not export.",
         &["consumes_decl"],
     ),
-    warn(dg(
+    dg(
         "bynk.consumes.type_not_selected",
-        "A type (or a bare variant of a sum) of a consumed unit is named in a file whose own `consumes` does not bring it in: it lists other names, or only another file of the unit consumes the unit (a warning; an error in a later release).",
+        "A type (or a bare variant of a sum) of a consumed unit is named in a file whose own `consumes` does not bring it in: it lists other names, or only another file of the unit consumes the unit.",
         &["consumes_decl"],
-    )),
-    warn(dg(
+    ),
+    dg(
         "bynk.consumes.unit_not_consumed",
-        "A call to another unit's service is written in a file whose own `consumes` does not name that unit (a warning; an error in a later release).",
+        "A call to another unit's service is written in a file whose own `consumes` does not name that unit.",
         &["consumes_decl"],
-    )),
+    ),
     dg(
         "bynk.consumes.unknown_context",
         "`consumes` names a context that does not exist.",

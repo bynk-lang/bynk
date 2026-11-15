@@ -233,8 +233,8 @@ pub struct ResolvedCommons {
     pub extensible_enums: HashSet<String>,
     /// #3536: the names of types in scope that a braced `consumes` of a
     /// first-party unit leaves out (`consumes bynk { Logger }` leaves out
-    /// `Claim`). Still resolvable while `bynk.consumes.type_not_selected` is a
-    /// warning, but never a name-clash or bare-variant ambiguity candidate: a
+    /// `Claim`). Still resolvable, so `bynk.consumes.type_not_selected` reports
+    /// it with a fix, but never a name-clash or bare-variant ambiguity candidate: a
     /// declaration of the unit's own wins. Empty unless set with
     /// [`ResolvedCommons::with_unselected_types`].
     pub unselected_types: HashSet<String>,
@@ -2606,8 +2606,8 @@ fn indent_after(source: &str, at: usize) -> String {
 /// writes the name of a type (or a bare variant of a sum) that a unit it
 /// consumes exports and that **this file's own** `consumes` does not bring in:
 /// either it lists other names, or only another file of the unit consumes the
-/// unit. Imports are per file, so naming anything else is deprecated: it still
-/// resolves, as a warning, and carries a fix that edits this file's `consumes`:
+/// unit. Imports are per file, so naming anything else
+/// is an error, and carries a fix that edits this file's `consumes`:
 /// extend the clause it has, or add one.
 pub fn check_unselected_type_names(
     items: &[CommonsItem],
@@ -2707,7 +2707,7 @@ fn unit_gate(
             format!("`{}` is not in scope: this file does not `consumes {unit}`", id.name),
         )
         .with_note(format!(
-            "imports are per file: a call to another unit's service is in scope in a file that itself `consumes` it. Add `consumes {unit}` to this file. This will be an error in a later release"
+            "imports are per file: a call to another unit's service is in scope in a file that itself `consumes` it. Add `consumes {unit}` to this file."
         ));
         if let Some((offset, separator)) = &file.insert_at {
             let at = Span::new_in(id.span.file, *offset, *offset);
@@ -2813,7 +2813,7 @@ fn unselected_gate(
             Names::Capabilities => "bynk.consumes.capability_not_selected",
         };
         CompileError::new(code, id.span, message).with_note(format!(
-            "imports are per file: a name from another unit is in scope in a file that itself `consumes` it, and in a braced list only if it is listed. Add `{name}` to this file's `consumes {owner} {{ … }}`. This will be an error in a later release"
+            "imports are per file: a name from another unit is in scope in a file that itself `consumes` it, and in a braced list only if it is listed. Add `{name}` to this file's `consumes {owner} {{ … }}`."
         ))
     };
     let report = |id: &Ident, owner: &str| warn(id, &id.name, owner);
@@ -2833,7 +2833,7 @@ fn unselected_gate(
     attach_consumes_fixes(errors, &hits.into_inner(), file)
 }
 
-/// #3536: give each [`check_unselected_type_names`] warning a fix that edits the
+/// #3536: give each [`check_unselected_type_names`] error a fix that edits the
 /// file it is in. A file with a braced clause for the owner gains `, Name` in
 /// it; one with none gains a line listing **every** name it needs from that
 /// owner, so the warnings share one edit and the batch applies it once.
@@ -4679,8 +4679,7 @@ fn find_ambiguous_variant_owners<'a>(name: &str, cx: &RefCheckCtx<'a, '_>) -> Ve
 /// leaves out (`unselected`) is not a candidate beside the sums in scope, so a
 /// user's own `Unavailable` is never ambiguous with a standard-library one it
 /// did not ask for. It is the answer only when nothing in scope declares the
-/// name: such a use still resolves while `bynk.consumes.type_not_selected` is a
-/// warning, and is the error once that becomes one.
+/// name: such a use resolves and is reported as `bynk.consumes.type_not_selected`.
 pub(crate) fn bare_variant_owners<'a>(
     name: &str,
     types: &'a HashMap<String, Arc<TypeDecl>>,

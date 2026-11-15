@@ -5470,7 +5470,7 @@ fn suite_import_owners(
         };
         // Two consumed units exporting one name is a clash the target itself
         // reports; here the first unit owns it, so a suite that consumes the
-        // other's version still warns (a rare edge, left to the error stage).
+        // other's version is reported (a rare edge, listed as open in ADR 0849).
         for name in table.types.keys().filter(|n| !own(n)) {
             owners.entry(name.clone()).or_insert_with(|| unit.clone());
         }
@@ -5496,7 +5496,7 @@ type TargetShadowed = (
 /// The naming gates a unit suite goes through before its cases are checked: a
 /// type reached only through an imported declaration is hidden (#1814), one the
 /// target hides behind its own value is shadowed (#1927), and (#3536) a type,
-/// capability or service the suite's own `consumes` does not bring in warns.
+/// capability or service the suite's own `consumes` does not bring in is an error.
 fn suite_naming_errors(
     suite: &SuiteDecl,
     pf: &ParsedFile,
@@ -5555,7 +5555,7 @@ fn warn_unselected_suite_types(
         consumed: &consumed,
         // A suite-side alias (`consumes x { T as U }`) is not modelled in the
         // warning stage: an alias names a type of the target's table, so naming
-        // one in a suite is not warned. A follow-up if suites may alias.
+        // one in a suite is not reported. A follow-up if suites may alias.
         aliases: &HashMap::new(),
         clauses: &suite.consumes,
         insert_at: new_suite_consumes_position(suite, pf.source()),

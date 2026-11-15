@@ -1,0 +1,8 @@
+context shop
+
+// Imports are per file: `checkout.bynk` consumes `pay`, this file does not.
+service refund {
+    on call() -> Effect[Int] {
+        pay.charge(2)
+    }
+}

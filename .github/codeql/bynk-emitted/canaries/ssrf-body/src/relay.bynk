@@ -1,6 +1,6 @@
 context relay
 
-consumes bynk { Fetch }
+consumes bynk { Fetch, Request, Method }
 
 ---
 CANARY (CWE-918, server-side request forgery). Deliberately vulnerable: the
