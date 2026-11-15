@@ -1,6 +1,6 @@
 context orders
 
-consumes bynk.cloudflare { D1 }
+consumes bynk.cloudflare { D1, SqlStatement, SqlValue }
 
 capability Orders = D1
 

@@ -143,7 +143,7 @@ and leaves decoding to the caller:
 ```bynk
 context assistant.ai
 
-consumes bynk { Fetch, Secrets, Request }
+consumes bynk { Fetch, Secrets, Request, Method }
 
 capability Ai {
 	fn run(model: String, body: String) -> Effect[Result[String, String]]

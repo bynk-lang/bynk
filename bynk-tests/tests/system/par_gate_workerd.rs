@@ -52,7 +52,7 @@ fn source(held_port: u16) -> String {
     format!(
         r#"context gate
 
-consumes bynk {{ Fetch }}
+consumes bynk {{ Fetch, Request, Method, FetchOptions, Redirect, FetchError }}
 
 agent Room {{
   key id: String

@@ -2212,7 +2212,7 @@ variant arrives:
 ```bynk
 context app.probe
 
-consumes bynk { Fetch, Request }
+consumes bynk { Fetch, Request, Method, FetchError }
 
 service probe {
 	on call(url: String) -> Effect[String] given Fetch {

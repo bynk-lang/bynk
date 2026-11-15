@@ -1,11 +1,11 @@
 context demo
 
-// #3536: `TimedOut` and the variants of `Claim` are not listed, so naming them
-// still resolves but is a `bynk.consumes.type_not_selected` warning; `bynk check
-// --fix` adds `TimedOut` and `Claim` to the braces.
+// #3536: the braces mean what they say. `TimedOut`, `Claim` (and so its
+// variants) and `ContainerError` are listed here; leaving one out is a
+// `bynk.consumes.type_not_selected` error, and `bynk check --fix` adds it.
 
-consumes bynk { Logger }
-consumes bynk.cloudflare { D1 }
+consumes bynk { Logger, TimedOut, Claim }
+consumes bynk.cloudflare { D1, ContainerError }
 
 type Outcome = | Done(n: Int) | Unavailable
 

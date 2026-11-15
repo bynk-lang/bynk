@@ -1,6 +1,6 @@
 context probe
 
-consumes bynk { Fetch }
+consumes bynk { Fetch, Request, Method }
 
 ---
 CANARY (CWE-918). Deliberately vulnerable, like `ssrf-body`, but the URL
