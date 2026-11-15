@@ -1,5 +1,6 @@
 ---
 level: patch
+probes: ts_writes
 changelog: The test runner can evaluate a snippet in a unit's scope and report its final value, the driver half of `bynk eval`
 ---
 
