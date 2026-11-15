@@ -17,6 +17,7 @@ or a row links to no file. Summaries and statuses are curated by hand; the
 
 | # | Decision | Status |
 |---|---|---|
+| [0856](0856-call-hierarchy-cross-context-service-calls.md) | **Service handlers are call-only index symbols, so call hierarchy covers cross-context calls** (v0.626.1) — A service's `on call` and `on http` handlers become `SymbolKind::Handler` symbols, and a cross-context call is an edge to one | Accepted (v0.626.1) |
 | [0855](0855-request-cf-handler-parameter.md) | **`request.cf` is a fifth special handler parameter, `cf: RequestCf`** (v0.626) — A record of optional Cloudflare-derived request facts, never a fault when absent, skipped by the client and OpenAPI | Accepted (v0.626) |
 | [0854](0854-architecture-model-events-uses.md) | **`bynk/architectureModel` carries event emitters and subscribers and each handler's capability use** (v0.625.3) — The architecture model extends one request with additive `events` and per-node `uses` sections, read from the checker's resolved view | Accepted (v0.625.3) |
 | [0853](0853-sequence-branch-span.md) | **Each sequence-model branch carries its arm's source span** (v0.625.2) — Additive `Branch.span` and `WireBranch.range`, so clients can link or cover a branch | Accepted (v0.625.2) |
