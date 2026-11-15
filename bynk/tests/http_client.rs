@@ -55,7 +55,23 @@ fn module(path: &Path, extra: &[&str]) -> String {
     args.extend_from_slice(extra);
     let (ok, stdout, stderr) = client(&args);
     assert!(ok, "bynk client failed: {stderr}");
-    stdout
+    versionless(&stdout)
+}
+
+/// The header names the compiler's version, which a golden must not pin: it would go
+/// stale at every release.
+fn versionless(text: &str) -> String {
+    text.lines()
+        .map(|l| {
+            if l.starts_with("// bynk ") && l.contains(". Regenerate with `bynk client`;") {
+                "// bynk <version>. Regenerate with `bynk client`; see https://bynk-lang.org/book/reference/http-client/".to_string()
+            } else {
+                l.to_string()
+            }
+        })
+        .collect::<Vec<_>>()
+        .join("\n")
+        + "\n"
 }
 
 fn golden(name: &str, actual: &str) {
