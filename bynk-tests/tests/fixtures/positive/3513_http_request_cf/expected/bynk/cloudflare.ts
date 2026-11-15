@@ -872,6 +872,160 @@ export const AiError = {
 };
 
 /**
+ * The format of a raster image. `Jpeg`, `Png`, `Webp`, `Avif` and `Gif` are
+ * the formats `Images.transform` can write; `Heic` is read only, so asking
+ * for it as an output is `InvalidImage`. Cloudflare adds formats over time, so
+ * a `match` over this type needs a wildcard.
+ */
+export type ImageFormat =
+    { readonly tag: "Jpeg" }
+  | { readonly tag: "Png" }
+  | { readonly tag: "Webp" }
+  | { readonly tag: "Avif" }
+  | { readonly tag: "Gif" }
+  | { readonly tag: "Heic" };
+
+export const ImageFormat = {
+  Jpeg: { tag: "Jpeg" } as ImageFormat,
+  Png: { tag: "Png" } as ImageFormat,
+  Webp: { tag: "Webp" } as ImageFormat,
+  Avif: { tag: "Avif" } as ImageFormat,
+  Gif: { tag: "Gif" } as ImageFormat,
+  Heic: { tag: "Heic" } as ImageFormat,
+};
+
+/**
+ * How a resize fits the image to `width` and `height`. `ScaleDown` (the
+ * platform's default) shrinks to fit and never enlarges; `Contain` fits inside
+ * the box; `Cover` fills the box and crops the overflow; `Crop` crops to the
+ * box without scaling up; `Pad` fits inside the box and fills the rest;
+ * `Squeeze` stretches to the box exactly. Cloudflare adds fits over time, so
+ * a `match` over this type needs a wildcard.
+ */
+export type ImageFit =
+    { readonly tag: "ScaleDown" }
+  | { readonly tag: "Contain" }
+  | { readonly tag: "Cover" }
+  | { readonly tag: "Crop" }
+  | { readonly tag: "Pad" }
+  | { readonly tag: "Squeeze" };
+
+export const ImageFit = {
+  ScaleDown: { tag: "ScaleDown" } as ImageFit,
+  Contain: { tag: "Contain" } as ImageFit,
+  Cover: { tag: "Cover" } as ImageFit,
+  Crop: { tag: "Crop" } as ImageFit,
+  Pad: { tag: "Pad" } as ImageFit,
+  Squeeze: { tag: "Squeeze" } as ImageFit,
+};
+
+/**
+ * What `Images.info` reads from an image: `Raster` with its `format`, its
+ * `width` and `height` in pixels and its `size` in bytes, or `Svg`, which the
+ * platform reports without dimensions because it is not a grid of pixels.
+ */
+export type ImageInfo =
+    { readonly tag: "Raster"; readonly format: ImageFormat; readonly width: number; readonly height: number; readonly size: number }
+  | { readonly tag: "Svg" };
+
+export const ImageInfo = {
+  Raster: (format: ImageFormat, width: number, height: number, size: number): ImageInfo => ({ tag: "Raster", format, width, height, size }),
+  Svg: { tag: "Svg" } as ImageInfo,
+};
+
+/**
+ * An image drawn over the one being transformed, from its `image` bytes. The
+ * overlay is placed by an offset in pixels from `top`, `left`, `bottom` or
+ * `right` (centred when none is given; `left` with `right`, or `top` with
+ * `bottom`, is `InvalidImage`), blended at `opacity` from 0 to 1 (`None` is
+ * fully opaque) and tiled across the image when `repeat` is true. Overlays are
+ * drawn in order, the last on top. The overlay is not resized: size it first
+ * with `Images.transform`.
+ */
+export interface Overlay {
+  readonly image: globalThis.Uint8Array;
+  readonly opacity: Option<number>;
+  readonly top: Option<number>;
+  readonly left: Option<number>;
+  readonly bottom: Option<number>;
+  readonly right: Option<number>;
+  readonly repeat: boolean;
+}
+
+export const Overlay = {
+};
+
+/**
+ * What `Images.transform` does to the image before it is written. `width` and
+ * `height` are the target size in pixels, and `fit` says how the image fits
+ * them; `rotate` turns it by 90, 180 or 270 degrees (before the resize, so
+ * `width` and `height` refer to the rotated image); `blur` is a radius from 0
+ * to 250; `overlays` are drawn on the result. A field left `None` is the
+ * platform's default. A `width`, `height` or `blur` the platform refuses is
+ * reported by the platform as `InvalidImage`, not checked here.
+ */
+export interface TransformOptions {
+  readonly width: Option<number>;
+  readonly height: Option<number>;
+  readonly fit: Option<ImageFit>;
+  readonly rotate: Option<number>;
+  readonly blur: Option<number>;
+  readonly overlays: readonly Overlay[];
+}
+
+export const TransformOptions = {
+};
+
+/**
+ * How `Images.transform` writes the result: the `format` (required, because
+ * the platform has no default) and the `quality` from 1 to 100 for the formats
+ * that take one (`None` is the platform's default).
+ */
+export interface OutputOptions {
+  readonly format: ImageFormat;
+  readonly quality: Option<number>;
+}
+
+export const OutputOptions = {
+};
+
+/**
+ * A transformed image: its `body` (buffered whole in the Worker) and the
+ * `contentType` the platform wrote it with, such as `image/webp`.
+ */
+export interface ImageResult {
+  readonly body: globalThis.Uint8Array;
+  readonly contentType: string;
+}
+
+export const ImageResult = {
+};
+
+/**
+ * Why an `Images` call did not give an image. `InvalidImage` is an input that
+ * is not an image, or an option the call cannot honour, with the reason;
+ * `UnsupportedImage` is a format the platform cannot read or write;
+ * `ImageTooLarge` is an image over the platform's size or area limit (a
+ * connection the platform lost mid-call is `ImagesFailed`, worth a retry); and
+ * `ImagesFailed` is any other refusal, with the platform's message (the
+ * `Image` prefix because `InvalidInput` is `AiError`'s and `Failed` is
+ * `SqlError`'s). Cloudflare adds error codes over time, so a `match` over this
+ * type needs a wildcard.
+ */
+export type ImagesError =
+    { readonly tag: "InvalidImage"; readonly message: string }
+  | { readonly tag: "UnsupportedImage" }
+  | { readonly tag: "ImageTooLarge" }
+  | { readonly tag: "ImagesFailed"; readonly message: string };
+
+export const ImagesError = {
+  InvalidImage: (message: string): ImagesError => ({ tag: "InvalidImage", message }),
+  UnsupportedImage: { tag: "UnsupportedImage" } as ImagesError,
+  ImageTooLarge: { tag: "ImageTooLarge" } as ImagesError,
+  ImagesFailed: (message: string): ImagesError => ({ tag: "ImagesFailed", message }),
+};
+
+/**
  * One vector of a `Vectorize` index: its `id` (at most 64 bytes), its `values`
  * (as many numbers as the index has dimensions), the `namespace` it lives in
  * when it has one, and `metadata`, a JSON object as text (`Json.encode` writes
@@ -1517,6 +1671,45 @@ export interface Ai {
 }
 
 export const __AiToken: symbol = globalThis.Symbol("Ai");
+
+/**
+ * Cloudflare Images, from the Worker's `[images]` binding: it resizes,
+ * rotates, blurs, converts and draws on images in the Worker, with no URL and
+ * no round trip to your zone. It is bound once per Worker, so it is used bare
+ * (`given Images`) and has no named instances. Only a Worker that uses it
+ * declares the binding.
+ *
+ * `info(image)` reads an image's format and size without transforming it, and
+ * Cloudflare does not bill it. An empty or non-image input is `InvalidImage`,
+ * and a format this type does not name is `ImagesFailed`.
+ *
+ * `transform(image, options, output)` reads `image` (any format the platform
+ * reads, at most 20 MB), applies `options` and writes the result as `output`
+ * says. The result is buffered whole. The image is untrusted input: an upload
+ * can be a non-image or very large, so answer `InvalidImage` and
+ * `ImageTooLarge` as the caller's mistake, and cap an upload with the request
+ * body limit. An empty image, a `width` or `height` below 1, a `rotate` other
+ * than 90, 180 or 270, an `opacity` outside 0 to 1, a `quality` outside 1 to 100
+ * and an overlay positioned from both opposite edges are `InvalidImage`
+ * without reaching the platform. Cloudflare's own limits are enforced by the
+ * platform and reported as an `ImagesError`; see Cloudflare's Images limits
+ * page for them.
+ *
+ * Calls are billed by Cloudflare as unique transformations. See Cloudflare's
+ * Images pricing page for what applies, and put a `RateLimit` in front of any
+ * handler an anonymous caller can reach. Under `bynk dev` the binding runs
+ * locally in a low-fidelity form that supports only `width`, `height`,
+ * `rotate` and the output format, so `fit`, `blur`, `overlays`, `quality` and
+ * some formats are not reproduced there; deploy to see production's output.
+ * In a test every operation faults until `stub Images.transform(_, _, _)
+ * returns …` replaces it, so a test never reaches the platform.
+ */
+export interface Images {
+  info(image: globalThis.Uint8Array): globalThis.Promise<Result<ImageInfo, ImagesError>>;
+  transform(image: globalThis.Uint8Array, options: TransformOptions, output: OutputOptions): globalThis.Promise<Result<ImageResult, ImagesError>>;
+}
+
+export const __ImagesToken: symbol = globalThis.Symbol("Images");
 
 /**
  * One secret of a Cloudflare Secrets Store, read as `StripeKey.get()`. A
@@ -2447,6 +2640,211 @@ export function __deserialise_Generation(json: __JsonValue, path: string = "$"):
   return Ok({ text: __text, usage: __usage } as Generation);
 }
 
+export function __serialise_ImageFit(value: ImageFit): __JsonValue {
+  switch (value.tag) {
+    case "ScaleDown":
+      return { kind: "ScaleDown" };
+    case "Contain":
+      return { kind: "Contain" };
+    case "Cover":
+      return { kind: "Cover" };
+    case "Crop":
+      return { kind: "Crop" };
+    case "Pad":
+      return { kind: "Pad" };
+    case "Squeeze":
+      return { kind: "Squeeze" };
+  }
+}
+
+export function __deserialise_ImageFit(json: __JsonValue, path: string = "$"): Result<ImageFit, __BoundaryError> {
+  if (typeof json !== "object" || json === null || globalThis.Array.isArray(json)) {
+    return Err({ kind: "StructuralMismatch", path, expected: "object", actual: typeof json });
+  }
+  const obj = json as { [k: string]: __JsonValue };
+  const kind = obj["kind"];
+  switch (kind) {
+    case "ScaleDown":
+      return Ok({ tag: "ScaleDown" } as ImageFit);
+    case "Contain":
+      return Ok({ tag: "Contain" } as ImageFit);
+    case "Cover":
+      return Ok({ tag: "Cover" } as ImageFit);
+    case "Crop":
+      return Ok({ tag: "Crop" } as ImageFit);
+    case "Pad":
+      return Ok({ tag: "Pad" } as ImageFit);
+    case "Squeeze":
+      return Ok({ tag: "Squeeze" } as ImageFit);
+    default:
+      return Err({ kind: "StructuralMismatch", path, expected: "sum variant kind", actual: String(kind) });
+  }
+}
+
+export function __serialise_ImageFormat(value: ImageFormat): __JsonValue {
+  switch (value.tag) {
+    case "Jpeg":
+      return { kind: "Jpeg" };
+    case "Png":
+      return { kind: "Png" };
+    case "Webp":
+      return { kind: "Webp" };
+    case "Avif":
+      return { kind: "Avif" };
+    case "Gif":
+      return { kind: "Gif" };
+    case "Heic":
+      return { kind: "Heic" };
+  }
+}
+
+export function __deserialise_ImageFormat(json: __JsonValue, path: string = "$"): Result<ImageFormat, __BoundaryError> {
+  if (typeof json !== "object" || json === null || globalThis.Array.isArray(json)) {
+    return Err({ kind: "StructuralMismatch", path, expected: "object", actual: typeof json });
+  }
+  const obj = json as { [k: string]: __JsonValue };
+  const kind = obj["kind"];
+  switch (kind) {
+    case "Jpeg":
+      return Ok({ tag: "Jpeg" } as ImageFormat);
+    case "Png":
+      return Ok({ tag: "Png" } as ImageFormat);
+    case "Webp":
+      return Ok({ tag: "Webp" } as ImageFormat);
+    case "Avif":
+      return Ok({ tag: "Avif" } as ImageFormat);
+    case "Gif":
+      return Ok({ tag: "Gif" } as ImageFormat);
+    case "Heic":
+      return Ok({ tag: "Heic" } as ImageFormat);
+    default:
+      return Err({ kind: "StructuralMismatch", path, expected: "sum variant kind", actual: String(kind) });
+  }
+}
+
+export function __serialise_ImageInfo(value: ImageInfo): __JsonValue {
+  switch (value.tag) {
+    case "Raster": {
+      return { kind: "Raster", format: __serialise_ImageFormat(value.format), width: ((v: number) => { if (!globalThis.Number.isSafeInteger(v)) throw new globalThis.Error("Int outside the safe-integer range at boundary"); return v as __JsonValue; })(value.width), height: ((v: number) => { if (!globalThis.Number.isSafeInteger(v)) throw new globalThis.Error("Int outside the safe-integer range at boundary"); return v as __JsonValue; })(value.height), size: ((v: number) => { if (!globalThis.Number.isSafeInteger(v)) throw new globalThis.Error("Int outside the safe-integer range at boundary"); return v as __JsonValue; })(value.size) };
+    }
+    case "Svg":
+      return { kind: "Svg" };
+  }
+}
+
+export function __deserialise_ImageInfo(json: __JsonValue, path: string = "$"): Result<ImageInfo, __BoundaryError> {
+  if (typeof json !== "object" || json === null || globalThis.Array.isArray(json)) {
+    return Err({ kind: "StructuralMismatch", path, expected: "object", actual: typeof json });
+  }
+  const obj = json as { [k: string]: __JsonValue };
+  const kind = obj["kind"];
+  switch (kind) {
+    case "Raster": {
+  const __r_format = __deserialise_ImageFormat(obj["format"], `${path}.format`);
+  if (__r_format.tag === "Err") return __r_format;
+  const __format = __r_format.value;
+  if (typeof obj["width"] !== "number") {
+    return Err({ kind: "StructuralMismatch", path: `${path}.width`, expected: "number", actual: typeof obj["width"] });
+  }
+  if (!globalThis.Number.isSafeInteger(obj["width"])) {
+    return Err({ kind: "StructuralMismatch", path: `${path}.width`, expected: "safe integer", actual: String(obj["width"]) });
+  }
+  const __width = obj["width"];
+  if (typeof obj["height"] !== "number") {
+    return Err({ kind: "StructuralMismatch", path: `${path}.height`, expected: "number", actual: typeof obj["height"] });
+  }
+  if (!globalThis.Number.isSafeInteger(obj["height"])) {
+    return Err({ kind: "StructuralMismatch", path: `${path}.height`, expected: "safe integer", actual: String(obj["height"]) });
+  }
+  const __height = obj["height"];
+  if (typeof obj["size"] !== "number") {
+    return Err({ kind: "StructuralMismatch", path: `${path}.size`, expected: "number", actual: typeof obj["size"] });
+  }
+  if (!globalThis.Number.isSafeInteger(obj["size"])) {
+    return Err({ kind: "StructuralMismatch", path: `${path}.size`, expected: "safe integer", actual: String(obj["size"]) });
+  }
+  const __size = obj["size"];
+      return Ok({ tag: "Raster", format: __format, width: __width, height: __height, size: __size } as ImageInfo);
+    }
+    case "Svg":
+      return Ok({ tag: "Svg" } as ImageInfo);
+    default:
+      return Err({ kind: "StructuralMismatch", path, expected: "sum variant kind", actual: String(kind) });
+  }
+}
+
+export function __serialise_ImageResult(value: ImageResult): __JsonValue {
+  return {
+    body: __bynkBytesToBase64(value.body) as __JsonValue,
+    contentType: value.contentType as __JsonValue,
+  };
+}
+
+export function __deserialise_ImageResult(json: __JsonValue, path: string = "$"): Result<ImageResult, __BoundaryError> {
+  if (typeof json !== "object" || json === null || globalThis.Array.isArray(json)) {
+    return Err({ kind: "StructuralMismatch", path, expected: "object", actual: typeof json });
+  }
+  const obj = json as { [k: string]: __JsonValue };
+  if (typeof obj["body"] !== "string") {
+    return Err({ kind: "StructuralMismatch", path: `${path}.body`, expected: "base64 string", actual: typeof obj["body"] });
+  }
+  const __b_body = __bynkBytesFromBase64(obj["body"]);
+  if (__b_body.tag === "None") {
+    return Err({ kind: "StructuralMismatch", path: `${path}.body`, expected: "base64 string", actual: "invalid base64" });
+  }
+  const __body = __b_body.value;
+  if (typeof obj["contentType"] !== "string") {
+    return Err({ kind: "StructuralMismatch", path: `${path}.contentType`, expected: "string", actual: typeof obj["contentType"] });
+  }
+  const __contentType = obj["contentType"];
+  return Ok({ body: __body, contentType: __contentType } as ImageResult);
+}
+
+export function __serialise_ImagesError(value: ImagesError): __JsonValue {
+  switch (value.tag) {
+    case "InvalidImage": {
+      return { kind: "InvalidImage", message: value.message as __JsonValue };
+    }
+    case "UnsupportedImage":
+      return { kind: "UnsupportedImage" };
+    case "ImageTooLarge":
+      return { kind: "ImageTooLarge" };
+    case "ImagesFailed": {
+      return { kind: "ImagesFailed", message: value.message as __JsonValue };
+    }
+  }
+}
+
+export function __deserialise_ImagesError(json: __JsonValue, path: string = "$"): Result<ImagesError, __BoundaryError> {
+  if (typeof json !== "object" || json === null || globalThis.Array.isArray(json)) {
+    return Err({ kind: "StructuralMismatch", path, expected: "object", actual: typeof json });
+  }
+  const obj = json as { [k: string]: __JsonValue };
+  const kind = obj["kind"];
+  switch (kind) {
+    case "InvalidImage": {
+  if (typeof obj["message"] !== "string") {
+    return Err({ kind: "StructuralMismatch", path: `${path}.message`, expected: "string", actual: typeof obj["message"] });
+  }
+  const __message = obj["message"];
+      return Ok({ tag: "InvalidImage", message: __message } as ImagesError);
+    }
+    case "UnsupportedImage":
+      return Ok({ tag: "UnsupportedImage" } as ImagesError);
+    case "ImageTooLarge":
+      return Ok({ tag: "ImageTooLarge" } as ImagesError);
+    case "ImagesFailed": {
+  if (typeof obj["message"] !== "string") {
+    return Err({ kind: "StructuralMismatch", path: `${path}.message`, expected: "string", actual: typeof obj["message"] });
+  }
+  const __message = obj["message"];
+      return Ok({ tag: "ImagesFailed", message: __message } as ImagesError);
+    }
+    default:
+      return Err({ kind: "StructuralMismatch", path, expected: "sum variant kind", actual: String(kind) });
+  }
+}
+
 export function __serialise_InboundAttachment(value: InboundAttachment): __JsonValue {
   return {
     filename: value.filename as __JsonValue,
@@ -3147,6 +3545,81 @@ export function __deserialise_MySqlValue(json: __JsonValue, path: string = "$"):
     default:
       return Err({ kind: "StructuralMismatch", path, expected: "sum variant kind", actual: String(kind) });
   }
+}
+
+export function __serialise_OutputOptions(value: OutputOptions): __JsonValue {
+  return {
+    format: __serialise_ImageFormat(value.format),
+    quality: __serialise_Option_Int(value.quality),
+  };
+}
+
+export function __deserialise_OutputOptions(json: __JsonValue, path: string = "$"): Result<OutputOptions, __BoundaryError> {
+  if (typeof json !== "object" || json === null || globalThis.Array.isArray(json)) {
+    return Err({ kind: "StructuralMismatch", path, expected: "object", actual: typeof json });
+  }
+  const obj = json as { [k: string]: __JsonValue };
+  const __r_format = __deserialise_ImageFormat(obj["format"], `${path}.format`);
+  if (__r_format.tag === "Err") return __r_format;
+  const __format = __r_format.value;
+  const __d_quality: __JsonValue = "quality" in obj ? obj["quality"] : { kind: "None" };
+  const __r_quality = __deserialise_Option_Int(__d_quality, `${path}.quality`);
+  if (__r_quality.tag === "Err") return __r_quality;
+  const __quality = __r_quality.value;
+  return Ok({ format: __format, quality: __quality } as OutputOptions);
+}
+
+export function __serialise_Overlay(value: Overlay): __JsonValue {
+  return {
+    image: __bynkBytesToBase64(value.image) as __JsonValue,
+    opacity: __serialise_Option_Float(value.opacity),
+    top: __serialise_Option_Int(value.top),
+    left: __serialise_Option_Int(value.left),
+    bottom: __serialise_Option_Int(value.bottom),
+    right: __serialise_Option_Int(value.right),
+    repeat: value.repeat as __JsonValue,
+  };
+}
+
+export function __deserialise_Overlay(json: __JsonValue, path: string = "$"): Result<Overlay, __BoundaryError> {
+  if (typeof json !== "object" || json === null || globalThis.Array.isArray(json)) {
+    return Err({ kind: "StructuralMismatch", path, expected: "object", actual: typeof json });
+  }
+  const obj = json as { [k: string]: __JsonValue };
+  if (typeof obj["image"] !== "string") {
+    return Err({ kind: "StructuralMismatch", path: `${path}.image`, expected: "base64 string", actual: typeof obj["image"] });
+  }
+  const __b_image = __bynkBytesFromBase64(obj["image"]);
+  if (__b_image.tag === "None") {
+    return Err({ kind: "StructuralMismatch", path: `${path}.image`, expected: "base64 string", actual: "invalid base64" });
+  }
+  const __image = __b_image.value;
+  const __d_opacity: __JsonValue = "opacity" in obj ? obj["opacity"] : { kind: "None" };
+  const __r_opacity = __deserialise_Option_Float(__d_opacity, `${path}.opacity`);
+  if (__r_opacity.tag === "Err") return __r_opacity;
+  const __opacity = __r_opacity.value;
+  const __d_top: __JsonValue = "top" in obj ? obj["top"] : { kind: "None" };
+  const __r_top = __deserialise_Option_Int(__d_top, `${path}.top`);
+  if (__r_top.tag === "Err") return __r_top;
+  const __top = __r_top.value;
+  const __d_left: __JsonValue = "left" in obj ? obj["left"] : { kind: "None" };
+  const __r_left = __deserialise_Option_Int(__d_left, `${path}.left`);
+  if (__r_left.tag === "Err") return __r_left;
+  const __left = __r_left.value;
+  const __d_bottom: __JsonValue = "bottom" in obj ? obj["bottom"] : { kind: "None" };
+  const __r_bottom = __deserialise_Option_Int(__d_bottom, `${path}.bottom`);
+  if (__r_bottom.tag === "Err") return __r_bottom;
+  const __bottom = __r_bottom.value;
+  const __d_right: __JsonValue = "right" in obj ? obj["right"] : { kind: "None" };
+  const __r_right = __deserialise_Option_Int(__d_right, `${path}.right`);
+  if (__r_right.tag === "Err") return __r_right;
+  const __right = __r_right.value;
+  const __d_repeat: __JsonValue = "repeat" in obj ? obj["repeat"] : false;
+  if (typeof __d_repeat !== "boolean") {
+    return Err({ kind: "StructuralMismatch", path: `${path}.repeat`, expected: "boolean", actual: typeof __d_repeat });
+  }
+  const __repeat = __d_repeat;
+  return Ok({ image: __image, opacity: __opacity, top: __top, left: __left, bottom: __bottom, right: __right, repeat: __repeat } as Overlay);
 }
 
 export function __serialise_PgError(value: PgError): __JsonValue {
@@ -4196,6 +4669,49 @@ export function __deserialise_TokenUsage(json: __JsonValue, path: string = "$"):
   return Ok({ promptTokens: __promptTokens, completionTokens: __completionTokens } as TokenUsage);
 }
 
+export function __serialise_TransformOptions(value: TransformOptions): __JsonValue {
+  return {
+    width: __serialise_Option_Int(value.width),
+    height: __serialise_Option_Int(value.height),
+    fit: __serialise_Option_ImageFit(value.fit),
+    rotate: __serialise_Option_Int(value.rotate),
+    blur: __serialise_Option_Int(value.blur),
+    overlays: __serialise_List_Overlay(value.overlays),
+  };
+}
+
+export function __deserialise_TransformOptions(json: __JsonValue, path: string = "$"): Result<TransformOptions, __BoundaryError> {
+  if (typeof json !== "object" || json === null || globalThis.Array.isArray(json)) {
+    return Err({ kind: "StructuralMismatch", path, expected: "object", actual: typeof json });
+  }
+  const obj = json as { [k: string]: __JsonValue };
+  const __d_width: __JsonValue = "width" in obj ? obj["width"] : { kind: "None" };
+  const __r_width = __deserialise_Option_Int(__d_width, `${path}.width`);
+  if (__r_width.tag === "Err") return __r_width;
+  const __width = __r_width.value;
+  const __d_height: __JsonValue = "height" in obj ? obj["height"] : { kind: "None" };
+  const __r_height = __deserialise_Option_Int(__d_height, `${path}.height`);
+  if (__r_height.tag === "Err") return __r_height;
+  const __height = __r_height.value;
+  const __d_fit: __JsonValue = "fit" in obj ? obj["fit"] : { kind: "None" };
+  const __r_fit = __deserialise_Option_ImageFit(__d_fit, `${path}.fit`);
+  if (__r_fit.tag === "Err") return __r_fit;
+  const __fit = __r_fit.value;
+  const __d_rotate: __JsonValue = "rotate" in obj ? obj["rotate"] : { kind: "None" };
+  const __r_rotate = __deserialise_Option_Int(__d_rotate, `${path}.rotate`);
+  if (__r_rotate.tag === "Err") return __r_rotate;
+  const __rotate = __r_rotate.value;
+  const __d_blur: __JsonValue = "blur" in obj ? obj["blur"] : { kind: "None" };
+  const __r_blur = __deserialise_Option_Int(__d_blur, `${path}.blur`);
+  if (__r_blur.tag === "Err") return __r_blur;
+  const __blur = __r_blur.value;
+  const __d_overlays: __JsonValue = "overlays" in obj ? obj["overlays"] : [];
+  const __r_overlays = __deserialise_List_Overlay(__d_overlays, `${path}.overlays`);
+  if (__r_overlays.tag === "Err") return __r_overlays;
+  const __overlays = __r_overlays.value;
+  return Ok({ width: __width, height: __height, fit: __fit, rotate: __rotate, blur: __blur, overlays: __overlays } as TransformOptions);
+}
+
 export function __serialise_Vector(value: Vector): __JsonValue {
   return {
     id: value.id as __JsonValue,
@@ -4970,6 +5486,65 @@ export function __deserialise_List_SqlValue(json: __JsonValue, path: string = "$
   if (__r_el.tag === "Err") return __r_el;
   const __el = __r_el.value;
   out.push(__el as SqlValue);
+  }
+  return Ok(out);
+}
+
+export function __serialise_Option_ImageFit(value: Option<ImageFit>): __JsonValue {
+  if (value.tag === "Some") return { kind: "Some", value: __serialise_ImageFit(value.value) };
+  return { kind: "None" };
+}
+
+function __option_value_ImageFit(raw: __JsonValue, at: string): Result<unknown, __BoundaryError> {
+  const __r_v = __deserialise_ImageFit(raw, at);
+  if (__r_v.tag === "Err") return __r_v;
+  const __v = __r_v.value;
+  return Ok(__v);
+}
+
+export function __deserialise_Option_ImageFit(json: __JsonValue, path: string = "$"): Result<Option<ImageFit>, __BoundaryError> {
+  if (json === undefined || json === null) {
+    return Ok(None as Option<ImageFit>);
+  }
+  if (typeof json === "object" && !globalThis.Array.isArray(json)) {
+    const obj = json as { [k: string]: __JsonValue };
+    const __keys = globalThis.Object.keys(obj);
+    if (obj["kind"] === "None" && __keys.length === 1) {
+      return Ok(None as Option<ImageFit>);
+    }
+    if (obj["kind"] === "Some" && __keys.length === 2 && "value" in obj) {
+      const __t = __option_value_ImageFit(obj["value"], `${path}.value`);
+      if (__t.tag === "Err") {
+        return __t;
+      }
+      return Ok(Some(__t.value as ImageFit) as Option<ImageFit>);
+    }
+  }
+  const __b = __option_value_ImageFit(json, path);
+  if (__b.tag === "Ok") {
+    return Ok(Some(__b.value as ImageFit) as Option<ImageFit>);
+  }
+  if (__b.error.kind === "StructuralMismatch" && __b.error.path === path && !__b.error.expected.endsWith(" | null | {\"kind\": \"None\"} | {\"kind\": \"Some\", \"value\": ...}")) {
+    return Err({ ...__b.error, expected: __b.error.expected + " | null | {\"kind\": \"None\"} | {\"kind\": \"Some\", \"value\": ...}" });
+  }
+  return __b;
+}
+
+export function __serialise_List_Overlay(value: readonly Overlay[]): __JsonValue {
+  return value.map((v) => __serialise_Overlay(v));
+}
+
+export function __deserialise_List_Overlay(json: __JsonValue, path: string = "$"): Result<readonly Overlay[], __BoundaryError> {
+  if (!globalThis.Array.isArray(json)) {
+    return Err({ kind: "StructuralMismatch", path, expected: "array", actual: typeof json });
+  }
+  const out: Overlay[] = [];
+  for (let i = 0; i < json.length; i++) {
+  const item = json[i];
+  const __r_el = __deserialise_Overlay(item, `${path}[${i}]`);
+  if (__r_el.tag === "Err") return __r_el;
+  const __el = __r_el.value;
+  out.push(__el as Overlay);
   }
   return Ok(out);
 }
