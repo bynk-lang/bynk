@@ -380,7 +380,8 @@ let res <- Fetch.send(Request { method: Get, url: \"https://example.com\", conte
         std::fs::create_dir_all(root.join("src")).unwrap();
         std::fs::write(root.join("bynk.toml"), "[project]\nname = \"p\"\n").unwrap();
         std::fs::write(root.join("src/demo.bynk"), UNIT).unwrap();
-        Project(root.canonicalize().unwrap())
+        // Not `canonicalize`, which gives a `\\?\` path on Windows that `tsc` refuses.
+        Project(std::path::absolute(&root).unwrap())
     }
 
     fn eval_with(root: &Path, snippet: &str, timeout: Duration) -> EvalOutcome {
