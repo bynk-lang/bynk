@@ -1,12 +1,6 @@
----
-level: minor
-changelog: `bynk client` writes a typed TypeScript client for a project's `from http` services (experimental, #3508 slice BC1): one module with an inlined browser-safe runtime, optional values as `T | null`, the server's refinement checks on encode and decode, and a per-route union of responses
-probes: ts_writes
----
+# 0846 — `bynk client`, a typed TypeScript client for `from http` services
 
-## ADR: bynk-client-typed-typescript-client
-title: `bynk client`, a typed TypeScript client for `from http` services
-summary: A generated single-file module with an inlined runtime, optional values as `T | null`, refinements checked on encode and decode, and per-route response unions
+- **Status:** Accepted (v0.607)
 
 **Context.** A front end (SvelteKit, Next.js, anything that can `fetch`) calling a Bynk `from http` API either hand-writes types and `fetch` calls or generates them from `bynk openapi` with a tool that cannot know Bynk's codecs. The compiler holds every fact needed to emit the client itself: the wire-contract IR that drives the emitter's codecs, the editor's wire peek and `bynk openapi`. The foreign-caller client (`bynk-client.ts`, #1970) signs every call with a per-edge secret and addresses `/_bynk/call/<service>`, so it is wrong for a browser. #3508 proposed the surface and the maintainer accepted its recommendations, with one change: **optional values appear in the generated TypeScript as `T | null`**, not as Bynk's tagged `Option`, and the client converts at the boundary using the same codecs as the server.
 

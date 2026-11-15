@@ -17,6 +17,7 @@ or a row links to no file. Summaries and statuses are curated by hand; the
 
 | # | Decision | Status |
 |---|---|---|
+| [0846](0846-bynk-client-typed-typescript-client.md) | **`bynk client`, a typed TypeScript client for `from http` services** (v0.607) — A generated single-file module with an inlined runtime, optional values as `T | null`, refinements checked on encode and decode, and per-route response unions | Accepted (v0.607) |
 | [0845](0845-braced-consumes-lists-what-is-in-scope.md) | **A braced `consumes` of a first-party unit brings into scope only the names it lists** (v0.606) — Unlisted standard-library types are not clash or ambiguity candidates; naming one is a deprecation warning with a fix, then an error | Accepted (v0.606) |
 | [0844](0844-check-fix-by-code.md) | **`check --fix=<code>` narrows a fix run to the named diagnostic codes** (v0.604) — A repeatable, comma-separated filter on `--fix`; naming a code asks for its fixes, a hint's included | Accepted (v0.604) |
 | [0843](0843-fix-applies-only-shown-diagnostics.md) | **Batch fixes (`check --fix`, fix-all) take only the fixes of diagnostics `check` shows** (v0.603.11) — Hints are skipped by the shared selection rule; the bare-statement `let _ =` fix is a quick fix only | Accepted (v0.603.11) |

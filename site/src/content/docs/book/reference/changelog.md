@@ -3,7 +3,7 @@ title: Version compatibility & changelog
 ---
 Bynk is pre-1.0 and developed in small, spec-first increments (see
 [Versioning & roadmap](/book/about/versioning-and-roadmap/)). This book is
-written against **v0.606**.
+written against **v0.607**.
 
 This page is a high-level summary of notable increments, not an exhaustive
 per-commit history. While Bynk is pre-1.0, increments may change behaviour.
@@ -28,6 +28,7 @@ per-commit history. While Bynk is pre-1.0, increments may change behaviour.
 
 | Version | Highlights |
 |---|---|
+| **v0.607.0** | `bynk client` writes a typed TypeScript client for a project's `from http` services (experimental, #3508 slice BC1): one module with an inlined browser-safe runtime, optional values as `T | null`, the server's refinement checks on encode and decode, and a per-route union of responses |
 | **v0.606.1** | A `Postgres` instance runs on `postgres` 4.0.0 (was 3.4.5), so a project with one has its `bynk.lock` row and installed package move to it |
 | **v0.606.0** | Naming a standard-library type (or a bare variant of one of its sums) that a braced `consumes` does not list is the warning `bynk.consumes.type_not_selected`, and `bynk check --fix` adds the name to the braces; an error follows in a later release (#3536) |
 | **v0.605.1** | A selective `consumes` no longer lets the standard-library types it did not list clash with a suite's types or make a context's own variant ambiguous (`Claim`, `Claimed`, `ContainerError`'s `Unavailable`) |
