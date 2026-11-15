@@ -468,6 +468,10 @@
       "summary": "Two flattened `consumes U { Cap }` capabilities collide, or one clashes with a local capability."
     },
     {
+      "code": "bynk.consumes.capability_not_selected",
+      "summary": "A capability a consumed unit exports is named (a `given` clause, a call, `provides`, a `stub`) in a file whose own `consumes` does not list it (a warning; an error in a later release)."
+    },
+    {
       "code": "bynk.consumes.name_conflict",
       "summary": "A `consumes` name collides with another name in scope."
     },
@@ -506,6 +510,10 @@
     {
       "code": "bynk.consumes.type_not_selected",
       "summary": "A type (or a bare variant of a sum) of a consumed unit is named in a file whose own `consumes` does not bring it in: it lists other names, or only another file of the unit consumes the unit (a warning; an error in a later release)."
+    },
+    {
+      "code": "bynk.consumes.unit_not_consumed",
+      "summary": "A call to another unit's service is written in a file whose own `consumes` does not name that unit (a warning; an error in a later release)."
     },
     {
       "code": "bynk.consumes.unknown_context",
