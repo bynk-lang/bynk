@@ -1579,6 +1579,14 @@ pub(crate) fn synthesise_environment_block(
         env_block.insert("secrets_store_secrets".to_string(), secrets.clone());
     }
 
+    // #3513 A: each mTLS certificate as written: the account's certificate, named the same in
+    // every environment, so it carries over with no environment suffix; the deploy slice
+    // resolves its id into the top level first. Bindings are not inherited by `[env.*]`, or a
+    // staging Worker has no `MTLS_*` to call through.
+    if let Some(certificates) = doc.get("mtls_certificates") {
+        env_block.insert("mtls_certificates".to_string(), certificates.clone());
+    }
+
     // #3302: each email binding as written, restrictions included: it names
     // no resource of the build, so it is the same in every environment, and
     // bindings are not inherited by `[env.*]`, or a staging Worker has no
