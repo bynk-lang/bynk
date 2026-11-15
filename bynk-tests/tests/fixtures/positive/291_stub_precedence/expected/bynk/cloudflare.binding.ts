@@ -8,6 +8,19 @@ import type { AnalyticsDataset, D1Database, D1PreparedStatement, D1Result, KVNam
 import type { VectorizeIndex } from "../__bynk_runtime/vectorize.js";
 import { claimStream } from "../__bynk_runtime/http.js";
 
+// The integration doubles mark the fault they throw for an unstubbed call
+// (`bynkNotStubbed`, #3589). Every catch that maps a platform failure to an
+// `Err` must call `rethrowNotStubbed` first, so the fault reaches the case
+// instead of becoming a value; a new double that throws needs the same guard
+// in its binding.
+function isNotStubbed(e: unknown): boolean {
+  return (e as { bynkNotStubbed?: unknown } | null)?.bynkNotStubbed === true;
+}
+
+function rethrowNotStubbed(e: unknown): void {
+  if (isNotStubbed(e)) throw e;
+}
+
 export class WorkersKv implements Kv {
   // A declared field + assigning constructor, not a parameter property
   // (`constructor(private env …)`): a parameter property is non-erasable by pure
@@ -1041,6 +1054,7 @@ export class WorkersAi implements Ai {
   }
 
   private static failure(e: unknown): AiError {
+    rethrowNotStubbed(e);
     const message = e instanceof Error ? e.message : String(e);
     switch (WorkersAi.code(e)) {
       case 5007:
@@ -1998,6 +2012,7 @@ export class WorkersAiSearch implements AiSearch {
   // `SearchFailed`, never a fault). An instance that is not there is a fault,
   // not a value: the deploy checks it exists, so a handler cannot act on it.
   private static failure(e: unknown): SearchError {
+    rethrowNotStubbed(e);
     const message = e instanceof Error ? e.message : String(e);
     // Only the instance itself missing: a message that *opens* with the
     // instance and its name, so a message about something else of it (a model,
@@ -2266,8 +2281,18 @@ export class WorkersContainer implements Container {
     const stub = objects.get(objects.idFromName(instance));
     let reported: ContainerError | undefined;
     let fault: string | undefined;
+    let unstubbed: unknown;
     const provider = new FetchProvider(async (url, init) => {
-      const res = await stub.fetch(new globalThis.Request(url, init));
+      let res: globalThis.Response;
+      try {
+        res = await stub.fetch(new globalThis.Request(url, init));
+      } catch (e) {
+        // The integration double's "not stubbed" fault, which `FetchProvider`
+        // would read as a network error: hold it and rethrow it below.
+        if (!isNotStubbed(e)) throw e;
+        unstubbed = e;
+        return new globalThis.Response(null, { status: 500 });
+      }
       // A fault, not an error value: `bynk dev` without Docker, where no answer a
       // handler could give is honest. The class's message names what to do.
       if (res.headers.has(CONTAINER_FAULT_HEADER)) {
@@ -2283,6 +2308,7 @@ export class WorkersContainer implements Container {
       return res;
     });
     const out = await run(provider);
+    if (unstubbed !== undefined) throw unstubbed;
     if (fault !== undefined) throw new Error(`bynk.cloudflare.Container.${op}: ${fault}`);
     if (reported !== undefined) return Err(reported);
     if (out.tag === "Ok") return Ok(out.value);

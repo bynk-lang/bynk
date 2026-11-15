@@ -6,10 +6,16 @@ import { FetchProvider } from "../bynk-cloudflare.js";
 import { claimStream, Err, None, Ok, Some, type AnalyticsDataset, type D1Database, type D1PreparedStatement, type D1Result, type KVNamespace, type Option, type QueueProducer, type R2Bucket, type R2MultipartUpload, type R2ObjectMeta, type RateLimiter, type Result, type SecretsStoreSecret, type SendEmail, type VectorizeIndex, type WorkerAiBinding, type AiSearchInstance, type WorkerVersionMetadata } from "../runtime.js";
 
 // The integration doubles mark the fault they throw for an unstubbed call
-// (`bynkNotStubbed`, #3589). A catch that maps a platform failure to an `Err`
-// calls this first, so the fault reaches the case instead of becoming a value.
+// (`bynkNotStubbed`, #3589). Every catch that maps a platform failure to an
+// `Err` must call `rethrowNotStubbed` first, so the fault reaches the case
+// instead of becoming a value; a new double that throws needs the same guard
+// in its binding.
+function isNotStubbed(e: unknown): boolean {
+  return (e as { bynkNotStubbed?: unknown } | null)?.bynkNotStubbed === true;
+}
+
 function rethrowNotStubbed(e: unknown): void {
-  if ((e as { bynkNotStubbed?: unknown } | null)?.bynkNotStubbed === true) throw e;
+  if (isNotStubbed(e)) throw e;
 }
 
 export class WorkersKv implements Kv {
@@ -2280,7 +2286,7 @@ export class WorkersContainer implements Container {
       } catch (e) {
         // The integration double's "not stubbed" fault, which `FetchProvider`
         // would read as a network error: hold it and rethrow it below.
-        if ((e as { bynkNotStubbed?: unknown } | null)?.bynkNotStubbed !== true) throw e;
+        if (!isNotStubbed(e)) throw e;
         unstubbed = e;
         return new globalThis.Response(null, { status: 500 });
       }
