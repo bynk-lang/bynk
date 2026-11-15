@@ -464,6 +464,8 @@ fn mtls_expiry_warning(expires_on: &str, now: time::OffsetDateTime) -> Option<St
     let days = (expires - now).whole_days();
     if expires <= now {
         Some(format!("it expired on {expires_on}"))
+    } else if days < 1 {
+        Some(format!("it expires on {expires_on}, within a day"))
     } else if days < MTLS_EXPIRY_WARNING_DAYS {
         Some(format!("it expires on {expires_on}, in {days} days"))
     } else {
@@ -625,8 +627,12 @@ pub(crate) fn link_for_run(
     }
     // The ids of the linked resources, by `(worker, binding)`: a binding's name is its kind's
     // own, so the Secrets Store ids and the mTLS certificate ids (#3513 A) share one map.
-    let mut linked = link_stored_secrets_for_run(order, resources)?;
-    linked.extend(link_mtls_for_run(order, resources)?);
+    // Both lookups run before either's problems stop the run, so a missing store and a missing
+    // certificate are reported together.
+    let secrets = link_stored_secrets_for_run(order, resources);
+    let certificates = link_mtls_for_run(order, resources);
+    let mut linked = secrets?;
+    linked.extend(certificates?);
     Some(linked)
 }
 
@@ -1501,6 +1507,7 @@ mod tests {
         for (expires, says) in [
             ("2026-11-01T00:00:00Z", "it expired on"),
             ("2026-11-30T00:00:00Z", "in 15 days"),
+            ("2026-11-15T12:00:00Z", "within a day"),
         ] {
             let certs = FakeCerts(
                 Ok(vec![cert("c1", Some("acme"), false, Some(expires))]),

@@ -2004,6 +2004,39 @@ pub fn mtls_certificate_bindings(text: &str) -> Result<Vec<String>, String> {
         .collect())
 }
 
+/// #3513 A: `text` without the `[[mtls_certificates]]` entries bound as `bindings`. `bynk dev`
+/// drops a certificate no deploy has linked from its development copy: marked `remote = true`
+/// with a name where an id belongs, it could fail wrangler's whole startup, and unbound the Worker
+/// serves and only a call through the binding fails. Unchanged text when none matches.
+pub fn drop_mtls_certificates(text: &str, bindings: &[String]) -> Result<String, String> {
+    let mut doc: toml_edit::DocumentMut = text
+        .parse()
+        .map_err(|e| format!("invalid wrangler.toml: {e}"))?;
+    let mut changed = false;
+    let mut now_empty = false;
+    if let Some(entries) = doc
+        .get_mut("mtls_certificates")
+        .and_then(|i| i.as_array_of_tables_mut())
+    {
+        let before = entries.len();
+        entries.retain(|e| {
+            !e.get("binding")
+                .and_then(|b| b.as_str())
+                .is_some_and(|b| bindings.iter().any(|x| x == b))
+        });
+        changed = entries.len() != before;
+        now_empty = entries.is_empty();
+    }
+    if now_empty {
+        doc.remove("mtls_certificates");
+    }
+    Ok(if changed {
+        doc.to_string()
+    } else {
+        text.to_string()
+    })
+}
+
 /// #3513 A: the config `bynk dev` serves, where each `[[mtls_certificates]]` entry also carries
 /// `remote = true`: there is no local simulation of an mTLS binding, so wrangler runs it on
 /// Cloudflare. Only ever applied to the development copy; the config `bynk deploy` reads never

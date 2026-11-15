@@ -50,8 +50,10 @@ documentation ([the list endpoint](https://developers.cloudflare.com/api/resourc
   simulation, so the call runs on Cloudflare, presenting the account's certificate to the origin, with
   a link to Cloudflare's page and no word of price. The development copy of the config marks each
   `[[mtls_certificates]]` entry `remote = true` and binds it by the id the last deploy recorded for the
-  environment, so a certificate no deploy has linked is reported and the Worker serves with a call
-  through it failing. The config `bynk deploy` reads never carries `remote`.
+  environment. A certificate no deploy has linked is reported and its entry is dropped from the
+  development copy, not left `remote = true` with a name where an id belongs (wrangler sets up its
+  remote proxy for every such binding at startup, so a bad id might fail the whole start), so the
+  Worker serves with the binding absent and a call through it failing. The config `bynk deploy` reads never carries `remote`.
 - `[env.*]` blocks copy the stanza as written (the certificate's id is already materialised into the
   top level before the block is synthesised), with no environment suffix.
 

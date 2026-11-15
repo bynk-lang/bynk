@@ -1870,16 +1870,6 @@ pub(crate) fn write_lock(path: &Path, lock: &DeployLock) -> Result<(), String> {
     Ok(())
 }
 
-/// Fill a generated worker configuration from the committed deploy ledger.
-/// This is shared with `bynk dev -- --remote`; local dev leaves placeholders
-/// alone because Miniflare does not read the Cloudflare namespace id.
-///
-/// `environment` (slice 4, #837 review): before `--env` existed every real
-/// deploy recorded into `"default"` regardless, so hardcoding it here always
-/// matched. A project deployed only under a non-default `--env` now has
-/// nothing under `"default"` — reading the wrong section would misreport a
-/// provisioned project as never deployed, so this reads whichever section
-/// `bynk dev --env NAME -- --remote` names (default `"default"`, unchanged).
 /// #3513 A: bind a served Worker's `[[mtls_certificates]]` by the ids the last deploy of
 /// `environment` recorded, for `bynk dev`. An mTLS binding has no local simulation, so the
 /// development copy runs it on Cloudflare and needs the certificate's real id, which only a deploy
@@ -1914,8 +1904,15 @@ pub fn materialise_mtls_for_dev(
     if unlinked.is_empty() {
         return Ok(true);
     }
+    // An unlinked entry is dropped from the development copy, not left to wrangler: marked
+    // `remote = true` with a name where an id belongs, it might fail the whole startup.
+    let text = std::fs::read_to_string(config).map_err(|e| e.to_string())?;
+    let kept = bynk_emit::emitter::wrangler::drop_mtls_certificates(&text, &unlinked)?;
+    if kept != text {
+        std::fs::write(config, kept).map_err(|e| e.to_string())?;
+    }
     Err(format!(
-        "mTLS certificate binding {} of `{worker}` has not been linked under environment `{environment}`, so a call through it fails; run `bynk deploy --env {environment}` first, which links the certificate by name",
+        "mTLS certificate binding {} of `{worker}` has not been linked under environment `{environment}`, so it is left unbound and a call through it fails; run `bynk deploy --env {environment}` first, which links the certificate by name",
         unlinked
             .iter()
             .map(|b| format!("`{b}`"))
@@ -1924,6 +1921,16 @@ pub fn materialise_mtls_for_dev(
     ))
 }
 
+/// Fill a generated worker configuration from the committed deploy ledger.
+/// This is shared with `bynk dev -- --remote`; local dev leaves placeholders
+/// alone because Miniflare does not read the Cloudflare namespace id.
+///
+/// `environment` (slice 4, #837 review): before `--env` existed every real
+/// deploy recorded into `"default"` regardless, so hardcoding it here always
+/// matched. A project deployed only under a non-default `--env` now has
+/// nothing under `"default"` — reading the wrong section would misreport a
+/// provisioned project as never deployed, so this reads whichever section
+/// `bynk dev --env NAME -- --remote` names (default `"default"`, unchanged).
 pub fn materialise_deploy_state(
     project_root: &Path,
     worker: &str,
@@ -3084,7 +3091,8 @@ pub(crate) mod tests {
             },
         );
         std::fs::write(dir.join(LOCK_FILE), toml::to_string_pretty(&lock).unwrap()).unwrap();
-        // The linked binding is bound; the other is named, and its name is left as it was.
+        let original = std::fs::read_to_string(&config).unwrap();
+        // The linked binding is bound; the other is named and dropped from the development copy.
         let err = materialise_mtls_for_dev(&dir, "shop", &config, "default")
             .expect_err("an unlinked certificate is reported");
         assert!(
@@ -3094,8 +3102,9 @@ pub(crate) mod tests {
         assert!(err.contains("bynk deploy --env default"), "{err}");
         let out = std::fs::read_to_string(&config).unwrap();
         assert!(out.contains("certificate_id = \"c-123\""), "{out}");
-        assert!(out.contains("certificate_id = \"ops\""), "{out}");
-        // Another environment has linked nothing.
+        assert!(!out.contains("MTLS_OTHER") && !out.contains("\"ops\""), "{out}");
+        // Another environment has linked nothing, so each binding is dropped.
+        std::fs::write(&config, original).unwrap();
         let other = materialise_mtls_for_dev(&dir, "shop", &config, "staging").unwrap_err();
         assert!(
             other.contains("`MTLS_OTHER`") && other.contains("staging"),
