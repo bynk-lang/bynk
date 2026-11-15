@@ -1,7 +1,7 @@
 ---
 level: minor
 changelog: A linked `MtlsCertificate` kind, `capability Backend = MtlsCertificate @certificate("acme-client")`, whose `send` presents an account-held client certificate to an origin (experimental; the deploy lands separately)
-probes: diagnostic_coverage
+probes: diagnostic_coverage, emit_diagnostics, emit_abi_shapes, ts_writes
 ---
 
 ## ADR: mtls-certificate-linked-kind
