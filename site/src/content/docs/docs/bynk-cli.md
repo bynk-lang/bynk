@@ -1345,7 +1345,7 @@ guide [Try an expression against your project](/book/guides/testing/try-an-expre
 walks through it.
 
 ```text
-bynk eval [INPUT] --unit UNIT [--expr SNIPPET] [--sources-stdin] [--suite UNIT]... [--timeout SECONDS] [--locked] [--offline]
+bynk eval [INPUT] --unit UNIT [--expr SNIPPET] [--sources-stdin] [--suite UNIT] [--timeout SECONDS] [--locked] [--offline]
 ```
 
 | Argument | Default | Meaning |
@@ -1354,7 +1354,7 @@ bynk eval [INPUT] --unit UNIT [--expr SNIPPET] [--sources-stdin] [--suite UNIT].
 | `--unit UNIT` | required | The `commons` or `context`, by dotted name, whose scope the snippet is evaluated in. |
 | `--expr SNIPPET` | stdin | The snippet. Without it, the snippet is read from standard input. |
 | `--sources-stdin` | off | Evaluate against unsaved buffers: a JSON object `{ "<absolute path>": "<text>" }` on stdin wins over the files on disk, as for [`bynk compile`](#bynk-compile) (ADR 0626). Stdin then holds the buffers, so the snippet must be `--expr`; asking for both is an error. |
-| `--suite UNIT` | — | Build the suite for `UNIT` into the evaluation and put the snippet inside it, so the suite's `stub`s, `fn`s and fixtures apply. Repeat the flag for several units. A suite that does not compile is reported. A suite that is not a unit-tier suite is refused. |
+| `--suite UNIT` | — | Build `--unit`'s own suite into the evaluation and put the snippet inside it, so the suite's `stub`s, `fn`s and fixtures apply. `UNIT` must be the unit named by `--unit`; any other is refused. A suite that does not compile is reported. It is an error when the unit has no unit-tier suite (a suite of another tier cannot hold a snippet). |
 | `--timeout SECONDS` | `60` | Kill the evaluation after this many seconds and report it as timed out. |
 
 **How it runs.** The snippet becomes the body of one `case` in a synthetic `suite`
@@ -1385,10 +1385,10 @@ evaluates a hover (ADR 0638).
 
 | Field | Meaning |
 |---|---|
-| `value` | The wire shape of the snippet's last expression, or `null` when there is none. |
-| `type` | That expression's type, or `null` when there is no value. A value with no wire shape (a bare effect) has a `type` and no `value`, and reports an `error`. |
+| `value` | The wire shape of the snippet's last expression; `null` when the snippet did not check (see `diagnostics`). Absent when `error` is present. |
+| `type` | That expression's type; `null` when the snippet did not check. Absent when `error` is present. |
 | `diagnostics` | When the snippet or the project does not check: one entry each of `line`, `col` (1-based, in the snippet), `severity`, `code` and `message`. An entry in another file adds its `file`, with that file's own line and column. Empty otherwise. |
-| `error` | Present only when the snippet checked but produced no value: `kind` is `runtime` (a refusal, a failed `expect`, an unstubbed capability), `timeout` or `setup` (no such unit, a bad flag combination), and `message` says why. |
+| `error` | Present only when the snippet checked, or could not be set up, and produced no value: `kind` is `runtime` (a failed `expect`, an unstubbed capability, a value with no wire shape such as a bare effect), `timeout`, or `setup` (no such unit, a bad flag combination, no suite to build the snippet into), and `message` says why. With an `error`, `value` and `type` are left out: `{"diagnostics": [], "error": {"kind": "runtime", "message": "…"}}`. |
 
 **Exit code** — `0` when there is a value (a refused refined-type construction,
 `{"kind":"Err",…}`, is a value), `1` otherwise.

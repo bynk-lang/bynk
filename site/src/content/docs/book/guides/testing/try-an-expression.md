@@ -126,7 +126,7 @@ store) has no real implementation here: the test runtime refuses it unless it's
 stubbed, and the result says so:
 
 ```json
-{"value":null,"type":null,"diagnostics":[],"error":{"kind":"runtime","message":"Error: bynk: `Fetch.send` is not stubbed, and a test never reaches the network — add `stub Fetch.send(_) returns …`"}}
+{"diagnostics":[],"error":{"kind":"runtime","message":"Error: bynk: `Fetch.send` is not stubbed, and a test never reaches the network — add `stub Fetch.send(_) returns …`"}}
 ```
 
 Stub it in the snippet's leading lines, as in a suite:
@@ -142,8 +142,8 @@ The unit has to consume the capability itself, as it does for the code the
 snippet calls. `Clock`, `Random` and `Logger` run as the in-memory doubles every
 test gets, so they need no stub.
 
-To use what a suite already declares (its `stub`s, and its helper `fn`s and
-fixtures), name its unit with `--suite`. Given this suite:
+To use what the unit's suite already declares (its `stub`s, and its helper `fn`s
+and fixtures), pass `--suite` with the same unit as `--unit`. Given this suite:
 
 ```text
 suite shop.orders {
