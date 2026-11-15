@@ -68,8 +68,9 @@ pub struct D1SqlSite {
     /// other call.
     pub batch: Option<BatchPosition>,
     /// #3147: for a statement read through `D1.peek`, the participant whose
-    /// database it reads (`shop.orders`). Such a statement must not write.
-    pub peek: Option<String>,
+    /// database it reads (`shop.orders`) and its capability (`Orders`; `cap`
+    /// is the handle's own name). Such a statement must not write.
+    pub peek: Option<(String, String)>,
 }
 
 /// #3197: where a statement sits in its `batch` list literal.

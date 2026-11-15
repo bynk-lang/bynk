@@ -2,5 +2,5 @@
 bynk.test.peek_write `run` writes, and `D1.peek` is read-only
 bynk.test.peek_not_a_database `D1.peek` reads a D1 database, but `shop.orders.Sessions` is not a D1 binding
 bynk.test.peek_unknown_capability `shop.orders` declares no capability `Missing`
-bynk.test.peek_write the SQL of `D1.peek` reads, but this statement of `Orders.all` would write
-bynk.d1.sql_invalid the SQL of `Orders.all` doesn't prepare: no such column: nope
+bynk.test.peek_write the SQL of `D1.peek` reads, but this statement of `db.all` would write
+bynk.d1.sql_invalid the SQL of `db.all` doesn't prepare: no such column: nope

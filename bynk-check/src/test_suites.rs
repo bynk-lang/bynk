@@ -1252,17 +1252,16 @@ fn peek_env(
                     .iter()
                     .map(|op| build_capability_op_info(op, &resolved.types, tys))
                     .collect();
-                (
-                    name.clone(),
-                    checker::CapabilityInfo {
-                        name: name.clone(),
-                        ops,
-                        derived_from: crate::context_checks::derived_from(
-                            decl,
-                            &resolved.cross_context.flattened_caps,
-                        ),
-                    },
-                )
+                let info = checker::CapabilityInfo {
+                    name: name.clone(),
+                    ops,
+                    derived_from: crate::context_checks::derived_from(
+                        decl,
+                        &resolved.cross_context.flattened_caps,
+                    ),
+                };
+                let binding = table.derived.get(name).map(|d| d.binding.clone());
+                (name.clone(), checker::peek::PeekCap { info, binding })
             })
             .collect();
         env.participants.insert(p.clone(), caps);
@@ -5462,7 +5461,13 @@ pub fn integration_view(
         })
     });
     if has_d1 && let Some(cloudflare) = unit_tables.get(crate::firstparty::CLOUDFLARE_UNIT) {
-        for name in ["SqlValue", "SqlError", "SqlRun", "SqlStatement"] {
+        for name in [
+            "SqlValue",
+            "SqlError",
+            "SqlReadError",
+            "SqlRun",
+            "SqlStatement",
+        ] {
             if let Some(decl) = cloudflare.types.get(name) {
                 view.types
                     .entry(name.to_string())

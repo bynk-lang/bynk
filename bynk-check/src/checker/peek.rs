@@ -30,7 +30,15 @@ const WRITE_OPS: &[&str] = &["run", "batch"];
 /// name. Present only while checking an `integration` or `system` case.
 #[derive(Debug, Clone, Default)]
 pub struct PeekEnv {
-    pub participants: BTreeMap<String, BTreeMap<String, CapabilityInfo>>,
+    pub participants: BTreeMap<String, BTreeMap<String, PeekCap>>,
+}
+
+/// One capability of a participant: its signatures, and for a `D1` instance
+/// the Worker binding its database is on.
+#[derive(Debug, Clone)]
+pub struct PeekCap {
+    pub info: CapabilityInfo,
+    pub binding: Option<String>,
 }
 
 /// What a peek handle names: a participant and its D1 capability.
@@ -38,6 +46,8 @@ pub struct PeekEnv {
 pub struct PeekHandle {
     pub participant: String,
     pub cap: String,
+    /// The Worker binding of the capability's database.
+    pub binding: String,
 }
 
 /// The dotted path an expression spells (`shop.orders.Orders`), as segments.
@@ -156,7 +166,7 @@ fn check_create(
         );
         return None;
     };
-    let Some(info) = caps.get(&cap) else {
+    let Some(PeekCap { info, binding }) = caps.get(&cap) else {
         refuse(
             "bynk.test.peek_unknown_capability",
             arg.span,
@@ -176,9 +186,15 @@ fn check_create(
         );
         return None;
     }
-    ctx.caps
-        .peek_resolved
-        .insert(expr_id, PeekHandle { participant, cap });
+    let binding = binding.clone().unwrap_or_default();
+    ctx.caps.peek_resolved.insert(
+        expr_id,
+        PeekHandle {
+            participant,
+            cap,
+            binding,
+        },
+    );
     let _ = span;
     Some(tys.intern(Ty::Named {
         name: PEEK_TYPE.to_string(),
@@ -192,6 +208,16 @@ fn check_create(
 pub(super) fn note_let(name: &str, value: &Expr, ctx: &mut Ctx) {
     ctx.caps.peek_handles.remove(name);
     if let Some(h) = ctx.caps.peek_resolved.get(&value.id).cloned() {
+        // The emitted case holds the capability over the database as
+        // `deps.<name>`, so a call on the handle is a capability call on it.
+        ctx.callees.insert(
+            value.id,
+            Callee::D1Peek {
+                participant: h.participant.clone(),
+                binding: h.binding.clone(),
+                local: name.to_string(),
+            },
+        );
         ctx.caps.peek_handles.insert(name.to_string(), h);
     }
 }
@@ -219,7 +245,7 @@ fn check_handle_op(
         .as_ref()
         .and_then(|e| e.participants.get(&handle.participant))
         .and_then(|c| c.get(&handle.cap))
-        .cloned();
+        .map(|c| c.info.clone());
     let info = info?;
     if !READ_OPS.contains(&method.name.as_str()) {
         if WRITE_OPS.contains(&method.name.as_str()) {
@@ -247,21 +273,19 @@ fn check_handle_op(
         }
         return None;
     }
-    // The ordinary capability call, over the participant's own signatures.
-    let present = ctx.caps.capabilities.insert(handle.cap.clone(), info);
-    let name = Ident {
-        name: handle.cap.clone(),
-        span: receiver.span,
-    };
+    // The ordinary capability call, over the participant's own signatures,
+    // on the handle's own name (what the emitted case holds it under).
+    let present = ctx.caps.capabilities.insert(receiver.name.clone(), info);
+    let name = receiver.clone();
     let out = super::calls::check_static_call(
         &name, method, type_args, args, span, expected, expr_id, ctx,
     );
     match present {
         Some(p) => {
-            ctx.caps.capabilities.insert(handle.cap.clone(), p);
+            ctx.caps.capabilities.insert(receiver.name.clone(), p);
         }
         None => {
-            ctx.caps.capabilities.remove(&handle.cap);
+            ctx.caps.capabilities.remove(&receiver.name);
         }
     }
     // The statement is the participant's: the project phase prepares it
@@ -275,7 +299,7 @@ fn check_handle_op(
             _ => None,
         };
         if let Some(site) = site {
-            site.peek = Some(handle.participant.clone());
+            site.peek = Some((handle.participant.clone(), handle.cap.clone()));
         }
     }
     out

@@ -303,12 +303,12 @@ mod native {
             }
             let mut out = Vec::new();
             for site in sites.values() {
-                let Some(participant) = site.peek.as_deref() else {
+                let Some((participant, cap)) = site.peek.as_ref() else {
                     continue;
                 };
                 let Some(instance) = unit_tables
                     .get(participant)
-                    .and_then(|t| t.derived.get(&site.cap))
+                    .and_then(|t| t.derived.get(cap))
                     .filter(|d| is_d1(d))
                 else {
                     continue;

@@ -2353,6 +2353,9 @@ fn lower_method_call(
         return pre.finish(s);
     }
     // Capability, cross-context, events and static-type calls (#3167).
+    if let Some(s) = lower_d1_peek_call(e, cx) {
+        return pre.finish(s);
+    }
     if let Some(s) = lower_d1_select_call(e, args, cx, &mut pre) {
         return pre.finish(s);
     }
@@ -2400,6 +2403,35 @@ fn lower_method_call(
     // Instance call: UFCS lowering with the receiver as first arg.
     let call = lower_ufcs_method_call(e, receiver, method, type_args, args, cx, &mut pre);
     pre.finish(call)
+}
+
+/// #3147: whether `name` is a case-local `D1.peek` handle, held on `deps`.
+fn is_peek_handle(name: &str, cx: &LowerCtx) -> bool {
+    cx.commons()
+        .callees
+        .values()
+        .any(|c| matches!(c, Callee::D1Peek { local, .. } if local == name))
+}
+
+/// #3147: lower `D1.peek(<participant>.<Cap>)` in an integration or `system`
+/// case, or `None` when the call is not one. It holds the participant's own
+/// capability over its test database, read-only, as `deps.<local>`: the same
+/// `WorkersD1` the app's code calls, over the very database object the
+/// participant's `env` holds, so a call on the handle (an ordinary capability
+/// call on `deps.<local>`) sees what the app wrote.
+fn lower_d1_peek_call(e: &Expr, cx: &mut LowerCtx) -> Option<String> {
+    let Some(Callee::D1Peek {
+        participant,
+        binding,
+        local,
+    }) = cx.commons().callees.get(&e.id).cloned()
+    else {
+        return None;
+    };
+    let ns = test_scaffold_ns(&participant);
+    Some(format!(
+        "(deps.{local} = new bynk_cloudflare__binding.WorkersD1({{ {binding}: deps.env_{ns}.{binding}.readOnly() }}, \"{binding}\"))"
+    ))
 }
 
 /// Lower a derived-`D1` `select`/`firstAs` call (#2865), or `None` when the call is not one. Moved out of
@@ -2456,7 +2488,7 @@ fn lower_d1_select_call(
             .expect("a checked D1 select row type has a JSON decoder");
         {
             let params = pre.lower(params, cx);
-            let deps = if cx.in_test_case() {
+            let deps = if cx.in_test_case() || is_peek_handle(&cap, cx) {
                 "deps".to_string()
             } else {
                 cx.cap_deps_expr().to_string()
@@ -2754,7 +2786,7 @@ fn lower_capability_call(
     // as a capability operation, but a case body is no handler and has no
     // `given` set for the branch below to read.
     if let ExprKind::Ident(id) = &receiver.kind
-        && cx.in_test_case()
+        && (cx.in_test_case() || is_peek_handle(&id.name, cx))
         && matches!(
             cx.commons().callee(e.id),
             Some(Callee::Capability { cap, .. }) if *cap == id.name

@@ -1,0 +1,17 @@
+context shop.orders
+
+consumes bynk.cloudflare { D1, SqlValue }
+
+capability Orders = D1
+
+type Order = { id: String, owner: String, qty: Int }
+
+service api from http {
+  on POST("/orders/:id") (id: String) -> Effect[HttpResult[String]] by v: Visitor given Orders {
+    let r <- Orders.run("INSERT INTO orders (id, owner, qty) VALUES (?1, ?2, ?3)", [Text(id), Text("bob"), Integer(2)])
+    match r {
+      Ok(_) => Ok("stored"),
+      Err(_) => BadRequest("no"),
+    }
+  }
+}

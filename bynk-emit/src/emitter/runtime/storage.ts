@@ -840,7 +840,9 @@ function sqlParameters(sql: string): { count: number; numbered: string[]; bare: 
  * `wrangler d1 migrations apply` runs them. One that fails faults, naming the
  * file, so every test using the database fails the same way.
  */
-export function makeIntegrationD1(migrations: readonly (readonly [string, string])[] = []): D1Database {
+export function makeIntegrationD1(
+  migrations: readonly (readonly [string, string])[] = [],
+): D1Database & { readOnly(): D1Database } {
   const node = (globalThis as { process?: { getBuiltinModule?(id: string): unknown } }).process;
   const sqlite = node?.getBuiltinModule?.("node:sqlite") as
     | { DatabaseSync: new (path: string) => SqliteDatabase }
@@ -880,7 +882,20 @@ export function makeIntegrationD1(migrations: readonly (readonly [string, string
     changes: Number(r.changes),
     last_row_id: Number(r.lastInsertRowid),
   });
-  const statement = (sql: string, params: unknown[]): D1PreparedStatement & { exec(): D1Result } => {
+  // #3147: a `D1.peek` handle reads the database the app wrote, and never
+  // writes it. Its statements run with `query_only` on, for the statement's
+  // own (synchronous) execution only, so the app's own statements in flight
+  // are never refused. SQLite refuses a write then, whatever the statement.
+  const readOnly = <T>(guarded: boolean, f: () => T): T => {
+    if (!guarded) return f();
+    db.exec("PRAGMA query_only = ON");
+    try {
+      return f();
+    } finally {
+      db.exec("PRAGMA query_only = OFF");
+    }
+  };
+  const statement = (sql: string, params: unknown[], guarded = false): D1PreparedStatement & { exec(): D1Result } => {
     const values = params.map((v) => (typeof v === "number" && Number.isInteger(v) ? BigInt(v) : v));
     // Node before 22.18 refuses positional values for numbered parameters
     // (`?1`), so those bind by name: `{ "?1": … }`, one key per number used.
@@ -907,11 +922,11 @@ export function makeIntegrationD1(migrations: readonly (readonly [string, string
       return db.prepare(text);
     };
     return {
-      bind: (...values: unknown[]) => statement(sql, values),
-      all: async () => ({ results: attempt(() => prepared().all(...bound)), meta: {} }),
-      first: async () => attempt(() => prepared().get(...bound)) ?? null,
-      run: async () => ({ results: [], meta: meta(attempt(() => prepared().run(...bound))) }),
-      exec: () => ({ results: [], meta: meta(attempt(() => prepared().run(...bound))) }),
+      bind: (...values: unknown[]) => statement(sql, values, guarded),
+      all: async () => ({ results: attempt(() => readOnly(guarded, () => prepared().all(...bound))), meta: {} }),
+      first: async () => attempt(() => readOnly(guarded, () => prepared().get(...bound))) ?? null,
+      run: async () => ({ results: [], meta: meta(attempt(() => readOnly(guarded, () => prepared().run(...bound)))) }),
+      exec: () => ({ results: [], meta: meta(attempt(() => readOnly(guarded, () => prepared().run(...bound)))) }),
     };
   };
   return {
@@ -927,6 +942,13 @@ export function makeIntegrationD1(migrations: readonly (readonly [string, string
         throw e;
       }
     },
+    // #3147: the same database, read-only, for `D1.peek`.
+    readOnly: (): D1Database => ({
+      prepare: (sql: string) => statement(sql, [], true),
+      async batch(): Promise<D1Result[]> {
+        throw d1Error(new Error("a D1.peek handle is read-only"));
+      },
+    }),
   };
 }
 

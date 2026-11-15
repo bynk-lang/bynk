@@ -1,0 +1,26 @@
+suite shop.orders as system {
+  case "a handle reads what the app wrote" {
+    let db = D1.peek(shop.orders.Orders)
+
+    let before <- db.select[Order]("FROM orders WHERE owner = ?1", [Text("bob")])
+    expect before is Ok([])
+
+    let r <- api.POST("/orders/:id", "o1") by Visitor
+    expect r is Ok("stored")
+
+    let after <- db.select[Order]("FROM orders WHERE owner = ?1", [Text("bob")])
+    expect after is Ok([Order { id: "o1", owner: "bob", qty: 2, .. }])
+
+    let one <- db.firstAs[Order]("FROM orders WHERE id = ?1", [Text("o1")])
+    expect one is Ok(Some(Order { id: "o1", owner: "bob", qty: 2, .. }))
+
+    let none <- db.firstAs[Order]("FROM orders WHERE id = ?1", [Text("nope")])
+    expect none is Ok(None)
+  }
+
+  case "each case starts from an empty database" {
+    let db = D1.peek(shop.orders.Orders)
+    let rows <- db.select[Order]("FROM orders WHERE owner = ?1", [Text("bob")])
+    expect rows is Ok([])
+  }
+}
