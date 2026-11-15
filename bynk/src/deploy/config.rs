@@ -2317,6 +2317,13 @@ max_batch_size = 10
                 },
             ),
             sample(
+                "MTLS_X",
+                BindingSource::MtlsCertificate {
+                    capability: cap(),
+                    certificate: "acme-client".into(),
+                },
+            ),
+            sample(
                 "AGENT",
                 BindingSource::Agent {
                     class_name: "Counter".into(),
@@ -2347,6 +2354,7 @@ max_batch_size = 10
                 | BindingSource::VectorizeIndex { .. }
                 | BindingSource::ContainerInstance { .. }
                 | BindingSource::AiSearchInstance { .. }
+                | BindingSource::MtlsCertificate { .. }
                 | BindingSource::Agent { .. }
                 | BindingSource::EventsFanout { .. } => {}
                 // Every registered singleton is added by the caller.
