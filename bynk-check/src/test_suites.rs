@@ -3077,6 +3077,18 @@ pub fn remote_unsupported(
             );
         }
     }
+    // #3147: a read of a participant's in-process test database. A deployment
+    // has none, and reaching a deployed D1 would make a test run touch real data.
+    if callee_list
+        .iter()
+        .any(|c| matches!(c, Callee::D1Peek { .. }))
+    {
+        return refusal(
+            "bynk.test.remote_unsupported_peek",
+            "reads a participant's database with `D1.peek`".to_string(),
+            "a deployment has no in-process test database, and reaching a deployed D1 would make a test run touch real data",
+        );
+    }
     if let Some(svc) = named(&|c| match c {
         Callee::TestAssetFetch { service } => Some(service.clone()),
         _ => None,

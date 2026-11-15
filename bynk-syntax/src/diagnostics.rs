@@ -11231,7 +11231,7 @@ pub const REGISTRY: &[DiagnosticInfo] = &[
     ),
     dg(
         "bynk.test.remote_unsupported_peek",
-        "A `system` case reads a participant's test database with `D1.peek`, which a run against a real runtime (`bynk test --against`) can't honour: a deployment has no in-process database. The case is skipped, naming why, and is neither run nor failed.",
+        "A `system` case reads a participant's test database with `D1.peek`, which a run against a real runtime (`bynk test --against`) can't honour: a deployment has no in-process database.",
         &["case"],
     ),
     dg(
