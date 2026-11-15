@@ -4789,8 +4789,9 @@ fn emit_composition_root(
             continue;
         };
         // A context's deps object exists only to feed its `__makeSurface`; a
-        // capability-only context (no services) needs neither (v0.15).
-        if table.services.is_empty() {
+        // capability-only context (no services) needs neither (v0.15). The
+        // bundle's `bynk.capability.not_provided` check skips the same ones.
+        if !project_model::composed_in_bundle_root(table) {
             continue;
         }
         let ns = ctx_name.replace('.', "_");

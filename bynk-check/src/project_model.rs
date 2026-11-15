@@ -5411,6 +5411,16 @@ pub enum UnprovidedReason {
     BundleComposition { trigger: String, because: String },
 }
 
+/// Whether a bundle's composition root builds this context: `composeApp`
+/// makes a deps object only to feed a context's `__makeSurface`, so a context
+/// with no services (agents, capabilities or providers only) is left to the
+/// host. Shared by the driver's `emit_composition_root` and
+/// [`phase_unprovided_capabilities`], so the check refuses exactly the
+/// contexts the root builds.
+pub fn composed_in_bundle_root(table: &UnitTable) -> bool {
+    !table.services.is_empty()
+}
+
 /// The shared body of the Workers and bundle-composition checks: each
 /// context's required local capability (a `given` on a service or agent
 /// handler, or on a provider) that has no provider, once per capability, at
@@ -5430,6 +5440,11 @@ pub fn phase_unprovided_capabilities(
         let Some(table) = unit_tables.get(name) else {
             continue;
         };
+        if matches!(reason, UnprovidedReason::BundleComposition { .. })
+            && !composed_in_bundle_root(table)
+        {
+            continue;
+        }
         // #1882 review: once per capability, at its first `given`, however
         // many handlers require it.
         let mut reported: HashSet<String> = HashSet::new();
