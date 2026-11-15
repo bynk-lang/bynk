@@ -17,8 +17,18 @@ const ORDERS: &str = "context shop.orders\n\nservice probe {\n\ton call() -> Eff
 const PAYMENT: &str = "context shop.payment\n\nservice probe {\n\ton call() -> Effect[Int] {\n\t\tEffect.pure(2)\n\t}\n}\n";
 
 fn check(root: &std::path::Path) -> (bool, String) {
+    run(root, &["check", "--format", "short"])
+}
+
+/// `bynk build`, which reads `[build] target`: the binding checks are a
+/// Workers-topology check, and `check` builds the in-process bundle.
+fn build(root: &std::path::Path) -> (bool, String) {
+    run(root, &["build"])
+}
+
+fn run(root: &std::path::Path, args: &[&str]) -> (bool, String) {
     let checked = Command::new(env!("CARGO_BIN_EXE_bynk-under-test"))
-        .args(["check", "--format", "short"])
+        .args(args)
         .arg(root)
         .output()
         .expect("run bynk");
@@ -103,5 +113,58 @@ fn the_build_and_the_editor_refuse_the_same_members() {
     ]);
     assert_eq!(build, expected, "the build's report:\n{out}");
     assert_eq!(editor, expected, "the editor's analysis");
+    let _ = fs::remove_dir_all(&root);
+}
+
+const UNSTABLE_R2: &str = "[unstable]\nallow = [\"bynk.cloudflare.R2\"]\n\n";
+
+const WORKERS_TARGET: &str = "[unstable]\nallow = [\"bynk.cloudflare.R2\"]\n\n[build]\ntarget = \"workers\"\n\n[deploy.workers.core]\ncontexts = [\"shop.orders\", \"shop.payment\"]\n";
+
+fn archive_context(name: &str, options: &str) -> String {
+    format!(
+        "context {name}\n\nconsumes bynk.cloudflare {{ R2 }}\n\ncapability Archives = R2{options}\n\nservice probe {{\n\ton call() -> Effect[Int] {{\n\t\tEffect.pure(1)\n\t}}\n}}\n"
+    )
+}
+
+#[test]
+fn members_with_different_bindings_under_one_name_collide() {
+    let root = std::env::temp_dir().join(format!("bynk-deploy-groups-bind-{}", std::process::id()));
+    write_project(&root, WORKERS_TARGET);
+    fs::write(
+        root.join("src/shop/orders.bynk"),
+        archive_context("shop.orders", ""),
+    )
+    .unwrap();
+    fs::write(
+        root.join("src/shop/payment.bynk"),
+        archive_context("shop.payment", " @jurisdiction(\"eu\")"),
+    )
+    .unwrap();
+    let (ok, out) = build(&root);
+    assert!(!ok, "{out}");
+    assert!(out.contains("bynk.deploy.binding_collision"), "{out}");
+
+    // The same declaration in both is one shared binding.
+    fs::write(
+        root.join("src/shop/payment.bynk"),
+        archive_context("shop.payment", ""),
+    )
+    .unwrap();
+    let (ok, out) = build(&root);
+    assert!(ok, "identical declarations share one binding:\n{out}");
+
+    // And two contexts that are not grouped each keep their own Worker.
+    fs::write(
+        root.join("bynk.toml"),
+        format!("{UNSTABLE_R2}[build]\ntarget = \"workers\"\n"),
+    )
+    .unwrap();
+    fs::write(
+        root.join("src/shop/payment.bynk"),
+        archive_context("shop.payment", " @jurisdiction(\"eu\")"),
+    )
+    .unwrap();
+    let (ok, out) = build(&root);
+    assert!(ok, "separate Workers may differ:\n{out}");
     let _ = fs::remove_dir_all(&root);
 }

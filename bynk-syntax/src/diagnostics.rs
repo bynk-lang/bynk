@@ -8762,6 +8762,10 @@ pub const REGISTRY: &[DiagnosticInfo] = &[
         "A path dependency declared by a dependency resolves outside the workspace; a dependency's own path dependencies are honoured only between members of one workspace.",
     ),
     d(
+        "bynk.deploy.binding_collision",
+        "Two members of one `[deploy.workers.<key>]` group declare different bindings under the same name; members share one `wrangler.toml`, so identical declarations share a binding and differing ones are refused.",
+    ),
+    d(
         "bynk.deploy.context_in_two_groups",
         "A context is listed in two `[deploy.workers.<key>]` groups; a context is deployed in one Worker only.",
     ),
