@@ -64,10 +64,10 @@ pub fn run(args: EvalArgs) -> ExitCode {
         );
     }
     let mut stdin = String::new();
-    if sources_stdin || expr.is_none() {
-        if let Err(e) = std::io::stdin().read_to_string(&mut stdin) {
-            return refuse(format!("could not read stdin: {e}"));
-        }
+    if (sources_stdin || expr.is_none())
+        && let Err(e) = std::io::stdin().read_to_string(&mut stdin)
+    {
+        return refuse(format!("could not read stdin: {e}"));
     }
     let (snippet, buffers) = if sources_stdin {
         match bynk_driver::source_overlay::parse_overlay(&stdin) {
