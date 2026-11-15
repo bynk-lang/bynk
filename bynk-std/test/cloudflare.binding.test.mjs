@@ -28,7 +28,7 @@
 
 import { test } from "node:test";
 import assert from "node:assert/strict";
-import { WorkersAi, WorkersAiSearch, WorkersAnalytics, WorkersContainer, WorkersD1, WorkersEdgeCache, WorkersEmail, WorkersKv, WorkersMySql, WorkersPostgres, WorkersQueue, WorkersR2, WorkersRateLimit, WorkersService, WorkersStoredSecret, WorkersVectorize, WorkersVersion } from "./bynk/cloudflare.binding.js";
+import { WorkersAi, WorkersAiSearch, WorkersAnalytics, WorkersContainer, WorkersD1, WorkersEdgeCache, WorkersEmail, WorkersKv, WorkersMtls, WorkersMySql, WorkersPostgres, WorkersQueue, WorkersR2, WorkersRateLimit, WorkersService, WorkersStoredSecret, WorkersVectorize, WorkersVersion } from "./bynk/cloudflare.binding.js";
 import { Method, FetchError } from "./bynk.js";
 import { Some, None } from "./__bynk_runtime/result.js";
 
@@ -256,6 +256,71 @@ t("WorkersService.send: a missing binding names it", async () => {
   await assert.rejects(
     new WorkersService({}, "SERVICE_BILLING").send(serviceRequest()),
     /requires a Service Binding \(env\.SERVICE_BILLING\)/,
+  );
+});
+
+// #3513 A: `WorkersMtls`, against a certificate-binding fake (a `Fetcher`). `send` is `Fetch.send`'s
+// over the binding's `fetch`, so the same request and response rules hold, and the call goes
+// through the binding, which is what presents the certificate.
+const mtlsRequest = (overrides = {}) => serviceRequest({ url: "https://orders.acme.example/v1/orders", ...overrides });
+
+t("WorkersMtls.send: sends over env[binding], not the network, and reads the response", async () => {
+  const cert = fakeService(() => new Response("[]", { status: 200, headers: { etag: "v1" } }));
+  const globalFetch = globalThis.fetch;
+  globalThis.fetch = () => {
+    throw new Error("the global fetch must not be used");
+  };
+  try {
+    const res = await new WorkersMtls({ MTLS_BACKEND: cert }, "MTLS_BACKEND").send(mtlsRequest());
+    assert.equal(res.tag, "Ok");
+    assert.equal(res.value.status, 200);
+    assert.equal(res.value.body, "[]");
+    assert.equal(res.value.headers.get("etag"), "v1");
+  } finally {
+    globalThis.fetch = globalFetch;
+  }
+  assert.equal(cert.sent.length, 1);
+  assert.equal(cert.sent[0].url, "https://orders.acme.example/v1/orders");
+});
+
+t("WorkersMtls.send: a status the origin returns, 5xx included, is Ok", async () => {
+  const cert = fakeService(() => new Response("down", { status: 503 }));
+  const res = await new WorkersMtls({ MTLS_BACKEND: cert }, "MTLS_BACKEND").send(mtlsRequest());
+  assert.equal(res.tag, "Ok");
+  assert.equal(res.value.status, 503);
+});
+
+t("WorkersMtls.send: a refused header is Err(InvalidHeader), and nothing is sent", async () => {
+  const cert = fakeService();
+  const res = await new WorkersMtls({ MTLS_BACKEND: cert }, "MTLS_BACKEND").send(
+    mtlsRequest({ headers: new Map([["host", "elsewhere"]]) }),
+  );
+  assert.deepEqual(res, { tag: "Err", error: FetchError.InvalidHeader });
+  assert.equal(cert.sent.length, 0);
+});
+
+t("WorkersMtls.send: a call the binding fails, a refused handshake included, is Err(Network)", async () => {
+  const cert = {
+    async fetch() {
+      throw new TypeError("peer did not return a certificate");
+    },
+  };
+  const res = await new WorkersMtls({ MTLS_BACKEND: cert }, "MTLS_BACKEND").send(mtlsRequest());
+  assert.deepEqual(res, { tag: "Err", error: FetchError.Network });
+});
+
+t("WorkersMtls.send: each instance reads its own binding", async () => {
+  const a = fakeService();
+  const b = fakeService();
+  await new WorkersMtls({ MTLS_A: a, MTLS_B: b }, "MTLS_B").send(mtlsRequest());
+  assert.equal(a.sent.length, 0);
+  assert.equal(b.sent.length, 1);
+});
+
+t("WorkersMtls.send: a missing binding names it", async () => {
+  await assert.rejects(
+    new WorkersMtls({}, "MTLS_BACKEND").send(mtlsRequest()),
+    /requires an mTLS certificate binding \(env\.MTLS_BACKEND\)/,
   );
 });
 

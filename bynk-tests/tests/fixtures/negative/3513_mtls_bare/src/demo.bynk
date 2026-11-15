@@ -1,0 +1,11 @@
+context demo
+
+// #3513 A: a bare use of an instance-only kind.
+
+consumes bynk.cloudflare { MtlsCertificate }
+
+service api from http {
+	on GET("/x") () -> Effect[HttpResult[String]] by Visitor given MtlsCertificate {
+		Ok("x")
+	}
+}

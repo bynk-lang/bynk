@@ -1,0 +1,7 @@
+context demo
+
+// #3513 A: using the kind needs `[unstable] allow`.
+
+consumes bynk.cloudflare { MtlsCertificate }
+
+capability Backend = MtlsCertificate @certificate("acme-client")
