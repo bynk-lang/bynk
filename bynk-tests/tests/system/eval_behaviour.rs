@@ -174,7 +174,7 @@ fn a_snippet_that_does_not_end_times_out() {
 #[test]
 fn unsaved_buffers_are_what_is_evaluated() {
     let root = project("buffers");
-    let file = std::fs::canonicalize(root.join("src/demo.bynk")).unwrap();
+    let file = std::path::absolute(root.join("src/demo.bynk")).unwrap();
     let edited = UNIT.replace("n * 2", "n * 7");
     let buffers = serde_json::json!({ file.to_string_lossy(): edited }).to_string();
     let (ok, doc) = eval(
@@ -256,4 +256,17 @@ fn a_named_suite_that_does_not_compile_is_reported() {
             .ends_with("demo.bynk"),
         "{doc}"
     );
+}
+
+#[test]
+fn a_suite_that_is_not_the_unit_is_refused() {
+    let root = project("other_suite");
+    let (ok, doc) = eval(
+        &root,
+        &["--unit", "demo", "--suite", "other", "--expr", "1"],
+        "",
+    );
+    assert!(!ok);
+    assert_eq!(doc["error"]["kind"], "setup");
+    assert!(doc.get("value").is_none(), "{doc}");
 }

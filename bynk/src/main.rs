@@ -615,9 +615,6 @@ fn project_root(input: &Path, lock: bynk::fetch::FetchOptions) -> Option<PathBuf
     root
 }
 
-/// #2240: resolve, fetch and lock the dependencies of the project holding
-/// `input` before a command compiles it. Prints the failure and returns
-/// `false` when it can't; a single file outside any project needs nothing.
 /// `bynk fetch`: the lock file, as JSON when asked.
 fn run_fetch(
     path: &Path,
@@ -642,6 +639,9 @@ fn run_eval(args: bynk::cli::EvalCommand, lock: bynk::cli::LockArgs) -> ExitCode
     bynk::eval::run(args)
 }
 
+/// #2240: resolve, fetch and lock the dependencies of the project holding
+/// `input` before a command compiles it. Prints the failure and returns
+/// `false` when it can't; a single file outside any project needs nothing.
 fn prepare(input: &Path, opts: bynk::fetch::FetchOptions) -> bool {
     let Some(project_root) = find_project_root(input) else {
         return true;

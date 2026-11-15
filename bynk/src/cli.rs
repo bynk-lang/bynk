@@ -39,11 +39,11 @@ pub struct EvalCommand {
     /// Stdin then holds the buffers, so the snippet must be `--expr`.
     #[arg(long)]
     pub sources_stdin: bool,
-    /// Build the suite for this unit in, and evaluate the snippet inside it, so
-    /// the suite's `stub`s apply. By default the project's own suites are left
-    /// out. Repeat the flag to build the suites of several units in.
+    /// Build `--unit`'s own suite in, and evaluate the snippet inside it, so the
+    /// suite's `stub`s, `fn`s and fixtures apply. The value must be the unit
+    /// named by `--unit`. By default the project's own suites are left out.
     #[arg(long, value_name = "UNIT")]
-    pub suite: Vec<String>,
+    pub suite: Option<String>,
     /// Kill the evaluation after this many seconds and report it timed out.
     #[arg(long, value_name = "SECONDS", default_value_t = crate::eval::default_timeout_secs(), value_parser = clap::value_parser!(u64).range(1..))]
     pub timeout: u64,
@@ -649,8 +649,8 @@ pub enum Command {
     /// independent: send earlier cells' `let`s again ahead of the snippet.
     ///
     /// The project's own suites are left out of the build, so a suite that does
-    /// not compile cannot block an evaluation. `--suite <UNIT>` builds that
-    /// unit's suite in and puts the snippet inside it, so the suite's `stub`s
+    /// not compile cannot block an evaluation. `--suite <UNIT>` builds `--unit`'s
+    /// own suite in and puts the snippet inside it, so the suite's `stub`s
     /// and `fn`s apply; its errors are then reported.
     ///
     /// Runs in-process, with the build and runner of `bynk test`; requires
