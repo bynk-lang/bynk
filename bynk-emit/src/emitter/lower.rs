@@ -2857,13 +2857,9 @@ fn lower_capability_call(
             capability_call_type_args_ts(type_args, wire.as_deref()),
             args_lowered.join(", ")
         );
-        return Some(decode_capability_reply(
-            call,
-            wire.as_deref(),
-            &id.name,
-            &method.name,
-            cx,
-        ));
+        let decoded = decode_capability_reply(call, wire.as_deref(), &id.name, &method.name, cx);
+        let target = format!("{}.{}", id.name, method.name);
+        return Some(cx.trace_step("capability", &target, e.span.start, decoded));
     }
     None
 }
@@ -3592,11 +3588,13 @@ fn lower_inline_agent_call(
         let mut all = args_lowered;
         // #2355: `this.deps` in a provider body.
         all.push(cx.cap_deps_expr().to_string());
-        return Some(format!(
+        let call = format!(
             "{instance}.{method}({args})",
             method = method.name,
             args = all.join(", ")
-        ));
+        );
+        let target = format!("{}.{}", name.name, method.name);
+        return Some(cx.trace_step("agent", &target, e.span.start, call));
     }
     None
 }
@@ -3638,7 +3636,12 @@ fn lower_let_bound_agent_call(
         let recv = cx
             .resolved_local_name(&id.name)
             .unwrap_or_else(|| id.name.clone());
-        return Some(format!("{}.{}({})", recv, method.name, all.join(", ")));
+        let call = format!("{}.{}({})", recv, method.name, all.join(", "));
+        let target = match cx.local_agent_vars.get(&id.name) {
+            Some(agent) => format!("{agent}.{}", method.name),
+            None => method.name.clone(),
+        };
+        return Some(cx.trace_step("agent", &target, e.span.start, call));
     }
     None
 }
@@ -5413,7 +5416,11 @@ fn lower_cross_context_service_call(
                 BuildTarget::Workers => {
                     let _ = key;
                     let call = pre.absorb(lower_workers_cross_context_call(
-                        &consumed, method, args, cx,
+                        &consumed,
+                        method,
+                        args,
+                        receiver.span.start,
+                        cx,
                     ));
                     return Some(pre.finish(call));
                 }

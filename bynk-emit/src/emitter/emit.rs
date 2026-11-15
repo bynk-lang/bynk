@@ -2937,7 +2937,7 @@ pub(crate) fn emit_provider(
         module.consumed_type_declared = ctx.consumed_type_aliases.clone();
         module.consumed_context_types = ctx.consumed_context_types();
         module.target = ctx.target;
-        module.in_bynk_unit = ctx.commons_name == "bynk";
+        module.note_unit(ctx);
         let body_smb = RefCell::new(SourceMapBuilder::new());
         let mut cx = LowerCtx::new(
             module,
@@ -3275,7 +3275,7 @@ pub(crate) fn emit_service(
             None
         };
         let mut module = ModuleCtx::new(commons, &ctx.cross_context, &ctx.runtime_use);
-        module.in_bynk_unit = ctx.commons_name == "bynk";
+        module.note_unit(ctx);
         module.agent_method_givens = ctx.agent_method_givens.clone();
         module.agent_called_contexts = ctx.agent_called_contexts.clone();
         module.event_schema_versions = ctx.event_schema_versions.clone();
@@ -4489,6 +4489,8 @@ pub(crate) fn lower_workers_cross_context_call(
     consumed: &str,
     method: &Ident,
     args: &[Expr],
+    // #3580: where the call starts in the source, for a traced build's span.
+    call_start: usize,
     cx: &mut LowerCtx<'_>,
 ) -> Lowered {
     use crate::emitter::serialisation::{deserialise_ref_via, serialise_expr_via};
@@ -4754,7 +4756,9 @@ pub(crate) fn lower_workers_cross_context_call(
             bynk_ts::TsExpr::Lit(bynk_ts::TsLit::Str(consumed.to_string())),
         ],
     };
-    pre.finish(bynk_ts::print_expr(&call_expr))
+    let call = bynk_ts::print_expr(&call_expr);
+    let target = format!("{consumed}.{}", method.name);
+    pre.finish(cx.trace_step("call", &target, call_start, call))
 }
 
 /// If `receiver` is a dotted chain or single ident that matches one of the
@@ -7381,7 +7385,7 @@ fn emit_agent_handlers(
             .map(|m| m.name.clone())
             .unwrap_or_else(|| "call".to_string());
         let mut module = ModuleCtx::new(commons, &ctx.cross_context, &ctx.runtime_use);
-        module.in_bynk_unit = ctx.commons_name == "bynk";
+        module.note_unit(ctx);
         // #1960: the body lowers for the build target, as a service body
         // does, so a cross-context call reads the Service Binding its `deps`
         // type names.
@@ -9149,7 +9153,7 @@ fn emit_ws_do_method(
     }
     let body_smb = RefCell::new(SourceMapBuilder::new());
     let mut module = ModuleCtx::new(commons, &ctx.cross_context, &ctx.runtime_use);
-    module.in_bynk_unit = ctx.commons_name == "bynk";
+    module.note_unit(ctx);
     module.agent_method_givens = ctx.agent_method_givens.clone();
     module.agent_called_contexts = ctx.agent_called_contexts.clone();
     module.event_schema_versions = ctx.event_schema_versions.clone();
