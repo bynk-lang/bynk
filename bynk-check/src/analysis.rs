@@ -221,6 +221,9 @@ pub struct ProjectAnalysis {
     /// sequence-diagram query. Only contexts/adapters have an entry; empty
     /// when the pipeline bails before the checker.
     pub sequence_info: HashMap<String, ContextSequenceInfo>,
+    /// #3583: event emitters/subscribers, each handler's resolved `given`, and the
+    /// suites' `stub`s, for `bynk/architectureModel`'s `events` and `uses` sections.
+    pub architecture_facts: crate::architecture_facts::ArchitectureFacts,
     /// #855: qualified context/adapter unit name → the combined type table
     /// and per-context service/agent tables the wire-contract peek needs.
     /// Only contexts/adapters have an entry; empty when the pipeline bails
@@ -311,6 +314,7 @@ fn bailed(
         requirements: requirements.take_files(),
         unit_sources: HashMap::new(),
         sequence_info: HashMap::new(),
+        architecture_facts: Default::default(),
         boundary_info: HashMap::new(),
         doc_scope: HashMap::new(),
         contract_diff: ContractDiff::default(),
@@ -1117,6 +1121,19 @@ fn analyse_project_inner(
         );
     }
 
+    let architecture_facts =
+        crate::architecture_facts::architecture_facts(&crate::architecture_facts::FactInputs {
+            parsed: &parsed,
+            groups: &groups,
+            test_groups: &test_groups,
+            kinds: &kinds,
+            unit_tables: &unit_tables,
+            unit_consumes: &unit_consumes,
+            unit_consumes_aliases: &unit_consumes_aliases,
+            unit_flattened: &unit_flattened,
+            callees: &unit_callees,
+        });
+
     let mut doc_scope: HashMap<String, Vec<String>> = HashMap::new();
     for name in unit_sources.keys() {
         let mut scope = vec![name.clone()];
@@ -1138,6 +1155,7 @@ fn analyse_project_inner(
         requirements: requirements.take_files(),
         unit_sources,
         sequence_info,
+        architecture_facts,
         boundary_info,
         doc_scope,
         contract_diff,
