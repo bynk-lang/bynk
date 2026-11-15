@@ -28,7 +28,7 @@ pub const COMMAND_GROUPS: &[(&str, &[&str])] = &[
     (
         "Project",
         &[
-            "new", "check", "fmt", "test", "build", "compile", "openapi", "token",
+            "new", "check", "fmt", "test", "build", "compile", "openapi", "client", "token",
         ],
     ),
     (
@@ -449,7 +449,7 @@ pub enum Command {
         #[command(flatten)]
         lock: LockArgs,
     },
-    /// Write a typed TypeScript client for the project's HTTP services.
+    /// Write a typed TypeScript client for the HTTP services.
     ///
     /// One module a front end (SvelteKit, Next.js, anything that can `fetch`)
     /// imports (#3508): one function per `from http` route, the boundary types as
