@@ -141,6 +141,29 @@ async function test_each_case_starts_from_an_empty_database() {
   }
 }
 
+async function test_a_handle_may_take_any_name__the_harness_s_own_included() {
+  try {
+    __bynkHarness = undefined;
+    __bynkClockNow = 0;
+    const deps: any = __makeHarness();
+    const { Order } = __ns_shop_orders;
+    type Order = __ns_shop_orders.Order;
+    const { SqlValue } = __ns_bynk_cloudflare;
+    type SqlValue = __ns_bynk_cloudflare.SqlValue;
+    const env = (deps.__peek_shop_orders_Orders = new bynk_cloudflare__binding.WorkersD1({ D1_ORDERS: deps.env___ns_shop_orders.D1_ORDERS.readOnly() }, "D1_ORDERS"));
+    const r = await __sysdrive_api_http_POST_orders_Param_id("o2", undefined, "");
+    if (!(((__c: boolean) => __c)(r.tag === "Ok" && r.value === "stored"))) { throw __bynkExpectFailure("tests/orders.test.bynk:30:12", 1103, 1120, "expect r is Ok(\"stored\")"); }
+    const rows = await (async () => { const __decode = (__s: string): Result<readonly Order[], DecodeError> => { let __j: __JsonValue; try { __j = globalThis.JSON.parse(__s) as __JsonValue; } catch (__e) { return Err({ kind: "Malformed", path: "$", message: String(__e) }); } const __r = __deserialise_List_Order(__j, "$"); if (__r.tag === "Ok") return Ok(__r.value as readonly Order[]); const __be = __r.error; return Err({ kind: __be.kind, path: (__be.kind === "StructuralMismatch" || __be.kind === "RefinementViolation") ? __be.path : "$", message: __be.kind === "StructuralMismatch" ? `expected ${__be.expected}, got ${String(__be.actual)}` : __be.kind === "RefinementViolation" ? __be.violation.message : __be.details }); }; const __r = await deps.__peek_shop_orders_Orders.all("SELECT \"id\", \"owner\", \"qty\" FROM orders WHERE owner = ?1", [SqlValue.Text("bob")]); if (__r.tag === "Err") return Err({ tag: "Sql" as const, error: __r.error }); const __d = __decode(__r.value); return __d.tag === "Ok" ? Ok(__d.value) : Err({ tag: "Decode" as const, error: __d.error }); })();
+    if (!(((__c: boolean) => __c)(rows.tag === "Ok" && rows.value.length === 1 && rows.value[0].id === "o2" && rows.value[0].owner === "bob" && rows.value[0].qty === 2))) { throw __bynkExpectFailure("tests/orders.test.bynk:33:12", 1214, 1272, "expect rows is Ok([Order { id: \"o2\", owner: \"bob\", qty: 2, .. }])"); }
+    return { pass: true };
+  } catch (e) {
+    if (e instanceof ExpectationError) {
+      return { pass: false, error: { message: e.message, location: e.location } };
+    }
+    return { pass: false, error: { message: String(e), location: "unknown", violation: __bynkViolationOf(e) } };
+  }
+}
+
 type CaseResult = {
   name: string;
   pass: boolean;
@@ -155,7 +178,7 @@ const __bynkCasePerformance = (globalThis as unknown as { performance?: { now():
 const __bynkCaseNow = (): number => (__bynkCasePerformance ? __bynkCasePerformance.now() : Date.now());
 const __bynkCaseSince = (started: number): number => Math.round((__bynkCaseNow() - started) * 100) / 100;
 
-export const __bynkCases: readonly string[] = ["a handle reads what the app wrote", "each case starts from an empty database"];
+export const __bynkCases: readonly string[] = ["a handle reads what the app wrote", "each case starts from an empty database", "a handle may take any name, the harness's own included"];
 
 export async function run(only?: string, onCase?: (a0: CaseResult) => void) {
   const results = [];
@@ -169,6 +192,12 @@ export async function run(only?: string, onCase?: (a0: CaseResult) => void) {
   if (want("each case starts from an empty database")) {
     const started = __bynkCaseNow();
     const r = { name: "each case starts from an empty database", ...(await test_each_case_starts_from_an_empty_database()), durationMs: __bynkCaseSince(started) };
+    results.push(r);
+    if (onCase) onCase(r);
+  }
+  if (want("a handle may take any name, the harness's own included")) {
+    const started = __bynkCaseNow();
+    const r = { name: "a handle may take any name, the harness's own included", ...(await test_a_handle_may_take_any_name__the_harness_s_own_included()), durationMs: __bynkCaseSince(started) };
     results.push(r);
     if (onCase) onCase(r);
   }

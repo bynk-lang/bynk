@@ -23,4 +23,13 @@ suite shop.orders as system {
     let rows <- db.select[Order]("FROM orders WHERE owner = ?1", [Text("bob")])
     expect rows is Ok([])
   }
+
+  case "a handle may take any name, the harness's own included" {
+    let env = D1.peek(shop.orders.Orders)
+    let r <- api.POST("/orders/:id", "o2") by Visitor
+    expect r is Ok("stored")
+
+    let rows <- env.select[Order]("FROM orders WHERE owner = ?1", [Text("bob")])
+    expect rows is Ok([Order { id: "o2", owner: "bob", qty: 2, .. }])
+  }
 }

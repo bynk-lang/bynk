@@ -257,7 +257,9 @@ fn check_create(args: &[Expr], span: Span, expr_id: ExprId, ctx: &mut Ctx) -> Op
         expr_id,
         Callee::D1Peek {
             participant: participant.clone(),
-            binding: binding.clone().unwrap_or_default(),
+            // A `D1` capability always has a binding: `peek_not_a_database`
+            // refused any other above.
+            binding: binding.clone().expect("a D1 capability has a binding"),
             local: local_name(&participant, &cap),
         },
     );
