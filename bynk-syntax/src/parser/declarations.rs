@@ -629,6 +629,7 @@ impl<'a> Parser<'a> {
         }
         self.enter_item_loop();
         let mut uses = Vec::new();
+        let mut consumes = Vec::new();
         let mut stubs = Vec::new();
         let mut envs = Vec::new();
         let mut cases = Vec::new();
@@ -698,6 +699,36 @@ impl<'a> Parser<'a> {
                             u.trivia.trailing = self.take_trailing_trivia();
                             last_span = u.span;
                             uses.push(u);
+                        }
+                        Err(e) => self.handle_item_err(e)?,
+                    }
+                }
+                // #3536: a suite file consumes what it names, as a unit's file does.
+                Some(TokenKind::Consumes) => {
+                    if let Some(doc) = item_doc {
+                        let doc_span = doc.span;
+                        self.warnings.push(CompileError::new(
+                            "bynk.parse.orphan_doc_block",
+                            doc_span,
+                            "documentation block before `consumes` is not allowed",
+                        ));
+                        keep_orphan(&mut leading, doc);
+                    }
+                    if !brace && seen_non_uses {
+                        let t = self.peek().unwrap();
+                        return Err(CompileError::new(
+                            "bynk.parse.consumes_after_decls",
+                            t.span,
+                            "`consumes` clauses must appear before any `stub`, `env`, `fixture`, `type`, `const`, `fn`, `case`, or `property` declarations in a fragment-form test",
+                        )
+                        .with_note("move all `consumes` lines to immediately after the `uses` clauses"));
+                    }
+                    match self.parse_consumes_decl() {
+                        Ok(mut c) => {
+                            c.trivia.leading = leading;
+                            c.trivia.trailing = self.take_trailing_trivia();
+                            last_span = c.span;
+                            consumes.push(c);
                         }
                         Err(e) => self.handle_item_err(e)?,
                     }
@@ -878,6 +909,7 @@ impl<'a> Parser<'a> {
         Ok(SuiteDecl {
             target,
             uses,
+            consumes,
             stubs,
             envs,
             cases,

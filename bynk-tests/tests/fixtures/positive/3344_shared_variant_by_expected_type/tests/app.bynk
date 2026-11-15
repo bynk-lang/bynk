@@ -1,5 +1,7 @@
 suite app
 
+consumes mail { MailError }
+
 case "a stubbed bare variant builds the operation's error sum" {
   stub Mailer.send(_) returns Err(Failed("down"))
   let r <- go.call("a")

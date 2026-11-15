@@ -1,5 +1,7 @@
 suite mirror
 
+consumes bynk { FetchError, Method, Response }
+
 // #2586: `sendWith` stubs as `send` does; every Logger level is observed.
 
 case "a redirect is returned, not followed, and logged with its status" {

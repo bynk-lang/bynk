@@ -111,7 +111,7 @@ async function test_a_let_bound_message_passed_to_a_function() {
     const none: ReadonlyMap<string, string> = new globalThis.Map<string, string>();
     const ooo = { from: "ada@example.org", to: "support@shop.example", subject: "Out of office", headers: new globalThis.Map(none).set("auto-submitted", "auto-replied"), messageId: "", text: { tag: "None" as const }, html: { tag: "None" as const }, attachments: [], size: 0 };
     const __r0 = triage(ooo, true);
-    if (!(((__c: boolean) => __c)(__r0.tag === "Reply"))) { throw __bynkExpectFailure("tests/inbox.bynk:11:9", 297, 326, "expect triage(ooo, true) is Reply(_)"); }
+    if (!(((__c: boolean) => __c)(__r0.tag === "Reply"))) { throw __bynkExpectFailure("tests/inbox.bynk:13:9", 354, 383, "expect triage(ooo, true) is Reply(_)"); }
     return { pass: true };
   } catch (e) {
     if (e instanceof ExpectationError) {

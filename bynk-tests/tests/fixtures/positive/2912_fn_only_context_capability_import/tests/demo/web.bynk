@@ -1,4 +1,5 @@
 suite demo.web {
+	consumes bynk { Response }
 	case "inline" {
 		stub Fetch.send(_) returns Ok(Response { status: 200, headers: Map.empty(), body: "" })
 		let s <- probe("https://x")

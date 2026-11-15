@@ -1,5 +1,7 @@
 suite mirror
 
+consumes bynk { FetchError, Method, StreamResponse }
+
 // #2627: `receiveStream` and `sendStream` stub as `send` does; a stub's
 // `returns` is built afresh on each call, so each call gets its own stream.
 

@@ -1020,28 +1020,19 @@ fn warn_unselected_type_names(
     );
 }
 
-/// Where a `consumes` line the file lacks is inserted: after its last `uses` or
-/// `consumes` clause (the parser wants them ahead of every declaration), else
-/// after the `context` header of a headerless file. A braced header has no such
-/// place without reading the source, so it gets no fix.
-fn new_consumes_position(pf: &ParsedFile) -> Option<(usize, &'static str)> {
+/// Where a `consumes` line the file lacks is inserted ([`resolver::new_consumes_position`]).
+fn new_consumes_position(pf: &ParsedFile) -> Option<(usize, String)> {
     let last = pf
         .uses()
         .iter()
         .map(|u| u.span.end)
         .chain(pf.consumes().iter().map(|c| c.span.end))
         .max();
-    if let Some(end) = last {
-        return Some((end, "\n"));
-    }
-    match pf.unit() {
-        bynk_syntax::ast::SourceUnit::Context(c)
-            if c.form == bynk_syntax::ast::CommonsForm::Fragment =>
-        {
-            Some((c.name.span.end, "\n\n"))
-        }
-        _ => None,
-    }
+    let bynk_syntax::ast::SourceUnit::Context(c) = pf.unit() else {
+        return None;
+    };
+    let braced = c.form == bynk_syntax::ast::CommonsForm::Brace;
+    resolver::new_consumes_position(pf.source(), last, c.name.span.end, braced)
 }
 
 #[cfg(test)]

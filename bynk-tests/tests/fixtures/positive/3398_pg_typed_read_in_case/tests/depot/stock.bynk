@@ -1,5 +1,7 @@
 suite depot.stock
 
+consumes bynk.cloudflare { PgRun, PgValue }
+
 type Counted = {
 	n: Int,
 }

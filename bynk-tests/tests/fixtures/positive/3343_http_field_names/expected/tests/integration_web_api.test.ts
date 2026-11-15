@@ -137,7 +137,7 @@ async function test_a___Host__cookie_is_read_into_its_field() {
     __bynkClockNow = 0;
     const deps = __makeHarness();
     const r = await __sysdrive_raw_api_http_GET_me("__Host-sid=abc; theme=dark", undefined, "");
-    if (!(((__c: boolean) => __c)(r.tag === "Handled" && r.value.tag === "Ok" && r.value.value === "abc dark"))) { throw __bynkExpectFailure("tests/api.bynk:39:10", 1242, 1270, "expect r is Handled(Ok(\"abc dark\"))"); }
+    if (!(((__c: boolean) => __c)(r.tag === "Handled" && r.value.tag === "Ok" && r.value.value === "abc dark"))) { throw __bynkExpectFailure("tests/api.bynk:40:10", 1266, 1294, "expect r is Handled(Ok(\"abc dark\"))"); }
     return { pass: true };
   } catch (e) {
     if (e instanceof ExpectationError) {
@@ -153,7 +153,7 @@ async function test_the_field_s_own_name_is_not_the_cookie_s_key() {
     __bynkClockNow = 0;
     const deps = __makeHarness();
     const r = await __sysdrive_raw_api_http_GET_me("sid=abc", undefined, "");
-    if (!(((__c: boolean) => __c)(r.tag === "Handled" && r.value.tag === "Ok" && r.value.value === "- light"))) { throw __bynkExpectFailure("tests/api.bynk:44:10", 1382, 1409, "expect r is Handled(Ok(\"- light\"))"); }
+    if (!(((__c: boolean) => __c)(r.tag === "Handled" && r.value.tag === "Ok" && r.value.value === "- light"))) { throw __bynkExpectFailure("tests/api.bynk:45:10", 1406, 1433, "expect r is Handled(Ok(\"- light\"))"); }
     return { pass: true };
   } catch (e) {
     if (e instanceof ExpectationError) {
@@ -169,7 +169,7 @@ async function test_a_typed_cookies_record_is_written_under_its_wire_name() {
     __bynkClockNow = 0;
     const deps = __makeHarness();
     const r = await __sysdrive_api_http_GET_me({ sid: Some(("xyz" as any)), theme: "dark" }, undefined, "");
-    if (!(((__c: boolean) => __c)(r.tag === "Ok" && r.value === "xyz dark"))) { throw __bynkExpectFailure("tests/api.bynk:49:10", 1558, 1577, "expect r is Ok(\"xyz dark\")"); }
+    if (!(((__c: boolean) => __c)(r.tag === "Ok" && r.value === "xyz dark"))) { throw __bynkExpectFailure("tests/api.bynk:50:10", 1582, 1601, "expect r is Ok(\"xyz dark\")"); }
     return { pass: true };
   } catch (e) {
     if (e instanceof ExpectationError) {
@@ -185,7 +185,7 @@ async function test_a_renamed_query_key_is_read__and_its_refinement_is_still_che
     __bynkClockNow = 0;
     const deps = __makeHarness();
     const r = await __sysdrive_raw_api_http_GET_items("?page-size=7&filter%5Bstatus%5D=done", undefined, "");
-    if (!(((__c: boolean) => __c)(r.tag === "Handled" && r.value.tag === "Ok" && r.value.value === "7 done"))) { throw __bynkExpectFailure("tests/api.bynk:54:10", 1741, 1767, "expect r is Handled(Ok(\"7 done\"))"); }
+    if (!(((__c: boolean) => __c)(r.tag === "Handled" && r.value.tag === "Ok" && r.value.value === "7 done"))) { throw __bynkExpectFailure("tests/api.bynk:55:10", 1765, 1791, "expect r is Handled(Ok(\"7 done\"))"); }
     return { pass: true };
   } catch (e) {
     if (e instanceof ExpectationError) {
@@ -201,7 +201,7 @@ async function test_a_renamed_form_key_is_read() {
     __bynkClockNow = 0;
     const deps = __makeHarness();
     const r = await __sysdrive_raw_api_http_POST_signup("e-mail=a%40b.c&remember-me=on", undefined, "");
-    if (!(((__c: boolean) => __c)(r.tag === "Handled" && r.value.tag === "Ok" && r.value.value === "a@b.c true"))) { throw __bynkExpectFailure("tests/api.bynk:59:10", 1888, 1918, "expect r is Handled(Ok(\"a@b.c true\"))"); }
+    if (!(((__c: boolean) => __c)(r.tag === "Handled" && r.value.tag === "Ok" && r.value.value === "a@b.c true"))) { throw __bynkExpectFailure("tests/api.bynk:60:10", 1912, 1942, "expect r is Handled(Ok(\"a@b.c true\"))"); }
     return { pass: true };
   } catch (e) {
     if (e instanceof ExpectationError) {
@@ -217,7 +217,7 @@ async function test_a_typed_form_is_written_under_its_wire_names() {
     __bynkClockNow = 0;
     const deps = __makeHarness();
     const r = await __sysdrive_api_http_POST_signup({ email: "a@b.c", remember: true }, undefined, "");
-    if (!(((__c: boolean) => __c)(r.tag === "Ok" && r.value === "a@b.c true"))) { throw __bynkExpectFailure("tests/api.bynk:64:10", 2061, 2082, "expect r is Ok(\"a@b.c true\")"); }
+    if (!(((__c: boolean) => __c)(r.tag === "Ok" && r.value === "a@b.c true"))) { throw __bynkExpectFailure("tests/api.bynk:65:10", 2085, 2106, "expect r is Ok(\"a@b.c true\")"); }
     return { pass: true };
   } catch (e) {
     if (e instanceof ExpectationError) {
@@ -233,7 +233,7 @@ async function test_a_renamed_multipart_part_is_read_by_its_wire_name() {
     __bynkClockNow = 0;
     const deps = __makeHarness();
     const r = await __sysdrive_raw_api_http_POST_upload("--bynk-boundary\r\nContent-Disposition: form-data; name=\"doc-title\"\r\n\r\nHello\r\n--bynk-boundary\r\nContent-Disposition: form-data; name=\"photo-file\"; filename=\"p.bin\"\r\nContent-Type: application/octet-stream\r\n\r\nabc\r\n--bynk-boundary--\r\n", undefined, "");
-    if (!(((__c: boolean) => __c)(r.tag === "Handled" && r.value.tag === "Ok" && r.value.value === "Hello 3"))) { throw __bynkExpectFailure("tests/api.bynk:69:10", 2451, 2478, "expect r is Handled(Ok(\"Hello 3\"))"); }
+    if (!(((__c: boolean) => __c)(r.tag === "Handled" && r.value.tag === "Ok" && r.value.value === "Hello 3"))) { throw __bynkExpectFailure("tests/api.bynk:70:10", 2475, 2502, "expect r is Handled(Ok(\"Hello 3\"))"); }
     return { pass: true };
   } catch (e) {
     if (e instanceof ExpectationError) {
@@ -254,11 +254,11 @@ async function test_a_typed_multipart_body_is_written_under_its_wire_names() {
             const png = __d.value;
             const photo = { filename: Some("a.png"), contentType: "image/png", bytes: png };
             const r = await __sysdrive_api_http_POST_upload({ title: "Hi", photo: photo }, undefined, "");
-            if (!(((__c: boolean) => __c)(r.tag === "Ok" && r.value === "Hi 7"))) { throw __bynkExpectFailure("tests/api.bynk:77:12", 2778, 2793, "expect r is Ok(\"Hi 7\")"); }
+            if (!(((__c: boolean) => __c)(r.tag === "Ok" && r.value === "Hi 7"))) { throw __bynkExpectFailure("tests/api.bynk:78:12", 2802, 2817, "expect r is Ok(\"Hi 7\")"); }
             return undefined;
           }
           case "None": {
-            if (!(false)) { throw __bynkExpectFailure("tests/api.bynk:80:12", 2823, 2828, "expect false"); }
+            if (!(false)) { throw __bynkExpectFailure("tests/api.bynk:81:12", 2847, 2852, "expect false"); }
             return undefined;
           }
         }
@@ -279,7 +279,7 @@ async function test_Form_encode_and_Form_decode_agree_at_the_system_tier() {
     __bynkClockNow = 0;
     const deps = __makeHarness();
     const r = await __sysdrive_api_http_GET_roundtrip(undefined, "");
-    if (!(((__c: boolean) => __c)(r.tag === "Ok" && r.value === "e-mail=a%40b.c&remember-me=true a@b.c"))) { throw __bynkExpectFailure("tests/api.bynk:87:10", 2947, 2995, "expect r is Ok(\"e-mail=a%40b.c&remember-me=true a@b.c\")"); }
+    if (!(((__c: boolean) => __c)(r.tag === "Ok" && r.value === "e-mail=a%40b.c&remember-me=true a@b.c"))) { throw __bynkExpectFailure("tests/api.bynk:88:10", 2971, 3019, "expect r is Ok(\"e-mail=a%40b.c&remember-me=true a@b.c\")"); }
     return { pass: true };
   } catch (e) {
     if (e instanceof ExpectationError) {

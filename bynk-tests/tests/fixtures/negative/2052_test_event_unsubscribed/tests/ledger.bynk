@@ -1,5 +1,6 @@
 // #2052: an event address delivers only the event the service subscribes to.
 suite shop.ledger {
+  consumes shop.order { Cancelled }
   case "an event the service does not subscribe to" {
     let _ <- OnPlaced.event(Cancelled { id: "o1" })
   }

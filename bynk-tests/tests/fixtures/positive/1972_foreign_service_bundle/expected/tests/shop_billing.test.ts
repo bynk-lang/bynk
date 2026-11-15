@@ -396,9 +396,9 @@ async function test_a_stubbed_instance_answers() {
     type VectorOf<M> = __ns_bynk_cloudflare.VectorOf<M>;
     type WorkerVersion = __ns_bynk_cloudflare.WorkerVersion;
     const r = await charge.call("a", deps);
-    if (!(r === 201)) { throw __bynkExpectFailure("tests/shop/billing.bynk:9:9", 365, 373, "expect r == 201\n  expected: r == 201\n  actual:   " + __bynkShow((r)) + " == " + __bynkShow((201))); }
-    if (!(((__obs.log["Billing.send"] ?? []).length === (1)))) { throw __bynkExpectFailure("tests/shop/billing.bynk:10:9", 382, 406, "expect Billing.send called once"); }
-    if (!(((__obs.log["Ledger.send"] ?? []).length === 0))) { throw __bynkExpectFailure("tests/shop/billing.bynk:11:9", 415, 439, "expect Ledger.send never called"); }
+    if (!(r === 201)) { throw __bynkExpectFailure("tests/shop/billing.bynk:11:9", 405, 413, "expect r == 201\n  expected: r == 201\n  actual:   " + __bynkShow((r)) + " == " + __bynkShow((201))); }
+    if (!(((__obs.log["Billing.send"] ?? []).length === (1)))) { throw __bynkExpectFailure("tests/shop/billing.bynk:12:9", 422, 446, "expect Billing.send called once"); }
+    if (!(((__obs.log["Ledger.send"] ?? []).length === 0))) { throw __bynkExpectFailure("tests/shop/billing.bynk:13:9", 455, 479, "expect Ledger.send never called"); }
     return { pass: true };
   } catch (e) {
     if (e instanceof ExpectationError) {
@@ -497,7 +497,7 @@ async function test_a_failing_call_is_the_instance_s_error() {
     type VectorOf<M> = __ns_bynk_cloudflare.VectorOf<M>;
     type WorkerVersion = __ns_bynk_cloudflare.WorkerVersion;
     const r = await charge.call("a", deps);
-    if (!(r === 0)) { throw __bynkExpectFailure("tests/shop/billing.bynk:17:9", 569, 575, "expect r == 0\n  expected: r == 0\n  actual:   " + __bynkShow((r)) + " == " + __bynkShow((0))); }
+    if (!(r === 0)) { throw __bynkExpectFailure("tests/shop/billing.bynk:19:9", 609, 615, "expect r == 0\n  expected: r == 0\n  actual:   " + __bynkShow((r)) + " == " + __bynkShow((0))); }
     return { pass: true };
   } catch (e) {
     if (e instanceof ExpectationError) {
@@ -597,8 +597,8 @@ async function test_an_instance_is_stubbed_under_its_own_name_at_integration() {
     type VectorOf<M> = __ns_bynk_cloudflare.VectorOf<M>;
     type WorkerVersion = __ns_bynk_cloudflare.WorkerVersion;
     const r = await audit.call(deps);
-    if (!(r === "e1")) { throw __bynkExpectFailure("tests/shop/billing.bynk:23:9", 783, 792, "expect r == \"e1\"\n  expected: r == \"e1\"\n  actual:   " + __bynkShow((r)) + " == " + __bynkShow(("e1"))); }
-    if (!(((__obs.log["Billing.send"] ?? []).length === 0))) { throw __bynkExpectFailure("tests/shop/billing.bynk:24:9", 801, 826, "expect Billing.send never called"); }
+    if (!(r === "e1")) { throw __bynkExpectFailure("tests/shop/billing.bynk:25:9", 823, 832, "expect r == \"e1\"\n  expected: r == \"e1\"\n  actual:   " + __bynkShow((r)) + " == " + __bynkShow(("e1"))); }
+    if (!(((__obs.log["Billing.send"] ?? []).length === 0))) { throw __bynkExpectFailure("tests/shop/billing.bynk:26:9", 841, 866, "expect Billing.send never called"); }
     return { pass: true };
   } catch (e) {
     if (e instanceof ExpectationError) {

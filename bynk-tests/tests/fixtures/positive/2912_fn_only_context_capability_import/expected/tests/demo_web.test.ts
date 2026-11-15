@@ -139,7 +139,7 @@ async function test_inline() {
     type TimedOut = __ns_bynk.TimedOut;
     type Uuid = __ns_bynk.Uuid;
     const s = await probe("https://x", deps);
-    if (!(s === 200)) { throw __bynkExpectFailure("tests/demo/web.bynk:5:10", 163, 171, "expect s == 200\n  expected: s == 200\n  actual:   " + __bynkShow((s)) + " == " + __bynkShow((200))); }
+    if (!(s === 200)) { throw __bynkExpectFailure("tests/demo/web.bynk:6:10", 191, 199, "expect s == 200\n  expected: s == 200\n  actual:   " + __bynkShow((s)) + " == " + __bynkShow((200))); }
     return { pass: true };
   } catch (e) {
     if (e instanceof ExpectationError) {

@@ -1,5 +1,7 @@
 suite shop.status
 
+consumes bynk.cloudflare { WorkerVersion }
+
 // #3300: the unit double reports a fixed version, and a stub replaces it.
 
 case "the test version is fixed" {

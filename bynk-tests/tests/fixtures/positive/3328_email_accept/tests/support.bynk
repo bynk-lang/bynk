@@ -1,4 +1,5 @@
 suite shop.support {
+  consumes bynk.cloudflare { EmailVerdict, InboundEmail }
   case "a message is accepted" {
     let r <- support.message(InboundEmail { from: "a@b.example", to: "support@shop.example" })
     expect r is Accept

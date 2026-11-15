@@ -2,6 +2,8 @@
 // `svc.event(e)` or `svc.event(e, env)`. Delivery runs the service's pattern
 // filter and `via schema(N)` guard, as the fan-out's delivery does.
 suite shop.ledger {
+  consumes shop.order { Placed, Region }
+  consumes bynk { EventEnvelope }
   case "an event delivered twice is counted once" {
     let e = Placed { id: "o1", region: Region.Domestic }
     let env = EventEnvelope { eventId: "evt-1", publisherId: "shop.order", emittedAt: Instant.fromEpochMillis(0), schemaVersion: 1 }

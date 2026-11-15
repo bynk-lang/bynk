@@ -1857,6 +1857,22 @@ fn check_test_bodies(
             &target_shadowed.0,
             &target_shadowed.1,
         ));
+        // #3536: nor a type its own `consumes` does not bring in.
+        errors.extend(warn_unselected_suite_types(
+            test_decl,
+            &parsed[i],
+            &suite_import_owners(
+                test_decl,
+                target_name,
+                unit_tables,
+                unit_uses,
+                unit_consumes,
+            ),
+            &target_shadowed.1,
+            unit_consumes
+                .get(target_name)
+                .map_or(&[][..], Vec::as_slice),
+        ));
         // v0.25: test-case edges record in the test file, resolving bare
         // names through the *target* unit's namespace.
         // #2834: a suite with helpers is its own namespace for the index, so
@@ -5443,6 +5459,85 @@ pub fn build_privileged_resolved(
             .filter_map(|t| unit_tables.get(t).map(|u| (t, u))),
     ));
     Some((resolved, reach))
+}
+
+/// #3536: each type a unit the suite's target consumes exports, with that unit,
+/// leaving out the names the target (or a commons it `uses`) or the suite
+/// declares itself, which win.
+fn suite_import_owners(
+    suite: &SuiteDecl,
+    target: &str,
+    unit_tables: &HashMap<String, UnitTable>,
+    unit_uses: &HashMap<String, Vec<String>>,
+    unit_consumes: &HashMap<String, Vec<String>>,
+) -> std::collections::BTreeMap<String, String> {
+    let own = |n: &String| {
+        unit_tables
+            .get(target)
+            .is_some_and(|t| t.types.contains_key(n))
+            || unit_uses
+                .get(target)
+                .into_iter()
+                .flatten()
+                .any(|u| unit_tables.get(u).is_some_and(|t| t.types.contains_key(n)))
+            || suite.types.iter().any(|t| t.name.name == *n)
+    };
+    let mut owners = std::collections::BTreeMap::new();
+    for unit in unit_consumes.get(target).into_iter().flatten() {
+        let Some(table) = unit_tables.get(unit) else {
+            continue;
+        };
+        for name in table.types.keys().filter(|n| !own(n)) {
+            owners.entry(name.clone()).or_insert_with(|| unit.clone());
+        }
+    }
+    owners
+}
+
+/// #3536: `bynk.consumes.type_not_selected` for a suite file: its own `consumes`
+/// clauses are what bring a name from another unit into scope, not the target's.
+fn warn_unselected_suite_types(
+    suite: &SuiteDecl,
+    pf: &ParsedFile,
+    owners: &std::collections::BTreeMap<String, String>,
+    types: &HashMap<String, Arc<TypeDecl>>,
+    consumed: &[String],
+) -> Vec<CompileError> {
+    let consumed: std::collections::BTreeSet<String> = consumed.iter().cloned().collect();
+    let file = resolver::FileConsumes {
+        consumed: &consumed,
+        aliases: &HashMap::new(),
+        clauses: &suite.consumes,
+        insert_at: new_suite_consumes_position(suite, pf.source()),
+    };
+    resolver::check_unselected_type_names_in_suite(suite, owners, types, &file)
+}
+
+/// Where a `consumes` line a suite lacks is inserted: after its last `uses` or
+/// `consumes`, else after its `suite <target> [as <tier>]` header
+/// ([`resolver::new_consumes_position`]).
+fn new_suite_consumes_position(suite: &SuiteDecl, source: &str) -> Option<(usize, String)> {
+    let last = suite
+        .uses
+        .iter()
+        .map(|u| u.span.end)
+        .chain(suite.consumes.iter().map(|c| c.span.end))
+        .max();
+    let mut end = suite.target.span.end;
+    let rest = source.get(end..)?;
+    let after_blank = rest.trim_start_matches([' ', '\t']);
+    if let Some(tier) = after_blank
+        .strip_prefix("as")
+        .filter(|t| t.starts_with([' ', '\t']))
+    {
+        let word = tier.trim_start_matches([' ', '\t']);
+        let len = word
+            .find(|c: char| !c.is_ascii_alphanumeric() && c != '_')
+            .unwrap_or(word.len());
+        end = source.len() - word.len() + len;
+    }
+    let braced = suite.form == CommonsForm::Brace;
+    resolver::new_consumes_position(source, last, end, braced)
 }
 
 #[cfg(test)]

@@ -1,4 +1,5 @@
 suite shop.support {
+  consumes bynk.cloudflare { EmailReply, EmailVerdict, InboundEmail }
   case "a reply carries the content" {
     let r <- support.message(InboundEmail { from: "a@b.example", to: "support@shop.example", subject: "order" })
     match r {

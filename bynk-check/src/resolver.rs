@@ -2480,7 +2480,7 @@ pub struct FileConsumes<'a> {
     /// the owner (offset, and the line break that precedes it): after its last
     /// `uses` or `consumes`, else after its header. `None` when the form has no
     /// safe place (a braced header).
-    pub insert_at: Option<(usize, &'static str)>,
+    pub insert_at: Option<(usize, String)>,
 }
 
 impl FileConsumes<'_> {
@@ -2507,6 +2507,44 @@ impl FileConsumes<'_> {
     }
 }
 
+/// #3536: where a `consumes` line a file lacks is inserted, with the line break
+/// (and indent) that precedes it. After the file's last `uses` or `consumes`
+/// clause (the parser wants them ahead of every declaration); else after its
+/// header, which is the text up to `header_end`, then the `{` of a braced file.
+/// `None` when a braced file's `{` is not where it should be.
+pub fn new_consumes_position(
+    source: &str,
+    last_clause_end: Option<usize>,
+    header_end: usize,
+    braced: bool,
+) -> Option<(usize, String)> {
+    if let Some(end) = last_clause_end {
+        let lead = if braced {
+            indent_after(source, end)
+        } else {
+            String::new()
+        };
+        return Some((end, format!("\n{lead}")));
+    }
+    if !braced {
+        return Some((header_end, "\n\n".to_string()));
+    }
+    let rest = source.get(header_end..)?;
+    let open = header_end + (rest.len() - rest.trim_start().len());
+    source[open..].starts_with('{').then_some(())?;
+    let lead = indent_after(source, open + 1);
+    Some((open + 1, format!("\n{lead}")))
+}
+
+/// The indent of the first non-blank line after `at`, or two spaces.
+fn indent_after(source: &str, at: usize) -> String {
+    source
+        .get(at..)
+        .and_then(|rest| rest.split('\n').skip(1).find(|l| !l.trim().is_empty()))
+        .map_or("  ", |l| &l[..l.len() - l.trim_start().len()])
+        .to_string()
+}
+
 /// #3536: `bynk.consumes.type_not_selected`, for each place a file's source
 /// writes the name of a type (or a bare variant of a sum) that a unit it
 /// consumes exports and that **this file's own** `consumes` does not bring in:
@@ -2519,15 +2557,41 @@ pub fn check_unselected_type_names(
     resolved: &ResolvedCommons,
     file: &FileConsumes<'_>,
 ) -> Vec<CompileError> {
-    let mut gated = std::collections::BTreeMap::new();
-    let mut variants = std::collections::BTreeMap::new();
-    let consumed_names = resolved
+    let owners = resolved
         .imported_from
         .iter()
-        .filter(|(_, owner)| file.consumed.contains(*owner));
-    for (name, owner) in consumed_names.filter(|(n, o)| !file.lists(o, n)) {
+        .filter(|(_, owner)| file.consumed.contains(*owner))
+        .map(|(n, o)| (n.clone(), o.clone()))
+        .collect();
+    unselected_gate(&owners, &resolved.types, file, |g| gate_items(g, items))
+}
+
+/// #3536: [`check_unselected_type_names`] for a unit suite. `owners` maps each
+/// type a unit the suite's target consumes exports, except those the target or
+/// the suite declares itself, to that unit; `types` is the suite's view.
+pub fn check_unselected_type_names_in_suite(
+    suite: &SuiteDecl,
+    owners: &std::collections::BTreeMap<String, String>,
+    types: &HashMap<String, Arc<TypeDecl>>,
+    file: &FileConsumes<'_>,
+) -> Vec<CompileError> {
+    unselected_gate(owners, types, file, |g| gate_suite(g, suite))
+}
+
+/// The gate both walk through: every name in `owners` this file's own clauses
+/// do not bring in is warned on where `walk` meets it, along with the bare
+/// variants of its sums.
+fn unselected_gate(
+    owners: &std::collections::BTreeMap<String, String>,
+    types: &HashMap<String, Arc<TypeDecl>>,
+    file: &FileConsumes<'_>,
+    walk: impl FnOnce(&mut Gate<'_>),
+) -> Vec<CompileError> {
+    let mut gated = std::collections::BTreeMap::new();
+    let mut variants = std::collections::BTreeMap::new();
+    for (name, owner) in owners.iter().filter(|(n, o)| !file.lists(o, n)) {
         gated.insert(name.clone(), owner.clone());
-        if let Some(TypeBody::Sum(sum)) = resolved.types.get(name).map(|t| &t.body) {
+        if let Some(TypeBody::Sum(sum)) = types.get(name).map(|t| &t.body) {
             variants.extend(
                 sum.variants
                     .iter()
@@ -2537,7 +2601,7 @@ pub fn check_unselected_type_names(
     }
     // A variant another sum in scope declares is that sum's, not this one's.
     variants.retain(|v, sum| {
-        !resolved.types.iter().any(|(n, t)| {
+        !types.iter().any(|(n, t)| {
             n != sum
                 && !gated.contains_key(n)
                 && matches!(&t.body, TypeBody::Sum(s) if s.variants.iter().any(|x| x.name.name == *v))
@@ -2566,7 +2630,7 @@ pub fn check_unselected_type_names(
         ))
     };
     let report = |id: &Ident, owner: &str| warn(id, &id.name, owner);
-    let variant_report = |id: &Ident, sum: &str| warn(id, sum, &resolved.imported_from[sum]);
+    let variant_report = |id: &Ident, sum: &str| warn(id, sum, &owners[sum]);
     let mut g = Gate {
         hidden: &gated,
         report: &report,
@@ -2575,7 +2639,7 @@ pub fn check_unselected_type_names(
         locals: None,
         errors: Vec::new(),
     };
-    gate_items(&mut g, items);
+    walk(&mut g);
     let errors = std::mem::take(&mut g.errors);
     let hits = hits.into_inner();
     if errors.len() != hits.len() {
@@ -2618,9 +2682,10 @@ fn attach_consumes_fixes(
                     applicable,
                 );
             }
-            let Some((offset, separator)) = file.insert_at else {
+            let Some((offset, separator)) = &file.insert_at else {
                 return e;
             };
+            let offset = *offset;
             let list = needed[owner.as_str()]
                 .iter()
                 .map(|n| file.item(owner, n))

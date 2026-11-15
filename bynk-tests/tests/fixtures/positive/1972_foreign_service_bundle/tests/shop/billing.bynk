@@ -1,4 +1,6 @@
 suite shop.billing
+
+consumes bynk { FetchError, Response }
 // #1972: each `Service` instance has its own double, faulting until stubbed,
 // at both tiers. A system suite binds the Worker's stand-in instead
 // (`1972_system_foreign_service`).

@@ -1,5 +1,7 @@
 suite links
 
+consumes bynk { Response }
+
 // #2594: what `bynk.url` reads, writes and refuses.
 
 case "parse lower-cases the scheme and host and reads the port" {

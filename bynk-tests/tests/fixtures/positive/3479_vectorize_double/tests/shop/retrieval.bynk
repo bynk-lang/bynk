@@ -1,5 +1,7 @@
 suite shop.retrieval
 
+consumes bynk.cloudflare { Condition, FilterOp, IndexInfo, MetaValue, MetadataScope, Mutation, QueryOptions, Vector, VectorError, VectorMatch, VectorOf }
+
 // #3479: the double ranks exactly (smaller euclidean distance is nearer),
 // enforces the declaration (dimensions, `@indexed`), and keeps insert and
 // upsert apart. A write is visible at once, unlike production.

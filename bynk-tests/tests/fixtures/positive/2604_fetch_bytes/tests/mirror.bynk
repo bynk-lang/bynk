@@ -1,5 +1,7 @@
 suite mirror
 
+consumes bynk { BytesResponse, FetchError, Method }
+
 // #2604: `receiveBytes` and `sendBytes` stub as `send` does.
 
 case "a download is uploaded unchanged" {

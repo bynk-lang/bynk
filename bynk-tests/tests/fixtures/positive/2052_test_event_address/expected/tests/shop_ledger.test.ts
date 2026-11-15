@@ -144,8 +144,8 @@ async function test_an_event_delivered_twice_is_counted_once() {
     const __r0 = await __bynkEvent_OnPlaced(e, env, deps);
     const __r1 = await __bynkEvent_OnPlaced(e, env, deps);
     const t = await __makeBooks("all").total(deps);
-    if (!(t === 1)) { throw __bynkExpectFailure("tests/ledger.bynk:11:12", 596, 602, "expect t == 1\n  expected: t == 1\n  actual:   " + __bynkShow((t)) + " == " + __bynkShow((1))); }
-    if (!(((__obs.log["Idempotency.claim"] ?? []).length === (2)))) { throw __bynkExpectFailure("tests/ledger.bynk:12:12", 614, 646, "expect Idempotency.claim called 2 times"); }
+    if (!(t === 1)) { throw __bynkExpectFailure("tests/ledger.bynk:13:12", 671, 677, "expect t == 1\n  expected: t == 1\n  actual:   " + __bynkShow((t)) + " == " + __bynkShow((1))); }
+    if (!(((__obs.log["Idempotency.claim"] ?? []).length === (2)))) { throw __bynkExpectFailure("tests/ledger.bynk:14:12", 689, 721, "expect Idempotency.claim called 2 times"); }
     return { pass: true };
   } catch (e) {
     if (e instanceof ExpectationError) {
@@ -187,7 +187,7 @@ async function test_dedup_holds_at_integration_too() {
     const __r0 = await __bynkEvent_OnPlaced(e, env, deps);
     const __r1 = await __bynkEvent_OnPlaced(e, env, deps);
     const t = await __makeBooks("all").total(deps);
-    if (!(t === 1)) { throw __bynkExpectFailure("tests/ledger.bynk:21:12", 1016, 1022, "expect t == 1\n  expected: t == 1\n  actual:   " + __bynkShow((t)) + " == " + __bynkShow((1))); }
+    if (!(t === 1)) { throw __bynkExpectFailure("tests/ledger.bynk:23:12", 1091, 1097, "expect t == 1\n  expected: t == 1\n  actual:   " + __bynkShow((t)) + " == " + __bynkShow((1))); }
     return { pass: true };
   } catch (e) {
     if (e instanceof ExpectationError) {
@@ -228,9 +228,9 @@ async function test_a_default_envelope_is_fresh_on_each_delivery() {
     const __r0 = await __bynkEvent_OnPlaced(e, undefined, deps);
     const __r1 = await __bynkEvent_OnPlaced(e, undefined, deps);
     const t = await __makeBooks("all").total(deps);
-    if (!(t === 2)) { throw __bynkExpectFailure("tests/ledger.bynk:29:12", 1248, 1254, "expect t == 2\n  expected: t == 2\n  actual:   " + __bynkShow((t)) + " == " + __bynkShow((2))); }
+    if (!(t === 2)) { throw __bynkExpectFailure("tests/ledger.bynk:31:12", 1323, 1329, "expect t == 2\n  expected: t == 2\n  actual:   " + __bynkShow((t)) + " == " + __bynkShow((2))); }
     const p = await __makeBooks("publisher").publisherSeen(deps);
-    if (!(p === "shop.order")) { throw __bynkExpectFailure("tests/ledger.bynk:31:12", 1314, 1331, "expect p == \"shop.order\"\n  expected: p == \"shop.order\"\n  actual:   " + __bynkShow((p)) + " == " + __bynkShow(("shop.order"))); }
+    if (!(p === "shop.order")) { throw __bynkExpectFailure("tests/ledger.bynk:33:12", 1389, 1406, "expect p == \"shop.order\"\n  expected: p == \"shop.order\"\n  actual:   " + __bynkShow((p)) + " == " + __bynkShow(("shop.order"))); }
     return { pass: true };
   } catch (e) {
     if (e instanceof ExpectationError) {
@@ -272,8 +272,8 @@ async function test_a_default_envelope_carries_the_current_schema_version() {
     const __r1 = await __bynkEvent_OnV2(e, undefined, deps);
     const v1 = await __makeBooks("v1").total(deps);
     const v2 = await __makeBooks("v2").total(deps);
-    if (!(v1 === 1)) { throw __bynkExpectFailure("tests/ledger.bynk:40:12", 1592, 1599, "expect v1 == 1\n  expected: v1 == 1\n  actual:   " + __bynkShow((v1)) + " == " + __bynkShow((1))); }
-    if (!(v2 === 0)) { throw __bynkExpectFailure("tests/ledger.bynk:41:12", 1611, 1618, "expect v2 == 0\n  expected: v2 == 0\n  actual:   " + __bynkShow((v2)) + " == " + __bynkShow((0))); }
+    if (!(v1 === 1)) { throw __bynkExpectFailure("tests/ledger.bynk:42:12", 1667, 1674, "expect v1 == 1\n  expected: v1 == 1\n  actual:   " + __bynkShow((v1)) + " == " + __bynkShow((1))); }
+    if (!(v2 === 0)) { throw __bynkExpectFailure("tests/ledger.bynk:43:12", 1686, 1693, "expect v2 == 0\n  expected: v2 == 0\n  actual:   " + __bynkShow((v2)) + " == " + __bynkShow((0))); }
     return { pass: true };
   } catch (e) {
     if (e instanceof ExpectationError) {
@@ -312,10 +312,10 @@ async function test_the_pattern_filter_is_honoured() {
     type Uuid = __ns_bynk.Uuid;
     const __r0 = await __bynkEvent_OnDomestic({ id: "o1", region: Region.International }, undefined, deps);
     const before = await __makeBooks("domestic").total(deps);
-    if (!(before === 0)) { throw __bynkExpectFailure("tests/ledger.bynk:47:12", 1802, 1813, "expect before == 0\n  expected: before == 0\n  actual:   " + __bynkShow((before)) + " == " + __bynkShow((0))); }
+    if (!(before === 0)) { throw __bynkExpectFailure("tests/ledger.bynk:49:12", 1877, 1888, "expect before == 0\n  expected: before == 0\n  actual:   " + __bynkShow((before)) + " == " + __bynkShow((0))); }
     const __r1 = await __bynkEvent_OnDomestic({ id: "o2", region: Region.Domestic }, undefined, deps);
     const after = await __makeBooks("domestic").total(deps);
-    if (!(after === 1)) { throw __bynkExpectFailure("tests/ledger.bynk:50:12", 1944, 1954, "expect after == 1\n  expected: after == 1\n  actual:   " + __bynkShow((after)) + " == " + __bynkShow((1))); }
+    if (!(after === 1)) { throw __bynkExpectFailure("tests/ledger.bynk:52:12", 2019, 2029, "expect after == 1\n  expected: after == 1\n  actual:   " + __bynkShow((after)) + " == " + __bynkShow((1))); }
     return { pass: true };
   } catch (e) {
     if (e instanceof ExpectationError) {
@@ -358,8 +358,8 @@ async function test_the_schema_guard_is_honoured() {
     const __r1 = await __bynkEvent_OnV2(e, env, deps);
     const v1 = await __makeBooks("v1").total(deps);
     const v2 = await __makeBooks("v2").total(deps);
-    if (!(v1 === 0)) { throw __bynkExpectFailure("tests/ledger.bynk:60:12", 2348, 2355, "expect v1 == 0\n  expected: v1 == 0\n  actual:   " + __bynkShow((v1)) + " == " + __bynkShow((0))); }
-    if (!(v2 === 1)) { throw __bynkExpectFailure("tests/ledger.bynk:61:12", 2367, 2374, "expect v2 == 1\n  expected: v2 == 1\n  actual:   " + __bynkShow((v2)) + " == " + __bynkShow((1))); }
+    if (!(v1 === 0)) { throw __bynkExpectFailure("tests/ledger.bynk:62:12", 2423, 2430, "expect v1 == 0\n  expected: v1 == 0\n  actual:   " + __bynkShow((v1)) + " == " + __bynkShow((0))); }
+    if (!(v2 === 1)) { throw __bynkExpectFailure("tests/ledger.bynk:63:12", 2442, 2449, "expect v2 == 1\n  expected: v2 == 1\n  actual:   " + __bynkShow((v2)) + " == " + __bynkShow((1))); }
     return { pass: true };
   } catch (e) {
     if (e instanceof ExpectationError) {

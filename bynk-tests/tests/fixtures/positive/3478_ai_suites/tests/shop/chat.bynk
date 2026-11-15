@@ -1,5 +1,7 @@
 suite shop.chat
 
+consumes bynk.cloudflare { AiError, Generation, TokenUsage }
+
 // #3478: every typed operation faults until stubbed, and a stub is what the
 // handler sees, including the `BadReply` a binding would return.
 

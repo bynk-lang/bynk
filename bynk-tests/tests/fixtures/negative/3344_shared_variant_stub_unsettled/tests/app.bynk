@@ -1,5 +1,7 @@
 suite app
 
+consumes mail { MailError }
+
 // #3344: `audit` fails with a `String`, so its type settles neither sum that
 // declares `Failed`. The value is reported as ambiguous, not folded into
 // `bynk.stub.rhs_type`.
