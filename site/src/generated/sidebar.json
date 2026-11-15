@@ -440,6 +440,10 @@
             "link": "/book/guides/testing/run-tests/"
           },
           {
+            "label": "Check what a request stored",
+            "link": "/book/guides/testing/check-what-the-app-stored/"
+          },
+          {
             "label": "Test against a running system",
             "link": "/book/guides/testing/against-a-running-system/"
           }

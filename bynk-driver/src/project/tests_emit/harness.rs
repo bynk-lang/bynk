@@ -241,6 +241,11 @@ pub(super) fn emit_integration_harness<'a>(
                     ident("__makeIntegrationAiSearch"),
                     vec![str_lit(&binding.name)],
                 ),
+                // #3513 A: a test never reaches the origin, so the binding faults,
+                // naming the instance, until the case stubs its `send`.
+                BindingSource::MtlsCertificate { capability, .. } => {
+                    call(ident("__makeIntegrationMtls"), vec![str_lit(capability)])
+                }
                 // #3477: there is no in-process container, so the binding faults,
                 // naming itself, until the case stubs the instance.
                 BindingSource::ContainerInstance { .. } => call(

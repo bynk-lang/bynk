@@ -1,0 +1,9 @@
+context api
+
+consumes bynk.cloudflare { RequestCf }
+
+service api from http {
+    on GET("/hello") (cf: RequestCf) -> Effect[HttpResult[String]] by v: Visitor {
+        Ok("x")
+    }
+}

@@ -355,6 +355,34 @@ pub(crate) fn link_ai_search_for_run(
     problems.is_empty()
 }
 
+/// The lookups of the account's named resources a run does before it confirms: each AI Search
+/// instance found, and (#3513 A) each mTLS certificate. `false` when either stops the run.
+pub(crate) fn link_named_resources_for_run(
+    order: &[String],
+    resources: &BTreeMap<String, Resources>,
+) -> bool {
+    let search = link_ai_search_for_run(order, resources);
+    let mtls = link_mtls_for_run(order, resources);
+    search && mtls
+}
+
+/// #3513 A: the lookup an `MtlsCertificate` binding needs is not built yet, so a run that
+/// declares one stops here, with nothing pushed, rather than push a certificate's name as its
+/// id. Replaced by the certificate resolver.
+pub(crate) fn link_mtls_for_run(order: &[String], resources: &BTreeMap<String, Resources>) -> bool {
+    let mut ok = true;
+    for worker in order {
+        for decl in &resources[worker].mtls_certificates {
+            eprintln!(
+                "bynk: `{worker}` declares the mTLS certificate `{}` (binding {}), but `bynk deploy` cannot resolve a certificate's id yet, so the Worker would be pushed with its name where Cloudflare expects an id; remove the `MtlsCertificate` instance from the deploy until the resolver lands",
+                decl.certificate, decl.binding
+            );
+            ok = false;
+        }
+    }
+    ok
+}
+
 /// Record the instances `worker`'s `AiSearch` bindings were linked to, before
 /// the push. Looked up in [`link_ai_search_for_run`], which stops the run when
 /// one is missing, so reaching here means each was found.
@@ -984,5 +1012,18 @@ mod tests {
             }
         ));
         std::fs::remove_dir_all(&dir).ok();
+    }
+
+    /// #3513 A: until the certificate resolver exists, a run that declares an mTLS binding stops
+    /// before anything is pushed, and one that declares none is not held up.
+    #[test]
+    fn an_mtls_binding_stops_the_run_until_the_resolver_exists() {
+        let with = BTreeMap::from([(
+            "shop".to_string(),
+            Resources::default().mtls_certificates(&[("MTLS_BACKEND", "acme-client")]),
+        )]);
+        assert!(!link_mtls_for_run(&["shop".to_string()], &with));
+        let without = BTreeMap::from([("shop".to_string(), Resources::default())]);
+        assert!(link_mtls_for_run(&["shop".to_string()], &without));
     }
 }

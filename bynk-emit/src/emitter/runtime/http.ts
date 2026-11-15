@@ -785,6 +785,38 @@ export function requestHeaderPairs(view: RequestHeaders, dropAuthorization = fal
   return out;
 }
 
+/** #3513 (C): an HTTP handler's `cf: RequestCf` — what Cloudflare derived about the
+ *  connection (`request.cf`), as the JSON the `RequestCf` codec reads. Only a field
+ *  that is present and of the shape Cloudflare documents is kept; anything else is
+ *  left out, so the record's default (`None`) fills it. `request.cf` itself may be
+ *  absent (a test, the dashboard preview): the result is then empty. `latitude` and
+ *  `longitude` are numeric strings on the platform and are read as numbers. */
+export function cfObject(request: Request): { [key: string]: JsonValue } {
+  const cf = (request as unknown as { cf?: unknown }).cf;
+  const out: { [key: string]: JsonValue } = {};
+  if (cf === null || typeof cf !== "object") return out;
+  const props = cf as Record<string, unknown>;
+  for (const k of [
+    "country", "continent", "city", "region", "regionCode", "postalCode", "timezone",
+    "colo", "asOrganization", "httpProtocol", "tlsVersion",
+  ]) {
+    const v = props[k];
+    if (typeof v === "string") out[k] = v;
+  }
+  for (const k of ["latitude", "longitude"]) {
+    const v = props[k];
+    const n = typeof v === "number" ? v : typeof v === "string" && v.trim() !== "" ? Number(v) : NaN;
+    if (Number.isFinite(n)) out[k] = n;
+  }
+  const asn = props["asn"];
+  if (typeof asn === "number" && Number.isSafeInteger(asn)) out["asn"] = asn;
+  // Cloudflare reports `"1"` for a country in the EU, and omits the field or sends `false` otherwise.
+  const eu = props["isEUCountry"];
+  if (eu === "1" || eu === true) out["isEuCountry"] = true;
+  else if (eu === "0" || eu === false) out["isEuCountry"] = false;
+  return out;
+}
+
 // #2854 (decision B): an HTTP handler's `query: RequestQuery` — a read-only view
 // of the request's query string. `get` is the first value of a key, `all` every
 // value in order, `params` every key with its values. Names and values are
@@ -1810,5 +1842,5 @@ function stripWeakPrefix(tag: string): string {
 }
 
 // #1653: the `__` aliases emitted code imports.
-export { applyCache as __applyCache, applyCors as __applyCors, applyEdgeCache as __applyEdgeCache, applySecurityHeaders as __applySecurityHeaders, corsPreflightResponse as __corsPreflightResponse, edgeCacheGuard as __edgeCacheGuard, headResponse as __headResponse, withPlainJson as __withPlainJson, httpResultToResponse as __httpResultToResponse, untilBodyTooLarge as __untilBodyTooLarge, matchPath as __matchPath, mediaTypeMatches as __mediaTypeMatches, multipartForm as __multipartForm, multipartMediaTypeMatches as __multipartMediaTypeMatches, multipartObject as __multipartObject, requestHeaders as __requestHeaders, formMediaTypeMatches as __formMediaTypeMatches, formDecode as __formDecode, formObject as __formObject, formString as __formString, cookieObject as __cookieObject, cookieValue as __cookieValue, csrfAllowed as __csrfAllowed, sessionCookieOf as __sessionCookieOf, cookieString as __cookieString, queryObject as __queryObject, queryString as __queryString, requestCookies as __requestCookies, requestCookiesHeader as __requestCookiesHeader, requestQuery as __requestQuery, requestQuerySearch as __requestQuerySearch, renderRejection as __renderRejection, requestBodyStream as __requestBodyStream, requestHeaderPairs as __requestHeaderPairs, noStore as __noStore, notModifiedIfMatch as __notModifiedIfMatch, responseToHttpOutcome as __responseToHttpOutcome, responseToHttpResult as __responseToHttpResult, responseToUnauthOutcome as __responseToUnauthOutcome, varyAcceptLanguage as __varyAcceptLanguage };
+export { applyCache as __applyCache, applyCors as __applyCors, applyEdgeCache as __applyEdgeCache, applySecurityHeaders as __applySecurityHeaders, corsPreflightResponse as __corsPreflightResponse, edgeCacheGuard as __edgeCacheGuard, headResponse as __headResponse, withPlainJson as __withPlainJson, httpResultToResponse as __httpResultToResponse, untilBodyTooLarge as __untilBodyTooLarge, matchPath as __matchPath, mediaTypeMatches as __mediaTypeMatches, multipartForm as __multipartForm, multipartMediaTypeMatches as __multipartMediaTypeMatches, multipartObject as __multipartObject, requestHeaders as __requestHeaders, formMediaTypeMatches as __formMediaTypeMatches, formDecode as __formDecode, formObject as __formObject, formString as __formString, cfObject as __cfObject, cookieObject as __cookieObject, cookieValue as __cookieValue, csrfAllowed as __csrfAllowed, sessionCookieOf as __sessionCookieOf, cookieString as __cookieString, queryObject as __queryObject, queryString as __queryString, requestCookies as __requestCookies, requestCookiesHeader as __requestCookiesHeader, requestQuery as __requestQuery, requestQuerySearch as __requestQuerySearch, renderRejection as __renderRejection, requestBodyStream as __requestBodyStream, requestHeaderPairs as __requestHeaderPairs, noStore as __noStore, notModifiedIfMatch as __notModifiedIfMatch, responseToHttpOutcome as __responseToHttpOutcome, responseToHttpResult as __responseToHttpResult, responseToUnauthOutcome as __responseToUnauthOutcome, varyAcceptLanguage as __varyAcceptLanguage };
 export type { CorsPolicy as __CorsPolicy, SecurityPolicy as __SecurityPolicy };

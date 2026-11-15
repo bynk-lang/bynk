@@ -122,6 +122,11 @@ pub fn semantic_tokens(
     };
     let mut raw: Vec<(Span, u32, u32)> = Vec::new();
     for (key, entry) in &index.symbols {
+        // #3582: a service handler is call-hierarchy-only; the call site keeps
+        // the `Service` token and the `on` keyword stays a keyword.
+        if entry.call_only {
+            continue;
+        }
         let ty = token_type_index(key.kind);
         let mods = modifier_bits(entry.modifiers);
         if let Some(def) = &entry.def
@@ -386,6 +391,41 @@ mod tests {
             ),
             (0, 8, 3)
         );
+    }
+
+    /// #3582: a call-only service handler adds no token — the call site keeps
+    /// its `service` token and the `on` keyword is not classified.
+    #[test]
+    fn call_only_service_handler_adds_no_tokens() {
+        let mut index = ProjectIndex::default();
+        index.symbols.insert(
+            SymbolKey {
+                unit: "u".into(),
+                kind: SymbolKind::Service,
+                name: "charge".into(),
+            },
+            SymbolEntry {
+                def: Some(site("a.bynk", 0, 6)),
+                refs: vec![site("a.bynk", 20, 26)],
+                ..Default::default()
+            },
+        );
+        index.symbols.insert(
+            SymbolKey {
+                unit: "u".into(),
+                kind: SymbolKind::Handler,
+                name: "charge.call".into(),
+            },
+            SymbolEntry {
+                def: Some(site("a.bynk", 10, 12)),
+                refs: vec![site("a.bynk", 20, 26)],
+                call_only: true,
+                ..Default::default()
+            },
+        );
+        let toks = semantic_tokens(&index, &[], &[], Path::new("a.bynk"), &" ".repeat(40), None);
+        assert_eq!(toks.len(), 2, "service def + service call site only");
+        assert!(toks.iter().all(|t| t.token_type == 3));
     }
 
     #[test]

@@ -661,6 +661,12 @@ The contract: it returns at once, never awaiting `promise`, after handing the ef
 - `Ok`, and any payload that is not a `Result`, report nothing.
 
 When `exec` has a `report` hook, as the test harness's double does, each report is handed to it
-and not logged, and it does not fail the case (ADR 0478). Like `__bynkSettleAll`, it is
+and not logged, and it does not fail the case (ADR 0478). The cron, queue and email doubles
+supply it too (#3541), so a detached `Err` there is counted in the case's `detached_failures`.
+A Bundle build has no platform to record an exception: its composition root hands handlers
+`__bynkProcessExec()`, whose `waitUntil` reports a fault as one structured `console.error`
+record, `{ message: "a detached effect faulted", level: "error", fields: { site, error } }`,
+with `site` read from the reason's `detachedAt` (empty for an effect abandoned by `within`).
+Like `__bynkSettleAll`, it is
 codegen, not part of the published emit ABI (ADR 0310), and lives in the `settle` runtime
 module.

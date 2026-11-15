@@ -29,6 +29,7 @@ pub mod actors;
 pub mod agent_state;
 pub mod analysis;
 pub mod annotation_consts;
+pub mod architecture_facts;
 pub mod assets;
 pub mod ast_text;
 pub mod builtin_names;
@@ -87,5 +88,6 @@ pub mod wire;
 pub mod wire_default;
 pub mod wire_format;
 pub mod worker_bindings;
+pub mod worker_groups;
 
 pub use firstparty::Platform;

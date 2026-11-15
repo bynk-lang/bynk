@@ -41,6 +41,8 @@ pub mod roots;
 pub mod schema_registry;
 pub mod snapshots;
 pub mod vectorize;
+pub mod worker_groups;
+pub mod worker_layout;
 pub mod workspace;
 
 mod diagnostics;

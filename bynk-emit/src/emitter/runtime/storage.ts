@@ -840,7 +840,9 @@ function sqlParameters(sql: string): { count: number; numbered: string[]; bare: 
  * `wrangler d1 migrations apply` runs them. One that fails faults, naming the
  * file, so every test using the database fails the same way.
  */
-export function makeIntegrationD1(migrations: readonly (readonly [string, string])[] = []): D1Database {
+export function makeIntegrationD1(
+  migrations: readonly (readonly [string, string])[] = [],
+): D1Database & { readOnly(): D1Database } {
   const node = (globalThis as { process?: { getBuiltinModule?(id: string): unknown } }).process;
   const sqlite = node?.getBuiltinModule?.("node:sqlite") as
     | { DatabaseSync: new (path: string) => SqliteDatabase }
@@ -880,7 +882,20 @@ export function makeIntegrationD1(migrations: readonly (readonly [string, string
     changes: Number(r.changes),
     last_row_id: Number(r.lastInsertRowid),
   });
-  const statement = (sql: string, params: unknown[]): D1PreparedStatement & { exec(): D1Result } => {
+  // #3147: a `D1.peek` handle reads the database the app wrote, and never
+  // writes it. Its statements run with `query_only` on, for the statement's
+  // own (synchronous) execution only, so the app's own statements in flight
+  // are never refused. SQLite refuses a write then, whatever the statement.
+  const readOnly = <T>(guarded: boolean, f: () => T): T => {
+    if (!guarded) return f();
+    db.exec("PRAGMA query_only = ON");
+    try {
+      return f();
+    } finally {
+      db.exec("PRAGMA query_only = OFF");
+    }
+  };
+  const statement = (sql: string, params: unknown[], guarded = false): D1PreparedStatement & { exec(): D1Result } => {
     const values = params.map((v) => (typeof v === "number" && Number.isInteger(v) ? BigInt(v) : v));
     // Node before 22.18 refuses positional values for numbered parameters
     // (`?1`), so those bind by name: `{ "?1": … }`, one key per number used.
@@ -907,11 +922,11 @@ export function makeIntegrationD1(migrations: readonly (readonly [string, string
       return db.prepare(text);
     };
     return {
-      bind: (...values: unknown[]) => statement(sql, values),
-      all: async () => ({ results: attempt(() => prepared().all(...bound)), meta: {} }),
-      first: async () => attempt(() => prepared().get(...bound)) ?? null,
-      run: async () => ({ results: [], meta: meta(attempt(() => prepared().run(...bound))) }),
-      exec: () => ({ results: [], meta: meta(attempt(() => prepared().run(...bound))) }),
+      bind: (...values: unknown[]) => statement(sql, values, guarded),
+      all: async () => ({ results: attempt(() => readOnly(guarded, () => prepared().all(...bound))), meta: {} }),
+      first: async () => attempt(() => readOnly(guarded, () => prepared().get(...bound))) ?? null,
+      run: async () => ({ results: [], meta: meta(attempt(() => readOnly(guarded, () => prepared().run(...bound)))) }),
+      exec: () => ({ results: [], meta: meta(attempt(() => readOnly(guarded, () => prepared().run(...bound)))) }),
     };
   };
   return {
@@ -927,6 +942,13 @@ export function makeIntegrationD1(migrations: readonly (readonly [string, string
         throw e;
       }
     },
+    // #3147: the same database, read-only, for `D1.peek`.
+    readOnly: (): D1Database => ({
+      prepare: (sql: string) => statement(sql, [], true),
+      async batch(): Promise<D1Result[]> {
+        throw d1Error(new Error("a D1.peek handle is read-only"));
+      },
+    }),
   };
 }
 
@@ -999,6 +1021,21 @@ export function makeIntegrationAiSearch(binding: string): AiSearchInstance {
     );
   };
   return { search: unstubbed, chatCompletions: unstubbed };
+}
+
+/**
+ * The mTLS certificate binding of a multi-Worker integration test participant (#3513 A), bound
+ * as its `env.<binding>`. A test never reaches an origin, so `fetch` faults, naming the
+ * instance, until the case stubs its `send`.
+ */
+export function makeIntegrationMtls(instance: string): { fetch(request: unknown): Promise<never> } {
+  return {
+    fetch: async (): Promise<never> => {
+      throw new globalThis.Error(
+        `bynk: \`${instance}.send\` is not stubbed, and a test never reaches the origin — add \`stub ${instance}.send(_) returns …\``,
+      );
+    },
+  };
 }
 
 /**
@@ -1108,5 +1145,5 @@ export function makeIntegrationHyperdrive(binding: string): Hyperdrive {
 }
 
 // #1653: the `__` aliases emitted code imports.
-export { makeIntegrationAi as __makeIntegrationAi, makeIntegrationContainer as __makeIntegrationContainer, makeIntegrationAnalytics as __makeIntegrationAnalytics, makeIntegrationD1 as __makeIntegrationD1, makeIntegrationEmail as __makeIntegrationEmail, makeIntegrationHyperdrive as __makeIntegrationHyperdrive, makeIntegrationKv as __makeIntegrationKv, makeIntegrationQueue as __makeIntegrationQueue, makeIntegrationR2 as __makeIntegrationR2, makeIntegrationRateLimit as __makeIntegrationRateLimit, makeIntegrationSecretsStoreSecret as __makeIntegrationSecretsStoreSecret, makeIntegrationAiSearch as __makeIntegrationAiSearch, makeIntegrationVersionMetadata as __makeIntegrationVersionMetadata, makeTestState as __makeTestState };
+export { makeIntegrationAi as __makeIntegrationAi, makeIntegrationContainer as __makeIntegrationContainer, makeIntegrationAnalytics as __makeIntegrationAnalytics, makeIntegrationD1 as __makeIntegrationD1, makeIntegrationEmail as __makeIntegrationEmail, makeIntegrationHyperdrive as __makeIntegrationHyperdrive, makeIntegrationKv as __makeIntegrationKv, makeIntegrationQueue as __makeIntegrationQueue, makeIntegrationR2 as __makeIntegrationR2, makeIntegrationRateLimit as __makeIntegrationRateLimit, makeIntegrationSecretsStoreSecret as __makeIntegrationSecretsStoreSecret, makeIntegrationAiSearch as __makeIntegrationAiSearch, makeIntegrationMtls as __makeIntegrationMtls, makeIntegrationVersionMetadata as __makeIntegrationVersionMetadata, makeTestState as __makeTestState };
 export type { AiSearchInstance as __AiSearchInstance, AnalyticsDataset as __AnalyticsDataset, D1Database as __D1Database, DurableObjectState as __DurableObjectState, Hyperdrive as __Hyperdrive, KVNamespace as __KVNamespace, QueueProducer as __QueueProducer, R2Bucket as __R2Bucket, RateLimiter as __RateLimiter, SecretsStoreSecret as __SecretsStoreSecret, SendEmail as __SendEmail, WorkerAiBinding as __WorkerAiBinding, WorkerVersionMetadata as __WorkerVersionMetadata };

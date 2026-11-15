@@ -569,6 +569,7 @@ fn get_architecture(ws: &Workspace, args: &Value) -> Result<String, String> {
         &a.unit_sources,
         &project.snapshots(),
         &a.sequence_info,
+        &a.architecture_facts,
     );
     if model.nodes.is_empty() {
         return Ok(format!(

@@ -2353,6 +2353,9 @@ fn lower_method_call(
         return pre.finish(s);
     }
     // Capability, cross-context, events and static-type calls (#3167).
+    if let Some(s) = lower_d1_peek_call(e, cx) {
+        return pre.finish(s);
+    }
     if let Some(s) = lower_d1_select_call(e, args, cx, &mut pre) {
         return pre.finish(s);
     }
@@ -2400,6 +2403,27 @@ fn lower_method_call(
     // Instance call: UFCS lowering with the receiver as first arg.
     let call = lower_ufcs_method_call(e, receiver, method, type_args, args, cx, &mut pre);
     pre.finish(call)
+}
+
+/// #3147: lower `D1.peek(<participant>.<Cap>)` in an integration or `system`
+/// case, or `None` when the call is not one. It holds the participant's own
+/// capability over its test database, read-only, as `deps.<local>`: the same
+/// `WorkersD1` the app's code calls, over the very database object the
+/// participant's `env` holds, so a call on the handle (an ordinary capability
+/// call on `deps.<local>`) sees what the app wrote.
+fn lower_d1_peek_call(e: &Expr, cx: &mut LowerCtx) -> Option<String> {
+    let Some(Callee::D1Peek {
+        participant,
+        binding,
+        local,
+    }) = cx.commons().callees.get(&e.id).cloned()
+    else {
+        return None;
+    };
+    let ns = test_scaffold_ns(&participant);
+    Some(format!(
+        "(deps.{local} = new bynk_cloudflare__binding.WorkersD1({{ {binding}: deps.env_{ns}.{binding}.readOnly() }}, \"{binding}\"))"
+    ))
 }
 
 /// Lower a derived-`D1` `select`/`firstAs` call (#2865), or `None` when the call is not one. Moved out of
@@ -2456,11 +2480,12 @@ fn lower_d1_select_call(
             .expect("a checked D1 select row type has a JSON decoder");
         {
             let params = pre.lower(params, cx);
-            let deps = if cx.in_test_case() {
-                "deps".to_string()
-            } else {
-                cx.cap_deps_expr().to_string()
-            };
+            let deps =
+                if cx.in_test_case() || cap.starts_with(bynk_check::checker::peek::LOCAL_PREFIX) {
+                    "deps".to_string()
+                } else {
+                    cx.cap_deps_expr().to_string()
+                };
             let sql = escape_ts_string(&sql);
             let (op, decode) = if first {
                 (
@@ -2773,6 +2798,24 @@ fn lower_capability_call(
             call,
             wire.as_deref(),
             &id.name,
+            &method.name,
+            cx,
+        ));
+    }
+    // #3147: a read through a `D1.peek` handle, whatever the handle is called:
+    // the call is recorded on the capability the case holds as `deps.<cap>`.
+    if let Some(Callee::Capability { cap, .. }) = cx.commons().callee(e.id)
+        && cap.starts_with(bynk_check::checker::peek::LOCAL_PREFIX)
+    {
+        let cap = cap.clone();
+        let mut args_lowered: Vec<String> = args.iter().map(|a| pre.lower(a, cx)).collect();
+        let wire = capability_wire(e, cx);
+        encode_capability_args(wire.as_deref(), &mut args_lowered, cx);
+        let call = format!("deps.{cap}.{}({})", method.name, args_lowered.join(", "));
+        return Some(decode_capability_reply(
+            call,
+            wire.as_deref(),
+            &cap,
             &method.name,
             cx,
         ));

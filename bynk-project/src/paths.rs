@@ -171,6 +171,10 @@ pub enum ProjectPathsError {
         capability: String,
         reason: String,
     },
+    /// #3562: a `[deploy.workers.<key>]` group that is not well formed, or
+    /// that breaks a rule across groups. The reason may lead with the
+    /// `bynk.deploy.*` code it is.
+    BadWorkerGroup { key: String, reason: String },
     /// #3478: a `[dev]` acknowledgement (`ai = "allow"`) holding anything but
     /// `"allow"`.
     BadDevAck { key: String, reason: String },
@@ -238,7 +242,10 @@ pub const MANIFEST_TABLES: &[(&str, &[&str])] = &[
     ("fmt", &[]),
     ("lsp", &["diagnostics_mode", "diagnostics_debounce_ms"]),
     ("workers", &["compatibility_flags", "workers_dev"]),
-    ("deploy", &["hyperdrive", "vectorize", "containers"]),
+    (
+        "deploy",
+        &["hyperdrive", "vectorize", "containers", "workers"],
+    ),
     (
         "dev",
         &[
@@ -429,6 +436,12 @@ impl std::fmt::Display for ProjectPathsError {
                 reason,
             } => {
                 write!(f, "`[{table}.{capability}]` {reason}")
+            }
+            ProjectPathsError::BadWorkerGroup { key, reason } if key.is_empty() => {
+                write!(f, "`[deploy.workers]` {reason}")
+            }
+            ProjectPathsError::BadWorkerGroup { key, reason } => {
+                write!(f, "`[deploy.workers.{key}]` {reason}")
             }
             ProjectPathsError::BadDevAck { key, reason } => {
                 write!(f, "`[dev]` `{key}` {reason}")
@@ -621,6 +634,7 @@ pub fn check_manifest_str(content: &str) -> Result<(), ProjectPathsError> {
                 drop(crate::hyperdrive::deploy_hyperdrive_from(entries)?);
                 drop(crate::vectorize::deploy_vectorize_from(entries)?);
                 drop(crate::containers::deploy_containers_from(entries)?);
+                drop(crate::worker_groups::deploy_workers_from(entries)?);
             }
             "dev" => {
                 drop(crate::hyperdrive::dev_hyperdrive_from(entries)?);

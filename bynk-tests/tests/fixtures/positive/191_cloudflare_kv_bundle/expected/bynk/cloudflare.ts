@@ -229,6 +229,43 @@ export const QueueSend = {
 };
 
 /**
+ * What Cloudflare knows about the connection of an `on http` request, as a
+ * handler's `cf: RequestCf` parameter. Every field is optional and defaults
+ * to `None`: Cloudflare derives them, a platform or a test may not supply
+ * them, and a field of an unexpected shape is `None`, never a fault. A
+ * handler that declares `cf` is therefore written once and works where
+ * `request.cf` is absent.
+ *
+ * These facts come from the client's IP address, so they can be personal
+ * data, and they are best-effort: a VPN or a proxy makes them wrong. The
+ * fields are Cloudflare's `request.cf` properties
+ * (https://developers.cloudflare.com/workers/runtime-apis/request/); a
+ * field is added later as a defaulted field. `latitude` and `longitude` are
+ * numeric strings on the platform and are read as `Float`; `isEuCountry` is
+ * `Some(true)` where Cloudflare reports the country as in the EU.
+ */
+export interface RequestCf {
+  readonly country: Option<string>;
+  readonly continent: Option<string>;
+  readonly city: Option<string>;
+  readonly region: Option<string>;
+  readonly regionCode: Option<string>;
+  readonly postalCode: Option<string>;
+  readonly timezone: Option<string>;
+  readonly latitude: Option<number>;
+  readonly longitude: Option<number>;
+  readonly colo: Option<string>;
+  readonly asn: Option<number>;
+  readonly asOrganization: Option<string>;
+  readonly httpProtocol: Option<string>;
+  readonly tlsVersion: Option<string>;
+  readonly isEuCountry: Option<boolean>;
+}
+
+export const RequestCf = {
+};
+
+/**
  * One event written to an `Analytics` dataset. `index` is the sampling key
  * (at most 96 bytes; `None` samples the dataset as a whole), `blobs` are
  * text dimensions (at most 20, totalling at most 16 KB), and `doubles` are
@@ -1813,3 +1850,40 @@ export interface Container {
 }
 
 export const __ContainerToken: symbol = globalThis.Symbol("Container");
+
+/**
+ * An outbound call that presents one of your account's client certificates, for
+ * an origin that requires mutual TLS: the server proves its identity and so
+ * does the Worker, during the handshake. Used only through a named instance
+ * that names the certificate,
+ * `capability Backend = MtlsCertificate @certificate("acme-client")`, which
+ * binds as `MTLS_BACKEND`; a bare `given MtlsCertificate` names no certificate
+ * and is refused.
+ *
+ * The certificate is uploaded to the account by its owner (Wrangler's
+ * `mtls-certificate upload`, the dashboard or the API) and is named there;
+ * `@certificate` names it, as written in every environment. Bynk never uploads
+ * a certificate: its private key never reaches Bynk or the Worker.
+ *
+ * `send` has `Fetch.send`'s shape and rules: the same `Request` (its headers
+ * checked the same way, refused as `InvalidHeader` before anything is sent),
+ * the same `Response`, and `Network` when the call itself fails, which includes
+ * a handshake the origin refuses. Unlike `Service`, the URL's host is the
+ * destination: this is a real outbound call, and the certificate is presented
+ * to whatever origin the URL names. A status the origin returns, 5xx included,
+ * is an `Ok` response.
+ *
+ * Cloudflare does not support presenting a certificate to an origin that is a
+ * proxied zone on Cloudflare; the call fails with a `520`. See Cloudflare's
+ * mTLS bindings page for the current rules. There is no local simulation of
+ * the binding, and `bynkc test` faults until the call is stubbed, so a test
+ * never reaches the origin.
+ *
+ * `Request`, `Response` and `FetchError` are `bynk`'s types, so a context that
+ * calls `send` also writes `consumes bynk` to name them.
+ */
+export interface MtlsCertificate {
+  send(req: Request): globalThis.Promise<Result<Response, FetchError>>;
+}
+
+export const __MtlsCertificateToken: symbol = globalThis.Symbol("MtlsCertificate");

@@ -315,6 +315,7 @@ pub(crate) fn check_fn_in(
                     given_used: HashSet::new(),
                     given_entries,
                     given_anchor: Some(f.return_type.span()),
+                    ..Default::default()
                 }
             }
             // #2868: a plain effectful function in a context has no `given`, but
@@ -3065,6 +3066,11 @@ pub(crate) fn check_method_call(
     if type_args_pending && !value_receiver {
         reject_method_type_args(method, args, span, ctx);
         return None;
+    }
+    if let Some(r) = super::peek::check_peek_call(
+        receiver, method, type_args, args, span, expected, expr_id, ctx,
+    ) {
+        return r;
     }
     if let Some(r) = super::kernels::check_cookie_call(receiver, method, args, span, expr_id, ctx) {
         return r;
@@ -6701,6 +6707,15 @@ fn check_cross_context_call(
     };
     ctx.refs
         .record_in_unit(method.span, SymbolKind::Service, &method.name, consumed);
+    // #3582: also the service's `on call` handler, so the call is an edge in the
+    // call hierarchy (a call-only symbol: Find References keeps reading the
+    // `Service` ref above). `consumed` is already the alias-resolved unit.
+    ctx.refs.record_in_unit(
+        method.span,
+        SymbolKind::Handler,
+        &format!("{}.call", method.name),
+        consumed,
+    );
     // A refused signature's arguments would only repeat it as a mismatch.
     let unconsumed = check_signature_owners_consumed(consumed, &service, method, ctx);
 

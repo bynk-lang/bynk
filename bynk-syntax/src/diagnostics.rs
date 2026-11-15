@@ -1424,7 +1424,7 @@ pub const EXPLANATIONS: &[Explain] = &[
     },
     Explain {
         code: "bynk.consumes.capability_not_selected",
-        blurb: "Imports are per file, for capabilities as for types. A braced `consumes U { Cap }` brings the capability `Cap` into scope as a bare name, but only in the file that writes it: a `given Cap` clause, a call `Cap.op(…)`, a `provides Cap = …`, a derived capability's base, or a suite's `stub Cap.op`. A file that names one its own `consumes` does not list still resolves for now, and is a warning; `bynk check --fix=bynk.consumes.capability_not_selected` adds the name to this file's `consumes`, or adds one. A later release makes it an error. The unit's wiring and deploy order still follow the union of its files' `consumes`.",
+        blurb: "Imports are per file, for capabilities as for types. A braced `consumes U { Cap }` brings the capability `Cap` into scope as a bare name, but only in the file that writes it: a `given Cap` clause, a call `Cap.op(…)`, a `provides Cap = …`, a derived capability's base, or a suite's `stub Cap.op`. A file that names one its own `consumes` does not list is an error; `bynk check --fix=bynk.consumes.capability_not_selected` adds the name to this file's `consumes`, or adds one. The unit's wiring and deploy order still follow the union of its files' `consumes`.",
         example: "// shop/context.bynk\nconsumes bynk { Clock }\n\n// shop/audit.bynk, another file of the same context\nservice stamp {\n    on call() -> Effect[Instant] given Clock {   // ✗ this file does not consume `bynk`\n        Clock.now()\n    }\n}\n\nconsumes bynk { Clock }                          // ✓ each file consumes what it names",
         page: "/book/guides/program-structure/consume-services",
         anchor: "rename-an-exported-type-that-clashes-with-one-of-yours",
@@ -1515,14 +1515,14 @@ pub const EXPLANATIONS: &[Explain] = &[
     },
     Explain {
         code: "bynk.consumes.type_not_selected",
-        blurb: "Imports are per file. A unit's own declarations are shared by all its files, but a name from another unit, a type or a bare variant of one of its sums, is in scope only in a file that itself has a `consumes` bringing it in, and where the list is braced, only if it is listed. Naming a type that this file's own `consumes` does not bring in still resolves for now, and is a warning, whether the clause lists other names or only another file of the unit consumes the unit; `bynk check --fix=bynk.consumes.type_not_selected` adds the name to this file's `consumes`, or adds one. A later release makes it an error. A bare `consumes U`, with no braces, brings in all of `U`'s names for that file.",
+        blurb: "Imports are per file. A unit's own declarations are shared by all its files, but a name from another unit, a type or a bare variant of one of its sums, is in scope only in a file that itself has a `consumes` bringing it in, and where the list is braced, only if it is listed. Naming a type that this file's own `consumes` does not bring in is an error, whether the clause lists other names or only another file of the unit consumes the unit; `bynk check --fix=bynk.consumes.type_not_selected` adds the name to this file's `consumes`, or adds one. A bare `consumes U`, with no braces, brings in all of `U`'s names for that file.",
         example: "// shop/context.bynk\nconsumes bynk { Logger }                   // ✗ `TimedOut` is not listed\n\nconsumes bynk { Logger, TimedOut }          // ✓\n\nfn at(t: TimedOut) -> Bool {\n    true\n}\n\n// shop/audit.bynk, another file of the same context\nfn late(t: TimedOut) -> Bool {   // ✗ this file does not consume `bynk`\n    true\n}\n\nconsumes bynk { TimedOut }        // ✓ each file consumes what it names",
         page: "/book/guides/program-structure/consume-services",
         anchor: "rename-an-exported-type-that-clashes-with-one-of-yours",
     },
     Explain {
         code: "bynk.consumes.unit_not_consumed",
-        blurb: "Imports are per file. A call to another unit's service (`pay.charge(…)`, or through the alias of `consumes pay as P`) is in scope only in a file that itself `consumes` that unit, in any form, even when another file of the same context does. The call still resolves for now, and is a warning; `bynk check --fix=bynk.consumes.unit_not_consumed` adds `consumes <unit>` to this file. A later release makes it an error. The unit's wiring and deploy order still follow the union of its files' `consumes`.",
+        blurb: "Imports are per file. A call to another unit's service (`pay.charge(…)`, or through the alias of `consumes pay as P`) is in scope only in a file that itself `consumes` that unit, in any form, even when another file of the same context does. A call from a file that does not is an error; `bynk check --fix=bynk.consumes.unit_not_consumed` adds `consumes <unit>` to this file. The unit's wiring and deploy order still follow the union of its files' `consumes`.",
         example: "// shop/checkout.bynk\nconsumes pay\n\nservice checkout {\n    on call() -> Effect[Int] {\n        pay.charge(1)\n    }\n}\n\n// shop/refund.bynk, another file of the same context\nservice refund {\n    on call() -> Effect[Int] {\n        pay.charge(2)   // ✗ this file does not consume `pay`\n    }\n}\n\nconsumes pay            // ✓ each file consumes what it names",
         page: "/book/guides/program-structure/consume-services",
         anchor: "declare-the-dependency-and-call-the-service",
@@ -2811,6 +2811,13 @@ pub const EXPLANATIONS: &[Explain] = &[
         example: "@cache(maxAge: 5.minutes, stale: true)   // ✗ not an argument of `@cache`\non GET(\"/links\") () -> Effect[HttpResult[String]] by v: Visitor { … }\n\n@cache(maxAge: 5.minutes)                // ✓\non GET(\"/links\") () -> Effect[HttpResult[String]] by v: Visitor { … }",
         page: "/book/reference/http",
         anchor: "caching",
+    },
+    Explain {
+        code: "bynk.http.cf_wrong_type",
+        blurb: "`cf` is the name the router reserves for what Cloudflare derived about the request's connection (its country, colo, ASN and the like), so a parameter called `cf` must be typed `RequestCf`, the record from `bynk.cloudflare` whose fields are all optional. Any other type has nothing to be filled from. Retype the parameter and import the type with `consumes bynk.cloudflare { RequestCf }`; that import is also what locks the deployment unit to Cloudflare. An input of your own needs another name, and a name that is neither a path parameter nor one of the reserved ones is `bynk.http.extra_param`. A `:cf` path segment stays a path parameter.",
+        example: "on GET(\"/hello\") (cf: String) -> Effect[HttpResult[String]] by v: Visitor { … }      // ✗\n\non GET(\"/hello\") (cf: RequestCf) -> Effect[HttpResult[String]] by v: Visitor { … }   // ✓",
+        page: "/book/reference/http",
+        anchor: "request-cf",
     },
     Explain {
         code: "bynk.http.cookie_cross_site_without_credentials",
@@ -6106,6 +6113,101 @@ bynk revert --accept-secret-changes   # only after a `bynk migrate sweep`",
         anchor: "failure-principals",
     },
     Explain {
+        code: "bynk.test.peek_not_a_database",
+        blurb: "`D1.peek` reads a D1 database, so it names a capability derived \
+                from `D1` (`capability Orders = D1`). A capability on another \
+                binding, such as `Kv`, has no database for it to read.",
+        example: "// shop/orders.bynk\n\
+                  capability Orders = D1\n\
+                  capability Sessions = Kv\n\
+                  \n\
+                  // tests/orders.test.bynk\n\
+                  suite shop.orders as system {\n\
+                  \x20\x20case \"peeks\" {\n\
+                  \x20\x20\x20\x20let db = D1.peek(shop.orders.Sessions)   // ✗ a `Kv`, not a `D1`\n\
+                  \x20\x20\x20\x20let ok = D1.peek(shop.orders.Orders)     // ✓\n\
+                  \x20\x20\x20\x20expect true\n\
+                  \x20\x20}\n\
+                  }",
+        page: "/book/reference/testing",
+        anchor: "peek-a-database",
+    },
+    Explain {
+        code: "bynk.test.peek_not_bound",
+        blurb: "`D1.peek(<participant>.<Capability>)` stands as the value of a \
+                `let`, and the case reads through the handle that binds. A \
+                `D1.peek` anywhere else, as an argument or the receiver of a \
+                call, has no handle to keep.",
+        example: "// tests/orders.test.bynk\n\
+                  suite shop.orders as system {\n\
+                  \x20\x20case \"peeks\" {\n\
+                  \x20\x20\x20\x20let rows <- D1.peek(shop.orders.Orders).all(\"SELECT id FROM orders\", [])   // ✗ the handle is not bound\n\
+                  \x20\x20\x20\x20let db = D1.peek(shop.orders.Orders)                                      // ✓\n\
+                  \x20\x20\x20\x20expect true\n\
+                  \x20\x20}\n\
+                  }",
+        page: "/book/reference/testing",
+        anchor: "peek-a-database",
+    },
+    Explain {
+        code: "bynk.test.peek_outside_case",
+        blurb: "`D1.peek(<participant>.<Capability>)` gives an `integration` or \
+                `system` case a read-only handle on a participant's test \
+                database. Only those tiers stand one up, so the handle is \
+                refused in a `unit` case, a `property`, and in the app's own \
+                code. A `unit` case reads the capability it stubs.",
+        example: "// tests/orders.test.bynk\n\
+                  suite shop.orders {\n\
+                  \x20\x20case \"peeks\" {\n\
+                  \x20\x20\x20\x20let db = D1.peek(shop.orders.Orders)   // ✗ a unit suite has no participant database\n\
+                  \x20\x20\x20\x20expect true\n\
+                  \x20\x20}\n\
+                  }\n\
+                  \n\
+                  suite shop.orders as system {\n\
+                  \x20\x20case \"peeks\" {\n\
+                  \x20\x20\x20\x20let db = D1.peek(shop.orders.Orders)   // ✓\n\
+                  \x20\x20\x20\x20expect true\n\
+                  \x20\x20}\n\
+                  }",
+        page: "/book/reference/testing",
+        anchor: "peek-a-database",
+    },
+    Explain {
+        code: "bynk.test.peek_unknown_capability",
+        blurb: "`D1.peek` names a capability as `<participant>.<Capability>`, \
+                where the participant is one of the suite's and declares the \
+                capability. The participant or the capability is not one.",
+        example: "// tests/orders.test.bynk\n\
+                  suite shop.orders as system {\n\
+                  \x20\x20case \"peeks\" {\n\
+                  \x20\x20\x20\x20let db = D1.peek(shop.orders.Missing)   // ✗ `shop.orders` declares no `Missing`\n\
+                  \x20\x20\x20\x20let ok = D1.peek(shop.orders.Orders)    // ✓\n\
+                  \x20\x20\x20\x20expect true\n\
+                  \x20\x20}\n\
+                  }",
+        page: "/book/reference/testing",
+        anchor: "peek-a-database",
+    },
+    Explain {
+        code: "bynk.test.peek_write",
+        blurb: "A `D1.peek` handle is read-only: it offers `all`, `first`, \
+                `select[T]` and `firstAs[T]`, and a statement that would write \
+                (`INSERT`, `UPDATE`, `DELETE`, a schema change) is refused, as is \
+                `run` or `batch`. A case makes the app write by driving the app.",
+        example: "// tests/orders.test.bynk\n\
+                  suite shop.orders as system {\n\
+                  \x20\x20case \"peeks\" {\n\
+                  \x20\x20\x20\x20let db = D1.peek(shop.orders.Orders)\n\
+                  \x20\x20\x20\x20let a <- db.all(\"DELETE FROM orders\", [])   // ✗ the statement writes\n\
+                  \x20\x20\x20\x20let r <- db.all(\"SELECT id FROM orders\", [])   // ✓\n\
+                  \x20\x20\x20\x20expect true\n\
+                  \x20\x20}\n\
+                  }",
+        page: "/book/reference/testing",
+        anchor: "peek-a-database",
+    },
+    Explain {
         code: "bynk.test.principal_claims_not_oidc",
         blurb: "`TokenClaims.of([…])` supplies the claims an `Oidc` actor's token \
                 carries, which the handler reads and the actor's rules check. A \
@@ -8578,11 +8680,11 @@ pub const REGISTRY: &[DiagnosticInfo] = &[
         "Two flattened `consumes U { Cap }` capabilities collide, or one clashes with a local capability.",
         &["consumes_decl"],
     ),
-    warn(dg(
+    dg(
         "bynk.consumes.capability_not_selected",
-        "A capability a consumed unit exports is named (a `given` clause, a call, `provides`, a `stub`) in a file whose own `consumes` does not list it (a warning; an error in a later release).",
+        "A capability a consumed unit exports is named (a `given` clause, a call, `provides`, a `stub`) in a file whose own `consumes` does not list it.",
         &["consumes_decl"],
-    )),
+    ),
     dg(
         "bynk.consumes.name_conflict",
         "A `consumes` name collides with another name in scope.",
@@ -8628,16 +8730,16 @@ pub const REGISTRY: &[DiagnosticInfo] = &[
         "`consumes U { T as Alias }` names a type `U` does not export.",
         &["consumes_decl"],
     ),
-    warn(dg(
+    dg(
         "bynk.consumes.type_not_selected",
-        "A type (or a bare variant of a sum) of a consumed unit is named in a file whose own `consumes` does not bring it in: it lists other names, or only another file of the unit consumes the unit (a warning; an error in a later release).",
+        "A type (or a bare variant of a sum) of a consumed unit is named in a file whose own `consumes` does not bring it in: it lists other names, or only another file of the unit consumes the unit.",
         &["consumes_decl"],
-    )),
-    warn(dg(
+    ),
+    dg(
         "bynk.consumes.unit_not_consumed",
-        "A call to another unit's service is written in a file whose own `consumes` does not name that unit (a warning; an error in a later release).",
+        "A call to another unit's service is written in a file whose own `consumes` does not name that unit.",
         &["consumes_decl"],
-    )),
+    ),
     dg(
         "bynk.consumes.unknown_context",
         "`consumes` names a context that does not exist.",
@@ -8762,12 +8864,48 @@ pub const REGISTRY: &[DiagnosticInfo] = &[
         "A path dependency declared by a dependency resolves outside the workspace; a dependency's own path dependencies are honoured only between members of one workspace.",
     ),
     d(
+        "bynk.deploy.binding_collision",
+        "Two members of one `[deploy.workers.<key>]` group declare different bindings under the same name; members share one `wrangler.toml`, so identical declarations share a binding and differing ones are refused.",
+    ),
+    d(
+        "bynk.deploy.context_in_two_groups",
+        "A context is listed in two `[deploy.workers.<key>]` groups; a context is deployed in one Worker only.",
+    ),
+    d(
         "bynk.deploy.contract_skew",
         "A worker was compiled against a contract its live dependencies no longer provide, or no longer provides the contract its live callers were compiled against, so `bynk deploy --context` refuses to ship it.",
     ),
     d(
+        "bynk.deploy.duplicate_hostname",
+        "A route or custom domain is claimed twice across `[deploy.workers.<key>]` groups.",
+    ),
+    d(
+        "bynk.deploy.empty_group",
+        "A `[deploy.workers.<key>]` group lists no context.",
+    ),
+    d(
         "bynk.deploy.foreign_contract_skew",
         "A build breaks the contract a declared foreign caller's client was generated at, as pinned in `bynk.foreign.toml`, so `bynk deploy` refuses to ship it.",
+    ),
+    d(
+        "bynk.deploy.group_name_conflict",
+        "A `[deploy.workers.<key>]` group's key or script name is another group's, or is the Worker of a context in no group.",
+    ),
+    d(
+        "bynk.deploy.multiple_publishers",
+        "More than one member of a `[deploy.workers.<key>]` group publishes events. A temporary restriction: each publisher has its own events fan-out class, and it goes when a group's fan-out is merged.",
+    ),
+    d(
+        "bynk.deploy.not_a_context",
+        "A `[deploy.workers.<key>]` group lists a unit that is not a `context`; only contexts are deployed as Workers.",
+    ),
+    d(
+        "bynk.deploy.service_name_conflict",
+        "Two members of one `[deploy.workers.<key>]` group declare a service of the same name; a Worker answers its members' services by name.",
+    ),
+    d(
+        "bynk.deploy.unknown_context",
+        "A `[deploy.workers.<key>]` group lists a context the project does not declare.",
     ),
     dg(
         "bynk.detach.in_agent_handler",
@@ -9305,6 +9443,11 @@ pub const REGISTRY: &[DiagnosticInfo] = &[
     d(
         "bynk.http.cache_unknown_arg",
         "A `@cache` annotation has an argument outside the closed set (`maxAge`/`scope`/`immutable`).",
+    ),
+    dg(
+        "bynk.http.cf_wrong_type",
+        "An HTTP handler's `cf` parameter is not typed `RequestCf`.",
+        &["http_handler"],
     ),
     warn(dg(
         "bynk.http.cookie_cross_site_without_credentials",
@@ -11032,6 +11175,31 @@ pub const REGISTRY: &[DiagnosticInfo] = &[
         "A case drives `by Nobody` at a route with no Bearer, `Oidc` or Signature actor (alone, or as a member of an actor sum) (e.g. a public `Visitor` route) — there is no auth seam to reject the missing credential.",
         &["case"],
     ),
+    dg(
+        "bynk.test.peek_not_a_database",
+        "`D1.peek` names a capability that is not derived from `D1`; only a D1 binding has a test database to read.",
+        &["case"],
+    ),
+    dg(
+        "bynk.test.peek_not_bound",
+        "`D1.peek` is used anywhere but as the value of a `let`; the handle is what a case reads through.",
+        &["case"],
+    ),
+    dg(
+        "bynk.test.peek_outside_case",
+        "`D1.peek` is used outside an `integration` or `system` case; only those tiers stand up a participant's test database.",
+        &["case"],
+    ),
+    dg(
+        "bynk.test.peek_unknown_capability",
+        "`D1.peek` names a participant or a capability that the suite does not have.",
+        &["case"],
+    ),
+    dg(
+        "bynk.test.peek_write",
+        "A `D1.peek` handle is asked to write, by a write operation (`run`, `batch`) or by a statement that would write; the handle is read-only.",
+        &["case"],
+    ),
     d(
         "bynk.test.principal_claims_not_oidc",
         "A call-site principal passes token claims for an actor that isn't `Oidc`.",
@@ -11079,6 +11247,11 @@ pub const REGISTRY: &[DiagnosticInfo] = &[
     dg(
         "bynk.test.remote_unsupported_env",
         "A `system` case's `env` disagrees with the named target it would run against (`bynk test --against`): it sets a secret, sets a name the target doesn't declare under `vars` or declares with another value, or leaves unset a name the target declares.",
+        &["case"],
+    ),
+    dg(
+        "bynk.test.remote_unsupported_peek",
+        "A `system` case reads a participant's test database with `D1.peek`, which a run against a real runtime (`bynk test --against`) can't honour: a deployment has no in-process database.",
         &["case"],
     ),
     dg(

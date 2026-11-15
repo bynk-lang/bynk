@@ -1193,6 +1193,7 @@ pub(crate) fn instance_example(kind: &firstparty::Instantiable) -> String {
         "Vectorize" => "Docs",
         "Container" => "Renderer",
         "AiSearch" => "Kb",
+        "MtlsCertificate" => "Backend",
         _ => "Archives",
     };
     let mut out = format!("capability {name} = {}", kind.capability);
@@ -1216,6 +1217,7 @@ fn option_sample(option: &str) -> &'static str {
             "[\"orders@shop.example\"]"
         }
         firstparty::AI_SEARCH_INSTANCE_OPTION => "\"support-docs\"",
+        firstparty::MTLS_CERTIFICATE_OPTION => "\"acme-client\"",
         firstparty::VECTORIZE_DIMENSIONS_OPTION => "768",
         firstparty::VECTORIZE_METRIC_OPTION => "\"cosine\"",
         firstparty::VECTORIZE_INDEXED_OPTION => "[\"category:string\"]",
@@ -1239,6 +1241,30 @@ fn vectorize_dimensions_problem(value: i64) -> Option<(&'static str, i64)> {
     } else {
         None
     }
+}
+
+/// #3513 A: an `MtlsCertificate` `@certificate` that is not a certificate name. A
+/// certificate is named by whoever uploaded it, in any text, so only a name the account
+/// could not have given one is refused: an empty one, or one with a control character.
+fn mtls_certificate_error(
+    base: &str,
+    option: &str,
+    text: &str,
+    span: bynk_syntax::span::Span,
+) -> Option<CompileError> {
+    (base == "MtlsCertificate"
+        && option == crate::firstparty::MTLS_CERTIFICATE_OPTION
+        && (text.trim().is_empty() || text.chars().any(char::is_control)))
+    .then(|| {
+        CompileError::new(
+            "bynk.capability.invalid_option",
+            span,
+            format!("{text:?} is not a certificate name a `{base}` can reach"),
+        )
+        .with_note(
+            "name the certificate as it was uploaded to the account (`wrangler mtls-certificate list` shows it), for example `@certificate(\"acme-client\")`",
+        )
+    })
 }
 
 /// #3480: an `AiSearch` `@instance` that is not an instance name. The instance
@@ -1547,6 +1573,10 @@ fn instance_option_value(
         return None;
     }
     if let Some(error) = ai_search_instance_error(base, option, text, ann.span) {
+        errors.push_for(Some(path), error);
+        return None;
+    }
+    if let Some(error) = mtls_certificate_error(base, option, text, ann.span) {
         errors.push_for(Some(path), error);
         return None;
     }
@@ -4932,6 +4962,84 @@ fn lock_violation(
     None
 }
 
+/// One deployment unit the platform lock checks (#3562): the contexts that
+/// deploy together and the union of their native platforms.
+#[derive(Debug, PartialEq, Eq)]
+struct LockUnit {
+    /// The `[deploy.workers]` group's key, for a unit that is one.
+    group: Option<String>,
+    /// The contexts in the unit, in the order their `consumes` are looked up.
+    members: Vec<String>,
+    /// The unit's native platforms, each with the unit that brings it in.
+    native: BTreeMap<Platform, String>,
+}
+
+/// The deployment units to check, from each context's native platforms:
+/// under `workers`, one per `[deploy.workers]` group (the union of its members',
+/// since they share a Worker) and one per context in no group; under `bundle`,
+/// the union of everything (the whole program co-locates).
+fn lock_units(
+    target: BuildTarget,
+    per_context: Vec<(String, BTreeMap<Platform, String>)>,
+    worker_groups: &bynk_project::worker_groups::WorkerGroups,
+) -> Vec<LockUnit> {
+    let union_of = |natives: Vec<&BTreeMap<Platform, String>>| {
+        let mut union = BTreeMap::new();
+        for native in natives {
+            for (p, unit) in native {
+                union.entry(*p).or_insert_with(|| unit.clone());
+            }
+        }
+        union
+    };
+    match target {
+        BuildTarget::Workers => {
+            let mut units = Vec::new();
+            for (key, group) in worker_groups {
+                let found: Vec<_> = per_context
+                    .iter()
+                    .filter(|(ctx, _)| group.contexts.contains(ctx))
+                    .collect();
+                let native = union_of(found.iter().map(|(_, n)| n).collect());
+                if !native.is_empty() {
+                    units.push(LockUnit {
+                        group: Some(key.clone()),
+                        members: found.iter().map(|(ctx, _)| ctx.clone()).collect(),
+                        native,
+                    });
+                }
+            }
+            let grouped = |ctx: &str| {
+                worker_groups
+                    .values()
+                    .any(|g| g.contexts.iter().any(|c| c == ctx))
+            };
+            units.extend(
+                per_context
+                    .into_iter()
+                    .filter(|(ctx, _)| !grouped(ctx))
+                    .map(|(ctx, native)| LockUnit {
+                        group: None,
+                        members: vec![ctx],
+                        native,
+                    }),
+            );
+            units
+        }
+        BuildTarget::Bundle => {
+            let native = union_of(per_context.iter().map(|(_, n)| n).collect());
+            match per_context.into_iter().next() {
+                Some((owner, _)) if !native.is_empty() => vec![LockUnit {
+                    group: None,
+                    members: vec![owner],
+                    native,
+                }],
+                _ => Vec::new(),
+            }
+        }
+    }
+}
+
 /// A platform-lock violation (v0.19, `bynk.target.*`).
 #[derive(Debug, PartialEq, Eq)]
 enum LockViolation {
@@ -5167,6 +5275,7 @@ pub fn phase_platform_lock(
     unit_consumes: &HashMap<String, Vec<String>>,
     unit_consumes_aliases: &HashMap<String, HashMap<String, String>>,
     unit_flattened: &HashMap<String, HashMap<String, String>>,
+    worker_groups: &bynk_project::worker_groups::WorkerGroups,
     errors: &mut ErrorSink,
 ) {
     // In-browser track, slice 2: `browser` is a Bundle-only platform — a browser
@@ -5211,33 +5320,29 @@ pub fn phase_platform_lock(
             per_context.push((name.clone(), native));
         }
     }
-    // The deployment units to check: per-context under workers; their union
-    // under bundle (the whole program co-locates).
-    let units: Vec<(String, BTreeMap<Platform, String>)> = match target {
-        BuildTarget::Workers => per_context,
-        BuildTarget::Bundle => {
-            let mut union = BTreeMap::new();
-            let mut owner: Option<String> = None;
-            for (ctx, native) in per_context {
-                owner.get_or_insert(ctx);
-                for (p, unit) in native {
-                    union.entry(p).or_insert(unit);
-                }
-            }
-            match owner {
-                Some(ctx) if !union.is_empty() => vec![(ctx, union)],
-                _ => Vec::new(),
-            }
-        }
-    };
-    for (ctx, native) in units {
+    let units = lock_units(target, per_context, worker_groups);
+    for LockUnit {
+        group,
+        members,
+        native,
+    } in units
+    {
         let Some(violation) = lock_violation(&native, selected) else {
             continue;
         };
+        // `context `a.b``, or, for a `[deploy.workers]` group, `Worker group `key``.
+        let ctx = match &group {
+            Some(key) => format!("Worker group `{key}`"),
+            None => format!("context `{}`", members[0]),
+        };
         let span_for = |unit: &str| {
-            groups
-                .get(&ctx)
-                .and_then(|idx| consumes_span_of(parsed, idx, unit))
+            members
+                .iter()
+                .find_map(|m| {
+                    groups
+                        .get(m)
+                        .and_then(|idx| consumes_span_of(parsed, idx, unit))
+                })
                 .map(|(_, s)| s)
                 .unwrap_or_default()
         };
@@ -5249,7 +5354,7 @@ pub fn phase_platform_lock(
                         "bynk.target.vendor_required",
                         span_for(&unit),
                         format!(
-                            "context `{ctx}` uses the platform-native capabilities of `{unit}`, which run only on the `{}` platform, but the build selects `--platform {}`",
+                            "{ctx} uses the platform-native capabilities of `{unit}`, which run only on the `{}` platform, but the build selects `--platform {}`",
                             needed.as_str(),
                             selected.as_str(),
                         ),
@@ -5266,16 +5371,18 @@ pub fn phase_platform_lock(
                         "bynk.target.vendor_conflict",
                         span_for(&a.1),
                         format!(
-                            "one deployment unit (via context `{ctx}`) uses platform-native capabilities from two mutually-exclusive platforms: `{}` (from `{}`) and `{}` (from `{}`)",
+                            "one deployment unit (via {ctx}) uses platform-native capabilities from two mutually-exclusive platforms: `{}` (from `{}`) and `{}` (from `{}`)",
                             a.0.as_str(),
                             a.1,
                             b.0.as_str(),
                             b.1,
                         ),
                     )
-                    .with_note(
-                        "split the consumers into separate deployment units (`--target workers`), or remove one of the platform-native dependencies",
-                    ),
+                    .with_note(if group.is_some() {
+                        "the members of a `[deploy.workers]` group share one Worker: move the conflicting contexts into different groups (or out of any group), or remove one of the platform-native dependencies"
+                    } else {
+                        "split the consumers into separate deployment units (`--target workers`), or remove one of the platform-native dependencies"
+                    }),
                 );
             }
         }
@@ -8419,5 +8526,98 @@ mod metadata_property_tests {
         assert!(!is_metadata_property("a.$x"));
         assert!(!is_metadata_property("a\"b"));
         assert!(!is_metadata_property(&"x".repeat(513)));
+    }
+}
+
+/// The deployment units the platform lock checks (#3562): per context under
+/// `workers`, a `[deploy.workers]` group's members together, the whole program
+/// under `bundle`.
+#[cfg(test)]
+mod lock_unit_tests {
+    use super::*;
+    use bynk_project::worker_groups::{WorkerGroup, WorkerGroups};
+
+    fn native(platform: Platform, unit: &str) -> BTreeMap<Platform, String> {
+        BTreeMap::from([(platform, unit.to_string())])
+    }
+
+    fn per_context() -> Vec<(String, BTreeMap<Platform, String>)> {
+        vec![
+            (
+                "a.x".to_string(),
+                native(Platform::Cloudflare, "bynk.cloudflare"),
+            ),
+            ("a.y".to_string(), native(Platform::Node, "bynk.node")),
+            (
+                "a.z".to_string(),
+                native(Platform::Cloudflare, "bynk.cloudflare"),
+            ),
+        ]
+    }
+
+    fn group(members: &[&str]) -> WorkerGroups {
+        WorkerGroups::from([(
+            "core".to_string(),
+            WorkerGroup {
+                contexts: members.iter().map(|m| m.to_string()).collect(),
+                ..WorkerGroup::default()
+            },
+        )])
+    }
+
+    /// Without groups, each context is its own unit, as before.
+    #[test]
+    fn workers_without_groups_is_one_unit_per_context() {
+        let units = lock_units(BuildTarget::Workers, per_context(), &WorkerGroups::new());
+        assert_eq!(units.len(), 3);
+        assert!(
+            units
+                .iter()
+                .all(|u| u.group.is_none() && u.members.len() == 1)
+        );
+        assert!(units.iter().all(
+            |u| lock_violation(&u.native, Platform::Cloudflare).is_some()
+                == (u.members[0] == "a.y")
+        ));
+    }
+
+    /// A group's members share a Worker, so a Cloudflare-native member and a
+    /// Node-native one are one unit spanning two platforms.
+    #[test]
+    fn a_group_is_one_unit_over_its_members_union() {
+        let units = lock_units(BuildTarget::Workers, per_context(), &group(&["a.x", "a.y"]));
+        assert_eq!(units.len(), 2, "{units:?}");
+        let core = &units[0];
+        assert_eq!(core.group.as_deref(), Some("core"));
+        assert_eq!(core.members, ["a.x", "a.y"]);
+        assert!(matches!(
+            lock_violation(&core.native, Platform::Cloudflare),
+            Some(LockViolation::Conflict { .. })
+        ));
+        // `a.z`, in no group, stays its own unit, and is fine on Cloudflare.
+        assert_eq!(units[1].members, ["a.z"]);
+        assert!(lock_violation(&units[1].native, Platform::Cloudflare).is_none());
+    }
+
+    /// A group whose members need no native platform makes no unit.
+    #[test]
+    fn a_group_with_no_native_platforms_is_not_a_unit() {
+        let units = lock_units(
+            BuildTarget::Workers,
+            vec![("a.x".to_string(), BTreeMap::new())],
+            &group(&["a.x"]),
+        );
+        assert!(units.is_empty());
+    }
+
+    /// Under `bundle` the whole program is one unit, owned by the first context,
+    /// whatever the groups say.
+    #[test]
+    fn bundle_is_one_unit_and_ignores_groups() {
+        let units = lock_units(BuildTarget::Bundle, per_context(), &group(&["a.x", "a.y"]));
+        assert_eq!(units.len(), 1);
+        assert_eq!(units[0].group, None);
+        assert_eq!(units[0].members, ["a.x"]);
+        assert_eq!(units[0].native.len(), 2);
     }
 }

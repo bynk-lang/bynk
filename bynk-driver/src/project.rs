@@ -2539,6 +2539,85 @@ fn d1_phase(
     (migrations, d1_sql)
 }
 
+/// The manifest checks that need the project's units, read as the editor reads
+/// them (`bynk_check::analysis::analyse_project`): `[package] exports` names
+/// only commons and adapters the project declares (#2207, packaging slice 1,
+/// decision D), and `[deploy.workers]` groups only contexts it declares (#3562).
+fn manifest_unit_diagnostics(
+    project_root: &Path,
+    overlay: &HashMap<PathBuf, String>,
+    kinds: &BTreeMap<String, UnitKind>,
+    errors: &mut ErrorSink,
+) {
+    let found = bynk_check::exports::manifest_diagnostics(Some(project_root), overlay, kinds)
+        .into_iter()
+        .chain(bynk_check::worker_groups::manifest_diagnostics(
+            Some(project_root),
+            overlay,
+            kinds,
+        ));
+    for err in found {
+        errors.push_for(Some(Path::new(bynk_check::stability::MANIFEST)), err);
+    }
+}
+
+/// The parsed files, each unit's files, and each unit's kind: what
+/// [`platform_lock_phase`] reads the units' sources from.
+type LockSources<'a> = (
+    &'a [ParsedFile],
+    &'a BTreeMap<String, Vec<usize>>,
+    &'a BTreeMap<String, UnitKind>,
+);
+
+/// Each unit's symbol table, `consumes`, `consumes` aliases and flattened names:
+/// what [`platform_lock_phase`] walks the provider closure with.
+type LockTables<'a> = (
+    &'a HashMap<String, UnitTable>,
+    &'a HashMap<String, Vec<String>>,
+    &'a HashMap<String, HashMap<String, String>>,
+    &'a HashMap<String, HashMap<String, String>>,
+);
+
+/// v0.19 (decisions 0017/0024): platform-lock enforcement. A deployment unit
+/// whose in-process closure reaches a platform-native capability is locked to
+/// that platform; the selected `--platform` must match. A unit is a context
+/// under `workers`, or a `[deploy.workers]` group of them (#3562, which share
+/// a Worker). Run only on otherwise-clean programs: the closure walk recurses
+/// the provider graph, whose acyclicity the earlier checks establish. P5.3:
+/// relocated to `bynk_check::project_model::phase_platform_lock` — this crate is
+/// a caller, not an owner.
+fn platform_lock_phase(
+    target: BuildTarget,
+    platform: Platform,
+    (project_root, overlay): (&Path, &HashMap<PathBuf, String>),
+    (parsed, groups, kinds): LockSources<'_>,
+    (unit_tables, unit_consumes, unit_consumes_aliases, unit_flattened): LockTables<'_>,
+    errors: &mut ErrorSink,
+) {
+    if !errors.is_empty() {
+        return;
+    }
+    // A malformed `[deploy.workers]` is reported when the project loads, before
+    // this phase runs, so a table that cannot be read here is not a silent
+    // loss of grouping.
+    let worker_groups =
+        bynk_project::worker_groups::try_read_worker_groups_with(project_root, overlay)
+            .unwrap_or_default();
+    project_model::phase_platform_lock(
+        target,
+        platform,
+        parsed,
+        groups,
+        kinds,
+        unit_tables,
+        unit_consumes,
+        unit_consumes_aliases,
+        unit_flattened,
+        &worker_groups,
+        errors,
+    );
+}
+
 #[allow(clippy::too_many_arguments)]
 fn run_checks(
     // R3.9 (#1113): one `(root, prefix)` pair per `Roots::trees` entry, not a
@@ -2720,12 +2799,7 @@ fn run_checks(
     //       fire — see that function's own doc comment. --
     let (groups, kinds, test_groups, integration_groups, adapter_bindings, npm_deps) =
         project_model::phase_group(&parsed, trees, platform, &injected, overlay, &mut errors);
-    // #2207 (packaging slice 1, decision D): `[package] exports` names only
-    // commons and adapters this project declares — read as the editor reads it
-    // (`bynk_check::analysis::analyse_project`).
-    for err in bynk_check::exports::manifest_diagnostics(Some(project_root), overlay, &kinds) {
-        errors.push_for(Some(Path::new(bynk_check::stability::MANIFEST)), err);
-    }
+    manifest_unit_diagnostics(project_root, overlay, &kinds, &mut errors);
     // -- 4. Build per-unit combined symbol tables. --
     // -- 4-5. Symbol tables, `uses` resolution, and (#3445) the constants named by
     //         literal-only annotation arguments, resolved ahead of every reader. --
@@ -3400,7 +3474,7 @@ fn run_checks(
         &groups,
         &mut emitted_barrels,
         &test_asset_files,
-        &d1_migrations,
+        tests_emit::IntegrationD1::new(&d1_migrations, d1_sql.as_deref()),
         context_bindings.as_ref(),
         &event_subscribers,
         remote_tests,
@@ -3424,33 +3498,30 @@ fn run_checks(
         &mut errors,
     );
 
-    // v0.19 (decisions 0017/0024): platform-lock enforcement. A deployment
-    // unit whose in-process closure reaches a platform-native capability is
-    // locked to that platform; the selected `--platform` must match. Run only
-    // on otherwise-clean programs: the closure walk recurses the provider
-    // graph, whose acyclicity the earlier checks establish. P5.3: relocated
-    // to `bynk_check::project_model::phase_platform_lock` — this crate is a
-    // caller, not an owner.
-    if errors.is_empty() {
-        project_model::phase_platform_lock(
-            target,
-            platform,
-            &parsed,
-            &groups,
-            &kinds,
+    platform_lock_phase(
+        target,
+        platform,
+        (project_root, overlay),
+        (&parsed, &groups, &kinds),
+        (
             &unit_tables,
             &unit_consumes,
             &unit_consumes_aliases,
             &unit_flattened,
-            &mut errors,
-        );
-    }
+        ),
+        &mut errors,
+    );
     // On Workers, each Worker's binding names are unique. Gated the same way:
     // the KV input walks the same provider graph.
-    if errors.is_empty()
-        && let Some(bindings) = &context_bindings
-    {
-        worker_bindings::phase_duplicate_bindings(target, &parsed, &groups, bindings, &mut errors);
+    if let Some(bindings) = context_bindings.as_ref().filter(|_| errors.is_empty()) {
+        worker_bindings::phase_duplicate_bindings(
+            target,
+            (project_root, overlay),
+            &parsed,
+            &groups,
+            bindings,
+            &mut errors,
+        );
     }
 
     // v0.176 (#642): the `Bytes`-at-a-workers-boundary guard (ADR 0142 D8) is
@@ -3706,6 +3777,10 @@ fn build_output(
         BuildTarget::Workers => {
             // v0.8 §2.3: per-Worker entry point, compose.ts, and wrangler
             // configuration. One Worker per context.
+            // #3562: where each context's files go. Always the identity layout for
+            // now: a group's directory and prefixes are switched on with the group
+            // as the emit unit.
+            let layout = bynk_project::worker_layout::WorkerLayout::identity();
             for (ctx_name, kind) in &kinds {
                 if *kind != UnitKind::Context {
                     continue;
@@ -3972,7 +4047,7 @@ fn build_output(
                 // precedent `events_fanout.rs`'s and `workers.rs`'s own
                 // construction sites already set.
                 compiled.push(StagedFile {
-                    output_path: PathBuf::from(format!("workers/{dashes}/index.ts")),
+                    output_path: layout.worker_file(ctx_name, "index.ts"),
                     document: Document::Ts(entry_ts),
                     source_map: None,
                     debug_metadata: None,
@@ -3990,7 +4065,7 @@ fn build_output(
                     let fanout_program =
                         emitter::emit_events_fanout_do(ctx_name, &own_event_routes);
                     compiled.push(StagedFile {
-                        output_path: PathBuf::from(format!("workers/{dashes}/events_fanout.ts")),
+                        output_path: layout.member_file(ctx_name, "events_fanout.ts"),
                         document: Document::Ts(fanout_program),
                         source_map: None,
                         debug_metadata: None,
@@ -3999,7 +4074,7 @@ fn build_output(
                 // #3477: the Durable Object classes of this Worker's containers.
                 if let Some(program) = emitter::emit_containers_ts(&bindings) {
                     compiled.push(StagedFile {
-                        output_path: PathBuf::from(format!("workers/{dashes}/containers.ts")),
+                        output_path: layout.worker_file(ctx_name, "containers.ts"),
                         document: Document::Ts(program),
                         source_map: None,
                         debug_metadata: None,
@@ -4011,13 +4086,13 @@ fn build_output(
                 // #1317) that reaches `Document::Ts` with no `Verbatim`
                 // wrap.
                 compiled.push(StagedFile {
-                    output_path: PathBuf::from(format!("workers/{dashes}/compose.ts")),
+                    output_path: layout.member_file(ctx_name, "compose.ts"),
                     document: Document::Ts(compose_ts),
                     source_map: None,
                     debug_metadata: None,
                 });
                 compiled.push(StagedFile {
-                    output_path: PathBuf::from(format!("workers/{dashes}/wrangler.toml")),
+                    output_path: layout.worker_file(ctx_name, "wrangler.toml"),
                     document: Document::Toml(wrangler_doc),
                     source_map: None,
                     debug_metadata: None,
@@ -4104,10 +4179,8 @@ fn build_output(
                     },
                 ) {
                     compiled.push(StagedFile {
-                        output_path: PathBuf::from(format!(
-                            "workers/{dashes}/{}",
-                            emitter::contracts::CONTRACTS_MANIFEST
-                        )),
+                        output_path: layout
+                            .member_file(ctx_name, emitter::contracts::CONTRACTS_MANIFEST),
                         document: Document::Json(manifest),
                         source_map: None,
                         debug_metadata: None,
@@ -4118,10 +4191,7 @@ fn build_output(
                 // imports, when the context declares one.
                 if let Some(client) = emitter::client::emit_client(ctx_name, table, &own_types) {
                     compiled.push(StagedFile {
-                        output_path: PathBuf::from(format!(
-                            "workers/{dashes}/{}",
-                            emitter::client::CLIENT_FILE
-                        )),
+                        output_path: layout.member_file(ctx_name, emitter::client::CLIENT_FILE),
                         document: Document::Ts(client),
                         source_map: None,
                         debug_metadata: None,
@@ -4137,10 +4207,8 @@ fn build_output(
                 );
                 if let Some(manifest) = emitter::emit_secrets_manifest(table, &reads) {
                     compiled.push(StagedFile {
-                        output_path: PathBuf::from(format!(
-                            "workers/{dashes}/{}",
-                            emitter::secrets::SECRETS_MANIFEST
-                        )),
+                        output_path: layout
+                            .member_file(ctx_name, emitter::secrets::SECRETS_MANIFEST),
                         document: Document::Json(manifest),
                         source_map: None,
                         debug_metadata: None,
@@ -4604,6 +4672,32 @@ fn deps_entry_sort_key(key: &str) -> String {
     format!("{key}:")
 }
 
+/// #2683: a `call` handler that calls `within` (or sends) reads `deps.__exec`.
+/// The bundle has no platform execution context, so what it is handed is kept
+/// alive by the process; a fault in it, with no handler left to raise it to, is
+/// reported by the same reporter `e.detach()` uses (#3541), not a logger of the
+/// shim's own. `None` when no handler of the context needs one.
+fn bundle_process_exec_entry(table: &UnitTable) -> Option<(String, TsExpr)> {
+    table
+        .services
+        .values()
+        .any(|s| {
+            s.handlers
+                .iter()
+                .any(|h| bynk_emit::emitter::call_handler_needs_exec(&table.exec_plan, h))
+        })
+        .then(|| ("__exec".to_string(), ident("__bynkProcessExec()")))
+}
+
+/// The composition root's import of `__bynkProcessExec` from the runtime.
+fn process_exec_import() -> Vec<TsStmt> {
+    emitter::runtime_files::runtime_import_stmts(
+        false,
+        &["__bynkProcessExec".to_string()],
+        "./runtime.js",
+    )
+}
+
 #[allow(clippy::too_many_arguments)]
 fn emit_composition_root(
     groups: &BTreeMap<String, Vec<usize>>,
@@ -4688,6 +4782,8 @@ fn emit_composition_root(
     }
 
     let mut body: Vec<TsStmt> = Vec::new();
+    // #3541: whether a context took the bundle's process execution context.
+    let mut process_exec_used = false;
 
     for ctx_name in &ordered {
         if kinds.get(ctx_name.as_str()) != Some(&UnitKind::Context) {
@@ -4871,19 +4967,9 @@ fn emit_composition_root(
             };
             deps_entries.push(("__eventsDispatch".to_string(), arrow));
         }
-        // #2683: a `call` handler that calls `within` (or sends) reads
-        // `deps.__exec`. The bundle has no platform execution context, so what
-        // it is handed is kept alive by the process; a fault in it, with no
-        // handler left to raise it to, is logged.
-        if table.services.values().any(|s| {
-            s.handlers
-                .iter()
-                .any(|h| bynk_emit::emitter::call_handler_needs_exec(&table.exec_plan, h))
-        }) {
-            deps_entries.push((
-                "__exec".to_string(),
-                ident("{ waitUntil(promise: globalThis.Promise<unknown>): void { promise.catch((e) => globalThis.console.error(\"an abandoned effect failed\", String(e))); } }"),
-            ));
+        if let Some(entry) = bundle_process_exec_entry(table) {
+            process_exec_used = true;
+            deps_entries.push(entry);
         }
         deps_entries.sort_by_cached_key(|(k, _)| deps_entry_sort_key(k));
 
@@ -5000,6 +5086,9 @@ fn emit_composition_root(
         None,
     ));
     program.push(TsStmt::comment("composition root", None));
+    if process_exec_used {
+        program.stmts.extend(process_exec_import());
+    }
 
     // Import every context as a namespace.
     for ctx_name in &contexts {

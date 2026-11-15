@@ -1,0 +1,2 @@
+# #3541: a detached Err in a cron or queue handler is a reported failure, not a failed case.
+passed=3 failed=0

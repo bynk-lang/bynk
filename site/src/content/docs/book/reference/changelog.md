@@ -3,7 +3,7 @@ title: Version compatibility & changelog
 ---
 Bynk is pre-1.0 and developed in small, spec-first increments (see
 [Versioning & roadmap](/book/about/versioning-and-roadmap/)). This book is
-written against **v0.615**.
+written against **v0.627**.
 
 This page is a high-level summary of notable increments, not an exhaustive
 per-commit history. While Bynk is pre-1.0, increments may change behaviour.
@@ -28,6 +28,25 @@ per-commit history. While Bynk is pre-1.0, increments may change behaviour.
 
 | Version | Highlights |
 |---|---|
+| **v0.627.0** | A linked `MtlsCertificate` kind, `capability Backend = MtlsCertificate @certificate("acme-client")`, whose `send` presents an account-held client certificate to an origin (experimental; the deploy lands separately) |
+| **v0.626.2** | Design: a plan to move the VS Code extension's diagram views from Mermaid to a first-party renderer in UML notation (model-diagrams track, settling) |
+| **v0.626.1** | Call hierarchy covers cross-context service calls, through `consumes … as` aliases too (#3582) |
+| **v0.626.0** | An `on http` handler takes a fifth special parameter, `cf: RequestCf`, the optional facts Cloudflare derived about the connection (Cloudflare-only, experimental) |
+| **v0.625.3** | `bynk/architectureModel` lists each event's emitters and subscribers and each handler's capability use (`given`, with the suites that `stub` it) |
+| **v0.625.2** | The `bynk/sequenceModel` request gives each `alt` branch a source `range` |
+| **v0.625.1** | `bynk deploy --env` copies the `ai` and `ai_search` bindings into the environment block, so a Workers AI or AI Search Worker is no longer unbound there (#3577) |
+| **v0.625.0** | `bynk build` refuses a `[deploy.workers.<key>]` group whose members declare a service of the same name, and, for now, one with more than one publishing member (#3562, G2b) |
+| **v0.624.0** | A case that reads a participant's database with `D1.peek` is refused under `bynk test --against`, or skipped naming why with `--skip-unsupported`, and `D1.peek` has hover, completion and signature help |
+| **v0.623.0** | A `system` or `integration` case can run `D1.peek` reads against the participant's in-memory test database, which refuses every write at run time (harness half) |
+| **v0.622.1** | A Workers build places each context's generated files through a `WorkerLayout`, the identity layout for now, ahead of `[deploy.workers]` groups sharing a directory (#3562, G2b) |
+| **v0.622.0** | The platform lock treats a `[deploy.workers.<key>]` group as one deployment unit, the union of its members' native platforms, as a Worker is one unit (#3562, G2a) |
+| **v0.621.0** | `bynk build` refuses a `[deploy.workers.<key>]` group whose members declare different bindings under one name; identical declarations share one binding (#3562, G2a) |
+| **v0.620.0** | A `system` or `integration` case can read a participant's test D1 database with `D1.peek(<participant>.<Capability>)`, a read-only handle whose SQL is checked against the migrations (checker half) |
+| **v0.619.0** | Naming a type, capability or service that the file's own `consumes` does not bring in is now an error (`bynk.consumes.type_not_selected`, `bynk.consumes.capability_not_selected`, `bynk.consumes.unit_not_consumed`), with the same fixes (#3536) |
+| **v0.618.0** | `bynk check` and `bynk build` refuse a `[deploy.workers.<key>]` group that names an undeclared unit, a unit that is not a `context`, or a key that is an ungrouped context's Worker, in the editor too (#3562, G1) |
+| **v0.617.0** | `bynk.toml` reads and validates a `[deploy.workers.<key>]` table of Worker groups (#3562, G1); the build does not use it yet |
+| **v0.616.1** | A Bundle build reports a detached fault through the same reporter as `e.detach()`, and a detached `Err` in a cron or queue handler is counted in `detached_failures` under `bynk test` |
+| **v0.616.0** | `bynk client`'s generated module exports `viaBinding`, which sends a client's calls through a Cloudflare Service Binding, with a verified recipe for SvelteKit and Next.js on Cloudflare (#3508 slice BC5) |
 | **v0.615.0** | `bynk client` generates `@raw` request bodies and the raw and streamed answers (`Raw`, `RawTagged`, `RawCreated`, `RawStreamed`, `RawError`, and `Streaming` as an async iterable of server-sent events) (#3508 slice BC4) |
 | **v0.614.1** | The editor now shows `bynk.capability.not_provided` in a bundle with a composition root, at the same `given` and with the same message as `bynk check`. `bynk check` also raises it when the only thing that brings the root in is a context that emits events (`Events.emit`); before, only `bynk test` and `bynk build` failed, with `tsc` errors in `compose.ts` |
 | **v0.614.0** | A suite file may have its own `consumes`, and a suite file consumes what it names: naming a type that the suite's own `consumes` does not bring in (the target's clauses are not inherited) is `bynk.consumes.type_not_selected`, with a fix that edits the suite file (#3536) |

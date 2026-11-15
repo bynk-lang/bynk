@@ -67,6 +67,10 @@ pub struct D1SqlSite {
     /// order, each against the schema the earlier ones leave. `None` for any
     /// other call.
     pub batch: Option<BatchPosition>,
+    /// #3147: for a statement read through `D1.peek`, the participant whose
+    /// database it reads (`shop.orders`) and its capability (`Orders`; `cap`
+    /// is the handle's own name). Such a statement must not write.
+    pub peek: Option<(String, String)>,
 }
 
 /// #3197: where a statement sits in its `batch` list literal.
@@ -356,6 +360,7 @@ pub(crate) fn check_sql_argument(
                     passed: literal_list_len(args.get(1), ctx),
                     literal: None,
                     batch: None,
+                    peek: None,
                 }),
             );
         } else {
@@ -413,6 +418,7 @@ fn record_batch_sites(cap: &str, list: Option<&Expr>, ctx: &mut Ctx) {
                 passed,
                 literal: None,
                 batch: Some(BatchPosition { group, index }),
+                peek: None,
             }),
         );
     }
@@ -933,6 +939,7 @@ pub(crate) fn check_typed_read(
                 passed: literal_list_len(args.get(1), ctx),
                 literal: select_literal,
                 batch: None,
+                peek: None,
             }),
         );
     }

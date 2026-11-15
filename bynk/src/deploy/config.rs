@@ -55,6 +55,9 @@ struct WranglerConfig {
     /// #3480: the `[[ai_search]]` of the `AiSearch` instances.
     #[serde(default)]
     ai_search: Vec<AiSearchBinding>,
+    /// #3513 A: the `[[mtls_certificates]]` of the `MtlsCertificate` instances.
+    #[serde(default)]
+    mtls_certificates: Vec<MtlsCertificateBinding>,
     /// #3302: the `[[send_email]]` of the `Email` instances.
     #[serde(default)]
     send_email: Vec<SendEmailBinding>,
@@ -72,6 +75,15 @@ struct SendEmailBinding {
     /// the instance is unrestricted.
     #[serde(default)]
     allowed_sender_addresses: Vec<String>,
+}
+
+#[derive(Debug, Deserialize)]
+struct MtlsCertificateBinding {
+    /// `MTLS_<SNAKE>`: the instance's binding.
+    binding: String,
+    /// The certificate's name, as `@certificate` wrote it, until the deploy replaces it
+    /// with the id it resolves.
+    certificate_id: String,
 }
 
 #[derive(Debug, Deserialize)]
@@ -310,6 +322,17 @@ pub(crate) struct AiSearchDecl {
     /// The instance's name, as `@instance` wrote it, used as written in
     /// every environment.
     pub(crate) instance: String,
+}
+
+/// #3513 A: one `MtlsCertificate` instance, as the emitted config declares it. The certificate
+/// belongs to whoever uploaded it, so the deploy finds it by name and never uploads it.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub(crate) struct MtlsCertificateDecl {
+    /// `MTLS_<SNAKE>`, the key the ledger records the link under.
+    pub(crate) binding: String,
+    /// The certificate's name, as `@certificate` wrote it, used as written in every
+    /// environment.
+    pub(crate) certificate: String,
 }
 
 /// #3301: one `StoredSecret` instance, as the emitted config declares it.
@@ -614,6 +637,8 @@ pub(crate) struct Resources {
     /// recorded in the ledger; nothing is created, and nothing is deleted
     /// when an instance goes.
     pub(crate) ai_search: Vec<AiSearchDecl>,
+    /// #3513 A: the `MtlsCertificate` instances, linked by name and never uploaded.
+    pub(crate) mtls_certificates: Vec<MtlsCertificateDecl>,
     /// #3302: the `@allowedSenders` of the `Email` instances that have any, in
     /// binding order. Only checked (each domain must be enabled for Email
     /// Sending on the account); nothing is created, recorded or deleted.
@@ -708,6 +733,7 @@ impl Default for Resources {
             analytics_datasets: Vec::new(),
             stored_secrets: Vec::new(),
             ai_search: Vec::new(),
+            mtls_certificates: Vec::new(),
             email_senders: Vec::new(),
             email_addresses: Vec::new(),
             declared_secrets: Vec::new(),
@@ -969,6 +995,15 @@ fn read_resources(config: &Path, project_workers: &[String]) -> Result<Resources
         })
         .collect();
     ai_search.sort_by(|a, b| a.binding.cmp(&b.binding));
+    let mut mtls_certificates: Vec<MtlsCertificateDecl> = parsed
+        .mtls_certificates
+        .into_iter()
+        .map(|c| MtlsCertificateDecl {
+            binding: c.binding,
+            certificate: c.certificate_id,
+        })
+        .collect();
+    mtls_certificates.sort_by(|a, b| a.binding.cmp(&b.binding));
     let mut email_senders: Vec<EmailSendersDecl> = parsed
         .send_email
         .into_iter()
@@ -1052,6 +1087,7 @@ fn read_resources(config: &Path, project_workers: &[String]) -> Result<Resources
         analytics_datasets,
         stored_secrets,
         ai_search,
+        mtls_certificates,
         email_senders,
         email_addresses: {
             let mut addresses = parsed.addresses;
@@ -1579,6 +1615,14 @@ pub(crate) fn synthesise_environment_block(
         env_block.insert("secrets_store_secrets".to_string(), secrets.clone());
     }
 
+    // #3513 A: each mTLS certificate as written: the account's certificate, named the same in
+    // every environment, so it carries over with no environment suffix; the deploy slice
+    // resolves its id into the top level first. Bindings are not inherited by `[env.*]`, or a
+    // staging Worker has no `MTLS_*` to call through.
+    if let Some(certificates) = doc.get("mtls_certificates") {
+        env_block.insert("mtls_certificates".to_string(), certificates.clone());
+    }
+
     // #3302: each email binding as written, restrictions included: it names
     // no resource of the build, so it is the same in every environment, and
     // bindings are not inherited by `[env.*]`, or a staging Worker has no
@@ -1591,6 +1635,17 @@ pub(crate) fn synthesise_environment_block(
     // the same in every environment; bindings are not inherited by `[env.*]`.
     if let Some(version_metadata) = doc.get("version_metadata") {
         env_block.insert("version_metadata".to_string(), version_metadata.clone());
+    }
+
+    // #3577: Workers AI (#3478) and AI Search (#3480), each as written: `[ai]`
+    // names no resource, and an `[[ai_search]]` entry names the account's
+    // instance as the declaration writes it, the same in every environment.
+    // Bindings are not inherited by `[env.*]`, or a staging Worker has no `AI`
+    // or `AI_SEARCH_*` to call.
+    for table in ["ai", "ai_search"] {
+        if let Some(value) = doc.get(table) {
+            env_block.insert(table.to_string(), value.clone());
+        }
     }
 
     // P3 (#2342): the rate limiters, copied as the top level has them. The
@@ -1674,6 +1729,7 @@ pub(crate) fn synthesise_environment_block(
 #[cfg(test)]
 pub(crate) mod tests {
     use super::*;
+    use bynk_check::worker_bindings::{BindingSource, WorkerBinding};
 
     fn names(v: &[&str]) -> Vec<String> {
         v.iter().map(|s| s.to_string()).collect()
@@ -1753,6 +1809,17 @@ pub(crate) mod tests {
                 .map(|(binding, instance)| AiSearchDecl {
                     binding: binding.to_string(),
                     instance: instance.to_string(),
+                })
+                .collect();
+            self
+        }
+        /// Derived `MtlsCertificate` instances, as `(binding, certificate)` (#3513 A).
+        pub(crate) fn mtls_certificates(mut self, instances: &[(&str, &str)]) -> Self {
+            self.mtls_certificates = instances
+                .iter()
+                .map(|(binding, certificate)| MtlsCertificateDecl {
+                    binding: binding.to_string(),
+                    certificate: certificate.to_string(),
                 })
                 .collect();
             self
@@ -2196,6 +2263,247 @@ max_batch_size = 10
         let block = doc["env"]["staging"].as_table().unwrap();
         assert_eq!(block["name"].as_str(), Some("api-staging"));
         assert_eq!(block.len(), 1, "a name and nothing else: {out}");
+    }
+
+    /// One binding of every [`BindingSource`] kind. The `match` has no
+    /// wildcard, so a new kind is a compile error here until it is added to
+    /// the list, and the guard below then sees the tables it writes.
+    fn one_binding_of_every_kind() -> Vec<WorkerBinding> {
+        let sample = |name: &str, source: BindingSource| WorkerBinding {
+            name: name.to_string(),
+            source,
+        };
+        let cap = || "Cap".to_string();
+        let bindings = vec![
+            sample(
+                "SVC",
+                BindingSource::Service {
+                    context: "other".into(),
+                },
+            ),
+            sample("KV", BindingSource::Kv),
+            sample("KV_X", BindingSource::KvInstance { capability: cap() }),
+            sample(
+                "FOREIGN",
+                BindingSource::ForeignService {
+                    capability: cap(),
+                    worker: "legacy".into(),
+                },
+            ),
+            sample(
+                "R2_X",
+                BindingSource::R2Instance {
+                    capability: cap(),
+                    jurisdiction: None,
+                },
+            ),
+            sample(
+                "RL_X",
+                BindingSource::RateLimitInstance {
+                    capability: cap(),
+                    limit: 10,
+                    period: 60,
+                },
+            ),
+            sample(
+                "Q_X",
+                BindingSource::QueueProducer {
+                    capability: cap(),
+                    queue: "jobs".into(),
+                },
+            ),
+            sample(
+                "AE_X",
+                BindingSource::AnalyticsDataset { capability: cap() },
+            ),
+            sample("D1_X", BindingSource::D1Database { capability: cap() }),
+            sample(
+                "SECRET_X",
+                BindingSource::StoredSecret {
+                    capability: cap(),
+                    store: "store".into(),
+                    secret: "secret".into(),
+                },
+            ),
+            sample(
+                "EMAIL_X",
+                BindingSource::Email {
+                    capability: cap(),
+                    to: None,
+                    allowed_recipients: vec![],
+                    allowed_senders: vec![],
+                },
+            ),
+            sample("PG_X", BindingSource::Postgres { capability: cap() }),
+            sample(
+                "MYSQL_X",
+                BindingSource::MySql {
+                    capability: cap(),
+                    tls: None,
+                },
+            ),
+            sample(
+                "VEC_X",
+                BindingSource::VectorizeIndex {
+                    capability: cap(),
+                    dimensions: 8,
+                    metric: "cosine".into(),
+                    indexed: vec![],
+                },
+            ),
+            sample(
+                "CONTAINER_X",
+                BindingSource::ContainerInstance {
+                    capability: cap(),
+                    class_name: "BoxClass".into(),
+                    build: "box".into(),
+                    root_from_worker: "../../..".into(),
+                    port: 8080,
+                    sleep_after: None,
+                    instance_type: None,
+                    forward: vec![],
+                },
+            ),
+            sample(
+                "AI_SEARCH_X",
+                BindingSource::AiSearchInstance {
+                    capability: cap(),
+                    instance: "docs".into(),
+                },
+            ),
+            sample(
+                "MTLS_X",
+                BindingSource::MtlsCertificate {
+                    capability: cap(),
+                    certificate: "acme-client".into(),
+                },
+            ),
+            sample(
+                "AGENT",
+                BindingSource::Agent {
+                    class_name: "Counter".into(),
+                },
+            ),
+            sample(
+                "FANOUT",
+                BindingSource::EventsFanout {
+                    class_name: "Fanout".into(),
+                },
+            ),
+        ];
+        for b in &bindings {
+            match &b.source {
+                BindingSource::Service { .. }
+                | BindingSource::Kv
+                | BindingSource::KvInstance { .. }
+                | BindingSource::ForeignService { .. }
+                | BindingSource::R2Instance { .. }
+                | BindingSource::RateLimitInstance { .. }
+                | BindingSource::QueueProducer { .. }
+                | BindingSource::AnalyticsDataset { .. }
+                | BindingSource::D1Database { .. }
+                | BindingSource::StoredSecret { .. }
+                | BindingSource::Email { .. }
+                | BindingSource::Postgres { .. }
+                | BindingSource::MySql { .. }
+                | BindingSource::VectorizeIndex { .. }
+                | BindingSource::ContainerInstance { .. }
+                | BindingSource::AiSearchInstance { .. }
+                | BindingSource::MtlsCertificate { .. }
+                | BindingSource::Agent { .. }
+                | BindingSource::EventsFanout { .. } => {}
+                // Every registered singleton is added by the caller.
+                BindingSource::Singleton { .. } => unreachable!(),
+            }
+        }
+        bindings
+    }
+
+    /// The top-level tables `emit_wrangler_toml` writes for `bindings`, less
+    /// those it writes for a Worker with no bindings at all (`name`, `main`,
+    /// the compatibility keys, `triggers`, ...), which are not bindings.
+    fn emitted_binding_tables(bindings: &[WorkerBinding]) -> BTreeSet<String> {
+        use bynk_emit::emitter::{toml_doc::print_toml_document, wrangler::emit_wrangler_toml};
+        let emit = |bindings: &[WorkerBinding]| -> toml::Table {
+            let doc = emit_wrangler_toml(
+                "shop",
+                bindings,
+                &["0 * * * *".to_string()],
+                &[],
+                &["orders@shop.example".to_string()],
+                &[],
+                Some(true),
+                &Default::default(),
+                &Default::default(),
+            );
+            print_toml_document(&doc)
+                .parse()
+                .expect("emitted TOML parses")
+        };
+        let base = emit(&[]);
+        emit(bindings)
+            .keys()
+            .filter(|k| !base.contains_key(*k))
+            .cloned()
+            .collect()
+    }
+
+    /// #3577: `[env.*]` does not inherit bindings, so a table the emitter
+    /// writes at the top level and the environment block does not copy leaves
+    /// that binding unbound in the deployed environment. The tables are read
+    /// from a real emission of every binding kind (and every registered
+    /// singleton), so a new kind is held to the same rule without a list to
+    /// update.
+    #[test]
+    fn every_binding_table_the_emitter_writes_is_copied_into_the_environment() {
+        let mut bindings = one_binding_of_every_kind();
+        let cloudflare = bynk_check::firstparty::unit(bynk_check::firstparty::CLOUDFLARE_UNIT)
+            .expect("the Cloudflare unit is registered");
+        bindings.extend(cloudflare.singletons.iter().map(|s| WorkerBinding {
+            name: s.binding.to_string(),
+            source: BindingSource::Singleton {
+                capability: s.capability.to_string(),
+            },
+        }));
+        let tables = emitted_binding_tables(&bindings);
+        assert!(
+            tables.len() >= 10 && tables.contains("ai") && tables.contains("version_metadata"),
+            "the emission should write every binding table: {tables:?}"
+        );
+
+        let config = {
+            use bynk_emit::emitter::{toml_doc::print_toml_document, wrangler::emit_wrangler_toml};
+            print_toml_document(&emit_wrangler_toml(
+                "shop",
+                &bindings,
+                &[],
+                &[],
+                &[],
+                &[],
+                None,
+                &Default::default(),
+                &Default::default(),
+            ))
+        };
+        let out = synthesise_environment_block(
+            &config,
+            "staging",
+            &kv_ids(&[("KV", "kv-id"), ("KV_X", "kv-x-id")]),
+            &BTreeSet::new(),
+        )
+        .expect("valid TOML in, valid TOML out");
+        let parsed: toml::Table = out.parse().expect("valid TOML out");
+        let env = parsed["env"]["staging"]
+            .as_table()
+            .expect("an [env.staging] block");
+        // `images` (#3578) needs no special case: it is checked as soon as the
+        // emitter writes it, and its copy lands with that change.
+        let missing: Vec<&String> = tables.iter().filter(|t| !env.contains_key(*t)).collect();
+        assert!(
+            missing.is_empty(),
+            "the emitter writes these tables at the top level but `synthesise_environment_block` \
+             does not copy them into `[env.*]`, so the binding is unbound in the environment: {missing:?}"
+        );
     }
 
     #[test]

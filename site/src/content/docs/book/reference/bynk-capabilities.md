@@ -494,6 +494,7 @@ Consuming it **locks the deployment unit to Cloudflare** (it cannot then target
 | **`Vectorize`** *(experimental)* | `upsert(vectors: List[Vector]) -> Effect[Result[Mutation, VectorError]]` · `insert(vectors) -> Effect[Result[Mutation, VectorError]]` · `upsertValue[M: Codable](vectors: List[VectorOf[M]]) -> Effect[Result[Mutation, VectorError]]` · `query(vector: List[Float], options: QueryOptions) -> Effect[Result[List[VectorMatch], VectorError]]` · `getByIds(ids: List[String]) -> Effect[Result[List[Vector], VectorError]]` · `deleteByIds(ids) -> Effect[Result[Mutation, VectorError]]` · `describe() -> Effect[Result[IndexInfo, VectorError]]`. Used only through a named instance that states its dimensions and metric; see [Vector indexes](#vector-indexes-vectorize). |
 | **`Container`** *(experimental)* | `send(instance: String, req: Request) -> Effect[Result[Response, ContainerError]]` · `receiveBytes(instance, req) -> Effect[Result[BytesResponse, ContainerError]]` · `sendBytes(instance, req, body: Bytes) -> Effect[Result[BytesResponse, ContainerError]]`. Used only through a named instance that names its image and port; see [Containers](#containers-container). |
 | **`AiSearch`** *(experimental)* | `search(query: String, options: SearchOptions) -> Effect[Result[List[SearchHit], SearchError]]` · `answer(messages: List[ChatMessage], options: SearchOptions) -> Effect[Result[SearchAnswer, SearchError]]`. Used only through a named instance that names an existing AI Search instance; see [AI Search](#ai-search-aisearch). |
+| **`MtlsCertificate`** *(experimental)* | `send(req: Request) -> Effect[Result[Response, FetchError]]`. Used only through a named instance that names a client certificate in the account; see [Mutual TLS](#mutual-tls-mtlscertificate). |
 
 `Kv` is backed by a Worker KV namespace bound as `env.KV`; the
 `[[kv_namespaces]]` stanza is derived for you.
@@ -1574,6 +1575,66 @@ for what applies, and put a `RateLimit` in front of any handler an anonymous cal
 can reach. `Vectorize` is experimental: list `"bynk.cloudflare.Vectorize"` under
 `[unstable] allow`.
 
+### Mutual TLS: `MtlsCertificate`
+
+`MtlsCertificate` makes an outbound call that presents one of your account's client
+certificates, for an origin that requires [mutual TLS](https://developers.cloudflare.com/workers/runtime-apis/bindings/mtls/):
+the origin proves its identity during the handshake, and so does the Worker. Each
+certificate is a named instance that says which certificate; the option is
+required, and a bare `given MtlsCertificate` is refused
+(`bynk.capability.instance_only`):
+
+```bynk,fragment
+consumes bynk
+consumes bynk.cloudflare { MtlsCertificate }
+
+capability Backend = MtlsCertificate @certificate("acme-client")
+
+service orders from http {
+	on GET("/orders") () -> Effect[HttpResult[String]] by Visitor given Backend {
+		let req = Request {
+			method: Get,
+			url: "https://orders.acme.example/v1/orders",
+			contentType: None,
+			authorization: None,
+			headers: Map.empty(),
+			body: None,
+		}
+		let res <- Backend.send(req)
+		match res {
+			Ok(r) => Ok("status \(r.status)"),
+			Err(_) => ServerError("the origin is unreachable"),
+		}
+	}
+}
+```
+
+`Backend` binds as `env.MTLS_BACKEND`, an `[[mtls_certificates]]` entry. `@certificate`
+is the certificate's **name** as it was uploaded to the account, never its id, so an
+id stays out of source; it is used as written in every environment, and an empty name
+is refused (`bynk.capability.invalid_option`). The generated stanza carries the name in
+`certificate_id`. Resolving the name to the certificate's id is the deploy's job and is not
+built yet, so `bynk deploy` refuses a Worker that declares an `MtlsCertificate` until it is,
+rather than push a name where Cloudflare expects an id.
+
+`send` has [`Fetch.send`](#the-portable-surface--bynk)'s shape and rules: the same
+`Request` (its headers checked the same way), the same `Response`, and `Network` when the
+call itself fails, a handshake the origin refuses included. Unlike [`Service`](#calling-a-worker-outside-the-project-service),
+the URL's host **is** the destination: this is a real outbound call, and the certificate is
+presented to whatever origin the URL names. `Request`, `Response` and `FetchError` are
+`bynk`'s types, so a context that calls `send` also writes `consumes bynk`.
+
+The certificate belongs to whoever uploaded it, with its private key, which never reaches
+Bynk or the Worker. Upload it with Wrangler's `mtls-certificate upload`, the dashboard or the
+API; see Cloudflare's [mTLS binding page](https://developers.cloudflare.com/workers/runtime-apis/bindings/mtls/)
+for what it supports. In particular, Cloudflare does not support presenting a certificate to an
+origin that is a proxied zone on Cloudflare: the call fails with a `520`.
+
+A test never presents a certificate: `send` **faults** until
+`stub Backend.send(_) returns …` gives it a reply, so a test never reaches the origin.
+`MtlsCertificate` is experimental: list `"bynk.cloudflare.MtlsCertificate"` under
+`[unstable] allow`.
+
 ### AI Search: `AiSearch`
 
 `AiSearch` is a Cloudflare [AI Search](https://developers.cloudflare.com/ai-search/)
@@ -2212,7 +2273,7 @@ variant arrives:
 ```bynk
 context app.probe
 
-consumes bynk { Fetch, Request }
+consumes bynk { Fetch, Request, Method, FetchError }
 
 service probe {
 	on call(url: String) -> Effect[String] given Fetch {

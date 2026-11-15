@@ -84,10 +84,13 @@ async function __sysdrive_wrongmethod_api(method: string, path: string) {
   return __responseToHttpOutcome(__res, (__j: __JsonValue) => Ok(__j as never));
 }
 
-type __BynkJobExec = { pending: Promise<unknown>[]; waitUntil(promise: Promise<unknown>): void; __bynkResult?: unknown };
+// #3541: `report` records a detached failure on the case, as the HTTP and service double's does (send.ts), so a detached `Err` in a cron or queue handler is counted in `detached_failures` and not left to `console.error`.
+type __BynkJobDetachReport = { kind: string; site: string; type: string | null; variant: string | null };
+type __BynkJobExec = { pending: Promise<unknown>[]; waitUntil(promise: Promise<unknown>): void; report(record: __BynkJobDetachReport): void; __bynkResult?: unknown };
 function __bynkJobExec(): __BynkJobExec {
   const pending: Promise<unknown>[] = [];
-  return { pending, waitUntil(promise: Promise<unknown>): void { pending.push(promise); } };
+  const reports = ((globalThis as unknown as { __bynkDetachedReports?: __BynkJobDetachReport[] }).__bynkDetachedReports ??= []);
+  return { pending, waitUntil(promise: Promise<unknown>): void { pending.push(promise); }, report(record: __BynkJobDetachReport): void { reports.push(record); } };
 }
 async function __bynkJobSettle(exec: __BynkJobExec, run: Promise<void>): Promise<void> {
   await run;

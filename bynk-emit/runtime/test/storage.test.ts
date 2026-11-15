@@ -281,3 +281,30 @@ test("makeIntegrationHyperdrive faults on the connection string, naming the bind
   const h = makeIntegrationHyperdrive("HYPERDRIVE_MAIN");
   assert.throws(() => h.connectionString, /HYPERDRIVE_MAIN.*stub/);
 });
+
+// #3147: a `D1.peek` handle reads the database the app wrote, and never writes it.
+// A row from `node:sqlite` has a null prototype.
+const plain = (v: unknown) => JSON.parse(JSON.stringify(v));
+
+test("makeIntegrationD1's read-only view sees the app's writes and refuses every write", async () => {
+  const db = makeIntegrationD1([["0001", "CREATE TABLE t (id TEXT PRIMARY KEY, n INTEGER)"]]);
+  const peek = db.readOnly();
+  await db.prepare("INSERT INTO t (id, n) VALUES (?1, ?2)").bind("a", 1).run();
+  assert.deepEqual(plain((await peek.prepare("SELECT id, n FROM t").all()).results), [{ id: "a", n: 1 }]);
+  assert.deepEqual(plain(await peek.prepare("SELECT id FROM t WHERE id = ?1").bind("a").first()), { id: "a" });
+
+  for (const sql of ["INSERT INTO t (id, n) VALUES ('b', 2)", "UPDATE t SET n = 2", "DELETE FROM t", "DROP TABLE t", "CREATE TABLE u (x)"]) {
+    await assert.rejects(() => peek.prepare(sql).run(), /D1_ERROR/, sql);
+  }
+  await assert.rejects(() => peek.prepare("DELETE FROM t").all(), /D1_ERROR/);
+  await assert.rejects(() => peek.batch([]), /read-only/);
+  assert.deepEqual(plain((await db.prepare("SELECT id FROM t").all()).results), [{ id: "a" }], "nothing was written");
+});
+
+test("makeIntegrationD1's read-only view leaves the app's own writes unaffected", async () => {
+  const db = makeIntegrationD1([["0001", "CREATE TABLE t (id TEXT PRIMARY KEY)"]]);
+  const peek = db.readOnly();
+  await assert.rejects(() => peek.prepare("INSERT INTO t (id) VALUES ('x')").run(), /D1_ERROR/);
+  await db.prepare("INSERT INTO t (id) VALUES ('y')").run();
+  assert.deepEqual(plain((await peek.prepare("SELECT id FROM t").all()).results), [{ id: "y" }]);
+});
