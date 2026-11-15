@@ -1,12 +1,6 @@
----
-level: minor
-changelog: `bynk client` generates `@raw` request bodies and the raw and streamed answers (`Raw`, `RawTagged`, `RawCreated`, `RawStreamed`, `RawError`, and `Streaming` as an async iterable of server-sent events) (#3508 slice BC4)
-probes: ts_writes
----
+# 0850 — `bynk client`: raw bodies, raw answers and server-sent events
 
-## ADR: bynk-client-raw-bodies-and-streams
-title: `bynk client`: raw bodies, raw answers and server-sent events
-summary: A `@raw` body is the caller's bytes under the declared type, a raw answer hands over the response body untouched, and `Streaming` is an async iterable of the events the server frames
+- **Status:** Accepted (v0.615)
 
 **Context.** BC1 to BC3 of #3508 left out the routes whose body Bynk does not own the form of: a `@raw` request body, the raw answers (`Raw`, `RawTagged`, `RawCreated`, `RawStreamed`, `RawError`) and the streamed `Streaming` answer. The proposal's Decision F fixed their shape and asked this slice to verify the event framing against the server, which it did by reading `sseResponse` in the runtime and running the generated reader against a real Worker and `workerd`.
 
