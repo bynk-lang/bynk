@@ -7,7 +7,7 @@ title: Diagnostic index
 
 Every diagnostic code the compiler can emit, with a one-line summary of the cause, grouped by category. For step-by-step cause-and-fix guidance on the most common ones, see the [troubleshooting guides](/book/troubleshooting/). For a code with a curated explanation, `bynk explain <code>` prints it in a terminal, and in VS Code the diagnostic's **Explain** quick fix (or **Bynk: Explain Diagnostic Code…**) shows the same text in a panel, offline.
 
-There are **872** codes in total.
+There are **878** codes in total.
 
 ## Agents
 
@@ -410,8 +410,14 @@ There are **872** codes in total.
 | [`bynk.d1.sql_invalid`](/book/reference/bynk-capabilities/#sql-checked-against-the-migrations) | A literal D1 statement does not prepare against the schema the binding's migrations build: a syntax error, or an unknown table or column. |  | — |
 | [`bynk.d1.sql_param_count`](/book/reference/bynk-capabilities/#sql-checked-against-the-migrations) | A literal D1 statement uses a different number of bound parameters (`?N`) than the list literal passed with it holds. |  | — |
 | [`bynk.dependency.path_outside_root`](/book/guides/projects-build-and-deployment/share-code-between-projects/#what-the-checks-catch) | A path dependency declared by a dependency resolves outside the workspace; a dependency's own path dependencies are honoured only between members of one workspace. |  | — |
+| `bynk.deploy.context_in_two_groups` | A context is listed in two `[deploy.workers.<key>]` groups; a context is deployed in one Worker only. |  | — |
 | `bynk.deploy.contract_skew` | A worker was compiled against a contract its live dependencies no longer provide, or no longer provides the contract its live callers were compiled against, so `bynk deploy --context` refuses to ship it. |  | — |
+| `bynk.deploy.duplicate_hostname` | A route or custom domain is claimed twice across `[deploy.workers.<key>]` groups. |  | — |
+| `bynk.deploy.empty_group` | A `[deploy.workers.<key>]` group lists no context. |  | — |
 | `bynk.deploy.foreign_contract_skew` | A build breaks the contract a declared foreign caller's client was generated at, as pinned in `bynk.foreign.toml`, so `bynk deploy` refuses to ship it. |  | — |
+| `bynk.deploy.group_name_conflict` | A `[deploy.workers.<key>]` group's key or script name is another group's, or is the Worker of a context in no group. |  | — |
+| `bynk.deploy.not_a_context` | A `[deploy.workers.<key>]` group lists a unit that is not a `context`; only contexts are deployed as Workers. |  | — |
+| `bynk.deploy.unknown_context` | A `[deploy.workers.<key>]` group lists a context the project does not declare. |  | — |
 | [`bynk.detach.in_agent_handler`](/book/reference/capabilities/#detach) | A `detach` was used in an agent handler, which has no execution context to keep a detached effect alive. | [`method_call`](/book/reference/grammar/#rule-method_call) | — |
 | [`bynk.detach.in_pure_context`](/book/reference/capabilities/#detach) | A `detach` was used in a pure (non-effectful) context. | [`method_call`](/book/reference/grammar/#rule-method_call) | — |
 | [`bynk.detach.store_op`](/book/reference/capabilities/#detach) | A `detach` targets an agent store operation, which is part of the handler's atomic commit and cannot be detached. | [`method_call`](/book/reference/grammar/#rule-method_call) | — |

@@ -105,6 +105,30 @@ struct DeployTable {
     /// Container settings, keyed by the `Container` capability's name
     /// (`capability Renderer = Container …` is `Renderer`).
     containers: Option<std::collections::BTreeMap<String, DeployContainerEntry>>,
+    /// Worker groups, keyed by the group's identity: which contexts share one
+    /// Worker. A context in no group stays its own Worker, named by its
+    /// dashed name.
+    workers: Option<std::collections::BTreeMap<String, DeployWorkerEntry>>,
+}
+
+/// One group: the contexts that are deployed as one Worker.
+#[derive(JsonSchema)]
+#[serde(deny_unknown_fields)]
+#[allow(dead_code)]
+struct DeployWorkerEntry {
+    /// The members, as qualified context names (`shop.orders`). Each context
+    /// is in one group only; there are no globs, so adding a context to a
+    /// group is a visible change here.
+    contexts: Vec<String>,
+    /// The Worker's script name on Cloudflare: 1 to 63 lowercase letters,
+    /// digits or `-`. Default: the group's key. The key stays the group's
+    /// identity (its ledger entry, `--worker` selector and `workers/<key>/`
+    /// directory); changing the key or the name makes a different Worker.
+    name: Option<String>,
+    /// Route patterns the Worker is attached to, like `pay.example.com/*`.
+    routes: Option<Vec<String>>,
+    /// Custom domains the Worker is attached to, like `pay.example.com`.
+    custom_domains: Option<Vec<String>>,
 }
 
 /// One `Container` capability's image at deploy.
