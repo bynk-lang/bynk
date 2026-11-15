@@ -171,6 +171,7 @@ fn every_generated_client_passes_tsc_strict() {
         ("one", fixture("one")),
         ("rich", fixture("rich")),
         ("forms", fixture("forms")),
+        ("raw", fixture("raw")),
         ("shapes", shapes_project()),
         ("plain", plain_project()),
     ] {
@@ -197,6 +198,7 @@ fn the_directory_layout_passes_tsc_strict_under_bundler_and_nodenext() {
     for (name, project) in [
         ("rich", fixture("rich")),
         ("forms", fixture("forms")),
+        ("raw", fixture("raw")),
         ("shapes", shapes_project()),
     ] {
         let dir = scratch(&format!("dir-{name}"));
@@ -591,21 +593,10 @@ fn skip_workerd(reason: &str) -> bool {
     )
 }
 
-#[test]
-fn the_client_round_trips_every_route_under_workerd() {
-    if skip_without_tools() {
-        return;
-    }
-    if !tools::tool_exists("npx") && skip_workerd("`npx` is not on PATH") {
-        return;
-    }
-    let dir = scratch("workerd");
-    let proj = dir.join("project");
-    copy_project(&fixture("rich"), &proj);
-    generate(&proj, &dir, &[]);
-    compile_worker(&proj, &dir);
-    tsc(&dir, "the `rich` client");
-
+/// Boot `wrangler dev` over the compiled Worker `worker` of `dir` and wait until
+/// `probe` answers `200`: the process and its port, or `None` (and a skip) where
+/// workerd cannot be had.
+fn boot_workerd(dir: &Path, worker: &str, probe: &str) -> Option<(Vec<wrangler::Wrangler>, u16)> {
     // Its own band, clear of the other smokes'.
     let pid = std::process::id();
     let port = 61_000 + 2 * (pid % 2_000) as u16;
@@ -621,20 +612,20 @@ fn the_client_round_trips_every_route_under_workerd() {
                 "--inspector-port",
                 &(port + 1).to_string(),
             ])
-            .current_dir(dir.join("out/workers/rich"))
+            .current_dir(dir.join("out/workers").join(worker))
             .stdout(Stdio::from(out_log))
             .stderr(Stdio::from(err_log)),
         &dir.join("registry"),
     );
     let Ok(wrangler) = spawned else {
         skip_workerd("could not launch npx");
-        return;
+        return None;
     };
     let mut wranglers = vec![wrangler];
     let deadline = Instant::now() + Duration::from_secs(180);
     loop {
-        if get(port, "/search?q=up").is_ok_and(|r| r.contains("200 OK")) {
-            break;
+        if get(port, probe).is_ok_and(|r| r.contains("200 OK")) {
+            return Some((wranglers, port));
         }
         if Instant::now() > deadline {
             let log = fs::read_to_string(&log).unwrap_or_default();
@@ -643,10 +634,30 @@ fn the_client_round_trips_every_route_under_workerd() {
                 "the Worker did not answer within the boot window (likely no network to provision {})\n{log}",
                 wrangler::SPEC
             ));
-            return;
+            return None;
         }
         std::thread::sleep(Duration::from_millis(500));
     }
+}
+
+#[test]
+fn the_client_round_trips_every_route_under_workerd() {
+    if skip_without_tools() {
+        return;
+    }
+    if !tools::tool_exists("npx") && skip_workerd("`npx` is not on PATH") {
+        return;
+    }
+    let dir = scratch("workerd");
+    let proj = dir.join("project");
+    copy_project(&fixture("rich"), &proj);
+    generate(&proj, &dir, &[]);
+    compile_worker(&proj, &dir);
+    tsc(&dir, "the `rich` client");
+
+    let Some((mut wranglers, port)) = boot_workerd(&dir, "rich", "/search?q=up") else {
+        return;
+    };
     let base = format!("http://127.0.0.1:{port}");
     let out = run_driver(
         &dir,
@@ -919,5 +930,215 @@ fn a_worker_hosted_server_can_set_origin_through_the_client() {
         answer.contains(r#""body":"https://app.example""#),
         "a Worker's `fetch` set `Origin` through the client, and the route saw it:\n{answer}"
     );
+    let _ = fs::remove_dir_all(&dir);
+}
+
+const RAW_DRIVER: &str = r#"
+import { createClient } from "./dist/api.js";
+const sent = [];
+const viaWorker = async (url, init) => {
+  sent.push(`${init.method} ${url.replace(BASE, "")} ${new Headers(init.headers).get("content-type") ?? "-"} duplex=${init.duplex ?? "-"}`);
+  return call(url, init);
+};
+const show = (label, v) => console.log(label, JSON.stringify(v));
+const c = createClient({ baseUrl: BASE, fetch: viaWorker });
+const text = new TextDecoder();
+
+// A raw upload goes as the caller's bytes under the declared type, whatever the client was configured with.
+const octets = new Uint8Array([0, 255, 7, 128]);
+show("put", await c.api.putBlobByName("a b", octets));
+show("put-buffer", await c.api.putBlobByName("x", octets.buffer));
+show("put-blob", await c.api.putBlobByName("y", new Blob([octets])));
+show("put-stream", await c.api.putBlobByName("z", new ReadableStream({ start(k) { k.enqueue(octets); k.close(); } })));
+const json = createClient({ baseUrl: BASE, headers: { "content-type": "application/json" }, fetch: viaWorker });
+show("put-configured", await json.api.putBlobByName("w", octets));
+// `*/*` names no type, so the caller's own is sent.
+show("any", await createClient({ baseUrl: BASE, headers: { "content-type": "image/png" }, fetch: viaWorker }).api.postAny(octets));
+
+const logo = await c.api.getLogo();
+show("logo", { status: logo.status, kind: logo.kind, ct: logo.contentType, weak: /^W\//.test(logo.etag ?? ""), text: await logo.text() });
+const doc = await c.api.getDocByName("a");
+show("doc", { status: doc.status, kind: doc.kind, ct: doc.contentType, etag: doc.etag, text: await doc.text() });
+show("doc-gone", await c.api.getDocByName("gone"));
+const chunks = await c.api.getChunks();
+const read = [];
+for await (const part of chunks.body) read.push(text.decode(part));
+// Where the network cuts the body is its own business: the text is what is read.
+show("chunks", { status: chunks.status, kind: chunks.kind, ct: chunks.contentType, read: read.join("") });
+const made = await c.api.postMadeByName("n", "hi");
+show("made", { status: made.status, kind: made.kind, text: await made.text() });
+const taken = await c.api.postMadeByName("taken", "hi");
+show("taken", { status: taken.status, kind: taken.kind, ct: taken.contentType, text: await taken.text() });
+const bytes = await (await c.api.getLogo()).bytes();
+show("bytes", Array.from(bytes));
+
+// Server-sent events, as the server frames them.
+const ticks = await c.api.getTicks();
+const events = [];
+for await (const e of ticks.events) events.push(e);
+show("ticks", { status: ticks.status, kind: ticks.kind, events });
+const live = await c.api.getFeedByMode("live");
+const seen = [];
+for await (const e of live.events) { seen.push(e); break; }
+show("feed-break", seen);
+show("feed-404", await c.api.getFeedByMode("off"));
+
+// The parser, over frames cut at awkward places and written by other servers.
+const framed = (parts, type = "text/event-stream") => async () =>
+  new Response(new ReadableStream({ start(k) { for (const p of parts) k.enqueue(typeof p === "string" ? new TextEncoder().encode(p) : p); k.close(); } }), { status: 200, headers: { "content-type": type } });
+const parse = async (parts) => {
+  const r = await createClient({ baseUrl: "http://x", fetch: framed(parts) }).api.getTicks();
+  const out = [];
+  for await (const e of r.events) out.push(e);
+  return out;
+};
+show("p-crlf", await parse(["data: a\r", "\ndata: b\r\n\r\ndata: c\r\r"]));
+show("p-nospace", await parse(["data:x\n\ndata:  y\n\n"]));
+show("p-fields", await parse([": hi\nevent: t\nid: 4\nretry: 1\ndata: d\n\n"]));
+show("p-open", await parse(["data: kept\n\ndata: dropped"]));
+show("p-empty", await parse(["data\n\ndata:\n\n"]));
+const euro = new TextEncoder().encode("data: €\n\n");
+show("p-split", await parse([euro.slice(0, 7), euro.slice(7)]));
+// An element with a bare `\r`, which the server does not split on, is two lines to a reader.
+const cr = await c.api.getCr();
+const crEvents = [];
+for await (const e of cr.events) crEvents.push(e);
+show("cr", crEvents);
+// A body that fails rejects the iteration.
+const broken = createClient({ baseUrl: "http://x", fetch: async () => new Response(new ReadableStream({ start(k) { k.enqueue(new TextEncoder().encode("data: one\n\n")); }, pull() { throw new Error("cut"); } }), { status: 200, headers: { "content-type": "text/event-stream" } }) });
+const cut = [];
+try { for await (const e of (await broken.api.getTicks()).events) cut.push(e); } catch (e) { cut.push("threw " + e.message); }
+show("p-cut", cut);
+// A body that is not what the route answers is `Unexpected`, with the text.
+show("html", await createClient({ baseUrl: "http://x", fetch: async () => new Response("<p>", { status: 200, headers: { "content-type": "text/html" } }) }).api.getTicks());
+console.log("requests", JSON.stringify(sent));
+"#;
+
+/// What the raw driver prints, checked: the same under a Worker called in process and
+/// under workerd, where a response is a real HTTP one.
+fn check_raw(out: &str) {
+    let v = |label: &str| line(out, label);
+    // The octets `0 255 7 128`, whichever way the caller held them.
+    for (label, name) in [
+        ("put", "a b"),
+        ("put-buffer", "x"),
+        ("put-blob", "y"),
+        ("put-stream", "z"),
+        ("put-configured", "w"),
+    ] {
+        assert_eq!(
+            v(label),
+            format!(r#"{{"status":200,"kind":"Ok","body":"{name} AP8HgA=="}}"#)
+        );
+    }
+    assert_eq!(v("any"), r#"{"status":200,"kind":"Ok","body":"AP8HgA=="}"#);
+    assert_eq!(
+        v("logo"),
+        r#"{"status":200,"kind":"Raw","ct":"image/svg+xml","weak":true,"text":"<svg/>"}"#
+    );
+    assert_eq!(
+        v("doc"),
+        r#"{"status":200,"kind":"RawTagged","ct":"text/plain","etag":"\"v1\"","text":"doc a"}"#
+    );
+    assert_eq!(v("doc-gone"), r#"{"status":404,"kind":"NotFound"}"#);
+    // The empty chunk the server skips is not on the wire.
+    assert_eq!(
+        v("chunks"),
+        r#"{"status":200,"kind":"RawStreamed","ct":"text/csv","read":"one,two,three"}"#
+    );
+    assert_eq!(
+        v("made"),
+        r#"{"status":201,"kind":"RawCreated","text":"made n: hi"}"#
+    );
+    assert_eq!(
+        v("taken"),
+        r#"{"status":409,"kind":"RawError","ct":"text/plain","text":"taken"}"#
+    );
+    assert_eq!(v("bytes"), "[60,115,118,103,47,62]");
+    // An event is an element, a multi-line one keeping its lines, an empty one kept.
+    assert_eq!(
+        v("ticks"),
+        r#"{"status":200,"kind":"Streaming","events":["tick-1","two\nlines","","tick-4"]}"#
+    );
+    assert_eq!(v("feed-break"), r#"["a"]"#);
+    assert_eq!(v("feed-404"), r#"{"status":404,"kind":"NotFound"}"#);
+    // The server splits an element on `\n` only, so a `\r` in one ends a line for a reader.
+    assert_eq!(v("cr"), r#"["a"]"#);
+    // The parser follows the specification.
+    assert_eq!(v("p-crlf"), r#"["a\nb","c"]"#);
+    assert_eq!(v("p-nospace"), r#"["x"," y"]"#);
+    assert_eq!(v("p-fields"), r#"["d"]"#);
+    assert_eq!(v("p-open"), r#"["kept"]"#);
+    assert_eq!(v("p-empty"), r#"["",""]"#);
+    assert_eq!(v("p-split"), r#"["\u20ac"]"#.replace("\\u20ac", "€"));
+    assert_eq!(v("p-cut"), r#"["one","threw cut"]"#);
+    assert_eq!(
+        v("html"),
+        r#"{"kind":"Unexpected","status":200,"text":"<p>"}"#
+    );
+}
+
+#[test]
+fn raw_bodies_and_streams_round_trip_against_a_real_worker() {
+    if skip_without_tools() {
+        return;
+    }
+    let dir = scratch("raw");
+    let proj = dir.join("project");
+    copy_project(&fixture("raw"), &proj);
+    generate(&proj, &dir, &[]);
+    compile_worker(&proj, &dir);
+    tsc(&dir, "the `raw` client");
+    let driver = format!("{IN_PROCESS}{RAW_DRIVER}").replace("workers/rich/", "workers/raw/");
+    let out = run_driver(&dir, &driver, &[]);
+    check_raw(&out);
+    // A raw upload names its type, and only a stream asks for `duplex`.
+    let requests = line(&out, "requests");
+    assert!(
+        requests.contains("PUT /blob/a%20b application/vnd.bynk.blob duplex=-"),
+        "{requests}"
+    );
+    assert!(
+        requests.contains("PUT /blob/z application/vnd.bynk.blob duplex=half"),
+        "{requests}"
+    );
+    assert!(
+        requests.contains("PUT /blob/w application/vnd.bynk.blob duplex=-"),
+        "{requests}"
+    );
+    assert!(
+        requests.contains("POST /any image/png duplex=-"),
+        "{requests}"
+    );
+    let _ = fs::remove_dir_all(&dir);
+}
+
+/// The same driver over real HTTP, where a streamed body is chunked by the network and
+/// a stream upload is a real one.
+#[test]
+fn raw_bodies_and_streams_round_trip_under_workerd() {
+    if skip_without_tools() {
+        return;
+    }
+    if !tools::tool_exists("npx") && skip_workerd("`npx` is not on PATH") {
+        return;
+    }
+    let dir = scratch("raw-workerd");
+    let proj = dir.join("project");
+    copy_project(&fixture("raw"), &proj);
+    generate(&proj, &dir, &[]);
+    compile_worker(&proj, &dir);
+    tsc(&dir, "the `raw` client");
+    let Some((mut wranglers, port)) = boot_workerd(&dir, "raw", "/logo") else {
+        return;
+    };
+    let base = format!("http://127.0.0.1:{port}");
+    let out = run_driver(
+        &dir,
+        &format!("{NETWORK}{RAW_DRIVER}"),
+        &[("BASE", base.as_str())],
+    );
+    wrangler::stop_all(&mut wranglers);
+    check_raw(&out);
     let _ = fs::remove_dir_all(&dir);
 }

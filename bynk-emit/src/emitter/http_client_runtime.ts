@@ -79,7 +79,9 @@ export interface ClientOptions {
 export interface __Reply {
   readonly kind: string;
   /** What its body carries: a decoded value, `{ error: string }`, a `Location` header, a boundary error, or nothing. */
-  readonly body: "value" | "message" | "location" | "boundary" | "none";
+  readonly body: "value" | "message" | "location" | "boundary" | "raw" | "events" | "none";
+  /** A `raw` reply's `ETag`: `maybe` when the server may leave it out, `required` when it always sends one. */
+  readonly etag?: "maybe" | "required";
   readonly decode?: (json: JsonValue) => Result<unknown, BoundaryError>;
 }
 
@@ -88,6 +90,11 @@ export interface __Route {
   readonly method: string;
   readonly path: string;
   readonly replies: { readonly [status: number]: readonly __Reply[] };
+  /**
+   * How a raw or streamed answer is read: set (to `__streamed`) only on a route that can
+   * make one, so a client without such a route does not carry the reader.
+   */
+  readonly streamed?: (route: __Route, response: globalThis.Response) => unknown;
 }
 
 /** What one call sends, already encoded. */
@@ -102,6 +109,10 @@ export interface __Request {
   readonly multipart?: globalThis.FormData;
   /** The `Cookie` header's value. A browser sets its own and ignores this. */
   readonly cookies?: string;
+  /** A `@raw` body: the caller's bytes, sent as given. */
+  readonly raw?: globalThis.Uint8Array | globalThis.ArrayBuffer | globalThis.Blob | globalThis.ReadableStream<globalThis.Uint8Array>;
+  /** The content type the route declared for its `@raw` body. */
+  readonly rawType?: string;
 }
 
 /** The result of `f` over an `Ok`, an `Err` unchanged. */
@@ -254,7 +265,10 @@ async function __headers(
   // body keeps one the caller chose (`application/vnd.api+json`).
   if (request.form !== undefined) headers.set("content-type", "application/x-www-form-urlencoded");
   else if (request.multipart !== undefined) headers.delete("content-type");
-  else if (request.body !== undefined && !headers.has("content-type")) headers.set("content-type", "application/json");
+  else if (request.raw !== undefined) {
+    // A `@raw` route names its content type: that, not one configured for JSON, is what it reads.
+    if (request.rawType !== undefined) headers.set("content-type", request.rawType);
+  } else if (request.body !== undefined && !headers.has("content-type")) headers.set("content-type", "application/json");
   // Typed cookies join a `Cookie` header the caller configured, they do not replace it.
   if (request.cookies !== undefined && request.cookies !== "") {
     const have = headers.get("cookie");
@@ -315,6 +329,85 @@ function __classify(route: __Route, response: globalThis.Response, text: string)
   return unexpected(failure);
 }
 
+/**
+ * The events of a `text/event-stream` body, each one the `data` of an event as the
+ * server wrote it. Lines end in CRLF, LF or CR; a `data` line adds a line to the event;
+ * a blank line ends it; comments and every other field are ignored; an event the
+ * stream ends in the middle of is dropped. Cancelling the iteration (a `break`, or
+ * the call's `signal`) cancels the body. A body that fails rejects the iteration.
+ */
+async function* __events(response: globalThis.Response): globalThis.AsyncGenerator<string, void, undefined> {
+  if (response.body === null) return;
+  const reader = response.body.getReader();
+  const decoder = new globalThis.TextDecoder();
+  let buffer = "";
+  let data: string[] = [];
+  try {
+    for (;;) {
+      const { value, done } = await reader.read();
+      buffer += done ? decoder.decode() : decoder.decode(value, { stream: true });
+      let start = 0;
+      for (let i = 0; i < buffer.length; i++) {
+        const c = buffer[i];
+        if (c !== "\n" && c !== "\r") continue;
+        // A CR at the end of the text may be the first half of a CRLF: wait for more.
+        if (c === "\r" && i + 1 === buffer.length && !done) break;
+        const line = buffer.slice(start, i);
+        if (c === "\r" && buffer[i + 1] === "\n") i++;
+        start = i + 1;
+        if (line === "") {
+          if (data.length > 0) {
+            const event = data.join("\n");
+            data = [];
+            yield event;
+          }
+        } else if (line[0] !== ":") {
+          const colon = line.indexOf(":");
+          const field = colon < 0 ? line : line.slice(0, colon);
+          if (field === "data") {
+            const rest = colon < 0 ? "" : line.slice(colon + 1);
+            data.push(rest[0] === " " ? rest.slice(1) : rest);
+          }
+        }
+      }
+      buffer = buffer.slice(start);
+      if (done) return;
+    }
+  } finally {
+    await reader.cancel().catch(() => undefined);
+  }
+}
+
+/** The raw or streamed reply `response` is, if the route can answer so and the content type says it did. */
+export function __streamed(route: __Route, response: globalThis.Response): unknown {
+  const status = response.status;
+  const replies = route.replies[status] ?? [];
+  const essence = (response.headers.get("content-type") ?? "").split(";")[0]!.trim().toLowerCase();
+  const events = replies.find((r) => r.body === "events");
+  if (events !== undefined && essence === "text/event-stream") {
+    return { status, kind: events.kind, events: __events(response) };
+  }
+  const raw = replies.find((r) => r.body === "raw");
+  if (raw === undefined) return undefined;
+  // A JSON body at a status that also answers in JSON is that answer; any other body is the author's.
+  const json = replies.some((r) => r.body !== "raw" && r.body !== "events");
+  if (json && essence === "application/json") return undefined;
+  const reply: { [k: string]: unknown } = {
+    status,
+    kind: raw.kind,
+    contentType: response.headers.get("content-type") ?? "",
+  };
+  if (raw.etag !== undefined) {
+    const etag = response.headers.get("etag");
+    if (etag === null && raw.etag === "required") return { kind: "Unexpected", status, text: "" } satisfies CallFailure;
+    reply.etag = etag;
+  }
+  reply.body = response.body;
+  reply.bytes = async () => new globalThis.Uint8Array(await response.arrayBuffer());
+  reply.text = () => response.text();
+  return reply;
+}
+
 /** Make one call: encode, send, classify. Returns the route's reply, or the `CallFailure`. */
 export async function __call(
   options: ClientOptions,
@@ -362,17 +455,24 @@ export async function __call(
   const send = options.fetch ?? globalThis.fetch;
   let response: globalThis.Response;
   let text: string;
+  let streamed: unknown;
   try {
     const headers = await __headers(options, init, request);
-    const sent: globalThis.RequestInit = { ...init, method: route.method, headers };
+    const sent: globalThis.RequestInit & { duplex?: "half" } = { ...init, method: route.method, headers };
     if (options.credentials !== undefined && sent.credentials === undefined) sent.credentials = options.credentials;
     if (request.body !== undefined) sent.body = globalThis.JSON.stringify(request.body);
     else if (request.form !== undefined) sent.body = request.form;
     else if (request.multipart !== undefined) sent.body = request.multipart;
+    else if (request.raw !== undefined) {
+      sent.body = request.raw as globalThis.BodyInit;
+      // A streamed upload needs `duplex: "half"`, and only some browsers can make one.
+      if (request.raw instanceof globalThis.ReadableStream) sent.duplex = "half";
+    }
     response = await send(__url(options, route, request), sent);
-    text = await response.text();
+    streamed = route.streamed?.(route, response);
+    text = streamed === undefined ? await response.text() : "";
   } catch (cause) {
     return { kind: "Transport", cause } satisfies CallFailure;
   }
-  return __classify(route, response, text);
+  return streamed !== undefined ? streamed : __classify(route, response, text);
 }
