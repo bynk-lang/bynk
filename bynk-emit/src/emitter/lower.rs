@@ -80,11 +80,49 @@ pub fn lower_test_case_body(
     sum_handlers: HashSet<(String, String)>,
     test_agents: HashSet<String>,
     settle_sends: bool,
+    harness_bound: HashSet<String>,
+    source: &str,
+    rel_path: &str,
+    runtime_use: &RuntimeUse,
+) -> (String, SourceMapBuilder) {
+    lower_test_case_body_reporting(
+        block,
+        typed,
+        cross_context,
+        test_services,
+        test_service_handlers,
+        sum_handlers,
+        test_agents,
+        settle_sends,
+        harness_bound,
+        source,
+        rel_path,
+        runtime_use,
+        false,
+    )
+}
+
+/// [`lower_test_case_body`], optionally reporting the tail's value (#3585,
+/// `bynk eval`). With `report_value`, the tail expression is not discarded: its
+/// value is encoded as the wire shape `Json.encode` gives it and written to
+/// stdout as one `{"type":"eval-value","valueType":"…","value":…}` line, which
+/// the test runner's NDJSON reader picks up. Nothing else about the body changes.
+#[allow(clippy::too_many_arguments)]
+pub fn lower_test_case_body_reporting(
+    block: &Block,
+    typed: &mut TypedCommons,
+    cross_context: &bynk_check::resolver::CrossContextInfo,
+    test_services: HashSet<String>,
+    test_service_handlers: HashMap<String, Vec<bynk_model::IrHandlerKind>>,
+    sum_handlers: HashSet<(String, String)>,
+    test_agents: HashSet<String>,
+    settle_sends: bool,
     // #2024: the names the runner scaffold binds in the body's scope.
     harness_bound: HashSet<String>,
     source: &str,
     rel_path: &str,
     runtime_use: &RuntimeUse,
+    report_value: bool,
 ) -> (String, SourceMapBuilder) {
     let mut out = String::new();
     let smb = RefCell::new(SourceMapBuilder::new());
@@ -118,6 +156,13 @@ pub fn lower_test_case_body(
         // it still take effect via thrown AssertionErrors.
         cx.record_span(out.len(), block.tail.span);
         let mut pre = Pre::new();
+        if report_value && let Some(line) = eval_value_line(&mut pre, &block.tail, &mut cx) {
+            for s in pre.stmts() {
+                write_line(&mut out, 0, s);
+            }
+            write_line(&mut out, 0, &line);
+            return (out, smb.into_inner());
+        }
         let tail = pre.lower(&block.tail, &mut cx);
         for s in pre.stmts() {
             write_line(&mut out, 0, s);
@@ -5197,6 +5242,23 @@ fn form_encode_wire(pre: &mut Pre, arg: &Expr, cx: &mut LowerCtx) -> Option<Stri
         &v,
         cx.runtime_use(),
     )))
+}
+
+/// #3585: the statement that reports a `bynk eval` case's tail value: its
+/// `Json.encode` text and its type, as one NDJSON line. `None` when the value's
+/// type is unknown to the lowering, so the case runs without reporting.
+fn eval_value_line(pre: &mut Pre, tail: &Expr, cx: &mut LowerCtx) -> Option<String> {
+    let json = json_encode_text(pre, tail, cx, false)?;
+    // The encoder names `JsonValue` and `BoundaryError`, whether or not the
+    // value's type needs a closure of codecs of its own.
+    cx.runtime_use().note_json_codec();
+    cx.runtime_use().note_boundary_codec();
+    let ty = cx.commons().expr_types.get(&tail.id).map(|te| te.ty)?;
+    let shown = bynk_check::symbols::display_type_names_in(&cx.commons().tys().display(ty));
+    let shown = bynk_project::json_string(&shown);
+    Some(format!(
+        "globalThis.console.log('{{\"type\":\"eval-value\",\"valueType\":' + globalThis.JSON.stringify({shown}) + ',\"value\":' + {json} + '}}');"
+    ))
 }
 
 /// `Json.encode(arg)`'s text: `globalThis.JSON.stringify(<serialised arg>)`, with
