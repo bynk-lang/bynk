@@ -34,7 +34,7 @@ it (a `..`, an absolute path elsewhere, a symlink out) is refused.
 | `bynk_explain_diagnostic` | A diagnostic `code`'s explanation, an example and a link to the Book (what [`bynk explain`](/docs/bynk-cli/#bynk-explain) prints). |
 | `bynk_describe_symbol` | A symbol's type or signature, doc comment and definition, at `file` + `line` (+ `column` or `name`), or found by `name`. |
 | `bynk_get_documentation` | Every declaration of the unit a `file` belongs to, with signature, doc comment and location. |
-| `bynk_get_architecture` | The project's contexts and adapters, their services, agents and capabilities, and the `consumes` edges between them. |
+| `bynk_get_architecture` | The project's contexts and adapters, their services, agents and capabilities, the `consumes` edges between them, the events (emitters and subscribers, with delivery kind) and the capabilities each context uses, with the suites that stub them. Events and uses are summarised as counts and names; pass `context` (a unit name) to list each of its handlers' uses, or `event` (`Pinged` or `owner.Pinged`) to list every emitter and subscriber. |
 | `bynk_get_wire_contract` | The route, request envelope, HTTP responses and boundary types of the service handler at `file` + `line`. |
 | `bynk_search_book` | The sections of the [Book](/book/) that best match `query`, with page links, from the Book embedded in your `bynk` (see [`bynk book`](/docs/bynk-cli/#bynk-book)). Every result names the version. A `bynk` built without the bundle says so and points at the hosted Book; this server never fetches it. |
 

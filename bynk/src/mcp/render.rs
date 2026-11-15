@@ -190,68 +190,233 @@ pub fn documentation(model: &DocModel, locs: &[String]) -> String {
 
 /// `bynk_get_architecture`: the project's units, what each declares, and the
 /// `consumes` edges between them.
-pub fn architecture(model: &ArchModel, at: &Locator<'_>) -> String {
+/// What the architecture tool expands (#3600): a context's per-handler
+/// capability uses, and an event's emitters and subscribers. Everything else is
+/// summarised as counts and names, so a large project stays inside the cap.
+#[derive(Default, Clone, Copy)]
+pub struct ArchExpand<'a> {
+    /// A unit's qualified name: list each of its handlers' uses.
+    pub context: Option<&'a str>,
+    /// An event's name (`Pinged` or `owner.Pinged`): list every emitter and subscriber.
+    pub event: Option<&'a str>,
+}
+
+pub fn architecture(model: &ArchModel, at: &Locator<'_>, expand: ArchExpand<'_>) -> String {
     let mut out = vec![
         format!(
-            "# Architecture: {} unit(s), {} dependency edge(s)",
+            "# Architecture: {} unit(s), {} dependency edge(s), {} event(s)",
             model.nodes.len(),
-            model.edges.len()
+            model.edges.len(),
+            model.events.len()
         ),
         String::new(),
     ];
     let mut nodes: Vec<_> = model.nodes.iter().collect();
     nodes.sort_by(|a, b| a.name.cmp(&b.name));
     for node in nodes {
-        let kind = match node.kind {
-            bynk_ide::architecture::NodeKind::Context => "context",
-            bynk_ide::architecture::NodeKind::Adapter => "adapter",
+        arch_node(&mut out, model, node, at, expand);
+    }
+    arch_events(&mut out, model, at, expand);
+    format!("{}\n", out.join("\n").trim_end())
+}
+
+fn arch_node(
+    out: &mut Vec<String>,
+    model: &ArchModel,
+    node: &bynk_ide::architecture::ArchNode,
+    at: &Locator<'_>,
+    expand: ArchExpand<'_>,
+) {
+    let kind = match node.kind {
+        bynk_ide::architecture::NodeKind::Context => "context",
+        bynk_ide::architecture::NodeKind::Adapter => "adapter",
+    };
+    out.push(format!(
+        "## {kind} `{}` ({})",
+        node.name,
+        at.located(&node.loc)
+    ));
+    for s in &node.services {
+        out.push(format!(
+            "- service `{}`: {} handler(s) ({})",
+            s.name,
+            s.handler_count,
+            at.located(&s.loc)
+        ));
+    }
+    for a in &node.agents {
+        out.push(format!(
+            "- agent `{}`: {} handler(s) ({})",
+            a.name,
+            a.handler_count,
+            at.located(&a.loc)
+        ));
+    }
+    for c in &node.capabilities {
+        let from = match &c.origin {
+            CapabilityOrigin::Local => "declared here".to_string(),
+            CapabilityOrigin::Consumed { from } => format!("from `{from}`"),
+        };
+        out.push(format!("- capability `{}` ({from})", c.name));
+    }
+    for p in &node.providers {
+        let ext = if p.external { ", external" } else { "" };
+        out.push(format!(
+            "- provides `{}` as `{}`{ext}",
+            p.capability, p.provider_name
+        ));
+    }
+    for e in model.edges.iter().filter(|e| e.from == node.name) {
+        let what = if e.capabilities.is_empty() {
+            String::new()
+        } else {
+            format!(" {{ {} }}", e.capabilities.join(", "))
+        };
+        out.push(format!("- consumes `{}`{what}", e.to));
+    }
+    arch_uses(out, node, at, expand.context == Some(node.name.as_str()));
+    out.push(String::new());
+}
+
+fn handler_label(m: &bynk_ide::architecture::ArchMember) -> String {
+    format!("{}.{}", m.container, m.handler)
+}
+
+/// A context's capability use: a one-line summary, or each handler's uses when
+/// the context is expanded.
+fn arch_uses(
+    out: &mut Vec<String>,
+    node: &bynk_ide::architecture::ArchNode,
+    at: &Locator<'_>,
+    expanded: bool,
+) {
+    let mut names = std::collections::BTreeSet::new();
+    let mut stubbed = std::collections::BTreeSet::new();
+    for h in &node.uses {
+        for u in &h.uses {
+            names.insert(u.capability.as_str());
+            if !u.stubbed_in.is_empty() {
+                stubbed.insert(u.capability.as_str());
+            }
+        }
+    }
+    if names.is_empty() {
+        return;
+    }
+    let list = |s: &std::collections::BTreeSet<&str>| {
+        s.iter()
+            .map(|n| format!("`{n}`"))
+            .collect::<Vec<_>>()
+            .join(", ")
+    };
+    let stub = if stubbed.is_empty() {
+        String::new()
+    } else {
+        format!("; stubbed: {}", list(&stubbed))
+    };
+    out.push(format!(
+        "- uses {}: {} across {} handler(s){stub}",
+        names.len(),
+        list(&names),
+        node.uses.iter().filter(|h| !h.uses.is_empty()).count()
+    ));
+    if !expanded {
+        return;
+    }
+    for h in node.uses.iter().filter(|h| !h.uses.is_empty()) {
+        out.push(format!(
+            "  - `{}` ({})",
+            handler_label(&h.member),
+            at.located(&h.member.loc)
+        ));
+        for u in &h.uses {
+            let from = u
+                .from
+                .as_deref()
+                .map_or(String::new(), |f| format!(" from `{f}`"));
+            let inherited = if u.inherited {
+                ", from the service's default_given"
+            } else {
+                ""
+            };
+            out.push(format!(
+                "    - `{}`{from} ({}{inherited})",
+                u.capability,
+                at.located(&u.loc)
+            ));
+            for s in &u.stubbed_in {
+                out.push(format!(
+                    "      - stubbed in `{}` ({})",
+                    at.project.display(at.ws, &s.suite),
+                    at.located(&s.loc)
+                ));
+            }
+        }
+    }
+}
+
+fn delivery_word(d: bynk_check::architecture_facts::DeliveryKind) -> &'static str {
+    use bynk_check::architecture_facts::DeliveryKind::*;
+    match d {
+        All => "all",
+        Pattern => "pattern",
+        Schema => "schema",
+        PatternSchema => "pattern + schema",
+    }
+}
+
+fn event_matches(e: &bynk_ide::architecture::ArchEvent, want: &str) -> bool {
+    want == e.name || want == format!("{}.{}", e.owner, e.name)
+}
+
+/// The events section: per event a summary (counts and the units involved), and
+/// the full emitter and subscriber lists for the one named in `expand`.
+fn arch_events(out: &mut Vec<String>, model: &ArchModel, at: &Locator<'_>, expand: ArchExpand<'_>) {
+    if model.events.is_empty() {
+        return;
+    }
+    out.push("## events".to_string());
+    let mut events: Vec<_> = model.events.iter().collect();
+    events.sort_by(|a, b| (&a.owner, &a.name).cmp(&(&b.owner, &b.name)));
+    for e in events {
+        let units = |it: &mut dyn Iterator<Item = &str>| {
+            let set: std::collections::BTreeSet<&str> = it.collect();
+            set.into_iter()
+                .map(|u| format!("`{u}`"))
+                .collect::<Vec<_>>()
+                .join(", ")
         };
         out.push(format!(
-            "## {kind} `{}` ({})",
-            node.name,
-            at.located(&node.loc)
+            "- event `{}.{}`: {} emitter(s) [{}], {} subscriber(s) [{}] ({})",
+            e.owner,
+            e.name,
+            e.emitters.len(),
+            units(&mut e.emitters.iter().map(|x| x.member.unit.as_str())),
+            e.subscribers.len(),
+            units(&mut e.subscribers.iter().map(|x| x.member.unit.as_str())),
+            at.located(&e.loc)
         ));
-        for s in &node.services {
-            out.push(format!(
-                "- service `{}`: {} handler(s) ({})",
-                s.name,
-                s.handler_count,
-                at.located(&s.loc)
-            ));
+        if expand.event.is_some_and(|w| event_matches(e, w)) {
+            for x in &e.emitters {
+                out.push(format!(
+                    "  - emitted by `{}` in `{}` ({})",
+                    handler_label(&x.member),
+                    x.member.unit,
+                    at.located(&x.loc)
+                ));
+            }
+            for x in &e.subscribers {
+                out.push(format!(
+                    "  - subscribed by `{}` in `{}`, delivery {} ({})",
+                    handler_label(&x.member),
+                    x.member.unit,
+                    delivery_word(x.delivery),
+                    at.located(&x.loc)
+                ));
+            }
         }
-        for a in &node.agents {
-            out.push(format!(
-                "- agent `{}`: {} handler(s) ({})",
-                a.name,
-                a.handler_count,
-                at.located(&a.loc)
-            ));
-        }
-        for c in &node.capabilities {
-            let from = match &c.origin {
-                CapabilityOrigin::Local => "declared here".to_string(),
-                CapabilityOrigin::Consumed { from } => format!("from `{from}`"),
-            };
-            out.push(format!("- capability `{}` ({from})", c.name));
-        }
-        for p in &node.providers {
-            let ext = if p.external { ", external" } else { "" };
-            out.push(format!(
-                "- provides `{}` as `{}`{ext}",
-                p.capability, p.provider_name
-            ));
-        }
-        for e in model.edges.iter().filter(|e| e.from == node.name) {
-            let what = if e.capabilities.is_empty() {
-                String::new()
-            } else {
-                format!(" {{ {} }}", e.capabilities.join(", "))
-            };
-            out.push(format!("- consumes `{}`{what}", e.to));
-        }
-        out.push(String::new());
     }
-    format!("{}\n", out.join("\n").trim_end())
+    out.push(String::new());
 }
 
 fn json_word(j: JsonKind) -> &'static str {

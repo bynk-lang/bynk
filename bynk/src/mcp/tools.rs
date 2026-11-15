@@ -132,13 +132,26 @@ pub fn definitions() -> Vec<Value> {
             "Bynk architecture",
             "Summarises a Bynk project's architecture: each context and adapter, the services and \
              agents it declares, the capabilities it uses or provides, and which other contexts \
-             it consumes. Use it to orient yourself in a project or to answer what a context \
-             exposes. `file` picks the project (any file in it); omit it when the workspace holds \
-             one project.",
-            json!({ "file": {
-                "type": "string",
-                "description": "Any `.bynk` file in the project, relative to the workspace root (or absolute).",
-            } }),
+             it consumes, the events (who emits and who subscribes, with delivery) and the \
+             capabilities each context uses (and which suites stub them). Use it to orient \
+             yourself in a project, to answer what a context exposes or touches, or who emits \
+             or subscribes to an event. Events and uses are summarised (counts and names); \
+             pass `context` or `event` to expand one. `file` picks the project (any file in \
+             it); omit it when the workspace holds one project.",
+            json!({
+                "file": {
+                    "type": "string",
+                    "description": "Any `.bynk` file in the project, relative to the workspace root (or absolute).",
+                },
+                "context": {
+                    "type": "string",
+                    "description": "A context or adapter name (for example `shop.orders`): list each of its handlers' capability uses, with the suites that stub them.",
+                },
+                "event": {
+                    "type": "string",
+                    "description": "An event name (`Pinged` or `owner.Pinged`): list every emitter and subscriber, with the delivery kind.",
+                },
+            }),
             &[],
         ),
         tool(
@@ -562,6 +575,8 @@ fn get_documentation(ws: &Workspace, args: &Value) -> Result<String, String> {
 }
 
 fn get_architecture(ws: &Workspace, args: &Value) -> Result<String, String> {
+    let context = opt_str(args, "context")?;
+    let event = opt_str(args, "event")?;
     let root = ws.pick_project(opt_str(args, "file")?.as_deref())?;
     let project = ws.analyse(&root);
     let a = &project.analysis;
@@ -583,7 +598,14 @@ fn get_architecture(ws: &Workspace, args: &Value) -> Result<String, String> {
         project: &project,
     };
     Ok(render::cap_text(
-        &render::architecture(&model, &at),
+        &render::architecture(
+            &model,
+            &at,
+            render::ArchExpand {
+                context: context.as_deref(),
+                event: event.as_deref(),
+            },
+        ),
         MAX_CHARS,
         None,
     ))
