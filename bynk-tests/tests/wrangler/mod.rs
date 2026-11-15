@@ -20,6 +20,10 @@
 //! that forgets the workflows would silently restore the race, visible only as
 //! an intermittent red.
 
+/// Free localhost ports that are never handed out twice in a process (#3526).
+#[path = "../support/ports.rs"]
+pub mod ports;
+
 /// The `npx` package spec every workerd smoke provisions.
 pub const SPEC: &str = "wrangler@4";
 

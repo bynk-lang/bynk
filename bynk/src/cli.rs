@@ -28,7 +28,7 @@ pub const COMMAND_GROUPS: &[(&str, &[&str])] = &[
     (
         "Project",
         &[
-            "new", "check", "fmt", "test", "build", "compile", "openapi", "token",
+            "new", "check", "fmt", "test", "build", "compile", "openapi", "client", "token",
         ],
     ),
     (
@@ -446,6 +446,51 @@ pub enum Command {
         /// Compile the unsaved buffers given as JSON on stdin (see above).
         #[arg(long)]
         sources_stdin: bool,
+        #[command(flatten)]
+        lock: LockArgs,
+    },
+    /// Write a typed TypeScript client for the HTTP services.
+    ///
+    /// One module a front end (SvelteKit, Next.js, anything that can `fetch`)
+    /// imports (#3508): one function per `from http` route, the boundary types as
+    /// TypeScript types, and the same refinement checks the server runs, on the
+    /// way out and on the way in. Each call returns a union of the route's own
+    /// responses keyed by `status`, or a `CallFailure`; nothing is thrown for an
+    /// HTTP status. An optional value is `T | null`.
+    ///
+    /// The module carries a small browser-safe runtime, so it needs nothing
+    /// installed. Pass it your own `fetch`, a `baseUrl` and `headers`:
+    /// `createClient({ baseUrl, fetch, headers })`. Writes to stdout unless
+    /// `--out` is given. The project must check clean. Experimental: member names
+    /// may change in a minor version until it is stabilised.
+    ///
+    /// Routes the client cannot represent yet (raw bodies, raw and streamed
+    /// responses) are named on stderr and left out. `bynk openapi` is the language-neutral contract and stays.
+    Client {
+        /// Project directory (or any path inside it). Defaults to the current
+        /// directory.
+        #[arg(default_value = ".")]
+        input: PathBuf,
+        /// Write the client to PATH instead of stdout: a `.ts` file, or with
+        /// `--layout dir` a directory. Defaults to `[build.client]` `out` in
+        /// bynk.toml.
+        #[arg(short, long)]
+        out: Option<PathBuf>,
+        /// Generate only this `from http` service (`Name` or `unit.Name`); may be
+        /// given more than once. Defaults to `[build.client]` `service`, else every
+        /// one.
+        #[arg(long)]
+        service: Vec<String>,
+        /// `file` (default) writes one module; `dir` writes `index.ts`,
+        /// `types.ts`, `codecs.ts` and `runtime.ts` into `--out`. Defaults to
+        /// `[build.client]` `layout`.
+        #[arg(long, value_enum)]
+        layout: Option<ClientLayoutArg>,
+        /// Write nothing: compare the client at `--out` with the one the project
+        /// generates, and exit non-zero, naming where they differ, when it is
+        /// stale or missing. The CI drift gate.
+        #[arg(long)]
+        check: bool,
         #[command(flatten)]
         lock: LockArgs,
     },
@@ -1039,6 +1084,15 @@ pub struct AccountTarget {
     pub path: PathBuf,
 }
 
+/// `bynk client --layout` (#3508).
+#[derive(Copy, Clone, Debug, PartialEq, Eq, ValueEnum)]
+pub enum ClientLayoutArg {
+    /// One module.
+    File,
+    /// `index.ts`, `types.ts`, `codecs.ts` and `runtime.ts`.
+    Dir,
+}
+
 /// #2378: `bynk org` subcommands.
 /// `bynk openapi --format`.
 #[derive(Copy, Clone, Debug, PartialEq, Eq, ValueEnum)]
@@ -1323,6 +1377,15 @@ pub enum BookFormat {
     Text,
     /// A JSON document: `version`, `query` and `results`.
     Json,
+}
+
+impl From<ClientLayoutArg> for bynk_emit::emitter::http_client::Layout {
+    fn from(l: ClientLayoutArg) -> Self {
+        match l {
+            ClientLayoutArg::File => Self::File,
+            ClientLayoutArg::Dir => Self::Dir,
+        }
+    }
 }
 
 #[cfg(test)]

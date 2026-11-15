@@ -147,6 +147,7 @@
   - [Testing](reference/testing.md)
   - [Wire format](reference/wire-format.md)
   - [TypeScript client](reference/typescript-client.md)
+  - [HTTP client](reference/http-client.md)
   - [Diagnostic index](reference/diagnostics.md)
   - [Version compatibility & changelog](reference/changelog.md)
   - [Upgrading](reference/upgrading.md)
