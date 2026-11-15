@@ -5475,6 +5475,21 @@ fn suite_import_owners(
     owners
 }
 
+/// The project's unit tables, `uses`, `consumes` and `consumes` aliases.
+type ProjectMaps<'a> = (
+    &'a HashMap<String, UnitTable>,
+    &'a HashMap<String, Vec<String>>,
+    &'a HashMap<String, Vec<String>>,
+    &'a HashMap<String, HashMap<String, String>>,
+);
+
+/// What a target hides behind its own values: the shadowed imports, and the
+/// target's types.
+type TargetShadowed = (
+    HashMap<String, crate::resolver::ShadowedImport>,
+    HashMap<String, Arc<TypeDecl>>,
+);
+
 /// The naming gates a unit suite goes through before its cases are checked: a
 /// type reached only through an imported declaration is hidden (#1814), one the
 /// target hides behind its own value is shadowed (#1927), and (#3536) a type,
@@ -5483,19 +5498,8 @@ fn suite_naming_errors(
     suite: &SuiteDecl,
     pf: &ParsedFile,
     target: &str,
-    maps: (
-        &HashMap<String, UnitTable>,
-        &HashMap<String, Vec<String>>,
-        &HashMap<String, Vec<String>>,
-        &HashMap<String, HashMap<String, String>>,
-    ),
-    (hidden, shadowed): (
-        &std::collections::BTreeMap<String, String>,
-        &(
-            HashMap<String, crate::resolver::ShadowedImport>,
-            HashMap<String, Arc<TypeDecl>>,
-        ),
-    ),
+    maps: ProjectMaps<'_>,
+    (hidden, shadowed): (&std::collections::BTreeMap<String, String>, &TargetShadowed),
 ) -> Vec<CompileError> {
     let mut errors = resolver::check_hidden_type_names_in_suite(suite, Some(target), hidden);
     errors.extend(resolver::check_shadowed_type_names_in_suite(
@@ -5520,12 +5524,7 @@ fn warn_unselected_suite_imports(
     suite: &SuiteDecl,
     pf: &ParsedFile,
     target: &str,
-    maps: (
-        &HashMap<String, UnitTable>,
-        &HashMap<String, Vec<String>>,
-        &HashMap<String, Vec<String>>,
-        &HashMap<String, HashMap<String, String>>,
-    ),
+    maps: ProjectMaps<'_>,
     types: &HashMap<String, Arc<TypeDecl>>,
 ) -> Vec<CompileError> {
     let (unit_tables, unit_uses, unit_consumes, unit_consumes_aliases) = maps;
