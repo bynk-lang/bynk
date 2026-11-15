@@ -505,7 +505,7 @@
     },
     {
       "code": "bynk.consumes.type_not_selected",
-      "summary": "A type (or a bare variant of a sum) of a consumed first-party unit is named, but the unit's braced `consumes` does not list it (a warning; an error in a later release)."
+      "summary": "A type (or a bare variant of a sum) of a consumed unit is named in a file whose own `consumes` does not bring it in: it lists other names, or only another file of the unit consumes the unit (a warning; an error in a later release)."
     },
     {
       "code": "bynk.consumes.unknown_context",
