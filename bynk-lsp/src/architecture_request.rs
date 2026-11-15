@@ -17,7 +17,8 @@
 use std::collections::HashMap;
 use std::path::{Path, PathBuf};
 
-use bynk_ide::architecture::{self, ArchModel, CapabilityOrigin, NodeKind};
+use bynk_ide::architecture::{self, ArchMember, ArchModel, CapabilityOrigin, NodeKind};
+use bynk_ide::{DeliveryKind, MemberKind};
 
 /// The `bynk/architectureModel` request payload — a bare text-document
 /// identifier used only to resolve the owning project (Decision B: the
@@ -41,8 +42,9 @@ pub fn architecture_model_for(
     unit_sources: &HashMap<String, Vec<PathBuf>>,
     snapshots: &HashMap<PathBuf, String>,
     sequence_info: &HashMap<String, bynk_ide::ContextSequenceInfo>,
+    facts: &bynk_ide::ArchitectureFacts,
 ) -> ArchModel {
-    architecture::architecture_model(unit_sources, snapshots, sequence_info)
+    architecture::architecture_model(unit_sources, snapshots, sequence_info, facts)
 }
 
 // -- Wire shape: a plain serde mirror of `bynk_ide::architecture::ArchModel`.
@@ -61,6 +63,8 @@ pub struct WireLoc {
 pub struct WireArchModel {
     pub nodes: Vec<WireArchNode>,
     pub edges: Vec<WireArchEdge>,
+    /// #3583: every declared event with its emitters and subscribers.
+    pub events: Vec<WireArchEvent>,
 }
 
 #[derive(Debug, Clone, serde::Serialize)]
@@ -72,6 +76,71 @@ pub struct WireArchNode {
     pub providers: Vec<WireArchProvider>,
     pub services: Vec<WireArchService>,
     pub agents: Vec<WireArchAgent>,
+    /// #3583: per handler, the capabilities it requires through `given`.
+    pub uses: Vec<WireArchHandlerUses>,
+}
+
+/// #3583: the handler (or provider operation) an event site or a use belongs to.
+#[derive(Debug, Clone, serde::Serialize)]
+pub struct WireArchMember {
+    pub unit: String,
+    /// `"service"`, `"agent"` or `"provider"`.
+    pub kind: &'static str,
+    pub container: String,
+    pub handler: String,
+    pub loc: WireLoc,
+}
+
+#[derive(Debug, Clone, serde::Serialize)]
+pub struct WireArchHandlerUses {
+    pub member: WireArchMember,
+    pub uses: Vec<WireArchUse>,
+}
+
+#[derive(Debug, Clone, serde::Serialize)]
+pub struct WireArchUse {
+    pub capability: String,
+    /// The unit that declares the capability: this unit, a consumed one, or
+    /// `"bynk"`.
+    pub from: Option<String>,
+    /// Written on the service header (`default_given`), not on the handler.
+    pub inherited: bool,
+    pub loc: WireLoc,
+    #[serde(rename = "stubbedIn")]
+    pub stubbed_in: Vec<WireArchStub>,
+}
+
+#[derive(Debug, Clone, serde::Serialize)]
+pub struct WireArchStub {
+    /// The suite file, project-relative with `/` separators.
+    pub suite: String,
+    /// The suite's first `stub` of the capability.
+    pub loc: WireLoc,
+}
+
+#[derive(Debug, Clone, serde::Serialize)]
+pub struct WireArchEvent {
+    pub owner: String,
+    pub name: String,
+    pub loc: WireLoc,
+    pub emitters: Vec<WireArchEmitter>,
+    pub subscribers: Vec<WireArchSubscriber>,
+}
+
+#[derive(Debug, Clone, serde::Serialize)]
+pub struct WireArchEmitter {
+    pub member: WireArchMember,
+    /// The `Events.emit[E](…)` call.
+    pub loc: WireLoc,
+}
+
+#[derive(Debug, Clone, serde::Serialize)]
+pub struct WireArchSubscriber {
+    pub member: WireArchMember,
+    /// `"all"`, `"pattern"`, `"schema"` or `"patternSchema"`.
+    pub delivery: &'static str,
+    /// The `from Events(…)` header.
+    pub loc: WireLoc,
 }
 
 #[derive(Debug, Clone, serde::Serialize)]
@@ -125,6 +194,37 @@ fn kind_str(k: NodeKind) -> &'static str {
         NodeKind::Context => "Context",
         NodeKind::Adapter => "Adapter",
     }
+}
+
+fn member_kind_str(k: MemberKind) -> &'static str {
+    match k {
+        MemberKind::Service => "service",
+        MemberKind::Agent => "agent",
+        MemberKind::Provider => "provider",
+    }
+}
+
+fn delivery_str(d: DeliveryKind) -> &'static str {
+    match d {
+        DeliveryKind::All => "all",
+        DeliveryKind::Pattern => "pattern",
+        DeliveryKind::Schema => "schema",
+        DeliveryKind::PatternSchema => "patternSchema",
+    }
+}
+
+fn wire_member(
+    project_root: &Path,
+    snapshots: &HashMap<PathBuf, String>,
+    m: &ArchMember,
+) -> Option<WireArchMember> {
+    Some(WireArchMember {
+        unit: m.unit.clone(),
+        kind: member_kind_str(m.kind),
+        container: m.container.clone(),
+        handler: m.handler.clone(),
+        loc: wire_loc(project_root, snapshots, &m.loc)?,
+    })
 }
 
 /// Lower a `Located` to a `{uri, range}` pair. `None` only on the defensive
@@ -211,9 +311,11 @@ pub fn to_wire(
                             })
                         })
                         .collect(),
+                    uses: wire_uses(&n.uses, project_root, snapshots),
                 })
             })
             .collect(),
+        events: wire_events(&model.events, project_root, snapshots),
         edges: model
             .edges
             .iter()
@@ -227,6 +329,81 @@ pub fn to_wire(
             })
             .collect(),
     }
+}
+
+fn wire_uses(
+    handlers: &[architecture::ArchHandlerUses],
+    project_root: &Path,
+    snapshots: &HashMap<PathBuf, String>,
+) -> Vec<WireArchHandlerUses> {
+    handlers
+        .iter()
+        .filter_map(|h| {
+            Some(WireArchHandlerUses {
+                member: wire_member(project_root, snapshots, &h.member)?,
+                uses: h
+                    .uses
+                    .iter()
+                    .filter_map(|u| {
+                        Some(WireArchUse {
+                            capability: u.capability.clone(),
+                            from: u.from.clone(),
+                            inherited: u.inherited,
+                            loc: wire_loc(project_root, snapshots, &u.loc)?,
+                            stubbed_in: u
+                                .stubbed_in
+                                .iter()
+                                .filter_map(|s| {
+                                    Some(WireArchStub {
+                                        suite: s.suite.to_string_lossy().replace('\\', "/"),
+                                        loc: wire_loc(project_root, snapshots, &s.loc)?,
+                                    })
+                                })
+                                .collect(),
+                        })
+                    })
+                    .collect(),
+            })
+        })
+        .collect()
+}
+
+fn wire_events(
+    events: &[architecture::ArchEvent],
+    project_root: &Path,
+    snapshots: &HashMap<PathBuf, String>,
+) -> Vec<WireArchEvent> {
+    events
+        .iter()
+        .filter_map(|e| {
+            Some(WireArchEvent {
+                owner: e.owner.clone(),
+                name: e.name.clone(),
+                loc: wire_loc(project_root, snapshots, &e.loc)?,
+                emitters: e
+                    .emitters
+                    .iter()
+                    .filter_map(|x| {
+                        Some(WireArchEmitter {
+                            member: wire_member(project_root, snapshots, &x.member)?,
+                            loc: wire_loc(project_root, snapshots, &x.loc)?,
+                        })
+                    })
+                    .collect(),
+                subscribers: e
+                    .subscribers
+                    .iter()
+                    .filter_map(|x| {
+                        Some(WireArchSubscriber {
+                            member: wire_member(project_root, snapshots, &x.member)?,
+                            delivery: delivery_str(x.delivery),
+                            loc: wire_loc(project_root, snapshots, &x.loc)?,
+                        })
+                    })
+                    .collect(),
+            })
+        })
+        .collect()
 }
 
 #[cfg(test)]
@@ -309,7 +486,12 @@ service run {
             .iter()
             .map(|f| (f.source_path.clone(), f.text.clone()))
             .collect();
-        let model = architecture_model_for(&diag.unit_sources, &snapshots, &diag.sequence_info);
+        let model = architecture_model_for(
+            &diag.unit_sources,
+            &snapshots,
+            &diag.sequence_info,
+            &diag.architecture_facts,
+        );
         let wire = to_wire(&model, &root, &snapshots);
 
         assert_eq!(wire.nodes.len(), 2);
