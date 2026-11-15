@@ -48,8 +48,28 @@ const WRITE_OPS: &[&str] = &["run", "batch"];
 /// name. Present only while checking an `integration` or `system` case.
 #[derive(Debug, Clone, Default)]
 pub struct PeekEnv {
-    pub participants: BTreeMap<String, BTreeMap<String, CapabilityInfo>>,
+    pub participants: BTreeMap<String, BTreeMap<String, PeekCap>>,
 }
+
+/// One capability of a participant: its signatures, and for a `D1` instance
+/// the Worker binding its database is on.
+#[derive(Debug, Clone)]
+pub struct PeekCap {
+    pub info: CapabilityInfo,
+    pub binding: Option<String>,
+}
+
+/// The name the emitted case holds a peeked capability under, as
+/// `deps.<local>`. It is made from the participant and capability alone, so
+/// two peeks of one database share it (and the one provider it holds), and no
+/// binding's name can collide with it.
+fn local_name(participant: &str, cap: &str) -> String {
+    format!("__peek_{}_{}", participant.replace('.', "_"), cap)
+}
+
+/// Whether `cap` is the name of a peeked capability on `deps` (see
+/// `local_name`), as a call on a handle records it.
+pub const LOCAL_PREFIX: &str = "__peek_";
 
 /// The dotted path an expression spells (`shop.orders.Orders`), as segments.
 fn path_of(e: &Expr) -> Option<Vec<String>> {
@@ -213,7 +233,7 @@ fn check_create(args: &[Expr], span: Span, expr_id: ExprId, ctx: &mut Ctx) -> Op
         );
         return None;
     };
-    let Some(info) = caps.get(&cap) else {
+    let Some(PeekCap { info, binding }) = caps.get(&cap) else {
         refuse(
             "bynk.test.peek_unknown_capability",
             arg.span,
@@ -233,6 +253,16 @@ fn check_create(args: &[Expr], span: Span, expr_id: ExprId, ctx: &mut Ctx) -> Op
         );
         return None;
     }
+    ctx.callees.insert(
+        expr_id,
+        Callee::D1Peek {
+            participant: participant.clone(),
+            // A `D1` capability always has a binding: `peek_not_a_database`
+            // refused any other above.
+            binding: binding.clone().expect("a D1 capability has a binding"),
+            local: local_name(&participant, &cap),
+        },
+    );
     Some(tys.intern(Ty::Named {
         name: peek_type_name(&participant, &cap),
         kind: NamedKind::Record,
@@ -264,7 +294,7 @@ fn check_handle_op(
         .as_ref()
         .and_then(|e| e.participants.get(participant))
         .and_then(|c| c.get(cap))
-        .cloned();
+        .map(|c| c.info.clone());
     let info = info?;
     if !READ_OPS.contains(&method.name.as_str()) {
         if WRITE_OPS.contains(&method.name.as_str()) {
@@ -292,10 +322,12 @@ fn check_handle_op(
         }
         return None;
     }
-    // The ordinary capability call, over the participant's own signatures.
-    let present = ctx.caps.capabilities.insert(cap.clone(), info);
+    // The ordinary capability call, over the participant's own signatures, on
+    // the name the emitted case holds the capability under (`deps.<local>`).
+    let local = local_name(participant, cap);
+    let present = ctx.caps.capabilities.insert(local.clone(), info);
     let name = Ident {
-        name: cap.clone(),
+        name: local.clone(),
         span: receiver.span,
     };
     let out = super::calls::check_static_call(
@@ -303,10 +335,10 @@ fn check_handle_op(
     );
     match present {
         Some(p) => {
-            ctx.caps.capabilities.insert(cap.clone(), p);
+            ctx.caps.capabilities.insert(local.clone(), p);
         }
         None => {
-            ctx.caps.capabilities.remove(cap);
+            ctx.caps.capabilities.remove(&local);
         }
     }
     // A statement that writes is refused whether or not there is a schema to
@@ -337,7 +369,7 @@ fn check_handle_op(
             _ => None,
         };
         if let Some(site) = site {
-            site.peek = Some(participant.clone());
+            site.peek = Some((participant.clone(), cap.clone()));
         }
     }
     out

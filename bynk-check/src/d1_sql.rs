@@ -303,12 +303,12 @@ mod native {
             }
             let mut out = Vec::new();
             for site in sites.values() {
-                let Some(participant) = site.peek.as_deref() else {
+                let Some((participant, cap)) = site.peek.as_ref() else {
                     continue;
                 };
                 let Some(instance) = unit_tables
                     .get(participant)
-                    .and_then(|t| t.derived.get(&site.cap))
+                    .and_then(|t| t.derived.get(cap))
                     .filter(|d| is_d1(d))
                 else {
                     continue;
@@ -331,8 +331,8 @@ mod native {
                             "bynk.test.peek_write",
                             site.span,
                             format!(
-                                "the SQL of `D1.peek` reads, but this statement of `{}.{}` would write",
-                                site.cap, site.op
+                                "the SQL of `D1.peek` reads, but this statement of {} would write",
+                                site_name(site)
                             ),
                         )
                         .with_note(
@@ -542,7 +542,7 @@ mod native {
         database: &str,
         source: Option<&str>,
     ) -> Option<CompileError> {
-        let what = format!("`{}.{}`", site.cap, site.op);
+        let what = site_name(site);
         let stmt = match conn.prepare(&site.text) {
             Ok(stmt) => stmt,
             Err(e) => {
@@ -583,6 +583,15 @@ mod native {
         count_error(site, stmt.parameter_count())
     }
 
+    /// How an error names a statement's call: `Orders.all`, or for a read
+    /// through `D1.peek` (#3147), `D1.peek(shop.orders.Orders).all`.
+    fn site_name(site: &D1SqlSite) -> String {
+        match &site.peek {
+            Some((participant, cap)) => format!("`D1.peek({participant}.{cap}).{}`", site.op),
+            None => format!("`{}.{}`", site.cap, site.op),
+        }
+    }
+
     /// #3139: the required fields of the decoded row with no result column in the
     /// statement the rows came from, one `select_field_missing` each.
     fn check_decode(conn: &Connection, d: &D1DecodeSite) -> Vec<CompileError> {
@@ -613,7 +622,7 @@ mod native {
     /// `bynk.d1.sql_param_count` when the SQL uses `used` parameters and the
     /// list literal passes a different number.
     fn count_error(site: &D1SqlSite, used: usize) -> Option<CompileError> {
-        let what = format!("`{}.{}`", site.cap, site.op);
+        let what = site_name(site);
         let passed = site.passed?;
         (used != passed).then(|| {
             CompileError::new(

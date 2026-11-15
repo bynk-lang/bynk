@@ -1252,17 +1252,16 @@ fn peek_env(
                     .iter()
                     .map(|op| build_capability_op_info(op, &resolved.types, tys))
                     .collect();
-                (
-                    name.clone(),
-                    checker::CapabilityInfo {
-                        name: name.clone(),
-                        ops,
-                        derived_from: crate::context_checks::derived_from(
-                            decl,
-                            &resolved.cross_context.flattened_caps,
-                        ),
-                    },
-                )
+                let info = checker::CapabilityInfo {
+                    name: name.clone(),
+                    ops,
+                    derived_from: crate::context_checks::derived_from(
+                        decl,
+                        &resolved.cross_context.flattened_caps,
+                    ),
+                };
+                let binding = table.derived.get(name).map(|d| d.binding.clone());
+                (name.clone(), checker::peek::PeekCap { info, binding })
             })
             .collect();
         env.participants.insert(p.clone(), caps);

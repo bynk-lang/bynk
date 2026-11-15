@@ -677,6 +677,14 @@ pub enum Callee {
     /// the *SQL argument's* id (not the call's, which keeps its own entry), so
     /// the project phase can prepare it against the binding's migrations.
     D1Sql(d1::D1SqlSite),
+    /// #3147: `D1.peek(<participant>.<Cap>)`. The case holds a capability over
+    /// the participant's test database, on the `binding` of its `env`, as
+    /// `deps.<local>`; calls on the handle are capability calls on `local`.
+    D1Peek {
+        participant: String,
+        binding: String,
+        local: String,
+    },
     /// #3139: a `Json.decodeSql[T](x)` whose `x` is the rows of a literal D1 read,
     /// recorded under the argument's id, so the project phase can check `T`'s
     /// fields against the statement's result columns.
