@@ -1,11 +1,6 @@
----
-level: minor
-changelog: `bynk client`'s generated module exports `viaBinding`, which sends a client's calls through a Cloudflare Service Binding, with a verified recipe for SvelteKit and Next.js on Cloudflare (#3508 slice BC5)
----
+# 0851 — `bynk client`: calling a Bynk Worker through a Service Binding
 
-## ADR: bynk-client-service-binding
-title: `bynk client`: calling a Bynk Worker through a Service Binding
-summary: A Service Binding's `fetch` has `fetch`'s shape, so the client's `fetch` option is the seam and `viaBinding` calls the binding correctly, with no second transport option
+- **Status:** Accepted (v0.616)
 
 **Context.** The proposal's Decision E sketched a `Transport` seam, `(request: Request) => Promise<Response>`, so a front end on Cloudflare (SvelteKit or Next.js on Workers) could call a Bynk Worker through a Service Binding: no public hop, no CORS, no egress. This is slice BC5 and server-side only, since a binding exists only in a Worker.
 
