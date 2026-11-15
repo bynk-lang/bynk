@@ -21,10 +21,11 @@ The track adds one event, `request`, per request a dev Worker serves: its contex
 ## 3. Architecture
 
 - **The runtime module.** A new runtime module, `trace.ts`, holds the recorder. ADR 0615 emits a runtime module only when emitted code reaches it, so a build that never imports it is unchanged, including every existing runtime module. The existing `boundary.ts` and `agent.ts` are not edited. The emitter wraps their calls in the dev build instead.
-- **The request scope.** A request-scoped recorder, found through `AsyncLocalStorage` (the dev build adds the `nodejs_als` compatibility flag to `wrangler.toml`; a deploy build never does). The generated `fetch` moves into an inner function, as L7's `__bynkFetch` does, and is wrapped in a function that opens the record, runs the dispatch and flushes on return or fault.
+- **The request scope.** A request-scoped recorder, found through `AsyncLocalStorage` (the dev build adds the `nodejs_als` compatibility flag through the ordinary `compatibility_flags` path, so it is merged and de-duplicated with the project's own flags, usually `nodejs_compat`, which already provides it; a deploy build never adds it). The generated `fetch` moves into an inner function, as L7's `__bynkFetch` does, and is wrapped in a function that opens the record, runs the dispatch and flushes when the response is ready, whether it returned or faulted. Work that continues after that, through `waitUntil` or a streamed response body, is out of the record: a step still unsettled at the flush reports `pending`, and a step begun afterwards is dropped.
 - **A step.** `step(kind, target, span, thunk)` times the thunk, records its outcome (`ok` or `fault`) and rethrows. The emitter wraps three sites: a cross-context call, an agent method call, and a capability op (through the deps wrapper).
 - **Bounds.** At most N steps per request (the first N are kept), then `truncated: true`.
-- **The event shape** is documented in the `bynk dev` JSON reference (`docs/bynk-cli.md`), so a consumer can be built against it.
+- **The flag is documented, and proven inert.** The `--trace-events` docs name the `nodejs_als` flag. The behavioural fixture (slice 1c) runs its "off" side without the flag, so it also shows that the flag itself changes no outcome.
+- **The event shape** is documented in the `bynk dev` JSON reference (`site/src/content/docs/docs/bynk-cli.md`), so a consumer can be built against it.
 
 ## 4. Slices
 
