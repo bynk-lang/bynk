@@ -2466,28 +2466,67 @@ fn hidden_type_error(id: &Ident, note: String) -> CompileError {
     .with_note(note)
 }
 
-/// #3536: `bynk.consumes.type_not_selected`, for each place a unit's source
-/// writes the name of a first-party type (or a bare variant of a first-party
-/// sum) that its braced `consumes` does not list. The braces say what is in
-/// scope, so naming anything else is deprecated: it still resolves, as a
-/// warning, and carries a fix that adds the name to the braces when the
-/// `consumes` clause is in the same file. `consumes` is this file's clauses.
+/// #3536: where a file's `consumes` clauses stand, for
+/// [`check_unselected_type_names`]: what the unit consumes, what this file's own
+/// clauses list, and where a clause the file lacks would go.
+pub struct FileConsumes<'a> {
+    /// The units the unit consumes, in any of its files.
+    pub consumed: &'a std::collections::BTreeSet<String>,
+    /// The unit's aliases (`consumes U { T as V }`), by alias, in any file.
+    pub aliases: &'a HashMap<String, crate::symbols::ConsumedTypeAlias>,
+    /// This file's own `consumes` clauses.
+    pub clauses: &'a [ConsumesDecl],
+    /// Where a new `consumes` line is inserted when this file has no clause for
+    /// the owner (offset, and the line break that precedes it): after its last
+    /// `uses` or `consumes`, else after its header. `None` when the form has no
+    /// safe place (a braced header).
+    pub insert_at: Option<(usize, &'static str)>,
+}
+
+impl FileConsumes<'_> {
+    /// Whether this file's own clauses bring `name` in from `owner`: a bare
+    /// `consumes owner`, or a braced list naming it (under its alias, if any).
+    fn lists(&self, owner: &str, name: &str) -> bool {
+        self.clauses
+            .iter()
+            .filter(|c| c.target.joined() == owner)
+            .any(|c| match &c.selected {
+                None => true,
+                Some(items) => items
+                    .iter()
+                    .any(|i| i.alias.as_ref().unwrap_or(&i.name).name == name),
+            })
+    }
+
+    /// How `name` is written in a list: `Original as Alias` for a renamed export.
+    fn item(&self, owner: &str, name: &str) -> String {
+        match self.aliases.get(name) {
+            Some(a) if a.target == owner => format!("{} as {name}", a.original),
+            _ => name.to_string(),
+        }
+    }
+}
+
+/// #3536: `bynk.consumes.type_not_selected`, for each place a file's source
+/// writes the name of a type (or a bare variant of a sum) that a unit it
+/// consumes exports and that **this file's own** `consumes` does not bring in:
+/// either it lists other names, or only another file of the unit consumes the
+/// unit. Imports are per file, so naming anything else is deprecated: it still
+/// resolves, as a warning, and carries a fix that edits this file's `consumes`:
+/// extend the clause it has, or add one.
 pub fn check_unselected_type_names(
     items: &[CommonsItem],
     resolved: &ResolvedCommons,
-    unlisted: &std::collections::BTreeSet<String>,
-    consumes: &[ConsumesDecl],
+    file: &FileConsumes<'_>,
 ) -> Vec<CompileError> {
-    let from = |n: &String| {
-        resolved
-            .imported_from
-            .get(n)
-            .filter(|u| crate::symbols::is_first_party_name(u))
-    };
     let mut gated = std::collections::BTreeMap::new();
     let mut variants = std::collections::BTreeMap::new();
-    for name in unlisted.iter().filter(|n| from(n).is_some()) {
-        gated.insert(name.clone(), resolved.imported_from[name].clone());
+    let consumed_names = resolved
+        .imported_from
+        .iter()
+        .filter(|(_, owner)| file.consumed.contains(*owner));
+    for (name, owner) in consumed_names.filter(|(n, o)| !file.lists(o, n)) {
+        gated.insert(name.clone(), owner.clone());
         if let Some(TypeBody::Sum(sum)) = resolved.types.get(name).map(|t| &t.body) {
             variants.extend(
                 sum.variants
@@ -2504,33 +2543,27 @@ pub fn check_unselected_type_names(
                 && matches!(&t.body, TypeBody::Sum(s) if s.variants.iter().any(|x| x.name.name == *v))
         })
     });
+    // Each report, in order: the name this file must list and its owner.
+    let hits = std::cell::RefCell::new(Vec::<(String, String)>::new());
     let warn = |id: &Ident, name: &str, owner: &str| {
+        let why = if file.clauses.iter().any(|c| c.target.joined() == owner) {
+            format!("this file's `consumes {owner}` does not list it")
+        } else {
+            format!("this file does not `consumes {owner}`")
+        };
         let message = if id.name == name {
-            format!("`{name}` is not in scope: `consumes {owner}` does not list it")
+            format!("`{name}` is not in scope: {why}")
         } else {
             format!(
-                "`{}` is a variant of `{name}`, which `consumes {owner}` does not list",
+                "`{}` is a variant of `{name}`, which is not in scope: {why}",
                 id.name
             )
         };
-        let mut e = CompileError::new("bynk.consumes.type_not_selected", id.span, message)
-            .with_note(format!(
-                "a braced `consumes` brings into scope only the names it lists; add `{name}` to `consumes {owner} {{ … }}`. This will be an error in a later release"
-            ));
-        if let Some((at, owner_clause)) = consumes
-            .iter()
-            .filter(|c| c.target.joined() == owner && c.span.file == id.span.file)
-            .find_map(|c| c.selected.as_ref()?.last().map(|last| (last, c)))
-        {
-            let end = at.alias.as_ref().map_or(at.name.span.end, |a| a.span.end);
-            let _ = owner_clause;
-            e = e.with_suggestion(
-                format!("add `{name}` to `consumes {owner}`"),
-                vec![(Span::new_in(id.span.file, end, end), format!(", {name}"))],
-                bynk_syntax::error::Applicability::MachineApplicable,
-            );
-        }
-        e
+        hits.borrow_mut()
+            .push((name.to_string(), owner.to_string()));
+        CompileError::new("bynk.consumes.type_not_selected", id.span, message).with_note(format!(
+            "imports are per file: a name from another unit is in scope in a file that itself `consumes` it, and in a braced list only if it is listed. Add `{name}` to this file's `consumes {owner} {{ … }}`. This will be an error in a later release"
+        ))
     };
     let report = |id: &Ident, owner: &str| warn(id, &id.name, owner);
     let variant_report = |id: &Ident, sum: &str| warn(id, sum, &resolved.imported_from[sum]);
@@ -2543,7 +2576,64 @@ pub fn check_unselected_type_names(
         errors: Vec::new(),
     };
     gate_items(&mut g, items);
-    g.errors
+    let errors = std::mem::take(&mut g.errors);
+    let hits = hits.into_inner();
+    if errors.len() != hits.len() {
+        return errors;
+    }
+    attach_consumes_fixes(errors, &hits, file)
+}
+
+/// #3536: give each [`check_unselected_type_names`] warning a fix that edits the
+/// file it is in. A file with a braced clause for the owner gains `, Name` in
+/// it; one with none gains a line listing **every** name it needs from that
+/// owner, so the warnings share one edit and the batch applies it once.
+fn attach_consumes_fixes(
+    errors: Vec<CompileError>,
+    hits: &[(String, String)],
+    file: &FileConsumes<'_>,
+) -> Vec<CompileError> {
+    let mut needed: std::collections::BTreeMap<&str, std::collections::BTreeSet<&str>> =
+        Default::default();
+    for (name, owner) in hits {
+        needed.entry(owner).or_default().insert(name);
+    }
+    let applicable = bynk_syntax::error::Applicability::MachineApplicable;
+    errors
+        .into_iter()
+        .zip(hits)
+        .map(|(e, (name, owner))| {
+            let own = || file.clauses.iter().filter(|c| c.target.joined() == *owner);
+            let extend = own().find_map(|c| c.selected.as_ref()?.last());
+            if let Some(last) = extend {
+                let end = last
+                    .alias
+                    .as_ref()
+                    .map_or(last.name.span.end, |a| a.span.end);
+                let at = Span::new_in(e.span.file, end, end);
+                let item = file.item(owner, name);
+                return e.with_suggestion(
+                    format!("add `{name}` to this file's `consumes {owner}`"),
+                    vec![(at, format!(", {item}"))],
+                    applicable,
+                );
+            }
+            let Some((offset, separator)) = file.insert_at else {
+                return e;
+            };
+            let list = needed[owner.as_str()]
+                .iter()
+                .map(|n| file.item(owner, n))
+                .collect::<Vec<_>>()
+                .join(", ");
+            let at = Span::new_in(e.span.file, offset, offset);
+            e.with_suggestion(
+                format!("add `consumes {owner} {{ {list} }}` to this file"),
+                vec![(at, format!("{separator}consumes {owner} {{ {list} }}"))],
+                applicable,
+            )
+        })
+        .collect()
 }
 
 /// #1927: the naming gate for a `uses`-imported type the unit hides behind
