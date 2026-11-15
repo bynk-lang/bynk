@@ -85,12 +85,7 @@ fn run() -> ExitCode {
                     local_workers,
                     no_install,
                     wrangler_args,
-                    // `--trace-events` writes events, so it implies `--format json`.
-                    format: if trace_events {
-                        bynk::dev::DevFormat::Json
-                    } else {
-                        format.into()
-                    },
+                    format: dev_format(format, trace_events),
                     ready_json,
                     log_events,
                     trace_events,
@@ -633,6 +628,16 @@ fn project_root(input: &Path, lock: bynk::fetch::FetchOptions) -> Option<PathBuf
 /// #2240: resolve, fetch and lock the dependencies of the project holding
 /// `input` before a command compiles it. Prints the failure and returns
 /// `false` when it can't; a single file outside any project needs nothing.
+/// `bynk dev`'s output format: `--trace-events` writes events, so it implies
+/// `--format json` (#3580).
+fn dev_format(format: bynk::cli::DevFormatArg, trace_events: bool) -> bynk::dev::DevFormat {
+    if trace_events {
+        bynk::dev::DevFormat::Json
+    } else {
+        format.into()
+    }
+}
+
 fn prepare(input: &Path, opts: bynk::fetch::FetchOptions) -> bool {
     let Some(project_root) = find_project_root(input) else {
         return true;

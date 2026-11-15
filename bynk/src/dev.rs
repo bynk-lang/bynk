@@ -525,9 +525,7 @@ pub fn run(
     if !crate::workers::compile_once_reporting(
         project_root,
         &build_dir,
-        crate::workers::Build::new(true, false)
-            .no_install(opts.no_install)
-            .trace_requests(opts.trace_events),
+        dev_build(opts),
         bynk_driver::progress::terminal_sink(),
     ) {
         return ExitCode::FAILURE;
@@ -862,9 +860,7 @@ pub fn run(
             fingerprint = now;
             eprintln!("bynk dev: change detected — rebuilding…");
             emit(opts.format, &DevEvent::Rebuilding);
-            let rebuild = crate::workers::Build::new(true, false)
-                .no_install(opts.no_install)
-                .trace_requests(opts.trace_events);
+            let rebuild = dev_build(opts);
             if crate::workers::compile_once_reporting(project_root, &build_dir, rebuild, None) {
                 proxy_ai_search(&workers_dir, &serving);
                 // Interop I5 (#1972): refresh the served copy from the
@@ -1019,6 +1015,14 @@ fn hyperdrive_local_env(
             None
         }
     }
+}
+
+/// How `bynk dev` builds, first and on every rebuild: it reconciles the schema
+/// lock, never dry-runs, and (#3580, `--trace-events`) records request traces.
+fn dev_build(opts: &DevOptions) -> crate::workers::Build {
+    crate::workers::Build::new(true, false)
+        .no_install(opts.no_install)
+        .trace_requests(opts.trace_events)
 }
 
 /// Whether `bynk dev` reads wrangler's output (#2474) rather than leaving it
