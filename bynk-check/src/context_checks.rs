@@ -3237,6 +3237,14 @@ fn check_service_decls(
     // #3343: `@name("…")` on the fields of a request record.
     validate_field_names(table, &typed.types, &typed.consts, errors);
 
+    // #3513 C: `cf` takes the standard library's `RequestCf` and no look-alike a
+    // unit declares or imports from elsewhere, so the platform lock and the
+    // unstable gate (both keyed to the import) cannot be bypassed.
+    let cf_is_std = cross_context
+        .consumed_types
+        .get("bynk.cloudflare")
+        .is_some_and(|t| t.contains_key("RequestCf"))
+        && !table.types.contains_key("RequestCf");
     // v0.9: validate HTTP handler shape and check for duplicate routes
     // across all services in this context.
     let mut route_first_span: HashMap<(HttpMethod, String), Span> = HashMap::new();
@@ -3245,7 +3253,7 @@ fn check_service_decls(
             let HandlerKind::Http { method, path } = &handler.kind else {
                 continue;
             };
-            validate_http_handler(handler, *method, path, &typed.types, errors);
+            validate_http_handler(handler, *method, path, &typed.types, cf_is_std, errors);
             let key = (*method, path.clone());
             if let Some(prev) = route_first_span.get(&key).copied() {
                 errors.push(
@@ -5330,6 +5338,7 @@ fn validate_http_handler(
     method: HttpMethod,
     path: &str,
     types: &HashMap<String, Arc<TypeDecl>>,
+    cf_is_std: bool,
     errors: &mut Vec<CompileError>,
 ) {
     if !path.starts_with('/') {
@@ -5423,7 +5432,9 @@ fn validate_http_handler(
         // #3513 C: `cf` is what Cloudflare derived about the connection, and must be
         // typed `RequestCf` (from `bynk.cloudflare`).
         let is_cf = !is_path && p.name.name == "cf";
-        if is_cf && !matches!(&p.type_ref, TypeRef::Named(id) if id.name == "RequestCf") {
+        if is_cf
+            && !(cf_is_std && matches!(&p.type_ref, TypeRef::Named(id) if id.name == "RequestCf"))
+        {
             errors.push(
                 CompileError::new(
                     "bynk.http.cf_wrong_type",
@@ -5434,7 +5445,7 @@ fn validate_http_handler(
                     ),
                 )
                 .with_note(
-                    "`cf: RequestCf` gives the handler what Cloudflare derived about the request; import it with `consumes bynk.cloudflare { RequestCf }`",
+                    "`cf: RequestCf` gives the handler what Cloudflare derived about the request; it is the `RequestCf` of `bynk.cloudflare` (`consumes bynk.cloudflare { RequestCf }`), not a type of your own",
                 ),
             );
         }
