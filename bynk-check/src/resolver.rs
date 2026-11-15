@@ -2788,7 +2788,7 @@ fn unselected_gate(
         (usize, usize),
         (String, String),
     >::new());
-    let warn = |id: &Ident, name: &str, owner: &str| {
+    let report_name = |id: &Ident, name: &str, owner: &str| {
         let why = if file.clauses.iter().any(|c| c.target.joined() == owner) {
             format!("this file's `consumes {owner}` does not list it")
         } else {
@@ -2816,8 +2816,8 @@ fn unselected_gate(
             "imports are per file: a name from another unit is in scope in a file that itself `consumes` it, and in a braced list only if it is listed. Add `{name}` to this file's `consumes {owner} {{ … }}`."
         ))
     };
-    let report = |id: &Ident, owner: &str| warn(id, &id.name, owner);
-    let variant_report = |id: &Ident, sum: &str| warn(id, sum, &owners[sum]);
+    let report = |id: &Ident, owner: &str| report_name(id, &id.name, owner);
+    let variant_report = |id: &Ident, sum: &str| report_name(id, sum, &owners[sum]);
     let mut g = Gate {
         hidden: &gated,
         report: &report,
@@ -2836,7 +2836,7 @@ fn unselected_gate(
 /// #3536: give each [`check_unselected_type_names`] error a fix that edits the
 /// file it is in. A file with a braced clause for the owner gains `, Name` in
 /// it; one with none gains a line listing **every** name it needs from that
-/// owner, so the warnings share one edit and the batch applies it once.
+/// owner, so the errors share one edit and the batch applies it once.
 fn attach_consumes_fixes(
     errors: Vec<CompileError>,
     hits: &std::collections::BTreeMap<(usize, usize), (String, String)>,
