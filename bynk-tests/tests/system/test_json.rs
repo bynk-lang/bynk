@@ -806,8 +806,10 @@ fn a_detached_failure_in_a_cron_or_queue_handler_is_counted() {
         .expect("run bynk test");
     assert!(
         out.status.success(),
-        "a detached failure does not fail the run:\n{}",
-        String::from_utf8_lossy(&out.stderr)
+        "a detached failure does not fail the run ({}):\n{}\n{}",
+        out.status,
+        String::from_utf8_lossy(&out.stderr),
+        String::from_utf8_lossy(&out.stdout)
     );
     let doc: serde_json::Value = serde_json::from_slice(&out.stdout).expect("a JSON document");
     let count = |name: &str| {
