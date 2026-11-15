@@ -355,6 +355,17 @@ pub(crate) fn link_ai_search_for_run(
     problems.is_empty()
 }
 
+/// The lookups of the account's named resources a run does before it confirms: each AI Search
+/// instance found, and (#3513 A) each mTLS certificate. `false` when either stops the run.
+pub(crate) fn link_named_resources_for_run(
+    order: &[String],
+    resources: &BTreeMap<String, Resources>,
+) -> bool {
+    let search = link_ai_search_for_run(order, resources);
+    let mtls = link_mtls_for_run(order, resources);
+    search && mtls
+}
+
 /// #3513 A: the lookup an `MtlsCertificate` binding needs is not built yet, so a run that
 /// declares one stops here, with nothing pushed, rather than push a certificate's name as its
 /// id. Replaced by the certificate resolver.
