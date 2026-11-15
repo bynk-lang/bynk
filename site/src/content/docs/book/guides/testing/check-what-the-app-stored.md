@@ -101,9 +101,11 @@ derived from `D1` that the participant declares. Elsewhere it is refused, each
 with its own diagnostic: `bynk.test.peek_outside_case`,
 `bynk.test.peek_not_a_database`, `bynk.test.peek_unknown_capability`.
 
-Under `bynk test --against`, a case that uses it is skipped, saying `needs the
-local test database`: a deployment has no in-process database, and reaching a
-deployed one would make a test run touch real data. See
+Under `bynk test --against`, a case that uses it is refused
+(`bynk.test.remote_unsupported_peek`), like the other cases a real runtime can't
+honour, or skipped, saying why, under `--skip-unsupported`: a deployment has no
+in-process database, and reaching a deployed one would make a test run touch
+real data. See
 [Testing against a running system](/book/guides/testing/against-a-running-system/).
 
 **See also:** [Reference — Reading a participant's database](/book/reference/testing/#peek-a-database).

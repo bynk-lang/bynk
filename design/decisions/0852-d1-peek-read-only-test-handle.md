@@ -37,9 +37,10 @@ Accepted in #3147.
   migrations, as the app's own D1 statements are.
 - **One object.** The handle reads the same database object the app's `env` holds, so it
   sees exactly what the app wrote in the case.
-- **`--against`.** A case that uses `D1.peek` is reported as skipped, with the reason
-  "needs the local test database", not failed and not silently passed: a deployed target has
-  no in-process database, and reaching a deployed D1 would make a test run touch a real one.
+- **`--against`.** A case that uses `D1.peek` is refused as `bynk.test.remote_unsupported_peek`,
+  as the other cases a real runtime cannot honour are, and is skipped, naming why, under
+  `--skip-unsupported` (maintainer decision). A deployed target has no in-process database, and
+  reaching a deployed D1 would make a test run touch a real one.
 - **Seeding is out of scope**, tracked in #3563. The handle stays read-only so a case cannot
   write state the app's invariants never saw.
 

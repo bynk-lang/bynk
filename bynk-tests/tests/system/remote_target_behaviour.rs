@@ -15,7 +15,8 @@
 //! - a case a remote run can't honour (`advance Clock`) refuses the run, and
 //!   `--skip-unsupported` skips it, naming why;
 //! - a case that reads a participant's test database with `D1.peek` (#3147) is
-//!   skipped, naming why, with no flag: a deployment has no in-process database;
+//!   refused like the others, and skipped under `--skip-unsupported`: a
+//!   deployment has no in-process database;
 //! - a bare URL, an unknown name, a `production = true` target and a missing
 //!   secret are each refused before any request.
 //!
@@ -508,12 +509,12 @@ fn unsafe_targets_are_refused_before_any_request() {
 }
 
 /// #3147: `D1.peek` reads the participant's in-process test database, which a
-/// deployment has none of, so a case that uses it is skipped against a target,
-/// with its reason, and the rest of the suite runs. Skipped without
-/// `--skip-unsupported`: a refusal would make every such suite unrunnable
-/// against a target.
+/// deployment has none of, so a case that uses it is refused against a target
+/// (`bynk.test.remote_unsupported_peek`), like the other cases a real runtime
+/// can't honour, and skipped with its reason under `--skip-unsupported`, while
+/// the rest of the suite runs.
 #[test]
-fn a_case_that_peeks_is_skipped_against_a_target() {
+fn a_case_that_peeks_is_refused_or_skipped_against_a_target() {
     if !runner_available() {
         return;
     }
@@ -555,8 +556,22 @@ fn a_case_that_peeks_is_skipped_against_a_target() {
     fs::write(proj.join("src/shop/api.bynk"), &source).unwrap();
     let (ok, stdout, stderr) = bynk_test(
         &proj,
-        &dir.join("remote/out"),
+        &dir.join("refused/out"),
         &["--against", "local"],
+        &[("AUTH_SECRET", "deployed-secret")],
+    );
+    assert!(!ok, "the peeking case refuses the run");
+    assert!(
+        json(&stdout, &stderr)["error"]["diagnostics"]
+            .to_string()
+            .contains("bynk.test.remote_unsupported_peek"),
+        "{stdout}"
+    );
+    // ...and `--skip-unsupported` skips it, saying why.
+    let (ok, stdout, stderr) = bynk_test(
+        &proj,
+        &dir.join("remote/out"),
+        &["--against", "local", "--skip-unsupported"],
         &[("AUTH_SECRET", "deployed-secret")],
     );
     let doc = json(&stdout, &stderr);
@@ -569,7 +584,8 @@ fn a_case_that_peeks_is_skipped_against_a_target() {
     assert_eq!(doc["skipped"], 1, "{doc}");
     let cases = doc["suites"].to_string();
     assert!(
-        cases.contains("\"skipped\"") && cases.contains("needs the local test database"),
+        cases.contains("\"skipped\"")
+            && cases.contains("reads a participant's database with `D1.peek`"),
         "{doc}"
     );
     let _ = fs::remove_dir_all(&dir);
