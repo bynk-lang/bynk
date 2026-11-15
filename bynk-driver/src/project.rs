@@ -3777,6 +3777,10 @@ fn build_output(
         BuildTarget::Workers => {
             // v0.8 §2.3: per-Worker entry point, compose.ts, and wrangler
             // configuration. One Worker per context.
+            // #3562: where each context's files go. Always the identity layout for
+            // now: a group's directory and prefixes are switched on with the group
+            // as the emit unit.
+            let layout = bynk_project::worker_layout::WorkerLayout::identity();
             for (ctx_name, kind) in &kinds {
                 if *kind != UnitKind::Context {
                     continue;
@@ -4043,7 +4047,7 @@ fn build_output(
                 // precedent `events_fanout.rs`'s and `workers.rs`'s own
                 // construction sites already set.
                 compiled.push(StagedFile {
-                    output_path: PathBuf::from(format!("workers/{dashes}/index.ts")),
+                    output_path: layout.worker_file(ctx_name, "index.ts"),
                     document: Document::Ts(entry_ts),
                     source_map: None,
                     debug_metadata: None,
@@ -4061,7 +4065,7 @@ fn build_output(
                     let fanout_program =
                         emitter::emit_events_fanout_do(ctx_name, &own_event_routes);
                     compiled.push(StagedFile {
-                        output_path: PathBuf::from(format!("workers/{dashes}/events_fanout.ts")),
+                        output_path: layout.member_file(ctx_name, "events_fanout.ts"),
                         document: Document::Ts(fanout_program),
                         source_map: None,
                         debug_metadata: None,
@@ -4070,7 +4074,7 @@ fn build_output(
                 // #3477: the Durable Object classes of this Worker's containers.
                 if let Some(program) = emitter::emit_containers_ts(&bindings) {
                     compiled.push(StagedFile {
-                        output_path: PathBuf::from(format!("workers/{dashes}/containers.ts")),
+                        output_path: layout.worker_file(ctx_name, "containers.ts"),
                         document: Document::Ts(program),
                         source_map: None,
                         debug_metadata: None,
@@ -4082,13 +4086,13 @@ fn build_output(
                 // #1317) that reaches `Document::Ts` with no `Verbatim`
                 // wrap.
                 compiled.push(StagedFile {
-                    output_path: PathBuf::from(format!("workers/{dashes}/compose.ts")),
+                    output_path: layout.member_file(ctx_name, "compose.ts"),
                     document: Document::Ts(compose_ts),
                     source_map: None,
                     debug_metadata: None,
                 });
                 compiled.push(StagedFile {
-                    output_path: PathBuf::from(format!("workers/{dashes}/wrangler.toml")),
+                    output_path: layout.worker_file(ctx_name, "wrangler.toml"),
                     document: Document::Toml(wrangler_doc),
                     source_map: None,
                     debug_metadata: None,
@@ -4175,10 +4179,8 @@ fn build_output(
                     },
                 ) {
                     compiled.push(StagedFile {
-                        output_path: PathBuf::from(format!(
-                            "workers/{dashes}/{}",
-                            emitter::contracts::CONTRACTS_MANIFEST
-                        )),
+                        output_path: layout
+                            .member_file(ctx_name, emitter::contracts::CONTRACTS_MANIFEST),
                         document: Document::Json(manifest),
                         source_map: None,
                         debug_metadata: None,
@@ -4189,10 +4191,7 @@ fn build_output(
                 // imports, when the context declares one.
                 if let Some(client) = emitter::client::emit_client(ctx_name, table, &own_types) {
                     compiled.push(StagedFile {
-                        output_path: PathBuf::from(format!(
-                            "workers/{dashes}/{}",
-                            emitter::client::CLIENT_FILE
-                        )),
+                        output_path: layout.member_file(ctx_name, emitter::client::CLIENT_FILE),
                         document: Document::Ts(client),
                         source_map: None,
                         debug_metadata: None,
@@ -4208,10 +4207,8 @@ fn build_output(
                 );
                 if let Some(manifest) = emitter::emit_secrets_manifest(table, &reads) {
                     compiled.push(StagedFile {
-                        output_path: PathBuf::from(format!(
-                            "workers/{dashes}/{}",
-                            emitter::secrets::SECRETS_MANIFEST
-                        )),
+                        output_path: layout
+                            .member_file(ctx_name, emitter::secrets::SECRETS_MANIFEST),
                         document: Document::Json(manifest),
                         source_map: None,
                         debug_metadata: None,
