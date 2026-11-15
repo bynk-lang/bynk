@@ -3102,7 +3102,10 @@ pub(crate) mod tests {
         assert!(err.contains("bynk deploy --env default"), "{err}");
         let out = std::fs::read_to_string(&config).unwrap();
         assert!(out.contains("certificate_id = \"c-123\""), "{out}");
-        assert!(!out.contains("MTLS_OTHER") && !out.contains("\"ops\""), "{out}");
+        assert!(
+            !out.contains("MTLS_OTHER") && !out.contains("\"ops\""),
+            "{out}"
+        );
         // Another environment has linked nothing, so each binding is dropped.
         std::fs::write(&config, original).unwrap();
         let other = materialise_mtls_for_dev(&dir, "shop", &config, "staging").unwrap_err();
