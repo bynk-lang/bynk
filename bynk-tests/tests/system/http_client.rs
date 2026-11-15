@@ -680,6 +680,21 @@ show("upload-invalid", await c.api.postUpload({ title: "", caption: null, photo:
 
 show("prefs", await c.api.getPrefs({ theme: "dark", lang: "fr" }));
 show("prefs-default", await c.api.getPrefs({ theme: "light" }));
+// A value that is not cookie text would add a cookie the caller never declared.
+show("prefs-inject", await c.api.getPrefs({ theme: "dark; __Host-sid=attacker" }));
+// A `Cookie` the caller configured is joined, not replaced; a JSON `content-type`
+// configured for the whole client does not spoil a form or a multipart body.
+const configured = createClient({
+  baseUrl: "http://api.test",
+  headers: { cookie: "sid=abc", "content-type": "application/json" },
+  fetch: async (url, init) => {
+    sent.push(`CONFIGURED ${new Headers(init.headers).get("cookie") ?? "-"} ${new Headers(init.headers).get("content-type") ?? "-"}`);
+    return call(url, init);
+  },
+});
+show("prefs-joined", await configured.api.getPrefs({ theme: "dark" }));
+show("note-configured", await configured.api.postNotes({ title: "J", body: null, tags: [], pinned: false, rank: null }));
+show("upload-configured", await configured.api.postUpload({ title: "U", caption: null, photo: png, cover: null, extras: [] }));
 // Where `document` exists a script cannot set `Cookie`: refused, not silently lost.
 globalThis.document = {};
 show("prefs-browser", await c.api.getPrefs({ theme: "dark" }));
@@ -747,6 +762,33 @@ fn forms_multipart_and_cookies_round_trip_against_a_real_worker() {
         line(&out, "prefs-default"),
         r#"{"status":200,"kind":"Ok","body":"light|-|1"}"#
     );
+    let l = line(&out, "prefs-inject");
+    assert!(
+        l.starts_with(
+            r#"{"kind":"Invalid","error":{"kind":"StructuralMismatch","path":"cookies.theme""#
+        ),
+        "{l}"
+    );
+    assert_eq!(
+        line(&out, "prefs-joined"),
+        r#"{"status":200,"kind":"Ok","body":"dark|-|1"}"#
+    );
+    assert_eq!(
+        line(&out, "note-configured"),
+        r#"{"status":200,"kind":"Ok","body":"J|-|0|false|-"}"#
+    );
+    assert_eq!(
+        line(&out, "upload-configured"),
+        r#"{"status":200,"kind":"Ok","body":"U|-|p.png|image/png|3|-|0"}"#
+    );
+    let requests = line(&out, "requests");
+    for expected in [
+        "CONFIGURED sid=abc; theme=dark application/json",
+        "CONFIGURED sid=abc application/x-www-form-urlencoded",
+        "CONFIGURED sid=abc -",
+    ] {
+        assert!(requests.contains(expected), "{expected} not in {requests}");
+    }
     // A browser drops a `Cookie` header, so typed cookies there are refused up front.
     let l = line(&out, "prefs-browser");
     assert!(

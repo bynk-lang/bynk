@@ -489,7 +489,7 @@ impl Gen {
         match self.sc.types.get(name).map(|d| &d.body) {
             // The standard `File` is declared by the `bynk` unit, which a service's
             // own type table does not hold.
-            None => true,
+            None => name == "File" || name == "bynk__File",
             Some(TypeBody::Record(r)) => {
                 let fields: Vec<&str> = r.fields.iter().map(|f| f.name.name.as_str()).collect();
                 fields == ["filename", "contentType", "bytes"]

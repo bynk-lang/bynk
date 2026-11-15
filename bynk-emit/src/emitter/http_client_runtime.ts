@@ -170,15 +170,40 @@ export function __formString(wire: JsonValue, fields: readonly __QueryField[]): 
   return __queryString(wire, fields).slice(1);
 }
 
+/** A value the client refuses to send, carrying the boundary error it is returned as. */
+export class __Refusal extends globalThis.Error {
+  readonly boundary: BoundaryError;
+  constructor(boundary: BoundaryError) {
+    super("refused before sending");
+    this.boundary = boundary;
+  }
+}
+
+// RFC 6265 §4.1.1, as the server's `serialiseCookie` reads them: a name is a token, a
+// value is `cookie-octet`s.
+const __COOKIE_NAME = /^[!#$%&'*+\-.^_`|~0-9A-Za-z]+$/;
+const __COOKIE_VALUE = /^[\x21\x23-\x2B\x2D-\x3A\x3C-\x5B\x5D-\x7E]*$/;
+
 /**
  * A `cookies` record's wire form as the `Cookie` header's value (`a=1; b=x; b=y`),
  * `""` when every field is absent. A cookie's value is not decoded, so it is
- * written raw.
+ * written raw, and a name or value that is not RFC 6265 text (a `;`, a space, a
+ * quote) is refused: written raw it could add a cookie the caller never declared.
  */
 export function __cookieString(wire: JsonValue, fields: readonly __QueryField[]): string {
   const query = __queryString(wire, fields);
   const pairs: string[] = [];
-  new globalThis.URLSearchParams(query.slice(1)).forEach((value, name) => pairs.push(`${name}=${value}`));
+  new globalThis.URLSearchParams(query.slice(1)).forEach((value, name) => {
+    if (!__COOKIE_NAME.test(name) || !__COOKIE_VALUE.test(value)) {
+      throw new __Refusal({
+        kind: "StructuralMismatch",
+        path: `cookies.${name}`,
+        expected: "an RFC 6265 cookie name and value (no `;`, `,`, space, quote, backslash or control character)",
+        actual: value,
+      });
+    }
+    pairs.push(`${name}=${value}`);
+  });
   return pairs.join("; ");
 }
 
@@ -198,6 +223,7 @@ export function __fileName(part: globalThis.Blob): string {
 
 /** A value that broke a boundary on its way out, as the `Invalid` failure it is. */
 function __invalid(e: unknown): CallFailure {
+  if (e instanceof __Refusal) return { kind: "Invalid", error: e.boundary };
   const details = e instanceof globalThis.Error ? e.message : globalThis.String(e);
   return {
     kind: "Invalid",
@@ -223,10 +249,17 @@ async function __headers(
   const configured = typeof options.headers === "function" ? await options.headers() : options.headers;
   const headers = new globalThis.Headers(configured);
   new globalThis.Headers(init?.headers).forEach((value, name) => headers.set(name, value));
-  // A multipart body names its own boundary, so `fetch` sets its content type.
-  const type = request.form !== undefined ? "application/x-www-form-urlencoded" : request.body !== undefined ? "application/json" : undefined;
-  if (type !== undefined && !headers.has("content-type")) headers.set("content-type", type);
-  if (request.cookies !== undefined && request.cookies !== "") headers.set("cookie", request.cookies);
+  // A form or multipart body names its own content type (a multipart one carries its
+  // boundary), so a `content-type` configured for JSON is replaced, not kept. A JSON
+  // body keeps one the caller chose (`application/vnd.api+json`).
+  if (request.form !== undefined) headers.set("content-type", "application/x-www-form-urlencoded");
+  else if (request.multipart !== undefined) headers.delete("content-type");
+  else if (request.body !== undefined && !headers.has("content-type")) headers.set("content-type", "application/json");
+  // Typed cookies join a `Cookie` header the caller configured, they do not replace it.
+  if (request.cookies !== undefined && request.cookies !== "") {
+    const have = headers.get("cookie");
+    headers.set("cookie", have === null || have === "" ? request.cookies : `${have}; ${request.cookies}`);
+  }
   if (options.origin !== undefined) headers.set("origin", options.origin);
   return headers;
 }
