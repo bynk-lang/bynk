@@ -669,6 +669,17 @@ pub const AI_SEARCH_BINDING_PREFIX: &str = "AI_SEARCH";
 /// `bynk deploy` links to it and never creates it (#3480 Decisions A and B).
 pub const AI_SEARCH_INSTANCE_OPTION: &str = "instance";
 
+/// The Worker binding prefix of an `MtlsCertificate` instance (#3513 A):
+/// `capability Backend = MtlsCertificate @certificate("acme-client")` binds as
+/// `MTLS_BACKEND`, an `[[mtls_certificates]]` entry.
+pub const MTLS_BINDING_PREFIX: &str = "MTLS";
+
+/// The option of an `MtlsCertificate` instance that names the account's client
+/// certificate, by the name it was uploaded under. It is used as written in every
+/// environment, and `bynk deploy` links to it and never uploads it: a certificate's
+/// private key never passes through Bynk (#3513 A Decisions A1 and A2).
+pub const MTLS_CERTIFICATE_OPTION: &str = "certificate";
+
 /// The Worker binding prefix of an `Email` instance (#3302):
 /// `capability Mail = Email @allowedSenders(["orders@shop.example"])` binds as
 /// `EMAIL_MAIL`, a `[[send_email]]` entry (keyed by `name`).
@@ -894,6 +905,7 @@ pub const UNITS: &[Unit] = &[
             "WorkersVectorize",
             "WorkersContainer",
             "WorkersAiSearch",
+            "WorkersMtls",
         ],
         stability: Stability::Stable,
         // Interop I5 (#1972): a Service Binding to a non-Bynk Worker is new
@@ -906,6 +918,7 @@ pub const UNITS: &[Unit] = &[
         // P3b (#2582): Analytics too, until a first-party service writes to it.
         // Version metadata (#3300) too, until a first-party service reports it.
         // Workers AI (#3478) too, until a first-party service has called a model.
+        // mTLS certificates (#3513 A) too, until a first-party service has called an mTLS origin.
         // Secrets Store (#3301) too, until a first-party service reads one.
         // Outbound email (#3302) too: Email Service carries no GA label.
         // Hyperdrive H1 (#3318): `Postgres` too, until a first-party service
@@ -931,6 +944,7 @@ pub const UNITS: &[Unit] = &[
             "Vectorize",
             "Container",
             "AiSearch",
+            "MtlsCertificate",
             "Kv.getWith",
             "Kv.putWith",
             "Kv.getBytes",
@@ -1106,6 +1120,18 @@ pub const UNITS: &[Unit] = &[
                 binding_prefix: AI_SEARCH_BINDING_PREFIX,
                 options: &[(AI_SEARCH_INSTANCE_OPTION, OptionKind::Str)],
                 required: &[AI_SEARCH_INSTANCE_OPTION],
+                bare: false,
+                linked: true,
+            },
+            // #3513 A: a client certificate is uploaded to the account by its owner, and
+            // its private key never passes through Bynk, so the deploy links to it by name
+            // and never uploads it. The name is required: a bare `given MtlsCertificate`
+            // would name no certificate.
+            Instantiable {
+                capability: "MtlsCertificate",
+                binding_prefix: MTLS_BINDING_PREFIX,
+                options: &[(MTLS_CERTIFICATE_OPTION, OptionKind::Str)],
+                required: &[MTLS_CERTIFICATE_OPTION],
                 bare: false,
                 linked: true,
             },
@@ -1769,7 +1795,8 @@ mod tests {
                 ("bynk.cloudflare", "MySql", "HYPERDRIVE"),
                 ("bynk.cloudflare", "Vectorize", "VECTORIZE"),
                 ("bynk.cloudflare", "Container", "CONTAINER"),
-                ("bynk.cloudflare", "AiSearch", "AI_SEARCH")
+                ("bynk.cloudflare", "AiSearch", "AI_SEARCH"),
+                ("bynk.cloudflare", "MtlsCertificate", "MTLS")
             ]
         );
         let kv = instantiable("bynk.cloudflare", "Kv").expect("Kv is instantiable");
@@ -1810,13 +1837,20 @@ mod tests {
             .flat_map(|u| u.instantiable.iter().filter(|i| i.linked))
             .map(|i| i.capability)
             .collect();
-        assert_eq!(linked, ["StoredSecret", "AiSearch"]);
+        assert_eq!(linked, ["StoredSecret", "AiSearch", "MtlsCertificate"]);
         // #3480: an AI Search instance names the instance, required, and is
         // linked like a stored secret.
         let search = instantiable("bynk.cloudflare", "AiSearch").expect("AiSearch is instantiable");
         assert_eq!(search.option_names().collect::<Vec<_>>(), ["instance"]);
         assert_eq!(search.required, ["instance"]);
         assert!(!search.bare && search.linked);
+        // #3513 A: an mTLS certificate names the certificate, required, and is linked like
+        // a stored secret.
+        let mtls = instantiable("bynk.cloudflare", "MtlsCertificate")
+            .expect("MtlsCertificate is instantiable");
+        assert_eq!(mtls.option_names().collect::<Vec<_>>(), ["certificate"]);
+        assert_eq!(mtls.required, ["certificate"]);
+        assert!(!mtls.bare && mtls.linked);
         // #3302: an email instance takes three optional options and is not
         // linked.
         let email = instantiable("bynk.cloudflare", "Email").expect("Email is instantiable");
@@ -1924,6 +1958,7 @@ mod tests {
                 "bynk.cloudflare.Vectorize",
                 "bynk.cloudflare.Container",
                 "bynk.cloudflare.AiSearch",
+                "bynk.cloudflare.MtlsCertificate",
                 "bynk.cloudflare.Kv.getWith",
                 "bynk.cloudflare.Kv.putWith",
                 "bynk.cloudflare.Kv.getBytes",

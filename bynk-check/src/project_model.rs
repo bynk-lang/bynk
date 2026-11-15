@@ -1193,6 +1193,7 @@ pub(crate) fn instance_example(kind: &firstparty::Instantiable) -> String {
         "Vectorize" => "Docs",
         "Container" => "Renderer",
         "AiSearch" => "Kb",
+        "MtlsCertificate" => "Backend",
         _ => "Archives",
     };
     let mut out = format!("capability {name} = {}", kind.capability);
@@ -1216,6 +1217,7 @@ fn option_sample(option: &str) -> &'static str {
             "[\"orders@shop.example\"]"
         }
         firstparty::AI_SEARCH_INSTANCE_OPTION => "\"support-docs\"",
+        firstparty::MTLS_CERTIFICATE_OPTION => "\"acme-client\"",
         firstparty::VECTORIZE_DIMENSIONS_OPTION => "768",
         firstparty::VECTORIZE_METRIC_OPTION => "\"cosine\"",
         firstparty::VECTORIZE_INDEXED_OPTION => "[\"category:string\"]",
@@ -1239,6 +1241,30 @@ fn vectorize_dimensions_problem(value: i64) -> Option<(&'static str, i64)> {
     } else {
         None
     }
+}
+
+/// #3513 A: an `MtlsCertificate` `@certificate` that is not a certificate name. A
+/// certificate is named by whoever uploaded it, in any text, so only a name the account
+/// could not have given one is refused: an empty one, or one with a control character.
+fn mtls_certificate_error(
+    base: &str,
+    option: &str,
+    text: &str,
+    span: bynk_syntax::span::Span,
+) -> Option<CompileError> {
+    (base == "MtlsCertificate"
+        && option == crate::firstparty::MTLS_CERTIFICATE_OPTION
+        && (text.trim().is_empty() || text.chars().any(char::is_control)))
+    .then(|| {
+        CompileError::new(
+            "bynk.capability.invalid_option",
+            span,
+            format!("`{text}` is not a certificate name a `{base}` can reach"),
+        )
+        .with_note(
+            "name the certificate as it was uploaded to the account (`wrangler mtls-certificate list` shows it), for example `@certificate(\"acme-client\")`",
+        )
+    })
 }
 
 /// #3480: an `AiSearch` `@instance` that is not an instance name. The instance
@@ -1547,6 +1573,10 @@ fn instance_option_value(
         return None;
     }
     if let Some(error) = ai_search_instance_error(base, option, text, ann.span) {
+        errors.push_for(Some(path), error);
+        return None;
+    }
+    if let Some(error) = mtls_certificate_error(base, option, text, ann.span) {
         errors.push_for(Some(path), error);
         return None;
     }

@@ -1024,6 +1024,21 @@ export function makeIntegrationAiSearch(binding: string): AiSearchInstance {
 }
 
 /**
+ * The mTLS certificate binding of a multi-Worker integration test participant (#3513 A), bound
+ * as its `env.<binding>`. A test never reaches an origin, so `fetch` faults, naming the
+ * binding, until the case stubs the capability's `send`.
+ */
+export function makeIntegrationMtls(binding: string): { fetch(request: unknown): Promise<never> } {
+  return {
+    fetch: async (): Promise<never> => {
+      throw new globalThis.Error(
+        `bynk: the \`${binding}\` mTLS certificate binding is not stubbed, and a test never reaches the origin — add \`stub <Name>.send(_) returns …\``,
+      );
+    },
+  };
+}
+
+/**
  * The Durable Object namespace of a `Container` instance (#3477), as the
  * multi-Worker integration harness binds it as `env.<binding>`. There is no
  * in-process container, so every call faults, naming the binding, until the
@@ -1130,5 +1145,5 @@ export function makeIntegrationHyperdrive(binding: string): Hyperdrive {
 }
 
 // #1653: the `__` aliases emitted code imports.
-export { makeIntegrationAi as __makeIntegrationAi, makeIntegrationContainer as __makeIntegrationContainer, makeIntegrationAnalytics as __makeIntegrationAnalytics, makeIntegrationD1 as __makeIntegrationD1, makeIntegrationEmail as __makeIntegrationEmail, makeIntegrationHyperdrive as __makeIntegrationHyperdrive, makeIntegrationKv as __makeIntegrationKv, makeIntegrationQueue as __makeIntegrationQueue, makeIntegrationR2 as __makeIntegrationR2, makeIntegrationRateLimit as __makeIntegrationRateLimit, makeIntegrationSecretsStoreSecret as __makeIntegrationSecretsStoreSecret, makeIntegrationAiSearch as __makeIntegrationAiSearch, makeIntegrationVersionMetadata as __makeIntegrationVersionMetadata, makeTestState as __makeTestState };
+export { makeIntegrationAi as __makeIntegrationAi, makeIntegrationContainer as __makeIntegrationContainer, makeIntegrationAnalytics as __makeIntegrationAnalytics, makeIntegrationD1 as __makeIntegrationD1, makeIntegrationEmail as __makeIntegrationEmail, makeIntegrationHyperdrive as __makeIntegrationHyperdrive, makeIntegrationKv as __makeIntegrationKv, makeIntegrationQueue as __makeIntegrationQueue, makeIntegrationR2 as __makeIntegrationR2, makeIntegrationRateLimit as __makeIntegrationRateLimit, makeIntegrationSecretsStoreSecret as __makeIntegrationSecretsStoreSecret, makeIntegrationAiSearch as __makeIntegrationAiSearch, makeIntegrationMtls as __makeIntegrationMtls, makeIntegrationVersionMetadata as __makeIntegrationVersionMetadata, makeTestState as __makeTestState };
 export type { AiSearchInstance as __AiSearchInstance, AnalyticsDataset as __AnalyticsDataset, D1Database as __D1Database, DurableObjectState as __DurableObjectState, Hyperdrive as __Hyperdrive, KVNamespace as __KVNamespace, QueueProducer as __QueueProducer, R2Bucket as __R2Bucket, RateLimiter as __RateLimiter, SecretsStoreSecret as __SecretsStoreSecret, SendEmail as __SendEmail, WorkerAiBinding as __WorkerAiBinding, WorkerVersionMetadata as __WorkerVersionMetadata };

@@ -1,0 +1,7 @@
+context demo
+
+// #3513 A: the certificate name is not empty.
+
+consumes bynk.cloudflare { MtlsCertificate }
+
+capability Backend = MtlsCertificate @certificate("")
