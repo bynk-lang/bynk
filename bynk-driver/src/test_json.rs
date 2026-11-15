@@ -50,6 +50,20 @@ pub struct TestRun {
     /// every existing document's byte layout is unchanged.
     #[serde(skip_serializing_if = "Option::is_none")]
     pub snapshots: Option<crate::snapshots::Counts>,
+    /// #3585: the value a `bynk eval` snippet ended in. Absent for every run
+    /// that is not an evaluation. Last field, so every existing document's byte
+    /// layout is unchanged.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub eval: Option<EvalValue>,
+}
+
+/// #3585: what a `bynk eval` snippet evaluated to: the wire shape of its final
+/// expression (what `Json.encode` gives it) and that expression's type.
+#[derive(Debug, Clone, PartialEq, Serialize)]
+pub struct EvalValue {
+    pub value: serde_json::Value,
+    #[serde(rename = "type")]
+    pub ty: String,
 }
 
 fn is_zero(n: &u32) -> bool {
@@ -282,6 +296,7 @@ impl TestRun {
             coverage: None,
             transport: None,
             snapshots: None,
+            eval: None,
         }
     }
 
@@ -312,6 +327,7 @@ impl TestRun {
             coverage: None,
             transport: None,
             snapshots: None,
+            eval: None,
         }
     }
 
@@ -334,6 +350,7 @@ impl TestRun {
             coverage: None,
             transport: None,
             snapshots: None,
+            eval: None,
         }
     }
 
@@ -382,6 +399,7 @@ impl TestRun {
             coverage: None,
             transport: None,
             snapshots: None,
+            eval: None,
         }
     }
 
@@ -526,6 +544,8 @@ pub struct ParsedRun {
     pub unmatched: Unmatched,
     /// #2842: the runner's snapshot report, when its build takes snapshots.
     pub snapshots: Option<crate::snapshots::Report>,
+    /// #3585: the value a `bynk eval` case reported.
+    pub eval: Option<EvalValue>,
 }
 
 impl ParsedRun {
@@ -544,6 +564,7 @@ impl ParsedRun {
                 coverage: None,
                 transport: None,
                 snapshots: None,
+                eval: self.eval,
             }
         } else {
             let trimmed = stderr.trim();
@@ -561,6 +582,7 @@ impl ParsedRun {
                 coverage: None,
                 transport: None,
                 snapshots: None,
+                eval: None,
             }
         }
     }
@@ -603,6 +625,12 @@ pub fn parse_ndjson(stdout: &str) -> ParsedRun {
                 if let Some(suite) = run.suites.last_mut() {
                     suite.cases.push(case);
                 }
+            }
+            Some("eval-value") => {
+                run.eval = value.get("value").map(|v| EvalValue {
+                    value: v.clone(),
+                    ty: str_field(&value, "valueType"),
+                });
             }
             Some("snapshots") => {
                 run.snapshots = value

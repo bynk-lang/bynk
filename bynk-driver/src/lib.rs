@@ -21,6 +21,7 @@ pub mod coverage;
 pub mod dev_run;
 pub mod discovery;
 pub mod doc_examples;
+pub mod eval;
 pub mod fix;
 pub mod mutate;
 pub mod npm_install;
