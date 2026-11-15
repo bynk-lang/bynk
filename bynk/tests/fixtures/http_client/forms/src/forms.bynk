@@ -1,0 +1,76 @@
+context forms
+
+consumes bynk { File }
+
+type Title = String where NonEmpty && MaxLength(40)
+
+type Note = {
+	title: Title,
+	body: Option[String],
+	tags: List[String] = [],
+	pinned: Bool,
+	rank: Option[Int],
+}
+
+type Upload = {
+	title: Title,
+	caption: Option[String],
+	photo: File,
+	cover: Option[File],
+	extras: List[File],
+}
+
+type Prefs = {
+	theme: String,
+	@name("lang-pref") lang: Option[String],
+	visits: Int = 1,
+}
+
+service api from http {
+	limits { maxBody: 8192, maxFile: 1024, maxParts: 12 }
+
+	@form
+	on POST("/notes") (body: Note) -> Effect[HttpResult[String]] by v: Visitor {
+		let b = match body.body {
+			Some(t) => t
+			None => "-"
+		}
+		let r = match body.rank {
+			Some(n) => "\(n)"
+			None => "-"
+		}
+		Ok("\(body.title)|\(b)|\(body.tags.length())|\(body.pinned)|\(r)")
+	}
+
+	@multipart
+	on POST("/upload") (body: Upload) -> Effect[HttpResult[String]] by v: Visitor {
+		let name = match body.photo.filename {
+			Some(n) => n
+			None => "-"
+		}
+		let cover = match body.cover {
+			Some(c) => "\(c.bytes.length())"
+			None => "-"
+		}
+		let caption = match body.caption {
+			Some(c) => c
+			None => "-"
+		}
+		Ok("\(body.title)|\(caption)|\(name)|\(body.photo.contentType)|\(body.photo.bytes.length())|\(cover)|\(body.extras.length())")
+	}
+
+	on GET("/prefs") (cookies: Prefs) -> Effect[HttpResult[String]] by v: Visitor {
+		let l = match cookies.lang {
+			Some(x) => x
+			None => "-"
+		}
+		Ok("\(cookies.theme)|\(l)|\(cookies.visits)")
+	}
+
+	on GET("/origin") (headers: RequestHeaders) -> Effect[HttpResult[String]] by v: Visitor {
+		match headers.get("origin") {
+			Some(o) => Ok(o)
+			None => Ok("none")
+		}
+	}
+}
