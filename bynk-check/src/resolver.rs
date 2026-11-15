@@ -3892,6 +3892,60 @@ fn check_statement_references(stmt: &Statement, cx: &mut RefCheckCtx) {
     }
 }
 
+/// v0.9: `HttpResult.Variant(args)`, the qualified `HttpResult` constructor.
+/// Reports an unknown variant, and says whether `receiver.method(args)` was one.
+fn check_http_result_call(
+    receiver: &Expr,
+    method: &Ident,
+    args: &[Expr],
+    cx: &mut RefCheckCtx,
+) -> bool {
+    let ExprKind::Ident(id) = &receiver.kind else {
+        return false;
+    };
+    if name_in_scope(&id.name, cx.params, &cx.scopes) || id.name != "HttpResult" {
+        return false;
+    }
+    if http_variant(&method.name).is_none() {
+        cx.errors.push(CompileError::new(
+            "bynk.resolve.unknown_static_member",
+            method.span,
+            format!("`HttpResult` has no variant named `{}`", method.name),
+        ));
+    }
+    for a in args {
+        check_expr_references(a, cx);
+    }
+    true
+}
+
+/// #3147: `D1.peek(…)` reads a participant's test database, from an
+/// `integration` or `system` case. A function body is none: report it, and say
+/// whether `receiver.method` was it.
+fn refuse_peek_in_fn(receiver: &Expr, method: &Ident, cx: &mut RefCheckCtx) -> bool {
+    let ExprKind::Ident(id) = &receiver.kind else {
+        return false;
+    };
+    if id.name != "D1"
+        || method.name != "peek"
+        || name_in_scope(&id.name, cx.params, &cx.scopes)
+        || cx.types.contains_key(&id.name)
+    {
+        return false;
+    }
+    cx.errors.push(
+        CompileError::new(
+            "bynk.test.peek_outside_case",
+            receiver.span.merge(method.span),
+            "`D1.peek` is only valid inside an `integration` or `system` case",
+        )
+        .with_note(
+            "it reads a participant's test database, which only those tiers stand up; the deployed app has no such handle",
+        ),
+    );
+    true
+}
+
 #[allow(clippy::too_many_lines)]
 fn check_expr_references(expr: &Expr, cx: &mut RefCheckCtx) {
     match &expr.kind {
@@ -4417,41 +4471,10 @@ fn check_expr_references(expr: &Expr, cx: &mut RefCheckCtx) {
                 }
                 return;
             }
-            // #3147: `D1.peek(…)` reads a participant's test database, from an
-            // `integration` or `system` case. A function body is none.
-            if let ExprKind::Ident(id) = &receiver.kind
-                && id.name == "D1"
-                && method.name == "peek"
-                && !name_in_scope(&id.name, cx.params, &cx.scopes)
-                && !cx.types.contains_key(&id.name)
-            {
-                cx.errors.push(
-                    CompileError::new(
-                        "bynk.test.peek_outside_case",
-                        receiver.span.merge(method.span),
-                        "`D1.peek` is only valid inside an `integration` or `system` case",
-                    )
-                    .with_note(
-                        "it reads a participant's test database, which only those tiers stand up; the deployed app has no such handle",
-                    ),
-                );
+            if refuse_peek_in_fn(receiver, method, cx) {
                 return;
             }
-            // v0.9: `HttpResult.Variant(args)` — qualified HttpResult constructor.
-            if let ExprKind::Ident(id) = &receiver.kind
-                && !name_in_scope(&id.name, cx.params, &cx.scopes)
-                && id.name == "HttpResult"
-            {
-                if http_variant(&method.name).is_none() {
-                    cx.errors.push(CompileError::new(
-                        "bynk.resolve.unknown_static_member",
-                        method.span,
-                        format!("`HttpResult` has no variant named `{}`", method.name),
-                    ));
-                }
-                for a in args {
-                    check_expr_references(a, cx);
-                }
+            if check_http_result_call(receiver, method, args, cx) {
                 return;
             }
             // v0.20b: `List.empty()` / `Map.empty()` — qualified statics on

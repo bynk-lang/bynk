@@ -1,5 +1,6 @@
 ---
 level: minor
+probes: emit_diagnostics, diagnostic_coverage, explained_codes
 changelog: A `system` or `integration` case can read a participant's test D1 database with `D1.peek(<participant>.<Capability>)`, a read-only handle whose SQL is checked against the migrations (checker half)
 ---
 

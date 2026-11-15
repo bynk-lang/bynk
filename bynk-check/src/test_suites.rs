@@ -753,45 +753,7 @@ pub fn phase_integration_bodies(
         }
 
         // -- #2026: a `stub` has nothing to override at `system`. --
-        // Each participant runs as the Worker it deploys as, and its
-        // composition root builds every capability provider from its own
-        // `env`, so the harness has no seam to put a double in. Refused
-        // rather than accepted and dropped. Reported without marking the
-        // suite `bad`, like #1738 above.
-        for &i in indices {
-            let Some(d) = parsed[i].integration() else {
-                continue;
-            };
-            let system = bynk_syntax::ast::TestTier::System;
-            let suite_stubs = d
-                .stubs
-                .iter()
-                .filter(|_| suite_effective_tier_is_system(d))
-                .map(|s| (s, "suite"));
-            let case_stubs = d
-                .cases
-                .iter()
-                .filter(|c| case_effective_tier(c, d) == system)
-                .flat_map(|c| c.stubs.iter().map(|s| (s, "case")));
-            for (stub, scope) in suite_stubs.chain(case_stubs) {
-                errors.push(
-                    CompileError::new(
-                        "bynk.stub.at_system",
-                        stub.span,
-                        format!(
-                            "`stub {}.{}` is in a `system`-tier {scope}, where a `stub` has no effect",
-                            stub.capability.name, stub.method.name
-                        ),
-                    )
-                    .with_note(
-                        "a `system` case runs each context as the Worker it deploys as, which builds its own capability providers; no seam can be overridden there",
-                    )
-                    .with_note(format!(
-                        "move the case into a `suite {suite_target}` below `system` (`unit`, or `as integration`), where a `stub` overrides the seam"
-                    )),
-                );
-            }
-        }
+        refuse_stubs_at_system(indices, parsed, &suite_target, errors);
 
         if bad {
             continue;
@@ -946,26 +908,23 @@ pub fn phase_integration_bodies(
                 let case_callees = if unchecked {
                     Default::default()
                 } else {
-                    typecheck_integration_case_body(
-                        &participants,
-                        &view,
-                        SuiteItems::of(d),
+                    let body = IntegrationBody {
+                        participants: &participants,
+                        view: &view,
+                        suite: d,
                         case,
-                        &cross_context,
+                        cross_context: &cross_context,
                         unit_tables,
+                    };
+                    check_integration_body(
+                        &body,
+                        d1_sql,
+                        parsed[first].source(),
                         &mut body_errs,
                         refs,
                         tys,
                     )
-                    .1
                 };
-                if let Some(d1_sql) = d1_sql {
-                    body_errs.extend(d1_sql.check_peek_sites(
-                        unit_tables,
-                        &case_callees,
-                        Some(parsed[first].source()),
-                    ));
-                }
                 check_faults_tier(case, case_effective_tier(case, d), &mut body_errs);
                 check_snapshot_placement(case, true, &mut body_errs);
                 check_event_address_tier(
@@ -1043,6 +1002,93 @@ pub fn phase_integration_bodies(
     }
 
     ready
+}
+
+/// #2026: a `stub` has nothing to override at `system`.
+///
+/// Each participant runs as the Worker it deploys as, and its composition root
+/// builds every capability provider from its own `env`, so the harness has no
+/// seam to put a double in. Refused rather than accepted and dropped. Reported
+/// without marking the suite `bad`, like #1738.
+fn refuse_stubs_at_system(
+    indices: &[usize],
+    parsed: &[ParsedFile],
+    suite_target: &str,
+    errors: &mut Vec<CompileError>,
+) {
+    for &i in indices {
+        let Some(d) = parsed[i].integration() else {
+            continue;
+        };
+        let system = bynk_syntax::ast::TestTier::System;
+        let suite_stubs = d
+            .stubs
+            .iter()
+            .filter(|_| suite_effective_tier_is_system(d))
+            .map(|s| (s, "suite"));
+        let case_stubs = d
+            .cases
+            .iter()
+            .filter(|c| case_effective_tier(c, d) == system)
+            .flat_map(|c| c.stubs.iter().map(|s| (s, "case")));
+        for (stub, scope) in suite_stubs.chain(case_stubs) {
+            errors.push(
+                    CompileError::new(
+                        "bynk.stub.at_system",
+                        stub.span,
+                        format!(
+                            "`stub {}.{}` is in a `system`-tier {scope}, where a `stub` has no effect",
+                            stub.capability.name, stub.method.name
+                        ),
+                    )
+                    .with_note(
+                        "a `system` case runs each context as the Worker it deploys as, which builds its own capability providers; no seam can be overridden there",
+                    )
+                    .with_note(format!(
+                        "move the case into a `suite {suite_target}` below `system` (`unit`, or `as integration`), where a `stub` overrides the seam"
+                    )),
+                );
+        }
+    }
+}
+
+/// One integration or `system` case, with what its body is checked against.
+struct IntegrationBody<'a> {
+    participants: &'a [String],
+    view: &'a SuiteView,
+    suite: &'a SuiteDecl,
+    case: &'a Case,
+    cross_context: &'a resolver::CrossContextInfo,
+    unit_tables: &'a HashMap<String, UnitTable>,
+}
+
+/// Type-check an integration or `system` case body, then prepare what it
+/// `D1.peek`s (#3147) against its participants' migrations. Returns the body's
+/// callees.
+fn check_integration_body(
+    body: &IntegrationBody<'_>,
+    d1_sql: Option<&crate::d1_sql::D1Sql>,
+    source: &str,
+    errors: &mut Vec<CompileError>,
+    refs: &mut RefSink,
+    tys: &Arc<Types>,
+) -> HashMap<ExprId, checker::Callee> {
+    let callees = typecheck_integration_case_body(
+        body.participants,
+        body.view,
+        SuiteItems::of(body.suite),
+        body.case,
+        body.cross_context,
+        body.unit_tables,
+        errors,
+        refs,
+        tys,
+    )
+    .1;
+    if let Some(d1_sql) = d1_sql {
+        errors.extend(d1_sql.check_peek_sites(body.unit_tables, &callees, Some(source)));
+    }
+    callees
 }
 
 /// #3162: the declarations recovery skipped in the units a suite can see: the

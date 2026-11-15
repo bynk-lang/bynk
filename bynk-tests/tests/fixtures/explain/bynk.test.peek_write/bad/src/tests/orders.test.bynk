@@ -1,0 +1,7 @@
+suite shop.orders as system {
+  case "peeks" {
+    let db = D1.peek(shop.orders.Orders)
+    let a <- db.all("DELETE FROM orders", [])
+    expect true
+  }
+}

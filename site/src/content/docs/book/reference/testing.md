@@ -1497,7 +1497,7 @@ participant's test D1 database:
 
 ```bynk,fragment
 case "placing an order stores it" {
-  let r <- api.POST("/orders", { sku: "A1", qty: 2 }) by User("bob")
+  let r <- api.POST("/orders", "A1") by User("bob")
   expect r is Ok(_)
 
   let db = D1.peek(shop.orders.Orders)

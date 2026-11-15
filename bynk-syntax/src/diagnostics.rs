@@ -6110,11 +6110,18 @@ bynk revert --accept-secret-changes   # only after a `bynk migrate sweep`",
         blurb: "`D1.peek` reads a D1 database, so it names a capability derived \
                 from `D1` (`capability Orders = D1`). A capability on another \
                 binding, such as `Kv`, has no database for it to read.",
-        example: "// src/shop/orders.bynk\n\
+        example: "// shop/orders.bynk\n\
+                  capability Orders = D1\n\
                   capability Sessions = Kv\n\
                   \n\
                   // tests/orders.test.bynk\n\
-                  D1.peek(shop.orders.Sessions)   // ✗ a `Kv`, not a `D1`",
+                  suite shop.orders as system {\n\
+                  \x20\x20case \"peeks\" {\n\
+                  \x20\x20\x20\x20let db = D1.peek(shop.orders.Sessions)   // ✗ a `Kv`, not a `D1`\n\
+                  \x20\x20\x20\x20let ok = D1.peek(shop.orders.Orders)     // ✓\n\
+                  \x20\x20\x20\x20expect true\n\
+                  \x20\x20}\n\
+                  }",
         page: "/book/reference/testing",
         anchor: "peek-a-database",
     },
@@ -6126,10 +6133,18 @@ bynk revert --accept-secret-changes   # only after a `bynk migrate sweep`",
                 refused in a `unit` case, a `property`, and in the app's own \
                 code. A `unit` case reads the capability it stubs.",
         example: "// tests/orders.test.bynk\n\
-                  suite shop.orders\n\
+                  suite shop.orders {\n\
+                  \x20\x20case \"peeks\" {\n\
+                  \x20\x20\x20\x20let db = D1.peek(shop.orders.Orders)   // ✗ a unit suite has no participant database\n\
+                  \x20\x20\x20\x20expect true\n\
+                  \x20\x20}\n\
+                  }\n\
                   \n\
-                  case \"a unit case\" {\n\
-                  \x20\x20let db = D1.peek(shop.orders.Orders)   // ✗ not an integration or system case\n\
+                  suite shop.orders as system {\n\
+                  \x20\x20case \"peeks\" {\n\
+                  \x20\x20\x20\x20let db = D1.peek(shop.orders.Orders)   // ✓\n\
+                  \x20\x20\x20\x20expect true\n\
+                  \x20\x20}\n\
                   }",
         page: "/book/reference/testing",
         anchor: "peek-a-database",
@@ -6140,8 +6155,13 @@ bynk revert --accept-secret-changes   # only after a `bynk migrate sweep`",
                 where the participant is one of the suite's and declares the \
                 capability. The participant or the capability is not one.",
         example: "// tests/orders.test.bynk\n\
-                  D1.peek(shop.orders.Missing)   // ✗ `shop.orders` declares no `Missing`\n\
-                  D1.peek(shop.orders.Orders)    // ✓",
+                  suite shop.orders as system {\n\
+                  \x20\x20case \"peeks\" {\n\
+                  \x20\x20\x20\x20let db = D1.peek(shop.orders.Missing)   // ✗ `shop.orders` declares no `Missing`\n\
+                  \x20\x20\x20\x20let ok = D1.peek(shop.orders.Orders)    // ✓\n\
+                  \x20\x20\x20\x20expect true\n\
+                  \x20\x20}\n\
+                  }",
         page: "/book/reference/testing",
         anchor: "peek-a-database",
     },
@@ -6152,10 +6172,14 @@ bynk revert --accept-secret-changes   # only after a `bynk migrate sweep`",
                 (`INSERT`, `UPDATE`, `DELETE`, a schema change) is refused, as is \
                 `run` or `batch`. A case makes the app write by driving the app.",
         example: "// tests/orders.test.bynk\n\
-                  let db = D1.peek(shop.orders.Orders)\n\
-                  let a <- db.run(\"DELETE FROM orders\", [])      // ✗ `run` writes\n\
-                  let b <- db.all(\"DELETE FROM orders\", [])      // ✗ the statement writes\n\
-                  let c <- db.all(\"SELECT id FROM orders\", [])   // ✓",
+                  suite shop.orders as system {\n\
+                  \x20\x20case \"peeks\" {\n\
+                  \x20\x20\x20\x20let db = D1.peek(shop.orders.Orders)\n\
+                  \x20\x20\x20\x20let a <- db.all(\"DELETE FROM orders\", [])   // ✗ the statement writes\n\
+                  \x20\x20\x20\x20let r <- db.all(\"SELECT id FROM orders\", [])   // ✓\n\
+                  \x20\x20\x20\x20expect true\n\
+                  \x20\x20}\n\
+                  }",
         page: "/book/reference/testing",
         anchor: "peek-a-database",
     },
