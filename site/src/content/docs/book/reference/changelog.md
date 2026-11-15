@@ -3,7 +3,7 @@ title: Version compatibility & changelog
 ---
 Bynk is pre-1.0 and developed in small, spec-first increments (see
 [Versioning & roadmap](/book/about/versioning-and-roadmap/)). This book is
-written against **v0.626**.
+written against **v0.627**.
 
 This page is a high-level summary of notable increments, not an exhaustive
 per-commit history. While Bynk is pre-1.0, increments may change behaviour.
@@ -28,6 +28,7 @@ per-commit history. While Bynk is pre-1.0, increments may change behaviour.
 
 | Version | Highlights |
 |---|---|
+| **v0.627.0** | A linked `MtlsCertificate` kind, `capability Backend = MtlsCertificate @certificate("acme-client")`, whose `send` presents an account-held client certificate to an origin (experimental; the deploy lands separately) |
 | **v0.626.2** | Design: a plan to move the VS Code extension's diagram views from Mermaid to a first-party renderer in UML notation (model-diagrams track, settling) |
 | **v0.626.1** | Call hierarchy covers cross-context service calls, through `consumes … as` aliases too (#3582) |
 | **v0.626.0** | An `on http` handler takes a fifth special parameter, `cf: RequestCf`, the optional facts Cloudflare derived about the connection (Cloudflare-only, experimental) |

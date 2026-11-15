@@ -1,12 +1,6 @@
----
-level: minor
-changelog: A linked `MtlsCertificate` kind, `capability Backend = MtlsCertificate @certificate("acme-client")`, whose `send` presents an account-held client certificate to an origin (experimental; the deploy lands separately)
-probes: diagnostic_coverage, emit_diagnostics, emit_abi_shapes, ts_writes
----
+# 0859 — `MtlsCertificate`, a linked instance kind that presents an account-held client certificate
 
-## ADR: mtls-certificate-linked-kind
-title: `MtlsCertificate`, a linked instance kind that presents an account-held client certificate
-summary: Named, never uploaded or given by id; `send` has Fetch.send's shape; remote-only under `bynk dev`; faults until stubbed
+- **Status:** Accepted (v0.627)
 
 **Context.** Cloudflare's `mtls_certificates` binding makes a Worker present a client
 certificate when it calls an origin that requires mutual TLS. The binding is a `Fetcher`
