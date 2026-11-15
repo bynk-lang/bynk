@@ -251,3 +251,53 @@ fn the_refusal_offers_a_provider_stub() {
         "a quick fix for `Warehouse`"
     );
 }
+
+/// The language server reuses a memo between rounds, so a file it does not
+/// re-check is replayed with its recorded callees. The publisher's
+/// `Events.emit` must still bring the root in when only `shop.orders` changes.
+#[test]
+fn the_events_trigger_survives_a_memoised_round() {
+    let scratch = Scratch::new("memo");
+    scratch.write("bynk.toml", MANIFEST);
+    scratch.write("src/shop/orders.bynk", ORDERS);
+    scratch.write("src/shop/audit.bynk", PUBLISHER);
+
+    let roots = bynk_ide::AnalysisRoots::Project(scratch.0.clone());
+    let mut sources = bynk_testkit::read_project_sources(&roots);
+    let mut memo = bynk_check::memo::AnalysisMemo::new();
+    let refused = |pd: &bynk_ide::ProjectDiagnostics| {
+        pd.files
+            .iter()
+            .flat_map(|f| &f.diagnostics)
+            .filter(|d| d.error.category == CATEGORY)
+            .count()
+    };
+
+    let cold = bynk_ide::diagnose_project_memoised(
+        &roots,
+        &sources,
+        &bynk_ide::SchemaLock::Off,
+        &mut memo,
+    );
+    assert_eq!(refused(&cold), 1);
+
+    sources.insert(
+        scratch.0.join("src/shop/orders.bynk"),
+        format!("// edited\n{ORDERS}"),
+    );
+    let warm = bynk_ide::diagnose_project_memoised(
+        &roots,
+        &sources,
+        &bynk_ide::SchemaLock::Off,
+        &mut memo,
+    );
+    assert!(
+        memo.stats().hits > 0,
+        "the publisher is replayed from the memo"
+    );
+    assert_eq!(
+        refused(&warm),
+        1,
+        "the replayed publisher still emits events"
+    );
+}
