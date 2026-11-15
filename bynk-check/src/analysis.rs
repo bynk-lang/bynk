@@ -863,6 +863,9 @@ fn analyse_project_inner(
     let mut exec_plan = crate::exec_plan::ExecPlan::default();
     // #3229: one set of cross-context views for the whole project, not one per unit.
     let views = CrossContextViewsCache::default();
+    // Each unit's `Events.emit` calls, for the bundle's composition-root check
+    // below, as `run_checks` keeps them in its own `unit_callees`.
+    let mut unit_callees = project_model::UnitCallees::new();
     for name in project_model::uses_first_order(unit_info.keys(), &unit_uses) {
         let info = &unit_info[name];
         let kind = info.kind;
@@ -959,6 +962,13 @@ fn analyse_project_inner(
             checked.extend(typed);
         }
         crate::phase_timing::mark(crate::phase_timing::Level::Unit);
+        unit_callees.entry(name.clone()).or_default().extend(
+            checked
+                .iter()
+                .flat_map(|t| &t.callees)
+                .filter(|(_, c)| project_model::is_events_emit(c))
+                .map(|(id, c)| (*id, c.clone())),
+        );
         // #2719: the unit's needs-context set, and the calls that would carry
         // the execution context where none exists.
         let plan_errors = exec_plan.extend(&checked.iter().map(|t| &**t).collect::<Vec<_>>());
@@ -1014,38 +1024,17 @@ fn analyse_project_inner(
     );
     errors.extend_attributed_by_span(&parsed, integration_errors);
 
-    // v0.19 (decisions 0017/0024), P5.3: platform-lock enforcement — closes
-    // category 5 of this module's own residual-gap accounting. Inherited from
-    // the now-deleted `analyse_project_with`'s own hardcoded
-    // `Platform::default()` (Cloudflare) and `BuildTarget::Bundle`:
-    // `bynk.cloudflare` is the only
-    // platform-native unit that exists, and it matches the default
-    // selection, so `lock_violation` can never fire here, for any project
-    // (see `bynk-lsp/tests/analysis_residual_gap.rs`'s
-    // `platform_lock_diagnostic_stays_absent`) — this call closes the
-    // category structurally (R3.5), not observably.
-    //
-    // Cost (review #1133): a full provider-closure walk per context, same
-    // shape as `run_checks`'s own gate, for a diagnostic that is provably
-    // dead here. `collect_given_closure` is also unmemoised — a
-    // diamond-shaped provider graph re-walks shared subtrees, so this is
-    // worse than linear in the closure's depth, not just wasted. Same
-    // trade-off and same "worth profiling if it ever shows up" note as the
-    // schema-registry reconciliation call above.
-    if errors.is_empty() {
-        project_model::phase_platform_lock(
-            project_model::BuildTarget::Bundle,
-            Platform::default(),
-            &parsed,
-            &groups,
-            &kinds,
-            &unit_tables,
-            &unit_consumes,
-            &unit_consumes_aliases,
-            &unit_flattened,
-            &mut errors,
-        );
-    }
+    phase_clean_program_checks(
+        &parsed,
+        &groups,
+        &kinds,
+        &unit_tables,
+        &unit_consumes,
+        &unit_consumes_aliases,
+        &unit_flattened,
+        &unit_callees,
+        &mut errors,
+    );
 
     crate::phase_timing::mark(crate::phase_timing::Level::Project);
     // -- Assemble the `ProjectAnalysis`. Mirrored the now-deleted
@@ -1143,6 +1132,73 @@ fn analyse_project_inner(
         boundary_info,
         doc_scope,
         contract_diff,
+    }
+}
+
+/// The whole-program checks that run after the per-unit checks, each only on an
+/// otherwise-clean program, at the point `run_checks` runs them.
+#[allow(clippy::too_many_arguments)]
+fn phase_clean_program_checks(
+    parsed: &[ParsedFile],
+    groups: &BTreeMap<String, Vec<usize>>,
+    kinds: &BTreeMap<String, UnitKind>,
+    unit_tables: &HashMap<String, crate::symbols::UnitTable>,
+    unit_consumes: &HashMap<String, Vec<String>>,
+    unit_consumes_aliases: &HashMap<String, HashMap<String, String>>,
+    unit_flattened: &HashMap<String, HashMap<String, String>>,
+    unit_callees: &project_model::UnitCallees,
+    errors: &mut ErrorSink,
+) {
+    // On the bundle target, a context's required capability with no provider
+    // once the bundle has a composition root (`compose.ts`), at the same point
+    // `run_checks` raises it and on the same otherwise-clean program. Unlike
+    // the Workers form, this one is live here: this entry point analyses as
+    // `BuildTarget::Bundle`.
+    project_model::phase_bundle_composition_unprovided(
+        project_model::BuildTarget::Bundle,
+        parsed,
+        groups,
+        kinds,
+        unit_consumes,
+        unit_consumes_aliases,
+        unit_tables,
+        unit_callees,
+        unit_flattened,
+        errors,
+    );
+
+    // v0.19 (decisions 0017/0024), P5.3: platform-lock enforcement — closes
+    // category 5 of this module's own residual-gap accounting. Inherited from
+    // the now-deleted `analyse_project_with`'s own hardcoded
+    // `Platform::default()` (Cloudflare) and `BuildTarget::Bundle`:
+    // `bynk.cloudflare` is the only
+    // platform-native unit that exists, and it matches the default
+    // selection, so `lock_violation` can never fire here, for any project
+    // (see `bynk-lsp/tests/analysis_residual_gap.rs`'s
+    // `platform_lock_diagnostic_stays_absent`) — this call closes the
+    // category structurally (R3.5), not observably.
+    //
+    // Cost (review #1133): a full provider-closure walk per context, same
+    // shape as `run_checks`'s own gate, for a diagnostic that is provably
+    // dead here. `collect_given_closure` is also unmemoised — a
+    // diamond-shaped provider graph re-walks shared subtrees, so this is
+    // worse than linear in the closure's depth, not just wasted. Same
+    // trade-off and same "worth profiling if it ever shows up" note as the
+    // schema-registry reconciliation in
+    // [`analyse_project_inner`].
+    if errors.is_empty() {
+        project_model::phase_platform_lock(
+            project_model::BuildTarget::Bundle,
+            Platform::default(),
+            parsed,
+            groups,
+            kinds,
+            unit_tables,
+            unit_consumes,
+            unit_consumes_aliases,
+            unit_flattened,
+            errors,
+        );
     }
 }
 
