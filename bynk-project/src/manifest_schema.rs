@@ -234,6 +234,28 @@ struct BuildTable {
     /// variable `BYNK_PACKAGE_MANAGER` overrides this.
     #[schemars(extend("enum" = ["npm", "pnpm", "bun", "yarn"]))]
     package_manager: Option<String>,
+    /// Where `bynk build` writes the typed TypeScript client for the project's
+    /// `from http` services (#3508). Absent, `bynk build` writes none.
+    client: Option<ClientTable>,
+}
+
+/// `[build.client]`: the typed TypeScript client `bynk build` writes beside its
+/// other outputs. `bynk client` reads it for the flags it is not given.
+#[derive(JsonSchema)]
+#[serde(deny_unknown_fields)]
+#[allow(dead_code)]
+struct ClientTable {
+    /// Where to write the client, relative to the project root: a `.ts` file with
+    /// `layout = "file"`, a directory with `layout = "dir"`. It may leave the
+    /// project, since a front end often lives beside the Bynk project.
+    out: String,
+    /// `"file"` writes one module; `"dir"` writes `index.ts`, `types.ts`,
+    /// `codecs.ts` and `runtime.ts`. Default: `"file"`.
+    #[schemars(extend("enum" = ["file", "dir"], "default" = "file"))]
+    layout: Option<String>,
+    /// The `from http` services to include, as `Name` or `unit.Name`. Default:
+    /// every one.
+    service: Option<Vec<String>>,
 }
 
 /// Switches for checks that read more than the source.

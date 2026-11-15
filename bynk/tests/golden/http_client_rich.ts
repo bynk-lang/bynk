@@ -406,7 +406,14 @@ export interface __Route {
 export interface __Request {
   readonly params?: { readonly [name: string]: string };
   readonly query?: string;
+  /** A JSON body. */
   readonly body?: JsonValue;
+  /** A `@form` body: `application/x-www-form-urlencoded` text. */
+  readonly form?: string;
+  /** A `@multipart` body. */
+  readonly multipart?: globalThis.FormData;
+  /** The `Cookie` header's value. A browser sets its own and ignores this. */
+  readonly cookies?: string;
 }
 
 /** The result of `f` over an `Ok`, an `Err` unchanged. */
@@ -470,8 +477,65 @@ export function __queryString(wire: JsonValue, fields: readonly __QueryField[]):
   return text === "" ? "" : `?${text}`;
 }
 
+/** A `form` body's text: the same as a query string without its `?`. */
+export function __formString(wire: JsonValue, fields: readonly __QueryField[]): string {
+  return __queryString(wire, fields).slice(1);
+}
+
+/** A value the client refuses to send, carrying the boundary error it is returned as. */
+export class __Refusal extends globalThis.Error {
+  readonly boundary: BoundaryError;
+  constructor(boundary: BoundaryError) {
+    super("refused before sending");
+    this.boundary = boundary;
+  }
+}
+
+// RFC 6265 §4.1.1, as the server's `serialiseCookie` reads them: a name is a token, a
+// value is `cookie-octet`s.
+const __COOKIE_NAME = /^[!#$%&'*+\-.^_`|~0-9A-Za-z]+$/;
+const __COOKIE_VALUE = /^[\x21\x23-\x2B\x2D-\x3A\x3C-\x5B\x5D-\x7E]*$/;
+
+/**
+ * A `cookies` record's wire form as the `Cookie` header's value (`a=1; b=x; b=y`),
+ * `""` when every field is absent. A cookie's value is not decoded, so it is
+ * written raw, and a name or value that is not RFC 6265 text (a `;`, a space, a
+ * quote) is refused: written raw it could add a cookie the caller never declared.
+ */
+export function __cookieString(wire: JsonValue, fields: readonly __QueryField[]): string {
+  const query = __queryString(wire, fields);
+  const pairs: string[] = [];
+  new globalThis.URLSearchParams(query.slice(1)).forEach((value, name) => {
+    if (!__COOKIE_NAME.test(name) || !__COOKIE_VALUE.test(value)) {
+      throw new __Refusal({
+        kind: "StructuralMismatch",
+        path: `cookies.${name}`,
+        expected: "an RFC 6265 cookie name and value (no `;`, `,`, space, quote, backslash or control character)",
+        actual: value,
+      });
+    }
+    pairs.push(`${name}=${value}`);
+  });
+  return pairs.join("; ");
+}
+
+/** The text parts of a `@multipart` body: `a=1&b=x` read back into `form`. */
+export function __appendText(form: globalThis.FormData, text: string): void {
+  new globalThis.URLSearchParams(text).forEach((value, name) => form.append(name, value));
+}
+
+/**
+ * The file name a part is sent under: a `File`'s own, else `"blob"`, which is what a
+ * browser names a bare `Blob`. A part with no name at all would be read back as text.
+ */
+export function __fileName(part: globalThis.Blob): string {
+  const name = (part as { readonly name?: unknown }).name;
+  return typeof name === "string" && name !== "" ? name : "blob";
+}
+
 /** A value that broke a boundary on its way out, as the `Invalid` failure it is. */
 function __invalid(e: unknown): CallFailure {
+  if (e instanceof __Refusal) return { kind: "Invalid", error: e.boundary };
   const details = e instanceof globalThis.Error ? e.message : globalThis.String(e);
   return {
     kind: "Invalid",
@@ -492,12 +556,22 @@ function __url(options: ClientOptions, route: __Route, request: __Request): stri
 async function __headers(
   options: ClientOptions,
   init: globalThis.RequestInit | undefined,
-  hasBody: boolean,
+  request: __Request,
 ): Promise<globalThis.Headers> {
   const configured = typeof options.headers === "function" ? await options.headers() : options.headers;
   const headers = new globalThis.Headers(configured);
   new globalThis.Headers(init?.headers).forEach((value, name) => headers.set(name, value));
-  if (hasBody && !headers.has("content-type")) headers.set("content-type", "application/json");
+  // A form or multipart body names its own content type (a multipart one carries its
+  // boundary), so a `content-type` configured for JSON is replaced, not kept. A JSON
+  // body keeps one the caller chose (`application/vnd.api+json`).
+  if (request.form !== undefined) headers.set("content-type", "application/x-www-form-urlencoded");
+  else if (request.multipart !== undefined) headers.delete("content-type");
+  else if (request.body !== undefined && !headers.has("content-type")) headers.set("content-type", "application/json");
+  // Typed cookies join a `Cookie` header the caller configured, they do not replace it.
+  if (request.cookies !== undefined && request.cookies !== "") {
+    const have = headers.get("cookie");
+    headers.set("cookie", have === null || have === "" ? request.cookies : `${have}; ${request.cookies}`);
+  }
   if (options.origin !== undefined) headers.set("origin", options.origin);
   return headers;
 }
@@ -568,6 +642,24 @@ export async function __call(
   } catch (e) {
     return __invalid(e);
   }
+  // A browser manages its own cookies and drops a `Cookie` header a script sets, so
+  // a call that would silently lose its typed cookies is refused instead. A page
+  // sends its cookies with `credentials: "include"`.
+  if (
+    request.cookies !== undefined &&
+    request.cookies !== "" &&
+    typeof (globalThis as { readonly document?: unknown }).document !== "undefined"
+  ) {
+    return {
+      kind: "Invalid",
+      error: {
+        kind: "StructuralMismatch",
+        path: "cookies",
+        expected: "no typed cookies in a browser: it sets its own (pass `credentials: \"include\"`)",
+        actual: request.cookies,
+      },
+    } satisfies CallFailure;
+  }
   // `.` and `..` survive percent-encoding and a URL parser collapses them (as `%2e`
   // too), which would send the call to another route: refuse them as the value they
   // are, never as a path.
@@ -580,14 +672,15 @@ export async function __call(
     }
   }
   const send = options.fetch ?? globalThis.fetch;
-  const hasBody = request.body !== undefined;
   let response: globalThis.Response;
   let text: string;
   try {
-    const headers = await __headers(options, init, hasBody);
+    const headers = await __headers(options, init, request);
     const sent: globalThis.RequestInit = { ...init, method: route.method, headers };
     if (options.credentials !== undefined && sent.credentials === undefined) sent.credentials = options.credentials;
-    if (hasBody) sent.body = globalThis.JSON.stringify(request.body);
+    if (request.body !== undefined) sent.body = globalThis.JSON.stringify(request.body);
+    else if (request.form !== undefined) sent.body = request.form;
+    else if (request.multipart !== undefined) sent.body = request.multipart;
     response = await send(__url(options, route, request), sent);
     text = await response.text();
   } catch (cause) {
@@ -1208,23 +1301,23 @@ export function __deserialise_Option_Note(json: __JsonValue, path: string = "$")
   return __b;
 }
 
-function __toPublic_Event(v: __Wire_Event): Event {
+export function __toPublic_Event(v: __Wire_Event): Event {
   if (v.tag === "Opened") return { ...v, by: __optToNull(v.by, (x0) => x0) } as unknown as Event;
   return v as unknown as Event;
 }
 
 
-function __toPublic_Order(v: __Wire_Order): Order {
+export function __toPublic_Order(v: __Wire_Order): Order {
   return { ...v, note: __optToNull(v.note, (x0) => x0) } as unknown as Order;
 }
 
 
-function __toPublic_Page_String(v: __Wire_Page<string>): Page<string> {
+export function __toPublic_Page_String(v: __Wire_Page<string>): Page<string> {
   return { ...v, next: __optToNull(v.next, (x0) => x0) } as unknown as Page<string>;
 }
 
 
-function __toWire_NewOrder(v: NewOrder): __Wire_NewOrder {
+export function __toWire_NewOrder(v: NewOrder): __Wire_NewOrder {
   return { ...v, note: __nullToOpt(v.note, (x0) => x0) } as unknown as __Wire_NewOrder;
 }
 
@@ -1293,15 +1386,14 @@ export function createClient(options: ClientOptions = {}) {
         }) as globalThis.Promise<PostOrdersResponse | CallFailure>,
       getOrders: (query: GetOrdersQuery, init?: globalThis.RequestInit): globalThis.Promise<GetOrdersResponse | CallFailure> =>
         __call(options, init, __route_api_getOrders, () => {
-          const __w: { [k: string]: JsonValue } = {};
-          if (query.sku !== undefined) __w["sku"] = __serialise_Option_Sku(__nullToOpt(query.sku, (x0) => x0));
-          if (query.limit !== undefined) __w["limit"] = ((v: number) => { if (!globalThis.Number.isSafeInteger(v)) throw new globalThis.Error("Int outside the safe-integer range at boundary"); return v as __JsonValue; })(query.limit);
-          __w["tags"] = __serialise_List_String(query.tags);
-          if (query.since !== undefined) __w["since"] = __serialise_Option_Int(__nullToOpt(query.since, (x0) => x0));
-          const __qc = __checked(__w, __deserialise_Filter, "query");
-          if (__qc.tag === "Err") return __qc;
-          const __qs = __queryString(__w, [{ name: "sku" }, { name: "limit" }, { name: "tags" }, { name: "since" }]);
-          return Ok({ params: {  }, query: __qs });
+          const __w_query: { [k: string]: JsonValue } = {};
+          if (query.sku !== undefined) __w_query["sku"] = __serialise_Option_Sku(__nullToOpt(query.sku, (x0) => x0));
+          if (query.limit !== undefined) __w_query["limit"] = ((v: number) => { if (!globalThis.Number.isSafeInteger(v)) throw new globalThis.Error("Int outside the safe-integer range at boundary"); return v as __JsonValue; })(query.limit);
+          __w_query["tags"] = __serialise_List_String(query.tags);
+          if (query.since !== undefined) __w_query["since"] = __serialise_Option_Int(__nullToOpt(query.since, (x0) => x0));
+          const __c_query = __checked(__w_query, __deserialise_Filter, "query");
+          if (__c_query.tag === "Err") return __c_query;
+          return Ok({ params: {  }, query: __queryString(__w_query, [{ name: "sku" }, { name: "limit" }, { name: "tags" }, { name: "since" }]) });
         }) as globalThis.Promise<GetOrdersResponse | CallFailure>,
       getOrderById: (id: OrderId, init?: globalThis.RequestInit): globalThis.Promise<GetOrderByIdResponse | CallFailure> =>
         __call(options, init, __route_api_getOrderById, () => {
@@ -1311,13 +1403,12 @@ export function createClient(options: ClientOptions = {}) {
         }) as globalThis.Promise<GetOrderByIdResponse | CallFailure>,
       getSearch: (query: GetSearchQuery, init?: globalThis.RequestInit): globalThis.Promise<GetSearchResponse | CallFailure> =>
         __call(options, init, __route_api_getSearch, () => {
-          const __w: { [k: string]: JsonValue } = {};
-          __w["q"] = query.q as __JsonValue;
-          if (query.page !== undefined) __w["page"] = __serialise_Option_Int(__nullToOpt(query.page, (x0) => x0));
-          const __qc = __checked(__w, __deserialise_Search, "query");
-          if (__qc.tag === "Err") return __qc;
-          const __qs = __queryString(__w, [{ name: "q" }, { name: "page", wire: "x-page" }]);
-          return Ok({ params: {  }, query: __qs });
+          const __w_query: { [k: string]: JsonValue } = {};
+          __w_query["q"] = query.q as __JsonValue;
+          if (query.page !== undefined) __w_query["page"] = __serialise_Option_Int(__nullToOpt(query.page, (x0) => x0));
+          const __c_query = __checked(__w_query, __deserialise_Search, "query");
+          if (__c_query.tag === "Err") return __c_query;
+          return Ok({ params: {  }, query: __queryString(__w_query, [{ name: "q" }, { name: "page", wire: "x-page" }]) });
         }) as globalThis.Promise<GetSearchResponse | CallFailure>,
       deleteOrderById: (id: OrderId, init?: globalThis.RequestInit): globalThis.Promise<DeleteOrderByIdResponse | CallFailure> =>
         __call(options, init, __route_api_deleteOrderById, () => {

@@ -10,9 +10,8 @@ way in.
 
 :::note
 `bynk client` is **experimental**. The generated module's member names and shape
-may change in a minor version until it is stabilised. Forms, multipart and raw
-bodies, typed cookies and streamed responses are not generated yet; see
-[Routes left out](#routes-left-out).
+may change in a minor version until it is stabilised. Raw bodies and streamed
+responses are not generated yet; see [Routes left out](#routes-left-out).
 :::
 
 This is the third surface a contract takes. [`bynk openapi`](/docs/tooling/bynk-openapi/)
@@ -46,6 +45,52 @@ and path are not an error here, since each has its own namespace.
 
 The output is byte-identical between runs, so a diff of the committed file shows
 an API change.
+
+### Layouts
+
+`--layout file` (the default) writes one module. `--layout dir` writes a directory
+instead, `--out` naming it: `index.ts` (the client and the public surface),
+`types.ts` (the boundary types and each route's response union), `codecs.ts` (the
+encoders and decoders) and `runtime.ts` (the inlined runtime). Each file imports
+exactly what it uses from the others, with type-only imports marked as such, so it
+passes a build with `verbatimModuleSyntax`, `isolatedModules` and `noUnusedLocals`.
+The imports end in `.js` (`"./types.js"`), which TypeScript resolves to the `.ts`
+files under both `bundler` and `node16`/`nodenext` resolution, so the same output
+works in Vite, SvelteKit and Next.js and in strict Node ESM.
+
+### Keeping it current
+
+`bynk client --check` writes nothing. It generates the client in memory, compares
+it with what is at `--out`, and exits non-zero when a file differs or is missing,
+naming the first differing line:
+
+```text
+bynk: client is stale: run `bynk client --out web/src/lib/api.ts`
+  web/src/lib/api.ts differs at line 142 (3 lines in all):
+    - found:    readonly qty: number;
+    + expected: readonly qty: Qty;
+```
+
+Run it in CI beside the front end's own checks. The header's compiler version and
+the file's line endings do not count as drift, so an upgrade of `bynk` alone does
+not break the gate.
+
+### From the manifest
+
+`[build.client]` in `bynk.toml` names where the client goes:
+
+```toml
+[build.client]
+out = "../web/src/lib/api.ts"
+layout = "file"          # or "dir"
+service = ["orders"]     # optional; every service when left out
+```
+
+`bynk build` then writes the client beside its other outputs, leaving a file alone
+whose text is already right. A project without the table builds exactly as before.
+`bynk client` takes its `--out`, `--layout` and `--service` from the table when the
+flags are left out, and a flag overrides the table, so `bynk client --check` needs
+no arguments in CI. See [`[build.client]`](/docs/manifest/#buildclient).
 
 ## Calling it
 
@@ -148,6 +193,43 @@ wire name. A `List` with no default is required by the server, and an empty list
 writes no key, so the server refuses it; give the field a default if it may be
 empty.
 
+## Forms and uploads
+
+A `@form` route's `body` is the record's public type, written as
+`application/x-www-form-urlencoded` under the same leaf rules the server reads it
+with: a `List` repeats its key, an `Option` is its value or absent, an enum is its
+variant's name, and a field renamed with `@name` is written under its wire name. A
+refinement is checked first, rooted at `body` as the server's error is.
+
+A `@multipart` route's `body` is the record's public type with each file part a
+`Blob`: `File` (the standard type) is `Blob`, `Option[File]` is `Blob | null`, and
+`List[File]` is `readonly Blob[]`. A browser's `File` input value is a `Blob`, so it
+passes as it is. The part is named by the field's wire name, and sent under the
+`File`'s own name; a bare `Blob` has none, so it is sent as `blob`, as a browser
+does, because a part with an empty file name is read back as text. The client does
+not read a file's bytes: its text fields are checked by the record's decoder, with
+an empty file standing in for each file part, and the size limits (`maxFile`,
+`maxParts`, `maxBody`) are the server's to enforce, answered as the boundary's
+`413`.
+
+The content type of a multipart body carries its boundary, so `fetch` sets it; do
+not set it in `headers`.
+
+## Cookies, typed
+
+A route that takes a typed `cookies` record gets a `cookies` argument of its own
+type: a field that is an `Option`, or has a default, may be omitted, and a field
+renamed with `@name` is written under that name (`__Host-sid`). It is written as the
+request's `Cookie` header (`a=1; b=x`).
+
+**It is for server-side calls**: a framework's server, a Worker, Node. A browser
+sets its own `Cookie` header and drops one a script writes, so it would lose the
+cookies without a word. Where `document` exists, a call with typed cookies given
+returns `CallFailure` `Invalid` (path `cookies`) instead of sending a request that
+would lose them; a page sends its cookies with `credentials: "include"` and calls
+the route without the argument it cannot set. The check is `typeof document`, so a
+test run under a DOM emulation such as jsdom sees a browser too.
+
 ## Refinements
 
 The client runs the server's own predicates, from the same generator:
@@ -175,6 +257,36 @@ from, say, a SvelteKit action is answered `403`. Set `origin` to one of the
 service's credentialed CORS origins when calling from a server. A browser sets its
 own `Origin` and ignores the option.
 
+Whether a server runtime may set `Origin` was checked, rather than assumed: the
+system tier runs the generated client inside a real `workerd`, calling a Bynk
+Worker with `origin` set, and the route sees the header. Node's `fetch` sends it
+too. A browser forbids a script setting it, and ignores the option.
+
+### A CORS recipe for a browser front end
+
+A front end on another origin needs the service's `cors` policy to name it. For a
+cookie-authenticated API, the policy must be credentialed with explicit origins
+(a wildcard is a compile error), and the client sends cookies with
+`credentials: "include"`:
+
+```bynk,ignore
+service orders from http {
+  cors { origins: ["https://app.example.com"], credentials: true }
+  // …
+}
+```
+
+```ts
+const api = createClient({
+  baseUrl: "https://api.example.com",
+  credentials: "include",
+});
+```
+
+A Bearer-guarded API needs no `credentials`: pass the token with `headers`, which
+the preflight already allows (`Authorization`). A route's `Allow-Methods` and the
+`Vary: Origin` of a reflected origin are the server's, derived from its routes.
+
 A `Set-Cookie` in a response reaches the browser only through the framework's
 server, which must forward it; a script cannot read it. The `Cookie` header of an
 incoming browser request must likewise be forwarded explicitly by the caller.
@@ -182,8 +294,8 @@ incoming browser request must likewise be forwarded explicitly by the caller.
 ## Routes left out
 
 A route the client cannot yet represent faithfully is named on stderr and left out,
-never generated wrong: a `@form`, `@multipart` or `@raw` body, a typed `cookies`
-record, a route that can answer a raw or streamed body, a route guarded by a request
+never generated wrong: a `@raw` body, a raw `query: RequestQuery` or `cookies:
+RequestCookies` view, a route that can answer a raw or streamed body, a route guarded by a request
 signature (the client holds no secret), and a route whose types hold an `Option`
 inside a `Map`, a `Set` or a `Result`. If every selected route is left out the
 command fails.

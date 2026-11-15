@@ -59,6 +59,12 @@ const SURFACE_TYPES: &[&str] = &[
     "ValidationError",
 ];
 
+/// The wire shape of the standard `File`, a `@multipart` file part.
+const FILE_TYPE: &str = "export interface __Wire_File {\n  readonly filename: Option<string>;\n  readonly contentType: string;\n  readonly bytes: globalThis.Uint8Array;\n}\n";
+
+/// A file part's codec, which only the stand-in a multipart check passes reaches.
+const FILE_CODEC: &str = "export function __serialise_File(value: __Wire_File): __JsonValue {\n  return {\n    filename: value.filename.tag === \"Some\" ? { kind: \"Some\", value: value.filename.value } : { kind: \"None\" },\n    contentType: value.contentType,\n    bytes: __bynkBytesToBase64(value.bytes),\n  };\n}\n\nexport function __deserialise_File(json: __JsonValue, path: string = \"$\"): Result<__Wire_File, __BoundaryError> {\n  if (typeof json !== \"object\" || json === null || globalThis.Array.isArray(json)) {\n    return Err({ kind: \"StructuralMismatch\", path, expected: \"object\", actual: typeof json });\n  }\n  return Ok(json as unknown as __Wire_File);\n}\n";
+
 /// The prefix of a boundary type's wire declaration, the shape its codec makes.
 const WIRE_PREFIX: &str = "__Wire_";
 
@@ -120,10 +126,23 @@ pub struct RouteInput {
 pub enum ParamInput {
     /// A path segment, typed.
     Path { name: String, ty: TypeRef },
-    /// The JSON body.
-    Body { ty: TypeRef },
+    /// The body, in the form its route reads it.
+    Body { ty: TypeRef, kind: BodyKind },
     /// The typed `query` record, whose type is a named record.
     Query { ty: TypeRef },
+    /// The typed `cookies` record, whose type is a named record.
+    Cookies { ty: TypeRef },
+}
+
+/// How a route reads its `body`.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum BodyKind {
+    /// JSON, the default.
+    Json,
+    /// `@form`: `application/x-www-form-urlencoded`.
+    Form,
+    /// `@multipart`: `multipart/form-data`.
+    Multipart,
 }
 
 /// One answer a route can make, in `bynk openapi`'s terms.
@@ -168,10 +187,28 @@ fn fail<T>(message: impl Into<String>) -> Result<T, ClientError> {
     Err(ClientError(message.into()))
 }
 
-/// The module, and the routes it leaves out with why.
+/// How the client is laid out.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Default)]
+pub enum Layout {
+    /// One module.
+    #[default]
+    File,
+    /// `index.ts`, `types.ts`, `codecs.ts` and `runtime.ts`.
+    Dir,
+}
+
+/// The files of a directory layout, in the order they are written.
+pub const DIR_FILES: [&str; 4] = ["index.ts", "types.ts", "codecs.ts", "runtime.ts"];
+
+/// The file name a single-file client has in [`Emitted::files`]: the caller
+/// writes it wherever `--out` says.
+pub const SINGLE_FILE: &str = "client.ts";
+
+/// The client, and the routes it leaves out with why.
 #[derive(Debug, Clone)]
 pub struct Emitted {
-    pub text: String,
+    /// `(file name, text)`: one file, or the four of [`DIR_FILES`].
+    pub files: Vec<(String, String)>,
     /// `` `GET /x` of `service`: why ``, one per route left out.
     pub skipped: Vec<String>,
 }
@@ -179,7 +216,7 @@ pub struct Emitted {
 /// The module for `input`. A route whose types have no `T | null` form (an `Option`
 /// inside a `Map`, `Set` or `Result`, or an `Option[Option[T]]`) is left out and
 /// named, never emitted wrong.
-pub fn emit_http_client(input: &HttpClientInput) -> Result<Emitted, ClientError> {
+pub fn emit_http_client(input: &HttpClientInput, layout: Layout) -> Result<Emitted, ClientError> {
     let (kept, skipped) = viable_routes(input)?;
     if kept.services.is_empty() {
         return fail(format!(
@@ -192,8 +229,11 @@ pub fn emit_http_client(input: &HttpClientInput) -> Result<Emitted, ClientError>
     }
     let mut gen_ = Gen::new(closure_of(&kept)?);
     let plan = gen_.plan(&kept)?;
-    let text = gen_.emit(&kept, &plan)?;
-    Ok(Emitted { text, skipped })
+    let parts = gen_.emit(&kept, &plan)?;
+    Ok(Emitted {
+        files: assemble(&kept, parts, layout),
+        skipped,
+    })
 }
 
 /// The codec closure of every route of `input`.
@@ -205,8 +245,9 @@ fn closure_of(input: &HttpClientInput) -> Result<SurfaceClosure, ClientError> {
             for p in &r.params {
                 match p {
                     ParamInput::Path { ty, .. }
-                    | ParamInput::Body { ty }
-                    | ParamInput::Query { ty } => roots.push(ty.clone()),
+                    | ParamInput::Body { ty, .. }
+                    | ParamInput::Query { ty }
+                    | ParamInput::Cookies { ty } => roots.push(ty.clone()),
                 }
             }
             roots.extend(r.success.iter().cloned());
@@ -289,6 +330,8 @@ struct RoutePlan {
     response: String,
     /// The query argument's type name, when the route takes one.
     query: Option<String>,
+    /// The cookies argument's type name, when the route takes one.
+    cookies: Option<String>,
 }
 
 /// One declared boundary type, as the two declarations need it.
@@ -384,10 +427,16 @@ impl Gen {
                     .iter()
                     .any(|p| matches!(p, ParamInput::Query { .. }));
                 let query = has_query.then(|| unique(format!("{stem}Query"), &mut taken));
+                let has_cookies = r
+                    .params
+                    .iter()
+                    .any(|p| matches!(p, ParamInput::Cookies { .. }));
+                let cookies = has_cookies.then(|| unique(format!("{stem}Cookies"), &mut taken));
                 routes.push(RoutePlan {
                     function,
                     response,
                     query,
+                    cookies,
                 });
             }
             services.push(ServicePlan { key, routes });
@@ -424,8 +473,29 @@ impl Gen {
                     args.iter().map(|a| self.public_type(a)).collect();
                 TsType::named_with_args(name.name.clone(), args?)
             }
+            // A `@multipart` file part: the standard `File` is a `Blob` here, which
+            // is what a `File` input yields, and what `fetch` appends.
+            TypeRef::Named(id) if self.is_file(&id.name) => TsType::named("globalThis.Blob"),
             other => super::ts_type_ref_qualified_multi_ts_type(other, &HashMap::new()),
         })
+    }
+
+    /// Whether `name` is the standard library's `File`, the part of a `@multipart`
+    /// body that carries a file (`bynk.File`: `filename`, `contentType`, `bytes`).
+    fn is_file(&self, name: &str) -> bool {
+        if bynk_check::symbols::display_type_name(name) != "File" {
+            return false;
+        }
+        match self.sc.types.get(name).map(|d| &d.body) {
+            // The standard `File` is declared by the `bynk` unit, which a service's
+            // own type table does not hold.
+            None => name == "File" || name == "bynk__File",
+            Some(TypeBody::Record(r)) => {
+                let fields: Vec<&str> = r.fields.iter().map(|f| f.name.name.as_str()).collect();
+                fields == ["filename", "contentType", "bytes"]
+            }
+            Some(_) => false,
+        }
     }
 
     /// The type a codec makes and takes.
@@ -723,7 +793,7 @@ impl Gen {
         if !is_record {
             body.push_str(&format!("  return v as unknown as {to};\n"));
         }
-        let text = format!("function {name}(v: {from}): {to} {{\n{body}}}\n");
+        let text = format!("export function {name}(v: {from}): {to} {{\n{body}}}\n");
         self.convs.insert(name, text);
         Ok(())
     }
@@ -732,7 +802,7 @@ impl Gen {
     // The module
     // -----------------------------------------------------------------
 
-    fn emit(&mut self, input: &HttpClientInput, plan: &Plan) -> Result<String, ClientError> {
+    fn emit(&mut self, input: &HttpClientInput, plan: &Plan) -> Result<Parts, ClientError> {
         let mut stmts: Vec<TsStmt> = Vec::new();
 
         // The route glue is built first: it decides which conversions exist.
@@ -745,7 +815,7 @@ impl Gen {
                 let route = self.route(&sp.key, r, rp)?;
                 glue.push_str(&route.constant);
                 unions.extend(route.response_type.into_iter().flatten());
-                unions.extend(route.query_type.into_iter().flatten());
+                unions.extend(route.arg_types);
                 client.push_str(&route.method);
             }
             client.push_str("    },\n");
@@ -769,14 +839,26 @@ impl Gen {
         type_names.dedup();
         for public in [true, false] {
             for name in &type_names {
+                // A file part is a `Blob` to the caller: it has no public declaration.
+                if public && self.is_file(name) {
+                    continue;
+                }
                 if let Some(decl) = self.sc.types.get(name) {
                     stmts.extend(self.declare(name, decl, public)?);
                 }
             }
         }
         stmts.extend(unions);
+        let mut codecs: Vec<TsStmt> = Vec::new();
+        // A file part has no codec in the project's own table: the caller's bytes
+        // are not the client's to encode, so its wire form is a stand-in the decoder
+        // accepts, and the part itself goes into the `FormData`.
+        if self.sc.names.iter().any(|n| self.is_file(n)) {
+            stmts.push(TsStmt::raw(FILE_TYPE.to_string(), None));
+            codecs.push(TsStmt::raw(FILE_CODEC.to_string(), None));
+        }
         let types = self.sc.types.clone();
-        stmts.extend(serialisation::decls_as_stmts(
+        codecs.extend(serialisation::decls_as_stmts(
             serialisation::emit_helpers_for_owner_qualified(
                 &self.sc.names,
                 &types,
@@ -785,7 +867,7 @@ impl Gen {
                 &self.ru,
             ),
         ));
-        stmts.extend(serialisation::decls_as_stmts(
+        codecs.extend(serialisation::decls_as_stmts(
             serialisation::emit_generic_helpers_qualified(
                 &self.sc.insts,
                 &types,
@@ -794,60 +876,28 @@ impl Gen {
             ),
         ));
         for text in self.convs.values().filter(|t| !t.is_empty()) {
-            stmts.push(TsStmt::raw(format!("{text}\n"), None));
+            codecs.push(TsStmt::raw(format!("{text}\n"), None));
         }
-        stmts.push(TsStmt::raw(glue, None));
-        stmts.push(TsStmt::raw(
+        let mut index: Vec<TsStmt> = vec![TsStmt::raw(glue, None)];
+        index.push(TsStmt::raw(
             format!(
                 "/**\n * The client: one property per service, one function per route. Each returns\n * the route's own response, a union keyed by `status`, or a `CallFailure`.\n */\nexport function createClient(options: ClientOptions = {{}}) {{\n  return {{\n{client}  }} as const;\n}}\n\n/** The client `createClient` makes. */\nexport type Client = ReturnType<typeof createClient>;\n"
             ),
             None,
         ));
 
-        let program = TsProgram { stmts };
-        let printed = bynk_ts::print(&program, "", "", "client.ts");
-        Ok(self.assemble(input, &printed.text))
-    }
-
-    /// The header, the runtime chunks the text uses and the text.
-    fn assemble(&self, input: &HttpClientInput, body: &str) -> String {
-        // The runtime modules whose names the text uses, in dependency order.
-        // `result` is always there; `keys` reads `decimal`.
-        let mut want = vec![false; OPTIONAL_MODULES.len()];
-        for (i, (_, source)) in OPTIONAL_MODULES.iter().enumerate() {
-            want[i] = exported_names(source)
-                .iter()
-                .any(|n| body.contains(n.as_str()));
-        }
-        if want[3] {
-            want[1] = true;
-        }
-        let mut out = String::new();
-        out.push_str("// @generated by `bynk client` — do not edit by hand.\n");
-        out.push_str(&format!(
-            "// bynk {}. Regenerate with `bynk client`; see https://bynk-lang.org/book/reference/http-client/\n",
-            input.compiler_version
-        ));
-        out.push_str(&format!("// {EXPERIMENTAL}\n\n"));
-        let mut chunks = vec![RESULT_MODULE];
-        for (i, (_, source)) in OPTIONAL_MODULES.iter().enumerate() {
-            if want[i] {
-                chunks.push(source);
-            }
-        }
-        chunks.push(RUNTIME);
-        for chunk in chunks {
-            out.push_str(&strip_imports(chunk));
-            out.push('\n');
-        }
-        out.push_str(&format!(
-            "/** The wire format version this client was generated for. */\nexport const WIRE_VERSION = \"{}\";\n\n",
-            bynk_check::wire_format::WIRE_VERSION
-        ));
-        // A refinement's `field` names the type the codec was given: the declared
-        // one, not its wire alias.
-        out.push_str(&body.replace(&format!("field: \"{WIRE_PREFIX}"), "field: \""));
-        out
+        let print = |stmts: Vec<TsStmt>| {
+            // A refinement's `field` names the type the codec was given: the
+            // declared one, not its wire alias.
+            bynk_ts::print(&TsProgram { stmts }, "", "", "client.ts")
+                .text
+                .replace(&format!("field: \"{WIRE_PREFIX}"), "field: \"")
+        };
+        Ok(Parts {
+            types: print(stmts),
+            codecs: print(codecs),
+            index: print(index),
+        })
     }
 
     // -----------------------------------------------------------------
@@ -969,7 +1019,7 @@ impl Gen {
         constant.push_str("  },\n};\n\n");
 
         // The function: its parameters and the encoding of each.
-        let (signature, build, query_type) = self.encoding(r, rp)?;
+        let (signature, build, arg_types) = self.encoding(r, rp)?;
         let init =
             if r.params.iter().any(
                 |p| matches!(p, ParamInput::Path { name, .. } if super::ts_ident(name) == "init"),
@@ -1006,7 +1056,7 @@ impl Gen {
             constant,
             method,
             response_type,
-            query_type,
+            arg_types,
         })
     }
 
@@ -1031,20 +1081,18 @@ impl Gen {
         Ok(out)
     }
 
-    /// The parameter list, the body of the encoding thunk and, for a route taking
-    /// a `query`, that argument's type.
+    /// The parameter list, the body of the encoding thunk and the types of the
+    /// arguments the route takes beyond the boundary's own (`query`, `cookies`).
     fn encoding(
         &mut self,
         r: &RouteInput,
         rp: &RoutePlan,
-    ) -> Result<(String, String, Option<Vec<TsStmt>>), ClientError> {
+    ) -> Result<(String, String, Vec<TsStmt>), ClientError> {
         let mut signature: Vec<String> = Vec::new();
         let mut build = String::new();
         let mut params = Vec::new();
-        let mut body_entry = None;
-        let mut query_entry = None;
-        let mut query_type = None;
-        let mut optional_query = false;
+        let mut entries: Vec<String> = Vec::new();
+        let mut arg_types: Vec<TsStmt> = Vec::new();
         for p in &r.params {
             match p {
                 ParamInput::Path { name, ty } => {
@@ -1068,7 +1116,10 @@ impl Gen {
                     };
                     params.push(format!("\"{name}\": {checked}"));
                 }
-                ParamInput::Body { ty } => {
+                ParamInput::Body {
+                    ty,
+                    kind: BodyKind::Json,
+                } => {
                     let ty = self.renamed(ty);
                     signature.push(format!("body: {}", self.public_text(&ty)?));
                     let wired = self.convert(&ty, Dir::ToWire, "body", 0)?;
@@ -1080,67 +1131,187 @@ impl Gen {
                     build.push_str(&format!(
                         "          const __b = __checked({ser}, {de}, \"$\");\n          if (__b.tag === \"Err\") return __b;\n"
                     ));
-                    body_entry = Some("body: __b.value".to_string());
+                    entries.push("body: __b.value".to_string());
+                }
+                ParamInput::Body {
+                    ty,
+                    kind: BodyKind::Form,
+                } => {
+                    let ty = self.renamed(ty);
+                    signature.push(format!("body: {}", self.public_text(&ty)?));
+                    let arg = self.record_arg(&ty, "body", "body", None)?;
+                    build.push_str(&arg.text);
+                    entries.push(format!("form: __formString(__w_body, [{}])", arg.specs));
+                }
+                ParamInput::Body {
+                    ty,
+                    kind: BodyKind::Multipart,
+                } => {
+                    let ty = self.renamed(ty);
+                    signature.push(format!("body: {}", self.multipart_type(&ty)?));
+                    let arg = self.multipart_arg(&ty)?;
+                    build.push_str(&arg);
+                    entries.push("multipart: __form".to_string());
                 }
                 ParamInput::Query { ty } => {
                     let ty = self.renamed(ty);
                     let name = rp.query.clone().expect("a query route has a query type");
-                    let (decl, text, optional) = self.query(&ty, &name)?;
-                    optional_query = optional;
-                    query_type = Some(decl);
-                    build.push_str(&text);
-                    query_entry = Some("query: __qs".to_string());
-                    signature.push(if optional {
-                        format!("query: {name} = {{}}")
-                    } else {
-                        format!("query: {name}")
-                    });
+                    let arg = self.record_arg(&ty, "query", "query", Some(&name))?;
+                    build.push_str(&arg.text);
+                    entries.push(format!("query: __queryString(__w_query, [{}])", arg.specs));
+                    signature.push(arg.parameter("query", &name));
+                    arg_types.extend(arg.decl);
+                }
+                ParamInput::Cookies { ty } => {
+                    let ty = self.renamed(ty);
+                    let name = rp
+                        .cookies
+                        .clone()
+                        .expect("a cookies route has a cookies type");
+                    let arg = self.record_arg(&ty, "cookies", "cookies", Some(&name))?;
+                    build.push_str(&arg.text);
+                    entries.push(format!(
+                        "cookies: __cookieString(__w_cookies, [{}])",
+                        arg.specs
+                    ));
+                    signature.push(arg.parameter("cookies", &name));
+                    arg_types.extend(arg.decl);
                 }
             }
         }
-        let _ = optional_query;
-        let mut entries = vec![format!("params: {{ {} }}", params.join(", "))];
-        entries.extend(query_entry);
-        entries.extend(body_entry);
+        entries.insert(0, format!("params: {{ {} }}", params.join(", ")));
         build.push_str(&format!(
             "          return Ok({{ {} }});\n",
             entries.join(", ")
         ));
-        Ok((signature.join(", "), build, query_type))
+        Ok((signature.join(", "), build, arg_types))
     }
 
-    /// The `query` argument's type, the code that writes and checks its wire form,
-    /// and whether the argument may be left out.
-    fn query(
-        &mut self,
-        record: &TypeRef,
-        name: &str,
-    ) -> Result<(Vec<TsStmt>, String, bool), ClientError> {
+    /// The type of a `@multipart` body: the record's public type, its file parts
+    /// `Blob`s.
+    fn multipart_type(&self, record: &TypeRef) -> Result<String, ClientError> {
+        self.public_text(record)
+    }
+
+    /// The statements that write a `@multipart` body: its text fields and file parts
+    /// into a `FormData`, after the record's own decoder has checked the fields (a
+    /// file part stands in as an empty file, since its bytes are the caller's).
+    fn multipart_arg(&mut self, record: &TypeRef) -> Result<String, ClientError> {
         let TypeRef::Named(id) = record else {
-            return fail("a `query` parameter is a record");
+            return fail("a `@multipart` body is a record");
         };
         let Some(decl) = self.sc.types.get(&id.name).cloned() else {
-            return fail(format!("the `query` record `{}` is not declared", id.name));
+            return fail("the `@multipart` record is not declared");
         };
         let TypeBody::Record(rec) = &decl.body else {
-            return fail("a `query` parameter is a record");
+            return fail("a `@multipart` body is a record");
+        };
+        let mut text = String::from(
+            "          const __w_body: { [k: string]: JsonValue } = {};\n          const __form = new globalThis.FormData();\n",
+        );
+        let mut parts = String::new();
+        let mut specs = Vec::new();
+        for f in &rec.fields {
+            let fname = f.name.name.clone();
+            let key = format!("{fname:?}");
+            let wire = f.wire_name().unwrap_or_else(|| fname.clone());
+            let wire_key = format!("{wire:?}");
+            let (inner, list, option) = match &f.type_ref {
+                TypeRef::List(i, _) => (i.as_ref(), true, false),
+                TypeRef::Option(i, _) => (i.as_ref(), false, true),
+                other => (other, false, false),
+            };
+            let is_file = matches!(inner, TypeRef::Named(i) if self.is_file(&i.name));
+            if !is_file {
+                let wired = self.convert(&f.type_ref, Dir::ToWire, &format!("body.{fname}"), 0)?;
+                let ser = bynk_ts::print_expr(&serialisation::serialise_expr_via(
+                    &f.type_ref,
+                    &wired,
+                    "",
+                    &self.ru,
+                ));
+                text.push_str(&format!("          __w_body[{key}] = {ser};\n"));
+                let w = f
+                    .wire_name()
+                    .map(|w| format!(", wire: {w:?}"))
+                    .unwrap_or_default();
+                specs.push(format!("{{ name: {key}{w} }}"));
+                continue;
+            }
+            // A file part: an empty file stands in for the decoder, and the blob is appended.
+            let stub = "{ filename: { kind: \"None\" }, contentType: \"\", bytes: \"\" }";
+            let (check, append) = match (list, option) {
+                (true, _) => (
+                    format!("body.{fname}.map(() => ({stub}))"),
+                    format!(
+                        "          for (const part of body.{fname}) __form.append({wire_key}, part, __fileName(part));\n"
+                    ),
+                ),
+                (_, true) => (
+                    format!(
+                        "body.{fname} === null || body.{fname} === undefined ? {{ kind: \"None\" }} : {{ kind: \"Some\", value: {stub} }}"
+                    ),
+                    format!(
+                        "          if (body.{fname} !== null && body.{fname} !== undefined) __form.append({wire_key}, body.{fname}, __fileName(body.{fname}));\n"
+                    ),
+                ),
+                _ => (
+                    stub.to_string(),
+                    format!(
+                        "          __form.append({wire_key}, body.{fname}, __fileName(body.{fname}));\n"
+                    ),
+                ),
+            };
+            text.push_str(&format!("          __w_body[{key}] = {check};\n"));
+            parts.push_str(&append);
+        }
+        let de = bynk_ts::print_expr(&serialisation::deserialise_ref_via(record, "", &self.ru));
+        text.push_str(&format!(
+            "          const __c_body = __checked(__w_body, {de}, \"body\");\n          if (__c_body.tag === \"Err\") return __c_body;\n          __appendText(__form, __formString(__w_body, [{}]));\n",
+            specs.join(", ")
+        ));
+        text.push_str(&parts);
+        Ok(text)
+    }
+
+    /// A record argument (`query`, `cookies` or a `@form` body): each field written
+    /// into its wire form, then checked by the record's own decoder, so a
+    /// refinement is refused before sending and a default is the server's to fill.
+    /// With a `custom` type name the argument is its own interface, where a field that
+    /// is an `Option` or has a default may be left out; without one the argument is
+    /// the record's public type and every field is given.
+    fn record_arg(
+        &mut self,
+        record: &TypeRef,
+        arg: &str,
+        at: &str,
+        custom: Option<&str>,
+    ) -> Result<RecordArg, ClientError> {
+        let TypeRef::Named(id) = record else {
+            return fail(format!("a `{arg}` parameter is a record"));
+        };
+        let Some(decl) = self.sc.types.get(&id.name).cloned() else {
+            return fail(format!("the `{arg}` record `{}` is not declared", id.name));
+        };
+        let TypeBody::Record(rec) = &decl.body else {
+            return fail(format!("a `{arg}` parameter is a record"));
         };
         let mut members = Vec::new();
-        let mut text = String::from("          const __w: { [k: string]: JsonValue } = {};\n");
+        let mut text = format!("          const __w_{arg}: {{ [k: string]: JsonValue }} = {{}};\n");
         let mut specs = Vec::new();
         let mut all_optional = true;
         for f in &rec.fields {
             let fname = f.name.name.clone();
-            let optional = matches!(f.type_ref, TypeRef::Option(..)) || f.init.is_some();
+            let optional =
+                custom.is_some() && (matches!(f.type_ref, TypeRef::Option(..)) || f.init.is_some());
             all_optional &= optional;
-            let ty = self.public_type(&f.type_ref)?;
             members.push(TsTypeMember::Prop {
                 name: fname.clone(),
-                ty,
+                ty: self.public_type(&f.type_ref)?,
                 optional,
                 readonly: true,
             });
-            let wired = self.convert(&f.type_ref, Dir::ToWire, &format!("query.{fname}"), 0)?;
+            let wired = self.convert(&f.type_ref, Dir::ToWire, &format!("{arg}.{fname}"), 0)?;
             let ser = bynk_ts::print_expr(&serialisation::serialise_expr_via(
                 &f.type_ref,
                 &wired,
@@ -1150,10 +1321,10 @@ impl Gen {
             let key = format!("{fname:?}");
             if optional {
                 text.push_str(&format!(
-                    "          if (query.{fname} !== undefined) __w[{key}] = {ser};\n"
+                    "          if ({arg}.{fname} !== undefined) __w_{arg}[{key}] = {ser};\n"
                 ));
             } else {
-                text.push_str(&format!("          __w[{key}] = {ser};\n"));
+                text.push_str(&format!("          __w_{arg}[{key}] = {ser};\n"));
             }
             let wire = f
                 .wire_name()
@@ -1163,24 +1334,60 @@ impl Gen {
         }
         let de = bynk_ts::print_expr(&serialisation::deserialise_ref_via(record, "", &self.ru));
         text.push_str(&format!(
-            "          const __qc = __checked(__w, {de}, \"query\");\n          if (__qc.tag === \"Err\") return __qc;\n          const __qs = __queryString(__w, [{}]);\n",
-            specs.join(", ")
+            "          const __c_{arg} = __checked(__w_{arg}, {de}, \"{at}\");\n          if (__c_{arg}.tag === \"Err\") return __c_{arg};\n"
         ));
-        let mut d = TsStmt::decl(
-            TsDecl::Export(Box::new(TsDecl::Interface {
-                name: name.to_string(),
-                type_params: Vec::new(),
-                members,
-            })),
-            None,
-        );
-        d.no_blank_before = true;
-        let doc = TsStmt::doc_comment(
-            "The `query` of the call: a field left out is absent from the query string."
-                .to_string(),
-            None,
-        );
-        Ok((vec![doc, d], text, all_optional))
+        let declared = custom.map(|name| {
+            let mut d = TsStmt::decl(
+                TsDecl::Export(Box::new(TsDecl::Interface {
+                    name: name.to_string(),
+                    type_params: Vec::new(),
+                    members,
+                })),
+                None,
+            );
+            d.no_blank_before = true;
+            vec![
+                TsStmt::doc_comment(
+                    if arg == "query" {
+                        "The `query` of the call: a field left out is absent from the query string."
+                            .to_string()
+                    } else {
+                        "The `cookies` of the call, sent as its `Cookie` header: a field left out is\nabsent. **For a server-side call** (a framework's server, a Worker, Node). A\nbrowser sets its own `Cookie` header and drops one a script writes, so a call\nmade where `document` exists with cookies given returns `CallFailure` `Invalid`\nrather than lose them; a page uses `credentials: \"include\"` instead.".to_string()
+                    },
+                    None,
+                ),
+                d,
+            ]
+        });
+        Ok(RecordArg {
+            decl: declared.into_iter().flatten().collect(),
+            text,
+            specs: specs.join(", "),
+            all_optional,
+        })
+    }
+}
+
+/// A record argument's type, its encoding and what that needs.
+struct RecordArg {
+    /// The argument's own interface, when it has one.
+    decl: Vec<TsStmt>,
+    /// The statements that write and check its wire form.
+    text: String,
+    /// The `QueryField`s that name each field's wire key.
+    specs: String,
+    /// Whether every field may be left out, so the argument may be.
+    all_optional: bool,
+}
+
+impl RecordArg {
+    /// The parameter, `name: Type`, or `name: Type = {}` when it may be left out.
+    fn parameter(&self, name: &str, ty: &str) -> String {
+        if self.all_optional {
+            format!("{name}: {ty} = {{}}")
+        } else {
+            format!("{name}: {ty}")
+        }
     }
 }
 
@@ -1190,7 +1397,7 @@ struct RouteText {
     constant: String,
     method: String,
     response_type: Option<Vec<TsStmt>>,
-    query_type: Option<Vec<TsStmt>>,
+    arg_types: Vec<TsStmt>,
 }
 
 // ---------------------------------------------------------------------
@@ -1313,6 +1520,240 @@ fn strip_imports(source: &str) -> String {
         out.push('\n');
     }
     out
+}
+
+/// The three printed parts of a client, before they are given files.
+struct Parts {
+    /// The boundary types (public and wire), and each route's response and query types.
+    types: String,
+    /// The codecs and the conversions between the wire and public shapes.
+    codecs: String,
+    /// Each route and `createClient`.
+    index: String,
+}
+
+/// The `// @generated` header every file of a client carries.
+fn header(input: &HttpClientInput) -> String {
+    format!(
+        "// @generated by `bynk client` — do not edit by hand.\n// bynk {}. Regenerate with `bynk client`; see https://bynk-lang.org/book/reference/http-client/\n// {EXPERIMENTAL}\n\n",
+        input.compiler_version
+    )
+}
+
+/// The inlined runtime for text that uses the names of `scan`: the runtime's own
+/// `result` module, then the `bytes`, `decimal`, `time` and `keys` modules the
+/// codecs reach, then this client's own, and the wire version.
+fn runtime_text(scan: &str) -> String {
+    // `keys` reads `decimal`.
+    let mut want = vec![false; OPTIONAL_MODULES.len()];
+    for (i, (_, source)) in OPTIONAL_MODULES.iter().enumerate() {
+        want[i] = exported_names(source)
+            .iter()
+            .any(|n| scan.contains(n.as_str()));
+    }
+    if want[3] {
+        want[1] = true;
+    }
+    let mut chunks = vec![RESULT_MODULE];
+    for (i, (_, source)) in OPTIONAL_MODULES.iter().enumerate() {
+        if want[i] {
+            chunks.push(source);
+        }
+    }
+    chunks.push(RUNTIME);
+    let mut out = String::new();
+    for chunk in chunks {
+        out.push_str(&strip_imports(chunk));
+        out.push('\n');
+    }
+    out.push_str(&format!(
+        "/** The wire format version this client was generated for. */\nexport const WIRE_VERSION = \"{}\";\n",
+        bynk_check::wire_format::WIRE_VERSION
+    ));
+    out
+}
+
+/// The client's files: one module, or the four of a directory.
+fn assemble(input: &HttpClientInput, parts: Parts, layout: Layout) -> Vec<(String, String)> {
+    let head = header(input);
+    let scan = format!("{}{}{}", parts.types, parts.codecs, parts.index);
+    let runtime = runtime_text(&scan);
+    match layout {
+        Layout::File => vec![(
+            SINGLE_FILE.to_string(),
+            format!(
+                "{head}{runtime}\n{}\n{}\n{}",
+                parts.types, parts.codecs, parts.index
+            ),
+        )],
+        Layout::Dir => {
+            let files: Vec<(&str, String)> = vec![
+                ("runtime.ts", runtime),
+                ("types.ts", parts.types),
+                ("codecs.ts", parts.codecs),
+                (
+                    "index.ts",
+                    format!(
+                        "export * from \"./types.js\";\nexport * from \"./runtime.js\";\n\n{}",
+                        parts.index
+                    ),
+                ),
+            ];
+            // Which file declares each name, so each file imports exactly what it
+            // uses and nothing else (a build with `noUnusedLocals` stays quiet).
+            let mut declared: BTreeMap<String, (&str, bool)> = BTreeMap::new();
+            for (name, text) in &files {
+                for (n, is_type) in declared_exports(text) {
+                    declared.insert(n, (name, is_type));
+                }
+            }
+            let mut out = Vec::new();
+            for (name, text) in &files {
+                let imports = imports_for(name, text, &declared);
+                out.push((name.to_string(), format!("{head}{imports}{text}")));
+            }
+            // Written in the order of [`DIR_FILES`].
+            out.sort_by_key(|(n, _)| DIR_FILES.iter().position(|f| f == n));
+            out
+        }
+    }
+}
+
+/// The names a file's text declares with `export`, each with whether it is a type.
+fn declared_exports(text: &str) -> Vec<(String, bool)> {
+    let mut out = Vec::new();
+    for line in text.lines() {
+        let Some(rest) = line.strip_prefix("export ") else {
+            continue;
+        };
+        let (rest, is_type) = if let Some(r) = rest.strip_prefix("type ") {
+            (r, true)
+        } else if let Some(r) = rest.strip_prefix("interface ") {
+            (r, true)
+        } else if let Some(r) = rest
+            .strip_prefix("function ")
+            .or_else(|| rest.strip_prefix("async function "))
+            .or_else(|| rest.strip_prefix("const "))
+            .or_else(|| rest.strip_prefix("class "))
+        {
+            (r, false)
+        } else {
+            continue;
+        };
+        let name: String = rest
+            .chars()
+            .take_while(|c| c.is_ascii_alphanumeric() || *c == '_' || *c == '$')
+            .collect();
+        if !name.is_empty() {
+            out.push((name, is_type));
+        }
+    }
+    out
+}
+
+/// The `import` lines `file` needs for the names of other files that its code uses.
+fn imports_for(file: &str, text: &str, declared: &BTreeMap<String, (&str, bool)>) -> String {
+    let used = code_identifiers(text);
+    let mut by_file: BTreeMap<&str, Vec<String>> = BTreeMap::new();
+    for (name, (from, is_type)) in declared {
+        if *from != file && used.contains(name.as_str()) {
+            let spec = if *is_type {
+                format!("type {name}")
+            } else {
+                name.clone()
+            };
+            by_file.entry(from).or_default().push(spec);
+        }
+    }
+    let mut out = String::new();
+    for from in ["runtime.ts", "types.ts", "codecs.ts"] {
+        if let Some(names) = by_file.get(from) {
+            let module = from.trim_end_matches(".ts");
+            out.push_str(&format!(
+                "import {{ {} }} from \"./{module}.js\";\n",
+                names.join(", ")
+            ));
+        }
+    }
+    if !out.is_empty() {
+        out.push('\n');
+    }
+    out
+}
+
+/// The identifiers of the code in `text`, leaving out comments and the text of
+/// string literals (a type named in a doc comment is not a use of it).
+fn code_identifiers(text: &str) -> BTreeSet<String> {
+    let chars: Vec<char> = text.chars().collect();
+    let mut out = BTreeSet::new();
+    let mut i = 0;
+    while i < chars.len() {
+        let c = chars[i];
+        match c {
+            '/' if chars.get(i + 1) == Some(&'/') => {
+                while i < chars.len() && chars[i] != '\n' {
+                    i += 1;
+                }
+            }
+            '/' if chars.get(i + 1) == Some(&'*') => {
+                i += 2;
+                while i + 1 < chars.len() && !(chars[i] == '*' && chars[i + 1] == '/') {
+                    i += 1;
+                }
+                i += 2;
+            }
+            '"' | '\'' => {
+                i += 1;
+                while i < chars.len() && chars[i] != c {
+                    i += if chars[i] == '\\' { 2 } else { 1 };
+                }
+                i += 1;
+            }
+            '`' => {
+                i += 1;
+                i = skip_template(&chars, i, &mut out);
+            }
+            _ if c.is_ascii_alphabetic() || c == '_' || c == '$' => {
+                let start = i;
+                while i < chars.len()
+                    && (chars[i].is_ascii_alphanumeric() || chars[i] == '_' || chars[i] == '$')
+                {
+                    i += 1;
+                }
+                out.insert(chars[start..i].iter().collect());
+            }
+            _ => i += 1,
+        }
+    }
+    out
+}
+
+/// Past the end of a template literal that starts at `i`, collecting the
+/// identifiers of its `${ }` expressions; the literal's own text is skipped.
+fn skip_template(chars: &[char], mut i: usize, out: &mut BTreeSet<String>) -> usize {
+    while i < chars.len() {
+        match chars[i] {
+            '\\' => i += 2,
+            '`' => return i + 1,
+            '$' if chars.get(i + 1) == Some(&'{') => {
+                let start = i + 2;
+                let mut depth = 1;
+                i = start;
+                while i < chars.len() && depth > 0 {
+                    match chars[i] {
+                        '{' => depth += 1,
+                        '}' => depth -= 1,
+                        _ => {}
+                    }
+                    i += 1;
+                }
+                let inner: String = chars[start..i.saturating_sub(1)].iter().collect();
+                out.extend(code_identifiers(&inner));
+            }
+            _ => i += 1,
+        }
+    }
+    i
 }
 
 #[cfg(test)]

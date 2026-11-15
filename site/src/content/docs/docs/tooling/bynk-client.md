@@ -38,6 +38,25 @@ A call returns a union of the route's own responses keyed by `status`, or a
 `fetch` your framework gives you (`createClient({ fetch })`), `headers` for a
 bearer token, and `credentials` or `origin` for a cookie-authenticated API.
 
+## In CI, and from `bynk build`
+
+Commit the generated file, and let CI say when it is stale:
+
+```sh
+bynk client --out web/src/lib/api.ts --check
+```
+
+Or name it once in `bynk.toml`, so `bynk build` keeps it written and
+`bynk client --check` needs no arguments:
+
+```toml
+[build.client]
+out = "../web/src/lib/api.ts"
+```
+
+`--layout dir` writes `index.ts`, `types.ts`, `codecs.ts` and `runtime.ts` instead
+of one module. See the [HTTP client reference](/book/reference/http-client/#layouts).
+
 ## When to use which
 
 | You want | Use |
@@ -46,5 +65,7 @@ bearer token, and `credentials` or `origin` for a cookie-authenticated API.
 | Documentation, a Swagger UI, a client in another language, a gateway | [`bynk openapi`](/docs/tooling/bynk-openapi/) |
 | A Worker that is not Bynk calling an `on call` service | the [TypeScript client](/book/reference/typescript-client/) |
 
-Routes the first version cannot represent (forms, multipart and raw bodies, typed
-cookies, streamed responses) are named on stderr and left out.
+`@form` and `@multipart` bodies are generated (a file part is a `Blob`), and a typed
+`cookies` record is written as a `Cookie` header for server-side calls. Routes the
+client cannot represent yet (raw bodies, raw and streamed responses) are named on
+stderr and left out.
