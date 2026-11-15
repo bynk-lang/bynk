@@ -210,3 +210,30 @@ fn a_project_context_is_an_owner_and_a_clause_is_extended() {
     );
     assert!(fixed("context.bynk").is_none());
 }
+
+/// A braced `context shop { … }` file in a split unit takes the clause inside its
+/// braces.
+#[test]
+fn a_braced_context_file_takes_the_clause_inside_its_braces() {
+    let dir = project(
+        "braced-context",
+        &[
+            (
+                "src/shop/a.bynk",
+                "context shop\n\nconsumes bynk { Claim }\n\nfn a(r: Claim) -> Bool {\n    true\n}\n",
+            ),
+            (
+                "src/shop/b.bynk",
+                "context shop {\n  fn b(r: Claim) -> Bool {\n    true\n  }\n}\n",
+            ),
+        ],
+    );
+    let plan = fix(&dir);
+    let [b] = plan.files.as_slice() else {
+        panic!("one file changes: {plan:?}");
+    };
+    assert_eq!(
+        b.fixed,
+        "context shop {\n  consumes bynk { Claim }\n  fn b(r: Claim) -> Bool {\n    true\n  }\n}\n"
+    );
+}
