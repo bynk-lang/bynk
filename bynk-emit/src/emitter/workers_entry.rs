@@ -415,6 +415,48 @@ fn verify_gate(context: &str, foreign: bool) -> [TsStmt; 2] {
     ]
 }
 
+/// #3581 (the dev agent-inspection track): the `/_bynk/inspect/` dispatch of a
+/// `bynk dev` build. The runtime verifies the request's signature under the local
+/// edge key, as `/_bynk/call/` does, before it looks anything up, so an unsigned
+/// sender gets a bare `401`. `classes` is each agent class this Worker hosts, with
+/// its Durable Object binding name.
+fn inspect_route(context: &str, classes: &[String]) -> TsStmt {
+    let table = TsExpr::object(
+        classes
+            .iter()
+            .map(|c| {
+                (
+                    format!("\"{c}\""),
+                    str_lit(crate::emitter::wrangler::agent_binding(c).name),
+                )
+            })
+            .collect(),
+    );
+    if_(
+        method_call(
+            ident("path"),
+            "startsWith",
+            vec![str_lit("/_bynk/inspect/")],
+        ),
+        block(vec![return_(Some(await_expr(call(
+            ident("__inspectRoute"),
+            vec![ident("env"), ident("request"), str_lit(context), table],
+        ))))]),
+    )
+}
+
+/// #3581: the registry Durable Object class a `bynk dev` build hosts, imported
+/// from the runtime and exported from the entry like an agent's class, so the dev
+/// copy of `wrangler.toml` can bind it.
+fn inspect_registry_export() -> TsStmt {
+    TsStmt::decl(
+        TsDecl::ExportNames {
+            names: vec!["BynkInspectRegistry".to_string()],
+        },
+        None,
+    )
+}
+
 /// State-migrations S4 (#2259 Decision D): the `/_bynk/migrate/<Class>`
 /// dispatch. See the call site for the order of its checks.
 fn migrate_route(context: &str, migratable: &[(String, i64)]) -> TsStmt {
@@ -790,6 +832,9 @@ pub fn emit_worker_entry(
     visible_types: &std::collections::HashMap<String, std::sync::Arc<bynk_syntax::ast::TypeDecl>>,
     // #3580: wrap `fetch` in the request recorder (`bynk dev --trace-events` only).
     trace: bool,
+    // #3581: the agent classes this Worker's `/_bynk/inspect/` route reads, and
+    // whose registry it hosts (`bynk dev` only; empty for every other build).
+    inspect: &[String],
 ) -> TsProgram {
     let mut program = TsProgram::new();
     // Which conditional runtime helpers the entry's own inbound/outbound codecs
@@ -1071,6 +1116,10 @@ pub fn emit_worker_entry(
         imports.push("__sweepAgentInstances".to_string());
     }
     imports.extend(trace_imports(trace));
+    if !inspect.is_empty() {
+        imports.push("__inspectRoute".to_string());
+        imports.push("BynkInspectRegistry".to_string());
+    }
     if has_http {
         imports.push("__matchPath".to_string());
         imports.push("__httpResultToResponse".to_string());
@@ -1232,6 +1281,9 @@ pub fn emit_worker_entry(
     }
 
     header_decls.extend(container_class_reexport(table));
+    if !inspect.is_empty() {
+        header_decls.push(inspect_registry_export());
+    }
 
     let mut fetch_params: Vec<TsParam> = vec![
         TsParam {
@@ -1483,6 +1535,12 @@ pub fn emit_worker_entry(
     // verifies the signature under the sweep's key.
     if !migratable.is_empty() {
         try_body.push(migrate_route(context, migratable));
+        try_body.push(TsStmt::blank(None));
+    }
+
+    // 1.3. #3581: the dev-only agent inspection route, signed as an internal call.
+    if !inspect.is_empty() {
+        try_body.push(inspect_route(context, inspect));
         try_body.push(TsStmt::blank(None));
     }
 

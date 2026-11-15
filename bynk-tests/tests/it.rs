@@ -97,6 +97,8 @@ mod integration {
     mod import_closure;
     #[path = "inlay_hints.rs"]
     mod inlay_hints;
+    #[path = "inspect_agents.rs"]
+    mod inspect_agents;
     #[path = "interpolation.rs"]
     mod interpolation;
     #[path = "kernel_registry.rs"]
