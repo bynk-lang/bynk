@@ -168,10 +168,28 @@ fn fail<T>(message: impl Into<String>) -> Result<T, ClientError> {
     Err(ClientError(message.into()))
 }
 
-/// The module, and the routes it leaves out with why.
+/// How the client is laid out.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Default)]
+pub enum Layout {
+    /// One module.
+    #[default]
+    File,
+    /// `index.ts`, `types.ts`, `codecs.ts` and `runtime.ts`.
+    Dir,
+}
+
+/// The files of a directory layout, in the order they are written.
+pub const DIR_FILES: [&str; 4] = ["index.ts", "types.ts", "codecs.ts", "runtime.ts"];
+
+/// The file name a single-file client has in [`Emitted::files`]: the caller
+/// writes it wherever `--out` says.
+pub const SINGLE_FILE: &str = "client.ts";
+
+/// The client, and the routes it leaves out with why.
 #[derive(Debug, Clone)]
 pub struct Emitted {
-    pub text: String,
+    /// `(file name, text)`: one file, or the four of [`DIR_FILES`].
+    pub files: Vec<(String, String)>,
     /// `` `GET /x` of `service`: why ``, one per route left out.
     pub skipped: Vec<String>,
 }
@@ -179,7 +197,7 @@ pub struct Emitted {
 /// The module for `input`. A route whose types have no `T | null` form (an `Option`
 /// inside a `Map`, `Set` or `Result`, or an `Option[Option[T]]`) is left out and
 /// named, never emitted wrong.
-pub fn emit_http_client(input: &HttpClientInput) -> Result<Emitted, ClientError> {
+pub fn emit_http_client(input: &HttpClientInput, layout: Layout) -> Result<Emitted, ClientError> {
     let (kept, skipped) = viable_routes(input)?;
     if kept.services.is_empty() {
         return fail(format!(
@@ -192,8 +210,11 @@ pub fn emit_http_client(input: &HttpClientInput) -> Result<Emitted, ClientError>
     }
     let mut gen_ = Gen::new(closure_of(&kept)?);
     let plan = gen_.plan(&kept)?;
-    let text = gen_.emit(&kept, &plan)?;
-    Ok(Emitted { text, skipped })
+    let parts = gen_.emit(&kept, &plan)?;
+    Ok(Emitted {
+        files: assemble(&kept, parts, layout),
+        skipped,
+    })
 }
 
 /// The codec closure of every route of `input`.
@@ -723,7 +744,7 @@ impl Gen {
         if !is_record {
             body.push_str(&format!("  return v as unknown as {to};\n"));
         }
-        let text = format!("function {name}(v: {from}): {to} {{\n{body}}}\n");
+        let text = format!("export function {name}(v: {from}): {to} {{\n{body}}}\n");
         self.convs.insert(name, text);
         Ok(())
     }
@@ -732,7 +753,7 @@ impl Gen {
     // The module
     // -----------------------------------------------------------------
 
-    fn emit(&mut self, input: &HttpClientInput, plan: &Plan) -> Result<String, ClientError> {
+    fn emit(&mut self, input: &HttpClientInput, plan: &Plan) -> Result<Parts, ClientError> {
         let mut stmts: Vec<TsStmt> = Vec::new();
 
         // The route glue is built first: it decides which conversions exist.
@@ -775,8 +796,9 @@ impl Gen {
             }
         }
         stmts.extend(unions);
+        let mut codecs: Vec<TsStmt> = Vec::new();
         let types = self.sc.types.clone();
-        stmts.extend(serialisation::decls_as_stmts(
+        codecs.extend(serialisation::decls_as_stmts(
             serialisation::emit_helpers_for_owner_qualified(
                 &self.sc.names,
                 &types,
@@ -785,7 +807,7 @@ impl Gen {
                 &self.ru,
             ),
         ));
-        stmts.extend(serialisation::decls_as_stmts(
+        codecs.extend(serialisation::decls_as_stmts(
             serialisation::emit_generic_helpers_qualified(
                 &self.sc.insts,
                 &types,
@@ -794,60 +816,28 @@ impl Gen {
             ),
         ));
         for text in self.convs.values().filter(|t| !t.is_empty()) {
-            stmts.push(TsStmt::raw(format!("{text}\n"), None));
+            codecs.push(TsStmt::raw(format!("{text}\n"), None));
         }
-        stmts.push(TsStmt::raw(glue, None));
-        stmts.push(TsStmt::raw(
+        let mut index: Vec<TsStmt> = vec![TsStmt::raw(glue, None)];
+        index.push(TsStmt::raw(
             format!(
                 "/**\n * The client: one property per service, one function per route. Each returns\n * the route's own response, a union keyed by `status`, or a `CallFailure`.\n */\nexport function createClient(options: ClientOptions = {{}}) {{\n  return {{\n{client}  }} as const;\n}}\n\n/** The client `createClient` makes. */\nexport type Client = ReturnType<typeof createClient>;\n"
             ),
             None,
         ));
 
-        let program = TsProgram { stmts };
-        let printed = bynk_ts::print(&program, "", "", "client.ts");
-        Ok(self.assemble(input, &printed.text))
-    }
-
-    /// The header, the runtime chunks the text uses and the text.
-    fn assemble(&self, input: &HttpClientInput, body: &str) -> String {
-        // The runtime modules whose names the text uses, in dependency order.
-        // `result` is always there; `keys` reads `decimal`.
-        let mut want = vec![false; OPTIONAL_MODULES.len()];
-        for (i, (_, source)) in OPTIONAL_MODULES.iter().enumerate() {
-            want[i] = exported_names(source)
-                .iter()
-                .any(|n| body.contains(n.as_str()));
-        }
-        if want[3] {
-            want[1] = true;
-        }
-        let mut out = String::new();
-        out.push_str("// @generated by `bynk client` — do not edit by hand.\n");
-        out.push_str(&format!(
-            "// bynk {}. Regenerate with `bynk client`; see https://bynk-lang.org/book/reference/http-client/\n",
-            input.compiler_version
-        ));
-        out.push_str(&format!("// {EXPERIMENTAL}\n\n"));
-        let mut chunks = vec![RESULT_MODULE];
-        for (i, (_, source)) in OPTIONAL_MODULES.iter().enumerate() {
-            if want[i] {
-                chunks.push(source);
-            }
-        }
-        chunks.push(RUNTIME);
-        for chunk in chunks {
-            out.push_str(&strip_imports(chunk));
-            out.push('\n');
-        }
-        out.push_str(&format!(
-            "/** The wire format version this client was generated for. */\nexport const WIRE_VERSION = \"{}\";\n\n",
-            bynk_check::wire_format::WIRE_VERSION
-        ));
-        // A refinement's `field` names the type the codec was given: the declared
-        // one, not its wire alias.
-        out.push_str(&body.replace(&format!("field: \"{WIRE_PREFIX}"), "field: \""));
-        out
+        let print = |stmts: Vec<TsStmt>| {
+            // A refinement's `field` names the type the codec was given: the
+            // declared one, not its wire alias.
+            bynk_ts::print(&TsProgram { stmts }, "", "", "client.ts")
+                .text
+                .replace(&format!("field: \"{WIRE_PREFIX}"), "field: \"")
+        };
+        Ok(Parts {
+            types: print(stmts),
+            codecs: print(codecs),
+            index: print(index),
+        })
     }
 
     // -----------------------------------------------------------------
@@ -1313,6 +1303,240 @@ fn strip_imports(source: &str) -> String {
         out.push('\n');
     }
     out
+}
+
+/// The three printed parts of a client, before they are given files.
+struct Parts {
+    /// The boundary types (public and wire), and each route's response and query types.
+    types: String,
+    /// The codecs and the conversions between the wire and public shapes.
+    codecs: String,
+    /// Each route and `createClient`.
+    index: String,
+}
+
+/// The `// @generated` header every file of a client carries.
+fn header(input: &HttpClientInput) -> String {
+    format!(
+        "// @generated by `bynk client` — do not edit by hand.\n// bynk {}. Regenerate with `bynk client`; see https://bynk-lang.org/book/reference/http-client/\n// {EXPERIMENTAL}\n\n",
+        input.compiler_version
+    )
+}
+
+/// The inlined runtime for text that uses the names of `scan`: the runtime's own
+/// `result` module, then the `bytes`, `decimal`, `time` and `keys` modules the
+/// codecs reach, then this client's own, and the wire version.
+fn runtime_text(scan: &str) -> String {
+    // `keys` reads `decimal`.
+    let mut want = vec![false; OPTIONAL_MODULES.len()];
+    for (i, (_, source)) in OPTIONAL_MODULES.iter().enumerate() {
+        want[i] = exported_names(source)
+            .iter()
+            .any(|n| scan.contains(n.as_str()));
+    }
+    if want[3] {
+        want[1] = true;
+    }
+    let mut chunks = vec![RESULT_MODULE];
+    for (i, (_, source)) in OPTIONAL_MODULES.iter().enumerate() {
+        if want[i] {
+            chunks.push(source);
+        }
+    }
+    chunks.push(RUNTIME);
+    let mut out = String::new();
+    for chunk in chunks {
+        out.push_str(&strip_imports(chunk));
+        out.push('\n');
+    }
+    out.push_str(&format!(
+        "/** The wire format version this client was generated for. */\nexport const WIRE_VERSION = \"{}\";\n",
+        bynk_check::wire_format::WIRE_VERSION
+    ));
+    out
+}
+
+/// The client's files: one module, or the four of a directory.
+fn assemble(input: &HttpClientInput, parts: Parts, layout: Layout) -> Vec<(String, String)> {
+    let head = header(input);
+    let scan = format!("{}{}{}", parts.types, parts.codecs, parts.index);
+    let runtime = runtime_text(&scan);
+    match layout {
+        Layout::File => vec![(
+            SINGLE_FILE.to_string(),
+            format!(
+                "{head}{runtime}\n{}\n{}\n{}",
+                parts.types, parts.codecs, parts.index
+            ),
+        )],
+        Layout::Dir => {
+            let files: Vec<(&str, String)> = vec![
+                ("runtime.ts", runtime),
+                ("types.ts", parts.types),
+                ("codecs.ts", parts.codecs),
+                (
+                    "index.ts",
+                    format!(
+                        "export * from \"./types\";\nexport * from \"./runtime\";\n\n{}",
+                        parts.index
+                    ),
+                ),
+            ];
+            // Which file declares each name, so each file imports exactly what it
+            // uses and nothing else (a build with `noUnusedLocals` stays quiet).
+            let mut declared: BTreeMap<String, (&str, bool)> = BTreeMap::new();
+            for (name, text) in &files {
+                for (n, is_type) in declared_exports(text) {
+                    declared.insert(n, (name, is_type));
+                }
+            }
+            let mut out = Vec::new();
+            for (name, text) in &files {
+                let imports = imports_for(name, text, &declared);
+                out.push((name.to_string(), format!("{head}{imports}{text}")));
+            }
+            // Written in the order of [`DIR_FILES`].
+            out.sort_by_key(|(n, _)| DIR_FILES.iter().position(|f| f == n));
+            out
+        }
+    }
+}
+
+/// The names a file's text declares with `export`, each with whether it is a type.
+fn declared_exports(text: &str) -> Vec<(String, bool)> {
+    let mut out = Vec::new();
+    for line in text.lines() {
+        let Some(rest) = line.strip_prefix("export ") else {
+            continue;
+        };
+        let (rest, is_type) = if let Some(r) = rest.strip_prefix("type ") {
+            (r, true)
+        } else if let Some(r) = rest.strip_prefix("interface ") {
+            (r, true)
+        } else if let Some(r) = rest
+            .strip_prefix("function ")
+            .or_else(|| rest.strip_prefix("async function "))
+            .or_else(|| rest.strip_prefix("const "))
+            .or_else(|| rest.strip_prefix("class "))
+        {
+            (r, false)
+        } else {
+            continue;
+        };
+        let name: String = rest
+            .chars()
+            .take_while(|c| c.is_ascii_alphanumeric() || *c == '_' || *c == '$')
+            .collect();
+        if !name.is_empty() {
+            out.push((name, is_type));
+        }
+    }
+    out
+}
+
+/// The `import` lines `file` needs for the names of other files that its code uses.
+fn imports_for(file: &str, text: &str, declared: &BTreeMap<String, (&str, bool)>) -> String {
+    let used = code_identifiers(text);
+    let mut by_file: BTreeMap<&str, Vec<String>> = BTreeMap::new();
+    for (name, (from, is_type)) in declared {
+        if *from != file && used.contains(name.as_str()) {
+            let spec = if *is_type {
+                format!("type {name}")
+            } else {
+                name.clone()
+            };
+            by_file.entry(from).or_default().push(spec);
+        }
+    }
+    let mut out = String::new();
+    for from in ["runtime.ts", "types.ts", "codecs.ts"] {
+        if let Some(names) = by_file.get(from) {
+            let module = from.trim_end_matches(".ts");
+            out.push_str(&format!(
+                "import {{ {} }} from \"./{module}\";\n",
+                names.join(", ")
+            ));
+        }
+    }
+    if !out.is_empty() {
+        out.push('\n');
+    }
+    out
+}
+
+/// The identifiers of the code in `text`, leaving out comments and the text of
+/// string literals (a type named in a doc comment is not a use of it).
+fn code_identifiers(text: &str) -> BTreeSet<String> {
+    let chars: Vec<char> = text.chars().collect();
+    let mut out = BTreeSet::new();
+    let mut i = 0;
+    while i < chars.len() {
+        let c = chars[i];
+        match c {
+            '/' if chars.get(i + 1) == Some(&'/') => {
+                while i < chars.len() && chars[i] != '\n' {
+                    i += 1;
+                }
+            }
+            '/' if chars.get(i + 1) == Some(&'*') => {
+                i += 2;
+                while i + 1 < chars.len() && !(chars[i] == '*' && chars[i + 1] == '/') {
+                    i += 1;
+                }
+                i += 2;
+            }
+            '"' | '\'' => {
+                i += 1;
+                while i < chars.len() && chars[i] != c {
+                    i += if chars[i] == '\\' { 2 } else { 1 };
+                }
+                i += 1;
+            }
+            '`' => {
+                i += 1;
+                i = skip_template(&chars, i, &mut out);
+            }
+            _ if c.is_ascii_alphabetic() || c == '_' || c == '$' => {
+                let start = i;
+                while i < chars.len()
+                    && (chars[i].is_ascii_alphanumeric() || chars[i] == '_' || chars[i] == '$')
+                {
+                    i += 1;
+                }
+                out.insert(chars[start..i].iter().collect());
+            }
+            _ => i += 1,
+        }
+    }
+    out
+}
+
+/// Past the end of a template literal that starts at `i`, collecting the
+/// identifiers of its `${ }` expressions; the literal's own text is skipped.
+fn skip_template(chars: &[char], mut i: usize, out: &mut BTreeSet<String>) -> usize {
+    while i < chars.len() {
+        match chars[i] {
+            '\\' => i += 2,
+            '`' => return i + 1,
+            '$' if chars.get(i + 1) == Some(&'{') => {
+                let start = i + 2;
+                let mut depth = 1;
+                i = start;
+                while i < chars.len() && depth > 0 {
+                    match chars[i] {
+                        '{' => depth += 1,
+                        '}' => depth -= 1,
+                        _ => {}
+                    }
+                    i += 1;
+                }
+                let inner: String = chars[start..i.saturating_sub(1)].iter().collect();
+                out.extend(code_identifiers(&inner));
+            }
+            _ => i += 1,
+        }
+    }
+    i
 }
 
 #[cfg(test)]

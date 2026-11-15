@@ -472,13 +472,26 @@ pub enum Command {
         /// directory.
         #[arg(default_value = ".")]
         input: PathBuf,
-        /// Write the module to FILE (a `.ts` file) instead of stdout.
+        /// Write the client to PATH instead of stdout: a `.ts` file, or with
+        /// `--layout dir` a directory. Defaults to `[build.client]` `out` in
+        /// bynk.toml.
         #[arg(short, long)]
         out: Option<PathBuf>,
         /// Generate only this `from http` service (`Name` or `unit.Name`); may be
-        /// given more than once. Defaults to every one.
+        /// given more than once. Defaults to `[build.client]` `service`, else every
+        /// one.
         #[arg(long)]
         service: Vec<String>,
+        /// `file` (default) writes one module; `dir` writes `index.ts`,
+        /// `types.ts`, `codecs.ts` and `runtime.ts` into `--out`. Defaults to
+        /// `[build.client]` `layout`.
+        #[arg(long, value_enum)]
+        layout: Option<ClientLayoutArg>,
+        /// Write nothing: compare the client at `--out` with the one the project
+        /// generates, and exit non-zero, naming where they differ, when it is
+        /// stale or missing. The CI drift gate.
+        #[arg(long)]
+        check: bool,
         #[command(flatten)]
         lock: LockArgs,
     },
@@ -1072,6 +1085,15 @@ pub struct AccountTarget {
     pub path: PathBuf,
 }
 
+/// `bynk client --layout` (#3508).
+#[derive(Copy, Clone, Debug, PartialEq, Eq, ValueEnum)]
+pub enum ClientLayoutArg {
+    /// One module.
+    File,
+    /// `index.ts`, `types.ts`, `codecs.ts` and `runtime.ts`.
+    Dir,
+}
+
 /// #2378: `bynk org` subcommands.
 /// `bynk openapi --format`.
 #[derive(Copy, Clone, Debug, PartialEq, Eq, ValueEnum)]
@@ -1356,6 +1378,15 @@ pub enum BookFormat {
     Text,
     /// A JSON document: `version`, `query` and `results`.
     Json,
+}
+
+impl From<ClientLayoutArg> for bynk_emit::emitter::http_client::Layout {
+    fn from(l: ClientLayoutArg) -> Self {
+        match l {
+            ClientLayoutArg::File => Self::File,
+            ClientLayoutArg::Dir => Self::Dir,
+        }
+    }
 }
 
 #[cfg(test)]

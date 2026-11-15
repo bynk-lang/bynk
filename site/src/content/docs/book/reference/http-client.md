@@ -47,6 +47,51 @@ and path are not an error here, since each has its own namespace.
 The output is byte-identical between runs, so a diff of the committed file shows
 an API change.
 
+### Layouts
+
+`--layout file` (the default) writes one module. `--layout dir` writes a directory
+instead, `--out` naming it: `index.ts` (the client and the public surface),
+`types.ts` (the boundary types and each route's response union), `codecs.ts` (the
+encoders and decoders) and `runtime.ts` (the inlined runtime). Each file imports
+exactly what it uses from the others, with type-only imports marked as such, so it
+passes a build with `verbatimModuleSyntax`, `isolatedModules` and `noUnusedLocals`.
+The imports have no extension (`"./types"`), which a bundler resolves (Vite,
+SvelteKit, Next.js); a strict Node ESM loader needs a build step.
+
+### Keeping it current
+
+`bynk client --check` writes nothing. It generates the client in memory, compares
+it with what is at `--out`, and exits non-zero when a file differs or is missing,
+naming the first differing line:
+
+```text
+bynk: client is stale: run `bynk client --out web/src/lib/api.ts`
+  web/src/lib/api.ts differs at line 142 (3 lines in all):
+    - found:    readonly qty: number;
+    + expected: readonly qty: Qty;
+```
+
+Run it in CI beside the front end's own checks. The header's compiler version and
+the file's line endings do not count as drift, so an upgrade of `bynk` alone does
+not break the gate.
+
+### From the manifest
+
+`[build.client]` in `bynk.toml` names where the client goes:
+
+```toml
+[build.client]
+out = "../web/src/lib/api.ts"
+layout = "file"          # or "dir"
+service = ["orders"]     # optional; every service when left out
+```
+
+`bynk build` then writes the client beside its other outputs, leaving a file alone
+whose text is already right. A project without the table builds exactly as before.
+`bynk client` takes its `--out`, `--layout` and `--service` from the table when the
+flags are left out, and a flag overrides the table, so `bynk client --check` needs
+no arguments in CI. See [`[build.client]`](/docs/manifest/#buildclient).
+
 ## Calling it
 
 ```ts

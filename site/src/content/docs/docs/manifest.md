@@ -51,6 +51,9 @@ platform = "cloudflare"     # "cloudflare", "node" or "browser"
 emit = "ts"                 # "ts" or "js"
 package_manager = "pnpm"    # installs the generated build's npm packages; detected when unset
 
+[build.client]
+out = "../web/src/lib/api.ts"  # where `bynk build` writes the typed TypeScript client (optional)
+
 [profile.dev]
 contracts = true            # the function-contract call-site guard; `dev` default
 
@@ -524,6 +527,20 @@ output directory (and read `package_manager` alone), so editing `[build]` never 
 the editor's *Show Compiled Output* view shows. The table describes the
 artefact; how contexts map to deployment units belongs to `[deploy]`, which is
 reserved.
+
+### `[build.client]`
+
+Where `bynk build` writes the [typed TypeScript client](/book/reference/http-client/)
+for the project's `from http` services (experimental). Absent, `bynk build` writes
+none, so a project that does not set it builds exactly as before. `bynk client`
+reads the same table for the flags it is not given, so `bynk client --check` needs
+no arguments in CI.
+
+| Key | Type | Default | Notes |
+|---|---|---|---|
+| `out` | string | required | Where to write it, relative to the project root: a `.ts` file with `layout = "file"`, a directory with `layout = "dir"`. Unlike `[build] out` it may leave the project, since a front end often lives beside the Bynk project (`"../web/src/lib/api.ts"`). |
+| `layout` | `"file"` or `"dir"` | `"file"` | `file` writes one module; `dir` writes `index.ts`, `types.ts`, `codecs.ts` and `runtime.ts`. |
+| `service` | list of strings | every service | The `from http` services to include, as `Name` or `unit.Name`. |
 
 ## `[profile.<name>]`
 

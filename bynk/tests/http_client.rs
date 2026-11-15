@@ -55,7 +55,22 @@ fn module(path: &Path, extra: &[&str]) -> String {
     args.extend_from_slice(extra);
     let (ok, stdout, stderr) = client(&args);
     assert!(ok, "bynk client failed: {stderr}");
-    stdout
+    versionless(&stdout)
+}
+
+/// The header names the compiler's version, which a golden must not pin.
+fn versionless(text: &str) -> String {
+    text.lines()
+        .map(|l| {
+            if l.starts_with("// bynk ") {
+                "// bynk <version>. Regenerate with `bynk client`; see https://bynk-lang.org/book/reference/http-client/".to_string()
+            } else {
+                l.to_string()
+            }
+        })
+        .collect::<Vec<_>>()
+        .join("\n")
+        + "\n"
 }
 
 fn golden(name: &str, actual: &str) {
@@ -184,4 +199,256 @@ fn a_refinement_violation_message_names_the_declared_type() {
         "a violation names the declared type, not its wire alias"
     );
     assert!(text.contains("field: \"Sku\""));
+}
+
+/// A copy of the `one` project in a scratch directory, with `extra` appended to
+/// its manifest.
+fn project_with(name: &str, extra: &str) -> PathBuf {
+    let dir = scratch(name);
+    std::fs::create_dir_all(dir.join("src")).unwrap();
+    let manifest = std::fs::read_to_string(fixture("one").join("bynk.toml")).unwrap();
+    std::fs::write(dir.join("bynk.toml"), format!("{manifest}{extra}")).unwrap();
+    std::fs::copy(
+        fixture("one").join("src/one.bynk"),
+        dir.join("src/one.bynk"),
+    )
+    .unwrap();
+    dir
+}
+
+#[test]
+fn a_directory_layout_writes_four_files_that_import_each_other() {
+    let dir = scratch("dir").join("api");
+    let (ok, stdout, stderr) = client(&[
+        fixture("rich").to_str().unwrap(),
+        "--layout",
+        "dir",
+        "--out",
+        dir.to_str().unwrap(),
+    ]);
+    assert!(ok, "{stderr}");
+    assert!(stdout.is_empty());
+    let mut names: Vec<String> = std::fs::read_dir(&dir)
+        .unwrap()
+        .map(|e| e.unwrap().file_name().to_string_lossy().into_owned())
+        .collect();
+    names.sort();
+    assert_eq!(names, ["codecs.ts", "index.ts", "runtime.ts", "types.ts"]);
+    let read = |n: &str| versionless(&std::fs::read_to_string(dir.join(n)).unwrap());
+    // Each file imports what it uses from the others, types marked as types, and
+    // the index re-exports the public surface.
+    let index = read("index.ts");
+    assert!(index.contains("from \"./runtime\";") && index.contains("from \"./codecs\";"));
+    assert!(index.contains("export * from \"./types\";"));
+    assert!(index.contains("export function createClient("));
+    assert!(read("runtime.ts").contains("export async function __call("));
+    assert!(read("types.ts").contains("export interface Order {"));
+    assert!(read("codecs.ts").contains("export function __deserialise_Order("));
+    assert!(!read("runtime.ts").contains("import "));
+    golden("http_client_rich_dir_index.ts", &index);
+    golden("http_client_rich_dir_types.ts", &read("types.ts"));
+}
+
+#[test]
+fn a_directory_layout_without_a_directory_is_refused() {
+    let (ok, _, stderr) = client(&[fixture("one").to_str().unwrap(), "--layout", "dir"]);
+    assert!(!ok);
+    assert!(
+        stderr.contains("`--layout dir` writes several files"),
+        "{stderr}"
+    );
+    let dir = scratch("dir-onto-file");
+    let file = dir.join("api.ts");
+    std::fs::write(&file, "").unwrap();
+    let (ok, _, stderr) = client(&[
+        fixture("one").to_str().unwrap(),
+        "--layout",
+        "dir",
+        "--out",
+        file.to_str().unwrap(),
+    ]);
+    assert!(!ok);
+    assert!(stderr.contains("is a file"), "{stderr}");
+}
+
+#[test]
+fn check_passes_on_a_current_client_and_fails_on_a_stale_or_missing_one() {
+    let dir = scratch("check");
+    let file = dir.join("api.ts");
+    let path = file.to_str().unwrap();
+    let project = fixture("one");
+    let project = project.to_str().unwrap();
+
+    // Missing: stale, and nothing is written.
+    let (ok, _, stderr) = client(&[project, "--out", path, "--check"]);
+    assert!(!ok);
+    assert!(
+        stderr.contains("client is stale: run `bynk client --out"),
+        "{stderr}"
+    );
+    assert!(stderr.contains("missing"), "{stderr}");
+    assert!(!file.exists(), "`--check` writes nothing");
+
+    // Current: passes, whatever the compiler version in the header says and
+    // whatever the line endings are.
+    let (ok, _, stderr) = client(&[project, "--out", path]);
+    assert!(ok, "{stderr}");
+    let (ok, _, stderr) = client(&[project, "--out", path, "--check"]);
+    assert!(ok, "{stderr}");
+    let text = std::fs::read_to_string(&file).unwrap();
+    std::fs::write(
+        &file,
+        text.replacen("// bynk ", "// bynk 9.9.9 ", 1)
+            .replace('\n', "\r\n"),
+    )
+    .unwrap();
+    let (ok, _, stderr) = client(&[project, "--out", path, "--check"]);
+    assert!(ok, "a version or line-ending change is not drift: {stderr}");
+
+    // Stale: names the file and the first differing line.
+    std::fs::write(&file, text.replace("createClient", "makeClient")).unwrap();
+    let (ok, _, stderr) = client(&[project, "--out", path, "--check"]);
+    assert!(!ok);
+    assert!(stderr.contains("client is stale"), "{stderr}");
+    assert!(stderr.contains("differs at line"), "{stderr}");
+    assert!(
+        stderr.contains("+ expected:") && stderr.contains("- found:"),
+        "{stderr}"
+    );
+    assert_eq!(
+        std::fs::read_to_string(&file).unwrap(),
+        text.replace("createClient", "makeClient")
+    );
+}
+
+#[test]
+fn check_without_a_written_client_to_compare_is_refused() {
+    let (ok, _, stderr) = client(&[fixture("one").to_str().unwrap(), "--check"]);
+    assert!(!ok);
+    assert!(
+        stderr.contains("`--check` compares with a written client"),
+        "{stderr}"
+    );
+}
+
+#[test]
+fn check_covers_each_file_of_a_directory_layout() {
+    let dir = scratch("check-dir").join("api");
+    let project = fixture("one");
+    let args = |extra: &[&'static str]| {
+        let mut a = vec![
+            project.to_str().unwrap().to_string(),
+            "--layout".to_string(),
+            "dir".to_string(),
+            "--out".to_string(),
+            dir.to_str().unwrap().to_string(),
+        ];
+        a.extend(extra.iter().map(|s| s.to_string()));
+        a
+    };
+    let run = |extra: &[&'static str]| {
+        let a = args(extra);
+        client(&a.iter().map(String::as_str).collect::<Vec<_>>())
+    };
+    assert!(run(&[]).0);
+    assert!(run(&["--check"]).0);
+    std::fs::write(dir.join("codecs.ts"), "").unwrap();
+    std::fs::remove_file(dir.join("runtime.ts")).unwrap();
+    let (ok, _, stderr) = run(&["--check"]);
+    assert!(!ok);
+    assert!(stderr.contains("--layout dir --out"), "{stderr}");
+    assert!(
+        stderr.contains("codecs.ts differs") && stderr.contains("runtime.ts: missing"),
+        "{stderr}"
+    );
+}
+
+#[test]
+fn the_manifest_supplies_what_the_flags_leave_out() {
+    let project = project_with(
+        "manifest",
+        "\n[build.client]\nout = \"web/src/lib/api.ts\"\n",
+    );
+    let (ok, stdout, stderr) = client(&[project.to_str().unwrap()]);
+    assert!(ok, "{stderr}");
+    assert!(stdout.is_empty(), "the manifest's `out` replaces stdout");
+    let written = project.join("web/src/lib/api.ts");
+    assert!(written.is_file());
+    // `--check` needs no arguments: CI runs it as it stands.
+    let (ok, _, stderr) = client(&[project.to_str().unwrap(), "--check"]);
+    assert!(ok, "{stderr}");
+    std::fs::write(&written, "// stale\n").unwrap();
+    let (ok, _, stderr) = client(&[project.to_str().unwrap(), "--check"]);
+    assert!(!ok && stderr.contains("client is stale"), "{stderr}");
+}
+
+#[test]
+fn the_manifest_may_ask_for_a_directory_outside_the_project() {
+    let project = project_with(
+        "manifest-dir",
+        "\n[build.client]\nout = \"../web/lib/api\"\nlayout = \"dir\"\nservice = [\"api\"]\n",
+    );
+    let (ok, _, stderr) = client(&[project.to_str().unwrap()]);
+    assert!(ok, "{stderr}");
+    assert!(project.join("../web/lib/api/index.ts").is_file());
+    assert!(project.join("../web/lib/api/runtime.ts").is_file());
+}
+
+#[test]
+fn a_malformed_client_table_is_refused_naming_the_key() {
+    for (table, expected) in [
+        ("out = \"api.ts\"\nlayout = \"folder\"", "client.layout"),
+        ("layout = \"dir\"", "client.out"),
+        ("out = \"/abs/api.ts\"", "client.out"),
+        ("out = \"api.ts\"\nservice = \"api\"", "client.service"),
+        ("out = \"api.ts\"\nfolder = \"x\"", "folder"),
+    ] {
+        let project = project_with("manifest-bad", &format!("\n[build.client]\n{table}\n"));
+        let (ok, _, stderr) = client(&[project.to_str().unwrap()]);
+        assert!(!ok, "{table}");
+        assert!(stderr.contains(expected), "{table}: {stderr}");
+    }
+}
+
+#[test]
+fn build_writes_the_client_the_manifest_asks_for_and_otherwise_nothing() {
+    let with = project_with("build-with", "\n[build.client]\nout = \"web/api.ts\"\n");
+    let out = Command::new(bynk())
+        .args(["build", "--target", "workers"])
+        .arg(&with)
+        .output()
+        .expect("run bynk");
+    assert!(
+        out.status.success(),
+        "{}",
+        String::from_utf8_lossy(&out.stderr)
+    );
+    assert!(with.join("web/api.ts").is_file());
+    assert!(String::from_utf8_lossy(&out.stderr).contains("wrote the client"));
+
+    let without = project_with("build-without", "");
+    let out = Command::new(bynk())
+        .args(["build", "--target", "workers"])
+        .arg(&without)
+        .output()
+        .expect("run bynk");
+    assert!(out.status.success());
+    let mut files = Vec::new();
+    fn walk(dir: &Path, files: &mut Vec<PathBuf>) {
+        for e in std::fs::read_dir(dir).unwrap().flatten() {
+            if e.path().is_dir() {
+                walk(&e.path(), files);
+            } else {
+                files.push(e.path());
+            }
+        }
+    }
+    walk(&without, &mut files);
+    assert!(
+        files
+            .iter()
+            .all(|f| f.extension().is_none_or(|e| e != "ts")
+                || f.to_string_lossy().contains("/out/")),
+        "a project without `[build.client]` gains no client: {files:?}"
+    );
 }

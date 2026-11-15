@@ -182,6 +182,57 @@ fn every_generated_client_passes_tsc_strict() {
     }
 }
 
+/// The directory layout is `tsc --strict` clean too, under the strictest module
+/// settings a front end may set (`verbatimModuleSyntax`, `isolatedModules`), so an
+/// import of a type that is not marked as one, or an unused one, is caught here.
+#[test]
+fn the_directory_layout_passes_tsc_strict() {
+    if skip_without_tools() {
+        return;
+    }
+    for (name, project) in [("rich", fixture("rich")), ("shapes", shapes_project())] {
+        let dir = scratch(&format!("dir-{name}"));
+        let proj = dir.join("project");
+        copy_project(&project, &proj);
+        let api = dir.join("api");
+        let out = bynk()
+            .args(["client", "--layout", "dir", "--out"])
+            .arg(&api)
+            .arg(&proj)
+            .output()
+            .expect("run bynk");
+        assert!(
+            out.status.success(),
+            "bynk client --layout dir failed:\n{}",
+            String::from_utf8_lossy(&out.stderr)
+        );
+        fs::write(
+            api.join("tsconfig.json"),
+            TSCONFIG
+                .replace("\"files\": [\"api.ts\"]", "\"files\": [\"index.ts\"]")
+                .replace(
+                    "\"skipLibCheck\": false",
+                    "\"skipLibCheck\": false, \"verbatimModuleSyntax\": true, \"isolatedModules\": true, \"noEmit\": true",
+                )
+                .replace("\"outDir\": \"dist\",", ""),
+        )
+        .unwrap();
+        let tsc = tools::tsc_command()
+            .expect("checked")
+            .arg("-p")
+            .arg(&api)
+            .output()
+            .expect("run tsc");
+        assert!(
+            tsc.status.success(),
+            "the `{name}` directory client does not pass `tsc --strict`:\n{}{}",
+            String::from_utf8_lossy(&tsc.stdout),
+            String::from_utf8_lossy(&tsc.stderr)
+        );
+        let _ = fs::remove_dir_all(&dir);
+    }
+}
+
 /// Compile `project` for Workers as JavaScript, next to the client; `worker` is the
 /// directory the compiled Worker lands in.
 fn compile_worker(project: &Path, dir: &Path) {
