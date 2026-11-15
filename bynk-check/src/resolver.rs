@@ -4829,3 +4829,63 @@ mod op_annotation_tests {
             .assert_reports("bynk.generics.internal_op_annotation");
     }
 }
+
+#[cfg(test)]
+mod consumes_position_tests {
+    use super::new_consumes_position;
+
+    fn insert(src: &str, last: Option<&str>, header: &str, braced: bool) -> Option<String> {
+        let header_end = src.find(header).unwrap() + header.len();
+        let last_end = last.map(|l| src.find(l).unwrap() + l.len());
+        let (at, sep) = new_consumes_position(src, last_end, header_end, braced)?;
+        Some(format!("{}{sep}X{}", &src[..at], &src[at..]))
+    }
+
+    /// A headerless file takes the clause after its header, a blank line away.
+    #[test]
+    fn a_fragment_gets_a_blank_line_after_its_header() {
+        let src = "context a\n\nfn f() -> Int { 1 }\n";
+        assert_eq!(
+            insert(src, None, "context a", false).unwrap(),
+            "context a\n\nX\n\nfn f() -> Int { 1 }\n"
+        );
+    }
+
+    /// A braced file takes it after the `{`, indented like the first member.
+    #[test]
+    fn a_braced_file_takes_the_clause_after_the_brace_at_the_members_indent() {
+        let src = "suite shop as unit {\n    case \"c\" {\n    }\n}\n";
+        assert_eq!(
+            insert(src, None, "as unit", true).unwrap(),
+            "suite shop as unit {\n    X\n    case \"c\" {\n    }\n}\n"
+        );
+    }
+
+    /// Beside an existing clause, the new line takes the next line's indent.
+    #[test]
+    fn a_new_line_follows_the_last_clause_at_the_next_lines_indent() {
+        let src = "suite s {\n  uses m\n  case \"c\" { }\n}\n";
+        assert_eq!(
+            insert(src, Some("uses m"), "suite s", true).unwrap(),
+            "suite s {\n  uses m\n  X\n  case \"c\" { }\n}\n"
+        );
+    }
+
+    /// When the clause is the last line before `}`, that line is the brace, so
+    /// the new line has no indent: only cosmetic, and the formatter repairs it.
+    #[test]
+    fn a_last_clause_before_the_closing_brace_gets_no_indent() {
+        let src = "suite s {\n  uses m\n}\n";
+        assert_eq!(
+            insert(src, Some("uses m"), "suite s", true).unwrap(),
+            "suite s {\n  uses m\nX\n}\n"
+        );
+    }
+
+    /// A braced file whose header is not followed by `{` has no safe place.
+    #[test]
+    fn a_header_not_followed_by_a_brace_gets_no_position() {
+        let src = "suite s as unit\n\ncase \"c\" { }\n";
+        assert!(insert(src, None, "as unit", true).is_none());
+    }
+}

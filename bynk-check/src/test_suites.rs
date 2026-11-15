@@ -5468,6 +5468,9 @@ fn suite_import_owners(
         let Some(table) = unit_tables.get(unit) else {
             continue;
         };
+        // Two consumed units exporting one name is a clash the target itself
+        // reports; here the first unit owns it, so a suite that consumes the
+        // other's version still warns (a rare edge, left to the error stage).
         for name in table.types.keys().filter(|n| !own(n)) {
             owners.entry(name.clone()).or_insert_with(|| unit.clone());
         }
@@ -5550,6 +5553,9 @@ fn warn_unselected_suite_types(
     let consumed: std::collections::BTreeSet<String> = consumed.iter().cloned().collect();
     let file = resolver::FileConsumes {
         consumed: &consumed,
+        // A suite-side alias (`consumes x { T as U }`) is not modelled in the
+        // warning stage: an alias names a type of the target's table, so naming
+        // one in a suite is not warned. A follow-up if suites may alias.
         aliases: &HashMap::new(),
         clauses: &suite.consumes,
         insert_at: new_suite_consumes_position(suite, pf.source()),

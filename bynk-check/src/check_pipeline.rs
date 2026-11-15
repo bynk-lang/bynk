@@ -1042,11 +1042,16 @@ fn new_consumes_position(pf: &ParsedFile) -> Option<(usize, String)> {
         .map(|u| u.span.end)
         .chain(pf.consumes().iter().map(|c| c.span.end))
         .max();
-    let bynk_syntax::ast::SourceUnit::Context(c) = pf.unit() else {
-        return None;
-    };
-    let braced = c.form == bynk_syntax::ast::CommonsForm::Brace;
-    resolver::new_consumes_position(pf.source(), last, c.name.span.end, braced)
+    match pf.unit() {
+        bynk_syntax::ast::SourceUnit::Context(c) => {
+            let braced = c.form == bynk_syntax::ast::CommonsForm::Brace;
+            resolver::new_consumes_position(pf.source(), last, c.name.span.end, braced)
+        }
+        // An adapter's header can carry a `binding` clause, so a new clause is
+        // only placed beside one it already has.
+        bynk_syntax::ast::SourceUnit::Adapter(_) => last.map(|end| (end, "\n".to_string())),
+        _ => None,
+    }
 }
 
 #[cfg(test)]
