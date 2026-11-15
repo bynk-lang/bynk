@@ -2561,6 +2561,63 @@ fn manifest_unit_diagnostics(
     }
 }
 
+/// The parsed files, each unit's files, and each unit's kind: what
+/// [`platform_lock_phase`] reads the units' sources from.
+type LockSources<'a> = (
+    &'a [ParsedFile],
+    &'a BTreeMap<String, Vec<usize>>,
+    &'a BTreeMap<String, UnitKind>,
+);
+
+/// Each unit's symbol table, `consumes`, `consumes` aliases and flattened names:
+/// what [`platform_lock_phase`] walks the provider closure with.
+type LockTables<'a> = (
+    &'a HashMap<String, UnitTable>,
+    &'a HashMap<String, Vec<String>>,
+    &'a HashMap<String, HashMap<String, String>>,
+    &'a HashMap<String, HashMap<String, String>>,
+);
+
+/// v0.19 (decisions 0017/0024): platform-lock enforcement. A deployment unit
+/// whose in-process closure reaches a platform-native capability is locked to
+/// that platform; the selected `--platform` must match. A unit is a context
+/// under `workers`, or a `[deploy.workers]` group of them (#3562, which share
+/// a Worker). Run only on otherwise-clean programs: the closure walk recurses
+/// the provider graph, whose acyclicity the earlier checks establish. P5.3:
+/// relocated to `bynk_check::project_model::phase_platform_lock` — this crate is
+/// a caller, not an owner.
+fn platform_lock_phase(
+    target: BuildTarget,
+    platform: Platform,
+    (project_root, overlay): (&Path, &HashMap<PathBuf, String>),
+    (parsed, groups, kinds): LockSources<'_>,
+    (unit_tables, unit_consumes, unit_consumes_aliases, unit_flattened): LockTables<'_>,
+    errors: &mut ErrorSink,
+) {
+    if !errors.is_empty() {
+        return;
+    }
+    // A malformed `[deploy.workers]` is reported when the project loads, before
+    // this phase runs, so a table that cannot be read here is not a silent
+    // loss of grouping.
+    let worker_groups =
+        bynk_project::worker_groups::try_read_worker_groups_with(project_root, overlay)
+            .unwrap_or_default();
+    project_model::phase_platform_lock(
+        target,
+        platform,
+        parsed,
+        groups,
+        kinds,
+        unit_tables,
+        unit_consumes,
+        unit_consumes_aliases,
+        unit_flattened,
+        &worker_groups,
+        errors,
+    );
+}
+
 #[allow(clippy::too_many_arguments)]
 fn run_checks(
     // R3.9 (#1113): one `(root, prefix)` pair per `Roots::trees` entry, not a
@@ -3441,33 +3498,30 @@ fn run_checks(
         &mut errors,
     );
 
-    // v0.19 (decisions 0017/0024): platform-lock enforcement. A deployment
-    // unit whose in-process closure reaches a platform-native capability is
-    // locked to that platform; the selected `--platform` must match. Run only
-    // on otherwise-clean programs: the closure walk recurses the provider
-    // graph, whose acyclicity the earlier checks establish. P5.3: relocated
-    // to `bynk_check::project_model::phase_platform_lock` — this crate is a
-    // caller, not an owner.
-    if errors.is_empty() {
-        project_model::phase_platform_lock(
-            target,
-            platform,
-            &parsed,
-            &groups,
-            &kinds,
+    platform_lock_phase(
+        target,
+        platform,
+        (project_root, overlay),
+        (&parsed, &groups, &kinds),
+        (
             &unit_tables,
             &unit_consumes,
             &unit_consumes_aliases,
             &unit_flattened,
-            &mut errors,
-        );
-    }
+        ),
+        &mut errors,
+    );
     // On Workers, each Worker's binding names are unique. Gated the same way:
     // the KV input walks the same provider graph.
-    if errors.is_empty()
-        && let Some(bindings) = &context_bindings
-    {
-        worker_bindings::phase_duplicate_bindings(target, &parsed, &groups, bindings, &mut errors);
+    if let Some(bindings) = context_bindings.as_ref().filter(|_| errors.is_empty()) {
+        worker_bindings::phase_duplicate_bindings(
+            target,
+            (project_root, overlay),
+            &parsed,
+            &groups,
+            bindings,
+            &mut errors,
+        );
     }
 
     // v0.176 (#642): the `Bytes`-at-a-workers-boundary guard (ADR 0142 D8) is
@@ -3723,6 +3777,10 @@ fn build_output(
         BuildTarget::Workers => {
             // v0.8 §2.3: per-Worker entry point, compose.ts, and wrangler
             // configuration. One Worker per context.
+            // #3562: where each context's files go. Always the identity layout for
+            // now: a group's directory and prefixes are switched on with the group
+            // as the emit unit.
+            let layout = bynk_project::worker_layout::WorkerLayout::identity();
             for (ctx_name, kind) in &kinds {
                 if *kind != UnitKind::Context {
                     continue;
@@ -3989,7 +4047,7 @@ fn build_output(
                 // precedent `events_fanout.rs`'s and `workers.rs`'s own
                 // construction sites already set.
                 compiled.push(StagedFile {
-                    output_path: PathBuf::from(format!("workers/{dashes}/index.ts")),
+                    output_path: layout.worker_file(ctx_name, "index.ts"),
                     document: Document::Ts(entry_ts),
                     source_map: None,
                     debug_metadata: None,
@@ -4007,7 +4065,7 @@ fn build_output(
                     let fanout_program =
                         emitter::emit_events_fanout_do(ctx_name, &own_event_routes);
                     compiled.push(StagedFile {
-                        output_path: PathBuf::from(format!("workers/{dashes}/events_fanout.ts")),
+                        output_path: layout.member_file(ctx_name, "events_fanout.ts"),
                         document: Document::Ts(fanout_program),
                         source_map: None,
                         debug_metadata: None,
@@ -4016,7 +4074,7 @@ fn build_output(
                 // #3477: the Durable Object classes of this Worker's containers.
                 if let Some(program) = emitter::emit_containers_ts(&bindings) {
                     compiled.push(StagedFile {
-                        output_path: PathBuf::from(format!("workers/{dashes}/containers.ts")),
+                        output_path: layout.worker_file(ctx_name, "containers.ts"),
                         document: Document::Ts(program),
                         source_map: None,
                         debug_metadata: None,
@@ -4028,13 +4086,13 @@ fn build_output(
                 // #1317) that reaches `Document::Ts` with no `Verbatim`
                 // wrap.
                 compiled.push(StagedFile {
-                    output_path: PathBuf::from(format!("workers/{dashes}/compose.ts")),
+                    output_path: layout.member_file(ctx_name, "compose.ts"),
                     document: Document::Ts(compose_ts),
                     source_map: None,
                     debug_metadata: None,
                 });
                 compiled.push(StagedFile {
-                    output_path: PathBuf::from(format!("workers/{dashes}/wrangler.toml")),
+                    output_path: layout.worker_file(ctx_name, "wrangler.toml"),
                     document: Document::Toml(wrangler_doc),
                     source_map: None,
                     debug_metadata: None,
@@ -4121,10 +4179,8 @@ fn build_output(
                     },
                 ) {
                     compiled.push(StagedFile {
-                        output_path: PathBuf::from(format!(
-                            "workers/{dashes}/{}",
-                            emitter::contracts::CONTRACTS_MANIFEST
-                        )),
+                        output_path: layout
+                            .member_file(ctx_name, emitter::contracts::CONTRACTS_MANIFEST),
                         document: Document::Json(manifest),
                         source_map: None,
                         debug_metadata: None,
@@ -4135,10 +4191,7 @@ fn build_output(
                 // imports, when the context declares one.
                 if let Some(client) = emitter::client::emit_client(ctx_name, table, &own_types) {
                     compiled.push(StagedFile {
-                        output_path: PathBuf::from(format!(
-                            "workers/{dashes}/{}",
-                            emitter::client::CLIENT_FILE
-                        )),
+                        output_path: layout.member_file(ctx_name, emitter::client::CLIENT_FILE),
                         document: Document::Ts(client),
                         source_map: None,
                         debug_metadata: None,
@@ -4154,10 +4207,8 @@ fn build_output(
                 );
                 if let Some(manifest) = emitter::emit_secrets_manifest(table, &reads) {
                     compiled.push(StagedFile {
-                        output_path: PathBuf::from(format!(
-                            "workers/{dashes}/{}",
-                            emitter::secrets::SECRETS_MANIFEST
-                        )),
+                        output_path: layout
+                            .member_file(ctx_name, emitter::secrets::SECRETS_MANIFEST),
                         document: Document::Json(manifest),
                         source_map: None,
                         debug_metadata: None,

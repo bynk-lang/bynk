@@ -389,8 +389,13 @@ pub(super) fn called_contexts(
 /// `bynk.context.duplicate_binding`: on a Workers build, each context's
 /// bindings ([`all_context_bindings`]), checked by
 /// [`bynk_check::worker_bindings::phase_duplicate_bindings`].
+///
+/// #3562: and the members of each `[deploy.workers]` group declare each binding
+/// name once, or declare it identically
+/// ([`bynk_check::worker_bindings::phase_group_binding_collisions`]).
 pub(super) fn phase_duplicate_bindings(
     target: BuildTarget,
+    project: (&std::path::Path, &HashMap<std::path::PathBuf, String>),
     parsed: &[ParsedFile],
     groups: &BTreeMap<String, Vec<usize>>,
     bindings: &BTreeMap<String, Vec<WorkerBinding>>,
@@ -400,6 +405,16 @@ pub(super) fn phase_duplicate_bindings(
         return;
     }
     bynk_check::worker_bindings::phase_duplicate_bindings(parsed, groups, bindings, errors);
+    let worker_groups =
+        bynk_project::worker_groups::try_read_worker_groups_with(project.0, project.1)
+            .unwrap_or_default();
+    bynk_check::worker_bindings::phase_group_binding_collisions(
+        &worker_groups,
+        parsed,
+        groups,
+        bindings,
+        errors,
+    );
 }
 
 /// #3477: the path back to the project root from a Worker's output directory,
