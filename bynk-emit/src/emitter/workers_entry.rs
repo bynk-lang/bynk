@@ -297,6 +297,15 @@ const REPORT_FAULT_HELPER: &str = "function __bynkReportFault(ctx: { waitUntil(p
 /// it, including with a `404` of its own. The router's own misses are added to a
 /// module-level `WeakSet`, and `isMiss` reads it; a response a handler returned
 /// is never added. It is never a header, so it cannot reach a client.
+///
+/// The dispatcher's contract, which the group `index.ts` implements: members are
+/// tried in declaration order; a marked response is a miss and the next member
+/// is tried; the first unmarked response is the answer. If every member misses,
+/// the answer is the first marked response that is not a `404` (the synthesised
+/// `405`/`204` with `Allow`), else the single-context `Not Found`. The synthesised
+/// `405` is a miss on purpose: `GET /x` in one member and `POST /x` in another is
+/// allowed (a route is keyed on method and path), so the `POST` must reach the
+/// second member rather than be answered by the first member's `405`.
 const MISS_HELPER: &str = "const __misses = new globalThis.WeakSet<globalThis.Response>();
 function __miss(response: globalThis.Response): globalThis.Response {
   __misses.add(response);
