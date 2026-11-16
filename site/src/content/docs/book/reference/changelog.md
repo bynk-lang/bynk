@@ -28,6 +28,9 @@ per-commit history. While Bynk is pre-1.0, increments may change behaviour.
 
 | Version | Highlights |
 |---|---|
+| **v0.629.3** | The test runner can evaluate a snippet in a unit's scope and report its final value, the driver half of `bynk eval` |
+| **v0.629.2** | The MCP architecture tool lists events with their emitters and subscribers, and each context's capability uses, expanding one on request |
+| **v0.629.1** | `bynk dev --trace-events` writes one `request` event per request served, with the steps it took and their `.bynk` spans |
 | **v0.629.0** | `bynk client`'s generated module carries a per-route and per-service contract hash (`API_CONTRACTS`) beside `WIRE_VERSION`, and `sendContract` sends the route's hash as `X-Bynk-Contract`; both informational (#3508 slice BC6) |
 | **v0.628.0** | `bynk.cloudflare` gains `Images`, a one-per-Worker capability over Cloudflare's `images` binding, with `transform` and `info` over `Bytes` (experimental; #3515) |
 | **v0.627.1** | A build can record per-request traces (the emitter and runtime half of `bynk dev --trace-events`); deploy output is unchanged |

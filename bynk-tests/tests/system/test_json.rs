@@ -113,6 +113,7 @@ fn golden_document_normal() {
         coverage: None,
         transport: None,
         snapshots: None,
+        eval: None,
     };
     bless_or_assert("test-json-normal.json", &run.render());
 }
@@ -617,6 +618,7 @@ fn golden_document_failed_property() {
         coverage: None,
         transport: None,
         snapshots: None,
+        eval: None,
     };
     bless_or_assert("test-json-failed-property.json", &run.render());
 }
@@ -669,6 +671,7 @@ fn golden_document_refusals() {
         coverage: None,
         transport: None,
         snapshots: None,
+        eval: None,
     };
     bless_or_assert("test-json-refusals.json", &run.render());
 }

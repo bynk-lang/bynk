@@ -670,7 +670,8 @@ pub(super) fn emit_test_case_function(
         .get(target_name)
         .map(|t| t.agents.keys().cloned().collect())
         .unwrap_or_default();
-    let (body_src, body_smb) = emitter::lower_test_case_body(
+    // #3585: a `bynk eval` snippet's case reports its tail's value.
+    let (body_src, body_smb) = emitter::lower_test_case_body_reporting(
         &case.body,
         &mut typed,
         &cross,
@@ -683,6 +684,7 @@ pub(super) fn emit_test_case_function(
         source,
         rel_path,
         runtime_use,
+        case.name == crate::eval::EVAL_CASE,
     );
     // v0.70: splice the case body (line-by-line, indented) and merge its source-map
     // sub-builder into the case builder, line-anchored at the splice. The caller
