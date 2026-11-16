@@ -29,7 +29,24 @@ fn find_offset(text: &str, needle: &str) -> usize {
         .unwrap_or_else(|| panic!("`{needle}` not found in fixture"))
 }
 
-fn setup_project(test_name: &str, files: &[(&str, &str)]) -> PathBuf {
+/// A scratch project directory, removed when the guard is dropped. Derefs to
+/// its path, so callers use it wherever they need the project root.
+struct Scratch(PathBuf);
+
+impl Drop for Scratch {
+    fn drop(&mut self) {
+        let _ = std::fs::remove_dir_all(&self.0);
+    }
+}
+
+impl std::ops::Deref for Scratch {
+    type Target = PathBuf;
+    fn deref(&self) -> &PathBuf {
+        &self.0
+    }
+}
+
+fn setup_project(test_name: &str, files: &[(&str, &str)]) -> Scratch {
     let root = std::env::temp_dir().join(format!(
         "bynk-lsp-wire-contract-request-test-{test_name}-{}",
         std::process::id()
@@ -43,7 +60,7 @@ fn setup_project(test_name: &str, files: &[(&str, &str)]) -> PathBuf {
         }
         std::fs::write(&p, contents).expect("write file");
     }
-    root
+    Scratch(root)
 }
 
 /// Fixture 1 — `examples/rate-limiter`'s `GET /check/:client`: the bare
