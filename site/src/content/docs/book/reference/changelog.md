@@ -28,6 +28,7 @@ per-commit history. While Bynk is pre-1.0, increments may change behaviour.
 
 | Version | Highlights |
 |---|---|
+| **v0.633.3** | A Workers build places a context's staged binding files and assets directory through its `WorkerLayout` too, still the identity layout, ahead of `[deploy.workers]` groups sharing a directory (#3562, G2b) |
 | **v0.633.2** | A `bynk dev` build records each agent instance's committed transitions in a bounded ring buffer, and `bynk dev inspect agent` returns them as `history` (slice 1 of the dev agent-inspection track) |
 | **v0.633.1** | The `bynk dev inspect` reference, the run-locally guide and the runtime-library chapter describe agent inspection, and a workerd test shows a dev session's outcomes match a deploy build's (slice 0c of the dev agent-inspection track) |
 | **v0.633.0** | `AnalyticsSql` reads Analytics Engine datasets through the account's SQL API, as one binding per Worker with positional `$1` parameters of `SqlValue`, a typed result and a `SqlRetryable | SqlRejected` error; `bynk dev` runs it on Cloudflare, with a one-time notice silenced by `[dev] analytics-sql = "allow"`; `Analytics.dataset()` names a dataset's environment-qualified table for such a query |
