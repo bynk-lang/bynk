@@ -1954,6 +1954,61 @@ pub fn enable_remote_ai_search(text: &str) -> Result<String, String> {
     })
 }
 
+/// #3581 (the dev agent-inspection track): the development copy of a Worker's
+/// config binds the registry Durable Object its `index.ts` re-exports
+/// (`BynkInspectRegistry`) as `__BYNK_INSPECT_REGISTRY`, and declares its class,
+/// SQLite-backed like every other. Only ever applied to the development copy: the
+/// config `bynk deploy` reads is a different build, which never carries it. A
+/// Worker whose entry does not re-export the class (one that hosts no agent) is
+/// returned unchanged, as is one that already has it.
+pub fn enable_agent_inspection(text: &str, entry: &str) -> Result<String, String> {
+    const CLASS: &str = "BynkInspectRegistry";
+    if !entry.contains(CLASS) {
+        return Ok(text.to_string());
+    }
+    let mut doc: toml_edit::DocumentMut = text
+        .parse()
+        .map_err(|e| format!("invalid wrangler.toml: {e}"))?;
+    let bound = doc
+        .get("durable_objects")
+        .and_then(|d| d.get("bindings"))
+        .and_then(|b| b.as_array_of_tables())
+        .is_some_and(|rows| {
+            rows.iter()
+                .any(|r| r.get("class_name").and_then(|c| c.as_str()) == Some(CLASS))
+        });
+    if bound {
+        return Ok(text.to_string());
+    }
+    let mut binding = toml_edit::Table::new();
+    binding.insert("name", toml_edit::value("__BYNK_INSPECT_REGISTRY"));
+    binding.insert("class_name", toml_edit::value(CLASS));
+    let durable = doc
+        .entry("durable_objects")
+        .or_insert_with(|| toml_edit::Item::Table(toml_edit::Table::new()))
+        .as_table_mut()
+        .ok_or("`durable_objects` is not a table")?;
+    durable
+        .entry("bindings")
+        .or_insert_with(|| toml_edit::Item::ArrayOfTables(toml_edit::ArrayOfTables::new()))
+        .as_array_of_tables_mut()
+        .ok_or("`durable_objects.bindings` is not an array of tables")?
+        .push(binding);
+    let mut class = toml_edit::Table::new();
+    class.insert("type", toml_edit::value("durable-object"));
+    class.insert("storage", toml_edit::value("sqlite"));
+    doc.entry("exports")
+        .or_insert_with(|| {
+            let mut t = toml_edit::Table::new();
+            t.set_implicit(true);
+            toml_edit::Item::Table(t)
+        })
+        .as_table_mut()
+        .ok_or("`exports` is not a table")?
+        .insert(CLASS, toml_edit::Item::Table(class));
+    Ok(doc.to_string())
+}
+
 /// Each `[[kv_namespaces]]` entry's `(binding, id)`, in file order; an entry
 /// missing either is skipped.
 fn kv_entries(doc: &toml_edit::DocumentMut) -> impl Iterator<Item = (&str, &str)> {
@@ -1962,6 +2017,43 @@ fn kv_entries(doc: &toml_edit::DocumentMut) -> impl Iterator<Item = (&str, &str)
         .into_iter()
         .flatten()
         .filter_map(|t| Some((t.get("binding")?.as_str()?, t.get("id")?.as_str()?)))
+}
+
+#[cfg(test)]
+mod inspect_dev_tests {
+    use super::*;
+
+    const ENTRY: &str = "import { BynkInspectRegistry } from \"../../__bynk_runtime/inspect.js\";\nexport { BynkInspectRegistry };\n";
+
+    /// The development copy of a Worker that hosts agents binds the registry and
+    /// declares its class; applying it again changes nothing.
+    #[test]
+    fn the_development_copy_binds_the_registry() {
+        let text = "name = \"shop\"\n\n[[durable_objects.bindings]]\nname = \"CART\"\nclass_name = \"Cart\"\n\n[exports.Cart]\ntype = \"durable-object\"\nstorage = \"sqlite\"\n";
+        let out = enable_agent_inspection(text, ENTRY).unwrap();
+        assert!(out.contains("name = \"__BYNK_INSPECT_REGISTRY\""), "{out}");
+        assert!(
+            out.contains("class_name = \"BynkInspectRegistry\""),
+            "{out}"
+        );
+        assert!(out.contains("[exports.BynkInspectRegistry]"), "{out}");
+        assert!(out.contains("class_name = \"Cart\""), "{out}");
+        assert_eq!(enable_agent_inspection(&out, ENTRY).unwrap(), out);
+    }
+
+    /// A Worker whose entry does not re-export the class is left as it was.
+    #[test]
+    fn a_worker_without_the_registry_export_is_unchanged() {
+        let text = "name = \"shop\"\n";
+        assert_eq!(enable_agent_inspection(text, "export {};\n").unwrap(), text);
+    }
+
+    /// A Worker with no durable-object bindings yet gets the first.
+    #[test]
+    fn a_worker_with_no_bindings_gets_the_first() {
+        let out = enable_agent_inspection("name = \"shop\"\n", ENTRY).unwrap();
+        assert!(out.contains("[[durable_objects.bindings]]"), "{out}");
+    }
 }
 
 #[cfg(test)]

@@ -1065,6 +1065,10 @@ pub struct EmitProjectCtx {
     /// `__traceStep`, and the Worker's `fetch` in `__traceFetch`. Never set by a
     /// deploy build, whose output is byte-identical.
     pub trace: Option<TraceLoc>,
+    /// #3581: emit the dev-only agent inspection (the instance recording in each
+    /// agent factory and the `/_bynk/inspect` branch of each agent). `false` for
+    /// every build but `bynk dev`, so a deploy build is byte-identical.
+    pub inspect_agents: bool,
     /// v0.119 (testing track slice 7, ADR 0155): agent names a `for all run:
     /// History[Agent]` property in this project drives. Only these agents gain the
     /// exported `__bynkDriveHistory_<Agent>` test-support driver — every other
