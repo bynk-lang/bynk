@@ -1,0 +1,8 @@
+# Bynk project manifest — marks the project root for `bynk` and the LSP.
+[project]
+name = "storefront"
+version = "0.1.0"
+
+# `bynk build` and `bynk client` write the typed front-end client here.
+[build.client]
+out = "web/src/api.ts"

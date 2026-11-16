@@ -435,6 +435,8 @@ mod system {
     mod snapshot_behaviour;
     #[path = "store_behaviour.rs"]
     mod store_behaviour;
+    #[path = "storefront_example.rs"]
+    mod storefront_example;
     #[path = "stream_behaviour.rs"]
     mod stream_behaviour;
     #[path = "stream_request_body_workerd.rs"]
