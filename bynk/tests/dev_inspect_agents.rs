@@ -285,10 +285,19 @@ fn wait_answers(port: u16, log: &Path, child: &mut Group) {
     }
 }
 
-/// The same requests against one Worker: a sequence on one instance, then a
-/// concurrent batch on another, then the totals. Returns every body, the
+/// Concurrent batches on one instance: `ROUNDS` rounds of `BATCH` adds.
+const ROUNDS: usize = 4;
+const BATCH: usize = 8;
+
+/// The same requests against one Worker: a sequence on one instance, then
+/// concurrent batches on another, then the totals. Returns every body, the
 /// concurrent ones sorted (their order is the scheduler's).
-fn exercise(port: u16, during: impl Fn() + Sync) -> Vec<String> {
+///
+/// `reads` is called in a loop on its own thread for as long as the batches run,
+/// and starts at the same moment the first batch is released (a barrier), so it
+/// is in flight while handlers load and commit. It never runs for the Worker
+/// that is built without inspection.
+fn exercise(port: u16, reads: impl Fn() + Sync) -> Vec<String> {
     let mut bodies: Vec<String> = [
         "/add/u1/apple",
         "/add/u1/pear",
@@ -298,18 +307,27 @@ fn exercise(port: u16, during: impl Fn() + Sync) -> Vec<String> {
     .iter()
     .map(|p| body_of(&get(port, p)))
     .collect();
+    let done = std::sync::atomic::AtomicBool::new(false);
+    let start = std::sync::Barrier::new(2);
     let mut batch: Vec<String> = std::thread::scope(|scope| {
-        let reads = scope.spawn(|| {
-            // Reads landing between the batch's loads and commits.
-            for _ in 0..8 {
-                during();
+        let reader = scope.spawn(|| {
+            start.wait();
+            while !done.load(std::sync::atomic::Ordering::SeqCst) {
+                reads();
             }
         });
-        let adds: Vec<_> = (0..8)
-            .map(|i| scope.spawn(move || body_of(&get(port, &format!("/add/c/sku{i}")))))
-            .collect();
-        let out = adds.into_iter().map(|h| h.join().unwrap()).collect();
-        reads.join().unwrap();
+        start.wait();
+        let mut out = Vec::new();
+        for round in 0..ROUNDS {
+            let adds: Vec<_> = (0..BATCH)
+                .map(|i| {
+                    scope.spawn(move || body_of(&get(port, &format!("/add/c/sku{round}-{i}"))))
+                })
+                .collect();
+            out.extend(adds.into_iter().map(|h| h.join().unwrap()));
+        }
+        done.store(true, std::sync::atomic::Ordering::SeqCst);
+        reader.join().unwrap();
         out
     });
     batch.sort();
@@ -343,7 +361,7 @@ fn a_dev_session_behaves_as_a_deploy_build_does() {
     let without = exercise(off_port, || {});
     drop(off_server);
 
-    // The dev session, with inspection on and reads landing while the batch runs.
+    // The dev session, with inspection on and reads running throughout the batches.
     let on = project("on");
     let on_port = ports::free_port();
     let ready = on.join("ready.json");
@@ -370,18 +388,46 @@ fn a_dev_session_behaves_as_a_deploy_build_does() {
         assert!(Instant::now() < deadline, "no readiness file within 180s");
         std::thread::sleep(Duration::from_millis(250));
     }
+    // Each read must succeed and answer in the documented shape, or the claim that
+    // inspection changes nothing would go untested.
+    let answered = std::sync::atomic::AtomicUsize::new(0);
     let with = exercise(on_port, || {
-        let _ = bynk(&on, &["dev", "inspect", "agents"]);
-        let _ = bynk(&on, &["dev", "inspect", "agent", "Cart", "c"]);
+        let listed = bynk(&on, &["dev", "inspect", "agents"]);
+        let state = bynk(&on, &["dev", "inspect", "agent", "Cart", "c"]);
+        let shape = |out: &std::process::Output| {
+            out.status
+                .success()
+                .then(|| serde_json::from_slice::<serde_json::Value>(&out.stdout).ok())
+                .flatten()
+        };
+        // The first reads may land before the instance is listed; only a listing
+        // that names it must also read.
+        if let Some(l) = shape(&listed)
+            && l["agents"].as_array().is_some_and(|a| !a.is_empty())
+            && let Some(v) = shape(&state)
+            && v["readable"] == true
+            && v["cells"]["total"].is_number()
+        {
+            answered.fetch_add(1, std::sync::atomic::Ordering::SeqCst);
+        }
     });
     drop(dev);
+    assert!(
+        answered.load(std::sync::atomic::Ordering::SeqCst) >= 2,
+        "`bynk dev inspect` answered in the documented shape while the batches ran"
+    );
 
     assert_eq!(
         with, without,
         "every outcome is the same with inspection on and off"
     );
-    // And the batch was not lost to a read: eight adds of two each.
-    assert_eq!(with.last().map(String::as_str), Some("\"16\""), "{with:?}");
+    // And no add was lost to a read: every add of two, on one instance.
+    let total = (ROUNDS * BATCH * 2).to_string();
+    assert_eq!(
+        with.last().map(String::as_str),
+        Some(format!("\"{total}\"").as_str()),
+        "{with:?}"
+    );
     let _ = std::fs::remove_dir_all(off);
     let _ = std::fs::remove_dir_all(on);
 }
