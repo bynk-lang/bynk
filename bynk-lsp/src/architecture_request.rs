@@ -169,6 +169,11 @@ pub struct WireArchService {
     #[serde(rename = "handlerCount")]
     pub handler_count: usize,
     pub loc: WireLoc,
+    /// Model-diagrams slice 4: `call`, `http`, `cron`, `queue`, `websocket`,
+    /// `events` or `email`.
+    pub protocol: &'static str,
+    /// Model-diagrams slice 4: the actors its handlers admit, sorted.
+    pub actors: Vec<String>,
 }
 
 #[derive(Debug, Clone, serde::Serialize)]
@@ -297,6 +302,8 @@ pub fn to_wire(
                                 name: s.name.clone(),
                                 handler_count: s.handler_count,
                                 loc: wire_loc(project_root, snapshots, &s.loc)?,
+                                protocol: s.protocol,
+                                actors: s.actors.clone(),
                             })
                         })
                         .collect(),

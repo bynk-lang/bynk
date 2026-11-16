@@ -60,6 +60,9 @@ fn rate_limiter_is_one_node_with_a_bound_capability_and_no_dangling_edge() {
             .collect::<Vec<_>>(),
         vec!["api"]
     );
+    // Model-diagrams slice 4: how the service is reached, and who calls it.
+    assert_eq!(node.services[0].protocol, "http");
+    assert_eq!(node.services[0].actors, vec!["Visitor".to_string()]);
     assert_eq!(
         node.agents
             .iter()
@@ -88,6 +91,9 @@ fn rate_limiter_is_one_node_with_a_bound_capability_and_no_dangling_edge() {
     assert_eq!(wire_node.capabilities.len(), 1);
     assert!(!wire_node.capabilities[0].local);
     assert_eq!(wire_node.capabilities[0].from.as_deref(), Some("bynk"));
+    let json = serde_json::to_value(&wire_node.services[0]).expect("serialise");
+    assert_eq!(json["protocol"], "http");
+    assert_eq!(json["actors"], serde_json::json!(["Visitor"]));
 }
 
 const PROVIDER_SRC: &str = r#"context platformtime

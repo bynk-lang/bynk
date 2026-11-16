@@ -96,6 +96,45 @@ pub struct ArchService {
     pub name: String,
     pub handler_count: usize,
     pub loc: Located,
+    /// Model-diagrams slice 4: how the service is reached — `call` (no
+    /// `from`), `http`, `cron`, `queue`, `websocket`, `events` or `email` —
+    /// for the architecture map's ingress ports.
+    pub protocol: &'static str,
+    /// Model-diagrams slice 4: the actors its handlers admit (`by Visitor`,
+    /// `by who: A | B`), from the service-level `default_by` and each
+    /// handler's own `by`, deduplicated and sorted — the outside world drawn
+    /// around the system boundary.
+    pub actors: Vec<String>,
+}
+
+/// A service's protocol, as the architecture model names it.
+fn protocol_name(p: &ServiceProtocol) -> &'static str {
+    match p {
+        ServiceProtocol::Call => "call",
+        ServiceProtocol::Http => "http",
+        ServiceProtocol::Cron => "cron",
+        ServiceProtocol::Queue { .. } => "queue",
+        ServiceProtocol::WebSocket { .. } => "websocket",
+        ServiceProtocol::Events { .. } => "events",
+        ServiceProtocol::Email { .. } => "email",
+    }
+}
+
+/// The actors a service's handlers admit: each handler's own `by`, or the
+/// service's `default_by` where it has none; deduplicated and sorted.
+fn service_actors(s: &ServiceDecl) -> Vec<String> {
+    // A handler's own `by` replaces the service default rather than adding to
+    // it (as `sequence.rs` resolves it), so the default counts only for the
+    // handlers that inherit it.
+    let mut actors: Vec<String> = s
+        .handlers
+        .iter()
+        .filter_map(|h| h.by_clause.as_ref().or(s.default_by.as_ref()))
+        .flat_map(|by| by.actors.iter().map(|a| a.name.clone()))
+        .collect();
+    actors.sort();
+    actors.dedup();
+    actors
 }
 
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -303,6 +342,8 @@ pub fn architecture_model(
                             file: file.clone(),
                             span: s.name.span,
                         },
+                        protocol: protocol_name(&s.protocol),
+                        actors: service_actors(s),
                     }),
                     CommonsItem::Agent(a) => agents.push(ArchAgent {
                         name: a.name.name.clone(),
@@ -864,5 +905,67 @@ service api {
             consumer.capabilities.is_empty(),
             "a whole-unit consumes flattens nothing into the local namespace"
         );
+    }
+
+    // -- Model-diagrams slice 4: each service's protocol and the actors its
+    // -- handlers admit (the service default and each handler's own `by`).
+    const SERVICES_SRC: &str = r#"context shop
+
+actor Visitor {
+  identity = String
+}
+
+actor Admin {
+  identity = String
+}
+
+service internal {
+  on call(n: Int) -> Effect[Int] {
+    n
+  }
+}
+
+service web from http by Visitor {
+  on GET("/a") () -> Effect[HttpResult[Int]] {
+    Ok(1)
+  }
+
+  on GET("/admin") () -> Effect[HttpResult[Int]] by Admin {
+    Ok(2)
+  }
+}
+
+service staff from http by Visitor {
+  on GET("/ops") () -> Effect[HttpResult[Int]] by Admin {
+    Ok(3)
+  }
+}
+"#;
+
+    #[test]
+    fn services_carry_their_protocol_and_actors() {
+        let root = setup_project("arch-services", &[("shop.bynk", SERVICES_SRC)]);
+        let diag = crate::testkit::diagnose_project(&root);
+        let model = build_model(&diag);
+        let node = model
+            .nodes
+            .iter()
+            .find(|n| n.name == "shop")
+            .expect("the shop node");
+        let svc = |name: &str| {
+            node.services
+                .iter()
+                .find(|s| s.name == name)
+                .expect("service")
+        };
+        assert_eq!(svc("internal").protocol, "call");
+        assert!(svc("internal").actors.is_empty());
+        assert_eq!(svc("web").protocol, "http");
+        assert_eq!(
+            svc("web").actors,
+            vec!["Admin".to_string(), "Visitor".to_string()]
+        );
+        // Every handler overrides the default, so no handler admits it.
+        assert_eq!(svc("staff").actors, vec!["Admin".to_string()]);
     }
 }
