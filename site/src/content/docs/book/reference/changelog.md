@@ -28,6 +28,7 @@ per-commit history. While Bynk is pre-1.0, increments may change behaviour.
 
 | Version | Highlights |
 |---|---|
+| **v0.633.15** | A Worker entry can be emitted as one member of a `[deploy.workers]` group, marking its router's own "not mine" answers so a group's dispatcher can try the next member (#3562, G2b step 2c-4a); no output changes until groups are switched on |
 | **v0.633.14** | `bynk deploy`, `bynk revert` and `bynk dev` refuse a project with a `[deploy.workers]` group, until grouping is deployable (#3562) |
 | **v0.633.13** | Two members of one `[deploy.workers]` group that declare the same HTTP route or consume the same queue are refused (`bynk.deploy.route_conflict`, `bynk.deploy.queue_consumer_conflict`); two members may still share a cron expression (#3562, G2b step 2c-3) |
 | **v0.633.12** | A Worker's D1, R2, Analytics Engine and Vectorize resource names, and where its D1 migrations are staged, come from the `WorkerLayout` rather than the context name, with the identity layout unchanged (#3562, G2b step 2c-2) |
