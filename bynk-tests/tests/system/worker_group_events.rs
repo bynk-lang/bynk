@@ -202,6 +202,19 @@ for (const path of ["/orders/place/5", "/billing/place/7", "/orders/place/9"]) {
   await Promise.allSettled(pending.splice(0));
   results.push({ path, status: r.status, body: await r.text(), delivered: [...delivered] });
 }
+// The fan-out signs as the publisher an event names, so it must refuse one it
+// was not built for: logged, not delivered, never signed.
+const logs = [];
+console.error = (...args) => logs.push(args.map((a) => typeof a === "string" ? a : JSON.stringify(a)).join(" "));
+const envelope = { eventId: "e", publisherId: "p", emittedAt: 0, schemaVersion: 1 };
+for (const [label, publisher] of [["unknown", "shop.audit"], ["missing", undefined], ["proto", "__proto__"], ["other-type", "shop.orders"]]) {
+  delivered.length = 0;
+  logs.length = 0;
+  const type = label === "other-type" ? "Paid" : "Placed";
+  const events = [{ ...(publisher === undefined ? {} : { publisher }), type, payload: { n: 1 }, envelope }];
+  const r = await fanout.fetch(new Request("http://fanout/_bynk/fanout", { method: "POST", body: JSON.stringify({ events }) }));
+  results.push({ path: "refuse-" + label, status: r.status, delivered: [...delivered], logs: [...logs] });
+}
 console.log(JSON.stringify(results));
 "#;
 
@@ -263,5 +276,39 @@ fn an_event_reaches_the_subscriber_of_the_member_that_published_it() {
         assert_eq!(result["status"], 200, "{result}");
         assert_eq!(result["delivered"], delivery(to, from), "{path}: {result}");
     }
+    let _ = fs::remove_dir_all(&root);
+}
+
+/// An event naming a publisher the group's fan-out was not built for is logged and
+/// dropped, never signed; a known publisher's event of a type it does not publish
+/// has no route and is dropped quietly.
+#[test]
+fn the_fanout_signs_only_for_its_own_publishers() {
+    let root = stage("refuse", MANIFEST);
+    let Some(results) = run_group(&root) else {
+        let _ = fs::remove_dir_all(&root);
+        return;
+    };
+    for label in ["unknown", "missing", "proto"] {
+        let path = format!("refuse-{label}");
+        let result = results.iter().find(|r| r["path"] == path.as_str()).unwrap();
+        assert_eq!(result["status"], 204, "{result}");
+        assert_eq!(
+            result["delivered"],
+            serde_json::json!([]),
+            "{path}: {result}"
+        );
+        let logs = result["logs"].to_string();
+        assert!(
+            logs.contains("EventsFanout refused an event from an unknown publisher"),
+            "{path}: {result}"
+        );
+    }
+    let result = results
+        .iter()
+        .find(|r| r["path"] == "refuse-other-type")
+        .unwrap();
+    assert_eq!(result["delivered"], serde_json::json!([]), "{result}");
+    assert_eq!(result["logs"], serde_json::json!([]), "{result}");
     let _ = fs::remove_dir_all(&root);
 }

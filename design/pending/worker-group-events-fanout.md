@@ -13,3 +13,9 @@ event of one name. The group's `events_fanout.ts` routes by `<publisher>/<type>`
 signs each delivery as the publisher the event names, and the group's entry
 exports `__EventsFanout` once, so the one `wrangler.toml` declares the class and
 its binding once. A context on a Worker of its own is unchanged.
+
+The fan-out signs a delivery as the publisher its event names, so it signs only for
+a member it was built for: an event naming any other publisher, or none, is logged
+(`EventsFanout refused an event from an unknown publisher`) and dropped, never
+signed. No Durable Object migration is needed for the class change, as no group
+has ever been deployed.
