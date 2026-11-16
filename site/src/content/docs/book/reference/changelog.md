@@ -28,6 +28,7 @@ per-commit history. While Bynk is pre-1.0, increments may change behaviour.
 
 | Version | Highlights |
 |---|---|
+| **v0.634.6** | The design of Worker groups (`[deploy.workers]`) is recorded in an ADR, which amends ADR 0193 (D2) and ADR 0017 (#3562, G7) |
 | **v0.634.5** | A Worker group's entry and members carry no `bynk dev` inspection route in a deploy build, and in a dev build a member answers only its own agents' inspect requests (#3562, G6 groundwork) |
 | **v0.634.4** | The `bynk/architectureModel` request gives each handler the services and agents it `calls`, and each agent its `key` and `state` fields, for the component view |
 | **v0.634.3** | A fixed asset in one member of a `[deploy.workers]` group that sits at the path of a literal HTTP route in another member is refused (`bynk.asset.shadows_route`, extended across a group's members) (#3562, G2b) |

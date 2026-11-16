@@ -1,11 +1,6 @@
----
-level: patch
-changelog: The design of Worker groups (`[deploy.workers]`) is recorded in an ADR, which amends ADR 0193 (D2) and ADR 0017 (#3562, G7)
----
+# 0874 — Worker groups: several contexts in one Worker
 
-## ADR: worker-groups
-title: Worker groups: several contexts in one Worker
-summary: How a `[deploy.workers.<key>]` group is identified, laid out, dispatched, checked and (not yet) deployed, and what it amends in 0017 and 0193
+- **Status:** Accepted (v0.634.6)
 
 - **Provenance:** #3562 (#551), G1 to G6 groundwork: #3566, #3569, #3571, #3574,
   #3575, #3576, #3628, #3635, #3640, #3641, #3642, #3643, #3647, #3649, #3655,
