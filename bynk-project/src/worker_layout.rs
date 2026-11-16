@@ -112,6 +112,14 @@ impl WorkerLayout {
         self.place(context).script
     }
 
+    /// Every group, by its directory (the group's key), with its members in the
+    /// order the manifest lists them.
+    pub fn groups(&self) -> impl Iterator<Item = (&str, &[String])> {
+        self.order
+            .iter()
+            .map(|(dir, members)| (dir.as_str(), members.as_slice()))
+    }
+
     /// The members of the group whose directory is `dir`, in the order the
     /// manifest lists them; `None` for a context's own Worker.
     pub fn group_members(&self, dir: &str) -> Option<&[String]> {

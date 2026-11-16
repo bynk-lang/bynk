@@ -1,0 +1,9 @@
+context shop.payment
+
+asset terms = "assets/b.txt" at "/legal.txt"
+
+service payment_probe {
+  on call() -> Effect[Int] {
+    Effect.pure(2)
+  }
+}

@@ -647,3 +647,97 @@ fn a_bundle_build_says_it_ignores_the_groups() {
     assert!(!out.contains("workers_ignored_on_bundle"), "{out}");
     let _ = fs::remove_dir_all(&root);
 }
+
+fn asset_context(name: &str, assets: &[(&str, &str, &str)]) -> String {
+    let declarations: String = assets
+        .iter()
+        .map(|(asset, file, at)| format!("asset {asset} = \"{file}\" at \"{at}\"\n"))
+        .collect();
+    format!(
+        "context {name}\n\n{declarations}\nservice probe_{} {{\n\ton call() -> Effect[Int] {{\n\t\tEffect.pure(1)\n\t}}\n}}\n",
+        name.replace('.', "_")
+    )
+}
+
+/// A group has one assets directory: distinct fixed paths all ship, the same file
+/// at one path is one file, and two files at one path, or a path that would be a
+/// folder of another, are refused.
+#[test]
+fn members_may_share_an_assets_directory_but_not_a_fixed_path() {
+    let root =
+        std::env::temp_dir().join(format!("bynk-deploy-groups-assets-{}", std::process::id()));
+    write_project(&root, WORKERS_TARGET);
+    fs::create_dir_all(root.join("assets")).unwrap();
+    fs::write(root.join("assets/a.txt"), "A").unwrap();
+    fs::write(root.join("assets/b.txt"), "B").unwrap();
+    let write = |orders: &[(&str, &str, &str)], payment: &[(&str, &str, &str)]| {
+        fs::write(
+            root.join("src/shop/orders.bynk"),
+            asset_context("shop.orders", orders),
+        )
+        .unwrap();
+        fs::write(
+            root.join("src/shop/payment.bynk"),
+            asset_context("shop.payment", payment),
+        )
+        .unwrap();
+    };
+
+    // Different paths: both ship, in the one directory.
+    write(
+        &[("terms", "assets/a.txt", "/terms.txt")],
+        &[("privacy", "assets/b.txt", "/privacy.txt")],
+    );
+    let (ok, out) = build(&root);
+    assert!(ok, "distinct paths merge:\n{out}");
+
+    // The same file at the same path is one file.
+    write(
+        &[("terms", "assets/a.txt", "/legal.txt")],
+        &[("terms", "assets/a.txt", "/legal.txt")],
+    );
+    let (ok, out) = build(&root);
+    assert!(ok, "one file reached by both members is fine:\n{out}");
+
+    // Two files at one path: one error, at the later member.
+    write(
+        &[("terms", "assets/a.txt", "/legal.txt")],
+        &[("terms", "assets/b.txt", "/legal.txt")],
+    );
+    let (ok, out) = build(&root);
+    assert!(!ok, "{out}");
+    assert_eq!(
+        out.matches("bynk.deploy.asset_path_conflict").count(),
+        1,
+        "{out}"
+    );
+    assert!(out.contains("`shop.orders` and `shop.payment`"), "{out}");
+    assert!(out.contains("payment.bynk"), "at the later member:\n{out}");
+
+    // A path that would be a folder of the other's file.
+    write(
+        &[("terms", "assets/a.txt", "/legal")],
+        &[("notes", "assets/b.txt", "/legal/notes.txt")],
+    );
+    let (ok, out) = build(&root);
+    assert!(!ok, "{out}");
+    assert!(out.contains("bynk.deploy.asset_path_conflict"), "{out}");
+    assert!(out.contains("one would be a folder of the other"), "{out}");
+
+    // Ungrouped, each context's own Worker may use the same path.
+    fs::write(
+        root.join("bynk.toml"),
+        format!("{UNSTABLE_R2}[build]\ntarget = \"workers\"\n"),
+    )
+    .unwrap();
+    write(
+        &[("terms", "assets/a.txt", "/legal.txt")],
+        &[("terms", "assets/b.txt", "/legal.txt")],
+    );
+    let (ok, out) = build(&root);
+    assert!(
+        ok,
+        "separate Workers each serve their own `/legal.txt`:\n{out}"
+    );
+    let _ = fs::remove_dir_all(&root);
+}

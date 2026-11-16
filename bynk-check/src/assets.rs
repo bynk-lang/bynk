@@ -400,11 +400,15 @@ fn route_matches(pattern: &str, path: &str) -> bool {
 pub fn phase_asset_routes(
     parsed: &[ParsedFile],
     groups: &BTreeMap<String, Vec<usize>>,
-    kinds: &BTreeMap<String, bynk_project::UnitKind>,
+    (kinds, layout): (
+        &BTreeMap<String, bynk_project::UnitKind>,
+        &bynk_project::worker_layout::WorkerLayout,
+    ),
     unit_uses: &HashMap<String, Vec<String>>,
     errors: &mut ErrorSink,
 ) {
     use bynk_syntax::ast::HandlerKind;
+    phase_group_asset_paths(layout, parsed, groups, unit_uses, errors);
     // A commons used by two contexts would otherwise report its conflict
     // twice; report each (file, span, code) once.
     let mut reported: BTreeSet<(std::path::PathBuf, usize, &'static str)> = BTreeSet::new();
@@ -515,6 +519,93 @@ pub fn phase_asset_routes(
                             )
                         };
                         push(parsed[i].identity_path(), err, errors);
+                    }
+                }
+            }
+        }
+    }
+}
+
+/// `bynk.deploy.asset_path_conflict` (#3562): the members of a Worker group share
+/// one `[assets]` directory, so a fixed path (`at "/favicon.ico"`) two members
+/// serve must be one file. Assets merge: distinct paths all ship, the same file
+/// reached by two members (through a shared commons) is one file, and only a path
+/// two members claim from **different** files is refused, or one that would be a
+/// folder of the other. (Content-hashed paths need no check: one path is one
+/// content.) One error per clash, at the later member's declaration, naming both
+/// members. A clash inside one member is [`phase_asset_routes`]'s
+/// `bynk.asset.path_conflict`.
+fn phase_group_asset_paths(
+    layout: &bynk_project::worker_layout::WorkerLayout,
+    parsed: &[ParsedFile],
+    groups: &BTreeMap<String, Vec<usize>>,
+    unit_uses: &HashMap<String, Vec<String>>,
+    errors: &mut ErrorSink,
+) {
+    let mut reported: BTreeSet<(std::path::PathBuf, usize)> = BTreeSet::new();
+    for (key, members) in layout.groups() {
+        // Fixed paths the group serves: at -> (the member that claimed it first, source file).
+        let mut fixed: BTreeMap<String, (&str, String)> = BTreeMap::new();
+        for member in members {
+            for unit in closure(member, &[unit_uses]) {
+                for &i in groups.get(unit).into_iter().flatten() {
+                    for item in parsed[i].items() {
+                        let CommonsItem::Asset(a) = item else {
+                            continue;
+                        };
+                        let Some((at, span)) = &a.at else { continue };
+                        if path_errors(a).is_some() || at_path_reason(at).is_some() {
+                            continue;
+                        }
+                        let source = bynk_project::assets::normalise_asset_path(&a.path);
+                        let clash = fixed.iter().find_map(|(other, (first, other_source))| {
+                            if first == member {
+                                return None;
+                            }
+                            let nested = other.starts_with(&format!("{at}/"))
+                                || at.starts_with(&format!("{other}/"));
+                            let two_files = other == at && *other_source != source;
+                            (nested || two_files).then(|| {
+                                (
+                                    *first,
+                                    other.clone(),
+                                    other_source.clone(),
+                                    nested && !two_files,
+                                )
+                            })
+                        });
+                        match clash {
+                            Some((first, other, other_source, nested)) => {
+                                let file = parsed[i].identity_path();
+                                if reported.insert((file.clone(), span.start)) {
+                                    let what = if nested {
+                                        format!(
+                                            "files at `{other}` and `{at}`: one would be a folder of the other"
+                                        )
+                                    } else {
+                                        format!(
+                                            "two files at `{at}`: `{other_source}` and `{source}`"
+                                        )
+                                    };
+                                    errors.push_for(
+                                        Some(&file),
+                                        CompileError::new(
+                                            "bynk.deploy.asset_path_conflict",
+                                            *span,
+                                            format!(
+                                                "contexts `{first}` and `{member}` share Worker `{key}`, and it would serve {what}"
+                                            ),
+                                        )
+                                        .with_note(
+                                            "a group's members share one assets directory, so each fixed asset path names one file: give one of the assets another path, or put the contexts in different groups",
+                                        ),
+                                    );
+                                }
+                            }
+                            None => {
+                                fixed.entry(at.clone()).or_insert((member.as_str(), source));
+                            }
+                        }
                     }
                 }
             }

@@ -24,6 +24,7 @@ use std::collections::{BTreeMap, BTreeSet, HashMap, HashSet};
 use std::path::{Component, Path, PathBuf};
 use std::sync::Arc;
 
+use bynk_check::assets::phase_asset_routes;
 use bynk_check::check_pipeline::{self, prepare_unit_check_ctx};
 use bynk_check::checker;
 use bynk_check::checker::{ExprId, TyId, Types};
@@ -3085,7 +3086,7 @@ fn run_checks(
         &mut errors,
     );
     // #1883, slice 2: fixed asset paths against each Worker's routes.
-    bynk_check::assets::phase_asset_routes(&parsed, &groups, &kinds, &unit_uses, &mut errors);
+    phase_asset_routes(&parsed, &groups, (&kinds, &layout), &unit_uses, &mut errors);
     // A deployable Bundle build (no tests: `bynk compile` without
     // `--target workers`) ships no files, so each asset's `.url` would 404:
     // say so. `bynk test` also builds a Bundle, with tests, and stays quiet.
