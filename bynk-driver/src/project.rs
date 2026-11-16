@@ -533,12 +533,16 @@ type Discovered = Vec<Vec<PathBuf>>;
 /// modes, for `bynk deploy` (a Worker with no `MySql` instance gets no file).
 fn stage_binding_files(
     bindings: &[emitter::wrangler::WorkerBinding],
-    (layout, context): (&bynk_project::worker_layout::WorkerLayout, &str),
+    layout: &bynk_project::worker_layout::WorkerLayout,
+    context: &str,
     d1_migrations: &bynk_check::d1_migrations::D1Migrations,
     compiled: &mut Vec<StagedFile>,
 ) {
-    // The Worker's directory name: its resources are named from it.
-    let dashes = layout.dir(context);
+    // A D1 database is named from the context, as the migrations' check side
+    // (`d1_migrations`, `d1_sql`) and `wrangler.toml`'s `d1_block` name it, so
+    // all of them agree. Naming it from the Worker (the group's key) is a change
+    // to all of those producers together, made when groups are switched on.
+    let dashes = worker_dir_name(context);
     if let Some(manifest) = emitter::wrangler::emit_hyperdrive_manifest(bindings) {
         compiled.push(StagedFile {
             output_path: layout.worker_file(context, emitter::wrangler::HYPERDRIVE_MANIFEST),
@@ -4091,7 +4095,7 @@ fn build_output(
                     &emitter::ClassTombstones::of(table),
                     d1_migrations,
                 );
-                stage_binding_files(&bindings, (&layout, ctx_name), d1_migrations, &mut compiled);
+                stage_binding_files(&bindings, &layout, ctx_name, d1_migrations, &mut compiled);
                 // #1883, slice 1b: the static files this Worker serves — its
                 // own and those of every commons its `uses` closure reaches —
                 // under its assets directory, with `_headers` and the
