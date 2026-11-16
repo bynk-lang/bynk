@@ -89,13 +89,15 @@ and a second one runs the drift check:
 {
   "version": "2.0.0",
   "tasks": [
-    { "label": "bynk: generate client", "type": "shell", "command": "bynk client", "problemMatcher": [] },
-    { "label": "bynk: check client", "type": "shell", "command": "bynk client --check", "problemMatcher": [] }
+    { "label": "bynk: generate client", "type": "shell", "command": "bynk client",
+      "options": { "cwd": "${workspaceFolder}/api" }, "problemMatcher": [] },
+    { "label": "bynk: check client", "type": "shell", "command": "bynk client --check",
+      "options": { "cwd": "${workspaceFolder}/api" }, "problemMatcher": [] }
   ]
 }
 ```
 
-Run them from the Bynk project's folder. `bynk build` also writes the client when
+A task runs in the workspace folder by default, so set `options.cwd` to the Bynk project (`api` here is a placeholder): `bynk client` needs to find `bynk.toml`. `bynk build` also writes the client when
 `[build.client]` is set, so a task that runs a build keeps it current.
 
 ## Call a route
