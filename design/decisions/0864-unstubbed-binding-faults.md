@@ -1,11 +1,6 @@
----
-level: patch
-changelog: An unstubbed `Ai`, `AiSearch`, `Container`, `Images` or `MtlsCertificate` call in an integration test now faults the case instead of returning `Err`, so a test that passed on that `Err` may now fail until it stubs the operation
----
+# 0864 — An integration double's not-stubbed fault is marked and never mapped to an error value
 
-## ADR: unstubbed-binding-faults
-title: An integration double's not-stubbed fault is marked and never mapped to an error value
-summary: The marker the `bynk.cloudflare` bindings rethrow, shared with `Images`
+- **Status:** Accepted (v0.629.4)
 
 **Context.** The integration doubles for `Ai`, `AiSearch` and `Container` throw when a case has not stubbed the operation, but `WorkersAi`, `WorkersAiSearch` and `WorkersContainer` turn any thrown error into `Err(…)`, so the "not stubbed" fault became an ordinary value and a case could pass without exercising the capability (#3589).
 

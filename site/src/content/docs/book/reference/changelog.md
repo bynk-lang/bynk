@@ -28,6 +28,7 @@ per-commit history. While Bynk is pre-1.0, increments may change behaviour.
 
 | Version | Highlights |
 |---|---|
+| **v0.629.4** | An unstubbed `Ai`, `AiSearch`, `Container`, `Images` or `MtlsCertificate` call in an integration test now faults the case instead of returning `Err`, so a test that passed on that `Err` may now fail until it stubs the operation |
 | **v0.629.3** | The test runner can evaluate a snippet in a unit's scope and report its final value, the driver half of `bynk eval` |
 | **v0.629.2** | The MCP architecture tool lists events with their emitters and subscribers, and each context's capability uses, expanding one on request |
 | **v0.629.1** | `bynk dev --trace-events` writes one `request` event per request served, with the steps it took and their `.bynk` spans |
