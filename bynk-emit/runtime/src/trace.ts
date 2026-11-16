@@ -32,13 +32,25 @@ export interface TraceStep {
   span: TraceSpan | null;
   ms: number;
   outcome: "ok" | "fault" | "pending";
+  /** A cross-context call: the id its callee's own request record will carry. */
+  request?: string;
 }
 
 interface TraceRecord {
+  id: string;
+  /** The caller's request id, when an internal call carried one. */
+  parent: string | null;
+  /** The step begun most recently, which `traceBinding` reads its child id from. */
+  last: TraceStep | undefined;
   steps: TraceStep[];
   truncated: boolean;
   fault: string | null;
 }
+
+/** The request id a caller gives its callee, so the callee's record carries it. */
+export const TRACE_REQUEST_HEADER = "x-bynk-trace-request";
+/** The caller's own request id, which the callee's record reports as its `parent`. */
+export const TRACE_PARENT_HEADER = "x-bynk-trace-parent";
 
 /** The prefix `bynk dev` recognises on a Worker's stdout (`pump_output`). */
 export const TRACE_PREFIX = "__bynk_trace:";
@@ -98,9 +110,12 @@ export function traceStep(
   const step: TraceStep = { kind, target, span, ms: 0, outcome: "pending" };
   if (record.steps.length >= TRACE_STEP_LIMIT) {
     record.truncated = true;
+    record.last = undefined;
     return (result) => result;
   }
+  if (kind === "call") step.request = globalThis.crypto.randomUUID();
   record.steps.push(step);
+  record.last = step;
   const settle = (outcome: "ok" | "fault"): void => {
     step.ms = now() - started;
     step.outcome = outcome;
@@ -124,6 +139,28 @@ export function traceStep(
   };
 }
 
+/**
+ * A Service Binding whose requests carry this request's id and the id its call
+ * step gave the callee, so the callee's record names its parent. The emitter
+ * wraps the binding it hands `callService` in a traced build, so `boundary.ts` is
+ * untouched; the signature `callService` adds does not cover these headers. Outside
+ * a traced request the binding is used as it is.
+ */
+export function traceBinding<B extends { fetch(request: Request): Promise<Response> }>(binding: B): B {
+  const record = scope === null || scope === undefined ? undefined : scope.getStore();
+  if (record === undefined) return binding;
+  const child = record.last?.kind === "call" ? record.last.request : undefined;
+  const parent = record.id;
+  return {
+    fetch(request: Request): Promise<Response> {
+      const headers = new globalThis.Headers(request.headers);
+      headers.set(TRACE_PARENT_HEADER, parent);
+      if (child !== undefined) headers.set(TRACE_REQUEST_HEADER, child);
+      return binding.fetch(new globalThis.Request(request, { headers }));
+    },
+  } as B;
+}
+
 /** Record the fault the generated `fetch` caught, so the request's line carries it. */
 export function traceFault(error: unknown): void {
   const record = scope === null || scope === undefined ? undefined : scope.getStore();
@@ -142,15 +179,26 @@ export async function traceFetch<E, C>(
   ctx: C,
 ): Promise<Response> {
   const als = requestScope();
-  const record: TraceRecord = { steps: [], truncated: false, fault: null };
-  const started = now();
   const url = new globalThis.URL(request.url);
+  // The ids ride only on an internal call between Workers, so a request from
+  // outside cannot choose its own id or claim a parent.
+  const internal = url.pathname.startsWith("/_bynk/call/");
+  const record: TraceRecord = {
+    id: (internal ? request.headers.get(TRACE_REQUEST_HEADER) : null) ?? globalThis.crypto.randomUUID(),
+    parent: internal ? request.headers.get(TRACE_PARENT_HEADER) : null,
+    last: undefined,
+    steps: [],
+    truncated: false,
+    fault: null,
+  };
+  const started = now();
   const flush = (status: number): void => {
     globalThis.console.log(
       TRACE_PREFIX +
         JSON.stringify({
           context,
-          id: globalThis.crypto.randomUUID(),
+          id: record.id,
+          parent: record.parent,
           route: `${request.method} ${url.pathname}`,
           status,
           duration_ms: now() - started,

@@ -209,10 +209,12 @@ bynk dev --trace-events
 ```
 
 ```json
-{"event":"request","context":"shop-orders","id":"5d5e…","route":"POST /orders","status":201,"duration_ms":12.4,"steps":[{"kind":"call","target":"shop.payment.authorise","span":{"file":"src/shop/orders.bynk","line":23,"col":14},"ms":3.1,"outcome":"ok"}],"truncated":false,"fault":null}
+{"event":"request","context":"shop-orders","id":"5d5e…","parent":null,"route":"POST /orders","status":201,"duration_ms":12.4,"steps":[{"kind":"call","target":"shop.payment.authorise","span":{"file":"src/shop/orders.bynk","line":23,"col":14},"ms":3.1,"outcome":"ok","request":"9a41…"}],"truncated":false,"fault":null}
 ```
 
-It implies `--format json`, so stdout carries events only. The steps hold no
+A call to another context is one step, and the callee's own request is its own
+event with the caller's id as its `parent`, so you can follow a request across
+the Workers. It implies `--format json`, so stdout carries events only. The steps hold no
 argument values, so nothing you passed to a call reaches the output. Traces are
 for `bynk dev` only: a deployed Worker records nothing. See [Request
 traces](/docs/bynk-cli/#request-traces) for every field.

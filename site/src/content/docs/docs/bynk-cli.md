@@ -345,13 +345,14 @@ event for each request a worker serves, so an editor can show what a request
 did. Draw it over the handler's sequence diagram with the `span` of each step.
 
 ```json
-{"event":"request","context":"shop-orders","id":"5d5e…","route":"POST /orders","status":201,"duration_ms":12.4,"steps":[{"kind":"call","target":"shop.payment.authorise","span":{"file":"src/shop/orders.bynk","line":23,"col":14},"ms":3.1,"outcome":"ok"},{"kind":"agent","target":"Ledger.tally","span":{"file":"src/shop/orders.bynk","line":27,"col":22},"ms":1.2,"outcome":"ok"}],"truncated":false,"fault":null}
+{"event":"request","context":"shop-orders","id":"5d5e…","parent":null,"route":"POST /orders","status":201,"duration_ms":12.4,"steps":[{"kind":"call","target":"shop.payment.authorise","span":{"file":"src/shop/orders.bynk","line":23,"col":14},"ms":3.1,"outcome":"ok","request":"9a41…"},{"kind":"agent","target":"Ledger.tally","span":{"file":"src/shop/orders.bynk","line":27,"col":22},"ms":1.2,"outcome":"ok"}],"truncated":false,"fault":null}
 ```
 
 | Field | Meaning |
 |---|---|
 | `context` | The worker directory that served the request, as in `serving`. |
 | `id` | This request's id. |
+| `parent` | `null` for a request from outside. For a cross-context call from another worker, the `id` of the calling request: the caller's `call` step carries this request's `id` as its `request`, so a client can join the two events into one call tree. |
 | `route` | `<METHOD> <path>`, the path as requested. |
 | `status` | The response status. A fault answers `500`. |
 | `duration_ms` | From the request arriving to the response being ready. |
@@ -368,6 +369,8 @@ A step is `{ "kind", "target", "span", "ms", "outcome" }`:
 - `span` is the `.bynk` call site, `{ "file", "line", "col" }` (project-relative
   path, 1-based line and column), or `null`.
 - `ms` is how long the call took.
+- `request` (on a `call` step only) is the `id` of the callee's own `request`
+  event.
 - `outcome` is `ok`, `fault` (it threw or was rejected), or `pending` (it had not
   settled when the response was ready).
 
@@ -375,7 +378,10 @@ A step carries **no argument values**: only kinds, targets, spans, timings and
 outcomes. The record closes when the response is ready, so work that continues
 afterwards (`waitUntil`, a streamed body) is not in it. A call to another
 context is one step here; the callee's own request is a separate `request`
-event, from its own worker.
+event, from its own worker, whose `parent` is the caller's `id`. Run every
+context under `bynk dev --trace-events` to see both sides: a callee served
+without it prints no event, and the caller's step still names the `request` it
+sent.
 
 `bynk dev` takes a worker's output line as a trace when it carries the
 `__bynk_trace:` prefix followed by valid trace JSON, so a line of your own that

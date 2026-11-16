@@ -34,7 +34,7 @@ The track adds one event, `request`, per request a dev Worker serves: its contex
 | 1a | Emitter and runtime: the `trace.ts` module, the dev-only build option, the wrapped sites, the fetch wrapper, the `__bynk_trace:` line. A golden pins deploy output. | tracked on #3580 |
 | 1b | Driver and CLI: `--trace-events`, `DevEvent::Request`, `pump_output` parsing, the build option set by `bynk dev`. | tracked on #3580 |
 | 1c | Docs: the JSON reference, the run-locally guide, ADR 0505's event list. A behavioural fixture runs the same suite with recording on and off and compares the outcomes. It runs under real `wrangler dev`/workerd in CI, not only under Node, so `AsyncLocalStorage` is proven there before the track is called done. If it misbehaves under workerd, the work stops and is reported rather than worked around. | tracked on #3580 |
-| 2 | Cross-Worker stitching: a request id on each record, carried to the callee on an internal header, so each callee's `request` event names its parent. | tracked on #3580 |
+| 2 | Cross-Worker stitching: a request id on each record, carried to the callee on an internal header, so each callee's `request` event names its parent. The caller wraps the Service Binding it hands `callService` (`__traceBinding`), so `boundary.ts` stays untouched; the call step's `request` is the id the callee's record takes. | tracked on #3580 |
 
 Slice 1 covers the handler, capability ops, agent calls and the reply or fault, within one Worker. Slice state lives on the spine, not here.
 

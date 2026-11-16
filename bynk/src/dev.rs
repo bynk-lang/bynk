@@ -146,6 +146,10 @@ pub enum DevEvent {
         context: String,
         /// This request's id.
         id: String,
+        /// The id of the request that made this one, when it is a cross-context
+        /// call from another worker (that request's `call` step carries this one's
+        /// id as its `request`); `null` for a request from outside.
+        parent: Option<String>,
         /// `<METHOD> <path>`.
         route: String,
         status: u16,
@@ -1182,6 +1186,7 @@ fn request_event(worker: &str, rewriter: &crate::logs::Rewriter, line: &str) -> 
     Some(DevEvent::Request {
         context: worker.to_string(),
         id: t.id,
+        parent: t.parent,
         route: t.route,
         status: t.status,
         duration_ms: t.duration_ms,
@@ -2840,6 +2845,7 @@ mod tests {
         let event = DevEvent::Request {
             context: "shop-orders".into(),
             id: "r1".into(),
+            parent: Some("p0".into()),
             route: "POST /orders".into(),
             status: 201,
             duration_ms: 12.5,
@@ -2853,13 +2859,14 @@ mod tests {
                 }),
                 ms: 3.5,
                 outcome: "ok".into(),
+                request: Some("c1".into()),
             }],
             truncated: false,
             fault: None,
         };
         assert_eq!(
             event_line(&event),
-            r#"{"event":"request","context":"shop-orders","id":"r1","route":"POST /orders","status":201,"duration_ms":12.5,"steps":[{"kind":"call","target":"shop.payment.authorise","span":{"file":"src/shop/orders.bynk","line":23,"col":14},"ms":3.5,"outcome":"ok"}],"truncated":false,"fault":null}"#
+            r#"{"event":"request","context":"shop-orders","id":"r1","parent":"p0","route":"POST /orders","status":201,"duration_ms":12.5,"steps":[{"kind":"call","target":"shop.payment.authorise","span":{"file":"src/shop/orders.bynk","line":23,"col":14},"ms":3.5,"outcome":"ok","request":"c1"}],"truncated":false,"fault":null}"#
         );
     }
 
@@ -2884,7 +2891,7 @@ mod tests {
         );
         // Built with `serde_json`, so a Windows path's backslashes are escaped.
         let json = serde_json::json!({
-            "id": "r1", "route": "GET /", "status": 500, "duration_ms": 2.0,
+            "id": "r1", "parent": "p0", "route": "GET /", "status": 500, "duration_ms": 2.0,
             "steps": [], "truncated": false, "fault": stack,
         });
         let line = format!("\u{1b}[34m[wrangler:inf]\u{1b}[0m __bynk_trace:{json}");
@@ -2893,6 +2900,7 @@ mod tests {
         let DevEvent::Request {
             context,
             id,
+            parent,
             status,
             fault,
             ..
@@ -2901,6 +2909,7 @@ mod tests {
             panic!("not a request event");
         };
         assert_eq!((context.as_str(), id.as_str(), status), ("shop", "r1", 500));
+        assert_eq!(parent.as_deref(), Some("p0"));
         let fault = fault.expect("the fault is carried");
         assert_eq!(fault.message, "Error: boom");
         assert_eq!(fault.frames, ["at http_GET (/p/src/shop.bynk:10:1)"]);
