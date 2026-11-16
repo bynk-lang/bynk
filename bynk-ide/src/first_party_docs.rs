@@ -104,7 +104,7 @@ pub const FIRST_PARTY_DOCS: &[Entry] = &[
         "bynk.cloudflare",
         "Analytics",
         "writing-events-analytics",
-        &["write"],
+        &["write", "dataset"],
     ),
     (
         "bynk.cloudflare",
@@ -181,6 +181,12 @@ pub const FIRST_PARTY_DOCS: &[Entry] = &[
         "MtlsCertificate",
         "mutual-tls-mtlscertificate",
         &["send"],
+    ),
+    (
+        "bynk.cloudflare",
+        "AnalyticsSql",
+        "reading-events-analyticssql",
+        &["query"],
     ),
 ];
 

@@ -29,7 +29,7 @@
 
 import { test } from "node:test";
 import assert from "node:assert/strict";
-import { WorkersAi, WorkersAiSearch, WorkersImages, WorkersAnalytics, WorkersContainer, WorkersD1, WorkersEdgeCache, WorkersEmail, WorkersKv, WorkersMtls, WorkersMySql, WorkersPostgres, WorkersQueue, WorkersR2, WorkersRateLimit, WorkersService, WorkersStoredSecret, WorkersVectorize, WorkersVersion } from "./bynk/cloudflare.binding.js";
+import { WorkersAi, WorkersAiSearch, WorkersImages, WorkersAnalytics, WorkersAnalyticsSql, WorkersContainer, WorkersD1, WorkersEdgeCache, WorkersEmail, WorkersKv, WorkersMtls, WorkersMySql, WorkersPostgres, WorkersQueue, WorkersR2, WorkersRateLimit, WorkersService, WorkersStoredSecret, WorkersVectorize, WorkersVersion } from "./bynk/cloudflare.binding.js";
 import { Method, FetchError } from "./bynk.js";
 import { __makeIntegrationAi, __makeIntegrationAiSearch, __makeIntegrationContainer, __makeIntegrationHyperdrive, __makeIntegrationImages, __makeIntegrationMtls, __makeIntegrationSecretsStoreSecret } from "./__bynk_runtime/storage.js";
 import { Some, None } from "./__bynk_runtime/result.js";
@@ -371,6 +371,109 @@ t("WorkersMtls.send: a missing binding names it", async () => {
     new WorkersMtls({}, "MTLS_BACKEND").send(mtlsRequest()),
     /requires an mTLS certificate binding \(env\.MTLS_BACKEND\)/,
   );
+});
+
+// #3513 B: `WorkersAnalyticsSql`, against a fake of the documented binding: `query({query, params})`
+// resolves `{data, rows, statistics: {elapsed_ms, rows_read, bytes_read}}`, and a failure throws an
+// error carrying a boolean `retryable`.
+function fakeAnalyticsSql(answer) {
+  const calls = [];
+  return {
+    calls,
+    async query(arg) {
+      calls.push(arg);
+      return answer ? answer(arg) : { data: [{ n: 3 }], rows: 1, statistics: { elapsed_ms: 4, rows_read: 10, bytes_read: 80 } };
+    },
+  };
+}
+const sqlEnv = (b, extra = {}) => ({ CF_ANALYTICS_SQL: b, ...extra });
+const sqlOf = (b, extra) => new WorkersAnalyticsSql(sqlEnv(b, extra));
+const failing = (message, retryable) => () => {
+  throw Object.assign(new Error(message), { retryable });
+};
+
+t("WorkersAnalyticsSql.query: sends the query and positional params, and reads the documented reply", async () => {
+  const b = fakeAnalyticsSql();
+  const res = await sqlOf(b).query("SELECT count() AS n FROM events.analyticsEngine.signups WHERE blob1 = $1", [
+    { tag: "Text", value: "uk" },
+  ]);
+  assert.deepEqual(b.calls, [
+    { query: "SELECT count() AS n FROM events.analyticsEngine.signups WHERE blob1 = $1", params: ["uk"] },
+  ]);
+  assert.equal(res.tag, "Ok");
+  assert.deepEqual(JSON.parse(res.value.data), [{ n: 3 }]);
+  assert.equal(res.value.rows, 1);
+  assert.deepEqual(res.value.statistics, { elapsedMs: 4, rowsRead: 10, bytesRead: 80 });
+});
+
+t("WorkersAnalyticsSql.query: maps Null, Integer, Real, Text and Boolean parameters", async () => {
+  const b = fakeAnalyticsSql();
+  await sqlOf(b).query("SELECT 1", [
+    { tag: "Null" },
+    { tag: "Integer", value: 7 },
+    { tag: "Real", value: 1.5 },
+    { tag: "Text", value: "x" },
+    { tag: "Boolean", value: true },
+  ]);
+  assert.deepEqual(b.calls[0].params, [null, 7, 1.5, "x", true]);
+});
+
+t("WorkersAnalyticsSql.query: a Blob parameter is SqlRejected, naming it, and nothing is sent", async () => {
+  const b = fakeAnalyticsSql();
+  const res = await sqlOf(b).query("SELECT $1", [{ tag: "Text", value: "a" }, { tag: "Blob", value: new Uint8Array([1]) }]);
+  assert.equal(res.tag, "Err");
+  assert.equal(res.error.tag, "SqlRejected");
+  assert.match(res.error.message, /parameter \$2 is a Blob/);
+  assert.equal(b.calls.length, 0);
+});
+
+t("WorkersAnalyticsSql.query: an unsafe Integer or non-finite Real is SqlRejected", async () => {
+  const b = fakeAnalyticsSql();
+  const big = await sqlOf(b).query("SELECT $1", [{ tag: "Integer", value: 2 ** 60 }]);
+  assert.equal(big.error.tag, "SqlRejected");
+  const nan = await sqlOf(b).query("SELECT $1", [{ tag: "Real", value: Number.NaN }]);
+  assert.equal(nan.error.tag, "SqlRejected");
+  assert.equal(b.calls.length, 0);
+});
+
+t("WorkersAnalyticsSql.query: a retryable failure is SqlRetryable, any other is SqlRejected", async () => {
+  const retry = await sqlOf(fakeAnalyticsSql(failing("busy", true))).query("SELECT 1", []);
+  assert.deepEqual(retry, { tag: "Err", error: { tag: "SqlRetryable", message: "busy" } });
+  const bad = await sqlOf(fakeAnalyticsSql(failing("syntax error", false))).query("SELECT", []);
+  assert.deepEqual(bad, { tag: "Err", error: { tag: "SqlRejected", message: "syntax error" } });
+  const bare = await sqlOf(fakeAnalyticsSql(failing("no flag", undefined))).query("SELECT", []);
+  assert.equal(bare.error.tag, "SqlRejected");
+});
+
+t("WorkersAnalyticsSql.query: a reply of another shape is SqlRejected", async () => {
+  const res = await sqlOf(fakeAnalyticsSql(() => ({ data: "nope" }))).query("SELECT 1", []);
+  assert.equal(res.tag, "Err");
+  assert.equal(res.error.tag, "SqlRejected");
+  assert.match(res.error.message, /not the shape Analytics SQL documents/);
+});
+
+t("WorkersAnalyticsSql.query: a dev notice names no price, and is silenced by the acknowledgement", async () => {
+  const warned = [];
+  const warn = console.warn;
+  console.warn = (m) => warned.push(m);
+  try {
+    const dev = sqlEnv(fakeAnalyticsSql(), { BYNK_DEV: "1" });
+    await new WorkersAnalyticsSql(dev).query("SELECT 1", []);
+    await new WorkersAnalyticsSql(dev).query("SELECT 1", []);
+    assert.equal(warned.length, 1, "once");
+    assert.match(warned[0], /Analytics SQL has no local implementation/);
+    assert.match(warned[0], /analytics-sql = "allow" under \[dev\]/);
+    assert.doesNotMatch(warned[0], /charge|price|pricing|\$/i);
+    warned.length = 0;
+    await new WorkersAnalyticsSql({ ...dev, BYNK_DEV_ACK_ANALYTICS_SQL: "allow" }).query("SELECT 1", []);
+    assert.equal(warned.length, 0, "silenced");
+  } finally {
+    console.warn = warn;
+  }
+});
+
+t("WorkersAnalyticsSql.query: a missing binding names it", async () => {
+  await assert.rejects(new WorkersAnalyticsSql({}).query("SELECT 1", []), /requires an Analytics SQL binding \(env\.CF_ANALYTICS_SQL\)/);
 });
 
 // P5 (#2323): `WorkersR2`, against a fake that follows Cloudflare's documented
@@ -1119,6 +1222,22 @@ t("WorkersAnalytics.write: a missing binding names it", async () => {
   await assert.rejects(
     new WorkersAnalytics({}, "ANALYTICS_SIGNUPS").write({ index: None, blobs: [], doubles: [] }),
     /requires an Analytics Engine binding \(env\.ANALYTICS_SIGNUPS\)/,
+  );
+});
+
+// #3513 B: `dataset()` reads the name the deploy qualified from the `[vars]` entry, never rebuilding it.
+t("WorkersAnalytics.dataset: names the table from the binding's var, so staging reads its own", async () => {
+  const d = fakeDataset();
+  const named = (name) => new WorkersAnalytics({ ANALYTICS_SIGNUPS: d, BYNK_DATASET_ANALYTICS_SIGNUPS: name }, "ANALYTICS_SIGNUPS");
+  assert.equal(await named("shop_cart_signups").dataset(), "events.analyticsEngine.shop_cart_signups");
+  assert.equal(await named("shop_cart_signups_staging").dataset(), "events.analyticsEngine.shop_cart_signups_staging");
+});
+
+t("WorkersAnalytics.dataset: a missing or empty var names it", async () => {
+  await assert.rejects(new WorkersAnalytics({}, "ANALYTICS_SIGNUPS").dataset(), /env\.BYNK_DATASET_ANALYTICS_SIGNUPS/);
+  await assert.rejects(
+    new WorkersAnalytics({ BYNK_DATASET_ANALYTICS_SIGNUPS: "" }, "ANALYTICS_SIGNUPS").dataset(),
+    /env\.BYNK_DATASET_ANALYTICS_SIGNUPS/,
   );
 });
 

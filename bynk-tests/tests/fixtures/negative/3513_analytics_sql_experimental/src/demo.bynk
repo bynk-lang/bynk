@@ -1,0 +1,15 @@
+context demo
+
+// #3513 B: `AnalyticsSql` is experimental, so using it needs `[unstable] allow`.
+
+consumes bynk.cloudflare { AnalyticsSql }
+
+service s {
+	on call() -> Effect[Int] given AnalyticsSql {
+		let r <- AnalyticsSql.query("SELECT 1", [])
+		match r {
+			Ok(res) => Effect.pure(res.rows),
+			Err(_) => Effect.pure(0),
+		}
+	}
+}

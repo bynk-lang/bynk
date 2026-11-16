@@ -1316,6 +1316,9 @@ pub(super) const ANALYTICS_DOUBLE_BODY: &str = r#"  const bytes = (text: string)
       if (blobBytes > 16384) fault(`a data point's blobs total at most 16 KB, not ${blobBytes} bytes`);
       if (!point.doubles.every(globalThis.Number.isFinite)) fault("a double is finite (not NaN or an infinity)");
     },
+    async dataset() {
+      return "events.analyticsEngine.__DATASET__";
+    },
   };
 "#;
 
@@ -1414,7 +1417,11 @@ pub(super) fn platform_double(
         // P3b (#2582): there is no dataset in a test, so each instance accepts
         // every write within the platform's limits; observation (the generic
         // call wrapper, as for every double) sees what was written.
-        ("bynk.cloudflare", "Analytics") => ANALYTICS_DOUBLE_BODY.to_string(),
+        // #3513 B: `dataset()` names a stand-in (`test_<name>`), since no deploy qualifies one.
+        ("bynk.cloudflare", "Analytics") => ANALYTICS_DOUBLE_BODY.replace(
+            "__DATASET__",
+            &format!("test_{}", name.to_ascii_lowercase()),
+        ),
         // P4a (#2602): each `D1` instance is the real `WorkersD1` over its own
         // in-memory SQLite database (`node:sqlite`), so a test runs its
         // statements as D1 would. P4b (#2608): the database's migrations run
@@ -1519,6 +1526,9 @@ pub(super) fn platform_double(
                 op("transformStream", "_, _, _")
             )
         }
+        // #3513 B: a test never reads the account's datasets, so `query` faults until it is
+        // stubbed. A fabricated result set would pass for the wrong reason.
+        ("bynk.cloudflare", "AnalyticsSql") => "  return {\n    async query() {\n      throw new globalThis.Error(\"bynk: `AnalyticsSql.query` is not stubbed, and a test never reads Analytics Engine — add `stub AnalyticsSql.query(_, _) returns …`\");\n    },\n  };\n".to_string(),
         // #3479: the real `WorkersVectorize` over an exact in-memory index built
         // from the instance's declaration, so a retrieval flow (store, filter,
         // rank) runs in a test. Ranking is exact and a write is visible at once,

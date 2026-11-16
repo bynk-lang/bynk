@@ -488,6 +488,7 @@ Consuming it **locks the deployment unit to Cloudflare** (it cannot then target
 | **`Version`** *(experimental)* | `current() -> Effect[WorkerVersion]`. One per Worker, used bare; see [The running version](#the-running-version-version). |
 | **`Ai`** *(experimental)* | `run(model: String, input: String) -> Effect[Result[String, AiError]]` · `generate(model, request: GenerateRequest) -> Effect[Result[Generation, AiError]]` · `embed(model, texts: List[String]) -> Effect[Result[List[List[Float]], AiError]]` · `runStream(model, input: String) -> Effect[Result[Stream[String], AiError]]`. One per Worker, used bare; see [Workers AI](#workers-ai-ai). |
 | **`Images`** *(experimental)* | `info(image: Bytes) -> Effect[Result[ImageInfo, ImagesError]]` · `transform(image: Bytes, options: TransformOptions, output: OutputOptions) -> Effect[Result[ImageResult, ImagesError]]` · `transformStream(image: Stream[Bytes], options, output) -> Effect[Result[ImageStream, ImagesError]]`. One per Worker, used bare; see [Images](#images-images). |
+| **`AnalyticsSql`** *(experimental)* | `query(sql: String, params: List[SqlValue]) -> Effect[Result[AnalyticsSqlResult, AnalyticsSqlError]]`. One per Worker, used bare; reads Analytics Engine datasets. See [Reading events](#reading-events-analyticssql). |
 | **`StoredSecret`** *(experimental)* | `get() -> Effect[String]`. Used only through a named instance that names its store and its secret; see [Account secrets](#account-secrets-storedsecret). |
 | **`Email`** *(experimental)* | `send(message: EmailMessage) -> Effect[Result[String, EmailError]]`. Used only through a named instance, which may restrict its senders and recipients; see [Outbound email](#outbound-email-email). |
 | **`Postgres`** *(experimental)* | `all(sql: String, params: List[PgValue]) -> Effect[Result[String, PgError]]` · `first(sql, params) -> Effect[Result[Option[String], PgError]]` · `run(sql, params) -> Effect[Result[PgRun, PgError]]` · `transaction(statements: List[PgStatement]) -> Effect[Result[List[PgRun], PgError]]`, and the compiler-lowered typed reads `select[T]` and `firstAs[T]`. Used only through a named instance; see [Postgres databases](#postgres-databases-postgres). |
@@ -802,9 +803,24 @@ on POST("/signup/:plan") (plan: String) -> Effect[HttpResult[String]] by Visitor
 
 A point over a limit faults the write; the platform's own cap of 250 writes per
 Worker invocation faults with the platform's error. The write is sent after the
-response, so it never delays one. Reading is the account's SQL API, outside
-Bynk. The platform keeps data for three months, readable with any account
+response, so it never delays one. Reading is [`AnalyticsSql`](#reading-events-analyticssql).
+The platform keeps data for three months, readable with any account
 analytics token, so keep secrets and personal data out of it.
+
+`dataset()` is the dataset's name as a table in a query: `events.analyticsEngine.shop_cart_signups`,
+and `events.analyticsEngine.shop_cart_signups_staging` under `--env staging`. A query built from
+it reads the environment it runs in without writing either name:
+
+```bynk,fragment
+let table <- Signups.dataset()
+let sql = "SELECT count() AS n FROM \(table) WHERE timestamp > NOW() - INTERVAL '1' DAY"
+```
+
+The name comes from one `[vars]` entry per dataset in the generated configuration,
+`BYNK_DATASET_ANALYTICS_SIGNUPS` for `Signups`, which `bynk deploy` qualifies for each environment
+as it does the binding's `dataset`. Names starting `BYNK_DATASET_` are reserved: a
+`[test.targets]` `vars` entry with one is refused. In tests `dataset()` answers a stand-in
+(`events.analyticsEngine.test_signups`), and `stub Signups.dataset() returns …` gives another.
 
 In tests each instance accepts every write within the limits, and faults on one
 over them, as the platform binding does. `stub Signups.write(_)` and
@@ -813,6 +829,72 @@ experimental: list `"bynk.cloudflare.Analytics"` under `[unstable] allow`.
 `bynk deploy` has nothing to create, since the platform makes a dataset on its
 first write; see
 [Deploy to Cloudflare](/book/guides/projects-build-and-deployment/deploy-to-cloudflare/#analytics-engine-datasets).
+
+### Reading events: `AnalyticsSql`
+
+`AnalyticsSql` reads Analytics Engine datasets through the account's
+[SQL API](https://developers.cloudflare.com/analytics/sql-api/workers-binding/). It is
+bound once per Worker and used bare, as `Ai` is: there are no named instances, and
+`capability X = AnalyticsSql` is refused (`bynk.capability.base_not_instantiable`).
+
+```bynk,fragment
+consumes bynk
+consumes bynk.cloudflare { Analytics, AnalyticsSql, AnalyticsSqlError }
+
+capability Signups = Analytics
+
+service report from http {
+	on GET("/signups/:country") (country: String) -> Effect[HttpResult[Int]] by Visitor given AnalyticsSql, Signups {
+		let table <- Signups.dataset()
+		let sql = "SELECT count() AS n FROM \(table) WHERE blob1 = $1 AND timestamp > NOW() - INTERVAL '1' DAY"
+		let res <- AnalyticsSql.query(sql, [Text(country)])
+		match res {
+			Ok(r) => Ok(r.rows),
+			Err(SqlRetryable(_)) => ServerError("try again shortly"),
+			Err(_) => ServerError("the query was refused"),
+		}
+	}
+}
+```
+
+The binding is `CF_ANALYTICS_SQL`, an `[analytics]` stanza that names no resource, so
+`bynk deploy` has nothing to create. A result is:
+
+```bynk,fragment
+type AnalyticsSqlStatistics = { elapsedMs: Int, rowsRead: Int, bytesRead: Int }
+type AnalyticsSqlResult     = { data: String, rows: Int, statistics: AnalyticsSqlStatistics }
+type AnalyticsSqlError      = | SqlRetryable(message: String) | SqlRejected(message: String)
+```
+
+- `data` is the result rows as JSON text, an array of objects keyed by column; decode it
+  with `Json.decode`. `rows` is how many there are.
+- `SqlRetryable` is a failure the platform marks as worth another try; `SqlRejected` is
+  every other failure, and a reply that is not the documented shape. `AnalyticsSqlError`
+  is an [extensible enum](#extensible-enums): a `match` over it needs an `Err(_)` arm.
+- Parameters are `SqlValue`s, as for `D1`, and bind positionally as `$1`, `$2`, and so
+  on. Analytics SQL takes `Null`, `Integer`, `Real`, `Text` and `Boolean`; a `Blob`,
+  an `Integer` outside the exactly-representable range or a non-finite `Real` is
+  `SqlRejected`, and nothing is sent.
+
+The rules of the SQL API apply as the platform states them, and the query is checked
+only by the platform:
+
+- A dataset is read as `events.analyticsEngine.<DATASET>`; `Analytics.dataset()` gives the
+  name for one of yours, for the environment the Worker runs in.
+- Bound the query's time range from below (a lower `timestamp` bound), so it reads a
+  window rather than the whole retention period.
+- Do not filter on `accountTag` or `zoneTag`, and do not add a `FORMAT` clause: the
+  binding scopes the query to your account and returns JSON itself.
+
+There is no local implementation, so under `bynk dev` a query runs on your Cloudflare
+account and reads your deployed datasets. The development copy of the Worker's
+configuration marks the binding `remote = true`, and `bynk dev` warns once, on the first
+query, unless `analytics-sql = "allow"` is under `[dev]` in `bynk.toml`.
+
+A test never reads Analytics Engine: `query` **faults** until
+`stub AnalyticsSql.query(_, _) returns …` gives it a reply, so a test never reaches
+the account. `AnalyticsSql` is experimental: list `"bynk.cloudflare.AnalyticsSql"`
+under `[unstable] allow`.
 
 ### The running version: `Version`
 

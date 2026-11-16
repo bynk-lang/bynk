@@ -503,6 +503,23 @@ pub fn emit_wrangler_toml(
         doc.push_block(TomlBlock::keyed_table("exports", old.to_string(), entries));
     }
 
+    // #3513 B: `Analytics.dataset()` reads the dataset's name, which only the deploy knows
+    // (it environment-qualifies it), from one `[vars]` entry per dataset binding. The name is
+    // the binding's own, `BYNK_DATASET_<BINDING>`, in the reserved `BYNK_` namespace.
+    let dataset_vars: Vec<TomlEntry> = bindings
+        .iter()
+        .filter(|b| matches!(b.source, BindingSource::AnalyticsDataset { .. }))
+        .map(|b| {
+            TomlEntry::kv_owned(
+                dataset_var_name(&b.name),
+                TomlValue::str(analytics_dataset_name(&worker_dir_name(context), &b.name)),
+            )
+        })
+        .collect();
+    if !dataset_vars.is_empty() {
+        doc.push_block(TomlBlock::table("vars", dataset_vars));
+    }
+
     // v0.10a: cron triggers. Cloudflare uses a single `[triggers]` table with a
     // `crons` array aggregating every `on cron` schedule in the context.
     // Already sorted+deduped by the caller (#1191).
@@ -891,6 +908,7 @@ pub(crate) fn binding_ts_type(source: &BindingSource) -> &'static str {
             "Version" => "__WorkerVersionMetadata",
             "Ai" => "__WorkerAiBinding",
             "Images" => "__WorkerImagesBinding",
+            "AnalyticsSql" => "__AnalyticsSqlBinding",
             other => unreachable!("singleton `{other}` has no `env` type"),
         },
         BindingSource::Agent { .. }
@@ -1205,6 +1223,12 @@ pub fn vectorize_index_name(worker: &str, binding: &str) -> String {
     let suffix = format!("-{:08x}", hash as u32);
     let head = &full[..budget - suffix.len()];
     format!("{}{suffix}", head.trim_end_matches('-'))
+}
+
+/// #3513 B: the `[vars]` entry that carries an `Analytics` binding's dataset name to the
+/// Worker (`ANALYTICS_SIGNUPS` gives `BYNK_DATASET_ANALYTICS_SIGNUPS`).
+pub fn dataset_var_name(binding: &str) -> String {
+    format!("BYNK_DATASET_{binding}")
 }
 
 /// P3b (#2582): the account-facing name of an `Analytics` instance's dataset,
@@ -2118,6 +2142,30 @@ pub fn enable_agent_inspection(text: &str, entry: &str) -> Result<String, String
         .ok_or("`exports` is not a table")?
         .insert(CLASS, toml_edit::Item::Table(class));
     Ok(doc.to_string())
+}
+
+/// #3513 B: the config `bynk dev` serves, where the `[analytics]` table (the Analytics SQL
+/// binding) also carries `remote = true`: there is no local implementation of it, so wrangler
+/// runs the query on Cloudflare. Only ever applied to the development copy. Unchanged text when
+/// there is no such table.
+pub fn enable_remote_analytics_sql(text: &str) -> Result<String, String> {
+    let mut doc: toml_edit::DocumentMut = text
+        .parse()
+        .map_err(|e| format!("invalid wrangler.toml: {e}"))?;
+    let mut changed = false;
+    if let Some(table) = doc
+        .get_mut("analytics")
+        .and_then(|i| i.as_table_like_mut())
+        .filter(|t| t.get("remote").and_then(|r| r.as_bool()) != Some(true))
+    {
+        table.insert("remote", toml_edit::value(true));
+        changed = true;
+    }
+    Ok(if changed {
+        doc.to_string()
+    } else {
+        text.to_string()
+    })
 }
 
 /// Each `[[kv_namespaces]]` entry's `(binding, id)`, in file order; an entry

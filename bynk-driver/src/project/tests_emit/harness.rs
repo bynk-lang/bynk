@@ -277,6 +277,21 @@ pub(super) fn emit_integration_harness<'a>(
                 value,
                 None,
             ));
+            // #3513 B: `Analytics.dataset()` reads the dataset's name from the variable the
+            // deployed Worker's `[vars]` carries.
+            if matches!(binding.source, BindingSource::AnalyticsDataset { .. }) {
+                body.push(TsStmt::assign(
+                    member(
+                        ident(env.clone()),
+                        bynk_emit::emitter::wrangler::dataset_var_name(&binding.name),
+                    ),
+                    str_lit(bynk_emit::emitter::wrangler::analytics_dataset_name(
+                        &bynk_project::worker_dir_name(p),
+                        &binding.name,
+                    )),
+                    None,
+                ));
+            }
         }
     }
     // Root env binds to every participant.
@@ -805,6 +820,8 @@ fn singleton_integration_double(capability: &str) -> TsExpr {
         "Ai" => "__makeIntegrationAi",
         // #3515: an Images binding that faults until stubbed.
         "Images" => "__makeIntegrationImages",
+        // #3513 B: Analytics SQL never answers in a test; it faults until stubbed.
+        "AnalyticsSql" => "__makeIntegrationAnalyticsSql",
         other => unreachable!("singleton `{other}` has no integration binding"),
     };
     call(ident(factory), vec![])

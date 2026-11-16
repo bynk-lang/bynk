@@ -128,7 +128,7 @@ impl TomlBlock {
 /// own comment syntax, not an escape hatch; `wrangler.toml`'s one instance
 /// today is the KV namespace id's `# set at deploy time`.
 pub(crate) struct TomlEntry {
-    key: &'static str,
+    key: std::borrow::Cow<'static, str>,
     value: TomlValue,
     comment: Option<&'static str>,
 }
@@ -136,7 +136,17 @@ pub(crate) struct TomlEntry {
 impl TomlEntry {
     pub(crate) fn kv(key: &'static str, value: TomlValue) -> Self {
         Self {
-            key,
+            key: key.into(),
+            value,
+            comment: None,
+        }
+    }
+
+    /// An entry whose key is chosen at emit time (#3513 B: `[vars]` names one variable per
+    /// `Analytics` binding). The printer quotes it unless TOML allows it bare.
+    pub(crate) fn kv_owned(key: String, value: TomlValue) -> Self {
+        Self {
+            key: key.into(),
             value,
             comment: None,
         }
@@ -144,7 +154,7 @@ impl TomlEntry {
 
     pub(crate) fn with_comment(key: &'static str, value: TomlValue, comment: &'static str) -> Self {
         Self {
-            key,
+            key: key.into(),
             value,
             comment: Some(comment),
         }
@@ -205,10 +215,10 @@ fn print_entries(out: &mut String, entries: &[TomlEntry]) {
         let value = render_value(&entry.value);
         match entry.comment {
             Some(comment) => {
-                let _ = writeln!(out, "{} = {value} # {comment}", entry.key);
+                let _ = writeln!(out, "{} = {value} # {comment}", render_key(&entry.key));
             }
             None => {
-                let _ = writeln!(out, "{} = {value}", entry.key);
+                let _ = writeln!(out, "{} = {value}", render_key(&entry.key));
             }
         }
     }
