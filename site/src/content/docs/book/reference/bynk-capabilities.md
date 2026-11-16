@@ -487,7 +487,7 @@ Consuming it **locks the deployment unit to Cloudflare** (it cannot then target
 | **`EdgeCache`** *(experimental)* | `purge(prefixes: List[String]) -> Effect[Bool]`. Used only through a named instance, at most one per context, which turns Cloudflare's edge cache on for the context's Worker; see below. |
 | **`Version`** *(experimental)* | `current() -> Effect[WorkerVersion]`. One per Worker, used bare; see [The running version](#the-running-version-version). |
 | **`Ai`** *(experimental)* | `run(model: String, input: String) -> Effect[Result[String, AiError]]` · `generate(model, request: GenerateRequest) -> Effect[Result[Generation, AiError]]` · `embed(model, texts: List[String]) -> Effect[Result[List[List[Float]], AiError]]` · `runStream(model, input: String) -> Effect[Result[Stream[String], AiError]]`. One per Worker, used bare; see [Workers AI](#workers-ai-ai). |
-| **`Images`** *(experimental)* | `info(image: Bytes) -> Effect[Result[ImageInfo, ImagesError]]` · `transform(image: Bytes, options: TransformOptions, output: OutputOptions) -> Effect[Result[ImageResult, ImagesError]]`. One per Worker, used bare; see [Images](#images-images). |
+| **`Images`** *(experimental)* | `info(image: Bytes) -> Effect[Result[ImageInfo, ImagesError]]` · `transform(image: Bytes, options: TransformOptions, output: OutputOptions) -> Effect[Result[ImageResult, ImagesError]]` · `transformStream(image: Stream[Bytes], options, output) -> Effect[Result[ImageStream, ImagesError]]`. One per Worker, used bare; see [Images](#images-images). |
 | **`StoredSecret`** *(experimental)* | `get() -> Effect[String]`. Used only through a named instance that names its store and its secret; see [Account secrets](#account-secrets-storedsecret). |
 | **`Email`** *(experimental)* | `send(message: EmailMessage) -> Effect[Result[String, EmailError]]`. Used only through a named instance, which may restrict its senders and recipients; see [Outbound email](#outbound-email-email). |
 | **`Postgres`** *(experimental)* | `all(sql: String, params: List[PgValue]) -> Effect[Result[String, PgError]]` · `first(sql, params) -> Effect[Result[Option[String], PgError]]` · `run(sql, params) -> Effect[Result[PgRun, PgError]]` · `transaction(statements: List[PgStatement]) -> Effect[Result[List[PgRun], PgError]]`, and the compiler-lowered typed reads `select[T]` and `firstAs[T]`. Used only through a named instance; see [Postgres databases](#postgres-databases-postgres). |
@@ -1012,6 +1012,18 @@ default. An `Overlay` is `Bytes` drawn over the image at an offset from `top`,
 read only, so it is `InvalidImage` as an output) and takes an
 optional `quality` from 1 to 100. The result is an `ImageResult` with the `body`
 and the `contentType` it was written with.
+
+`transformStream(image, options, output)` is `transform` over streams, for an
+image too large to hold: it reads `image` as a `Stream[Bytes]` and answers an
+`ImageStream`, a `body: Stream[Bytes]` with the `contentType`, that a handler
+serves with `RawStreamed` as it is read. The options are the same, and the
+overlay images stay `Bytes`. A refusal before the stream starts (a non-image, an
+option out of range) is the `Err`, so the handler can answer with an ordinary
+response; a failure after the first chunk faults the stream. Like every
+`Stream`, both are read once, and the result cannot cross a service boundary:
+the handler that calls `transformStream` is the one that serves it. The
+platform's input limit still applies. In a test it faults until stubbed
+(`stub Images.transformStream(_, _, _) returns …`).
 
 An uploaded image is untrusted input, so a bad one is a value, not a fault. An
 `ImagesError` is `InvalidImage(message)` (the input is not an image, or an

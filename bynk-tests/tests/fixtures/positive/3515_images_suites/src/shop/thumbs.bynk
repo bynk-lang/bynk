@@ -66,6 +66,20 @@ service safe from http {
 	}
 }
 
+service streams from http {
+	// The image goes in as a stream and comes out as one, served as it is read.
+	@raw(contentType: "*/*")
+	@limit(maxBody: 1048576)
+	on POST("/resize") (body: Bytes) -> Effect[HttpResult[()]] by Visitor given Images {
+		let r <- Images.transformStream(Stream.of([body]), TransformOptions { width: Some(128) }, OutputOptions { format: ImageFormat.Avif })
+		match r {
+			Ok(img) => RawStreamed(img.body, img.contentType),
+			Err(InvalidImage(m)) => BadRequest(m),
+			Err(_) => ServerError("could not process image"),
+		}
+	}
+}
+
 service about {
 	on call(image: Bytes) -> Effect[Option[Bytes]] given Thumbnailer {
 		Thumbnailer.thumb(image)

@@ -1002,6 +1002,21 @@ export const ImageResult = {
 };
 
 /**
+ * A transformed image as a stream, from `Images.transformStream`: the `body`
+ * as chunks read as they are pulled, and the `contentType` the platform wrote
+ * it with. The body can be read once (`collect`, `map`, or handed to
+ * `RawStreamed`); a second read faults. A record carrying a stream is not
+ * data: it can't be stored, sent or encoded.
+ */
+export interface ImageStream {
+  readonly body: AsyncIterable<globalThis.Uint8Array>;
+  readonly contentType: string;
+}
+
+export const ImageStream = {
+};
+
+/**
  * Why an `Images` call did not give an image. `InvalidImage` is an input that
  * is not an image, or an option the call cannot honour, with the reason;
  * `UnsupportedImage` is a format the platform cannot read or write;
@@ -1685,7 +1700,19 @@ export const __AiToken: symbol = globalThis.Symbol("Ai");
  *
  * `transform(image, options, output)` reads `image` (any format the platform
  * reads, at most 20 MB), applies `options` and writes the result as `output`
- * says. The result is buffered whole. The image is untrusted input: an upload
+ * says. The result is buffered whole; for a large image use `transformStream`.
+ *
+ * `transformStream(image, options, output)` is `transform` over a stream: it
+ * reads `image` as a `Stream[Bytes]` (read once, as any stream is) and gives
+ * the result as an `ImageStream`, so a handler can serve it with
+ * `RawStreamed` without holding the output. The input is still bounded by
+ * the platform's limit, and the options are the same. A refusal before the
+ * stream starts (a non-image, an option out of range) is the `Err`; a failure
+ * after the first chunk faults the stream, as a failing producer aborts any
+ * stream. The overlay images stay `Bytes`, since an overlay is small and a
+ * stream cannot be read twice for `repeat`. Like every `Stream`, the result
+ * cannot cross a service boundary: the handler that calls it is the one that
+ * serves it. The image is untrusted input: an upload
  * can be a non-image or very large, so answer `InvalidImage` and
  * `ImageTooLarge` as the caller's mistake, and cap an upload with the request
  * body limit. An empty image, a `width` or `height` below 1, a `rotate` other
@@ -1707,6 +1734,7 @@ export const __AiToken: symbol = globalThis.Symbol("Ai");
 export interface Images {
   info(image: globalThis.Uint8Array): globalThis.Promise<Result<ImageInfo, ImagesError>>;
   transform(image: globalThis.Uint8Array, options: TransformOptions, output: OutputOptions): globalThis.Promise<Result<ImageResult, ImagesError>>;
+  transformStream(image: AsyncIterable<globalThis.Uint8Array>, options: TransformOptions, output: OutputOptions): globalThis.Promise<Result<ImageStream, ImagesError>>;
 }
 
 export const __ImagesToken: symbol = globalThis.Symbol("Images");

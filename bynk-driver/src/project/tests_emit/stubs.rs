@@ -1513,9 +1513,10 @@ pub(super) fn platform_double(
                 )
             };
             format!(
-                "  return {{\n{}{}  }};\n",
+                "  return {{\n{}{}{}  }};\n",
                 op("info", "_"),
-                op("transform", "_, _, _")
+                op("transform", "_, _, _"),
+                op("transformStream", "_, _, _")
             )
         }
         // #3479: the real `WorkersVectorize` over an exact in-memory index built
