@@ -63,6 +63,10 @@ pub fn emit_group_events_fanout_do(key: &str, publishers: &[Publisher]) -> TsPro
     fanout_program(&format!("Worker group `{key}`"), &merged, None, &known)
 }
 
+/// A group's fan-out trusts the `publisher` an event names only because it is
+/// one of `known` (see [`unknown_publisher_refusal`]), and only code in the same
+/// Worker can reach the Durable Object through its binding.
+///
 /// `publisher` is the one context a standalone fan-out signs deliveries as;
 /// `None` for a group's, which reads it from each event and signs only for one of
 /// `known`, the group's publishing members.
@@ -319,6 +323,104 @@ fn unknown_publisher_refusal() -> TsStmt {
     )
 }
 
+/// The per-subscriber delivery, `try { await __deliverEvent(…) } catch { log }`,
+/// signed as `publisher`, or as the event's own `publisher` in a group's.
+fn deliver_isolated(publisher: Option<&str>) -> TsStmt {
+    // ADR 0284: subscriber failure isolation
+    // — one subscriber's rejection is logged
+    // and does not stop delivery to the
+    // remaining subscribers, nor does it
+    // propagate back to the (already-
+    // committed) publishing handler.
+    TsStmt::try_catch(
+        TsStmt::block(
+            vec![TsStmt::expr_stmt(
+                TsExpr::Await(Box::new(TsExpr::Call {
+                    callee: Box::new(TsExpr::Ident("__deliverEvent".to_string())),
+                    args: vec![
+                        TsExpr::Ident("binding".to_string()),
+                        TsExpr::Member {
+                            object: Box::new(TsExpr::Ident("sub".to_string())),
+                            property: "service".to_string(),
+                        },
+                        TsExpr::Member {
+                            object: Box::new(TsExpr::Ident("ev".to_string())),
+                            property: "payload".to_string(),
+                        },
+                        TsExpr::Member {
+                            object: Box::new(TsExpr::Ident("ev".to_string())),
+                            property: "envelope".to_string(),
+                        },
+                        // I2 (#1971): the key for
+                        // the edge to the
+                        // subscriber, and the
+                        // two names the
+                        // delivery is signed
+                        // between.
+                        TsExpr::Member {
+                            object: Box::new(TsExpr::Ident("this".to_string())),
+                            property: "env".to_string(),
+                        },
+                        match publisher {
+                            Some(context) => TsExpr::Lit(TsLit::Str(context.to_string())),
+                            None => TsExpr::Member {
+                                object: Box::new(TsExpr::Ident("ev".to_string())),
+                                property: "publisher".to_string(),
+                            },
+                        },
+                        TsExpr::Member {
+                            object: Box::new(TsExpr::Ident("sub".to_string())),
+                            property: "context".to_string(),
+                        },
+                    ],
+                })),
+                None,
+            )],
+            None,
+        ),
+        Some("e"),
+        TsStmt::block(
+            vec![TsStmt::expr_stmt(
+                TsExpr::Call {
+                    callee: Box::new(TsExpr::Member {
+                        object: Box::new(TsExpr::Ident("globalThis.console".to_string())),
+                        property: "error".to_string(),
+                    }),
+                    args: vec![
+                        TsExpr::Lit(TsLit::Str("EventsFanout delivery failed".to_string())),
+                        TsExpr::object(vec![
+                            (
+                                "event".to_string(),
+                                TsExpr::Member {
+                                    object: Box::new(TsExpr::Ident("ev".to_string())),
+                                    property: "type".to_string(),
+                                },
+                            ),
+                            (
+                                "service".to_string(),
+                                TsExpr::Member {
+                                    object: Box::new(TsExpr::Ident("sub".to_string())),
+                                    property: "service".to_string(),
+                                },
+                            ),
+                            (
+                                "error".to_string(),
+                                TsExpr::Call {
+                                    callee: Box::new(TsExpr::Ident("String".to_string())),
+                                    args: vec![TsExpr::Ident("e".to_string())],
+                                },
+                            ),
+                        ]),
+                    ],
+                },
+                None,
+            )],
+            None,
+        ),
+        None,
+    )
+}
+
 /// A standalone fan-out routes by `ev.type` and signs as `publisher`; a group's
 /// (`None`) routes by `<ev.publisher>/<ev.type>` and signs as `ev.publisher`.
 fn events_fanout_fetch(publisher: Option<&str>) -> TsClassMethod {
@@ -465,140 +567,7 @@ fn events_fanout_fetch(publisher: Option<&str>) -> TsClassMethod {
                                             TsStmt::continue_stmt(None),
                                             None,
                                         ),
-                                        // ADR 0284: subscriber failure isolation
-                                        // — one subscriber's rejection is logged
-                                        // and does not stop delivery to the
-                                        // remaining subscribers, nor does it
-                                        // propagate back to the (already-
-                                        // committed) publishing handler.
-                                        TsStmt::try_catch(
-                                            TsStmt::block(
-                                                vec![TsStmt::expr_stmt(
-                                                    TsExpr::Await(Box::new(TsExpr::Call {
-                                                        callee: Box::new(TsExpr::Ident(
-                                                            "__deliverEvent".to_string(),
-                                                        )),
-                                                        args: vec![
-                                                            TsExpr::Ident("binding".to_string()),
-                                                            TsExpr::Member {
-                                                                object: Box::new(TsExpr::Ident(
-                                                                    "sub".to_string(),
-                                                                )),
-                                                                property: "service".to_string(),
-                                                            },
-                                                            TsExpr::Member {
-                                                                object: Box::new(TsExpr::Ident(
-                                                                    "ev".to_string(),
-                                                                )),
-                                                                property: "payload".to_string(),
-                                                            },
-                                                            TsExpr::Member {
-                                                                object: Box::new(TsExpr::Ident(
-                                                                    "ev".to_string(),
-                                                                )),
-                                                                property: "envelope".to_string(),
-                                                            },
-                                                            // I2 (#1971): the key for
-                                                            // the edge to the
-                                                            // subscriber, and the
-                                                            // two names the
-                                                            // delivery is signed
-                                                            // between.
-                                                            TsExpr::Member {
-                                                                object: Box::new(TsExpr::Ident(
-                                                                    "this".to_string(),
-                                                                )),
-                                                                property: "env".to_string(),
-                                                            },
-                                                            match publisher {
-                                                                Some(context) => TsExpr::Lit(
-                                                                    TsLit::Str(context.to_string()),
-                                                                ),
-                                                                None => TsExpr::Member {
-                                                                    object: Box::new(
-                                                                        TsExpr::Ident(
-                                                                            "ev".to_string(),
-                                                                        ),
-                                                                    ),
-                                                                    property: "publisher"
-                                                                        .to_string(),
-                                                                },
-                                                            },
-                                                            TsExpr::Member {
-                                                                object: Box::new(TsExpr::Ident(
-                                                                    "sub".to_string(),
-                                                                )),
-                                                                property: "context".to_string(),
-                                                            },
-                                                        ],
-                                                    })),
-                                                    None,
-                                                )],
-                                                None,
-                                            ),
-                                            Some("e"),
-                                            TsStmt::block(
-                                                vec![TsStmt::expr_stmt(
-                                                    TsExpr::Call {
-                                                        callee: Box::new(TsExpr::Member {
-                                                            object: Box::new(TsExpr::Ident(
-                                                                "globalThis.console".to_string(),
-                                                            )),
-                                                            property: "error".to_string(),
-                                                        }),
-                                                        args: vec![
-                                                            TsExpr::Lit(TsLit::Str(
-                                                                "EventsFanout delivery failed"
-                                                                    .to_string(),
-                                                            )),
-                                                            TsExpr::object(vec![
-                                                                (
-                                                                    "event".to_string(),
-                                                                    TsExpr::Member {
-                                                                        object: Box::new(
-                                                                            TsExpr::Ident(
-                                                                                "ev".to_string(),
-                                                                            ),
-                                                                        ),
-                                                                        property: "type"
-                                                                            .to_string(),
-                                                                    },
-                                                                ),
-                                                                (
-                                                                    "service".to_string(),
-                                                                    TsExpr::Member {
-                                                                        object: Box::new(
-                                                                            TsExpr::Ident(
-                                                                                "sub".to_string(),
-                                                                            ),
-                                                                        ),
-                                                                        property: "service"
-                                                                            .to_string(),
-                                                                    },
-                                                                ),
-                                                                (
-                                                                    "error".to_string(),
-                                                                    TsExpr::Call {
-                                                                        callee: Box::new(
-                                                                            TsExpr::Ident(
-                                                                                "String"
-                                                                                    .to_string(),
-                                                                            ),
-                                                                        ),
-                                                                        args: vec![TsExpr::Ident(
-                                                                            "e".to_string(),
-                                                                        )],
-                                                                    },
-                                                                ),
-                                                            ]),
-                                                        ],
-                                                    },
-                                                    None,
-                                                )],
-                                                None,
-                                            ),
-                                            None,
-                                        ),
+                                        deliver_isolated(publisher),
                                     ],
                                     None,
                                 ),
