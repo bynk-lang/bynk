@@ -26,7 +26,7 @@ fn discount(cents: Int, off: Percent) -> Int {
 ```
 
 `shop.catalog` is a context that exports a type, and `shop.orders` is a context
-that `uses` the money and `consumes` the catalog:
+that `uses` the money and `consumes` the catalogue:
 
 ```text
 context shop.catalog
