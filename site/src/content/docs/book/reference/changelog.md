@@ -28,6 +28,7 @@ per-commit history. While Bynk is pre-1.0, increments may change behaviour.
 
 | Version | Highlights |
 |---|---|
+| **v0.632.2** | A `bynk dev --trace-events` request names the request that called it, so a client can join a call across Workers |
 | **v0.632.1** | `bynk dev inspect agents` lists a running session's agent instances by key, and `bynk dev inspect agent <Class> <key>` reads one's stored state as JSON (slice 0b of the dev agent-inspection track) |
 | **v0.632.0** | `bynk deploy` links each `MtlsCertificate` by name, writes the certificate's id into the Worker's configuration and records it in the ledger, failing when it is missing or ambiguous and never uploading one; `bynk dev` runs the binding on Cloudflare, with a one-time notice silenced by `[dev] mtls = "allow"`; the byte forms `receiveBytes` and `sendBytes` join `send` |
 | **v0.631.0** | `bynk eval` evaluates a snippet in a unit's scope against the project and prints its value as JSON |
