@@ -538,11 +538,10 @@ fn stage_binding_files(
     d1_migrations: &bynk_check::d1_migrations::D1Migrations,
     compiled: &mut Vec<StagedFile>,
 ) {
-    // A D1 database is named from the context, as the migrations' check side
+    // A D1 database is named from the Worker, as the migrations' check side
     // (`d1_migrations`, `d1_sql`) and `wrangler.toml`'s `d1_block` name it, so
-    // all of them agree. Naming it from the Worker (the group's key) is a change
-    // to all of those producers together, made when groups are switched on.
-    let dashes = worker_dir_name(context);
+    // all of them agree.
+    let dashes = layout.dir(context);
     if let Some(manifest) = emitter::wrangler::emit_hyperdrive_manifest(bindings) {
         compiled.push(StagedFile {
             output_path: layout.worker_file(context, emitter::wrangler::HYPERDRIVE_MANIFEST),
@@ -2576,13 +2575,14 @@ fn d1_phase(
     bynk_check::d1_migrations::D1Migrations,
     Option<Arc<bynk_check::d1_sql::D1Sql>>,
 ) {
+    let layout = bynk_project::worker_layout::WorkerLayout::for_project(project_root, overlay);
     let mut migrations = bynk_check::d1_migrations::phase_d1_migrations(
         migration_files,
-        &bynk_check::d1_migrations::declared_databases(kinds, unit_tables),
+        &bynk_check::d1_migrations::declared_databases(kinds, unit_tables, &layout),
         errors,
     );
     let d1_sql = if bynk_project::read_check_config(project_root, overlay).d1_sql {
-        bynk_check::d1_sql::D1Sql::build(&migrations, errors)
+        bynk_check::d1_sql::D1Sql::build(&migrations, &layout, errors)
     } else {
         None
     };
@@ -3961,6 +3961,7 @@ impl WorkersEmit<'_> {
         let (crons, queues) = bynk_check::symbols::cron_and_queue_triggers(table);
         let mut wrangler_doc = emitter::emit_wrangler_toml(
             ctx_name,
+            layout,
             &bindings,
             &crons,
             &queues,
@@ -5395,6 +5396,64 @@ fn _ensure_components_used(_p: &Path) {
 mod tests {
     use super::*;
     use std::fs;
+
+    /// #3562: a member of a group names its D1 database from the Worker (the
+    /// group's key), and the migrations staged for it sit where `wrangler.toml`
+    /// points, so `wrangler d1 migrations apply` finds them.
+    #[test]
+    fn a_group_members_d1_migrations_are_staged_where_wrangler_points() {
+        use bynk_project::worker_groups::{WorkerGroup, WorkerGroups};
+        let groups = WorkerGroups::from([(
+            "core".to_string(),
+            WorkerGroup {
+                contexts: vec!["shop.orders".to_string(), "shop.pricing".to_string()],
+                ..WorkerGroup::default()
+            },
+        )]);
+        let layout = bynk_project::worker_layout::WorkerLayout::from_groups(&groups);
+        let bindings = vec![emitter::wrangler::WorkerBinding {
+            name: "D1_ORDERS".to_string(),
+            source: emitter::wrangler::BindingSource::D1Database {
+                capability: "Orders".to_string(),
+            },
+        }];
+        let database = emitter::wrangler::d1_database_name(&layout.dir("shop.orders"), "D1_ORDERS");
+        assert_eq!(database, "core-orders");
+        let mut migrations = bynk_check::d1_migrations::D1Migrations::new();
+        migrations.insert(
+            database.clone(),
+            vec![bynk_check::d1_migrations::MigrationFile {
+                name: "0001_init.sql".to_string(),
+                sql: "CREATE TABLE t (id TEXT);".to_string(),
+            }],
+        );
+        let toml = emitter::toml_doc::print_toml_document(&emitter::wrangler::emit_wrangler_toml(
+            "shop.orders",
+            &layout,
+            &bindings,
+            &[],
+            &[],
+            &[],
+            &[],
+            None,
+            &Default::default(),
+            &migrations,
+        ));
+        assert!(toml.contains("database_name = \"core-orders\""), "{toml}");
+        assert!(
+            toml.contains("migrations_dir = \"migrations/core-orders\""),
+            "{toml}"
+        );
+        let mut staged = Vec::new();
+        stage_binding_files(&bindings, &layout, "shop.orders", &migrations, &mut staged);
+        let paths: Vec<_> = staged.iter().map(|f| f.output_path.clone()).collect();
+        assert_eq!(
+            paths,
+            vec![PathBuf::from(
+                "workers/core/migrations/core-orders/0001_init.sql"
+            )]
+        );
+    }
 
     /// Review of #1904: the `_headers` glob must cover every served path, or
     /// every asset silently loses its immutable cache lifetime. Both come

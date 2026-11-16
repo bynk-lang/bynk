@@ -6,7 +6,7 @@
 
 use crate::emitter::toml_doc::{TomlBlock, TomlDocument, TomlEntry, TomlValue};
 pub use bynk_check::worker_bindings::{BindingSource, WorkerBinding};
-use bynk_project::worker_dir_name;
+use bynk_project::worker_layout::WorkerLayout;
 
 /// Compile-time pinned compatibility date. Cloudflare uses this to lock
 /// Workers runtime behaviour. When to bump it, and the gate a bump must pass,
@@ -238,6 +238,7 @@ fn addresses_entry(addresses: &[String]) -> Option<TomlEntry> {
 #[allow(clippy::too_many_arguments)]
 pub fn emit_wrangler_toml(
     context: &str,
+    layout: &WorkerLayout,
     // #1944: every binding this Worker declares, [`worker_bindings`]' list —
     // the same one its `Env` interface and the duplicate check read.
     bindings: &[WorkerBinding],
@@ -263,7 +264,7 @@ pub fn emit_wrangler_toml(
     // `migrations_dir`.
     d1_migrations: &bynk_check::d1_migrations::D1Migrations,
 ) -> TomlDocument {
-    let name = worker_dir_name(context);
+    let name = layout.dir(context);
     let mut root = vec![
         TomlEntry::kv("name", TomlValue::str(name)),
         TomlEntry::kv("main", TomlValue::str("index.ts")),
@@ -287,7 +288,7 @@ pub fn emit_wrangler_toml(
                 "services",
                 vec![
                     TomlEntry::kv("binding", name),
-                    TomlEntry::kv("service", TomlValue::str(worker_dir_name(context))),
+                    TomlEntry::kv("service", TomlValue::str(layout.dir(context))),
                 ],
             ),
             BindingSource::Kv => TomlBlock::array_table(
@@ -323,7 +324,7 @@ pub fn emit_wrangler_toml(
                     TomlEntry::kv("binding", name),
                     TomlEntry::kv(
                         "bucket_name",
-                        TomlValue::str(r2_bucket_name(&worker_dir_name(context), &binding.name)),
+                        TomlValue::str(r2_bucket_name(&layout.dir(context), &binding.name)),
                     ),
                 ];
                 if let Some(jurisdiction) = jurisdiction {
@@ -372,10 +373,7 @@ pub fn emit_wrangler_toml(
                     TomlEntry::kv("binding", name),
                     TomlEntry::kv(
                         "dataset",
-                        TomlValue::str(analytics_dataset_name(
-                            &worker_dir_name(context),
-                            &binding.name,
-                        )),
+                        TomlValue::str(analytics_dataset_name(&layout.dir(context), &binding.name)),
                     ),
                 ],
             ),
@@ -386,7 +384,9 @@ pub fn emit_wrangler_toml(
             //
             // P4b (#2608): a database with migrations names their copy beside
             // this file, which `wrangler d1 migrations apply` reads.
-            BindingSource::D1Database { .. } => d1_block(context, binding, name, d1_migrations),
+            BindingSource::D1Database { .. } => {
+                d1_block(context, layout, binding, name, d1_migrations)
+            }
             BindingSource::StoredSecret { store, secret, .. } => {
                 stored_secret_block(name, store, secret)
             }
@@ -398,7 +398,7 @@ pub fn emit_wrangler_toml(
             // environment-qualifies and creates (never recreates). The binding
             // names the index; its dimensions, metric and metadata indexes are
             // the deploy's, not this stanza's.
-            BindingSource::VectorizeIndex { .. } => vectorize_block(context, binding, name),
+            BindingSource::VectorizeIndex { .. } => vectorize_block(context, layout, binding, name),
             // #3480: the account's instance, named as the declaration writes it
             // (in every environment). `bynk deploy` checks it exists and never
             // creates it.
@@ -504,7 +504,7 @@ pub fn emit_wrangler_toml(
     }
 
     // #3513 B: `Analytics.dataset()` reads the dataset's name from `[vars]`.
-    if let Some(vars) = dataset_vars_block(context, bindings) {
+    if let Some(vars) = dataset_vars_block(context, layout, bindings) {
         doc.push_block(vars);
     }
 
@@ -541,11 +541,12 @@ pub fn emit_wrangler_toml(
 /// compiler's for the implicit idempotency database, W30 #2840).
 fn d1_block(
     context: &str,
+    layout: &WorkerLayout,
     binding: &WorkerBinding,
     name: TomlValue,
     d1_migrations: &bynk_check::d1_migrations::D1Migrations,
 ) -> TomlBlock {
-    let database = d1_database_name(&worker_dir_name(context), &binding.name);
+    let database = d1_database_name(&layout.dir(context), &binding.name);
     let mut entries = vec![
         TomlEntry::kv("binding", name),
         TomlEntry::kv("database_name", TomlValue::str(database.clone())),
@@ -745,17 +746,19 @@ pub(crate) fn handler_bindings(consumed: &[String], agents: &[String]) -> Vec<Wo
 }
 
 /// #3479: the `[[vectorize]]` entry of a `Vectorize` instance.
-fn vectorize_block(context: &str, binding: &WorkerBinding, name: TomlValue) -> TomlBlock {
+fn vectorize_block(
+    context: &str,
+    layout: &WorkerLayout,
+    binding: &WorkerBinding,
+    name: TomlValue,
+) -> TomlBlock {
     TomlBlock::array_table(
         "vectorize",
         vec![
             TomlEntry::kv("binding", name),
             TomlEntry::kv(
                 "index_name",
-                TomlValue::str(vectorize_index_name(
-                    &worker_dir_name(context),
-                    &binding.name,
-                )),
+                TomlValue::str(vectorize_index_name(&layout.dir(context), &binding.name)),
             ),
         ],
     )
@@ -1217,14 +1220,18 @@ pub fn vectorize_index_name(worker: &str, binding: &str) -> String {
 /// environment-qualifies it), from one `[vars]` entry per dataset binding. The variable is the
 /// binding's own, `BYNK_DATASET_<BINDING>`, in the reserved `BYNK_` namespace. `None` when the
 /// Worker has no dataset.
-fn dataset_vars_block(context: &str, bindings: &[WorkerBinding]) -> Option<TomlBlock> {
+fn dataset_vars_block(
+    context: &str,
+    layout: &WorkerLayout,
+    bindings: &[WorkerBinding],
+) -> Option<TomlBlock> {
     let entries: Vec<TomlEntry> = bindings
         .iter()
         .filter(|b| matches!(b.source, BindingSource::AnalyticsDataset { .. }))
         .map(|b| {
             TomlEntry::kv_owned(
                 dataset_var_name(&b.name),
-                TomlValue::str(analytics_dataset_name(&worker_dir_name(context), &b.name)),
+                TomlValue::str(analytics_dataset_name(&layout.dir(context), &b.name)),
             )
         })
         .collect();
