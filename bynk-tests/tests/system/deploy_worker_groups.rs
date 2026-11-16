@@ -321,3 +321,136 @@ fn a_group_with_two_publishing_members_is_refused_for_now() {
     assert!(ok, "one publishing member is allowed:\n{out}");
     let _ = fs::remove_dir_all(&root);
 }
+
+/// One context of `services`, a `shop.*` source for the trigger-conflict tests.
+fn context_with(name: &str, body: &str) -> String {
+    format!("context {name}\n\n{body}\n")
+}
+
+/// Write the two members of group `core` with `a` and `b` as their bodies, build
+/// grouped and expect `code`. With `separate_ok`, then build ungrouped and expect
+/// it clean, since separate Workers may each answer the same route. It is not
+/// asserted for a queue: Cloudflare accepts one consumer Worker per queue, and no
+/// project-wide check says so yet, so a test must not treat that as intended.
+fn trigger_conflict(tag: &str, a: &str, b: &str, code: &str, separate_ok: bool) {
+    let root =
+        std::env::temp_dir().join(format!("bynk-deploy-groups-{tag}-{}", std::process::id()));
+    write_project(&root, WORKERS_TARGET);
+    fs::write(
+        root.join("src/shop/orders.bynk"),
+        context_with("shop.orders", a),
+    )
+    .unwrap();
+    fs::write(
+        root.join("src/shop/payment.bynk"),
+        context_with("shop.payment", b),
+    )
+    .unwrap();
+    let (ok, out) = build(&root);
+    assert!(!ok, "{out}");
+    assert!(out.contains(code), "{out}");
+    assert!(
+        out.contains("contexts `shop.orders` and `shop.payment` share Worker `core`"),
+        "{out}"
+    );
+    if !separate_ok {
+        let _ = fs::remove_dir_all(&root);
+        return;
+    }
+    // The same project, ungrouped: each Worker answers its own.
+    fs::write(
+        root.join("bynk.toml"),
+        format!("{UNSTABLE_R2}[build]\ntarget = \"workers\"\n"),
+    )
+    .unwrap();
+    let (ok, out) = build(&root);
+    assert!(ok, "separate Workers may each answer it:\n{out}");
+    let _ = fs::remove_dir_all(&root);
+}
+
+const ROUTE_A: &str = "service a from http by Visitor {\n\ton GET(\"/ping\") () -> Effect[HttpResult[Int]] {\n\t\tOk(1)\n\t}\n}";
+const ROUTE_B: &str = "service b from http by Visitor {\n\ton GET(\"/ping\") () -> Effect[HttpResult[Int]] {\n\t\tOk(2)\n\t}\n}";
+
+/// A Worker answers a route with one handler.
+#[test]
+fn members_that_declare_the_same_route_collide() {
+    trigger_conflict(
+        "route",
+        ROUTE_A,
+        ROUTE_B,
+        "bynk.deploy.route_conflict",
+        true,
+    );
+}
+
+/// A Worker has one consumer for a queue.
+#[test]
+fn members_that_consume_the_same_queue_collide() {
+    let svc = |n: &str| {
+        format!(
+            "service {n} from queue(\"jobs\") {{\n\ton message(j: Int) -> Effect[QueueResult] {{\n\t\tAck\n\t}}\n}}"
+        )
+    };
+    trigger_conflict(
+        "queue",
+        &svc("a"),
+        &svc("b"),
+        "bynk.deploy.queue_consumer_conflict",
+        false,
+    );
+}
+
+/// An address is claimed once a project, so two members cannot claim one: the
+/// project-wide check already refuses it, grouped or not, and a group adds no
+/// check of its own.
+#[test]
+fn members_that_claim_the_same_address_are_refused() {
+    let root =
+        std::env::temp_dir().join(format!("bynk-deploy-groups-email-{}", std::process::id()));
+    write_project(&root, WORKERS_TARGET);
+    let svc = |n: &str, addr: &str| {
+        format!(
+            "consumes bynk.cloudflare {{ InboundEmail, EmailVerdict }}\n\nservice {n} from email(\"{addr}\") {{\n\ton message(mail: InboundEmail) -> Effect[EmailVerdict] by s: Sender {{\n\t\tAccept\n\t}}\n}}"
+        )
+    };
+    fs::write(
+        root.join("src/shop/orders.bynk"),
+        context_with("shop.orders", &svc("a", "support@shop.example")),
+    )
+    .unwrap();
+    fs::write(
+        root.join("src/shop/payment.bynk"),
+        context_with("shop.payment", &svc("b", "Support@shop.example")),
+    )
+    .unwrap();
+    let (ok, out) = build(&root);
+    assert!(!ok, "{out}");
+    assert!(out.contains("bynk.email.duplicate_address"), "{out}");
+    let _ = fs::remove_dir_all(&root);
+}
+
+/// A cron expression is not claimed: two members may share it, and the group's
+/// Worker runs both handlers.
+#[test]
+fn members_may_share_a_cron_expression() {
+    let root = std::env::temp_dir().join(format!("bynk-deploy-groups-cron-{}", std::process::id()));
+    write_project(&root, WORKERS_TARGET);
+    let svc = |n: &str| {
+        format!(
+            "service {n} from cron {{\n\ton schedule(\"*/5 * * * *\") (at: Int) -> Effect[Result[(), String]] {{\n\t\tEffect.pure(Ok(()))\n\t}}\n}}"
+        )
+    };
+    fs::write(
+        root.join("src/shop/orders.bynk"),
+        context_with("shop.orders", &svc("a")),
+    )
+    .unwrap();
+    fs::write(
+        root.join("src/shop/payment.bynk"),
+        context_with("shop.payment", &svc("b")),
+    )
+    .unwrap();
+    let (ok, out) = check(&root);
+    assert!(ok, "two members may share a cron expression:\n{out}");
+    let _ = fs::remove_dir_all(&root);
+}
