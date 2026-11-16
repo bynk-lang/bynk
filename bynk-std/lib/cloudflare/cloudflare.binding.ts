@@ -405,6 +405,7 @@ export class WorkersAnalyticsSql implements AnalyticsSql {
     try {
       return WorkersAnalyticsSql.result(await binding.query({ query: sql, params: bound.value }));
     } catch (e) {
+      rethrowNotStubbed(e);
       const retryable = (e as { retryable?: unknown } | null)?.retryable === true;
       const message = e instanceof Error ? e.message : String(e);
       return Err({ tag: retryable ? "SqlRetryable" : "SqlRejected", message });

@@ -2179,6 +2179,39 @@ fn kv_entries(doc: &toml_edit::DocumentMut) -> impl Iterator<Item = (&str, &str)
 }
 
 #[cfg(test)]
+mod analytics_sql_dev_tests {
+    use super::*;
+
+    const CONFIG: &str = "name = \"shop\"\n\n[[analytics_engine_datasets]]\nbinding = \"ANALYTICS_SIGNUPS\"\ndataset = \"shop_signups\"\n\n[analytics]\nbinding = \"CF_ANALYTICS_SQL\"\n";
+
+    #[test]
+    fn the_analytics_sql_binding_runs_remotely_in_the_development_copy() {
+        let out = enable_remote_analytics_sql(CONFIG).unwrap();
+        let doc: toml::Table = out.parse().unwrap();
+        assert_eq!(doc["analytics"]["remote"].as_bool(), Some(true));
+        assert_eq!(
+            doc["analytics"]["binding"].as_str(),
+            Some("CF_ANALYTICS_SQL")
+        );
+        // The dataset the Worker writes to is a different table, and stays as it was.
+        let dataset = &doc["analytics_engine_datasets"][0];
+        assert_eq!(dataset["dataset"].as_str(), Some("shop_signups"));
+        assert!(dataset.get("remote").is_none(), "{out}");
+        // The config `bynk deploy` reads is the original, which never carries it.
+        assert!(!CONFIG.contains("remote"));
+    }
+
+    #[test]
+    fn it_is_idempotent_and_leaves_a_config_without_the_binding_alone() {
+        let once = enable_remote_analytics_sql(CONFIG).unwrap();
+        assert_eq!(enable_remote_analytics_sql(&once).unwrap(), once);
+        let plain = "name = \"shop\"\n";
+        assert_eq!(enable_remote_analytics_sql(plain).unwrap(), plain);
+        assert!(enable_remote_analytics_sql("not = [valid").is_err());
+    }
+}
+
+#[cfg(test)]
 mod mtls_tests {
     use super::*;
 

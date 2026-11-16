@@ -31,7 +31,7 @@ import { test } from "node:test";
 import assert from "node:assert/strict";
 import { WorkersAi, WorkersAiSearch, WorkersImages, WorkersAnalytics, WorkersAnalyticsSql, WorkersContainer, WorkersD1, WorkersEdgeCache, WorkersEmail, WorkersKv, WorkersMtls, WorkersMySql, WorkersPostgres, WorkersQueue, WorkersR2, WorkersRateLimit, WorkersService, WorkersStoredSecret, WorkersVectorize, WorkersVersion } from "./bynk/cloudflare.binding.js";
 import { Method, FetchError } from "./bynk.js";
-import { __makeIntegrationAi, __makeIntegrationAiSearch, __makeIntegrationContainer, __makeIntegrationHyperdrive, __makeIntegrationImages, __makeIntegrationMtls, __makeIntegrationSecretsStoreSecret } from "./__bynk_runtime/storage.js";
+import { __makeIntegrationAi, __makeIntegrationAiSearch, __makeIntegrationAnalyticsSql, __makeIntegrationContainer, __makeIntegrationHyperdrive, __makeIntegrationImages, __makeIntegrationMtls, __makeIntegrationSecretsStoreSecret } from "./__bynk_runtime/storage.js";
 import { Some, None } from "./__bynk_runtime/result.js";
 
 function fakeKv(pageSize = 2) {
@@ -3165,6 +3165,11 @@ t("WorkersAi: an unstubbed integration double faults every operation, never an E
   await assert.rejects(ai.generate("@cf/x/y", { messages: [chat("User", "hi")], maxTokens: None, temperature: None, topP: None, seed: None }), notStubbed);
   await assert.rejects(ai.embed("@cf/x/y", ["a"]), notStubbed);
   await assert.rejects(ai.runStream("@cf/x/y", "{}"), notStubbed);
+});
+
+t("WorkersAnalyticsSql: an unstubbed integration double faults the query, never an Err", async () => {
+  const sql = new WorkersAnalyticsSql({ CF_ANALYTICS_SQL: __makeIntegrationAnalyticsSql() });
+  await assert.rejects(sql.query("SELECT 1", []), /`AnalyticsSql` binding is not stubbed/);
 });
 
 t("WorkersAiSearch: an unstubbed integration double faults search and answer, never an Err", async () => {
