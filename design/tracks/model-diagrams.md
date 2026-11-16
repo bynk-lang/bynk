@@ -1,7 +1,10 @@
 # Model diagrams — a first-party UML renderer for the sequence, architecture and component views
 
-- **Status:** Draft (settling). Direction not yet merged; no slice authorised.
-  The spine issue is still to be opened. This doc is its settling text.
+- **Status:** Settling. The doc merged in #3587 (v0.626.2) with its two
+  front-loaded ADRs, [0857](../decisions/0857-model-views-first-party-uml-renderer.md)
+  and [0858](../decisions/0858-diagram-models-are-complete.md), both
+  **Proposed** while the settling questions (§13) stay open. Slices 0 and 1
+  shipped in vscode-bynk #170 (§12). The spine issue is still to be opened.
 - **Realises:** `design/bynk-lsp-spec.md` §3.23 (sequence diagram, #846) and
   §3.25 (architecture map, #851), and the "architecture in the language" claim
   in `design/bynk-design-notes.md`. If the architecture is written in the
@@ -373,6 +376,11 @@ stays compatible with `bynkServerMinVersion`.
 | **Message detail**: argument types, result type and effect, as display strings | 6.1.10 | Hover only. Strings, not types, so the wire stays presentation-free but self-describing |
 | **Agent key expression** on agent participants | 6.1.2 | |
 
+Already landed, outside this track: [ADR 0853](../decisions/0853-sequence-branch-span.md)
+(v0.625.2) gives each branch its arm's source span (`WireBranch.range`).
+Slice 1 links a guard to its whole block, because a branch had no span of its
+own. With 0853, a guard (and a folded operand, 6.1.4) can link to its own arm.
+
 Loops and parallel composition (`loop`, `par`) enter the model only when the
 language has a construct that warrants them. The IR supports them from day one.
 
@@ -433,6 +441,13 @@ All additive:
   same data as `bynk deploy --dry-run`'s plan.
 - **Cycles:** the members of any `consumes` cycle the checker reports.
 
+Already landed, outside this track: [ADR 0854](../decisions/0854-architecture-model-events-uses.md)
+(v0.625.3) adds each event's emitters and subscribers, and each handler's
+capability use (`uses`, with `stubbedIn`), to `bynk/architectureModel`. That
+covers the event entry points and sources above, and the `given` half of
+capability wiring. What still remains is the link from a capability to the
+provider or adapter that satisfies it.
+
 ADR 0302's decision (context-level nodes by default, expansion on demand)
 **stands**. Only its Mermaid mechanics (the synthetic toggle node, id lookups
 of the form `flowchart-<id>-<n>`) are superseded.
@@ -479,9 +494,12 @@ wired to one another.
 ### 8.3 Model
 
 **[DECISION D4]** (§11): this is a projection of an enriched
-`bynk/architectureModel`, not a new request. Its additional content:
+`bynk/architectureModel`, not a new request. ADR 0854 took the same line for
+events and capability use ("extend `bynk/architectureModel` rather than add a
+request"), so D4 now has a precedent. Its additional content:
 
-- each handler's `given` set, resolved to capability identity;
+- each handler's `given` set, resolved to capability identity (**landed**:
+  ADR 0854's per-handler `uses`);
 - each handler's outbound `consumes` calls;
 - the context's provided surface (consumable services and HTTP routes);
 - agent keys and state field names.
@@ -574,15 +592,15 @@ Each fork is marked `[DECISION]`, with a recommendation.
 
 ## 12. Candidate slice decomposition
 
-| # | Slice | Repos | Depends on |
-|---|---|---|---|
-| 0 | **Mermaid hygiene.** One shared Mermaid bundle for the three views, and re-theme on theme change. Standalone and useful even if the track stalls | vscode-bynk | n/a |
-| 1 | **Engine core plus sequence parity.** IR, grid layout, drawing, the interaction basics (reveal, hover, keyboard), notation from §5, and copy as Mermaid. No server change. Deletes `participant-map.ts` and the zip | vscode-bynk | n/a |
-| 2 | **Sequence interaction.** Sticky headers, folding, two-way cursor sync, pan and zoom, minimap, export | vscode-bynk | 1 |
-| 3 | **Sequence model deltas** (§6.3): full tree, `break`, triggers and found messages, callee identity with `ref` drill-down, hover detail | bynk (ide, lsp), vscode-bynk | 1 |
-| 4 | **ELK path plus architecture overhaul** (§7) with its model deltas. The deployment overlay may split off as 4b | bynk, vscode-bynk | 1 |
-| 5 | **Component view** (§8): model enrichment, view, and cross-view navigation (§9) | bynk, vscode-bynk | 4 |
-| 6 | **Agent state view port.** Mermaid leaves the extension, and the bundle budget is enforced | vscode-bynk | 4 |
+| # | Slice | Repos | Depends on | Status |
+|---|---|---|---|---|
+| 0 | **Mermaid hygiene.** One shared Mermaid bundle for the three views, and re-theme on theme change. Standalone and useful even if the track stalls | vscode-bynk | n/a | **Shipped** (vscode-bynk #170). Compare Model's diagrams, which landed meanwhile, share the bundle too |
+| 1 | **Engine core plus sequence parity.** IR, grid layout, drawing, the interaction basics (reveal, hover, keyboard), notation from §5, and copy as Mermaid. No server change. Deletes `participant-map.ts` and the zip | vscode-bynk | n/a | **Shipped** (vscode-bynk #170) |
+| 2 | **Sequence interaction.** Sticky headers, folding, two-way cursor sync, pan and zoom, minimap, export | vscode-bynk | 1 | Next |
+| 3 | **Sequence model deltas** (§6.3): full tree, `break`, triggers and found messages, callee identity with `ref` drill-down, hover detail | bynk (ide, lsp), vscode-bynk | 1 | Open. ADR 0853's branch spans already landed |
+| 4 | **ELK path plus architecture overhaul** (§7) with its model deltas. The deployment overlay may split off as 4b | bynk, vscode-bynk | 1 | Open. ADR 0854's events and capability use already landed |
+| 5 | **Component view** (§8): model enrichment, view, and cross-view navigation (§9) | bynk, vscode-bynk | 4 | Open. ADR 0854 already carries each handler's `given` |
+| 6 | **Agent state view port.** Mermaid leaves the extension, and the bundle budget is enforced | vscode-bynk | 4 | Open |
 
 Slices 2 and 3 can run in parallel, as can 3 and 4.
 
@@ -609,16 +627,17 @@ Slices 2 and 3 can run in parallel, as can 3 and 4.
 
 ## 14. Front-loaded ADRs
 
-These are drafted in `design/pending/model-diagrams-first-party-renderer.md`,
-and stamped on merge of this doc with status **Proposed**, because Q1 can
-still change D1. The slice that resolves the settling questions moves them to
-Accepted:
+These were stamped on the merge of this doc (#3587, v0.626.2) with status
+**Proposed**, because Q1 can still change D1. The slice that resolves the
+settling questions moves them to Accepted:
 
-- **The model views render through a first-party engine in UML notation.**
-  This is D1, D3 and D6. It supersedes the Mermaid-mechanics consequences
-  listed in §10.
-- **The server's diagram models are complete; the client decides how much to
-  show.** This is D5. It retires `MAX_BLOCK_DEPTH` as a presentation cut.
+- [**ADR 0857**](../decisions/0857-model-views-first-party-uml-renderer.md): the
+  model views render through a first-party engine in UML notation. This is D1,
+  D3 and D6. It supersedes the Mermaid-mechanics consequences listed in §10.
+  Slice 1 put the sequence view on it.
+- [**ADR 0858**](../decisions/0858-diagram-models-are-complete.md): the server's
+  diagram models are complete, and the client decides how much to show. This
+  is D5. It retires `MAX_BLOCK_DEPTH` as a presentation cut (slice 3).
 
 D2, D4, D7 and D8 are implementation-level and are recorded by the slices that
 make them.
