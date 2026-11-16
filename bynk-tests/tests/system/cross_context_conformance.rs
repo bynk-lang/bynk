@@ -371,10 +371,13 @@ fn observe(topology: &Topology) -> Option<(PathBuf, Vec<Value>)> {
     Some((root, results))
 }
 
+/// A topology's name and what each scenario showed.
+type Observation = (&'static str, Vec<Value>);
+
 /// Every topology observed once, however many tests read it: a build and `tsc`
 /// each. `None` when the toolchain is missing and the tests skip.
-fn observed() -> Option<&'static [(&'static str, Vec<Value>)]> {
-    static OBSERVED: OnceLock<Option<Vec<(&'static str, Vec<Value>)>>> = OnceLock::new();
+fn observed() -> Option<&'static [Observation]> {
+    static OBSERVED: OnceLock<Option<Vec<Observation>>> = OnceLock::new();
     OBSERVED
         .get_or_init(|| {
             let mut all = Vec::new();
