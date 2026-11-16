@@ -31,7 +31,7 @@ import { test } from "node:test";
 import assert from "node:assert/strict";
 import { WorkersAi, WorkersAiSearch, WorkersImages, WorkersAnalytics, WorkersContainer, WorkersD1, WorkersEdgeCache, WorkersEmail, WorkersKv, WorkersMtls, WorkersMySql, WorkersPostgres, WorkersQueue, WorkersR2, WorkersRateLimit, WorkersService, WorkersStoredSecret, WorkersVectorize, WorkersVersion } from "./bynk/cloudflare.binding.js";
 import { Method, FetchError } from "./bynk.js";
-import { __makeIntegrationAi, __makeIntegrationAiSearch, __makeIntegrationContainer, __makeIntegrationHyperdrive, __makeIntegrationSecretsStoreSecret } from "./__bynk_runtime/storage.js";
+import { __makeIntegrationAi, __makeIntegrationAiSearch, __makeIntegrationContainer, __makeIntegrationHyperdrive, __makeIntegrationImages, __makeIntegrationMtls, __makeIntegrationSecretsStoreSecret } from "./__bynk_runtime/storage.js";
 import { Some, None } from "./__bynk_runtime/result.js";
 
 function fakeKv(pageSize = 2) {
@@ -2939,4 +2939,15 @@ t("WorkersStoredSecret, WorkersPostgres and WorkersMySql: an unstubbed integrati
   await assert.rejects(new WorkersStoredSecret(env, "SECRET_K").get(), /`SECRET_K` has no value in a test/);
   await assert.rejects(new WorkersPostgres(env, "HYPERDRIVE_MAIN", async () => assert.fail("not reached")).all("select 1", []), /Hyperdrive binding `HYPERDRIVE_MAIN` has no database/);
   await assert.rejects(new WorkersMySql(env, "HYPERDRIVE_MAIN", async () => assert.fail("not reached")).all("select 1", []), /Hyperdrive binding `HYPERDRIVE_MAIN` has no database/);
+});
+
+t("WorkersImages: an unstubbed integration double faults transform and info, never an Err", async () => {
+  const images = new WorkersImages({ IMAGES: __makeIntegrationImages() });
+  await assert.rejects(images.transform(IMG, imgOpts(), outOpts()), /`Images` binding is not stubbed/);
+  await assert.rejects(images.info(IMG), /`Images` binding is not stubbed/);
+});
+
+t("WorkersMtls: an unstubbed integration double faults send, never an Err", async () => {
+  const m = new WorkersMtls({ MTLS_BACKEND: __makeIntegrationMtls("Backend") }, "MTLS_BACKEND");
+  await assert.rejects(m.send(creq()), /`Backend.send` is not stubbed/);
 });

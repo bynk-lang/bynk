@@ -264,7 +264,20 @@ export class WorkersMtls implements MtlsCertificate {
     // Resolved before sending, so a missing binding throws (a deployment fault) rather than
     // reading as the `Network` error of a failed call.
     const cert = this.target();
-    return new FetchProvider((url, init) => cert.fetch(new globalThis.Request(url, init))).send(req);
+    // The integration double's "not stubbed" fault would read as `Network` to
+    // `FetchProvider`: hold it past the provider and rethrow it (#3589).
+    let unstubbed: unknown;
+    const out = await new FetchProvider(async (url, init) => {
+      try {
+        return await cert.fetch(new globalThis.Request(url, init));
+      } catch (e) {
+        if (!isNotStubbed(e)) throw e;
+        unstubbed = e;
+        return new globalThis.Response(null, { status: 500 });
+      }
+    }).send(req);
+    if (unstubbed !== undefined) throw unstubbed;
+    return out;
   }
 }
 
@@ -983,7 +996,7 @@ export class WorkersImages implements Images {
 
   private static failure(e: unknown): ImagesError {
     // The integration double's "not stubbed" fault is a fault, not a refusal.
-    if ((e as { bynkNotStubbed?: unknown } | null)?.bynkNotStubbed === true) throw e;
+    rethrowNotStubbed(e);
     const message = e instanceof Error ? e.message : String(e);
     switch (WorkersImages.code(e)) {
       case 9412: // the input is not an image

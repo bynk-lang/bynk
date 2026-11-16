@@ -1038,15 +1038,12 @@ export interface WorkerImagesBinding {
  * until the case stubs the capability's operation. There is no fake transform:
  * an image handed back unchanged would make a test pass for the wrong reason.
  */
-// The double's fault carries `bynkNotStubbed`, which `WorkersImages` rethrows
-// instead of mapping to an `ImagesError`: an unstubbed call must fault, not
-// come back as a value a handler's fallback would swallow.
+// The double's fault is marked (`markNotStubbed`), which `WorkersImages`
+// rethrows instead of mapping to an `ImagesError`: an unstubbed call must
+// fault, not come back as a value a handler's fallback would swallow.
 function notStubbed(stub: string): Error {
-  return Object.assign(
-    new globalThis.Error(
-      `bynk: the \`Images\` binding is not stubbed, and a test never reaches Cloudflare Images — stub the operation the case calls (${stub})`,
-    ),
-    { bynkNotStubbed: true },
+  return markNotStubbed(
+    `bynk: the \`Images\` binding is not stubbed, and a test never reaches Cloudflare Images — stub the operation the case calls (${stub})`,
   );
 }
 
@@ -1094,7 +1091,7 @@ export function makeIntegrationAiSearch(binding: string): AiSearchInstance {
 export function makeIntegrationMtls(instance: string): { fetch(request: unknown): Promise<never> } {
   return {
     fetch: async (): Promise<never> => {
-      throw new globalThis.Error(
+      throw markNotStubbed(
         `bynk: \`${instance}.send\` is not stubbed, and a test never reaches the origin — add \`stub ${instance}.send(_) returns …\``,
       );
     },

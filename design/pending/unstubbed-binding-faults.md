@@ -1,6 +1,6 @@
 ---
 level: patch
-changelog: An unstubbed `Ai`, `AiSearch` or `Container` call in an integration test now faults the case instead of returning `Err`, so a test that passed on that `Err` may now fail until it stubs the operation
+changelog: An unstubbed `Ai`, `AiSearch`, `Container`, `Images` or `MtlsCertificate` call in an integration test now faults the case instead of returning `Err`, so a test that passed on that `Err` may now fail until it stubs the operation
 ---
 
 ## ADR: unstubbed-binding-faults
