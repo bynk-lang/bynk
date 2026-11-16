@@ -1,0 +1,1 @@
+bynk.asset.shadows_route `GET /legal.txt` is unreachable: the asset `assets/a.txt` of `shop.orders` is served at `/legal.txt`, and `shop.orders` and `shop.payment` share Worker `core`

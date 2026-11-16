@@ -1074,7 +1074,9 @@ pub const EXPLANATIONS: &[Explain] = &[
                 compiler refuses it rather than ship a route that never runs. Move the route, or \
                 give the asset another path. A route with a parameter that matches the asset's \
                 path, such as `/:page`, still serves every other path, and is only the warning \
-                `bynk.asset.may_shadow_route`.",
+                `bynk.asset.may_shadow_route`. The members of a `[deploy.workers.<key>]` group \
+                share one assets directory, so an asset in one member shadows a route of the \
+                same path in another.",
         example: "asset favicon = \"assets/favicon.ico\" at \"/favicon.ico\"\n\nservice web from http {\n    on GET(\"/favicon.ico\") () -> Effect[HttpResult[String]] by Visitor {    // ✗ the asset answers first\n        Ok(\"never reached\")\n    }\n}\n\nservice web from http {\n    on GET(\"/health\") () -> Effect[HttpResult[String]] by Visitor {    // ✓\n        Ok(\"ok\")\n    }\n}",
         page: "/book/reference/assets",
         anchor: "fixed-paths",
@@ -8556,7 +8558,7 @@ pub const REGISTRY: &[DiagnosticInfo] = &[
     ),
     d(
         "bynk.asset.shadows_route",
-        "A fixed asset path equals a literal HTTP route, which the platform-served asset makes unreachable.",
+        "A fixed asset path equals a literal HTTP route, in the same context or in another member of the same `[deploy.workers.<key>]` group, which the platform-served asset makes unreachable.",
     ),
     d(
         "bynk.asset.unreadable_file",
