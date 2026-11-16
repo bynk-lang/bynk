@@ -2564,10 +2564,24 @@ impl Backend {
         let Some(offset) = crate::position::position_to_offset(text, params.position) else {
             return Ok(None);
         };
-        let info = bynk_ide::symbols::own_declaration_name(text)
-            .and_then(|(name, _)| analysis.sequence_info.get(&name));
+        let own = bynk_ide::symbols::own_declaration_name(text).map(|(name, _)| name);
+        let info = own
+            .as_ref()
+            .and_then(|name| analysis.sequence_info.get(name));
         let model = sequence_request::sequence_model_at(text, offset, info);
-        Ok(model.map(|m| sequence_request::to_wire(&m, text)))
+        // Model-diagrams slice 3: locate each callee among its unit's files in
+        // this round — the caller's own unit for an agent, else the consumed
+        // context's.
+        let locate = |callee: &bynk_ide::sequence::Callee| {
+            let unit = callee.unit.as_ref().or(own.as_ref())?;
+            let files = analysis.unit_sources.get(unit)?.iter().filter_map(|rel| {
+                let text = analysis.snapshots.get(rel)?;
+                let uri = Url::from_file_path(analysis.project_root.join(rel)).ok()?;
+                Some((uri, text.as_str()))
+            });
+            sequence_request::locate_callee(callee, files)
+        };
+        Ok(model.map(|m| sequence_request::to_wire(&m, text, locate)))
     }
 
     /// #2196: `bynk/agentStateModel` — the agent state view's query for the

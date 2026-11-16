@@ -234,7 +234,7 @@ fn render() -> String {
         writeln!(out, "=== sequence: {label}").unwrap();
         let model = bynk_lsp::sequence_request::sequence_model_at(&text, offset, seq_info)
             .unwrap_or_else(|| panic!("a sequence model at {label}"));
-        let wire = bynk_lsp::sequence_request::to_wire(&model, &text);
+        let wire = bynk_lsp::sequence_request::to_wire(&model, &text, |_| None);
         writeln!(out, "{}", serde_json::to_string_pretty(&wire).unwrap()).unwrap();
 
         writeln!(out, "=== wire contract: {label}").unwrap();

@@ -103,7 +103,7 @@ fn sequence_model_at_resolves_for_a_cursor_anywhere_in_the_handler_body() {
 
     // Confirm the LSP-side wire conversion round-trips the span data too — and
     // that the new `Actor` kind and per-branch `reply` cross the wire.
-    let wire = bynk_lsp::sequence_request::to_wire(&model, RATELIMIT_SRC);
+    let wire = bynk_lsp::sequence_request::to_wire(&model, RATELIMIT_SRC, |_| None);
     assert_eq!(wire.participants.len(), 4);
     assert_eq!(wire.participants[0].kind, "Actor");
     assert!(
@@ -129,7 +129,7 @@ fn an_agent_handlers_state_write_crosses_the_wire() {
 
     let model = bynk_lsp::sequence_request::sequence_model_at(RATELIMIT_SRC, offset, Some(info))
         .expect("the agent handler encloses this offset");
-    let wire = bynk_lsp::sequence_request::to_wire(&model, RATELIMIT_SRC);
+    let wire = bynk_lsp::sequence_request::to_wire(&model, RATELIMIT_SRC, |_| None);
     assert_eq!(wire.messages.len(), 1);
     let w = &wire.messages[0];
     assert_eq!(
