@@ -17,8 +17,8 @@
 //! - Agent, events fan-out and container classes are re-exported by name (a
 //!   member entry exports `isMiss`, so `export *` over members would collide).
 //!
-//! A request to the internal `/_bynk/call`, `/_bynk/event` or `/_bynk/migrate`
-//! prefix that no member claims is answered as a standalone Worker answers it
+//! A request to the internal `/_bynk/call`, `/_bynk/event`, `/_bynk/migrate` or
+//! (in a `bynk dev` build only) `/_bynk/inspect` prefix that no member claims is answered as a standalone Worker answers it
 //! unauthenticated: the same method gate, then the same `413` or `401` the
 //! runtime's `verifyCall` gives. Answering `404` for an unknown service while a
 //! known one answers `401` would let an unsigned caller list a group's services.
@@ -54,6 +54,10 @@ pub struct GroupEntry<'a> {
     pub has_events: bool,
     /// Whether any member hosts a migratable agent (answers `/_bynk/migrate/`).
     pub has_migrate: bool,
+    /// Whether this is a `bynk dev` build with agents to inspect (answers
+    /// `/_bynk/inspect/`). A deploy build has no such route, in the group or a
+    /// member, and the entry says nothing of it.
+    pub has_inspect: bool,
 }
 
 /// `["a", "b"]`, as a TypeScript array literal of strings.
@@ -86,6 +90,13 @@ fn unclaimed(entry: &GroupEntry<'_>) -> String {
             method = wf::CALL_METHOD,
             caller_header = wf::CALLER_HEADER,
             caller = wf::MIGRATE_CALLER,
+        ));
+    }
+    if entry.has_inspect {
+        text.push_str(&format!(
+            "  if (path.startsWith({prefix:?})) {{\n    if (request.method !== \"POST\") return new globalThis.Response(\"Method Not Allowed\", {{ status: 405 }});\n    if (request.headers.get({caller_header:?}) !== \"bynk.dev\") return new globalThis.Response(\"Unauthorized\", {{ status: 401 }});\n    return __refused(await __verifyCall(request, env, \"\"));\n  }}\n",
+            prefix = super::workers_entry::INSPECT_PREFIX,
+            caller_header = wf::CALLER_HEADER,
         ));
     }
     text.push_str("  return new globalThis.Response(\"Not Found\", { status: 404 });\n}\n");
