@@ -371,7 +371,7 @@ stays compatible with `bynkServerMinVersion`.
 |---|---|---|
 | Ship the **full block tree**; record `depth` on each block instead of collapsing at `MAX_BLOCK_DEPTH` | Folding moves to the client (6.1.4) | `Collapsed` remains for genuinely unanalysable bodies. Needs a size guard for pathological handlers (a cap far above 2, for example 16) |
 | **`break` blocks** for `?` sites that can propagate `Err`, with the error operand | 6.1.6 | `ExprKind::Question` is already walked. It also needs the propagated error type for the label |
-| **Callee identity** on boundary messages: the target handler's location | 6.1.7 | Lets the client request the callee's `sequenceModel` without guessing |
+| **Callee identity** on boundary messages: the target handler's location | 6.1.7 | Lets the client request the callee's `sequenceModel` without guessing. **Follow-up for packaging slice 6:** callees are located among the project's own units only, since a package never shares a context (ADR 0542). Once behavioural library units let a dependency's agent be mixed into a consumer's context, `locate_callee_in` (`bynk-lsp`) must also search that package's files for the agent's handler, or its `location` stays `null` |
 | A **trigger** on the model: `principal` (exists), `schedule`, `event` or `call` | 6.1.8 | Drives the found message |
 | **Message detail**: argument types, result type and effect, as display strings | 6.1.10 | Hover only. Strings, not types, so the wire stays presentation-free but self-describing. **Deferred from slice 3:** the walk is syntactic and has no types |
 | **Agent key expression** on agent participants | 6.1.2 | |
