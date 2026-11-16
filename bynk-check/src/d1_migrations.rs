@@ -139,6 +139,7 @@ pub fn is_d1(instance: &crate::symbols::DerivedInstance) -> bool {
 pub fn declared_databases(
     kinds: &BTreeMap<String, UnitKind>,
     unit_tables: &HashMap<String, UnitTable>,
+    layout: &bynk_project::worker_layout::WorkerLayout,
 ) -> Vec<String> {
     let mut out = Vec::new();
     for (unit, kind) in kinds {
@@ -148,7 +149,7 @@ pub fn declared_databases(
         let Some(table) = unit_tables.get(unit) else {
             continue;
         };
-        let worker = bynk_project::worker_dir_name(unit);
+        let worker = layout.dir(unit);
         for instance in table.derived.values().filter(|d| is_d1(d)) {
             out.push(d1_database_name(&worker, &instance.binding));
         }

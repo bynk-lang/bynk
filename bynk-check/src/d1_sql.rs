@@ -51,6 +51,7 @@ mod stub {
     use crate::d1_migrations::D1Migrations;
     use crate::project_model::ErrorSink;
     use crate::symbols::UnitTable;
+    use bynk_project::worker_layout::WorkerLayout;
 
     #[derive(Debug)]
     pub struct D1Sql;
@@ -61,7 +62,7 @@ mod stub {
             0
         }
 
-        pub fn build(_: &D1Migrations, _: &mut ErrorSink) -> Option<Arc<D1Sql>> {
+        pub fn build(_: &D1Migrations, _: &WorkerLayout, _: &mut ErrorSink) -> Option<Arc<D1Sql>> {
             None
         }
         pub fn check_unit(
@@ -101,6 +102,7 @@ mod native {
     use crate::d1_migrations::{D1Migrations, d1_database_name, is_d1};
     use crate::project_model::ErrorSink;
     use crate::symbols::UnitTable;
+    use bynk_project::worker_layout::WorkerLayout;
 
     use super::parameter_count;
 
@@ -118,6 +120,8 @@ mod native {
         /// digest takes it, #3243). `Debug` prints only the database names, so it
         /// is not enough to tell two builds apart.
         digest: u64,
+        /// #3562: which Worker each context's database belongs to.
+        layout: WorkerLayout,
     }
 
     impl std::fmt::Debug for D1Sql {
@@ -230,7 +234,11 @@ mod native {
         /// that fails is reported as a warning at its file, and the database is
         /// left out. Always `Some`: a database with no migrations still has its
         /// parameter counts checked (#3126).
-        pub fn build(migrations: &D1Migrations, errors: &mut ErrorSink) -> Option<Arc<D1Sql>> {
+        pub fn build(
+            migrations: &D1Migrations,
+            layout: &WorkerLayout,
+            errors: &mut ErrorSink,
+        ) -> Option<Arc<D1Sql>> {
             let mut schemas = HashMap::new();
             let mut migrated = std::collections::HashSet::new();
             for (database, files) in migrations {
@@ -278,6 +286,7 @@ mod native {
                 schemas,
                 migrated,
                 digest,
+                layout: layout.clone(),
             }))
         }
 
@@ -313,10 +322,7 @@ mod native {
                 else {
                     continue;
                 };
-                let database = d1_database_name(
-                    &bynk_project::worker_dir_name(participant),
-                    &instance.binding,
-                );
+                let database = d1_database_name(&self.layout.dir(participant), &instance.binding);
                 let Some(conn) = self.schemas.get(&database) else {
                     continue;
                 };
@@ -376,7 +382,7 @@ mod native {
                 }
                 sites.insert((site.span.start, site.span.end), site);
             }
-            let worker = bynk_project::worker_dir_name(unit);
+            let worker = self.layout.dir(unit);
             let mut out = Vec::new();
             // #3197: a batch is checked as a whole, the first time one of its
             // statements is reached (they are contiguous in source order).
@@ -861,6 +867,7 @@ mod tests {
                 ("0002_b.sql", "ALTER TABLE t ADD COLUMN;"),
                 ("0003_c.sql", "CREATE TABLE u (id TEXT);"),
             ]),
+            &bynk_project::worker_layout::WorkerLayout::identity(),
             &mut errors,
         );
         let built = built.expect("built");
@@ -890,6 +897,7 @@ mod tests {
                     "INSERT INTO t VALUES (\"a\"); SELECT name FROM d1_migrations;",
                 ),
             ]),
+            &bynk_project::worker_layout::WorkerLayout::identity(),
             &mut errors,
         );
         assert!(built.is_some());
@@ -976,7 +984,12 @@ mod tests {
     #[test]
     fn a_database_without_migrations_is_checked_for_its_parameter_count_alone() {
         let mut errors = ErrorSink::new();
-        let built = D1Sql::build(&migrations(&[]), &mut errors).expect("always built");
+        let built = D1Sql::build(
+            &migrations(&[]),
+            &bynk_project::worker_layout::WorkerLayout::identity(),
+            &mut errors,
+        )
+        .expect("always built");
         assert!(built.schemas.is_empty() && built.migrated.is_empty());
     }
 
@@ -985,6 +998,7 @@ mod tests {
         let mut errors = ErrorSink::new();
         let built = D1Sql::build(
             &migrations(&[("0001_a.sql", "CREATE TABLE t (id TEXT);")]),
+            &bynk_project::worker_layout::WorkerLayout::identity(),
             &mut errors,
         )
         .expect("applies");
@@ -1038,7 +1052,12 @@ mod tests {
     fn a_schema_is_cached_until_its_migrations_change() {
         let build = |sql: &str| {
             let mut errors = ErrorSink::new();
-            D1Sql::build(&migrations(&[("0001_a.sql", sql)]), &mut errors).expect("applies")
+            D1Sql::build(
+                &migrations(&[("0001_a.sql", sql)]),
+                &bynk_project::worker_layout::WorkerLayout::identity(),
+                &mut errors,
+            )
+            .expect("applies")
         };
         let a = build("CREATE TABLE cache_probe (id TEXT);");
         let b = build("CREATE TABLE cache_probe (id TEXT);");
@@ -1068,6 +1087,7 @@ mod tests {
             let mut errors = ErrorSink::new();
             let built = D1Sql::build(
                 &migrations(&[("0001_a.sql", "NOT SQL AT ALL;")]),
+                &bynk_project::worker_layout::WorkerLayout::identity(),
                 &mut errors,
             );
             assert!(built.expect("built").schemas.is_empty());
@@ -1137,8 +1157,12 @@ mod tests {
         std::sync::Arc<std::sync::Mutex<Connection>>,
     ) {
         let mut errors = ErrorSink::new();
-        let built =
-            D1Sql::build(&migrations(&[("0001_a.sql", migration)]), &mut errors).expect("applies");
+        let built = D1Sql::build(
+            &migrations(&[("0001_a.sql", migration)]),
+            &bynk_project::worker_layout::WorkerLayout::identity(),
+            &mut errors,
+        )
+        .expect("applies");
         let conn = built.schemas["demo-orders"].clone();
         let sites: Vec<_> = statements
             .iter()

@@ -2487,6 +2487,7 @@ max_batch_size = 10
         let emit = |bindings: &[WorkerBinding]| -> toml::Table {
             let doc = emit_wrangler_toml(
                 "shop",
+                &bynk_project::worker_layout::WorkerLayout::identity(),
                 bindings,
                 &["0 * * * *".to_string()],
                 &[],
@@ -2535,6 +2536,7 @@ max_batch_size = 10
             use bynk_emit::emitter::{toml_doc::print_toml_document, wrangler::emit_wrangler_toml};
             print_toml_document(&emit_wrangler_toml(
                 "shop",
+                &bynk_project::worker_layout::WorkerLayout::identity(),
                 &bindings,
                 &[],
                 &[],

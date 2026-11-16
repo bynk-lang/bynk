@@ -783,15 +783,19 @@ fn analyse_project_inner(
         bynk_project::assets::AssetFolder::migrations_on_disk(roots.project_root())
             .ok()
             .and_then(|folder| {
+                let layout = bynk_project::worker_layout::WorkerLayout::for_project(
+                    roots.project_root(),
+                    overlay,
+                );
                 let mut scratch = ErrorSink::new();
                 let migrations = crate::d1_migrations::phase_d1_migrations(
                     Some(&folder),
-                    &crate::d1_migrations::declared_databases(&kinds, &unit_tables),
+                    &crate::d1_migrations::declared_databases(&kinds, &unit_tables, &layout),
                     &mut scratch,
                 );
                 // Its `migration_invalid` warning is keyed to a path the editor has
                 // no document for, so it stays in the scratch sink too.
-                crate::d1_sql::D1Sql::build(&migrations, &mut scratch)
+                crate::d1_sql::D1Sql::build(&migrations, &layout, &mut scratch)
             })
     } else {
         None

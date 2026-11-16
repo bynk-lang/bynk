@@ -38,6 +38,17 @@ impl WorkerLayout {
         Self::default()
     }
 
+    /// The layout a project's build uses, from its `bynk.toml` (with `overlay`
+    /// over the files on disk). The one place the build, the checker and the
+    /// editor learn where each context's Worker is, so they cannot disagree.
+    /// Identity for now: groups are switched on with the group as the emit unit.
+    pub fn for_project(
+        _project_root: &std::path::Path,
+        _overlay: &std::collections::HashMap<PathBuf, String>,
+    ) -> Self {
+        Self::identity()
+    }
+
     /// The layout of `groups`: a member goes in its group's directory, under a
     /// prefix; every other context is as in [`Self::identity`].
     pub fn from_groups(groups: &WorkerGroups) -> Self {

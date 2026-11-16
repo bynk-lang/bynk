@@ -44,6 +44,7 @@ use bynk_model::CapRefIr;
 use bynk_model::EventSubscriberShape;
 use bynk_model::FnSig;
 use bynk_model::{lower_attached_fn_sig_ir_from_types, lower_handler_given_ir};
+use bynk_project::worker_layout::WorkerLayout;
 use bynk_syntax::error::CompileError;
 use bynk_syntax::lexer;
 use bynk_syntax::parser;
@@ -97,7 +98,6 @@ pub use bynk_check::schema_registry::{AgentVersions, MigrationStep};
 pub use bynk_check::symbols::{FileDeclIndex, UnitTable};
 // #1883, slice 1b: the `assets/` folder helpers, for the driver and testkit.
 pub use bynk_project::assets;
-use bynk_project::worker_layout::WorkerLayout;
 pub use bynk_project::{
     AttributedError, LabelFile, ProjectPaths, ProjectPathsError, Roots, SchemaLock, TestTarget,
     UnitKind, WorkersConfig, Workspace, check_manifest, check_manifest_str, dependency_trees,
@@ -539,11 +539,10 @@ fn stage_binding_files(
     d1_migrations: &bynk_check::d1_migrations::D1Migrations,
     compiled: &mut Vec<StagedFile>,
 ) {
-    // A D1 database is named from the context, as the migrations' check side
+    // A D1 database is named from the Worker, as the migrations' check side
     // (`d1_migrations`, `d1_sql`) and `wrangler.toml`'s `d1_block` name it, so
-    // all of them agree. Naming it from the Worker (the group's key) is a change
-    // to all of those producers together, made when groups are switched on.
-    let dashes = worker_dir_name(context);
+    // all of them agree.
+    let dashes = layout.dir(context);
     if let Some(manifest) = emitter::wrangler::emit_hyperdrive_manifest(bindings) {
         compiled.push(StagedFile {
             output_path: layout.worker_file(context, emitter::wrangler::HYPERDRIVE_MANIFEST),
@@ -1544,6 +1543,7 @@ fn finish_build(
             asset_bytes,
             agent_versions,
             d1_migrations,
+            layout,
             ..
         } => {
             // #3477: a container's build paths are written from the output
@@ -1589,6 +1589,7 @@ fn finish_build(
                 &agent_versions,
                 &contracts_lock,
                 &d1_migrations,
+                &layout,
                 trace_requests,
                 inspect_agents,
             );
@@ -2148,13 +2149,6 @@ fn emit_unit(
     });
 }
 
-/// #3562: where each context's files go under a Workers build. Always the
-/// identity layout for now: a group's directory and prefixes are switched on
-/// with the group as the emit unit.
-fn emit_layout() -> WorkerLayout {
-    WorkerLayout::identity()
-}
-
 /// Phase 8d/8e: resolve + check (and, in build mode, emit) every source file in
 /// one production unit. The per-file `continue`s stay internal to this loop, so
 /// a file that fails resolution/checking is skipped without abandoning the unit.
@@ -2569,6 +2563,8 @@ enum RunChecks {
         // P4b (#2608): each `D1` database's migrations, copied beside its
         // Worker's `wrangler.toml`.
         d1_migrations: bynk_check::d1_migrations::D1Migrations,
+        // #3562: where each context's Worker is, as the checks above read it.
+        layout: WorkerLayout,
         // State-migrations S4 (#2259): each agent class's reconciled versions
         // and valid steps, keyed `<unit>.<Agent>`, for `bynk migrate status`.
         // Empty when the build has no lock.
@@ -2592,14 +2588,16 @@ fn d1_phase(
 ) -> (
     bynk_check::d1_migrations::D1Migrations,
     Option<Arc<bynk_check::d1_sql::D1Sql>>,
+    WorkerLayout,
 ) {
+    let layout = WorkerLayout::for_project(project_root, overlay);
     let mut migrations = bynk_check::d1_migrations::phase_d1_migrations(
         migration_files,
-        &bynk_check::d1_migrations::declared_databases(kinds, unit_tables),
+        &bynk_check::d1_migrations::declared_databases(kinds, unit_tables, &layout),
         errors,
     );
     let d1_sql = if bynk_project::read_check_config(project_root, overlay).d1_sql {
-        bynk_check::d1_sql::D1Sql::build(&migrations, errors)
+        bynk_check::d1_sql::D1Sql::build(&migrations, &layout, errors)
     } else {
         None
     };
@@ -2615,7 +2613,7 @@ fn d1_phase(
             .unwrap_or_default();
         migrations.insert(bynk_check::d1_migrations::PG_TEST_KEY.to_string(), schema);
     }
-    (migrations, d1_sql)
+    (migrations, d1_sql, layout)
 }
 
 /// The manifest checks that need the project's units, read as the editor reads
@@ -3027,9 +3025,8 @@ fn run_checks(
     let fixture_text = fixture_files
         .map(|folder| bynk_check::fixtures::read_declared_fixtures(&parsed, folder, &mut errors))
         .unwrap_or_default();
-    // -- 6a0''. P4b (#2608), #3070, #3321: the D1 migrations, and the schemas
-    //           literal D1 statements are prepared against.
-    let (d1_migrations, d1_sql) = d1_phase(
+    // -- 6a0''. P4b (#2608), #3070, #3321: D1 migrations, and the schemas D1 SQL is checked against.
+    let (d1_migrations, d1_sql, layout) = d1_phase(
         migration_files,
         (&kinds, &unit_tables),
         (project_root, overlay),
@@ -3346,7 +3343,7 @@ fn run_checks(
                 &adapter_bindings,
                 indices.len() > 1,
                 harness_clock_contexts.contains(name),
-                &emit_layout(),
+                &layout,
             )
         } else {
             None
@@ -3396,7 +3393,7 @@ fn run_checks(
                 .entry(name.clone())
                 .or_default(),
             &mut exec_plan,
-            &emit_layout(),
+            &layout,
         );
         if let Some(sink) = report
             && errors.len() == group_error_baseline
@@ -3647,6 +3644,7 @@ fn run_checks(
         asset_bytes,
         agent_versions: schema_effective_versions.agents,
         d1_migrations,
+        layout,
     }
 }
 
@@ -3982,6 +3980,7 @@ impl WorkersEmit<'_> {
         let (crons, queues) = bynk_check::symbols::cron_and_queue_triggers(table);
         let mut wrangler_doc = emitter::emit_wrangler_toml(
             ctx_name,
+            layout,
             &bindings,
             &crons,
             &queues,
@@ -4284,6 +4283,8 @@ fn build_output(
     contracts_lock: &bynk_project::contracts_lock::ContractsLock,
     // P4b (#2608): each `D1` database's migrations.
     d1_migrations: &bynk_check::d1_migrations::D1Migrations,
+    // #3562: where each context's Worker is.
+    layout: &WorkerLayout,
     // #3580: wrap each Worker's `fetch` in the request recorder.
     trace_requests: bool,
     inspect_agents: bool,
@@ -4425,7 +4426,6 @@ fn build_output(
         BuildTarget::Workers => {
             // v0.8 §2.3: per-Worker entry point, compose.ts, and wrangler
             // configuration. One Worker per context.
-            let layout = emit_layout();
             let emit = WorkersEmit {
                 adapter_bindings: &adapter_bindings,
                 agent_versions,
@@ -4443,7 +4443,7 @@ fn build_output(
                 import_ext,
                 inspect_agents,
                 kinds: &kinds,
-                layout: &layout,
+                layout,
                 parsed: &parsed,
                 trace_requests,
                 unit_callees: &unit_callees,
@@ -5418,6 +5418,64 @@ fn _ensure_components_used(_p: &Path) {
 mod tests {
     use super::*;
     use std::fs;
+
+    /// #3562: a member of a group names its D1 database from the Worker (the
+    /// group's key), and the migrations staged for it sit where `wrangler.toml`
+    /// points, so `wrangler d1 migrations apply` finds them.
+    #[test]
+    fn a_group_members_d1_migrations_are_staged_where_wrangler_points() {
+        use bynk_project::worker_groups::{WorkerGroup, WorkerGroups};
+        let groups = WorkerGroups::from([(
+            "core".to_string(),
+            WorkerGroup {
+                contexts: vec!["shop.orders".to_string(), "shop.pricing".to_string()],
+                ..WorkerGroup::default()
+            },
+        )]);
+        let layout = bynk_project::worker_layout::WorkerLayout::from_groups(&groups);
+        let bindings = vec![emitter::wrangler::WorkerBinding {
+            name: "D1_ORDERS".to_string(),
+            source: emitter::wrangler::BindingSource::D1Database {
+                capability: "Orders".to_string(),
+            },
+        }];
+        let database = emitter::wrangler::d1_database_name(&layout.dir("shop.orders"), "D1_ORDERS");
+        assert_eq!(database, "core-orders");
+        let mut migrations = bynk_check::d1_migrations::D1Migrations::new();
+        migrations.insert(
+            database.clone(),
+            vec![bynk_check::d1_migrations::MigrationFile {
+                name: "0001_init.sql".to_string(),
+                sql: "CREATE TABLE t (id TEXT);".to_string(),
+            }],
+        );
+        let toml = emitter::toml_doc::print_toml_document(&emitter::wrangler::emit_wrangler_toml(
+            "shop.orders",
+            &layout,
+            &bindings,
+            &[],
+            &[],
+            &[],
+            &[],
+            None,
+            &Default::default(),
+            &migrations,
+        ));
+        assert!(toml.contains("database_name = \"core-orders\""), "{toml}");
+        assert!(
+            toml.contains("migrations_dir = \"migrations/core-orders\""),
+            "{toml}"
+        );
+        let mut staged = Vec::new();
+        stage_binding_files(&bindings, &layout, "shop.orders", &migrations, &mut staged);
+        let paths: Vec<_> = staged.iter().map(|f| f.output_path.clone()).collect();
+        assert_eq!(
+            paths,
+            vec![PathBuf::from(
+                "workers/core/migrations/core-orders/0001_init.sql"
+            )]
+        );
+    }
 
     /// Review of #1904: the `_headers` glob must cover every served path, or
     /// every asset silently loses its immutable cache lifetime. Both come
