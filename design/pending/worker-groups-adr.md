@@ -111,12 +111,14 @@ edge as no edge.
   the diagnostic names the group, not a context.
 - **[[0193]] D2:** the checker's `consumes` acyclicity is the precondition for
   uploading in one pass **only between Workers whose nodes are contexts**. With
-  groups the nodes are Workers, and two groups can form a cycle with no cycle among
-  their contexts (`A1 -> B1` and `B2 -> A2`, with `A1`, `A2` in one group and
-  `B1`, `B2` in another). D2's conclusion, that no two-pass deploy is needed,
-  stands **if** the group-level graph is acyclic. That is a check-time error,
-  `bynk.deploy.group_cycle`, over the Worker-level graph, naming the Workers and one
-  context edge per hop; it lands before G3 (its own PR), and G4 does not deploy a
+  groups the nodes are Workers, and a group and any other Worker (another group or a
+  single context) can form a cycle with no cycle among their contexts: `A1 -> B1`
+  and `B2 -> A2` with the `A`s in one group and the `B`s in another, or `A1 -> C`
+  and `C -> A2` with `C` on its own. D2's conclusion, that no two-pass deploy is
+  needed, stands **if** the Worker-level graph is acyclic. That is a check-time
+  error, `bynk.deploy.group_cycle`, over the Worker-level graph, naming the Workers
+  and one context edge per hop; it lands before G3 (its own PR), tested for both
+  shapes (group to group, and group to a single context), and G4 does not deploy a
   group without it.
 
 **Consequences.**

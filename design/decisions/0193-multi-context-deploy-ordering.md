@@ -3,11 +3,12 @@
 - **Status:** Accepted (v0.170)
 - **Amended** for Worker groups (#3562, the "Worker groups: several contexts in one
   Worker" ADR, D7 and D8): **D1** does not apply to a group's Service Binding to
-  itself, so the ordering treats an intra-group edge as no edge; **D2**'s
-  acyclicity precondition holds between Workers only if the group-level graph is
-  acyclic (two groups can form a cycle with no cycle among their contexts), which
-  is the check-time error `bynk.deploy.group_cycle`, which lands before `bynk
-  deploy` deploys a group.
+  itself, so the ordering treats an intra-group edge as no edge. **D2**'s
+  acyclicity precondition holds between Workers only if the Worker-level graph is
+  acyclic: a group and any other Worker (another group or a single context) can
+  form a cycle with no cycle among the contexts. The check-time error
+  `bynk.deploy.group_cycle` enforces it, and must land before `bynk deploy`
+  accepts a group.
 - **Provenance:** #601, deploy track slice 2 (spine #558). Builds on slice 0
   (#583, v0.154).
 - **Relates:** [[0179]] (provisioning state — the ledger this extends), [[0180]]
