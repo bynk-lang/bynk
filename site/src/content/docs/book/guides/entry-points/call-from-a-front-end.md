@@ -71,6 +71,26 @@ bynk client --check    # exits non-zero, naming the first differing line, when i
 
 `--check` writes nothing, and an upgrade of `bynk` alone does not trip it.
 
+### Regenerate from your editor
+
+The editor needs no command of its own: `bynk client` reads `[build.client]`, so it takes
+no arguments. In VS Code, a task puts it in the command palette (**Tasks: Run Task**),
+and a second one runs the drift check:
+
+```json
+// .vscode/tasks.json
+{
+  "version": "2.0.0",
+  "tasks": [
+    { "label": "bynk: generate client", "type": "shell", "command": "bynk client", "problemMatcher": [] },
+    { "label": "bynk: check client", "type": "shell", "command": "bynk client --check", "problemMatcher": [] }
+  ]
+}
+```
+
+Run them from the Bynk project's folder. `bynk build` also writes the client when
+`[build.client]` is set, so a task that runs a build keeps it current.
+
 ## Call a route
 
 ```ts
