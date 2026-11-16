@@ -130,7 +130,7 @@ a service that would share a name are refused, naming both.
 A call returns `Promise<RouteResponse | CallFailure>` and never throws for an HTTP
 status or a network failure.
 
-`RouteResponse` is a union keyed by `status`, one member for each answer `bynk openapi`
+`RouteResponse` is a union with one member for each answer `bynk openapi`
 documents for the route: the declared success when the handler can return it, each
 `HttpResult` variant it constructs, and the boundary's own `400` (and `413` and
 `415` where they apply).
