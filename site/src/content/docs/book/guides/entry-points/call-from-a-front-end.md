@@ -26,8 +26,8 @@ current documentation before relying on them.
 
 ## The API
 
-The recipes use this service. It has a refined type, an optional field, a
-route that can answer `409`, and a Bearer-guarded route:
+The recipes use this service. It has a refined type, an optional field, and
+routes that can answer `201`, `200`, `404` and `409`:
 
 ```bynk,fragment
 type Sku = String where NonEmpty
@@ -38,11 +38,18 @@ type Order = { id: String, sku: Sku, qty: Qty, note: Option[String] }
 
 service orders from http {
 	on POST("/orders") (body: NewOrder) -> Effect[HttpResult[Order]] by v: Visitor {
-		Created(Order { id: "o1", sku: body.sku, qty: body.qty, note: body.note })
+		if body.sku == "sold-out" {
+			Conflict("that item is sold out")
+		} else {
+			Created(Order { id: "o1", sku: body.sku, qty: body.qty, note: body.note })
+		}
 	}
 
 	on GET("/orders/:id") (id: String) -> Effect[HttpResult[Order]] by v: Visitor {
-		NotFound
+		match id {
+			"o1" => Ok(Order { id: "o1", sku: "A1", qty: 2, note: None }),
+			_ => NotFound,
+		}
 	}
 }
 ```
@@ -133,7 +140,8 @@ round trip.
 
 ## Send an auth header
 
-For a Bearer-guarded route, `headers` is a value or a function read on every call,
+For a Bearer-guarded route (the service above has none; yours would declare a
+`Bearer` actor), `headers` is a value or a function read on every call,
 so a token that refreshes needs no wrapper. The client never reads or stores one:
 
 ```ts
@@ -197,15 +205,18 @@ export const api = createClient({ baseUrl: import.meta.env.VITE_API_URL }).order
 
 The client's `fetch` option is the whole integration. In a `load` function, pass
 SvelteKit's own `fetch`, which forwards cookies and resolves relative URLs
-(**unverified** against the current SvelteKit documentation):
+(**unverified** against the current SvelteKit documentation). `PUBLIC_API_URL` is
+your API's origin; leave `baseUrl` out only if the API is proxied on the app's own
+origin, since the client then uses relative URLs:
 
 ```ts
 // src/routes/orders/[id]/+page.ts
 import { createClient } from "$lib/api";
+import { PUBLIC_API_URL } from "$env/static/public";
 import { error } from "@sveltejs/kit";
 
 export async function load({ fetch, params }) {
-  const api = createClient({ fetch }).orders;
+  const api = createClient({ baseUrl: PUBLIC_API_URL, fetch }).orders;
   const res = await api.getOrderById(params.id);
   if (res.kind !== "Ok") error(res.kind === "NotFound" ? 404 : 502);
   return { order: res.body };
@@ -217,12 +228,13 @@ A form action calls it the same way:
 ```ts
 // src/routes/orders/new/+page.server.ts
 import { createClient } from "$lib/api";
+import { PUBLIC_API_URL } from "$env/static/public";
 import { fail } from "@sveltejs/kit";
 
 export const actions = {
   default: async ({ request, fetch }) => {
     const data = await request.formData();
-    const api = createClient({ fetch }).orders;
+    const api = createClient({ baseUrl: PUBLIC_API_URL, fetch }).orders;
     const res = await api.postOrders({
       sku: String(data.get("sku")),
       qty: Number(data.get("qty")),
@@ -265,7 +277,17 @@ const api = createClient({ baseUrl: process.env.API_URL }).orders;
 
 export async function POST(request: Request) {
   const res = await api.postOrders(await request.json());
-  return Response.json(res, { status: "status" in res ? res.status : 502 });
+  switch (res.kind) {
+    case "Created":
+      return Response.json(res.body, { status: 201 });
+    case "Conflict":
+      return Response.json({ error: res.error }, { status: 409 });
+    case "Invalid":
+    case "StructuralMismatch":
+      return Response.json({ error: "invalid order" }, { status: 400 });  // the caller's input
+    default:
+      return Response.json({ error: "upstream failure" }, { status: 502 }); // Transport, Unexpected
+  }
 }
 ```
 
@@ -296,7 +318,8 @@ needs `origin` as above; your front end's server must authenticate its caller.
 
 ## Streams and uploads
 
-A route that streams server-sent events returns an `events` iterator, and a
+A route that streams server-sent events (here a hypothetical `GET /ticks`) returns an
+`events` iterator, and a
 `@form` or `@multipart` route takes the typed record, with a browser's file input
 value passed as a `Blob`:
 
