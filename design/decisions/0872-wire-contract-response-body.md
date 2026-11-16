@@ -1,11 +1,6 @@
----
-level: patch
-changelog: `bynk/wireContract` describes every HTTP response's body (value, message, redirect, raw, stream) in a new `body` field, checked against `bynk openapi`
----
+# 0872 — `bynk/wireContract` describes message, redirect, raw and stream response bodies
 
-## ADR: wire-contract-response-body
-title: `bynk/wireContract` describes message, redirect, raw and stream response bodies
-summary: A `body` descriptor beside the value-only `payload`, classified once and checked against `bynk openapi`
+- **Status:** Accepted (v0.633.9)
 
 **Context.** [ADR 0870](0870-wire-contract-success-payload.md) gave each
 `WcHttpResponse` a `payload`: `T` for a value variant, `null` for everything
