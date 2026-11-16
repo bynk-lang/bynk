@@ -38,6 +38,7 @@ pub mod dev_inspect;
 mod dev_vectorize;
 pub mod diagnostics;
 pub mod doctor;
+pub mod eval;
 pub mod explain;
 pub mod fetch;
 pub mod fmt;

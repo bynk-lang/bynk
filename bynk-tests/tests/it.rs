@@ -315,6 +315,8 @@ mod system {
     mod doc_examples_check_behaviour;
     #[path = "embed_check_behaviour.rs"]
     mod embed_check_behaviour;
+    #[path = "eval_behaviour.rs"]
+    mod eval_behaviour;
     #[path = "events_behaviour.rs"]
     mod events_behaviour;
     #[path = "events_boundary_workerd.rs"]

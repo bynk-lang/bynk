@@ -106,6 +106,7 @@
     - [Test a flow across Workers](guides/testing/integration.md)
     - [Run your tests](guides/testing/run-tests.md)
     - [Check what a request stored](guides/testing/check-what-the-app-stored.md)
+    - [Try an expression against your project](guides/testing/try-an-expression.md)
     - [Test against a running system](guides/testing/against-a-running-system.md)
   - [Projects, build & deployment](guides/projects-build-and-deployment/index.md)
     - [Why compile to TypeScript](guides/projects-build-and-deployment/why-compile-to-typescript.md)

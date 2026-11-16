@@ -1,12 +1,6 @@
----
-level: patch
-probes: ts_writes
-changelog: A build can record agent instances and answer a signed `/_bynk/inspect/` route (the emitter and runtime half of `bynk dev inspect`); deploy output is unchanged
----
+# 0865 — `bynk dev` lists agent instances and reads their state through a dev-only registry and a signed inspect route
 
-## ADR: dev-agent-inspection
-title: `bynk dev` lists agent instances and reads their state through a dev-only registry and a signed inspect route
-summary: A dev build records each instance's key in a registry Durable Object and answers a signed, read-only `/_bynk/inspect/` route; a deploy build contains neither
+- **Status:** Accepted (v0.629.5)
 
 **Context.** While `bynk dev` runs, nothing shows which agent instances exist or
 what state each is in. A key is hashed into a Durable Object id and never stored,

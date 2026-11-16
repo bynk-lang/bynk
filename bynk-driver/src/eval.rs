@@ -30,7 +30,7 @@
 //! implicit request.
 
 use std::collections::HashMap;
-use std::path::PathBuf;
+use std::path::{Path, PathBuf};
 use std::process::ExitCode;
 use std::time::Duration;
 
@@ -63,9 +63,181 @@ pub struct EvalRequest {
     /// Unsaved buffers, layered over the project's files (ADR 0626): an
     /// absolute path to the file's text.
     pub buffers: HashMap<PathBuf, String>,
+    /// The project's own suites to build in, by target unit: the suites whose
+    /// `stub`s the snippet wants. Every other suite of the project is left out
+    /// of the build, so an unrelated suite that does not compile cannot block an
+    /// evaluation; a suite named here is built, and its errors are reported.
+    pub suites: Vec<String>,
     /// The time limit. The evaluation is killed, and reported as timed out,
     /// after this long.
     pub timeout: Duration,
+}
+
+/// One diagnostic of a snippet that does not check.
+#[derive(Debug, Clone, PartialEq, serde::Serialize)]
+pub struct EvalDiagnostic {
+    /// The file it is in, as the project names it; absent for the snippet
+    /// itself, whose `line` and `col` are then the snippet's own (1-based).
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub file: Option<String>,
+    pub line: u32,
+    pub col: u32,
+    /// `"error"`, `"warning"` or `"hint"`.
+    pub severity: String,
+    /// The diagnostic's code, `bynk.types.let_annotation_mismatch`.
+    pub code: String,
+    pub message: String,
+}
+
+/// The result document `bynk eval` prints: `{"value", "type", "diagnostics"}`,
+/// and an `error` when the snippet ran to no value.
+#[derive(Debug, Clone, PartialEq)]
+pub struct EvalReport {
+    /// The wire shape of the snippet's last expression; `null` when there is
+    /// none (and when the expression is the unit value, which `type` tells).
+    /// Absent from the document when `error` is present.
+    pub value: Option<Value>,
+    /// That expression's type, or `null` with no value. Absent from the
+    /// document when `error` is present.
+    pub ty: Option<String>,
+    /// Why the snippet did not check, one entry each; empty otherwise.
+    pub diagnostics: Vec<EvalDiagnostic>,
+    /// Absent when there is a value or `diagnostics` says why not.
+    pub error: Option<EvalError>,
+}
+
+impl serde::Serialize for EvalReport {
+    /// `value` and `type` come first, and are left out when `error` says why
+    /// there is no value.
+    fn serialize<S: serde::Serializer>(&self, serializer: S) -> Result<S::Ok, S::Error> {
+        use serde::ser::SerializeMap as _;
+        let mut map = serializer.serialize_map(None)?;
+        if self.error.is_none() {
+            map.serialize_entry("value", &self.value)?;
+            map.serialize_entry("type", &self.ty)?;
+        }
+        map.serialize_entry("diagnostics", &self.diagnostics)?;
+        if let Some(error) = &self.error {
+            map.serialize_entry("error", error)?;
+        }
+        map.end()
+    }
+}
+
+/// A snippet that checked but ran to no value.
+#[derive(Debug, Clone, PartialEq, serde::Serialize)]
+pub struct EvalError {
+    /// `"runtime"` (a refusal, a failed `expect`, an unstubbed capability),
+    /// `"timeout"`, or `"setup"` (no such unit, no runner).
+    pub kind: &'static str,
+    pub message: String,
+}
+
+impl EvalReport {
+    /// Whether the snippet produced a value.
+    pub fn succeeded(&self) -> bool {
+        self.ty.is_some()
+    }
+}
+
+impl From<EvalOutcome> for EvalReport {
+    fn from(outcome: EvalOutcome) -> Self {
+        let none = |diagnostics, error| EvalReport {
+            value: None,
+            ty: None,
+            diagnostics,
+            error,
+        };
+        let error = |kind, message| none(Vec::new(), Some(EvalError { kind, message }));
+        match outcome {
+            EvalOutcome::Value { value, ty } => EvalReport {
+                value: Some(value),
+                ty: Some(ty),
+                diagnostics: Vec::new(),
+                error: None,
+            },
+            EvalOutcome::Diagnostics(diagnostics) => none(diagnostics, None),
+            EvalOutcome::Failed(message) => error("runtime", message),
+            EvalOutcome::TimedOut(message) => error("timeout", message),
+            EvalOutcome::Error(message) => error("setup", message),
+        }
+    }
+}
+
+/// Where the snippet sits in the file it was built into, to put a diagnostic
+/// back at the snippet's own line and column.
+struct Placement {
+    /// The file's key in the project's sources.
+    file: PathBuf,
+    /// The lines of the file ahead of the snippet's first.
+    line_offset: u32,
+    /// The snippet's lines.
+    lines: u32,
+    /// The characters generated ahead of the snippet on its first line.
+    prefix: usize,
+}
+
+impl Placement {
+    /// Whether `path`, as the run printed it (as typed from the working
+    /// directory, so possibly relative), is the file the snippet was built into.
+    /// The file may not exist on disk (a synthetic suite), so its directory is
+    /// compared canonically, and its name.
+    fn holds(&self, path: &Path) -> bool {
+        let canonical = |dir: Option<&Path>| {
+            let dir = dir
+                .filter(|d| !d.as_os_str().is_empty())
+                .unwrap_or(Path::new("."));
+            dir.canonicalize().unwrap_or_else(|_| dir.to_path_buf())
+        };
+        path.file_name() == self.file.file_name()
+            && canonical(path.parent()) == canonical(self.file.parent())
+    }
+}
+
+/// The `--format short` line `line` as a diagnostic. A line with no location
+/// (`error[code]: message`) has line and column 0.
+fn parse_diagnostic(line: &str, at: &Placement) -> Option<EvalDiagnostic> {
+    let (location, rest) = [": error[", ": warning[", ": hint["]
+        .iter()
+        .find_map(|marker| {
+            line.find(marker)
+                .map(|at| (Some(&line[..at]), &line[at + 2..]))
+        })
+        .or_else(|| {
+            ["error[", "warning[", "hint["]
+                .iter()
+                .any(|m| line.starts_with(m))
+                .then_some((None, line))
+        })?;
+    let (severity, rest) = rest.split_once('[')?;
+    let (code, message) = rest.split_once("]: ")?;
+    let (mut file, mut line_no, mut col) = (None, 0u32, 0u32);
+    if let Some(location) = location {
+        let mut parts = location.rsplitn(3, ':');
+        col = parts.next()?.parse().ok()?;
+        line_no = parts.next()?.parse().ok()?;
+        let path = parts.next()?;
+        let in_snippet = at.holds(Path::new(path))
+            && line_no > at.line_offset
+            && line_no <= at.line_offset + at.lines;
+        if in_snippet {
+            // The snippet's own line; the first carries any generated opening.
+            line_no -= at.line_offset;
+            if line_no == 1 {
+                col = col.saturating_sub(at.prefix as u32).max(1);
+            }
+        } else {
+            file = Some(path.to_string());
+        }
+    }
+    Some(EvalDiagnostic {
+        file,
+        line: line_no,
+        col,
+        severity: severity.to_string(),
+        code: code.to_string(),
+        message: message.to_string(),
+    })
 }
 
 /// What an evaluation produced.
@@ -74,9 +246,8 @@ pub enum EvalOutcome {
     /// The snippet ran. `value` is the wire shape of its last expression and
     /// `ty` that expression's type.
     Value { value: Value, ty: String },
-    /// The project or the snippet did not compile: the diagnostics, one line
-    /// each.
-    Diagnostics(Vec<String>),
+    /// The project or the snippet did not compile: the diagnostics.
+    Diagnostics(Vec<EvalDiagnostic>),
     /// The snippet compiled and ran, but a failure stopped it (a refused
     /// refined-type construction, an `expect` that did not hold, a capability
     /// with no stub).
@@ -87,25 +258,65 @@ pub enum EvalOutcome {
     Error(String),
 }
 
+/// The unit `text` declares, when it parses without an error. A warning the
+/// parser reports (a lint) does not stop a unit being found.
+fn parse_clean(text: &str) -> Option<SourceUnit> {
+    let tokens = tokenize(text).ok()?;
+    let (unit, errors) = parse_unit_with_recovery(&tokens, text);
+    errors
+        .iter()
+        .all(|e| bynk_syntax::Severity::for_error(e) != bynk_syntax::Severity::Error)
+        .then_some(unit)
+        .flatten()
+}
+
 /// The key, in `sources`, of the file that declares the unit `unit`.
 fn unit_file(sources: &HashMap<PathBuf, String>, unit: &str) -> Option<PathBuf> {
     let mut keys: Vec<&PathBuf> = sources.keys().collect();
     keys.sort();
     keys.into_iter()
-        .find(|key| {
-            let source = &sources[*key];
-            let Ok(tokens) = tokenize(source) else {
-                return false;
-            };
-            let (parsed, errors) = parse_unit_with_recovery(&tokens, source);
-            errors.is_empty()
-                && match parsed {
-                    Some(SourceUnit::Commons(c)) => c.name.joined() == unit,
-                    Some(SourceUnit::Context(c)) => c.name.joined() == unit,
-                    _ => false,
-                }
+        .find(|key| match parse_clean(&sources[*key]) {
+            Some(SourceUnit::Commons(c)) => c.name.joined() == unit,
+            Some(SourceUnit::Context(c)) => c.name.joined() == unit,
+            _ => false,
         })
         .cloned()
+}
+
+/// What stands in for a suite file left out of the build: a suite of one case
+/// that is never selected. (A suite with no case emits a module that does not
+/// type-check.)
+fn left_out(target: &str) -> String {
+    format!(
+        "// left out of this `bynk eval` build\nsuite {target} {{ case \"left out\" {{ expect 1 == 1 }} }}\n"
+    )
+}
+
+/// A stand-in for every suite of `sources` that is not among `keep` (by target
+/// unit), to lay over them: a snippet needs only its target unit's own
+/// declarations, and the project's suites are built only when asked for.
+fn left_out_suites(
+    sources: &HashMap<PathBuf, String>,
+    keep: &[String],
+) -> HashMap<PathBuf, String> {
+    let mut out = HashMap::new();
+    for (key, text) in sources {
+        let target = match parse_clean(text) {
+            Some(SourceUnit::Suite(suite)) => Some(suite.target.joined()),
+            Some(_) => None,
+            // A suite that does not parse is still left out, as the target its
+            // own `suite <name>` line names.
+            None => text.lines().find_map(|l| {
+                let name = l.strip_prefix("suite ")?;
+                let end = name.find(|c: char| c.is_whitespace() || c == '{');
+                Some(name[..end.unwrap_or(name.len())].to_string())
+            }),
+        };
+        if let Some(target) = target.filter(|t| !keep.contains(t)) {
+            out.insert(key.clone(), left_out(&target));
+        }
+    }
+    out
 }
 
 /// How many leading lines of `snippet` are the suite's own: `consumes` and
@@ -156,10 +367,10 @@ fn bracket_delta(line: &str) -> i32 {
     delta
 }
 
-/// The synthetic suite for `snippet`, targeting `unit`: the snippet's own
-/// lines, with the suite and case openings added to the first and last header
-/// lines and the closers after the last line.
-pub fn suite_text(unit: &str, snippet: &str) -> String {
+/// The snippet's lines, with the case opened on the last header line (or the
+/// first, with no header) and no closer, and how many characters that opening
+/// adds to the first line.
+fn case_lines(snippet: &str) -> (Vec<String>, usize) {
     let header = header_lines(snippet);
     let mut lines: Vec<String> = snippet.lines().map(str::to_string).collect();
     if lines.is_empty() {
@@ -167,19 +378,94 @@ pub fn suite_text(unit: &str, snippet: &str) -> String {
     }
     let open = format!("case \"{EVAL_CASE}\" {{");
     if header == 0 {
-        lines[0] = format!("suite {unit} {{ {open} {}", lines[0]);
+        lines[0] = format!("{open} {}", lines[0]);
+        (lines, open.len() + 1)
     } else {
-        lines[0] = format!("suite {unit} {{ {}", lines[0]);
         lines[header - 1].push_str(&format!(" {open}"));
+        (lines, 0)
     }
+}
+
+/// The synthetic suite for `snippet`, targeting `unit`: the snippet's own
+/// lines, with the suite and case openings added to the first and last header
+/// lines and the closers after the last line. Also how many characters the
+/// generated opening adds to the first line.
+pub fn suite_text(unit: &str, snippet: &str) -> (String, usize) {
+    let (mut lines, case_prefix) = case_lines(snippet);
+    let suite_prefix = format!("suite {unit} {{ ");
+    lines[0] = format!("{suite_prefix}{}", lines[0]);
     let mut text = lines.join("\n");
     text.push_str("\n} }\n");
-    text
+    (text, suite_prefix.len() + case_prefix)
+}
+
+/// `existing`, a suite file, with the snippet's case added at its end (before
+/// its closing brace, in brace form, whose offset is `close`): the snippet then
+/// sees the suite's own `consumes`, `stub`s, `fn`s and fixtures. Also the lines
+/// ahead of the snippet's first and the characters generated on it.
+fn merged_suite_text(existing: &str, close: Option<usize>, snippet: &str) -> (String, u32, usize) {
+    let (lines, prefix) = case_lines(snippet);
+    let head = &existing[..close.unwrap_or(existing.len())];
+    let mut text = format!("{head}\n{}\n", lines.join("\n"));
+    let offset = text[..head.len() + 1].matches('\n').count() as u32;
+    text.push_str("}\n");
+    if let Some(close) = close {
+        text.push_str(&existing[close..]);
+    }
+    (text, offset, prefix)
+}
+
+/// The suite file of `sources` for the target `unit` that a snippet is merged
+/// into when the caller names that suite: its key and the offset of its closing
+/// brace. An error says why the unit's suites cannot host a snippet.
+fn host_suite(
+    sources: &HashMap<PathBuf, String>,
+    unit: &str,
+) -> Result<(PathBuf, Option<usize>), String> {
+    let mut keys: Vec<&PathBuf> = sources.keys().collect();
+    keys.sort();
+    let mut other_tier = false;
+    for key in keys {
+        let text = &sources[key];
+        let Some(SourceUnit::Suite(suite)) = parse_clean(text) else {
+            continue;
+        };
+        if suite.target.joined() != unit {
+            continue;
+        }
+        // A suite of another tier cannot host a snippet; a unit suite can.
+        if suite
+            .tier
+            .is_some_and(|t| t != bynk_syntax::ast::TestTier::Unit)
+        {
+            other_tier = true;
+            continue;
+        }
+        let close = match suite.form {
+            bynk_syntax::ast::CommonsForm::Fragment => None,
+            bynk_syntax::ast::CommonsForm::Brace => match text[..suite.span.end].rfind('}') {
+                Some(at) => Some(at),
+                None => continue,
+            },
+        };
+        return Ok((key.clone(), close));
+    }
+    Err(if other_tier {
+        format!(
+            "`{unit}` has no unit suite for a snippet to be built into: its suites are of another tier, and a snippet is evaluated at the unit tier"
+        )
+    } else {
+        format!("there is no suite for `{unit}` to build the snippet into")
+    })
 }
 
 /// Run `request`: the snippet's value, or why there is none.
 pub fn evaluate(request: &EvalRequest) -> EvalOutcome {
-    let options = match crate::try_project_options(&request.input) {
+    // Absolute, so the synthetic file's key is inside the root an overlay is
+    // judged against, however the project was named.
+    // (Not `canonicalize`, which gives a `\\?\` path on Windows that `tsc` refuses.)
+    let input = std::path::absolute(&request.input).unwrap_or_else(|_| request.input.clone());
+    let options = match crate::try_project_options(&input) {
         Ok(o) => o,
         Err(e) => return EvalOutcome::Error(e.to_string()),
     };
@@ -224,7 +510,42 @@ pub fn evaluate(request: &EvalRequest) -> EvalOutcome {
         _ => synthetic,
     };
     let mut overlay = buffers;
-    overlay.insert(synthetic, suite_text(&request.unit, &request.snippet));
+    overlay.extend(left_out_suites(&sources, &request.suites));
+    // Only the unit's own suite can host the snippet: it is the one whose
+    // `stub`s and `fn`s apply to a case of that unit.
+    if let Some(other) = request.suites.iter().find(|s| **s != request.unit) {
+        return EvalOutcome::Error(format!(
+            "`--suite {other}` is not the unit being evaluated (`{}`): only that unit's suite can hold the snippet",
+            request.unit
+        ));
+    }
+    let placement = if request.suites.is_empty() {
+        let (text, prefix) = suite_text(&request.unit, &request.snippet);
+        let lines = text.lines().count() as u32;
+        let placement = Placement {
+            file: synthetic.clone(),
+            line_offset: 0,
+            lines,
+            prefix,
+        };
+        overlay.insert(synthetic, text);
+        placement
+    } else {
+        let (key, close) = match host_suite(&sources, &request.unit) {
+            Ok(host) => host,
+            Err(message) => return EvalOutcome::Error(message),
+        };
+        let (text, line_offset, prefix) =
+            merged_suite_text(&sources[&key], close, &request.snippet);
+        let lines = request.snippet.lines().count().max(1) as u32;
+        overlay.insert(key.clone(), text);
+        Placement {
+            file: key,
+            line_offset,
+            lines,
+            prefix,
+        }
+    };
     let args = TestArgs {
         no_run: false,
         format: TestFormat::Json,
@@ -232,14 +553,14 @@ pub fn evaluate(request: &EvalRequest) -> EvalOutcome {
         case: vec![EVAL_CASE.to_string()],
         run_timeout: Some(request.timeout),
         overlay: Some(overlay),
-        ..TestArgs::discovery(request.input.clone())
+        ..TestArgs::discovery(input)
     };
     let (code, text) = crate::test_stream::capture(|| run_test("bynk", args));
-    interpret(code, &text)
+    interpret(code, &text, &placement)
 }
 
 /// What the `bynk test --format json` document `text` says about the snippet.
-fn interpret(code: ExitCode, text: &str) -> EvalOutcome {
+fn interpret(code: ExitCode, text: &str, at: &Placement) -> EvalOutcome {
     let Ok(doc) = serde_json::from_str::<Value>(text) else {
         return EvalOutcome::Error(format!("the test run said: {}", text.trim()));
     };
@@ -253,7 +574,14 @@ fn interpret(code: ExitCode, text: &str) -> EvalOutcome {
     };
     let message = doc["error"]["message"].as_str().map(str::to_string);
     match doc["error"]["kind"].as_str() {
-        Some("compile") => return EvalOutcome::Diagnostics(lines("diagnostics")),
+        Some("compile") => {
+            return EvalOutcome::Diagnostics(
+                lines("diagnostics")
+                    .iter()
+                    .filter_map(|l| parse_diagnostic(l, at))
+                    .collect(),
+            );
+        }
         Some("timeout") => {
             return EvalOutcome::TimedOut(message.unwrap_or_else(|| "timed out".to_string()));
         }
@@ -295,14 +623,16 @@ fn interpret(code: ExitCode, text: &str) -> EvalOutcome {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use std::path::Path;
 
     #[test]
     fn a_snippet_without_a_header_is_all_case_body() {
         assert_eq!(header_lines("let x = 1\nx + 1"), 0);
         assert_eq!(
             suite_text("demo.calc", "double(21)"),
-            "suite demo.calc { case \"bynk eval\" { double(21)\n} }\n"
+            (
+                "suite demo.calc { case \"bynk eval\" { double(21)\n} }\n".to_string(),
+                "suite demo.calc { case \"bynk eval\" { ".len()
+            )
         );
     }
 
@@ -312,7 +642,7 @@ mod tests {
             "consumes shop.order { Placed }\n// a stub\nstub Clock.now() returns 0\nlet x = 1\nx";
         assert_eq!(header_lines(snippet), 3);
         assert_eq!(
-            suite_text("demo.calc", snippet),
+            suite_text("demo.calc", snippet).0,
             "suite demo.calc { consumes shop.order { Placed }\n// a stub\nstub Clock.now() returns 0 case \"bynk eval\" {\nlet x = 1\nx\n} }\n"
         );
     }
@@ -384,11 +714,15 @@ let res <- Fetch.send(Request { method: Get, url: \"https://example.com\", conte
     }
 
     fn project(tag: &str) -> Project {
+        project_with(tag, UNIT)
+    }
+
+    fn project_with(tag: &str, unit: &str) -> Project {
         let root = std::env::temp_dir().join(format!("bynk_eval_{tag}_{}", std::process::id()));
         let _ = std::fs::remove_dir_all(&root);
         std::fs::create_dir_all(root.join("src")).unwrap();
         std::fs::write(root.join("bynk.toml"), "[project]\nname = \"p\"\n").unwrap();
-        std::fs::write(root.join("src/demo.bynk"), UNIT).unwrap();
+        std::fs::write(root.join("src/demo.bynk"), unit).unwrap();
         // Not `canonicalize`, which gives a `\\?\` path on Windows that `tsc` refuses.
         Project(std::path::absolute(&root).unwrap())
     }
@@ -399,6 +733,7 @@ let res <- Fetch.send(Request { method: Get, url: \"https://example.com\", conte
             unit: "demo".to_string(),
             snippet: snippet.to_string(),
             buffers: HashMap::new(),
+            suites: Vec::new(),
             timeout,
         })
     }
@@ -464,13 +799,14 @@ let res <- Fetch.send(Request { method: Get, url: \"https://example.com\", conte
     fn a_snippet_that_does_not_check_reports_diagnostics() {
         let root = project("diag");
         match eval(&root, "let x: Int = \"oops\"\nx") {
-            EvalOutcome::Diagnostics(lines) => {
-                assert!(
-                    lines
-                        .iter()
-                        .any(|l| l.contains("bynk.types.let_annotation_mismatch")),
-                    "{lines:?}"
-                );
+            EvalOutcome::Diagnostics(found) => {
+                // In the snippet, on its line, at the column in the snippet.
+                let d = found
+                    .iter()
+                    .find(|d| d.code == "bynk.types.let_annotation_mismatch")
+                    .unwrap_or_else(|| panic!("{found:?}"));
+                assert_eq!((d.file.as_deref(), d.line, d.col), (None, 1, 14));
+                assert_eq!(d.severity, "error");
             }
             other => panic!("expected diagnostics, got {other:?}"),
         }
@@ -493,6 +829,7 @@ let res <- Fetch.send(Request { method: Get, url: \"https://example.com\", conte
             unit: "demo".to_string(),
             snippet: "double(2)".to_string(),
             buffers: HashMap::from([(file, edited)]),
+            suites: Vec::new(),
             timeout: Duration::from_secs(120),
         });
         assert_eq!(value(outcome).0, serde_json::json!(6));
@@ -506,9 +843,50 @@ let res <- Fetch.send(Request { method: Get, url: \"https://example.com\", conte
             unit: "nope".to_string(),
             snippet: "1".to_string(),
             buffers: HashMap::new(),
+            suites: Vec::new(),
             timeout: Duration::from_secs(5),
         });
         assert!(matches!(outcome, EvalOutcome::Error(_)), "{outcome:?}");
+    }
+
+    #[test]
+    fn a_short_line_is_a_diagnostic() {
+        let at = |file: &str, line_offset, lines| Placement {
+            file: PathBuf::from(file),
+            line_offset,
+            lines,
+            prefix: 10,
+        };
+        let synthetic = at("/p/src/demo.eval.bynk", 0, 3);
+        let d = parse_diagnostic(
+            "/p/src/demo.eval.bynk:2:5: error[bynk.resolve.unknown_name]: unknown name `x`",
+            &synthetic,
+        )
+        .unwrap();
+        assert_eq!((d.file, d.line, d.col), (None, 2, 5));
+        let d = parse_diagnostic(
+            "/p/src/demo.bynk:7:1: warning[a.b]: odd: really",
+            &synthetic,
+        )
+        .unwrap();
+        assert_eq!(d.file.as_deref(), Some("/p/src/demo.bynk"));
+        assert_eq!(d.message, "odd: really");
+        let d = parse_diagnostic("error[a.b]: no place", &synthetic).unwrap();
+        assert_eq!((d.line, d.col), (0, 0));
+        // Built into a suite file, the lines ahead of the snippet and after it
+        // are the suite's own, and so is a file of the same name elsewhere.
+        let hosted = at("/p/tests/demo.bynk", 8, 2);
+        let line = |path: &str, n: u32| format!("{path}:{n}:3: error[a.b]: here");
+        let found = parse_diagnostic(&line("/p/tests/demo.bynk", 9), &hosted).unwrap();
+        assert_eq!((found.file, found.line), (None, 1));
+        for (path, n) in [
+            ("/p/tests/demo.bynk", 4),
+            ("/p/tests/demo.bynk", 11),
+            ("/p/src/demo.bynk", 9),
+        ] {
+            let d = parse_diagnostic(&line(path, n), &hosted).unwrap();
+            assert_eq!((d.file.as_deref(), d.line), (Some(path), n));
+        }
     }
 
     #[test]
@@ -526,5 +904,212 @@ let res <- Fetch.send(Request { method: Get, url: \"https://example.com\", conte
             }
             other => panic!("expected a report of no wire shape, got {other:?}"),
         }
+    }
+
+    const STUBBING_SUITE: &str = "\
+suite demo {
+  consumes bynk { Fetch, Request, Method, Response }
+  stub Fetch.send(_) returns Ok(Response { status: 204, headers: Map.empty(), body: \"\" })
+
+  case \"x\" {
+    expect double(1) == 2
+  }
+}
+";
+
+    fn with_suite(root: &Path, text: &str) {
+        std::fs::create_dir_all(root.join("tests")).unwrap();
+        std::fs::write(root.join("tests/demo.bynk"), text).unwrap();
+    }
+
+    #[test]
+    fn a_suite_that_does_not_compile_does_not_block_an_evaluation() {
+        let root = project("broken_suite");
+        with_suite(
+            &root,
+            "suite demo {\n  case \"broken\" {\n    let x: Int = \"no\"\n    expect x == 1\n  }\n}\n",
+        );
+        // Another unit's suite, left out as well, still builds a module that
+        // type-checks beside the evaluation's.
+        std::fs::write(
+            root.join("src/other.bynk"),
+            "commons other\n\nfn one() -> Int {\n  1\n}\n",
+        )
+        .unwrap();
+        std::fs::write(
+            root.join("tests/other.bynk"),
+            "suite other {\n  case \"one\" {\n    expect one() == 1\n  }\n}\n",
+        )
+        .unwrap();
+        assert_eq!(value(eval(&root, "double(2)")).0, serde_json::json!(4));
+    }
+
+    #[test]
+    fn a_named_suite_is_built_in_and_its_stubs_apply() {
+        let root = project("named_suite");
+        with_suite(&root, STUBBING_SUITE);
+        let send = FETCH.to_string() + "res";
+        // Left out, the suite's stub is not there to answer.
+        assert!(matches!(eval(&root, &send), EvalOutcome::Failed(_)));
+        // Named, it is, and the snippet needs no stub of its own.
+        let request = |suites: Vec<String>| EvalRequest {
+            input: root.to_path_buf(),
+            unit: "demo".to_string(),
+            snippet: FETCH.to_string() + "res",
+            buffers: HashMap::new(),
+            suites,
+            timeout: Duration::from_secs(120),
+        };
+        let (v, _) = value(evaluate(&request(vec!["demo".to_string()])));
+        assert_eq!(v["value"]["status"], 204);
+        // And a named suite that does not compile is reported.
+        with_suite(
+            &root,
+            "suite demo {\n  case \"x\" {\n    let n: Int = \"no\"\n  }\n}\n",
+        );
+        match evaluate(&request(vec!["demo".to_string()])) {
+            EvalOutcome::Diagnostics(d) => {
+                let d = &d[0];
+                assert_eq!(d.line, 3, "{d:?}");
+                assert!(
+                    d.file.as_deref().is_some_and(|f| f.ends_with("demo.bynk")),
+                    "{d:?}"
+                );
+            }
+            other => panic!("expected the suite's diagnostics, got {other:?}"),
+        }
+    }
+
+    fn request(root: &Path, snippet: &str, suites: &[&str]) -> EvalRequest {
+        EvalRequest {
+            input: root.to_path_buf(),
+            unit: "demo".to_string(),
+            snippet: snippet.to_string(),
+            buffers: HashMap::new(),
+            suites: suites.iter().map(|s| s.to_string()).collect(),
+            timeout: Duration::from_secs(120),
+        }
+    }
+
+    #[test]
+    fn an_error_in_the_unit_is_the_units_even_when_a_suite_hosts_the_snippet() {
+        let root = project("hosted_unit_error");
+        with_suite(&root, STUBBING_SUITE);
+        // The unit and its suite are both `demo.bynk`, in different folders; the
+        // error is on a line past the suite's own.
+        let file = root.join("src/demo.bynk");
+        let broken = format!("{UNIT}\nfn bad() -> Int {{\n  \"no\"\n}}\n");
+        let line = broken.lines().position(|l| l.contains("\"no\"")).unwrap() as u32 + 1;
+        let mut r = request(&root, "1", &["demo"]);
+        r.buffers = HashMap::from([(file, broken)]);
+        match evaluate(&r) {
+            EvalOutcome::Diagnostics(d) => {
+                let d = d
+                    .iter()
+                    .find(|d| d.line == line)
+                    .unwrap_or_else(|| panic!("{d:?}"));
+                assert!(
+                    d.file.as_deref().is_some_and(|f| f.ends_with("demo.bynk")),
+                    "{d:?}"
+                );
+            }
+            other => panic!("expected diagnostics, got {other:?}"),
+        }
+    }
+
+    #[test]
+    fn a_unit_suite_hosts_the_snippet_whatever_other_suites_the_unit_has() {
+        let root = project("tiers");
+        with_suite(&root, STUBBING_SUITE);
+        // Sorts before `demo.bynk`, and is not a unit suite.
+        std::fs::write(
+            root.join("tests/a_integration.bynk"),
+            "suite demo as integration {\n  case \"integrated\" {\n    expect 1 == 1\n  }\n}\n",
+        )
+        .unwrap();
+        let (v, _) = value(evaluate(&request(
+            &root,
+            &(FETCH.to_string() + "res"),
+            &["demo"],
+        )));
+        assert_eq!(v["value"]["status"], 204);
+    }
+
+    #[test]
+    fn a_suite_that_cannot_host_is_said_so() {
+        let root = project("no_host");
+        // No suite at all.
+        match evaluate(&request(&root, "1", &["demo"])) {
+            EvalOutcome::Error(m) => assert!(m.contains("no suite for `demo`"), "{m}"),
+            other => panic!("{other:?}"),
+        }
+        // Only another tier's.
+        std::fs::create_dir_all(root.join("tests")).unwrap();
+        std::fs::write(
+            root.join("tests/demo.bynk"),
+            "suite demo as integration {\n  case \"x\" {\n    expect 1 == 1\n  }\n}\n",
+        )
+        .unwrap();
+        match evaluate(&request(&root, "1", &["demo"])) {
+            EvalOutcome::Error(m) => assert!(m.contains("another tier"), "{m}"),
+            other => panic!("{other:?}"),
+        }
+        // A suite that is not the unit's.
+        match evaluate(&request(&root, "1", &["other"])) {
+            EvalOutcome::Error(m) => assert!(m.contains("not the unit being evaluated"), "{m}"),
+            other => panic!("{other:?}"),
+        }
+    }
+
+    #[test]
+    fn a_suite_that_does_not_parse_is_left_out_as_the_target_it_names() {
+        let sources = HashMap::from([(
+            PathBuf::from("/p/tests/other.bynk"),
+            "suite other {\n  case \"x\" {{{\n".to_string(),
+        )]);
+        assert_eq!(left_out_suites(&sources, &[]).len(), 1);
+        // Named, the broken suite is kept, so its errors are the evaluation's.
+        assert!(left_out_suites(&sources, &["other".to_string()]).is_empty());
+    }
+
+    #[test]
+    fn a_report_leaves_out_value_and_type_when_it_has_an_error() {
+        let report = EvalReport::from(EvalOutcome::Failed("no".to_string()));
+        assert_eq!(
+            serde_json::to_string(&report).unwrap(),
+            r#"{"diagnostics":[],"error":{"kind":"runtime","message":"no"}}"#
+        );
+        let report = EvalReport::from(EvalOutcome::Value {
+            value: serde_json::json!(1),
+            ty: "Int".to_string(),
+        });
+        assert_eq!(
+            serde_json::to_string(&report).unwrap(),
+            r#"{"value":1,"type":"Int","diagnostics":[]}"#
+        );
+    }
+
+    #[test]
+    fn a_unit_the_parser_only_warns_about_is_found() {
+        // Three nested `match`es draw a lint from the parser, not an error.
+        let unit = "\
+context demo
+
+fn sum(a: Option[Int], b: Option[Int], c: Option[Int]) -> Int {
+  match a {
+    Some(x) => match b {
+      Some(y) => match c {
+        Some(z) => x + y + z
+        None => 0
+      }
+      None => 0
+    }
+    None => 0
+  }
+}
+";
+        let root = project_with("lint", unit);
+        let (v, _) = value(eval(&root, "sum(Some(1), Some(2), Some(3))"));
+        assert_eq!(v, serde_json::json!(6));
     }
 }

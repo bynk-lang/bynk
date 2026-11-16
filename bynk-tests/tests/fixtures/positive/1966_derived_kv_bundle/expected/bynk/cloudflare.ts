@@ -1000,6 +1000,21 @@ export const ImageResult = {
 };
 
 /**
+ * A transformed image as a stream, from `Images.transformStream`: the `body`
+ * as chunks read as they are pulled, and the `contentType` the platform wrote
+ * it with. The body can be read once (`collect`, `map`, or handed to
+ * `RawStreamed`); a second read faults. A record carrying a stream is not
+ * data: it can't be stored, sent or encoded.
+ */
+export interface ImageStream {
+  readonly body: AsyncIterable<globalThis.Uint8Array>;
+  readonly contentType: string;
+}
+
+export const ImageStream = {
+};
+
+/**
  * Why an `Images` call did not give an image. `InvalidImage` is an input that
  * is not an image, or an option the call cannot honour, with the reason;
  * `UnsupportedImage` is a format the platform cannot read or write;
@@ -1683,7 +1698,19 @@ export const __AiToken: symbol = globalThis.Symbol("Ai");
  *
  * `transform(image, options, output)` reads `image` (any format the platform
  * reads, at most 20 MB), applies `options` and writes the result as `output`
- * says. The result is buffered whole. The image is untrusted input: an upload
+ * says. The result is buffered whole; for a large image use `transformStream`.
+ *
+ * `transformStream(image, options, output)` is `transform` over a stream: it
+ * reads `image` as a `Stream[Bytes]` (read once, as any stream is) and gives
+ * the result as an `ImageStream`, so a handler can serve it with
+ * `RawStreamed` without holding the output. The input is still bounded by
+ * the platform's limit, and the options are the same. A refusal before the
+ * stream starts (a non-image, an option out of range) is the `Err`; a failure
+ * after the first chunk faults the stream, as a failing producer aborts any
+ * stream. The overlay images stay `Bytes`, since an overlay is small and a
+ * stream cannot be read twice for `repeat`. Like every `Stream`, the result
+ * cannot cross a service boundary: the handler that calls it is the one that
+ * serves it. The image is untrusted input: an upload
  * can be a non-image or very large, so answer `InvalidImage` and
  * `ImageTooLarge` as the caller's mistake, and cap an upload with the request
  * body limit. An empty image, a `width` or `height` below 1, a `rotate` other
@@ -1705,6 +1732,7 @@ export const __AiToken: symbol = globalThis.Symbol("Ai");
 export interface Images {
   info(image: globalThis.Uint8Array): globalThis.Promise<Result<ImageInfo, ImagesError>>;
   transform(image: globalThis.Uint8Array, options: TransformOptions, output: OutputOptions): globalThis.Promise<Result<ImageResult, ImagesError>>;
+  transformStream(image: AsyncIterable<globalThis.Uint8Array>, options: TransformOptions, output: OutputOptions): globalThis.Promise<Result<ImageStream, ImagesError>>;
 }
 
 export const __ImagesToken: symbol = globalThis.Symbol("Images");
@@ -2055,8 +2083,10 @@ export const __ContainerToken: symbol = globalThis.Symbol("Container");
  *
  * The certificate is uploaded to the account by its owner (Wrangler's
  * `mtls-certificate upload`, the dashboard or the API) and is named there;
- * `@certificate` names it, as written in every environment. Bynk never uploads
- * a certificate: its private key never reaches Bynk or the Worker.
+ * `@certificate` names it, as written in every environment. The deploy links to
+ * it by that name and never uploads it: its private key never reaches Bynk or
+ * the Worker. A name that no uploaded client certificate carries, or that more
+ * than one carries, fails the deploy with the problem named.
  *
  * `send` has `Fetch.send`'s shape and rules: the same `Request` (its headers
  * checked the same way, refused as `InvalidHeader` before anything is sent),
@@ -2069,14 +2099,22 @@ export const __ContainerToken: symbol = globalThis.Symbol("Container");
  * Cloudflare does not support presenting a certificate to an origin that is a
  * proxied zone on Cloudflare; the call fails with a `520`. See Cloudflare's
  * mTLS bindings page for the current rules. There is no local simulation of
- * the binding, and `bynkc test` faults until the call is stubbed, so a test
- * never reaches the origin.
+ * the binding: `bynk dev` runs it on Cloudflare, once you allow it, and
+ * `bynkc test` faults until the call is stubbed, so a test never reaches the
+ * origin.
  *
- * `Request`, `Response` and `FetchError` are `bynk`'s types, so a context that
- * calls `send` also writes `consumes bynk` to name them.
+ * `receiveBytes` and `sendBytes` are `Fetch`'s byte forms over the same
+ * certificate: the response body as `Bytes`, and a `Bytes` request body (which
+ * `req.body` must then leave `None`), each with `Fetch`'s defaults for the
+ * timeout and redirects.
+ *
+ * `Request`, `Response`, `BytesResponse` and `FetchError` are `bynk`'s types, so
+ * a context that calls them also writes `consumes bynk` to name them.
  */
 export interface MtlsCertificate {
   send(req: Request): globalThis.Promise<Result<Response, FetchError>>;
+  receiveBytes(req: Request): globalThis.Promise<Result<BytesResponse, FetchError>>;
+  sendBytes(req: Request, body: globalThis.Uint8Array): globalThis.Promise<Result<BytesResponse, FetchError>>;
 }
 
 export const __MtlsCertificateToken: symbol = globalThis.Symbol("MtlsCertificate");

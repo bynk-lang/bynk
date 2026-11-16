@@ -86,6 +86,7 @@ contexts = ["shop.orders", "shop.pricing"]   # qualified names, each context in 
 ai = "allow"                # no default: silences `bynk dev`'s Workers AI cost warning
 vectorize = "allow"         # no default: silences `bynk dev`'s Vectorize cost warning
 ai-search = "allow"         # no default: silences `bynk dev`'s AI Search cost warning
+mtls = "allow"              # no default: silences `bynk dev`'s mTLS certificate notice
 
 [dev.vectorize-index]       # no default: the index of your own `bynk dev` binds, per capability
 Docs = "docs-dev"
@@ -760,6 +761,7 @@ vectorize = "allow"
 | `ai` | `[dev]` | `"allow"` | Acknowledges that `Ai` calls run remotely under `bynk dev`. The only value; any other is a manifest error. There is no command-line flag. |
 | `vectorize` | `[dev]` | `"allow"` | The same for `Vectorize` calls. |
 | `ai-search` | `[dev]` | `"allow"` | Acknowledges that `AiSearch` calls go to your deployed AI Search instance under `bynk dev`, which has no local simulation. Separate from `ai`. The only value; any other is a manifest error. |
+| `mtls` | `[dev]` | `"allow"` | Acknowledges that an `MtlsCertificate` call runs on Cloudflare under `bynk dev`, presenting your account's certificate to the origin, because an mTLS binding has no local simulation. It needs a certificate `bynk deploy` has linked for the environment. The only value; any other is a manifest error. |
 
 The key is per binding kind, so a later remote-only binding takes its own key
 and the same warning. `bynk dev` marks each Worker it serves with a `BYNK_DEV`

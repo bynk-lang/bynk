@@ -487,7 +487,7 @@ Consuming it **locks the deployment unit to Cloudflare** (it cannot then target
 | **`EdgeCache`** *(experimental)* | `purge(prefixes: List[String]) -> Effect[Bool]`. Used only through a named instance, at most one per context, which turns Cloudflare's edge cache on for the context's Worker; see below. |
 | **`Version`** *(experimental)* | `current() -> Effect[WorkerVersion]`. One per Worker, used bare; see [The running version](#the-running-version-version). |
 | **`Ai`** *(experimental)* | `run(model: String, input: String) -> Effect[Result[String, AiError]]` · `generate(model, request: GenerateRequest) -> Effect[Result[Generation, AiError]]` · `embed(model, texts: List[String]) -> Effect[Result[List[List[Float]], AiError]]` · `runStream(model, input: String) -> Effect[Result[Stream[String], AiError]]`. One per Worker, used bare; see [Workers AI](#workers-ai-ai). |
-| **`Images`** *(experimental)* | `info(image: Bytes) -> Effect[Result[ImageInfo, ImagesError]]` · `transform(image: Bytes, options: TransformOptions, output: OutputOptions) -> Effect[Result[ImageResult, ImagesError]]`. One per Worker, used bare; see [Images](#images-images). |
+| **`Images`** *(experimental)* | `info(image: Bytes) -> Effect[Result[ImageInfo, ImagesError]]` · `transform(image: Bytes, options: TransformOptions, output: OutputOptions) -> Effect[Result[ImageResult, ImagesError]]` · `transformStream(image: Stream[Bytes], options, output) -> Effect[Result[ImageStream, ImagesError]]`. One per Worker, used bare; see [Images](#images-images). |
 | **`StoredSecret`** *(experimental)* | `get() -> Effect[String]`. Used only through a named instance that names its store and its secret; see [Account secrets](#account-secrets-storedsecret). |
 | **`Email`** *(experimental)* | `send(message: EmailMessage) -> Effect[Result[String, EmailError]]`. Used only through a named instance, which may restrict its senders and recipients; see [Outbound email](#outbound-email-email). |
 | **`Postgres`** *(experimental)* | `all(sql: String, params: List[PgValue]) -> Effect[Result[String, PgError]]` · `first(sql, params) -> Effect[Result[Option[String], PgError]]` · `run(sql, params) -> Effect[Result[PgRun, PgError]]` · `transaction(statements: List[PgStatement]) -> Effect[Result[List[PgRun], PgError]]`, and the compiler-lowered typed reads `select[T]` and `firstAs[T]`. Used only through a named instance; see [Postgres databases](#postgres-databases-postgres). |
@@ -495,7 +495,7 @@ Consuming it **locks the deployment unit to Cloudflare** (it cannot then target
 | **`Vectorize`** *(experimental)* | `upsert(vectors: List[Vector]) -> Effect[Result[Mutation, VectorError]]` · `insert(vectors) -> Effect[Result[Mutation, VectorError]]` · `upsertValue[M: Codable](vectors: List[VectorOf[M]]) -> Effect[Result[Mutation, VectorError]]` · `query(vector: List[Float], options: QueryOptions) -> Effect[Result[List[VectorMatch], VectorError]]` · `getByIds(ids: List[String]) -> Effect[Result[List[Vector], VectorError]]` · `deleteByIds(ids) -> Effect[Result[Mutation, VectorError]]` · `describe() -> Effect[Result[IndexInfo, VectorError]]`. Used only through a named instance that states its dimensions and metric; see [Vector indexes](#vector-indexes-vectorize). |
 | **`Container`** *(experimental)* | `send(instance: String, req: Request) -> Effect[Result[Response, ContainerError]]` · `receiveBytes(instance, req) -> Effect[Result[BytesResponse, ContainerError]]` · `sendBytes(instance, req, body: Bytes) -> Effect[Result[BytesResponse, ContainerError]]`. Used only through a named instance that names its image and port; see [Containers](#containers-container). |
 | **`AiSearch`** *(experimental)* | `search(query: String, options: SearchOptions) -> Effect[Result[List[SearchHit], SearchError]]` · `answer(messages: List[ChatMessage], options: SearchOptions) -> Effect[Result[SearchAnswer, SearchError]]`. Used only through a named instance that names an existing AI Search instance; see [AI Search](#ai-search-aisearch). |
-| **`MtlsCertificate`** *(experimental)* | `send(req: Request) -> Effect[Result[Response, FetchError]]`. Used only through a named instance that names a client certificate in the account; see [Mutual TLS](#mutual-tls-mtlscertificate). |
+| **`MtlsCertificate`** *(experimental)* | `send(req: Request) -> Effect[Result[Response, FetchError]]` · `receiveBytes(req) -> Effect[Result[BytesResponse, FetchError]]` · `sendBytes(req, body: Bytes) -> Effect[Result[BytesResponse, FetchError]]`. Used only through a named instance that names a client certificate in the account; see [Mutual TLS](#mutual-tls-mtlscertificate). |
 
 `Kv` is backed by a Worker KV namespace bound as `env.KV`; the
 `[[kv_namespaces]]` stanza is derived for you.
@@ -1012,6 +1012,18 @@ default. An `Overlay` is `Bytes` drawn over the image at an offset from `top`,
 read only, so it is `InvalidImage` as an output) and takes an
 optional `quality` from 1 to 100. The result is an `ImageResult` with the `body`
 and the `contentType` it was written with.
+
+`transformStream(image, options, output)` is `transform` over streams, for an
+image too large to hold: it reads `image` as a `Stream[Bytes]` and answers an
+`ImageStream`, a `body: Stream[Bytes]` with the `contentType`, that a handler
+serves with `RawStreamed` as it is read. The options are the same, and the
+overlay images stay `Bytes`. A refusal before the stream starts (a non-image, an
+option out of range) is the `Err`, so the handler can answer with an ordinary
+response; a failure after the first chunk faults the stream. Like every
+`Stream`, both are read once, and the result cannot cross a service boundary:
+the handler that calls `transformStream` is the one that serves it. The
+platform's input limit still applies. In a test it faults until stubbed
+(`stub Images.transformStream(_, _, _) returns …`).
 
 An uploaded image is untrusted input, so a bad one is a value, not a fault. An
 `ImagesError` is `InvalidImage(message)` (the input is not an image, or an
@@ -1694,13 +1706,13 @@ service orders from http {
 is the certificate's **name** as it was uploaded to the account, never its id, so an
 id stays out of source; it is used as written in every environment, and an empty name
 is refused (`bynk.capability.invalid_option`). The generated stanza carries the name in
-`certificate_id`. Resolving the name to the certificate's id is the deploy's job and is not
-built yet, so `bynk deploy` refuses a Worker that declares an `MtlsCertificate` until it is,
-rather than push a name where Cloudflare expects an id.
+`certificate_id`, which `bynk deploy` replaces with the id it resolves.
 
 `send` has [`Fetch.send`](#the-portable-surface--bynk)'s shape and rules: the same
 `Request` (its headers checked the same way), the same `Response`, and `Network` when the
-call itself fails, a handshake the origin refuses included. Unlike [`Service`](#calling-a-worker-outside-the-project-service),
+call itself fails, a handshake the origin refuses included. `receiveBytes` and `sendBytes` are
+[`Fetch`'s byte forms](#binary-bodies) over the same certificate, with `Fetch`'s defaults for
+the timeout and redirects. Unlike [`Service`](#calling-a-worker-outside-the-project-service),
 the URL's host **is** the destination: this is a real outbound call, and the certificate is
 presented to whatever origin the URL names. `Request`, `Response` and `FetchError` are
 `bynk`'s types, so a context that calls `send` also writes `consumes bynk`.
@@ -1711,8 +1723,24 @@ API; see Cloudflare's [mTLS binding page](https://developers.cloudflare.com/work
 for what it supports. In particular, Cloudflare does not support presenting a certificate to an
 origin that is a proxied zone on Cloudflare: the call fails with a `520`.
 
-A test never presents a certificate: `send` **faults** until
-`stub Backend.send(_) returns …` gives it a reply, so a test never reaches the origin.
+`bynk deploy` **links** a certificate and never uploads one. It lists the account's mTLS
+certificates through Cloudflare's API, matches the name (client certificates only, never a CA),
+writes the id into the Worker's configuration and records the link in `bynk.deploy.lock`, keyed
+by environment, Worker and binding. A missing or ambiguous name fails the deploy before anything
+is pushed, naming it; an expired or soon-expiring certificate is a warning. It needs
+`CLOUDFLARE_API_TOKEN` and `CLOUDFLARE_ACCOUNT_ID`, the token with "SSL and Certificates: Read";
+see [Deploy to Cloudflare](/book/guides/projects-build-and-deployment/deploy-to-cloudflare/#mtls-certificates).
+
+There is no local simulation of the binding, so under `bynk dev` a call runs on Cloudflare,
+presenting your account's certificate to the origin. The development copy of the Worker's
+configuration marks the binding `remote = true` and binds the certificate by the id the last
+deploy recorded for the environment, so run `bynk deploy` once first; a certificate no deploy has
+linked is reported and a call through it fails. `bynk dev` warns once, on the first call, unless
+`mtls = "allow"` is under `[dev]` in `bynk.toml`.
+
+A test never presents a certificate: every operation **faults** until
+`stub Backend.send(_) returns …` (or `receiveBytes`, `sendBytes`) gives it a reply, so a test never
+reaches the origin.
 `MtlsCertificate` is experimental: list `"bynk.cloudflare.MtlsCertificate"` under
 `[unstable] allow`.
 
