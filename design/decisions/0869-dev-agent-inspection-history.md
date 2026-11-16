@@ -1,12 +1,6 @@
----
-level: patch
-probes: ts_writes
-changelog: A `bynk dev` build records each agent instance's committed transitions in a bounded ring buffer, and `bynk dev inspect agent` returns them as `history` (slice 1 of the dev agent-inspection track)
----
+# 0869 — A dev build keeps each agent instance's recent transitions in a bounded ring buffer outside layout 2
 
-## ADR: dev-agent-inspection-history
-title: A dev build keeps each agent instance's recent transitions in a bounded ring buffer outside layout 2
-summary: `commitState` appends `{handler, old, new, at}` to a reserved key in a `bynk dev` build only, and a refused transition leaves no entry
+- **Status:** Accepted (v0.633.2)
 
 **Context.** The list-and-read slice of the dev agent-inspection track shows what
 an instance holds now, not how it got there. Transitions exist only inside

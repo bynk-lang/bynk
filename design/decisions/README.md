@@ -17,6 +17,7 @@ or a row links to no file. Summaries and statuses are curated by hand; the
 
 | # | Decision | Status |
 |---|---|---|
+| [0869](0869-dev-agent-inspection-history.md) | **A dev build keeps each agent instance's recent transitions in a bounded ring buffer outside layout 2** (v0.633.2) — `commitState` appends `{handler, old, new, at}` to a reserved key in a `bynk dev` build only, and a refused transition leaves no entry | Accepted (v0.633.2) |
 | [0868](0868-analytics-sql-singleton.md) | **`AnalyticsSql` is a singleton binding over the Analytics Engine SQL API, remote-only under `bynk dev`** (v0.633) — One `[analytics]` binding per Worker, `query(sql, params)` over D1's `SqlValue`, a typed result and extensible error; no local implementation | Accepted (v0.633) |
 | [0867](0867-mtls-certificate-deploy-link.md) | **`bynk deploy` links an mTLS certificate by name and never uploads it; `bynk dev` runs it remotely** (v0.632) — Resolve the name over the REST list, match client certificates only, record a name and an id, never key material; remote-only under `bynk dev` | Accepted (v0.632) |
 | [0866](0866-images-transform-stream.md) | **`Images.transformStream` is `transform` over streams, and its result is not data** (v0.630) — A streamed form of `Images.transform`: `Stream[Bytes]` in, `ImageStream` out, refusals before the stream starts are values | Accepted (v0.630) |
