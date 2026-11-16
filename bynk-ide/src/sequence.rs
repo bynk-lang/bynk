@@ -54,7 +54,7 @@ pub enum HandlerOwner<'a> {
 /// pathological handler; real code never comes near it. Beyond it the walk
 /// emits a single [`AltKind::Collapsed`] marker instead of recursing further.
 /// (It was 2, a presentation cut, until slice 3.)
-const MAX_BLOCK_DEPTH: u32 = 16;
+pub const MAX_BLOCK_DEPTH: u32 = 16;
 
 #[derive(Debug, Clone, Default, PartialEq)]
 pub struct SequenceModel {
