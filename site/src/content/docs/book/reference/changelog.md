@@ -28,6 +28,7 @@ per-commit history. While Bynk is pre-1.0, increments may change behaviour.
 
 | Version | Highlights |
 |---|---|
+| **v0.633.10** | A user sum variant spelled like an `HttpResult` variant (`Found`, `Gone`, ...) is its own constructor inside an `HttpResult` handler, so it no longer type-checks as the HTTP response or appears in the wire contract and OpenAPI document (#3631) |
 | **v0.633.9** | `bynk/wireContract` describes every HTTP response's body (value, message, redirect, raw, stream) in a new `body` field, checked against `bynk openapi` |
 | **v0.633.8** | `bynk/agentStateModel` trims trailing whitespace from an invariant's `doc` and omits it when empty, and documents its `range` as running from the keyword to the end of the predicate (#3608) |
 | **v0.633.7** | The Workers emit loop in `bynk-driver` is split into a per-context function and two helpers, the shape `[deploy.workers]` groups will emit through (#3562, G2b) |
