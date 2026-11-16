@@ -1000,6 +1000,14 @@ impl DerivedInstance {
             .flatten()
     }
 
+    /// The client certificate an `MtlsCertificate` declaration names (#3513 A), as
+    /// written; `None` for any other kind.
+    pub fn mtls_certificate(&self) -> Option<&str> {
+        (self.base_unit == crate::firstparty::CLOUDFLARE_UNIT && self.base_cap == "MtlsCertificate")
+            .then(|| self.option(crate::firstparty::MTLS_CERTIFICATE_OPTION))
+            .flatten()
+    }
+
     /// Whether this is a `StoredSecret` instance (#3301).
     pub fn is_stored_secret(&self) -> bool {
         self.base_unit == crate::firstparty::CLOUDFLARE_UNIT && self.base_cap == "StoredSecret"

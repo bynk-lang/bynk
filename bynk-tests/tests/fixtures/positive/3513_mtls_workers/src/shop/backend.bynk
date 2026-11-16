@@ -1,0 +1,28 @@
+context shop.backend
+
+// #3513 A: an `MtlsCertificate` instance names a client certificate in the account. It binds
+// as `MTLS_<NAME>`, an `[[mtls_certificates]]` entry naming the certificate as written, and only
+// a Worker that reaches one declares it. `bynk deploy` links it and never uploads it.
+
+consumes bynk
+consumes bynk.cloudflare { MtlsCertificate }
+
+capability Backend = MtlsCertificate @certificate("acme-client")
+
+service api from http {
+	on GET("/orders") () -> Effect[HttpResult[String]] by Visitor given Backend {
+		let req = Request {
+			method: Get,
+			url: "https://orders.acme.example/v1/orders",
+			contentType: None,
+			authorization: None,
+			headers: Map.empty(),
+			body: None,
+		}
+		let res <- Backend.send(req)
+		match res {
+			Ok(r) => Ok("status \(r.status)"),
+			Err(_) => ServerError("the origin is unreachable"),
+		}
+	}
+}

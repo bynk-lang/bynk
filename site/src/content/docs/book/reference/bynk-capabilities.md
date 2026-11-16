@@ -487,6 +487,7 @@ Consuming it **locks the deployment unit to Cloudflare** (it cannot then target
 | **`EdgeCache`** *(experimental)* | `purge(prefixes: List[String]) -> Effect[Bool]`. Used only through a named instance, at most one per context, which turns Cloudflare's edge cache on for the context's Worker; see below. |
 | **`Version`** *(experimental)* | `current() -> Effect[WorkerVersion]`. One per Worker, used bare; see [The running version](#the-running-version-version). |
 | **`Ai`** *(experimental)* | `run(model: String, input: String) -> Effect[Result[String, AiError]]` · `generate(model, request: GenerateRequest) -> Effect[Result[Generation, AiError]]` · `embed(model, texts: List[String]) -> Effect[Result[List[List[Float]], AiError]]` · `runStream(model, input: String) -> Effect[Result[Stream[String], AiError]]`. One per Worker, used bare; see [Workers AI](#workers-ai-ai). |
+| **`Images`** *(experimental)* | `info(image: Bytes) -> Effect[Result[ImageInfo, ImagesError]]` · `transform(image: Bytes, options: TransformOptions, output: OutputOptions) -> Effect[Result[ImageResult, ImagesError]]`. One per Worker, used bare; see [Images](#images-images). |
 | **`StoredSecret`** *(experimental)* | `get() -> Effect[String]`. Used only through a named instance that names its store and its secret; see [Account secrets](#account-secrets-storedsecret). |
 | **`Email`** *(experimental)* | `send(message: EmailMessage) -> Effect[Result[String, EmailError]]`. Used only through a named instance, which may restrict its senders and recipients; see [Outbound email](#outbound-email-email). |
 | **`Postgres`** *(experimental)* | `all(sql: String, params: List[PgValue]) -> Effect[Result[String, PgError]]` · `first(sql, params) -> Effect[Result[Option[String], PgError]]` · `run(sql, params) -> Effect[Result[PgRun, PgError]]` · `transaction(statements: List[PgStatement]) -> Effect[Result[List[PgRun], PgError]]`, and the compiler-lowered typed reads `select[T]` and `firstAs[T]`. Used only through a named instance; see [Postgres databases](#postgres-databases-postgres). |
@@ -494,6 +495,7 @@ Consuming it **locks the deployment unit to Cloudflare** (it cannot then target
 | **`Vectorize`** *(experimental)* | `upsert(vectors: List[Vector]) -> Effect[Result[Mutation, VectorError]]` · `insert(vectors) -> Effect[Result[Mutation, VectorError]]` · `upsertValue[M: Codable](vectors: List[VectorOf[M]]) -> Effect[Result[Mutation, VectorError]]` · `query(vector: List[Float], options: QueryOptions) -> Effect[Result[List[VectorMatch], VectorError]]` · `getByIds(ids: List[String]) -> Effect[Result[List[Vector], VectorError]]` · `deleteByIds(ids) -> Effect[Result[Mutation, VectorError]]` · `describe() -> Effect[Result[IndexInfo, VectorError]]`. Used only through a named instance that states its dimensions and metric; see [Vector indexes](#vector-indexes-vectorize). |
 | **`Container`** *(experimental)* | `send(instance: String, req: Request) -> Effect[Result[Response, ContainerError]]` · `receiveBytes(instance, req) -> Effect[Result[BytesResponse, ContainerError]]` · `sendBytes(instance, req, body: Bytes) -> Effect[Result[BytesResponse, ContainerError]]`. Used only through a named instance that names its image and port; see [Containers](#containers-container). |
 | **`AiSearch`** *(experimental)* | `search(query: String, options: SearchOptions) -> Effect[Result[List[SearchHit], SearchError]]` · `answer(messages: List[ChatMessage], options: SearchOptions) -> Effect[Result[SearchAnswer, SearchError]]`. Used only through a named instance that names an existing AI Search instance; see [AI Search](#ai-search-aisearch). |
+| **`MtlsCertificate`** *(experimental)* | `send(req: Request) -> Effect[Result[Response, FetchError]]`. Used only through a named instance that names a client certificate in the account; see [Mutual TLS](#mutual-tls-mtlscertificate). |
 
 `Kv` is backed by a Worker KV namespace bound as `env.KV`; the
 `[[kv_namespaces]]` stanza is derived for you.
@@ -962,6 +964,86 @@ caller can reach. In a test every `Ai` operation faults until it is stubbed
 (`stub Ai.run(_, _) returns …`), so a test never reaches Workers AI, and a
 `system` test's Workers behave the same. `Ai` is experimental: list
 `"bynk.cloudflare.Ai"` under `[unstable] allow`.
+
+### Images: `Images`
+
+`Images` resizes, rotates, blurs, converts and draws on images inside the Worker,
+through Cloudflare's [Images binding](https://developers.cloudflare.com/images/optimization/binding/).
+The image is the bytes you hold (an upload, an object from R2), not a URL. A
+Worker has one such binding, so `Images` is used bare, with no named instances
+(`capability Resizer = Images` is `bynk.capability.base_not_instantiable`):
+
+```bynk,fragment
+consumes bynk
+consumes bynk.cloudflare { Images, ImageFormat, ImageFit, TransformOptions, OutputOptions }
+
+service avatars from http {
+	@raw(contentType: "*/*")
+	@limit(maxBody: 1048576)
+	on POST("/avatar") (body: Bytes) -> Effect[HttpResult[String]] by Visitor given Images {
+		let options = TransformOptions { width: Some(256), height: Some(256), fit: Some(ImageFit.Cover) }
+		let r <- Images.transform(body, options, OutputOptions { format: ImageFormat.Webp })
+		match r {
+			Ok(img) => Raw(img.body, img.contentType),
+			Err(InvalidImage(m)) => BadRequest(m),
+			Err(ImageTooLarge) => BadRequest("image too large"),
+			Err(_) => ServerError("could not process image"),
+		}
+	}
+}
+```
+
+`info(image)` reads an image's format and size without transforming it, and
+Cloudflare does not bill it. It answers `Raster(format, width, height, size)`
+(`size` in bytes) or `Svg`, which the platform reports without dimensions. A
+format `ImageFormat` does not name is `ImagesFailed`, and an empty or non-image
+input is `InvalidImage`.
+
+`transform(image, options, output)` reads `image` (at most 20 MB), applies
+`options` and writes the result as `output` says; the result is buffered whole.
+`TransformOptions` has `width` and `height` in pixels, a `fit`
+(`ScaleDown`, the platform's default, `Contain`, `Cover`, `Crop`, `Pad` or
+`Squeeze`), a `rotate` of 90, 180 or 270 degrees (applied before the resize), a
+`blur` radius and a list of `overlays`; a field left `None` is the platform's
+default. An `Overlay` is `Bytes` drawn over the image at an offset from `top`,
+`left`, `bottom` or `right`, at an `opacity` from 0 to 1, optionally tiled with
+`repeat`; overlays are drawn in order. `OutputOptions` needs a `format`
+(`Jpeg`, `Png`, `Webp`, `Avif` or `Gif`: the platform has no default; `Heic` is
+read only, so it is `InvalidImage` as an output) and takes an
+optional `quality` from 1 to 100. The result is an `ImageResult` with the `body`
+and the `contentType` it was written with.
+
+An uploaded image is untrusted input, so a bad one is a value, not a fault. An
+`ImagesError` is `InvalidImage(message)` (the input is not an image, or an
+option is out of range), `UnsupportedImage` (a format the platform cannot read
+or write), `ImageTooLarge` (over the platform's size or area limit) or
+`ImagesFailed(message)` (anything else, with the platform's message).
+The binding itself refuses an empty image, a `width` or `height` below 1, a
+`rotate` other than 90, 180 or 270, an `opacity` outside 0 to 1, a `quality`
+outside 1 to 100 and an overlay positioned from both opposite edges, as
+`InvalidImage`, without calling the platform. The platform's own limits
+(dimensions, area, blur radius) are not repeated here: it enforces them and
+reports them as an `ImagesError`, so see Cloudflare's
+[Images limits](https://developers.cloudflare.com/images/get-started/limits/).
+Cloudflare adds formats, fits and error codes over time, so a `match` over
+`ImageFormat`, `ImageFit` or `ImagesError` needs a wildcard.
+
+A Worker whose code reaches `Images`, directly or through a provider's `given`,
+declares `[images]` bound as `env.IMAGES`; one that does not declares nothing.
+There is nothing for `bynk deploy` to create.
+
+Calls are billed by Cloudflare as unique transformations; see Cloudflare's
+[Images pricing](https://developers.cloudflare.com/images/pricing/) for what
+applies, and put a `RateLimit` in front of any handler an anonymous caller can
+reach. Under `bynk dev` the binding runs locally in Cloudflare's low-fidelity
+form, which supports only `width`, `height`, `rotate` and the output format:
+`fit`, `blur`, `overlays`, `quality` and some formats are not reproduced there,
+so check the output on a deployed Worker. In a test every `Images` operation
+faults until it is stubbed (`stub Images.info(_) returns …`), so a
+test never reaches Cloudflare Images, and a `system` test's Workers behave the
+same. There is no fake transform, because an image handed back unchanged would
+make a test pass for the wrong reason. `Images` is experimental: list
+`"bynk.cloudflare.Images"` under `[unstable] allow`.
 
 ### Account secrets: `StoredSecret`
 
@@ -1572,6 +1654,66 @@ any operation. Vectorize is a remote service on your Cloudflare account, so a ca
 may incur charges; see Cloudflare's [Vectorize pricing](https://developers.cloudflare.com/vectorize/platform/pricing/)
 for what applies, and put a `RateLimit` in front of any handler an anonymous caller
 can reach. `Vectorize` is experimental: list `"bynk.cloudflare.Vectorize"` under
+`[unstable] allow`.
+
+### Mutual TLS: `MtlsCertificate`
+
+`MtlsCertificate` makes an outbound call that presents one of your account's client
+certificates, for an origin that requires [mutual TLS](https://developers.cloudflare.com/workers/runtime-apis/bindings/mtls/):
+the origin proves its identity during the handshake, and so does the Worker. Each
+certificate is a named instance that says which certificate; the option is
+required, and a bare `given MtlsCertificate` is refused
+(`bynk.capability.instance_only`):
+
+```bynk,fragment
+consumes bynk
+consumes bynk.cloudflare { MtlsCertificate }
+
+capability Backend = MtlsCertificate @certificate("acme-client")
+
+service orders from http {
+	on GET("/orders") () -> Effect[HttpResult[String]] by Visitor given Backend {
+		let req = Request {
+			method: Get,
+			url: "https://orders.acme.example/v1/orders",
+			contentType: None,
+			authorization: None,
+			headers: Map.empty(),
+			body: None,
+		}
+		let res <- Backend.send(req)
+		match res {
+			Ok(r) => Ok("status \(r.status)"),
+			Err(_) => ServerError("the origin is unreachable"),
+		}
+	}
+}
+```
+
+`Backend` binds as `env.MTLS_BACKEND`, an `[[mtls_certificates]]` entry. `@certificate`
+is the certificate's **name** as it was uploaded to the account, never its id, so an
+id stays out of source; it is used as written in every environment, and an empty name
+is refused (`bynk.capability.invalid_option`). The generated stanza carries the name in
+`certificate_id`. Resolving the name to the certificate's id is the deploy's job and is not
+built yet, so `bynk deploy` refuses a Worker that declares an `MtlsCertificate` until it is,
+rather than push a name where Cloudflare expects an id.
+
+`send` has [`Fetch.send`](#the-portable-surface--bynk)'s shape and rules: the same
+`Request` (its headers checked the same way), the same `Response`, and `Network` when the
+call itself fails, a handshake the origin refuses included. Unlike [`Service`](#calling-a-worker-outside-the-project-service),
+the URL's host **is** the destination: this is a real outbound call, and the certificate is
+presented to whatever origin the URL names. `Request`, `Response` and `FetchError` are
+`bynk`'s types, so a context that calls `send` also writes `consumes bynk`.
+
+The certificate belongs to whoever uploaded it, with its private key, which never reaches
+Bynk or the Worker. Upload it with Wrangler's `mtls-certificate upload`, the dashboard or the
+API; see Cloudflare's [mTLS binding page](https://developers.cloudflare.com/workers/runtime-apis/bindings/mtls/)
+for what it supports. In particular, Cloudflare does not support presenting a certificate to an
+origin that is a proxied zone on Cloudflare: the call fails with a `520`.
+
+A test never presents a certificate: `send` **faults** until
+`stub Backend.send(_) returns …` gives it a reply, so a test never reaches the origin.
+`MtlsCertificate` is experimental: list `"bynk.cloudflare.MtlsCertificate"` under
 `[unstable] allow`.
 
 ### AI Search: `AiSearch`
