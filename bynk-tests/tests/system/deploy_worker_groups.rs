@@ -910,6 +910,26 @@ fn groups_may_depend_one_way_but_not_in_a_cycle() {
         "one context edge per hop:\n{out}"
     );
 
+    // A cycle needs one group and any other Worker, not two groups: a1 -> c and
+    // c -> a2, with a1 and a2 in `front` and `shop.c` a Worker of its own.
+    fs::write(
+        root.join("bynk.toml"),
+        "[build]\ntarget = \"workers\"\n\n[deploy.workers.front]\ncontexts = [\"shop.a1\", \"shop.a2\"]\n",
+    )
+    .unwrap();
+    write(Some("shop.b1"), None, Some("shop.a2"), None);
+    let (ok, out) = build(&root);
+    assert!(!ok, "{out}");
+    assert_eq!(out.matches("bynk.deploy.group_cycle").count(), 1, "{out}");
+    assert!(
+        out.contains("`front` to `shop.b1` (`shop.a1` binds to `shop.b1`)"),
+        "{out}"
+    );
+    assert!(
+        out.contains("`shop.b1` to `front` (`shop.b1` binds to `shop.a2`)"),
+        "{out}"
+    );
+
     // Ungrouped, the same contexts have no cycle: each is its own Worker.
     fs::write(root.join("bynk.toml"), "[build]\ntarget = \"workers\"\n").unwrap();
     let (ok, out) = build(&root);

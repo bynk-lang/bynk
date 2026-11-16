@@ -1,0 +1,9 @@
+[project]
+name = "x"
+version = "0.1.0"
+
+[build]
+target = "workers"
+
+[deploy.workers.front]
+contexts = ["shop.a1", "shop.a2"]
