@@ -1124,13 +1124,10 @@ export class WorkersImages implements Images {
     const stream = new ReadableStream<Uint8Array>(
       {
         async pull(controller) {
-          let next: IteratorResult<Uint8Array>;
-          try {
-            next = await iterator.next();
-          } catch (e) {
+          const next = await iterator.next().catch((e: unknown) => {
             held.failure = e;
             throw e;
-          }
+          });
           if (next.done) controller.close();
           else controller.enqueue(next.value);
         },
