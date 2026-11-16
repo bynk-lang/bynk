@@ -34,6 +34,7 @@ pub mod deploy;
 pub mod dev;
 mod dev_containers;
 mod dev_hyperdrive;
+pub mod dev_inspect;
 mod dev_vectorize;
 pub mod diagnostics;
 pub mod doctor;

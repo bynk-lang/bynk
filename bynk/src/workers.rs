@@ -49,6 +49,8 @@ pub struct Build {
     no_install: bool,
     /// #3580: record per-request traces (`bynk dev --trace-events`).
     trace_requests: bool,
+    /// #3581: record agent instances and answer the inspect route (`bynk dev`).
+    inspect_agents: bool,
 }
 
 impl Build {
@@ -58,6 +60,16 @@ impl Build {
             dry_run,
             no_install: false,
             trace_requests: false,
+            inspect_agents: false,
+        }
+    }
+
+    /// `bynk dev` (#3581): build the Workers so a running session can list and read
+    /// its agent instances. Never set for a deploy build.
+    pub fn inspect_agents(self, inspect_agents: bool) -> Self {
+        Build {
+            inspect_agents,
+            ..self
         }
     }
 
@@ -139,7 +151,7 @@ pub fn compile_once_reporting(
             return false;
         }
     };
-    let options = with_trace(options, build.trace_requests);
+    let options = with_trace(options, build.trace_requests).inspect_agents(build.inspect_agents);
     let output = match bynk_driver::project::compile_project(&options) {
         Ok(out) => out,
         Err(failure) => {

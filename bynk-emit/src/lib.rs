@@ -213,6 +213,13 @@ pub const TYPESCRIPT_MAJOR_TESTED: u32 = 7;
 /// written into a generated `wrangler.toml`.
 pub const LOCAL_CALL_KEY: &str = "bynk-local-call-key";
 
+/// #3581 (the dev agent-inspection track): the caller name `bynk dev inspect` signs
+/// its requests as, and the variable under which `bynk dev` gives every served
+/// Worker the local key for it (`BYNK_CALL_FROM_` plus the caller's edge suffix). The
+/// runtime's `INSPECT_CALLER` is the same name.
+pub const INSPECT_CALLER: &str = "bynk.dev";
+pub const INSPECT_CALLER_KEY_VAR: &str = "BYNK_CALL_FROM_BYNK__DEV";
+
 /// The storage layout this emitter writes an agent's state in (#3189, the
 /// retired per-entry-storage track in `design/archive/retired-tracks.md`): 1 is
 /// the wholesale layout, with every collection inline in the one `"state"`
