@@ -28,6 +28,7 @@ per-commit history. While Bynk is pre-1.0, increments may change behaviour.
 
 | Version | Highlights |
 |---|---|
+| **v0.633.7** | The Workers emit loop in `bynk-driver` is split into a per-context function and two helpers, the shape `[deploy.workers]` groups will emit through (#3562, G2b) |
 | **v0.633.6** | A `storefront` example, a typed front end over a generated `bynk client`, with a system test (#3508, BC7) |
 | **v0.633.5** | `bynk/agentStateModel` lists each agent's `invariant` and `transition` declarations as an optional `invariants` array, with each one's formatted predicate text, range and documentation (#3608) |
 | **v0.633.4** | `bynk/wireContract` carries an HTTP handler's success payload: a `success` ref to the `T` of `HttpResult[T]` and a `payload` per response (#3609) |
