@@ -232,6 +232,8 @@ export class WorkersService implements Service {
 // account's client certificate, so `send` is `FetchProvider`'s over it, as `WorkersService`'s
 // is, and headers are checked, and the response read, exactly as `Fetch.send` does them.
 // The binding is read per call, so a missing one fails the call that needed it, loudly.
+const MTLS_DEFAULT_OPTIONS = { timeout: None, redirect: { tag: "Follow" } } as unknown as FetchOptions;
+
 export class WorkersMtls implements MtlsCertificate {
   private env?: unknown;
   private binding: string;
@@ -250,11 +252,30 @@ export class WorkersMtls implements MtlsCertificate {
     return cert;
   }
 
-  async send(req: FetchRequest): Promise<Result<FetchResponse, FetchError>> {
-    // Resolved before sending, so a missing binding throws (a deployment fault) rather than
-    // reading as the `Network` error of a failed call.
+  // Resolved before sending, so a missing binding throws (a deployment fault) rather than
+  // reading as the `Network` error of a failed call; the dev notice follows, once a session
+  // (#3513 A: there is no local simulation, so `bynk dev` runs the call on Cloudflare).
+  private provider(): FetchProvider {
     const cert = this.target();
-    return new FetchProvider((url, init) => cert.fetch(new globalThis.Request(url, init))).send(req);
+    devRemoteNoticeText(
+      this.env,
+      "mtls",
+      "BYNK_DEV_ACK_MTLS",
+      "an mTLS certificate binding has no local simulation, so this call runs on Cloudflare, presenting your account's certificate to the origin. See https://developers.cloudflare.com/workers/runtime-apis/bindings/mtls/ .",
+    );
+    return new FetchProvider((url, init) => cert.fetch(new globalThis.Request(url, init)));
+  }
+
+  async send(req: FetchRequest): Promise<Result<FetchResponse, FetchError>> {
+    return this.provider().send(req);
+  }
+
+  receiveBytes(req: FetchRequest): Promise<Result<BytesResponse, FetchError>> {
+    return this.provider().receiveBytes(req, MTLS_DEFAULT_OPTIONS);
+  }
+
+  sendBytes(req: FetchRequest, body: Uint8Array): Promise<Result<BytesResponse, FetchError>> {
+    return this.provider().sendBytes(req, body, MTLS_DEFAULT_OPTIONS);
   }
 }
 
@@ -1117,12 +1138,19 @@ export class WorkersImages implements Images {
 const devRemoteNoticed = new Set<string>();
 const devIndexChecked = new Set<string>();
 function devRemoteNotice(env: unknown, kind: string, ackVar: string, service: string, pricingUrl: string): void {
+  devRemoteNoticeText(
+    env,
+    kind,
+    ackVar,
+    `${service} has no local simulation, so this call runs on your Cloudflare account and may incur charges. See ${pricingUrl} .`,
+  );
+}
+// The notice with its own consequence, for a kind whose remote run is not about charges.
+function devRemoteNoticeText(env: unknown, kind: string, ackVar: string, what: string): void {
   const vars = env as Record<string, unknown> | undefined;
   if (vars?.BYNK_DEV !== "1" || vars?.[ackVar] === "allow" || devRemoteNoticed.has(kind)) return;
   devRemoteNoticed.add(kind);
-  console.warn(
-    `bynk dev: ${service} has no local simulation, so this call runs on your Cloudflare account and may incur charges. See ${pricingUrl} . To silence this warning, put ${kind} = "allow" under [dev] in bynk.toml.`,
-  );
+  console.warn(`bynk dev: ${what} To silence this warning, put ${kind} = "allow" under [dev] in bynk.toml.`);
 }
 
 // #3478: the events of a Server-Sent Events body, each as its `data` text, as
