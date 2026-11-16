@@ -96,6 +96,10 @@ pub struct DevOptions {
     /// `.bynk` locations. Off by default, so a script reading the stream sees
     /// only the lifecycle events.
     pub log_events: bool,
+    /// `--trace-events` (#3580): build the workers with per-request trace
+    /// recording, and write each request as a [`DevEvent::Request`]. Implies
+    /// `--format json`.
+    pub trace_events: bool,
     /// `--rewrite-frames` (#2474): rewrite stack frames to `.bynk` even on a
     /// terminal, where the driver otherwise leaves wrangler's output alone.
     pub rewrite_frames: bool,
@@ -118,7 +122,7 @@ pub enum DevFormat {
 /// parse the human report, whose wording is UX and changes. Serialised with an
 /// `event` tag in snake_case. A consumer should ignore fields and events it
 /// does not know: new ones may be added, existing ones keep their meaning.
-#[derive(Debug, Clone, PartialEq, Eq, serde::Serialize)]
+#[derive(Debug, Clone, PartialEq, serde::Serialize)]
 #[serde(tag = "event", rename_all = "snake_case")]
 pub enum DevEvent {
     /// Every `wrangler dev` has been started. Ports are allocated, but a
@@ -133,6 +137,26 @@ pub enum DevEvent {
     RebuildFailed,
     /// The session ended, with the exit code `bynk dev` is about to return.
     Stopped { code: u8 },
+    /// One request a worker served (`--trace-events`, #3580): its route, status
+    /// and duration, and the steps it took in call order. Steps carry no argument
+    /// values. A cross-context call is its own step here; the callee's own
+    /// request is a separate event.
+    Request {
+        /// The worker dir that served it, as in [`ServedContext::name`].
+        context: String,
+        /// This request's id.
+        id: String,
+        /// `<METHOD> <path>`.
+        route: String,
+        status: u16,
+        duration_ms: f64,
+        steps: Vec<crate::trace::TraceStep>,
+        /// More steps happened than are listed (the list is bounded).
+        truncated: bool,
+        /// The fault that answered the request with a 500, with its stack frames
+        /// mapped to `.bynk` locations; `null` when it did not fault.
+        fault: Option<crate::trace::TraceFault>,
+    },
     /// One line a worker printed (`--log-events`, #2474), with any stack frame
     /// into generated code rewritten to the `.bynk` line it came from. A
     /// thrown error is a headline line followed by one event per frame, all
@@ -501,7 +525,7 @@ pub fn run(
     if !crate::workers::compile_once_reporting(
         project_root,
         &build_dir,
-        crate::workers::Build::new(true, false).no_install(opts.no_install),
+        dev_build(opts),
         bynk_driver::progress::terminal_sink(),
     ) {
         return ExitCode::FAILURE;
@@ -836,7 +860,7 @@ pub fn run(
             fingerprint = now;
             eprintln!("bynk dev: change detected — rebuilding…");
             emit(opts.format, &DevEvent::Rebuilding);
-            let rebuild = crate::workers::Build::new(true, false).no_install(opts.no_install);
+            let rebuild = dev_build(opts);
             if crate::workers::compile_once_reporting(project_root, &build_dir, rebuild, None) {
                 proxy_ai_search(&workers_dir, &serving);
                 // Interop I5 (#1972): refresh the served copy from the
@@ -993,6 +1017,14 @@ fn hyperdrive_local_env(
     }
 }
 
+/// How `bynk dev` builds, first and on every rebuild: it reconciles the schema
+/// lock, never dry-runs, and (#3580, `--trace-events`) records request traces.
+fn dev_build(opts: &DevOptions) -> crate::workers::Build {
+    crate::workers::Build::new(true, false)
+        .no_install(opts.no_install)
+        .trace_requests(opts.trace_events)
+}
+
 /// Whether `bynk dev` reads wrangler's output (#2474) rather than leaving it
 /// attached to the terminal: when asked (`--rewrite-frames`, `--log-events`),
 /// or when either of our streams is not a terminal, where wrangler has no
@@ -1001,6 +1033,7 @@ fn pipes_output(opts: &DevOptions) -> bool {
     use std::io::IsTerminal;
     opts.rewrite_frames
         || opts.log_events
+        || opts.trace_events
         || !std::io::stdout().is_terminal()
         || !std::io::stderr().is_terminal()
 }
@@ -1024,6 +1057,7 @@ fn pump_output(
     let classifier = std::sync::Arc::new(std::sync::Mutex::new(crate::logs::Classifier::default()));
     let to_stderr_only = opts.format == DevFormat::Json;
     let events = opts.log_events && opts.format == DevFormat::Json;
+    let trace = opts.trace_events && opts.format == DevFormat::Json;
     let streams: [(Option<Box<dyn std::io::Read + Send>>, bool); 2] = [
         (
             child.stdout.take().map(|s| Box::new(s) as Box<_>),
@@ -1038,23 +1072,31 @@ fn pump_output(
             (worker.to_string(), rewriter.clone(), classifier.clone());
         handles.push(std::thread::spawn(move || {
             use std::io::Write;
-            forward_lines(stream, &worker, &rewriter, &classifier, |line, level| {
-                if to_stdout {
-                    let _ = writeln!(std::io::stdout().lock(), "{line}");
-                } else {
-                    let _ = writeln!(std::io::stderr().lock(), "{line}");
-                }
-                if events {
-                    emit(
-                        DevFormat::Json,
-                        &DevEvent::Log {
-                            context: worker.clone(),
-                            level,
-                            text: crate::logs::strip_ansi(line),
-                        },
-                    );
-                }
-            });
+            let consume = |line: &str| trace && emit_request(&worker, &rewriter, line);
+            forward_lines_with(
+                stream,
+                &worker,
+                &rewriter,
+                &classifier,
+                consume,
+                |line, level| {
+                    if to_stdout {
+                        let _ = writeln!(std::io::stdout().lock(), "{line}");
+                    } else {
+                        let _ = writeln!(std::io::stderr().lock(), "{line}");
+                    }
+                    if events {
+                        emit(
+                            DevFormat::Json,
+                            &DevEvent::Log {
+                                context: worker.clone(),
+                                level,
+                                text: crate::logs::strip_ansi(line),
+                            },
+                        );
+                    }
+                },
+            );
         }));
     }
     handles
@@ -1087,6 +1129,20 @@ pub(crate) fn forward_lines(
     worker: &str,
     rewriter: &crate::logs::Rewriter,
     classifier: &std::sync::Mutex<crate::logs::Classifier>,
+    sink: impl FnMut(&str, crate::logs::LogLevel),
+) {
+    forward_lines_with(stream, worker, rewriter, classifier, |_| false, sink);
+}
+
+/// [`forward_lines`], with `consume` shown each line first, before the frame
+/// rewriter touches it (#3580: a trace line's JSON must reach the parser as
+/// printed). A line `consume` takes (answers `true`) is not forwarded.
+pub(crate) fn forward_lines_with(
+    stream: impl std::io::Read,
+    worker: &str,
+    rewriter: &crate::logs::Rewriter,
+    classifier: &std::sync::Mutex<crate::logs::Classifier>,
+    mut consume: impl FnMut(&str) -> bool,
     mut sink: impl FnMut(&str, crate::logs::LogLevel),
 ) {
     use std::io::BufRead;
@@ -1099,13 +1155,47 @@ pub(crate) fn forward_lines(
             Ok(_) => {}
         }
         let text = String::from_utf8_lossy(&raw);
-        let line = rewriter.rewrite(worker, text.trim_end_matches(['\n', '\r']));
+        let plain = text.trim_end_matches(['\n', '\r']);
+        if consume(plain) {
+            continue;
+        }
+        let line = rewriter.rewrite(worker, plain);
         let level = classifier
             .lock()
             .map(|mut c| c.classify(&crate::logs::strip_ansi(&line)))
             .unwrap_or(crate::logs::LogLevel::Info);
         sink(&line, level);
     }
+}
+
+/// #3580: a trace line a worker printed as a [`DevEvent::Request`], with its
+/// fault's frames mapped to `.bynk` locations, or `None` for a line that is not a
+/// trace (or is malformed), which is then forwarded like any other.
+fn request_event(worker: &str, rewriter: &crate::logs::Rewriter, line: &str) -> Option<DevEvent> {
+    let t = crate::trace::parse(&crate::logs::strip_ansi(line))?;
+    let fault = t
+        .fault
+        .as_deref()
+        .map(|stack| crate::trace::fault(stack, |l| rewriter.rewrite(worker, l)));
+    Some(DevEvent::Request {
+        context: worker.to_string(),
+        id: t.id,
+        route: t.route,
+        status: t.status,
+        duration_ms: t.duration_ms,
+        steps: t.steps,
+        truncated: t.truncated,
+        fault,
+    })
+}
+
+/// Write the [`DevEvent::Request`] for `line`; `false` when it is not a trace.
+fn emit_request(worker: &str, rewriter: &crate::logs::Rewriter, line: &str) -> bool {
+    let Some(event) = request_event(worker, rewriter, line) else {
+        return false;
+    };
+    emit(DevFormat::Json, &event);
+    true
 }
 
 /// The watch loop: every 500ms, end the session if it was asked to stop or a
@@ -2611,6 +2701,104 @@ mod tests {
             }),
             r#"{"event":"log","context":"shop","level":"error","text":"    at f (/p/src/a.bynk:3:1)"}"#
         );
+    }
+
+    /// #3580: the `request` event's documented shape.
+    #[test]
+    fn a_request_event_is_a_tagged_line() {
+        let event = DevEvent::Request {
+            context: "shop-orders".into(),
+            id: "r1".into(),
+            route: "POST /orders".into(),
+            status: 201,
+            duration_ms: 12.5,
+            steps: vec![crate::trace::TraceStep {
+                kind: "call".into(),
+                target: "shop.payment.authorise".into(),
+                span: Some(crate::trace::TraceSpan {
+                    file: "src/shop/orders.bynk".into(),
+                    line: 23,
+                    col: 14,
+                }),
+                ms: 3.5,
+                outcome: "ok".into(),
+            }],
+            truncated: false,
+            fault: None,
+        };
+        assert_eq!(
+            event_line(&event),
+            r#"{"event":"request","context":"shop-orders","id":"r1","route":"POST /orders","status":201,"duration_ms":12.5,"steps":[{"kind":"call","target":"shop.payment.authorise","span":{"file":"src/shop/orders.bynk","line":23,"col":14},"ms":3.5,"outcome":"ok"}],"truncated":false,"fault":null}"#
+        );
+    }
+
+    /// The real path from a printed line to the event: colour codes and a host
+    /// prefix are tolerated, and a fault's frames are rewritten through the
+    /// worker's own source map to `.bynk` locations.
+    #[test]
+    fn a_printed_trace_becomes_a_request_event_with_its_frames_mapped() {
+        let build = std::env::temp_dir().join(format!("bynk-trace-event-{}", std::process::id()));
+        let _ = std::fs::remove_dir_all(&build);
+        let worker = build.join("workers").join("shop");
+        std::fs::create_dir_all(&worker).unwrap();
+        std::fs::write(
+            worker.join("handlers.ts.map"),
+            r#"{"version":3,"sources":["/p/src/shop.bynk"],"mappings":";AASA"}"#,
+        )
+        .unwrap();
+        let rewriter = crate::logs::Rewriter::new(&build);
+        let stack = format!(
+            "Error: boom\n    at http_GET (file://{}/handlers.ts:2:5)",
+            worker.display()
+        );
+        // Built with `serde_json`, so a Windows path's backslashes are escaped.
+        let json = serde_json::json!({
+            "id": "r1", "route": "GET /", "status": 500, "duration_ms": 2.0,
+            "steps": [], "truncated": false, "fault": stack,
+        });
+        let line = format!("\u{1b}[34m[wrangler:inf]\u{1b}[0m __bynk_trace:{json}");
+        let event = request_event("shop", &rewriter, &line).expect("a trace line");
+        let _ = std::fs::remove_dir_all(&build);
+        let DevEvent::Request {
+            context,
+            id,
+            status,
+            fault,
+            ..
+        } = event
+        else {
+            panic!("not a request event");
+        };
+        assert_eq!((context.as_str(), id.as_str(), status), ("shop", "r1", 500));
+        let fault = fault.expect("the fault is carried");
+        assert_eq!(fault.message, "Error: boom");
+        assert_eq!(fault.frames, ["at http_GET (/p/src/shop.bynk:10:1)"]);
+        assert!(request_event("shop", &rewriter, "plain output").is_none());
+    }
+
+    /// A trace line is consumed before the frame rewriter and never forwarded;
+    /// every other line, and a malformed trace, is forwarded as before.
+    #[test]
+    fn a_trace_line_is_consumed_and_other_lines_are_forwarded() {
+        let dir = std::env::temp_dir().join("bynk_trace_pump");
+        let rewriter = crate::logs::Rewriter::new(&dir);
+        let classifier = std::sync::Mutex::new(crate::logs::Classifier::default());
+        let input = "hello\n__bynk_trace:{\"id\":\"r\",\"route\":\"GET /\",\"status\":200,\"duration_ms\":1.0,\"steps\":[],\"truncated\":false,\"fault\":null}\n__bynk_trace:{broken\n";
+        let (mut consumed, mut forwarded) = (0, Vec::new());
+        forward_lines_with(
+            input.as_bytes(),
+            "shop",
+            &rewriter,
+            &classifier,
+            |l| {
+                let is_trace = crate::trace::parse(l).is_some();
+                consumed += usize::from(is_trace);
+                is_trace
+            },
+            |l, _| forwarded.push(l.to_string()),
+        );
+        assert_eq!(consumed, 1);
+        assert_eq!(forwarded, ["hello", "__bynk_trace:{broken"]);
     }
 
     /// The path a handler error takes: wrangler prints a headline and frames
