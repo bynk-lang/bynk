@@ -19,6 +19,8 @@ CI scripts that start `bynk dev` and wait for it have the same need.
 - `rebuilding`, `rebuild_ok`, `rebuild_failed`: a watched change, and the
   rebuild's outcome. Diagnostics stay on stderr.
 - `stopped`: the session ended, with the exit `code` `bynk dev` returns.
+- `request` (added by #3580, `--trace-events`): one request a worker served,
+  with its steps. Its fields are in the `bynk dev` reference.
 
 Keys are snake_case, as in `bynk deploy --format json` (the proposal sketched
 `inspectorPort`; the driver's existing JSON surfaces decided it). The human
