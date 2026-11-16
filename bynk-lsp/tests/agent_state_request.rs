@@ -311,8 +311,8 @@ fn invariants_and_transitions_cross_the_wire_in_one_list() {
         "status is Paid implies paymentRef.isSome()"
     );
     assert_eq!(
-        list[0]["doc"].as_str().map(str::trim),
-        Some("A paid order carries its payment reference.")
+        list[0]["doc"],
+        "A paid order carries its payment reference."
     );
     let line = |needle: &str| {
         INVARIANTS_SRC[..INVARIANTS_SRC.find(needle).unwrap()]

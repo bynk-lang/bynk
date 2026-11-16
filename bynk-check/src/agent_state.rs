@@ -91,9 +91,11 @@ pub struct AgentInvariant {
     pub kind: InvariantKind,
     pub name: String,
     pub predicate: String,
-    /// The declaration's documentation text, when it has any.
+    /// The declaration's documentation text, trailing whitespace trimmed,
+    /// when it has any.
     pub doc: Option<String>,
-    /// The whole declaration.
+    /// From the `invariant`/`transition` keyword to the end of the predicate;
+    /// the leading documentation block is not included.
     pub span: Span,
 }
 
@@ -327,7 +329,11 @@ fn declared_invariants(agent: &AgentDecl) -> Vec<AgentInvariant> {
         kind,
         name: name.name.clone(),
         predicate: bynk_syntax::print::expr_to_string(predicate),
-        doc: doc.as_ref().map(|d| d.text.clone()),
+        doc: doc
+            .as_ref()
+            .map(|d| d.text.trim_end())
+            .filter(|t| !t.is_empty())
+            .map(str::to_string),
         span,
     };
     let snapshots = agent.invariants.iter().map(|i| {
@@ -2535,7 +2541,7 @@ agent Plain {
             ]
         );
         assert_eq!(
-            m.invariants[0].doc.as_deref().map(str::trim),
+            m.invariants[0].doc.as_deref(),
             Some("A paid order carries its payment reference.")
         );
         assert_eq!(m.invariants[1].doc, None);
@@ -2547,5 +2553,38 @@ agent Plain {
     #[test]
     fn an_agent_with_neither_kind_lists_nothing() {
         assert!(model(INVARIANTS_SRC, "Plain").invariants.is_empty());
+    }
+
+    /// #3608: comments inside a predicate do not change its printed text, and
+    /// the span starts at the keyword, after the documentation block.
+    #[test]
+    fn comments_do_not_change_the_predicate_and_the_span_excludes_the_doc() {
+        let src = INVARIANTS_SRC.replace(
+            "status is Paid\n      implies   paymentRef.isSome()",
+            "status is Paid // trailing\n      implies // inline\n      paymentRef.isSome()",
+        );
+        assert_ne!(src, INVARIANTS_SRC, "the fixture was rewritten");
+        let m = model(&src, "Order");
+        assert_eq!(
+            m.invariants[0].predicate,
+            "status is Paid implies paymentRef.isSome()"
+        );
+        let span = m.invariants[0].span;
+        assert!(src[span.start..span.end].starts_with("invariant paid_has_ref"));
+        assert!(src[span.start..span.end].ends_with("paymentRef.isSome()"));
+    }
+
+    /// #3608: a documentation block holding only whitespace is no
+    /// documentation, so `doc` is `None` (omitted on the wire), not `Some("")`.
+    #[test]
+    fn a_whitespace_only_doc_block_is_no_doc() {
+        let src = INVARIANTS_SRC.replace(
+            "  ---\n  A paid order carries its payment reference.\n  ---\n",
+            "  ---\n   \n  ---\n",
+        );
+        assert_ne!(src, INVARIANTS_SRC, "the fixture was rewritten");
+        let m = model(&src, "Order");
+        assert_eq!(m.invariants[0].name, "paid_has_ref");
+        assert_eq!(m.invariants[0].doc, None);
     }
 }
