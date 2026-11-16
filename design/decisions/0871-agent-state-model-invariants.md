@@ -26,7 +26,8 @@ in ADRs 0422, 0535, 0536 and 0547; it changes nothing else.
 - **`range` runs from the `invariant`/`transition` keyword to the end of the
   predicate**; the leading documentation block is not in it. **`doc` is that
   documentation's text with trailing whitespace trimmed**, when there is any, and
-  is omitted, not `null`, when absent.
+  is omitted, not `null`, when absent or when it is empty once trimmed (a doc
+  block holding only whitespace).
 - **Omitted when empty.** An agent that declares neither kind has no
   `invariants` key, so an older client ignores the field and a newer one treats
   its absence as "none".
