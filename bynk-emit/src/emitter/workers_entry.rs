@@ -1132,6 +1132,26 @@ fn edge_cache_return(member_mode: bool) -> Vec<TsStmt> {
     ]
 }
 
+/// Events track, slice 0 (spine #936, ADR 0284): the re-export of the fan-out DO,
+/// which lives in its own file (`events_fanout.ts`, not `handlers.ts`; a fan-out
+/// DO has no backing `AgentDecl` for `emit_agent` to emit it from). A group's one
+/// fan-out is exported by the group's entry, not a member's (#3562).
+fn fanout_reexport(
+    context: &str,
+    layout: &bynk_project::worker_layout::WorkerLayout,
+    wanted: bool,
+) -> Option<TsStmt> {
+    wanted.then(|| {
+        TsStmt::decl(
+            TsDecl::ReExport {
+                names: vec![crate::emitter::wrangler::EVENTS_FANOUT_CLASS_NAME.to_string()],
+                from: layout.own_module_specifier(context, "events_fanout.ts"),
+            },
+            None,
+        )
+    })
+}
+
 #[allow(clippy::too_many_arguments)]
 pub fn emit_worker_entry(
     context: &str,
@@ -1601,20 +1621,7 @@ pub fn emit_worker_entry(
             None,
         ));
     }
-    // Events track, slice 0 (spine #936, ADR 0284): same re-export
-    // requirement, for the fan-out DO — it lives in its own file
-    // (`events_fanout.ts`, not `handlers.ts`; a fan-out DO has no backing
-    // `AgentDecl` for `emit_agent` to emit it from).
-    // A group's one fan-out is exported by the group's entry (#3562).
-    if uses_emit && !member_mode {
-        header_decls.push(TsStmt::decl(
-            TsDecl::ReExport {
-                names: vec![crate::emitter::wrangler::EVENTS_FANOUT_CLASS_NAME.to_string()],
-                from: layout.own_module_specifier(context, "events_fanout.ts"),
-            },
-            None,
-        ));
-    }
+    header_decls.extend(fanout_reexport(context, layout, uses_emit && !member_mode));
 
     header_decls.extend(container_class_reexport(table, member_mode));
     header_decls.extend(inspect_registry_export(inspect.0));
