@@ -88,5 +88,4 @@ bynk.deploy.unknown_context: a manifest-level diagnostic (a `bynk.toml` `[deploy
 bynk.deploy.binding_collision: a project-level diagnostic over a `[deploy.workers]` group in `bynk.toml` and two contexts' sources, which the single-file example gate cannot mark
 bynk.deploy.multiple_publishers: a project-level diagnostic over a `[deploy.workers]` group in `bynk.toml` and two contexts' sources (and temporary), which the single-file example gate cannot mark
 bynk.deploy.service_name_conflict: a project-level diagnostic over a `[deploy.workers]` group in `bynk.toml` and two contexts' sources, which the single-file example gate cannot mark
-bynk.deploy.queue_consumer_conflict: a project-level diagnostic over a `[deploy.workers]` group in `bynk.toml` and two contexts' sources, which the single-file example gate cannot mark
 bynk.deploy.route_conflict: a project-level diagnostic over a `[deploy.workers]` group in `bynk.toml` and two contexts' sources, which the single-file example gate cannot mark

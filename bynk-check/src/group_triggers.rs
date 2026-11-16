@@ -6,11 +6,11 @@
 //! services (`bynk.http.duplicate_route`), kept across the members of a group,
 //! with the same keys:
 //!
-//! - an HTTP route is its method and path;
-//! - a queue is its name, and a Worker has one consumer for it.
+//! - an HTTP route is its method and path.
 //!
-//! An email address is not checked here: a project already refuses two contexts
-//! claiming one (`bynk.email.duplicate_address`), grouped or not.
+//! An email address and a queue are not checked here: a project already refuses
+//! two contexts claiming one address (`bynk.email.duplicate_address`) or
+//! consuming one queue (`bynk.queue.duplicate_consumer`), grouped or not.
 //!
 //! A cron expression is not one of these: two members may share it, and both
 //! their handlers run.
@@ -20,7 +20,7 @@
 use std::collections::{BTreeMap, HashMap};
 
 use bynk_project::ParsedFile;
-use bynk_syntax::ast::{CommonsItem, HandlerKind, HttpMethod, ServiceProtocol, SourceUnit};
+use bynk_syntax::ast::{CommonsItem, HandlerKind, HttpMethod, SourceUnit};
 use bynk_syntax::error::CompileError;
 
 use crate::project_model::ErrorSink;
@@ -30,7 +30,6 @@ use crate::project_model::ErrorSink;
 #[derive(Default)]
 struct Claims<'a> {
     routes: HashMap<(HttpMethod, String), &'a str>,
-    queues: HashMap<String, &'a str>,
 }
 
 /// Check the members of one group for a route or queue two of them claim.
@@ -66,21 +65,6 @@ pub fn group_trigger_conflicts(
                 let CommonsItem::Service(service) = item else {
                     continue;
                 };
-                if let ServiceProtocol::Queue { name } = &service.protocol {
-                    match claims.queues.get(name) {
-                        Some(&earlier) if earlier != ctx => clash(
-                            "bynk.deploy.queue_consumer_conflict",
-                            service.name.span,
-                            format!("consume queue `{name}`"),
-                            earlier,
-                            "a Worker has one consumer for a queue: move the queue to one context, or put the contexts in different groups",
-                        ),
-                        Some(_) => {}
-                        None => {
-                            claims.queues.insert(name.clone(), ctx);
-                        }
-                    }
-                }
                 for handler in &service.handlers {
                     let HandlerKind::Http { method, path } = &handler.kind else {
                         continue;
