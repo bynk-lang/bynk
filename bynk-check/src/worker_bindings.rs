@@ -16,11 +16,11 @@
 //! worker_bindings`, the list `wrangler.toml` is written from); this module
 //! owns the check over them and the diagnostic.
 
-use std::collections::{BTreeMap, HashMap};
+use std::collections::{BTreeMap, HashMap, HashSet};
 use std::path::PathBuf;
 
 use bynk_project::ParsedFile;
-use bynk_syntax::ast::{CommonsItem, SourceUnit};
+use bynk_syntax::ast::{CommonsItem, ServiceProtocol, SourceUnit};
 use bynk_syntax::error::CompileError;
 use bynk_syntax::span::Span;
 
@@ -395,6 +395,26 @@ fn shareable(source: &BindingSource) -> bool {
     !matches!(source, BindingSource::Agent { .. })
 }
 
+/// The bindings of one Worker from its members' (#3562): each name once, at its
+/// first declaration. Two members declaring one name is one binding when the
+/// declarations are identical; when they differ it is the error
+/// [`phase_group_binding_collisions`] reports, so a build that reaches the emit
+/// has none.
+pub fn merge_group_bindings<'a>(
+    members: impl IntoIterator<Item = &'a [WorkerBinding]>,
+) -> Vec<WorkerBinding> {
+    let mut seen: HashSet<&str> = HashSet::new();
+    let mut merged: Vec<WorkerBinding> = Vec::new();
+    for bindings in members {
+        for binding in bindings {
+            if seen.insert(binding.name.as_str()) {
+                merged.push(binding.clone());
+            }
+        }
+    }
+    merged
+}
+
 /// `bynk.deploy.binding_collision` (#3562): the members of a Worker group share
 /// one `wrangler.toml` and one `env`, so a binding name two members both
 /// declare is one binding when their declarations are identical (the same kind
@@ -413,6 +433,7 @@ pub fn phase_group_binding_collisions(
     for (key, group) in worker_groups {
         group_service_names(key, &group.contexts, parsed, groups, errors);
         group_publishers(key, &group.contexts, parsed, groups, bindings, errors);
+        group_websockets(key, &group.contexts, parsed, groups, errors);
         crate::group_triggers::group_trigger_conflicts(
             key,
             &group.contexts,
@@ -545,6 +566,48 @@ fn group_publishers(
         )
         .with_note(
             "for now a Worker group has at most one publishing member, because each publisher has its own events fan-out class; this restriction is temporary, and goes when a group's fan-out is merged. Put the publishers in different groups, or give one of them its own Worker",
+        ),
+    );
+}
+
+/// `bynk.deploy.multiple_websocket_members` (#3562): a WebSocket upgrade is an
+/// `Upgrade: websocket` request, which names no path or service the group could
+/// route it by. A group with one member that declares `from websocket` services
+/// passes every upgrade to that member, which is right; with two, the first
+/// would take the upgrades meant for the second. So a group has at most one such
+/// member. One error, at the second.
+fn group_websockets(
+    key: &str,
+    members: &[String],
+    parsed: &[ParsedFile],
+    groups: &BTreeMap<String, Vec<usize>>,
+    errors: &mut ErrorSink,
+) {
+    let declares_websocket = |ctx: &String| {
+        groups.get(ctx).into_iter().flatten().any(|&i| {
+            matches!(parsed[i].unit(), SourceUnit::Context(c) if c.items.iter().any(|item| {
+                matches!(item, CommonsItem::Service(s) if matches!(s.protocol, ServiceProtocol::WebSocket { .. }))
+            }))
+        })
+    };
+    let mut hosts = members.iter().filter(|c| declares_websocket(c));
+    let (Some(first), Some(second)) = (hosts.next(), hosts.next()) else {
+        return;
+    };
+    let indices = groups.get(second).map(Vec::as_slice).unwrap_or_default();
+    let (file, span) = context_header(parsed, indices)
+        .map_or((None, Span::default()), |(file, span)| (Some(file), span));
+    errors.push_for(
+        file.as_deref(),
+        CompileError::new(
+            "bynk.deploy.multiple_websocket_members",
+            span,
+            format!(
+                "contexts `{first}` and `{second}` share Worker `{key}`, and both declare a `from websocket` service"
+            ),
+        )
+        .with_note(
+            "a WebSocket upgrade carries no path or service name for a group to route it by, so a group has at most one member that accepts them: put the contexts in different groups, or give one of them its own Worker",
         ),
     );
 }

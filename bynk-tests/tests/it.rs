@@ -465,6 +465,8 @@ mod system {
     mod wire_reference;
     #[path = "within_behaviour.rs"]
     mod within_behaviour;
+    #[path = "worker_group_dispatch.rs"]
+    mod worker_group_dispatch;
     #[path = "workers_fault_log.rs"]
     mod workers_fault_log;
     #[path = "workers_runtime_smoke.rs"]

@@ -2572,6 +2572,38 @@ enum RunChecks {
     },
 }
 
+/// A project's unit groups, kinds and parsed files, as [`resolve_derived`] reads them.
+type DerivedInputs<'a> = (
+    &'a BTreeMap<String, Vec<usize>>,
+    &'a BTreeMap<String, UnitKind>,
+    &'a [ParsedFile],
+);
+
+/// Resolve each context's derived capabilities, and read the Worker layout they
+/// resolve against. Groups are a Workers topology: any other target has each
+/// context alone.
+fn resolve_derived(
+    target: BuildTarget,
+    (project_root, overlay): (&Path, &HashMap<PathBuf, String>),
+    (groups, kinds, parsed): DerivedInputs<'_>,
+    unit_tables: &mut HashMap<String, UnitTable>,
+    errors: &mut ErrorSink,
+) -> WorkerLayout {
+    let layout = match target {
+        BuildTarget::Workers => WorkerLayout::for_project(project_root, overlay),
+        _ => WorkerLayout::identity(),
+    };
+    bynk_check::project_model::phase_resolve_derived(
+        groups,
+        kinds,
+        parsed,
+        &layout,
+        unit_tables,
+        errors,
+    );
+    layout
+}
+
 /// The `D1` side of [`run_checks`]: each instance's migrations directory,
 /// checked and read (P4b, #2608; a directory no instance owns is a warning), and
 /// the in-memory SQLite those migrations build, which every literal D1 statement
@@ -2582,22 +2614,24 @@ enum RunChecks {
 /// after the SQLite check, which reads migrations only.
 fn d1_phase(
     migration_files: Option<&assets::AssetFolder>,
-    (kinds, unit_tables): (&BTreeMap<String, UnitKind>, &HashMap<String, UnitTable>),
+    (kinds, unit_tables, layout): (
+        &BTreeMap<String, UnitKind>,
+        &HashMap<String, UnitTable>,
+        &WorkerLayout,
+    ),
     (project_root, overlay): (&Path, &HashMap<PathBuf, String>),
     errors: &mut ErrorSink,
 ) -> (
     bynk_check::d1_migrations::D1Migrations,
     Option<Arc<bynk_check::d1_sql::D1Sql>>,
-    WorkerLayout,
 ) {
-    let layout = WorkerLayout::for_project(project_root, overlay);
     let mut migrations = bynk_check::d1_migrations::phase_d1_migrations(
         migration_files,
-        &bynk_check::d1_migrations::declared_databases(kinds, unit_tables, &layout),
+        &bynk_check::d1_migrations::declared_databases(kinds, unit_tables, layout),
         errors,
     );
     let d1_sql = if bynk_project::read_check_config(project_root, overlay).d1_sql {
-        bynk_check::d1_sql::D1Sql::build(&migrations, &layout, errors)
+        bynk_check::d1_sql::D1Sql::build(&migrations, layout, errors)
     } else {
         None
     };
@@ -2613,7 +2647,7 @@ fn d1_phase(
             .unwrap_or_default();
         migrations.insert(bynk_check::d1_migrations::PG_TEST_KEY.to_string(), schema);
     }
-    (migrations, d1_sql, layout)
+    (migrations, d1_sql)
 }
 
 /// The manifest checks that need the project's units, read as the editor reads
@@ -2624,8 +2658,10 @@ fn manifest_unit_diagnostics(
     project_root: &Path,
     overlay: &HashMap<PathBuf, String>,
     kinds: &BTreeMap<String, UnitKind>,
+    (mode, target): (Mode, BuildTarget),
     errors: &mut ErrorSink,
 ) {
+    let bundle_build = mode == Mode::Build && target == BuildTarget::Bundle;
     let found = bynk_check::exports::manifest_diagnostics(Some(project_root), overlay, kinds)
         .into_iter()
         .chain(bynk_check::worker_groups::manifest_diagnostics(
@@ -2635,6 +2671,22 @@ fn manifest_unit_diagnostics(
         ));
     for err in found {
         errors.push_for(Some(Path::new(bynk_check::stability::MANIFEST)), err);
+    }
+    // #3562: a bundle has every context in one program, so a group means
+    // nothing to it; say so rather than build as if it were used.
+    if bundle_build
+        && bynk_project::worker_groups::try_read_worker_groups_with(project_root, overlay)
+            .is_ok_and(|groups| !groups.is_empty())
+    {
+        errors.push_for(
+            Some(Path::new(bynk_check::stability::MANIFEST)),
+            bynk_syntax::error::CompileError::new(
+                "bynk.deploy.workers_ignored_on_bundle",
+                bynk_syntax::span::Span::default(),
+                "`[deploy.workers]` groups are ignored by a `bundle` build, which has every context in one program",
+            )
+            .with_note("set `[build] target = \"workers\"`, or pass `--target workers`, to build the groups as Workers"),
+        );
     }
 }
 
@@ -2878,7 +2930,7 @@ fn run_checks(
     //       fire — see that function's own doc comment. --
     let (groups, kinds, test_groups, integration_groups, adapter_bindings, npm_deps) =
         project_model::phase_group(&parsed, trees, platform, &injected, overlay, &mut errors);
-    manifest_unit_diagnostics(project_root, overlay, &kinds, &mut errors);
+    manifest_unit_diagnostics(project_root, overlay, &kinds, (mode, target), &mut errors);
     // -- 4. Build per-unit combined symbol tables. --
     // -- 4-5. Symbol tables, `uses` resolution, and (#3445) the constants named by
     //         literal-only annotation arguments, resolved ahead of every reader. --
@@ -2907,10 +2959,10 @@ fn run_checks(
         &unit_flattened,
         &unit_type_aliases,
     );
-    bynk_check::project_model::phase_resolve_derived(
-        &groups,
-        &kinds,
-        &parsed,
+    let layout = resolve_derived(
+        target,
+        (project_root, overlay),
+        (&groups, &kinds, &parsed),
         &mut unit_tables,
         &mut errors,
     );
@@ -3026,9 +3078,9 @@ fn run_checks(
         .map(|folder| bynk_check::fixtures::read_declared_fixtures(&parsed, folder, &mut errors))
         .unwrap_or_default();
     // -- 6a0''. P4b (#2608), #3070, #3321: D1 migrations, and the schemas D1 SQL is checked against.
-    let (d1_migrations, d1_sql, layout) = d1_phase(
+    let (d1_migrations, d1_sql) = d1_phase(
         migration_files,
-        (&kinds, &unit_tables),
+        (&kinds, &unit_tables, &layout),
         (project_root, overlay),
         &mut errors,
     );
@@ -3749,27 +3801,25 @@ struct WorkersEmit<'a> {
 }
 
 impl WorkersEmit<'_> {
-    /// The files of one context's Worker: its handlers, `compose.ts`, entry,
-    /// `wrangler.toml`, manifests, staged binding files and assets, pushed onto
-    /// `compiled`; contract-lock warnings onto `lock_warnings`; the assets it
-    /// serves into `staged_assets`.
-    fn emit_context(
+    /// The files of one context (a Worker's, or one member's of a group's):
+    /// `compose.ts`, its entry, its fan-out class and its manifests, pushed
+    /// onto `compiled`; contract-lock warnings onto `lock_warnings`. What it
+    /// contributes to its Worker's `wrangler.toml` comes back as [`MemberParts`],
+    /// for [`Self::finish_worker`].
+    fn emit_member(
         &self,
         ctx_name: &String,
         table: &UnitTable,
         compiled: &mut Vec<StagedFile>,
         lock_warnings: &mut Vec<AttributedError>,
-        staged_assets: &mut BTreeMap<PathBuf, Vec<u8>>,
-    ) {
+    ) -> MemberParts {
         let WorkersEmit {
             adapter_bindings,
             agent_versions,
-            compatibility_flags,
             container_root,
             context_bare_native,
             context_singletons,
             contracts_lock,
-            d1_migrations,
             event_subscribers,
             groups,
             harness_clock_contexts,
@@ -3786,7 +3836,6 @@ impl WorkersEmit<'_> {
             unit_flattened,
             unit_tables,
             unit_uses,
-            workers_dev,
             ..
         } = *self;
         let consumes_targets = unit_consumes.get(ctx_name).cloned().unwrap_or_default();
@@ -3978,31 +4027,20 @@ impl WorkersEmit<'_> {
         // AST contact here was incidental to where the loop happened
         // to be written, not structural.
         let (crons, queues) = bynk_check::symbols::cron_and_queue_triggers(table);
-        let mut wrangler_doc = emitter::emit_wrangler_toml(
-            ctx_name,
-            layout,
-            &bindings,
-            &crons,
-            &queues,
-            &bynk_check::email::routed_addresses(table),
-            compatibility_flags,
-            workers_dev,
-            &emitter::ClassTombstones::of(table),
-            d1_migrations,
-        );
-        stage_binding_files(&bindings, layout, ctx_name, d1_migrations, compiled);
-        self.stage_worker_extras(ctx_name, table, &mut wrangler_doc, staged_assets);
         // Arc C slice 4 (#1323): `emit_worker_entry` returns a real
         // `TsProgram` directly — the construction site's own
         // `Verbatim`/`NotYetConverted` wrap is gone, matching the
         // precedent `events_fanout.rs`'s and `workers.rs`'s own
-        // construction sites already set.
+        // construction sites already set. A group member's entry is its own
+        // file, which the group's entry imports.
         compiled.push(StagedFile {
-            output_path: layout.worker_file(ctx_name, "index.ts"),
+            output_path: layout.member_file(ctx_name, "index.ts"),
             document: Document::Ts(entry_ts),
             source_map: None,
             debug_metadata: None,
         });
+        let mut classes: Vec<String> = table.agents.keys().cloned().collect();
+        classes.sort();
         // Events track, slice 0: this context's fan-out Durable
         // Object — emitted only when it actually publishes (mirrors
         // `emit_worker_compose`'s own `unit_table_uses_emit` gate on
@@ -4020,15 +4058,7 @@ impl WorkersEmit<'_> {
                 source_map: None,
                 debug_metadata: None,
             });
-        }
-        // #3477: the Durable Object classes of this Worker's containers.
-        if let Some(program) = emitter::emit_containers_ts(&bindings) {
-            compiled.push(StagedFile {
-                output_path: layout.worker_file(ctx_name, "containers.ts"),
-                document: Document::Ts(program),
-                source_map: None,
-                debug_metadata: None,
-            });
+            classes.push(emitter::wrangler::EVENTS_FANOUT_CLASS_NAME.to_string());
         }
         // Arc C slice 3 (#1321): `emit_worker_compose` returns a
         // real `TsProgram` directly — the second `bynk-emit`
@@ -4041,16 +4071,175 @@ impl WorkersEmit<'_> {
             source_map: None,
             debug_metadata: None,
         });
+        self.emit_contract_manifests(ctx_name, table, &called, &own_types, &accepted, compiled);
+        MemberParts {
+            context: ctx_name.clone(),
+            bindings,
+            crons,
+            queues,
+            addresses: bynk_check::email::routed_addresses(table),
+            has_events: own_handles_events(table),
+            has_migrate: !migratable.is_empty(),
+            classes,
+        }
+    }
+
+    /// Every context's files, then every Worker's: a Worker is a context's own,
+    /// or a group's members (in the order the manifest lists them).
+    fn emit_all(
+        &self,
+        compiled: &mut Vec<StagedFile>,
+        lock_warnings: &mut Vec<AttributedError>,
+        staged_assets: &mut BTreeMap<PathBuf, Vec<u8>>,
+    ) {
+        let WorkersEmit {
+            kinds,
+            layout,
+            unit_tables,
+            ..
+        } = *self;
+        let mut parts: BTreeMap<&String, (MemberParts, &UnitTable)> = BTreeMap::new();
+        for (ctx_name, kind) in kinds {
+            if *kind != UnitKind::Context {
+                continue;
+            }
+            let Some(table) = unit_tables.get(ctx_name) else {
+                continue;
+            };
+            let member = self.emit_member(ctx_name, table, compiled, lock_warnings);
+            parts.insert(ctx_name, (member, table));
+        }
+        let mut done: HashSet<String> = HashSet::new();
+        for ctx_name in parts.keys() {
+            let dir = layout.dir(ctx_name);
+            if !done.insert(dir.clone()) {
+                continue;
+            }
+            let order = layout
+                .group_members(&dir)
+                .map_or_else(|| vec![(*ctx_name).clone()], <[String]>::to_vec);
+            let worker: Vec<(&MemberParts, &UnitTable)> = order
+                .iter()
+                .filter_map(|c| parts.get(c))
+                .map(|(member, table)| (member, *table))
+                .collect();
+            self.finish_worker(&worker, compiled, staged_assets);
+        }
+    }
+
+    /// One Worker's whole-Worker files, from its members' parts: `wrangler.toml`
+    /// (their bindings, crons, queues and addresses merged, an identical
+    /// capability one binding), the staged binding files, the assets it serves,
+    /// `containers.ts`, and, for a group, the entry that dispatches to its
+    /// members. A context's own Worker is a group of one, whose entry is the
+    /// member's own.
+    fn finish_worker(
+        &self,
+        members: &[(&MemberParts, &UnitTable)],
+        compiled: &mut Vec<StagedFile>,
+        staged_assets: &mut BTreeMap<PathBuf, Vec<u8>>,
+    ) {
+        let WorkersEmit {
+            compatibility_flags,
+            d1_migrations,
+            layout,
+            workers_dev,
+            ..
+        } = *self;
+        let first = members[0].0.context.as_str();
+        let bindings = bynk_check::worker_bindings::merge_group_bindings(
+            members.iter().map(|(parts, _)| parts.bindings.as_slice()),
+        );
+        let union = |of: fn(&MemberParts) -> &Vec<String>| -> Vec<String> {
+            let mut all: Vec<String> = members.iter().flat_map(|(p, _)| of(p).clone()).collect();
+            all.sort();
+            all.dedup();
+            all
+        };
+        let mut tombstones = emitter::ClassTombstones::default();
+        for (_, table) in members {
+            let one = emitter::ClassTombstones::of(table);
+            tombstones.renamed.extend(one.renamed);
+            tombstones.deleted.extend(one.deleted);
+        }
+        tombstones.renamed.sort();
+        tombstones.deleted.sort();
+        tombstones.deleted.dedup();
+        let mut wrangler_doc = emitter::emit_wrangler_toml(
+            first,
+            layout,
+            &bindings,
+            &union(|p| &p.crons),
+            &union(|p| &p.queues),
+            &union(|p| &p.addresses),
+            compatibility_flags,
+            workers_dev,
+            &tombstones,
+            d1_migrations,
+        );
+        stage_binding_files(&bindings, layout, first, d1_migrations, compiled);
+        let tables: Vec<(&str, &UnitTable)> = members
+            .iter()
+            .map(|(parts, table)| (parts.context.as_str(), *table))
+            .collect();
+        self.stage_worker_extras(&tables, &mut wrangler_doc, staged_assets);
+        // #3477: the Durable Object classes of this Worker's containers.
+        if let Some(program) = emitter::emit_containers_ts(&bindings) {
+            compiled.push(StagedFile {
+                output_path: layout.worker_file(first, "containers.ts"),
+                document: Document::Ts(program),
+                source_map: None,
+                debug_metadata: None,
+            });
+        }
         compiled.push(StagedFile {
-            output_path: layout.worker_file(ctx_name, "wrangler.toml"),
+            output_path: layout.worker_file(first, "wrangler.toml"),
             document: Document::Toml(wrangler_doc),
             source_map: None,
             debug_metadata: None,
         });
-        self.emit_contract_manifests(ctx_name, table, &called, &own_types, &accepted, compiled);
+        if layout.is_member(first) {
+            let entry = self.group_entry(first, members, &bindings);
+            compiled.push(StagedFile {
+                output_path: layout.worker_file(first, "index.ts"),
+                document: Document::Ts(entry),
+                source_map: None,
+                debug_metadata: None,
+            });
+        }
     }
 
-    /// The files `bynk deploy` reads beside a Worker: the contracts manifest (the hashes its entry enforces and what it expects of each dependency), the typed client a foreign caller imports, and the secrets manifest.
+    /// A group's `index.ts` (see `emitter::workers_group`).
+    fn group_entry(
+        &self,
+        first: &str,
+        members: &[(&MemberParts, &UnitTable)],
+        bindings: &[emitter::wrangler::WorkerBinding],
+    ) -> bynk_ts::TsProgram {
+        let layout = self.layout;
+        let facts: Vec<emitter::GroupMember> = members
+            .iter()
+            .map(|(parts, _)| emitter::GroupMember {
+                context: parts.context.clone(),
+                specifier: layout.own_module_specifier(&parts.context, "index.ts"),
+                crons: parts.crons.clone(),
+                queues: parts.queues.clone(),
+                addresses: parts.addresses.clone(),
+                classes: parts.classes.clone(),
+            })
+            .collect();
+        emitter::emit_group_entry(&emitter::GroupEntry {
+            key: &layout.dir(first),
+            members: &facts,
+            container_classes: &emitter::container_class_names(bindings),
+            has_events: members.iter().any(|(parts, _)| parts.has_events),
+            has_migrate: members.iter().any(|(parts, _)| parts.has_migrate),
+        })
+    }
+
+    /// The files `bynk deploy` reads beside a Worker: the contracts manifest
+    /// (the hashes its entry enforces and what it expects of each dependency),
+    /// the typed client a foreign caller imports, and the secrets manifest.
     fn emit_contract_manifests(
         &self,
         ctx_name: &str,
@@ -4069,24 +4258,11 @@ impl WorkersEmit<'_> {
             unit_uses,
             ..
         } = *self;
-        // v0.172 (ADR 0195 D5): the secret names this Worker's handlers
-        // will read from `env`, for `deploy` to check before it pushes.
-        // Emitted from the same seams the entry lowers, so the two
-        // cannot describe different Workers.
-        //
-        // v0.173 (ADR 0196): plus the literal `bynk.Secrets` names it
-        // reads, and whether that list is everything. The walk is here
-        // rather than in the checker because it needs `unit_flattened`
-        // to answer *whose* `Secrets` this is (D4) and the warning sink
-        // to say when it cannot know a name — and `bynk-check` has
-        // neither. Absent when there is nothing at all to say (D5).
-        // The warnings half is dropped here: `run_checks` already raised
-        // it, on the analyse path the editor shares.
         // v0.177 (#643): the contract hashes this context's entry
         // enforces, written where `deploy` can read them — so a skew is
         // refused at the push rather than discovered by live traffic.
-        // #2750: the SAME table the entry's hashes (`own_contracts`
-        // above) and every caller's `expects` are computed from —
+        // #2750: the SAME table the entry's hashes (`own_contracts`, in
+        // `emit_member`) and every caller's `expects` are computed from —
         // `own_types`, bound once from `contract_types_for`. A second
         // binding from `combined_types_for` here left a consumed
         // context's exported type unresolved in `provides`.
@@ -4163,6 +4339,19 @@ impl WorkersEmit<'_> {
             });
         }
 
+        // v0.172 (ADR 0195 D5): the secret names this Worker's handlers
+        // will read from `env`, for `deploy` to check before it pushes.
+        // Emitted from the same seams the entry lowers, so the two
+        // cannot describe different Workers.
+        //
+        // v0.173 (ADR 0196): plus the literal `bynk.Secrets` names it
+        // reads, and whether that list is everything. The walk is here
+        // rather than in the checker because it needs `unit_flattened`
+        // to answer *whose* `Secrets` this is (D4) and the warning sink
+        // to say when it cannot know a name — and `bynk-check` has
+        // neither. Absent when there is nothing at all to say (D5).
+        // The warnings half is dropped here: `run_checks` already raised
+        // it, on the analyse path the editor shares.
         let reads = emitter::secrets::secret_reads(
             ctx_name,
             unit_tables,
@@ -4180,11 +4369,15 @@ impl WorkersEmit<'_> {
         }
     }
 
-    /// What a Worker's `wrangler.toml` gains beyond its bindings: the static files it serves under its assets directory (with `_headers` and the `[assets]` block), the Workers Cache for an `EdgeCache` instance, and the `CompiledWasm` rule for a WebAssembly module its adapter closure reaches.
+    /// What a Worker's `wrangler.toml` gains beyond its bindings: the static
+    /// files it serves under its assets directory (with `_headers` and the
+    /// `[assets]` block), the Workers Cache for an `EdgeCache` instance, and the
+    /// `CompiledWasm` rule for a WebAssembly module its adapter closure reaches.
+    /// A group's members share one Worker, so each is asked and each block is
+    /// added once.
     fn stage_worker_extras(
         &self,
-        ctx_name: &str,
-        table: &UnitTable,
+        members: &[(&str, &UnitTable)],
         wrangler_doc: &mut bynk_emit::emitter::toml_doc::TomlDocument,
         staged_assets: &mut BTreeMap<PathBuf, Vec<u8>>,
     ) {
@@ -4203,15 +4396,18 @@ impl WorkersEmit<'_> {
         // own and those of every commons its `uses` closure reaches —
         // under its assets directory, with `_headers` and the
         // `[assets]` block. A Worker with none gets neither.
-        let deployed = bynk_check::assets::deployed_assets(
-            ctx_name,
-            unit_uses,
-            unit_consumes,
-            unit_tables,
-            asset_served,
-        );
+        let mut deployed = BTreeMap::new();
+        for (ctx_name, _) in members {
+            deployed.extend(bynk_check::assets::deployed_assets(
+                ctx_name,
+                unit_uses,
+                unit_consumes,
+                unit_tables,
+                asset_served,
+            ));
+        }
         if !deployed.is_empty() {
-            let dir = worker_assets_dir(&layout.dir(ctx_name));
+            let dir = worker_assets_dir(&layout.dir(members[0].0));
             for (served, source) in &deployed {
                 let bytes = asset_files
                     .and_then(|files| files.get(source))
@@ -4228,15 +4424,48 @@ impl WorkersEmit<'_> {
             wrangler_doc.push_block(emitter::wrangler::assets_block());
         }
         // L7 (#2414): an `EdgeCache` instance turns Workers Cache on.
-        if table.derived.values().any(|d| d.is_edge_cache()) {
+        if members
+            .iter()
+            .any(|(_, table)| table.derived.values().any(|d| d.is_edge_cache()))
+        {
             wrangler_doc.push_block(emitter::wrangler::edge_cache_block());
         }
         // #2321: a Worker whose adapter closure reaches an included
         // WebAssembly module gets the explicit `CompiledWasm` rule.
-        if worker_reaches_wasm_module(ctx_name, unit_consumes, kinds, adapter_bindings) {
+        if members.iter().any(|(ctx_name, _)| {
+            worker_reaches_wasm_module(ctx_name, unit_consumes, kinds, adapter_bindings)
+        }) {
             wrangler_doc.push_block(emitter::wrangler::wasm_rule_block());
         }
     }
+}
+
+/// What one context contributes to its Worker's `wrangler.toml` and, in a
+/// group, to the group's entry ([`WorkersEmit::emit_member`]).
+struct MemberParts {
+    context: String,
+    bindings: Vec<emitter::wrangler::WorkerBinding>,
+    crons: Vec<String>,
+    queues: Vec<String>,
+    addresses: Vec<String>,
+    /// Whether it subscribes to events (answers `/_bynk/event/`).
+    has_events: bool,
+    /// Whether it hosts a migratable agent (answers `/_bynk/migrate/`).
+    has_migrate: bool,
+    /// The Durable Object classes its entry exports.
+    classes: Vec<String>,
+}
+
+/// Whether any service of `table` has an `on event` handler.
+fn own_handles_events(table: &UnitTable) -> bool {
+    table.services.values().any(|s| {
+        s.handlers.iter().any(|h| {
+            matches!(
+                bynk_model::lower_handler_kind_ir(&h.kind),
+                bynk_model::IrHandlerKind::Event
+            )
+        })
+    })
 }
 
 /// Build-success tail (region 3): emit the composition/worker/runtime files
@@ -4455,21 +4684,7 @@ fn build_output(
                 unit_uses: &unit_uses,
                 workers_dev,
             };
-            for (ctx_name, kind) in &kinds {
-                if *kind != UnitKind::Context {
-                    continue;
-                }
-                let Some(table) = unit_tables.get(ctx_name) else {
-                    continue;
-                };
-                emit.emit_context(
-                    ctx_name,
-                    table,
-                    &mut compiled,
-                    &mut lock_warnings,
-                    &mut staged_assets,
-                );
-            }
+            emit.emit_all(&mut compiled, &mut lock_warnings, &mut staged_assets);
         }
     }
 

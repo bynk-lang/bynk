@@ -264,7 +264,7 @@ pub fn emit_wrangler_toml(
     // `migrations_dir`.
     d1_migrations: &bynk_check::d1_migrations::D1Migrations,
 ) -> TomlDocument {
-    let name = layout.dir(context);
+    let name = layout.script_name(context);
     let mut root = vec![
         TomlEntry::kv("name", TomlValue::str(name)),
         TomlEntry::kv("main", TomlValue::str("index.ts")),
@@ -288,7 +288,7 @@ pub fn emit_wrangler_toml(
                 "services",
                 vec![
                     TomlEntry::kv("binding", name),
-                    TomlEntry::kv("service", TomlValue::str(layout.dir(context))),
+                    TomlEntry::kv("service", TomlValue::str(layout.script_name(context))),
                 ],
             ),
             BindingSource::Kv => TomlBlock::array_table(
