@@ -1,12 +1,6 @@
----
-level: minor
-changelog: `bynk client`'s generated module carries a per-route and per-service contract hash (`API_CONTRACTS`) beside `WIRE_VERSION`, and `sendContract` sends the route's hash as `X-Bynk-Contract`; both informational (#3508 slice BC6)
-probes: ts_writes
----
+# 0862 — `bynk client`: an informational contract hash for `from http` routes
 
-## ADR: bynk-client-http-contract-hash
-title: `bynk client`: an informational contract hash for `from http` routes
-summary: A generated client carries a FNV-1a hash of what it acts on for each route and service, sends it only on request, and nothing rejects a mismatch
+- **Status:** Accepted (v0.629)
 
 **Context.** The proposal's Decision G gave a generated client a contract hash and a wire version to compare against a deployed Worker, and left server-side rejection out: `contract_hash` covers `on call` services only, and a hard refusal of a stale client is right between Bynk Workers deployed together and wrong for a public API whose browsers and cached bundles lag the server for days. This is slice BC6.
 
