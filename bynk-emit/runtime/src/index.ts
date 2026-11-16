@@ -32,5 +32,7 @@ export * from "./session.ts";
 export * from "./connection.ts";
 export * from "./messages.ts";
 export * from "./locale.ts";
+export * from "./trace.ts";
+export * from "./inspect.ts";
 export * from "./aliases.ts";
 export * from "./wasm.ts";

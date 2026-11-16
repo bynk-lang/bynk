@@ -265,6 +265,12 @@ pub(super) fn context_bindings(
                     capability,
                     instance: d.ai_search_instance().unwrap_or_default().to_string(),
                 },
+                (firstparty::CLOUDFLARE_UNIT, "MtlsCertificate") => {
+                    BindingSource::MtlsCertificate {
+                        capability,
+                        certificate: d.mtls_certificate().unwrap_or_default().to_string(),
+                    }
+                }
                 (firstparty::CLOUDFLARE_UNIT, "Kv") => BindingSource::KvInstance { capability },
                 (unit, base) => {
                     unreachable!("`{unit}.{base}` is instantiable but has no binding kind")

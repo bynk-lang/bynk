@@ -306,15 +306,7 @@ pub fn assemble_index(
                         );
                     }
                 }
-                CommonsItem::Service(s) => {
-                    builder.add_def(
-                        &unit,
-                        SymbolKind::Service,
-                        &s.name.name,
-                        site(&s.name),
-                        symbol_modifiers(&unit, None),
-                    );
-                }
+                CommonsItem::Service(s) => add_service_defs(&mut builder, &unit, pf, s),
                 CommonsItem::Agent(a) => {
                     builder.add_def(
                         &unit,
@@ -414,6 +406,75 @@ pub fn assemble_index(
         }
     }
     builder.build(refs.edges)
+}
+
+/// A service's definition, and (#3582) its callable handlers — `on call` and each `on http` route —
+/// as call-only `Handler` symbols keyed `"service.call"` / `"service.POST /path"`,
+/// so a cross-context call has a handler to be an edge to. The definition site is
+/// the handler's `on` keyword; no other handler
+/// kind can be called or is named by method and path.
+fn add_service_defs(
+    builder: &mut IndexBuilder,
+    unit: &str,
+    pf: &ParsedFile,
+    service: &ServiceDecl,
+) {
+    let (path, source) = (pf.identity_path(), pf.source());
+    builder.add_def(
+        unit,
+        SymbolKind::Service,
+        &service.name.name,
+        SiteRef {
+            path: path.clone(),
+            span: service.name.span,
+        },
+        symbol_modifiers(unit, None),
+    );
+    for h in &service.handlers {
+        let label = match &h.kind {
+            HandlerKind::Call => "call".to_string(),
+            HandlerKind::Http { method, path } => format!("{} {path}", method.as_str()),
+            _ => continue,
+        };
+        let start = on_keyword_start(source, h);
+        let span = Span {
+            start,
+            end: start + 2,
+            ..h.span
+        };
+        builder.add_call_only_def(
+            unit,
+            &format!("{}.{label}", service.name.name),
+            SiteRef {
+                path: path.clone(),
+                span,
+            },
+        );
+    }
+}
+
+/// Byte offset of a handler's `on` keyword. `Handler.span` starts at the first
+/// annotation when there is one, so skip past the annotations (and any
+/// whitespace or `//` comments after them) in the source.
+fn on_keyword_start(source: &str, h: &bynk_syntax::ast::Handler) -> usize {
+    let Some(last) = h.annotations.last() else {
+        return h.span.start;
+    };
+    let mut at = last.span.end;
+    while let Some(rest) = source.get(at..) {
+        let trimmed = rest.trim_start();
+        at += rest.len() - trimmed.len();
+        if trimmed.starts_with("//") {
+            at += trimmed.find('\n').map_or(trimmed.len(), |n| n + 1);
+        } else {
+            break;
+        }
+    }
+    if source.get(at..).is_some_and(|r| r.starts_with("on")) {
+        at
+    } else {
+        h.span.start
+    }
 }
 
 /// v0.28 (ADR 0057): a symbol's semantic-token modifiers from its
@@ -936,6 +997,14 @@ impl DerivedInstance {
     pub fn ai_search_instance(&self) -> Option<&str> {
         (self.base_unit == crate::firstparty::CLOUDFLARE_UNIT && self.base_cap == "AiSearch")
             .then(|| self.option(crate::firstparty::AI_SEARCH_INSTANCE_OPTION))
+            .flatten()
+    }
+
+    /// The client certificate an `MtlsCertificate` declaration names (#3513 A), as
+    /// written; `None` for any other kind.
+    pub fn mtls_certificate(&self) -> Option<&str> {
+        (self.base_unit == crate::firstparty::CLOUDFLARE_UNIT && self.base_cap == "MtlsCertificate")
+            .then(|| self.option(crate::firstparty::MTLS_CERTIFICATE_OPTION))
             .flatten()
     }
 

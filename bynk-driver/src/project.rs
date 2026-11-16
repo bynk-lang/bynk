@@ -143,6 +143,16 @@ pub struct CompileOptions {
     /// `fn`; `false` (release/deploy) strips it entirely for zero runtime cost.
     /// `bynk test` and `--inspect` set it on; `bynk compile` leaves it off.
     pub contracts: bool,
+    /// #3580 (the dev request-traces track): emit the per-request trace recording
+    /// (`__bynk_runtime/trace`) into a Workers build, for `bynk dev
+    /// --trace-events`. `false` for every other build, so a deploy build's
+    /// output is byte-identical. Dev-only by construction: only `bynk dev` sets it.
+    pub trace_requests: bool,
+    /// #3581 (the dev agent-inspection track): emit the dev-only agent registry,
+    /// the `/_bynk/inspect` routes and the instance recording into a Workers
+    /// build, for `bynk dev`. `false` for every other build, so a deploy build's
+    /// output is byte-identical. Dev-only by construction: only `bynk dev` sets it.
+    pub inspect_agents: bool,
     /// #1821 (ADR 0147 D3): whether `suite`s are type-checked and emitted (the
     /// `tests/` modules and `tests/main.ts`). On by default; `bynk compile`
     /// and the driver's dev/deploy build turn it off, so a suite never reaches
@@ -298,6 +308,8 @@ impl CompileOptions {
             roots: Roots::Single(root.into()),
             import_ext: ImportExt::default(),
             contracts: false,
+            trace_requests: false,
+            inspect_agents: false,
             tests: true,
             sources: None,
             schema_registry: SchemaLock::Off,
@@ -328,6 +340,8 @@ impl CompileOptions {
             },
             import_ext: ImportExt::default(),
             contracts: false,
+            trace_requests: false,
+            inspect_agents: false,
             tests: true,
             sources: None,
             schema_registry: SchemaLock::Off,
@@ -381,6 +395,21 @@ impl CompileOptions {
     /// contract checks never reach production (DECISION J).
     pub fn contracts(mut self, on: bool) -> Self {
         self.contracts = on;
+        self
+    }
+
+    /// #3580: record per-request traces in a Workers build (`bynk dev
+    /// --trace-events`). Off by default, and never set by `bynk compile` or
+    /// `bynk deploy`.
+    pub fn trace_requests(mut self, on: bool) -> Self {
+        self.trace_requests = on;
+        self
+    }
+
+    /// #3581: emit the dev-only agent inspection into a Workers build (`bynk
+    /// dev`). Off by default, and never set by `bynk compile` or `bynk deploy`.
+    pub fn inspect_agents(mut self, on: bool) -> Self {
+        self.inspect_agents = on;
         self
     }
 
@@ -622,6 +651,8 @@ pub fn compile_project(options: &CompileOptions) -> Result<ProjectOutput, Projec
         &excludes,
         discovered,
         options.contracts,
+        options.trace_requests,
+        options.inspect_agents,
         options.tests,
         &options.schema_registry,
         options.remote_tests.as_ref(),
@@ -757,6 +788,8 @@ pub fn check_project(options: &CompileOptions) -> ProjectCheck {
         &excludes,
         discovered,
         options.contracts,
+        options.trace_requests,
+        options.inspect_agents,
         options.tests,
         // #2078: `bynk check` reconciles against the committed
         // `bynk.schema.lock` whenever the caller pre-read it
@@ -965,6 +998,8 @@ pub fn compile_in_memory(
         &[],
         Some(vec![vec![path]]),
         false,
+        false,
+        false,
         true,
         &SchemaLock::Off,
         None,
@@ -1041,6 +1076,8 @@ pub fn compile_files_in_memory_locked(
         &overlay,
         &[],
         Some(vec![paths]),
+        false,
+        false,
         false,
         tests,
         &SchemaLock::Off,
@@ -1127,6 +1164,8 @@ pub fn analyse_in_memory_with_types(
         &overlay,
         &[],
         Some(vec![vec![path.clone()]]),
+        false,
+        false,
         false,
         true,
         &SchemaLock::Off,
@@ -1239,6 +1278,8 @@ pub fn analyse_in_memory_project(
         files,
         &[],
         Some(buckets),
+        false,
+        false,
         false,
         true,
         &SchemaLock::Off,
@@ -1496,6 +1537,8 @@ fn finish_build(
             adapter_bindings,
             npm_deps,
             target,
+            trace_requests,
+            inspect_agents,
             schema_registry,
             asset_bytes,
             agent_versions,
@@ -1545,6 +1588,8 @@ fn finish_build(
                 &agent_versions,
                 &contracts_lock,
                 &d1_migrations,
+                trace_requests,
+                inspect_agents,
             );
             // ADR 0117: surface non-failing warnings on the successful build
             // (errors is empty here — the guard arm above caught any).
@@ -1827,6 +1872,8 @@ fn emit_unit(
     target: BuildTarget,
     import_ext: ImportExt,
     contracts: bool,
+    trace_requests: bool,
+    inspect_agents: bool,
     agent_deps_plan: Option<&AgentDepsPlan>,
     compiled: &mut Vec<StagedFile>,
     schema_effective_versions: &SchemaVersions,
@@ -2018,6 +2065,13 @@ fn emit_unit(
             .collect(),
         import_ext,
         contracts,
+        // #3580: the file's source and project-relative path name each traced call
+        // site; `None` (every build but `bynk dev --trace-events`) records nothing.
+        trace: trace_requests.then(|| bynk_emit::emit_model::TraceLoc {
+            source: std::sync::Arc::from(pf.source()),
+            rel_path: pf.identity_path().to_string_lossy().into_owned(),
+        }),
+        inspect_agents,
         history_target_agents: history_target_agents.clone(),
         asset_served: asset_served.clone(),
         embed_text: embed_text.clone(),
@@ -2127,6 +2181,8 @@ fn check_unit_files(
     target: BuildTarget,
     import_ext: ImportExt,
     contracts: bool,
+    trace_requests: bool,
+    inspect_agents: bool,
     agent_deps_plan: Option<&AgentDepsPlan>,
     history_target_agents: &HashSet<String>,
     asset_served: &BTreeMap<String, String>,
@@ -2329,6 +2385,8 @@ fn check_unit_files(
             target,
             import_ext,
             contracts,
+            trace_requests,
+            inspect_agents,
             agent_deps_plan,
             compiled,
             schema_effective_versions,
@@ -2478,6 +2536,10 @@ enum RunChecks {
         adapter_bindings: HashMap<String, AdapterBinding>,
         npm_deps: std::collections::BTreeMap<String, String>,
         target: BuildTarget,
+        // #3580: whether this build records per-request traces (`bynk dev
+        // --trace-events`); read by `build_output` for the Worker entry.
+        trace_requests: bool,
+        inspect_agents: bool,
         // Events track, slice 3c (#980): the reconciled registry document,
         // ready for `finish_build` to serialize onto
         // `ProjectOutput::schema_lock`. `None` when `schema_registry` was
@@ -2640,6 +2702,8 @@ fn run_checks(
     discovered: Option<Vec<Vec<PathBuf>>>,
     // v0.115: emit the function-contract call-site guard (dev/test profile).
     contracts: bool,
+    trace_requests: bool,
+    inspect_agents: bool,
     // #1821 (ADR 0147 D3): check and emit `suite`s. Off for a deployable build.
     tests: bool,
     // Events track, slice 3c (#980): `On` turns on `bynk.schema.lock`
@@ -3291,6 +3355,8 @@ fn run_checks(
             target,
             import_ext,
             contracts,
+            trace_requests,
+            inspect_agents,
             agent_deps_plan.as_ref(),
             &history_target_agents,
             &asset_served,
@@ -3556,6 +3622,8 @@ fn run_checks(
         adapter_bindings,
         npm_deps,
         target,
+        trace_requests,
+        inspect_agents,
         schema_registry: schema_registry_doc,
         asset_bytes,
         agent_versions: schema_effective_versions.agents,
@@ -3593,6 +3661,38 @@ fn runtime_with_npm(
         npm_deps.insert(dep.package.to_string(), dep.version.to_string());
     }
     (runtime_files, npm_deps)
+}
+
+/// State-migrations S4 (#2259 Decision D): the context's versioned agent classes,
+/// which its Worker's signed `/_bynk/migrate/` route can wake, with their lock
+/// versions, sorted.
+fn migratable_agents(
+    ctx_name: &str,
+    table: &UnitTable,
+    agent_versions: &std::collections::HashMap<String, bynk_check::schema_registry::AgentVersions>,
+) -> Vec<(String, i64)> {
+    let mut migratable: Vec<(String, i64)> = agent_versions
+        .iter()
+        .filter_map(|(class, v)| {
+            let (unit, agent) = class.rsplit_once('.')?;
+            (unit == ctx_name && table.agents.contains_key(agent))
+                .then(|| (agent.to_string(), v.version))
+        })
+        .collect();
+    migratable.sort();
+    migratable
+}
+
+/// #3581: the agent classes a `bynk dev` build's Worker answers the inspect route
+/// for, sorted; empty unless the build asks for inspection.
+fn inspect_classes(on: bool, table: &UnitTable) -> Vec<String> {
+    let mut classes: Vec<String> = if on {
+        table.agents.keys().cloned().collect()
+    } else {
+        Vec::new()
+    };
+    classes.sort();
+    classes
 }
 
 /// Build-success tail (region 3): emit the composition/worker/runtime files
@@ -3639,6 +3739,9 @@ fn build_output(
     contracts_lock: &bynk_project::contracts_lock::ContractsLock,
     // P4b (#2608): each `D1` database's migrations.
     d1_migrations: &bynk_check::d1_migrations::D1Migrations,
+    // #3580: wrap each Worker's `fetch` in the request recorder.
+    trace_requests: bool,
+    inspect_agents: bool,
 ) -> ProjectOutput {
     // #2554: the lock's warnings, returned on `ProjectOutput::warnings` for
     // `finish_build` to merge with the checker's.
@@ -3957,18 +4060,8 @@ fn build_output(
                 let consumed_types = unit_consumed_context_types
                     .get(ctx_name)
                     .unwrap_or(&no_consumed_types);
-                // State-migrations S4 (#2259 Decision D): the context's
-                // versioned agent classes, which its Worker's signed
-                // `/_bynk/migrate/` route can wake.
-                let mut migratable: Vec<(String, i64)> = agent_versions
-                    .iter()
-                    .filter_map(|(class, v)| {
-                        let (unit, agent) = class.rsplit_once('.')?;
-                        (unit == ctx_name && table.agents.contains_key(agent))
-                            .then(|| (agent.to_string(), v.version))
-                    })
-                    .collect();
-                migratable.sort();
+                let migratable = migratable_agents(ctx_name, table, agent_versions);
+                let inspect_classes = inspect_classes(inspect_agents, table);
                 let entry_ts = emitter::emit_worker_entry(
                     ctx_name,
                     table,
@@ -3981,6 +4074,8 @@ fn build_output(
                     &migratable,
                     ctx_uses_exec,
                     &bynk_check::symbols::combined_types_for(ctx_name, &unit_tables, &unit_uses),
+                    trace_requests,
+                    &inspect_classes,
                 );
                 // P6.x cutover slice 2 (#1191): collected here, not inside
                 // `emit_wrangler_toml` itself, so that function's own file
@@ -5641,6 +5736,8 @@ mod tests {
             &roots.excludes(),
             None,
             false,
+            false,
+            false,
             true,
             &SchemaLock::Off,
             None,
@@ -5922,6 +6019,8 @@ mod tests {
             &sources,
             &roots.excludes(),
             None,
+            false,
+            false,
             false,
             true,
             &SchemaLock::Off,

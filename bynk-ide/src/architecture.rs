@@ -44,6 +44,9 @@ use std::collections::{HashMap, HashSet};
 use std::path::PathBuf;
 
 use bynk_check::analysis::ContextSequenceInfo;
+use bynk_check::architecture_facts::{
+    ArchitectureFacts, DeliveryKind, FactSite, MemberFact, MemberKind,
+};
 use bynk_syntax::ast::*;
 use bynk_syntax::span::Span;
 
@@ -116,6 +119,74 @@ pub struct ArchNode {
     pub providers: Vec<ArchProvider>,
     pub services: Vec<ArchService>,
     pub agents: Vec<ArchAgent>,
+    /// #3583: per handler, the capabilities it requires through `given`.
+    pub uses: Vec<ArchHandlerUses>,
+}
+
+/// #3583: the handler (or provider operation) an event site or a use belongs to.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct ArchMember {
+    /// The declaring unit's qualified name.
+    pub unit: String,
+    pub kind: MemberKind,
+    /// The service, agent or provider name.
+    pub container: String,
+    /// The handler's request descriptor, or a provider operation's name.
+    pub handler: String,
+    pub loc: Located,
+}
+
+/// #3583: one capability a handler requires through `given`.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct ArchUse {
+    pub capability: String,
+    /// The unit that declares the capability (this unit, a consumed one, or `bynk`).
+    pub from: Option<String>,
+    /// Written on the service header (`default_given`), not on the handler.
+    pub inherited: bool,
+    pub loc: Located,
+    /// The suites that `stub` this capability for this unit, one per file.
+    pub stubbed_in: Vec<ArchStub>,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct ArchStub {
+    /// The suite file, project-relative.
+    pub suite: PathBuf,
+    /// The suite's first `stub` of the capability.
+    pub loc: Located,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct ArchHandlerUses {
+    pub member: ArchMember,
+    pub uses: Vec<ArchUse>,
+}
+
+/// #3583: one `Events.emit[E]` call.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct ArchEmitter {
+    pub member: ArchMember,
+    pub loc: Located,
+}
+
+/// #3583: one `from Events(E)` subscriber's `on event` handler.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct ArchSubscriber {
+    pub member: ArchMember,
+    pub delivery: DeliveryKind,
+    pub loc: Located,
+}
+
+/// #3583: an event type with everything that emits or subscribes to it.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct ArchEvent {
+    /// The context that declares the event.
+    pub owner: String,
+    pub name: String,
+    pub loc: Located,
+    pub emitters: Vec<ArchEmitter>,
+    pub subscribers: Vec<ArchSubscriber>,
 }
 
 /// A directed `consumes` edge between two nodes.
@@ -134,6 +205,8 @@ pub struct ArchEdge {
 pub struct ArchModel {
     pub nodes: Vec<ArchNode>,
     pub edges: Vec<ArchEdge>,
+    /// #3583: every declared event, with its emitters and subscribers.
+    pub events: Vec<ArchEvent>,
 }
 
 /// Build the whole-project architecture model.
@@ -146,11 +219,13 @@ pub struct ArchModel {
 /// `unit_sources`, per its own doc) contributes no node; a `consumes` edge
 /// that resolves to such a unit is dropped (nothing to draw an arrow to) but
 /// its selected capabilities are still recorded on the consuming node — see
-/// the module doc.
+/// the module doc. `facts` is the checker's resolved event and `given` view
+/// (#3583).
 pub fn architecture_model(
     unit_sources: &HashMap<String, Vec<PathBuf>>,
     snapshots: &HashMap<PathBuf, String>,
     sequence_info: &HashMap<String, ContextSequenceInfo>,
+    facts: &ArchitectureFacts,
 ) -> ArchModel {
     // Deterministic iteration order (ADR risk: "layout churn" — a `HashMap`
     // walk shuffles between rounds otherwise).
@@ -327,6 +402,7 @@ pub fn architecture_model(
             providers,
             services,
             agents,
+            uses: node_uses(name, facts),
         });
     }
 
@@ -360,7 +436,94 @@ pub fn architecture_model(
     ArchModel {
         nodes,
         edges: merged_edges,
+        events: events_of(facts),
     }
+}
+
+fn located(site: &FactSite) -> Located {
+    Located {
+        file: site.file.clone(),
+        span: site.span,
+    }
+}
+
+fn member_of(m: &MemberFact) -> ArchMember {
+    ArchMember {
+        unit: m.unit.clone(),
+        kind: m.kind,
+        container: m.container.clone(),
+        handler: m.handler.clone(),
+        loc: located(&m.site),
+    }
+}
+
+fn events_of(facts: &ArchitectureFacts) -> Vec<ArchEvent> {
+    facts
+        .events
+        .iter()
+        .map(|e| ArchEvent {
+            owner: e.owner.clone(),
+            name: e.name.clone(),
+            loc: located(&e.site),
+            emitters: e
+                .emitters
+                .iter()
+                .map(|x| ArchEmitter {
+                    member: member_of(&x.member),
+                    loc: located(&x.site),
+                })
+                .collect(),
+            subscribers: e
+                .subscribers
+                .iter()
+                .map(|x| ArchSubscriber {
+                    member: member_of(&x.member),
+                    delivery: x.delivery,
+                    loc: located(&x.site),
+                })
+                .collect(),
+        })
+        .collect()
+}
+
+/// One node's handlers and what each requires through `given`, with the suites
+/// that `stub` each capability (a suite stubs for the unit it targets).
+fn node_uses(unit: &str, facts: &ArchitectureFacts) -> Vec<ArchHandlerUses> {
+    let stubbed_in = |capability: &str| -> Vec<ArchStub> {
+        let mut out: Vec<ArchStub> = Vec::new();
+        for s in facts
+            .stubs
+            .iter()
+            .filter(|s| s.target == unit && s.capability == capability)
+        {
+            if !out.iter().any(|o| o.suite == s.site.file) {
+                out.push(ArchStub {
+                    suite: s.site.file.clone(),
+                    loc: located(&s.site),
+                });
+            }
+        }
+        out
+    };
+    facts
+        .uses
+        .iter()
+        .filter(|h| h.member.unit == unit)
+        .map(|h| ArchHandlerUses {
+            member: member_of(&h.member),
+            uses: h
+                .uses
+                .iter()
+                .map(|u| ArchUse {
+                    capability: u.capability.clone(),
+                    from: u.provider_unit.clone(),
+                    inherited: u.inherited,
+                    loc: located(&u.site),
+                    stubbed_in: stubbed_in(&u.capability),
+                })
+                .collect(),
+        })
+        .collect()
 }
 
 #[cfg(test)]
@@ -391,7 +554,12 @@ mod tests {
             .iter()
             .map(|f| (f.source_path.clone(), f.text.clone()))
             .collect();
-        architecture_model(&diag.unit_sources, &snapshots, &diag.sequence_info)
+        architecture_model(
+            &diag.unit_sources,
+            &snapshots,
+            &diag.sequence_info,
+            &diag.architecture_facts,
+        )
     }
 
     // -- Fixture: examples/rate-limiter's single context, self-contained (not

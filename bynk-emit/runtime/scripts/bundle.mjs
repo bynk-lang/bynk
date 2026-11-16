@@ -59,6 +59,8 @@ const MODULES = [
   "connection",
   "messages",
   "locale",
+  "trace",
+  "inspect",
   "aliases",
   "wasm",
 ];

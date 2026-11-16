@@ -125,6 +125,7 @@ pub const FIRST_PARTY_DOCS: &[Entry] = &[
         &["current"],
     ),
     ("bynk.cloudflare", "Ai", "workers-ai-ai", &["run"]),
+    ("bynk.cloudflare", "Images", "images-images", &["transform"]),
     (
         "bynk.cloudflare",
         "StoredSecret",
@@ -174,6 +175,12 @@ pub const FIRST_PARTY_DOCS: &[Entry] = &[
         "AiSearch",
         "ai-search-aisearch",
         &["search", "answer"],
+    ),
+    (
+        "bynk.cloudflare",
+        "MtlsCertificate",
+        "mutual-tls-mtlscertificate",
+        &["send"],
     ),
 ];
 

@@ -10,6 +10,7 @@
 // `WorkersEdgeCache` (L7, #2414) against an execution context fake, and
 // `WorkersVersion` (#3300) against a Version metadata fake, and
 // `WorkersAi` (#3478) against a Workers AI binding fake, and
+// `WorkersImages` (#3515) against an Images binding fake, and
 // `WorkersVectorize` (#3479) against a Vectorize index fake, and
 // `WorkersAiSearch` (#3480) against an AI Search instance fake, and
 // `WorkersStoredSecret` (#3301) against a Secrets Store secret fake, and
@@ -28,8 +29,9 @@
 
 import { test } from "node:test";
 import assert from "node:assert/strict";
-import { WorkersAi, WorkersAiSearch, WorkersAnalytics, WorkersContainer, WorkersD1, WorkersEdgeCache, WorkersEmail, WorkersKv, WorkersMySql, WorkersPostgres, WorkersQueue, WorkersR2, WorkersRateLimit, WorkersService, WorkersStoredSecret, WorkersVectorize, WorkersVersion } from "./bynk/cloudflare.binding.js";
+import { WorkersAi, WorkersAiSearch, WorkersImages, WorkersAnalytics, WorkersContainer, WorkersD1, WorkersEdgeCache, WorkersEmail, WorkersKv, WorkersMtls, WorkersMySql, WorkersPostgres, WorkersQueue, WorkersR2, WorkersRateLimit, WorkersService, WorkersStoredSecret, WorkersVectorize, WorkersVersion } from "./bynk/cloudflare.binding.js";
 import { Method, FetchError } from "./bynk.js";
+import { __makeIntegrationAi, __makeIntegrationAiSearch, __makeIntegrationContainer, __makeIntegrationHyperdrive, __makeIntegrationImages, __makeIntegrationMtls, __makeIntegrationSecretsStoreSecret } from "./__bynk_runtime/storage.js";
 import { Some, None } from "./__bynk_runtime/result.js";
 
 function fakeKv(pageSize = 2) {
@@ -256,6 +258,71 @@ t("WorkersService.send: a missing binding names it", async () => {
   await assert.rejects(
     new WorkersService({}, "SERVICE_BILLING").send(serviceRequest()),
     /requires a Service Binding \(env\.SERVICE_BILLING\)/,
+  );
+});
+
+// #3513 A: `WorkersMtls`, against a certificate-binding fake (a `Fetcher`). `send` is `Fetch.send`'s
+// over the binding's `fetch`, so the same request and response rules hold, and the call goes
+// through the binding, which is what presents the certificate.
+const mtlsRequest = (overrides = {}) => serviceRequest({ url: "https://orders.acme.example/v1/orders", ...overrides });
+
+t("WorkersMtls.send: sends over env[binding], not the network, and reads the response", async () => {
+  const cert = fakeService(() => new Response("[]", { status: 200, headers: { etag: "v1" } }));
+  const globalFetch = globalThis.fetch;
+  globalThis.fetch = () => {
+    throw new Error("the global fetch must not be used");
+  };
+  try {
+    const res = await new WorkersMtls({ MTLS_BACKEND: cert }, "MTLS_BACKEND").send(mtlsRequest());
+    assert.equal(res.tag, "Ok");
+    assert.equal(res.value.status, 200);
+    assert.equal(res.value.body, "[]");
+    assert.equal(res.value.headers.get("etag"), "v1");
+  } finally {
+    globalThis.fetch = globalFetch;
+  }
+  assert.equal(cert.sent.length, 1);
+  assert.equal(cert.sent[0].url, "https://orders.acme.example/v1/orders");
+});
+
+t("WorkersMtls.send: a status the origin returns, 5xx included, is Ok", async () => {
+  const cert = fakeService(() => new Response("down", { status: 503 }));
+  const res = await new WorkersMtls({ MTLS_BACKEND: cert }, "MTLS_BACKEND").send(mtlsRequest());
+  assert.equal(res.tag, "Ok");
+  assert.equal(res.value.status, 503);
+});
+
+t("WorkersMtls.send: a refused header is Err(InvalidHeader), and nothing is sent", async () => {
+  const cert = fakeService();
+  const res = await new WorkersMtls({ MTLS_BACKEND: cert }, "MTLS_BACKEND").send(
+    mtlsRequest({ headers: new Map([["host", "elsewhere"]]) }),
+  );
+  assert.deepEqual(res, { tag: "Err", error: FetchError.InvalidHeader });
+  assert.equal(cert.sent.length, 0);
+});
+
+t("WorkersMtls.send: a call the binding fails, a refused handshake included, is Err(Network)", async () => {
+  const cert = {
+    async fetch() {
+      throw new TypeError("peer did not return a certificate");
+    },
+  };
+  const res = await new WorkersMtls({ MTLS_BACKEND: cert }, "MTLS_BACKEND").send(mtlsRequest());
+  assert.deepEqual(res, { tag: "Err", error: FetchError.Network });
+});
+
+t("WorkersMtls.send: each instance reads its own binding", async () => {
+  const a = fakeService();
+  const b = fakeService();
+  await new WorkersMtls({ MTLS_A: a, MTLS_B: b }, "MTLS_B").send(mtlsRequest());
+  assert.equal(a.sent.length, 0);
+  assert.equal(b.sent.length, 1);
+});
+
+t("WorkersMtls.send: a missing binding names it", async () => {
+  await assert.rejects(
+    new WorkersMtls({}, "MTLS_BACKEND").send(mtlsRequest()),
+    /requires an mTLS certificate binding \(env\.MTLS_BACKEND\)/,
   );
 });
 
@@ -1245,6 +1312,250 @@ t("WorkersVersion.current: a missing binding or an unreadable timestamp faults",
   await assert.rejects(new WorkersVersion({}).current(), /\[version_metadata\]/);
   const bad = { CF_VERSION_METADATA: { id: "x", tag: "", timestamp: "yesterday" } };
   await assert.rejects(new WorkersVersion(bad).current(), /not a date/);
+});
+
+// #3515: `WorkersImages`, against a fake of Cloudflare's Images binding:
+// `input(stream)` starts a pipeline that records `transform` and `draw` steps,
+// and `output({ format })` resolves a result with `image()` (a stream) and
+// `contentType()`. A refusal is a thrown `ImagesError` carrying a numeric
+// `code` (Cloudflare's workers-types), and the code is also read from a message
+// that opens with it.
+function fakeImages(opts = {}) {
+  const calls = [];
+  const read = async (stream) => new Uint8Array(await new Response(stream).arrayBuffer());
+  const chain = (source, steps) => ({
+    source,
+    steps,
+    transform(o) {
+      return chain(source, [...steps, { transform: o }]);
+    },
+    draw(overlay, o) {
+      return chain(source, [...steps, { draw: overlay, options: o }]);
+    },
+    async output(o) {
+      const bytes = await read(source);
+      const overlays = [];
+      for (const st of steps) if (st.draw) overlays.push(await read(st.draw.source));
+      calls.push({ bytes, steps: steps.map((st) => (st.draw ? { draw: true, options: st.options } : st)), overlays, output: o });
+      if (opts.throws !== undefined) throw opts.throws;
+      return {
+        image: () => new Blob([new Uint8Array([9, 9])]).stream(),
+        contentType: () => o.format,
+      };
+    },
+  });
+  return {
+    calls,
+    input: (stream) => chain(stream, []),
+    async info(stream) {
+      calls.push({ info: await read(stream) });
+      if (opts.throws !== undefined) throw opts.throws;
+      return opts.info;
+    },
+  };
+}
+const imgOpts = (o = {}) => ({ width: None, height: None, fit: None, rotate: None, blur: None, overlays: [], ...o });
+const outOpts = (o = {}) => ({ format: { tag: "Webp" }, quality: None, ...o });
+const IMG = new Uint8Array([1, 2, 3]);
+
+t("WorkersImages.transform: builds the pipeline and returns the bytes and content type", async () => {
+  const images = fakeImages();
+  const logo = { image: new Uint8Array([7]), opacity: Some(0.5), top: None, left: None, bottom: Some(8), right: Some(8), repeat: false };
+  const r = await new WorkersImages({ IMAGES: images }).transform(
+    IMG,
+    imgOpts({ width: Some(256), height: Some(128), fit: Some({ tag: "ScaleDown" }), rotate: Some(90), blur: Some(5), overlays: [logo] }),
+    outOpts({ quality: Some(80) }),
+  );
+  assert.deepEqual(r, { tag: "Ok", value: { body: new Uint8Array([9, 9]), contentType: "image/webp" } });
+  const [c] = images.calls;
+  assert.deepEqual(c.bytes, IMG);
+  assert.deepEqual(c.steps, [
+    { transform: { width: 256, height: 128, fit: "scale-down", rotate: 90, blur: 5 } },
+    { draw: true, options: { opacity: 0.5, bottom: 8, right: 8 } },
+  ]);
+  assert.deepEqual(c.overlays, [new Uint8Array([7])]);
+  assert.deepEqual(c.output, { format: "image/webp", quality: 80 });
+});
+
+t("WorkersImages.transform: every format and fit has its wire name, and no options means no transform step", async () => {
+  const images = fakeImages();
+  const wb = new WorkersImages({ IMAGES: images });
+  for (const [tag, mime] of [["Jpeg", "image/jpeg"], ["Png", "image/png"], ["Webp", "image/webp"], ["Avif", "image/avif"], ["Gif", "image/gif"]]) {
+    await wb.transform(IMG, imgOpts(), outOpts({ format: { tag } }));
+    assert.deepEqual(images.calls.at(-1).output, { format: mime });
+    assert.deepEqual(images.calls.at(-1).steps, []);
+  }
+  for (const [tag, wire] of [["ScaleDown", "scale-down"], ["Contain", "contain"], ["Cover", "cover"], ["Crop", "crop"], ["Pad", "pad"], ["Squeeze", "squeeze"]]) {
+    await wb.transform(IMG, imgOpts({ fit: Some({ tag }) }), outOpts());
+    assert.deepEqual(images.calls.at(-1).steps, [{ transform: { fit: wire } }]);
+  }
+});
+
+t("WorkersImages.transform: obvious invalid input is InvalidImage and never reaches the platform", async () => {
+  const images = fakeImages();
+  const wb = new WorkersImages({ IMAGES: images });
+  const overlay = (o = {}) => ({ image: new Uint8Array([7]), opacity: None, top: None, left: None, bottom: None, right: None, repeat: false, ...o });
+  const bad = async (image, options, output) => (await wb.transform(image, options, output)).error;
+  const invalid = (m) => ({ tag: "InvalidImage", message: m });
+  assert.deepEqual(await bad(new Uint8Array(0), imgOpts(), outOpts()), invalid("the image is empty"));
+  assert.deepEqual(await bad(IMG, imgOpts({ width: Some(0) }), outOpts()), invalid("width must be a whole number of pixels, at least 1, not 0"));
+  assert.deepEqual(await bad(IMG, imgOpts({ height: Some(-3) }), outOpts()), invalid("height must be a whole number of pixels, at least 1, not -3"));
+  assert.deepEqual(await bad(IMG, imgOpts({ rotate: Some(45) }), outOpts()), invalid("rotate must be 90, 180 or 270, not 45"));
+  assert.deepEqual(await bad(IMG, imgOpts(), outOpts({ quality: Some(0) })), invalid("quality must be a whole number from 1 to 100, not 0"));
+  assert.deepEqual(await bad(IMG, imgOpts(), outOpts({ quality: Some(101) })), invalid("quality must be a whole number from 1 to 100, not 101"));
+  assert.deepEqual(await bad(IMG, imgOpts({ overlays: [overlay({ opacity: Some(1.5) })] }), outOpts()), invalid("overlay 0: opacity must be from 0 to 1, not 1.5"));
+  assert.deepEqual(await bad(IMG, imgOpts({ overlays: [overlay(), overlay({ left: Some(1), right: Some(1) })] }), outOpts()), invalid("overlay 1: left and right cannot both be set"));
+  assert.deepEqual(await bad(IMG, imgOpts({ overlays: [overlay({ top: Some(1), bottom: Some(1) })] }), outOpts()), invalid("overlay 0: top and bottom cannot both be set"));
+  assert.deepEqual(await bad(IMG, imgOpts({ overlays: [overlay({ image: new Uint8Array(0) })] }), outOpts()), invalid("overlay 0: the image is empty"));
+  assert.deepEqual(images.calls, []);
+});
+
+t("WorkersImages.transform: a platform error is mapped by its code, any other is ImagesFailed with its message", async () => {
+  const failure = async (e) => (await new WorkersImages({ IMAGES: fakeImages({ throws: e }) }).transform(IMG, imgOpts(), outOpts())).error;
+  const coded = (code, message = "boom") => Object.assign(new Error(message), { name: "ImagesError", code });
+  assert.deepEqual(await failure(coded(9412, "not an image")), { tag: "InvalidImage", message: "not an image" });
+  assert.deepEqual(await failure(coded(9401)), { tag: "InvalidImage", message: "boom" });
+  assert.deepEqual(await failure(coded(9432)), { tag: "InvalidImage", message: "boom" });
+  // 9402 is "too large or the connection was interrupted": only a message about size is the caller's.
+  assert.deepEqual(await failure(coded(9402, "The image is too large")), { tag: "ImageTooLarge" });
+  assert.deepEqual(await failure(coded(9402, "connection interrupted")), { tag: "ImagesFailed", message: "connection interrupted" });
+  assert.deepEqual(await failure(coded(9413)), { tag: "ImageTooLarge" });
+  assert.deepEqual(await failure(coded(9520)), { tag: "UnsupportedImage" });
+  assert.deepEqual(await failure(coded(9422, "usage limit")), { tag: "ImagesFailed", message: "usage limit" });
+  assert.deepEqual(await failure(coded(9529, "timed out")), { tag: "ImagesFailed", message: "timed out" });
+  // A `code` that is a string, or only the message's opening code, still maps.
+  assert.deepEqual(await failure(Object.assign(new Error("x"), { code: "9412" })), { tag: "InvalidImage", message: "x" });
+  assert.deepEqual(await failure(new Error("ImagesError: 9413: too big")), { tag: "ImageTooLarge" });
+  assert.deepEqual(await failure(new Error("9520: format")), { tag: "UnsupportedImage" });
+  // Only a code that opens the message is one.
+  assert.deepEqual(await failure(new Error("id 9412 failed")), { tag: "ImagesFailed", message: "id 9412 failed" });
+  assert.deepEqual(await failure(new Error("something new")), { tag: "ImagesFailed", message: "something new" });
+  assert.deepEqual(await failure("odd"), { tag: "ImagesFailed", message: "odd" });
+});
+
+t("WorkersImages.info: a raster image is its format and size, an SVG has none", async () => {
+  const info = async (reply) => new WorkersImages({ IMAGES: fakeImages({ info: reply }) }).info(IMG);
+  const raster = (mime, format) => info({ format: mime, fileSize: 1234, width: 640, height: 480 }).then((r) => [r, format]);
+  for (const [mime, tag] of [["image/jpeg", "Jpeg"], ["image/png", "Png"], ["image/webp", "Webp"], ["image/avif", "Avif"], ["image/gif", "Gif"], ["image/heic", "Heic"]]) {
+    const [r] = await raster(mime, tag);
+    assert.deepEqual(r, { tag: "Ok", value: { tag: "Raster", format: { tag: tag }, width: 640, height: 480, size: 1234 } });
+  }
+  assert.deepEqual(await info({ format: "image/svg+xml" }), { tag: "Ok", value: { tag: "Svg" } });
+  // A format `ImageFormat` does not name, or a raster with no size, is a failure, not a guess.
+  assert.deepEqual((await info({ format: "image/jxl", fileSize: 1, width: 1, height: 1 })).error.tag, "ImagesFailed");
+  assert.deepEqual((await info({ format: "image/png" })).error.tag, "ImagesFailed");
+});
+
+t("WorkersImages.info: an empty image is InvalidImage without calling the platform, and a platform error maps by code", async () => {
+  const images = fakeImages({ info: { format: "image/png", fileSize: 1, width: 1, height: 1 } });
+  assert.deepEqual(await new WorkersImages({ IMAGES: images }).info(new Uint8Array(0)), { tag: "Err", error: { tag: "InvalidImage", message: "the image is empty" } });
+  assert.deepEqual(images.calls, []);
+  const coded = (code) => Object.assign(new Error("boom"), { name: "ImagesError", code });
+  const failure = async (e) => (await new WorkersImages({ IMAGES: fakeImages({ throws: e }) }).info(IMG)).error;
+  assert.deepEqual(await failure(coded(9412)), { tag: "InvalidImage", message: "boom" });
+  assert.deepEqual(await failure(coded(9413)), { tag: "ImageTooLarge" });
+  assert.deepEqual(await failure(coded(9520)), { tag: "UnsupportedImage" });
+  assert.deepEqual(await failure(new Error("odd")), { tag: "ImagesFailed", message: "odd" });
+});
+
+t("WorkersImages.transform: Heic is read-only, so asking for it as an output is InvalidImage", async () => {
+  const images = fakeImages();
+  const r = await new WorkersImages({ IMAGES: images }).transform(IMG, imgOpts(), outOpts({ format: { tag: "Heic" } }));
+  assert.deepEqual(r, { tag: "Err", error: { tag: "InvalidImage", message: "Heic cannot be written as an output format" } });
+  assert.deepEqual(images.calls, []);
+});
+
+t("WorkersImages.transform: the integration double's not-stubbed fault is rethrown, not returned as an error", async () => {
+  const notStubbed = Object.assign(new Error("bynk: the `Images` binding is not stubbed"), { bynkNotStubbed: true });
+  const wb = new WorkersImages({ IMAGES: fakeImages({ throws: notStubbed, info: undefined }) });
+  await assert.rejects(wb.transform(IMG, imgOpts(), outOpts()), /not stubbed/);
+  await assert.rejects(wb.info(IMG), /not stubbed/);
+  // An unknown fit is refused before the platform, like an unknown format.
+  const r = await new WorkersImages({ IMAGES: fakeImages() }).transform(IMG, imgOpts({ fit: Some({ tag: "Zoom" }) }), outOpts());
+  assert.deepEqual(r, { tag: "Err", error: { tag: "InvalidImage", message: "the fit Zoom has no wire name in this binding" } });
+});
+
+async function* imageChunks(parts, log = []) {
+  try {
+    for (const p of parts) yield p;
+  } finally {
+    log.push("released");
+  }
+}
+const drainBytes = async (it) => {
+  const out = [];
+  for await (const c of it) out.push(...c);
+  return out;
+};
+
+t("WorkersImages.transformStream: reads the input stream, gives the output as a stream, and builds the same pipeline", async () => {
+  const images = fakeImages();
+  const r = await new WorkersImages({ IMAGES: images }).transformStream(imageChunks([new Uint8Array([1, 2]), new Uint8Array([3])]), imgOpts({ width: Some(64) }), outOpts());
+  assert.equal(r.tag, "Ok");
+  assert.equal(r.value.contentType, "image/webp");
+  assert.deepEqual(await drainBytes(r.value.body), [9, 9]);
+  assert.deepEqual(images.calls[0].bytes, new Uint8Array([1, 2, 3]));
+  assert.deepEqual(images.calls[0].steps, [{ transform: { width: 64 } }]);
+  assert.deepEqual(images.calls[0].output, { format: "image/webp" });
+});
+
+t("WorkersImages.transformStream: a bad option is InvalidImage before anything is read, the iterator is closed and the stream is claimed", async () => {
+  const images = fakeImages();
+  let pulled = 0;
+  let closed = 0;
+  const source = {
+    [Symbol.asyncIterator]() {
+      return {
+        async next() {
+          pulled += 1;
+          return { done: true, value: undefined };
+        },
+        async return() {
+          closed += 1;
+          return { done: true, value: undefined };
+        },
+      };
+    },
+  };
+  const wb = new WorkersImages({ IMAGES: images });
+  const r = await wb.transformStream(source, imgOpts({ width: Some(0) }), outOpts());
+  assert.equal(r.tag, "Err");
+  assert.equal(r.error.tag, "InvalidImage");
+  assert.deepEqual(images.calls, []);
+  assert.equal(pulled, 0, "nothing is read from a refused source");
+  assert.equal(closed, 1, "the iterator is closed");
+  // Claimed even though refused: a second use of the same stream is the fault.
+  await assert.rejects(wb.transformStream(source, imgOpts(), outOpts()), /read only once/);
+});
+
+t("WorkersImages.transformStream: a producer that throws stays a fault, it is not the platform's refusal", async () => {
+  async function* failing() {
+    yield new Uint8Array([1]);
+    throw new Error("producer broke");
+  }
+  // A fake that reads its input like the platform does, so the producer's failure surfaces from `output()`.
+  const images = fakeImages();
+  const wb = new WorkersImages({ IMAGES: images });
+  await assert.rejects(wb.transformStream(failing(), imgOpts(), outOpts()), /producer broke/);
+});
+
+t("WorkersImages.transformStream: a platform refusal before the stream starts is an error value, and the not-stubbed fault is rethrown", async () => {
+  const refused = Object.assign(new Error("not an image"), { name: "ImagesError", code: 9412 });
+  const r = await new WorkersImages({ IMAGES: fakeImages({ throws: refused }) }).transformStream(imageChunks([new Uint8Array([1])]), imgOpts(), outOpts());
+  assert.deepEqual(r, { tag: "Err", error: { tag: "InvalidImage", message: "not an image" } });
+  const notStubbed = Object.assign(new Error("not stubbed"), { bynkNotStubbed: true });
+  await assert.rejects(new WorkersImages({ IMAGES: fakeImages({ throws: notStubbed }) }).transformStream(imageChunks([new Uint8Array([1])]), imgOpts(), outOpts()), /not stubbed/);
+});
+
+t("WorkersImages.transformStream: an input stream can be read only once", async () => {
+  const input = imageChunks([new Uint8Array([1])]);
+  const wb = new WorkersImages({ IMAGES: fakeImages() });
+  await wb.transformStream(input, imgOpts(), outOpts());
+  await assert.rejects(wb.transformStream(input, imgOpts(), outOpts()), /read only once/);
+});
+
+t("WorkersImages: a Worker without the binding faults, naming the stanza", async () => {
+  await assert.rejects(new WorkersImages({}).transform(IMG, imgOpts(), outOpts()), /\[images\] wrangler stanza/);
 });
 
 // #3478: `WorkersAi`, against a fake of Cloudflare's AI binding: `run(model,
@@ -2676,4 +2987,46 @@ t("WorkersContainer: a fault the class reports (`bynk dev` without Docker) is th
   );
   await assert.rejects(() => cont(ns).send("a", creq()), /Container\.send: .*Docker is not available/);
   await assert.rejects(() => cont(ns).receiveBytes("a", creq({ method: { tag: "Get" }, body: None })), /Docker/);
+});
+
+// #3589: the integration doubles' "not stubbed" fault (marked `bynkNotStubbed`)
+// must fault the case. Each binding below is driven against the real double,
+// and a binding that catches platform failures as `Err` must not catch it.
+t("WorkersAi: an unstubbed integration double faults every operation, never an Err", async () => {
+  const ai = new WorkersAi({ AI: __makeIntegrationAi() });
+  const notStubbed = /`Ai` binding is not stubbed/;
+  await assert.rejects(ai.run("@cf/x/y", "{}"), notStubbed);
+  await assert.rejects(ai.generate("@cf/x/y", { messages: [chat("User", "hi")], maxTokens: None, temperature: None, topP: None, seed: None }), notStubbed);
+  await assert.rejects(ai.embed("@cf/x/y", ["a"]), notStubbed);
+  await assert.rejects(ai.runStream("@cf/x/y", "{}"), notStubbed);
+});
+
+t("WorkersAiSearch: an unstubbed integration double faults search and answer, never an Err", async () => {
+  const instance = new WorkersAiSearch({ AI_SEARCH_KB: __makeIntegrationAiSearch("AI_SEARCH_KB") }, "AI_SEARCH_KB");
+  await assert.rejects(instance.search("q", sOpts()), /`AI_SEARCH_KB` AI Search binding is not stubbed/);
+  await assert.rejects(instance.answer([userMsg("q")], sOpts()), /`AI_SEARCH_KB` AI Search binding is not stubbed/);
+});
+
+t("WorkersContainer: an unstubbed integration double faults send and receiveBytes, never an Err", async () => {
+  const c = new WorkersContainer({ CONTAINER_RENDERER: __makeIntegrationContainer("CONTAINER_RENDERER") }, "CONTAINER_RENDERER");
+  await assert.rejects(c.send("a", creq()), /container `a` is not stubbed/);
+  await assert.rejects(c.receiveBytes("a", creq({ method: { tag: "Get" }, body: None })), /container `a` is not stubbed/);
+});
+
+t("WorkersStoredSecret, WorkersPostgres and WorkersMySql: an unstubbed integration double faults", async () => {
+  const env = { SECRET_K: __makeIntegrationSecretsStoreSecret("SECRET_K"), HYPERDRIVE_MAIN: __makeIntegrationHyperdrive("HYPERDRIVE_MAIN") };
+  await assert.rejects(new WorkersStoredSecret(env, "SECRET_K").get(), /`SECRET_K` has no value in a test/);
+  await assert.rejects(new WorkersPostgres(env, "HYPERDRIVE_MAIN", async () => assert.fail("not reached")).all("select 1", []), /Hyperdrive binding `HYPERDRIVE_MAIN` has no database/);
+  await assert.rejects(new WorkersMySql(env, "HYPERDRIVE_MAIN", async () => assert.fail("not reached")).all("select 1", []), /Hyperdrive binding `HYPERDRIVE_MAIN` has no database/);
+});
+
+t("WorkersImages: an unstubbed integration double faults transform and info, never an Err", async () => {
+  const images = new WorkersImages({ IMAGES: __makeIntegrationImages() });
+  await assert.rejects(images.transform(IMG, imgOpts(), outOpts()), /`Images` binding is not stubbed/);
+  await assert.rejects(images.info(IMG), /`Images` binding is not stubbed/);
+});
+
+t("WorkersMtls: an unstubbed integration double faults send, never an Err", async () => {
+  const m = new WorkersMtls({ MTLS_BACKEND: __makeIntegrationMtls("Backend") }, "MTLS_BACKEND");
+  await assert.rejects(m.send(creq()), /`Backend.send` is not stubbed/);
 });

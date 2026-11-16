@@ -170,6 +170,75 @@ fn block(stmts: Vec<TsStmt>) -> TsStmt {
     TsStmt::block(stmts, None)
 }
 
+/// #3580: the runtime names a traced entry imports.
+fn trace_imports(trace: bool) -> Vec<String> {
+    if trace {
+        vec!["__traceFetch".to_string(), "__traceFault".to_string()]
+    } else {
+        Vec::new()
+    }
+}
+
+/// What `fetch`'s catch does with a fault (#1825): log it, report it, and answer
+/// the bare 500. #3580: a traced build also hands the fault to the request's record.
+fn fault_handler(context: &str, trace: bool) -> Vec<TsStmt> {
+    let mut handler = vec![expr_stmt(method_call(
+        ident("globalThis.console"),
+        "error",
+        vec![
+            TsExpr::template_lit(
+                vec![format!("{context} "), " faulted".to_string()],
+                vec![ident("__route")],
+            ),
+            fault_detail("e"),
+        ],
+    ))];
+    if trace {
+        handler.push(expr_stmt(call(ident("__traceFault"), vec![ident("e")])));
+    }
+    handler.push(report_fault());
+    handler.push(return_(Some(call(
+        ident("__faultResponse"),
+        vec![str_lit(context.to_string()), ident("__route")],
+    ))));
+    handler
+}
+
+/// #3580: a traced build moves the dispatch (with any edge-cache guard) into
+/// `__bynkTracedFetch`, and `fetch` serves each request under a record that
+/// prints one `__bynk_trace:` line as the response is ready. Returns `fetch`'s
+/// new body.
+fn traced_fetch(
+    context: &str,
+    header_decls: &mut Vec<TsStmt>,
+    fetch_params: &[TsParam],
+    fetch_return: &Option<TsType>,
+    fetch_body: Vec<TsStmt>,
+) -> Vec<TsStmt> {
+    header_decls.push(TsStmt::decl(
+        TsDecl::Function {
+            name: "__bynkTracedFetch".to_string(),
+            generics: Vec::new(),
+            params: fetch_params.to_vec(),
+            return_type: fetch_return.clone(),
+            body: fetch_body,
+            is_async: true,
+            inline: false,
+        },
+        None,
+    ));
+    vec![return_(Some(call(
+        ident("__traceFetch"),
+        vec![
+            str_lit(context.to_string()),
+            ident("__bynkTracedFetch"),
+            ident("request"),
+            ident("env"),
+            ident("ctx"),
+        ],
+    )))]
+}
+
 /// #1825: `__route = "<what>";`, naming the dispatch `fetch`'s fault log
 /// reports.
 fn set_fault_route(what: String) -> TsStmt {
@@ -344,6 +413,89 @@ fn verify_gate(context: &str, foreign: bool) -> [TsStmt; 2] {
             return_(Some(ident("__body"))),
         ),
     ]
+}
+
+/// #3581 (the dev agent-inspection track): the `/_bynk/inspect/` dispatch of a
+/// `bynk dev` build. The runtime verifies the request's signature under the local
+/// edge key, as `/_bynk/call/` does, before it looks anything up, so an unsigned
+/// sender gets a bare `401`. `classes` is each agent class this Worker hosts, with
+/// its Durable Object binding name.
+fn inspect_route(context: &str, classes: &[String]) -> TsStmt {
+    let table = TsExpr::object(
+        classes
+            .iter()
+            .map(|c| {
+                (
+                    format!("\"{c}\""),
+                    str_lit(crate::emitter::wrangler::agent_binding(c).name),
+                )
+            })
+            .collect(),
+    );
+    if_(
+        method_call(
+            ident("path"),
+            "startsWith",
+            vec![str_lit("/_bynk/inspect/")],
+        ),
+        block(vec![return_(Some(await_expr(call(
+            ident("__inspectRoute"),
+            vec![ident("env"), ident("request"), str_lit(context), table],
+        ))))]),
+    )
+}
+
+/// #3581: the registry Durable Object class a `bynk dev` build hosts, imported
+/// from the runtime and exported from the entry like an agent's class, so the dev
+/// copy of `wrangler.toml` can bind it.
+fn inspect_registry_export(inspect: &[String]) -> Option<TsStmt> {
+    (!inspect.is_empty()).then(|| {
+        TsStmt::decl(
+            TsDecl::ExportNames {
+                names: vec!["BynkInspectRegistry".to_string()],
+            },
+            None,
+        )
+    })
+}
+
+/// The runtime names the entry imports for `bynk migrate sweep`'s wake (#2259), the
+/// request recorder (#3580) and the inspect route (#3581), each only when the build
+/// has it.
+fn sweep_trace_inspect_imports(
+    migratable: &[(String, i64)],
+    trace: bool,
+    inspect: &[String],
+) -> Vec<String> {
+    let mut names = Vec::new();
+    if !migratable.is_empty() {
+        names.push("__sweepAgentInstances".to_string());
+    }
+    names.extend(trace_imports(trace));
+    if !inspect.is_empty() {
+        names.push("__inspectRoute".to_string());
+        names.push("BynkInspectRegistry".to_string());
+    }
+    names
+}
+
+/// The entry's internal admin routes, in dispatch order, each followed by a blank:
+/// State-migrations S4 (#2259 Decision D): `bynk migrate sweep`'s wake, present only
+/// while a sweep has set its key (without it the route is `404`, as if absent); it
+/// admits the sweep's caller name alone and verifies the signature under the
+/// sweep's key. Then #3581: the dev-only agent inspection route, signed as an
+/// internal call. Neither is present unless the build has it.
+fn admin_routes(context: &str, migratable: &[(String, i64)], inspect: &[String]) -> Vec<TsStmt> {
+    let mut routes = Vec::new();
+    if !migratable.is_empty() {
+        routes.push(migrate_route(context, migratable));
+        routes.push(TsStmt::blank(None));
+    }
+    if !inspect.is_empty() {
+        routes.push(inspect_route(context, inspect));
+        routes.push(TsStmt::blank(None));
+    }
+    routes
 }
 
 /// State-migrations S4 (#2259 Decision D): the `/_bynk/migrate/<Class>`
@@ -719,6 +871,10 @@ pub fn emit_worker_entry(
     // query field typed by an imported refined type or enum resolves to its real
     // wire kind rather than falling through to `string`.
     visible_types: &std::collections::HashMap<String, std::sync::Arc<bynk_syntax::ast::TypeDecl>>,
+    // #3580: wrap `fetch` in the request recorder (`bynk dev --trace-events` only).
+    trace: bool,
+    // #3581: the agent classes of the `bynk dev`-only inspect route (else empty).
+    inspect: &[String],
 ) -> TsProgram {
     let mut program = TsProgram::new();
     // Which conditional runtime helpers the entry's own inbound/outbound codecs
@@ -996,9 +1152,7 @@ pub fn emit_worker_entry(
         // #2193: every Worker's `fetch` catch answers through it.
         "__faultResponse".to_string(),
     ];
-    if !migratable.is_empty() {
-        imports.push("__sweepAgentInstances".to_string());
-    }
+    imports.extend(sweep_trace_inspect_imports(migratable, trace, inspect));
     if has_http {
         imports.push("__matchPath".to_string());
         imports.push("__httpResultToResponse".to_string());
@@ -1071,23 +1225,7 @@ pub fn emit_worker_entry(
     {
         imports.push("__mediaTypeMatches".to_string());
     }
-    // #2341 (decision A): a route taking `headers` builds them from the request.
-    if http_routes.iter().any(|r| {
-        r.handler
-            .params
-            .iter()
-            .any(|p| p.name.name == "headers" && matches!(p.type_ref, TypeRef::RequestHeaders(_)))
-    }) {
-        imports.push("__requestHeaders".to_string());
-    }
-    // #2854: a route taking `query` decodes it (typed) or views it (raw).
-    if http_routes.iter().any(|r| r.query_fields.is_some()) {
-        imports.push("__queryObject".to_string());
-    }
-    // #3277: a route taking `cookies` decodes the `Cookie` header.
-    if http_routes.iter().any(|r| r.cookies_fields.is_some()) {
-        imports.push("__cookieObject".to_string());
-    }
+    push_request_param_imports(&http_routes, &mut imports);
     // #3276: a `@multipart` route checks its `Content-Type` and reads its parts.
     if http_routes
         .iter()
@@ -1104,23 +1242,7 @@ pub fn emit_worker_entry(
         imports.push("__formMediaTypeMatches".to_string());
         imports.push("__formObject".to_string());
     }
-    if http_routes.iter().any(|r| {
-        r.handler
-            .params
-            .iter()
-            .any(|p| p.name.name == "query" && matches!(p.type_ref, TypeRef::RequestQuery(_)))
-    }) {
-        imports.push("__requestQuery".to_string());
-    }
-    // #3277: a route taking the raw `cookies` view builds it off the request.
-    if http_routes.iter().any(|r| {
-        r.handler
-            .params
-            .iter()
-            .any(|p| p.name.name == "cookies" && matches!(p.type_ref, TypeRef::RequestCookies(_)))
-    }) {
-        imports.push("__requestCookies".to_string());
-    }
+    push_request_view_imports(&http_routes, &mut imports);
     // #2341 (decision C): a service with `on rejected` renders its rejections.
     if http_routes.iter().any(|r| r.rejected.is_some()) {
         imports.push("__renderRejection".to_string());
@@ -1192,6 +1314,7 @@ pub fn emit_worker_entry(
     }
 
     header_decls.extend(container_class_reexport(table));
+    header_decls.extend(inspect_registry_export(inspect));
 
     let mut fetch_params: Vec<TsParam> = vec![
         TsParam {
@@ -1436,15 +1559,8 @@ pub fn emit_worker_entry(
     ));
     try_body.push(TsStmt::blank(None));
 
-    // 1.25. State-migrations S4 (#2259 Decision D): `bynk migrate sweep`'s
-    // wake. Present only while a sweep has set its key: without it the route
-    // is `404`, as if absent. It admits the sweep's caller name alone, so a
-    // context holding an edge key to this Worker cannot use it, and then
-    // verifies the signature under the sweep's key.
-    if !migratable.is_empty() {
-        try_body.push(migrate_route(context, migratable));
-        try_body.push(TsStmt::blank(None));
-    }
+    // 1.25. The internal admin routes: see `admin_routes`.
+    try_body.extend(admin_routes(context, migratable, inspect));
 
     // 1.5. WebSocket upgrade dispatch (v0.104, slice 3b). An `Upgrade: websocket`
     // request routes to the `from websocket` service's edge wrapper, which runs the
@@ -1814,24 +1930,7 @@ pub fn emit_worker_entry(
     fetch_body.push(try_catch_stmt(
         try_body,
         Some("e"),
-        vec![
-            expr_stmt(method_call(
-                ident("globalThis.console"),
-                "error",
-                vec![
-                    TsExpr::template_lit(
-                        vec![format!("{context} "), " faulted".to_string()],
-                        vec![ident("__route")],
-                    ),
-                    fault_detail("e"),
-                ],
-            )),
-            report_fault(),
-            return_(Some(call(
-                ident("__faultResponse"),
-                vec![str_lit(context.to_string()), ident("__route")],
-            ))),
-        ],
+        fault_handler(context, trace),
     ));
 
     let fetch_return = Some(TsType::named_with_args(
@@ -1865,6 +1964,17 @@ pub fn emit_worker_entry(
                 )),
             ],
         )))]
+    } else {
+        fetch_body
+    };
+    let fetch_body = if trace {
+        traced_fetch(
+            context,
+            &mut header_decls,
+            &fetch_params,
+            &fetch_return,
+            fetch_body,
+        )
     } else {
         fetch_body
     };
@@ -2794,6 +2904,54 @@ fn request_headers_arg(route: &HttpRoute) -> TsExpr {
     call(ident("__requestHeaders"), args)
 }
 
+/// #3513 C: `cf` is what Cloudflare derived about the connection, read off `request.cf`
+/// into the `RequestCf` record; a missing or oddly shaped property is `None`.
+fn bind_cf_param(
+    route: &HttpRoute,
+    p: &bynk_syntax::ast::Param,
+    guarded: &mut Vec<TsStmt>,
+    call_args: &mut Vec<TsExpr>,
+    (cors_const, security_const, rejected): (Option<&str>, Option<&str>, Option<&str>),
+    ru: &RuntimeUse,
+) -> bool {
+    if route.path.split('/').any(|seg| seg == ":cf")
+        || !matches!(&p.type_ref, TypeRef::Named(id) if id.name == "RequestCf")
+    {
+        return false;
+    }
+    let dser = deserialise_call(&p.type_ref, "__cfObject(request)", "cf", ru);
+    guarded.push(const_("__r_cf", dser));
+    // `__cfObject` keeps only fields the record accepts, so this does not reject; the arm
+    // is what narrows the `Result` for the compiler.
+    guarded.push(if_(
+        strict_eq(member(ident("__r_cf"), "tag"), str_lit("Err")),
+        return_(Some(stamp_rejection(
+            json_response(member(ident("__r_cf"), "error"), 400),
+            cors_const,
+            security_const,
+            rejected,
+        ))),
+    ));
+    guarded.push(const_("cf", member(ident("__r_cf"), "value")));
+    call_args.push(ident("cf"));
+    true
+}
+
+/// The request-reading parameters that bind a record: `cf`, and `cookies`.
+fn bind_request_record_param(
+    route: &HttpRoute,
+    p: &bynk_syntax::ast::Param,
+    guarded: &mut Vec<TsStmt>,
+    call_args: &mut Vec<TsExpr>,
+    wrappers: (Option<&str>, Option<&str>, Option<&str>),
+    ru: &RuntimeUse,
+) -> bool {
+    if p.name.name == "cf" {
+        return bind_cf_param(route, p, guarded, call_args, wrappers, ru);
+    }
+    bind_cookies_param(route, p, guarded, call_args, wrappers, ru)
+}
+
 fn bind_cookies_param(
     route: &HttpRoute,
     p: &bynk_syntax::ast::Param,
@@ -3319,7 +3477,7 @@ fn emit_http_route_dispatch(
             call_args.push(ident("query"));
             continue;
         }
-        if bind_cookies_param(
+        if bind_request_record_param(
             route,
             p,
             &mut guarded,
@@ -3826,6 +3984,58 @@ fn emit_http_route_dispatch(
 
     inner.push(if_(route_cond, block(guarded)));
     block(inner)
+}
+
+/// #2341, #2854, #3277: the runtime imports for a route's `headers`, typed `query` and typed `cookies` parameters.
+fn push_request_param_imports(http_routes: &[HttpRoute], imports: &mut Vec<String>) {
+    // #2341 (decision A): a route taking `headers` builds them from the request.
+    if http_routes.iter().any(|r| {
+        r.handler
+            .params
+            .iter()
+            .any(|p| p.name.name == "headers" && matches!(p.type_ref, TypeRef::RequestHeaders(_)))
+    }) {
+        imports.push("__requestHeaders".to_string());
+    }
+    // #2854: a route taking `query` decodes it (typed) or views it (raw).
+    if http_routes.iter().any(|r| r.query_fields.is_some()) {
+        imports.push("__queryObject".to_string());
+    }
+    // #3277: a route taking `cookies` decodes the `Cookie` header.
+    if http_routes.iter().any(|r| r.cookies_fields.is_some()) {
+        imports.push("__cookieObject".to_string());
+    }
+}
+
+/// #2854, #3277, #3513: the runtime imports for a route's raw `query` and `cookies` views, and for `cf: RequestCf`.
+fn push_request_view_imports(http_routes: &[HttpRoute], imports: &mut Vec<String>) {
+    if http_routes.iter().any(|r| {
+        r.handler
+            .params
+            .iter()
+            .any(|p| p.name.name == "query" && matches!(p.type_ref, TypeRef::RequestQuery(_)))
+    }) {
+        imports.push("__requestQuery".to_string());
+    }
+    // #3277: a route taking the raw `cookies` view builds it off the request.
+    if http_routes.iter().any(|r| {
+        r.handler
+            .params
+            .iter()
+            .any(|p| p.name.name == "cookies" && matches!(p.type_ref, TypeRef::RequestCookies(_)))
+    }) {
+        imports.push("__requestCookies".to_string());
+    }
+    // #3513 C: a route taking `cf: RequestCf` reads `request.cf`.
+    if http_routes.iter().any(|r| {
+        !r.path.split('/').any(|seg| seg == ":cf")
+            && r.handler.params.iter().any(|p| {
+                p.name.name == "cf"
+                    && matches!(&p.type_ref, TypeRef::Named(id) if id.name == "RequestCf")
+            })
+    }) {
+        imports.push("__cfObject".to_string());
+    }
 }
 
 /// #3380: the runtime imports a context's streamed `@raw` bodies need: the

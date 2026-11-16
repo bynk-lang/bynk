@@ -188,6 +188,16 @@ pub enum BindingSource {
         capability: String,
         instance: String,
     },
+    /// #3513 A: the `[[mtls_certificates]]` binding of an `MtlsCertificate`
+    /// instance (`capability Backend = MtlsCertificate @certificate("acme-client")`),
+    /// naming the account's client certificate `certificate` as written, in every
+    /// environment. The certificate is linked by `bynk deploy`, which resolves its id and
+    /// never uploads it. Never seen by handlers: they reach it through the instance's
+    /// `WorkersMtls`.
+    MtlsCertificate {
+        capability: String,
+        certificate: String,
+    },
     /// #3300: the binding of a one-per-Worker capability of `bynk.cloudflare`
     /// (`Version`'s `[version_metadata]`), declared when the Worker's
     /// closure reaches the bare capability. Never seen by handlers: they
@@ -276,6 +286,12 @@ impl BindingSource {
                 instance,
             } => format!(
                 "the `[[ai_search]]` binding of derived capability `{capability}` (to instance `{instance}`)"
+            ),
+            Self::MtlsCertificate {
+                capability,
+                certificate,
+            } => format!(
+                "the `[[mtls_certificates]]` binding of derived capability `{capability}` (to certificate `{certificate}`)"
             ),
             Self::Postgres { capability } | Self::MySql { capability, .. } => {
                 format!("the `[[hyperdrive]]` binding of derived capability `{capability}`")
@@ -569,6 +585,7 @@ fn declared_at(
             | BindingSource::VectorizeIndex { capability, .. }
             | BindingSource::ContainerInstance { capability, .. }
             | BindingSource::AiSearchInstance { capability, .. }
+            | BindingSource::MtlsCertificate { capability, .. }
             | BindingSource::D1Database { capability } => c.items.iter().find_map(|item| {
                 let CommonsItem::Capability(d) = item else {
                     return None;

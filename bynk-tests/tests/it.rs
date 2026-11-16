@@ -97,6 +97,8 @@ mod integration {
     mod import_closure;
     #[path = "inlay_hints.rs"]
     mod inlay_hints;
+    #[path = "inspect_agents.rs"]
+    mod inspect_agents;
     #[path = "interpolation.rs"]
     mod interpolation;
     #[path = "kernel_registry.rs"]
@@ -145,6 +147,8 @@ mod integration {
     mod suggestions;
     #[path = "suite_diagnostics_attributed.rs"]
     mod suite_diagnostics_attributed;
+    #[path = "trace_requests.rs"]
+    mod trace_requests;
     #[path = "wire_shape_drift.rs"]
     mod wire_shape_drift;
     #[path = "write_output_reconciliation_behaviour.rs"]
@@ -443,6 +447,8 @@ mod system {
     mod test_json;
     #[path = "test_runner_resolution.rs"]
     mod test_runner_resolution;
+    #[path = "trace_requests_workerd.rs"]
+    mod trace_requests_workerd;
     #[path = "tsc_failure_diagnostic.rs"]
     mod tsc_failure_diagnostic;
     #[path = "tsc_verify.rs"]

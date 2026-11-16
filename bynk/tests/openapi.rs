@@ -753,3 +753,43 @@ service api from http {
     let open = &d["paths"]["/open"]["get"];
     assert!(open.get("security").is_none(), "{open:?}");
 }
+
+/// #3513 (C): `cf: RequestCf` is what Cloudflare derived, not something a caller supplies, so
+/// the contract documents the path parameter and nothing for `cf`.
+#[test]
+fn a_cf_parameter_is_not_documented() {
+    let dir = scratch("cf");
+    write(
+        &dir.join("bynk.toml"),
+        r#"[project]
+name = "geo"
+version = "0.1.0"
+
+[unstable]
+allow = ["bynk.cloudflare.RequestCf"]
+"#,
+    );
+    write(
+        &dir.join("src/geo.bynk"),
+        r#"context geo
+
+consumes bynk.cloudflare { RequestCf }
+
+service api from http {
+	on GET("/hello/:name") (name: String, cf: RequestCf) -> Effect[HttpResult[String]] by v: Visitor {
+		match cf.country {
+			Some(c) => Ok("\(name) from \(c)")
+			None => Ok(name)
+		}
+	}
+}
+"#,
+    );
+    let doc = doc(&dir, &[]);
+    let op = &doc["paths"]["/hello/{name}"]["get"];
+    let params = op["parameters"].as_array().expect("parameters");
+    assert_eq!(params.len(), 1, "{params:?}");
+    assert_eq!(params[0]["name"], "name");
+    assert!(op.get("requestBody").is_none());
+    assert!(!doc.to_string().contains("RequestCf"), "{doc}");
+}

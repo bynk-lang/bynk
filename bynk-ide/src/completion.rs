@@ -1161,6 +1161,11 @@ pub const HTTP_PARAMS: &[(&str, &str, &str)] = &[
         "the request's cookies: a record `T` decoded from the `Cookie` header and validated before the handler runs (`400` on a violation), or a raw `RequestCookies` view",
     ),
     (
+        "cf",
+        "RequestCf",
+        "what Cloudflare derived about the connection (country, colo, ASN, …); every field is optional (Cloudflare only: `consumes bynk.cloudflare { RequestCf }`)",
+    ),
+    (
         "body",
         "T",
         "the request body, parsed and validated before the handler runs (not on `GET` or `DELETE`)",
@@ -5279,7 +5284,8 @@ fn Box.size(self) -> Int { 1 }
                 "MySql",
                 "Vectorize",
                 "Container",
-                "AiSearch"
+                "AiSearch",
+                "MtlsCertificate"
             ]
         );
         let narrowed: Vec<String> = instance_declaration_completions("capability L = Ra")

@@ -412,3 +412,180 @@ fn analysis_does_not_follow_the_manifest_or_a_symlink_out_of_the_workspace() {
     assert!(sym.starts_with("No Bynk symbol named `Hidden`"), "{sym}");
     assert!(!sym.contains("elsewhere"), "{sym}");
 }
+
+/// #3600: events and capability uses, summarised and expanded.
+mod architecture_events {
+    use super::*;
+
+    const VALUES: &str = "commons ev.values\n\ntype Qty = Int where InRange(1, 100)\n";
+
+    const EMITTER: &str = r#"context ev.emitter
+
+uses ev.values
+consumes bynk { Clock, Events }
+exports transparent { Pinged }
+
+event Pinged = { n: Qty }
+
+capability Audit {
+  fn note() -> Effect[()]
+}
+
+provides Audit = Ledger given Clock, Events {
+  fn note() -> Effect[()] {
+    let _ <- Clock.now()
+    let _ <- Events.emit[Pinged](Pinged { n: 1 })
+    Effect.pure(())
+  }
+}
+
+service api from http by Visitor given Clock, Events {
+  on POST("/ping") () -> Effect[HttpResult[String]] {
+    let _ <- Clock.now()
+    let _ <- Events.emit[Pinged](Pinged { n: 7 })
+    Created("sent")
+  }
+
+  on GET("/quiet") () -> Effect[HttpResult[String]] given Clock {
+    let _ <- Clock.now()
+    Created("quiet")
+  }
+}
+"#;
+
+    const LISTENER: &str = r#"context ev.listener
+
+consumes ev.emitter
+
+service OnPing from Events(Pinged) {
+  on event(e: Pinged) -> Effect[()] { () }
+}
+"#;
+
+    const FILTERED: &str = r#"context ev.filtered
+
+consumes ev.emitter
+
+service Seven from Events(Pinged { n: 7, .. }) {
+  on event(e: Pinged) -> Effect[()] { () }
+}
+
+service Versioned from Events(Pinged) via schema(1) {
+  on event(e: Pinged) -> Effect[()] { () }
+}
+
+service Both from Events(Pinged { n: 7, .. }) via schema(1) {
+  on event(e: Pinged) -> Effect[()] { () }
+}
+"#;
+
+    const SUITE: &str = r#"suite ev.emitter
+
+stub Clock.now() returns 7
+
+case "ping" {
+  expect true
+}
+"#;
+
+    fn project(name: &str) -> Project {
+        let root = std::env::temp_dir().join(format!("bynk-mcp-{name}-{}", std::process::id()));
+        let _ = std::fs::remove_dir_all(&root);
+        std::fs::create_dir_all(root.join("ev")).unwrap();
+        std::fs::write(
+            root.join("bynk.toml"),
+            MANIFEST.replace("\"src\"", "\"ev\""),
+        )
+        .unwrap();
+        for (rel, text) in [
+            ("values.bynk", VALUES),
+            ("emitter.bynk", EMITTER),
+            ("listener.bynk", LISTENER),
+            ("filtered.bynk", FILTERED),
+            ("emitter.test.bynk", SUITE),
+        ] {
+            std::fs::write(root.join("ev").join(rel), text).unwrap();
+        }
+        Project(root.canonicalize().unwrap())
+    }
+
+    fn architecture(p: &Project, args: Value) -> String {
+        let replies = session(
+            &p.0,
+            &[
+                json!({"jsonrpc":"2.0","id":1,"method":"initialize","params":{
+                    "protocolVersion":"2025-06-18","capabilities":{},
+                    "clientInfo":{"name":"test","version":"0"}}}),
+                json!({"jsonrpc":"2.0","method":"notifications/initialized"}),
+                call(2, "bynk_get_architecture", args),
+            ],
+        );
+        text(&replies[1]).0.to_string()
+    }
+
+    #[test]
+    fn summarises_events_and_uses_by_default() {
+        let p = project("arch-ev-sum");
+        let out = architecture(&p, json!({}));
+        assert!(out.contains("## events"), "{out}");
+        assert!(
+            out.contains("- event `ev.emitter.Pinged`: 2 emitter(s) [`ev.emitter`], 4 subscriber(s) [`ev.filtered`, `ev.listener`]"),
+            "{out}"
+        );
+        assert!(
+            out.contains("- uses 2: `Clock`, `Events` across 3 handler(s); stubbed: `Clock`"),
+            "{out}"
+        );
+        // Summarised: no per-handler or per-subscriber lines.
+        assert!(!out.contains("subscribed by"), "{out}");
+        assert!(!out.contains("stubbed in"), "{out}");
+    }
+
+    #[test]
+    fn expands_an_event_with_every_delivery_kind() {
+        let p = project("arch-ev-event");
+        let out = architecture(&p, json!({"event": "Pinged"}));
+        assert!(
+            out.contains("emitted by `api.POST /ping` in `ev.emitter`"),
+            "{out}"
+        );
+        assert!(out.contains("emitted by `Ledger.note`"), "{out}");
+        for kind in [
+            "delivery all",
+            "delivery pattern ",
+            "delivery schema ",
+            "delivery pattern + schema",
+        ] {
+            assert!(out.contains(kind), "{kind}: {out}");
+        }
+    }
+
+    #[test]
+    fn expands_a_context_with_its_stubbed_capability() {
+        let p = project("arch-ev-ctx");
+        let out = architecture(&p, json!({"context": "ev.emitter"}));
+        assert!(out.contains("stubbed in `ev/emitter.test.bynk`"), "{out}");
+        assert!(out.contains("from the service's default_given"), "{out}");
+        assert!(!out.contains("subscribed by"), "{out}");
+    }
+
+    #[test]
+    fn an_unmatched_context_or_event_is_an_error() {
+        let p = project("arch-ev-miss");
+        for (k, v) in [("context", "nope"), ("event", "Nope")] {
+            let replies = session(
+                &p.0,
+                &[
+                    json!({"jsonrpc":"2.0","id":1,"method":"initialize","params":{
+                        "protocolVersion":"2025-06-18","capabilities":{},
+                        "clientInfo":{"name":"test","version":"0"}}}),
+                    json!({"jsonrpc":"2.0","method":"notifications/initialized"}),
+                    call(2, "bynk_get_architecture", json!({ k: v })),
+                ],
+            );
+            let (out, err) = text(&replies[1]);
+            assert!(err, "{out}");
+            assert!(out.contains("Known:"), "{out}");
+        }
+    }
+}

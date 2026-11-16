@@ -225,6 +225,11 @@ fn every_indexed_symbol_has_a_renderer() {
     let mut unrendered: Vec<String> = Vec::new();
     for (key, entry) in &r.index.symbols {
         let Some(def) = &entry.def else { continue };
+        // #3582: a call-only service handler never resolves for hover
+        // (`symbol_at` skips it), so it needs no renderer.
+        if entry.call_only {
+            continue;
+        }
         let text = texts
             .iter()
             .find(|(p, _)| p.file_name() == def.path.file_name())

@@ -1,0 +1,10 @@
+context shop.billing
+
+consumes shop.pay as Pay
+
+service invoice {
+  on call(total: Int) -> Effect[Result[Int, Int]] {
+    let paid <- Pay.charge(total)
+    paid
+  }
+}
