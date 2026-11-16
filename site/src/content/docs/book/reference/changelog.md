@@ -28,6 +28,7 @@ per-commit history. While Bynk is pre-1.0, increments may change behaviour.
 
 | Version | Highlights |
 |---|---|
+| **v0.634.7** | A `[deploy.workers]` group and another Worker (another group or a single context) whose members bind to each other in both directions are refused (`bynk.deploy.group_cycle`), even though the contexts themselves are acyclic (#3562, G2b) |
 | **v0.634.6** | The design of Worker groups (`[deploy.workers]`) is recorded in an ADR, which amends ADR 0193 (D2) and ADR 0017 (#3562, G7) |
 | **v0.634.5** | A Worker group's entry and members carry no `bynk dev` inspection route in a deploy build, and in a dev build a member answers only its own agents' inspect requests (#3562, G6 groundwork) |
 | **v0.634.4** | The `bynk/architectureModel` request gives each handler the services and agents it `calls`, and each agent its `key` and `state` fields, for the component view |
