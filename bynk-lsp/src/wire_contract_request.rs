@@ -42,8 +42,8 @@ use bynk_check::wire::{
     WireField, WireInst, WireModel, WireRef, WireScalar, WireSum, WireType,
 };
 use bynk_ide::wire_contract::{
-    BoundaryKind, Envelope, HttpResponse, NoCrossContextReason, ResponseOrigin, WireContractModel,
-    response_payload,
+    BoundaryKind, Envelope, HttpResponse, NoCrossContextReason, REDIRECT_HEADER, ResponseBody,
+    ResponseOrigin, WireContractModel, response_body,
 };
 use bynk_syntax::ast::{PredKind, TypeDecl};
 use tower_lsp::lsp_types::Range;
@@ -148,11 +148,31 @@ pub struct WcHttpResponse {
     pub status: u16,
     pub variant: String,
     pub origin: WcResponseOrigin,
-    /// #3609: the body this response carries — `T` for a value variant, `null`
-    /// otherwise (no payload, message, redirect, stream, raw bytes,
-    /// boundary-implicit). A message body is `{ "error": String }`, which is not
-    /// a ref into `types`; it is deferred (see the ADR).
+    /// #3609: `T` for a value variant, `null` otherwise. The value-only ref;
+    /// [`Self::body`] describes every other kind of body.
     pub payload: Option<WcRef>,
+    /// #3632: what the response body is. `null` when there is none to describe
+    /// (a no-payload variant, a `()` value, a boundary-implicit response).
+    pub body: Option<WcResponseBody>,
+}
+
+/// #3632: a response body, the same classification `bynk openapi` makes.
+#[derive(Debug, Clone, serde::Serialize)]
+#[serde(tag = "kind")]
+pub enum WcResponseBody {
+    /// `T`, JSON-encoded; `ref` is the same ref as `payload`.
+    Value {
+        #[serde(rename = "ref")]
+        ty: WcRef,
+    },
+    /// `{ "error": String }`.
+    Message,
+    /// No body; the target is in `header`.
+    Redirect { header: &'static str },
+    /// Author-owned bytes, no codec.
+    Raw,
+    /// `text/event-stream`.
+    Stream,
 }
 
 #[derive(Debug, Clone, serde::Serialize)]
@@ -621,11 +641,28 @@ fn envelope_wire(e: &Envelope) -> WcEnvelope {
     }
 }
 
+fn wc_response_body(b: &ResponseBody) -> WcResponseBody {
+    match b {
+        ResponseBody::Value(v) => WcResponseBody::Value { ty: wc_ref(v) },
+        ResponseBody::Message => WcResponseBody::Message,
+        ResponseBody::Redirect => WcResponseBody::Redirect {
+            header: REDIRECT_HEADER,
+        },
+        ResponseBody::Raw => WcResponseBody::Raw,
+        ResponseBody::Stream => WcResponseBody::Stream,
+    }
+}
+
 fn wc_response(r: &HttpResponse, success: Option<&WireRef>, text: &str) -> WcHttpResponse {
+    let body = response_body(r, success);
     WcHttpResponse {
         status: r.status,
         variant: r.variant.clone(),
-        payload: response_payload(r, success).as_ref().map(wc_ref),
+        payload: match &body {
+            Some(ResponseBody::Value(v)) => Some(wc_ref(v)),
+            _ => None,
+        },
+        body: body.as_ref().map(wc_response_body),
         origin: match &r.origin {
             ResponseOrigin::DeclaredSuccess => WcResponseOrigin::DeclaredSuccess,
             ResponseOrigin::Constructed { span } => WcResponseOrigin::Constructed {
