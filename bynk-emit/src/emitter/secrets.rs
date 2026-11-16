@@ -178,12 +178,68 @@ pub fn secret_reads(
 /// secrets but declares none, which is exactly the context this file now exists
 /// to describe.
 pub fn emit_secrets_manifest(table: &UnitTable, reads: &SecretReads) -> Option<String> {
-    render(
-        &declared_secrets(table),
-        reads,
-        &foreign_callers(table),
-        &session_keys(table),
-    )
+    SecretsParts::of(table, reads).render()
+}
+
+/// What one context says about its secrets, before it is rendered, so a
+/// `[deploy.workers.<key>]` group's members (one Worker, one file) can be merged
+/// (#3562).
+#[derive(Debug, Clone, Default)]
+pub struct SecretsParts {
+    declared: BTreeSet<String>,
+    names: BTreeSet<String>,
+    /// Whether `names` is every name read (a vacuous `true` for none).
+    complete: bool,
+    foreign: Vec<bynk_check::actors::ForeignCaller>,
+    session: Vec<(String, String)>,
+}
+
+impl SecretsParts {
+    pub fn of(table: &UnitTable, reads: &SecretReads) -> Self {
+        Self {
+            declared: declared_secrets(table),
+            names: reads.names.clone(),
+            complete: reads.complete,
+            foreign: foreign_callers(table),
+            session: session_keys(table),
+        }
+    }
+
+    /// One Worker's secrets: the union of its members'. The names are read from
+    /// one `env`, so a name any member reads is read by the Worker, and the census
+    /// is complete only if every member's is.
+    pub fn merged(parts: impl IntoIterator<Item = Self>) -> Self {
+        let mut all = Self {
+            complete: true,
+            ..Self::default()
+        };
+        for part in parts {
+            all.declared.extend(part.declared);
+            all.names.extend(part.names);
+            all.complete &= part.complete;
+            for f in part.foreign {
+                if !all.foreign.contains(&f) {
+                    all.foreign.push(f);
+                }
+            }
+            all.session.extend(part.session);
+        }
+        all.session.sort();
+        all.session.dedup();
+        all
+    }
+
+    pub fn render(&self) -> Option<String> {
+        render(
+            &self.declared,
+            &SecretReads {
+                names: self.names.clone(),
+                complete: self.complete,
+            },
+            &self.foreign,
+            &self.session,
+        )
+    }
 }
 
 /// Render a resolved name set. Split from the derivation so the file's shape is
@@ -377,6 +433,35 @@ mod tests {
             "{\n  \"version\": 2,\n  \"declared\": [],\n  \"read\": [],\n  \"read_complete\": true,\n  \
              \"foreign\": [\n    { \"actor\": \"Ledger\", \"secret\": \"LEDGER_CALL_KEY\", \"worker\": \"ledger-svc\" },\n    \
              { \"actor\": \"Legacy\", \"secret\": \"LEGACY_CALL_KEY\" }\n  ]\n}\n",
+        );
+    }
+
+    /// #3562: a group's members share one Worker and one `env`, so its manifest
+    /// is the union of theirs, and its census is complete only if every member's is.
+    #[test]
+    fn a_groups_secrets_are_the_union_of_its_members() {
+        let part = |declared: &[&str], read: &[&str], complete: bool| SecretsParts {
+            declared: declared.iter().map(|s| s.to_string()).collect(),
+            names: read.iter().map(|s| s.to_string()).collect(),
+            complete,
+            foreign: Vec::new(),
+            session: Vec::new(),
+        };
+        let merged =
+            SecretsParts::merged([part(&["A"], &["x"], true), part(&["B"], &["y", "x"], true)])
+                .render()
+                .unwrap();
+        assert!(
+            merged.contains("\"A\"") && merged.contains("\"B\""),
+            "{merged}"
+        );
+        assert!(merged.contains("\"read_complete\": true"), "{merged}");
+        let incomplete = SecretsParts::merged([part(&[], &["x"], true), part(&[], &[], false)])
+            .render()
+            .unwrap();
+        assert!(
+            incomplete.contains("\"read_complete\": false"),
+            "{incomplete}"
         );
     }
 }

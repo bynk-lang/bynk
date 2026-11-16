@@ -115,6 +115,62 @@ pub fn emit_contracts_manifest(
     ))
 }
 
+/// What one context's contract manifest says, before it is rendered, so a
+/// `[deploy.workers.<key>]` group's members (one Worker, one file) can be merged
+/// (#3562).
+#[derive(Debug, Clone, Default)]
+pub struct ContractParts {
+    pub provides: BTreeMap<String, String>,
+    pub expects: BTreeMap<String, BTreeMap<String, String>>,
+    pub foreign: BTreeMap<String, BTreeMap<String, String>>,
+    pub provides_shapes: BTreeMap<String, String>,
+    pub expects_shapes: BTreeMap<String, BTreeMap<String, String>>,
+    pub accepts: BTreeMap<String, Vec<String>>,
+}
+
+impl ContractParts {
+    pub fn render(&self) -> Option<String> {
+        emit_contracts_manifest(
+            &self.provides,
+            &self.expects,
+            &self.foreign,
+            &Shapes {
+                provides: self.provides_shapes.clone(),
+                expects: self.expects_shapes.clone(),
+                accepts: self.accepts.clone(),
+            },
+        )
+    }
+
+    /// One Worker's contracts: what its members provide (a service name is unique
+    /// within a group, so the union loses nothing) and what they expect of
+    /// contexts **outside** the Worker. A member's call to another member is the
+    /// same build and the same upload, so it has no contract to skew against and
+    /// is left out of `expects`.
+    pub fn merged(parts: impl IntoIterator<Item = Self>, members: &[String]) -> Self {
+        let mut all = Self::default();
+        for part in parts {
+            all.provides.extend(part.provides);
+            all.provides_shapes.extend(part.provides_shapes);
+            all.accepts.extend(part.accepts);
+            for (dep, services) in part.expects {
+                if !members.contains(&dep) {
+                    all.expects.entry(dep).or_default().extend(services);
+                }
+            }
+            for (dep, services) in part.expects_shapes {
+                if !members.contains(&dep) {
+                    all.expects_shapes.entry(dep).or_default().extend(services);
+                }
+            }
+            for (actor, services) in part.foreign {
+                all.foreign.entry(actor).or_default().extend(services);
+            }
+        }
+        all
+    }
+}
+
 /// A two-level map at the manifest's top level, `{}` when empty.
 fn nested_map(m: &BTreeMap<String, BTreeMap<String, String>>) -> String {
     if m.is_empty() {
