@@ -1,13 +1,6 @@
----
-level: minor
-changelog: `AnalyticsSql` reads Analytics Engine datasets through the account's SQL API, as one binding per Worker with positional `$1` parameters of `SqlValue`, a typed result and a `SqlRetryable | SqlRejected` error; `bynk dev` runs it on Cloudflare, with a one-time notice silenced by `[dev] analytics-sql = "allow"`; `Analytics.dataset()` names a dataset's environment-qualified table for such a query
-probes: diagnostic_coverage, emit_abi_shapes, emit_diagnostics, ts_writes
-breaking: a `[test.targets.*]` `vars` entry named `BYNK_DATASET_…` is now a manifest error ("`vars.BYNK_DATASET_…` is reserved"), because `bynk` writes that name to carry an `Analytics` dataset's qualified name; rename the variable
----
+# 0868 — `AnalyticsSql` is a singleton binding over the Analytics Engine SQL API, remote-only under `bynk dev`
 
-## ADR: analytics-sql-singleton
-title: `AnalyticsSql` is a singleton binding over the Analytics Engine SQL API, remote-only under `bynk dev`
-summary: One `[analytics]` binding per Worker, `query(sql, params)` over D1's `SqlValue`, a typed result and extensible error; no local implementation
+- **Status:** Accepted (v0.633)
 
 **Context.** Analytics Engine datasets are written with `Analytics` and, until now, read only outside
 Bynk. Proposal #3513 Part B, as the maintainer amended it, checked against Cloudflare's documentation
