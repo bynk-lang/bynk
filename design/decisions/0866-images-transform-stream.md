@@ -1,12 +1,6 @@
----
-level: minor
-changelog: `Images.transformStream` reads an image as a `Stream[Bytes]` and answers an `ImageStream` that `RawStreamed` serves as it is read (experimental; #3515)
-probes: emit_diagnostics, emit_abi_shapes, ts_writes
----
+# 0866 — `Images.transformStream` is `transform` over streams, and its result is not data
 
-## ADR: images-transform-stream
-title: `Images.transformStream` is `transform` over streams, and its result is not data
-summary: A streamed form of `Images.transform`: `Stream[Bytes]` in, `ImageStream` out, refusals before the stream starts are values
+- **Status:** Accepted (v0.630)
 
 **Context.** `Images.transform` buffers the whole image in and the whole result out. For a large image a handler wants to serve the result as it is produced, as `R2.getStream` does for an object. The proposal (#3515) put the streamed form in a second slice.
 

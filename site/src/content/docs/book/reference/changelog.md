@@ -3,7 +3,7 @@ title: Version compatibility & changelog
 ---
 Bynk is pre-1.0 and developed in small, spec-first increments (see
 [Versioning & roadmap](/book/about/versioning-and-roadmap/)). This book is
-written against **v0.629**.
+written against **v0.630**.
 
 This page is a high-level summary of notable increments, not an exhaustive
 per-commit history. While Bynk is pre-1.0, increments may change behaviour.
@@ -28,6 +28,7 @@ per-commit history. While Bynk is pre-1.0, increments may change behaviour.
 
 | Version | Highlights |
 |---|---|
+| **v0.630.0** | `Images.transformStream` reads an image as a `Stream[Bytes]` and answers an `ImageStream` that `RawStreamed` serves as it is read (experimental; #3515) |
 | **v0.629.5** | A build can record agent instances and answer a signed `/_bynk/inspect/` route (the emitter and runtime half of `bynk dev inspect`); deploy output is unchanged |
 | **v0.629.4** | An unstubbed `Ai`, `AiSearch`, `Container`, `Images` or `MtlsCertificate` call in an integration test now faults the case instead of returning `Err`, so a test that passed on that `Err` may now fail until it stubs the operation |
 | **v0.629.3** | The test runner can evaluate a snippet in a unit's scope and report its final value, the driver half of `bynk eval` |
