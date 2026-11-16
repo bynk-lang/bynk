@@ -28,6 +28,7 @@ per-commit history. While Bynk is pre-1.0, increments may change behaviour.
 
 | Version | Highlights |
 |---|---|
+| **v0.633.17** | `bynk registry conformance`: `yank.yank` and `yank.unyank` wait up to 65 seconds for a cached index to show the change, instead of failing a registry whose edge cache briefly kept the old index |
 | **v0.633.16** | Two contexts that consume the same queue are now refused, grouped or not (`bynk.queue.duplicate_consumer`), and `bynk.deploy.queue_consumer_conflict` is removed in its favour. A project this newly refuses built cleanly before but could never deploy, since Cloudflare allows one consumer Worker per queue (#3644) |
 | **v0.633.15** | A Worker entry can be emitted as one member of a `[deploy.workers]` group, marking its router's own "not mine" answers so a group's dispatcher can try the next member (#3562, G2b step 2c-4a); no output changes until groups are switched on |
 | **v0.633.14** | `bynk deploy`, `bynk revert` and `bynk dev` refuse a project with a `[deploy.workers]` group, until grouping is deployable (#3562) |
