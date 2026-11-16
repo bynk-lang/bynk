@@ -10,5 +10,6 @@ group; it now reads every cycle in the Worker-level graph. A publisher's Worker
 binds to each subscriber, opposite to the subscriber's `consumes`, so a context that
 subscribes to an event and also calls its publisher closes a cycle with no group
 involved. The message names a group only when one is in the cycle. A cycle among
-contexts' `consumes` stays `bynk.context.consumes_cycle`'s: when that has been
-reported the Worker check stays quiet, so one cycle is one error.
+contexts' `consumes` stays `bynk.context.consumes_cycle`'s. The bindings this reads
+are built only for a project with no error, so that cycle is reported first and a
+Worker cycle once it is fixed: never the same cycle twice.

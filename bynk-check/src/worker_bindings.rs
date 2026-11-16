@@ -543,9 +543,11 @@ fn group_service_names(
 ///
 /// One error per strongly connected set of Workers, showing one representative
 /// cycle: the Workers and one context edge per hop, at the first hop's consumer.
-/// `bynk.context.consumes_cycle` owns a cycle among contexts' `consumes`, so
-/// when it has been reported this check stays quiet and the project is fixed
-/// there first, rather than reporting the same cycle twice.
+/// `bynk.context.consumes_cycle` owns a cycle among contexts' `consumes`. The
+/// bindings this reads are built only for a project with no error, so a project
+/// with a `consumes` cycle reports that first and this check runs once it is
+/// fixed: a cycle is never reported twice, and a disjoint Worker cycle is
+/// reported at the next build, not beside it.
 fn group_worker_cycles(
     worker_groups: &bynk_project::worker_groups::WorkerGroups,
     parsed: &[ParsedFile],
@@ -553,9 +555,6 @@ fn group_worker_cycles(
     bindings: &BTreeMap<String, Vec<WorkerBinding>>,
     errors: &mut ErrorSink,
 ) {
-    if errors.has_category("bynk.context.consumes_cycle") {
-        return;
-    }
     // A context's Worker: its group's key, else the context's own name.
     let worker_of = |ctx: &str| -> String {
         worker_groups

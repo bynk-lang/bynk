@@ -1033,5 +1033,36 @@ fn any_worker_cycle_is_refused_once() {
         0,
         "one cycle, one error:\n{out}"
     );
+
+    // A disjoint event-edge cycle beside it is reported at the next build, once
+    // the `consumes` cycle is fixed: the bindings it reads are built only for a
+    // project with no error, so the two never appear together or twice.
+    fs::write(
+        root.join("src/shop/orders.bynk"),
+        publisher_context("shop.orders", "Placed"),
+    )
+    .unwrap();
+    fs::write(
+        root.join("src/shop/payment.bynk"),
+        "context shop.payment\n\nconsumes shop.orders as P\n\nservice OnPlaced from Events(Placed) {\n\ton event(e: Placed) -> Effect[()] {\n\t\tlet _ <- P.probe_shop_orders()\n\t\tEffect.pure(())\n\t}\n}\n",
+    )
+    .unwrap();
+    let (ok, out) = build(&root);
+    assert!(!ok, "{out}");
+    assert!(out.contains("bynk.context.consumes_cycle"), "{out}");
+    assert_eq!(out.matches("bynk.deploy.worker_cycle").count(), 0, "{out}");
+    fs::write(
+        root.join("src/shop/a2.bynk"),
+        calling_context("shop.a2", None, "to_a2"),
+    )
+    .unwrap();
+    let (ok, out) = build(&root);
+    assert!(!ok, "{out}");
+    assert!(!out.contains("bynk.context.consumes_cycle"), "{out}");
+    assert_eq!(out.matches("bynk.deploy.worker_cycle").count(), 1, "{out}");
+    assert!(
+        out.contains("`shop.orders`") && out.contains("`shop.payment`"),
+        "{out}"
+    );
     let _ = fs::remove_dir_all(&root);
 }
