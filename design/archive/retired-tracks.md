@@ -2594,3 +2594,31 @@ imposed; entries keep the order they were retired in.
 
   This track's doc, `design/tracks/per-entry-storage.md`, is removed. Code comments and ADRs that
   cited it now point here.
+
+- **`dev-agent-inspection.md`** — spine [#3581](https://github.com/bynk-lang/bynk/issues/3581), the
+  proposal's accepted direction in its decision comment. Under `bynk dev`, list the local agent
+  instances and read their state and transition history. No language surface, and the storage layout
+  is untouched.
+
+  **What shipped.**
+  - **List and read** ([ADR 0865](../decisions/0865-dev-agent-inspection.md)). A dev-only registry
+    Durable Object per Worker, written by the agent factory on first address, and a dev-only,
+    read-only `/_bynk/inspect/` route, signed as an internal call is by the reserved caller
+    `bynk.dev` under the local call key. A read applies only the layout and schema-version gates to
+    the raw record: it never migrates, runs a handler or commits, and pages each collection. The
+    emitter option `inspect_agents` is set only by `bynk dev`, and a golden asserts a deploy build
+    is byte-identical to one without the feature. `bynk dev inspect agents` and
+    `bynk dev inspect agent <Class> <key>` read a session through `.bynk/dev/session.json` and
+    print JSON, documented for the editor consumer
+    ([vscode-bynk#145](https://github.com/bynk-lang/vscode-bynk/issues/145)). A behavioural
+    fixture under real workerd shows outcomes are unchanged with inspection on.
+  - **History** (`dev-agent-inspection-history`). `commitState` in a dev build appends
+    `{handler, old, new, at}` to a ring buffer of the last 50, under the reserved key
+    `__bynk_dev/history`, outside every layout-2 namespace. `old` and `new` hold cell values and
+    collection sizes, `old` is `null` for a first commit, and a refused transition leaves no entry.
+
+  **Named follow-ons.** The editor side (vscode-bynk#145). A `pid` in the session file would let
+  `inspect` tell a stale session from a live one.
+
+  This track's doc, `design/tracks/dev-agent-inspection.md`, is removed. Code comments and ADRs that
+  cited it now point here.

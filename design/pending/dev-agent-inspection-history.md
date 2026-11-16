@@ -11,7 +11,7 @@ summary: `commitState` appends `{handler, old, new, at}` to a reserved key in a 
 **Context.** The list-and-read slice of the dev agent-inspection track shows what
 an instance holds now, not how it got there. Transitions exist only inside
 `commitState`, so only the emitter can record them. The track is
-`design/tracks/dev-agent-inspection.md`; its spine is #3581.
+`design/archive/retired-tracks.md` (`dev-agent-inspection.md`); its spine is #3581.
 
 **Decision.**
 

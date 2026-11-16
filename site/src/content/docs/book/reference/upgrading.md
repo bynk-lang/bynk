@@ -17,6 +17,10 @@ here broke nothing, or its author did not say so: please
 
 <!-- stamp:breaking-entries -->
 
+## v0.633.0
+
+a `[test.targets.*]` `vars` entry named `BYNK_DATASET_…` is now a manifest error ("`vars.BYNK_DATASET_…` is reserved"), because `bynk` writes that name to carry an `Analytics` dataset's qualified name; rename the variable
+
 ## v0.619.0
 
 `consumes` is per file, for every unit and for suites: a file that names a type (or a variant), a capability or a service that its own `consumes` does not bring in now fails `bynk check` with `bynk.consumes.type_not_selected`, `bynk.consumes.capability_not_selected` or `bynk.consumes.unit_not_consumed` (these were warnings since v0.614.0). Run `bynk check --fix=bynk.consumes.type_not_selected,bynk.consumes.capability_not_selected,bynk.consumes.unit_not_consumed` to add the clauses to each file, on this version or on v0.614.x, where the fixes are attached.

@@ -4720,13 +4720,13 @@ pub(crate) fn lower_workers_cross_context_call(
     let call_expr = bynk_ts::TsExpr::Call {
         callee: Box::new(bynk_ts::TsExpr::Ident("__callService".to_string())),
         args: vec![
-            bynk_ts::TsExpr::Member {
+            cx.trace_binding(bynk_ts::TsExpr::Member {
                 object: Box::new(bynk_ts::TsExpr::Member {
                     object: Box::new(bynk_ts::TsExpr::Ident("deps".to_string())),
                     property: "env".to_string(),
                 }),
                 property: binding,
-            },
+            }),
             bynk_ts::TsExpr::Lit(bynk_ts::TsLit::Str(method.name.clone())),
             args_json_expr,
             deser_ref,

@@ -995,6 +995,31 @@ export interface WorkerAiBinding {
 }
 
 /**
+ * Analytics SQL (#3513 B): Cloudflare's account-scoped binding, which `WorkersAnalyticsSql`
+ * reads. `query` takes one `SELECT` and its positional parameters, and answers the rows with
+ * the cost of the query; a failure rejects with an error carrying a boolean `retryable`.
+ */
+export interface AnalyticsSqlBinding {
+  query(request: { query: string; params?: unknown[] }): Promise<unknown>;
+}
+
+/**
+ * The Analytics SQL binding of a multi-Worker integration test participant, bound as its
+ * `env.CF_ANALYTICS_SQL`. A test never reaches Cloudflare, so `query` faults until the case stubs
+ * the capability's operation. There are no fake rows: a fabricated reply would make a test pass
+ * for the wrong reason.
+ */
+export function makeIntegrationAnalyticsSql(): AnalyticsSqlBinding {
+  return {
+    async query(): Promise<unknown> {
+      throw markNotStubbed(
+        "bynk: the `AnalyticsSql` binding is not stubbed, and a test never reaches Analytics SQL — add `stub AnalyticsSql.query(_, _) returns …`",
+      );
+    },
+  };
+}
+
+/**
  * The AI binding of a multi-Worker integration test participant, bound as its
  * `env.AI`. A test never reaches Workers AI, so `run` faults until the case
  * stubs the capability's operation. There is no fake model: a fabricated reply

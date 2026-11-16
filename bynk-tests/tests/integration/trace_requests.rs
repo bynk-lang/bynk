@@ -69,6 +69,12 @@ fn a_traced_build_wraps_the_call_agent_and_capability_sites_with_their_spans() {
         orders.contains(r#"__traceStep("call", "shop.payment.authorise", { file: "shop/orders.bynk", line: 23, col: 14 })(__callService("#),
         "{orders}"
     );
+    // The call's Service Binding carries the request's ids to the callee.
+    assert!(
+        orders.contains("__callService(__traceBinding(deps.env.SHOP_PAYMENT)"),
+        "{orders}"
+    );
+    assert!(orders.contains("__traceBinding"), "{orders}");
     // The let-bound agent call.
     assert!(
         orders.contains(r#"__traceStep("agent", "Ledger.tally", { file: "shop/orders.bynk", line: 27, col: 22 })("#),

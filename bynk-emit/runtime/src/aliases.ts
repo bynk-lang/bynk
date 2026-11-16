@@ -18,11 +18,11 @@ import { commitStored, noteClock, readStored, readsLazily, then } from "./entrie
 import { attachLazy } from "./lazy.ts";
 import { fault, invariantViolation } from "./errors.ts";
 import { applyCache, applyCors, applyEdgeCache, applySecurityHeaders, cfObject, cookieObject, cookieString, cookieValue, corsPreflightResponse, csrfAllowed, edgeCacheGuard, formDecode, formMediaTypeMatches, formObject, formString, headResponse, httpResultToResponse, matchPath, mediaTypeMatches, multipartForm, multipartMediaTypeMatches, multipartObject, noStore, notModifiedIfMatch, queryObject, queryString, renderRejection, requestHeaderPairs, requestCookies, requestCookiesHeader, requestBodyStream, requestHeaders, requestQuery, requestQuerySearch, responseToHttpOutcome, responseToHttpResult, responseToUnauthOutcome, sessionCookieOf, untilBodyTooLarge, varyAcceptLanguage, withPlainJson, type CorsPolicy, type SecurityPolicy } from "./http.ts";
-import { traceFault, traceFetch, traceStep, type TraceSpan } from "./trace.ts";
+import { traceBinding, traceFault, traceFetch, traceStep, type TraceSpan } from "./trace.ts";
 import { historyBefore, historyRecord, inspectAgent, inspectRoute, noteAgentInstance } from "./inspect.ts";
 import { formatIcuDate, formatIcuNumber, selectPluralArm } from "./messages.ts";
 import { StoreCache, StoreLog, StoreMap, StoreSet, fillHeld, fillLog, fillMap, fillSet, wireEntries, wireHeld, wireHeldOrder, wireLog, wireMap, wirePostings, wireSet } from "./store.ts";
-import { makeIntegrationAi, makeIntegrationImages, makeIntegrationAiSearch, makeIntegrationContainer, makeIntegrationAnalytics, makeIntegrationD1, makeIntegrationEmail, makeIntegrationHyperdrive, makeIntegrationKv, makeIntegrationMtls, makeIntegrationQueue, makeIntegrationR2, makeIntegrationRateLimit, makeIntegrationSecretsStoreSecret, makeIntegrationVersionMetadata, makeTestState, type AiSearchInstance, type AnalyticsDataset, type D1Database, type DurableObjectState, type Hyperdrive, type KVNamespace, type QueueProducer, type R2Bucket, type RateLimiter, type SecretsStoreSecret, type SendEmail, type WorkerAiBinding, type WorkerImagesBinding, type WorkerVersionMetadata } from "./storage.ts";
+import { makeIntegrationAi, makeIntegrationImages, makeIntegrationAiSearch, makeIntegrationAnalyticsSql, makeIntegrationContainer, makeIntegrationAnalytics, makeIntegrationD1, makeIntegrationEmail, makeIntegrationHyperdrive, makeIntegrationKv, makeIntegrationMtls, makeIntegrationQueue, makeIntegrationR2, makeIntegrationRateLimit, makeIntegrationSecretsStoreSecret, makeIntegrationVersionMetadata, makeTestState, type AiSearchInstance, type AnalyticsDataset, type AnalyticsSqlBinding, type D1Database, type DurableObjectState, type Hyperdrive, type KVNamespace, type QueueProducer, type R2Bucket, type RateLimiter, type SecretsStoreSecret, type SendEmail, type WorkerAiBinding, type WorkerImagesBinding, type WorkerVersionMetadata } from "./storage.ts";
 import { makeIntegrationVectorize, type VectorizeIndex } from "./vectorize.ts";
 
 export {
@@ -93,6 +93,7 @@ export {
   makeIntegrationRateLimit as __makeIntegrationRateLimit,
   makeIntegrationSecretsStoreSecret as __makeIntegrationSecretsStoreSecret,
   makeIntegrationAiSearch as __makeIntegrationAiSearch,
+  makeIntegrationAnalyticsSql as __makeIntegrationAnalyticsSql,
   makeIntegrationMtls as __makeIntegrationMtls,
   makeIntegrationVectorize as __makeIntegrationVectorize,
   makeIntegrationVersionMetadata as __makeIntegrationVersionMetadata,
@@ -162,6 +163,7 @@ export {
   inspectAgent as __inspectAgent,
   inspectRoute as __inspectRoute,
   noteAgentInstance as __noteAgentInstance,
+  traceBinding as __traceBinding,
   traceFault as __traceFault,
   traceFetch as __traceFetch,
   traceStep as __traceStep,
@@ -198,6 +200,7 @@ export type {
   SecretsStoreSecret as __SecretsStoreSecret,
   SendEmail as __SendEmail,
   VectorizeIndex as __VectorizeIndex,
+  AnalyticsSqlBinding as __AnalyticsSqlBinding,
   WorkerAiBinding as __WorkerAiBinding,
   WorkerImagesBinding as __WorkerImagesBinding,
   WorkerVersionMetadata as __WorkerVersionMetadata,

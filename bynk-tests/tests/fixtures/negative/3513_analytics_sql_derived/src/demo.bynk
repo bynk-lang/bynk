@@ -1,0 +1,7 @@
+context demo
+
+// #3513 B: `AnalyticsSql` is bound once per Worker, so it has no named instances.
+
+consumes bynk.cloudflare { AnalyticsSql }
+
+capability Reports = AnalyticsSql

@@ -259,6 +259,29 @@ export type BoundaryError =
 | `boundaryError(error)` | wraps a call error (a `BoundaryError`, `ContractMismatch` or `CalleeFaulted`) as a throwable `Error` |
 | `faultResponse(context, route)` | #2193: the `500` a Worker entry answers when a handler faults. A fault in an `on call` service (`route` is `call <service>`) carries `X-Bynk-Fault: <context>`, which `callService` raises as `CalleeFaulted { context, service, status }` |
 
+### Dev-only inspection (#3581)
+
+A build made by `bynk dev` adds a runtime module, `inspect`, that a deploy build
+does not emit (the module is emitted only when emitted code imports it). It
+holds: `noteAgentInstance`, which an agent factory hands its agent through to
+record the instance's `{class, key, id}` in the Worker's `BynkInspectRegistry`
+Durable Object; `inspectAgent`, which an agent's `fetch` answers `/_bynk/inspect`
+with; and `inspectRoute`, the Worker's `/_bynk/inspect/` route.
+
+The route is signed as an internal call is (`verifyCall`), by the reserved caller
+`bynk.dev` under the local key, and is refused with a bare `401` otherwise. It is a
+`POST` with no body, because the call signature covers the method. A read applies
+`checkStoredLayout` and `checkStoredSchemaVersion` to the raw stored record and
+returns it; it does not run `loadState` (which upgrades an older layout by writing),
+commit, or migrate. A deploy build has neither the route nor the registry, and its
+output is byte-identical to a build without the feature. The history of
+transitions is stored under the reserved key `__bynk_dev/history`, outside every
+layout-2 key namespace: a ring buffer of the last 50 committed transitions, each
+`{handler, old, new, at}`, appended by `commitState` in a dev build only. `old`
+and `new` carry the `Cell` fields in wire form and each collection's size, not its
+entries, and `old` is `null` for a first commit. A refused transition is not
+committed and so is not recorded.
+
 ## §7.4.6 Non-exports: brands and `Effect`
 
 Two parts of the surface have **no** runtime export, by design:

@@ -1628,6 +1628,35 @@ pub(crate) fn synthesise_environment_block(
         );
     }
 
+    // #3513 B: the `[vars]` the dataset names travel in (`Analytics.dataset()` reads them),
+    // each dataset var under the environment-qualified name its binding now has, or
+    // `dataset()` would name the default environment's table from a staging Worker. `vars` is
+    // not inherited by `[env.*]` either. Merged into any `vars` the block already has, never
+    // replacing a variable that is there.
+    if let Some(toml::Value::Table(vars)) = doc.get("vars") {
+        let prefix = "BYNK_DATASET_";
+        let mut carried = toml::Table::new();
+        for (key, value) in vars {
+            let value = match value {
+                toml::Value::String(name) if key.starts_with(prefix) => {
+                    toml::Value::String(analytics_dataset_name(environment, name))
+                }
+                other => other.clone(),
+            };
+            carried.insert(key.clone(), value);
+        }
+        match env_block.get_mut("vars") {
+            Some(toml::Value::Table(existing)) => {
+                for (key, value) in carried {
+                    existing.insert(key, value);
+                }
+            }
+            _ => {
+                env_block.insert("vars".to_string(), toml::Value::Table(carried));
+            }
+        }
+    }
+
     // #3301: each stored secret as the deploy linked it, with the store's id
     // (`materialise_stored_secret_stores` runs first). The store is the
     // account's, so its name carries over as written, with no environment
@@ -1662,8 +1691,9 @@ pub(crate) fn synthesise_environment_block(
     // written: `[ai]` and `[images]` name no resource, and an `[[ai_search]]`
     // entry names the account's instance as the declaration writes it, the
     // same in every environment. Bindings are not inherited by `[env.*]`, or a
-    // staging Worker has no `AI`, `AI_SEARCH_*` or `IMAGES` to call.
-    for table in ["ai", "ai_search", "images"] {
+    // staging Worker has no `AI`, `AI_SEARCH_*` or `IMAGES` to call. #3513 B: and
+    // the `[analytics]` Analytics SQL binding, which names no resource either.
+    for table in ["ai", "ai_search", "images", "analytics"] {
         if let Some(value) = doc.get(table) {
             env_block.insert(table.to_string(), value.clone());
         }
@@ -2852,6 +2882,28 @@ state = "deleted"
         assert_eq!(
             analytics_dataset_name("default", "shop_cart_signups"),
             "shop_cart_signups"
+        );
+    }
+
+    #[test]
+    fn the_dataset_var_is_qualified_per_environment_and_merged_into_the_vars_there() {
+        // #3513 B: `Analytics.dataset()` reads `BYNK_DATASET_<BINDING>`, so a staging block
+        // carries the staging name, beside any other variable the config has (kept as written).
+        let config = "name = \"shop-cart\"\n\n[vars]\nBYNK_DATASET_ANALYTICS_SIGNUPS = \"shop_cart_signups\"\nGREETING = \"hello\"\n\n[[analytics_engine_datasets]]\nbinding = \"ANALYTICS_SIGNUPS\"\ndataset = \"shop_cart_signups\"\n";
+        let out =
+            synthesise_environment_block(config, "staging", &BTreeMap::new(), &BTreeSet::new())
+                .unwrap();
+        let doc: toml::Table = out.parse().unwrap();
+        let vars = &doc["env"]["staging"]["vars"];
+        assert_eq!(
+            vars["BYNK_DATASET_ANALYTICS_SIGNUPS"].as_str(),
+            Some("shop_cart_signups_staging")
+        );
+        assert_eq!(vars["GREETING"].as_str(), Some("hello"));
+        // The dataset the binding writes to is the same name the var reads.
+        assert_eq!(
+            doc["env"]["staging"]["analytics_engine_datasets"][0]["dataset"].as_str(),
+            Some("shop_cart_signups_staging")
         );
     }
 

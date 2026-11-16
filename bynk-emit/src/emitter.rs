@@ -4595,9 +4595,6 @@ pub fn effect_runtime_imports(ru: &RuntimeUse) -> &'static str {
 
 /// #2620: the deliberate-fault helper behind `unreachable`/`todo`.
 pub const FAULT_RUNTIME_IMPORTS: &str = ", __fault";
-/// #3580: the step wrapper a traced build puts around a call.
-pub const TRACE_STEP_RUNTIME_IMPORTS: &str = ", __traceStep";
-
 /// #3581: what a `bynk dev` build's agent module imports to record an instance and
 /// answer the inspect route.
 fn inspect_agent_imports(on: bool) -> Vec<&'static str> {
@@ -4613,16 +4610,18 @@ fn inspect_agent_imports(on: bool) -> Vec<&'static str> {
     }
 }
 
-/// The import names for [`TRACE_STEP_RUNTIME_IMPORTS`], when the module wraps a call.
+/// #3580: the trace helpers a traced build's module imports, by what it used:
+/// `__traceStep` around a call, `__traceBinding` around a cross-context call's
+/// Service Binding.
 fn trace_step_imports(runtime_use: &RuntimeUse) -> Vec<&'static str> {
+    let mut names = Vec::new();
     if runtime_use.trace_step() {
-        TRACE_STEP_RUNTIME_IMPORTS
-            .trim_start_matches(", ")
-            .split(", ")
-            .collect()
-    } else {
-        Vec::new()
+        names.push("__traceStep");
     }
+    if runtime_use.trace_binding() {
+        names.push("__traceBinding");
+    }
+    names
 }
 
 /// K2 (#2594): the percent-encoding helpers (`percentEncode`,
@@ -5709,6 +5708,20 @@ impl<'a> LowerCtx<'a> {
             escape_ts_string(target),
             escape_ts_string(&path),
         )
+    }
+
+    /// #3580: in a traced build, `binding` wrapped so the request it makes to its
+    /// callee carries this request's id and the call step's (the callee's record
+    /// names its parent); otherwise `binding` unchanged.
+    pub(crate) fn trace_binding(&self, binding: bynk_ts::TsExpr) -> bynk_ts::TsExpr {
+        if self.module.trace.is_none() {
+            return binding;
+        }
+        self.runtime_use().note_trace_binding();
+        bynk_ts::TsExpr::Call {
+            callee: Box::new(bynk_ts::TsExpr::Ident("__traceBinding".to_string())),
+            args: vec![binding],
+        }
     }
 
     // ---- single-kind state -------------------------------------------------

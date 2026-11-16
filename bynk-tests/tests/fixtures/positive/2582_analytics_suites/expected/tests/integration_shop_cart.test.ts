@@ -48,6 +48,7 @@ function __buildHarness() {
   env___ns_shop_cart.__bynkClock = __bynkClock;
   env___ns_shop_cart.BYNK_CALL_FROM_INTEGRATION = "bynk-local-call-key";
   env___ns_shop_cart.ANALYTICS_SIGNUPS = __makeIntegrationAnalytics();
+  env___ns_shop_cart.BYNK_DATASET_ANALYTICS_SIGNUPS = "shop_cart_signups";
   const rootEnv: any = {};
   rootEnv.BYNK_CALL_TO_SHOP__CART = "bynk-local-call-key";
   rootEnv.SHOP_CART = { fetch: (req: globalThis.Request) => worker___ns_shop_cart.fetch(req, env___ns_shop_cart) } as __ServiceBinding;

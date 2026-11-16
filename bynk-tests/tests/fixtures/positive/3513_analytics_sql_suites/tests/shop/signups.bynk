@@ -1,0 +1,38 @@
+suite shop.signups
+
+consumes bynk
+consumes bynk.cloudflare { AnalyticsSql, AnalyticsSqlError, AnalyticsSqlResult, AnalyticsSqlStatistics }
+
+// #3513 B: a test never reads Analytics Engine. `query` faults until it is stubbed, and a
+// stubbed result (or error) is what the handler sees.
+
+case "an unstubbed query faults" {
+	expect report.GET("/signups/:country", "uk") by Visitor faults
+}
+
+case "a stubbed result is read" {
+	stub AnalyticsSql.query(_, _) returns Ok(AnalyticsSqlResult { data: "[{\"n\":4}]", rows: 1, statistics: AnalyticsSqlStatistics { elapsedMs: 3, rowsRead: 9, bytesRead: 72 } })
+	let r <- report.GET("/signups/:country", "uk") by Visitor
+	expect r is Ok(1)
+	expect AnalyticsSql.query called once
+}
+
+case "a retryable error is matched" {
+	stub AnalyticsSql.query(_, _) returns Err(SqlRetryable("busy"))
+	let r <- report.GET("/signups/:country", "uk") by Visitor
+	expect r is ServerError("try again shortly")
+}
+
+case "a rejected query is matched" {
+	stub AnalyticsSql.query(_, _) returns Err(SqlRejected("syntax error"))
+	let r <- report.GET("/signups/:country", "uk") by Visitor
+	expect r is ServerError("the query was refused")
+}
+
+case "the query reads the environment's own dataset" {
+	stub Signups.dataset() returns "events.analyticsEngine.shop_signups_signups_staging"
+	stub AnalyticsSql.query(_, _) returns Ok(AnalyticsSqlResult { data: "[]", rows: 0, statistics: AnalyticsSqlStatistics { elapsedMs: 1, rowsRead: 0, bytesRead: 0 } })
+	let r <- report.GET("/signups/:country", "uk") by Visitor
+	expect r is Ok(0)
+	expect AnalyticsSql.query called with sql == "SELECT count() AS n FROM events.analyticsEngine.shop_signups_signups_staging WHERE blob1 = $1 AND timestamp > NOW() - INTERVAL '1' DAY"
+}

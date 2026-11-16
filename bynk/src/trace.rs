@@ -32,6 +32,10 @@ pub struct TraceStep {
     pub ms: f64,
     /// `ok`, `fault`, or `pending` (not settled when the response was ready).
     pub outcome: String,
+    /// A `call` step: the id of the callee's own request, so a client can join
+    /// this step to the callee's `request` event. Absent on other steps.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub request: Option<String>,
 }
 
 /// A request's fault: the error's first line and its stack frames, with frames
@@ -46,6 +50,9 @@ pub struct TraceFault {
 #[derive(Debug, Deserialize)]
 pub struct RawTrace {
     pub id: String,
+    /// The calling request's id, when a cross-context call carried one.
+    #[serde(default)]
+    pub parent: Option<String>,
     pub route: String,
     pub status: u16,
     pub duration_ms: f64,
@@ -80,12 +87,15 @@ pub fn fault(stack: &str, rewrite: impl Fn(&str) -> String) -> TraceFault {
 mod tests {
     use super::*;
 
-    const LINE: &str = r#"__bynk_trace:{"context":"shop.orders","id":"r1","route":"POST /orders","status":500,"duration_ms":12.5,"steps":[{"kind":"call","target":"shop.payment.authorise","span":{"file":"src/shop/orders.bynk","line":23,"col":14},"ms":3.1,"outcome":"fault"},{"kind":"agent","target":"Ledger.tally","span":null,"ms":0,"outcome":"pending"}],"truncated":false,"fault":"Error: boom\n    at f (index.js:1:2)"}"#;
+    const LINE: &str = r#"__bynk_trace:{"context":"shop.orders","id":"r1","parent":"p0","route":"POST /orders","status":500,"duration_ms":12.5,"steps":[{"kind":"call","target":"shop.payment.authorise","span":{"file":"src/shop/orders.bynk","line":23,"col":14},"ms":3.1,"outcome":"fault","request":"c1"},{"kind":"agent","target":"Ledger.tally","span":null,"ms":0,"outcome":"pending"}],"truncated":false,"fault":"Error: boom\n    at f (index.js:1:2)"}"#;
 
     #[test]
     fn a_trace_line_parses() {
         let t = parse(LINE).expect("parses");
         assert_eq!(t.route, "POST /orders");
+        assert_eq!(t.parent.as_deref(), Some("p0"));
+        assert_eq!(t.steps[0].request.as_deref(), Some("c1"));
+        assert_eq!(t.steps[1].request, None);
         assert_eq!(t.status, 500);
         assert_eq!(t.steps.len(), 2);
         assert_eq!(t.steps[0].span.as_ref().unwrap().line, 23);

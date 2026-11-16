@@ -209,13 +209,39 @@ bynk dev --trace-events
 ```
 
 ```json
-{"event":"request","context":"shop-orders","id":"5d5e…","route":"POST /orders","status":201,"duration_ms":12.4,"steps":[{"kind":"call","target":"shop.payment.authorise","span":{"file":"src/shop/orders.bynk","line":23,"col":14},"ms":3.1,"outcome":"ok"}],"truncated":false,"fault":null}
+{"event":"request","context":"shop-orders","id":"5d5e…","parent":null,"route":"POST /orders","status":201,"duration_ms":12.4,"steps":[{"kind":"call","target":"shop.payment.authorise","span":{"file":"src/shop/orders.bynk","line":23,"col":14},"ms":3.1,"outcome":"ok","request":"9a41…"}],"truncated":false,"fault":null}
 ```
 
-It implies `--format json`, so stdout carries events only. The steps hold no
+A call to another context is one step, and the callee's own request is its own
+event with the caller's id as its `parent`, so you can follow a request across
+the Workers. It implies `--format json`, so stdout carries events only. The steps hold no
 argument values, so nothing you passed to a call reaches the output. Traces are
 for `bynk dev` only: a deployed Worker records nothing. See [Request
 traces](/docs/bynk-cli/#request-traces) for every field.
+
+## Inspecting your agents
+
+While `bynk dev` is running, a second terminal can list the agent instances the
+session has seen and read their stored state:
+
+```sh
+bynk dev inspect agents                  # every instance, by class and key
+bynk dev inspect agents --class Cart
+bynk dev inspect agent Cart u1           # one instance's state, as JSON
+```
+
+An instance is listed once a handler has addressed it in this session. Reading
+one shows its stored state (the same shape that crosses the wire), its schema
+version and its storage layout; a large `Map`, `Set`, `Cache` or `Log` comes a
+page at a time (`--field NAME --limit N`, then `--after` the `next` cursor it
+returned). It also shows the instance's last 50 committed transitions, oldest
+first: which handler committed each and the cells and collection sizes before and
+after. A transition an invariant refuses never commits, so it is not listed. Inspecting changes nothing: it does not run a handler, migrate a
+record or write to storage.
+
+This is for the local session only. A build for [`bynk deploy`](/book/guides/projects-build-and-deployment/deploy-to-cloudflare/)
+carries none of it, and the Worker has no inspection route there. The JSON
+shapes are in the [`bynk dev inspect` reference](/docs/bynk-cli/#inspecting-agents).
 
 ## From VS Code
 

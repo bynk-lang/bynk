@@ -277,6 +277,7 @@ pub(super) fn emit_integration_harness<'a>(
                 value,
                 None,
             ));
+            push_dataset_var(&mut body, &env, binding, p);
         }
     }
     // Root env binds to every participant.
@@ -797,6 +798,25 @@ pub(super) fn json_codec_qual_for_target(
 /// The integration double of a one-per-Worker binding, as the participant's
 /// `env` holds it: the same for every participant, or faulting until the case
 /// stubs the operation.
+/// #3513 B: `Analytics.dataset()` reads the dataset's name from the variable the deployed
+/// Worker's `[vars]` carries, so the harness sets it beside an `Analytics` binding.
+fn push_dataset_var(body: &mut Vec<TsStmt>, env: &str, binding: &WorkerBinding, context: &str) {
+    if !matches!(binding.source, BindingSource::AnalyticsDataset { .. }) {
+        return;
+    }
+    body.push(TsStmt::assign(
+        member(
+            ident(env.to_string()),
+            bynk_emit::emitter::wrangler::dataset_var_name(&binding.name),
+        ),
+        str_lit(bynk_emit::emitter::wrangler::analytics_dataset_name(
+            &bynk_project::worker_dir_name(context),
+            &binding.name,
+        )),
+        None,
+    ));
+}
+
 fn singleton_integration_double(capability: &str) -> TsExpr {
     let factory = match capability {
         // #3300: a fixed version.
@@ -805,6 +825,8 @@ fn singleton_integration_double(capability: &str) -> TsExpr {
         "Ai" => "__makeIntegrationAi",
         // #3515: an Images binding that faults until stubbed.
         "Images" => "__makeIntegrationImages",
+        // #3513 B: Analytics SQL never answers in a test; it faults until stubbed.
+        "AnalyticsSql" => "__makeIntegrationAnalyticsSql",
         other => unreachable!("singleton `{other}` has no integration binding"),
     };
     call(ident(factory), vec![])

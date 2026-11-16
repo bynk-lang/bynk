@@ -811,6 +811,11 @@ pub const AI_BINDING_NAME: &str = "AI";
 /// binding, `[images] binding = "IMAGES"`, the name Cloudflare's own
 /// documentation uses.
 pub const IMAGES_BINDING_NAME: &str = "IMAGES";
+/// The Worker binding of the `AnalyticsSql` capability (#3513 B): Cloudflare's Analytics SQL
+/// binding, `[analytics] binding = "CF_ANALYTICS_SQL"`. Cloudflare's own documentation names it
+/// `ANALYTICS_SQL`; the `CF_` prefix keeps it clear of an `Analytics` instance's binding
+/// (`capability Sql = Analytics` would bind as `ANALYTICS_SQL`).
+pub const ANALYTICS_SQL_BINDING_NAME: &str = "CF_ANALYTICS_SQL";
 
 /// The prefix an `EdgeCache` instance's binding name would carry (first-party
 /// registry L7, #2414). Workers Cache is a Worker-wide `[cache]` setting with
@@ -912,6 +917,7 @@ pub const UNITS: &[Unit] = &[
             "WorkersContainer",
             "WorkersAiSearch",
             "WorkersMtls",
+            "WorkersAnalyticsSql",
         ],
         stability: Stability::Stable,
         // Interop I5 (#1972): a Service Binding to a non-Bynk Worker is new
@@ -954,6 +960,7 @@ pub const UNITS: &[Unit] = &[
             "Container",
             "AiSearch",
             "MtlsCertificate",
+            "AnalyticsSql",
             "RequestCf",
             "Kv.getWith",
             "Kv.putWith",
@@ -970,6 +977,7 @@ pub const UNITS: &[Unit] = &[
             "ImageFormat",
             "ImageFit",
             "ImagesError",
+            "AnalyticsSqlError",
             "ChatRole",
             "PgError",
             "MySqlError",
@@ -1168,6 +1176,13 @@ pub const UNITS: &[Unit] = &[
                 capability: "Images",
                 binding: IMAGES_BINDING_NAME,
                 wrangler_table: "images",
+            },
+            // Analytics SQL (#3513 B): one account-scoped `[analytics]` binding per Worker, the
+            // read side of `Analytics`.
+            Singleton {
+                capability: "AnalyticsSql",
+                binding: ANALYTICS_SQL_BINDING_NAME,
+                wrangler_table: "analytics",
             },
         ],
     },
@@ -1747,6 +1762,12 @@ mod tests {
                 ),
                 ("bynk.cloudflare", "Ai", "AI", "ai"),
                 ("bynk.cloudflare", "Images", "IMAGES", "images"),
+                (
+                    "bynk.cloudflare",
+                    "AnalyticsSql",
+                    "CF_ANALYTICS_SQL",
+                    "analytics"
+                ),
             ]
         );
         for u in UNITS {
@@ -1980,6 +2001,7 @@ mod tests {
                 "bynk.cloudflare.Container",
                 "bynk.cloudflare.AiSearch",
                 "bynk.cloudflare.MtlsCertificate",
+                "bynk.cloudflare.AnalyticsSql",
                 "bynk.cloudflare.RequestCf",
                 "bynk.cloudflare.Kv.getWith",
                 "bynk.cloudflare.Kv.putWith",
@@ -2007,6 +2029,7 @@ mod tests {
                 ("bynk.cloudflare", "ImageFormat"),
                 ("bynk.cloudflare", "ImageFit"),
                 ("bynk.cloudflare", "ImagesError"),
+                ("bynk.cloudflare", "AnalyticsSqlError"),
                 ("bynk.cloudflare", "ChatRole"),
                 ("bynk.cloudflare", "PgError"),
                 ("bynk.cloudflare", "MySqlError"),
