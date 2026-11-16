@@ -118,7 +118,15 @@ fn strip_types_with_map(
         ..CodegenOptions::default()
     };
     let ret = Codegen::new().with_options(options).build(&program);
-    Ok((ret.code, ret.map.map(|m| m.into_owned())))
+    // `oxc_codegen` 0.146 still links `oxc_sourcemap` 8, while this crate uses 10:
+    // the two `SourceMap` types are distinct, so cross the boundary as a v3 JSON
+    // document. Drop this round trip once `oxc` is bumped to a release on 10.
+    let map = ret.map.and_then(|m| {
+        oxc_sourcemap::SourceMap::from_json_string(&m.to_json_string())
+            .ok()
+            .map(|m| m.into_owned())
+    });
+    Ok((ret.code, map))
 }
 
 /// Compose a Bynk-to-TypeScript source map (the emitter's own, line-anchored
@@ -143,7 +151,7 @@ fn compose_maps(bynk_to_ts: &str, ts_to_js: &oxc_sourcemap::SourceMap<'_>) -> Op
     }
     let mut builder = oxc_sourcemap::SourceMapBuilder::default();
     for name in first.get_sources() {
-        builder.add_source_and_content(name, "");
+        builder.add_source_and_content(name.unwrap_or_default(), "");
     }
     let mut last: Option<(u32, u32, u32, u32)> = None;
     let mut any = false;

@@ -36,8 +36,8 @@ use std::process::ExitCode;
 
 use bynk_check::wire::{self, WireBody, WireInst, WireModel, WireRef, WireType};
 use bynk_ide::wire_contract::{
-    BoundaryKind, IrHttpMethod, ResponseOrigin, WireContractModel, real_context_count,
-    wire_contract_for_service,
+    BoundaryKind, IrHttpMethod, ResponseOrigin, WireContractModel, http_result_inner,
+    real_context_count, wire_contract_for_service,
 };
 use bynk_ide::{AnalysisRoots, ContextBoundaryInfo, ProjectDiagnostics, SchemaLock};
 use bynk_model::{IrHandlerKind, lower_handler_kind_ir};
@@ -913,18 +913,6 @@ fn responses_of(
         out.insert(status.to_string(), Value::Object(resp));
     }
     Value::Object(out)
-}
-
-/// `Effect[HttpResult[T]]` / `HttpResult[T]` → `T`.
-fn http_result_inner(t: &TypeRef) -> Option<&TypeRef> {
-    let t = match t {
-        TypeRef::Effect(inner, _) => inner.as_ref(),
-        other => other,
-    };
-    match t {
-        TypeRef::HttpResult(inner, _) => Some(inner.as_ref()),
-        _ => None,
-    }
 }
 
 // ---------------------------------------------------------------------

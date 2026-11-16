@@ -17,7 +17,9 @@ use std::collections::{HashMap, HashSet};
 use std::sync::Arc;
 
 use bynk_ide::agent_effects::{self, HandlerEffects};
-use bynk_ide::agent_state::{self, AgentStateModel, Certainty, Target};
+use bynk_ide::agent_state::{
+    self, AgentInvariant, AgentStateModel, Certainty, InvariantKind, Target,
+};
 use bynk_syntax::ast::{AgentDecl, CommonsItem, SourceUnit, TypeDecl};
 use bynk_syntax::span::Span;
 use tower_lsp::lsp_types::Range;
@@ -80,6 +82,40 @@ pub struct WireAgentStateModel {
     pub machines: Vec<WireStateMachine>,
     /// #2198: what each handler writes, reads and calls, path by path.
     pub effects: Vec<WireHandlerEffects>,
+    /// #3608: the agent's `invariant`s and `transition`s; omitted when it
+    /// declares neither.
+    #[serde(skip_serializing_if = "Vec::is_empty")]
+    pub invariants: Vec<WireInvariant>,
+}
+
+/// #3608: one declared `invariant` or `transition`.
+#[derive(Debug, Clone, serde::Serialize)]
+pub struct WireInvariant {
+    /// `"invariant"` or `"transition"`.
+    pub kind: &'static str,
+    pub name: String,
+    /// The predicate's source text, printed by the expression printer.
+    pub predicate: String,
+    pub range: Range,
+    /// The declaration's documentation text; omitted when it has none.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub doc: Option<String>,
+}
+
+fn wire_invariants(invariants: &[AgentInvariant], text: &str) -> Vec<WireInvariant> {
+    invariants
+        .iter()
+        .map(|i| WireInvariant {
+            kind: match i.kind {
+                InvariantKind::Invariant => "invariant",
+                InvariantKind::Transition => "transition",
+            },
+            name: i.name.clone(),
+            predicate: i.predicate.clone(),
+            range: crate::position::span_to_range(text, i.span),
+            doc: i.doc.clone(),
+        })
+        .collect()
 }
 
 #[derive(Debug, Clone, serde::Serialize)]
@@ -182,6 +218,7 @@ pub fn to_wire(
 ) -> WireAgentStateModel {
     let range = |s: Span| crate::position::span_to_range(text, s);
     WireAgentStateModel {
+        invariants: wire_invariants(&model.invariants, text),
         effects: effects
             .iter()
             .map(|h| WireHandlerEffects {

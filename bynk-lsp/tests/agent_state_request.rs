@@ -239,3 +239,171 @@ fn handler_effects_cross_the_wire() {
     assert_eq!(row["reads"], serde_json::json!(["total"]));
     assert_eq!(row["outcomes"], serde_json::json!(["total"]));
 }
+
+const INVARIANTS_SRC: &str = r#"context commerce
+
+type OrderStatus = enum { Pending, Placed, Paid }
+
+agent Order {
+  key id: String
+
+  store status: Cell[OrderStatus] = Pending
+  store paymentRef: Cell[Option[String]] = None
+
+  ---
+  A paid order carries its payment reference.
+  ---
+  invariant paid_has_ref:
+    status is Paid
+      implies   paymentRef.isSome()
+
+  transition paid_is_terminal: old.status is Paid implies new.status is Paid
+
+  on call place() -> Effect[()] {
+    status := Placed
+  }
+}
+
+agent Plain {
+  key id: String
+
+  store total: Cell[Int]
+
+  on call bump() -> Effect[Int] {
+    total := total + 1
+    total
+  }
+}
+"#;
+
+/// The wire JSON of the agent enclosing `needle` in `src`, a one-file context
+/// named `commerce`.
+fn wire_json(tag: &str, src: &str, needle: &str) -> serde_json::Value {
+    let root = scratch(tag, &[("commerce.bynk", src)]);
+    let roots = bynk_ide::AnalysisRoots::SingleTree(root.0.clone());
+    let sources = bynk_testkit::read_project_sources(&roots);
+    let diag = bynk_ide::diagnose_project_with(&roots, &sources, &bynk_ide::SchemaLock::Off);
+    let info = diag.boundary_info.get("commerce").expect("boundary_info");
+    let offset = src.find(needle).unwrap();
+    let (agent, model) = bynk_lsp::agent_state_request::agent_state_at(src, offset, &info.types)
+        .expect("an agent encloses this offset");
+    serde_json::to_value(bynk_lsp::agent_state_request::to_wire(
+        &agent,
+        &model,
+        &[],
+        src,
+    ))
+    .unwrap()
+}
+
+/// #3608: both kinds cross the wire in one list, with formatted predicate
+/// text, the declaration's range and its documentation.
+#[test]
+fn invariants_and_transitions_cross_the_wire_in_one_list() {
+    let json = wire_json("inv_both", INVARIANTS_SRC, "status := Placed");
+    let list = json["invariants"].as_array().expect("an invariants array");
+    assert_eq!(list.len(), 2);
+    assert_eq!(list[0]["kind"], "invariant");
+    assert_eq!(list[0]["name"], "paid_has_ref");
+    // The source spans three lines with irregular spacing; the text is not that.
+    assert_eq!(
+        list[0]["predicate"],
+        "status is Paid implies paymentRef.isSome()"
+    );
+    assert_eq!(
+        list[0]["doc"].as_str().map(str::trim),
+        Some("A paid order carries its payment reference.")
+    );
+    let line = |needle: &str| {
+        INVARIANTS_SRC[..INVARIANTS_SRC.find(needle).unwrap()]
+            .matches('\n')
+            .count()
+    };
+    assert_eq!(
+        list[0]["range"]["start"]["line"],
+        line("invariant paid_has_ref")
+    );
+    assert_eq!(list[1]["kind"], "transition");
+    assert_eq!(list[1]["name"], "paid_is_terminal");
+    assert_eq!(
+        list[1]["predicate"],
+        "old.status is Paid implies new.status is Paid"
+    );
+    assert_eq!(
+        list[1]["range"]["start"]["line"],
+        line("transition paid_is_terminal")
+    );
+    // No documentation: the key is omitted, not null.
+    assert!(list[1].get("doc").is_none());
+}
+
+/// #3608: an agent with neither kind omits the field entirely.
+#[test]
+fn an_agent_with_no_invariants_omits_the_field() {
+    let json = wire_json("inv_none", INVARIANTS_SRC, "total := total");
+    assert!(json.get("invariants").is_none(), "{json}");
+}
+
+/// #3608: a context split across files keeps each agent's declarations with
+/// that agent. An agent is one declaration in one file, so there is nothing to
+/// merge, and one file's request never lists another file's declarations.
+#[test]
+fn a_context_split_across_files_keeps_each_agents_declarations_apart() {
+    let a = r#"context shop
+
+type Stage = enum { Open, Closed }
+
+agent Cart {
+  key id: String
+
+  store stage: Cell[Stage] = Open
+
+  invariant cart_has_stage: stage is Open implies stage is Open
+
+  on call close() -> Effect[()] {
+    stage := Closed
+  }
+}
+"#;
+    let b = r#"context shop
+
+type Phase = enum { Idle, Busy }
+
+agent Worker {
+  key id: String
+
+  store phase: Cell[Phase] = Idle
+
+  transition busy_stays_busy: old.phase is Busy implies new.phase is Busy
+
+  on call start() -> Effect[()] {
+    phase := Busy
+  }
+}
+"#;
+    let root = scratch("inv_split", &[("shop_a.bynk", a), ("shop_b.bynk", b)]);
+    let roots = bynk_ide::AnalysisRoots::SingleTree(root.0.clone());
+    let sources = bynk_testkit::read_project_sources(&roots);
+    let diag = bynk_ide::diagnose_project_with(&roots, &sources, &bynk_ide::SchemaLock::Off);
+    let info = diag.boundary_info.get("shop").expect("boundary_info");
+    let wire = |src: &str, needle: &str| {
+        let offset = src.find(needle).unwrap();
+        let (agent, model) =
+            bynk_lsp::agent_state_request::agent_state_at(src, offset, &info.types).unwrap();
+        serde_json::to_value(bynk_lsp::agent_state_request::to_wire(
+            &agent,
+            &model,
+            &[],
+            src,
+        ))
+        .unwrap()
+    };
+    let cart = wire(a, "stage := Closed");
+    let worker = wire(b, "phase := Busy");
+    assert_eq!(cart["invariants"].as_array().unwrap().len(), 1);
+    assert_eq!(cart["invariants"][0]["kind"], "invariant");
+    assert_eq!(cart["invariants"][0]["name"], "cart_has_stage");
+    assert_eq!(worker["invariants"].as_array().unwrap().len(), 1);
+    assert_eq!(worker["invariants"][0]["kind"], "transition");
+    assert_eq!(worker["invariants"][0]["name"], "busy_stays_busy");
+}

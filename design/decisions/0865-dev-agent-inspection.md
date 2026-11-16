@@ -5,7 +5,7 @@
 **Context.** While `bynk dev` runs, nothing shows which agent instances exist or
 what state each is in. A key is hashed into a Durable Object id and never stored,
 the storage layout (`entries.ts`) is frozen for 1.0, and only the toolchain can
-decode it. The track is `design/tracks/dev-agent-inspection.md`; its spine is
+decode it. The track is `design/archive/retired-tracks.md` (`dev-agent-inspection.md`); its spine is
 #3581.
 
 **Decision.**

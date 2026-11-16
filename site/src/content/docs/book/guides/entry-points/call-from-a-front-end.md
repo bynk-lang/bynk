@@ -97,8 +97,8 @@ and a second one runs the drift check:
 }
 ```
 
-A task runs in the workspace folder by default, so set `options.cwd` to the Bynk project (`api` here is a placeholder): `bynk client` needs to find `bynk.toml`. `bynk build` also writes the client when
-`[build.client]` is set, so a task that runs a build keeps it current.
+A task runs in the workspace folder by default, so set `options.cwd` to the Bynk project (`api` here is a placeholder): `bynk client` needs to find `bynk.toml`.
+`bynk build` also writes the client when `[build.client]` is set, so a task that runs a build keeps it current.
 
 ## Call a route
 
