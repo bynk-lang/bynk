@@ -201,6 +201,7 @@ walkthrough.
 
 ```text
 bynk dev [PATH] [--context NAME]... [--base-port N] [--inspect] [--inspect-port N] [--local-worker NAME]... [--format human|json] [--log-events] [--trace-events] [--rewrite-frames] [--ready-json FILE] [--no-install] [-- <wrangler args>]
+bynk dev inspect agents|agent …   # read a running session; see Inspecting agents
 ```
 
 `bynk dev` serves one project, so it refuses to run at a
@@ -414,6 +415,96 @@ after 30 seconds without readiness, notes once which contexts haven't answered.
 Readiness means each Worker answers a request. The dev-registry service
 bindings between contexts connect shortly after start, so a cross-context call
 in the first moments may still be refused.
+
+### Inspecting agents
+
+```text
+bynk dev inspect agents [PATH] [--context NAME] [--class AGENT]
+bynk dev inspect agent <CLASS> <KEY> [--path PATH] [--context NAME] [--field FIELD [--after CURSOR]] [--limit N]
+```
+
+While `bynk dev` runs, `bynk dev inspect` lists the agent instances the session
+has seen and reads one's stored state. Both print JSON on stdout, and fail with
+a message on stderr and a non-zero exit when there is no running session for
+the project, or the instance is unknown.
+
+A running session writes `.bynk/dev/session.json`, naming each served context
+and its URL, and removes it when it stops; `inspect` reads it to find the
+session. Each request is signed under the local call key as the caller
+`bynk.dev`, as an internal call between contexts is, so a Worker answers only a
+caller holding that key.
+
+**Dev builds only.** `bynk dev` builds each Worker with the inspection in; a
+build for `bynk deploy` has no registry and no `/_bynk/inspect/` route (it
+answers `404`), and is byte-identical to a build without this feature. Nothing
+is written by inspecting: the read does not migrate a record, run a handler or
+commit.
+
+**`inspect agents`** lists the instances. An instance is listed once a handler
+has addressed it in this session; one that exists in local storage from an
+earlier session appears when it is next addressed.
+
+```json
+{
+  "agents": [
+    { "context": "shop.orders", "class": "Cart", "key": "u1", "id": "29bacc06…" }
+  ],
+  "errors": []
+}
+```
+
+- `key` is the key in its wire form: a string key as a string, any other key as
+  its JSON. `inspect agent` matches a string key by its text and any other key by
+  its JSON, so if one class holds both a string key `"7"` and a numeric key `7`,
+  typing `7` reaches whichever is listed first.
+- `id` is the Durable Object id.
+- `errors` names a context that could not be reached, as
+  `{ "context": …, "error": … }`; the others still answer.
+
+**`inspect agent CLASS KEY`** reads one instance. A string key is given as it is,
+any other key as JSON.
+
+```json
+{
+  "context": "shop.orders",
+  "class": "Cart",
+  "key": "u1",
+  "id": "29bacc06…",
+  "exists": true,
+  "readable": true,
+  "version": 1,
+  "current": 1,
+  "layout": 2,
+  "migrationPending": false,
+  "cells": { "total": 4 },
+  "collections": {
+    "lines": {
+      "kind": "map",
+      "size": 2,
+      "entries": [ { "key": "apple", "value": { "i": 0, "v": 2 } } ],
+      "next": "m/lines/apple"
+    }
+  }
+}
+```
+
+- `cells` holds the agent's `Cell` fields as stored, in wire form.
+- `collections` has one entry per `Map`, `Set`, `Cache` and `Log` field.
+  `entries` is one page (`--limit`, 50 by default and at most 500), in storage
+  key order, and `next` is the cursor of the following page or `null`. `--field
+  NAME --after CURSOR` reads that field's next page alone. A `Map` or `Cache`
+  entry is `{ "key", "value" }` with the stored value (`i` is its insertion
+  sequence; a `Cache` entry also carries its expiry), a `Set` element is
+  `{ "key", "value" }`, and a `Log` entry is the stored `{ "t", "v" }`. `size`
+  is the entry count, or `null` when none is recorded.
+- `version` is the schema version of the stored record and `current` the build's
+  (`null` when the project has no schema lock). `layout` is the storage layout.
+  `migrationPending` is `true` when the record is behind the build and a
+  migration step covers it: it is shown as stored, not migrated.
+- `exists` is `false`, and nothing else is returned, for an instance with no
+  stored state yet.
+- `readable` is `false` for a record this build cannot read, with `fault` naming
+  the kind (`NewerLayout`, `NewerSchema` or `NoMigrationPath`) and no state.
 
 ---
 

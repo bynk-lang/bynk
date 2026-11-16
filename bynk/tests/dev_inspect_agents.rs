@@ -42,11 +42,20 @@ agent Cart {
     let _ <- total.update((t) => t + n)
     Effect.pure(total)
   }
+
+  on call read() -> Effect[Int] {
+    Effect.pure(total)
+  }
 }
 
 service api from http {
   on GET("/add/:id/:sku") (id: String, sku: String) -> Effect[HttpResult[String]] by v: Visitor {
     let t <- Cart(id).add(sku, 2)
+    Ok("\(t)")
+  }
+
+  on GET("/total/:id") (id: String) -> Effect[HttpResult[String]] by v: Visitor {
+    let t <- Cart(id).read()
     Ok("\(t)")
   }
 }
@@ -71,17 +80,21 @@ fn bynk(proj: &Path, args: &[&str]) -> std::process::Output {
         .expect("run bynk")
 }
 
-fn get(port: u16, path: &str) -> String {
-    let mut stream = std::net::TcpStream::connect(("127.0.0.1", port)).expect("connect");
+fn try_get(port: u16, path: &str) -> Option<String> {
     use std::io::{Read, Write};
+    let mut stream = std::net::TcpStream::connect(("127.0.0.1", port)).ok()?;
     write!(
         stream,
         "GET {path} HTTP/1.1\r\nHost: localhost\r\nConnection: close\r\n\r\n"
     )
-    .unwrap();
+    .ok()?;
     let mut out = String::new();
-    stream.read_to_string(&mut out).unwrap();
-    out
+    stream.read_to_string(&mut out).ok()?;
+    Some(out)
+}
+
+fn get(port: u16, path: &str) -> String {
+    try_get(port, path).expect("a reply")
 }
 
 #[test]
@@ -220,4 +233,155 @@ fn a_running_session_lists_its_instances_and_reads_their_state() {
         "the session file is removed when the session stops"
     );
     let _ = std::fs::remove_dir_all(proj);
+}
+
+// ---- the behavioural fixture: outcomes are unchanged with inspection on ----
+
+/// The body of a `GET` reply, or its status line when it is not a 200.
+fn body_of(reply: &str) -> String {
+    match reply.split_once("\r\n\r\n") {
+        Some((head, body)) if head.contains(" 200 ") => body.trim().to_string(),
+        _ => reply.lines().next().unwrap_or_default().to_string(),
+    }
+}
+
+/// `wrangler dev` for the Worker built in `dir`, on `port`, logging to `log`.
+fn serve_deploy_build(dir: &Path, port: u16, log: &Path) -> Group {
+    let (out, err) = dev_child::log_to(log);
+    let mut cmd = if dev_child::have("wrangler") {
+        Command::new("wrangler")
+    } else {
+        let mut c = Command::new("npx");
+        c.args(["-y", "wrangler@4"]);
+        c
+    };
+    std::os::unix::process::CommandExt::process_group(&mut cmd, 0);
+    Group(
+        cmd.arg("dev")
+            .args(["--port", &port.to_string()])
+            .args(["--inspector-port", &ports::free_port().to_string()])
+            .current_dir(dir)
+            .stdout(out)
+            .stderr(err)
+            .spawn()
+            .expect("spawn wrangler dev"),
+    )
+}
+
+fn wait_answers(port: u16, log: &Path, child: &mut Group) {
+    let deadline = Instant::now() + Duration::from_secs(180);
+    loop {
+        if try_get(port, "/total/probe").is_some_and(|r| r.contains("HTTP/1.1")) {
+            return;
+        }
+        if let Ok(Some(status)) = child.0.try_wait() {
+            panic!("{}", dev_child::exited_early(status, log));
+        }
+        assert!(
+            Instant::now() < deadline,
+            "the Worker did not answer within 180s"
+        );
+        std::thread::sleep(Duration::from_millis(250));
+    }
+}
+
+/// The same requests against one Worker: a sequence on one instance, then a
+/// concurrent batch on another, then the totals. Returns every body, the
+/// concurrent ones sorted (their order is the scheduler's).
+fn exercise(port: u16, during: impl Fn() + Sync) -> Vec<String> {
+    let mut bodies: Vec<String> = [
+        "/add/u1/apple",
+        "/add/u1/pear",
+        "/add/u2/fig",
+        "/add/u1/plum",
+    ]
+    .iter()
+    .map(|p| body_of(&get(port, p)))
+    .collect();
+    let mut batch: Vec<String> = std::thread::scope(|scope| {
+        let reads = scope.spawn(|| {
+            // Reads landing between the batch's loads and commits.
+            for _ in 0..8 {
+                during();
+            }
+        });
+        let adds: Vec<_> = (0..8)
+            .map(|i| scope.spawn(move || body_of(&get(port, &format!("/add/c/sku{i}")))))
+            .collect();
+        let out = adds.into_iter().map(|h| h.join().unwrap()).collect();
+        reads.join().unwrap();
+        out
+    });
+    batch.sort();
+    bodies.extend(batch);
+    for id in ["u1", "u2", "c"] {
+        bodies.push(body_of(&get(port, &format!("/total/{id}"))));
+    }
+    bodies
+}
+
+#[test]
+fn a_dev_session_behaves_as_a_deploy_build_does() {
+    if unavailable() {
+        return;
+    }
+    // The deploy-shaped build: the same project, built without inspection.
+    let off = project("off");
+    let build_off = off.join("build");
+    assert!(
+        bynk::workers::compile_once(&off, &build_off, false),
+        "the deploy-shaped build compiles"
+    );
+    let off_port = ports::free_port();
+    let off_log = off.join("wrangler.log");
+    let mut off_server = serve_deploy_build(
+        &build_off.join("workers").join("demo-shop"),
+        off_port,
+        &off_log,
+    );
+    wait_answers(off_port, &off_log, &mut off_server);
+    let without = exercise(off_port, || {});
+    drop(off_server);
+
+    // The dev session, with inspection on and reads landing while the batch runs.
+    let on = project("on");
+    let on_port = ports::free_port();
+    let ready = on.join("ready.json");
+    let on_log = on.join("bynk-dev.log");
+    let (out, err) = dev_child::log_to(&on_log);
+    let mut cmd = Command::new(env!("CARGO_BIN_EXE_bynk"));
+    std::os::unix::process::CommandExt::process_group(&mut cmd, 0);
+    let mut dev = Group(
+        cmd.arg("dev")
+            .arg(&on)
+            .args(["--base-port", &on_port.to_string()])
+            .arg("--ready-json")
+            .arg(&ready)
+            .stdout(out)
+            .stderr(err)
+            .spawn()
+            .expect("spawn bynk dev"),
+    );
+    let deadline = Instant::now() + Duration::from_secs(180);
+    while !ready.exists() {
+        if let Ok(Some(status)) = dev.0.try_wait() {
+            panic!("{}", dev_child::exited_early(status, &on_log));
+        }
+        assert!(Instant::now() < deadline, "no readiness file within 180s");
+        std::thread::sleep(Duration::from_millis(250));
+    }
+    let with = exercise(on_port, || {
+        let _ = bynk(&on, &["dev", "inspect", "agents"]);
+        let _ = bynk(&on, &["dev", "inspect", "agent", "Cart", "c"]);
+    });
+    drop(dev);
+
+    assert_eq!(
+        with, without,
+        "every outcome is the same with inspection on and off"
+    );
+    // And the batch was not lost to a read: eight adds of two each.
+    assert_eq!(with.last().map(String::as_str), Some("\"16\""), "{with:?}");
+    let _ = std::fs::remove_dir_all(off);
+    let _ = std::fs::remove_dir_all(on);
 }
