@@ -690,6 +690,12 @@ fn members_may_share_an_assets_directory_but_not_a_fixed_path() {
     );
     let (ok, out) = build(&root);
     assert!(ok, "distinct paths merge:\n{out}");
+    for file in ["terms.txt", "privacy.txt"] {
+        assert!(
+            root.join("out/workers/core/assets").join(file).is_file(),
+            "{file} ships in the group's one assets directory"
+        );
+    }
 
     // The same file at the same path is one file.
     write(
@@ -739,5 +745,105 @@ fn members_may_share_an_assets_directory_but_not_a_fixed_path() {
         ok,
         "separate Workers each serve their own `/legal.txt`:\n{out}"
     );
+    let _ = fs::remove_dir_all(&root);
+}
+
+fn route_context(name: &str, routes: &[&str]) -> String {
+    let handlers: String = routes
+        .iter()
+        .map(|r| {
+            let params = if r.contains(":page") { "page: String" } else { "" };
+            format!(
+                "  on GET(\"{r}\") ({params}) -> Effect[HttpResult[String]] by v: Visitor {{\n    Ok(\"x\")\n  }}\n"
+            )
+        })
+        .collect();
+    format!("context {name}\n\nservice api from http {{\n{handlers}}}\n")
+}
+
+/// A group's members share one assets directory, and the platform answers an
+/// asset's path before the Worker runs: so one member's fixed asset shadows
+/// another member's literal route at that path, as it does the same member's own.
+#[test]
+fn a_members_fixed_asset_shadows_another_members_literal_route() {
+    let root =
+        std::env::temp_dir().join(format!("bynk-deploy-groups-shadow-{}", std::process::id()));
+    write_project(&root, WORKERS_TARGET);
+    fs::create_dir_all(root.join("assets")).unwrap();
+    fs::write(root.join("assets/a.txt"), "A").unwrap();
+    let orders = asset_context("shop.orders", &[("terms", "assets/a.txt", "/legal.txt")]);
+    fs::write(root.join("src/shop/orders.bynk"), &orders).unwrap();
+
+    // Another member's literal route at the asset's path: refused, at the route.
+    fs::write(
+        root.join("src/shop/payment.bynk"),
+        route_context("shop.payment", &["/legal.txt"]),
+    )
+    .unwrap();
+    let (ok, out) = build(&root);
+    assert!(!ok, "{out}");
+    assert_eq!(out.matches("bynk.asset.shadows_route").count(), 1, "{out}");
+    assert!(
+        out.contains("payment.bynk"),
+        "at the shadowed route:\n{out}"
+    );
+    assert!(
+        out.contains("the asset `assets/a.txt` of `shop.orders` is served at `/legal.txt`"),
+        "naming the asset's member:\n{out}"
+    );
+
+    // An asset both members reach through a shared commons shadows payment's
+    // route once, not once per pass that sees it.
+    fs::write(
+        root.join("src/shop/shared.bynk"),
+        "commons shop.shared\n\nasset terms = \"assets/a.txt\" at \"/legal.txt\"\n",
+    )
+    .unwrap();
+    fs::write(
+        root.join("src/shop/orders.bynk"),
+        "context shop.orders\n\nuses shop.shared\n\nservice orders_probe {\n\ton call() -> Effect[Int] {\n\t\tEffect.pure(1)\n\t}\n}\n",
+    )
+    .unwrap();
+    fs::write(
+        root.join("src/shop/payment.bynk"),
+        route_context("shop.payment", &["/legal.txt"]).replacen(
+            "context shop.payment\n",
+            "context shop.payment\n\nuses shop.shared\n",
+            1,
+        ),
+    )
+    .unwrap();
+    let (ok, out) = build(&root);
+    assert!(!ok, "{out}");
+    assert_eq!(
+        out.matches("bynk.asset.shadows_route").count(),
+        1,
+        "one error for the one route:\n{out}"
+    );
+    fs::remove_file(root.join("src/shop/shared.bynk")).unwrap();
+    fs::write(root.join("src/shop/orders.bynk"), &orders).unwrap();
+
+    // A route at another path, or a parameterised one, is not an error here.
+    fs::write(
+        root.join("src/shop/payment.bynk"),
+        route_context("shop.payment", &["/pay", "/:page"]),
+    )
+    .unwrap();
+    let (ok, out) = build(&root);
+    assert!(ok, "other paths are untouched:\n{out}");
+
+    // Ungrouped, the asset is another Worker's, so the route is reachable.
+    fs::write(
+        root.join("src/shop/payment.bynk"),
+        route_context("shop.payment", &["/legal.txt"]),
+    )
+    .unwrap();
+    fs::write(
+        root.join("bynk.toml"),
+        format!("{UNSTABLE_R2}[build]\ntarget = \"workers\"\n"),
+    )
+    .unwrap();
+    let (ok, out) = build(&root);
+    assert!(ok, "separate Workers each have their own paths:\n{out}");
     let _ = fs::remove_dir_all(&root);
 }

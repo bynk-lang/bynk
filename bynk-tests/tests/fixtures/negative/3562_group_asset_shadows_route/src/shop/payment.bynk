@@ -1,0 +1,7 @@
+context shop.payment
+
+service api from http {
+  on GET("/legal.txt") () -> Effect[HttpResult[String]] by v: Visitor {
+    Ok("payment's own terms")
+  }
+}

@@ -889,7 +889,7 @@ There are **893** codes in total.
 | [`bynk.asset.outside_assets_dir`](/book/reference/assets/#declaring-an-asset) | An `asset` path does not name a file in the project's `assets/` folder. |  | — |
 | [`bynk.asset.outside_context_or_commons`](/book/reference/assets/#declaring-an-asset) | An `asset` declaration appears outside a context or commons. |  | — |
 | [`bynk.asset.path_conflict`](/book/reference/assets/#fixed-paths) | Two different asset files would be served at one fixed path by the same Worker. |  | — |
-| [`bynk.asset.shadows_route`](/book/reference/assets/#fixed-paths) | A fixed asset path equals a literal HTTP route, which the platform-served asset makes unreachable. |  | — |
+| [`bynk.asset.shadows_route`](/book/reference/assets/#fixed-paths) | A fixed asset path equals a literal HTTP route, in the same context or in another member of the same `[deploy.workers.<key>]` group, which the platform-served asset makes unreachable. |  | — |
 | `bynk.asset.unreadable_file` | An `asset` names a file in the project's `assets/` folder that could not be read. |  | — |
 | [`bynk.asset.unsafe_path`](/book/reference/assets/#declaring-an-asset) | An `asset` path is empty, absolute, or contains a `..` segment. |  | — |
 

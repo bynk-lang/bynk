@@ -409,6 +409,7 @@ pub fn phase_asset_routes(
 ) {
     use bynk_syntax::ast::HandlerKind;
     phase_group_asset_paths(layout, parsed, groups, unit_uses, errors);
+    phase_group_shadowed_routes(layout, parsed, groups, unit_uses, errors);
     // A commons used by two contexts would otherwise report its conflict
     // twice; report each (file, span, code) once.
     let mut reported: BTreeSet<(std::path::PathBuf, usize, &'static str)> = BTreeSet::new();
@@ -605,6 +606,109 @@ fn phase_group_asset_paths(
                             None => {
                                 fixed.entry(at.clone()).or_insert((member.as_str(), source));
                             }
+                        }
+                    }
+                }
+            }
+        }
+    }
+}
+
+/// The fixed asset paths `member`'s Worker serves from its own `uses` closure:
+/// each valid `at` path to its normalised source file, the first declaration
+/// winning. [`phase_asset_routes`] reports what is wrong with them.
+fn fixed_paths_of(
+    member: &str,
+    parsed: &[ParsedFile],
+    groups: &BTreeMap<String, Vec<usize>>,
+    unit_uses: &HashMap<String, Vec<String>>,
+) -> BTreeMap<String, String> {
+    let mut fixed = BTreeMap::new();
+    for unit in closure(member, &[unit_uses]) {
+        for &i in groups.get(unit).into_iter().flatten() {
+            for item in parsed[i].items() {
+                let CommonsItem::Asset(a) = item else {
+                    continue;
+                };
+                let Some((at, _)) = &a.at else { continue };
+                if path_errors(a).is_some() || at_path_reason(at).is_some() {
+                    continue;
+                }
+                fixed
+                    .entry(at.clone())
+                    .or_insert_with(|| bynk_project::assets::normalise_asset_path(&a.path));
+            }
+        }
+    }
+    fixed
+}
+
+/// `bynk.asset.shadows_route` across a group (#3562): the platform answers a
+/// fixed asset's path before the Worker runs, and a group's members share one
+/// assets directory, so another member's literal route at that path is as
+/// unreachable as the same member's own (which [`phase_asset_routes`] reports).
+/// One error per route, at the route's handler, naming the member whose asset
+/// shadows it. A parameterised route that matches stays out of scope, as it is
+/// within a context.
+fn phase_group_shadowed_routes(
+    layout: &bynk_project::worker_layout::WorkerLayout,
+    parsed: &[ParsedFile],
+    groups: &BTreeMap<String, Vec<usize>>,
+    unit_uses: &HashMap<String, Vec<String>>,
+    errors: &mut ErrorSink,
+) {
+    use bynk_syntax::ast::HandlerKind;
+    let mut reported: BTreeSet<(std::path::PathBuf, usize)> = BTreeSet::new();
+    for (key, members) in layout.groups() {
+        let fixed: Vec<(&String, BTreeMap<String, String>)> = members
+            .iter()
+            .map(|m| (m, fixed_paths_of(m, parsed, groups, unit_uses)))
+            .collect();
+        for route_member in members {
+            for &i in groups.get(route_member.as_str()).into_iter().flatten() {
+                for item in parsed[i].items() {
+                    let CommonsItem::Service(svc) = item else {
+                        continue;
+                    };
+                    for h in &svc.handlers {
+                        let HandlerKind::Http { method, path } = &h.kind else {
+                            continue;
+                        };
+                        if path.split('/').any(|s| s.starts_with(':')) {
+                            continue;
+                        }
+                        // An asset this member reaches itself (its own, or a shared
+                        // commons') is `phase_asset_routes`'s to report, once.
+                        let own_shadow = fixed.iter().any(|(m, paths)| {
+                            *m == route_member && paths.keys().any(|at| route_matches(path, at))
+                        });
+                        if own_shadow {
+                            continue;
+                        }
+                        // The first other member whose asset sits at this path.
+                        let shadow = fixed.iter().find_map(|(asset_member, paths)| {
+                            let at = paths.keys().find(|at| route_matches(path, at))?;
+                            (*asset_member != route_member).then(|| (*asset_member, at, &paths[at]))
+                        });
+                        let Some((asset_member, at, source)) = shadow else {
+                            continue;
+                        };
+                        let file = parsed[i].identity_path();
+                        if reported.insert((file.clone(), h.span.start)) {
+                            errors.push_for(
+                                Some(&file),
+                                CompileError::new(
+                                    "bynk.asset.shadows_route",
+                                    h.span,
+                                    format!(
+                                        "`{} {path}` is unreachable: the asset `{source}` of `{asset_member}` is served at `{at}`, and `{asset_member}` and `{route_member}` share Worker `{key}`",
+                                        method.as_str()
+                                    ),
+                                )
+                                .with_note(
+                                    "the platform answers an asset's path before the Worker runs, for every method, and a group's members share one assets directory; move the asset or the route, or put the contexts in different groups",
+                                ),
+                            );
                         }
                     }
                 }
