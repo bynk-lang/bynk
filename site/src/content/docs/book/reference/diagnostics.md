@@ -422,7 +422,7 @@ There are **889** codes in total.
 | `bynk.deploy.not_a_context` | A `[deploy.workers.<key>]` group lists a unit that is not a `context`; only contexts are deployed as Workers. |  | — |
 | `bynk.deploy.service_name_conflict` | Two members of one `[deploy.workers.<key>]` group declare a service of the same name; a Worker answers its members' services by name. |  | — |
 | `bynk.deploy.unknown_context` | A `[deploy.workers.<key>]` group lists a context the project does not declare. |  | — |
-| `bynk.deploy.worker_groups_unsupported` | `bynk deploy`, `bynk revert` and `bynk dev` do not yet support a `[deploy.workers.<key>]` group of more than one context (temporary, #3562). |  | — |
+| `bynk.deploy.worker_groups_unsupported` | `bynk deploy`, `bynk revert` and `bynk dev` do not yet support `[deploy.workers.<key>]` Worker groups (temporary, #3562). |  | — |
 | [`bynk.detach.in_agent_handler`](/book/reference/capabilities/#detach) | A `detach` was used in an agent handler, which has no execution context to keep a detached effect alive. | [`method_call`](/book/reference/grammar/#rule-method_call) | — |
 | [`bynk.detach.in_pure_context`](/book/reference/capabilities/#detach) | A `detach` was used in a pure (non-effectful) context. | [`method_call`](/book/reference/grammar/#rule-method_call) | — |
 | [`bynk.detach.store_op`](/book/reference/capabilities/#detach) | A `detach` targets an agent store operation, which is part of the handler's atomic commit and cannot be detached. | [`method_call`](/book/reference/grammar/#rule-method_call) | — |

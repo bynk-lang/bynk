@@ -8909,7 +8909,7 @@ pub const REGISTRY: &[DiagnosticInfo] = &[
     ),
     d(
         "bynk.deploy.worker_groups_unsupported",
-        "`bynk deploy`, `bynk revert` and `bynk dev` do not yet support a `[deploy.workers.<key>]` group of more than one context (temporary, #3562).",
+        "`bynk deploy`, `bynk revert` and `bynk dev` do not yet support `[deploy.workers.<key>]` Worker groups (temporary, #3562).",
     ),
     dg(
         "bynk.detach.in_agent_handler",

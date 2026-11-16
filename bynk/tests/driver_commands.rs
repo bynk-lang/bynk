@@ -1236,11 +1236,11 @@ fn deploy_refuses_release_contracts() {
     assert!(!proj.join(".bynk").exists(), "nothing was prepared: {err}");
 }
 
-/// #3562 (temporary): a project with a `[deploy.workers]` group of more than one
-/// context is refused by `deploy`, `dev` and `revert`, which would otherwise name
-/// each Worker after its context, before anything is prepared.
+/// #3562 (temporary): a project with a `[deploy.workers]` group is refused by
+/// `deploy`, `dev` and `revert`, which would otherwise name each Worker after its
+/// context, before anything is prepared.
 #[test]
-fn deploy_dev_and_revert_refuse_a_multi_context_worker_group() {
+fn deploy_dev_and_revert_refuse_a_worker_group() {
     for args in [&["deploy"][..], &["dev"][..], &["revert"][..]] {
         let proj = scratch("groups-refused");
         write(
