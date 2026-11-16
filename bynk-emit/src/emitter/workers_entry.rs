@@ -477,7 +477,7 @@ fn verify_gate(context: &str, foreign: bool) -> [TsStmt; 2] {
 /// edge key, as `/_bynk/call/` does, before it looks anything up, so an unsigned
 /// sender gets a bare `401`. `classes` is each agent class this Worker hosts, with
 /// its Durable Object binding name.
-fn inspect_route(context: &str, classes: &[String]) -> TsStmt {
+fn inspect_route(context: &str, member_mode: bool, lists: bool, classes: &[String]) -> TsStmt {
     let table = TsExpr::object(
         classes
             .iter()
@@ -490,17 +490,42 @@ fn inspect_route(context: &str, classes: &[String]) -> TsStmt {
             .collect(),
     );
     if_(
-        method_call(
-            ident("path"),
-            "startsWith",
-            vec![str_lit("/_bynk/inspect/")],
-        ),
+        inspect_guard(member_mode, lists, classes),
         block(vec![return_(Some(await_expr(call(
             ident("__inspectRoute"),
             vec![ident("env"), ident("request"), str_lit(context), table],
         ))))]),
     )
 }
+
+/// The condition of the inspect dispatch: `path.startsWith("/_bynk/inspect/")`,
+/// and, in a Worker group's member, that the request is this member's: the
+/// listing, if this is the member that answers it (`lists`, the group's first
+/// member that hosts an agent), or an agent of this member's own class. A member
+/// decides that before it verifies a signature, so a request for another
+/// member's agent reaches that member untouched.
+fn inspect_guard(member_mode: bool, lists: bool, classes: &[String]) -> TsExpr {
+    let starts = method_call(ident("path"), "startsWith", vec![str_lit(INSPECT_PREFIX)]);
+    if !member_mode {
+        return starts;
+    }
+    let own_agent = own_path_guard(true, INSPECT_AGENT_PREFIX, classes);
+    let owned = if lists {
+        or_expr(
+            strict_eq(ident("path"), str_lit(INSPECT_LIST_PATH)),
+            own_agent,
+        )
+    } else {
+        own_agent
+    };
+    and_expr(starts, paren(owned))
+}
+
+/// The `bynk dev` inspect routes (`runtime/inspect.ts`): the prefix, the listing
+/// and the per-agent prefix.
+pub(crate) const INSPECT_PREFIX: &str = "/_bynk/inspect/";
+const INSPECT_LIST_PATH: &str = "/_bynk/inspect/agents";
+const INSPECT_AGENT_PREFIX: &str = "/_bynk/inspect/agent/";
 
 /// #3581: the registry Durable Object class a `bynk dev` build hosts, imported
 /// from the runtime and exported from the entry like an agent's class, so the dev
@@ -546,7 +571,7 @@ fn admin_routes(
     context: &str,
     member_mode: bool,
     migratable: &[(String, i64)],
-    inspect: &[String],
+    (inspect, inspect_lists): (&[String], bool),
 ) -> Vec<TsStmt> {
     let mut routes = Vec::new();
     if !migratable.is_empty() {
@@ -554,7 +579,7 @@ fn admin_routes(
         routes.push(TsStmt::blank(None));
     }
     if !inspect.is_empty() {
-        routes.push(inspect_route(context, inspect));
+        routes.push(inspect_route(context, member_mode, inspect_lists, inspect));
         routes.push(TsStmt::blank(None));
     }
     routes
@@ -1149,8 +1174,8 @@ pub fn emit_worker_entry(
     visible_types: &std::collections::HashMap<String, std::sync::Arc<bynk_syntax::ast::TypeDecl>>,
     // #3580: wrap `fetch` in the request recorder (`bynk dev --trace-events` only).
     trace: bool,
-    // #3581: the agent classes of the `bynk dev`-only inspect route (else empty).
-    inspect: &[String],
+    // #3581: the dev inspect route's agent classes (else empty), and if this member lists them.
+    inspect: (&[String], bool),
 ) -> TsProgram {
     let member_mode = layout.is_member(context);
     let mut program = TsProgram::new();
@@ -1429,7 +1454,7 @@ pub fn emit_worker_entry(
         // #2193: every Worker's `fetch` catch answers through it.
         "__faultResponse".to_string(),
     ];
-    imports.extend(sweep_trace_inspect_imports(migratable, trace, inspect));
+    imports.extend(sweep_trace_inspect_imports(migratable, trace, inspect.0));
     if has_http {
         imports.push("__matchPath".to_string());
         imports.push("__httpResultToResponse".to_string());
@@ -1591,7 +1616,7 @@ pub fn emit_worker_entry(
     }
 
     header_decls.extend(container_class_reexport(table, member_mode));
-    header_decls.extend(inspect_registry_export(inspect));
+    header_decls.extend(inspect_registry_export(inspect.0));
 
     let mut fetch_params: Vec<TsParam> = vec![
         TsParam {

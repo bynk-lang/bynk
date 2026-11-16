@@ -3813,6 +3813,7 @@ impl WorkersEmit<'_> {
         table: &UnitTable,
         compiled: &mut Vec<StagedFile>,
         lock_warnings: &mut Vec<AttributedError>,
+        inspect_lists: bool,
     ) -> MemberParts {
         let WorkersEmit {
             adapter_bindings,
@@ -4018,7 +4019,7 @@ impl WorkersEmit<'_> {
             ctx_uses_exec,
             &bynk_check::symbols::combined_types_for(ctx_name, unit_tables, unit_uses),
             trace_requests,
-            &inspect_classes,
+            (&inspect_classes, inspect_lists),
         );
         // P6.x cutover slice 2 (#1191): collected here, not inside
         // `emit_wrangler_toml` itself, so that function's own file
@@ -4061,6 +4062,11 @@ impl WorkersEmit<'_> {
             });
             classes.push(emitter::wrangler::EVENTS_FANOUT_CLASS_NAME.to_string());
         }
+        // A `bynk dev` build's registry class is exported once for the Worker, by
+        // the member that answers the listing.
+        if inspect_lists {
+            classes.push("BynkInspectRegistry".to_string());
+        }
         // Arc C slice 3 (#1321): `emit_worker_compose` returns a
         // real `TsProgram` directly — the second `bynk-emit`
         // construction site (after `events_fanout.ts`'s own,
@@ -4081,8 +4087,37 @@ impl WorkersEmit<'_> {
             addresses: bynk_check::email::routed_addresses(table),
             has_events: own_handles_events(table),
             has_migrate: !migratable.is_empty(),
+            has_inspect: !inspect_classes.is_empty(),
             classes,
         }
+    }
+
+    /// Whether `ctx_name`'s entry answers its Worker's `/_bynk/inspect/agents`
+    /// listing (`bynk dev` only): the first member of its group that hosts an
+    /// agent does, so the registry is listed once. False outside a group, where
+    /// the one entry answers everything.
+    fn lists_inspection(&self, ctx_name: &str) -> bool {
+        let WorkersEmit {
+            inspect_agents,
+            layout,
+            unit_tables,
+            ..
+        } = *self;
+        let Some(members) = layout
+            .is_member(ctx_name)
+            .then(|| layout.group_members(&layout.dir(ctx_name)))
+            .flatten()
+        else {
+            return false;
+        };
+        members
+            .iter()
+            .find(|m| {
+                unit_tables
+                    .get(m.as_str())
+                    .is_some_and(|t| !inspect_classes(inspect_agents, t).is_empty())
+            })
+            .is_some_and(|first| first == ctx_name)
     }
 
     /// Every context's files, then every Worker's: a Worker is a context's own,
@@ -4107,7 +4142,8 @@ impl WorkersEmit<'_> {
             let Some(table) = unit_tables.get(ctx_name) else {
                 continue;
             };
-            let member = self.emit_member(ctx_name, table, compiled, lock_warnings);
+            let lists = self.lists_inspection(ctx_name);
+            let member = self.emit_member(ctx_name, table, compiled, lock_warnings, lists);
             parts.insert(ctx_name, (member, table));
         }
         let mut done: HashSet<String> = HashSet::new();
@@ -4235,6 +4271,7 @@ impl WorkersEmit<'_> {
             container_classes: &emitter::container_class_names(bindings),
             has_events: members.iter().any(|(parts, _)| parts.has_events),
             has_migrate: members.iter().any(|(parts, _)| parts.has_migrate),
+            has_inspect: members.iter().any(|(parts, _)| parts.has_inspect),
         })
     }
 
@@ -4453,6 +4490,8 @@ struct MemberParts {
     has_events: bool,
     /// Whether it hosts a migratable agent (answers `/_bynk/migrate/`).
     has_migrate: bool,
+    /// Whether it hosts an agent a `bynk dev` build can inspect.
+    has_inspect: bool,
     /// The Durable Object classes its entry exports.
     classes: Vec<String>,
 }
