@@ -28,6 +28,7 @@ per-commit history. While Bynk is pre-1.0, increments may change behaviour.
 
 | Version | Highlights |
 |---|---|
+| **v0.634.8** | A conformance harness drives a call, a refusal, a fault and an event between contexts through every topology (separate Workers, a Worker group) and asserts the same observations in each (#3562, G3-0), and a `[deploy.workers]` group's `<member>.bynk-client.ts` is left out of the generated `tsconfig.json` as a context's `bynk-client.ts` is |
 | **v0.634.7** | A `[deploy.workers]` group and another Worker (another group or a single context) whose members bind to each other in both directions are refused (`bynk.deploy.group_cycle`), even though the contexts themselves are acyclic (#3562, G2b) |
 | **v0.634.6** | The design of Worker groups (`[deploy.workers]`) is recorded in an ADR, which amends ADR 0193 (D2) and ADR 0017 (#3562, G7) |
 | **v0.634.5** | A Worker group's entry and members carry no `bynk dev` inspection route in a deploy build, and in a dev build a member answers only its own agents' inspect requests (#3562, G6 groundwork) |
