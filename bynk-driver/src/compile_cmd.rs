@@ -88,6 +88,14 @@ pub fn refuse_worker_groups(root: &Path) -> Result<(), String> {
     ))
 }
 
+/// What a deployment refuses before it prepares anything: contract checks in the
+/// release profile ([`refuse_release_contracts`]), and, until `bynk deploy` learns
+/// them (G4), Worker groups ([`refuse_worker_groups`]).
+pub fn refuse_undeployable_project(root: &Path) -> Result<(), String> {
+    refuse_worker_groups(root)?;
+    refuse_release_contracts(root)
+}
+
 /// `--target`: the build topology.
 #[derive(Copy, Clone, Debug, PartialEq, Eq, ValueEnum)]
 pub enum CliTarget {

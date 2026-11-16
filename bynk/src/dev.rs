@@ -479,19 +479,23 @@ fn remote_env_conflict(opts: &DevOptions) -> bool {
 /// Orchestrate a local dev session: pre-flight, compile, select the worker, and
 /// hand off to `wrangler dev`. Returns wrangler's own exit code on a clean
 /// hand-off, or a pre-flight/build failure code before serving.
+/// #3562 (temporary, until G6): `bynk dev` names each Worker after its context,
+/// so a project with Worker groups is refused rather than run wrongly.
+fn worker_groups_refused(project_root: &Path) -> bool {
+    let Err(e) = bynk_driver::refuse_worker_groups(project_root) else {
+        return false;
+    };
+    eprintln!("bynk: {e}");
+    true
+}
+
 pub fn run(
     tb: &dyn Toolbox,
     project_root: &Path,
     node_floor: (u32, u32),
     opts: &DevOptions,
 ) -> ExitCode {
-    if remote_env_conflict(opts) {
-        return ExitCode::FAILURE;
-    }
-
-    // #3562 (temporary, until G6): a multi-context Worker group is not runnable.
-    if let Err(e) = bynk_driver::refuse_worker_groups(project_root) {
-        eprintln!("bynk: {e}");
+    if remote_env_conflict(opts) || worker_groups_refused(project_root) {
         return ExitCode::FAILURE;
     }
 
