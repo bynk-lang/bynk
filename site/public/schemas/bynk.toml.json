@@ -287,6 +287,16 @@
             }
           ]
         },
+        "analytics-sql": {
+          "description": "Acknowledges that Analytics SQL has no local implementation: under `bynk dev` a query\nruns on your Cloudflare account and reads your deployed datasets. `bynk dev` warns once,\non the first query, unless this is `\"allow\"`. See Cloudflare's Analytics Engine SQL API\npage.",
+          "oneOf": [
+            {
+              "const": "allow",
+              "description": "Silence the warning.",
+              "type": "string"
+            }
+          ]
+        },
         "hyperdrive": {
           "additionalProperties": {
             "additionalProperties": false,

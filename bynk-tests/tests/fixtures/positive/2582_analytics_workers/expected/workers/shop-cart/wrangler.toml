@@ -12,3 +12,7 @@ dataset = "shop_cart_checkout_timings"
 binding = "ANALYTICS_SIGNUPS"
 dataset = "shop_cart_signups"
 
+[vars]
+BYNK_DATASET_ANALYTICS_CHECKOUT_TIMINGS = "shop_cart_checkout_timings"
+BYNK_DATASET_ANALYTICS_SIGNUPS = "shop_cart_signups"
+

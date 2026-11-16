@@ -253,6 +253,7 @@ pub const MANIFEST_TABLES: &[(&str, &[&str])] = &[
             "ai",
             "ai-search",
             "mtls",
+            "analytics-sql",
             "vectorize",
             "vectorize-index",
         ],
@@ -1133,6 +1134,9 @@ pub fn read_test_postgres(project_root: &Path) -> TestPostgres {
 /// The `[test]` table's `targets`, each checked for shape: `url` a table of
 /// strings (at least one), `secrets` a list of strings, `production` a
 /// boolean, `vars` a table of strings, and nothing else.
+/// #3513 B: the prefix of the `[vars]` entries `bynk` writes for `Analytics.dataset()`.
+const RESERVED_DATASET_VAR_PREFIX: &str = "BYNK_DATASET_";
+
 fn test_targets_from(
     table: &toml::Table,
 ) -> Result<BTreeMap<String, TestTarget>, ProjectPathsError> {
@@ -1170,7 +1174,21 @@ fn test_targets_from(
         for (key, value) in entry {
             match key.as_str() {
                 "url" => target.urls = strings(value, "url")?,
-                "vars" => target.vars = strings(value, "vars")?,
+                "vars" => {
+                    target.vars = strings(value, "vars")?;
+                    // #3513 B: `BYNK_DATASET_<BINDING>` is the variable that carries an
+                    // `Analytics` dataset's environment-qualified name to its Worker, so a
+                    // target may not set one and point `dataset()` at another table.
+                    if let Some(reserved) = target
+                        .vars
+                        .keys()
+                        .find(|k| k.starts_with(RESERVED_DATASET_VAR_PREFIX))
+                    {
+                        return Err(bad(&format!(
+                            "`vars.{reserved}` is reserved: `{RESERVED_DATASET_VAR_PREFIX}…` names are set by `bynk` to carry each `Analytics` dataset's name"
+                        )));
+                    }
+                }
                 "secrets" => {
                     target.secrets = value
                         .as_array()
@@ -2242,6 +2260,10 @@ mod manifest_tests {
                 "`production` must be",
             ),
             ("[test.targets.p]\nurl.a = 1\n", "`url.a` must be a string"),
+            (
+                "[test.targets.p]\nurl.a = \"x\"\nvars = { BYNK_DATASET_ANALYTICS_SIGNUPS = \"x\" }\n",
+                "`vars.BYNK_DATASET_ANALYTICS_SIGNUPS` is reserved",
+            ),
             ("[test]\ntarget = 1\n", "no key named `target`"),
         ] {
             let err = check_manifest_str(manifest)

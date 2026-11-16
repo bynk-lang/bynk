@@ -87,6 +87,7 @@ ai = "allow"                # no default: silences `bynk dev`'s Workers AI cost 
 vectorize = "allow"         # no default: silences `bynk dev`'s Vectorize cost warning
 ai-search = "allow"         # no default: silences `bynk dev`'s AI Search cost warning
 mtls = "allow"              # no default: silences `bynk dev`'s mTLS certificate notice
+analytics-sql = "allow"      # no default: silences `bynk dev`'s Analytics SQL notice
 
 [dev.vectorize-index]       # no default: the index of your own `bynk dev` binds, per capability
 Docs = "docs-dev"
@@ -762,6 +763,7 @@ vectorize = "allow"
 | `vectorize` | `[dev]` | `"allow"` | The same for `Vectorize` calls. |
 | `ai-search` | `[dev]` | `"allow"` | Acknowledges that `AiSearch` calls go to your deployed AI Search instance under `bynk dev`, which has no local simulation. Separate from `ai`. The only value; any other is a manifest error. |
 | `mtls` | `[dev]` | `"allow"` | Acknowledges that an `MtlsCertificate` call runs on Cloudflare under `bynk dev`, presenting your account's certificate to the origin, because an mTLS binding has no local simulation. It needs a certificate `bynk deploy` has linked for the environment. The only value; any other is a manifest error. |
+| `analytics-sql` | `[dev]` | `"allow"` | Acknowledges that an `AnalyticsSql` query runs on Cloudflare under `bynk dev`, reading your deployed Analytics Engine datasets, because Analytics SQL has no local implementation. The only value; any other is a manifest error. |
 
 The key is per binding kind, so a later remote-only binding takes its own key
 and the same warning. `bynk dev` marks each Worker it serves with a `BYNK_DEV`
@@ -843,7 +845,7 @@ refused, so a run can't be pointed at a deployment by accident.
 |---|---|---|---|
 | `url.<worker>` | string | required | Each Worker's base URL, keyed by its worker-directory name (`shop.orders` is `shop-orders`). At least one is required. |
 | `secrets` | array of strings | `[]` | The names of the secrets the deployed Workers verify with. The runner reads each from the **environment** and signs with it; a name that isn't set refuses the run. Never put a secret's value in `bynk.toml`. |
-| `vars` | table of strings | `{}` | The non-secret values the target was deployed with (`vars = { PAYMENTS_PROCESSOR = "fake" }`). A case runs against the target only if its `env` agrees with them on every name either one mentions. |
+| `vars` | table of strings | `{}` | The non-secret values the target was deployed with (`vars = { PAYMENTS_PROCESSOR = "fake" }`). A case runs against the target only if its `env` agrees with them on every name either one mentions. A name beginning `BYNK_DATASET_` is reserved (it carries an `Analytics` dataset's name to its Worker) and is a manifest error. |
 | `production` | boolean | `false` | Marks a production deployment, which `--against` refuses. |
 
 ```toml

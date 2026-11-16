@@ -758,6 +758,53 @@ export const MySqlReadError = {
 };
 
 /**
+ * What an Analytics SQL query cost to run, as the platform reports it: `elapsedMs`
+ * the time it took, `rowsRead` and `bytesRead` what it scanned.
+ */
+export interface AnalyticsSqlStatistics {
+  readonly elapsedMs: number;
+  readonly rowsRead: number;
+  readonly bytesRead: number;
+}
+
+export const AnalyticsSqlStatistics = {
+};
+
+/**
+ * The reply of `AnalyticsSql.query`: `data` is the result rows as JSON text, an array
+ * of objects keyed by the selected column names, to read with `Json.decode` (the
+ * columns and their types are the query's, not Bynk's, as `Ai.run`'s reply is the
+ * model's); `rows` is how many there are, and `statistics` what the query cost.
+ */
+export interface AnalyticsSqlResult {
+  readonly data: string;
+  readonly rows: number;
+  readonly statistics: AnalyticsSqlStatistics;
+}
+
+export const AnalyticsSqlResult = {
+};
+
+/**
+ * Why an Analytics SQL query did not give a reply. The platform reports a failure
+ * with a message and one fact, whether repeating the query may succeed, and that is
+ * all this type says: `SqlRetryable` is a failure worth retrying with bounded
+ * exponential backoff (a rate or capacity limit, a temporary outage), and
+ * `SqlRejected` one that repeating will not fix (a query the engine refused, a
+ * parameter Analytics SQL cannot take, a reply that is not the shape promised),
+ * each with its message. Cloudflare changes what it reports over time, so a `match`
+ * over this type needs a wildcard.
+ */
+export type AnalyticsSqlError =
+    { readonly tag: "SqlRetryable"; readonly message: string }
+  | { readonly tag: "SqlRejected"; readonly message: string };
+
+export const AnalyticsSqlError = {
+  SqlRetryable: (message: string): AnalyticsSqlError => ({ tag: "SqlRetryable", message }),
+  SqlRejected: (message: string): AnalyticsSqlError => ({ tag: "SqlRejected", message }),
+};
+
+/**
  * The version of this Worker that is running, as `Version.current()`
  * reports it. `id` is the version's id, `tag` its tag (`None` when the
  * version was uploaded without one), and `deployed` when the version was
@@ -1533,16 +1580,55 @@ export const __QueueToken: symbol = globalThis.Symbol("Queue");
  *
  * `write` checks the point against the platform's limits (see `DataPoint`)
  * and faults on a breach; a Worker invocation may write at most 250 points.
- * Writes are sent after the response, so one never delays it. Reading is
- * the account's SQL API, outside Bynk. Data is kept for three months and
+ * Writes are sent after the response, so one never delays it. Reading is done
+ * with `AnalyticsSql`, and `dataset` names this dataset for the query:
+ * `events.analyticsEngine.shop_cart_signups`, or `..._staging` under
+ * `--env staging`, so a query never hard-codes the environment. Data is kept for three months and
  * readable with any account analytics token, so keep secrets and personal
  * data out of it.
  */
 export interface Analytics {
   write(point: DataPoint): globalThis.Promise<void>;
+  dataset(): globalThis.Promise<string>;
 }
 
 export const __AnalyticsToken: symbol = globalThis.Symbol("Analytics");
+
+/**
+ * Read analytics data with SQL, from the Worker's `[analytics]` binding: it needs no
+ * API token. It is account-scoped and bound once per Worker, so it is used bare
+ * (`given AnalyticsSql`) and has no named instances; only a Worker that uses it
+ * declares the binding. It reads the datasets `Analytics.write` fills, and Cloudflare's
+ * other analytics datasets, as `events.analyticsEngine.<DATASET>`.
+ *
+ * `query(sql, params)` runs one `SELECT`. Put values in `params`, a `List[SqlValue]`
+ * bound to `$1`, `$2`, … by position, and never into the text of `sql`. A `Null`,
+ * `Integer`, `Real`, `Text` or `Boolean` is taken (a `Real` that is not finite is
+ * `SqlRejected`); a `Blob` has no Analytics SQL counterpart and is `SqlRejected` too,
+ * before anything is sent. Named
+ * `$name` parameters are not taken yet. A dataset's name is an identifier, which a
+ * parameter cannot be, so it is the one value written into `sql`.
+ *
+ * Cloudflare's rules for the SQL apply as they do to its own API: the query must carry a
+ * lower time bound (`WHERE timestamp >= NOW() - INTERVAL '1' HOUR`), because the binding
+ * exposes no separate time range; it must not name `accountTag` or `zoneTag`, because the
+ * binding supplies the account; and it must not end in a `FORMAT` clause. The dialect is
+ * deliberately limited; see Cloudflare's Analytics SQL reference.
+ *
+ * The reply is an `AnalyticsSqlResult`, its `data` the rows as JSON text for `Json.decode`.
+ * A failure is an `AnalyticsSqlError`: `SqlRetryable` when the platform says repeating
+ * may succeed, `SqlRejected` when it does not. The call never retries by itself.
+ *
+ * There is no local implementation of the binding: under `bynk dev` a query runs on
+ * Cloudflare, against the deployed datasets, once you allow it, and `bynkc test` faults
+ * until the call is stubbed (`stub AnalyticsSql.query(_, _) returns …`), so a test never
+ * reaches Cloudflare.
+ */
+export interface AnalyticsSql {
+  query(sql: string, params: readonly SqlValue[]): globalThis.Promise<Result<AnalyticsSqlResult, AnalyticsSqlError>>;
+}
+
+export const __AnalyticsSqlToken: symbol = globalThis.Symbol("AnalyticsSql");
 
 /**
  * Cloudflare's edge cache for this context's Worker (Workers Cache), and its
@@ -2178,6 +2264,110 @@ export function __deserialise_AiError(json: __JsonValue, path: string = "$"): Re
     default:
       return Err({ kind: "StructuralMismatch", path, expected: "sum variant kind", actual: String(kind) });
   }
+}
+
+export function __serialise_AnalyticsSqlError(value: AnalyticsSqlError): __JsonValue {
+  switch (value.tag) {
+    case "SqlRetryable": {
+      return { kind: "SqlRetryable", message: value.message as __JsonValue };
+    }
+    case "SqlRejected": {
+      return { kind: "SqlRejected", message: value.message as __JsonValue };
+    }
+  }
+}
+
+export function __deserialise_AnalyticsSqlError(json: __JsonValue, path: string = "$"): Result<AnalyticsSqlError, __BoundaryError> {
+  if (typeof json !== "object" || json === null || globalThis.Array.isArray(json)) {
+    return Err({ kind: "StructuralMismatch", path, expected: "object", actual: typeof json });
+  }
+  const obj = json as { [k: string]: __JsonValue };
+  const kind = obj["kind"];
+  switch (kind) {
+    case "SqlRetryable": {
+  if (typeof obj["message"] !== "string") {
+    return Err({ kind: "StructuralMismatch", path: `${path}.message`, expected: "string", actual: typeof obj["message"] });
+  }
+  const __message = obj["message"];
+      return Ok({ tag: "SqlRetryable", message: __message } as AnalyticsSqlError);
+    }
+    case "SqlRejected": {
+  if (typeof obj["message"] !== "string") {
+    return Err({ kind: "StructuralMismatch", path: `${path}.message`, expected: "string", actual: typeof obj["message"] });
+  }
+  const __message = obj["message"];
+      return Ok({ tag: "SqlRejected", message: __message } as AnalyticsSqlError);
+    }
+    default:
+      return Err({ kind: "StructuralMismatch", path, expected: "sum variant kind", actual: String(kind) });
+  }
+}
+
+export function __serialise_AnalyticsSqlResult(value: AnalyticsSqlResult): __JsonValue {
+  return {
+    data: value.data as __JsonValue,
+    rows: ((v: number) => { if (!globalThis.Number.isSafeInteger(v)) throw new globalThis.Error("Int outside the safe-integer range at boundary"); return v as __JsonValue; })(value.rows),
+    statistics: __serialise_AnalyticsSqlStatistics(value.statistics),
+  };
+}
+
+export function __deserialise_AnalyticsSqlResult(json: __JsonValue, path: string = "$"): Result<AnalyticsSqlResult, __BoundaryError> {
+  if (typeof json !== "object" || json === null || globalThis.Array.isArray(json)) {
+    return Err({ kind: "StructuralMismatch", path, expected: "object", actual: typeof json });
+  }
+  const obj = json as { [k: string]: __JsonValue };
+  if (typeof obj["data"] !== "string") {
+    return Err({ kind: "StructuralMismatch", path: `${path}.data`, expected: "string", actual: typeof obj["data"] });
+  }
+  const __data = obj["data"];
+  if (typeof obj["rows"] !== "number") {
+    return Err({ kind: "StructuralMismatch", path: `${path}.rows`, expected: "number", actual: typeof obj["rows"] });
+  }
+  if (!globalThis.Number.isSafeInteger(obj["rows"])) {
+    return Err({ kind: "StructuralMismatch", path: `${path}.rows`, expected: "safe integer", actual: String(obj["rows"]) });
+  }
+  const __rows = obj["rows"];
+  const __r_statistics = __deserialise_AnalyticsSqlStatistics(obj["statistics"], `${path}.statistics`);
+  if (__r_statistics.tag === "Err") return __r_statistics;
+  const __statistics = __r_statistics.value;
+  return Ok({ data: __data, rows: __rows, statistics: __statistics } as AnalyticsSqlResult);
+}
+
+export function __serialise_AnalyticsSqlStatistics(value: AnalyticsSqlStatistics): __JsonValue {
+  return {
+    elapsedMs: ((v: number) => { if (!globalThis.Number.isSafeInteger(v)) throw new globalThis.Error("Int outside the safe-integer range at boundary"); return v as __JsonValue; })(value.elapsedMs),
+    rowsRead: ((v: number) => { if (!globalThis.Number.isSafeInteger(v)) throw new globalThis.Error("Int outside the safe-integer range at boundary"); return v as __JsonValue; })(value.rowsRead),
+    bytesRead: ((v: number) => { if (!globalThis.Number.isSafeInteger(v)) throw new globalThis.Error("Int outside the safe-integer range at boundary"); return v as __JsonValue; })(value.bytesRead),
+  };
+}
+
+export function __deserialise_AnalyticsSqlStatistics(json: __JsonValue, path: string = "$"): Result<AnalyticsSqlStatistics, __BoundaryError> {
+  if (typeof json !== "object" || json === null || globalThis.Array.isArray(json)) {
+    return Err({ kind: "StructuralMismatch", path, expected: "object", actual: typeof json });
+  }
+  const obj = json as { [k: string]: __JsonValue };
+  if (typeof obj["elapsedMs"] !== "number") {
+    return Err({ kind: "StructuralMismatch", path: `${path}.elapsedMs`, expected: "number", actual: typeof obj["elapsedMs"] });
+  }
+  if (!globalThis.Number.isSafeInteger(obj["elapsedMs"])) {
+    return Err({ kind: "StructuralMismatch", path: `${path}.elapsedMs`, expected: "safe integer", actual: String(obj["elapsedMs"]) });
+  }
+  const __elapsedMs = obj["elapsedMs"];
+  if (typeof obj["rowsRead"] !== "number") {
+    return Err({ kind: "StructuralMismatch", path: `${path}.rowsRead`, expected: "number", actual: typeof obj["rowsRead"] });
+  }
+  if (!globalThis.Number.isSafeInteger(obj["rowsRead"])) {
+    return Err({ kind: "StructuralMismatch", path: `${path}.rowsRead`, expected: "safe integer", actual: String(obj["rowsRead"]) });
+  }
+  const __rowsRead = obj["rowsRead"];
+  if (typeof obj["bytesRead"] !== "number") {
+    return Err({ kind: "StructuralMismatch", path: `${path}.bytesRead`, expected: "number", actual: typeof obj["bytesRead"] });
+  }
+  if (!globalThis.Number.isSafeInteger(obj["bytesRead"])) {
+    return Err({ kind: "StructuralMismatch", path: `${path}.bytesRead`, expected: "safe integer", actual: String(obj["bytesRead"]) });
+  }
+  const __bytesRead = obj["bytesRead"];
+  return Ok({ elapsedMs: __elapsedMs, rowsRead: __rowsRead, bytesRead: __bytesRead } as AnalyticsSqlStatistics);
 }
 
 export function __serialise_ChatMessage(value: ChatMessage): __JsonValue {

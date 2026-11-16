@@ -210,6 +210,12 @@ struct DevTable {
     /// names, so it needs a certificate `bynk deploy` has linked. `bynk dev` warns once, on the
     /// first call, unless this is `"allow"`. See Cloudflare's mTLS bindings page.
     mtls: Option<DevAck>,
+    /// Acknowledges that Analytics SQL has no local implementation: under `bynk dev` a query
+    /// runs on your Cloudflare account and reads your deployed datasets. `bynk dev` warns once,
+    /// on the first query, unless this is `"allow"`. See Cloudflare's Analytics Engine SQL API
+    /// page.
+    #[serde(rename = "analytics-sql")]
+    analytics_sql: Option<DevAck>,
 }
 
 /// The one value a `[dev]` acknowledgement takes.

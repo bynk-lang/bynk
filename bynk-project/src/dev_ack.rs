@@ -52,6 +52,11 @@ pub const REMOTE_KINDS: &[RemoteKind] = &[
         key: "mtls",
         var: "BYNK_DEV_ACK_MTLS",
     },
+    // #3513 B: an Analytics SQL query runs on Cloudflare under `bynk dev`.
+    RemoteKind {
+        key: "analytics-sql",
+        var: "BYNK_DEV_ACK_ANALYTICS_SQL",
+    },
 ];
 
 /// The variable `bynk dev` sets to `1` on every Worker it serves, so a

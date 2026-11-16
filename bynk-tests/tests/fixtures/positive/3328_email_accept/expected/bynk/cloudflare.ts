@@ -756,6 +756,53 @@ export const MySqlReadError = {
 };
 
 /**
+ * What an Analytics SQL query cost to run, as the platform reports it: `elapsedMs`
+ * the time it took, `rowsRead` and `bytesRead` what it scanned.
+ */
+export interface AnalyticsSqlStatistics {
+  readonly elapsedMs: number;
+  readonly rowsRead: number;
+  readonly bytesRead: number;
+}
+
+export const AnalyticsSqlStatistics = {
+};
+
+/**
+ * The reply of `AnalyticsSql.query`: `data` is the result rows as JSON text, an array
+ * of objects keyed by the selected column names, to read with `Json.decode` (the
+ * columns and their types are the query's, not Bynk's, as `Ai.run`'s reply is the
+ * model's); `rows` is how many there are, and `statistics` what the query cost.
+ */
+export interface AnalyticsSqlResult {
+  readonly data: string;
+  readonly rows: number;
+  readonly statistics: AnalyticsSqlStatistics;
+}
+
+export const AnalyticsSqlResult = {
+};
+
+/**
+ * Why an Analytics SQL query did not give a reply. The platform reports a failure
+ * with a message and one fact, whether repeating the query may succeed, and that is
+ * all this type says: `SqlRetryable` is a failure worth retrying with bounded
+ * exponential backoff (a rate or capacity limit, a temporary outage), and
+ * `SqlRejected` one that repeating will not fix (a query the engine refused, a
+ * parameter Analytics SQL cannot take, a reply that is not the shape promised),
+ * each with its message. Cloudflare changes what it reports over time, so a `match`
+ * over this type needs a wildcard.
+ */
+export type AnalyticsSqlError =
+    { readonly tag: "SqlRetryable"; readonly message: string }
+  | { readonly tag: "SqlRejected"; readonly message: string };
+
+export const AnalyticsSqlError = {
+  SqlRetryable: (message: string): AnalyticsSqlError => ({ tag: "SqlRetryable", message }),
+  SqlRejected: (message: string): AnalyticsSqlError => ({ tag: "SqlRejected", message }),
+};
+
+/**
  * The version of this Worker that is running, as `Version.current()`
  * reports it. `id` is the version's id, `tag` its tag (`None` when the
  * version was uploaded without one), and `deployed` when the version was
@@ -1531,16 +1578,55 @@ export const __QueueToken: symbol = globalThis.Symbol("Queue");
  *
  * `write` checks the point against the platform's limits (see `DataPoint`)
  * and faults on a breach; a Worker invocation may write at most 250 points.
- * Writes are sent after the response, so one never delays it. Reading is
- * the account's SQL API, outside Bynk. Data is kept for three months and
+ * Writes are sent after the response, so one never delays it. Reading is done
+ * with `AnalyticsSql`, and `dataset` names this dataset for the query:
+ * `events.analyticsEngine.shop_cart_signups`, or `..._staging` under
+ * `--env staging`, so a query never hard-codes the environment. Data is kept for three months and
  * readable with any account analytics token, so keep secrets and personal
  * data out of it.
  */
 export interface Analytics {
   write(point: DataPoint): globalThis.Promise<void>;
+  dataset(): globalThis.Promise<string>;
 }
 
 export const __AnalyticsToken: symbol = globalThis.Symbol("Analytics");
+
+/**
+ * Read analytics data with SQL, from the Worker's `[analytics]` binding: it needs no
+ * API token. It is account-scoped and bound once per Worker, so it is used bare
+ * (`given AnalyticsSql`) and has no named instances; only a Worker that uses it
+ * declares the binding. It reads the datasets `Analytics.write` fills, and Cloudflare's
+ * other analytics datasets, as `events.analyticsEngine.<DATASET>`.
+ *
+ * `query(sql, params)` runs one `SELECT`. Put values in `params`, a `List[SqlValue]`
+ * bound to `$1`, `$2`, … by position, and never into the text of `sql`. A `Null`,
+ * `Integer`, `Real`, `Text` or `Boolean` is taken (a `Real` that is not finite is
+ * `SqlRejected`); a `Blob` has no Analytics SQL counterpart and is `SqlRejected` too,
+ * before anything is sent. Named
+ * `$name` parameters are not taken yet. A dataset's name is an identifier, which a
+ * parameter cannot be, so it is the one value written into `sql`.
+ *
+ * Cloudflare's rules for the SQL apply as they do to its own API: the query must carry a
+ * lower time bound (`WHERE timestamp >= NOW() - INTERVAL '1' HOUR`), because the binding
+ * exposes no separate time range; it must not name `accountTag` or `zoneTag`, because the
+ * binding supplies the account; and it must not end in a `FORMAT` clause. The dialect is
+ * deliberately limited; see Cloudflare's Analytics SQL reference.
+ *
+ * The reply is an `AnalyticsSqlResult`, its `data` the rows as JSON text for `Json.decode`.
+ * A failure is an `AnalyticsSqlError`: `SqlRetryable` when the platform says repeating
+ * may succeed, `SqlRejected` when it does not. The call never retries by itself.
+ *
+ * There is no local implementation of the binding: under `bynk dev` a query runs on
+ * Cloudflare, against the deployed datasets, once you allow it, and `bynkc test` faults
+ * until the call is stubbed (`stub AnalyticsSql.query(_, _) returns …`), so a test never
+ * reaches Cloudflare.
+ */
+export interface AnalyticsSql {
+  query(sql: string, params: readonly SqlValue[]): globalThis.Promise<Result<AnalyticsSqlResult, AnalyticsSqlError>>;
+}
+
+export const __AnalyticsSqlToken: symbol = globalThis.Symbol("AnalyticsSql");
 
 /**
  * Cloudflare's edge cache for this context's Worker (Workers Cache), and its

@@ -995,6 +995,31 @@ export interface WorkerAiBinding {
 }
 
 /**
+ * Analytics SQL (#3513 B): Cloudflare's account-scoped binding, which `WorkersAnalyticsSql`
+ * reads. `query` takes one `SELECT` and its positional parameters, and answers the rows with
+ * the cost of the query; a failure rejects with an error carrying a boolean `retryable`.
+ */
+export interface AnalyticsSqlBinding {
+  query(request: { query: string; params?: unknown[] }): Promise<unknown>;
+}
+
+/**
+ * The Analytics SQL binding of a multi-Worker integration test participant, bound as its
+ * `env.CF_ANALYTICS_SQL`. A test never reaches Cloudflare, so `query` faults until the case stubs
+ * the capability's operation. There are no fake rows: a fabricated reply would make a test pass
+ * for the wrong reason.
+ */
+export function makeIntegrationAnalyticsSql(): AnalyticsSqlBinding {
+  return {
+    async query(): Promise<unknown> {
+      throw markNotStubbed(
+        "bynk: the `AnalyticsSql` binding is not stubbed, and a test never reaches Analytics SQL — add `stub AnalyticsSql.query(_, _) returns …`",
+      );
+    },
+  };
+}
+
+/**
  * The AI binding of a multi-Worker integration test participant, bound as its
  * `env.AI`. A test never reaches Workers AI, so `run` faults until the case
  * stubs the capability's operation. There is no fake model: a fabricated reply
@@ -1205,5 +1230,5 @@ export function makeIntegrationHyperdrive(binding: string): Hyperdrive {
 }
 
 // #1653: the `__` aliases emitted code imports.
-export { makeIntegrationAi as __makeIntegrationAi, makeIntegrationImages as __makeIntegrationImages, makeIntegrationContainer as __makeIntegrationContainer, makeIntegrationAnalytics as __makeIntegrationAnalytics, makeIntegrationD1 as __makeIntegrationD1, makeIntegrationEmail as __makeIntegrationEmail, makeIntegrationHyperdrive as __makeIntegrationHyperdrive, makeIntegrationKv as __makeIntegrationKv, makeIntegrationQueue as __makeIntegrationQueue, makeIntegrationR2 as __makeIntegrationR2, makeIntegrationRateLimit as __makeIntegrationRateLimit, makeIntegrationSecretsStoreSecret as __makeIntegrationSecretsStoreSecret, makeIntegrationAiSearch as __makeIntegrationAiSearch, makeIntegrationMtls as __makeIntegrationMtls, makeIntegrationVersionMetadata as __makeIntegrationVersionMetadata, makeTestState as __makeTestState };
-export type { AiSearchInstance as __AiSearchInstance, AnalyticsDataset as __AnalyticsDataset, D1Database as __D1Database, DurableObjectState as __DurableObjectState, Hyperdrive as __Hyperdrive, KVNamespace as __KVNamespace, QueueProducer as __QueueProducer, R2Bucket as __R2Bucket, RateLimiter as __RateLimiter, SecretsStoreSecret as __SecretsStoreSecret, SendEmail as __SendEmail, WorkerAiBinding as __WorkerAiBinding, WorkerImagesBinding as __WorkerImagesBinding, WorkerVersionMetadata as __WorkerVersionMetadata };
+export { makeIntegrationAi as __makeIntegrationAi, makeIntegrationImages as __makeIntegrationImages, makeIntegrationContainer as __makeIntegrationContainer, makeIntegrationAnalytics as __makeIntegrationAnalytics, makeIntegrationD1 as __makeIntegrationD1, makeIntegrationEmail as __makeIntegrationEmail, makeIntegrationHyperdrive as __makeIntegrationHyperdrive, makeIntegrationKv as __makeIntegrationKv, makeIntegrationQueue as __makeIntegrationQueue, makeIntegrationR2 as __makeIntegrationR2, makeIntegrationRateLimit as __makeIntegrationRateLimit, makeIntegrationSecretsStoreSecret as __makeIntegrationSecretsStoreSecret, makeIntegrationAiSearch as __makeIntegrationAiSearch, makeIntegrationAnalyticsSql as __makeIntegrationAnalyticsSql, makeIntegrationMtls as __makeIntegrationMtls, makeIntegrationVersionMetadata as __makeIntegrationVersionMetadata, makeTestState as __makeTestState };
+export type { AiSearchInstance as __AiSearchInstance, AnalyticsDataset as __AnalyticsDataset, D1Database as __D1Database, DurableObjectState as __DurableObjectState, Hyperdrive as __Hyperdrive, KVNamespace as __KVNamespace, QueueProducer as __QueueProducer, R2Bucket as __R2Bucket, RateLimiter as __RateLimiter, SecretsStoreSecret as __SecretsStoreSecret, SendEmail as __SendEmail, AnalyticsSqlBinding as __AnalyticsSqlBinding, WorkerAiBinding as __WorkerAiBinding, WorkerImagesBinding as __WorkerImagesBinding, WorkerVersionMetadata as __WorkerVersionMetadata };

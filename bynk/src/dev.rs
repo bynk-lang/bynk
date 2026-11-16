@@ -2150,8 +2150,37 @@ fn proxy_mtls(project_root: &Path, workers_dir: &Path, serving: &[Serving], envi
     }
 }
 
-/// The remote-only bindings of the development copy: AI Search (#3480) and mTLS certificates
-/// (#3513 A).
+/// #3513 B: each served Worker's development copy runs its `[analytics]` (Analytics SQL)
+/// binding on Cloudflare (`remote = true`), since it has no local implementation.
+fn proxy_analytics_sql(workers_dir: &Path, serving: &[Serving]) {
+    for s in serving {
+        let path = workers_dir.join(&s.worker).join("wrangler.toml");
+        let Ok(text) = std::fs::read_to_string(&path) else {
+            continue;
+        };
+        if !text.contains("[analytics]") {
+            continue;
+        }
+        match bynk_emit::emitter::wrangler::enable_remote_analytics_sql(&text) {
+            Ok(out) if out != text => {
+                if let Err(e) = std::fs::write(&path, out) {
+                    eprintln!(
+                        "bynk: could not run `{}`'s Analytics SQL binding on the account: {e}",
+                        s.worker
+                    );
+                }
+            }
+            Ok(_) => {}
+            Err(e) => eprintln!(
+                "bynk: could not run `{}`'s Analytics SQL binding: {e}",
+                s.worker
+            ),
+        }
+    }
+}
+
+/// The remote-only bindings of the development copy: AI Search (#3480), mTLS certificates
+/// (#3513 A) and Analytics SQL (#3513 B).
 fn proxy_remote_bindings(
     project_root: &Path,
     workers_dir: &Path,
@@ -2160,6 +2189,7 @@ fn proxy_remote_bindings(
 ) {
     proxy_ai_search(workers_dir, serving);
     proxy_mtls(project_root, workers_dir, serving, environment);
+    proxy_analytics_sql(workers_dir, serving);
 }
 
 /// #3478: the `--var`s of [`dev_var_args`] for `project_root`'s `[dev]`
@@ -2304,6 +2334,16 @@ mod tests {
         assert_eq!(
             dev_var_args(&BTreeSet::from(["mtls"])),
             ["--var", "BYNK_DEV:1", "--var", "BYNK_DEV_ACK_MTLS:allow"]
+        );
+        // #3513 B: and Analytics SQL.
+        assert_eq!(
+            dev_var_args(&BTreeSet::from(["analytics-sql"])),
+            [
+                "--var",
+                "BYNK_DEV:1",
+                "--var",
+                "BYNK_DEV_ACK_ANALYTICS_SQL:allow"
+            ]
         );
     }
 

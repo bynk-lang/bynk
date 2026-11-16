@@ -439,6 +439,7 @@ mod tests {
                 "bynk.cloudflare.Container",
                 "bynk.cloudflare.AiSearch",
                 "bynk.cloudflare.MtlsCertificate",
+                "bynk.cloudflare.AnalyticsSql",
                 "bynk.cloudflare.RequestCf",
                 "bynk.cloudflare.Kv.getWith",
                 "bynk.cloudflare.Kv.putWith",
