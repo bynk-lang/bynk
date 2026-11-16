@@ -227,6 +227,7 @@ await show("get-orders", new Request(u("/orders")));
 await show("post-orders", new Request(u("/orders"), { method: "POST", body: JSON.stringify("hello"), headers: { "content-type": "application/json" } }));
 await show("owned-404", new Request(u("/gone")));
 await show("delete-orders", new Request(u("/orders"), { method: "DELETE" }));
+await show("options-orders", new Request(u("/orders"), { method: "OPTIONS" }));
 await show("nothing", new Request(u("/nope")));
 const big = "x".repeat(2_000_000);
 for (const [name, method, body] of [["post", "POST", "[1]"], ["get", "GET", undefined], ["big", "POST", big]]) {
@@ -316,14 +317,15 @@ fn a_groups_fetch_dispatches_to_the_member_that_owns_the_request() {
     assert_eq!(owned["status"], 404);
     assert_eq!(owned["nosniff"], "nosniff", "{owned}");
 
-    // A method no member handles on a path some member serves is the first
-    // member's `405`, with its `Allow`.
+    // A method no member handles on a path members serve is a `405` whose
+    // `Allow` lists what the whole Worker serves there: `GET` from the first
+    // member and `POST` from the second, not one member's alone.
     let delete = find(&results, "delete-orders");
     assert_eq!(delete["status"], 405);
-    assert!(
-        delete["allow"].as_str().is_some_and(|a| a.contains("GET")),
-        "{delete}"
-    );
+    assert_eq!(delete["allow"], "GET, HEAD, OPTIONS, POST", "{delete}");
+    let options = find(&results, "options-orders");
+    assert_eq!(options["status"], 204);
+    assert_eq!(options["allow"], "GET, HEAD, OPTIONS, POST", "{options}");
 
     // No member owns the request: the single-context `Not Found`.
     let nothing = find(&results, "nothing");

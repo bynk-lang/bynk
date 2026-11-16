@@ -302,7 +302,8 @@ const REPORT_FAULT_HELPER: &str = "function __bynkReportFault(ctx: { waitUntil(p
 /// tried in declaration order; a marked response is a miss and the next member
 /// is tried; the first unmarked response is the answer. If every member misses,
 /// the answer is the first marked response that is not a `404` (the synthesised
-/// `405`/`204` with `Allow`), else the single-context `Not Found`. The synthesised
+/// `405`/`204`) with the `Allow` of every such response merged, else the
+/// single-context `Not Found`. The synthesised
 /// `405` is a miss on purpose: `GET /x` in one member and `POST /x` in another is
 /// allowed (a route is keyed on method and path), so the `POST` must reach the
 /// second member rather than be answered by the first member's `405`.

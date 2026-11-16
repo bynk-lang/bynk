@@ -13,8 +13,8 @@ Each member keeps its own files under its prefix (`<member>.index.ts`,
 The group's `index.ts` tries members in the order `contexts` lists them. Only a
 router's own miss (its `404`, its synthesised `405`/`204`) lets the next member
 try; a handler's response, a `404` of its own included, is the answer. If every
-member misses it returns the first `405`/`204`, else the single-context
-`Not Found`. `scheduled` runs each member whose cron matches, `queue` goes by
+member misses it returns the first `405`/`204` with the `Allow` of all of them
+merged, else the single-context `Not Found`. `scheduled` runs each member whose cron matches, `queue` goes by
 `batch.queue`, `email` by recipient. Agent, fan-out and container classes are
 re-exported by name.
 

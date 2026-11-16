@@ -9,7 +9,9 @@
 //!   response is a miss and the next member is tried; the first unmarked one is
 //!   the answer (a handler's own `404` included). If every member misses, the
 //!   answer is the first marked response that is not a `404` (the synthesised
-//!   `405`/`204` with `Allow`), else the single-context `Not Found`.
+//!   `405`/`204`), with the `Allow` of all such responses merged, since two
+//!   members may serve one path under different methods; else the single-context
+//!   `Not Found`.
 //! - `scheduled` runs every member whose cron matches, `queue` goes to the member
 //!   consuming `batch.queue`, `email` to the member claiming the recipient.
 //! - Agent, events fan-out and container classes are re-exported by name (a
@@ -90,16 +92,31 @@ fn unclaimed(entry: &GroupEntry<'_>) -> String {
     text
 }
 
-/// `fetch`: the members in order (see the module doc).
+/// `fetch`: the members in order (see the module doc). Every marked response
+/// that is not a `404` is kept, so that if no member owns the request the answer
+/// lists the methods the whole Worker serves on the path, not one member's.
 const FETCH: &str = "  async fetch(request: globalThis.Request, env: unknown, ctx: __Ctx): Promise<globalThis.Response> {
-    let held: globalThis.Response | undefined;
+    const held: globalThis.Response[] = [];
     for (const member of __members) {
       const response = await member.entry.fetch(request, env as never, ctx);
       if (!member.isMiss(response)) return response;
-      if (held === undefined && response.status !== 404) held = response;
+      if (response.status !== 404) held.push(response);
     }
-    return held ?? (await __unclaimed(request, env));
+    return held.length === 0 ? await __unclaimed(request, env) : __withAllowed(held);
   },
+";
+
+/// The first held `405`/`204`, answering with the union of every member's
+/// `Allow` (RFC 9110 §10.2.1: the methods the target resource supports).
+const WITH_ALLOWED: &str = "function __withAllowed(held: readonly globalThis.Response[]): globalThis.Response {
+  const first = held[0];
+  if (held.length === 1) return first;
+  const methods = held.flatMap((r) => (r.headers.get(\"allow\") ?? \"\").split(\",\").map((m) => m.trim()).filter((m) => m !== \"\"));
+  const merged = new globalThis.Response(first.body, first);
+  merged.headers.set(\"allow\", [...new globalThis.Set(methods)].sort().join(\", \"));
+  return merged;
+}
+
 ";
 
 fn scheduled(members: &[(usize, &GroupMember)]) -> String {
@@ -248,6 +265,7 @@ pub fn emit_group_entry(entry: &GroupEntry<'_>) -> TsProgram {
     text.push_str(
         "function __refused(verified: string | globalThis.Response): globalThis.Response {\n  return typeof verified === \"string\" ? new globalThis.Response(\"Unauthorized\", { status: 401 }) : verified;\n}\n\n",
     );
+    text.push_str(WITH_ALLOWED);
     text.push_str(&unclaimed(entry));
     text.push_str("\nexport default {\n");
     text.push_str(FETCH);
