@@ -806,13 +806,10 @@ fn a_members_fixed_asset_shadows_another_members_literal_route() {
     .unwrap();
     fs::write(
         root.join("src/shop/payment.bynk"),
-        format!(
-            "{}",
-            route_context("shop.payment", &["/legal.txt"]).replacen(
-                "context shop.payment\n",
-                "context shop.payment\n\nuses shop.shared\n",
-                1
-            )
+        route_context("shop.payment", &["/legal.txt"]).replacen(
+            "context shop.payment\n",
+            "context shop.payment\n\nuses shop.shared\n",
+            1,
         ),
     )
     .unwrap();
