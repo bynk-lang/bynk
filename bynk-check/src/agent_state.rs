@@ -68,6 +68,33 @@ pub const PATH_BUDGET: usize = 256;
 pub struct AgentStateModel {
     pub agent: String,
     pub machines: Vec<StateMachine>,
+    /// #3608: the agent's snapshot `invariant`s then its step `transition`s,
+    /// each in declaration order.
+    pub invariants: Vec<AgentInvariant>,
+}
+
+/// Which declaration an [`AgentInvariant`] came from.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum InvariantKind {
+    /// A snapshot `invariant`, over the committed state.
+    Invariant,
+    /// A step `transition`, over the `old`/`new` pair (ADR 0144).
+    Transition,
+}
+
+/// #3608: one declared `invariant` or `transition` of an agent. The predicate
+/// is source text printed by the expression printer, so two spellings of one
+/// predicate (whitespace, comments, layout) print alike and a client can
+/// compare revisions by `(kind, name, predicate)`.
+#[derive(Debug, Clone, PartialEq)]
+pub struct AgentInvariant {
+    pub kind: InvariantKind,
+    pub name: String,
+    pub predicate: String,
+    /// The declaration's documentation text, when it has any.
+    pub doc: Option<String>,
+    /// The whole declaration.
+    pub span: Span,
 }
 
 /// One state field's machine.
@@ -288,7 +315,40 @@ pub fn agent_state_model(
     AgentStateModel {
         agent: agent.name.name.clone(),
         machines,
+        invariants: declared_invariants(agent),
     }
+}
+
+/// #3608: `agent`'s snapshot `invariant`s then its step `transition`s. An agent
+/// is one declaration in one file (`bynk.resolve.duplicate_agent`), so these
+/// are all of its declarations.
+fn declared_invariants(agent: &AgentDecl) -> Vec<AgentInvariant> {
+    let entry = |kind, name: &Ident, predicate: &Expr, doc: &Option<Doc>, span| AgentInvariant {
+        kind,
+        name: name.name.clone(),
+        predicate: bynk_syntax::print::expr_to_string(predicate),
+        doc: doc.as_ref().map(|d| d.text.clone()),
+        span,
+    };
+    let snapshots = agent.invariants.iter().map(|i| {
+        entry(
+            InvariantKind::Invariant,
+            &i.name,
+            &i.predicate,
+            &i.documentation,
+            i.span,
+        )
+    });
+    let steps = agent.transitions.iter().map(|t| {
+        entry(
+            InvariantKind::Transition,
+            &t.name,
+            &t.predicate,
+            &t.documentation,
+            t.span,
+        )
+    });
+    snapshots.chain(steps).collect()
 }
 
 /// The variant names of `field` when it is a `Cell` of a user sum type.
@@ -2410,5 +2470,82 @@ agent M {
 }
 "#;
         assert!(warnings(src, "M").is_empty());
+    }
+
+    const INVARIANTS_SRC: &str = r#"context commerce
+
+type OrderStatus = enum { Pending, Placed, Paid }
+
+agent Order {
+  key id: String
+
+  store status: Cell[OrderStatus] = Pending
+  store paymentRef: Cell[Option[String]] = None
+
+  ---
+  A paid order carries its payment reference.
+  ---
+  invariant paid_has_ref:
+    status is Paid
+      implies   paymentRef.isSome()
+
+  transition paid_is_terminal: old.status is Paid implies new.status is Paid
+
+  on call place() -> Effect[()] {
+    status := Placed
+  }
+}
+
+agent Plain {
+  key id: String
+
+  store total: Cell[Int]
+
+  on call bump() -> Effect[Int] {
+    total := total + 1
+    total
+  }
+}
+"#;
+
+    /// #3608: both kinds are listed, snapshot invariants first, with the
+    /// predicate printed by the expression printer (layout-independent), the
+    /// documentation, and the declaration's span.
+    #[test]
+    fn declared_invariants_and_transitions_are_listed() {
+        let m = model(INVARIANTS_SRC, "Order");
+        let got: Vec<(InvariantKind, &str, &str)> = m
+            .invariants
+            .iter()
+            .map(|i| (i.kind, i.name.as_str(), i.predicate.as_str()))
+            .collect();
+        assert_eq!(
+            got,
+            [
+                (
+                    InvariantKind::Invariant,
+                    "paid_has_ref",
+                    "status is Paid implies paymentRef.isSome()"
+                ),
+                (
+                    InvariantKind::Transition,
+                    "paid_is_terminal",
+                    "old.status is Paid implies new.status is Paid"
+                ),
+            ]
+        );
+        assert_eq!(
+            m.invariants[0].doc.as_deref().map(str::trim),
+            Some("A paid order carries its payment reference.")
+        );
+        assert_eq!(m.invariants[1].doc, None);
+        let span = m.invariants[1].span;
+        assert!(INVARIANTS_SRC[span.start..span.end].contains("transition paid_is_terminal"));
+    }
+
+    /// #3608: an agent that declares neither has an empty list.
+    #[test]
+    fn an_agent_with_neither_kind_lists_nothing() {
+        assert!(model(INVARIANTS_SRC, "Plain").invariants.is_empty());
     }
 }
