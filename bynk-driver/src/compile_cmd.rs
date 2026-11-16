@@ -68,6 +68,33 @@ pub fn refuse_release_contracts(root: &Path) -> Result<(), String> {
     Ok(())
 }
 
+/// #3562 (temporary): `bynk build` emits a `[deploy.workers.<key>]` group as one
+/// Worker, but `bynk deploy`, `bynk revert` and `bynk dev` still name each
+/// Worker after its context, so they would deploy, or revert, the wrong thing.
+/// Until they are taught groups (G4, G6), they refuse a project with a group of
+/// more than one member, before touching anything. A group of one is that
+/// context's own Worker, as without the table.
+pub fn refuse_worker_groups(root: &Path) -> Result<(), String> {
+    let groups =
+        bynk_project::worker_groups::try_read_worker_groups(root).map_err(|e| e.to_string())?;
+    let grouped: Vec<&str> = groups
+        .iter()
+        .filter(|(_, group)| group.contexts.len() > 1)
+        .map(|(key, _)| key.as_str())
+        .collect();
+    if grouped.is_empty() {
+        return Ok(());
+    }
+    Err(format!(
+        "bynk.deploy.worker_groups_unsupported: `[deploy.workers]` groups several contexts into one Worker ({}), which `bynk build` emits but this command cannot yet deploy; grouping is not deployable until #3562 is finished, so deploy a project without a multi-context group, or leave the table out for now",
+        grouped
+            .iter()
+            .map(|k| format!("`{k}`"))
+            .collect::<Vec<_>>()
+            .join(", ")
+    ))
+}
+
 /// `--target`: the build topology.
 #[derive(Copy, Clone, Debug, PartialEq, Eq, ValueEnum)]
 pub enum CliTarget {
@@ -590,5 +617,46 @@ mod profile_tests {
         let only_dev = with(Some(false), None);
         assert!(!profile_contracts(&only_dev, CliProfile::Dev));
         assert!(!profile_contracts(&only_dev, CliProfile::Release));
+    }
+}
+
+#[cfg(test)]
+mod worker_group_refusal_tests {
+    use super::refuse_worker_groups;
+    use std::fs;
+
+    fn project(name: &str, manifest: &str) -> std::path::PathBuf {
+        let root =
+            std::env::temp_dir().join(format!("bynk-refuse-groups-{name}-{}", std::process::id()));
+        let _ = fs::remove_dir_all(&root);
+        fs::create_dir_all(&root).unwrap();
+        fs::write(root.join("bynk.toml"), manifest).unwrap();
+        root
+    }
+
+    /// No table, and a group of one (that context's own Worker), deploy as before.
+    #[test]
+    fn no_table_and_a_group_of_one_are_not_refused() {
+        let none = project("none", "[project]\nname = \"p\"\nversion = \"0.1.0\"\n");
+        assert_eq!(refuse_worker_groups(&none), Ok(()));
+        let one = project(
+            "one",
+            "[project]\nname = \"p\"\nversion = \"0.1.0\"\n\n[deploy.workers.solo]\ncontexts = [\"shop.orders\"]\n",
+        );
+        assert_eq!(refuse_worker_groups(&one), Ok(()));
+    }
+
+    /// A group of two or more is refused, naming it.
+    #[test]
+    fn a_multi_member_group_is_refused_naming_it() {
+        let two = project(
+            "two",
+            "[project]\nname = \"p\"\nversion = \"0.1.0\"\n\n[deploy.workers.core]\ncontexts = [\"a\", \"b\"]\n",
+        );
+        let err = refuse_worker_groups(&two).unwrap_err();
+        assert!(
+            err.contains("bynk.deploy.worker_groups_unsupported") && err.contains("`core`"),
+            "{err}"
+        );
     }
 }

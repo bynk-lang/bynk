@@ -782,6 +782,12 @@ pub fn run(
         return ExitCode::FAILURE;
     }
 
+    // #3562 (temporary, until G4): a multi-context Worker group is not deployable.
+    if let Err(e) = bynk_driver::refuse_worker_groups(project_root) {
+        eprintln!("bynk: {e}");
+        return ExitCode::FAILURE;
+    }
+
     // #3107: a deployment never carries contract checks.
     if let Err(e) = bynk_driver::refuse_release_contracts(project_root) {
         eprintln!("bynk: {e}");

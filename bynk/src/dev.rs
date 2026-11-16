@@ -489,6 +489,12 @@ pub fn run(
         return ExitCode::FAILURE;
     }
 
+    // #3562 (temporary, until G6): a multi-context Worker group is not runnable.
+    if let Err(e) = bynk_driver::refuse_worker_groups(project_root) {
+        eprintln!("bynk: {e}");
+        return ExitCode::FAILURE;
+    }
+
     if opts.log_events && opts.format != DevFormat::Json {
         eprintln!("bynk: `--log-events` writes events, so it needs `--format json`");
         return ExitCode::FAILURE;
