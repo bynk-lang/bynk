@@ -143,13 +143,31 @@ fn a_dev_build_adds_only_the_inspection_to_the_deploy_output() {
 /// A grouped project on disk: `shop.orders` and `shop.payment` in group `core`,
 /// each hosting an agent of its own name.
 fn grouped_project(tag: &str) -> PathBuf {
+    grouped_project_with(tag, false)
+}
+
+/// [`grouped_project`], optionally with `shop.audit`, a context that hosts no
+/// agent, listed **first** in the group.
+fn grouped_project_with(tag: &str, audit_first: bool) -> PathBuf {
     let root =
         std::env::temp_dir().join(format!("bynk-group-inspect-{tag}-{}", std::process::id()));
     let _ = std::fs::remove_dir_all(&root);
     std::fs::create_dir_all(root.join("src/shop")).unwrap();
+    let contexts = if audit_first {
+        "\"shop.audit\", \"shop.orders\", \"shop.payment\""
+    } else {
+        "\"shop.orders\", \"shop.payment\""
+    };
     std::fs::write(
         root.join("bynk.toml"),
-        "[project]\nname = \"x\"\nversion = \"0.1.0\"\n\n[deploy.workers.core]\ncontexts = [\"shop.orders\", \"shop.payment\"]\n",
+        format!(
+            "[project]\nname = \"x\"\nversion = \"0.1.0\"\n\n[deploy.workers.core]\ncontexts = [{contexts}]\n"
+        ),
+    )
+    .unwrap();
+    std::fs::write(
+        root.join("src/shop/audit.bynk"),
+        "context shop.audit\n\nservice probe_audit {\n\ton call() -> Effect[Int] {\n\t\tEffect.pure(1)\n\t}\n}\n",
     )
     .unwrap();
     for (context, file, agent) in [
@@ -253,5 +271,38 @@ fn a_dev_build_of_a_group_gates_the_inspect_route_per_member() {
         "{index}"
     );
     assert!(index.contains("\"Method Not Allowed\""), "{index}");
+    let _ = std::fs::remove_dir_all(&root);
+}
+
+/// The listing belongs to the first member that hosts an agent, not to the first
+/// member: with an agent-less context listed first (which has no inspect route at
+/// all), the next member still answers `/_bynk/inspect/agents` and the group still
+/// exports the registry class, once, from it.
+#[test]
+fn the_listing_goes_to_the_first_member_that_hosts_an_agent() {
+    let root = grouped_project_with("audit-first", true);
+    let files = build_grouped(&root, true);
+    let audit = find(&files, "workers/core/shop-audit.index.ts");
+    assert!(!audit.contains("inspect"), "{audit}");
+    let orders = find(&files, "workers/core/shop-orders.index.ts");
+    assert!(
+        orders.contains("path === \"/_bynk/inspect/agents\""),
+        "{orders}"
+    );
+    let payment = find(&files, "workers/core/shop-payment.index.ts");
+    assert!(!payment.contains("/_bynk/inspect/agents"), "{payment}");
+    let index = find(&files, "workers/core/index.ts");
+    assert_eq!(index.matches("BynkInspectRegistry").count(), 1, "{index}");
+    assert!(
+        index.contains("export { Cart, BynkInspectRegistry } from \"./shop-orders.index.js\";"),
+        "{index}"
+    );
+    // The agent-less member exports no class, so the group re-exports nothing of it.
+    assert!(
+        !index
+            .lines()
+            .any(|l| l.starts_with("export") && l.contains("shop-audit")),
+        "{index}"
+    );
     let _ = std::fs::remove_dir_all(&root);
 }
