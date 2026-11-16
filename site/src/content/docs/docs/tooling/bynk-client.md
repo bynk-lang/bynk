@@ -28,8 +28,8 @@ import { createClient } from "$lib/api";
 export const api = createClient({ baseUrl: "https://api.example.com" });
 
 const res = await api.orders.getOrderById(id);
-if (res.status === 200) render(res.body);   // res.body: Order, an optional field is `T | null`
-else if (res.status === 404) notFound();
+if (res.kind === "Ok") render(res.body);   // res.body: Order, an optional field is `T | null`
+else if (res.kind === "NotFound") notFound();
 else report(res);                           // 400, or a CallFailure
 ```
 

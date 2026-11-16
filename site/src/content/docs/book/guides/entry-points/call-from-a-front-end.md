@@ -87,24 +87,32 @@ The function names come from the method and path: `POST /orders` is `postOrders`
 ## Handle every outcome
 
 A call never throws for an HTTP status or a network failure. It returns the
-route's own answers, plus three failures, and you narrow on `status`:
+route's own answers, plus three failures, and every one carries a `kind`, so you
+narrow on that:
 
 ```ts
 const res = await api.postOrders({ sku: "A1", qty: 2, note: null });
-switch (res.status) {
-  case 201:
+switch (res.kind) {
+  case "Created":
     show(res.body);                 // Order
     break;
-  case 400:
-    log(res.error);                 // the boundary's own refusal
+  case "StructuralMismatch":
+    log(res.error);                 // the boundary's own 400
+    break;
+  case "Invalid":
+  case "Transport":
+  case "Unexpected":
+    report(res);                    // a CallFailure
     break;
   default:
-    res satisfies CallFailure;      // anything left is a failure
+    res satisfies never;
 }
 ```
 
-Ending the `switch` in a `satisfies` check means that when the server starts
-answering a new status, the front end stops compiling until it handles it.
+The route's members also carry their HTTP `status`, but a `CallFailure` other than
+`Unexpected` has none, so `res.status` alone does not type-check on the union.
+Ending the `switch` in a `satisfies never` check means that when the server starts
+answering something new, the front end stops compiling until it handles it.
 
 A `CallFailure` says what went wrong:
 
@@ -199,7 +207,7 @@ import { error } from "@sveltejs/kit";
 export async function load({ fetch, params }) {
   const api = createClient({ fetch }).orders;
   const res = await api.getOrderById(params.id);
-  if (res.status !== 200) error(res.status === 404 ? 404 : 502);
+  if (res.kind !== "Ok") error(res.kind === "NotFound" ? 404 : 502);
   return { order: res.body };
 }
 ```
@@ -220,7 +228,7 @@ export const actions = {
       qty: Number(data.get("qty")),
       note: null,
     });
-    if (res.status !== 201) return fail(400, { message: describe(res) });
+    if (res.kind !== "Created") return fail(400, { message: describe(res) });
     return { order: res.body };
   },
 };
@@ -242,7 +250,7 @@ const api = createClient({ baseUrl: process.env.API_URL }).orders;
 export default async function Page({ params }: { params: Promise<{ id: string }> }) {
   const { id } = await params;
   const res = await api.getOrderById(id, { next: { revalidate: 60 } });
-  if (res.status !== 200) return <p>Not available.</p>;
+  if (res.kind !== "Ok") return <p>Not available.</p>;
   return <p>{res.body.sku} × {res.body.qty}</p>;
 }
 ```
@@ -294,7 +302,7 @@ value passed as a `Blob`:
 
 ```ts
 const res = await api.getTicks();
-if (res.status === 200) {
+if (res.kind === "Streaming") {
   for await (const tick of res.events) console.log(tick);
 }
 ```
@@ -313,7 +321,7 @@ const api = createClient({
 }).orders;
 
 const res = await api.postOrders({ sku: "A1", qty: 2, note: null });
-// res.status === 201
+// res.kind === "Created"
 ```
 
 **See also:** [Reference — HTTP client](/book/reference/http-client/),
