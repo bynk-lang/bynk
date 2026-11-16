@@ -46,6 +46,7 @@ use serde_json::Value;
 use std::fs;
 use std::path::PathBuf;
 use std::process::{Command, Output};
+use std::sync::OnceLock;
 
 const REQUIRE_ENV: &str = "BYNK_REQUIRE_TSC";
 
@@ -173,7 +174,8 @@ service OnPlaced from Events(Placed) {
 /// a function over the target's `fetch`, and each call across one is recorded in
 /// `wire`. A log line is attributed to the binding it was written under
 /// (`client` when under none), and cut at its stack.
-const DRIVER: &str = r#"import { signedHeaders } from "./out-js/__bynk_runtime/boundary.js";
+const DRIVER: &str = r#"import { AsyncLocalStorage } from "node:async_hooks";
+import { signedHeaders } from "./out-js/__bynk_runtime/boundary.js";
 
 const grouped = process.argv[2] === "grouped";
 const KEY = "edge-key";
@@ -181,12 +183,17 @@ const CONTEXTS = ["app.a", "app.b", "app.pub", "app.sub"];
 const upper = (c) => c.toUpperCase().replace(".", "__");
 const binding = (c) => c.toUpperCase().replace(".", "_");
 
-const owners = [];
+// Which binding a log line was written under follows the call it ran in, even
+// when that work outlives the call that started it (a `waitUntil`).
+const owner = new AsyncLocalStorage();
 const logs = [];
 const wire = [];
-const show = (a) => typeof a === "string" ? a : a instanceof Error ? String(a) : JSON.stringify(a);
+const show = (a) => typeof a === "string" ? a : a instanceof Error ? (a.stack ?? String(a)) : JSON.stringify(a);
 console.error = (...args) => {
-  logs.push({ owner: owners.at(-1) ?? "client", text: args.map(show).join(" ").split("\n    at ")[0] });
+  // `raw` keeps any stack, for what must not leak; `text` is cut at it, which is
+  // what topologies are compared on (their file names differ).
+  const raw = args.map(show).join(" ");
+  logs.push({ owner: owner.getStore() ?? "client", text: raw.split("\n    at ")[0], raw });
 };
 console.log = () => {};
 const pending = [];
@@ -214,14 +221,9 @@ const envs = {};
 const over = (name, target, run) => async (request) => {
   const record = { to: name, path: new URL(request.url).pathname };
   wire.push(record);
-  owners.push(name);
-  try {
-    const response = await run(request);
-    record.status = response.status;
-    return response;
-  } finally {
-    owners.pop();
-  }
+  const response = await owner.run(name, () => run(request));
+  record.status = response.status;
+  return response;
 };
 for (const c of CONTEXTS) {
   envs[c] = { ...keys };
@@ -284,9 +286,9 @@ fn text(out: &Output) -> String {
     )
 }
 
-fn stage(tag: &str, topology: &Topology) -> PathBuf {
+fn stage(topology: &Topology) -> PathBuf {
     let root = std::env::temp_dir().join(format!(
-        "bynk-conformance-{tag}-{}-{}",
+        "bynk-conformance-{}-{}",
         topology.name,
         std::process::id()
     ));
@@ -306,7 +308,7 @@ fn stage(tag: &str, topology: &Topology) -> PathBuf {
 
 /// Build the topology, compile it, and run [`DRIVER`]: one observation per
 /// scenario. `None` when the toolchain is missing and the test skips.
-fn observe(tag: &str, topology: &Topology) -> Option<(PathBuf, Vec<Value>)> {
+fn observe(topology: &Topology) -> Option<(PathBuf, Vec<Value>)> {
     let Some(mut tsc) = tools::tsc_command() else {
         tools::skip(
             "CROSS-CONTEXT CONFORMANCE (tsc)",
@@ -325,7 +327,7 @@ fn observe(tag: &str, topology: &Topology) -> Option<(PathBuf, Vec<Value>)> {
         );
         return None;
     }
-    let root = stage(tag, topology);
+    let root = stage(topology);
     let built = Command::new(env!("CARGO_BIN_EXE_bynk-under-test"))
         .args(["build", "."])
         .current_dir(&root)
@@ -369,6 +371,23 @@ fn observe(tag: &str, topology: &Topology) -> Option<(PathBuf, Vec<Value>)> {
     Some((root, results))
 }
 
+/// Every topology observed once, however many tests read it: a build and `tsc`
+/// each. `None` when the toolchain is missing and the tests skip.
+fn observed() -> Option<&'static [(&'static str, Vec<Value>)]> {
+    static OBSERVED: OnceLock<Option<Vec<(&'static str, Vec<Value>)>>> = OnceLock::new();
+    OBSERVED
+        .get_or_init(|| {
+            let mut all = Vec::new();
+            for topology in TOPOLOGIES {
+                let (root, results) = observe(topology)?;
+                let _ = fs::remove_dir_all(&root);
+                all.push((topology.name, results));
+            }
+            Some(all)
+        })
+        .as_deref()
+}
+
 fn scenario<'a>(results: &'a [Value], label: &str) -> &'a Value {
     results
         .iter()
@@ -403,8 +422,8 @@ fn wire_of(result: &Value) -> Vec<(String, String, Option<u64>)> {
 }
 
 /// Everything a client, a caller or a subscriber's publisher can see of a
-/// scenario, leaving only what the callee wrote to its own log out of the
-/// `exposed` set.
+/// scenario, with each log line whole (its stack too), leaving only what the
+/// callee wrote to its own log out.
 fn exposed(result: &Value, callee_owners: &[&str]) -> String {
     let mut out = format!(
         "{} {} {}",
@@ -413,10 +432,20 @@ fn exposed(result: &Value, callee_owners: &[&str]) -> String {
     for line in result["logs"].as_array().unwrap() {
         let owner = line["owner"].as_str().unwrap();
         if !callee_owners.contains(&owner) {
-            out.push_str(&format!("\n{owner}: {}", line["text"].as_str().unwrap()));
+            out.push_str(&format!("\n{owner}: {}", line["raw"].as_str().unwrap()));
         }
     }
     out
+}
+
+/// Whether `seen` carries a callee's own exception: its message, the runtime
+/// helper that raised it, or a frame from one of its modules (`frames`, as a
+/// path part). The caller's own frames are its own, so a stack is not a leak
+/// by itself.
+fn leaks(seen: &str, frames: &[&str]) -> bool {
+    seen.contains(INTERNAL)
+        || seen.contains("__bynkIntDiv")
+        || frames.iter().any(|f| seen.contains(f))
 }
 
 /// What a call must do whichever way it travels.
@@ -464,9 +493,15 @@ fn assert_conforms(topology: &str, results: &[Value]) {
         "{}: control: the callee's own log carries its exception: {fault}",
         at("call-fault")
     );
+    // Control: the same check on the callee's own log does find its exception.
+    assert!(
+        leaks(&exposed(fault, &[]), &["app-b"]),
+        "{}: the leak check can fail",
+        at("call-fault")
+    );
     let seen = exposed(fault, &["APP_B"]);
     assert!(
-        !seen.contains(INTERNAL) && !seen.contains(".js:") && !seen.contains("at "),
+        !leaks(&seen, &["app-b"]),
         "{}: the callee's exception detail reached the caller or the client:\n{seen}",
         at("call-fault")
     );
@@ -543,9 +578,14 @@ fn assert_conforms(topology: &str, results: &[Value]) {
         "{}: control: the subscriber's own log carries its exception: {faulted}",
         at("event-faulted")
     );
+    assert!(
+        leaks(&exposed(faulted, &[]), &["app-sub"]),
+        "{}: the leak check can fail",
+        at("event-faulted")
+    );
     let seen = exposed(faulted, &["APP_SUB"]);
     assert!(
-        !seen.contains(INTERNAL) && !seen.contains(".js:"),
+        !leaks(&seen, &["app-sub"]),
         "{}: the subscriber's exception reached the publisher or the client:\n{seen}",
         at("event-faulted")
     );
@@ -562,6 +602,9 @@ fn assert_topologies_agree(all: &[(&str, Vec<Value>)]) {
             let strip = |r: &Value| {
                 let mut r = r.clone();
                 r.as_object_mut().unwrap().remove("wire");
+                for line in r["logs"].as_array_mut().unwrap() {
+                    line.as_object_mut().unwrap().remove("raw");
+                }
                 r
             };
             assert_eq!(
@@ -575,57 +618,47 @@ fn assert_topologies_agree(all: &[(&str, Vec<Value>)]) {
 
 #[test]
 fn a_call_and_an_event_between_contexts_conform_in_every_topology() {
-    let mut all = Vec::new();
-    for topology in TOPOLOGIES {
-        let Some((root, results)) = observe("conform", topology) else {
-            return;
-        };
-        assert_conforms(topology.name, &results);
-        all.push((topology.name, results));
-        let _ = fs::remove_dir_all(&root);
+    let Some(all) = observed() else { return };
+    for (name, results) in all {
+        assert_conforms(name, results);
     }
-    assert_topologies_agree(&all);
+    assert_topologies_agree(all);
 }
 
 /// Both topologies here go over a Service Binding: the call, the refusal, the
-/// event delivery and the fan-out each appear on the wire. A topology that makes
-/// a call in-process has no entry for it, and states so where it is added.
+/// event delivery and the fan-out each appear on the wire, in this order. A
+/// topology that makes a call in-process has no entry for it, and states so where
+/// it is added.
 #[test]
 fn the_topologies_here_go_over_a_service_binding() {
-    for topology in TOPOLOGIES {
-        let Some((root, results)) = observe("wire", topology) else {
-            return;
-        };
-        let ok = wire_of(scenario(&results, "call-ok"));
+    let Some(all) = observed() else { return };
+    let wire = |entries: &[(&str, &str, u64)]| {
+        entries
+            .iter()
+            .map(|(to, path, status)| (to.to_string(), path.to_string(), Some(*status)))
+            .collect::<Vec<_>>()
+    };
+    for (name, results) in all {
         assert_eq!(
-            ok,
-            vec![("APP_B".to_string(), "/_bynk/call/ok".to_string(), Some(200))],
-            "{}",
-            topology.name
+            wire_of(scenario(results, "call-ok")),
+            wire(&[("APP_B", "/_bynk/call/ok", 200)]),
+            "{name}"
         );
-        let refused = wire_of(scenario(&results, "call-refused"));
         assert_eq!(
-            refused,
-            vec![(
-                "APP_B".to_string(),
-                "/_bynk/call/only_legacy".to_string(),
-                Some(403)
-            )],
-            "{}",
-            topology.name
+            wire_of(scenario(results, "call-refused")),
+            wire(&[("APP_B", "/_bynk/call/only_legacy", 403)]),
+            "{name}"
         );
-        let delivered = wire_of(scenario(&results, "event-delivered"));
-        assert!(
-            delivered.contains(&(
-                "APP_SUB".to_string(),
-                "/_bynk/event/OnPlaced".to_string(),
-                Some(204)
-            )) || delivered
-                .iter()
-                .any(|w| w.0 == "APP_SUB" && w.2 == Some(200)),
-            "{}: the event reaches the subscriber over its binding: {delivered:?}",
-            topology.name
+        assert_eq!(
+            wire_of(scenario(results, "event-delivered")),
+            wire(WIRE_EVENT),
+            "{name}: the emit, the fan-out and the delivery"
         );
-        let _ = fs::remove_dir_all(&root);
     }
 }
+
+const WIRE_EVENT: &[(&str, &str, u64)] = &[
+    ("APP_PUB", "/_bynk/call/place", 200),
+    ("FANOUT", "/_bynk/fanout", 204),
+    ("APP_SUB", "/_bynk/event/OnPlaced", 204),
+];
