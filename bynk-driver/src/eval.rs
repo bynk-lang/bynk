@@ -500,6 +500,15 @@ pub fn evaluate(request: &EvalRequest) -> EvalOutcome {
         n += 1;
         synthetic = key.with_file_name(format!("{stem}.eval{n}.bynk"));
     }
+    // The overlay judges a new file against the project's canonical root, so the
+    // suite is keyed by the canonical form of its folder (which exists).
+    let synthetic = match (
+        synthetic.parent().map(std::path::Path::canonicalize),
+        synthetic.file_name(),
+    ) {
+        (Some(Ok(dir)), Some(name)) => dir.join(name),
+        _ => synthetic,
+    };
     let mut overlay = buffers;
     overlay.extend(left_out_suites(&sources, &request.suites));
     // Only the unit's own suite can host the snippet: it is the one whose
