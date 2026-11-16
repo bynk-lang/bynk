@@ -14,6 +14,7 @@
 //! `--read-only` publishes nothing.
 
 use std::path::{Path, PathBuf};
+use std::time::{Duration, Instant};
 
 use bynk_project::manifest::RegistryConfig;
 
@@ -156,6 +157,14 @@ const S_PUBLISH: &str = "/docs/registry-protocol/#publish-api";
 const S_DELEGATION: &str = "/docs/registry-protocol/#delegation-and-revocation";
 const S_WITHDRAWALS: &str = "/docs/registry-protocol/#withdrawals";
 const SPEC_FOR_SKIP: &str = "/docs/registry-protocol/#conformance";
+
+/// How long `yank.yank` and `yank.unyank` wait for the index to show the
+/// change: an edge cache may serve an index file for up to a minute (the
+/// first-party registry's `max-age=60`), and a purge racing the response it
+/// should clear can leave the old copy for that long.
+const YANK_SETTLE: Duration = Duration::from_secs(65);
+/// How often they read the index while waiting.
+const YANK_POLL: Duration = Duration::from_secs(2);
 
 struct Run<'o> {
     opts: &'o Options,
@@ -821,16 +830,39 @@ fn publishing(run: &mut Run<'_>, reader: &mut Client, api: &str, token: &str) {
     let mut flip = |run: &mut Run<'_>, id: &'static str, verb: &str, want: bool| {
         let result = match yank(verb) {
             Ok((200, _, _)) => {
-                reader.forget(name, &package);
-                match reader.lines(name, &package) {
-                    Ok(lines) => match lines.iter().find(|l| l.version == "0.0.1") {
-                        Some(l) if l.yanked == want => {
-                            Ok(format!("200, and the index shows yanked = {want}"))
+                // A cached index may lag the yank (caching is the operator's
+                // choice), so read until it shows the change or the cache's
+                // longest life has passed.
+                let started = Instant::now();
+                loop {
+                    reader.forget(name, &package);
+                    let seen = match reader.lines(name, &package) {
+                        Ok(lines) => match lines.iter().find(|l| l.version == "0.0.1") {
+                            Some(l) => Ok(l.yanked == want),
+                            None => Err("the line disappeared".to_string()),
+                        },
+                        Err(e) => Err(e.to_string()),
+                    };
+                    let waited = started.elapsed();
+                    match seen {
+                        Ok(true) if waited < YANK_POLL => {
+                            break Ok(format!("200, and the index shows yanked = {want}"));
                         }
-                        Some(_) => Err(format!("200, but the index doesn't show yanked = {want}")),
-                        None => Err("the line disappeared".to_string()),
-                    },
-                    Err(e) => Err(e.to_string()),
+                        Ok(true) => {
+                            break Ok(format!(
+                                "200, and the index shows yanked = {want} after {}s",
+                                waited.as_secs()
+                            ));
+                        }
+                        Ok(false) if waited < YANK_SETTLE => std::thread::sleep(YANK_POLL),
+                        Ok(false) => {
+                            break Err(format!(
+                                "200, but the index doesn't show yanked = {want} after {}s",
+                                waited.as_secs()
+                            ));
+                        }
+                        Err(e) => break Err(e),
+                    }
                 }
             }
             Ok((status, _, body)) => Err(format!("expected 200, got {status}: {}", snippet(&body))),
