@@ -33,7 +33,7 @@ export async function placeOrder(shop: Shop, sku: string, qty: number): Promise<
     case "StructuralMismatch":
       return "The server refused that order.";
     case "Invalid":
-      return "Check the quantity (1 to 99); nothing was sent.";
+      return "Check the SKU and quantity (1 to 99); nothing was sent.";
     case "Transport":
       return "Could not reach the shop. Try again.";
     case "Unexpected":
