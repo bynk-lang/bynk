@@ -1120,6 +1120,8 @@ pub fn revert(root: &Path, opts: &RevertOptions) -> ExitCode {
 }
 
 fn revert_run(root: &Path, opts: &RevertOptions) -> Result<ExitCode, String> {
+    // #3562 (temporary, until G4): a multi-context Worker group is not revertable.
+    bynk_driver::refuse_worker_groups(root)?;
     if opts.to.is_some() && opts.context.is_none() {
         return Err("`--to` names one Worker's version, so it needs `--context`".to_string());
     }

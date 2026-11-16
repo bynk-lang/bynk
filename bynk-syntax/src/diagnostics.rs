@@ -8911,6 +8911,10 @@ pub const REGISTRY: &[DiagnosticInfo] = &[
         "bynk.deploy.unknown_context",
         "A `[deploy.workers.<key>]` group lists a context the project does not declare.",
     ),
+    d(
+        "bynk.deploy.worker_groups_unsupported",
+        "`bynk deploy`, `bynk revert` and `bynk dev` do not yet support `[deploy.workers.<key>]` Worker groups (temporary, #3562).",
+    ),
     dg(
         "bynk.detach.in_agent_handler",
         "A `detach` was used in an agent handler, which has no execution context to keep a detached effect alive.",
