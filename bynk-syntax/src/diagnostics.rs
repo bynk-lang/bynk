@@ -8900,6 +8900,14 @@ pub const REGISTRY: &[DiagnosticInfo] = &[
         "A `[deploy.workers.<key>]` group lists a unit that is not a `context`; only contexts are deployed as Workers.",
     ),
     d(
+        "bynk.deploy.queue_consumer_conflict",
+        "Two members of one `[deploy.workers.<key>]` group consume the same queue; a Worker has one consumer for a queue.",
+    ),
+    d(
+        "bynk.deploy.route_conflict",
+        "Two members of one `[deploy.workers.<key>]` group declare the same HTTP method and path; a Worker answers a route with one handler.",
+    ),
+    d(
         "bynk.deploy.service_name_conflict",
         "Two members of one `[deploy.workers.<key>]` group declare a service of the same name; a Worker answers its members' services by name.",
     ),

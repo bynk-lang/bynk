@@ -28,6 +28,7 @@ per-commit history. While Bynk is pre-1.0, increments may change behaviour.
 
 | Version | Highlights |
 |---|---|
+| **v0.633.13** | Two members of one `[deploy.workers]` group that declare the same HTTP route or consume the same queue are refused (`bynk.deploy.route_conflict`, `bynk.deploy.queue_consumer_conflict`); two members may still share a cron expression (#3562, G2b step 2c-3) |
 | **v0.633.12** | A Worker's D1, R2, Analytics Engine and Vectorize resource names, and where its D1 migrations are staged, come from the `WorkerLayout` rather than the context name, with the identity layout unchanged (#3562, G2b step 2c-2) |
 | **v0.633.11** | The handlers paths and cross-context handlers imports of a Workers build come from the `WorkerLayout` rather than being spelled in place, with the identity layout unchanged (#3562, G2b step 2c-1) |
 | **v0.633.10** | A user sum variant spelled like an `HttpResult` variant (`Found`, `Gone`, ...) is its own constructor inside an `HttpResult` handler, so it no longer type-checks as the HTTP response or appears in the wire contract and OpenAPI document (#3631) |
