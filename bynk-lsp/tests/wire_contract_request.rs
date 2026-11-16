@@ -466,7 +466,7 @@ fn success_of_a_plain_http_result_names_the_item_type() {
         "`success` must resolve against `types`"
     );
     assert_eq!(response(&wire, "Ok")["payload"], wire["success"]);
-    // A message variant carries a `String`; a boundary-implicit response none.
+    // A boundary-implicit response carries no handler payload.
     let bad = wire["responses"]
         .as_array()
         .unwrap()
@@ -488,7 +488,7 @@ fn success_of_a_generic_payload_resolves_through_instantiations() {
 }
 
 #[test]
-fn success_of_a_sum_payload_names_the_sum_and_messages_carry_a_string() {
+fn success_of_a_sum_payload_names_the_sum_and_messages_are_not_a_bare_string() {
     let wire = wire_json_at("success-sum", "GET(\"/outcome/:id\")");
     assert_eq!(
         wire["success"],
@@ -496,8 +496,9 @@ fn success_of_a_sum_payload_names_the_sum_and_messages_carry_a_string() {
     );
     assert!(has_type(&wire, "Outcome"));
     let message = response(&wire, "BadRequest");
-    assert_eq!(message["payload"]["kind"], "Base");
-    assert_eq!(message["payload"]["base"], "String");
+    // A message body is `{ "error": String }`, not a bare string, and has no ref
+    // into `types`: it is `null` rather than wrong.
+    assert!(message["payload"].is_null());
 }
 
 #[test]

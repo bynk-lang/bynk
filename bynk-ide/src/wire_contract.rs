@@ -560,23 +560,18 @@ pub fn http_result_inner(t: &TypeRef) -> Option<&TypeRef> {
 }
 
 /// The wire shape of the body one response carries (#3609), given the model's
-/// [`WireContractModel::success`]: `T` for a value variant, `String` for a
-/// message or redirect-location variant, and `None` for everything else —
-/// no payload, a stream, raw author-owned bytes, and boundary-implicit
-/// responses (whose bodies the boundary shapes, not the handler).
+/// [`WireContractModel::success`]: `T` for a value variant, `None` for
+/// everything else. A message variant's body is `{ "error": String }` and a
+/// redirect's location travels in a header with no body (as `bynk openapi`
+/// describes them); neither is a ref into `types`, so they are left `None`
+/// rather than reported wrongly. Boundary-implicit responses are `None` too —
+/// the boundary shapes their bodies, not the handler.
 pub fn response_payload(resp: &HttpResponse, success: Option<&WireRef>) -> Option<WireRef> {
     if matches!(resp.origin, ResponseOrigin::BoundaryImplicit { .. }) {
         return None;
     }
-    let string = || WireRef::Base {
-        base: BaseType::String,
-        json: wire::JsonKind::String,
-        guards: Vec::new(),
-        expected: wire::Expected::Json(wire::JsonKind::String),
-    };
     match http_variant(&resp.variant)?.payload {
         HttpVariantPayload::Value => success.cloned(),
-        HttpVariantPayload::Message | HttpVariantPayload::Location => Some(string()),
         _ => None,
     }
 }

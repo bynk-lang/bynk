@@ -23,14 +23,17 @@ without the unit.
   `instantiations` — the same resolution the envelope's refs use — so a
   generic payload (`Page[Item]`) is a `WcRef::Inst` whose key names an entry in
   `instantiations`. Each `WcHttpResponse` also carries `payload: WcRef | null`:
-  `T` for a value variant, `String` for a message variant and for a redirect's
-  location, `null` for everything else.
+  `T` for a value variant, `null` for everything else.
 - **B.** `success` is `null` for a non-HTTP handler, a return that is not an
   `HttpResult`, and a `()` payload — which is what a raw-response handler
   (`Raw(..)`) declares — so a client knows there is no typed body to check
   paths against. A raw, streamed or no-payload response has `payload: null`,
   as does a boundary-implicit response (the boundary shapes its body, not the
-  handler).
+  handler). So do message and redirect variants: a message body is
+  `{ "error": String }` and a redirect's location is a header with no body
+  (as `bynk openapi` describes them), and neither is a ref into `types`. A
+  wrong shape would mislead a client that checks body paths, so they are
+  deferred to a follow-up rather than approximated.
 - The payload type is read by one function, `bynk_ide::wire_contract::http_result_inner`,
   which `bynk openapi` now shares, so the two cannot drift. The per-variant
   payload kind comes from the same `http_variant` table.

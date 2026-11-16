@@ -148,9 +148,10 @@ pub struct WcHttpResponse {
     pub status: u16,
     pub variant: String,
     pub origin: WcResponseOrigin,
-    /// #3609: the body this response carries — `T` for a value variant,
-    /// `String` for a message or redirect location, `null` otherwise (no
-    /// payload, stream, raw bytes, boundary-implicit).
+    /// #3609: the body this response carries — `T` for a value variant, `null`
+    /// otherwise (no payload, message, redirect, stream, raw bytes,
+    /// boundary-implicit). A message body is `{ "error": String }`, which is not
+    /// a ref into `types`; it is deferred (see the ADR).
     pub payload: Option<WcRef>,
 }
 
