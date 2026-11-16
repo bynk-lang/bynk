@@ -3,7 +3,7 @@ title: Version compatibility & changelog
 ---
 Bynk is pre-1.0 and developed in small, spec-first increments (see
 [Versioning & roadmap](/book/about/versioning-and-roadmap/)). This book is
-written against **v0.633**.
+written against **v0.634**.
 
 This page is a high-level summary of notable increments, not an exhaustive
 per-commit history. While Bynk is pre-1.0, increments may change behaviour.
@@ -28,6 +28,7 @@ per-commit history. While Bynk is pre-1.0, increments may change behaviour.
 
 | Version | Highlights |
 |---|---|
+| **v0.634.0** | A `[deploy.workers.<key>]` group now builds as one Worker: its members share one `index.ts` that tries them in manifest order, one `wrangler.toml` that merges their bindings, crons, queues and addresses, and a group has at most one member that accepts WebSockets (`bynk.deploy.multiple_websocket_members`); a `bundle` build says it ignores the groups (`bynk.deploy.workers_ignored_on_bundle`) (#3562, G2b step 2c-4b) |
 | **v0.633.18** | The `bynk/sequenceModel` request walks nesting in full (with each block's `depth`), shows `?` as a `Break` block, and names each handler's `trigger`, each agent lifeline's `key` and each boundary call's `callee` (with its location) |
 | **v0.633.17** | `bynk registry conformance`: `yank.yank` and `yank.unyank` wait up to 65 seconds for a cached index to show the change, instead of failing a registry whose edge cache briefly kept the old index |
 | **v0.633.16** | Two contexts that consume the same queue are now refused, grouped or not (`bynk.queue.duplicate_consumer`), and `bynk.deploy.queue_consumer_conflict` is removed in its favour. A project this newly refuses built cleanly before but could never deploy, since Cloudflare allows one consumer Worker per queue (#3644) |
