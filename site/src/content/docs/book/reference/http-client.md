@@ -100,11 +100,11 @@ import { createClient } from "$lib/api";
 const api = createClient({ baseUrl: "https://api.example.com" });
 
 const res = await api.orders.createOrder({ sku: "A1", qty: 2, note: null, tags: [] });
-switch (res.status) {
-  case 201: show(res.body); break;           // res.body: Order
-  case 409: warn(res.error); break;          // `Conflict("…")`: res.error is the message
-  case 400: log(res.error); break;           // the boundary's own refusal
-  default: res satisfies CallFailure;        // Invalid, Transport or Unexpected
+switch (res.kind) {
+  case "Created": show(res.body); break;            // res.body: Order
+  case "Conflict": warn(res.error); break;          // `Conflict("…")`: res.error is the message
+  case "StructuralMismatch": log(res.error); break; // the boundary's own refusal
+  default: res satisfies CallFailure;               // Invalid, Transport or Unexpected
 }
 ```
 
@@ -130,7 +130,7 @@ a service that would share a name are refused, naming both.
 A call returns `Promise<RouteResponse | CallFailure>` and never throws for an HTTP
 status or a network failure.
 
-`RouteResponse` is a union keyed by `status`, one member for each answer `bynk openapi`
+`RouteResponse` is a union with one member for each answer `bynk openapi`
 documents for the route: the declared success when the handler can return it, each
 `HttpResult` variant it constructs, and the boundary's own `400` (and `413` and
 `415` where they apply).
@@ -147,7 +147,9 @@ documents for the route: the declared success when the handler can return it, ea
 
 `kind` is the `HttpResult` variant's name. Two answers can share a status (the
 boundary's `400` and a handler's own `BadRequest`); both are members, told apart by
-`kind`. A `switch (res.status)` that ends in a `never` check is the intended idiom.
+`kind`. Every member and every `CallFailure` has a `kind` and only `Unexpected` of the
+failures has a `status`, so narrow on `kind`: a `switch (res.kind)` that ends in a
+`never` check is the intended idiom.
 
 A `fetch` follows redirects by default, so a redirect member appears only when the
 caller passes `redirect: "manual"` in `init`, and a browser hides the response of a
@@ -338,7 +340,7 @@ then a blank line, under `content-type: text/event-stream`, and nothing else (no
 
 ```ts
 const res = await api.orders.getTicks();
-if (res.status === 200) {
+if (res.kind === "Streaming") {
   for await (const tick of res.events) console.log(tick);
 }
 ```
