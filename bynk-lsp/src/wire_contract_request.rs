@@ -43,6 +43,7 @@ use bynk_check::wire::{
 };
 use bynk_ide::wire_contract::{
     BoundaryKind, Envelope, HttpResponse, NoCrossContextReason, ResponseOrigin, WireContractModel,
+    response_payload,
 };
 use bynk_syntax::ast::{PredKind, TypeDecl};
 use tower_lsp::lsp_types::Range;
@@ -90,6 +91,10 @@ pub struct WcModel {
     pub recursive: Vec<String>,
     /// Empty for a non-HTTP handler.
     pub responses: Vec<WcHttpResponse>,
+    /// #3609: the `T` of the handler's `HttpResult[T]`, resolved against
+    /// `types`/`instantiations`. `null` for a non-HTTP handler and for a raw or
+    /// unit-payload return.
+    pub success: Option<WcRef>,
     #[serde(rename = "noCrossContext")]
     pub no_cross_context: Option<&'static str>,
 }
@@ -143,6 +148,11 @@ pub struct WcHttpResponse {
     pub status: u16,
     pub variant: String,
     pub origin: WcResponseOrigin,
+    /// #3609: the body this response carries — `T` for a value variant, `null`
+    /// otherwise (no payload, message, redirect, stream, raw bytes,
+    /// boundary-implicit). A message body is `{ "error": String }`, which is not
+    /// a ref into `types`; it is deferred (see the ADR).
+    pub payload: Option<WcRef>,
 }
 
 #[derive(Debug, Clone, serde::Serialize)]
@@ -611,10 +621,11 @@ fn envelope_wire(e: &Envelope) -> WcEnvelope {
     }
 }
 
-fn wc_response(r: &HttpResponse, text: &str) -> WcHttpResponse {
+fn wc_response(r: &HttpResponse, success: Option<&WireRef>, text: &str) -> WcHttpResponse {
     WcHttpResponse {
         status: r.status,
         variant: r.variant.clone(),
+        payload: response_payload(r, success).as_ref().map(wc_ref),
         origin: match &r.origin {
             ResponseOrigin::DeclaredSuccess => WcResponseOrigin::DeclaredSuccess,
             ResponseOrigin::Constructed { span } => WcResponseOrigin::Constructed {
@@ -673,8 +684,9 @@ pub fn to_wire(
         responses: model
             .responses
             .iter()
-            .map(|r| wc_response(r, text))
+            .map(|r| wc_response(r, model.success.as_ref(), text))
             .collect(),
+        success: model.success.as_ref().map(wc_ref),
         no_cross_context: model.no_cross_context.map(no_cross_context_str),
     }
 }
