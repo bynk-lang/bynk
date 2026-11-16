@@ -266,7 +266,7 @@ nothing: it checks `config.json` and reads back an existing `--package`.
 | `auth.missing`, `auth.unknown`, `auth.scope` | `401` with no token or an unknown one; `403` for a token that can't act for the organisation (needs `--narrow-token-env`) | [Publish API](#publish-api) |
 | `limits.too-large` | `413 too_large` for an upload past the cap (`--max-upload`, default 64 MiB) | [Publish API](#publish-api) |
 | `consume.resolve` | Let a fresh client choose the version and admit its tree | [Index files](#index-files) |
-| `yank.yank`, `yank.unyank`, `yank.missing` | Flip `yanked` with `200`, shown in the index; `404 not_found` for a missing version | [Publish API](#publish-api) |
+| `yank.yank`, `yank.unyank`, `yank.missing` | Flip `yanked` with `200`, shown in the index within 65 seconds (a cached index file may lag the change); `404 not_found` for a missing version | [Publish API](#publish-api) |
 | `errors.shape` | Give every refusal a JSON `{"error", "message"}` body with the code above | [Publish API](#publish-api) |
 
 The redirect rule and caching aren't checked: refusing a redirect is the
