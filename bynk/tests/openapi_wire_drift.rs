@@ -122,6 +122,40 @@ fn schemas(response: &Value, media: &str) -> Vec<Value> {
     }
 }
 
+/// The converse: a status whose every response is handler-described and has no
+/// body (`NoContent`, a `()` value) has no `content` in OpenAPI either. A status
+/// shared with a boundary-implicit response or one with a body is skipped, since
+/// OpenAPI merges them under one entry.
+fn assert_bodiless_statuses_have_no_content(
+    model: &WireContractModel,
+    responses: &Value,
+    path: &str,
+) {
+    let listed = |r: &&bynk_ide::wire_contract::HttpResponse| {
+        r.origin != ResponseOrigin::DeclaredSuccess || model.ok_reachable
+    };
+    for status in model.responses.iter().filter(listed).map(|r| r.status) {
+        let at: Vec<_> = model
+            .responses
+            .iter()
+            .filter(listed)
+            .filter(|r| r.status == status)
+            .collect();
+        let bodiless = at.iter().all(|r| {
+            !matches!(r.origin, ResponseOrigin::BoundaryImplicit { .. })
+                && response_body(r, model.success.as_ref()).is_none()
+        });
+        if bodiless {
+            let resp = &responses[status.to_string()];
+            assert!(resp.is_object(), "{path}: no {status} in openapi");
+            assert!(
+                resp["content"].is_null(),
+                "{path}: {status} has no body in the wire contract but openapi gives one: {resp}"
+            );
+        }
+    }
+}
+
 #[test]
 fn every_response_body_agrees_with_openapi() {
     let dir = project();
@@ -130,6 +164,7 @@ fn every_response_body_agrees_with_openapi() {
     for (path, model) in models(&dir) {
         let responses = &doc["paths"][path]["get"]["responses"];
         assert!(responses.is_object(), "no GET {path} in the document");
+        assert_bodiless_statuses_have_no_content(&model, responses, path);
         for r in &model.responses {
             if r.origin == ResponseOrigin::DeclaredSuccess && !model.ok_reachable {
                 continue; // openapi lists only what the handler can answer
