@@ -1,12 +1,6 @@
----
-level: patch
-probes: ts_writes
-changelog: The test runner can evaluate a snippet in a unit's scope and report its final value, the driver half of `bynk eval`
----
+# 0863 — A snippet is evaluated as a synthetic test case that reports its value
 
-## ADR: eval-snippet-as-test-case
-title: A snippet is evaluated as a synthetic test case that reports its value
-summary: `bynk eval` builds on the doc-example path; stateless, stub-only, explicit and local, and no change to ADR 0638
+- **Status:** Accepted (v0.629.3)
 
 **Context.** A notebook cell, or any tool that wants to try an expression against a project, needs a value back. Nothing ran Bynk code outside `bynk test` and `bynk dev`, and a doc example marked `bynk test` only passes or fails (#3585). [ADR 0638](0638-refined-explorer-evaluation.md) considered a `bynk eval` driver command for the refined-type explorer and rejected it, because a hover is an implicit request and must not build and execute the project.
 
@@ -18,4 +12,4 @@ summary: `bynk eval` builds on the doc-example path; stateless, stub-only, expli
 4. *Bounded.* A run is killed after a time limit and reported as timed out.
 5. *Explicit and local, not implicit.* An evaluation is a request to run code the user wrote in their own workspace, at the trust level of `bynk test`. ADR 0638 is not overturned: the refined-type explorer keeps evaluating compiler-generated predicates in the editor, because a hover must not build and run a project, while a notebook cell is an explicit instruction to do so.
 
-**Consequences.** No grammar, checker or runtime-library change. The one lowering change is that a case named `bynk eval` reports its tail. The command line, JSON result and time-limit flag follow. The build is `bynk test`'s, so it also compiles the project's own suites; a project whose own suites do not compile cannot be evaluated against until they do.
+**Consequences.** No grammar, checker or runtime-library change. The one lowering change is that a case named `bynk eval` reports its tail. The command line, JSON result and time-limit flag follow. The build is `bynk test`'s, but the project's own suites are left out of it by default, so a suite that does not compile cannot block an evaluation; `--suite` builds the target unit's own suite in and puts the snippet inside it, so the suite's `stub`s and helper `fn`s apply, and its errors are then reported. The name `bynk eval` is reserved for the synthetic case: a user-written case of that name would print one extra event line and add `eval` to the JSON document.

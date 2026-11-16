@@ -20,6 +20,14 @@
 //! ([`ACCEPTED_WIRE_VERSIONS`]). That includes the request signature
 //! ([`signing_input`]): its canonical input and its headers are part of the
 //! version, the keys are not.
+//!
+//! **`from http` bodies (#3508).** The JSON encoding of a boundary type on a
+//! `from http` route is the same encoding, so it follows this version too: a
+//! change to it is a new wire version, and `bynk client` embeds [`WIRE_VERSION`]
+//! for that reason. The per-route contract hash a generated client carries
+//! ([`crate::contract::http_route_contract_hash`]) is informational and is not
+//! part of the version; a `from http` call has no handshake and nothing rejects
+//! a mismatch.
 
 pub mod reference;
 

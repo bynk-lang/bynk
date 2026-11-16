@@ -3,7 +3,7 @@ title: Version compatibility & changelog
 ---
 Bynk is pre-1.0 and developed in small, spec-first increments (see
 [Versioning & roadmap](/book/about/versioning-and-roadmap/)). This book is
-written against **v0.625**.
+written against **v0.629**.
 
 This page is a high-level summary of notable increments, not an exhaustive
 per-commit history. While Bynk is pre-1.0, increments may change behaviour.
@@ -28,6 +28,17 @@ per-commit history. While Bynk is pre-1.0, increments may change behaviour.
 
 | Version | Highlights |
 |---|---|
+| **v0.629.3** | The test runner can evaluate a snippet in a unit's scope and report its final value, the driver half of `bynk eval` |
+| **v0.629.2** | The MCP architecture tool lists events with their emitters and subscribers, and each context's capability uses, expanding one on request |
+| **v0.629.1** | `bynk dev --trace-events` writes one `request` event per request served, with the steps it took and their `.bynk` spans |
+| **v0.629.0** | `bynk client`'s generated module carries a per-route and per-service contract hash (`API_CONTRACTS`) beside `WIRE_VERSION`, and `sendContract` sends the route's hash as `X-Bynk-Contract`; both informational (#3508 slice BC6) |
+| **v0.628.0** | `bynk.cloudflare` gains `Images`, a one-per-Worker capability over Cloudflare's `images` binding, with `transform` and `info` over `Bytes` (experimental; #3515) |
+| **v0.627.1** | A build can record per-request traces (the emitter and runtime half of `bynk dev --trace-events`); deploy output is unchanged |
+| **v0.627.0** | A linked `MtlsCertificate` kind, `capability Backend = MtlsCertificate @certificate("acme-client")`, whose `send` presents an account-held client certificate to an origin (experimental; the deploy lands separately) |
+| **v0.626.2** | Design: a plan to move the VS Code extension's diagram views from Mermaid to a first-party renderer in UML notation (model-diagrams track, settling) |
+| **v0.626.1** | Call hierarchy covers cross-context service calls, through `consumes … as` aliases too (#3582) |
+| **v0.626.0** | An `on http` handler takes a fifth special parameter, `cf: RequestCf`, the optional facts Cloudflare derived about the connection (Cloudflare-only, experimental) |
+| **v0.625.3** | `bynk/architectureModel` lists each event's emitters and subscribers and each handler's capability use (`given`, with the suites that `stub` it) |
 | **v0.625.2** | The `bynk/sequenceModel` request gives each `alt` branch a source `range` |
 | **v0.625.1** | `bynk deploy --env` copies the `ai` and `ai_search` bindings into the environment block, so a Workers AI or AI Search Worker is no longer unbound there (#3577) |
 | **v0.625.0** | `bynk build` refuses a `[deploy.workers.<key>]` group whose members declare a service of the same name, and, for now, one with more than one publishing member (#3562, G2b) |

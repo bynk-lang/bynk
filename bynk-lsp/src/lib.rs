@@ -140,6 +140,8 @@ struct Analysis {
     /// tables the `bynk/sequenceModel` request classifies handler calls
     /// against.
     sequence_info: std::collections::HashMap<String, bynk_ide::ContextSequenceInfo>,
+    /// #3583: see `bynk_ide::ProjectDiagnostics::architecture_facts`.
+    architecture_facts: bynk_ide::ArchitectureFacts,
     /// #855: qualified context/adapter unit name → the combined type table
     /// and service/agent tables the `bynk/wireContract` request resolves a
     /// handler's boundary shape and cross-context hash against.
@@ -943,6 +945,7 @@ impl Backend {
                 ty_intern: result.ty_intern,
                 unit_sources: result.unit_sources,
                 sequence_info: result.sequence_info,
+                architecture_facts: result.architecture_facts,
                 boundary_info: result.boundary_info,
                 doc_scope: result.doc_scope,
                 contract_diff: result.contract_diff,
@@ -2302,7 +2305,7 @@ impl Backend {
     ) -> Option<CallHierarchyItem> {
         let location = Self::site_to_location(analysis, def)?;
         Some(CallHierarchyItem {
-            name: key.name.clone(),
+            name: key.handler_display_name().to_string(),
             kind: lsp_symbol_kind(key.kind),
             tags: None,
             detail: Some(key.unit.clone()),
@@ -2676,6 +2679,7 @@ impl Backend {
             &analysis.unit_sources,
             &analysis.snapshots,
             &analysis.sequence_info,
+            &analysis.architecture_facts,
         );
         Ok(Some(architecture_request::to_wire(
             &model,

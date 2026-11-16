@@ -1,0 +1,7 @@
+context demo
+
+// #3513 A: a name with a control character is not a certificate name.
+
+consumes bynk.cloudflare { MtlsCertificate }
+
+capability Backend = MtlsCertificate @certificate("acme\tclient")

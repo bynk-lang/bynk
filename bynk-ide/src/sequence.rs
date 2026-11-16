@@ -149,6 +149,12 @@ pub struct Branch {
     /// keyword span). For a `match`, the arm from its pattern to its end. An
     /// else-less `if` emits only the `then` branch (an `opt`), so there is no
     /// synthesised branch to span.
+    ///
+    /// #3599: in an `else if` chain the `else` branch's span starts at the
+    /// inner `if` keyword and covers the rest of the chain, because the parser
+    /// desugars `else if` into a block that reuses the inner `if`'s span. The
+    /// inner `if` is its own nested `AltBlock` with its own branch spans, so
+    /// the outer `else` range contains those.
     pub span: Span,
 }
 
@@ -1421,6 +1427,16 @@ service spanSvc {
       ()
     }
   }
+
+  on call(a: Bool, b: Bool) -> Effect[Int] {
+    if a {
+      1
+    } else if b {
+      2
+    } else {
+      3
+    }
+  }
 }
 "#;
 
@@ -1451,6 +1467,58 @@ service spanSvc {
         );
         assert!(t[0].contains('1') && !t[0].contains("else"), "{t:?}");
         assert!(t[1].starts_with('{') && t[1].contains('2'), "{t:?}");
+    }
+
+    #[test]
+    fn else_if_branch_spans_the_rest_of_the_chain() {
+        // #3599: the outer `else` branch reuses the inner `if`'s span, so it
+        // starts at the inner `if` keyword and covers the rest of the chain.
+        let ctx = parse_context(SPAN_SRC);
+        let svc = find_service(&ctx, "spanSvc");
+        let model = sequence_model(
+            &svc.handlers[3],
+            HandlerOwner::Service("spanSvc"),
+            &svc.default_given,
+            svc.default_by.as_ref(),
+            None,
+        );
+        let text = |b: &Branch| SPAN_SRC[b.span.start..b.span.end].to_string();
+        let outer = &model.blocks[0];
+        assert_eq!(outer.branches.len(), 2);
+        assert!(
+            text(&outer.branches[0]).starts_with("if a {")
+                && !text(&outer.branches[0]).contains("else"),
+            "{:?}",
+            text(&outer.branches[0])
+        );
+        let else_text = text(&outer.branches[1]);
+        assert!(
+            else_text.starts_with("if b {") && else_text.ends_with('}'),
+            "{else_text:?}"
+        );
+        assert!(
+            else_text.contains("else") && else_text.contains('3'),
+            "{else_text:?}"
+        );
+        // The nested `if` is its own block, whose branches sit inside that range.
+        assert_eq!(model.blocks.len(), 2);
+        let inner = &model.blocks[1];
+        assert_eq!(inner.parent, Some(outer.id));
+        assert_eq!(inner.parent_branch, Some(1));
+        let inner_texts: Vec<String> = inner.branches.iter().map(text).collect();
+        assert_eq!(inner_texts.len(), 2);
+        assert!(
+            inner_texts[0].starts_with("if b {") && !inner_texts[0].contains("else"),
+            "{inner_texts:?}"
+        );
+        assert!(
+            inner_texts[1].starts_with('{') && inner_texts[1].contains('3'),
+            "{inner_texts:?}"
+        );
+        for b in &inner.branches {
+            let o = &outer.branches[1];
+            assert!(b.span.start >= o.span.start && b.span.end <= o.span.end);
+        }
     }
 
     #[test]

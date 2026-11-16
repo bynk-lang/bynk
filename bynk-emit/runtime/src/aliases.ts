@@ -17,10 +17,11 @@ import { handleEmail, type InboundMessage, type SenderIdentity } from "./email.t
 import { commitStored, noteClock, readStored, readsLazily, then } from "./entries.ts";
 import { attachLazy } from "./lazy.ts";
 import { fault, invariantViolation } from "./errors.ts";
-import { applyCache, applyCors, applyEdgeCache, applySecurityHeaders, cookieObject, cookieString, cookieValue, corsPreflightResponse, csrfAllowed, edgeCacheGuard, formDecode, formMediaTypeMatches, formObject, formString, headResponse, httpResultToResponse, matchPath, mediaTypeMatches, multipartForm, multipartMediaTypeMatches, multipartObject, noStore, notModifiedIfMatch, queryObject, queryString, renderRejection, requestHeaderPairs, requestCookies, requestCookiesHeader, requestBodyStream, requestHeaders, requestQuery, requestQuerySearch, responseToHttpOutcome, responseToHttpResult, responseToUnauthOutcome, sessionCookieOf, untilBodyTooLarge, varyAcceptLanguage, withPlainJson, type CorsPolicy, type SecurityPolicy } from "./http.ts";
+import { applyCache, applyCors, applyEdgeCache, applySecurityHeaders, cfObject, cookieObject, cookieString, cookieValue, corsPreflightResponse, csrfAllowed, edgeCacheGuard, formDecode, formMediaTypeMatches, formObject, formString, headResponse, httpResultToResponse, matchPath, mediaTypeMatches, multipartForm, multipartMediaTypeMatches, multipartObject, noStore, notModifiedIfMatch, queryObject, queryString, renderRejection, requestHeaderPairs, requestCookies, requestCookiesHeader, requestBodyStream, requestHeaders, requestQuery, requestQuerySearch, responseToHttpOutcome, responseToHttpResult, responseToUnauthOutcome, sessionCookieOf, untilBodyTooLarge, varyAcceptLanguage, withPlainJson, type CorsPolicy, type SecurityPolicy } from "./http.ts";
+import { traceFault, traceFetch, traceStep, type TraceSpan } from "./trace.ts";
 import { formatIcuDate, formatIcuNumber, selectPluralArm } from "./messages.ts";
 import { StoreCache, StoreLog, StoreMap, StoreSet, fillHeld, fillLog, fillMap, fillSet, wireEntries, wireHeld, wireHeldOrder, wireLog, wireMap, wirePostings, wireSet } from "./store.ts";
-import { makeIntegrationAi, makeIntegrationAiSearch, makeIntegrationContainer, makeIntegrationAnalytics, makeIntegrationD1, makeIntegrationEmail, makeIntegrationHyperdrive, makeIntegrationKv, makeIntegrationQueue, makeIntegrationR2, makeIntegrationRateLimit, makeIntegrationSecretsStoreSecret, makeIntegrationVersionMetadata, makeTestState, type AiSearchInstance, type AnalyticsDataset, type D1Database, type DurableObjectState, type Hyperdrive, type KVNamespace, type QueueProducer, type R2Bucket, type RateLimiter, type SecretsStoreSecret, type SendEmail, type WorkerAiBinding, type WorkerVersionMetadata } from "./storage.ts";
+import { makeIntegrationAi, makeIntegrationImages, makeIntegrationAiSearch, makeIntegrationContainer, makeIntegrationAnalytics, makeIntegrationD1, makeIntegrationEmail, makeIntegrationHyperdrive, makeIntegrationKv, makeIntegrationMtls, makeIntegrationQueue, makeIntegrationR2, makeIntegrationRateLimit, makeIntegrationSecretsStoreSecret, makeIntegrationVersionMetadata, makeTestState, type AiSearchInstance, type AnalyticsDataset, type D1Database, type DurableObjectState, type Hyperdrive, type KVNamespace, type QueueProducer, type R2Bucket, type RateLimiter, type SecretsStoreSecret, type SendEmail, type WorkerAiBinding, type WorkerImagesBinding, type WorkerVersionMetadata } from "./storage.ts";
 import { makeIntegrationVectorize, type VectorizeIndex } from "./vectorize.ts";
 
 export {
@@ -79,6 +80,7 @@ export {
   makeAgent as __makeAgent,
   makeIntegrationDoNamespace as __makeIntegrationDoNamespace,
   makeIntegrationAi as __makeIntegrationAi,
+  makeIntegrationImages as __makeIntegrationImages,
   makeIntegrationContainer as __makeIntegrationContainer,
   makeIntegrationAnalytics as __makeIntegrationAnalytics,
   makeIntegrationD1 as __makeIntegrationD1,
@@ -90,6 +92,7 @@ export {
   makeIntegrationRateLimit as __makeIntegrationRateLimit,
   makeIntegrationSecretsStoreSecret as __makeIntegrationSecretsStoreSecret,
   makeIntegrationAiSearch as __makeIntegrationAiSearch,
+  makeIntegrationMtls as __makeIntegrationMtls,
   makeIntegrationVectorize as __makeIntegrationVectorize,
   makeIntegrationVersionMetadata as __makeIntegrationVersionMetadata,
   makeTestState as __makeTestState,
@@ -107,6 +110,7 @@ export {
   formDecode as __formDecode,
   formObject as __formObject,
   formString as __formString,
+  cfObject as __cfObject,
   cookieObject as __cookieObject,
   cookieValue as __cookieValue,
   csrfAllowed as __csrfAllowed,
@@ -152,8 +156,12 @@ export {
   verifySignatureHmacSha256 as __verifySignatureHmacSha256,
   wakeForMigration as __wakeForMigration,
   webSocketUpgradeResponse as __webSocketUpgradeResponse,
+  traceFault as __traceFault,
+  traceFetch as __traceFetch,
+  traceStep as __traceStep,
 };
 export type {
+  TraceSpan as __TraceSpan,
   InboundMessage as __InboundMessage,
   MySqlEndpoint as __MySqlEndpoint,
   MySqlExecute as __MySqlExecute,
@@ -185,6 +193,7 @@ export type {
   SendEmail as __SendEmail,
   VectorizeIndex as __VectorizeIndex,
   WorkerAiBinding as __WorkerAiBinding,
+  WorkerImagesBinding as __WorkerImagesBinding,
   WorkerVersionMetadata as __WorkerVersionMetadata,
   SecurityPolicy as __SecurityPolicy,
   ServiceBinding as __ServiceBinding,

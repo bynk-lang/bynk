@@ -221,6 +221,9 @@ pub struct ProjectAnalysis {
     /// sequence-diagram query. Only contexts/adapters have an entry; empty
     /// when the pipeline bails before the checker.
     pub sequence_info: HashMap<String, ContextSequenceInfo>,
+    /// #3583: event emitters/subscribers, each handler's resolved `given`, and the
+    /// suites' `stub`s, for `bynk/architectureModel`'s `events` and `uses` sections.
+    pub architecture_facts: crate::architecture_facts::ArchitectureFacts,
     /// #855: qualified context/adapter unit name → the combined type table
     /// and per-context service/agent tables the wire-contract peek needs.
     /// Only contexts/adapters have an entry; empty when the pipeline bails
@@ -311,6 +314,7 @@ fn bailed(
         requirements: requirements.take_files(),
         unit_sources: HashMap::new(),
         sequence_info: HashMap::new(),
+        architecture_facts: Default::default(),
         boundary_info: HashMap::new(),
         doc_scope: HashMap::new(),
         contract_diff: ContractDiff::default(),
@@ -489,6 +493,73 @@ pub(crate) fn analyse_project_cached(
     let analysis = analyse_project_inner(roots, overlay, policy, schema_lock, Some(&mut *memo));
     memo.end_round();
     analysis
+}
+
+/// The per-context tables the editor queries resolve against: the sequence
+/// view's cross-context info and the wire-contract peek's boundary info, plus
+/// each context's provided contracts recorded on `contract_diff`.
+fn per_unit_infos(
+    kinds: &BTreeMap<String, UnitKind>,
+    unit_tables: &HashMap<String, crate::symbols::UnitTable>,
+    unit_consumes: &HashMap<String, Vec<String>>,
+    unit_consumes_aliases: &HashMap<String, HashMap<String, String>>,
+    unit_uses: &HashMap<String, Vec<String>>,
+    unit_flattened: &HashMap<String, HashMap<String, String>>,
+    contract_diff: &mut ContractDiff,
+) -> (
+    HashMap<String, ContextSequenceInfo>,
+    HashMap<String, ContextBoundaryInfo>,
+) {
+    let mut sequence_info: HashMap<String, ContextSequenceInfo> = HashMap::new();
+    let mut boundary_info: HashMap<String, ContextBoundaryInfo> = HashMap::new();
+    for (name, kind) in kinds {
+        if !matches!(kind, UnitKind::Context | UnitKind::Adapter) {
+            continue;
+        }
+        let Some(table) = unit_tables.get(name) else {
+            continue;
+        };
+        let mut cross_context = build_cross_context_info(
+            name,
+            unit_consumes,
+            unit_consumes_aliases,
+            unit_uses,
+            unit_tables,
+        );
+        cross_context.flattened_caps = unit_flattened.get(name).cloned().unwrap_or_default();
+        // Both infos share the table's `Arc`'d agents (#3243: no deep clone per info).
+        let agents: HashMap<String, Arc<AgentDecl>> = table.agents.clone();
+        sequence_info.insert(
+            name.clone(),
+            ContextSequenceInfo {
+                cross_context,
+                agents: agents.clone(),
+            },
+        );
+        let contract_types =
+            crate::symbols::contract_types_for(name, unit_tables, unit_uses, unit_consumes).0;
+        // Recorded even when empty: a context that dropped its last `on call`
+        // service still has a Worker whose live contracts it no longer provides.
+        contract_diff.services.insert(
+            name.clone(),
+            ProvidedContracts {
+                worker: bynk_project::worker_dir_name(name),
+                hashes: crate::contract::own_contract_hashes(table, &contract_types),
+                shapes: crate::contract_compat::own_contract_shapes(table, &contract_types),
+            },
+        );
+        boundary_info.insert(
+            name.clone(),
+            ContextBoundaryInfo {
+                // #2073: the table `own_contract_hashes` hashes through.
+                types: contract_types,
+                services: table.services.clone(),
+                agents,
+                actors: table.actors.clone(),
+            },
+        );
+    }
+    (sequence_info, boundary_info)
 }
 
 fn analyse_project_inner(
@@ -1067,55 +1138,28 @@ fn analyse_project_inner(
             .push(pf.identity_path());
     }
 
-    let mut sequence_info: HashMap<String, ContextSequenceInfo> = HashMap::new();
-    let mut boundary_info: HashMap<String, ContextBoundaryInfo> = HashMap::new();
-    for (name, kind) in &kinds {
-        if !matches!(kind, UnitKind::Context | UnitKind::Adapter) {
-            continue;
-        }
-        let Some(table) = unit_tables.get(name) else {
-            continue;
-        };
-        let mut cross_context = build_cross_context_info(
-            name,
-            &unit_consumes,
-            &unit_consumes_aliases,
-            &unit_uses,
-            &unit_tables,
-        );
-        cross_context.flattened_caps = unit_flattened.get(name).cloned().unwrap_or_default();
-        // Both infos share the table's `Arc`'d agents (#3243: no deep clone per info).
-        let agents: HashMap<String, Arc<AgentDecl>> = table.agents.clone();
-        sequence_info.insert(
-            name.clone(),
-            ContextSequenceInfo {
-                cross_context,
-                agents: agents.clone(),
-            },
-        );
-        let contract_types =
-            crate::symbols::contract_types_for(name, &unit_tables, &unit_uses, &unit_consumes).0;
-        // Recorded even when empty: a context that dropped its last `on call`
-        // service still has a Worker whose live contracts it no longer provides.
-        contract_diff.services.insert(
-            name.clone(),
-            ProvidedContracts {
-                worker: bynk_project::worker_dir_name(name),
-                hashes: crate::contract::own_contract_hashes(table, &contract_types),
-                shapes: crate::contract_compat::own_contract_shapes(table, &contract_types),
-            },
-        );
-        boundary_info.insert(
-            name.clone(),
-            ContextBoundaryInfo {
-                // #2073: the table `own_contract_hashes` hashes through.
-                types: contract_types,
-                services: table.services.clone(),
-                agents,
-                actors: table.actors.clone(),
-            },
-        );
-    }
+    let (sequence_info, boundary_info) = per_unit_infos(
+        &kinds,
+        &unit_tables,
+        &unit_consumes,
+        &unit_consumes_aliases,
+        &unit_uses,
+        &unit_flattened,
+        &mut contract_diff,
+    );
+
+    let architecture_facts =
+        crate::architecture_facts::architecture_facts(&crate::architecture_facts::FactInputs {
+            parsed: &parsed,
+            groups: &groups,
+            test_groups: &test_groups,
+            kinds: &kinds,
+            unit_tables: &unit_tables,
+            unit_consumes: &unit_consumes,
+            unit_consumes_aliases: &unit_consumes_aliases,
+            unit_flattened: &unit_flattened,
+            callees: &unit_callees,
+        });
 
     let mut doc_scope: HashMap<String, Vec<String>> = HashMap::new();
     for name in unit_sources.keys() {
@@ -1138,6 +1182,7 @@ fn analyse_project_inner(
         requirements: requirements.take_files(),
         unit_sources,
         sequence_info,
+        architecture_facts,
         boundary_info,
         doc_scope,
         contract_diff,

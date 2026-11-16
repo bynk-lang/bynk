@@ -966,6 +966,14 @@ pub struct SchemaVersions {
     pub agents: HashMap<String, bynk_check::schema_registry::AgentVersions>,
 }
 
+/// #3580: what a traced build needs to name a call site: the file's source text,
+/// to turn a byte offset into `line:col`, and its project-relative path.
+#[derive(Clone)]
+pub struct TraceLoc {
+    pub source: std::sync::Arc<str>,
+    pub rel_path: String,
+}
+
 pub struct EmitProjectCtx {
     /// Source path of the file being emitted (relative to project root).
     pub source_path: PathBuf,
@@ -1052,6 +1060,11 @@ pub struct EmitProjectCtx {
     /// v0.115 (testing track slice 3): emit the function-contract call-site guard
     /// (dev/test profile). Stripped in the deploy build for zero runtime cost.
     pub contracts: bool,
+    /// #3580: `Some` emits the per-request trace recording (`bynk dev
+    /// --trace-events`): the cross-context, agent and capability sites wrapped in
+    /// `__traceStep`, and the Worker's `fetch` in `__traceFetch`. Never set by a
+    /// deploy build, whose output is byte-identical.
+    pub trace: Option<TraceLoc>,
     /// v0.119 (testing track slice 7, ADR 0155): agent names a `for all run:
     /// History[Agent]` property in this project drives. Only these agents gain the
     /// exported `__bynkDriveHistory_<Agent>` test-support driver — every other

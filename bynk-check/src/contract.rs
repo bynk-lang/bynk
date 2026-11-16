@@ -704,6 +704,95 @@ pub fn fnv1a64_hex(bytes: &[u8]) -> String {
     format!("{h:016x}")
 }
 
+/// What a client of one `from http` route acts on: the facts [`http_route_normal_form`]
+/// canonicalises. #3508 (BC6) hashes it so a generated client can name the contract it
+/// was made for, and a log or a deploy gate can compare it.
+///
+/// Unlike an `on call` contract this one is **informational**: nothing rejects a
+/// mismatch. A public HTTP API's browsers and cached bundles lag the server for days,
+/// so a hard refusal would turn every additive deploy into an outage; the hash exists
+/// to be compared, logged and sent, never enforced.
+#[derive(Debug, Clone)]
+pub struct HttpRouteContract {
+    /// `GET`, `POST`, ...
+    pub method: String,
+    /// `/orders/:id`.
+    pub path: String,
+    /// What the caller supplies, in the order the client takes it.
+    pub params: Vec<HttpRouteParam>,
+    /// The declared success type, when it carries a value.
+    pub success: Option<TypeRef>,
+    /// Each answer as `(status, variant, payload kind)`, in any order.
+    pub replies: Vec<(u16, String, String)>,
+}
+
+/// One thing a caller supplies to a route.
+#[derive(Debug, Clone)]
+pub struct HttpRouteParam {
+    /// `path`, `query`, `cookies`, `body-json`, `body-form`, `body-multipart` or `body-raw`.
+    pub kind: String,
+    /// The handler's parameter name.
+    pub name: String,
+    /// Its type; `None` for a `@raw` body, whose content type is `detail`.
+    pub ty: Option<TypeRef>,
+    /// The `@raw` content type, when the kind is `body-raw`.
+    pub detail: Option<String>,
+}
+
+/// The canonical normal form of one `from http` route, as a client sees it.
+///
+/// Every type is canonicalised as it appears on the wire (the same `canon_type` the
+/// `on call` contract uses, so a record's fields are sorted, predicates are a set and
+/// a generic is substituted), in the namespace of the route's own service. The
+/// replies are a sorted set. What is *not* in it is what a client does not act on: a
+/// handler's body, a doc comment, the order of a record's fields, the route's CORS
+/// policy and its plain-JSON `Option` mode (the client reads both forms).
+pub fn http_route_normal_form(
+    route: &HttpRouteContract,
+    types: &HashMap<String, Arc<TypeDecl>>,
+) -> String {
+    let mut out = format!("{} {}", route.method, route.path);
+    for p in &route.params {
+        let shape = match (&p.ty, &p.detail) {
+            (Some(t), _) => canon_type(t, types, &mut Vec::new()),
+            (None, Some(d)) => d.clone(),
+            (None, None) => String::new(),
+        };
+        let _ = write!(out, " | {} {}: {shape}", p.kind, p.name);
+    }
+    match &route.success {
+        Some(t) => {
+            let _ = write!(out, " | ok: {}", canon_type(t, types, &mut Vec::new()));
+        }
+        None => out.push_str(" | ok: none"),
+    }
+    let mut replies: Vec<String> = route
+        .replies
+        .iter()
+        .map(|(status, variant, payload)| format!("{status}:{variant}:{payload}"))
+        .collect();
+    replies.sort();
+    replies.dedup();
+    let _ = write!(out, " | replies: {}", replies.join(","));
+    out
+}
+
+/// The hash of one route's normal form: FNV-1a, as [`contract_hash`].
+pub fn http_route_contract_hash(
+    route: &HttpRouteContract,
+    types: &HashMap<String, Arc<TypeDecl>>,
+) -> String {
+    contract_hash(&http_route_normal_form(route, types))
+}
+
+/// A service's hash: the hash of its routes' hashes, sorted, so the order the routes
+/// are declared in does not move it.
+pub fn http_service_contract_hash(route_hashes: &[String]) -> String {
+    let mut sorted: Vec<&str> = route_hashes.iter().map(String::as_str).collect();
+    sorted.sort_unstable();
+    contract_hash(&sorted.join("\n"))
+}
+
 /// The stamped contract hash for one consumed service.
 pub fn service_contract_hash(
     svc: &CrossContextService,
@@ -1493,6 +1582,99 @@ mod tests {
         assert!(
             !nf.contains("List[T]"),
             "the parameter must not survive: {nf}"
+        );
+    }
+
+    fn route(types_src: &str) -> (HttpRouteContract, HashMap<String, Arc<TypeDecl>>) {
+        let t = types_of(types_src);
+        let named = |n: &str| {
+            TypeRef::Named(bynk_syntax::ast::Ident {
+                name: n.to_string(),
+                span: sp(),
+            })
+        };
+        (
+            HttpRouteContract {
+                method: "POST".to_string(),
+                path: "/orders".to_string(),
+                params: vec![HttpRouteParam {
+                    kind: "body-json".to_string(),
+                    name: "body".to_string(),
+                    ty: Some(named("Order")),
+                    detail: None,
+                }],
+                success: Some(named("Order")),
+                replies: vec![
+                    (201, "Created".to_string(), "Value".to_string()),
+                    (
+                        400,
+                        "StructuralMismatch".to_string(),
+                        "BoundaryError".to_string(),
+                    ),
+                ],
+            },
+            t,
+        )
+    }
+
+    /// The hash moves when what a client acts on moves, and only then.
+    #[test]
+    fn an_http_route_hash_follows_what_a_client_acts_on() {
+        let base = "commons x\n\ntype Order = { sku: String, qty: Int }\n";
+        let (r, t) = route(base);
+        let h = http_route_contract_hash(&r, &t);
+        assert_eq!(h.len(), 16);
+        // Pinned absolutely: a change to `canon_type` or to this form moves every route's
+        // hash, and a generated client carries it, so that is a decision, not a side effect.
+        assert_eq!(
+            http_route_normal_form(&r, &t),
+            "POST /orders | body-json body: Order{qty: Int, sku: String} | ok: Order{qty: Int, sku: String} | replies: 201:Created:Value,400:StructuralMismatch:BoundaryError"
+        );
+        assert_eq!(h, "0f4346f8f1c4f893");
+        // Field order, replies order and a repeated reply are not contract changes.
+        let (_, reordered) = route("commons x\n\ntype Order = { qty: Int, sku: String }\n");
+        assert_eq!(h, http_route_contract_hash(&r, &reordered));
+        let mut shuffled = r.clone();
+        shuffled.replies.reverse();
+        shuffled
+            .replies
+            .push((201, "Created".to_string(), "Value".to_string()));
+        assert_eq!(h, http_route_contract_hash(&shuffled, &t));
+        // A field, a refinement, a status, a method, a path and a body kind are.
+        let (_, wider) =
+            route("commons x\n\ntype Order = { sku: String, qty: Int, note: Option[String] }\n");
+        assert_ne!(h, http_route_contract_hash(&r, &wider));
+        let (_, refined) =
+            route("commons x\n\ntype Order = { sku: String, qty: Int where InRange(1, 9) }\n");
+        assert_ne!(h, http_route_contract_hash(&r, &refined));
+        let mut other = r.clone();
+        other
+            .replies
+            .push((409, "Conflict".to_string(), "Message".to_string()));
+        assert_ne!(h, http_route_contract_hash(&other, &t));
+        let mut other = r.clone();
+        other.method = "PUT".to_string();
+        assert_ne!(h, http_route_contract_hash(&other, &t));
+        let mut other = r.clone();
+        other.path = "/orders/:id".to_string();
+        assert_ne!(h, http_route_contract_hash(&other, &t));
+        let mut other = r.clone();
+        other.params[0].kind = "body-form".to_string();
+        assert_ne!(h, http_route_contract_hash(&other, &t));
+    }
+
+    /// A service hash does not depend on the order its routes are declared in.
+    #[test]
+    fn an_http_service_hash_is_independent_of_route_order() {
+        let a = vec!["aaaa".to_string(), "bbbb".to_string()];
+        let b = vec!["bbbb".to_string(), "aaaa".to_string()];
+        assert_eq!(
+            http_service_contract_hash(&a),
+            http_service_contract_hash(&b)
+        );
+        assert_ne!(
+            http_service_contract_hash(&a),
+            http_service_contract_hash(&["aaaa".to_string()])
         );
     }
 

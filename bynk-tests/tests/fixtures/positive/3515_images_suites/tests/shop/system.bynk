@@ -1,0 +1,10 @@
+// #3515: at `system`, each participant Worker binds an Images binding that
+// faults until stubbed. The handler falls back on any `Err`, so a fault is
+// told from a refusal: the call must come back as a server error, never as
+// the fallback.
+suite shop.thumbs as system {
+	case "the participant's unstubbed binding faults, it is not an error value" {
+		let r <- safe.POST("/safe", Bytes.fromUtf8("x")) by Visitor
+		expect r is ServerError(_)
+	}
+}

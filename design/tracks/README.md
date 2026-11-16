@@ -80,8 +80,10 @@ each track's spine issue; this table is deliberately just the map.
 
 | Track doc | Spine issue | Phase | Theme |
 |---|---|---|---|
+| [`dev-agent-inspection.md`](dev-agent-inspection.md) | [#3581](https://github.com/bynk-lang/bynk/issues/3581) | Direction accepted; slice 0 (list and read) then slice 1 (history) | `bynk dev inspect` lists local agent instances by key and reads their decoded state and transition history, through a dev-only registry and `/_bynk/inspect` route that deploy builds do not contain |
 | [`dev-request-traces.md`](dev-request-traces.md) | [#3580](https://github.com/bynk-lang/bynk/issues/3580) | Direction accepted; slice 1 (one Worker) then slice 2 (cross-Worker) | `bynk dev` emits a structured `request` trace event per request: handler, capability ops, agent calls and cross-context calls, each with its `.bynk` span, recorded in dev builds only |
 | [`first-party-registry.md`](first-party-registry.md) | [#2308](https://github.com/bynk-lang/bynk/issues/2308) | Build slices shipped and the service extracted to `bynk-lang/registry`; R6 (go-live) remains | The first-party registry (packaging slice 4b): a hosted Bynk service written in Bynk, in this repo until go-live; its `bynk-std` prerequisites, accounts and organisations, key custody, conformance, and setting `FIRST_PARTY` |
+| [`model-diagrams.md`](model-diagrams.md) | To be opened | Settling | Model diagrams: a first-party UML renderer for the extension's model views. A better sequence diagram, an overhauled architecture map, and a new component diagram; Mermaid leaves `vscode-bynk` |
 | [`packaging.md`](packaging.md) | [#843](https://github.com/bynk-lang/bynk/issues/843) | Slices 1–5 shipped (through 4c); 4b is the first-party-registry track; slices 6–7 gated | Packaging & distribution: the package unit, `org/package` identity without renaming units, single-version resolution and `bynk.lock`, and a registry *protocol* run first-party and privately, with only the `bynk` driver touching the network |
 
 (`documentation.md` (now retired) pre-dates the GitHub-native flow, so its doc was

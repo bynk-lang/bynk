@@ -216,17 +216,8 @@ pub enum Command {
         /// removed when the session stops.
         #[arg(long, value_name = "FILE")]
         ready_json: Option<PathBuf>,
-        /// With `--format json`, also write each line a worker prints as a
-        /// `log` event (`context`, `level`, `text`), so an editor can show the
-        /// workers' logs per context and level. Implies `--rewrite-frames`.
-        #[arg(long, requires = "format")]
-        log_events: bool,
-        /// Rewrite stack frames in the workers' output to `.bynk` locations
-        /// even on a terminal. Off a terminal (an editor task, CI) it is
-        /// always done; on one, wrangler's output is left attached so its
-        /// colour and hotkeys keep working.
-        #[arg(long)]
-        rewrite_frames: bool,
+        #[command(flatten)]
+        stream: DevStreamArgs,
         /// Arguments after `--`, forwarded to `wrangler dev` (e.g. `-- --remote`).
         /// Ports are the driver's to allocate: use `--base-port` / `--inspect-port`.
         #[arg(last = true)]
@@ -1100,6 +1091,33 @@ pub fn doctor_options(only: Option<CapabilityArg>, strict: bool) -> DoctorOption
     }
 }
 
+/// What `bynk dev` reads from the workers' output and writes as events: the
+/// `--log-events`, `--trace-events` and `--rewrite-frames` flags, together so
+/// `bynk dev`'s many flags stay manageable.
+#[derive(Args, Debug, Clone, Copy, Default)]
+pub struct DevStreamArgs {
+    /// With `--format json`, also write each line a worker prints as a
+    /// `log` event (`context`, `level`, `text`), so an editor can show the
+    /// workers' logs per context and level. Implies `--rewrite-frames`.
+    #[arg(long)]
+    pub log_events: bool,
+    /// Write one `request` event per request a worker serves (its route,
+    /// status, duration and the steps it took: capability ops, cross-context
+    /// calls and agent calls, each with its `.bynk` span), so an editor can show
+    /// what a request did. Implies `--format json` and `--rewrite-frames`. Builds the workers with the
+    /// recording on, and adds the `nodejs_als` compatibility flag unless the
+    /// project already lists `nodejs_compat` or `nodejs_als`. Steps carry no
+    /// argument values. Dev builds only: a deploy build never records.
+    #[arg(long)]
+    pub trace_events: bool,
+    /// Rewrite stack frames in the workers' output to `.bynk` locations
+    /// even on a terminal. Off a terminal (an editor task, CI) it is
+    /// always done; on one, wrangler's output is left attached so its
+    /// colour and hotkeys keep working.
+    #[arg(long)]
+    pub rewrite_frames: bool,
+}
+
 /// #2240: how a command may change `bynk.lock` and the store.
 #[derive(Args, Debug, Clone, Copy, Default)]
 pub struct LockArgs {
@@ -1444,6 +1462,17 @@ impl From<ClientLayoutArg> for bynk_emit::emitter::http_client::Layout {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use clap::Parser;
+
+    /// #3580: `--trace-events` implies `--format json`, so it needs no `--format`
+    /// and goes with `--log-events` (which writes events too).
+    #[test]
+    fn trace_events_needs_no_format_and_goes_with_log_events() {
+        let parse = |args: &[&str]| Cli::try_parse_from(["bynk", "dev"].iter().chain(args));
+        assert!(parse(&["--trace-events"]).is_ok());
+        assert!(parse(&["--trace-events", "--log-events"]).is_ok());
+        assert!(parse(&["--trace-events", "--format", "json"]).is_ok());
+    }
 
     /// A subcommand left out of `COMMAND_GROUPS` would vanish from
     /// `bynk --help`; one listed twice, or not at all, is a typo.

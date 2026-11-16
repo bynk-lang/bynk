@@ -1,0 +1,2 @@
+bynk.capability.base_not_instantiable
+`bynk.cloudflare.Images` has no named instances
