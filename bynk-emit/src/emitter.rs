@@ -4599,7 +4599,12 @@ pub const FAULT_RUNTIME_IMPORTS: &str = ", __fault";
 /// answer the inspect route.
 fn inspect_agent_imports(on: bool) -> Vec<&'static str> {
     if on {
-        vec!["__noteAgentInstance", "__inspectAgent"]
+        vec![
+            "__noteAgentInstance",
+            "__inspectAgent",
+            "__historyBefore",
+            "__historyRecord",
+        ]
     } else {
         Vec::new()
     }

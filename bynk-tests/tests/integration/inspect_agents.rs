@@ -50,6 +50,9 @@ fn a_deploy_build_carries_no_inspection_route_or_registry() {
             "__inspectRoute",
             "__inspectAgent",
             "__noteAgentInstance",
+            "__historyBefore",
+            "__historyRecord",
+            "__bynk_dev/history",
         ] {
             assert!(!text.contains(needle), "{path} mentions {needle}");
         }
@@ -71,6 +74,23 @@ fn a_dev_build_records_instances_and_answers_the_inspect_route() {
     // The factory hands its agent back through the recorder, with its key codec.
     let agents = find(&files, "shop-orders/handlers.ts");
     assert!(agents.contains("__noteAgentInstance(env?.__BYNK_INSPECT_REGISTRY, env?.LEDGER, \"Ledger\", key, __LedgerKey, __makeAgent("), "{agents}");
+    // Its commit records the transition, the handler's name riding with it.
+    assert!(
+        agents.contains(
+            "const __before = await __historyBefore(this.state.storage, __entryFieldsOfLedger)"
+        ),
+        "{agents}"
+    );
+    assert!(
+        agents.contains(
+            "await __historyRecord(this.state.storage, __entryFieldsOfLedger, __before, __handler)"
+        ),
+        "{agents}"
+    );
+    assert!(
+        agents.contains("commitState(__state, \"tally\")"),
+        "{agents}"
+    );
     // The agent's `fetch` answers `/_bynk/inspect` from its own storage, read-only.
     assert!(
         agents.contains("if (url.pathname === \"/_bynk/inspect\")"),

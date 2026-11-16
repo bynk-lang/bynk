@@ -6609,15 +6609,13 @@ fn emit_agent_load_commit_state(
         ));
         stmts
     };
+    let (commit_state_body, commit_state_params) =
+        commit_state_params(commit_state_body, &state_ty, ctx, fields_const);
     let commit_state_method = bynk_ts::TsClassMethod {
         name: "commitState".to_string(),
         private: true,
         is_async: true,
-        params: vec![bynk_ts::TsParam {
-            name: "s".to_string(),
-            ty: Some(bynk_ts::TsType::named(state_ty.clone())),
-            optional: false,
-        }],
+        params: commit_state_params,
         return_type: Some(bynk_ts::TsType::named_with_args(
             "globalThis.Promise",
             vec![bynk_ts::TsType::named("void")],
@@ -6630,6 +6628,55 @@ fn emit_agent_load_commit_state(
         class_depth,
     ));
     writeln!(out).unwrap();
+}
+
+/// `commitState`'s parameters and body. #3581: a `bynk dev` build's `commitState` also records the transition. It takes the
+/// handler's name as an optional trailing parameter, snapshots what is stored just
+/// before the write (the last statement of `body`), and appends `{handler, old, new,
+/// at}` to the instance's ring buffer just after it. A commit that throws before the
+/// write (an invariant or `transition` refusal) never reaches the append. Returns
+/// `body` unchanged, and just the state parameter, for every other build.
+fn commit_state_params(
+    mut body: Vec<bynk_ts::TsStmt>,
+    state_ty: &str,
+    ctx: &EmitProjectCtx,
+    fields_const: &str,
+) -> (Vec<bynk_ts::TsStmt>, Vec<bynk_ts::TsParam>) {
+    let mut params = vec![bynk_ts::TsParam {
+        name: "s".to_string(),
+        ty: Some(bynk_ts::TsType::named(state_ty.to_string())),
+        optional: false,
+    }];
+    if !ctx.inspect_agents {
+        return (body, params);
+    }
+    let call = |name: &str, extra: &[&str]| {
+        let mut args = vec![
+            bynk_ts::TsExpr::Ident("this.state.storage".to_string()),
+            bynk_ts::TsExpr::Ident(fields_const.to_string()),
+        ];
+        args.extend(extra.iter().map(|e| bynk_ts::TsExpr::Ident(e.to_string())));
+        bynk_ts::TsExpr::Await(Box::new(bynk_ts::TsExpr::Call {
+            callee: Box::new(bynk_ts::TsExpr::Ident(name.to_string())),
+            args,
+        }))
+    };
+    let before = bynk_ts::TsStmt::const_stmt(
+        bynk_ts::TsBindingName::Ident("__before".to_string()),
+        None,
+        call("__historyBefore", &[]),
+        None,
+    );
+    let after =
+        bynk_ts::TsStmt::expr_stmt(call("__historyRecord", &["__before", "__handler"]), None);
+    body.insert(body.len().saturating_sub(1), before);
+    body.push(after);
+    params.push(bynk_ts::TsParam {
+        name: "__handler".to_string(),
+        ty: Some(bynk_ts::TsType::named("string")),
+        optional: true,
+    });
+    (body, params)
 }
 
 /// What `loadState` does with the merged state's collections: fill the in-memory handles from the
@@ -7513,8 +7560,13 @@ fn emit_agent_handlers(
         // interleaved with direct `writeln!`s into `out` the way the
         // pre-conversion code was.
         let body_emits_directly = bynk_model::block_uses_emit(&h.body, &commons.callees);
-        let (mut raw_body, mut body_out_offset_in_raw) =
-            assemble_agent_raw_body(&body_out, is_store_agent, writes_state, body_emits_directly);
+        let (mut raw_body, mut body_out_offset_in_raw) = assemble_agent_raw_body(
+            &body_out,
+            is_store_agent,
+            writes_state,
+            body_emits_directly,
+            history_handler(ctx, &scope_method),
+        );
         // #3465: an agent handler that claimed settles its claims after the state
         // commit and the events flush, so a failure of either releases them.
         if cx.claim_scope_used {
@@ -7546,6 +7598,12 @@ fn emit_agent_handlers(
     }
 }
 
+/// #3581: in a `bynk dev` build the handler's name rides with its commit, so the
+/// instance's history entry names it. `None` for every other build.
+fn history_handler<'a>(ctx: &EmitProjectCtx, handler: &'a str) -> Option<&'a str> {
+    ctx.inspect_agents.then_some(handler)
+}
+
 /// One agent handler method's prologue + lowered body + epilogue (#3167), and
 /// the offset inside it at which the lowered body begins. A store handler that
 /// writes wraps its body in the implicit-commit closure; one that emits events
@@ -7555,6 +7613,7 @@ fn assemble_agent_raw_body(
     is_store_agent: bool,
     writes_state: bool,
     body_emits_directly: bool,
+    history_handler: Option<&str>,
 ) -> (String, usize) {
     let events_decl = format!(
         "    const __events: globalThis.Array<{}> = [];",
@@ -7584,7 +7643,10 @@ fn assemble_agent_raw_body(
     raw.push_str(body_out);
     writeln!(raw, "    }})();").unwrap();
     if writes_state {
-        writeln!(raw, "    await this.commitState(__state);").unwrap();
+        match history_handler {
+            Some(h) => writeln!(raw, "    await this.commitState(__state, \"{h}\");").unwrap(),
+            None => writeln!(raw, "    await this.commitState(__state);").unwrap(),
+        }
     }
     if body_emits_directly {
         writeln!(raw, "{flush}").unwrap();

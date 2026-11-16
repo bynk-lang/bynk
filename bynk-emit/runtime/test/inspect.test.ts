@@ -2,6 +2,11 @@ import { test } from "node:test";
 import assert from "node:assert/strict";
 import {
   BynkInspectRegistry,
+  HISTORY_KEY,
+  HISTORY_BYTES,
+  HISTORY_LIMIT,
+  historyBefore,
+  historyRecord,
   INSPECT_CALLER,
   inspectAgent,
   inspectRoute,
@@ -151,4 +156,63 @@ test("the route refuses a request that is not signed, and answers a signed one",
 
   const get = await inspectRoute(env, new Request(`http://w${path}`), "shop", bindings);
   assert.equal(get.status, 405);
+});
+
+// A commit as a dev build's `commitState` makes it: snapshot, write, record.
+async function commit(
+  state: ReturnType<typeof makeTestState>,
+  handler: string | undefined,
+  next: Record<string, unknown>,
+  lines: number,
+) {
+  const before = await historyBefore(state.storage, fields);
+  await state.storage.put("state", { ...next, __v: 2, __layout: 2 });
+  await state.storage.put(metaKey("lines"), { size: lines, seq: lines });
+  await historyRecord(state.storage, fields, before, handler);
+}
+
+test("each commit appends {handler, old, new, at}, and a read returns them in order", async () => {
+  const state = makeTestState("a");
+  await commit(state, "add", { total: 1 }, 1);
+  await commit(state, "add", { total: 3 }, 2);
+  const out = await read(state);
+  assert.equal(out.history.length, 2);
+  assert.equal(out.history[0].handler, "add");
+  assert.equal(out.history[0].old, null, "the first commit replaced nothing");
+  assert.deepEqual(out.history[0].new, { cells: { total: 1 }, sizes: { lines: 1 } });
+  assert.deepEqual(out.history[1].old, { cells: { total: 1 }, sizes: { lines: 1 } });
+  assert.deepEqual(out.history[1].new, { cells: { total: 3 }, sizes: { lines: 2 } });
+  assert.equal(typeof out.history[1].at, "number");
+});
+
+test("the buffer is bounded, drops the oldest, and lives outside layout 2's keys", async () => {
+  const state = makeTestState("a");
+  for (let i = 0; i < HISTORY_LIMIT + 5; i++) await commit(state, `h${i}`, { total: i }, 0);
+  const kept = (await state.storage.get(HISTORY_KEY)) as Array<{ handler: string }>;
+  assert.equal(kept.length, HISTORY_LIMIT);
+  assert.equal(kept[0]!.handler, "h5");
+  assert.equal(kept[kept.length - 1]!.handler, `h${HISTORY_LIMIT + 4}`);
+  for (const prefix of ["m/", "s/", "l/", "i/", "x/", "c/"]) assert.ok(!HISTORY_KEY.startsWith(prefix));
+  // A read of the cells and collections does not see it as one.
+  const out = await read(state);
+  assert.deepEqual(Object.keys(out.cells), ["total"]);
+});
+
+test("the buffer is also trimmed by size, so one value never outgrows storage's cap", async () => {
+  const state = makeTestState("a");
+  const big = "x".repeat(20 * 1024);
+  for (let i = 0; i < 20; i++) await commit(state, `h${i}`, { total: `${big}${i}` }, 0);
+  const kept = (await state.storage.get(HISTORY_KEY)) as Array<{ handler: string }>;
+  assert.ok(JSON.stringify(kept).length <= HISTORY_BYTES, "the stored value stays under the budget");
+  assert.ok(kept.length < 20, "older entries were dropped");
+  assert.equal(kept[kept.length - 1]!.handler, "h19", "recording kept going to the end");
+});
+
+test("a commit with no handler name is recorded as null, and recording never throws", async () => {
+  const state = makeTestState("a");
+  await commit(state, undefined, { total: 1 }, 0);
+  assert.equal(((await state.storage.get(HISTORY_KEY)) as Array<{ handler: unknown }>)[0]!.handler, null);
+  const broken = { get: async () => { throw new Error("boom"); }, put: async () => { throw new Error("boom"); } };
+  assert.equal(await historyBefore(broken as never, fields), undefined);
+  await historyRecord(broken as never, fields, null, "x");
 });
