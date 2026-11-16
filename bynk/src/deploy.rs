@@ -76,7 +76,7 @@ use vectorize::*;
 
 // External facade: the paths `main.rs` and `dev.rs` already use must keep
 // resolving exactly as they did before the split.
-pub use ledger::materialise_deploy_state;
+pub use ledger::{materialise_deploy_state, materialise_mtls_for_dev};
 pub(crate) use plan::conflicting_env_passthrough;
 pub use plan::{DeployFormat, DeployOptions, run};
 pub use revert::{RevertOptions, revert};

@@ -205,6 +205,11 @@ struct DevTable {
     /// `"allow"`. See Cloudflare's AI Search pricing page.
     #[serde(rename = "ai-search")]
     ai_search: Option<DevAck>,
+    /// Acknowledges that an mTLS certificate binding has no local simulation: under `bynk dev` a
+    /// call runs on Cloudflare, presenting your account's certificate to the origin the URL
+    /// names, so it needs a certificate `bynk deploy` has linked. `bynk dev` warns once, on the
+    /// first call, unless this is `"allow"`. See Cloudflare's mTLS bindings page.
+    mtls: Option<DevAck>,
 }
 
 /// The one value a `[dev]` acknowledgement takes.

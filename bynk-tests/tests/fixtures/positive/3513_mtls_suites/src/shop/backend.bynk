@@ -25,4 +25,36 @@ service api from http {
 			Err(_) => ServerError("the origin is unreachable"),
 		}
 	}
+	// The byte forms: the response body as `Bytes`, and a `Bytes` request body.
+	on GET("/orders/raw") () -> Effect[HttpResult[Int]] by Visitor given Backend {
+		let req = Request {
+			method: Get,
+			url: "https://orders.acme.example/v1/orders",
+			contentType: None,
+			authorization: None,
+			headers: Map.empty(),
+			body: None,
+		}
+		let res <- Backend.receiveBytes(req)
+		match res {
+			Ok(r) => Ok(r.body.length()),
+			Err(_) => ServerError("the origin is unreachable"),
+		}
+	}
+
+	on POST("/orders") (body: String) -> Effect[HttpResult[Int]] by Visitor given Backend {
+		let req = Request {
+			method: Post,
+			url: "https://orders.acme.example/v1/orders",
+			contentType: Some("application/octet-stream"),
+			authorization: None,
+			headers: Map.empty(),
+			body: None,
+		}
+		let res <- Backend.sendBytes(req, Bytes.fromUtf8(body))
+		match res {
+			Ok(r) => Ok(r.status),
+			Err(_) => ServerError("the origin is unreachable"),
+		}
+	}
 }

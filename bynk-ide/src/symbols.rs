@@ -2979,7 +2979,7 @@ pub(crate) fn describe_derived_capability(
     }
     // #3513 A: a client certificate, linked by deploy and never uploaded.
     if d.base.name == "MtlsCertificate" {
-        out.push_str("\nEmits `[[mtls_certificates]]`: a distinct instance of `MtlsCertificate`, whose `send` presents the account's client certificate `@certificate` names to the origin the URL names, in every environment. Bynk never uploads a certificate: its private key never reaches Bynk.\n");
+        out.push_str("\nEmits `[[mtls_certificates]]`: a distinct instance of `MtlsCertificate`, whose `send` presents the account's client certificate `@certificate` names to the origin the URL names, in every environment. `bynk deploy` links it by name and never uploads it: the private key never reaches Bynk. `bynk dev` runs it on Cloudflare, once you allow it with `[dev] mtls`.\n");
     }
     // #3302: outbound email, restricted by its annotations.
     if d.base.name == "Email" {

@@ -125,6 +125,15 @@ pub(crate) struct Environment {
     /// reads and a project without AI Search writes the same file.
     #[serde(default, skip_serializing_if = "BTreeMap::is_empty")]
     pub(crate) ai_search_links: BTreeMap<String, BTreeMap<String, AiSearchLink>>,
+    /// #3513 A: each Worker's `MtlsCertificate` instances, keyed by the instance's binding
+    /// (`MTLS_BACKEND`): the account certificate the deploy linked it to. Linked, never
+    /// uploaded, so there is nothing to orphan or prune. It holds a certificate's name and id,
+    /// never any key material: the deploy never asks for it. It is what `bynk dev` binds by.
+    ///
+    /// Additive, `default`ed and omitted when empty, so an older ledger still reads and a
+    /// project without mTLS writes the same file.
+    #[serde(default, skip_serializing_if = "BTreeMap::is_empty")]
+    pub(crate) mtls_certificate_links: BTreeMap<String, BTreeMap<String, MtlsCertificateLink>>,
     /// P3 (#2342): each Worker's `RateLimit` instances, keyed by binding
     /// (`RATELIMIT_LOGIN_LIMIT`), as `kv_instances` is. The `namespace_id` is
     /// minted here, not by Cloudflare: a positive integer unique across every
@@ -295,6 +304,15 @@ pub(crate) struct HyperdrivePast {
 pub(crate) struct AiSearchLink {
     /// The instance's name, as `@instance` wrote it.
     pub(crate) instance: String,
+}
+
+/// #3513 A: the account certificate an `MtlsCertificate` binding was linked to.
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
+pub(crate) struct MtlsCertificateLink {
+    /// The certificate's name, as `@certificate` wrote it.
+    pub(crate) certificate: String,
+    /// The certificate's id, which the push binds.
+    pub(crate) certificate_id: String,
 }
 
 /// #3301: the Secrets Store secret a `StoredSecret` binding was linked to.
@@ -1057,6 +1075,29 @@ impl DeployLock {
         true
     }
 
+    /// #3513 A: record the certificate `worker`'s `MtlsCertificate` `binding` was linked to.
+    /// `true` when that changed the ledger.
+    pub(crate) fn record_mtls_certificate(
+        &mut self,
+        environment: &str,
+        worker: &str,
+        binding: &str,
+        link: MtlsCertificateLink,
+    ) -> bool {
+        let links = self
+            .environments
+            .entry(environment.to_string())
+            .or_default()
+            .mtls_certificate_links
+            .entry(worker.to_string())
+            .or_default();
+        if links.get(binding) == Some(&link) {
+            return false;
+        }
+        links.insert(binding.to_string(), link);
+        true
+    }
+
     /// P3 (#2342): the `namespace_id` for `worker`'s rate limiter `binding`
     /// in `environment`: the recorded one, else a new one — the first id from
     /// its [`ratelimit_seed`] upward (wrapping within the span) that no rate
@@ -1618,6 +1659,19 @@ pub(crate) fn recorded_stored_secret<'a>(
         .and_then(|links| links.get(binding))
 }
 
+/// The certificate recorded for `worker`'s `MtlsCertificate` `binding` (#3513 A).
+pub(crate) fn recorded_mtls_certificate<'a>(
+    lock: &'a DeployLock,
+    worker: &str,
+    binding: &str,
+    environment: &str,
+) -> Option<&'a MtlsCertificateLink> {
+    lock.environments
+        .get(environment)
+        .and_then(|env| env.mtls_certificate_links.get(worker))
+        .and_then(|links| links.get(binding))
+}
+
 /// The instance recorded for `worker`'s `AiSearch` `binding` (#3480).
 #[cfg(test)]
 pub(crate) fn recorded_ai_search<'a>(
@@ -1814,6 +1868,57 @@ pub(crate) fn write_lock(path: &Path, lock: &DeployLock) -> Result<(), String> {
         let _ = dir_file.sync_all();
     }
     Ok(())
+}
+
+/// #3513 A: bind a served Worker's `[[mtls_certificates]]` by the ids the last deploy of
+/// `environment` recorded, for `bynk dev`. An mTLS binding has no local simulation, so the
+/// development copy runs it on Cloudflare and needs the certificate's real id, which only a deploy
+/// has resolved. Every binding with a recorded link is bound; the message names each that has
+/// none (`Err`), for the caller to report and carry on: a call through it then fails, naming it.
+/// `Ok(false)` when the Worker declares no certificate.
+pub fn materialise_mtls_for_dev(
+    project_root: &Path,
+    worker: &str,
+    config: &Path,
+    environment: &str,
+) -> Result<bool, String> {
+    let text = std::fs::read_to_string(config).map_err(|e| e.to_string())?;
+    let bindings = bynk_emit::emitter::wrangler::mtls_certificate_bindings(&text)?;
+    if bindings.is_empty() {
+        return Ok(false);
+    }
+    let lock = read_lock(&project_root.join(LOCK_FILE))?;
+    let mut ids = BTreeMap::new();
+    let mut unlinked = Vec::new();
+    for binding in bindings {
+        match recorded_mtls_certificate(&lock, worker, &binding, environment) {
+            Some(link) => {
+                ids.insert(binding, link.certificate_id.clone());
+            }
+            None => unlinked.push(binding),
+        }
+    }
+    if !ids.is_empty() && !materialise_mtls_certificates(config, &ids) {
+        return Err("could not write generated configuration".into());
+    }
+    if unlinked.is_empty() {
+        return Ok(true);
+    }
+    // An unlinked entry is dropped from the development copy, not left to wrangler: marked
+    // `remote = true` with a name where an id belongs, it might fail the whole startup.
+    let text = std::fs::read_to_string(config).map_err(|e| e.to_string())?;
+    let kept = bynk_emit::emitter::wrangler::drop_mtls_certificates(&text, &unlinked)?;
+    if kept != text {
+        std::fs::write(config, kept).map_err(|e| e.to_string())?;
+    }
+    Err(format!(
+        "mTLS certificate binding {} of `{worker}` has not been linked under environment `{environment}`, so it is left unbound and a call through it fails; run `bynk deploy --env {environment}` first, which links the certificate by name",
+        unlinked
+            .iter()
+            .map(|b| format!("`{b}`"))
+            .collect::<Vec<_>>()
+            .join(", ")
+    ))
 }
 
 /// Fill a generated worker configuration from the committed deploy ledger.
@@ -2333,6 +2438,7 @@ pub(crate) mod tests {
                     )]),
                     hyperdrive_instances: BTreeMap::new(),
                     ai_search_links: BTreeMap::new(),
+                    mtls_certificate_links: BTreeMap::new(),
                     stored_secret_links: BTreeMap::from([(
                         "api".into(),
                         BTreeMap::from([(
@@ -2951,6 +3057,62 @@ pub(crate) mod tests {
             .map(|ns| ns["id"].as_str().unwrap())
             .collect();
         assert_eq!(ids, ["price", "sess"]);
+        let _ = std::fs::remove_dir_all(dir);
+    }
+
+    /// #3513 A: `bynk dev` binds an mTLS certificate by the id the last deploy recorded for the
+    /// environment, since the binding runs on Cloudflare and takes a real id. One no deploy has
+    /// linked is reported naming it, and the certificate's *name* is never left in
+    /// `certificate_id` for a linked one.
+    #[test]
+    fn materialise_mtls_for_dev_binds_a_linked_certificate_by_its_recorded_id() {
+        let dir = scratch_lock_dir("materialise-mtls");
+        let config = dir.join("wrangler.toml");
+        let text = "[[mtls_certificates]]\nbinding = \"MTLS_BACKEND\"\ncertificate_id = \"acme-client\"\n\n[[mtls_certificates]]\nbinding = \"MTLS_OTHER\"\ncertificate_id = \"ops\"\n";
+        std::fs::write(&config, text).unwrap();
+        // A Worker with no certificate is left alone.
+        let plain = dir.join("plain.toml");
+        std::fs::write(&plain, "name = \"x\"\n").unwrap();
+        assert_eq!(
+            materialise_mtls_for_dev(&dir, "shop", &plain, "default"),
+            Ok(false)
+        );
+        let mut lock = DeployLock {
+            version: 1,
+            ..Default::default()
+        };
+        lock.record_mtls_certificate(
+            "default",
+            "shop",
+            "MTLS_BACKEND",
+            MtlsCertificateLink {
+                certificate: "acme-client".into(),
+                certificate_id: "c-123".into(),
+            },
+        );
+        std::fs::write(dir.join(LOCK_FILE), toml::to_string_pretty(&lock).unwrap()).unwrap();
+        let original = std::fs::read_to_string(&config).unwrap();
+        // The linked binding is bound; the other is named and dropped from the development copy.
+        let err = materialise_mtls_for_dev(&dir, "shop", &config, "default")
+            .expect_err("an unlinked certificate is reported");
+        assert!(
+            err.contains("`MTLS_OTHER`") && !err.contains("`MTLS_BACKEND`"),
+            "{err}"
+        );
+        assert!(err.contains("bynk deploy --env default"), "{err}");
+        let out = std::fs::read_to_string(&config).unwrap();
+        assert!(out.contains("certificate_id = \"c-123\""), "{out}");
+        assert!(
+            !out.contains("MTLS_OTHER") && !out.contains("\"ops\""),
+            "{out}"
+        );
+        // Another environment has linked nothing, so each binding is dropped.
+        std::fs::write(&config, original).unwrap();
+        let other = materialise_mtls_for_dev(&dir, "shop", &config, "staging").unwrap_err();
+        assert!(
+            other.contains("`MTLS_OTHER`") && other.contains("staging"),
+            "{other}"
+        );
         let _ = std::fs::remove_dir_all(dir);
     }
 

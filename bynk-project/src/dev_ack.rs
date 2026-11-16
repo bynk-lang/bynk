@@ -47,6 +47,11 @@ pub const REMOTE_KINDS: &[RemoteKind] = &[
         key: "ai-search",
         var: "BYNK_DEV_ACK_AI_SEARCH",
     },
+    // #3513 A: an mTLS certificate binding runs on Cloudflare under `bynk dev`.
+    RemoteKind {
+        key: "mtls",
+        var: "BYNK_DEV_ACK_MTLS",
+    },
 ];
 
 /// The variable `bynk dev` sets to `1` on every Worker it serves, so a
@@ -145,6 +150,10 @@ mod tests {
             acks("[dev]\nai-search = \"allow\"\n"),
             Ok(vec!["ai-search"])
         );
+        // #3513 A: an mTLS certificate binding is acknowledged on its own.
+        assert_eq!(acks("[dev]\nmtls = \"allow\"\n"), Ok(vec!["mtls"]));
+        let e = acks("[dev]\nmtls = true\n").unwrap_err();
+        assert!(e.contains("`[dev]` `mtls`"), "{e}");
         assert_eq!(
             acks("[dev.hyperdrive.Main]\nconnection_env = \"X\"\n[dev]\n"),
             Ok(vec![])

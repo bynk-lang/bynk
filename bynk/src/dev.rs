@@ -637,7 +637,7 @@ pub fn run(
         );
         return ExitCode::FAILURE;
     }
-    proxy_ai_search(&workers_dir, &serving);
+    proxy_remote_bindings(project_root, &workers_dir, &serving, &opts.environment);
     let stand_in_configs = match write_stand_ins(&build_dir, &stand_in_plans) {
         Ok(configs) => configs,
         Err(e) => {
@@ -862,7 +862,7 @@ pub fn run(
             emit(opts.format, &DevEvent::Rebuilding);
             let rebuild = dev_build(opts);
             if crate::workers::compile_once_reporting(project_root, &build_dir, rebuild, None) {
-                proxy_ai_search(&workers_dir, &serving);
+                proxy_remote_bindings(project_root, &workers_dir, &serving, &opts.environment);
                 // Interop I5 (#1972): refresh the served copy from the
                 // rebuilt config. A binding added since start has no
                 // stand-in until `bynk dev` restarts.
@@ -2043,6 +2043,54 @@ fn proxy_ai_search(workers_dir: &Path, serving: &[Serving]) {
     }
 }
 
+/// #3513 A: each served Worker's development copy of its config runs an `[[mtls_certificates]]`
+/// binding on Cloudflare (`remote = true`), bound by the certificate id the last deploy of
+/// `environment` recorded, since mTLS has no local simulation. A certificate no deploy has linked
+/// is reported, and the Worker serves with it unbound, so a call through it fails.
+fn proxy_mtls(project_root: &Path, workers_dir: &Path, serving: &[Serving], environment: &str) {
+    for s in serving {
+        let path = workers_dir.join(&s.worker).join("wrangler.toml");
+        let Ok(text) = std::fs::read_to_string(&path) else {
+            continue;
+        };
+        if !text.contains("mtls_certificates") {
+            continue;
+        }
+        if let Err(e) =
+            crate::deploy::materialise_mtls_for_dev(project_root, &s.worker, &path, environment)
+        {
+            eprintln!("bynk: {e}");
+        }
+        let Ok(text) = std::fs::read_to_string(&path) else {
+            continue;
+        };
+        match bynk_emit::emitter::wrangler::enable_remote_mtls(&text) {
+            Ok(out) if out != text => {
+                if let Err(e) = std::fs::write(&path, out) {
+                    eprintln!(
+                        "bynk: could not run `{}`'s mTLS bindings on the account: {e}",
+                        s.worker
+                    );
+                }
+            }
+            Ok(_) => {}
+            Err(e) => eprintln!("bynk: could not run `{}`'s mTLS bindings: {e}", s.worker),
+        }
+    }
+}
+
+/// The remote-only bindings of the development copy: AI Search (#3480) and mTLS certificates
+/// (#3513 A).
+fn proxy_remote_bindings(
+    project_root: &Path,
+    workers_dir: &Path,
+    serving: &[Serving],
+    environment: &str,
+) {
+    proxy_ai_search(workers_dir, serving);
+    proxy_mtls(project_root, workers_dir, serving, environment);
+}
+
 /// #3478: the `--var`s of [`dev_var_args`] for `project_root`'s `[dev]`
 /// acknowledgements, or `None` after printing why not.
 fn dev_vars_for(project_root: &Path) -> Option<Vec<String>> {
@@ -2168,6 +2216,11 @@ mod tests {
                 "--var",
                 "BYNK_DEV_ACK_AI_SEARCH:allow"
             ]
+        );
+        // #3513 A: and so does an mTLS certificate binding.
+        assert_eq!(
+            dev_var_args(&BTreeSet::from(["mtls"])),
+            ["--var", "BYNK_DEV:1", "--var", "BYNK_DEV_ACK_MTLS:allow"]
         );
     }
 
