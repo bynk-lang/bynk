@@ -84,11 +84,12 @@ not; a group has at most one member that declares `from websocket` services
 service to route by; a fixed asset path two members serve from different files, or
 one that would be a folder of the other's, is `asset_path_conflict`, and a fixed
 asset shadowing another member's literal route is `bynk.asset.shadows_route`
-across members (assets merge into one directory, so only overlaps are errors); and
-a group has at most one member that publishes events
-(`bynk.deploy.multiple_publishers`), which is **temporary**: each publisher has its
-own events fan-out class, and the restriction lifts when G3 merges a group's
-fan-out into one class routing every member's events.
+across members (assets merge into one directory, so only overlaps are errors). A
+group has **one events fan-out** for every member that publishes (G3-1): a member
+emits no fan-out of its own and tags each event with its name, the group's
+`events_fanout.ts` routes by `<publisher>/<type>` (two members may declare an
+event of one name) and signs each delivery as the publisher, and its entry exports
+`__EventsFanout` once. The temporary `bynk.deploy.multiple_publishers` is gone.
 
 *D7: a group's self-binding is exempt from [[0193]] D1.* An edge between two members
 is a Service Binding from the group's Worker **to itself**, which Cloudflare
@@ -122,8 +123,8 @@ edge as no edge.
   refuse it with `bynk.deploy.worker_groups_unsupported`, which G4 (deploy,
   `--worker`, ledger and facts versions, the `10007` handling) and G6 remove.
 - **Still open, G3:** in-process edges and events between members (an intra-group
-  call is a Service Binding to itself today), a merged events fan-out (lifting
-  `multiple_publishers`), and a conformance harness. The group cycle check
+  call is a Service Binding to itself today). The merged events fan-out and the
+  conformance harness have landed. The group cycle check
   (`bynk.deploy.group_cycle`) lands before G3.
 - **Still open, G5:** moving an agent-owning context into or out of a group is
   refused in v1 (`bynk.deploy.agent_move_refused`); the scratch-account probe

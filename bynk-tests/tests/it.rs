@@ -467,6 +467,8 @@ mod system {
     mod within_behaviour;
     #[path = "worker_group_dispatch.rs"]
     mod worker_group_dispatch;
+    #[path = "worker_group_events.rs"]
+    mod worker_group_events;
     #[path = "workers_fault_log.rs"]
     mod workers_fault_log;
     #[path = "workers_runtime_smoke.rs"]

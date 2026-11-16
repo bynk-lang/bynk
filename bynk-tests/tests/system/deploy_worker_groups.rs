@@ -290,10 +290,9 @@ fn publisher_context(name: &str, event: &str) -> String {
     )
 }
 
-/// Temporary: each publisher has its own events fan-out class, so a group may
-/// have one publishing member only.
+/// A group's members may all publish: they share one events fan-out (G3-1).
 #[test]
-fn a_group_with_two_publishing_members_is_refused_for_now() {
+fn a_group_may_have_several_publishing_members() {
     let root = std::env::temp_dir().join(format!("bynk-deploy-groups-pub-{}", std::process::id()));
     write_project(&root, WORKERS_TARGET);
     fs::write(
@@ -307,18 +306,7 @@ fn a_group_with_two_publishing_members_is_refused_for_now() {
     )
     .unwrap();
     let (ok, out) = build(&root);
-    assert!(!ok, "{out}");
-    assert!(out.contains("bynk.deploy.multiple_publishers"), "{out}");
-    assert!(out.contains("temporary"), "{out}");
-
-    // One publisher, with a member that publishes nothing, is fine.
-    fs::write(
-        root.join("src/shop/payment.bynk"),
-        plain_context("shop.payment"),
-    )
-    .unwrap();
-    let (ok, out) = build(&root);
-    assert!(ok, "one publishing member is allowed:\n{out}");
+    assert!(ok, "two publishers share the group's fan-out:\n{out}");
     let _ = fs::remove_dir_all(&root);
 }
 

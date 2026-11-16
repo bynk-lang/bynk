@@ -1605,7 +1605,8 @@ pub fn emit_worker_entry(
     // requirement, for the fan-out DO — it lives in its own file
     // (`events_fanout.ts`, not `handlers.ts`; a fan-out DO has no backing
     // `AgentDecl` for `emit_agent` to emit it from).
-    if uses_emit {
+    // A group's one fan-out is exported by the group's entry (#3562).
+    if uses_emit && !member_mode {
         header_decls.push(TsStmt::decl(
             TsDecl::ReExport {
                 names: vec![crate::emitter::wrangler::EVENTS_FANOUT_CLASS_NAME.to_string()],
