@@ -108,20 +108,26 @@ impl WorkerLayout {
     /// entry) imports its handlers module: `./handlers.js`, or
     /// `./<member>.handlers.js` in a group.
     pub fn own_handlers_specifier(&self, context: &str) -> String {
-        self.handlers_specifier(context, context)
+        format!("./{}", self.handlers_file_stem(context))
+    }
+
+    fn handlers_file_stem(&self, context: &str) -> String {
+        let file = self.handlers_output_path(context);
+        let name = file.file_name().unwrap_or_default().to_string_lossy();
+        format!("{}.js", name.trim_end_matches(".ts"))
     }
 
     /// The import specifier, from a module in `from`'s Worker directory, of
     /// `to`'s handlers module: `../<dir>/handlers.js` across Workers,
     /// `./<member>.handlers.js` within one.
     pub fn handlers_specifier(&self, from: &str, to: &str) -> String {
-        let file = self.handlers_output_path(to);
-        let name = file.file_name().unwrap_or_default().to_string_lossy();
-        let name = name.trim_end_matches(".ts");
-        if self.dir(from) == self.dir(to) {
-            format!("./{name}.js")
+        let name = self.handlers_file_stem(to);
+        // A context naming its own handlers from a module one directory down
+        // (a split context's) goes up and back in, as it always has.
+        if from != to && self.dir(from) == self.dir(to) {
+            format!("./{name}")
         } else {
-            format!("../{}/{name}.js", self.dir(to))
+            format!("../{}/{name}", self.dir(to))
         }
     }
 }
@@ -237,6 +243,16 @@ mod tests {
         assert_eq!(
             layout.handlers_specifier("shop.orders", "billing"),
             "../billing/handlers.js"
+        );
+    }
+
+    /// A context importing its own handlers (a split context's agent deps) keeps
+    /// the specifier it has always had, so a build without groups is unchanged.
+    #[test]
+    fn a_contexts_own_handlers_import_keeps_its_spelling() {
+        assert_eq!(
+            WorkerLayout::identity().handlers_specifier("shop.orders", "shop.orders"),
+            "../shop-orders/handlers.js"
         );
     }
 }
