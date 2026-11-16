@@ -369,6 +369,7 @@ fn single_file_ctx() -> EmitProjectCtx {
         embed_text: Default::default(),
         imported_methods: HashMap::new(),
         runtime_use: Default::default(),
+        worker_layout: Default::default(),
     }
 }
 
@@ -3542,7 +3543,7 @@ fn emit_cross_context_namespace_imports(
                     p
                 } else {
                     match ctx.target {
-                        BuildTarget::Workers => bynk_project::worker_handlers_source_path(q),
+                        BuildTarget::Workers => ctx.worker_layout.handlers_source_path(q),
                         BuildTarget::Bundle => {
                             let mut p = EmitProjectCtx::commons_path(q);
                             p.set_extension("bynk");

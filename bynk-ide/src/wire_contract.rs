@@ -1652,4 +1652,120 @@ service api from http {
             model.responses
         );
     }
+
+    // -- #3631: a user sum variant named like an `HttpResult` variant is that
+    // -- sum's constructor, not the HTTP response. The checker records the
+    // -- constructor call's own (sum) type, so the walk never reaches the
+    // -- declared-return fallback for it.
+    #[test]
+    fn user_sum_variant_named_like_an_http_variant_is_not_a_response() {
+        const SRC: &str = r#"context catalogue
+
+type Item = { id: Int, name: String }
+type Outcome = | Found(item: Item) | Absent
+
+service api from http {
+  on GET("/outcome/:id") (id: String) -> Effect[HttpResult[Outcome]] by Visitor {
+    Ok(Found(Item { id: 1, name: id }))
+  }
+}
+"#;
+        let root = setup_project("sum-variant-found", &[("catalogue.bynk", SRC)]);
+        let diag = crate::testkit::diagnose_project(&root);
+        let info = diag.boundary_info.get("catalogue").expect("entry");
+        let expr_types = clean_expr_types(&diag, "catalogue.bynk");
+        let model = wire_contract_at(
+            "catalogue",
+            SRC,
+            find_offset(SRC, "GET("),
+            info,
+            expr_types,
+            &diag.ty_intern,
+            real_context_count(&diag),
+        )
+        .expect("a wire contract at the GET handler");
+        let variants: Vec<&str> = model.responses.iter().map(|r| r.variant.as_str()).collect();
+        assert_eq!(variants, ["Ok", "StructuralMismatch"], "{variants:?}");
+    }
+
+    /// The responses `src`'s `GET /x` handler constructs, by variant name.
+    fn constructed_variants(test: &str, ctx_name: &str, src: &str) -> Vec<String> {
+        let file = format!("{ctx_name}.bynk");
+        let root = setup_project(test, &[(file.as_str(), src)]);
+        let diag = crate::testkit::diagnose_project(&root);
+        let info = diag.boundary_info.get(ctx_name).expect("entry");
+        let expr_types = clean_expr_types(&diag, &file);
+        wire_contract_at(
+            ctx_name,
+            src,
+            find_offset(src, "GET("),
+            info,
+            expr_types,
+            &diag.ty_intern,
+            real_context_count(&diag),
+        )
+        .expect("a wire contract at the GET handler")
+        .responses
+        .into_iter()
+        .map(|r| r.variant)
+        .collect()
+    }
+
+    // -- #3631: every `HttpResult` variant name, used as a user sum variant
+    // -- (bare call, and bare nullary), is the user's constructor.
+    #[test]
+    fn every_http_variant_name_as_a_user_sum_variant_is_not_a_response() {
+        const SRC: &str = r#"context names
+
+type Msg = { text: String }
+type Shape =
+  | Created(msg: Msg)
+  | Accepted(msg: Msg)
+  | NotFound(msg: Msg)
+  | Conflict(msg: Msg)
+  | Gone(msg: Msg)
+  | Redirect(msg: Msg)
+  | Found(msg: Msg)
+  | NoContent
+
+service api from http {
+  on GET("/x") () -> Effect[HttpResult[List[Shape]]] by Visitor {
+    let m = Msg { text: "t" }
+    Ok([Created(m), Accepted(m), NotFound(m), Conflict(m), Gone(m), Redirect(m), Found(m), NoContent])
+  }
+}
+"#;
+        let variants = constructed_variants("all-http-names", "names", SRC);
+        assert_eq!(variants, ["Ok"], "only the declared `Ok`: {variants:?}");
+    }
+
+    // -- #3631: the wire contract still reports a genuine `HttpResult.Found`,
+    // -- bare and qualified, alongside a same-named user variant elsewhere.
+    #[test]
+    fn genuine_http_found_is_still_a_response() {
+        const SRC: &str = r#"context moved
+
+type Item = { id: Int }
+type Outcome = | Found(item: Item) | Absent
+
+fn lookup() -> Outcome {
+  Found(Item { id: 1 })
+}
+
+service api from http {
+  on GET("/x") () -> Effect[HttpResult[Outcome]] by Visitor {
+    match lookup() {
+      Found(item) => Found("/elsewhere")
+      Absent => HttpResult.NotFound
+    }
+  }
+}
+"#;
+        let variants = constructed_variants("genuine-found", "moved", SRC);
+        assert!(
+            variants.iter().any(|v| v == "Found"),
+            "a genuine `Found(\"/elsewhere\")` is the 302: {variants:?}"
+        );
+        assert!(variants.iter().any(|v| v == "NotFound"), "{variants:?}");
+    }
 }
