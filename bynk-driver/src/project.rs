@@ -3663,11 +3663,6 @@ fn runtime_with_npm(
     (runtime_files, npm_deps)
 }
 
-/// Build-success tail (region 3): emit the composition/worker/runtime files
-/// and assemble the final `ProjectOutput`. Reached only on build mode with a
-/// clean error sink. Moved verbatim from the old pipeline; only the locals it
-/// reads are now bound from the `Checked` variant.
-#[allow(clippy::too_many_arguments)]
 /// State-migrations S4 (#2259 Decision D): the context's versioned agent classes,
 /// which its Worker's signed `/_bynk/migrate/` route can wake, with their lock
 /// versions, sorted.
@@ -3700,6 +3695,11 @@ fn inspect_classes(on: bool, table: &UnitTable) -> Vec<String> {
     classes
 }
 
+/// Build-success tail (region 3): emit the composition/worker/runtime files
+/// and assemble the final `ProjectOutput`. Reached only on build mode with a
+/// clean error sink. Moved verbatim from the old pipeline; only the locals it
+/// reads are now bound from the `Checked` variant.
+#[allow(clippy::too_many_arguments)]
 fn build_output(
     parsed: Vec<ParsedFile>,
     mut compiled: Vec<StagedFile>,
@@ -4060,7 +4060,7 @@ fn build_output(
                 let consumed_types = unit_consumed_context_types
                     .get(ctx_name)
                     .unwrap_or(&no_consumed_types);
-                let migratable = migratable_agents(ctx_name, table, &agent_versions);
+                let migratable = migratable_agents(ctx_name, table, agent_versions);
                 let inspect_classes = inspect_classes(inspect_agents, table);
                 let entry_ts = emitter::emit_worker_entry(
                     ctx_name,
