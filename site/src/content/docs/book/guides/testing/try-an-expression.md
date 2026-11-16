@@ -15,18 +15,17 @@ is deployed and nothing reaches the network.
 A small shop of three units. `shop.money` is a commons with a refined type and a
 function:
 
-```bynk
+```text
 commons shop.money
 
 type Percent = Int where InRange(0, 100)
 
 fn discount(cents: Int, off: Percent) -> Int {
-	cents - cents * off / 100
+  cents - cents * off / 100
 }
 ```
 
-`shop.catalog` is a context that exports a type, and `shop.orders` is a context
-that `uses` the money and `consumes` the catalogue:
+`shop.catalog` is a context that exports a type:
 
 ```text
 context shop.catalog
@@ -36,11 +35,15 @@ exports transparent { Sku }
 type Sku = String where NonEmpty
 ```
 
+`shop.orders` is a context that `uses` the money, `consumes` the catalogue, and
+calls out over `Fetch`:
+
 ```text
 context shop.orders
 
 uses shop.money
 consumes shop.catalog
+consumes bynk { Fetch, Request, Method, Response }
 
 type Order = {
   id: String,
@@ -49,6 +52,23 @@ type Order = {
 
 fn total(o: Order, off: Percent) -> Int {
   discount(o.cents, off)
+}
+
+service notify {
+  on call(url: String) -> Effect[Int] given Fetch {
+    let res <- Fetch.send(Request {
+      method: Post,
+      url: url,
+      contentType: None,
+      authorization: None,
+      headers: Map.empty(),
+      body: None,
+    })
+    match res {
+      Ok(r) => Effect.pure(r.status)
+      Err(_) => Effect.pure(-1)
+    }
+  }
 }
 ```
 
@@ -123,19 +143,30 @@ line. Units used with `uses` (like `shop.money` above) are in scope already.
 
 A capability that reaches outside the process (`Fetch`, a database, a secret
 store) has no real implementation here: the test runtime refuses it unless it's
-stubbed, and the result says so:
+stubbed, and the result says so. This is `shop.orders`, which consumes `Fetch`,
+sending a request with no stub:
+
+```sh
+bynk eval --unit shop.orders --expr 'consumes bynk { Fetch, Request, Method, Response }
+let res <- Fetch.send(Request { method: Get, url: "https://example.com", contentType: None, authorization: None, headers: Map.empty(), body: None })
+res'
+```
 
 ```json
 {"diagnostics":[],"error":{"kind":"runtime","message":"Error: bynk: `Fetch.send` is not stubbed, and a test never reaches the network — add `stub Fetch.send(_) returns …`"}}
 ```
 
-Stub it in the snippet's leading lines, as in a suite:
+Stub it in the snippet's leading lines, as in a suite, and it answers:
 
 ```text
 consumes bynk { Fetch, Request, Method, Response }
 stub Fetch.send(_) returns Ok(Response { status: 204, headers: Map.empty(), body: "" })
 let res <- Fetch.send(Request { method: Get, url: "https://example.com", contentType: None, authorization: None, headers: Map.empty(), body: None })
 res
+```
+
+```json
+{"value":{"kind":"Ok","value":{"body":"","headers":[],"status":204}},"type":"Result[Response, FetchError]","diagnostics":[]}
 ```
 
 The unit has to consume the capability itself, as it does for the code the
@@ -185,7 +216,15 @@ Standard input then carries the buffers, so the snippet has to come from `--expr
 ## 7. When it doesn't check or doesn't finish
 
 A snippet that doesn't type-check returns structured diagnostics at its own lines
-and columns, and exits 1:
+and columns, and exits 1. For the snippet
+
+```text
+let a = 1
+let x: Int = "no"
+x
+```
+
+the result is:
 
 ```json
 {"value":null,"type":null,"diagnostics":[{"line":2,"col":14,"severity":"error","code":"bynk.types.let_annotation_mismatch","message":"let binding's value has type `String`, but the annotation declares `Int`"}]}

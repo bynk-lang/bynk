@@ -1377,7 +1377,7 @@ This is an explicit, local run of code the user wrote in their own workspace, at
 the trust level of `bynk test`. It does not change how the refined-type explorer
 evaluates a hover (ADR 0638).
 
-**Result.** One document on stdout, in this order:
+**Result.** One document on stdout, in this order (when the project's dependencies cannot be prepared, the reason goes to stderr as for the other commands, and the document is a `setup` error):
 
 ```json
 {"value": <wire shape>, "type": "Result[Percent, ValidationError]", "diagnostics": []}
@@ -1411,8 +1411,8 @@ installation once, on the first evaluation, as `bynk test` does.
 
 ## Dependencies: `bynk.lock`, `--locked` and `--offline`
 
-Before `bynk check`, `bynk test`, `bynk dev` and `bynk deploy` compile, they
-resolve the project's [`[dependencies]`](/docs/manifest/#dependencies) (and
+Before `bynk check`, `bynk test`, `bynk eval`, `bynk dev` and `bynk deploy`
+compile, they resolve the project's [`[dependencies]`](/docs/manifest/#dependencies) (and
 `[dev-dependencies]`) against [`bynk.lock`](/docs/manifest/#bynklock), fetch any
 git dependency missing from the store, re-check every fetched dependency
 against its locked checksum, and rewrite the lock if the dependencies changed.
