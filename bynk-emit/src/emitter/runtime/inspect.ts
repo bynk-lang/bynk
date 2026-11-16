@@ -12,8 +12,10 @@
 // an older layout by writing; it applies the same layout and schema-version
 // gates to the raw stored record, and returns what is stored, which is the wire
 // shape. A record at an older version than the build is reported, not migrated.
-// The history ring buffer (slice 1) is stored under `HISTORY_KEY`, a reserved
-// key outside layout 2's namespaces, and is not read here yet.
+// The history ring buffer (slice 1) is appended by `commitState` in a dev build,
+// through `historyBefore` and `historyRecord`, and kept under `HISTORY_KEY`, a
+// reserved key outside layout 2's namespaces: it survives eviction, and no
+// layout-2 read, write or sweep touches it. `inspectAgent` returns it.
 
 import type { DurableObjectNamespace, WireCodec } from "./agent.ts";
 import { serialiseAgentKey } from "./agent.ts";
@@ -32,8 +34,11 @@ export const INSPECT_CALLER = "bynk.dev";
 export const INSPECT_PAGE_DEFAULT = 50;
 export const INSPECT_PAGE_MAX = 500;
 
-/** The reserved storage key of an instance's transition ring buffer (slice 1). */
+/** The reserved storage key of an instance's transition ring buffer. */
 export const HISTORY_KEY = "__bynk_dev/history";
+
+/** Transitions kept per instance; the oldest are dropped. */
+export const HISTORY_LIMIT = 50;
 
 /** What the registry knows of one instance. `key` is the key in wire form. */
 export interface InspectInstance {
@@ -193,6 +198,85 @@ function faultKind(e: unknown): string {
   return typeof kind === "string" ? kind : "Fault";
 }
 
+// The `Cell` fields of a stored record, as stored: everything but the toolchain's
+// markers and the collections (and their index postings), which are not cells.
+function cellsOf(stored: Record<string, unknown>, fields: readonly WholesaleField[]): Record<string, unknown> {
+  const cells: Record<string, unknown> = {};
+  for (const [k, v] of globalThis.Object.entries(stored)) {
+    if (k === "__v" || k === "__layout") continue;
+    if (fields.some((f) => f.name === k || (f.indexes ?? []).some((ix) => ix.recordField === k))) continue;
+    cells[k] = v;
+  }
+  return cells;
+}
+
+/** One transition, as a dev build records it: the state a commit replaced and the state it wrote. */
+export interface HistoryState {
+  cells: Record<string, unknown>;
+  sizes: Record<string, number | null>;
+}
+
+export interface HistoryEntry {
+  handler: string | null;
+  old: HistoryState | null;
+  new: HistoryState | null;
+  at: number;
+}
+
+// The cells and each collection's size, as stored. A collection's entries are not
+// copied (a large one would fill the buffer); its size is. `null` is no stored state yet.
+async function snapshot(storage: DurableObjectState["storage"], fields: readonly WholesaleField[]): Promise<HistoryState | null> {
+  const stored = await storage.get<Record<string, unknown>>("state");
+  if (stored === undefined || stored === null) return null;
+  const sizes: Record<string, number | null> = {};
+  for (const f of fields) {
+    if (typeof stored.__layout === "number" && stored.__layout >= 2) {
+      const meta = await storage.get<{ size?: number }>(metaKey(f.name));
+      sizes[f.name] = typeof meta?.size === "number" ? meta.size : null;
+    } else {
+      const inline = stored[f.name];
+      sizes[f.name] = Array.isArray(inline)
+        ? inline.length
+        : inline !== null && typeof inline === "object"
+          ? globalThis.Object.keys(inline).length
+          : null;
+    }
+  }
+  return { cells: cellsOf(stored, fields), sizes };
+}
+
+// A dev build's `commitState`, just before the write: what is stored now. Never
+// throws and never writes: recording must not change a commit.
+export async function historyBefore(
+  storage: DurableObjectState["storage"],
+  fields: readonly WholesaleField[],
+): Promise<HistoryState | null | undefined> {
+  try {
+    return await snapshot(storage, fields);
+  } catch {
+    return undefined;
+  }
+}
+
+// A dev build's `commitState`, just after the write: append `{handler, old, new, at}`
+// to the instance's ring buffer, dropping the oldest past `HISTORY_LIMIT`. A commit
+// that failed never reaches it, so a refused transition leaves no entry. Never throws.
+export async function historyRecord(
+  storage: DurableObjectState["storage"],
+  fields: readonly WholesaleField[],
+  before: HistoryState | null | undefined,
+  handler: string | undefined,
+): Promise<void> {
+  if (before === undefined) return;
+  try {
+    const kept = (await storage.get<HistoryEntry[]>(HISTORY_KEY)) ?? [];
+    kept.push({ handler: handler ?? null, old: before, new: await snapshot(storage, fields), at: Date.now() });
+    await storage.put(HISTORY_KEY, kept.slice(-HISTORY_LIMIT));
+  } catch {
+    // Recording is best effort.
+  }
+}
+
 // The agent side: read this instance's stored state, without writing. `fields`
 // describes its collections. `?field=<f>&after=<cursor>&limit=<n>` pages one
 // collection; otherwise each collection's first page comes back with its cursor.
@@ -218,12 +302,7 @@ export async function inspectAgent(
   }
   // A record behind the build that a migration step covers: shown as stored, not migrated.
   const behind = version !== null && info.current !== null && version < info.current && info.steps.some(([lo, n]) => version >= lo && version <= n);
-  const cells: Record<string, unknown> = {};
-  for (const [k, v] of globalThis.Object.entries(stored)) {
-    if (k === "__v" || k === "__layout") continue;
-    if (fields.some((f) => f.name === k || (f.indexes ?? []).some((ix) => ix.recordField === k))) continue;
-    cells[k] = v;
-  }
+  const cells = cellsOf(stored, fields);
   const limit = limitOf(url);
   const only = url.searchParams.get("field");
   const after = url.searchParams.get("after");
@@ -233,7 +312,8 @@ export async function inspectAgent(
     const cursor = only === null ? null : after;
     collections[f.name] = layout >= 2 ? await entryPage(state, f, cursor, limit) : inlinePage(f, stored[f.name], cursor, limit);
   }
-  return json({ ...head, readable: true, migrationPending: behind, cells, collections });
+  const history = (await state.storage.get<HistoryEntry[]>(HISTORY_KEY)) ?? [];
+  return json({ ...head, readable: true, migrationPending: behind, cells, collections, history });
 }
 
 async function instancesOf(registry: DurableObjectNamespace, className: string | null): Promise<InspectInstance[]> {
@@ -294,4 +374,4 @@ export async function inspectRoute(
 }
 
 // #1653: the `__` aliases emitted code imports.
-export { inspectAgent as __inspectAgent, inspectRoute as __inspectRoute, noteAgentInstance as __noteAgentInstance };
+export { historyBefore as __historyBefore, historyRecord as __historyRecord, inspectAgent as __inspectAgent, inspectRoute as __inspectRoute, noteAgentInstance as __noteAgentInstance };

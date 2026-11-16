@@ -44,7 +44,25 @@ agent Cart {
   }
 }
 
+// Refuses the commit that would take `taken` past 3.
+agent Gate {
+  key id: String
+  store taken: Cell[Int] = 0
+
+  invariant under_limit: taken < 3
+
+  on call take() -> Effect[Int] {
+    let _ <- taken.update((n) => n + 1)
+    Effect.pure(taken)
+  }
+}
+
 service api from http {
+  on GET("/gate/:id") (id: String) -> Effect[HttpResult[String]] by v: Visitor {
+    let n <- Gate(id).take()
+    Ok("\(n)")
+  }
+
   on GET("/add/:id/:sku") (id: String, sku: String) -> Effect[HttpResult[String]] by v: Visitor {
     let t <- Cart(id).add(sku, 2)
     Ok("\(t)")
@@ -219,5 +237,93 @@ fn a_running_session_lists_its_instances_and_reads_their_state() {
         !proj.join(".bynk").join("dev").join("session.json").exists(),
         "the session file is removed when the session stops"
     );
+    let _ = std::fs::remove_dir_all(proj);
+}
+
+/// The body of a 200 reply, trimmed; the status line otherwise.
+fn gate_body(reply: &str) -> String {
+    match reply.split_once("\r\n\r\n") {
+        Some((head, body)) if head.contains(" 200 ") => body.trim().to_string(),
+        _ => reply.lines().next().unwrap_or_default().to_string(),
+    }
+}
+
+#[test]
+fn a_session_records_each_committed_transition_and_not_a_refused_one() {
+    if unavailable() {
+        return;
+    }
+    let proj = project("history");
+    let port = ports::free_port();
+    let ready = proj.join("ready.json");
+    let log = proj.join("bynk-dev.log");
+    let (out, err) = dev_child::log_to(&log);
+    let mut cmd = Command::new(env!("CARGO_BIN_EXE_bynk"));
+    std::os::unix::process::CommandExt::process_group(&mut cmd, 0);
+    let mut dev = Group(
+        cmd.arg("dev")
+            .arg(&proj)
+            .args(["--base-port", &port.to_string()])
+            .arg("--ready-json")
+            .arg(&ready)
+            .stdout(out)
+            .stderr(err)
+            .spawn()
+            .expect("spawn bynk dev"),
+    );
+    let deadline = Instant::now() + Duration::from_secs(180);
+    while !ready.exists() {
+        if let Ok(Some(status)) = dev.0.try_wait() {
+            panic!("{}", dev_child::exited_early(status, &log));
+        }
+        assert!(Instant::now() < deadline, "no readiness file within 180s");
+        std::thread::sleep(Duration::from_millis(250));
+    }
+
+    // Two commits go through; the third would take `taken` to 3 and is refused.
+    for expected in ["\"1\"", "\"2\""] {
+        assert_eq!(gate_body(&get(port, "/gate/g1")), expected);
+    }
+    let refused = get(port, "/gate/g1");
+    assert!(
+        !refused.contains(" 200 "),
+        "the third take is refused: {refused}"
+    );
+
+    // The registry write is fire-and-forget: wait for the instance to be listed.
+    let until = Instant::now() + Duration::from_secs(20);
+    let state = loop {
+        let out = bynk(&proj, &["dev", "inspect", "agent", "Gate", "g1"]);
+        if out.status.success() {
+            break serde_json::from_slice::<serde_json::Value>(&out.stdout).unwrap();
+        }
+        assert!(
+            Instant::now() < until,
+            "{}",
+            String::from_utf8_lossy(&out.stderr)
+        );
+        std::thread::sleep(Duration::from_millis(250));
+    };
+    assert_eq!(
+        state["cells"]["taken"], 2,
+        "the refused commit did not persist: {state}"
+    );
+    let history = state["history"].as_array().expect("history");
+    assert_eq!(
+        history.len(),
+        2,
+        "two commits, no entry for the refused one: {state}"
+    );
+    assert_eq!(history[0]["handler"], "take");
+    assert!(
+        history[0]["old"].is_null(),
+        "the first commit replaced nothing"
+    );
+    assert_eq!(history[0]["new"]["cells"]["taken"], 1);
+    assert_eq!(history[1]["old"]["cells"]["taken"], 1);
+    assert_eq!(history[1]["new"]["cells"]["taken"], 2);
+    assert!(history[1]["at"].as_u64().unwrap() >= history[0]["at"].as_u64().unwrap());
+
+    drop(dev);
     let _ = std::fs::remove_dir_all(proj);
 }
