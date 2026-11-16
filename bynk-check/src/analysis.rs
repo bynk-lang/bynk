@@ -955,7 +955,9 @@ fn analyse_project_inner(
     // #3229: one set of cross-context views for the whole project, not one per unit.
     let views = CrossContextViewsCache::default();
     // Each unit's `Events.emit` calls, for the bundle's composition-root check
-    // below, as `run_checks` keeps them in its own `unit_callees`.
+    // below, as `run_checks` keeps them in its own `unit_callees`; and its
+    // service and agent calls, for the architecture facts (model-diagrams
+    // slice 5).
     let mut unit_callees = project_model::UnitCallees::new();
     for name in project_model::uses_first_order(unit_info.keys(), &unit_uses) {
         let info = &unit_info[name];
@@ -1057,7 +1059,14 @@ fn analyse_project_inner(
             checked
                 .iter()
                 .flat_map(|t| &t.callees)
-                .filter(|(_, c)| project_model::is_events_emit(c))
+                .filter(|(_, c)| {
+                    project_model::is_events_emit(c)
+                        || matches!(
+                            c,
+                            crate::checker::Callee::Cross { .. }
+                                | crate::checker::Callee::Agent { .. }
+                        )
+                })
                 .map(|(id, c)| (*id, c.clone())),
         );
         // #2719: the unit's needs-context set, and the calls that would carry

@@ -95,6 +95,25 @@ pub struct WireArchMember {
 pub struct WireArchHandlerUses {
     pub member: WireArchMember,
     pub uses: Vec<WireArchUse>,
+    /// Model-diagrams slice 5: the services and agents the handler calls.
+    pub calls: Vec<WireArchCall>,
+}
+
+/// Model-diagrams slice 5: one service or agent a handler calls.
+#[derive(Debug, Clone, serde::Serialize)]
+pub struct WireArchCall {
+    /// `"service"` (a consumed context's service) or `"agent"` (one of the
+    /// caller's own agents).
+    pub kind: &'static str,
+    /// The unit that declares the callee.
+    pub unit: String,
+    /// The service or agent name.
+    pub container: String,
+    /// The agent handler dispatched to; absent for a service call.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub handler: Option<String>,
+    /// The handler's first call to it.
+    pub loc: WireLoc,
 }
 
 #[derive(Debug, Clone, serde::Serialize)]
@@ -182,6 +201,10 @@ pub struct WireArchAgent {
     #[serde(rename = "handlerCount")]
     pub handler_count: usize,
     pub loc: WireLoc,
+    /// Model-diagrams slice 5: the key as written (`id: ClientId`).
+    pub key: String,
+    /// Model-diagrams slice 5: the `store` field names, in declaration order.
+    pub state: Vec<String>,
 }
 
 #[derive(Debug, Clone, serde::Serialize)]
@@ -315,6 +338,8 @@ pub fn to_wire(
                                 name: a.name.clone(),
                                 handler_count: a.handler_count,
                                 loc: wire_loc(project_root, snapshots, &a.loc)?,
+                                key: a.key.clone(),
+                                state: a.state.clone(),
                             })
                         })
                         .collect(),
@@ -367,6 +392,19 @@ fn wire_uses(
                                     })
                                 })
                                 .collect(),
+                        })
+                    })
+                    .collect(),
+                calls: h
+                    .calls
+                    .iter()
+                    .filter_map(|c| {
+                        Some(WireArchCall {
+                            kind: member_kind_str(c.kind),
+                            unit: c.unit.clone(),
+                            container: c.container.clone(),
+                            handler: c.handler.clone(),
+                            loc: wire_loc(project_root, snapshots, &c.loc)?,
                         })
                     })
                     .collect(),

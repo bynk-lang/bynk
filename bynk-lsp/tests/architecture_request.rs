@@ -94,6 +94,31 @@ fn rate_limiter_is_one_node_with_a_bound_capability_and_no_dangling_edge() {
     let json = serde_json::to_value(&wire_node.services[0]).expect("serialise");
     assert_eq!(json["protocol"], "http");
     assert_eq!(json["actors"], serde_json::json!(["Visitor"]));
+
+    // Model-diagrams slice 5: the agent's key and state, and the route's call
+    // into the agent, as the component view draws them.
+    let agent = serde_json::to_value(&wire_node.agents[0]).expect("serialise");
+    assert_eq!(agent["key"], "client: ClientId");
+    assert_eq!(agent["state"], serde_json::json!(["windowStart", "count"]));
+    let route = wire_node
+        .uses
+        .iter()
+        .find(|h| h.member.container == "api")
+        .expect("the api route");
+    let calls = serde_json::to_value(&route.calls).expect("serialise");
+    assert_eq!(calls.as_array().map(Vec::len), Some(1));
+    assert_eq!(calls[0]["kind"], "agent");
+    assert_eq!(calls[0]["unit"], "ratelimit");
+    assert_eq!(calls[0]["container"], "Limiter");
+    assert_eq!(calls[0]["handler"], "hit");
+    assert!(route.calls[0].loc.uri.as_str().ends_with("ratelimit.bynk"));
+    let hit = wire_node
+        .uses
+        .iter()
+        .find(|h| h.member.container == "Limiter")
+        .expect("the agent handler");
+    let json = serde_json::to_value(hit).expect("serialise");
+    assert_eq!(json["calls"], serde_json::json!([]));
 }
 
 const PROVIDER_SRC: &str = r#"context platformtime

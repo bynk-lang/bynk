@@ -129,6 +129,25 @@ pub struct UseFact {
 pub struct HandlerUsesFact {
     pub member: MemberFact,
     pub uses: Vec<UseFact>,
+    /// Model-diagrams slice 5: the services and agents the handler calls, as
+    /// the checker resolved them. One entry per target, at its first call.
+    pub calls: Vec<CallFact>,
+}
+
+/// What a handler calls (model-diagrams slice 5).
+#[derive(Debug, Clone, PartialEq, Eq, PartialOrd, Ord)]
+pub enum CallTarget {
+    /// A consumed context's service (`B.service(…)`, `Alias.service(…)`).
+    Service { unit: String, service: String },
+    /// One of this unit's own agents, and the handler dispatched to.
+    Agent { agent: String, handler: String },
+}
+
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct CallFact {
+    pub target: CallTarget,
+    /// The first call to `target` in the handler.
+    pub site: FactSite,
 }
 
 /// A `stub` of one capability in one suite (suite-level or in a case).
@@ -322,6 +341,7 @@ impl<'a> UnitCx<'a> {
                         self.emits(&member, &op.body, &site, events);
                         uses.push(HandlerUsesFact {
                             uses: self.use_facts(&p.given, None, &site),
+                            calls: self.calls(&op.body, &site),
                             member,
                         });
                     }
@@ -380,6 +400,7 @@ impl<'a> UnitCx<'a> {
         self.emits(&member, &h.body, site, events);
         uses.push(HandlerUsesFact {
             uses: self.use_facts(&h.given, Some(h.span), site),
+            calls: self.calls(&h.body, site),
             member,
         });
     }
@@ -398,6 +419,55 @@ impl<'a> UnitCx<'a> {
                 inherited: handler_span
                     .is_some_and(|h| c.span.start < h.start || c.span.end > h.end),
                 site: site(c.span),
+            })
+            .collect()
+    }
+
+    /// The services and agents a body calls, in source order, one entry per
+    /// target (its first call).
+    fn calls(
+        &self,
+        body: &bynk_syntax::ast::Block,
+        site: &dyn Fn(Span) -> FactSite,
+    ) -> Vec<CallFact> {
+        let Some(callees) = self.callees else {
+            return Vec::new();
+        };
+        let mut found: Vec<(CallTarget, Span)> = Vec::new();
+        let mut stack = Vec::new();
+        for s in &body.statements {
+            statement_exprs(s, &mut stack);
+        }
+        stack.push(&body.tail);
+        while let Some(e) = stack.pop() {
+            let target = match callees.get(&e.id) {
+                Some(crate::checker::Callee::Cross { unit, service }) => {
+                    Some(CallTarget::Service {
+                        unit: unit.clone(),
+                        service: service.clone(),
+                    })
+                }
+                Some(crate::checker::Callee::Agent { agent, handler }) => Some(CallTarget::Agent {
+                    agent: agent.clone(),
+                    handler: handler.clone(),
+                }),
+                _ => None,
+            };
+            if let Some(target) = target {
+                match found.iter_mut().find(|(t, _)| *t == target) {
+                    Some((_, at)) if e.span.start < at.start => *at = e.span,
+                    Some(_) => {}
+                    None => found.push((target, e.span)),
+                }
+            }
+            stack.extend(expr_children(e));
+        }
+        found.sort_by_key(|(_, span)| span.start);
+        found
+            .into_iter()
+            .map(|(target, span)| CallFact {
+                target,
+                site: site(span),
             })
             .collect()
     }
