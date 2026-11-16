@@ -66,19 +66,20 @@ pub fn group_trigger_conflicts(
                 let CommonsItem::Service(service) = item else {
                     continue;
                 };
-                if let ServiceProtocol::Queue { name } = &service.protocol
-                    && let Some(&earlier) = claims.queues.get(name)
-                    && earlier != ctx
-                {
-                    clash(
-                        "bynk.deploy.queue_consumer_conflict",
-                        service.name.span,
-                        format!("consume queue `{name}`"),
-                        earlier,
-                        "a Worker has one consumer for a queue: move the queue to one context, or put the contexts in different groups",
-                    );
-                } else if let ServiceProtocol::Queue { name } = &service.protocol {
-                    claims.queues.entry(name.clone()).or_insert(ctx);
+                if let ServiceProtocol::Queue { name } = &service.protocol {
+                    match claims.queues.get(name) {
+                        Some(&earlier) if earlier != ctx => clash(
+                            "bynk.deploy.queue_consumer_conflict",
+                            service.name.span,
+                            format!("consume queue `{name}`"),
+                            earlier,
+                            "a Worker has one consumer for a queue: move the queue to one context, or put the contexts in different groups",
+                        ),
+                        Some(_) => {}
+                        None => {
+                            claims.queues.insert(name.clone(), ctx);
+                        }
+                    }
                 }
                 for handler in &service.handlers {
                     let HandlerKind::Http { method, path } = &handler.kind else {

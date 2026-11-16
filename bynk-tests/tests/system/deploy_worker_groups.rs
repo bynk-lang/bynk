@@ -328,9 +328,11 @@ fn context_with(name: &str, body: &str) -> String {
 }
 
 /// Write the two members of group `core` with `a` and `b` as their bodies, build
-/// grouped, and (when `code` is given) expect that error; then build ungrouped
-/// and expect it clean, since separate Workers may each answer the same thing.
-fn trigger_conflict(tag: &str, a: &str, b: &str, code: &str) {
+/// grouped and expect `code`. With `separate_ok`, then build ungrouped and expect
+/// it clean, since separate Workers may each answer the same route. It is not
+/// asserted for a queue: Cloudflare accepts one consumer Worker per queue, and no
+/// project-wide check says so yet, so a test must not treat that as intended.
+fn trigger_conflict(tag: &str, a: &str, b: &str, code: &str, separate_ok: bool) {
     let root =
         std::env::temp_dir().join(format!("bynk-deploy-groups-{tag}-{}", std::process::id()));
     write_project(&root, WORKERS_TARGET);
@@ -351,6 +353,10 @@ fn trigger_conflict(tag: &str, a: &str, b: &str, code: &str) {
         out.contains("contexts `shop.orders` and `shop.payment` share Worker `core`"),
         "{out}"
     );
+    if !separate_ok {
+        let _ = fs::remove_dir_all(&root);
+        return;
+    }
     // The same project, ungrouped: each Worker answers its own.
     fs::write(
         root.join("bynk.toml"),
@@ -368,7 +374,13 @@ const ROUTE_B: &str = "service b from http by Visitor {\n\ton GET(\"/ping\") () 
 /// A Worker answers a route with one handler.
 #[test]
 fn members_that_declare_the_same_route_collide() {
-    trigger_conflict("route", ROUTE_A, ROUTE_B, "bynk.deploy.route_conflict");
+    trigger_conflict(
+        "route",
+        ROUTE_A,
+        ROUTE_B,
+        "bynk.deploy.route_conflict",
+        true,
+    );
 }
 
 /// A Worker has one consumer for a queue.
@@ -384,6 +396,7 @@ fn members_that_consume_the_same_queue_collide() {
         &svc("a"),
         &svc("b"),
         "bynk.deploy.queue_consumer_conflict",
+        false,
     );
 }
 
