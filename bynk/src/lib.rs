@@ -64,6 +64,7 @@ pub mod stop;
 pub mod sweep;
 pub mod tail;
 pub mod test;
+pub mod trace;
 pub mod workers;
 
 /// The driver's own version, from Cargo.

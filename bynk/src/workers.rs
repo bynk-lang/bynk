@@ -47,6 +47,8 @@ pub struct Build {
     schema_registry: bool,
     dry_run: bool,
     no_install: bool,
+    /// #3580: record per-request traces (`bynk dev --trace-events`).
+    trace_requests: bool,
 }
 
 impl Build {
@@ -55,6 +57,16 @@ impl Build {
             schema_registry,
             dry_run,
             no_install: false,
+            trace_requests: false,
+        }
+    }
+
+    /// `bynk dev --trace-events` (#3580): build the Workers with per-request
+    /// trace recording, and the compatibility flag its request scope needs.
+    pub fn trace_requests(self, trace_requests: bool) -> Self {
+        Build {
+            trace_requests,
+            ..self
         }
     }
 
@@ -67,6 +79,28 @@ impl Build {
             ..self
         }
     }
+}
+
+/// #3580: a traced build records per-request steps, and finds the request's
+/// record through `AsyncLocalStorage`, which a Worker has under `nodejs_als` (or
+/// `nodejs_compat`, which includes it). The flag goes through the ordinary
+/// `compatibility_flags` path, so it merges with the project's own; it is added
+/// only when neither is already listed, so the duplicate warning never fires.
+fn with_trace(
+    options: bynk_driver::project::CompileOptions,
+    trace_requests: bool,
+) -> bynk_driver::project::CompileOptions {
+    if !trace_requests {
+        return options;
+    }
+    let mut flags = options.compatibility_flags.clone();
+    if !flags
+        .iter()
+        .any(|f| f == "nodejs_als" || f == "nodejs_compat")
+    {
+        flags.push("nodejs_als".to_string());
+    }
+    options.compatibility_flags(flags).trace_requests(true)
 }
 
 /// [`compile_once`], reporting each context to `progress` as it compiles (#3100).
@@ -105,6 +139,7 @@ pub fn compile_once_reporting(
             return false;
         }
     };
+    let options = with_trace(options, build.trace_requests);
     let output = match bynk_driver::project::compile_project(&options) {
         Ok(out) => out,
         Err(failure) => {
@@ -295,5 +330,33 @@ pub fn wrangler_command(provenance: &Provenance, subcommand: &str) -> Option<Com
             Some(cmd)
         }
         Provenance::Missing => None,
+    }
+}
+
+#[cfg(test)]
+mod trace_flag_tests {
+    use super::with_trace;
+
+    fn flags(listed: &[&str], trace: bool) -> Vec<String> {
+        let mut o = bynk_driver::project::CompileOptions::single(".");
+        o.compatibility_flags = listed.iter().map(|s| s.to_string()).collect();
+        with_trace(o, trace).compatibility_flags
+    }
+
+    #[test]
+    fn a_traced_build_adds_the_request_scope_flag_once() {
+        assert_eq!(flags(&[], true), ["nodejs_als"]);
+        assert_eq!(flags(&["x"], true), ["x", "nodejs_als"]);
+    }
+
+    #[test]
+    fn a_flag_that_already_provides_it_is_left_alone() {
+        assert_eq!(flags(&["nodejs_compat"], true), ["nodejs_compat"]);
+        assert_eq!(flags(&["nodejs_als"], true), ["nodejs_als"]);
+    }
+
+    #[test]
+    fn an_untraced_build_is_untouched() {
+        assert!(flags(&[], false).is_empty());
     }
 }
