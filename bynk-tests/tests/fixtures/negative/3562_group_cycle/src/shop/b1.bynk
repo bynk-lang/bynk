@@ -1,0 +1,7 @@
+context shop.b1
+
+service to_b1 {
+  on call(n: Int) -> Effect[Int] {
+    Effect.pure(n)
+  }
+}

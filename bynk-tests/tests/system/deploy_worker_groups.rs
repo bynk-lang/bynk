@@ -847,3 +847,72 @@ fn a_members_fixed_asset_shadows_another_members_literal_route() {
     assert!(ok, "separate Workers each have their own paths:\n{out}");
     let _ = fs::remove_dir_all(&root);
 }
+
+fn calling_context(name: &str, callee: Option<&str>, service: &str) -> String {
+    match callee {
+        Some(callee) => format!(
+            "context {name}\n\nconsumes {callee}\n\nservice {service} {{\n\ton call(n: Int) -> Effect[Int] {{\n\t\tlet r <- {callee}.to_{}(n)\n\t\tEffect.pure(r)\n\t}}\n}}\n",
+            callee.rsplit('.').next().unwrap()
+        ),
+        None => format!(
+            "context {name}\n\nservice {service} {{\n\ton call(n: Int) -> Effect[Int] {{\n\t\tEffect.pure(n)\n\t}}\n}}\n"
+        ),
+    }
+}
+
+/// A Worker is uploaded after the Workers it binds to, so two groups may depend on
+/// one another one way, and a group's members may call each other (a Worker
+/// binding to itself), but not both ways between two groups.
+#[test]
+fn groups_may_depend_one_way_but_not_in_a_cycle() {
+    let root =
+        std::env::temp_dir().join(format!("bynk-deploy-groups-cycle-{}", std::process::id()));
+    let manifest = "[build]\ntarget = \"workers\"\n\n[deploy.workers.front]\ncontexts = [\"shop.a1\", \"shop.a2\"]\n\n[deploy.workers.back]\ncontexts = [\"shop.b1\", \"shop.b2\"]\n";
+    write_project(&root, manifest);
+    let write = |a1: Option<&str>, a2: Option<&str>, b1: Option<&str>, b2: Option<&str>| {
+        for (file, name, callee) in [
+            ("a1", "shop.a1", a1),
+            ("a2", "shop.a2", a2),
+            ("b1", "shop.b1", b1),
+            ("b2", "shop.b2", b2),
+        ] {
+            fs::write(
+                root.join(format!("src/shop/{file}.bynk")),
+                calling_context(name, callee, &format!("to_{file}")),
+            )
+            .unwrap();
+        }
+    };
+
+    // front -> back and front -> back again: one direction, fine.
+    write(Some("shop.b1"), Some("shop.b2"), None, None);
+    let (ok, out) = build(&root);
+    assert!(ok, "one-way dependencies between groups are fine:\n{out}");
+
+    // An edge inside a group (a1 calls a2) is a Worker binding to itself.
+    write(Some("shop.a2"), None, None, None);
+    let (ok, out) = build(&root);
+    assert!(ok, "calls within a group are no edge:\n{out}");
+
+    // front -> back (a1 calls b1) and back -> front (b2 calls a2): a cycle
+    // between the Workers, though no cycle among the contexts.
+    write(Some("shop.b1"), None, None, Some("shop.a2"));
+    let (ok, out) = build(&root);
+    assert!(!ok, "{out}");
+    assert_eq!(out.matches("bynk.deploy.group_cycle").count(), 1, "{out}");
+    assert!(
+        out.contains("`back`, `front`") || out.contains("`front`, `back`"),
+        "{out}"
+    );
+    assert!(
+        out.contains("`shop.a1` binds to `shop.b1`")
+            && out.contains("`shop.b2` binds to `shop.a2`"),
+        "one context edge per hop:\n{out}"
+    );
+
+    // Ungrouped, the same contexts have no cycle: each is its own Worker.
+    fs::write(root.join("bynk.toml"), "[build]\ntarget = \"workers\"\n").unwrap();
+    let (ok, out) = build(&root);
+    assert!(ok, "ungrouped, the contexts form no cycle:\n{out}");
+    let _ = fs::remove_dir_all(&root);
+}

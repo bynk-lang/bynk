@@ -8894,6 +8894,10 @@ pub const REGISTRY: &[DiagnosticInfo] = &[
         "A build breaks the contract a declared foreign caller's client was generated at, as pinned in `bynk.foreign.toml`, so `bynk deploy` refuses to ship it.",
     ),
     d(
+        "bynk.deploy.group_cycle",
+        "Workers bind to each other in a cycle once the contexts of `[deploy.workers.<key>]` groups are folded into their Workers, though the contexts themselves are acyclic; a Worker is uploaded after the Workers it binds to, so the cycle cannot be deployed.",
+    ),
+    d(
         "bynk.deploy.group_name_conflict",
         "A `[deploy.workers.<key>]` group's key or script name is another group's, or is the Worker of a context in no group.",
     ),
