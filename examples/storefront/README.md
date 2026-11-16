@@ -8,7 +8,7 @@ What it shows:
   TypeScript module with one function per route, the server's refinements applied in
   the client, and `Option` as `T | null`.
 - **A discriminated result** — every call returns the route's own answers plus a
-  `CallFailure`; `web/src/storefront.ts` handles each with a `switch` on `status`.
+  `CallFailure`; `web/src/storefront.ts` handles each with a `switch` on `kind`.
 - **A drift gate** — `bynk client --check` fails when the committed client is stale.
 
 The `web/` front end has no framework, so the same functions work in SvelteKit, Next.js

@@ -76,6 +76,7 @@ console.log("catalogue", JSON.stringify(await loadCatalogue(shop)));
 console.log("ordered", await placeOrder(shop, "mug", 2));
 console.log("sold-out", await placeOrder(shop, "sold-out", 1));
 console.log("invalid", await placeOrder(shop, "mug", 100));
+console.log("empty-sku", await placeOrder(shop, "", 1));
 console.log("offline", await placeOrder(down, "mug", 1));
 "#;
 
@@ -151,7 +152,11 @@ fn the_front_end_type_checks_and_runs_against_the_real_worker() {
     assert_eq!(said("sold-out"), "Sorry: that item is sold out");
     assert_eq!(
         said("invalid"),
-        "Check the quantity (1 to 99); nothing was sent."
+        "Check the SKU and quantity (1 to 99); nothing was sent."
+    );
+    assert_eq!(
+        said("empty-sku"),
+        "Check the SKU and quantity (1 to 99); nothing was sent."
     );
     assert_eq!(said("offline"), "Could not reach the shop. Try again.");
     let _ = fs::remove_dir_all(&dir);
