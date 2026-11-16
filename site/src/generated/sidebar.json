@@ -250,6 +250,10 @@
             "link": "/book/guides/effects-and-capabilities/call-a-foreign-worker/"
           },
           {
+            "label": "Call an mTLS origin",
+            "link": "/book/guides/effects-and-capabilities/call-an-mtls-origin/"
+          },
+          {
             "label": "Store files in R2",
             "link": "/book/guides/effects-and-capabilities/store-files-in-r2/"
           },
