@@ -87,7 +87,11 @@ fn the_front_end_type_checks_and_runs_against_the_real_worker() {
     let dir = std::env::temp_dir().join(format!("bynk-storefront-{}", std::process::id()));
     let _ = fs::remove_dir_all(&dir);
     fs::create_dir_all(dir.join("web")).unwrap();
-    for rel in ["web/tsconfig.json", "web/src/api.ts", "web/src/storefront.ts"] {
+    for rel in [
+        "web/tsconfig.json",
+        "web/src/api.ts",
+        "web/src/storefront.ts",
+    ] {
         let to = dir.join(rel);
         fs::create_dir_all(to.parent().unwrap()).unwrap();
         fs::copy(example().join(rel), to).unwrap();
@@ -145,7 +149,10 @@ fn the_front_end_type_checks_and_runs_against_the_real_worker() {
     );
     assert_eq!(said("ordered"), "Ordered 2 × mug (o-1)");
     assert_eq!(said("sold-out"), "Sorry: that item is sold out");
-    assert_eq!(said("invalid"), "Check the quantity (1 to 99); nothing was sent.");
+    assert_eq!(
+        said("invalid"),
+        "Check the quantity (1 to 99); nothing was sent."
+    );
     assert_eq!(said("offline"), "Could not reach the shop. Try again.");
     let _ = fs::remove_dir_all(&dir);
 }
