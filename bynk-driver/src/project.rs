@@ -97,6 +97,7 @@ pub use bynk_check::schema_registry::{AgentVersions, MigrationStep};
 pub use bynk_check::symbols::{FileDeclIndex, UnitTable};
 // #1883, slice 1b: the `assets/` folder helpers, for the driver and testkit.
 pub use bynk_project::assets;
+use bynk_project::worker_layout::WorkerLayout;
 pub use bynk_project::{
     AttributedError, LabelFile, ProjectPaths, ProjectPathsError, Roots, SchemaLock, TestTarget,
     UnitKind, WorkersConfig, Workspace, check_manifest, check_manifest_str, dependency_trees,
@@ -533,7 +534,7 @@ type Discovered = Vec<Vec<PathBuf>>;
 /// modes, for `bynk deploy` (a Worker with no `MySql` instance gets no file).
 fn stage_binding_files(
     bindings: &[emitter::wrangler::WorkerBinding],
-    layout: &bynk_project::worker_layout::WorkerLayout,
+    layout: &WorkerLayout,
     context: &str,
     d1_migrations: &bynk_check::d1_migrations::D1Migrations,
     compiled: &mut Vec<StagedFile>,
@@ -1676,6 +1677,8 @@ struct EmitUnitCtx {
     /// overwriting the last. `file_decl_index` then names each declaration's
     /// module, so one file imports what it uses from another.
     split_worker: bool,
+    /// #3562: where each context's files go.
+    layout: WorkerLayout,
 }
 
 fn build_emit_unit_ctx(
@@ -1685,6 +1688,7 @@ fn build_emit_unit_ctx(
     target: BuildTarget,
     tys: &Arc<Types>,
     split_worker: bool,
+    layout: &WorkerLayout,
 ) -> EmitUnitCtx {
     let info = &unit_info[name];
     // v0.132.1 (#481): gather the attached methods of every `uses`-imported type
@@ -1813,7 +1817,7 @@ fn build_emit_unit_ctx(
         for (unit, decls) in imported_decl_paths.iter() {
             let target_kind = unit_info.get(unit).map(|i| i.kind);
             if target_kind == Some(UnitKind::Context) {
-                let handlers_path = worker_handlers_source_path(unit);
+                let handlers_path = layout.handlers_source_path(unit);
                 let mut rewritten = HashMap::new();
                 for n in decls.keys() {
                     rewritten.insert(n.clone(), handlers_path.clone());
@@ -1825,7 +1829,7 @@ fn build_emit_unit_ctx(
 
     let mut file_decl_index = info.file_index.clone();
     if split_worker {
-        let module = |p: &mut PathBuf| *p = worker_file_source_path(name, p);
+        let module = |p: &mut PathBuf| *p = layout.file_source_path(name, p);
         file_decl_index.types.values_mut().for_each(module);
         file_decl_index.fns.values_mut().for_each(module);
         file_decl_index.agents.values_mut().for_each(module);
@@ -1843,6 +1847,7 @@ fn build_emit_unit_ctx(
         exports_for_consumed,
         file_decl_index,
         split_worker,
+        layout: layout.clone(),
     }
 }
 
@@ -1905,9 +1910,9 @@ fn emit_unit(
     // imported_decl_paths produce correct relative imports.
     let workers_mode = matches!(target, BuildTarget::Workers);
     let emit_source_path = if unit_ctx.split_worker {
-        worker_file_source_path(name, &pf.source_path())
+        unit_ctx.layout.file_source_path(name, &pf.source_path())
     } else if workers_mode && kind == UnitKind::Context {
-        worker_handlers_source_path(name)
+        unit_ctx.layout.handlers_source_path(name)
     } else {
         pf.source_path()
     };
@@ -2076,6 +2081,7 @@ fn emit_unit(
         asset_served: asset_served.clone(),
         embed_text: embed_text.clone(),
         runtime_use: Default::default(),
+        worker_layout: unit_ctx.layout.clone(),
     };
     // #2858: any plain-JSON route in the project (project-wide, not per Worker;
     // the branch is inert unless `withPlainJson` sets the flag) switches the generated `Option`
@@ -2128,9 +2134,9 @@ fn emit_unit(
     // frames by their Bynk operation. `None` for units with no handlers.
     let debug_metadata = emitter::collect_handler_labels(typed);
     let output_path = if unit_ctx.split_worker {
-        ts_output_path(&worker_file_source_path(name, &pf.source_path()))
+        ts_output_path(&unit_ctx.layout.file_source_path(name, &pf.source_path()))
     } else if workers_mode && kind == UnitKind::Context {
-        worker_handlers_output_path(name)
+        unit_ctx.layout.handlers_output_path(name)
     } else {
         ts_output_path(&pf.source_path())
     };
@@ -2140,6 +2146,13 @@ fn emit_unit(
         source_map,
         debug_metadata,
     });
+}
+
+/// #3562: where each context's files go under a Workers build. Always the
+/// identity layout for now: a group's directory and prefixes are switched on
+/// with the group as the emit unit.
+fn emit_layout() -> WorkerLayout {
+    WorkerLayout::identity()
 }
 
 /// Phase 8d/8e: resolve + check (and, in build mode, emit) every source file in
@@ -2218,6 +2231,7 @@ fn check_unit_files(
     event_subscriber_shapes: &mut HashMap<String, EventSubscriberShape>,
     // #2719: the build's needs-context set so far; this unit extends it.
     exec_plan: &mut bynk_check::exec_plan::ExecPlan,
+    layout: &WorkerLayout,
 ) {
     // Emit-prologue tables invariant across every file of this unit — built
     // once here rather than once per file (see `EmitUnitCtx`).
@@ -2230,6 +2244,7 @@ fn check_unit_files(
         target,
         tys,
         split_worker,
+        layout,
     );
     let first_emitted = compiled.len();
     let mut check_ctx = prepare_unit_check_ctx(
@@ -2400,6 +2415,7 @@ fn check_unit_files(
             parsed,
             &compiled[first_emitted..],
             import_ext,
+            layout,
         );
         compiled.push(barrel);
     }
@@ -2424,9 +2440,10 @@ fn emit_worker_handlers_barrel(
     parsed: &[ParsedFile],
     emitted: &[StagedFile],
     import_ext: ImportExt,
+    layout: &WorkerLayout,
 ) -> StagedFile {
-    let barrel_loc = worker_handlers_source_path(name);
-    let module_of = |file: &Path| worker_file_source_path(name, file);
+    let barrel_loc = layout.handlers_source_path(name);
+    let module_of = |file: &Path| layout.file_source_path(name, file);
     let mut modules: Vec<PathBuf> = indices
         .iter()
         .map(|&i| module_of(&parsed[i].source_path()))
@@ -2460,7 +2477,7 @@ fn emit_worker_handlers_barrel(
     ));
     stmts.extend(merged);
     StagedFile {
-        output_path: worker_handlers_output_path(name),
+        output_path: layout.handlers_output_path(name),
         document: Document::Ts(TsProgram { stmts }),
         source_map: None,
         debug_metadata: None,
@@ -3329,6 +3346,7 @@ fn run_checks(
                 &adapter_bindings,
                 indices.len() > 1,
                 harness_clock_contexts.contains(name),
+                &emit_layout(),
             )
         } else {
             None
@@ -3378,6 +3396,7 @@ fn run_checks(
                 .entry(name.clone())
                 .or_default(),
             &mut exec_plan,
+            &emit_layout(),
         );
         if let Some(sink) = report
             && errors.len() == group_error_baseline
@@ -3718,7 +3737,7 @@ struct WorkersEmit<'a> {
     import_ext: bynk_emit::emit_model::ImportExt,
     inspect_agents: bool,
     kinds: &'a BTreeMap<String, UnitKind>,
-    layout: &'a bynk_project::worker_layout::WorkerLayout,
+    layout: &'a WorkerLayout,
     parsed: &'a [ParsedFile],
     trace_requests: bool,
     unit_callees: &'a HashMap<String, HashMap<ExprId, bynk_check::checker::Callee>>,
@@ -3900,6 +3919,7 @@ impl WorkersEmit<'_> {
             .collect();
         let (compose_ts, needs_locale_request) = emitter::emit_worker_compose(
             ctx_name,
+            self.layout,
             table,
             &consumes_targets,
             &aliases,
@@ -3938,6 +3958,7 @@ impl WorkersEmit<'_> {
         let inspect_classes = inspect_classes(inspect_agents, table);
         let entry_ts = emitter::emit_worker_entry(
             ctx_name,
+            self.layout,
             table,
             &own_contracts,
             &accepted.hashes,
@@ -4404,10 +4425,7 @@ fn build_output(
         BuildTarget::Workers => {
             // v0.8 §2.3: per-Worker entry point, compose.ts, and wrangler
             // configuration. One Worker per context.
-            // #3562: where each context's files go. Always the identity layout for
-            // now: a group's directory and prefixes are switched on with the group
-            // as the emit unit.
-            let layout = bynk_project::worker_layout::WorkerLayout::identity();
+            let layout = emit_layout();
             let emit = WorkersEmit {
                 adapter_bindings: &adapter_bindings,
                 agent_versions,
@@ -4761,6 +4779,7 @@ fn plan_agent_given_deps(
     split: bool,
     // #2137: whether a `system` harness stands this context up (test build).
     harness_clock: bool,
+    layout: &WorkerLayout,
 ) -> Option<AgentDepsPlan> {
     let info = unit_info.get(name)?;
     info.table.agents.values().next()?;
@@ -4880,10 +4899,14 @@ fn plan_agent_given_deps(
                 "import * as {ns}__binding from \"{up}../../{module}\";"
             ));
         } else {
-            let dir = worker_dir_name(u);
-            imports.push(format!(
-                "import * as handlers_{ns} from \"{up}../{dir}/handlers.js\";"
-            ));
+            // A split context's modules sit one directory below its Worker's.
+            let spec = layout.handlers_specifier(name, u);
+            let spec = if split {
+                format!("../{}", spec.strip_prefix("./").unwrap_or(&spec))
+            } else {
+                spec
+            };
+            imports.push(format!("import * as handlers_{ns} from \"{spec}\";"));
         }
     }
     Some(AgentDepsPlan { exprs, imports })

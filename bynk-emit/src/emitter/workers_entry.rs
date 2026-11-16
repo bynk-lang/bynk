@@ -835,6 +835,7 @@ fn container_class_reexport(table: &UnitTable) -> Option<TsStmt> {
 #[allow(clippy::too_many_arguments)]
 pub fn emit_worker_entry(
     context: &str,
+    layout: &bynk_project::worker_layout::WorkerLayout,
     table: &UnitTable,
     // v0.177 (#643): this context's own contract hash per `on call` service.
     own_contracts: &std::collections::BTreeMap<String, String>,
@@ -1271,7 +1272,7 @@ pub fn emit_worker_entry(
             TsDecl::ImportNamespace {
                 type_only: false,
                 alias: "handlers".to_string(),
-                from: "./handlers.js".to_string(),
+                from: layout.own_handlers_specifier(context),
             },
             None,
         ),
