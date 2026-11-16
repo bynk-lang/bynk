@@ -454,3 +454,163 @@ fn members_may_share_a_cron_expression() {
     assert!(ok, "two members may share a cron expression:\n{out}");
     let _ = fs::remove_dir_all(&root);
 }
+
+/// A context with one `from websocket` service and the agent it hands the
+/// connection to (named per context, since two members cannot share an agent's
+/// name).
+fn websocket_context(name: &str, agent: &str) -> String {
+    format!(
+        r#"context {name}
+
+type RoomId = opaque String
+type UserId = opaque String
+type ServerFrame = {{ text: String }}
+type ClientFrame = {{ text: String }}
+
+actor Participant {{ auth = Bearer(secret = "AUTH_SECRET"), identity = UserId }}
+
+service Gateway from websocket(in: ClientFrame, out: ServerFrame) {{
+  on open (roomId: RoomId) -> Effect[()] by user: Participant {{
+    let _ <- {agent}(roomId).join(user.identity, connection)
+    ()
+  }}
+
+  on message (roomId: RoomId, frame: ClientFrame) -> Effect[()] by user: Participant {{
+    let _ <- {agent}(roomId).post(user.identity, frame.text)
+    ()
+  }}
+
+  on close (roomId: RoomId) -> Effect[()] by user: Participant {{
+    let _ <- {agent}(roomId).leave(user.identity)
+    ()
+  }}
+}}
+
+agent {agent} {{
+  key id: RoomId
+  store members: Set[UserId]
+  store conns: Map[UserId, Connection[ServerFrame]]
+
+  on call join(u: UserId, conn: Connection[ServerFrame]) -> Effect[()] {{
+    let _ <- members.add(u)
+    let _ <- conns.put(u, conn)
+    ()
+  }}
+
+  on call leave(u: UserId) -> Effect[()] {{
+    let _ <- members.remove(u)
+    let _ <- conns.remove(u)
+    ()
+  }}
+
+  on call post(u: UserId, text: String) -> Effect[()] {{
+    ()
+  }}
+}}
+"#
+    )
+}
+
+/// An upgrade request names no path or service, so a group cannot route one: it
+/// has at most one member that accepts them.
+#[test]
+fn a_group_with_two_websocket_members_is_refused() {
+    let root = std::env::temp_dir().join(format!("bynk-deploy-groups-ws-{}", std::process::id()));
+    write_project(&root, WORKERS_TARGET);
+    fs::write(
+        root.join("src/shop/orders.bynk"),
+        websocket_context("shop.orders", "OrderRoom"),
+    )
+    .unwrap();
+    fs::write(
+        root.join("src/shop/payment.bynk"),
+        websocket_context("shop.payment", "PayRoom"),
+    )
+    .unwrap();
+    let (ok, out) = build(&root);
+    assert!(!ok, "{out}");
+    assert!(
+        out.contains("bynk.deploy.multiple_websocket_members"),
+        "{out}"
+    );
+    assert!(out.contains("`shop.orders` and `shop.payment`"), "{out}");
+
+    // One member that accepts upgrades, with one that does not, is fine.
+    fs::write(
+        root.join("src/shop/payment.bynk"),
+        plain_context("shop.payment"),
+    )
+    .unwrap();
+    let (ok, out) = build(&root);
+    assert!(ok, "one websocket member is fine:\n{out}");
+    let _ = fs::remove_dir_all(&root);
+}
+
+fn service_context(name: &str, service: &str) -> String {
+    format!(
+        "context {name}\n\nservice {service} {{\n\ton call() -> Effect[Int] {{\n\t\tEffect.pure(1)\n\t}}\n}}\n"
+    )
+}
+
+/// Three members, two of which declare a service of one name: one error, at the
+/// later of the two, naming both.
+#[test]
+fn a_service_name_shared_by_two_of_three_members_is_one_error_at_the_later() {
+    let root =
+        std::env::temp_dir().join(format!("bynk-deploy-groups-three-{}", std::process::id()));
+    let manifest = WORKERS_TARGET.replace(
+        "contexts = [\"shop.orders\", \"shop.payment\"]",
+        "contexts = [\"shop.orders\", \"shop.payment\", \"shop.billing\"]",
+    );
+    write_project(&root, &manifest);
+    fs::write(
+        root.join("src/shop/orders.bynk"),
+        service_context("shop.orders", "orders_probe"),
+    )
+    .unwrap();
+    fs::write(
+        root.join("src/shop/payment.bynk"),
+        service_context("shop.payment", "shared"),
+    )
+    .unwrap();
+    fs::write(
+        root.join("src/shop/billing.bynk"),
+        service_context("shop.billing", "shared"),
+    )
+    .unwrap();
+    let (ok, out) = build(&root);
+    assert!(!ok, "{out}");
+    assert_eq!(
+        out.matches("bynk.deploy.service_name_conflict").count(),
+        1,
+        "one error for the one clash:\n{out}"
+    );
+    assert!(out.contains("`shop.payment` and `shop.billing`"), "{out}");
+    assert!(out.contains("billing.bynk"), "at the later member:\n{out}");
+    let _ = fs::remove_dir_all(&root);
+}
+
+/// A `bundle` build has every context in one program, so it says it ignores the
+/// groups; a `workers` build uses them and says nothing.
+#[test]
+fn a_bundle_build_says_it_ignores_the_groups() {
+    let root =
+        std::env::temp_dir().join(format!("bynk-deploy-groups-bundle-{}", std::process::id()));
+    write_project(&root, WORKERS_TARGET);
+    let (ok, out) = run(&root, &["build", "--target", "bundle"]);
+    assert!(ok, "{out}");
+    assert!(
+        out.contains("bynk.deploy.workers_ignored_on_bundle"),
+        "{out}"
+    );
+
+    let (ok, out) = build(&root);
+    assert!(ok, "{out}");
+    assert!(!out.contains("workers_ignored_on_bundle"), "{out}");
+
+    // `check` is not a build, and says nothing either way.
+    let (ok, out) = check(&root);
+    assert!(ok, "{out}");
+    assert!(!out.contains("workers_ignored_on_bundle"), "{out}");
+    let _ = fs::remove_dir_all(&root);
+}

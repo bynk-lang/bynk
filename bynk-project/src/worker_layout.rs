@@ -22,6 +22,9 @@ struct Place {
     dir: String,
     /// `Some` when the context is a member of a group: its file prefix.
     prefix: Option<String>,
+    /// The Worker's name on Cloudflare: the group's `name`, else its key; a
+    /// context's own Worker is named by its dashed name.
+    script: String,
 }
 
 /// Where each context's generated files go.
@@ -30,6 +33,9 @@ pub struct WorkerLayout {
     /// The contexts that are members of a group; every other context is
     /// [`Self::place`]d by its dashed name.
     members: BTreeMap<String, Place>,
+    /// Each group's members in the order its `contexts` list gives them, by the
+    /// group's directory: the order the group's entry tries them in.
+    order: BTreeMap<String, Vec<String>>,
 }
 
 impl WorkerLayout {
@@ -41,17 +47,25 @@ impl WorkerLayout {
     /// The layout a project's build uses, from its `bynk.toml` (with `overlay`
     /// over the files on disk). The one place the build, the checker and the
     /// editor learn where each context's Worker is, so they cannot disagree.
-    /// Identity for now: groups are switched on with the group as the emit unit.
+    /// A manifest with no `[deploy.workers]` table, or one that does not read
+    /// (the manifest checks report that), is [`Self::identity`].
     pub fn for_project(
-        _project_root: &std::path::Path,
-        _overlay: &std::collections::HashMap<PathBuf, String>,
+        project_root: &std::path::Path,
+        overlay: &std::collections::HashMap<PathBuf, String>,
     ) -> Self {
-        Self::identity()
+        match crate::worker_groups::try_read_worker_groups_with(project_root, overlay) {
+            Ok(groups) if !groups.is_empty() => Self::from_groups(&groups),
+            _ => Self::identity(),
+        }
     }
 
     /// The layout of `groups`: a member goes in its group's directory, under a
     /// prefix; every other context is as in [`Self::identity`].
     pub fn from_groups(groups: &WorkerGroups) -> Self {
+        let order = groups
+            .iter()
+            .map(|(key, group)| (key.clone(), group.contexts.clone()))
+            .collect();
         let members = groups
             .iter()
             .flat_map(|(key, group)| {
@@ -61,12 +75,13 @@ impl WorkerLayout {
                         Place {
                             dir: key.clone(),
                             prefix: Some(worker_dir_name(ctx)),
+                            script: group.script_name(key).to_string(),
                         },
                     )
                 })
             })
             .collect();
-        Self { members }
+        Self { members, order }
     }
 
     /// Whether `context` is a member of a group, so its entry is one of several
@@ -79,12 +94,28 @@ impl WorkerLayout {
         self.members.get(context).cloned().unwrap_or_else(|| Place {
             dir: worker_dir_name(context),
             prefix: None,
+            script: worker_dir_name(context),
         })
     }
 
     /// The directory name, under `workers/`, of the Worker `context` is in.
     pub fn dir(&self, context: &str) -> String {
         self.place(context).dir
+    }
+
+    /// The name of the Worker `context` is in on Cloudflare: what a Service
+    /// Binding to it, and its own `wrangler.toml`, call it. The group's `name`
+    /// or key for a member, the dashed context name otherwise. (The directory
+    /// and the names derived for its resources stay the key, the group's
+    /// identity, so that renaming a script does not move them.)
+    pub fn script_name(&self, context: &str) -> String {
+        self.place(context).script
+    }
+
+    /// The members of the group whose directory is `dir`, in the order the
+    /// manifest lists them; `None` for a context's own Worker.
+    pub fn group_members(&self, dir: &str) -> Option<&[String]> {
+        self.order.get(dir).map(Vec::as_slice)
     }
 
     /// The path of a file that belongs to the Worker as a whole (`index.ts`,
@@ -101,6 +132,16 @@ impl WorkerLayout {
             Some(prefix) => PathBuf::from(format!("workers/{}/{prefix}.{name}", place.dir)),
             None => PathBuf::from(format!("workers/{}/{name}", place.dir)),
         }
+    }
+
+    /// The import specifier, from a module in `context`'s Worker directory, of
+    /// one of its own files: `./<name>` stripped of its extension and given
+    /// `.js`, with the member prefix in a group (`./shop-orders.compose.js`).
+    pub fn own_module_specifier(&self, context: &str, name: &str) -> String {
+        let file = self.member_file(context, name);
+        let file = file.file_name().unwrap_or_default().to_string_lossy();
+        let stem = file.rsplit_once('.').map_or(&*file, |(stem, _)| stem);
+        format!("./{stem}.js")
     }
 
     /// The project-relative synthetic source path of `context`'s handlers
@@ -206,6 +247,32 @@ mod tests {
         let layout = WorkerLayout::from_groups(&groups());
         assert!(layout.is_member("shop.orders"));
         assert!(!layout.is_member("shop.payment"));
+    }
+
+    /// A Worker's name on Cloudflare is the group's `name`, else its key; a
+    /// context's own is its dashed name. A member's own modules are imported under
+    /// its prefix, and a group lists its members in manifest order.
+    #[test]
+    fn a_groups_script_name_modules_and_members() {
+        let mut named = groups();
+        named.get_mut("core").unwrap().name = Some("acme-core".to_string());
+        let layout = WorkerLayout::from_groups(&named);
+        assert_eq!(layout.script_name("shop.orders"), "acme-core");
+        assert_eq!(layout.dir("shop.orders"), "core");
+        assert_eq!(layout.script_name("shop.payment"), "shop-payment");
+        assert_eq!(
+            layout.own_module_specifier("shop.pricing", "compose.ts"),
+            "./shop-pricing.compose.js"
+        );
+        assert_eq!(
+            WorkerLayout::identity().own_module_specifier("shop.pricing", "events_fanout.ts"),
+            "./events_fanout.js"
+        );
+        assert_eq!(
+            layout.group_members("core"),
+            Some(["shop.orders".to_string(), "shop.pricing".to_string()].as_slice())
+        );
+        assert_eq!(layout.group_members("shop-payment"), None);
     }
 
     /// A context in no group stays as in the identity layout.

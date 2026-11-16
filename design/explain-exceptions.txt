@@ -91,3 +91,4 @@ bynk.deploy.service_name_conflict: a project-level diagnostic over a `[deploy.wo
 bynk.deploy.queue_consumer_conflict: a project-level diagnostic over a `[deploy.workers]` group in `bynk.toml` and two contexts' sources, which the single-file example gate cannot mark
 bynk.deploy.route_conflict: a project-level diagnostic over a `[deploy.workers]` group in `bynk.toml` and two contexts' sources, which the single-file example gate cannot mark
 bynk.deploy.worker_groups_unsupported: a command-level refusal over a `[deploy.workers]` group in `bynk.toml` (temporary), which the single-file example gate cannot mark
+bynk.deploy.multiple_websocket_members: a project-level diagnostic over a `[deploy.workers]` group in `bynk.toml` and two contexts' sources, which the single-file example gate cannot mark

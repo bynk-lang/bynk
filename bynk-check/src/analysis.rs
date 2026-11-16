@@ -275,8 +275,9 @@ pub enum LockState {
 /// One context's own `on call` contracts.
 #[derive(Debug, Clone, Default, PartialEq, Eq)]
 pub struct ProvidedContracts {
-    /// The context's Worker, as `bynk.deploy.lock` keys it
-    /// ([`bynk_project::worker_dir_name`]).
+    /// The context's Worker, as `bynk.deploy.lock` keys it: its directory
+    /// ([`bynk_project::worker_layout::WorkerLayout::dir`]), the group's key for
+    /// a member.
     pub worker: String,
     /// Service → contract hash.
     pub hashes: std::collections::BTreeMap<String, String>,
@@ -505,7 +506,10 @@ fn per_unit_infos(
     unit_consumes_aliases: &HashMap<String, HashMap<String, String>>,
     unit_uses: &HashMap<String, Vec<String>>,
     unit_flattened: &HashMap<String, HashMap<String, String>>,
-    contract_diff: &mut ContractDiff,
+    (layout, contract_diff): (
+        &bynk_project::worker_layout::WorkerLayout,
+        &mut ContractDiff,
+    ),
 ) -> (
     HashMap<String, ContextSequenceInfo>,
     HashMap<String, ContextBoundaryInfo>,
@@ -543,7 +547,7 @@ fn per_unit_infos(
         contract_diff.services.insert(
             name.clone(),
             ProvidedContracts {
-                worker: bynk_project::worker_dir_name(name),
+                worker: layout.dir(name),
                 hashes: crate::contract::own_contract_hashes(table, &contract_types),
                 shapes: crate::contract_compat::own_contract_shapes(table, &contract_types),
             },
@@ -683,10 +687,14 @@ fn analyse_project_inner(
     );
     let mut unit_tables = unit_tables;
     crate::symbols::record_flattened_caps(&mut unit_tables, &unit_flattened, &unit_type_aliases);
+    // The editor reads the groups as a Workers build does.
+    let layout =
+        bynk_project::worker_layout::WorkerLayout::for_project(roots.project_root(), overlay);
     crate::project_model::phase_resolve_derived(
         &groups,
         &kinds,
         &parsed,
+        &layout,
         &mut unit_tables,
         &mut errors,
     );
@@ -1149,7 +1157,7 @@ fn analyse_project_inner(
         &unit_consumes_aliases,
         &unit_uses,
         &unit_flattened,
-        &mut contract_diff,
+        (&layout, &mut contract_diff),
     );
 
     let architecture_facts =

@@ -771,6 +771,7 @@ pub fn phase_resolve_derived(
     groups: &BTreeMap<String, Vec<usize>>,
     kinds: &BTreeMap<String, UnitKind>,
     parsed: &[ParsedFile],
+    layout: &bynk_project::worker_layout::WorkerLayout,
     unit_tables: &mut HashMap<String, UnitTable>,
     errors: &mut ErrorSink,
 ) {
@@ -871,7 +872,7 @@ pub fn phase_resolve_derived(
                                 {
                                     kinds.iter().find(|(unit, kind)| {
                                         **kind == UnitKind::Context
-                                            && bynk_project::worker_dir_name(unit) == *value
+                                            && layout.script_name(unit) == *value
                                     })
                                 }
                                 _ => None,
@@ -884,7 +885,7 @@ pub fn phase_resolve_derived(
                                         ann.span,
                                         format!(
                                             "`{}` is this project's context `{context}`, not a Worker outside it",
-                                            bynk_project::worker_dir_name(context)
+                                            layout.script_name(context)
                                         ),
                                     )
                                     .with_note(format!(

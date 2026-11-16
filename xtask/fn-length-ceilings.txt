@@ -14,7 +14,7 @@ bynk-driver/src/project/tests_emit/integration_module.rs::emit_integration_modul
 bynk-driver/src/test_runner.rs::run_test = 801
 bynk/src/deploy/plan.rs::run = 781
 bynk-emit/src/emitter/workers_entry.rs::emit_http_route_dispatch = 764
-bynk-driver/src/project.rs::build_output = 376
+bynk-driver/src/project.rs::build_output = 360
 bynk-check/src/resolver.rs::check_expr_references = 698
 bynk-emit/src/emitter/serialisation.rs::emit_generic_helpers_qualified = 687
 bynk-check/src/checker.rs::type_of = 659

@@ -8896,6 +8896,10 @@ pub const REGISTRY: &[DiagnosticInfo] = &[
         "More than one member of a `[deploy.workers.<key>]` group publishes events. A temporary restriction: each publisher has its own events fan-out class, and it goes when a group's fan-out is merged.",
     ),
     d(
+        "bynk.deploy.multiple_websocket_members",
+        "More than one member of a `[deploy.workers.<key>]` group declares a `from websocket` service; an upgrade request names no path or service a group could route it by, so a group has at most one such member.",
+    ),
+    d(
         "bynk.deploy.not_a_context",
         "A `[deploy.workers.<key>]` group lists a unit that is not a `context`; only contexts are deployed as Workers.",
     ),
@@ -8919,6 +8923,10 @@ pub const REGISTRY: &[DiagnosticInfo] = &[
         "bynk.deploy.worker_groups_unsupported",
         "`bynk deploy`, `bynk revert` and `bynk dev` do not yet support `[deploy.workers.<key>]` Worker groups (temporary, #3562).",
     ),
+    warn(d(
+        "bynk.deploy.workers_ignored_on_bundle",
+        "`bynk.toml` declares `[deploy.workers]` groups, which only a `workers` build uses; this build is a `bundle`, which has every context in one program and ignores them (warning).",
+    )),
     dg(
         "bynk.detach.in_agent_handler",
         "A `detach` was used in an agent handler, which has no execution context to keep a detached effect alive.",

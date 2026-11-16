@@ -78,6 +78,7 @@ pub mod toml_doc;
 pub(crate) mod workers;
 pub(crate) mod workers_email;
 pub(crate) mod workers_entry;
+pub mod workers_group;
 pub mod wrangler;
 
 pub use containers::{container_class_names, emit_containers_ts};
@@ -89,6 +90,7 @@ pub use workers_entry::{
     emit_worker_entry, field_spec_source, form_body_specs, renamed_specs_source,
     table_has_plain_json,
 };
+pub use workers_group::{GroupEntry, GroupMember, emit_group_entry};
 pub use wrangler::{ClassTombstones, emit_wrangler_toml};
 
 mod cmp;
