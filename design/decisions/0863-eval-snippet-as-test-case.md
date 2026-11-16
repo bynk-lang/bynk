@@ -1,12 +1,6 @@
----
-level: patch
-probes: ts_writes
-changelog: The test runner can evaluate a snippet in a unit's scope and report its final value, the driver half of `bynk eval`
----
+# 0863 — A snippet is evaluated as a synthetic test case that reports its value
 
-## ADR: eval-snippet-as-test-case
-title: A snippet is evaluated as a synthetic test case that reports its value
-summary: `bynk eval` builds on the doc-example path; stateless, stub-only, explicit and local, and no change to ADR 0638
+- **Status:** Accepted (v0.629.3)
 
 **Context.** A notebook cell, or any tool that wants to try an expression against a project, needs a value back. Nothing ran Bynk code outside `bynk test` and `bynk dev`, and a doc example marked `bynk test` only passes or fails (#3585). [ADR 0638](0638-refined-explorer-evaluation.md) considered a `bynk eval` driver command for the refined-type explorer and rejected it, because a hover is an implicit request and must not build and execute the project.
 
