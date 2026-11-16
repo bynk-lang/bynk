@@ -3,7 +3,7 @@ title: Version compatibility & changelog
 ---
 Bynk is pre-1.0 and developed in small, spec-first increments (see
 [Versioning & roadmap](/book/about/versioning-and-roadmap/)). This book is
-written against **v0.631**.
+written against **v0.632**.
 
 This page is a high-level summary of notable increments, not an exhaustive
 per-commit history. While Bynk is pre-1.0, increments may change behaviour.
@@ -28,6 +28,7 @@ per-commit history. While Bynk is pre-1.0, increments may change behaviour.
 
 | Version | Highlights |
 |---|---|
+| **v0.632.0** | `bynk deploy` links each `MtlsCertificate` by name, writes the certificate's id into the Worker's configuration and records it in the ledger, failing when it is missing or ambiguous and never uploading one; `bynk dev` runs the binding on Cloudflare, with a one-time notice silenced by `[dev] mtls = "allow"`; the byte forms `receiveBytes` and `sendBytes` join `send` |
 | **v0.631.0** | `bynk eval` evaluates a snippet in a unit's scope against the project and prints its value as JSON |
 | **v0.630.0** | `Images.transformStream` reads an image as a `Stream[Bytes]` and answers an `ImageStream` that `RawStreamed` serves as it is read (experimental; #3515) |
 | **v0.629.5** | A build can record agent instances and answer a signed `/_bynk/inspect/` route (the emitter and runtime half of `bynk dev inspect`); deploy output is unchanged |

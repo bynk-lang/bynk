@@ -1,12 +1,6 @@
----
-level: minor
-changelog: `bynk deploy` links each `MtlsCertificate` by name, writes the certificate's id into the Worker's configuration and records it in the ledger, failing when it is missing or ambiguous and never uploading one; `bynk dev` runs the binding on Cloudflare, with a one-time notice silenced by `[dev] mtls = "allow"`; the byte forms `receiveBytes` and `sendBytes` join `send`
-probes: diagnostic_coverage, ts_writes
----
+# 0867 — `bynk deploy` links an mTLS certificate by name and never uploads it; `bynk dev` runs it remotely
 
-## ADR: mtls-certificate-deploy-link
-title: `bynk deploy` links an mTLS certificate by name and never uploads it; `bynk dev` runs it remotely
-summary: Resolve the name over the REST list, match client certificates only, record a name and an id, never key material; remote-only under `bynk dev`
+- **Status:** Accepted (v0.632)
 
 **Context.** The `MtlsCertificate` kind (ADR for the kind slice) names a client certificate in the
 account and leaves the deploy to resolve the name to the id Cloudflare's `[[mtls_certificates]]`
