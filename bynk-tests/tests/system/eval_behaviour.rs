@@ -270,3 +270,14 @@ fn a_suite_that_is_not_the_unit_is_refused() {
     assert_eq!(doc["error"]["kind"], "setup");
     assert!(doc.get("value").is_none(), "{doc}");
 }
+
+#[test]
+fn dependencies_that_cannot_be_prepared_still_print_a_document() {
+    let root = project("deps");
+    // A git dependency that is nowhere, offline.
+    let manifest = "[project]\nname = \"p\"\n\n[dependencies]\nghost = { git = \"https://invalid.invalid/ghost.git\", rev = \"main\" }\n";
+    std::fs::write(root.join("bynk.toml"), manifest).unwrap();
+    let (ok, doc) = eval(&root, &["--unit", "demo", "--offline", "--expr", "1"], "");
+    assert!(!ok);
+    assert_eq!(doc["error"]["kind"], "setup", "{doc}");
+}

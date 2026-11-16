@@ -33,7 +33,7 @@ fn print(report: &EvalReport) -> ExitCode {
 }
 
 /// An evaluation that could not be set up, in the document's own shape.
-fn refuse(message: impl Into<String>) -> ExitCode {
+pub fn refuse(message: impl Into<String>) -> ExitCode {
     print(&bynk_driver::eval::EvalOutcome::Error(message.into()).into())
 }
 
