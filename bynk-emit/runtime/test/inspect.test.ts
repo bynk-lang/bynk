@@ -60,6 +60,15 @@ test("a wholesale record is paged from the record itself", async () => {
   assert.deepEqual(page.cells, { total: 1 });
 });
 
+test("a cursor that is not a position pages from the start", async () => {
+  const state = makeTestState("a");
+  await state.storage.put("state", { lines: { a: 1, b: 2 }, __v: 2 });
+  for (const after of ["-3", "x", "1.5"]) {
+    const page = await read(state, `?field=lines&after=${after}&limit=5`);
+    assert.equal(page.collections.lines.entries.length, 2, after);
+  }
+});
+
 test("a record from a later build is reported unreadable, not decoded", async () => {
   const newer = makeTestState("a");
   await newer.storage.put("state", { __v: 2, __layout: 9 });
@@ -132,6 +141,13 @@ test("the route refuses a request that is not signed, and answers a signed one",
   const signed = await inspectRoute(env, new Request(`http://w${path}`, { method: "POST", headers }), "shop", bindings);
   assert.equal(signed.status, 200);
   assert.deepEqual(await signed.json(), { context: "shop", instances: [] });
+
+  // A sibling context holding an edge key to this Worker signs validly as itself,
+  // and is still refused: only `bynk.dev` is admitted.
+  const sibling = { ...env, BYNK_CALL_FROM_BILLING: "billing-key", BYNK_CALL_TO_SHOP: "billing-key" };
+  const billing = await signedHeaders(sibling, "billing", "shop", path, "", "1", "", "inspect");
+  const refused = await inspectRoute(sibling, new Request(`http://w${path}`, { method: "POST", headers: billing }), "shop", bindings);
+  assert.equal(refused.status, 401);
 
   const get = await inspectRoute(env, new Request(`http://w${path}`), "shop", bindings);
   assert.equal(get.status, 405);
