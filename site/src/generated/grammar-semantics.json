@@ -1463,7 +1463,7 @@
     },
     {
       "code": "bynk.queue.duplicate_consumer",
-      "summary": "Two `on message` handlers consume the same queue."
+      "summary": "Two `on message` handlers, in one context or in two, consume the same queue."
     },
     {
       "code": "bynk.queue.invalid_name",

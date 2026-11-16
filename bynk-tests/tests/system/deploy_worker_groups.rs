@@ -330,8 +330,8 @@ fn context_with(name: &str, body: &str) -> String {
 /// Write the two members of group `core` with `a` and `b` as their bodies, build
 /// grouped and expect `code`. With `separate_ok`, then build ungrouped and expect
 /// it clean, since separate Workers may each answer the same route. It is not
-/// asserted for a queue: Cloudflare accepts one consumer Worker per queue, and no
-/// project-wide check says so yet, so a test must not treat that as intended.
+/// used for a queue: that is refused project-wide, grouped or not, so it is not a trigger
+/// a group alone can clash on.
 fn trigger_conflict(tag: &str, a: &str, b: &str, code: &str, separate_ok: bool) {
     let root =
         std::env::temp_dir().join(format!("bynk-deploy-groups-{tag}-{}", std::process::id()));
@@ -383,21 +383,54 @@ fn members_that_declare_the_same_route_collide() {
     );
 }
 
-/// A Worker has one consumer for a queue.
+/// A queue has one consumer Worker, so two contexts consuming one are refused by
+/// the project-wide check (`bynk.queue.duplicate_consumer`), grouped or not, and
+/// a group adds no check of its own: a project gets exactly one diagnostic.
 #[test]
-fn members_that_consume_the_same_queue_collide() {
+fn contexts_that_consume_the_same_queue_are_refused_once() {
+    let root =
+        std::env::temp_dir().join(format!("bynk-deploy-groups-queue-{}", std::process::id()));
+    write_project(&root, WORKERS_TARGET);
     let svc = |n: &str| {
         format!(
             "service {n} from queue(\"jobs\") {{\n\ton message(j: Int) -> Effect[QueueResult] {{\n\t\tAck\n\t}}\n}}"
         )
     };
-    trigger_conflict(
-        "queue",
-        &svc("a"),
-        &svc("b"),
-        "bynk.deploy.queue_consumer_conflict",
-        false,
-    );
+    fs::write(
+        root.join("src/shop/orders.bynk"),
+        context_with("shop.orders", &svc("a")),
+    )
+    .unwrap();
+    fs::write(
+        root.join("src/shop/payment.bynk"),
+        context_with("shop.payment", &svc("b")),
+    )
+    .unwrap();
+    let check = |out: &str| {
+        assert_eq!(
+            out.matches("bynk.queue.duplicate_consumer").count(),
+            1,
+            "{out}"
+        );
+        assert!(
+            out.contains("contexts `shop.orders` and `shop.payment` both consume queue `jobs`"),
+            "{out}"
+        );
+        assert!(!out.contains("queue_consumer_conflict"), "{out}");
+    };
+    let (ok, out) = build(&root);
+    assert!(!ok, "{out}");
+    check(&out);
+    // The same project, ungrouped: separate Workers still cannot share a queue.
+    fs::write(
+        root.join("bynk.toml"),
+        format!("{UNSTABLE_R2}[build]\ntarget = \"workers\"\n"),
+    )
+    .unwrap();
+    let (ok, out) = build(&root);
+    assert!(!ok, "{out}");
+    check(&out);
+    let _ = fs::remove_dir_all(&root);
 }
 
 /// An address is claimed once a project, so two members cannot claim one: the

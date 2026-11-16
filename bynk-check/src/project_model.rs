@@ -5455,7 +5455,8 @@ pub fn phase_secrets_computed_name(
 
 /// The project-wide topology checks, in the order their diagnostics appear:
 /// #1822 (on Workers, a required local capability needs a provider), #3328 (one
-/// service per email address across the whole project, on every target) and
+/// service per email address across the whole project, on every target), #3644 (one
+/// consuming context per queue) and
 /// #2306 (on Workers, a WebSocket `on open` and the agent it transfers to share a
 /// file). One call for the build and the editor path, which both run them.
 pub fn phase_topology(
@@ -5468,6 +5469,7 @@ pub fn phase_topology(
 ) {
     phase_workers_unprovided_capabilities(target, parsed, groups, kinds, unit_tables, errors);
     crate::email::phase_duplicate_addresses(parsed, groups, kinds, errors);
+    crate::queue_consumers::phase_duplicate_queue_consumers(parsed, groups, kinds, errors);
     phase_workers_ws_open_split(target, parsed, groups, kinds, unit_tables, errors);
 }
 

@@ -4871,7 +4871,7 @@ pub const EXPLANATIONS: &[Explain] = &[
     },
     Explain {
         code: "bynk.queue.duplicate_consumer",
-        blurb: "The context's `queue` entry point picks the handler by the queue's name. Two `on message` handlers for the same name would leave it with two to run. Merge them into one handler, or move one to a `from queue` service for another queue.",
+        blurb: "The context's `queue` entry point picks the handler by the queue's name. Two `on message` handlers for the same name would leave it with two to run. Merge them into one handler, or move one to a `from queue` service for another queue. The rule holds across the project too: Cloudflare accepts one consumer Worker per queue, so two contexts consuming one queue, in a `[deploy.workers]` group or not, could never both deploy. Move the queue to one context; any number of contexts may still send to it.",
         example: "service worker from queue(\"jobs\") {\n    on message(message: String) -> Effect[QueueResult] { … }\n    on message(message: String) -> Effect[QueueResult] { … }   // ✗ `jobs` already has a consumer\n}\n\nservice audit from queue(\"audit\") {\n    on message(message: String) -> Effect[QueueResult] { … }   // ✓ a queue of its own\n}",
         page: "/book/reference/queue",
         anchor: "handler-form",
@@ -8900,10 +8900,6 @@ pub const REGISTRY: &[DiagnosticInfo] = &[
         "A `[deploy.workers.<key>]` group lists a unit that is not a `context`; only contexts are deployed as Workers.",
     ),
     d(
-        "bynk.deploy.queue_consumer_conflict",
-        "Two members of one `[deploy.workers.<key>]` group consume the same queue; a Worker has one consumer for a queue.",
-    ),
-    d(
         "bynk.deploy.route_conflict",
         "Two members of one `[deploy.workers.<key>]` group declare the same HTTP method and path; a Worker answers a route with one handler.",
     ),
@@ -10537,7 +10533,7 @@ pub const REGISTRY: &[DiagnosticInfo] = &[
     ),
     dg(
         "bynk.queue.duplicate_consumer",
-        "Two `on message` handlers consume the same queue.",
+        "Two `on message` handlers, in one context or in two, consume the same queue.",
         &["queue_handler"],
     ),
     dg(
