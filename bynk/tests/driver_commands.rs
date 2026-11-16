@@ -1236,6 +1236,31 @@ fn deploy_refuses_release_contracts() {
     assert!(!proj.join(".bynk").exists(), "nothing was prepared: {err}");
 }
 
+/// #3562 (temporary): a project with a `[deploy.workers]` group is refused by
+/// `deploy`, `dev` and `revert`, which would otherwise name each Worker after its
+/// context, before anything is prepared.
+#[test]
+fn deploy_dev_and_revert_refuse_a_worker_group() {
+    for args in [&["deploy"][..], &["dev"][..], &["revert"][..]] {
+        let proj = scratch("groups-refused");
+        write(
+            &proj.join("bynk.toml"),
+            "[project]\nname = \"shop\"\nversion = \"0.1.0\"\n\n[deploy.workers.core]\ncontexts = [\"shop.orders\", \"shop.pricing\"]\n",
+        );
+        write(&proj.join("src/calc.bynk"), CLEAN_COMMONS);
+        let (code, _, err) = run_bynk_in(&proj, args);
+        assert_ne!(code, 0, "{args:?}: {err}");
+        assert!(
+            err.contains("bynk.deploy.worker_groups_unsupported") && err.contains("`core`"),
+            "{args:?}: {err}"
+        );
+        assert!(
+            !proj.join(".bynk").exists(),
+            "{args:?}: nothing was prepared: {err}"
+        );
+    }
+}
+
 /// #3054: a bad `[build]` is refused and nothing is built.
 #[test]
 fn build_refuses_a_bad_build_table() {

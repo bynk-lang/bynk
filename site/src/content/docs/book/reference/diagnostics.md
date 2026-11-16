@@ -7,7 +7,7 @@ title: Diagnostic index
 
 Every diagnostic code the compiler can emit, with a one-line summary of the cause, grouped by category. For step-by-step cause-and-fix guidance on the most common ones, see the [troubleshooting guides](/book/troubleshooting/). For a code with a curated explanation, `bynk explain <code>` prints it in a terminal, and in VS Code the diagnostic's **Explain** quick fix (or **Bynk: Explain Diagnostic Code…**) shows the same text in a panel, offline.
 
-There are **890** codes in total.
+There are **891** codes in total.
 
 ## Agents
 
@@ -424,6 +424,7 @@ There are **890** codes in total.
 | `bynk.deploy.route_conflict` | Two members of one `[deploy.workers.<key>]` group declare the same HTTP method and path; a Worker answers a route with one handler. |  | — |
 | `bynk.deploy.service_name_conflict` | Two members of one `[deploy.workers.<key>]` group declare a service of the same name; a Worker answers its members' services by name. |  | — |
 | `bynk.deploy.unknown_context` | A `[deploy.workers.<key>]` group lists a context the project does not declare. |  | — |
+| `bynk.deploy.worker_groups_unsupported` | `bynk deploy`, `bynk revert` and `bynk dev` do not yet support `[deploy.workers.<key>]` Worker groups (temporary, #3562). |  | — |
 | [`bynk.detach.in_agent_handler`](/book/reference/capabilities/#detach) | A `detach` was used in an agent handler, which has no execution context to keep a detached effect alive. | [`method_call`](/book/reference/grammar/#rule-method_call) | — |
 | [`bynk.detach.in_pure_context`](/book/reference/capabilities/#detach) | A `detach` was used in a pure (non-effectful) context. | [`method_call`](/book/reference/grammar/#rule-method_call) | — |
 | [`bynk.detach.store_op`](/book/reference/capabilities/#detach) | A `detach` targets an agent store operation, which is part of the handler's atomic commit and cannot be detached. | [`method_call`](/book/reference/grammar/#rule-method_call) | — |

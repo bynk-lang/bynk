@@ -782,8 +782,8 @@ pub fn run(
         return ExitCode::FAILURE;
     }
 
-    // #3107: a deployment never carries contract checks.
-    if let Err(e) = bynk_driver::refuse_release_contracts(project_root) {
+    // #3107: no contract checks in a deployment; #3562: no Worker groups yet.
+    if let Err(e) = bynk_driver::refuse_undeployable_project(project_root) {
         eprintln!("bynk: {e}");
         return ExitCode::FAILURE;
     }
