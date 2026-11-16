@@ -843,13 +843,21 @@ consumes bynk.cloudflare { Analytics, AnalyticsSql, AnalyticsSqlError }
 
 capability Signups = Analytics
 
+type Row = { n: Int }
+
 service report from http {
 	on GET("/signups/:country") (country: String) -> Effect[HttpResult[Int]] by Visitor given AnalyticsSql, Signups {
 		let table <- Signups.dataset()
 		let sql = "SELECT count() AS n FROM \(table) WHERE blob1 = $1 AND timestamp > NOW() - INTERVAL '1' DAY"
 		let res <- AnalyticsSql.query(sql, [Text(country)])
 		match res {
-			Ok(r) => Ok(r.rows),
+			Ok(r) => {
+				let rows = Json.decode[List[Row]](r.data)
+				match rows {
+					Ok([first]) => Ok(first.n),
+					_ => ServerError("the reply was not one count"),
+				}
+			},
 			Err(SqlRetryable(_)) => ServerError("try again shortly"),
 			Err(_) => ServerError("the query was refused"),
 		}
@@ -867,7 +875,8 @@ type AnalyticsSqlError      = | SqlRetryable(message: String) | SqlRejected(mess
 ```
 
 - `data` is the result rows as JSON text, an array of objects keyed by column; decode it
-  with `Json.decode`. `rows` is how many there are.
+  with `Json.decode`. `rows` is how many result rows there are, which is not what a `count()`
+  counted: `SELECT count()` without a `GROUP BY` is always one row, with the count in `data`.
 - `SqlRetryable` is a failure the platform marks as worth another try; `SqlRejected` is
   every other failure, and a reply that is not the documented shape. `AnalyticsSqlError`
   is an [extensible enum](#extensible-enums): a `match` over it needs an `Err(_)` arm.

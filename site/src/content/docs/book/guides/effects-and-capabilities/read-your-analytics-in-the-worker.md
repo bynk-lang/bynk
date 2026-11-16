@@ -51,13 +51,21 @@ operation takes the query text and its parameters, and answers a result or an er
 ```bynk,fragment
 consumes bynk.cloudflare { Analytics, AnalyticsSql, AnalyticsSqlError }
 
+type Row = { n: Int }
+
 service report from http {
 	on GET("/joined/:country") (country: String) -> Effect[HttpResult[Int]] by Visitor given AnalyticsSql, Signups {
 		let table <- Signups.dataset()
 		let sql = "SELECT count() AS n FROM \(table) WHERE blob1 = $1 AND timestamp > NOW() - INTERVAL '1' DAY"
 		let res <- AnalyticsSql.query(sql, [Text(country)])
 		match res {
-			Ok(r) => Ok(r.rows),
+			Ok(r) => {
+				let rows = Json.decode[List[Row]](r.data)
+				match rows {
+					Ok([first]) => Ok(first.n),
+					_ => ServerError("the reply was not one count"),
+				}
+			},
 			Err(SqlRetryable(_)) => ServerError("try again shortly"),
 			Err(_) => ServerError("the query was refused"),
 		}
@@ -65,8 +73,15 @@ service report from http {
 }
 ```
 
-A successful result is `AnalyticsSqlResult`: `rows` is how many rows came back, `data` is the rows as JSON
-text (an array of one object per row, keyed by column), and `statistics` says what the query cost the
+This continues the `shop.signups` context above: its `consumes bynk.cloudflare` line replaces the earlier one.
+
+The count is **in the data**, not in `rows`. `SELECT count()` with no `GROUP BY` always returns exactly one row,
+so `rows` would be `1` whether nobody or thousands had joined. The reply's `data` is `[{"n":4}]`, and the handler
+decodes it into rows and reads `n` from the only one.
+
+A successful result is `AnalyticsSqlResult`: `rows` is how many **result rows** came back (not what a
+`count()` counted), `data` is those rows as JSON text (an array of one object per row, keyed by column), and
+`statistics` says what the query cost the
 platform (`elapsedMs`, `rowsRead`, `bytesRead`).
 
 The rules of the SQL API apply as Cloudflare states them, and the platform, not Bynk, checks the query:
@@ -153,7 +168,7 @@ suite shop.signups {
 	case "a stubbed result is what the handler sees" {
 		stub AnalyticsSql.query(_, _) returns Ok(AnalyticsSqlResult { data: "[{\"n\":4}]", rows: 1, statistics: AnalyticsSqlStatistics { elapsedMs: 3, rowsRead: 9, bytesRead: 72 } })
 		let r <- report.GET("/joined/:country", "uk") by Visitor
-		expect r is Ok(1)
+		expect r is Ok(4)
 	}
 
 	case "a retryable failure is matched" {
@@ -164,7 +179,7 @@ suite shop.signups {
 
 	case "the query reads the environment's own dataset" {
 		stub Signups.dataset() returns "events.analyticsEngine.shop_signups_signups_staging"
-		stub AnalyticsSql.query(_, _) returns Ok(AnalyticsSqlResult { data: "[]", rows: 0, statistics: AnalyticsSqlStatistics { elapsedMs: 1, rowsRead: 0, bytesRead: 0 } })
+		stub AnalyticsSql.query(_, _) returns Ok(AnalyticsSqlResult { data: "[{\"n\":0}]", rows: 1, statistics: AnalyticsSqlStatistics { elapsedMs: 1, rowsRead: 0, bytesRead: 0 } })
 		let r <- report.GET("/joined/:country", "uk") by Visitor
 		expect r is Ok(0)
 		expect AnalyticsSql.query called with sql == "SELECT count() AS n FROM events.analyticsEngine.shop_signups_signups_staging WHERE blob1 = $1 AND timestamp > NOW() - INTERVAL '1' DAY"
