@@ -66,6 +66,7 @@
     - [Use more than one KV namespace](guides/effects-and-capabilities/use-several-kv-namespaces.md)
     - [Call a Worker outside the project](guides/effects-and-capabilities/call-a-foreign-worker.md)
     - [Call an mTLS origin](guides/effects-and-capabilities/call-an-mtls-origin.md)
+    - [Read your analytics in the Worker](guides/effects-and-capabilities/read-your-analytics-in-the-worker.md)
     - [Store files in R2](guides/effects-and-capabilities/store-files-in-r2.md)
     - [Query rows into a record without repeating the columns](guides/effects-and-capabilities/query-rows-into-a-record.md)
     - [Connect an existing Postgres database](guides/effects-and-capabilities/connect-an-existing-postgres-database.md)

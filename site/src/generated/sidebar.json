@@ -254,6 +254,10 @@
             "link": "/book/guides/effects-and-capabilities/call-an-mtls-origin/"
           },
           {
+            "label": "Read your analytics in the Worker",
+            "link": "/book/guides/effects-and-capabilities/read-your-analytics-in-the-worker/"
+          },
+          {
             "label": "Store files in R2",
             "link": "/book/guides/effects-and-capabilities/store-files-in-r2/"
           },

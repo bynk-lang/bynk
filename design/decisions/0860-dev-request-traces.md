@@ -5,7 +5,7 @@
 **Context.** Nothing in the editor or the CLI shows what one request did. The
 `bynk dev` event stream has no per-request event, and the emitter already holds
 the `.bynk` spans that only the toolchain can attach to a call. The track is
-`design/tracks/dev-request-traces.md`; its spine is #3580.
+retired (its closing summary is in `design/archive/retired-tracks.md`); its spine is #3580.
 
 **Decision.**
 
