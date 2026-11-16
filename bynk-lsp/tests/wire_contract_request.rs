@@ -550,7 +550,20 @@ service api from http {
 "#;
 
 fn body_json(handler: &str) -> serde_json::Value {
-    let root = setup_project("body-descriptor", &[("bodies.bynk", BODY_SRC)]);
+    // Each call gets its own project directory: the tests calling this run in
+    // parallel in one process, and `setup_project` deletes and recreates its
+    // directory, so a shared name lets one test remove another's project
+    // mid-analysis. Handlers repeat across tests, hence the counter.
+    static CALLS: std::sync::atomic::AtomicUsize = std::sync::atomic::AtomicUsize::new(0);
+    let call = CALLS.fetch_add(1, std::sync::atomic::Ordering::Relaxed);
+    let slug: String = handler
+        .chars()
+        .map(|c| if c.is_ascii_alphanumeric() { c } else { '-' })
+        .collect();
+    let root = setup_project(
+        &format!("body-descriptor-{slug}-{call}"),
+        &[("bodies.bynk", BODY_SRC)],
+    );
     let sources =
         bynk_testkit::read_project_sources(&bynk_ide::AnalysisRoots::SingleTree(root.clone()));
     let diag = bynk_ide::diagnose_project(&root, &sources);
