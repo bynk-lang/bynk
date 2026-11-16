@@ -1,6 +1,6 @@
 ---
 level: patch
-changelog: Any cycle between Workers is refused at check time as `bynk.deploy.worker_cycle` (renamed from `bynk.deploy.group_cycle`, which never shipped), including one through the events fan-out among contexts in no group (#3562, G2b)
+changelog: Any cycle between Workers is refused at check time as `bynk.deploy.worker_cycle` (renamed from `bynk.deploy.group_cycle`, never released), including one through the events fan-out among contexts in no group (#3562, G2b)
 probes: diagnostic_coverage, emit_diagnostics, explained_codes
 ---
 

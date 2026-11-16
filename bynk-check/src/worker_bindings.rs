@@ -430,7 +430,7 @@ pub fn phase_group_binding_collisions(
     bindings: &BTreeMap<String, Vec<WorkerBinding>>,
     errors: &mut ErrorSink,
 ) {
-    group_worker_cycles(worker_groups, parsed, groups, bindings, errors);
+    worker_cycles(worker_groups, parsed, groups, bindings, errors);
     for (key, group) in worker_groups {
         group_service_names(key, &group.contexts, parsed, groups, errors);
         group_publishers(key, &group.contexts, parsed, groups, bindings, errors);
@@ -548,7 +548,7 @@ fn group_service_names(
 /// with a `consumes` cycle reports that first and this check runs once it is
 /// fixed: a cycle is never reported twice, and a disjoint Worker cycle is
 /// reported at the next build, not beside it.
-fn group_worker_cycles(
+fn worker_cycles(
     worker_groups: &bynk_project::worker_groups::WorkerGroups,
     parsed: &[ParsedFile],
     groups: &BTreeMap<String, Vec<usize>>,
@@ -617,7 +617,7 @@ fn group_worker_cycles(
             .with_note(if in_group {
                 "a Worker is uploaded after the Workers it binds to, so a cycle between Workers cannot be deployed. A group folds its members into one Worker: move a context out of its group, or into the other, so the Workers' dependencies run one way"
             } else {
-                "a Worker is uploaded after the Workers it binds to, so a cycle between Workers cannot be deployed. A context that subscribes to an event is bound by its publisher's Worker, so it cannot also call the publisher: have one side stop calling the other"
+                "a Worker is uploaded after the Workers it binds to, so a cycle between Workers cannot be deployed. A context that subscribes to an event is bound by its publisher's Worker, so it cannot also call the publisher: have one side stop calling the other, or the subscriber stop subscribing, along the hops listed"
             }),
         );
     }
