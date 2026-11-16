@@ -367,3 +367,154 @@ fn two_context_call_contract_form_and_hash() {
         other => panic!("expected WcEnvelope::Keyed, got {other:?}"),
     }
 }
+
+// -- #3609: `success` (the `T` of `HttpResult[T]`) and per-response `payload`.
+
+const SUCCESS_SRC: &str = r#"context catalogue
+
+type Item = { id: Int, name: String }
+type Page[T] = { items: List[T], total: Int }
+type Outcome = | Present(item: Item) | Absent
+
+service api from http {
+  on GET("/items/:id") (id: Int) -> Effect[HttpResult[Item]] by Visitor {
+    Ok(Item { id: id, name: "widget" })
+  }
+
+  on GET("/items") () -> Effect[HttpResult[Page[Item]]] by Visitor {
+    Ok(Page { items: [], total: 0 })
+  }
+
+  on GET("/outcome/:id") (id: Int) -> Effect[HttpResult[Outcome]] by Visitor {
+    if id > 0 { Ok(Present(Item { id: id, name: "widget" })) } else { BadRequest("no such item") }
+  }
+
+  on GET("/page") () -> Effect[HttpResult[()]] by Visitor {
+    Raw(Bytes.fromUtf8("<p>hi</p>"), "text/html")
+  }
+}
+"#;
+
+/// The `bynk/wireContract` JSON for the handler whose header contains `needle`.
+fn wire_json_at(test_name: &str, needle: &str) -> serde_json::Value {
+    let root = setup_project(test_name, &[("catalogue.bynk", SUCCESS_SRC)]);
+    let sources =
+        bynk_testkit::read_project_sources(&bynk_ide::AnalysisRoots::SingleTree(root.clone()));
+    let diag = bynk_ide::diagnose_project(&root, &sources);
+    let file = diag
+        .files
+        .iter()
+        .find(|f| f.source_path.to_string_lossy().ends_with("catalogue.bynk"))
+        .expect("catalogue.bynk analysed");
+    let (rel, text) = (file.source_path.clone(), file.text.clone());
+    let info = &diag.boundary_info["catalogue"];
+    let expr_types = diag
+        .expr_types
+        .get(&rel)
+        .map(|v| v.as_slice())
+        .unwrap_or(&[]);
+    let model = wire_contract_at(
+        "catalogue",
+        &text,
+        find_offset(&text, needle),
+        info,
+        expr_types,
+        &diag.ty_intern,
+        real_context_count(&diag.boundary_info, &diag.unit_sources),
+    )
+    .expect("a wire contract at the handler");
+    let snapshots: HashMap<PathBuf, String> = diag
+        .files
+        .iter()
+        .map(|f| (f.source_path.clone(), f.text.clone()))
+        .collect();
+    let search_order = diag.doc_scope.get("catalogue").cloned().unwrap_or_default();
+    let wire = to_wire(
+        &model,
+        &root,
+        &text,
+        &info.types,
+        &diag.index,
+        &snapshots,
+        &search_order,
+    );
+    serde_json::to_value(&wire).expect("the model serialises")
+}
+
+fn response<'a>(wire: &'a serde_json::Value, variant: &str) -> &'a serde_json::Value {
+    wire["responses"]
+        .as_array()
+        .and_then(|rs| rs.iter().find(|r| r["variant"] == variant))
+        .unwrap_or_else(|| panic!("no `{variant}` response in {}", wire["responses"]))
+}
+
+fn has_type(wire: &serde_json::Value, name: &str) -> bool {
+    wire["types"]
+        .as_array()
+        .is_some_and(|ts| ts.iter().any(|t| t["name"] == name))
+}
+
+#[test]
+fn success_of_a_plain_http_result_names_the_item_type() {
+    let wire = wire_json_at("success-plain", "GET(\"/items/:id\")");
+    assert_eq!(
+        wire["success"],
+        serde_json::json!({ "kind": "Named", "name": "Item" })
+    );
+    assert!(
+        has_type(&wire, "Item"),
+        "`success` must resolve against `types`"
+    );
+    assert_eq!(response(&wire, "Ok")["payload"], wire["success"]);
+    // A message variant carries a `String`; a boundary-implicit response none.
+    let bad = wire["responses"]
+        .as_array()
+        .unwrap()
+        .iter()
+        .find(|r| r["status"] == 400);
+    assert!(bad.is_some_and(|r| r["payload"].is_null()));
+}
+
+#[test]
+fn success_of_a_generic_payload_resolves_through_instantiations() {
+    let wire = wire_json_at("success-generic", "GET(\"/items\")");
+    let key = wire["success"]["key"].as_str().expect("an Inst ref");
+    assert_eq!(wire["success"]["kind"], "Inst");
+    let insts = wire["instantiations"].as_array().expect("instantiations");
+    assert!(
+        insts.iter().any(|i| i["key"] == key),
+        "`success` key `{key}` must name an instantiation: {insts:?}"
+    );
+}
+
+#[test]
+fn success_of_a_sum_payload_names_the_sum_and_messages_carry_a_string() {
+    let wire = wire_json_at("success-sum", "GET(\"/outcome/:id\")");
+    assert_eq!(
+        wire["success"],
+        serde_json::json!({ "kind": "Named", "name": "Outcome" })
+    );
+    assert!(has_type(&wire, "Outcome"));
+    let message = response(&wire, "BadRequest");
+    assert_eq!(message["payload"]["kind"], "Base");
+    assert_eq!(message["payload"]["base"], "String");
+}
+
+#[test]
+fn success_of_a_raw_handler_is_null_and_so_is_its_raw_payload() {
+    let wire = wire_json_at("success-raw", "GET(\"/page\")");
+    assert!(
+        wire["success"].is_null(),
+        "raw handler: {}",
+        wire["success"]
+    );
+    assert!(response(&wire, "Ok")["payload"].is_null());
+    if let Some(raw) = wire["responses"]
+        .as_array()
+        .unwrap()
+        .iter()
+        .find(|r| r["variant"] == "Raw")
+    {
+        assert!(raw["payload"].is_null());
+    }
+}

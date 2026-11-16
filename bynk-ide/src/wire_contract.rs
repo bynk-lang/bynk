@@ -159,6 +159,12 @@ pub struct WireContractModel {
     /// so a consumer that wants only what the handler *can* answer — the
     /// OpenAPI export (#856) — uses this to drop it when it provably cannot.
     pub ok_reachable: bool,
+    /// #3609: the `T` of the handler's `HttpResult[T]`, resolved against
+    /// [`Self::boundary`] as the envelope's refs are. `None` for a non-HTTP
+    /// handler, a return that is not an `HttpResult`, and a `()` payload —
+    /// which is what a raw-response handler (`Raw(..)`) declares, so a client
+    /// knows there is no typed body to check paths against.
+    pub success: Option<WireRef>,
     pub no_cross_context: Option<NoCrossContextReason>,
 }
 
@@ -305,6 +311,13 @@ pub fn wire_contract_for_service(
         None
     };
 
+    let success = if matches!(kind, BoundaryKind::Http { .. }) {
+        http_result_inner(&handler.return_type)
+            .filter(|t| !matches!(t, TypeRef::Unit(_)))
+            .map(|t| wire::wire_ref(t, &info.types))
+    } else {
+        None
+    };
     let (responses, ok_reachable) = if matches!(kind, BoundaryKind::Http { .. }) {
         (
             http_responses(handler, real.span.file, expr_types, tys),
@@ -326,6 +339,7 @@ pub fn wire_contract_for_service(
         type_sites,
         responses,
         ok_reachable,
+        success,
         no_cross_context,
     })
 }
@@ -533,6 +547,38 @@ fn ok_is_reachable(
     }
     exprs.push(&handler.body.tail);
     exprs.into_iter().any(|e| walk.opaque_http_result(e))
+}
+
+/// `Effect[HttpResult[T]]` / `HttpResult[T]` → `T`; `None` when the declared
+/// return is not an `HttpResult`. The one place the payload type is read, shared
+/// with `bynk openapi` so the two cannot drift.
+pub fn http_result_inner(t: &TypeRef) -> Option<&TypeRef> {
+    match strip_effect(t) {
+        TypeRef::HttpResult(inner, _) => Some(inner.as_ref()),
+        _ => None,
+    }
+}
+
+/// The wire shape of the body one response carries (#3609), given the model's
+/// [`WireContractModel::success`]: `T` for a value variant, `String` for a
+/// message or redirect-location variant, and `None` for everything else —
+/// no payload, a stream, raw author-owned bytes, and boundary-implicit
+/// responses (whose bodies the boundary shapes, not the handler).
+pub fn response_payload(resp: &HttpResponse, success: Option<&WireRef>) -> Option<WireRef> {
+    if matches!(resp.origin, ResponseOrigin::BoundaryImplicit { .. }) {
+        return None;
+    }
+    let string = || WireRef::Base {
+        base: BaseType::String,
+        json: wire::JsonKind::String,
+        guards: Vec::new(),
+        expected: wire::Expected::Json(wire::JsonKind::String),
+    };
+    match http_variant(&resp.variant)?.payload {
+        HttpVariantPayload::Value => success.cloned(),
+        HttpVariantPayload::Message | HttpVariantPayload::Location => Some(string()),
+        _ => None,
+    }
 }
 
 /// Strip `Effect[_]` to expose the inner type — mirrors
