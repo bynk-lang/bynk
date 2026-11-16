@@ -2564,10 +2564,47 @@ impl Backend {
         let Some(offset) = crate::position::position_to_offset(text, params.position) else {
             return Ok(None);
         };
-        let info = bynk_ide::symbols::own_declaration_name(text)
-            .and_then(|(name, _)| analysis.sequence_info.get(&name));
+        let own = bynk_ide::symbols::own_declaration_name(text).map(|(name, _)| name);
+        let info = own
+            .as_ref()
+            .and_then(|name| analysis.sequence_info.get(name));
         let model = sequence_request::sequence_model_at(text, offset, info);
-        Ok(model.map(|m| sequence_request::to_wire(&m, text)))
+        // Model-diagrams slice 3: locate each callee among its unit's files in
+        // this round — the caller's own unit for an agent, else the consumed
+        // context's.
+        // A handler calling one agent several times names the same callee
+        // each time: parse its unit's files once per request (review, #3651).
+        let located: std::cell::RefCell<
+            std::collections::HashMap<
+                bynk_ide::sequence::Callee,
+                Option<tower_lsp::lsp_types::Location>,
+            >,
+        > = Default::default();
+        let locate = |callee: &bynk_ide::sequence::Callee| {
+            if let Some(hit) = located.borrow().get(callee) {
+                return hit.clone();
+            }
+            let found = Self::locate_callee_in(&analysis, own.as_ref(), callee);
+            located.borrow_mut().insert(callee.clone(), found.clone());
+            found
+        };
+        Ok(model.map(|m| sequence_request::to_wire(&m, text, locate)))
+    }
+
+    /// Model-diagrams slice 3: where `callee`'s handler is declared, among its
+    /// unit's files in `analysis` — the caller's own unit (`own`) for an agent.
+    fn locate_callee_in(
+        analysis: &Analysis,
+        own: Option<&String>,
+        callee: &bynk_ide::sequence::Callee,
+    ) -> Option<tower_lsp::lsp_types::Location> {
+        let unit = callee.unit.as_ref().or(own)?;
+        let files = analysis.unit_sources.get(unit)?.iter().filter_map(|rel| {
+            let text = analysis.snapshots.get(rel)?;
+            let uri = Url::from_file_path(analysis.project_root.join(rel)).ok()?;
+            Some((uri, text.as_str()))
+        });
+        sequence_request::locate_callee(callee, files)
     }
 
     /// #2196: `bynk/agentStateModel` — the agent state view's query for the

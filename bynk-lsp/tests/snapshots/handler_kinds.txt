@@ -5,11 +5,16 @@
       "id": 0,
       "kind": "Entry",
       "name": "calc call",
-      "range": null
+      "range": null,
+      "key": null
     }
   ],
   "messages": [],
-  "blocks": []
+  "blocks": [],
+  "trigger": {
+    "kind": "Call",
+    "label": "call"
+  }
 }
 === wire contract: calc call
 {
@@ -46,13 +51,15 @@
           "line": 19,
           "character": 79
         }
-      }
+      },
+      "key": null
     },
     {
       "id": 0,
       "kind": "Entry",
       "name": "web",
-      "range": null
+      "range": null,
+      "key": null
     }
   ],
   "messages": [
@@ -71,7 +78,8 @@
           "character": 3
         }
       },
-      "block": null
+      "block": null,
+      "callee": null
     },
     {
       "from": 0,
@@ -88,10 +96,15 @@
           "character": 10
         }
       },
-      "block": null
+      "block": null,
+      "callee": null
     }
   ],
-  "blocks": []
+  "blocks": [],
+  "trigger": {
+    "kind": "Request",
+    "label": "GET /items/:id"
+  }
 }
 === wire contract: web GET
 {
@@ -130,13 +143,15 @@
           "line": 23,
           "character": 78
         }
-      }
+      },
+      "key": null
     },
     {
       "id": 0,
       "kind": "Entry",
       "name": "web",
-      "range": null
+      "range": null,
+      "key": null
     }
   ],
   "messages": [
@@ -155,7 +170,8 @@
           "character": 3
         }
       },
-      "block": null
+      "block": null,
+      "callee": null
     },
     {
       "from": 0,
@@ -172,10 +188,15 @@
           "character": 12
         }
       },
-      "block": null
+      "block": null,
+      "callee": null
     }
   ],
-  "blocks": []
+  "blocks": [],
+  "trigger": {
+    "kind": "Request",
+    "label": "POST /items"
+  }
 }
 === wire contract: web POST
 {
@@ -205,11 +226,16 @@
       "id": 0,
       "kind": "Entry",
       "name": "web rejected",
-      "range": null
+      "range": null,
+      "key": null
     }
   ],
   "messages": [],
-  "blocks": []
+  "blocks": [],
+  "trigger": {
+    "kind": "Rejected",
+    "label": "rejected"
+  }
 }
 === wire contract: web rejected
 {
@@ -237,11 +263,16 @@
       "id": 0,
       "kind": "Entry",
       "name": "ticker cron \"*/5 * * * *\"",
-      "range": null
+      "range": null,
+      "key": null
     }
   ],
   "messages": [],
-  "blocks": []
+  "blocks": [],
+  "trigger": {
+    "kind": "Schedule",
+    "label": "cron \"*/5 * * * *\""
+  }
 }
 === wire contract: ticker schedule
 {
@@ -270,11 +301,16 @@
       "id": 0,
       "kind": "Entry",
       "name": "jobs message",
-      "range": null
+      "range": null,
+      "key": null
     }
   ],
   "messages": [],
-  "blocks": []
+  "blocks": [],
+  "trigger": {
+    "kind": "Message",
+    "label": "message"
+  }
 }
 === wire contract: jobs message
 {
@@ -311,13 +347,15 @@
           "line": 45,
           "character": 51
         }
-      }
+      },
+      "key": null
     },
     {
       "id": 0,
       "kind": "Entry",
       "name": "gate",
-      "range": null
+      "range": null,
+      "key": null
     },
     {
       "id": 2,
@@ -332,7 +370,8 @@
           "line": 46,
           "character": 17
         }
-      }
+      },
+      "key": "room"
     }
   ],
   "messages": [
@@ -351,7 +390,8 @@
           "character": 3
         }
       },
-      "block": null
+      "block": null,
+      "callee": null
     },
     {
       "from": 0,
@@ -368,7 +408,13 @@
           "character": 52
         }
       },
-      "block": null
+      "block": null,
+      "callee": {
+        "unit": null,
+        "owner": "Room",
+        "method": "join",
+        "location": null
+      }
     },
     {
       "from": 2,
@@ -385,10 +431,15 @@
           "character": 52
         }
       },
-      "block": null
+      "block": null,
+      "callee": null
     }
   ],
-  "blocks": []
+  "blocks": [],
+  "trigger": {
+    "kind": "Connection",
+    "label": "open"
+  }
 }
 === wire contract: gate open
 {
@@ -425,13 +476,15 @@
           "line": 50,
           "character": 68
         }
-      }
+      },
+      "key": null
     },
     {
       "id": 0,
       "kind": "Entry",
       "name": "gate",
-      "range": null
+      "range": null,
+      "key": null
     }
   ],
   "messages": [
@@ -450,10 +503,15 @@
           "character": 3
         }
       },
-      "block": null
+      "block": null,
+      "callee": null
     }
   ],
-  "blocks": []
+  "blocks": [],
+  "trigger": {
+    "kind": "Message",
+    "label": "message"
+  }
 }
 === wire contract: gate message
 {
@@ -490,13 +548,15 @@
           "line": 54,
           "character": 52
         }
-      }
+      },
+      "key": null
     },
     {
       "id": 0,
       "kind": "Entry",
       "name": "gate",
-      "range": null
+      "range": null,
+      "key": null
     }
   ],
   "messages": [
@@ -515,10 +575,15 @@
           "character": 3
         }
       },
-      "block": null
+      "block": null,
+      "callee": null
     }
   ],
-  "blocks": []
+  "blocks": [],
+  "trigger": {
+    "kind": "Connection",
+    "label": "close"
+  }
 }
 === wire contract: gate close
 {
@@ -546,11 +611,16 @@
       "id": 0,
       "kind": "Entry",
       "name": "onPing event",
-      "range": null
+      "range": null,
+      "key": null
     }
   ],
   "messages": [],
-  "blocks": []
+  "blocks": [],
+  "trigger": {
+    "kind": "Event",
+    "label": "event"
+  }
 }
 === wire contract: onPing event
 {
@@ -578,7 +648,8 @@
       "id": 0,
       "kind": "Entry",
       "name": "Counter.bump",
-      "range": null
+      "range": null,
+      "key": null
     }
   ],
   "messages": [
@@ -597,10 +668,15 @@
           "character": 39
         }
       },
-      "block": null
+      "block": null,
+      "callee": null
     }
   ],
-  "blocks": []
+  "blocks": [],
+  "trigger": {
+    "kind": "Call",
+    "label": "bump"
+  }
 }
 === wire contract: Counter bump
 (none)

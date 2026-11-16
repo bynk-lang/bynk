@@ -14,9 +14,10 @@
 //! same convention as `SerKey` in `lib.rs`).
 
 use bynk_ide::sequence::{
-    self, AltKind, HandlerOwner, MessageKind, ParticipantKind, SequenceModel,
+    self, AltKind, Callee, HandlerOwner, MessageKind, ParticipantKind, SequenceModel, TriggerKind,
 };
 use bynk_syntax::ast::{CommonsItem, Handler, SourceUnit};
+use tower_lsp::lsp_types::{Location, Url};
 
 /// Locate the `Handler` enclosing `offset` in `text` and build its sequence
 /// model. `info` is the owning unit's cross-context/agent table — `None`
@@ -128,11 +129,26 @@ pub struct SequenceModelParams {
 // -- `Span` lowered to `Range` (converted against the committed snapshot text
 // -- the caller already has — this module stays position-map-agnostic).
 
+// Model-diagrams slice 3 adds `trigger`, `WireParticipant::key`,
+// `WireMessage::callee` and `WireAltBlock::depth`, and the `"Break"` block
+// kind. All additive: an older client ignores the fields, and draws a `Break`
+// as it draws any block it does not know.
+
 #[derive(Debug, Clone, serde::Serialize)]
 pub struct WireSequenceModel {
     pub participants: Vec<WireParticipant>,
     pub messages: Vec<WireMessage>,
     pub blocks: Vec<WireAltBlock>,
+    /// What starts the handler — see [`bynk_ide::sequence::Trigger`].
+    pub trigger: WireTrigger,
+}
+
+#[derive(Debug, Clone, serde::Serialize)]
+pub struct WireTrigger {
+    /// `Request`, `Call`, `Schedule`, `Event`, `Message`, `Connection` or
+    /// `Rejected`.
+    pub kind: &'static str,
+    pub label: String,
 }
 
 #[derive(Debug, Clone, serde::Serialize)]
@@ -141,6 +157,9 @@ pub struct WireParticipant {
     pub kind: &'static str,
     pub name: String,
     pub range: Option<tower_lsp::lsp_types::Range>,
+    /// An agent's key expression as called (`client`), or `…` when calls
+    /// disagree; `null` otherwise. See [`bynk_ide::sequence::Participant::key`].
+    pub key: Option<String>,
 }
 
 #[derive(Debug, Clone, serde::Serialize)]
@@ -151,6 +170,23 @@ pub struct WireMessage {
     pub label: String,
     pub range: tower_lsp::lsp_types::Range,
     pub block: Option<u32>,
+    /// The handler a boundary call reaches; `null` for every other message.
+    pub callee: Option<WireCallee>,
+}
+
+/// The handler a boundary call reaches: by name, and where it is when the
+/// server can find it in the committed round (a client opens the callee's own
+/// sequence diagram there).
+#[derive(Debug, Clone, serde::Serialize)]
+pub struct WireCallee {
+    /// The consumed context; `null` for an agent of the caller's own context.
+    pub unit: Option<String>,
+    pub owner: String,
+    /// The handler's method name; `null` for a service's unnamed `on call`.
+    pub method: Option<String>,
+    /// The handler's declaration; `null` when not found (a consumed context
+    /// from a package, say, whose source is not in this project).
+    pub location: Option<Location>,
 }
 
 #[derive(Debug, Clone, serde::Serialize)]
@@ -162,6 +198,8 @@ pub struct WireAltBlock {
     pub parent: Option<u32>,
     #[serde(rename = "parentBranch")]
     pub parent_branch: Option<u32>,
+    /// The block's nesting depth, 0 at the top level (ADR 0858).
+    pub depth: u32,
 }
 
 #[derive(Debug, Clone, serde::Serialize)]
@@ -203,11 +241,76 @@ fn alt_kind_str(k: AltKind) -> &'static str {
         AltKind::If => "If",
         AltKind::Match => "Match",
         AltKind::Collapsed => "Collapsed",
+        AltKind::Break => "Break",
     }
 }
 
-pub fn to_wire(model: &SequenceModel, text: &str) -> WireSequenceModel {
+fn trigger_kind_str(k: TriggerKind) -> &'static str {
+    match k {
+        TriggerKind::Request => "Request",
+        TriggerKind::Call => "Call",
+        TriggerKind::Schedule => "Schedule",
+        TriggerKind::Event => "Event",
+        TriggerKind::Message => "Message",
+        TriggerKind::Connection => "Connection",
+        TriggerKind::Rejected => "Rejected",
+    }
+}
+
+/// Find the handler `callee` names among `files` (the callee unit's files:
+/// URI and analysed text), and return its declaration. A service's handler is
+/// its `on call` (named `method`, or unnamed when `method` is `None`); an
+/// agent's is its `on call method`.
+pub fn locate_callee<'a>(
+    callee: &Callee,
+    files: impl IntoIterator<Item = (Url, &'a str)>,
+) -> Option<Location> {
+    for (uri, text) in files {
+        let Ok(tokens) = bynk_syntax::lexer::tokenize(text) else {
+            continue;
+        };
+        let (unit, _errs) = bynk_syntax::parser::parse_unit_with_recovery(&tokens, text);
+        let items: &[CommonsItem] = match unit.as_ref() {
+            Some(SourceUnit::Context(c)) => &c.items,
+            Some(SourceUnit::Adapter(a)) => &a.items,
+            _ => continue,
+        };
+        for item in items {
+            let (name, handlers) = match item {
+                CommonsItem::Service(s) => (&s.name.name, &s.handlers),
+                CommonsItem::Agent(a) => (&a.name.name, &a.handlers),
+                _ => continue,
+            };
+            if *name != callee.owner {
+                continue;
+            }
+            let found = handlers.iter().find(|h| {
+                matches!(h.kind, bynk_syntax::ast::HandlerKind::Call)
+                    && h.method_name.as_ref().map(|m| m.name.as_str()) == callee.method.as_deref()
+            });
+            if let Some(h) = found {
+                return Some(Location {
+                    uri,
+                    range: crate::position::span_to_range(text, h.span),
+                });
+            }
+        }
+    }
+    None
+}
+
+/// The wire shape of `model`, with each callee located by `locate` (the
+/// server passes a lookup over the committed round's files).
+pub fn to_wire(
+    model: &SequenceModel,
+    text: &str,
+    locate: impl Fn(&Callee) -> Option<Location>,
+) -> WireSequenceModel {
     WireSequenceModel {
+        trigger: WireTrigger {
+            kind: trigger_kind_str(model.trigger.kind),
+            label: model.trigger.label.clone(),
+        },
         participants: model
             .participants
             .iter()
@@ -216,6 +319,7 @@ pub fn to_wire(model: &SequenceModel, text: &str) -> WireSequenceModel {
                 kind: participant_kind_str(p.kind),
                 name: p.name.clone(),
                 range: p.span.map(|s| crate::position::span_to_range(text, s)),
+                key: p.key.clone(),
             })
             .collect(),
         messages: model
@@ -228,6 +332,12 @@ pub fn to_wire(model: &SequenceModel, text: &str) -> WireSequenceModel {
                 label: m.label.clone(),
                 range: crate::position::span_to_range(text, m.span),
                 block: m.block,
+                callee: m.callee.as_ref().map(|c| WireCallee {
+                    unit: c.unit.clone(),
+                    owner: c.owner.clone(),
+                    method: c.method.clone(),
+                    location: locate(c),
+                }),
             })
             .collect(),
         blocks: model
@@ -249,6 +359,7 @@ pub fn to_wire(model: &SequenceModel, text: &str) -> WireSequenceModel {
                 range: crate::position::span_to_range(text, b.span),
                 parent: b.parent,
                 parent_branch: b.parent_branch,
+                depth: b.depth,
             })
             .collect(),
     }
@@ -277,13 +388,138 @@ mod tests {
                 span: Span::from(0..5),
                 parent: None,
                 parent_branch: None,
+                depth: 0,
             }],
             ..SequenceModel::default()
         };
-        let json = serde_json::to_value(to_wire(&model, text)).unwrap();
+        let json = serde_json::to_value(to_wire(&model, text, |_| None)).unwrap();
         let range = &json["blocks"][0]["branches"][0]["range"];
         assert_eq!(range["start"]["line"], 1);
         assert_eq!(range["start"]["character"], 0);
         assert_eq!(range["end"]["character"], 2);
+    }
+
+    const PLATFORM: &str =
+        "context platform\n\nservice Pinger {\n  on call(n: Int) -> Effect[Int] {\n    n\n  }\n}\n";
+    const LIMITS: &str = "context ratelimit\n\nagent Limiter {\n  key client: String\n\n  store count: Cell[Int]\n\n  on call reset() -> Effect[()] {\n    count := 0\n  }\n\n  on call hit(now: Int) -> Effect[Int] {\n    now\n  }\n}\n";
+
+    fn uri(name: &str) -> Url {
+        Url::parse(&format!("file:///p/{name}")).unwrap()
+    }
+
+    /// Model-diagrams slice 3: a callee is found by owner and method among
+    /// its unit's files.
+    #[test]
+    fn locates_a_service_call_and_a_named_agent_handler() {
+        let pinger = Callee {
+            unit: Some("platform".into()),
+            owner: "Pinger".into(),
+            method: None,
+        };
+        let found = locate_callee(
+            &pinger,
+            [
+                (uri("other.bynk"), LIMITS),
+                (uri("platform.bynk"), PLATFORM),
+            ],
+        )
+        .expect("the service's on call");
+        assert_eq!(found.uri, uri("platform.bynk"));
+        assert_eq!(found.range.start.line, 3, "the `on call` line");
+
+        let hit = Callee {
+            unit: None,
+            owner: "Limiter".into(),
+            method: Some("hit".into()),
+        };
+        let found = locate_callee(&hit, [(uri("limits.bynk"), LIMITS)]).expect("on call hit");
+        assert_eq!(found.range.start.line, 11, "not `reset`, the first handler");
+    }
+
+    #[test]
+    fn a_callee_that_is_not_there_has_no_location() {
+        let missing = Callee {
+            unit: None,
+            owner: "Limiter".into(),
+            method: Some("nope".into()),
+        };
+        assert_eq!(
+            locate_callee(&missing, [(uri("limits.bynk"), LIMITS)]),
+            None
+        );
+        let other = Callee {
+            unit: None,
+            owner: "Nobody".into(),
+            method: None,
+        };
+        assert_eq!(
+            locate_callee(
+                &other,
+                [
+                    (uri("limits.bynk"), LIMITS),
+                    (uri("bad.bynk"), "context {{{")
+                ]
+            ),
+            None
+        );
+    }
+
+    /// Model-diagrams slice 3: the additive wire fields.
+    #[test]
+    fn wire_carries_trigger_depth_key_and_located_callee() {
+        let text = "x\n";
+        let callee = Callee {
+            unit: None,
+            owner: "Limiter".into(),
+            method: Some("hit".into()),
+        };
+        let model = SequenceModel {
+            participants: vec![bynk_ide::sequence::Participant {
+                id: 1,
+                kind: ParticipantKind::Agent,
+                name: "Limiter".into(),
+                span: None,
+                key: Some("client".into()),
+            }],
+            messages: vec![bynk_ide::sequence::Message {
+                from: 0,
+                to: 1,
+                kind: MessageKind::Call,
+                label: "hit(now)".into(),
+                span: Span::from(0..1),
+                block: Some(0),
+                callee: Some(callee),
+            }],
+            blocks: vec![AltBlock {
+                id: 0,
+                kind: AltKind::Break,
+                branches: vec![],
+                span: Span::from(0..1),
+                parent: None,
+                parent_branch: None,
+                depth: 3,
+            }],
+            trigger: bynk_ide::sequence::Trigger {
+                kind: TriggerKind::Schedule,
+                label: "cron \"0 * * * *\"".into(),
+            },
+        };
+        let located = |_: &Callee| {
+            Some(Location {
+                uri: uri("limits.bynk"),
+                range: Default::default(),
+            })
+        };
+        let json = serde_json::to_value(to_wire(&model, text, located)).unwrap();
+        assert_eq!(json["trigger"]["kind"], "Schedule");
+        assert_eq!(json["trigger"]["label"], "cron \"0 * * * *\"");
+        assert_eq!(json["participants"][0]["key"], "client");
+        assert_eq!(json["blocks"][0]["kind"], "Break");
+        assert_eq!(json["blocks"][0]["depth"], 3);
+        let c = &json["messages"][0]["callee"];
+        assert_eq!(c["owner"], "Limiter");
+        assert_eq!(c["method"], "hit");
+        assert!(c["unit"].is_null());
+        assert_eq!(c["location"]["uri"], "file:///p/limits.bynk");
     }
 }

@@ -25,6 +25,14 @@
 //! Cross-context/agent calls are boundary-stop (Decision C): one `Call` +
 //! one `Return` message: the callee's own body is never walked, even where
 //! reachable (an agent's handlers are visible via [`ContextSequenceInfo::agents`]).
+//! Model-diagrams slice 3 names the callee instead ([`Message::callee`]), so a
+//! client can open the callee's own diagram (a UML `ref`).
+//!
+//! Model-diagrams slice 3 (ADR 0858): the model is complete. Nesting is
+//! walked to [`MAX_BLOCK_DEPTH`], a safety cap far beyond real code, and each
+//! block carries its [`AltBlock::depth`]; how much to show is the client's
+//! call. A `?` at the top of a statement's value is an early return, modelled
+//! as an [`AltKind::Break`] block, and the model names its [`Trigger`].
 
 use std::collections::HashMap;
 
@@ -40,16 +48,61 @@ pub enum HandlerOwner<'a> {
     Agent(&'a str),
 }
 
-/// Nesting budget for rendered `if`/`match` blocks (issue #846: "~2 levels").
-/// Beyond this depth the walk stops classifying calls and emits a single
-/// [`AltKind::Collapsed`] marker instead of recursing further.
-const MAX_BLOCK_DEPTH: u32 = 2;
+/// A safety cap on `if`/`match` nesting, not a presentation choice (ADR 0858,
+/// model-diagrams slice 3): the model is complete to this depth and the client
+/// decides how much to show. It bounds the work and the payload for a
+/// pathological handler; real code never comes near it. Beyond it the walk
+/// emits a single [`AltKind::Collapsed`] marker instead of recursing further.
+/// (It was 2, a presentation cut, until slice 3.)
+pub const MAX_BLOCK_DEPTH: u32 = 16;
 
 #[derive(Debug, Clone, Default, PartialEq)]
 pub struct SequenceModel {
     pub participants: Vec<Participant>,
     pub messages: Vec<Message>,
     pub blocks: Vec<AltBlock>,
+    /// Model-diagrams slice 3: what starts the handler. With a principal the
+    /// actor's inbound message already says so; without one (an `on call`,
+    /// `on cron`, `on event` …) a client draws a found message labelled by it.
+    pub trigger: Trigger,
+}
+
+/// What starts a handler (model-diagrams slice 3).
+#[derive(Debug, Clone, PartialEq)]
+pub struct Trigger {
+    pub kind: TriggerKind,
+    /// The handler's request descriptor: `GET /check/:client`, `hit`,
+    /// `cron "0 * * * *"`, `event` …
+    pub label: String,
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Default)]
+pub enum TriggerKind {
+    /// An HTTP request (`from http`).
+    Request,
+    /// An `on call` handler, called by another handler or context.
+    #[default]
+    Call,
+    /// An `on cron` schedule.
+    Schedule,
+    /// An `on event` subscription.
+    Event,
+    /// An `on message`: off a queue or a WebSocket (the service's protocol
+    /// says which; the model does not).
+    Message,
+    /// A WebSocket `on open` or `on close`.
+    Connection,
+    /// An `on rejected` handler.
+    Rejected,
+}
+
+impl Default for Trigger {
+    fn default() -> Self {
+        Trigger {
+            kind: TriggerKind::Call,
+            label: String::new(),
+        }
+    }
 }
 
 #[derive(Debug, Clone, PartialEq)]
@@ -60,7 +113,15 @@ pub struct Participant {
     /// `None` for `Entry` — it has no single declaration site to jump to
     /// (it *is* the handler).
     pub span: Option<Span>,
+    /// Model-diagrams slice 3: an agent's key expression as written at the
+    /// call (`client` in `Limiter(client).hit(…)`), for a lifeline drawn
+    /// `Limiter[client]`. `None` for other kinds; [`MIXED_KEYS`] when calls in
+    /// one handler key the same agent differently.
+    pub key: Option<String>,
 }
+
+/// An agent participant's key when the handler's calls key it differently.
+pub const MIXED_KEYS: &str = "…";
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum ParticipantKind {
@@ -84,6 +145,24 @@ pub struct Message {
     pub label: String,
     pub span: Span,
     pub block: Option<u32>,
+    /// Model-diagrams slice 3: the handler a boundary call reaches, for a
+    /// `Call` or `Send` to an agent or a consumed context — what a client
+    /// needs to open the callee's own diagram. `None` for every other message.
+    pub callee: Option<Callee>,
+}
+
+/// The handler a boundary-stop call reaches, named rather than walked
+/// (Decision C). The LSP layer resolves it to a location.
+#[derive(Debug, Clone, PartialEq, Eq, Hash)]
+pub struct Callee {
+    /// The consumed context's qualified name; `None` for an agent of the
+    /// handler's own context.
+    pub unit: Option<String>,
+    /// The agent or service declaring the handler.
+    pub owner: String,
+    /// The handler's method name (`hit` in `on call hit`); `None` for a
+    /// service's unnamed `on call`, which is what `platform.Pinger(n)` reaches.
+    pub method: Option<String>,
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -115,6 +194,9 @@ pub struct AltBlock {
     /// `Message.block` alone would have no way to place a nested block whose
     /// own branches are also message-free.
     pub parent_branch: Option<u32>,
+    /// Model-diagrams slice 3: the block's nesting depth, 0 at the top level,
+    /// so a client can fold by depth (ADR 0858).
+    pub depth: u32,
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -122,6 +204,10 @@ pub enum AltKind {
     If,
     Match,
     Collapsed,
+    /// Model-diagrams slice 3: a `?` — UML `break`. Its one branch is the
+    /// early return when the operand is `None` or `Err`, labelled by the
+    /// operand (`stored?`); the walk carries on after it, as the code does.
+    Break,
 }
 
 #[derive(Debug, Clone, PartialEq)]
@@ -225,7 +311,27 @@ pub fn sequence_model(
     // The whole body is in the handler's return position: its tail (and each
     // return-gating branch's tail) is what the handler replies to the actor.
     b.walk_block(&handler.body, None, 0, true);
-    b.finish()
+    let mut model = b.finish();
+    model.trigger = trigger(handler);
+    model
+}
+
+/// What starts `handler` (model-diagrams slice 3).
+fn trigger(handler: &Handler) -> Trigger {
+    use bynk_model::IrHandlerKind;
+    let kind = match bynk_model::lower_handler_kind_ir(&handler.kind) {
+        IrHandlerKind::Call => TriggerKind::Call,
+        IrHandlerKind::Http { .. } => TriggerKind::Request,
+        IrHandlerKind::Cron { .. } => TriggerKind::Schedule,
+        IrHandlerKind::Event => TriggerKind::Event,
+        IrHandlerKind::Message => TriggerKind::Message,
+        IrHandlerKind::Open | IrHandlerKind::Close => TriggerKind::Connection,
+        IrHandlerKind::Rejected => TriggerKind::Rejected,
+    };
+    Trigger {
+        kind,
+        label: discriminator(handler),
+    }
 }
 
 /// The handler's request descriptor — its method + path (`GET /check/:client`),
@@ -305,6 +411,7 @@ impl<'a> Builder<'a> {
                 kind: ParticipantKind::Entry,
                 name: entry_label,
                 span: None,
+                key: None,
             }],
             messages: Vec::new(),
             blocks: Vec::new(),
@@ -327,6 +434,7 @@ impl<'a> Builder<'a> {
                 kind: ParticipantKind::Actor,
                 name,
                 span: Some(span),
+                key: None,
             },
         );
         self.actor = Some(id);
@@ -345,6 +453,7 @@ impl<'a> Builder<'a> {
             label,
             span: handler_span,
             block: None,
+            callee: None,
         });
     }
 
@@ -360,6 +469,7 @@ impl<'a> Builder<'a> {
             label: outcome,
             span,
             block: current_block.map(|c| c.id),
+            callee: None,
         });
     }
 
@@ -368,6 +478,7 @@ impl<'a> Builder<'a> {
             participants: self.participants,
             messages: self.messages,
             blocks: self.blocks,
+            trigger: Trigger::default(),
         }
     }
 
@@ -385,8 +496,21 @@ impl<'a> Builder<'a> {
             kind,
             name: name.to_string(),
             span: Some(span),
+            key: None,
         });
         id
+    }
+
+    /// Record the key an agent participant was called with: the first one
+    /// seen, or [`MIXED_KEYS`] once two calls disagree.
+    fn note_key(&mut self, id: u32, key: String) {
+        if let Some(p) = self.participants.iter_mut().find(|p| p.id == id) {
+            p.key = match p.key.take() {
+                None => Some(key),
+                Some(k) if k == key => Some(k),
+                Some(_) => Some(MIXED_KEYS.to_string()),
+            };
+        }
     }
 
     /// Walk a block's statements, then its tail — the traversal spine every
@@ -487,6 +611,15 @@ impl<'a> Builder<'a> {
                 self.walk_match(inner.span, arms, current_block, depth, ret)
             }
             ExprKind::Block(b) => self.walk_block(b, current_block, depth, ret),
+            // Model-diagrams slice 3: `x?` returns early when `x` is `None` or
+            // `Err`. Only a `?` at the top of a statement's value (or a tail)
+            // is seen, as for calls; one inside a lambda returns from the
+            // lambda, and lambdas are not walked.
+            ExprKind::Question(operand) => {
+                self.walk_value(operand, current_block, depth, arrow, false);
+                self.push_break(inner, peel_paren(operand), current_block, depth);
+                self.maybe_reply(inner, current_block, ret);
+            }
             ExprKind::Call { .. } | ExprKind::MethodCall { .. } => {
                 // A write to the agent's own store is a note, not a lifeline —
                 // under `<-`/`do`, or as a tail (`balance.update(…)` as a
@@ -529,7 +662,7 @@ impl<'a> Builder<'a> {
         };
         let span = if_expr.span;
         if depth >= MAX_BLOCK_DEPTH {
-            self.push_collapsed(span, current_block);
+            self.push_collapsed(span, current_block, depth);
             return;
         }
         let id = self.blocks.len() as u32;
@@ -540,6 +673,7 @@ impl<'a> Builder<'a> {
             span,
             parent: current_block.map(|c| c.id),
             parent_branch: current_block.map(|c| c.branch),
+            depth,
         });
         let then_start = self.messages.len();
         self.walk_block(then_block, Some(BlockCtx { id, branch: 0 }), depth + 1, ret);
@@ -595,7 +729,7 @@ impl<'a> Builder<'a> {
         ret: bool,
     ) {
         if depth >= MAX_BLOCK_DEPTH {
-            self.push_collapsed(span, current_block);
+            self.push_collapsed(span, current_block, depth);
             return;
         }
         let id = self.blocks.len() as u32;
@@ -606,6 +740,7 @@ impl<'a> Builder<'a> {
             span,
             parent: current_block.map(|c| c.id),
             parent_branch: current_block.map(|c| c.branch),
+            depth,
         });
         let mut branches = Vec::with_capacity(arms.len());
         for (arm_index, arm) in arms.iter().enumerate() {
@@ -693,10 +828,11 @@ impl<'a> Builder<'a> {
             label,
             span,
             block: current_block.map(|c| c.id),
+            callee: None,
         });
     }
 
-    fn push_collapsed(&mut self, span: Span, current_block: Option<BlockCtx>) {
+    fn push_collapsed(&mut self, span: Span, current_block: Option<BlockCtx>, depth: u32) {
         let id = self.blocks.len() as u32;
         self.blocks.push(AltBlock {
             id,
@@ -705,10 +841,53 @@ impl<'a> Builder<'a> {
             span,
             parent: current_block.map(|c| c.id),
             parent_branch: current_block.map(|c| c.branch),
+            depth,
         });
     }
 
+    /// Model-diagrams slice 3: a `?` is an early return — a UML `break`
+    /// whose one branch, labelled by the operand (`stored?`), replies an
+    /// early return: a `Return` to the principal when there is one, else the
+    /// branch's reply note. The operand is walked first (it is evaluated
+    /// first); the walk carries on after the block, as the code does.
+    fn push_break(
+        &mut self,
+        question: &Expr,
+        operand: &Expr,
+        current_block: Option<BlockCtx>,
+        depth: u32,
+    ) {
+        if depth >= MAX_BLOCK_DEPTH {
+            self.push_collapsed(question.span, current_block, depth);
+            return;
+        }
+        let id = self.blocks.len() as u32;
+        self.blocks.push(AltBlock {
+            id,
+            kind: AltKind::Break,
+            branches: Vec::new(),
+            span: question.span,
+            parent: current_block.map(|c| c.id),
+            parent_branch: current_block.map(|c| c.branch),
+            depth,
+        });
+        let start = self.messages.len();
+        self.emit_reply(
+            EARLY_RETURN.to_string(),
+            question.span,
+            Some(BlockCtx { id, branch: 0 }),
+        );
+        let reply = self.actor.is_none().then(|| EARLY_RETURN.to_string());
+        self.blocks[id as usize].branches = vec![Branch {
+            label: format!("{}?", bynk_fmt::expr_to_string(operand)),
+            message_ids: (start..self.messages.len()).collect(),
+            reply,
+            span: question.span,
+        }];
+    }
+
     fn classify_call(&mut self, expr: &Expr, arrow: Arrow, current_block: Option<BlockCtx>) {
+        let callee = self.callee_of(expr);
         let Some((target, label)) = self.classify_target(expr) else {
             // Local computation (commons/context-local fn, plain method,
             // constructor) — folds into the entry activation, no message.
@@ -724,6 +903,7 @@ impl<'a> Builder<'a> {
                     label,
                     span: expr.span,
                     block,
+                    callee,
                 });
             }
             Arrow::Awaited => {
@@ -734,6 +914,7 @@ impl<'a> Builder<'a> {
                     label,
                     span: expr.span,
                     block,
+                    callee,
                 });
                 self.messages.push(Message {
                     from: target,
@@ -742,8 +923,41 @@ impl<'a> Builder<'a> {
                     label: String::new(),
                     span: expr.span,
                     block,
+                    callee: None,
                 });
             }
+        }
+    }
+
+    /// Model-diagrams slice 3: the handler a boundary call reaches, by name —
+    /// `Agent(key).method(…)` reaches the agent's `on call method`, and
+    /// `consumed.Service(…)` the consumed service's `on call`. Read from the
+    /// same shapes [`Builder::classify_target`] classifies; `None` for a
+    /// capability op or local computation. Must agree with that method on
+    /// which calls are boundary calls.
+    fn callee_of(&self, expr: &Expr) -> Option<Callee> {
+        let ExprKind::MethodCall {
+            receiver, method, ..
+        } = &expr.kind
+        else {
+            return None;
+        };
+        let info = self.info?;
+        match &receiver.kind {
+            ExprKind::Call { name, .. } if info.agents.contains_key(&name.name) => Some(Callee {
+                unit: None,
+                owner: name.name.clone(),
+                method: Some(method.name.clone()),
+            }),
+            ExprKind::Ident(id) if !self.given.iter().any(|c| c.key() == id.name) => {
+                let unit = info.cross_context.resolve_prefix(&id.name)?;
+                Some(Callee {
+                    unit: Some(unit),
+                    owner: method.name.clone(),
+                    method: None,
+                })
+            }
+            _ => None,
         }
     }
 
@@ -770,10 +984,17 @@ impl<'a> Builder<'a> {
                 args,
                 ..
             } => match &receiver.kind {
-                ExprKind::Call { name, .. }
-                    if self.info.is_some_and(|i| i.agents.contains_key(&name.name)) =>
-                {
+                ExprKind::Call {
+                    name,
+                    args: key_args,
+                    ..
+                } if self.info.is_some_and(|i| i.agents.contains_key(&name.name)) => {
                     let id = self.participant_id(ParticipantKind::Agent, &name.name, name.span);
+                    let key: Vec<String> = key_args.iter().map(bynk_fmt::expr_to_string).collect();
+                    // No key arguments (a file mid-edit): no key, not `""`.
+                    if !key.is_empty() {
+                        self.note_key(id, key.join(", "));
+                    }
                     Some((id, call_label(&method.name, args)))
                 }
                 ExprKind::Ident(id) => self.classify_static(&id.name, &method.name, args, id.span),
@@ -814,6 +1035,10 @@ impl<'a> Builder<'a> {
         Some((id, call_label(method, args)))
     }
 }
+
+/// The reply a `break` block (a `?`) gives: the handler returns early with the
+/// operand's `None` or `Err` (a 404 under `HttpResult`, the error otherwise).
+pub const EARLY_RETURN: &str = "early return";
 
 /// The longest rendered value a state-write note shows before eliding.
 const WRITE_LABEL_MAX: usize = 32;
@@ -1198,7 +1423,7 @@ service nestedService {
     }
 
     #[test]
-    fn nested_if_collapses_past_the_depth_budget() {
+    fn nested_if_is_walked_in_full_with_depths() {
         let root = setup_project("misc-nested", &[("misc.bynk", MISC_SRC)]);
         let diag = crate::testkit::diagnose_project(&root);
         let info = misc_info(&diag);
@@ -1214,16 +1439,13 @@ service nestedService {
             Some(&info),
         );
 
-        // Depth 0 (`n > 0`) and depth 1 (`n > 10`) render as real blocks;
-        // depth 2 (`n > 100`) is past `MAX_BLOCK_DEPTH` and collapses instead
-        // of expanding further — click-to-code still works (the collapsed
-        // marker's span points at the whole collapsed `if`), the diagram
-        // just doesn't recurse into it.
-        let kinds: Vec<AltKind> = model.blocks.iter().map(|b| b.kind).collect();
-        assert_eq!(kinds, vec![AltKind::If, AltKind::If, AltKind::Collapsed]);
-        assert!(
-            model.blocks[2].branches.is_empty(),
-            "a Collapsed block carries no branches"
+        // Model-diagrams slice 3 (ADR 0858): all three levels are real blocks
+        // — the old presentation cut at depth 2 is gone, and each block says
+        // how deep it is so the client can fold by depth.
+        let kinds: Vec<(AltKind, u32)> = model.blocks.iter().map(|b| (b.kind, b.depth)).collect();
+        assert_eq!(
+            kinds,
+            vec![(AltKind::If, 0), (AltKind::If, 1), (AltKind::If, 2)]
         );
         // Regression: each nested block must record which branch of its
         // parent it sits under, not just the parent id — both the middle
@@ -1236,6 +1458,48 @@ service nestedService {
         assert_eq!(model.blocks[1].parent_branch, Some(0));
         assert_eq!(model.blocks[2].parent, Some(1));
         assert_eq!(model.blocks[2].parent_branch, Some(0));
+    }
+
+    /// A handler whose body is `depth` nested `if`s around one value.
+    fn deeply_nested_src(depth: usize) -> String {
+        let mut body = String::from("n");
+        for i in (0..depth).rev() {
+            body = format!("if n > {i} {{ {body} }} else {{ 0 }}");
+        }
+        format!(
+            "context deep\n\nservice api {{\n  on call(n: Int) -> Effect[Int] {{\n    {body}\n  }}\n}}\n"
+        )
+    }
+
+    #[test]
+    fn nesting_past_the_safety_cap_collapses() {
+        let src = deeply_nested_src(MAX_BLOCK_DEPTH as usize + 2);
+        let ctx = parse_context(&src);
+        let svc = find_service(&ctx, "api");
+        let model = sequence_model(
+            &svc.handlers[0],
+            HandlerOwner::Service("api"),
+            &[],
+            None,
+            None,
+        );
+        let ifs = model
+            .blocks
+            .iter()
+            .filter(|b| b.kind == AltKind::If)
+            .count();
+        assert_eq!(
+            ifs, MAX_BLOCK_DEPTH as usize,
+            "walked in full up to the cap"
+        );
+        let collapsed: Vec<&AltBlock> = model
+            .blocks
+            .iter()
+            .filter(|b| b.kind == AltKind::Collapsed)
+            .collect();
+        assert_eq!(collapsed.len(), 1, "one marker for everything past the cap");
+        assert_eq!(collapsed[0].depth, MAX_BLOCK_DEPTH);
+        assert!(collapsed[0].branches.is_empty());
     }
 
     // -- Fixture 6 (#861 review): a service declares a service-level `given`
@@ -1781,5 +2045,358 @@ agent Order {
 }
 "#;
         assert!(writes(&agent_model("bad-assign", src, "Order", "bad")).is_empty());
+    }
+
+    // -- Model-diagrams slice 3: `?` as `break`, triggers, agent keys, callees.
+
+    const QUESTION_SRC: &str = r#"context q
+
+service web from http by Visitor {
+  on GET("/links/:code") (code: String) -> Effect[HttpResult[String]] {
+    let stored = lookup(code)
+    let raw = stored?
+    Ok(raw)
+  }
+}
+
+service calls {
+  on call(n: Int) -> Effect[Int] {
+    let v = parse(n)?
+    v
+  }
+}
+"#;
+
+    #[test]
+    fn a_question_mark_is_a_break_that_returns_early_to_the_principal() {
+        let ctx = parse_context(QUESTION_SRC);
+        let svc = find_service(&ctx, "web");
+        let model = sequence_model(
+            &svc.handlers[0],
+            HandlerOwner::Service("web"),
+            &svc.default_given,
+            svc.default_by.as_ref(),
+            None,
+        );
+        assert_eq!(model.blocks.len(), 1);
+        let brk = &model.blocks[0];
+        assert_eq!((brk.kind, brk.depth, brk.parent), (AltKind::Break, 0, None));
+        assert_eq!(brk.branches.len(), 1);
+        assert_eq!(brk.branches[0].label, "stored?");
+        // With a principal the early return is a `Return` to the actor, inside
+        // the block, and not also a note.
+        assert_eq!(brk.branches[0].reply, None);
+        let early: Vec<&Message> = brk.branches[0]
+            .message_ids
+            .iter()
+            .map(|&i| &model.messages[i])
+            .collect();
+        assert_eq!(early.len(), 1);
+        assert_eq!(early[0].kind, MessageKind::Return);
+        assert_eq!(early[0].label, EARLY_RETURN);
+        assert_eq!(early[0].block, Some(0));
+        // The walk carries on after the `?`: the handler's own reply follows.
+        let last = model.messages.last().expect("a final reply");
+        assert_eq!(
+            (last.kind, last.label.as_str(), last.block),
+            (MessageKind::Return, "Ok(raw)", None)
+        );
+    }
+
+    #[test]
+    fn a_question_mark_without_a_principal_replies_with_a_note() {
+        let ctx = parse_context(QUESTION_SRC);
+        let svc = find_service(&ctx, "calls");
+        let model = sequence_model(
+            &svc.handlers[0],
+            HandlerOwner::Service("calls"),
+            &[],
+            None,
+            None,
+        );
+        assert_eq!(model.blocks.len(), 1);
+        assert_eq!(model.blocks[0].kind, AltKind::Break);
+        assert_eq!(model.blocks[0].branches[0].label, "parse(n)?");
+        assert_eq!(
+            model.blocks[0].branches[0].reply.as_deref(),
+            Some(EARLY_RETURN)
+        );
+        assert!(model.blocks[0].branches[0].message_ids.is_empty());
+    }
+
+    #[test]
+    fn the_model_names_its_trigger() {
+        let ctx = parse_context(QUESTION_SRC);
+        let web = find_service(&ctx, "web");
+        let model = sequence_model(
+            &web.handlers[0],
+            HandlerOwner::Service("web"),
+            &web.default_given,
+            web.default_by.as_ref(),
+            None,
+        );
+        assert_eq!(
+            model.trigger,
+            Trigger {
+                kind: TriggerKind::Request,
+                label: "GET /links/:code".to_string()
+            }
+        );
+        let calls = find_service(&ctx, "calls");
+        let model = sequence_model(
+            &calls.handlers[0],
+            HandlerOwner::Service("calls"),
+            &[],
+            None,
+            None,
+        );
+        assert_eq!(
+            model.trigger,
+            Trigger {
+                kind: TriggerKind::Call,
+                label: "call".to_string()
+            }
+        );
+    }
+
+    #[test]
+    fn an_agent_call_carries_its_key_and_names_its_callee() {
+        let root = setup_project("ratelimit-callee", &[("ratelimit.bynk", RATELIMIT_SRC)]);
+        let diag = crate::testkit::diagnose_project(&root);
+        let info = diag.sequence_info.get("ratelimit").expect("sequence_info");
+        let ctx = parse_context(RATELIMIT_SRC);
+        let svc = find_service(&ctx, "api");
+        let model = sequence_model(
+            &svc.handlers[0],
+            HandlerOwner::Service("api"),
+            &svc.default_given,
+            svc.default_by.as_ref(),
+            Some(info),
+        );
+        let limiter = model
+            .participants
+            .iter()
+            .find(|p| p.kind == ParticipantKind::Agent)
+            .expect("the agent lifeline");
+        assert_eq!(limiter.key.as_deref(), Some("client"));
+        let hit = model
+            .messages
+            .iter()
+            .find(|m| m.kind == MessageKind::Call && m.to == limiter.id)
+            .expect("the agent call");
+        assert_eq!(
+            hit.callee,
+            Some(Callee {
+                unit: None,
+                owner: "Limiter".to_string(),
+                method: Some("hit".to_string())
+            })
+        );
+        // A capability op is not a boundary call: no callee.
+        let now = model
+            .messages
+            .iter()
+            .find(|m| m.kind == MessageKind::Call && m.label.starts_with("now"))
+            .expect("the Clock call");
+        assert_eq!(now.callee, None);
+        // Returns never name a callee.
+        assert!(
+            model
+                .messages
+                .iter()
+                .filter(|m| m.kind == MessageKind::Return)
+                .all(|m| m.callee.is_none())
+        );
+    }
+
+    #[test]
+    fn an_agent_called_with_different_keys_has_mixed_keys() {
+        const SRC: &str = r#"context mixed
+
+agent Book {
+  key channel: String
+
+  store count: Cell[Int]
+
+  on call add() -> Effect[Int] {
+    1
+  }
+}
+
+service api {
+  on call(a: String, b: String) -> Effect[Int] {
+    let x <- Book(a).add()
+    let y <- Book(b).add()
+    x
+  }
+}
+"#;
+        let root = setup_project("mixed-keys", &[("mixed.bynk", SRC)]);
+        let diag = crate::testkit::diagnose_project(&root);
+        let info = diag.sequence_info.get("mixed").expect("sequence_info");
+        let ctx = parse_context(SRC);
+        let svc = find_service(&ctx, "api");
+        let model = sequence_model(
+            &svc.handlers[0],
+            HandlerOwner::Service("api"),
+            &[],
+            None,
+            Some(info),
+        );
+        let book = model
+            .participants
+            .iter()
+            .find(|p| p.kind == ParticipantKind::Agent)
+            .expect("the agent lifeline");
+        assert_eq!(book.key.as_deref(), Some(MIXED_KEYS));
+    }
+
+    #[test]
+    fn a_cross_context_call_names_the_consumed_service() {
+        let root = setup_project(
+            "crossctx-callee",
+            &[
+                ("platform.bynk", PLATFORM_SRC),
+                ("consumer.bynk", CONSUMER_SRC),
+            ],
+        );
+        let diag = crate::testkit::diagnose_project(&root);
+        let info = diag.sequence_info.get("consumer").expect("sequence_info");
+        let ctx = parse_context(CONSUMER_SRC);
+        let svc = find_service(&ctx, "api");
+        let model = sequence_model(
+            &svc.handlers[0],
+            HandlerOwner::Service("api"),
+            &svc.default_given,
+            svc.default_by.as_ref(),
+            Some(info),
+        );
+        assert_eq!(
+            model.messages[0].callee,
+            Some(Callee {
+                unit: Some("platform".to_string()),
+                owner: "Pinger".to_string(),
+                method: None
+            })
+        );
+    }
+
+    // -- Review follow-ups (#3651): `?` inside a branch, a boundary call as a
+    // -- `?` operand, and a `?` past the depth cap.
+
+    const QUESTION_EDGES_SRC: &str = r#"context qe
+
+agent Limiter {
+  key client: String
+
+  store count: Cell[Int]
+
+  on call hit(n: Int) -> Effect[Result[Int, String]] {
+    Ok(n)
+  }
+}
+
+service api {
+  on call(c: String, n: Int) -> Effect[Int] {
+    if n > 0 {
+      let v = parse(n)?
+      v
+    } else {
+      0
+    }
+  }
+
+  on call(c: String, n: Int) -> Effect[Int] {
+    let x <- Limiter(c).hit(n)?
+    x
+  }
+}
+"#;
+
+    #[test]
+    fn a_question_mark_inside_a_branch_nests_under_it() {
+        let ctx = parse_context(QUESTION_EDGES_SRC);
+        let svc = find_service(&ctx, "api");
+        let model = sequence_model(
+            &svc.handlers[0],
+            HandlerOwner::Service("api"),
+            &[],
+            None,
+            None,
+        );
+        let kinds: Vec<(AltKind, Option<u32>, Option<u32>, u32)> = model
+            .blocks
+            .iter()
+            .map(|b| (b.kind, b.parent, b.parent_branch, b.depth))
+            .collect();
+        assert_eq!(
+            kinds,
+            vec![
+                (AltKind::If, None, None, 0),
+                (AltKind::Break, Some(0), Some(0), 1)
+            ]
+        );
+    }
+
+    #[test]
+    fn a_boundary_call_under_a_question_mark_comes_before_its_break() {
+        let root = setup_project("question-edges", &[("qe.bynk", QUESTION_EDGES_SRC)]);
+        let diag = crate::testkit::diagnose_project(&root);
+        let info = diag.sequence_info.get("qe").expect("sequence_info");
+        let ctx = parse_context(QUESTION_EDGES_SRC);
+        let svc = find_service(&ctx, "api");
+        let model = sequence_model(
+            &svc.handlers[1],
+            HandlerOwner::Service("api"),
+            &[],
+            None,
+            Some(info),
+        );
+        assert_eq!(model.messages[0].kind, MessageKind::Call);
+        assert_eq!(
+            model.messages[0].block, None,
+            "the call is evaluated before the `?`"
+        );
+        assert_eq!(
+            model.messages[0].callee,
+            Some(Callee {
+                unit: None,
+                owner: "Limiter".to_string(),
+                method: Some("hit".to_string())
+            })
+        );
+        assert_eq!(model.messages[1].kind, MessageKind::Return);
+        assert_eq!(model.blocks.len(), 1);
+        assert_eq!(model.blocks[0].kind, AltKind::Break);
+        assert_eq!(model.blocks[0].branches[0].label, "Limiter(c).hit(n)?");
+    }
+
+    #[test]
+    fn a_question_mark_past_the_cap_collapses() {
+        let mut body = String::from("let v = parse(n)?\n v");
+        for i in (0..MAX_BLOCK_DEPTH as usize).rev() {
+            body = format!("if n > {i} {{ {body} }} else {{ 0 }}");
+        }
+        let src = format!(
+            "context deepq\n\nservice api {{\n  on call(n: Int) -> Effect[Int] {{\n    {body}\n  }}\n}}\n"
+        );
+        let ctx = parse_context(&src);
+        let svc = find_service(&ctx, "api");
+        let model = sequence_model(
+            &svc.handlers[0],
+            HandlerOwner::Service("api"),
+            &[],
+            None,
+            None,
+        );
+        assert!(
+            model.blocks.iter().all(|b| b.kind != AltKind::Break),
+            "no break past the cap"
+        );
+        let last = model.blocks.last().expect("a marker");
+        assert_eq!(
+            (last.kind, last.depth),
+            (AltKind::Collapsed, MAX_BLOCK_DEPTH)
+        );
     }
 }

@@ -373,7 +373,7 @@ stays compatible with `bynkServerMinVersion`.
 | **`break` blocks** for `?` sites that can propagate `Err`, with the error operand | 6.1.6 | `ExprKind::Question` is already walked. It also needs the propagated error type for the label |
 | **Callee identity** on boundary messages: the target handler's location | 6.1.7 | Lets the client request the callee's `sequenceModel` without guessing |
 | A **trigger** on the model: `principal` (exists), `schedule`, `event` or `call` | 6.1.8 | Drives the found message |
-| **Message detail**: argument types, result type and effect, as display strings | 6.1.10 | Hover only. Strings, not types, so the wire stays presentation-free but self-describing |
+| **Message detail**: argument types, result type and effect, as display strings | 6.1.10 | Hover only. Strings, not types, so the wire stays presentation-free but self-describing. **Deferred from slice 3:** the walk is syntactic and has no types |
 | **Agent key expression** on agent participants | 6.1.2 | |
 
 Already landed, outside this track: [ADR 0853](../decisions/0853-sequence-branch-span.md)
@@ -596,8 +596,8 @@ Each fork is marked `[DECISION]`, with a recommendation.
 |---|---|---|---|---|
 | 0 | **Mermaid hygiene.** One shared Mermaid bundle for the three views, and re-theme on theme change. Standalone and useful even if the track stalls | vscode-bynk | n/a | **Shipped** (vscode-bynk #170). Compare Model's diagrams, which landed meanwhile, share the bundle too |
 | 1 | **Engine core plus sequence parity.** IR, grid layout, drawing, the interaction basics (reveal, hover, keyboard), notation from §5, and copy as Mermaid. No server change. Deletes `participant-map.ts` and the zip | vscode-bynk | n/a | **Shipped** (vscode-bynk #170) |
-| 2 | **Sequence interaction.** Sticky headers, folding, two-way cursor sync, pan and zoom, minimap, export | vscode-bynk | 1 | Next |
-| 3 | **Sequence model deltas** (§6.3): full tree, `break`, triggers and found messages, callee identity with `ref` drill-down, hover detail | bynk (ide, lsp), vscode-bynk | 1 | Open. ADR 0853's branch spans already landed |
+| 2 | **Sequence interaction.** Sticky headers, folding, two-way cursor sync, pan and zoom, minimap, export | vscode-bynk | 1 | **Shipped** (vscode-bynk #174) |
+| 3 | **Sequence model deltas** (§6.3): full tree, `break`, triggers and found messages, callee identity with `ref` drill-down, hover detail | bynk (ide, lsp), vscode-bynk | 1 | Server half in progress: full tree with depths, `break` for `?`, trigger, agent key, located callee (pending ADR `sequence-model-slice-3`). The extension half follows. Hover detail is deferred: it needs the checker's types |
 | 4 | **ELK path plus architecture overhaul** (§7) with its model deltas. The deployment overlay may split off as 4b | bynk, vscode-bynk | 1 | Open. ADR 0854's events and capability use already landed |
 | 5 | **Component view** (§8): model enrichment, view, and cross-view navigation (§9) | bynk, vscode-bynk | 4 | Open. ADR 0854 already carries each handler's `given` |
 | 6 | **Agent state view port.** Mermaid leaves the extension, and the bundle budget is enforced | vscode-bynk | 4 | Open |
@@ -618,7 +618,9 @@ Slices 2 and 3 can run in parallel, as can 3 and 4.
   request?
 - **Q5.** The `break` rendering for `?`. Should every `?` site be a fragment,
   or only those whose `Err` actually reaches the handler's result (fewer, more
-  honest fragments)?
+  honest fragments)? **Resolved in slice 3:** every `?` the walk sees. A `?`
+  in a lambda returns from the lambda, and lambdas are not walked, so each one
+  shown does reach the handler's result.
 - **Q6.** Headless rendering for `bynk doc` and the Book. Is it in scope for a
   later slice of this track, or a separate track?
 - **Q7.** Should the web extension (vscode.dev) get the same views? The engine
