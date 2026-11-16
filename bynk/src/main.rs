@@ -633,8 +633,10 @@ fn run_fetch(
 
 /// `bynk eval`: bring the project's dependencies up to date, then evaluate.
 fn run_eval(args: bynk::cli::EvalCommand, lock: bynk::cli::LockArgs) -> ExitCode {
+    // `prepare` says why on stderr; the document says that it failed, so a
+    // client reading stdout always gets one.
     if !prepare(&args.input, lock.options()) {
-        return ExitCode::FAILURE;
+        return bynk::eval::refuse("the project's dependencies could not be prepared (see stderr)");
     }
     bynk::eval::run(args)
 }
