@@ -39,6 +39,9 @@ export const HISTORY_KEY = "__bynk_dev/history";
 
 /** Transitions kept per instance; the oldest are dropped. */
 export const HISTORY_LIMIT = 50;
+// The buffer is one stored value and Durable Object storage caps a value at 128 KiB,
+// so it is also trimmed by size: the oldest entries go until it serialises under this.
+export const HISTORY_BYTES = 96 * 1024;
 
 /** What the registry knows of one instance. `key` is the key in wire form. */
 export interface InspectInstance {
@@ -259,7 +262,7 @@ export async function historyBefore(
 }
 
 // A dev build's `commitState`, just after the write: append `{handler, old, new, at}`
-// to the instance's ring buffer, dropping the oldest past `HISTORY_LIMIT`. A commit
+// to the instance's ring buffer, dropping the oldest past `HISTORY_LIMIT` or `HISTORY_BYTES`. A commit
 // that failed never reaches it, so a refused transition leaves no entry. Never throws.
 export async function historyRecord(
   storage: DurableObjectState["storage"],
@@ -271,7 +274,9 @@ export async function historyRecord(
   try {
     const kept = (await storage.get<HistoryEntry[]>(HISTORY_KEY)) ?? [];
     kept.push({ handler: handler ?? null, old: before, new: await snapshot(storage, fields), at: Date.now() });
-    await storage.put(HISTORY_KEY, kept.slice(-HISTORY_LIMIT));
+    const trimmed = kept.slice(-HISTORY_LIMIT);
+    while (trimmed.length > 1 && JSON.stringify(trimmed).length > HISTORY_BYTES) trimmed.shift();
+    await storage.put(HISTORY_KEY, trimmed);
   } catch {
     // Recording is best effort.
   }

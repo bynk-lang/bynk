@@ -280,7 +280,9 @@ layout-2 key namespace: a ring buffer of the last 50 committed transitions, each
 `{handler, old, new, at}`, appended by `commitState` in a dev build only. `old`
 and `new` carry the `Cell` fields in wire form and each collection's size, not its
 entries, and `old` is `null` for a first commit. A refused transition is not
-committed and so is not recorded.
+committed and so is not recorded. A migration commit records `handler: null`.
+The buffer is one stored value, so it is trimmed by size as well as by count
+(`HISTORY_BYTES`, 96 KiB, under Durable Object storage's 128 KiB cap on a value).
 
 ## §7.4.6 Non-exports: brands and `Effect`
 

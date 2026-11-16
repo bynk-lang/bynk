@@ -20,7 +20,7 @@ an instance holds now, not how it got there. Transitions exist only inside
   snapshots what is stored just before its write, and after the write appends
   `{handler, old, new, at}`. Every other build's `commitState` is unchanged, and a
   test pins that.
-- **Bounded, and outside layout 2.** The buffer is the last 50 entries, under the
+- **Bounded, and outside layout 2.** The buffer is the last 50 entries (and under 96 KiB, since it is one stored value and storage caps a value at 128 KiB), under the
   reserved key `__bynk_dev/history`. It lies outside every layout-2 namespace
   (`state`, `m/`, `s/`, `l/`, `i/`, `x/`, `c/`), so no read, write or sweep of
   layout 2 sees it, and it is storage, so it survives eviction.

@@ -513,7 +513,9 @@ any other key as JSON.
   `cells` in wire form and each collection's `size` (`{ "cells": {…},
   "collections": { "lines": 2 } }`), not its entries; `old` is `null` for the
   instance's first recorded commit. A transition a handler or an invariant
-  refuses is never committed, so it has no entry. `history` is `[]` for an
+  refuses is never committed, so it has no entry. A commit made by a migration
+  has `handler: null`. The buffer also drops its oldest entries when it would pass
+  about 96 KiB, so an instance with large cells keeps fewer than 50. `history` is `[]` for an
   instance nothing has committed to in this build.
 - `exists` is `false`, and nothing else is returned, for an instance with no
   stored state yet.

@@ -3,6 +3,7 @@ import assert from "node:assert/strict";
 import {
   BynkInspectRegistry,
   HISTORY_KEY,
+  HISTORY_BYTES,
   HISTORY_LIMIT,
   historyBefore,
   historyRecord,
@@ -195,6 +196,16 @@ test("the buffer is bounded, drops the oldest, and lives outside layout 2's keys
   // A read of the cells and collections does not see it as one.
   const out = await read(state);
   assert.deepEqual(Object.keys(out.cells), ["total"]);
+});
+
+test("the buffer is also trimmed by size, so one value never outgrows storage's cap", async () => {
+  const state = makeTestState("a");
+  const big = "x".repeat(20 * 1024);
+  for (let i = 0; i < 20; i++) await commit(state, `h${i}`, { total: `${big}${i}` }, 0);
+  const kept = (await state.storage.get(HISTORY_KEY)) as Array<{ handler: string }>;
+  assert.ok(JSON.stringify(kept).length <= HISTORY_BYTES, "the stored value stays under the budget");
+  assert.ok(kept.length < 20, "older entries were dropped");
+  assert.equal(kept[kept.length - 1]!.handler, "h19", "recording kept going to the end");
 });
 
 test("a commit with no handler name is recorded as null, and recording never throws", async () => {

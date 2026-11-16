@@ -111,6 +111,7 @@ pub(crate) const RUNTIME_EXPORTS: &[(&str, &str)] = &[
     ("Err", "result"),
     ("FAULT_HEADER", "boundary"),
     ("Fault", "errors"),
+    ("HISTORY_BYTES", "inspect"),
     ("HISTORY_KEY", "inspect"),
     ("HISTORY_LIMIT", "inspect"),
     ("HistoryEntry", "inspect"),
