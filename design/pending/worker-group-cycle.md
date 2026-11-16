@@ -11,8 +11,10 @@ other with no cycle among their contexts: `A1` calls `B1` and `B2` calls `A2`, w
 `A1` and `A2` in one group and `B1` and `B2` in another, or `A1` calls `C` and `C`
 calls `A2`, with `C` a Worker of its own. The check reads the Service Bindings the
 Workers would declare, a context standing for its group's Worker, and reports one
-error per cycle through a group, naming the Workers and one context edge per hop.
-A call inside a group is a Worker binding to itself and is no edge, and a cycle
-among ungrouped contexts is not this check's. It runs at check time, so a project
+error per strongly connected set of Workers containing a group, showing one cycle
+with a context edge per hop. A call inside a group is a Worker binding to itself and
+is no edge. A cycle among ungrouped Workers is not this check's: `consumes_cycle`
+rules out service-call cycles, but a publisher-to-subscriber binding can still close
+one with a call in the other direction, a pre-existing gap left for a follow-up. It runs at check time, so a project
 learns of it before any deploy, and ADR 0193's conclusion that no two-pass deploy
 is needed holds for groups.

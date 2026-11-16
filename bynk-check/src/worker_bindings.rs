@@ -538,8 +538,12 @@ fn group_service_names(
 /// another). The graph is the Service Bindings the Workers would declare, read
 /// from `bindings` like deploy's ordering, a context standing for its group's
 /// Worker. An edge inside a group is a Worker binding to itself and is no edge.
-/// One error per cycle through a group, naming the Workers and one context edge per
-/// hop, at the first hop's consumer.
+/// One error per strongly connected set of Workers containing a group, showing one
+/// representative cycle: the Workers and one context edge per hop, at the first
+/// hop's consumer. A cycle among ungrouped Workers is deliberately not reported
+/// here. `consumes_cycle` covers service calls, but `bindings` also holds the
+/// publisher-to-subscriber edges, so an ungrouped event-edge cycle is a known gap
+/// that predates this check.
 fn group_worker_cycles(
     worker_groups: &bynk_project::worker_groups::WorkerGroups,
     parsed: &[ParsedFile],
