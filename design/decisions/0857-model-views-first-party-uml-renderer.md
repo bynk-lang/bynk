@@ -1,12 +1,6 @@
----
-level: patch
-changelog: Design: a plan to move the VS Code extension's diagram views from Mermaid to a first-party renderer in UML notation (model-diagrams track, settling)
----
+# 0857 — The extension's model views render through a first-party diagram engine in UML notation, not Mermaid
 
-## ADR: model-views-first-party-uml-renderer
-title: The extension's model views render through a first-party diagram engine in UML notation, not Mermaid
-status: Proposed
-summary: Model → diagram IR → layout (own grid for sequence, ELK for structure) → SVG, in the webview, in UML 2.5 with a Bynk profile
+- **Status:** Proposed (v0.626.2)
 
 **Context.** The VS Code extension draws the sequence diagram (#846), the
 architecture map (#851) and the agent state view (#2196) by generating Mermaid
@@ -71,33 +65,3 @@ unchanged.
   explicit non-goal.
 - A Sprotty spike during settling may still move the *structure* views to
   Sprotty. That would not change this decision for the sequence view.
-
-## ADR: diagram-models-are-complete
-title: The server's diagram models are complete; the client decides how much to show
-status: Proposed
-summary: Retire `MAX_BLOCK_DEPTH` as a presentation cut — ship the full block tree with depth, fold in the client
-
-**Context.** `bynk-ide::sequence` stops classifying at `MAX_BLOCK_DEPTH = 2`
-and emits a single `Collapsed` marker beyond it. That is a presentation
-decision made in the model, because Mermaid could not fold a fragment. With a
-renderer that can fold (the `model-views-first-party-uml-renderer` ADR), the
-cut only hides information a reader could otherwise expand.
-
-**Decision.** The server's diagram models (`bynk/sequenceModel`,
-`bynk/architectureModel`, `bynk/agentStateModel`) describe the program
-**completely**, up to a generous safety cap that only protects against
-pathological input. Each nested element carries its `depth`. *How much to show*
-(the default fold depth, which members are expanded) is the client's decision,
-and is kept as page state. Model growth stays **facts about the program**:
-nesting, locations, types as display strings, and triggers. It never includes
-positions, colours or fold state. Every addition is additive on the wire, so
-older extensions keep working against newer servers.
-
-**Consequences.**
-
-- `AltKind::Collapsed` narrows to bodies that genuinely cannot be analysed.
-- Payloads grow for deeply nested handlers. The safety cap bounds this, and the
-  `model-diagrams` track's Q4 measures it.
-- The rule gives later model deltas (`break` fragments, callee identity, actors
-  and ingress on the architecture model) a test to pass: *is this a fact about
-  the program, or a choice about the picture?*

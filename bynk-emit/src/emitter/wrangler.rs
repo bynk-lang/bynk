@@ -403,6 +403,9 @@ pub fn emit_wrangler_toml(
             // (in every environment). `bynk deploy` checks it exists and never
             // creates it.
             BindingSource::AiSearchInstance { instance, .. } => ai_search_block(name, instance),
+            // #3513 A: the account's client certificate, named as the declaration writes it
+            // (in every environment). `bynk deploy` resolves its id and never uploads it.
+            BindingSource::MtlsCertificate { certificate, .. } => mtls_block(name, certificate),
             // #3300: a one-per-Worker capability's plain table, holding only
             // its fixed binding name (`[version_metadata]`).
             BindingSource::Singleton { capability } => {
@@ -684,6 +687,13 @@ pub fn worker_bindings(
             .filter(|b| matches!(b.source, BindingSource::AiSearchInstance { .. }))
             .cloned(),
     );
+    // #3513 A: the mTLS certificates, after the AI Search instances.
+    bindings.extend(
+        instances
+            .iter()
+            .filter(|b| matches!(b.source, BindingSource::MtlsCertificate { .. }))
+            .cloned(),
+    );
     // #3300: the one-per-Worker bindings, after the databases.
     bindings.extend(singletons.iter().cloned());
     // Events track, slice 0 (spine #936, ADR 0284): a context whose handlers
@@ -741,6 +751,23 @@ fn vectorize_block(context: &str, binding: &WorkerBinding, name: TomlValue) -> T
                     &worker_dir_name(context),
                     &binding.name,
                 )),
+            ),
+        ],
+    )
+}
+
+/// #3513 A: the `[[mtls_certificates]]` entry of an `MtlsCertificate` instance. The
+/// certificate is written as its name, which `bynk deploy` replaces with the id it
+/// resolves (the same call as a `StoredSecret`'s store, ADR 0802).
+fn mtls_block(binding: TomlValue, certificate: &str) -> TomlBlock {
+    TomlBlock::array_table(
+        "mtls_certificates",
+        vec![
+            TomlEntry::kv("binding", binding),
+            TomlEntry::with_comment(
+                "certificate_id",
+                TomlValue::str(certificate.to_string()),
+                "the certificate's name; `bynk deploy` replaces it with the id it resolves",
             ),
         ],
     )
@@ -846,7 +873,9 @@ pub type BindingKind = fn(&BindingSource) -> bool;
 /// `Env` interface and a handler's `deps.env`.
 pub(crate) fn binding_ts_type(source: &BindingSource) -> &'static str {
     match source {
-        BindingSource::Service { .. } | BindingSource::ForeignService { .. } => "__ServiceBinding",
+        BindingSource::Service { .. }
+        | BindingSource::ForeignService { .. }
+        | BindingSource::MtlsCertificate { .. } => "__ServiceBinding",
         BindingSource::Kv | BindingSource::KvInstance { .. } => "__KVNamespace",
         BindingSource::R2Instance { .. } => "__R2Bucket",
         BindingSource::RateLimitInstance { .. } => "__RateLimiter",
@@ -861,6 +890,7 @@ pub(crate) fn binding_ts_type(source: &BindingSource) -> &'static str {
         BindingSource::Singleton { capability } => match capability.as_str() {
             "Version" => "__WorkerVersionMetadata",
             "Ai" => "__WorkerAiBinding",
+            "Images" => "__WorkerImagesBinding",
             other => unreachable!("singleton `{other}` has no `env` type"),
         },
         BindingSource::Agent { .. }

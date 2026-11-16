@@ -12,6 +12,7 @@ export * from "./runtime.js";
 const __route_api_postOrders: __Route = {
   method: "POST",
   path: "/orders",
+  contract: "649eed088c75a251",
   replies: {
     201: [{ kind: "Created", body: "value", decode: (json) => __then(__deserialise_Order(json, "$"), (v) => __toPublic_Order(v)) }],
     400: [{ kind: "StructuralMismatch", body: "boundary" }],
@@ -23,6 +24,7 @@ const __route_api_postOrders: __Route = {
 const __route_api_getOrders: __Route = {
   method: "GET",
   path: "/orders",
+  contract: "8ba5cacf5f1a167c",
   replies: {
     200: [{ kind: "Ok", body: "value", decode: (json) => __then(__deserialise_Page_String(json, "$"), (v) => __toPublic_Page_String(v)) }],
     400: [{ kind: "StructuralMismatch", body: "boundary" }],
@@ -32,6 +34,7 @@ const __route_api_getOrders: __Route = {
 const __route_api_getOrderById: __Route = {
   method: "GET",
   path: "/orders/:id",
+  contract: "963bc9758fe525f1",
   replies: {
     200: [{ kind: "Ok", body: "value", decode: (json) => __then(__deserialise_Option_Event(json, "$"), (v) => __optToNull(v, (x0) => __toPublic_Event(x0))) }],
     400: [{ kind: "StructuralMismatch", body: "boundary" }],
@@ -42,6 +45,7 @@ const __route_api_getOrderById: __Route = {
 const __route_api_getSearch: __Route = {
   method: "GET",
   path: "/search",
+  contract: "2d4544f1493d4088",
   replies: {
     200: [{ kind: "Ok", body: "value", decode: (__j: __JsonValue) => ((__v) => typeof __v === "string" ? Ok(__v) : Err({ kind: "StructuralMismatch", path: "$", expected: "string", actual: typeof __v } as __BoundaryError))(__j) }],
     400: [{ kind: "StructuralMismatch", body: "boundary" }],
@@ -51,12 +55,32 @@ const __route_api_getSearch: __Route = {
 const __route_api_deleteOrderById: __Route = {
   method: "DELETE",
   path: "/orders/:id",
+  contract: "4bcc28c604f336bc",
   replies: {
     204: [{ kind: "NoContent", body: "none" }],
     400: [{ kind: "StructuralMismatch", body: "boundary" }],
   },
 };
 
+
+/**
+ * The contract of each service and route this client was generated for: a hash of
+ * what a client acts on (the route's method and path, what it takes, what it can
+ * answer). It moves when that does and not for a handler's body. Informational: log
+ * it, compare it with the server's, or send it with `sendContract`.
+ */
+export const API_CONTRACTS = {
+  api: {
+    service: "f80dfb7b6e5882df",
+    routes: {
+      postOrders: "649eed088c75a251",
+      getOrders: "8ba5cacf5f1a167c",
+      getOrderById: "963bc9758fe525f1",
+      getSearch: "2d4544f1493d4088",
+      deleteOrderById: "4bcc28c604f336bc",
+    },
+  },
+} as const;
 
 /**
  * The client: one property per service, one function per route. Each returns

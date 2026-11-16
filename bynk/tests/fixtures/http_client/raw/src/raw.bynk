@@ -107,4 +107,12 @@ service api from http {
 			NotFound
 		}
 	}
+
+	// The `X-Bynk-Contract` header the call arrived with, `none` when it carried none.
+	on GET("/contract") (headers: RequestHeaders) -> Effect[HttpResult[String]] by v: Visitor {
+		match headers.get("x-bynk-contract") {
+			Some(c) => Ok(c)
+			None => Ok("none")
+		}
+	}
 }

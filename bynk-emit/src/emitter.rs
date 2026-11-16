@@ -333,6 +333,7 @@ fn single_file_ctx() -> EmitProjectCtx {
     EmitProjectCtx {
         import_ext: crate::emit_model::ImportExt::Js,
         contracts: false,
+        trace: None,
         source_path: PathBuf::new(),
         identity_path: String::new(),
         commons_name: String::new(),
@@ -4237,6 +4238,7 @@ fn write_header(commons: &TypedCommons, ctx: &EmitProjectCtx) -> Vec<bynk_ts::Ts
         if ctx.runtime_use.fault() {
             parts.extend(FAULT_RUNTIME_IMPORTS.trim_start_matches(", ").split(", "));
         }
+        parts.extend(trace_step_imports(&ctx.runtime_use));
         if ctx.runtime_use.url_ops() {
             parts.extend(URL_OPS_RUNTIME_IMPORTS.trim_start_matches(", ").split(", "));
         }
@@ -4586,6 +4588,20 @@ pub fn effect_runtime_imports(ru: &RuntimeUse) -> &'static str {
 
 /// #2620: the deliberate-fault helper behind `unreachable`/`todo`.
 pub const FAULT_RUNTIME_IMPORTS: &str = ", __fault";
+/// #3580: the step wrapper a traced build puts around a call.
+pub const TRACE_STEP_RUNTIME_IMPORTS: &str = ", __traceStep";
+
+/// The import names for [`TRACE_STEP_RUNTIME_IMPORTS`], when the module wraps a call.
+fn trace_step_imports(runtime_use: &RuntimeUse) -> Vec<&'static str> {
+    if runtime_use.trace_step() {
+        TRACE_STEP_RUNTIME_IMPORTS
+            .trim_start_matches(", ")
+            .split(", ")
+            .collect()
+    } else {
+        Vec::new()
+    }
+}
 
 /// K2 (#2594): the percent-encoding helpers (`percentEncode`,
 /// `percentDecode`), appended only when the body calls one.
@@ -4747,9 +4763,19 @@ pub(crate) struct ModuleCtx<'a> {
     /// variant of one of these sums is built inline, not through the callee's
     /// companion object, so the callee's module is never a value import.
     consumed_context_types: HashSet<String>,
+    /// #3580: [`crate::emit_model::EmitProjectCtx::trace`]. `None` (the default)
+    /// emits no trace recording.
+    trace: Option<crate::emit_model::TraceLoc>,
 }
 
 impl<'a> ModuleCtx<'a> {
+    /// What the unit being emitted tells every body it lowers: whether it is the
+    /// reserved `bynk` adapter, and (#3580) where a traced build names call sites.
+    fn note_unit(&mut self, ctx: &EmitProjectCtx) {
+        self.in_bynk_unit = ctx.commons_name == "bynk";
+        self.trace = ctx.trace.clone();
+    }
+
     fn new(
         commons: &'a TypedCommons,
         cross_context: &'a bynk_check::resolver::CrossContextInfo,
@@ -4767,6 +4793,7 @@ impl<'a> ModuleCtx<'a> {
             in_bynk_unit: false,
             agent_called_contexts: Vec::new(),
             consumed_context_types: HashSet::new(),
+            trace: None,
         }
     }
 }
@@ -5635,6 +5662,31 @@ impl<'a> LowerCtx<'a> {
     /// v0.59: the test body's source context, for `assert`/`expect` locations.
     pub(crate) fn assert_loc(&self) -> Option<&AssertLoc> {
         self.test().and_then(|t| t.assert_loc.as_ref())
+    }
+
+    /// #3580: wrap `call`, a lowered call expression, in a trace step when this is
+    /// a traced build, naming its kind, its target and the `.bynk` call site at
+    /// `offset`; otherwise `call` unchanged, so a deploy build's output is
+    /// byte-identical. The call is the wrapper's argument, so its arguments
+    /// evaluate where they always did.
+    pub(crate) fn trace_step(
+        &self,
+        kind: &str,
+        target: &str,
+        offset: usize,
+        call: String,
+    ) -> String {
+        let Some(loc) = self.module.trace.as_ref() else {
+            return call;
+        };
+        self.runtime_use().note_trace_step();
+        let (line, col) = bynk_syntax::span::line_col(&loc.source, offset);
+        let path = loc.rel_path.replace('\\', "/");
+        format!(
+            "__traceStep(\"{kind}\", \"{}\", {{ file: \"{}\", line: {line}, col: {col} }})({call})",
+            escape_ts_string(target),
+            escape_ts_string(&path),
+        )
     }
 
     // ---- single-kind state -------------------------------------------------
