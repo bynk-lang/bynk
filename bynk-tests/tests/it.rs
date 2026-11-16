@@ -439,6 +439,8 @@ mod system {
     mod stream_behaviour;
     #[path = "stream_request_body_workerd.rs"]
     mod stream_request_body_workerd;
+    #[path = "storefront_example.rs"]
+    mod storefront_example;
     #[path = "suite_filter.rs"]
     mod suite_filter;
     #[path = "system_suite_heading_behaviour.rs"]

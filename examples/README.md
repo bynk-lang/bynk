@@ -24,6 +24,7 @@ language; the middle four lead with the **agent storage kinds** (`Map`, `Cache`,
 | [`webhook-relay`](webhook-relay/) | verifying a signed webhook, then forwarding it | http | `Fetch`, `Logger`, `Secrets` | — (all-effectful; see below) |
 | [`semver`](semver/) | a real algorithm in a `commons`: version parsing, precedence and range matching | http | — | the library and the service |
 | [`markdown`](markdown/) | text processing in a `commons`: Markdown to HTML, escaping first | http | — | inline, blocks and the service |
+| [`storefront`](storefront/) | a typed front end over `bynk client`: a generated module, refinements on the client, a drift gate | http | — | the front end against the real Worker (system tier) |
 
 Together they cover every entry point (http, cron; queue is covered in the
 [queue guide](https://bynk-lang.org/book/guides/entry-points/queue/)), both state models — **KV
