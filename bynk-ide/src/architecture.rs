@@ -45,7 +45,7 @@ use std::path::PathBuf;
 
 use bynk_check::analysis::ContextSequenceInfo;
 use bynk_check::architecture_facts::{
-    ArchitectureFacts, DeliveryKind, FactSite, MemberFact, MemberKind,
+    ArchitectureFacts, CallTarget, DeliveryKind, FactSite, MemberFact, MemberKind,
 };
 use bynk_syntax::ast::*;
 use bynk_syntax::span::Span;
@@ -142,6 +142,10 @@ pub struct ArchAgent {
     pub name: String,
     pub handler_count: usize,
     pub loc: Located,
+    /// Model-diagrams slice 5: the key, as written (`id: ClientId`).
+    pub key: String,
+    /// Model-diagrams slice 5: the `store` field names, in declaration order.
+    pub state: Vec<String>,
 }
 
 /// One context/adapter node — the "services in, agents below" grouping the
@@ -200,6 +204,23 @@ pub struct ArchStub {
 pub struct ArchHandlerUses {
     pub member: ArchMember,
     pub uses: Vec<ArchUse>,
+    /// Model-diagrams slice 5: the services and agents the handler calls.
+    pub calls: Vec<ArchCall>,
+}
+
+/// Model-diagrams slice 5: one service or agent a handler calls, at its first
+/// call.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct ArchCall {
+    pub kind: MemberKind,
+    /// The unit that declares the callee: a consumed context for a service,
+    /// the caller's own unit for an agent.
+    pub unit: String,
+    /// The service or agent name.
+    pub container: String,
+    /// The agent handler dispatched to; `None` for a service call.
+    pub handler: Option<String>,
+    pub loc: Located,
 }
 
 /// #3583: one `Events.emit[E]` call.
@@ -352,6 +373,12 @@ pub fn architecture_model(
                             file: file.clone(),
                             span: a.name.span,
                         },
+                        key: format!(
+                            "{}: {}",
+                            a.key_name.name,
+                            bynk_syntax::print::type_ref_to_string(&a.key_type)
+                        ),
+                        state: a.store_fields.iter().map(|f| f.name.name.clone()).collect(),
                     }),
                     _ => {}
                 }
@@ -561,6 +588,26 @@ fn node_uses(unit: &str, facts: &ArchitectureFacts) -> Vec<ArchHandlerUses> {
                     inherited: u.inherited,
                     loc: located(&u.site),
                     stubbed_in: stubbed_in(&u.capability),
+                })
+                .collect(),
+            calls: h
+                .calls
+                .iter()
+                .map(|c| match &c.target {
+                    CallTarget::Service { unit, service } => ArchCall {
+                        kind: MemberKind::Service,
+                        unit: unit.clone(),
+                        container: service.clone(),
+                        handler: None,
+                        loc: located(&c.site),
+                    },
+                    CallTarget::Agent { agent, handler } => ArchCall {
+                        kind: MemberKind::Agent,
+                        unit: unit.to_string(),
+                        container: agent.clone(),
+                        handler: Some(handler.clone()),
+                        loc: located(&c.site),
+                    },
                 })
                 .collect(),
         })
@@ -941,6 +988,102 @@ service staff from http by Visitor {
   }
 }
 "#;
+
+    const CALLS_BILLING: &str = r#"context billing
+
+type Quote = { amount: Int, currency: String }
+
+service Pricing {
+  on call(sku: String, qty: Int) -> Effect[Quote] {
+    Quote { amount: qty * 100, currency: "USD" }
+  }
+}
+"#;
+
+    const CALLS_STOREFRONT: &str = r#"context storefront
+
+consumes billing
+
+agent Cart {
+  key owner: String
+
+  store lines: Cell[Int]
+  store total: Cell[Int]
+
+  on call add(n: Int) -> Effect[Int] {
+    let _ <- lines.update((c) => c + n)
+    n
+  }
+}
+
+service checkout {
+  on call(sku: String, qty: Int) -> Effect[Int] {
+    let q <- billing.Pricing(sku, qty)
+    let again <- billing.Pricing(sku, 1)
+    let n <- Cart(sku).add(qty)
+    q.amount + again.amount + n
+  }
+}
+"#;
+
+    #[test]
+    fn handlers_carry_their_calls_and_agents_their_key_and_state() {
+        let root = setup_project(
+            "arch-calls",
+            &[
+                ("billing.bynk", CALLS_BILLING),
+                ("storefront.bynk", CALLS_STOREFRONT),
+            ],
+        );
+        let diag = crate::testkit::diagnose_project(&root);
+        let model = build_model(&diag);
+        let node = model
+            .nodes
+            .iter()
+            .find(|n| n.name == "storefront")
+            .expect("the storefront node");
+
+        let cart = &node.agents[0];
+        assert_eq!(cart.key, "owner: String");
+        assert_eq!(cart.state, vec!["lines".to_string(), "total".to_string()]);
+
+        let checkout = node
+            .uses
+            .iter()
+            .find(|h| h.member.container == "checkout")
+            .expect("the checkout handler");
+        let calls: Vec<(MemberKind, &str, &str, Option<&str>)> = checkout
+            .calls
+            .iter()
+            .map(|c| {
+                (
+                    c.kind,
+                    c.unit.as_str(),
+                    c.container.as_str(),
+                    c.handler.as_deref(),
+                )
+            })
+            .collect();
+        // One entry per target, in source order: the second `Pricing` call
+        // folds into the first.
+        assert_eq!(
+            calls,
+            vec![
+                (MemberKind::Service, "billing", "Pricing", None),
+                (MemberKind::Agent, "storefront", "Cart", Some("add")),
+            ]
+        );
+        let first = CALLS_STOREFRONT.find("billing.Pricing(sku, qty)").unwrap();
+        assert!(checkout.calls[0].loc.span.start <= first + 1);
+        assert!(checkout.calls[0].loc.span.end > first);
+
+        let add = node
+            .uses
+            .iter()
+            .find(|h| h.member.container == "Cart")
+            .expect("the agent handler");
+        assert!(add.calls.is_empty());
+    }
 
     #[test]
     fn services_carry_their_protocol_and_actors() {
