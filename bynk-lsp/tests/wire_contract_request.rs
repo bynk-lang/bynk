@@ -519,3 +519,125 @@ fn success_of_a_raw_handler_is_null_and_so_is_its_raw_payload() {
         assert!(raw["payload"].is_null());
     }
 }
+
+// -- #3632: the `body` descriptor.
+
+const BODY_SRC: &str = r#"context bodies
+
+type Item = { id: Int, name: String }
+
+service api from http {
+  on GET("/value/:id") (id: String) -> Effect[HttpResult[Item]] by Visitor {
+    if id == "1" { Ok(Item { id: 1, name: "widget" }) } else { BadRequest("no") }
+  }
+
+  on GET("/moved") () -> Effect[HttpResult[Item]] by Visitor {
+    SeeOther("/value/1")
+  }
+
+  on GET("/page") () -> Effect[HttpResult[()]] by Visitor {
+    Raw(Bytes.fromUtf8("<p>hi</p>"), "text/html")
+  }
+
+  on GET("/events") () -> Effect[HttpResult[()]] by Visitor {
+    Streaming(Stream.of(["a"]).take(1))
+  }
+
+  on GET("/gone") () -> Effect[HttpResult[()]] by Visitor {
+    NoContent
+  }
+}
+"#;
+
+fn body_json(handler: &str) -> serde_json::Value {
+    let root = setup_project("body-descriptor", &[("bodies.bynk", BODY_SRC)]);
+    let sources =
+        bynk_testkit::read_project_sources(&bynk_ide::AnalysisRoots::SingleTree(root.clone()));
+    let diag = bynk_ide::diagnose_project(&root, &sources);
+    let file = diag
+        .files
+        .iter()
+        .find(|f| f.source_path.to_string_lossy().ends_with("bodies.bynk"))
+        .expect("bodies.bynk analysed");
+    let (rel, text) = (file.source_path.clone(), file.text.clone());
+    let info = &diag.boundary_info["bodies"];
+    let expr_types = diag
+        .expr_types
+        .get(&rel)
+        .map(|v| v.as_slice())
+        .unwrap_or(&[]);
+    let model = wire_contract_at(
+        "bodies",
+        &text,
+        find_offset(&text, handler),
+        info,
+        expr_types,
+        &diag.ty_intern,
+        real_context_count(&diag.boundary_info, &diag.unit_sources),
+    )
+    .expect("a wire contract at the handler");
+    let snapshots: HashMap<PathBuf, String> = diag
+        .files
+        .iter()
+        .map(|f| (f.source_path.clone(), f.text.clone()))
+        .collect();
+    let search_order = diag.doc_scope.get("bodies").cloned().unwrap_or_default();
+    let wire = to_wire(
+        &model,
+        &root,
+        &text,
+        &info.types,
+        &diag.index,
+        &snapshots,
+        &search_order,
+    );
+    serde_json::to_value(&wire).expect("the model serialises")
+}
+
+#[test]
+fn a_value_body_carries_the_same_ref_as_payload() {
+    let wire = body_json("GET(\"/value/:id\")");
+    let ok = response(&wire, "Ok");
+    assert_eq!(ok["body"]["kind"], "Value");
+    assert_eq!(ok["body"]["ref"], ok["payload"]);
+}
+
+#[test]
+fn a_message_body_is_the_error_object() {
+    let wire = body_json("GET(\"/value/:id\")");
+    let bad = response(&wire, "BadRequest");
+    assert_eq!(bad["body"], serde_json::json!({ "kind": "Message" }));
+    assert!(bad["payload"].is_null());
+}
+
+#[test]
+fn a_redirect_has_no_body_and_names_its_header() {
+    let wire = body_json("GET(\"/moved\")");
+    assert_eq!(
+        response(&wire, "SeeOther")["body"],
+        serde_json::json!({ "kind": "Redirect", "header": "Location" })
+    );
+}
+
+#[test]
+fn raw_and_stream_bodies_are_opaque_and_unit_ones_are_null() {
+    assert_eq!(
+        response(&body_json("GET(\"/page\")"), "Raw")["body"],
+        serde_json::json!({ "kind": "Raw" })
+    );
+    assert_eq!(
+        response(&body_json("GET(\"/events\")"), "Streaming")["body"],
+        serde_json::json!({ "kind": "Stream" })
+    );
+    let gone = body_json("GET(\"/gone\")");
+    assert!(response(&gone, "NoContent")["body"].is_null());
+    // A boundary-implicit response has no handler-described body.
+    let value = body_json("GET(\"/value/:id\")");
+    let implicit = value["responses"]
+        .as_array()
+        .unwrap()
+        .iter()
+        .find(|r| r["origin"]["kind"] == "BoundaryImplicit")
+        .expect("a boundary-implicit response");
+    assert!(implicit["body"].is_null());
+}

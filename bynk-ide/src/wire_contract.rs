@@ -564,16 +564,52 @@ pub fn http_result_inner(t: &TypeRef) -> Option<&TypeRef> {
 /// everything else. A message variant's body is `{ "error": String }` and a
 /// redirect's location travels in a header with no body (as `bynk openapi`
 /// describes them); neither is a ref into `types`, so they are left `None`
-/// rather than reported wrongly. Boundary-implicit responses are `None` too —
-/// the boundary shapes their bodies, not the handler.
+/// here and described by [`response_body`] instead (#3632). Boundary-implicit
+/// responses are `None` too — the boundary shapes their bodies, not the handler.
 pub fn response_payload(resp: &HttpResponse, success: Option<&WireRef>) -> Option<WireRef> {
+    match response_body(resp, success)? {
+        ResponseBody::Value(r) => Some(r),
+        _ => None,
+    }
+}
+
+/// What a response's body is (#3632): the classification `bynk openapi`'s
+/// `responses_of` makes per `HttpVariantPayload`, as data a client can read.
+#[derive(Debug, Clone)]
+pub enum ResponseBody {
+    /// `T`, the handler's `HttpResult[T]` payload, JSON-encoded.
+    Value(WireRef),
+    /// `{ "error": String }`.
+    Message,
+    /// No body; the target is the `Location` header.
+    Redirect,
+    /// Author-owned bytes under an author-chosen media type, no codec.
+    Raw,
+    /// `text/event-stream`.
+    Stream,
+}
+
+/// The header a [`ResponseBody::Redirect`] carries its target in.
+pub const REDIRECT_HEADER: &str = "Location";
+
+/// The body of one response, or `None` when it has none to describe: a
+/// no-payload variant, a `()` value payload, or a boundary-implicit response
+/// (the boundary shapes those bodies, not the handler).
+pub fn response_body(resp: &HttpResponse, success: Option<&WireRef>) -> Option<ResponseBody> {
     if matches!(resp.origin, ResponseOrigin::BoundaryImplicit { .. }) {
         return None;
     }
-    match http_variant(&resp.variant)?.payload {
-        HttpVariantPayload::Value => success.cloned(),
-        _ => None,
-    }
+    Some(match http_variant(&resp.variant)?.payload {
+        HttpVariantPayload::Value => ResponseBody::Value(success?.clone()),
+        HttpVariantPayload::Message => ResponseBody::Message,
+        HttpVariantPayload::Location => ResponseBody::Redirect,
+        HttpVariantPayload::Streamed => ResponseBody::Stream,
+        HttpVariantPayload::Raw
+        | HttpVariantPayload::RawTagged
+        | HttpVariantPayload::RawStreamed
+        | HttpVariantPayload::RawError => ResponseBody::Raw,
+        HttpVariantPayload::None => return None,
+    })
 }
 
 /// Strip `Effect[_]` to expose the inner type — mirrors
