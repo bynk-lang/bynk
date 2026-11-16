@@ -239,6 +239,16 @@ export interface ClientOptions {
    * credentialed CORS origin, and a server call carries neither by itself.
    */
   readonly origin?: string;
+  /**
+   * Send the route's contract hash as `X-Bynk-Contract`, so a server's log can tell which
+   * contract a caller was generated for. Informational: nothing rejects a mismatch. Off by
+   * default, because a custom header makes a cross-origin browser call preflighted, and the
+   * server's `Access-Control-Allow-Headers` is only `content-type` (and `Authorization` on a
+   * Bearer route) unless the service's `cors { headers: [...] }` lists `x-bynk-contract` (an
+   * explicit list replaces the default).
+   * A server-side call has no preflight and can turn it on freely.
+   */
+  readonly sendContract?: boolean;
 }
 
 /**
@@ -256,13 +266,14 @@ export interface FetchBinding {
  * fails ("Illegal invocation"); this does it right. A binding ignores the host of the URL
  * it is given but needs a valid one, so `baseUrl` is an inert one unless you give another.
  * A binding call carries no `Origin` or `Sec-Fetch-Site`: a route that changes state under
- * a signed cookie needs `origin` too.
+ * a signed cookie needs `origin` too. It also sets `sendContract`, since a binding call has
+ * no preflight to refuse the header (override it after the spread to turn it off).
  */
 export function viaBinding(
   binding: FetchBinding,
   baseUrl: string = "https://bynk.invalid",
-): { readonly baseUrl: string; readonly fetch: typeof globalThis.fetch } {
-  return { baseUrl, fetch: ((input, init) => binding.fetch(input, init)) as typeof globalThis.fetch };
+): { readonly baseUrl: string; readonly fetch: typeof globalThis.fetch; readonly sendContract: true } {
+  return { baseUrl, sendContract: true, fetch: ((input, init) => binding.fetch(input, init)) as typeof globalThis.fetch };
 }
 
 /** What one reply of a route is. */
@@ -279,6 +290,8 @@ export interface __Reply {
 export interface __Route {
   readonly method: string;
   readonly path: string;
+  /** The hash of what this client acts on for the route (see `API_CONTRACTS`). */
+  readonly contract?: string;
   readonly replies: { readonly [status: number]: readonly __Reply[] };
   /**
    * How a raw or streamed answer is read: set (to `__streamed`) only on a route that can
@@ -446,6 +459,7 @@ async function __headers(
   options: ClientOptions,
   init: globalThis.RequestInit | undefined,
   request: __Request,
+  route: __Route,
 ): Promise<globalThis.Headers> {
   const configured = typeof options.headers === "function" ? await options.headers() : options.headers;
   const headers = new globalThis.Headers(configured);
@@ -465,6 +479,7 @@ async function __headers(
     headers.set("cookie", have === null || have === "" ? request.cookies : `${have}; ${request.cookies}`);
   }
   if (options.origin !== undefined) headers.set("origin", options.origin);
+  if (options.sendContract === true && route.contract !== undefined) headers.set("x-bynk-contract", route.contract);
   return headers;
 }
 
@@ -675,7 +690,7 @@ export async function __call(
   let text: string;
   let streamed: unknown;
   try {
-    const headers = await __headers(options, init, request);
+    const headers = await __headers(options, init, request, route);
     const sent: globalThis.RequestInit & { duplex?: "half" } = { ...init, method: route.method, headers };
     if (options.credentials !== undefined && sent.credentials === undefined) sent.credentials = options.credentials;
     if (request.body !== undefined) sent.body = globalThis.JSON.stringify(request.body);
@@ -1032,6 +1047,7 @@ export function __toWire_Order(v: Order): __Wire_Order {
 const __route_api_postOrders: __Route = {
   method: "POST",
   path: "/orders",
+  contract: "009ff0ff5655f4e1",
   replies: {
     201: [{ kind: "Created", body: "value", decode: __deserialise_Receipt }],
     400: [{ kind: "StructuralMismatch", body: "boundary" }],
@@ -1042,6 +1058,7 @@ const __route_api_postOrders: __Route = {
 const __route_api_getOrderBySkuLineByLine: __Route = {
   method: "GET",
   path: "/orders/:sku/lines/:line",
+  contract: "10a10073b49e3c92",
   replies: {
     200: [{ kind: "Ok", body: "value", decode: __deserialise_Shape }],
     400: [{ kind: "StructuralMismatch", body: "boundary" }],
@@ -1051,12 +1068,30 @@ const __route_api_getOrderBySkuLineByLine: __Route = {
 const __route_api_deleteOrderBySku: __Route = {
   method: "DELETE",
   path: "/orders/:sku",
+  contract: "0ccef639506172cd",
   replies: {
     204: [{ kind: "NoContent", body: "none" }],
     400: [{ kind: "StructuralMismatch", body: "boundary" }],
   },
 };
 
+
+/**
+ * The contract of each service and route this client was generated for: a hash of
+ * what a client acts on (the route's method and path, what it takes, what it can
+ * answer). It moves when that does and not for a handler's body. Informational: log
+ * it, compare it with the server's, or send it with `sendContract`.
+ */
+export const API_CONTRACTS = {
+  api: {
+    service: "4f1179735657d0d8",
+    routes: {
+      postOrders: "009ff0ff5655f4e1",
+      getOrderBySkuLineByLine: "10a10073b49e3c92",
+      deleteOrderBySku: "0ccef639506172cd",
+    },
+  },
+} as const;
 
 /**
  * The client: one property per service, one function per route. Each returns

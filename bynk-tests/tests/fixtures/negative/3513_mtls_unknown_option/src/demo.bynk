@@ -1,0 +1,7 @@
+context demo
+
+// #3513 A: `@certificate` is the only option.
+
+consumes bynk.cloudflare { MtlsCertificate }
+
+capability Backend = MtlsCertificate @certificate("acme-client") @cert("x")

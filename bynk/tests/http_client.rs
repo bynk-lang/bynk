@@ -525,6 +525,89 @@ fn a_directory_layout_notes_files_a_replaced_layout_left_behind() {
     );
 }
 
+/// The hash of `route` in `service` out of a generated client's `API_CONTRACTS`.
+fn contract_of(text: &str, route: &str) -> String {
+    let block = text
+        .split("export const API_CONTRACTS = {")
+        .nth(1)
+        .and_then(|t| t.split("} as const;").next())
+        .expect("a client carries `API_CONTRACTS`");
+    block
+        .lines()
+        .find_map(|l| {
+            l.trim()
+                .strip_prefix(&format!("{route}: \""))
+                .map(|h| h.trim_end_matches("\",").to_string())
+        })
+        .unwrap_or_else(|| panic!("no `{route}` in {block}"))
+}
+
+/// #3508 BC6: a route's hash moves with what a client acts on, route by route, and
+/// does not move for anything else.
+#[test]
+fn a_routes_contract_hash_moves_with_the_contract_and_only_it() {
+    let source = "context shop\n\ntype Item = { sku: String, qty: Int }\n\nservice api from http {\n  on POST(\"/items\") (body: Item) -> Effect[HttpResult[Item]] by v: Visitor {\n    Created(body)\n  }\n\n  on GET(\"/ping\") () -> Effect[HttpResult[String]] by v: Visitor {\n    Ok(\"pong\")\n  }\n}\n";
+    let generate = |name: &str, text: &str| {
+        let dir = scratch(name);
+        std::fs::create_dir_all(dir.join("src")).unwrap();
+        std::fs::write(
+            dir.join("bynk.toml"),
+            "[project]\nname = \"shop\"\nversion = \"0.1.0\"\n",
+        )
+        .unwrap();
+        std::fs::write(dir.join("src/shop.bynk"), text).unwrap();
+        module(&dir, &[])
+    };
+    let base = generate("hash-base", source);
+    let (post, ping) = (
+        contract_of(&base, "postItems"),
+        contract_of(&base, "getPing"),
+    );
+    assert_eq!((post.len(), ping.len()), (16, 16));
+    assert_ne!(post, ping);
+    // Run again, and with the fields written in the other order: the same.
+    assert_eq!(base, generate("hash-again", source));
+    let reordered = generate(
+        "hash-order",
+        &source.replace("{ sku: String, qty: Int }", "{ qty: Int, sku: String }"),
+    );
+    assert_eq!(post, contract_of(&reordered, "postItems"));
+    // A handler's body is not the contract.
+    let body = generate(
+        "hash-body",
+        &source.replace("Ok(\"pong\")", "Ok(\"pong, again\")"),
+    );
+    assert_eq!(ping, contract_of(&body, "getPing"));
+    // A field moves the route that carries it and no other.
+    let wider = generate(
+        "hash-wider",
+        &source.replace(
+            "{ sku: String, qty: Int }",
+            "{ sku: String, qty: Int, note: Option[String] }",
+        ),
+    );
+    assert_ne!(post, contract_of(&wider, "postItems"));
+    assert_eq!(ping, contract_of(&wider, "getPing"));
+    // So does a refinement, and a new answer the route can make.
+    let refined = generate(
+        "hash-refined",
+        &source.replace(
+            "{ sku: String, qty: Int }",
+            "{ sku: String, qty: Int where InRange(1, 9) }",
+        ),
+    );
+    assert_ne!(post, contract_of(&refined, "postItems"));
+    let answers = generate(
+        "hash-answers",
+        &source.replace(
+            "Created(body)",
+            "if body.qty > 9 { Conflict(\"no\") } else { Created(body) }",
+        ),
+    );
+    assert_ne!(post, contract_of(&answers, "postItems"));
+    assert_eq!(ping, contract_of(&answers, "getPing"));
+}
+
 /// #3513 (C): `cf: RequestCf` is not a caller's input, so the client's function takes the path
 /// parameter and no `cf`.
 #[test]

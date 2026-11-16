@@ -1,12 +1,6 @@
----
-level: patch
-probes: ts_writes
-changelog: A build can record per-request traces (the emitter and runtime half of `bynk dev --trace-events`); deploy output is unchanged
----
+# 0860 — `bynk dev` records per-request traces through a dev-only runtime module
 
-## ADR: dev-request-traces
-title: `bynk dev` records per-request traces through a dev-only runtime module
-summary: Steps are recorded at the emitter's call sites, the trace leaves the Worker as a `__bynk_trace:` stdout line, and recording exists only in builds that ask for it
+- **Status:** Accepted (v0.627.1)
 
 **Context.** Nothing in the editor or the CLI shows what one request did. The
 `bynk dev` event stream has no per-request event, and the emitter already holds

@@ -870,6 +870,160 @@ export const AiError = {
 };
 
 /**
+ * The format of a raster image. `Jpeg`, `Png`, `Webp`, `Avif` and `Gif` are
+ * the formats `Images.transform` can write; `Heic` is read only, so asking
+ * for it as an output is `InvalidImage`. Cloudflare adds formats over time, so
+ * a `match` over this type needs a wildcard.
+ */
+export type ImageFormat =
+    { readonly tag: "Jpeg" }
+  | { readonly tag: "Png" }
+  | { readonly tag: "Webp" }
+  | { readonly tag: "Avif" }
+  | { readonly tag: "Gif" }
+  | { readonly tag: "Heic" };
+
+export const ImageFormat = {
+  Jpeg: { tag: "Jpeg" } as ImageFormat,
+  Png: { tag: "Png" } as ImageFormat,
+  Webp: { tag: "Webp" } as ImageFormat,
+  Avif: { tag: "Avif" } as ImageFormat,
+  Gif: { tag: "Gif" } as ImageFormat,
+  Heic: { tag: "Heic" } as ImageFormat,
+};
+
+/**
+ * How a resize fits the image to `width` and `height`. `ScaleDown` (the
+ * platform's default) shrinks to fit and never enlarges; `Contain` fits inside
+ * the box; `Cover` fills the box and crops the overflow; `Crop` crops to the
+ * box without scaling up; `Pad` fits inside the box and fills the rest;
+ * `Squeeze` stretches to the box exactly. Cloudflare adds fits over time, so
+ * a `match` over this type needs a wildcard.
+ */
+export type ImageFit =
+    { readonly tag: "ScaleDown" }
+  | { readonly tag: "Contain" }
+  | { readonly tag: "Cover" }
+  | { readonly tag: "Crop" }
+  | { readonly tag: "Pad" }
+  | { readonly tag: "Squeeze" };
+
+export const ImageFit = {
+  ScaleDown: { tag: "ScaleDown" } as ImageFit,
+  Contain: { tag: "Contain" } as ImageFit,
+  Cover: { tag: "Cover" } as ImageFit,
+  Crop: { tag: "Crop" } as ImageFit,
+  Pad: { tag: "Pad" } as ImageFit,
+  Squeeze: { tag: "Squeeze" } as ImageFit,
+};
+
+/**
+ * What `Images.info` reads from an image: `Raster` with its `format`, its
+ * `width` and `height` in pixels and its `size` in bytes, or `Svg`, which the
+ * platform reports without dimensions because it is not a grid of pixels.
+ */
+export type ImageInfo =
+    { readonly tag: "Raster"; readonly format: ImageFormat; readonly width: number; readonly height: number; readonly size: number }
+  | { readonly tag: "Svg" };
+
+export const ImageInfo = {
+  Raster: (format: ImageFormat, width: number, height: number, size: number): ImageInfo => ({ tag: "Raster", format, width, height, size }),
+  Svg: { tag: "Svg" } as ImageInfo,
+};
+
+/**
+ * An image drawn over the one being transformed, from its `image` bytes. The
+ * overlay is placed by an offset in pixels from `top`, `left`, `bottom` or
+ * `right` (centred when none is given; `left` with `right`, or `top` with
+ * `bottom`, is `InvalidImage`), blended at `opacity` from 0 to 1 (`None` is
+ * fully opaque) and tiled across the image when `repeat` is true. Overlays are
+ * drawn in order, the last on top. The overlay is not resized: size it first
+ * with `Images.transform`.
+ */
+export interface Overlay {
+  readonly image: globalThis.Uint8Array;
+  readonly opacity: Option<number>;
+  readonly top: Option<number>;
+  readonly left: Option<number>;
+  readonly bottom: Option<number>;
+  readonly right: Option<number>;
+  readonly repeat: boolean;
+}
+
+export const Overlay = {
+};
+
+/**
+ * What `Images.transform` does to the image before it is written. `width` and
+ * `height` are the target size in pixels, and `fit` says how the image fits
+ * them; `rotate` turns it by 90, 180 or 270 degrees (before the resize, so
+ * `width` and `height` refer to the rotated image); `blur` is a radius from 0
+ * to 250; `overlays` are drawn on the result. A field left `None` is the
+ * platform's default. A `width`, `height` or `blur` the platform refuses is
+ * reported by the platform as `InvalidImage`, not checked here.
+ */
+export interface TransformOptions {
+  readonly width: Option<number>;
+  readonly height: Option<number>;
+  readonly fit: Option<ImageFit>;
+  readonly rotate: Option<number>;
+  readonly blur: Option<number>;
+  readonly overlays: readonly Overlay[];
+}
+
+export const TransformOptions = {
+};
+
+/**
+ * How `Images.transform` writes the result: the `format` (required, because
+ * the platform has no default) and the `quality` from 1 to 100 for the formats
+ * that take one (`None` is the platform's default).
+ */
+export interface OutputOptions {
+  readonly format: ImageFormat;
+  readonly quality: Option<number>;
+}
+
+export const OutputOptions = {
+};
+
+/**
+ * A transformed image: its `body` (buffered whole in the Worker) and the
+ * `contentType` the platform wrote it with, such as `image/webp`.
+ */
+export interface ImageResult {
+  readonly body: globalThis.Uint8Array;
+  readonly contentType: string;
+}
+
+export const ImageResult = {
+};
+
+/**
+ * Why an `Images` call did not give an image. `InvalidImage` is an input that
+ * is not an image, or an option the call cannot honour, with the reason;
+ * `UnsupportedImage` is a format the platform cannot read or write;
+ * `ImageTooLarge` is an image over the platform's size or area limit (a
+ * connection the platform lost mid-call is `ImagesFailed`, worth a retry); and
+ * `ImagesFailed` is any other refusal, with the platform's message (the
+ * `Image` prefix because `InvalidInput` is `AiError`'s and `Failed` is
+ * `SqlError`'s). Cloudflare adds error codes over time, so a `match` over this
+ * type needs a wildcard.
+ */
+export type ImagesError =
+    { readonly tag: "InvalidImage"; readonly message: string }
+  | { readonly tag: "UnsupportedImage" }
+  | { readonly tag: "ImageTooLarge" }
+  | { readonly tag: "ImagesFailed"; readonly message: string };
+
+export const ImagesError = {
+  InvalidImage: (message: string): ImagesError => ({ tag: "InvalidImage", message }),
+  UnsupportedImage: { tag: "UnsupportedImage" } as ImagesError,
+  ImageTooLarge: { tag: "ImageTooLarge" } as ImagesError,
+  ImagesFailed: (message: string): ImagesError => ({ tag: "ImagesFailed", message }),
+};
+
+/**
  * One vector of a `Vectorize` index: its `id` (at most 64 bytes), its `values`
  * (as many numbers as the index has dimensions), the `namespace` it lives in
  * when it has one, and `metadata`, a JSON object as text (`Json.encode` writes
@@ -1517,6 +1671,45 @@ export interface Ai {
 export const __AiToken: symbol = globalThis.Symbol("Ai");
 
 /**
+ * Cloudflare Images, from the Worker's `[images]` binding: it resizes,
+ * rotates, blurs, converts and draws on images in the Worker, with no URL and
+ * no round trip to your zone. It is bound once per Worker, so it is used bare
+ * (`given Images`) and has no named instances. Only a Worker that uses it
+ * declares the binding.
+ *
+ * `info(image)` reads an image's format and size without transforming it, and
+ * Cloudflare does not bill it. An empty or non-image input is `InvalidImage`,
+ * and a format this type does not name is `ImagesFailed`.
+ *
+ * `transform(image, options, output)` reads `image` (any format the platform
+ * reads, at most 20 MB), applies `options` and writes the result as `output`
+ * says. The result is buffered whole. The image is untrusted input: an upload
+ * can be a non-image or very large, so answer `InvalidImage` and
+ * `ImageTooLarge` as the caller's mistake, and cap an upload with the request
+ * body limit. An empty image, a `width` or `height` below 1, a `rotate` other
+ * than 90, 180 or 270, an `opacity` outside 0 to 1, a `quality` outside 1 to 100
+ * and an overlay positioned from both opposite edges are `InvalidImage`
+ * without reaching the platform. Cloudflare's own limits are enforced by the
+ * platform and reported as an `ImagesError`; see Cloudflare's Images limits
+ * page for them.
+ *
+ * Calls are billed by Cloudflare as unique transformations. See Cloudflare's
+ * Images pricing page for what applies, and put a `RateLimit` in front of any
+ * handler an anonymous caller can reach. Under `bynk dev` the binding runs
+ * locally in a low-fidelity form that supports only `width`, `height`,
+ * `rotate` and the output format, so `fit`, `blur`, `overlays`, `quality` and
+ * some formats are not reproduced there; deploy to see production's output.
+ * In a test every operation faults until `stub Images.transform(_, _, _)
+ * returns …` replaces it, so a test never reaches the platform.
+ */
+export interface Images {
+  info(image: globalThis.Uint8Array): globalThis.Promise<Result<ImageInfo, ImagesError>>;
+  transform(image: globalThis.Uint8Array, options: TransformOptions, output: OutputOptions): globalThis.Promise<Result<ImageResult, ImagesError>>;
+}
+
+export const __ImagesToken: symbol = globalThis.Symbol("Images");
+
+/**
  * One secret of a Cloudflare Secrets Store, read as `StripeKey.get()`. A
  * Secrets Store is account-scoped: its secrets are shared across Workers,
  * rotated centrally and bound one per binding, which is what separates this
@@ -1850,3 +2043,40 @@ export interface Container {
 }
 
 export const __ContainerToken: symbol = globalThis.Symbol("Container");
+
+/**
+ * An outbound call that presents one of your account's client certificates, for
+ * an origin that requires mutual TLS: the server proves its identity and so
+ * does the Worker, during the handshake. Used only through a named instance
+ * that names the certificate,
+ * `capability Backend = MtlsCertificate @certificate("acme-client")`, which
+ * binds as `MTLS_BACKEND`; a bare `given MtlsCertificate` names no certificate
+ * and is refused.
+ *
+ * The certificate is uploaded to the account by its owner (Wrangler's
+ * `mtls-certificate upload`, the dashboard or the API) and is named there;
+ * `@certificate` names it, as written in every environment. Bynk never uploads
+ * a certificate: its private key never reaches Bynk or the Worker.
+ *
+ * `send` has `Fetch.send`'s shape and rules: the same `Request` (its headers
+ * checked the same way, refused as `InvalidHeader` before anything is sent),
+ * the same `Response`, and `Network` when the call itself fails, which includes
+ * a handshake the origin refuses. Unlike `Service`, the URL's host is the
+ * destination: this is a real outbound call, and the certificate is presented
+ * to whatever origin the URL names. A status the origin returns, 5xx included,
+ * is an `Ok` response.
+ *
+ * Cloudflare does not support presenting a certificate to an origin that is a
+ * proxied zone on Cloudflare; the call fails with a `520`. See Cloudflare's
+ * mTLS bindings page for the current rules. There is no local simulation of
+ * the binding, and `bynkc test` faults until the call is stubbed, so a test
+ * never reaches the origin.
+ *
+ * `Request`, `Response` and `FetchError` are `bynk`'s types, so a context that
+ * calls `send` also writes `consumes bynk` to name them.
+ */
+export interface MtlsCertificate {
+  send(req: Request): globalThis.Promise<Result<Response, FetchError>>;
+}
+
+export const __MtlsCertificateToken: symbol = globalThis.Symbol("MtlsCertificate");
