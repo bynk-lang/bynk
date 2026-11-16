@@ -12,6 +12,7 @@ collaborators — in one context, or wired across the real cross-context edge.
 - [Test tiers](/book/guides/testing/integration/)
 - [Run your tests](/book/guides/testing/run-tests/)
 - [Check what a request stored](/book/guides/testing/check-what-the-app-stored/)
+- [Try an expression against your project](/book/guides/testing/try-an-expression/)
 - [Test against a running system](/book/guides/testing/against-a-running-system/)
 
 **See also:** [Reference — Testing](/book/reference/testing/).
