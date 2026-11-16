@@ -4940,15 +4940,8 @@ pub(crate) fn type_of(expr: &Expr, expected: Option<TyId>, ctx: &mut Ctx) -> Opt
             else if ctx.lookup(id.name.as_str()).is_none()
                 && let Some(v) = http_variant(&id.name)
             {
-                let user_owns = ctx.input.types.values().any(|t| {
-                    matches!(&t.body, TypeBody::Sum(s)
-                        if s.variants.iter().any(|var| var.name.name == id.name))
-                });
-                let http_implied = expected
-                    .map(|t| peel_to_http_result(t, tys).is_some())
-                    .unwrap_or(false)
-                    || peel_to_http_result(ctx.return_ty, tys).is_some();
-                if http_implied || !user_owns {
+                let user_owns = user_sum_owns_variant(ctx, &id.name);
+                if http_variant_applies(user_owns, expected, ctx) {
                     // P6.21/P6.23 (review of #1244/#1247): `Callee::Intrinsic`
                     // recorded here — a namespace-qualified built-in-sum
                     // variant reference, the shape P6.1's Decision C had
@@ -5000,21 +4993,12 @@ pub(crate) fn type_of(expr: &Expr, expected: Option<TyId>, ctx: &mut Ctx) -> Opt
             // scan for user sum-variant owners behind them. The common case is
             // an ordinary function call whose name is neither keyword, so it
             // must not pay for either. The owner scan is further deferred behind
-            // `http_implied`, since `unowned` only matters when the surrounding
+            // `http_variant_applies`, since ownership only matters when the surrounding
             // type does not already imply HttpResult.
             if let Some(v) = http_variant(&name.name) {
-                let http_implied = expected
-                    .map(|t| peel_to_http_result(t, tys).is_some())
-                    .unwrap_or(false)
-                    || peel_to_http_result(ctx.return_ty, tys).is_some();
-                let owned_elsewhere = || {
-                    ctx.input.fns.contains_key(&name.name)
-                        || ctx.input.types.values().any(|t| {
-                            matches!(&t.body, TypeBody::Sum(s)
-                                if s.variants.iter().any(|var| var.name.name == name.name))
-                        })
-                };
-                if http_implied || !owned_elsewhere() {
+                let owned_elsewhere = ctx.input.fns.contains_key(&name.name)
+                    || user_sum_owns_variant(ctx, &name.name);
+                if http_variant_applies(owned_elsewhere, expected, ctx) {
                     ctx.callees.insert(
                         expr.id,
                         Callee::Intrinsic {
@@ -5432,6 +5416,34 @@ pub(crate) fn type_of(expr: &Expr, expected: Option<TyId>, ctx: &mut Ctx) -> Opt
         },
     );
     ty
+}
+
+/// Whether a user sum type declared in this unit has a variant `name`.
+fn user_sum_owns_variant(ctx: &Ctx, name: &str) -> bool {
+    ctx.input.types.values().any(|t| {
+        matches!(&t.body, TypeBody::Sum(s) if s.variants.iter().any(|var| var.name.name == name))
+    })
+}
+
+/// #3631: whether a bare name or call that is spelled like an `HttpResult`
+/// variant (`Found`, `Gone`, `Ok`, ...) is that variant rather than something
+/// the user declared under the same name (a sum variant or a `fn`).
+///
+/// An expected type that is `HttpResult` settles it. A name nothing else owns
+/// is the `HttpResult` variant. A name the user owns goes to the user whenever
+/// the context supplies a concrete expected type that is not `HttpResult`
+/// (`Ok(Found(item))` in a handler returning `HttpResult[Outcome]` expects an
+/// `Outcome`), and only with no expected type at all does the enclosing
+/// handler's `HttpResult` return type tip it back to the variant. Reading the
+/// return type alone, as this once did, claimed every user variant sharing an
+/// `HttpResult` variant's name for HTTP, whatever type the context asked for.
+fn http_variant_applies(owned_by_user: bool, expected: Option<TyId>, ctx: &Ctx) -> bool {
+    let tys = ctx.tys;
+    match expected {
+        Some(t) if peel_to_http_result(t, tys).is_some() => true,
+        Some(_) => !owned_by_user,
+        None => !owned_by_user || peel_to_http_result(ctx.return_ty, tys).is_some(),
+    }
 }
 
 /// #1658 (runtime-semantics track S9): an `Effect[T]` value in an effectful
