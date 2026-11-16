@@ -503,21 +503,9 @@ pub fn emit_wrangler_toml(
         doc.push_block(TomlBlock::keyed_table("exports", old.to_string(), entries));
     }
 
-    // #3513 B: `Analytics.dataset()` reads the dataset's name, which only the deploy knows
-    // (it environment-qualifies it), from one `[vars]` entry per dataset binding. The name is
-    // the binding's own, `BYNK_DATASET_<BINDING>`, in the reserved `BYNK_` namespace.
-    let dataset_vars: Vec<TomlEntry> = bindings
-        .iter()
-        .filter(|b| matches!(b.source, BindingSource::AnalyticsDataset { .. }))
-        .map(|b| {
-            TomlEntry::kv_owned(
-                dataset_var_name(&b.name),
-                TomlValue::str(analytics_dataset_name(&worker_dir_name(context), &b.name)),
-            )
-        })
-        .collect();
-    if !dataset_vars.is_empty() {
-        doc.push_block(TomlBlock::table("vars", dataset_vars));
+    // #3513 B: `Analytics.dataset()` reads the dataset's name from `[vars]`.
+    if let Some(vars) = dataset_vars_block(context, bindings) {
+        doc.push_block(vars);
     }
 
     // v0.10a: cron triggers. Cloudflare uses a single `[triggers]` table with a
@@ -1223,6 +1211,24 @@ pub fn vectorize_index_name(worker: &str, binding: &str) -> String {
     let suffix = format!("-{:08x}", hash as u32);
     let head = &full[..budget - suffix.len()];
     format!("{}{suffix}", head.trim_end_matches('-'))
+}
+
+/// #3513 B: `Analytics.dataset()` reads the dataset's name, which only the deploy knows (it
+/// environment-qualifies it), from one `[vars]` entry per dataset binding. The variable is the
+/// binding's own, `BYNK_DATASET_<BINDING>`, in the reserved `BYNK_` namespace. `None` when the
+/// Worker has no dataset.
+fn dataset_vars_block(context: &str, bindings: &[WorkerBinding]) -> Option<TomlBlock> {
+    let entries: Vec<TomlEntry> = bindings
+        .iter()
+        .filter(|b| matches!(b.source, BindingSource::AnalyticsDataset { .. }))
+        .map(|b| {
+            TomlEntry::kv_owned(
+                dataset_var_name(&b.name),
+                TomlValue::str(analytics_dataset_name(&worker_dir_name(context), &b.name)),
+            )
+        })
+        .collect();
+    (!entries.is_empty()).then(|| TomlBlock::table("vars", entries))
 }
 
 /// #3513 B: the `[vars]` entry that carries an `Analytics` binding's dataset name to the
