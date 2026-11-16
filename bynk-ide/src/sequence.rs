@@ -153,7 +153,7 @@ pub struct Message {
 
 /// The handler a boundary-stop call reaches, named rather than walked
 /// (Decision C). The LSP layer resolves it to a location.
-#[derive(Debug, Clone, PartialEq, Eq)]
+#[derive(Debug, Clone, PartialEq, Eq, Hash)]
 pub struct Callee {
     /// The consumed context's qualified name; `None` for an agent of the
     /// handler's own context.
@@ -991,7 +991,10 @@ impl<'a> Builder<'a> {
                 } if self.info.is_some_and(|i| i.agents.contains_key(&name.name)) => {
                     let id = self.participant_id(ParticipantKind::Agent, &name.name, name.span);
                     let key: Vec<String> = key_args.iter().map(bynk_fmt::expr_to_string).collect();
-                    self.note_key(id, key.join(", "));
+                    // No key arguments (a file mid-edit): no key, not `""`.
+                    if !key.is_empty() {
+                        self.note_key(id, key.join(", "));
+                    }
                     Some((id, call_label(&method.name, args)))
                 }
                 ExprKind::Ident(id) => self.classify_static(&id.name, &method.name, args, id.span),
@@ -2275,6 +2278,125 @@ service api {
                 owner: "Pinger".to_string(),
                 method: None
             })
+        );
+    }
+
+    // -- Review follow-ups (#3651): `?` inside a branch, a boundary call as a
+    // -- `?` operand, and a `?` past the depth cap.
+
+    const QUESTION_EDGES_SRC: &str = r#"context qe
+
+agent Limiter {
+  key client: String
+
+  store count: Cell[Int]
+
+  on call hit(n: Int) -> Effect[Result[Int, String]] {
+    Ok(n)
+  }
+}
+
+service api {
+  on call(c: String, n: Int) -> Effect[Int] {
+    if n > 0 {
+      let v = parse(n)?
+      v
+    } else {
+      0
+    }
+  }
+
+  on call(c: String, n: Int) -> Effect[Int] {
+    let x <- Limiter(c).hit(n)?
+    x
+  }
+}
+"#;
+
+    #[test]
+    fn a_question_mark_inside_a_branch_nests_under_it() {
+        let ctx = parse_context(QUESTION_EDGES_SRC);
+        let svc = find_service(&ctx, "api");
+        let model = sequence_model(
+            &svc.handlers[0],
+            HandlerOwner::Service("api"),
+            &[],
+            None,
+            None,
+        );
+        let kinds: Vec<(AltKind, Option<u32>, Option<u32>, u32)> = model
+            .blocks
+            .iter()
+            .map(|b| (b.kind, b.parent, b.parent_branch, b.depth))
+            .collect();
+        assert_eq!(
+            kinds,
+            vec![
+                (AltKind::If, None, None, 0),
+                (AltKind::Break, Some(0), Some(0), 1)
+            ]
+        );
+    }
+
+    #[test]
+    fn a_boundary_call_under_a_question_mark_comes_before_its_break() {
+        let root = setup_project("question-edges", &[("qe.bynk", QUESTION_EDGES_SRC)]);
+        let diag = crate::testkit::diagnose_project(&root);
+        let info = diag.sequence_info.get("qe").expect("sequence_info");
+        let ctx = parse_context(QUESTION_EDGES_SRC);
+        let svc = find_service(&ctx, "api");
+        let model = sequence_model(
+            &svc.handlers[1],
+            HandlerOwner::Service("api"),
+            &[],
+            None,
+            Some(info),
+        );
+        assert_eq!(model.messages[0].kind, MessageKind::Call);
+        assert_eq!(
+            model.messages[0].block, None,
+            "the call is evaluated before the `?`"
+        );
+        assert_eq!(
+            model.messages[0].callee,
+            Some(Callee {
+                unit: None,
+                owner: "Limiter".to_string(),
+                method: Some("hit".to_string())
+            })
+        );
+        assert_eq!(model.messages[1].kind, MessageKind::Return);
+        assert_eq!(model.blocks.len(), 1);
+        assert_eq!(model.blocks[0].kind, AltKind::Break);
+        assert_eq!(model.blocks[0].branches[0].label, "Limiter(c).hit(n)?");
+    }
+
+    #[test]
+    fn a_question_mark_past_the_cap_collapses() {
+        let mut body = String::from("let v = parse(n)?\n v");
+        for i in (0..MAX_BLOCK_DEPTH as usize).rev() {
+            body = format!("if n > {i} {{ {body} }} else {{ 0 }}");
+        }
+        let src = format!(
+            "context deepq\n\nservice api {{\n  on call(n: Int) -> Effect[Int] {{\n    {body}\n  }}\n}}\n"
+        );
+        let ctx = parse_context(&src);
+        let svc = find_service(&ctx, "api");
+        let model = sequence_model(
+            &svc.handlers[0],
+            HandlerOwner::Service("api"),
+            &[],
+            None,
+            None,
+        );
+        assert!(
+            model.blocks.iter().all(|b| b.kind != AltKind::Break),
+            "no break past the cap"
+        );
+        let last = model.blocks.last().expect("a marker");
+        assert_eq!(
+            (last.kind, last.depth),
+            (AltKind::Collapsed, MAX_BLOCK_DEPTH)
         );
     }
 }
