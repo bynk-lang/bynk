@@ -267,6 +267,12 @@ pub struct TestArgs {
     /// Not a flag. Kill the test process, and fail the run, after this long.
     #[arg(skip)]
     pub run_timeout: Option<std::time::Duration>,
+    /// Not a flag. Source files layered over the project's for this build, as
+    /// `--sources-stdin` does for `compile`, with the new ones it adds: the
+    /// synthetic suite of a `bynk eval` snippet (#3585) and the caller's unsaved
+    /// buffers.
+    #[arg(skip)]
+    pub overlay: Option<std::collections::HashMap<PathBuf, String>>,
 }
 
 impl TestArgs {
@@ -305,6 +311,7 @@ impl TestArgs {
             mutate_jobs: None,
             mutant_overlay: None,
             run_timeout: None,
+            overlay: None,
         }
     }
 }
@@ -389,6 +396,7 @@ pub fn run_test(program: &str, args: TestArgs) -> ExitCode {
         mutate_jobs,
         mutant_overlay,
         run_timeout,
+        overlay,
         // #3274: resolved by the caller, which runs each project on its own.
         each: _,
     } = args;
@@ -612,23 +620,11 @@ pub fn run_test(program: &str, args: TestArgs) -> ExitCode {
                     .map_err(|e| format!("could not read `snapshots/`: {e}"))?;
                 Ok(o.snapshot_files(files))
             }) {
-            Ok(mut o) => {
-                // #3069: a mutant replaces one file's text, in memory only.
-                if let Some((path, text)) = mutant_overlay {
-                    o.sources
-                        .get_or_insert_with(Default::default)
-                        .insert(path, text);
-                }
-                o
-            }
-            Err(e) => {
-                if json {
-                    crate::test_stream::print_run(stream, &TestRun::runtime_error(e, None));
-                } else {
-                    eprintln!("{program} test: {e}");
-                }
-                return ExitCode::FAILURE;
-            }
+            Ok(o) => match with_overlays(o, &input, mutant_overlay, overlay) {
+                Ok(o) => o,
+                Err(e) => return fail_run(program, json, stream, e),
+            },
+            Err(e) => return fail_run(program, json, stream, e),
         };
         // #2138: a remote run emits only the `system` suites, driven at
         // the target's URLs.
@@ -1201,6 +1197,29 @@ fn report_no_tests(
         ExitCode::FAILURE
     } else {
         ExitCode::SUCCESS
+    }
+}
+
+/// The build's options with the run's in-memory sources laid over the project's:
+/// a mutant's one file (#3069), and a caller's buffers and synthetic files, as
+/// `--sources-stdin` does for `compile` (#3585).
+fn with_overlays(
+    mut options: crate::project::CompileOptions,
+    input: &Path,
+    mutant: Option<(PathBuf, String)>,
+    overlay: Option<std::collections::HashMap<PathBuf, String>>,
+) -> Result<crate::project::CompileOptions, String> {
+    if let Some((path, text)) = mutant {
+        options
+            .sources
+            .get_or_insert_with(Default::default)
+            .insert(path, text);
+    }
+    match overlay {
+        Some(overlay) => {
+            crate::source_overlay::apply_overlay(options, input, overlay).map_err(|e| e.to_string())
+        }
+        None => Ok(options),
     }
 }
 
