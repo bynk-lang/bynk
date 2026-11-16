@@ -21,6 +21,34 @@ pub struct Cli {
     pub command: Command,
 }
 
+/// The flags of `bynk eval` (#3585).
+#[derive(clap::Args, Debug, Clone)]
+pub struct EvalCommand {
+    /// Project directory. Defaults to the current directory.
+    #[arg(default_value = ".")]
+    pub input: PathBuf,
+    /// The unit (a `commons` or `context`, by dotted name) whose scope the
+    /// snippet is evaluated in.
+    #[arg(long)]
+    pub unit: String,
+    /// The snippet. When absent it is read from stdin.
+    #[arg(long)]
+    pub expr: Option<String>,
+    /// Evaluate against the unsaved buffers given as JSON on stdin, as
+    /// `bynk compile --sources-stdin` does: `{ "<absolute path>": "<text>" }`.
+    /// Stdin then holds the buffers, so the snippet must be `--expr`.
+    #[arg(long)]
+    pub sources_stdin: bool,
+    /// Build `--unit`'s own suite in, and evaluate the snippet inside it, so the
+    /// suite's `stub`s, `fn`s and fixtures apply. The value must be the unit
+    /// named by `--unit`. By default the project's own suites are left out.
+    #[arg(long, value_name = "UNIT")]
+    pub suite: Option<String>,
+    /// Kill the evaluation after this many seconds and report it timed out.
+    #[arg(long, value_name = "SECONDS", default_value_t = crate::eval::default_timeout_secs(), value_parser = clap::value_parser!(u64).range(1..))]
+    pub timeout: u64,
+}
+
 /// The headings `bynk --help` sorts its subcommands under, in order. clap has
 /// no subcommand headings of its own, so [`command`] renders this listing into
 /// the help template; every visible subcommand must appear exactly once.
@@ -28,7 +56,7 @@ pub const COMMAND_GROUPS: &[(&str, &[&str])] = &[
     (
         "Project",
         &[
-            "new", "check", "fmt", "test", "build", "compile", "openapi", "client", "token",
+            "new", "check", "fmt", "test", "eval", "build", "compile", "openapi", "client", "token",
         ],
     ),
     (
@@ -597,6 +625,31 @@ pub enum Command {
     Test {
         #[command(flatten)]
         args: Box<bynk_driver::test_runner::TestArgs>,
+        #[command(flatten)]
+        lock: LockArgs,
+    },
+    /// Evaluate a snippet in a unit's scope; print its value.
+    ///
+    /// Compiles and runs the snippet as a synthetic test case in a suite for
+    /// `--unit`, under the test runtime, and prints
+    /// `{"value": <wire shape>, "type": "…", "diagnostics": […]}` (#3585). The
+    /// snippet is `--expr`, or stdin; its last expression is the value. Leading
+    /// `consumes` and `stub` lines belong to the suite, so a snippet that uses
+    /// another unit `consumes` it, as a suite does. A capability the snippet
+    /// calls needs a `stub`; nothing reaches the network. Each evaluation is
+    /// independent: send earlier cells' `let`s again ahead of the snippet.
+    ///
+    /// The project's own suites are left out of the build, so a suite that does
+    /// not compile cannot block an evaluation. `--suite <UNIT>` builds `--unit`'s
+    /// own suite in and puts the snippet inside it, so the suite's `stub`s
+    /// and `fn`s apply; its errors are then reported.
+    ///
+    /// Runs in-process, with the build and runner of `bynk test`; requires
+    /// `tsc` (with Node.js) or `tsx` on PATH. The exit status is zero only when
+    /// there is a value.
+    Eval {
+        #[command(flatten)]
+        args: EvalCommand,
         #[command(flatten)]
         lock: LockArgs,
     },

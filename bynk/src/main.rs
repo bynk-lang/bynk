@@ -274,16 +274,8 @@ fn run() -> ExitCode {
             }
             prepared.finish(run_test(*args))
         }
-        Command::Fetch { path, lock, format } => {
-            if matches!(format, bynk::cli::DeployFormatArg::Json) {
-                return fetch_json(&path, lock.options());
-            }
-            if prepare_offering_approval(&path, lock.options()) {
-                ExitCode::SUCCESS
-            } else {
-                ExitCode::FAILURE
-            }
-        }
+        Command::Eval { args, lock } => run_eval(args, lock),
+        Command::Fetch { path, lock, format } => run_fetch(&path, lock, format),
         Command::Update { names, path } => {
             let opts = bynk::fetch::FetchOptions {
                 locked: false,
@@ -621,6 +613,32 @@ fn project_root(input: &Path, lock: bynk::fetch::FetchOptions) -> Option<PathBuf
         );
     }
     root
+}
+
+/// `bynk fetch`: the lock file, as JSON when asked.
+fn run_fetch(
+    path: &Path,
+    lock: bynk::cli::LockArgs,
+    format: bynk::cli::DeployFormatArg,
+) -> ExitCode {
+    if matches!(format, bynk::cli::DeployFormatArg::Json) {
+        return fetch_json(path, lock.options());
+    }
+    if prepare_offering_approval(path, lock.options()) {
+        ExitCode::SUCCESS
+    } else {
+        ExitCode::FAILURE
+    }
+}
+
+/// `bynk eval`: bring the project's dependencies up to date, then evaluate.
+fn run_eval(args: bynk::cli::EvalCommand, lock: bynk::cli::LockArgs) -> ExitCode {
+    // `prepare` says why on stderr; the document says that it failed, so a
+    // client reading stdout always gets one.
+    if !prepare(&args.input, lock.options()) {
+        return bynk::eval::refuse("the project's dependencies could not be prepared (see stderr)");
+    }
+    bynk::eval::run(args)
 }
 
 /// #2240: resolve, fetch and lock the dependencies of the project holding
