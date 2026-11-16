@@ -2148,6 +2148,13 @@ fn emit_unit(
     });
 }
 
+/// #3562: where each context's files go under a Workers build. Always the
+/// identity layout for now: a group's directory and prefixes are switched on
+/// with the group as the emit unit.
+fn emit_layout() -> WorkerLayout {
+    WorkerLayout::identity()
+}
+
 /// Phase 8d/8e: resolve + check (and, in build mode, emit) every source file in
 /// one production unit. The per-file `continue`s stay internal to this loop, so
 /// a file that fails resolution/checking is skipped without abandoning the unit.
@@ -2160,13 +2167,6 @@ fn emit_unit(
 /// `EmitUnitCtx`/`prepare_unit_check_ctx` prelude, the `Mode`-conditional
 /// exit (`Mode::Analyse` records and stops; `Mode::Build` proceeds to
 /// `certify`+`emit_unit`) and the emission tail itself.
-/// #3562: where each context's files go under a Workers build. Always the
-/// identity layout for now: a group's directory and prefixes are switched on
-/// with the group as the emit unit.
-fn emit_layout() -> WorkerLayout {
-    WorkerLayout::identity()
-}
-
 #[allow(clippy::too_many_arguments)]
 #[allow(clippy::type_complexity)]
 fn check_unit_files(

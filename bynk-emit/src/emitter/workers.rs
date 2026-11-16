@@ -335,7 +335,7 @@ pub fn emit_worker_compose(
         && let Some(bundle) = locale_bundle
     {
         let import = crate::emitter::cross_commons_import_specifier_for_path(
-            &bynk_project::worker_handlers_source_path(context),
+            &layout.handlers_source_path(context),
             &bundle.source_path,
             import_ext,
         );
@@ -1042,7 +1042,7 @@ pub fn emit_worker_compose(
                 type_only: false,
                 names,
                 from: crate::emitter::cross_commons_import_specifier_for_path(
-                    &bynk_project::worker_handlers_source_path(context),
+                    &layout.handlers_source_path(context),
                     &module,
                     import_ext,
                 ),
