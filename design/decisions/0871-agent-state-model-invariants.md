@@ -1,11 +1,6 @@
----
-level: patch
-changelog: `bynk/agentStateModel` lists each agent's `invariant` and `transition` declarations as an optional `invariants` array, with each one's formatted predicate text, range and documentation (#3608)
----
+# 0871 — `bynk/agentStateModel` carries an agent's declared `invariant`s and `transition`s as one list of source-text predicates
 
-## ADR: agent-state-model-invariants
-title: `bynk/agentStateModel` carries an agent's declared `invariant`s and `transition`s as one list of source-text predicates
-summary: An optional `invariants` array of `{kind, name, predicate, range, doc?}`, omitted when empty; an addendum to the ADR 0422/0535/0536/0547 wire-shape lineage
+- **Status:** Accepted (v0.633.5)
 
 **Context.** The agent state model carried an agent's step `transition`s only
 indirectly, as per-edge `violations` and a machine's `not_evaluated` list, and

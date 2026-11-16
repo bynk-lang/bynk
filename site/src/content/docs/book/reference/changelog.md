@@ -28,6 +28,8 @@ per-commit history. While Bynk is pre-1.0, increments may change behaviour.
 
 | Version | Highlights |
 |---|---|
+| **v0.633.6** | A `storefront` example, a typed front end over a generated `bynk client`, with a system test (#3508, BC7) |
+| **v0.633.5** | `bynk/agentStateModel` lists each agent's `invariant` and `transition` declarations as an optional `invariants` array, with each one's formatted predicate text, range and documentation (#3608) |
 | **v0.633.4** | `bynk/wireContract` carries an HTTP handler's success payload: a `success` ref to the `T` of `HttpResult[T]` and a `payload` per response (#3609) |
 | **v0.633.3** | A Workers build places a context's staged binding files and assets directory through its `WorkerLayout` too, still the identity layout, ahead of `[deploy.workers]` groups sharing a directory (#3562, G2b) |
 | **v0.633.2** | A `bynk dev` build records each agent instance's committed transitions in a bounded ring buffer, and `bynk dev inspect agent` returns them as `history` (slice 1 of the dev agent-inspection track) |

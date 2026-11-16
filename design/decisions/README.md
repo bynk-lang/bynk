@@ -17,6 +17,7 @@ or a row links to no file. Summaries and statuses are curated by hand; the
 
 | # | Decision | Status |
 |---|---|---|
+| [0871](0871-agent-state-model-invariants.md) | **`bynk/agentStateModel` carries an agent's declared `invariant`s and `transition`s as one list of source-text predicates** (v0.633.5) — An optional `invariants` array of `{kind, name, predicate, range, doc?}`, omitted when empty; an addendum to the ADR 0422/0535/0536/0547 wire-shape lineage | Accepted (v0.633.5) |
 | [0870](0870-wire-contract-success-payload.md) | **`bynk/wireContract` carries an HTTP handler's success payload** (v0.633.4) — `success` on the HTTP model and `payload` per response, resolved into the existing `types`/`instantiations` | Accepted (v0.633.4) |
 | [0869](0869-dev-agent-inspection-history.md) | **A dev build keeps each agent instance's recent transitions in a bounded ring buffer outside layout 2** (v0.633.2) — `commitState` appends `{handler, old, new, at}` to a reserved key in a `bynk dev` build only, and a refused transition leaves no entry | Accepted (v0.633.2) |
 | [0868](0868-analytics-sql-singleton.md) | **`AnalyticsSql` is a singleton binding over the Analytics Engine SQL API, remote-only under `bynk dev`** (v0.633) — One `[analytics]` binding per Worker, `query(sql, params)` over D1's `SqlValue`, a typed result and extensible error; no local implementation | Accepted (v0.633) |
