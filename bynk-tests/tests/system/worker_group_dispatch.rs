@@ -30,9 +30,11 @@ const UNGROUPED: &str =
 /// agent, a cron and the same R2 capability as `shop.pricing`.
 const ORDERS: &str = r#"context shop.orders
 
-consumes bynk.cloudflare { R2 }
+consumes bynk.cloudflare { R2, InboundEmail, EmailVerdict }
 
 capability Archives = R2
+
+type Job = { id: String }
 
 agent Cart {
 	key id: String
@@ -52,7 +54,19 @@ service api from http {
 
 service tick from cron {
   on schedule("0 * * * *") () -> Effect[Result[(), String]] {
-    Effect.pure(Ok(()))
+    Effect.pure(Err("ran-orders"))
+  }
+}
+
+service intake from queue("jobs-a") {
+  on message(d: Job) -> Effect[QueueResult] {
+    Ack
+  }
+}
+
+service support from email("support@shop.example") {
+  on message(mail: InboundEmail) -> Effect[EmailVerdict] by s: Sender {
+    Accept
   }
 }
 
@@ -67,9 +81,11 @@ service order_count {
 /// echoes its body, and has its own cron.
 const PRICING: &str = r#"context shop.pricing
 
-consumes bynk.cloudflare { R2 }
+consumes bynk.cloudflare { R2, InboundEmail, EmailVerdict }
 
 capability Archives = R2
+
+type Job = { id: String }
 
 service papi from http {
   on POST("/orders") (body: String) -> Effect[HttpResult[String]] by v: Visitor {
@@ -78,8 +94,23 @@ service papi from http {
 }
 
 service sweep from cron {
+  on schedule("0 * * * *") () -> Effect[Result[(), String]] {
+    Effect.pure(Err("ran-pricing"))
+  }
   on schedule("30 * * * *") () -> Effect[Result[(), String]] {
-    Effect.pure(Ok(()))
+    Effect.pure(Err("ran-pricing-30"))
+  }
+}
+
+service intake_b from queue("jobs-b") {
+  on message(d: Job) -> Effect[QueueResult] {
+    Retry("later")
+  }
+}
+
+service catch_all from email("*@shop.example") {
+  on message(mail: InboundEmail) -> Effect[EmailVerdict] by s: Sender {
+    Accept
   }
 }
 
@@ -235,6 +266,35 @@ for (const [name, method, body] of [["post", "POST", "[1]"], ["get", "GET", unde
   await show(`call-unknown-${name}`, new Request(u("/_bynk/call/nothing"), { method, body }));
 }
 await show("event-unsigned", new Request(u("/_bynk/event/nothing"), { method: "POST", body: "{}" }));
+const logs = [];
+console.error = (...args) => { logs.push(args.map(String).join(" ")); };
+const observe = async (label, run) => {
+  logs.length = 0;
+  const extra = await run();
+  results.push({ label, logs: [...logs], ...extra });
+};
+for (const [name, cron] of [["both", "0 * * * *"], ["one", "30 * * * *"], ["none", "5 5 * * *"]]) {
+  await observe(`cron-${name}`, async () => {
+    await worker.scheduled({ cron, scheduledTime: 0 }, {}, ctx);
+    return {};
+  });
+}
+for (const queue of ["jobs-a", "jobs-b", "jobs-other"]) {
+  await observe(`queue-${queue}`, async () => {
+    const outcome = { acks: 0, retries: 0 };
+    const message = { body: { id: "1" }, ack() { outcome.acks += 1; }, retry() { outcome.retries += 1; } };
+    await worker.queue({ queue, messages: [message] }, {}, ctx);
+    return outcome;
+  });
+}
+for (const [name, to] of [["exact", "Support@Shop.example"], ["catch-all", "sales@shop.example"], ["unknown", "who@elsewhere.example"]]) {
+  await observe(`email-${name}`, async () => {
+    const rejects = [];
+    const message = { to, from: "sender@example.com", rawSize: 999999999, raw: null, headers: new Headers(), setReject(reason) { rejects.push(reason); } };
+    await worker.email(message, {}, ctx);
+    return { rejects };
+  });
+}
 console.log(JSON.stringify(results));
 "#;
 
@@ -268,6 +328,21 @@ fn run_group(root: &Path) -> Option<Vec<serde_json::Value>> {
         .expect("run tsc");
     assert!(emitted.status.success(), "tsc failed:\n{}", text(&emitted));
     fs::write(root.join("out-js/package.json"), "{\"type\":\"module\"}").unwrap();
+    // The email runtime imports `postal-mime`, an npm dependency of a project with
+    // an email service. These cases never reach the parser (they stop at the size
+    // cap or the recipient), so a stub stands in for it.
+    let stub = root.join("out-js/node_modules/postal-mime");
+    fs::create_dir_all(&stub).unwrap();
+    fs::write(
+        stub.join("package.json"),
+        "{\"name\":\"postal-mime\",\"type\":\"module\",\"main\":\"index.js\"}",
+    )
+    .unwrap();
+    fs::write(
+        stub.join("index.js"),
+        "export default class PostalMime { static async parse() { throw new Error(\"stub\"); } }\n",
+    )
+    .unwrap();
     fs::write(root.join("run.mjs"), SCRIPT).unwrap();
     let ran = Command::new("node")
         .arg("run.mjs")
@@ -335,7 +410,7 @@ fn a_groups_fetch_dispatches_to_the_member_that_owns_the_request() {
     );
 
     // The marker is never visible: no response carries a header naming it.
-    for r in &results {
+    for r in results.iter().filter(|r| r["headers"].is_array()) {
         let names = r["headers"].as_array().unwrap();
         assert!(
             names.iter().all(|n| !n.as_str().unwrap().contains("miss")),
@@ -373,5 +448,85 @@ fn an_unsigned_internal_request_answers_the_same_for_a_known_and_an_unknown_serv
     // No member subscribes to events, so a group answers the prefix as a
     // standalone Worker without subscribers does.
     assert_eq!(find(&results, "event-unsigned")["status"], 404);
+    let _ = fs::remove_dir_all(&root);
+}
+
+/// `scheduled`, `queue` and `email` go to the member that owns them: every
+/// member whose cron matches runs, a queue goes by `batch.queue`, and a mail goes
+/// to the member claiming the recipient (an exact address before the domain's
+/// catch-all), an unknown recipient to the first email member, whose runtime
+/// refuses it.
+#[test]
+fn a_groups_scheduled_queue_and_email_go_to_the_members_that_own_them() {
+    let root = stage("others", MANIFEST);
+    let Some(results) = run_group(&root) else {
+        let _ = fs::remove_dir_all(&root);
+        return;
+    };
+    let logged = |label: &str| -> String {
+        find(&results, label)["logs"]
+            .as_array()
+            .unwrap()
+            .iter()
+            .map(|l| l.as_str().unwrap().to_string())
+            .collect::<Vec<_>>()
+            .join("\n")
+    };
+
+    // Two members share a cron: both run. Another cron is one member's alone.
+    let both = logged("cron-both");
+    assert!(
+        both.contains("ran-orders") && both.contains("ran-pricing"),
+        "{both}"
+    );
+    let one = logged("cron-one");
+    assert!(
+        one.contains("ran-pricing-30") && !one.contains("ran-orders"),
+        "{one}"
+    );
+    assert_eq!(logged("cron-none"), "");
+
+    // A queue goes to its consumer: acked by the one, retried by the other, and
+    // a queue no member consumes is left alone.
+    let (a, b, other) = (
+        find(&results, "queue-jobs-a"),
+        find(&results, "queue-jobs-b"),
+        find(&results, "queue-jobs-other"),
+    );
+    assert_eq!(
+        (a["acks"].as_u64(), a["retries"].as_u64()),
+        (Some(1), Some(0)),
+        "{a}"
+    );
+    assert_eq!(
+        (b["acks"].as_u64(), b["retries"].as_u64()),
+        (Some(0), Some(1)),
+        "{b}"
+    );
+    assert_eq!(
+        (other["acks"].as_u64(), other["retries"].as_u64()),
+        (Some(0), Some(0)),
+        "{other}"
+    );
+
+    // Mail: the exact address (whatever its case) is the first member's, another
+    // address in the domain the second member's catch-all, and an unknown
+    // recipient the first email member's, refused by its runtime.
+    assert!(
+        logged("email-exact").contains("email support@shop.example"),
+        "{}",
+        logged("email-exact")
+    );
+    assert!(
+        logged("email-catch-all").contains("email *@shop.example"),
+        "{}",
+        logged("email-catch-all")
+    );
+    let unknown = find(&results, "email-unknown");
+    assert_eq!(unknown["rejects"][0], "recipient not accepted", "{unknown}");
+    assert!(
+        !logged("email-unknown").contains("email "),
+        "no route claimed it"
+    );
     let _ = fs::remove_dir_all(&root);
 }

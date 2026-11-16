@@ -8864,6 +8864,10 @@ pub const REGISTRY: &[DiagnosticInfo] = &[
         "A path dependency declared by a dependency resolves outside the workspace; a dependency's own path dependencies are honoured only between members of one workspace.",
     ),
     d(
+        "bynk.deploy.asset_path_conflict",
+        "Two members of one `[deploy.workers.<key>]` group serve a fixed asset path (`at \"/…\"`) from different files, or one that would be a folder of the other; a group has one assets directory, so each fixed path names one file.",
+    ),
+    d(
         "bynk.deploy.binding_collision",
         "Two members of one `[deploy.workers.<key>]` group declare different bindings under the same name; members share one `wrangler.toml`, so identical declarations share a binding and differing ones are refused.",
     ),
@@ -8897,7 +8901,7 @@ pub const REGISTRY: &[DiagnosticInfo] = &[
     ),
     d(
         "bynk.deploy.multiple_websocket_members",
-        "More than one member of a `[deploy.workers.<key>]` group declares a `from websocket` service; an upgrade request names no path or service a group could route it by, so a group has at most one such member.",
+        "More than one member of a `[deploy.workers.<key>]` group declares a `from websocket` service; an upgrade request names no path or service a group could route it by, so a group has at most one such member, which takes every upgrade request whatever the path.",
     ),
     d(
         "bynk.deploy.not_a_context",

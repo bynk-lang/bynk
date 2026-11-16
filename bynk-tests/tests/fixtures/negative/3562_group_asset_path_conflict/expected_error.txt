@@ -1,0 +1,1 @@
+bynk.deploy.asset_path_conflict contexts `shop.orders` and `shop.payment` share Worker `core`, and it would serve two files at `/legal.txt`: `assets/a.txt` and `assets/b.txt`

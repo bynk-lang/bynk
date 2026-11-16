@@ -783,7 +783,7 @@ fn analyse_project_inner(
     // #2841: and every suite `fixture` names a file in `fixtures/`.
     let available_fixtures = bynk_project::assets::list_fixture_files(roots.project_root()).ok();
     crate::fixtures::phase_fixture_files(&parsed, available_fixtures.as_ref(), &mut errors);
-    crate::assets::phase_asset_routes(&parsed, &groups, &kinds, &unit_uses, &mut errors);
+    crate::assets::phase_asset_routes(&parsed, &groups, (&kinds, &layout), &unit_uses, &mut errors);
     // #3070: the D1 migrations' schemas, which literal D1 SQL is prepared
     // against below, as `bynk check` does. A throwaway sink: the migrations'
     // own file diagnostics are not (yet) an editor surface.
