@@ -6,9 +6,11 @@
   itself, so the ordering treats an intra-group edge as no edge. **D2**'s
   acyclicity precondition holds between Workers only if the Worker-level graph is
   acyclic: a group and any other Worker (another group or a single context) can
-  form a cycle with no cycle among the contexts. The check-time error
-  `bynk.deploy.group_cycle` enforces it, and must land before `bynk deploy`
-  accepts a group.
+  form a cycle with no cycle among the contexts, and so can two ungrouped contexts
+  when one subscribes to the other's event and also calls it (the publisher's
+  Worker binds to its subscriber, opposite to `consumes`). The check-time error
+  `bynk.deploy.worker_cycle` enforces it over the Worker-level graph, and must
+  land before `bynk deploy` accepts a group.
 - **Provenance:** #601, deploy track slice 2 (spine #558). Builds on slice 0
   (#583, v0.154).
 - **Relates:** [[0179]] (provisioning state — the ledger this extends), [[0180]]

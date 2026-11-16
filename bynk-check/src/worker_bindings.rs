@@ -530,20 +530,22 @@ fn group_service_names(
     }
 }
 
-/// `bynk.deploy.group_cycle` (#3562): a Worker must be uploaded after the Workers
-/// it binds to (ADR 0193 D1), and the language rules out a cycle among *contexts*
-/// (`bynk.context.consumes_cycle`), but a group folds its members into one node,
-/// so two groups can depend on each other with no cycle among their contexts
-/// (`A1 -> B1` and `B2 -> A2`, with `A1`, `A2` in one group and `B1`, `B2` in
-/// another). The graph is the Service Bindings the Workers would declare, read
-/// from `bindings` like deploy's ordering, a context standing for its group's
-/// Worker. An edge inside a group is a Worker binding to itself and is no edge.
-/// One error per strongly connected set of Workers containing a group, showing one
-/// representative cycle: the Workers and one context edge per hop, at the first
-/// hop's consumer. A cycle among ungrouped Workers is deliberately not reported
-/// here. `consumes_cycle` covers service calls, but `bindings` also holds the
-/// publisher-to-subscriber edges, so an ungrouped event-edge cycle is a known gap
-/// that predates this check.
+/// `bynk.deploy.worker_cycle` (#3562): a Worker must be uploaded after the Workers
+/// it binds to (ADR 0193 D1), so a cycle among Workers cannot be deployed. The
+/// graph is the Service Bindings the Workers would declare, read from `bindings`
+/// like deploy's ordering: a call, or the publisher-to-subscriber binding the
+/// events fan-out needs, which runs opposite to the subscriber's `consumes`. A
+/// context stands for its group's Worker, and an edge inside a group is a Worker
+/// binding to itself and is no edge. A group makes cycles the language does not
+/// otherwise rule out: two groups, or a group and a single context, can depend on
+/// each other with no cycle among their contexts. An ungrouped event edge can too
+/// (B calls A and subscribes to A's event).
+///
+/// One error per strongly connected set of Workers, showing one representative
+/// cycle: the Workers and one context edge per hop, at the first hop's consumer.
+/// `bynk.context.consumes_cycle` owns a cycle among contexts' `consumes`, so
+/// when it has been reported this check stays quiet and the project is fixed
+/// there first, rather than reporting the same cycle twice.
 fn group_worker_cycles(
     worker_groups: &bynk_project::worker_groups::WorkerGroups,
     parsed: &[ParsedFile],
@@ -551,6 +553,9 @@ fn group_worker_cycles(
     bindings: &BTreeMap<String, Vec<WorkerBinding>>,
     errors: &mut ErrorSink,
 ) {
+    if errors.has_category("bynk.context.consumes_cycle") {
+        return;
+    }
     // A context's Worker: its group's key, else the context's own name.
     let worker_of = |ctx: &str| -> String {
         worker_groups
@@ -577,9 +582,6 @@ fn group_worker_cycles(
         }
     }
     for scc in strongly_connected(&edges) {
-        if !scc.iter().any(|w| worker_groups.contains_key(w)) {
-            continue;
-        }
         let Some(path) = cycle_through(&edges, &scc) else {
             continue;
         };
@@ -593,6 +595,7 @@ fn group_worker_cycles(
                 )
             })
             .collect();
+        let in_group = path.iter().any(|w| worker_groups.contains_key(w));
         let (consumer, _) = &edges[&path[0]][&path[1]];
         let indices = groups.get(consumer).map(Vec::as_slice).unwrap_or_default();
         let (file, span) = context_header(parsed, indices)
@@ -600,7 +603,7 @@ fn group_worker_cycles(
         errors.push_for(
             file.as_deref(),
             CompileError::new(
-                "bynk.deploy.group_cycle",
+                "bynk.deploy.worker_cycle",
                 span,
                 format!(
                     "the Workers {} bind to each other in a cycle: {}",
@@ -612,9 +615,11 @@ fn group_worker_cycles(
                     hops.join(", ")
                 ),
             )
-            .with_note(
-                "a Worker is uploaded after the Workers it binds to, so a cycle between Workers cannot be deployed. The contexts themselves are acyclic, but a group folds its members into one Worker: move a context out of its group, or into the other, so the Workers' dependencies run one way",
-            ),
+            .with_note(if in_group {
+                "a Worker is uploaded after the Workers it binds to, so a cycle between Workers cannot be deployed. A group folds its members into one Worker: move a context out of its group, or into the other, so the Workers' dependencies run one way"
+            } else {
+                "a Worker is uploaded after the Workers it binds to, so a cycle between Workers cannot be deployed. A context that subscribes to an event is bound by its publisher's Worker, so it cannot also call the publisher: have one side stop calling the other"
+            }),
         );
     }
 }

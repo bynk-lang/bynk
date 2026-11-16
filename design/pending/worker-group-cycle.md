@@ -1,6 +1,6 @@
 ---
 level: patch
-changelog: A `[deploy.workers]` group and another Worker (another group or a single context) whose members bind to each other in both directions are refused (`bynk.deploy.group_cycle`), even though the contexts themselves are acyclic (#3562, G2b)
+changelog: A `[deploy.workers]` group and another Worker (another group or a single context) whose members bind to each other in both directions are refused (`bynk.deploy.worker_cycle`), even though the contexts themselves are acyclic (#3562, G2b)
 probes: diagnostic_coverage, emit_diagnostics, explained_codes
 ---
 

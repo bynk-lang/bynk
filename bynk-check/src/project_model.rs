@@ -223,6 +223,11 @@ impl ErrorSink {
     pub fn is_empty(&self) -> bool {
         self.entries.is_empty()
     }
+    /// True when an **error** of `category` has been collected, so a later check
+    /// can leave a case an earlier one already reported.
+    pub fn has_category(&self, category: &str) -> bool {
+        self.entries.iter().any(|e| e.error.category == category)
+    }
     /// Consume the sink, yielding the non-failing **warnings** (ADR 0117).
     pub fn into_warnings(self) -> Vec<AttributedError> {
         let mut warnings = self.warnings;

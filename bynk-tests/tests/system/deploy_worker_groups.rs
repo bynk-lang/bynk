@@ -899,7 +899,7 @@ fn groups_may_depend_one_way_but_not_in_a_cycle() {
     write(Some("shop.b1"), None, None, Some("shop.a2"));
     let (ok, out) = build(&root);
     assert!(!ok, "{out}");
-    assert_eq!(out.matches("bynk.deploy.group_cycle").count(), 1, "{out}");
+    assert_eq!(out.matches("bynk.deploy.worker_cycle").count(), 1, "{out}");
     assert!(
         out.contains("`back`, `front`") || out.contains("`front`, `back`"),
         "{out}"
@@ -920,7 +920,7 @@ fn groups_may_depend_one_way_but_not_in_a_cycle() {
     write(Some("shop.b1"), None, Some("shop.a2"), None);
     let (ok, out) = build(&root);
     assert!(!ok, "{out}");
-    assert_eq!(out.matches("bynk.deploy.group_cycle").count(), 1, "{out}");
+    assert_eq!(out.matches("bynk.deploy.worker_cycle").count(), 1, "{out}");
     assert!(
         out.contains("`front` to `shop.b1` (`shop.a1` binds to `shop.b1`)"),
         "{out}"
@@ -934,5 +934,104 @@ fn groups_may_depend_one_way_but_not_in_a_cycle() {
     fs::write(root.join("bynk.toml"), "[build]\ntarget = \"workers\"\n").unwrap();
     let (ok, out) = build(&root);
     assert!(ok, "ungrouped, the contexts form no cycle:\n{out}");
+    let _ = fs::remove_dir_all(&root);
+}
+
+/// A cycle between Workers is refused whatever closes it: an event edge among
+/// contexts in no group, a longer cycle through a group, and not twice when
+/// `consumes_cycle` already owns it.
+#[test]
+fn any_worker_cycle_is_refused_once() {
+    let root =
+        std::env::temp_dir().join(format!("bynk-deploy-worker-cycle-{}", std::process::id()));
+    write_project(&root, "[build]\ntarget = \"workers\"\n");
+
+    // `shop.sub` subscribes to `shop.pub`'s event and also calls it: the
+    // publisher's Worker binds to its subscriber for the fan-out, and the
+    // subscriber's to the publisher for the call. No group is involved.
+    fs::write(
+        root.join("src/shop/orders.bynk"),
+        publisher_context("shop.orders", "Placed"),
+    )
+    .unwrap();
+    fs::write(
+        root.join("src/shop/payment.bynk"),
+        "context shop.payment\n\nconsumes shop.orders as P\n\nservice OnPlaced from Events(Placed) {\n\ton event(e: Placed) -> Effect[()] {\n\t\tlet _ <- P.probe_shop_orders()\n\t\tEffect.pure(())\n\t}\n}\n",
+    )
+    .unwrap();
+    let (ok, out) = build(&root);
+    assert!(!ok, "{out}");
+    assert_eq!(out.matches("bynk.deploy.worker_cycle").count(), 1, "{out}");
+    assert!(
+        out.contains("`shop.orders`") && out.contains("`shop.payment`"),
+        "{out}"
+    );
+    assert!(!out.contains("group"), "no group is in this cycle:\n{out}");
+
+    // Calling alone, one way, is fine.
+    fs::write(
+        root.join("src/shop/orders.bynk"),
+        calling_context("shop.orders", None, "to_orders"),
+    )
+    .unwrap();
+    fs::write(
+        root.join("src/shop/payment.bynk"),
+        calling_context("shop.payment", Some("shop.orders"), "to_payment"),
+    )
+    .unwrap();
+    let (ok, out) = build(&root);
+    assert!(ok, "a one-way call builds:\n{out}");
+
+    // A cycle through three Workers: front{a1, a2}, a1 -> b1 -> c1 -> a2.
+    fs::remove_file(root.join("src/shop/orders.bynk")).unwrap();
+    fs::remove_file(root.join("src/shop/payment.bynk")).unwrap();
+    fs::write(
+        root.join("bynk.toml"),
+        "[build]\ntarget = \"workers\"\n\n[deploy.workers.front]\ncontexts = [\"shop.a1\", \"shop.a2\"]\n",
+    )
+    .unwrap();
+    for (file, callee) in [
+        ("a1", Some("shop.b1")),
+        ("a2", None),
+        ("b1", Some("shop.c1")),
+        ("c1", Some("shop.a2")),
+    ] {
+        fs::write(
+            root.join(format!("src/shop/{file}.bynk")),
+            calling_context(&format!("shop.{file}"), callee, &format!("to_{file}")),
+        )
+        .unwrap();
+    }
+    let (ok, out) = build(&root);
+    assert!(!ok, "{out}");
+    assert_eq!(out.matches("bynk.deploy.worker_cycle").count(), 1, "{out}");
+    for hop in [
+        "`shop.a1` binds to `shop.b1`",
+        "`shop.b1` binds to `shop.c1`",
+        "`shop.c1` binds to `shop.a2`",
+    ] {
+        assert!(out.contains(hop), "{hop}:\n{out}");
+    }
+
+    // A cycle among the contexts is `consumes_cycle`'s alone.
+    fs::write(root.join("bynk.toml"), "[build]\ntarget = \"workers\"\n").unwrap();
+    fs::write(
+        root.join("src/shop/a2.bynk"),
+        calling_context("shop.a2", Some("shop.a1"), "to_a2"),
+    )
+    .unwrap();
+    fs::write(
+        root.join("src/shop/c1.bynk"),
+        calling_context("shop.c1", Some("shop.a2"), "to_c1"),
+    )
+    .unwrap();
+    let (ok, out) = build(&root);
+    assert!(!ok, "{out}");
+    assert!(out.contains("bynk.context.consumes_cycle"), "{out}");
+    assert_eq!(
+        out.matches("bynk.deploy.worker_cycle").count(),
+        0,
+        "one cycle, one error:\n{out}"
+    );
     let _ = fs::remove_dir_all(&root);
 }
