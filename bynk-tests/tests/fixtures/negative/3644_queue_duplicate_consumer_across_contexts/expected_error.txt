@@ -1,2 +1,2 @@
-bynk.queue.duplicate_consumer
-bynk.queue.duplicate_consumer
+# exact
+contexts `shop.orders` and `shop.payment` both consume queue `jobs`

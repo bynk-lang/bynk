@@ -9,6 +9,11 @@
 //! its own). Like `bynk.email.duplicate_address`, which it is modelled on, it
 //! reports only a claim by a *different* context, on the later one (contexts in
 //! name order, so the report does not depend on discovery order).
+//!
+//! It runs on every target, like the email check: `from queue` is a Cloudflare
+//! Queues binding, which has one consumer per queue wherever the project is
+//! built, and a project that names one queue from two contexts has no single
+//! consumer to deploy. That is deliberate, not a Workers-only rule.
 
 use std::collections::{BTreeMap, HashMap};
 
