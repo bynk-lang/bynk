@@ -29,7 +29,10 @@ service <Name> from queue("<name>") {
   (`bynk.parse.handler_in_agent`).
 
 No two queue handlers in a context may consume the same queue
-(`bynk.queue.duplicate_consumer`).
+(`bynk.queue.duplicate_consumer`). The same holds across the project: Cloudflare
+accepts one consumer Worker per queue, so two contexts that consume one queue are
+refused too, whether or not they share a `[deploy.workers]` group. Any number of
+contexts may *send* to a queue; only the consumer is limited to one.
 
 ## Acknowledgement and retry
 

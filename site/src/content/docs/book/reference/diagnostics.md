@@ -7,7 +7,7 @@ title: Diagnostic index
 
 Every diagnostic code the compiler can emit, with a one-line summary of the cause, grouped by category. For step-by-step cause-and-fix guidance on the most common ones, see the [troubleshooting guides](/book/troubleshooting/). For a code with a curated explanation, `bynk explain <code>` prints it in a terminal, and in VS Code the diagnostic's **Explain** quick fix (or **Bynk: Explain Diagnostic Code…**) shows the same text in a panel, offline.
 
-There are **893** codes in total.
+There are **892** codes in total.
 
 ## Agents
 
@@ -421,7 +421,6 @@ There are **893** codes in total.
 | `bynk.deploy.multiple_publishers` | More than one member of a `[deploy.workers.<key>]` group publishes events. A temporary restriction: each publisher has its own events fan-out class, and it goes when a group's fan-out is merged. |  | — |
 | `bynk.deploy.multiple_websocket_members` | More than one member of a `[deploy.workers.<key>]` group declares a `from websocket` service; an upgrade request names no path or service a group could route it by, so a group has at most one such member. |  | — |
 | `bynk.deploy.not_a_context` | A `[deploy.workers.<key>]` group lists a unit that is not a `context`; only contexts are deployed as Workers. |  | — |
-| `bynk.deploy.queue_consumer_conflict` | Two members of one `[deploy.workers.<key>]` group consume the same queue; a Worker has one consumer for a queue. |  | — |
 | `bynk.deploy.route_conflict` | Two members of one `[deploy.workers.<key>]` group declare the same HTTP method and path; a Worker answers a route with one handler. |  | — |
 | `bynk.deploy.service_name_conflict` | Two members of one `[deploy.workers.<key>]` group declare a service of the same name; a Worker answers its members' services by name. |  | — |
 | `bynk.deploy.unknown_context` | A `[deploy.workers.<key>]` group lists a context the project does not declare. |  | — |
@@ -788,7 +787,7 @@ There are **893** codes in total.
 | Code | Summary | Construct | Severity |
 |---|---|---|---|
 | [`bynk.queue.bad_params`](/book/reference/queue/#handler-form) | An `on message` handler does not take exactly one `message` parameter. | [`queue_handler`](/book/reference/grammar/#rule-queue_handler) | — |
-| [`bynk.queue.duplicate_consumer`](/book/reference/queue/#handler-form) | Two `on message` handlers consume the same queue. | [`queue_handler`](/book/reference/grammar/#rule-queue_handler) | — |
+| [`bynk.queue.duplicate_consumer`](/book/reference/queue/#handler-form) | Two `on message` handlers, in one context or in two, consume the same queue. | [`queue_handler`](/book/reference/grammar/#rule-queue_handler) | — |
 | [`bynk.queue.invalid_name`](/book/reference/queue/#handler-form) | A `from queue("…")` binding has an empty queue name, or one Cloudflare refuses. | [`queue_handler`](/book/reference/grammar/#rule-queue_handler) | — |
 | [`bynk.queue.return_not_queue_result`](/book/reference/queue/#handler-form) | An `on message` handler does not return `Effect[QueueResult]`. | [`handler`](/book/reference/grammar/#rule-handler) | — |
 

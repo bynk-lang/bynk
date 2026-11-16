@@ -1,0 +1,2 @@
+# exact
+contexts `shop.orders` and `shop.payment` both consume queue `jobs`

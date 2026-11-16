@@ -1,0 +1,7 @@
+context shop.payment
+
+service payment_worker from queue("jobs") {
+  on message(message: String) -> Effect[QueueResult] {
+    Ack
+  }
+}

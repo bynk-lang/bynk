@@ -1,0 +1,13 @@
+context shop.admin
+
+// #3644: a producer of `jobs`; any number may send to a queue that has one consumer.
+consumes bynk.cloudflare { Queue }
+
+capability Jobs = Queue @name("jobs")
+
+service api from http {
+  on POST("/admin") () -> Effect[HttpResult[String]] by Visitor given Jobs {
+    let _ <- Jobs.send("admin")
+    Created("queued")
+  }
+}
