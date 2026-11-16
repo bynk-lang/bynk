@@ -28,6 +28,7 @@ per-commit history. While Bynk is pre-1.0, increments may change behaviour.
 
 | Version | Highlights |
 |---|---|
+| **v0.633.1** | The `bynk dev inspect` reference, the run-locally guide and the runtime-library chapter describe agent inspection, and a workerd test shows a dev session's outcomes match a deploy build's (slice 0c of the dev agent-inspection track) |
 | **v0.633.0** | `AnalyticsSql` reads Analytics Engine datasets through the account's SQL API, as one binding per Worker with positional `$1` parameters of `SqlValue`, a typed result and a `SqlRetryable | SqlRejected` error; `bynk dev` runs it on Cloudflare, with a one-time notice silenced by `[dev] analytics-sql = "allow"`; `Analytics.dataset()` names a dataset's environment-qualified table for such a query |
 | **v0.632.2** | A `bynk dev --trace-events` request names the request that called it, so a client can join a call across Workers |
 | **v0.632.1** | `bynk dev inspect agents` lists a running session's agent instances by key, and `bynk dev inspect agent <Class> <key>` reads one's stored state as JSON (slice 0b of the dev agent-inspection track) |
