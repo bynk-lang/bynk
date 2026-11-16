@@ -829,42 +829,7 @@ fn publishing(run: &mut Run<'_>, reader: &mut Client, api: &str, token: &str) {
     };
     let mut flip = |run: &mut Run<'_>, id: &'static str, verb: &str, want: bool| {
         let result = match yank(verb) {
-            Ok((200, _, _)) => {
-                // A cached index may lag the yank (caching is the operator's
-                // choice), so read until it shows the change or the cache's
-                // longest life has passed.
-                let started = Instant::now();
-                loop {
-                    reader.forget(name, &package);
-                    let seen = match reader.lines(name, &package) {
-                        Ok(lines) => match lines.iter().find(|l| l.version == "0.0.1") {
-                            Some(l) => Ok(l.yanked == want),
-                            None => Err("the line disappeared".to_string()),
-                        },
-                        Err(e) => Err(e.to_string()),
-                    };
-                    let waited = started.elapsed();
-                    match seen {
-                        Ok(true) if waited < YANK_POLL => {
-                            break Ok(format!("200, and the index shows yanked = {want}"));
-                        }
-                        Ok(true) => {
-                            break Ok(format!(
-                                "200, and the index shows yanked = {want} after {}s",
-                                waited.as_secs()
-                            ));
-                        }
-                        Ok(false) if waited < YANK_SETTLE => std::thread::sleep(YANK_POLL),
-                        Ok(false) => {
-                            break Err(format!(
-                                "200, but the index doesn't show yanked = {want} after {}s",
-                                waited.as_secs()
-                            ));
-                        }
-                        Err(e) => break Err(e),
-                    }
-                }
-            }
+            Ok((200, _, _)) => index_shows_yank(reader, name, &package, want),
             Ok((status, _, body)) => Err(format!("expected 200, got {status}: {}", snippet(&body))),
             Err(e) => Err(e),
         };
@@ -1021,6 +986,44 @@ fn hex4() -> String {
 }
 
 /// The current UTC time as `yyyymmddhhmmss`.
+/// After a `200` yank or un-yank: whether `package`'s index comes to show
+/// `0.0.1` with `yanked = want`. A cached index may lag the change (caching is
+/// the operator's choice), so read until it shows it or the cache's longest
+/// life has passed.
+fn index_shows_yank(
+    reader: &mut Client,
+    name: &str,
+    package: &str,
+    want: bool,
+) -> Result<String, String> {
+    let started = Instant::now();
+    loop {
+        reader.forget(name, package);
+        let lines = reader.lines(name, package).map_err(|e| e.to_string())?;
+        let Some(line) = lines.iter().find(|l| l.version == "0.0.1") else {
+            return Err("the line disappeared".to_string());
+        };
+        let waited = started.elapsed();
+        if line.yanked == want {
+            return Ok(if waited < YANK_POLL {
+                format!("200, and the index shows yanked = {want}")
+            } else {
+                format!(
+                    "200, and the index shows yanked = {want} after {}s",
+                    waited.as_secs()
+                )
+            });
+        }
+        if waited >= YANK_SETTLE {
+            return Err(format!(
+                "200, but the index doesn't show yanked = {want} after {}s",
+                waited.as_secs()
+            ));
+        }
+        std::thread::sleep(YANK_POLL);
+    }
+}
+
 fn utc_stamp() -> String {
     let secs = std::time::SystemTime::now()
         .duration_since(std::time::UNIX_EPOCH)
