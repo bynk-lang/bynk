@@ -1,11 +1,6 @@
----
-level: patch
-changelog: `bynk/wireContract` carries an HTTP handler's success payload: a `success` ref to the `T` of `HttpResult[T]` and a `payload` per response (#3609)
----
+# 0870 — `bynk/wireContract` carries an HTTP handler's success payload
 
-## ADR: wire-contract-success-payload
-title: `bynk/wireContract` carries an HTTP handler's success payload
-summary: `success` on the HTTP model and `payload` per response, resolved into the existing `types`/`instantiations`
+- **Status:** Accepted (v0.633.4)
 
 **Context.** For an HTTP handler, `bynk/wireContract` listed the reachable
 responses as `{status, variant, origin}` only. The declared return type was
