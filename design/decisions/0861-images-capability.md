@@ -1,12 +1,6 @@
----
-level: minor
-changelog: `bynk.cloudflare` gains `Images`, a one-per-Worker capability over Cloudflare's `images` binding, with `transform` and `info` over `Bytes` (experimental; #3515)
-probes: emit_diagnostics, emit_abi_shapes, ts_writes
----
+# 0861 — Cloudflare Images is a one-per-Worker `Images` capability: a flat typed `transform` over `Bytes`
 
-## ADR: images-capability
-title: Cloudflare Images is a one-per-Worker `Images` capability: a flat typed `transform` over `Bytes`
-summary: A `Singleton` `Images` over the `[images]` binding, typed options, errors by code, stub-only in tests
+- **Status:** Accepted (v0.628)
 
 **Context.** Cloudflare's Images binding resizes, converts and draws on images in the Worker from the bytes it holds, with no URL and no zone. ADR 0798 anticipated it beside Version and Workers AI, and ADR 0833 added the second `Singleton`. The proposal (#3515) was written when Cloudflare's documentation was unreachable, so its first slice checked every platform fact against [Images binding](https://developers.cloudflare.com/images/optimization/binding/), [limits and formats](https://developers.cloudflare.com/images/get-started/limits/), [draw overlays](https://developers.cloudflare.com/images/optimization/draw-overlays/), [features](https://developers.cloudflare.com/images/optimization/features/), [troubleshooting](https://developers.cloudflare.com/images/reference/troubleshooting/), Wrangler's configuration page and `@cloudflare/workers-types`.
 
