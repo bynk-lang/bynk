@@ -20,6 +20,7 @@ Effects are explicit and capability-gated: a handler declares what it needs via
 - [Wrap a library as an adapter](/book/guides/effects-and-capabilities/wrap-a-library/)
 - [Use more than one KV namespace](/book/guides/effects-and-capabilities/use-several-kv-namespaces/)
 - [Call a Worker outside the project](/book/guides/effects-and-capabilities/call-a-foreign-worker/)
+- [Call an mTLS origin](/book/guides/effects-and-capabilities/call-an-mtls-origin/)
 - [Query rows into a record without repeating the columns](/book/guides/effects-and-capabilities/query-rows-into-a-record/)
 - [Connect an existing Postgres database](/book/guides/effects-and-capabilities/connect-an-existing-postgres-database/)
 - [Connect an existing MySQL database](/book/guides/effects-and-capabilities/connect-an-existing-mysql-database/)
