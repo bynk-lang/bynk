@@ -16,5 +16,11 @@ export function compose(env: Env) {
     async http_GET_orders() {
       return handlers.api.http_GET_orders(deps);
     },
+    async http_GET_orders_raw() {
+      return handlers.api.http_GET_orders_raw(deps);
+    },
+    async http_POST_orders(body: string) {
+      return handlers.api.http_POST_orders(body, deps);
+    },
   };
 }

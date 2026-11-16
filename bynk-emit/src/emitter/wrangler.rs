@@ -1694,6 +1694,43 @@ pub fn materialise_stored_secret_stores(
     })
 }
 
+/// #3513 A: point `[[mtls_certificates]]` entries at their certificates' ids, structurally, by
+/// binding. Unchanged text when nothing differs.
+pub fn materialise_mtls_certificates(
+    text: &str,
+    certificates: &std::collections::BTreeMap<String, String>,
+) -> Result<String, String> {
+    let mut doc: toml_edit::DocumentMut = text
+        .parse()
+        .map_err(|e| format!("invalid wrangler.toml: {e}"))?;
+    let mut changed = false;
+    if let Some(entries) = doc
+        .get_mut("mtls_certificates")
+        .and_then(|i| i.as_array_of_tables_mut())
+    {
+        for entry in entries.iter_mut() {
+            let Some(id) = entry
+                .get("binding")
+                .and_then(|b| b.as_str())
+                .and_then(|b| certificates.get(b))
+            else {
+                continue;
+            };
+            if let Some(item) = entry.get_mut("certificate_id")
+                && item.as_str() != Some(id.as_str())
+            {
+                set_string_preserving_decor(item, id);
+                changed = true;
+            }
+        }
+    }
+    Ok(if changed {
+        doc.to_string()
+    } else {
+        text.to_string()
+    })
+}
+
 /// A generated `wrangler.toml`'s `[[r2_buckets]]` entries as `(binding,
 /// bucket_name, jurisdiction)`, in file order; an entry missing a binding or
 /// a name is skipped.
@@ -1954,6 +1991,135 @@ pub fn enable_remote_ai_search(text: &str) -> Result<String, String> {
     })
 }
 
+/// #3513 A: the binding of each `[[mtls_certificates]]` entry, in file order.
+pub fn mtls_certificate_bindings(text: &str) -> Result<Vec<String>, String> {
+    let doc: toml_edit::DocumentMut = text
+        .parse()
+        .map_err(|e| format!("invalid wrangler.toml: {e}"))?;
+    Ok(doc
+        .get("mtls_certificates")
+        .and_then(|i| i.as_array_of_tables())
+        .into_iter()
+        .flatten()
+        .filter_map(|t| Some(t.get("binding")?.as_str()?.to_string()))
+        .collect())
+}
+
+/// #3513 A: `text` without the `[[mtls_certificates]]` entries bound as `bindings`. `bynk dev`
+/// drops a certificate no deploy has linked from its development copy: marked `remote = true`
+/// with a name where an id belongs, it could fail wrangler's whole startup, and unbound the Worker
+/// serves and only a call through the binding fails. Unchanged text when none matches.
+pub fn drop_mtls_certificates(text: &str, bindings: &[String]) -> Result<String, String> {
+    let mut doc: toml_edit::DocumentMut = text
+        .parse()
+        .map_err(|e| format!("invalid wrangler.toml: {e}"))?;
+    let mut changed = false;
+    let mut now_empty = false;
+    if let Some(entries) = doc
+        .get_mut("mtls_certificates")
+        .and_then(|i| i.as_array_of_tables_mut())
+    {
+        let before = entries.len();
+        entries.retain(|e| {
+            !e.get("binding")
+                .and_then(|b| b.as_str())
+                .is_some_and(|b| bindings.iter().any(|x| x == b))
+        });
+        changed = entries.len() != before;
+        now_empty = entries.is_empty();
+    }
+    if now_empty {
+        doc.remove("mtls_certificates");
+    }
+    Ok(if changed {
+        doc.to_string()
+    } else {
+        text.to_string()
+    })
+}
+
+/// #3513 A: the config `bynk dev` serves, where each `[[mtls_certificates]]` entry also carries
+/// `remote = true`: there is no local simulation of an mTLS binding, so wrangler runs it on
+/// Cloudflare. Only ever applied to the development copy; the config `bynk deploy` reads never
+/// carries it. Unchanged text when there is no such entry.
+pub fn enable_remote_mtls(text: &str) -> Result<String, String> {
+    let mut doc: toml_edit::DocumentMut = text
+        .parse()
+        .map_err(|e| format!("invalid wrangler.toml: {e}"))?;
+    let mut changed = false;
+    if let Some(entries) = doc
+        .get_mut("mtls_certificates")
+        .and_then(|i| i.as_array_of_tables_mut())
+    {
+        for entry in entries.iter_mut() {
+            if entry.get("remote").and_then(|r| r.as_bool()) != Some(true) {
+                entry.insert("remote", toml_edit::value(true));
+                changed = true;
+            }
+        }
+    }
+    Ok(if changed {
+        doc.to_string()
+    } else {
+        text.to_string()
+    })
+}
+
+/// #3581 (the dev agent-inspection track): the development copy of a Worker's
+/// config binds the registry Durable Object its `index.ts` re-exports
+/// (`BynkInspectRegistry`) as `__BYNK_INSPECT_REGISTRY`, and declares its class,
+/// SQLite-backed like every other. Only ever applied to the development copy: the
+/// config `bynk deploy` reads is a different build, which never carries it. A
+/// Worker whose entry does not re-export the class (one that hosts no agent) is
+/// returned unchanged, as is one that already has it.
+pub fn enable_agent_inspection(text: &str, entry: &str) -> Result<String, String> {
+    const CLASS: &str = "BynkInspectRegistry";
+    if !entry.contains(CLASS) {
+        return Ok(text.to_string());
+    }
+    let mut doc: toml_edit::DocumentMut = text
+        .parse()
+        .map_err(|e| format!("invalid wrangler.toml: {e}"))?;
+    let bound = doc
+        .get("durable_objects")
+        .and_then(|d| d.get("bindings"))
+        .and_then(|b| b.as_array_of_tables())
+        .is_some_and(|rows| {
+            rows.iter()
+                .any(|r| r.get("class_name").and_then(|c| c.as_str()) == Some(CLASS))
+        });
+    if bound {
+        return Ok(text.to_string());
+    }
+    let mut binding = toml_edit::Table::new();
+    binding.insert("name", toml_edit::value("__BYNK_INSPECT_REGISTRY"));
+    binding.insert("class_name", toml_edit::value(CLASS));
+    let durable = doc
+        .entry("durable_objects")
+        .or_insert_with(|| toml_edit::Item::Table(toml_edit::Table::new()))
+        .as_table_mut()
+        .ok_or("`durable_objects` is not a table")?;
+    durable
+        .entry("bindings")
+        .or_insert_with(|| toml_edit::Item::ArrayOfTables(toml_edit::ArrayOfTables::new()))
+        .as_array_of_tables_mut()
+        .ok_or("`durable_objects.bindings` is not an array of tables")?
+        .push(binding);
+    let mut class = toml_edit::Table::new();
+    class.insert("type", toml_edit::value("durable-object"));
+    class.insert("storage", toml_edit::value("sqlite"));
+    doc.entry("exports")
+        .or_insert_with(|| {
+            let mut t = toml_edit::Table::new();
+            t.set_implicit(true);
+            toml_edit::Item::Table(t)
+        })
+        .as_table_mut()
+        .ok_or("`exports` is not a table")?
+        .insert(CLASS, toml_edit::Item::Table(class));
+    Ok(doc.to_string())
+}
+
 /// Each `[[kv_namespaces]]` entry's `(binding, id)`, in file order; an entry
 /// missing either is skipped.
 fn kv_entries(doc: &toml_edit::DocumentMut) -> impl Iterator<Item = (&str, &str)> {
@@ -1962,6 +2128,90 @@ fn kv_entries(doc: &toml_edit::DocumentMut) -> impl Iterator<Item = (&str, &str)
         .into_iter()
         .flatten()
         .filter_map(|t| Some((t.get("binding")?.as_str()?, t.get("id")?.as_str()?)))
+}
+
+#[cfg(test)]
+mod mtls_tests {
+    use super::*;
+
+    const CONFIG: &str = "name = \"shop\"\n\n[[mtls_certificates]]\nbinding = \"MTLS_BACKEND\"\ncertificate_id = \"acme-client\" # the certificate's name\n\n[[mtls_certificates]]\nbinding = \"MTLS_OTHER\"\ncertificate_id = \"ops\"\n";
+
+    #[test]
+    fn the_stanza_names_the_certificate_and_a_binding_lists_each_entry() {
+        assert_eq!(
+            mtls_certificate_bindings(CONFIG).unwrap(),
+            ["MTLS_BACKEND", "MTLS_OTHER"]
+        );
+        assert!(
+            mtls_certificate_bindings("name = \"shop\"\n")
+                .unwrap()
+                .is_empty()
+        );
+    }
+
+    #[test]
+    fn materialising_replaces_only_the_linked_bindings_ids_and_keeps_the_comment() {
+        let ids =
+            std::collections::BTreeMap::from([("MTLS_BACKEND".to_string(), "c-123".to_string())]);
+        let out = materialise_mtls_certificates(CONFIG, &ids).unwrap();
+        assert!(
+            out.contains("certificate_id = \"c-123\" # the certificate's name"),
+            "{out}"
+        );
+        assert!(out.contains("certificate_id = \"ops\""), "{out}");
+        // A repeat changes nothing.
+        assert_eq!(materialise_mtls_certificates(&out, &ids).unwrap(), out);
+        assert!(materialise_mtls_certificates("not = [valid", &ids).is_err());
+    }
+
+    #[test]
+    fn the_development_copy_runs_each_binding_on_the_account() {
+        let out = enable_remote_mtls(CONFIG).unwrap();
+        assert_eq!(out.matches("remote = true").count(), 2, "{out}");
+        assert_eq!(enable_remote_mtls(&out).unwrap(), out);
+        let plain = "name = \"shop\"\n";
+        assert_eq!(enable_remote_mtls(plain).unwrap(), plain);
+        assert!(enable_remote_mtls("not = [valid").is_err());
+        // The config the deploy reads is the original, which never carries it.
+        assert!(!CONFIG.contains("remote"));
+    }
+}
+
+#[cfg(test)]
+mod inspect_dev_tests {
+    use super::*;
+
+    const ENTRY: &str = "import { BynkInspectRegistry } from \"../../__bynk_runtime/inspect.js\";\nexport { BynkInspectRegistry };\n";
+
+    /// The development copy of a Worker that hosts agents binds the registry and
+    /// declares its class; applying it again changes nothing.
+    #[test]
+    fn the_development_copy_binds_the_registry() {
+        let text = "name = \"shop\"\n\n[[durable_objects.bindings]]\nname = \"CART\"\nclass_name = \"Cart\"\n\n[exports.Cart]\ntype = \"durable-object\"\nstorage = \"sqlite\"\n";
+        let out = enable_agent_inspection(text, ENTRY).unwrap();
+        assert!(out.contains("name = \"__BYNK_INSPECT_REGISTRY\""), "{out}");
+        assert!(
+            out.contains("class_name = \"BynkInspectRegistry\""),
+            "{out}"
+        );
+        assert!(out.contains("[exports.BynkInspectRegistry]"), "{out}");
+        assert!(out.contains("class_name = \"Cart\""), "{out}");
+        assert_eq!(enable_agent_inspection(&out, ENTRY).unwrap(), out);
+    }
+
+    /// A Worker whose entry does not re-export the class is left as it was.
+    #[test]
+    fn a_worker_without_the_registry_export_is_unchanged() {
+        let text = "name = \"shop\"\n";
+        assert_eq!(enable_agent_inspection(text, "export {};\n").unwrap(), text);
+    }
+
+    /// A Worker with no durable-object bindings yet gets the first.
+    #[test]
+    fn a_worker_with_no_bindings_gets_the_first() {
+        let out = enable_agent_inspection("name = \"shop\"\n", ENTRY).unwrap();
+        assert!(out.contains("[[durable_objects.bindings]]"), "{out}");
+    }
 }
 
 #[cfg(test)]

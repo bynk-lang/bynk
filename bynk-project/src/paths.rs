@@ -252,6 +252,7 @@ pub const MANIFEST_TABLES: &[(&str, &[&str])] = &[
             "hyperdrive",
             "ai",
             "ai-search",
+            "mtls",
             "vectorize",
             "vectorize-index",
         ],

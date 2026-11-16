@@ -334,6 +334,7 @@ fn single_file_ctx() -> EmitProjectCtx {
         import_ext: crate::emit_model::ImportExt::Js,
         contracts: false,
         trace: None,
+        inspect_agents: false,
         source_path: PathBuf::new(),
         identity_path: String::new(),
         commons_name: String::new(),
@@ -1351,7 +1352,12 @@ fn emit_json_codec_helpers(
 /// target — every handler's parameters and its return type — in agent then
 /// handler order. Positions with no codec (`agent_wire_passes_through`) carry
 /// no named types to collect, so they are left out.
-pub(crate) fn agent_call_boundary_roots(agents: &HashMap<String, AgentDecl>) -> Vec<TypeRef> {
+pub(crate) fn agent_call_boundary_roots(
+    agents: &HashMap<String, AgentDecl>,
+    // #3581: a `bynk dev` build records each instance's key, so every agent's key
+    // type is a boundary type, not only one an agent reads.
+    inspect: bool,
+) -> Vec<TypeRef> {
     let mut names: Vec<&String> = agents.keys().collect();
     names.sort();
     let mut roots = Vec::new();
@@ -1364,7 +1370,7 @@ pub(crate) fn agent_call_boundary_roots(agents: &HashMap<String, AgentDecl>) -> 
         }
         // #1818: an agent that reads its own key is sent it with each call,
         // through the key type's codec.
-        if crate::emitter::emit::agent_reads_key(&agents[name]) {
+        if inspect || crate::emitter::emit::agent_reads_key(&agents[name]) {
             roots.push(agents[name].key_type.clone());
         }
     }
@@ -1434,7 +1440,7 @@ fn emit_boundary_helpers(
         // every agent handler's parameter and return types are boundary types
         // too. On `bundle` the call is in-process and needs no codec.
         let agent_call_roots: Vec<TypeRef> = if workers {
-            agent_call_boundary_roots(&agents)
+            agent_call_boundary_roots(&agents, ctx.inspect_agents)
         } else {
             Vec::new()
         };
@@ -3977,6 +3983,7 @@ fn write_header(commons: &TypedCommons, ctx: &EmitProjectCtx) -> Vec<bynk_ts::Ts
             parts.push("type __DurableObjectNamespace");
             parts.push("__StateRegistry");
             parts.push("__makeAgent");
+            parts.extend(inspect_agent_imports(workers && ctx.inspect_agents));
         } else if workers
             && commons
                 .callees
@@ -4588,6 +4595,16 @@ pub fn effect_runtime_imports(ru: &RuntimeUse) -> &'static str {
 
 /// #2620: the deliberate-fault helper behind `unreachable`/`todo`.
 pub const FAULT_RUNTIME_IMPORTS: &str = ", __fault";
+/// #3581: what a `bynk dev` build's agent module imports to record an instance and
+/// answer the inspect route.
+fn inspect_agent_imports(on: bool) -> Vec<&'static str> {
+    if on {
+        vec!["__noteAgentInstance", "__inspectAgent"]
+    } else {
+        Vec::new()
+    }
+}
+
 /// #3580: the trace helpers a traced build's module imports, by what it used:
 /// `__traceStep` around a call, `__traceBinding` around a cross-context call's
 /// Service Binding.

@@ -17,6 +17,10 @@ or a row links to no file. Summaries and statuses are curated by hand; the
 
 | # | Decision | Status |
 |---|---|---|
+| [0867](0867-mtls-certificate-deploy-link.md) | **`bynk deploy` links an mTLS certificate by name and never uploads it; `bynk dev` runs it remotely** (v0.632) — Resolve the name over the REST list, match client certificates only, record a name and an id, never key material; remote-only under `bynk dev` | Accepted (v0.632) |
+| [0866](0866-images-transform-stream.md) | **`Images.transformStream` is `transform` over streams, and its result is not data** (v0.630) — A streamed form of `Images.transform`: `Stream[Bytes]` in, `ImageStream` out, refusals before the stream starts are values | Accepted (v0.630) |
+| [0865](0865-dev-agent-inspection.md) | **`bynk dev` lists agent instances and reads their state through a dev-only registry and a signed inspect route** (v0.629.5) — A dev build records each instance's key in a registry Durable Object and answers a signed, read-only `/_bynk/inspect/` route; a deploy build contains neither | Accepted (v0.629.5) |
+| [0864](0864-unstubbed-binding-faults.md) | **An integration double's not-stubbed fault is marked and never mapped to an error value** (v0.629.4) — The marker the `bynk.cloudflare` bindings rethrow, shared with `Images` | Accepted (v0.629.4) |
 | [0863](0863-eval-snippet-as-test-case.md) | **A snippet is evaluated as a synthetic test case that reports its value** (v0.629.3) — `bynk eval` builds on the doc-example path; stateless, stub-only, explicit and local, and no change to ADR 0638 | Accepted (v0.629.3) |
 | [0862](0862-bynk-client-http-contract-hash.md) | **`bynk client`: an informational contract hash for `from http` routes** (v0.629) — A generated client carries a FNV-1a hash of what it acts on for each route and service, sends it only on request, and nothing rejects a mismatch | Accepted (v0.629) |
 | [0861](0861-images-capability.md) | **Cloudflare Images is a one-per-Worker `Images` capability: a flat typed `transform` over `Bytes`** (v0.628) — A `Singleton` `Images` over the `[images]` binding, typed options, errors by code, stub-only in tests | Accepted (v0.628) |

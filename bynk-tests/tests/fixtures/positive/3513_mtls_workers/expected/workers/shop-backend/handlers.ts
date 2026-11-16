@@ -29,4 +29,32 @@ export const api = {
     }
     throw new globalThis.Error("non-exhaustive match");
   },
+  async http_GET_orders_raw(deps: { Backend: Backend }): globalThis.Promise<HttpResult<number>> {
+    const req = { method: Method.Get, url: "https://orders.acme.example/v1/orders", contentType: None, authorization: None, headers: new globalThis.Map<string, string>(), body: None };
+    const res = await deps.Backend.receiveBytes(req);
+    switch (res.tag) {
+      case "Ok": {
+        const r = res.value;
+        return HttpResult.Ok((r.body).length);
+      }
+      case "Err": {
+        return HttpResult.ServerError("the origin is unreachable");
+      }
+    }
+    throw new globalThis.Error("non-exhaustive match");
+  },
+  async http_POST_orders(body: string, deps: { Backend: Backend }): globalThis.Promise<HttpResult<number>> {
+    const req = { method: Method.Post, url: "https://orders.acme.example/v1/orders", contentType: Some("application/octet-stream"), authorization: None, headers: new globalThis.Map<string, string>(), body: None };
+    const res = await deps.Backend.sendBytes(req, new globalThis.TextEncoder().encode(body));
+    switch (res.tag) {
+      case "Ok": {
+        const r = res.value;
+        return HttpResult.Ok(r.status);
+      }
+      case "Err": {
+        return HttpResult.ServerError("the origin is unreachable");
+      }
+    }
+    throw new globalThis.Error("non-exhaustive match");
+  },
 };

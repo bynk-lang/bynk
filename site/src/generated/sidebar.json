@@ -250,6 +250,10 @@
             "link": "/book/guides/effects-and-capabilities/call-a-foreign-worker/"
           },
           {
+            "label": "Call an mTLS origin",
+            "link": "/book/guides/effects-and-capabilities/call-an-mtls-origin/"
+          },
+          {
             "label": "Store files in R2",
             "link": "/book/guides/effects-and-capabilities/store-files-in-r2/"
           },
@@ -442,6 +446,10 @@
           {
             "label": "Check what a request stored",
             "link": "/book/guides/testing/check-what-the-app-stored/"
+          },
+          {
+            "label": "Try an expression against your project",
+            "link": "/book/guides/testing/try-an-expression/"
           },
           {
             "label": "Test against a running system",

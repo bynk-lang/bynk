@@ -126,6 +126,25 @@ async function __sysdrive_wrongmethod_safe(method: string, path: string) {
   const __res = await __h.env.SHOP_THUMBS.fetch(__req);
   return __responseToHttpOutcome(__res, (__j: __JsonValue) => Ok(__j as never));
 }
+async function __sysdrive_streams_http_POST_resize(body: globalThis.Uint8Array, __extraHeaders: { get(name: string): { readonly tag: "Some"; readonly value: string } | { readonly tag: "None" }; bearer(): { readonly tag: "Some"; readonly value: string } | { readonly tag: "None" }; clientIp(): { readonly tag: "Some"; readonly value: string } | { readonly tag: "None" } } | undefined, __sub: string) {
+  const __body = body;
+  const __h = __makeHarness();
+  const __req = new globalThis.Request(`https://test/resize`, { method: "POST", headers: { ...(__extraHeaders ? __requestHeaderPairs(__extraHeaders, true) : {}), "content-type": "application/octet-stream", }, body: __body as BufferSource, });
+  const __res = await __h.env.SHOP_THUMBS.fetch(__req);
+  return __responseToHttpResult(__res, (__j: __JsonValue) => Ok(undefined) as Result<void, __BoundaryError>);
+}
+async function __sysdrive_raw_streams_http_POST_resize(body: string, __extraHeaders: { get(name: string): { readonly tag: "Some"; readonly value: string } | { readonly tag: "None" }; bearer(): { readonly tag: "Some"; readonly value: string } | { readonly tag: "None" }; clientIp(): { readonly tag: "Some"; readonly value: string } | { readonly tag: "None" } } | undefined, __sub: string) {
+  const __h = __makeHarness();
+  const __req = new globalThis.Request(`https://test/resize`, { method: "POST", headers: { ...(__extraHeaders ? __requestHeaderPairs(__extraHeaders, true) : {}), "content-type": "text/plain; charset=utf-8", }, body: body, });
+  const __res = await __h.env.SHOP_THUMBS.fetch(__req);
+  return __responseToHttpOutcome(__res, (__j: __JsonValue) => Ok(undefined) as Result<void, __BoundaryError>);
+}
+async function __sysdrive_wrongmethod_streams(method: string, path: string) {
+  const __h = __makeHarness();
+  const __req = new globalThis.Request(`https://test${path}`, { method });
+  const __res = await __h.env.SHOP_THUMBS.fetch(__req);
+  return __responseToHttpOutcome(__res, (__j: __JsonValue) => Ok(__j as never));
+}
 
 async function test_the_participant_s_unstubbed_binding_faults__it_is_not_an_error_value() {
   try {

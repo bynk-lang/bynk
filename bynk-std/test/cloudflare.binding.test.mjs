@@ -319,6 +319,53 @@ t("WorkersMtls.send: each instance reads its own binding", async () => {
   assert.equal(b.sent.length, 1);
 });
 
+t("WorkersMtls.receiveBytes: reads the response body as bytes, over the binding", async () => {
+  const cert = fakeService(() => new Response(new Uint8Array([0, 255, 7]), { status: 200 }));
+  const res = await new WorkersMtls({ MTLS_BACKEND: cert }, "MTLS_BACKEND").receiveBytes(mtlsRequest());
+  assert.equal(res.tag, "Ok");
+  assert.deepEqual([...res.value.body], [0, 255, 7]);
+  assert.equal(cert.sent.length, 1);
+});
+
+t("WorkersMtls.sendBytes: sends a Bytes body over the binding", async () => {
+  const cert = fakeService(() => new Response("ok", { status: 200 }));
+  const res = await new WorkersMtls({ MTLS_BACKEND: cert }, "MTLS_BACKEND").sendBytes(
+    mtlsRequest({ method: Method.Post }),
+    new Uint8Array([1, 2, 3]),
+  );
+  assert.equal(res.tag, "Ok");
+  assert.equal(cert.sent[0].method, "POST");
+  assert.equal(cert.sent[0].body, "\u0001\u0002\u0003");
+});
+
+t("WorkersMtls.sendBytes: a refused header is Err(InvalidHeader), and nothing is sent", async () => {
+  const cert = fakeService();
+  const res = await new WorkersMtls({ MTLS_BACKEND: cert }, "MTLS_BACKEND").sendBytes(
+    mtlsRequest({ method: Method.Post, headers: new Map([["host", "elsewhere"]]) }),
+    new Uint8Array([1]),
+  );
+  assert.deepEqual(res, { tag: "Err", error: FetchError.InvalidHeader });
+  assert.equal(cert.sent.length, 0);
+});
+
+t("WorkersMtls.send: a dev notice names no price, and is silenced by the acknowledgement", async () => {
+  const warned = [];
+  const warn = console.warn;
+  console.warn = (m) => warned.push(m);
+  try {
+    const cert = fakeService();
+    const dev = { MTLS_BACKEND: cert, BYNK_DEV: "1" };
+    await new WorkersMtls(dev, "MTLS_BACKEND").send(mtlsRequest());
+    await new WorkersMtls(dev, "MTLS_BACKEND").send(mtlsRequest());
+    assert.equal(warned.length, 1, "once");
+    assert.match(warned[0], /mTLS certificate binding has no local simulation/);
+    assert.match(warned[0], /mtls = "allow" under \[dev\]/);
+    assert.doesNotMatch(warned[0], /charge|price|pricing|\$/i);
+  } finally {
+    console.warn = warn;
+  }
+});
+
 t("WorkersMtls.send: a missing binding names it", async () => {
   await assert.rejects(
     new WorkersMtls({}, "MTLS_BACKEND").send(mtlsRequest()),
@@ -1473,6 +1520,85 @@ t("WorkersImages.transform: the integration double's not-stubbed fault is rethro
   // An unknown fit is refused before the platform, like an unknown format.
   const r = await new WorkersImages({ IMAGES: fakeImages() }).transform(IMG, imgOpts({ fit: Some({ tag: "Zoom" }) }), outOpts());
   assert.deepEqual(r, { tag: "Err", error: { tag: "InvalidImage", message: "the fit Zoom has no wire name in this binding" } });
+});
+
+async function* imageChunks(parts, log = []) {
+  try {
+    for (const p of parts) yield p;
+  } finally {
+    log.push("released");
+  }
+}
+const drainBytes = async (it) => {
+  const out = [];
+  for await (const c of it) out.push(...c);
+  return out;
+};
+
+t("WorkersImages.transformStream: reads the input stream, gives the output as a stream, and builds the same pipeline", async () => {
+  const images = fakeImages();
+  const r = await new WorkersImages({ IMAGES: images }).transformStream(imageChunks([new Uint8Array([1, 2]), new Uint8Array([3])]), imgOpts({ width: Some(64) }), outOpts());
+  assert.equal(r.tag, "Ok");
+  assert.equal(r.value.contentType, "image/webp");
+  assert.deepEqual(await drainBytes(r.value.body), [9, 9]);
+  assert.deepEqual(images.calls[0].bytes, new Uint8Array([1, 2, 3]));
+  assert.deepEqual(images.calls[0].steps, [{ transform: { width: 64 } }]);
+  assert.deepEqual(images.calls[0].output, { format: "image/webp" });
+});
+
+t("WorkersImages.transformStream: a bad option is InvalidImage before anything is read, the iterator is closed and the stream is claimed", async () => {
+  const images = fakeImages();
+  let pulled = 0;
+  let closed = 0;
+  const source = {
+    [Symbol.asyncIterator]() {
+      return {
+        async next() {
+          pulled += 1;
+          return { done: true, value: undefined };
+        },
+        async return() {
+          closed += 1;
+          return { done: true, value: undefined };
+        },
+      };
+    },
+  };
+  const wb = new WorkersImages({ IMAGES: images });
+  const r = await wb.transformStream(source, imgOpts({ width: Some(0) }), outOpts());
+  assert.equal(r.tag, "Err");
+  assert.equal(r.error.tag, "InvalidImage");
+  assert.deepEqual(images.calls, []);
+  assert.equal(pulled, 0, "nothing is read from a refused source");
+  assert.equal(closed, 1, "the iterator is closed");
+  // Claimed even though refused: a second use of the same stream is the fault.
+  await assert.rejects(wb.transformStream(source, imgOpts(), outOpts()), /read only once/);
+});
+
+t("WorkersImages.transformStream: a producer that throws stays a fault, it is not the platform's refusal", async () => {
+  async function* failing() {
+    yield new Uint8Array([1]);
+    throw new Error("producer broke");
+  }
+  // A fake that reads its input like the platform does, so the producer's failure surfaces from `output()`.
+  const images = fakeImages();
+  const wb = new WorkersImages({ IMAGES: images });
+  await assert.rejects(wb.transformStream(failing(), imgOpts(), outOpts()), /producer broke/);
+});
+
+t("WorkersImages.transformStream: a platform refusal before the stream starts is an error value, and the not-stubbed fault is rethrown", async () => {
+  const refused = Object.assign(new Error("not an image"), { name: "ImagesError", code: 9412 });
+  const r = await new WorkersImages({ IMAGES: fakeImages({ throws: refused }) }).transformStream(imageChunks([new Uint8Array([1])]), imgOpts(), outOpts());
+  assert.deepEqual(r, { tag: "Err", error: { tag: "InvalidImage", message: "not an image" } });
+  const notStubbed = Object.assign(new Error("not stubbed"), { bynkNotStubbed: true });
+  await assert.rejects(new WorkersImages({ IMAGES: fakeImages({ throws: notStubbed }) }).transformStream(imageChunks([new Uint8Array([1])]), imgOpts(), outOpts()), /not stubbed/);
+});
+
+t("WorkersImages.transformStream: an input stream can be read only once", async () => {
+  const input = imageChunks([new Uint8Array([1])]);
+  const wb = new WorkersImages({ IMAGES: fakeImages() });
+  await wb.transformStream(input, imgOpts(), outOpts());
+  await assert.rejects(wb.transformStream(input, imgOpts(), outOpts()), /read only once/);
 });
 
 t("WorkersImages: a Worker without the binding faults, naming the stanza", async () => {

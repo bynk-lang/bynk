@@ -641,7 +641,7 @@ pub fn run(
         );
         return ExitCode::FAILURE;
     }
-    proxy_ai_search(&workers_dir, &serving);
+    dev_config_patches(project_root, &workers_dir, &serving, &opts.environment);
     let stand_in_configs = match write_stand_ins(&build_dir, &stand_in_plans) {
         Ok(configs) => configs,
         Err(e) => {
@@ -814,6 +814,7 @@ pub fn run(
     eprint!("{}", stand_in_report(&stand_in_plans));
     let serving_now = serving_event(&serving, &opts.wrangler_args);
     emit(opts.format, &serving_now);
+    let _session = crate::dev_inspect::SessionFile::write(project_root, &session_of(&serving_now));
     // #2138: `--ready-json` — written from the watch loop below once every
     // served context answers a probe. The probe is plain HTTP on localhost,
     // so a server it can't reach never reads as ready; say so up front.
@@ -866,7 +867,7 @@ pub fn run(
             emit(opts.format, &DevEvent::Rebuilding);
             let rebuild = dev_build(opts);
             if crate::workers::compile_once_reporting(project_root, &build_dir, rebuild, None) {
-                proxy_ai_search(&workers_dir, &serving);
+                dev_config_patches(project_root, &workers_dir, &serving, &opts.environment);
                 // Interop I5 (#1972): refresh the served copy from the
                 // rebuilt config. A binding added since start has no
                 // stand-in until `bynk dev` restarts.
@@ -1027,6 +1028,7 @@ fn dev_build(opts: &DevOptions) -> crate::workers::Build {
     crate::workers::Build::new(true, false)
         .no_install(opts.no_install)
         .trace_requests(opts.trace_events)
+        .inspect_agents(true)
 }
 
 /// Whether `bynk dev` reads wrangler's output (#2474) rather than leaving it
@@ -2019,6 +2021,70 @@ fn serve_args(s: &Serving, edge_keys: &[String]) -> Vec<String> {
     args
 }
 
+/// The session file's record (#3581) of the contexts a `serving` event names.
+fn session_of(serving: &DevEvent) -> crate::dev_inspect::Session {
+    let DevEvent::Serving { contexts } = serving else {
+        unreachable!("serving_event builds a Serving event")
+    };
+    crate::dev_inspect::Session {
+        workers: contexts
+            .iter()
+            .map(|c| {
+                (
+                    c.name.clone(),
+                    crate::dev_inspect::SessionWorker {
+                        context: crate::dev_inspect::context_of_worker(&c.name),
+                        url: c.url.clone(),
+                    },
+                )
+            })
+            .collect(),
+    }
+}
+
+/// What `bynk dev` changes in each Worker's development copy of its config: the
+/// remote-only bindings (AI Search, #3480; mTLS certificates, #3513), and the
+/// agent-inspection registry (#3581).
+fn dev_config_patches(
+    project_root: &Path,
+    workers_dir: &Path,
+    serving: &[Serving],
+    environment: &str,
+) {
+    proxy_remote_bindings(project_root, workers_dir, serving, environment);
+    bind_inspect_registry(workers_dir, serving);
+}
+
+/// #3581: bind the agent-inspection registry in each Worker's development copy of its
+/// config, for a Worker whose entry exports its class (one that hosts an agent). The
+/// config `bynk deploy` reads is a different build and never carries it.
+fn bind_inspect_registry(workers_dir: &Path, serving: &[Serving]) {
+    for s in serving {
+        let dir = workers_dir.join(&s.worker);
+        let (Ok(text), Ok(entry)) = (
+            std::fs::read_to_string(dir.join("wrangler.toml")),
+            std::fs::read_to_string(dir.join("index.ts")),
+        ) else {
+            continue;
+        };
+        match bynk_emit::emitter::wrangler::enable_agent_inspection(&text, &entry) {
+            Ok(out) if out != text => {
+                if let Err(e) = std::fs::write(dir.join("wrangler.toml"), out) {
+                    eprintln!(
+                        "bynk: could not bind `{}`'s inspect registry: {e}",
+                        s.worker
+                    );
+                }
+            }
+            Ok(_) => {}
+            Err(e) => eprintln!(
+                "bynk: could not bind `{}`'s inspect registry: {e}",
+                s.worker
+            ),
+        }
+    }
+}
+
 /// #3480: each served Worker's development copy of its config proxies an
 /// `[[ai_search]]` binding to the deployed instance (`remote = true`), since
 /// AI Search has no local simulation. The generated config `bynk deploy`
@@ -2048,11 +2114,71 @@ fn proxy_ai_search(workers_dir: &Path, serving: &[Serving]) {
     }
 }
 
+/// #3513 A: each served Worker's development copy of its config runs an `[[mtls_certificates]]`
+/// binding on Cloudflare (`remote = true`), bound by the certificate id the last deploy of
+/// `environment` recorded, since mTLS has no local simulation. A certificate no deploy has linked
+/// is reported, and the Worker serves with it unbound, so a call through it fails.
+fn proxy_mtls(project_root: &Path, workers_dir: &Path, serving: &[Serving], environment: &str) {
+    for s in serving {
+        let path = workers_dir.join(&s.worker).join("wrangler.toml");
+        let Ok(text) = std::fs::read_to_string(&path) else {
+            continue;
+        };
+        if !text.contains("mtls_certificates") {
+            continue;
+        }
+        if let Err(e) =
+            crate::deploy::materialise_mtls_for_dev(project_root, &s.worker, &path, environment)
+        {
+            eprintln!("bynk: {e}");
+        }
+        let Ok(text) = std::fs::read_to_string(&path) else {
+            continue;
+        };
+        match bynk_emit::emitter::wrangler::enable_remote_mtls(&text) {
+            Ok(out) if out != text => {
+                if let Err(e) = std::fs::write(&path, out) {
+                    eprintln!(
+                        "bynk: could not run `{}`'s mTLS bindings on the account: {e}",
+                        s.worker
+                    );
+                }
+            }
+            Ok(_) => {}
+            Err(e) => eprintln!("bynk: could not run `{}`'s mTLS bindings: {e}", s.worker),
+        }
+    }
+}
+
+/// The remote-only bindings of the development copy: AI Search (#3480) and mTLS certificates
+/// (#3513 A).
+fn proxy_remote_bindings(
+    project_root: &Path,
+    workers_dir: &Path,
+    serving: &[Serving],
+    environment: &str,
+) {
+    proxy_ai_search(workers_dir, serving);
+    proxy_mtls(project_root, workers_dir, serving, environment);
+}
+
 /// #3478: the `--var`s of [`dev_var_args`] for `project_root`'s `[dev]`
 /// acknowledgements, or `None` after printing why not.
 fn dev_vars_for(project_root: &Path) -> Option<Vec<String>> {
     match bynk_project::dev_ack::try_read_dev_acks(project_root) {
-        Ok(acks) => Some(dev_var_args(&acks)),
+        Ok(acks) => {
+            let mut args = dev_var_args(&acks);
+            // #3581: the local key `bynk dev inspect` signs under, as `bynk.dev`.
+            args.extend([
+                "--var".to_string(),
+                format!(
+                    "{}:{}",
+                    bynk_emit::INSPECT_CALLER_KEY_VAR,
+                    bynk_emit::LOCAL_CALL_KEY
+                ),
+            ]);
+            Some(args)
+        }
         Err(e) => {
             eprintln!("bynk: {e}");
             None
@@ -2173,6 +2299,11 @@ mod tests {
                 "--var",
                 "BYNK_DEV_ACK_AI_SEARCH:allow"
             ]
+        );
+        // #3513 A: and so does an mTLS certificate binding.
+        assert_eq!(
+            dev_var_args(&BTreeSet::from(["mtls"])),
+            ["--var", "BYNK_DEV:1", "--var", "BYNK_DEV_ACK_MTLS:allow"]
         );
     }
 

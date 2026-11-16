@@ -60,6 +60,7 @@ const MODULES = [
   "messages",
   "locale",
   "trace",
+  "inspect",
   "aliases",
   "wasm",
 ];
