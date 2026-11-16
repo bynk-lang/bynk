@@ -309,10 +309,14 @@ export class WorkersMtls implements MtlsCertificate {
 // Parameters bind positionally (`$1`); a value Analytics SQL has no counterpart for is
 // refused with `SqlRejected` before anything is sent.
 export class WorkersAnalyticsSql implements AnalyticsSql {
-  constructor(
-    private readonly env?: unknown,
-    private readonly binding: string = "CF_ANALYTICS_SQL",
-  ) {}
+  // A declared field + assigning constructor, not a parameter property: the binding stays
+  // strip-removable (ADR 0136).
+  private env?: unknown;
+  private binding: string;
+  constructor(env?: unknown, binding: string = "CF_ANALYTICS_SQL") {
+    this.env = env;
+    this.binding = binding;
+  }
 
   private sql(): AnalyticsSqlBinding {
     const b = (this.env as Record<string, AnalyticsSqlBinding | undefined> | undefined)?.[this.binding];

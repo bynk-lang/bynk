@@ -914,7 +914,10 @@ adapter bynk.cloudflare {
 	reaches Cloudflare.
 	---
 	capability AnalyticsSql {
-		fn query(sql: String, params: List[SqlValue]) -> Effect[Result[AnalyticsSqlResult, AnalyticsSqlError]]
+		fn query(
+			sql: String,
+			params: List[SqlValue]
+		) -> Effect[Result[AnalyticsSqlResult, AnalyticsSqlError]]
 	}
 
 	---
