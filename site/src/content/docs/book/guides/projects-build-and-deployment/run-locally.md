@@ -219,6 +219,28 @@ argument values, so nothing you passed to a call reaches the output. Traces are
 for `bynk dev` only: a deployed Worker records nothing. See [Request
 traces](/docs/bynk-cli/#request-traces) for every field.
 
+## Inspecting your agents
+
+While `bynk dev` is running, a second terminal can list the agent instances the
+session has seen and read their stored state:
+
+```sh
+bynk dev inspect agents                  # every instance, by class and key
+bynk dev inspect agents --class Cart
+bynk dev inspect agent Cart u1           # one instance's state, as JSON
+```
+
+An instance is listed once a handler has addressed it in this session. Reading
+one shows its stored state (the same shape that crosses the wire), its schema
+version and its storage layout; a large `Map`, `Set`, `Cache` or `Log` comes a
+page at a time (`--field NAME --limit N`, then `--after` the `next` cursor it
+returned). Inspecting changes nothing: it does not run a handler, migrate a
+record or write to storage.
+
+This is for the local session only. A build for [`bynk deploy`](/book/guides/projects-build-and-deployment/deploy-to-cloudflare/)
+carries none of it, and the Worker has no inspection route there. The JSON
+shapes are in the [`bynk dev inspect` reference](/docs/bynk-cli/#inspecting-agents).
+
 ## From VS Code
 
 The [VS Code extension](/docs/tooling/vscode-bynk/) runs `bynk dev` for you.
