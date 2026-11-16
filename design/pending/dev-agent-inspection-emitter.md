@@ -36,8 +36,13 @@ decode it. The track is `design/tracks/dev-agent-inspection.md`; its spine is
 - **The route is signed as an internal call is.** The Worker's `/_bynk/inspect/`
   route verifies the call signature before it looks anything up, under the local
   edge key and the reserved caller `bynk.dev`; anything else gets a bare `401`.
-  It is a `POST` with no body, because the signature covers the method and the
-  published signer signs `POST`.
+  It admits only that caller: a request naming any other, a sibling context that
+  holds an edge key to the Worker included, is refused before the signature is
+  checked. It is a `POST` with no body, because the signature covers the method
+  and the published signer signs `POST`. The signature covers the path and not the
+  query, so a captured request can be replayed within the signature window against
+  another instance; this is local development, and the key is the well-known local
+  one.
 - **The dev config is patched, not emitted.** The registry's binding and class are
   added to the development copy of `wrangler.toml` by `bynk dev`, as the AI Search
   proxy is, so the config `bynk deploy` reads is unchanged.

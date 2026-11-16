@@ -17,7 +17,7 @@
 
 import type { DurableObjectNamespace, WireCodec } from "./agent.ts";
 import { serialiseAgentKey } from "./agent.ts";
-import { checkStoredLayout, checkStoredSchemaVersion, verifyCall } from "./boundary.ts";
+import { CALLER_HEADER, checkStoredLayout, checkStoredSchemaVersion, verifyCall } from "./boundary.ts";
 import type { JsonValue } from "./boundary.ts";
 import { decodeKeyPart, logPrefix, mapPrefix, metaKey, setPrefix, type WholesaleField } from "./entries.ts";
 import type { DurableObjectState } from "./storage.ts";
@@ -77,6 +77,9 @@ export function noteAgentInstance<C>(
         method: "POST",
         headers: { "content-type": "application/json" },
         body: JSON.stringify(instance),
+      })
+      .then((r) => {
+        if (!r.ok) noted.delete(seen);
       })
       .catch(() => noted.delete(seen));
   } catch {
@@ -173,7 +176,8 @@ function inlinePage(field: WholesaleField, inline: unknown, after: string | null
       : Array.isArray(inline)
         ? inline
         : globalThis.Object.entries(inline as Record<string, unknown>).map(([key, value]) => ({ key, value }));
-  const from = after === null ? 0 : Number(after);
+  const parsed = after === null ? 0 : Number(after);
+  const from = globalThis.Number.isInteger(parsed) && parsed >= 0 ? parsed : 0;
   const kept = rows.slice(from, from + limit);
   return {
     kind: field.kind,
@@ -212,7 +216,7 @@ export async function inspectAgent(
   } catch (e) {
     return json({ ...head, readable: false, fault: faultKind(e) });
   }
-  // A record behind the build reads by zero-merge only when no step covers it.
+  // A record behind the build that a migration step covers: shown as stored, not migrated.
   const behind = version !== null && info.current !== null && version < info.current && info.steps.some(([lo, n]) => version >= lo && version <= n);
   const cells: Record<string, unknown> = {};
   for (const [k, v] of globalThis.Object.entries(stored)) {
@@ -254,6 +258,10 @@ export async function inspectRoute(
   bindings: Readonly<Record<string, string>>,
 ): Promise<Response> {
   if (request.method !== "POST") return new Response("Method Not Allowed", { status: 405 });
+  // Only `bynk dev inspect`: a sibling context holding an edge key to this Worker
+  // signs validly as itself, and must not read an agent's state. Checked before
+  // the signature, as the migrate route checks its caller.
+  if (request.headers.get(CALLER_HEADER) !== INSPECT_CALLER) return new Response("Unauthorized", { status: 401 });
   const verified = await verifyCall(request, env, context);
   if (typeof verified !== "string") return verified;
   const url = new URL(request.url);
