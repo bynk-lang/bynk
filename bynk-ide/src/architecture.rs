@@ -1074,8 +1074,7 @@ service checkout {
             ]
         );
         let first = CALLS_STOREFRONT.find("billing.Pricing(sku, qty)").unwrap();
-        assert!(checkout.calls[0].loc.span.start <= first + 1);
-        assert!(checkout.calls[0].loc.span.end > first);
+        assert_eq!(checkout.calls[0].loc.span.start, first);
 
         let add = node
             .uses
@@ -1083,6 +1082,72 @@ service checkout {
             .find(|h| h.member.container == "Cart")
             .expect("the agent handler");
         assert!(add.calls.is_empty());
+    }
+
+    #[test]
+    fn calls_resolve_aliases_and_reach_nested_and_provider_bodies() {
+        let storefront = r#"context storefront
+
+consumes billing as b
+
+capability Audit {
+  fn note(n: Int) -> Effect[Int]
+}
+
+provides Audit = Notes {
+  fn note(n: Int) -> Effect[Int] {
+    let q <- b.Pricing("x", n)
+    q.amount
+  }
+}
+
+service checkout {
+  on call(sku: String, qty: Int) -> Effect[Int] {
+    if qty > 1 {
+      let q <- b.Pricing(sku, qty)
+      q.amount
+    } else {
+      0
+    }
+  }
+}
+"#;
+        let root = setup_project(
+            "arch-calls-alias",
+            &[
+                ("billing.bynk", CALLS_BILLING),
+                ("storefront.bynk", storefront),
+            ],
+        );
+        let diag = crate::testkit::diagnose_project(&root);
+        let model = build_model(&diag);
+        let node = model
+            .nodes
+            .iter()
+            .find(|n| n.name == "storefront")
+            .expect("the storefront node");
+        let calls_of = |container: &str| -> Vec<(String, String)> {
+            node.uses
+                .iter()
+                .find(|h| h.member.container == container)
+                .expect("the handler")
+                .calls
+                .iter()
+                .map(|c| (c.unit.clone(), c.container.clone()))
+                .collect()
+        };
+        let pricing = vec![("billing".to_string(), "Pricing".to_string())];
+        // Inside an `if` branch, through the `b` alias.
+        assert_eq!(calls_of("checkout"), pricing);
+        // In a provider operation's body.
+        assert_eq!(calls_of("Notes"), pricing);
+        let first = storefront.find("b.Pricing(sku, qty)").unwrap();
+        let checkout = node
+            .uses
+            .iter()
+            .find(|h| h.member.container == "checkout")
+            .unwrap();
+        assert_eq!(checkout.calls[0].loc.span.start, first);
     }
 
     #[test]
