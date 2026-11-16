@@ -19,12 +19,14 @@ in ADRs 0422, 0535, 0536 and 0547; it changes nothing else.
   surface (ADR 0144), and a client presents them together.
 - **The predicate is source text, printed by the expression printer.** It is
   `bynk_syntax::print::expr_to_string`, the printer `bynk-fmt` re-exports, so
-  whitespace, line breaks and comments in the declaration do not change it and a
+  whitespace, line breaks and `//` comments in the declaration do not change it and a
   client can compare two revisions by `(kind, name, predicate)`. A structured
   predicate (as in ADR 0638's refined-type explorer) is more than a listing or a
   diff needs.
-- **`range` is the whole declaration; `doc` is its documentation text**, when it
-  has any. `doc` is omitted, not `null`, when absent.
+- **`range` runs from the `invariant`/`transition` keyword to the end of the
+  predicate**; the leading documentation block is not in it. **`doc` is that
+  documentation's text with trailing whitespace trimmed**, when there is any, and
+  is omitted, not `null`, when absent.
 - **Omitted when empty.** An agent that declares neither kind has no
   `invariants` key, so an older client ignores the field and a newer one treats
   its absence as "none".
