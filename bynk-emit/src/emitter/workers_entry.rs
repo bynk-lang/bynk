@@ -291,6 +291,62 @@ const REPORT_FAULT_HELPER: &str = "function __bynkReportFault(ctx: { waitUntil(p
 }
 ";
 
+/// #3562 (G2b, 2c-4a): the marker of a member's own misses. A Worker group's
+/// dispatcher tries its members in turn and must tell a member that does not own
+/// a request (its router's `404`, its synthesised `405`) from one that answered
+/// it, including with a `404` of its own. The router's own misses are added to a
+/// module-level `WeakSet`, and `isMiss` reads it; a response a handler returned
+/// is never added. It is never a header, so it cannot reach a client.
+///
+/// The dispatcher's contract, which the group `index.ts` implements: members are
+/// tried in declaration order; a marked response is a miss and the next member
+/// is tried; the first unmarked response is the answer. If every member misses,
+/// the answer is the first marked response that is not a `404` (the synthesised
+/// `405`/`204` with `Allow`), else the single-context `Not Found`. The synthesised
+/// `405` is a miss on purpose: `GET /x` in one member and `POST /x` in another is
+/// allowed (a route is keyed on method and path), so the `POST` must reach the
+/// second member rather than be answered by the first member's `405`.
+const MISS_HELPER: &str = "const __misses = new globalThis.WeakSet<globalThis.Response>();
+function __miss(response: globalThis.Response): globalThis.Response {
+  __misses.add(response);
+  return response;
+}
+export function isMiss(response: globalThis.Response): boolean {
+  return __misses.has(response);
+}
+";
+
+/// `__miss(<response>)` in a Worker group's member, `<response>` otherwise: the
+/// router's own "not mine" answers are marked there ([`MISS_HELPER`]).
+fn miss(member_mode: bool, response: TsExpr) -> TsExpr {
+    if member_mode {
+        call(ident("__miss"), vec![response])
+    } else {
+        response
+    }
+}
+
+/// The condition of an internal dispatch block: `path.startsWith(<prefix>)`, and,
+/// in a Worker group's member, that the rest of the path is one of `names`. A
+/// member answers only what it owns, and decides that before it reads the body
+/// or verifies a signature, so a request meant for another member reaches that
+/// member untouched.
+fn own_path_guard(member_mode: bool, prefix: &str, names: &[String]) -> TsExpr {
+    let starts = method_call(ident("path"), "startsWith", vec![str_lit(prefix)]);
+    if !member_mode {
+        return starts;
+    }
+    let rest = method_call(
+        ident("path"),
+        "slice",
+        vec![member(str_lit(prefix), "length")],
+    );
+    and_expr(
+        starts,
+        method_call(str_array(names), "includes", vec![rest]),
+    )
+}
+
 /// #2192: `__bynkReportFault(ctx, e);`, in an entry-point catch clause.
 fn report_fault() -> TsStmt {
     expr_stmt(call(
@@ -485,10 +541,15 @@ fn sweep_trace_inspect_imports(
 /// admits the sweep's caller name alone and verifies the signature under the
 /// sweep's key. Then #3581: the dev-only agent inspection route, signed as an
 /// internal call. Neither is present unless the build has it.
-fn admin_routes(context: &str, migratable: &[(String, i64)], inspect: &[String]) -> Vec<TsStmt> {
+fn admin_routes(
+    context: &str,
+    member_mode: bool,
+    migratable: &[(String, i64)],
+    inspect: &[String],
+) -> Vec<TsStmt> {
     let mut routes = Vec::new();
     if !migratable.is_empty() {
-        routes.push(migrate_route(context, migratable));
+        routes.push(migrate_route(context, member_mode, migratable));
         routes.push(TsStmt::blank(None));
     }
     if !inspect.is_empty() {
@@ -500,8 +561,8 @@ fn admin_routes(context: &str, migratable: &[(String, i64)], inspect: &[String])
 
 /// State-migrations S4 (#2259 Decision D): the `/_bynk/migrate/<Class>`
 /// dispatch. See the call site for the order of its checks.
-fn migrate_route(context: &str, migratable: &[(String, i64)]) -> TsStmt {
-    let not_found = || return_(Some(text_response("Not found", 404)));
+fn migrate_route(context: &str, member_mode: bool, migratable: &[(String, i64)]) -> TsStmt {
+    let not_found = || return_(Some(miss(member_mode, text_response("Not found", 404))));
     let mut cases: Vec<TsSwitchCase> = migratable
         .iter()
         .map(|(class, version)| {
@@ -582,12 +643,9 @@ fn migrate_route(context: &str, migratable: &[(String, i64)]) -> TsStmt {
             cases,
         ),
     ];
+    let classes: Vec<String> = migratable.iter().map(|(class, _)| class.clone()).collect();
     if_(
-        method_call(
-            ident("path"),
-            "startsWith",
-            vec![str_lit(wf::MIGRATE_PATH_PREFIX)],
-        ),
+        own_path_guard(member_mode, wf::MIGRATE_PATH_PREFIX, &classes),
         block(body),
     )
 }
@@ -832,6 +890,216 @@ fn container_class_reexport(table: &UnitTable) -> Option<TsStmt> {
     })
 }
 
+/// The `/_bynk/call/` dispatch: the published wire format's checks
+/// (`bynk_check::wire_format::CALL_CHECKS`) in their published order: method,
+/// body size and signature (I2), wire version, then (per service) the service,
+/// its contract, the body's JSON and the arguments.
+///
+/// A member of a Worker group (`member_mode`) answers only the services it declares,
+/// and tests that **before** any gate: the gates read the body and verify the
+/// signature for this member's context, so a member that missed would otherwise
+/// refuse a call signed for another member. A call to a service no member
+/// declares is therefore a miss, answered by the group's own `404`. A member
+/// with no `on call` service has no such block.
+fn call_dispatch(
+    context: &str,
+    member_mode: bool,
+    table: &UnitTable,
+    service_names: &[&String],
+    (own_contracts, accepted_contracts): (
+        &std::collections::BTreeMap<String, String>,
+        &std::collections::BTreeMap<String, Vec<String>>,
+    ),
+    has_foreign: bool,
+    runtime_use: &RuntimeUse,
+) -> Option<TsStmt> {
+    let mut call_cases: Vec<TsSwitchCase> = Vec::new();
+    let mut call_names: Vec<String> = Vec::new();
+    for sname in service_names {
+        let service = table.services.get(*sname).unwrap();
+        let Some(h) = service.handlers.iter().find(|h| {
+            matches!(
+                bynk_model::lower_handler_kind_ir(&h.kind),
+                bynk_model::IrHandlerKind::Call
+            )
+        }) else {
+            continue;
+        };
+
+        // #1825: names the dispatch for the fault log below.
+        let mut case_body: Vec<TsStmt> = vec![set_fault_route(format!("call {sname}"))];
+        if has_foreign
+            && let Some(admission) = bynk_check::actors::call_admission_for(h, &table.actors)
+        {
+            case_body.extend(admission_gate(&admission));
+        }
+        // v0.177 (#643): the deploy-skew check runs **before the body is read**.
+        //
+        // The caller stamps a hash of its compiled view of this contract; this
+        // context stamps its own. They are constants in two separately-deployed
+        // artifacts, frozen at two different deploy times — so a mismatch means
+        // the deployed callee is not the one the caller was compiled against,
+        // which is exactly what `deploy --context NAME` makes possible.
+        //
+        // First, ahead of even parsing the payload: once the contracts disagree
+        // the body's *interpretation* is the thing in doubt, so validating it
+        // would report a misleading `StructuralMismatch` for the real fault —
+        // and there is no reason to parse a body that is already refused.
+        //
+        // `409` rather than `400`: the payload is not malformed, and the caller
+        // cannot fix it by sending different bytes — the two deployments
+        // conflict.
+        //
+        // An absent header fails closed. A Bynk caller always stamps one, so its
+        // absence means a non-Bynk or pre-upgrade caller — and a pre-upgrade
+        // caller is a skewed caller by definition. This departs from ADR 0092's
+        // conditional posture (a missing `X-Bynk-Caller` fail-closes only on a
+        // `by c: Caller` handler) because there is no binder to condition on:
+        // identity matters only when read, but the contract always matters. It
+        // therefore also precedes the caller check — if the contracts disagree,
+        // nothing about the request is trustworthy, including the identity.
+        if let Some(expected) = own_contracts.get(*sname) {
+            case_body.push(const_(
+                "__contract",
+                method_call(
+                    member(ident("request"), "headers"),
+                    "get",
+                    vec![str_lit(wf::CONTRACT_HEADER)],
+                ),
+            ));
+            // #1826: the callee decides, so it logs the skew, by name and with
+            // both hashes, before refusing: otherwise the diagnosis existed only
+            // in a response body passed between two Workers.
+            let skew = |actual: TsExpr| {
+                vec![
+                    ("service".to_string(), str_lit(sname.to_string())),
+                    ("expected".to_string(), str_lit(expected.clone())),
+                    ("actual".to_string(), actual),
+                ]
+            };
+            // #1826 review: `/_bynk/call/` is reachable from outside, and
+            // nothing about the request is trusted yet, so the header is
+            // logged bounded to a hash's 16 characters: an operator loses
+            // nothing, and a sender can't write arbitrary text to the log.
+            // The 409 body echoes it unbounded, to the sender who sent it.
+            let logged_actual = method_call(
+                call(ident("globalThis.String"), vec![ident("__contract")]),
+                "slice",
+                vec![num_lit("0"), num_lit("16")],
+            );
+            // #2554: refused unless it is this contract's hash or one the
+            // lock records this callee as still accepting. The 409 below still
+            // names the current hash as the expected one.
+            let mismatch = accepted_contracts.get(*sname).into_iter().flatten().fold(
+                strict_neq(ident("__contract"), str_lit(expected.clone())),
+                |all, hash| and_expr(all, strict_neq(ident("__contract"), str_lit(hash.clone()))),
+            );
+            case_body.push(if_(
+                mismatch,
+                block(vec![
+                    expr_stmt(method_call(
+                        ident("globalThis.console"),
+                        "error",
+                        vec![
+                            str_lit(format!("ContractMismatch {context} call {sname}")),
+                            TsExpr::object(skew(logged_actual)),
+                        ],
+                    )),
+                    return_(Some(json_response(
+                        json_error_kind(check_kind(CallCheck::Contract), skew(ident("__contract"))),
+                        check_status(CallCheck::Contract),
+                    ))),
+                ]),
+            ));
+        }
+        // #1969 (wire format v1): the body is parsed here, so malformed JSON is
+        // the caller's fault (`400 MalformedJson`), not a fault in this Worker
+        // (`500`). I2 (#1971): it is the text `__verifyCall` read and verified,
+        // so the bytes decoded are the bytes signed.
+        case_body.push(let_typed("args", TsType::named("__JsonValue")));
+        case_body.push(try_catch_stmt(
+            vec![TsStmt::assign(
+                ident("args"),
+                as_expr(
+                    method_call(ident("globalThis.JSON"), "parse", vec![ident("__body")]),
+                    TsType::named("__JsonValue"),
+                ),
+                None,
+            )],
+            None,
+            vec![return_(Some(json_response(
+                json_error_kind(
+                    check_kind(CallCheck::MalformedJson),
+                    vec![("details".to_string(), str_lit(wf::MALFORMED_JSON_DETAILS))],
+                ),
+                check_status(CallCheck::MalformedJson),
+            )))],
+        ));
+        case_body.extend(emit_call_handler_dispatch(
+            sname,
+            h,
+            &table.actors,
+            runtime_use,
+        ));
+        call_names.push(sname.to_string());
+        call_cases.push(case_(str_lit(sname.to_string()), case_body));
+    }
+    call_cases.push(default_case(vec![return_(Some(miss(
+        member_mode,
+        text_response(
+            CallCheck::UnknownService.text_body().unwrap_or_default(),
+            check_status(CallCheck::UnknownService),
+        ),
+    )))]));
+    if member_mode && call_names.is_empty() {
+        return None;
+    }
+    let gates = std::iter::once(call_method_gate())
+        .chain(verify_gate(context, has_foreign))
+        .chain(wire_version_gate())
+        .chain([
+            const_(
+                "servicePath",
+                method_call(
+                    ident("path"),
+                    "slice",
+                    vec![member(str_lit(wf::CALL_PATH_PREFIX), "length")],
+                ),
+            ),
+            switch_stmt(ident("servicePath"), call_cases),
+        ])
+        .collect();
+    Some(if_(
+        own_path_guard(member_mode, wf::CALL_PATH_PREFIX, &call_names),
+        block(gates),
+    ))
+}
+
+/// L7 (#2414, Decision C): an opted-in Worker's `fetch`, which runs what
+/// `__bynkFetch` answers through `edgeCacheGuard`. The guard can answer with a
+/// copy, which would drop a member's miss mark, so a member re-marks the copy
+/// when the answer it guarded was a miss.
+fn edge_cache_return(member_mode: bool) -> Vec<TsStmt> {
+    let answer = await_expr(call(
+        ident("__bynkFetch"),
+        vec![ident("request"), ident("env"), ident("ctx")],
+    ));
+    let guarded =
+        |response: TsExpr| call(ident("__edgeCacheGuard"), vec![ident("request"), response]);
+    if !member_mode {
+        return vec![return_(Some(guarded(answer)))];
+    }
+    vec![
+        const_("__answer", answer),
+        const_("__guarded", guarded(ident("__answer"))),
+        return_(Some(cond_expr(
+            call(ident("isMiss"), vec![ident("__answer")]),
+            call(ident("__miss"), vec![ident("__guarded")]),
+            ident("__guarded"),
+        ))),
+    ]
+}
+
 #[allow(clippy::too_many_arguments)]
 pub fn emit_worker_entry(
     context: &str,
@@ -877,6 +1145,7 @@ pub fn emit_worker_entry(
     // #3581: the agent classes of the `bynk dev`-only inspect route (else empty).
     inspect: &[String],
 ) -> TsProgram {
+    let member_mode = layout.is_member(context);
     let mut program = TsProgram::new();
     // Which conditional runtime helpers the entry's own inbound/outbound codecs
     // reach for; read back below to decide the import injection.
@@ -1397,171 +1666,21 @@ pub fn emit_worker_entry(
             ),
         ));
     }
-    let mut call_cases: Vec<TsSwitchCase> = Vec::new();
-    for sname in &service_names {
-        let service = table.services.get(*sname).unwrap();
-        let Some(h) = service.handlers.iter().find(|h| {
-            matches!(
-                bynk_model::lower_handler_kind_ir(&h.kind),
-                bynk_model::IrHandlerKind::Call
-            )
-        }) else {
-            continue;
-        };
-
-        // #1825: names the dispatch for the fault log below.
-        let mut case_body: Vec<TsStmt> = vec![set_fault_route(format!("call {sname}"))];
-        if has_foreign
-            && let Some(admission) = bynk_check::actors::call_admission_for(h, &table.actors)
-        {
-            case_body.extend(admission_gate(&admission));
-        }
-        // v0.177 (#643): the deploy-skew check runs **before the body is read**.
-        //
-        // The caller stamps a hash of its compiled view of this contract; this
-        // context stamps its own. They are constants in two separately-deployed
-        // artifacts, frozen at two different deploy times — so a mismatch means
-        // the deployed callee is not the one the caller was compiled against,
-        // which is exactly what `deploy --context NAME` makes possible.
-        //
-        // First, ahead of even parsing the payload: once the contracts disagree
-        // the body's *interpretation* is the thing in doubt, so validating it
-        // would report a misleading `StructuralMismatch` for the real fault —
-        // and there is no reason to parse a body that is already refused.
-        //
-        // `409` rather than `400`: the payload is not malformed, and the caller
-        // cannot fix it by sending different bytes — the two deployments
-        // conflict.
-        //
-        // An absent header fails closed. A Bynk caller always stamps one, so its
-        // absence means a non-Bynk or pre-upgrade caller — and a pre-upgrade
-        // caller is a skewed caller by definition. This departs from ADR 0092's
-        // conditional posture (a missing `X-Bynk-Caller` fail-closes only on a
-        // `by c: Caller` handler) because there is no binder to condition on:
-        // identity matters only when read, but the contract always matters. It
-        // therefore also precedes the caller check — if the contracts disagree,
-        // nothing about the request is trustworthy, including the identity.
-        if let Some(expected) = own_contracts.get(*sname) {
-            case_body.push(const_(
-                "__contract",
-                method_call(
-                    member(ident("request"), "headers"),
-                    "get",
-                    vec![str_lit(wf::CONTRACT_HEADER)],
-                ),
-            ));
-            // #1826: the callee decides, so it logs the skew, by name and with
-            // both hashes, before refusing: otherwise the diagnosis existed only
-            // in a response body passed between two Workers.
-            let skew = |actual: TsExpr| {
-                vec![
-                    ("service".to_string(), str_lit(sname.to_string())),
-                    ("expected".to_string(), str_lit(expected.clone())),
-                    ("actual".to_string(), actual),
-                ]
-            };
-            // #1826 review: `/_bynk/call/` is reachable from outside, and
-            // nothing about the request is trusted yet, so the header is
-            // logged bounded to a hash's 16 characters: an operator loses
-            // nothing, and a sender can't write arbitrary text to the log.
-            // The 409 body echoes it unbounded, to the sender who sent it.
-            let logged_actual = method_call(
-                call(ident("globalThis.String"), vec![ident("__contract")]),
-                "slice",
-                vec![num_lit("0"), num_lit("16")],
-            );
-            // #2554: refused unless it is this contract's hash or one the
-            // lock records this callee as still accepting. The 409 below still
-            // names the current hash as the expected one.
-            let mismatch = accepted_contracts.get(*sname).into_iter().flatten().fold(
-                strict_neq(ident("__contract"), str_lit(expected.clone())),
-                |all, hash| and_expr(all, strict_neq(ident("__contract"), str_lit(hash.clone()))),
-            );
-            case_body.push(if_(
-                mismatch,
-                block(vec![
-                    expr_stmt(method_call(
-                        ident("globalThis.console"),
-                        "error",
-                        vec![
-                            str_lit(format!("ContractMismatch {context} call {sname}")),
-                            TsExpr::object(skew(logged_actual)),
-                        ],
-                    )),
-                    return_(Some(json_response(
-                        json_error_kind(check_kind(CallCheck::Contract), skew(ident("__contract"))),
-                        check_status(CallCheck::Contract),
-                    ))),
-                ]),
-            ));
-        }
-        // #1969 (wire format v1): the body is parsed here, so malformed JSON is
-        // the caller's fault (`400 MalformedJson`), not a fault in this Worker
-        // (`500`). I2 (#1971): it is the text `__verifyCall` read and verified,
-        // so the bytes decoded are the bytes signed.
-        case_body.push(let_typed("args", TsType::named("__JsonValue")));
-        case_body.push(try_catch_stmt(
-            vec![TsStmt::assign(
-                ident("args"),
-                as_expr(
-                    method_call(ident("globalThis.JSON"), "parse", vec![ident("__body")]),
-                    TsType::named("__JsonValue"),
-                ),
-                None,
-            )],
-            None,
-            vec![return_(Some(json_response(
-                json_error_kind(
-                    check_kind(CallCheck::MalformedJson),
-                    vec![("details".to_string(), str_lit(wf::MALFORMED_JSON_DETAILS))],
-                ),
-                check_status(CallCheck::MalformedJson),
-            )))],
-        ));
-        case_body.extend(emit_call_handler_dispatch(
-            sname,
-            h,
-            &table.actors,
-            &runtime_use,
-        ));
-        call_cases.push(case_(str_lit(sname.to_string()), case_body));
-    }
-    call_cases.push(default_case(vec![return_(Some(text_response(
-        CallCheck::UnknownService.text_body().unwrap_or_default(),
-        check_status(CallCheck::UnknownService),
-    )))]));
-    // #1969: the call dispatch makes the published wire format's checks
-    // (`bynk_check::wire_format::CALL_CHECKS`) in their published order:
-    // method, body size and signature (I2), wire version, then (per service,
-    // above) the service, its contract, the body's JSON and the arguments.
-    try_body.push(if_(
-        method_call(
-            ident("path"),
-            "startsWith",
-            vec![str_lit(wf::CALL_PATH_PREFIX)],
-        ),
-        block(
-            std::iter::once(call_method_gate())
-                .chain(verify_gate(context, has_foreign))
-                .chain(wire_version_gate())
-                .chain([
-                    const_(
-                        "servicePath",
-                        method_call(
-                            ident("path"),
-                            "slice",
-                            vec![member(str_lit(wf::CALL_PATH_PREFIX), "length")],
-                        ),
-                    ),
-                    switch_stmt(ident("servicePath"), call_cases),
-                ])
-                .collect(),
-        ),
+    // The foreign callers any `on call` handler admits are `foreign_callers`
+    // above; `has_foreign` makes the dispatch check them.
+    try_body.extend(call_dispatch(
+        context,
+        member_mode,
+        table,
+        &service_names,
+        (own_contracts, accepted_contracts),
+        has_foreign,
+        &runtime_use,
     ));
     try_body.push(TsStmt::blank(None));
 
     // 1.25. The internal admin routes: see `admin_routes`.
-    try_body.extend(admin_routes(context, migratable, inspect));
+    try_body.extend(admin_routes(context, member_mode, migratable, inspect));
 
     // 1.5. WebSocket upgrade dispatch (v0.104, slice 3b). An `Upgrade: websocket`
     // request routes to the `from websocket` service's edge wrapper, which runs the
@@ -1726,14 +1845,15 @@ pub fn emit_worker_entry(
             ];
             event_cases.push(case_(str_lit(sname.to_string()), case_body));
         }
-        event_cases.push(default_case(vec![return_(Some(text_response(
-            "Not found",
-            404,
+        event_cases.push(default_case(vec![return_(Some(miss(
+            member_mode,
+            text_response("Not found", 404),
         )))]));
         event_body.push(switch_stmt(ident("servicePath"), event_cases));
 
+        let event_names: Vec<String> = event_services.iter().map(|s| s.to_string()).collect();
         try_body.push(if_(
-            method_call(ident("path"), "startsWith", vec![str_lit("/_bynk/event/")]),
+            own_path_guard(member_mode, "/_bynk/event/", &event_names),
             block(event_body),
         ));
         try_body.push(TsStmt::blank(None));
@@ -1901,11 +2021,14 @@ pub fn emit_worker_entry(
             ),
             None => cors_res,
         };
-        fallthrough_body.push(return_(Some(stamped)));
+        fallthrough_body.push(return_(Some(miss(member_mode, stamped))));
         try_body.push(if_(match_cond, block(fallthrough_body)));
     }
 
-    try_body.push(return_(Some(text_response("Not Found", 404))));
+    try_body.push(return_(Some(miss(
+        member_mode,
+        text_response("Not Found", 404),
+    ))));
 
     // #1825: a fault answers a bare 500, never leaking the error to the
     // client (#184), but it is logged here first, with the context and the
@@ -1955,16 +2078,7 @@ pub fn emit_worker_entry(
             },
             None,
         ));
-        vec![return_(Some(call(
-            ident("__edgeCacheGuard"),
-            vec![
-                ident("request"),
-                await_expr(call(
-                    ident("__bynkFetch"),
-                    vec![ident("request"), ident("env"), ident("ctx")],
-                )),
-            ],
-        )))]
+        edge_cache_return(member_mode)
     } else {
         fetch_body
     };
@@ -2096,6 +2210,9 @@ pub fn emit_worker_entry(
     }
     for decl in header_decls {
         program.push(decl);
+    }
+    if member_mode {
+        program.push(TsStmt::raw(MISS_HELPER, None));
     }
     program.push(TsStmt::raw(REPORT_FAULT_HELPER, None));
     program.push(TsStmt::decl(
@@ -4582,6 +4699,84 @@ service calc {
   }
 }
 ";
+
+    fn printed(stmts: &[TsStmt]) -> String {
+        stmts.iter().map(|s| bynk_ts::print_stmt(s, 0)).collect()
+    }
+
+    /// Default (non-member) output: the guard is the bare prefix test, nothing is
+    /// marked, and the edge-cache return is the one it has always been.
+    #[test]
+    fn outside_a_group_nothing_is_marked_or_gated() {
+        let guard = bynk_ts::print_expr(&own_path_guard(false, "/_bynk/call/", &[]));
+        assert_eq!(guard, "path.startsWith(\"/_bynk/call/\")");
+        let marked = bynk_ts::print_expr(&miss(false, text_response("Not Found", 404)));
+        assert!(!marked.contains("__miss"), "{marked}");
+        let edge = printed(&edge_cache_return(false));
+        assert!(
+            !edge.contains("isMiss") && !edge.contains("__miss"),
+            "{edge}"
+        );
+        assert!(
+            edge.contains("__edgeCacheGuard(request, await __bynkFetch("),
+            "{edge}"
+        );
+    }
+
+    /// A member tests that the service is its own before anything reads the body
+    /// or verifies a signature, so a request for another member is left untouched.
+    #[test]
+    fn a_member_tests_ownership_in_the_guard_before_any_gate() {
+        let names = vec!["a".to_string(), "b".to_string()];
+        let guard = bynk_ts::print_expr(&own_path_guard(true, "/_bynk/call/", &names));
+        assert_eq!(
+            guard,
+            "path.startsWith(\"/_bynk/call/\") && [\"a\", \"b\"].includes(path.slice(\"/_bynk/call/\".length))"
+        );
+    }
+
+    /// The router's own answers are marked in a member; the marker is a call on a
+    /// module-level set, never a header.
+    #[test]
+    fn a_member_marks_its_routers_own_answers() {
+        let marked = bynk_ts::print_expr(&miss(true, text_response("Not Found", 404)));
+        assert!(
+            marked.starts_with("__miss(new globalThis.Response(\"Not Found\""),
+            "{marked}"
+        );
+        assert!(MISS_HELPER.contains("new globalThis.WeakSet"));
+        assert!(
+            !MISS_HELPER.contains("headers"),
+            "the mark is never a header"
+        );
+    }
+
+    /// The edge-cache guard can answer with a copy, so a member re-marks it.
+    #[test]
+    fn a_members_edge_cache_guard_keeps_a_miss_a_miss() {
+        let edge = printed(&edge_cache_return(true));
+        assert!(
+            edge.contains("isMiss(__answer) ? __miss(__guarded) : __guarded"),
+            "{edge}"
+        );
+    }
+
+    /// The admin route is gated on the class and its absence is a marked miss.
+    #[test]
+    fn a_members_migrate_route_is_gated_on_its_class_and_marks_its_miss() {
+        let migratable = vec![("Cart".to_string(), 2)];
+        let route = bynk_ts::print_stmt(&migrate_route("shop.cart", true, &migratable), 0);
+        assert!(route.contains("[\"Cart\"].includes("), "{route}");
+        assert!(
+            route.contains("return __miss(new globalThis.Response(\"Not found\""),
+            "{route}"
+        );
+        let alone = bynk_ts::print_stmt(&migrate_route("shop.cart", false, &migratable), 0);
+        assert!(
+            !alone.contains("includes") && !alone.contains("__miss"),
+            "{alone}"
+        );
+    }
 
     fn shop_index() -> String {
         emit_workers(&[("demo/shop.bynk", SHOP)])

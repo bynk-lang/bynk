@@ -69,6 +69,12 @@ impl WorkerLayout {
         Self { members }
     }
 
+    /// Whether `context` is a member of a group, so its entry is one of several
+    /// behind the group's dispatcher and marks the requests it does not own.
+    pub fn is_member(&self, context: &str) -> bool {
+        self.members.contains_key(context)
+    }
+
     fn place(&self, context: &str) -> Place {
         self.members.get(context).cloned().unwrap_or_else(|| Place {
             dir: worker_dir_name(context),
@@ -191,6 +197,15 @@ mod tests {
             layout.worker_file("shop.pricing", "index.ts"),
             PathBuf::from("workers/core/index.ts")
         );
+    }
+
+    /// Only a member of a group is a member: a project with no group has none.
+    #[test]
+    fn only_a_group_member_is_a_member() {
+        assert!(!WorkerLayout::identity().is_member("shop.orders"));
+        let layout = WorkerLayout::from_groups(&groups());
+        assert!(layout.is_member("shop.orders"));
+        assert!(!layout.is_member("shop.payment"));
     }
 
     /// A context in no group stays as in the identity layout.
