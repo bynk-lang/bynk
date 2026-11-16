@@ -85,6 +85,45 @@ impl WorkerLayout {
             None => PathBuf::from(format!("workers/{}/{name}", place.dir)),
         }
     }
+
+    /// The project-relative synthetic source path of `context`'s handlers
+    /// module, which the emitter's relative-import machinery resolves against.
+    pub fn handlers_source_path(&self, context: &str) -> PathBuf {
+        self.member_file(context, "handlers.bynk")
+    }
+
+    /// The project-relative output path of `context`'s handlers module.
+    pub fn handlers_output_path(&self, context: &str) -> PathBuf {
+        self.member_file(context, "handlers.ts")
+    }
+
+    /// The synthetic source path of one file's module in a context split across
+    /// files (#1820): `handlers/<stem>.bynk` beside the handlers barrel.
+    pub fn file_source_path(&self, context: &str, source: &std::path::Path) -> PathBuf {
+        let stem = source.file_stem().unwrap_or_default().to_string_lossy();
+        self.member_file(context, &format!("handlers/{stem}.bynk"))
+    }
+
+    /// The specifier by which one of `context`'s own modules (its compose and
+    /// entry) imports its handlers module: `./handlers.js`, or
+    /// `./<member>.handlers.js` in a group.
+    pub fn own_handlers_specifier(&self, context: &str) -> String {
+        self.handlers_specifier(context, context)
+    }
+
+    /// The import specifier, from a module in `from`'s Worker directory, of
+    /// `to`'s handlers module: `../<dir>/handlers.js` across Workers,
+    /// `./<member>.handlers.js` within one.
+    pub fn handlers_specifier(&self, from: &str, to: &str) -> String {
+        let file = self.handlers_output_path(to);
+        let name = file.file_name().unwrap_or_default().to_string_lossy();
+        let name = name.trim_end_matches(".ts");
+        if self.dir(from) == self.dir(to) {
+            format!("./{name}.js")
+        } else {
+            format!("../{}/{name}.js", self.dir(to))
+        }
+    }
 }
 
 #[cfg(test)]
@@ -145,6 +184,59 @@ mod tests {
         assert_eq!(
             layout.member_file("shop.payment", "compose.ts"),
             PathBuf::from("workers/shop-payment/compose.ts")
+        );
+    }
+
+    /// Without a group the handlers paths and specifiers are the ones every
+    /// Workers build has always used.
+    #[test]
+    fn identity_handlers_paths_are_unchanged() {
+        let layout = WorkerLayout::identity();
+        assert_eq!(
+            layout.handlers_source_path("shop.orders"),
+            PathBuf::from("workers/shop-orders/handlers.bynk")
+        );
+        assert_eq!(
+            layout.handlers_output_path("shop.orders"),
+            PathBuf::from("workers/shop-orders/handlers.ts")
+        );
+        assert_eq!(
+            layout.file_source_path(
+                "shop.orders",
+                std::path::Path::new("shop/orders/place.bynk")
+            ),
+            PathBuf::from("workers/shop-orders/handlers/place.bynk")
+        );
+        assert_eq!(
+            layout.own_handlers_specifier("shop.orders"),
+            "./handlers.js"
+        );
+        assert_eq!(
+            layout.handlers_specifier("shop.orders", "shop.pricing"),
+            "../shop-pricing/handlers.js"
+        );
+    }
+
+    /// In a group a member's handlers sit beside its siblings' under its prefix,
+    /// and an import within the Worker is local; one out of it is not.
+    #[test]
+    fn members_handlers_are_prefixed_and_imported_locally() {
+        let layout = WorkerLayout::from_groups(&groups());
+        assert_eq!(
+            layout.handlers_output_path("shop.pricing"),
+            PathBuf::from("workers/core/shop-pricing.handlers.ts")
+        );
+        assert_eq!(
+            layout.file_source_path("shop.orders", std::path::Path::new("o/place.bynk")),
+            PathBuf::from("workers/core/shop-orders.handlers/place.bynk")
+        );
+        assert_eq!(
+            layout.handlers_specifier("shop.orders", "shop.pricing"),
+            "./shop-pricing.handlers.js"
+        );
+        assert_eq!(
+            layout.handlers_specifier("shop.orders", "billing"),
+            "../billing/handlers.js"
         );
     }
 }

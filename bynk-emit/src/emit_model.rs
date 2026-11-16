@@ -1106,6 +1106,8 @@ pub struct EmitProjectCtx {
     /// `emit_project` call, so the flags cannot leak between files. Replaces a
     /// substring scan of the generated text; see `emitter::runtime_use`.
     pub runtime_use: crate::emitter::RuntimeUse,
+    /// #3562: where each context's generated files go on Workers.
+    pub worker_layout: bynk_project::worker_layout::WorkerLayout,
 }
 
 impl EmitProjectCtx {

@@ -265,6 +265,7 @@ fn append_missing_bindings(names: &mut Vec<String>, extra: &str) {
 #[allow(clippy::too_many_arguments)]
 pub fn emit_worker_compose(
     context: &str,
+    layout: &bynk_project::worker_layout::WorkerLayout,
     table: &UnitTable,
     consumes: &[String],
     aliases: &HashMap<String, String>,
@@ -985,7 +986,7 @@ pub fn emit_worker_compose(
         TsDecl::ImportNamespace {
             type_only: false,
             alias: "handlers".to_string(),
-            from: "./handlers.js".to_string(),
+            from: layout.own_handlers_specifier(context),
         },
         None,
     ));
@@ -1004,12 +1005,11 @@ pub fn emit_worker_compose(
                 None,
             ));
         } else {
-            let dir = bynk_project::worker_dir_name(cctx);
             program.push(TsStmt::decl(
                 TsDecl::ImportNamespace {
                     type_only: false,
                     alias: format!("handlers_{ns}"),
-                    from: format!("../{dir}/handlers.js"),
+                    from: layout.handlers_specifier(context, cctx),
                 },
                 None,
             ));
