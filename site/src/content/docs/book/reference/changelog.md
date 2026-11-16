@@ -28,6 +28,7 @@ per-commit history. While Bynk is pre-1.0, increments may change behaviour.
 
 | Version | Highlights |
 |---|---|
+| **v0.634.1** | The `bynk/architectureModel` request gives each service its `protocol` and the `actors` its handlers admit |
 | **v0.634.0** | A `[deploy.workers.<key>]` group now builds as one Worker: its members share one `index.ts` that tries them in manifest order, one `wrangler.toml` that merges their bindings, crons, queues and addresses, and a group has at most one member that accepts WebSockets (`bynk.deploy.multiple_websocket_members`); a `bundle` build says it ignores the groups (`bynk.deploy.workers_ignored_on_bundle`) (#3562, G2b step 2c-4b) |
 | **v0.633.18** | The `bynk/sequenceModel` request walks nesting in full (with each block's `depth`), shows `?` as a `Break` block, and names each handler's `trigger`, each agent lifeline's `key` and each boundary call's `callee` (with its location) |
 | **v0.633.17** | `bynk registry conformance`: `yank.yank` and `yank.unyank` wait up to 65 seconds for a cached index to show the change, instead of failing a registry whose edge cache briefly kept the old index |
