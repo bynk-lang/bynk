@@ -4,7 +4,7 @@
 # below 300 (or gone) must be removed. Prefer splitting a function to raising its
 # ceiling; a raise needs its justification in review. `cargo xtask fn-lengths --apply`
 # rewrites this file from the tree (lowering ceilings after a function shrinks).
-bynk-emit/src/emitter/workers_entry.rs::emit_worker_entry = 1281
+bynk-emit/src/emitter/workers_entry.rs::emit_worker_entry = 1121
 bynk-driver/src/project/tests_emit/system_support.rs::emit_system_http_support = 1157
 bynk-driver/src/project/tests_emit/test_module.rs::emit_test_module = 1003
 bynk-driver/src/project.rs::run_checks = 951
