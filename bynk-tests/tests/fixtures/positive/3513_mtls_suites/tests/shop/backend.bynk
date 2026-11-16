@@ -1,0 +1,40 @@
+suite shop.backend
+
+consumes bynk
+
+// #3513 A: a test never presents a certificate to an origin. The call faults until it is
+// stubbed, and a stubbed reply (or error) is what the handler sees.
+
+case "an unstubbed send faults" {
+	expect api.GET("/orders") by Visitor faults
+}
+
+case "a stubbed response is returned" {
+	stub Backend.send(_) returns Ok(Response { status: 200, headers: Map.empty(), body: "[]" })
+	let r <- api.GET("/orders") by Visitor
+	expect r is Ok("status 200")
+	expect Backend.send called once
+}
+
+case "a stubbed network error is matched" {
+	stub Backend.send(_) returns Err(Network)
+	let r <- api.GET("/orders") by Visitor
+	expect r is ServerError("the origin is unreachable")
+}
+
+case "the byte forms fault until stubbed too" {
+	expect api.GET("/orders/raw") by Visitor faults
+	expect api.POST("/orders", "x") by Visitor faults
+}
+
+case "a stubbed byte response is read" {
+	stub Backend.receiveBytes(_) returns Ok(BytesResponse { status: 200, headers: Map.empty(), body: Bytes.fromUtf8("abc") })
+	let r <- api.GET("/orders/raw") by Visitor
+	expect r is Ok(3)
+}
+
+case "a stubbed sendBytes answers its status" {
+	stub Backend.sendBytes(_, _) returns Ok(BytesResponse { status: 201, headers: Map.empty(), body: Bytes.empty() })
+	let r <- api.POST("/orders", "payload") by Visitor
+	expect r is Ok(201)
+}

@@ -6,7 +6,7 @@ import { __bynkBytesEqual, __bynkBytesToBase64, __bynkBytesFromBase64, __bynkByt
 import type { ValidationError, DecodeError } from "../__bynk_runtime/errors.js";
 import { type __JsonValue, type __BoundaryError, type __ServiceBinding, __callService, __boundaryError } from "../__bynk_runtime/boundary.js";
 
-import { FetchError, Request, Response } from "../bynk.js";
+import { BytesResponse, FetchError, Request, Response } from "../bynk.js";
 
 /**
  * When a `Kv.putWith` or `Kv.putBytes` entry expires: `Never`, `After` a
@@ -228,6 +228,43 @@ export interface QueueSend {
 }
 
 export const QueueSend = {
+};
+
+/**
+ * What Cloudflare knows about the connection of an `on http` request, as a
+ * handler's `cf: RequestCf` parameter. Every field is optional and defaults
+ * to `None`: Cloudflare derives them, a platform or a test may not supply
+ * them, and a field of an unexpected shape is `None`, never a fault. A
+ * handler that declares `cf` is therefore written once and works where
+ * `request.cf` is absent.
+ *
+ * These facts come from the client's IP address, so they can be personal
+ * data, and they are best-effort: a VPN or a proxy makes them wrong. The
+ * fields are Cloudflare's `request.cf` properties
+ * (https://developers.cloudflare.com/workers/runtime-apis/request/); a
+ * field is added later as a defaulted field. `latitude` and `longitude` are
+ * numeric strings on the platform and are read as `Float`; `isEuCountry` is
+ * `Some(true)` where Cloudflare reports the country as in the EU.
+ */
+export interface RequestCf {
+  readonly country: Option<string>;
+  readonly continent: Option<string>;
+  readonly city: Option<string>;
+  readonly region: Option<string>;
+  readonly regionCode: Option<string>;
+  readonly postalCode: Option<string>;
+  readonly timezone: Option<string>;
+  readonly latitude: Option<number>;
+  readonly longitude: Option<number>;
+  readonly colo: Option<string>;
+  readonly asn: Option<number>;
+  readonly asOrganization: Option<string>;
+  readonly httpProtocol: Option<string>;
+  readonly tlsVersion: Option<string>;
+  readonly isEuCountry: Option<boolean>;
+}
+
+export const RequestCf = {
 };
 
 /**
@@ -721,6 +758,53 @@ export const MySqlReadError = {
 };
 
 /**
+ * What an Analytics SQL query cost to run, as the platform reports it: `elapsedMs`
+ * the time it took, `rowsRead` and `bytesRead` what it scanned.
+ */
+export interface AnalyticsSqlStatistics {
+  readonly elapsedMs: number;
+  readonly rowsRead: number;
+  readonly bytesRead: number;
+}
+
+export const AnalyticsSqlStatistics = {
+};
+
+/**
+ * The reply of `AnalyticsSql.query`: `data` is the result rows as JSON text, an array
+ * of objects keyed by the selected column names, to read with `Json.decode` (the
+ * columns and their types are the query's, not Bynk's, as `Ai.run`'s reply is the
+ * model's); `rows` is how many there are, and `statistics` what the query cost.
+ */
+export interface AnalyticsSqlResult {
+  readonly data: string;
+  readonly rows: number;
+  readonly statistics: AnalyticsSqlStatistics;
+}
+
+export const AnalyticsSqlResult = {
+};
+
+/**
+ * Why an Analytics SQL query did not give a reply. The platform reports a failure
+ * with a message and one fact, whether repeating the query may succeed, and that is
+ * all this type says: `SqlRetryable` is a failure worth retrying with bounded
+ * exponential backoff (a rate or capacity limit, a temporary outage), and
+ * `SqlRejected` one that repeating will not fix (a query the engine refused, a
+ * parameter Analytics SQL cannot take, a reply that is not the shape promised),
+ * each with its message. Cloudflare changes what it reports over time, so a `match`
+ * over this type needs a wildcard.
+ */
+export type AnalyticsSqlError =
+    { readonly tag: "SqlRetryable"; readonly message: string }
+  | { readonly tag: "SqlRejected"; readonly message: string };
+
+export const AnalyticsSqlError = {
+  SqlRetryable: (message: string): AnalyticsSqlError => ({ tag: "SqlRetryable", message }),
+  SqlRejected: (message: string): AnalyticsSqlError => ({ tag: "SqlRejected", message }),
+};
+
+/**
  * The version of this Worker that is running, as `Version.current()`
  * reports it. `id` is the version's id, `tag` its tag (`None` when the
  * version was uploaded without one), and `deployed` when the version was
@@ -733,6 +817,590 @@ export interface WorkerVersion {
 }
 
 export const WorkerVersion = {
+};
+
+/**
+ * Who said a `ChatMessage`. A `System` message sets how the model behaves, a
+ * `User` message is what it is asked, and an `Assistant` message is an earlier
+ * reply of the model, to carry a conversation. Cloudflare adds roles over
+ * time, so a `match` over this type needs a wildcard.
+ */
+export type ChatRole =
+    { readonly tag: "System" }
+  | { readonly tag: "User" }
+  | { readonly tag: "Assistant" };
+
+export const ChatRole = {
+  System: { tag: "System" } as ChatRole,
+  User: { tag: "User" } as ChatRole,
+  Assistant: { tag: "Assistant" } as ChatRole,
+};
+
+/**
+ * One message of a conversation for `Ai.generate`.
+ */
+export interface ChatMessage {
+  readonly role: ChatRole;
+  readonly content: string;
+}
+
+export const ChatMessage = {
+};
+
+/**
+ * The input of `Ai.generate`: the conversation so far in `messages`, which must
+ * not be empty, and the sampling settings the platform's chat models share.
+ * A setting left `None` is the model's own default. `maxTokens` caps the
+ * length of the reply; `temperature` and `topP` shape how varied it is; `seed`
+ * makes a run repeatable where the model supports it.
+ */
+export interface GenerateRequest {
+  readonly messages: readonly ChatMessage[];
+  readonly maxTokens: Option<number>;
+  readonly temperature: Option<number>;
+  readonly topP: Option<number>;
+  readonly seed: Option<number>;
+}
+
+export const GenerateRequest = {
+};
+
+/**
+ * The tokens a generation used: `promptTokens` read and `completionTokens`
+ * written.
+ */
+export interface TokenUsage {
+  readonly promptTokens: number;
+  readonly completionTokens: number;
+}
+
+export const TokenUsage = {
+};
+
+/**
+ * The reply of `Ai.generate`: the model's `text`, which is untrusted input,
+ * and `usage` when the platform reported it (`None` when it did not).
+ */
+export interface Generation {
+  readonly text: string;
+  readonly usage: Option<TokenUsage>;
+}
+
+export const Generation = {
+};
+
+/**
+ * Why a Workers AI call did not give a reply. `ModelNotFound` is a model id
+ * the platform does not know, or has retired; `InvalidInput` is a request the
+ * platform refused as malformed or too large, with its message; `QuotaExceeded`
+ * is a usage limit of the account, or a model its plan does not include, so
+ * back off or change the plan; `Overloaded` is the platform's temporary
+ * capacity, worth retrying; `BadReply` is a reply that is not the shape the
+ * operation promises (`generate` and `embed` only, never `run`), with what was
+ * wrong; `AiFailed` is any other refusal, with the platform's message (the `Ai`
+ * prefix because `Failed` is `SqlError`'s). Cloudflare adds error codes over
+ * time, so a `match` over this type needs a wildcard.
+ */
+export type AiError =
+    { readonly tag: "ModelNotFound" }
+  | { readonly tag: "InvalidInput"; readonly message: string }
+  | { readonly tag: "QuotaExceeded" }
+  | { readonly tag: "Overloaded" }
+  | { readonly tag: "BadReply"; readonly message: string }
+  | { readonly tag: "AiFailed"; readonly message: string };
+
+export const AiError = {
+  ModelNotFound: { tag: "ModelNotFound" } as AiError,
+  InvalidInput: (message: string): AiError => ({ tag: "InvalidInput", message }),
+  QuotaExceeded: { tag: "QuotaExceeded" } as AiError,
+  Overloaded: { tag: "Overloaded" } as AiError,
+  BadReply: (message: string): AiError => ({ tag: "BadReply", message }),
+  AiFailed: (message: string): AiError => ({ tag: "AiFailed", message }),
+};
+
+/**
+ * The format of a raster image. `Jpeg`, `Png`, `Webp`, `Avif` and `Gif` are
+ * the formats `Images.transform` can write; `Heic` is read only, so asking
+ * for it as an output is `InvalidImage`. Cloudflare adds formats over time, so
+ * a `match` over this type needs a wildcard.
+ */
+export type ImageFormat =
+    { readonly tag: "Jpeg" }
+  | { readonly tag: "Png" }
+  | { readonly tag: "Webp" }
+  | { readonly tag: "Avif" }
+  | { readonly tag: "Gif" }
+  | { readonly tag: "Heic" };
+
+export const ImageFormat = {
+  Jpeg: { tag: "Jpeg" } as ImageFormat,
+  Png: { tag: "Png" } as ImageFormat,
+  Webp: { tag: "Webp" } as ImageFormat,
+  Avif: { tag: "Avif" } as ImageFormat,
+  Gif: { tag: "Gif" } as ImageFormat,
+  Heic: { tag: "Heic" } as ImageFormat,
+};
+
+/**
+ * How a resize fits the image to `width` and `height`. `ScaleDown` (the
+ * platform's default) shrinks to fit and never enlarges; `Contain` fits inside
+ * the box; `Cover` fills the box and crops the overflow; `Crop` crops to the
+ * box without scaling up; `Pad` fits inside the box and fills the rest;
+ * `Squeeze` stretches to the box exactly. Cloudflare adds fits over time, so
+ * a `match` over this type needs a wildcard.
+ */
+export type ImageFit =
+    { readonly tag: "ScaleDown" }
+  | { readonly tag: "Contain" }
+  | { readonly tag: "Cover" }
+  | { readonly tag: "Crop" }
+  | { readonly tag: "Pad" }
+  | { readonly tag: "Squeeze" };
+
+export const ImageFit = {
+  ScaleDown: { tag: "ScaleDown" } as ImageFit,
+  Contain: { tag: "Contain" } as ImageFit,
+  Cover: { tag: "Cover" } as ImageFit,
+  Crop: { tag: "Crop" } as ImageFit,
+  Pad: { tag: "Pad" } as ImageFit,
+  Squeeze: { tag: "Squeeze" } as ImageFit,
+};
+
+/**
+ * What `Images.info` reads from an image: `Raster` with its `format`, its
+ * `width` and `height` in pixels and its `size` in bytes, or `Svg`, which the
+ * platform reports without dimensions because it is not a grid of pixels.
+ */
+export type ImageInfo =
+    { readonly tag: "Raster"; readonly format: ImageFormat; readonly width: number; readonly height: number; readonly size: number }
+  | { readonly tag: "Svg" };
+
+export const ImageInfo = {
+  Raster: (format: ImageFormat, width: number, height: number, size: number): ImageInfo => ({ tag: "Raster", format, width, height, size }),
+  Svg: { tag: "Svg" } as ImageInfo,
+};
+
+/**
+ * An image drawn over the one being transformed, from its `image` bytes. The
+ * overlay is placed by an offset in pixels from `top`, `left`, `bottom` or
+ * `right` (centred when none is given; `left` with `right`, or `top` with
+ * `bottom`, is `InvalidImage`), blended at `opacity` from 0 to 1 (`None` is
+ * fully opaque) and tiled across the image when `repeat` is true. Overlays are
+ * drawn in order, the last on top. The overlay is not resized: size it first
+ * with `Images.transform`.
+ */
+export interface Overlay {
+  readonly image: globalThis.Uint8Array;
+  readonly opacity: Option<number>;
+  readonly top: Option<number>;
+  readonly left: Option<number>;
+  readonly bottom: Option<number>;
+  readonly right: Option<number>;
+  readonly repeat: boolean;
+}
+
+export const Overlay = {
+};
+
+/**
+ * What `Images.transform` does to the image before it is written. `width` and
+ * `height` are the target size in pixels, and `fit` says how the image fits
+ * them; `rotate` turns it by 90, 180 or 270 degrees (before the resize, so
+ * `width` and `height` refer to the rotated image); `blur` is a radius from 0
+ * to 250; `overlays` are drawn on the result. A field left `None` is the
+ * platform's default. A `width`, `height` or `blur` the platform refuses is
+ * reported by the platform as `InvalidImage`, not checked here.
+ */
+export interface TransformOptions {
+  readonly width: Option<number>;
+  readonly height: Option<number>;
+  readonly fit: Option<ImageFit>;
+  readonly rotate: Option<number>;
+  readonly blur: Option<number>;
+  readonly overlays: readonly Overlay[];
+}
+
+export const TransformOptions = {
+};
+
+/**
+ * How `Images.transform` writes the result: the `format` (required, because
+ * the platform has no default) and the `quality` from 1 to 100 for the formats
+ * that take one (`None` is the platform's default).
+ */
+export interface OutputOptions {
+  readonly format: ImageFormat;
+  readonly quality: Option<number>;
+}
+
+export const OutputOptions = {
+};
+
+/**
+ * A transformed image: its `body` (buffered whole in the Worker) and the
+ * `contentType` the platform wrote it with, such as `image/webp`.
+ */
+export interface ImageResult {
+  readonly body: globalThis.Uint8Array;
+  readonly contentType: string;
+}
+
+export const ImageResult = {
+};
+
+/**
+ * A transformed image as a stream, from `Images.transformStream`: the `body`
+ * as chunks read as they are pulled, and the `contentType` the platform wrote
+ * it with. The body can be read once (`collect`, `map`, or handed to
+ * `RawStreamed`); a second read faults. A record carrying a stream is not
+ * data: it can't be stored, sent or encoded.
+ */
+export interface ImageStream {
+  readonly body: AsyncIterable<globalThis.Uint8Array>;
+  readonly contentType: string;
+}
+
+export const ImageStream = {
+};
+
+/**
+ * Why an `Images` call did not give an image. `InvalidImage` is an input that
+ * is not an image, or an option the call cannot honour, with the reason;
+ * `UnsupportedImage` is a format the platform cannot read or write;
+ * `ImageTooLarge` is an image over the platform's size or area limit (a
+ * connection the platform lost mid-call is `ImagesFailed`, worth a retry); and
+ * `ImagesFailed` is any other refusal, with the platform's message (the
+ * `Image` prefix because `InvalidInput` is `AiError`'s and `Failed` is
+ * `SqlError`'s). Cloudflare adds error codes over time, so a `match` over this
+ * type needs a wildcard.
+ */
+export type ImagesError =
+    { readonly tag: "InvalidImage"; readonly message: string }
+  | { readonly tag: "UnsupportedImage" }
+  | { readonly tag: "ImageTooLarge" }
+  | { readonly tag: "ImagesFailed"; readonly message: string };
+
+export const ImagesError = {
+  InvalidImage: (message: string): ImagesError => ({ tag: "InvalidImage", message }),
+  UnsupportedImage: { tag: "UnsupportedImage" } as ImagesError,
+  ImageTooLarge: { tag: "ImageTooLarge" } as ImagesError,
+  ImagesFailed: (message: string): ImagesError => ({ tag: "ImagesFailed", message }),
+};
+
+/**
+ * One vector of a `Vectorize` index: its `id` (at most 64 bytes), its `values`
+ * (as many numbers as the index has dimensions), the `namespace` it lives in
+ * when it has one, and `metadata`, a JSON object as text (`Json.encode` writes
+ * it, `Json.decode` reads it back). A property can be filtered on only when
+ * the index declares it in `@indexed`.
+ */
+export interface Vector {
+  readonly id: string;
+  readonly values: readonly number[];
+  readonly metadata: Option<string>;
+  readonly namespace: Option<string>;
+}
+
+export const Vector = {
+};
+
+/**
+ * One vector to write with typed metadata: a `Vector` whose `metadata` is a
+ * value of `M`, which `upsertValue` encodes with `M`'s codec. Reading is not
+ * typed: `getByIds` and a query's matches give the metadata as text, so a
+ * vector stored by an older version of `M` can be skipped or repaired.
+ * Keep the properties a query filters on plain (not `Option`): an `Option` is
+ * written as a tagged object, as `Json.encode` writes it, so a filter on it
+ * would never match.
+ */
+export interface VectorOf<M> {
+  readonly id: string;
+  readonly values: readonly number[];
+  readonly metadata: Option<M>;
+  readonly namespace: Option<string>;
+}
+
+export const VectorOf = {
+};
+
+/**
+ * A metadata value a `Condition` compares a property with: text, a number or
+ * a flag.
+ */
+export type MetaValue =
+    { readonly tag: "MetaText"; readonly value: string }
+  | { readonly tag: "MetaNumber"; readonly value: number }
+  | { readonly tag: "MetaFlag"; readonly value: boolean };
+
+export const MetaValue = {
+  MetaText: (value: string): MetaValue => ({ tag: "MetaText", value }),
+  MetaNumber: (value: number): MetaValue => ({ tag: "MetaNumber", value }),
+  MetaFlag: (value: boolean): MetaValue => ({ tag: "MetaFlag", value }),
+};
+
+/**
+ * How a `Condition` compares a property with a value: equal, not equal, less
+ * than, at most, greater than, at least, one of a list, or none of a list.
+ * The platform allows a range over text or numbers only, and a lower and an
+ * upper bound on one property together, not other mixes; it refuses the
+ * rest as `VectorInvalidInput`.
+ */
+export type FilterOp =
+    { readonly tag: "FilterEq"; readonly value: MetaValue }
+  | { readonly tag: "FilterNe"; readonly value: MetaValue }
+  | { readonly tag: "FilterLt"; readonly value: MetaValue }
+  | { readonly tag: "FilterLte"; readonly value: MetaValue }
+  | { readonly tag: "FilterGt"; readonly value: MetaValue }
+  | { readonly tag: "FilterGte"; readonly value: MetaValue }
+  | { readonly tag: "FilterAnyOf"; readonly values: readonly MetaValue[] }
+  | { readonly tag: "FilterNoneOf"; readonly values: readonly MetaValue[] };
+
+export const FilterOp = {
+  FilterEq: (value: MetaValue): FilterOp => ({ tag: "FilterEq", value }),
+  FilterNe: (value: MetaValue): FilterOp => ({ tag: "FilterNe", value }),
+  FilterLt: (value: MetaValue): FilterOp => ({ tag: "FilterLt", value }),
+  FilterLte: (value: MetaValue): FilterOp => ({ tag: "FilterLte", value }),
+  FilterGt: (value: MetaValue): FilterOp => ({ tag: "FilterGt", value }),
+  FilterGte: (value: MetaValue): FilterOp => ({ tag: "FilterGte", value }),
+  FilterAnyOf: (values: readonly MetaValue[]): FilterOp => ({ tag: "FilterAnyOf", values }),
+  FilterNoneOf: (values: readonly MetaValue[]): FilterOp => ({ tag: "FilterNoneOf", values }),
+};
+
+/**
+ * One test of a `Vectorize` query: the metadata property `field` (a dot nests, as in
+ * `"author.name"`) against `op`. A query's conditions all have to hold.
+ * The property has to be declared in the index's `@indexed`, and a vector
+ * only matches once it was written after that index existed. A text property
+ * is indexed by its first 64 bytes only.
+ */
+export interface Condition {
+  readonly field: string;
+  readonly op: FilterOp;
+}
+
+export const Condition = {
+};
+
+/**
+ * How much metadata a `Vectorize` query returns: `Omit` none (the default),
+ * `Indexed` only the `@indexed` properties, `All` every property. `All` costs
+ * the platform more work and lowers how many matches one query may return.
+ */
+export type MetadataScope =
+    { readonly tag: "Omit" }
+  | { readonly tag: "Indexed" }
+  | { readonly tag: "All" };
+
+export const MetadataScope = {
+  Omit: { tag: "Omit" } as MetadataScope,
+  Indexed: { tag: "Indexed" } as MetadataScope,
+  All: { tag: "All" } as MetadataScope,
+};
+
+/**
+ * The options of `Vectorize.query`. `topK` is how many matches to return
+ * (5 unless set; the platform caps it, and caps it lower when `returnValues`
+ * is set or `returnMetadata` is `All`, and says so as `VectorInvalidInput`).
+ * `namespace` restricts the query to one namespace. `filter` is a list of
+ * conditions that must all hold.
+ */
+export interface QueryOptions {
+  readonly topK: number;
+  readonly returnValues: boolean;
+  readonly returnMetadata: MetadataScope;
+  readonly namespace: Option<string>;
+  readonly filter: readonly Condition[];
+}
+
+export const QueryOptions = {
+};
+
+/**
+ * One match of `Vectorize.query`: the vector's `id` and its `score`, whose
+ * meaning depends on the index's metric (a larger cosine score is nearer; a
+ * smaller euclidean distance is nearer). `values`, `metadata` (a JSON object
+ * as text) and `namespace` are present when the query asked for them and the
+ * vector has them.
+ */
+export interface VectorMatch {
+  readonly id: string;
+  readonly score: number;
+  readonly values: Option<readonly number[]>;
+  readonly metadata: Option<string>;
+  readonly namespace: Option<string>;
+}
+
+export const VectorMatch = {
+};
+
+/**
+ * The receipt of a write: its `id`. A write is asynchronous. It is queryable
+ * after the platform has processed it, which takes some seconds, so a handler
+ * that writes and then queries in the same request will not see its own write.
+ */
+export interface Mutation {
+  readonly id: string;
+}
+
+export const Mutation = {
+};
+
+/**
+ * An index's configuration, as `Vectorize.describe` reports it: its
+ * `dimensions`, and its `metric` when the platform reports one (a real index's
+ * `describe` does not, so it is normally `None`; the declaration states it).
+ */
+export interface IndexInfo {
+  readonly dimensions: number;
+  readonly metric: Option<string>;
+}
+
+export const IndexInfo = {
+};
+
+/**
+ * Why a Vectorize call did not succeed. `DimensionMismatch` is a vector or
+ * query whose length is not the index's dimensions, with the platform's
+ * message; `VectorInvalidInput` is a request the platform refused as malformed
+ * or over a limit (a bad filter, too large a `topK`, too large a batch or too
+ * much metadata); `VectorRateLimited` is a rate limit, worth retrying later;
+ * `VectorFailed` is any other refusal, with the platform's message. The
+ * `Vector` prefix is because `InvalidInput` is `AiError`'s, `RateLimited`
+ * `EmailError`'s and `Failed` `SqlError`'s. Cloudflare adds error cases over
+ * time, so a `match` over this type needs a wildcard.
+ */
+export type VectorError =
+    { readonly tag: "DimensionMismatch"; readonly message: string }
+  | { readonly tag: "VectorInvalidInput"; readonly message: string }
+  | { readonly tag: "VectorRateLimited" }
+  | { readonly tag: "VectorFailed"; readonly message: string };
+
+export const VectorError = {
+  DimensionMismatch: (message: string): VectorError => ({ tag: "DimensionMismatch", message }),
+  VectorInvalidInput: (message: string): VectorError => ({ tag: "VectorInvalidInput", message }),
+  VectorRateLimited: { tag: "VectorRateLimited" } as VectorError,
+  VectorFailed: (message: string): VectorError => ({ tag: "VectorFailed", message }),
+};
+
+/**
+ * One retrieved chunk of an `AiSearch` instance: the chunk's `id`, its `score`
+ * (0 to 1, larger is a closer match), its `text`, and where it came from: `key`
+ * is the source file's path or the page's URL, `timestamp` the source item's
+ * unix time in milliseconds when the platform reports one (a `timestamp`
+ * condition in `SearchOptions.filter` compares in the same unit), and `metadata` the item's custom
+ * metadata as a JSON object in text (`None` when it has none). The text is
+ * indexed content, so treat it as untrusted input.
+ */
+export interface SearchHit {
+  readonly id: string;
+  readonly score: number;
+  readonly text: string;
+  readonly key: string;
+  readonly timestamp: Option<number>;
+  readonly metadata: Option<string>;
+}
+
+export const SearchHit = {
+};
+
+/**
+ * How an `AiSearch` query finds chunks: by `Vector` (meaning), by `Keyword`
+ * (words), or `Hybrid`, both together. The platform's default is `Hybrid`.
+ */
+export type RetrievalType =
+    { readonly tag: "Vector" }
+  | { readonly tag: "Keyword" }
+  | { readonly tag: "Hybrid" };
+
+export const RetrievalType = {
+  Vector: { tag: "Vector" } as RetrievalType,
+  Keyword: { tag: "Keyword" } as RetrievalType,
+  Hybrid: { tag: "Hybrid" } as RetrievalType,
+};
+
+/**
+ * The options of `AiSearch.search` and `AiSearch.answer` (for `answer` they
+ * shape its retrieval step). A setting left `None` or `false` leaves the
+ * platform's own default in place: `maxResults` is how many chunks to return
+ * (1 to 50, 10 unless set), `matchThreshold` the least score a chunk may have
+ * (0 to 1, 0.4 unless set), and `retrieval` how chunks are found. `rewriteQuery`
+ * has the instance rewrite the question for better retrieval, and `rerank`
+ * has it reorder the chunks with a reranking model; both use the models the
+ * platform picks. `filter` is a list of conditions on the items' attributes
+ * (`folder`, `timestamp`, `filename`) and on the instance's custom metadata
+ * (at most five fields), and every condition must hold. A text value is
+ * matched on its first 64 bytes only. Out-of-range values are refused as
+ * `SearchInvalidInput`.
+ */
+export interface SearchOptions {
+  readonly maxResults: Option<number>;
+  readonly matchThreshold: Option<number>;
+  readonly retrieval: Option<RetrievalType>;
+  readonly rewriteQuery: boolean;
+  readonly rerank: boolean;
+  readonly filter: readonly Condition[];
+}
+
+export const SearchOptions = {
+};
+
+/**
+ * The reply of `AiSearch.answer`: the generated `text`, which is untrusted
+ * input, the `hits` it was grounded on, and the `usage` of the generation when
+ * the platform reported it.
+ */
+export interface SearchAnswer {
+  readonly text: string;
+  readonly hits: readonly SearchHit[];
+  readonly usage: Option<TokenUsage>;
+}
+
+export const SearchAnswer = {
+};
+
+/**
+ * Why an AI Search call did not give a reply. `SearchInvalidInput` is a
+ * request the platform refused as malformed or out of range (a bad filter or
+ * option), with its message; `SearchRateLimited` is a rate limit, worth
+ * retrying later; `SearchQuotaExceeded` is a usage limit of the account;
+ * `SearchFailed` is any other refusal, or a reply that is not the shape the
+ * operation promises, with a message. The `Search` prefix is because
+ * `InvalidInput` is `AiError`'s, `RateLimited` `EmailError`'s, `QuotaExceeded`
+ * `AiError`'s and `Failed` `SqlError`'s. Cloudflare adds error cases over time,
+ * so a `match` over this type needs a wildcard.
+ */
+export type SearchError =
+    { readonly tag: "SearchInvalidInput"; readonly message: string }
+  | { readonly tag: "SearchRateLimited" }
+  | { readonly tag: "SearchQuotaExceeded" }
+  | { readonly tag: "SearchFailed"; readonly message: string };
+
+export const SearchError = {
+  SearchInvalidInput: (message: string): SearchError => ({ tag: "SearchInvalidInput", message }),
+  SearchRateLimited: { tag: "SearchRateLimited" } as SearchError,
+  SearchQuotaExceeded: { tag: "SearchQuotaExceeded" } as SearchError,
+  SearchFailed: (message: string): SearchError => ({ tag: "SearchFailed", message }),
+};
+
+/**
+ * Why a `Container` call did not succeed. `StartFailed` is a container that
+ * would not start, or whose port never listened, with a message; `Unavailable`
+ * is the platform declining to start another instance (the account's limits);
+ * `Timeout` is a start or a call that took too long; `Network` is a failure
+ * reaching the instance. Cloudflare adds error cases over time, so a `match`
+ * over this type needs a wildcard.
+ */
+export type ContainerError =
+    { readonly tag: "StartFailed"; readonly message: string }
+  | { readonly tag: "Unavailable" }
+  | { readonly tag: "Timeout" }
+  | { readonly tag: "Network" };
+
+export const ContainerError = {
+  StartFailed: (message: string): ContainerError => ({ tag: "StartFailed", message }),
+  Unavailable: { tag: "Unavailable" } as ContainerError,
+  Timeout: { tag: "Timeout" } as ContainerError,
+  Network: { tag: "Network" } as ContainerError,
 };
 
 /**
@@ -912,16 +1580,55 @@ export const __QueueToken: symbol = globalThis.Symbol("Queue");
  *
  * `write` checks the point against the platform's limits (see `DataPoint`)
  * and faults on a breach; a Worker invocation may write at most 250 points.
- * Writes are sent after the response, so one never delays it. Reading is
- * the account's SQL API, outside Bynk. Data is kept for three months and
+ * Writes are sent after the response, so one never delays it. Reading is done
+ * with `AnalyticsSql`, and `dataset` names this dataset for the query:
+ * `events.analyticsEngine.shop_cart_signups`, or `..._staging` under
+ * `--env staging`, so a query never hard-codes the environment. Data is kept for three months and
  * readable with any account analytics token, so keep secrets and personal
  * data out of it.
  */
 export interface Analytics {
   write(point: DataPoint): globalThis.Promise<void>;
+  dataset(): globalThis.Promise<string>;
 }
 
 export const __AnalyticsToken: symbol = globalThis.Symbol("Analytics");
+
+/**
+ * Read analytics data with SQL, from the Worker's `[analytics]` binding: it needs no
+ * API token. It is account-scoped and bound once per Worker, so it is used bare
+ * (`given AnalyticsSql`) and has no named instances; only a Worker that uses it
+ * declares the binding. It reads the datasets `Analytics.write` fills, and Cloudflare's
+ * other analytics datasets, as `events.analyticsEngine.<DATASET>`.
+ *
+ * `query(sql, params)` runs one `SELECT`. Put values in `params`, a `List[SqlValue]`
+ * bound to `$1`, `$2`, … by position, and never into the text of `sql`. A `Null`,
+ * `Integer`, `Real`, `Text` or `Boolean` is taken (a `Real` that is not finite is
+ * `SqlRejected`); a `Blob` has no Analytics SQL counterpart and is `SqlRejected` too,
+ * before anything is sent. Named
+ * `$name` parameters are not taken yet. A dataset's name is an identifier, which a
+ * parameter cannot be, so it is the one value written into `sql`.
+ *
+ * Cloudflare's rules for the SQL apply as they do to its own API: the query must carry a
+ * lower time bound (`WHERE timestamp >= NOW() - INTERVAL '1' HOUR`), because the binding
+ * exposes no separate time range; it must not name `accountTag` or `zoneTag`, because the
+ * binding supplies the account; and it must not end in a `FORMAT` clause. The dialect is
+ * deliberately limited; see Cloudflare's Analytics SQL reference.
+ *
+ * The reply is an `AnalyticsSqlResult`, its `data` the rows as JSON text for `Json.decode`.
+ * A failure is an `AnalyticsSqlError`: `SqlRetryable` when the platform says repeating
+ * may succeed, `SqlRejected` when it does not. The call never retries by itself.
+ *
+ * There is no local implementation of the binding: under `bynk dev` a query runs on
+ * Cloudflare, against the deployed datasets, once you allow it, and `bynkc test` faults
+ * until the call is stubbed (`stub AnalyticsSql.query(_, _) returns …`), so a test never
+ * reaches Cloudflare.
+ */
+export interface AnalyticsSql {
+  query(sql: string, params: readonly SqlValue[]): globalThis.Promise<Result<AnalyticsSqlResult, AnalyticsSqlError>>;
+}
+
+export const __AnalyticsSqlToken: symbol = globalThis.Symbol("AnalyticsSql");
 
 /**
  * Cloudflare's edge cache for this context's Worker (Workers Cache), and its
@@ -1011,6 +1718,112 @@ export interface Version {
 }
 
 export const __VersionToken: symbol = globalThis.Symbol("Version");
+
+/**
+ * Workers AI, from the Worker's `[ai]` binding: it needs no API token and no
+ * account id. It is bound once per Worker, so it is used bare (`given Ai`)
+ * and has no named instances. Only a Worker that uses it declares the
+ * binding.
+ *
+ * `run(model, input)` runs any model by its id (`"@cf/meta/llama-3.2-1b-instruct"`).
+ * `input` is the model's JSON input as text, and the reply is the model's JSON
+ * output as text, so a model Cloudflare ships tomorrow works today: build the
+ * input with `Json.encode` and read the reply with `Json.decode`. An `input`
+ * that is not a JSON object, or a `model` that is empty or has characters an
+ * id never has, is a fault. A model that answers with binary data (an image,
+ * say) is `AiFailed`: `run` carries JSON replies only.
+ *
+ * `generate(model, request)` is chat-style text generation with the same
+ * request and reply for every chat model: the text is read from the model's
+ * `response`, or from `choices[0].message.content` for a model that answers in
+ * that shape. `embed(model, texts)` gives one vector per text, in order, all of
+ * one length, for a text-embedding model such as `"@cf/baai/bge-base-en-v1.5"`.
+ * Both return `BadReply` when the platform answers but not in the promised
+ * shape (a model that is not of that kind, say). An empty `messages` or `texts`
+ * is a fault. `embed` does not check how many texts one call may carry: the
+ * limit is the model's, and a call over it is `InvalidInput`. The embeddings use
+ * the platform's default pooling, so an index built from them stays consistent.
+ *
+ * `runStream(model, input)` is `run` with the reply streamed: the model's own
+ * events, one element each, as the JSON text of that event (the shape is the
+ * model's, so a handler that wants text deltas maps the stream and decodes each
+ * event). The binding asks the model to stream; the terminal `[DONE]` marker
+ * is consumed, not yielded. A refusal before the stream starts (an unknown
+ * model, a usage limit) is the `Err`, so a handler can answer with an ordinary
+ * response; a failure after the first event faults the stream, as a failing
+ * producer aborts any stream. A model that does not stream is `AiFailed`. Like
+ * every `Stream`, it is read once and cannot cross a service boundary: the
+ * handler that calls `runStream` is the one that serves it, as in
+ * `Streaming(events)`.
+ *
+ * Workers AI is a remote service on your Cloudflare account, so a call
+ * may be billed, and a model's reply is untrusted input like any other
+ * user text. See Cloudflare's Workers AI pricing page for what applies,
+ * and put a `RateLimit` in front of any handler an anonymous caller can reach.
+ * Under `bynk dev` a call runs the model on Cloudflare. In a test every
+ * operation faults until `stub Ai.run(_, _) returns …` replaces it, so a
+ * test never reaches Workers AI.
+ */
+export interface Ai {
+  run(model: string, input: string): globalThis.Promise<Result<string, AiError>>;
+  generate(model: string, request: GenerateRequest): globalThis.Promise<Result<Generation, AiError>>;
+  embed(model: string, texts: readonly string[]): globalThis.Promise<Result<readonly (readonly number[])[], AiError>>;
+  runStream(model: string, input: string): globalThis.Promise<Result<AsyncIterable<string>, AiError>>;
+}
+
+export const __AiToken: symbol = globalThis.Symbol("Ai");
+
+/**
+ * Cloudflare Images, from the Worker's `[images]` binding: it resizes,
+ * rotates, blurs, converts and draws on images in the Worker, with no URL and
+ * no round trip to your zone. It is bound once per Worker, so it is used bare
+ * (`given Images`) and has no named instances. Only a Worker that uses it
+ * declares the binding.
+ *
+ * `info(image)` reads an image's format and size without transforming it, and
+ * Cloudflare does not bill it. An empty or non-image input is `InvalidImage`,
+ * and a format this type does not name is `ImagesFailed`.
+ *
+ * `transform(image, options, output)` reads `image` (any format the platform
+ * reads, at most 20 MB), applies `options` and writes the result as `output`
+ * says. The result is buffered whole; for a large image use `transformStream`.
+ *
+ * `transformStream(image, options, output)` is `transform` over a stream: it
+ * reads `image` as a `Stream[Bytes]` (read once, as any stream is) and gives
+ * the result as an `ImageStream`, so a handler can serve it with
+ * `RawStreamed` without holding the output. The input is still bounded by
+ * the platform's limit, and the options are the same. A refusal before the
+ * stream starts (a non-image, an option out of range) is the `Err`; a failure
+ * after the first chunk faults the stream, as a failing producer aborts any
+ * stream. The overlay images stay `Bytes`, since an overlay is small and a
+ * stream cannot be read twice for `repeat`. Like every `Stream`, the result
+ * cannot cross a service boundary: the handler that calls it is the one that
+ * serves it. The image is untrusted input: an upload
+ * can be a non-image or very large, so answer `InvalidImage` and
+ * `ImageTooLarge` as the caller's mistake, and cap an upload with the request
+ * body limit. An empty image, a `width` or `height` below 1, a `rotate` other
+ * than 90, 180 or 270, an `opacity` outside 0 to 1, a `quality` outside 1 to 100
+ * and an overlay positioned from both opposite edges are `InvalidImage`
+ * without reaching the platform. Cloudflare's own limits are enforced by the
+ * platform and reported as an `ImagesError`; see Cloudflare's Images limits
+ * page for them.
+ *
+ * Calls are billed by Cloudflare as unique transformations. See Cloudflare's
+ * Images pricing page for what applies, and put a `RateLimit` in front of any
+ * handler an anonymous caller can reach. Under `bynk dev` the binding runs
+ * locally in a low-fidelity form that supports only `width`, `height`,
+ * `rotate` and the output format, so `fit`, `blur`, `overlays`, `quality` and
+ * some formats are not reproduced there; deploy to see production's output.
+ * In a test every operation faults until `stub Images.transform(_, _, _)
+ * returns …` replaces it, so a test never reaches the platform.
+ */
+export interface Images {
+  info(image: globalThis.Uint8Array): globalThis.Promise<Result<ImageInfo, ImagesError>>;
+  transform(image: globalThis.Uint8Array, options: TransformOptions, output: OutputOptions): globalThis.Promise<Result<ImageResult, ImagesError>>;
+  transformStream(image: AsyncIterable<globalThis.Uint8Array>, options: TransformOptions, output: OutputOptions): globalThis.Promise<Result<ImageStream, ImagesError>>;
+}
+
+export const __ImagesToken: symbol = globalThis.Symbol("Images");
 
 /**
  * One secret of a Cloudflare Secrets Store, read as `StripeKey.get()`. A
@@ -1194,6 +2007,480 @@ export interface MySql {
 }
 
 export const __MySqlToken: symbol = globalThis.Symbol("MySql");
+
+/**
+ * A Vectorize index: vectors with an id, searched by similarity. Used only
+ * through a named instance that states the index's fixed shape,
+ * `capability Docs = Vectorize @dimensions(768) @metric("cosine")`, which
+ * binds as `VECTORIZE_DOCS`, a `[[vectorize]]` entry; both annotations are
+ * required, and a bare `given Vectorize` is refused. `@metric` is `"cosine"`,
+ * `"euclidean"` or `"dot-product"`. Experimental.
+ *
+ * An index's dimensions and metric cannot change once it exists, so they are
+ * written next to the code that depends on them. `@indexed(["category:string",
+ * "year:number"])` lists the metadata properties a query may filter on (at
+ * most 10, each `name:type` with the type `string`, `number` or `boolean`).
+ * Metadata indexes should exist before the vectors that carry the property.
+ *
+ * `upsert` writes vectors, replacing any with the same id in full; `insert`
+ * writes only vectors whose id is new. `upsertValue(vectors)` is `upsert` with
+ * the metadata of each `VectorOf[M]` encoded by `M`'s codec, as
+ * `Queue.sendValue` encodes a message. `query(vector, options)` returns the
+ * nearest matches, best first. `getByIds` reads vectors back, `deleteByIds`
+ * removes them, and `describe` reports the index's dimensions and metric.
+ * Metadata is JSON text: write it with `Json.encode` and read it with
+ * `Json.decode`, so a vector stored by an older version of the program can be
+ * skipped or repaired instead of failing the query. The embeddings of
+ * `Ai.embed` are the usual `values`; an index must be queried with the same
+ * model and pooling it was built with.
+ *
+ * A write returns a `Mutation` and is visible to queries only after the
+ * platform has processed it. Every operation gives a `VectorError` rather
+ * than faulting, except a call on an index that does not exist, which is a
+ * platform fault.
+ *
+ * Vectorize is a remote service on your Cloudflare account, so a call may be
+ * billed; see Cloudflare's Vectorize pricing page for what applies, and put a
+ * `RateLimit` in front of any handler an anonymous caller can reach.
+ *
+ * In a test each instance is an in-memory index built from its declaration,
+ * so a test never reaches Cloudflare and a retrieval flow (store, filter,
+ * rank) runs. It ranks exactly where production ranks approximately, and a
+ * write is visible at once where production takes some seconds; those are
+ * its two differences. It enforces the dimensions, namespaces, insert versus
+ * upsert, all eight filter operators and the platform limits as of
+ * 2026-11-13 (a limit it refuses is a `VectorInvalidInput`). A filter on a
+ * property that is not in `@indexed` faults, naming the difference, because
+ * production silently matches nothing for it. `stub Docs.query(_, _) returns …`
+ * still replaces any operation.
+ */
+export interface Vectorize {
+  upsert(vectors: readonly Vector[]): globalThis.Promise<Result<Mutation, VectorError>>;
+  insert(vectors: readonly Vector[]): globalThis.Promise<Result<Mutation, VectorError>>;
+  upsertValue(vectors: unknown): globalThis.Promise<Result<Mutation, VectorError>>;
+  query(vector: readonly number[], options: QueryOptions): globalThis.Promise<Result<readonly VectorMatch[], VectorError>>;
+  getByIds(ids: readonly string[]): globalThis.Promise<Result<readonly Vector[], VectorError>>;
+  deleteByIds(ids: readonly string[]): globalThis.Promise<Result<Mutation, VectorError>>;
+  describe(): globalThis.Promise<Result<IndexInfo, VectorError>>;
+}
+
+export const __VectorizeToken: symbol = globalThis.Symbol("Vectorize");
+
+/**
+ * An AI Search instance: a managed retrieval service that indexes a data source
+ * (an R2 bucket, a website, files uploaded to it) and answers from it. Used
+ * only through a named instance that names it,
+ * `capability Kb = AiSearch @instance("support-docs")`, which binds as
+ * `AI_SEARCH_KB`, an `[[ai_search]]` entry; the annotation is required, and a
+ * bare `given AiSearch` is refused. Experimental.
+ *
+ * The instance is not created by Bynk. It is configured by whoever owns it (the
+ * data source, the models, the chunking, how it is kept in sync), so you create
+ * it in the Cloudflare dashboard, with `wrangler` or the REST API, and the
+ * Worker only queries it. The name is used as written in every environment.
+ * To fill an instance backed by an R2 bucket, write the files with `R2.put`;
+ * the instance indexes them on its own schedule, so a freshly written file is
+ * not searchable at once, and a query against an instance that has indexed
+ * nothing yet is an empty list, not an error.
+ *
+ * `search(query, options)` returns the best-matching chunks, best first, for a
+ * handler that shows results or builds its own prompt (with `Ai.generate`).
+ * `answer(messages, options)` retrieves the same way and has the instance's own
+ * generation model write the reply from the conversation, which must not be
+ * empty; a `SearchAnswer` carries the text, the chunks it used and the token usage.
+ * The generation model is the instance's setting and a call cannot override
+ * it. Every operation gives a `SearchError` rather than faulting, except a call
+ * on an instance that does not exist, which is a platform fault.
+ *
+ * AI Search is a remote service on your Cloudflare account, so a call may be
+ * billed; see Cloudflare's AI Search pricing page for what applies, and put a
+ * `RateLimit` in front of any handler an anonymous caller can reach. Under
+ * `bynk dev` a call goes to the deployed instance on Cloudflare. In a test every
+ * operation faults until `stub Kb.search(_, _) returns …` replaces it, so a test
+ * never reaches AI Search; to test retrieval logic, use `Vectorize`, which
+ * has an in-memory double.
+ */
+export interface AiSearch {
+  search(query: string, options: SearchOptions): globalThis.Promise<Result<readonly SearchHit[], SearchError>>;
+  answer(messages: readonly ChatMessage[], options: SearchOptions): globalThis.Promise<Result<SearchAnswer, SearchError>>;
+}
+
+export const __AiSearchToken: symbol = globalThis.Symbol("AiSearch");
+
+/**
+ * A container: a server in a Docker image, run on Cloudflare and reached over
+ * HTTP on one port. Used only through a named instance,
+ * `capability Renderer = Container @build("containers/renderer") @port(8080)`,
+ * which binds as `CONTAINER_RENDERER`, a Durable Object class the compiler
+ * generates; a bare `given Container` is refused. `@build` is the
+ * project-relative directory that holds the `Dockerfile`, and `@port` the
+ * port its server listens on; both are required. Experimental.
+ *
+ * `@sleepAfter(5.minutes)` stops an idle container after that long (more than
+ * zero, at most 6 hours); left out, the platform stops it shortly after the
+ * instance goes inactive, with no figure to rely on. `@instanceType` is
+ * `"lite"` (the default), `"standard-1"`, `"standard-2"`, `"standard-3"` or
+ * `"standard-4"`. `@forward(["API_KEY"])` names Worker secrets the container's
+ * process reads from its environment: every process and dependency in the
+ * image can read them, and Bynk cannot scope them further.
+ *
+ * `send(instance, req)` sends `req` to the container named `instance` and
+ * returns its response; `receiveBytes` returns the body as `Bytes`, and
+ * `sendBytes` sends `body` as the request body (`req.body` must be `None`).
+ * `Request`, `Response` and `BytesResponse` are `bynk`'s, so a context that
+ * calls them also writes `consumes bynk`. The URL's host is not used for
+ * routing, but the URL must be absolute, and the container sees it.
+ *
+ * `instance` is the name of one container instance, one process: the same
+ * name reaches the same instance, and a new name starts a new one. It is a
+ * runtime value, so a handler can use one per tenant, and it is not a secret:
+ * names appear in Cloudflare's dashboards and logs. A name that is empty, over
+ * 256 bytes or holds a control character faults the call. The first call to an
+ * instance starts its container, which takes noticeable time, longer for a
+ * larger image. A container is not storage: its disk is ephemeral.
+ *
+ * A container has no internet access: Bynk always starts it with outbound
+ * access off. Images must be built for `linux/amd64` and live in Cloudflare's
+ * registry. `bynk.cloudflare` puts no ceiling on instances: names are chosen
+ * by the caller and only the account's limits apply, so choose `@sleepAfter`
+ * and `@instanceType` with that in mind. A running container costs money; see
+ * Cloudflare's Containers pricing and limits pages for what applies. A slow
+ * call from inside an agent handler holds that agent's queue, so call from a
+ * service and hand the result to the agent.
+ *
+ * Deploy with `wrangler deploy` (Docker running).
+ * In a test every operation faults until `stub Renderer.send(_, _) returns …`
+ * replaces it, so a test never starts a container.
+ */
+export interface Container {
+  send(instance: string, req: Request): globalThis.Promise<Result<Response, ContainerError>>;
+  receiveBytes(instance: string, req: Request): globalThis.Promise<Result<BytesResponse, ContainerError>>;
+  sendBytes(instance: string, req: Request, body: globalThis.Uint8Array): globalThis.Promise<Result<BytesResponse, ContainerError>>;
+}
+
+export const __ContainerToken: symbol = globalThis.Symbol("Container");
+
+/**
+ * An outbound call that presents one of your account's client certificates, for
+ * an origin that requires mutual TLS: the server proves its identity and so
+ * does the Worker, during the handshake. Used only through a named instance
+ * that names the certificate,
+ * `capability Backend = MtlsCertificate @certificate("acme-client")`, which
+ * binds as `MTLS_BACKEND`; a bare `given MtlsCertificate` names no certificate
+ * and is refused.
+ *
+ * The certificate is uploaded to the account by its owner (Wrangler's
+ * `mtls-certificate upload`, the dashboard or the API) and is named there;
+ * `@certificate` names it, as written in every environment. The deploy links to
+ * it by that name and never uploads it: its private key never reaches Bynk or
+ * the Worker. A name that no uploaded client certificate carries, or that more
+ * than one carries, fails the deploy with the problem named.
+ *
+ * `send` has `Fetch.send`'s shape and rules: the same `Request` (its headers
+ * checked the same way, refused as `InvalidHeader` before anything is sent),
+ * the same `Response`, and `Network` when the call itself fails, which includes
+ * a handshake the origin refuses. Unlike `Service`, the URL's host is the
+ * destination: this is a real outbound call, and the certificate is presented
+ * to whatever origin the URL names. A status the origin returns, 5xx included,
+ * is an `Ok` response.
+ *
+ * Cloudflare does not support presenting a certificate to an origin that is a
+ * proxied zone on Cloudflare; the call fails with a `520`. See Cloudflare's
+ * mTLS bindings page for the current rules. There is no local simulation of
+ * the binding: `bynk dev` runs it on Cloudflare, once you allow it, and
+ * `bynkc test` faults until the call is stubbed, so a test never reaches the
+ * origin.
+ *
+ * `receiveBytes` and `sendBytes` are `Fetch`'s byte forms over the same
+ * certificate: the response body as `Bytes`, and a `Bytes` request body (which
+ * `req.body` must then leave `None`), each with `Fetch`'s defaults for the
+ * timeout and redirects.
+ *
+ * `Request`, `Response`, `BytesResponse` and `FetchError` are `bynk`'s types, so
+ * a context that calls them also writes `consumes bynk` to name them.
+ */
+export interface MtlsCertificate {
+  send(req: Request): globalThis.Promise<Result<Response, FetchError>>;
+  receiveBytes(req: Request): globalThis.Promise<Result<BytesResponse, FetchError>>;
+  sendBytes(req: Request, body: globalThis.Uint8Array): globalThis.Promise<Result<BytesResponse, FetchError>>;
+}
+
+export const __MtlsCertificateToken: symbol = globalThis.Symbol("MtlsCertificate");
+
+export function __serialise_AiError(value: AiError): __JsonValue {
+  switch (value.tag) {
+    case "ModelNotFound":
+      return { kind: "ModelNotFound" };
+    case "InvalidInput": {
+      return { kind: "InvalidInput", message: value.message as __JsonValue };
+    }
+    case "QuotaExceeded":
+      return { kind: "QuotaExceeded" };
+    case "Overloaded":
+      return { kind: "Overloaded" };
+    case "BadReply": {
+      return { kind: "BadReply", message: value.message as __JsonValue };
+    }
+    case "AiFailed": {
+      return { kind: "AiFailed", message: value.message as __JsonValue };
+    }
+  }
+}
+
+export function __deserialise_AiError(json: __JsonValue, path: string = "$"): Result<AiError, __BoundaryError> {
+  if (typeof json !== "object" || json === null || globalThis.Array.isArray(json)) {
+    return Err({ kind: "StructuralMismatch", path, expected: "object", actual: typeof json });
+  }
+  const obj = json as { [k: string]: __JsonValue };
+  const kind = obj["kind"];
+  switch (kind) {
+    case "ModelNotFound":
+      return Ok({ tag: "ModelNotFound" } as AiError);
+    case "InvalidInput": {
+  if (typeof obj["message"] !== "string") {
+    return Err({ kind: "StructuralMismatch", path: `${path}.message`, expected: "string", actual: typeof obj["message"] });
+  }
+  const __message = obj["message"];
+      return Ok({ tag: "InvalidInput", message: __message } as AiError);
+    }
+    case "QuotaExceeded":
+      return Ok({ tag: "QuotaExceeded" } as AiError);
+    case "Overloaded":
+      return Ok({ tag: "Overloaded" } as AiError);
+    case "BadReply": {
+  if (typeof obj["message"] !== "string") {
+    return Err({ kind: "StructuralMismatch", path: `${path}.message`, expected: "string", actual: typeof obj["message"] });
+  }
+  const __message = obj["message"];
+      return Ok({ tag: "BadReply", message: __message } as AiError);
+    }
+    case "AiFailed": {
+  if (typeof obj["message"] !== "string") {
+    return Err({ kind: "StructuralMismatch", path: `${path}.message`, expected: "string", actual: typeof obj["message"] });
+  }
+  const __message = obj["message"];
+      return Ok({ tag: "AiFailed", message: __message } as AiError);
+    }
+    default:
+      return Err({ kind: "StructuralMismatch", path, expected: "sum variant kind", actual: String(kind) });
+  }
+}
+
+export function __serialise_AnalyticsSqlError(value: AnalyticsSqlError): __JsonValue {
+  switch (value.tag) {
+    case "SqlRetryable": {
+      return { kind: "SqlRetryable", message: value.message as __JsonValue };
+    }
+    case "SqlRejected": {
+      return { kind: "SqlRejected", message: value.message as __JsonValue };
+    }
+  }
+}
+
+export function __deserialise_AnalyticsSqlError(json: __JsonValue, path: string = "$"): Result<AnalyticsSqlError, __BoundaryError> {
+  if (typeof json !== "object" || json === null || globalThis.Array.isArray(json)) {
+    return Err({ kind: "StructuralMismatch", path, expected: "object", actual: typeof json });
+  }
+  const obj = json as { [k: string]: __JsonValue };
+  const kind = obj["kind"];
+  switch (kind) {
+    case "SqlRetryable": {
+  if (typeof obj["message"] !== "string") {
+    return Err({ kind: "StructuralMismatch", path: `${path}.message`, expected: "string", actual: typeof obj["message"] });
+  }
+  const __message = obj["message"];
+      return Ok({ tag: "SqlRetryable", message: __message } as AnalyticsSqlError);
+    }
+    case "SqlRejected": {
+  if (typeof obj["message"] !== "string") {
+    return Err({ kind: "StructuralMismatch", path: `${path}.message`, expected: "string", actual: typeof obj["message"] });
+  }
+  const __message = obj["message"];
+      return Ok({ tag: "SqlRejected", message: __message } as AnalyticsSqlError);
+    }
+    default:
+      return Err({ kind: "StructuralMismatch", path, expected: "sum variant kind", actual: String(kind) });
+  }
+}
+
+export function __serialise_AnalyticsSqlResult(value: AnalyticsSqlResult): __JsonValue {
+  return {
+    data: value.data as __JsonValue,
+    rows: ((v: number) => { if (!globalThis.Number.isSafeInteger(v)) throw new globalThis.Error("Int outside the safe-integer range at boundary"); return v as __JsonValue; })(value.rows),
+    statistics: __serialise_AnalyticsSqlStatistics(value.statistics),
+  };
+}
+
+export function __deserialise_AnalyticsSqlResult(json: __JsonValue, path: string = "$"): Result<AnalyticsSqlResult, __BoundaryError> {
+  if (typeof json !== "object" || json === null || globalThis.Array.isArray(json)) {
+    return Err({ kind: "StructuralMismatch", path, expected: "object", actual: typeof json });
+  }
+  const obj = json as { [k: string]: __JsonValue };
+  if (typeof obj["data"] !== "string") {
+    return Err({ kind: "StructuralMismatch", path: `${path}.data`, expected: "string", actual: typeof obj["data"] });
+  }
+  const __data = obj["data"];
+  if (typeof obj["rows"] !== "number") {
+    return Err({ kind: "StructuralMismatch", path: `${path}.rows`, expected: "number", actual: typeof obj["rows"] });
+  }
+  if (!globalThis.Number.isSafeInteger(obj["rows"])) {
+    return Err({ kind: "StructuralMismatch", path: `${path}.rows`, expected: "safe integer", actual: String(obj["rows"]) });
+  }
+  const __rows = obj["rows"];
+  const __r_statistics = __deserialise_AnalyticsSqlStatistics(obj["statistics"], `${path}.statistics`);
+  if (__r_statistics.tag === "Err") return __r_statistics;
+  const __statistics = __r_statistics.value;
+  return Ok({ data: __data, rows: __rows, statistics: __statistics } as AnalyticsSqlResult);
+}
+
+export function __serialise_AnalyticsSqlStatistics(value: AnalyticsSqlStatistics): __JsonValue {
+  return {
+    elapsedMs: ((v: number) => { if (!globalThis.Number.isSafeInteger(v)) throw new globalThis.Error("Int outside the safe-integer range at boundary"); return v as __JsonValue; })(value.elapsedMs),
+    rowsRead: ((v: number) => { if (!globalThis.Number.isSafeInteger(v)) throw new globalThis.Error("Int outside the safe-integer range at boundary"); return v as __JsonValue; })(value.rowsRead),
+    bytesRead: ((v: number) => { if (!globalThis.Number.isSafeInteger(v)) throw new globalThis.Error("Int outside the safe-integer range at boundary"); return v as __JsonValue; })(value.bytesRead),
+  };
+}
+
+export function __deserialise_AnalyticsSqlStatistics(json: __JsonValue, path: string = "$"): Result<AnalyticsSqlStatistics, __BoundaryError> {
+  if (typeof json !== "object" || json === null || globalThis.Array.isArray(json)) {
+    return Err({ kind: "StructuralMismatch", path, expected: "object", actual: typeof json });
+  }
+  const obj = json as { [k: string]: __JsonValue };
+  if (typeof obj["elapsedMs"] !== "number") {
+    return Err({ kind: "StructuralMismatch", path: `${path}.elapsedMs`, expected: "number", actual: typeof obj["elapsedMs"] });
+  }
+  if (!globalThis.Number.isSafeInteger(obj["elapsedMs"])) {
+    return Err({ kind: "StructuralMismatch", path: `${path}.elapsedMs`, expected: "safe integer", actual: String(obj["elapsedMs"]) });
+  }
+  const __elapsedMs = obj["elapsedMs"];
+  if (typeof obj["rowsRead"] !== "number") {
+    return Err({ kind: "StructuralMismatch", path: `${path}.rowsRead`, expected: "number", actual: typeof obj["rowsRead"] });
+  }
+  if (!globalThis.Number.isSafeInteger(obj["rowsRead"])) {
+    return Err({ kind: "StructuralMismatch", path: `${path}.rowsRead`, expected: "safe integer", actual: String(obj["rowsRead"]) });
+  }
+  const __rowsRead = obj["rowsRead"];
+  if (typeof obj["bytesRead"] !== "number") {
+    return Err({ kind: "StructuralMismatch", path: `${path}.bytesRead`, expected: "number", actual: typeof obj["bytesRead"] });
+  }
+  if (!globalThis.Number.isSafeInteger(obj["bytesRead"])) {
+    return Err({ kind: "StructuralMismatch", path: `${path}.bytesRead`, expected: "safe integer", actual: String(obj["bytesRead"]) });
+  }
+  const __bytesRead = obj["bytesRead"];
+  return Ok({ elapsedMs: __elapsedMs, rowsRead: __rowsRead, bytesRead: __bytesRead } as AnalyticsSqlStatistics);
+}
+
+export function __serialise_ChatMessage(value: ChatMessage): __JsonValue {
+  return {
+    role: __serialise_ChatRole(value.role),
+    content: value.content as __JsonValue,
+  };
+}
+
+export function __deserialise_ChatMessage(json: __JsonValue, path: string = "$"): Result<ChatMessage, __BoundaryError> {
+  if (typeof json !== "object" || json === null || globalThis.Array.isArray(json)) {
+    return Err({ kind: "StructuralMismatch", path, expected: "object", actual: typeof json });
+  }
+  const obj = json as { [k: string]: __JsonValue };
+  const __r_role = __deserialise_ChatRole(obj["role"], `${path}.role`);
+  if (__r_role.tag === "Err") return __r_role;
+  const __role = __r_role.value;
+  if (typeof obj["content"] !== "string") {
+    return Err({ kind: "StructuralMismatch", path: `${path}.content`, expected: "string", actual: typeof obj["content"] });
+  }
+  const __content = obj["content"];
+  return Ok({ role: __role, content: __content } as ChatMessage);
+}
+
+export function __serialise_ChatRole(value: ChatRole): __JsonValue {
+  switch (value.tag) {
+    case "System":
+      return { kind: "System" };
+    case "User":
+      return { kind: "User" };
+    case "Assistant":
+      return { kind: "Assistant" };
+  }
+}
+
+export function __deserialise_ChatRole(json: __JsonValue, path: string = "$"): Result<ChatRole, __BoundaryError> {
+  if (typeof json !== "object" || json === null || globalThis.Array.isArray(json)) {
+    return Err({ kind: "StructuralMismatch", path, expected: "object", actual: typeof json });
+  }
+  const obj = json as { [k: string]: __JsonValue };
+  const kind = obj["kind"];
+  switch (kind) {
+    case "System":
+      return Ok({ tag: "System" } as ChatRole);
+    case "User":
+      return Ok({ tag: "User" } as ChatRole);
+    case "Assistant":
+      return Ok({ tag: "Assistant" } as ChatRole);
+    default:
+      return Err({ kind: "StructuralMismatch", path, expected: "sum variant kind", actual: String(kind) });
+  }
+}
+
+export function __serialise_Condition(value: Condition): __JsonValue {
+  return {
+    field: value.field as __JsonValue,
+    op: __serialise_FilterOp(value.op),
+  };
+}
+
+export function __deserialise_Condition(json: __JsonValue, path: string = "$"): Result<Condition, __BoundaryError> {
+  if (typeof json !== "object" || json === null || globalThis.Array.isArray(json)) {
+    return Err({ kind: "StructuralMismatch", path, expected: "object", actual: typeof json });
+  }
+  const obj = json as { [k: string]: __JsonValue };
+  if (typeof obj["field"] !== "string") {
+    return Err({ kind: "StructuralMismatch", path: `${path}.field`, expected: "string", actual: typeof obj["field"] });
+  }
+  const __field = obj["field"];
+  const __r_op = __deserialise_FilterOp(obj["op"], `${path}.op`);
+  if (__r_op.tag === "Err") return __r_op;
+  const __op = __r_op.value;
+  return Ok({ field: __field, op: __op } as Condition);
+}
+
+export function __serialise_ContainerError(value: ContainerError): __JsonValue {
+  switch (value.tag) {
+    case "StartFailed": {
+      return { kind: "StartFailed", message: value.message as __JsonValue };
+    }
+    case "Unavailable":
+      return { kind: "Unavailable" };
+    case "Timeout":
+      return { kind: "Timeout" };
+    case "Network":
+      return { kind: "Network" };
+  }
+}
+
+export function __deserialise_ContainerError(json: __JsonValue, path: string = "$"): Result<ContainerError, __BoundaryError> {
+  if (typeof json !== "object" || json === null || globalThis.Array.isArray(json)) {
+    return Err({ kind: "StructuralMismatch", path, expected: "object", actual: typeof json });
+  }
+  const obj = json as { [k: string]: __JsonValue };
+  const kind = obj["kind"];
+  switch (kind) {
+    case "StartFailed": {
+  if (typeof obj["message"] !== "string") {
+    return Err({ kind: "StructuralMismatch", path: `${path}.message`, expected: "string", actual: typeof obj["message"] });
+  }
+  const __message = obj["message"];
+      return Ok({ tag: "StartFailed", message: __message } as ContainerError);
+    }
+    case "Unavailable":
+      return Ok({ tag: "Unavailable" } as ContainerError);
+    case "Timeout":
+      return Ok({ tag: "Timeout" } as ContainerError);
+    case "Network":
+      return Ok({ tag: "Network" } as ContainerError);
+    default:
+      return Err({ kind: "StructuralMismatch", path, expected: "sum variant kind", actual: String(kind) });
+  }
+}
 
 export function __serialise_DataPoint(value: DataPoint): __JsonValue {
   return {
@@ -1470,6 +2757,359 @@ export function __deserialise_EmailVerdict(json: __JsonValue, path: string = "$"
   }
 }
 
+export function __serialise_FilterOp(value: FilterOp): __JsonValue {
+  switch (value.tag) {
+    case "FilterEq": {
+      return { kind: "FilterEq", value: __serialise_MetaValue(value.value) };
+    }
+    case "FilterNe": {
+      return { kind: "FilterNe", value: __serialise_MetaValue(value.value) };
+    }
+    case "FilterLt": {
+      return { kind: "FilterLt", value: __serialise_MetaValue(value.value) };
+    }
+    case "FilterLte": {
+      return { kind: "FilterLte", value: __serialise_MetaValue(value.value) };
+    }
+    case "FilterGt": {
+      return { kind: "FilterGt", value: __serialise_MetaValue(value.value) };
+    }
+    case "FilterGte": {
+      return { kind: "FilterGte", value: __serialise_MetaValue(value.value) };
+    }
+    case "FilterAnyOf": {
+      return { kind: "FilterAnyOf", values: __serialise_List_MetaValue(value.values) };
+    }
+    case "FilterNoneOf": {
+      return { kind: "FilterNoneOf", values: __serialise_List_MetaValue(value.values) };
+    }
+  }
+}
+
+export function __deserialise_FilterOp(json: __JsonValue, path: string = "$"): Result<FilterOp, __BoundaryError> {
+  if (typeof json !== "object" || json === null || globalThis.Array.isArray(json)) {
+    return Err({ kind: "StructuralMismatch", path, expected: "object", actual: typeof json });
+  }
+  const obj = json as { [k: string]: __JsonValue };
+  const kind = obj["kind"];
+  switch (kind) {
+    case "FilterEq": {
+  const __r_value = __deserialise_MetaValue(obj["value"], `${path}.value`);
+  if (__r_value.tag === "Err") return __r_value;
+  const __value = __r_value.value;
+      return Ok({ tag: "FilterEq", value: __value } as FilterOp);
+    }
+    case "FilterNe": {
+  const __r_value = __deserialise_MetaValue(obj["value"], `${path}.value`);
+  if (__r_value.tag === "Err") return __r_value;
+  const __value = __r_value.value;
+      return Ok({ tag: "FilterNe", value: __value } as FilterOp);
+    }
+    case "FilterLt": {
+  const __r_value = __deserialise_MetaValue(obj["value"], `${path}.value`);
+  if (__r_value.tag === "Err") return __r_value;
+  const __value = __r_value.value;
+      return Ok({ tag: "FilterLt", value: __value } as FilterOp);
+    }
+    case "FilterLte": {
+  const __r_value = __deserialise_MetaValue(obj["value"], `${path}.value`);
+  if (__r_value.tag === "Err") return __r_value;
+  const __value = __r_value.value;
+      return Ok({ tag: "FilterLte", value: __value } as FilterOp);
+    }
+    case "FilterGt": {
+  const __r_value = __deserialise_MetaValue(obj["value"], `${path}.value`);
+  if (__r_value.tag === "Err") return __r_value;
+  const __value = __r_value.value;
+      return Ok({ tag: "FilterGt", value: __value } as FilterOp);
+    }
+    case "FilterGte": {
+  const __r_value = __deserialise_MetaValue(obj["value"], `${path}.value`);
+  if (__r_value.tag === "Err") return __r_value;
+  const __value = __r_value.value;
+      return Ok({ tag: "FilterGte", value: __value } as FilterOp);
+    }
+    case "FilterAnyOf": {
+  const __r_values = __deserialise_List_MetaValue(obj["values"], `${path}.values`);
+  if (__r_values.tag === "Err") return __r_values;
+  const __values = __r_values.value;
+      return Ok({ tag: "FilterAnyOf", values: __values } as FilterOp);
+    }
+    case "FilterNoneOf": {
+  const __r_values = __deserialise_List_MetaValue(obj["values"], `${path}.values`);
+  if (__r_values.tag === "Err") return __r_values;
+  const __values = __r_values.value;
+      return Ok({ tag: "FilterNoneOf", values: __values } as FilterOp);
+    }
+    default:
+      return Err({ kind: "StructuralMismatch", path, expected: "sum variant kind", actual: String(kind) });
+  }
+}
+
+export function __serialise_GenerateRequest(value: GenerateRequest): __JsonValue {
+  return {
+    messages: __serialise_List_ChatMessage(value.messages),
+    maxTokens: __serialise_Option_Int(value.maxTokens),
+    temperature: __serialise_Option_Float(value.temperature),
+    topP: __serialise_Option_Float(value.topP),
+    seed: __serialise_Option_Int(value.seed),
+  };
+}
+
+export function __deserialise_GenerateRequest(json: __JsonValue, path: string = "$"): Result<GenerateRequest, __BoundaryError> {
+  if (typeof json !== "object" || json === null || globalThis.Array.isArray(json)) {
+    return Err({ kind: "StructuralMismatch", path, expected: "object", actual: typeof json });
+  }
+  const obj = json as { [k: string]: __JsonValue };
+  const __r_messages = __deserialise_List_ChatMessage(obj["messages"], `${path}.messages`);
+  if (__r_messages.tag === "Err") return __r_messages;
+  const __messages = __r_messages.value;
+  const __d_maxTokens: __JsonValue = "maxTokens" in obj ? obj["maxTokens"] : { kind: "None" };
+  const __r_maxTokens = __deserialise_Option_Int(__d_maxTokens, `${path}.maxTokens`);
+  if (__r_maxTokens.tag === "Err") return __r_maxTokens;
+  const __maxTokens = __r_maxTokens.value;
+  const __d_temperature: __JsonValue = "temperature" in obj ? obj["temperature"] : { kind: "None" };
+  const __r_temperature = __deserialise_Option_Float(__d_temperature, `${path}.temperature`);
+  if (__r_temperature.tag === "Err") return __r_temperature;
+  const __temperature = __r_temperature.value;
+  const __d_topP: __JsonValue = "topP" in obj ? obj["topP"] : { kind: "None" };
+  const __r_topP = __deserialise_Option_Float(__d_topP, `${path}.topP`);
+  if (__r_topP.tag === "Err") return __r_topP;
+  const __topP = __r_topP.value;
+  const __d_seed: __JsonValue = "seed" in obj ? obj["seed"] : { kind: "None" };
+  const __r_seed = __deserialise_Option_Int(__d_seed, `${path}.seed`);
+  if (__r_seed.tag === "Err") return __r_seed;
+  const __seed = __r_seed.value;
+  return Ok({ messages: __messages, maxTokens: __maxTokens, temperature: __temperature, topP: __topP, seed: __seed } as GenerateRequest);
+}
+
+export function __serialise_Generation(value: Generation): __JsonValue {
+  return {
+    text: value.text as __JsonValue,
+    usage: __serialise_Option_TokenUsage(value.usage),
+  };
+}
+
+export function __deserialise_Generation(json: __JsonValue, path: string = "$"): Result<Generation, __BoundaryError> {
+  if (typeof json !== "object" || json === null || globalThis.Array.isArray(json)) {
+    return Err({ kind: "StructuralMismatch", path, expected: "object", actual: typeof json });
+  }
+  const obj = json as { [k: string]: __JsonValue };
+  if (typeof obj["text"] !== "string") {
+    return Err({ kind: "StructuralMismatch", path: `${path}.text`, expected: "string", actual: typeof obj["text"] });
+  }
+  const __text = obj["text"];
+  const __r_usage = __deserialise_Option_TokenUsage(obj["usage"], `${path}.usage`);
+  if (__r_usage.tag === "Err") return __r_usage;
+  const __usage = __r_usage.value;
+  return Ok({ text: __text, usage: __usage } as Generation);
+}
+
+export function __serialise_ImageFit(value: ImageFit): __JsonValue {
+  switch (value.tag) {
+    case "ScaleDown":
+      return { kind: "ScaleDown" };
+    case "Contain":
+      return { kind: "Contain" };
+    case "Cover":
+      return { kind: "Cover" };
+    case "Crop":
+      return { kind: "Crop" };
+    case "Pad":
+      return { kind: "Pad" };
+    case "Squeeze":
+      return { kind: "Squeeze" };
+  }
+}
+
+export function __deserialise_ImageFit(json: __JsonValue, path: string = "$"): Result<ImageFit, __BoundaryError> {
+  if (typeof json !== "object" || json === null || globalThis.Array.isArray(json)) {
+    return Err({ kind: "StructuralMismatch", path, expected: "object", actual: typeof json });
+  }
+  const obj = json as { [k: string]: __JsonValue };
+  const kind = obj["kind"];
+  switch (kind) {
+    case "ScaleDown":
+      return Ok({ tag: "ScaleDown" } as ImageFit);
+    case "Contain":
+      return Ok({ tag: "Contain" } as ImageFit);
+    case "Cover":
+      return Ok({ tag: "Cover" } as ImageFit);
+    case "Crop":
+      return Ok({ tag: "Crop" } as ImageFit);
+    case "Pad":
+      return Ok({ tag: "Pad" } as ImageFit);
+    case "Squeeze":
+      return Ok({ tag: "Squeeze" } as ImageFit);
+    default:
+      return Err({ kind: "StructuralMismatch", path, expected: "sum variant kind", actual: String(kind) });
+  }
+}
+
+export function __serialise_ImageFormat(value: ImageFormat): __JsonValue {
+  switch (value.tag) {
+    case "Jpeg":
+      return { kind: "Jpeg" };
+    case "Png":
+      return { kind: "Png" };
+    case "Webp":
+      return { kind: "Webp" };
+    case "Avif":
+      return { kind: "Avif" };
+    case "Gif":
+      return { kind: "Gif" };
+    case "Heic":
+      return { kind: "Heic" };
+  }
+}
+
+export function __deserialise_ImageFormat(json: __JsonValue, path: string = "$"): Result<ImageFormat, __BoundaryError> {
+  if (typeof json !== "object" || json === null || globalThis.Array.isArray(json)) {
+    return Err({ kind: "StructuralMismatch", path, expected: "object", actual: typeof json });
+  }
+  const obj = json as { [k: string]: __JsonValue };
+  const kind = obj["kind"];
+  switch (kind) {
+    case "Jpeg":
+      return Ok({ tag: "Jpeg" } as ImageFormat);
+    case "Png":
+      return Ok({ tag: "Png" } as ImageFormat);
+    case "Webp":
+      return Ok({ tag: "Webp" } as ImageFormat);
+    case "Avif":
+      return Ok({ tag: "Avif" } as ImageFormat);
+    case "Gif":
+      return Ok({ tag: "Gif" } as ImageFormat);
+    case "Heic":
+      return Ok({ tag: "Heic" } as ImageFormat);
+    default:
+      return Err({ kind: "StructuralMismatch", path, expected: "sum variant kind", actual: String(kind) });
+  }
+}
+
+export function __serialise_ImageInfo(value: ImageInfo): __JsonValue {
+  switch (value.tag) {
+    case "Raster": {
+      return { kind: "Raster", format: __serialise_ImageFormat(value.format), width: ((v: number) => { if (!globalThis.Number.isSafeInteger(v)) throw new globalThis.Error("Int outside the safe-integer range at boundary"); return v as __JsonValue; })(value.width), height: ((v: number) => { if (!globalThis.Number.isSafeInteger(v)) throw new globalThis.Error("Int outside the safe-integer range at boundary"); return v as __JsonValue; })(value.height), size: ((v: number) => { if (!globalThis.Number.isSafeInteger(v)) throw new globalThis.Error("Int outside the safe-integer range at boundary"); return v as __JsonValue; })(value.size) };
+    }
+    case "Svg":
+      return { kind: "Svg" };
+  }
+}
+
+export function __deserialise_ImageInfo(json: __JsonValue, path: string = "$"): Result<ImageInfo, __BoundaryError> {
+  if (typeof json !== "object" || json === null || globalThis.Array.isArray(json)) {
+    return Err({ kind: "StructuralMismatch", path, expected: "object", actual: typeof json });
+  }
+  const obj = json as { [k: string]: __JsonValue };
+  const kind = obj["kind"];
+  switch (kind) {
+    case "Raster": {
+  const __r_format = __deserialise_ImageFormat(obj["format"], `${path}.format`);
+  if (__r_format.tag === "Err") return __r_format;
+  const __format = __r_format.value;
+  if (typeof obj["width"] !== "number") {
+    return Err({ kind: "StructuralMismatch", path: `${path}.width`, expected: "number", actual: typeof obj["width"] });
+  }
+  if (!globalThis.Number.isSafeInteger(obj["width"])) {
+    return Err({ kind: "StructuralMismatch", path: `${path}.width`, expected: "safe integer", actual: String(obj["width"]) });
+  }
+  const __width = obj["width"];
+  if (typeof obj["height"] !== "number") {
+    return Err({ kind: "StructuralMismatch", path: `${path}.height`, expected: "number", actual: typeof obj["height"] });
+  }
+  if (!globalThis.Number.isSafeInteger(obj["height"])) {
+    return Err({ kind: "StructuralMismatch", path: `${path}.height`, expected: "safe integer", actual: String(obj["height"]) });
+  }
+  const __height = obj["height"];
+  if (typeof obj["size"] !== "number") {
+    return Err({ kind: "StructuralMismatch", path: `${path}.size`, expected: "number", actual: typeof obj["size"] });
+  }
+  if (!globalThis.Number.isSafeInteger(obj["size"])) {
+    return Err({ kind: "StructuralMismatch", path: `${path}.size`, expected: "safe integer", actual: String(obj["size"]) });
+  }
+  const __size = obj["size"];
+      return Ok({ tag: "Raster", format: __format, width: __width, height: __height, size: __size } as ImageInfo);
+    }
+    case "Svg":
+      return Ok({ tag: "Svg" } as ImageInfo);
+    default:
+      return Err({ kind: "StructuralMismatch", path, expected: "sum variant kind", actual: String(kind) });
+  }
+}
+
+export function __serialise_ImageResult(value: ImageResult): __JsonValue {
+  return {
+    body: __bynkBytesToBase64(value.body) as __JsonValue,
+    contentType: value.contentType as __JsonValue,
+  };
+}
+
+export function __deserialise_ImageResult(json: __JsonValue, path: string = "$"): Result<ImageResult, __BoundaryError> {
+  if (typeof json !== "object" || json === null || globalThis.Array.isArray(json)) {
+    return Err({ kind: "StructuralMismatch", path, expected: "object", actual: typeof json });
+  }
+  const obj = json as { [k: string]: __JsonValue };
+  if (typeof obj["body"] !== "string") {
+    return Err({ kind: "StructuralMismatch", path: `${path}.body`, expected: "base64 string", actual: typeof obj["body"] });
+  }
+  const __b_body = __bynkBytesFromBase64(obj["body"]);
+  if (__b_body.tag === "None") {
+    return Err({ kind: "StructuralMismatch", path: `${path}.body`, expected: "base64 string", actual: "invalid base64" });
+  }
+  const __body = __b_body.value;
+  if (typeof obj["contentType"] !== "string") {
+    return Err({ kind: "StructuralMismatch", path: `${path}.contentType`, expected: "string", actual: typeof obj["contentType"] });
+  }
+  const __contentType = obj["contentType"];
+  return Ok({ body: __body, contentType: __contentType } as ImageResult);
+}
+
+export function __serialise_ImagesError(value: ImagesError): __JsonValue {
+  switch (value.tag) {
+    case "InvalidImage": {
+      return { kind: "InvalidImage", message: value.message as __JsonValue };
+    }
+    case "UnsupportedImage":
+      return { kind: "UnsupportedImage" };
+    case "ImageTooLarge":
+      return { kind: "ImageTooLarge" };
+    case "ImagesFailed": {
+      return { kind: "ImagesFailed", message: value.message as __JsonValue };
+    }
+  }
+}
+
+export function __deserialise_ImagesError(json: __JsonValue, path: string = "$"): Result<ImagesError, __BoundaryError> {
+  if (typeof json !== "object" || json === null || globalThis.Array.isArray(json)) {
+    return Err({ kind: "StructuralMismatch", path, expected: "object", actual: typeof json });
+  }
+  const obj = json as { [k: string]: __JsonValue };
+  const kind = obj["kind"];
+  switch (kind) {
+    case "InvalidImage": {
+  if (typeof obj["message"] !== "string") {
+    return Err({ kind: "StructuralMismatch", path: `${path}.message`, expected: "string", actual: typeof obj["message"] });
+  }
+  const __message = obj["message"];
+      return Ok({ tag: "InvalidImage", message: __message } as ImagesError);
+    }
+    case "UnsupportedImage":
+      return Ok({ tag: "UnsupportedImage" } as ImagesError);
+    case "ImageTooLarge":
+      return Ok({ tag: "ImageTooLarge" } as ImagesError);
+    case "ImagesFailed": {
+  if (typeof obj["message"] !== "string") {
+    return Err({ kind: "StructuralMismatch", path: `${path}.message`, expected: "string", actual: typeof obj["message"] });
+  }
+  const __message = obj["message"];
+      return Ok({ tag: "ImagesFailed", message: __message } as ImagesError);
+    }
+    default:
+      return Err({ kind: "StructuralMismatch", path, expected: "sum variant kind", actual: String(kind) });
+  }
+}
+
 export function __serialise_InboundAttachment(value: InboundAttachment): __JsonValue {
   return {
     filename: value.filename as __JsonValue,
@@ -1570,6 +3210,31 @@ export function __deserialise_InboundEmail(json: __JsonValue, path: string = "$"
   }
   const __size = __d_size;
   return Ok({ from: __from, to: __to, subject: __subject, messageId: __messageId, headers: __headers, text: __text, html: __html, attachments: __attachments, size: __size } as InboundEmail);
+}
+
+export function __serialise_IndexInfo(value: IndexInfo): __JsonValue {
+  return {
+    dimensions: ((v: number) => { if (!globalThis.Number.isSafeInteger(v)) throw new globalThis.Error("Int outside the safe-integer range at boundary"); return v as __JsonValue; })(value.dimensions),
+    metric: __serialise_Option_String(value.metric),
+  };
+}
+
+export function __deserialise_IndexInfo(json: __JsonValue, path: string = "$"): Result<IndexInfo, __BoundaryError> {
+  if (typeof json !== "object" || json === null || globalThis.Array.isArray(json)) {
+    return Err({ kind: "StructuralMismatch", path, expected: "object", actual: typeof json });
+  }
+  const obj = json as { [k: string]: __JsonValue };
+  if (typeof obj["dimensions"] !== "number") {
+    return Err({ kind: "StructuralMismatch", path: `${path}.dimensions`, expected: "number", actual: typeof obj["dimensions"] });
+  }
+  if (!globalThis.Number.isSafeInteger(obj["dimensions"])) {
+    return Err({ kind: "StructuralMismatch", path: `${path}.dimensions`, expected: "safe integer", actual: String(obj["dimensions"]) });
+  }
+  const __dimensions = obj["dimensions"];
+  const __r_metric = __deserialise_Option_String(obj["metric"], `${path}.metric`);
+  if (__r_metric.tag === "Err") return __r_metric;
+  const __metric = __r_metric.value;
+  return Ok({ dimensions: __dimensions, metric: __metric } as IndexInfo);
 }
 
 export function __serialise_KvEntry(value: KvEntry): __JsonValue {
@@ -1752,6 +3417,103 @@ export function __deserialise_KvPut(json: __JsonValue, path: string = "$"): Resu
   if (__r_metadata.tag === "Err") return __r_metadata;
   const __metadata = __r_metadata.value;
   return Ok({ expiration: __expiration, metadata: __metadata } as KvPut);
+}
+
+export function __serialise_MetaValue(value: MetaValue): __JsonValue {
+  switch (value.tag) {
+    case "MetaText": {
+      return { kind: "MetaText", value: value.value as __JsonValue };
+    }
+    case "MetaNumber": {
+      return { kind: "MetaNumber", value: ((v: number) => { if (!globalThis.Number.isFinite(v)) throw new globalThis.Error("non-finite Float at boundary"); return v as __JsonValue; })(value.value) };
+    }
+    case "MetaFlag": {
+      return { kind: "MetaFlag", value: value.value as __JsonValue };
+    }
+  }
+}
+
+export function __deserialise_MetaValue(json: __JsonValue, path: string = "$"): Result<MetaValue, __BoundaryError> {
+  if (typeof json !== "object" || json === null || globalThis.Array.isArray(json)) {
+    return Err({ kind: "StructuralMismatch", path, expected: "object", actual: typeof json });
+  }
+  const obj = json as { [k: string]: __JsonValue };
+  const kind = obj["kind"];
+  switch (kind) {
+    case "MetaText": {
+  if (typeof obj["value"] !== "string") {
+    return Err({ kind: "StructuralMismatch", path: `${path}.value`, expected: "string", actual: typeof obj["value"] });
+  }
+  const __value = obj["value"];
+      return Ok({ tag: "MetaText", value: __value } as MetaValue);
+    }
+    case "MetaNumber": {
+  if (typeof obj["value"] !== "number") {
+    return Err({ kind: "StructuralMismatch", path: `${path}.value`, expected: "number", actual: typeof obj["value"] });
+  }
+  if (!globalThis.Number.isFinite(obj["value"])) {
+    return Err({ kind: "StructuralMismatch", path: `${path}.value`, expected: "finite number", actual: String(obj["value"]) });
+  }
+  const __value = obj["value"];
+      return Ok({ tag: "MetaNumber", value: __value } as MetaValue);
+    }
+    case "MetaFlag": {
+  if (typeof obj["value"] !== "boolean") {
+    return Err({ kind: "StructuralMismatch", path: `${path}.value`, expected: "boolean", actual: typeof obj["value"] });
+  }
+  const __value = obj["value"];
+      return Ok({ tag: "MetaFlag", value: __value } as MetaValue);
+    }
+    default:
+      return Err({ kind: "StructuralMismatch", path, expected: "sum variant kind", actual: String(kind) });
+  }
+}
+
+export function __serialise_MetadataScope(value: MetadataScope): __JsonValue {
+  switch (value.tag) {
+    case "Omit":
+      return { kind: "Omit" };
+    case "Indexed":
+      return { kind: "Indexed" };
+    case "All":
+      return { kind: "All" };
+  }
+}
+
+export function __deserialise_MetadataScope(json: __JsonValue, path: string = "$"): Result<MetadataScope, __BoundaryError> {
+  if (typeof json !== "object" || json === null || globalThis.Array.isArray(json)) {
+    return Err({ kind: "StructuralMismatch", path, expected: "object", actual: typeof json });
+  }
+  const obj = json as { [k: string]: __JsonValue };
+  const kind = obj["kind"];
+  switch (kind) {
+    case "Omit":
+      return Ok({ tag: "Omit" } as MetadataScope);
+    case "Indexed":
+      return Ok({ tag: "Indexed" } as MetadataScope);
+    case "All":
+      return Ok({ tag: "All" } as MetadataScope);
+    default:
+      return Err({ kind: "StructuralMismatch", path, expected: "sum variant kind", actual: String(kind) });
+  }
+}
+
+export function __serialise_Mutation(value: Mutation): __JsonValue {
+  return {
+    id: value.id as __JsonValue,
+  };
+}
+
+export function __deserialise_Mutation(json: __JsonValue, path: string = "$"): Result<Mutation, __BoundaryError> {
+  if (typeof json !== "object" || json === null || globalThis.Array.isArray(json)) {
+    return Err({ kind: "StructuralMismatch", path, expected: "object", actual: typeof json });
+  }
+  const obj = json as { [k: string]: __JsonValue };
+  if (typeof obj["id"] !== "string") {
+    return Err({ kind: "StructuralMismatch", path: `${path}.id`, expected: "string", actual: typeof obj["id"] });
+  }
+  const __id = obj["id"];
+  return Ok({ id: __id } as Mutation);
 }
 
 export function __serialise_MySqlError(value: MySqlError): __JsonValue {
@@ -2050,6 +3812,81 @@ export function __deserialise_MySqlValue(json: __JsonValue, path: string = "$"):
   }
 }
 
+export function __serialise_OutputOptions(value: OutputOptions): __JsonValue {
+  return {
+    format: __serialise_ImageFormat(value.format),
+    quality: __serialise_Option_Int(value.quality),
+  };
+}
+
+export function __deserialise_OutputOptions(json: __JsonValue, path: string = "$"): Result<OutputOptions, __BoundaryError> {
+  if (typeof json !== "object" || json === null || globalThis.Array.isArray(json)) {
+    return Err({ kind: "StructuralMismatch", path, expected: "object", actual: typeof json });
+  }
+  const obj = json as { [k: string]: __JsonValue };
+  const __r_format = __deserialise_ImageFormat(obj["format"], `${path}.format`);
+  if (__r_format.tag === "Err") return __r_format;
+  const __format = __r_format.value;
+  const __d_quality: __JsonValue = "quality" in obj ? obj["quality"] : { kind: "None" };
+  const __r_quality = __deserialise_Option_Int(__d_quality, `${path}.quality`);
+  if (__r_quality.tag === "Err") return __r_quality;
+  const __quality = __r_quality.value;
+  return Ok({ format: __format, quality: __quality } as OutputOptions);
+}
+
+export function __serialise_Overlay(value: Overlay): __JsonValue {
+  return {
+    image: __bynkBytesToBase64(value.image) as __JsonValue,
+    opacity: __serialise_Option_Float(value.opacity),
+    top: __serialise_Option_Int(value.top),
+    left: __serialise_Option_Int(value.left),
+    bottom: __serialise_Option_Int(value.bottom),
+    right: __serialise_Option_Int(value.right),
+    repeat: value.repeat as __JsonValue,
+  };
+}
+
+export function __deserialise_Overlay(json: __JsonValue, path: string = "$"): Result<Overlay, __BoundaryError> {
+  if (typeof json !== "object" || json === null || globalThis.Array.isArray(json)) {
+    return Err({ kind: "StructuralMismatch", path, expected: "object", actual: typeof json });
+  }
+  const obj = json as { [k: string]: __JsonValue };
+  if (typeof obj["image"] !== "string") {
+    return Err({ kind: "StructuralMismatch", path: `${path}.image`, expected: "base64 string", actual: typeof obj["image"] });
+  }
+  const __b_image = __bynkBytesFromBase64(obj["image"]);
+  if (__b_image.tag === "None") {
+    return Err({ kind: "StructuralMismatch", path: `${path}.image`, expected: "base64 string", actual: "invalid base64" });
+  }
+  const __image = __b_image.value;
+  const __d_opacity: __JsonValue = "opacity" in obj ? obj["opacity"] : { kind: "None" };
+  const __r_opacity = __deserialise_Option_Float(__d_opacity, `${path}.opacity`);
+  if (__r_opacity.tag === "Err") return __r_opacity;
+  const __opacity = __r_opacity.value;
+  const __d_top: __JsonValue = "top" in obj ? obj["top"] : { kind: "None" };
+  const __r_top = __deserialise_Option_Int(__d_top, `${path}.top`);
+  if (__r_top.tag === "Err") return __r_top;
+  const __top = __r_top.value;
+  const __d_left: __JsonValue = "left" in obj ? obj["left"] : { kind: "None" };
+  const __r_left = __deserialise_Option_Int(__d_left, `${path}.left`);
+  if (__r_left.tag === "Err") return __r_left;
+  const __left = __r_left.value;
+  const __d_bottom: __JsonValue = "bottom" in obj ? obj["bottom"] : { kind: "None" };
+  const __r_bottom = __deserialise_Option_Int(__d_bottom, `${path}.bottom`);
+  if (__r_bottom.tag === "Err") return __r_bottom;
+  const __bottom = __r_bottom.value;
+  const __d_right: __JsonValue = "right" in obj ? obj["right"] : { kind: "None" };
+  const __r_right = __deserialise_Option_Int(__d_right, `${path}.right`);
+  if (__r_right.tag === "Err") return __r_right;
+  const __right = __r_right.value;
+  const __d_repeat: __JsonValue = "repeat" in obj ? obj["repeat"] : false;
+  if (typeof __d_repeat !== "boolean") {
+    return Err({ kind: "StructuralMismatch", path: `${path}.repeat`, expected: "boolean", actual: typeof __d_repeat });
+  }
+  const __repeat = __d_repeat;
+  return Ok({ image: __image, opacity: __opacity, top: __top, left: __left, bottom: __bottom, right: __right, repeat: __repeat } as Overlay);
+}
+
 export function __serialise_PgError(value: PgError): __JsonValue {
   switch (value.tag) {
     case "PgConstraint": {
@@ -2305,6 +4142,49 @@ export function __deserialise_PgValue(json: __JsonValue, path: string = "$"): Re
   }
 }
 
+export function __serialise_QueryOptions(value: QueryOptions): __JsonValue {
+  return {
+    topK: ((v: number) => { if (!globalThis.Number.isSafeInteger(v)) throw new globalThis.Error("Int outside the safe-integer range at boundary"); return v as __JsonValue; })(value.topK),
+    returnValues: value.returnValues as __JsonValue,
+    returnMetadata: __serialise_MetadataScope(value.returnMetadata),
+    namespace: __serialise_Option_String(value.namespace),
+    filter: __serialise_List_Condition(value.filter),
+  };
+}
+
+export function __deserialise_QueryOptions(json: __JsonValue, path: string = "$"): Result<QueryOptions, __BoundaryError> {
+  if (typeof json !== "object" || json === null || globalThis.Array.isArray(json)) {
+    return Err({ kind: "StructuralMismatch", path, expected: "object", actual: typeof json });
+  }
+  const obj = json as { [k: string]: __JsonValue };
+  const __d_topK: __JsonValue = "topK" in obj ? obj["topK"] : 5;
+  if (typeof __d_topK !== "number") {
+    return Err({ kind: "StructuralMismatch", path: `${path}.topK`, expected: "number", actual: typeof __d_topK });
+  }
+  if (!globalThis.Number.isSafeInteger(__d_topK)) {
+    return Err({ kind: "StructuralMismatch", path: `${path}.topK`, expected: "safe integer", actual: String(__d_topK) });
+  }
+  const __topK = __d_topK;
+  const __d_returnValues: __JsonValue = "returnValues" in obj ? obj["returnValues"] : false;
+  if (typeof __d_returnValues !== "boolean") {
+    return Err({ kind: "StructuralMismatch", path: `${path}.returnValues`, expected: "boolean", actual: typeof __d_returnValues });
+  }
+  const __returnValues = __d_returnValues;
+  const __d_returnMetadata: __JsonValue = "returnMetadata" in obj ? obj["returnMetadata"] : { kind: "Omit" };
+  const __r_returnMetadata = __deserialise_MetadataScope(__d_returnMetadata, `${path}.returnMetadata`);
+  if (__r_returnMetadata.tag === "Err") return __r_returnMetadata;
+  const __returnMetadata = __r_returnMetadata.value;
+  const __d_namespace: __JsonValue = "namespace" in obj ? obj["namespace"] : { kind: "None" };
+  const __r_namespace = __deserialise_Option_String(__d_namespace, `${path}.namespace`);
+  if (__r_namespace.tag === "Err") return __r_namespace;
+  const __namespace = __r_namespace.value;
+  const __d_filter: __JsonValue = "filter" in obj ? obj["filter"] : [];
+  const __r_filter = __deserialise_List_Condition(__d_filter, `${path}.filter`);
+  if (__r_filter.tag === "Err") return __r_filter;
+  const __filter = __r_filter.value;
+  return Ok({ topK: __topK, returnValues: __returnValues, returnMetadata: __returnMetadata, namespace: __namespace, filter: __filter } as QueryOptions);
+}
+
 export function __serialise_QueueSend(value: QueueSend): __JsonValue {
   return {
     delay: __serialise_Option_Duration(value.delay),
@@ -2522,6 +4402,283 @@ export function __deserialise_R2UploadOptions(json: __JsonValue, path: string = 
   if (__r_metadata.tag === "Err") return __r_metadata;
   const __metadata = __r_metadata.value;
   return Ok({ contentType: __contentType, metadata: __metadata } as R2UploadOptions);
+}
+
+export function __serialise_RequestCf(value: RequestCf): __JsonValue {
+  return {
+    country: __serialise_Option_String(value.country),
+    continent: __serialise_Option_String(value.continent),
+    city: __serialise_Option_String(value.city),
+    region: __serialise_Option_String(value.region),
+    regionCode: __serialise_Option_String(value.regionCode),
+    postalCode: __serialise_Option_String(value.postalCode),
+    timezone: __serialise_Option_String(value.timezone),
+    latitude: __serialise_Option_Float(value.latitude),
+    longitude: __serialise_Option_Float(value.longitude),
+    colo: __serialise_Option_String(value.colo),
+    asn: __serialise_Option_Int(value.asn),
+    asOrganization: __serialise_Option_String(value.asOrganization),
+    httpProtocol: __serialise_Option_String(value.httpProtocol),
+    tlsVersion: __serialise_Option_String(value.tlsVersion),
+    isEuCountry: __serialise_Option_Bool(value.isEuCountry),
+  };
+}
+
+export function __deserialise_RequestCf(json: __JsonValue, path: string = "$"): Result<RequestCf, __BoundaryError> {
+  if (typeof json !== "object" || json === null || globalThis.Array.isArray(json)) {
+    return Err({ kind: "StructuralMismatch", path, expected: "object", actual: typeof json });
+  }
+  const obj = json as { [k: string]: __JsonValue };
+  const __d_country: __JsonValue = "country" in obj ? obj["country"] : { kind: "None" };
+  const __r_country = __deserialise_Option_String(__d_country, `${path}.country`);
+  if (__r_country.tag === "Err") return __r_country;
+  const __country = __r_country.value;
+  const __d_continent: __JsonValue = "continent" in obj ? obj["continent"] : { kind: "None" };
+  const __r_continent = __deserialise_Option_String(__d_continent, `${path}.continent`);
+  if (__r_continent.tag === "Err") return __r_continent;
+  const __continent = __r_continent.value;
+  const __d_city: __JsonValue = "city" in obj ? obj["city"] : { kind: "None" };
+  const __r_city = __deserialise_Option_String(__d_city, `${path}.city`);
+  if (__r_city.tag === "Err") return __r_city;
+  const __city = __r_city.value;
+  const __d_region: __JsonValue = "region" in obj ? obj["region"] : { kind: "None" };
+  const __r_region = __deserialise_Option_String(__d_region, `${path}.region`);
+  if (__r_region.tag === "Err") return __r_region;
+  const __region = __r_region.value;
+  const __d_regionCode: __JsonValue = "regionCode" in obj ? obj["regionCode"] : { kind: "None" };
+  const __r_regionCode = __deserialise_Option_String(__d_regionCode, `${path}.regionCode`);
+  if (__r_regionCode.tag === "Err") return __r_regionCode;
+  const __regionCode = __r_regionCode.value;
+  const __d_postalCode: __JsonValue = "postalCode" in obj ? obj["postalCode"] : { kind: "None" };
+  const __r_postalCode = __deserialise_Option_String(__d_postalCode, `${path}.postalCode`);
+  if (__r_postalCode.tag === "Err") return __r_postalCode;
+  const __postalCode = __r_postalCode.value;
+  const __d_timezone: __JsonValue = "timezone" in obj ? obj["timezone"] : { kind: "None" };
+  const __r_timezone = __deserialise_Option_String(__d_timezone, `${path}.timezone`);
+  if (__r_timezone.tag === "Err") return __r_timezone;
+  const __timezone = __r_timezone.value;
+  const __d_latitude: __JsonValue = "latitude" in obj ? obj["latitude"] : { kind: "None" };
+  const __r_latitude = __deserialise_Option_Float(__d_latitude, `${path}.latitude`);
+  if (__r_latitude.tag === "Err") return __r_latitude;
+  const __latitude = __r_latitude.value;
+  const __d_longitude: __JsonValue = "longitude" in obj ? obj["longitude"] : { kind: "None" };
+  const __r_longitude = __deserialise_Option_Float(__d_longitude, `${path}.longitude`);
+  if (__r_longitude.tag === "Err") return __r_longitude;
+  const __longitude = __r_longitude.value;
+  const __d_colo: __JsonValue = "colo" in obj ? obj["colo"] : { kind: "None" };
+  const __r_colo = __deserialise_Option_String(__d_colo, `${path}.colo`);
+  if (__r_colo.tag === "Err") return __r_colo;
+  const __colo = __r_colo.value;
+  const __d_asn: __JsonValue = "asn" in obj ? obj["asn"] : { kind: "None" };
+  const __r_asn = __deserialise_Option_Int(__d_asn, `${path}.asn`);
+  if (__r_asn.tag === "Err") return __r_asn;
+  const __asn = __r_asn.value;
+  const __d_asOrganization: __JsonValue = "asOrganization" in obj ? obj["asOrganization"] : { kind: "None" };
+  const __r_asOrganization = __deserialise_Option_String(__d_asOrganization, `${path}.asOrganization`);
+  if (__r_asOrganization.tag === "Err") return __r_asOrganization;
+  const __asOrganization = __r_asOrganization.value;
+  const __d_httpProtocol: __JsonValue = "httpProtocol" in obj ? obj["httpProtocol"] : { kind: "None" };
+  const __r_httpProtocol = __deserialise_Option_String(__d_httpProtocol, `${path}.httpProtocol`);
+  if (__r_httpProtocol.tag === "Err") return __r_httpProtocol;
+  const __httpProtocol = __r_httpProtocol.value;
+  const __d_tlsVersion: __JsonValue = "tlsVersion" in obj ? obj["tlsVersion"] : { kind: "None" };
+  const __r_tlsVersion = __deserialise_Option_String(__d_tlsVersion, `${path}.tlsVersion`);
+  if (__r_tlsVersion.tag === "Err") return __r_tlsVersion;
+  const __tlsVersion = __r_tlsVersion.value;
+  const __d_isEuCountry: __JsonValue = "isEuCountry" in obj ? obj["isEuCountry"] : { kind: "None" };
+  const __r_isEuCountry = __deserialise_Option_Bool(__d_isEuCountry, `${path}.isEuCountry`);
+  if (__r_isEuCountry.tag === "Err") return __r_isEuCountry;
+  const __isEuCountry = __r_isEuCountry.value;
+  return Ok({ country: __country, continent: __continent, city: __city, region: __region, regionCode: __regionCode, postalCode: __postalCode, timezone: __timezone, latitude: __latitude, longitude: __longitude, colo: __colo, asn: __asn, asOrganization: __asOrganization, httpProtocol: __httpProtocol, tlsVersion: __tlsVersion, isEuCountry: __isEuCountry } as RequestCf);
+}
+
+export function __serialise_RetrievalType(value: RetrievalType): __JsonValue {
+  switch (value.tag) {
+    case "Vector":
+      return { kind: "Vector" };
+    case "Keyword":
+      return { kind: "Keyword" };
+    case "Hybrid":
+      return { kind: "Hybrid" };
+  }
+}
+
+export function __deserialise_RetrievalType(json: __JsonValue, path: string = "$"): Result<RetrievalType, __BoundaryError> {
+  if (typeof json !== "object" || json === null || globalThis.Array.isArray(json)) {
+    return Err({ kind: "StructuralMismatch", path, expected: "object", actual: typeof json });
+  }
+  const obj = json as { [k: string]: __JsonValue };
+  const kind = obj["kind"];
+  switch (kind) {
+    case "Vector":
+      return Ok({ tag: "Vector" } as RetrievalType);
+    case "Keyword":
+      return Ok({ tag: "Keyword" } as RetrievalType);
+    case "Hybrid":
+      return Ok({ tag: "Hybrid" } as RetrievalType);
+    default:
+      return Err({ kind: "StructuralMismatch", path, expected: "sum variant kind", actual: String(kind) });
+  }
+}
+
+export function __serialise_SearchAnswer(value: SearchAnswer): __JsonValue {
+  return {
+    text: value.text as __JsonValue,
+    hits: __serialise_List_SearchHit(value.hits),
+    usage: __serialise_Option_TokenUsage(value.usage),
+  };
+}
+
+export function __deserialise_SearchAnswer(json: __JsonValue, path: string = "$"): Result<SearchAnswer, __BoundaryError> {
+  if (typeof json !== "object" || json === null || globalThis.Array.isArray(json)) {
+    return Err({ kind: "StructuralMismatch", path, expected: "object", actual: typeof json });
+  }
+  const obj = json as { [k: string]: __JsonValue };
+  if (typeof obj["text"] !== "string") {
+    return Err({ kind: "StructuralMismatch", path: `${path}.text`, expected: "string", actual: typeof obj["text"] });
+  }
+  const __text = obj["text"];
+  const __r_hits = __deserialise_List_SearchHit(obj["hits"], `${path}.hits`);
+  if (__r_hits.tag === "Err") return __r_hits;
+  const __hits = __r_hits.value;
+  const __r_usage = __deserialise_Option_TokenUsage(obj["usage"], `${path}.usage`);
+  if (__r_usage.tag === "Err") return __r_usage;
+  const __usage = __r_usage.value;
+  return Ok({ text: __text, hits: __hits, usage: __usage } as SearchAnswer);
+}
+
+export function __serialise_SearchError(value: SearchError): __JsonValue {
+  switch (value.tag) {
+    case "SearchInvalidInput": {
+      return { kind: "SearchInvalidInput", message: value.message as __JsonValue };
+    }
+    case "SearchRateLimited":
+      return { kind: "SearchRateLimited" };
+    case "SearchQuotaExceeded":
+      return { kind: "SearchQuotaExceeded" };
+    case "SearchFailed": {
+      return { kind: "SearchFailed", message: value.message as __JsonValue };
+    }
+  }
+}
+
+export function __deserialise_SearchError(json: __JsonValue, path: string = "$"): Result<SearchError, __BoundaryError> {
+  if (typeof json !== "object" || json === null || globalThis.Array.isArray(json)) {
+    return Err({ kind: "StructuralMismatch", path, expected: "object", actual: typeof json });
+  }
+  const obj = json as { [k: string]: __JsonValue };
+  const kind = obj["kind"];
+  switch (kind) {
+    case "SearchInvalidInput": {
+  if (typeof obj["message"] !== "string") {
+    return Err({ kind: "StructuralMismatch", path: `${path}.message`, expected: "string", actual: typeof obj["message"] });
+  }
+  const __message = obj["message"];
+      return Ok({ tag: "SearchInvalidInput", message: __message } as SearchError);
+    }
+    case "SearchRateLimited":
+      return Ok({ tag: "SearchRateLimited" } as SearchError);
+    case "SearchQuotaExceeded":
+      return Ok({ tag: "SearchQuotaExceeded" } as SearchError);
+    case "SearchFailed": {
+  if (typeof obj["message"] !== "string") {
+    return Err({ kind: "StructuralMismatch", path: `${path}.message`, expected: "string", actual: typeof obj["message"] });
+  }
+  const __message = obj["message"];
+      return Ok({ tag: "SearchFailed", message: __message } as SearchError);
+    }
+    default:
+      return Err({ kind: "StructuralMismatch", path, expected: "sum variant kind", actual: String(kind) });
+  }
+}
+
+export function __serialise_SearchHit(value: SearchHit): __JsonValue {
+  return {
+    id: value.id as __JsonValue,
+    score: ((v: number) => { if (!globalThis.Number.isFinite(v)) throw new globalThis.Error("non-finite Float at boundary"); return v as __JsonValue; })(value.score),
+    text: value.text as __JsonValue,
+    key: value.key as __JsonValue,
+    timestamp: __serialise_Option_Int(value.timestamp),
+    metadata: __serialise_Option_String(value.metadata),
+  };
+}
+
+export function __deserialise_SearchHit(json: __JsonValue, path: string = "$"): Result<SearchHit, __BoundaryError> {
+  if (typeof json !== "object" || json === null || globalThis.Array.isArray(json)) {
+    return Err({ kind: "StructuralMismatch", path, expected: "object", actual: typeof json });
+  }
+  const obj = json as { [k: string]: __JsonValue };
+  if (typeof obj["id"] !== "string") {
+    return Err({ kind: "StructuralMismatch", path: `${path}.id`, expected: "string", actual: typeof obj["id"] });
+  }
+  const __id = obj["id"];
+  if (typeof obj["score"] !== "number") {
+    return Err({ kind: "StructuralMismatch", path: `${path}.score`, expected: "number", actual: typeof obj["score"] });
+  }
+  if (!globalThis.Number.isFinite(obj["score"])) {
+    return Err({ kind: "StructuralMismatch", path: `${path}.score`, expected: "finite number", actual: String(obj["score"]) });
+  }
+  const __score = obj["score"];
+  if (typeof obj["text"] !== "string") {
+    return Err({ kind: "StructuralMismatch", path: `${path}.text`, expected: "string", actual: typeof obj["text"] });
+  }
+  const __text = obj["text"];
+  if (typeof obj["key"] !== "string") {
+    return Err({ kind: "StructuralMismatch", path: `${path}.key`, expected: "string", actual: typeof obj["key"] });
+  }
+  const __key = obj["key"];
+  const __r_timestamp = __deserialise_Option_Int(obj["timestamp"], `${path}.timestamp`);
+  if (__r_timestamp.tag === "Err") return __r_timestamp;
+  const __timestamp = __r_timestamp.value;
+  const __r_metadata = __deserialise_Option_String(obj["metadata"], `${path}.metadata`);
+  if (__r_metadata.tag === "Err") return __r_metadata;
+  const __metadata = __r_metadata.value;
+  return Ok({ id: __id, score: __score, text: __text, key: __key, timestamp: __timestamp, metadata: __metadata } as SearchHit);
+}
+
+export function __serialise_SearchOptions(value: SearchOptions): __JsonValue {
+  return {
+    maxResults: __serialise_Option_Int(value.maxResults),
+    matchThreshold: __serialise_Option_Float(value.matchThreshold),
+    retrieval: __serialise_Option_RetrievalType(value.retrieval),
+    rewriteQuery: value.rewriteQuery as __JsonValue,
+    rerank: value.rerank as __JsonValue,
+    filter: __serialise_List_Condition(value.filter),
+  };
+}
+
+export function __deserialise_SearchOptions(json: __JsonValue, path: string = "$"): Result<SearchOptions, __BoundaryError> {
+  if (typeof json !== "object" || json === null || globalThis.Array.isArray(json)) {
+    return Err({ kind: "StructuralMismatch", path, expected: "object", actual: typeof json });
+  }
+  const obj = json as { [k: string]: __JsonValue };
+  const __d_maxResults: __JsonValue = "maxResults" in obj ? obj["maxResults"] : { kind: "None" };
+  const __r_maxResults = __deserialise_Option_Int(__d_maxResults, `${path}.maxResults`);
+  if (__r_maxResults.tag === "Err") return __r_maxResults;
+  const __maxResults = __r_maxResults.value;
+  const __d_matchThreshold: __JsonValue = "matchThreshold" in obj ? obj["matchThreshold"] : { kind: "None" };
+  const __r_matchThreshold = __deserialise_Option_Float(__d_matchThreshold, `${path}.matchThreshold`);
+  if (__r_matchThreshold.tag === "Err") return __r_matchThreshold;
+  const __matchThreshold = __r_matchThreshold.value;
+  const __d_retrieval: __JsonValue = "retrieval" in obj ? obj["retrieval"] : { kind: "None" };
+  const __r_retrieval = __deserialise_Option_RetrievalType(__d_retrieval, `${path}.retrieval`);
+  if (__r_retrieval.tag === "Err") return __r_retrieval;
+  const __retrieval = __r_retrieval.value;
+  const __d_rewriteQuery: __JsonValue = "rewriteQuery" in obj ? obj["rewriteQuery"] : false;
+  if (typeof __d_rewriteQuery !== "boolean") {
+    return Err({ kind: "StructuralMismatch", path: `${path}.rewriteQuery`, expected: "boolean", actual: typeof __d_rewriteQuery });
+  }
+  const __rewriteQuery = __d_rewriteQuery;
+  const __d_rerank: __JsonValue = "rerank" in obj ? obj["rerank"] : false;
+  if (typeof __d_rerank !== "boolean") {
+    return Err({ kind: "StructuralMismatch", path: `${path}.rerank`, expected: "boolean", actual: typeof __d_rerank });
+  }
+  const __rerank = __d_rerank;
+  const __d_filter: __JsonValue = "filter" in obj ? obj["filter"] : [];
+  const __r_filter = __deserialise_List_Condition(__d_filter, `${path}.filter`);
+  if (__r_filter.tag === "Err") return __r_filter;
+  const __filter = __r_filter.value;
+  return Ok({ maxResults: __maxResults, matchThreshold: __matchThreshold, retrieval: __retrieval, rewriteQuery: __rewriteQuery, rerank: __rerank, filter: __filter } as SearchOptions);
 }
 
 export function __serialise_SenderIdentity(value: SenderIdentity): __JsonValue {
@@ -2748,6 +4905,199 @@ export function __deserialise_SqlValue(json: __JsonValue, path: string = "$"): R
   }
 }
 
+export function __serialise_TokenUsage(value: TokenUsage): __JsonValue {
+  return {
+    promptTokens: ((v: number) => { if (!globalThis.Number.isSafeInteger(v)) throw new globalThis.Error("Int outside the safe-integer range at boundary"); return v as __JsonValue; })(value.promptTokens),
+    completionTokens: ((v: number) => { if (!globalThis.Number.isSafeInteger(v)) throw new globalThis.Error("Int outside the safe-integer range at boundary"); return v as __JsonValue; })(value.completionTokens),
+  };
+}
+
+export function __deserialise_TokenUsage(json: __JsonValue, path: string = "$"): Result<TokenUsage, __BoundaryError> {
+  if (typeof json !== "object" || json === null || globalThis.Array.isArray(json)) {
+    return Err({ kind: "StructuralMismatch", path, expected: "object", actual: typeof json });
+  }
+  const obj = json as { [k: string]: __JsonValue };
+  if (typeof obj["promptTokens"] !== "number") {
+    return Err({ kind: "StructuralMismatch", path: `${path}.promptTokens`, expected: "number", actual: typeof obj["promptTokens"] });
+  }
+  if (!globalThis.Number.isSafeInteger(obj["promptTokens"])) {
+    return Err({ kind: "StructuralMismatch", path: `${path}.promptTokens`, expected: "safe integer", actual: String(obj["promptTokens"]) });
+  }
+  const __promptTokens = obj["promptTokens"];
+  if (typeof obj["completionTokens"] !== "number") {
+    return Err({ kind: "StructuralMismatch", path: `${path}.completionTokens`, expected: "number", actual: typeof obj["completionTokens"] });
+  }
+  if (!globalThis.Number.isSafeInteger(obj["completionTokens"])) {
+    return Err({ kind: "StructuralMismatch", path: `${path}.completionTokens`, expected: "safe integer", actual: String(obj["completionTokens"]) });
+  }
+  const __completionTokens = obj["completionTokens"];
+  return Ok({ promptTokens: __promptTokens, completionTokens: __completionTokens } as TokenUsage);
+}
+
+export function __serialise_TransformOptions(value: TransformOptions): __JsonValue {
+  return {
+    width: __serialise_Option_Int(value.width),
+    height: __serialise_Option_Int(value.height),
+    fit: __serialise_Option_ImageFit(value.fit),
+    rotate: __serialise_Option_Int(value.rotate),
+    blur: __serialise_Option_Int(value.blur),
+    overlays: __serialise_List_Overlay(value.overlays),
+  };
+}
+
+export function __deserialise_TransformOptions(json: __JsonValue, path: string = "$"): Result<TransformOptions, __BoundaryError> {
+  if (typeof json !== "object" || json === null || globalThis.Array.isArray(json)) {
+    return Err({ kind: "StructuralMismatch", path, expected: "object", actual: typeof json });
+  }
+  const obj = json as { [k: string]: __JsonValue };
+  const __d_width: __JsonValue = "width" in obj ? obj["width"] : { kind: "None" };
+  const __r_width = __deserialise_Option_Int(__d_width, `${path}.width`);
+  if (__r_width.tag === "Err") return __r_width;
+  const __width = __r_width.value;
+  const __d_height: __JsonValue = "height" in obj ? obj["height"] : { kind: "None" };
+  const __r_height = __deserialise_Option_Int(__d_height, `${path}.height`);
+  if (__r_height.tag === "Err") return __r_height;
+  const __height = __r_height.value;
+  const __d_fit: __JsonValue = "fit" in obj ? obj["fit"] : { kind: "None" };
+  const __r_fit = __deserialise_Option_ImageFit(__d_fit, `${path}.fit`);
+  if (__r_fit.tag === "Err") return __r_fit;
+  const __fit = __r_fit.value;
+  const __d_rotate: __JsonValue = "rotate" in obj ? obj["rotate"] : { kind: "None" };
+  const __r_rotate = __deserialise_Option_Int(__d_rotate, `${path}.rotate`);
+  if (__r_rotate.tag === "Err") return __r_rotate;
+  const __rotate = __r_rotate.value;
+  const __d_blur: __JsonValue = "blur" in obj ? obj["blur"] : { kind: "None" };
+  const __r_blur = __deserialise_Option_Int(__d_blur, `${path}.blur`);
+  if (__r_blur.tag === "Err") return __r_blur;
+  const __blur = __r_blur.value;
+  const __d_overlays: __JsonValue = "overlays" in obj ? obj["overlays"] : [];
+  const __r_overlays = __deserialise_List_Overlay(__d_overlays, `${path}.overlays`);
+  if (__r_overlays.tag === "Err") return __r_overlays;
+  const __overlays = __r_overlays.value;
+  return Ok({ width: __width, height: __height, fit: __fit, rotate: __rotate, blur: __blur, overlays: __overlays } as TransformOptions);
+}
+
+export function __serialise_Vector(value: Vector): __JsonValue {
+  return {
+    id: value.id as __JsonValue,
+    values: __serialise_List_Float(value.values),
+    metadata: __serialise_Option_String(value.metadata),
+    namespace: __serialise_Option_String(value.namespace),
+  };
+}
+
+export function __deserialise_Vector(json: __JsonValue, path: string = "$"): Result<Vector, __BoundaryError> {
+  if (typeof json !== "object" || json === null || globalThis.Array.isArray(json)) {
+    return Err({ kind: "StructuralMismatch", path, expected: "object", actual: typeof json });
+  }
+  const obj = json as { [k: string]: __JsonValue };
+  if (typeof obj["id"] !== "string") {
+    return Err({ kind: "StructuralMismatch", path: `${path}.id`, expected: "string", actual: typeof obj["id"] });
+  }
+  const __id = obj["id"];
+  const __r_values = __deserialise_List_Float(obj["values"], `${path}.values`);
+  if (__r_values.tag === "Err") return __r_values;
+  const __values = __r_values.value;
+  const __d_metadata: __JsonValue = "metadata" in obj ? obj["metadata"] : { kind: "None" };
+  const __r_metadata = __deserialise_Option_String(__d_metadata, `${path}.metadata`);
+  if (__r_metadata.tag === "Err") return __r_metadata;
+  const __metadata = __r_metadata.value;
+  const __d_namespace: __JsonValue = "namespace" in obj ? obj["namespace"] : { kind: "None" };
+  const __r_namespace = __deserialise_Option_String(__d_namespace, `${path}.namespace`);
+  if (__r_namespace.tag === "Err") return __r_namespace;
+  const __namespace = __r_namespace.value;
+  return Ok({ id: __id, values: __values, metadata: __metadata, namespace: __namespace } as Vector);
+}
+
+export function __serialise_VectorError(value: VectorError): __JsonValue {
+  switch (value.tag) {
+    case "DimensionMismatch": {
+      return { kind: "DimensionMismatch", message: value.message as __JsonValue };
+    }
+    case "VectorInvalidInput": {
+      return { kind: "VectorInvalidInput", message: value.message as __JsonValue };
+    }
+    case "VectorRateLimited":
+      return { kind: "VectorRateLimited" };
+    case "VectorFailed": {
+      return { kind: "VectorFailed", message: value.message as __JsonValue };
+    }
+  }
+}
+
+export function __deserialise_VectorError(json: __JsonValue, path: string = "$"): Result<VectorError, __BoundaryError> {
+  if (typeof json !== "object" || json === null || globalThis.Array.isArray(json)) {
+    return Err({ kind: "StructuralMismatch", path, expected: "object", actual: typeof json });
+  }
+  const obj = json as { [k: string]: __JsonValue };
+  const kind = obj["kind"];
+  switch (kind) {
+    case "DimensionMismatch": {
+  if (typeof obj["message"] !== "string") {
+    return Err({ kind: "StructuralMismatch", path: `${path}.message`, expected: "string", actual: typeof obj["message"] });
+  }
+  const __message = obj["message"];
+      return Ok({ tag: "DimensionMismatch", message: __message } as VectorError);
+    }
+    case "VectorInvalidInput": {
+  if (typeof obj["message"] !== "string") {
+    return Err({ kind: "StructuralMismatch", path: `${path}.message`, expected: "string", actual: typeof obj["message"] });
+  }
+  const __message = obj["message"];
+      return Ok({ tag: "VectorInvalidInput", message: __message } as VectorError);
+    }
+    case "VectorRateLimited":
+      return Ok({ tag: "VectorRateLimited" } as VectorError);
+    case "VectorFailed": {
+  if (typeof obj["message"] !== "string") {
+    return Err({ kind: "StructuralMismatch", path: `${path}.message`, expected: "string", actual: typeof obj["message"] });
+  }
+  const __message = obj["message"];
+      return Ok({ tag: "VectorFailed", message: __message } as VectorError);
+    }
+    default:
+      return Err({ kind: "StructuralMismatch", path, expected: "sum variant kind", actual: String(kind) });
+  }
+}
+
+export function __serialise_VectorMatch(value: VectorMatch): __JsonValue {
+  return {
+    id: value.id as __JsonValue,
+    score: ((v: number) => { if (!globalThis.Number.isFinite(v)) throw new globalThis.Error("non-finite Float at boundary"); return v as __JsonValue; })(value.score),
+    values: __serialise_Option_List_Float(value.values),
+    metadata: __serialise_Option_String(value.metadata),
+    namespace: __serialise_Option_String(value.namespace),
+  };
+}
+
+export function __deserialise_VectorMatch(json: __JsonValue, path: string = "$"): Result<VectorMatch, __BoundaryError> {
+  if (typeof json !== "object" || json === null || globalThis.Array.isArray(json)) {
+    return Err({ kind: "StructuralMismatch", path, expected: "object", actual: typeof json });
+  }
+  const obj = json as { [k: string]: __JsonValue };
+  if (typeof obj["id"] !== "string") {
+    return Err({ kind: "StructuralMismatch", path: `${path}.id`, expected: "string", actual: typeof obj["id"] });
+  }
+  const __id = obj["id"];
+  if (typeof obj["score"] !== "number") {
+    return Err({ kind: "StructuralMismatch", path: `${path}.score`, expected: "number", actual: typeof obj["score"] });
+  }
+  if (!globalThis.Number.isFinite(obj["score"])) {
+    return Err({ kind: "StructuralMismatch", path: `${path}.score`, expected: "finite number", actual: String(obj["score"]) });
+  }
+  const __score = obj["score"];
+  const __r_values = __deserialise_Option_List_Float(obj["values"], `${path}.values`);
+  if (__r_values.tag === "Err") return __r_values;
+  const __values = __r_values.value;
+  const __r_metadata = __deserialise_Option_String(obj["metadata"], `${path}.metadata`);
+  if (__r_metadata.tag === "Err") return __r_metadata;
+  const __metadata = __r_metadata.value;
+  const __r_namespace = __deserialise_Option_String(obj["namespace"], `${path}.namespace`);
+  if (__r_namespace.tag === "Err") return __r_namespace;
+  const __namespace = __r_namespace.value;
+  return Ok({ id: __id, score: __score, values: __values, metadata: __metadata, namespace: __namespace } as VectorMatch);
+}
+
 export function __serialise_WorkerVersion(value: WorkerVersion): __JsonValue {
   return {
     id: value.id as __JsonValue,
@@ -2918,6 +5268,172 @@ export function __deserialise_Map_String_String(json: __JsonValue, path: string 
   return Ok(out);
 }
 
+export function __serialise_List_MetaValue(value: readonly MetaValue[]): __JsonValue {
+  return value.map((v) => __serialise_MetaValue(v));
+}
+
+export function __deserialise_List_MetaValue(json: __JsonValue, path: string = "$"): Result<readonly MetaValue[], __BoundaryError> {
+  if (!globalThis.Array.isArray(json)) {
+    return Err({ kind: "StructuralMismatch", path, expected: "array", actual: typeof json });
+  }
+  const out: MetaValue[] = [];
+  for (let i = 0; i < json.length; i++) {
+  const item = json[i];
+  const __r_el = __deserialise_MetaValue(item, `${path}[${i}]`);
+  if (__r_el.tag === "Err") return __r_el;
+  const __el = __r_el.value;
+  out.push(__el as MetaValue);
+  }
+  return Ok(out);
+}
+
+export function __serialise_List_ChatMessage(value: readonly ChatMessage[]): __JsonValue {
+  return value.map((v) => __serialise_ChatMessage(v));
+}
+
+export function __deserialise_List_ChatMessage(json: __JsonValue, path: string = "$"): Result<readonly ChatMessage[], __BoundaryError> {
+  if (!globalThis.Array.isArray(json)) {
+    return Err({ kind: "StructuralMismatch", path, expected: "array", actual: typeof json });
+  }
+  const out: ChatMessage[] = [];
+  for (let i = 0; i < json.length; i++) {
+  const item = json[i];
+  const __r_el = __deserialise_ChatMessage(item, `${path}[${i}]`);
+  if (__r_el.tag === "Err") return __r_el;
+  const __el = __r_el.value;
+  out.push(__el as ChatMessage);
+  }
+  return Ok(out);
+}
+
+export function __serialise_Option_Int(value: Option<number>): __JsonValue {
+  if (value.tag === "Some") return { kind: "Some", value: ((v: number) => { if (!globalThis.Number.isSafeInteger(v)) throw new globalThis.Error("Int outside the safe-integer range at boundary"); return v as __JsonValue; })(value.value) };
+  return { kind: "None" };
+}
+
+function __option_value_Int(raw: __JsonValue, at: string): Result<unknown, __BoundaryError> {
+  if (typeof raw !== "number") {
+    return Err({ kind: "StructuralMismatch", path: at, expected: "number", actual: typeof raw });
+  }
+  if (!globalThis.Number.isSafeInteger(raw)) {
+    return Err({ kind: "StructuralMismatch", path: at, expected: "safe integer", actual: String(raw) });
+  }
+  const __v = raw;
+  return Ok(__v);
+}
+
+export function __deserialise_Option_Int(json: __JsonValue, path: string = "$"): Result<Option<number>, __BoundaryError> {
+  if (json === undefined || json === null) {
+    return Ok(None as Option<number>);
+  }
+  if (typeof json === "object" && !globalThis.Array.isArray(json)) {
+    const obj = json as { [k: string]: __JsonValue };
+    const __keys = globalThis.Object.keys(obj);
+    if (obj["kind"] === "None" && __keys.length === 1) {
+      return Ok(None as Option<number>);
+    }
+    if (obj["kind"] === "Some" && __keys.length === 2 && "value" in obj) {
+      const __t = __option_value_Int(obj["value"], `${path}.value`);
+      if (__t.tag === "Err") {
+        return __t;
+      }
+      return Ok(Some(__t.value as number) as Option<number>);
+    }
+  }
+  const __b = __option_value_Int(json, path);
+  if (__b.tag === "Ok") {
+    return Ok(Some(__b.value as number) as Option<number>);
+  }
+  if (__b.error.kind === "StructuralMismatch" && __b.error.path === path && !__b.error.expected.endsWith(" | null | {\"kind\": \"None\"} | {\"kind\": \"Some\", \"value\": ...}")) {
+    return Err({ ...__b.error, expected: __b.error.expected + " | null | {\"kind\": \"None\"} | {\"kind\": \"Some\", \"value\": ...}" });
+  }
+  return __b;
+}
+
+export function __serialise_Option_Float(value: Option<number>): __JsonValue {
+  if (value.tag === "Some") return { kind: "Some", value: ((v: number) => { if (!globalThis.Number.isFinite(v)) throw new globalThis.Error("non-finite Float at boundary"); return v as __JsonValue; })(value.value) };
+  return { kind: "None" };
+}
+
+function __option_value_Float(raw: __JsonValue, at: string): Result<unknown, __BoundaryError> {
+  if (typeof raw !== "number") {
+    return Err({ kind: "StructuralMismatch", path: at, expected: "number", actual: typeof raw });
+  }
+  if (!globalThis.Number.isFinite(raw)) {
+    return Err({ kind: "StructuralMismatch", path: at, expected: "finite number", actual: String(raw) });
+  }
+  const __v = raw;
+  return Ok(__v);
+}
+
+export function __deserialise_Option_Float(json: __JsonValue, path: string = "$"): Result<Option<number>, __BoundaryError> {
+  if (json === undefined || json === null) {
+    return Ok(None as Option<number>);
+  }
+  if (typeof json === "object" && !globalThis.Array.isArray(json)) {
+    const obj = json as { [k: string]: __JsonValue };
+    const __keys = globalThis.Object.keys(obj);
+    if (obj["kind"] === "None" && __keys.length === 1) {
+      return Ok(None as Option<number>);
+    }
+    if (obj["kind"] === "Some" && __keys.length === 2 && "value" in obj) {
+      const __t = __option_value_Float(obj["value"], `${path}.value`);
+      if (__t.tag === "Err") {
+        return __t;
+      }
+      return Ok(Some(__t.value as number) as Option<number>);
+    }
+  }
+  const __b = __option_value_Float(json, path);
+  if (__b.tag === "Ok") {
+    return Ok(Some(__b.value as number) as Option<number>);
+  }
+  if (__b.error.kind === "StructuralMismatch" && __b.error.path === path && !__b.error.expected.endsWith(" | null | {\"kind\": \"None\"} | {\"kind\": \"Some\", \"value\": ...}")) {
+    return Err({ ...__b.error, expected: __b.error.expected + " | null | {\"kind\": \"None\"} | {\"kind\": \"Some\", \"value\": ...}" });
+  }
+  return __b;
+}
+
+export function __serialise_Option_TokenUsage(value: Option<TokenUsage>): __JsonValue {
+  if (value.tag === "Some") return { kind: "Some", value: __serialise_TokenUsage(value.value) };
+  return { kind: "None" };
+}
+
+function __option_value_TokenUsage(raw: __JsonValue, at: string): Result<unknown, __BoundaryError> {
+  const __r_v = __deserialise_TokenUsage(raw, at);
+  if (__r_v.tag === "Err") return __r_v;
+  const __v = __r_v.value;
+  return Ok(__v);
+}
+
+export function __deserialise_Option_TokenUsage(json: __JsonValue, path: string = "$"): Result<Option<TokenUsage>, __BoundaryError> {
+  if (json === undefined || json === null) {
+    return Ok(None as Option<TokenUsage>);
+  }
+  if (typeof json === "object" && !globalThis.Array.isArray(json)) {
+    const obj = json as { [k: string]: __JsonValue };
+    const __keys = globalThis.Object.keys(obj);
+    if (obj["kind"] === "None" && __keys.length === 1) {
+      return Ok(None as Option<TokenUsage>);
+    }
+    if (obj["kind"] === "Some" && __keys.length === 2 && "value" in obj) {
+      const __t = __option_value_TokenUsage(obj["value"], `${path}.value`);
+      if (__t.tag === "Err") {
+        return __t;
+      }
+      return Ok(Some(__t.value as TokenUsage) as Option<TokenUsage>);
+    }
+  }
+  const __b = __option_value_TokenUsage(json, path);
+  if (__b.tag === "Ok") {
+    return Ok(Some(__b.value as TokenUsage) as Option<TokenUsage>);
+  }
+  if (__b.error.kind === "StructuralMismatch" && __b.error.path === path && !__b.error.expected.endsWith(" | null | {\"kind\": \"None\"} | {\"kind\": \"Some\", \"value\": ...}")) {
+    return Err({ ...__b.error, expected: __b.error.expected + " | null | {\"kind\": \"None\"} | {\"kind\": \"Some\", \"value\": ...}" });
+  }
+  return __b;
+}
+
 export function __serialise_List_InboundAttachment(value: readonly InboundAttachment[]): __JsonValue {
   return value.map((v) => __serialise_InboundAttachment(v));
 }
@@ -3025,50 +5541,6 @@ export function __deserialise_Option_Instant(json: __JsonValue, path: string = "
   return __b;
 }
 
-export function __serialise_Option_Int(value: Option<number>): __JsonValue {
-  if (value.tag === "Some") return { kind: "Some", value: ((v: number) => { if (!globalThis.Number.isSafeInteger(v)) throw new globalThis.Error("Int outside the safe-integer range at boundary"); return v as __JsonValue; })(value.value) };
-  return { kind: "None" };
-}
-
-function __option_value_Int(raw: __JsonValue, at: string): Result<unknown, __BoundaryError> {
-  if (typeof raw !== "number") {
-    return Err({ kind: "StructuralMismatch", path: at, expected: "number", actual: typeof raw });
-  }
-  if (!globalThis.Number.isSafeInteger(raw)) {
-    return Err({ kind: "StructuralMismatch", path: at, expected: "safe integer", actual: String(raw) });
-  }
-  const __v = raw;
-  return Ok(__v);
-}
-
-export function __deserialise_Option_Int(json: __JsonValue, path: string = "$"): Result<Option<number>, __BoundaryError> {
-  if (json === undefined || json === null) {
-    return Ok(None as Option<number>);
-  }
-  if (typeof json === "object" && !globalThis.Array.isArray(json)) {
-    const obj = json as { [k: string]: __JsonValue };
-    const __keys = globalThis.Object.keys(obj);
-    if (obj["kind"] === "None" && __keys.length === 1) {
-      return Ok(None as Option<number>);
-    }
-    if (obj["kind"] === "Some" && __keys.length === 2 && "value" in obj) {
-      const __t = __option_value_Int(obj["value"], `${path}.value`);
-      if (__t.tag === "Err") {
-        return __t;
-      }
-      return Ok(Some(__t.value as number) as Option<number>);
-    }
-  }
-  const __b = __option_value_Int(json, path);
-  if (__b.tag === "Ok") {
-    return Ok(Some(__b.value as number) as Option<number>);
-  }
-  if (__b.error.kind === "StructuralMismatch" && __b.error.path === path && !__b.error.expected.endsWith(" | null | {\"kind\": \"None\"} | {\"kind\": \"Some\", \"value\": ...}")) {
-    return Err({ ...__b.error, expected: __b.error.expected + " | null | {\"kind\": \"None\"} | {\"kind\": \"Some\", \"value\": ...}" });
-  }
-  return __b;
-}
-
 export function __serialise_List_KvKey(value: readonly KvKey[]): __JsonValue {
   return value.map((v) => __serialise_KvKey(v));
 }
@@ -3126,6 +5598,25 @@ export function __deserialise_List_PgValue(json: __JsonValue, path: string = "$"
   return Ok(out);
 }
 
+export function __serialise_List_Condition(value: readonly Condition[]): __JsonValue {
+  return value.map((v) => __serialise_Condition(v));
+}
+
+export function __deserialise_List_Condition(json: __JsonValue, path: string = "$"): Result<readonly Condition[], __BoundaryError> {
+  if (!globalThis.Array.isArray(json)) {
+    return Err({ kind: "StructuralMismatch", path, expected: "array", actual: typeof json });
+  }
+  const out: Condition[] = [];
+  for (let i = 0; i < json.length; i++) {
+  const item = json[i];
+  const __r_el = __deserialise_Condition(item, `${path}[${i}]`);
+  if (__r_el.tag === "Err") return __r_el;
+  const __el = __r_el.value;
+  out.push(__el as Condition);
+  }
+  return Ok(out);
+}
+
 export function __serialise_List_R2Object(value: readonly R2Object[]): __JsonValue {
   return value.map((v) => __serialise_R2Object(v));
 }
@@ -3145,6 +5636,106 @@ export function __deserialise_List_R2Object(json: __JsonValue, path: string = "$
   return Ok(out);
 }
 
+export function __serialise_Option_Bool(value: Option<boolean>): __JsonValue {
+  if (value.tag === "Some") return { kind: "Some", value: value.value as __JsonValue };
+  return { kind: "None" };
+}
+
+function __option_value_Bool(raw: __JsonValue, at: string): Result<unknown, __BoundaryError> {
+  if (typeof raw !== "boolean") {
+    return Err({ kind: "StructuralMismatch", path: at, expected: "boolean", actual: typeof raw });
+  }
+  const __v = raw;
+  return Ok(__v);
+}
+
+export function __deserialise_Option_Bool(json: __JsonValue, path: string = "$"): Result<Option<boolean>, __BoundaryError> {
+  if (json === undefined || json === null) {
+    return Ok(None as Option<boolean>);
+  }
+  if (typeof json === "object" && !globalThis.Array.isArray(json)) {
+    const obj = json as { [k: string]: __JsonValue };
+    const __keys = globalThis.Object.keys(obj);
+    if (obj["kind"] === "None" && __keys.length === 1) {
+      return Ok(None as Option<boolean>);
+    }
+    if (obj["kind"] === "Some" && __keys.length === 2 && "value" in obj) {
+      const __t = __option_value_Bool(obj["value"], `${path}.value`);
+      if (__t.tag === "Err") {
+        return __t;
+      }
+      return Ok(Some(__t.value as boolean) as Option<boolean>);
+    }
+  }
+  const __b = __option_value_Bool(json, path);
+  if (__b.tag === "Ok") {
+    return Ok(Some(__b.value as boolean) as Option<boolean>);
+  }
+  if (__b.error.kind === "StructuralMismatch" && __b.error.path === path && !__b.error.expected.endsWith(" | null | {\"kind\": \"None\"} | {\"kind\": \"Some\", \"value\": ...}")) {
+    return Err({ ...__b.error, expected: __b.error.expected + " | null | {\"kind\": \"None\"} | {\"kind\": \"Some\", \"value\": ...}" });
+  }
+  return __b;
+}
+
+export function __serialise_List_SearchHit(value: readonly SearchHit[]): __JsonValue {
+  return value.map((v) => __serialise_SearchHit(v));
+}
+
+export function __deserialise_List_SearchHit(json: __JsonValue, path: string = "$"): Result<readonly SearchHit[], __BoundaryError> {
+  if (!globalThis.Array.isArray(json)) {
+    return Err({ kind: "StructuralMismatch", path, expected: "array", actual: typeof json });
+  }
+  const out: SearchHit[] = [];
+  for (let i = 0; i < json.length; i++) {
+  const item = json[i];
+  const __r_el = __deserialise_SearchHit(item, `${path}[${i}]`);
+  if (__r_el.tag === "Err") return __r_el;
+  const __el = __r_el.value;
+  out.push(__el as SearchHit);
+  }
+  return Ok(out);
+}
+
+export function __serialise_Option_RetrievalType(value: Option<RetrievalType>): __JsonValue {
+  if (value.tag === "Some") return { kind: "Some", value: __serialise_RetrievalType(value.value) };
+  return { kind: "None" };
+}
+
+function __option_value_RetrievalType(raw: __JsonValue, at: string): Result<unknown, __BoundaryError> {
+  const __r_v = __deserialise_RetrievalType(raw, at);
+  if (__r_v.tag === "Err") return __r_v;
+  const __v = __r_v.value;
+  return Ok(__v);
+}
+
+export function __deserialise_Option_RetrievalType(json: __JsonValue, path: string = "$"): Result<Option<RetrievalType>, __BoundaryError> {
+  if (json === undefined || json === null) {
+    return Ok(None as Option<RetrievalType>);
+  }
+  if (typeof json === "object" && !globalThis.Array.isArray(json)) {
+    const obj = json as { [k: string]: __JsonValue };
+    const __keys = globalThis.Object.keys(obj);
+    if (obj["kind"] === "None" && __keys.length === 1) {
+      return Ok(None as Option<RetrievalType>);
+    }
+    if (obj["kind"] === "Some" && __keys.length === 2 && "value" in obj) {
+      const __t = __option_value_RetrievalType(obj["value"], `${path}.value`);
+      if (__t.tag === "Err") {
+        return __t;
+      }
+      return Ok(Some(__t.value as RetrievalType) as Option<RetrievalType>);
+    }
+  }
+  const __b = __option_value_RetrievalType(json, path);
+  if (__b.tag === "Ok") {
+    return Ok(Some(__b.value as RetrievalType) as Option<RetrievalType>);
+  }
+  if (__b.error.kind === "StructuralMismatch" && __b.error.path === path && !__b.error.expected.endsWith(" | null | {\"kind\": \"None\"} | {\"kind\": \"Some\", \"value\": ...}")) {
+    return Err({ ...__b.error, expected: __b.error.expected + " | null | {\"kind\": \"None\"} | {\"kind\": \"Some\", \"value\": ...}" });
+  }
+  return __b;
+}
+
 export function __serialise_List_SqlValue(value: readonly SqlValue[]): __JsonValue {
   return value.map((v) => __serialise_SqlValue(v));
 }
@@ -3162,4 +5753,103 @@ export function __deserialise_List_SqlValue(json: __JsonValue, path: string = "$
   out.push(__el as SqlValue);
   }
   return Ok(out);
+}
+
+export function __serialise_Option_ImageFit(value: Option<ImageFit>): __JsonValue {
+  if (value.tag === "Some") return { kind: "Some", value: __serialise_ImageFit(value.value) };
+  return { kind: "None" };
+}
+
+function __option_value_ImageFit(raw: __JsonValue, at: string): Result<unknown, __BoundaryError> {
+  const __r_v = __deserialise_ImageFit(raw, at);
+  if (__r_v.tag === "Err") return __r_v;
+  const __v = __r_v.value;
+  return Ok(__v);
+}
+
+export function __deserialise_Option_ImageFit(json: __JsonValue, path: string = "$"): Result<Option<ImageFit>, __BoundaryError> {
+  if (json === undefined || json === null) {
+    return Ok(None as Option<ImageFit>);
+  }
+  if (typeof json === "object" && !globalThis.Array.isArray(json)) {
+    const obj = json as { [k: string]: __JsonValue };
+    const __keys = globalThis.Object.keys(obj);
+    if (obj["kind"] === "None" && __keys.length === 1) {
+      return Ok(None as Option<ImageFit>);
+    }
+    if (obj["kind"] === "Some" && __keys.length === 2 && "value" in obj) {
+      const __t = __option_value_ImageFit(obj["value"], `${path}.value`);
+      if (__t.tag === "Err") {
+        return __t;
+      }
+      return Ok(Some(__t.value as ImageFit) as Option<ImageFit>);
+    }
+  }
+  const __b = __option_value_ImageFit(json, path);
+  if (__b.tag === "Ok") {
+    return Ok(Some(__b.value as ImageFit) as Option<ImageFit>);
+  }
+  if (__b.error.kind === "StructuralMismatch" && __b.error.path === path && !__b.error.expected.endsWith(" | null | {\"kind\": \"None\"} | {\"kind\": \"Some\", \"value\": ...}")) {
+    return Err({ ...__b.error, expected: __b.error.expected + " | null | {\"kind\": \"None\"} | {\"kind\": \"Some\", \"value\": ...}" });
+  }
+  return __b;
+}
+
+export function __serialise_List_Overlay(value: readonly Overlay[]): __JsonValue {
+  return value.map((v) => __serialise_Overlay(v));
+}
+
+export function __deserialise_List_Overlay(json: __JsonValue, path: string = "$"): Result<readonly Overlay[], __BoundaryError> {
+  if (!globalThis.Array.isArray(json)) {
+    return Err({ kind: "StructuralMismatch", path, expected: "array", actual: typeof json });
+  }
+  const out: Overlay[] = [];
+  for (let i = 0; i < json.length; i++) {
+  const item = json[i];
+  const __r_el = __deserialise_Overlay(item, `${path}[${i}]`);
+  if (__r_el.tag === "Err") return __r_el;
+  const __el = __r_el.value;
+  out.push(__el as Overlay);
+  }
+  return Ok(out);
+}
+
+export function __serialise_Option_List_Float(value: Option<readonly number[]>): __JsonValue {
+  if (value.tag === "Some") return { kind: "Some", value: __serialise_List_Float(value.value) };
+  return { kind: "None" };
+}
+
+function __option_value_List_Float(raw: __JsonValue, at: string): Result<unknown, __BoundaryError> {
+  const __r_v = __deserialise_List_Float(raw, at);
+  if (__r_v.tag === "Err") return __r_v;
+  const __v = __r_v.value;
+  return Ok(__v);
+}
+
+export function __deserialise_Option_List_Float(json: __JsonValue, path: string = "$"): Result<Option<readonly number[]>, __BoundaryError> {
+  if (json === undefined || json === null) {
+    return Ok(None as Option<readonly number[]>);
+  }
+  if (typeof json === "object" && !globalThis.Array.isArray(json)) {
+    const obj = json as { [k: string]: __JsonValue };
+    const __keys = globalThis.Object.keys(obj);
+    if (obj["kind"] === "None" && __keys.length === 1) {
+      return Ok(None as Option<readonly number[]>);
+    }
+    if (obj["kind"] === "Some" && __keys.length === 2 && "value" in obj) {
+      const __t = __option_value_List_Float(obj["value"], `${path}.value`);
+      if (__t.tag === "Err") {
+        return __t;
+      }
+      return Ok(Some(__t.value as readonly number[]) as Option<readonly number[]>);
+    }
+  }
+  const __b = __option_value_List_Float(json, path);
+  if (__b.tag === "Ok") {
+    return Ok(Some(__b.value as readonly number[]) as Option<readonly number[]>);
+  }
+  if (__b.error.kind === "StructuralMismatch" && __b.error.path === path && !__b.error.expected.endsWith(" | null | {\"kind\": \"None\"} | {\"kind\": \"Some\", \"value\": ...}")) {
+    return Err({ ...__b.error, expected: __b.error.expected + " | null | {\"kind\": \"None\"} | {\"kind\": \"Some\", \"value\": ...}" });
+  }
+  return __b;
 }

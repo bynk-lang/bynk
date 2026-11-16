@@ -4,6 +4,7 @@ mechanism already covers overriding `Locale.current()` — no dedicated
 test-provider class is needed.
 ---
 suite app.greet as integration {
+  consumes bynk { Locale }
   stub Locale.current() returns "fr"
 
   case "a stubbed locale is what the capability reports" {

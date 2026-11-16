@@ -4,11 +4,14 @@
 //! operation's signature copied and its body a typed default.
 //!
 //! It is offered as a quick fix on `bynk.exports.capability_not_provided`
-//! (an exported capability with no provider), and as a `refactor` with the
-//! cursor on the capability's name. The Workers-only
-//! `bynk.capability.not_provided` is never raised in the editor, whose
-//! analysis runs as the bundle target, so the refactor is what covers a
-//! required capability.
+//! (an exported capability with no provider) and on
+//! `bynk.capability.not_provided` (a required capability with no provider),
+//! and as a `refactor` with the cursor on the capability's name. The editor's
+//! analysis runs as the bundle target, so it raises
+//! `bynk.capability.not_provided` only in a bundle with a composition root
+//! (`compose.ts`), as `bynk check` does; the Workers form, raised for every
+//! context on `--target workers`, never reaches the editor. So the refactor is
+//! what covers a required capability elsewhere.
 //!
 //! The language has no placeholder expression, so a stub body must be a value
 //! that type-checks (DECISION B re-checks the edit). Each body is a default of
@@ -32,7 +35,10 @@ use bynk_syntax::span::Span;
 use tower_lsp::lsp_types::*;
 
 const DATA_TAG: &str = "bynk.generateProvider";
-const CATEGORIES: [&str; 1] = ["bynk.exports.capability_not_provided"];
+const CATEGORIES: [&str; 2] = [
+    "bynk.exports.capability_not_provided",
+    "bynk.capability.not_provided",
+];
 
 /// A planned stub: the capability, the provider's name, and the edits.
 pub struct Plan {

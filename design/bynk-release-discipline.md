@@ -184,7 +184,7 @@ compiler's output. Until #1677 the only guidance was "bump cautiously", with no
 trigger for a bump. The date stayed at `2024-11-01` for 23 months, falling
 further behind the runtime that Cloudflare and the local `workerd` actually
 test. The first review under this policy, at the `v0.303.4` release, moved it
-to `2026-07-01`; the review at the Hyperdrive H0 work ([#3317](https://github.com/bynk-lang/bynk/issues/3317)) moved it to `2026-08-04`.
+to `2026-07-01`; the review at the Hyperdrive H0 work ([#3317](https://github.com/bynk-lang/bynk/issues/3317)) moved it to `2026-08-04`; the review at the toolchain-dependency sweep of 14 November 2026 moved it to `2026-08-11`, the newest date a wrangler released at least three months earlier (4.123.0, workerd 1.20260811.1) supports.
 
 ### The decision
 
@@ -214,10 +214,12 @@ the new date.** The recommended option of #1677's Decision A.
    `1.YYYYMMDD.n` names the newest date it supports.
 
    **The review also sets the wrangler minimum** (#1732): `WRANGLER_MIN`, beside
-   `COMPATIBILITY_DATE`, is the oldest wrangler whose `workerd` serves the date.
-   It's currently `4.120.1` for `2026-08-04`. `bynk doctor` warns about an
-   installed wrangler below it, and `bynk dev` prints the same warning before
-   serving. `bynk-emit/tests/compat_date_policy.rs` fails until this section,
+   `COMPATIBILITY_DATE`, is the oldest wrangler Bynk supports, and it is never
+   older than the one whose `workerd` serves the date. It's currently `4.162.0`
+   for `2026-08-11` (see *Dependencies until v1.0.0*, below, for why it
+   is the newest wrangler and not the oldest that serves the date).
+   `bynk doctor` warns about an installed wrangler below it, and `bynk dev`
+   prints the same warning before serving. `bynk-emit/tests/compat_date_policy.rs` fails until this section,
    the doctor guide and the emission reference all name the current pair.
 2. **Gate.** The bump lands as its own PR. Before it merges, the full suite runs
    with `BYNK_REQUIRE_WORKERD=1` on the new date, so the workerd smokes exercise
@@ -236,6 +238,62 @@ the new date.** The recommended option of #1677's Decision A.
 3. **Record.** A bump changes what every deployed Worker runs under, so it
    carries a changelog entry. It needs an ADR only when a flag changes
    behaviour a Bynk program can observe.
+
+### Dependencies until v1.0.0
+
+**Until v1.0.0, Bynk tracks current versions of its toolchain dependencies, and
+each release reviews them. Its first-party runtime dependencies are tracked too,
+but only to versions that have had time to settle.** The review, beside the
+compatibility date, is:
+
+- **`WRANGLER_MIN`** moves to the newest wrangler (`npm view wrangler version`).
+  No feature has a floor of its own: a feature that needs a particular wrangler
+  (the `durable_object` container policy needs 4.136.0) is covered by the general
+  one, and a test keeps it so. A raised floor is a `breaking:` line in the
+  increment's pending file, because `bynk doctor`, `bynk dev` and `bynk deploy`
+  start refusing or warning about an older wrangler.
+- **The other toolchain dependencies** (the TypeScript floor, the Node floor, the
+  miniflare and workerd pins, and the dev dependencies of the `@bynk/runtime`
+  package, which are its test and type-check tools) move to their newest
+  compatible release where that is safe. A major version, or a Node floor that
+  would drop a Node still in support, is its own decision and is not part of the
+  sweep. None of these ships into users' Workers, so none has a cooling-off
+  period. Bynk's own packages are versioned with each release and are not part of
+  this review.
+- **Rust crates** are left to the normal dependency updates.
+- **First-party runtime dependencies** are the third-party npm packages that ship
+  into users' Workers or into their `bynk.lock` (`FIRST_PARTY_NPM` in
+  `bynk-std/src/lib.rs`: `postal-mime`, `postgres`, `mysql2` and
+  `@electric-sql/pglite`), as against the tools that build and run a project. The
+  review moves each to the newest version of its major that has been **published
+  for at least 14 days**. The age matters most for a package that parses or
+  handles untrusted input (`postal-mime` reads inbound mail), but the rule does
+  not depend on that: a package that does not is moved the same way. A major
+  version is its own decision, as above.
+  - **Exception: a security fix** may be adopted before the 14 days. The PR says
+    so, and names the advisory and why waiting is the greater risk.
+  - **Provenance.** A bump PR records the version's publish date, the package's
+    changelog since the previous pin, and the limits or behaviour Bynk relies on
+    that were checked against the new version (for `postal-mime`, the parser
+    limits its module sets).
+  - **Both places move.** A pin is held to the version in
+    `bynk-emit/runtime/package.json` by `first_party_pins_match_the_runtime`, so
+    a bump changes `FIRST_PARTY_NPM` and that file (and its lockfile) together.
+    It also moves users' `bynk.lock` and installed package, so it carries a
+    `breaking:` line for `--locked` builds.
+
+This is a pre-1.0 policy: nothing outside this repository's corpus depends on an
+older toolchain, so a floor that moves with the ecosystem costs less than
+supporting a window of old versions. The toolchain tracks the latest because it
+does not ship into users' Workers; the first-party runtime dependencies do, so
+they get a cooling-off period and the toolchain does not. From v1.0.0 a floor
+change follows the milestone's stability promise instead, and this section gives
+way to it.
+
+The compatibility date does not follow the same rule: it still moves only by the
+lag rule above, since a date only the newest wrangler supports would break the
+developers whose wrangler lags, whatever the minimum says. The lag rule is the
+reason the date can sit behind the minimum.
 
 ### Why at releases
 

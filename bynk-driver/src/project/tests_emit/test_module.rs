@@ -40,6 +40,7 @@ fn real_provider_double_factory(owner: &str, cap: &str, pglite: bool) -> Option<
     match cap {
         "D1" => Some("__makeIntegrationD1"),
         "Email" => Some("__makeIntegrationEmail"),
+        "Vectorize" => Some("__makeIntegrationVectorize"),
         // #3321: only when the project opts in (`[test] postgres = "pglite"`).
         "Postgres" if pglite => Some("__makeIntegrationPostgres"),
         _ => None,
@@ -82,6 +83,13 @@ pub(super) fn emit_test_module(
     // and boundary-codec paths. What those reach for is recorded here as they emit
     // and injected into the import line as a post-pass, the same shape
     // `emit_project` and `emit_worker_entry` use.
+    // #3536: every suite type of this module, so a name a suite declares is not
+    // also a first-party type the target's braces leave out.
+    let all_suite_types: Vec<bynk_syntax::ast::TypeDecl> = indices
+        .iter()
+        .filter_map(|&i| parsed[i].test())
+        .flat_map(|d| d.types.iter().cloned())
+        .collect();
     let runtime_use = RuntimeUse::default();
     // #2991: a suite calling `Json.encodePlain` needs its own `Option` encoders to
     // carry the plain branch.
@@ -91,6 +99,7 @@ pub(super) fn emit_test_module(
         unit_tables,
         unit_uses,
         unit_consumes,
+        &all_suite_types,
     ));
     let _ = exports_visibility;
     let ext = import_ext.as_str();
@@ -363,7 +372,7 @@ pub(super) fn emit_test_module(
             None,
         ));
     }
-    // #1994: a target whose handlers use `~>` gets the execution-context
+    // #1994: a target whose handlers use `detach` gets the execution-context
     // double its deps carry as `__exec`, and the settle helper that awaits
     // the collected `waitUntil` promises after each addressed call.
     if uses_send {
@@ -837,6 +846,7 @@ pub(super) fn emit_test_module(
         unit_consumes,
         hidden,
         tys,
+        &all_suite_types,
     );
     let suite_type_names: HashSet<String> = indices
         .iter()
@@ -1457,7 +1467,7 @@ pub(super) fn event_delivery_helpers(
 }
 
 /// #1994: the test double for the Worker's `ExecutionContext` — a `waitUntil`
-/// that collects the promises a `~>` send hands it, and (L7, #2414) a `cache`
+/// that collects the promises a `detach` send hands it, and (L7, #2414) a `cache`
 /// that records each `EdgeCache` purge and accepts it unless `succeeds` is
 /// cleared — and `__bynkSettle`, which
 /// awaits them after an addressed handler call, so a case's expectations see
@@ -1550,7 +1560,7 @@ pub(super) fn block_uses_advance(b: &Block) -> bool {
 }
 
 /// #1994: whether a context target has a handler that hands work to the
-/// execution context (`~>`, `within` or `race`, directly or through a function it
+/// execution context (`detach`, `within` or `race`, directly or through a function it
 /// calls, #2719), so its handlers' `deps` require `__exec` — the same gate the Worker entry and
 /// `compose` thread the request's execution context on.
 pub(super) fn target_uses_send(

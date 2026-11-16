@@ -1,6 +1,6 @@
 context app.demo
 
-consumes bynk { Clock, Random, Logger, Fetch, Secrets }
+consumes bynk { Clock, Random, Logger, Fetch, Secrets, Method, Request }
 
 service demo {
   on call(url: String) -> Effect[Int] given Clock, Random, Logger, Fetch, Secrets {

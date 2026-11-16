@@ -99,6 +99,62 @@ struct DeployTable {
     /// Hyperdrive settings, keyed by the `Postgres` capability's name
     /// (`capability Main = Postgres` is `Main`).
     hyperdrive: Option<std::collections::BTreeMap<String, DeployHyperdriveEntry>>,
+    /// Vectorize settings, keyed by the `Vectorize` capability's name
+    /// (`capability Docs = Vectorize …` is `Docs`).
+    vectorize: Option<std::collections::BTreeMap<String, DeployVectorizeEntry>>,
+    /// Container settings, keyed by the `Container` capability's name
+    /// (`capability Renderer = Container …` is `Renderer`).
+    containers: Option<std::collections::BTreeMap<String, DeployContainerEntry>>,
+    /// Worker groups, keyed by the group's identity: which contexts share one
+    /// Worker. A context in no group stays its own Worker, named by its
+    /// dashed name.
+    workers: Option<std::collections::BTreeMap<String, DeployWorkerEntry>>,
+}
+
+/// One group: the contexts that are deployed as one Worker.
+#[derive(JsonSchema)]
+#[serde(deny_unknown_fields)]
+#[allow(dead_code)]
+struct DeployWorkerEntry {
+    /// The members, as qualified context names (`shop.orders`). Each context
+    /// is in one group only; there are no globs, so adding a context to a
+    /// group is a visible change here.
+    contexts: Vec<String>,
+    /// The Worker's script name on Cloudflare: 1 to 63 lowercase letters,
+    /// digits or `-`. Default: the group's key. The key stays the group's
+    /// identity (its ledger entry, `--worker` selector and `workers/<key>/`
+    /// directory); changing the key or the name makes a different Worker.
+    name: Option<String>,
+    /// Route patterns the Worker is attached to, like `pay.example.com/*`.
+    routes: Option<Vec<String>>,
+    /// Custom domains the Worker is attached to, like `pay.example.com`.
+    custom_domains: Option<Vec<String>>,
+}
+
+/// One `Container` capability's image at deploy.
+#[derive(JsonSchema)]
+#[serde(deny_unknown_fields)]
+#[allow(dead_code)]
+struct DeployContainerEntry {
+    /// Prebuilt images by deployment environment (`default`, or an `--env`
+    /// name), each `registry.cloudflare.com/<ACCOUNT_ID>/<REPOSITORY>@sha256:<DIGEST>`:
+    /// in Cloudflare's own registry and named by digest. An environment listed
+    /// here runs that image and is never built, so the deploy needs no Docker;
+    /// without an entry the image is built from `@build`'s Dockerfile.
+    image: std::collections::BTreeMap<String, String>,
+}
+
+/// One `Vectorize` capability's index at deploy.
+#[derive(JsonSchema)]
+#[serde(deny_unknown_fields)]
+#[allow(dead_code)]
+struct DeployVectorizeEntry {
+    /// Names of Vectorize indexes that already exist, by deployment
+    /// environment (`default`, or an `--env` name). An environment listed here
+    /// is adopted: `bynk deploy` checks its dimensions and metric against the
+    /// declaration and never creates, changes or deletes it. Without an entry
+    /// the deploy creates the index.
+    index: std::collections::BTreeMap<String, String>,
 }
 
 /// One `Postgres` capability's Hyperdrive config at deploy.
@@ -126,6 +182,49 @@ struct DevTable {
     /// Local Hyperdrive connection strings, keyed by the `Postgres`
     /// capability's name.
     hyperdrive: Option<std::collections::BTreeMap<String, DevHyperdriveEntry>>,
+    /// Acknowledges that Workers AI has no local simulation: under `bynk dev`
+    /// a call runs on your Cloudflare account and may incur charges. `bynk dev`
+    /// warns once, on the first call, unless this is `"allow"`. See Cloudflare's
+    /// Workers AI pricing page.
+    ai: Option<DevAck>,
+    /// Acknowledges that Vectorize has no local simulation: under `bynk dev` a
+    /// call runs against your own index on your Cloudflare account and may
+    /// incur charges. `bynk dev` warns once, on the first call, unless this is
+    /// `"allow"`. See Cloudflare's Vectorize pricing page.
+    vectorize: Option<DevAck>,
+    /// The Vectorize index of your own that `bynk dev` binds, keyed by the
+    /// `Vectorize` capability's name (`Docs = "docs-dev"`). It must already
+    /// exist with the declaration's dimensions and metric: `bynk dev` never
+    /// creates one, and never uses the deploy's derived name. A capability
+    /// with no entry is unbound under `bynk dev`.
+    #[serde(rename = "vectorize-index")]
+    vectorize_index: Option<std::collections::BTreeMap<String, String>>,
+    /// Acknowledges that AI Search has no local simulation: under `bynk dev`
+    /// a call goes to your deployed instance on your Cloudflare account and may
+    /// incur charges. `bynk dev` warns once, on the first call, unless this is
+    /// `"allow"`. See Cloudflare's AI Search pricing page.
+    #[serde(rename = "ai-search")]
+    ai_search: Option<DevAck>,
+    /// Acknowledges that an mTLS certificate binding has no local simulation: under `bynk dev` a
+    /// call runs on Cloudflare, presenting your account's certificate to the origin the URL
+    /// names, so it needs a certificate `bynk deploy` has linked. `bynk dev` warns once, on the
+    /// first call, unless this is `"allow"`. See Cloudflare's mTLS bindings page.
+    mtls: Option<DevAck>,
+    /// Acknowledges that Analytics SQL has no local implementation: under `bynk dev` a query
+    /// runs on your Cloudflare account and reads your deployed datasets. `bynk dev` warns once,
+    /// on the first query, unless this is `"allow"`. See Cloudflare's Analytics Engine SQL API
+    /// page.
+    #[serde(rename = "analytics-sql")]
+    analytics_sql: Option<DevAck>,
+}
+
+/// The one value a `[dev]` acknowledgement takes.
+#[derive(JsonSchema)]
+#[allow(dead_code)]
+enum DevAck {
+    /// Silence the warning.
+    #[serde(rename = "allow")]
+    Allow,
 }
 
 /// One `Postgres` capability's connection string under `bynk dev`.
@@ -170,6 +269,28 @@ struct BuildTable {
     /// variable `BYNK_PACKAGE_MANAGER` overrides this.
     #[schemars(extend("enum" = ["npm", "pnpm", "bun", "yarn"]))]
     package_manager: Option<String>,
+    /// Where `bynk build` writes the typed TypeScript client for the project's
+    /// `from http` services (#3508). Absent, `bynk build` writes none.
+    client: Option<ClientTable>,
+}
+
+/// `[build.client]`: the typed TypeScript client `bynk build` writes beside its
+/// other outputs. `bynk client` reads it for the flags it is not given.
+#[derive(JsonSchema)]
+#[serde(deny_unknown_fields)]
+#[allow(dead_code)]
+struct ClientTable {
+    /// Where to write the client, relative to the project root: a `.ts` file with
+    /// `layout = "file"`, a directory with `layout = "dir"`. It may leave the
+    /// project, since a front end often lives beside the Bynk project.
+    out: String,
+    /// `"file"` writes one module; `"dir"` writes `index.ts`, `types.ts`,
+    /// `codecs.ts` and `runtime.ts`. Default: `"file"`.
+    #[schemars(extend("enum" = ["file", "dir"], "default" = "file"))]
+    layout: Option<String>,
+    /// The `from http` services to include, as `Name` or `unit.Name`. Default:
+    /// every one.
+    service: Option<Vec<String>>,
 }
 
 /// Switches for checks that read more than the source.

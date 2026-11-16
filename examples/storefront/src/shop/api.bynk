@@ -1,0 +1,49 @@
+context shop.api
+
+type Sku = String where NonEmpty
+
+type Qty = Int where InRange(1, 99)
+
+type Product = {
+	sku: Sku,
+	name: String,
+	note: Option[String],
+}
+
+type NewOrder = {
+	sku: Sku,
+	qty: Qty,
+	note: Option[String],
+}
+
+type Order = {
+	id: String,
+	sku: Sku,
+	qty: Qty,
+	note: Option[String],
+}
+
+service shop from http {
+	on GET("/products") () -> Effect[HttpResult[List[Product]]] by v: Visitor {
+		Ok([
+			Product {
+				sku: "mug",
+				name: "Enamel mug",
+				note: None,
+			},
+			Product {
+				sku: "tote",
+				name: "Canvas tote",
+				note: Some("organic cotton"),
+			},
+		])
+	}
+
+	on POST("/orders") (body: NewOrder) -> Effect[HttpResult[Order]] by v: Visitor {
+		if body.sku == "sold-out" {
+			Conflict("that item is sold out")
+		} else {
+			Created(Order { id: "o-1", sku: body.sku, qty: body.qty, note: body.note })
+		}
+	}
+}

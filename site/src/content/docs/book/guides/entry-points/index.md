@@ -12,10 +12,13 @@ schedules, queue messages, WebSocket connections, and inbound email.
 - [Receive email](/book/guides/entry-points/receive-email/)
 - [Serve a page from an HTML file](/book/guides/entry-points/serve-a-page/)
 - [Accept an HTML form](/book/guides/entry-points/accept-a-form/)
+- [Branch on the caller's country](/book/guides/entry-points/branch-on-the-callers-country/)
 - [Accept a file upload](/book/guides/entry-points/accept-a-file-upload/)
 - [Stream a large upload](/book/guides/entry-points/stream-a-large-upload/)
+- [Call your API from a front end](/book/guides/entry-points/call-from-a-front-end/)
 
 **See also:** [Reference — HTTP](/book/reference/http/),
 [Cron](/book/reference/cron/), [Queue](/book/reference/queue/),
 [WebSocket](/book/reference/websocket/),
-[Inbound email](/book/reference/inbound-email/).
+[Inbound email](/book/reference/inbound-email/),
+[HTTP client](/book/reference/http-client/).

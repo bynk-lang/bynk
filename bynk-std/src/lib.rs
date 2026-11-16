@@ -134,17 +134,17 @@ pub const FIRST_PARTY_NPM: &[FirstPartyNpm] = &[
     // Inbound email (#3328): `email.ts` parses the raw message with it.
     FirstPartyNpm {
         package: "postal-mime",
-        version: "4.1.4",
+        version: "4.2.1",
         runtime_module: "email",
         reached_by: Reach::ServiceProtocol("email"),
     },
     // Hyperdrive H1 (#3318): `postgres.ts` is the driver seam of `Postgres`,
     // handed to the binding by a Worker's compose, so only a Worker with a
-    // `Postgres` instance carries the package. Pinned at the version ADR 0799 A
-    // measured.
+    // `Postgres` instance carries the package. 4.0.0, the newest 4.x that was
+    // 14 days old when #3529 moved it from 3.4.5 (the version ADR 0799 A measured).
     FirstPartyNpm {
         package: "postgres",
-        version: "3.4.5",
+        version: "4.0.0",
         runtime_module: "postgres",
         reached_by: Reach::CapabilityInstance("Postgres"),
     },
@@ -517,7 +517,7 @@ pub struct Unit {
 }
 
 /// A platform capability with exactly one binding per Worker (#3300): Version
-/// metadata's `[version_metadata]`, and later Workers AI's `[ai]`.
+/// metadata's `[version_metadata]` and Workers AI's `[ai]`.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub struct Singleton {
     /// The capability's name in its unit (`Version`).
@@ -659,6 +659,27 @@ pub const STORED_SECRET_STORE_OPTION: &str = "store";
 /// The option of a `StoredSecret` instance that names the secret in its store.
 pub const STORED_SECRET_SECRET_OPTION: &str = "secret";
 
+/// The Worker binding prefix of an `AiSearch` instance (#3480):
+/// `capability Kb = AiSearch @instance("support-docs")` binds as
+/// `AI_SEARCH_KB`, an `[[ai_search]]` entry.
+pub const AI_SEARCH_BINDING_PREFIX: &str = "AI_SEARCH";
+
+/// The option of an `AiSearch` instance that names the instance, by the name
+/// the account gives it. It is used as written in every environment, and
+/// `bynk deploy` links to it and never creates it (#3480 Decisions A and B).
+pub const AI_SEARCH_INSTANCE_OPTION: &str = "instance";
+
+/// The Worker binding prefix of an `MtlsCertificate` instance (#3513 A):
+/// `capability Backend = MtlsCertificate @certificate("acme-client")` binds as
+/// `MTLS_BACKEND`, an `[[mtls_certificates]]` entry.
+pub const MTLS_BINDING_PREFIX: &str = "MTLS";
+
+/// The option of an `MtlsCertificate` instance that names the account's client
+/// certificate, by the name it was uploaded under. It is used as written in every
+/// environment, and `bynk deploy` links to it and never uploads it: a certificate's
+/// private key never passes through Bynk (#3513 A Decisions A1 and A2).
+pub const MTLS_CERTIFICATE_OPTION: &str = "certificate";
+
 /// The Worker binding prefix of an `Email` instance (#3302):
 /// `capability Mail = Email @allowedSenders(["orders@shop.example"])` binds as
 /// `EMAIL_MAIL`, a `[[send_email]]` entry (keyed by `name`).
@@ -702,10 +723,99 @@ pub const EMAIL_ALLOWED_RECIPIENTS_OPTION: &str = "allowedRecipients";
 /// verified for sending on the account (#3302 Decision D).
 pub const EMAIL_ALLOWED_SENDERS_OPTION: &str = "allowedSenders";
 
+/// The Worker binding prefix of a `Vectorize` instance (#3479): `capability
+/// Docs = Vectorize @dimensions(768) @metric("cosine")` binds as
+/// `VECTORIZE_DOCS`, a `[[vectorize]]` entry naming the index.
+pub const VECTORIZE_BINDING_PREFIX: &str = "VECTORIZE";
+
+/// A `Vectorize` instance's vector length. Fixed when the index is created
+/// and never changeable after, so the declaration states it (#3479 A).
+pub const VECTORIZE_DIMENSIONS_OPTION: &str = "dimensions";
+
+/// A `Vectorize` instance's distance metric, one of [`VECTORIZE_METRICS`].
+pub const VECTORIZE_METRIC_OPTION: &str = "metric";
+
+/// The metadata properties of a `Vectorize` instance a query may filter on,
+/// each written `name:type` (#3479 C).
+pub const VECTORIZE_INDEXED_OPTION: &str = "indexed";
+
+/// The distance metrics an index is created with.
+pub const VECTORIZE_METRICS: &[&str] = &["cosine", "euclidean", "dot-product"];
+
+/// The types a metadata index holds.
+pub const VECTORIZE_INDEXED_TYPES: &[&str] = &["string", "number", "boolean"];
+
+/// The most metadata indexes one index carries.
+pub const VECTORIZE_MAX_INDEXED: usize = 10;
+
+/// The fewest dimensions a Cloudflare Vectorize index accepts: creating one with
+/// fewer fails with `Dimensions must be in range: [32, 1536]`. `@dimensions`
+/// below it is refused at compile time, so the failure is not left for a deploy.
+pub const VECTORIZE_MIN_DIMENSIONS: i64 = 32;
+
+/// The most dimensions a Cloudflare Vectorize vector can have (its published
+/// limit); `@dimensions` above it is refused at compile time.
+pub const VECTORIZE_MAX_DIMENSIONS: i64 = 1536;
+
+/// The Worker binding prefix of a `Container` instance (#3477): `capability
+/// Renderer = Container @build("containers/renderer") @port(8080)` binds as
+/// `CONTAINER_RENDERER`, a Durable Object namespace whose class (derived from
+/// the capability's name) runs the container.
+pub const CONTAINER_BINDING_PREFIX: &str = "CONTAINER";
+
+/// A `Container` instance's build context: a project-relative directory that
+/// holds a `Dockerfile` (#3477 B).
+pub const CONTAINER_BUILD_OPTION: &str = "build";
+
+/// The one TCP port the container's HTTP server listens on (#3477 D).
+pub const CONTAINER_PORT_OPTION: &str = "port";
+
+/// How long an idle container runs before the platform stops it, applied with
+/// `setInactivityTimeout` on every start (#3477 E).
+pub const CONTAINER_SLEEP_AFTER_OPTION: &str = "sleepAfter";
+
+/// The instance type the container starts with, one of
+/// [`CONTAINER_INSTANCE_TYPES`], passed as `instance` to `start()` (#3477 E).
+pub const CONTAINER_INSTANCE_TYPE_OPTION: &str = "instanceType";
+
+/// The names of the Worker secrets passed to the container's process at start
+/// (#3477 J).
+pub const CONTAINER_FORWARD_OPTION: &str = "forward";
+
+/// The instance types a `Container` can start with under the `durable_object`
+/// scheduling policy. There is no `basic` under it.
+pub const CONTAINER_INSTANCE_TYPES: &[&str] = &[
+    "lite",
+    "standard-1",
+    "standard-2",
+    "standard-3",
+    "standard-4",
+];
+
+/// The longest inactivity timeout the platform accepts, in seconds (6 hours).
+pub const CONTAINER_MAX_SLEEP_AFTER_SECONDS: i64 = 6 * 60 * 60;
+
+/// The most Worker secrets one container forwards.
+pub const CONTAINER_MAX_FORWARD: usize = 32;
+
 /// The Worker binding of the `Version` capability (#3300): Cloudflare's
 /// Version metadata binding, `[version_metadata] binding = "CF_VERSION_METADATA"`,
 /// the name Cloudflare's own documentation uses.
 pub const VERSION_BINDING_NAME: &str = "CF_VERSION_METADATA";
+
+/// The Worker binding of the `Ai` capability (#3478): Workers AI's binding,
+/// `[ai] binding = "AI"`, the name Cloudflare's own documentation uses.
+pub const AI_BINDING_NAME: &str = "AI";
+
+/// The Worker binding of the `Images` capability (#3515): Cloudflare Images'
+/// binding, `[images] binding = "IMAGES"`, the name Cloudflare's own
+/// documentation uses.
+pub const IMAGES_BINDING_NAME: &str = "IMAGES";
+/// The Worker binding of the `AnalyticsSql` capability (#3513 B): Cloudflare's Analytics SQL
+/// binding, `[analytics] binding = "CF_ANALYTICS_SQL"`. Cloudflare's own documentation names it
+/// `ANALYTICS_SQL`; the `CF_` prefix keeps it clear of an `Analytics` instance's binding
+/// (`capability Sql = Analytics` would bind as `ANALYTICS_SQL`).
+pub const ANALYTICS_SQL_BINDING_NAME: &str = "CF_ANALYTICS_SQL";
 
 /// The prefix an `EdgeCache` instance's binding name would carry (first-party
 /// registry L7, #2414). Workers Cache is a Worker-wide `[cache]` setting with
@@ -797,10 +907,17 @@ pub const UNITS: &[Unit] = &[
             "WorkersAnalytics",
             "WorkersD1",
             "WorkersVersion",
+            "WorkersAi",
+            "WorkersImages",
             "WorkersStoredSecret",
             "WorkersEmail",
             "WorkersPostgres",
             "WorkersMySql",
+            "WorkersVectorize",
+            "WorkersContainer",
+            "WorkersAiSearch",
+            "WorkersMtls",
+            "WorkersAnalyticsSql",
         ],
         stability: Stability::Stable,
         // Interop I5 (#1972): a Service Binding to a non-Bynk Worker is new
@@ -812,10 +929,14 @@ pub const UNITS: &[Unit] = &[
         // P2 (#2578): Queue too, until a first-party service has sent on it.
         // P3b (#2582): Analytics too, until a first-party service writes to it.
         // Version metadata (#3300) too, until a first-party service reports it.
+        // Workers AI (#3478) too, until a first-party service has called a model.
+        // Cloudflare Images (#3515) too, until a first-party service has resized one.
+        // mTLS certificates (#3513 A) too, until a first-party service has called an mTLS origin.
         // Secrets Store (#3301) too, until a first-party service reads one.
         // Outbound email (#3302) too: Email Service carries no GA label.
         // Hyperdrive H1 (#3318): `Postgres` too, until a first-party service
         // has run on it; its records are stable and `PgError` is extensible.
+        // `request.cf` (#3513 C): `RequestCf` too, until a first-party service reads it.
         // P1 (#2590): the new operations of the stable `Kv`, until a service
         // has used them.
         // D1 shipped experimental (P4a, #2602) and graduated in P4d (#2652)
@@ -829,10 +950,18 @@ pub const UNITS: &[Unit] = &[
             "Queue",
             "Analytics",
             "Version",
+            "Ai",
+            "Images",
             "StoredSecret",
             "Email",
             "Postgres",
             "MySql",
+            "Vectorize",
+            "Container",
+            "AiSearch",
+            "MtlsCertificate",
+            "AnalyticsSql",
+            "RequestCf",
             "Kv.getWith",
             "Kv.putWith",
             "Kv.getBytes",
@@ -844,8 +973,17 @@ pub const UNITS: &[Unit] = &[
             "KvExpiration",
             "SqlError",
             "EmailError",
+            "AiError",
+            "ImageFormat",
+            "ImageFit",
+            "ImagesError",
+            "AnalyticsSqlError",
+            "ChatRole",
             "PgError",
             "MySqlError",
+            "VectorError",
+            "ContainerError",
+            "SearchError",
         ],
         instantiable: &[
             Instantiable {
@@ -963,14 +1101,90 @@ pub const UNITS: &[Unit] = &[
                 bare: false,
                 linked: false,
             },
+            // #3479: the index is project-owned state, so `bynk deploy` creates
+            // it from these (never linked); both fixed at creation, so required.
+            Instantiable {
+                capability: "Vectorize",
+                binding_prefix: VECTORIZE_BINDING_PREFIX,
+                options: &[
+                    (VECTORIZE_DIMENSIONS_OPTION, OptionKind::PositiveInt),
+                    (VECTORIZE_METRIC_OPTION, OptionKind::Str),
+                    (VECTORIZE_INDEXED_OPTION, OptionKind::StrList),
+                ],
+                required: &[VECTORIZE_DIMENSIONS_OPTION, VECTORIZE_METRIC_OPTION],
+                bare: false,
+                linked: false,
+            },
+            // #3477: a container is a Durable Object class backed by an image
+            // that `wrangler deploy` builds and pushes, so it is neither
+            // linked nor provisioned by `bynk deploy`.
+            Instantiable {
+                capability: "Container",
+                binding_prefix: CONTAINER_BINDING_PREFIX,
+                options: &[
+                    (CONTAINER_BUILD_OPTION, OptionKind::Str),
+                    (CONTAINER_PORT_OPTION, OptionKind::PositiveInt),
+                    (CONTAINER_SLEEP_AFTER_OPTION, OptionKind::Duration),
+                    (CONTAINER_INSTANCE_TYPE_OPTION, OptionKind::Str),
+                    (CONTAINER_FORWARD_OPTION, OptionKind::StrList),
+                ],
+                required: &[CONTAINER_BUILD_OPTION, CONTAINER_PORT_OPTION],
+                bare: false,
+                linked: false,
+            },
+            // #3480: an AI Search instance is configured and owned by someone
+            // else (a data source, models, an indexing lifecycle), so the
+            // deploy links to it by name and never creates it. The name is
+            // required: a bare `given AiSearch` would name no instance.
+            Instantiable {
+                capability: "AiSearch",
+                binding_prefix: AI_SEARCH_BINDING_PREFIX,
+                options: &[(AI_SEARCH_INSTANCE_OPTION, OptionKind::Str)],
+                required: &[AI_SEARCH_INSTANCE_OPTION],
+                bare: false,
+                linked: true,
+            },
+            // #3513 A: a client certificate is uploaded to the account by its owner, and
+            // its private key never passes through Bynk, so the deploy links to it by name
+            // and never uploads it. The name is required: a bare `given MtlsCertificate`
+            // would name no certificate.
+            Instantiable {
+                capability: "MtlsCertificate",
+                binding_prefix: MTLS_BINDING_PREFIX,
+                options: &[(MTLS_CERTIFICATE_OPTION, OptionKind::Str)],
+                required: &[MTLS_CERTIFICATE_OPTION],
+                bare: false,
+                linked: true,
+            },
         ],
         // Version metadata (#3300): the running Worker version's id, tag and
         // creation time, one binding per Worker.
-        singletons: &[Singleton {
-            capability: "Version",
-            binding: VERSION_BINDING_NAME,
-            wrangler_table: "version_metadata",
-        }],
+        singletons: &[
+            Singleton {
+                capability: "Version",
+                binding: VERSION_BINDING_NAME,
+                wrangler_table: "version_metadata",
+            },
+            // Workers AI (#3478): one `[ai]` binding per Worker, no instances.
+            Singleton {
+                capability: "Ai",
+                binding: AI_BINDING_NAME,
+                wrangler_table: "ai",
+            },
+            // Cloudflare Images (#3515): one `[images]` binding per Worker.
+            Singleton {
+                capability: "Images",
+                binding: IMAGES_BINDING_NAME,
+                wrangler_table: "images",
+            },
+            // Analytics SQL (#3513 B): one account-scoped `[analytics]` binding per Worker, the
+            // read side of `Analytics`.
+            Singleton {
+                capability: "AnalyticsSql",
+                binding: ANALYTICS_SQL_BINDING_NAME,
+                wrangler_table: "analytics",
+            },
+        ],
     },
     Unit {
         name: LIST_UNIT,
@@ -1539,12 +1753,22 @@ mod tests {
             .collect();
         assert_eq!(
             shipped,
-            [(
-                "bynk.cloudflare",
-                "Version",
-                "CF_VERSION_METADATA",
-                "version_metadata"
-            )]
+            [
+                (
+                    "bynk.cloudflare",
+                    "Version",
+                    "CF_VERSION_METADATA",
+                    "version_metadata"
+                ),
+                ("bynk.cloudflare", "Ai", "AI", "ai"),
+                ("bynk.cloudflare", "Images", "IMAGES", "images"),
+                (
+                    "bynk.cloudflare",
+                    "AnalyticsSql",
+                    "CF_ANALYTICS_SQL",
+                    "analytics"
+                ),
+            ]
         );
         for u in UNITS {
             for s in u.singletons {
@@ -1609,7 +1833,11 @@ mod tests {
                 ("bynk.cloudflare", "StoredSecret", "SECRET"),
                 ("bynk.cloudflare", "Email", "EMAIL"),
                 ("bynk.cloudflare", "Postgres", "HYPERDRIVE"),
-                ("bynk.cloudflare", "MySql", "HYPERDRIVE")
+                ("bynk.cloudflare", "MySql", "HYPERDRIVE"),
+                ("bynk.cloudflare", "Vectorize", "VECTORIZE"),
+                ("bynk.cloudflare", "Container", "CONTAINER"),
+                ("bynk.cloudflare", "AiSearch", "AI_SEARCH"),
+                ("bynk.cloudflare", "MtlsCertificate", "MTLS")
             ]
         );
         let kv = instantiable("bynk.cloudflare", "Kv").expect("Kv is instantiable");
@@ -1650,7 +1878,20 @@ mod tests {
             .flat_map(|u| u.instantiable.iter().filter(|i| i.linked))
             .map(|i| i.capability)
             .collect();
-        assert_eq!(linked, ["StoredSecret"]);
+        assert_eq!(linked, ["StoredSecret", "AiSearch", "MtlsCertificate"]);
+        // #3480: an AI Search instance names the instance, required, and is
+        // linked like a stored secret.
+        let search = instantiable("bynk.cloudflare", "AiSearch").expect("AiSearch is instantiable");
+        assert_eq!(search.option_names().collect::<Vec<_>>(), ["instance"]);
+        assert_eq!(search.required, ["instance"]);
+        assert!(!search.bare && search.linked);
+        // #3513 A: an mTLS certificate names the certificate, required, and is linked like
+        // a stored secret.
+        let mtls = instantiable("bynk.cloudflare", "MtlsCertificate")
+            .expect("MtlsCertificate is instantiable");
+        assert_eq!(mtls.option_names().collect::<Vec<_>>(), ["certificate"]);
+        assert_eq!(mtls.required, ["certificate"]);
+        assert!(!mtls.bare && mtls.linked);
         // #3302: an email instance takes three optional options and is not
         // linked.
         let email = instantiable("bynk.cloudflare", "Email").expect("Email is instantiable");
@@ -1672,6 +1913,31 @@ mod tests {
         assert!(my.required.is_empty() && !my.bare && !my.linked);
         assert_eq!(MYSQL_BINDING_PREFIX, POSTGRES_BINDING_PREFIX);
         assert_eq!(MYSQL_TLS_MODES[0], ("required", "REQUIRED"));
+        // #3479: a Vectorize instance states the index's fixed configuration,
+        // both required; the metadata indexes are optional. Never bare, and
+        // created by the deploy, so not linked.
+        let vec = instantiable("bynk.cloudflare", "Vectorize").expect("Vectorize is instantiable");
+        assert_eq!(
+            vec.option_names().collect::<Vec<_>>(),
+            ["dimensions", "metric", "indexed"]
+        );
+        assert_eq!(vec.option_kind("dimensions"), Some(OptionKind::PositiveInt));
+        assert_eq!(vec.option_kind("indexed"), Some(OptionKind::StrList));
+        assert_eq!(vec.required, ["dimensions", "metric"]);
+        assert!(!vec.bare && !vec.linked);
+        // #3477: a Container names its build and port, and may set the rest.
+        let container =
+            instantiable("bynk.cloudflare", "Container").expect("Container is instantiable");
+        assert_eq!(
+            container.option_names().collect::<Vec<_>>(),
+            ["build", "port", "sleepAfter", "instanceType", "forward"]
+        );
+        assert_eq!(
+            container.option_kind("sleepAfter"),
+            Some(OptionKind::Duration)
+        );
+        assert_eq!(container.required, ["build", "port"]);
+        assert!(!container.bare && !container.linked);
         let pg = instantiable("bynk.cloudflare", "Postgres").expect("Postgres is instantiable");
         assert!(pg.options.is_empty() && pg.required.is_empty() && !pg.bare && !pg.linked);
         for u in UNITS {
@@ -1725,10 +1991,18 @@ mod tests {
                 "bynk.cloudflare.Queue",
                 "bynk.cloudflare.Analytics",
                 "bynk.cloudflare.Version",
+                "bynk.cloudflare.Ai",
+                "bynk.cloudflare.Images",
                 "bynk.cloudflare.StoredSecret",
                 "bynk.cloudflare.Email",
                 "bynk.cloudflare.Postgres",
                 "bynk.cloudflare.MySql",
+                "bynk.cloudflare.Vectorize",
+                "bynk.cloudflare.Container",
+                "bynk.cloudflare.AiSearch",
+                "bynk.cloudflare.MtlsCertificate",
+                "bynk.cloudflare.AnalyticsSql",
+                "bynk.cloudflare.RequestCf",
                 "bynk.cloudflare.Kv.getWith",
                 "bynk.cloudflare.Kv.putWith",
                 "bynk.cloudflare.Kv.getBytes",
@@ -1751,8 +2025,17 @@ mod tests {
                 ("bynk.cloudflare", "KvExpiration"),
                 ("bynk.cloudflare", "SqlError"),
                 ("bynk.cloudflare", "EmailError"),
+                ("bynk.cloudflare", "AiError"),
+                ("bynk.cloudflare", "ImageFormat"),
+                ("bynk.cloudflare", "ImageFit"),
+                ("bynk.cloudflare", "ImagesError"),
+                ("bynk.cloudflare", "AnalyticsSqlError"),
+                ("bynk.cloudflare", "ChatRole"),
                 ("bynk.cloudflare", "PgError"),
                 ("bynk.cloudflare", "MySqlError"),
+                ("bynk.cloudflare", "VectorError"),
+                ("bynk.cloudflare", "ContainerError"),
+                ("bynk.cloudflare", "SearchError"),
                 ("bynk.crypto", "Digest"),
                 ("bynk.crypto", "Signature"),
                 ("bynk.crypto", "CryptoError"),

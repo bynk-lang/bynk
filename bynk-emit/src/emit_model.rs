@@ -859,57 +859,27 @@ pub fn harness_clock_contexts(
         .collect()
 }
 
-#[allow(clippy::too_many_arguments)]
-/// Events track, slice 0 (spine #936): does any handler in this unit emit —
-/// the `UnitTable`-level analogue of `emitter::commons_uses_emit`, needed
-/// here because compose works from the project-wide `UnitTable` map, not a
-/// single unit's `TypedCommons`. #1187's slice 6 plumbing: reads the
-/// checker's own already-resolved `Callee::Capability{cap:"Events",
-/// op:"emit"}` (`Events.emit[...]` dispatches through the ordinary
-/// capability-call path, `bynk-check/src/checker/calls.rs`) instead of
-/// `emitter::block_uses_emit`'s bare-`Ident("Events")`-receiver name match.
-/// `callees` is `None` only defensively (a unit whose own check never ran) —
-/// every call site this function actually reaches has already certified
-/// (review of #1202: traced live, confirmed unreachable on the build path
-/// today). A silent `false` here disables four emission gates at once (no
-/// fan-out DO, no `dispatchToEventsFanout` import, no `EVENTS_FANOUT`
-/// binding, no `__eventsDispatch` field) with no diagnostic — `debug_assert`
-/// makes that invariant enforced, not just documented, so a future caller
-/// that violates it fails loudly in tests rather than shipping a publishing
-/// context that silently drops every emitted event.
+/// Events track, slice 0 (spine #936): does any handler in this unit emit?
+/// The `UnitTable`-level analogue of `emitter::commons_uses_emit`, needed
+/// because compose works from the project-wide `UnitTable` map, not a single
+/// unit's `TypedCommons`. It is
+/// [`bynk_check::project_model::unit_table_uses_emit`], which decides the
+/// four emission gates here (the fan-out DO, the `dispatchToEventsFanout`
+/// import, the `EVENTS_FANOUT` binding and the `__eventsDispatch` field) and
+/// whether a bundle has a composition root for the
+/// `bynk.capability.not_provided` check, which the editor runs too. One
+/// predicate, so the check and the emitter cannot disagree.
 ///
 /// `emitter::block_uses_emit` — the per-*handler* twin deciding
 /// `emit_service`/`emit_agent`'s own `deps.__eventsDispatch` *parameter*
-/// threading — reads the same resolved `Callee` now too (its own doc
-/// comment has the story: the two checks briefly disagreed on a
-/// locally-shadowed `Events` type between this function converting and
-/// that one following, confirmed by a fixture that failed `tsc --strict` in
-/// between, `1204_events_emit_shadowed_by_local_type`), so the two stay in
-/// agreement on every input, not just the ones existing fixtures cover.
+/// threading — reads the same resolved `Callee`
+/// (`1204_events_emit_shadowed_by_local_type`), so the two stay in
+/// agreement on every input.
 pub fn unit_table_uses_emit(
     table: &UnitTable,
     callees: Option<&HashMap<ExprId, bynk_check::checker::Callee>>,
 ) -> bool {
-    let Some(callees) = callees else {
-        debug_assert!(
-            false,
-            "unit_table_uses_emit: no Callee map for a checked unit"
-        );
-        return false;
-    };
-    let mut found = false;
-    emitter::walk_unit_table_bodies(table, &mut |e| {
-        if !found
-            && matches!(
-                callees.get(&e.id),
-                Some(bynk_check::checker::Callee::Capability { cap, op, .. })
-                    if cap == "Events" && op == "emit"
-            )
-        {
-            found = true;
-        }
-    });
-    found
+    bynk_check::project_model::unit_table_uses_emit(table, callees)
 }
 
 /// W30 (#2840): does any body in this unit call the first-party `Idempotency`
@@ -994,6 +964,14 @@ pub fn const_(name: impl Into<String>, init: TsExpr) -> TsStmt {
 pub struct SchemaVersions {
     pub events: HashMap<String, i64>,
     pub agents: HashMap<String, bynk_check::schema_registry::AgentVersions>,
+}
+
+/// #3580: what a traced build needs to name a call site: the file's source text,
+/// to turn a byte offset into `line:col`, and its project-relative path.
+#[derive(Clone)]
+pub struct TraceLoc {
+    pub source: std::sync::Arc<str>,
+    pub rel_path: String,
 }
 
 pub struct EmitProjectCtx {
@@ -1082,6 +1060,15 @@ pub struct EmitProjectCtx {
     /// v0.115 (testing track slice 3): emit the function-contract call-site guard
     /// (dev/test profile). Stripped in the deploy build for zero runtime cost.
     pub contracts: bool,
+    /// #3580: `Some` emits the per-request trace recording (`bynk dev
+    /// --trace-events`): the cross-context, agent and capability sites wrapped in
+    /// `__traceStep`, and the Worker's `fetch` in `__traceFetch`. Never set by a
+    /// deploy build, whose output is byte-identical.
+    pub trace: Option<TraceLoc>,
+    /// #3581: emit the dev-only agent inspection (the instance recording in each
+    /// agent factory and the `/_bynk/inspect` branch of each agent). `false` for
+    /// every build but `bynk dev`, so a deploy build is byte-identical.
+    pub inspect_agents: bool,
     /// v0.119 (testing track slice 7, ADR 0155): agent names a `for all run:
     /// History[Agent]` property in this project drives. Only these agents gain the
     /// exported `__bynkDriveHistory_<Agent>` test-support driver — every other

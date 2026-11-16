@@ -113,6 +113,10 @@ pub struct RuntimeUse {
     detach: Cell<bool>,
     /// #2620: the module references `unreachable`/`todo`'s helper, `__fault`.
     fault: Cell<bool>,
+    /// #3580: the module wraps a call in `__traceStep` (a traced build).
+    trace_step: Cell<bool>,
+    /// #3580: the module wraps a Service Binding in `__traceBinding` (slice 2).
+    trace_binding: Cell<bool>,
     /// #2683: the test module runs on virtual time, so an addressed call is
     /// driven by `__bynkSettleVirtual`.
     virtual_time: Cell<bool>,
@@ -274,6 +278,11 @@ impl RuntimeUse {
     /// Record that the module references the `race` helper (#2711).
     pub fn note_race(&self) {
         self.race.set(true);
+    }
+
+    /// Record that the module references `__traceStep` (#3580).
+    pub fn note_trace_step(&self) {
+        self.trace_step.set(true);
     }
 
     /// Record that the module references the `__fault` helper (#2620).
@@ -593,6 +602,21 @@ impl RuntimeUse {
     /// Whether `__bynkWithin` must be imported (#2683).
     pub fn within(&self) -> bool {
         self.within.get()
+    }
+
+    /// Record that the module references `__traceBinding` (#3580).
+    pub fn note_trace_binding(&self) {
+        self.trace_binding.set(true);
+    }
+
+    /// Whether `__traceBinding` must be imported (#3580).
+    pub fn trace_binding(&self) -> bool {
+        self.trace_binding.get()
+    }
+
+    /// Whether `__traceStep` must be imported (#3580).
+    pub fn trace_step(&self) -> bool {
+        self.trace_step.get()
     }
 
     /// Whether `__fault` must be imported (#2620).

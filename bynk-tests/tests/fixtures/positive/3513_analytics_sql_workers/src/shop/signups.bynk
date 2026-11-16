@@ -1,0 +1,26 @@
+context shop.signups
+
+// #3513 B: `AnalyticsSql` reads Analytics Engine datasets over the account's SQL API. It is a
+// singleton binding (`CF_ANALYTICS_SQL`, an `[analytics]` stanza) with no resource of its own to
+// create. Parameters bind positionally as `$1`, and a reply is a result set or a typed error.
+
+consumes bynk
+consumes bynk.cloudflare { Analytics, AnalyticsSql, AnalyticsSqlError, AnalyticsSqlResult, SqlValue }
+
+capability Signups = Analytics
+
+service report from http {
+	on GET("/signups/:country") (country: String) -> Effect[HttpResult[Int]] by Visitor given AnalyticsSql, Signups {
+		// `dataset()` is this environment's table: `events.analyticsEngine.shop_signups_signups`, or
+		// the `_staging` one under `--env staging`.
+		let table <- Signups.dataset()
+		let sql = "SELECT count() AS n FROM \(table) WHERE blob1 = $1 AND timestamp > NOW() - INTERVAL '1' DAY"
+		let res <- AnalyticsSql.query(sql, [Text(country)])
+		match res {
+			Ok(r) => Ok(r.rows),
+			Err(SqlRetryable(_)) => ServerError("try again shortly"),
+			Err(SqlRejected(_)) => ServerError("the query was refused"),
+			Err(_) => ServerError("the query failed"),
+		}
+	}
+}

@@ -4,7 +4,7 @@ context shop.orders
 // test tier runs on each fresh database, so no service creates it.
 
 consumes bynk
-consumes bynk.cloudflare { D1 }
+consumes bynk.cloudflare { D1, SqlRun, SqlError, SqlValue }
 
 capability Orders = D1
 

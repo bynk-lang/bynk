@@ -189,14 +189,6 @@ fn request(
     })
 }
 
-/// A port nothing is listening on: bind port 0, read what the OS chose, release it.
-fn free_port() -> u16 {
-    std::net::TcpListener::bind("127.0.0.1:0")
-        .and_then(|l| l.local_addr())
-        .expect("the OS hands out a free port")
-        .port()
-}
-
 fn tool_exists(name: &str) -> bool {
     which::which(name).is_ok()
 }
@@ -250,7 +242,7 @@ fn spawn_worker(
     name: &str,
     key: &str,
 ) -> Result<(wrangler::Wrangler, u16, std::path::PathBuf), String> {
-    let (port, inspector_port) = (free_port(), free_port());
+    let [port, inspector_port] = wrangler::ports::free_ports();
     let log_path = tmp.join(format!("wrangler-{name}.log"));
     let out_log = fs::File::create(&log_path).map_err(|e| e.to_string())?;
     let err_log = out_log.try_clone().map_err(|e| e.to_string())?;

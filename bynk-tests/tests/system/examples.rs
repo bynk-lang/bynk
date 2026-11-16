@@ -23,6 +23,7 @@ const EXAMPLES: &[&str] = &[
     "webhook-relay",
     "semver",
     "markdown",
+    "storefront",
 ];
 
 fn example_root(name: &str) -> PathBuf {

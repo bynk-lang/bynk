@@ -150,6 +150,17 @@ pub(crate) fn deploy_one(
         lock_path,
         environment,
     )?;
+    // #3479: each `Vectorize` index, created with its fixed configuration or
+    // checked against it, and its metadata indexes made before any vector.
+    provision_vectorize_indexes(
+        provenance,
+        project_root,
+        worker,
+        declared,
+        lock,
+        lock_path,
+        environment,
+    )?;
     provision_d1_databases(
         provenance,
         project_root,
@@ -162,9 +173,10 @@ pub(crate) fn deploy_one(
     )?;
     // #3319: each `Postgres` binding's Hyperdrive config, bound by its id.
     hyperdrive.provision(worker, declared, lock, lock_path, &config, environment)?;
-    // #3301: each stored secret's store, found before the run, recorded and
-    // bound by its id. Nothing is created here: the account owns them.
-    record_links(
+    // #3301, #3513 A, #3480: each stored secret's store, mTLS certificate and AI Search instance,
+    // found before the run, recorded and (the first two) bound by their ids. Nothing is created or
+    // uploaded here: the account owns them.
+    record_linked_resources(
         worker,
         declared,
         linked_stores,
@@ -288,6 +300,9 @@ pub(crate) fn deploy_one(
             ))
         })?;
     }
+    // #3479: an adopted index keeps the name it has on the account.
+    materialise_adopted_vectorize(&config, worker, declared, environment)?;
+    adopt_containers_for_push(&config, worker, declared, lock, lock_path, environment)?;
     // P4b (#2608): each database's pending migrations, applied once it is
     // bound (and, for a named environment, once `[env.<name>]` binds it) and
     // before the push, so the new code never meets the old schema. Wrangler
@@ -1167,7 +1182,7 @@ fn queue_exists(provenance: &Provenance, name: &str, project_root: &Path) -> boo
 /// Everything a failed wrangler call said, both streams, never empty — a
 /// non-zero exit with nothing to say must still read as something rather than
 /// as a dangling colon.
-fn wrangler_said(output: &std::process::Output) -> String {
+pub(crate) fn wrangler_said(output: &std::process::Output) -> String {
     let stderr = String::from_utf8_lossy(&output.stderr);
     let stdout = String::from_utf8_lossy(&output.stdout);
     let said: Vec<&str> = [stderr.trim(), stdout.trim()]

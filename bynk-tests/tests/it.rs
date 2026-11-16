@@ -53,6 +53,8 @@ mod integration {
     mod check_format_short;
     #[path = "comment_syntax_fixes.rs"]
     mod comment_syntax_fixes;
+    #[path = "consumes_per_file.rs"]
+    mod consumes_per_file;
     #[path = "contract_hash.rs"]
     mod contract_hash;
     #[path = "debug_metadata.rs"]
@@ -95,6 +97,8 @@ mod integration {
     mod import_closure;
     #[path = "inlay_hints.rs"]
     mod inlay_hints;
+    #[path = "inspect_agents.rs"]
+    mod inspect_agents;
     #[path = "interpolation.rs"]
     mod interpolation;
     #[path = "kernel_registry.rs"]
@@ -119,14 +123,14 @@ mod integration {
     mod reference_index;
     #[path = "refinement_index.rs"]
     mod refinement_index;
+    #[path = "removed_send_arrow.rs"]
+    mod removed_send_arrow;
     #[path = "requirements_ledger.rs"]
     mod requirements_ledger;
     #[path = "reserved_builtin_type_name.rs"]
     mod reserved_builtin_type_name;
     #[path = "semantic_tokens_index.rs"]
     mod semantic_tokens_index;
-    #[path = "send_deprecation_fix.rs"]
-    mod send_deprecation_fix;
     #[path = "snippets.rs"]
     mod snippets;
     #[path = "source_map.rs"]
@@ -143,6 +147,8 @@ mod integration {
     mod suggestions;
     #[path = "suite_diagnostics_attributed.rs"]
     mod suite_diagnostics_attributed;
+    #[path = "trace_requests.rs"]
+    mod trace_requests;
     #[path = "wire_shape_drift.rs"]
     mod wire_shape_drift;
     #[path = "write_output_reconciliation_behaviour.rs"]
@@ -285,6 +291,8 @@ mod system {
     mod compile_sources_stdin;
     #[path = "compile_strips_suites.rs"]
     mod compile_strips_suites;
+    #[path = "container_workerd.rs"]
+    mod container_workerd;
     #[path = "contract_behaviour.rs"]
     mod contract_behaviour;
     #[path = "coverage_behaviour.rs"]
@@ -295,6 +303,8 @@ mod system {
     mod cross_file_label_behaviour;
     #[path = "debug_inspect.rs"]
     mod debug_inspect;
+    #[path = "deploy_worker_groups.rs"]
+    mod deploy_worker_groups;
     #[path = "detach_workerd.rs"]
     mod detach_workerd;
     #[path = "deterministic_diagnostic_order_behaviour.rs"]
@@ -305,6 +315,8 @@ mod system {
     mod doc_examples_check_behaviour;
     #[path = "embed_check_behaviour.rs"]
     mod embed_check_behaviour;
+    #[path = "eval_behaviour.rs"]
+    mod eval_behaviour;
     #[path = "events_behaviour.rs"]
     mod events_behaviour;
     #[path = "events_boundary_workerd.rs"]
@@ -339,6 +351,8 @@ mod system {
     mod history_behaviour;
     #[path = "http_caching_behaviour.rs"]
     mod http_caching_behaviour;
+    #[path = "http_client.rs"]
+    mod http_client;
     #[path = "http_edge_cache_behaviour.rs"]
     mod http_edge_cache_behaviour;
     #[path = "http_limits_behaviour.rs"]
@@ -421,6 +435,8 @@ mod system {
     mod snapshot_behaviour;
     #[path = "store_behaviour.rs"]
     mod store_behaviour;
+    #[path = "storefront_example.rs"]
+    mod storefront_example;
     #[path = "stream_behaviour.rs"]
     mod stream_behaviour;
     #[path = "stream_request_body_workerd.rs"]
@@ -433,6 +449,8 @@ mod system {
     mod test_json;
     #[path = "test_runner_resolution.rs"]
     mod test_runner_resolution;
+    #[path = "trace_requests_workerd.rs"]
+    mod trace_requests_workerd;
     #[path = "tsc_failure_diagnostic.rs"]
     mod tsc_failure_diagnostic;
     #[path = "tsc_verify.rs"]

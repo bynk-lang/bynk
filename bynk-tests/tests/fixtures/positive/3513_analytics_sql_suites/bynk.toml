@@ -1,0 +1,9 @@
+[project]
+name = "3513-analytics-sql-suites"
+version = "0.1.0"
+
+[paths]
+include = ["src", "tests"]
+
+[unstable]
+allow = ["bynk.cloudflare.Analytics", "bynk.cloudflare.AnalyticsSql"]

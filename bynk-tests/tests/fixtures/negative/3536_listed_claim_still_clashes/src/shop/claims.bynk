@@ -1,0 +1,12 @@
+context shop.claims
+
+// #3536: listing `Claim` brings it, and its variants, into scope, so a suite
+// type of the same name is still refused.
+
+consumes bynk { Logger, Claim }
+
+service probe {
+	on call(n: Int) -> Effect[Int] {
+		n
+	}
+}

@@ -32,12 +32,17 @@ pub mod cli;
 pub mod compile;
 pub mod deploy;
 pub mod dev;
+mod dev_containers;
 mod dev_hyperdrive;
+pub mod dev_inspect;
+mod dev_vectorize;
 pub mod diagnostics;
 pub mod doctor;
+pub mod eval;
 pub mod explain;
 pub mod fetch;
 pub mod fmt;
+pub mod http_client;
 #[cfg(windows)]
 pub mod job;
 pub mod logs;
@@ -61,6 +66,7 @@ pub mod stop;
 pub mod sweep;
 pub mod tail;
 pub mod test;
+pub mod trace;
 pub mod workers;
 
 /// The driver's own version, from Cargo.

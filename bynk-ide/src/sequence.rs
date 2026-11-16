@@ -90,7 +90,7 @@ pub struct Message {
 pub enum MessageKind {
     Call,
     Return,
-    /// `~>` fire-and-forget — no paired `Return`.
+    /// `e.detach()` fire-and-forget — no paired `Return`.
     Send,
     /// #2194: an agent handler's write to its own state — a `:=` or a
     /// mutating store operation (`items.put(…)`, `count.update(…)`). Not a
@@ -142,16 +142,30 @@ pub struct Branch {
     /// (`if`/`match`/block) that is itself already rendered as nested
     /// structure — a note duplicating it would be noise.
     pub reply: Option<String>,
+    /// #3584: the source extent of the arm this branch came from, so a client
+    /// can link a branch to its source or project coverage onto it. For an
+    /// `if`, the `then` branch runs from the `if` keyword to the end of its
+    /// body, and the `else` branch is its block (the AST records no `else`
+    /// keyword span). For a `match`, the arm from its pattern to its end. An
+    /// else-less `if` emits only the `then` branch (an `opt`), so there is no
+    /// synthesised branch to span.
+    ///
+    /// #3599: in an `else if` chain the `else` branch's span starts at the
+    /// inner `if` keyword and covers the rest of the chain, because the parser
+    /// desugars `else if` into a block that reuses the inner `if`'s span. The
+    /// inner `if` is its own nested `AltBlock` with its own branch spans, so
+    /// the outer `else` range contains those.
+    pub span: Span,
 }
 
 /// Whether an expression sits directly under an effect operator
-/// (`<-`/`~>`/`do`) — only then can it be a lifeline call, since a bare
+/// (`<-`/`do`) — only then can it be a lifeline call, since a bare
 /// (pure) `let` cannot bind an `Effect[_]` value in this language.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 enum Arrow {
     /// `let x <- expr` / `do expr` — awaited; a Call+Return pair.
     Awaited,
-    /// `~> expr` — fire-and-forget; a Send only.
+    /// `expr.detach()` — fire-and-forget; a Send only.
     FireAndForget,
 }
 
@@ -408,13 +422,6 @@ impl<'a> Builder<'a> {
             Statement::Do(d) => {
                 self.walk_value(&d.value, current_block, depth, Some(Arrow::Awaited), false)
             }
-            Statement::Send(s) => self.walk_value(
-                &s.value,
-                current_block,
-                depth,
-                Some(Arrow::FireAndForget),
-                false,
-            ),
             Statement::Let(l) => {
                 self.walk_value(&l.value, current_block, depth, None, false);
                 self.bound.push(l.name.name.clone());
@@ -450,7 +457,7 @@ impl<'a> Builder<'a> {
         ret: bool,
     ) {
         let inner = peel_paren(expr);
-        // #3437: `e.detach()` is the asynchronous arrow, as `~> e` is: the call it
+        // #3437: `e.detach()` is the asynchronous arrow, as the removed `~> e` was: the call it
         // wraps is drawn without a return. Read from the shape (the walk has no
         // types), and only under `do` or `<-`, where an effect is awaited.
         if arrow == Some(Arrow::Awaited)
@@ -543,6 +550,10 @@ impl<'a> Builder<'a> {
             label: bynk_fmt::expr_to_string(cond),
             message_ids: then_ids,
             reply: self.branch_reply(&then_block.tail),
+            span: Span {
+                end: then_block.span.end,
+                ..span
+            },
         }];
         // An else-less `if` has a synthesised `()` else block: no messages, no
         // nested blocks, no outcome. Rendering it as a second (empty) branch
@@ -556,6 +567,7 @@ impl<'a> Builder<'a> {
                 label: "otherwise".to_string(),
                 message_ids: (else_start..self.messages.len()).collect(),
                 reply: self.branch_reply(&else_block.tail),
+                span: else_block.span,
             });
         }
         self.blocks[id as usize].branches = branches;
@@ -627,6 +639,7 @@ impl<'a> Builder<'a> {
                 label: pattern_summary(&arm.pattern),
                 message_ids: (start..self.messages.len()).collect(),
                 reply,
+                span: arm.span,
             });
         }
         self.blocks[id as usize].branches = branches;
@@ -1098,7 +1111,7 @@ fn double(x: Int) -> Int {
 
 service fireService {
   on call(n: Int) -> Effect[()] given Logger {
-    ~> Logger.info("hi")
+    do Logger.info("hi").detach()
     Effect.pure(())
   }
 }
@@ -1136,29 +1149,7 @@ service nestedService {
             .expect("sequence_info entry for misc")
     }
 
-    /// #3437: `do e.detach()` is the same asynchronous arrow as `~> e`: a Send,
-    /// with no paired Return.
-    #[test]
-    fn detach_is_a_fire_and_forget_send() {
-        let src = MISC_SRC.replace("~> Logger.info(\"hi\")", "do Logger.info(\"hi\").detach()");
-        assert_ne!(src, MISC_SRC);
-        let root = setup_project("misc-detach", &[("misc.bynk", &src)]);
-        let diag = crate::testkit::diagnose_project(&root);
-        let info = misc_info(&diag);
-
-        let ctx = parse_context(&src);
-        let svc = find_service(&ctx, "fireService");
-        let model = sequence_model(
-            &svc.handlers[0],
-            HandlerOwner::Service("fireService"),
-            &svc.default_given,
-            svc.default_by.as_ref(),
-            Some(&info),
-        );
-        assert_eq!(model.messages.len(), 1, "a detach has no paired Return");
-        assert_eq!(model.messages[0].kind, MessageKind::Send);
-    }
-
+    /// #3437: `do e.detach()` is the asynchronous arrow.
     #[test]
     fn fire_and_forget_send_has_no_paired_return() {
         let root = setup_project("misc-send", &[("misc.bynk", MISC_SRC)]);
@@ -1335,7 +1326,7 @@ consumes bynk { Logger }
 service guardSvc {
   on call(flag: Bool) -> Effect[()] given Logger {
     if flag {
-      ~> Logger.info("hi")
+      do Logger.info("hi").detach()
     }
   }
 }
@@ -1386,7 +1377,7 @@ service routeSvc {
         assert_eq!(
             gm.blocks[0].branches[0].message_ids.len(),
             1,
-            "the `~>` Send"
+            "the `detach` Send"
         );
 
         // `route`: a `match` whose arms yield distinct values — each captured
@@ -1407,6 +1398,147 @@ service routeSvc {
             .map(|b| b.reply.as_deref())
             .collect();
         assert_eq!(replies, vec![Some("100"), Some("x")]);
+    }
+
+    // -- #3584: each branch carries the source extent of its arm.
+    const SPAN_SRC: &str = r#"context spans
+
+service spanSvc {
+  on call(x: Int) -> Effect[Int] {
+    if x > 0 {
+      1
+    } else {
+      2
+    }
+  }
+
+  on call(y: Int) -> Effect[Int] {
+    match y {
+      0 => 100
+      n if n > 5 => {
+        n
+      }
+      _ => {}
+    }
+  }
+
+  on call(z: Bool) -> Effect[()] {
+    if z {
+      ()
+    }
+  }
+
+  on call(a: Bool, b: Bool) -> Effect[Int] {
+    if a {
+      1
+    } else if b {
+      2
+    } else {
+      3
+    }
+  }
+}
+"#;
+
+    fn branch_texts(src: &str, handler: usize) -> Vec<String> {
+        let ctx = parse_context(src);
+        let svc = find_service(&ctx, "spanSvc");
+        let model = sequence_model(
+            &svc.handlers[handler],
+            HandlerOwner::Service("spanSvc"),
+            &svc.default_given,
+            svc.default_by.as_ref(),
+            None,
+        );
+        model.blocks[0]
+            .branches
+            .iter()
+            .map(|b| src[b.span.start..b.span.end].to_string())
+            .collect()
+    }
+
+    #[test]
+    fn if_else_branches_span_their_arms() {
+        let t = branch_texts(SPAN_SRC, 0);
+        assert_eq!(t.len(), 2);
+        assert!(
+            t[0].starts_with("if x > 0 {") && t[0].ends_with('}'),
+            "{t:?}"
+        );
+        assert!(t[0].contains('1') && !t[0].contains("else"), "{t:?}");
+        assert!(t[1].starts_with('{') && t[1].contains('2'), "{t:?}");
+    }
+
+    #[test]
+    fn else_if_branch_spans_the_rest_of_the_chain() {
+        // #3599: the outer `else` branch reuses the inner `if`'s span, so it
+        // starts at the inner `if` keyword and covers the rest of the chain.
+        let ctx = parse_context(SPAN_SRC);
+        let svc = find_service(&ctx, "spanSvc");
+        let model = sequence_model(
+            &svc.handlers[3],
+            HandlerOwner::Service("spanSvc"),
+            &svc.default_given,
+            svc.default_by.as_ref(),
+            None,
+        );
+        let text = |b: &Branch| SPAN_SRC[b.span.start..b.span.end].to_string();
+        let outer = &model.blocks[0];
+        assert_eq!(outer.branches.len(), 2);
+        assert!(
+            text(&outer.branches[0]).starts_with("if a {")
+                && !text(&outer.branches[0]).contains("else"),
+            "{:?}",
+            text(&outer.branches[0])
+        );
+        let else_text = text(&outer.branches[1]);
+        assert!(
+            else_text.starts_with("if b {") && else_text.ends_with('}'),
+            "{else_text:?}"
+        );
+        assert!(
+            else_text.contains("else") && else_text.contains('3'),
+            "{else_text:?}"
+        );
+        // The nested `if` is its own block, whose branches sit inside that range.
+        assert_eq!(model.blocks.len(), 2);
+        let inner = &model.blocks[1];
+        assert_eq!(inner.parent, Some(outer.id));
+        assert_eq!(inner.parent_branch, Some(1));
+        let inner_texts: Vec<String> = inner.branches.iter().map(text).collect();
+        assert_eq!(inner_texts.len(), 2);
+        assert!(
+            inner_texts[0].starts_with("if b {") && !inner_texts[0].contains("else"),
+            "{inner_texts:?}"
+        );
+        assert!(
+            inner_texts[1].starts_with('{') && inner_texts[1].contains('3'),
+            "{inner_texts:?}"
+        );
+        for b in &inner.branches {
+            let o = &outer.branches[1];
+            assert!(b.span.start >= o.span.start && b.span.end <= o.span.end);
+        }
+    }
+
+    #[test]
+    fn match_arms_span_pattern_through_body() {
+        let t = branch_texts(SPAN_SRC, 1);
+        assert_eq!(t.len(), 3);
+        assert_eq!(t[0], "0 => 100");
+        assert!(
+            t[1].starts_with("n if n > 5 => {") && t[1].ends_with('}'),
+            "{t:?}"
+        );
+        // An empty arm still has a span, covering its pattern.
+        assert_eq!(t[2], "_ => {}");
+    }
+
+    #[test]
+    fn else_less_if_has_one_branch_spanning_the_then_arm() {
+        let t = branch_texts(SPAN_SRC, 2);
+        assert_eq!(t.len(), 1, "no synthesised else branch is emitted");
+        assert!(t[0].starts_with("if z {") && t[0].ends_with('}'), "{t:?}");
     }
 
     // -- #2194: an agent's *own* handler — state writes as notes.

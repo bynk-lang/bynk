@@ -1,0 +1,7 @@
+context demo
+
+// #3480: an instance name is lowercase, as the REST reference documents.
+
+consumes bynk.cloudflare { AiSearch }
+
+capability Kb = AiSearch @instance("Support-Docs")

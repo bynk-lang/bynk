@@ -1,6 +1,6 @@
 {
   "type": "module",
   "dependencies": {
-    "postgres": "3.4.5"
+    "postgres": "4.0.0"
   }
 }

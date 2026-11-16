@@ -42,19 +42,19 @@ A dry run reads Cloudflare, so it needs `CLOUDFLARE_API_TOKEN` and
 
 ## What it refuses
 
-Each refusal names its reason, and any check that cannot be answered is a refusal. A deploy or secret change made after the plan also stops the revert before it rolls anything back.
+Each refusal names its reason and carries a registered diagnostic code, so `bynk explain bynk.revert.database_schema_ahead` says why and what to do, and the `--format json` plan has it as `code` on the refused check. Any check that cannot be answered is a refusal. A deploy or secret change made after the plan also stops the revert before it rolls anything back.
 
-| Check | Refused when | What to do |
+| Check (code) | Refused when | What to do |
 |---|---|---|
-| `facts` | the live or target version records no deploy facts | Redeploy the previous tag. |
-| `d1` | the live version applied migrations the target was not built against | Migrations are forward-only, so the old code may not run on the new schema. If every one is additive, assert it with `--accept-schema-ahead <binding>`. Otherwise redeploy forward. |
-| `agent` | the target writes an older schema version than the live one and stored instances exist, are not known to be absent, or the target is below the class's floor | The older code would fault with `NewerSchema` on newer records. Deploy a fix forward. The listing of stored objects lags a write by minutes, so within 30 minutes of the live deploy an empty listing counts as unknown. |
-| `layout` | the target writes an older storage layout than the live one (a layout is how an agent's state is placed in storage, recorded in each version's deploy facts) and stored instances exist, or are not known to be absent | The older code cannot read records in the newer layout: a build with the layout check faults them as `NewerLayout`, and one without it would orphan their entries. Deploy a fix forward. A build that stores each collection entry under its own key writes layout 2, so rolling back past it over stored data is refused. |
-| `classes` | a Durable Object class was added, removed or renamed between the two versions | Cloudflare cannot roll back across a class migration. |
-| `contracts` | the target's contracts no longer match another live Worker, judged as if every selected Worker were reverted together | Revert the whole project, or redeploy forward. See [Contract skew](/book/guides/projects-build-and-deployment/contract-skew/). |
-| `ids` | the target binds a KV namespace, database or limiter the lock no longer records | A namespace was re-provisioned since. Redeploy forward. |
-| `secrets` | a secret changed after the target was live | A rollback may restore the *old* value of a secret that was rotated since, which peers no longer accept. After a `bynk migrate sweep`, whose two changes touch only its own temporary key, pass `--accept-secret-changes`. |
-| `history` | the Worker's history cannot be placed (a Worker first added in the bad release has nothing before it, the live upload is out of the listed history, a gradual deployment is in progress) | Refused for that Worker only; the plan still judges the others. |
+| `facts` (`bynk.revert.facts_missing`) | the live or target version records no deploy facts | Redeploy the previous tag. |
+| `d1` (`bynk.revert.database_schema_ahead`) | the live version applied migrations the target was not built against | Migrations are forward-only, so the old code may not run on the new schema. If every one is additive, assert it with `--accept-schema-ahead <binding>`. Otherwise redeploy forward. |
+| `agent` (`bynk.revert.agent_schema_older`) | the target writes an older schema version than the live one and stored instances exist, are not known to be absent, or the target is below the class's floor | The older code would fault with `NewerSchema` on newer records. Deploy a fix forward. The listing of stored objects lags a write by minutes, so within 30 minutes of the live deploy an empty listing counts as unknown. |
+| `layout` (`bynk.revert.layout_older`) | the target writes an older storage layout than the live one (a layout is how an agent's state is placed in storage, recorded in each version's deploy facts) and stored instances exist, or are not known to be absent | The older code cannot read records in the newer layout: a build with the layout check faults them as `NewerLayout`, and one without it would orphan their entries. Deploy a fix forward. A build that stores each collection entry under its own key writes layout 2, so rolling back past it over stored data is refused. |
+| `classes` (`bynk.revert.class_changed`) | a Durable Object class was added, removed or renamed between the two versions | Cloudflare cannot roll back across a class migration. |
+| `contracts` (`bynk.revert.contract_skew`) | the target's contracts no longer match another live Worker, judged as if every selected Worker were reverted together | Revert the whole project, or redeploy forward. See [Contract skew](/book/guides/projects-build-and-deployment/contract-skew/). |
+| `ids` (`bynk.revert.id_unrecorded`) | the target binds a KV namespace, database or limiter the lock no longer records | A namespace was re-provisioned since. Redeploy forward. |
+| `secrets` (`bynk.revert.secret_changed`) | a secret changed after the target was live | A rollback may restore the *old* value of a secret that was rotated since, which peers no longer accept. After a `bynk migrate sweep`, whose two changes touch only its own temporary key, pass `--accept-secret-changes`. |
+| `history` (`bynk.revert.history_unplaceable`) | the Worker's history cannot be placed (a Worker first added in the bad release has nothing before it, the live upload is out of the listed history, a gradual deployment is in progress) | Refused for that Worker only; the plan still judges the others. |
 
 `--yes` only skips the confirmation. It never overrides a refusal.
 

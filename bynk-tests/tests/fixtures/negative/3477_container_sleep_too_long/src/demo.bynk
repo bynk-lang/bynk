@@ -1,0 +1,7 @@
+context demo
+
+// #3477: @sleepAfter is at most six hours.
+
+consumes bynk.cloudflare { Container }
+
+capability Renderer = Container @build("containers/renderer") @port(8080) @sleepAfter(7.hours)

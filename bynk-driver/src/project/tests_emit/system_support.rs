@@ -477,10 +477,17 @@ pub(super) fn emit_system_http_support(
             let is_cookies = |p: &&bynk_syntax::ast::Param| {
                 p.name.name == "cookies" && !path_params.contains(&"cookies")
             };
+            // #3513 C: nor is a `cf: RequestCf` param: the request is real here, so it
+            // carries whatever the platform supplies, and the case's argument is unused.
+            let is_cf = |p: &&bynk_syntax::ast::Param| {
+                p.name.name == "cf"
+                    && !path_params.contains(&"cf")
+                    && matches!(&p.type_ref, bynk_syntax::ast::TypeRef::Named(id) if id.name == "RequestCf")
+            };
             let (_path_ps, body_ps): (Vec<_>, Vec<_>) = h
                 .params
                 .iter()
-                .filter(|p| !is_headers(p) && !is_query(p) && !is_cookies(p))
+                .filter(|p| !is_headers(p) && !is_query(p) && !is_cookies(p) && !is_cf(p))
                 .partition(|p| path_params.contains(&p.name.name.as_str()));
             // The query string the typed drivers append to the URL, and the one
             // the raw drivers append (a `Wire("?…")` text, or a `RequestQuery`).
@@ -1712,7 +1719,7 @@ pub(super) fn service_binding_forward(worker_ident: &str, env_ident: &str, sends
         ty: Some(TsType::named("globalThis.Request")),
         optional: false,
     };
-    // #1994: a Worker whose handlers send with `~>` takes the execution
+    // #1994: a Worker whose handlers send with `detach` takes the execution
     // context as `fetch`'s third argument; the harness hands it a collecting
     // double and settles the sends before the response reaches the case.
     let forward = if sends {

@@ -46,6 +46,7 @@ const LOCK_FILE: &str = "bynk.deploy.lock";
 use bynk_emit::emitter::wrangler::KV_NAMESPACE_ID_PLACEHOLDER;
 
 mod config;
+pub(crate) mod containers;
 mod destinations;
 mod facts;
 mod graph;
@@ -58,8 +59,10 @@ mod provisioning;
 mod revert;
 mod secrets;
 mod senders;
+mod vectorize;
 
 use config::*;
+use containers::*;
 use destinations::*;
 use graph::*;
 use ledger::*;
@@ -69,16 +72,18 @@ use plan::*;
 use provisioning::*;
 use secrets::*;
 use senders::*;
+use vectorize::*;
 
 // External facade: the paths `main.rs` and `dev.rs` already use must keep
 // resolving exactly as they did before the split.
-pub use ledger::materialise_deploy_state;
+pub use ledger::{materialise_deploy_state, materialise_mtls_for_dev};
 pub(crate) use plan::conflicting_env_passthrough;
 pub use plan::{DeployFormat, DeployOptions, run};
 pub use revert::{RevertOptions, revert};
 // State-migrations S4 (#2259): `bynk migrate sweep` names deployed Workers as
 // `deploy` does, and mints its run's key as an edge key is minted.
 pub(crate) use config::deployed_worker_name;
+pub(crate) use config::{VectorizeDecl, project_resources};
 pub(crate) use secrets::mint_edge_key as mint_key;
 
 /// State-migrations S4 (#2259): for each Worker directory in `workers`, the

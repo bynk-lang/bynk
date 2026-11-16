@@ -1,0 +1,49 @@
+context shop.render
+
+// #3477: a `Container` instance is a server in a Docker image, reached by name
+// over HTTP on one port. Each instance binds as `CONTAINER_<NAME>`, a Durable
+// Object namespace whose class the compiler generates, with an `exports`
+// entry and a `[[containers]]` entry that builds the image from `@build`. Only
+// a Worker that reaches one declares it.
+
+consumes bynk
+consumes bynk.cloudflare { Container, ContainerError }
+
+capability Renderer = Container @build("containers/renderer") @port(8080) @sleepAfter(5.minutes) @instanceType("standard-1") @forward(["RENDER_API_KEY"])
+capability Thumbs = Container @build("./containers/thumbs/") @port(3000)
+
+service api from http {
+	on GET("/render/:name") (name: String) -> Effect[HttpResult[String]] by Visitor given Renderer {
+		let req = Request {
+			method: Get,
+			url: "http://renderer/render",
+			contentType: None,
+			authorization: None,
+			headers: Map.empty(),
+			body: None,
+		}
+		let res <- Renderer.send("tenant-\(name)", req)
+		match res {
+			Ok(r) => Ok(r.body),
+			Err(Unavailable) => ServiceUnavailable("no capacity"),
+			Err(Timeout) => GatewayTimeout("slow"),
+			Err(_) => ServerError("render failed"),
+		}
+	}
+
+	on GET("/thumb/:name") (name: String) -> Effect[HttpResult[String]] by Visitor given Thumbs {
+		let req = Request {
+			method: Get,
+			url: "http://thumbs/thumb",
+			contentType: None,
+			authorization: None,
+			headers: Map.empty(),
+			body: None,
+		}
+		let res <- Thumbs.receiveBytes(name, req)
+		match res {
+			Ok(r) => Ok(r.body.decodeUtf8().getOrElse("")),
+			Err(_) => ServerError("thumbnail failed"),
+		}
+	}
+}

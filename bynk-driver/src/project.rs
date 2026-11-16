@@ -127,6 +127,11 @@ pub type ProgressSink = Arc<dyn Fn(&ProgressEvent) + Send + Sync>;
 /// `.import_ext(…)` to override the bundle/default-platform/`.js` defaults.
 #[derive(Clone)]
 pub struct CompileOptions {
+    /// #3477: the directory the build will be written to, when the caller knows
+    /// it (`bynk build` and `bynk compile`), so a container's build paths can be
+    /// written from the Worker's output directory back to the project. `None`
+    /// uses the project's `[build] out`.
+    pub out_dir: Option<PathBuf>,
     pub target: BuildTarget,
     pub platform: Platform,
     pub roots: Roots,
@@ -138,6 +143,16 @@ pub struct CompileOptions {
     /// `fn`; `false` (release/deploy) strips it entirely for zero runtime cost.
     /// `bynk test` and `--inspect` set it on; `bynk compile` leaves it off.
     pub contracts: bool,
+    /// #3580 (the dev request-traces track): emit the per-request trace recording
+    /// (`__bynk_runtime/trace`) into a Workers build, for `bynk dev
+    /// --trace-events`. `false` for every other build, so a deploy build's
+    /// output is byte-identical. Dev-only by construction: only `bynk dev` sets it.
+    pub trace_requests: bool,
+    /// #3581 (the dev agent-inspection track): emit the dev-only agent registry,
+    /// the `/_bynk/inspect` routes and the instance recording into a Workers
+    /// build, for `bynk dev`. `false` for every other build, so a deploy build's
+    /// output is byte-identical. Dev-only by construction: only `bynk dev` sets it.
+    pub inspect_agents: bool,
     /// #1821 (ADR 0147 D3): whether `suite`s are type-checked and emitted (the
     /// `tests/` modules and `tests/main.ts`). On by default; `bynk compile`
     /// and the driver's dev/deploy build turn it off, so a suite never reaches
@@ -287,11 +302,14 @@ impl CompileOptions {
     /// Single-root project (`src == tests`), bundle target, default platform.
     pub fn single(root: impl Into<PathBuf>) -> Self {
         Self {
+            out_dir: None,
             target: BuildTarget::Bundle,
             platform: Platform::default(),
             roots: Roots::Single(root.into()),
             import_ext: ImportExt::default(),
             contracts: false,
+            trace_requests: false,
+            inspect_agents: false,
             tests: true,
             sources: None,
             schema_registry: SchemaLock::Off,
@@ -313,6 +331,7 @@ impl CompileOptions {
     /// `bynk test` so its rooting matches `bynk compile`'s.
     pub fn split(project_root: impl Into<PathBuf>, paths: ProjectPaths) -> Self {
         Self {
+            out_dir: None,
             target: BuildTarget::Bundle,
             platform: Platform::default(),
             roots: Roots::Split {
@@ -321,6 +340,8 @@ impl CompileOptions {
             },
             import_ext: ImportExt::default(),
             contracts: false,
+            trace_requests: false,
+            inspect_agents: false,
             tests: true,
             sources: None,
             schema_registry: SchemaLock::Off,
@@ -335,6 +356,12 @@ impl CompileOptions {
             progress: None,
             remote_tests: None,
         }
+    }
+
+    /// #3477: the directory the build is written to ([`CompileOptions::out_dir`]).
+    pub fn out_dir(mut self, out: Option<PathBuf>) -> Self {
+        self.out_dir = out;
+        self
     }
 
     /// #3100: report each context as it compiles ([`CompileOptions::progress`]).
@@ -368,6 +395,21 @@ impl CompileOptions {
     /// contract checks never reach production (DECISION J).
     pub fn contracts(mut self, on: bool) -> Self {
         self.contracts = on;
+        self
+    }
+
+    /// #3580: record per-request traces in a Workers build (`bynk dev
+    /// --trace-events`). Off by default, and never set by `bynk compile` or
+    /// `bynk deploy`.
+    pub fn trace_requests(mut self, on: bool) -> Self {
+        self.trace_requests = on;
+        self
+    }
+
+    /// #3581: emit the dev-only agent inspection into a Workers build (`bynk
+    /// dev`). Off by default, and never set by `bynk compile` or `bynk deploy`.
+    pub fn inspect_agents(mut self, on: bool) -> Self {
+        self.inspect_agents = on;
         self
     }
 
@@ -491,16 +533,39 @@ type Discovered = Vec<Vec<PathBuf>>;
 /// modes, for `bynk deploy` (a Worker with no `MySql` instance gets no file).
 fn stage_binding_files(
     bindings: &[emitter::wrangler::WorkerBinding],
-    dashes: &str,
+    layout: &bynk_project::worker_layout::WorkerLayout,
+    context: &str,
     d1_migrations: &bynk_check::d1_migrations::D1Migrations,
     compiled: &mut Vec<StagedFile>,
 ) {
+    // A D1 database is named from the context, as the migrations' check side
+    // (`d1_migrations`, `d1_sql`) and `wrangler.toml`'s `d1_block` name it, so
+    // all of them agree. Naming it from the Worker (the group's key) is a change
+    // to all of those producers together, made when groups are switched on.
+    let dashes = worker_dir_name(context);
     if let Some(manifest) = emitter::wrangler::emit_hyperdrive_manifest(bindings) {
         compiled.push(StagedFile {
-            output_path: PathBuf::from(format!(
-                "workers/{dashes}/{}",
-                emitter::wrangler::HYPERDRIVE_MANIFEST
-            )),
+            output_path: layout.worker_file(context, emitter::wrangler::HYPERDRIVE_MANIFEST),
+            document: Document::Json(manifest),
+            source_map: None,
+            debug_metadata: None,
+        });
+    }
+    // #3479: each `Vectorize` index's configuration, for `bynk deploy` to
+    // create the index with and check it against.
+    if let Some(manifest) = emitter::wrangler::emit_vectorize_manifest(bindings) {
+        compiled.push(StagedFile {
+            output_path: layout.worker_file(context, emitter::wrangler::VECTORIZE_MANIFEST),
+            document: Document::Json(manifest),
+            source_map: None,
+            debug_metadata: None,
+        });
+    }
+    // #3477: each container's capability, build directory and instance type,
+    // for `bynk deploy` to plan from and to adopt an image against.
+    if let Some(manifest) = emitter::wrangler::emit_containers_manifest(bindings) {
+        compiled.push(StagedFile {
+            output_path: layout.worker_file(context, emitter::wrangler::CONTAINERS_MANIFEST),
             document: Document::Json(manifest),
             source_map: None,
             debug_metadata: None,
@@ -513,14 +578,17 @@ fn stage_binding_files(
         ) {
             continue;
         }
-        let database = emitter::wrangler::d1_database_name(dashes, &binding.name);
+        let database = emitter::wrangler::d1_database_name(&dashes, &binding.name);
         for file in bynk_check::d1_migrations::migrations_of(d1_migrations, &database, binding) {
             compiled.push(StagedFile {
-                output_path: PathBuf::from(format!(
-                    "workers/{dashes}/{}/{database}/{}",
-                    emitter::wrangler::D1_MIGRATIONS_DIR,
-                    file.name
-                )),
+                output_path: layout.worker_file(
+                    context,
+                    &format!(
+                        "{}/{database}/{}",
+                        emitter::wrangler::D1_MIGRATIONS_DIR,
+                        file.name
+                    ),
+                ),
                 document: Document::Sql(file.sql.clone()),
                 source_map: None,
                 debug_metadata: None,
@@ -583,6 +651,8 @@ pub fn compile_project(options: &CompileOptions) -> Result<ProjectOutput, Projec
         &excludes,
         discovered,
         options.contracts,
+        options.trace_requests,
+        options.inspect_agents,
         options.tests,
         &options.schema_registry,
         options.remote_tests.as_ref(),
@@ -611,6 +681,7 @@ pub fn compile_project(options: &CompileOptions) -> Result<ProjectOutput, Projec
         options.roots.project_root(),
         &options.compatibility_flags,
         options.workers_dev,
+        options.out_dir.as_deref(),
         options.contracts_lock.as_deref(),
     )
 }
@@ -717,6 +788,8 @@ pub fn check_project(options: &CompileOptions) -> ProjectCheck {
         &excludes,
         discovered,
         options.contracts,
+        options.trace_requests,
+        options.inspect_agents,
         options.tests,
         // #2078: `bynk check` reconciles against the committed
         // `bynk.schema.lock` whenever the caller pre-read it
@@ -925,6 +998,8 @@ pub fn compile_in_memory(
         &[],
         Some(vec![vec![path]]),
         false,
+        false,
+        false,
         true,
         &SchemaLock::Off,
         None,
@@ -938,7 +1013,7 @@ pub fn compile_in_memory(
         tys,
         None,
     );
-    finish_build(run, ImportExt::Js, Path::new(""), &[], None, None)
+    finish_build(run, ImportExt::Js, Path::new(""), &[], None, None, None)
 }
 
 /// [`compile_in_memory`] for several files (#1830): each `(path, source)` pair
@@ -1002,6 +1077,8 @@ pub fn compile_files_in_memory_locked(
         &[],
         Some(vec![paths]),
         false,
+        false,
+        false,
         tests,
         &SchemaLock::Off,
         remote,
@@ -1015,7 +1092,15 @@ pub fn compile_files_in_memory_locked(
         tys,
         None,
     );
-    finish_build(run, ImportExt::Js, Path::new(""), &[], None, contracts_lock)
+    finish_build(
+        run,
+        ImportExt::Js,
+        Path::new(""),
+        &[],
+        None,
+        None,
+        contracts_lock,
+    )
 }
 
 /// Analyse a single **in-memory** Bynk source and return all diagnostics —
@@ -1079,6 +1164,8 @@ pub fn analyse_in_memory_with_types(
         &overlay,
         &[],
         Some(vec![vec![path.clone()]]),
+        false,
+        false,
         false,
         true,
         &SchemaLock::Off,
@@ -1191,6 +1278,8 @@ pub fn analyse_in_memory_project(
         files,
         &[],
         Some(buckets),
+        false,
+        false,
         false,
         true,
         &SchemaLock::Off,
@@ -1389,6 +1478,8 @@ fn finish_build(
     display_root: &Path,
     compatibility_flags: &[String],
     workers_dev: Option<bool>,
+    // #3477: the directory the build is written to, when known.
+    out_dir: Option<&Path>,
     // #2554: the pre-read `bynk.contracts.lock`; `None` is a project without
     // one, which accepts no older contract.
     contracts_lock: Option<&str>,
@@ -1446,12 +1537,30 @@ fn finish_build(
             adapter_bindings,
             npm_deps,
             target,
+            trace_requests,
+            inspect_agents,
             schema_registry,
             asset_bytes,
             agent_versions,
             d1_migrations,
             ..
         } => {
+            // #3477: a container's build paths are written from the output
+            // directory, which has to be inside the project.
+            let container_root = match worker_bindings::container_root(display_root, out_dir) {
+                Ok(root) => root,
+                Err(outside) => {
+                    let errors = worker_bindings::container_output_errors(&unit_tables, &outside);
+                    if !errors.is_empty() {
+                        return Err(ProjectFailure {
+                            errors,
+                            snapshots,
+                            display_root: display_root.to_path_buf(),
+                        });
+                    }
+                    String::new()
+                }
+            };
             let mut out = build_output(
                 parsed,
                 compiled,
@@ -1474,10 +1583,13 @@ fn finish_build(
                 import_ext,
                 &flags,
                 workers_dev,
+                &container_root,
                 asset_bytes.as_ref(),
                 &agent_versions,
                 &contracts_lock,
                 &d1_migrations,
+                trace_requests,
+                inspect_agents,
             );
             // ADR 0117: surface non-failing warnings on the successful build
             // (errors is empty here — the guard arm above caught any).
@@ -1760,6 +1872,8 @@ fn emit_unit(
     target: BuildTarget,
     import_ext: ImportExt,
     contracts: bool,
+    trace_requests: bool,
+    inspect_agents: bool,
     agent_deps_plan: Option<&AgentDepsPlan>,
     compiled: &mut Vec<StagedFile>,
     schema_effective_versions: &SchemaVersions,
@@ -1951,6 +2065,13 @@ fn emit_unit(
             .collect(),
         import_ext,
         contracts,
+        // #3580: the file's source and project-relative path name each traced call
+        // site; `None` (every build but `bynk dev --trace-events`) records nothing.
+        trace: trace_requests.then(|| bynk_emit::emit_model::TraceLoc {
+            source: std::sync::Arc::from(pf.source()),
+            rel_path: pf.identity_path().to_string_lossy().into_owned(),
+        }),
+        inspect_agents,
         history_target_agents: history_target_agents.clone(),
         asset_served: asset_served.clone(),
         embed_text: embed_text.clone(),
@@ -2060,6 +2181,8 @@ fn check_unit_files(
     target: BuildTarget,
     import_ext: ImportExt,
     contracts: bool,
+    trace_requests: bool,
+    inspect_agents: bool,
     agent_deps_plan: Option<&AgentDepsPlan>,
     history_target_agents: &HashSet<String>,
     asset_served: &BTreeMap<String, String>,
@@ -2194,7 +2317,10 @@ fn check_unit_files(
                     bynk_check::checker::Callee::Ctor { sum, tag } => {
                         tag == "Forward" && sum.name.name == "EmailVerdict"
                     }
-                    _ => false,
+                    // `Events.emit`: whether the bundle has a composition
+                    // root (`project_model::phase_bundle_composition_unprovided`),
+                    // which `bynk check` decides as the build does.
+                    c => project_model::is_events_emit(c),
                 };
                 keep.then(|| (*id, c.clone()))
             }));
@@ -2259,6 +2385,8 @@ fn check_unit_files(
             target,
             import_ext,
             contracts,
+            trace_requests,
+            inspect_agents,
             agent_deps_plan,
             compiled,
             schema_effective_versions,
@@ -2408,6 +2536,10 @@ enum RunChecks {
         adapter_bindings: HashMap<String, AdapterBinding>,
         npm_deps: std::collections::BTreeMap<String, String>,
         target: BuildTarget,
+        // #3580: whether this build records per-request traces (`bynk dev
+        // --trace-events`); read by `build_output` for the Worker entry.
+        trace_requests: bool,
+        inspect_agents: bool,
         // Events track, slice 3c (#980): the reconciled registry document,
         // ready for `finish_build` to serialize onto
         // `ProjectOutput::schema_lock`. `None` when `schema_registry` was
@@ -2469,6 +2601,85 @@ fn d1_phase(
     (migrations, d1_sql)
 }
 
+/// The manifest checks that need the project's units, read as the editor reads
+/// them (`bynk_check::analysis::analyse_project`): `[package] exports` names
+/// only commons and adapters the project declares (#2207, packaging slice 1,
+/// decision D), and `[deploy.workers]` groups only contexts it declares (#3562).
+fn manifest_unit_diagnostics(
+    project_root: &Path,
+    overlay: &HashMap<PathBuf, String>,
+    kinds: &BTreeMap<String, UnitKind>,
+    errors: &mut ErrorSink,
+) {
+    let found = bynk_check::exports::manifest_diagnostics(Some(project_root), overlay, kinds)
+        .into_iter()
+        .chain(bynk_check::worker_groups::manifest_diagnostics(
+            Some(project_root),
+            overlay,
+            kinds,
+        ));
+    for err in found {
+        errors.push_for(Some(Path::new(bynk_check::stability::MANIFEST)), err);
+    }
+}
+
+/// The parsed files, each unit's files, and each unit's kind: what
+/// [`platform_lock_phase`] reads the units' sources from.
+type LockSources<'a> = (
+    &'a [ParsedFile],
+    &'a BTreeMap<String, Vec<usize>>,
+    &'a BTreeMap<String, UnitKind>,
+);
+
+/// Each unit's symbol table, `consumes`, `consumes` aliases and flattened names:
+/// what [`platform_lock_phase`] walks the provider closure with.
+type LockTables<'a> = (
+    &'a HashMap<String, UnitTable>,
+    &'a HashMap<String, Vec<String>>,
+    &'a HashMap<String, HashMap<String, String>>,
+    &'a HashMap<String, HashMap<String, String>>,
+);
+
+/// v0.19 (decisions 0017/0024): platform-lock enforcement. A deployment unit
+/// whose in-process closure reaches a platform-native capability is locked to
+/// that platform; the selected `--platform` must match. A unit is a context
+/// under `workers`, or a `[deploy.workers]` group of them (#3562, which share
+/// a Worker). Run only on otherwise-clean programs: the closure walk recurses
+/// the provider graph, whose acyclicity the earlier checks establish. P5.3:
+/// relocated to `bynk_check::project_model::phase_platform_lock` — this crate is
+/// a caller, not an owner.
+fn platform_lock_phase(
+    target: BuildTarget,
+    platform: Platform,
+    (project_root, overlay): (&Path, &HashMap<PathBuf, String>),
+    (parsed, groups, kinds): LockSources<'_>,
+    (unit_tables, unit_consumes, unit_consumes_aliases, unit_flattened): LockTables<'_>,
+    errors: &mut ErrorSink,
+) {
+    if !errors.is_empty() {
+        return;
+    }
+    // A malformed `[deploy.workers]` is reported when the project loads, before
+    // this phase runs, so a table that cannot be read here is not a silent
+    // loss of grouping.
+    let worker_groups =
+        bynk_project::worker_groups::try_read_worker_groups_with(project_root, overlay)
+            .unwrap_or_default();
+    project_model::phase_platform_lock(
+        target,
+        platform,
+        parsed,
+        groups,
+        kinds,
+        unit_tables,
+        unit_consumes,
+        unit_consumes_aliases,
+        unit_flattened,
+        &worker_groups,
+        errors,
+    );
+}
+
 #[allow(clippy::too_many_arguments)]
 fn run_checks(
     // R3.9 (#1113): one `(root, prefix)` pair per `Roots::trees` entry, not a
@@ -2491,6 +2702,8 @@ fn run_checks(
     discovered: Option<Vec<Vec<PathBuf>>>,
     // v0.115: emit the function-contract call-site guard (dev/test profile).
     contracts: bool,
+    trace_requests: bool,
+    inspect_agents: bool,
     // #1821 (ADR 0147 D3): check and emit `suite`s. Off for a deployable build.
     tests: bool,
     // Events track, slice 3c (#980): `On` turns on `bynk.schema.lock`
@@ -2650,12 +2863,7 @@ fn run_checks(
     //       fire — see that function's own doc comment. --
     let (groups, kinds, test_groups, integration_groups, adapter_bindings, npm_deps) =
         project_model::phase_group(&parsed, trees, platform, &injected, overlay, &mut errors);
-    // #2207 (packaging slice 1, decision D): `[package] exports` names only
-    // commons and adapters this project declares — read as the editor reads it
-    // (`bynk_check::analysis::analyse_project`).
-    for err in bynk_check::exports::manifest_diagnostics(Some(project_root), overlay, &kinds) {
-        errors.push_for(Some(Path::new(bynk_check::stability::MANIFEST)), err);
-    }
+    manifest_unit_diagnostics(project_root, overlay, &kinds, &mut errors);
     // -- 4. Build per-unit combined symbol tables. --
     // -- 4-5. Symbol tables, `uses` resolution, and (#3445) the constants named by
     //         literal-only annotation arguments, resolved ahead of every reader. --
@@ -2692,6 +2900,15 @@ fn run_checks(
         &mut errors,
     );
     let unit_tables = unit_tables;
+    // #3477: each `Container`'s `@build` directory holds a Dockerfile.
+    bynk_check::containers::phase_container_builds(
+        &groups,
+        &kinds,
+        &parsed,
+        &unit_tables,
+        project_root,
+        &mut errors,
+    );
 
     // -- 5b'. Collect `consumes` aliases (v0.6 §3.1). Each consuming context
     //         has an alias map: alias → consumed-context qualified name.
@@ -3138,6 +3355,8 @@ fn run_checks(
             target,
             import_ext,
             contracts,
+            trace_requests,
+            inspect_agents,
             agent_deps_plan.as_ref(),
             &history_target_agents,
             &asset_served,
@@ -3321,7 +3540,7 @@ fn run_checks(
         &groups,
         &mut emitted_barrels,
         &test_asset_files,
-        &d1_migrations,
+        tests_emit::IntegrationD1::new(&d1_migrations, d1_sql.as_deref()),
         context_bindings.as_ref(),
         &event_subscribers,
         remote_tests,
@@ -3332,33 +3551,43 @@ fn run_checks(
     // #696/#1659: integration-suite diagnostics, attributed the same way.
     errors.extend_attributed_by_span(&parsed, integration_errors);
 
-    // v0.19 (decisions 0017/0024): platform-lock enforcement. A deployment
-    // unit whose in-process closure reaches a platform-native capability is
-    // locked to that platform; the selected `--platform` must match. Run only
-    // on otherwise-clean programs: the closure walk recurses the provider
-    // graph, whose acyclicity the earlier checks establish. P5.3: relocated
-    // to `bynk_check::project_model::phase_platform_lock` — this crate is a
-    // caller, not an owner.
-    if errors.is_empty() {
-        project_model::phase_platform_lock(
-            target,
-            platform,
-            &parsed,
-            &groups,
-            &kinds,
+    project_model::phase_bundle_composition_unprovided(
+        target,
+        &parsed,
+        &groups,
+        &kinds,
+        &unit_consumes,
+        &unit_consumes_aliases,
+        &unit_tables,
+        &unit_callees,
+        &unit_flattened,
+        &mut errors,
+    );
+
+    platform_lock_phase(
+        target,
+        platform,
+        (project_root, overlay),
+        (&parsed, &groups, &kinds),
+        (
             &unit_tables,
             &unit_consumes,
             &unit_consumes_aliases,
             &unit_flattened,
-            &mut errors,
-        );
-    }
+        ),
+        &mut errors,
+    );
     // On Workers, each Worker's binding names are unique. Gated the same way:
     // the KV input walks the same provider graph.
-    if errors.is_empty()
-        && let Some(bindings) = &context_bindings
-    {
-        worker_bindings::phase_duplicate_bindings(target, &parsed, &groups, bindings, &mut errors);
+    if let Some(bindings) = context_bindings.as_ref().filter(|_| errors.is_empty()) {
+        worker_bindings::phase_duplicate_bindings(
+            target,
+            (project_root, overlay),
+            &parsed,
+            &groups,
+            bindings,
+            &mut errors,
+        );
     }
 
     // v0.176 (#642): the `Bytes`-at-a-workers-boundary guard (ADR 0142 D8) is
@@ -3393,6 +3622,8 @@ fn run_checks(
         adapter_bindings,
         npm_deps,
         target,
+        trace_requests,
+        inspect_agents,
         schema_registry: schema_registry_doc,
         asset_bytes,
         agent_versions: schema_effective_versions.agents,
@@ -3432,6 +3663,562 @@ fn runtime_with_npm(
     (runtime_files, npm_deps)
 }
 
+/// State-migrations S4 (#2259 Decision D): the context's versioned agent classes,
+/// which its Worker's signed `/_bynk/migrate/` route can wake, with their lock
+/// versions, sorted.
+fn migratable_agents(
+    ctx_name: &str,
+    table: &UnitTable,
+    agent_versions: &std::collections::HashMap<String, bynk_check::schema_registry::AgentVersions>,
+) -> Vec<(String, i64)> {
+    let mut migratable: Vec<(String, i64)> = agent_versions
+        .iter()
+        .filter_map(|(class, v)| {
+            let (unit, agent) = class.rsplit_once('.')?;
+            (unit == ctx_name && table.agents.contains_key(agent))
+                .then(|| (agent.to_string(), v.version))
+        })
+        .collect();
+    migratable.sort();
+    migratable
+}
+
+/// #3581: the agent classes a `bynk dev` build's Worker answers the inspect route
+/// for, sorted; empty unless the build asks for inspection.
+fn inspect_classes(on: bool, table: &UnitTable) -> Vec<String> {
+    let mut classes: Vec<String> = if on {
+        table.agents.keys().cloned().collect()
+    } else {
+        Vec::new()
+    };
+    classes.sort();
+    classes
+}
+
+/// Everything a context's Workers emit reads from the checked project and the
+/// build's options (#3562, G2b): the same inputs the emit loop in
+/// [`build_output`] used as locals, gathered so one context's files are
+/// produced by [`WorkersEmit::emit_context`] and the loop only chooses which
+/// contexts to emit.
+#[derive(Clone, Copy)]
+struct WorkersEmit<'a> {
+    adapter_bindings: &'a HashMap<String, AdapterBinding>,
+    agent_versions: &'a HashMap<String, AgentVersions>,
+    asset_files: Option<&'a BTreeMap<String, Vec<u8>>>,
+    asset_served: &'a BTreeMap<String, String>,
+    compatibility_flags: &'a [String],
+    container_root: &'a str,
+    context_bare_native: &'a HashMap<String, BTreeMap<Platform, String>>,
+    context_singletons: &'a HashMap<String, Vec<String>>,
+    contracts_lock: &'a bynk_project::contracts_lock::ContractsLock,
+    d1_migrations: &'a BTreeMap<String, Vec<bynk_check::d1_migrations::MigrationFile>>,
+    event_subscribers: &'a BTreeMap<(String, String), Vec<(String, String)>>,
+    groups: &'a BTreeMap<String, Vec<usize>>,
+    harness_clock_contexts: &'a HashSet<String>,
+    import_ext: bynk_emit::emit_model::ImportExt,
+    inspect_agents: bool,
+    kinds: &'a BTreeMap<String, UnitKind>,
+    layout: &'a bynk_project::worker_layout::WorkerLayout,
+    parsed: &'a [ParsedFile],
+    trace_requests: bool,
+    unit_callees: &'a HashMap<String, HashMap<ExprId, bynk_check::checker::Callee>>,
+    unit_consumed_context_types: &'a HashMap<String, HashSet<String>>,
+    unit_consumes: &'a HashMap<String, Vec<String>>,
+    unit_consumes_aliases: &'a HashMap<String, HashMap<String, String>>,
+    unit_flattened: &'a HashMap<String, HashMap<String, String>>,
+    unit_tables: &'a HashMap<String, UnitTable>,
+    unit_uses: &'a HashMap<String, Vec<String>>,
+    workers_dev: Option<bool>,
+}
+
+impl WorkersEmit<'_> {
+    /// The files of one context's Worker: its handlers, `compose.ts`, entry,
+    /// `wrangler.toml`, manifests, staged binding files and assets, pushed onto
+    /// `compiled`; contract-lock warnings onto `lock_warnings`; the assets it
+    /// serves into `staged_assets`.
+    fn emit_context(
+        &self,
+        ctx_name: &String,
+        table: &UnitTable,
+        compiled: &mut Vec<StagedFile>,
+        lock_warnings: &mut Vec<AttributedError>,
+        staged_assets: &mut BTreeMap<PathBuf, Vec<u8>>,
+    ) {
+        let WorkersEmit {
+            adapter_bindings,
+            agent_versions,
+            compatibility_flags,
+            container_root,
+            context_bare_native,
+            context_singletons,
+            contracts_lock,
+            d1_migrations,
+            event_subscribers,
+            groups,
+            harness_clock_contexts,
+            import_ext,
+            inspect_agents,
+            kinds,
+            layout,
+            parsed,
+            trace_requests,
+            unit_callees,
+            unit_consumed_context_types,
+            unit_consumes,
+            unit_consumes_aliases,
+            unit_flattened,
+            unit_tables,
+            unit_uses,
+            workers_dev,
+            ..
+        } = *self;
+        let consumes_targets = unit_consumes.get(ctx_name).cloned().unwrap_or_default();
+        let aliases = unit_consumes_aliases
+            .get(ctx_name)
+            .cloned()
+            .unwrap_or_default();
+        // v0.177 (#643): the callee's own view of each of its `on call`
+        // contracts, hashed from *its own* namespace — the same table
+        // (`contract_types_for`) a caller reaches through
+        // `consumed_types[ctx_name]`, so the two sides cannot disagree.
+        let own_types = bynk_check::symbols::contract_types_for(
+            ctx_name,
+            unit_tables,
+            unit_uses,
+            unit_consumes,
+        )
+        .0;
+        let own_contracts = bynk_check::contract::own_contract_hashes(table, &own_types);
+        // #2554: the older contracts this callee also accepts, each
+        // re-checked against the contract it has now.
+        let accepted = bynk_check::contract_compat::own_accepted(
+            table,
+            &own_types,
+            |service| contracts_lock.accepted(ctx_name, service),
+            bynk_project::contracts_lock::ACCEPTED_CAP,
+        );
+        for (service, why) in &accepted.stale {
+            lock_warnings.push(bynk_project::contracts_lock::stale_warning(
+                ctx_name, service, why,
+            ));
+        }
+        for (service, count) in &accepted.oversized {
+            lock_warnings.push(bynk_project::contracts_lock::oversized_warning(
+                ctx_name, service, *count,
+            ));
+        }
+        let binding_modules: HashMap<String, String> = adapter_bindings
+            .iter()
+            .map(|(n, b)| {
+                (
+                    n.clone(),
+                    emitter::ts_specifier(&b.output_path.with_extension("js")),
+                )
+            })
+            .collect();
+        let flattened = unit_flattened.get(ctx_name).cloned().unwrap_or_default();
+        // v0.19 (C1): this Worker needs the KV namespace binding when
+        // its in-process closure reaches the cloudflare adapter.
+        let needs_kv = worker_bindings::needs_kv(context_bare_native, ctx_name);
+        // Locale capability track, slice 2 (#882, Decision A): real
+        // negotiation is Cloudflare-only — `BuildTarget::Workers`
+        // isn't itself restricted to `Platform::Cloudflare`, so a
+        // hypothetical `--target workers --platform node` project
+        // must not try to pass 3 args to Node's still-0-arg
+        // `LocaleProvider`.
+        let is_cloudflare_binding = adapter_bindings
+            .get(firstparty::BYNK_UNIT)
+            .is_some_and(|b| {
+                b.output_path.file_name()
+                    == Some(std::ffi::OsStr::new(
+                        firstparty::Platform::Cloudflare.bynk_binding_filename(),
+                    ))
+            });
+        let bundle = bynk_check::symbols::detect_context_message_bundle(
+            ctx_name, unit_uses, groups, kinds, parsed,
+        );
+        let locale_bundle_info = match &bundle {
+            bynk_check::symbols::ContextMessageBundle::One(info) if is_cloudflare_binding => {
+                Some(info)
+            }
+            _ => None,
+        };
+        // #1187's slice 6 plumbing: computed once, reused by every
+        // Workers-target emitter below that needs it.
+        let ctx_uses_emit = unit_table_uses_emit(table, unit_callees.get(ctx_name));
+        // #1944: every binding this Worker declares, once — its
+        // `Env` interface and its `wrangler.toml` are both built from
+        // it, and the duplicate check read the same list.
+        let own_event_routes = worker_bindings::own_event_routes(ctx_name, event_subscribers);
+        // What this context calls on each dependency (#1961): its
+        // Service Bindings, and below, its contracts manifest.
+        let called =
+            called_cross_context_services(table, &consumes_targets, unit_callees.get(ctx_name));
+        let called_contexts = worker_bindings::called_contexts(
+            table,
+            &consumes_targets,
+            Some(&aliases),
+            kinds,
+            unit_callees.get(ctx_name),
+        );
+        let mut bindings = worker_bindings::context_bindings(
+            table,
+            &called_contexts,
+            &own_event_routes,
+            needs_kv,
+            worker_bindings::singletons_of(context_singletons, ctx_name),
+            ctx_uses_emit,
+            unit_table_uses_idempotency(
+                table,
+                unit_callees.get(ctx_name),
+                unit_flattened.get(ctx_name),
+            ),
+        );
+        // #3477: a container's image is built from a directory of the
+        // project, which `wrangler` reaches from the Worker's output
+        // directory.
+        worker_bindings::locate_container_builds(&mut bindings, container_root);
+        // #2719: the context's handlers that hand work to the execution
+        // context, from the checker's needs-context set.
+        let ctx_uses_exec = table
+            .services
+            .values()
+            .any(|s| s.handlers.iter().any(|h| table.exec_plan.handler_needs(h)));
+        // #2969: the file of each used commons that declares each of its
+        // functions and constants, so `compose.ts` imports a commons
+        // constant from its declaring module, as `handlers.ts` does,
+        // when the commons is split across files.
+        let used_decl_paths: HashMap<String, HashMap<String, PathBuf>> = unit_uses
+            .get(ctx_name)
+            .into_iter()
+            .flatten()
+            .filter_map(|u| {
+                let indices = groups.get(u)?;
+                let index = bynk_check::symbols::build_file_decl_index(indices, parsed);
+                Some((u.clone(), index.fns))
+            })
+            .collect();
+        let (compose_ts, needs_locale_request) = emitter::emit_worker_compose(
+            ctx_name,
+            table,
+            &consumes_targets,
+            &aliases,
+            unit_tables,
+            &binding_modules,
+            &flattened,
+            unit_consumes,
+            unit_consumes_aliases,
+            unit_flattened,
+            locale_bundle_info,
+            import_ext,
+            ctx_uses_emit,
+            &bindings,
+            harness_clock_contexts.contains(ctx_name),
+            ctx_uses_exec,
+            unit_uses
+                .get(ctx_name)
+                .map(Vec::as_slice)
+                .unwrap_or_default(),
+            &used_decl_paths,
+        );
+        // #2136: a context a `system` suite targets gets the test
+        // build's scheduled-result hook. A deployable build strips
+        // suites (`tests` off), so it never does.
+        let system_driven = parsed
+            .iter()
+            .filter_map(ParsedFile::integration)
+            .any(|d| d.target.joined() == *ctx_name);
+        // #2252: the types this context takes from the contexts it
+        // consumes, recorded when its handlers were checked.
+        let no_consumed_types = HashSet::new();
+        let consumed_types = unit_consumed_context_types
+            .get(ctx_name)
+            .unwrap_or(&no_consumed_types);
+        let migratable = migratable_agents(ctx_name, table, agent_versions);
+        let inspect_classes = inspect_classes(inspect_agents, table);
+        let entry_ts = emitter::emit_worker_entry(
+            ctx_name,
+            table,
+            &own_contracts,
+            &accepted.hashes,
+            needs_locale_request,
+            ctx_uses_emit,
+            system_driven,
+            consumed_types,
+            &migratable,
+            ctx_uses_exec,
+            &bynk_check::symbols::combined_types_for(ctx_name, unit_tables, unit_uses),
+            trace_requests,
+            &inspect_classes,
+        );
+        // P6.x cutover slice 2 (#1191): collected here, not inside
+        // `emit_wrangler_toml` itself, so that function's own file
+        // needs no raw-AST match. P6.46 (#1137): the walk itself
+        // relocated to `bynk_check::symbols::cron_and_queue_triggers`
+        // — a pure function of `table`, `project.rs`'s own remaining
+        // AST contact here was incidental to where the loop happened
+        // to be written, not structural.
+        let (crons, queues) = bynk_check::symbols::cron_and_queue_triggers(table);
+        let mut wrangler_doc = emitter::emit_wrangler_toml(
+            ctx_name,
+            &bindings,
+            &crons,
+            &queues,
+            &bynk_check::email::routed_addresses(table),
+            compatibility_flags,
+            workers_dev,
+            &emitter::ClassTombstones::of(table),
+            d1_migrations,
+        );
+        stage_binding_files(&bindings, layout, ctx_name, d1_migrations, compiled);
+        self.stage_worker_extras(ctx_name, table, &mut wrangler_doc, staged_assets);
+        // Arc C slice 4 (#1323): `emit_worker_entry` returns a real
+        // `TsProgram` directly — the construction site's own
+        // `Verbatim`/`NotYetConverted` wrap is gone, matching the
+        // precedent `events_fanout.rs`'s and `workers.rs`'s own
+        // construction sites already set.
+        compiled.push(StagedFile {
+            output_path: layout.worker_file(ctx_name, "index.ts"),
+            document: Document::Ts(entry_ts),
+            source_map: None,
+            debug_metadata: None,
+        });
+        // Events track, slice 0: this context's fan-out Durable
+        // Object — emitted only when it actually publishes (mirrors
+        // `emit_worker_compose`'s own `unit_table_uses_emit` gate on
+        // `deps.__eventsDispatch`, so the two never disagree about
+        // whether `env.EVENTS_FANOUT` is real).
+        if ctx_uses_emit {
+            // Arc C's own first real conversion slice (#1317):
+            // `emit_events_fanout_do` returns a real `TsProgram`
+            // directly — the first `bynk-emit` construction site
+            // that reaches `Document::Ts` with no `Verbatim` wrap.
+            let fanout_program = emitter::emit_events_fanout_do(ctx_name, &own_event_routes);
+            compiled.push(StagedFile {
+                output_path: layout.member_file(ctx_name, "events_fanout.ts"),
+                document: Document::Ts(fanout_program),
+                source_map: None,
+                debug_metadata: None,
+            });
+        }
+        // #3477: the Durable Object classes of this Worker's containers.
+        if let Some(program) = emitter::emit_containers_ts(&bindings) {
+            compiled.push(StagedFile {
+                output_path: layout.worker_file(ctx_name, "containers.ts"),
+                document: Document::Ts(program),
+                source_map: None,
+                debug_metadata: None,
+            });
+        }
+        // Arc C slice 3 (#1321): `emit_worker_compose` returns a
+        // real `TsProgram` directly — the second `bynk-emit`
+        // construction site (after `events_fanout.ts`'s own,
+        // #1317) that reaches `Document::Ts` with no `Verbatim`
+        // wrap.
+        compiled.push(StagedFile {
+            output_path: layout.member_file(ctx_name, "compose.ts"),
+            document: Document::Ts(compose_ts),
+            source_map: None,
+            debug_metadata: None,
+        });
+        compiled.push(StagedFile {
+            output_path: layout.worker_file(ctx_name, "wrangler.toml"),
+            document: Document::Toml(wrangler_doc),
+            source_map: None,
+            debug_metadata: None,
+        });
+        self.emit_contract_manifests(ctx_name, table, &called, &own_types, &accepted, compiled);
+    }
+
+    /// The files `bynk deploy` reads beside a Worker: the contracts manifest (the hashes its entry enforces and what it expects of each dependency), the typed client a foreign caller imports, and the secrets manifest.
+    fn emit_contract_manifests(
+        &self,
+        ctx_name: &str,
+        table: &UnitTable,
+        called: &BTreeMap<String, BTreeSet<String>>,
+        own_types: &HashMap<String, Arc<TypeDecl>>,
+        accepted: &bynk_check::contract_compat::ContextAccepted,
+        compiled: &mut Vec<StagedFile>,
+    ) {
+        let WorkersEmit {
+            layout,
+            unit_consumes,
+            unit_consumes_aliases,
+            unit_flattened,
+            unit_tables,
+            unit_uses,
+            ..
+        } = *self;
+        // v0.172 (ADR 0195 D5): the secret names this Worker's handlers
+        // will read from `env`, for `deploy` to check before it pushes.
+        // Emitted from the same seams the entry lowers, so the two
+        // cannot describe different Workers.
+        //
+        // v0.173 (ADR 0196): plus the literal `bynk.Secrets` names it
+        // reads, and whether that list is everything. The walk is here
+        // rather than in the checker because it needs `unit_flattened`
+        // to answer *whose* `Secrets` this is (D4) and the warning sink
+        // to say when it cannot know a name — and `bynk-check` has
+        // neither. Absent when there is nothing at all to say (D5).
+        // The warnings half is dropped here: `run_checks` already raised
+        // it, on the analyse path the editor shares.
+        // v0.177 (#643): the contract hashes this context's entry
+        // enforces, written where `deploy` can read them — so a skew is
+        // refused at the push rather than discovered by live traffic.
+        // #2750: the SAME table the entry's hashes (`own_contracts`
+        // above) and every caller's `expects` are computed from —
+        // `own_types`, bound once from `contract_types_for`. A second
+        // binding from `combined_types_for` here left a consumed
+        // context's exported type unresolved in `provides`.
+        // What this context expects of each dependency — the same hash
+        // it stamps at each call site, computed the same way: in the
+        // *dependency's* namespace, from the dependency's own table.
+        //
+        // Only the services this context actually **calls**. Recording
+        // everything the dependency provides would refuse a deploy over a
+        // service this caller never touches — a skew its runtime check
+        // could never fire on. See `called_cross_context_services`.
+        let mut expects: std::collections::BTreeMap<
+            String,
+            std::collections::BTreeMap<String, String>,
+        > = std::collections::BTreeMap::new();
+        let mut expects_shapes: std::collections::BTreeMap<
+            String,
+            std::collections::BTreeMap<String, String>,
+        > = std::collections::BTreeMap::new();
+        for (dep, services) in called {
+            let Some(dep_table) = unit_tables.get(dep) else {
+                continue;
+            };
+            let dep_types =
+                bynk_check::symbols::contract_types_for(dep, unit_tables, unit_uses, unit_consumes)
+                    .0;
+            let all = bynk_check::contract::own_contract_hashes(dep_table, &dep_types);
+            let hashes: std::collections::BTreeMap<String, String> = all
+                .into_iter()
+                .filter(|(svc, _)| services.contains(svc))
+                .collect();
+            if !hashes.is_empty() {
+                // #2485: the structure behind each hash, from the same
+                // dependency table.
+                let dep_shapes: std::collections::BTreeMap<String, String> =
+                    bynk_check::contract_compat::own_contract_shapes(dep_table, &dep_types)
+                        .into_iter()
+                        .filter(|(svc, _)| hashes.contains_key(svc))
+                        .collect();
+                expects_shapes.insert(dep.clone(), dep_shapes);
+                expects.insert(dep.clone(), hashes);
+            }
+        }
+        // I4 (#1970): what each declared foreign caller's generated
+        // client embeds, recorded beside `provides` so `deploy` can
+        // hold it against the caller's pin.
+        let foreign = emitter::client::foreign_contracts(table, own_types);
+        if let Some(manifest) = emitter::contracts::emit_contracts_manifest(
+            &bynk_check::contract::own_contract_hashes(table, own_types),
+            &expects,
+            &foreign,
+            &emitter::contracts::Shapes {
+                provides: bynk_check::contract_compat::own_contract_shapes(table, own_types),
+                expects: expects_shapes,
+                accepts: accepted.hashes.clone(),
+            },
+        ) {
+            compiled.push(StagedFile {
+                output_path: layout.member_file(ctx_name, emitter::contracts::CONTRACTS_MANIFEST),
+                document: Document::Json(manifest),
+                source_map: None,
+                debug_metadata: None,
+            });
+        }
+
+        // I4 (#1970): the typed TypeScript client a foreign caller
+        // imports, when the context declares one.
+        if let Some(client) = emitter::client::emit_client(ctx_name, table, own_types) {
+            compiled.push(StagedFile {
+                output_path: layout.member_file(ctx_name, emitter::client::CLIENT_FILE),
+                document: Document::Ts(client),
+                source_map: None,
+                debug_metadata: None,
+            });
+        }
+
+        let reads = emitter::secrets::secret_reads(
+            ctx_name,
+            unit_tables,
+            unit_consumes,
+            unit_consumes_aliases,
+            unit_flattened,
+        );
+        if let Some(manifest) = emitter::emit_secrets_manifest(table, &reads) {
+            compiled.push(StagedFile {
+                output_path: layout.member_file(ctx_name, emitter::secrets::SECRETS_MANIFEST),
+                document: Document::Json(manifest),
+                source_map: None,
+                debug_metadata: None,
+            });
+        }
+    }
+
+    /// What a Worker's `wrangler.toml` gains beyond its bindings: the static files it serves under its assets directory (with `_headers` and the `[assets]` block), the Workers Cache for an `EdgeCache` instance, and the `CompiledWasm` rule for a WebAssembly module its adapter closure reaches.
+    fn stage_worker_extras(
+        &self,
+        ctx_name: &str,
+        table: &UnitTable,
+        wrangler_doc: &mut bynk_emit::emitter::toml_doc::TomlDocument,
+        staged_assets: &mut BTreeMap<PathBuf, Vec<u8>>,
+    ) {
+        let WorkersEmit {
+            adapter_bindings,
+            asset_files,
+            asset_served,
+            kinds,
+            layout,
+            unit_consumes,
+            unit_tables,
+            unit_uses,
+            ..
+        } = *self;
+        // #1883, slice 1b: the static files this Worker serves — its
+        // own and those of every commons its `uses` closure reaches —
+        // under its assets directory, with `_headers` and the
+        // `[assets]` block. A Worker with none gets neither.
+        let deployed = bynk_check::assets::deployed_assets(
+            ctx_name,
+            unit_uses,
+            unit_consumes,
+            unit_tables,
+            asset_served,
+        );
+        if !deployed.is_empty() {
+            let dir = worker_assets_dir(&layout.dir(ctx_name));
+            for (served, source) in &deployed {
+                let bytes = asset_files
+                    .and_then(|files| files.get(source))
+                    .cloned()
+                    .unwrap_or_else(|| {
+                        panic!("bynk internal error: deployed asset `{source}` was never read")
+                    });
+                staged_assets.insert(dir.join(served.trim_start_matches('/')), bytes);
+            }
+            staged_assets.insert(
+                dir.join("_headers"),
+                emitter::wrangler::asset_headers().into_bytes(),
+            );
+            wrangler_doc.push_block(emitter::wrangler::assets_block());
+        }
+        // L7 (#2414): an `EdgeCache` instance turns Workers Cache on.
+        if table.derived.values().any(|d| d.is_edge_cache()) {
+            wrangler_doc.push_block(emitter::wrangler::edge_cache_block());
+        }
+        // #2321: a Worker whose adapter closure reaches an included
+        // WebAssembly module gets the explicit `CompiledWasm` rule.
+        if worker_reaches_wasm_module(ctx_name, unit_consumes, kinds, adapter_bindings) {
+            wrangler_doc.push_block(emitter::wrangler::wasm_rule_block());
+        }
+    }
+}
+
 /// Build-success tail (region 3): emit the composition/worker/runtime files
 /// and assemble the final `ProjectOutput`. Reached only on build mode with a
 /// clean error sink. Moved verbatim from the old pipeline; only the locals it
@@ -3463,6 +4250,9 @@ fn build_output(
     // #1890: the merged `wrangler.toml` flag list (`finish_build` merges it).
     compatibility_flags: &[String],
     workers_dev: Option<bool>,
+    // #3477: the path back to the project root from a Worker's output
+    // directory, for a container's build paths.
+    container_root: &str,
     // #1883, slice 1b: the declared asset files' bytes; each Worker ships
     // the files its `uses` closure declares.
     asset_files: Option<&BTreeMap<String, Vec<u8>>>,
@@ -3473,6 +4263,9 @@ fn build_output(
     contracts_lock: &bynk_project::contracts_lock::ContractsLock,
     // P4b (#2608): each `D1` database's migrations.
     d1_migrations: &bynk_check::d1_migrations::D1Migrations,
+    // #3580: wrap each Worker's `fetch` in the request recorder.
+    trace_requests: bool,
+    inspect_agents: bool,
 ) -> ProjectOutput {
     // #2554: the lock's warnings, returned on `ProjectOutput::warnings` for
     // `finish_build` to merge with the checker's.
@@ -3611,6 +4404,39 @@ fn build_output(
         BuildTarget::Workers => {
             // v0.8 §2.3: per-Worker entry point, compose.ts, and wrangler
             // configuration. One Worker per context.
+            // #3562: where each context's files go. Always the identity layout for
+            // now: a group's directory and prefixes are switched on with the group
+            // as the emit unit.
+            let layout = bynk_project::worker_layout::WorkerLayout::identity();
+            let emit = WorkersEmit {
+                adapter_bindings: &adapter_bindings,
+                agent_versions,
+                asset_files,
+                asset_served: &asset_served,
+                compatibility_flags,
+                container_root,
+                context_bare_native: &context_bare_native,
+                context_singletons: &context_singletons,
+                contracts_lock,
+                d1_migrations,
+                event_subscribers: &event_subscribers,
+                groups: &groups,
+                harness_clock_contexts: &harness_clock_contexts,
+                import_ext,
+                inspect_agents,
+                kinds: &kinds,
+                layout: &layout,
+                parsed: &parsed,
+                trace_requests,
+                unit_callees: &unit_callees,
+                unit_consumed_context_types,
+                unit_consumes: &unit_consumes,
+                unit_consumes_aliases: &unit_consumes_aliases,
+                unit_flattened: &unit_flattened,
+                unit_tables: &unit_tables,
+                unit_uses: &unit_uses,
+                workers_dev,
+            };
             for (ctx_name, kind) in &kinds {
                 if *kind != UnitKind::Context {
                     continue;
@@ -3618,426 +4444,13 @@ fn build_output(
                 let Some(table) = unit_tables.get(ctx_name) else {
                     continue;
                 };
-                let dashes = worker_dir_name(ctx_name);
-                let consumes_targets = unit_consumes.get(ctx_name).cloned().unwrap_or_default();
-                let aliases = unit_consumes_aliases
-                    .get(ctx_name)
-                    .cloned()
-                    .unwrap_or_default();
-                // v0.177 (#643): the callee's own view of each of its `on call`
-                // contracts, hashed from *its own* namespace — the same table
-                // (`contract_types_for`) a caller reaches through
-                // `consumed_types[ctx_name]`, so the two sides cannot disagree.
-                let own_types = bynk_check::symbols::contract_types_for(
-                    ctx_name,
-                    &unit_tables,
-                    &unit_uses,
-                    &unit_consumes,
-                )
-                .0;
-                let own_contracts = bynk_check::contract::own_contract_hashes(table, &own_types);
-                // #2554: the older contracts this callee also accepts, each
-                // re-checked against the contract it has now.
-                let accepted = bynk_check::contract_compat::own_accepted(
-                    table,
-                    &own_types,
-                    |service| contracts_lock.accepted(ctx_name, service),
-                    bynk_project::contracts_lock::ACCEPTED_CAP,
-                );
-                for (service, why) in &accepted.stale {
-                    lock_warnings.push(bynk_project::contracts_lock::stale_warning(
-                        ctx_name, service, why,
-                    ));
-                }
-                for (service, count) in &accepted.oversized {
-                    lock_warnings.push(bynk_project::contracts_lock::oversized_warning(
-                        ctx_name, service, *count,
-                    ));
-                }
-                let binding_modules: HashMap<String, String> = adapter_bindings
-                    .iter()
-                    .map(|(n, b)| {
-                        (
-                            n.clone(),
-                            emitter::ts_specifier(&b.output_path.with_extension("js")),
-                        )
-                    })
-                    .collect();
-                let flattened = unit_flattened.get(ctx_name).cloned().unwrap_or_default();
-                // v0.19 (C1): this Worker needs the KV namespace binding when
-                // its in-process closure reaches the cloudflare adapter.
-                let needs_kv = worker_bindings::needs_kv(&context_bare_native, ctx_name);
-                // Locale capability track, slice 2 (#882, Decision A): real
-                // negotiation is Cloudflare-only — `BuildTarget::Workers`
-                // isn't itself restricted to `Platform::Cloudflare`, so a
-                // hypothetical `--target workers --platform node` project
-                // must not try to pass 3 args to Node's still-0-arg
-                // `LocaleProvider`.
-                let is_cloudflare_binding = adapter_bindings
-                    .get(firstparty::BYNK_UNIT)
-                    .is_some_and(|b| {
-                        b.output_path.file_name()
-                            == Some(std::ffi::OsStr::new(
-                                firstparty::Platform::Cloudflare.bynk_binding_filename(),
-                            ))
-                    });
-                let bundle = bynk_check::symbols::detect_context_message_bundle(
-                    ctx_name, &unit_uses, &groups, &kinds, &parsed,
-                );
-                let locale_bundle_info = match &bundle {
-                    bynk_check::symbols::ContextMessageBundle::One(info)
-                        if is_cloudflare_binding =>
-                    {
-                        Some(info)
-                    }
-                    _ => None,
-                };
-                // #1187's slice 6 plumbing: computed once, reused by every
-                // Workers-target emitter below that needs it.
-                let ctx_uses_emit = unit_table_uses_emit(table, unit_callees.get(ctx_name));
-                // #1944: every binding this Worker declares, once — its
-                // `Env` interface and its `wrangler.toml` are both built from
-                // it, and the duplicate check read the same list.
-                let own_event_routes =
-                    worker_bindings::own_event_routes(ctx_name, &event_subscribers);
-                // What this context calls on each dependency (#1961): its
-                // Service Bindings, and below, its contracts manifest.
-                let called = called_cross_context_services(
-                    table,
-                    &consumes_targets,
-                    unit_callees.get(ctx_name),
-                );
-                let called_contexts = worker_bindings::called_contexts(
-                    table,
-                    &consumes_targets,
-                    Some(&aliases),
-                    &kinds,
-                    unit_callees.get(ctx_name),
-                );
-                let bindings = worker_bindings::context_bindings(
-                    table,
-                    &called_contexts,
-                    &own_event_routes,
-                    needs_kv,
-                    worker_bindings::singletons_of(&context_singletons, ctx_name),
-                    ctx_uses_emit,
-                    unit_table_uses_idempotency(
-                        table,
-                        unit_callees.get(ctx_name),
-                        unit_flattened.get(ctx_name),
-                    ),
-                );
-                // #2719: the context's handlers that hand work to the execution
-                // context, from the checker's needs-context set.
-                let ctx_uses_exec = table
-                    .services
-                    .values()
-                    .any(|s| s.handlers.iter().any(|h| table.exec_plan.handler_needs(h)));
-                // #2969: the file of each used commons that declares each of its
-                // functions and constants, so `compose.ts` imports a commons
-                // constant from its declaring module, as `handlers.ts` does,
-                // when the commons is split across files.
-                let used_decl_paths: HashMap<String, HashMap<String, PathBuf>> = unit_uses
-                    .get(ctx_name)
-                    .into_iter()
-                    .flatten()
-                    .filter_map(|u| {
-                        let indices = groups.get(u)?;
-                        let index = bynk_check::symbols::build_file_decl_index(indices, &parsed);
-                        Some((u.clone(), index.fns))
-                    })
-                    .collect();
-                let (compose_ts, needs_locale_request) = emitter::emit_worker_compose(
+                emit.emit_context(
                     ctx_name,
                     table,
-                    &consumes_targets,
-                    &aliases,
-                    &unit_tables,
-                    &binding_modules,
-                    &flattened,
-                    &unit_consumes,
-                    &unit_consumes_aliases,
-                    &unit_flattened,
-                    locale_bundle_info,
-                    import_ext,
-                    ctx_uses_emit,
-                    &bindings,
-                    harness_clock_contexts.contains(ctx_name),
-                    ctx_uses_exec,
-                    unit_uses
-                        .get(ctx_name)
-                        .map(Vec::as_slice)
-                        .unwrap_or_default(),
-                    &used_decl_paths,
+                    &mut compiled,
+                    &mut lock_warnings,
+                    &mut staged_assets,
                 );
-                // #2136: a context a `system` suite targets gets the test
-                // build's scheduled-result hook. A deployable build strips
-                // suites (`tests` off), so it never does.
-                let system_driven = parsed
-                    .iter()
-                    .filter_map(ParsedFile::integration)
-                    .any(|d| d.target.joined() == *ctx_name);
-                // #2252: the types this context takes from the contexts it
-                // consumes, recorded when its handlers were checked.
-                let no_consumed_types = HashSet::new();
-                let consumed_types = unit_consumed_context_types
-                    .get(ctx_name)
-                    .unwrap_or(&no_consumed_types);
-                // State-migrations S4 (#2259 Decision D): the context's
-                // versioned agent classes, which its Worker's signed
-                // `/_bynk/migrate/` route can wake.
-                let mut migratable: Vec<(String, i64)> = agent_versions
-                    .iter()
-                    .filter_map(|(class, v)| {
-                        let (unit, agent) = class.rsplit_once('.')?;
-                        (unit == ctx_name && table.agents.contains_key(agent))
-                            .then(|| (agent.to_string(), v.version))
-                    })
-                    .collect();
-                migratable.sort();
-                let entry_ts = emitter::emit_worker_entry(
-                    ctx_name,
-                    table,
-                    &own_contracts,
-                    &accepted.hashes,
-                    needs_locale_request,
-                    ctx_uses_emit,
-                    system_driven,
-                    consumed_types,
-                    &migratable,
-                    ctx_uses_exec,
-                    &bynk_check::symbols::combined_types_for(ctx_name, &unit_tables, &unit_uses),
-                );
-                // P6.x cutover slice 2 (#1191): collected here, not inside
-                // `emit_wrangler_toml` itself, so that function's own file
-                // needs no raw-AST match. P6.46 (#1137): the walk itself
-                // relocated to `bynk_check::symbols::cron_and_queue_triggers`
-                // — a pure function of `table`, `project.rs`'s own remaining
-                // AST contact here was incidental to where the loop happened
-                // to be written, not structural.
-                let (crons, queues) = bynk_check::symbols::cron_and_queue_triggers(table);
-                let mut wrangler_doc = emitter::emit_wrangler_toml(
-                    ctx_name,
-                    &bindings,
-                    &crons,
-                    &queues,
-                    &bynk_check::email::routed_addresses(table),
-                    compatibility_flags,
-                    workers_dev,
-                    &emitter::ClassTombstones::of(table),
-                    d1_migrations,
-                );
-                stage_binding_files(&bindings, &dashes, d1_migrations, &mut compiled);
-                // #1883, slice 1b: the static files this Worker serves — its
-                // own and those of every commons its `uses` closure reaches —
-                // under its assets directory, with `_headers` and the
-                // `[assets]` block. A Worker with none gets neither.
-                let deployed = bynk_check::assets::deployed_assets(
-                    ctx_name,
-                    &unit_uses,
-                    &unit_consumes,
-                    &unit_tables,
-                    &asset_served,
-                );
-                if !deployed.is_empty() {
-                    let dir = worker_assets_dir(&dashes);
-                    for (served, source) in &deployed {
-                        let bytes = asset_files
-                            .and_then(|files| files.get(source))
-                            .cloned()
-                            .unwrap_or_else(|| {
-                                panic!(
-                                    "bynk internal error: deployed asset `{source}` was never read"
-                                )
-                            });
-                        staged_assets.insert(dir.join(served.trim_start_matches('/')), bytes);
-                    }
-                    staged_assets.insert(
-                        dir.join("_headers"),
-                        emitter::wrangler::asset_headers().into_bytes(),
-                    );
-                    wrangler_doc.push_block(emitter::wrangler::assets_block());
-                }
-                // L7 (#2414): an `EdgeCache` instance turns Workers Cache on.
-                if table.derived.values().any(|d| d.is_edge_cache()) {
-                    wrangler_doc.push_block(emitter::wrangler::edge_cache_block());
-                }
-                // #2321: a Worker whose adapter closure reaches an included
-                // WebAssembly module gets the explicit `CompiledWasm` rule.
-                if worker_reaches_wasm_module(ctx_name, &unit_consumes, &kinds, &adapter_bindings) {
-                    wrangler_doc.push_block(emitter::wrangler::wasm_rule_block());
-                }
-                // Arc C slice 4 (#1323): `emit_worker_entry` returns a real
-                // `TsProgram` directly — the construction site's own
-                // `Verbatim`/`NotYetConverted` wrap is gone, matching the
-                // precedent `events_fanout.rs`'s and `workers.rs`'s own
-                // construction sites already set.
-                compiled.push(StagedFile {
-                    output_path: PathBuf::from(format!("workers/{dashes}/index.ts")),
-                    document: Document::Ts(entry_ts),
-                    source_map: None,
-                    debug_metadata: None,
-                });
-                // Events track, slice 0: this context's fan-out Durable
-                // Object — emitted only when it actually publishes (mirrors
-                // `emit_worker_compose`'s own `unit_table_uses_emit` gate on
-                // `deps.__eventsDispatch`, so the two never disagree about
-                // whether `env.EVENTS_FANOUT` is real).
-                if ctx_uses_emit {
-                    // Arc C's own first real conversion slice (#1317):
-                    // `emit_events_fanout_do` returns a real `TsProgram`
-                    // directly — the first `bynk-emit` construction site
-                    // that reaches `Document::Ts` with no `Verbatim` wrap.
-                    let fanout_program =
-                        emitter::emit_events_fanout_do(ctx_name, &own_event_routes);
-                    compiled.push(StagedFile {
-                        output_path: PathBuf::from(format!("workers/{dashes}/events_fanout.ts")),
-                        document: Document::Ts(fanout_program),
-                        source_map: None,
-                        debug_metadata: None,
-                    });
-                }
-                // Arc C slice 3 (#1321): `emit_worker_compose` returns a
-                // real `TsProgram` directly — the second `bynk-emit`
-                // construction site (after `events_fanout.ts`'s own,
-                // #1317) that reaches `Document::Ts` with no `Verbatim`
-                // wrap.
-                compiled.push(StagedFile {
-                    output_path: PathBuf::from(format!("workers/{dashes}/compose.ts")),
-                    document: Document::Ts(compose_ts),
-                    source_map: None,
-                    debug_metadata: None,
-                });
-                compiled.push(StagedFile {
-                    output_path: PathBuf::from(format!("workers/{dashes}/wrangler.toml")),
-                    document: Document::Toml(wrangler_doc),
-                    source_map: None,
-                    debug_metadata: None,
-                });
-                // v0.172 (ADR 0195 D5): the secret names this Worker's handlers
-                // will read from `env`, for `deploy` to check before it pushes.
-                // Emitted from the same seams the entry lowers, so the two
-                // cannot describe different Workers.
-                //
-                // v0.173 (ADR 0196): plus the literal `bynk.Secrets` names it
-                // reads, and whether that list is everything. The walk is here
-                // rather than in the checker because it needs `unit_flattened`
-                // to answer *whose* `Secrets` this is (D4) and the warning sink
-                // to say when it cannot know a name — and `bynk-check` has
-                // neither. Absent when there is nothing at all to say (D5).
-                // The warnings half is dropped here: `run_checks` already raised
-                // it, on the analyse path the editor shares.
-                // v0.177 (#643): the contract hashes this context's entry
-                // enforces, written where `deploy` can read them — so a skew is
-                // refused at the push rather than discovered by live traffic.
-                // #2750: the SAME table the entry's hashes (`own_contracts`
-                // above) and every caller's `expects` are computed from —
-                // `own_types`, bound once from `contract_types_for`. A second
-                // binding from `combined_types_for` here left a consumed
-                // context's exported type unresolved in `provides`.
-                // What this context expects of each dependency — the same hash
-                // it stamps at each call site, computed the same way: in the
-                // *dependency's* namespace, from the dependency's own table.
-                //
-                // Only the services this context actually **calls**. Recording
-                // everything the dependency provides would refuse a deploy over a
-                // service this caller never touches — a skew its runtime check
-                // could never fire on. See `called_cross_context_services`.
-                let mut expects: std::collections::BTreeMap<
-                    String,
-                    std::collections::BTreeMap<String, String>,
-                > = std::collections::BTreeMap::new();
-                let mut expects_shapes: std::collections::BTreeMap<
-                    String,
-                    std::collections::BTreeMap<String, String>,
-                > = std::collections::BTreeMap::new();
-                for (dep, services) in &called {
-                    let Some(dep_table) = unit_tables.get(dep) else {
-                        continue;
-                    };
-                    let dep_types = bynk_check::symbols::contract_types_for(
-                        dep,
-                        &unit_tables,
-                        &unit_uses,
-                        &unit_consumes,
-                    )
-                    .0;
-                    let all = bynk_check::contract::own_contract_hashes(dep_table, &dep_types);
-                    let hashes: std::collections::BTreeMap<String, String> = all
-                        .into_iter()
-                        .filter(|(svc, _)| services.contains(svc))
-                        .collect();
-                    if !hashes.is_empty() {
-                        // #2485: the structure behind each hash, from the same
-                        // dependency table.
-                        let dep_shapes: std::collections::BTreeMap<String, String> =
-                            bynk_check::contract_compat::own_contract_shapes(dep_table, &dep_types)
-                                .into_iter()
-                                .filter(|(svc, _)| hashes.contains_key(svc))
-                                .collect();
-                        expects_shapes.insert(dep.clone(), dep_shapes);
-                        expects.insert(dep.clone(), hashes);
-                    }
-                }
-                // I4 (#1970): what each declared foreign caller's generated
-                // client embeds, recorded beside `provides` so `deploy` can
-                // hold it against the caller's pin.
-                let foreign = emitter::client::foreign_contracts(table, &own_types);
-                if let Some(manifest) = emitter::contracts::emit_contracts_manifest(
-                    &bynk_check::contract::own_contract_hashes(table, &own_types),
-                    &expects,
-                    &foreign,
-                    &emitter::contracts::Shapes {
-                        provides: bynk_check::contract_compat::own_contract_shapes(
-                            table, &own_types,
-                        ),
-                        expects: expects_shapes,
-                        accepts: accepted.hashes.clone(),
-                    },
-                ) {
-                    compiled.push(StagedFile {
-                        output_path: PathBuf::from(format!(
-                            "workers/{dashes}/{}",
-                            emitter::contracts::CONTRACTS_MANIFEST
-                        )),
-                        document: Document::Json(manifest),
-                        source_map: None,
-                        debug_metadata: None,
-                    });
-                }
-
-                // I4 (#1970): the typed TypeScript client a foreign caller
-                // imports, when the context declares one.
-                if let Some(client) = emitter::client::emit_client(ctx_name, table, &own_types) {
-                    compiled.push(StagedFile {
-                        output_path: PathBuf::from(format!(
-                            "workers/{dashes}/{}",
-                            emitter::client::CLIENT_FILE
-                        )),
-                        document: Document::Ts(client),
-                        source_map: None,
-                        debug_metadata: None,
-                    });
-                }
-
-                let reads = emitter::secrets::secret_reads(
-                    ctx_name,
-                    &unit_tables,
-                    &unit_consumes,
-                    &unit_consumes_aliases,
-                    &unit_flattened,
-                );
-                if let Some(manifest) = emitter::emit_secrets_manifest(table, &reads) {
-                    compiled.push(StagedFile {
-                        output_path: PathBuf::from(format!(
-                            "workers/{dashes}/{}",
-                            emitter::secrets::SECRETS_MANIFEST
-                        )),
-                        document: Document::Json(manifest),
-                        source_map: None,
-                        debug_metadata: None,
-                    });
-                }
             }
         }
     }
@@ -4496,6 +4909,32 @@ fn deps_entry_sort_key(key: &str) -> String {
     format!("{key}:")
 }
 
+/// #2683: a `call` handler that calls `within` (or sends) reads `deps.__exec`.
+/// The bundle has no platform execution context, so what it is handed is kept
+/// alive by the process; a fault in it, with no handler left to raise it to, is
+/// reported by the same reporter `e.detach()` uses (#3541), not a logger of the
+/// shim's own. `None` when no handler of the context needs one.
+fn bundle_process_exec_entry(table: &UnitTable) -> Option<(String, TsExpr)> {
+    table
+        .services
+        .values()
+        .any(|s| {
+            s.handlers
+                .iter()
+                .any(|h| bynk_emit::emitter::call_handler_needs_exec(&table.exec_plan, h))
+        })
+        .then(|| ("__exec".to_string(), ident("__bynkProcessExec()")))
+}
+
+/// The composition root's import of `__bynkProcessExec` from the runtime.
+fn process_exec_import() -> Vec<TsStmt> {
+    emitter::runtime_files::runtime_import_stmts(
+        false,
+        &["__bynkProcessExec".to_string()],
+        "./runtime.js",
+    )
+}
+
 #[allow(clippy::too_many_arguments)]
 fn emit_composition_root(
     groups: &BTreeMap<String, Vec<usize>>,
@@ -4521,66 +4960,14 @@ fn emit_composition_root(
     // own per-Worker fan-out wiring, so it is shared rather than rebuilt).
     event_subscribers: &BTreeMap<(String, String), Vec<(String, String)>>,
 ) -> Option<TsProgram> {
-    // Identify contexts that consume something whose surface has services.
-    let mut needs_compose = false;
-    for (name, targets) in unit_consumes {
-        if !targets.is_empty()
-            && let Some(UnitKind::Context) = kinds.get(name)
-        {
-            for t in targets {
-                if let Some(other) = unit_tables.get(t)
-                    && !other.services.is_empty()
-                {
-                    needs_compose = true;
-                }
-            }
-        }
-    }
-    // v0.15: also compose when a context uses a consumed context's capability
-    // (in a handler or in a provider's `given`) — the consumer must instantiate
-    // the provided capability's provider locally.
-    if !needs_compose {
-        for (name, kind) in kinds {
-            if *kind != UnitKind::Context {
-                continue;
-            }
-            let Some(table) = unit_tables.get(name) else {
-                continue;
-            };
-            let consumed = unit_consumes.get(name).cloned().unwrap_or_default();
-            let aliases = unit_consumes_aliases.get(name).cloned().unwrap_or_default();
-            let flattened = unit_flattened.get(name).cloned().unwrap_or_default();
-            if !handler_cross_caps(table, &consumed, &aliases, &flattened).is_empty()
-                || table.providers.values().any(|p| {
-                    p.given.iter().any(|g| {
-                        g.is_cross_context()
-                            // v0.18: a bare given flattened from `consumes U
-                            // { Cap }` is cross-unit too — its provider lives
-                            // in the consumed unit.
-                            || (g.prefix().is_none() && flattened.contains_key(g.key()))
-                    })
-                })
-                // Events track, slice 0 (spine #936): a context whose
-                // handlers emit needs its own `__eventsDispatch` closure
-                // built by compose (§ `discover_event_subscribers`) even
-                // when it consumes nothing and no other context consumes
-                // it — `Events` is filtered out of `handler_cross_caps`
-                // (there is no `EventsProvider`), so without this check a
-                // publish-only context would never get a compose entry and
-                // its service would simply never be called.
-                || unit_table_uses_emit(table, unit_callees.get(name))
-                // S4a (#1966): a derived capability's instance is its base's
-                // platform provider, built by compose like a flattened one.
-                || !table.derived.is_empty()
-            {
-                needs_compose = true;
-                break;
-            }
-        }
-    }
-    if !needs_compose {
-        return None;
-    }
+    project_model::composition_root_trigger(
+        kinds,
+        unit_consumes,
+        unit_consumes_aliases,
+        unit_tables,
+        unit_callees,
+        unit_flattened,
+    )?;
 
     let mut contexts: Vec<&String> = groups
         .keys()
@@ -4632,6 +5019,8 @@ fn emit_composition_root(
     }
 
     let mut body: Vec<TsStmt> = Vec::new();
+    // #3541: whether a context took the bundle's process execution context.
+    let mut process_exec_used = false;
 
     for ctx_name in &ordered {
         if kinds.get(ctx_name.as_str()) != Some(&UnitKind::Context) {
@@ -4641,8 +5030,9 @@ fn emit_composition_root(
             continue;
         };
         // A context's deps object exists only to feed its `__makeSurface`; a
-        // capability-only context (no services) needs neither (v0.15).
-        if table.services.is_empty() {
+        // capability-only context (no services) needs neither (v0.15). The
+        // bundle's `bynk.capability.not_provided` check skips the same ones.
+        if !project_model::composed_in_bundle_root(table) {
             continue;
         }
         let ns = ctx_name.replace('.', "_");
@@ -4814,19 +5204,9 @@ fn emit_composition_root(
             };
             deps_entries.push(("__eventsDispatch".to_string(), arrow));
         }
-        // #2683: a `call` handler that calls `within` (or sends) reads
-        // `deps.__exec`. The bundle has no platform execution context, so what
-        // it is handed is kept alive by the process; a fault in it, with no
-        // handler left to raise it to, is logged.
-        if table.services.values().any(|s| {
-            s.handlers
-                .iter()
-                .any(|h| bynk_emit::emitter::call_handler_needs_exec(&table.exec_plan, h))
-        }) {
-            deps_entries.push((
-                "__exec".to_string(),
-                ident("{ waitUntil(promise: globalThis.Promise<unknown>): void { promise.catch((e) => globalThis.console.error(\"an abandoned effect failed\", String(e))); } }"),
-            ));
+        if let Some(entry) = bundle_process_exec_entry(table) {
+            process_exec_used = true;
+            deps_entries.push(entry);
         }
         deps_entries.sort_by_cached_key(|(k, _)| deps_entry_sort_key(k));
 
@@ -4943,6 +5323,9 @@ fn emit_composition_root(
         None,
     ));
     program.push(TsStmt::comment("composition root", None));
+    if process_exec_used {
+        program.stmts.extend(process_exec_import());
+    }
 
     // Import every context as a namespace.
     for ctx_name in &contexts {
@@ -5495,6 +5878,8 @@ mod tests {
             &roots.excludes(),
             None,
             false,
+            false,
+            false,
             true,
             &SchemaLock::Off,
             None,
@@ -5776,6 +6161,8 @@ mod tests {
             &sources,
             &roots.excludes(),
             None,
+            false,
+            false,
             false,
             true,
             &SchemaLock::Off,

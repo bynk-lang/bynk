@@ -606,6 +606,8 @@ pub fn phase_integration_bodies(
     errors: &mut Vec<CompileError>,
     refs: &mut RefSink,
     tys: &Arc<Types>,
+    // #3147: the migrations' schemas, which a `D1.peek` read is prepared against.
+    d1_sql: Option<&crate::d1_sql::D1Sql>,
 ) -> HashMap<String, resolver::CrossContextInfo> {
     let mut ready: HashMap<String, resolver::CrossContextInfo> = HashMap::new();
 
@@ -751,45 +753,7 @@ pub fn phase_integration_bodies(
         }
 
         // -- #2026: a `stub` has nothing to override at `system`. --
-        // Each participant runs as the Worker it deploys as, and its
-        // composition root builds every capability provider from its own
-        // `env`, so the harness has no seam to put a double in. Refused
-        // rather than accepted and dropped. Reported without marking the
-        // suite `bad`, like #1738 above.
-        for &i in indices {
-            let Some(d) = parsed[i].integration() else {
-                continue;
-            };
-            let system = bynk_syntax::ast::TestTier::System;
-            let suite_stubs = d
-                .stubs
-                .iter()
-                .filter(|_| suite_effective_tier_is_system(d))
-                .map(|s| (s, "suite"));
-            let case_stubs = d
-                .cases
-                .iter()
-                .filter(|c| case_effective_tier(c, d) == system)
-                .flat_map(|c| c.stubs.iter().map(|s| (s, "case")));
-            for (stub, scope) in suite_stubs.chain(case_stubs) {
-                errors.push(
-                    CompileError::new(
-                        "bynk.stub.at_system",
-                        stub.span,
-                        format!(
-                            "`stub {}.{}` is in a `system`-tier {scope}, where a `stub` has no effect",
-                            stub.capability.name, stub.method.name
-                        ),
-                    )
-                    .with_note(
-                        "a `system` case runs each context as the Worker it deploys as, which builds its own capability providers; no seam can be overridden there",
-                    )
-                    .with_note(format!(
-                        "move the case into a `suite {suite_target}` below `system` (`unit`, or `as integration`), where a `stub` overrides the seam"
-                    )),
-                );
-            }
-        }
+        refuse_stubs_at_system(indices, parsed, &suite_target, errors);
 
         if bad {
             continue;
@@ -944,18 +908,22 @@ pub fn phase_integration_bodies(
                 let case_callees = if unchecked {
                     Default::default()
                 } else {
-                    typecheck_integration_case_body(
-                        &participants,
-                        &view,
-                        SuiteItems::of(d),
+                    let body = IntegrationBody {
+                        participants: &participants,
+                        view: &view,
+                        suite: d,
                         case,
-                        &cross_context,
+                        cross_context: &cross_context,
                         unit_tables,
+                    };
+                    check_integration_body(
+                        &body,
+                        d1_sql,
+                        parsed[first].source(),
                         &mut body_errs,
                         refs,
                         tys,
                     )
-                    .1
                 };
                 check_faults_tier(case, case_effective_tier(case, d), &mut body_errs);
                 check_snapshot_placement(case, true, &mut body_errs);
@@ -1034,6 +1002,93 @@ pub fn phase_integration_bodies(
     }
 
     ready
+}
+
+/// #2026: a `stub` has nothing to override at `system`.
+///
+/// Each participant runs as the Worker it deploys as, and its composition root
+/// builds every capability provider from its own `env`, so the harness has no
+/// seam to put a double in. Refused rather than accepted and dropped. Reported
+/// without marking the suite `bad`, like #1738.
+fn refuse_stubs_at_system(
+    indices: &[usize],
+    parsed: &[ParsedFile],
+    suite_target: &str,
+    errors: &mut Vec<CompileError>,
+) {
+    for &i in indices {
+        let Some(d) = parsed[i].integration() else {
+            continue;
+        };
+        let system = bynk_syntax::ast::TestTier::System;
+        let suite_stubs = d
+            .stubs
+            .iter()
+            .filter(|_| suite_effective_tier_is_system(d))
+            .map(|s| (s, "suite"));
+        let case_stubs = d
+            .cases
+            .iter()
+            .filter(|c| case_effective_tier(c, d) == system)
+            .flat_map(|c| c.stubs.iter().map(|s| (s, "case")));
+        for (stub, scope) in suite_stubs.chain(case_stubs) {
+            errors.push(
+                    CompileError::new(
+                        "bynk.stub.at_system",
+                        stub.span,
+                        format!(
+                            "`stub {}.{}` is in a `system`-tier {scope}, where a `stub` has no effect",
+                            stub.capability.name, stub.method.name
+                        ),
+                    )
+                    .with_note(
+                        "a `system` case runs each context as the Worker it deploys as, which builds its own capability providers; no seam can be overridden there",
+                    )
+                    .with_note(format!(
+                        "move the case into a `suite {suite_target}` below `system` (`unit`, or `as integration`), where a `stub` overrides the seam"
+                    )),
+                );
+        }
+    }
+}
+
+/// One integration or `system` case, with what its body is checked against.
+struct IntegrationBody<'a> {
+    participants: &'a [String],
+    view: &'a SuiteView,
+    suite: &'a SuiteDecl,
+    case: &'a Case,
+    cross_context: &'a resolver::CrossContextInfo,
+    unit_tables: &'a HashMap<String, UnitTable>,
+}
+
+/// Type-check an integration or `system` case body, then prepare what it
+/// `D1.peek`s (#3147) against its participants' migrations. Returns the body's
+/// callees.
+fn check_integration_body(
+    body: &IntegrationBody<'_>,
+    d1_sql: Option<&crate::d1_sql::D1Sql>,
+    source: &str,
+    errors: &mut Vec<CompileError>,
+    refs: &mut RefSink,
+    tys: &Arc<Types>,
+) -> HashMap<ExprId, checker::Callee> {
+    let callees = typecheck_integration_case_body(
+        body.participants,
+        body.view,
+        SuiteItems::of(body.suite),
+        body.case,
+        body.cross_context,
+        body.unit_tables,
+        errors,
+        refs,
+        tys,
+    )
+    .1;
+    if let Some(d1_sql) = d1_sql {
+        errors.extend(d1_sql.check_peek_sites(body.unit_tables, &callees, Some(source)));
+    }
+    callees
 }
 
 /// #3162: the declarations recovery skipped in the units a suite can see: the
@@ -1142,7 +1197,16 @@ pub fn typecheck_integration_case_body(
         return_ty,
         case.span,
         HashMap::new(),
-        checker::CapabilityCtx::default(),
+        checker::CapabilityCtx {
+            // #3147: a case may `D1.peek` its participants' databases.
+            peek_env: Some(Arc::new(peek_env(
+                participants,
+                unit_tables,
+                &resolved,
+                tys,
+            ))),
+            ..Default::default()
+        },
         // Slice B: a `system` case addresses the target's own service (`api.POST`)
         // and names a principal (`by User(...)`), so the checker needs the
         // target's services and actors — the same resolution the unit tier does.
@@ -1165,6 +1229,44 @@ pub fn typecheck_integration_case_body(
         },
     );
     (expr_types, callees)
+}
+
+/// #3147: each participant's capabilities, for `D1.peek` to name.
+fn peek_env(
+    participants: &[String],
+    unit_tables: &HashMap<String, UnitTable>,
+    resolved: &ResolvedCommons,
+    tys: &Arc<Types>,
+) -> checker::peek::PeekEnv {
+    let mut env = checker::peek::PeekEnv::default();
+    for p in participants {
+        let Some(table) = unit_tables.get(p) else {
+            continue;
+        };
+        let caps = table
+            .capabilities
+            .iter()
+            .map(|(name, decl)| {
+                let ops = decl
+                    .ops
+                    .iter()
+                    .map(|op| build_capability_op_info(op, &resolved.types, tys))
+                    .collect();
+                let info = checker::CapabilityInfo {
+                    name: name.clone(),
+                    ops,
+                    derived_from: crate::context_checks::derived_from(
+                        decl,
+                        &resolved.cross_context.flattened_caps,
+                    ),
+                };
+                let binding = table.derived.get(name).map(|d| d.binding.clone());
+                (name.clone(), checker::peek::PeekCap { info, binding })
+            })
+            .collect();
+        env.participants.insert(p.clone(), caps);
+    }
+    env
 }
 
 /// The harness-root [`ResolvedCommons`] a `system` case (or a suite helper) is
@@ -1282,10 +1384,18 @@ fn fixture_as_embed(f: &FixtureDecl) -> EmbedDecl {
 pub fn add_suite_fns(resolved: &mut ResolvedCommons, items: SuiteItems<'_>) {
     // #3066: the suite's own types and constants join its view the same way.
     for t in items.types {
-        resolved
-            .types
-            .entry(t.name.name.clone())
-            .or_insert_with(|| Arc::new(t.clone()));
+        // #3536: a suite type wins over a standard-library type the target's
+        // braces leave out, which is not in scope under its own name.
+        if resolved.unselected_types.remove(&t.name.name) {
+            resolved
+                .types
+                .insert(t.name.name.clone(), Arc::new(t.clone()));
+        } else {
+            resolved
+                .types
+                .entry(t.name.name.clone())
+                .or_insert_with(|| Arc::new(t.clone()));
+        }
         resolved.local_type_names.insert(t.name.name.clone());
     }
     for c in items.consts {
@@ -1348,7 +1458,14 @@ pub fn add_suite_fns_to_typed(typed: &mut checker::TypedCommons, suite_fns: &[Fn
 fn bound_value_names(resolved: &ResolvedCommons, target: Option<&UnitTable>) -> HashSet<String> {
     let mut names: HashSet<String> = HashSet::new();
     names.extend(resolved.fns.keys().cloned());
-    names.extend(resolved.types.keys().cloned());
+    // #3536: a type the target's braces leave out is not a name in scope.
+    names.extend(
+        resolved
+            .types
+            .keys()
+            .filter(|n| !resolved.unselected_types.contains(*n))
+            .cloned(),
+    );
     names.extend(resolved.consts.keys().cloned());
     names.extend(resolved.embeds.keys().cloned());
     names.extend(resolved.assets.keys().cloned());
@@ -1387,7 +1504,9 @@ pub fn check_suite_decls(
     }
     let mut taken = bound_value_names(resolved, target);
     for t in resolved.types.values() {
-        if let TypeBody::Sum(s) = &t.body {
+        if let TypeBody::Sum(s) = &t.body
+            && !resolved.unselected_types.contains(&t.name.name)
+        {
             taken.extend(s.variants.iter().map(|v| v.name.name.clone()));
         }
     }
@@ -1829,16 +1948,13 @@ fn check_test_bodies(
         let Some(test_decl) = parsed[i].test() else {
             continue;
         };
-        errors.extend(resolver::check_hidden_type_names_in_suite(
+        let maps = (unit_tables, unit_uses, unit_consumes, unit_consumes_aliases);
+        errors.extend(suite_naming_errors(
             test_decl,
-            Some(target_name),
-            &hidden,
-        ));
-        // #1927: nor a type the target hides behind its own value.
-        errors.extend(resolver::check_shadowed_type_names_in_suite(
-            test_decl,
-            &target_shadowed.0,
-            &target_shadowed.1,
+            &parsed[i],
+            target_name,
+            maps,
+            (&hidden, &target_shadowed),
         ));
         // v0.25: test-case edges record in the test file, resolving bare
         // names through the *target* unit's namespace.
@@ -2961,6 +3077,18 @@ pub fn remote_unsupported(
             );
         }
     }
+    // #3147: a read of a participant's in-process test database. A deployment
+    // has none, and reaching a deployed D1 would make a test run touch real data.
+    if callee_list
+        .iter()
+        .any(|c| matches!(c, Callee::D1Peek { .. }))
+    {
+        return refusal(
+            "bynk.test.remote_unsupported_peek",
+            "reads a participant's database with `D1.peek`".to_string(),
+            "a deployment has no in-process test database, and reaching a deployed D1 would make a test run touch real data",
+        );
+    }
     if let Some(svc) = named(&|c| match c {
         Callee::TestAssetFetch { service } => Some(service.clone()),
         _ => None,
@@ -3778,6 +3906,7 @@ fn typecheck_case_body_recording(
             given_used: HashSet::new(),
             given_entries: Vec::new(),
             given_anchor: None,
+            ..Default::default()
         },
         target_test_services(
             Some(target_name),
@@ -4844,6 +4973,7 @@ fn check_property_body(
             given_used: HashSet::new(),
             given_entries: Vec::new(),
             given_anchor: None,
+            ..Default::default()
         },
         target_test_services(
             Some(target_name),
@@ -5333,6 +5463,30 @@ pub fn integration_view(
             }
         }
     }
+    // #3147: a case `D1.peek`s a participant's database and binds the values of
+    // its statements, so the `D1` types are in scope where a participant has one.
+    let has_d1 = participants.iter().any(|p| {
+        unit_tables.get(p).is_some_and(|t| {
+            t.derived
+                .values()
+                .any(|d| d.base_unit == crate::firstparty::CLOUDFLARE_UNIT && d.base_cap == "D1")
+        })
+    });
+    if has_d1 && let Some(cloudflare) = unit_tables.get(crate::firstparty::CLOUDFLARE_UNIT) {
+        for name in [
+            "SqlValue",
+            "SqlError",
+            "SqlReadError",
+            "SqlRun",
+            "SqlStatement",
+        ] {
+            if let Some(decl) = cloudflare.types.get(name) {
+                view.types
+                    .entry(name.to_string())
+                    .or_insert_with(|| decl.clone());
+            }
+        }
+    }
     // #3064: a participant's actors' identity types are reached too.
     view.close(&imported, unit_tables, unit_uses, true);
     view.reach_first_party_types(participants, unit_tables);
@@ -5413,6 +5567,8 @@ pub fn build_privileged_resolved(
     .with_assets(assets)
     .with_embeds(embeds)
     .with_consts(consts)
+    // #3536: the first-party types the target's braces leave out.
+    .with_unselected_types(local.unselected_consumed_types.iter().cloned().collect())
     // #1925: the imports the target hides, so a case naming one reports the
     // conflict as the target's own code would.
     .with_shadowed_imports(crate::project_model::shadowed_imports_in(
@@ -5424,6 +5580,167 @@ pub fn build_privileged_resolved(
             .filter_map(|t| unit_tables.get(t).map(|u| (t, u))),
     ));
     Some((resolved, reach))
+}
+
+/// #3536: each type a unit the suite's target consumes exports, with that unit,
+/// leaving out the names the target (or a commons it `uses`) or the suite
+/// declares itself, which win.
+fn suite_import_owners(
+    suite: &SuiteDecl,
+    target: &str,
+    unit_tables: &HashMap<String, UnitTable>,
+    unit_uses: &HashMap<String, Vec<String>>,
+    unit_consumes: &HashMap<String, Vec<String>>,
+) -> std::collections::BTreeMap<String, String> {
+    let own = |n: &String| {
+        unit_tables
+            .get(target)
+            .is_some_and(|t| t.types.contains_key(n))
+            || unit_uses
+                .get(target)
+                .into_iter()
+                .flatten()
+                .any(|u| unit_tables.get(u).is_some_and(|t| t.types.contains_key(n)))
+            || suite.types.iter().any(|t| t.name.name == *n)
+    };
+    let mut owners = std::collections::BTreeMap::new();
+    for unit in unit_consumes.get(target).into_iter().flatten() {
+        let Some(table) = unit_tables.get(unit) else {
+            continue;
+        };
+        // Two consumed units exporting one name is a clash the target itself
+        // reports; here the first unit owns it, so a suite that consumes the
+        // other's version is reported (a rare edge, listed as open in ADR 0849).
+        for name in table.types.keys().filter(|n| !own(n)) {
+            owners.entry(name.clone()).or_insert_with(|| unit.clone());
+        }
+    }
+    owners
+}
+
+/// The project's unit tables, `uses`, `consumes` and `consumes` aliases.
+type ProjectMaps<'a> = (
+    &'a HashMap<String, UnitTable>,
+    &'a HashMap<String, Vec<String>>,
+    &'a HashMap<String, Vec<String>>,
+    &'a HashMap<String, HashMap<String, String>>,
+);
+
+/// What a target hides behind its own values: the shadowed imports, and the
+/// target's types.
+type TargetShadowed = (
+    HashMap<String, crate::resolver::ShadowedImport>,
+    HashMap<String, Arc<TypeDecl>>,
+);
+
+/// The naming gates a unit suite goes through before its cases are checked: a
+/// type reached only through an imported declaration is hidden (#1814), one the
+/// target hides behind its own value is shadowed (#1927), and (#3536) a type,
+/// capability or service the suite's own `consumes` does not bring in is an error.
+fn suite_naming_errors(
+    suite: &SuiteDecl,
+    pf: &ParsedFile,
+    target: &str,
+    maps: ProjectMaps<'_>,
+    (hidden, shadowed): (&std::collections::BTreeMap<String, String>, &TargetShadowed),
+) -> Vec<CompileError> {
+    let mut errors = resolver::check_hidden_type_names_in_suite(suite, Some(target), hidden);
+    errors.extend(resolver::check_shadowed_type_names_in_suite(
+        suite,
+        &shadowed.0,
+        &shadowed.1,
+    ));
+    errors.extend(check_unselected_suite_imports(
+        suite,
+        pf,
+        target,
+        maps,
+        &shadowed.1,
+    ));
+    errors
+}
+
+/// #3536: [`check_unselected_suite_types`] for the suite `suite` of `target`,
+/// reading what it consumes from the project's maps (tables, `uses`,
+/// `consumes`, aliases).
+fn check_unselected_suite_imports(
+    suite: &SuiteDecl,
+    pf: &ParsedFile,
+    target: &str,
+    maps: ProjectMaps<'_>,
+    types: &HashMap<String, Arc<TypeDecl>>,
+) -> Vec<CompileError> {
+    let (unit_tables, unit_uses, unit_consumes, unit_consumes_aliases) = maps;
+    let owners = suite_import_owners(suite, target, unit_tables, unit_uses, unit_consumes);
+    let consumed = unit_consumes.get(target).map_or(&[][..], Vec::as_slice);
+    let none = HashMap::new();
+    let caps = unit_tables.get(target).map_or(&none, |t| &t.flattened_caps);
+    let aliases = unit_consumes_aliases.get(target).unwrap_or(&none);
+    check_unselected_suite_types(suite, pf, &owners, types, consumed, caps, aliases)
+}
+
+/// #3536: `bynk.consumes.type_not_selected` for a suite file: its own `consumes`
+/// clauses are what bring a name from another unit into scope, not the target's.
+fn check_unselected_suite_types(
+    suite: &SuiteDecl,
+    pf: &ParsedFile,
+    owners: &std::collections::BTreeMap<String, String>,
+    types: &HashMap<String, Arc<TypeDecl>>,
+    consumed: &[String],
+    caps: &HashMap<String, String>,
+    aliases: &HashMap<String, String>,
+) -> Vec<CompileError> {
+    let consumed: std::collections::BTreeSet<String> = consumed.iter().cloned().collect();
+    let file = resolver::FileConsumes {
+        consumed: &consumed,
+        // A suite-side alias (`consumes x { T as U }`) is not modelled in the
+        // first stage: an alias names a type of the target's table, so naming
+        // one in a suite is not reported. A follow-up if suites may alias.
+        aliases: &HashMap::new(),
+        clauses: &suite.consumes,
+        insert_at: new_suite_consumes_position(suite, pf.source()),
+    };
+    let mut found = resolver::check_unselected_type_names_in_suite(suite, owners, types, &file);
+    let caps = caps.iter().map(|(n, o)| (n.clone(), o.clone())).collect();
+    found.extend(resolver::check_unselected_capabilities_in_suite(
+        suite, &caps, &file,
+    ));
+    let prefixes = consumed
+        .iter()
+        .map(|u| (u.clone(), u.clone()))
+        .chain(aliases.iter().map(|(a, u)| (a.clone(), u.clone())))
+        .collect();
+    found.extend(resolver::check_unconsumed_unit_calls_in_suite(
+        suite, &prefixes, &file,
+    ));
+    found
+}
+
+/// Where a `consumes` line a suite lacks is inserted: after its last `uses` or
+/// `consumes`, else after its `suite <target> [as <tier>]` header
+/// ([`resolver::new_consumes_position`]).
+fn new_suite_consumes_position(suite: &SuiteDecl, source: &str) -> Option<(usize, String)> {
+    let last = suite
+        .uses
+        .iter()
+        .map(|u| u.span.end)
+        .chain(suite.consumes.iter().map(|c| c.span.end))
+        .max();
+    let mut end = suite.target.span.end;
+    let rest = source.get(end..)?;
+    let after_blank = rest.trim_start_matches([' ', '\t']);
+    if let Some(tier) = after_blank
+        .strip_prefix("as")
+        .filter(|t| t.starts_with([' ', '\t']))
+    {
+        let word = tier.trim_start_matches([' ', '\t']);
+        let len = word
+            .find(|c: char| !c.is_ascii_alphanumeric() && c != '_')
+            .unwrap_or(word.len());
+        end = source.len() - word.len() + len;
+    }
+    let braced = suite.form == CommonsForm::Brace;
+    resolver::new_consumes_position(source, last, end, braced)
 }
 
 #[cfg(test)]
@@ -6169,7 +6486,9 @@ mod event_address_tests {
             ("shop/ledger.bynk", &ledger("consumes shop.order", "")),
             (
                 "shop/tests/ledger.test.bynk",
-                &suite("    let _ <- OnPlaced.event(Placed { id: \"o1\" })"),
+                // #3536: a suite consumes what it names.
+                &suite("    let _ <- OnPlaced.event(Placed { id: \"o1\" })")
+                    .replace("{\n  case", "{\n  consumes shop.order\n  case"),
             ),
         ]);
         a.assert_clean();

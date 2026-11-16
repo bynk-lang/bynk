@@ -269,6 +269,12 @@ place it (Slice F,
 rejected state, the call that provoked a refusal, and a refusal in a `system` suite or
 a remote run, which does not reach the case.
 
+**`bynk eval`** (#3585) runs a snippet in a unit's scope against the project and
+prints its value as JSON, on the same build and runner as `bynk test`. Its
+downstream consumer is the editor's Bynk notebooks, where each expression cell
+is one stateless evaluation (vscode-bynk#151). The refined-type explorer keeps
+its own in-editor evaluation (ADR 0638).
+
 ## 6. Suggested sequencing
 
 1. **B‑0** (server provisioning) — without it nothing else is *felt*. Smallest, highest impact.

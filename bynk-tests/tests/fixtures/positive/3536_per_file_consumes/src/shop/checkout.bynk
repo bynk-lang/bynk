@@ -1,0 +1,18 @@
+context shop
+
+// #3536: imports are per file. Each file of this context consumes everything it
+// names, repeating the clauses; the unit's dependencies are their union.
+
+consumes bynk { Clock, TimedOut }
+consumes pay
+
+fn late(t: TimedOut) -> Bool {
+  true
+}
+
+service checkout {
+  on call() -> Effect[Int] given Clock {
+    let _ <- Clock.now()
+    pay.charge(1)
+  }
+}

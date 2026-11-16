@@ -110,7 +110,7 @@ on POST("/hooks/:id") (id: String) -> Effect[HttpResult[String]] by Visitor give
 `claim` records no outcome, so there is nothing to replay: use it when the work should run
 at most once. It is separate from `dedup`/`remember`, which never see a claim.
 
-In a service handler, the compiler settles the claims the handler made when it exits:
+In a service handler or an agent handler, the compiler settles the claims the handler made when it exits:
 
 - **A failure releases the claim**, so a retry can claim again. A failure is a fault, a
   returned `Err`, or an `HttpResult` that is a 5xx (`ServerError`, `ServiceUnavailable`
@@ -125,8 +125,11 @@ In a service handler, the compiler settles the claims the handler made when it e
 
 The guarantee is **at-most-once completion, not exactly-once side effects**: work done
 before a failure, such as a call to another service, can repeat on the retry. Make those
-calls idempotent too. A `claim` outside a service handler (in an agent handler, say) is not
-settled: it is held for `expiresAfter` whether or not the work succeeds.
+calls idempotent too. A `claim` in a service handler or an agent handler is settled, an agent
+handler's after its state commit and events flush, so a failure of either releases it. A
+`claim` anywhere else is not settled: it is held for `expiresAfter` whether or not the
+work succeeds. Settling an agent's claim releases only the claim: state the handler wrote before
+returning an `Err` is still committed, and a retry repeats that write.
 
 The key is scoped to the calling handler as for `dedup`.
 
@@ -157,7 +160,7 @@ on POST("/hooks/:id") (id: String) -> Effect[HttpResult[String]] by Visitor give
 `claim` records no outcome, so there is nothing to replay: use it when the work should run
 at most once. It is separate from `dedup`/`remember`, which never see a claim.
 
-In a service handler, the compiler settles the claims the handler made when it exits:
+In a service handler or an agent handler, the compiler settles the claims the handler made when it exits:
 
 - **A failure releases the claim**, so a retry can claim again. A failure is a fault, a
   returned `Err`, or an `HttpResult` that is a 5xx (`ServerError`, `ServiceUnavailable`
@@ -172,8 +175,11 @@ In a service handler, the compiler settles the claims the handler made when it e
 
 The guarantee is **at-most-once completion, not exactly-once side effects**: work done
 before a failure, such as a call to another service, can repeat on the retry. Make those
-calls idempotent too. A `claim` outside a service handler (in an agent handler, say) is not
-settled: it is held for `expiresAfter` whether or not the work succeeds.
+calls idempotent too. A `claim` in a service handler or an agent handler is settled, an agent
+handler's after its state commit and events flush, so a failure of either releases it. A
+`claim` anywhere else is not settled: it is held for `expiresAfter` whether or not the
+work succeeds. Settling an agent's claim releases only the claim: state the handler wrote before
+returning an `Err` is still committed, and a retry repeats that write.
 
 The key is scoped to the calling handler as for `dedup`. The in-memory provider makes the
 claim atomic within one process; it is no more durable than `dedup`.
@@ -480,10 +486,17 @@ Consuming it **locks the deployment unit to Cloudflare** (it cannot then target
 | **`RateLimit`** *(experimental)* | `allow(key: String) -> Effect[Bool]`. Used only through a named instance that sets its limit and window; see below. |
 | **`EdgeCache`** *(experimental)* | `purge(prefixes: List[String]) -> Effect[Bool]`. Used only through a named instance, at most one per context, which turns Cloudflare's edge cache on for the context's Worker; see below. |
 | **`Version`** *(experimental)* | `current() -> Effect[WorkerVersion]`. One per Worker, used bare; see [The running version](#the-running-version-version). |
+| **`Ai`** *(experimental)* | `run(model: String, input: String) -> Effect[Result[String, AiError]]` · `generate(model, request: GenerateRequest) -> Effect[Result[Generation, AiError]]` · `embed(model, texts: List[String]) -> Effect[Result[List[List[Float]], AiError]]` · `runStream(model, input: String) -> Effect[Result[Stream[String], AiError]]`. One per Worker, used bare; see [Workers AI](#workers-ai-ai). |
+| **`Images`** *(experimental)* | `info(image: Bytes) -> Effect[Result[ImageInfo, ImagesError]]` · `transform(image: Bytes, options: TransformOptions, output: OutputOptions) -> Effect[Result[ImageResult, ImagesError]]` · `transformStream(image: Stream[Bytes], options, output) -> Effect[Result[ImageStream, ImagesError]]`. One per Worker, used bare; see [Images](#images-images). |
+| **`AnalyticsSql`** *(experimental)* | `query(sql: String, params: List[SqlValue]) -> Effect[Result[AnalyticsSqlResult, AnalyticsSqlError]]`. One per Worker, used bare; reads Analytics Engine datasets. See [Reading events](#reading-events-analyticssql). |
 | **`StoredSecret`** *(experimental)* | `get() -> Effect[String]`. Used only through a named instance that names its store and its secret; see [Account secrets](#account-secrets-storedsecret). |
 | **`Email`** *(experimental)* | `send(message: EmailMessage) -> Effect[Result[String, EmailError]]`. Used only through a named instance, which may restrict its senders and recipients; see [Outbound email](#outbound-email-email). |
 | **`Postgres`** *(experimental)* | `all(sql: String, params: List[PgValue]) -> Effect[Result[String, PgError]]` · `first(sql, params) -> Effect[Result[Option[String], PgError]]` · `run(sql, params) -> Effect[Result[PgRun, PgError]]` · `transaction(statements: List[PgStatement]) -> Effect[Result[List[PgRun], PgError]]`, and the compiler-lowered typed reads `select[T]` and `firstAs[T]`. Used only through a named instance; see [Postgres databases](#postgres-databases-postgres). |
 | **`MySql`** *(experimental)* | `all(sql: String, params: List[MySqlValue]) -> Effect[Result[String, MySqlError]]` · `first(sql, params) -> Effect[Result[Option[String], MySqlError]]` · `run(sql, params) -> Effect[Result[MySqlRun, MySqlError]]` · `transaction(statements: List[MySqlStatement]) -> Effect[Result[List[MySqlRun], MySqlError]]`, and the compiler-lowered typed reads `select[T]` and `firstAs[T]`. Takes an optional `@tls("…")`. Used only through a named instance; see [MySQL databases](#mysql-databases-mysql). |
+| **`Vectorize`** *(experimental)* | `upsert(vectors: List[Vector]) -> Effect[Result[Mutation, VectorError]]` · `insert(vectors) -> Effect[Result[Mutation, VectorError]]` · `upsertValue[M: Codable](vectors: List[VectorOf[M]]) -> Effect[Result[Mutation, VectorError]]` · `query(vector: List[Float], options: QueryOptions) -> Effect[Result[List[VectorMatch], VectorError]]` · `getByIds(ids: List[String]) -> Effect[Result[List[Vector], VectorError]]` · `deleteByIds(ids) -> Effect[Result[Mutation, VectorError]]` · `describe() -> Effect[Result[IndexInfo, VectorError]]`. Used only through a named instance that states its dimensions and metric; see [Vector indexes](#vector-indexes-vectorize). |
+| **`Container`** *(experimental)* | `send(instance: String, req: Request) -> Effect[Result[Response, ContainerError]]` · `receiveBytes(instance, req) -> Effect[Result[BytesResponse, ContainerError]]` · `sendBytes(instance, req, body: Bytes) -> Effect[Result[BytesResponse, ContainerError]]`. Used only through a named instance that names its image and port; see [Containers](#containers-container). |
+| **`AiSearch`** *(experimental)* | `search(query: String, options: SearchOptions) -> Effect[Result[List[SearchHit], SearchError]]` · `answer(messages: List[ChatMessage], options: SearchOptions) -> Effect[Result[SearchAnswer, SearchError]]`. Used only through a named instance that names an existing AI Search instance; see [AI Search](#ai-search-aisearch). |
+| **`MtlsCertificate`** *(experimental)* | `send(req: Request) -> Effect[Result[Response, FetchError]]` · `receiveBytes(req) -> Effect[Result[BytesResponse, FetchError]]` · `sendBytes(req, body: Bytes) -> Effect[Result[BytesResponse, FetchError]]`. Used only through a named instance that names a client certificate in the account; see [Mutual TLS](#mutual-tls-mtlscertificate). |
 
 `Kv` is backed by a Worker KV namespace bound as `env.KV`; the
 `[[kv_namespaces]]` stanza is derived for you.
@@ -790,9 +803,24 @@ on POST("/signup/:plan") (plan: String) -> Effect[HttpResult[String]] by Visitor
 
 A point over a limit faults the write; the platform's own cap of 250 writes per
 Worker invocation faults with the platform's error. The write is sent after the
-response, so it never delays one. Reading is the account's SQL API, outside
-Bynk. The platform keeps data for three months, readable with any account
+response, so it never delays one. Reading is [`AnalyticsSql`](#reading-events-analyticssql).
+The platform keeps data for three months, readable with any account
 analytics token, so keep secrets and personal data out of it.
+
+`dataset()` is the dataset's name as a table in a query: `events.analyticsEngine.shop_cart_signups`,
+and `events.analyticsEngine.shop_cart_signups_staging` under `--env staging`. A query built from
+it reads the environment it runs in without writing either name:
+
+```bynk,fragment
+let table <- Signups.dataset()
+let sql = "SELECT count() AS n FROM \(table) WHERE timestamp > NOW() - INTERVAL '1' DAY"
+```
+
+The name comes from one `[vars]` entry per dataset in the generated configuration,
+`BYNK_DATASET_ANALYTICS_SIGNUPS` for `Signups`, which `bynk deploy` qualifies for each environment
+as it does the binding's `dataset`. Names starting `BYNK_DATASET_` are reserved: a
+`[test.targets]` `vars` entry with one is refused. In tests `dataset()` answers a stand-in
+(`events.analyticsEngine.test_signups`), and `stub Signups.dataset() returns …` gives another.
 
 In tests each instance accepts every write within the limits, and faults on one
 over them, as the platform binding does. `stub Signups.write(_)` and
@@ -801,6 +829,81 @@ experimental: list `"bynk.cloudflare.Analytics"` under `[unstable] allow`.
 `bynk deploy` has nothing to create, since the platform makes a dataset on its
 first write; see
 [Deploy to Cloudflare](/book/guides/projects-build-and-deployment/deploy-to-cloudflare/#analytics-engine-datasets).
+
+### Reading events: `AnalyticsSql`
+
+`AnalyticsSql` reads Analytics Engine datasets through the account's
+[SQL API](https://developers.cloudflare.com/analytics/sql-api/workers-binding/). It is
+bound once per Worker and used bare, as `Ai` is: there are no named instances, and
+`capability X = AnalyticsSql` is refused (`bynk.capability.base_not_instantiable`).
+
+```bynk,fragment
+consumes bynk
+consumes bynk.cloudflare { Analytics, AnalyticsSql, AnalyticsSqlError }
+
+capability Signups = Analytics
+
+type Row = { n: Int }
+
+service report from http {
+	on GET("/signups/:country") (country: String) -> Effect[HttpResult[Int]] by Visitor given AnalyticsSql, Signups {
+		let table <- Signups.dataset()
+		let sql = "SELECT count() AS n FROM \(table) WHERE blob1 = $1 AND timestamp > NOW() - INTERVAL '1' DAY"
+		let res <- AnalyticsSql.query(sql, [Text(country)])
+		match res {
+			Ok(r) => {
+				let rows = Json.decode[List[Row]](r.data)
+				match rows {
+					Ok([first]) => Ok(first.n),
+					_ => ServerError("the reply was not one count"),
+				}
+			},
+			Err(SqlRetryable(_)) => ServerError("try again shortly"),
+			Err(_) => ServerError("the query was refused"),
+		}
+	}
+}
+```
+
+The binding is `CF_ANALYTICS_SQL`, an `[analytics]` stanza that names no resource, so
+`bynk deploy` has nothing to create. A result is:
+
+```bynk,fragment
+type AnalyticsSqlStatistics = { elapsedMs: Int, rowsRead: Int, bytesRead: Int }
+type AnalyticsSqlResult     = { data: String, rows: Int, statistics: AnalyticsSqlStatistics }
+type AnalyticsSqlError      = | SqlRetryable(message: String) | SqlRejected(message: String)
+```
+
+- `data` is the result rows as JSON text, an array of objects keyed by column; decode it
+  with `Json.decode`. `rows` is how many result rows there are, which is not what a `count()`
+  counted: `SELECT count()` without a `GROUP BY` is always one row, with the count in `data`.
+- `SqlRetryable` is a failure the platform marks as worth another try; `SqlRejected` is
+  every other failure, and a reply that is not the documented shape. `AnalyticsSqlError`
+  is an [extensible enum](#extensible-enums): a `match` over it needs an `Err(_)` arm.
+- Parameters are `SqlValue`s, as for `D1`, and bind positionally as `$1`, `$2`, and so
+  on. Analytics SQL takes `Null`, `Integer`, `Real`, `Text` and `Boolean`; a `Blob`,
+  an `Integer` outside the exactly-representable range or a non-finite `Real` is
+  `SqlRejected`, and nothing is sent.
+
+The rules of the SQL API apply as the platform states them, and the query is checked
+only by the platform:
+
+- A dataset is read as `events.analyticsEngine.<DATASET>`; `Analytics.dataset()` gives the
+  name for one of yours, for the environment the Worker runs in.
+- Bound the query's time range from below (a lower `timestamp` bound), so it reads a
+  window rather than the whole retention period.
+- Do not filter on `accountTag` or `zoneTag`, and do not add a `FORMAT` clause: the
+  binding scopes the query to your account and returns JSON itself.
+
+There is no local implementation, so under `bynk dev` a query runs on your Cloudflare
+account and reads your deployed datasets. The development copy of the Worker's
+configuration marks the binding `remote = true`, and `bynk dev` warns once, on the first
+query, unless `analytics-sql = "allow"` is under `[dev]` in `bynk.toml`.
+
+A test never reads Analytics Engine: `query` **faults** until
+`stub AnalyticsSql.query(_, _) returns …` gives it a reply, so a test never reaches
+the account. `AnalyticsSql` is experimental: list `"bynk.cloudflare.AnalyticsSql"`
+under `[unstable] allow`.
 
 ### The running version: `Version`
 
@@ -839,6 +942,211 @@ version (id `"test"`, no tag, `deployed` at the epoch), so a result never
 depends on when or where the test runs, and `stub Version.current() returns …`
 gives another. A `system` test's Workers report id `"integration"`. `Version` is
 experimental: list `"bynk.cloudflare.Version"` under `[unstable] allow`.
+
+### Workers AI: `Ai`
+
+`Ai` runs a model on Cloudflare's [Workers AI](https://developers.cloudflare.com/workers-ai/)
+through the Worker's `[ai]` binding, which needs no API token and no account id.
+A Worker has one such binding, so `Ai` is used bare, with no named instances
+(`capability Chat = Ai` is `bynk.capability.base_not_instantiable`):
+
+```bynk,fragment
+consumes bynk
+consumes bynk.cloudflare { Ai, AiError }
+
+service translate from http {
+	on POST("/translate") (text: String) -> Effect[HttpResult[String]] by Visitor given Ai {
+		let reply <- Ai.run("@cf/meta/m2m100-1.2b", Json.encode(TranslateIn { text: text, source_lang: "en", target_lang: "fr" }))
+		match reply {
+			Ok(json) => Ok(json),
+			Err(ModelNotFound) => NotFound,
+			Err(_) => ServerError("model unavailable"),
+		}
+	}
+}
+```
+
+`run(model, input)` runs any model by its id. `input` is the model's JSON input
+as text and the reply is the model's JSON output as text, so a model Cloudflare
+ships tomorrow works today: build the input with `Json.encode` and read the
+reply with `Json.decode` in a second step, which returns a matchable error
+instead of faulting when a model's output is not the shape you expected. The
+model id is a string, checked only for being 1 to 128 characters of
+`A-Z a-z 0-9 @ / . _ : -`; an `input` that is not a JSON object is a fault. A
+model that answers with binary data (an image, say) is `AiFailed`.
+
+`generate` and `embed` are typed for the two tasks whose shape is the same across
+models:
+
+```bynk,fragment
+type ChatRole = enum { System, User, Assistant }
+type ChatMessage = { role: ChatRole, content: String }
+type GenerateRequest = {
+	messages: List[ChatMessage],
+	maxTokens: Option[Int] = None,
+	temperature: Option[Float] = None,
+	topP: Option[Float] = None,
+	seed: Option[Int] = None,
+}
+type TokenUsage = { promptTokens: Int, completionTokens: Int }
+type Generation = { text: String, usage: Option[TokenUsage] }
+```
+
+`generate(model, request)` is chat-style generation: `request.messages` must not be
+empty (a fault), a setting left `None` is the model's own default, and the
+`Generation` has the model's `text` and, when the platform reported it, its token
+`usage`. The text comes from the model's `response`, or from
+`choices[0].message.content` for a model that answers in that shape instead. `embed(model, texts)` embeds a batch and returns one vector per text, in
+order and all the same length, which pairs with a vector index's `List[Float]` unchanged; an empty `texts`
+is a fault. `embed` does not check how many texts one call may carry, since the
+limit is the model's and drifts: a call over it is `InvalidInput`. The
+embeddings use the platform's default pooling, so an index built from them stays
+consistent. Both return `BadReply(message)` when the platform answers but not in
+the shape they promise (a model that is not of that kind, or an embedding reply whose vectors are empty or of different lengths), and never fault on
+it; `run` returns the model's JSON as given and cannot be a `BadReply`.
+
+`runStream(model, input)` is `run` with the reply streamed, for serving a model's
+output as it is produced:
+
+```bynk,fragment
+service chat from http {
+	on GET("/chat") () -> Effect[HttpResult[String]] by Visitor given Ai {
+		let started <- Ai.runStream("@cf/meta/llama-3.2-1b-instruct", "{\"prompt\": \"Tell me a story\"}")
+		match started {
+			Ok(events) => Streaming(events),
+			Err(_) => ServerError("model unavailable"),
+		}
+	}
+}
+```
+
+Each element is one event of the model's own stream, as the JSON text of that
+event, so the client sees what Workers AI sends (the shape is the model's: a
+handler that wants text deltas maps the stream and decodes each event; for a
+chat model the events observed on a real account carry a `response` text delta,
+which Cloudflare does not document). The
+binding asks the model to stream; the terminal `[DONE]` marker is consumed, not
+yielded. A refusal before the stream starts (an unknown model, a usage limit) is
+the `Err`, so the handler can answer with an ordinary response; a failure after
+the first event faults the stream and aborts the response, as a failing producer
+does. A model that does not stream is `AiFailed`. A client that hangs up cancels
+the model's stream, once the Worker next writes to it. A stream a handler never
+reads or serves is never cancelled, as with any `Stream`: read it or serve it. Like every `Stream`, the
+result is read once and cannot cross a service boundary: the handler that calls
+`runStream` is the one that serves it.
+
+An `AiError` is `ModelNotFound` (an id the platform does not know, or has
+retired), `InvalidInput(message)` (a request refused as malformed or too large),
+`QuotaExceeded` (a usage limit of the account, or a model its plan does not
+include), `Overloaded` (temporary capacity, worth retrying), `BadReply(message)`
+(`generate` and `embed` only: the reply was not the shape promised) or
+`AiFailed(message)` (anything else, with the platform's message). Cloudflare
+adds error codes over time, so a `match` over `AiError` needs a wildcard.
+
+A Worker whose code reaches `Ai`, directly or through a provider's `given`,
+declares `[ai]` bound as `env.AI`; one that does not declares nothing. There is
+nothing for `bynk deploy` to create.
+
+Workers AI is a remote service on your Cloudflare account, so a call may incur
+charges, and a model's reply is untrusted input like any other user text. See
+Cloudflare's [Workers AI pricing](https://developers.cloudflare.com/workers-ai/platform/pricing/)
+for what applies, and put a `RateLimit` in front of any handler an anonymous
+caller can reach. In a test every `Ai` operation faults until it is stubbed
+(`stub Ai.run(_, _) returns …`), so a test never reaches Workers AI, and a
+`system` test's Workers behave the same. `Ai` is experimental: list
+`"bynk.cloudflare.Ai"` under `[unstable] allow`.
+
+### Images: `Images`
+
+`Images` resizes, rotates, blurs, converts and draws on images inside the Worker,
+through Cloudflare's [Images binding](https://developers.cloudflare.com/images/optimization/binding/).
+The image is the bytes you hold (an upload, an object from R2), not a URL. A
+Worker has one such binding, so `Images` is used bare, with no named instances
+(`capability Resizer = Images` is `bynk.capability.base_not_instantiable`):
+
+```bynk,fragment
+consumes bynk
+consumes bynk.cloudflare { Images, ImageFormat, ImageFit, TransformOptions, OutputOptions }
+
+service avatars from http {
+	@raw(contentType: "*/*")
+	@limit(maxBody: 1048576)
+	on POST("/avatar") (body: Bytes) -> Effect[HttpResult[String]] by Visitor given Images {
+		let options = TransformOptions { width: Some(256), height: Some(256), fit: Some(ImageFit.Cover) }
+		let r <- Images.transform(body, options, OutputOptions { format: ImageFormat.Webp })
+		match r {
+			Ok(img) => Raw(img.body, img.contentType),
+			Err(InvalidImage(m)) => BadRequest(m),
+			Err(ImageTooLarge) => BadRequest("image too large"),
+			Err(_) => ServerError("could not process image"),
+		}
+	}
+}
+```
+
+`info(image)` reads an image's format and size without transforming it, and
+Cloudflare does not bill it. It answers `Raster(format, width, height, size)`
+(`size` in bytes) or `Svg`, which the platform reports without dimensions. A
+format `ImageFormat` does not name is `ImagesFailed`, and an empty or non-image
+input is `InvalidImage`.
+
+`transform(image, options, output)` reads `image` (at most 20 MB), applies
+`options` and writes the result as `output` says; the result is buffered whole.
+`TransformOptions` has `width` and `height` in pixels, a `fit`
+(`ScaleDown`, the platform's default, `Contain`, `Cover`, `Crop`, `Pad` or
+`Squeeze`), a `rotate` of 90, 180 or 270 degrees (applied before the resize), a
+`blur` radius and a list of `overlays`; a field left `None` is the platform's
+default. An `Overlay` is `Bytes` drawn over the image at an offset from `top`,
+`left`, `bottom` or `right`, at an `opacity` from 0 to 1, optionally tiled with
+`repeat`; overlays are drawn in order. `OutputOptions` needs a `format`
+(`Jpeg`, `Png`, `Webp`, `Avif` or `Gif`: the platform has no default; `Heic` is
+read only, so it is `InvalidImage` as an output) and takes an
+optional `quality` from 1 to 100. The result is an `ImageResult` with the `body`
+and the `contentType` it was written with.
+
+`transformStream(image, options, output)` is `transform` over streams, for an
+image too large to hold: it reads `image` as a `Stream[Bytes]` and answers an
+`ImageStream`, a `body: Stream[Bytes]` with the `contentType`, that a handler
+serves with `RawStreamed` as it is read. The options are the same, and the
+overlay images stay `Bytes`. A refusal before the stream starts (a non-image, an
+option out of range) is the `Err`, so the handler can answer with an ordinary
+response; a failure after the first chunk faults the stream. Like every
+`Stream`, both are read once, and the result cannot cross a service boundary:
+the handler that calls `transformStream` is the one that serves it. The
+platform's input limit still applies. In a test it faults until stubbed
+(`stub Images.transformStream(_, _, _) returns …`).
+
+An uploaded image is untrusted input, so a bad one is a value, not a fault. An
+`ImagesError` is `InvalidImage(message)` (the input is not an image, or an
+option is out of range), `UnsupportedImage` (a format the platform cannot read
+or write), `ImageTooLarge` (over the platform's size or area limit) or
+`ImagesFailed(message)` (anything else, with the platform's message).
+The binding itself refuses an empty image, a `width` or `height` below 1, a
+`rotate` other than 90, 180 or 270, an `opacity` outside 0 to 1, a `quality`
+outside 1 to 100 and an overlay positioned from both opposite edges, as
+`InvalidImage`, without calling the platform. The platform's own limits
+(dimensions, area, blur radius) are not repeated here: it enforces them and
+reports them as an `ImagesError`, so see Cloudflare's
+[Images limits](https://developers.cloudflare.com/images/get-started/limits/).
+Cloudflare adds formats, fits and error codes over time, so a `match` over
+`ImageFormat`, `ImageFit` or `ImagesError` needs a wildcard.
+
+A Worker whose code reaches `Images`, directly or through a provider's `given`,
+declares `[images]` bound as `env.IMAGES`; one that does not declares nothing.
+There is nothing for `bynk deploy` to create.
+
+Calls are billed by Cloudflare as unique transformations; see Cloudflare's
+[Images pricing](https://developers.cloudflare.com/images/pricing/) for what
+applies, and put a `RateLimit` in front of any handler an anonymous caller can
+reach. Under `bynk dev` the binding runs locally in Cloudflare's low-fidelity
+form, which supports only `width`, `height`, `rotate` and the output format:
+`fit`, `blur`, `overlays`, `quality` and some formats are not reproduced there,
+so check the output on a deployed Worker. In a test every `Images` operation
+faults until it is stubbed (`stub Images.info(_) returns …`), so a
+test never reaches Cloudflare Images, and a `system` test's Workers behave the
+same. There is no fake transform, because an image handed back unchanged would
+make a test pass for the wrong reason. `Images` is experimental: list
+`"bynk.cloudflare.Images"` under `[unstable] allow`.
 
 ### Account secrets: `StoredSecret`
 
@@ -1348,6 +1656,356 @@ MySQL dialect. It is the switch `Postgres`'s check uses:
 Nothing is checked against the tables the file defines. Without a `schema.sql`
 nothing is checked, and the typed reads are not checked either.
 
+### Vector indexes: `Vectorize`
+
+`Vectorize` is a Cloudflare [Vectorize](https://developers.cloudflare.com/vectorize/)
+index: vectors with an id, searched by similarity. It is used only through a named
+instance that states the index's fixed shape, because Cloudflare cannot change an
+index's dimensions or metric after it exists:
+
+```bynk,fragment
+consumes bynk
+consumes bynk.cloudflare { Vectorize, Vector, QueryOptions, Condition, FilterEq, MetaText }
+
+capability Docs = Vectorize @dimensions(768) @metric("cosine") @indexed(["category:string", "year:number"])
+
+service search from http {
+	on GET("/search") (q: String) -> Effect[HttpResult[String]] by Visitor given Docs {
+		let hits <- Docs.query(embedding, QueryOptions {
+			topK: 5,
+			filter: [Condition { field: "category", op: FilterEq(MetaText("faq")) }],
+		})
+		match hits {
+			Ok(found) => Ok(Json.encode(found)),
+			Err(_) => ServerError("search unavailable"),
+		}
+	}
+}
+```
+
+`capability Docs = Vectorize …` binds as `VECTORIZE_DOCS`, a `[[vectorize]]` entry
+naming the index. `@dimensions(n)` (an `Int` from 32 to 1536, the range Cloudflare creates an index with; one outside it is `bynk.capability.invalid_option`) and `@metric("cosine" |
+"euclidean" | "dot-product")` are both required; a bare `given Vectorize` is
+`bynk.capability.instance_only`. `@indexed([…])` lists the metadata properties a
+query may filter on, each written `name:type` with the type `string`, `number` or
+`boolean`, at most 10; a malformed entry, an unknown type or more than 10 is
+`bynk.capability.invalid_option`. Nothing ties `@dimensions` to an embedding model:
+`Ai.embed`'s output length is a runtime fact (768 for
+`@cf/baai/bge-base-en-v1.5`, which pairs with `@metric("cosine")`), and a vector of
+the wrong length is the platform's `DimensionMismatch`, returned as a value.
+
+A `Vector` is `{ id, values: List[Float], metadata: Option[String], namespace:
+Option[String] }`. `upsert` replaces a vector with the same id in full (the platform
+does not merge values or metadata) and `insert` keeps an existing id's vector and
+writes only new ones. Metadata is a JSON object as text: write it with `Json.encode`
+and read it back with `Json.decode` in a second step, so a vector written by an older
+version of the program can be skipped or repaired instead of faulting the query.
+`upsertValue(vectors)` is `upsert` with typed metadata: a `VectorOf[M]` is a `Vector`
+whose `metadata` is an `Option[M]`, encoded by `M`'s codec as `Queue.sendValue` encodes
+a message (`M` is inferred from the argument), so `Docs.upsertValue([VectorOf { id,
+values, metadata: Some(meta) }])` writes what `upsert` writes with `Json.encode(meta)`.
+Metadata is a JSON object on the platform, so an `M` that does not encode to an object
+(a bare `String`, say) faults. Only writes are typed; reads stay as text. An `Option` field of `M` is written as a tagged object, as `Json.encode` writes it, so keep the properties you filter on non-`Option`.
+`query(vector, options)` returns the nearest matches, best first, as `VectorMatch`es
+with a `score` whose meaning depends on the metric (a larger cosine score is nearer;
+a smaller euclidean distance is nearer). `QueryOptions` carries `topK` (5 by default),
+`returnValues`, `returnMetadata` (`Omit`, `Indexed` or `All`), an optional `namespace`
+and `filter`, a list of `Condition`s that must all hold. A condition tests one
+metadata property with `FilterEq`, `FilterNe`, `FilterLt`, `FilterLte`, `FilterGt`,
+`FilterGte`, `FilterAnyOf` or `FilterNoneOf`, over a `MetaText`, `MetaNumber` or
+`MetaFlag`. The filter is typed, so a user-supplied string can never become an
+operator. Before calling, the binding refuses what the platform cannot take whatever
+the data (an empty property name, one with a double quote or a leading `$`, one over
+512 characters, a range over a flag, or conditions on one property that are not one
+lower and one upper bound) as `VectorInvalidInput`; the limits that drift (the
+filter's size, `topK`, a batch, metadata) are the platform's to say, and come back as
+`VectorInvalidInput(message)` as well (a `topK` over the limit, for one: the platform
+refuses a `topK` over 50 with `returnValues` or `returnMetadata: All`). A property can be filtered on only when it is
+in `@indexed` and the vector was written after the metadata index existed.
+
+A write (`upsert`, `insert`, `deleteByIds`) returns a `Mutation { id }` and is
+queryable only once the platform has processed it, which takes some seconds: a
+handler that writes and then queries in the same request will not see its own write.
+`getByIds` reads vectors back with their values and metadata. `describe` reports the
+index's `dimensions`; its `metric` is an `Option[String]`, `None` because the
+platform's `describe` does not report one (the declaration states it, so the metric
+of a bound index cannot be checked at run time, so create a development index
+with the declared metric: under `bynk dev` only its dimensions are checked, and a
+different metric would quietly change scores and ordering).
+
+A `VectorError` is `DimensionMismatch(message)`, `VectorInvalidInput(message)`,
+`VectorRateLimited` (worth retrying later) or `VectorFailed(message)` (anything else,
+with the platform's message), the `Vector` prefix because `InvalidInput`,
+`RateLimited` and `Failed` belong to other error types. Cloudflare adds error cases
+over time, so a `match` over `VectorError` needs a wildcard. A call on an index that
+does not exist is a platform fault: the deploy creates the index.
+
+A Worker whose code reaches a `Vectorize` instance declares `[[vectorize]]` with
+`binding` and `index_name`, the index named for the context and the capability
+(`shop.cart`'s `Docs` is `shop-cart-docs`). (`shop.cart`'s `Docs` is `shop-cart-docs`). In a test each `Vectorize` instance is
+an exact in-memory index built from its declaration, so a test never reaches
+Cloudflare and a retrieval flow runs end to end. It ranks exactly where production
+ranks approximately, and a write is visible at once where production takes some
+seconds; those are its two differences. A query that names no namespace returns the vectors of every namespace, as on the
+platform, and one that names a namespace returns only that namespace's. It enforces
+the dimensions, namespaces,
+insert versus upsert, all eight filter operators and the platform's limits as read
+on 13 November 2026 (a limit it refuses is `VectorInvalidInput`); a filter on a
+property that is not in `@indexed` faults, naming the difference, since production
+silently matches nothing for it. `stub Docs.query(_, _) returns …` still replaces
+any operation. Vectorize is a remote service on your Cloudflare account, so a call
+may incur charges; see Cloudflare's [Vectorize pricing](https://developers.cloudflare.com/vectorize/platform/pricing/)
+for what applies, and put a `RateLimit` in front of any handler an anonymous caller
+can reach. `Vectorize` is experimental: list `"bynk.cloudflare.Vectorize"` under
+`[unstable] allow`.
+
+### Mutual TLS: `MtlsCertificate`
+
+`MtlsCertificate` makes an outbound call that presents one of your account's client
+certificates, for an origin that requires [mutual TLS](https://developers.cloudflare.com/workers/runtime-apis/bindings/mtls/):
+the origin proves its identity during the handshake, and so does the Worker. Each
+certificate is a named instance that says which certificate; the option is
+required, and a bare `given MtlsCertificate` is refused
+(`bynk.capability.instance_only`):
+
+```bynk,fragment
+consumes bynk
+consumes bynk.cloudflare { MtlsCertificate }
+
+capability Backend = MtlsCertificate @certificate("acme-client")
+
+service orders from http {
+	on GET("/orders") () -> Effect[HttpResult[String]] by Visitor given Backend {
+		let req = Request {
+			method: Get,
+			url: "https://orders.acme.example/v1/orders",
+			contentType: None,
+			authorization: None,
+			headers: Map.empty(),
+			body: None,
+		}
+		let res <- Backend.send(req)
+		match res {
+			Ok(r) => Ok("status \(r.status)"),
+			Err(_) => ServerError("the origin is unreachable"),
+		}
+	}
+}
+```
+
+`Backend` binds as `env.MTLS_BACKEND`, an `[[mtls_certificates]]` entry. `@certificate`
+is the certificate's **name** as it was uploaded to the account, never its id, so an
+id stays out of source; it is used as written in every environment, and an empty name
+is refused (`bynk.capability.invalid_option`). The generated stanza carries the name in
+`certificate_id`, which `bynk deploy` replaces with the id it resolves.
+
+`send` has [`Fetch.send`](#the-portable-surface--bynk)'s shape and rules: the same
+`Request` (its headers checked the same way), the same `Response`, and `Network` when the
+call itself fails, a handshake the origin refuses included. `receiveBytes` and `sendBytes` are
+[`Fetch`'s byte forms](#binary-bodies) over the same certificate, with `Fetch`'s defaults for
+the timeout and redirects. Unlike [`Service`](#calling-a-worker-outside-the-project-service),
+the URL's host **is** the destination: this is a real outbound call, and the certificate is
+presented to whatever origin the URL names. `Request`, `Response` and `FetchError` are
+`bynk`'s types, so a context that calls `send` also writes `consumes bynk`.
+
+The certificate belongs to whoever uploaded it, with its private key, which never reaches
+Bynk or the Worker. Upload it with Wrangler's `mtls-certificate upload`, the dashboard or the
+API; see Cloudflare's [mTLS binding page](https://developers.cloudflare.com/workers/runtime-apis/bindings/mtls/)
+for what it supports. In particular, Cloudflare does not support presenting a certificate to an
+origin that is a proxied zone on Cloudflare: the call fails with a `520`.
+
+`bynk deploy` **links** a certificate and never uploads one. It lists the account's mTLS
+certificates through Cloudflare's API, matches the name (client certificates only, never a CA),
+writes the id into the Worker's configuration and records the link in `bynk.deploy.lock`, keyed
+by environment, Worker and binding. A missing or ambiguous name fails the deploy before anything
+is pushed, naming it; an expired or soon-expiring certificate is a warning. It needs
+`CLOUDFLARE_API_TOKEN` and `CLOUDFLARE_ACCOUNT_ID`, the token with "SSL and Certificates: Read";
+see [Deploy to Cloudflare](/book/guides/projects-build-and-deployment/deploy-to-cloudflare/#mtls-certificates).
+
+There is no local simulation of the binding, so under `bynk dev` a call runs on Cloudflare,
+presenting your account's certificate to the origin. The development copy of the Worker's
+configuration marks the binding `remote = true` and binds the certificate by the id the last
+deploy recorded for the environment, so run `bynk deploy` once first; a certificate no deploy has
+linked is reported and a call through it fails. `bynk dev` warns once, on the first call, unless
+`mtls = "allow"` is under `[dev]` in `bynk.toml`.
+
+A test never presents a certificate: every operation **faults** until
+`stub Backend.send(_) returns …` (or `receiveBytes`, `sendBytes`) gives it a reply, so a test never
+reaches the origin.
+`MtlsCertificate` is experimental: list `"bynk.cloudflare.MtlsCertificate"` under
+`[unstable] allow`.
+
+### AI Search: `AiSearch`
+
+`AiSearch` is a Cloudflare [AI Search](https://developers.cloudflare.com/ai-search/)
+instance: a managed retrieval service that indexes a data source (an R2 bucket, a
+website, files uploaded to it) and answers from it. Unlike a `Vectorize` index, an
+instance is configured and owned by someone (its data source, models, chunking and
+sync), so Bynk never creates it: you make it in the Cloudflare dashboard, with
+`wrangler` or the REST API, and the Worker only queries it. It is used only through a
+named instance that names it:
+
+```bynk,fragment
+consumes bynk
+consumes bynk.cloudflare { AiSearch, ChatMessage, ChatRole, SearchOptions }
+
+capability Kb = AiSearch @instance("support-docs")
+
+service ask from http {
+	on POST("/ask") (body: String) -> Effect[HttpResult[String]] by Visitor given Kb {
+		let reply <- Kb.answer([ChatMessage { role: ChatRole.User, content: body }], SearchOptions {})
+		match reply {
+			Ok(a) => Ok(a.text),
+			Err(_) => ServerError("search unavailable"),
+		}
+	}
+}
+```
+
+`capability Kb = AiSearch @instance("support-docs")` binds as `AI_SEARCH_KB`, an
+`[[ai_search]]` entry naming the instance as written, in every environment.
+`@instance("…")` is required; a bare `given AiSearch` is
+`bynk.capability.instance_only`, and a missing or empty name is
+`bynk.capability.missing_option` or `bynk.capability.invalid_option`.
+
+`bynk deploy` links the instance and never creates it: it looks the instance up by
+name before anything is pushed, records it in `bynk.deploy.lock`, and fails, naming
+it, when it is missing; a paused instance is a warning. See [Deploy to
+Cloudflare](/book/guides/projects-build-and-deployment/deploy-to-cloudflare/#ai-search-instances).
+Under `bynk dev` the binding is proxied to the deployed instance (the development
+copy of `wrangler.toml` carries `remote = true`; the generated file the deploy reads
+does not), so a call runs on your Cloudflare account: the first one in a session
+prints a one-time warning with a link to Cloudflare's pricing, unless the project
+has acknowledged it with `ai-search = "allow"` under `[dev]` in `bynk.toml`.
+
+`search(query, options)` returns the best-matching chunks, best first, as `SearchHit`s
+(`id`, `score` from 0 to 1, `text`, `key` the source path or URL, `timestamp` in unix milliseconds and
+`metadata` as JSON text when the item has them), for a handler that shows results or
+builds its own prompt with `Ai.generate`. `answer(messages, options)` retrieves the
+same way and has the instance's own generation model write the reply from the
+conversation, which must not be empty; a `SearchAnswer` is `{ text, hits, usage }`. The
+generation model is the instance's setting and a call cannot override it. Retrieved
+text and generated answers are untrusted input.
+
+`SearchOptions` carries `maxResults` (1 to 50), `matchThreshold` (0 to 1) and
+`retrieval` (`Vector`, `Keyword` or `Hybrid`), each `None` to leave the platform's
+default; `rewriteQuery` and `rerank`; and `filter`, a list of the same typed
+`Condition`s `Vectorize` takes, which must all hold, over the items' `folder`,
+`timestamp` and `filename` and the instance's custom metadata. A text value is
+matched on its first 64 bytes only. The binding refuses an out-of-range option, or a
+filter the platform cannot take (an empty attribute name, a leading `$`, a range over
+a flag, or conditions on one attribute that are not one lower and one upper bound), as
+`SearchInvalidInput`.
+
+A `SearchError` is `SearchInvalidInput(message)`, `SearchRateLimited` (worth retrying
+later), `SearchQuotaExceeded` or `SearchFailed(message)` (anything else, and a reply
+that is not the shape the operation promises), the `Search` prefix because the other
+names belong to other error types. Cloudflare adds error cases over time, so a
+`match` over `SearchError` needs a wildcard. A call on an instance that does not
+exist is a platform fault. A freshly written file is not searchable until the instance
+has indexed it, and a query against an instance that has indexed nothing is an empty
+list, not an error.
+
+In a test every `AiSearch` operation faults until it is stubbed
+(`stub Kb.search(_, _) returns …`), so a test never reaches AI Search; `Vectorize` has
+an in-memory double for retrieval logic a test wants to run. AI Search is a remote
+service on your Cloudflare account, so a call may incur charges; see Cloudflare's
+[AI Search pricing](https://developers.cloudflare.com/ai-search/platform/limits-pricing/)
+for what applies, and put a `RateLimit` in front of any handler an anonymous caller
+can reach. `AiSearch` is experimental: list `"bynk.cloudflare.AiSearch"` under
+`[unstable] allow`.
+
+### Containers: `Container`
+
+`Container` runs a server from a Docker image on Cloudflare
+[Containers](https://developers.cloudflare.com/containers/) and reaches it over HTTP.
+It is used only through a named instance that names the image's build directory and
+the port the server listens on:
+
+```bynk,fragment
+consumes bynk
+consumes bynk.cloudflare { Container, ContainerError }
+
+capability Renderer = Container @build("containers/renderer") @port(8080) @sleepAfter(5.minutes) @instanceType("standard-1")
+
+service render from http {
+	on GET("/render/:tenant") (tenant: String) -> Effect[HttpResult[String]] by Visitor given Renderer {
+		let req = Request {
+			method: Get,
+			url: "http://renderer/render",
+			contentType: None,
+			authorization: None,
+			headers: Map.empty(),
+			body: None,
+		}
+		let res <- Renderer.send("tenant-\(tenant)", req)
+		match res {
+			Ok(r) => Ok(r.body),
+			Err(Unavailable) => ServiceUnavailable("no capacity"),
+			Err(_) => ServerError("render failed"),
+		}
+	}
+}
+```
+
+`capability Renderer = Container …` binds as `CONTAINER_RENDERER`, a Durable Object
+namespace whose class the compiler generates (`__Container_Renderer`). `@build` (a
+`String`) and `@port` (a TCP port, 1 to 65535) are required; a bare `given Container`
+is `bynk.capability.instance_only`. `@build` is the project-relative directory that holds the
+`Dockerfile`: it must stay inside the project (`bynk.container.build_path`) and hold a
+`Dockerfile` (`bynk.container.build_missing`). Bynk does not read or generate the
+Dockerfile, and the image must be built for `linux/amd64`.
+
+The optional annotations set how an instance starts. `@sleepAfter(d)` stops an idle
+container after `d` (a whole number of seconds, more than zero and at most 6 hours),
+applied each time the container starts. Left out, the platform stops the container
+shortly after the instance goes inactive, and Bynk states no figure. `@instanceType` is
+`"lite"` (the platform's default when none is given), `"standard-1"`, `"standard-2"`,
+`"standard-3"` or `"standard-4"`, passed as the instance type when the container
+starts. `@forward(["NAME", …])` names Worker secrets passed to the container's process
+as environment variables. Their values stay in the Worker's secrets: they are never
+written into source, config or the lock file, but every process and dependency in the
+image can read them and Bynk cannot scope them further. There is no `@maxInstances`:
+the platform has no per-application ceiling for these containers, so only the account's
+own limits apply, and `@sleepAfter` and a small `@instanceType` are the levers an
+author has.
+
+`send(instance, req)` sends `req` to the container named `instance` and returns its
+response; `receiveBytes` returns the body as `Bytes`, and `sendBytes` sends `body` as
+the request body (`req.body` must be `None`). `Request`, `Response` and `BytesResponse`
+are `bynk`'s, with the same header and body rules as `Fetch`, and the URL's host is not
+used for routing. `instance` names one container instance, one process: the same name
+reaches the same instance, and a new name starts a new one, so a handler can use one
+per tenant. A name is 1 to 256 bytes with no control character, otherwise the call
+faults before anything is sent; it is not a secret, because names appear in
+Cloudflare's dashboards and logs. The first call to an instance starts its container,
+which takes noticeable time, longer for a larger image, and a container's disk is
+ephemeral: a container is not storage. Bynk adds no queue: the container serves
+concurrent requests as its own server does. A slow call from inside an agent handler
+holds that agent's queue (ADR 0781), so call from a service and hand the result to the
+agent.
+
+A `ContainerError` is `StartFailed(message)` (the image would not start, or its port
+never listened), `Unavailable` (the platform would not start another instance, from
+the account's limits), `Timeout` or `Network`, returned as values. Cloudflare adds
+error cases over time, so a `match` over it needs a wildcard.
+
+A container has no internet access: Bynk always starts it with outbound access off,
+and there is no option to open it in this release. Containers must be pushed to
+Cloudflare's own registry; Docker Hub, Amazon ECR and Google's registry
+references are not supported for this kind of container. In a test every `Container`
+operation faults, naming the instance, until it is stubbed (`stub Renderer.send(_, _)
+returns …`), so a test never starts a container, and the system tier gives each Worker
+a binding that faults the same way.
+
+A running container costs money. See Cloudflare's
+[Containers pricing](https://developers.cloudflare.com/containers/pricing/) and
+[limits](https://developers.cloudflare.com/containers/platform/limits/) for what
+applies; Bynk states no rates. This release emits the configuration and the generated
+class: deploy with `wrangler deploy`, with Docker running.
+`Container` is experimental: list `"bynk.cloudflare.Container"` under
+`[unstable] allow`.
+
 ### SQL databases: `D1`
 
 `D1` queries a D1 database, Cloudflare's SQLite. Each database is a named
@@ -1787,7 +2445,7 @@ covers one, at any depth, needs a wildcard:
 ```bynk,fail=bynk.types.extensible_match_needs_wildcard
 context app.probe
 
-consumes bynk { Fetch }
+consumes bynk { Fetch, Request }
 
 service probe {
 	on call(url: String) -> Effect[String] given Fetch {
@@ -1815,7 +2473,7 @@ variant arrives:
 ```bynk
 context app.probe
 
-consumes bynk { Fetch }
+consumes bynk { Fetch, Request, Method, FetchError }
 
 service probe {
 	on call(url: String) -> Effect[String] given Fetch {

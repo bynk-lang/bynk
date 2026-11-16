@@ -1,6 +1,6 @@
 context demo
 
-consumes bynk { Fetch }
+consumes bynk { Fetch, Request, FetchOptions, Redirect }
 
 // #2604: `sendBytes` takes its body as `Bytes`; a `String` is refused.
 service probe {

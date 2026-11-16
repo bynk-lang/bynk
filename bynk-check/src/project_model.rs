@@ -774,6 +774,10 @@ pub fn phase_resolve_derived(
     unit_tables: &mut HashMap<String, UnitTable>,
     errors: &mut ErrorSink,
 ) {
+    // #3536: recorded here, the phase that already holds the groups, kinds,
+    // parsed files and mutable tables of both pipelines.
+    let selections = consume_selections(groups, kinds, parsed);
+    crate::symbols::record_unselected_consumed_types(unit_tables, &selections);
     for (name, indices) in groups {
         for &i in indices {
             if parsed[i].is_synthetic() {
@@ -1186,6 +1190,10 @@ pub(crate) fn instance_example(kind: &firstparty::Instantiable) -> String {
         "Email" => "Mail",
         "Postgres" => "Main",
         "MySql" => "Legacy",
+        "Vectorize" => "Docs",
+        "Container" => "Renderer",
+        "AiSearch" => "Kb",
+        "MtlsCertificate" => "Backend",
         _ => "Archives",
     };
     let mut out = format!("capability {name} = {}", kind.capability);
@@ -1208,8 +1216,107 @@ fn option_sample(option: &str) -> &'static str {
         firstparty::EMAIL_ALLOWED_RECIPIENTS_OPTION | firstparty::EMAIL_ALLOWED_SENDERS_OPTION => {
             "[\"orders@shop.example\"]"
         }
+        firstparty::AI_SEARCH_INSTANCE_OPTION => "\"support-docs\"",
+        firstparty::MTLS_CERTIFICATE_OPTION => "\"acme-client\"",
+        firstparty::VECTORIZE_DIMENSIONS_OPTION => "768",
+        firstparty::VECTORIZE_METRIC_OPTION => "\"cosine\"",
+        firstparty::VECTORIZE_INDEXED_OPTION => "[\"category:string\"]",
+        firstparty::CONTAINER_BUILD_OPTION => "\"containers/renderer\"",
+        firstparty::CONTAINER_PORT_OPTION => "8080",
+        firstparty::CONTAINER_SLEEP_AFTER_OPTION => "5.minutes",
+        firstparty::CONTAINER_INSTANCE_TYPE_OPTION => "\"lite\"",
+        firstparty::CONTAINER_FORWARD_OPTION => "[\"API_KEY\"]",
         _ => "\"legacy-billing\"",
     }
+}
+
+/// Why a `Vectorize` `@dimensions` literal is outside Cloudflare's range of
+/// 32 to 1536: `("least", 32)` or `("most", 1536)`. `None` when it is inside, or
+/// not positive (which the positive-`Int` check reports).
+fn vectorize_dimensions_problem(value: i64) -> Option<(&'static str, i64)> {
+    if value > firstparty::VECTORIZE_MAX_DIMENSIONS {
+        Some(("most", firstparty::VECTORIZE_MAX_DIMENSIONS))
+    } else if value > 0 && value < firstparty::VECTORIZE_MIN_DIMENSIONS {
+        Some(("least", firstparty::VECTORIZE_MIN_DIMENSIONS))
+    } else {
+        None
+    }
+}
+
+/// #3513 A: an `MtlsCertificate` `@certificate` that is not a certificate name. A
+/// certificate is named by whoever uploaded it, in any text, so only a name the account
+/// could not have given one is refused: an empty one, or one with a control character.
+fn mtls_certificate_error(
+    base: &str,
+    option: &str,
+    text: &str,
+    span: bynk_syntax::span::Span,
+) -> Option<CompileError> {
+    (base == "MtlsCertificate"
+        && option == crate::firstparty::MTLS_CERTIFICATE_OPTION
+        && (text.trim().is_empty() || text.chars().any(char::is_control)))
+    .then(|| {
+        CompileError::new(
+            "bynk.capability.invalid_option",
+            span,
+            format!("{text:?} is not a certificate name a `{base}` can reach"),
+        )
+        .with_note(
+            "name the certificate as it was uploaded to the account (`wrangler mtls-certificate list` shows it), for example `@certificate(\"acme-client\")`",
+        )
+    })
+}
+
+/// #3480: an `AiSearch` `@instance` that is not an instance name. The instance
+/// is a path segment of the REST call that links it, and Cloudflare's API
+/// documents an instance id as 1 to 64 lowercase letters, digits, hyphens and
+/// underscores.
+fn ai_search_instance_error(
+    base: &str,
+    option: &str,
+    text: &str,
+    span: bynk_syntax::span::Span,
+) -> Option<CompileError> {
+    (base == "AiSearch"
+        && option == crate::firstparty::AI_SEARCH_INSTANCE_OPTION
+        && !is_ai_search_instance_name(text))
+    .then(|| {
+        CompileError::new(
+            "bynk.capability.invalid_option",
+            span,
+            format!("`{text}` is not an instance name a `{base}` can reach"),
+        )
+        .with_note(
+            "an instance name is 1 to 64 lowercase letters, digits, `-` or `_`, the form Cloudflare's API documents",
+        )
+    })
+}
+
+/// #3479 (DECISION A): a `Vectorize` `@metric` outside the closed set.
+fn vectorize_metric_error(
+    base: &str,
+    option: &str,
+    text: &str,
+    span: bynk_syntax::span::Span,
+) -> Option<CompileError> {
+    (base == "Vectorize"
+        && option == crate::firstparty::VECTORIZE_METRIC_OPTION
+        && !crate::firstparty::VECTORIZE_METRICS.contains(&text))
+    .then(|| {
+        CompileError::new(
+            "bynk.capability.invalid_option",
+            span,
+            format!("`{text}` is not a distance metric a `{base}` index can use"),
+        )
+        .with_note(format!(
+            "the metrics are {}",
+            crate::firstparty::VECTORIZE_METRICS
+                .iter()
+                .map(|m| format!("`\"{m}\"`"))
+                .collect::<Vec<_>>()
+                .join(", ")
+        ))
+    })
 }
 
 /// Interop I5 (#1972): the value of one instance option: one positional
@@ -1282,7 +1389,17 @@ fn instance_option_value(
             if out.is_empty() {
                 errors.push_for(
                     Some(path),
-                    invalid(arg.span, format!("`@{option}` takes at least one address")),
+                    invalid(
+                        arg.span,
+                        format!(
+                            "`@{option}` takes at least one {}",
+                            if base == "Container" {
+                                "entry"
+                            } else {
+                                "address"
+                            }
+                        ),
+                    ),
                 );
                 return None;
             }
@@ -1295,6 +1412,39 @@ fn instance_option_value(
                     arg.span,
                     format!("`@{option}` takes a list of string literals"),
                 ),
+            );
+            return None;
+        }
+        (firstparty::OptionKind::PositiveInt, ExprKind::IntLit { value, .. })
+            if base == "Vectorize"
+                && option == firstparty::VECTORIZE_DIMENSIONS_OPTION
+                && vectorize_dimensions_problem(*value).is_some() =>
+        {
+            let (bound, limit) = vectorize_dimensions_problem(*value).unwrap_or_default();
+            errors.push_for(
+                Some(path),
+                CompileError::new(
+                    "bynk.capability.invalid_option",
+                    arg.span,
+                    format!("`@{option}` is at {bound} {limit} for a `{base}` index"),
+                )
+                .with_note("Cloudflare creates an index only with a dimension count in its supported range, 32 to 1536"),
+            );
+            return None;
+        }
+        (firstparty::OptionKind::PositiveInt, ExprKind::IntLit { value, .. })
+            if base == "Container"
+                && option == firstparty::CONTAINER_PORT_OPTION
+                && crate::containers::port_problem(*value).is_some() =>
+        {
+            errors.push_for(
+                Some(path),
+                CompileError::new(
+                    "bynk.capability.invalid_option",
+                    arg.span,
+                    format!("`@{option}` is not a port a `{base}` can listen on"),
+                )
+                .with_note("a port is a TCP port, 1 to 65535"),
             );
             return None;
         }
@@ -1311,6 +1461,9 @@ fn instance_option_value(
             );
             return None;
         }
+        (firstparty::OptionKind::Duration, _) if base == "Container" => OptionValue::Seconds(
+            container_sleep_after(&arg.value.kind, arg.span, path, errors)?,
+        ),
         (firstparty::OptionKind::Duration, ExprKind::DurationLit { millis, .. })
             if *millis % 1000 == 0 && firstparty::RATELIMIT_PERIODS.contains(&(*millis / 1000)) =>
         {
@@ -1337,22 +1490,17 @@ fn instance_option_value(
         }
     };
     if let OptionValue::List(items) = &value {
+        // #3477: a `Container`'s `@forward` names Worker secrets.
+        if base == "Container" {
+            return container_forward_ok(items, ann, path, errors).then_some(value);
+        }
+        // #3479: a `Vectorize`'s `@indexed` entries are metadata indexes.
+        if base == "Vectorize" {
+            return vectorize_indexed_ok(items, ann, path, errors).then_some(value);
+        }
         // Every address is checked as the platform will see it (#3302).
-        for item in items {
-            if !is_email_address(item) {
-                errors.push_for(
-                    Some(path),
-                    invalid(
-                        ann.span,
-                        format!(
-                            "`{}` is not an email address a `{base}` can use",
-                            item.escape_debug()
-                        ),
-                    )
-                    .with_note("an address is `name@domain`, with no spaces or control characters"),
-                );
-                return None;
-            }
+        if !email_list_ok(items, base, ann, path, errors) {
+            return None;
         }
         return Some(value);
     }
@@ -1374,24 +1522,16 @@ fn instance_option_value(
         return None;
     }
     if option == crate::firstparty::R2_JURISDICTION_OPTION
-        && !crate::firstparty::R2_JURISDICTIONS.contains(&text.as_str())
+        && !r2_jurisdiction_ok(text, base, ann, path, errors)
     {
-        errors.push_for(
-            Some(path),
-            CompileError::new(
-                "bynk.capability.invalid_option",
-                ann.span,
-                format!("`{text}` is not a jurisdiction a `{base}` bucket can be pinned to"),
-            )
-            .with_note(format!(
-                "the jurisdictions are {}",
-                crate::firstparty::R2_JURISDICTIONS
-                    .iter()
-                    .map(|j| format!("`\"{j}\"`"))
-                    .collect::<Vec<_>>()
-                    .join(" and ")
-            )),
-        );
+        return None;
+    }
+    if let Some(error) = vectorize_metric_error(base, option, text, ann.span) {
+        errors.push_for(Some(path), error);
+        return None;
+    }
+    // #3477: a `Container`'s `@build` and `@instanceType`.
+    if base == "Container" && !container_str_ok(text, option, ann, path, errors) {
         return None;
     }
     // Hyperdrive H5 (#3322, DECISION B): `@tls` is one of a closed set.
@@ -1430,6 +1570,14 @@ fn instance_option_value(
                 "a Worker name is 1 to 63 lowercase letters, digits, `-` or `_`, and does not start or end with `-`",
             ),
         );
+        return None;
+    }
+    if let Some(error) = ai_search_instance_error(base, option, text, ann.span) {
+        errors.push_for(Some(path), error);
+        return None;
+    }
+    if let Some(error) = mtls_certificate_error(base, option, text, ann.span) {
+        errors.push_for(Some(path), error);
         return None;
     }
     if base == "StoredSecret"
@@ -1473,6 +1621,235 @@ fn instance_option_value(
     Some(value)
 }
 
+/// #3302: whether every entry of an `Email` instance's address list is an
+/// address the platform takes. Pushes the error and returns `false` otherwise.
+fn email_list_ok(
+    items: &[String],
+    base: &str,
+    ann: &bynk_syntax::ast::Annotation,
+    path: &std::path::Path,
+    errors: &mut ErrorSink,
+) -> bool {
+    let option = ann.name.name.as_str();
+    let Some(item) = items.iter().find(|item| !is_email_address(item)) else {
+        return true;
+    };
+    errors.push_for(
+        Some(path),
+        CompileError::new(
+            "bynk.capability.invalid_option",
+            ann.span,
+            format!(
+                "`{}` is not an email address a `{base}` can use",
+                item.escape_debug()
+            ),
+        )
+        .with_note(format!(
+            "write `@{option}({})`, for example",
+            option_sample(option)
+        ))
+        .with_note("an address is `name@domain`, with no spaces or control characters"),
+    );
+    false
+}
+
+/// Whether `text` is a jurisdiction an `R2` bucket can be pinned to. Pushes the
+/// error and returns `false` otherwise.
+fn r2_jurisdiction_ok(
+    text: &str,
+    base: &str,
+    ann: &bynk_syntax::ast::Annotation,
+    path: &std::path::Path,
+    errors: &mut ErrorSink,
+) -> bool {
+    if crate::firstparty::R2_JURISDICTIONS.contains(&text) {
+        return true;
+    }
+    errors.push_for(
+        Some(path),
+        CompileError::new(
+            "bynk.capability.invalid_option",
+            ann.span,
+            format!("`{text}` is not a jurisdiction a `{base}` bucket can be pinned to"),
+        )
+        .with_note(format!(
+            "the jurisdictions are {}",
+            crate::firstparty::R2_JURISDICTIONS
+                .iter()
+                .map(|j| format!("`\"{j}\"`"))
+                .collect::<Vec<_>>()
+                .join(" and ")
+        )),
+    );
+    false
+}
+
+/// #3477: whether a `Container`'s string option `option` is a value the
+/// platform takes: `@build` a directory inside the project, `@instanceType` one
+/// of a closed set. Pushes the error and returns `false` otherwise.
+fn container_str_ok(
+    text: &str,
+    option: &str,
+    ann: &bynk_syntax::ast::Annotation,
+    path: &std::path::Path,
+    errors: &mut ErrorSink,
+) -> bool {
+    let error = if option == firstparty::CONTAINER_BUILD_OPTION {
+        crate::containers::build_path_problem(text).map(|problem| {
+            CompileError::new(
+                "bynk.container.build_path",
+                ann.span,
+                format!("`@build(\"{}\")` {problem}", text.escape_debug()),
+            )
+            .with_note(
+                "`@build` names the directory that holds the `Dockerfile`, relative to the project root, for example `@build(\"containers/renderer\")`",
+            )
+        })
+    } else if option == firstparty::CONTAINER_INSTANCE_TYPE_OPTION
+        && !firstparty::CONTAINER_INSTANCE_TYPES.contains(&text)
+    {
+        Some(
+            CompileError::new(
+                "bynk.capability.invalid_option",
+                ann.span,
+                format!("`{text}` is not an instance type a `Container` can start with"),
+            )
+            .with_note(format!(
+                "the instance types are {}",
+                firstparty::CONTAINER_INSTANCE_TYPES
+                    .iter()
+                    .map(|t| format!("`\"{t}\"`"))
+                    .collect::<Vec<_>>()
+                    .join(", ")
+            )),
+        )
+    } else {
+        None
+    };
+    let Some(error) = error else {
+        return true;
+    };
+    errors.push_for(Some(path), error);
+    false
+}
+
+/// #3477: a `Container`'s `@sleepAfter` in whole seconds: more than zero and at
+/// most 6 hours. Pushes the error and returns `None` otherwise.
+fn container_sleep_after(
+    kind: &ExprKind,
+    span: bynk_syntax::span::Span,
+    path: &std::path::Path,
+    errors: &mut ErrorSink,
+) -> Option<i64> {
+    let seconds = match kind {
+        ExprKind::DurationLit { millis, .. } => crate::containers::sleep_after_seconds(*millis),
+        _ => None,
+    };
+    if seconds.is_none() {
+        errors.push_for(
+            Some(path),
+            CompileError::new(
+                "bynk.capability.invalid_option",
+                span,
+                "`@sleepAfter` is not a time a `Container` can sleep after".to_string(),
+            )
+            .with_note(
+                "write a whole number of seconds, more than zero and at most 6 hours, for example `5.minutes`",
+            ),
+        );
+    }
+    seconds
+}
+
+/// #3477 (DECISION J): whether a `Container`'s `@forward` is a list of Worker
+/// secret names a process environment can hold. Pushes the error and returns
+/// `false` otherwise.
+fn container_forward_ok(
+    items: &[String],
+    ann: &bynk_syntax::ast::Annotation,
+    path: &std::path::Path,
+    errors: &mut ErrorSink,
+) -> bool {
+    let Some(message) = crate::containers::forward_problem(items) else {
+        return true;
+    };
+    errors.push_for(
+        Some(path),
+        CompileError::new("bynk.capability.invalid_option", ann.span, message).with_note(
+            "write `@forward([\"API_KEY\"])`: the names of Worker secrets, each a letter or `_` then letters, digits or `_`; their values are never written into source or config",
+        ),
+    );
+    false
+}
+
+/// #3479 (DECISION C): whether a `Vectorize`'s `@indexed` entries are a list of
+/// at most [`firstparty::VECTORIZE_MAX_INDEXED`] metadata indexes, each
+/// `name:type` with a type the platform indexes, none repeated. Pushes the
+/// error and returns `false` otherwise.
+fn vectorize_indexed_ok(
+    items: &[String],
+    ann: &bynk_syntax::ast::Annotation,
+    path: &std::path::Path,
+    errors: &mut ErrorSink,
+) -> bool {
+    let types = firstparty::VECTORIZE_INDEXED_TYPES;
+    let problem = if items.len() > firstparty::VECTORIZE_MAX_INDEXED {
+        Some(format!(
+            "an index has at most {} metadata indexes, and `@indexed` lists {}",
+            firstparty::VECTORIZE_MAX_INDEXED,
+            items.len()
+        ))
+    } else {
+        items.iter().enumerate().find_map(|(i, item)| {
+            let Some((name, ty)) = item.split_once(':') else {
+                return Some(format!("`{}` is not `name:type`", item.escape_debug()));
+            };
+            if !types.contains(&ty) {
+                return Some(format!(
+                    "`{}` is not a type a metadata index holds",
+                    ty.escape_debug()
+                ));
+            }
+            if !is_metadata_property(name) {
+                return Some(format!(
+                    "`{}` is not a metadata property a filter can name",
+                    name.escape_debug()
+                ));
+            }
+            items[..i]
+                .iter()
+                .any(|p| p.split_once(':').is_some_and(|(n, _)| n == name))
+                .then(|| format!("`{name}` is listed twice"))
+        })
+    };
+    let Some(message) = problem else {
+        return true;
+    };
+    errors.push_for(
+        Some(path),
+        CompileError::new("bynk.capability.invalid_option", ann.span, message).with_note(format!(
+            "write `@indexed([\"category:string\", \"year:number\"])`: at most {} entries, each `name:type` with the type {}",
+            firstparty::VECTORIZE_MAX_INDEXED,
+            types
+                .iter()
+                .map(|t| format!("`{t}`"))
+                .collect::<Vec<_>>()
+                .join(", ")
+        )),
+    );
+    false
+}
+
+/// Whether `name` is a metadata property a filter can name (#3479): a dotted
+/// path whose every segment is non-empty, has no `"` or `|` and does not start
+/// with `$`, at most 512 characters in all. A dot nests (`author.name`).
+fn is_metadata_property(name: &str) -> bool {
+    name.chars().count() <= 512
+        && name
+            .split('.')
+            .all(|seg| !seg.is_empty() && !seg.starts_with('$') && !seg.contains(['"', '|']))
+}
+
 /// Whether `name` is a Cloudflare queue name ([`instance_option_value`]):
 /// Cloudflare allows letters, digits and `-`, starting and ending with a letter
 /// or digit, 1 to 63 characters. Lowercase only, as every name `bynk deploy`
@@ -1514,6 +1891,14 @@ pub(crate) fn is_secrets_store_name(name: &str) -> bool {
         && name
             .bytes()
             .all(|b| b.is_ascii_alphanumeric() || b == b'-' || b == b'_')
+}
+
+/// Whether `name` can name an AI Search instance ([`instance_option_value`]).
+fn is_ai_search_instance_name(name: &str) -> bool {
+    (1..=64).contains(&name.len())
+        && name
+            .bytes()
+            .all(|b| b.is_ascii_lowercase() || b.is_ascii_digit() || b == b'-' || b == b'_')
 }
 
 /// Whether `name` is a Cloudflare Worker name ([`instance_option_value`]).
@@ -2444,6 +2829,36 @@ pub fn phase_resolve_uses(
         unit_uses.insert(name.clone(), uses_targets);
     }
     unit_uses
+}
+
+/// #3536: each context's or adapter's `consumes` clauses as `(target, listed
+/// names)` — `None` for the whole-module form (no braces), `Some(names)` for a
+/// braced list — across all the unit's files, for
+/// [`crate::symbols::record_unselected_consumed_types`].
+pub fn consume_selections(
+    groups: &BTreeMap<String, Vec<usize>>,
+    kinds: &BTreeMap<String, UnitKind>,
+    parsed: &[ParsedFile],
+) -> crate::symbols::ConsumeSelections {
+    let mut out = HashMap::new();
+    for (name, indices) in groups {
+        if !matches!(kinds.get(name), Some(UnitKind::Context | UnitKind::Adapter)) {
+            continue;
+        }
+        let clauses: Vec<(String, Option<Vec<String>>)> = indices
+            .iter()
+            .flat_map(|&i| parsed[i].consumes())
+            .map(|c| {
+                let names = c
+                    .selected
+                    .as_ref()
+                    .map(|items| items.iter().map(|n| n.name.name.clone()).collect());
+                (c.target.joined(), names)
+            })
+            .collect();
+        out.insert(name.clone(), clauses);
+    }
+    out
 }
 
 /// Phase 5b: resolve each unit's `consumes` clauses (target exists, is a context
@@ -4547,6 +4962,84 @@ fn lock_violation(
     None
 }
 
+/// One deployment unit the platform lock checks (#3562): the contexts that
+/// deploy together and the union of their native platforms.
+#[derive(Debug, PartialEq, Eq)]
+struct LockUnit {
+    /// The `[deploy.workers]` group's key, for a unit that is one.
+    group: Option<String>,
+    /// The contexts in the unit, in the order their `consumes` are looked up.
+    members: Vec<String>,
+    /// The unit's native platforms, each with the unit that brings it in.
+    native: BTreeMap<Platform, String>,
+}
+
+/// The deployment units to check, from each context's native platforms:
+/// under `workers`, one per `[deploy.workers]` group (the union of its members',
+/// since they share a Worker) and one per context in no group; under `bundle`,
+/// the union of everything (the whole program co-locates).
+fn lock_units(
+    target: BuildTarget,
+    per_context: Vec<(String, BTreeMap<Platform, String>)>,
+    worker_groups: &bynk_project::worker_groups::WorkerGroups,
+) -> Vec<LockUnit> {
+    let union_of = |natives: Vec<&BTreeMap<Platform, String>>| {
+        let mut union = BTreeMap::new();
+        for native in natives {
+            for (p, unit) in native {
+                union.entry(*p).or_insert_with(|| unit.clone());
+            }
+        }
+        union
+    };
+    match target {
+        BuildTarget::Workers => {
+            let mut units = Vec::new();
+            for (key, group) in worker_groups {
+                let found: Vec<_> = per_context
+                    .iter()
+                    .filter(|(ctx, _)| group.contexts.contains(ctx))
+                    .collect();
+                let native = union_of(found.iter().map(|(_, n)| n).collect());
+                if !native.is_empty() {
+                    units.push(LockUnit {
+                        group: Some(key.clone()),
+                        members: found.iter().map(|(ctx, _)| ctx.clone()).collect(),
+                        native,
+                    });
+                }
+            }
+            let grouped = |ctx: &str| {
+                worker_groups
+                    .values()
+                    .any(|g| g.contexts.iter().any(|c| c == ctx))
+            };
+            units.extend(
+                per_context
+                    .into_iter()
+                    .filter(|(ctx, _)| !grouped(ctx))
+                    .map(|(ctx, native)| LockUnit {
+                        group: None,
+                        members: vec![ctx],
+                        native,
+                    }),
+            );
+            units
+        }
+        BuildTarget::Bundle => {
+            let native = union_of(per_context.iter().map(|(_, n)| n).collect());
+            match per_context.into_iter().next() {
+                Some((owner, _)) if !native.is_empty() => vec![LockUnit {
+                    group: None,
+                    members: vec![owner],
+                    native,
+                }],
+                _ => Vec::new(),
+            }
+        }
+    }
+}
+
 /// A platform-lock violation (v0.19, `bynk.target.*`).
 #[derive(Debug, PartialEq, Eq)]
 enum LockViolation {
@@ -4782,6 +5275,7 @@ pub fn phase_platform_lock(
     unit_consumes: &HashMap<String, Vec<String>>,
     unit_consumes_aliases: &HashMap<String, HashMap<String, String>>,
     unit_flattened: &HashMap<String, HashMap<String, String>>,
+    worker_groups: &bynk_project::worker_groups::WorkerGroups,
     errors: &mut ErrorSink,
 ) {
     // In-browser track, slice 2: `browser` is a Bundle-only platform — a browser
@@ -4826,33 +5320,29 @@ pub fn phase_platform_lock(
             per_context.push((name.clone(), native));
         }
     }
-    // The deployment units to check: per-context under workers; their union
-    // under bundle (the whole program co-locates).
-    let units: Vec<(String, BTreeMap<Platform, String>)> = match target {
-        BuildTarget::Workers => per_context,
-        BuildTarget::Bundle => {
-            let mut union = BTreeMap::new();
-            let mut owner: Option<String> = None;
-            for (ctx, native) in per_context {
-                owner.get_or_insert(ctx);
-                for (p, unit) in native {
-                    union.entry(p).or_insert(unit);
-                }
-            }
-            match owner {
-                Some(ctx) if !union.is_empty() => vec![(ctx, union)],
-                _ => Vec::new(),
-            }
-        }
-    };
-    for (ctx, native) in units {
+    let units = lock_units(target, per_context, worker_groups);
+    for LockUnit {
+        group,
+        members,
+        native,
+    } in units
+    {
         let Some(violation) = lock_violation(&native, selected) else {
             continue;
         };
+        // `context `a.b``, or, for a `[deploy.workers]` group, `Worker group `key``.
+        let ctx = match &group {
+            Some(key) => format!("Worker group `{key}`"),
+            None => format!("context `{}`", members[0]),
+        };
         let span_for = |unit: &str| {
-            groups
-                .get(&ctx)
-                .and_then(|idx| consumes_span_of(parsed, idx, unit))
+            members
+                .iter()
+                .find_map(|m| {
+                    groups
+                        .get(m)
+                        .and_then(|idx| consumes_span_of(parsed, idx, unit))
+                })
                 .map(|(_, s)| s)
                 .unwrap_or_default()
         };
@@ -4864,7 +5354,7 @@ pub fn phase_platform_lock(
                         "bynk.target.vendor_required",
                         span_for(&unit),
                         format!(
-                            "context `{ctx}` uses the platform-native capabilities of `{unit}`, which run only on the `{}` platform, but the build selects `--platform {}`",
+                            "{ctx} uses the platform-native capabilities of `{unit}`, which run only on the `{}` platform, but the build selects `--platform {}`",
                             needed.as_str(),
                             selected.as_str(),
                         ),
@@ -4881,16 +5371,18 @@ pub fn phase_platform_lock(
                         "bynk.target.vendor_conflict",
                         span_for(&a.1),
                         format!(
-                            "one deployment unit (via context `{ctx}`) uses platform-native capabilities from two mutually-exclusive platforms: `{}` (from `{}`) and `{}` (from `{}`)",
+                            "one deployment unit (via {ctx}) uses platform-native capabilities from two mutually-exclusive platforms: `{}` (from `{}`) and `{}` (from `{}`)",
                             a.0.as_str(),
                             a.1,
                             b.0.as_str(),
                             b.1,
                         ),
                     )
-                    .with_note(
-                        "split the consumers into separate deployment units (`--target workers`), or remove one of the platform-native dependencies",
-                    ),
+                    .with_note(if group.is_some() {
+                        "the members of a `[deploy.workers]` group share one Worker: move the conflicting contexts into different groups (or out of any group), or remove one of the platform-native dependencies"
+                    } else {
+                        "split the consumers into separate deployment units (`--target workers`), or remove one of the platform-native dependencies"
+                    }),
                 );
             }
         }
@@ -5000,6 +5492,54 @@ pub fn phase_workers_unprovided_capabilities(
     if target != BuildTarget::Workers {
         return;
     }
+    phase_unprovided_capabilities(
+        &UnprovidedReason::Workers,
+        parsed,
+        groups,
+        kinds,
+        unit_tables,
+        errors,
+    );
+}
+
+/// Why a context's required local capability has to have a provider in it,
+/// which is what the `bynk.capability.not_provided` message and note say.
+pub enum UnprovidedReason {
+    /// #1822: each context is a Worker, which builds every capability its
+    /// handlers are given.
+    Workers,
+    /// A bundle with a composition root: `composeApp` builds every context's
+    /// deps itself, so the host has no `__makeSurface(deps)` call to supply a
+    /// capability through. `trigger` is the context that brings the root in,
+    /// and `because` what it does that needs one (for example "consumes the
+    /// services of `shop.stock`"). Without this check the gap reached `tsc`
+    /// as a member missing from a `__makeSurface` argument in `compose.ts`,
+    /// reported as a compiler bug (`bynk.codegen.tsc_failed`).
+    BundleComposition { trigger: String, because: String },
+}
+
+/// Whether a bundle's composition root builds this context: `composeApp`
+/// makes a deps object only to feed a context's `__makeSurface`, so a context
+/// with no services (agents, capabilities or providers only) is left to the
+/// host. Shared by the driver's `emit_composition_root` and
+/// [`phase_unprovided_capabilities`], so the check refuses exactly the
+/// contexts the root builds.
+pub fn composed_in_bundle_root(table: &UnitTable) -> bool {
+    !table.services.is_empty()
+}
+
+/// The shared body of the Workers and bundle-composition checks: each
+/// context's required local capability (a `given` on a service or agent
+/// handler, or on a provider) that has no provider, once per capability, at
+/// its first `given`.
+pub fn phase_unprovided_capabilities(
+    reason: &UnprovidedReason,
+    parsed: &[ParsedFile],
+    groups: &BTreeMap<String, Vec<usize>>,
+    kinds: &BTreeMap<String, UnitKind>,
+    unit_tables: &HashMap<String, UnitTable>,
+    errors: &mut ErrorSink,
+) {
     for (name, indices) in groups {
         if kinds.get(name) != Some(&UnitKind::Context) {
             continue;
@@ -5007,6 +5547,11 @@ pub fn phase_workers_unprovided_capabilities(
         let Some(table) = unit_tables.get(name) else {
             continue;
         };
+        if matches!(reason, UnprovidedReason::BundleComposition { .. })
+            && !composed_in_bundle_root(table)
+        {
+            continue;
+        }
         // #1882 review: once per capability, at its first `given`, however
         // many handlers require it.
         let mut reported: HashSet<String> = HashSet::new();
@@ -5041,24 +5586,231 @@ pub fn phase_workers_unprovided_capabilities(
                 {
                     continue;
                 }
-                errors.push_for(
-                    Some(&parsed[i].identity_path()),
-                    CompileError::new(
+                let cap_name = &cap.name.name;
+                let error = match reason {
+                    UnprovidedReason::Workers => CompileError::new(
                         "bynk.capability.not_provided",
                         cap.span,
                         format!(
-                            "capability `{}` is required here but has no provider in context `{name}`; a Worker builds every capability its handlers are given",
-                            cap.name.name
+                            "capability `{cap_name}` is required here but has no provider in context `{name}`; a Worker builds every capability its handlers are given"
                         ),
                     )
                     .with_note(format!(
-                        "add `provides {} = …` to `{name}`, or build for `--target bundle`, where the host supplies it",
-                        cap.name.name
+                        "add `provides {cap_name} = …` to `{name}`, or build for `--target bundle`, where the host supplies it"
                     )),
-                );
+                    UnprovidedReason::BundleComposition { trigger, because } => {
+                        CompileError::new(
+                            "bynk.capability.not_provided",
+                            cap.span,
+                            format!(
+                                "capability `{cap_name}` is required here but has no provider in context `{name}`; this program's composition root builds every context, so nothing else can supply it"
+                            ),
+                        )
+                        .with_note(format!(
+                            "`{trigger}` {because}, so the bundle has a composition root (`composeApp`), which builds `{name}` with the providers it declares"
+                        ))
+                        .with_note(format!(
+                            "add `provides {cap_name} = …` to `{name}`; a test `stub` replaces it in the cases that stub it, but the program still needs one"
+                        ))
+                    }
+                };
+                errors.push_for(Some(&parsed[i].identity_path()), error);
             }
         }
     }
+}
+
+/// Each unit's resolved calls, by expression: the slice of the checker's
+/// [`checker::Callee`] map the composition-root predicate reads. The driver
+/// keeps one per unit for emission; [`crate::analysis`] gathers the same
+/// slice from the files it checks, so `bynk check` and the editor decide
+/// whether a bundle has a composition root from the same facts.
+pub type UnitCallees = HashMap<String, HashMap<ExprId, checker::Callee>>;
+
+/// Whether a resolved call is `Events.emit`, the one callee
+/// [`unit_table_uses_emit`] looks for. `Events.emit[...]` dispatches through
+/// the ordinary capability-call path (`checker/calls.rs`).
+pub fn is_events_emit(callee: &checker::Callee) -> bool {
+    matches!(callee, checker::Callee::Capability { cap, op, .. } if cap == "Events" && op == "emit")
+}
+
+/// Events track, slice 0 (spine #936): does any handler or provider op in
+/// this unit emit? Reads the checker's own resolved `Callee` for every
+/// expression in every service handler, agent handler and provider op, not
+/// the receiver's spelling, so a local type that shadows `Events` does not
+/// count (`1204_events_emit_shadowed_by_local_type`).
+///
+/// `callees` is `None` only for a unit whose own check never ran. Every
+/// caller runs on an otherwise-clean program, where every unit was checked,
+/// and a silent `false` would disable the emitter's events wiring with no
+/// diagnostic, so it is a `debug_assert` rather than a quiet default.
+pub fn unit_table_uses_emit(
+    table: &UnitTable,
+    callees: Option<&HashMap<ExprId, checker::Callee>>,
+) -> bool {
+    let Some(callees) = callees else {
+        debug_assert!(
+            false,
+            "unit_table_uses_emit: no Callee map for a checked unit"
+        );
+        return false;
+    };
+    let bodies = table
+        .services
+        .values()
+        .flat_map(|s| s.handlers.iter().map(|h| &h.body))
+        .chain(
+            table
+                .agents
+                .values()
+                .flat_map(|a| a.handlers.iter().map(|h| &h.body)),
+        )
+        .chain(
+            table
+                .providers
+                .values()
+                .flat_map(|p| p.ops.iter().map(|op| &op.body)),
+        );
+    let mut stack: Vec<&Expr> = Vec::new();
+    for body in bodies {
+        for s in &body.statements {
+            statement_exprs(s, &mut stack);
+        }
+        stack.push(&body.tail);
+    }
+    while let Some(e) = stack.pop() {
+        if callees.get(&e.id).is_some_and(is_events_emit) {
+            return true;
+        }
+        stack.extend(expr_children(e));
+    }
+    false
+}
+
+/// The context that makes a bundle emit its composition root (`compose.ts`,
+/// `composeApp`) and what it does that needs one, phrased to follow the
+/// context's name, or `None` when the bundle has no root. Shared by the
+/// driver's `emit_composition_root` and [`phase_bundle_composition_unprovided`]
+/// (which both `bynk check` and the editor's analysis run), so the check and
+/// the emitter cannot disagree about whether there is a root: `composeApp`
+/// builds every context's deps itself, so once there is one the host cannot
+/// supply a capability through `__makeSurface(deps)`, and a required local
+/// capability needs a provider, as it does on Workers.
+pub fn composition_root_trigger(
+    kinds: &BTreeMap<String, UnitKind>,
+    unit_consumes: &HashMap<String, Vec<String>>,
+    unit_consumes_aliases: &HashMap<String, HashMap<String, String>>,
+    unit_tables: &HashMap<String, UnitTable>,
+    unit_callees: &UnitCallees,
+    unit_flattened: &HashMap<String, HashMap<String, String>>,
+) -> Option<(String, String)> {
+    // Identify contexts that consume something whose surface has services.
+    // Sorted, so the context named is the same on every run.
+    let mut consumers: Vec<(&String, &Vec<String>)> = unit_consumes.iter().collect();
+    consumers.sort();
+    for (name, targets) in consumers {
+        if kinds.get(name) != Some(&UnitKind::Context) {
+            continue;
+        }
+        if let Some(t) = targets.iter().find(|t| {
+            unit_tables
+                .get(*t)
+                .is_some_and(|other| !other.services.is_empty())
+        }) {
+            return Some((name.clone(), format!("consumes `{t}`, which has services")));
+        }
+    }
+    // v0.15: also compose when a context uses a consumed context's capability
+    // (in a handler or in a provider's `given`) — the consumer must instantiate
+    // the provided capability's provider locally.
+    for (name, kind) in kinds {
+        if *kind != UnitKind::Context {
+            continue;
+        }
+        let Some(table) = unit_tables.get(name) else {
+            continue;
+        };
+        let consumed = unit_consumes.get(name).cloned().unwrap_or_default();
+        let aliases = unit_consumes_aliases.get(name).cloned().unwrap_or_default();
+        let flattened = unit_flattened.get(name).cloned().unwrap_or_default();
+        let uses_cross_cap = !handler_cross_caps(table, &consumed, &aliases, &flattened).is_empty()
+            || table.providers.values().any(|p| {
+                p.given.iter().any(|g| {
+                    g.is_cross_context()
+                        // v0.18: a bare given flattened from `consumes U
+                        // { Cap }` is cross-unit too — its provider lives
+                        // in the consumed unit.
+                        || (g.prefix().is_none() && flattened.contains_key(g.key()))
+                })
+            });
+        // Events track, slice 0 (spine #936): a context whose handlers emit
+        // needs its own `__eventsDispatch` closure built by compose
+        // (§ `discover_event_subscribers`) even when it consumes nothing and
+        // no other context consumes it — `Events` is filtered out of
+        // `handler_cross_caps` (there is no `EventsProvider`), so without
+        // this check a publish-only context would never get a compose entry
+        // and its service would simply never be called. S4a (#1966): a
+        // derived capability's instance is its base's platform provider,
+        // built by compose like a flattened one.
+        let because = if uses_cross_cap {
+            "is given a capability another unit provides"
+        } else if unit_table_uses_emit(table, unit_callees.get(name)) {
+            "emits events"
+        } else if !table.derived.is_empty() {
+            "derives a capability"
+        } else {
+            continue;
+        };
+        return Some((name.clone(), because.to_string()));
+    }
+    None
+}
+
+/// On the bundle target a context's required local capability may be left to
+/// the host, which supplies it through `__makeSurface(deps)`, but only while
+/// the bundle has no composition root ([`composition_root_trigger`]):
+/// `composeApp` builds the deps of every context it composes
+/// ([`composed_in_bundle_root`]), so once a context brings a root in, a
+/// capability with no provider is the Workers gap again. Raised at the
+/// `given` rather than left to `tsc` against `compose.ts`
+/// (`bynk.codegen.tsc_failed`). Called by the driver's `run_checks` and by
+/// [`crate::analysis`], after the per-unit checks (it reads `unit_callees`),
+/// and only on an otherwise-clean program: a unit that failed to check has no
+/// callee map, and the root is only emitted for a clean one.
+#[allow(clippy::too_many_arguments)]
+pub fn phase_bundle_composition_unprovided(
+    target: BuildTarget,
+    parsed: &[ParsedFile],
+    groups: &BTreeMap<String, Vec<usize>>,
+    kinds: &BTreeMap<String, UnitKind>,
+    unit_consumes: &HashMap<String, Vec<String>>,
+    unit_consumes_aliases: &HashMap<String, HashMap<String, String>>,
+    unit_tables: &HashMap<String, UnitTable>,
+    unit_callees: &UnitCallees,
+    unit_flattened: &HashMap<String, HashMap<String, String>>,
+    errors: &mut ErrorSink,
+) {
+    if target != BuildTarget::Bundle || !errors.is_empty() {
+        return;
+    }
+    let Some((trigger, because)) = composition_root_trigger(
+        kinds,
+        unit_consumes,
+        unit_consumes_aliases,
+        unit_tables,
+        unit_callees,
+        unit_flattened,
+    ) else {
+        return;
+    };
+    phase_unprovided_capabilities(
+        &UnprovidedReason::BundleComposition { trigger, because },
+        parsed,
+        groups,
+        kinds,
+        unit_tables,
+        errors,
+    );
 }
 
 /// #2306: on the Workers target, a `from websocket` service's `on open` is hosted
@@ -5524,6 +6276,16 @@ pub fn merge_consumed_exports(
             let local_value = crate::symbols::local_value_kind(&unit_info[name].table, type_name)
                 .map(|(kind, _)| kind)
                 .filter(|kind| !matches!(*kind, "type" | "event"));
+            // #3536: a type the braces leave out is not in scope as a name of
+            // its own, so a declaration of this unit's wins over it, silently.
+            if unit_info[name]
+                .table
+                .unselected_consumed_types
+                .contains(type_name)
+                && (combined_types.contains_key(type_name) || local_value.is_some())
+            {
+                continue;
+            }
             if combined_types.contains_key(type_name) || local_value.is_some() {
                 // Name conflict between local/uses and consumed export.
                 let consumes_site = consumes_span_of(parsed, &unit_info[name].files, t);
@@ -6620,6 +7382,8 @@ mod native_platform_closure_tests {
             events: StdHashMap::new(),
             flattened_caps: StdHashMap::new(),
             consumed_type_aliases: StdHashMap::new(),
+            unselected_consumed_types: Default::default(),
+            unlisted_consumed_types: Default::default(),
             assets: StdHashMap::new(),
             embeds: StdHashMap::new(),
             consts: StdHashMap::new(),
@@ -7299,6 +8063,21 @@ mod consumes_alias_tests {
         assert_eq!(a.resolves_to("app.bynk", "Digest { total").unit, "report");
     }
 
+    /// #3536: braces that list only `Clock` do not bring `Method` in, and no
+    /// listed capability's signature reaches it, so the unit's own `Method` is
+    /// not in conflict with the standard library's.
+    #[test]
+    fn an_unlisted_export_yields_to_the_units_own_type() {
+        let src = app(
+            "consumes bynk { Clock }",
+            "type Method = | Fetch | Skip\n\nfn pick() -> Method { Fetch }",
+        );
+        run(&[REPORT, ("app.bynk", &src)]).assert_clean();
+    }
+
+    /// A type a listed capability's signatures use is still the standard
+    /// library's, so the unit's own type of that name still conflicts, with a
+    /// note that names the way out.
     #[test]
     fn the_unaliased_form_still_clashes_with_a_note_that_names_the_way_out() {
         let src = app(
@@ -7728,5 +8507,117 @@ fn display_canonical_names(error: &mut CompileError) {
         if label.contains('$') {
             *label = bynk_project::display_names(label);
         }
+    }
+}
+
+#[cfg(test)]
+mod metadata_property_tests {
+    use super::is_metadata_property;
+
+    #[test]
+    fn a_dot_nests_and_each_segment_is_checked() {
+        assert!(is_metadata_property("category"));
+        assert!(is_metadata_property("author.name"));
+        assert!(!is_metadata_property(""));
+        assert!(!is_metadata_property("a..b"));
+        assert!(!is_metadata_property(".a"));
+        assert!(!is_metadata_property("a."));
+        assert!(!is_metadata_property("$x"));
+        assert!(!is_metadata_property("a.$x"));
+        assert!(!is_metadata_property("a\"b"));
+        assert!(!is_metadata_property(&"x".repeat(513)));
+    }
+}
+
+/// The deployment units the platform lock checks (#3562): per context under
+/// `workers`, a `[deploy.workers]` group's members together, the whole program
+/// under `bundle`.
+#[cfg(test)]
+mod lock_unit_tests {
+    use super::*;
+    use bynk_project::worker_groups::{WorkerGroup, WorkerGroups};
+
+    fn native(platform: Platform, unit: &str) -> BTreeMap<Platform, String> {
+        BTreeMap::from([(platform, unit.to_string())])
+    }
+
+    fn per_context() -> Vec<(String, BTreeMap<Platform, String>)> {
+        vec![
+            (
+                "a.x".to_string(),
+                native(Platform::Cloudflare, "bynk.cloudflare"),
+            ),
+            ("a.y".to_string(), native(Platform::Node, "bynk.node")),
+            (
+                "a.z".to_string(),
+                native(Platform::Cloudflare, "bynk.cloudflare"),
+            ),
+        ]
+    }
+
+    fn group(members: &[&str]) -> WorkerGroups {
+        WorkerGroups::from([(
+            "core".to_string(),
+            WorkerGroup {
+                contexts: members.iter().map(|m| m.to_string()).collect(),
+                ..WorkerGroup::default()
+            },
+        )])
+    }
+
+    /// Without groups, each context is its own unit, as before.
+    #[test]
+    fn workers_without_groups_is_one_unit_per_context() {
+        let units = lock_units(BuildTarget::Workers, per_context(), &WorkerGroups::new());
+        assert_eq!(units.len(), 3);
+        assert!(
+            units
+                .iter()
+                .all(|u| u.group.is_none() && u.members.len() == 1)
+        );
+        assert!(units.iter().all(
+            |u| lock_violation(&u.native, Platform::Cloudflare).is_some()
+                == (u.members[0] == "a.y")
+        ));
+    }
+
+    /// A group's members share a Worker, so a Cloudflare-native member and a
+    /// Node-native one are one unit spanning two platforms.
+    #[test]
+    fn a_group_is_one_unit_over_its_members_union() {
+        let units = lock_units(BuildTarget::Workers, per_context(), &group(&["a.x", "a.y"]));
+        assert_eq!(units.len(), 2, "{units:?}");
+        let core = &units[0];
+        assert_eq!(core.group.as_deref(), Some("core"));
+        assert_eq!(core.members, ["a.x", "a.y"]);
+        assert!(matches!(
+            lock_violation(&core.native, Platform::Cloudflare),
+            Some(LockViolation::Conflict { .. })
+        ));
+        // `a.z`, in no group, stays its own unit, and is fine on Cloudflare.
+        assert_eq!(units[1].members, ["a.z"]);
+        assert!(lock_violation(&units[1].native, Platform::Cloudflare).is_none());
+    }
+
+    /// A group whose members need no native platform makes no unit.
+    #[test]
+    fn a_group_with_no_native_platforms_is_not_a_unit() {
+        let units = lock_units(
+            BuildTarget::Workers,
+            vec![("a.x".to_string(), BTreeMap::new())],
+            &group(&["a.x"]),
+        );
+        assert!(units.is_empty());
+    }
+
+    /// Under `bundle` the whole program is one unit, owned by the first context,
+    /// whatever the groups say.
+    #[test]
+    fn bundle_is_one_unit_and_ignores_groups() {
+        let units = lock_units(BuildTarget::Bundle, per_context(), &group(&["a.x", "a.y"]));
+        assert_eq!(units.len(), 1);
+        assert_eq!(units[0].group, None);
+        assert_eq!(units[0].members, ["a.x"]);
+        assert_eq!(units[0].native.len(), 2);
     }
 }

@@ -259,7 +259,7 @@ fn a_typescript_worker_calls_a_bynk_context_through_the_generated_client() {
     fs::write(
         ts_dir.join("wrangler.toml"),
         format!(
-            "name = \"{ts_worker}\"\nmain = \"worker.ts\"\ncompatibility_date = \"2026-08-04\"\n\n[[services]]\nbinding = \"LEDGER\"\nservice = \"{bynk_worker}\"\n"
+            "name = \"{ts_worker}\"\nmain = \"worker.ts\"\ncompatibility_date = \"2026-08-11\"\n\n[[services]]\nbinding = \"LEDGER\"\nservice = \"{bynk_worker}\"\n"
         ),
     )
     .unwrap();

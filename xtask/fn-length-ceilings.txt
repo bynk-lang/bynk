@@ -4,17 +4,17 @@
 # below 300 (or gone) must be removed. Prefer splitting a function to raising its
 # ceiling; a raise needs its justification in review. `cargo xtask fn-lengths --apply`
 # rewrites this file from the tree (lowering ceilings after a function shrinks).
-bynk-emit/src/emitter/workers_entry.rs::emit_worker_entry = 1313
+bynk-emit/src/emitter/workers_entry.rs::emit_worker_entry = 1281
 bynk-driver/src/project/tests_emit/system_support.rs::emit_system_http_support = 1157
 bynk-driver/src/project/tests_emit/test_module.rs::emit_test_module = 1003
-bynk-driver/src/project.rs::run_checks = 938
+bynk-driver/src/project.rs::run_checks = 951
 bynk-check/src/checker/calls.rs::check_method_call = 876
 bynk-emit/src/emitter/workers.rs::emit_worker_compose = 846
 bynk-driver/src/project/tests_emit/integration_module.rs::emit_integration_module = 839
-bynk-driver/src/test_runner.rs::run_test = 815
+bynk-driver/src/test_runner.rs::run_test = 801
 bynk/src/deploy/plan.rs::run = 781
 bynk-emit/src/emitter/workers_entry.rs::emit_http_route_dispatch = 764
-bynk-driver/src/project.rs::build_output = 767
+bynk-driver/src/project.rs::build_output = 376
 bynk-check/src/resolver.rs::check_expr_references = 698
 bynk-emit/src/emitter/serialisation.rs::emit_generic_helpers_qualified = 687
 bynk-check/src/checker.rs::type_of = 659
@@ -61,7 +61,7 @@ bynk-driver/src/project/tests_emit/stubs.rs::emit_stub_class = 338
 bynk-project/src/packages.rs::resolve_graph = 337
 bynk-check/src/checker/expressions.rs::check_http_variant = 335
 bynk-emit/src/emitter/workers.rs::emit_http_sum_wrapper = 335
-bynk-check/src/resolver.rs::resolve_recovering = 332
+bynk-check/src/resolver.rs::resolve_recovering = 300
 bynk-check/src/test_suites.rs::check_test_bodies = 330
 bynk-check/src/context_checks.rs::check_service_decls = 328
 bynk-ide/src/hover.rs::hover_content = 327
@@ -73,7 +73,4 @@ bynk-emit/src/emitter/emit.rs::emit_ws_dispatch_handlers = 312
 bynk-emit/src/emitter/emit.rs::classify_agent_store = 310
 bynk-check/src/context_checks.rs::reject_fn_types = 306
 bynk-check/src/project_model.rs::phase_messages_bundles = 306
-bynk-driver/src/project/tests_emit/test_cases.rs::emit_test_scope_setup = 305
 bynk-emit/src/emitter/lower.rs::lower_expr = 303
-bynk-emit/src/emitter/emit.rs::emit_agent_handlers = 301
-bynk-driver/src/project/tests_emit/property_tests.rs::emit_test_property_function = 300

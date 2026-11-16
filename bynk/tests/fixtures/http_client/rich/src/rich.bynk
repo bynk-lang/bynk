@@ -1,0 +1,61 @@
+context rich
+
+type Sku = String where NonEmpty
+type OrderId = opaque String
+type Qty = Int where InRange(1, 99)
+type Note = String where MaxLength(10)
+
+type NewOrder = { sku: Sku, qty: Qty, note: Option[Note], tags: List[String] }
+type Order = { id: OrderId, sku: Sku, qty: Qty, note: Option[Note], placedAt: Instant, price: Decimal }
+type Page[T] = { items: List[T], next: Option[Int] }
+type Event =
+  | Opened(by: Option[String])
+  | Closed
+type Filter = { sku: Option[Sku], limit: Int = 10, tags: List[String], since: Option[Int] }
+type Search = { q: String, @name("x-page") page: Option[Int] }
+
+service api from http {
+  on POST("/orders") (body: NewOrder) -> Effect[HttpResult[Order]] by v: Visitor {
+    if body.qty > 50 {
+      HttpResult.Conflict("too many")
+    } else {
+      match OrderId.of("o-1") {
+        Ok(oid) => match Decimal.parse("12.50") {
+          Some(p) => Created(Order {
+            id: oid,
+            sku: body.sku,
+            qty: body.qty,
+            note: body.note,
+            placedAt: Instant.fromEpochMillis(1700000000000),
+            price: p,
+          })
+          None => HttpResult.ServerError("no price")
+        }
+        Err(_) => HttpResult.ServerError("no id")
+      }
+    }
+  }
+
+  on GET("/orders") (query: Filter) -> Effect[HttpResult[Page[String]]] by v: Visitor {
+    Ok(Page { items: query.tags, next: query.since })
+  }
+
+  on GET("/orders/:id") (id: OrderId) -> Effect[HttpResult[Option[Event]]] by v: Visitor {
+    match OrderId.of("gone") {
+      Ok(g) => if id == g {
+        HttpResult.NotFound
+      } else {
+        Ok(Some(Opened(Some("ann"))))
+      }
+      Err(_) => Ok(None)
+    }
+  }
+
+  on GET("/search") (query: Search) -> Effect[HttpResult[String]] by v: Visitor {
+    Ok(query.q)
+  }
+
+  on DELETE("/orders/:id") (id: OrderId) -> Effect[HttpResult[()]] by v: Visitor {
+    HttpResult.NoContent
+  }
+}

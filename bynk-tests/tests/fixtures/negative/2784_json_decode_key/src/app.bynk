@@ -1,6 +1,6 @@
 context app
 
-consumes bynk.crypto { Crypto }
+consumes bynk.crypto { Crypto, SigningKey }
 
 // #2784: a key cannot be built from JSON either.
 fn parse(s: String) -> Bool {

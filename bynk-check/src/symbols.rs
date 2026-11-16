@@ -306,15 +306,7 @@ pub fn assemble_index(
                         );
                     }
                 }
-                CommonsItem::Service(s) => {
-                    builder.add_def(
-                        &unit,
-                        SymbolKind::Service,
-                        &s.name.name,
-                        site(&s.name),
-                        symbol_modifiers(&unit, None),
-                    );
-                }
+                CommonsItem::Service(s) => add_service_defs(&mut builder, &unit, pf, s),
                 CommonsItem::Agent(a) => {
                     builder.add_def(
                         &unit,
@@ -416,6 +408,75 @@ pub fn assemble_index(
     builder.build(refs.edges)
 }
 
+/// A service's definition, and (#3582) its callable handlers — `on call` and each `on http` route —
+/// as call-only `Handler` symbols keyed `"service.call"` / `"service.POST /path"`,
+/// so a cross-context call has a handler to be an edge to. The definition site is
+/// the handler's `on` keyword; no other handler
+/// kind can be called or is named by method and path.
+fn add_service_defs(
+    builder: &mut IndexBuilder,
+    unit: &str,
+    pf: &ParsedFile,
+    service: &ServiceDecl,
+) {
+    let (path, source) = (pf.identity_path(), pf.source());
+    builder.add_def(
+        unit,
+        SymbolKind::Service,
+        &service.name.name,
+        SiteRef {
+            path: path.clone(),
+            span: service.name.span,
+        },
+        symbol_modifiers(unit, None),
+    );
+    for h in &service.handlers {
+        let label = match &h.kind {
+            HandlerKind::Call => "call".to_string(),
+            HandlerKind::Http { method, path } => format!("{} {path}", method.as_str()),
+            _ => continue,
+        };
+        let start = on_keyword_start(source, h);
+        let span = Span {
+            start,
+            end: start + 2,
+            ..h.span
+        };
+        builder.add_call_only_def(
+            unit,
+            &format!("{}.{label}", service.name.name),
+            SiteRef {
+                path: path.clone(),
+                span,
+            },
+        );
+    }
+}
+
+/// Byte offset of a handler's `on` keyword. `Handler.span` starts at the first
+/// annotation when there is one, so skip past the annotations (and any
+/// whitespace or `//` comments after them) in the source.
+fn on_keyword_start(source: &str, h: &bynk_syntax::ast::Handler) -> usize {
+    let Some(last) = h.annotations.last() else {
+        return h.span.start;
+    };
+    let mut at = last.span.end;
+    while let Some(rest) = source.get(at..) {
+        let trimmed = rest.trim_start();
+        at += rest.len() - trimmed.len();
+        if trimmed.starts_with("//") {
+            at += trimmed.find('\n').map_or(trimmed.len(), |n| n + 1);
+        } else {
+            break;
+        }
+    }
+    if source.get(at..).is_some_and(|r| r.starts_with("on")) {
+        at
+    } else {
+        h.span.start
+    }
+}
+
 /// v0.28 (ADR 0057): a symbol's semantic-token modifiers from its
 /// declaration. `refined` only when a refinement is present — `type X = Int`
 /// is `Refined { refinement: None }`, a plain alias, and carries neither;
@@ -496,6 +557,18 @@ pub struct UnitTable {
     /// #2887: the exported types this unit renames with `consumes U { T as
     /// Alias }`, keyed by the alias. Recorded by [`record_flattened_caps`].
     pub consumed_type_aliases: HashMap<String, ConsumedTypeAlias>,
+    /// #3536: the types of the first-party units this unit consumes with a
+    /// braced list (`consumes bynk { Logger }`) that the list does not name.
+    /// A selective `consumes` brings in only what it lists, so these are not
+    /// candidates for a name clash or a bare-variant lookup, and a declaration
+    /// of this unit's own wins over them. Recorded by
+    /// [`record_unselected_consumed_types`].
+    pub unselected_consumed_types: std::collections::BTreeSet<String>,
+    /// #3536: every type of those units the braces do not list, including the
+    /// ones a listed capability's signatures reach (which stay in scope as
+    /// values, so [`UnitTable::unselected_consumed_types`] leaves them out).
+    /// What `bynk.consumes.type_not_selected` is reported against.
+    pub unlisted_consumed_types: std::collections::BTreeSet<String>,
     /// S4a (#1966): the derived capabilities (`capability Sessions = Kv`)
     /// this context declares, by name, once resolved to their base by
     /// [`crate::project_model::phase_resolve_derived`]. Each is also in
@@ -531,6 +604,11 @@ pub(crate) fn sorted_methods(
 }
 
 impl UnitTable {
+    /// #3536: [`UnitTable::unselected_consumed_types`] as a set.
+    pub fn unselected_names(&self) -> std::collections::HashSet<String> {
+        self.unselected_consumed_types.iter().cloned().collect()
+    }
+
     /// The parts of this table that are **not** a function of the unit's own
     /// files (#3243 S2.3b): everything `phase_symbol_tables` builds from a unit's
     /// own sources is covered by hashing those sources, so a file-check digest
@@ -567,12 +645,16 @@ impl UnitTable {
             // Filled in from other units.
             flattened_caps,
             consumed_type_aliases,
+            unselected_consumed_types,
+            unlisted_consumed_types,
             derived,
         } = self;
         (
             *kind,
             sorted(flattened_caps),
             sorted(consumed_type_aliases),
+            unselected_consumed_types,
+            unlisted_consumed_types,
             sorted(derived),
         )
     }
@@ -840,9 +922,90 @@ impl DerivedInstance {
             .flatten()
     }
 
+    /// Whether this is a `Vectorize` instance (#3479).
+    pub fn is_vectorize(&self) -> bool {
+        self.base_unit == crate::firstparty::CLOUDFLARE_UNIT && self.base_cap == "Vectorize"
+    }
+
+    /// A `Vectorize` instance's `@dimensions`; `None` for any other kind.
+    pub fn vectorize_dimensions(&self) -> Option<i64> {
+        self.is_vectorize()
+            .then(|| self.number(crate::firstparty::VECTORIZE_DIMENSIONS_OPTION))
+            .flatten()
+    }
+
+    /// A `Vectorize` instance's `@metric`; `None` for any other kind.
+    pub fn vectorize_metric(&self) -> Option<&str> {
+        self.is_vectorize()
+            .then(|| self.option(crate::firstparty::VECTORIZE_METRIC_OPTION))
+            .flatten()
+    }
+
+    /// A `Vectorize` instance's `@indexed` entries as written (`name:type`);
+    /// empty when it has none or is another kind.
+    pub fn vectorize_indexed(&self) -> &[String] {
+        self.list(crate::firstparty::VECTORIZE_INDEXED_OPTION)
+    }
+
+    /// Whether this is a `Container` instance (#3477).
+    pub fn is_container(&self) -> bool {
+        self.base_unit == crate::firstparty::CLOUDFLARE_UNIT && self.base_cap == "Container"
+    }
+
+    /// A `Container` instance's `@build` directory as written; `None` for any
+    /// other kind.
+    pub fn container_build(&self) -> Option<&str> {
+        self.is_container()
+            .then(|| self.option(crate::firstparty::CONTAINER_BUILD_OPTION))
+            .flatten()
+    }
+
+    /// A `Container` instance's `@port`; `None` for any other kind.
+    pub fn container_port(&self) -> Option<i64> {
+        self.is_container()
+            .then(|| self.number(crate::firstparty::CONTAINER_PORT_OPTION))
+            .flatten()
+    }
+
+    /// A `Container` instance's `@sleepAfter` in seconds, when it has one.
+    pub fn container_sleep_after(&self) -> Option<i64> {
+        self.is_container()
+            .then(|| self.number(crate::firstparty::CONTAINER_SLEEP_AFTER_OPTION))
+            .flatten()
+    }
+
+    /// A `Container` instance's `@instanceType`, when it has one.
+    pub fn container_instance_type(&self) -> Option<&str> {
+        self.is_container()
+            .then(|| self.option(crate::firstparty::CONTAINER_INSTANCE_TYPE_OPTION))
+            .flatten()
+    }
+
+    /// A `Container` instance's `@forward` names; empty when it has none or is
+    /// another kind.
+    pub fn container_forward(&self) -> &[String] {
+        self.list(crate::firstparty::CONTAINER_FORWARD_OPTION)
+    }
+
     /// Whether this is an `Email` instance (#3302).
     pub fn is_email(&self) -> bool {
         self.base_unit == crate::firstparty::CLOUDFLARE_UNIT && self.base_cap == "Email"
+    }
+
+    /// The AI Search instance an `AiSearch` declaration names (#3480), as
+    /// written; `None` for any other kind.
+    pub fn ai_search_instance(&self) -> Option<&str> {
+        (self.base_unit == crate::firstparty::CLOUDFLARE_UNIT && self.base_cap == "AiSearch")
+            .then(|| self.option(crate::firstparty::AI_SEARCH_INSTANCE_OPTION))
+            .flatten()
+    }
+
+    /// The client certificate an `MtlsCertificate` declaration names (#3513 A), as
+    /// written; `None` for any other kind.
+    pub fn mtls_certificate(&self) -> Option<&str> {
+        (self.base_unit == crate::firstparty::CLOUDFLARE_UNIT && self.base_cap == "MtlsCertificate")
+            .then(|| self.option(crate::firstparty::MTLS_CERTIFICATE_OPTION))
+            .flatten()
     }
 
     /// Whether this is a `StoredSecret` instance (#3301).
@@ -885,6 +1048,141 @@ pub fn record_flattened_caps(
             t.consumed_type_aliases = aliases.clone();
         }
     }
+}
+
+/// #3536: record, on each unit's table, the types of its first-party consumed
+/// units that its braces leave out. A bare `consumes bynk` (or one stated bare
+/// in any of the unit's files) is the whole-module form and leaves nothing out;
+/// a braced list brings in only the names it lists, so every other type of that
+/// unit is *unselected*. Types stay resolvable, so that `bynk.consumes.type_not_selected` can
+/// report them with a fix rather than as an unknown name, but are neither clash nor ambiguity
+/// candidates, and the unit's own declarations win over them.
+pub type ConsumeSelections = HashMap<String, Vec<(String, Option<Vec<String>>)>>;
+
+pub fn record_unselected_consumed_types(
+    unit_tables: &mut HashMap<String, UnitTable>,
+    consumes: &ConsumeSelections,
+) {
+    type Sets = std::collections::BTreeSet<String>;
+    let mut out: HashMap<String, (Sets, Sets)> = HashMap::new();
+    for (unit, clauses) in consumes {
+        // target -> Some(listed names) | None for the whole-module form.
+        let mut selection: HashMap<&str, Option<std::collections::HashSet<&str>>> = HashMap::new();
+        for (target, names) in clauses {
+            if !is_first_party_name(target) {
+                continue;
+            }
+            match (names, selection.get_mut(target.as_str())) {
+                (None, _) => {
+                    selection.insert(target, None);
+                }
+                (Some(_), Some(None)) => {}
+                (Some(names), Some(Some(listed))) => {
+                    listed.extend(names.iter().map(String::as_str))
+                }
+                (Some(names), None) => {
+                    selection.insert(target, Some(names.iter().map(String::as_str).collect()));
+                }
+            }
+        }
+        for (target, listed) in selection {
+            let (Some(listed), Some(table)) = (listed, unit_tables.get(target)) else {
+                continue;
+            };
+            let unlisted: Vec<&String> = table
+                .types
+                .keys()
+                .filter(|t| !listed.contains(t.as_str()))
+                .collect();
+            // A listed capability's signatures use types that must keep meaning
+            // the standard library's, so a declaration of the unit's own
+            // cannot silently take their name.
+            let reached = signature_types(table, &listed);
+            let entry = out.entry(unit.clone()).or_default();
+            entry.0.extend(unlisted.iter().map(|t| (*t).clone()));
+            entry.1.extend(
+                unlisted
+                    .into_iter()
+                    .filter(|t| !reached.contains(*t))
+                    .cloned(),
+            );
+        }
+    }
+    for (unit, (unlisted, unselected)) in out {
+        if let Some(t) = unit_tables.get_mut(&unit) {
+            t.unlisted_consumed_types = unlisted;
+            t.unselected_consumed_types = unselected;
+        }
+    }
+}
+
+/// The types of `table` that the signatures of the capabilities `listed`
+/// names mention, and that those types' own fields and payloads reach.
+fn signature_types(
+    table: &UnitTable,
+    listed: &std::collections::HashSet<&str>,
+) -> std::collections::HashSet<String> {
+    fn names(r: &TypeRef, out: &mut Vec<String>) {
+        match r {
+            TypeRef::Named(id) => out.push(id.name.clone()),
+            TypeRef::App { name, args, .. } => {
+                out.push(name.name.clone());
+                args.iter().for_each(|a| names(a, out));
+            }
+            TypeRef::Result(a, b, _) | TypeRef::Map(a, b, _) => {
+                names(a, out);
+                names(b, out);
+            }
+            TypeRef::Option(t, _)
+            | TypeRef::Effect(t, _)
+            | TypeRef::HttpResult(t, _)
+            | TypeRef::List(t, _)
+            | TypeRef::Set(t, _)
+            | TypeRef::Query(t, _)
+            | TypeRef::Stream(t, _)
+            | TypeRef::Connection(t, _)
+            | TypeRef::History(t, _) => names(t, out),
+            TypeRef::Fn(params, ret, _) => {
+                params.iter().for_each(|p| names(p, out));
+                names(ret, out);
+            }
+            _ => {}
+        }
+    }
+    let mut todo: Vec<String> = Vec::new();
+    for cap in table
+        .capabilities
+        .values()
+        .filter(|c| listed.contains(c.name.name.as_str()))
+    {
+        for op in &cap.ops {
+            op.params.iter().for_each(|p| names(&p.type_ref, &mut todo));
+            names(&op.return_type, &mut todo);
+        }
+    }
+    let mut seen = std::collections::HashSet::new();
+    while let Some(n) = todo.pop() {
+        if !seen.insert(n.clone()) {
+            continue;
+        }
+        match table.types.get(&n).map(|t| &t.body) {
+            Some(TypeBody::Record(r)) => {
+                r.fields.iter().for_each(|f| names(&f.type_ref, &mut todo))
+            }
+            Some(TypeBody::Sum(s)) => s
+                .variants
+                .iter()
+                .flat_map(|v| &v.payload)
+                .for_each(|p| names(&p.type_ref, &mut todo)),
+            _ => {}
+        }
+    }
+    seen
+}
+
+/// Whether a unit name is under the reserved `bynk` root: the toolchain's own.
+pub(crate) fn is_first_party_name(unit: &str) -> bool {
+    unit == "bynk" || unit.starts_with("bynk.")
 }
 
 /// #696: each table-construction diagnostic is attributed to the project-relative

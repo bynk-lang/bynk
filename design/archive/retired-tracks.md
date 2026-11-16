@@ -2594,3 +2594,63 @@ imposed; entries keep the order they were retired in.
 
   This track's doc, `design/tracks/per-entry-storage.md`, is removed. Code comments and ADRs that
   cited it now point here.
+
+- **`dev-request-traces.md`** — `bynk dev` emits a structured `request` trace event per request a dev
+  Worker serves: its context, route, status and duration, and an ordered list of steps (capability
+  ops, agent calls and cross-context calls), each with its kind, target, duration, outcome and the
+  `.bynk` span that made the call. Settled on
+  [#3580](https://github.com/bynk-lang/bynk/issues/3580), the spine; no language surface.
+  Four slices shipped: **1a** — the emitter and runtime, a `trace` runtime module emitted only for a
+  traced dev build (so deploy output is byte-identical, pinned by a golden), the wrapped sites and
+  the `fetch` wrapper
+  ([#3593](https://github.com/bynk-lang/bynk/pull/3593),
+  [ADR 0860](../decisions/0860-dev-request-traces.md)); **1b** — the driver and CLI, `bynk dev
+  --trace-events` (implying `--format json`) and `DevEvent::Request` parsed from the
+  `__bynk_trace:` stdout line ([#3594](https://github.com/bynk-lang/bynk/pull/3594)); **1c** — the
+  docs and a behavioural fixture that runs one suite with recording on and off under real workerd and
+  compares the outcomes, which proved `AsyncLocalStorage` (reached through
+  `process.getBuiltinModule`, with the `nodejs_als` flag added for a traced build only) there
+  ([#3595](https://github.com/bynk-lang/bynk/pull/3595)); and **2** — cross-Worker stitching, in
+  which the caller wraps the Service Binding it hands `callService` so the callee's record carries
+  the caller's id as its `parent` and the caller's `call` step names the callee's request, with the
+  ids honoured only on `/_bynk/call/` paths so an outside request cannot forge them
+  ([#3597](https://github.com/bynk-lang/bynk/pull/3597)).
+
+  **Observable changes the track accepted.** None for a deploy build or a `bynk dev` run without the
+  flag. A traced build adds the `nodejs_als` compatibility flag and a wrapper around the generated
+  `fetch`; steps carry no argument values (Decision D).
+
+  **Named follow-ons.** The editor overlay of a request's path on its handler's sequence diagram
+  ([vscode-bynk#143](https://github.com/bynk-lang/vscode-bynk/issues/143)), which was never part of
+  this track. A `--trace-values` option, if wanted. A step still unsettled at the flush reports
+  `pending`, and work after the response (`waitUntil`, a streamed body) is out of the record.
+
+  This track's doc, `design/tracks/dev-request-traces.md`, is removed. Code comments and ADRs that
+
+- **`dev-agent-inspection.md`** — spine [#3581](https://github.com/bynk-lang/bynk/issues/3581), the
+  proposal's accepted direction in its decision comment. Under `bynk dev`, list the local agent
+  instances and read their state and transition history. No language surface, and the storage layout
+  is untouched.
+
+  **What shipped.**
+  - **List and read** ([ADR 0865](../decisions/0865-dev-agent-inspection.md)). A dev-only registry
+    Durable Object per Worker, written by the agent factory on first address, and a dev-only,
+    read-only `/_bynk/inspect/` route, signed as an internal call is by the reserved caller
+    `bynk.dev` under the local call key. A read applies only the layout and schema-version gates to
+    the raw record: it never migrates, runs a handler or commits, and pages each collection. The
+    emitter option `inspect_agents` is set only by `bynk dev`, and a golden asserts a deploy build
+    is byte-identical to one without the feature. `bynk dev inspect agents` and
+    `bynk dev inspect agent <Class> <key>` read a session through `.bynk/dev/session.json` and
+    print JSON, documented for the editor consumer
+    ([vscode-bynk#145](https://github.com/bynk-lang/vscode-bynk/issues/145)). A behavioural
+    fixture under real workerd shows outcomes are unchanged with inspection on.
+  - **History** (`dev-agent-inspection-history`). `commitState` in a dev build appends
+    `{handler, old, new, at}` to a ring buffer of the last 50, under the reserved key
+    `__bynk_dev/history`, outside every layout-2 namespace. `old` and `new` hold cell values and
+    collection sizes, `old` is `null` for a first commit, and a refused transition leaves no entry.
+
+  **Named follow-ons.** The editor side (vscode-bynk#145). A `pid` in the session file would let
+  `inspect` tell a stale session from a live one.
+
+  This track's doc, `design/tracks/dev-agent-inspection.md`, is removed. Code comments and ADRs that
+  cited it now point here.

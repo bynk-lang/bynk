@@ -43,7 +43,7 @@ const REQUIRE_ENV: &str = "BYNK_REQUIRE_WORKERD";
 
 const SOURCE: &str = "context kv.smoke
 
-consumes bynk.cloudflare { Kv }
+consumes bynk.cloudflare { Kv, KvPut, KvGet, KvList, KvExpiration }
 
 capability Sessions = Kv
 capability PriceCache = Kv
@@ -133,14 +133,6 @@ service api from http {
 /// are free, for a smoke that has no band of its own: every one below port
 /// 65_536 is taken (the last, 10, by the D1 migrations smoke, #2608).
 const FREE_PORTS: u16 = u16::MAX;
-
-/// A port nothing is listening on, as the operating system hands one out.
-fn free_port() -> u16 {
-    std::net::TcpListener::bind("127.0.0.1:0")
-        .and_then(|l| l.local_addr())
-        .map(|a| a.port())
-        .expect("a free local port")
-}
 
 fn skip(reason: &str) -> bool {
     if require::is_required(REQUIRE_ENV) {
@@ -252,7 +244,7 @@ fn run_smoke_with(
     fs::write(
         tmp.join("proj/bynk.toml"),
         format!(
-            "[project]\nname = \"{project}\"\nversion = \"0.1.0\"\n\n[unstable]\nallow = [\"bynk.cloudflare.R2\", \"bynk.cloudflare.RateLimit\", \"bynk.cloudflare.Queue\", \"bynk.cloudflare.Analytics\", \"bynk.cloudflare.Version\", \"bynk.cloudflare.StoredSecret\", \"bynk.cloudflare.Email\", \"bynk.cloudflare.Postgres\", \"bynk.cloudflare.MySql\", \"bynk.Fetch.sendWith\", \"bynk.Fetch.receiveBytes\", \"bynk.Fetch.sendBytes\", \"bynk.Fetch.receiveStream\", \"bynk.Fetch.sendStream\", \"bynk.cloudflare.Kv.getWith\", \"bynk.cloudflare.Kv.putWith\", \"bynk.cloudflare.Kv.getBytes\", \"bynk.cloudflare.Kv.putBytes\", \"bynk.cloudflare.Kv.listPage\"]\n"
+            "[project]\nname = \"{project}\"\nversion = \"0.1.0\"\n\n[unstable]\nallow = [\"bynk.cloudflare.R2\", \"bynk.cloudflare.RateLimit\", \"bynk.cloudflare.Queue\", \"bynk.cloudflare.Analytics\", \"bynk.cloudflare.Version\", \"bynk.cloudflare.StoredSecret\", \"bynk.cloudflare.Email\", \"bynk.cloudflare.Ai\", \"bynk.cloudflare.Postgres\", \"bynk.cloudflare.MySql\", \"bynk.Fetch.sendWith\", \"bynk.Fetch.receiveBytes\", \"bynk.Fetch.sendBytes\", \"bynk.Fetch.receiveStream\", \"bynk.Fetch.sendStream\", \"bynk.cloudflare.Kv.getWith\", \"bynk.cloudflare.Kv.putWith\", \"bynk.cloudflare.Kv.getBytes\", \"bynk.cloudflare.Kv.putBytes\", \"bynk.cloudflare.Kv.listPage\"]\n"
         ),
     )
     .unwrap();
@@ -290,7 +282,8 @@ fn run_smoke_with(
     // of all pids, so the Fetch smokes use 8 and 9 (#2604), and the D1
     // migrations smoke 10, the last band below port 65_536 (#2608).
     let (port, inspector_port) = if band == FREE_PORTS {
-        (free_port(), free_port())
+        let [port, inspector_port] = wrangler::ports::free_ports();
+        (port, inspector_port)
     } else {
         let port = 20_000 + 2 * (std::process::id() % 2_000) as u16 + 4_000 * band;
         (port, port + 1)
@@ -784,7 +777,7 @@ fn workers_ratelimit_counts_on_workerd() {
 const QUEUE_SOURCE: &str = "context q.smoke
 
 consumes bynk
-consumes bynk.cloudflare { Kv, Queue, InboundEmail, EmailVerdict, EmailReply, DmarcVerdict, SenderIdentity }
+consumes bynk.cloudflare { Kv, Queue, QueueSend, InboundEmail, EmailVerdict, EmailReply, DmarcVerdict, SenderIdentity }
 
 type Placed = {
 \tid: String,
@@ -1140,7 +1133,7 @@ fn seed_local_secret(dir: &std::path::Path) -> Option<String> {
 const ANALYTICS_SOURCE: &str = "context a.smoke
 
 consumes bynk
-consumes bynk.cloudflare { Analytics, Version, StoredSecret, Email, EmailMessage, EmailAttachment }
+consumes bynk.cloudflare { DataPoint, Analytics, Version, StoredSecret, Email, EmailMessage, EmailAttachment }
 
 capability Mail = Email @allowedSenders([\"orders@smoke.example\"])
 capability Signups = Analytics
@@ -1276,7 +1269,7 @@ fn workers_analytics_writes_on_workerd() {
 const D1_SOURCE: &str = "context d.smoke
 
 consumes bynk
-consumes bynk.cloudflare { D1 }
+consumes bynk.cloudflare { D1, SqlValue, SqlStatement, SqlError }
 
 capability Orders = D1
 
@@ -1385,7 +1378,7 @@ fn workers_d1_round_trips_on_workerd() {
 const D1_MIGRATIONS_SOURCE: &str = "context m.smoke
 
 consumes bynk
-consumes bynk.cloudflare { D1 }
+consumes bynk.cloudflare { D1, SqlValue, SqlStatement, SqlError }
 
 capability Items = D1
 
@@ -1519,7 +1512,7 @@ fn fetch_source(upstream: u16) -> String {
     format!(
         "context f.smoke
 
-consumes bynk {{ Fetch }}
+consumes bynk {{ Fetch, Request, Method, FetchOptions, Redirect, FetchError }}
 
 service api from http {{
 \ton GET(\"/go/:path/:manual/:wait\") (path: String, manual: String, wait: String) -> Effect[HttpResult[String]] by Visitor given Fetch {{
@@ -1787,7 +1780,7 @@ fn fetch_bytes_source(upstream: u16, streams: u16) -> String {
     format!(
         "context fb.smoke
 
-consumes bynk {{ Fetch }}
+consumes bynk {{ Fetch, Request, Method, FetchOptions, Redirect, FetchError }}
 
 service api from http {{
 \ton GET(\"/round\") () -> Effect[HttpResult[String]] by Visitor given Fetch {{
@@ -2001,7 +1994,7 @@ impl LocalPostgres {
         };
         let server = Self {
             bin,
-            port: free_port(),
+            port: wrangler::ports::free_port(),
             dir,
             user,
         };
@@ -2362,7 +2355,7 @@ impl LocalMySql {
         }
         let socket = dir.join("mysql.sock");
         let mut me = Self {
-            port: free_port(),
+            port: wrangler::ports::free_port(),
             dir: Some(dir),
             server: None,
         };
@@ -2421,7 +2414,7 @@ impl Drop for LocalMySql {
 const MYSQL_SOURCE: &str = r#"context my.smoke
 
 consumes bynk
-consumes bynk.cloudflare { MySql, MySqlError, MySqlValue, MySqlRun, MySqlStatement }
+consumes bynk.cloudflare { MySql, MySqlError, MySqlReadError, MySqlValue, MySqlRun, MySqlStatement }
 
 capability Main = MySql
 capability Refused = MySql
@@ -2670,4 +2663,204 @@ fn workers_mysql_runs_through_hyperdrive_on_workerd() {
             "the wrangler log holds `{secret}`:\n{log}"
         );
     }
+}
+
+const AI_SOURCE: &str = "context ai.smoke
+
+consumes bynk
+consumes bynk.cloudflare { Ai, AiError }
+
+service api from http {
+\ton GET(\"/ready\") () -> Effect[HttpResult[String]] by Visitor {
+\t\tOk(\"ready\")
+\t}
+
+\ton GET(\"/stream/:model\") (model: String) -> Effect[HttpResult[String]] by Visitor given Ai {
+\t\tlet started <- Ai.runStream(\"@cf/test/\\(model)\", \"{\\\"prompt\\\": \\\"hi\\\"}\")
+\t\tmatch started {
+\t\t\tOk(s) => Streaming(s)
+\t\t\tErr(ModelNotFound) => NotFound
+\t\t\tErr(_) => ServerError(\"model unavailable\")
+\t\t}
+\t}
+}
+";
+
+/// A fake of Cloudflare's AI binding, in front of the compiled Worker: the real
+/// `AI` binding runs models on the account, so the Worker's `[ai]` stanza is
+/// taken out and `env.AI` is this instead. Its streams are what the platform
+/// documents for `stream: true`, a `ReadableStream` of Server-Sent Events bytes,
+/// cut mid-event so the decoder meets a boundary inside an event. The Worker
+/// counts how many of them were cancelled at `/__cancelled`.
+const AI_FAKE_ENTRY: &str = r#"import real from "./index.real.js";
+export * from "./index.real.js";
+
+globalThis.__cancelled = 0;
+const enc = new TextEncoder();
+
+function sse(chunks, { failAfter, hold } = {}) {
+  let i = 0;
+  return new ReadableStream({
+    async pull(controller) {
+      if (failAfter !== undefined && i === failAfter) return controller.error(new Error("connection reset"));
+      if (i < chunks.length) controller.enqueue(enc.encode(chunks[i]));
+      else if (hold) {
+        // A model still generating: an event every so often, so the Worker is
+        // never idle for good (workerd calls that hung code) and a write to a
+        // client that has gone is how the platform finds out.
+        await new Promise((resolve) => setTimeout(resolve, 100));
+        controller.enqueue(enc.encode('data: {"response":"tick"}\n\n'));
+        return;
+      }
+      else controller.close();
+      i += 1;
+    },
+    cancel() { globalThis.__cancelled += 1; },
+  });
+}
+
+const EVENTS = ['data: {"response":"h', 'e"}\n\nda', 'ta: {"response":"llo"}\n\ndata: [DO', "NE]\n\n"];
+
+const AI = {
+  async run(model, input) {
+    if (input.stream !== true || input.prompt !== "hi") throw new Error("5004: the binding sent " + JSON.stringify(input));
+    switch (model) {
+      case "@cf/test/stream": return sse(EVENTS);
+      case "@cf/test/broken": return sse(EVENTS, { failAfter: 2 });
+      case "@cf/test/forever": return sse(['data: {"response":"first"}\n\n'], { hold: true });
+      case "@cf/test/missing": throw new Error("5007: No such model `" + model + "` or task");
+      default: throw new Error("3040: Capacity temporarily exceeded");
+    }
+  },
+};
+
+export default {
+  ...real,
+  fetch(request, env, ctx) {
+    if (new URL(request.url).pathname === "/__cancelled") return new Response(String(globalThis.__cancelled));
+    return real.fetch(request, { ...env, AI }, ctx);
+  },
+};
+"#;
+
+/// Take the `[ai]` stanza out of the compiled Worker and put [`AI_FAKE_ENTRY`] in
+/// front of its entry point.
+fn fake_ai(dir: &Path) -> Option<String> {
+    let toml = dir.join("wrangler.toml");
+    let text = fs::read_to_string(&toml).ok()?;
+    if !text.contains("[ai]") {
+        return Some("the compiled Worker has no [ai] stanza".to_string());
+    }
+    let kept: Vec<&str> = text
+        .lines()
+        .filter(|l| *l != "[ai]" && !l.starts_with("binding = \"AI\""))
+        .collect();
+    fs::write(&toml, kept.join("\n") + "\n").ok()?;
+    fs::rename(dir.join("index.js"), dir.join("index.real.js")).ok()?;
+    fs::write(dir.join("index.js"), AI_FAKE_ENTRY).ok()?;
+    None
+}
+
+/// `GET path` over a raw socket, read until `needle` has arrived, then dropped:
+/// a client that disconnects mid-stream.
+fn get_then_hang_up(port: u16, path: &str, needle: &str) -> Result<(), String> {
+    let addr = format!("127.0.0.1:{port}");
+    let mut stream = std::net::TcpStream::connect(&addr).map_err(|e| e.to_string())?;
+    stream
+        .set_read_timeout(Some(Duration::from_secs(10)))
+        .map_err(|e| e.to_string())?;
+    let request = format!("GET {path} HTTP/1.1\r\nHost: {addr}\r\n\r\n");
+    stream
+        .write_all(request.as_bytes())
+        .map_err(|e| e.to_string())?;
+    let mut seen = Vec::new();
+    let mut buf = [0u8; 512];
+    while !String::from_utf8_lossy(&seen).contains(needle) {
+        let n = stream.read(&mut buf).map_err(|e| e.to_string())?;
+        if n == 0 {
+            return Err(format!(
+                "closed before {needle:?}: {:?}",
+                String::from_utf8_lossy(&seen)
+            ));
+        }
+        seen.extend_from_slice(&buf[..n]);
+    }
+    Ok(())
+}
+
+#[test]
+fn workers_ai_stream_decodes_and_cancels_on_workerd() {
+    // #3478: `Ai.runStream` against a fake `env.AI` on workerd's own streams:
+    // each event (whatever the byte chunking, `[DONE]` consumed) is one SSE
+    // event of the Bynk response, a refusal before the stream is an ordinary
+    // response, a failure after the first event aborts the response, and a
+    // client that hangs up cancels the model's stream.
+    let Some((mut failures, log)) = run_smoke_with(
+        "ai-smoke",
+        "ai",
+        AI_SOURCE,
+        &[],
+        &fake_ai,
+        "/ready",
+        FREE_PORTS,
+        &[],
+        &|port| {
+            let mut failures = Vec::new();
+            match get(port, "/stream/stream") {
+                Ok((200, body)) => {
+                    let body = dechunk(&body);
+                    let expected =
+                        "data: {\"response\":\"he\"}\n\ndata: {\"response\":\"llo\"}\n\n";
+                    if body != expected {
+                        failures.push(format!("/stream/stream: {body:?}, expected {expected:?}"));
+                    }
+                }
+                other => failures.push(format!("/stream/stream: {other:?}")),
+            }
+            failures.extend(check_steps(
+                port,
+                &[("/stream/missing", 404, ""), ("/stream/busy", 500, "")],
+            ));
+            // The head is sent with the first event, so a failure after it can
+            // only cut the response short: the second event never arrives and
+            // the chunked body is never ended.
+            match get(port, "/stream/broken") {
+                Ok((_, body)) if body.contains("llo") || body.ends_with("0\r\n\r\n") => {
+                    failures.push(format!("/stream/broken ran on past the failure: {body:?}"))
+                }
+                _ => {}
+            }
+            match get_then_hang_up(port, "/stream/forever", "first") {
+                Ok(()) => {
+                    let deadline = Instant::now() + Duration::from_secs(15);
+                    let mut cancelled = 0;
+                    while Instant::now() < deadline {
+                        cancelled = get(port, "/__cancelled")
+                            .ok()
+                            .and_then(|(_, b)| b.trim().parse::<u32>().ok())
+                            .unwrap_or(0);
+                        if cancelled >= 1 {
+                            break;
+                        }
+                        std::thread::sleep(Duration::from_millis(250));
+                    }
+                    if cancelled < 1 {
+                        failures.push(format!(
+                            "a client that hung up did not cancel the model's stream (cancelled: {cancelled})"
+                        ));
+                    }
+                }
+                Err(e) => failures.push(format!("/stream/forever: {e}")),
+            }
+            failures
+        },
+    ) else {
+        return;
+    };
+    failures.retain(|f| !f.is_empty());
+    assert!(
+        failures.is_empty(),
+        "Ai.runStream on workerd disagrees with the contract its fake models:\n{}\n--- wrangler log ---\n{log}",
+        failures.join("\n")
+    );
 }

@@ -159,6 +159,25 @@ pub enum ProjectPathsError {
         capability: String,
         reason: String,
     },
+    /// #3477: a `[deploy.containers.<Capability>]` entry that is not well formed.
+    BadContainers {
+        table: &'static str,
+        capability: String,
+        reason: String,
+    },
+    /// #3479: a `[deploy.vectorize.<Capability>]` entry that is not well formed.
+    BadVectorize {
+        table: &'static str,
+        capability: String,
+        reason: String,
+    },
+    /// #3562: a `[deploy.workers.<key>]` group that is not well formed, or
+    /// that breaks a rule across groups. The reason may lead with the
+    /// `bynk.deploy.*` code it is.
+    BadWorkerGroup { key: String, reason: String },
+    /// #3478: a `[dev]` acknowledgement (`ai = "allow"`) holding anything but
+    /// `"allow"`.
+    BadDevAck { key: String, reason: String },
     /// #2138: a `[test.targets.<name>]` entry that is not well formed.
     BadTestTarget { target: String, reason: String },
     /// #3321: a `[test] postgres` value that is not one the key accepts.
@@ -223,11 +242,32 @@ pub const MANIFEST_TABLES: &[(&str, &[&str])] = &[
     ("fmt", &[]),
     ("lsp", &["diagnostics_mode", "diagnostics_debounce_ms"]),
     ("workers", &["compatibility_flags", "workers_dev"]),
-    ("deploy", &["hyperdrive"]),
-    ("dev", &["hyperdrive"]),
+    (
+        "deploy",
+        &["hyperdrive", "vectorize", "containers", "workers"],
+    ),
+    (
+        "dev",
+        &[
+            "hyperdrive",
+            "ai",
+            "ai-search",
+            "mtls",
+            "analytics-sql",
+            "vectorize",
+            "vectorize-index",
+        ],
+    ),
     (
         "build",
-        &["out", "target", "platform", "emit", "package_manager"],
+        &[
+            "out",
+            "target",
+            "platform",
+            "emit",
+            "package_manager",
+            "client",
+        ],
     ),
     ("check", &["d1_sql"]),
     ("profile", PROFILE_NAMES),
@@ -283,7 +323,7 @@ fn table_list(conj: &str) -> String {
 }
 
 /// The closest of `candidates` to `name`, if any is within two edits.
-pub(crate) fn did_you_mean<'a>(
+pub fn did_you_mean<'a>(
     name: &str,
     candidates: impl IntoIterator<Item = &'a str>,
 ) -> Option<&'a str> {
@@ -384,6 +424,29 @@ impl std::fmt::Display for ProjectPathsError {
                 reason,
             } => {
                 write!(f, "`[{table}.{capability}]` {reason}")
+            }
+            ProjectPathsError::BadContainers {
+                table,
+                capability,
+                reason,
+            } => {
+                write!(f, "`[{table}.{capability}]` {reason}")
+            }
+            ProjectPathsError::BadVectorize {
+                table,
+                capability,
+                reason,
+            } => {
+                write!(f, "`[{table}.{capability}]` {reason}")
+            }
+            ProjectPathsError::BadWorkerGroup { key, reason } if key.is_empty() => {
+                write!(f, "`[deploy.workers]` {reason}")
+            }
+            ProjectPathsError::BadWorkerGroup { key, reason } => {
+                write!(f, "`[deploy.workers.{key}]` {reason}")
+            }
+            ProjectPathsError::BadDevAck { key, reason } => {
+                write!(f, "`[dev]` `{key}` {reason}")
             }
             ProjectPathsError::BadTestTarget { target, reason } => {
                 write!(f, "`[test.targets.{target}]` {reason}")
@@ -569,8 +632,17 @@ pub fn check_manifest_str(content: &str) -> Result<(), ProjectPathsError> {
             }
             "package" => drop(crate::manifest::package_config_from(entries)?),
             "workspace" => drop(crate::manifest::workspace_config_from(entries)?),
-            "deploy" => drop(crate::hyperdrive::deploy_hyperdrive_from(entries)?),
-            "dev" => drop(crate::hyperdrive::dev_hyperdrive_from(entries)?),
+            "deploy" => {
+                drop(crate::hyperdrive::deploy_hyperdrive_from(entries)?);
+                drop(crate::vectorize::deploy_vectorize_from(entries)?);
+                drop(crate::containers::deploy_containers_from(entries)?);
+                drop(crate::worker_groups::deploy_workers_from(entries)?);
+            }
+            "dev" => {
+                drop(crate::hyperdrive::dev_hyperdrive_from(entries)?);
+                drop(crate::dev_ack::dev_acks_from(entries)?);
+                drop(crate::vectorize::dev_vectorize_index_from(entries)?);
+            }
             _ => {}
         }
     }
@@ -710,9 +782,41 @@ pub struct BuildConfig {
     /// #3350: the package manager that installs the generated build
     /// directory's npm packages: `npm`, `pnpm`, `bun` or `yarn`.
     pub package_manager: Option<String>,
+    /// #3508: `[build.client]`, where `bynk build` writes the typed TypeScript
+    /// client (`bynk client`). Absent, `bynk build` writes none.
+    pub client: Option<ClientConfig>,
     /// The `[profile.<name>]` tables present, by profile name.
     pub profiles: BTreeMap<String, ProfileConfig>,
 }
+
+/// #3508: the `[build.client]` table: where the typed TypeScript client for the
+/// project's `from http` services is written, and how.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct ClientConfig {
+    /// Where to write it, relative to the project root. A file with
+    /// `layout = "file"`, a directory with `layout = "dir"`. It may leave the
+    /// project: a front end often lives beside the Bynk project, not in it.
+    pub out: String,
+    /// `file` (one module) or `dir` (`index.ts`, `types.ts`, `codecs.ts`,
+    /// `runtime.ts`).
+    pub layout: ClientLayout,
+    /// The `from http` services to include (`Name` or `unit.Name`); every one when
+    /// empty.
+    pub services: Vec<String>,
+}
+
+/// #3508: how `bynk client` lays the client out.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Default)]
+pub enum ClientLayout {
+    /// One module: one thing to commit, review and diff.
+    #[default]
+    File,
+    /// A directory of modules, which is package-shaped.
+    Dir,
+}
+
+/// The `[build.client]` keys.
+const CLIENT_KEYS: &[&str] = &["out", "layout", "service"];
 
 /// #3054: one `[profile.<name>]` table. `None` leaves the profile's built-in
 /// default (`dev` on, `release` off).
@@ -861,12 +965,86 @@ fn build_config_from(table: &toml::Table) -> Result<BuildConfig, ProjectPathsErr
     }
     Ok(BuildConfig {
         out,
+        client: client_config_from(table.get("client"))?,
         target: get("target", Some(&["bundle", "workers"]))?,
         platform: get("platform", Some(&["cloudflare", "node", "browser"]))?,
         emit: get("emit", Some(&["ts", "js"]))?,
         package_manager: get("package_manager", Some(&["npm", "pnpm", "bun", "yarn"]))?,
         profiles: BTreeMap::new(),
     })
+}
+
+/// #3508: the `[build.client]` table's typed content. `out` is required, a
+/// relative path that is not the project root; `layout` is `"file"` or `"dir"`;
+/// `service` is a list of service names.
+fn client_config_from(
+    value: Option<&toml::Value>,
+) -> Result<Option<ClientConfig>, ProjectPathsError> {
+    let Some(value) = value else {
+        return Ok(None);
+    };
+    let bad = |key: &'static str, reason: &str| ProjectPathsError::BadBuild {
+        key,
+        reason: reason.to_string(),
+    };
+    let Some(table) = value.as_table() else {
+        return Err(bad("client", "must be a table, written `[build.client]`"));
+    };
+    if let Some(key) = table.keys().find(|k| !CLIENT_KEYS.contains(&k.as_str())) {
+        return Err(ProjectPathsError::UnknownTableKey {
+            table: "build.client",
+            key: key.clone(),
+        });
+    }
+    let Some(out) = table.get("out").and_then(|v| v.as_str()) else {
+        return Err(bad(
+            "client.out",
+            "is required, a path such as \"web/src/lib/api.ts\"",
+        ));
+    };
+    let path = Path::new(out);
+    let nothing = path
+        .components()
+        .all(|c| matches!(c, std::path::Component::CurDir));
+    // A root or a drive makes a path absolute (`/abs`, `C:\\abs`), and on Windows `/abs`
+    // has no drive, so `is_absolute` alone would let it by.
+    let rooted = path.components().any(|c| {
+        matches!(
+            c,
+            std::path::Component::RootDir | std::path::Component::Prefix(_)
+        )
+    });
+    if path.is_absolute() || rooted || nothing {
+        return Err(bad(
+            "client.out",
+            "must be a path relative to the project root, not the root itself",
+        ));
+    }
+    let layout = match table.get("layout").map(|v| v.as_str()) {
+        None => ClientLayout::File,
+        Some(Some("file")) => ClientLayout::File,
+        Some(Some("dir")) => ClientLayout::Dir,
+        Some(_) => return Err(bad("client.layout", "must be \"file\" or \"dir\"")),
+    };
+    let services = match table.get("service") {
+        None => Vec::new(),
+        Some(toml::Value::Array(items)) => {
+            let mut out = Vec::new();
+            for item in items {
+                let Some(name) = item.as_str() else {
+                    return Err(bad("client.service", "must be a list of service names"));
+                };
+                out.push(name.to_string());
+            }
+            out
+        }
+        Some(_) => return Err(bad("client.service", "must be a list of service names")),
+    };
+    Ok(Some(ClientConfig {
+        out: out.to_string(),
+        layout,
+        services,
+    }))
 }
 
 /// #2138 (end-to-end testing track §3.8): a deployment `bynk test --against
@@ -956,6 +1134,9 @@ pub fn read_test_postgres(project_root: &Path) -> TestPostgres {
 /// The `[test]` table's `targets`, each checked for shape: `url` a table of
 /// strings (at least one), `secrets` a list of strings, `production` a
 /// boolean, `vars` a table of strings, and nothing else.
+/// #3513 B: the prefix of the `[vars]` entries `bynk` writes for `Analytics.dataset()`.
+const RESERVED_DATASET_VAR_PREFIX: &str = "BYNK_DATASET_";
+
 fn test_targets_from(
     table: &toml::Table,
 ) -> Result<BTreeMap<String, TestTarget>, ProjectPathsError> {
@@ -993,7 +1174,21 @@ fn test_targets_from(
         for (key, value) in entry {
             match key.as_str() {
                 "url" => target.urls = strings(value, "url")?,
-                "vars" => target.vars = strings(value, "vars")?,
+                "vars" => {
+                    target.vars = strings(value, "vars")?;
+                    // #3513 B: `BYNK_DATASET_<BINDING>` is the variable that carries an
+                    // `Analytics` dataset's environment-qualified name to its Worker, so a
+                    // target may not set one and point `dataset()` at another table.
+                    if let Some(reserved) = target
+                        .vars
+                        .keys()
+                        .find(|k| k.starts_with(RESERVED_DATASET_VAR_PREFIX))
+                    {
+                        return Err(bad(&format!(
+                            "`vars.{reserved}` is reserved: `{RESERVED_DATASET_VAR_PREFIX}…` names are set by `bynk` to carry each `Analytics` dataset's name"
+                        )));
+                    }
+                }
                 "secrets" => {
                     target.secrets = value
                         .as_array()
@@ -1751,6 +1946,58 @@ mod manifest_tests {
         check_manifest_str("").expect("an empty manifest is accepted");
     }
 
+    /// #3508: `[build.client]` is read, its defaults are the file layout and every
+    /// service, and the path may leave the project.
+    #[test]
+    fn the_build_client_table_is_read() {
+        let read = |client: &str| {
+            let manifest = format!(
+                "[project]\nname = \"p\"\n\n[build]\nout = \"out\"\n\n[build.client]\n{client}"
+            );
+            check_manifest_str(&manifest)?;
+            let overlay = HashMap::from([(PathBuf::from("/p/bynk.toml"), manifest)]);
+            try_read_build_config_with(Path::new("/p"), &overlay).map(|c| c.client)
+        };
+        assert_eq!(
+            read("out = \"web/api.ts\"").unwrap(),
+            Some(ClientConfig {
+                out: "web/api.ts".to_string(),
+                layout: ClientLayout::File,
+                services: Vec::new(),
+            })
+        );
+        assert_eq!(
+            read("out = \"../web/api\"\nlayout = \"dir\"\nservice = [\"a\", \"u.B\"]").unwrap(),
+            Some(ClientConfig {
+                out: "../web/api".to_string(),
+                layout: ClientLayout::Dir,
+                services: vec!["a".to_string(), "u.B".to_string()],
+            })
+        );
+        for (table, needle) in [
+            ("layout = \"dir\"", "client.out"),
+            ("out = \"\"", "client.out"),
+            ("out = \".\"", "client.out"),
+            ("out = \"a.ts\"\nlayout = \"zip\"", "client.layout"),
+            ("out = \"a.ts\"\nservice = [1]", "client.service"),
+            ("out = \"a.ts\"\nbogus = 1", "bogus"),
+        ] {
+            let e = read(table).expect_err(table).to_string();
+            assert!(e.contains(needle), "{table}: {e}");
+        }
+        // No table, no client.
+        let overlay = HashMap::from([(
+            PathBuf::from("/p/bynk.toml"),
+            "[build]\nout = \"out\"\n".to_string(),
+        )]);
+        assert_eq!(
+            try_read_build_config_with(Path::new("/p"), &overlay)
+                .unwrap()
+                .client,
+            None
+        );
+    }
+
     #[test]
     fn the_deploy_and_dev_tables_take_hyperdrive_entries_only() {
         check_manifest_str(
@@ -2013,6 +2260,10 @@ mod manifest_tests {
                 "`production` must be",
             ),
             ("[test.targets.p]\nurl.a = 1\n", "`url.a` must be a string"),
+            (
+                "[test.targets.p]\nurl.a = \"x\"\nvars = { BYNK_DATASET_ANALYTICS_SIGNUPS = \"x\" }\n",
+                "`vars.BYNK_DATASET_ANALYTICS_SIGNUPS` is reserved",
+            ),
             ("[test]\ntarget = 1\n", "no key named `target`"),
         ] {
             let err = check_manifest_str(manifest)

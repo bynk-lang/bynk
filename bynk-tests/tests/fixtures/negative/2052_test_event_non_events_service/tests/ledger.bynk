@@ -1,5 +1,6 @@
 // #2052: only a `from Events(E)` service takes an event address.
 suite shop.ledger {
+  consumes shop.order { Placed }
   case "a call service has no event to deliver" {
     let _ <- audit.event(Placed { id: "o1" })
   }

@@ -48,6 +48,7 @@ mod calls;
 pub mod codable;
 mod cookie_lints;
 mod d1;
+pub mod peek;
 pub use d1::{BatchPosition, D1DecodeSite, D1SqlSite, RowLink};
 pub(crate) mod equality;
 pub mod keying;
@@ -676,6 +677,14 @@ pub enum Callee {
     /// the *SQL argument's* id (not the call's, which keeps its own entry), so
     /// the project phase can prepare it against the binding's migrations.
     D1Sql(d1::D1SqlSite),
+    /// #3147: `D1.peek(<participant>.<Cap>)`. The case holds a capability over
+    /// the participant's test database, on the `binding` of its `env`, as
+    /// `deps.<local>`; calls on the handle are capability calls on `local`.
+    D1Peek {
+        participant: String,
+        binding: String,
+        local: String,
+    },
     /// #3139: a `Json.decodeSql[T](x)` whose `x` is the rows of a literal D1 read,
     /// recorded under the argument's id, so the project phase can check `T`'s
     /// fields against the statement's result columns.
@@ -895,6 +904,9 @@ pub struct TypedCommons {
     /// S3 (#1963): the extensible first-party enums in scope, carried from
     /// [`ResolvedCommons::extensible_enums`] for the same per-handler checks.
     pub extensible_enums: HashSet<String>,
+    /// #3536: carried from [`ResolvedCommons::unselected_types`] for the same
+    /// per-handler checks.
+    pub unselected_types: HashSet<String>,
     /// S3 (#1963): carried from [`ResolvedCommons::stability`] for the same
     /// per-handler checks.
     pub stability: crate::stability::UnitStability,
@@ -940,6 +952,7 @@ impl TypedCommons {
             consts: HashMap::new(),
             shadowed_imports: HashMap::new(),
             extensible_enums: HashSet::new(),
+            unselected_types: HashSet::new(),
             stability: Default::default(),
             exec_plan: Default::default(),
         }
@@ -1378,6 +1391,7 @@ pub fn check_record_in(
                 consts: input.consts,
                 shadowed_imports: input.shadowed_imports,
                 extensible_enums: input.extensible_enums,
+                unselected_types: input.unselected_types,
                 stability: input.stability,
                 exec_plan: Default::default(),
             }),
@@ -1406,6 +1420,7 @@ pub fn check_record_in(
                 consts: input.consts,
                 shadowed_imports: input.shadowed_imports,
                 extensible_enums: input.extensible_enums,
+                unselected_types: input.unselected_types,
                 stability: input.stability,
                 exec_plan: Default::default(),
             }),
@@ -1792,6 +1807,7 @@ pub fn check_handler_body(
             given_used: HashSet::new(),
             given_entries: given_entries.clone(),
             given_anchor,
+            ..Default::default()
         },
         in_test_body: false,
         oidc_binder,
@@ -2128,6 +2144,7 @@ pub fn check_invariants(
                 given_used: HashSet::new(),
                 given_entries: Vec::new(),
                 given_anchor: None,
+                ..Default::default()
             },
             in_test_body: false,
             oidc_binder: None,
@@ -2284,6 +2301,7 @@ pub(crate) fn check_contracts(
                 given_used: HashSet::new(),
                 given_entries: Vec::new(),
                 given_anchor: None,
+                ..Default::default()
             },
             in_test_body: false,
             oidc_binder: None,
@@ -2520,6 +2538,7 @@ pub fn check_transitions(
                 given_used: HashSet::new(),
                 given_entries: Vec::new(),
                 given_anchor: None,
+                ..Default::default()
             },
             in_test_body: false,
             oidc_binder: None,
@@ -2713,6 +2732,7 @@ pub fn check_migrations(
                 given_used: HashSet::new(),
                 given_entries: Vec::new(),
                 given_anchor: None,
+                ..Default::default()
             },
             in_test_body: false,
             oidc_binder: None,
@@ -2929,6 +2949,12 @@ pub struct CapabilityCtx {
     /// where the clause lives elsewhere (a provider's `provides … given`
     /// line); the fix is then offered only when entries already exist.
     pub given_anchor: Option<Span>,
+    /// #3147: the participants' D1 capabilities a case may `D1.peek`. `Some`
+    /// only while checking an `integration` or `system` case.
+    pub peek_env: Option<Arc<peek::PeekEnv>>,
+    /// #3147: the value of the `let` being checked, the one place a
+    /// `D1.peek` may stand.
+    pub peek_let_value: Option<ExprId>,
 }
 
 /// v0.178 (Slice 0, #662) / v0.182 (Slice A, #664): the shape a test body needs
@@ -3131,8 +3157,8 @@ pub(crate) struct Ctx<'a> {
     pub store_fields: HashMap<String, StoreField>,
     /// #2017: true while checking an agent handler body, lambdas included.
     /// Unlike [`agent_state_ty`](Self::agent_state_ty), a lambda frame does
-    /// not clear it: a `~>` inside a closure still runs in the agent's
-    /// handler, which carries no execution context, so the send gate must
+    /// not clear it: a `detach` inside a closure still runs in the agent's
+    /// handler, which carries no execution context, so the gate must
     /// see through the frame swap.
     pub in_agent_handler: bool,
     /// #2683: true while checking a service handler body, lambdas included
@@ -3144,7 +3170,7 @@ pub(crate) struct Ctx<'a> {
     /// #2719: true while checking the body of a `fn` or a method, lambdas
     /// included. A function takes the execution context as a hidden trailing
     /// parameter when its body (or a function it calls) hands work to it, so
-    /// `~>`, `within` and `race` are legal here; whether a *caller* has a
+    /// `detach`, `within` and `race` are legal here; whether a *caller* has a
     /// context to pass is the needs-context analysis's question
     /// ([`crate::exec_plan`]), not this body's.
     pub in_fn_body: bool,
@@ -4494,6 +4520,7 @@ pub(crate) fn type_of_block(block: &Block, expected: Option<TyId>, ctx: &mut Ctx
                     }
                     r
                 });
+                peek::expect_let(&l.value, ctx);
                 let rhs_ty = type_of(&l.value, annot_ty, ctx);
                 par::note_let_lambda(l, ctx);
                 check_unbound_effects(&l.value, false, ctx);
@@ -4643,7 +4670,6 @@ pub(crate) fn type_of_block(block: &Block, expected: Option<TyId>, ctx: &mut Ctx
             }
             Statement::Advance(a) => check_advance(a, ctx),
             Statement::Par(p) => par::check_par(p, block.span.end, ctx),
-            Statement::Send(s) => check_send_statement(s, ctx),
             Statement::Do(d) => check_do(d, true, ctx),
             Statement::Assign(a) => {
                 // v0.81 (storage track): `cell := expr` — the unconditional `Cell`
@@ -7279,160 +7305,5 @@ mod pure_helper_pins {
         assert!(!numeric_mix(Some(BaseType::Int), Some(BaseType::Int)));
         assert!(!numeric_mix(Some(BaseType::Float), Some(BaseType::Float)));
         assert!(!numeric_mix(None, Some(BaseType::Int)));
-    }
-}
-
-/// #3437: `~> e` is deprecated in favour of `do e.detach()`, which says the same
-/// thing as an ordinary effect statement and works anywhere an `Effect[()]` does.
-/// A warning with a machine-applicable rewrite: `~>` becomes `do ` and `.detach()`
-/// follows the operand (parenthesised unless it already ends a postfix chain).
-/// Only reached for a send that was not refused, so `detach` is legal here.
-fn warn_send_deprecated(s: &bynk_syntax::ast::SendStmt, ctx: &mut Ctx) {
-    let postfix_safe = matches!(
-        s.value.kind,
-        ExprKind::Call { .. }
-            | ExprKind::MethodCall { .. }
-            | ExprKind::Ident(_)
-            | ExprKind::FieldAccess { .. }
-            | ExprKind::Paren(_)
-    );
-    let (open, close) = if postfix_safe {
-        ("do ", ".detach()")
-    } else {
-        ("do (", ").detach()")
-    };
-    ctx.errors.push(
-        CompileError::new(
-            "bynk.send.deprecated",
-            s.span,
-            "the `~>` send is deprecated — write `do e.detach()`",
-        )
-        .with_note(
-            "`e.detach()` stops waiting for `e` as `~>` does, for any `Effect[T]`, and reports a fault or an `Err` instead of losing it; `bynk check --fix` rewrites each `~> e` to `do e.detach()`",
-        )
-        .with_suggestion(
-            "rewrite to `do e.detach()`",
-            vec![
-                (
-                    Span::new(s.span.start, s.value.span.start),
-                    open.to_string(),
-                ),
-                (
-                    Span::new(s.value.span.end, s.value.span.end),
-                    close.to_string(),
-                ),
-            ],
-            Applicability::MachineApplicable,
-        ),
-    );
-}
-
-/// `~> e` (v0.79): fire-and-forget. Effectful context only, like `<-`; the reply
-/// is never awaited, so nothing is bound.
-fn check_send_statement(s: &bynk_syntax::ast::SendStmt, ctx: &mut Ctx) {
-    let tys = ctx.tys;
-    // v0.79: `~> e` — fire-and-forget. Effectful context only, like
-    // `<-`; the reply is never awaited, so nothing is bound.
-    let errors_before = ctx.errors.len();
-    if !ctx.effectful {
-        ctx.errors.push(
-                CompileError::new(
-                    "bynk.send.in_pure_context",
-                    s.span,
-                    "the `~>` send can only be used inside an effectful body (one returning `Effect[T]`)",
-                )
-                .with_label(
-                    ctx.return_ty_span,
-                    format!("enclosing return type is `{}`", ctx.return_ty.display(tys)),
-                )
-                .with_note(
-                    "change the enclosing function/handler's return type to `Effect[...]`",
-                ),
-            );
-    }
-    // The reply must be `Effect[()]`. A real payload (value or error)
-    // would be silently dropped by a fire-and-forget send — the error
-    // gate ([DECISION C/D]). `let _ <- e` is the honest spelling for
-    // "await and discard".
-    let unit = tys.intern(Ty::Unit);
-    let expected = tys.intern(Ty::Effect(unit));
-    let rhs_ty = type_of(&s.value, Some(expected), ctx);
-    // #2017: an agent handler has no execution context to hand a
-    // fire-and-forget promise to — it runs inside the agent's
-    // Durable Object, whose `deps` carry no `__exec` — so a `~>`
-    // there checked clean and then failed `tsc`. Refuse it here,
-    // on both targets. A store operation gets its own code: it is
-    // not a message at all but a write to the handler's staged
-    // state, committed atomically at the handler boundary.
-    // Typed first, so the RHS's own errors still surface and the
-    // `Callee::Store` classification (recorded by `type_of`) is
-    // available. When this fires, the reply-shape checks below
-    // are skipped: their remedy is moot once the send itself is
-    // refused.
-    if ctx.in_agent_handler {
-        if let Some(Callee::Store { field, op }) = ctx.callees.get(&s.value.id) {
-            let msg = format!(
-                "`~> {field}.{op}(…)` sends a store operation, but a store write is part of the agent handler's atomic commit — there is nothing to send without waiting for"
-            );
-            let note = format!(
-                "drop the `~>` and perform the write as a plain statement, `do {field}.{op}(…)`, or with `let _ <- {field}.{op}(…)`; it is staged and committed with the rest of the handler"
-            );
-            ctx.errors
-                .push(CompileError::new("bynk.send.store_op", s.span, msg).with_note(note));
-        } else {
-            ctx.errors.push(
-                    CompileError::new(
-                        "bynk.send.in_agent_handler",
-                        s.span,
-                        "the `~>` send cannot be used in an agent handler: an agent handler has no execution context to keep a fire-and-forget send alive",
-                    )
-                    .with_note(
-                        "await the effect instead with `let _ <- ...` (or `do ...` for an `Effect[()]`), or move the send to the service handler that calls the agent",
-                    ),
-                );
-        }
-    }
-    match rhs_ty.map(|t| tys.get(t)).as_deref() {
-        _ if ctx.in_agent_handler => {}
-        Some(Ty::Effect(inner)) if *inner == unit => {}
-        Some(Ty::Effect(inner)) => {
-            ctx.errors.push(
-                    CompileError::new(
-                        "bynk.send.requires_unit",
-                        s.value.span,
-                        format!(
-                            "`~>` requires an `Effect[()]` reply, but this send returns `Effect[{}]` — its result would be silently dropped",
-                            inner.display(tys)
-                        ),
-                    )
-                    .with_note(
-                        "a `~>` send never awaits a reply, so it is reserved for empty replies; to await and discard a real result, write `let _ <- ...` instead",
-                    ),
-                );
-        }
-        Some(other) => {
-            ctx.errors.push(
-                    CompileError::new(
-                        "bynk.send.non_effect",
-                        s.value.span,
-                        format!(
-                            "the `~>` send requires an `Effect[()]` value, but got `{}`",
-                            other.display(tys)
-                        ),
-                    )
-                    .with_note("`~>` sends an effectful call; the target must be a call returning `Effect[()]`"),
-                );
-        }
-        None => {}
-    }
-    // A refused send has the refusal to fix first; the deprecation
-    // is for one that would otherwise be accepted.
-    // Only an error counts: a warning raised in the operand (`todo()`, a
-    // deprecated call) must not hide the deprecation, or `--fix` would skip the send.
-    let refused = ctx.errors[errors_before..]
-        .iter()
-        .any(|e| bynk_syntax::Severity::for_error(e) == bynk_syntax::Severity::Error);
-    if !refused {
-        warn_send_deprecated(s, ctx);
     }
 }

@@ -17,6 +17,7 @@ use crate::emit_model::{ImportExt, LocaleNegotiationArgs};
 use crate::emitter::http_handler_method_name_ir;
 use crate::emitter::wrangler::{
     BindingSource, WorkerBinding, agent_binding, binding_ts_type, events_fanout_binding,
+    singleton_is,
 };
 use crate::emitter::{
     BOUNDARY_CODEC_RUNTIME_IMPORTS, BYTES_RUNTIME_IMPORTS, JSON_CODEC_RUNTIME_IMPORTS, RuntimeUse,
@@ -299,7 +300,7 @@ pub fn emit_worker_compose(
     // first-party `Clock` reads the harness clock (`ProviderNamespaces::Workers`).
     harness_clock: bool,
     // #2719: whether any of this context's service handlers hands work to the
-    // execution context (`~>`, `within` or `race`, directly or through the
+    // execution context (`detach`, `within` or `race`, directly or through the
     // functions it calls), so `compose` takes the request's and threads its
     // `waitUntil` into `deps.__exec`. From the checker's needs-context set.
     ctx_uses_send: bool,
@@ -560,7 +561,7 @@ pub fn emit_worker_compose(
         .collect();
     sorted_consumes.sort();
 
-    // v0.79: if any handler in this context uses `~>`, `compose` also takes the
+    // v0.79: if any handler in this context uses `detach`, `compose` also takes the
     // request's execution context and threads its `waitUntil` into `deps.__exec`.
 
     // -- Build the `compose` function's own body (Decision A/B: real nodes
@@ -626,7 +627,7 @@ pub fn emit_worker_compose(
         deps_entries.push(TsObjectEntry::Shorthand("env".to_string()));
     }
     deps_entries.extend(session_deps_entry(table));
-    // v0.79: the execution context rides in `deps.__exec` for `~>` sends.
+    // v0.79: the execution context rides in `deps.__exec` for `detach` sends.
     if ctx_uses_send {
         deps_entries.push(TsObjectEntry::Prop("__exec".to_string(), ident("exec")));
     }
@@ -661,7 +662,7 @@ pub fn emit_worker_compose(
     // (a *double* space, not the tight `"{}"` the ordinary single-line
     // `TsExpr::Object` empty-entries shortcut renders), a real, reachable
     // shape (a Worker with no providers/cross-caps/consumed services/agents,
-    // no `~>`, no events — `941_http_result_float_bytes_serialise` and
+    // no `detach`, no events — `941_http_result_float_bytes_serialise` and
     // several other real fixtures hit exactly this). The shortcut itself is
     // correct and stays unchanged for every *other* real call site (e.g.
     // `events_fanout.rs`'s own `(env ?? {})`, which genuinely wants the
@@ -927,7 +928,7 @@ pub fn emit_worker_compose(
     // Locale capability track, slice 2 (#882): `request` is threaded
     // independently of `exec` — the two-way independence matters because
     // `scheduled`/`queue` (which never have a `request`) may still use
-    // `~>` (`exec`), and a `fetch`-only Worker with no message bundle needs
+    // `detach` (`exec`), and a `fetch`-only Worker with no message bundle needs
     // neither.
     if needs_request {
         compose_params.push(TsParam {
@@ -1068,7 +1069,9 @@ pub fn emit_worker_compose(
     if binds(|s| {
         matches!(
             s,
-            BindingSource::Agent { .. } | BindingSource::EventsFanout { .. }
+            BindingSource::Agent { .. }
+                | BindingSource::EventsFanout { .. }
+                | BindingSource::ContainerInstance { .. }
         )
     }) {
         // P7.2: deferred, not narrowed — this settling attempt broke real
@@ -3041,7 +3044,7 @@ fn qualified_ts_type_ref(r: &TypeRef) -> TsType {
 /// `type __X` import entries, then the driver a `Postgres` instance is given.
 fn platform_binding_imports(bindings: &[WorkerBinding]) -> Vec<String> {
     let binds = |kind: fn(&BindingSource) -> bool| bindings.iter().any(|b| kind(&b.source));
-    let kinds: [(crate::emitter::wrangler::BindingKind, &str); 10] = [
+    let kinds: [(crate::emitter::wrangler::BindingKind, &str); 15] = [
         (
             |s| matches!(s, BindingSource::Kv | BindingSource::KvInstance { .. }),
             "__KVNamespace",
@@ -3081,9 +3084,17 @@ fn platform_binding_imports(bindings: &[WorkerBinding]) -> Vec<String> {
             "__Hyperdrive",
         ),
         (
-            |s| matches!(s, BindingSource::Singleton { .. }),
-            "__WorkerVersionMetadata",
+            |s| matches!(s, BindingSource::VectorizeIndex { .. }),
+            "__VectorizeIndex",
         ),
+        (
+            |s| matches!(s, BindingSource::AiSearchInstance { .. }),
+            "__AiSearchInstance",
+        ),
+        (|s| singleton_is(s, "Version"), "__WorkerVersionMetadata"),
+        (|s| singleton_is(s, "Ai"), "__WorkerAiBinding"),
+        (|s| singleton_is(s, "Images"), "__WorkerImagesBinding"),
+        (|s| singleton_is(s, "AnalyticsSql"), "__AnalyticsSqlBinding"),
     ];
     let mut imports: Vec<String> = kinds
         .into_iter()

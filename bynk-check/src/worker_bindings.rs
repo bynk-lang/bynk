@@ -143,6 +143,61 @@ pub enum BindingSource {
         capability: String,
         tls: Option<String>,
     },
+    /// #3479: the `[[vectorize]]` binding of a `Vectorize` instance
+    /// (`capability Docs = Vectorize @dimensions(768) @metric("cosine")`), one
+    /// index per instance under a derived name that `bynk deploy`
+    /// environment-qualifies and creates with `dimensions` and `metric`, which
+    /// Cloudflare cannot change afterwards. `indexed` is each `@indexed`
+    /// entry as written (`name:type`). Never seen by handlers: they reach it
+    /// through the instance's `WorkersVectorize`.
+    VectorizeIndex {
+        capability: String,
+        dimensions: i64,
+        metric: String,
+        indexed: Vec<String>,
+    },
+    /// #3477: the Durable Object namespace of a `Container` instance
+    /// (`capability Renderer = Container @build("…") @port(8080)`): a
+    /// `[[durable_objects.bindings]]` entry for the generated class
+    /// `class_name` (`__Container_Renderer`), its `exports` entry, and a
+    /// `[[containers]]` entry whose image is built from `build`, the
+    /// project-relative directory of its `Dockerfile`. `sleep_after`
+    /// (seconds), `instance_type` and `forward` are applied when the class
+    /// starts the container, not in config. Never seen by handlers: they reach
+    /// it through the instance's `WorkersContainer`.
+    ContainerInstance {
+        capability: String,
+        class_name: String,
+        build: String,
+        // The path from the Worker's output directory (`<out>/workers/<worker>`)
+        // back to the project root (`../../..` for the default `out`), which
+        // the driver fills in from `[build] out`; empty until then.
+        root_from_worker: String,
+        port: i64,
+        sleep_after: Option<i64>,
+        instance_type: Option<String>,
+        forward: Vec<String>,
+    },
+    /// #3480: the `[[ai_search]]` binding of an `AiSearch` instance
+    /// (`capability Kb = AiSearch @instance("support-docs")`), naming the
+    /// account's instance `instance` as written, in every environment. The
+    /// instance is linked by `bynk deploy`, which checks it exists, and never
+    /// created. Never seen by handlers: they reach it through the instance's
+    /// `WorkersAiSearch`.
+    AiSearchInstance {
+        capability: String,
+        instance: String,
+    },
+    /// #3513 A: the `[[mtls_certificates]]` binding of an `MtlsCertificate`
+    /// instance (`capability Backend = MtlsCertificate @certificate("acme-client")`),
+    /// naming the account's client certificate `certificate` as written, in every
+    /// environment. The certificate is linked by `bynk deploy`, which resolves its id and
+    /// never uploads it. Never seen by handlers: they reach it through the instance's
+    /// `WorkersMtls`.
+    MtlsCertificate {
+        capability: String,
+        certificate: String,
+    },
     /// #3300: the binding of a one-per-Worker capability of `bynk.cloudflare`
     /// (`Version`'s `[version_metadata]`), declared when the Worker's
     /// closure reaches the bare capability. Never seen by handlers: they
@@ -218,6 +273,26 @@ impl BindingSource {
             Self::Email { capability, .. } => {
                 format!("the `[[send_email]]` binding of derived capability `{capability}`")
             }
+            Self::VectorizeIndex { capability, .. } => {
+                format!("the `[[vectorize]]` binding of derived capability `{capability}`")
+            }
+            Self::ContainerInstance { capability, .. } => {
+                format!(
+                    "the Durable Object binding of the container of derived capability `{capability}`"
+                )
+            }
+            Self::AiSearchInstance {
+                capability,
+                instance,
+            } => format!(
+                "the `[[ai_search]]` binding of derived capability `{capability}` (to instance `{instance}`)"
+            ),
+            Self::MtlsCertificate {
+                capability,
+                certificate,
+            } => format!(
+                "the `[[mtls_certificates]]` binding of derived capability `{capability}` (to certificate `{certificate}`)"
+            ),
             Self::Postgres { capability } | Self::MySql { capability, .. } => {
                 format!("the `[[hyperdrive]]` binding of derived capability `{capability}`")
             }
@@ -311,6 +386,162 @@ pub fn phase_duplicate_bindings(
     }
 }
 
+/// Whether two identical declarations of `source` in different members of a
+/// group are one shared binding. A resource is identified by its declaration
+/// (a capability and its options), so identical ones share. An agent is not: its
+/// binding holds only the class's name, but its class is the code of the context
+/// that declares it, so two members' agents of one name are two classes.
+fn shareable(source: &BindingSource) -> bool {
+    !matches!(source, BindingSource::Agent { .. })
+}
+
+/// `bynk.deploy.binding_collision` (#3562): the members of a Worker group share
+/// one `wrangler.toml` and one `env`, so a binding name two members both
+/// declare is one binding when their declarations are identical (the same kind
+/// and options, so the point of co-location is shared state) and an error when
+/// they differ. `bindings` holds each context's bindings
+/// ([`phase_duplicate_bindings`] reports a name one context repeats). One error
+/// per clash, at the later member's declaration, naming both members and both
+/// sources.
+pub fn phase_group_binding_collisions(
+    worker_groups: &bynk_project::worker_groups::WorkerGroups,
+    parsed: &[ParsedFile],
+    groups: &BTreeMap<String, Vec<usize>>,
+    bindings: &BTreeMap<String, Vec<WorkerBinding>>,
+    errors: &mut ErrorSink,
+) {
+    for (key, group) in worker_groups {
+        group_service_names(key, &group.contexts, parsed, groups, errors);
+        group_publishers(key, &group.contexts, parsed, groups, bindings, errors);
+        let mut first: HashMap<&str, (&str, &WorkerBinding)> = HashMap::new();
+        for ctx in &group.contexts {
+            let indices = groups.get(ctx).map(Vec::as_slice).unwrap_or_default();
+            for binding in bindings.get(ctx).into_iter().flatten() {
+                let Some(&(earlier_ctx, earlier)) = first.get(binding.name.as_str()) else {
+                    first.insert(&binding.name, (ctx, binding));
+                    continue;
+                };
+                if earlier_ctx == ctx
+                    || (shareable(&binding.source) && earlier.source == binding.source)
+                {
+                    continue;
+                }
+                let (file, span) = declared_at(parsed, indices, binding)
+                    .or_else(|| context_header(parsed, indices))
+                    .map_or((None, Span::default()), |(file, span)| (Some(file), span));
+                errors.push_for(
+                    file.as_deref(),
+                    CompileError::new(
+                        "bynk.deploy.binding_collision",
+                        span,
+                        format!(
+                            "contexts `{earlier_ctx}` and `{ctx}` share Worker `{key}`, which would declare two different bindings named `{}`: {} (from `{earlier_ctx}`) and {} (from `{ctx}`)",
+                            binding.name,
+                            earlier.source.describe(),
+                            binding.source.describe(),
+                        ),
+                    )
+                    .with_note(if shareable(&binding.source) {
+                        "members of one Worker share its bindings: give both contexts the same declaration so they share one binding, or rename one capability"
+                    } else {
+                        "a Durable Object class belongs to the context that declares it, whatever its name, so two members cannot each declare one with the same name: rename one of the agents"
+                    }),
+                );
+            }
+        }
+    }
+}
+
+/// `bynk.deploy.service_name_conflict` (#3562): a service is reached by its name
+/// (`/_bynk/call/<service>` carries no context), and a Worker answers every
+/// member's services, so two members of one group cannot each declare a service
+/// of one name. One error per repeat, at the later member's service.
+fn group_service_names(
+    key: &str,
+    members: &[String],
+    parsed: &[ParsedFile],
+    groups: &BTreeMap<String, Vec<usize>>,
+    errors: &mut ErrorSink,
+) {
+    let mut first: HashMap<String, &str> = HashMap::new();
+    for ctx in members {
+        let indices = groups.get(ctx).map(Vec::as_slice).unwrap_or_default();
+        for &i in indices {
+            let SourceUnit::Context(c) = parsed[i].unit() else {
+                continue;
+            };
+            for item in &c.items {
+                let CommonsItem::Service(service) = item else {
+                    continue;
+                };
+                let name = &service.name.name;
+                match first.get(name.as_str()) {
+                    None => {
+                        first.insert(name.clone(), ctx);
+                    }
+                    Some(earlier) if *earlier != ctx.as_str() => {
+                        errors.push_for(
+                            Some(&parsed[i].identity_path()),
+                            CompileError::new(
+                                "bynk.deploy.service_name_conflict",
+                                service.name.span,
+                                format!(
+                                    "contexts `{earlier}` and `{ctx}` share Worker `{key}`, and both declare a service named `{name}`"
+                                ),
+                            )
+                            .with_note(
+                                "a Worker answers its members' services by name, so each service name must be unique within a group: rename one of the services, or put the contexts in different groups",
+                            ),
+                        );
+                    }
+                    Some(_) => {}
+                }
+            }
+        }
+    }
+}
+
+/// `bynk.deploy.multiple_publishers` (#3562): a context that publishes events has
+/// its own events fan-out class, and a Worker has one, so a group with two
+/// publishing members would emit two classes of one name. A **temporary**
+/// restriction: the group's fan-out is to become one class routing every member's
+/// events, and this check goes when it does. One error, at the second publisher.
+fn group_publishers(
+    key: &str,
+    members: &[String],
+    parsed: &[ParsedFile],
+    groups: &BTreeMap<String, Vec<usize>>,
+    bindings: &BTreeMap<String, Vec<WorkerBinding>>,
+    errors: &mut ErrorSink,
+) {
+    let publishes = |ctx: &String| {
+        bindings.get(ctx).is_some_and(|b| {
+            b.iter()
+                .any(|b| matches!(b.source, BindingSource::EventsFanout { .. }))
+        })
+    };
+    let mut publishers = members.iter().filter(|c| publishes(c));
+    let (Some(first), Some(second)) = (publishers.next(), publishers.next()) else {
+        return;
+    };
+    let indices = groups.get(second).map(Vec::as_slice).unwrap_or_default();
+    let (file, span) = context_header(parsed, indices)
+        .map_or((None, Span::default()), |(file, span)| (Some(file), span));
+    errors.push_for(
+        file.as_deref(),
+        CompileError::new(
+            "bynk.deploy.multiple_publishers",
+            span,
+            format!(
+                "contexts `{first}` and `{second}` share Worker `{key}`, and both publish events"
+            ),
+        )
+        .with_note(
+            "for now a Worker group has at most one publishing member, because each publisher has its own events fan-out class; this restriction is temporary, and goes when a group's fan-out is merged. Put the publishers in different groups, or give one of them its own Worker",
+        ),
+    );
+}
+
 /// Where the context declares the source of `binding`: an agent's name, or
 /// the `consumes` clause naming a context (or `bynk.cloudflare`, for the KV
 /// namespace). `None` for a source with no declaration of its own: the events
@@ -351,6 +582,10 @@ fn declared_at(
             | BindingSource::Email { capability, .. }
             | BindingSource::Postgres { capability }
             | BindingSource::MySql { capability, .. }
+            | BindingSource::VectorizeIndex { capability, .. }
+            | BindingSource::ContainerInstance { capability, .. }
+            | BindingSource::AiSearchInstance { capability, .. }
+            | BindingSource::MtlsCertificate { capability, .. }
             | BindingSource::D1Database { capability } => c.items.iter().find_map(|item| {
                 let CommonsItem::Capability(d) = item else {
                     return None;
@@ -408,5 +643,142 @@ mod tests {
                 .all(|(earlier, _)| *earlier == &bindings[0])
         );
         assert_eq!(duplicates[1].1, &bindings[2]);
+    }
+
+    fn kv(name: &str, capability: &str) -> WorkerBinding {
+        WorkerBinding {
+            name: name.to_string(),
+            source: BindingSource::KvInstance {
+                capability: capability.to_string(),
+            },
+        }
+    }
+
+    fn r2(name: &str, jurisdiction: Option<&str>) -> WorkerBinding {
+        WorkerBinding {
+            name: name.to_string(),
+            source: BindingSource::R2Instance {
+                capability: "Archives".to_string(),
+                jurisdiction: jurisdiction.map(str::to_string),
+            },
+        }
+    }
+
+    fn collisions(
+        members: &[&str],
+        bindings: &[(&str, Vec<WorkerBinding>)],
+    ) -> Vec<(String, String)> {
+        let table = format!(
+            "[deploy.workers.core]\ncontexts = [{}]\n",
+            members
+                .iter()
+                .map(|m| format!("\"{m}\""))
+                .collect::<Vec<_>>()
+                .join(", ")
+        );
+        let root = std::path::Path::new("/project");
+        let overlay = HashMap::from([(root.join("bynk.toml"), table)]);
+        let worker_groups =
+            bynk_project::worker_groups::try_read_worker_groups_with(root, &overlay).unwrap();
+        let bindings: BTreeMap<String, Vec<WorkerBinding>> = bindings
+            .iter()
+            .map(|(ctx, b)| (ctx.to_string(), b.clone()))
+            .collect();
+        let mut errors = ErrorSink::new();
+        phase_group_binding_collisions(
+            &worker_groups,
+            &[],
+            &BTreeMap::new(),
+            &bindings,
+            &mut errors,
+        );
+        errors
+            .into_all()
+            .into_iter()
+            .map(|e| (e.error.category.to_string(), e.error.message))
+            .collect()
+    }
+
+    /// Identical declarations in two members are one binding.
+    #[test]
+    fn identical_declarations_share_one_binding() {
+        assert!(
+            collisions(
+                &["a.x", "a.y"],
+                &[
+                    ("a.x", vec![kv("KV_MAIN", "Main")]),
+                    ("a.y", vec![kv("KV_MAIN", "Main")]),
+                ],
+            )
+            .is_empty()
+        );
+    }
+
+    /// The same name with different options is a collision, naming both members.
+    #[test]
+    fn differing_declarations_collide() {
+        let found = collisions(
+            &["a.x", "a.y"],
+            &[
+                ("a.x", vec![r2("ARCHIVES", None)]),
+                ("a.y", vec![r2("ARCHIVES", Some("eu"))]),
+            ],
+        );
+        assert_eq!(found.len(), 1, "{found:?}");
+        assert_eq!(found[0].0, "bynk.deploy.binding_collision");
+        assert!(
+            found[0].1.contains("`a.x` and `a.y` share Worker `core`"),
+            "{}",
+            found[0].1
+        );
+    }
+
+    /// A name one member repeats is the existing per-context error, not this one;
+    /// a context outside the group is not checked against it.
+    #[test]
+    fn only_clashes_between_members_are_reported() {
+        assert!(
+            collisions(
+                &["a.x", "a.y"],
+                &[
+                    (
+                        "a.x",
+                        vec![r2("ARCHIVES", None), r2("ARCHIVES", Some("eu"))]
+                    ),
+                    ("a.z", vec![r2("ARCHIVES", Some("eu"))]),
+                ],
+            )
+            .is_empty()
+        );
+    }
+
+    fn agent(name: &str) -> WorkerBinding {
+        WorkerBinding {
+            name: format!("AGENT_{}", name.to_uppercase()),
+            source: BindingSource::Agent {
+                class_name: name.to_string(),
+            },
+        }
+    }
+
+    /// An agent binding holds only the class name, so equal bindings can be two
+    /// different classes: two members each declaring `Cart` collide, though
+    /// their bindings compare equal.
+    #[test]
+    fn same_named_agents_in_two_members_collide() {
+        let found = collisions(
+            &["a.x", "a.y"],
+            &[("a.x", vec![agent("Cart")]), ("a.y", vec![agent("Cart")])],
+        );
+        assert_eq!(found.len(), 1, "{found:?}");
+        assert_eq!(found[0].0, "bynk.deploy.binding_collision");
+        // Agents of different names do not.
+        assert!(
+            collisions(
+                &["a.x", "a.y"],
+                &[("a.x", vec![agent("Cart")]), ("a.y", vec![agent("Order")])],
+            )
+            .is_empty()
+        );
     }
 }

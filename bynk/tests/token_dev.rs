@@ -22,6 +22,8 @@ use std::time::{Duration, Instant};
 
 #[path = "support/dev_child.rs"]
 mod dev_child;
+#[path = "../../bynk-tests/tests/support/ports.rs"]
+mod ports;
 
 const SECRET: &str = "dev-only-secret";
 
@@ -39,14 +41,6 @@ fn skip(reason: &str) -> bool {
         panic!("BYNK_REQUIRE_WORKERD is set but {reason}");
     }
     true
-}
-
-/// Two distinct localhost ports, free when asked.
-fn free_ports() -> (u16, u16) {
-    let bind = || std::net::TcpListener::bind("127.0.0.1:0").expect("bind an ephemeral port");
-    let (a, b) = (bind(), bind());
-    let port = |l: &std::net::TcpListener| l.local_addr().expect("local addr").port();
-    (port(&a), port(&b))
 }
 
 /// Stops `bynk dev`'s whole process group on drop: `SIGTERM`, then `SIGKILL`
@@ -157,7 +151,7 @@ fn a_minted_token_is_accepted_and_expired_or_not_yet_valid_ones_are_refused() {
         std::fs::copy(entry.path(), proj.join("src").join(entry.file_name())).unwrap();
     }
     let ready = dir.join("ready.json");
-    let (port, inspector) = free_ports();
+    let [port, inspector] = ports::free_ports();
 
     let dev_log = dir.join("bynk-dev.log");
     let (dev_stdout, dev_stderr) = dev_child::log_to(&dev_log);

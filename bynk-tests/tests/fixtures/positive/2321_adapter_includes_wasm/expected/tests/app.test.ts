@@ -84,7 +84,7 @@ async function test_the_real_binding_runs_its_wasm_module() {
     const deps = __makeIntegrationDeps();
     const { sum } = __ns_app;
     const s = await sum.call(2, 3, deps);
-    if (!(s === 5)) { throw __bynkExpectFailure("tests/app.bynk:7:9", 248, 254, "expect s == 5\n  expected: s == 5\n  actual:   " + __bynkShow((s)) + " == " + __bynkShow((5))); }
+    if (!(s === 5)) { throw __bynkExpectFailure("tests/app.bynk:9:9", 273, 279, "expect s == 5\n  expected: s == 5\n  actual:   " + __bynkShow((s)) + " == " + __bynkShow((5))); }
     return { pass: true };
   } catch (e) {
     if (e instanceof ExpectationError) {
@@ -100,7 +100,7 @@ async function test_the_unit_tier_stubs_the_adapter() {
     const deps = __makeTestDeps("the unit tier stubs the adapter");
     const { sum } = __ns_app;
     const s = await sum.call(2, 3, deps);
-    if (!(s === 99)) { throw __bynkExpectFailure("tests/app.bynk:14:9", 429, 436, "expect s == 99\n  expected: s == 99\n  actual:   " + __bynkShow((s)) + " == " + __bynkShow((99))); }
+    if (!(s === 99)) { throw __bynkExpectFailure("tests/app.bynk:16:9", 454, 461, "expect s == 99\n  expected: s == 99\n  actual:   " + __bynkShow((s)) + " == " + __bynkShow((99))); }
     return { pass: true };
   } catch (e) {
     if (e instanceof ExpectationError) {

@@ -1,0 +1,2 @@
+bynk.capability.invalid_option
+is at most 1536

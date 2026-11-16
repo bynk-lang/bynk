@@ -1,6 +1,6 @@
 context demo
 
-consumes bynk { Fetch }
+consumes bynk { Fetch, Request, StreamResponse, FetchError, FetchOptions, Redirect }
 
 // #2627: a `StreamResponse` carries a stream, so it can't be a handler's
 // result: serve its body with `RawStreamed` instead.

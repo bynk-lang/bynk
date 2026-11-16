@@ -231,6 +231,13 @@ pub struct ResolvedCommons {
     /// from its provenance (`check_pipeline`) and carried to every check built
     /// from it. Empty unless set with [`ResolvedCommons::with_extensible_enums`].
     pub extensible_enums: HashSet<String>,
+    /// #3536: the names of types in scope that a braced `consumes` of a
+    /// first-party unit leaves out (`consumes bynk { Logger }` leaves out
+    /// `Claim`). Still resolvable, so `bynk.consumes.type_not_selected` reports
+    /// it with a fix, but never a name-clash or bare-variant ambiguity candidate: a
+    /// declaration of the unit's own wins. Empty unless set with
+    /// [`ResolvedCommons::with_unselected_types`].
+    pub unselected_types: HashSet<String>,
     /// Standard-library S3 (#1963): the unit's stability facts — the project's
     /// `[unstable]` policy and the imports it blocks. Set with
     /// [`ResolvedCommons::with_stability`]; the default blocks nothing.
@@ -480,6 +487,7 @@ impl ResolvedCommons {
             consts: HashMap::new(),
             shadowed_imports: HashMap::new(),
             extensible_enums: HashSet::new(),
+            unselected_types: HashSet::new(),
             stability: Default::default(),
         }
     }
@@ -525,6 +533,20 @@ impl ResolvedCommons {
     pub fn with_shadowed_imports(mut self, shadowed: HashMap<String, ShadowedImport>) -> Self {
         self.shadowed_imports = shadowed;
         self
+    }
+
+    /// #3536: set [`ResolvedCommons::unselected_types`].
+    pub fn with_unselected_types(mut self, names: HashSet<String>) -> Self {
+        self.unselected_types = names;
+        self
+    }
+
+    /// Carry the per-unit scope facts of a checked unit
+    /// ([`ResolvedCommons::extensible_enums`], [`ResolvedCommons::unselected_types`])
+    /// onto the rebuilt per-handler view.
+    pub fn with_scope_facts_of(self, typed: &crate::checker::TypedCommons) -> Self {
+        self.with_extensible_enums(typed.extensible_enums.clone())
+            .with_unselected_types(typed.unselected_types.clone())
     }
 
     /// S3 (#1963): set [`ResolvedCommons::extensible_enums`].
@@ -594,6 +616,42 @@ pub fn resolve(commons: Commons) -> Result<ResolvedCommons, Vec<CompileError>> {
     } else {
         Err(errors)
     }
+}
+
+/// Single-file mode has no `uses`, so the visible assets (#1883), embeds
+/// (#2387) and constants (#2617) are exactly the ones declared here, the first
+/// declaration of a name winning as in the unit table; a second is reported by
+/// `assets::single_file_asset_errors`, `embeds::single_file_embed_errors` and
+/// `consts::single_file_const_errors`.
+fn single_file_values(
+    commons: &Commons,
+) -> (
+    HashMap<String, AssetDecl>,
+    HashMap<String, EmbedDecl>,
+    HashMap<String, ConstDecl>,
+) {
+    let (mut assets, mut embeds, mut consts) = (HashMap::new(), HashMap::new(), HashMap::new());
+    for item in &commons.items {
+        match item {
+            CommonsItem::Asset(a) => {
+                assets
+                    .entry(a.name.name.clone())
+                    .or_insert_with(|| a.clone());
+            }
+            CommonsItem::Embed(e) => {
+                embeds
+                    .entry(e.name.name.clone())
+                    .or_insert_with(|| e.clone());
+            }
+            CommonsItem::Const(c) => {
+                consts
+                    .entry(c.name.name.clone())
+                    .or_insert_with(|| c.clone());
+            }
+            _ => {}
+        }
+    }
+    (assets, embeds, consts)
 }
 
 /// [`resolve`], returning the symbol table *with* every resolve error rather
@@ -813,40 +871,7 @@ pub fn resolve_recovering(commons: Commons) -> (ResolvedCommons, Vec<CompileErro
         }
     }
 
-    // #1883, slice 1a: single-file mode has no `uses`, so the visible assets
-    // are exactly the ones declared here.
-    // The first declaration of a name wins, as in the unit table; a second is
-    // `bynk.asset.duplicate` (`assets::single_file_asset_errors`).
-    let mut local_assets: HashMap<String, AssetDecl> = HashMap::new();
-    for item in &commons.items {
-        if let CommonsItem::Asset(a) = item {
-            local_assets
-                .entry(a.name.name.clone())
-                .or_insert_with(|| a.clone());
-        }
-    }
-
-    // #2387, slice 1: likewise the embeds, first declaration winning
-    // (`embeds::single_file_embed_errors` reports a second).
-    let mut local_embeds: HashMap<String, EmbedDecl> = HashMap::new();
-    for item in &commons.items {
-        if let CommonsItem::Embed(e) = item {
-            local_embeds
-                .entry(e.name.name.clone())
-                .or_insert_with(|| e.clone());
-        }
-    }
-
-    // #2617: likewise the constants, first declaration winning
-    // (`consts::single_file_const_errors` reports a second).
-    let mut local_consts: HashMap<String, ConstDecl> = HashMap::new();
-    for item in &commons.items {
-        if let CommonsItem::Const(c) = item {
-            local_consts
-                .entry(c.name.name.clone())
-                .or_insert_with(|| c.clone());
-        }
-    }
+    let (local_assets, local_embeds, local_consts) = single_file_values(&commons);
 
     // Second pass: validate references inside type-refs and function bodies.
     let mut refs = RefSink::new(); // single-file mode: no recording context.
@@ -929,6 +954,7 @@ pub fn resolve_recovering(commons: Commons) -> (ResolvedCommons, Vec<CompileErro
             consts: local_consts,
             shadowed_imports: HashMap::new(),
             extensible_enums: HashSet::new(),
+            unselected_types: HashSet::new(),
             stability: Default::default(),
         };
         (resolved, errors)
@@ -1209,7 +1235,7 @@ pub fn resolve_file_record(
             }
             CommonsItem::Fn(f) => {
                 sinks.refs.set_owner(f.name.display());
-                check_fn_refs(
+                check_fn_refs_with(
                     f,
                     &resolved.types,
                     &resolved.fns,
@@ -1218,18 +1244,20 @@ pub fn resolve_file_record(
                     &resolved.embeds,
                     &resolved.consts,
                     &resolved.shadowed_imports,
+                    &resolved.unselected_types,
                     &declared_caps,
                     &mut sinks,
                 );
             }
             CommonsItem::Const(c) => {
                 sinks.refs.set_owner(&c.name.name);
-                check_const_refs(
+                check_const_refs_with(
                     c,
                     &resolved.types,
                     &resolved.fns,
                     &resolved.methods,
                     &resolved.consts,
+                    &resolved.unselected_types,
                     &mut sinks,
                 );
             }
@@ -1832,6 +1860,7 @@ fn check_type_decl_refs(t: &TypeDecl, types: &HashMap<String, Arc<TypeDecl>>, er
     }
 }
 
+/// [`check_fn_refs_with`] for a unit with no braced `consumes` to leave a type out.
 #[allow(clippy::too_many_arguments)]
 fn check_fn_refs(
     f: &FnDecl,
@@ -1842,6 +1871,48 @@ fn check_fn_refs(
     embeds: &HashMap<String, EmbedDecl>,
     consts: &HashMap<String, ConstDecl>,
     shadowed: &HashMap<String, ShadowedImport>,
+    declared_caps: &HashSet<String>,
+    errors: &mut Sinks,
+) {
+    let none = HashSet::new();
+    check_fn_refs_with(
+        f,
+        types,
+        fns,
+        methods,
+        assets,
+        embeds,
+        consts,
+        shadowed,
+        &none,
+        declared_caps,
+        errors,
+    );
+}
+
+/// [`check_const_refs_with`] for a unit with no braced `consumes` to leave a type out.
+fn check_const_refs(
+    c: &ConstDecl,
+    types: &HashMap<String, Arc<TypeDecl>>,
+    fns: &HashMap<String, Arc<FnDecl>>,
+    methods: &HashMap<String, MethodTable>,
+    consts: &HashMap<String, ConstDecl>,
+    errors: &mut Sinks,
+) {
+    check_const_refs_with(c, types, fns, methods, consts, &HashSet::new(), errors);
+}
+
+#[allow(clippy::too_many_arguments)]
+fn check_fn_refs_with(
+    f: &FnDecl,
+    types: &HashMap<String, Arc<TypeDecl>>,
+    fns: &HashMap<String, Arc<FnDecl>>,
+    methods: &HashMap<String, MethodTable>,
+    assets: &HashMap<String, AssetDecl>,
+    embeds: &HashMap<String, EmbedDecl>,
+    consts: &HashMap<String, ConstDecl>,
+    shadowed: &HashMap<String, ShadowedImport>,
+    unselected: &HashSet<String>,
     declared_caps: &HashSet<String>,
     errors: &mut Sinks,
 ) {
@@ -1962,6 +2033,7 @@ fn check_fn_refs(
         embeds,
         consts,
         shadowed,
+        unselected,
         caps: &caps,
         given: &f.given,
         cap_advice: &cap_advice,
@@ -2009,12 +2081,13 @@ fn given_cap_chain(receiver: &Expr, given: &[CapRef], shadowed: &dyn Fn(&str) ->
 /// what is in scope. The initialiser has no parameters or bindings, so this is
 /// the function walk over an empty scope; whether the initialiser is *static*
 /// is the checker's call (`consts::static_error`).
-fn check_const_refs(
+fn check_const_refs_with(
     c: &ConstDecl,
     types: &HashMap<String, Arc<TypeDecl>>,
     fns: &HashMap<String, Arc<FnDecl>>,
     methods: &HashMap<String, MethodTable>,
     consts: &HashMap<String, ConstDecl>,
+    unselected: &HashSet<String>,
     errors: &mut Sinks,
 ) {
     let type_params = HashSet::new();
@@ -2032,6 +2105,7 @@ fn check_const_refs(
         embeds: &embeds,
         consts,
         shadowed: &shadowed,
+        unselected,
         caps: &HashSet::new(),
         given: &[],
         cap_advice: "",
@@ -2045,22 +2119,36 @@ fn check_const_refs(
 /// #1807, #1814: the walk the naming gates share: every place source writes
 /// a type name, reporting each one that names a hidden type. See
 /// [`check_hidden_type_names`] for what is walked.
+/// How a [`Gate`] reports a gated name written at an identifier, given its owner.
+type GateReport<'a> = dyn Fn(&Ident, &str) -> CompileError + 'a;
+
 struct Gate<'a> {
     /// Each gated type name, with its owning unit.
     hidden: &'a std::collections::BTreeMap<String, String>,
     /// #1814: the error for a gated name written at `id`, given its owner. A
     /// unit and a suite name the `uses` that would admit a hidden type
     /// differently; a shadowed import is a conflict instead (#1927).
-    report: &'a dyn Fn(&Ident, &str) -> CompileError,
+    report: &'a GateReport<'a>,
     /// #1927: each bare variant whose construction is gated, with its sum's
     /// name. Empty for #1807's hidden types, whose bare variants are values
     /// typed by their position; a shadowed sum's construction emits its type's
     /// name, which the local declaration has taken.
     variants: std::collections::BTreeMap<String, String>,
+    /// #3536: set, [`Gate::variants`] are reported through it wherever a bare
+    /// variant is *written* — constructed or matched — as the sum it names.
+    variant_report: Option<&'a GateReport<'a>>,
     /// #1927: for a shadowed type, the local declaration of each name, which
     /// answers a receiver it can serve (`svc.GET(…)` in a suite, `logo.url`).
     /// `None` for #1807's hidden types, which nothing local shares a name with.
     locals: Option<&'a HashMap<String, ShadowedImport>>,
+    /// #3536: the names gated are capabilities, which are also written in
+    /// `given` clauses, `provides` and a derived capability's base, and in a
+    /// suite's `stub` clauses; a type gate does not walk those.
+    caps: bool,
+    /// #3536: the units a cross-context call names, by the prefix it writes
+    /// (`pay`, `shop.pay`, or an alias), each with its unit; a method call on
+    /// one is reported through [`Gate::report`] with the prefix as the name.
+    units: Option<&'a std::collections::BTreeMap<String, String>>,
     errors: Vec<CompileError>,
 }
 impl Gate<'_> {
@@ -2077,6 +2165,35 @@ impl Gate<'_> {
             _ => false,
         }
     }
+    /// #3536: a capability named in a `given` clause (a qualified `B.Cap` names
+    /// its unit and is not a flattened name).
+    fn givens(&mut self, given: &[CapRef]) {
+        if self.caps {
+            for c in given.iter().filter(|c| c.context.is_none()) {
+                self.name(&c.name);
+            }
+        }
+    }
+    /// #3536: a call `pay.charge(…)` on a unit named by its prefix.
+    fn unit_call(&mut self, receiver: &Expr) {
+        let Some(units) = self.units else { return };
+        let Some(path) = qualified_path(receiver) else {
+            return;
+        };
+        if let Some(owner) = units.get(&path) {
+            let id = Ident {
+                name: path,
+                span: receiver.span,
+            };
+            self.errors.push((self.report)(&id, owner));
+        }
+    }
+    /// #3536: a capability named where a declaration refers to one.
+    fn capability(&mut self, id: &Ident) {
+        if self.caps {
+            self.name(id);
+        }
+    }
     fn name(&mut self, id: &Ident) {
         if let Some(owner) = self.hidden.get(&id.name) {
             self.errors.push((self.report)(id, owner));
@@ -2089,6 +2206,10 @@ impl Gate<'_> {
         let Some(sum) = self.variants.get(&id.name) else {
             return;
         };
+        if let Some(report) = self.variant_report {
+            self.errors.push(report(id, sum));
+            return;
+        }
         let Some(s) = self.locals.and_then(|l| l.get(sum)) else {
             return;
         };
@@ -2186,6 +2307,8 @@ impl Gate<'_> {
             } => {
                 if let Some(tn) = type_name {
                     self.name(tn);
+                } else if self.variant_report.is_some() {
+                    self.bare_variant(variant);
                 } else if bindings.is_empty() {
                     // A bare, payload-less pattern may name a refined type
                     // rather than a variant: `s is Repo` tests a refinement.
@@ -2289,11 +2412,15 @@ impl Gate<'_> {
                 type_args,
                 ..
             } => {
+                // #3147: `D1.peek(…)` is a case-only built-in, not a use of the
+                // `D1` capability, so it needs no `consumes bynk.cloudflare`.
                 if let ExprKind::Ident(id) = &receiver.kind
+                    && !(id.name == "D1" && method.name == "peek")
                     && !self.local_receiver(id, Some(method), None)
                 {
                     self.name(id);
                 }
+                self.unit_call(receiver);
                 for t in type_args {
                     self.type_ref(t);
                 }
@@ -2360,7 +2487,10 @@ pub fn check_hidden_type_names(
         hidden,
         report: &report,
         variants: Default::default(),
+        variant_report: None,
         locals: None,
+        caps: false,
+        units: None,
         errors: Vec::new(),
     };
     gate_items(&mut g, items);
@@ -2377,6 +2507,388 @@ fn hidden_type_error(id: &Ident, note: String) -> CompileError {
         format!("unknown type `{}`", id.name),
     )
     .with_note(note)
+}
+
+/// #3536: where a file's `consumes` clauses stand, for
+/// [`check_unselected_type_names`]: what the unit consumes, what this file's own
+/// clauses list, and where a clause the file lacks would go.
+pub struct FileConsumes<'a> {
+    /// The units the unit consumes, in any of its files.
+    pub consumed: &'a std::collections::BTreeSet<String>,
+    /// The unit's aliases (`consumes U { T as V }`), by alias, in any file.
+    pub aliases: &'a HashMap<String, crate::symbols::ConsumedTypeAlias>,
+    /// This file's own `consumes` clauses.
+    pub clauses: &'a [ConsumesDecl],
+    /// Where a new `consumes` line is inserted when this file has no clause for
+    /// the owner (offset, and the line break that precedes it): after its last
+    /// `uses` or `consumes`, else after its header. `None` when the form has no
+    /// safe place (a braced header).
+    pub insert_at: Option<(usize, String)>,
+}
+
+impl FileConsumes<'_> {
+    /// Whether this file's own clauses bring `name` in from `owner`: a bare
+    /// `consumes owner`, or a braced list naming it (under its alias, if any).
+    fn lists(&self, owner: &str, name: &str) -> bool {
+        self.clauses
+            .iter()
+            .filter(|c| c.target.joined() == owner)
+            .any(|c| match &c.selected {
+                None => true,
+                Some(items) => items
+                    .iter()
+                    .any(|i| i.alias.as_ref().unwrap_or(&i.name).name == name),
+            })
+    }
+
+    /// How `name` is written in a list: `Original as Alias` for a renamed export.
+    fn item(&self, owner: &str, name: &str) -> String {
+        match self.aliases.get(name) {
+            Some(a) if a.target == owner => format!("{} as {name}", a.original),
+            _ => name.to_string(),
+        }
+    }
+}
+
+/// #3536: where a `consumes` line a file lacks is inserted, with the line break
+/// (and indent) that precedes it. After the file's last `uses` or `consumes`
+/// clause (the parser wants them ahead of every declaration); else after its
+/// header, which is the text up to `header_end`, then the `{` of a braced file.
+/// `None` when a braced file's `{` is not where it should be.
+pub fn new_consumes_position(
+    source: &str,
+    last_clause_end: Option<usize>,
+    header_end: usize,
+    braced: bool,
+) -> Option<(usize, String)> {
+    if let Some(end) = last_clause_end {
+        let lead = if braced {
+            indent_after(source, end)
+        } else {
+            String::new()
+        };
+        return Some((past_trailing_comment(source, end), format!("\n{lead}")));
+    }
+    if !braced {
+        let at = past_trailing_comment(source, header_end);
+        return Some((at, "\n\n".to_string()));
+    }
+    let rest = source.get(header_end..)?;
+    let open = header_end + (rest.len() - rest.trim_start().len());
+    source[open..].starts_with('{').then_some(())?;
+    let lead = indent_after(source, open + 1);
+    Some((past_trailing_comment(source, open + 1), format!("\n{lead}")))
+}
+
+/// `at`, or the end of its line when all that follows `at` on the line is a
+/// comment, so a line inserted here leaves the comment on the line it was
+/// written on instead of taking it over.
+fn past_trailing_comment(source: &str, at: usize) -> usize {
+    let Some(rest) = source.get(at..) else {
+        return at;
+    };
+    let line = rest.split('\n').next().unwrap_or("");
+    let trimmed = line.trim();
+    if trimmed.is_empty() || trimmed.starts_with("//") || trimmed.starts_with("--") {
+        at + line.trim_end_matches('\r').len()
+    } else {
+        at
+    }
+}
+
+/// The indent of the first non-blank line after `at`, or two spaces.
+fn indent_after(source: &str, at: usize) -> String {
+    source
+        .get(at..)
+        .and_then(|rest| rest.split('\n').skip(1).find(|l| !l.trim().is_empty()))
+        .map_or("  ", |l| &l[..l.len() - l.trim_start().len()])
+        .to_string()
+}
+
+/// #3536: `bynk.consumes.type_not_selected`, for each place a file's source
+/// writes the name of a type (or a bare variant of a sum) that a unit it
+/// consumes exports and that **this file's own** `consumes` does not bring in:
+/// either it lists other names, or only another file of the unit consumes the
+/// unit. Imports are per file, so naming anything else
+/// is an error, and carries a fix that edits this file's `consumes`:
+/// extend the clause it has, or add one.
+pub fn check_unselected_type_names(
+    items: &[CommonsItem],
+    resolved: &ResolvedCommons,
+    file: &FileConsumes<'_>,
+) -> Vec<CompileError> {
+    let owners = resolved
+        .imported_from
+        .iter()
+        .filter(|(_, owner)| file.consumed.contains(*owner))
+        .map(|(n, o)| (n.clone(), o.clone()))
+        .collect();
+    unselected_gate(Names::Types, &owners, &resolved.types, file, |g| {
+        gate_items(g, items)
+    })
+}
+
+/// #3536: `bynk.consumes.capability_not_selected`, the same rule for the
+/// capabilities a braced `consumes U { Cap }` flattens into the unit's namespace:
+/// naming one (a `given` clause, a call, `provides`, a derived capability's
+/// base) in a file whose own `consumes` does not list it. `flattened` is the
+/// unit's capabilities, each with its owner.
+pub fn check_unselected_capabilities(
+    items: &[CommonsItem],
+    flattened: &HashMap<String, String>,
+    file: &FileConsumes<'_>,
+) -> Vec<CompileError> {
+    let owners = flattened
+        .iter()
+        .map(|(n, o)| (n.clone(), o.clone()))
+        .collect();
+    unselected_gate(Names::Capabilities, &owners, &HashMap::new(), file, |g| {
+        gate_items(g, items)
+    })
+}
+
+/// #3536: [`check_unselected_capabilities`] for a unit suite, whose `stub`
+/// clauses and cases name its target's flattened capabilities.
+pub fn check_unselected_capabilities_in_suite(
+    suite: &SuiteDecl,
+    owners: &std::collections::BTreeMap<String, String>,
+    file: &FileConsumes<'_>,
+) -> Vec<CompileError> {
+    unselected_gate(Names::Capabilities, owners, &HashMap::new(), file, |g| {
+        gate_suite(g, suite)
+    })
+}
+
+/// The dotted path an expression of identifiers and field accesses writes
+/// (`pay`, `shop.pay`), or `None` for anything else.
+fn qualified_path(e: &Expr) -> Option<String> {
+    match &e.kind {
+        ExprKind::Ident(id) => Some(id.name.clone()),
+        ExprKind::FieldAccess { receiver, field } => {
+            Some(format!("{}.{}", qualified_path(receiver)?, field.name))
+        }
+        _ => None,
+    }
+}
+
+/// #3536: `bynk.consumes.unit_not_consumed`, the same rule for a cross-context
+/// call (`pay.charge(…)`): the file that writes it must itself `consumes` the
+/// unit, in any form. `prefixes` maps each prefix a call may write (the unit's
+/// name, or the alias of a `consumes U as A`) to the unit. The fix adds
+/// `consumes U` to this file.
+pub fn check_unconsumed_unit_calls(
+    items: &[CommonsItem],
+    prefixes: &std::collections::BTreeMap<String, String>,
+    file: &FileConsumes<'_>,
+) -> Vec<CompileError> {
+    unit_gate(prefixes, file, |g| gate_items(g, items))
+}
+
+/// [`check_unconsumed_unit_calls`] for a unit suite.
+pub fn check_unconsumed_unit_calls_in_suite(
+    suite: &SuiteDecl,
+    prefixes: &std::collections::BTreeMap<String, String>,
+    file: &FileConsumes<'_>,
+) -> Vec<CompileError> {
+    unit_gate(prefixes, file, |g| gate_suite(g, suite))
+}
+
+fn unit_gate(
+    prefixes: &std::collections::BTreeMap<String, String>,
+    file: &FileConsumes<'_>,
+    walk: impl FnOnce(&mut Gate<'_>),
+) -> Vec<CompileError> {
+    let missing: std::collections::BTreeMap<String, String> = prefixes
+        .iter()
+        .filter(|(_, unit)| !file.clauses.iter().any(|c| c.target.joined() == **unit))
+        .map(|(p, u)| (p.clone(), u.clone()))
+        .collect();
+    let report = |id: &Ident, unit: &str| {
+        let mut e = CompileError::new(
+            "bynk.consumes.unit_not_consumed",
+            id.span,
+            format!("`{}` is not in scope: this file does not `consumes {unit}`", id.name),
+        )
+        .with_note(format!(
+            "imports are per file: a call to another unit's service is in scope in a file that itself `consumes` it. Add `consumes {unit}` to this file."
+        ));
+        if let Some((offset, separator)) = &file.insert_at {
+            let at = Span::new_in(id.span.file, *offset, *offset);
+            e = e.with_suggestion(
+                format!("add `consumes {unit}` to this file"),
+                vec![(at, format!("{separator}consumes {unit}"))],
+                Applicability::MachineApplicable,
+            );
+        }
+        e
+    };
+    let mut g = Gate {
+        hidden: &std::collections::BTreeMap::new(),
+        report: &report,
+        variants: Default::default(),
+        variant_report: None,
+        locals: None,
+        caps: false,
+        units: Some(&missing),
+        errors: Vec::new(),
+    };
+    walk(&mut g);
+    g.errors
+}
+
+/// What a per-file gate is about.
+#[derive(Clone, Copy)]
+enum Names {
+    Types,
+    Capabilities,
+}
+
+/// #3536: [`check_unselected_type_names`] for a unit suite. `owners` maps each
+/// type a unit the suite's target consumes exports, except those the target or
+/// the suite declares itself, to that unit; `types` is the suite's view.
+pub fn check_unselected_type_names_in_suite(
+    suite: &SuiteDecl,
+    owners: &std::collections::BTreeMap<String, String>,
+    types: &HashMap<String, Arc<TypeDecl>>,
+    file: &FileConsumes<'_>,
+) -> Vec<CompileError> {
+    unselected_gate(Names::Types, owners, types, file, |g| gate_suite(g, suite))
+}
+
+/// The gate both walk through: every name in `owners` this file's own clauses
+/// do not bring in is warned on where `walk` meets it, along with the bare
+/// variants of its sums.
+fn unselected_gate(
+    names: Names,
+    owners: &std::collections::BTreeMap<String, String>,
+    types: &HashMap<String, Arc<TypeDecl>>,
+    file: &FileConsumes<'_>,
+    walk: impl FnOnce(&mut Gate<'_>),
+) -> Vec<CompileError> {
+    let mut gated = std::collections::BTreeMap::new();
+    let mut variants = std::collections::BTreeMap::new();
+    for (name, owner) in owners.iter().filter(|(n, o)| !file.lists(o, n)) {
+        gated.insert(name.clone(), owner.clone());
+        if let Some(TypeBody::Sum(sum)) = types.get(name).map(|t| &t.body) {
+            variants.extend(
+                sum.variants
+                    .iter()
+                    .map(|v| (v.name.name.clone(), name.clone())),
+            );
+        }
+    }
+    // A variant another sum in scope declares is that sum's, not this one's.
+    variants.retain(|v, sum| {
+        !types.iter().any(|(n, t)| {
+            n != sum
+                && !gated.contains_key(n)
+                && matches!(&t.body, TypeBody::Sum(s) if s.variants.iter().any(|x| x.name.name == *v))
+        })
+    });
+    // Each report's name this file must list and its owner, by the byte range it
+    // is reported at (one file's, so the range identifies the site).
+    let hits = std::cell::RefCell::new(std::collections::BTreeMap::<
+        (usize, usize),
+        (String, String),
+    >::new());
+    let report_name = |id: &Ident, name: &str, owner: &str| {
+        let why = if file.clauses.iter().any(|c| c.target.joined() == owner) {
+            format!("this file's `consumes {owner}` does not list it")
+        } else {
+            format!("this file does not `consumes {owner}`")
+        };
+        let message = if matches!(names, Names::Capabilities) {
+            format!("capability `{name}` is not in scope: {why}")
+        } else if id.name == name {
+            format!("`{name}` is not in scope: {why}")
+        } else {
+            format!(
+                "`{}` is a variant of `{name}`, which is not in scope: {why}",
+                id.name
+            )
+        };
+        hits.borrow_mut().insert(
+            (id.span.start, id.span.end),
+            (name.to_string(), owner.to_string()),
+        );
+        let code = match names {
+            Names::Types => "bynk.consumes.type_not_selected",
+            Names::Capabilities => "bynk.consumes.capability_not_selected",
+        };
+        CompileError::new(code, id.span, message).with_note(format!(
+            "imports are per file: a name from another unit is in scope in a file that itself `consumes` it, and in a braced list only if it is listed. Add `{name}` to this file's `consumes {owner} {{ … }}`."
+        ))
+    };
+    let report = |id: &Ident, owner: &str| report_name(id, &id.name, owner);
+    let variant_report = |id: &Ident, sum: &str| report_name(id, sum, &owners[sum]);
+    let mut g = Gate {
+        hidden: &gated,
+        report: &report,
+        variants,
+        variant_report: Some(&variant_report),
+        locals: None,
+        caps: matches!(names, Names::Capabilities),
+        units: None,
+        errors: Vec::new(),
+    };
+    walk(&mut g);
+    let errors = std::mem::take(&mut g.errors);
+    attach_consumes_fixes(errors, &hits.into_inner(), file)
+}
+
+/// #3536: give each [`check_unselected_type_names`] error a fix that edits the
+/// file it is in. A file with a braced clause for the owner gains `, Name` in
+/// it; one with none gains a line listing **every** name it needs from that
+/// owner, so the errors share one edit and the batch applies it once.
+fn attach_consumes_fixes(
+    errors: Vec<CompileError>,
+    hits: &std::collections::BTreeMap<(usize, usize), (String, String)>,
+    file: &FileConsumes<'_>,
+) -> Vec<CompileError> {
+    let mut needed: std::collections::BTreeMap<&str, std::collections::BTreeSet<&str>> =
+        Default::default();
+    for (name, owner) in hits.values() {
+        needed.entry(owner).or_default().insert(name);
+    }
+    let applicable = bynk_syntax::error::Applicability::MachineApplicable;
+    errors
+        .into_iter()
+        .map(|e| {
+            let Some((name, owner)) = hits.get(&(e.span.start, e.span.end)) else {
+                return e;
+            };
+            let own = || file.clauses.iter().filter(|c| c.target.joined() == *owner);
+            let extend = own().find_map(|c| c.selected.as_ref()?.last());
+            if let Some(last) = extend {
+                let end = last
+                    .alias
+                    .as_ref()
+                    .map_or(last.name.span.end, |a| a.span.end);
+                let at = Span::new_in(e.span.file, end, end);
+                let item = file.item(owner, name);
+                return e.with_suggestion(
+                    format!("add `{name}` to this file's `consumes {owner}`"),
+                    vec![(at, format!(", {item}"))],
+                    applicable,
+                );
+            }
+            let Some((offset, separator)) = &file.insert_at else {
+                return e;
+            };
+            let offset = *offset;
+            let list = needed[owner.as_str()]
+                .iter()
+                .map(|n| file.item(owner, n))
+                .collect::<Vec<_>>()
+                .join(", ");
+            let at = Span::new_in(e.span.file, offset, offset);
+            e.with_suggestion(
+                format!("add `consumes {owner} {{ {list} }}` to this file"),
+                vec![(at, format!("{separator}consumes {owner} {{ {list} }}"))],
+                applicable,
+            )
+        })
+        .collect()
 }
 
 /// #1927: the naming gate for a `uses`-imported type the unit hides behind
@@ -2402,7 +2914,10 @@ pub fn check_shadowed_type_names(
         hidden: &gated,
         report: &report,
         variants,
+        variant_report: None,
         locals: Some(shadowed),
+        caps: false,
+        units: None,
         errors: Vec::new(),
     };
     gate_items(&mut g, items);
@@ -2433,7 +2948,7 @@ fn shadowed_type_gate(
 
 /// Walk every item of a unit through `g`.
 fn gate_items(g: &mut Gate<'_>, items: &[CommonsItem]) {
-    if g.hidden.is_empty() {
+    if g.hidden.is_empty() && g.units.is_none() {
         return;
     }
     for item in items {
@@ -2444,15 +2959,21 @@ fn gate_items(g: &mut Gate<'_>, items: &[CommonsItem]) {
                 if let FnName::Method { type_name, .. } = &f.name {
                     g.name(type_name);
                 }
+                g.givens(&f.given);
                 g.signature(&f.params, &f.return_type);
                 g.block(&f.body);
             }
             CommonsItem::Capability(c) => {
+                if let Some(d) = &c.derived {
+                    g.capability(&d.base);
+                }
                 for op in &c.ops {
                     g.signature(&op.params, &op.return_type);
                 }
             }
             CommonsItem::Provider(p) => {
+                g.capability(&p.capability);
+                g.givens(&p.given);
                 for op in &p.ops {
                     g.signature(&op.params, &op.return_type);
                     g.block(&op.body);
@@ -2471,7 +2992,9 @@ fn gate_items(g: &mut Gate<'_>, items: &[CommonsItem]) {
                     | ServiceProtocol::Queue { .. }
                     | ServiceProtocol::Email { .. } => {}
                 }
+                g.givens(&s.default_given);
                 for h in &s.handlers {
+                    g.givens(&h.given);
                     g.signature(&h.params, &h.return_type);
                     g.block(&h.body);
                 }
@@ -2487,6 +3010,7 @@ fn gate_items(g: &mut Gate<'_>, items: &[CommonsItem]) {
                     }
                 }
                 for h in &a.handlers {
+                    g.givens(&h.given);
                     g.signature(&h.params, &h.return_type);
                     g.block(&h.body);
                 }
@@ -2549,7 +3073,10 @@ pub fn check_hidden_type_names_in_suite(
         hidden,
         report: &report,
         variants: Default::default(),
+        variant_report: None,
         locals: None,
+        caps: false,
+        units: None,
         errors: Vec::new(),
     };
     gate_suite(&mut g, suite);
@@ -2570,7 +3097,10 @@ pub fn check_shadowed_type_names_in_suite(
         hidden: &gated,
         report: &report,
         variants,
+        variant_report: None,
         locals: Some(shadowed),
+        caps: false,
+        units: None,
         errors: Vec::new(),
     };
     gate_suite(&mut g, suite);
@@ -2579,10 +3109,11 @@ pub fn check_shadowed_type_names_in_suite(
 
 /// Walk every stub, case and property of `suite` through `g`.
 fn gate_suite(g: &mut Gate<'_>, suite: &SuiteDecl) {
-    if g.hidden.is_empty() {
+    if g.hidden.is_empty() && g.units.is_none() {
         return;
     }
     let stub = |g: &mut Gate<'_>, s: &StubClause| {
+        g.capability(&s.capability);
         for a in &s.args {
             if let ArgPattern::Value(e) = a {
                 g.expr(e);
@@ -3259,6 +3790,8 @@ struct RefCheckCtx<'a, 'b> {
     consts: &'a HashMap<String, ConstDecl>,
     /// #1925: imports a local declaration of another kind hides.
     shadowed: &'a HashMap<String, ShadowedImport>,
+    /// #3536: first-party types a braced `consumes` leaves out.
+    unselected: &'a HashSet<String>,
     /// #2868: the capabilities a `given` function names: an identifier that is
     /// one is a capability receiver (`Logger.error(…)`), typed by the checker.
     caps: &'a HashSet<String>,
@@ -3327,9 +3860,6 @@ fn check_statement_references(stmt: &Statement, cx: &mut RefCheckCtx) {
         Statement::Expect(a) => {
             check_expr_references(&a.value, cx);
         }
-        Statement::Send(s) => {
-            check_expr_references(&s.value, cx);
-        }
         Statement::Do(d) => {
             check_expr_references(&d.value, cx);
         }
@@ -3360,6 +3890,60 @@ fn check_statement_references(stmt: &Statement, cx: &mut RefCheckCtx) {
             }
         }
     }
+}
+
+/// v0.9: `HttpResult.Variant(args)`, the qualified `HttpResult` constructor.
+/// Reports an unknown variant, and says whether `receiver.method(args)` was one.
+fn check_http_result_call(
+    receiver: &Expr,
+    method: &Ident,
+    args: &[Expr],
+    cx: &mut RefCheckCtx,
+) -> bool {
+    let ExprKind::Ident(id) = &receiver.kind else {
+        return false;
+    };
+    if name_in_scope(&id.name, cx.params, &cx.scopes) || id.name != "HttpResult" {
+        return false;
+    }
+    if http_variant(&method.name).is_none() {
+        cx.errors.push(CompileError::new(
+            "bynk.resolve.unknown_static_member",
+            method.span,
+            format!("`HttpResult` has no variant named `{}`", method.name),
+        ));
+    }
+    for a in args {
+        check_expr_references(a, cx);
+    }
+    true
+}
+
+/// #3147: `D1.peek(…)` reads a participant's test database, from an
+/// `integration` or `system` case. A function body is none: report it, and say
+/// whether `receiver.method` was it.
+fn refuse_peek_in_fn(receiver: &Expr, method: &Ident, cx: &mut RefCheckCtx) -> bool {
+    let ExprKind::Ident(id) = &receiver.kind else {
+        return false;
+    };
+    if id.name != "D1"
+        || method.name != "peek"
+        || name_in_scope(&id.name, cx.params, &cx.scopes)
+        || cx.types.contains_key(&id.name)
+    {
+        return false;
+    }
+    cx.errors.push(
+        CompileError::new(
+            "bynk.test.peek_outside_case",
+            receiver.span.merge(method.span),
+            "`D1.peek` is only valid inside an `integration` or `system` case",
+        )
+        .with_note(
+            "it reads a participant's test database, which only those tiers stand up; the deployed app has no such handle",
+        ),
+    );
+    true
 }
 
 #[allow(clippy::too_many_lines)]
@@ -3492,7 +4076,7 @@ fn check_expr_references(expr: &Expr, cx: &mut RefCheckCtx) {
                 // v0.9: predeclared HttpResult variant (e.g. `NoContent`,
                 // `Unauthorized`). The checker validates payload arity and
                 // expected-type disambiguation.
-            } else if let Some(sum_owner) = find_unique_variant_owner(&id.name, cx.types) {
+            } else if let Some(sum_owner) = find_unique_variant_owner(&id.name, cx) {
                 // It's a bare variant reference. We treat it as a valid
                 // expression in resolver — the type checker will assign
                 // the correct sum type. Mark with no error.
@@ -3550,7 +4134,7 @@ fn check_expr_references(expr: &Expr, cx: &mut RefCheckCtx) {
             } else if cx.embeds.contains_key(&id.name) {
                 // #2387, slice 1: an embed name is a `String` value; the
                 // checker types it (`check_ident`).
-            } else if find_ambiguous_variant_owners(&id.name, cx.types).len() > 1 {
+            } else if find_ambiguous_variant_owners(&id.name, cx).len() > 1 {
                 // #3344: a name several sums declare is settled by the
                 // expected type, which only the checker knows; it reports
                 // `bynk.resolve.ambiguous_variant` when nothing picks one.
@@ -3623,7 +4207,7 @@ fn check_expr_references(expr: &Expr, cx: &mut RefCheckCtx) {
                 }
                 None => {
                     // Maybe it's a variant constructor with a payload (e.g., `Placed(at, total)`).
-                    let owners = find_ambiguous_variant_owners(&name.name, cx.types);
+                    let owners = find_ambiguous_variant_owners(&name.name, cx);
                     if http_variant(&name.name).is_some() {
                         // v0.9: predeclared HttpResult variant constructor.
                     } else if owners.len() == 1 {
@@ -3887,21 +4471,10 @@ fn check_expr_references(expr: &Expr, cx: &mut RefCheckCtx) {
                 }
                 return;
             }
-            // v0.9: `HttpResult.Variant(args)` — qualified HttpResult constructor.
-            if let ExprKind::Ident(id) = &receiver.kind
-                && !name_in_scope(&id.name, cx.params, &cx.scopes)
-                && id.name == "HttpResult"
-            {
-                if http_variant(&method.name).is_none() {
-                    cx.errors.push(CompileError::new(
-                        "bynk.resolve.unknown_static_member",
-                        method.span,
-                        format!("`HttpResult` has no variant named `{}`", method.name),
-                    ));
-                }
-                for a in args {
-                    check_expr_references(a, cx);
-                }
+            if refuse_peek_in_fn(receiver, method, cx) {
+                return;
+            }
+            if check_http_result_call(receiver, method, args, cx) {
                 return;
             }
             // v0.20b: `List.empty()` / `Map.empty()` — qualified statics on
@@ -4132,11 +4705,8 @@ fn collect_pattern_bindings(pattern: &Pattern, into: &mut HashMap<String, ()>) {
 /// Find the unique sum type that owns a given variant name. Returns None
 /// if no type owns it; ignores cases of multiple owners (those are
 /// reported via `find_ambiguous_variant_owners`).
-fn find_unique_variant_owner<'a>(
-    name: &str,
-    types: &'a HashMap<String, Arc<TypeDecl>>,
-) -> Option<&'a TypeDecl> {
-    let owners = find_ambiguous_variant_owners(name, types);
+fn find_unique_variant_owner<'a>(name: &str, cx: &RefCheckCtx<'a, '_>) -> Option<&'a TypeDecl> {
+    let owners = find_ambiguous_variant_owners(name, cx);
     if owners.len() == 1 {
         Some(owners[0])
     } else {
@@ -4144,19 +4714,40 @@ fn find_unique_variant_owner<'a>(
     }
 }
 
-fn find_ambiguous_variant_owners<'a>(
+fn find_ambiguous_variant_owners<'a>(name: &str, cx: &RefCheckCtx<'a, '_>) -> Vec<&'a TypeDecl> {
+    bare_variant_owners(name, cx.types, cx.unselected)
+        .into_iter()
+        .map(|t| t.as_ref())
+        .collect()
+}
+
+/// The sums a bare variant name may mean (#3536). A sum a braced `consumes`
+/// leaves out (`unselected`) is not a candidate beside the sums in scope, so a
+/// user's own `Unavailable` is never ambiguous with a standard-library one it
+/// did not ask for. It is the answer only when nothing in scope declares the
+/// name: such a use resolves and is reported as `bynk.consumes.type_not_selected`.
+pub(crate) fn bare_variant_owners<'a>(
     name: &str,
     types: &'a HashMap<String, Arc<TypeDecl>>,
-) -> Vec<&'a TypeDecl> {
-    let mut out = Vec::new();
+    unselected: &HashSet<String>,
+) -> Vec<&'a Arc<TypeDecl>> {
+    let (mut in_scope, mut left_out) = (Vec::new(), Vec::new());
     for t in types.values() {
         if let TypeBody::Sum(s) = &t.body
             && s.variants.iter().any(|v| v.name.name == name)
         {
-            out.push(t.as_ref());
+            if unselected.contains(&t.name.name) {
+                left_out.push(t);
+            } else {
+                in_scope.push(t);
+            }
         }
     }
-    out
+    if in_scope.is_empty() {
+        left_out
+    } else {
+        in_scope
+    }
 }
 
 /// #1848: a match-arm guard is resolved like every other expression, in its
@@ -4302,5 +4893,65 @@ mod op_annotation_tests {
     fn a_user_operation_takes_no_annotation() {
         analyse(&[("a.bynk", &unit("shop", "@onUndecodable(miss)"))])
             .assert_reports("bynk.generics.internal_op_annotation");
+    }
+}
+
+#[cfg(test)]
+mod consumes_position_tests {
+    use super::new_consumes_position;
+
+    fn insert(src: &str, last: Option<&str>, header: &str, braced: bool) -> Option<String> {
+        let header_end = src.find(header).unwrap() + header.len();
+        let last_end = last.map(|l| src.find(l).unwrap() + l.len());
+        let (at, sep) = new_consumes_position(src, last_end, header_end, braced)?;
+        Some(format!("{}{sep}X{}", &src[..at], &src[at..]))
+    }
+
+    /// A headerless file takes the clause after its header, a blank line away.
+    #[test]
+    fn a_fragment_gets_a_blank_line_after_its_header() {
+        let src = "context a\n\nfn f() -> Int { 1 }\n";
+        assert_eq!(
+            insert(src, None, "context a", false).unwrap(),
+            "context a\n\nX\n\nfn f() -> Int { 1 }\n"
+        );
+    }
+
+    /// A braced file takes it after the `{`, indented like the first member.
+    #[test]
+    fn a_braced_file_takes_the_clause_after_the_brace_at_the_members_indent() {
+        let src = "suite shop as unit {\n    case \"c\" {\n    }\n}\n";
+        assert_eq!(
+            insert(src, None, "as unit", true).unwrap(),
+            "suite shop as unit {\n    X\n    case \"c\" {\n    }\n}\n"
+        );
+    }
+
+    /// Beside an existing clause, the new line takes the next line's indent.
+    #[test]
+    fn a_new_line_follows_the_last_clause_at_the_next_lines_indent() {
+        let src = "suite s {\n  uses m\n  case \"c\" { }\n}\n";
+        assert_eq!(
+            insert(src, Some("uses m"), "suite s", true).unwrap(),
+            "suite s {\n  uses m\n  X\n  case \"c\" { }\n}\n"
+        );
+    }
+
+    /// When the clause is the last line before `}`, that line is the brace, so
+    /// the new line has no indent: only cosmetic, and the formatter repairs it.
+    #[test]
+    fn a_last_clause_before_the_closing_brace_gets_no_indent() {
+        let src = "suite s {\n  uses m\n}\n";
+        assert_eq!(
+            insert(src, Some("uses m"), "suite s", true).unwrap(),
+            "suite s {\n  uses m\nX\n}\n"
+        );
+    }
+
+    /// A braced file whose header is not followed by `{` has no safe place.
+    #[test]
+    fn a_header_not_followed_by_a_brace_gets_no_position() {
+        let src = "suite s as unit\n\ncase \"c\" { }\n";
+        assert!(insert(src, None, "as unit", true).is_none());
     }
 }

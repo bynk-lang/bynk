@@ -2937,7 +2937,7 @@ pub(crate) fn emit_provider(
         module.consumed_type_declared = ctx.consumed_type_aliases.clone();
         module.consumed_context_types = ctx.consumed_context_types();
         module.target = ctx.target;
-        module.in_bynk_unit = ctx.commons_name == "bynk";
+        module.note_unit(ctx);
         let body_smb = RefCell::new(SourceMapBuilder::new());
         let mut cx = LowerCtx::new(
             module,
@@ -3275,7 +3275,7 @@ pub(crate) fn emit_service(
             None
         };
         let mut module = ModuleCtx::new(commons, &ctx.cross_context, &ctx.runtime_use);
-        module.in_bynk_unit = ctx.commons_name == "bynk";
+        module.note_unit(ctx);
         module.agent_method_givens = ctx.agent_method_givens.clone();
         module.agent_called_contexts = ctx.agent_called_contexts.clone();
         module.event_schema_versions = ctx.event_schema_versions.clone();
@@ -3455,7 +3455,7 @@ pub(crate) fn emit_service(
             // A binder-less Bearer/Oidc, or no seam at all — nothing to widen.
             ActorSeamIr::Oidc(_) | ActorSeamIr::None => {}
         }
-        // v0.79: a handler whose body uses `~>` receives the execution context
+        // v0.79: a handler whose body uses `detach` receives the execution context
         // (`__exec`) in its deps, so the fire-and-forget send can hand its promise
         // to `waitUntil`. Gated on the body so non-sending handlers are unchanged.
         if commons.exec_plan.handler_needs(handler) {
@@ -3484,7 +3484,7 @@ pub(crate) fn emit_service(
         // layer, which already knows how to build any capability's
         // provider; the handler itself only needs to hand its buffered
         // `__events` to whatever composed it. Mirrors `__exec`'s threading
-        // for `~>` exactly. Gated on more than this handler's own body: a
+        // for `detach` exactly. Gated on more than this handler's own body: a
         // handler with no direct `Events.emit` call but that invokes a
         // *local agent* method which itself emits (`Ledger(id).bump(...)`)
         // still needs `__eventsDispatch` threaded through, to hand onward —
@@ -4145,7 +4145,7 @@ fn emit_context_deps_interface(
         ));
     }
     // #2683: a surface `on call` handler that calls `within` (or sends with
-    // `~>`) forwards `deps` to a handler that requires `__exec`, so the
+    // `detach`) forwards `deps` to a handler that requires `__exec`, so the
     // surface's `deps` carry it; the compose root supplies it.
     if commons.commons.items.iter().any(|i| match i {
         CommonsItem::Service(s) => s
@@ -4489,6 +4489,8 @@ pub(crate) fn lower_workers_cross_context_call(
     consumed: &str,
     method: &Ident,
     args: &[Expr],
+    // #3580: where the call starts in the source, for a traced build's span.
+    call_start: usize,
     cx: &mut LowerCtx<'_>,
 ) -> Lowered {
     use crate::emitter::serialisation::{deserialise_ref_via, serialise_expr_via};
@@ -4718,13 +4720,13 @@ pub(crate) fn lower_workers_cross_context_call(
     let call_expr = bynk_ts::TsExpr::Call {
         callee: Box::new(bynk_ts::TsExpr::Ident("__callService".to_string())),
         args: vec![
-            bynk_ts::TsExpr::Member {
+            cx.trace_binding(bynk_ts::TsExpr::Member {
                 object: Box::new(bynk_ts::TsExpr::Member {
                     object: Box::new(bynk_ts::TsExpr::Ident("deps".to_string())),
                     property: "env".to_string(),
                 }),
                 property: binding,
-            },
+            }),
             bynk_ts::TsExpr::Lit(bynk_ts::TsLit::Str(method.name.clone())),
             args_json_expr,
             deser_ref,
@@ -4754,7 +4756,9 @@ pub(crate) fn lower_workers_cross_context_call(
             bynk_ts::TsExpr::Lit(bynk_ts::TsLit::Str(consumed.to_string())),
         ],
     };
-    pre.finish(bynk_ts::print_expr(&call_expr))
+    let call = bynk_ts::print_expr(&call_expr);
+    let target = format!("{consumed}.{}", method.name);
+    pre.finish(cx.trace_step("call", &target, call_start, call))
 }
 
 /// If `receiver` is a dotted chain or single ident that matches one of the
@@ -6605,15 +6609,13 @@ fn emit_agent_load_commit_state(
         ));
         stmts
     };
+    let (commit_state_body, commit_state_params) =
+        commit_state_params(commit_state_body, &state_ty, ctx, fields_const);
     let commit_state_method = bynk_ts::TsClassMethod {
         name: "commitState".to_string(),
         private: true,
         is_async: true,
-        params: vec![bynk_ts::TsParam {
-            name: "s".to_string(),
-            ty: Some(bynk_ts::TsType::named(state_ty.clone())),
-            optional: false,
-        }],
+        params: commit_state_params,
         return_type: Some(bynk_ts::TsType::named_with_args(
             "globalThis.Promise",
             vec![bynk_ts::TsType::named("void")],
@@ -6626,6 +6628,55 @@ fn emit_agent_load_commit_state(
         class_depth,
     ));
     writeln!(out).unwrap();
+}
+
+/// `commitState`'s parameters and body. #3581: a `bynk dev` build's `commitState` also records the transition. It takes the
+/// handler's name as an optional trailing parameter, snapshots what is stored just
+/// before the write (the last statement of `body`), and appends `{handler, old, new,
+/// at}` to the instance's ring buffer just after it. A commit that throws before the
+/// write (an invariant or `transition` refusal) never reaches the append. Returns
+/// `body` unchanged, and just the state parameter, for every other build.
+fn commit_state_params(
+    mut body: Vec<bynk_ts::TsStmt>,
+    state_ty: &str,
+    ctx: &EmitProjectCtx,
+    fields_const: &str,
+) -> (Vec<bynk_ts::TsStmt>, Vec<bynk_ts::TsParam>) {
+    let mut params = vec![bynk_ts::TsParam {
+        name: "s".to_string(),
+        ty: Some(bynk_ts::TsType::named(state_ty.to_string())),
+        optional: false,
+    }];
+    if !ctx.inspect_agents {
+        return (body, params);
+    }
+    let call = |name: &str, extra: &[&str]| {
+        let mut args = vec![
+            bynk_ts::TsExpr::Ident("this.state.storage".to_string()),
+            bynk_ts::TsExpr::Ident(fields_const.to_string()),
+        ];
+        args.extend(extra.iter().map(|e| bynk_ts::TsExpr::Ident(e.to_string())));
+        bynk_ts::TsExpr::Await(Box::new(bynk_ts::TsExpr::Call {
+            callee: Box::new(bynk_ts::TsExpr::Ident(name.to_string())),
+            args,
+        }))
+    };
+    let before = bynk_ts::TsStmt::const_stmt(
+        bynk_ts::TsBindingName::Ident("__before".to_string()),
+        None,
+        call("__historyBefore", &[]),
+        None,
+    );
+    let after =
+        bynk_ts::TsStmt::expr_stmt(call("__historyRecord", &["__before", "__handler"]), None);
+    body.insert(body.len().saturating_sub(1), before);
+    body.push(after);
+    params.push(bynk_ts::TsParam {
+        name: "__handler".to_string(),
+        ty: Some(bynk_ts::TsType::named("string")),
+        optional: true,
+    });
+    (body, params)
 }
 
 /// What `loadState` does with the merged state's collections: fill the in-memory handles from the
@@ -7381,7 +7432,7 @@ fn emit_agent_handlers(
             .map(|m| m.name.clone())
             .unwrap_or_else(|| "call".to_string());
         let mut module = ModuleCtx::new(commons, &ctx.cross_context, &ctx.runtime_use);
-        module.in_bynk_unit = ctx.commons_name == "bynk";
+        module.note_unit(ctx);
         // #1960: the body lowers for the build target, as a service body
         // does, so a cross-context call reads the Service Binding its `deps`
         // type names.
@@ -7509,59 +7560,17 @@ fn emit_agent_handlers(
         // interleaved with direct `writeln!`s into `out` the way the
         // pre-conversion code was.
         let body_emits_directly = bynk_model::block_uses_emit(&h.body, &commons.callees);
-        let events_decl = format!(
-            "    const __events: globalThis.Array<{}> = [];",
-            crate::emitter::EVENTS_WIRE_EVENT_TS_TYPE
+        let (mut raw_body, mut body_out_offset_in_raw) = assemble_agent_raw_body(
+            &body_out,
+            is_store_agent,
+            writes_state,
+            body_emits_directly,
+            history_handler(ctx, &scope_method),
         );
-        let flush = "    if (__events.length > 0) { await deps.__eventsDispatch(__events); }";
-        let mut raw_body = String::new();
-        let body_out_offset_in_raw;
-        if is_store_agent {
-            if writes_state {
-                writeln!(
-                    raw_body,
-                    "    const __state = {{ ...(await this.loadState()) }};"
-                )
-                .unwrap();
-                if body_emits_directly {
-                    writeln!(raw_body, "{events_decl}").unwrap();
-                }
-                writeln!(raw_body, "    const __result = await (async () => {{").unwrap();
-                body_out_offset_in_raw = raw_body.len();
-                raw_body.push_str(&body_out);
-                writeln!(raw_body, "    }})();").unwrap();
-                writeln!(raw_body, "    await this.commitState(__state);").unwrap();
-                if body_emits_directly {
-                    writeln!(raw_body, "{flush}").unwrap();
-                }
-                writeln!(raw_body, "    return __result;").unwrap();
-            } else if body_emits_directly {
-                writeln!(raw_body, "    const __state = await this.loadState();").unwrap();
-                writeln!(raw_body, "{events_decl}").unwrap();
-                writeln!(raw_body, "    const __result = await (async () => {{").unwrap();
-                body_out_offset_in_raw = raw_body.len();
-                raw_body.push_str(&body_out);
-                writeln!(raw_body, "    }})();").unwrap();
-                writeln!(raw_body, "{flush}").unwrap();
-                writeln!(raw_body, "    return __result;").unwrap();
-            } else {
-                writeln!(raw_body, "    const __state = await this.loadState();").unwrap();
-                body_out_offset_in_raw = raw_body.len();
-                raw_body.push_str(&body_out);
-            }
-        } else if body_emits_directly {
-            writeln!(raw_body, "    const currentState = await this.loadState();").unwrap();
-            writeln!(raw_body, "{events_decl}").unwrap();
-            writeln!(raw_body, "    const __result = await (async () => {{").unwrap();
-            body_out_offset_in_raw = raw_body.len();
-            raw_body.push_str(&body_out);
-            writeln!(raw_body, "    }})();").unwrap();
-            writeln!(raw_body, "{flush}").unwrap();
-            writeln!(raw_body, "    return __result;").unwrap();
-        } else {
-            writeln!(raw_body, "    const currentState = await this.loadState();").unwrap();
-            body_out_offset_in_raw = raw_body.len();
-            raw_body.push_str(&body_out);
+        // #3465: an agent handler that claimed settles its claims after the state
+        // commit and the events flush, so a failure of either releases them.
+        if cx.claim_scope_used {
+            wrap_agent_claims(&mut raw_body, &mut body_out_offset_in_raw);
         }
         let handler_method = bynk_ts::TsClassMethod {
             name: method,
@@ -7587,6 +7596,74 @@ fn emit_agent_handlers(
         );
         writeln!(out).unwrap();
     }
+}
+
+/// #3581: in a `bynk dev` build the handler's name rides with its commit, so the
+/// instance's history entry names it. `None` for every other build.
+fn history_handler<'a>(ctx: &EmitProjectCtx, handler: &'a str) -> Option<&'a str> {
+    ctx.inspect_agents.then_some(handler)
+}
+
+/// One agent handler method's prologue + lowered body + epilogue (#3167), and
+/// the offset inside it at which the lowered body begins. A store handler that
+/// writes wraps its body in the implicit-commit closure; one that emits events
+/// directly flushes them after it.
+fn assemble_agent_raw_body(
+    body_out: &str,
+    is_store_agent: bool,
+    writes_state: bool,
+    body_emits_directly: bool,
+    history_handler: Option<&str>,
+) -> (String, usize) {
+    let events_decl = format!(
+        "    const __events: globalThis.Array<{}> = [];",
+        crate::emitter::EVENTS_WIRE_EVENT_TS_TYPE
+    );
+    let flush = "    if (__events.length > 0) { await deps.__eventsDispatch(__events); }";
+    let mut raw = String::new();
+    let state_decl = if !is_store_agent {
+        "    const currentState = await this.loadState();"
+    } else if writes_state {
+        "    const __state = { ...(await this.loadState()) };"
+    } else {
+        "    const __state = await this.loadState();"
+    };
+    writeln!(raw, "{state_decl}").unwrap();
+    // Only a handler that wraps its body (a commit, or direct events) needs the closure.
+    if !writes_state && !body_emits_directly {
+        let offset = raw.len();
+        raw.push_str(body_out);
+        return (raw, offset);
+    }
+    if body_emits_directly {
+        writeln!(raw, "{events_decl}").unwrap();
+    }
+    writeln!(raw, "    const __result = await (async () => {{").unwrap();
+    let offset = raw.len();
+    raw.push_str(body_out);
+    writeln!(raw, "    }})();").unwrap();
+    if writes_state {
+        match history_handler {
+            Some(h) => writeln!(raw, "    await this.commitState(__state, \"{h}\");").unwrap(),
+            None => writeln!(raw, "    await this.commitState(__state);").unwrap(),
+        }
+    }
+    if body_emits_directly {
+        writeln!(raw, "{flush}").unwrap();
+    }
+    writeln!(raw, "    return __result;").unwrap();
+    (raw, offset)
+}
+
+/// #3465: wrap a whole agent handler method body so the claims it made are
+/// settled once the state commit and events flush have run (a failure of either
+/// releases them). `offset` is where the lowered body begins in `raw`, moved to
+/// stay valid for the source map.
+fn wrap_agent_claims(raw: &mut String, offset: &mut usize) {
+    let (before, after) = crate::emitter::lower::claim_scope_wrapper(4);
+    raw.insert_str(0, &before);
+    raw.push_str(&after);
+    *offset += before.len();
 }
 
 /// What an agent class's dispatch methods depend on, decided while the class
@@ -7672,9 +7749,7 @@ fn emit_agent_dispatch(
         // (steps are key-free), loads the state (running any step), and
         // commits only a record older than this build's version. Reachable
         // only through this Worker's signed `/_bynk/migrate/` route.
-        if let Some(v) = &agent_versions {
-            fetch_stmts.push(migrate_wake_branch_stmt(v.version));
-        }
+        fetch_stmts.extend(wake_and_inspect_branches(a, agent_versions, ctx));
         let dispatch_callee = bynk_ts::TsExpr::Index {
             object: Box::new(bynk_ts::TsExpr::Ident(
                 "(this as unknown as globalThis.Record<string, (...bynkArgs: unknown[]) => unknown>)"
@@ -7927,6 +8002,27 @@ fn emit_agent_dispatch(
     // statement follows.
 }
 
+/// #3581: `__noteAgentInstance(env?.__BYNK_INSPECT_REGISTRY, env?.<binding>,
+/// "<Agent>", key, <key codec>, <make>)`: the factory's agent, recorded in the
+/// Worker's dev registry on first address and returned as it was.
+fn inspect_noted(a: &AgentDecl, binding: &str, make: bynk_ts::TsExpr) -> bynk_ts::TsExpr {
+    let env_prop = |property: &str| bynk_ts::TsExpr::OptionalMember {
+        object: Box::new(bynk_ts::TsExpr::Ident("env".to_string())),
+        property: property.to_string(),
+    };
+    bynk_ts::TsExpr::Call {
+        callee: Box::new(bynk_ts::TsExpr::Ident("__noteAgentInstance".to_string())),
+        args: vec![
+            env_prop("__BYNK_INSPECT_REGISTRY"),
+            env_prop(binding),
+            bynk_ts::TsExpr::Lit(bynk_ts::TsLit::Str(a.name.name.clone())),
+            bynk_ts::TsExpr::Ident("key".to_string()),
+            bynk_ts::TsExpr::Ident(agent_key_codec_name(&a.name.name)),
+            make,
+        ],
+    }
+}
+
 /// The agent-construction factory (#3167): `AgentName(key)` lowers to a call of
 /// this, which on the bundle target builds the agent over its registered state
 /// and on Workers hands back a proxy over the Durable Object stub. Pushes the
@@ -7960,9 +8056,12 @@ fn emit_agent_factory(
     // since a comment landed at one slice's own commit is a snapshot, not
     // a live pointer.
     let workers = matches!(ctx.target, BuildTarget::Workers);
+    // #3581: a `bynk dev` build records the key each instance is addressed by, so it
+    // needs the key codec even for an agent that never reads its key.
+    let inspect = workers && ctx.inspect_agents;
     if workers {
         stmts.push(agent_wire_table(a, &ctx.runtime_use));
-        if reads_key {
+        if reads_key || inspect {
             stmts.push(agent_key_codec(a, &ctx.runtime_use));
         }
     }
@@ -8006,6 +8105,31 @@ fn emit_agent_factory(
             make_agent_args.push(bynk_ts::TsExpr::Ident(agent_key_codec_name(&a.name.name)));
         }
     }
+    // #3581: the factory hands the agent back through `__noteAgentInstance`, which
+    // records the instance in the dev registry and returns it unchanged.
+    let make_agent = bynk_ts::TsExpr::Call {
+        callee: Box::new(bynk_ts::TsExpr::Ident("__makeAgent".to_string())),
+        args: make_agent_args,
+    };
+    let make_agent = if inspect {
+        inspect_noted(a, &bind, make_agent)
+    } else {
+        make_agent
+    };
+    let mut env_props = vec![bynk_ts::TsTypeMember::Prop {
+        name: bind.clone(),
+        ty: bynk_ts::TsType::named("__DurableObjectNamespace"),
+        optional: true,
+        readonly: false,
+    }];
+    if inspect {
+        env_props.push(bynk_ts::TsTypeMember::Prop {
+            name: "__BYNK_INSPECT_REGISTRY".to_string(),
+            ty: bynk_ts::TsType::named("__DurableObjectNamespace"),
+            optional: true,
+            readonly: false,
+        });
+    }
     let factory_decl = bynk_ts::TsStmt::decl(
         bynk_ts::TsDecl::Export(Box::new(bynk_ts::TsDecl::Function {
             name: agent_factory_name(&a.name.name),
@@ -8018,23 +8142,12 @@ fn emit_agent_factory(
                 },
                 bynk_ts::TsParam {
                     name: "env".to_string(),
-                    ty: Some(bynk_ts::TsType::Object(vec![bynk_ts::TsTypeMember::Prop {
-                        name: bind.clone(),
-                        ty: bynk_ts::TsType::named("__DurableObjectNamespace"),
-                        optional: true,
-                        readonly: false,
-                    }])),
+                    ty: Some(bynk_ts::TsType::Object(env_props)),
                     optional: true,
                 },
             ],
             return_type: Some(bynk_ts::TsType::named(a.name.name.clone())),
-            body: vec![bynk_ts::TsStmt::return_stmt(
-                Some(bynk_ts::TsExpr::Call {
-                    callee: Box::new(bynk_ts::TsExpr::Ident("__makeAgent".to_string())),
-                    args: make_agent_args,
-                }),
-                None,
-            )],
+            body: vec![bynk_ts::TsStmt::return_stmt(Some(make_agent), None)],
             is_async: false,
             inline: false,
         })),
@@ -9138,7 +9251,7 @@ fn emit_ws_do_method(
     }
     let body_smb = RefCell::new(SourceMapBuilder::new());
     let mut module = ModuleCtx::new(commons, &ctx.cross_context, &ctx.runtime_use);
-    module.in_bynk_unit = ctx.commons_name == "bynk";
+    module.note_unit(ctx);
     module.agent_method_givens = ctx.agent_method_givens.clone();
     module.agent_called_contexts = ctx.agent_called_contexts.clone();
     module.event_schema_versions = ctx.event_schema_versions.clone();
@@ -9262,6 +9375,82 @@ fn emit_ws_do_method(
         source_map,
     );
     writeln!(out).unwrap();
+}
+
+/// The `fetch` branches ahead of the method dispatch that need the agent's schema
+/// versions: the migration sweep's wake (S4, #2259), and in a `bynk dev` build
+/// (#3581) the inspect read.
+fn wake_and_inspect_branches(
+    a: &AgentDecl,
+    agent_versions: &Option<bynk_check::schema_registry::AgentVersions>,
+    ctx: &EmitProjectCtx,
+) -> Vec<bynk_ts::TsStmt> {
+    let mut branches = Vec::new();
+    if let Some(v) = agent_versions {
+        branches.push(migrate_wake_branch_stmt(v.version));
+    }
+    if ctx.inspect_agents {
+        branches.push(inspect_branch_stmt(a, agent_versions));
+    }
+    branches
+}
+
+/// #3581: the `/_bynk/inspect` branch of an agent class's `fetch` in a `bynk dev`
+/// build: `return __inspectAgent(this.state, <collection fields>, <versions>, url)`.
+/// It reads the stored record and writes nothing, and is reachable only through
+/// the Worker's signed `/_bynk/inspect/` route. A class with no schema lock has no
+/// version to hold the record to, so `current` is `null` and the check is skipped.
+fn inspect_branch_stmt(
+    a: &AgentDecl,
+    agent_versions: &Option<bynk_check::schema_registry::AgentVersions>,
+) -> bynk_ts::TsStmt {
+    let num = |n: i64| bynk_ts::TsExpr::Lit(bynk_ts::TsLit::Num(n.to_string()));
+    let (current, oldest, steps) = match agent_versions {
+        Some(v) => (
+            num(v.version),
+            num(v.oldest_readable),
+            step_ranges_expr(&v.steps),
+        ),
+        None => (
+            bynk_ts::TsExpr::Ident("null".to_string()),
+            num(1),
+            step_ranges_expr(&[]),
+        ),
+    };
+    let info = bynk_ts::TsExpr::object(vec![
+        (
+            "agent".to_string(),
+            bynk_ts::TsExpr::Lit(bynk_ts::TsLit::Str(a.name.name.clone())),
+        ),
+        ("current".to_string(), current),
+        ("oldestReadable".to_string(), oldest),
+        ("steps".to_string(), steps),
+    ]);
+    bynk_ts::TsStmt::if_stmt(
+        bynk_ts::TsExpr::Binary {
+            op: bynk_ts::TsBinaryOp::StrictEq,
+            left: Box::new(bynk_ts::TsExpr::Member {
+                object: Box::new(bynk_ts::TsExpr::Ident("url".to_string())),
+                property: "pathname".to_string(),
+            }),
+            right: Box::new(bynk_ts::TsExpr::Lit(bynk_ts::TsLit::Str(
+                "/_bynk/inspect".to_string(),
+            ))),
+        },
+        bynk_ts::TsStmt::return_stmt(
+            Some(bynk_ts::TsExpr::Call {
+                callee: Box::new(bynk_ts::TsExpr::Ident("__inspectAgent".to_string())),
+                args: vec![
+                    bynk_ts::TsExpr::Ident("this.state".to_string()),
+                    bynk_ts::TsExpr::Ident(format!("__entryFieldsOf{}", a.name.name)),
+                    info,
+                    bynk_ts::TsExpr::Ident("url".to_string()),
+                ],
+            }),
+            None,
+        ),
+        None,
+    )
 }
 
 /// Build the `fetch` branch that completes a forwarded WebSocket upgrade for a

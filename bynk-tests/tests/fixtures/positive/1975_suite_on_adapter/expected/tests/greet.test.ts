@@ -167,7 +167,7 @@ async function test_the_binding_reads_its_secret() {
     type TimedOut = __ns_bynk.TimedOut;
     type Uuid = __ns_bynk.Uuid;
     const s = await deps.Greeter.hello("ann");
-    if (!(s === "hi, ann at 0")) { throw __bynkExpectFailure("tests/greet.bynk:8:9", 278, 297, "expect s == \"hi, ann at 0\"\n  expected: s == \"hi, ann at 0\"\n  actual:   " + __bynkShow((s)) + " == " + __bynkShow(("hi, ann at 0"))); }
+    if (!(s === "hi, ann at 0")) { throw __bynkExpectFailure("tests/greet.bynk:10:9", 305, 324, "expect s == \"hi, ann at 0\"\n  expected: s == \"hi, ann at 0\"\n  actual:   " + __bynkShow((s)) + " == " + __bynkShow(("hi, ann at 0"))); }
     return { pass: true };
   } catch (e) {
     if (e instanceof ExpectationError) {
@@ -199,7 +199,7 @@ async function test_the_binding_falls_back_without_one() {
     type TimedOut = __ns_bynk.TimedOut;
     type Uuid = __ns_bynk.Uuid;
     const s = await deps.Greeter.hello("ann");
-    if (!(s === "hello, ann at 0")) { throw __bynkExpectFailure("tests/greet.bynk:13:9", 384, 406, "expect s == \"hello, ann at 0\"\n  expected: s == \"hello, ann at 0\"\n  actual:   " + __bynkShow((s)) + " == " + __bynkShow(("hello, ann at 0"))); }
+    if (!(s === "hello, ann at 0")) { throw __bynkExpectFailure("tests/greet.bynk:15:9", 411, 433, "expect s == \"hello, ann at 0\"\n  expected: s == \"hello, ann at 0\"\n  actual:   " + __bynkShow((s)) + " == " + __bynkShow(("hello, ann at 0"))); }
     return { pass: true };
   } catch (e) {
     if (e instanceof ExpectationError) {
@@ -231,7 +231,7 @@ async function test_a_stub_on_the_adapter_s_capability_answers_instead() {
     type TimedOut = __ns_bynk.TimedOut;
     type Uuid = __ns_bynk.Uuid;
     const s = await deps.Greeter.hello("ann");
-    if (!(s === "stubbed")) { throw __bynkExpectFailure("tests/greet.bynk:20:9", 621, 635, "expect s == \"stubbed\"\n  expected: s == \"stubbed\"\n  actual:   " + __bynkShow((s)) + " == " + __bynkShow(("stubbed"))); }
+    if (!(s === "stubbed")) { throw __bynkExpectFailure("tests/greet.bynk:22:9", 648, 662, "expect s == \"stubbed\"\n  expected: s == \"stubbed\"\n  actual:   " + __bynkShow((s)) + " == " + __bynkShow(("stubbed"))); }
     return { pass: true };
   } catch (e) {
     if (e instanceof ExpectationError) {

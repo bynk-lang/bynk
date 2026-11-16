@@ -1,0 +1,2 @@
+bynk.container.build_path
+is absolute

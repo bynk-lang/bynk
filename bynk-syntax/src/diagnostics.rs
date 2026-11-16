@@ -1215,11 +1215,15 @@ pub const EXPLANATIONS: &[Explain] = &[
                 `provides Mailer = …` in the same context, which says what the capability does \
                 there. Without one the Worker has nothing to hand the handler, so the compiler \
                 refuses it here and does not leave it to fail in the generated TypeScript. The \
-                bundle target (the default) does not ask, because the host program can supply the \
-                capability when it builds the surface. A capability declared in another context is \
+                bundle target (the default) asks only when the program has a composition root \
+                (`composeApp`), which it has once a context consumes another context's service or \
+                capability, emits events, or derives a capability: `composeApp` builds every \
+                context itself, so nothing else can supply the capability, and a test `stub` \
+                covers only the cases that stub it. Without a root, the host program can supply \
+                the capability when it builds the surface. A capability declared in another context is \
                 that context's to provide, and an exported capability with no provider has its own \
-                `bynk.exports.capability_not_provided`. Add a provider to the context, or build \
-                for `--target bundle`.",
+                `bynk.exports.capability_not_provided`. Add a provider to the context, or, on \
+                Workers, build for `--target bundle` when the bundle has no composition root.",
         example: "service notify {\n\
                   \x20\x20on call(to: String) -> Effect[()] given Mailer {   // ✗ no `provides Mailer` in this context\n\
                   \x20\x20\x20\x20Mailer.send(to)\n\
@@ -1419,6 +1423,13 @@ pub const EXPLANATIONS: &[Explain] = &[
         anchor: "consume-it-with-a-qualified-given",
     },
     Explain {
+        code: "bynk.consumes.capability_not_selected",
+        blurb: "Imports are per file, for capabilities as for types. A braced `consumes U { Cap }` brings the capability `Cap` into scope as a bare name, but only in the file that writes it: a `given Cap` clause, a call `Cap.op(…)`, a `provides Cap = …`, a derived capability's base, or a suite's `stub Cap.op`. A file that names one its own `consumes` does not list is an error; `bynk check --fix=bynk.consumes.capability_not_selected` adds the name to this file's `consumes`, or adds one. The unit's wiring and deploy order still follow the union of its files' `consumes`.",
+        example: "// shop/context.bynk\nconsumes bynk { Clock }\n\n// shop/audit.bynk, another file of the same context\nservice stamp {\n    on call() -> Effect[Instant] given Clock {   // ✗ this file does not consume `bynk`\n        Clock.now()\n    }\n}\n\nconsumes bynk { Clock }                          // ✓ each file consumes what it names",
+        page: "/book/guides/program-structure/consume-services",
+        anchor: "rename-an-exported-type-that-clashes-with-one-of-yours",
+    },
+    Explain {
         code: "bynk.consumes.name_conflict",
         blurb: "`consumes payment` brings every type that `payment` exports into scope under its \
                 own name, because the services' signatures use them. If this context already has \
@@ -1503,6 +1514,20 @@ pub const EXPLANATIONS: &[Explain] = &[
         anchor: "rename-an-exported-type-that-clashes-with-one-of-yours",
     },
     Explain {
+        code: "bynk.consumes.type_not_selected",
+        blurb: "Imports are per file. A unit's own declarations are shared by all its files, but a name from another unit, a type or a bare variant of one of its sums, is in scope only in a file that itself has a `consumes` bringing it in, and where the list is braced, only if it is listed. Naming a type that this file's own `consumes` does not bring in is an error, whether the clause lists other names or only another file of the unit consumes the unit; `bynk check --fix=bynk.consumes.type_not_selected` adds the name to this file's `consumes`, or adds one. A bare `consumes U`, with no braces, brings in all of `U`'s names for that file.",
+        example: "// shop/context.bynk\nconsumes bynk { Logger }                   // ✗ `TimedOut` is not listed\n\nconsumes bynk { Logger, TimedOut }          // ✓\n\nfn at(t: TimedOut) -> Bool {\n    true\n}\n\n// shop/audit.bynk, another file of the same context\nfn late(t: TimedOut) -> Bool {   // ✗ this file does not consume `bynk`\n    true\n}\n\nconsumes bynk { TimedOut }        // ✓ each file consumes what it names",
+        page: "/book/guides/program-structure/consume-services",
+        anchor: "rename-an-exported-type-that-clashes-with-one-of-yours",
+    },
+    Explain {
+        code: "bynk.consumes.unit_not_consumed",
+        blurb: "Imports are per file. A call to another unit's service (`pay.charge(…)`, or through the alias of `consumes pay as P`) is in scope only in a file that itself `consumes` that unit, in any form, even when another file of the same context does. A call from a file that does not is an error; `bynk check --fix=bynk.consumes.unit_not_consumed` adds `consumes <unit>` to this file. The unit's wiring and deploy order still follow the union of its files' `consumes`.",
+        example: "// shop/checkout.bynk\nconsumes pay\n\nservice checkout {\n    on call() -> Effect[Int] {\n        pay.charge(1)\n    }\n}\n\n// shop/refund.bynk, another file of the same context\nservice refund {\n    on call() -> Effect[Int] {\n        pay.charge(2)   // ✗ this file does not consume `pay`\n    }\n}\n\nconsumes pay            // ✓ each file consumes what it names",
+        page: "/book/guides/program-structure/consume-services",
+        anchor: "declare-the-dependency-and-call-the-service",
+    },
+    Explain {
         code: "bynk.consumes.unknown_context",
         blurb: "A `consumes` clause is how one context states that it depends on another, so it has to name a context in the project, and no unit of that name exists. Check the spelling against the `context` line of the unit you mean.",
         example: "// pay.bynk\ncontext pay\n\n// shop.bynk\ncontext shop\n\nconsumes paymnet                 // ✗ no context `paymnet`\nconsumes pay                     // ✓ the context's declared name",
@@ -1515,6 +1540,49 @@ pub const EXPLANATIONS: &[Explain] = &[
         example: "// pay.bynk\ncontext pay\n\nservice charge {\n    on call(amount: Int) -> Effect[Int] {\n        Effect.pure(amount)\n    }\n}\n\n// shop.bynk\ncontext shop\n\nconsumes pay\n\nservice checkout {\n    on call() -> Effect[Int] {\n        pay.charg(1)             // ✗ `pay` has no service `charg`\n    }\n}\n\nservice checkout {\n    on call() -> Effect[Int] {\n        pay.charge(1)            // ✓ the declared name\n    }\n}",
         page: "/book/guides/program-structure/consume-services",
         anchor: "declare-the-dependency-and-call-the-service",
+    },
+    Explain {
+        code: "bynk.container.build_missing",
+        blurb: "A `Container` is built from a Dockerfile: `@build(\"dir\")` names the \
+                project-relative directory that holds it, and `bynk check` looks for \
+                `dir/Dockerfile`. A directory with no Dockerfile would fail only when \
+                `wrangler deploy` tried to build the image, so it is refused here. Create the \
+                Dockerfile, or correct the path. Bynk does not read or generate the Dockerfile, \
+                and the image must be built for `linux/amd64`.",
+        example: "capability Renderer = Container @build(\"containers/renderer\") @port(8080)    // ✗ containers/renderer/Dockerfile does not exist\n\
+                  capability Renderer = Container @build(\"containers/renderer\") @port(8080)    // ✓ once containers/renderer/Dockerfile exists",
+        page: "/book/reference/capabilities",
+        anchor: "derived-capabilities",
+    },
+    Explain {
+        code: "bynk.container.build_path",
+        blurb: "`@build` on a `Container` is a directory inside the project, written relative to \
+                the project root with `/` separators: `@build(\"containers/renderer\")`. An empty \
+                path, an absolute path, a drive path, a path with `\\` and a path that leaves the \
+                project with `..` are refused, so the build context can never reach outside the \
+                project and the emitted configuration stays a function of the source.",
+        example: "capability Renderer = Container @build(\"../renderer\") @port(8080)       // ✗ leaves the project\n\
+                  capability Renderer = Container @build(\"containers/renderer\") @port(8080) // ✓",
+        page: "/book/reference/capabilities",
+        anchor: "derived-capabilities",
+    },
+    Explain {
+        code: "bynk.container.output_outside_project",
+        blurb: "A container's image is built by `wrangler deploy` from the Dockerfile that `@build` \
+                names. The generated `wrangler.toml` reaches it from the Worker's output directory, \
+                `<out>/workers/<worker>`, by a relative path back into the project, so the output \
+                directory has to be inside the project; the path is computed from the directory the \
+                build is written to. A build into a directory outside the project is refused, naming \
+                each container and both paths, because a path that climbs out and back in would break \
+                when the output is moved, and copying the build directory into the output would take \
+                `node_modules`, secrets and large files with it. Build into a directory inside the \
+                project: set `[build] out` or pass `--out` a path under the project root.",
+        example: "# bynk.toml\n\
+                  [build]\n\
+                  out = \"../dist\"    # ✗ outside the project\n\
+                  out = \"dist\"       # ✓ inside it",
+        page: "/book/reference/capabilities",
+        anchor: "derived-capabilities",
     },
     Explain {
         code: "bynk.context.consumes_cycle",
@@ -1795,7 +1863,7 @@ pub const EXPLANATIONS: &[Explain] = &[
     },
     Explain {
         code: "bynk.detach.in_pure_context",
-        blurb: "`detach` hands a running effect to the execution context, and only an effectful body has effects to run: a pure function never runs one. Change the enclosing function's return type to `Effect[…]`. The same rule holds for `bynk.within.in_pure_context`, `bynk.race.in_pure_context` and `bynk.send.in_pure_context`.",
+        blurb: "`detach` hands a running effect to the execution context, and only an effectful body has effects to run: a pure function never runs one. Change the enclosing function's return type to `Effect[…]`. The same rule holds for `bynk.within.in_pure_context` and `bynk.race.in_pure_context`.",
         example: "fn twice(ping: Effect[()], n: Int) -> Int {\n    let _ = ping.detach()   // ✗ the body is pure\n    n * 2\n}\n\n\
                   fn twice(ping: Effect[()], n: Int) -> Effect[Int] {   // ✓ an effectful body\n    do ping.detach()\n    Effect.pure(n * 2)\n}",
         page: "/book/reference/capabilities",
@@ -2128,7 +2196,7 @@ pub const EXPLANATIONS: &[Explain] = &[
     },
     Explain {
         code: "bynk.exec.unavailable",
-        blurb: "A function that uses `~>`, `detach`, `within` or `race` hands work to the execution context, which a service handler has. An agent handler, a WebSocket handler, a provider operation, a function that is not effectful and a `const`, `store` or predicate initialiser do not. Calling such a function from one of those, directly or through other functions, or naming it as a value, is refused. The note gives the chain of calls down to the construct. Make the call in a service handler, and pass what it returns on.",
+        blurb: "A function that uses `detach`, `within` or `race` hands work to the execution context, which a service handler has. An agent handler, a WebSocket handler, a provider operation, a function that is not effectful and a `const`, `store` or predicate initialiser do not. Calling such a function from one of those, directly or through other functions, or naming it as a value, is refused. The note gives the chain of calls down to the construct. Make the call in a service handler, and pass what it returns on.",
         example: "fn bounded(e: Effect[Int]) -> Effect[Bool] { … }\n\nagent Counter {\n    key id: String\n    store n: Cell[Int] = 0\n\n    on call check() -> Effect[Bool] {\n        bounded(Effect.pure(1))    // ✗ an agent handler has no execution context\n    }\n}\n\nservice api {\n    on call() -> Effect[Bool] {\n        bounded(Effect.pure(1))    // ✓ a service handler has\n    }\n}",
         page: "/book/reference/capabilities",
         anchor: "within",
@@ -2743,6 +2811,13 @@ pub const EXPLANATIONS: &[Explain] = &[
         example: "@cache(maxAge: 5.minutes, stale: true)   // ✗ not an argument of `@cache`\non GET(\"/links\") () -> Effect[HttpResult[String]] by v: Visitor { … }\n\n@cache(maxAge: 5.minutes)                // ✓\non GET(\"/links\") () -> Effect[HttpResult[String]] by v: Visitor { … }",
         page: "/book/reference/http",
         anchor: "caching",
+    },
+    Explain {
+        code: "bynk.http.cf_wrong_type",
+        blurb: "`cf` is the name the router reserves for what Cloudflare derived about the request's connection (its country, colo, ASN and the like), so a parameter called `cf` must be typed `RequestCf`, the record from `bynk.cloudflare` whose fields are all optional. Any other type has nothing to be filled from. Retype the parameter and import the type with `consumes bynk.cloudflare { RequestCf }`; that import is also what locks the deployment unit to Cloudflare. An input of your own needs another name, and a name that is neither a path parameter nor one of the reserved ones is `bynk.http.extra_param`. A `:cf` path segment stays a path parameter.",
+        example: "on GET(\"/hello\") (cf: String) -> Effect[HttpResult[String]] by v: Visitor { … }      // ✗\n\non GET(\"/hello\") (cf: RequestCf) -> Effect[HttpResult[String]] by v: Visitor { … }   // ✓",
+        page: "/book/reference/http",
+        anchor: "request-cf",
     },
     Explain {
         code: "bynk.http.cookie_cross_site_without_credentials",
@@ -3730,7 +3805,7 @@ pub const EXPLANATIONS: &[Explain] = &[
     },
     Explain {
         code: "bynk.par.invalid_statement",
-        blurb: "A `par { … }` block issues all its bindings together and waits for them, so it holds only `let x <- e` and `do e`. Anything else has no effect to overlap, nothing to join, or must stay in order: a plain `let`, `~>`, `:=` or a `store` write, `expect`, `advance`, a nested `par`, a `let … else`, a bare expression (write `do e`) and an empty block. Store writes stay sequential; for `parTraverse` closures the rule is `bynk.par.store_write_in_closure`. Move the statement before or after the block; the names a block binds are in scope after its closing brace. See also `bynk.par.sibling_name` (a binding reading another binding of the same block) and the warning `bynk.par.single_binding`.",
+        blurb: "A `par { … }` block issues all its bindings together and waits for them, so it holds only `let x <- e` and `do e`. Anything else has no effect to overlap, nothing to join, or must stay in order: a plain `let`, `:=` or a `store` write, `expect`, `advance`, a nested `par`, a `let … else`, a bare expression (write `do e`) and an empty block. Store writes stay sequential; for `parTraverse` closures the rule is `bynk.par.store_write_in_closure`. Move the statement before or after the block; the names a block binds are in scope after its closing brace. See also `bynk.par.sibling_name` (a binding reading another binding of the same block) and the warning `bynk.par.single_binding`.",
         example: "par {\n  let a <- Users.get(id)\n  let b = 1   // ✗ a plain `let` has no effect to overlap\n}\n\nlet b = 1   // ✓ compute it before the block\npar {\n  let a <- Users.get(id)\n  let c <- Users.get(b)\n}",
         page: "/book/reference/capabilities",
         anchor: "par",
@@ -3770,7 +3845,7 @@ pub const EXPLANATIONS: &[Explain] = &[
     Explain {
         code: "bynk.parse.bare_expression_statement",
         blurb: "A block has no expression statements: each statement is a `let`, `do`, \
-                `~>`, `expect`, `:=` and so on, and the last expression is the block's \
+                `expect`, `:=` and so on, and the last expression is the block's \
                 value. An expression written on its own line with more of the block after \
                 it would have its value thrown away, so the compiler asks you to say what \
                 happens to it. Bind it: `let _ = expr` when you only want to discard a \
@@ -4472,6 +4547,14 @@ pub const EXPLANATIONS: &[Explain] = &[
         anchor: "4710-refined_pattern",
     },
     Explain {
+        code: "bynk.parse.removed_send_arrow",
+        blurb: "`~>` was removed. It started an effect and carried on without waiting, which `e.detach()` now says as an ordinary effect statement: it works for any `Effect[T]`, inside a lambda, `forEach` or helper, and reports a fault or an `Err` instead of losing it. Write `do e.detach()` where you wrote `~> e`. For a unit effect that does not need to outlive the handler, plain `do e` is enough, since `Logger` calls finish before they return. On v0.603.x, `bynk check --fix` rewrites each `~> e` for you. See the Book's Upgrading page.",
+        example: "service api from http {\n    on GET(\"/\") () -> Effect[HttpResult[String]] by Visitor given Logger {\n        ~> Logger.info(\"served\")                    // ✗ removed\n        Ok(\"ok\")\n    }\n}\n\n\
+                  service api from http {\n    on GET(\"/\") () -> Effect[HttpResult[String]] by Visitor given Logger {\n        do Logger.info(\"served\").detach()    // ✓ an ordinary statement\n        Ok(\"ok\")\n    }\n}",
+        page: "/book/reference/capabilities",
+        anchor: "detach",
+    },
+    Explain {
         code: "bynk.parse.reserved_keyword",
         blurb: "A hard keyword (`type`, `fn`, `match`, `Int` and so on) was \
                 written where a name is expected: a parameter, a `let` binding, an \
@@ -4816,7 +4899,7 @@ pub const EXPLANATIONS: &[Explain] = &[
     },
     Explain {
         code: "bynk.race.in_pure_context",
-        blurb: "`race` starts two effects and hands the loser to the execution context, and only an effectful body has one: a pure function never runs an effect at all. Change the enclosing function's return type to `Effect[…]` so its body can run it. The same rule holds for `bynk.within.in_pure_context` and `bynk.send.in_pure_context`.",
+        blurb: "`race` starts two effects and hands the loser to the execution context, and only an effectful body has one: a pure function never runs an effect at all. Change the enclosing function's return type to `Effect[…]` so its body can run it. The same rule holds for `bynk.within.in_pure_context`.",
         example: "fn first(a: Effect[Int], b: Effect[Int]) -> Int {\n    let c = a.race(b)   // ✗ the body is pure\n    0\n}\n\nfn first(a: Effect[Int], b: Effect[Int]) -> Effect[Int] {   // ✓ an effectful body\n    a.race(b)\n}",
         page: "/book/reference/capabilities",
         anchor: "race",
@@ -5272,48 +5355,94 @@ pub const EXPLANATIONS: &[Explain] = &[
         anchor: "",
     },
     Explain {
-        code: "bynk.send.deprecated",
-        blurb: "`~>` is deprecated: `e.detach()` says the same thing as an ordinary effect statement, works for any `Effect[T]` and inside a lambda, `forEach` or helper, and reports a fault or an `Err` instead of losing it. A warning, not an error: `bynk check --fix` rewrites each `~> e` to `do e.detach()`. `~>` will be removed in the next release, after which it is a parse error. For a unit effect that does not need to outlive the handler, plain `do e` is enough; `Logger` calls finish before they return.",
-        example: "on call bump() -> Effect[()] given Logger {\n    ~> Logger.info(\"bump\")             // ⚠ deprecated\n    Effect.pure(())\n}\n\n\
-                  on call bump() -> Effect[()] given Logger {\n    do Logger.info(\"bump\").detach()   // ✓ the same, as an ordinary statement\n    Effect.pure(())\n}",
-        page: "/book/reference/capabilities",
-        anchor: "detach",
+        code: "bynk.revert.agent_schema_older",
+        blurb: "Agent state is stamped with the schema version of the build that wrote it, and older code faults with `NewerSchema` on records written by newer code. `bynk revert` therefore refuses to go back to a build with an older schema version while stored instances exist, while they are not known to be absent, or when the target is below the class's schema floor. The listing of stored objects lags a write by minutes, so within 30 minutes of the live deploy an empty listing counts as unknown. Deploy a fix forward instead.",
+        example: "bynk revert --dry-run\n\
+\x20\x20agent     Cart         refused: the target writes schema v1, the live version v2, and stored instances exist\n\
+\n\
+bynk deploy   # fix forward",
+        page: "/book/guides/projects-build-and-deployment/roll-back-a-deployment",
+        anchor: "what-it-refuses",
     },
     Explain {
-        code: "bynk.send.in_agent_handler",
-        blurb: "`~>` starts an effect and lets the handler carry on, so something must keep the effect alive after the handler returns. A service handler has an execution context that does. An agent handler runs inside the agent's own object, with no such context, and its effects are awaited so that they finish with the handler. So the send is refused, and so is one inside a closure there. Await it instead, with `do` for an `Effect[()]` or `let _ <-`, or move the send to the service handler that calls the agent. A `~>` of a store operation is `bynk.send.store_op`.",
-        example: "on call bump() -> Effect[()] given Logger {\n    ~> Logger.info(\"bump\")      // ✗ an agent handler cannot send\n    do count.update((n) => n + 1)\n}\n\n\
-                  on call bump() -> Effect[()] given Logger {\n    do Logger.info(\"bump\")      // ✓ awaited, so it finishes with the handler\n    do count.update((n) => n + 1)\n}",
-        page: "/book/spec/static-semantics",
-        anchor: "",
+        code: "bynk.revert.class_changed",
+        blurb: "Cloudflare applies Durable Object class additions, removals and renames as migrations, and it cannot roll back across one. If the set of classes differs between the live version and the target, `bynk revert` refuses. Redeploy forward, with the class set you want, instead.",
+        example: "bynk revert --dry-run\n\
+\x20\x20classes   shop-orders  refused: the Durable Object classes differ between the two versions\n\
+\n\
+bynk deploy   # redeploy forward",
+        page: "/book/guides/projects-build-and-deployment/roll-back-a-deployment",
+        anchor: "what-it-refuses",
     },
     Explain {
-        code: "bynk.send.in_pure_context",
-        blurb: "A `~>` send starts an effect and does not wait for it, so it can only appear in a body that runs effects: one that returns `Effect[…]`. A pure function never runs one, so there would be nothing to send. Change the enclosing function's return type to `Effect[…]`. The same rule holds for `bynk.within.in_pure_context` and `bynk.race.in_pure_context`.",
-        example: "fn twice(ping: Effect[()], n: Int) -> Int {\n    ~> ping   // ✗ the body is pure\n    n * 2\n}\n\nfn twice(ping: Effect[()], n: Int) -> Effect[Int] {   // ✓ an effectful body\n    ~> ping\n    Effect.pure(n * 2)\n}",
-        page: "/book/reference/capabilities",
-        anchor: "capabilities-in-functions",
+        code: "bynk.revert.contract_skew",
+        blurb: "Contexts call each other under contract hashes. Reverting one Worker can leave it expecting, or providing, a contract that another live Worker does not, and the runtime would refuse the calls. The check judges the result as if every selected Worker were reverted together, using the post-revert lock. Revert the whole project, or redeploy forward. See `bynk.deploy.contract_skew` for the same skew at deploy time.",
+        example: "bynk revert --dry-run --context shop.orders\n\
+\x20\x20contracts shop-orders  refused: the target no longer matches shop-payment\n\
+\n\
+bynk revert   # the whole project, so the contexts revert together",
+        page: "/book/guides/projects-build-and-deployment/roll-back-a-deployment",
+        anchor: "what-it-refuses",
     },
     Explain {
-        code: "bynk.send.non_effect",
-        blurb: "`~>` sends an effectful call without waiting for it, so what follows it must be an `Effect`. A plain value such as an `Int` has nothing to run and nothing to send. If the call is meant to be a plain call, drop the `~>`; if it is meant to be sent, make the function return `Effect[()]`. A send of an effect with a reply is `bynk.send.requires_unit`.",
-        example: "fn total() -> Int { 1 }\n\nfn run() -> Effect[()] {\n    ~> total()   // ✗ `total` returns an `Int`, not an `Effect`\n    Effect.pure(())\n}\n\nfn total() -> Effect[()] { Effect.pure(()) }\n\nfn run() -> Effect[()] {\n    ~> total()   // ✓ an `Effect[()]`\n    Effect.pure(())\n}",
-        page: "/book/guides/effects-and-capabilities/synchronous-and-asynchronous-sends",
-        anchor: "the-error-gate",
+        code: "bynk.revert.database_schema_ahead",
+        blurb: "D1 migrations only move forward. If the live version applied a migration the target was not built against, the older code would meet a schema it was never written for. Bynk cannot judge a migration's SQL, so it refuses. If every such migration is additive, assert it per database with `--accept-schema-ahead <binding>`; otherwise deploy a fix forward. The same refusal is given when the applied migrations could not be read, because an unread list is never taken to be empty.",
+        example: "bynk revert --dry-run\n\
+\x20\x20d1        DB           refused: the live version applied 0003_add_index.sql after the target was built\n\
+\n\
+bynk revert --accept-schema-ahead DB   # only if each such migration is additive",
+        page: "/book/guides/projects-build-and-deployment/roll-back-a-deployment",
+        anchor: "what-it-refuses",
     },
     Explain {
-        code: "bynk.send.requires_unit",
-        blurb: "`~>` never waits, so it throws away whatever the call returns. Bynk therefore lets it send only an operation whose reply is `Effect[()]`: an `Effect[Int]`, or one carrying a `Result`, would lose its value or its error with no trace. To use the reply, or to discard it on purpose, await the call with `let r <- …` or `let _ <- …`. For a value that is not an `Effect` at all see `bynk.send.non_effect`.",
-        example: "fn fetch() -> Effect[Int] { Effect.pure(1) }\n\nfn run() -> Effect[()] {\n    ~> fetch()   // ✗ the `Int` reply would vanish\n    Effect.pure(())\n}\n\nfn run() -> Effect[()] {\n    let _ <- fetch()   // ✓ awaited, the reply discarded on purpose\n    Effect.pure(())\n}",
-        page: "/book/guides/effects-and-capabilities/synchronous-and-asynchronous-sends",
-        anchor: "the-error-gate",
+        code: "bynk.revert.facts_missing",
+        blurb: "`bynk revert` reads the deploy facts that every `bynk deploy` records on the Worker version it pushes. Without them on both the live version and the target it cannot tell what changed in between, and every unknown is a refusal. A version deployed before facts were recorded, or one pushed outside Bynk, has none. Redeploy the version you want from its tag with `git checkout <tag> && bynk deploy`.",
+        example: "bynk revert --dry-run\n\
+\x20\x20facts     shop-orders  refused: the target version records no deploy facts\n\
+\n\
+git checkout v1.4.0 && bynk deploy   # redeploy the previous tag instead",
+        page: "/book/guides/projects-build-and-deployment/roll-back-a-deployment",
+        anchor: "what-it-refuses",
     },
     Explain {
-        code: "bynk.send.store_op",
-        blurb: "In an agent handler, a store write is not a message to send: it is staged and committed atomically with the rest of the handler, so there is nothing for `~>` to leave running. `~>` is refused there for any call, and a store operation gets its own code to point at the fix. Drop the `~>` and write `do field.op(…)`, or `let _ <- field.op(…)`; the write is committed with the handler. For a send that is not a store operation see `bynk.send.in_agent_handler`.",
-        example: "on call bump() -> Effect[()] {\n    ~> count.update((n) => n + 1)   // ✗ a store write is not sent\n}\n\non call bump() -> Effect[()] {\n    do count.update((n) => n + 1)   // ✓ staged, committed with the handler\n}",
-        page: "/book/guides/effects-and-capabilities/synchronous-and-asynchronous-sends",
-        anchor: "not-in-an-agent-handler",
+        code: "bynk.revert.history_unplaceable",
+        blurb: "`bynk revert` finds the target in the Worker's deployment history: by default the deployment before the live code's own upload, or the version named by `--to`. It refuses that Worker when it cannot place the live version or the target: a Worker first added in the bad release has nothing before it, the live upload is out of the listed history, a gradual deployment is in progress, or the history could not be read. A version made live outside Bynk has no upload deployment to step back from; name the version to go back to with `--to`. The plan still judges the other Workers.",
+        example: "bynk revert --dry-run --context shop.orders\n\
+\x20\x20history   shop-orders  refused: the live version is a gradual deployment\n\
+\n\
+bynk revert --context shop.orders --to <version>",
+        page: "/book/guides/projects-build-and-deployment/roll-back-a-deployment",
+        anchor: "what-it-refuses",
+    },
+    Explain {
+        code: "bynk.revert.id_unrecorded",
+        blurb: "The target version binds resources (KV namespaces, databases, limiters) by id. If the deploy lock no longer records the same id for a binding, the resource was re-provisioned since, and the older code would bind one that is no longer yours. `bynk revert` refuses. Redeploy forward.",
+        example: "bynk revert --dry-run\n\
+\x20\x20ids       shop-orders  refused: the target would bind a resource that has since been replaced\n\
+\n\
+bynk deploy   # redeploy forward",
+        page: "/book/guides/projects-build-and-deployment/roll-back-a-deployment",
+        anchor: "what-it-refuses",
+    },
+    Explain {
+        code: "bynk.revert.layout_older",
+        blurb: "A layout is how an agent's state is placed in storage, and each version's deploy facts record which one it writes. Code that writes an older layout than the live version cannot read records in the newer one: a build with the layout check faults them as `NewerLayout`, and one without it would orphan their entries. `bynk revert` refuses while stored instances exist or are not known to be absent. Deploy a fix forward.",
+        example: "bynk revert --dry-run\n\
+\x20\x20layout    Cart         refused: the target writes layout 1, the live version writes layout 2, and stored instances exist\n\
+\n\
+bynk deploy   # fix forward",
+        page: "/book/guides/projects-build-and-deployment/roll-back-a-deployment",
+        anchor: "what-it-refuses",
+    },
+    Explain {
+        code: "bynk.revert.secret_changed",
+        blurb: "A rollback can restore the old value of a secret that was rotated after the target was live, and its peers no longer accept that value. `bynk revert` counts the secret changes between the target and now and refuses if there are any. After a `bynk migrate sweep`, whose two changes touch only its own temporary key, pass `--accept-secret-changes`. A secret rotated before the release you are leaving is kept and does not count.",
+        example: "bynk revert --dry-run\n\
+\x20\x20secrets   shop-orders  refused: 2 secret change(s) since the target\n\
+\n\
+bynk revert --accept-secret-changes   # only after a `bynk migrate sweep`",
+        page: "/book/guides/projects-build-and-deployment/roll-back-a-deployment",
+        anchor: "what-it-refuses",
     },
     Explain {
         code: "bynk.service.missing_from",
@@ -5982,6 +6111,101 @@ pub const EXPLANATIONS: &[Explain] = &[
                   let r <- api.GET(\"/health\") by Visitor    // ✓",
         page: "/book/reference/testing",
         anchor: "failure-principals",
+    },
+    Explain {
+        code: "bynk.test.peek_not_a_database",
+        blurb: "`D1.peek` reads a D1 database, so it names a capability derived \
+                from `D1` (`capability Orders = D1`). A capability on another \
+                binding, such as `Kv`, has no database for it to read.",
+        example: "// shop/orders.bynk\n\
+                  capability Orders = D1\n\
+                  capability Sessions = Kv\n\
+                  \n\
+                  // tests/orders.test.bynk\n\
+                  suite shop.orders as system {\n\
+                  \x20\x20case \"peeks\" {\n\
+                  \x20\x20\x20\x20let db = D1.peek(shop.orders.Sessions)   // ✗ a `Kv`, not a `D1`\n\
+                  \x20\x20\x20\x20let ok = D1.peek(shop.orders.Orders)     // ✓\n\
+                  \x20\x20\x20\x20expect true\n\
+                  \x20\x20}\n\
+                  }",
+        page: "/book/reference/testing",
+        anchor: "peek-a-database",
+    },
+    Explain {
+        code: "bynk.test.peek_not_bound",
+        blurb: "`D1.peek(<participant>.<Capability>)` stands as the value of a \
+                `let`, and the case reads through the handle that binds. A \
+                `D1.peek` anywhere else, as an argument or the receiver of a \
+                call, has no handle to keep.",
+        example: "// tests/orders.test.bynk\n\
+                  suite shop.orders as system {\n\
+                  \x20\x20case \"peeks\" {\n\
+                  \x20\x20\x20\x20let rows <- D1.peek(shop.orders.Orders).all(\"SELECT id FROM orders\", [])   // ✗ the handle is not bound\n\
+                  \x20\x20\x20\x20let db = D1.peek(shop.orders.Orders)                                      // ✓\n\
+                  \x20\x20\x20\x20expect true\n\
+                  \x20\x20}\n\
+                  }",
+        page: "/book/reference/testing",
+        anchor: "peek-a-database",
+    },
+    Explain {
+        code: "bynk.test.peek_outside_case",
+        blurb: "`D1.peek(<participant>.<Capability>)` gives an `integration` or \
+                `system` case a read-only handle on a participant's test \
+                database. Only those tiers stand one up, so the handle is \
+                refused in a `unit` case, a `property`, and in the app's own \
+                code. A `unit` case reads the capability it stubs.",
+        example: "// tests/orders.test.bynk\n\
+                  suite shop.orders {\n\
+                  \x20\x20case \"peeks\" {\n\
+                  \x20\x20\x20\x20let db = D1.peek(shop.orders.Orders)   // ✗ a unit suite has no participant database\n\
+                  \x20\x20\x20\x20expect true\n\
+                  \x20\x20}\n\
+                  }\n\
+                  \n\
+                  suite shop.orders as system {\n\
+                  \x20\x20case \"peeks\" {\n\
+                  \x20\x20\x20\x20let db = D1.peek(shop.orders.Orders)   // ✓\n\
+                  \x20\x20\x20\x20expect true\n\
+                  \x20\x20}\n\
+                  }",
+        page: "/book/reference/testing",
+        anchor: "peek-a-database",
+    },
+    Explain {
+        code: "bynk.test.peek_unknown_capability",
+        blurb: "`D1.peek` names a capability as `<participant>.<Capability>`, \
+                where the participant is one of the suite's and declares the \
+                capability. The participant or the capability is not one.",
+        example: "// tests/orders.test.bynk\n\
+                  suite shop.orders as system {\n\
+                  \x20\x20case \"peeks\" {\n\
+                  \x20\x20\x20\x20let db = D1.peek(shop.orders.Missing)   // ✗ `shop.orders` declares no `Missing`\n\
+                  \x20\x20\x20\x20let ok = D1.peek(shop.orders.Orders)    // ✓\n\
+                  \x20\x20\x20\x20expect true\n\
+                  \x20\x20}\n\
+                  }",
+        page: "/book/reference/testing",
+        anchor: "peek-a-database",
+    },
+    Explain {
+        code: "bynk.test.peek_write",
+        blurb: "A `D1.peek` handle is read-only: it offers `all`, `first`, \
+                `select[T]` and `firstAs[T]`, and a statement that would write \
+                (`INSERT`, `UPDATE`, `DELETE`, a schema change) is refused, as is \
+                `run` or `batch`. A case makes the app write by driving the app.",
+        example: "// tests/orders.test.bynk\n\
+                  suite shop.orders as system {\n\
+                  \x20\x20case \"peeks\" {\n\
+                  \x20\x20\x20\x20let db = D1.peek(shop.orders.Orders)\n\
+                  \x20\x20\x20\x20let a <- db.all(\"DELETE FROM orders\", [])   // ✗ the statement writes\n\
+                  \x20\x20\x20\x20let r <- db.all(\"SELECT id FROM orders\", [])   // ✓\n\
+                  \x20\x20\x20\x20expect true\n\
+                  \x20\x20}\n\
+                  }",
+        page: "/book/reference/testing",
+        anchor: "peek-a-database",
     },
     Explain {
         code: "bynk.test.principal_claims_not_oidc",
@@ -7763,7 +7987,7 @@ pub const EXPLANATIONS: &[Explain] = &[
     },
     Explain {
         code: "bynk.within.in_pure_context",
-        blurb: "`within` hands the effect it abandons on a timeout to the execution context, and only an effectful body has one: a pure function never runs an effect at all. Change the enclosing function's return type to `Effect[…]` so its body can run it. The same rule holds for `bynk.race.in_pure_context` and `bynk.send.in_pure_context`.",
+        blurb: "`within` hands the effect it abandons on a timeout to the execution context, and only an effectful body has one: a pure function never runs an effect at all. Change the enclosing function's return type to `Effect[…]` so its body can run it. The same rule holds for `bynk.race.in_pure_context`.",
         example: "fn bounded(e: Effect[Int]) -> Int {\n    let r = e.within(1.seconds)   // ✗ the body is pure\n    0\n}\n\nfn bounded(e: Effect[Int]) -> Effect[Result[Int, TimedOut]] {   // ✓ an effectful body\n    e.within(1.seconds)\n}",
         page: "/book/reference/capabilities",
         anchor: "within",
@@ -8377,7 +8601,7 @@ pub const REGISTRY: &[DiagnosticInfo] = &[
     ),
     dg(
         "bynk.capability.not_provided",
-        "On the Workers target, a capability a context requires has no provider in it.",
+        "A capability a context requires has no provider in it, on the Workers target or in a bundle with a composition root.",
         &["given_clause"],
     ),
     dg(
@@ -8457,6 +8681,11 @@ pub const REGISTRY: &[DiagnosticInfo] = &[
         &["consumes_decl"],
     ),
     dg(
+        "bynk.consumes.capability_not_selected",
+        "A capability a consumed unit exports is named (a `given` clause, a call, `provides`, a `stub`) in a file whose own `consumes` does not list it.",
+        &["consumes_decl"],
+    ),
+    dg(
         "bynk.consumes.name_conflict",
         "A `consumes` name collides with another name in scope.",
         &["consumes_decl"],
@@ -8502,6 +8731,16 @@ pub const REGISTRY: &[DiagnosticInfo] = &[
         &["consumes_decl"],
     ),
     dg(
+        "bynk.consumes.type_not_selected",
+        "A type (or a bare variant of a sum) of a consumed unit is named in a file whose own `consumes` does not bring it in: it lists other names, or only another file of the unit consumes the unit.",
+        &["consumes_decl"],
+    ),
+    dg(
+        "bynk.consumes.unit_not_consumed",
+        "A call to another unit's service is written in a file whose own `consumes` does not name that unit.",
+        &["consumes_decl"],
+    ),
+    dg(
         "bynk.consumes.unknown_context",
         "`consumes` names a context that does not exist.",
         &["consumes_decl"],
@@ -8510,6 +8749,18 @@ pub const REGISTRY: &[DiagnosticInfo] = &[
         "bynk.consumes.unknown_service",
         "Called a service the consumed context does not declare.",
         &["consumes_decl"],
+    ),
+    d(
+        "bynk.container.build_missing",
+        "A `Container`'s `@build` directory holds no `Dockerfile`, so there is no image to build.",
+    ),
+    d(
+        "bynk.container.build_path",
+        "A `Container`'s `@build` is not a directory inside the project: it is empty, absolute, uses `\\`, or leaves the project with `..`.",
+    ),
+    d(
+        "bynk.container.output_outside_project",
+        "A build with a `Container` is written to an output directory outside the project, so `wrangler` cannot reach the container's Dockerfile from the Worker's output directory by a relative path inside the project.",
     ),
     d(
         "bynk.context.consumes_cycle",
@@ -8613,12 +8864,48 @@ pub const REGISTRY: &[DiagnosticInfo] = &[
         "A path dependency declared by a dependency resolves outside the workspace; a dependency's own path dependencies are honoured only between members of one workspace.",
     ),
     d(
+        "bynk.deploy.binding_collision",
+        "Two members of one `[deploy.workers.<key>]` group declare different bindings under the same name; members share one `wrangler.toml`, so identical declarations share a binding and differing ones are refused.",
+    ),
+    d(
+        "bynk.deploy.context_in_two_groups",
+        "A context is listed in two `[deploy.workers.<key>]` groups; a context is deployed in one Worker only.",
+    ),
+    d(
         "bynk.deploy.contract_skew",
         "A worker was compiled against a contract its live dependencies no longer provide, or no longer provides the contract its live callers were compiled against, so `bynk deploy --context` refuses to ship it.",
     ),
     d(
+        "bynk.deploy.duplicate_hostname",
+        "A route or custom domain is claimed twice across `[deploy.workers.<key>]` groups.",
+    ),
+    d(
+        "bynk.deploy.empty_group",
+        "A `[deploy.workers.<key>]` group lists no context.",
+    ),
+    d(
         "bynk.deploy.foreign_contract_skew",
         "A build breaks the contract a declared foreign caller's client was generated at, as pinned in `bynk.foreign.toml`, so `bynk deploy` refuses to ship it.",
+    ),
+    d(
+        "bynk.deploy.group_name_conflict",
+        "A `[deploy.workers.<key>]` group's key or script name is another group's, or is the Worker of a context in no group.",
+    ),
+    d(
+        "bynk.deploy.multiple_publishers",
+        "More than one member of a `[deploy.workers.<key>]` group publishes events. A temporary restriction: each publisher has its own events fan-out class, and it goes when a group's fan-out is merged.",
+    ),
+    d(
+        "bynk.deploy.not_a_context",
+        "A `[deploy.workers.<key>]` group lists a unit that is not a `context`; only contexts are deployed as Workers.",
+    ),
+    d(
+        "bynk.deploy.service_name_conflict",
+        "Two members of one `[deploy.workers.<key>]` group declare a service of the same name; a Worker answers its members' services by name.",
+    ),
+    d(
+        "bynk.deploy.unknown_context",
+        "A `[deploy.workers.<key>]` group lists a context the project does not declare.",
     ),
     dg(
         "bynk.detach.in_agent_handler",
@@ -8823,7 +9110,7 @@ pub const REGISTRY: &[DiagnosticInfo] = &[
     ),
     d(
         "bynk.exec.unavailable",
-        "A call to, or reference to, a function that hands work to the execution context (`~>`, `detach`, `within` or `race`, directly or through the functions it calls) appears where no execution context exists: an agent handler, a WebSocket handler or a provider operation.",
+        "A call to, or reference to, a function that hands work to the execution context (`detach`, `within` or `race`, directly or through the functions it calls) appears where no execution context exists: an agent handler, a WebSocket handler or a provider operation.",
     ),
     dg(
         "bynk.expect.faults_not_effect",
@@ -9156,6 +9443,11 @@ pub const REGISTRY: &[DiagnosticInfo] = &[
     d(
         "bynk.http.cache_unknown_arg",
         "A `@cache` annotation has an argument outside the closed set (`maxAge`/`scope`/`immutable`).",
+    ),
+    dg(
+        "bynk.http.cf_wrong_type",
+        "An HTTP handler's `cf` parameter is not typed `RequestCf`.",
+        &["http_handler"],
     ),
     warn(dg(
         "bynk.http.cookie_cross_site_without_credentials",
@@ -9759,7 +10051,7 @@ pub const REGISTRY: &[DiagnosticInfo] = &[
     ),
     dg(
         "bynk.par.invalid_statement",
-        "A `par { … }` block holds a statement other than `let x <- e` or `do e`: a refutable `let … else`, a plain `let`, `~>`, `:=` or a store write, `expect`, `advance`, a nested `par`, or anything that is not a statement.",
+        "A `par { … }` block holds a statement other than `let x <- e` or `do e`: a refutable `let … else`, a plain `let`, `:=` or a store write, `expect`, `advance`, a nested `par`, or anything that is not a statement.",
         &["par_stmt"],
     ),
     dg(
@@ -10028,6 +10320,11 @@ pub const REGISTRY: &[DiagnosticInfo] = &[
         "bynk.parse.refined_pattern_inner",
         "A refined pattern's inner form is something other than `_`.",
         &["refined_pattern"],
+    ),
+    dg(
+        "bynk.parse.removed_send_arrow",
+        "The `~>` send was removed; write `do e.detach()`.",
+        &["do_stmt"],
     ),
     dg(
         "bynk.parse.reserved_keyword",
@@ -10538,40 +10835,46 @@ pub const REGISTRY: &[DiagnosticInfo] = &[
         "bynk.resolve.unknown_type",
         "Referenced a type that does not exist.",
     ),
+    d(
+        "bynk.revert.agent_schema_older",
+        "`bynk revert` refused because the target writes an older agent schema version than the live one while stored instances exist, are not known to be absent, or the target is below the class's floor, so the older code would fault on newer records.",
+    ),
+    d(
+        "bynk.revert.class_changed",
+        "`bynk revert` refused because a Durable Object class was added, removed or renamed between the live version and the target, and Cloudflare cannot roll back across a class migration.",
+    ),
+    d(
+        "bynk.revert.contract_skew",
+        "`bynk revert` refused because the target's contracts would no longer match another live Worker, judged as if every selected Worker were reverted together.",
+    ),
+    d(
+        "bynk.revert.database_schema_ahead",
+        "`bynk revert` refused because the live version applied D1 migrations the target was not built against, or the applied migrations could not be read; migrations only move forward, so the older code may not run on the newer schema.",
+    ),
+    d(
+        "bynk.revert.facts_missing",
+        "`bynk revert` refused because the live version or the target version carries no deploy facts (`BYNK_DEPLOY_FACTS`), or the facts could not be read, so nothing can be checked against them.",
+    ),
+    d(
+        "bynk.revert.history_unplaceable",
+        "`bynk revert` refused for one Worker because its deployment history cannot be placed: it has no earlier deployment, the live upload is outside the listed history, a gradual deployment is in progress, or the history could not be read.",
+    ),
+    d(
+        "bynk.revert.id_unrecorded",
+        "`bynk revert` refused because the target binds a KV namespace, database or limiter that the deploy lock no longer records, usually because the resource was re-provisioned since.",
+    ),
+    d(
+        "bynk.revert.layout_older",
+        "`bynk revert` refused because the target writes an older agent storage layout than the live one while stored instances exist or are not known to be absent, so the older code could not read the newer records.",
+    ),
+    d(
+        "bynk.revert.secret_changed",
+        "`bynk revert` refused because a secret changed after the target was live, so the rollback could restore an old secret value that its peers no longer accept.",
+    ),
     warn(d(
         "bynk.secrets.computed_name",
         "A `bynk.Secrets` read names its secret with a computed expression rather than a literal, so `bynk deploy` cannot plan it (warning).",
     )),
-    warn(dg(
-        "bynk.send.deprecated",
-        "The `~>` send is deprecated in favour of `do e.detach()` (warning; auto-fixable).",
-        &["effect_send_stmt"],
-    )),
-    dg(
-        "bynk.send.in_agent_handler",
-        "A `~>` send was used in an agent handler, which has no execution context to keep a fire-and-forget send alive.",
-        &["effect_send_stmt"],
-    ),
-    dg(
-        "bynk.send.in_pure_context",
-        "A `~>` send was used in a pure (non-effectful) context.",
-        &["effect_send_stmt"],
-    ),
-    dg(
-        "bynk.send.non_effect",
-        "A `~>` send was applied to a non-`Effect` value.",
-        &["effect_send_stmt"],
-    ),
-    dg(
-        "bynk.send.requires_unit",
-        "A `~>` send targets an operation whose reply is not `Effect[()]`.",
-        &["effect_send_stmt"],
-    ),
-    dg(
-        "bynk.send.store_op",
-        "A `~>` send targets an agent store operation, which is part of the handler's atomic commit and cannot be sent without waiting.",
-        &["effect_send_stmt"],
-    ),
     dg(
         "bynk.service.missing_from",
         "A `from`-less service has a handler other than `on call`.",
@@ -10872,6 +11175,31 @@ pub const REGISTRY: &[DiagnosticInfo] = &[
         "A case drives `by Nobody` at a route with no Bearer, `Oidc` or Signature actor (alone, or as a member of an actor sum) (e.g. a public `Visitor` route) — there is no auth seam to reject the missing credential.",
         &["case"],
     ),
+    dg(
+        "bynk.test.peek_not_a_database",
+        "`D1.peek` names a capability that is not derived from `D1`; only a D1 binding has a test database to read.",
+        &["case"],
+    ),
+    dg(
+        "bynk.test.peek_not_bound",
+        "`D1.peek` is used anywhere but as the value of a `let`; the handle is what a case reads through.",
+        &["case"],
+    ),
+    dg(
+        "bynk.test.peek_outside_case",
+        "`D1.peek` is used outside an `integration` or `system` case; only those tiers stand up a participant's test database.",
+        &["case"],
+    ),
+    dg(
+        "bynk.test.peek_unknown_capability",
+        "`D1.peek` names a participant or a capability that the suite does not have.",
+        &["case"],
+    ),
+    dg(
+        "bynk.test.peek_write",
+        "A `D1.peek` handle is asked to write, by a write operation (`run`, `batch`) or by a statement that would write; the handle is read-only.",
+        &["case"],
+    ),
     d(
         "bynk.test.principal_claims_not_oidc",
         "A call-site principal passes token claims for an actor that isn't `Oidc`.",
@@ -10919,6 +11247,11 @@ pub const REGISTRY: &[DiagnosticInfo] = &[
     dg(
         "bynk.test.remote_unsupported_env",
         "A `system` case's `env` disagrees with the named target it would run against (`bynk test --against`): it sets a secret, sets a name the target doesn't declare under `vars` or declares with another value, or leaves unset a name the target declares.",
+        &["case"],
+    ),
+    dg(
+        "bynk.test.remote_unsupported_peek",
+        "A `system` case reads a participant's test database with `D1.peek`, which a run against a real runtime (`bynk test --against`) can't honour: a deployment has no in-process database.",
         &["case"],
     ),
     dg(

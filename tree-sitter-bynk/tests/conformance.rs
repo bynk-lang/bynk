@@ -328,7 +328,7 @@ const CASES: &[Case] = &[
     },
     Case {
         what: "par block holding a statement the checker refuses",
-        body: "fn f(id: Int) -> Effect[Int] { par { let a = 1 ~> N.ping(id) par { do C.touch(id) } } Effect.pure(1) }",
+        body: "fn f(id: Int) -> Effect[Int] { par { let a = 1 par { do C.touch(id) } } Effect.pure(1) }",
         accept: true,
     },
     Case {

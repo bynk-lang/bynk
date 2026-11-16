@@ -54,7 +54,9 @@ fn run() -> ExitCode {
             bynk::cli::doctor_options(only, strict),
             format.into(),
         ),
+        Command::Dev { sub: Some(sub), .. } => run_dev_sub(sub),
         Command::Dev {
+            sub: None,
             path,
             lock,
             contexts,
@@ -66,8 +68,7 @@ fn run() -> ExitCode {
             no_install,
             format,
             ready_json,
-            log_events,
-            rewrite_frames,
+            stream,
             wrangler_args,
         } => {
             if !prepare(&path, lock.options()) {
@@ -84,10 +85,11 @@ fn run() -> ExitCode {
                     local_workers,
                     no_install,
                     wrangler_args,
-                    format: format.into(),
+                    format: dev_format(format, stream.trace_events),
                     ready_json,
-                    log_events,
-                    rewrite_frames,
+                    log_events: stream.log_events,
+                    trace_events: stream.trace_events,
+                    rewrite_frames: stream.rewrite_frames,
                 },
             )
         }
@@ -97,19 +99,7 @@ fn run() -> ExitCode {
             context,
             env,
             wrangler_args,
-        } => {
-            if !prepare(&path, lock.options()) {
-                return ExitCode::FAILURE;
-            }
-            run_tail(
-                path,
-                bynk::tail::TailOptions {
-                    context,
-                    environment: env,
-                    wrangler_args,
-                },
-            )
-        }
+        } => run_tail_command(path, lock, context, env, wrangler_args),
         Command::Deploy {
             path,
             lock,
@@ -164,25 +154,35 @@ fn run() -> ExitCode {
             }
             prepared.finish(run_check(input, format, fix, emit, each))
         }
+        Command::Client {
+            input,
+            out,
+            service,
+            layout,
+            check,
+            lock,
+        } => match project_root(&input, lock.options()) {
+            Some(root) => bynk::http_client::run(
+                &root,
+                bynk::http_client::Request {
+                    services: &service,
+                    out: out.as_deref(),
+                    layout: layout.map(Into::into),
+                    check,
+                },
+            ),
+            None => ExitCode::FAILURE,
+        },
         Command::Openapi {
             input,
             service,
             out,
             format,
             lock,
-        } => {
-            if !prepare(&input, lock.options()) {
-                return ExitCode::FAILURE;
-            }
-            let Some(root) = find_project_root(&input) else {
-                eprintln!(
-                    "bynk: no `bynk.toml` found in `{}` or above; run from a project",
-                    input.display()
-                );
-                return ExitCode::FAILURE;
-            };
-            bynk::openapi::run(&root, service.as_deref(), out.as_deref(), format)
-        }
+        } => match project_root(&input, lock.options()) {
+            Some(root) => bynk::openapi::run(&root, service.as_deref(), out.as_deref(), format),
+            None => ExitCode::FAILURE,
+        },
         Command::Token {
             actor,
             sub,
@@ -223,22 +223,17 @@ fn run() -> ExitCode {
             emit,
             profile,
             lock,
-        } => {
-            if !prepare(&input, lock.options()) {
-                return ExitCode::FAILURE;
-            }
-            bynk_driver::run_build(
-                "bynk",
-                bynk_driver::BuildArgs {
-                    input,
-                    out,
-                    target,
-                    platform,
-                    emit,
-                    profile,
-                },
-            )
-        }
+        } => run_build_command(
+            bynk_driver::BuildArgs {
+                input,
+                out,
+                target,
+                platform,
+                emit,
+                profile,
+            },
+            lock.options(),
+        ),
         Command::Compile {
             input,
             output,
@@ -269,16 +264,8 @@ fn run() -> ExitCode {
             }
             prepared.finish(run_test(*args))
         }
-        Command::Fetch { path, lock, format } => {
-            if matches!(format, bynk::cli::DeployFormatArg::Json) {
-                return fetch_json(&path, lock.options());
-            }
-            if prepare_offering_approval(&path, lock.options()) {
-                ExitCode::SUCCESS
-            } else {
-                ExitCode::FAILURE
-            }
-        }
+        Command::Eval { args, lock } => run_eval(args, lock),
+        Command::Fetch { path, lock, format } => run_fetch(&path, lock, format),
         Command::Update { names, path } => {
             let opts = bynk::fetch::FetchOptions {
                 locked: false,
@@ -452,7 +439,7 @@ fn run() -> ExitCode {
             if !prepare(&root, bynk::fetch::FetchOptions::default()) {
                 return ExitCode::FAILURE;
             }
-            if run_check(root.clone(), CheckFormatArg::Short, false, false, false)
+            if run_check(root.clone(), CheckFormatArg::Short, None, false, false)
                 != ExitCode::SUCCESS
             {
                 eprintln!("bynk: not published: the package doesn't check");
@@ -588,9 +575,75 @@ fn fetch_json(input: &Path, opts: bynk::fetch::FetchOptions) -> ExitCode {
     }
 }
 
+/// `bynk build`, then the client when `[build.client]` asks for one (#3508).
+fn run_build_command(args: bynk_driver::BuildArgs, lock: bynk::fetch::FetchOptions) -> ExitCode {
+    if !prepare(&args.input, lock) {
+        return ExitCode::FAILURE;
+    }
+    let input = args.input.clone();
+    let code = bynk_driver::run_build("bynk", args);
+    match find_project_root(&input) {
+        Some(root) if code == ExitCode::SUCCESS => bynk::http_client::write_configured(&root),
+        _ => code,
+    }
+}
+
+/// Prepare the project's dependencies and find its root, or say why not: the
+/// start of every command that reads a project's checked model (`openapi`,
+/// `client`).
+fn project_root(input: &Path, lock: bynk::fetch::FetchOptions) -> Option<PathBuf> {
+    if !prepare(input, lock) {
+        return None;
+    }
+    let root = find_project_root(input);
+    if root.is_none() {
+        eprintln!(
+            "bynk: no `bynk.toml` found in `{}` or above; run from a project",
+            input.display()
+        );
+    }
+    root
+}
+
+/// `bynk fetch`: the lock file, as JSON when asked.
+fn run_fetch(
+    path: &Path,
+    lock: bynk::cli::LockArgs,
+    format: bynk::cli::DeployFormatArg,
+) -> ExitCode {
+    if matches!(format, bynk::cli::DeployFormatArg::Json) {
+        return fetch_json(path, lock.options());
+    }
+    if prepare_offering_approval(path, lock.options()) {
+        ExitCode::SUCCESS
+    } else {
+        ExitCode::FAILURE
+    }
+}
+
+/// `bynk eval`: bring the project's dependencies up to date, then evaluate.
+fn run_eval(args: bynk::cli::EvalCommand, lock: bynk::cli::LockArgs) -> ExitCode {
+    // `prepare` says why on stderr; the document says that it failed, so a
+    // client reading stdout always gets one.
+    if !prepare(&args.input, lock.options()) {
+        return bynk::eval::refuse("the project's dependencies could not be prepared (see stderr)");
+    }
+    bynk::eval::run(args)
+}
+
 /// #2240: resolve, fetch and lock the dependencies of the project holding
 /// `input` before a command compiles it. Prints the failure and returns
 /// `false` when it can't; a single file outside any project needs nothing.
+/// `bynk dev`'s output format: `--trace-events` writes events, so it implies
+/// `--format json` (#3580).
+fn dev_format(format: bynk::cli::DevFormatArg, trace_events: bool) -> bynk::dev::DevFormat {
+    if trace_events {
+        bynk::dev::DevFormat::Json
+    } else {
+        format.into()
+    }
+}
+
 fn prepare(input: &Path, opts: bynk::fetch::FetchOptions) -> bool {
     let Some(project_root) = find_project_root(input) else {
         return true;
@@ -957,6 +1010,49 @@ fn run_doctor(input: PathBuf, opts: DoctorOptions, format: Format) -> ExitCode {
     }
 }
 
+/// `bynk dev inspect …` (#3581): read a running session's agents.
+fn run_dev_sub(sub: bynk::cli::DevSub) -> ExitCode {
+    use bynk::cli::{DevSub, InspectSub};
+    use bynk::dev_inspect::{Inspect, Page};
+    let DevSub::Inspect { what } = sub;
+    let (path, inspect) = match what {
+        InspectSub::Agents {
+            path,
+            context,
+            class,
+        } => (path, Inspect::Agents { context, class }),
+        InspectSub::Agent {
+            class,
+            key,
+            path,
+            context,
+            field,
+            after,
+            limit,
+        } => (
+            path,
+            Inspect::Agent {
+                context,
+                class,
+                key,
+                page: Page {
+                    field,
+                    after,
+                    limit,
+                },
+            },
+        ),
+    };
+    let Some(project_root) = find_project_root(&path) else {
+        eprintln!(
+            "bynk: not inside a Bynk project (no bynk.toml found from `{}`)",
+            path.display()
+        );
+        return ExitCode::FAILURE;
+    };
+    bynk::dev_inspect::command(&project_root, &inspect)
+}
+
 fn run_dev(path: PathBuf, opts: DevOptions) -> ExitCode {
     let tb = SystemToolbox;
 
@@ -974,6 +1070,25 @@ fn run_dev(path: PathBuf, opts: DevOptions) -> ExitCode {
     // project root — the same shape as `bynk compile` — so no per-include
     // root is selected here any more.
     dev::run(&tb, &project_root, bynk_emit::NODE_FLOOR, &opts)
+}
+
+/// `bynk tail`: prepare the project, then stream the deployed Worker's logs.
+fn run_tail_command(
+    path: PathBuf,
+    lock: bynk::cli::LockArgs,
+    context: Option<String>,
+    env: String,
+    wrangler_args: Vec<String>,
+) -> ExitCode {
+    if !prepare(&path, lock.options()) {
+        return ExitCode::FAILURE;
+    }
+    let opts = bynk::tail::TailOptions {
+        context,
+        environment: env,
+        wrangler_args,
+    };
+    run_tail(path, opts)
 }
 
 fn run_tail(path: PathBuf, opts: bynk::tail::TailOptions) -> ExitCode {
@@ -1010,7 +1125,7 @@ fn run_deploy(path: PathBuf, opts: DeployOptions) -> ExitCode {
 fn run_check(
     input: PathBuf,
     format: CheckFormatArg,
-    fix: bool,
+    fix: Option<Vec<String>>,
     emit: bool,
     each: bool,
 ) -> ExitCode {

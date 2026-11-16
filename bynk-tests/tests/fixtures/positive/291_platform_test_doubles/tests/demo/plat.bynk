@@ -1,5 +1,8 @@
 suite demo.plat
 
+consumes bynk { Response, Fetch }
+consumes bynk.cloudflare { Kv }
+
 // #291: a platform capability the target consumes gets a deterministic test
 // double under `bynkc test` — the same answer on every run, and no I/O.
 

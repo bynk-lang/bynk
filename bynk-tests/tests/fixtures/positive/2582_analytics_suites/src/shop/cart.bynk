@@ -5,7 +5,7 @@ context shop.cart
 // system bind a recorder per participant Worker.
 
 consumes bynk
-consumes bynk.cloudflare { Analytics }
+consumes bynk.cloudflare { Analytics, DataPoint }
 
 capability Signups = Analytics
 

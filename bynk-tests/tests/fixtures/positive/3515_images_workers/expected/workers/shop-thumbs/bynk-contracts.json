@@ -1,0 +1,10 @@
+{
+  "version": 1,
+  "provides": {
+    "about": "82d083083f942f32"
+  },
+  "expects": {},
+  "provides_shapes": {
+    "about": "Svc(\"about\",P(\"image\",B(\"Bytes\")),Ret(O(B(\"Bytes\"))))"
+  }
+}

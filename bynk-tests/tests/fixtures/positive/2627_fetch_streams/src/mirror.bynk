@@ -4,7 +4,7 @@ context mirror
 // `RawStreamed` re-serves it without buffering; `Fetch.sendStream` uploads a
 // `Stream[Bytes]` chunk by chunk.
 
-consumes bynk { Fetch }
+consumes bynk { Fetch, Request, Method, FetchOptions, Redirect, FetchError }
 
 fn fetchFrom(url: String) -> Request {
 	Request { method: Get, url: url, contentType: None, authorization: None, headers: Map.empty(), body: None }

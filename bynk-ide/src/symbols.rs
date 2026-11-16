@@ -2973,6 +2973,14 @@ pub(crate) fn describe_derived_capability(
     if d.base.name == "StoredSecret" {
         out.push_str("\nEmits `[[secrets_store_secrets]]`: a distinct instance of `StoredSecret`, reading the secret in the Secrets Store the declaration names. `bynk deploy` links it (it resolves the store's id and checks the secret exists, and creates neither) and fails when either is missing.\n");
     }
+    // #3480: an AI Search instance, linked by deploy and never created.
+    if d.base.name == "AiSearch" {
+        out.push_str("\nEmits `[[ai_search]]`: a distinct instance of `AiSearch`, querying the AI Search instance `@instance` names, in every environment. `bynk deploy` links it (it looks the instance up and records it, and creates nothing) and fails when it is missing; `bynk dev` proxies it to the deployed instance.\n");
+    }
+    // #3513 A: a client certificate, linked by deploy and never uploaded.
+    if d.base.name == "MtlsCertificate" {
+        out.push_str("\nEmits `[[mtls_certificates]]`: a distinct instance of `MtlsCertificate`, whose `send` presents the account's client certificate `@certificate` names to the origin the URL names, in every environment. `bynk deploy` links it by name and never uploads it: the private key never reaches Bynk. `bynk dev` runs it on Cloudflare, once you allow it with `[dev] mtls`.\n");
+    }
     // #3302: outbound email, restricted by its annotations.
     if d.base.name == "Email" {
         out.push_str("\nEmits `[[send_email]]`, keyed by `name`, with the instance's `@to`, `@allowedRecipients` and `@allowedSenders` as `destination_address`, `allowed_destination_addresses` and `allowed_sender_addresses`. `bynk deploy` checks each `@allowedSenders` domain has Email Sending enabled on the account, and never configures one. A call that breaks a platform limit or sets a reserved header faults before it is sent.\n");
@@ -3897,6 +3905,33 @@ mod tests {
         assert!(with_text.contains("withText"), "{with_text}");
         // A name in no first-party source yields nothing (the fallback no-ops).
         assert!(describe_firstparty_symbol("DoesNotExist").is_none());
+    }
+
+    /// #3481: hovering `Idempotency`, or one of its operations, names the provider
+    /// each platform selects: D1-backed on Cloudflare, in-memory on Node and in the
+    /// browser. The text is static and names both, so it needs no project platform.
+    #[test]
+    fn idempotency_hover_names_the_provider_for_each_platform() {
+        let capability = describe_firstparty_symbol("Idempotency").expect("`Idempotency` hovers");
+        assert!(capability.contains("D1-backed"), "{capability}");
+        assert!(capability.contains("Cloudflare"), "{capability}");
+        assert!(
+            capability.contains("`<worker>-idempotency`"),
+            "{capability}"
+        );
+        assert!(
+            capability.contains("in-memory") && capability.contains("Node and in the browser"),
+            "{capability}"
+        );
+        for op in ["dedup", "remember", "claim"] {
+            let hover =
+                describe_firstparty_symbol(&format!("Idempotency.{op}")).unwrap_or_default();
+            assert!(
+                hover.contains("D1-backed on Cloudflare")
+                    && hover.contains("in-memory on Node and in the browser"),
+                "`{op}`: {hover}"
+            );
+        }
     }
 
     #[test]

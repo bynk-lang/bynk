@@ -1,0 +1,28 @@
+context shop.ask
+
+// #3480: a test never reaches AI Search. Every operation faults until it is
+// stubbed, and a stubbed reply (or error) is what the handler sees.
+
+consumes bynk
+consumes bynk.cloudflare { AiSearch, ChatMessage, ChatRole, SearchOptions, SearchHit, SearchError, SearchAnswer }
+
+capability Kb = AiSearch @instance("support-docs")
+
+service api from http {
+	on POST("/search") (body: String) -> Effect[HttpResult[String]] by Visitor given Kb {
+		let hits <- Kb.search(body, SearchOptions {})
+		match hits {
+			Ok(found) => Ok(Json.encode(found)),
+			Err(_) => ServerError("search unavailable"),
+		}
+	}
+
+	on POST("/ask") (body: String) -> Effect[HttpResult[String]] by Visitor given Kb {
+		let reply <- Kb.answer([ChatMessage { role: ChatRole.User, content: body }], SearchOptions {})
+		match reply {
+			Ok(a) => Ok(a.text),
+			Err(SearchRateLimited) => ServerError("busy"),
+			Err(_) => ServerError("search unavailable"),
+		}
+	}
+}

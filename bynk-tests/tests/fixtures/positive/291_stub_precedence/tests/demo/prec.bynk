@@ -1,4 +1,5 @@
 suite demo.prec {
+  consumes bynk.cloudflare { Kv }
   // #291: case `stub` > suite `stub` > the tier default, per operation. The
   // suite stubs `Kv.get`; `Kv.put` stays the in-memory double throughout.
   stub Kv.get(_) returns Some("suite")

@@ -1,0 +1,16 @@
+context shop.stock
+
+// #3536: `SqlError` is not listed, but `D1`'s operations return it, so it keeps
+// meaning the standard library's: a type of the same name here is still a conflict.
+
+consumes bynk.cloudflare { D1 }
+
+type SqlError = { message: String }
+
+capability Stock = D1
+
+service ping {
+	on call() -> Effect[Int] {
+		1
+	}
+}

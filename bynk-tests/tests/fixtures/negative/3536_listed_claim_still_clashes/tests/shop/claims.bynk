@@ -1,0 +1,8 @@
+suite shop.claims
+
+type Claimed = { calls: Int }
+
+case "a suite type named like a listed variant" {
+	let c = Claimed { calls: 1 }
+	expect c.calls == 1
+}

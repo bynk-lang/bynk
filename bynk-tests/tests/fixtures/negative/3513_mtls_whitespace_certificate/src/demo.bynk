@@ -1,0 +1,7 @@
+context demo
+
+// #3513 A: a name of only whitespace is not a certificate name.
+
+consumes bynk.cloudflare { MtlsCertificate }
+
+capability Backend = MtlsCertificate @certificate("  ")

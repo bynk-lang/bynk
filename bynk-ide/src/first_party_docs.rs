@@ -104,7 +104,7 @@ pub const FIRST_PARTY_DOCS: &[Entry] = &[
         "bynk.cloudflare",
         "Analytics",
         "writing-events-analytics",
-        &["write"],
+        &["write", "dataset"],
     ),
     (
         "bynk.cloudflare",
@@ -124,6 +124,8 @@ pub const FIRST_PARTY_DOCS: &[Entry] = &[
         "the-running-version-version",
         &["current"],
     ),
+    ("bynk.cloudflare", "Ai", "workers-ai-ai", &["run"]),
+    ("bynk.cloudflare", "Images", "images-images", &["transform"]),
     (
         "bynk.cloudflare",
         "StoredSecret",
@@ -147,6 +149,44 @@ pub const FIRST_PARTY_DOCS: &[Entry] = &[
         "MySql",
         "mysql-databases-mysql",
         &["all", "first", "run", "transaction"],
+    ),
+    (
+        "bynk.cloudflare",
+        "Vectorize",
+        "vector-indexes-vectorize",
+        &[
+            "upsert",
+            "insert",
+            "upsertValue",
+            "query",
+            "getByIds",
+            "deleteByIds",
+            "describe",
+        ],
+    ),
+    (
+        "bynk.cloudflare",
+        "Container",
+        "containers-container",
+        &["send", "receiveBytes", "sendBytes"],
+    ),
+    (
+        "bynk.cloudflare",
+        "AiSearch",
+        "ai-search-aisearch",
+        &["search", "answer"],
+    ),
+    (
+        "bynk.cloudflare",
+        "MtlsCertificate",
+        "mutual-tls-mtlscertificate",
+        &["send"],
+    ),
+    (
+        "bynk.cloudflare",
+        "AnalyticsSql",
+        "reading-events-analyticssql",
+        &["query"],
     ),
 ];
 

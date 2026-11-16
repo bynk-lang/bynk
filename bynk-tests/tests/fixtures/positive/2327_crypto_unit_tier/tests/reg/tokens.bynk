@@ -1,5 +1,7 @@
 suite reg.tokens
 
+consumes bynk.crypto { Crypto }
+
 // K4: a unit-tier test runs real cryptography through the Node binding, so
 // known answers hold, and `stub`/`expect` still work on `Crypto`.
 

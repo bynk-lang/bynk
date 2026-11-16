@@ -1,0 +1,7 @@
+context demo
+
+// #3477: @sleepAfter is a whole number of seconds.
+
+consumes bynk.cloudflare { Container }
+
+capability Renderer = Container @build("containers/renderer") @port(8080) @sleepAfter(1500.milliseconds)

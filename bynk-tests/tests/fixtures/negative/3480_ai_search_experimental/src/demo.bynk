@@ -1,0 +1,7 @@
+context demo
+
+// #3480: AiSearch is experimental until it is allowed.
+
+consumes bynk.cloudflare { AiSearch }
+
+capability Kb = AiSearch @instance("support-docs")

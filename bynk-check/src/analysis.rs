@@ -221,6 +221,9 @@ pub struct ProjectAnalysis {
     /// sequence-diagram query. Only contexts/adapters have an entry; empty
     /// when the pipeline bails before the checker.
     pub sequence_info: HashMap<String, ContextSequenceInfo>,
+    /// #3583: event emitters/subscribers, each handler's resolved `given`, and the
+    /// suites' `stub`s, for `bynk/architectureModel`'s `events` and `uses` sections.
+    pub architecture_facts: crate::architecture_facts::ArchitectureFacts,
     /// #855: qualified context/adapter unit name → the combined type table
     /// and per-context service/agent tables the wire-contract peek needs.
     /// Only contexts/adapters have an entry; empty when the pipeline bails
@@ -311,6 +314,7 @@ fn bailed(
         requirements: requirements.take_files(),
         unit_sources: HashMap::new(),
         sequence_info: HashMap::new(),
+        architecture_facts: Default::default(),
         boundary_info: HashMap::new(),
         doc_scope: HashMap::new(),
         contract_diff: ContractDiff::default(),
@@ -491,6 +495,73 @@ pub(crate) fn analyse_project_cached(
     analysis
 }
 
+/// The per-context tables the editor queries resolve against: the sequence
+/// view's cross-context info and the wire-contract peek's boundary info, plus
+/// each context's provided contracts recorded on `contract_diff`.
+fn per_unit_infos(
+    kinds: &BTreeMap<String, UnitKind>,
+    unit_tables: &HashMap<String, crate::symbols::UnitTable>,
+    unit_consumes: &HashMap<String, Vec<String>>,
+    unit_consumes_aliases: &HashMap<String, HashMap<String, String>>,
+    unit_uses: &HashMap<String, Vec<String>>,
+    unit_flattened: &HashMap<String, HashMap<String, String>>,
+    contract_diff: &mut ContractDiff,
+) -> (
+    HashMap<String, ContextSequenceInfo>,
+    HashMap<String, ContextBoundaryInfo>,
+) {
+    let mut sequence_info: HashMap<String, ContextSequenceInfo> = HashMap::new();
+    let mut boundary_info: HashMap<String, ContextBoundaryInfo> = HashMap::new();
+    for (name, kind) in kinds {
+        if !matches!(kind, UnitKind::Context | UnitKind::Adapter) {
+            continue;
+        }
+        let Some(table) = unit_tables.get(name) else {
+            continue;
+        };
+        let mut cross_context = build_cross_context_info(
+            name,
+            unit_consumes,
+            unit_consumes_aliases,
+            unit_uses,
+            unit_tables,
+        );
+        cross_context.flattened_caps = unit_flattened.get(name).cloned().unwrap_or_default();
+        // Both infos share the table's `Arc`'d agents (#3243: no deep clone per info).
+        let agents: HashMap<String, Arc<AgentDecl>> = table.agents.clone();
+        sequence_info.insert(
+            name.clone(),
+            ContextSequenceInfo {
+                cross_context,
+                agents: agents.clone(),
+            },
+        );
+        let contract_types =
+            crate::symbols::contract_types_for(name, unit_tables, unit_uses, unit_consumes).0;
+        // Recorded even when empty: a context that dropped its last `on call`
+        // service still has a Worker whose live contracts it no longer provides.
+        contract_diff.services.insert(
+            name.clone(),
+            ProvidedContracts {
+                worker: bynk_project::worker_dir_name(name),
+                hashes: crate::contract::own_contract_hashes(table, &contract_types),
+                shapes: crate::contract_compat::own_contract_shapes(table, &contract_types),
+            },
+        );
+        boundary_info.insert(
+            name.clone(),
+            ContextBoundaryInfo {
+                // #2073: the table `own_contract_hashes` hashes through.
+                types: contract_types,
+                services: table.services.clone(),
+                agents,
+                actors: table.actors.clone(),
+            },
+        );
+    }
+    (sequence_info, boundary_info)
+}
+
 fn analyse_project_inner(
     roots: &Roots,
     overlay: &HashMap<PathBuf, String>,
@@ -577,6 +648,14 @@ fn analyse_project_inner(
     // #2207: `[package] exports` names only commons and adapters this project
     // declares, read the way the build reads it.
     for err in crate::exports::manifest_diagnostics(Some(roots.project_root()), overlay, &kinds) {
+        errors.push_for(Some(Path::new(crate::stability::MANIFEST)), err);
+    }
+
+    // #3562: `[deploy.workers]` groups name only contexts the project declares,
+    // read the way the build reads them.
+    for err in
+        crate::worker_groups::manifest_diagnostics(Some(roots.project_root()), overlay, &kinds)
+    {
         errors.push_for(Some(Path::new(crate::stability::MANIFEST)), err);
     }
 
@@ -863,6 +942,9 @@ fn analyse_project_inner(
     let mut exec_plan = crate::exec_plan::ExecPlan::default();
     // #3229: one set of cross-context views for the whole project, not one per unit.
     let views = CrossContextViewsCache::default();
+    // Each unit's `Events.emit` calls, for the bundle's composition-root check
+    // below, as `run_checks` keeps them in its own `unit_callees`.
+    let mut unit_callees = project_model::UnitCallees::new();
     for name in project_model::uses_first_order(unit_info.keys(), &unit_uses) {
         let info = &unit_info[name];
         let kind = info.kind;
@@ -959,6 +1041,13 @@ fn analyse_project_inner(
             checked.extend(typed);
         }
         crate::phase_timing::mark(crate::phase_timing::Level::Unit);
+        unit_callees.entry(name.clone()).or_default().extend(
+            checked
+                .iter()
+                .flat_map(|t| &t.callees)
+                .filter(|(_, c)| project_model::is_events_emit(c))
+                .map(|(id, c)| (*id, c.clone())),
+        );
         // #2719: the unit's needs-context set, and the calls that would carry
         // the execution context where none exists.
         let plan_errors = exec_plan.extend(&checked.iter().map(|t| &**t).collect::<Vec<_>>());
@@ -1011,41 +1100,21 @@ fn analyse_project_inner(
         &mut integration_errors,
         &mut refs,
         tys,
+        d1_sql.as_deref(),
     );
     errors.extend_attributed_by_span(&parsed, integration_errors);
 
-    // v0.19 (decisions 0017/0024), P5.3: platform-lock enforcement — closes
-    // category 5 of this module's own residual-gap accounting. Inherited from
-    // the now-deleted `analyse_project_with`'s own hardcoded
-    // `Platform::default()` (Cloudflare) and `BuildTarget::Bundle`:
-    // `bynk.cloudflare` is the only
-    // platform-native unit that exists, and it matches the default
-    // selection, so `lock_violation` can never fire here, for any project
-    // (see `bynk-lsp/tests/analysis_residual_gap.rs`'s
-    // `platform_lock_diagnostic_stays_absent`) — this call closes the
-    // category structurally (R3.5), not observably.
-    //
-    // Cost (review #1133): a full provider-closure walk per context, same
-    // shape as `run_checks`'s own gate, for a diagnostic that is provably
-    // dead here. `collect_given_closure` is also unmemoised — a
-    // diamond-shaped provider graph re-walks shared subtrees, so this is
-    // worse than linear in the closure's depth, not just wasted. Same
-    // trade-off and same "worth profiling if it ever shows up" note as the
-    // schema-registry reconciliation call above.
-    if errors.is_empty() {
-        project_model::phase_platform_lock(
-            project_model::BuildTarget::Bundle,
-            Platform::default(),
-            &parsed,
-            &groups,
-            &kinds,
-            &unit_tables,
-            &unit_consumes,
-            &unit_consumes_aliases,
-            &unit_flattened,
-            &mut errors,
-        );
-    }
+    phase_clean_program_checks(
+        &parsed,
+        &groups,
+        &kinds,
+        &unit_tables,
+        &unit_consumes,
+        &unit_consumes_aliases,
+        &unit_flattened,
+        &unit_callees,
+        &mut errors,
+    );
 
     crate::phase_timing::mark(crate::phase_timing::Level::Project);
     // -- Assemble the `ProjectAnalysis`. Mirrored the now-deleted
@@ -1069,55 +1138,28 @@ fn analyse_project_inner(
             .push(pf.identity_path());
     }
 
-    let mut sequence_info: HashMap<String, ContextSequenceInfo> = HashMap::new();
-    let mut boundary_info: HashMap<String, ContextBoundaryInfo> = HashMap::new();
-    for (name, kind) in &kinds {
-        if !matches!(kind, UnitKind::Context | UnitKind::Adapter) {
-            continue;
-        }
-        let Some(table) = unit_tables.get(name) else {
-            continue;
-        };
-        let mut cross_context = build_cross_context_info(
-            name,
-            &unit_consumes,
-            &unit_consumes_aliases,
-            &unit_uses,
-            &unit_tables,
-        );
-        cross_context.flattened_caps = unit_flattened.get(name).cloned().unwrap_or_default();
-        // Both infos share the table's `Arc`'d agents (#3243: no deep clone per info).
-        let agents: HashMap<String, Arc<AgentDecl>> = table.agents.clone();
-        sequence_info.insert(
-            name.clone(),
-            ContextSequenceInfo {
-                cross_context,
-                agents: agents.clone(),
-            },
-        );
-        let contract_types =
-            crate::symbols::contract_types_for(name, &unit_tables, &unit_uses, &unit_consumes).0;
-        // Recorded even when empty: a context that dropped its last `on call`
-        // service still has a Worker whose live contracts it no longer provides.
-        contract_diff.services.insert(
-            name.clone(),
-            ProvidedContracts {
-                worker: bynk_project::worker_dir_name(name),
-                hashes: crate::contract::own_contract_hashes(table, &contract_types),
-                shapes: crate::contract_compat::own_contract_shapes(table, &contract_types),
-            },
-        );
-        boundary_info.insert(
-            name.clone(),
-            ContextBoundaryInfo {
-                // #2073: the table `own_contract_hashes` hashes through.
-                types: contract_types,
-                services: table.services.clone(),
-                agents,
-                actors: table.actors.clone(),
-            },
-        );
-    }
+    let (sequence_info, boundary_info) = per_unit_infos(
+        &kinds,
+        &unit_tables,
+        &unit_consumes,
+        &unit_consumes_aliases,
+        &unit_uses,
+        &unit_flattened,
+        &mut contract_diff,
+    );
+
+    let architecture_facts =
+        crate::architecture_facts::architecture_facts(&crate::architecture_facts::FactInputs {
+            parsed: &parsed,
+            groups: &groups,
+            test_groups: &test_groups,
+            kinds: &kinds,
+            unit_tables: &unit_tables,
+            unit_consumes: &unit_consumes,
+            unit_consumes_aliases: &unit_consumes_aliases,
+            unit_flattened: &unit_flattened,
+            callees: &unit_callees,
+        });
 
     let mut doc_scope: HashMap<String, Vec<String>> = HashMap::new();
     for name in unit_sources.keys() {
@@ -1140,9 +1182,78 @@ fn analyse_project_inner(
         requirements: requirements.take_files(),
         unit_sources,
         sequence_info,
+        architecture_facts,
         boundary_info,
         doc_scope,
         contract_diff,
+    }
+}
+
+/// The whole-program checks that run after the per-unit checks, each only on an
+/// otherwise-clean program, at the point `run_checks` runs them.
+#[allow(clippy::too_many_arguments)]
+fn phase_clean_program_checks(
+    parsed: &[ParsedFile],
+    groups: &BTreeMap<String, Vec<usize>>,
+    kinds: &BTreeMap<String, UnitKind>,
+    unit_tables: &HashMap<String, crate::symbols::UnitTable>,
+    unit_consumes: &HashMap<String, Vec<String>>,
+    unit_consumes_aliases: &HashMap<String, HashMap<String, String>>,
+    unit_flattened: &HashMap<String, HashMap<String, String>>,
+    unit_callees: &project_model::UnitCallees,
+    errors: &mut ErrorSink,
+) {
+    // On the bundle target, a context's required capability with no provider
+    // once the bundle has a composition root (`compose.ts`), at the same point
+    // `run_checks` raises it and on the same otherwise-clean program. Unlike
+    // the Workers form, this one is live here: this entry point analyses as
+    // `BuildTarget::Bundle`.
+    project_model::phase_bundle_composition_unprovided(
+        project_model::BuildTarget::Bundle,
+        parsed,
+        groups,
+        kinds,
+        unit_consumes,
+        unit_consumes_aliases,
+        unit_tables,
+        unit_callees,
+        unit_flattened,
+        errors,
+    );
+
+    // v0.19 (decisions 0017/0024), P5.3: platform-lock enforcement — closes
+    // category 5 of this module's own residual-gap accounting. Inherited from
+    // the now-deleted `analyse_project_with`'s own hardcoded
+    // `Platform::default()` (Cloudflare) and `BuildTarget::Bundle`:
+    // `bynk.cloudflare` is the only
+    // platform-native unit that exists, and it matches the default
+    // selection, so `lock_violation` can never fire here, for any project
+    // (see `bynk-lsp/tests/analysis_residual_gap.rs`'s
+    // `platform_lock_diagnostic_stays_absent`) — this call closes the
+    // category structurally (R3.5), not observably.
+    //
+    // Cost (review #1133): a full provider-closure walk per context, same
+    // shape as `run_checks`'s own gate, for a diagnostic that is provably
+    // dead here. `collect_given_closure` is also unmemoised — a
+    // diamond-shaped provider graph re-walks shared subtrees, so this is
+    // worse than linear in the closure's depth, not just wasted. Same
+    // trade-off and same "worth profiling if it ever shows up" note as the
+    // schema-registry reconciliation in
+    // [`analyse_project_inner`].
+    if errors.is_empty() {
+        project_model::phase_platform_lock(
+            project_model::BuildTarget::Bundle,
+            Platform::default(),
+            parsed,
+            groups,
+            kinds,
+            unit_tables,
+            unit_consumes,
+            unit_consumes_aliases,
+            unit_flattened,
+            &bynk_project::worker_groups::WorkerGroups::new(),
+            errors,
+        );
     }
 }
 

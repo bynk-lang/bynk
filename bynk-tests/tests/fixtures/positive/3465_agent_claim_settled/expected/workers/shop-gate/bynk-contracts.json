@@ -1,0 +1,10 @@
+{
+  "version": 1,
+  "provides": {
+    "gate": "a8ed9669d174b533"
+  },
+  "expects": {},
+  "provides_shapes": {
+    "gate": "Svc(\"gate\",P(\"id\",B(\"String\")),P(\"job\",B(\"String\")),Ret(R(B(\"String\"),B(\"String\"))))"
+  }
+}

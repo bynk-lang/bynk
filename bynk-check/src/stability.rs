@@ -356,7 +356,7 @@ mod tests {
             .collect()
     }
 
-    const FETCH_MATCH: &str = "context app.probe\n\nconsumes bynk { Fetch }\n\nservice probe {\n\ton call(url: String) -> Effect[String] given Fetch {\n\t\tlet res <- Fetch.send(Request { method: Get, url: url, contentType: None, authorization: None, headers: Map.empty(), body: None })\n\t\tmatch res {\n\t\t\tOk(r) => Effect.pure(\"ok\")\n\t\t\tErr(Network) => Effect.pure(\"network\")\n\t\t\tErr(Timeout) => Effect.pure(\"timeout\")\n\t\t\tErr(InvalidHeader) => Effect.pure(\"header\")\n\t\t\tErr(InvalidBody) => Effect.pure(\"body\")\nWILDCARD\t\t}\n\t}\n}\n";
+    const FETCH_MATCH: &str = "context app.probe\n\nconsumes bynk { Fetch, Request, Method, FetchError }\n\nservice probe {\n\ton call(url: String) -> Effect[String] given Fetch {\n\t\tlet res <- Fetch.send(Request { method: Get, url: url, contentType: None, authorization: None, headers: Map.empty(), body: None })\n\t\tmatch res {\n\t\t\tOk(r) => Effect.pure(\"ok\")\n\t\t\tErr(Network) => Effect.pure(\"network\")\n\t\t\tErr(Timeout) => Effect.pure(\"timeout\")\n\t\t\tErr(InvalidHeader) => Effect.pure(\"header\")\n\t\t\tErr(InvalidBody) => Effect.pure(\"body\")\nWILDCARD\t\t}\n\t}\n}\n";
 
     /// An extensible enum (S3, #1963): listing every variant it has today is
     /// not enough; a wildcard is, and it is then not reported unreachable (the
@@ -429,10 +429,18 @@ mod tests {
                 "bynk.cloudflare.Queue",
                 "bynk.cloudflare.Analytics",
                 "bynk.cloudflare.Version",
+                "bynk.cloudflare.Ai",
+                "bynk.cloudflare.Images",
                 "bynk.cloudflare.StoredSecret",
                 "bynk.cloudflare.Email",
                 "bynk.cloudflare.Postgres",
                 "bynk.cloudflare.MySql",
+                "bynk.cloudflare.Vectorize",
+                "bynk.cloudflare.Container",
+                "bynk.cloudflare.AiSearch",
+                "bynk.cloudflare.MtlsCertificate",
+                "bynk.cloudflare.AnalyticsSql",
+                "bynk.cloudflare.RequestCf",
                 "bynk.cloudflare.Kv.getWith",
                 "bynk.cloudflare.Kv.putWith",
                 "bynk.cloudflare.Kv.getBytes",

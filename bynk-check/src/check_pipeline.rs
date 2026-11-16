@@ -702,13 +702,9 @@ pub fn check_file_core(
     .with_shadowed_imports(crate::project_model::shadowed_imports(name, unit_info))
     // S3 (#1963): which names in scope are a first-party extensible enum,
     // decided here, where the unit's full provenance is known.
-    .with_extensible_enums(
-        imported_from
-            .iter()
-            .filter(|(n, unit)| crate::firstparty::is_extensible(unit, n))
-            .map(|(n, _)| n.clone())
-            .collect(),
-    )
+    .with_extensible_enums(extensible_names(imported_from))
+    // #3536: the first-party types this unit's braces leave out.
+    .with_unselected_types(unit_info[name].table.unselected_names())
     // S3 (#1963): the project's policy, and this unit's blocked imports. A
     // first-party unit's own bodies are the library's business, never the
     // project's opt-in, so they check under a policy that blocks nothing.
@@ -765,6 +761,7 @@ pub fn check_file_core(
             .get_or_insert_with(Vec::new)
             .extend(shadowed_named);
     }
+    check_unselected_imports(&resolved, pf, &unit_info[name], errors);
     let item_spans: Vec<bynk_syntax::span::Span> =
         resolved.commons.items.iter().map(|i| i.span()).collect();
     // The unit's own span is this file's, even when it has no items of its own
@@ -986,6 +983,71 @@ pub fn check_file_core(
         typed,
         cross_context: cross_context_for_file,
     })
+}
+
+/// S3 (#1963): which of the names in scope are a first-party extensible enum.
+fn extensible_names(imported_from: &HashMap<String, String>) -> HashSet<String> {
+    imported_from
+        .iter()
+        .filter(|(n, unit)| crate::firstparty::is_extensible(unit, n))
+        .map(|(n, _)| n.clone())
+        .collect()
+}
+
+/// #3536: naming a type, capability or service this file's own `consumes` does
+/// not bring in is an error, with a fix that edits this file. The standard library's own units are not the user's code to
+/// migrate.
+fn check_unselected_imports(
+    resolved: &ResolvedCommons,
+    pf: &ParsedFile,
+    info: &crate::project_model::UnitInfo,
+    errors: &mut ErrorSink,
+) {
+    if crate::firstparty::is_first_party_unit(&resolved.commons.name) {
+        return;
+    }
+    let consumed: std::collections::BTreeSet<String> = info.consumes.iter().cloned().collect();
+    let file = resolver::FileConsumes {
+        consumed: &consumed,
+        aliases: &info.table.consumed_type_aliases,
+        clauses: pf.consumes(),
+        insert_at: new_consumes_position(pf),
+    };
+    errors.extend_for(
+        Some(&pf.identity_path()),
+        resolver::check_unselected_type_names(&resolved.commons.items, resolved, &file),
+    );
+    errors.extend_for(
+        Some(&pf.identity_path()),
+        resolver::check_unselected_capabilities(&resolved.commons.items, &info.flattened, &file),
+    );
+    let prefixes: std::collections::BTreeMap<String, String> = info
+        .consumes
+        .iter()
+        .map(|u| (u.clone(), u.clone()))
+        .chain(info.aliases.iter().map(|(a, u)| (a.clone(), u.clone())))
+        .collect();
+    errors.extend_for(
+        Some(&pf.identity_path()),
+        resolver::check_unconsumed_unit_calls(&resolved.commons.items, &prefixes, &file),
+    );
+}
+
+/// Where a `consumes` line the file lacks is inserted ([`resolver::new_consumes_position`]).
+fn new_consumes_position(pf: &ParsedFile) -> Option<(usize, String)> {
+    let last = pf
+        .uses()
+        .iter()
+        .map(|u| u.span.end)
+        .chain(pf.consumes().iter().map(|c| c.span.end))
+        .max();
+    use bynk_syntax::ast::{CommonsForm, SourceUnit};
+    let (name_end, form) = match pf.unit() {
+        SourceUnit::Context(c) => (c.name.span.end, c.form),
+        SourceUnit::Adapter(a) => (a.name.span.end, a.form),
+        _ => return None,
+    };
+    resolver::new_consumes_position(pf.source(), last, name_end, form == CommonsForm::Brace)
 }
 
 #[cfg(test)]

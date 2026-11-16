@@ -624,6 +624,12 @@ impl Route<'_> {
                 if p.name.name == "headers" {
                     return "RequestHeaders.of([])".to_string();
                 }
+                // #3513 C: `cf` is a record of optionals, so the empty literal is the case.
+                if p.name.name == "cf"
+                    && matches!(&p.type_ref, bynk_syntax::ast::TypeRef::Named(id) if id.name == "RequestCf")
+                {
+                    return "RequestCf {}".to_string();
+                }
                 if matches!(p.type_ref, bynk_syntax::ast::TypeRef::RequestQuery(_)) {
                     return "RequestQuery.empty()".to_string();
                 }

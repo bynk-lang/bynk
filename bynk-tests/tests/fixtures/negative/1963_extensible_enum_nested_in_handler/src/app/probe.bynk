@@ -2,7 +2,7 @@
 // nested inside `Result` in a handler, still needs a wildcard.
 context app.probe
 
-consumes bynk { Fetch }
+consumes bynk { Fetch, FetchError, Method, Request }
 
 service probe {
 	on call(url: String) -> Effect[String] given Fetch {

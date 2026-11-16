@@ -4,7 +4,7 @@ context shop.orders
 // and still lowers to the constant's own call.
 
 consumes bynk
-consumes bynk.cloudflare { D1 }
+consumes bynk.cloudflare { D1, SqlRun, SqlError, SqlValue }
 
 capability Orders = D1
 

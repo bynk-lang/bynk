@@ -1,6 +1,6 @@
 context demo
 
-consumes bynk.cloudflare { Analytics }
+consumes bynk.cloudflare { Analytics, DataPoint }
 
 // #2582: a bare `Analytics` has no dataset of its own.
 service probe {

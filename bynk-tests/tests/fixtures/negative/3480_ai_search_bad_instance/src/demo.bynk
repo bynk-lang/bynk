@@ -1,0 +1,7 @@
+context demo
+
+// #3480: the instance name has no character a name never has.
+
+consumes bynk.cloudflare { AiSearch }
+
+capability Kb = AiSearch @instance("support/docs")

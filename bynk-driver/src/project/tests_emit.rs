@@ -249,6 +249,25 @@ pub(crate) fn process_tests(
 /// `participants`/`uses_targets`/`case_inputs` are cheap and pure, so the
 /// loop below recomputes them exactly as this function always did, using the
 /// now-relocated [`test_suites::infer_participants`].
+/// The `D1` inputs an integration suite is processed with: each database's
+/// migrations, run on every test database (P4b, #2608), and the schemas they
+/// build, which a `D1.peek` read in a case is prepared against (#3147; `None`
+/// under `[check] d1_sql = false`).
+#[derive(Clone, Copy)]
+pub(crate) struct IntegrationD1<'a> {
+    pub migrations: &'a D1Migrations,
+    pub sql: Option<&'a bynk_check::d1_sql::D1Sql>,
+}
+
+impl<'a> IntegrationD1<'a> {
+    pub(crate) fn new(
+        migrations: &'a D1Migrations,
+        sql: Option<&'a bynk_check::d1_sql::D1Sql>,
+    ) -> Self {
+        Self { migrations, sql }
+    }
+}
+
 #[allow(clippy::too_many_arguments)]
 pub(crate) fn process_integration_tests(
     integration_groups: &BTreeMap<String, Vec<usize>>,
@@ -267,7 +286,7 @@ pub(crate) fn process_integration_tests(
     // #1883, slice 3: the declared assets, for `svc.GET(asset)` in a case.
     asset_files: &TestAssetFiles,
     // P4b (#2608): each `D1` database's migrations, run on every test database.
-    d1_migrations: &D1Migrations,
+    d1: IntegrationD1<'_>,
     // #1959: each context's Worker bindings, bound on each participant's
     // `env`. `None` when earlier errors stop the build anyway.
     context_bindings: Option<&BTreeMap<String, Vec<WorkerBinding>>>,
@@ -294,7 +313,9 @@ pub(crate) fn process_integration_tests(
         errors,
         refs,
         tys,
+        d1.sql,
     );
+    let d1_migrations = d1.migrations;
 
     let mut sorted: Vec<&String> = ready.keys().collect();
     sorted.sort();

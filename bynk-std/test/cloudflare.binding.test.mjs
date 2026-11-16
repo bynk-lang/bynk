@@ -9,6 +9,10 @@
 // `WorkersD1` (standard-library P4a, #2602) against a database fake,
 // `WorkersEdgeCache` (L7, #2414) against an execution context fake, and
 // `WorkersVersion` (#3300) against a Version metadata fake, and
+// `WorkersAi` (#3478) against a Workers AI binding fake, and
+// `WorkersImages` (#3515) against an Images binding fake, and
+// `WorkersVectorize` (#3479) against a Vectorize index fake, and
+// `WorkersAiSearch` (#3480) against an AI Search instance fake, and
 // `WorkersStoredSecret` (#3301) against a Secrets Store secret fake, and
 // `WorkersEmail` (#3302) against a `send_email` binding fake, and
 // `WorkersPostgres` (Hyperdrive H1, #3318) against a driver-executor fake (the
@@ -25,8 +29,9 @@
 
 import { test } from "node:test";
 import assert from "node:assert/strict";
-import { WorkersAnalytics, WorkersD1, WorkersEdgeCache, WorkersEmail, WorkersKv, WorkersMySql, WorkersPostgres, WorkersQueue, WorkersR2, WorkersRateLimit, WorkersService, WorkersStoredSecret, WorkersVersion } from "./bynk/cloudflare.binding.js";
+import { WorkersAi, WorkersAiSearch, WorkersImages, WorkersAnalytics, WorkersAnalyticsSql, WorkersContainer, WorkersD1, WorkersEdgeCache, WorkersEmail, WorkersKv, WorkersMtls, WorkersMySql, WorkersPostgres, WorkersQueue, WorkersR2, WorkersRateLimit, WorkersService, WorkersStoredSecret, WorkersVectorize, WorkersVersion } from "./bynk/cloudflare.binding.js";
 import { Method, FetchError } from "./bynk.js";
+import { __makeIntegrationAi, __makeIntegrationAiSearch, __makeIntegrationAnalyticsSql, __makeIntegrationContainer, __makeIntegrationHyperdrive, __makeIntegrationImages, __makeIntegrationMtls, __makeIntegrationSecretsStoreSecret } from "./__bynk_runtime/storage.js";
 import { Some, None } from "./__bynk_runtime/result.js";
 
 function fakeKv(pageSize = 2) {
@@ -254,6 +259,221 @@ t("WorkersService.send: a missing binding names it", async () => {
     new WorkersService({}, "SERVICE_BILLING").send(serviceRequest()),
     /requires a Service Binding \(env\.SERVICE_BILLING\)/,
   );
+});
+
+// #3513 A: `WorkersMtls`, against a certificate-binding fake (a `Fetcher`). `send` is `Fetch.send`'s
+// over the binding's `fetch`, so the same request and response rules hold, and the call goes
+// through the binding, which is what presents the certificate.
+const mtlsRequest = (overrides = {}) => serviceRequest({ url: "https://orders.acme.example/v1/orders", ...overrides });
+
+t("WorkersMtls.send: sends over env[binding], not the network, and reads the response", async () => {
+  const cert = fakeService(() => new Response("[]", { status: 200, headers: { etag: "v1" } }));
+  const globalFetch = globalThis.fetch;
+  globalThis.fetch = () => {
+    throw new Error("the global fetch must not be used");
+  };
+  try {
+    const res = await new WorkersMtls({ MTLS_BACKEND: cert }, "MTLS_BACKEND").send(mtlsRequest());
+    assert.equal(res.tag, "Ok");
+    assert.equal(res.value.status, 200);
+    assert.equal(res.value.body, "[]");
+    assert.equal(res.value.headers.get("etag"), "v1");
+  } finally {
+    globalThis.fetch = globalFetch;
+  }
+  assert.equal(cert.sent.length, 1);
+  assert.equal(cert.sent[0].url, "https://orders.acme.example/v1/orders");
+});
+
+t("WorkersMtls.send: a status the origin returns, 5xx included, is Ok", async () => {
+  const cert = fakeService(() => new Response("down", { status: 503 }));
+  const res = await new WorkersMtls({ MTLS_BACKEND: cert }, "MTLS_BACKEND").send(mtlsRequest());
+  assert.equal(res.tag, "Ok");
+  assert.equal(res.value.status, 503);
+});
+
+t("WorkersMtls.send: a refused header is Err(InvalidHeader), and nothing is sent", async () => {
+  const cert = fakeService();
+  const res = await new WorkersMtls({ MTLS_BACKEND: cert }, "MTLS_BACKEND").send(
+    mtlsRequest({ headers: new Map([["host", "elsewhere"]]) }),
+  );
+  assert.deepEqual(res, { tag: "Err", error: FetchError.InvalidHeader });
+  assert.equal(cert.sent.length, 0);
+});
+
+t("WorkersMtls.send: a call the binding fails, a refused handshake included, is Err(Network)", async () => {
+  const cert = {
+    async fetch() {
+      throw new TypeError("peer did not return a certificate");
+    },
+  };
+  const res = await new WorkersMtls({ MTLS_BACKEND: cert }, "MTLS_BACKEND").send(mtlsRequest());
+  assert.deepEqual(res, { tag: "Err", error: FetchError.Network });
+});
+
+t("WorkersMtls.send: each instance reads its own binding", async () => {
+  const a = fakeService();
+  const b = fakeService();
+  await new WorkersMtls({ MTLS_A: a, MTLS_B: b }, "MTLS_B").send(mtlsRequest());
+  assert.equal(a.sent.length, 0);
+  assert.equal(b.sent.length, 1);
+});
+
+t("WorkersMtls.receiveBytes: reads the response body as bytes, over the binding", async () => {
+  const cert = fakeService(() => new Response(new Uint8Array([0, 255, 7]), { status: 200 }));
+  const res = await new WorkersMtls({ MTLS_BACKEND: cert }, "MTLS_BACKEND").receiveBytes(mtlsRequest());
+  assert.equal(res.tag, "Ok");
+  assert.deepEqual([...res.value.body], [0, 255, 7]);
+  assert.equal(cert.sent.length, 1);
+});
+
+t("WorkersMtls.sendBytes: sends a Bytes body over the binding", async () => {
+  const cert = fakeService(() => new Response("ok", { status: 200 }));
+  const res = await new WorkersMtls({ MTLS_BACKEND: cert }, "MTLS_BACKEND").sendBytes(
+    mtlsRequest({ method: Method.Post }),
+    new Uint8Array([1, 2, 3]),
+  );
+  assert.equal(res.tag, "Ok");
+  assert.equal(cert.sent[0].method, "POST");
+  assert.equal(cert.sent[0].body, "\u0001\u0002\u0003");
+});
+
+t("WorkersMtls.sendBytes: a refused header is Err(InvalidHeader), and nothing is sent", async () => {
+  const cert = fakeService();
+  const res = await new WorkersMtls({ MTLS_BACKEND: cert }, "MTLS_BACKEND").sendBytes(
+    mtlsRequest({ method: Method.Post, headers: new Map([["host", "elsewhere"]]) }),
+    new Uint8Array([1]),
+  );
+  assert.deepEqual(res, { tag: "Err", error: FetchError.InvalidHeader });
+  assert.equal(cert.sent.length, 0);
+});
+
+t("WorkersMtls.send: a dev notice names no price, and is silenced by the acknowledgement", async () => {
+  const warned = [];
+  const warn = console.warn;
+  console.warn = (m) => warned.push(m);
+  try {
+    const cert = fakeService();
+    const dev = { MTLS_BACKEND: cert, BYNK_DEV: "1" };
+    await new WorkersMtls(dev, "MTLS_BACKEND").send(mtlsRequest());
+    await new WorkersMtls(dev, "MTLS_BACKEND").send(mtlsRequest());
+    assert.equal(warned.length, 1, "once");
+    assert.match(warned[0], /mTLS certificate binding has no local simulation/);
+    assert.match(warned[0], /mtls = "allow" under \[dev\]/);
+    assert.doesNotMatch(warned[0], /charge|price|pricing|\$/i);
+  } finally {
+    console.warn = warn;
+  }
+});
+
+t("WorkersMtls.send: a missing binding names it", async () => {
+  await assert.rejects(
+    new WorkersMtls({}, "MTLS_BACKEND").send(mtlsRequest()),
+    /requires an mTLS certificate binding \(env\.MTLS_BACKEND\)/,
+  );
+});
+
+// #3513 B: `WorkersAnalyticsSql`, against a fake of the documented binding: `query({query, params})`
+// resolves `{data, rows, statistics: {elapsed_ms, rows_read, bytes_read}}`, and a failure throws an
+// error carrying a boolean `retryable`.
+function fakeAnalyticsSql(answer) {
+  const calls = [];
+  return {
+    calls,
+    async query(arg) {
+      calls.push(arg);
+      return answer ? answer(arg) : { data: [{ n: 3 }], rows: 1, statistics: { elapsed_ms: 4, rows_read: 10, bytes_read: 80 } };
+    },
+  };
+}
+const sqlEnv = (b, extra = {}) => ({ CF_ANALYTICS_SQL: b, ...extra });
+const sqlOf = (b, extra) => new WorkersAnalyticsSql(sqlEnv(b, extra));
+const failing = (message, retryable) => () => {
+  throw Object.assign(new Error(message), { retryable });
+};
+
+t("WorkersAnalyticsSql.query: sends the query and positional params, and reads the documented reply", async () => {
+  const b = fakeAnalyticsSql();
+  const res = await sqlOf(b).query("SELECT count() AS n FROM events.analyticsEngine.signups WHERE blob1 = $1", [
+    { tag: "Text", value: "uk" },
+  ]);
+  assert.deepEqual(b.calls, [
+    { query: "SELECT count() AS n FROM events.analyticsEngine.signups WHERE blob1 = $1", params: ["uk"] },
+  ]);
+  assert.equal(res.tag, "Ok");
+  assert.deepEqual(JSON.parse(res.value.data), [{ n: 3 }]);
+  assert.equal(res.value.rows, 1);
+  assert.deepEqual(res.value.statistics, { elapsedMs: 4, rowsRead: 10, bytesRead: 80 });
+});
+
+t("WorkersAnalyticsSql.query: maps Null, Integer, Real, Text and Boolean parameters", async () => {
+  const b = fakeAnalyticsSql();
+  await sqlOf(b).query("SELECT 1", [
+    { tag: "Null" },
+    { tag: "Integer", value: 7 },
+    { tag: "Real", value: 1.5 },
+    { tag: "Text", value: "x" },
+    { tag: "Boolean", value: true },
+  ]);
+  assert.deepEqual(b.calls[0].params, [null, 7, 1.5, "x", true]);
+});
+
+t("WorkersAnalyticsSql.query: a Blob parameter is SqlRejected, naming it, and nothing is sent", async () => {
+  const b = fakeAnalyticsSql();
+  const res = await sqlOf(b).query("SELECT $1", [{ tag: "Text", value: "a" }, { tag: "Blob", value: new Uint8Array([1]) }]);
+  assert.equal(res.tag, "Err");
+  assert.equal(res.error.tag, "SqlRejected");
+  assert.match(res.error.message, /parameter \$2 is a Blob/);
+  assert.equal(b.calls.length, 0);
+});
+
+t("WorkersAnalyticsSql.query: an unsafe Integer or non-finite Real is SqlRejected", async () => {
+  const b = fakeAnalyticsSql();
+  const big = await sqlOf(b).query("SELECT $1", [{ tag: "Integer", value: 2 ** 60 }]);
+  assert.equal(big.error.tag, "SqlRejected");
+  const nan = await sqlOf(b).query("SELECT $1", [{ tag: "Real", value: Number.NaN }]);
+  assert.equal(nan.error.tag, "SqlRejected");
+  assert.equal(b.calls.length, 0);
+});
+
+t("WorkersAnalyticsSql.query: a retryable failure is SqlRetryable, any other is SqlRejected", async () => {
+  const retry = await sqlOf(fakeAnalyticsSql(failing("busy", true))).query("SELECT 1", []);
+  assert.deepEqual(retry, { tag: "Err", error: { tag: "SqlRetryable", message: "busy" } });
+  const bad = await sqlOf(fakeAnalyticsSql(failing("syntax error", false))).query("SELECT", []);
+  assert.deepEqual(bad, { tag: "Err", error: { tag: "SqlRejected", message: "syntax error" } });
+  const bare = await sqlOf(fakeAnalyticsSql(failing("no flag", undefined))).query("SELECT", []);
+  assert.equal(bare.error.tag, "SqlRejected");
+});
+
+t("WorkersAnalyticsSql.query: a reply of another shape is SqlRejected", async () => {
+  const res = await sqlOf(fakeAnalyticsSql(() => ({ data: "nope" }))).query("SELECT 1", []);
+  assert.equal(res.tag, "Err");
+  assert.equal(res.error.tag, "SqlRejected");
+  assert.match(res.error.message, /not the shape Analytics SQL documents/);
+});
+
+t("WorkersAnalyticsSql.query: a dev notice names no price, and is silenced by the acknowledgement", async () => {
+  const warned = [];
+  const warn = console.warn;
+  console.warn = (m) => warned.push(m);
+  try {
+    const dev = sqlEnv(fakeAnalyticsSql(), { BYNK_DEV: "1" });
+    await new WorkersAnalyticsSql(dev).query("SELECT 1", []);
+    await new WorkersAnalyticsSql(dev).query("SELECT 1", []);
+    assert.equal(warned.length, 1, "once");
+    assert.match(warned[0], /Analytics SQL has no local implementation/);
+    assert.match(warned[0], /analytics-sql = "allow" under \[dev\]/);
+    assert.doesNotMatch(warned[0], /charge|price|pricing|\$/i);
+    warned.length = 0;
+    await new WorkersAnalyticsSql({ ...dev, BYNK_DEV_ACK_ANALYTICS_SQL: "allow" }).query("SELECT 1", []);
+    assert.equal(warned.length, 0, "silenced");
+  } finally {
+    console.warn = warn;
+  }
+});
+
+t("WorkersAnalyticsSql.query: a missing binding names it", async () => {
+  await assert.rejects(new WorkersAnalyticsSql({}).query("SELECT 1", []), /requires an Analytics SQL binding \(env\.CF_ANALYTICS_SQL\)/);
 });
 
 // P5 (#2323): `WorkersR2`, against a fake that follows Cloudflare's documented
@@ -1005,6 +1225,22 @@ t("WorkersAnalytics.write: a missing binding names it", async () => {
   );
 });
 
+// #3513 B: `dataset()` reads the name the deploy qualified from the `[vars]` entry, never rebuilding it.
+t("WorkersAnalytics.dataset: names the table from the binding's var, so staging reads its own", async () => {
+  const d = fakeDataset();
+  const named = (name) => new WorkersAnalytics({ ANALYTICS_SIGNUPS: d, BYNK_DATASET_ANALYTICS_SIGNUPS: name }, "ANALYTICS_SIGNUPS");
+  assert.equal(await named("shop_cart_signups").dataset(), "events.analyticsEngine.shop_cart_signups");
+  assert.equal(await named("shop_cart_signups_staging").dataset(), "events.analyticsEngine.shop_cart_signups_staging");
+});
+
+t("WorkersAnalytics.dataset: a missing or empty var names it", async () => {
+  await assert.rejects(new WorkersAnalytics({}, "ANALYTICS_SIGNUPS").dataset(), /env\.BYNK_DATASET_ANALYTICS_SIGNUPS/);
+  await assert.rejects(
+    new WorkersAnalytics({ BYNK_DATASET_ANALYTICS_SIGNUPS: "" }, "ANALYTICS_SIGNUPS").dataset(),
+    /env\.BYNK_DATASET_ANALYTICS_SIGNUPS/,
+  );
+});
+
 // P1 (#2590): the new `Kv` operations.
 const never = { tag: "Never" };
 const putOpts = (o = {}) => ({ expiration: never, metadata: new Map(), ...o });
@@ -1242,6 +1478,554 @@ t("WorkersVersion.current: a missing binding or an unreadable timestamp faults",
   await assert.rejects(new WorkersVersion({}).current(), /\[version_metadata\]/);
   const bad = { CF_VERSION_METADATA: { id: "x", tag: "", timestamp: "yesterday" } };
   await assert.rejects(new WorkersVersion(bad).current(), /not a date/);
+});
+
+// #3515: `WorkersImages`, against a fake of Cloudflare's Images binding:
+// `input(stream)` starts a pipeline that records `transform` and `draw` steps,
+// and `output({ format })` resolves a result with `image()` (a stream) and
+// `contentType()`. A refusal is a thrown `ImagesError` carrying a numeric
+// `code` (Cloudflare's workers-types), and the code is also read from a message
+// that opens with it.
+function fakeImages(opts = {}) {
+  const calls = [];
+  const read = async (stream) => new Uint8Array(await new Response(stream).arrayBuffer());
+  const chain = (source, steps) => ({
+    source,
+    steps,
+    transform(o) {
+      return chain(source, [...steps, { transform: o }]);
+    },
+    draw(overlay, o) {
+      return chain(source, [...steps, { draw: overlay, options: o }]);
+    },
+    async output(o) {
+      const bytes = await read(source);
+      const overlays = [];
+      for (const st of steps) if (st.draw) overlays.push(await read(st.draw.source));
+      calls.push({ bytes, steps: steps.map((st) => (st.draw ? { draw: true, options: st.options } : st)), overlays, output: o });
+      if (opts.throws !== undefined) throw opts.throws;
+      return {
+        image: () => new Blob([new Uint8Array([9, 9])]).stream(),
+        contentType: () => o.format,
+      };
+    },
+  });
+  return {
+    calls,
+    input: (stream) => chain(stream, []),
+    async info(stream) {
+      calls.push({ info: await read(stream) });
+      if (opts.throws !== undefined) throw opts.throws;
+      return opts.info;
+    },
+  };
+}
+const imgOpts = (o = {}) => ({ width: None, height: None, fit: None, rotate: None, blur: None, overlays: [], ...o });
+const outOpts = (o = {}) => ({ format: { tag: "Webp" }, quality: None, ...o });
+const IMG = new Uint8Array([1, 2, 3]);
+
+t("WorkersImages.transform: builds the pipeline and returns the bytes and content type", async () => {
+  const images = fakeImages();
+  const logo = { image: new Uint8Array([7]), opacity: Some(0.5), top: None, left: None, bottom: Some(8), right: Some(8), repeat: false };
+  const r = await new WorkersImages({ IMAGES: images }).transform(
+    IMG,
+    imgOpts({ width: Some(256), height: Some(128), fit: Some({ tag: "ScaleDown" }), rotate: Some(90), blur: Some(5), overlays: [logo] }),
+    outOpts({ quality: Some(80) }),
+  );
+  assert.deepEqual(r, { tag: "Ok", value: { body: new Uint8Array([9, 9]), contentType: "image/webp" } });
+  const [c] = images.calls;
+  assert.deepEqual(c.bytes, IMG);
+  assert.deepEqual(c.steps, [
+    { transform: { width: 256, height: 128, fit: "scale-down", rotate: 90, blur: 5 } },
+    { draw: true, options: { opacity: 0.5, bottom: 8, right: 8 } },
+  ]);
+  assert.deepEqual(c.overlays, [new Uint8Array([7])]);
+  assert.deepEqual(c.output, { format: "image/webp", quality: 80 });
+});
+
+t("WorkersImages.transform: every format and fit has its wire name, and no options means no transform step", async () => {
+  const images = fakeImages();
+  const wb = new WorkersImages({ IMAGES: images });
+  for (const [tag, mime] of [["Jpeg", "image/jpeg"], ["Png", "image/png"], ["Webp", "image/webp"], ["Avif", "image/avif"], ["Gif", "image/gif"]]) {
+    await wb.transform(IMG, imgOpts(), outOpts({ format: { tag } }));
+    assert.deepEqual(images.calls.at(-1).output, { format: mime });
+    assert.deepEqual(images.calls.at(-1).steps, []);
+  }
+  for (const [tag, wire] of [["ScaleDown", "scale-down"], ["Contain", "contain"], ["Cover", "cover"], ["Crop", "crop"], ["Pad", "pad"], ["Squeeze", "squeeze"]]) {
+    await wb.transform(IMG, imgOpts({ fit: Some({ tag }) }), outOpts());
+    assert.deepEqual(images.calls.at(-1).steps, [{ transform: { fit: wire } }]);
+  }
+});
+
+t("WorkersImages.transform: obvious invalid input is InvalidImage and never reaches the platform", async () => {
+  const images = fakeImages();
+  const wb = new WorkersImages({ IMAGES: images });
+  const overlay = (o = {}) => ({ image: new Uint8Array([7]), opacity: None, top: None, left: None, bottom: None, right: None, repeat: false, ...o });
+  const bad = async (image, options, output) => (await wb.transform(image, options, output)).error;
+  const invalid = (m) => ({ tag: "InvalidImage", message: m });
+  assert.deepEqual(await bad(new Uint8Array(0), imgOpts(), outOpts()), invalid("the image is empty"));
+  assert.deepEqual(await bad(IMG, imgOpts({ width: Some(0) }), outOpts()), invalid("width must be a whole number of pixels, at least 1, not 0"));
+  assert.deepEqual(await bad(IMG, imgOpts({ height: Some(-3) }), outOpts()), invalid("height must be a whole number of pixels, at least 1, not -3"));
+  assert.deepEqual(await bad(IMG, imgOpts({ rotate: Some(45) }), outOpts()), invalid("rotate must be 90, 180 or 270, not 45"));
+  assert.deepEqual(await bad(IMG, imgOpts(), outOpts({ quality: Some(0) })), invalid("quality must be a whole number from 1 to 100, not 0"));
+  assert.deepEqual(await bad(IMG, imgOpts(), outOpts({ quality: Some(101) })), invalid("quality must be a whole number from 1 to 100, not 101"));
+  assert.deepEqual(await bad(IMG, imgOpts({ overlays: [overlay({ opacity: Some(1.5) })] }), outOpts()), invalid("overlay 0: opacity must be from 0 to 1, not 1.5"));
+  assert.deepEqual(await bad(IMG, imgOpts({ overlays: [overlay(), overlay({ left: Some(1), right: Some(1) })] }), outOpts()), invalid("overlay 1: left and right cannot both be set"));
+  assert.deepEqual(await bad(IMG, imgOpts({ overlays: [overlay({ top: Some(1), bottom: Some(1) })] }), outOpts()), invalid("overlay 0: top and bottom cannot both be set"));
+  assert.deepEqual(await bad(IMG, imgOpts({ overlays: [overlay({ image: new Uint8Array(0) })] }), outOpts()), invalid("overlay 0: the image is empty"));
+  assert.deepEqual(images.calls, []);
+});
+
+t("WorkersImages.transform: a platform error is mapped by its code, any other is ImagesFailed with its message", async () => {
+  const failure = async (e) => (await new WorkersImages({ IMAGES: fakeImages({ throws: e }) }).transform(IMG, imgOpts(), outOpts())).error;
+  const coded = (code, message = "boom") => Object.assign(new Error(message), { name: "ImagesError", code });
+  assert.deepEqual(await failure(coded(9412, "not an image")), { tag: "InvalidImage", message: "not an image" });
+  assert.deepEqual(await failure(coded(9401)), { tag: "InvalidImage", message: "boom" });
+  assert.deepEqual(await failure(coded(9432)), { tag: "InvalidImage", message: "boom" });
+  // 9402 is "too large or the connection was interrupted": only a message about size is the caller's.
+  assert.deepEqual(await failure(coded(9402, "The image is too large")), { tag: "ImageTooLarge" });
+  assert.deepEqual(await failure(coded(9402, "connection interrupted")), { tag: "ImagesFailed", message: "connection interrupted" });
+  assert.deepEqual(await failure(coded(9413)), { tag: "ImageTooLarge" });
+  assert.deepEqual(await failure(coded(9520)), { tag: "UnsupportedImage" });
+  assert.deepEqual(await failure(coded(9422, "usage limit")), { tag: "ImagesFailed", message: "usage limit" });
+  assert.deepEqual(await failure(coded(9529, "timed out")), { tag: "ImagesFailed", message: "timed out" });
+  // A `code` that is a string, or only the message's opening code, still maps.
+  assert.deepEqual(await failure(Object.assign(new Error("x"), { code: "9412" })), { tag: "InvalidImage", message: "x" });
+  assert.deepEqual(await failure(new Error("ImagesError: 9413: too big")), { tag: "ImageTooLarge" });
+  assert.deepEqual(await failure(new Error("9520: format")), { tag: "UnsupportedImage" });
+  // Only a code that opens the message is one.
+  assert.deepEqual(await failure(new Error("id 9412 failed")), { tag: "ImagesFailed", message: "id 9412 failed" });
+  assert.deepEqual(await failure(new Error("something new")), { tag: "ImagesFailed", message: "something new" });
+  assert.deepEqual(await failure("odd"), { tag: "ImagesFailed", message: "odd" });
+});
+
+t("WorkersImages.info: a raster image is its format and size, an SVG has none", async () => {
+  const info = async (reply) => new WorkersImages({ IMAGES: fakeImages({ info: reply }) }).info(IMG);
+  const raster = (mime, format) => info({ format: mime, fileSize: 1234, width: 640, height: 480 }).then((r) => [r, format]);
+  for (const [mime, tag] of [["image/jpeg", "Jpeg"], ["image/png", "Png"], ["image/webp", "Webp"], ["image/avif", "Avif"], ["image/gif", "Gif"], ["image/heic", "Heic"]]) {
+    const [r] = await raster(mime, tag);
+    assert.deepEqual(r, { tag: "Ok", value: { tag: "Raster", format: { tag: tag }, width: 640, height: 480, size: 1234 } });
+  }
+  assert.deepEqual(await info({ format: "image/svg+xml" }), { tag: "Ok", value: { tag: "Svg" } });
+  // A format `ImageFormat` does not name, or a raster with no size, is a failure, not a guess.
+  assert.deepEqual((await info({ format: "image/jxl", fileSize: 1, width: 1, height: 1 })).error.tag, "ImagesFailed");
+  assert.deepEqual((await info({ format: "image/png" })).error.tag, "ImagesFailed");
+});
+
+t("WorkersImages.info: an empty image is InvalidImage without calling the platform, and a platform error maps by code", async () => {
+  const images = fakeImages({ info: { format: "image/png", fileSize: 1, width: 1, height: 1 } });
+  assert.deepEqual(await new WorkersImages({ IMAGES: images }).info(new Uint8Array(0)), { tag: "Err", error: { tag: "InvalidImage", message: "the image is empty" } });
+  assert.deepEqual(images.calls, []);
+  const coded = (code) => Object.assign(new Error("boom"), { name: "ImagesError", code });
+  const failure = async (e) => (await new WorkersImages({ IMAGES: fakeImages({ throws: e }) }).info(IMG)).error;
+  assert.deepEqual(await failure(coded(9412)), { tag: "InvalidImage", message: "boom" });
+  assert.deepEqual(await failure(coded(9413)), { tag: "ImageTooLarge" });
+  assert.deepEqual(await failure(coded(9520)), { tag: "UnsupportedImage" });
+  assert.deepEqual(await failure(new Error("odd")), { tag: "ImagesFailed", message: "odd" });
+});
+
+t("WorkersImages.transform: Heic is read-only, so asking for it as an output is InvalidImage", async () => {
+  const images = fakeImages();
+  const r = await new WorkersImages({ IMAGES: images }).transform(IMG, imgOpts(), outOpts({ format: { tag: "Heic" } }));
+  assert.deepEqual(r, { tag: "Err", error: { tag: "InvalidImage", message: "Heic cannot be written as an output format" } });
+  assert.deepEqual(images.calls, []);
+});
+
+t("WorkersImages.transform: the integration double's not-stubbed fault is rethrown, not returned as an error", async () => {
+  const notStubbed = Object.assign(new Error("bynk: the `Images` binding is not stubbed"), { bynkNotStubbed: true });
+  const wb = new WorkersImages({ IMAGES: fakeImages({ throws: notStubbed, info: undefined }) });
+  await assert.rejects(wb.transform(IMG, imgOpts(), outOpts()), /not stubbed/);
+  await assert.rejects(wb.info(IMG), /not stubbed/);
+  // An unknown fit is refused before the platform, like an unknown format.
+  const r = await new WorkersImages({ IMAGES: fakeImages() }).transform(IMG, imgOpts({ fit: Some({ tag: "Zoom" }) }), outOpts());
+  assert.deepEqual(r, { tag: "Err", error: { tag: "InvalidImage", message: "the fit Zoom has no wire name in this binding" } });
+});
+
+async function* imageChunks(parts, log = []) {
+  try {
+    for (const p of parts) yield p;
+  } finally {
+    log.push("released");
+  }
+}
+const drainBytes = async (it) => {
+  const out = [];
+  for await (const c of it) out.push(...c);
+  return out;
+};
+
+t("WorkersImages.transformStream: reads the input stream, gives the output as a stream, and builds the same pipeline", async () => {
+  const images = fakeImages();
+  const r = await new WorkersImages({ IMAGES: images }).transformStream(imageChunks([new Uint8Array([1, 2]), new Uint8Array([3])]), imgOpts({ width: Some(64) }), outOpts());
+  assert.equal(r.tag, "Ok");
+  assert.equal(r.value.contentType, "image/webp");
+  assert.deepEqual(await drainBytes(r.value.body), [9, 9]);
+  assert.deepEqual(images.calls[0].bytes, new Uint8Array([1, 2, 3]));
+  assert.deepEqual(images.calls[0].steps, [{ transform: { width: 64 } }]);
+  assert.deepEqual(images.calls[0].output, { format: "image/webp" });
+});
+
+t("WorkersImages.transformStream: a bad option is InvalidImage before anything is read, the iterator is closed and the stream is claimed", async () => {
+  const images = fakeImages();
+  let pulled = 0;
+  let closed = 0;
+  const source = {
+    [Symbol.asyncIterator]() {
+      return {
+        async next() {
+          pulled += 1;
+          return { done: true, value: undefined };
+        },
+        async return() {
+          closed += 1;
+          return { done: true, value: undefined };
+        },
+      };
+    },
+  };
+  const wb = new WorkersImages({ IMAGES: images });
+  const r = await wb.transformStream(source, imgOpts({ width: Some(0) }), outOpts());
+  assert.equal(r.tag, "Err");
+  assert.equal(r.error.tag, "InvalidImage");
+  assert.deepEqual(images.calls, []);
+  assert.equal(pulled, 0, "nothing is read from a refused source");
+  assert.equal(closed, 1, "the iterator is closed");
+  // Claimed even though refused: a second use of the same stream is the fault.
+  await assert.rejects(wb.transformStream(source, imgOpts(), outOpts()), /read only once/);
+});
+
+t("WorkersImages.transformStream: a producer that throws stays a fault, it is not the platform's refusal", async () => {
+  async function* failing() {
+    yield new Uint8Array([1]);
+    throw new Error("producer broke");
+  }
+  // A fake that reads its input like the platform does, so the producer's failure surfaces from `output()`.
+  const images = fakeImages();
+  const wb = new WorkersImages({ IMAGES: images });
+  await assert.rejects(wb.transformStream(failing(), imgOpts(), outOpts()), /producer broke/);
+});
+
+t("WorkersImages.transformStream: a platform refusal before the stream starts is an error value, and the not-stubbed fault is rethrown", async () => {
+  const refused = Object.assign(new Error("not an image"), { name: "ImagesError", code: 9412 });
+  const r = await new WorkersImages({ IMAGES: fakeImages({ throws: refused }) }).transformStream(imageChunks([new Uint8Array([1])]), imgOpts(), outOpts());
+  assert.deepEqual(r, { tag: "Err", error: { tag: "InvalidImage", message: "not an image" } });
+  const notStubbed = Object.assign(new Error("not stubbed"), { bynkNotStubbed: true });
+  await assert.rejects(new WorkersImages({ IMAGES: fakeImages({ throws: notStubbed }) }).transformStream(imageChunks([new Uint8Array([1])]), imgOpts(), outOpts()), /not stubbed/);
+});
+
+t("WorkersImages.transformStream: an input stream can be read only once", async () => {
+  const input = imageChunks([new Uint8Array([1])]);
+  const wb = new WorkersImages({ IMAGES: fakeImages() });
+  await wb.transformStream(input, imgOpts(), outOpts());
+  await assert.rejects(wb.transformStream(input, imgOpts(), outOpts()), /read only once/);
+});
+
+t("WorkersImages: a Worker without the binding faults, naming the stanza", async () => {
+  await assert.rejects(new WorkersImages({}).transform(IMG, imgOpts(), outOpts()), /\[images\] wrangler stanza/);
+});
+
+// #3478: `WorkersAi`, against a fake of Cloudflare's AI binding: `run(model,
+// input)` resolves the model's output, or rejects with an error whose message
+// carries the platform's internal code (the Workers AI errors page gives the
+// codes, not the thrown object's fields, so both a numeric `code` and a code in
+// the message are read).
+function fakeAi(reply) {
+  const calls = [];
+  return {
+    calls,
+    async run(model, input) {
+      calls.push({ model, input });
+      if (reply instanceof Error) throw reply;
+      if (reply?.throws !== undefined) throw reply.throws;
+      return reply;
+    },
+  };
+}
+
+t("WorkersAi.run: passes the model and the parsed input, and returns the reply as JSON text", async () => {
+  const ai = fakeAi({ response: "bonjour" });
+  const r = await new WorkersAi({ AI: ai }).run("@cf/meta/llama-3.2-1b-instruct", '{"prompt":"hi","max_tokens":8}');
+  assert.deepEqual(r, { tag: "Ok", value: '{"response":"bonjour"}' });
+  assert.deepEqual(ai.calls, [{ model: "@cf/meta/llama-3.2-1b-instruct", input: { prompt: "hi", max_tokens: 8 } }]);
+});
+
+t("WorkersAi.run: a documented platform code is a typed error, any other a failure with its message", async () => {
+  const failure = async (e) => (await new WorkersAi({ AI: fakeAi(e) }).run("@cf/x/y", "{}")).error;
+  assert.deepEqual(await failure(new Error("5007: No such model `@cf/x/y` or task")), { tag: "ModelNotFound" });
+  assert.deepEqual(await failure(new Error("3042: The model name is invalid")), { tag: "ModelNotFound" });
+  assert.deepEqual(await failure(new Error("5028: `@cf/x/y` was deprecated")), { tag: "ModelNotFound" });
+  assert.deepEqual(await failure(new Error("3036: used up")), { tag: "QuotaExceeded" });
+  assert.deepEqual(await failure(new Error("5035: requires a plan")), { tag: "QuotaExceeded" });
+  assert.deepEqual(await failure(new Error("3040: Capacity temporarily exceeded")), { tag: "Overloaded" });
+  assert.deepEqual(await failure(new Error("AiError: 3040: Capacity temporarily exceeded")), { tag: "Overloaded" });
+  assert.deepEqual(await failure(Object.assign(new Error("bad"), { code: 5004 })), { tag: "InvalidInput", message: "bad" });
+  assert.deepEqual(await failure(Object.assign(new Error("bad"), { code: "3006" })), { tag: "InvalidInput", message: "bad" });
+  assert.deepEqual(await failure(new Error("3007: Request timeout")), { tag: "AiFailed", message: "3007: Request timeout" });
+  assert.deepEqual(await failure(new Error("something new")), { tag: "AiFailed", message: "something new" });
+  assert.deepEqual(await failure({ throws: "odd" }), { tag: "AiFailed", message: "odd" });
+  // Only a code that opens the message is one: a number elsewhere in it is not.
+  assert.deepEqual(await failure(new Error("Model @cf/x/foo-3040 failed")), { tag: "AiFailed", message: "Model @cf/x/foo-3040 failed" });
+  assert.deepEqual(await failure(new Error("input of 3003 tokens too long")), { tag: "AiFailed", message: "input of 3003 tokens too long" });
+  // A number that merely sits in a longer one is not a code.
+  assert.deepEqual(await failure(new Error("id 350071 failed")), { tag: "AiFailed", message: "id 350071 failed" });
+});
+
+// Observed on a real account (#3478, W39): the binding throws an `Error` named
+// `AiError` (constructor `InferenceUpstreamError`) with no `code` property and a
+// message that opens with the platform's code.
+t("WorkersAi.run: the error a live binding throws is read from its message, 5006 included", async () => {
+  class InferenceUpstreamError extends Error {
+    constructor(message) {
+      super(message);
+      this.name = "AiError";
+    }
+  }
+  const live = (message) => new InferenceUpstreamError(message);
+  const failure = async (e) => (await new WorkersAi({ AI: fakeAi(e) }).run("@cf/x/y", "{}")).error;
+  assert.equal("code" in live("5007: x"), false);
+  assert.deepEqual(await failure(live("5007: No such model @cf/nobody/no-such-model or task")), { tag: "ModelNotFound" });
+  assert.deepEqual(await failure(live("5028: @cf/x/y was deprecated on 2026-05-30. See the model catalog for alternatives: https://developers.cloudflare.com/workers-ai/models/")), { tag: "ModelNotFound" });
+  const rejected = "5006: Error: oneOf at '/' not met, 0 matches: required properties at '/' are 'prompt', required properties at '/' are 'messages'";
+  assert.deepEqual(await failure(live(rejected)), { tag: "InvalidInput", message: rejected });
+});
+
+t("WorkersAi.run: a live stream (input with stream: true) is cancelled and is a failure", async () => {
+  let cancelled = false;
+  const stream = new ReadableStream({ cancel() { cancelled = true; } });
+  const r = await new WorkersAi({ AI: fakeAi(stream) }).run("@cf/x/y", '{"stream":true}');
+  assert.equal(r.tag, "Err");
+  assert.equal(cancelled, true);
+});
+
+t("WorkersAi.run: a binary reply is a failure, not a fault", async () => {
+  for (const bytes of [new Uint8Array([1, 2]), new ArrayBuffer(2), new ReadableStream()]) {
+    const r = await new WorkersAi({ AI: fakeAi(bytes) }).run("@cf/x/y", "{}");
+    assert.deepEqual(r.error, { tag: "AiFailed", message: "model returned binary data; run supports JSON replies only" });
+  }
+});
+
+t("WorkersAi.run: a bad model id, an input that is not a JSON object and a missing binding fault", async () => {
+  const ai = new WorkersAi({ AI: fakeAi({}) });
+  for (const model of ["", "has space", "a".repeat(129), "bad\u00e9"]) {
+    await assert.rejects(ai.run(model, "{}"), /not a model id/);
+  }
+  for (const input of ["not json", "[1]", "3", "null", '"s"']) {
+    await assert.rejects(ai.run("@cf/x/y", input), /`input`/);
+  }
+  await assert.rejects(new WorkersAi({}).run("@cf/x/y", "{}"), /\[ai\]/);
+});
+
+const chat = (role, content) => ({ role: { tag: role }, content });
+const request = (extra = {}) => ({ messages: [chat("User", "hi")], maxTokens: None, temperature: None, topP: None, seed: None, ...extra });
+
+t("WorkersAi.generate: sends the messages with lower-case roles and only the settings given, and reads text and usage", async () => {
+  const ai = fakeAi({ response: "hello", usage: { prompt_tokens: 3, completion_tokens: 2, total_tokens: 5 } });
+  const r = await new WorkersAi({ AI: ai }).generate(
+    "@cf/meta/llama-3.2-1b-instruct",
+    request({ messages: [chat("System", "be brief"), chat("User", "hi"), chat("Assistant", "hey")], maxTokens: Some(64), temperature: Some(0.5), topP: Some(0.9), seed: Some(7) }),
+  );
+  assert.deepEqual(r, { tag: "Ok", value: { text: "hello", usage: Some({ promptTokens: 3, completionTokens: 2 }) } });
+  assert.deepEqual(ai.calls[0].input, {
+    messages: [{ role: "system", content: "be brief" }, { role: "user", content: "hi" }, { role: "assistant", content: "hey" }],
+    max_tokens: 64,
+    temperature: 0.5,
+    top_p: 0.9,
+    seed: 7,
+  });
+  const plain = fakeAi({ response: "ok" });
+  await new WorkersAi({ AI: plain }).generate("@cf/x/y", request());
+  assert.deepEqual(plain.calls[0].input, { messages: [{ role: "user", content: "hi" }] });
+});
+
+t("WorkersAi.generate: a missing or odd usage is None, and a reply that is not text is a BadReply", async () => {
+  const gen = async (reply) => new WorkersAi({ AI: fakeAi(reply) }).generate("@cf/x/y", request());
+  assert.deepEqual((await gen({ response: "t" })).value, { text: "t", usage: None });
+  assert.deepEqual((await gen({ response: "t", usage: { prompt_tokens: "3" } })).value.usage, None);
+  assert.equal((await gen({ response: "" })).value.text, "");
+  for (const bad of [{}, { response: 5 }, { response: null, tool_calls: [] }, { response: { a: 1 } }, "text", null, [1], new Uint8Array(2)]) {
+    const r = await gen(bad);
+    assert.equal(r.error?.tag, "BadReply", JSON.stringify(bad));
+  }
+  let cancelled = false;
+  const r = await gen(new ReadableStream({ cancel() { cancelled = true; } }));
+  assert.equal(r.error.tag, "BadReply");
+  assert.equal(cancelled, true);
+});
+
+// Shapes observed on a real account (#3478, W39) for a `messages` request.
+t("WorkersAi.generate: reads `choices[0].message.content` when there is no `response`, and prefers `response` when both are there", async () => {
+  const gen = async (reply) => new WorkersAi({ AI: fakeAi(reply) }).generate("@cf/x/y", request());
+  const usage = { prompt_tokens: 36, completion_tokens: 3, total_tokens: 39, prompt_tokens_details: { cached_tokens: 0 }, neurons: 0.09 };
+  // granite 4.0 micro: OpenAI-style only.
+  const granite = { id: "chatcmpl-1", object: "chat.completion", model: "@cf/ibm-granite/granite-4.0-h-micro", choices: [{ index: 0, message: { role: "assistant", content: "Hello!", refusal: null }, finish_reason: "stop" }], usage };
+  assert.deepEqual((await gen(granite)).value, { text: "Hello!", usage: Some({ promptTokens: 36, completionTokens: 3 }) });
+  // llama 3.1 8b fast: both; `response` is read.
+  const both = { ...granite, choices: [{ index: 0, message: { role: "assistant", content: "from choices" } }], response: "from response" };
+  assert.equal((await gen(both)).value.text, "from response");
+  // llama 3.2 1b: `response` only.
+  assert.equal((await gen({ response: "Hi", usage })).value.text, "Hi");
+  assert.deepEqual((await gen({ choices: [{ message: { content: "" } }] })).value, { text: "", usage: None });
+  // A `response` that is there but not text does not block the fallback.
+  assert.equal((await gen({ response: null, choices: [{ message: { content: "x" } }] })).value.text, "x");
+  // Neither shape is a BadReply: no content, or content that is not text.
+  for (const bad of [{ choices: [] }, { choices: [{}] }, { choices: [{ message: {} }] }, { choices: [{ message: { content: null } }] }, { choices: [{ message: { content: 5 } }] }, { choices: "x" }, { choices: [{ text: "completion shape" }] }]) {
+    assert.equal((await gen(bad)).error?.tag, "BadReply", JSON.stringify(bad));
+  }
+});
+
+t("WorkersAi.generate: a platform refusal is a typed error, and empty messages or a bad model fault", async () => {
+  const ai = (e) => new WorkersAi({ AI: fakeAi(e) });
+  assert.deepEqual((await ai(new Error("5007: No such model")).generate("@cf/x/y", request())).error, { tag: "ModelNotFound" });
+  assert.deepEqual((await ai(new Error("3040: busy")).generate("@cf/x/y", request())).error, { tag: "Overloaded" });
+  await assert.rejects(ai({}).generate("@cf/x/y", request({ messages: [] })), /at least one message/);
+  await assert.rejects(ai({}).generate("", request()), /not a model id/);
+  // A role this binding has no wire name for is refused, not sent as a guess.
+  await assert.rejects(ai({}).generate("@cf/x/y", request({ messages: [chat("ToolCall", "x")] })), /no wire name/);
+});
+
+t("WorkersAi.embed: sends the texts as a list and returns one vector per text in order", async () => {
+  const ai = fakeAi({ shape: [2, 3], data: [[0.1, 0.2, 0.3], [1, 2, 3]], pooling: "mean" });
+  const r = await new WorkersAi({ AI: ai }).embed("@cf/baai/bge-base-en-v1.5", ["a", "b"]);
+  assert.deepEqual(r, { tag: "Ok", value: [[0.1, 0.2, 0.3], [1, 2, 3]] });
+  assert.deepEqual(ai.calls, [{ model: "@cf/baai/bge-base-en-v1.5", input: { text: ["a", "b"] } }]);
+  // No `shape` in the reply is fine: it is optional.
+  assert.equal((await new WorkersAi({ AI: fakeAi({ data: [[1, 2], [3, 4]] }) }).embed("@cf/x/y", ["a", "b"])).tag, "Ok");
+  // One text is still a list, so the reply is always a list of vectors.
+  const one = fakeAi({ data: [[1]] });
+  await new WorkersAi({ AI: one }).embed("@cf/x/y", ["only"]);
+  assert.deepEqual(one.calls[0].input, { text: ["only"] });
+});
+
+t("WorkersAi.embed: a reply that is not one list of numbers per text is a BadReply, a refusal a typed error, and an empty batch a fault", async () => {
+  const emb = async (reply, texts = ["a", "b"]) => new WorkersAi({ AI: fakeAi(reply) }).embed("@cf/x/y", texts);
+  for (const bad of [{}, { data: "x" }, { data: [1, 2] }, { data: [[1], ["a"]] }, { data: [[1], [NaN]] }, { data: [[1]] }, { data: [[1], [2], [3]] }, { data: [[], []] }, { data: [[1, 2], [3]] }, { shape: [2, 3], data: [[1, 2], [3, 4]] }, { shape: [3, 2], data: [[1, 2], [3, 4]] }, [], "s", null]) {
+    assert.equal((await emb(bad)).error?.tag, "BadReply", JSON.stringify(bad));
+  }
+  assert.deepEqual((await emb(new Error("5004: Invalid data"))).error, { tag: "InvalidInput", message: "5004: Invalid data" });
+  assert.deepEqual((await emb(new Error("3036: used up"))).error, { tag: "QuotaExceeded" });
+  await assert.rejects(emb({}, []), /at least one text/);
+});
+
+// #3478: `runStream`, against a fake whose reply is a `ReadableStream` of the
+// bytes of a Server-Sent Events body, cut into the chunks the test chooses.
+const sseBody = (chunks, { failAfter, onCancel, hold } = {}) => {
+  const enc = new TextEncoder();
+  let i = 0;
+  return new ReadableStream({
+    pull(controller) {
+      if (failAfter !== undefined && i === failAfter) return controller.error(new Error("connection reset"));
+      if (i < chunks.length) controller.enqueue(typeof chunks[i] === "string" ? enc.encode(chunks[i]) : chunks[i]);
+      else if (hold) return new Promise(() => {});
+      else controller.close();
+      i += 1;
+    },
+    cancel() { onCancel?.(); },
+  });
+};
+const collect = async (iterable) => {
+  const out = [];
+  for await (const e of iterable) out.push(e);
+  return out;
+};
+const events = async (chunks, opts) => {
+  const r = await new WorkersAi({ AI: fakeAi(sseBody(chunks, opts)) }).runStream("@cf/x/y", "{}");
+  assert.equal(r.tag, "Ok");
+  return collect(r.value);
+};
+
+t("WorkersAi.runStream: asks the model to stream and yields each event's data text, consuming [DONE]", async () => {
+  const ai = fakeAi(sseBody(['data: {"response":"he"}\n\n', 'data: {"response":"llo"}\n\n', "data: [DONE]\n\n"]));
+  const r = await new WorkersAi({ AI: ai }).runStream("@cf/meta/llama-3.2-1b-instruct", '{"prompt":"hi","stream":false}');
+  assert.deepEqual(await collect(r.value), ['{"response":"he"}', '{"response":"llo"}']);
+  // `stream: true` wins over whatever the input said.
+  assert.deepEqual(ai.calls[0].input, { prompt: "hi", stream: true });
+});
+
+t("WorkersAi.runStream: decodes events however the bytes are cut, and accepts LF, CRLF and CR", async () => {
+  const whole = 'data: {"a":"é"}\r\n\r\ndata: two\n\ndata: three\r\r';
+  const bytes = new TextEncoder().encode(whole);
+  // One byte at a time: boundaries fall inside a multi-byte character and inside a CRLF.
+  const single = Array.from(bytes, (b) => new Uint8Array([b]));
+  assert.deepEqual(await events(single), ['{"a":"é"}', "two", "three"]);
+  assert.deepEqual(await events([whole]), ['{"a":"é"}', "two", "three"]);
+});
+
+t("WorkersAi.runStream: joins data lines, ignores other fields and comments, and gives a last event with no blank line after it", async () => {
+  assert.deepEqual(await events([": keep-alive\n", "event: message\nid: 7\nretry: 5\ndata: a\ndata: b\n\n", "data:c\n\n", "data: last"]), ["a\nb", "c", "last"]);
+  assert.deepEqual(await events(["\n\n\n: only a comment\n\n"]), []);
+  assert.deepEqual(await events([]), []);
+  // `[DONE]` ends the stream: nothing after it is read.
+  assert.deepEqual(await events(["data: one\n\ndata: [DONE]\n\ndata: late\n\n"]), ["one"]);
+});
+
+t("WorkersAi.runStream: a failure before the stream is an Err, a model that does not stream is AiFailed, and the binding faults on a bad input", async () => {
+  const run = (reply, input = "{}") => new WorkersAi({ AI: fakeAi(reply) }).runStream("@cf/x/y", input);
+  assert.deepEqual((await run(new Error("5007: No such model"))).error, { tag: "ModelNotFound" });
+  assert.deepEqual((await run(new Error("3036: used up"))).error, { tag: "QuotaExceeded" });
+  assert.equal((await run({ response: "not a stream" })).error.tag, "AiFailed");
+  await assert.rejects(run({}, "[1]"), /`input`/);
+  await assert.rejects(run({}, "{}").then(() => new WorkersAi({}).runStream("@cf/x/y", "{}")), /\[ai\]/);
+});
+
+t("WorkersAi.runStream: a failure after the first event faults the stream, after the events already given", async () => {
+  const r = await new WorkersAi({ AI: fakeAi(sseBody(["data: one\n\n", "data: two\n\n", "data: three\n\n"], { failAfter: 2 })) }).runStream("@cf/x/y", "{}");
+  const seen = [];
+  await assert.rejects(async () => { for await (const e of r.value) seen.push(e); }, /connection reset/);
+  assert.deepEqual(seen, ["one", "two"]);
+});
+
+t("WorkersAi.runStream: return() cancels at once even while a read is in flight, and the pending next() ends", async () => {
+  // A model that is only sending keep-alive comments: `next()` is parked in a
+  // read that yields no event. A generator would queue `return()` behind it.
+  let cancels = 0;
+  const body = sseBody([": keep-alive\n"], { hold: true, onCancel: () => { cancels += 1; } });
+  const r = await new WorkersAi({ AI: fakeAi(body) }).runStream("@cf/x/y", "{}");
+  const iterator = r.value[Symbol.asyncIterator]();
+  const pending = iterator.next();
+  await new Promise((resolve) => setTimeout(resolve, 20));
+  assert.deepEqual(await iterator.return(), { done: true, value: undefined });
+  assert.equal(cancels, 1);
+  assert.deepEqual(await pending, { done: true, value: undefined });
+  // Done stays done.
+  assert.deepEqual(await iterator.next(), { done: true, value: undefined });
+});
+
+t("WorkersAi.runStream: abandoning the stream, or reaching [DONE], cancels the model's", async () => {
+  let cancels = 0;
+  const onCancel = () => { cancels += 1; };
+  const abandoned = await new WorkersAi({ AI: fakeAi(sseBody(["data: one\n\n", "data: two\n\n"], { onCancel, hold: true })) }).runStream("@cf/x/y", "{}");
+  for await (const e of abandoned.value) { assert.equal(e, "one"); break; }
+  assert.equal(cancels, 1);
+  await events(["data: one\n\ndata: [DONE]\n\n"], { onCancel, hold: true });
+  assert.equal(cancels, 2);
+});
+
+// #3478: the one-time warning of a remote-only binding under `bynk dev`.
+t("WorkersAi.run: warns once under bynk dev unless the project acknowledged it, and never in a deployment", async () => {
+  const warnings = [];
+  const original = console.warn;
+  console.warn = (...args) => warnings.push(args.join(" "));
+  try {
+    const run = async (env) => new WorkersAi({ AI: fakeAi({ response: "x" }), ...env }).run("@cf/x/y", "{}");
+    // Deployed: neither variable, so silence.
+    assert.equal((await run({})).tag, "Ok");
+    assert.deepEqual(warnings, []);
+    // Acknowledged: `[dev] ai = "allow"` sets the variable.
+    assert.equal((await run({ BYNK_DEV: "1", BYNK_DEV_ACK_AI: "allow" })).tag, "Ok");
+    assert.deepEqual(warnings, []);
+    // `bynk dev` without it: the call goes ahead, with a warning that links to Cloudflare and states no price.
+    assert.equal((await run({ BYNK_DEV: "1" })).tag, "Ok");
+    assert.equal(warnings.length, 1);
+    assert.match(warnings[0], /may incur charges/);
+    assert.match(warnings[0], /https:\/\/developers\.cloudflare\.com\/workers-ai\/platform\/pricing\//);
+    assert.match(warnings[0], /ai = "allow"/);
+    assert.doesNotMatch(warnings[0], /\$|free|neuron/i);
+    // Once: a second call says nothing more.
+    assert.equal((await run({ BYNK_DEV: "1" })).tag, "Ok");
+    assert.equal(warnings.length, 1);
+  } finally {
+    console.warn = original;
+  }
 });
 
 // #3301: `WorkersStoredSecret`, against a fake of Cloudflare's Secrets Store
@@ -1801,4 +2585,619 @@ t("WorkersMySql.transaction: a failure is the result; an empty list is Ok([]) an
   assert.equal(empty.calls.length, 0);
   await assert.rejects(() => new WorkersMySql({}, "HYPERDRIVE_LEGACY", empty.execute).transaction([]), /requires a Hyperdrive binding/);
   await assert.rejects(() => new WorkersMySql({ HYPERDRIVE_LEGACY: MY_BINDING }, "HYPERDRIVE_LEGACY").transaction([{ sql: "x", params: [] }]), /needs the MySQL driver/);
+});
+
+// #3479: `WorkersVectorize`, against a fake of Cloudflare's Vectorize binding.
+// The error messages the platform throws are not documented, so the mapping is
+// pinned here against messages of the shapes the binding recognises.
+function fakeIndex(over = {}) {
+  const calls = [];
+  const rec = (name, reply) => async (...args) => {
+    calls.push({ name, args });
+    if (over[name] instanceof Error) throw over[name];
+    return over[name] ?? reply;
+  };
+  return {
+    calls,
+    upsert: rec("upsert", { mutationId: "m-1" }),
+    insert: rec("insert", { mutationId: "m-2" }),
+    query: rec("query", { count: 0, matches: [] }),
+    getByIds: rec("getByIds", []),
+    deleteByIds: rec("deleteByIds", { mutationId: "m-3" }),
+    describe: rec("describe", { dimensions: 3, metric: "cosine" }),
+  };
+}
+const vec = (id, extra = {}) => ({ id, values: [0.1, 0.2, 0.3], metadata: None, namespace: None, ...extra });
+const opts = (over = {}) => ({ topK: 5, returnValues: false, returnMetadata: { tag: "Omit" }, namespace: None, filter: [], ...over });
+const eq = (field, v) => ({ field, op: { tag: "FilterEq", value: v } });
+const metaText = (value) => ({ tag: "MetaText", value });
+const metaNum = (value) => ({ tag: "MetaNumber", value });
+const range = (field, tag, value) => ({ field, op: { tag, value: metaNum(value) } });
+const vz = (index) => new WorkersVectorize({ VECTORIZE_DOCS: index }, "VECTORIZE_DOCS");
+
+t("WorkersVectorize.upsert: sends the platform's vectors and returns the mutation id", async () => {
+  const index = fakeIndex();
+  const r = await vz(index).upsert([vec("a", { metadata: Some('{"category":"faq"}'), namespace: Some("ns") }), vec("b")]);
+  assert.deepEqual(r, { tag: "Ok", value: { id: "m-1" } });
+  assert.deepEqual(index.calls[0].args[0], [
+    { id: "a", values: [0.1, 0.2, 0.3], namespace: "ns", metadata: { category: "faq" } },
+    { id: "b", values: [0.1, 0.2, 0.3] },
+  ]);
+});
+
+t("WorkersVectorize.insert: sends new vectors and returns the mutation id", async () => {
+  const index = fakeIndex();
+  assert.deepEqual(await vz(index).insert([vec("c")]), { tag: "Ok", value: { id: "m-2" } });
+  assert.equal(index.calls[0].name, "insert");
+});
+
+t("WorkersVectorize.upsert: metadata that is not a JSON object faults; a missing binding faults", async () => {
+  await assert.rejects(() => vz(fakeIndex()).upsert([vec("a", { metadata: Some("nope") })]), /not JSON text/);
+  await assert.rejects(() => vz(fakeIndex()).upsert([vec("a", { metadata: Some("[1]") })]), /must be a JSON object/);
+  await assert.rejects(() => new WorkersVectorize({}, "VECTORIZE_DOCS").describe(), /\[\[vectorize\]\]/);
+});
+
+t("WorkersVectorize: a platform refusal is a typed error, an unknown index a fault", async () => {
+  const err = async (message) => (await vz(fakeIndex({ upsert: new Error(message) })).upsert([vec("a")])).error;
+  assert.deepEqual(await err("expected 768 dimensions, got 3"), { tag: "DimensionMismatch", message: "expected 768 dimensions, got 3" });
+  assert.deepEqual(await err("429 Too Many Requests"), { tag: "VectorRateLimited" });
+  assert.deepEqual(await err("batch is too large"), { tag: "VectorInvalidInput", message: "batch is too large" });
+  assert.deepEqual(await err("something else"), { tag: "VectorFailed", message: "something else" });
+  // The platform's own messages, as observed on a real index (#3479).
+  const topK = "VECTOR_QUERY_ERROR (code = 40025): with returnValues=true or returnMetadata=all, max top K is 50, but got 500; ";
+  assert.deepEqual(await err(topK), { tag: "VectorInvalidInput", message: topK });
+  const dims = "VECTOR_UPSERT_ERROR (code = 40012): invalid vector at index 0, expected 32 dimensions, and got 2 dimensions;";
+  assert.deepEqual(await err(dims), { tag: "DimensionMismatch", message: dims });
+  assert.equal((await err("VECTOR_QUERY_ERROR (code = 40025): max top K is 50")).tag, "VectorInvalidInput");
+  await assert.rejects(() => err("index not found"), /index not found/);
+});
+
+t("WorkersVectorize.query: builds the platform's options and filter, and shapes the matches", async () => {
+  const index = fakeIndex({
+    query: { matches: [{ id: "a", score: 0.9, values: [1, 2], metadata: { c: "faq" }, namespace: "ns" }, { id: "b", score: 0.5 }] },
+  });
+  const filter = [
+    eq("category", metaText("faq")),
+    range("year", "FilterGte", 2020),
+    range("year", "FilterLt", 2030),
+    { field: "tag", op: { tag: "FilterAnyOf", values: [metaText("x"), metaText("y")] } },
+  ];
+  const r = await vz(index).query([1, 2, 3], opts({ topK: 3, returnMetadata: { tag: "Indexed" }, namespace: Some("ns"), filter }));
+  assert.deepEqual(index.calls[0].args, [
+    [1, 2, 3],
+    {
+      topK: 3,
+      returnValues: false,
+      returnMetadata: "indexed",
+      namespace: "ns",
+      filter: { category: { $eq: "faq" }, year: { $gte: 2020, $lt: 2030 }, tag: { $in: ["x", "y"] } },
+    },
+  ]);
+  assert.deepEqual(r.value, [
+    { id: "a", score: 0.9, values: Some([1, 2]), metadata: Some('{"c":"faq"}'), namespace: Some("ns") },
+    { id: "b", score: 0.5, values: None, metadata: None, namespace: None },
+  ]);
+  // No conditions, no filter key.
+  await vz(index).query([1], opts());
+  assert.equal("filter" in index.calls[1].args[1], false);
+});
+
+t("WorkersVectorize.query: a filter the platform cannot take is VectorInvalidInput and no call is made", async () => {
+  const index = fakeIndex();
+  const refused = async (filter) => (await vz(index).query([1], opts({ filter }))).error;
+  for (const filter of [
+    [eq("", metaText("x"))],
+    [eq('a"b', metaText("x"))],
+    [eq("$and", metaText("x"))],
+    [eq("k".repeat(513), metaText("x"))],
+    [eq("f", { tag: "MetaFlag", value: true }), eq("f", metaText("x"))],
+    [range("n", "FilterGt", 1), range("n", "FilterGte", 2)],
+    [{ field: "f", op: { tag: "FilterGt", value: { tag: "MetaFlag", value: true } } }],
+  ]) {
+    assert.equal((await refused(filter)).tag, "VectorInvalidInput");
+  }
+  assert.equal(index.calls.length, 0);
+});
+
+t("WorkersVectorize.getByIds: reads vectors back with values and metadata", async () => {
+  const index = fakeIndex({ getByIds: [{ id: "a", values: new Float32Array([0.5]), metadata: { k: 1 } }] });
+  const got = await vz(index).getByIds(["a"]);
+  assert.deepEqual(got.value, [{ id: "a", values: [0.5], metadata: Some('{"k":1}'), namespace: None }]);
+});
+
+t("WorkersVectorize.deleteByIds: returns the mutation id", async () => {
+  assert.deepEqual(await vz(fakeIndex()).deleteByIds(["a"]), { tag: "Ok", value: { id: "m-3" } });
+});
+
+t("WorkersVectorize.describe: reads the configuration from the top level or under config", async () => {
+  assert.deepEqual(await vz(fakeIndex()).describe(), { tag: "Ok", value: { dimensions: 3, metric: { tag: "Some", value: "cosine" } } });
+  const nested = fakeIndex({ describe: { config: { dimensions: 8, metric: "euclidean" } } });
+  assert.deepEqual((await vz(nested).describe()).value, { dimensions: 8, metric: { tag: "Some", value: "euclidean" } });
+  // The real reply (observed on a real index, #3479) has no metric: `None`.
+  const real = fakeIndex({ describe: { dimensions: 32, vectorCount: 1, processedUpToDatetime: "d", processedUpToMutation: "m" } });
+  assert.deepEqual(await vz(real).describe(), { tag: "Ok", value: { dimensions: 32, metric: { tag: "None" } } });
+  const bare = fakeIndex({ describe: { vectorCount: 1 } });
+  assert.equal((await vz(bare).describe()).error.tag, "VectorFailed");
+});
+
+// #3480: `WorkersAiSearch`, against a fake of Cloudflare's AI Search instance
+// binding. The thrown messages are not documented, so the mapping is pinned
+// against messages of the shapes the binding recognises; the request and reply
+// shapes are the Workers binding page's.
+const chunkOf = (id, extra = {}) => ({
+  id,
+  type: "text",
+  score: 0.8,
+  text: `text ${id}`,
+  item: { key: `docs/${id}.md`, timestamp: 1735689600000, metadata: { lang: "en" } },
+  scoring_details: { vector_score: 0.8 },
+  ...extra,
+});
+function fakeSearch(over = {}) {
+  const calls = [];
+  const rec = (name, reply) => async (...args) => {
+    calls.push({ name, args });
+    if (over[name] instanceof Error) throw over[name];
+    return over[name] ?? reply;
+  };
+  return {
+    calls,
+    search: rec("search", { query_kind: "text", search_query: "q", chunks: [chunkOf("a"), chunkOf("b")] }),
+    chatCompletions: rec("chatCompletions", {
+      id: "c1",
+      object: "chat.completion",
+      model: "m",
+      choices: [{ message: { role: "assistant", content: "Within 30 days." }, finish_reason: "stop" }],
+      usage: { prompt_tokens: 12, completion_tokens: 5, total_tokens: 17 },
+      chunks: [chunkOf("a")],
+    }),
+  };
+}
+const sOpts = (over = {}) => ({
+  maxResults: None,
+  matchThreshold: None,
+  retrieval: None,
+  rewriteQuery: false,
+  rerank: false,
+  filter: [],
+  ...over,
+});
+const as = (instance) => new WorkersAiSearch({ AI_SEARCH_KB: instance }, "AI_SEARCH_KB");
+const userMsg = (content) => ({ role: { tag: "User" }, content });
+
+t("WorkersAiSearch.search: sends the query with no options, leaving the platform defaults", async () => {
+  const instance = fakeSearch();
+  const got = await as(instance).search("refunds", sOpts());
+  assert.deepEqual(instance.calls, [{ name: "search", args: [{ query: "refunds", ai_search_options: {} }] }]);
+  assert.equal(got.tag, "Ok");
+  assert.deepEqual(got.value[0], {
+    id: "a",
+    score: 0.8,
+    text: "text a",
+    key: "docs/a.md",
+    timestamp: Some(1735689600000),
+    metadata: Some('{"lang":"en"}'),
+  });
+});
+
+t("WorkersAiSearch.search: sends each option the author set, with query_rewrite and reranking beside retrieval", async () => {
+  const instance = fakeSearch();
+  await as(instance).search(
+    "q",
+    sOpts({
+      maxResults: Some(5),
+      matchThreshold: Some(0.6),
+      retrieval: Some({ tag: "Keyword" }),
+      rewriteQuery: true,
+      rerank: true,
+      filter: [eq("folder", metaText("docs/")), range("timestamp", "FilterGte", 10), range("timestamp", "FilterLt", 20)],
+    }),
+  );
+  assert.deepEqual(instance.calls[0].args[0].ai_search_options, {
+    retrieval: {
+      max_num_results: 5,
+      match_threshold: 0.6,
+      retrieval_type: "keyword",
+      filters: { folder: { $eq: "docs/" }, timestamp: { $gte: 10, $lt: 20 } },
+    },
+    query_rewrite: { enabled: true },
+    reranking: { enabled: true },
+  });
+});
+
+t("WorkersAiSearch.search: an out-of-range option or an unsendable filter is SearchInvalidInput, and nothing is sent", async () => {
+  const instance = fakeSearch();
+  const refused = async (over) => (await as(instance).search("q", sOpts(over))).error;
+  for (const over of [
+    { maxResults: Some(0) },
+    { maxResults: Some(51) },
+    { matchThreshold: Some(1.5) },
+    { matchThreshold: Some(-0.1) },
+    { filter: [eq("", metaText("x"))] },
+    { filter: [eq("$and", metaText("x"))] },
+    { filter: [eq("k".repeat(513), metaText("x"))] },
+    { filter: [eq("f", { tag: "MetaFlag", value: true }), eq("f", metaText("x"))] },
+    { filter: [range("n", "FilterGt", 1), range("n", "FilterGte", 2)] },
+    { filter: [{ field: "f", op: { tag: "FilterLt", value: { tag: "MetaFlag", value: true } } }] },
+  ]) {
+    assert.equal((await refused(over)).tag, "SearchInvalidInput");
+  }
+  assert.equal(instance.calls.length, 0);
+});
+
+t("WorkersAiSearch.search: a filter's every operator takes the platform's $ spelling", async () => {
+  const instance = fakeSearch();
+  const op = (tag, value) => ({ field: "k", op: Array.isArray(value) ? { tag, values: value } : { tag, value } });
+  const sent = async (condition) => {
+    instance.calls.length = 0;
+    await as(instance).search("q", sOpts({ filter: [condition] }));
+    return instance.calls[0].args[0].ai_search_options.retrieval.filters.k;
+  };
+  assert.deepEqual(await sent(op("FilterNe", metaText("x"))), { $ne: "x" });
+  assert.deepEqual(await sent(op("FilterAnyOf", [metaText("a"), metaText("b")])), { $in: ["a", "b"] });
+  assert.deepEqual(await sent(op("FilterNoneOf", [metaNum(1)])), { $nin: [1] });
+  assert.deepEqual(await sent(op("FilterEq", { tag: "MetaFlag", value: true })), { $eq: true });
+});
+
+t("WorkersAiSearch.search: a query against an empty index is an empty list", async () => {
+  assert.deepEqual(await as(fakeSearch({ search: { chunks: [] } })).search("q", sOpts()), { tag: "Ok", value: [] });
+});
+
+t("WorkersAiSearch.search: a reply that is not the documented shape is SearchFailed, never a fault", async () => {
+  for (const reply of [42, "text", {}, { chunks: "no" }, { chunks: [{ id: "a" }] }, { chunks: [chunkOf("a", { item: {} })] }]) {
+    const got = await as(fakeSearch({ search: reply })).search("q", sOpts());
+    assert.equal(got.error.tag, "SearchFailed");
+    assert.match(got.error.message, /^unexpected reply from AI Search: /);
+  }
+});
+
+t("WorkersAiSearch.search: an item without a timestamp or metadata gives None", async () => {
+  const bare = chunkOf("a", { item: { key: "docs/a.md" } });
+  const got = await as(fakeSearch({ search: { chunks: [bare] } })).search("q", sOpts());
+  assert.deepEqual(got.value[0], { id: "a", score: 0.8, text: "text a", key: "docs/a.md", timestamp: None, metadata: None });
+});
+
+t("WorkersAiSearch.search: the platform's refusals map by message, and anything else is SearchFailed", async () => {
+  const failing = (message) => as(fakeSearch({ search: new Error(message) })).search("q", sOpts());
+  assert.equal((await failing("Rate limit exceeded")).error.tag, "SearchRateLimited");
+  assert.equal((await failing("429 Too Many Requests")).error.tag, "SearchRateLimited");
+  assert.equal((await failing("You have exceeded your usage quota")).error.tag, "SearchQuotaExceeded");
+  assert.deepEqual((await failing("invalid filter: unknown operator")).error, {
+    tag: "SearchInvalidInput",
+    message: "invalid filter: unknown operator",
+  });
+  assert.deepEqual((await failing("something new")).error, { tag: "SearchFailed", message: "something new" });
+});
+
+t("WorkersAiSearch.search: a message about something else of the instance stays a value, not a fault", async () => {
+  const failing = (message) => as(fakeSearch({ search: new Error(message) })).search("q", sOpts());
+  for (const message of [
+    "The generation model configured for instance support-docs was not found",
+    "instance support-docs: source bucket not found",
+  ]) {
+    assert.deepEqual((await failing(message)).error, { tag: "SearchFailed", message });
+  }
+  // An auth or upstream problem is not a malformed request.
+  for (const message of ["Invalid API token", "invalid binding", "invalid response from upstream", "API token must have the AI Search: Run permission"]) {
+    assert.equal((await failing(message)).error.tag, "SearchFailed", message);
+  }
+  assert.equal((await failing("invalid filter: unknown operator")).error.tag, "SearchInvalidInput");
+  // The platform's own messages for an empty query and an empty message, as
+  // observed on a real instance (#3480).
+  for (const message of [
+    "AiSearchError: Too small: expected string to have >=1 characters",
+    "AiSearchError: All user messages must have non-empty content",
+  ]) {
+    assert.deepEqual((await failing(message)).error, { tag: "SearchInvalidInput", message });
+  }
+});
+
+t("WorkersAiSearch.search: an instance that is not there is a fault, as is a missing binding", async () => {
+  await assert.rejects(as(fakeSearch({ search: new Error("Instance support-docs not found") })).search("q", sOpts()), /not found/);
+  await assert.rejects(as(fakeSearch({ search: new Error("instance `support-docs` does not exist") })).search("q", sOpts()), /does not exist/);
+  await assert.rejects(as(fakeSearch({ search: new Error("No such instance") })).search("q", sOpts()), /No such instance/);
+  await assert.rejects(new WorkersAiSearch({}, "AI_SEARCH_KB").search("q", sOpts()), /requires an AI Search binding/);
+});
+
+t("WorkersAiSearch.answer: sends the conversation and returns the text, the chunks and the usage", async () => {
+  const instance = fakeSearch();
+  const got = await as(instance).answer([{ role: { tag: "System" }, content: "Be brief." }, userMsg("refunds?")], sOpts({ maxResults: Some(3) }));
+  assert.deepEqual(instance.calls[0].args[0], {
+    messages: [
+      { role: "system", content: "Be brief." },
+      { role: "user", content: "refunds?" },
+    ],
+    ai_search_options: { retrieval: { max_num_results: 3 } },
+  });
+  assert.equal(got.tag, "Ok");
+  assert.equal(got.value.text, "Within 30 days.");
+  assert.equal(got.value.hits.length, 1);
+  assert.deepEqual(got.value.usage, Some({ promptTokens: 12, completionTokens: 5 }));
+});
+
+t("WorkersAiSearch.answer: a reply with no usage or chunks still answers", async () => {
+  const reply = { choices: [{ message: { role: "assistant", content: "ok" } }] };
+  assert.deepEqual(await as(fakeSearch({ chatCompletions: reply })).answer([userMsg("q")], sOpts()), {
+    tag: "Ok",
+    value: { text: "ok", hits: [], usage: None },
+  });
+});
+
+t("WorkersAiSearch.answer: a reply that is not the documented shape is SearchFailed, never a fault", async () => {
+  for (const reply of [42, {}, { choices: [] }, { choices: [{ message: { content: 7 } }] }, { choices: [{ message: { content: "x" } }], chunks: "no" }]) {
+    const got = await as(fakeSearch({ chatCompletions: reply })).answer([userMsg("q")], sOpts());
+    assert.equal(got.error.tag, "SearchFailed");
+    assert.match(got.error.message, /^unexpected reply from AI Search: /);
+  }
+});
+
+t("WorkersAiSearch.answer: an empty conversation is a fault, and a bad option is refused before the call", async () => {
+  const instance = fakeSearch();
+  await assert.rejects(as(instance).answer([], sOpts()), /needs at least one message/);
+  assert.equal((await as(instance).answer([userMsg("q")], sOpts({ maxResults: Some(99) }))).error.tag, "SearchInvalidInput");
+  assert.equal(instance.calls.length, 0);
+});
+
+t("WorkersAiSearch.answer: the platform's refusals map as for search", async () => {
+  const failing = (message) => as(fakeSearch({ chatCompletions: new Error(message) })).answer([userMsg("q")], sOpts());
+  assert.equal((await failing("rate limited")).error.tag, "SearchRateLimited");
+  assert.equal((await failing("boom")).error.tag, "SearchFailed");
+});
+
+// #3479: `bynk dev` binds a Vectorize to an index of the developer's own.
+t("WorkersVectorize: under bynk dev, warns once unless acknowledged, and never in a deployment", async () => {
+  const warnings = [];
+  const original = console.warn;
+  console.warn = (...args) => warnings.push(args.join(" "));
+  try {
+    const run = async (env) => new WorkersVectorize({ VECTORIZE_DOCS: fakeIndex(), ...env }, "VECTORIZE_DOCS").describe();
+    assert.equal((await run({})).tag, "Ok");
+    assert.equal((await run({ BYNK_DEV: "1", BYNK_DEV_ACK_VECTORIZE: "allow" })).tag, "Ok");
+    assert.deepEqual(warnings, []);
+    assert.equal((await run({ BYNK_DEV: "1" })).tag, "Ok");
+    assert.equal(warnings.length, 1);
+    assert.match(warnings[0], /may incur charges/);
+    assert.match(warnings[0], /https:\/\/developers\.cloudflare\.com\/vectorize\/platform\/pricing\//);
+    assert.match(warnings[0], /vectorize = "allow"/);
+    assert.doesNotMatch(warnings[0], /\$|free/i);
+    assert.equal((await run({ BYNK_DEV: "1" })).tag, "Ok");
+    assert.equal(warnings.length, 1);
+  } finally {
+    console.warn = original;
+  }
+});
+
+t("WorkersVectorize: an instance with no development index faults, saying how to bind one", async () => {
+  const unbound = new WorkersVectorize({ BYNK_DEV: "1" }, "VECTORIZE_MY_DOCS");
+  await assert.rejects(() => unbound.describe(), /`MyDocs` has no development index: set `\[dev\.vectorize-index\] MyDocs = "<index-name>"`/);
+});
+
+t("WorkersVectorize: the first call under bynk dev checks the index against the declaration", async () => {
+  const env = (index, declared) => ({ VECTORIZE_DOCS: index, BYNK_DEV: "1", BYNK_DEV_ACK_VECTORIZE: "allow", BYNK_DEV_INDEX_VECTORIZE_DOCS: declared });
+  // A wrong index faults, on every call until it is right.
+  const wrong = fakeIndex({ describe: { dimensions: 8, metric: "cosine" } });
+  const bad = new WorkersVectorize(env(wrong, "3:cosine"), "VECTORIZE_DOCS");
+  await assert.rejects(() => bad.query([0, 0, 0], opts()), /has 8 dimensions and the cosine metric, but the declaration says 3 and cosine/);
+  await assert.rejects(() => bad.upsert([vec("a")]), /declaration says 3 and cosine/);
+  assert.equal(wrong.calls.filter((c) => c.name === "query" || c.name === "upsert").length, 0);
+  // An index that cannot be reached faults, naming that bynk dev never creates one.
+  const gone = fakeIndex({ describe: new Error("index not found") });
+  await assert.rejects(() => new WorkersVectorize(env(gone, "3:cosine"), "VECTORIZE_DOCS").getByIds(["a"]), /could not reach the development index.*never creates one/);
+  // A matching index is checked once, then the call goes ahead.
+  const good = fakeIndex({ describe: { config: { dimensions: 3, metric: "cosine" } } });
+  const ok = new WorkersVectorize(env(good, "3:cosine"), "VECTORIZE_DOCS");
+  assert.equal((await ok.upsert([vec("a")])).tag, "Ok");
+  assert.equal((await ok.deleteByIds(["a"])).tag, "Ok");
+  assert.equal(good.calls.filter((c) => c.name === "describe").length, 1);
+  // The check's own describe is reused by a first `describe()` call: one platform call, not two.
+  const once = fakeIndex({ describe: { dimensions: 3, metric: "cosine" } });
+  const first = new WorkersVectorize({ ...env(once, "3:cosine"), BYNK_DEV_INDEX_VECTORIZE_DOCS: "3:cosine" }, "VECTORIZE_DOCS");
+  assert.deepEqual((await first.describe()).value, { dimensions: 3, metric: { tag: "Some", value: "cosine" } });
+  assert.equal(once.calls.filter((c) => c.name === "describe").length, 1);
+  // A real `describe()` reports no metric: only the dimensions are compared, and the call goes ahead.
+  // (Each uses its own binding: a passed check is remembered per binding.)
+  const named = (binding, index, declared) => ({ [binding]: index, BYNK_DEV: "1", BYNK_DEV_ACK_VECTORIZE: "allow", [`BYNK_DEV_INDEX_${binding}`]: declared });
+  const real = fakeIndex({ describe: { dimensions: 3, vectorCount: 0, processedUpToMutation: "m" } });
+  const live = new WorkersVectorize(named("VECTORIZE_REAL", real, "3:cosine"), "VECTORIZE_REAL");
+  assert.equal((await live.upsert([vec("a")])).tag, "Ok");
+  const realWrong = new WorkersVectorize(named("VECTORIZE_REALWRONG", fakeIndex({ describe: { dimensions: 8, vectorCount: 0 } }), "3:cosine"), "VECTORIZE_REALWRONG");
+  await assert.rejects(() => realWrong.upsert([vec("a")]), /has 8 dimensions, but the declaration says 3;/);
+  // Not under bynk dev (a deployment, or bynk test): no check at all.
+  const plain = fakeIndex({ describe: { dimensions: 99, metric: "euclidean" } });
+  assert.equal((await new WorkersVectorize({ VECTORIZE_DOCS: plain }, "VECTORIZE_DOCS").upsert([vec("a")])).tag, "Ok");
+  assert.equal(plain.calls.filter((c) => c.name === "describe").length, 0);
+});
+
+// #3480: AI Search is a remote-only binding of its own kind: its warning is
+// keyed `ai-search`, acknowledged by its own variable (not Workers AI's), once
+// per session, never in a deployment, and links to Cloudflare, not a price.
+t("WorkersAiSearch.search: warns once under bynk dev unless the project acknowledged ai-search, and never in a deployment", async () => {
+  const warnings = [];
+  const original = console.warn;
+  console.warn = (...args) => warnings.push(args.join(" "));
+  try {
+    const run = async (env) => new WorkersAiSearch({ AI_SEARCH_KB: fakeSearch(), ...env }, "AI_SEARCH_KB").search("q", sOpts());
+    assert.equal((await run({})).tag, "Ok");
+    assert.deepEqual(warnings, []);
+    // Workers AI's acknowledgement does not cover AI Search.
+    assert.equal((await run({ BYNK_DEV: "1", BYNK_DEV_ACK_AI: "allow" })).tag, "Ok");
+    assert.equal(warnings.length, 1);
+    assert.match(warnings[0], /may incur charges/);
+    assert.match(warnings[0], /https:\/\/developers\.cloudflare\.com\/ai-search\//);
+    assert.match(warnings[0], /ai-search = "allow"/);
+    assert.doesNotMatch(warnings[0], /\$|free/i);
+    // Once per session: a second call, even with no acknowledgement, is quiet.
+    assert.equal((await run({ BYNK_DEV: "1" })).tag, "Ok");
+    assert.equal(warnings.length, 1);
+  } finally {
+    console.warn = original;
+  }
+});
+
+t("WorkersAiSearch.answer: an acknowledged project is never warned", async () => {
+  const warnings = [];
+  const original = console.warn;
+  console.warn = (...args) => warnings.push(args.join(" "));
+  try {
+    const instance = new WorkersAiSearch({ AI_SEARCH_KB: fakeSearch(), BYNK_DEV: "1", BYNK_DEV_ACK_AI_SEARCH: "allow" }, "AI_SEARCH_KB");
+    assert.equal((await instance.answer([userMsg("q")], sOpts())).tag, "Ok");
+    assert.deepEqual(warnings, []);
+  } finally {
+    console.warn = original;
+  }
+});
+
+// #3479: `upsertValue[M]` arrives boundary-encoded, with an `Option` as `{ kind }`.
+t("WorkersVectorize.upsertValue: sends what upsert sends, from the call site's encoding", async () => {
+  const index = fakeIndex();
+  const wire = [
+    { id: "a", values: [0.1, 0.2], metadata: { kind: "Some", value: { category: "faq", year: 2026 } }, namespace: { kind: "Some", value: "ns" } },
+    { id: "b", values: [0.3, 0.4], metadata: { kind: "None" }, namespace: { kind: "None" } },
+  ];
+  assert.deepEqual(await vz(index).upsertValue(wire), { tag: "Ok", value: { id: "m-1" } });
+  const sent = index.calls[0];
+  assert.equal(sent.name, "upsert");
+  assert.deepEqual(sent.args[0], [
+    { id: "a", values: [0.1, 0.2], namespace: "ns", metadata: { category: "faq", year: 2026 } },
+    { id: "b", values: [0.3, 0.4] },
+  ]);
+  // The same platform call `upsert` makes for the same vectors.
+  const plain = fakeIndex();
+  await vz(plain).upsert([vec("a", { values: [0.1, 0.2], metadata: Some('{"category":"faq","year":2026}'), namespace: Some("ns") }), vec("b", { values: [0.3, 0.4] })]);
+  assert.deepEqual(plain.calls[0].args[0], sent.args[0]);
+});
+
+t("WorkersVectorize.upsertValue: metadata that is not a JSON object faults, as upsert's does", async () => {
+  const index = fakeIndex();
+  const wire = [{ id: "a", values: [0.1], metadata: { kind: "Some", value: "just text" }, namespace: { kind: "None" } }];
+  await assert.rejects(() => vz(index).upsertValue(wire), /must be a JSON object/);
+  assert.equal(index.calls.length, 0);
+});
+
+// #3477: `WorkersContainer`, against a fake of the Durable Object namespace the
+// generated class sits behind. The class itself (starting the container) is
+// tested in the runtime; here only what the provider sends and how it reads the
+// class's answer.
+function fakeContainerNs(answer) {
+  const seen = [];
+  return {
+    seen,
+    idFromName: (name) => `id:${name}`,
+    get: (id) => ({
+      fetch: async (request) => {
+        seen.push({ id, url: request.url, method: request.method, body: await request.text() });
+        return answer(request);
+      },
+    }),
+  };
+}
+const creq = (over = {}) => ({ method: { tag: "Post" }, url: "http://renderer/render", contentType: Some("text/plain"), authorization: None, headers: new Map(), body: Some("hello"), ...over });
+const cont = (ns) => new WorkersContainer({ CONTAINER_RENDERER: ns }, "CONTAINER_RENDERER");
+
+t("WorkersContainer.send: reaches the named instance and returns the container's response", async () => {
+  const ns = fakeContainerNs(() => new Response("<svg/>", { status: 201 }));
+  const r = await cont(ns).send("tenant-a", creq());
+  assert.equal(r.tag, "Ok");
+  assert.equal(r.value.status, 201);
+  assert.equal(r.value.body, "<svg/>");
+  assert.deepEqual(ns.seen, [{ id: "id:tenant-a", url: "http://renderer/render", method: "POST", body: "hello" }]);
+});
+
+t("WorkersContainer.receiveBytes and sendBytes: bytes both ways", async () => {
+  const ns = fakeContainerNs(() => new Response(new Uint8Array([1, 2, 3])));
+  const got = await cont(ns).receiveBytes("a", creq({ method: { tag: "Get" }, body: None }));
+  assert.deepEqual([...got.value.body], [1, 2, 3]);
+  const sent = await cont(ns).sendBytes("a", creq({ body: None }), new Uint8Array([9, 8]));
+  assert.equal(sent.tag, "Ok");
+  assert.equal(ns.seen[1].body, "\u0009\u0008");
+});
+
+t("WorkersContainer: a 5xx from the container is its answer, not an error", async () => {
+  const r = await cont(fakeContainerNs(() => new Response("boom", { status: 503 }))).send("a", creq());
+  assert.equal(r.tag, "Ok");
+  assert.equal(r.value.status, 503);
+});
+
+t("WorkersContainer: an error the generated class reports is a ContainerError value", async () => {
+  const reply = (kind) => () => new Response("the port never listened", { status: 502, headers: { "bynk-container-error": kind } });
+  assert.deepEqual((await cont(fakeContainerNs(reply("start-failed"))).send("a", creq())).error, { tag: "StartFailed", message: "the port never listened" });
+  assert.deepEqual((await cont(fakeContainerNs(reply("unavailable"))).send("a", creq())).error, { tag: "Unavailable" });
+  assert.deepEqual((await cont(fakeContainerNs(reply("timeout"))).send("a", creq())).error, { tag: "Timeout" });
+  assert.deepEqual((await cont(fakeContainerNs(reply("other"))).send("a", creq())).error, { tag: "Network" });
+});
+
+t("WorkersContainer: a failed call is Network", async () => {
+  const r = await cont(fakeContainerNs(() => { throw new Error("socket closed"); })).send("a", creq());
+  assert.deepEqual(r.error, { tag: "Network" });
+});
+
+t("WorkersContainer: a bad instance name, a refused request or a missing binding faults", async () => {
+  const ns = fakeContainerNs(() => new Response("x"));
+  for (const bad of ["", "a".repeat(257), "a\nb", "a\u0000b"]) {
+    await assert.rejects(() => cont(ns).send(bad, creq()), /an instance name is 1 to 256 bytes/);
+  }
+  await assert.rejects(() => cont(ns).send("a", creq({ headers: new Map([["host", "x"]]) })), /not one the platform can send/);
+  await assert.rejects(() => cont(ns).send("a", creq({ method: { tag: "Get" } })), /not one the platform can send/);
+  await assert.rejects(() => new WorkersContainer({}, "CONTAINER_RENDERER").send("a", creq()), /\[\[containers\]\]/);
+  assert.equal(ns.seen.length, 0);
+});
+
+t("WorkersContainer: a response cannot forge a ContainerError without the header, and the header is the class's", async () => {
+  const r = await cont(fakeContainerNs(() => new Response("StartFailed", { status: 500 }))).send("a", creq());
+  assert.equal(r.tag, "Ok");
+});
+
+t("WorkersContainer: a fault the class reports (`bynk dev` without Docker) is thrown, not returned", async () => {
+  const ns = fakeContainerNs(
+    () => new Response("the container `Renderer` is not running because Docker is not available", { status: 500, headers: { "bynk-container-fault": "docker" } }),
+  );
+  await assert.rejects(() => cont(ns).send("a", creq()), /Container\.send: .*Docker is not available/);
+  await assert.rejects(() => cont(ns).receiveBytes("a", creq({ method: { tag: "Get" }, body: None })), /Docker/);
+});
+
+// #3589: the integration doubles' "not stubbed" fault (marked `bynkNotStubbed`)
+// must fault the case. Each binding below is driven against the real double,
+// and a binding that catches platform failures as `Err` must not catch it.
+t("WorkersAi: an unstubbed integration double faults every operation, never an Err", async () => {
+  const ai = new WorkersAi({ AI: __makeIntegrationAi() });
+  const notStubbed = /`Ai` binding is not stubbed/;
+  await assert.rejects(ai.run("@cf/x/y", "{}"), notStubbed);
+  await assert.rejects(ai.generate("@cf/x/y", { messages: [chat("User", "hi")], maxTokens: None, temperature: None, topP: None, seed: None }), notStubbed);
+  await assert.rejects(ai.embed("@cf/x/y", ["a"]), notStubbed);
+  await assert.rejects(ai.runStream("@cf/x/y", "{}"), notStubbed);
+});
+
+t("WorkersAnalyticsSql: an unstubbed integration double faults the query, never an Err", async () => {
+  const sql = new WorkersAnalyticsSql({ CF_ANALYTICS_SQL: __makeIntegrationAnalyticsSql() });
+  await assert.rejects(sql.query("SELECT 1", []), /`AnalyticsSql` binding is not stubbed/);
+});
+
+t("WorkersAiSearch: an unstubbed integration double faults search and answer, never an Err", async () => {
+  const instance = new WorkersAiSearch({ AI_SEARCH_KB: __makeIntegrationAiSearch("AI_SEARCH_KB") }, "AI_SEARCH_KB");
+  await assert.rejects(instance.search("q", sOpts()), /`AI_SEARCH_KB` AI Search binding is not stubbed/);
+  await assert.rejects(instance.answer([userMsg("q")], sOpts()), /`AI_SEARCH_KB` AI Search binding is not stubbed/);
+});
+
+t("WorkersContainer: an unstubbed integration double faults send and receiveBytes, never an Err", async () => {
+  const c = new WorkersContainer({ CONTAINER_RENDERER: __makeIntegrationContainer("CONTAINER_RENDERER") }, "CONTAINER_RENDERER");
+  await assert.rejects(c.send("a", creq()), /container `a` is not stubbed/);
+  await assert.rejects(c.receiveBytes("a", creq({ method: { tag: "Get" }, body: None })), /container `a` is not stubbed/);
+});
+
+t("WorkersStoredSecret, WorkersPostgres and WorkersMySql: an unstubbed integration double faults", async () => {
+  const env = { SECRET_K: __makeIntegrationSecretsStoreSecret("SECRET_K"), HYPERDRIVE_MAIN: __makeIntegrationHyperdrive("HYPERDRIVE_MAIN") };
+  await assert.rejects(new WorkersStoredSecret(env, "SECRET_K").get(), /`SECRET_K` has no value in a test/);
+  await assert.rejects(new WorkersPostgres(env, "HYPERDRIVE_MAIN", async () => assert.fail("not reached")).all("select 1", []), /Hyperdrive binding `HYPERDRIVE_MAIN` has no database/);
+  await assert.rejects(new WorkersMySql(env, "HYPERDRIVE_MAIN", async () => assert.fail("not reached")).all("select 1", []), /Hyperdrive binding `HYPERDRIVE_MAIN` has no database/);
+});
+
+t("WorkersImages: an unstubbed integration double faults transform and info, never an Err", async () => {
+  const images = new WorkersImages({ IMAGES: __makeIntegrationImages() });
+  await assert.rejects(images.transform(IMG, imgOpts(), outOpts()), /`Images` binding is not stubbed/);
+  await assert.rejects(images.info(IMG), /`Images` binding is not stubbed/);
+});
+
+t("WorkersMtls: an unstubbed integration double faults send, never an Err", async () => {
+  const m = new WorkersMtls({ MTLS_BACKEND: __makeIntegrationMtls("Backend") }, "MTLS_BACKEND");
+  await assert.rejects(m.send(creq()), /`Backend.send` is not stubbed/);
 });

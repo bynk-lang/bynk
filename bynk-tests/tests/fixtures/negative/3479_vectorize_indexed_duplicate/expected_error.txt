@@ -1,0 +1,2 @@
+bynk.capability.invalid_option
+is listed twice

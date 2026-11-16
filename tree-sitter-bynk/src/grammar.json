@@ -7022,10 +7022,6 @@
         },
         {
           "type": "SYMBOL",
-          "name": "effect_send_stmt"
-        },
-        {
-          "type": "SYMBOL",
           "name": "do_stmt"
         },
         {
@@ -7729,23 +7725,6 @@
         }
       }
     },
-    "effect_send_stmt": {
-      "type": "SEQ",
-      "members": [
-        {
-          "type": "STRING",
-          "value": "~>"
-        },
-        {
-          "type": "FIELD",
-          "name": "value",
-          "content": {
-            "type": "SYMBOL",
-            "name": "_expression"
-          }
-        }
-      ]
-    },
     "do_stmt": {
       "type": "SEQ",
       "members": [
@@ -7860,10 +7839,6 @@
         {
           "type": "SYMBOL",
           "name": "effect_let_stmt"
-        },
-        {
-          "type": "SYMBOL",
-          "name": "effect_send_stmt"
         },
         {
           "type": "SYMBOL",

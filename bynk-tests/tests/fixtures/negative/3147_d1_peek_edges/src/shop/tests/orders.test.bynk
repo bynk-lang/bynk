@@ -1,0 +1,27 @@
+suite shop.orders as system
+
+const WIPE: String = "DELETE FROM orders WHERE owner = ?1"
+
+case "a write in any spelling is refused" {
+  let db = D1.peek(shop.orders.Orders)
+  let a <- db.all(WIPE, [Text("bob")])
+  let b <- db.all("WITH o AS (SELECT id FROM orders) DELETE FROM orders WHERE id IN (SELECT id FROM o) AND owner = ?1", [Text("bob")])
+  let c <- db.all("INSERT INTO orders (id, owner, qty) VALUES ('x', ?1, 1) RETURNING id", [Text("bob")])
+  let d <- db.firstAs[Order]("FROM orders WHERE owner = ?1; DELETE FROM orders", [Text("bob")])
+  let ok <- db.select[Order]("FROM orders WHERE owner = ?1", [Text("bob")])
+  expect ok is Ok(_)
+}
+
+case "a handle is its binding's" {
+  let db = D1.peek(shop.orders.Orders)
+  let xs = [1, 2]
+  let m = xs.map((db) => db.first("SELECT 1", [Text("x")]))
+  let copy = db
+  let r <- copy.all("SELECT id FROM orders WHERE owner = ?1", [Text("bob")])
+  expect r is Ok(_)
+}
+
+case "a handle is bound by let" {
+  let r <- D1.peek(shop.orders.Orders).all("SELECT id FROM orders WHERE owner = ?1", [Text("bob")])
+  expect r is Ok(_)
+}

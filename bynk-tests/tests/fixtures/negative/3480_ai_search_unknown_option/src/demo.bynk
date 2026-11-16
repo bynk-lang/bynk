@@ -1,0 +1,7 @@
+context demo
+
+// #3480: an option the kind does not have (the generation model is the instance's setting).
+
+consumes bynk.cloudflare { AiSearch }
+
+capability Kb = AiSearch @instance("support-docs") @model("x")

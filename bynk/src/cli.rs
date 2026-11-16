@@ -21,6 +21,34 @@ pub struct Cli {
     pub command: Command,
 }
 
+/// The flags of `bynk eval` (#3585).
+#[derive(clap::Args, Debug, Clone)]
+pub struct EvalCommand {
+    /// Project directory. Defaults to the current directory.
+    #[arg(default_value = ".")]
+    pub input: PathBuf,
+    /// The unit (a `commons` or `context`, by dotted name) whose scope the
+    /// snippet is evaluated in.
+    #[arg(long)]
+    pub unit: String,
+    /// The snippet. When absent it is read from stdin.
+    #[arg(long)]
+    pub expr: Option<String>,
+    /// Evaluate against the unsaved buffers given as JSON on stdin, as
+    /// `bynk compile --sources-stdin` does: `{ "<absolute path>": "<text>" }`.
+    /// Stdin then holds the buffers, so the snippet must be `--expr`.
+    #[arg(long)]
+    pub sources_stdin: bool,
+    /// Build `--unit`'s own suite in, and evaluate the snippet inside it, so the
+    /// suite's `stub`s, `fn`s and fixtures apply. The value must be the unit
+    /// named by `--unit`. By default the project's own suites are left out.
+    #[arg(long, value_name = "UNIT")]
+    pub suite: Option<String>,
+    /// Kill the evaluation after this many seconds and report it timed out.
+    #[arg(long, value_name = "SECONDS", default_value_t = crate::eval::default_timeout_secs(), value_parser = clap::value_parser!(u64).range(1..))]
+    pub timeout: u64,
+}
+
 /// The headings `bynk --help` sorts its subcommands under, in order. clap has
 /// no subcommand headings of its own, so [`command`] renders this listing into
 /// the help template; every visible subcommand must appear exactly once.
@@ -28,7 +56,7 @@ pub const COMMAND_GROUPS: &[(&str, &[&str])] = &[
     (
         "Project",
         &[
-            "new", "check", "fmt", "test", "build", "compile", "openapi", "token",
+            "new", "check", "fmt", "test", "eval", "build", "compile", "openapi", "client", "token",
         ],
     ),
     (
@@ -128,7 +156,12 @@ pub enum Command {
     /// the running workers hot-reload; a failing rebuild reports errors and
     /// keeps serving the last good build. Everything after `--` is forwarded to
     /// `wrangler dev` verbatim.
+    ///
+    /// `bynk dev inspect` reads a running session (#3581): see its help.
+    #[command(args_conflicts_with_subcommands = true)]
     Dev {
+        #[command(subcommand)]
+        sub: Option<DevSub>,
         /// Project directory to serve from (anywhere inside the project; the
         /// root is found by walking up for `bynk.toml`). Defaults to `.`.
         #[arg(default_value = ".")]
@@ -188,17 +221,8 @@ pub enum Command {
         /// removed when the session stops.
         #[arg(long, value_name = "FILE")]
         ready_json: Option<PathBuf>,
-        /// With `--format json`, also write each line a worker prints as a
-        /// `log` event (`context`, `level`, `text`), so an editor can show the
-        /// workers' logs per context and level. Implies `--rewrite-frames`.
-        #[arg(long, requires = "format")]
-        log_events: bool,
-        /// Rewrite stack frames in the workers' output to `.bynk` locations
-        /// even on a terminal. Off a terminal (an editor task, CI) it is
-        /// always done; on one, wrangler's output is left attached so its
-        /// colour and hotkeys keep working.
-        #[arg(long)]
-        rewrite_frames: bool,
+        #[command(flatten)]
+        stream: DevStreamArgs,
         /// Arguments after `--`, forwarded to `wrangler dev` (e.g. `-- --remote`).
         /// Ports are the driver's to allocate: use `--base-port` / `--inspect-port`.
         #[arg(last = true)]
@@ -352,9 +376,18 @@ pub enum Command {
         /// "fix all" applies, repeated until none remain. Writes only files
         /// that change, does not format, and writes nothing if applying the
         /// fixes would leave a problem that needs a human. What remains is
-        /// reported as usual.
-        #[arg(long)]
-        fix: bool,
+        /// reported as usual. `--fix=<code>[,<code>…]` takes only the fixes of
+        /// the named diagnostic codes (a hint's too, when named): for a single
+        /// migration, such as an upgrade note's one change. An unknown code is
+        /// an error that names the nearest real one (#3537).
+        #[arg(
+            long,
+            value_name = "CODE",
+            num_args = 0..,
+            require_equals = true,
+            value_delimiter = ','
+        )]
+        fix: Option<Vec<String>>,
         /// After a passing check, generate the Workers TypeScript into a
         /// temporary directory and type-check it with `tsc` (#3068). A failure
         /// is reported as `bynk.codegen.tsc_failed` at the Bynk source the
@@ -437,6 +470,51 @@ pub enum Command {
         /// Compile the unsaved buffers given as JSON on stdin (see above).
         #[arg(long)]
         sources_stdin: bool,
+        #[command(flatten)]
+        lock: LockArgs,
+    },
+    /// Write a typed TypeScript client for the HTTP services.
+    ///
+    /// One module a front end (SvelteKit, Next.js, anything that can `fetch`)
+    /// imports (#3508): one function per `from http` route, the boundary types as
+    /// TypeScript types, and the same refinement checks the server runs, on the
+    /// way out and on the way in. Each call returns a union of the route's own
+    /// responses keyed by `status`, or a `CallFailure`; nothing is thrown for an
+    /// HTTP status. An optional value is `T | null`.
+    ///
+    /// The module carries a small browser-safe runtime, so it needs nothing
+    /// installed. Pass it your own `fetch`, a `baseUrl` and `headers`:
+    /// `createClient({ baseUrl, fetch, headers })`. Writes to stdout unless
+    /// `--out` is given. The project must check clean. Experimental: member names
+    /// may change in a minor version until it is stabilised.
+    ///
+    /// Routes the client cannot represent yet (raw bodies, raw and streamed
+    /// responses) are named on stderr and left out. `bynk openapi` is the language-neutral contract and stays.
+    Client {
+        /// Project directory (or any path inside it). Defaults to the current
+        /// directory.
+        #[arg(default_value = ".")]
+        input: PathBuf,
+        /// Write the client to PATH instead of stdout: a `.ts` file, or with
+        /// `--layout dir` a directory. Defaults to `[build.client]` `out` in
+        /// bynk.toml.
+        #[arg(short, long)]
+        out: Option<PathBuf>,
+        /// Generate only this `from http` service (`Name` or `unit.Name`); may be
+        /// given more than once. Defaults to `[build.client]` `service`, else every
+        /// one.
+        #[arg(long)]
+        service: Vec<String>,
+        /// `file` (default) writes one module; `dir` writes `index.ts`,
+        /// `types.ts`, `codecs.ts` and `runtime.ts` into `--out`. Defaults to
+        /// `[build.client]` `layout`.
+        #[arg(long, value_enum)]
+        layout: Option<ClientLayoutArg>,
+        /// Write nothing: compare the client at `--out` with the one the project
+        /// generates, and exit non-zero, naming where they differ, when it is
+        /// stale or missing. The CI drift gate.
+        #[arg(long)]
+        check: bool,
         #[command(flatten)]
         lock: LockArgs,
     },
@@ -552,6 +630,31 @@ pub enum Command {
     Test {
         #[command(flatten)]
         args: Box<bynk_driver::test_runner::TestArgs>,
+        #[command(flatten)]
+        lock: LockArgs,
+    },
+    /// Evaluate a snippet in a unit's scope; print its value.
+    ///
+    /// Compiles and runs the snippet as a synthetic test case in a suite for
+    /// `--unit`, under the test runtime, and prints
+    /// `{"value": <wire shape>, "type": "…", "diagnostics": […]}` (#3585). The
+    /// snippet is `--expr`, or stdin; its last expression is the value. Leading
+    /// `consumes` and `stub` lines belong to the suite, so a snippet that uses
+    /// another unit `consumes` it, as a suite does. A capability the snippet
+    /// calls needs a `stub`; nothing reaches the network. Each evaluation is
+    /// independent: send earlier cells' `let`s again ahead of the snippet.
+    ///
+    /// The project's own suites are left out of the build, so a suite that does
+    /// not compile cannot block an evaluation. `--suite <UNIT>` builds `--unit`'s
+    /// own suite in and puts the snippet inside it, so the suite's `stub`s
+    /// and `fn`s apply; its errors are then reported.
+    ///
+    /// Runs in-process, with the build and runner of `bynk test`; requires
+    /// `tsc` (with Node.js) or `tsx` on PATH. The exit status is zero only when
+    /// there is a value.
+    Eval {
+        #[command(flatten)]
+        args: EvalCommand,
         #[command(flatten)]
         lock: LockArgs,
     },
@@ -993,6 +1096,91 @@ pub fn doctor_options(only: Option<CapabilityArg>, strict: bool) -> DoctorOption
     }
 }
 
+/// What `bynk dev` can do besides serve (#3581).
+#[derive(Subcommand, Debug)]
+pub enum DevSub {
+    /// Read what a running `bynk dev` session holds. Prints JSON on stdout.
+    ///
+    /// A session built by `bynk dev` answers a signed, read-only route in each
+    /// Worker; a deploy build has none. Needs a running session for the project.
+    Inspect {
+        #[command(subcommand)]
+        what: InspectSub,
+    },
+}
+
+/// `bynk dev inspect`'s subjects.
+#[derive(Subcommand, Debug)]
+pub enum InspectSub {
+    /// List the agent instances the session has seen, by class and key.
+    ///
+    /// An instance is listed once a handler has addressed it in this session.
+    Agents {
+        /// Project directory (anywhere inside the project). Defaults to `.`.
+        #[arg(default_value = ".")]
+        path: PathBuf,
+        /// Only this context (dotted name or its worker-dir form).
+        #[arg(long, value_name = "NAME")]
+        context: Option<String>,
+        /// Only this agent class.
+        #[arg(long, value_name = "AGENT")]
+        class: Option<String>,
+    },
+    /// Read one agent instance's stored state, its schema version and layout.
+    ///
+    /// The state is read as stored (the wire shape) and nothing is written: a
+    /// record older than the build is reported, not migrated. Collections are
+    /// paged: `--field` pages one, from the cursor `--after`.
+    Agent {
+        /// The agent class.
+        class: String,
+        /// The instance's key: a string as it is, any other key as JSON.
+        key: String,
+        /// Project directory (anywhere inside the project). Defaults to `.`.
+        #[arg(long, default_value = ".")]
+        path: PathBuf,
+        /// Only this context (dotted name or its worker-dir form).
+        #[arg(long, value_name = "NAME")]
+        context: Option<String>,
+        /// Page this collection field alone.
+        #[arg(long, value_name = "FIELD")]
+        field: Option<String>,
+        /// The cursor a previous page returned as `next`.
+        #[arg(long, value_name = "CURSOR", requires = "field")]
+        after: Option<String>,
+        /// Entries per page (at most 500).
+        #[arg(long, value_name = "N")]
+        limit: Option<u32>,
+    },
+}
+
+/// What `bynk dev` reads from the workers' output and writes as events: the
+/// `--log-events`, `--trace-events` and `--rewrite-frames` flags, together so
+/// `bynk dev`'s many flags stay manageable.
+#[derive(Args, Debug, Clone, Copy, Default)]
+pub struct DevStreamArgs {
+    /// With `--format json`, also write each line a worker prints as a
+    /// `log` event (`context`, `level`, `text`), so an editor can show the
+    /// workers' logs per context and level. Implies `--rewrite-frames`.
+    #[arg(long)]
+    pub log_events: bool,
+    /// Write one `request` event per request a worker serves (its route,
+    /// status, duration and the steps it took: capability ops, cross-context
+    /// calls and agent calls, each with its `.bynk` span), so an editor can show
+    /// what a request did. Implies `--format json` and `--rewrite-frames`. Builds the workers with the
+    /// recording on, and adds the `nodejs_als` compatibility flag unless the
+    /// project already lists `nodejs_compat` or `nodejs_als`. Steps carry no
+    /// argument values. Dev builds only: a deploy build never records.
+    #[arg(long)]
+    pub trace_events: bool,
+    /// Rewrite stack frames in the workers' output to `.bynk` locations
+    /// even on a terminal. Off a terminal (an editor task, CI) it is
+    /// always done; on one, wrangler's output is left attached so its
+    /// colour and hotkeys keep working.
+    #[arg(long)]
+    pub rewrite_frames: bool,
+}
+
 /// #2240: how a command may change `bynk.lock` and the store.
 #[derive(Args, Debug, Clone, Copy, Default)]
 pub struct LockArgs {
@@ -1028,6 +1216,15 @@ pub struct AccountTarget {
     /// The project whose `[registries]` name and route the registry.
     #[arg(long, default_value = ".")]
     pub path: PathBuf,
+}
+
+/// `bynk client --layout` (#3508).
+#[derive(Copy, Clone, Debug, PartialEq, Eq, ValueEnum)]
+pub enum ClientLayoutArg {
+    /// One module.
+    File,
+    /// `index.ts`, `types.ts`, `codecs.ts` and `runtime.ts`.
+    Dir,
 }
 
 /// #2378: `bynk org` subcommands.
@@ -1316,9 +1513,29 @@ pub enum BookFormat {
     Json,
 }
 
+impl From<ClientLayoutArg> for bynk_emit::emitter::http_client::Layout {
+    fn from(l: ClientLayoutArg) -> Self {
+        match l {
+            ClientLayoutArg::File => Self::File,
+            ClientLayoutArg::Dir => Self::Dir,
+        }
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
+    use clap::Parser;
+
+    /// #3580: `--trace-events` implies `--format json`, so it needs no `--format`
+    /// and goes with `--log-events` (which writes events too).
+    #[test]
+    fn trace_events_needs_no_format_and_goes_with_log_events() {
+        let parse = |args: &[&str]| Cli::try_parse_from(["bynk", "dev"].iter().chain(args));
+        assert!(parse(&["--trace-events"]).is_ok());
+        assert!(parse(&["--trace-events", "--log-events"]).is_ok());
+        assert!(parse(&["--trace-events", "--format", "json"]).is_ok());
+    }
 
     /// A subcommand left out of `COMMAND_GROUPS` would vanish from
     /// `bynk --help`; one listed twice, or not at all, is a typo.

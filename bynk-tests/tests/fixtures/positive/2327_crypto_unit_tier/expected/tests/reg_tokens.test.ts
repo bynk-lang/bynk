@@ -188,7 +188,7 @@ async function test_a_token_is_hashed_with_SHA_256() {
     type SigningKey = __ns_bynk_crypto.SigningKey;
     type VerifyKey = __ns_bynk_crypto.VerifyKey;
     const h = await hashing.call("abc", deps);
-    if (!(h === "ba7816bf8f01cfea414140de5dae2223b00361a396177a9cb410ff61f20015ad")) { throw __bynkExpectFailure("tests/reg/tokens.bynk:8:10", 242, 313, "expect h == \"ba7816bf8f01cfea414140de5dae2223b00361a396177a9cb410ff61f20015ad\"\n  expected: h == \"ba7816bf8f01cfea414140de5dae2223b00361a396177a9cb410ff61f20015ad\"\n  actual:   " + __bynkShow((h)) + " == " + __bynkShow(("ba7816bf8f01cfea414140de5dae2223b00361a396177a9cb410ff61f20015ad"))); }
+    if (!(h === "ba7816bf8f01cfea414140de5dae2223b00361a396177a9cb410ff61f20015ad")) { throw __bynkExpectFailure("tests/reg/tokens.bynk:10:10", 275, 346, "expect h == \"ba7816bf8f01cfea414140de5dae2223b00361a396177a9cb410ff61f20015ad\"\n  expected: h == \"ba7816bf8f01cfea414140de5dae2223b00361a396177a9cb410ff61f20015ad\"\n  actual:   " + __bynkShow((h)) + " == " + __bynkShow(("ba7816bf8f01cfea414140de5dae2223b00361a396177a9cb410ff61f20015ad"))); }
     return { pass: true };
   } catch (e) {
     if (e instanceof ExpectationError) {
@@ -228,8 +228,8 @@ async function test_equal_digests_match_and_different_ones_do_not() {
     type VerifyKey = __ns_bynk_crypto.VerifyKey;
     const same = await matching.call("secret", "secret", deps);
     const different = await matching.call("secret", "Secret", deps);
-    if (!(same === true)) { throw __bynkExpectFailure("tests/reg/tokens.bynk:14:10", 482, 494, "expect same == true\n  expected: same == true\n  actual:   " + __bynkShow((same)) + " == " + __bynkShow((true))); }
-    if (!(different === false)) { throw __bynkExpectFailure("tests/reg/tokens.bynk:15:10", 504, 522, "expect different == false\n  expected: different == false\n  actual:   " + __bynkShow((different)) + " == " + __bynkShow((false))); }
+    if (!(same === true)) { throw __bynkExpectFailure("tests/reg/tokens.bynk:16:10", 515, 527, "expect same == true\n  expected: same == true\n  actual:   " + __bynkShow((same)) + " == " + __bynkShow((true))); }
+    if (!(different === false)) { throw __bynkExpectFailure("tests/reg/tokens.bynk:17:10", 537, 555, "expect different == false\n  expected: different == false\n  actual:   " + __bynkShow((different)) + " == " + __bynkShow((false))); }
     return { pass: true };
   } catch (e) {
     if (e instanceof ExpectationError) {
@@ -268,7 +268,7 @@ async function test_an_HMAC_matches_RFC_4231_test_case_2() {
     type SigningKey = __ns_bynk_crypto.SigningKey;
     type VerifyKey = __ns_bynk_crypto.VerifyKey;
     const m = await mac.call("Jefe", "what do ya want for nothing?", deps);
-    if (!(m === "5bdcc146bf60754e6a042426089575c75a003f089d2739839dec58b964ec3843")) { throw __bynkExpectFailure("tests/reg/tokens.bynk:20:10", 641, 712, "expect m == \"5bdcc146bf60754e6a042426089575c75a003f089d2739839dec58b964ec3843\"\n  expected: m == \"5bdcc146bf60754e6a042426089575c75a003f089d2739839dec58b964ec3843\"\n  actual:   " + __bynkShow((m)) + " == " + __bynkShow(("5bdcc146bf60754e6a042426089575c75a003f089d2739839dec58b964ec3843"))); }
+    if (!(m === "5bdcc146bf60754e6a042426089575c75a003f089d2739839dec58b964ec3843")) { throw __bynkExpectFailure("tests/reg/tokens.bynk:22:10", 674, 745, "expect m == \"5bdcc146bf60754e6a042426089575c75a003f089d2739839dec58b964ec3843\"\n  expected: m == \"5bdcc146bf60754e6a042426089575c75a003f089d2739839dec58b964ec3843\"\n  actual:   " + __bynkShow((m)) + " == " + __bynkShow(("5bdcc146bf60754e6a042426089575c75a003f089d2739839dec58b964ec3843"))); }
     return { pass: true };
   } catch (e) {
     if (e instanceof ExpectationError) {
@@ -309,9 +309,9 @@ async function test_a_webhook_MAC_verifies__and_a_wrong_one_does_not() {
     const good = await webhook.call("Jefe", "what do ya want for nothing?", "5bdcc146bf60754e6a042426089575c75a003f089d2739839dec58b964ec3843", deps);
     const bad = await webhook.call("Jefe", "tampered", "5bdcc146bf60754e6a042426089575c75a003f089d2739839dec58b964ec3843", deps);
     const junk = await webhook.call("Jefe", "x", "not hex", deps);
-    if (!(good === true)) { throw __bynkExpectFailure("tests/reg/tokens.bynk:27:10", 1083, 1095, "expect good == true\n  expected: good == true\n  actual:   " + __bynkShow((good)) + " == " + __bynkShow((true))); }
-    if (!(bad === false)) { throw __bynkExpectFailure("tests/reg/tokens.bynk:28:10", 1105, 1117, "expect bad == false\n  expected: bad == false\n  actual:   " + __bynkShow((bad)) + " == " + __bynkShow((false))); }
-    if (!(junk === false)) { throw __bynkExpectFailure("tests/reg/tokens.bynk:29:10", 1127, 1140, "expect junk == false\n  expected: junk == false\n  actual:   " + __bynkShow((junk)) + " == " + __bynkShow((false))); }
+    if (!(good === true)) { throw __bynkExpectFailure("tests/reg/tokens.bynk:29:10", 1116, 1128, "expect good == true\n  expected: good == true\n  actual:   " + __bynkShow((good)) + " == " + __bynkShow((true))); }
+    if (!(bad === false)) { throw __bynkExpectFailure("tests/reg/tokens.bynk:30:10", 1138, 1150, "expect bad == false\n  expected: bad == false\n  actual:   " + __bynkShow((bad)) + " == " + __bynkShow((false))); }
+    if (!(junk === false)) { throw __bynkExpectFailure("tests/reg/tokens.bynk:31:10", 1160, 1173, "expect junk == false\n  expected: junk == false\n  actual:   " + __bynkShow((junk)) + " == " + __bynkShow((false))); }
     return { pass: true };
   } catch (e) {
     if (e instanceof ExpectationError) {
@@ -350,7 +350,7 @@ async function test_random_bytes_are_deterministic_under_test() {
     type SigningKey = __ns_bynk_crypto.SigningKey;
     type VerifyKey = __ns_bynk_crypto.VerifyKey;
     const n = await token.call(deps);
-    if (!(n === 64)) { throw __bynkExpectFailure("tests/reg/tokens.bynk:34:10", 1228, 1235, "expect n == 64\n  expected: n == 64\n  actual:   " + __bynkShow((n)) + " == " + __bynkShow((64))); }
+    if (!(n === 64)) { throw __bynkExpectFailure("tests/reg/tokens.bynk:36:10", 1261, 1268, "expect n == 64\n  expected: n == 64\n  actual:   " + __bynkShow((n)) + " == " + __bynkShow((64))); }
     return { pass: true };
   } catch (e) {
     if (e instanceof ExpectationError) {
@@ -389,7 +389,7 @@ async function test_an_Ed25519_signature_matches_RFC_8032_test_1() {
     type SigningKey = __ns_bynk_crypto.SigningKey;
     type VerifyKey = __ns_bynk_crypto.VerifyKey;
     const sig = await signing.call("302e020100300506032b6570042204209d61b19deffd5a60ba844af492ec2cc44449c5697b326919703bac031cae7f60", "", deps);
-    if (!(sig === "e5564300c360ac729086e2cc806e828a84877f1eb8e5d974d873e065224901555fb8821590a33bacc61e39701cf9b46bd25bf5f0595bbe24655141438e7a100b")) { throw __bynkExpectFailure("tests/reg/tokens.bynk:39:10", 1432, 1569, "expect sig == \"e5564300c360ac729086e2cc806e828a84877f1eb8e5d974d873e065224901555fb8821590a33bacc61e39701cf9b46bd25bf5f0595bbe24655141438e7a100b\"\n  expected: sig == \"e5564300c360ac729086e2cc806e828a84877f1eb8e5d974d873e065224901555fb8821590a33bacc61e39701cf9b46bd25bf5f0595bbe24655141438e7a100b\"\n  actual:   " + __bynkShow((sig)) + " == " + __bynkShow(("e5564300c360ac729086e2cc806e828a84877f1eb8e5d974d873e065224901555fb8821590a33bacc61e39701cf9b46bd25bf5f0595bbe24655141438e7a100b"))); }
+    if (!(sig === "e5564300c360ac729086e2cc806e828a84877f1eb8e5d974d873e065224901555fb8821590a33bacc61e39701cf9b46bd25bf5f0595bbe24655141438e7a100b")) { throw __bynkExpectFailure("tests/reg/tokens.bynk:41:10", 1465, 1602, "expect sig == \"e5564300c360ac729086e2cc806e828a84877f1eb8e5d974d873e065224901555fb8821590a33bacc61e39701cf9b46bd25bf5f0595bbe24655141438e7a100b\"\n  expected: sig == \"e5564300c360ac729086e2cc806e828a84877f1eb8e5d974d873e065224901555fb8821590a33bacc61e39701cf9b46bd25bf5f0595bbe24655141438e7a100b\"\n  actual:   " + __bynkShow((sig)) + " == " + __bynkShow(("e5564300c360ac729086e2cc806e828a84877f1eb8e5d974d873e065224901555fb8821590a33bacc61e39701cf9b46bd25bf5f0595bbe24655141438e7a100b"))); }
     return { pass: true };
   } catch (e) {
     if (e instanceof ExpectationError) {
@@ -430,8 +430,8 @@ async function test_that_signature_verifies__and_fails_for_other_data() {
     const sig = await signing.call("302e020100300506032b6570042204209d61b19deffd5a60ba844af492ec2cc44449c5697b326919703bac031cae7f60", "", deps);
     const ok = await verifying.call("302a300506032b6570032100d75a980182b10ab7d54bfed3c964073a0ee172f3daa62325af021a68f707511a", "", sig, deps);
     const other = await verifying.call("302a300506032b6570032100d75a980182b10ab7d54bfed3c964073a0ee172f3daa62325af021a68f707511a", "other", sig, deps);
-    if (!(ok === true)) { throw __bynkExpectFailure("tests/reg/tokens.bynk:46:10", 2035, 2045, "expect ok == true\n  expected: ok == true\n  actual:   " + __bynkShow((ok)) + " == " + __bynkShow((true))); }
-    if (!(other === false)) { throw __bynkExpectFailure("tests/reg/tokens.bynk:47:10", 2055, 2069, "expect other == false\n  expected: other == false\n  actual:   " + __bynkShow((other)) + " == " + __bynkShow((false))); }
+    if (!(ok === true)) { throw __bynkExpectFailure("tests/reg/tokens.bynk:48:10", 2068, 2078, "expect ok == true\n  expected: ok == true\n  actual:   " + __bynkShow((ok)) + " == " + __bynkShow((true))); }
+    if (!(other === false)) { throw __bynkExpectFailure("tests/reg/tokens.bynk:49:10", 2088, 2102, "expect other == false\n  expected: other == false\n  actual:   " + __bynkShow((other)) + " == " + __bynkShow((false))); }
     return { pass: true };
   } catch (e) {
     if (e instanceof ExpectationError) {
@@ -470,7 +470,7 @@ async function test_a_bad_key_is_an_error_value__not_a_fault() {
     type SigningKey = __ns_bynk_crypto.SigningKey;
     type VerifyKey = __ns_bynk_crypto.VerifyKey;
     const sig = await signing.call("00", "x", deps);
-    if (!(sig === "error")) { throw __bynkExpectFailure("tests/reg/tokens.bynk:52:10", 2169, 2183, "expect sig == \"error\"\n  expected: sig == \"error\"\n  actual:   " + __bynkShow((sig)) + " == " + __bynkShow(("error"))); }
+    if (!(sig === "error")) { throw __bynkExpectFailure("tests/reg/tokens.bynk:54:10", 2202, 2216, "expect sig == \"error\"\n  expected: sig == \"error\"\n  actual:   " + __bynkShow((sig)) + " == " + __bynkShow(("error"))); }
     return { pass: true };
   } catch (e) {
     if (e instanceof ExpectationError) {
@@ -510,8 +510,8 @@ async function test_a_stubbed_digest_is_observed() {
     type SigningKey = __ns_bynk_crypto.SigningKey;
     type VerifyKey = __ns_bynk_crypto.VerifyKey;
     const h = await hashing.call("abc", deps);
-    if (!(h === "73747562626564")) { throw __bynkExpectFailure("tests/reg/tokens.bynk:58:10", 2326, 2347, "expect h == \"73747562626564\"\n  expected: h == \"73747562626564\"\n  actual:   " + __bynkShow((h)) + " == " + __bynkShow(("73747562626564"))); }
-    if (!(((__obs.log["Crypto.digest"] ?? []).length === (1)))) { throw __bynkExpectFailure("tests/reg/tokens.bynk:59:10", 2357, 2382, "expect Crypto.digest called once"); }
+    if (!(h === "73747562626564")) { throw __bynkExpectFailure("tests/reg/tokens.bynk:60:10", 2359, 2380, "expect h == \"73747562626564\"\n  expected: h == \"73747562626564\"\n  actual:   " + __bynkShow((h)) + " == " + __bynkShow(("73747562626564"))); }
+    if (!(((__obs.log["Crypto.digest"] ?? []).length === (1)))) { throw __bynkExpectFailure("tests/reg/tokens.bynk:61:10", 2390, 2415, "expect Crypto.digest called once"); }
     return { pass: true };
   } catch (e) {
     if (e instanceof ExpectationError) {

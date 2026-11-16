@@ -4,7 +4,7 @@
 import { Ok, Err, Some, None, type Result, type Option } from "../__bynk_runtime/result.js";
 import type { ValidationError, DecodeError } from "../__bynk_runtime/errors.js";
 
-import { FetchError, Request, Response } from "../bynk.js";
+import { BytesResponse, FetchError, Request, Response } from "../bynk.js";
 
 /**
  * When a `Kv.putWith` or `Kv.putBytes` entry expires: `Never`, `After` a
@@ -226,6 +226,43 @@ export interface QueueSend {
 }
 
 export const QueueSend = {
+};
+
+/**
+ * What Cloudflare knows about the connection of an `on http` request, as a
+ * handler's `cf: RequestCf` parameter. Every field is optional and defaults
+ * to `None`: Cloudflare derives them, a platform or a test may not supply
+ * them, and a field of an unexpected shape is `None`, never a fault. A
+ * handler that declares `cf` is therefore written once and works where
+ * `request.cf` is absent.
+ *
+ * These facts come from the client's IP address, so they can be personal
+ * data, and they are best-effort: a VPN or a proxy makes them wrong. The
+ * fields are Cloudflare's `request.cf` properties
+ * (https://developers.cloudflare.com/workers/runtime-apis/request/); a
+ * field is added later as a defaulted field. `latitude` and `longitude` are
+ * numeric strings on the platform and are read as `Float`; `isEuCountry` is
+ * `Some(true)` where Cloudflare reports the country as in the EU.
+ */
+export interface RequestCf {
+  readonly country: Option<string>;
+  readonly continent: Option<string>;
+  readonly city: Option<string>;
+  readonly region: Option<string>;
+  readonly regionCode: Option<string>;
+  readonly postalCode: Option<string>;
+  readonly timezone: Option<string>;
+  readonly latitude: Option<number>;
+  readonly longitude: Option<number>;
+  readonly colo: Option<string>;
+  readonly asn: Option<number>;
+  readonly asOrganization: Option<string>;
+  readonly httpProtocol: Option<string>;
+  readonly tlsVersion: Option<string>;
+  readonly isEuCountry: Option<boolean>;
+}
+
+export const RequestCf = {
 };
 
 /**
@@ -719,6 +756,53 @@ export const MySqlReadError = {
 };
 
 /**
+ * What an Analytics SQL query cost to run, as the platform reports it: `elapsedMs`
+ * the time it took, `rowsRead` and `bytesRead` what it scanned.
+ */
+export interface AnalyticsSqlStatistics {
+  readonly elapsedMs: number;
+  readonly rowsRead: number;
+  readonly bytesRead: number;
+}
+
+export const AnalyticsSqlStatistics = {
+};
+
+/**
+ * The reply of `AnalyticsSql.query`: `data` is the result rows as JSON text, an array
+ * of objects keyed by the selected column names, to read with `Json.decode` (the
+ * columns and their types are the query's, not Bynk's, as `Ai.run`'s reply is the
+ * model's); `rows` is how many there are, and `statistics` what the query cost.
+ */
+export interface AnalyticsSqlResult {
+  readonly data: string;
+  readonly rows: number;
+  readonly statistics: AnalyticsSqlStatistics;
+}
+
+export const AnalyticsSqlResult = {
+};
+
+/**
+ * Why an Analytics SQL query did not give a reply. The platform reports a failure
+ * with a message and one fact, whether repeating the query may succeed, and that is
+ * all this type says: `SqlRetryable` is a failure worth retrying with bounded
+ * exponential backoff (a rate or capacity limit, a temporary outage), and
+ * `SqlRejected` one that repeating will not fix (a query the engine refused, a
+ * parameter Analytics SQL cannot take, a reply that is not the shape promised),
+ * each with its message. Cloudflare changes what it reports over time, so a `match`
+ * over this type needs a wildcard.
+ */
+export type AnalyticsSqlError =
+    { readonly tag: "SqlRetryable"; readonly message: string }
+  | { readonly tag: "SqlRejected"; readonly message: string };
+
+export const AnalyticsSqlError = {
+  SqlRetryable: (message: string): AnalyticsSqlError => ({ tag: "SqlRetryable", message }),
+  SqlRejected: (message: string): AnalyticsSqlError => ({ tag: "SqlRejected", message }),
+};
+
+/**
  * The version of this Worker that is running, as `Version.current()`
  * reports it. `id` is the version's id, `tag` its tag (`None` when the
  * version was uploaded without one), and `deployed` when the version was
@@ -731,6 +815,590 @@ export interface WorkerVersion {
 }
 
 export const WorkerVersion = {
+};
+
+/**
+ * Who said a `ChatMessage`. A `System` message sets how the model behaves, a
+ * `User` message is what it is asked, and an `Assistant` message is an earlier
+ * reply of the model, to carry a conversation. Cloudflare adds roles over
+ * time, so a `match` over this type needs a wildcard.
+ */
+export type ChatRole =
+    { readonly tag: "System" }
+  | { readonly tag: "User" }
+  | { readonly tag: "Assistant" };
+
+export const ChatRole = {
+  System: { tag: "System" } as ChatRole,
+  User: { tag: "User" } as ChatRole,
+  Assistant: { tag: "Assistant" } as ChatRole,
+};
+
+/**
+ * One message of a conversation for `Ai.generate`.
+ */
+export interface ChatMessage {
+  readonly role: ChatRole;
+  readonly content: string;
+}
+
+export const ChatMessage = {
+};
+
+/**
+ * The input of `Ai.generate`: the conversation so far in `messages`, which must
+ * not be empty, and the sampling settings the platform's chat models share.
+ * A setting left `None` is the model's own default. `maxTokens` caps the
+ * length of the reply; `temperature` and `topP` shape how varied it is; `seed`
+ * makes a run repeatable where the model supports it.
+ */
+export interface GenerateRequest {
+  readonly messages: readonly ChatMessage[];
+  readonly maxTokens: Option<number>;
+  readonly temperature: Option<number>;
+  readonly topP: Option<number>;
+  readonly seed: Option<number>;
+}
+
+export const GenerateRequest = {
+};
+
+/**
+ * The tokens a generation used: `promptTokens` read and `completionTokens`
+ * written.
+ */
+export interface TokenUsage {
+  readonly promptTokens: number;
+  readonly completionTokens: number;
+}
+
+export const TokenUsage = {
+};
+
+/**
+ * The reply of `Ai.generate`: the model's `text`, which is untrusted input,
+ * and `usage` when the platform reported it (`None` when it did not).
+ */
+export interface Generation {
+  readonly text: string;
+  readonly usage: Option<TokenUsage>;
+}
+
+export const Generation = {
+};
+
+/**
+ * Why a Workers AI call did not give a reply. `ModelNotFound` is a model id
+ * the platform does not know, or has retired; `InvalidInput` is a request the
+ * platform refused as malformed or too large, with its message; `QuotaExceeded`
+ * is a usage limit of the account, or a model its plan does not include, so
+ * back off or change the plan; `Overloaded` is the platform's temporary
+ * capacity, worth retrying; `BadReply` is a reply that is not the shape the
+ * operation promises (`generate` and `embed` only, never `run`), with what was
+ * wrong; `AiFailed` is any other refusal, with the platform's message (the `Ai`
+ * prefix because `Failed` is `SqlError`'s). Cloudflare adds error codes over
+ * time, so a `match` over this type needs a wildcard.
+ */
+export type AiError =
+    { readonly tag: "ModelNotFound" }
+  | { readonly tag: "InvalidInput"; readonly message: string }
+  | { readonly tag: "QuotaExceeded" }
+  | { readonly tag: "Overloaded" }
+  | { readonly tag: "BadReply"; readonly message: string }
+  | { readonly tag: "AiFailed"; readonly message: string };
+
+export const AiError = {
+  ModelNotFound: { tag: "ModelNotFound" } as AiError,
+  InvalidInput: (message: string): AiError => ({ tag: "InvalidInput", message }),
+  QuotaExceeded: { tag: "QuotaExceeded" } as AiError,
+  Overloaded: { tag: "Overloaded" } as AiError,
+  BadReply: (message: string): AiError => ({ tag: "BadReply", message }),
+  AiFailed: (message: string): AiError => ({ tag: "AiFailed", message }),
+};
+
+/**
+ * The format of a raster image. `Jpeg`, `Png`, `Webp`, `Avif` and `Gif` are
+ * the formats `Images.transform` can write; `Heic` is read only, so asking
+ * for it as an output is `InvalidImage`. Cloudflare adds formats over time, so
+ * a `match` over this type needs a wildcard.
+ */
+export type ImageFormat =
+    { readonly tag: "Jpeg" }
+  | { readonly tag: "Png" }
+  | { readonly tag: "Webp" }
+  | { readonly tag: "Avif" }
+  | { readonly tag: "Gif" }
+  | { readonly tag: "Heic" };
+
+export const ImageFormat = {
+  Jpeg: { tag: "Jpeg" } as ImageFormat,
+  Png: { tag: "Png" } as ImageFormat,
+  Webp: { tag: "Webp" } as ImageFormat,
+  Avif: { tag: "Avif" } as ImageFormat,
+  Gif: { tag: "Gif" } as ImageFormat,
+  Heic: { tag: "Heic" } as ImageFormat,
+};
+
+/**
+ * How a resize fits the image to `width` and `height`. `ScaleDown` (the
+ * platform's default) shrinks to fit and never enlarges; `Contain` fits inside
+ * the box; `Cover` fills the box and crops the overflow; `Crop` crops to the
+ * box without scaling up; `Pad` fits inside the box and fills the rest;
+ * `Squeeze` stretches to the box exactly. Cloudflare adds fits over time, so
+ * a `match` over this type needs a wildcard.
+ */
+export type ImageFit =
+    { readonly tag: "ScaleDown" }
+  | { readonly tag: "Contain" }
+  | { readonly tag: "Cover" }
+  | { readonly tag: "Crop" }
+  | { readonly tag: "Pad" }
+  | { readonly tag: "Squeeze" };
+
+export const ImageFit = {
+  ScaleDown: { tag: "ScaleDown" } as ImageFit,
+  Contain: { tag: "Contain" } as ImageFit,
+  Cover: { tag: "Cover" } as ImageFit,
+  Crop: { tag: "Crop" } as ImageFit,
+  Pad: { tag: "Pad" } as ImageFit,
+  Squeeze: { tag: "Squeeze" } as ImageFit,
+};
+
+/**
+ * What `Images.info` reads from an image: `Raster` with its `format`, its
+ * `width` and `height` in pixels and its `size` in bytes, or `Svg`, which the
+ * platform reports without dimensions because it is not a grid of pixels.
+ */
+export type ImageInfo =
+    { readonly tag: "Raster"; readonly format: ImageFormat; readonly width: number; readonly height: number; readonly size: number }
+  | { readonly tag: "Svg" };
+
+export const ImageInfo = {
+  Raster: (format: ImageFormat, width: number, height: number, size: number): ImageInfo => ({ tag: "Raster", format, width, height, size }),
+  Svg: { tag: "Svg" } as ImageInfo,
+};
+
+/**
+ * An image drawn over the one being transformed, from its `image` bytes. The
+ * overlay is placed by an offset in pixels from `top`, `left`, `bottom` or
+ * `right` (centred when none is given; `left` with `right`, or `top` with
+ * `bottom`, is `InvalidImage`), blended at `opacity` from 0 to 1 (`None` is
+ * fully opaque) and tiled across the image when `repeat` is true. Overlays are
+ * drawn in order, the last on top. The overlay is not resized: size it first
+ * with `Images.transform`.
+ */
+export interface Overlay {
+  readonly image: globalThis.Uint8Array;
+  readonly opacity: Option<number>;
+  readonly top: Option<number>;
+  readonly left: Option<number>;
+  readonly bottom: Option<number>;
+  readonly right: Option<number>;
+  readonly repeat: boolean;
+}
+
+export const Overlay = {
+};
+
+/**
+ * What `Images.transform` does to the image before it is written. `width` and
+ * `height` are the target size in pixels, and `fit` says how the image fits
+ * them; `rotate` turns it by 90, 180 or 270 degrees (before the resize, so
+ * `width` and `height` refer to the rotated image); `blur` is a radius from 0
+ * to 250; `overlays` are drawn on the result. A field left `None` is the
+ * platform's default. A `width`, `height` or `blur` the platform refuses is
+ * reported by the platform as `InvalidImage`, not checked here.
+ */
+export interface TransformOptions {
+  readonly width: Option<number>;
+  readonly height: Option<number>;
+  readonly fit: Option<ImageFit>;
+  readonly rotate: Option<number>;
+  readonly blur: Option<number>;
+  readonly overlays: readonly Overlay[];
+}
+
+export const TransformOptions = {
+};
+
+/**
+ * How `Images.transform` writes the result: the `format` (required, because
+ * the platform has no default) and the `quality` from 1 to 100 for the formats
+ * that take one (`None` is the platform's default).
+ */
+export interface OutputOptions {
+  readonly format: ImageFormat;
+  readonly quality: Option<number>;
+}
+
+export const OutputOptions = {
+};
+
+/**
+ * A transformed image: its `body` (buffered whole in the Worker) and the
+ * `contentType` the platform wrote it with, such as `image/webp`.
+ */
+export interface ImageResult {
+  readonly body: globalThis.Uint8Array;
+  readonly contentType: string;
+}
+
+export const ImageResult = {
+};
+
+/**
+ * A transformed image as a stream, from `Images.transformStream`: the `body`
+ * as chunks read as they are pulled, and the `contentType` the platform wrote
+ * it with. The body can be read once (`collect`, `map`, or handed to
+ * `RawStreamed`); a second read faults. A record carrying a stream is not
+ * data: it can't be stored, sent or encoded.
+ */
+export interface ImageStream {
+  readonly body: AsyncIterable<globalThis.Uint8Array>;
+  readonly contentType: string;
+}
+
+export const ImageStream = {
+};
+
+/**
+ * Why an `Images` call did not give an image. `InvalidImage` is an input that
+ * is not an image, or an option the call cannot honour, with the reason;
+ * `UnsupportedImage` is a format the platform cannot read or write;
+ * `ImageTooLarge` is an image over the platform's size or area limit (a
+ * connection the platform lost mid-call is `ImagesFailed`, worth a retry); and
+ * `ImagesFailed` is any other refusal, with the platform's message (the
+ * `Image` prefix because `InvalidInput` is `AiError`'s and `Failed` is
+ * `SqlError`'s). Cloudflare adds error codes over time, so a `match` over this
+ * type needs a wildcard.
+ */
+export type ImagesError =
+    { readonly tag: "InvalidImage"; readonly message: string }
+  | { readonly tag: "UnsupportedImage" }
+  | { readonly tag: "ImageTooLarge" }
+  | { readonly tag: "ImagesFailed"; readonly message: string };
+
+export const ImagesError = {
+  InvalidImage: (message: string): ImagesError => ({ tag: "InvalidImage", message }),
+  UnsupportedImage: { tag: "UnsupportedImage" } as ImagesError,
+  ImageTooLarge: { tag: "ImageTooLarge" } as ImagesError,
+  ImagesFailed: (message: string): ImagesError => ({ tag: "ImagesFailed", message }),
+};
+
+/**
+ * One vector of a `Vectorize` index: its `id` (at most 64 bytes), its `values`
+ * (as many numbers as the index has dimensions), the `namespace` it lives in
+ * when it has one, and `metadata`, a JSON object as text (`Json.encode` writes
+ * it, `Json.decode` reads it back). A property can be filtered on only when
+ * the index declares it in `@indexed`.
+ */
+export interface Vector {
+  readonly id: string;
+  readonly values: readonly number[];
+  readonly metadata: Option<string>;
+  readonly namespace: Option<string>;
+}
+
+export const Vector = {
+};
+
+/**
+ * One vector to write with typed metadata: a `Vector` whose `metadata` is a
+ * value of `M`, which `upsertValue` encodes with `M`'s codec. Reading is not
+ * typed: `getByIds` and a query's matches give the metadata as text, so a
+ * vector stored by an older version of `M` can be skipped or repaired.
+ * Keep the properties a query filters on plain (not `Option`): an `Option` is
+ * written as a tagged object, as `Json.encode` writes it, so a filter on it
+ * would never match.
+ */
+export interface VectorOf<M> {
+  readonly id: string;
+  readonly values: readonly number[];
+  readonly metadata: Option<M>;
+  readonly namespace: Option<string>;
+}
+
+export const VectorOf = {
+};
+
+/**
+ * A metadata value a `Condition` compares a property with: text, a number or
+ * a flag.
+ */
+export type MetaValue =
+    { readonly tag: "MetaText"; readonly value: string }
+  | { readonly tag: "MetaNumber"; readonly value: number }
+  | { readonly tag: "MetaFlag"; readonly value: boolean };
+
+export const MetaValue = {
+  MetaText: (value: string): MetaValue => ({ tag: "MetaText", value }),
+  MetaNumber: (value: number): MetaValue => ({ tag: "MetaNumber", value }),
+  MetaFlag: (value: boolean): MetaValue => ({ tag: "MetaFlag", value }),
+};
+
+/**
+ * How a `Condition` compares a property with a value: equal, not equal, less
+ * than, at most, greater than, at least, one of a list, or none of a list.
+ * The platform allows a range over text or numbers only, and a lower and an
+ * upper bound on one property together, not other mixes; it refuses the
+ * rest as `VectorInvalidInput`.
+ */
+export type FilterOp =
+    { readonly tag: "FilterEq"; readonly value: MetaValue }
+  | { readonly tag: "FilterNe"; readonly value: MetaValue }
+  | { readonly tag: "FilterLt"; readonly value: MetaValue }
+  | { readonly tag: "FilterLte"; readonly value: MetaValue }
+  | { readonly tag: "FilterGt"; readonly value: MetaValue }
+  | { readonly tag: "FilterGte"; readonly value: MetaValue }
+  | { readonly tag: "FilterAnyOf"; readonly values: readonly MetaValue[] }
+  | { readonly tag: "FilterNoneOf"; readonly values: readonly MetaValue[] };
+
+export const FilterOp = {
+  FilterEq: (value: MetaValue): FilterOp => ({ tag: "FilterEq", value }),
+  FilterNe: (value: MetaValue): FilterOp => ({ tag: "FilterNe", value }),
+  FilterLt: (value: MetaValue): FilterOp => ({ tag: "FilterLt", value }),
+  FilterLte: (value: MetaValue): FilterOp => ({ tag: "FilterLte", value }),
+  FilterGt: (value: MetaValue): FilterOp => ({ tag: "FilterGt", value }),
+  FilterGte: (value: MetaValue): FilterOp => ({ tag: "FilterGte", value }),
+  FilterAnyOf: (values: readonly MetaValue[]): FilterOp => ({ tag: "FilterAnyOf", values }),
+  FilterNoneOf: (values: readonly MetaValue[]): FilterOp => ({ tag: "FilterNoneOf", values }),
+};
+
+/**
+ * One test of a `Vectorize` query: the metadata property `field` (a dot nests, as in
+ * `"author.name"`) against `op`. A query's conditions all have to hold.
+ * The property has to be declared in the index's `@indexed`, and a vector
+ * only matches once it was written after that index existed. A text property
+ * is indexed by its first 64 bytes only.
+ */
+export interface Condition {
+  readonly field: string;
+  readonly op: FilterOp;
+}
+
+export const Condition = {
+};
+
+/**
+ * How much metadata a `Vectorize` query returns: `Omit` none (the default),
+ * `Indexed` only the `@indexed` properties, `All` every property. `All` costs
+ * the platform more work and lowers how many matches one query may return.
+ */
+export type MetadataScope =
+    { readonly tag: "Omit" }
+  | { readonly tag: "Indexed" }
+  | { readonly tag: "All" };
+
+export const MetadataScope = {
+  Omit: { tag: "Omit" } as MetadataScope,
+  Indexed: { tag: "Indexed" } as MetadataScope,
+  All: { tag: "All" } as MetadataScope,
+};
+
+/**
+ * The options of `Vectorize.query`. `topK` is how many matches to return
+ * (5 unless set; the platform caps it, and caps it lower when `returnValues`
+ * is set or `returnMetadata` is `All`, and says so as `VectorInvalidInput`).
+ * `namespace` restricts the query to one namespace. `filter` is a list of
+ * conditions that must all hold.
+ */
+export interface QueryOptions {
+  readonly topK: number;
+  readonly returnValues: boolean;
+  readonly returnMetadata: MetadataScope;
+  readonly namespace: Option<string>;
+  readonly filter: readonly Condition[];
+}
+
+export const QueryOptions = {
+};
+
+/**
+ * One match of `Vectorize.query`: the vector's `id` and its `score`, whose
+ * meaning depends on the index's metric (a larger cosine score is nearer; a
+ * smaller euclidean distance is nearer). `values`, `metadata` (a JSON object
+ * as text) and `namespace` are present when the query asked for them and the
+ * vector has them.
+ */
+export interface VectorMatch {
+  readonly id: string;
+  readonly score: number;
+  readonly values: Option<readonly number[]>;
+  readonly metadata: Option<string>;
+  readonly namespace: Option<string>;
+}
+
+export const VectorMatch = {
+};
+
+/**
+ * The receipt of a write: its `id`. A write is asynchronous. It is queryable
+ * after the platform has processed it, which takes some seconds, so a handler
+ * that writes and then queries in the same request will not see its own write.
+ */
+export interface Mutation {
+  readonly id: string;
+}
+
+export const Mutation = {
+};
+
+/**
+ * An index's configuration, as `Vectorize.describe` reports it: its
+ * `dimensions`, and its `metric` when the platform reports one (a real index's
+ * `describe` does not, so it is normally `None`; the declaration states it).
+ */
+export interface IndexInfo {
+  readonly dimensions: number;
+  readonly metric: Option<string>;
+}
+
+export const IndexInfo = {
+};
+
+/**
+ * Why a Vectorize call did not succeed. `DimensionMismatch` is a vector or
+ * query whose length is not the index's dimensions, with the platform's
+ * message; `VectorInvalidInput` is a request the platform refused as malformed
+ * or over a limit (a bad filter, too large a `topK`, too large a batch or too
+ * much metadata); `VectorRateLimited` is a rate limit, worth retrying later;
+ * `VectorFailed` is any other refusal, with the platform's message. The
+ * `Vector` prefix is because `InvalidInput` is `AiError`'s, `RateLimited`
+ * `EmailError`'s and `Failed` `SqlError`'s. Cloudflare adds error cases over
+ * time, so a `match` over this type needs a wildcard.
+ */
+export type VectorError =
+    { readonly tag: "DimensionMismatch"; readonly message: string }
+  | { readonly tag: "VectorInvalidInput"; readonly message: string }
+  | { readonly tag: "VectorRateLimited" }
+  | { readonly tag: "VectorFailed"; readonly message: string };
+
+export const VectorError = {
+  DimensionMismatch: (message: string): VectorError => ({ tag: "DimensionMismatch", message }),
+  VectorInvalidInput: (message: string): VectorError => ({ tag: "VectorInvalidInput", message }),
+  VectorRateLimited: { tag: "VectorRateLimited" } as VectorError,
+  VectorFailed: (message: string): VectorError => ({ tag: "VectorFailed", message }),
+};
+
+/**
+ * One retrieved chunk of an `AiSearch` instance: the chunk's `id`, its `score`
+ * (0 to 1, larger is a closer match), its `text`, and where it came from: `key`
+ * is the source file's path or the page's URL, `timestamp` the source item's
+ * unix time in milliseconds when the platform reports one (a `timestamp`
+ * condition in `SearchOptions.filter` compares in the same unit), and `metadata` the item's custom
+ * metadata as a JSON object in text (`None` when it has none). The text is
+ * indexed content, so treat it as untrusted input.
+ */
+export interface SearchHit {
+  readonly id: string;
+  readonly score: number;
+  readonly text: string;
+  readonly key: string;
+  readonly timestamp: Option<number>;
+  readonly metadata: Option<string>;
+}
+
+export const SearchHit = {
+};
+
+/**
+ * How an `AiSearch` query finds chunks: by `Vector` (meaning), by `Keyword`
+ * (words), or `Hybrid`, both together. The platform's default is `Hybrid`.
+ */
+export type RetrievalType =
+    { readonly tag: "Vector" }
+  | { readonly tag: "Keyword" }
+  | { readonly tag: "Hybrid" };
+
+export const RetrievalType = {
+  Vector: { tag: "Vector" } as RetrievalType,
+  Keyword: { tag: "Keyword" } as RetrievalType,
+  Hybrid: { tag: "Hybrid" } as RetrievalType,
+};
+
+/**
+ * The options of `AiSearch.search` and `AiSearch.answer` (for `answer` they
+ * shape its retrieval step). A setting left `None` or `false` leaves the
+ * platform's own default in place: `maxResults` is how many chunks to return
+ * (1 to 50, 10 unless set), `matchThreshold` the least score a chunk may have
+ * (0 to 1, 0.4 unless set), and `retrieval` how chunks are found. `rewriteQuery`
+ * has the instance rewrite the question for better retrieval, and `rerank`
+ * has it reorder the chunks with a reranking model; both use the models the
+ * platform picks. `filter` is a list of conditions on the items' attributes
+ * (`folder`, `timestamp`, `filename`) and on the instance's custom metadata
+ * (at most five fields), and every condition must hold. A text value is
+ * matched on its first 64 bytes only. Out-of-range values are refused as
+ * `SearchInvalidInput`.
+ */
+export interface SearchOptions {
+  readonly maxResults: Option<number>;
+  readonly matchThreshold: Option<number>;
+  readonly retrieval: Option<RetrievalType>;
+  readonly rewriteQuery: boolean;
+  readonly rerank: boolean;
+  readonly filter: readonly Condition[];
+}
+
+export const SearchOptions = {
+};
+
+/**
+ * The reply of `AiSearch.answer`: the generated `text`, which is untrusted
+ * input, the `hits` it was grounded on, and the `usage` of the generation when
+ * the platform reported it.
+ */
+export interface SearchAnswer {
+  readonly text: string;
+  readonly hits: readonly SearchHit[];
+  readonly usage: Option<TokenUsage>;
+}
+
+export const SearchAnswer = {
+};
+
+/**
+ * Why an AI Search call did not give a reply. `SearchInvalidInput` is a
+ * request the platform refused as malformed or out of range (a bad filter or
+ * option), with its message; `SearchRateLimited` is a rate limit, worth
+ * retrying later; `SearchQuotaExceeded` is a usage limit of the account;
+ * `SearchFailed` is any other refusal, or a reply that is not the shape the
+ * operation promises, with a message. The `Search` prefix is because
+ * `InvalidInput` is `AiError`'s, `RateLimited` `EmailError`'s, `QuotaExceeded`
+ * `AiError`'s and `Failed` `SqlError`'s. Cloudflare adds error cases over time,
+ * so a `match` over this type needs a wildcard.
+ */
+export type SearchError =
+    { readonly tag: "SearchInvalidInput"; readonly message: string }
+  | { readonly tag: "SearchRateLimited" }
+  | { readonly tag: "SearchQuotaExceeded" }
+  | { readonly tag: "SearchFailed"; readonly message: string };
+
+export const SearchError = {
+  SearchInvalidInput: (message: string): SearchError => ({ tag: "SearchInvalidInput", message }),
+  SearchRateLimited: { tag: "SearchRateLimited" } as SearchError,
+  SearchQuotaExceeded: { tag: "SearchQuotaExceeded" } as SearchError,
+  SearchFailed: (message: string): SearchError => ({ tag: "SearchFailed", message }),
+};
+
+/**
+ * Why a `Container` call did not succeed. `StartFailed` is a container that
+ * would not start, or whose port never listened, with a message; `Unavailable`
+ * is the platform declining to start another instance (the account's limits);
+ * `Timeout` is a start or a call that took too long; `Network` is a failure
+ * reaching the instance. Cloudflare adds error cases over time, so a `match`
+ * over this type needs a wildcard.
+ */
+export type ContainerError =
+    { readonly tag: "StartFailed"; readonly message: string }
+  | { readonly tag: "Unavailable" }
+  | { readonly tag: "Timeout" }
+  | { readonly tag: "Network" };
+
+export const ContainerError = {
+  StartFailed: (message: string): ContainerError => ({ tag: "StartFailed", message }),
+  Unavailable: { tag: "Unavailable" } as ContainerError,
+  Timeout: { tag: "Timeout" } as ContainerError,
+  Network: { tag: "Network" } as ContainerError,
 };
 
 /**
@@ -910,16 +1578,55 @@ export const __QueueToken: symbol = globalThis.Symbol("Queue");
  *
  * `write` checks the point against the platform's limits (see `DataPoint`)
  * and faults on a breach; a Worker invocation may write at most 250 points.
- * Writes are sent after the response, so one never delays it. Reading is
- * the account's SQL API, outside Bynk. Data is kept for three months and
+ * Writes are sent after the response, so one never delays it. Reading is done
+ * with `AnalyticsSql`, and `dataset` names this dataset for the query:
+ * `events.analyticsEngine.shop_cart_signups`, or `..._staging` under
+ * `--env staging`, so a query never hard-codes the environment. Data is kept for three months and
  * readable with any account analytics token, so keep secrets and personal
  * data out of it.
  */
 export interface Analytics {
   write(point: DataPoint): globalThis.Promise<void>;
+  dataset(): globalThis.Promise<string>;
 }
 
 export const __AnalyticsToken: symbol = globalThis.Symbol("Analytics");
+
+/**
+ * Read analytics data with SQL, from the Worker's `[analytics]` binding: it needs no
+ * API token. It is account-scoped and bound once per Worker, so it is used bare
+ * (`given AnalyticsSql`) and has no named instances; only a Worker that uses it
+ * declares the binding. It reads the datasets `Analytics.write` fills, and Cloudflare's
+ * other analytics datasets, as `events.analyticsEngine.<DATASET>`.
+ *
+ * `query(sql, params)` runs one `SELECT`. Put values in `params`, a `List[SqlValue]`
+ * bound to `$1`, `$2`, … by position, and never into the text of `sql`. A `Null`,
+ * `Integer`, `Real`, `Text` or `Boolean` is taken (a `Real` that is not finite is
+ * `SqlRejected`); a `Blob` has no Analytics SQL counterpart and is `SqlRejected` too,
+ * before anything is sent. Named
+ * `$name` parameters are not taken yet. A dataset's name is an identifier, which a
+ * parameter cannot be, so it is the one value written into `sql`.
+ *
+ * Cloudflare's rules for the SQL apply as they do to its own API: the query must carry a
+ * lower time bound (`WHERE timestamp >= NOW() - INTERVAL '1' HOUR`), because the binding
+ * exposes no separate time range; it must not name `accountTag` or `zoneTag`, because the
+ * binding supplies the account; and it must not end in a `FORMAT` clause. The dialect is
+ * deliberately limited; see Cloudflare's Analytics SQL reference.
+ *
+ * The reply is an `AnalyticsSqlResult`, its `data` the rows as JSON text for `Json.decode`.
+ * A failure is an `AnalyticsSqlError`: `SqlRetryable` when the platform says repeating
+ * may succeed, `SqlRejected` when it does not. The call never retries by itself.
+ *
+ * There is no local implementation of the binding: under `bynk dev` a query runs on
+ * Cloudflare, against the deployed datasets, once you allow it, and `bynkc test` faults
+ * until the call is stubbed (`stub AnalyticsSql.query(_, _) returns …`), so a test never
+ * reaches Cloudflare.
+ */
+export interface AnalyticsSql {
+  query(sql: string, params: readonly SqlValue[]): globalThis.Promise<Result<AnalyticsSqlResult, AnalyticsSqlError>>;
+}
+
+export const __AnalyticsSqlToken: symbol = globalThis.Symbol("AnalyticsSql");
 
 /**
  * Cloudflare's edge cache for this context's Worker (Workers Cache), and its
@@ -1009,6 +1716,112 @@ export interface Version {
 }
 
 export const __VersionToken: symbol = globalThis.Symbol("Version");
+
+/**
+ * Workers AI, from the Worker's `[ai]` binding: it needs no API token and no
+ * account id. It is bound once per Worker, so it is used bare (`given Ai`)
+ * and has no named instances. Only a Worker that uses it declares the
+ * binding.
+ *
+ * `run(model, input)` runs any model by its id (`"@cf/meta/llama-3.2-1b-instruct"`).
+ * `input` is the model's JSON input as text, and the reply is the model's JSON
+ * output as text, so a model Cloudflare ships tomorrow works today: build the
+ * input with `Json.encode` and read the reply with `Json.decode`. An `input`
+ * that is not a JSON object, or a `model` that is empty or has characters an
+ * id never has, is a fault. A model that answers with binary data (an image,
+ * say) is `AiFailed`: `run` carries JSON replies only.
+ *
+ * `generate(model, request)` is chat-style text generation with the same
+ * request and reply for every chat model: the text is read from the model's
+ * `response`, or from `choices[0].message.content` for a model that answers in
+ * that shape. `embed(model, texts)` gives one vector per text, in order, all of
+ * one length, for a text-embedding model such as `"@cf/baai/bge-base-en-v1.5"`.
+ * Both return `BadReply` when the platform answers but not in the promised
+ * shape (a model that is not of that kind, say). An empty `messages` or `texts`
+ * is a fault. `embed` does not check how many texts one call may carry: the
+ * limit is the model's, and a call over it is `InvalidInput`. The embeddings use
+ * the platform's default pooling, so an index built from them stays consistent.
+ *
+ * `runStream(model, input)` is `run` with the reply streamed: the model's own
+ * events, one element each, as the JSON text of that event (the shape is the
+ * model's, so a handler that wants text deltas maps the stream and decodes each
+ * event). The binding asks the model to stream; the terminal `[DONE]` marker
+ * is consumed, not yielded. A refusal before the stream starts (an unknown
+ * model, a usage limit) is the `Err`, so a handler can answer with an ordinary
+ * response; a failure after the first event faults the stream, as a failing
+ * producer aborts any stream. A model that does not stream is `AiFailed`. Like
+ * every `Stream`, it is read once and cannot cross a service boundary: the
+ * handler that calls `runStream` is the one that serves it, as in
+ * `Streaming(events)`.
+ *
+ * Workers AI is a remote service on your Cloudflare account, so a call
+ * may be billed, and a model's reply is untrusted input like any other
+ * user text. See Cloudflare's Workers AI pricing page for what applies,
+ * and put a `RateLimit` in front of any handler an anonymous caller can reach.
+ * Under `bynk dev` a call runs the model on Cloudflare. In a test every
+ * operation faults until `stub Ai.run(_, _) returns …` replaces it, so a
+ * test never reaches Workers AI.
+ */
+export interface Ai {
+  run(model: string, input: string): globalThis.Promise<Result<string, AiError>>;
+  generate(model: string, request: GenerateRequest): globalThis.Promise<Result<Generation, AiError>>;
+  embed(model: string, texts: readonly string[]): globalThis.Promise<Result<readonly (readonly number[])[], AiError>>;
+  runStream(model: string, input: string): globalThis.Promise<Result<AsyncIterable<string>, AiError>>;
+}
+
+export const __AiToken: symbol = globalThis.Symbol("Ai");
+
+/**
+ * Cloudflare Images, from the Worker's `[images]` binding: it resizes,
+ * rotates, blurs, converts and draws on images in the Worker, with no URL and
+ * no round trip to your zone. It is bound once per Worker, so it is used bare
+ * (`given Images`) and has no named instances. Only a Worker that uses it
+ * declares the binding.
+ *
+ * `info(image)` reads an image's format and size without transforming it, and
+ * Cloudflare does not bill it. An empty or non-image input is `InvalidImage`,
+ * and a format this type does not name is `ImagesFailed`.
+ *
+ * `transform(image, options, output)` reads `image` (any format the platform
+ * reads, at most 20 MB), applies `options` and writes the result as `output`
+ * says. The result is buffered whole; for a large image use `transformStream`.
+ *
+ * `transformStream(image, options, output)` is `transform` over a stream: it
+ * reads `image` as a `Stream[Bytes]` (read once, as any stream is) and gives
+ * the result as an `ImageStream`, so a handler can serve it with
+ * `RawStreamed` without holding the output. The input is still bounded by
+ * the platform's limit, and the options are the same. A refusal before the
+ * stream starts (a non-image, an option out of range) is the `Err`; a failure
+ * after the first chunk faults the stream, as a failing producer aborts any
+ * stream. The overlay images stay `Bytes`, since an overlay is small and a
+ * stream cannot be read twice for `repeat`. Like every `Stream`, the result
+ * cannot cross a service boundary: the handler that calls it is the one that
+ * serves it. The image is untrusted input: an upload
+ * can be a non-image or very large, so answer `InvalidImage` and
+ * `ImageTooLarge` as the caller's mistake, and cap an upload with the request
+ * body limit. An empty image, a `width` or `height` below 1, a `rotate` other
+ * than 90, 180 or 270, an `opacity` outside 0 to 1, a `quality` outside 1 to 100
+ * and an overlay positioned from both opposite edges are `InvalidImage`
+ * without reaching the platform. Cloudflare's own limits are enforced by the
+ * platform and reported as an `ImagesError`; see Cloudflare's Images limits
+ * page for them.
+ *
+ * Calls are billed by Cloudflare as unique transformations. See Cloudflare's
+ * Images pricing page for what applies, and put a `RateLimit` in front of any
+ * handler an anonymous caller can reach. Under `bynk dev` the binding runs
+ * locally in a low-fidelity form that supports only `width`, `height`,
+ * `rotate` and the output format, so `fit`, `blur`, `overlays`, `quality` and
+ * some formats are not reproduced there; deploy to see production's output.
+ * In a test every operation faults until `stub Images.transform(_, _, _)
+ * returns …` replaces it, so a test never reaches the platform.
+ */
+export interface Images {
+  info(image: globalThis.Uint8Array): globalThis.Promise<Result<ImageInfo, ImagesError>>;
+  transform(image: globalThis.Uint8Array, options: TransformOptions, output: OutputOptions): globalThis.Promise<Result<ImageResult, ImagesError>>;
+  transformStream(image: AsyncIterable<globalThis.Uint8Array>, options: TransformOptions, output: OutputOptions): globalThis.Promise<Result<ImageStream, ImagesError>>;
+}
+
+export const __ImagesToken: symbol = globalThis.Symbol("Images");
 
 /**
  * One secret of a Cloudflare Secrets Store, read as `StripeKey.get()`. A
@@ -1192,3 +2005,202 @@ export interface MySql {
 }
 
 export const __MySqlToken: symbol = globalThis.Symbol("MySql");
+
+/**
+ * A Vectorize index: vectors with an id, searched by similarity. Used only
+ * through a named instance that states the index's fixed shape,
+ * `capability Docs = Vectorize @dimensions(768) @metric("cosine")`, which
+ * binds as `VECTORIZE_DOCS`, a `[[vectorize]]` entry; both annotations are
+ * required, and a bare `given Vectorize` is refused. `@metric` is `"cosine"`,
+ * `"euclidean"` or `"dot-product"`. Experimental.
+ *
+ * An index's dimensions and metric cannot change once it exists, so they are
+ * written next to the code that depends on them. `@indexed(["category:string",
+ * "year:number"])` lists the metadata properties a query may filter on (at
+ * most 10, each `name:type` with the type `string`, `number` or `boolean`).
+ * Metadata indexes should exist before the vectors that carry the property.
+ *
+ * `upsert` writes vectors, replacing any with the same id in full; `insert`
+ * writes only vectors whose id is new. `upsertValue(vectors)` is `upsert` with
+ * the metadata of each `VectorOf[M]` encoded by `M`'s codec, as
+ * `Queue.sendValue` encodes a message. `query(vector, options)` returns the
+ * nearest matches, best first. `getByIds` reads vectors back, `deleteByIds`
+ * removes them, and `describe` reports the index's dimensions and metric.
+ * Metadata is JSON text: write it with `Json.encode` and read it with
+ * `Json.decode`, so a vector stored by an older version of the program can be
+ * skipped or repaired instead of failing the query. The embeddings of
+ * `Ai.embed` are the usual `values`; an index must be queried with the same
+ * model and pooling it was built with.
+ *
+ * A write returns a `Mutation` and is visible to queries only after the
+ * platform has processed it. Every operation gives a `VectorError` rather
+ * than faulting, except a call on an index that does not exist, which is a
+ * platform fault.
+ *
+ * Vectorize is a remote service on your Cloudflare account, so a call may be
+ * billed; see Cloudflare's Vectorize pricing page for what applies, and put a
+ * `RateLimit` in front of any handler an anonymous caller can reach.
+ *
+ * In a test each instance is an in-memory index built from its declaration,
+ * so a test never reaches Cloudflare and a retrieval flow (store, filter,
+ * rank) runs. It ranks exactly where production ranks approximately, and a
+ * write is visible at once where production takes some seconds; those are
+ * its two differences. It enforces the dimensions, namespaces, insert versus
+ * upsert, all eight filter operators and the platform limits as of
+ * 2026-11-13 (a limit it refuses is a `VectorInvalidInput`). A filter on a
+ * property that is not in `@indexed` faults, naming the difference, because
+ * production silently matches nothing for it. `stub Docs.query(_, _) returns …`
+ * still replaces any operation.
+ */
+export interface Vectorize {
+  upsert(vectors: readonly Vector[]): globalThis.Promise<Result<Mutation, VectorError>>;
+  insert(vectors: readonly Vector[]): globalThis.Promise<Result<Mutation, VectorError>>;
+  upsertValue(vectors: unknown): globalThis.Promise<Result<Mutation, VectorError>>;
+  query(vector: readonly number[], options: QueryOptions): globalThis.Promise<Result<readonly VectorMatch[], VectorError>>;
+  getByIds(ids: readonly string[]): globalThis.Promise<Result<readonly Vector[], VectorError>>;
+  deleteByIds(ids: readonly string[]): globalThis.Promise<Result<Mutation, VectorError>>;
+  describe(): globalThis.Promise<Result<IndexInfo, VectorError>>;
+}
+
+export const __VectorizeToken: symbol = globalThis.Symbol("Vectorize");
+
+/**
+ * An AI Search instance: a managed retrieval service that indexes a data source
+ * (an R2 bucket, a website, files uploaded to it) and answers from it. Used
+ * only through a named instance that names it,
+ * `capability Kb = AiSearch @instance("support-docs")`, which binds as
+ * `AI_SEARCH_KB`, an `[[ai_search]]` entry; the annotation is required, and a
+ * bare `given AiSearch` is refused. Experimental.
+ *
+ * The instance is not created by Bynk. It is configured by whoever owns it (the
+ * data source, the models, the chunking, how it is kept in sync), so you create
+ * it in the Cloudflare dashboard, with `wrangler` or the REST API, and the
+ * Worker only queries it. The name is used as written in every environment.
+ * To fill an instance backed by an R2 bucket, write the files with `R2.put`;
+ * the instance indexes them on its own schedule, so a freshly written file is
+ * not searchable at once, and a query against an instance that has indexed
+ * nothing yet is an empty list, not an error.
+ *
+ * `search(query, options)` returns the best-matching chunks, best first, for a
+ * handler that shows results or builds its own prompt (with `Ai.generate`).
+ * `answer(messages, options)` retrieves the same way and has the instance's own
+ * generation model write the reply from the conversation, which must not be
+ * empty; a `SearchAnswer` carries the text, the chunks it used and the token usage.
+ * The generation model is the instance's setting and a call cannot override
+ * it. Every operation gives a `SearchError` rather than faulting, except a call
+ * on an instance that does not exist, which is a platform fault.
+ *
+ * AI Search is a remote service on your Cloudflare account, so a call may be
+ * billed; see Cloudflare's AI Search pricing page for what applies, and put a
+ * `RateLimit` in front of any handler an anonymous caller can reach. Under
+ * `bynk dev` a call goes to the deployed instance on Cloudflare. In a test every
+ * operation faults until `stub Kb.search(_, _) returns …` replaces it, so a test
+ * never reaches AI Search; to test retrieval logic, use `Vectorize`, which
+ * has an in-memory double.
+ */
+export interface AiSearch {
+  search(query: string, options: SearchOptions): globalThis.Promise<Result<readonly SearchHit[], SearchError>>;
+  answer(messages: readonly ChatMessage[], options: SearchOptions): globalThis.Promise<Result<SearchAnswer, SearchError>>;
+}
+
+export const __AiSearchToken: symbol = globalThis.Symbol("AiSearch");
+
+/**
+ * A container: a server in a Docker image, run on Cloudflare and reached over
+ * HTTP on one port. Used only through a named instance,
+ * `capability Renderer = Container @build("containers/renderer") @port(8080)`,
+ * which binds as `CONTAINER_RENDERER`, a Durable Object class the compiler
+ * generates; a bare `given Container` is refused. `@build` is the
+ * project-relative directory that holds the `Dockerfile`, and `@port` the
+ * port its server listens on; both are required. Experimental.
+ *
+ * `@sleepAfter(5.minutes)` stops an idle container after that long (more than
+ * zero, at most 6 hours); left out, the platform stops it shortly after the
+ * instance goes inactive, with no figure to rely on. `@instanceType` is
+ * `"lite"` (the default), `"standard-1"`, `"standard-2"`, `"standard-3"` or
+ * `"standard-4"`. `@forward(["API_KEY"])` names Worker secrets the container's
+ * process reads from its environment: every process and dependency in the
+ * image can read them, and Bynk cannot scope them further.
+ *
+ * `send(instance, req)` sends `req` to the container named `instance` and
+ * returns its response; `receiveBytes` returns the body as `Bytes`, and
+ * `sendBytes` sends `body` as the request body (`req.body` must be `None`).
+ * `Request`, `Response` and `BytesResponse` are `bynk`'s, so a context that
+ * calls them also writes `consumes bynk`. The URL's host is not used for
+ * routing, but the URL must be absolute, and the container sees it.
+ *
+ * `instance` is the name of one container instance, one process: the same
+ * name reaches the same instance, and a new name starts a new one. It is a
+ * runtime value, so a handler can use one per tenant, and it is not a secret:
+ * names appear in Cloudflare's dashboards and logs. A name that is empty, over
+ * 256 bytes or holds a control character faults the call. The first call to an
+ * instance starts its container, which takes noticeable time, longer for a
+ * larger image. A container is not storage: its disk is ephemeral.
+ *
+ * A container has no internet access: Bynk always starts it with outbound
+ * access off. Images must be built for `linux/amd64` and live in Cloudflare's
+ * registry. `bynk.cloudflare` puts no ceiling on instances: names are chosen
+ * by the caller and only the account's limits apply, so choose `@sleepAfter`
+ * and `@instanceType` with that in mind. A running container costs money; see
+ * Cloudflare's Containers pricing and limits pages for what applies. A slow
+ * call from inside an agent handler holds that agent's queue, so call from a
+ * service and hand the result to the agent.
+ *
+ * Deploy with `wrangler deploy` (Docker running).
+ * In a test every operation faults until `stub Renderer.send(_, _) returns …`
+ * replaces it, so a test never starts a container.
+ */
+export interface Container {
+  send(instance: string, req: Request): globalThis.Promise<Result<Response, ContainerError>>;
+  receiveBytes(instance: string, req: Request): globalThis.Promise<Result<BytesResponse, ContainerError>>;
+  sendBytes(instance: string, req: Request, body: globalThis.Uint8Array): globalThis.Promise<Result<BytesResponse, ContainerError>>;
+}
+
+export const __ContainerToken: symbol = globalThis.Symbol("Container");
+
+/**
+ * An outbound call that presents one of your account's client certificates, for
+ * an origin that requires mutual TLS: the server proves its identity and so
+ * does the Worker, during the handshake. Used only through a named instance
+ * that names the certificate,
+ * `capability Backend = MtlsCertificate @certificate("acme-client")`, which
+ * binds as `MTLS_BACKEND`; a bare `given MtlsCertificate` names no certificate
+ * and is refused.
+ *
+ * The certificate is uploaded to the account by its owner (Wrangler's
+ * `mtls-certificate upload`, the dashboard or the API) and is named there;
+ * `@certificate` names it, as written in every environment. The deploy links to
+ * it by that name and never uploads it: its private key never reaches Bynk or
+ * the Worker. A name that no uploaded client certificate carries, or that more
+ * than one carries, fails the deploy with the problem named.
+ *
+ * `send` has `Fetch.send`'s shape and rules: the same `Request` (its headers
+ * checked the same way, refused as `InvalidHeader` before anything is sent),
+ * the same `Response`, and `Network` when the call itself fails, which includes
+ * a handshake the origin refuses. Unlike `Service`, the URL's host is the
+ * destination: this is a real outbound call, and the certificate is presented
+ * to whatever origin the URL names. A status the origin returns, 5xx included,
+ * is an `Ok` response.
+ *
+ * Cloudflare does not support presenting a certificate to an origin that is a
+ * proxied zone on Cloudflare; the call fails with a `520`. See Cloudflare's
+ * mTLS bindings page for the current rules. There is no local simulation of
+ * the binding: `bynk dev` runs it on Cloudflare, once you allow it, and
+ * `bynkc test` faults until the call is stubbed, so a test never reaches the
+ * origin.
+ *
+ * `receiveBytes` and `sendBytes` are `Fetch`'s byte forms over the same
+ * certificate: the response body as `Bytes`, and a `Bytes` request body (which
+ * `req.body` must then leave `None`), each with `Fetch`'s defaults for the
+ * timeout and redirects.
+ *
+ * `Request`, `Response`, `BytesResponse` and `FetchError` are `bynk`'s types, so
+ * a context that calls them also writes `consumes bynk` to name them.
+ */
+export interface MtlsCertificate {
+  send(req: Request): globalThis.Promise<Result<Response, FetchError>>;
+  receiveBytes(req: Request): globalThis.Promise<Result<BytesResponse, FetchError>>;
+  sendBytes(req: Request, body: globalThis.Uint8Array): globalThis.Promise<Result<BytesResponse, FetchError>>;
+}
+
+export const __MtlsCertificateToken: symbol = globalThis.Symbol("MtlsCertificate");

@@ -1,0 +1,7 @@
+context demo
+
+// #3479: @dimensions is at most 1536.
+
+consumes bynk.cloudflare { Vectorize }
+
+capability Docs = Vectorize @dimensions(4096) @metric("cosine")

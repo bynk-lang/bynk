@@ -92,7 +92,7 @@ impl RestDestinations {
 /// Cloudflare's answer to a token without the permission: HTTP 401 or 403, or
 /// its authentication error codes (10000 "Authentication error", 9109 "Invalid
 /// access token", 9106 "Missing authentication headers").
-fn is_denied(said: &str) -> bool {
+pub(crate) fn is_denied(said: &str) -> bool {
     said.contains("answered 401")
         || said.contains("answered 403")
         || ["10000", "9109", "9106"]

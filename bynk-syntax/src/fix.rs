@@ -3,6 +3,8 @@
 //! slice 6) and `bynk check --fix` (#2642), which share it so the two cannot
 //! drift.
 //!
+//! #3537: a Hint-severity diagnostic's fix is never taken (see [`select`]).
+//!
 //! DECISION C (#2100): only a suggestion marked
 //! [`Applicability::MachineApplicable`] is taken, and only from a diagnostic
 //! that carries exactly one such suggestion. A diagnostic offering several
@@ -17,7 +19,7 @@
 //! still a quick fix, and the next fix-all picks it up once the first batch is
 //! applied.
 
-use crate::error::{Applicability, CompileError};
+use crate::error::{Applicability, CompileError, Severity};
 use crate::span::Span;
 
 /// The one machine-applicable suggestion `error` carries, if it carries
@@ -56,9 +58,33 @@ pub fn edits<'a>(
 
 /// [`edits`], also naming the diagnostics the edits came from.
 pub fn select<'a>(text: &str, errors: impl IntoIterator<Item = &'a CompileError>) -> Selection {
+    // #3537: a hint is not shown by `check`, so a batch never takes its fix;
+    // it stays an individual quick fix in the editor.
+    pick(text, errors, |e| Severity::for_error(e) != Severity::Hint)
+}
+
+/// [`select`] restricted to the diagnostics whose code is in `codes` (#3537,
+/// `check --fix=<code>`). Naming a code is asking for its fixes, so a hint's
+/// fix is taken when its code is named.
+pub fn select_codes<'a>(
+    text: &str,
+    errors: impl IntoIterator<Item = &'a CompileError>,
+    codes: &[String],
+) -> Selection {
+    pick(text, errors, |e| codes.iter().any(|c| c == e.category))
+}
+
+fn pick<'a>(
+    text: &str,
+    errors: impl IntoIterator<Item = &'a CompileError>,
+    admit: impl Fn(&CompileError) -> bool,
+) -> Selection {
     let mut taken: Vec<(Span, String)> = Vec::new();
     let mut categories = Vec::new();
     for e in errors {
+        if !admit(e) {
+            continue;
+        }
         let Some(s) = lone_fix(e) else {
             continue; // none, or a choice between candidates
         };
@@ -262,6 +288,35 @@ mod tests {
         ];
         assert_eq!(apply("abc", &bad), "Abc");
         assert_eq!(apply("aé", &[(Span::new(2, 2), "w".to_string())]), "aé");
+    }
+
+    #[test]
+    fn a_hint_fix_is_never_taken() {
+        let hint = CompileError::new("bynk.parse.let_else_staircase", Span::new(0, 2), "msg")
+            .with_suggestion("flatten", vec![(Span::new(0, 2), "a".to_string())], M);
+        assert_eq!(Severity::for_error(&hint), Severity::Hint);
+        assert!(edits(TEXT, &[hint]).is_empty());
+    }
+
+    #[test]
+    fn named_codes_select_only_those_diagnostics_hints_included() {
+        let hint = CompileError::new("bynk.parse.let_else_staircase", Span::new(0, 2), "msg")
+            .with_suggestion("flatten", vec![(Span::new(0, 2), "a".to_string())], M);
+        let other = diag((10, 12), &[(&[((10, 12), "b")], M)]);
+        let errors = [hint, other];
+        let only = |codes: &[&str]| {
+            let codes: Vec<String> = codes.iter().map(|c| c.to_string()).collect();
+            select_codes(TEXT, &errors, &codes).edits
+        };
+        assert_eq!(
+            only(&["bynk.test"]),
+            vec![(Span::new(10, 12), "b".to_string())]
+        );
+        assert_eq!(
+            only(&["bynk.parse.let_else_staircase"]),
+            vec![(Span::new(0, 2), "a".to_string())]
+        );
+        assert!(only(&["bynk.nothing"]).is_empty());
     }
 
     #[test]

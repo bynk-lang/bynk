@@ -1,6 +1,6 @@
 context demo
 
-consumes bynk.cloudflare { Kv }
+consumes bynk.cloudflare { Kv, KvPut, KvExpiration }
 
 // #2590: `Kv.putWith` ships experimental, though `Kv` is stable.
 service probe {

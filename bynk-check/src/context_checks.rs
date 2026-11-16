@@ -695,7 +695,7 @@ pub fn check_context_declarations(
     .with_embeds(typed.embeds.clone())
     .with_consts(typed.consts.clone())
     .with_shadowed_imports(typed.shadowed_imports.clone())
-    .with_extensible_enums(typed.extensible_enums.clone())
+    .with_scope_facts_of(typed)
     .with_stability(typed.stability.clone());
 
     // v0.25: capability operation signatures reference types.
@@ -3237,6 +3237,7 @@ fn check_service_decls(
     // #3343: `@name("…")` on the fields of a request record.
     validate_field_names(table, &typed.types, &typed.consts, errors);
 
+    let cf_is_std = cf_type_is_std(cross_context, table);
     // v0.9: validate HTTP handler shape and check for duplicate routes
     // across all services in this context.
     let mut route_first_span: HashMap<(HttpMethod, String), Span> = HashMap::new();
@@ -3245,7 +3246,7 @@ fn check_service_decls(
             let HandlerKind::Http { method, path } = &handler.kind else {
                 continue;
             };
-            validate_http_handler(handler, *method, path, &typed.types, errors);
+            validate_http_handler(handler, *method, path, &typed.types, cf_is_std, errors);
             let key = (*method, path.clone());
             if let Some(prev) = route_first_span.get(&key).copied() {
                 errors.push(
@@ -4415,7 +4416,7 @@ fn check_agent_decls(
         .with_embeds(typed.embeds.clone())
         .with_consts(typed.consts.clone())
         .with_shadowed_imports(typed.shadowed_imports.clone())
-        .with_extensible_enums(typed.extensible_enums.clone())
+        .with_scope_facts_of(typed)
         .with_stability(typed.stability.clone());
         // v0.81: the fresh-key rule for `store Cell[T]` fields — an
         // initialiser is checked against the element type `T` (which also types
@@ -4523,7 +4524,7 @@ fn check_agent_decls(
         .with_embeds(typed.embeds.clone())
         .with_consts(typed.consts.clone())
         .with_shadowed_imports(typed.shadowed_imports.clone())
-        .with_extensible_enums(typed.extensible_enums.clone())
+        .with_scope_facts_of(typed)
         .with_stability(typed.stability.clone());
         self_scope.insert(
             "self".to_string(),
@@ -5330,6 +5331,7 @@ fn validate_http_handler(
     method: HttpMethod,
     path: &str,
     types: &HashMap<String, Arc<TypeDecl>>,
+    cf_is_std: bool,
     errors: &mut Vec<CompileError>,
 ) {
     if !path.starts_with('/') {
@@ -5420,6 +5422,26 @@ fn validate_http_handler(
         if is_cookies {
             validate_cookies_param(p, types, errors);
         }
+        // #3513 C: `cf` is what Cloudflare derived about the connection, and must be
+        // typed `RequestCf` (from `bynk.cloudflare`).
+        let is_cf = !is_path && p.name.name == "cf";
+        if is_cf
+            && !(cf_is_std && matches!(&p.type_ref, TypeRef::Named(id) if id.name == "RequestCf"))
+        {
+            errors.push(
+                CompileError::new(
+                    "bynk.http.cf_wrong_type",
+                    p.type_ref.span(),
+                    format!(
+                        "an HTTP handler's `cf` parameter must be typed `RequestCf` (got `{}`)",
+                        ts_type_ref_display(&p.type_ref),
+                    ),
+                )
+                .with_note(
+                    "`cf: RequestCf` gives the handler what Cloudflare derived about the request; it is the `RequestCf` of `bynk.cloudflare` (`consumes bynk.cloudflare { RequestCf }`), not a type of your own",
+                ),
+            );
+        }
         // #3276: the `body` of a `@form` handler is a record of form leaves.
         if is_body
             && let Some(kind) = handler
@@ -5459,18 +5481,18 @@ fn validate_http_handler(
                 ),
             );
         }
-        if !is_path && !is_body && !is_headers && !is_query && !is_cookies {
+        if !is_path && !is_body && !is_headers && !is_query && !is_cookies && !is_cf {
             errors.push(
                 CompileError::new(
                     "bynk.http.extra_param",
                     p.span,
                     format!(
-                        "handler parameter `{}` is not a path parameter and is not named `body`, `headers`, `query` or `cookies`",
+                        "handler parameter `{}` is not a path parameter and is not named `body`, `headers`, `query`, `cookies` or `cf`",
                         p.name.name
                     ),
                 )
                 .with_note(
-                    "HTTP handler parameters must match a `:name` path segment, or be named `body`, `headers`, `query` or `cookies`",
+                    "HTTP handler parameters must match a `:name` path segment, or be named `body`, `headers`, `query`, `cookies` or `cf`",
                 ),
             );
         }
@@ -5543,6 +5565,18 @@ fn is_query_leaf(r: &TypeRef, types: &HashMap<String, Arc<TypeDecl>>) -> bool {
         },
         _ => false,
     }
+}
+
+/// #3513 C: whether this unit's `RequestCf` is the standard library's: consumed from
+/// `bynk.cloudflare`, and not a type the unit declares itself. `cf` takes only that one,
+/// so a look-alike cannot bypass the platform lock and the unstable gate, which are both
+/// keyed to the import.
+fn cf_type_is_std(cross_context: &resolver::CrossContextInfo, table: &UnitTable) -> bool {
+    cross_context
+        .consumed_types
+        .get("bynk.cloudflare")
+        .is_some_and(|t| t.contains_key("RequestCf"))
+        && !table.types.contains_key("RequestCf")
 }
 
 /// #2854: whether `r` is a legal field type of a typed `query` record: a leaf,

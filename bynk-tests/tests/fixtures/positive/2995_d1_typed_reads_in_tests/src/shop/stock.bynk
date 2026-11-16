@@ -3,7 +3,7 @@ context shop.stock
 // #2995: a test case reads through the capability with the typed reads.
 
 consumes bynk
-consumes bynk.cloudflare { D1 }
+consumes bynk.cloudflare { D1, SqlReadError }
 
 capability Stock = D1
 

@@ -80,11 +80,49 @@ pub fn lower_test_case_body(
     sum_handlers: HashSet<(String, String)>,
     test_agents: HashSet<String>,
     settle_sends: bool,
+    harness_bound: HashSet<String>,
+    source: &str,
+    rel_path: &str,
+    runtime_use: &RuntimeUse,
+) -> (String, SourceMapBuilder) {
+    lower_test_case_body_reporting(
+        block,
+        typed,
+        cross_context,
+        test_services,
+        test_service_handlers,
+        sum_handlers,
+        test_agents,
+        settle_sends,
+        harness_bound,
+        source,
+        rel_path,
+        runtime_use,
+        false,
+    )
+}
+
+/// [`lower_test_case_body`], optionally reporting the tail's value (#3585,
+/// `bynk eval`). With `report_value`, the tail expression is not discarded: its
+/// value is encoded as the wire shape `Json.encode` gives it and written to
+/// stdout as one `{"type":"eval-value","valueType":"…","value":…}` line, which
+/// the test runner's NDJSON reader picks up. Nothing else about the body changes.
+#[allow(clippy::too_many_arguments)]
+pub fn lower_test_case_body_reporting(
+    block: &Block,
+    typed: &mut TypedCommons,
+    cross_context: &bynk_check::resolver::CrossContextInfo,
+    test_services: HashSet<String>,
+    test_service_handlers: HashMap<String, Vec<bynk_model::IrHandlerKind>>,
+    sum_handlers: HashSet<(String, String)>,
+    test_agents: HashSet<String>,
+    settle_sends: bool,
     // #2024: the names the runner scaffold binds in the body's scope.
     harness_bound: HashSet<String>,
     source: &str,
     rel_path: &str,
     runtime_use: &RuntimeUse,
+    report_value: bool,
 ) -> (String, SourceMapBuilder) {
     let mut out = String::new();
     let smb = RefCell::new(SourceMapBuilder::new());
@@ -118,6 +156,13 @@ pub fn lower_test_case_body(
         // it still take effect via thrown AssertionErrors.
         cx.record_span(out.len(), block.tail.span);
         let mut pre = Pre::new();
+        if report_value && let Some(line) = eval_value_line(&mut pre, &block.tail, &mut cx) {
+            for s in pre.stmts() {
+                write_line(&mut out, 0, s);
+            }
+            write_line(&mut out, 0, &line);
+            return (out, smb.into_inner());
+        }
         let tail = pre.lower(&block.tail, &mut cx);
         for s in pre.stmts() {
             write_line(&mut out, 0, s);
@@ -255,7 +300,7 @@ enum SettleKind {
 
 /// Fails closed: only a pure `let` is `Other` and only an `expect` is
 /// `Expect`, and either is `Unsafe` if it holds an unsafe address. An
-/// effectful statement (`<-`, `do`, `~>`, `:=`, `advance`) is `Safe` only
+/// effectful statement (`<-`, `do`, `:=`, `advance`) is `Safe` only
 /// when its value *is* a safe address and holds no other; anything else ends
 /// the segment, so a retry can never re-run a write. A missed retry is the
 /// price; a repeated `POST` against a real deployment would not be.
@@ -422,7 +467,7 @@ pub(crate) fn emit_block_as_function_body_with_return(
     cx.tail_slot = prev_slot;
     cx.return_ty = prev;
     // W30 (#2840): a service handler that claimed settles its claims on exit.
-    if cx.claim_scope_used && cx.tracks_claims() {
+    if cx.claim_scope_used && cx.wraps_claims_in_body() {
         let (before, after) = claim_scope_wrapper(indent);
         out.insert_str(start, &before);
         out.push_str(&after);
@@ -1185,33 +1230,6 @@ fn emit_statement(out: &mut String, stmt: &Statement, cx: &mut LowerCtx, indent:
                 write_line(out, indent, s);
             }
             write_line(out, indent, &format!("__bynkAdvanceClock({amount});"));
-        }
-        Statement::Send(s) => {
-            // v0.79: `~> expr` — fire-and-forget. The reply is `Effect[()]` and is
-            // never awaited. On the Workers target the immediate tier hands the
-            // promise to the execution context's `waitUntil`, so it settles after
-            // the handler returns rather than being killed with the response. The
-            // execution context rides in `deps.__exec` (threaded by `compose`).
-            let mut pre = Pre::new();
-            let value = pre.lower(&s.value, cx);
-            for st in pre.stmts() {
-                write_line(out, indent, st);
-            }
-            // #3437: `~>` lowers through the same helper as `e.detach()`, so its
-            // faults are labelled and a failure is reported. Its operand is
-            // `Effect[()]`, so there is no `Err` to name.
-            cx.note_detach();
-            let site = cx
-                .assert_loc()
-                .map(|_| expect_location(cx, s.span.start))
-                .or_else(|| crate::emitter::fault_source_location(s.span.start))
-                .map(|l| crate::emitter::escape_ts_string(&l))
-                .unwrap_or_else(|| format!("offset {}", s.span.start));
-            write_line(
-                out,
-                indent,
-                &format!("__bynkDetach({value}, {}, \"{site}\");", cx.exec_expr()),
-            );
         }
         Statement::Do(d) => {
             // v0.146 (ADR 0170): `do expr` → `await expr;`. The binder-free
@@ -2348,7 +2366,7 @@ fn tracked_claim_call(cap_expr: &str, args: &[String], cx: &mut LowerCtx) -> Str
 /// returned `Err` or a 5xx `HttpResult` does too; any other outcome confirms
 /// them. Returns the text to put before and after the body, which is left
 /// where it is so its source-map checkpoints stay valid.
-fn claim_scope_wrapper(indent: usize) -> (String, String) {
+pub(crate) fn claim_scope_wrapper(indent: usize) -> (String, String) {
     let pad = " ".repeat(indent);
     let before = format!(
         "{pad}const __claims = (deps.Idempotency as unknown as {{ __track?: () => {{ note<C>(k: string, c: C, t: number): C; lease(t: number): number; settle(r: unknown, threw: boolean): globalThis.Promise<void> }} }}).__track?.() ?? {{ note: <C>(_k: string, c: C, _t: number) => c, lease: (t: number) => t, settle: async (_r: unknown, _threw: boolean) => {{}} }};\n{pad}let __r;\n{pad}try {{\n{pad}__r = await (async () => {{\n"
@@ -2380,6 +2398,9 @@ fn lower_method_call(
         return pre.finish(s);
     }
     // Capability, cross-context, events and static-type calls (#3167).
+    if let Some(s) = lower_d1_peek_call(e, cx) {
+        return pre.finish(s);
+    }
     if let Some(s) = lower_d1_select_call(e, args, cx, &mut pre) {
         return pre.finish(s);
     }
@@ -2427,6 +2448,27 @@ fn lower_method_call(
     // Instance call: UFCS lowering with the receiver as first arg.
     let call = lower_ufcs_method_call(e, receiver, method, type_args, args, cx, &mut pre);
     pre.finish(call)
+}
+
+/// #3147: lower `D1.peek(<participant>.<Cap>)` in an integration or `system`
+/// case, or `None` when the call is not one. It holds the participant's own
+/// capability over its test database, read-only, as `deps.<local>`: the same
+/// `WorkersD1` the app's code calls, over the very database object the
+/// participant's `env` holds, so a call on the handle (an ordinary capability
+/// call on `deps.<local>`) sees what the app wrote.
+fn lower_d1_peek_call(e: &Expr, cx: &mut LowerCtx) -> Option<String> {
+    let Some(Callee::D1Peek {
+        participant,
+        binding,
+        local,
+    }) = cx.commons().callees.get(&e.id).cloned()
+    else {
+        return None;
+    };
+    let ns = test_scaffold_ns(&participant);
+    Some(format!(
+        "(deps.{local} = new bynk_cloudflare__binding.WorkersD1({{ {binding}: deps.env_{ns}.{binding}.readOnly() }}, \"{binding}\"))"
+    ))
 }
 
 /// Lower a derived-`D1` `select`/`firstAs` call (#2865), or `None` when the call is not one. Moved out of
@@ -2483,11 +2525,12 @@ fn lower_d1_select_call(
             .expect("a checked D1 select row type has a JSON decoder");
         {
             let params = pre.lower(params, cx);
-            let deps = if cx.in_test_case() {
-                "deps".to_string()
-            } else {
-                cx.cap_deps_expr().to_string()
-            };
+            let deps =
+                if cx.in_test_case() || cap.starts_with(bynk_check::checker::peek::LOCAL_PREFIX) {
+                    "deps".to_string()
+                } else {
+                    cx.cap_deps_expr().to_string()
+                };
             let sql = escape_ts_string(&sql);
             let (op, decode) = if first {
                 (
@@ -2804,6 +2847,24 @@ fn lower_capability_call(
             cx,
         ));
     }
+    // #3147: a read through a `D1.peek` handle, whatever the handle is called:
+    // the call is recorded on the capability the case holds as `deps.<cap>`.
+    if let Some(Callee::Capability { cap, .. }) = cx.commons().callee(e.id)
+        && cap.starts_with(bynk_check::checker::peek::LOCAL_PREFIX)
+    {
+        let cap = cap.clone();
+        let mut args_lowered: Vec<String> = args.iter().map(|a| pre.lower(a, cx)).collect();
+        let wire = capability_wire(e, cx);
+        encode_capability_args(wire.as_deref(), &mut args_lowered, cx);
+        let call = format!("deps.{cap}.{}({})", method.name, args_lowered.join(", "));
+        return Some(decode_capability_reply(
+            call,
+            wire.as_deref(),
+            &cap,
+            &method.name,
+            cx,
+        ));
+    }
     // Capability call: receiver is a bare ident naming a declared
     // capability in `given`. Lower to `<deps>.Capability.op(args)`,
     // where `<deps>` is `deps` in a handler body and `this.deps` in a
@@ -2841,13 +2902,9 @@ fn lower_capability_call(
             capability_call_type_args_ts(type_args, wire.as_deref()),
             args_lowered.join(", ")
         );
-        return Some(decode_capability_reply(
-            call,
-            wire.as_deref(),
-            &id.name,
-            &method.name,
-            cx,
-        ));
+        let decoded = decode_capability_reply(call, wire.as_deref(), &id.name, &method.name, cx);
+        let target = format!("{}.{}", id.name, method.name);
+        return Some(cx.trace_step("capability", &target, e.span.start, decoded));
     }
     None
 }
@@ -3248,7 +3305,7 @@ fn lower_test_service_call(
         && cx.is_test_service(&id.name)
         && !cx.is_local(&id.name)
     {
-        // #1994: a target whose handlers send with `~>` settles each addressed
+        // #1994: a target whose handlers send with `detach` settles each addressed
         // call — awaits the promises the handler handed `deps.__exec.waitUntil`
         // — so the case's expectations see the sends' effects.
         let settles = cx.test_settles_sends();
@@ -3576,11 +3633,13 @@ fn lower_inline_agent_call(
         let mut all = args_lowered;
         // #2355: `this.deps` in a provider body.
         all.push(cx.cap_deps_expr().to_string());
-        return Some(format!(
+        let call = format!(
             "{instance}.{method}({args})",
             method = method.name,
             args = all.join(", ")
-        ));
+        );
+        let target = format!("{}.{}", name.name, method.name);
+        return Some(cx.trace_step("agent", &target, e.span.start, call));
     }
     None
 }
@@ -3622,7 +3681,12 @@ fn lower_let_bound_agent_call(
         let recv = cx
             .resolved_local_name(&id.name)
             .unwrap_or_else(|| id.name.clone());
-        return Some(format!("{}.{}({})", recv, method.name, all.join(", ")));
+        let call = format!("{}.{}({})", recv, method.name, all.join(", "));
+        let target = match cx.local_agent_vars.get(&id.name) {
+            Some(agent) => format!("{agent}.{}", method.name),
+            None => method.name.clone(),
+        };
+        return Some(cx.trace_step("agent", &target, e.span.start, call));
     }
     None
 }
@@ -5183,6 +5247,29 @@ fn form_encode_wire(pre: &mut Pre, arg: &Expr, cx: &mut LowerCtx) -> Option<Stri
     )))
 }
 
+/// #3585: the statement that reports a `bynk eval` case's tail value: its
+/// `Json.encode` text and its type, as one NDJSON line. `None` when the value's
+/// type is unknown to the lowering, so the case runs without reporting.
+fn eval_value_line(pre: &mut Pre, tail: &Expr, cx: &mut LowerCtx) -> Option<String> {
+    let ty = cx.commons().expr_types.get(&tail.id).map(|te| te.ty)?;
+    let shown = bynk_check::symbols::display_type_names_in(&cx.commons().tys().display(ty));
+    let shown = bynk_project::json_string(&shown);
+    let head = format!(
+        "globalThis.console.log('{{\"type\":\"eval-value\",\"valueType\":' + globalThis.JSON.stringify({shown})"
+    );
+    // A value with no wire shape (a function, say) still reports its type, and
+    // no value.
+    let Some(json) = json_encode_text(pre, tail, cx, false) else {
+        let _ = pre.lower(tail, cx);
+        return Some(format!("{head} + '}}');"));
+    };
+    // The encoder names `JsonValue` and `BoundaryError`, whether or not the
+    // value's type needs a closure of codecs of its own.
+    cx.runtime_use().note_json_codec();
+    cx.runtime_use().note_boundary_codec();
+    Some(format!("{head} + ',\"value\":' + {json} + '}}');"))
+}
+
 /// `Json.encode(arg)`'s text: `globalThis.JSON.stringify(<serialised arg>)`, with
 /// the codec roots the module needs recorded. Shared by the `Json.encode` call
 /// and the snapshot `expect` (#2842), so both encode a value one way. `None`
@@ -5397,7 +5484,11 @@ fn lower_cross_context_service_call(
                 BuildTarget::Workers => {
                     let _ = key;
                     let call = pre.absorb(lower_workers_cross_context_call(
-                        &consumed, method, args, cx,
+                        &consumed,
+                        method,
+                        args,
+                        receiver.span.start,
+                        cx,
                     ));
                     return Some(pre.finish(call));
                 }

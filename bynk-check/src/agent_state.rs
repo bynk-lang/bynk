@@ -68,6 +68,35 @@ pub const PATH_BUDGET: usize = 256;
 pub struct AgentStateModel {
     pub agent: String,
     pub machines: Vec<StateMachine>,
+    /// #3608: the agent's snapshot `invariant`s then its step `transition`s,
+    /// each in declaration order.
+    pub invariants: Vec<AgentInvariant>,
+}
+
+/// Which declaration an [`AgentInvariant`] came from.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum InvariantKind {
+    /// A snapshot `invariant`, over the committed state.
+    Invariant,
+    /// A step `transition`, over the `old`/`new` pair (ADR 0144).
+    Transition,
+}
+
+/// #3608: one declared `invariant` or `transition` of an agent. The predicate
+/// is source text printed by the expression printer, so two spellings of one
+/// predicate (whitespace, comments, layout) print alike and a client can
+/// compare revisions by `(kind, name, predicate)`.
+#[derive(Debug, Clone, PartialEq)]
+pub struct AgentInvariant {
+    pub kind: InvariantKind,
+    pub name: String,
+    pub predicate: String,
+    /// The declaration's documentation text, trailing whitespace trimmed,
+    /// when it has any.
+    pub doc: Option<String>,
+    /// From the `invariant`/`transition` keyword to the end of the predicate;
+    /// the leading documentation block is not included.
+    pub span: Span,
 }
 
 /// One state field's machine.
@@ -288,7 +317,44 @@ pub fn agent_state_model(
     AgentStateModel {
         agent: agent.name.name.clone(),
         machines,
+        invariants: declared_invariants(agent),
     }
+}
+
+/// #3608: `agent`'s snapshot `invariant`s then its step `transition`s. An agent
+/// is one declaration in one file (`bynk.resolve.duplicate_agent`), so these
+/// are all of its declarations.
+fn declared_invariants(agent: &AgentDecl) -> Vec<AgentInvariant> {
+    let entry = |kind, name: &Ident, predicate: &Expr, doc: &Option<Doc>, span| AgentInvariant {
+        kind,
+        name: name.name.clone(),
+        predicate: bynk_syntax::print::expr_to_string(predicate),
+        doc: doc
+            .as_ref()
+            .map(|d| d.text.trim_end())
+            .filter(|t| !t.is_empty())
+            .map(str::to_string),
+        span,
+    };
+    let snapshots = agent.invariants.iter().map(|i| {
+        entry(
+            InvariantKind::Invariant,
+            &i.name,
+            &i.predicate,
+            &i.documentation,
+            i.span,
+        )
+    });
+    let steps = agent.transitions.iter().map(|t| {
+        entry(
+            InvariantKind::Transition,
+            &t.name,
+            &t.predicate,
+            &t.documentation,
+            t.span,
+        )
+    });
+    snapshots.chain(steps).collect()
 }
 
 /// The variant names of `field` when it is a `Cell` of a user sum type.
@@ -507,7 +573,6 @@ fn stmt_commits(s: &Statement, store: &HashMap<String, String>, bound: &mut Vec<
             c
         }
         Statement::Expect(a) => expr_commits(&a.value, store, bound),
-        Statement::Send(s) => expr_commits(&s.value, store, bound),
         Statement::Do(d) => expr_commits(&d.value, store, bound),
         Statement::Advance(a) => expr_commits(&a.amount, store, bound),
         Statement::Par(p) => p
@@ -826,7 +891,6 @@ impl Walker<'_> {
             }
             Statement::Do(d) => self.walk_expr(&d.value, paths, false),
             Statement::Expect(e) => self.walk_expr(&e.value, paths, false),
-            Statement::Send(s) => self.walk_expr(&s.value, paths, false),
             Statement::Advance(a) => self.walk_expr(&a.amount, paths, false),
             Statement::Par(p) => p
                 .statements
@@ -2412,5 +2476,115 @@ agent M {
 }
 "#;
         assert!(warnings(src, "M").is_empty());
+    }
+
+    const INVARIANTS_SRC: &str = r#"context commerce
+
+type OrderStatus = enum { Pending, Placed, Paid }
+
+agent Order {
+  key id: String
+
+  store status: Cell[OrderStatus] = Pending
+  store paymentRef: Cell[Option[String]] = None
+
+  ---
+  A paid order carries its payment reference.
+  ---
+  invariant paid_has_ref:
+    status is Paid
+      implies   paymentRef.isSome()
+
+  transition paid_is_terminal: old.status is Paid implies new.status is Paid
+
+  on call place() -> Effect[()] {
+    status := Placed
+  }
+}
+
+agent Plain {
+  key id: String
+
+  store total: Cell[Int]
+
+  on call bump() -> Effect[Int] {
+    total := total + 1
+    total
+  }
+}
+"#;
+
+    /// #3608: both kinds are listed, snapshot invariants first, with the
+    /// predicate printed by the expression printer (layout-independent), the
+    /// documentation, and the declaration's span.
+    #[test]
+    fn declared_invariants_and_transitions_are_listed() {
+        let m = model(INVARIANTS_SRC, "Order");
+        let got: Vec<(InvariantKind, &str, &str)> = m
+            .invariants
+            .iter()
+            .map(|i| (i.kind, i.name.as_str(), i.predicate.as_str()))
+            .collect();
+        assert_eq!(
+            got,
+            [
+                (
+                    InvariantKind::Invariant,
+                    "paid_has_ref",
+                    "status is Paid implies paymentRef.isSome()"
+                ),
+                (
+                    InvariantKind::Transition,
+                    "paid_is_terminal",
+                    "old.status is Paid implies new.status is Paid"
+                ),
+            ]
+        );
+        assert_eq!(
+            m.invariants[0].doc.as_deref(),
+            Some("A paid order carries its payment reference.")
+        );
+        assert_eq!(m.invariants[1].doc, None);
+        let span = m.invariants[1].span;
+        assert!(INVARIANTS_SRC[span.start..span.end].contains("transition paid_is_terminal"));
+    }
+
+    /// #3608: an agent that declares neither has an empty list.
+    #[test]
+    fn an_agent_with_neither_kind_lists_nothing() {
+        assert!(model(INVARIANTS_SRC, "Plain").invariants.is_empty());
+    }
+
+    /// #3608: comments inside a predicate do not change its printed text, and
+    /// the span starts at the keyword, after the documentation block.
+    #[test]
+    fn comments_do_not_change_the_predicate_and_the_span_excludes_the_doc() {
+        let src = INVARIANTS_SRC.replace(
+            "status is Paid\n      implies   paymentRef.isSome()",
+            "status is Paid // trailing\n      implies // inline\n      paymentRef.isSome()",
+        );
+        assert_ne!(src, INVARIANTS_SRC, "the fixture was rewritten");
+        let m = model(&src, "Order");
+        assert_eq!(
+            m.invariants[0].predicate,
+            "status is Paid implies paymentRef.isSome()"
+        );
+        let span = m.invariants[0].span;
+        assert!(src[span.start..span.end].starts_with("invariant paid_has_ref"));
+        assert!(src[span.start..span.end].ends_with("paymentRef.isSome()"));
+    }
+
+    /// #3608: a documentation block holding only whitespace is no
+    /// documentation, so `doc` is `None` (omitted on the wire), not `Some("")`.
+    #[test]
+    fn a_whitespace_only_doc_block_is_no_doc() {
+        let src = INVARIANTS_SRC.replace(
+            "  ---\n  A paid order carries its payment reference.\n  ---\n",
+            "  ---\n   \n  ---\n",
+        );
+        assert_ne!(src, INVARIANTS_SRC, "the fixture was rewritten");
+        let m = model(&src, "Order");
+        assert_eq!(m.invariants[0].name, "paid_has_ref");
+        assert_eq!(m.invariants[0].doc, None);
     }
 }

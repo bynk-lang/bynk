@@ -100,6 +100,9 @@ struct ContextPlan<'a> {
     /// P5 (#2323): one line per R2 bucket the Worker binds, in binding order.
     #[serde(skip_serializing_if = "Vec::is_empty")]
     r2: Vec<PlanR2<'a>>,
+    /// #3479: one line per Vectorize index the Worker binds, in binding order.
+    #[serde(skip_serializing_if = "Vec::is_empty")]
+    vectorize: Vec<PlanVectorize<'a>>,
     /// P4a (#2602): one line per D1 database the Worker binds, in binding
     /// order.
     #[serde(skip_serializing_if = "Vec::is_empty")]
@@ -126,10 +129,26 @@ struct ContextPlan<'a> {
     /// plan, which stays offline under `--dry-run`, does not claim it.
     #[serde(skip_serializing_if = "Vec::is_empty")]
     stored_secrets: Vec<PlanStoredSecret<'a>>,
+    /// #3480: one line per AI Search instance the Worker queries, in binding
+    /// order. Linked: found on the account before the push, never created,
+    /// never deleted, and asked after authenticating, so the plan does not
+    /// claim it exists.
+    #[serde(skip_serializing_if = "Vec::is_empty")]
+    ai_search: Vec<PlanAiSearch<'a>>,
+    /// #3513 A: one line per mTLS certificate the Worker presents, in binding order. Linked: found
+    /// on the account before the push and never uploaded, and asked after authenticating, so the
+    /// plan, which stays offline under `--dry-run`, does not claim it exists.
+    #[serde(skip_serializing_if = "Vec::is_empty")]
+    mtls_certificates: Vec<PlanMtlsCertificate<'a>>,
     /// #1796: one line per Durable Object class the push declares in
     /// `exports`, in class-name order. Empty for a context with no agent and
     /// no events fan-out.
     durable_objects: Vec<PlanDurableObject<'a>>,
+    /// #3477: one line per container, in class-name order: where its image comes
+    /// from and the instance type Bynk passes when it starts. The application
+    /// itself is `wrangler deploy`'s to reconcile, which the line says.
+    #[serde(skip_serializing_if = "Vec::is_empty")]
+    containers: Vec<PlanContainer<'a>>,
     /// State-migrations S3 (#2248): each class an `agent New replaces Old`
     /// renames — the push moves its stored data. In old-name order.
     #[serde(
@@ -174,6 +193,22 @@ struct ContextPlan<'a> {
     /// refused unless `--prune` confirms it ([`confirm_address_removals`]).
     #[serde(skip_serializing_if = "Vec::is_empty")]
     removed_email_addresses: Vec<String>,
+}
+
+/// #3480: one `AiSearch` instance's link. No action: `bynk deploy` neither
+/// creates nor changes the instance.
+#[derive(Debug, Serialize)]
+struct PlanAiSearch<'a> {
+    binding: &'a str,
+    instance: &'a str,
+}
+
+/// #3513 A: one `MtlsCertificate` instance's link. No action: `bynk deploy` neither uploads nor
+/// changes the certificate.
+#[derive(Debug, Serialize)]
+struct PlanMtlsCertificate<'a> {
+    binding: &'a str,
+    certificate: &'a str,
 }
 
 /// #3301: one `StoredSecret` instance's link. No action: `bynk deploy`
@@ -231,6 +266,28 @@ struct PlanR2<'a> {
     bucket: String,
     #[serde(skip_serializing_if = "Option::is_none")]
     jurisdiction: Option<&'a str>,
+}
+
+/// #3479: one Vectorize index. The name is the identity and the configuration
+/// is fixed at creation, so `reuse` is a plain statement of the ledger; the
+/// plan is offline, so whether an existing index still matches is checked by
+/// the deploy, which fails on a mismatch.
+#[derive(Debug, Serialize)]
+struct PlanVectorize<'a> {
+    /// `VECTORIZE_<SNAKE>`.
+    binding: &'a str,
+    /// `create` (an index, or reusing one of its name already on the account
+    /// that matches), `adopt` (an existing index `bynk.toml` names, which is
+    /// never created, changed or deleted) or `reuse` (the one the ledger
+    /// recorded).
+    action: &'static str,
+    /// The index's account-facing name, [`vectorize_index_name`]d.
+    index: String,
+    dimensions: i64,
+    metric: &'a str,
+    /// The metadata indexes created before any vector.
+    #[serde(skip_serializing_if = "<[_]>::is_empty")]
+    indexed: &'a [String],
 }
 
 /// P4a (#2602): one D1 database.
@@ -327,6 +384,32 @@ struct PlanDurableObject<'a> {
     /// D1's principle). A consumer reading the plan learns that this line is
     /// not a claim that the namespace exists or doesn't, without having to
     /// know the ADR.
+    reconciled_by: &'static str,
+}
+
+/// #3477: one container the push declares.
+#[derive(Debug, Serialize)]
+struct PlanContainer<'a> {
+    /// The generated Durable Object class.
+    class: &'a str,
+    /// The capability's name, the key `[deploy.containers.<Cap>]` takes.
+    capability: &'a str,
+    /// The `@build` directory the image is built from when it is not adopted.
+    build: &'a str,
+    /// The digest-pinned image adopted for this environment, if any. When
+    /// present nothing is built.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    adopted: Option<&'a str>,
+    /// The image the ledger recorded this container as adopted when it was last
+    /// pushed, when it is not the one in `adopted` (a changed or dropped
+    /// adoption). Informational: the push starts new instances on the new image.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    previously_adopted: Option<String>,
+    /// The instance type passed to `start()`: `@instanceType`, else the
+    /// platform's default (`lite`).
+    instance: &'a str,
+    /// Always `Cloudflare`: the application is `wrangler deploy`'s to create
+    /// and update, not Bynk's, as for a Durable Object class.
     reconciled_by: &'static str,
 }
 
@@ -749,7 +832,7 @@ pub fn run(
     // Read spans the *whole* project even under `--context`: D4 needs the
     // selected context's binding targets to check they are live, and they are
     // by definition outside the selection.
-    let resources = match project_resources(&workers_dir, &available) {
+    let mut resources = match project_resources(&workers_dir, &available) {
         Ok(resources) => resources,
         Err(e) => {
             eprintln!("bynk: {e}");
@@ -1045,6 +1128,11 @@ pub fn run(
     // Review of #1974: names the account scopes (a namespace's title, a
     // bucket's, a database's, a dataset's) can coincide, so they are refused
     // before the plan, `--dry-run` included, not met as wrangler's own error.
+    // #3479: an index `bynk.toml` names for this environment is adopted, not
+    // created, so its name is known before the plan.
+    if apply_adoptions(project_root, &mut resources, &opts.environment).is_err() {
+        return ExitCode::FAILURE;
+    }
     if let Some(message) = account_name_problem(&resources, &lock, &opts.environment) {
         eprintln!("bynk: {message}");
         return ExitCode::FAILURE;
@@ -1101,7 +1189,7 @@ pub fn run(
     }
     let (manager, probe) = probe::detect_in_project(tb, "wrangler", project_root);
     // #1796: before authenticating, so the refusal costs no network call.
-    if let Some(refusal) = wrangler_floor_refusal(&probe, manager, &order, &resources) {
+    if let Some(refusal) = preflight_refusal(tb, &probe, manager, &order, &resources) {
         eprintln!("{refusal}");
         return ExitCode::FAILURE;
     }
@@ -1126,6 +1214,10 @@ pub fn run(
     let Some(linked_stores) = link_for_run(&order, &resources) else {
         return ExitCode::FAILURE;
     };
+    // #3480: an AI Search instance too: found by name, never created.
+    if !link_ai_search_for_run(&order, &resources) {
+        return ExitCode::FAILURE;
+    }
     // #3319: the Hyperdrive API client, checked here, before the confirmation,
     // so a missing token costs nothing.
     let Ok(hyperdrive_api) = hyperdrive::api_for_run(
@@ -1870,6 +1962,21 @@ pub(crate) fn foreign_binding_maybe_set_notice(
     )
 }
 
+/// Everything a push needs of the installed tools, refused before authenticating
+/// so it costs no call: the wrangler floor for a Durable Object class
+/// (a container is one; [`wrangler_floor_refusal`]), then a container's Docker
+/// ([`container_refusals`]).
+fn preflight_refusal(
+    tb: &dyn Toolbox,
+    probe: &probe::Probe,
+    manager: bynk_driver::npm_install::PackageManager,
+    order: &[String],
+    resources: &BTreeMap<String, Resources>,
+) -> Option<String> {
+    wrangler_floor_refusal(probe, manager, order, resources)
+        .or_else(|| container_refusals(tb, order, resources))
+}
+
 /// #1796: the refusal a deploy gets when a context it pushes declares a
 /// Durable Object class and the wrangler that would push it is older than
 /// [`bynk_emit::WRANGLER_MIN`].
@@ -1896,8 +2003,10 @@ pub(crate) fn wrangler_floor_refusal(
         .iter()
         .find(|worker| !resources[*worker].durable_objects.is_empty())?;
     Some(format!(
-        "bynk: wrangler {version} is older than {}, the first that reads the Durable Object \
-         `exports` `{worker}` declares; the push would fail. Upgrade with `{}`.",
+        "bynk: wrangler {version} is older than {}, the oldest this Bynk release supports \
+         (`{worker}` declares Durable Object `exports`, which wrangler reads from 4.107.0, and an \
+         older wrangler is untested against the generated configuration); the push is not \
+         attempted. Upgrade with `{}`.",
         bynk_emit::WRANGLER_MIN,
         doctor::wrangler_upgrade_remedy(probe, manager)
     ))
@@ -2107,6 +2216,19 @@ pub(crate) fn plan_report(plan: &Plan<'_>, format: DeployFormat) -> String {
                         .unwrap_or_default()
                 ));
             }
+            for v in &plan.shown_orphans.vectorize {
+                out.push_str(&format!(
+                    "orphan vectorize {} {} ({}{})\n",
+                    v.worker,
+                    v.binding,
+                    v.index,
+                    if v.adopted {
+                        "; adopted, never deleted"
+                    } else {
+                        "; deleted by --prune"
+                    }
+                ));
+            }
             for d1 in &plan.shown_orphans.d1 {
                 out.push_str(&format!(
                     "orphan d1 {} {} ({}; not deleted)\n",
@@ -2153,6 +2275,16 @@ pub(crate) fn plan_report(plan: &Plan<'_>, format: DeployFormat) -> String {
                         out.push_str(" — the old bucket and its objects stay where they are");
                     }
                     out.push('\n');
+                }
+                for v in &context.vectorize {
+                    out.push_str(&format!(
+                        "vectorize {} {} ({}, {}, {}",
+                        v.action, v.index, v.binding, v.dimensions, v.metric
+                    ));
+                    if !v.indexed.is_empty() {
+                        out.push_str(&format!("; metadata indexes {}", v.indexed.join(", ")));
+                    }
+                    out.push_str(")\n");
                 }
                 for d1 in &context.d1 {
                     out.push_str(&format!(
@@ -2208,6 +2340,25 @@ pub(crate) fn plan_report(plan: &Plan<'_>, format: DeployFormat) -> String {
                         secret.binding, secret.secret, secret.store
                     ));
                 }
+                // #3480: linked, not provisioned — the account owns it. The
+                // plan is built offline (#3494), so it has not looked the
+                // instance up: it says "will link", never "linked", and only a real
+                // deploy checks that the instance exists. The same line prints
+                // on a real run, before that lookup, so it is worded for both.
+                for search in &context.ai_search {
+                    out.push_str(&format!(
+                        "will link ai-search {} ({}; not created; not checked in a dry run)\n",
+                        search.instance, search.binding
+                    ));
+                }
+                // #3513 A: linked the same way, and worded for the same reason: the plan has
+                // not looked the certificate up.
+                for cert in &context.mtls_certificates {
+                    out.push_str(&format!(
+                        "will link mtls-certificate {} ({}; not created; not checked in a dry run)\n",
+                        cert.certificate, cert.binding
+                    ));
+                }
                 // Interop I5 (#1972): bound, not provisioned — the Worker is
                 // not Bynk's, so the line says so rather than an action.
                 for service in &context.foreign_services {
@@ -2237,6 +2388,22 @@ pub(crate) fn plan_report(plan: &Plan<'_>, format: DeployFormat) -> String {
                     out.push_str(&format!(
                         "durable object {} ({}; advisory — {} reconciles it)\n",
                         object.class, object.storage, object.reconciled_by
+                    ));
+                }
+                // #3477: each container, naming where its image comes from and
+                // the instance type passed at start, so the size is visible
+                // before the confirmation. The rates are Cloudflare's to state.
+                for container in &context.containers {
+                    let mut image = match container.adopted {
+                        Some(reference) => format!("adopted {reference}"),
+                        None => format!("build from {}", container.build),
+                    };
+                    if let Some(was) = &container.previously_adopted {
+                        image.push_str(&format!(", was adopted {was}"));
+                    }
+                    out.push_str(&format!(
+                        "container {} (image: {image}; instance {}; reconciled by {})\n",
+                        container.class, container.instance, container.reconciled_by
                     ));
                 }
                 // State-migrations S3 (#2248): the declared class renames and
@@ -2359,6 +2526,7 @@ fn account_name_problem(
 ) -> Option<String> {
     kv_title_collision(resources, lock, environment)
         .or_else(|| r2_bucket_problem(resources, lock, environment))
+        .or_else(|| vectorize_index_problem(resources, lock, environment))
         .or_else(|| d1_database_problem(resources, lock, environment))
         .or_else(|| analytics_dataset_problem(resources, lock, environment))
 }
@@ -2474,6 +2642,30 @@ pub(crate) fn derive_plan<'a>(
                             jurisdiction: bucket.jurisdiction.as_deref(),
                         })
                         .collect(),
+                    vectorize: declared
+                        .vectorize_indexes
+                        .iter()
+                        .map(|v| {
+                            let index = v.physical_name(environment);
+                            let recorded =
+                                recorded_vectorize(lock, worker, &v.binding, environment);
+                            PlanVectorize {
+                                binding: &v.binding,
+                                action: if v.adopt.is_some() {
+                                    // Adopted stays `adopt` once recorded, as Hyperdrive's does.
+                                    "adopt"
+                                } else if recorded.is_some_and(|r| r.name == index) {
+                                    "reuse"
+                                } else {
+                                    "create"
+                                },
+                                index,
+                                dimensions: v.dimensions,
+                                metric: &v.metric,
+                                indexed: &v.indexed,
+                            }
+                        })
+                        .collect(),
                     d1: declared
                         .d1_databases
                         .iter()
@@ -2552,12 +2744,48 @@ pub(crate) fn derive_plan<'a>(
                             secret: &s.secret,
                         })
                         .collect(),
+                    ai_search: declared
+                        .ai_search
+                        .iter()
+                        .map(|s| PlanAiSearch {
+                            binding: &s.binding,
+                            instance: &s.instance,
+                        })
+                        .collect(),
+                    mtls_certificates: declared
+                        .mtls_certificates
+                        .iter()
+                        .map(|c| PlanMtlsCertificate {
+                            binding: &c.binding,
+                            certificate: &c.certificate,
+                        })
+                        .collect(),
                     durable_objects: declared
                         .durable_objects
                         .iter()
                         .map(|object| PlanDurableObject {
                             class: &object.class,
                             storage: &object.storage,
+                            reconciled_by: "Cloudflare",
+                        })
+                        .collect(),
+                    containers: declared
+                        .containers
+                        .iter()
+                        .map(|c| PlanContainer {
+                            class: &c.class,
+                            capability: &c.capability,
+                            build: &c.build,
+                            adopted: c.adopt.as_deref(),
+                            previously_adopted: recorded_container_image(
+                                lock,
+                                worker,
+                                &c.capability,
+                                environment,
+                            )
+                            .filter(|was| Some(*was) != c.adopt.as_deref())
+                            .map(str::to_string),
+                            instance: c.instance_type.as_deref().unwrap_or("lite"),
                             reconciled_by: "Cloudflare",
                         })
                         .collect(),
@@ -2836,6 +3064,69 @@ pub(crate) fn analytics_dataset_problem(
                     return Some(format!(
                         "`{other_binding}` of `{other_worker}` would write to the Analytics Engine dataset `{there}`, which `{}` of `{worker}` writes to in environment `{other_env}`; rename one capability",
                         dataset.binding
+                    ));
+                }
+            }
+        }
+    }
+    None
+}
+
+/// #3479: why the indexes the build declares cannot all be made in
+/// `environment`, or `None`: a name Cloudflare would refuse (the environment's
+/// suffix can push a derived name past 64 bytes), or one name for two
+/// instances, which would silently share an index. Checked within the build and
+/// against every index the ledger records in any environment.
+pub(crate) fn vectorize_index_problem(
+    resources: &BTreeMap<String, Resources>,
+    lock: &DeployLock,
+    environment: &str,
+) -> Option<String> {
+    let mut seen: BTreeMap<String, (&str, &str, bool)> = BTreeMap::new();
+    for (worker, declared) in resources {
+        for index in &declared.vectorize_indexes {
+            let name = index.physical_name(environment);
+            if let Some(why) = vectorize_index_name_problem(&name) {
+                // #3479: an adopted name is the developer's, so the remedy is
+                // the `bynk.toml` entry, not the capability's name.
+                let remedy = if index.adopt.is_some() {
+                    "name an index whose name the platform takes in `[deploy.vectorize]`"
+                } else {
+                    "rename the capability or the context"
+                };
+                return Some(format!(
+                    "Vectorize index `{name}` (`{}` of `{worker}`) cannot be used: {why}; {remedy}",
+                    index.binding
+                ));
+            }
+            let adopted = index.adopt.is_some();
+            // Adopters may share an index (it is another system's, or
+            // another environment's); a created index is one capability's.
+            if let Some((other_worker, other_binding, other_adopted)) =
+                seen.insert(name.clone(), (worker, &index.binding, adopted))
+                && !(adopted && other_adopted)
+            {
+                return Some(format!(
+                    "`{}` of `{worker}` and `{other_binding}` of `{other_worker}` would both be the Vectorize index `{name}`; index names are scoped to the account, so rename one capability, or adopt the index for both in `[deploy.vectorize]`",
+                    index.binding
+                ));
+            }
+            for (other_env, env) in &lock.environments {
+                let clash = env
+                    .vectorize_instances
+                    .iter()
+                    .flat_map(|(w, instances)| instances.iter().map(move |(b, r)| (w, b, r)))
+                    .find(|(w, b, r)| {
+                        r.name == name
+                            && !(r.adopted && adopted)
+                            && (other_env != environment
+                                || w.as_str() != worker
+                                || **b != index.binding)
+                    });
+                if let Some((other_worker, other_binding, _)) = clash {
+                    return Some(format!(
+                        "`{}` of `{worker}` would be the Vectorize index `{name}`, which `{other_binding}` of `{other_worker}` already holds in environment `{other_env}`; index names are scoped to the account, so rename one capability, or adopt the index for both in `[deploy.vectorize]`",
+                        index.binding
                     ));
                 }
             }
@@ -3157,6 +3448,59 @@ pub(crate) mod tests {
         );
     }
 
+    /// #3477: the plan names each container's image source and instance type,
+    /// says whose it is to reconcile, shows a changed adoption, and states no
+    /// price.
+    #[test]
+    fn the_plan_names_a_containers_image_instance_and_owner() {
+        use crate::deploy::containers::tests_support::decl;
+        let order = names(&["shop"]);
+        let image = "registry.cloudflare.com/abc123/renderer@sha256:0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef";
+        let mut declared = project(vec![(
+            "shop",
+            Resources {
+                containers: vec![
+                    decl("Renderer", Some("standard-1"), None),
+                    decl("Thumbs", None, Some(image)),
+                ],
+                ..Resources::default()
+            },
+        )]);
+        let text = plan_report(
+            &plan_of(&order, &declared, &DeployLock::default()),
+            DeployFormat::Short,
+        );
+        assert!(
+            text.contains("container __Container_Renderer (image: build from containers/render; instance standard-1; reconciled by Cloudflare)\n"),
+            "{text}"
+        );
+        assert!(
+            text.contains(&format!(
+                "container __Container_Thumbs (image: adopted {image}; instance lite; reconciled by Cloudflare)\n"
+            )),
+            "{text}"
+        );
+        // A recorded adoption that is dropped shows beside the new line.
+        let mut recorded = DeployLock::default();
+        recorded.record_container_image("default", "shop", "Renderer", Some(image));
+        declared.get_mut("shop").unwrap().containers[0].adopt = None;
+        let again = plan_report(&plan_of(&order, &declared, &recorded), DeployFormat::Short);
+        assert!(
+            again.contains(&format!(
+                "image: build from containers/render, was adopted {image};"
+            )),
+            "{again}"
+        );
+        // The JSON plan carries the same facts, and no rate or allowance.
+        let json = plan_report(&plan_of(&order, &declared, &recorded), DeployFormat::Json);
+        assert!(json.contains("\"containers\""), "{json}");
+        assert!(json.contains("\"reconciled_by\": \"Cloudflare\""), "{json}");
+        assert!(
+            !text.contains('$') && !text.to_lowercase().contains("billed"),
+            "{text}"
+        );
+    }
+
     fn names(v: &[&str]) -> Vec<String> {
         v.iter().map(|s| s.to_string()).collect()
     }
@@ -3177,6 +3521,79 @@ pub(crate) mod tests {
             false,
             "default",
         )
+    }
+
+    // ---- #3479: Vectorize indexes ----
+
+    #[test]
+    fn the_plan_names_each_index_its_shape_and_its_orphans() {
+        let order = names(&["shop"]);
+        let declared = project(vec![(
+            "shop",
+            Resources::default().vectorize_indexes(&[(
+                "VECTORIZE_DOCS",
+                "shop-docs",
+                768,
+                "cosine",
+                &["category:string"],
+            )]),
+        )]);
+        let mut lock = DeployLock::default();
+        lock.record_vectorize("default", "shop", "VECTORIZE_OLD", "shop-old", false);
+        let fresh = plan_report(&plan_of(&order, &declared, &lock), DeployFormat::Short);
+        assert!(
+            fresh.contains("vectorize create shop-docs (VECTORIZE_DOCS, 768, cosine; metadata indexes category:string)\n"),
+            "{fresh}"
+        );
+        assert!(
+            fresh.contains("orphan vectorize shop VECTORIZE_OLD (shop-old; deleted by --prune)\n"),
+            "{fresh}"
+        );
+        lock.record_vectorize("default", "shop", "VECTORIZE_DOCS", "shop-docs", false);
+        let again = plan_report(&plan_of(&order, &declared, &lock), DeployFormat::Short);
+        assert!(
+            again.contains("vectorize reuse shop-docs (VECTORIZE_DOCS, 768, cosine; metadata indexes category:string)\n"),
+            "{again}"
+        );
+        // An adopted index is named as it is on the account, and planned as an
+        // `adopt` until the ledger records it.
+        let mut adopted = project(vec![(
+            "shop",
+            Resources::default().vectorize_indexes(&[(
+                "VECTORIZE_DOCS",
+                "shop-docs",
+                768,
+                "cosine",
+                &["category:string"],
+            )]),
+        )]);
+        adopted.get_mut("shop").unwrap().vectorize_indexes[0].adopt = Some("docs-prod".into());
+        let adopt = plan_report(
+            &plan_of(&order, &adopted, &DeployLock::default()),
+            DeployFormat::Short,
+        );
+        assert!(
+            adopt.contains("vectorize adopt docs-prod (VECTORIZE_DOCS, 768, cosine"),
+            "{adopt}"
+        );
+        // Once recorded, an adopted index is still planned as `adopt`.
+        let mut recorded = DeployLock::default();
+        recorded.record_vectorize("default", "shop", "VECTORIZE_DOCS", "docs-prod", true);
+        let again = plan_report(&plan_of(&order, &adopted, &recorded), DeployFormat::Short);
+        assert!(
+            again.contains("vectorize adopt docs-prod (VECTORIZE_DOCS, 768, cosine"),
+            "{again}"
+        );
+        // A staging deploy names the qualified index.
+        let staging = derive_plan(
+            &order,
+            &declared,
+            &DeployLock::default(),
+            &SecretSource::default(),
+            false,
+            "staging",
+        );
+        assert_eq!(staging.contexts[0].vectorize[0].index, "shop-docs-staging");
     }
 
     // ---- P5 (#2323): R2 buckets ----
@@ -3600,6 +4017,69 @@ pub(crate) mod tests {
         let json: serde_json::Value =
             serde_json::from_str(&plan_report(&plan, DeployFormat::Json)).unwrap();
         assert!(json["contexts"][0].get("stored_secrets").is_none());
+    }
+
+    // ---- #3513 A: mTLS certificates are linked, never uploaded ----
+
+    #[test]
+    fn an_mtls_certificate_is_a_linked_plan_line_with_no_action() {
+        let resources = project(vec![(
+            "shop-backend",
+            Resources::default().mtls_certificates(&[("MTLS_BACKEND", "acme-client")]),
+        )]);
+        let order = names(&["shop-backend"]);
+        let plan = plan_of(&order, &resources, &DeployLock::default());
+        assert_eq!(
+            plan_report(&plan, DeployFormat::Short),
+            "will link mtls-certificate acme-client (MTLS_BACKEND; not created; not checked in a dry run)\ndeploy shop-backend\n"
+        );
+        let json: serde_json::Value =
+            serde_json::from_str(&plan_report(&plan, DeployFormat::Json)).unwrap();
+        assert_eq!(
+            json["contexts"][0]["mtls_certificates"],
+            serde_json::json!([{
+                "binding": "MTLS_BACKEND",
+                "certificate": "acme-client"
+            }])
+        );
+        // A project without one has no such key, so its machine surface is unchanged.
+        let plain = project(vec![("shop-backend", Resources::default())]);
+        let plan = plan_of(&order, &plain, &DeployLock::default());
+        let json: serde_json::Value =
+            serde_json::from_str(&plan_report(&plan, DeployFormat::Json)).unwrap();
+        assert!(json["contexts"][0].get("mtls_certificates").is_none());
+    }
+
+    // ---- #3480: AI Search instances are linked, never created ----
+
+    #[test]
+    fn an_ai_search_instance_is_a_linked_plan_line_with_no_action() {
+        let resources = project(vec![(
+            "shop-ask",
+            Resources::default().ai_search(&[("AI_SEARCH_KB", "support-docs")]),
+        )]);
+        let order = names(&["shop-ask"]);
+        let plan = plan_of(&order, &resources, &DeployLock::default());
+        assert_eq!(
+            plan_report(&plan, DeployFormat::Short),
+            "will link ai-search support-docs (AI_SEARCH_KB; not created; not checked in a dry run)\ndeploy shop-ask\n"
+        );
+        let json: serde_json::Value =
+            serde_json::from_str(&plan_report(&plan, DeployFormat::Json)).unwrap();
+        assert_eq!(
+            json["contexts"][0]["ai_search"],
+            serde_json::json!([{
+                "binding": "AI_SEARCH_KB",
+                "instance": "support-docs"
+            }])
+        );
+        // A project without one has no such key, so the machine surface of
+        // every existing project is unchanged.
+        let plain = project(vec![("shop-ask", Resources::default())]);
+        let plan = plan_of(&order, &plain, &DeployLock::default());
+        let json: serde_json::Value =
+            serde_json::from_str(&plan_report(&plan, DeployFormat::Json)).unwrap();
+        assert!(json["contexts"][0].get("ai_search").is_none());
     }
 
     // ---- #3328: Email Routing rules, reconciled by wrangler ----

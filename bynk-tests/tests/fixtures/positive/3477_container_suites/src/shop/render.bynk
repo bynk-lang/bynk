@@ -1,0 +1,29 @@
+context shop.render
+
+// #3477: a test never starts a container, so every operation faults until it
+// is stubbed.
+
+consumes bynk
+consumes bynk.cloudflare { Container, ContainerError }
+
+capability Renderer = Container @build("containers/renderer") @port(8080)
+
+service api from http {
+	on GET("/render/:name") (name: String) -> Effect[HttpResult[String]] by Visitor given Renderer {
+		let req = Request {
+			method: Get,
+			url: "http://renderer/render",
+			contentType: None,
+			authorization: None,
+			headers: Map.empty(),
+			body: None,
+		}
+		let res <- Renderer.send(name, req)
+		match res {
+			Ok(r) => Ok(r.body),
+			Err(Unavailable) => ServiceUnavailable("no capacity"),
+			Err(StartFailed(message)) => ServerError(message),
+			Err(_) => ServerError("render failed"),
+		}
+	}
+}

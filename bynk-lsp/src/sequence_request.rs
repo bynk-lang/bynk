@@ -172,6 +172,11 @@ pub struct WireBranch {
     /// The branch's rendered outcome (`Ok(view)`) — see
     /// [`bynk_ide::sequence::Branch::reply`]. `null` on the wire when absent.
     pub reply: Option<String>,
+    /// The source range of the branch's arm — see
+    /// [`bynk_ide::sequence::Branch::span`]. For the `else` of an `else if`,
+    /// the range starts at the inner `if` keyword and covers the rest of the
+    /// chain (#3599); the inner `if` is a nested block with its own ranges.
+    pub range: tower_lsp::lsp_types::Range,
 }
 
 fn participant_kind_str(k: ParticipantKind) -> &'static str {
@@ -238,6 +243,7 @@ pub fn to_wire(model: &SequenceModel, text: &str) -> WireSequenceModel {
                         label: br.label.clone(),
                         message_ids: br.message_ids.clone(),
                         reply: br.reply.clone(),
+                        range: crate::position::span_to_range(text, br.span),
                     })
                     .collect(),
                 range: crate::position::span_to_range(text, b.span),
@@ -245,5 +251,39 @@ pub fn to_wire(model: &SequenceModel, text: &str) -> WireSequenceModel {
                 parent_branch: b.parent_branch,
             })
             .collect(),
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use bynk_ide::sequence::{AltBlock, Branch};
+    use bynk_syntax::span::Span;
+
+    /// #3584: a branch's span is lowered to a `range` on the wire.
+    #[test]
+    fn wire_branch_carries_a_range() {
+        let text = "ab\ncd\n";
+        let model = SequenceModel {
+            blocks: vec![AltBlock {
+                id: 0,
+                kind: AltKind::If,
+                branches: vec![Branch {
+                    label: "x".into(),
+                    message_ids: vec![],
+                    reply: None,
+                    span: Span::from(3..5),
+                }],
+                span: Span::from(0..5),
+                parent: None,
+                parent_branch: None,
+            }],
+            ..SequenceModel::default()
+        };
+        let json = serde_json::to_value(to_wire(&model, text)).unwrap();
+        let range = &json["blocks"][0]["branches"][0]["range"];
+        assert_eq!(range["start"]["line"], 1);
+        assert_eq!(range["start"]["character"], 0);
+        assert_eq!(range["end"]["character"], 2);
     }
 }

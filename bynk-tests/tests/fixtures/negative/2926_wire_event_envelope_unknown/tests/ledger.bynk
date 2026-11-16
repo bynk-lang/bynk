@@ -1,5 +1,6 @@
 // #2926: a `Wire` envelope on an event address still types its inner.
 suite shop.ledger {
+  consumes shop.order { Placed }
   case "wire envelope names an unknown binding" {
     let _ <- OnPlaced.event(Placed { id: "o1" }, Wire(undefinedName))
   }

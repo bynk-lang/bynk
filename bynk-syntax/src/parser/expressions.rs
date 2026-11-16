@@ -1228,6 +1228,20 @@ impl<'a> Parser<'a> {
         debug_assert_eq!(self.peek_kind(), Some(TokenKind::LBrace));
         let a = self.tokens.get(self.pos + 1).map(|t| t.kind);
         let b = self.tokens.get(self.pos + 2).map(|t| t.kind);
+        // A contextual keyword (`messages`, `case`, …) is a field label like
+        // any identifier (`expect_ident` admits it), though it lexes as its
+        // own token: before a `:` it counts as an `Ident` here (#3486). The
+        // shorthand forms are not widened: a keyword cannot name a variable.
+        let a_contextual = b == Some(TokenKind::Colon)
+            && self
+                .tokens
+                .get(self.pos + 1)
+                .is_some_and(|t| crate::keywords::is_reserved_contextual(self.slice(t.span)));
+        let a = if a_contextual {
+            Some(TokenKind::Ident)
+        } else {
+            a
+        };
         match (a, b) {
             // `T {}` — empty record.
             (Some(TokenKind::RBrace), _) => true,

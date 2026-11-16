@@ -74,7 +74,7 @@ afterwards, the tombstone stops it being added:
 context hooks
 
 consumes bynk
-consumes bynk.cloudflare { D1 }
+consumes bynk.cloudflare { D1, SqlStatement, SqlValue }
 
 capability Deliveries = D1
 
@@ -118,7 +118,7 @@ later time for a request already present:
 context hooks
 
 consumes bynk
-consumes bynk.cloudflare { D1 }
+consumes bynk.cloudflare { D1, SqlStatement, SqlValue }
 
 capability Deliveries = D1
 
@@ -163,7 +163,7 @@ above still applies when the set's own rows are inserted:
 context hooks
 
 consumes bynk
-consumes bynk.cloudflare { D1 }
+consumes bynk.cloudflare { D1, SqlStatement, SqlValue }
 
 capability Deliveries = D1
 

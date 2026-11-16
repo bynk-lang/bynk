@@ -8,7 +8,7 @@ fn tick(n: Int) -> Effect[()] {
 }
 
 fn twice(f: (Int) -> Effect[()], n: Int) -> Effect[Int] {
-	~> f(n)
+	do f(n).detach()
 	Effect.pure(n)
 }
 

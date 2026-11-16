@@ -57,6 +57,7 @@ bynk.test.remote_unsupported_advance: needs the network, git, a registry, lockfi
 bynk.test.remote_unsupported_asset: needs the network, git, a registry, lockfile state or a live deployment: not expressible as a compiled example
 bynk.test.remote_unsupported_call: needs the network, git, a registry, lockfile state or a live deployment: not expressible as a compiled example
 bynk.test.remote_unsupported_env: needs the network, git, a registry, lockfile state or a live deployment: not expressible as a compiled example
+bynk.test.remote_unsupported_peek: needs the network, git, a registry, lockfile state or a live deployment: not expressible as a compiled example
 bynk.test.remote_unsupported_queue: needs the network, git, a registry, lockfile state or a live deployment: not expressible as a compiled example
 bynk.test.remote_unsupported_schedule: needs the network, git, a registry, lockfile state or a live deployment: not expressible as a compiled example
 bynk.asset.unreadable_file: needs an unreadable, oversized or corrupt file: not expressible as a compiled example
@@ -78,3 +79,12 @@ bynk.wasm.strip_failed: a tool failure or compiler bug, not a program error
 bynk.fmt.comment_loss: a tool failure or compiler bug, not a program error
 bynk.fmt.mixed_comment_syntax: a tool failure or compiler bug, not a program error
 bynk.fmt.roundtrip: a tool failure or compiler bug, not a program error
+bynk.deploy.context_in_two_groups: a manifest-level diagnostic (a `bynk.toml` `[deploy.workers]` error) with no source line, which the example gate cannot mark
+bynk.deploy.duplicate_hostname: a manifest-level diagnostic (a `bynk.toml` `[deploy.workers]` error) with no source line, which the example gate cannot mark
+bynk.deploy.empty_group: a manifest-level diagnostic (a `bynk.toml` `[deploy.workers]` error) with no source line, which the example gate cannot mark
+bynk.deploy.group_name_conflict: a manifest-level diagnostic (a `bynk.toml` `[deploy.workers]` error) with no source line, which the example gate cannot mark
+bynk.deploy.not_a_context: a manifest-level diagnostic (a `bynk.toml` `[deploy.workers]` error) with no source line, which the example gate cannot mark
+bynk.deploy.unknown_context: a manifest-level diagnostic (a `bynk.toml` `[deploy.workers]` error) with no source line, which the example gate cannot mark
+bynk.deploy.binding_collision: a project-level diagnostic over a `[deploy.workers]` group in `bynk.toml` and two contexts' sources, which the single-file example gate cannot mark
+bynk.deploy.multiple_publishers: a project-level diagnostic over a `[deploy.workers]` group in `bynk.toml` and two contexts' sources (and temporary), which the single-file example gate cannot mark
+bynk.deploy.service_name_conflict: a project-level diagnostic over a `[deploy.workers]` group in `bynk.toml` and two contexts' sources, which the single-file example gate cannot mark

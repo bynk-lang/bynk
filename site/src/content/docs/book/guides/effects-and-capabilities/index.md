@@ -20,12 +20,18 @@ Effects are explicit and capability-gated: a handler declares what it needs via
 - [Wrap a library as an adapter](/book/guides/effects-and-capabilities/wrap-a-library/)
 - [Use more than one KV namespace](/book/guides/effects-and-capabilities/use-several-kv-namespaces/)
 - [Call a Worker outside the project](/book/guides/effects-and-capabilities/call-a-foreign-worker/)
+- [Call an mTLS origin](/book/guides/effects-and-capabilities/call-an-mtls-origin/)
+- [Read your analytics in the Worker](/book/guides/effects-and-capabilities/read-your-analytics-in-the-worker/)
 - [Query rows into a record without repeating the columns](/book/guides/effects-and-capabilities/query-rows-into-a-record/)
 - [Connect an existing Postgres database](/book/guides/effects-and-capabilities/connect-an-existing-postgres-database/)
 - [Connect an existing MySQL database](/book/guides/effects-and-capabilities/connect-an-existing-mysql-database/)
 - [Apply webhook events that arrive late, twice or out of order](/book/guides/effects-and-capabilities/apply-webhook-events-out-of-order/)
 - [Cache responses at Cloudflare's edge](/book/guides/effects-and-capabilities/cache-at-the-edge/)
+- [Run a model from a Worker](/book/guides/effects-and-capabilities/run-a-model-from-a-worker/)
+- [Run a container from a Worker](/book/guides/effects-and-capabilities/run-a-container-from-a-worker/)
+- [Answer questions from your documents with AI Search](/book/guides/effects-and-capabilities/answer-questions-from-your-documents/)
 - [Call Workers AI through an adapter](/book/guides/effects-and-capabilities/call-workers-ai-through-an-adapter/)
+- [Search by meaning with Vectorize and Workers AI](/book/guides/effects-and-capabilities/search-by-meaning-with-vectorize/)
 - [Sign and verify data](/book/guides/effects-and-capabilities/sign-and-verify-data/)
 
 **See also:** [Reference — Capabilities & providers](/book/reference/capabilities/),

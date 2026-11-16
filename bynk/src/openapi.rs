@@ -36,8 +36,8 @@ use std::process::ExitCode;
 
 use bynk_check::wire::{self, WireBody, WireInst, WireModel, WireRef, WireType};
 use bynk_ide::wire_contract::{
-    BoundaryKind, IrHttpMethod, ResponseOrigin, WireContractModel, real_context_count,
-    wire_contract_for_service,
+    BoundaryKind, IrHttpMethod, ResponseOrigin, WireContractModel, http_result_inner,
+    real_context_count, wire_contract_for_service,
 };
 use bynk_ide::{AnalysisRoots, ContextBoundaryInfo, ProjectDiagnostics, SchemaLock};
 use bynk_model::{IrHandlerKind, lower_handler_kind_ir};
@@ -263,24 +263,19 @@ fn manifest_info(root: &Path) -> Info {
 // ---------------------------------------------------------------------
 
 /// One `from http` service selected for the document.
-struct Selected<'a> {
-    unit: &'a str,
-    service: &'a ServiceDecl,
-    info: &'a ContextBoundaryInfo,
+pub(crate) struct Selected<'a> {
+    pub unit: &'a str,
+    pub service: &'a ServiceDecl,
+    pub info: &'a ContextBoundaryInfo,
 }
 
-/// Build the OpenAPI document for `analysis`' `from http` services — every
-/// one, or only `service` (matched as `Name` or `unit.Name`).
-pub fn document(
-    info: &Info,
-    analysis: &ProjectDiagnostics,
-    service: Option<&str>,
-) -> Result<Value, Error> {
-    let errors = errors_of(analysis);
-    if !errors.is_empty() {
-        return Err(Error::Invalid(errors));
-    }
-
+/// The `from http` services of `analysis` named by `want` (`Name` or
+/// `unit.Name`), every one when `want` is empty, ordered by unit and name. The
+/// selection `bynk openapi` and `bynk client` share.
+pub(crate) fn select_services<'a>(
+    analysis: &'a ProjectDiagnostics,
+    want: &[&str],
+) -> Result<Vec<Selected<'a>>, Error> {
     let mut all: Vec<Selected> = Vec::new();
     for (unit, ctx) in &analysis.boundary_info {
         // A synthetic unit (the `bynk` capability surface) has no source.
@@ -300,25 +295,41 @@ pub fn document(
         }
     }
     all.sort_by(|a, b| (a.unit, &a.service.name.name).cmp(&(b.unit, &b.service.name.name)));
-
-    let selected: Vec<&Selected> = match service {
-        None => all.iter().collect(),
-        Some(want) => all
-            .iter()
-            .filter(|s| {
-                s.service.name.name == want || format!("{}.{}", s.unit, s.service.name.name) == want
-            })
-            .collect(),
+    let known: Vec<String> = all.iter().map(|s| s.service.name.name.clone()).collect();
+    let matches = |s: &Selected, name: &str| {
+        s.service.name.name == name || format!("{}.{}", s.unit, s.service.name.name) == name
     };
-    if selected.is_empty() {
-        return Err(match service {
-            Some(name) => Error::UnknownService {
+    for name in want {
+        if !all.iter().any(|s| matches(s, name)) {
+            return Err(Error::UnknownService {
                 name: name.to_string(),
-                known: all.iter().map(|s| s.service.name.name.clone()).collect(),
-            },
-            None => Error::NoHttpService,
-        });
+                known,
+            });
+        }
     }
+    if all.is_empty() {
+        return Err(Error::NoHttpService);
+    }
+    Ok(all
+        .into_iter()
+        .filter(|s| want.is_empty() || want.iter().any(|n| matches(s, n)))
+        .collect())
+}
+
+/// Build the OpenAPI document for `analysis`' `from http` services — every
+/// one, or only `service` (matched as `Name` or `unit.Name`).
+pub fn document(
+    info: &Info,
+    analysis: &ProjectDiagnostics,
+    service: Option<&str>,
+) -> Result<Value, Error> {
+    let service: Vec<&str> = service.into_iter().collect();
+    let errors = errors_of(analysis);
+    if !errors.is_empty() {
+        return Err(Error::Invalid(errors));
+    }
+
+    let selected = select_services(analysis, &service)?;
 
     let context_count = real_context_count(&analysis.boundary_info, &analysis.unit_sources);
     let mut models: Vec<(&Selected, &Handler, WireContractModel)> = Vec::new();
@@ -902,18 +913,6 @@ fn responses_of(
         out.insert(status.to_string(), Value::Object(resp));
     }
     Value::Object(out)
-}
-
-/// `Effect[HttpResult[T]]` / `HttpResult[T]` → `T`.
-fn http_result_inner(t: &TypeRef) -> Option<&TypeRef> {
-    let t = match t {
-        TypeRef::Effect(inner, _) => inner.as_ref(),
-        other => other,
-    };
-    match t {
-        TypeRef::HttpResult(inner, _) => Some(inner.as_ref()),
-        _ => None,
-    }
 }
 
 // ---------------------------------------------------------------------

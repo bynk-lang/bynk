@@ -4,6 +4,7 @@
 // importing module can collide with an imported runtime name (a user
 // `type JsonValue` beside an import of `JsonValue` would not compile).
 // The plain names stay exported for the runtime's own tests.
+import { containerClass } from "./container.ts";
 import { AGENT_WIRE_PASS, StateRegistry, decodeAgentArgs, decodeAgentKey, dispatchToEventsFanout, encodeAgentResult, makeAgent, makeIntegrationDoNamespace, serialiseAgentClass, serialiseAgentKey, sweepAgentInstances, wakeForMigration, type AgentWire, type DurableObjectNamespace } from "./agent.ts";
 import { oidcTrust, tokenClaims, verifyBearerJwtHs256, verifyOidcJwt, verifySignatureHmacSha256 } from "./auth.ts";
 import { expireSessionCookie, issueSessionCookie, newSessionKey, sessionKeysOf, signSessionCookie, verifySignedCookie } from "./session.ts";
@@ -16,10 +17,13 @@ import { handleEmail, type InboundMessage, type SenderIdentity } from "./email.t
 import { commitStored, noteClock, readStored, readsLazily, then } from "./entries.ts";
 import { attachLazy } from "./lazy.ts";
 import { fault, invariantViolation } from "./errors.ts";
-import { applyCache, applyCors, applyEdgeCache, applySecurityHeaders, cookieObject, cookieString, cookieValue, corsPreflightResponse, csrfAllowed, edgeCacheGuard, formDecode, formMediaTypeMatches, formObject, formString, headResponse, httpResultToResponse, matchPath, mediaTypeMatches, multipartForm, multipartMediaTypeMatches, multipartObject, noStore, notModifiedIfMatch, queryObject, queryString, renderRejection, requestHeaderPairs, requestCookies, requestCookiesHeader, requestBodyStream, requestHeaders, requestQuery, requestQuerySearch, responseToHttpOutcome, responseToHttpResult, responseToUnauthOutcome, sessionCookieOf, untilBodyTooLarge, varyAcceptLanguage, withPlainJson, type CorsPolicy, type SecurityPolicy } from "./http.ts";
+import { applyCache, applyCors, applyEdgeCache, applySecurityHeaders, cfObject, cookieObject, cookieString, cookieValue, corsPreflightResponse, csrfAllowed, edgeCacheGuard, formDecode, formMediaTypeMatches, formObject, formString, headResponse, httpResultToResponse, matchPath, mediaTypeMatches, multipartForm, multipartMediaTypeMatches, multipartObject, noStore, notModifiedIfMatch, queryObject, queryString, renderRejection, requestHeaderPairs, requestCookies, requestCookiesHeader, requestBodyStream, requestHeaders, requestQuery, requestQuerySearch, responseToHttpOutcome, responseToHttpResult, responseToUnauthOutcome, sessionCookieOf, untilBodyTooLarge, varyAcceptLanguage, withPlainJson, type CorsPolicy, type SecurityPolicy } from "./http.ts";
+import { traceBinding, traceFault, traceFetch, traceStep, type TraceSpan } from "./trace.ts";
+import { historyBefore, historyRecord, inspectAgent, inspectRoute, noteAgentInstance } from "./inspect.ts";
 import { formatIcuDate, formatIcuNumber, selectPluralArm } from "./messages.ts";
 import { StoreCache, StoreLog, StoreMap, StoreSet, fillHeld, fillLog, fillMap, fillSet, wireEntries, wireHeld, wireHeldOrder, wireLog, wireMap, wirePostings, wireSet } from "./store.ts";
-import { makeIntegrationAnalytics, makeIntegrationD1, makeIntegrationEmail, makeIntegrationHyperdrive, makeIntegrationKv, makeIntegrationQueue, makeIntegrationR2, makeIntegrationRateLimit, makeIntegrationSecretsStoreSecret, makeIntegrationVersionMetadata, makeTestState, type AnalyticsDataset, type D1Database, type DurableObjectState, type Hyperdrive, type KVNamespace, type QueueProducer, type R2Bucket, type RateLimiter, type SecretsStoreSecret, type SendEmail, type WorkerVersionMetadata } from "./storage.ts";
+import { makeIntegrationAi, makeIntegrationImages, makeIntegrationAiSearch, makeIntegrationAnalyticsSql, makeIntegrationContainer, makeIntegrationAnalytics, makeIntegrationD1, makeIntegrationEmail, makeIntegrationHyperdrive, makeIntegrationKv, makeIntegrationMtls, makeIntegrationQueue, makeIntegrationR2, makeIntegrationRateLimit, makeIntegrationSecretsStoreSecret, makeIntegrationVersionMetadata, makeTestState, type AiSearchInstance, type AnalyticsDataset, type AnalyticsSqlBinding, type D1Database, type DurableObjectState, type Hyperdrive, type KVNamespace, type QueueProducer, type R2Bucket, type RateLimiter, type SecretsStoreSecret, type SendEmail, type WorkerAiBinding, type WorkerImagesBinding, type WorkerVersionMetadata } from "./storage.ts";
+import { makeIntegrationVectorize, type VectorizeIndex } from "./vectorize.ts";
 
 export {
   AGENT_WIRE_PASS as __AGENT_WIRE_PASS,
@@ -76,6 +80,9 @@ export {
   invariantViolation as __invariantViolation,
   makeAgent as __makeAgent,
   makeIntegrationDoNamespace as __makeIntegrationDoNamespace,
+  makeIntegrationAi as __makeIntegrationAi,
+  makeIntegrationImages as __makeIntegrationImages,
+  makeIntegrationContainer as __makeIntegrationContainer,
   makeIntegrationAnalytics as __makeIntegrationAnalytics,
   makeIntegrationD1 as __makeIntegrationD1,
   makeIntegrationEmail as __makeIntegrationEmail,
@@ -85,6 +92,10 @@ export {
   makeIntegrationR2 as __makeIntegrationR2,
   makeIntegrationRateLimit as __makeIntegrationRateLimit,
   makeIntegrationSecretsStoreSecret as __makeIntegrationSecretsStoreSecret,
+  makeIntegrationAiSearch as __makeIntegrationAiSearch,
+  makeIntegrationAnalyticsSql as __makeIntegrationAnalyticsSql,
+  makeIntegrationMtls as __makeIntegrationMtls,
+  makeIntegrationVectorize as __makeIntegrationVectorize,
   makeIntegrationVersionMetadata as __makeIntegrationVersionMetadata,
   makeTestState as __makeTestState,
   matchPath as __matchPath,
@@ -101,6 +112,7 @@ export {
   formDecode as __formDecode,
   formObject as __formObject,
   formString as __formString,
+  cfObject as __cfObject,
   cookieObject as __cookieObject,
   cookieValue as __cookieValue,
   csrfAllowed as __csrfAllowed,
@@ -129,6 +141,7 @@ export {
   selectPluralArm as __selectPluralArm,
   serialiseAgentKey as __serialiseAgentKey,
   serialiseAgentClass as __serialiseAgentClass,
+  containerClass as __containerClass,
   sweepAgentInstances as __sweepAgentInstances,
   varyAcceptLanguage as __varyAcceptLanguage,
   expireSessionCookie as __expireSessionCookie,
@@ -145,8 +158,18 @@ export {
   verifySignatureHmacSha256 as __verifySignatureHmacSha256,
   wakeForMigration as __wakeForMigration,
   webSocketUpgradeResponse as __webSocketUpgradeResponse,
+  historyBefore as __historyBefore,
+  historyRecord as __historyRecord,
+  inspectAgent as __inspectAgent,
+  inspectRoute as __inspectRoute,
+  noteAgentInstance as __noteAgentInstance,
+  traceBinding as __traceBinding,
+  traceFault as __traceFault,
+  traceFetch as __traceFetch,
+  traceStep as __traceStep,
 };
 export type {
+  TraceSpan as __TraceSpan,
   InboundMessage as __InboundMessage,
   MySqlEndpoint as __MySqlEndpoint,
   MySqlExecute as __MySqlExecute,
@@ -164,6 +187,7 @@ export type {
   BoundaryError as __BoundaryError,
   CorsPolicy as __CorsPolicy,
   DurableObjectNamespace as __DurableObjectNamespace,
+  AiSearchInstance as __AiSearchInstance,
   AnalyticsDataset as __AnalyticsDataset,
   D1Database as __D1Database,
   DurableObjectState as __DurableObjectState,
@@ -175,6 +199,10 @@ export type {
   RateLimiter as __RateLimiter,
   SecretsStoreSecret as __SecretsStoreSecret,
   SendEmail as __SendEmail,
+  VectorizeIndex as __VectorizeIndex,
+  AnalyticsSqlBinding as __AnalyticsSqlBinding,
+  WorkerAiBinding as __WorkerAiBinding,
+  WorkerImagesBinding as __WorkerImagesBinding,
   WorkerVersionMetadata as __WorkerVersionMetadata,
   SecurityPolicy as __SecurityPolicy,
   ServiceBinding as __ServiceBinding,

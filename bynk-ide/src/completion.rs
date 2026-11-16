@@ -1161,6 +1161,11 @@ pub const HTTP_PARAMS: &[(&str, &str, &str)] = &[
         "the request's cookies: a record `T` decoded from the `Cookie` header and validated before the handler runs (`400` on a violation), or a raw `RequestCookies` view",
     ),
     (
+        "cf",
+        "RequestCf",
+        "what Cloudflare derived about the connection (country, colo, ASN, …); every field is optional (Cloudflare only: `consumes bynk.cloudflare { RequestCf }`)",
+    ),
+    (
         "body",
         "T",
         "the request body, parsed and validated before the handler runs (not on `GET` or `DELETE`)",
@@ -2431,12 +2436,24 @@ pub fn signed_cookie_members(a: &bynk_syntax::ast::ActorDecl) -> [(&'static str,
     ]
 }
 
+/// #3147: the signature of `D1.peek`, a built-in of an `integration` or
+/// `system` case that is no operation of the capability.
+pub(crate) const D1_PEEK_SIGNATURE: &str = "peek(<participant>.<Capability>) -> D1Peek - a read-only handle on a participant's test database";
+
 fn member_candidates(
     receiver: &str,
     doc_text: &str,
     files: Option<&HashMap<PathBuf, String>>,
 ) -> Vec<Completion> {
-    member_candidates_from(receiver, doc_text, files, &mut BTreeSet::new())
+    let mut out = member_candidates_from(receiver, doc_text, files, &mut BTreeSet::new());
+    if receiver == "D1" && !out.iter().any(|c| c.label == "peek") {
+        out.push(Completion::item(
+            "peek",
+            CompletionKind::Member,
+            Some(D1_PEEK_SIGNATURE.to_string()),
+        ));
+    }
+    out
 }
 
 /// [`member_candidates`], with the derived capabilities already followed
@@ -4453,6 +4470,15 @@ mod tests {
         }
     }
 
+    /// #3147: `D1.` offers `peek`, the case-only handle on a participant's database.
+    #[test]
+    fn the_d1_name_offers_peek() {
+        let doc = "suite a.b as system {\n  case \"c\" {\n    let db = D1.\n  }\n}\n";
+        let items = complete("    let db = D1.", doc, None);
+        let peek = find(&items, "peek", CompletionKind::Member).expect("`peek` offered");
+        assert_eq!(peek.detail.as_deref(), Some(D1_PEEK_SIGNATURE));
+    }
+
     /// Hyperdrive H3 (#3320): a derived `Postgres` offers the typed reads and
     /// `transaction` beside `all`, `first` and `run`.
     #[test]
@@ -5255,7 +5281,11 @@ fn Box.size(self) -> Int { 1 }
                 "StoredSecret",
                 "Email",
                 "Postgres",
-                "MySql"
+                "MySql",
+                "Vectorize",
+                "Container",
+                "AiSearch",
+                "MtlsCertificate"
             ]
         );
         let narrowed: Vec<String> = instance_declaration_completions("capability L = Ra")

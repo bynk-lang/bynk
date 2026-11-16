@@ -1,0 +1,17 @@
+suite shop.api {
+	case "a quantity inside the range is accepted" {
+		expect Qty.of(2) is Ok(_)
+	}
+
+	case "a quantity of zero is refused" {
+		expect Qty.of(0) is Err(_)
+	}
+
+	case "a quantity above 99 is refused" {
+		expect Qty.of(100) is Err(_)
+	}
+
+	case "an empty SKU is refused" {
+		expect Sku.of("") is Err(_)
+	}
+}

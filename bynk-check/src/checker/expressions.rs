@@ -301,14 +301,22 @@ pub(crate) fn check_ident(
         return None;
     }
     // Bare variant of a unique-owner sum type (nullary variants).
-    let owners: Vec<&std::sync::Arc<TypeDecl>> = ctx
-        .input
-        .types
-        .values()
-        .filter(|t| matches!(&t.body, TypeBody::Sum(s) if s.variants.iter().any(|v| v.name.name == id.name)))
-        .collect();
+    let owners: Vec<&std::sync::Arc<TypeDecl>> = crate::resolver::bare_variant_owners(
+        &id.name,
+        &ctx.input.types,
+        &ctx.input.unselected_types,
+    );
     // #3344: several sums in scope share the name; the expected type picks one.
-    if let Some(owner) = variant_owner(&owners, expected, ctx.tys).map(|o| o.as_ref())
+    let left_out = left_out_variant_owner(
+        &id.name,
+        &ctx.input.types,
+        &ctx.input.unselected_types,
+        expected,
+        ctx.tys,
+    );
+    if let Some(owner) = left_out
+        .or_else(|| variant_owner(&owners, expected, ctx.tys))
+        .map(|o| o.as_ref())
         && let TypeBody::Sum(s) = &owner.body
         && let Some(variant) = s.variants.iter().find(|v| v.name.name == id.name)
     {
@@ -1719,7 +1727,6 @@ fn body_performs_effects(e: &Expr, ctx: &Ctx) -> bool {
                         return true;
                     }
                 }
-                Statement::Send(_) => return true,
                 Statement::Do(_) => return true,
                 Statement::Assign(a) => {
                     if body_performs_effects(&a.value, ctx) {
@@ -1883,6 +1890,27 @@ pub(crate) fn variant_owner<'a, D: AsRef<TypeDecl>>(
         .iter()
         .copied()
         .find(|o| (*o).as_ref().name.name == *name)
+}
+
+/// #3536: the sum an expected type names, when it is one a braced `consumes`
+/// leaves out (`unselected`) and it declares the bare variant `name`. The
+/// expected type settles it as it settles #3344's shared names, so a name that
+/// resolves, to be reported as `bynk.consumes.type_not_selected` (with its fix),
+/// builds the sum the position asks for, even when a sum in scope shares the variant.
+pub(crate) fn left_out_variant_owner<'a>(
+    name: &str,
+    types: &'a std::collections::HashMap<String, std::sync::Arc<TypeDecl>>,
+    unselected: &std::collections::HashSet<String>,
+    expected: Option<TyId>,
+    tys: &Types,
+) -> Option<&'a std::sync::Arc<TypeDecl>> {
+    let Ty::Named { name: want, .. } = &*tys.get(expected?) else {
+        return None;
+    };
+    types.get(want).filter(|t| {
+        unselected.contains(want)
+            && matches!(&t.body, TypeBody::Sum(s) if s.variants.iter().any(|v| v.name.name == name))
+    })
 }
 
 /// `bynk.resolve.ambiguous_variant`: a bare variant name several sums in scope

@@ -1,0 +1,7 @@
+context demo
+
+// #3477: an instance type is one of a closed set.
+
+consumes bynk.cloudflare { Container }
+
+capability Renderer = Container @build("containers/renderer") @port(8080) @instanceType("basic")

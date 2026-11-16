@@ -290,7 +290,7 @@ fn the_listed_action_is_a_quick_fix_without_an_edit() {
 /// variants a minor release may add, as well as an arm per declared variant.
 fn method_context(arms: &str) -> String {
     canon(&format!(
-        "context app.m\n\nconsumes bynk {{ Fetch }}\n\nfn verb(m: Method) -> String {{\n  match m {{\n{arms}  }}\n}}\n\nservice probe {{\n  on call() -> Effect[String] {{\n    Effect.pure(verb(Get))\n  }}\n}}\n"
+        "context app.m\n\nconsumes bynk {{ Fetch, Method }}\n\nfn verb(m: Method) -> String {{\n  match m {{\n{arms}  }}\n}}\n\nservice probe {{\n  on call() -> Effect[String] {{\n    Effect.pure(verb(Get))\n  }}\n}}\n"
     ))
 }
 

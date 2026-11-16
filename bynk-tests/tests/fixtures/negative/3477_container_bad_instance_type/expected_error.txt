@@ -1,0 +1,2 @@
+bynk.capability.invalid_option
+`basic` is not an instance type a `Container` can start with

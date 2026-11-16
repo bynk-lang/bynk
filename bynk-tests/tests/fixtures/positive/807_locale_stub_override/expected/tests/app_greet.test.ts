@@ -121,7 +121,7 @@ async function test_a_stubbed_locale_is_what_the_capability_reports() {
     type TimedOut = __ns_bynk.TimedOut;
     type Uuid = __ns_bynk.Uuid;
     const tag = await currentTag.call(deps);
-    if (!(tag === "fr")) { throw __bynkExpectFailure("tests/greet.test.bynk:11:12", 357, 368, "expect tag == \"fr\"\n  expected: tag == \"fr\"\n  actual:   " + __bynkShow((tag)) + " == " + __bynkShow(("fr"))); }
+    if (!(tag === "fr")) { throw __bynkExpectFailure("tests/greet.test.bynk:12:12", 384, 395, "expect tag == \"fr\"\n  expected: tag == \"fr\"\n  actual:   " + __bynkShow((tag)) + " == " + __bynkShow(("fr"))); }
     return { pass: true };
   } catch (e) {
     if (e instanceof ExpectationError) {
@@ -159,7 +159,7 @@ async function test_render_is_unaffected_by_the_stub_in_slice_1__tag_is_unused_(
     type TimedOut = __ns_bynk.TimedOut;
     type Uuid = __ns_bynk.Uuid;
     const g = await greeting.call(deps);
-    if (!(g === "hello")) { throw __bynkExpectFailure("tests/greet.test.bynk:16:12", 485, 497, "expect g == \"hello\"\n  expected: g == \"hello\"\n  actual:   " + __bynkShow((g)) + " == " + __bynkShow(("hello"))); }
+    if (!(g === "hello")) { throw __bynkExpectFailure("tests/greet.test.bynk:17:12", 512, 524, "expect g == \"hello\"\n  expected: g == \"hello\"\n  actual:   " + __bynkShow((g)) + " == " + __bynkShow(("hello"))); }
     return { pass: true };
   } catch (e) {
     if (e instanceof ExpectationError) {

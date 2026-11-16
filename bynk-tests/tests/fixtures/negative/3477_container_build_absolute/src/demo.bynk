@@ -1,0 +1,7 @@
+context demo
+
+// #3477: a build directory is relative.
+
+consumes bynk.cloudflare { Container }
+
+capability Renderer = Container @build("/srv/renderer") @port(8080)

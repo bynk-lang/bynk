@@ -1,0 +1,2 @@
+bynk.capability.base_not_instantiable
+`bynk.cloudflare.Ai` has no named instances

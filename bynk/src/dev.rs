@@ -96,6 +96,10 @@ pub struct DevOptions {
     /// `.bynk` locations. Off by default, so a script reading the stream sees
     /// only the lifecycle events.
     pub log_events: bool,
+    /// `--trace-events` (#3580): build the workers with per-request trace
+    /// recording, and write each request as a [`DevEvent::Request`]. Implies
+    /// `--format json`.
+    pub trace_events: bool,
     /// `--rewrite-frames` (#2474): rewrite stack frames to `.bynk` even on a
     /// terminal, where the driver otherwise leaves wrangler's output alone.
     pub rewrite_frames: bool,
@@ -118,7 +122,7 @@ pub enum DevFormat {
 /// parse the human report, whose wording is UX and changes. Serialised with an
 /// `event` tag in snake_case. A consumer should ignore fields and events it
 /// does not know: new ones may be added, existing ones keep their meaning.
-#[derive(Debug, Clone, PartialEq, Eq, serde::Serialize)]
+#[derive(Debug, Clone, PartialEq, serde::Serialize)]
 #[serde(tag = "event", rename_all = "snake_case")]
 pub enum DevEvent {
     /// Every `wrangler dev` has been started. Ports are allocated, but a
@@ -133,6 +137,30 @@ pub enum DevEvent {
     RebuildFailed,
     /// The session ended, with the exit code `bynk dev` is about to return.
     Stopped { code: u8 },
+    /// One request a worker served (`--trace-events`, #3580): its route, status
+    /// and duration, and the steps it took in call order. Steps carry no argument
+    /// values. A cross-context call is its own step here; the callee's own
+    /// request is a separate event.
+    Request {
+        /// The worker dir that served it, as in [`ServedContext::name`].
+        context: String,
+        /// This request's id.
+        id: String,
+        /// The id of the request that made this one, when it is a cross-context
+        /// call from another worker (that request's `call` step carries this one's
+        /// id as its `request`); `null` for a request from outside.
+        parent: Option<String>,
+        /// `<METHOD> <path>`.
+        route: String,
+        status: u16,
+        duration_ms: f64,
+        steps: Vec<crate::trace::TraceStep>,
+        /// More steps happened than are listed (the list is bounded).
+        truncated: bool,
+        /// The fault that answered the request with a 500, with its stack frames
+        /// mapped to `.bynk` locations; `null` when it did not fault.
+        fault: Option<crate::trace::TraceFault>,
+    },
     /// One line a worker printed (`--log-events`, #2474), with any stack frame
     /// into generated code rewritten to the `.bynk` line it came from. A
     /// thrown error is a headline line followed by one event per frame, all
@@ -421,6 +449,33 @@ pub struct Serving {
     pub inspect: bool,
 }
 
+/// Whether the forwarded wrangler arguments ask for remote mode: `--remote`,
+/// its `-r` alias, or `--remote=true`.
+pub(crate) fn is_remote(args: &[String]) -> bool {
+    args.iter()
+        .any(|arg| matches!(arg.as_str(), "--remote" | "-r" | "--remote=true"))
+}
+
+/// #837 review: once `--remote` reads a ledger section by `--env`, a
+/// `-- --env`/`-- --environment` passthrough would silently diverge — `bynk`
+/// materialises one environment's KV id while Wrangler actually connects to a
+/// different one. Checked only when `--remote` is present, since `--env` is
+/// otherwise inert (nothing reads the ledger without it). Prints the conflict
+/// and returns `true` when there is one.
+fn remote_env_conflict(opts: &DevOptions) -> bool {
+    if !is_remote(&opts.wrangler_args) {
+        return false;
+    }
+    let Some(conflict) = crate::deploy::conflicting_env_passthrough(&opts.wrangler_args) else {
+        return false;
+    };
+    eprintln!(
+        "bynk: `--env {}` conflicts with `{conflict}` after `--` — pass one or the other, not both",
+        opts.environment
+    );
+    true
+}
+
 /// Orchestrate a local dev session: pre-flight, compile, select the worker, and
 /// hand off to `wrangler dev`. Returns wrangler's own exit code on a clean
 /// hand-off, or a pre-flight/build failure code before serving.
@@ -430,18 +485,7 @@ pub fn run(
     node_floor: (u32, u32),
     opts: &DevOptions,
 ) -> ExitCode {
-    // #837 review: once `--remote` reads a ledger section by `--env`, a
-    // `-- --env`/`-- --environment` passthrough would silently diverge —
-    // `bynk` materialises one environment's KV id while Wrangler actually
-    // connects to a different one. Checked only when `--remote` is present,
-    // since `--env` is otherwise inert (nothing reads the ledger without it).
-    if opts.wrangler_args.iter().any(|arg| arg == "--remote")
-        && let Some(conflict) = crate::deploy::conflicting_env_passthrough(&opts.wrangler_args)
-    {
-        eprintln!(
-            "bynk: `--env {}` conflicts with `{conflict}` after `--` — pass one or the other, not both",
-            opts.environment
-        );
+    if remote_env_conflict(opts) {
         return ExitCode::FAILURE;
     }
 
@@ -485,7 +529,7 @@ pub fn run(
     if !crate::workers::compile_once_reporting(
         project_root,
         &build_dir,
-        crate::workers::Build::new(true, false).no_install(opts.no_install),
+        dev_build(opts),
         bynk_driver::progress::terminal_sink(),
     ) {
         return ExitCode::FAILURE;
@@ -566,9 +610,16 @@ pub fn run(
         return ExitCode::FAILURE;
     }
 
+    // #3477: a container Worker runs under Docker here, never `--remote`.
+    let Some(containers) =
+        crate::dev_containers::for_session(&workers_dir, &serving, &opts.wrangler_args)
+    else {
+        return ExitCode::FAILURE;
+    };
+
     // Remote dev reads the real Cloudflare ids, unlike Miniflare's local mode,
     // from the deploy ledger immediately before Wrangler runs.
-    if opts.wrangler_args.iter().any(|arg| arg == "--remote")
+    if is_remote(&opts.wrangler_args)
         && !materialise_remote_state(project_root, &workers_dir, &serving, &opts.environment)
     {
         return ExitCode::FAILURE;
@@ -579,26 +630,8 @@ pub fn run(
     // `--local-worker` names the Worker (the dev registry then reaches the
     // user's own `wrangler dev` of it). Under `--remote` the bindings are the
     // account's, so there is nothing to stand in for.
-    let remote = opts.wrangler_args.iter().any(|arg| arg == "--remote");
-    let mut stand_in_plans: Vec<(String, Vec<StandIn>)> = Vec::new();
-    let mut bound_foreign: Vec<String> = Vec::new();
-    for s in &serving {
-        let config = std::fs::read_to_string(workers_dir.join(&s.worker).join("wrangler.toml"))
-            .unwrap_or_default();
-        let foreign = foreign_services(&config, &available);
-        bound_foreign.extend(foreign.iter().map(|(_, w)| w.clone()));
-        let planned = stand_ins(&foreign, &opts.local_workers);
-        if !remote && !planned.is_empty() {
-            stand_in_plans.push((s.worker.clone(), planned));
-        }
-    }
-    for local in &opts.local_workers {
-        if !bound_foreign.contains(local) {
-            eprintln!(
-                "bynk: warning: `--local-worker {local}` names no Worker the served contexts bind with a `Service` instance."
-            );
-        }
-    }
+    let remote = is_remote(&opts.wrangler_args);
+    let stand_in_plans = plan_stand_ins(&workers_dir, &serving, &available, opts, remote);
     if !stand_in_plans.is_empty()
         && (passthrough_has(&opts.wrangler_args, "-c")
             || passthrough_has(&opts.wrangler_args, "--config"))
@@ -608,6 +641,7 @@ pub fn run(
         );
         return ExitCode::FAILURE;
     }
+    dev_config_patches(project_root, &workers_dir, &serving, &opts.environment);
     let stand_in_configs = match write_stand_ins(&build_dir, &stand_in_plans) {
         Ok(configs) => configs,
         Err(e) => {
@@ -617,6 +651,18 @@ pub fn run(
     };
     if let Err(e) = point_at_stand_ins(&workers_dir, &stand_in_plans) {
         eprintln!("bynk: could not bind the stand-ins for foreign Workers: {e}");
+        return ExitCode::FAILURE;
+    }
+    // #3479: each `Vectorize` instance is bound to the index `[dev.vectorize-index]`
+    // names, or left unbound.
+    if !bind_dev_vectorize(
+        project_root,
+        &workers_dir,
+        &available,
+        &serving,
+        remote,
+        true,
+    ) {
         return ExitCode::FAILURE;
     }
 
@@ -642,6 +688,9 @@ pub fn run(
         eprintln!("bynk: wrangler not found (run `bynk doctor --only deploy`)");
         return ExitCode::FAILURE;
     }
+
+    // #3477: Docker: containers off when it is absent.
+    let containers_off = crate::dev_containers::session(tb, &containers);
 
     if !warm_up_wrangler(&probe.provenance, serving.len()) {
         return ExitCode::FAILURE;
@@ -688,6 +737,10 @@ pub fn run(
     else {
         return ExitCode::FAILURE;
     };
+    // #3478: `BYNK_DEV` and the acknowledged remote-only kinds, as `--var`s.
+    let Some(dev_vars) = dev_vars_for(project_root) else {
+        return ExitCode::FAILURE;
+    };
     let rewriter = std::sync::Arc::new(crate::logs::Rewriter::new(&build_dir));
     let mut children: Vec<(String, Served)> = Vec::new();
     let mut pumps: Vec<std::thread::JoinHandle<()>> = Vec::new();
@@ -712,6 +765,12 @@ pub fn run(
             .map(Vec::as_slice)
             .unwrap_or_default();
         cmd.args(serve_args(s, keys));
+        cmd.args(&dev_vars);
+        cmd.args(crate::dev_containers::off_args_for(
+            containers_off,
+            &containers,
+            &s.worker,
+        ));
         cmd.args(local.session_args(&s.worker, &opts.wrangler_args));
         for arg in &opts.wrangler_args {
             cmd.arg(arg);
@@ -755,6 +814,7 @@ pub fn run(
     eprint!("{}", stand_in_report(&stand_in_plans));
     let serving_now = serving_event(&serving, &opts.wrangler_args);
     emit(opts.format, &serving_now);
+    let _session = crate::dev_inspect::SessionFile::write(project_root, &session_of(&serving_now));
     // #2138: `--ready-json` — written from the watch loop below once every
     // served context answers a probe. The probe is plain HTTP on localhost,
     // so a server it can't reach never reads as ready; say so up front.
@@ -805,24 +865,24 @@ pub fn run(
             fingerprint = now;
             eprintln!("bynk dev: change detected — rebuilding…");
             emit(opts.format, &DevEvent::Rebuilding);
-            let rebuild = crate::workers::Build::new(true, false).no_install(opts.no_install);
+            let rebuild = dev_build(opts);
             if crate::workers::compile_once_reporting(project_root, &build_dir, rebuild, None) {
+                dev_config_patches(project_root, &workers_dir, &serving, &opts.environment);
                 // Interop I5 (#1972): refresh the served copy from the
                 // rebuilt config. A binding added since start has no
                 // stand-in until `bynk dev` restarts.
                 if let Err(e) = point_at_stand_ins(&workers_dir, &stand_in_plans) {
                     eprintln!("bynk: could not bind the stand-ins for foreign Workers: {e}");
                 }
-                // P4b (#2608): a new migration is applied without a restart.
-                if !remote {
-                    apply_local_migrations(
-                        &probe.provenance,
-                        &workers_dir,
-                        &serving,
-                        &opts.wrangler_args,
-                        &mut applied,
-                    );
-                }
+                // The rebuilt configs name the derived indexes again.
+                bind_dev_vectorize(
+                    project_root,
+                    &workers_dir,
+                    &available,
+                    &serving,
+                    remote,
+                    false,
+                );
                 eprintln!("bynk dev: rebuilt");
                 emit(opts.format, &DevEvent::RebuildOk);
             } else {
@@ -862,6 +922,78 @@ fn materialise_remote_state(
     true
 }
 
+/// Interop I5 (#1972): each served Worker's stand-ins for the foreign Workers
+/// it binds, none under `--remote`. Warns for a `--local-worker` that names no
+/// Worker the served contexts bind.
+fn plan_stand_ins(
+    workers_dir: &Path,
+    serving: &[Serving],
+    available: &[String],
+    opts: &DevOptions,
+    remote: bool,
+) -> Vec<(String, Vec<StandIn>)> {
+    let mut stand_in_plans: Vec<(String, Vec<StandIn>)> = Vec::new();
+    let mut bound_foreign: Vec<String> = Vec::new();
+    for s in serving {
+        let config = std::fs::read_to_string(workers_dir.join(&s.worker).join("wrangler.toml"))
+            .unwrap_or_default();
+        let foreign = foreign_services(&config, available);
+        bound_foreign.extend(foreign.iter().map(|(_, w)| w.clone()));
+        let planned = stand_ins(&foreign, &opts.local_workers);
+        if !remote && !planned.is_empty() {
+            stand_in_plans.push((s.worker.clone(), planned));
+        }
+    }
+    for local in &opts.local_workers {
+        if !bound_foreign.contains(local) {
+            eprintln!(
+                "bynk: warning: `--local-worker {local}` names no Worker the served contexts bind with a `Service` instance."
+            );
+        }
+    }
+    stand_in_plans
+}
+
+/// #3479: bind the served Workers' `Vectorize` instances for development
+/// (see [`crate::dev_vectorize`]), printing why not on a failure and, when
+/// `announce`, the one note of what is bound. `--remote` keeps the account's
+/// deployed names, so it binds nothing. `false` after printing why not.
+fn bind_dev_vectorize(
+    project_root: &Path,
+    workers_dir: &Path,
+    available: &[String],
+    serving: &[Serving],
+    remote: bool,
+    announce: bool,
+) -> bool {
+    if remote {
+        return true;
+    }
+    let names: Vec<String> = serving.iter().map(|s| s.worker.clone()).collect();
+    match crate::dev_vectorize::bind_for_dev(project_root, workers_dir, available, &names) {
+        Ok(bound) => {
+            if announce && let Some(note) = crate::dev_vectorize::report_note(&bound) {
+                eprintln!("{note}");
+            }
+            true
+        }
+        Err(e) => {
+            eprintln!("bynk: {e}");
+            // A rebuild's configs name the deploy's indexes again: never serve
+            // them. Unbound, a call to an instance faults until `bynk.toml` reads.
+            if !announce {
+                match crate::dev_vectorize::unbind_all(workers_dir, &names) {
+                    Ok(()) => eprintln!(
+                        "bynk dev: Vectorize instances are unbound until `bynk.toml` is fixed; calls to them fail"
+                    ),
+                    Err(e) => eprintln!("bynk: could not unbind the Vectorize instances: {e}"),
+                }
+            }
+            false
+        }
+    }
+}
+
 /// #3319: the local connection strings of the served Workers' `Postgres`
 /// instances, or `None` after printing why not. `--remote` runs against the
 /// account's Hyperdrive config, so no local string applies.
@@ -890,6 +1022,15 @@ fn hyperdrive_local_env(
     }
 }
 
+/// How `bynk dev` builds, first and on every rebuild: it reconciles the schema
+/// lock, never dry-runs, and (#3580, `--trace-events`) records request traces.
+fn dev_build(opts: &DevOptions) -> crate::workers::Build {
+    crate::workers::Build::new(true, false)
+        .no_install(opts.no_install)
+        .trace_requests(opts.trace_events)
+        .inspect_agents(true)
+}
+
 /// Whether `bynk dev` reads wrangler's output (#2474) rather than leaving it
 /// attached to the terminal: when asked (`--rewrite-frames`, `--log-events`),
 /// or when either of our streams is not a terminal, where wrangler has no
@@ -898,6 +1039,7 @@ fn pipes_output(opts: &DevOptions) -> bool {
     use std::io::IsTerminal;
     opts.rewrite_frames
         || opts.log_events
+        || opts.trace_events
         || !std::io::stdout().is_terminal()
         || !std::io::stderr().is_terminal()
 }
@@ -921,6 +1063,7 @@ fn pump_output(
     let classifier = std::sync::Arc::new(std::sync::Mutex::new(crate::logs::Classifier::default()));
     let to_stderr_only = opts.format == DevFormat::Json;
     let events = opts.log_events && opts.format == DevFormat::Json;
+    let trace = opts.trace_events && opts.format == DevFormat::Json;
     let streams: [(Option<Box<dyn std::io::Read + Send>>, bool); 2] = [
         (
             child.stdout.take().map(|s| Box::new(s) as Box<_>),
@@ -935,23 +1078,31 @@ fn pump_output(
             (worker.to_string(), rewriter.clone(), classifier.clone());
         handles.push(std::thread::spawn(move || {
             use std::io::Write;
-            forward_lines(stream, &worker, &rewriter, &classifier, |line, level| {
-                if to_stdout {
-                    let _ = writeln!(std::io::stdout().lock(), "{line}");
-                } else {
-                    let _ = writeln!(std::io::stderr().lock(), "{line}");
-                }
-                if events {
-                    emit(
-                        DevFormat::Json,
-                        &DevEvent::Log {
-                            context: worker.clone(),
-                            level,
-                            text: crate::logs::strip_ansi(line),
-                        },
-                    );
-                }
-            });
+            let consume = |line: &str| trace && emit_request(&worker, &rewriter, line);
+            forward_lines_with(
+                stream,
+                &worker,
+                &rewriter,
+                &classifier,
+                consume,
+                |line, level| {
+                    if to_stdout {
+                        let _ = writeln!(std::io::stdout().lock(), "{line}");
+                    } else {
+                        let _ = writeln!(std::io::stderr().lock(), "{line}");
+                    }
+                    if events {
+                        emit(
+                            DevFormat::Json,
+                            &DevEvent::Log {
+                                context: worker.clone(),
+                                level,
+                                text: crate::logs::strip_ansi(line),
+                            },
+                        );
+                    }
+                },
+            );
         }));
     }
     handles
@@ -984,6 +1135,20 @@ pub(crate) fn forward_lines(
     worker: &str,
     rewriter: &crate::logs::Rewriter,
     classifier: &std::sync::Mutex<crate::logs::Classifier>,
+    sink: impl FnMut(&str, crate::logs::LogLevel),
+) {
+    forward_lines_with(stream, worker, rewriter, classifier, |_| false, sink);
+}
+
+/// [`forward_lines`], with `consume` shown each line first, before the frame
+/// rewriter touches it (#3580: a trace line's JSON must reach the parser as
+/// printed). A line `consume` takes (answers `true`) is not forwarded.
+pub(crate) fn forward_lines_with(
+    stream: impl std::io::Read,
+    worker: &str,
+    rewriter: &crate::logs::Rewriter,
+    classifier: &std::sync::Mutex<crate::logs::Classifier>,
+    mut consume: impl FnMut(&str) -> bool,
     mut sink: impl FnMut(&str, crate::logs::LogLevel),
 ) {
     use std::io::BufRead;
@@ -996,13 +1161,48 @@ pub(crate) fn forward_lines(
             Ok(_) => {}
         }
         let text = String::from_utf8_lossy(&raw);
-        let line = rewriter.rewrite(worker, text.trim_end_matches(['\n', '\r']));
+        let plain = text.trim_end_matches(['\n', '\r']);
+        if consume(plain) {
+            continue;
+        }
+        let line = rewriter.rewrite(worker, plain);
         let level = classifier
             .lock()
             .map(|mut c| c.classify(&crate::logs::strip_ansi(&line)))
             .unwrap_or(crate::logs::LogLevel::Info);
         sink(&line, level);
     }
+}
+
+/// #3580: a trace line a worker printed as a [`DevEvent::Request`], with its
+/// fault's frames mapped to `.bynk` locations, or `None` for a line that is not a
+/// trace (or is malformed), which is then forwarded like any other.
+fn request_event(worker: &str, rewriter: &crate::logs::Rewriter, line: &str) -> Option<DevEvent> {
+    let t = crate::trace::parse(&crate::logs::strip_ansi(line))?;
+    let fault = t
+        .fault
+        .as_deref()
+        .map(|stack| crate::trace::fault(stack, |l| rewriter.rewrite(worker, l)));
+    Some(DevEvent::Request {
+        context: worker.to_string(),
+        id: t.id,
+        parent: t.parent,
+        route: t.route,
+        status: t.status,
+        duration_ms: t.duration_ms,
+        steps: t.steps,
+        truncated: t.truncated,
+        fault,
+    })
+}
+
+/// Write the [`DevEvent::Request`] for `line`; `false` when it is not a trace.
+fn emit_request(worker: &str, rewriter: &crate::logs::Rewriter, line: &str) -> bool {
+    let Some(event) = request_event(worker, rewriter, line) else {
+        return false;
+    };
+    emit(DevFormat::Json, &event);
+    true
 }
 
 /// The watch loop: every 500ms, end the session if it was asked to stop or a
@@ -1611,7 +1811,7 @@ fn collect_bynk_files(dir: &Path, excludes: &[PathBuf], visit: &mut dyn FnMut(&P
 }
 
 /// #1732: the warning `bynk dev` prints before serving with a wrangler older
-/// than [`bynk_emit::WRANGLER_MIN`]. Its `workerd` refuses the pinned
+/// than [`bynk_emit::WRANGLER_MIN`]. An older `workerd` can refuse the pinned
 /// compatibility date outright, and wrangler's own error says nothing about
 /// Bynk, so this names the cause and the fix first. A warning, not a refusal:
 /// the version is `doctor`'s judgement, and the wrangler itself has the last
@@ -1624,9 +1824,9 @@ pub fn wrangler_age_notice(
         .version
         .filter(|_| doctor::wrangler_below_min(probe))?;
     Some(format!(
-        "bynk: warning: wrangler {v} is older than {}, the first whose runtime serves \
-         compatibility date {}; `wrangler dev` will refuse it. Upgrade with \
-         `{}`.",
+        "bynk: warning: wrangler {v} is older than {}, the oldest this Bynk release supports; \
+         an older runtime may refuse compatibility date {}, and `wrangler dev` then exits. \
+         Upgrade with `{}`.",
         bynk_emit::WRANGLER_MIN,
         bynk_emit::COMPATIBILITY_DATE,
         doctor::wrangler_upgrade_remedy(probe, manager)
@@ -1718,12 +1918,25 @@ fn free_local_port() -> Option<u16> {
 /// listening on, so `bynk dev` can say so instead of leaving it to wrangler's
 /// `Address already in use`.
 fn inspector_port_in_use(serving: &[Serving]) -> Option<u16> {
-    serving.iter().filter_map(|s| s.inspector_port).find(|p| {
-        matches!(
-            std::net::TcpListener::bind(("127.0.0.1", *p)),
-            Err(e) if e.kind() == std::io::ErrorKind::AddrInUse
-        )
-    })
+    first_inspector_port_where(serving, port_is_in_use)
+}
+
+/// The first inspector port in the allocation for which `in_use` holds. The
+/// probe is a parameter so a test can say "this port is free" without relying
+/// on the OS leaving a port it just released alone (#3526).
+fn first_inspector_port_where(serving: &[Serving], in_use: impl Fn(u16) -> bool) -> Option<u16> {
+    serving
+        .iter()
+        .filter_map(|s| s.inspector_port)
+        .find(|p| in_use(*p))
+}
+
+/// Whether binding `port` on localhost fails because something holds it.
+fn port_is_in_use(port: u16) -> bool {
+    matches!(
+        std::net::TcpListener::bind(("127.0.0.1", port)),
+        Err(e) if e.kind() == std::io::ErrorKind::AddrInUse
+    )
 }
 
 /// #1957: whether to install wrangler once before spawning the contexts. Only
@@ -1808,6 +2021,215 @@ fn serve_args(s: &Serving, edge_keys: &[String]) -> Vec<String> {
     args
 }
 
+/// The session file's record (#3581) of the contexts a `serving` event names.
+fn session_of(serving: &DevEvent) -> crate::dev_inspect::Session {
+    let DevEvent::Serving { contexts } = serving else {
+        unreachable!("serving_event builds a Serving event")
+    };
+    crate::dev_inspect::Session {
+        workers: contexts
+            .iter()
+            .map(|c| {
+                (
+                    c.name.clone(),
+                    crate::dev_inspect::SessionWorker {
+                        context: crate::dev_inspect::context_of_worker(&c.name),
+                        url: c.url.clone(),
+                    },
+                )
+            })
+            .collect(),
+    }
+}
+
+/// What `bynk dev` changes in each Worker's development copy of its config: the
+/// remote-only bindings (AI Search, #3480; mTLS certificates, #3513), and the
+/// agent-inspection registry (#3581).
+fn dev_config_patches(
+    project_root: &Path,
+    workers_dir: &Path,
+    serving: &[Serving],
+    environment: &str,
+) {
+    proxy_remote_bindings(project_root, workers_dir, serving, environment);
+    bind_inspect_registry(workers_dir, serving);
+}
+
+/// #3581: bind the agent-inspection registry in each Worker's development copy of its
+/// config, for a Worker whose entry exports its class (one that hosts an agent). The
+/// config `bynk deploy` reads is a different build and never carries it.
+fn bind_inspect_registry(workers_dir: &Path, serving: &[Serving]) {
+    for s in serving {
+        let dir = workers_dir.join(&s.worker);
+        let (Ok(text), Ok(entry)) = (
+            std::fs::read_to_string(dir.join("wrangler.toml")),
+            std::fs::read_to_string(dir.join("index.ts")),
+        ) else {
+            continue;
+        };
+        match bynk_emit::emitter::wrangler::enable_agent_inspection(&text, &entry) {
+            Ok(out) if out != text => {
+                if let Err(e) = std::fs::write(dir.join("wrangler.toml"), out) {
+                    eprintln!(
+                        "bynk: could not bind `{}`'s inspect registry: {e}",
+                        s.worker
+                    );
+                }
+            }
+            Ok(_) => {}
+            Err(e) => eprintln!(
+                "bynk: could not bind `{}`'s inspect registry: {e}",
+                s.worker
+            ),
+        }
+    }
+}
+
+/// #3480: each served Worker's development copy of its config proxies an
+/// `[[ai_search]]` binding to the deployed instance (`remote = true`), since
+/// AI Search has no local simulation. The generated config `bynk deploy`
+/// reads is written elsewhere and never carries it. A failure is reported and
+/// the Worker serves without, so a call faults naming the binding.
+fn proxy_ai_search(workers_dir: &Path, serving: &[Serving]) {
+    for s in serving {
+        let path = workers_dir.join(&s.worker).join("wrangler.toml");
+        let Ok(text) = std::fs::read_to_string(&path) else {
+            continue;
+        };
+        match bynk_emit::emitter::wrangler::enable_remote_ai_search(&text) {
+            Ok(out) if out != text => {
+                if let Err(e) = std::fs::write(&path, out) {
+                    eprintln!(
+                        "bynk: could not proxy `{}`'s AI Search bindings to the account: {e}",
+                        s.worker
+                    );
+                }
+            }
+            Ok(_) => {}
+            Err(e) => eprintln!(
+                "bynk: could not proxy `{}`'s AI Search bindings: {e}",
+                s.worker
+            ),
+        }
+    }
+}
+
+/// #3513 A: each served Worker's development copy of its config runs an `[[mtls_certificates]]`
+/// binding on Cloudflare (`remote = true`), bound by the certificate id the last deploy of
+/// `environment` recorded, since mTLS has no local simulation. A certificate no deploy has linked
+/// is reported, and the Worker serves with it unbound, so a call through it fails.
+fn proxy_mtls(project_root: &Path, workers_dir: &Path, serving: &[Serving], environment: &str) {
+    for s in serving {
+        let path = workers_dir.join(&s.worker).join("wrangler.toml");
+        let Ok(text) = std::fs::read_to_string(&path) else {
+            continue;
+        };
+        if !text.contains("mtls_certificates") {
+            continue;
+        }
+        if let Err(e) =
+            crate::deploy::materialise_mtls_for_dev(project_root, &s.worker, &path, environment)
+        {
+            eprintln!("bynk: {e}");
+        }
+        let Ok(text) = std::fs::read_to_string(&path) else {
+            continue;
+        };
+        match bynk_emit::emitter::wrangler::enable_remote_mtls(&text) {
+            Ok(out) if out != text => {
+                if let Err(e) = std::fs::write(&path, out) {
+                    eprintln!(
+                        "bynk: could not run `{}`'s mTLS bindings on the account: {e}",
+                        s.worker
+                    );
+                }
+            }
+            Ok(_) => {}
+            Err(e) => eprintln!("bynk: could not run `{}`'s mTLS bindings: {e}", s.worker),
+        }
+    }
+}
+
+/// #3513 B: each served Worker's development copy runs its `[analytics]` (Analytics SQL)
+/// binding on Cloudflare (`remote = true`), since it has no local implementation.
+fn proxy_analytics_sql(workers_dir: &Path, serving: &[Serving]) {
+    for s in serving {
+        let path = workers_dir.join(&s.worker).join("wrangler.toml");
+        let Ok(text) = std::fs::read_to_string(&path) else {
+            continue;
+        };
+        if !text.contains("[analytics]") {
+            continue;
+        }
+        match bynk_emit::emitter::wrangler::enable_remote_analytics_sql(&text) {
+            Ok(out) if out != text => {
+                if let Err(e) = std::fs::write(&path, out) {
+                    eprintln!(
+                        "bynk: could not run `{}`'s Analytics SQL binding on the account: {e}",
+                        s.worker
+                    );
+                }
+            }
+            Ok(_) => {}
+            Err(e) => eprintln!(
+                "bynk: could not run `{}`'s Analytics SQL binding: {e}",
+                s.worker
+            ),
+        }
+    }
+}
+
+/// The remote-only bindings of the development copy: AI Search (#3480), mTLS certificates
+/// (#3513 A) and Analytics SQL (#3513 B).
+fn proxy_remote_bindings(
+    project_root: &Path,
+    workers_dir: &Path,
+    serving: &[Serving],
+    environment: &str,
+) {
+    proxy_ai_search(workers_dir, serving);
+    proxy_mtls(project_root, workers_dir, serving, environment);
+    proxy_analytics_sql(workers_dir, serving);
+}
+
+/// #3478: the `--var`s of [`dev_var_args`] for `project_root`'s `[dev]`
+/// acknowledgements, or `None` after printing why not.
+fn dev_vars_for(project_root: &Path) -> Option<Vec<String>> {
+    match bynk_project::dev_ack::try_read_dev_acks(project_root) {
+        Ok(acks) => {
+            let mut args = dev_var_args(&acks);
+            // #3581: the local key `bynk dev inspect` signs under, as `bynk.dev`.
+            args.extend([
+                "--var".to_string(),
+                format!(
+                    "{}:{}",
+                    bynk_emit::INSPECT_CALLER_KEY_VAR,
+                    bynk_emit::LOCAL_CALL_KEY
+                ),
+            ]);
+            Some(args)
+        }
+        Err(e) => {
+            eprintln!("bynk: {e}");
+            None
+        }
+    }
+}
+
+/// #3478: the `--var`s every served Worker gets: `BYNK_DEV` marks a
+/// development session, and each acknowledged remote-only kind (`[dev] ai =
+/// "allow"`) sets its variable to `allow`, which its provider reads to stay
+/// quiet. A deployed Worker has none of them.
+fn dev_var_args(acks: &std::collections::BTreeSet<&'static str>) -> Vec<String> {
+    use bynk_project::dev_ack::{ALLOW, DEV_VAR, REMOTE_KINDS};
+    let mut args = vec!["--var".to_string(), format!("{DEV_VAR}:1")];
+    for kind in REMOTE_KINDS.iter().filter(|k| acks.contains(k.key)) {
+        args.push("--var".to_string());
+        args.push(format!("{}:{ALLOW}", kind.var));
+    }
+    args
+}
+
 /// The start-up report: which context answers on which URL, plus the inspector
 /// notice under `--inspect`. Pure and deterministic, so it is golden-pinned in
 /// the style of ADR 0096 §Exit — unlike the `wrangler dev` streams it precedes.
@@ -1876,6 +2298,53 @@ mod tests {
 
     fn names(v: &[&str]) -> Vec<String> {
         v.iter().map(|s| s.to_string()).collect()
+    }
+
+    /// #3478: every served Worker is marked as a development session, and an
+    /// acknowledged remote-only kind sets its own variable to `allow`.
+    #[test]
+    fn dev_vars_mark_the_session_and_carry_acknowledgements() {
+        use std::collections::BTreeSet;
+        assert_eq!(dev_var_args(&BTreeSet::new()), ["--var", "BYNK_DEV:1"]);
+        assert_eq!(
+            dev_var_args(&BTreeSet::from(["ai"])),
+            ["--var", "BYNK_DEV:1", "--var", "BYNK_DEV_ACK_AI:allow"]
+        );
+        // #3479: Vectorize shares the mechanism, under its own key and variable.
+        assert_eq!(
+            dev_var_args(&BTreeSet::from(["vectorize"])),
+            [
+                "--var",
+                "BYNK_DEV:1",
+                "--var",
+                "BYNK_DEV_ACK_VECTORIZE:allow"
+            ]
+        );
+        // #3480: AI Search has its own acknowledgement.
+        assert_eq!(
+            dev_var_args(&BTreeSet::from(["ai-search"])),
+            [
+                "--var",
+                "BYNK_DEV:1",
+                "--var",
+                "BYNK_DEV_ACK_AI_SEARCH:allow"
+            ]
+        );
+        // #3513 A: and so does an mTLS certificate binding.
+        assert_eq!(
+            dev_var_args(&BTreeSet::from(["mtls"])),
+            ["--var", "BYNK_DEV:1", "--var", "BYNK_DEV_ACK_MTLS:allow"]
+        );
+        // #3513 B: and Analytics SQL.
+        assert_eq!(
+            dev_var_args(&BTreeSet::from(["analytics-sql"])),
+            [
+                "--var",
+                "BYNK_DEV:1",
+                "--var",
+                "BYNK_DEV_ACK_ANALYTICS_SQL:allow"
+            ]
+        );
     }
 
     #[test]
@@ -2026,6 +2495,7 @@ mod tests {
 
     #[test]
     fn a_taken_inspector_port_is_found() {
+        // The listener is held for the whole test, so the port stays taken.
         let held = std::net::TcpListener::bind("127.0.0.1:0").unwrap();
         let taken = held.local_addr().unwrap().port();
         let given = DevOptions {
@@ -2034,12 +2504,24 @@ mod tests {
         };
         let lone = allocate(&names(&["links"]), None, &given);
         assert_eq!(inspector_port_in_use(&lone), Some(taken));
-        drop(held);
-        assert_eq!(inspector_port_in_use(&lone), None);
         // A worker with no inspector port has nothing to find.
         let plain = allocate(&names(&["links"]), None, &DevOptions::default());
         assert_eq!(inspector_port_in_use(&plain), None);
         assert!(free_local_port().is_some());
+    }
+
+    #[test]
+    fn a_free_inspector_port_is_not_reported() {
+        // #3526: this used to drop the listener and assert the port was then
+        // free, which fails whenever a parallel test's `bind(":0")` is handed
+        // the port just released. The probe says "free" without the OS.
+        let given = DevOptions {
+            inspect_port: Some(9300),
+            ..Default::default()
+        };
+        let lone = allocate(&names(&["links"]), None, &given);
+        assert_eq!(first_inspector_port_where(&lone, |_| false), None);
+        assert_eq!(first_inspector_port_where(&lone, |p| p == 9300), Some(9300));
     }
 
     // ---- #552: multi-context selection ------------------------------------
@@ -2395,6 +2877,108 @@ mod tests {
             }),
             r#"{"event":"log","context":"shop","level":"error","text":"    at f (/p/src/a.bynk:3:1)"}"#
         );
+    }
+
+    /// #3580: the `request` event's documented shape.
+    #[test]
+    fn a_request_event_is_a_tagged_line() {
+        let event = DevEvent::Request {
+            context: "shop-orders".into(),
+            id: "r1".into(),
+            parent: Some("p0".into()),
+            route: "POST /orders".into(),
+            status: 201,
+            duration_ms: 12.5,
+            steps: vec![crate::trace::TraceStep {
+                kind: "call".into(),
+                target: "shop.payment.authorise".into(),
+                span: Some(crate::trace::TraceSpan {
+                    file: "src/shop/orders.bynk".into(),
+                    line: 23,
+                    col: 14,
+                }),
+                ms: 3.5,
+                outcome: "ok".into(),
+                request: Some("c1".into()),
+            }],
+            truncated: false,
+            fault: None,
+        };
+        assert_eq!(
+            event_line(&event),
+            r#"{"event":"request","context":"shop-orders","id":"r1","parent":"p0","route":"POST /orders","status":201,"duration_ms":12.5,"steps":[{"kind":"call","target":"shop.payment.authorise","span":{"file":"src/shop/orders.bynk","line":23,"col":14},"ms":3.5,"outcome":"ok","request":"c1"}],"truncated":false,"fault":null}"#
+        );
+    }
+
+    /// The real path from a printed line to the event: colour codes and a host
+    /// prefix are tolerated, and a fault's frames are rewritten through the
+    /// worker's own source map to `.bynk` locations.
+    #[test]
+    fn a_printed_trace_becomes_a_request_event_with_its_frames_mapped() {
+        let build = std::env::temp_dir().join(format!("bynk-trace-event-{}", std::process::id()));
+        let _ = std::fs::remove_dir_all(&build);
+        let worker = build.join("workers").join("shop");
+        std::fs::create_dir_all(&worker).unwrap();
+        std::fs::write(
+            worker.join("handlers.ts.map"),
+            r#"{"version":3,"sources":["/p/src/shop.bynk"],"mappings":";AASA"}"#,
+        )
+        .unwrap();
+        let rewriter = crate::logs::Rewriter::new(&build);
+        let stack = format!(
+            "Error: boom\n    at http_GET (file://{}/handlers.ts:2:5)",
+            worker.display()
+        );
+        // Built with `serde_json`, so a Windows path's backslashes are escaped.
+        let json = serde_json::json!({
+            "id": "r1", "parent": "p0", "route": "GET /", "status": 500, "duration_ms": 2.0,
+            "steps": [], "truncated": false, "fault": stack,
+        });
+        let line = format!("\u{1b}[34m[wrangler:inf]\u{1b}[0m __bynk_trace:{json}");
+        let event = request_event("shop", &rewriter, &line).expect("a trace line");
+        let _ = std::fs::remove_dir_all(&build);
+        let DevEvent::Request {
+            context,
+            id,
+            parent,
+            status,
+            fault,
+            ..
+        } = event
+        else {
+            panic!("not a request event");
+        };
+        assert_eq!((context.as_str(), id.as_str(), status), ("shop", "r1", 500));
+        assert_eq!(parent.as_deref(), Some("p0"));
+        let fault = fault.expect("the fault is carried");
+        assert_eq!(fault.message, "Error: boom");
+        assert_eq!(fault.frames, ["at http_GET (/p/src/shop.bynk:10:1)"]);
+        assert!(request_event("shop", &rewriter, "plain output").is_none());
+    }
+
+    /// A trace line is consumed before the frame rewriter and never forwarded;
+    /// every other line, and a malformed trace, is forwarded as before.
+    #[test]
+    fn a_trace_line_is_consumed_and_other_lines_are_forwarded() {
+        let dir = std::env::temp_dir().join("bynk_trace_pump");
+        let rewriter = crate::logs::Rewriter::new(&dir);
+        let classifier = std::sync::Mutex::new(crate::logs::Classifier::default());
+        let input = "hello\n__bynk_trace:{\"id\":\"r\",\"route\":\"GET /\",\"status\":200,\"duration_ms\":1.0,\"steps\":[],\"truncated\":false,\"fault\":null}\n__bynk_trace:{broken\n";
+        let (mut consumed, mut forwarded) = (0, Vec::new());
+        forward_lines_with(
+            input.as_bytes(),
+            "shop",
+            &rewriter,
+            &classifier,
+            |l| {
+                let is_trace = crate::trace::parse(l).is_some();
+                consumed += usize::from(is_trace);
+                is_trace
+            },
+            |l, _| forwarded.push(l.to_string()),
+        );
+        assert_eq!(consumed, 1);
+        assert_eq!(forwarded, ["hello", "__bynk_trace:{broken"]);
     }
 
     /// The path a handler error takes: wrangler prints a headline and frames

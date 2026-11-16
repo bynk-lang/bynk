@@ -33,6 +33,12 @@ struct WranglerConfig {
     /// P4a (#2602): the `[[d1_databases]]` of the `D1` instances.
     #[serde(default)]
     d1_databases: Vec<D1DatabaseBinding>,
+    /// #3479: the `[[vectorize]]` of the `Vectorize` instances.
+    #[serde(default)]
+    vectorize: Vec<VectorizeStanza>,
+    /// #3477: the `[[containers]]` of the `Container` instances.
+    #[serde(default)]
+    containers: Vec<ContainerStanza>,
     /// #3319: the `[[hyperdrive]]` of the `Postgres` instances.
     #[serde(default)]
     hyperdrive: Vec<HyperdriveStanza>,
@@ -46,6 +52,12 @@ struct WranglerConfig {
     /// #3301: the `[[secrets_store_secrets]]` of the `StoredSecret` instances.
     #[serde(default)]
     secrets_store_secrets: Vec<StoredSecretBinding>,
+    /// #3480: the `[[ai_search]]` of the `AiSearch` instances.
+    #[serde(default)]
+    ai_search: Vec<AiSearchBinding>,
+    /// #3513 A: the `[[mtls_certificates]]` of the `MtlsCertificate` instances.
+    #[serde(default)]
+    mtls_certificates: Vec<MtlsCertificateBinding>,
     /// #3302: the `[[send_email]]` of the `Email` instances.
     #[serde(default)]
     send_email: Vec<SendEmailBinding>,
@@ -63,6 +75,23 @@ struct SendEmailBinding {
     /// the instance is unrestricted.
     #[serde(default)]
     allowed_sender_addresses: Vec<String>,
+}
+
+#[derive(Debug, Deserialize)]
+struct MtlsCertificateBinding {
+    /// `MTLS_<SNAKE>`: the instance's binding.
+    binding: String,
+    /// The certificate's name, as `@certificate` wrote it, until the deploy replaces it
+    /// with the id it resolves.
+    certificate_id: String,
+}
+
+#[derive(Debug, Deserialize)]
+struct AiSearchBinding {
+    /// `AI_SEARCH_<SNAKE>`: the instance's binding.
+    binding: String,
+    /// The account's instance, as `@instance` wrote it.
+    instance_name: String,
 }
 
 #[derive(Debug, Deserialize)]
@@ -177,6 +206,90 @@ pub(crate) struct DurableObject {
     pub(crate) storage: String,
 }
 
+/// #3477: one `[[containers]]` entry: the class whose container it runs.
+#[derive(Debug, Deserialize)]
+struct ContainerStanza {
+    class_name: String,
+}
+
+/// #3477: `bynk-containers.json` beside a Worker's config: each container's
+/// capability, `@build` directory and `@instanceType`, which the stanza does
+/// not carry.
+#[derive(Debug, Deserialize)]
+struct ContainersManifest {
+    version: u32,
+    #[serde(default)]
+    containers: Vec<ContainersManifestEntry>,
+}
+
+#[derive(Debug, Deserialize)]
+struct ContainersManifestEntry {
+    capability: String,
+    class: String,
+    build: String,
+    #[serde(default)]
+    instance_type: Option<String>,
+}
+
+/// Read the containers manifest beside `worker_dir`'s config, if there is one.
+fn read_containers_manifest(worker_dir: &Path) -> Result<Vec<ContainersManifestEntry>, String> {
+    let name = bynk_emit::emitter::wrangler::CONTAINERS_MANIFEST;
+    let path = worker_dir.join(name);
+    if !path.exists() {
+        return Ok(Vec::new());
+    }
+    let text = std::fs::read_to_string(&path).map_err(|e| e.to_string())?;
+    let manifest: ContainersManifest = serde_json::from_str(&text).map_err(|e| e.to_string())?;
+    if manifest.version != bynk_emit::emitter::wrangler::CONTAINERS_MANIFEST_VERSION {
+        return Err(format!("unsupported {name} version {}", manifest.version));
+    }
+    Ok(manifest.containers)
+}
+
+#[derive(Debug, Deserialize)]
+struct VectorizeStanza {
+    /// `VECTORIZE_<SNAKE>`: the instance's binding.
+    binding: String,
+    /// The unqualified derived index name, which [`vectorize_index_name`]
+    /// environment-qualifies.
+    index_name: String,
+}
+
+/// #3479: `bynk-vectorize.json` beside a Worker's config: each index's
+/// dimensions, metric and metadata indexes, which the stanza does not carry.
+#[derive(Debug, Deserialize)]
+struct VectorizeManifest {
+    version: u32,
+    #[serde(default)]
+    vectorize: Vec<VectorizeManifestEntry>,
+}
+
+#[derive(Debug, Deserialize)]
+struct VectorizeManifestEntry {
+    binding: String,
+    dimensions: i64,
+    metric: String,
+    #[serde(default)]
+    indexed: Vec<String>,
+}
+
+/// Read the Vectorize manifest beside `worker_dir`'s config, if there is one.
+/// A version this deploy does not know is refused rather than guessed: an index
+/// made with the wrong dimensions cannot be corrected.
+fn read_vectorize_manifest(worker_dir: &Path) -> Result<Vec<VectorizeManifestEntry>, String> {
+    let name = bynk_emit::emitter::wrangler::VECTORIZE_MANIFEST;
+    let path = worker_dir.join(name);
+    if !path.exists() {
+        return Ok(Vec::new());
+    }
+    let text = std::fs::read_to_string(&path).map_err(|e| e.to_string())?;
+    let manifest: VectorizeManifest = serde_json::from_str(&text).map_err(|e| e.to_string())?;
+    if manifest.version != bynk_emit::emitter::wrangler::VECTORIZE_MANIFEST_VERSION {
+        return Err(format!("unsupported {name} version {}", manifest.version));
+    }
+    Ok(manifest.vectorize)
+}
+
 #[derive(Debug, Deserialize)]
 struct R2BucketBinding {
     /// `R2_<SNAKE>`: the instance's binding.
@@ -197,6 +310,29 @@ pub(crate) struct AnalyticsDecl {
     pub(crate) binding: String,
     /// The derived name before any environment qualification.
     pub(crate) name: String,
+}
+
+/// #3480: one `AiSearch` instance, as the emitted config declares it. Linked,
+/// never created: the instance's data source, models and indexing belong to
+/// whoever configured it, so the deploy finds it and fails when it is missing.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub(crate) struct AiSearchDecl {
+    /// `AI_SEARCH_<SNAKE>`, the key the ledger records the link under.
+    pub(crate) binding: String,
+    /// The instance's name, as `@instance` wrote it, used as written in
+    /// every environment.
+    pub(crate) instance: String,
+}
+
+/// #3513 A: one `MtlsCertificate` instance, as the emitted config declares it. The certificate
+/// belongs to whoever uploaded it, so the deploy finds it by name and never uploads it.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub(crate) struct MtlsCertificateDecl {
+    /// `MTLS_<SNAKE>`, the key the ledger records the link under.
+    pub(crate) binding: String,
+    /// The certificate's name, as `@certificate` wrote it, used as written in every
+    /// environment.
+    pub(crate) certificate: String,
 }
 
 /// #3301: one `StoredSecret` instance, as the emitted config declares it.
@@ -360,6 +496,64 @@ pub(crate) struct R2Decl {
     pub(crate) jurisdiction: Option<String>,
 }
 
+/// #3479: one `Vectorize` instance's index, as the emitted config and manifest
+/// declare it. The name is the identity (as for a bucket), and the
+/// configuration is fixed at creation: the deploy creates the index with it,
+/// checks an existing one against it, and never recreates.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub(crate) struct VectorizeDecl {
+    /// `VECTORIZE_<SNAKE>`, the key the ledger records the index under.
+    pub(crate) binding: String,
+    /// The derived name before any environment qualification.
+    pub(crate) name: String,
+    pub(crate) dimensions: i64,
+    pub(crate) metric: String,
+    /// The `@indexed` entries as written (`name:type`).
+    pub(crate) indexed: Vec<String>,
+    /// The name of an existing index `bynk.toml` adopts for this run's
+    /// environment (`[deploy.vectorize.<Cap>] index`), or `None` when the
+    /// deploy creates it. Set per run, never read from the generated config.
+    pub(crate) adopt: Option<String>,
+}
+
+impl VectorizeDecl {
+    /// Whether `capability` (as `bynk.toml` names it, `Docs`) is this binding's.
+    pub(crate) fn matches_capability(&self, capability: &str) -> bool {
+        bynk_check::worker_bindings::instance_binding_name(
+            bynk_check::firstparty::VECTORIZE_BINDING_PREFIX,
+            capability,
+        ) == self.binding
+    }
+
+    /// The index's name on the account in `environment`: the adopted one as
+    /// written, or the derived name qualified for the environment.
+    pub(crate) fn physical_name(&self, environment: &str) -> String {
+        self.adopt
+            .clone()
+            .unwrap_or_else(|| vectorize_index_name(environment, &self.name))
+    }
+}
+
+/// #3477: one `Container` instance, as the emitted config and manifest declare
+/// it. The image is built by `wrangler deploy` from `build`, or adopted from
+/// `bynk.toml` for an environment, in which case nothing is built.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub(crate) struct ContainerDecl {
+    /// The capability's name (`Renderer`): the key of its image, and what
+    /// `[deploy.containers.<Capability>]` names.
+    pub(crate) capability: String,
+    /// The generated Durable Object class.
+    pub(crate) class: String,
+    /// The `@build` directory, relative to the project root.
+    pub(crate) build: String,
+    /// `@instanceType`, or `None` for the platform's default (`lite`).
+    pub(crate) instance_type: Option<String>,
+    /// The digest-pinned image `bynk.toml` adopts for this run's environment
+    /// (`[deploy.containers.<Cap>] image`), or `None` when it is built. Set per
+    /// run, never read from the generated config.
+    pub(crate) adopt: Option<String>,
+}
+
 /// The provisioning surface one context's closure locks it to.
 #[derive(Debug, PartialEq, Eq)]
 pub(crate) struct Resources {
@@ -404,6 +598,17 @@ pub(crate) struct Resources {
     /// created by name (the name is the identity), recorded in the ledger, and
     /// reported, never deleted, when its instance goes.
     pub(crate) r2_buckets: Vec<R2Decl>,
+    /// #3479: the indexes of the `Vectorize` instances, in binding order. Each
+    /// is created by name with its fixed configuration, its metadata indexes
+    /// created before any vector, and checked against the account on every
+    /// deploy; a mismatch fails the deploy. Reported, never deleted unless
+    /// `--prune` is confirmed, when its instance goes.
+    pub(crate) vectorize_indexes: Vec<VectorizeDecl>,
+    /// #3477: the containers of the `Container` instances, by class name. Each
+    /// is built or adopted at the push, which `wrangler deploy` reconciles; the
+    /// deploy only plans it, needs Docker for it when it must build, and records
+    /// an adopted image.
+    pub(crate) containers: Vec<ContainerDecl>,
     /// P4a (#2602): the databases of the `D1` instances, in binding order.
     /// Each is created by name, its minted id recorded in the ledger and
     /// written into the config before the push; reported, never deleted, when
@@ -427,6 +632,13 @@ pub(crate) struct Resources {
     /// config before the push; nothing is created, and nothing is deleted
     /// when an instance goes.
     pub(crate) stored_secrets: Vec<StoredSecretDecl>,
+    /// #3480: the instances of the `AiSearch` instances, in binding order.
+    /// Linked as stored secrets are: looked up by name before the push and
+    /// recorded in the ledger; nothing is created, and nothing is deleted
+    /// when an instance goes.
+    pub(crate) ai_search: Vec<AiSearchDecl>,
+    /// #3513 A: the `MtlsCertificate` instances, linked by name and never uploaded.
+    pub(crate) mtls_certificates: Vec<MtlsCertificateDecl>,
     /// #3302: the `@allowedSenders` of the `Email` instances that have any, in
     /// binding order. Only checked (each domain must be enabled for Email
     /// Sending on the account); nothing is created, recorded or deleted.
@@ -513,11 +725,15 @@ impl Default for Resources {
             needs_kv: false,
             kv_instances: Vec::new(),
             r2_buckets: Vec::new(),
+            vectorize_indexes: Vec::new(),
+            containers: Vec::new(),
             d1_databases: Vec::new(),
             hyperdrive: Vec::new(),
             ratelimits: Vec::new(),
             analytics_datasets: Vec::new(),
             stored_secrets: Vec::new(),
+            ai_search: Vec::new(),
+            mtls_certificates: Vec::new(),
             email_senders: Vec::new(),
             email_addresses: Vec::new(),
             declared_secrets: Vec::new(),
@@ -698,6 +914,57 @@ fn read_resources(config: &Path, project_workers: &[String]) -> Result<Resources
         })
         .collect();
     r2_buckets.sort_by(|a, b| a.binding.cmp(&b.binding));
+    let configured = read_vectorize_manifest(config.parent().unwrap_or(Path::new(".")))?;
+    let mut vectorize_indexes: Vec<VectorizeDecl> = parsed
+        .vectorize
+        .into_iter()
+        .map(|v| {
+            let entry = configured
+                .iter()
+                .find(|c| c.binding == v.binding)
+                .ok_or_else(|| {
+                    format!(
+                        "{} does not state the configuration of `{}`, so the index cannot be created or checked",
+                        bynk_emit::emitter::wrangler::VECTORIZE_MANIFEST,
+                        v.binding
+                    )
+                })?;
+            Ok(VectorizeDecl {
+                binding: v.binding,
+                name: v.index_name,
+                dimensions: entry.dimensions,
+                metric: entry.metric.clone(),
+                indexed: entry.indexed.clone(),
+                adopt: None,
+            })
+        })
+        .collect::<Result<_, String>>()?;
+    vectorize_indexes.sort_by(|a, b| a.binding.cmp(&b.binding));
+    let manifest = read_containers_manifest(config.parent().unwrap_or(Path::new(".")))?;
+    let mut containers: Vec<ContainerDecl> = parsed
+        .containers
+        .into_iter()
+        .map(|stanza| {
+            let entry = manifest
+                .iter()
+                .find(|c| c.class == stanza.class_name)
+                .ok_or_else(|| {
+                    format!(
+                        "{} does not describe the container of `{}`, so it cannot be planned or adopted",
+                        bynk_emit::emitter::wrangler::CONTAINERS_MANIFEST,
+                        stanza.class_name
+                    )
+                })?;
+            Ok(ContainerDecl {
+                capability: entry.capability.clone(),
+                class: entry.class.clone(),
+                build: entry.build.clone(),
+                instance_type: entry.instance_type.clone(),
+                adopt: None,
+            })
+        })
+        .collect::<Result<_, String>>()?;
+    containers.sort_by(|a, b| a.class.cmp(&b.class));
     let mut ratelimits: Vec<String> = parsed.ratelimits.into_iter().map(|r| r.name).collect();
     ratelimits.sort();
     let mut analytics_datasets: Vec<AnalyticsDecl> = parsed
@@ -719,6 +986,24 @@ fn read_resources(config: &Path, project_workers: &[String]) -> Result<Resources
         })
         .collect();
     stored_secrets.sort_by(|a, b| a.binding.cmp(&b.binding));
+    let mut ai_search: Vec<AiSearchDecl> = parsed
+        .ai_search
+        .into_iter()
+        .map(|s| AiSearchDecl {
+            binding: s.binding,
+            instance: s.instance_name,
+        })
+        .collect();
+    ai_search.sort_by(|a, b| a.binding.cmp(&b.binding));
+    let mut mtls_certificates: Vec<MtlsCertificateDecl> = parsed
+        .mtls_certificates
+        .into_iter()
+        .map(|c| MtlsCertificateDecl {
+            binding: c.binding,
+            certificate: c.certificate_id,
+        })
+        .collect();
+    mtls_certificates.sort_by(|a, b| a.binding.cmp(&b.binding));
     let mut email_senders: Vec<EmailSendersDecl> = parsed
         .send_email
         .into_iter()
@@ -794,11 +1079,15 @@ fn read_resources(config: &Path, project_workers: &[String]) -> Result<Resources
             instances
         },
         r2_buckets,
+        vectorize_indexes,
+        containers,
         d1_databases,
         hyperdrive,
         ratelimits,
         analytics_datasets,
         stored_secrets,
+        ai_search,
+        mtls_certificates,
         email_senders,
         email_addresses: {
             let mut addresses = parsed.addresses;
@@ -1020,6 +1309,38 @@ pub(crate) fn r2_bucket_name(environment: &str, name: &str) -> String {
     env_qualify(environment, name)
 }
 
+/// #3479: the name a `Vectorize` instance's index has in `environment`: its
+/// derived name, qualified as [`env_qualify`] does.
+pub(crate) fn vectorize_index_name(environment: &str, name: &str) -> String {
+    env_qualify(environment, name)
+}
+
+/// #3479, #3496: why `name` cannot be an index name, or `None`. Cloudflare
+/// takes 1 to 64 bytes of lowercase letters, digits, hyphens and underscores,
+/// starting with a letter (observed against a real account on #3479:
+/// `probe_underscore` is accepted; `9probe-leading-digit`, `Probe-Upper` and
+/// `probe.dot` are refused). Checked on the qualified name, which the
+/// environment suffix can push over the limit. A trailing hyphen was not
+/// probed, so it stays refused.
+pub(crate) fn vectorize_index_name_problem(name: &str) -> Option<&'static str> {
+    if name.is_empty() || name.len() > 64 {
+        return Some("it must be 1 to 64 bytes");
+    }
+    if !name
+        .bytes()
+        .all(|b| b.is_ascii_lowercase() || b.is_ascii_digit() || b == b'-' || b == b'_')
+    {
+        return Some("it may hold only lowercase letters, digits, hyphens and underscores");
+    }
+    if !name.starts_with(|c: char| c.is_ascii_lowercase()) {
+        return Some("it must start with a lowercase letter");
+    }
+    if name.ends_with('-') {
+        return Some("it may not end with a hyphen");
+    }
+    None
+}
+
 /// P3b (#2582): the name an `Analytics` instance's dataset has in
 /// `environment`: its derived name, qualified as [`env_qualify`] does but with
 /// `_` (`shop_cart_signups_staging`), since the dataset is a SQL table name.
@@ -1089,6 +1410,27 @@ pub(crate) fn materialise_stored_secret_stores(
         return false;
     };
     let Ok(patched) = bynk_emit::emitter::wrangler::materialise_stored_secret_stores(&text, stores)
+    else {
+        return false;
+    };
+    if patched == text {
+        return true;
+    }
+    std::fs::write(path, patched).is_ok()
+}
+
+/// #3513 A: materialise each linked `MtlsCertificate`'s certificate id into the generated config at
+/// `path`, by binding. A named environment's block copies the stanza from here
+/// ([`synthesise_environment_block`]).
+pub(crate) fn materialise_mtls_certificates(
+    path: &Path,
+    certificates: &BTreeMap<String, String>,
+) -> bool {
+    let Ok(text) = std::fs::read_to_string(path) else {
+        return false;
+    };
+    let Ok(patched) =
+        bynk_emit::emitter::wrangler::materialise_mtls_certificates(&text, certificates)
     else {
         return false;
     };
@@ -1223,6 +1565,33 @@ pub(crate) fn synthesise_environment_block(
         env_block.insert("r2_buckets".to_string(), toml::Value::Array(buckets));
     }
 
+    // #3479: each index under its environment-qualified name.
+    if let Some(toml::Value::Array(indexes)) = doc.get("vectorize") {
+        let mut indexes = indexes.clone();
+        for index in &mut indexes {
+            if let toml::Value::Table(t) = index
+                && let Some(name) = t
+                    .get("index_name")
+                    .and_then(toml::Value::as_str)
+                    .map(str::to_owned)
+            {
+                t.insert(
+                    "index_name".to_string(),
+                    toml::Value::String(vectorize_index_name(environment, &name)),
+                );
+            }
+        }
+        env_block.insert("vectorize".to_string(), toml::Value::Array(indexes));
+    }
+
+    // #3477: each container's application as emitted (an adopted image already
+    // materialised by `materialise_adopted_container_images`). Like `exports`,
+    // it is copied so the `[env.<name>]` block states the container its class
+    // runs rather than leaning on an inheritance rule.
+    if let Some(containers) = doc.get("containers") {
+        env_block.insert("containers".to_string(), containers.clone());
+    }
+
     // P4a (#2602): each database as the deploy materialised it, under this
     // environment's name and id (`materialise_d1_databases` runs first).
     if let Some(databases) = doc.get("d1_databases") {
@@ -1259,12 +1628,49 @@ pub(crate) fn synthesise_environment_block(
         );
     }
 
+    // #3513 B: the `[vars]` the dataset names travel in (`Analytics.dataset()` reads them),
+    // each dataset var under the environment-qualified name its binding now has, or
+    // `dataset()` would name the default environment's table from a staging Worker. `vars` is
+    // not inherited by `[env.*]` either. Merged into any `vars` the block already has, never
+    // replacing a variable that is there.
+    if let Some(toml::Value::Table(vars)) = doc.get("vars") {
+        let prefix = "BYNK_DATASET_";
+        let mut carried = toml::Table::new();
+        for (key, value) in vars {
+            let value = match value {
+                toml::Value::String(name) if key.starts_with(prefix) => {
+                    toml::Value::String(analytics_dataset_name(environment, name))
+                }
+                other => other.clone(),
+            };
+            carried.insert(key.clone(), value);
+        }
+        match env_block.get_mut("vars") {
+            Some(toml::Value::Table(existing)) => {
+                for (key, value) in carried {
+                    existing.insert(key, value);
+                }
+            }
+            _ => {
+                env_block.insert("vars".to_string(), toml::Value::Table(carried));
+            }
+        }
+    }
+
     // #3301: each stored secret as the deploy linked it, with the store's id
     // (`materialise_stored_secret_stores` runs first). The store is the
     // account's, so its name carries over as written, with no environment
     // suffix; bindings are not inherited by `[env.*]`.
     if let Some(secrets) = doc.get("secrets_store_secrets") {
         env_block.insert("secrets_store_secrets".to_string(), secrets.clone());
+    }
+
+    // #3513 A: each mTLS certificate as written: the account's certificate, named the same in
+    // every environment, so it carries over with no environment suffix; the deploy slice
+    // resolves its id into the top level first. Bindings are not inherited by `[env.*]`, or a
+    // staging Worker has no `MTLS_*` to call through.
+    if let Some(certificates) = doc.get("mtls_certificates") {
+        env_block.insert("mtls_certificates".to_string(), certificates.clone());
     }
 
     // #3302: each email binding as written, restrictions included: it names
@@ -1279,6 +1685,18 @@ pub(crate) fn synthesise_environment_block(
     // the same in every environment; bindings are not inherited by `[env.*]`.
     if let Some(version_metadata) = doc.get("version_metadata") {
         env_block.insert("version_metadata".to_string(), version_metadata.clone());
+    }
+
+    // #3577: Workers AI (#3478), AI Search (#3480) and Images (#3515), each as
+    // written: `[ai]` and `[images]` name no resource, and an `[[ai_search]]`
+    // entry names the account's instance as the declaration writes it, the
+    // same in every environment. Bindings are not inherited by `[env.*]`, or a
+    // staging Worker has no `AI`, `AI_SEARCH_*` or `IMAGES` to call. #3513 B: and
+    // the `[analytics]` Analytics SQL binding, which names no resource either.
+    for table in ["ai", "ai_search", "images", "analytics"] {
+        if let Some(value) = doc.get(table) {
+            env_block.insert(table.to_string(), value.clone());
+        }
     }
 
     // P3 (#2342): the rate limiters, copied as the top level has them. The
@@ -1362,6 +1780,7 @@ pub(crate) fn synthesise_environment_block(
 #[cfg(test)]
 pub(crate) mod tests {
     use super::*;
+    use bynk_check::worker_bindings::{BindingSource, WorkerBinding};
 
     fn names(v: &[&str]) -> Vec<String> {
         v.iter().map(|s| s.to_string()).collect()
@@ -1434,6 +1853,28 @@ pub(crate) mod tests {
                 .collect();
             self
         }
+        /// Derived `AiSearch` instances, as `(binding, instance)` (#3480).
+        pub(crate) fn ai_search(mut self, instances: &[(&str, &str)]) -> Self {
+            self.ai_search = instances
+                .iter()
+                .map(|(binding, instance)| AiSearchDecl {
+                    binding: binding.to_string(),
+                    instance: instance.to_string(),
+                })
+                .collect();
+            self
+        }
+        /// Derived `MtlsCertificate` instances, as `(binding, certificate)` (#3513 A).
+        pub(crate) fn mtls_certificates(mut self, instances: &[(&str, &str)]) -> Self {
+            self.mtls_certificates = instances
+                .iter()
+                .map(|(binding, certificate)| MtlsCertificateDecl {
+                    binding: binding.to_string(),
+                    certificate: certificate.to_string(),
+                })
+                .collect();
+            self
+        }
         /// Derived `Email` instances with `@allowedSenders`, as `(binding,
         /// senders)` (#3302).
         pub(crate) fn email_senders(mut self, instances: &[(&str, &[&str])]) -> Self {
@@ -1467,6 +1908,26 @@ pub(crate) mod tests {
                     name: name.to_string(),
                     migrations: Vec::new(),
                 })
+                .collect();
+            self
+        }
+
+        pub(crate) fn vectorize_indexes(
+            mut self,
+            indexes: &[(&str, &str, i64, &str, &[&str])],
+        ) -> Self {
+            self.vectorize_indexes = indexes
+                .iter()
+                .map(
+                    |(binding, name, dimensions, metric, indexed)| VectorizeDecl {
+                        binding: binding.to_string(),
+                        name: name.to_string(),
+                        dimensions: *dimensions,
+                        metric: metric.to_string(),
+                        indexed: indexed.iter().map(|s| s.to_string()).collect(),
+                        adopt: None,
+                    },
+                )
                 .collect();
             self
         }
@@ -1609,7 +2070,7 @@ pub(crate) mod tests {
 # Generated by bynk — do not edit by hand.
 name = "api"
 main = "index.ts"
-compatibility_date = "2026-08-04"
+compatibility_date = "2026-08-11"
 compatibility_flags = ["global_fetch_strictly_public"]
 addresses = ["support@shop.example"]
 
@@ -1623,6 +2084,9 @@ id = "<KV_NAMESPACE_ID>" # set at deploy time
 
 [version_metadata]
 binding = "CF_VERSION_METADATA"
+
+[images]
+binding = "IMAGES"
 
 [[send_email]]
 name = "EMAIL_MAIL"
@@ -1773,6 +2237,12 @@ max_batch_size = 10
             Some("CF_VERSION_METADATA"),
             "the Version metadata binding is repeated, or `Version.current()` faults in the environment"
         );
+        // #3515: likewise the Images binding.
+        assert_eq!(
+            env["images"]["binding"].as_str(),
+            Some("IMAGES"),
+            "the Images binding is repeated, or `Images.transform` faults in the environment"
+        );
         assert_eq!(
             env["services"][0]["service"].as_str(),
             Some("payment-staging"),
@@ -1855,6 +2325,247 @@ max_batch_size = 10
         assert_eq!(block.len(), 1, "a name and nothing else: {out}");
     }
 
+    /// One binding of every [`BindingSource`] kind. The `match` has no
+    /// wildcard, so a new kind is a compile error here until it is added to
+    /// the list, and the guard below then sees the tables it writes.
+    fn one_binding_of_every_kind() -> Vec<WorkerBinding> {
+        let sample = |name: &str, source: BindingSource| WorkerBinding {
+            name: name.to_string(),
+            source,
+        };
+        let cap = || "Cap".to_string();
+        let bindings = vec![
+            sample(
+                "SVC",
+                BindingSource::Service {
+                    context: "other".into(),
+                },
+            ),
+            sample("KV", BindingSource::Kv),
+            sample("KV_X", BindingSource::KvInstance { capability: cap() }),
+            sample(
+                "FOREIGN",
+                BindingSource::ForeignService {
+                    capability: cap(),
+                    worker: "legacy".into(),
+                },
+            ),
+            sample(
+                "R2_X",
+                BindingSource::R2Instance {
+                    capability: cap(),
+                    jurisdiction: None,
+                },
+            ),
+            sample(
+                "RL_X",
+                BindingSource::RateLimitInstance {
+                    capability: cap(),
+                    limit: 10,
+                    period: 60,
+                },
+            ),
+            sample(
+                "Q_X",
+                BindingSource::QueueProducer {
+                    capability: cap(),
+                    queue: "jobs".into(),
+                },
+            ),
+            sample(
+                "AE_X",
+                BindingSource::AnalyticsDataset { capability: cap() },
+            ),
+            sample("D1_X", BindingSource::D1Database { capability: cap() }),
+            sample(
+                "SECRET_X",
+                BindingSource::StoredSecret {
+                    capability: cap(),
+                    store: "store".into(),
+                    secret: "secret".into(),
+                },
+            ),
+            sample(
+                "EMAIL_X",
+                BindingSource::Email {
+                    capability: cap(),
+                    to: None,
+                    allowed_recipients: vec![],
+                    allowed_senders: vec![],
+                },
+            ),
+            sample("PG_X", BindingSource::Postgres { capability: cap() }),
+            sample(
+                "MYSQL_X",
+                BindingSource::MySql {
+                    capability: cap(),
+                    tls: None,
+                },
+            ),
+            sample(
+                "VEC_X",
+                BindingSource::VectorizeIndex {
+                    capability: cap(),
+                    dimensions: 8,
+                    metric: "cosine".into(),
+                    indexed: vec![],
+                },
+            ),
+            sample(
+                "CONTAINER_X",
+                BindingSource::ContainerInstance {
+                    capability: cap(),
+                    class_name: "BoxClass".into(),
+                    build: "box".into(),
+                    root_from_worker: "../../..".into(),
+                    port: 8080,
+                    sleep_after: None,
+                    instance_type: None,
+                    forward: vec![],
+                },
+            ),
+            sample(
+                "AI_SEARCH_X",
+                BindingSource::AiSearchInstance {
+                    capability: cap(),
+                    instance: "docs".into(),
+                },
+            ),
+            sample(
+                "MTLS_X",
+                BindingSource::MtlsCertificate {
+                    capability: cap(),
+                    certificate: "acme-client".into(),
+                },
+            ),
+            sample(
+                "AGENT",
+                BindingSource::Agent {
+                    class_name: "Counter".into(),
+                },
+            ),
+            sample(
+                "FANOUT",
+                BindingSource::EventsFanout {
+                    class_name: "Fanout".into(),
+                },
+            ),
+        ];
+        for b in &bindings {
+            match &b.source {
+                BindingSource::Service { .. }
+                | BindingSource::Kv
+                | BindingSource::KvInstance { .. }
+                | BindingSource::ForeignService { .. }
+                | BindingSource::R2Instance { .. }
+                | BindingSource::RateLimitInstance { .. }
+                | BindingSource::QueueProducer { .. }
+                | BindingSource::AnalyticsDataset { .. }
+                | BindingSource::D1Database { .. }
+                | BindingSource::StoredSecret { .. }
+                | BindingSource::Email { .. }
+                | BindingSource::Postgres { .. }
+                | BindingSource::MySql { .. }
+                | BindingSource::VectorizeIndex { .. }
+                | BindingSource::ContainerInstance { .. }
+                | BindingSource::AiSearchInstance { .. }
+                | BindingSource::MtlsCertificate { .. }
+                | BindingSource::Agent { .. }
+                | BindingSource::EventsFanout { .. } => {}
+                // Every registered singleton is added by the caller.
+                BindingSource::Singleton { .. } => unreachable!(),
+            }
+        }
+        bindings
+    }
+
+    /// The top-level tables `emit_wrangler_toml` writes for `bindings`, less
+    /// those it writes for a Worker with no bindings at all (`name`, `main`,
+    /// the compatibility keys, `triggers`, ...), which are not bindings.
+    fn emitted_binding_tables(bindings: &[WorkerBinding]) -> BTreeSet<String> {
+        use bynk_emit::emitter::{toml_doc::print_toml_document, wrangler::emit_wrangler_toml};
+        let emit = |bindings: &[WorkerBinding]| -> toml::Table {
+            let doc = emit_wrangler_toml(
+                "shop",
+                bindings,
+                &["0 * * * *".to_string()],
+                &[],
+                &["orders@shop.example".to_string()],
+                &[],
+                Some(true),
+                &Default::default(),
+                &Default::default(),
+            );
+            print_toml_document(&doc)
+                .parse()
+                .expect("emitted TOML parses")
+        };
+        let base = emit(&[]);
+        emit(bindings)
+            .keys()
+            .filter(|k| !base.contains_key(*k))
+            .cloned()
+            .collect()
+    }
+
+    /// #3577: `[env.*]` does not inherit bindings, so a table the emitter
+    /// writes at the top level and the environment block does not copy leaves
+    /// that binding unbound in the deployed environment. The tables are read
+    /// from a real emission of every binding kind (and every registered
+    /// singleton), so a new kind is held to the same rule without a list to
+    /// update.
+    #[test]
+    fn every_binding_table_the_emitter_writes_is_copied_into_the_environment() {
+        let mut bindings = one_binding_of_every_kind();
+        let cloudflare = bynk_check::firstparty::unit(bynk_check::firstparty::CLOUDFLARE_UNIT)
+            .expect("the Cloudflare unit is registered");
+        bindings.extend(cloudflare.singletons.iter().map(|s| WorkerBinding {
+            name: s.binding.to_string(),
+            source: BindingSource::Singleton {
+                capability: s.capability.to_string(),
+            },
+        }));
+        let tables = emitted_binding_tables(&bindings);
+        assert!(
+            tables.len() >= 10 && tables.contains("ai") && tables.contains("version_metadata"),
+            "the emission should write every binding table: {tables:?}"
+        );
+
+        let config = {
+            use bynk_emit::emitter::{toml_doc::print_toml_document, wrangler::emit_wrangler_toml};
+            print_toml_document(&emit_wrangler_toml(
+                "shop",
+                &bindings,
+                &[],
+                &[],
+                &[],
+                &[],
+                None,
+                &Default::default(),
+                &Default::default(),
+            ))
+        };
+        let out = synthesise_environment_block(
+            &config,
+            "staging",
+            &kv_ids(&[("KV", "kv-id"), ("KV_X", "kv-x-id")]),
+            &BTreeSet::new(),
+        )
+        .expect("valid TOML in, valid TOML out");
+        let parsed: toml::Table = out.parse().expect("valid TOML out");
+        let env = parsed["env"]["staging"]
+            .as_table()
+            .expect("an [env.staging] block");
+        // `images` (#3578) needs no special case: it is checked as soon as the
+        // emitter writes it, and its copy lands with that change.
+        let missing: Vec<&String> = tables.iter().filter(|t| !env.contains_key(*t)).collect();
+        assert!(
+            missing.is_empty(),
+            "the emitter writes these tables at the top level but `synthesise_environment_block` \
+             does not copy them into `[env.*]`, so the binding is unbound in the environment: {missing:?}"
+        );
+    }
+
     #[test]
     fn synthesise_environment_block_is_a_true_no_op_with_nothing_to_state() {
         let nameless = "main = \"index.ts\"\n";
@@ -1890,7 +2601,7 @@ max_batch_size = 10
                 r#"
 name = "commerce-orders"
 main = "index.ts"
-compatibility_date = "2026-08-04"
+compatibility_date = "2026-08-11"
 compatibility_flags = ["global_fetch_strictly_public"]
 
 [[services]]
@@ -1919,7 +2630,7 @@ service = "commerce-payment"
                 r#"
 name = "jobs"
 main = "index.ts"
-compatibility_date = "2026-08-04"
+compatibility_date = "2026-08-11"
 compatibility_flags = ["global_fetch_strictly_public"]
 
 [[queues.consumers]]
@@ -1990,7 +2701,7 @@ max_batch_size = 10
                 r#"
 name = "cart"
 main = "index.ts"
-compatibility_date = "2026-08-04"
+compatibility_date = "2026-08-11"
 compatibility_flags = ["global_fetch_strictly_public"]
 
 [[durable_objects.bindings]]
@@ -2018,7 +2729,7 @@ storage = "sqlite"
                 r#"
 name = "ops-hub"
 main = "index.ts"
-compatibility_date = "2026-08-04"
+compatibility_date = "2026-08-11"
 compatibility_flags = ["global_fetch_strictly_public"]
 
 [[kv_namespaces]]
@@ -2175,6 +2886,28 @@ state = "deleted"
     }
 
     #[test]
+    fn the_dataset_var_is_qualified_per_environment_and_merged_into_the_vars_there() {
+        // #3513 B: `Analytics.dataset()` reads `BYNK_DATASET_<BINDING>`, so a staging block
+        // carries the staging name, beside any other variable the config has (kept as written).
+        let config = "name = \"shop-cart\"\n\n[vars]\nBYNK_DATASET_ANALYTICS_SIGNUPS = \"shop_cart_signups\"\nGREETING = \"hello\"\n\n[[analytics_engine_datasets]]\nbinding = \"ANALYTICS_SIGNUPS\"\ndataset = \"shop_cart_signups\"\n";
+        let out =
+            synthesise_environment_block(config, "staging", &BTreeMap::new(), &BTreeSet::new())
+                .unwrap();
+        let doc: toml::Table = out.parse().unwrap();
+        let vars = &doc["env"]["staging"]["vars"];
+        assert_eq!(
+            vars["BYNK_DATASET_ANALYTICS_SIGNUPS"].as_str(),
+            Some("shop_cart_signups_staging")
+        );
+        assert_eq!(vars["GREETING"].as_str(), Some("hello"));
+        // The dataset the binding writes to is the same name the var reads.
+        assert_eq!(
+            doc["env"]["staging"]["analytics_engine_datasets"][0]["dataset"].as_str(),
+            Some("shop_cart_signups_staging")
+        );
+    }
+
+    #[test]
     fn r2_buckets_are_read_with_their_names_and_jurisdictions() {
         // P5 (#2323): fixture `2323_r2_workers`'s buckets, in binding order.
         let resources = parse_config(
@@ -2301,6 +3034,34 @@ state = "deleted"
     }
 
     #[test]
+    fn vectorize_names_follow_cloudflares_observed_rules() {
+        // #3496: the verdicts Cloudflare gave a real account (#3479).
+        // A trailing underscore was not probed; it is accepted deliberately.
+        for ok in [
+            "revertprobe-app-docs",
+            "probe_underscore",
+            "my_index",
+            "a",
+            "a_",
+        ] {
+            assert_eq!(vectorize_index_name_problem(ok), None, "{ok}");
+        }
+        for bad in [
+            "9probe-leading-digit",
+            "Probe-Upper",
+            "probe.dot",
+            "",
+            "-a",
+            "a-",
+            "_a",
+        ] {
+            assert!(vectorize_index_name_problem(bad).is_some(), "{bad}");
+        }
+        assert!(vectorize_index_name_problem(&"a".repeat(65)).is_some());
+        assert_eq!(vectorize_index_name_problem(&"a".repeat(64)), None);
+    }
+
+    #[test]
     fn r2_names_are_held_to_r2s_rules() {
         assert_eq!(r2_bucket_name_problem("shop-cart-archives"), None);
         assert_eq!(r2_bucket_name_problem("a1b"), None);
@@ -2355,6 +3116,126 @@ state = "deleted"
             err.contains("`exports.Cart`") && err.contains("`storage`"),
             "{err}"
         );
+    }
+
+    /// #3479: an index's name comes from the config's `[[vectorize]]` and its
+    /// configuration from the manifest beside it; a stanza the manifest does not
+    /// state is an error (an index made with a guessed shape cannot be corrected),
+    /// and a named environment's block carries the qualified name.
+    /// #3477: a container is read from the config's `[[containers]]` and its
+    /// manifest, which states what the stanza does not; the `[env.<name>]` block
+    /// copies the application, and the config alone does not describe a container.
+    #[test]
+    fn a_container_is_read_from_the_config_and_its_manifest() {
+        let dir = std::env::temp_dir().join(format!(
+            "bynk-containers-manifest-{}-{}",
+            std::process::id(),
+            std::time::SystemTime::now()
+                .duration_since(std::time::UNIX_EPOCH)
+                .unwrap()
+                .as_nanos()
+        ));
+        std::fs::create_dir_all(&dir).unwrap();
+        let config = dir.join("wrangler.toml");
+        let text = "name = \"shop\"\n\n[[containers]]\nclass_name = \"__Container_Renderer\"\nscheduling_policy = \"durable_object\"\n\n[containers.images.Renderer]\ndockerfile = \"../../../containers/render/Dockerfile\"\nbuild_context = \"../../../containers/render\"\n";
+        std::fs::write(&config, text).unwrap();
+
+        let error = read_resources(&config, &[]).unwrap_err();
+        assert!(
+            error.contains("does not describe the container of `__Container_Renderer`"),
+            "{error}"
+        );
+
+        let manifest = dir.join(bynk_emit::emitter::wrangler::CONTAINERS_MANIFEST);
+        std::fs::write(
+            &manifest,
+            "{ \"version\": 1, \"containers\": [{ \"capability\": \"Renderer\", \"class\": \"__Container_Renderer\", \"build\": \"containers/render\", \"instance_type\": \"standard-1\" }] }",
+        )
+        .unwrap();
+        let read = read_resources(&config, &[]).unwrap();
+        assert_eq!(
+            read.containers,
+            [ContainerDecl {
+                capability: "Renderer".into(),
+                class: "__Container_Renderer".into(),
+                build: "containers/render".into(),
+                instance_type: Some("standard-1".into()),
+                adopt: None,
+            }]
+        );
+
+        std::fs::write(&manifest, "{ \"version\": 2 }").unwrap();
+        let error = read_resources(&config, &[]).unwrap_err();
+        assert!(
+            error.contains("unsupported bynk-containers.json version 2"),
+            "{error}"
+        );
+
+        let synthesised =
+            synthesise_environment_block(text, "staging", &BTreeMap::new(), &BTreeSet::new())
+                .unwrap();
+        let doc: toml::Table = synthesised.parse().unwrap();
+        let copied = &doc["env"]["staging"]["containers"][0];
+        assert_eq!(copied["scheduling_policy"].as_str(), Some("durable_object"));
+        assert!(copied["images"]["Renderer"].get("dockerfile").is_some());
+        let _ = std::fs::remove_dir_all(&dir);
+    }
+
+    #[test]
+    fn a_vectorize_index_is_read_from_the_config_and_its_manifest() {
+        let dir = std::env::temp_dir().join(format!(
+            "bynk-vectorize-manifest-{}-{}",
+            std::process::id(),
+            std::time::SystemTime::now()
+                .duration_since(std::time::UNIX_EPOCH)
+                .unwrap()
+                .as_nanos()
+        ));
+        std::fs::create_dir_all(&dir).unwrap();
+        let config = dir.join("wrangler.toml");
+        let text = "name = \"shop\"\n\n[[vectorize]]\nbinding = \"VECTORIZE_DOCS\"\nindex_name = \"shop-docs\"\n";
+        std::fs::write(&config, text).unwrap();
+
+        let error = read_resources(&config, &[]).unwrap_err();
+        assert!(
+            error.contains("does not state the configuration of `VECTORIZE_DOCS`"),
+            "{error}"
+        );
+
+        let manifest = dir.join(bynk_emit::emitter::wrangler::VECTORIZE_MANIFEST);
+        std::fs::write(
+            &manifest,
+            "{ \"version\": 1, \"vectorize\": [{ \"binding\": \"VECTORIZE_DOCS\", \"dimensions\": 768, \"metric\": \"cosine\", \"indexed\": [\"category:string\"] }] }",
+        )
+        .unwrap();
+        let read = read_resources(&config, &[]).unwrap();
+        assert_eq!(
+            read.vectorize_indexes,
+            [VectorizeDecl {
+                binding: "VECTORIZE_DOCS".into(),
+                name: "shop-docs".into(),
+                dimensions: 768,
+                metric: "cosine".into(),
+                indexed: vec!["category:string".into()],
+                adopt: None,
+            }]
+        );
+
+        std::fs::write(&manifest, "{ \"version\": 2 }").unwrap();
+        let error = read_resources(&config, &[]).unwrap_err();
+        assert!(
+            error.contains("unsupported bynk-vectorize.json version 2"),
+            "{error}"
+        );
+
+        let synthesised =
+            synthesise_environment_block(text, "staging", &BTreeMap::new(), &BTreeSet::new())
+                .unwrap();
+        assert!(
+            synthesised.contains("index_name = \"shop-docs-staging\""),
+            "{synthesised}"
+        );
+        let _ = std::fs::remove_dir_all(&dir);
     }
 
     /// Hyperdrive H5 (#3322): a binding the Hyperdrive manifest lists is MySQL's,
@@ -2478,7 +3359,7 @@ mod foreign_service_tests {
     const WITH_FOREIGN: &str = r#"
 name = "shop-billing"
 main = "index.ts"
-compatibility_date = "2026-08-04"
+compatibility_date = "2026-08-11"
 compatibility_flags = ["global_fetch_strictly_public"]
 
 [[services]]

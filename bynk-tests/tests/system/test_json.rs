@@ -113,6 +113,7 @@ fn golden_document_normal() {
         coverage: None,
         transport: None,
         snapshots: None,
+        eval: None,
     };
     bless_or_assert("test-json-normal.json", &run.render());
 }
@@ -617,6 +618,7 @@ fn golden_document_failed_property() {
         coverage: None,
         transport: None,
         snapshots: None,
+        eval: None,
     };
     bless_or_assert("test-json-failed-property.json", &run.render());
 }
@@ -669,6 +671,7 @@ fn golden_document_refusals() {
         coverage: None,
         transport: None,
         snapshots: None,
+        eval: None,
     };
     bless_or_assert("test-json-refusals.json", &run.render());
 }
@@ -780,5 +783,49 @@ fn a_detached_failure_is_reported_on_its_case() {
         "{text}"
     );
     assert!(text.contains("(MailError.Bounced)"), "{text}");
+    let _ = std::fs::remove_dir_all(&scratch);
+}
+
+/// #3541: a detached `Err` in a cron or queue handler is counted in
+/// `detached_failures` on its case, as one in an HTTP or service handler is. Needs
+/// a TypeScript runner; skips without one.
+#[test]
+fn a_detached_failure_in_a_cron_or_queue_handler_is_counted() {
+    let have = |t: &str| which::which(t).is_ok();
+    if !(have("tsx") || (have("tsc") && have("node")) || have("npx")) {
+        eprintln!("skipped: no TypeScript runner on PATH");
+        return;
+    }
+    let fixture = Path::new(env!("CARGO_MANIFEST_DIR"))
+        .join("tests/fixtures/positive/3541_detach_cron_queue");
+    let scratch = std::env::temp_dir().join(format!("bynk-detach-jobs-{}", std::process::id()));
+    let out = Command::new(env!("CARGO_BIN_EXE_bynk-under-test"))
+        .args(["test"])
+        .arg(&fixture)
+        .arg("--output")
+        .arg(&scratch)
+        .args(["--format", "json"])
+        .output()
+        .expect("run bynk test");
+    assert!(
+        out.status.success(),
+        "a detached failure does not fail the run ({}):\n{}\n{}",
+        out.status,
+        String::from_utf8_lossy(&out.stderr),
+        String::from_utf8_lossy(&out.stdout)
+    );
+    let doc: serde_json::Value = serde_json::from_slice(&out.stdout).expect("a JSON document");
+    let count = |name: &str| {
+        doc["suites"][0]["cases"]
+            .as_array()
+            .unwrap()
+            .iter()
+            .find(|c| c["name"].as_str().unwrap().contains(name))
+            .and_then(|c| c["detached_failures"].as_u64())
+            .unwrap_or(0)
+    };
+    assert_eq!(count("Err in a cron handler"), 1);
+    assert_eq!(count("fault in a cron handler"), 1);
+    assert_eq!(count("queue consumer"), 2);
     let _ = std::fs::remove_dir_all(&scratch);
 }

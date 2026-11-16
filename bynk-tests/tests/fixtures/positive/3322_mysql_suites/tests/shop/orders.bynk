@@ -1,5 +1,7 @@
 suite shop.orders
 
+consumes bynk.cloudflare { MySqlError, MySqlRun }
+
 case "every operation faults until it is stubbed" {
 	expect add.call("a") faults
 	expect list.call() faults

@@ -112,6 +112,7 @@ bynk <command> [options]
 | [`bynk check`](#bynk-check) | Type-check a file or project without writing output. |
 | [`bynk build`](#bynk-build) | Build a project into its output directory with the settings in `bynk.toml`'s `[build]`; no flags needed. |
 | [`bynk compile`](#bynk-compile) | Compile a project to TypeScript in a directory, optionally from unsaved editor buffers. |
+| [`bynk client`](#bynk-client) | Write a typed TypeScript client for the project's `from http` services (experimental). |
 | [`bynk openapi`](#bynk-openapi) | Write an OpenAPI 3.1 document for the project's `from http` services. |
 | [`bynk token`](#bynk-token) | Mint a credential for the project's own `Bearer` actor, to call a guarded route by hand. |
 | [`bynk fmt`](#bynk-fmt) | Format `.bynk` source files in place. |
@@ -199,7 +200,8 @@ locally](/book/guides/projects-build-and-deployment/run-locally/) for a worked
 walkthrough.
 
 ```text
-bynk dev [PATH] [--context NAME]... [--base-port N] [--inspect] [--inspect-port N] [--local-worker NAME]... [--format human|json] [--log-events] [--rewrite-frames] [--ready-json FILE] [--no-install] [-- <wrangler args>]
+bynk dev [PATH] [--context NAME]... [--base-port N] [--inspect] [--inspect-port N] [--local-worker NAME]... [--format human|json] [--log-events] [--trace-events] [--rewrite-frames] [--ready-json FILE] [--no-install] [-- <wrangler args>]
+bynk dev inspect agents|agent …   # read a running session; see Inspecting agents
 ```
 
 `bynk dev` serves one project, so it refuses to run at a
@@ -217,7 +219,8 @@ run it inside a member.
 | `--local-worker NAME` | none | A Worker outside the project, named by a [`Service` instance](/book/guides/effects-and-capabilities/call-a-foreign-worker/) (`@worker("NAME")`), to reach in your own locally running `wrangler dev` of it instead of the stand-in `bynk dev` binds by default. **Repeatable.** A name no served context binds is warned about. |
 | `--format human\|json` | `human` | `human` is the readable stream on stderr. `json` adds one JSON lifecycle event per line on stdout (see [Lifecycle events](#lifecycle-events)), and moves `wrangler dev`'s own stdout to stderr so stdout carries only events. |
 | `--log-events` | off | With `--format json`, also write each line a worker prints as a `log` event (see [Worker logs](#worker-logs)). |
-| `--rewrite-frames` | off | Rewrite stack frames to `.bynk` locations even on a terminal (see [Worker logs](#worker-logs)). Implied by `--log-events`. |
+| `--trace-events` | off | Write one `request` event per request a worker serves: its route, status, duration and the steps it took (see [Request traces](#request-traces)). Implies `--format json` and `--rewrite-frames`. |
+| `--rewrite-frames` | off | Rewrite stack frames to `.bynk` locations even on a terminal (see [Worker logs](#worker-logs)). Implied by `--log-events` and `--trace-events`. |
 | `--ready-json FILE` | none | Once every served context answers an HTTP probe, write `{ "<worker>": "<url>" }` to `FILE` (see [Readiness](#readiness)). A stale `FILE` is removed at start, and `FILE` is removed when the session stops. |
 | `-- <wrangler args>` | — | Everything after `--` is forwarded to `wrangler dev` verbatim (e.g. `-- --var K:V`). Ports are the driver's to allocate: passing `-- --port` or `-- --inspector-port` against an allocation is an error naming the flag that owns it. A single context with no `--inspect` or `--inspect-port` leaves `-- --inspector-port N` yours. |
 
@@ -288,6 +291,7 @@ new ones may be added, and existing ones keep their meaning.
 | `rebuild_ok` | The rebuild succeeded; the workers hot-reload. | — |
 | `rebuild_failed` | The rebuild failed. Its diagnostics are on stderr, and the last good build keeps serving. | — |
 | `stopped` | The session ended. | `code`: the exit code `bynk dev` returns. |
+| `request` | A worker served a request. Only under `--trace-events`. | See [Request traces](#request-traces). |
 | `log` | A worker printed a line. Only under `--log-events`. | `context`: the worker directory that printed it. `level`: `info`, `warn` or `error`. `text`: the line, without colour, with any stack frame already at its `.bynk` location. |
 
 ```json
@@ -334,6 +338,62 @@ line with `[ERROR]`, `✘`, `Uncaught` or an `…Error:` headline is `error`,
 the line it continues. The VS Code extension reads these for its
 [Bynk Logs](/docs/tooling/vscode-bynk/) view.
 
+### Request traces
+
+`--trace-events` builds the workers with per-request recording (a dev build
+only: `bynk deploy` and `bynk compile` never record) and writes one `request`
+event for each request a worker serves, so an editor can show what a request
+did. Draw it over the handler's sequence diagram with the `span` of each step.
+
+```json
+{"event":"request","context":"shop-orders","id":"5d5e…","parent":null,"route":"POST /orders","status":201,"duration_ms":12.4,"steps":[{"kind":"call","target":"shop.payment.authorise","span":{"file":"src/shop/orders.bynk","line":23,"col":14},"ms":3.1,"outcome":"ok","request":"9a41…"},{"kind":"agent","target":"Ledger.tally","span":{"file":"src/shop/orders.bynk","line":27,"col":22},"ms":1.2,"outcome":"ok"}],"truncated":false,"fault":null}
+```
+
+| Field | Meaning |
+|---|---|
+| `context` | The worker directory that served the request, as in `serving`. |
+| `id` | This request's id. |
+| `parent` | `null` for a request from outside. For a cross-context call from another worker, the `id` of the calling request: the caller's `call` step carries this request's `id` as its `request`, so a client can join the two events into one call tree. |
+| `route` | `<METHOD> <path>`, the path as requested. |
+| `status` | The response status. A fault answers `500`. |
+| `duration_ms` | From the request arriving to the response being ready. |
+| `steps` | What the request did, in call order (below). |
+| `truncated` | `true` when more steps happened than are listed. At most 200 steps are kept. |
+| `fault` | `null`, or `{ "message", "frames" }`: the error's first line, and its stack frames, with frames into generated code at their `.bynk` location. |
+
+A step is `{ "kind", "target", "span", "ms", "outcome" }`:
+
+- `kind` is `capability` (an op on a capability in `given`), `call` (a call to
+  another context) or `agent` (a method call on an agent).
+- `target` is what was called: `Db.query`, `shop.payment.authorise`,
+  `Ledger.tally`.
+- `span` is the `.bynk` call site, `{ "file", "line", "col" }` (project-relative
+  path, 1-based line and column), or `null`.
+- `ms` is how long the call took.
+- `request` (on a `call` step only) is the `id` of the callee's own `request`
+  event.
+- `outcome` is `ok`, `fault` (it threw or was rejected), or `pending` (it had not
+  settled when the response was ready).
+
+A step carries **no argument values**: only kinds, targets, spans, timings and
+outcomes. The record closes when the response is ready, so work that continues
+afterwards (`waitUntil`, a streamed body) is not in it. A call to another
+context is one step here; the callee's own request is a separate `request`
+event, from its own worker, whose `parent` is the caller's `id`. Run every
+context under `bynk dev --trace-events` to see both sides: a callee served
+without it prints no event, and the caller's step still names the `request` it
+sent.
+
+`bynk dev` takes a worker's output line as a trace when it carries the
+`__bynk_trace:` prefix followed by valid trace JSON, so a line of your own that
+happens to do so is read as one.
+
+The recorder finds the request's record through `AsyncLocalStorage`, so a traced
+build adds the `nodejs_als` compatibility flag to each worker's `wrangler.toml`.
+It does not add it when `[workers] compatibility_flags` already lists
+`nodejs_als` or `nodejs_compat`. Recording only observes: a call returns and
+throws what it would have.
+
 ### Readiness
 
 `--ready-json FILE` is the readiness signal for a test runner or a CI script,
@@ -361,6 +421,106 @@ after 30 seconds without readiness, notes once which contexts haven't answered.
 Readiness means each Worker answers a request. The dev-registry service
 bindings between contexts connect shortly after start, so a cross-context call
 in the first moments may still be refused.
+
+### Inspecting agents
+
+```text
+bynk dev inspect agents [PATH] [--context NAME] [--class AGENT]
+bynk dev inspect agent <CLASS> <KEY> [--path PATH] [--context NAME] [--field FIELD [--after CURSOR]] [--limit N]
+```
+
+While `bynk dev` runs, `bynk dev inspect` lists the agent instances the session
+has seen and reads one's stored state. Both print JSON on stdout, and fail with
+a message on stderr and a non-zero exit when there is no running session for
+the project, or the instance is unknown.
+
+A running session writes `.bynk/dev/session.json`, naming each served context
+and its URL, and removes it when it stops; `inspect` reads it to find the
+session. Each request is signed under the local call key as the caller
+`bynk.dev`, as an internal call between contexts is, so a Worker answers only a
+caller holding that key.
+
+**Dev builds only.** `bynk dev` builds each Worker with the inspection in; a
+build for `bynk deploy` has no registry and no `/_bynk/inspect/` route (it
+answers `404`), and is byte-identical to a build without this feature. Nothing
+is written by inspecting: the read does not migrate a record, run a handler or
+commit.
+
+**`inspect agents`** lists the instances. An instance is listed once a handler
+has addressed it in this session; one that exists in local storage from an
+earlier session appears when it is next addressed.
+
+```json
+{
+  "agents": [
+    { "context": "shop.orders", "class": "Cart", "key": "u1", "id": "29bacc06…" }
+  ],
+  "errors": []
+}
+```
+
+- `key` is the key in its wire form: a string key as a string, any other key as
+  its JSON. `inspect agent` matches a string key by its text and any other key by
+  its JSON, so if one class holds both a string key `"7"` and a numeric key `7`,
+  typing `7` reaches whichever is listed first.
+- `id` is the Durable Object id.
+- `errors` names a context that could not be reached, as
+  `{ "context": …, "error": … }`; the others still answer.
+
+**`inspect agent CLASS KEY`** reads one instance. A string key is given as it is,
+any other key as JSON.
+
+```json
+{
+  "context": "shop.orders",
+  "class": "Cart",
+  "key": "u1",
+  "id": "29bacc06…",
+  "exists": true,
+  "readable": true,
+  "version": 1,
+  "current": 1,
+  "layout": 2,
+  "migrationPending": false,
+  "cells": { "total": 4 },
+  "collections": {
+    "lines": {
+      "kind": "map",
+      "size": 2,
+      "entries": [ { "key": "apple", "value": { "i": 0, "v": 2 } } ],
+      "next": "m/lines/apple"
+    }
+  }
+}
+```
+
+- `cells` holds the agent's `Cell` fields as stored, in wire form.
+- `collections` has one entry per `Map`, `Set`, `Cache` and `Log` field.
+  `entries` is one page (`--limit`, 50 by default and at most 500), in storage
+  key order, and `next` is the cursor of the following page or `null`. `--field
+  NAME --after CURSOR` reads that field's next page alone. A `Map` or `Cache`
+  entry is `{ "key", "value" }` with the stored value (`i` is its insertion
+  sequence; a `Cache` entry also carries its expiry), a `Set` element is
+  `{ "key", "value" }`, and a `Log` entry is the stored `{ "t", "v" }`. `size`
+  is the entry count, or `null` when none is recorded.
+- `version` is the schema version of the stored record and `current` the build's
+  (`null` when the project has no schema lock). `layout` is the storage layout.
+  `migrationPending` is `true` when the record is behind the build and a
+  migration step covers it: it is shown as stored, not migrated.
+- `history` is the instance's recent transitions, oldest first, at most the last
+  50, each `{ "handler", "old", "new", "at" }`: the handler that committed it, the
+  state before and after, and the time in milliseconds. `old` and `new` hold the
+  `cells` in wire form and each collection's `size` (`{ "cells": {…},
+  "collections": { "lines": 2 } }`), not its entries; `old` is `null` for the
+  instance's first recorded commit. A transition a handler or an invariant
+  refuses is never committed, so it has no entry. A commit made by a migration
+  has `handler: null`. The buffer also drops its oldest entries when it would pass
+  about 96 KiB, so an instance with large cells keeps fewer than 50. `history` is `[]` for an
+  instance nothing has committed to in this build.
+- `exists` is `false`, and nothing else is returned, for an instance with no
+  stored state yet.
+- `readable` is `false` for a record this build cannot read, with `fault` naming
+  the kind (`NewerLayout`, `NewerSchema` or `NoMigrationPath`) and no state.
 
 ---
 
@@ -510,7 +670,7 @@ Type-check a `.bynk` file or project without writing output. Runs the compiler
 pipeline **in-process**.
 
 ```text
-bynk check [INPUT] [--format rich|short] [--fix] [--emit] [--each] [--locked] [--offline]
+bynk check [INPUT] [--format rich|short] [--fix[=CODE,…]] [--emit] [--each] [--locked] [--offline]
 ```
 
 | Argument | Default | Meaning |
@@ -518,7 +678,7 @@ bynk check [INPUT] [--format rich|short] [--fix] [--emit] [--each] [--locked] [-
 | `INPUT` | `.` | A `.bynk` file, or a project root directory (a `bynk.toml` or `src/` subdir selects project mode; otherwise the directory is itself the source tree). |
 | `--format` | `rich` | `rich` is the source-context rendering; `short` emits one terse `path:line:col: severity[category]: message` line per diagnostic, for the VS Code problem-matcher, CI, and scripts. In both, `path` is the file as you'd type it from the working directory (the input you passed, joined with the file's place in it), the same path `fmt` reports. `rich` is coloured only when stderr is a terminal and `NO_COLOR` is unset or empty; `FORCE_COLOR` or `CLICOLOR_FORCE` set to anything but empty or `0` colours it without a terminal (for `less -R` or a CI log); `0` doesn't turn colour off on a terminal, `NO_COLOR` does, and it wins over both. `rich` cuts a source line longer than 400 bytes to a window around its labels, marked `…`. |
 
-| `--fix` | off | Apply the machine-applicable fix suggestions to the sources, in place, before checking. See [Applying fixes](#applying-fixes). |
+| `--fix[=CODE,…]` | off | Apply the machine-applicable fix suggestions to the sources, in place, before checking. With `=CODE` (comma-separated, or repeated), only those diagnostic codes' fixes. See [Applying fixes](#applying-fixes). |
 | `--emit` | off | After a passing check, generate the Workers TypeScript into a temporary directory and type-check it with `tsc`. See [Type-checking the generated code](#type-checking-the-generated-code). Needs a project directory, and `tsc` (with Node.js). |
 | `--each` | off | Check each project directly inside a directory that has no `bynk.toml`. See [A directory of projects](#a-directory-of-projects). |
 
@@ -599,8 +759,18 @@ never one with placeholders for you to fill in.
 bynk check --fix
 bynk check --fix --format short
 bynk check --fix src/shop.bynk
+bynk check --fix=bynk.given.unused_capability
 ```
 
+- **`--fix=<code>` takes one migration at a time.** `--fix=bynk.types.inverted_range`
+  takes only the fixes of that code, and `--fix=<a>,<b>` (or `--fix=<a> --fix=<b>`)
+  of several; the value needs the `=`. Use it where an upgrade note names a code.
+  Naming a code asks for its fixes, so a hint `check` hides (such as
+  `bynk.parse.let_else_staircase`) is fixed when you name it, and plain `--fix`
+  still leaves hints alone. An editor-only quick fix, one that changes meaning
+  you must choose, is never taken. A code that is not a real diagnostic code is
+  refused before anything is read, naming the nearest real one; a real code with
+  nothing to fix writes nothing. The rest of the rules below apply unchanged.
 - **It repeats until nothing more applies.** A fix can expose another fixable
   diagnostic (adding a capability to an agent handler's `given` makes a provider
   that calls it short of the same capability), so each round re-checks the
@@ -614,7 +784,8 @@ bynk check --fix src/shop.bynk
 - **It writes only files that change, in place, and does not format.** A file
   with nothing to fix keeps its modification time. Run [`bynk fmt`](#bynk-fmt)
   afterwards if you want both. One line per file written precedes the report:
-  `fixed: src/shop.bynk (3 edits)`.
+  `fixed: src/shop.bynk: bynk.given.unused_capability ×3`, naming each code
+  and how many of its diagnostics were fixed.
 - **A directory you cannot write to** is only noticed when its file is written, so a
   failure there can come after earlier files were written.
 - **There is no dry run.** Review with `git diff` and undo with `git checkout`.
@@ -684,6 +855,43 @@ bynk compile [INPUT] --output DIR [--target bundle|workers] [--platform cloudfla
 `--sources-stdin` makes the run a **preview build**: `bynk.schema.lock` is
 neither read nor written, so nothing changes outside `--output`. Only `.bynk`
 sources can be overlaid; a `bynk.toml` edit is read from disk.
+
+---
+
+## `bynk client`
+
+Write a typed TypeScript client for the project's `from http` services, as one
+module a front end imports (experimental, #3508): one function per route, the
+boundary types as TypeScript types (an optional value is `T | null`), the server's
+refinement checks on the way out and on the way in, and a union of each route's own
+responses keyed by `status`. The module inlines a small browser-safe runtime. The
+surface is in the [HTTP client reference](/book/reference/http-client/), and a
+recipe in [Generate a typed client for your front end](/docs/tooling/bynk-client/).
+
+```text
+bynk client [INPUT] [--service NAME]... [--out PATH] [--layout file|dir] [--check] [--locked] [--offline]
+```
+
+| Argument | Default | Meaning |
+|---|---|---|
+| `INPUT` | `.` | A project directory, or any path inside one. |
+| `--service` | every service | Generate only this `from http` service, as `Name` or `unit.Name`. May be given more than once. |
+| `--out`, `-o` | stdout | Write the client to this path instead of stdout: a file, or with `--layout dir` a directory. |
+| `--layout` | `file` | `file` writes one module; `dir` writes `index.ts`, `types.ts`, `codecs.ts` and `runtime.ts` into `--out`. |
+| `--check` | off | Write nothing. Compare the client at `--out` with the one the project generates, and exit non-zero, naming the first differing line, when it is stale or missing. The CI drift gate. |
+
+A flag left out takes its value from [`[build.client]`](/docs/manifest/#buildclient)
+in `bynk.toml`, when the project has one, so `bynk client --check` needs no
+arguments there. `bynk build` writes the client that table names.
+
+The project must check clean; otherwise the command lists the errors and writes
+nothing. It exits non-zero when the project has no `from http` service, when
+`--service` names none, when `--check` or `--layout dir` has no path to work on,
+when two routes of a service would share a function name,
+and when every selected route is one this version cannot represent. A route it
+cannot represent (a `@raw` body, a raw `query` or `cookies` view, a raw or streamed
+response, a request-signature route, an `Option` inside a `Map`, `Set` or `Result`) is
+named on stderr and left out.
 
 ---
 
@@ -1080,7 +1288,7 @@ the addresses made since the last **unsafe** one: an address whose HTTP method
 isn't safe per RFC 9110 (anything but `GET`, `HEAD` or `OPTIONS`), or a
 `schedule` or `message` address. The rule fails closed: any other effectful
 line that isn't itself a safe address counts as unsafe too, such as a `<-` on
-an `if` or `match` around an address, a `do e.detach()` or `~>` send, or a store write. Only
+an `if` or `match` around an address, a `do e.detach()`, or a store write. Only
 a plain `let` and an `expect` are replayed with the reads. An unsafe address is never repeated, so a
 retry can't place a second order. An `expect` with no safe address before it
 in that stretch isn't retried at all.
@@ -1288,10 +1496,82 @@ reaches the case, which sees a `CalleeFaulted` or a response that is not `Ok`. A
 
 ---
 
+## `bynk eval`
+
+Evaluate a snippet in a unit's scope against the project, and print the value it
+ends in as JSON (#3585). It is what an editor notebook runs for a cell, and the
+guide [Try an expression against your project](/book/guides/testing/try-an-expression/)
+walks through it.
+
+```text
+bynk eval [INPUT] --unit UNIT [--expr SNIPPET] [--sources-stdin] [--suite UNIT] [--timeout SECONDS] [--locked] [--offline]
+```
+
+| Argument | Default | Meaning |
+|---|---|---|
+| `INPUT` | `.` | Project root directory. |
+| `--unit UNIT` | required | The `commons` or `context`, by dotted name, whose scope the snippet is evaluated in. |
+| `--expr SNIPPET` | stdin | The snippet. Without it, the snippet is read from standard input. |
+| `--sources-stdin` | off | Evaluate against unsaved buffers: a JSON object `{ "<absolute path>": "<text>" }` on stdin wins over the files on disk, as for [`bynk compile`](#bynk-compile) (ADR 0626). Stdin then holds the buffers, so the snippet must be `--expr`; asking for both is an error. |
+| `--suite UNIT` | — | Build `--unit`'s own suite into the evaluation and put the snippet inside it, so the suite's `stub`s, `fn`s and fixtures apply. `UNIT` must be the unit named by `--unit`; any other is refused. A suite that does not compile is reported. It is an error when the unit has no unit-tier suite (a suite of another tier cannot hold a snippet). |
+| `--timeout SECONDS` | `60` | Kill the evaluation after this many seconds and report it as timed out. |
+
+**How it runs.** The snippet becomes the body of one `case` in a synthetic `suite`
+for `--unit`, and is built and run by the build and runner `bynk test` uses
+(`tsc` with Node.js, or `tsx`, on `PATH`). The `case`'s last expression is
+encoded as the wire shape `Json.encode` gives it and reported with its type.
+Each evaluation is **independent**: an earlier cell's `let`s are sent again
+ahead of the snippet. The snippet sees the unit's declarations and what a suite
+for that unit sees. Its leading `consumes` and `stub` lines (with the blank and
+`//` lines among them) belong to the suite, and the rest is the case, so it
+`consumes` what it uses from other units, as a suite file does.
+
+**No real I/O.** A capability that reaches outside the process (`Fetch`, a
+database, a secret store) is refused unless it has a `stub`, in the snippet or in
+a suite named with `--suite`; `Clock`, `Random` and `Logger` are the in-memory
+doubles every test has. By default the project's own suites are left out of the
+build, so a suite that does not compile cannot stop an evaluation.
+
+This is an explicit, local run of code the user wrote in their own workspace, at
+the trust level of `bynk test`. It does not change how the refined-type explorer
+evaluates a hover (ADR 0638).
+
+**Result.** One document on stdout, in this order (when the project's dependencies cannot be prepared, the reason goes to stderr as for the other commands, and the document is a `setup` error):
+
+```json
+{"value": <wire shape>, "type": "Result[Percent, ValidationError]", "diagnostics": []}
+```
+
+| Field | Meaning |
+|---|---|
+| `value` | The wire shape of the snippet's last expression; `null` when the snippet did not check (see `diagnostics`). Absent when `error` is present. |
+| `type` | That expression's type; `null` when the snippet did not check. Absent when `error` is present. |
+| `diagnostics` | When the snippet or the project does not check: one entry each of `line`, `col` (1-based, in the snippet), `severity`, `code` and `message`. An entry in another file adds its `file`, with that file's own line and column. Empty otherwise. |
+| `error` | Present only when the snippet checked, or could not be set up, and produced no value: `kind` is `runtime` (a failed `expect`, an unstubbed capability, a value with no wire shape such as a bare effect), `timeout`, or `setup` (no such unit, a bad flag combination, no suite to build the snippet into), and `message` says why. With an `error`, `value` and `type` are left out: `{"diagnostics": [], "error": {"kind": "runtime", "message": "…"}}`. |
+
+**Exit code** — `0` when there is a value (a refused refined-type construction,
+`{"kind":"Err",…}`, is a value), `1` otherwise.
+
+**Timing.** An evaluation is a build and a run of the project, in process, so its
+cost is that of a one-case `bynk test`. It is not incremental: each evaluation
+compiles the whole project again, and what is reused between runs is the `out`
+directory and the installed npm packages. Measured with a release build on a
+4-core Linux machine with Node 22 and a global `tsc`, for a project of one unit
+and one of six units:
+
+| | Time |
+|---|---|
+| First evaluation, empty `out` | 0.8 – 0.9 s |
+| Later evaluations | 0.7 – 0.9 s |
+| `bynk test` on the six-unit project, for comparison | 0.9 s |
+
+A project that needs npm packages (a first-party adapter, say) pays their
+installation once, on the first evaluation, as `bynk test` does.
+
 ## Dependencies: `bynk.lock`, `--locked` and `--offline`
 
-Before `bynk check`, `bynk test`, `bynk dev` and `bynk deploy` compile, they
-resolve the project's [`[dependencies]`](/docs/manifest/#dependencies) (and
+Before `bynk check`, `bynk test`, `bynk eval`, `bynk dev` and `bynk deploy`
+compile, they resolve the project's [`[dependencies]`](/docs/manifest/#dependencies) (and
 `[dev-dependencies]`) against [`bynk.lock`](/docs/manifest/#bynklock), fetch any
 git dependency missing from the store, re-check every fetched dependency
 against its locked checksum, and rewrite the lock if the dependencies changed.

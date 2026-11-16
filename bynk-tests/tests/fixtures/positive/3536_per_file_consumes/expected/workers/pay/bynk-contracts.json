@@ -1,0 +1,10 @@
+{
+  "version": 1,
+  "provides": {
+    "charge": "f30c066e8f631491"
+  },
+  "expects": {},
+  "provides_shapes": {
+    "charge": "Svc(\"charge\",P(\"amount\",B(\"Int\")),Ret(B(\"Int\")))"
+  }
+}

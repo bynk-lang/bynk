@@ -138,7 +138,7 @@ service cancelOrder {
 const SOURCE_NOTIFICATIONS: &str = r#"context commerce.notifications
 
 consumes commerce.order
-consumes bynk { Logger }
+consumes bynk { Logger, EventEnvelope }
 
 service OnPaymentConfirmed from Events(PaymentConfirmed) {
   on event(e: PaymentConfirmed, env: EventEnvelope) -> Effect[()] given Logger {

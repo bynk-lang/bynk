@@ -8,6 +8,36 @@
       "additionalProperties": false,
       "description": "Defaults for `bynk build`, which takes no flags. A flag overrides its key.\n`bynk compile` and `bynk dev`/`deploy`/`test` do not read this table.",
       "properties": {
+        "client": {
+          "additionalProperties": false,
+          "description": "Where `bynk build` writes the typed TypeScript client for the project's\n`from http` services (#3508). Absent, `bynk build` writes none.",
+          "properties": {
+            "layout": {
+              "default": "file",
+              "description": "`\"file\"` writes one module; `\"dir\"` writes `index.ts`, `types.ts`,\n`codecs.ts` and `runtime.ts`. Default: `\"file\"`.",
+              "enum": [
+                "file",
+                "dir"
+              ],
+              "type": "string"
+            },
+            "out": {
+              "description": "Where to write the client, relative to the project root: a `.ts` file with\n`layout = \"file\"`, a directory with `layout = \"dir\"`. It may leave the\nproject, since a front end often lives beside the Bynk project.",
+              "type": "string"
+            },
+            "service": {
+              "description": "The `from http` services to include, as `Name` or `unit.Name`. Default:\nevery one.",
+              "items": {
+                "type": "string"
+              },
+              "type": "array"
+            }
+          },
+          "required": [
+            "out"
+          ],
+          "type": "object"
+        },
         "emit": {
           "default": "ts",
           "description": "The artefact language: `\"ts\"` (typed TypeScript) or `\"js\"` (types\nstripped). Default: `\"ts\"`.",
@@ -122,6 +152,27 @@
       "additionalProperties": false,
       "description": "Where `bynk deploy` gets each `Postgres` capability's Hyperdrive config.\nNo table holds a connection string: it is a secret, and `bynk.toml` is\ncommitted.",
       "properties": {
+        "containers": {
+          "additionalProperties": {
+            "additionalProperties": false,
+            "description": "One `Container` capability's image at deploy.",
+            "properties": {
+              "image": {
+                "additionalProperties": {
+                  "type": "string"
+                },
+                "description": "Prebuilt images by deployment environment (`default`, or an `--env`\nname), each `registry.cloudflare.com/<ACCOUNT_ID>/<REPOSITORY>@sha256:<DIGEST>`:\nin Cloudflare's own registry and named by digest. An environment listed\nhere runs that image and is never built, so the deploy needs no Docker;\nwithout an entry the image is built from `@build`'s Dockerfile.",
+                "type": "object"
+              }
+            },
+            "required": [
+              "image"
+            ],
+            "type": "object"
+          },
+          "description": "Container settings, keyed by the `Container` capability's name\n(`capability Renderer = Container …` is `Renderer`).",
+          "type": "object"
+        },
         "hyperdrive": {
           "additionalProperties": {
             "additionalProperties": false,
@@ -143,6 +194,66 @@
           },
           "description": "Hyperdrive settings, keyed by the `Postgres` capability's name\n(`capability Main = Postgres` is `Main`).",
           "type": "object"
+        },
+        "vectorize": {
+          "additionalProperties": {
+            "additionalProperties": false,
+            "description": "One `Vectorize` capability's index at deploy.",
+            "properties": {
+              "index": {
+                "additionalProperties": {
+                  "type": "string"
+                },
+                "description": "Names of Vectorize indexes that already exist, by deployment\nenvironment (`default`, or an `--env` name). An environment listed here\nis adopted: `bynk deploy` checks its dimensions and metric against the\ndeclaration and never creates, changes or deletes it. Without an entry\nthe deploy creates the index.",
+                "type": "object"
+              }
+            },
+            "required": [
+              "index"
+            ],
+            "type": "object"
+          },
+          "description": "Vectorize settings, keyed by the `Vectorize` capability's name\n(`capability Docs = Vectorize …` is `Docs`).",
+          "type": "object"
+        },
+        "workers": {
+          "additionalProperties": {
+            "additionalProperties": false,
+            "description": "One group: the contexts that are deployed as one Worker.",
+            "properties": {
+              "contexts": {
+                "description": "The members, as qualified context names (`shop.orders`). Each context\nis in one group only; there are no globs, so adding a context to a\ngroup is a visible change here.",
+                "items": {
+                  "type": "string"
+                },
+                "type": "array"
+              },
+              "custom_domains": {
+                "description": "Custom domains the Worker is attached to, like `pay.example.com`.",
+                "items": {
+                  "type": "string"
+                },
+                "type": "array"
+              },
+              "name": {
+                "description": "The Worker's script name on Cloudflare: 1 to 63 lowercase letters,\ndigits or `-`. Default: the group's key. The key stays the group's\nidentity (its ledger entry, `--worker` selector and `workers/<key>/`\ndirectory); changing the key or the name makes a different Worker.",
+                "type": "string"
+              },
+              "routes": {
+                "description": "Route patterns the Worker is attached to, like `pay.example.com/*`.",
+                "items": {
+                  "type": "string"
+                },
+                "type": "array"
+              }
+            },
+            "required": [
+              "contexts"
+            ],
+            "type": "object"
+          },
+          "description": "Worker groups, keyed by the group's identity: which contexts share one\nWorker. A context in no group stays its own Worker, named by its\ndashed name.",
+          "type": "object"
         }
       },
       "type": "object",
@@ -156,6 +267,36 @@
       "additionalProperties": false,
       "description": "Settings `bynk dev` reads.",
       "properties": {
+        "ai": {
+          "description": "Acknowledges that Workers AI has no local simulation: under `bynk dev`\na call runs on your Cloudflare account and may incur charges. `bynk dev`\nwarns once, on the first call, unless this is `\"allow\"`. See Cloudflare's\nWorkers AI pricing page.",
+          "oneOf": [
+            {
+              "const": "allow",
+              "description": "Silence the warning.",
+              "type": "string"
+            }
+          ]
+        },
+        "ai-search": {
+          "description": "Acknowledges that AI Search has no local simulation: under `bynk dev`\na call goes to your deployed instance on your Cloudflare account and may\nincur charges. `bynk dev` warns once, on the first call, unless this is\n`\"allow\"`. See Cloudflare's AI Search pricing page.",
+          "oneOf": [
+            {
+              "const": "allow",
+              "description": "Silence the warning.",
+              "type": "string"
+            }
+          ]
+        },
+        "analytics-sql": {
+          "description": "Acknowledges that Analytics SQL has no local implementation: under `bynk dev` a query\nruns on your Cloudflare account and reads your deployed datasets. `bynk dev` warns once,\non the first query, unless this is `\"allow\"`. See Cloudflare's Analytics Engine SQL API\npage.",
+          "oneOf": [
+            {
+              "const": "allow",
+              "description": "Silence the warning.",
+              "type": "string"
+            }
+          ]
+        },
         "hyperdrive": {
           "additionalProperties": {
             "additionalProperties": false,
@@ -172,6 +313,33 @@
             "type": "object"
           },
           "description": "Local Hyperdrive connection strings, keyed by the `Postgres`\ncapability's name.",
+          "type": "object"
+        },
+        "mtls": {
+          "description": "Acknowledges that an mTLS certificate binding has no local simulation: under `bynk dev` a\ncall runs on Cloudflare, presenting your account's certificate to the origin the URL\nnames, so it needs a certificate `bynk deploy` has linked. `bynk dev` warns once, on the\nfirst call, unless this is `\"allow\"`. See Cloudflare's mTLS bindings page.",
+          "oneOf": [
+            {
+              "const": "allow",
+              "description": "Silence the warning.",
+              "type": "string"
+            }
+          ]
+        },
+        "vectorize": {
+          "description": "Acknowledges that Vectorize has no local simulation: under `bynk dev` a\ncall runs against your own index on your Cloudflare account and may\nincur charges. `bynk dev` warns once, on the first call, unless this is\n`\"allow\"`. See Cloudflare's Vectorize pricing page.",
+          "oneOf": [
+            {
+              "const": "allow",
+              "description": "Silence the warning.",
+              "type": "string"
+            }
+          ]
+        },
+        "vectorize-index": {
+          "additionalProperties": {
+            "type": "string"
+          },
+          "description": "The Vectorize index of your own that `bynk dev` binds, keyed by the\n`Vectorize` capability's name (`Docs = \"docs-dev\"`). It must already\nexist with the declaration's dimensions and metric: `bynk dev` never\ncreates one, and never uses the deploy's derived name. A capability\nwith no entry is unbound under `bynk dev`.",
           "type": "object"
         }
       },

@@ -840,7 +840,9 @@ function sqlParameters(sql: string): { count: number; numbered: string[]; bare: 
  * `wrangler d1 migrations apply` runs them. One that fails faults, naming the
  * file, so every test using the database fails the same way.
  */
-export function makeIntegrationD1(migrations: readonly (readonly [string, string])[] = []): D1Database {
+export function makeIntegrationD1(
+  migrations: readonly (readonly [string, string])[] = [],
+): D1Database & { readOnly(): D1Database } {
   const node = (globalThis as { process?: { getBuiltinModule?(id: string): unknown } }).process;
   const sqlite = node?.getBuiltinModule?.("node:sqlite") as
     | { DatabaseSync: new (path: string) => SqliteDatabase }
@@ -880,7 +882,20 @@ export function makeIntegrationD1(migrations: readonly (readonly [string, string
     changes: Number(r.changes),
     last_row_id: Number(r.lastInsertRowid),
   });
-  const statement = (sql: string, params: unknown[]): D1PreparedStatement & { exec(): D1Result } => {
+  // #3147: a `D1.peek` handle reads the database the app wrote, and never
+  // writes it. Its statements run with `query_only` on, for the statement's
+  // own (synchronous) execution only, so the app's own statements in flight
+  // are never refused. SQLite refuses a write then, whatever the statement.
+  const readOnly = <T>(guarded: boolean, f: () => T): T => {
+    if (!guarded) return f();
+    db.exec("PRAGMA query_only = ON");
+    try {
+      return f();
+    } finally {
+      db.exec("PRAGMA query_only = OFF");
+    }
+  };
+  const statement = (sql: string, params: unknown[], guarded = false): D1PreparedStatement & { exec(): D1Result } => {
     const values = params.map((v) => (typeof v === "number" && Number.isInteger(v) ? BigInt(v) : v));
     // Node before 22.18 refuses positional values for numbered parameters
     // (`?1`), so those bind by name: `{ "?1": … }`, one key per number used.
@@ -907,11 +922,11 @@ export function makeIntegrationD1(migrations: readonly (readonly [string, string
       return db.prepare(text);
     };
     return {
-      bind: (...values: unknown[]) => statement(sql, values),
-      all: async () => ({ results: attempt(() => prepared().all(...bound)), meta: {} }),
-      first: async () => attempt(() => prepared().get(...bound)) ?? null,
-      run: async () => ({ results: [], meta: meta(attempt(() => prepared().run(...bound))) }),
-      exec: () => ({ results: [], meta: meta(attempt(() => prepared().run(...bound))) }),
+      bind: (...values: unknown[]) => statement(sql, values, guarded),
+      all: async () => ({ results: attempt(() => readOnly(guarded, () => prepared().all(...bound))), meta: {} }),
+      first: async () => attempt(() => readOnly(guarded, () => prepared().get(...bound))) ?? null,
+      run: async () => ({ results: [], meta: meta(attempt(() => readOnly(guarded, () => prepared().run(...bound)))) }),
+      exec: () => ({ results: [], meta: meta(attempt(() => readOnly(guarded, () => prepared().run(...bound)))) }),
     };
   };
   return {
@@ -927,6 +942,13 @@ export function makeIntegrationD1(migrations: readonly (readonly [string, string
         throw e;
       }
     },
+    // #3147: the same database, read-only, for `D1.peek`.
+    readOnly: (): D1Database => ({
+      prepare: (sql: string) => statement(sql, [], true),
+      async batch(): Promise<D1Result[]> {
+        throw d1Error(new Error("a D1.peek handle is read-only"));
+      },
+    }),
   };
 }
 
@@ -952,6 +974,179 @@ export function makeIntegrationVersionMetadata(): WorkerVersionMetadata {
 }
 
 /**
+ * The marker every integration double puts on the fault it throws for an
+ * unstubbed call (#3589). A binding in `bynk.cloudflare` that maps a platform
+ * failure to an `Err` rethrows an error that carries it (`bynkNotStubbed ===
+ * true`), so an unstubbed call faults the case and a handler's `Err(_)`
+ * fallback cannot swallow it. Defined once, here; #3578's `Images` double uses
+ * the same property.
+ */
+export function markNotStubbed(message: string): Error {
+  return Object.assign(new globalThis.Error(message), { bynkNotStubbed: true });
+}
+
+/**
+ * Workers AI (#3478): Cloudflare's AI binding, which `WorkersAi` reads. `run`
+ * takes the model id and its input object, and answers the model's output (a
+ * JSON value, or bytes or a stream for a model that sends those).
+ */
+export interface WorkerAiBinding {
+  run(model: string, input: Record<string, unknown>): Promise<unknown>;
+}
+
+/**
+ * Analytics SQL (#3513 B): Cloudflare's account-scoped binding, which `WorkersAnalyticsSql`
+ * reads. `query` takes one `SELECT` and its positional parameters, and answers the rows with
+ * the cost of the query; a failure rejects with an error carrying a boolean `retryable`.
+ */
+export interface AnalyticsSqlBinding {
+  query(request: { query: string; params?: unknown[] }): Promise<unknown>;
+}
+
+/**
+ * The Analytics SQL binding of a multi-Worker integration test participant, bound as its
+ * `env.CF_ANALYTICS_SQL`. A test never reaches Cloudflare, so `query` faults until the case stubs
+ * the capability's operation. There are no fake rows: a fabricated reply would make a test pass
+ * for the wrong reason.
+ */
+export function makeIntegrationAnalyticsSql(): AnalyticsSqlBinding {
+  return {
+    async query(): Promise<unknown> {
+      throw markNotStubbed(
+        "bynk: the `AnalyticsSql` binding is not stubbed, and a test never reaches Analytics SQL — add `stub AnalyticsSql.query(_, _) returns …`",
+      );
+    },
+  };
+}
+
+/**
+ * The AI binding of a multi-Worker integration test participant, bound as its
+ * `env.AI`. A test never reaches Workers AI, so `run` faults until the case
+ * stubs the capability's operation. There is no fake model: a fabricated reply
+ * would make a test pass for the wrong reason.
+ */
+export function makeIntegrationAi(): WorkerAiBinding {
+  return {
+    async run(): Promise<unknown> {
+      throw markNotStubbed(
+        "bynk: the `Ai` binding is not stubbed, and a test never reaches Workers AI — stub the operation the case calls (`stub Ai.run(_, _) returns …`)",
+      );
+    },
+  };
+}
+
+/**
+ * Cloudflare Images (#3515): the `images` binding, which `WorkersImages` reads.
+ * `input` starts a pipeline over the image's bytes; `transform` and `draw`
+ * chain, and `output` finishes with the format. The result's `image()` is the
+ * bytes as a stream and `contentType()` the type they were written with.
+ */
+export interface WorkerImagesTransformer {
+  transform(options: Record<string, unknown>): WorkerImagesTransformer;
+  draw(overlay: WorkerImagesTransformer, options?: Record<string, unknown>): WorkerImagesTransformer;
+  output(options: Record<string, unknown>): Promise<WorkerImagesResult>;
+}
+export interface WorkerImagesResult {
+  image(): ReadableStream<Uint8Array>;
+  contentType(): string;
+}
+export interface WorkerImagesBinding {
+  input(stream: ReadableStream<Uint8Array>): WorkerImagesTransformer;
+  info(
+    stream: ReadableStream<Uint8Array>,
+  ): Promise<{ format: string; fileSize?: number; width?: number; height?: number }>;
+}
+
+/**
+ * The Images binding of a multi-Worker integration test participant, bound as
+ * its `env.IMAGES`. A test never reaches Cloudflare Images, so `input` faults
+ * until the case stubs the capability's operation. There is no fake transform:
+ * an image handed back unchanged would make a test pass for the wrong reason.
+ */
+// The double's fault is marked (`markNotStubbed`), which `WorkersImages`
+// rethrows instead of mapping to an `ImagesError`: an unstubbed call must
+// fault, not come back as a value a handler's fallback would swallow.
+function notStubbed(stub: string): Error {
+  return markNotStubbed(
+    `bynk: the \`Images\` binding is not stubbed, and a test never reaches Cloudflare Images — stub the operation the case calls (${stub})`,
+  );
+}
+
+export function makeIntegrationImages(): WorkerImagesBinding {
+  return {
+    async info(): Promise<never> {
+      throw notStubbed("`stub Images.info(_) returns …`");
+    },
+    input(): WorkerImagesTransformer {
+      throw notStubbed("`stub Images.transform(_, _, _) returns …`");
+    },
+  };
+}
+
+/**
+ * An AI Search instance binding (#3480): Cloudflare's `ai_search` binding,
+ * which `WorkersAiSearch` reads. Requests and replies are the platform's own
+ * shapes (`ai_search_options`, `chunks`, `choices`), and the binding is the
+ * instance itself, so its methods are called directly.
+ */
+export interface AiSearchInstance {
+  search(request: Record<string, unknown>): Promise<unknown>;
+  chatCompletions(request: Record<string, unknown>): Promise<unknown>;
+}
+
+/**
+ * The AI Search binding of a multi-Worker integration test participant, bound
+ * as its `env.<binding>`. A test never reaches AI Search, so every operation
+ * faults, naming the binding, until the case stubs the capability's operation.
+ */
+export function makeIntegrationAiSearch(binding: string): AiSearchInstance {
+  const unstubbed = async (): Promise<never> => {
+    throw markNotStubbed(
+      `bynk: the \`${binding}\` AI Search binding is not stubbed, and a test never reaches AI Search — stub the operation the case calls (for example \`stub <Name>.search(_, _) returns …\`)`,
+    );
+  };
+  return { search: unstubbed, chatCompletions: unstubbed };
+}
+
+/**
+ * The mTLS certificate binding of a multi-Worker integration test participant (#3513 A), bound
+ * as its `env.<binding>`. A test never reaches an origin, so `fetch` faults, naming the
+ * instance, until the case stubs its `send`.
+ */
+export function makeIntegrationMtls(instance: string): { fetch(request: unknown): Promise<never> } {
+  return {
+    fetch: async (): Promise<never> => {
+      throw markNotStubbed(
+        `bynk: \`${instance}.send\` is not stubbed, and a test never reaches the origin — add \`stub ${instance}.send(_) returns …\``,
+      );
+    },
+  };
+}
+
+/**
+ * The Durable Object namespace of a `Container` instance (#3477), as the
+ * multi-Worker integration harness binds it as `env.<binding>`. There is no
+ * in-process container, so every call faults, naming the binding, until the
+ * case stubs the instance (`stub Renderer.send(_, _) returns …`). An in-memory
+ * echo is deliberately not offered: it would pass cases a real image fails.
+ */
+export function makeIntegrationContainer(binding: string): {
+  idFromName(name: string): string;
+  get(id: string): { fetch(request: unknown): Promise<never> };
+} {
+  return {
+    idFromName: (name) => name,
+    get: (id) => ({
+      fetch: async (): Promise<never> => {
+        throw markNotStubbed(
+          `bynk: the \`${binding}\` container \`${id}\` is not stubbed, and a test never starts a container — stub the operation the case calls (for example \`stub <Name>.send(_, _) returns …\`)`,
+        );
+      },
+    }),
+  };
+}
+
+/**
  * A Secrets Store secret binding (#3301): Cloudflare's `secrets_store_secrets`
  * binding, which `WorkersStoredSecret` reads. `get` resolves to the secret's
  * value, so nothing that holds one may log it.
@@ -969,7 +1164,7 @@ export interface SecretsStoreSecret {
 export function makeIntegrationSecretsStoreSecret(binding: string): SecretsStoreSecret {
   return {
     async get(): Promise<string> {
-      throw new globalThis.Error(
+      throw markNotStubbed(
         `bynk: Secrets Store binding \`${binding}\` has no value in a test, which never reads the account's store — add \`stub <Capability>.get() returns …\``,
       );
     },
@@ -1027,7 +1222,7 @@ export interface Hyperdrive {
 export function makeIntegrationHyperdrive(binding: string): Hyperdrive {
   return {
     get connectionString(): string {
-      throw new globalThis.Error(
+      throw markNotStubbed(
         `bynk: Hyperdrive binding \`${binding}\` has no database in a test, which never reaches a database — add \`stub <Capability>.all(_, _) returns …\` (or \`first\` or \`run\`)`,
       );
     },
@@ -1035,5 +1230,5 @@ export function makeIntegrationHyperdrive(binding: string): Hyperdrive {
 }
 
 // #1653: the `__` aliases emitted code imports.
-export { makeIntegrationAnalytics as __makeIntegrationAnalytics, makeIntegrationD1 as __makeIntegrationD1, makeIntegrationEmail as __makeIntegrationEmail, makeIntegrationHyperdrive as __makeIntegrationHyperdrive, makeIntegrationKv as __makeIntegrationKv, makeIntegrationQueue as __makeIntegrationQueue, makeIntegrationR2 as __makeIntegrationR2, makeIntegrationRateLimit as __makeIntegrationRateLimit, makeIntegrationSecretsStoreSecret as __makeIntegrationSecretsStoreSecret, makeIntegrationVersionMetadata as __makeIntegrationVersionMetadata, makeTestState as __makeTestState };
-export type { AnalyticsDataset as __AnalyticsDataset, D1Database as __D1Database, DurableObjectState as __DurableObjectState, Hyperdrive as __Hyperdrive, KVNamespace as __KVNamespace, QueueProducer as __QueueProducer, R2Bucket as __R2Bucket, RateLimiter as __RateLimiter, SecretsStoreSecret as __SecretsStoreSecret, SendEmail as __SendEmail, WorkerVersionMetadata as __WorkerVersionMetadata };
+export { makeIntegrationAi as __makeIntegrationAi, makeIntegrationImages as __makeIntegrationImages, makeIntegrationContainer as __makeIntegrationContainer, makeIntegrationAnalytics as __makeIntegrationAnalytics, makeIntegrationD1 as __makeIntegrationD1, makeIntegrationEmail as __makeIntegrationEmail, makeIntegrationHyperdrive as __makeIntegrationHyperdrive, makeIntegrationKv as __makeIntegrationKv, makeIntegrationQueue as __makeIntegrationQueue, makeIntegrationR2 as __makeIntegrationR2, makeIntegrationRateLimit as __makeIntegrationRateLimit, makeIntegrationSecretsStoreSecret as __makeIntegrationSecretsStoreSecret, makeIntegrationAiSearch as __makeIntegrationAiSearch, makeIntegrationAnalyticsSql as __makeIntegrationAnalyticsSql, makeIntegrationMtls as __makeIntegrationMtls, makeIntegrationVersionMetadata as __makeIntegrationVersionMetadata, makeTestState as __makeTestState };
+export type { AiSearchInstance as __AiSearchInstance, AnalyticsDataset as __AnalyticsDataset, D1Database as __D1Database, DurableObjectState as __DurableObjectState, Hyperdrive as __Hyperdrive, KVNamespace as __KVNamespace, QueueProducer as __QueueProducer, R2Bucket as __R2Bucket, RateLimiter as __RateLimiter, SecretsStoreSecret as __SecretsStoreSecret, SendEmail as __SendEmail, AnalyticsSqlBinding as __AnalyticsSqlBinding, WorkerAiBinding as __WorkerAiBinding, WorkerImagesBinding as __WorkerImagesBinding, WorkerVersionMetadata as __WorkerVersionMetadata };

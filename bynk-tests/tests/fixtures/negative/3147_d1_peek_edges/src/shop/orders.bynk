@@ -1,0 +1,13 @@
+context shop.orders
+
+consumes bynk.cloudflare { D1 }
+
+capability Orders = D1
+
+type Order = { id: String, owner: String, qty: Int }
+
+service api from http {
+  on GET("/hello") () -> Effect[HttpResult[String]] by v: Visitor {
+    Ok("hi")
+  }
+}

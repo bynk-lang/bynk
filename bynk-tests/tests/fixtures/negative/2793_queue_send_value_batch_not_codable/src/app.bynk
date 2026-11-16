@@ -1,7 +1,7 @@
 context app
 
 consumes bynk.cloudflare { Queue }
-consumes bynk.crypto { Crypto }
+consumes bynk.crypto { Crypto, Signature }
 
 capability Orders = Queue @name("orders")
 

@@ -555,6 +555,7 @@ pub(super) fn lower_stub_value_block(
         unit_consumes,
         hidden,
         tys,
+        items.types,
     );
     let block = test_suites::value_block(e);
     let mut helpers: Vec<String> = Vec::new();
@@ -693,6 +694,9 @@ pub(super) fn synthetic_typed_commons_for_target(
     unit_consumes: &HashMap<String, Vec<String>>,
     hidden: &BTreeMap<String, String>,
     tys: &Arc<checker::Types>,
+    // #3536: the declaring suite's own `type`s. One named like a first-party
+    // type the target's braces leave out is not that type in the case's scope.
+    suite_types: &[bynk_syntax::ast::TypeDecl],
 ) -> checker::TypedCommons {
     let table = unit_tables.get(target_name).cloned().unwrap_or_default();
     let table_plan = Arc::clone(&table.exec_plan);
@@ -719,7 +723,9 @@ pub(super) fn synthetic_typed_commons_for_target(
     for unit in unit_consumes.get(target_name).into_iter().flatten() {
         if let Some(t) = unit_tables.get(unit) {
             for (n, d) in &t.types {
-                if d.private.is_none() {
+                let shadowed = table.unselected_consumed_types.contains(n)
+                    && suite_types.iter().any(|s| s.name.name == *n);
+                if d.private.is_none() && !shadowed {
                     types.entry(n.clone()).or_insert_with(|| d.clone());
                 }
             }
@@ -823,6 +829,7 @@ pub(super) fn synthetic_typed_commons_for_target(
         consts: HashMap::new(),
         shadowed_imports: HashMap::new(),
         extensible_enums: Default::default(),
+        unselected_types: Default::default(),
         stability: Default::default(),
         exec_plan: table_plan,
     }
@@ -1309,6 +1316,9 @@ pub(super) const ANALYTICS_DOUBLE_BODY: &str = r#"  const bytes = (text: string)
       if (blobBytes > 16384) fault(`a data point's blobs total at most 16 KB, not ${blobBytes} bytes`);
       if (!point.doubles.every(globalThis.Number.isFinite)) fault("a double is finite (not NaN or an infinity)");
     },
+    async dataset() {
+      return "events.analyticsEngine.__DATASET__";
+    },
   };
 "#;
 
@@ -1407,7 +1417,11 @@ pub(super) fn platform_double(
         // P3b (#2582): there is no dataset in a test, so each instance accepts
         // every write within the platform's limits; observation (the generic
         // call wrapper, as for every double) sees what was written.
-        ("bynk.cloudflare", "Analytics") => ANALYTICS_DOUBLE_BODY.to_string(),
+        // #3513 B: `dataset()` names a stand-in (`test_<name>`), since no deploy qualifies one.
+        ("bynk.cloudflare", "Analytics") => ANALYTICS_DOUBLE_BODY.replace(
+            "__DATASET__",
+            &format!("test_{}", name.to_ascii_lowercase()),
+        ),
         // P4a (#2602): each `D1` instance is the real `WorkersD1` over its own
         // in-memory SQLite database (`node:sqlite`), so a test runs its
         // statements as D1 would. P4b (#2608): the database's migrations run
@@ -1479,6 +1493,94 @@ pub(super) fn platform_double(
         // epoch), so a case's result never depends on the deployment;
         // `stub Version.current() returns …` gives another.
         ("bynk.cloudflare", "Version") => "  return {\n    async current() {\n      return { id: \"test\", tag: None, deployed: 0 } as never;\n    },\n  };\n".to_string(),
+        // #3478: a test never reaches Workers AI, so every operation faults
+        // until stubbed. There is no fake model: a fabricated reply would make
+        // a test pass for the wrong reason.
+        ("bynk.cloudflare", "Ai") => {
+            let op = |op: &str, args: &str| {
+                format!(
+                    "    async {op}() {{\n      throw new globalThis.Error(\"bynk: `Ai.{op}` is not stubbed, and a test never reaches Workers AI — add `stub Ai.{op}({args}) returns …`\");\n    }},\n"
+                )
+            };
+            format!(
+                "  return {{\n{}{}{}{}  }};\n",
+                op("run", "_, _"),
+                op("generate", "_, _"),
+                op("embed", "_, _"),
+                op("runStream", "_, _")
+            )
+        }
+        // #3515: a test never reaches Cloudflare Images, so every operation
+        // faults until stubbed. There is no fake transform: an image returned
+        // unchanged would make a test pass for the wrong reason.
+        ("bynk.cloudflare", "Images") => {
+            let op = |op: &str, args: &str| {
+                format!(
+                    "    async {op}() {{\n      throw new globalThis.Error(\"bynk: `Images.{op}` is not stubbed, and a test never reaches Cloudflare Images — add `stub Images.{op}({args}) returns …`\");\n    }},\n"
+                )
+            };
+            format!(
+                "  return {{\n{}{}{}  }};\n",
+                op("info", "_"),
+                op("transform", "_, _, _"),
+                op("transformStream", "_, _, _")
+            )
+        }
+        // #3513 B: a test never reads the account's datasets, so `query` faults until it is
+        // stubbed. A fabricated result set would pass for the wrong reason.
+        ("bynk.cloudflare", "AnalyticsSql") => "  return {\n    async query() {\n      throw new globalThis.Error(\"bynk: `AnalyticsSql.query` is not stubbed, and a test never reads Analytics Engine — add `stub AnalyticsSql.query(_, _) returns …`\");\n    },\n  };\n".to_string(),
+        // #3479: the real `WorkersVectorize` over an exact in-memory index built
+        // from the instance's declaration, so a retrieval flow (store, filter,
+        // rank) runs in a test. Ranking is exact and a write is visible at once,
+        // which production's approximate, eventually consistent index is not.
+        // `stub Docs.query(_, _) returns …` still replaces an operation.
+        ("bynk.cloudflare", "Vectorize") => {
+            return Some(format!(
+                "function __bynkTest_{name}(dimensions: number = 1, metric: string = \"cosine\", indexed: readonly string[] = []): {ns}.{cap} {{\n  return new bynk_cloudflare__binding.WorkersVectorize({{ INDEX: __makeIntegrationVectorize(dimensions, metric, indexed) }}, \"INDEX\");\n}}\n"
+            ));
+        }
+        // #3480: a test never reaches AI Search, so each instance faults until
+        // its operation is stubbed (no double could keep the service's
+        // contract: chunking, embeddings and ranking are the service).
+        ("bynk.cloudflare", "AiSearch") => {
+            let op = |op: &str| {
+                format!(
+                    "    async {op}() {{\n      throw new globalThis.Error(\"bynk: `{name}.{op}` is not stubbed, and a test never reaches AI Search — add `stub {name}.{op}(_, _) returns …`\");\n    }},\n"
+                )
+            };
+            format!("  return {{\n{}{}  }};\n", op("search"), op("answer"))
+        }
+        // #3513 A: a test never presents a certificate to an origin, so each instance faults
+        // until its `send` is stubbed. A fake origin would pass cases the real handshake fails.
+        ("bynk.cloudflare", "MtlsCertificate") => {
+            let op = |op: &str, args: &str| {
+                format!(
+                    "    async {op}() {{\n      throw new globalThis.Error(\"bynk: `{name}.{op}` is not stubbed, and a test never reaches the origin — add `stub {name}.{op}({args}) returns …`\");\n    }},\n"
+                )
+            };
+            format!(
+                "  return {{\n{}{}{}  }};\n",
+                op("send", "_"),
+                op("receiveBytes", "_"),
+                op("sendBytes", "_, _")
+            )
+        }
+        // #3477: a test never starts a container, so each operation faults,
+        // naming the instance it was asked for, until it is stubbed. There is
+        // no in-memory echo: it would pass cases a real image fails.
+        ("bynk.cloudflare", "Container") => {
+            let op = |op: &str, args: &str| {
+                format!(
+                    "    async {op}(instance: string) {{\n      throw new globalThis.Error(`bynk: \\`{name}.{op}\\` on instance ${{JSON.stringify(instance)}} is not stubbed, and a test never starts a container — add \\`stub {name}.{op}({args}) returns …\\``);\n    }},\n"
+                )
+            };
+            format!(
+                "  return {{\n{}{}{}  }};\n",
+                op("send", "_, _"),
+                op("receiveBytes", "_, _"),
+                op("sendBytes", "_, _, _")
+            )
+        }
         // #3301: a test never reads the account's Secrets Store, so each
         // instance faults until its `get` is stubbed. The message names the
         // instance and never a value: there is none to name.

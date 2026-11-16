@@ -226,8 +226,20 @@
             "link": "/book/guides/effects-and-capabilities/wrap-a-library/"
           },
           {
+            "label": "Run a model from a Worker",
+            "link": "/book/guides/effects-and-capabilities/run-a-model-from-a-worker/"
+          },
+          {
+            "label": "Run a container from a Worker",
+            "link": "/book/guides/effects-and-capabilities/run-a-container-from-a-worker/"
+          },
+          {
             "label": "Call Workers AI through an adapter",
             "link": "/book/guides/effects-and-capabilities/call-workers-ai-through-an-adapter/"
+          },
+          {
+            "label": "Search by meaning with Vectorize and Workers AI",
+            "link": "/book/guides/effects-and-capabilities/search-by-meaning-with-vectorize/"
           },
           {
             "label": "Use more than one KV namespace",
@@ -236,6 +248,14 @@
           {
             "label": "Call a Worker outside the project",
             "link": "/book/guides/effects-and-capabilities/call-a-foreign-worker/"
+          },
+          {
+            "label": "Call an mTLS origin",
+            "link": "/book/guides/effects-and-capabilities/call-an-mtls-origin/"
+          },
+          {
+            "label": "Read your analytics in the Worker",
+            "link": "/book/guides/effects-and-capabilities/read-your-analytics-in-the-worker/"
           },
           {
             "label": "Store files in R2",
@@ -428,6 +448,14 @@
             "link": "/book/guides/testing/run-tests/"
           },
           {
+            "label": "Check what a request stored",
+            "link": "/book/guides/testing/check-what-the-app-stored/"
+          },
+          {
+            "label": "Try an expression against your project",
+            "link": "/book/guides/testing/try-an-expression/"
+          },
+          {
             "label": "Test against a running system",
             "link": "/book/guides/testing/against-a-running-system/"
           }
@@ -599,6 +627,10 @@
       {
         "label": "TypeScript client",
         "link": "/book/reference/typescript-client/"
+      },
+      {
+        "label": "HTTP client",
+        "link": "/book/reference/http-client/"
       },
       {
         "label": "Diagnostic index",

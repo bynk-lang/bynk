@@ -24,11 +24,21 @@ ones from a terminal or CI.
    bynk check --fix
    ```
 
-   Each file written is listed, with how many edits it took:
+   Each file written is listed, with the code each fix was for and how many
+   diagnostics of that code it fixed:
 
    ```text
-   fixed: src/shop.bynk (3 edits)
+   fixed: src/shop.bynk: bynk.given.unused_capability ×3
    ```
+
+   If the release's upgrade note names a code, run only that migration:
+
+   ```sh
+   bynk check --fix=bynk.given.unused_capability
+   ```
+
+   List several codes with commas (`--fix=<a>,<b>`). A code that does not exist
+   is refused, with the nearest real one suggested, before anything is changed.
 
    The diagnostics that remain are reported as `check` reports them, and the
    exit code is non-zero if any error is left.
@@ -58,8 +68,8 @@ ones from a terminal or CI.
   each other. The message lists the codes involved; that is a compiler bug worth
   reporting.
 
-> **Understand — the same fixes as the editor.** `--fix` uses the rule behind
-> the editor's fix all, so it never takes a fix a person would have to choose
+> **Understand — the same fixes as the editor.** `--fix` applies only the fixes
+> of diagnostics `bynk check` shows, using the rule behind the editor's fix all, so it never takes a fix a person would have to choose
 > between. It differs in repeating the fixes until none remain, because a fix can
 > expose another (adding a capability to an agent handler's `given` makes the
 > provider that calls it short of the same capability), and in refusing the whole

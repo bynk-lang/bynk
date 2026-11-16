@@ -1,0 +1,7 @@
+context demo
+
+// #3477: egress is always off in this slice.
+
+consumes bynk.cloudflare { Container }
+
+capability Renderer = Container @build("containers/renderer") @port(8080) @internet

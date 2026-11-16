@@ -1,0 +1,10 @@
+{
+  "version": 1,
+  "provides": {
+    "probe": "0e39103393215bfc"
+  },
+  "expects": {},
+  "provides_shapes": {
+    "probe": "Svc(\"probe\",P(\"n\",B(\"Int\")),Ret(Sum(\"Outcome\",V(\"Done\",F(\"n\",B(\"Int\"))),V(\"Unavailable\",F(\"reason\",B(\"String\"))))))"
+  }
+}

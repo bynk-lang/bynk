@@ -571,23 +571,24 @@ pub(crate) fn signed_headers(
     body: &str,
     now: u64,
 ) -> Vec<(String, String)> {
+    signed_headers_as(wf::MIGRATE_CALLER, key, context, path, body, now)
+}
+
+/// The same signature, as `caller`: the headers that prove `caller` sent a `POST`
+/// of `body` to `path` on `context`, under `key`.
+pub(crate) fn signed_headers_as(
+    caller: &str,
+    key: &str,
+    context: &str,
+    path: &str,
+    body: &str,
+    now: u64,
+) -> Vec<(String, String)> {
     let timestamp = now.to_string();
     let digest = hex(&Sha256::digest(body.as_bytes()));
-    let input = wf::signing_input(
-        wf::MIGRATE_CALLER,
-        context,
-        "POST",
-        path,
-        "",
-        "1",
-        &timestamp,
-        &digest,
-    );
+    let input = wf::signing_input(caller, context, "POST", path, "", "1", &timestamp, &digest);
     vec![
-        (
-            wf::CALLER_HEADER.to_string(),
-            wf::MIGRATE_CALLER.to_string(),
-        ),
+        (wf::CALLER_HEADER.to_string(), caller.to_string()),
         (wf::TIMESTAMP_HEADER.to_string(), timestamp),
         (
             wf::SIGNATURE_HEADER.to_string(),

@@ -19,7 +19,7 @@ service <Name> from http {
 - **Route:** must start with `/`; a `:name` segment is a path parameter.
 - **Parameters:** each parameter is a path parameter (matching a `:name`
   segment), the special `body` parameter, or the special
-  [`headers`](#request-headers), [`query`](#query-strings) or [`cookies`](#cookies) parameter. A path parameter's type must be
+  [`headers`](#request-headers), [`query`](#query-strings), [`cookies`](#cookies) or [`cf`](#request-cf) parameter. A path parameter's type must be
   constructible from a string (`bynk.http.path_param_not_stringy`); `GET` and
   `DELETE` may not take a `body` (`bynk.http.body_on_get_or_delete`).
 - **Return type:** must be `Effect[HttpResult[T]]`
@@ -71,6 +71,61 @@ plain function may take it to share a check between handlers
 (`bynk.types.headers_at_boundary`). A parameter named `headers` must have this
 type (`bynk.http.headers_wrong_type`). A test builds one with
 [`RequestHeaders.of`](/book/reference/testing/#request-headers).
+
+## Cloudflare request metadata {#request-cf}
+
+A handler that wants what Cloudflare derived about the connection (the caller's
+country, the data centre that served the request, the ASN) declares a
+`cf: RequestCf` parameter. It may sit anywhere among the parameters. `RequestCf` is
+a record in `bynk.cloudflare`, so naming it needs `consumes bynk.cloudflare { RequestCf }`
+and locks the deployment unit to Cloudflare (a platform lock, as for any
+`bynk.cloudflare` name). It is experimental: using it needs `bynk.cloudflare.RequestCf`
+in `[unstable] allow`.
+
+```bynk,ignore
+consumes bynk.cloudflare { RequestCf }
+
+service api from http {
+	on GET("/hello") (cf: RequestCf) -> Effect[HttpResult[String]] by v: Visitor {
+		match cf.country {
+			Some("GB") => Ok("Hello")
+			_ => Ok("Hi")
+		}
+	}
+}
+```
+
+| Field | Type | `request.cf` property |
+|---|---|---|
+| `country`, `continent`, `city`, `region`, `regionCode`, `postalCode`, `timezone` | `Option[String]` | the property of the same name |
+| `latitude`, `longitude` | `Option[Float]` | the property of the same name, which Cloudflare sends as a numeric string |
+| `colo` | `Option[String]` | `colo`, the data centre's airport code |
+| `asn` | `Option[Int]` | `asn` |
+| `asOrganization`, `httpProtocol`, `tlsVersion` | `Option[String]` | the property of the same name |
+| `isEuCountry` | `Option[Bool]` | `isEUCountry`, which Cloudflare sends as `"1"` for a country in the EU |
+
+**Every field is optional**, and the parameter is not: a request with no
+`request.cf` (a test, the dashboard's preview) gives a `RequestCf` whose fields are
+all `None`, never a fault, so the handler reads `cf.country` without first matching
+on whether `cf` is there. A property of an unexpected type is `None` too. The set is
+the initial one; a field is added later as a defaulted field, which does not break a
+handler. The plan-dependent properties (bot management, client certificates) are not
+part of it.
+
+The facts come from the client's IP address, so they can be personal data, and they
+are best-effort: a VPN or a proxy makes them wrong. Cloudflare documents the
+properties on [its Request page](https://developers.cloudflare.com/workers/runtime-apis/request/).
+
+`cf` is not part of a route's wire contract: [`bynk client`](/book/reference/http-client/) and
+`bynk openapi` leave it out, so a handler that declares it has
+the same client and the same OpenAPI document as without it. A parameter named `cf`
+must be typed `RequestCf` (`bynk.http.cf_wrong_type`), and a `:cf` path segment
+stays a path parameter.
+
+A test builds one with the record literal: `RequestCf { country: Some("GB") }`, and
+`RequestCf {}` for a request with none. At the `system` tier the request is real, so
+`cf` carries whatever the platform supplies there, and the argument a case passes is
+not sent.
 
 ## Query strings
 
@@ -977,9 +1032,28 @@ service archives from http {
 - **Answering without reading** is allowed: the unread body is discarded when the request
   ends. A client that is still sending a large body may see a reset instead of the
   response. A handler cannot read the request after it has returned, so read first, then
-  answer. Do not build a response from the request stream (a streamed echo through
-  `RawStreamed`): workerd allows it on its own, but it failed under `wrangler dev`'s
-  proxy, and it is not checked on Cloudflare's edge.
+  answer.
+- **Do not build a response from the request stream.** A handler that returns
+  `RawStreamed(body, …)`, or `RawStreamed(body.map(f), …)`, with the request's own `body`
+  (a streamed echo or transform) **passes its `bynk test` cases at every tier and then
+  fails under `wrangler dev`**. Nothing warns you: the compiler does not follow the stream
+  into the response, and the test runner has no proxy in front of the handler.
+  - *What happens.* With the pinned Wrangler (4.162.0 at the time of writing), a client that
+    sends a 256 KiB chunked body and then reads the response gets a `500`. The dev server logs `Uncaught TypeError: This
+    ReadableStream is currently locked to a reader` and `Error inside ProxyWorker … Network
+    connection lost`. The same route, reading the body to the end with `collect()` and then
+    answering, returns `200`.
+  - *What is not known.* Whether the fault is `wrangler dev`'s proxy or workerd itself, and
+    whether it also happens on Cloudflare's edge. Driving Miniflare directly (no dev proxy)
+    streamed 8 MiB back intact, and workerd separately refuses a read of the request body
+    after the response has been sent (`Can't read from request stream after response has
+    been sent`). Neither has been checked on a deployed Worker.
+  - *What to do.* Read the body (`collect()`, or hand it to a capability such as
+    `R2.putStream`) and then answer, as the `/archives/:name` example above does. To echo
+    bytes back, answer from what you collected. If a streamed answer is the point, take the
+    stream from a capability, not from the request.
+  - *Why there is no warning.* It is unconfirmed on the edge, and a diagnostic would be a new
+    one; see [#3396](https://github.com/bynk-lang/bynk/issues/3396) for the status.
 - **Retries and idempotency.** A request body cannot be replayed, so a client that retries
   sends it again. Take an [`Idempotency`](/book/reference/bynk-capabilities/#the-idempotency-capability)
   key from the request's head (a path segment or a header), not the body.
@@ -1453,7 +1527,8 @@ Only `Ok`, `Created` and `Accepted` **response bodies** of `from http` routes.
 Request bodies already decode plain JSON. Cross-context calls, queue messages,
 agent state, `Json.encode`, `Streaming` (SSE) events and the contract hashes keep
 the tagged form (`Json.encodePlain` is the plain form outside a route), so `decode(encode(x)) == x` still holds everywhere else.
-`bynk openapi` describes a plain route's `Option` as nullable.
+`bynk openapi` describes a plain route's `Option` as nullable, and `bynk client`
+generates it as `T | null` (see the [HTTP client](/book/reference/http-client/)).
 
 ## Request lifecycle
 

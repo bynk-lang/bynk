@@ -1,0 +1,7 @@
+context demo
+
+// #3513 A: a certificate instance names its certificate.
+
+consumes bynk.cloudflare { MtlsCertificate }
+
+capability Backend = MtlsCertificate

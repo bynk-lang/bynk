@@ -1,0 +1,9 @@
+[project]
+name = "3513-mtls-workers"
+version = "0.1.0"
+
+[paths]
+include = ["src"]
+
+[unstable]
+allow = ["bynk.cloudflare.MtlsCertificate"]

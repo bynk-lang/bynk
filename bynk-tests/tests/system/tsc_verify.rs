@@ -1078,3 +1078,93 @@ fn emitted_javascript_is_valid_under_node() {
         );
     }
 }
+
+/// #3580 (the dev request-traces track): a build that records per-request traces
+/// must be strict-clean too, since `bynk dev --trace-events` serves it. The
+/// wrapped cross-context, agent and capability sites, the `fetch` wrapper and the
+/// `trace` runtime module are checked as emitted.
+#[test]
+fn traced_build_passes_tsc_strict() {
+    let Some(runner) = discover_tsc() else {
+        eprintln!(
+            "\n!!! TYPESCRIPT VERIFICATION SKIPPED (traced build) !!!\nneither `tsc` nor `npx` is on PATH.\n"
+        );
+        assert!(
+            !require::is_required(REQUIRE_ENV),
+            "{REQUIRE_ENV} is set but no tsc runner was found"
+        );
+        return;
+    };
+    let fixture = Path::new(env!("CARGO_MANIFEST_DIR"))
+        .join("tests/fixtures/positive/174_integration_full_checkout/src");
+    let out = bynk_driver::project::compile_project(
+        &bynk_testkit::compile_options_single(fixture)
+            .target(bynk_driver::project::BuildTarget::Workers)
+            .tests(false)
+            .trace_requests(true),
+    )
+    .map_err(bynk_driver::project::ProjectFailure::flatten)
+    .unwrap_or_else(|e| panic!("compile failed: {e:?}"));
+    let root = std::env::temp_dir().join(format!("bynk-tsc-traced-{}", std::process::id()));
+    let _ = fs::remove_dir_all(&root);
+    fs::create_dir_all(&root).unwrap();
+    write_outputs(&out, &root).unwrap();
+    fs::write(
+        root.join("tsconfig.json"),
+        bynk_emit::emitter::emit_tsconfig(),
+    )
+    .unwrap();
+    let (ok, output) = run_tsc_in(&runner, &root);
+    if ok {
+        let _ = fs::remove_dir_all(&root);
+    }
+    assert!(
+        ok,
+        "the traced build failed tsc --strict --noEmit:\n{output}"
+    );
+}
+
+/// #3581 (the dev agent-inspection track): a build that records agent instances
+/// and answers the inspect route must be strict-clean too, since `bynk dev` serves
+/// it. The recording factory, the agent's inspect branch, the Worker's route and
+/// the `inspect` runtime module are checked as emitted.
+#[test]
+fn inspected_build_passes_tsc_strict() {
+    let Some(runner) = discover_tsc() else {
+        eprintln!(
+            "\n!!! TYPESCRIPT VERIFICATION SKIPPED (inspected build) !!!\nneither `tsc` nor `npx` is on PATH.\n"
+        );
+        assert!(
+            !require::is_required(REQUIRE_ENV),
+            "{REQUIRE_ENV} is set but no tsc runner was found"
+        );
+        return;
+    };
+    let fixture = Path::new(env!("CARGO_MANIFEST_DIR"))
+        .join("tests/fixtures/positive/174_integration_full_checkout/src");
+    let out = bynk_driver::project::compile_project(
+        &bynk_testkit::compile_options_single(fixture)
+            .target(bynk_driver::project::BuildTarget::Workers)
+            .tests(false)
+            .inspect_agents(true),
+    )
+    .map_err(bynk_driver::project::ProjectFailure::flatten)
+    .unwrap_or_else(|e| panic!("compile failed: {e:?}"));
+    let root = std::env::temp_dir().join(format!("bynk-tsc-inspected-{}", std::process::id()));
+    let _ = fs::remove_dir_all(&root);
+    fs::create_dir_all(&root).unwrap();
+    write_outputs(&out, &root).unwrap();
+    fs::write(
+        root.join("tsconfig.json"),
+        bynk_emit::emitter::emit_tsconfig(),
+    )
+    .unwrap();
+    let (ok, output) = run_tsc_in(&runner, &root);
+    if ok {
+        let _ = fs::remove_dir_all(&root);
+    }
+    assert!(
+        ok,
+        "the inspected build failed tsc --strict --noEmit:\n{output}"
+    );
+}

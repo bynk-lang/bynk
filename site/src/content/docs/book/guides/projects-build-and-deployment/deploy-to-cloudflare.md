@@ -65,6 +65,9 @@ nothing speculative. If it isn't in the generated `wrangler.toml`, it isn't
 | `consumes bynk.cloudflare { Kv }` | Creates a KV namespace and records its id |
 | `capability Sessions = Kv` | Creates a KV namespace of its own for that instance, and records its id |
 | `capability Archives = R2` | Creates an R2 bucket of its own for that instance, by name, and records it |
+| `capability Docs = Vectorize @dimensions(768) @metric("cosine")` | Creates the Vectorize index with that configuration if the account has none of its name, checks an existing one against it, and creates the `@indexed` metadata indexes before the push; it never recreates an index |
+| `capability Renderer = Container @build("containers/render") @port(8080)` | Nothing of its own: `wrangler deploy` builds the image from the Dockerfile and creates the container application. `bynk deploy` plans it, needs Docker only when it must build, and can run a prebuilt image you name in `bynk.toml` instead |
+| `capability Kb = AiSearch @instance("support-docs")` | Links to the AI Search instance of that name and records it; a missing instance fails the deploy, and the deploy never creates one |
 | `capability Main = Postgres` | Makes a Hyperdrive config from the connection string in the environment variable `[deploy.hyperdrive.Main]` names (or adopts a config you name by id), and records its id |
 | `capability PublishLimit = RateLimit …` | Allocates the limiter a `namespace_id` and records it; nothing is created on the account |
 | An `agent` | Nothing to create — the config declares its Durable Object class, and Cloudflare registers it |
@@ -546,6 +549,137 @@ data. The old bucket stays in the ledger and is reported as an orphan
 until you remove its entry. `bynk dev -- --remote` binds the recorded buckets and refuses one no
 deploy has created.
 
+### Vectorize indexes
+
+Each [`Vectorize` instance](/book/reference/bynk-capabilities/#vector-indexes-vectorize)
+(`capability Docs = Vectorize @dimensions(768) @metric("cosine")`) is an index of
+its own, which the deploy creates because it is state your project owns. The plan
+says `create` the first time and `reuse` after:
+
+```
+vectorize create shop-cart-docs (VECTORIZE_DOCS, 768, cosine; metadata indexes category:string)
+```
+
+An index is named `<worker>-<capability>`, with an environment suffix under
+`--env`, and made with `wrangler vectorize create` in the dimensions and metric the
+declaration states. Cloudflare takes 1 to 64 bytes of lowercase letters, digits,
+hyphens and underscores, starting with a letter; a name the environment suffix
+would push past that, or two instances would share, is an error naming the
+instance.
+
+An index's dimensions and metric cannot change once it exists, and recreating it
+would delete every vector in it, so **the deploy never recreates one**. Every
+deploy checks an existing index against the declaration; on a mismatch it fails
+before pushing anything, naming both configurations, and changes nothing. Rename
+the instance to get a new index, change the declaration back, or delete the
+index by hand and reindex.
+
+The `@indexed` metadata indexes are created straight after the index and before the
+Worker that writes vectors is pushed, because a vector written before its
+property's index existed is not covered by it until it is written again.
+Cloudflare builds a metadata index asynchronously, so a deploy that created one
+waits (for up to five minutes, printing a progress line) until every new one is
+listed, and only then pushes the Worker. If one is still not listed by then, the
+deploy fails without pushing: run it again once they are. A deploy that creates no
+metadata index does not wait. Adding an
+entry to `@indexed` later creates the new metadata index and prints a warning that
+vectors already stored need an upsert to be filterable on it. Removing one is
+reported and left in place, since a metadata index holds no data of its own but
+removing it would silently break a query that filters on it.
+
+To use an index that already exists (made by hand, or shared with another system),
+name it for an environment in `bynk.toml`:
+
+```toml
+[deploy.vectorize.Docs]
+index = { production = "docs-prod" }
+```
+
+Under `--env production` the plan says `vectorize adopt docs-prod (...)`. The index
+must exist (the deploy never creates an adopted one) and must match the
+declaration, which is checked the same way; a metadata index it lacks is reported
+with the `wrangler` command that makes it, not created. An adopted index keeps its
+own name, is recorded as adopted, and is never deleted, not even by `--prune`.
+Other environments still create theirs.
+
+`bynk dev` never uses an index the deploy made. A `Vectorize` has no local
+simulation, so name an index of your own for it, per capability, in `bynk.toml`:
+
+```toml
+[dev.vectorize-index]
+Docs = "docs-dev"
+```
+
+It binds that index, remotely, and checks it against the declaration on the first
+call; a capability with no entry is unbound and a call to it fails, naming the entry
+to add. See [the manifest reference](/docs/manifest/#binding-a-vectorize-index-under-bynk-dev).
+
+A renamed or removed instance leaves its index recorded and reported as an orphan
+(`orphan vectorize shop-cart VECTORIZE_DOCS (shop-cart-docs; deleted by --prune)`).
+`--prune` deletes it behind the same confirmation as a KV namespace, naming the
+index and saying its vectors go too. It is never deleted otherwise.
+
+### Containers
+
+Each [`Container` instance](/book/reference/bynk-capabilities/#containers-container)
+(`capability Renderer = Container @build("containers/render") @port(8080)`) is a
+Durable Object class backed by a Docker image. `bynk deploy` neither builds nor
+pushes the image: it hands the Worker to `wrangler deploy`, which builds the image
+from the Dockerfile `@build` names, pushes it to Cloudflare's registry and creates
+or updates the container application. The plan says so, and names where the image
+comes from and the instance type Bynk passes when the container starts:
+
+```text
+container __Container_Renderer (image: build from containers/render; instance standard-1; reconciled by Cloudflare)
+```
+
+The plan states no price. A running container costs money; see Cloudflare's
+[Containers pricing](https://developers.cloudflare.com/containers/pricing/) and
+[limits](https://developers.cloudflare.com/containers/platform/limits/) pages.
+
+**Docker.** Building an image needs a running Docker daemon. A deploy with an image
+to build checks for one before it authenticates or asks for confirmation, and if
+there is none it stops, naming the container, the missing tool and the two ways
+out: start Docker, or run a prebuilt image. `bynk deploy --dry-run` shows the plan
+and builds nothing, so it never needs Docker; it does not call `wrangler deploy
+--dry-run`, which builds a Dockerfile image. `bynk doctor` has a `docker` row under
+`deploy`; it only warns when the project declares a container. In CI, a hosted
+runner has Docker, so the deploy builds there. A setup that only runs `wrangler
+versions upload` neither builds nor rolls out an image, so deploy with `bynk
+deploy`.
+
+**Wrangler.** A Worker with a container needs no more of wrangler than any other
+Worker: the general minimum is past the first version that accepts the
+`durable_object` scheduling policy the generated configuration uses (4.136.0).
+
+**Adopting a prebuilt image.** A team that builds elsewhere, or deploys from a
+machine without Docker, names an image per environment in `bynk.toml`, as the
+Hyperdrive and Vectorize sections do:
+
+```toml
+[deploy.containers.Renderer]
+image = { production = "registry.cloudflare.com/<ACCOUNT_ID>/renderer@sha256:<DIGEST>" }
+```
+
+The image has to be in Cloudflare's own registry and named by digest: Docker Hub,
+Amazon ECR and Google's registry are not supported for this kind of container, and
+a tag is not a digest. Under `--env production` the plan says `image: adopted
+registry.cloudflare.com/…` and nothing is built; another environment still builds.
+The deploy rewrites the generated `[containers.images.Renderer]` entry to that
+`image` for the run, records the reference in `bynk.deploy.lock`, and shows a
+changed or dropped adoption on the next plan (`was adopted …`). An entry that names
+no container of the project is refused, as an entry that matches nothing would
+build an image you meant to adopt.
+
+**Reverting.** `bynk revert` of a Worker with a container says that the rollback
+restores the image for *new* starts only: instances already running keep the image
+they started with until they stop. This is read from Cloudflare's documentation and
+has not been confirmed on a real account.
+
+**Orphans.** A renamed capability is a new class and an orphaned one, so the push
+fails loudly as it does for an agent (ADR 0443). Nothing here tombstones a
+container class.
+
 ### Rate limiters
 
 Each [`RateLimit` instance](/book/reference/bynk-capabilities/#rate-limiting-ratelimit)
@@ -807,6 +941,74 @@ shared across Workers, rotated once in the store, and Cloudflare-only. Use
 `bynk.Secrets` unless several Workers must share one value or you rotate it
 centrally.
 
+### AI Search instances
+
+An `AiSearch` instance
+(`capability Kb = AiSearch @instance("support-docs")`) queries an AI Search
+instance that someone configured: its data source, models and indexing are theirs,
+so deploy **links** it and never creates it. Before anything is pushed,
+`bynk deploy` asks the account for the instance named in `@instance` (in the
+default namespace) and records the link in `bynk.deploy.lock`; a missing instance
+fails the deploy, naming it:
+
+```
+bynk: `AI_SEARCH_KB` of `shop-ask` queries AI Search instance `support-docs`, which does not exist on this account. `bynk deploy` links to an instance and never creates one: create `support-docs` in the Cloudflare dashboard, with `wrangler` or with the REST API, or name the instance the account has
+```
+
+An instance the lookup shows as paused or disabled is a warning, not a failure.
+For a paused instance the warning names its `status`. One whose status is
+`paused_user` has its indexing stopped, and a search does not resume it (a
+search against it still answered when checked), so resume it in the dashboard.
+Any other status is named and nothing is claimed about it. The plan shows the
+binding as a link to be made, with no action:
+
+```
+will link ai-search support-docs (AI_SEARCH_KB; not created; not checked in a dry run)
+```
+
+`--dry-run` stays offline and does not ask (plans are built offline,
+[#3494](https://github.com/bynk-lang/bynk/issues/3494)), so the plan says "will
+link" and has not verified that the instance exists or whether it is paused. The lookup uses Cloudflare's API, so
+it needs `CLOUDFLARE_API_TOKEN` and `CLOUDFLARE_ACCOUNT_ID`, the token with the
+"AI Search: Edit" and "AI Search: Run" permissions (Cloudflare's reference names
+no read-only one); a refusal says so. The instance's name is used as declared in
+every environment, without an environment suffix, so a staging deploy reads the
+same instance as production, and `--prune` never touches one.
+
+### mTLS certificates
+
+An `MtlsCertificate` instance
+(`capability Backend = MtlsCertificate @certificate("acme-client")`) presents a client
+certificate to an origin that requires mutual TLS. The certificate is uploaded to the
+account by whoever owns it, with its private key, so deploy **links** it and never
+uploads it: the key never passes through Bynk. Before anything is pushed,
+`bynk deploy` lists the account's mTLS certificates, matches the name in
+`@certificate`, writes the certificate's id into the Worker's configuration and
+records the link in `bynk.deploy.lock` (a name and an id, never key material). A
+certificate that is not there fails the deploy, naming it and where to upload one:
+
+```
+bynk: `MTLS_BACKEND` of `shop-backend` presents mTLS certificate `acme-client`, which does not exist on this account. `bynk deploy` links to a certificate and never uploads one, so its private key never passes through Bynk: upload it with `wrangler mtls-certificate upload --cert … --key … --name acme-client`, the dashboard or the API, or name the certificate the account has
+```
+
+Every problem is reported together. A name that two client certificates carry fails the
+deploy naming both ids. The account's list also holds CA certificates, which have no private
+key for a Worker to present, so a name matches client certificates only, and a name carried
+only by a CA is its own message. A certificate that has expired, or expires within 30 days, is
+a warning and not a failure, since the Worker deploys fine and fails at the handshake once the
+certificate has expired. The plan shows the binding as a link to be made, with no action:
+
+```
+will link mtls-certificate acme-client (MTLS_BACKEND; not created; not checked in a dry run)
+```
+
+`--dry-run` stays offline and does not ask, so the plan says "will link" and has not verified
+that the certificate exists. The lookup uses Cloudflare's API, so it needs
+`CLOUDFLARE_API_TOKEN` and `CLOUDFLARE_ACCOUNT_ID`, the token with the "SSL and Certificates:
+Read" permission; a refusal says so. The certificate's name is used as declared in every
+environment, so a staging deploy presents the same certificate as production, and `--prune`
+never touches a link.
+
 ### Sender domains: Email Sending
 
 An `Email` instance with `@allowedSenders`
@@ -840,7 +1042,7 @@ gets its addresses in the Worker's `wrangler.toml`, as wrangler's top-level
 addresses = ["*@shop.example", "support@shop.example"]
 ```
 
-`wrangler deploy` (4.113.0 or later; Bynk requires 4.120.1) reconciles the
+`wrangler deploy` (4.113.0 or later; Bynk requires 4.162.0) reconciles the
 account's Email Routing rules to that list, so an address a service claims has a
 rule that delivers to the Worker, and one that is no longer listed loses its rule.
 The list applies to every environment, so it is top-level and never copied into
@@ -1163,8 +1365,8 @@ redeploy shop-cart
 The data is not moved. Copy it across before you prune the old namespace. This is a plain diff against your current source; it
 never calls Cloudflare, so it works under `--dry-run` too.
 
-Pass `--prune` to delete what's reported — KV namespaces, queues and the
-Hyperdrive configs a deploy made, never a Worker. It does not touch Worker versions or static assets: Cloudflare
+Pass `--prune` to delete what's reported — KV namespaces, queues, Vectorize
+indexes and the Hyperdrive configs a deploy made, never a Worker. It does not touch Worker versions or static assets: Cloudflare
 owns those, and an asset lives as long as a version that serves it. Anything that
 holds data (a D1 database, an R2 bucket) is only ever listed:
 

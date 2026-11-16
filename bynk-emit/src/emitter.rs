@@ -68,8 +68,10 @@ use bynk_syntax::ast::{
 };
 
 pub mod client;
+pub mod containers;
 pub mod contracts;
 pub(crate) mod events_fanout;
+pub mod http_client;
 pub mod secrets;
 pub mod serialisation;
 pub mod toml_doc;
@@ -78,6 +80,7 @@ pub(crate) mod workers_email;
 pub(crate) mod workers_entry;
 pub mod wrangler;
 
+pub use containers::{container_class_names, emit_containers_ts};
 pub use events_fanout::emit_events_fanout_do;
 pub use secrets::emit_secrets_manifest;
 pub use toml_doc::print_toml_document;
@@ -330,6 +333,8 @@ fn single_file_ctx() -> EmitProjectCtx {
     EmitProjectCtx {
         import_ext: crate::emit_model::ImportExt::Js,
         contracts: false,
+        trace: None,
+        inspect_agents: false,
         source_path: PathBuf::new(),
         identity_path: String::new(),
         commons_name: String::new(),
@@ -800,7 +805,7 @@ pub fn emit_project(
 }
 
 /// Whether a service's `on call` handler hands work to the execution context
-/// (`~>`, `within` or `race`, directly or through the functions it calls or
+/// (`detach`, `within` or `race`, directly or through the functions it calls or
 /// names, #2719), so the Bundle target's `__makeSurface` deps must carry the
 /// execution context (`deps.__exec`) it forwards to the handler. The set is the
 /// checker's ([`bynk_check::exec_plan::ExecPlan`]), computed from what it
@@ -1347,7 +1352,12 @@ fn emit_json_codec_helpers(
 /// target — every handler's parameters and its return type — in agent then
 /// handler order. Positions with no codec (`agent_wire_passes_through`) carry
 /// no named types to collect, so they are left out.
-pub(crate) fn agent_call_boundary_roots(agents: &HashMap<String, AgentDecl>) -> Vec<TypeRef> {
+pub(crate) fn agent_call_boundary_roots(
+    agents: &HashMap<String, AgentDecl>,
+    // #3581: a `bynk dev` build records each instance's key, so every agent's key
+    // type is a boundary type, not only one an agent reads.
+    inspect: bool,
+) -> Vec<TypeRef> {
     let mut names: Vec<&String> = agents.keys().collect();
     names.sort();
     let mut roots = Vec::new();
@@ -1360,7 +1370,7 @@ pub(crate) fn agent_call_boundary_roots(agents: &HashMap<String, AgentDecl>) -> 
         }
         // #1818: an agent that reads its own key is sent it with each call,
         // through the key type's codec.
-        if crate::emitter::emit::agent_reads_key(&agents[name]) {
+        if inspect || crate::emitter::emit::agent_reads_key(&agents[name]) {
             roots.push(agents[name].key_type.clone());
         }
     }
@@ -1430,7 +1440,7 @@ fn emit_boundary_helpers(
         // every agent handler's parameter and return types are boundary types
         // too. On `bundle` the call is in-process and needs no codec.
         let agent_call_roots: Vec<TypeRef> = if workers {
-            agent_call_boundary_roots(&agents)
+            agent_call_boundary_roots(&agents, ctx.inspect_agents)
         } else {
             Vec::new()
         };
@@ -2992,9 +3002,6 @@ fn collect_refs_in_stmt(
         Statement::Expect(a) => {
             collect_refs_in_expr(&a.value, local_to_file, commons, ctx, out);
         }
-        Statement::Send(s) => {
-            collect_refs_in_expr(&s.value, local_to_file, commons, ctx, out);
-        }
         Statement::Do(d) => {
             collect_refs_in_expr(&d.value, local_to_file, commons, ctx, out);
         }
@@ -3976,6 +3983,7 @@ fn write_header(commons: &TypedCommons, ctx: &EmitProjectCtx) -> Vec<bynk_ts::Ts
             parts.push("type __DurableObjectNamespace");
             parts.push("__StateRegistry");
             parts.push("__makeAgent");
+            parts.extend(inspect_agent_imports(workers && ctx.inspect_agents));
         } else if workers
             && commons
                 .callees
@@ -4237,6 +4245,7 @@ fn write_header(commons: &TypedCommons, ctx: &EmitProjectCtx) -> Vec<bynk_ts::Ts
         if ctx.runtime_use.fault() {
             parts.extend(FAULT_RUNTIME_IMPORTS.trim_start_matches(", ").split(", "));
         }
+        parts.extend(trace_step_imports(&ctx.runtime_use));
         if ctx.runtime_use.url_ops() {
             parts.extend(URL_OPS_RUNTIME_IMPORTS.trim_start_matches(", ").split(", "));
         }
@@ -4586,6 +4595,34 @@ pub fn effect_runtime_imports(ru: &RuntimeUse) -> &'static str {
 
 /// #2620: the deliberate-fault helper behind `unreachable`/`todo`.
 pub const FAULT_RUNTIME_IMPORTS: &str = ", __fault";
+/// #3581: what a `bynk dev` build's agent module imports to record an instance and
+/// answer the inspect route.
+fn inspect_agent_imports(on: bool) -> Vec<&'static str> {
+    if on {
+        vec![
+            "__noteAgentInstance",
+            "__inspectAgent",
+            "__historyBefore",
+            "__historyRecord",
+        ]
+    } else {
+        Vec::new()
+    }
+}
+
+/// #3580: the trace helpers a traced build's module imports, by what it used:
+/// `__traceStep` around a call, `__traceBinding` around a cross-context call's
+/// Service Binding.
+fn trace_step_imports(runtime_use: &RuntimeUse) -> Vec<&'static str> {
+    let mut names = Vec::new();
+    if runtime_use.trace_step() {
+        names.push("__traceStep");
+    }
+    if runtime_use.trace_binding() {
+        names.push("__traceBinding");
+    }
+    names
+}
 
 /// K2 (#2594): the percent-encoding helpers (`percentEncode`,
 /// `percentDecode`), appended only when the body calls one.
@@ -4747,9 +4784,19 @@ pub(crate) struct ModuleCtx<'a> {
     /// variant of one of these sums is built inline, not through the callee's
     /// companion object, so the callee's module is never a value import.
     consumed_context_types: HashSet<String>,
+    /// #3580: [`crate::emit_model::EmitProjectCtx::trace`]. `None` (the default)
+    /// emits no trace recording.
+    trace: Option<crate::emit_model::TraceLoc>,
 }
 
 impl<'a> ModuleCtx<'a> {
+    /// What the unit being emitted tells every body it lowers: whether it is the
+    /// reserved `bynk` adapter, and (#3580) where a traced build names call sites.
+    fn note_unit(&mut self, ctx: &EmitProjectCtx) {
+        self.in_bynk_unit = ctx.commons_name == "bynk";
+        self.trace = ctx.trace.clone();
+    }
+
     fn new(
         commons: &'a TypedCommons,
         cross_context: &'a bynk_check::resolver::CrossContextInfo,
@@ -4767,6 +4814,7 @@ impl<'a> ModuleCtx<'a> {
             in_bynk_unit: false,
             agent_called_contexts: Vec::new(),
             consumed_context_types: HashSet::new(),
+            trace: None,
         }
     }
 }
@@ -5013,7 +5061,7 @@ pub(crate) enum BodyMode {
         /// `"call"` for an `on call` handler and the emitted method name
         /// (`http_handler_method_name_ir`) for an http route.
         sum_handlers: HashSet<(String, String)>,
-        /// #1994: the target has a handler that sends with `~>`, so `deps`
+        /// #1994: the target has a handler that sends with `detach`, so `deps`
         /// carries the `__exec` double and each addressed service call is
         /// wrapped in `__bynkSettle(deps, …)`.
         settle_sends: bool,
@@ -5482,10 +5530,20 @@ impl<'a> LowerCtx<'a> {
 
     /// W30 (#2840): whether a first-party `Idempotency.claim` here is recorded
     /// in the handler's claim scope so it can be released or confirmed on exit.
-    /// Only a service handler's body is wrapped, so only there is a claim
-    /// tracked; anywhere else (an agent handler, a provider) it is a plain call
-    /// held for its full window.
+    /// A service handler's body and an agent handler's method body are wrapped
+    /// (#3465); anywhere else (a provider) it is a plain call held for its full
+    /// window.
     pub(crate) fn tracks_claims(&self) -> bool {
+        matches!(
+            self.mode,
+            BodyMode::ServiceHandler { .. } | BodyMode::AgentHandler { .. }
+        )
+    }
+
+    /// Whether the lowered body is itself wrapped in the claim scope. A service
+    /// handler's is; an agent handler's scope wraps the whole method instead, so
+    /// settlement follows the state commit.
+    pub(crate) fn wraps_claims_in_body(&self) -> bool {
         matches!(self.mode, BodyMode::ServiceHandler { .. })
     }
 
@@ -5625,6 +5683,45 @@ impl<'a> LowerCtx<'a> {
     /// v0.59: the test body's source context, for `assert`/`expect` locations.
     pub(crate) fn assert_loc(&self) -> Option<&AssertLoc> {
         self.test().and_then(|t| t.assert_loc.as_ref())
+    }
+
+    /// #3580: wrap `call`, a lowered call expression, in a trace step when this is
+    /// a traced build, naming its kind, its target and the `.bynk` call site at
+    /// `offset`; otherwise `call` unchanged, so a deploy build's output is
+    /// byte-identical. The call is the wrapper's argument, so its arguments
+    /// evaluate where they always did.
+    pub(crate) fn trace_step(
+        &self,
+        kind: &str,
+        target: &str,
+        offset: usize,
+        call: String,
+    ) -> String {
+        let Some(loc) = self.module.trace.as_ref() else {
+            return call;
+        };
+        self.runtime_use().note_trace_step();
+        let (line, col) = bynk_syntax::span::line_col(&loc.source, offset);
+        let path = loc.rel_path.replace('\\', "/");
+        format!(
+            "__traceStep(\"{kind}\", \"{}\", {{ file: \"{}\", line: {line}, col: {col} }})({call})",
+            escape_ts_string(target),
+            escape_ts_string(&path),
+        )
+    }
+
+    /// #3580: in a traced build, `binding` wrapped so the request it makes to its
+    /// callee carries this request's id and the call step's (the callee's record
+    /// names its parent); otherwise `binding` unchanged.
+    pub(crate) fn trace_binding(&self, binding: bynk_ts::TsExpr) -> bynk_ts::TsExpr {
+        if self.module.trace.is_none() {
+            return binding;
+        }
+        self.runtime_use().note_trace_binding();
+        bynk_ts::TsExpr::Call {
+            callee: Box::new(bynk_ts::TsExpr::Ident("__traceBinding".to_string())),
+            args: vec![binding],
+        }
     }
 
     // ---- single-kind state -------------------------------------------------
@@ -5852,7 +5949,7 @@ impl<'a> LowerCtx<'a> {
         matches!(&self.mode, BodyMode::TestCase { .. })
     }
 
-    /// #1994: whether an addressed test-service call settles the `~>` sends
+    /// #1994: whether an addressed test-service call settles the `detach` sends
     /// its handler handed `deps.__exec`.
     pub(crate) fn test_settles_sends(&self) -> bool {
         matches!(

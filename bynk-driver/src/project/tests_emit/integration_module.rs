@@ -4,7 +4,7 @@
 
 use super::*;
 use bynk_emit::emitter::RuntimeUse;
-use bynk_emit::emitter::wrangler::{BindingSource, WorkerBinding};
+use bynk_emit::emitter::wrangler::{BindingSource, WorkerBinding, singleton_is};
 // #1759: every namespace a test module imports, from one definition.
 use bynk_check::checker::Types;
 use bynk_check::d1_migrations::{D1Migrations, pglite_on};
@@ -241,7 +241,7 @@ pub(super) fn emit_integration_module(
         stmts.push(TsStmt::raw(text.clone(), None));
     }
 
-    // #1994: a participant whose handlers send with `~>` is driven with a
+    // #1994: a participant whose handlers send with `detach` is driven with a
     // collecting execution context, settled before its response returns.
     // L7 (#2414): so is one with an `EdgeCache` instance, which purges
     // through that context's `cache` double.
@@ -282,11 +282,49 @@ pub(super) fn emit_integration_module(
             participants.first().is_some_and(sends),
         )
     };
-    let exposed: Vec<String> = if job_support.code.is_empty() {
+    // #3147: a case that `D1.peek`s reaches each participant's database through
+    // that participant's `env`, so the harness hands those back too, and the
+    // module imports the `D1` binding the handle is built on.
+    let peeks = cases.iter().any(|c| c.source.contains("D1.peek("));
+    let mut exposed: Vec<String> = if job_support.code.is_empty() {
         Vec::new()
     } else {
         participants.first().cloned().into_iter().collect()
     };
+    if peeks {
+        for p in harness_participants {
+            let has_d1 = bindings_of(p)
+                .iter()
+                .any(|b| matches!(b.source, BindingSource::D1Database { .. }));
+            if has_d1 && !exposed.contains(p) {
+                exposed.push(p.clone());
+            }
+        }
+        // The `D1` value types a statement's parameters name (`SqlValue.Text`).
+        let cloudflare = bynk_check::firstparty::CLOUDFLARE_UNIT;
+        stmts.push(TsStmt::decl(
+            TsDecl::ImportNamespace {
+                type_only: false,
+                alias: test_ns(cloudflare),
+                from: format!(
+                    "./{}.js",
+                    relative_import_for_test(&commons_dir_for(cloudflare))
+                ),
+            },
+            None,
+        ));
+        stmts.push(TsStmt::decl(
+            TsDecl::ImportNamespace {
+                type_only: false,
+                alias: "bynk_cloudflare__binding".to_string(),
+                from: format!(
+                    "../{}.js",
+                    bynk_check::firstparty::CLOUDFLARE_BINDING_FILENAME.trim_end_matches(".ts")
+                ),
+            },
+            None,
+        ));
+    }
     // #2134: when a case runs with `env` entries, the running case's map is
     // held in a module-level `__bynkEnv`, which each case runner sets first:
     // the case's harness puts it on each participant's `env`, and a Bearer
@@ -540,6 +578,24 @@ pub(super) fn emit_integration_module(
             harness_bound.extend(names.iter().cloned());
             participant_types.push((p.clone(), names));
         }
+        // #3147: the `D1` value types a peeked statement's parameters name,
+        // from `bynk.cloudflare`, which is no participant.
+        if peeks && let Some(cloudflare) = unit_tables.get(bynk_check::firstparty::CLOUDFLARE_UNIT)
+        {
+            let names: Vec<String> = [
+                "SqlError",
+                "SqlReadError",
+                "SqlRun",
+                "SqlStatement",
+                "SqlValue",
+            ]
+            .into_iter()
+            .filter(|n| cloudflare.types.contains_key(*n) && !harness_bound.contains(*n))
+            .map(str::to_string)
+            .collect();
+            harness_bound.extend(names.iter().cloned());
+            participant_types.push((bynk_check::firstparty::CLOUDFLARE_UNIT.to_string(), names));
+        }
         // #1855: the lowering reads the case's checked types (a literal at a
         // refined record field is branded only when its type says so), so
         // type the body here as the check pass did, into throwaway sinks.
@@ -581,6 +637,18 @@ pub(super) fn emit_integration_module(
                 .map(|e| e.category)
                 .collect::<Vec<_>>()
         );
+        if typed
+            .callees
+            .values()
+            .any(|c| matches!(c, bynk_check::checker::Callee::D1Peek { .. }))
+        {
+            // #3147: the case's handles are held on `deps` (`deps.db`).
+            case_out = case_out.replacen(
+                "    const deps = __makeHarness();\n",
+                "    const deps: any = __makeHarness();\n",
+                1,
+            );
+        }
         let (body_src, body_smb) = emitter::lower_integration_case_body(
             &case.body,
             &mut typed,
@@ -784,7 +852,7 @@ fn platform_binding_factories(
     binds: &dyn Fn(fn(&BindingSource) -> bool) -> bool,
     pglite: bool,
 ) -> Vec<String> {
-    let kinds: [(bynk_emit::emitter::wrangler::BindingKind, &str); 10] = [
+    let kinds: [(bynk_emit::emitter::wrangler::BindingKind, &str); 17] = [
         (
             |s| matches!(s, BindingSource::Kv | BindingSource::KvInstance { .. }),
             "__makeIntegrationKv",
@@ -827,8 +895,30 @@ fn platform_binding_factories(
             "__makeIntegrationHyperdrive",
         ),
         (
-            |s| matches!(s, BindingSource::Singleton { .. }),
+            |s| matches!(s, BindingSource::VectorizeIndex { .. }),
+            "__makeIntegrationVectorize",
+        ),
+        (
+            |s| matches!(s, BindingSource::ContainerInstance { .. }),
+            "__makeIntegrationContainer",
+        ),
+        (
+            |s| matches!(s, BindingSource::AiSearchInstance { .. }),
+            "__makeIntegrationAiSearch",
+        ),
+        (
+            |s| matches!(s, BindingSource::MtlsCertificate { .. }),
+            "__makeIntegrationMtls",
+        ),
+        (
+            |s| singleton_is(s, "Version"),
             "__makeIntegrationVersionMetadata",
+        ),
+        (|s| singleton_is(s, "Ai"), "__makeIntegrationAi"),
+        (|s| singleton_is(s, "Images"), "__makeIntegrationImages"),
+        (
+            |s| singleton_is(s, "AnalyticsSql"),
+            "__makeIntegrationAnalyticsSql",
         ),
     ];
     kinds

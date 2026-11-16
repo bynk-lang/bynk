@@ -1,5 +1,7 @@
 suite shop.orders
 
+consumes bynk.cloudflare { PgError, PgRun }
+
 case "a statement runs for real" {
 	let a <- add.call("first")
 	expect a == Ok(PgRun { rowCount: 1 })
