@@ -1114,15 +1114,23 @@ export class WorkersImages implements Images {
   }
 
   // `image` as the platform's `ReadableStream`, pulled as the platform reads
-  // it. Claimed now, so a second read faults as it does for any stream; the
-  // iterator is released if the platform stops reading it early.
-  private static source(image: AsyncIterable<Uint8Array>): ReadableStream<Uint8Array> {
-    claimStream(image);
+  // it. A failure of the Bynk source (a producer that throws) is kept in
+  // `failure`, so the caller can tell it from the platform's own refusal and
+  // let it stay a fault. The iterator is released if the platform stops
+  // reading it early.
+  private static source(image: AsyncIterable<Uint8Array>) {
     const iterator = image[Symbol.asyncIterator]();
-    return new ReadableStream<Uint8Array>(
+    const held: { failure?: unknown } = {};
+    const stream = new ReadableStream<Uint8Array>(
       {
         async pull(controller) {
-          const next = await iterator.next();
+          let next: IteratorResult<Uint8Array>;
+          try {
+            next = await iterator.next();
+          } catch (e) {
+            held.failure = e;
+            throw e;
+          }
           if (next.done) controller.close();
           else controller.enqueue(next.value);
         },
@@ -1132,23 +1140,31 @@ export class WorkersImages implements Images {
       },
       { highWaterMark: 0 },
     );
+    return { stream, held, iterator };
   }
 
   async transformStream(image: AsyncIterable<Uint8Array>, options: TransformOptions, output: OutputOptions): Promise<Result<ImageStream, ImagesError>> {
+    // Claimed first, outside the `try`: reading a stream twice is a fault, not
+    // an error value, whether or not the call goes on.
+    claimStream(image);
+    const source = WorkersImages.source(image);
     const bad = WorkersImages.check(options, output);
     if (bad !== undefined) {
-      // Refused before it was read: release the source, so a stream holding
-      // another resource is not left open.
-      await image[Symbol.asyncIterator]().return?.();
+      // Refused before anything was read: close the iterator. A source that has
+      // not started has nothing open to close (an R2 body is unlocked until it
+      // is first read), as `R2.putStream` does when it refuses a write.
+      await source.iterator.return?.();
       return WorkersImages.invalid(bad);
     }
-    // Claimed outside the `try`: reading a stream twice is a fault, not an error value.
-    const source = WorkersImages.source(image);
     const images = this.images();
     try {
-      const result = await WorkersImages.run(images, source, options, output);
+      const result = await WorkersImages.run(images, source.stream, options, output);
       return Ok({ body: r2Chunks(result.image()), contentType: result.contentType() });
     } catch (e) {
+      // The Bynk producer failed while the platform pulled it: a failing
+      // producer aborts the call, as it aborts any stream, rather than being
+      // reported as the platform's refusal.
+      if (source.held.failure !== undefined) throw source.held.failure;
       return Err(WorkersImages.failure(e));
     }
   }

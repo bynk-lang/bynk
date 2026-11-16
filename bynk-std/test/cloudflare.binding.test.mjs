@@ -1498,13 +1498,44 @@ t("WorkersImages.transformStream: reads the input stream, gives the output as a 
   assert.deepEqual(images.calls[0].output, { format: "image/webp" });
 });
 
-t("WorkersImages.transformStream: a bad option is InvalidImage before anything is read, and the source is released", async () => {
+t("WorkersImages.transformStream: a bad option is InvalidImage before anything is read, the iterator is closed and the stream is claimed", async () => {
   const images = fakeImages();
-  const log = [];
-  const r = await new WorkersImages({ IMAGES: images }).transformStream(imageChunks([new Uint8Array([1])], log), imgOpts({ width: Some(0) }), outOpts());
+  let pulled = 0;
+  let closed = 0;
+  const source = {
+    [Symbol.asyncIterator]() {
+      return {
+        async next() {
+          pulled += 1;
+          return { done: true, value: undefined };
+        },
+        async return() {
+          closed += 1;
+          return { done: true, value: undefined };
+        },
+      };
+    },
+  };
+  const wb = new WorkersImages({ IMAGES: images });
+  const r = await wb.transformStream(source, imgOpts({ width: Some(0) }), outOpts());
   assert.equal(r.tag, "Err");
   assert.equal(r.error.tag, "InvalidImage");
   assert.deepEqual(images.calls, []);
+  assert.equal(pulled, 0, "nothing is read from a refused source");
+  assert.equal(closed, 1, "the iterator is closed");
+  // Claimed even though refused: a second use of the same stream is the fault.
+  await assert.rejects(wb.transformStream(source, imgOpts(), outOpts()), /read only once/);
+});
+
+t("WorkersImages.transformStream: a producer that throws stays a fault, it is not the platform's refusal", async () => {
+  async function* failing() {
+    yield new Uint8Array([1]);
+    throw new Error("producer broke");
+  }
+  // A fake that reads its input like the platform does, so the producer's failure surfaces from `output()`.
+  const images = fakeImages();
+  const wb = new WorkersImages({ IMAGES: images });
+  await assert.rejects(wb.transformStream(failing(), imgOpts(), outOpts()), /producer broke/);
 });
 
 t("WorkersImages.transformStream: a platform refusal before the stream starts is an error value, and the not-stubbed fault is rethrown", async () => {
