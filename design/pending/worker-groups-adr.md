@@ -114,8 +114,10 @@ edge as no edge.
   groups the nodes are Workers, and two groups can form a cycle with no cycle among
   their contexts (`A1 -> B1` and `B2 -> A2`, with `A1`, `A2` in one group and
   `B1`, `B2` in another). D2's conclusion, that no two-pass deploy is needed,
-  stands **if** the group-level graph is acyclic: that check is G3's (the group
-  cycle check), and G4 does not deploy a group before it exists.
+  stands **if** the group-level graph is acyclic. That is a check-time error,
+  `bynk.deploy.group_cycle`, over the Worker-level graph, naming the Workers and one
+  context edge per hop; it lands before G3 (its own PR), and G4 does not deploy a
+  group without it.
 
 **Consequences.**
 
@@ -124,7 +126,8 @@ edge as no edge.
   `--worker`, ledger and facts versions, the `10007` handling) and G6 remove.
 - **Still open, G3:** in-process edges and events between members (an intra-group
   call is a Service Binding to itself today), a merged events fan-out (lifting
-  `multiple_publishers`), the group cycle check, and a conformance harness.
+  `multiple_publishers`), and a conformance harness. The group cycle check
+  (`bynk.deploy.group_cycle`) lands before G3.
 - **Still open, G5:** moving an agent-owning context into or out of a group is
   refused in v1 (`bynk.deploy.agent_move_refused`); the scratch-account probe
   showed a data-preserving class transfer works with the declarative `exports` map
