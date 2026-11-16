@@ -299,6 +299,8 @@ mod system {
     mod coverage_behaviour;
     #[path = "cross_context_caller.rs"]
     mod cross_context_caller;
+    #[path = "cross_context_conformance.rs"]
+    mod cross_context_conformance;
     #[path = "cross_file_label_behaviour.rs"]
     mod cross_file_label_behaviour;
     #[path = "debug_inspect.rs"]

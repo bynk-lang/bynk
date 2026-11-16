@@ -147,7 +147,8 @@ pub const EVENTS_WIRE_EVENT_TS_TYPE: &str = "{ type: string; payload: unknown; e
 /// excluded. It is for a foreign Worker's build, where `@bynk/wire-client`
 /// resolves; the Bynk build neither imports it nor has that package.
 /// Excluding a file drops the default `node_modules` exclusion, so it is
-/// restated.
+/// restated. A `[deploy.workers]` group's member writes it as
+/// `<member>.bynk-client.ts` (#3562), so that name is excluded too.
 ///
 /// #2148: `module: NodeNext` takes each file's format from the nearest
 /// `package.json`, so the compiler also emits `out/package.json` declaring
@@ -187,7 +188,7 @@ const TSCONFIG_JSON: &str = r#"{
     "rootDir": "."
   },
   "include": ["**/*.ts"],
-  "exclude": ["node_modules", "**/bynk-client.ts"]
+  "exclude": ["node_modules", "**/bynk-client.ts", "**/*.bynk-client.ts"]
 }
 "#;
 
@@ -8090,6 +8091,15 @@ mod runtime_tests {
         assert!(s.contains("\"target\": \"ES2022\""));
         assert!(s.contains("\"strict\": true"));
         assert!(s.contains("\"include\""));
+    }
+
+    #[test]
+    fn tsconfig_excludes_a_members_client_too() {
+        // #3562: a group's member writes `<member>.bynk-client.ts`, which
+        // `**/bynk-client.ts` does not match.
+        let s = emit_tsconfig();
+        assert!(s.contains("\"**/bynk-client.ts\""), "{s}");
+        assert!(s.contains("\"**/*.bynk-client.ts\""), "{s}");
     }
 
     #[test]
