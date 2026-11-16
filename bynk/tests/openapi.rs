@@ -754,6 +754,45 @@ service api from http {
     assert!(open.get("security").is_none(), "{open:?}");
 }
 
+/// #3631: a user sum variant spelled like an `HttpResult` variant is the sum's constructor, so it
+/// adds no response; a genuine `HttpResult.Found` still documents the `302`.
+#[test]
+fn a_user_sum_variant_named_like_an_http_variant_adds_no_response() {
+    let dir = scratch("sum-variant-found");
+    write(&dir.join("bynk.toml"), "[project]\nname = \"p\"\n");
+    write(
+        &dir.join("src/p.bynk"),
+        r#"context p
+
+type Item = { id: Int, name: String }
+type Outcome = | Found(item: Item) | Absent
+
+service api from http {
+  on GET("/outcome/:id") (id: String) -> Effect[HttpResult[Outcome]] by Visitor {
+    Ok(Found(Item { id: 1, name: id }))
+  }
+
+  on GET("/moved") () -> Effect[HttpResult[String]] by Visitor {
+    Found("/elsewhere")
+  }
+}
+"#,
+    );
+    let d = doc(&dir, &[]);
+    assert_valid(&d);
+    let outcome = &d["paths"]["/outcome/{id}"]["get"]["responses"];
+    assert!(outcome.get("200").is_some(), "{outcome:?}");
+    assert!(
+        outcome.get("302").is_none(),
+        "the user's `Found` is no redirect: {outcome:?}"
+    );
+    let moved = &d["paths"]["/moved"]["get"]["responses"];
+    assert!(
+        moved.get("302").is_some(),
+        "a genuine `HttpResult.Found` is still a 302: {moved:?}"
+    );
+}
+
 /// #3513 (C): `cf: RequestCf` is what Cloudflare derived, not something a caller supplies, so
 /// the contract documents the path parameter and nothing for `cf`.
 #[test]
