@@ -413,6 +413,13 @@ pub fn phase_group_binding_collisions(
     for (key, group) in worker_groups {
         group_service_names(key, &group.contexts, parsed, groups, errors);
         group_publishers(key, &group.contexts, parsed, groups, bindings, errors);
+        crate::group_triggers::group_trigger_conflicts(
+            key,
+            &group.contexts,
+            parsed,
+            groups,
+            errors,
+        );
         let mut first: HashMap<&str, (&str, &WorkerBinding)> = HashMap::new();
         for ctx in &group.contexts {
             let indices = groups.get(ctx).map(Vec::as_slice).unwrap_or_default();
