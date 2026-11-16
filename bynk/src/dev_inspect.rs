@@ -244,6 +244,31 @@ fn call(
     }
 }
 
+/// The listing of one Worker. A Worker that hosts no agent has no inspect route (the
+/// emitter adds it only where there is a class to read), so a `404` is "no agents
+/// here", an empty listing, and not a failure.
+fn listing(
+    http: &dyn Post,
+    worker: &SessionWorker,
+    query: &[(&str, String)],
+) -> Result<Value, String> {
+    let (url, headers) = signed_request(
+        &worker.url,
+        &worker.context,
+        "/_bynk/inspect/agents",
+        query,
+        unix_now(),
+    );
+    match http.post(&url, &headers)? {
+        (404, _) => Ok(json!({ "instances": [] })),
+        (200, body) => serde_json::from_str(&body).map_err(|e| format!("unreadable answer: {e}")),
+        (401, _) => Err(
+            "refused the signature: is this `bynk dev` session built by this `bynk`?".to_string(),
+        ),
+        (s, _) => Err(format!("answered {s}")),
+    }
+}
+
 /// Run `what` against the session, returning the JSON to print. A context that
 /// cannot be reached is named in `errors` and the rest still answer.
 pub fn run(session: &Session, what: &Inspect, http: &dyn Post) -> Result<Value, String> {
@@ -253,7 +278,7 @@ pub fn run(session: &Session, what: &Inspect, http: &dyn Post) -> Result<Value, 
             let mut errors = Vec::new();
             let query: Vec<(&str, String)> = class.iter().map(|c| ("class", c.clone())).collect();
             for (_, w) in selected(session, context)? {
-                match call(http, w, "/_bynk/inspect/agents", &query) {
+                match listing(http, w, &query) {
                     Ok(v) => {
                         for i in v["instances"].as_array().into_iter().flatten() {
                             agents.push(json!({
@@ -287,8 +312,16 @@ fn read_agent(
     http: &dyn Post,
 ) -> Result<Value, String> {
     let class_query = [("class", class.to_string())];
+    let mut failed = Vec::new();
     for (_, w) in selected(session, context)? {
-        let listed = call(http, w, "/_bynk/inspect/agents", &class_query)?;
+        // A Worker that is down, or refuses, is skipped: the instance may be in another.
+        let listed = match listing(http, w, &class_query) {
+            Ok(v) => v,
+            Err(e) => {
+                failed.push(format!("{}: {e}", w.context));
+                continue;
+            }
+        };
         let found = listed["instances"]
             .as_array()
             .into_iter()
@@ -307,10 +340,18 @@ fn read_agent(
         }
         return Ok(state);
     }
-    Err(format!(
+    let mut message = format!(
         "no instance of `{class}` with key `{key}` has been addressed in this session \
          (an instance is listed once a handler addresses it)"
-    ))
+    );
+    if !failed.is_empty() {
+        message.push_str(&format!(
+            "; these contexts could not be asked: {} (a session killed without stopping \
+             leaves a stale `.bynk/dev/session.json`)",
+            failed.join("; ")
+        ));
+    }
+    Err(message)
 }
 
 /// `bynk dev inspect`: find the session under `project_root`, run `what`, print
@@ -482,6 +523,107 @@ mod tests {
         };
         let e = run(&session(), &what, &http).unwrap_err();
         assert!(e.contains("has been addressed"), "{e}");
+    }
+
+    /// Two Workers: `shop.api` hosts no agent, so it has no inspect route and answers
+    /// `404`; `shop.orders` hosts `Ledger`. The one without agents must not hide the other.
+    fn two_workers() -> Session {
+        let mut session = session();
+        session.workers.insert(
+            "shop-api".to_string(),
+            SessionWorker {
+                context: "shop.api".to_string(),
+                url: "http://localhost:8788".to_string(),
+            },
+        );
+        // `shop-api` sorts before `shop-orders`.
+        session.workers.insert(
+            "shop-orders".to_string(),
+            SessionWorker {
+                context: "shop.orders".to_string(),
+                url: "http://localhost:8787".to_string(),
+            },
+        );
+        session
+    }
+
+    struct Routes;
+
+    impl Post for Routes {
+        fn post(&self, url: &str, _: &[(String, String)]) -> Result<(u16, String), String> {
+            if url.starts_with("http://localhost:8788") {
+                return Ok((404, "Not Found".into()));
+            }
+            Fake(RefCell::default()).post(url, &[("X-Bynk-Caller".into(), "bynk.dev".into())])
+        }
+    }
+
+    #[test]
+    fn a_worker_without_agents_does_not_hide_the_one_that_has_them() {
+        let out = run(
+            &two_workers(),
+            &Inspect::Agent {
+                context: None,
+                class: "Ledger".into(),
+                key: "u1".into(),
+                page: Page::default(),
+            },
+            &Routes,
+        )
+        .unwrap();
+        assert_eq!(out["context"], "shop.orders");
+        assert_eq!(out["key"], "u1");
+        // And listing says nothing is wrong with it.
+        let listed = run(
+            &two_workers(),
+            &Inspect::Agents {
+                context: None,
+                class: None,
+            },
+            &Routes,
+        )
+        .unwrap();
+        assert_eq!(listed["errors"], json!([]));
+        assert_eq!(listed["agents"].as_array().unwrap().len(), 2);
+    }
+
+    #[test]
+    fn a_worker_that_is_down_is_skipped_and_named_when_nothing_matches() {
+        struct OneDown;
+        impl Post for OneDown {
+            fn post(&self, url: &str, h: &[(String, String)]) -> Result<(u16, String), String> {
+                if url.starts_with("http://localhost:8788") {
+                    return Err("connection refused".into());
+                }
+                Routes.post(url, h)
+            }
+        }
+        let found = run(
+            &two_workers(),
+            &Inspect::Agent {
+                context: None,
+                class: "Ledger".into(),
+                key: "u1".into(),
+                page: Page::default(),
+            },
+            &OneDown,
+        );
+        assert!(found.is_ok(), "{found:?}");
+        let missing = run(
+            &two_workers(),
+            &Inspect::Agent {
+                context: None,
+                class: "Ledger".into(),
+                key: "nobody".into(),
+                page: Page::default(),
+            },
+            &OneDown,
+        )
+        .unwrap_err();
+        assert!(
+            missing.contains("shop.api: connection refused"),
+            "{missing}"
+        );
     }
 
     #[test]
