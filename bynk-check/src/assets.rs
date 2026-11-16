@@ -677,6 +677,14 @@ fn phase_group_shadowed_routes(
                         if path.split('/').any(|s| s.starts_with(':')) {
                             continue;
                         }
+                        // An asset this member reaches itself (its own, or a shared
+                        // commons') is `phase_asset_routes`'s to report, once.
+                        let own_shadow = fixed.iter().any(|(m, paths)| {
+                            *m == route_member && paths.keys().any(|at| route_matches(path, at))
+                        });
+                        if own_shadow {
+                            continue;
+                        }
                         // The first other member whose asset sits at this path.
                         let shadow = fixed.iter().find_map(|(asset_member, paths)| {
                             let at = paths.keys().find(|at| route_matches(path, at))?;

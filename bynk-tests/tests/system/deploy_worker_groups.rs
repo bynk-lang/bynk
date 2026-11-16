@@ -772,7 +772,7 @@ fn a_members_fixed_asset_shadows_another_members_literal_route() {
     fs::create_dir_all(root.join("assets")).unwrap();
     fs::write(root.join("assets/a.txt"), "A").unwrap();
     let orders = asset_context("shop.orders", &[("terms", "assets/a.txt", "/legal.txt")]);
-    fs::write(root.join("src/shop/orders.bynk"), orders).unwrap();
+    fs::write(root.join("src/shop/orders.bynk"), &orders).unwrap();
 
     // Another member's literal route at the asset's path: refused, at the route.
     fs::write(
@@ -791,6 +791,40 @@ fn a_members_fixed_asset_shadows_another_members_literal_route() {
         out.contains("the asset `assets/a.txt` of `shop.orders` is served at `/legal.txt`"),
         "naming the asset's member:\n{out}"
     );
+
+    // An asset both members reach through a shared commons shadows payment's
+    // route once, not once per pass that sees it.
+    fs::write(
+        root.join("src/shop/shared.bynk"),
+        "commons shop.shared\n\nasset terms = \"assets/a.txt\" at \"/legal.txt\"\n",
+    )
+    .unwrap();
+    fs::write(
+        root.join("src/shop/orders.bynk"),
+        "context shop.orders\n\nuses shop.shared\n\nservice orders_probe {\n\ton call() -> Effect[Int] {\n\t\tEffect.pure(1)\n\t}\n}\n",
+    )
+    .unwrap();
+    fs::write(
+        root.join("src/shop/payment.bynk"),
+        format!(
+            "{}",
+            route_context("shop.payment", &["/legal.txt"]).replacen(
+                "context shop.payment\n",
+                "context shop.payment\n\nuses shop.shared\n",
+                1
+            )
+        ),
+    )
+    .unwrap();
+    let (ok, out) = build(&root);
+    assert!(!ok, "{out}");
+    assert_eq!(
+        out.matches("bynk.asset.shadows_route").count(),
+        1,
+        "one error for the one route:\n{out}"
+    );
+    fs::remove_file(root.join("src/shop/shared.bynk")).unwrap();
+    fs::write(root.join("src/shop/orders.bynk"), &orders).unwrap();
 
     // A route at another path, or a parameterised one, is not an error here.
     fs::write(
