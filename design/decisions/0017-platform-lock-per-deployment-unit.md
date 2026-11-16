@@ -1,6 +1,10 @@
 # 0017 — Platform lock is per deployment unit, propagating along given edges
 
 - **Status:** Accepted (v0.17 design; enforcement live since v0.19)
+- **Amended** for Worker groups (#3562, the "Worker groups: several contexts in one Worker"
+  ADR, D8): under `workers` the deployment unit is a context **or a group of
+  them**. A platform-native capability in any member locks the whole Worker, and
+  the diagnostic names the group.
 - **Spec:** §5.8 (`bynk.target.vendor_required`/`vendor_conflict`)
 
 ## Context
