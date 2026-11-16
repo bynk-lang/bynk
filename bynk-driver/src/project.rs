@@ -44,6 +44,7 @@ use bynk_model::CapRefIr;
 use bynk_model::EventSubscriberShape;
 use bynk_model::FnSig;
 use bynk_model::{lower_attached_fn_sig_ir_from_types, lower_handler_given_ir};
+use bynk_project::worker_layout::WorkerLayout;
 use bynk_syntax::error::CompileError;
 use bynk_syntax::lexer;
 use bynk_syntax::parser;
@@ -1542,6 +1543,7 @@ fn finish_build(
             asset_bytes,
             agent_versions,
             d1_migrations,
+            layout,
             ..
         } => {
             // #3477: a container's build paths are written from the output
@@ -1587,6 +1589,7 @@ fn finish_build(
                 &agent_versions,
                 &contracts_lock,
                 &d1_migrations,
+                &layout,
                 trace_requests,
                 inspect_agents,
             );
@@ -2551,6 +2554,8 @@ enum RunChecks {
         // P4b (#2608): each `D1` database's migrations, copied beside its
         // Worker's `wrangler.toml`.
         d1_migrations: bynk_check::d1_migrations::D1Migrations,
+        // #3562: where each context's Worker is, as the checks above read it.
+        layout: WorkerLayout,
         // State-migrations S4 (#2259): each agent class's reconciled versions
         // and valid steps, keyed `<unit>.<Agent>`, for `bynk migrate status`.
         // Empty when the build has no lock.
@@ -2574,8 +2579,9 @@ fn d1_phase(
 ) -> (
     bynk_check::d1_migrations::D1Migrations,
     Option<Arc<bynk_check::d1_sql::D1Sql>>,
+    WorkerLayout,
 ) {
-    let layout = bynk_project::worker_layout::WorkerLayout::for_project(project_root, overlay);
+    let layout = WorkerLayout::for_project(project_root, overlay);
     let mut migrations = bynk_check::d1_migrations::phase_d1_migrations(
         migration_files,
         &bynk_check::d1_migrations::declared_databases(kinds, unit_tables, &layout),
@@ -2598,7 +2604,7 @@ fn d1_phase(
             .unwrap_or_default();
         migrations.insert(bynk_check::d1_migrations::PG_TEST_KEY.to_string(), schema);
     }
-    (migrations, d1_sql)
+    (migrations, d1_sql, layout)
 }
 
 /// The manifest checks that need the project's units, read as the editor reads
@@ -3012,7 +3018,7 @@ fn run_checks(
         .unwrap_or_default();
     // -- 6a0''. P4b (#2608), #3070, #3321: the D1 migrations, and the schemas
     //           literal D1 statements are prepared against.
-    let (d1_migrations, d1_sql) = d1_phase(
+    let (d1_migrations, d1_sql, layout) = d1_phase(
         migration_files,
         (&kinds, &unit_tables),
         (project_root, overlay),
@@ -3628,6 +3634,7 @@ fn run_checks(
         asset_bytes,
         agent_versions: schema_effective_versions.agents,
         d1_migrations,
+        layout,
     }
 }
 
@@ -4264,6 +4271,8 @@ fn build_output(
     contracts_lock: &bynk_project::contracts_lock::ContractsLock,
     // P4b (#2608): each `D1` database's migrations.
     d1_migrations: &bynk_check::d1_migrations::D1Migrations,
+    // #3562: where each context's Worker is.
+    layout: &WorkerLayout,
     // #3580: wrap each Worker's `fetch` in the request recorder.
     trace_requests: bool,
     inspect_agents: bool,
@@ -4405,10 +4414,6 @@ fn build_output(
         BuildTarget::Workers => {
             // v0.8 §2.3: per-Worker entry point, compose.ts, and wrangler
             // configuration. One Worker per context.
-            // #3562: where each context's files go. Always the identity layout for
-            // now: a group's directory and prefixes are switched on with the group
-            // as the emit unit.
-            let layout = bynk_project::worker_layout::WorkerLayout::identity();
             let emit = WorkersEmit {
                 adapter_bindings: &adapter_bindings,
                 agent_versions,
@@ -4426,7 +4431,7 @@ fn build_output(
                 import_ext,
                 inspect_agents,
                 kinds: &kinds,
-                layout: &layout,
+                layout,
                 parsed: &parsed,
                 trace_requests,
                 unit_callees: &unit_callees,
