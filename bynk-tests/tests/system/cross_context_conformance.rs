@@ -338,18 +338,9 @@ fn observe(tag: &str, topology: &Topology) -> Option<(PathBuf, Vec<Value>)> {
         topology.name,
         text(&built)
     );
-    // The build's `tsconfig.json` leaves out `**/bynk-client.ts`, the typed client
-    // a foreign caller imports, but a group's member writes it as
-    // `<member>.bynk-client.ts`, which that pattern misses. Excluded here, as the
-    // Worker does not import it; the pattern itself is fixed separately.
-    fs::write(
-        root.join("out/tsconfig.conformance.json"),
-        "{\"extends\":\"./tsconfig.json\",\"exclude\":[\"node_modules\",\"**/*bynk-client.ts\"]}",
-    )
-    .unwrap();
     let emitted = tsc
         .arg("-p")
-        .arg(root.join("out/tsconfig.conformance.json"))
+        .arg(root.join("out/tsconfig.json"))
         .current_dir(&root)
         .output()
         .expect("run tsc");
