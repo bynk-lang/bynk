@@ -1,0 +1,10 @@
+context shop.b2
+
+consumes shop.a2
+
+service from_b2 {
+  on call(n: Int) -> Effect[Int] {
+    let r <- shop.a2.to_a2(n)
+    Effect.pure(r)
+  }
+}

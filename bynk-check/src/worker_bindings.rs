@@ -16,7 +16,7 @@
 //! worker_bindings`, the list `wrangler.toml` is written from); this module
 //! owns the check over them and the diagnostic.
 
-use std::collections::{BTreeMap, HashMap, HashSet};
+use std::collections::{BTreeMap, BTreeSet, HashMap, HashSet};
 use std::path::PathBuf;
 
 use bynk_project::ParsedFile;
@@ -430,6 +430,7 @@ pub fn phase_group_binding_collisions(
     bindings: &BTreeMap<String, Vec<WorkerBinding>>,
     errors: &mut ErrorSink,
 ) {
+    group_worker_cycles(worker_groups, parsed, groups, bindings, errors);
     for (key, group) in worker_groups {
         group_service_names(key, &group.contexts, parsed, groups, errors);
         group_publishers(key, &group.contexts, parsed, groups, bindings, errors);
@@ -527,6 +528,201 @@ fn group_service_names(
             }
         }
     }
+}
+
+/// `bynk.deploy.group_cycle` (#3562): a Worker must be uploaded after the Workers
+/// it binds to (ADR 0193 D1), and the language rules out a cycle among *contexts*
+/// (`bynk.context.consumes_cycle`), but a group folds its members into one node,
+/// so two groups can depend on each other with no cycle among their contexts
+/// (`A1 -> B1` and `B2 -> A2`, with `A1`, `A2` in one group and `B1`, `B2` in
+/// another). The graph is the Service Bindings the Workers would declare, read
+/// from `bindings` like deploy's ordering, a context standing for its group's
+/// Worker. An edge inside a group is a Worker binding to itself and is no edge.
+/// One error per strongly connected set of Workers containing a group, showing one
+/// representative cycle: the Workers and one context edge per hop, at the first
+/// hop's consumer. A cycle among ungrouped Workers is deliberately not reported
+/// here. `consumes_cycle` covers service calls, but `bindings` also holds the
+/// publisher-to-subscriber edges, so an ungrouped event-edge cycle is a known gap
+/// that predates this check.
+fn group_worker_cycles(
+    worker_groups: &bynk_project::worker_groups::WorkerGroups,
+    parsed: &[ParsedFile],
+    groups: &BTreeMap<String, Vec<usize>>,
+    bindings: &BTreeMap<String, Vec<WorkerBinding>>,
+    errors: &mut ErrorSink,
+) {
+    // A context's Worker: its group's key, else the context's own name.
+    let worker_of = |ctx: &str| -> String {
+        worker_groups
+            .iter()
+            .find(|(_, g)| g.contexts.iter().any(|c| c == ctx))
+            .map_or_else(|| ctx.to_string(), |(key, _)| key.clone())
+    };
+    // Worker -> (target Worker -> (consumer context, target context)), the first
+    // context edge that makes each Worker edge.
+    let mut edges: BTreeMap<String, BTreeMap<String, (String, String)>> = BTreeMap::new();
+    for (ctx, list) in bindings {
+        for binding in list {
+            let BindingSource::Service { context: target } = &binding.source else {
+                continue;
+            };
+            let (from, to) = (worker_of(ctx), worker_of(target));
+            if from != to {
+                edges
+                    .entry(from)
+                    .or_default()
+                    .entry(to)
+                    .or_insert_with(|| (ctx.clone(), target.clone()));
+            }
+        }
+    }
+    for scc in strongly_connected(&edges) {
+        if !scc.iter().any(|w| worker_groups.contains_key(w)) {
+            continue;
+        }
+        let Some(path) = cycle_through(&edges, &scc) else {
+            continue;
+        };
+        let hops: Vec<String> = path
+            .windows(2)
+            .map(|pair| {
+                let (consumer, target) = &edges[&pair[0]][&pair[1]];
+                format!(
+                    "`{}` to `{}` (`{consumer}` binds to `{target}`)",
+                    pair[0], pair[1]
+                )
+            })
+            .collect();
+        let (consumer, _) = &edges[&path[0]][&path[1]];
+        let indices = groups.get(consumer).map(Vec::as_slice).unwrap_or_default();
+        let (file, span) = context_header(parsed, indices)
+            .map_or((None, Span::default()), |(file, span)| (Some(file), span));
+        errors.push_for(
+            file.as_deref(),
+            CompileError::new(
+                "bynk.deploy.group_cycle",
+                span,
+                format!(
+                    "the Workers {} bind to each other in a cycle: {}",
+                    path[..path.len() - 1]
+                        .iter()
+                        .map(|w| format!("`{w}`"))
+                        .collect::<Vec<_>>()
+                        .join(", "),
+                    hops.join(", ")
+                ),
+            )
+            .with_note(
+                "a Worker is uploaded after the Workers it binds to, so a cycle between Workers cannot be deployed. The contexts themselves are acyclic, but a group folds its members into one Worker: move a context out of its group, or into the other, so the Workers' dependencies run one way",
+            ),
+        );
+    }
+}
+
+/// The strongly connected components of a graph with more than one node, each
+/// sorted, in order of their first node (Tarjan's algorithm, so the report is
+/// deterministic).
+fn strongly_connected(
+    edges: &BTreeMap<String, BTreeMap<String, (String, String)>>,
+) -> Vec<Vec<String>> {
+    struct State<'a> {
+        edges: &'a BTreeMap<String, BTreeMap<String, (String, String)>>,
+        index: BTreeMap<String, usize>,
+        low: BTreeMap<String, usize>,
+        on_stack: BTreeSet<String>,
+        stack: Vec<String>,
+        out: Vec<Vec<String>>,
+    }
+    fn visit(state: &mut State<'_>, node: &str) {
+        let n = state.index.len();
+        state.index.insert(node.to_string(), n);
+        state.low.insert(node.to_string(), n);
+        state.stack.push(node.to_string());
+        state.on_stack.insert(node.to_string());
+        let next: Vec<String> = state
+            .edges
+            .get(node)
+            .map(|m| m.keys().cloned().collect())
+            .unwrap_or_default();
+        for to in next {
+            if !state.index.contains_key(&to) {
+                visit(state, &to);
+                let low = state.low[node].min(state.low[&to]);
+                state.low.insert(node.to_string(), low);
+            } else if state.on_stack.contains(&to) {
+                let low = state.low[node].min(state.index[&to]);
+                state.low.insert(node.to_string(), low);
+            }
+        }
+        if state.low[node] == state.index[node] {
+            let mut component = Vec::new();
+            while let Some(top) = state.stack.pop() {
+                state.on_stack.remove(&top);
+                let done = top == node;
+                component.push(top);
+                if done {
+                    break;
+                }
+            }
+            if component.len() > 1 {
+                component.sort();
+                state.out.push(component);
+            }
+        }
+    }
+    let mut state = State {
+        edges,
+        index: BTreeMap::new(),
+        low: BTreeMap::new(),
+        on_stack: BTreeSet::new(),
+        stack: Vec::new(),
+        out: Vec::new(),
+    };
+    let nodes: BTreeSet<&String> = edges
+        .keys()
+        .chain(edges.values().flat_map(|m| m.keys()))
+        .collect();
+    for node in nodes {
+        if !state.index.contains_key(node) {
+            visit(&mut state, node);
+        }
+    }
+    state.out.sort();
+    state.out
+}
+
+/// One cycle inside `scc`, as a path that starts and ends at the component's
+/// first Worker: depth-first over the component's edges in name order.
+fn cycle_through(
+    edges: &BTreeMap<String, BTreeMap<String, (String, String)>>,
+    scc: &[String],
+) -> Option<Vec<String>> {
+    fn walk(
+        edges: &BTreeMap<String, BTreeMap<String, (String, String)>>,
+        scc: &[String],
+        path: &mut Vec<String>,
+    ) -> bool {
+        let here = path.last().expect("a path has a node").clone();
+        for next in edges.get(&here).into_iter().flat_map(|m| m.keys()) {
+            if !scc.contains(next) {
+                continue;
+            }
+            if *next == path[0] {
+                path.push(next.clone());
+                return true;
+            }
+            if !path.contains(next) {
+                path.push(next.clone());
+                if walk(edges, scc, path) {
+                    return true;
+                }
+                path.pop();
+            }
+        }
+        false
+    }
+    let mut path = vec![scc.first()?.clone()];
+    walk(edges, scc, &mut path).then_some(path)
 }
 
 /// `bynk.deploy.multiple_publishers` (#3562): a context that publishes events has
