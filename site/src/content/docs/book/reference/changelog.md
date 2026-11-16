@@ -3,7 +3,7 @@ title: Version compatibility & changelog
 ---
 Bynk is pre-1.0 and developed in small, spec-first increments (see
 [Versioning & roadmap](/book/about/versioning-and-roadmap/)). This book is
-written against **v0.627**.
+written against **v0.628**.
 
 This page is a high-level summary of notable increments, not an exhaustive
 per-commit history. While Bynk is pre-1.0, increments may change behaviour.
@@ -28,6 +28,7 @@ per-commit history. While Bynk is pre-1.0, increments may change behaviour.
 
 | Version | Highlights |
 |---|---|
+| **v0.628.0** | `bynk.cloudflare` gains `Images`, a one-per-Worker capability over Cloudflare's `images` binding, with `transform` and `info` over `Bytes` (experimental; #3515) |
 | **v0.627.1** | A build can record per-request traces (the emitter and runtime half of `bynk dev --trace-events`); deploy output is unchanged |
 | **v0.627.0** | A linked `MtlsCertificate` kind, `capability Backend = MtlsCertificate @certificate("acme-client")`, whose `send` presents an account-held client certificate to an origin (experimental; the deploy lands separately) |
 | **v0.626.2** | Design: a plan to move the VS Code extension's diagram views from Mermaid to a first-party renderer in UML notation (model-diagrams track, settling) |
