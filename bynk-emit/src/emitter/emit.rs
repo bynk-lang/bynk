@@ -7687,12 +7687,7 @@ fn emit_agent_dispatch(
         // (steps are key-free), loads the state (running any step), and
         // commits only a record older than this build's version. Reachable
         // only through this Worker's signed `/_bynk/migrate/` route.
-        if let Some(v) = &agent_versions {
-            fetch_stmts.push(migrate_wake_branch_stmt(v.version));
-        }
-        if ctx.inspect_agents {
-            fetch_stmts.push(inspect_branch_stmt(a, agent_versions));
-        }
+        fetch_stmts.extend(wake_and_inspect_branches(a, agent_versions, ctx));
         let dispatch_callee = bynk_ts::TsExpr::Index {
             object: Box::new(bynk_ts::TsExpr::Ident(
                 "(this as unknown as globalThis.Record<string, (...bynkArgs: unknown[]) => unknown>)"
@@ -9318,6 +9313,24 @@ fn emit_ws_do_method(
         source_map,
     );
     writeln!(out).unwrap();
+}
+
+/// The `fetch` branches ahead of the method dispatch that need the agent's schema
+/// versions: the migration sweep's wake (S4, #2259), and in a `bynk dev` build
+/// (#3581) the inspect read.
+fn wake_and_inspect_branches(
+    a: &AgentDecl,
+    agent_versions: &Option<bynk_check::schema_registry::AgentVersions>,
+    ctx: &EmitProjectCtx,
+) -> Vec<bynk_ts::TsStmt> {
+    let mut branches = Vec::new();
+    if let Some(v) = agent_versions {
+        branches.push(migrate_wake_branch_stmt(v.version));
+    }
+    if ctx.inspect_agents {
+        branches.push(inspect_branch_stmt(a, agent_versions));
+    }
+    branches
 }
 
 /// #3581: the `/_bynk/inspect` branch of an agent class's `fetch` in a `bynk dev`

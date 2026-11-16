@@ -3668,6 +3668,38 @@ fn runtime_with_npm(
 /// clean error sink. Moved verbatim from the old pipeline; only the locals it
 /// reads are now bound from the `Checked` variant.
 #[allow(clippy::too_many_arguments)]
+/// State-migrations S4 (#2259 Decision D): the context's versioned agent classes,
+/// which its Worker's signed `/_bynk/migrate/` route can wake, with their lock
+/// versions, sorted.
+fn migratable_agents(
+    ctx_name: &str,
+    table: &UnitTable,
+    agent_versions: &std::collections::HashMap<String, bynk_check::schema_registry::AgentVersions>,
+) -> Vec<(String, i64)> {
+    let mut migratable: Vec<(String, i64)> = agent_versions
+        .iter()
+        .filter_map(|(class, v)| {
+            let (unit, agent) = class.rsplit_once('.')?;
+            (unit == ctx_name && table.agents.contains_key(agent))
+                .then(|| (agent.to_string(), v.version))
+        })
+        .collect();
+    migratable.sort();
+    migratable
+}
+
+/// #3581: the agent classes a `bynk dev` build's Worker answers the inspect route
+/// for, sorted; empty unless the build asks for inspection.
+fn inspect_classes(on: bool, table: &UnitTable) -> Vec<String> {
+    let mut classes: Vec<String> = if on {
+        table.agents.keys().cloned().collect()
+    } else {
+        Vec::new()
+    };
+    classes.sort();
+    classes
+}
+
 fn build_output(
     parsed: Vec<ParsedFile>,
     mut compiled: Vec<StagedFile>,
@@ -4028,26 +4060,8 @@ fn build_output(
                 let consumed_types = unit_consumed_context_types
                     .get(ctx_name)
                     .unwrap_or(&no_consumed_types);
-                // State-migrations S4 (#2259 Decision D): the context's
-                // versioned agent classes, which its Worker's signed
-                // `/_bynk/migrate/` route can wake.
-                let mut migratable: Vec<(String, i64)> = agent_versions
-                    .iter()
-                    .filter_map(|(class, v)| {
-                        let (unit, agent) = class.rsplit_once('.')?;
-                        (unit == ctx_name && table.agents.contains_key(agent))
-                            .then(|| (agent.to_string(), v.version))
-                    })
-                    .collect();
-                migratable.sort();
-                // #3581: the agent classes this Worker's `/_bynk/inspect/` route
-                // reads; empty unless this is a `bynk dev` build.
-                let mut inspect_classes: Vec<String> = if inspect_agents {
-                    table.agents.keys().cloned().collect()
-                } else {
-                    Vec::new()
-                };
-                inspect_classes.sort();
+                let migratable = migratable_agents(ctx_name, table, &agent_versions);
+                let inspect_classes = inspect_classes(inspect_agents, table);
                 let entry_ts = emitter::emit_worker_entry(
                     ctx_name,
                     table,

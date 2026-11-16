@@ -448,13 +448,54 @@ fn inspect_route(context: &str, classes: &[String]) -> TsStmt {
 /// #3581: the registry Durable Object class a `bynk dev` build hosts, imported
 /// from the runtime and exported from the entry like an agent's class, so the dev
 /// copy of `wrangler.toml` can bind it.
-fn inspect_registry_export() -> TsStmt {
-    TsStmt::decl(
-        TsDecl::ExportNames {
-            names: vec!["BynkInspectRegistry".to_string()],
-        },
-        None,
-    )
+fn inspect_registry_export(inspect: &[String]) -> Option<TsStmt> {
+    (!inspect.is_empty()).then(|| {
+        TsStmt::decl(
+            TsDecl::ExportNames {
+                names: vec!["BynkInspectRegistry".to_string()],
+            },
+            None,
+        )
+    })
+}
+
+/// The runtime names the entry imports for `bynk migrate sweep`'s wake (#2259), the
+/// request recorder (#3580) and the inspect route (#3581), each only when the build
+/// has it.
+fn sweep_trace_inspect_imports(
+    migratable: &[(String, i64)],
+    trace: bool,
+    inspect: &[String],
+) -> Vec<String> {
+    let mut names = Vec::new();
+    if !migratable.is_empty() {
+        names.push("__sweepAgentInstances".to_string());
+    }
+    names.extend(trace_imports(trace));
+    if !inspect.is_empty() {
+        names.push("__inspectRoute".to_string());
+        names.push("BynkInspectRegistry".to_string());
+    }
+    names
+}
+
+/// The entry's internal admin routes, in dispatch order, each followed by a blank:
+/// State-migrations S4 (#2259 Decision D): `bynk migrate sweep`'s wake, present only
+/// while a sweep has set its key (without it the route is `404`, as if absent); it
+/// admits the sweep's caller name alone and verifies the signature under the
+/// sweep's key. Then #3581: the dev-only agent inspection route, signed as an
+/// internal call. Neither is present unless the build has it.
+fn admin_routes(context: &str, migratable: &[(String, i64)], inspect: &[String]) -> Vec<TsStmt> {
+    let mut routes = Vec::new();
+    if !migratable.is_empty() {
+        routes.push(migrate_route(context, migratable));
+        routes.push(TsStmt::blank(None));
+    }
+    if !inspect.is_empty() {
+        routes.push(inspect_route(context, inspect));
+        routes.push(TsStmt::blank(None));
+    }
+    routes
 }
 
 /// State-migrations S4 (#2259 Decision D): the `/_bynk/migrate/<Class>`
@@ -832,8 +873,7 @@ pub fn emit_worker_entry(
     visible_types: &std::collections::HashMap<String, std::sync::Arc<bynk_syntax::ast::TypeDecl>>,
     // #3580: wrap `fetch` in the request recorder (`bynk dev --trace-events` only).
     trace: bool,
-    // #3581: the agent classes this Worker's `/_bynk/inspect/` route reads, and
-    // whose registry it hosts (`bynk dev` only; empty for every other build).
+    // #3581: the agent classes of the `bynk dev`-only inspect route (else empty).
     inspect: &[String],
 ) -> TsProgram {
     let mut program = TsProgram::new();
@@ -1112,14 +1152,7 @@ pub fn emit_worker_entry(
         // #2193: every Worker's `fetch` catch answers through it.
         "__faultResponse".to_string(),
     ];
-    if !migratable.is_empty() {
-        imports.push("__sweepAgentInstances".to_string());
-    }
-    imports.extend(trace_imports(trace));
-    if !inspect.is_empty() {
-        imports.push("__inspectRoute".to_string());
-        imports.push("BynkInspectRegistry".to_string());
-    }
+    imports.extend(sweep_trace_inspect_imports(migratable, trace, inspect));
     if has_http {
         imports.push("__matchPath".to_string());
         imports.push("__httpResultToResponse".to_string());
@@ -1281,9 +1314,7 @@ pub fn emit_worker_entry(
     }
 
     header_decls.extend(container_class_reexport(table));
-    if !inspect.is_empty() {
-        header_decls.push(inspect_registry_export());
-    }
+    header_decls.extend(inspect_registry_export(inspect));
 
     let mut fetch_params: Vec<TsParam> = vec![
         TsParam {
@@ -1528,21 +1559,8 @@ pub fn emit_worker_entry(
     ));
     try_body.push(TsStmt::blank(None));
 
-    // 1.25. State-migrations S4 (#2259 Decision D): `bynk migrate sweep`'s
-    // wake. Present only while a sweep has set its key: without it the route
-    // is `404`, as if absent. It admits the sweep's caller name alone, so a
-    // context holding an edge key to this Worker cannot use it, and then
-    // verifies the signature under the sweep's key.
-    if !migratable.is_empty() {
-        try_body.push(migrate_route(context, migratable));
-        try_body.push(TsStmt::blank(None));
-    }
-
-    // 1.3. #3581: the dev-only agent inspection route, signed as an internal call.
-    if !inspect.is_empty() {
-        try_body.push(inspect_route(context, inspect));
-        try_body.push(TsStmt::blank(None));
-    }
+    // 1.25. The internal admin routes: see `admin_routes`.
+    try_body.extend(admin_routes(context, migratable, inspect));
 
     // 1.5. WebSocket upgrade dispatch (v0.104, slice 3b). An `Upgrade: websocket`
     // request routes to the `from websocket` service's edge wrapper, which runs the

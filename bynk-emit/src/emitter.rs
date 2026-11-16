@@ -3983,10 +3983,7 @@ fn write_header(commons: &TypedCommons, ctx: &EmitProjectCtx) -> Vec<bynk_ts::Ts
             parts.push("type __DurableObjectNamespace");
             parts.push("__StateRegistry");
             parts.push("__makeAgent");
-            if workers && ctx.inspect_agents {
-                parts.push("__noteAgentInstance");
-                parts.push("__inspectAgent");
-            }
+            parts.extend(inspect_agent_imports(workers && ctx.inspect_agents));
         } else if workers
             && commons
                 .callees
@@ -4600,6 +4597,16 @@ pub fn effect_runtime_imports(ru: &RuntimeUse) -> &'static str {
 pub const FAULT_RUNTIME_IMPORTS: &str = ", __fault";
 /// #3580: the step wrapper a traced build puts around a call.
 pub const TRACE_STEP_RUNTIME_IMPORTS: &str = ", __traceStep";
+
+/// #3581: what a `bynk dev` build's agent module imports to record an instance and
+/// answer the inspect route.
+fn inspect_agent_imports(on: bool) -> Vec<&'static str> {
+    if on {
+        vec!["__noteAgentInstance", "__inspectAgent"]
+    } else {
+        Vec::new()
+    }
+}
 
 /// The import names for [`TRACE_STEP_RUNTIME_IMPORTS`], when the module wraps a call.
 fn trace_step_imports(runtime_use: &RuntimeUse) -> Vec<&'static str> {
