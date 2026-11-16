@@ -54,7 +54,9 @@ fn run() -> ExitCode {
             bynk::cli::doctor_options(only, strict),
             format.into(),
         ),
+        Command::Dev { sub: Some(sub), .. } => run_dev_sub(sub),
         Command::Dev {
+            sub: None,
             path,
             lock,
             contexts,
@@ -97,19 +99,7 @@ fn run() -> ExitCode {
             context,
             env,
             wrangler_args,
-        } => {
-            if !prepare(&path, lock.options()) {
-                return ExitCode::FAILURE;
-            }
-            run_tail(
-                path,
-                bynk::tail::TailOptions {
-                    context,
-                    environment: env,
-                    wrangler_args,
-                },
-            )
-        }
+        } => run_tail_command(path, lock, context, env, wrangler_args),
         Command::Deploy {
             path,
             lock,
@@ -1002,6 +992,49 @@ fn run_doctor(input: PathBuf, opts: DoctorOptions, format: Format) -> ExitCode {
     }
 }
 
+/// `bynk dev inspect …` (#3581): read a running session's agents.
+fn run_dev_sub(sub: bynk::cli::DevSub) -> ExitCode {
+    use bynk::cli::{DevSub, InspectSub};
+    use bynk::dev_inspect::{Inspect, Page};
+    let DevSub::Inspect { what } = sub;
+    let (path, inspect) = match what {
+        InspectSub::Agents {
+            path,
+            context,
+            class,
+        } => (path, Inspect::Agents { context, class }),
+        InspectSub::Agent {
+            class,
+            key,
+            path,
+            context,
+            field,
+            after,
+            limit,
+        } => (
+            path,
+            Inspect::Agent {
+                context,
+                class,
+                key,
+                page: Page {
+                    field,
+                    after,
+                    limit,
+                },
+            },
+        ),
+    };
+    let Some(project_root) = find_project_root(&path) else {
+        eprintln!(
+            "bynk: not inside a Bynk project (no bynk.toml found from `{}`)",
+            path.display()
+        );
+        return ExitCode::FAILURE;
+    };
+    bynk::dev_inspect::command(&project_root, &inspect)
+}
+
 fn run_dev(path: PathBuf, opts: DevOptions) -> ExitCode {
     let tb = SystemToolbox;
 
@@ -1019,6 +1052,25 @@ fn run_dev(path: PathBuf, opts: DevOptions) -> ExitCode {
     // project root — the same shape as `bynk compile` — so no per-include
     // root is selected here any more.
     dev::run(&tb, &project_root, bynk_emit::NODE_FLOOR, &opts)
+}
+
+/// `bynk tail`: prepare the project, then stream the deployed Worker's logs.
+fn run_tail_command(
+    path: PathBuf,
+    lock: bynk::cli::LockArgs,
+    context: Option<String>,
+    env: String,
+    wrangler_args: Vec<String>,
+) -> ExitCode {
+    if !prepare(&path, lock.options()) {
+        return ExitCode::FAILURE;
+    }
+    let opts = bynk::tail::TailOptions {
+        context,
+        environment: env,
+        wrangler_args,
+    };
+    run_tail(path, opts)
 }
 
 fn run_tail(path: PathBuf, opts: bynk::tail::TailOptions) -> ExitCode {

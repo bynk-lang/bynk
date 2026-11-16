@@ -128,7 +128,12 @@ pub enum Command {
     /// the running workers hot-reload; a failing rebuild reports errors and
     /// keeps serving the last good build. Everything after `--` is forwarded to
     /// `wrangler dev` verbatim.
+    ///
+    /// `bynk dev inspect` reads a running session (#3581): see its help.
+    #[command(args_conflicts_with_subcommands = true)]
     Dev {
+        #[command(subcommand)]
+        sub: Option<DevSub>,
         /// Project directory to serve from (anywhere inside the project; the
         /// root is found by walking up for `bynk.toml`). Defaults to `.`.
         #[arg(default_value = ".")]
@@ -1036,6 +1041,64 @@ pub fn doctor_options(only: Option<CapabilityArg>, strict: bool) -> DoctorOption
         only: only.map(Into::into),
         strict,
     }
+}
+
+/// What `bynk dev` can do besides serve (#3581).
+#[derive(Subcommand, Debug)]
+pub enum DevSub {
+    /// Read what a running `bynk dev` session holds. Prints JSON on stdout.
+    ///
+    /// A session built by `bynk dev` answers a signed, read-only route in each
+    /// Worker; a deploy build has none. Needs a running session for the project.
+    Inspect {
+        #[command(subcommand)]
+        what: InspectSub,
+    },
+}
+
+/// `bynk dev inspect`'s subjects.
+#[derive(Subcommand, Debug)]
+pub enum InspectSub {
+    /// List the agent instances the session has seen, by class and key.
+    ///
+    /// An instance is listed once a handler has addressed it in this session.
+    Agents {
+        /// Project directory (anywhere inside the project). Defaults to `.`.
+        #[arg(default_value = ".")]
+        path: PathBuf,
+        /// Only this context (dotted name or its worker-dir form).
+        #[arg(long, value_name = "NAME")]
+        context: Option<String>,
+        /// Only this agent class.
+        #[arg(long, value_name = "AGENT")]
+        class: Option<String>,
+    },
+    /// Read one agent instance's stored state, its schema version and layout.
+    ///
+    /// The state is read as stored (the wire shape) and nothing is written: a
+    /// record older than the build is reported, not migrated. Collections are
+    /// paged: `--field` pages one, from the cursor `--after`.
+    Agent {
+        /// The agent class.
+        class: String,
+        /// The instance's key: a string as it is, any other key as JSON.
+        key: String,
+        /// Project directory (anywhere inside the project). Defaults to `.`.
+        #[arg(long, default_value = ".")]
+        path: PathBuf,
+        /// Only this context (dotted name or its worker-dir form).
+        #[arg(long, value_name = "NAME")]
+        context: Option<String>,
+        /// Page this collection field alone.
+        #[arg(long, value_name = "FIELD")]
+        field: Option<String>,
+        /// The cursor a previous page returned as `next`.
+        #[arg(long, value_name = "CURSOR", requires = "field")]
+        after: Option<String>,
+        /// Entries per page (at most 500).
+        #[arg(long, value_name = "N")]
+        limit: Option<u32>,
+    },
 }
 
 /// What `bynk dev` reads from the workers' output and writes as events: the
