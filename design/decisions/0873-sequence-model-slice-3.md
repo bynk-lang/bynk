@@ -1,11 +1,6 @@
----
-level: patch
-changelog: The `bynk/sequenceModel` request walks nesting in full (with each block's `depth`), shows `?` as a `Break` block, and names each handler's `trigger`, each agent lifeline's `key` and each boundary call's `callee` (with its location)
----
+# 0873 — The sequence model is complete to a safety cap, shows `?` as a break, and names its trigger, agent keys and callees
 
-## ADR: sequence-model-slice-3
-title: The sequence model is complete to a safety cap, shows `?` as a break, and names its trigger, agent keys and callees
-summary: Model-diagrams slice 3 — `MAX_BLOCK_DEPTH` becomes a 16-level safety cap with `AltBlock.depth`; `?` is an `AltKind::Break`; additive `trigger`, `Participant.key` and `Message.callee` (located by the LSP)
+- **Status:** Accepted (v0.633.18)
 
 **Context.** The model-diagrams track (`design/tracks/model-diagrams.md` §6.3)
 asks the server for the facts behind a better sequence diagram. ADR 0858 says
