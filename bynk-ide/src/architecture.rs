@@ -120,13 +120,16 @@ fn protocol_name(p: &ServiceProtocol) -> &'static str {
     }
 }
 
-/// The actors a service's handlers admit: its `default_by` and each
-/// handler's `by`, deduplicated and sorted.
+/// The actors a service's handlers admit: each handler's own `by`, or the
+/// service's `default_by` where it has none; deduplicated and sorted.
 fn service_actors(s: &ServiceDecl) -> Vec<String> {
+    // A handler's own `by` replaces the service default rather than adding to
+    // it (as `sequence.rs` resolves it), so the default counts only for the
+    // handlers that inherit it.
     let mut actors: Vec<String> = s
-        .default_by
+        .handlers
         .iter()
-        .chain(s.handlers.iter().filter_map(|h| h.by_clause.as_ref()))
+        .filter_map(|h| h.by_clause.as_ref().or(s.default_by.as_ref()))
         .flat_map(|by| by.actors.iter().map(|a| a.name.clone()))
         .collect();
     actors.sort();
@@ -931,6 +934,12 @@ service web from http by Visitor {
     Ok(2)
   }
 }
+
+service staff from http by Visitor {
+  on GET("/ops") () -> Effect[HttpResult[Int]] by Admin {
+    Ok(3)
+  }
+}
 "#;
 
     #[test]
@@ -956,5 +965,7 @@ service web from http by Visitor {
             svc("web").actors,
             vec!["Admin".to_string(), "Visitor".to_string()]
         );
+        // Every handler overrides the default, so no handler admits it.
+        assert_eq!(svc("staff").actors, vec!["Admin".to_string()]);
     }
 }
