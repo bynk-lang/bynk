@@ -1503,6 +1503,21 @@ pub(super) fn platform_double(
                 op("runStream", "_, _")
             )
         }
+        // #3515: a test never reaches Cloudflare Images, so every operation
+        // faults until stubbed. There is no fake transform: an image returned
+        // unchanged would make a test pass for the wrong reason.
+        ("bynk.cloudflare", "Images") => {
+            let op = |op: &str, args: &str| {
+                format!(
+                    "    async {op}() {{\n      throw new globalThis.Error(\"bynk: `Images.{op}` is not stubbed, and a test never reaches Cloudflare Images — add `stub Images.{op}({args}) returns …`\");\n    }},\n"
+                )
+            };
+            format!(
+                "  return {{\n{}{}  }};\n",
+                op("info", "_"),
+                op("transform", "_, _, _")
+            )
+        }
         // #3479: the real `WorkersVectorize` over an exact in-memory index built
         // from the instance's declaration, so a retrieval flow (store, filter,
         // rank) runs in a test. Ranking is exact and a write is visible at once,

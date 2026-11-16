@@ -1658,12 +1658,12 @@ pub(crate) fn synthesise_environment_block(
         env_block.insert("version_metadata".to_string(), version_metadata.clone());
     }
 
-    // #3577: Workers AI (#3478) and AI Search (#3480), each as written: `[ai]`
-    // names no resource, and an `[[ai_search]]` entry names the account's
-    // instance as the declaration writes it, the same in every environment.
-    // Bindings are not inherited by `[env.*]`, or a staging Worker has no `AI`
-    // or `AI_SEARCH_*` to call.
-    for table in ["ai", "ai_search"] {
+    // #3577: Workers AI (#3478), AI Search (#3480) and Images (#3515), each as
+    // written: `[ai]` and `[images]` name no resource, and an `[[ai_search]]`
+    // entry names the account's instance as the declaration writes it, the
+    // same in every environment. Bindings are not inherited by `[env.*]`, or a
+    // staging Worker has no `AI`, `AI_SEARCH_*` or `IMAGES` to call.
+    for table in ["ai", "ai_search", "images"] {
         if let Some(value) = doc.get(table) {
             env_block.insert(table.to_string(), value.clone());
         }
@@ -2055,6 +2055,9 @@ id = "<KV_NAMESPACE_ID>" # set at deploy time
 [version_metadata]
 binding = "CF_VERSION_METADATA"
 
+[images]
+binding = "IMAGES"
+
 [[send_email]]
 name = "EMAIL_MAIL"
 allowed_sender_addresses = ["orders@shop.example"]
@@ -2203,6 +2206,12 @@ max_batch_size = 10
             env["version_metadata"]["binding"].as_str(),
             Some("CF_VERSION_METADATA"),
             "the Version metadata binding is repeated, or `Version.current()` faults in the environment"
+        );
+        // #3515: likewise the Images binding.
+        assert_eq!(
+            env["images"]["binding"].as_str(),
+            Some("IMAGES"),
+            "the Images binding is repeated, or `Images.transform` faults in the environment"
         );
         assert_eq!(
             env["services"][0]["service"].as_str(),

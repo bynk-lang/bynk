@@ -1,0 +1,48 @@
+suite shop.thumbs
+
+consumes bynk
+consumes bynk.cloudflare { Images, ImageResult, ImagesError, ImageInfo, ImageFormat }
+
+// #3515: a test never reaches Cloudflare Images. `transform` faults until it
+// is stubbed, and a stubbed result (or error) is what the handler sees. There
+// is no fake transform: an image handed back unchanged would pass for the
+// wrong reason.
+
+case "an unstubbed transform faults" {
+	expect avatars.POST("/avatar", Bytes.fromUtf8("x")) by Visitor faults
+}
+
+case "a stubbed image is served" {
+	stub Images.transform(_, _, _) returns Ok(ImageResult { body: Bytes.fromUtf8("webp"), contentType: "image/webp" })
+	let r <- avatars.POST("/avatar", Bytes.fromUtf8("x")) by Visitor
+	expect r is Raw(_, "image/webp")
+	expect Images.transform called once
+}
+
+case "a stubbed invalid image is a bad request" {
+	stub Images.transform(_, _, _) returns Err(InvalidImage("not an image"))
+	let r <- avatars.POST("/avatar", Bytes.fromUtf8("x")) by Visitor
+	expect r is BadRequest("not an image")
+}
+
+case "a provider reaches Images through its given" {
+	stub Images.transform(_, _, _) returns Err(ImageTooLarge)
+	let r <- about.call(Bytes.fromUtf8("x"))
+	expect r is None
+}
+
+case "an unstubbed info faults" {
+	expect probe.POST("/probe", Bytes.fromUtf8("x")) by Visitor faults
+}
+
+case "a stubbed raster info is read" {
+	stub Images.info(_) returns Ok(Raster(ImageFormat.Png, 640, 480, 1234))
+	let r <- probe.POST("/probe", Bytes.fromUtf8("x")) by Visitor
+	expect r is Ok("640x480 1234")
+}
+
+case "a stubbed svg has no dimensions" {
+	stub Images.info(_) returns Ok(Svg)
+	let r <- probe.POST("/probe", Bytes.fromUtf8("x")) by Visitor
+	expect r is Ok("svg")
+}

@@ -890,6 +890,7 @@ pub(crate) fn binding_ts_type(source: &BindingSource) -> &'static str {
         BindingSource::Singleton { capability } => match capability.as_str() {
             "Version" => "__WorkerVersionMetadata",
             "Ai" => "__WorkerAiBinding",
+            "Images" => "__WorkerImagesBinding",
             other => unreachable!("singleton `{other}` has no `env` type"),
         },
         BindingSource::Agent { .. }

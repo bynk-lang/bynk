@@ -10,6 +10,7 @@
 // `WorkersEdgeCache` (L7, #2414) against an execution context fake, and
 // `WorkersVersion` (#3300) against a Version metadata fake, and
 // `WorkersAi` (#3478) against a Workers AI binding fake, and
+// `WorkersImages` (#3515) against an Images binding fake, and
 // `WorkersVectorize` (#3479) against a Vectorize index fake, and
 // `WorkersAiSearch` (#3480) against an AI Search instance fake, and
 // `WorkersStoredSecret` (#3301) against a Secrets Store secret fake, and
@@ -28,7 +29,7 @@
 
 import { test } from "node:test";
 import assert from "node:assert/strict";
-import { WorkersAi, WorkersAiSearch, WorkersAnalytics, WorkersContainer, WorkersD1, WorkersEdgeCache, WorkersEmail, WorkersKv, WorkersMtls, WorkersMySql, WorkersPostgres, WorkersQueue, WorkersR2, WorkersRateLimit, WorkersService, WorkersStoredSecret, WorkersVectorize, WorkersVersion } from "./bynk/cloudflare.binding.js";
+import { WorkersAi, WorkersAiSearch, WorkersImages, WorkersAnalytics, WorkersContainer, WorkersD1, WorkersEdgeCache, WorkersEmail, WorkersKv, WorkersMtls, WorkersMySql, WorkersPostgres, WorkersQueue, WorkersR2, WorkersRateLimit, WorkersService, WorkersStoredSecret, WorkersVectorize, WorkersVersion } from "./bynk/cloudflare.binding.js";
 import { Method, FetchError } from "./bynk.js";
 import { Some, None } from "./__bynk_runtime/result.js";
 
@@ -1357,6 +1358,171 @@ t("WorkersVersion.current: a missing binding or an unreadable timestamp faults",
   await assert.rejects(new WorkersVersion({}).current(), /\[version_metadata\]/);
   const bad = { CF_VERSION_METADATA: { id: "x", tag: "", timestamp: "yesterday" } };
   await assert.rejects(new WorkersVersion(bad).current(), /not a date/);
+});
+
+// #3515: `WorkersImages`, against a fake of Cloudflare's Images binding:
+// `input(stream)` starts a pipeline that records `transform` and `draw` steps,
+// and `output({ format })` resolves a result with `image()` (a stream) and
+// `contentType()`. A refusal is a thrown `ImagesError` carrying a numeric
+// `code` (Cloudflare's workers-types), and the code is also read from a message
+// that opens with it.
+function fakeImages(opts = {}) {
+  const calls = [];
+  const read = async (stream) => new Uint8Array(await new Response(stream).arrayBuffer());
+  const chain = (source, steps) => ({
+    source,
+    steps,
+    transform(o) {
+      return chain(source, [...steps, { transform: o }]);
+    },
+    draw(overlay, o) {
+      return chain(source, [...steps, { draw: overlay, options: o }]);
+    },
+    async output(o) {
+      const bytes = await read(source);
+      const overlays = [];
+      for (const st of steps) if (st.draw) overlays.push(await read(st.draw.source));
+      calls.push({ bytes, steps: steps.map((st) => (st.draw ? { draw: true, options: st.options } : st)), overlays, output: o });
+      if (opts.throws !== undefined) throw opts.throws;
+      return {
+        image: () => new Blob([new Uint8Array([9, 9])]).stream(),
+        contentType: () => o.format,
+      };
+    },
+  });
+  return {
+    calls,
+    input: (stream) => chain(stream, []),
+    async info(stream) {
+      calls.push({ info: await read(stream) });
+      if (opts.throws !== undefined) throw opts.throws;
+      return opts.info;
+    },
+  };
+}
+const imgOpts = (o = {}) => ({ width: None, height: None, fit: None, rotate: None, blur: None, overlays: [], ...o });
+const outOpts = (o = {}) => ({ format: { tag: "Webp" }, quality: None, ...o });
+const IMG = new Uint8Array([1, 2, 3]);
+
+t("WorkersImages.transform: builds the pipeline and returns the bytes and content type", async () => {
+  const images = fakeImages();
+  const logo = { image: new Uint8Array([7]), opacity: Some(0.5), top: None, left: None, bottom: Some(8), right: Some(8), repeat: false };
+  const r = await new WorkersImages({ IMAGES: images }).transform(
+    IMG,
+    imgOpts({ width: Some(256), height: Some(128), fit: Some({ tag: "ScaleDown" }), rotate: Some(90), blur: Some(5), overlays: [logo] }),
+    outOpts({ quality: Some(80) }),
+  );
+  assert.deepEqual(r, { tag: "Ok", value: { body: new Uint8Array([9, 9]), contentType: "image/webp" } });
+  const [c] = images.calls;
+  assert.deepEqual(c.bytes, IMG);
+  assert.deepEqual(c.steps, [
+    { transform: { width: 256, height: 128, fit: "scale-down", rotate: 90, blur: 5 } },
+    { draw: true, options: { opacity: 0.5, bottom: 8, right: 8 } },
+  ]);
+  assert.deepEqual(c.overlays, [new Uint8Array([7])]);
+  assert.deepEqual(c.output, { format: "image/webp", quality: 80 });
+});
+
+t("WorkersImages.transform: every format and fit has its wire name, and no options means no transform step", async () => {
+  const images = fakeImages();
+  const wb = new WorkersImages({ IMAGES: images });
+  for (const [tag, mime] of [["Jpeg", "image/jpeg"], ["Png", "image/png"], ["Webp", "image/webp"], ["Avif", "image/avif"], ["Gif", "image/gif"]]) {
+    await wb.transform(IMG, imgOpts(), outOpts({ format: { tag } }));
+    assert.deepEqual(images.calls.at(-1).output, { format: mime });
+    assert.deepEqual(images.calls.at(-1).steps, []);
+  }
+  for (const [tag, wire] of [["ScaleDown", "scale-down"], ["Contain", "contain"], ["Cover", "cover"], ["Crop", "crop"], ["Pad", "pad"], ["Squeeze", "squeeze"]]) {
+    await wb.transform(IMG, imgOpts({ fit: Some({ tag }) }), outOpts());
+    assert.deepEqual(images.calls.at(-1).steps, [{ transform: { fit: wire } }]);
+  }
+});
+
+t("WorkersImages.transform: obvious invalid input is InvalidImage and never reaches the platform", async () => {
+  const images = fakeImages();
+  const wb = new WorkersImages({ IMAGES: images });
+  const overlay = (o = {}) => ({ image: new Uint8Array([7]), opacity: None, top: None, left: None, bottom: None, right: None, repeat: false, ...o });
+  const bad = async (image, options, output) => (await wb.transform(image, options, output)).error;
+  const invalid = (m) => ({ tag: "InvalidImage", message: m });
+  assert.deepEqual(await bad(new Uint8Array(0), imgOpts(), outOpts()), invalid("the image is empty"));
+  assert.deepEqual(await bad(IMG, imgOpts({ width: Some(0) }), outOpts()), invalid("width must be a whole number of pixels, at least 1, not 0"));
+  assert.deepEqual(await bad(IMG, imgOpts({ height: Some(-3) }), outOpts()), invalid("height must be a whole number of pixels, at least 1, not -3"));
+  assert.deepEqual(await bad(IMG, imgOpts({ rotate: Some(45) }), outOpts()), invalid("rotate must be 90, 180 or 270, not 45"));
+  assert.deepEqual(await bad(IMG, imgOpts(), outOpts({ quality: Some(0) })), invalid("quality must be a whole number from 1 to 100, not 0"));
+  assert.deepEqual(await bad(IMG, imgOpts(), outOpts({ quality: Some(101) })), invalid("quality must be a whole number from 1 to 100, not 101"));
+  assert.deepEqual(await bad(IMG, imgOpts({ overlays: [overlay({ opacity: Some(1.5) })] }), outOpts()), invalid("overlay 0: opacity must be from 0 to 1, not 1.5"));
+  assert.deepEqual(await bad(IMG, imgOpts({ overlays: [overlay(), overlay({ left: Some(1), right: Some(1) })] }), outOpts()), invalid("overlay 1: left and right cannot both be set"));
+  assert.deepEqual(await bad(IMG, imgOpts({ overlays: [overlay({ top: Some(1), bottom: Some(1) })] }), outOpts()), invalid("overlay 0: top and bottom cannot both be set"));
+  assert.deepEqual(await bad(IMG, imgOpts({ overlays: [overlay({ image: new Uint8Array(0) })] }), outOpts()), invalid("overlay 0: the image is empty"));
+  assert.deepEqual(images.calls, []);
+});
+
+t("WorkersImages.transform: a platform error is mapped by its code, any other is ImagesFailed with its message", async () => {
+  const failure = async (e) => (await new WorkersImages({ IMAGES: fakeImages({ throws: e }) }).transform(IMG, imgOpts(), outOpts())).error;
+  const coded = (code, message = "boom") => Object.assign(new Error(message), { name: "ImagesError", code });
+  assert.deepEqual(await failure(coded(9412, "not an image")), { tag: "InvalidImage", message: "not an image" });
+  assert.deepEqual(await failure(coded(9401)), { tag: "InvalidImage", message: "boom" });
+  assert.deepEqual(await failure(coded(9432)), { tag: "InvalidImage", message: "boom" });
+  // 9402 is "too large or the connection was interrupted": only a message about size is the caller's.
+  assert.deepEqual(await failure(coded(9402, "The image is too large")), { tag: "ImageTooLarge" });
+  assert.deepEqual(await failure(coded(9402, "connection interrupted")), { tag: "ImagesFailed", message: "connection interrupted" });
+  assert.deepEqual(await failure(coded(9413)), { tag: "ImageTooLarge" });
+  assert.deepEqual(await failure(coded(9520)), { tag: "UnsupportedImage" });
+  assert.deepEqual(await failure(coded(9422, "usage limit")), { tag: "ImagesFailed", message: "usage limit" });
+  assert.deepEqual(await failure(coded(9529, "timed out")), { tag: "ImagesFailed", message: "timed out" });
+  // A `code` that is a string, or only the message's opening code, still maps.
+  assert.deepEqual(await failure(Object.assign(new Error("x"), { code: "9412" })), { tag: "InvalidImage", message: "x" });
+  assert.deepEqual(await failure(new Error("ImagesError: 9413: too big")), { tag: "ImageTooLarge" });
+  assert.deepEqual(await failure(new Error("9520: format")), { tag: "UnsupportedImage" });
+  // Only a code that opens the message is one.
+  assert.deepEqual(await failure(new Error("id 9412 failed")), { tag: "ImagesFailed", message: "id 9412 failed" });
+  assert.deepEqual(await failure(new Error("something new")), { tag: "ImagesFailed", message: "something new" });
+  assert.deepEqual(await failure("odd"), { tag: "ImagesFailed", message: "odd" });
+});
+
+t("WorkersImages.info: a raster image is its format and size, an SVG has none", async () => {
+  const info = async (reply) => new WorkersImages({ IMAGES: fakeImages({ info: reply }) }).info(IMG);
+  const raster = (mime, format) => info({ format: mime, fileSize: 1234, width: 640, height: 480 }).then((r) => [r, format]);
+  for (const [mime, tag] of [["image/jpeg", "Jpeg"], ["image/png", "Png"], ["image/webp", "Webp"], ["image/avif", "Avif"], ["image/gif", "Gif"], ["image/heic", "Heic"]]) {
+    const [r] = await raster(mime, tag);
+    assert.deepEqual(r, { tag: "Ok", value: { tag: "Raster", format: { tag: tag }, width: 640, height: 480, size: 1234 } });
+  }
+  assert.deepEqual(await info({ format: "image/svg+xml" }), { tag: "Ok", value: { tag: "Svg" } });
+  // A format `ImageFormat` does not name, or a raster with no size, is a failure, not a guess.
+  assert.deepEqual((await info({ format: "image/jxl", fileSize: 1, width: 1, height: 1 })).error.tag, "ImagesFailed");
+  assert.deepEqual((await info({ format: "image/png" })).error.tag, "ImagesFailed");
+});
+
+t("WorkersImages.info: an empty image is InvalidImage without calling the platform, and a platform error maps by code", async () => {
+  const images = fakeImages({ info: { format: "image/png", fileSize: 1, width: 1, height: 1 } });
+  assert.deepEqual(await new WorkersImages({ IMAGES: images }).info(new Uint8Array(0)), { tag: "Err", error: { tag: "InvalidImage", message: "the image is empty" } });
+  assert.deepEqual(images.calls, []);
+  const coded = (code) => Object.assign(new Error("boom"), { name: "ImagesError", code });
+  const failure = async (e) => (await new WorkersImages({ IMAGES: fakeImages({ throws: e }) }).info(IMG)).error;
+  assert.deepEqual(await failure(coded(9412)), { tag: "InvalidImage", message: "boom" });
+  assert.deepEqual(await failure(coded(9413)), { tag: "ImageTooLarge" });
+  assert.deepEqual(await failure(coded(9520)), { tag: "UnsupportedImage" });
+  assert.deepEqual(await failure(new Error("odd")), { tag: "ImagesFailed", message: "odd" });
+});
+
+t("WorkersImages.transform: Heic is read-only, so asking for it as an output is InvalidImage", async () => {
+  const images = fakeImages();
+  const r = await new WorkersImages({ IMAGES: images }).transform(IMG, imgOpts(), outOpts({ format: { tag: "Heic" } }));
+  assert.deepEqual(r, { tag: "Err", error: { tag: "InvalidImage", message: "Heic cannot be written as an output format" } });
+  assert.deepEqual(images.calls, []);
+});
+
+t("WorkersImages.transform: the integration double's not-stubbed fault is rethrown, not returned as an error", async () => {
+  const notStubbed = Object.assign(new Error("bynk: the `Images` binding is not stubbed"), { bynkNotStubbed: true });
+  const wb = new WorkersImages({ IMAGES: fakeImages({ throws: notStubbed, info: undefined }) });
+  await assert.rejects(wb.transform(IMG, imgOpts(), outOpts()), /not stubbed/);
+  await assert.rejects(wb.info(IMG), /not stubbed/);
+  // An unknown fit is refused before the platform, like an unknown format.
+  const r = await new WorkersImages({ IMAGES: fakeImages() }).transform(IMG, imgOpts({ fit: Some({ tag: "Zoom" }) }), outOpts());
+  assert.deepEqual(r, { tag: "Err", error: { tag: "InvalidImage", message: "the fit Zoom has no wire name in this binding" } });
+});
+
+t("WorkersImages: a Worker without the binding faults, naming the stanza", async () => {
+  await assert.rejects(new WorkersImages({}).transform(IMG, imgOpts(), outOpts()), /\[images\] wrangler stanza/);
 });
 
 // #3478: `WorkersAi`, against a fake of Cloudflare's AI binding: `run(model,

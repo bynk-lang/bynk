@@ -487,6 +487,7 @@ Consuming it **locks the deployment unit to Cloudflare** (it cannot then target
 | **`EdgeCache`** *(experimental)* | `purge(prefixes: List[String]) -> Effect[Bool]`. Used only through a named instance, at most one per context, which turns Cloudflare's edge cache on for the context's Worker; see below. |
 | **`Version`** *(experimental)* | `current() -> Effect[WorkerVersion]`. One per Worker, used bare; see [The running version](#the-running-version-version). |
 | **`Ai`** *(experimental)* | `run(model: String, input: String) -> Effect[Result[String, AiError]]` · `generate(model, request: GenerateRequest) -> Effect[Result[Generation, AiError]]` · `embed(model, texts: List[String]) -> Effect[Result[List[List[Float]], AiError]]` · `runStream(model, input: String) -> Effect[Result[Stream[String], AiError]]`. One per Worker, used bare; see [Workers AI](#workers-ai-ai). |
+| **`Images`** *(experimental)* | `info(image: Bytes) -> Effect[Result[ImageInfo, ImagesError]]` · `transform(image: Bytes, options: TransformOptions, output: OutputOptions) -> Effect[Result[ImageResult, ImagesError]]`. One per Worker, used bare; see [Images](#images-images). |
 | **`StoredSecret`** *(experimental)* | `get() -> Effect[String]`. Used only through a named instance that names its store and its secret; see [Account secrets](#account-secrets-storedsecret). |
 | **`Email`** *(experimental)* | `send(message: EmailMessage) -> Effect[Result[String, EmailError]]`. Used only through a named instance, which may restrict its senders and recipients; see [Outbound email](#outbound-email-email). |
 | **`Postgres`** *(experimental)* | `all(sql: String, params: List[PgValue]) -> Effect[Result[String, PgError]]` · `first(sql, params) -> Effect[Result[Option[String], PgError]]` · `run(sql, params) -> Effect[Result[PgRun, PgError]]` · `transaction(statements: List[PgStatement]) -> Effect[Result[List[PgRun], PgError]]`, and the compiler-lowered typed reads `select[T]` and `firstAs[T]`. Used only through a named instance; see [Postgres databases](#postgres-databases-postgres). |
@@ -963,6 +964,86 @@ caller can reach. In a test every `Ai` operation faults until it is stubbed
 (`stub Ai.run(_, _) returns …`), so a test never reaches Workers AI, and a
 `system` test's Workers behave the same. `Ai` is experimental: list
 `"bynk.cloudflare.Ai"` under `[unstable] allow`.
+
+### Images: `Images`
+
+`Images` resizes, rotates, blurs, converts and draws on images inside the Worker,
+through Cloudflare's [Images binding](https://developers.cloudflare.com/images/optimization/binding/).
+The image is the bytes you hold (an upload, an object from R2), not a URL. A
+Worker has one such binding, so `Images` is used bare, with no named instances
+(`capability Resizer = Images` is `bynk.capability.base_not_instantiable`):
+
+```bynk,fragment
+consumes bynk
+consumes bynk.cloudflare { Images, ImageFormat, ImageFit, TransformOptions, OutputOptions }
+
+service avatars from http {
+	@raw(contentType: "*/*")
+	@limit(maxBody: 1048576)
+	on POST("/avatar") (body: Bytes) -> Effect[HttpResult[String]] by Visitor given Images {
+		let options = TransformOptions { width: Some(256), height: Some(256), fit: Some(ImageFit.Cover) }
+		let r <- Images.transform(body, options, OutputOptions { format: ImageFormat.Webp })
+		match r {
+			Ok(img) => Raw(img.body, img.contentType),
+			Err(InvalidImage(m)) => BadRequest(m),
+			Err(ImageTooLarge) => BadRequest("image too large"),
+			Err(_) => ServerError("could not process image"),
+		}
+	}
+}
+```
+
+`info(image)` reads an image's format and size without transforming it, and
+Cloudflare does not bill it. It answers `Raster(format, width, height, size)`
+(`size` in bytes) or `Svg`, which the platform reports without dimensions. A
+format `ImageFormat` does not name is `ImagesFailed`, and an empty or non-image
+input is `InvalidImage`.
+
+`transform(image, options, output)` reads `image` (at most 20 MB), applies
+`options` and writes the result as `output` says; the result is buffered whole.
+`TransformOptions` has `width` and `height` in pixels, a `fit`
+(`ScaleDown`, the platform's default, `Contain`, `Cover`, `Crop`, `Pad` or
+`Squeeze`), a `rotate` of 90, 180 or 270 degrees (applied before the resize), a
+`blur` radius and a list of `overlays`; a field left `None` is the platform's
+default. An `Overlay` is `Bytes` drawn over the image at an offset from `top`,
+`left`, `bottom` or `right`, at an `opacity` from 0 to 1, optionally tiled with
+`repeat`; overlays are drawn in order. `OutputOptions` needs a `format`
+(`Jpeg`, `Png`, `Webp`, `Avif` or `Gif`: the platform has no default; `Heic` is
+read only, so it is `InvalidImage` as an output) and takes an
+optional `quality` from 1 to 100. The result is an `ImageResult` with the `body`
+and the `contentType` it was written with.
+
+An uploaded image is untrusted input, so a bad one is a value, not a fault. An
+`ImagesError` is `InvalidImage(message)` (the input is not an image, or an
+option is out of range), `UnsupportedImage` (a format the platform cannot read
+or write), `ImageTooLarge` (over the platform's size or area limit) or
+`ImagesFailed(message)` (anything else, with the platform's message).
+The binding itself refuses an empty image, a `width` or `height` below 1, a
+`rotate` other than 90, 180 or 270, an `opacity` outside 0 to 1, a `quality`
+outside 1 to 100 and an overlay positioned from both opposite edges, as
+`InvalidImage`, without calling the platform. The platform's own limits
+(dimensions, area, blur radius) are not repeated here: it enforces them and
+reports them as an `ImagesError`, so see Cloudflare's
+[Images limits](https://developers.cloudflare.com/images/get-started/limits/).
+Cloudflare adds formats, fits and error codes over time, so a `match` over
+`ImageFormat`, `ImageFit` or `ImagesError` needs a wildcard.
+
+A Worker whose code reaches `Images`, directly or through a provider's `given`,
+declares `[images]` bound as `env.IMAGES`; one that does not declares nothing.
+There is nothing for `bynk deploy` to create.
+
+Calls are billed by Cloudflare as unique transformations; see Cloudflare's
+[Images pricing](https://developers.cloudflare.com/images/pricing/) for what
+applies, and put a `RateLimit` in front of any handler an anonymous caller can
+reach. Under `bynk dev` the binding runs locally in Cloudflare's low-fidelity
+form, which supports only `width`, `height`, `rotate` and the output format:
+`fit`, `blur`, `overlays`, `quality` and some formats are not reproduced there,
+so check the output on a deployed Worker. In a test every `Images` operation
+faults until it is stubbed (`stub Images.info(_) returns …`), so a
+test never reaches Cloudflare Images, and a `system` test's Workers behave the
+same. There is no fake transform, because an image handed back unchanged would
+make a test pass for the wrong reason. `Images` is experimental: list
+`"bynk.cloudflare.Images"` under `[unstable] allow`.
 
 ### Account secrets: `StoredSecret`
 

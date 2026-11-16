@@ -17,6 +17,9 @@ or a row links to no file. Summaries and statuses are curated by hand; the
 
 | # | Decision | Status |
 |---|---|---|
+| [0862](0862-bynk-client-http-contract-hash.md) | **`bynk client`: an informational contract hash for `from http` routes** (v0.629) — A generated client carries a FNV-1a hash of what it acts on for each route and service, sends it only on request, and nothing rejects a mismatch | Accepted (v0.629) |
+| [0861](0861-images-capability.md) | **Cloudflare Images is a one-per-Worker `Images` capability: a flat typed `transform` over `Bytes`** (v0.628) — A `Singleton` `Images` over the `[images]` binding, typed options, errors by code, stub-only in tests | Accepted (v0.628) |
+| [0860](0860-dev-request-traces.md) | **`bynk dev` records per-request traces through a dev-only runtime module** (v0.627.1) — Steps are recorded at the emitter's call sites, the trace leaves the Worker as a `__bynk_trace:` stdout line, and recording exists only in builds that ask for it | Accepted (v0.627.1) |
 | [0859](0859-mtls-certificate-linked-kind.md) | **`MtlsCertificate`, a linked instance kind that presents an account-held client certificate** (v0.627) — Named, never uploaded or given by id; `send` has Fetch.send's shape; remote-only under `bynk dev`; faults until stubbed | Accepted (v0.627) |
 | [0858](0858-diagram-models-are-complete.md) | **The server's diagram models are complete; the client decides how much to show** (v0.626.2) — Retire `MAX_BLOCK_DEPTH` as a presentation cut — ship the full block tree with depth, fold in the client | Proposed (v0.626.2) |
 | [0857](0857-model-views-first-party-uml-renderer.md) | **The extension's model views render through a first-party diagram engine in UML notation, not Mermaid** (v0.626.2) — Model → diagram IR → layout (own grid for sequence, ELK for structure) → SVG, in the webview, in UML 2.5 with a Bynk profile | Proposed (v0.626.2) |

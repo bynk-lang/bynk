@@ -173,7 +173,9 @@ pub struct WireBranch {
     /// [`bynk_ide::sequence::Branch::reply`]. `null` on the wire when absent.
     pub reply: Option<String>,
     /// The source range of the branch's arm — see
-    /// [`bynk_ide::sequence::Branch::span`].
+    /// [`bynk_ide::sequence::Branch::span`]. For the `else` of an `else if`,
+    /// the range starts at the inner `if` keyword and covers the rest of the
+    /// chain (#3599); the inner `if` is a nested block with its own ranges.
     pub range: tower_lsp::lsp_types::Range,
 }
 
