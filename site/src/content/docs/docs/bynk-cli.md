@@ -507,6 +507,16 @@ any other key as JSON.
   (`null` when the project has no schema lock). `layout` is the storage layout.
   `migrationPending` is `true` when the record is behind the build and a
   migration step covers it: it is shown as stored, not migrated.
+- `history` is the instance's recent transitions, oldest first, at most the last
+  50, each `{ "handler", "old", "new", "at" }`: the handler that committed it, the
+  state before and after, and the time in milliseconds. `old` and `new` hold the
+  `cells` in wire form and each collection's `size` (`{ "cells": {…},
+  "collections": { "lines": 2 } }`), not its entries; `old` is `null` for the
+  instance's first recorded commit. A transition a handler or an invariant
+  refuses is never committed, so it has no entry. A commit made by a migration
+  has `handler: null`. The buffer also drops its oldest entries when it would pass
+  about 96 KiB, so an instance with large cells keeps fewer than 50. `history` is `[]` for an
+  instance nothing has committed to in this build.
 - `exists` is `false`, and nothing else is returned, for an instance with no
   stored state yet.
 - `readable` is `false` for a record this build cannot read, with `fault` naming

@@ -234,7 +234,9 @@ An instance is listed once a handler has addressed it in this session. Reading
 one shows its stored state (the same shape that crosses the wire), its schema
 version and its storage layout; a large `Map`, `Set`, `Cache` or `Log` comes a
 page at a time (`--field NAME --limit N`, then `--after` the `next` cursor it
-returned). Inspecting changes nothing: it does not run a handler, migrate a
+returned). It also shows the instance's last 50 committed transitions, oldest
+first: which handler committed each and the cells and collection sizes before and
+after. A transition an invariant refuses never commits, so it is not listed. Inspecting changes nothing: it does not run a handler, migrate a
 record or write to storage.
 
 This is for the local session only. A build for [`bynk deploy`](/book/guides/projects-build-and-deployment/deploy-to-cloudflare/)

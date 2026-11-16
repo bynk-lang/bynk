@@ -176,7 +176,7 @@ jobs:
         with:
           persist-credentials: false
       - uses: dtolnay/rust-toolchain@e081816240890017053eacbb1bdf337761dc5582 # 1.95.0
-      - uses: Swatinem/rust-cache@c8037a86dde8214a8310e9f54a8fc61ab362aa31 # v2
+      - uses: Swatinem/rust-cache@eedcf2fb1c22f010a0eb66b92f378c110977f266 # v2
       # #1676: the release gate runs the suite exactly as the PR gate does —
       # nextest under the shared `ci` profile (.config/nextest.toml), one
       # process per test and the same retry policy — so a test that passes CI
@@ -286,7 +286,7 @@ jobs:
       - uses: dtolnay/rust-toolchain@e081816240890017053eacbb1bdf337761dc5582 # 1.95.0
         with:
           targets: ${{ matrix.target }}
-      - uses: Swatinem/rust-cache@c8037a86dde8214a8310e9f54a8fc61ab362aa31 # v2
+      - uses: Swatinem/rust-cache@eedcf2fb1c22f010a0eb66b92f378c110977f266 # v2
         with:
           key: ${{ matrix.target }}
       # #2463: `bynk book` embeds the Book (site/public/llms-full.txt, via
@@ -355,7 +355,7 @@ jobs:
       - uses: dtolnay/rust-toolchain@e081816240890017053eacbb1bdf337761dc5582 # 1.95.0
         with:
           targets: wasm32-unknown-unknown
-      - uses: Swatinem/rust-cache@c8037a86dde8214a8310e9f54a8fc61ab362aa31 # v2
+      - uses: Swatinem/rust-cache@eedcf2fb1c22f010a0eb66b92f378c110977f266 # v2
       # Same version as the wasm-bindgen crate in Cargo.lock; see ci.yml.
       - uses: ./.github/actions/install-tool
         with:
@@ -398,7 +398,7 @@ jobs:
       - uses: dtolnay/rust-toolchain@e081816240890017053eacbb1bdf337761dc5582 # 1.95.0
         with:
           targets: wasm32-unknown-unknown
-      - uses: Swatinem/rust-cache@c8037a86dde8214a8310e9f54a8fc61ab362aa31 # v2
+      - uses: Swatinem/rust-cache@eedcf2fb1c22f010a0eb66b92f378c110977f266 # v2
       - uses: ./.github/actions/binaryen
       - name: Build
         run: scripts/build-registry-core.sh
@@ -429,7 +429,7 @@ jobs:
         with:
           persist-credentials: false
       - uses: dtolnay/rust-toolchain@e081816240890017053eacbb1bdf337761dc5582 # 1.95.0
-      - uses: Swatinem/rust-cache@c8037a86dde8214a8310e9f54a8fc61ab362aa31 # v2
+      - uses: Swatinem/rust-cache@eedcf2fb1c22f010a0eb66b92f378c110977f266 # v2
       - name: Generate
         run: |
           mkdir editor-contract
@@ -463,7 +463,7 @@ jobs:
           fetch-tags: true
           persist-credentials: false
       - uses: dtolnay/rust-toolchain@e081816240890017053eacbb1bdf337761dc5582 # 1.95.0
-      - uses: Swatinem/rust-cache@c8037a86dde8214a8310e9f54a8fc61ab362aa31 # v2
+      - uses: Swatinem/rust-cache@eedcf2fb1c22f010a0eb66b92f378c110977f266 # v2
       - id: notes
         env:
           TAG: ${{ github.ref_name }}
@@ -614,7 +614,7 @@ jobs:
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
       - uses: dtolnay/rust-toolchain@e081816240890017053eacbb1bdf337761dc5582 # 1.95.0
-      - uses: Swatinem/rust-cache@c8037a86dde8214a8310e9f54a8fc61ab362aa31 # v2
+      - uses: Swatinem/rust-cache@eedcf2fb1c22f010a0eb66b92f378c110977f266 # v2
       - uses: rust-lang/crates-io-auth-action@3268eb413133e2960fa4ae0e963ca76380c54cd9 # v1
         id: auth
       - name: cargo publish (bynk-std -> bynk-syntax -> bynk-project -> bynk-registry-core -> bynk-ts -> bynk-fmt -> bynk-check -> bynk-model -> bynk-emit -> bynk-strip -> bynk-ide -> bynk-driver -> bynk -> bynk-lsp)

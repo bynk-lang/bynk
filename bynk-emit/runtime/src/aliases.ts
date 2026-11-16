@@ -19,7 +19,7 @@ import { attachLazy } from "./lazy.ts";
 import { fault, invariantViolation } from "./errors.ts";
 import { applyCache, applyCors, applyEdgeCache, applySecurityHeaders, cfObject, cookieObject, cookieString, cookieValue, corsPreflightResponse, csrfAllowed, edgeCacheGuard, formDecode, formMediaTypeMatches, formObject, formString, headResponse, httpResultToResponse, matchPath, mediaTypeMatches, multipartForm, multipartMediaTypeMatches, multipartObject, noStore, notModifiedIfMatch, queryObject, queryString, renderRejection, requestHeaderPairs, requestCookies, requestCookiesHeader, requestBodyStream, requestHeaders, requestQuery, requestQuerySearch, responseToHttpOutcome, responseToHttpResult, responseToUnauthOutcome, sessionCookieOf, untilBodyTooLarge, varyAcceptLanguage, withPlainJson, type CorsPolicy, type SecurityPolicy } from "./http.ts";
 import { traceBinding, traceFault, traceFetch, traceStep, type TraceSpan } from "./trace.ts";
-import { inspectAgent, inspectRoute, noteAgentInstance } from "./inspect.ts";
+import { historyBefore, historyRecord, inspectAgent, inspectRoute, noteAgentInstance } from "./inspect.ts";
 import { formatIcuDate, formatIcuNumber, selectPluralArm } from "./messages.ts";
 import { StoreCache, StoreLog, StoreMap, StoreSet, fillHeld, fillLog, fillMap, fillSet, wireEntries, wireHeld, wireHeldOrder, wireLog, wireMap, wirePostings, wireSet } from "./store.ts";
 import { makeIntegrationAi, makeIntegrationImages, makeIntegrationAiSearch, makeIntegrationAnalyticsSql, makeIntegrationContainer, makeIntegrationAnalytics, makeIntegrationD1, makeIntegrationEmail, makeIntegrationHyperdrive, makeIntegrationKv, makeIntegrationMtls, makeIntegrationQueue, makeIntegrationR2, makeIntegrationRateLimit, makeIntegrationSecretsStoreSecret, makeIntegrationVersionMetadata, makeTestState, type AiSearchInstance, type AnalyticsDataset, type AnalyticsSqlBinding, type D1Database, type DurableObjectState, type Hyperdrive, type KVNamespace, type QueueProducer, type R2Bucket, type RateLimiter, type SecretsStoreSecret, type SendEmail, type WorkerAiBinding, type WorkerImagesBinding, type WorkerVersionMetadata } from "./storage.ts";
@@ -158,6 +158,8 @@ export {
   verifySignatureHmacSha256 as __verifySignatureHmacSha256,
   wakeForMigration as __wakeForMigration,
   webSocketUpgradeResponse as __webSocketUpgradeResponse,
+  historyBefore as __historyBefore,
+  historyRecord as __historyRecord,
   inspectAgent as __inspectAgent,
   inspectRoute as __inspectRoute,
   noteAgentInstance as __noteAgentInstance,

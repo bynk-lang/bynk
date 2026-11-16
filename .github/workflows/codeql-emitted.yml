@@ -46,7 +46,7 @@ jobs:
       - uses: dtolnay/rust-toolchain@e081816240890017053eacbb1bdf337761dc5582 # 1.95.0
       # Restore only: a nightly-only entry saved every night would count
       # against the repo's cache quota and could evict the PR stage's caches.
-      - uses: Swatinem/rust-cache@c8037a86dde8214a8310e9f54a8fc61ab362aa31 # v2
+      - uses: Swatinem/rust-cache@eedcf2fb1c22f010a0eb66b92f378c110977f266 # v2
         with:
           save-if: false
       - name: Build bynk
