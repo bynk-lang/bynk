@@ -533,16 +533,15 @@ type Discovered = Vec<Vec<PathBuf>>;
 /// modes, for `bynk deploy` (a Worker with no `MySql` instance gets no file).
 fn stage_binding_files(
     bindings: &[emitter::wrangler::WorkerBinding],
-    dashes: &str,
+    (layout, context): (&bynk_project::worker_layout::WorkerLayout, &str),
     d1_migrations: &bynk_check::d1_migrations::D1Migrations,
     compiled: &mut Vec<StagedFile>,
 ) {
+    // The Worker's directory name: its resources are named from it.
+    let dashes = layout.dir(context);
     if let Some(manifest) = emitter::wrangler::emit_hyperdrive_manifest(bindings) {
         compiled.push(StagedFile {
-            output_path: PathBuf::from(format!(
-                "workers/{dashes}/{}",
-                emitter::wrangler::HYPERDRIVE_MANIFEST
-            )),
+            output_path: layout.worker_file(context, emitter::wrangler::HYPERDRIVE_MANIFEST),
             document: Document::Json(manifest),
             source_map: None,
             debug_metadata: None,
@@ -552,10 +551,7 @@ fn stage_binding_files(
     // create the index with and check it against.
     if let Some(manifest) = emitter::wrangler::emit_vectorize_manifest(bindings) {
         compiled.push(StagedFile {
-            output_path: PathBuf::from(format!(
-                "workers/{dashes}/{}",
-                emitter::wrangler::VECTORIZE_MANIFEST
-            )),
+            output_path: layout.worker_file(context, emitter::wrangler::VECTORIZE_MANIFEST),
             document: Document::Json(manifest),
             source_map: None,
             debug_metadata: None,
@@ -565,10 +561,7 @@ fn stage_binding_files(
     // for `bynk deploy` to plan from and to adopt an image against.
     if let Some(manifest) = emitter::wrangler::emit_containers_manifest(bindings) {
         compiled.push(StagedFile {
-            output_path: PathBuf::from(format!(
-                "workers/{dashes}/{}",
-                emitter::wrangler::CONTAINERS_MANIFEST
-            )),
+            output_path: layout.worker_file(context, emitter::wrangler::CONTAINERS_MANIFEST),
             document: Document::Json(manifest),
             source_map: None,
             debug_metadata: None,
@@ -581,14 +574,17 @@ fn stage_binding_files(
         ) {
             continue;
         }
-        let database = emitter::wrangler::d1_database_name(dashes, &binding.name);
+        let database = emitter::wrangler::d1_database_name(&dashes, &binding.name);
         for file in bynk_check::d1_migrations::migrations_of(d1_migrations, &database, binding) {
             compiled.push(StagedFile {
-                output_path: PathBuf::from(format!(
-                    "workers/{dashes}/{}/{database}/{}",
-                    emitter::wrangler::D1_MIGRATIONS_DIR,
-                    file.name
-                )),
+                output_path: layout.worker_file(
+                    context,
+                    &format!(
+                        "{}/{database}/{}",
+                        emitter::wrangler::D1_MIGRATIONS_DIR,
+                        file.name
+                    ),
+                ),
                 document: Document::Sql(file.sql.clone()),
                 source_map: None,
                 debug_metadata: None,
@@ -3891,7 +3887,6 @@ fn build_output(
                 let Some(table) = unit_tables.get(ctx_name) else {
                     continue;
                 };
-                let dashes = worker_dir_name(ctx_name);
                 let consumes_targets = unit_consumes.get(ctx_name).cloned().unwrap_or_default();
                 let aliases = unit_consumes_aliases
                     .get(ctx_name)
@@ -4096,7 +4091,7 @@ fn build_output(
                     &emitter::ClassTombstones::of(table),
                     d1_migrations,
                 );
-                stage_binding_files(&bindings, &dashes, d1_migrations, &mut compiled);
+                stage_binding_files(&bindings, (&layout, ctx_name), d1_migrations, &mut compiled);
                 // #1883, slice 1b: the static files this Worker serves — its
                 // own and those of every commons its `uses` closure reaches —
                 // under its assets directory, with `_headers` and the
@@ -4109,7 +4104,7 @@ fn build_output(
                     &asset_served,
                 );
                 if !deployed.is_empty() {
-                    let dir = worker_assets_dir(&dashes);
+                    let dir = worker_assets_dir(&layout.dir(ctx_name));
                     for (served, source) in &deployed {
                         let bytes = asset_files
                             .and_then(|files| files.get(source))
