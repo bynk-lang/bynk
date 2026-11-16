@@ -196,7 +196,56 @@ service count {
 const STRING_REPO: NamedKind = NamedKind::Refined(BaseType::String);
 
 /// Rows the checker gets right today.
+/// #3631: a handler whose unit also declares a sum with `HttpResult`-named variants.
+const HTTP_NAMED_VARIANTS: &str = "context t.app
+
+type Item = { id: Int }
+type Outcome = | Found(item: Item) | Absent
+
+fn id[T](x: T) -> T { x }
+
+service api from http {
+  on GET(\"/user\") () -> Effect[HttpResult[Outcome]] by Visitor {
+    Ok(Found(Item { id: 1 }))
+  }
+
+  on GET(\"/inferred\") () -> Effect[HttpResult[Outcome]] by Visitor {
+    let r = Found(\"/inferred-target\")
+    r
+  }
+
+  on GET(\"/generic\") () -> Effect[HttpResult[Outcome]] by Visitor {
+    id(Found(\"/generic-target\"))
+  }
+}
+";
+
 const ROWS: &[Row] = &[
+    Row {
+        name: "a user sum variant named like an HttpResult variant is the user's constructor",
+        files: &[("t/app.bynk", HTTP_NAMED_VARIANTS)],
+        expect: &[Expect::Type {
+            file: "t/app.bynk",
+            at: "Found(Item { id: 1 })",
+            ty: "Outcome",
+        }],
+    },
+    Row {
+        name: "with no expected type the handler's HttpResult return type still reads Found as the redirect",
+        files: &[("t/app.bynk", HTTP_NAMED_VARIANTS)],
+        expect: &[
+            Expect::Type {
+                file: "t/app.bynk",
+                at: "Found(\"/inferred-target\")",
+                ty: "HttpResult[Outcome]",
+            },
+            Expect::Type {
+                file: "t/app.bynk",
+                at: "Found(\"/generic-target\")",
+                ty: "HttpResult[Outcome]",
+            },
+        ],
+    },
     Row {
         name: "a local type shadows a used one in its own declarations",
         files: &[

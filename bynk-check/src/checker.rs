@@ -5459,16 +5459,23 @@ fn user_sum_owns_variant(ctx: &Ctx, name: &str) -> bool {
 /// is the `HttpResult` variant. A name the user owns goes to the user whenever
 /// the context supplies a concrete expected type that is not `HttpResult`
 /// (`Ok(Found(item))` in a handler returning `HttpResult[Outcome]` expects an
-/// `Outcome`), and only with no expected type at all does the enclosing
-/// handler's `HttpResult` return type tip it back to the variant. Reading the
+/// `Outcome`), and only with no informative expected type (none at all, an error type, or
+/// a type variable still being inferred, as for `id(Found("/x"))`) does the
+/// enclosing handler's `HttpResult` return type tip it back to the variant. Reading the
 /// return type alone, as this once did, claimed every user variant sharing an
 /// `HttpResult` variant's name for HTTP, whatever type the context asked for.
 fn http_variant_applies(owned_by_user: bool, expected: Option<TyId>, ctx: &Ctx) -> bool {
     let tys = ctx.tys;
+    // An unsolved variable (`id(Found("/x"))`: the argument's `T` is still being
+    // inferred) or an error type says nothing about what the value is, so it is
+    // no more informative than no expected type.
+    let informative = |t: TyId| {
+        !matches!(&*tys.get(t), Ty::Error) && !contains_flexible_var(t, &ctx.type_vars, tys)
+    };
     match expected {
         Some(t) if peel_to_http_result(t, tys).is_some() => true,
-        Some(_) => !owned_by_user,
-        None => !owned_by_user || peel_to_http_result(ctx.return_ty, tys).is_some(),
+        Some(t) if informative(t) => !owned_by_user,
+        _ => !owned_by_user || peel_to_http_result(ctx.return_ty, tys).is_some(),
     }
 }
 
