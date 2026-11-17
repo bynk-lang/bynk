@@ -13,3 +13,8 @@ wrangler said `[code: 10007]`, the account had no script of that name before the
 and it has exactly one version after it. It needs `CLOUDFLARE_API_TOKEN` and
 `CLOUDFLARE_ACCOUNT_ID` to ask; without them, or on any doubt, the failure stays as
 wrangler reported it, and so does every other failure.
+
+Wrangler's lookup runs after the upload and before its triggers step (workers.dev,
+routes, custom domains, crons), so after forgiving the failure `bynk deploy` runs
+`wrangler triggers deploy` for the Worker, and fails the deploy, saying the Worker was
+uploaded and to run it again, if that step fails.

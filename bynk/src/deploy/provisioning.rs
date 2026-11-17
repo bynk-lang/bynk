@@ -553,25 +553,52 @@ fn push(
     if watch.is_some() {
         command.stderr(Stdio::piped());
     }
-    if secrets_file.is_some() {
-        return push_holding_secrets_file(command, environment, worker, watch.as_ref());
-    }
-    let status = match watch.as_ref() {
-        Some(watch) => command.spawn().and_then(|mut child| {
-            let said = first_deploy::tee_stderr(&mut child);
-            let status = child.wait()?;
-            let said = said.and_then(|t| t.join().ok()).unwrap_or_default();
-            Ok(watch.settle(status, &said))
-        }),
-        None => command.status(),
+    let pushed = if secrets_file.is_some() {
+        push_holding_secrets_file(command, environment, worker, watch.as_ref())?
+    } else {
+        let status = match watch.as_ref() {
+            Some(watch) => command.spawn().and_then(|mut child| {
+                let said = first_deploy::tee_stderr(&mut child);
+                let status = child.wait()?;
+                let said = said.and_then(|t| t.join().ok()).unwrap_or_default();
+                Ok(watch.settle(status, &said))
+            }),
+            None => command.status(),
+        };
+        match status {
+            Ok(status) => wrangler_outcome(environment, worker, &status)?,
+            Err(e) => {
+                return Err(DeployFailure::driver(format!(
+                    "could not run wrangler deploy for `{}`: {e}",
+                    deployed_worker_name(environment, worker)
+                )));
+            }
+        }
     };
-    match status {
-        Ok(status) => wrangler_outcome(environment, worker, &status),
-        Err(e) => Err(DeployFailure::driver(format!(
-            "could not run wrangler deploy for `{}`: {e}",
-            deployed_worker_name(environment, worker)
-        ))),
+    // A forgiven failure left wrangler's triggers step unrun (see `Watch::forgave`).
+    if pushed == Pushed::Ok && watch.as_ref().is_some_and(first_deploy::Watch::forgave) {
+        deploy_forgiven_triggers(provenance, worker_dir, worker, environment)?;
     }
+    Ok(pushed)
+}
+
+/// The triggers a forgiven first deploy never got: `wrangler triggers deploy`.
+fn deploy_forgiven_triggers(
+    provenance: &Provenance,
+    worker_dir: &Path,
+    worker: &str,
+    environment: &str,
+) -> Result<(), DeployFailure> {
+    let Some(command) = workers::wrangler_command(provenance, "triggers") else {
+        return Err(DeployFailure::driver("wrangler not found".into()));
+    };
+    first_deploy::deploy_triggers(command, worker_dir, environment).map_err(|e| {
+        DeployFailure::driver(format!(
+            "`{}` was uploaded, but its triggers (workers.dev, routes, crons) were not applied: {e}. Run `{}` again to finish",
+            deployed_worker_name(environment, worker),
+            deploy_command(environment)
+        ))
+    })
 }
 
 /// #2055: run the upload that carries a secrets file without letting a

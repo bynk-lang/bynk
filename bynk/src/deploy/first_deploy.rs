@@ -21,6 +21,7 @@
 //! account cannot be asked (no API token, an unreadable answer), nothing is
 //! forgiven and the failure stays as wrangler reported it.
 
+use std::cell::Cell;
 use std::io::{BufRead, BufReader, Write};
 use std::path::Path;
 use std::process::{Child, ExitStatus};
@@ -54,10 +55,19 @@ impl ScriptVersions for RestVersions {
                     .as_array()
                     .map_or(0, std::vec::Vec::len),
             ),
-            Err(said) if said.contains("404") || said.contains("10007") => ScriptState::Absent,
+            // Cloudflare's own answer, by status or by code, never a bare number that
+            // an id or a message could happen to contain.
+            Err(said) if is_not_found(&said) => ScriptState::Absent,
             Err(said) => ScriptState::Unknown(said),
         }
     }
+}
+
+/// Whether a REST error says the script does not exist: an HTTP 404 answer, or
+/// Cloudflare's code 10007 (as [`Rest::get`] words them: `Cloudflare answered 404
+/// [...]`, with the `errors` array as JSON).
+fn is_not_found(said: &str) -> bool {
+    said.contains("Cloudflare answered 404 ") || said.contains("\"code\":10007")
 }
 
 /// Wrangler's code for "the Worker does not exist".
@@ -74,6 +84,8 @@ pub(crate) fn upload_survived(said: &str, before: &ScriptState, after: &ScriptSt
 pub(crate) struct Watch {
     script: String,
     scripts: Box<dyn ScriptVersions>,
+    /// Whether a failure was forgiven, so the steps wrangler skipped can be run.
+    forgave: Cell<bool>,
 }
 
 impl Watch {
@@ -109,7 +121,11 @@ impl Watch {
             .as_str()?
             .to_string();
         let script = super::env_qualify(environment, &name);
-        (scripts.state(&script) == ScriptState::Absent).then_some(Self { script, scripts })
+        (scripts.state(&script) == ScriptState::Absent).then_some(Self {
+            script,
+            scripts,
+            forgave: Cell::new(false),
+        })
     }
 
     /// Whether a failed push, which said `said`, is forgiven.
@@ -130,7 +146,15 @@ impl Watch {
             "bynk: wrangler could not look up `{}` after uploading it ([code: 10007], a race with the script's creation); the account shows the upload landed as the Worker's first version, so the deploy continues",
             self.script
         );
+        self.forgave.set(true);
         success_status()
+    }
+
+    /// Whether a failure was forgiven. wrangler's lookup that answers `10007` comes
+    /// after the upload and **before** the triggers step (workers.dev, routes,
+    /// custom domains, crons), which it therefore never ran.
+    pub(crate) fn forgave(&self) -> bool {
+        self.forgave.get()
     }
 }
 
@@ -152,13 +176,37 @@ pub(crate) fn tee_stderr(child: &mut Child) -> Option<JoinHandle<String>> {
     Some(std::thread::spawn(move || {
         let mut kept = String::new();
         let mut out = std::io::stderr();
-        for line in BufReader::new(stderr).lines().map_while(Result::ok) {
-            let _ = writeln!(out, "{line}");
-            kept.push_str(&line);
-            kept.push('\n');
+        let mut reader = BufReader::new(stderr);
+        let mut line = Vec::new();
+        // Bytes, not `lines()`: a line that is not UTF-8 must not end the copy, which
+        // would drop the pipe under wrangler and lose everything after it.
+        while reader.read_until(b'\n', &mut line).is_ok_and(|n| n > 0) {
+            let _ = out.write_all(&line);
+            kept.push_str(&String::from_utf8_lossy(&line));
+            line.clear();
         }
         kept
     }))
+}
+
+/// Run `wrangler triggers deploy` for a Worker whose `deploy` was forgiven: the
+/// step wrangler never reached (workers.dev, routes, custom domains, crons). A
+/// failure here is the deploy's failure, since the Worker would be live without
+/// them.
+pub(crate) fn deploy_triggers(
+    mut command: std::process::Command,
+    worker_dir: &Path,
+    environment: &str,
+) -> Result<(), String> {
+    command.arg("deploy").current_dir(worker_dir);
+    if environment != "default" {
+        command.arg("--env").arg(environment);
+    }
+    match command.status() {
+        Ok(status) if status.success() => Ok(()),
+        Ok(status) => Err(format!("`wrangler triggers deploy` exited {status}")),
+        Err(e) => Err(format!("could not run `wrangler triggers deploy`: {e}")),
+    }
 }
 
 #[cfg(test)]
@@ -263,5 +311,81 @@ mod tests {
         assert!(watch.settle(failed, SAID).success());
         assert!(!watch.settle(failed, "some other failure").success());
         let _ = std::fs::remove_dir_all(&dir);
+    }
+
+    #[test]
+    fn only_cloudflares_own_not_found_reads_as_absent() {
+        assert!(is_not_found(
+            "GET /workers/scripts/x/versions: Cloudflare answered 404 [{\"code\":10007,\"message\":\"x\"}]"
+        ));
+        assert!(is_not_found(
+            "GET /y: Cloudflare answered 200 [{\"code\":10007}]"
+        ));
+        // A number that merely appears (an id, a Ray ID, another code) is not it.
+        assert!(!is_not_found(
+            "GET /y: Cloudflare answered 500 [{\"code\":10404}]"
+        ));
+        assert!(!is_not_found(
+            "GET /y: ray 4045-LHR: Cloudflare answered 403 []"
+        ));
+        assert!(!is_not_found("GET /y: connection reset"));
+    }
+
+    /// The tee copies stderr through and keeps it, through a line that is not
+    /// UTF-8, with the kept text readable afterwards.
+    #[cfg(unix)]
+    #[test]
+    fn the_tee_keeps_everything_wrangler_says_even_past_invalid_utf8() {
+        let mut child = std::process::Command::new("sh")
+            .args([
+                "-c",
+                "printf 'first\\n\\377\\n' >&2; echo '[code: 10007]' >&2; exit 1",
+            ])
+            .stderr(std::process::Stdio::piped())
+            .spawn()
+            .unwrap();
+        let said = tee_stderr(&mut child).unwrap();
+        let status = child.wait().unwrap();
+        let said = said.join().unwrap();
+        assert!(!status.success());
+        assert!(said.starts_with("first\n"), "{said:?}");
+        assert!(said.contains("[code: 10007]"), "{said:?}");
+        assert!(upload_survived(
+            &said,
+            &ScriptState::Absent,
+            &ScriptState::Present(1)
+        ));
+    }
+
+    /// `settle` of a failed push that said `10007`, on an account that shows the
+    /// upload landed, records that triggers were skipped.
+    #[cfg(unix)]
+    #[test]
+    fn a_forgiven_failure_records_that_triggers_were_skipped() {
+        use std::os::unix::process::ExitStatusExt;
+        let dir = dir("forgave");
+        let watch = Watch::with(
+            &dir,
+            "default",
+            Box::new(Scripted(std::cell::RefCell::new(vec![
+                ScriptState::Absent,
+                ScriptState::Present(1),
+            ]))),
+        )
+        .unwrap();
+        assert!(!watch.forgave());
+        assert!(watch.settle(ExitStatus::from_raw(1 << 8), SAID).success());
+        assert!(watch.forgave());
+        let _ = std::fs::remove_dir_all(&dir);
+    }
+
+    #[cfg(unix)]
+    #[test]
+    fn triggers_deploy_reports_its_own_failure() {
+        let dir = std::env::temp_dir();
+        let ok = std::process::Command::new("true");
+        assert!(deploy_triggers(ok, &dir, "default").is_ok());
+        let bad = std::process::Command::new("false");
+        assert!(deploy_triggers(bad, &dir, "default").is_err());
     }
 }

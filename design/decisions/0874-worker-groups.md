@@ -118,8 +118,11 @@ upload landed: the ledger has no record of the Worker, wrangler's output carries
 `[code: 10007]`, the account had **no** script of that name before the push, and it
 has **exactly one** version after it. The last two compare Cloudflare's state before
 and after, so no local clock is involved, and a same-named script that predates the
-deploy (another project, a lost ledger) is never mistaken for the upload. If the
-account cannot be asked (no API token), the failure stays as wrangler reported it.
+deploy (another project, a lost ledger) is never mistaken for the upload. wrangler's lookup comes after the upload and before its triggers step
+(workers.dev, routes, custom domains, crons), which it therefore never ran, so a forgiven
+failure is followed by `wrangler triggers deploy`, and a failure of that is the
+deploy's failure. If the account cannot be asked (no API token), the failure stays as
+wrangler reported it.
 
 *D8: amendments.*
 
