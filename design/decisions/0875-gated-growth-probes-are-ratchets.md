@@ -1,11 +1,6 @@
----
-level: patch
-changelog: The greenfield-status growth probes (`ts_writes`, `ts_any`, `emit_abi_shapes`, `verbatim_sites`, `span_keyed_maps`) can only fall unless a pending file raises them with a reason (`raises:`), which the stamp records in `design/greenfield-status-raises.md`
----
+# 0875 — Gated growth probes are ratchets
 
-## ADR: gated-growth-probes-are-ratchets
-title: Gated growth probes are ratchets
-summary: The five growth probes can only fall in an ordinary PR; a rise needs a reasoned `raises:` entry, recorded in a ledger
+- **Status:** Accepted (v0.639.3)
 
 **Context.** ADR 0389 and ADR 0390 gated `ts_writes` and `ts_any` (and `ast_importers` before them) with the exact-match gate: a live reading that differs from the committed row fails unless a pending file names the probe in `probes:`. ADR 0389 named the cost: "the gate is equality, not a ratchet, so it fails identically whether either count rises or falls". The back-half debt review (`design/reviews/2026-11-17-back-half-debt-review.md`, section 1.1) shows what that became under feature velocity. The gate forces a PR to say that a value moved; it never asks whether it should have risen. Acknowledging a move became routine: `ts_writes` went 822 to 1,502 (rising in 165 commits, falling in 15), `emit_abi_shapes` 1 to 104, `ts_any` 26 to 38, `verbatim_sites` 11 to 15 and `span_keyed_maps` 4 to 6. ADR 0310's leak guard became a list. The one gauge that held, the function-length ratchet, is directional and records its exceptions in a committed file.
 

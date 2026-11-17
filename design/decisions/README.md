@@ -17,6 +17,7 @@ or a row links to no file. Summaries and statuses are curated by hand; the
 
 | # | Decision | Status |
 |---|---|---|
+| [0875](0875-gated-growth-probes-are-ratchets.md) | **Gated growth probes are ratchets** (v0.639.3) — The five growth probes can only fall in an ordinary PR; a rise needs a reasoned `raises:` entry, recorded in a ledger | Accepted (v0.639.3) |
 | [0874](0874-worker-groups.md) | **Worker groups: several contexts in one Worker** (v0.634.6) — How a `[deploy.workers.<key>]` group is identified, laid out, dispatched, checked and (not yet) deployed, and what it amends in 0017 and 0193 | Accepted (v0.634.6) |
 | [0873](0873-sequence-model-slice-3.md) | **The sequence model is complete to a safety cap, shows `?` as a break, and names its trigger, agent keys and callees** (v0.633.18) — Model-diagrams slice 3 — `MAX_BLOCK_DEPTH` becomes a 16-level safety cap with `AltBlock.depth`; `?` is an `AltKind::Break`; additive `trigger`, `Participant.key` and `Message.callee` (located by the LSP) | Accepted (v0.633.18) |
 | [0872](0872-wire-contract-response-body.md) | **`bynk/wireContract` describes message, redirect, raw and stream response bodies** (v0.633.9) — A `body` descriptor beside the value-only `payload`, classified once and checked against `bynk openapi` | Accepted (v0.633.9) |
