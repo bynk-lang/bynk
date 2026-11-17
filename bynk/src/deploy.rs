@@ -691,14 +691,14 @@ mod tests {
             "default",
             "shop-payment",
             &orphaned,
-            "npx",
+            ("npx", &|c: &str| c.to_string()),
         ));
         out.push_str("# --env staging: a live caller of a context removed from the project\n");
         out.push_str(&orphaned_caller_skew_refusal(
             "staging",
             "shop-payment",
             &orphaned,
-            "npx",
+            ("npx", &|c: &str| c.to_string()),
         ));
         out.push_str("# a live caller recorded before expectations were\n");
         out.push_str(&unrecorded_caller_warning(

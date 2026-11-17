@@ -432,6 +432,11 @@ struct WorkerRecord {
     /// a ledger written before groups; additive and `default`ed.
     #[serde(default, skip_serializing_if = "Vec::is_empty")]
     contexts: Vec<String>,
+    /// #3562: the Worker's script name on Cloudflare when it is not its key (a
+    /// group's `name`), so a report or a `wrangler delete` names the script that
+    /// exists. Omitted when the script is named by the key.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    script: Option<String>,
 }
 
 impl DeployLock {
@@ -610,8 +615,32 @@ impl DeployLock {
                     shapes: BTreeMap::new(),
                     expects_shapes: BTreeMap::new(),
                     contexts: Vec::new(),
+                    script: None,
                 },
             );
+    }
+
+    /// #3562: record the script name `worker` was pushed under, when it is not
+    /// the key ([`WorkerRecord::script`]). Called right after
+    /// [`DeployLock::record_deployed`].
+    pub(crate) fn record_script(&mut self, environment: &str, worker: &str, script: &str) {
+        if let Some(record) = self
+            .environments
+            .get_mut(environment)
+            .and_then(|env| env.workers.get_mut(worker))
+        {
+            record.script = (script != worker).then(|| script.to_string());
+        }
+    }
+
+    /// #3562: the name `worker`'s script has on Cloudflare: the recorded script
+    /// name, else the key.
+    pub(crate) fn script_of(&self, environment: &str, worker: &str) -> String {
+        self.environments
+            .get(environment)
+            .and_then(|env| env.workers.get(worker))
+            .and_then(|record| record.script.clone())
+            .unwrap_or_else(|| worker.to_string())
     }
 
     /// #3562: record the contexts a group's Worker holds as of this push
@@ -1289,6 +1318,10 @@ pub(crate) struct Orphans {
     /// group's, by Worker name, so the report names a removed group's members.
     #[serde(skip_serializing_if = "BTreeMap::is_empty")]
     pub(crate) worker_contexts: BTreeMap<String, Vec<String>>,
+    /// #3562: the script name of each orphaned Worker whose script is not named
+    /// by its key (a renamed group), by key.
+    #[serde(skip_serializing_if = "BTreeMap::is_empty")]
+    pub(crate) worker_scripts: BTreeMap<String, String>,
     pub(crate) queues: Vec<String>,
 }
 
@@ -1381,6 +1414,16 @@ impl Orphans {
     /// its Worker's ledger key: its line names the ledger entry, not the
     /// namespace's title ([`kv_title`]), which a namespace made before #2037
     /// may not match.
+    /// An orphaned Worker as the account names it: its script name when that is
+    /// not its key, in `environment`.
+    fn shown_worker(&self, environment: &str, worker: &str) -> String {
+        let script = self
+            .worker_scripts
+            .get(worker)
+            .map_or(worker, String::as_str);
+        deployed_worker_name(environment, script)
+    }
+
     pub(crate) fn as_named_in(&self, environment: &str) -> Orphans {
         Orphans {
             kv: self
@@ -1407,15 +1450,16 @@ impl Orphans {
             workers: self
                 .workers
                 .iter()
-                .map(|worker| deployed_worker_name(environment, worker))
+                .map(|worker| self.shown_worker(environment, worker))
                 .collect(),
             worker_contexts: self
                 .worker_contexts
                 .iter()
                 .map(|(worker, contexts)| {
-                    (deployed_worker_name(environment, worker), contexts.clone())
+                    (self.shown_worker(environment, worker), contexts.clone())
                 })
                 .collect(),
+            worker_scripts: BTreeMap::new(),
             queues: self
                 .queues
                 .iter()
@@ -1618,6 +1662,12 @@ pub(crate) fn find_orphans(
                 !resources.contains_key(worker.as_str()) && !record.contexts.is_empty()
             })
             .map(|(worker, record)| (worker.clone(), record.contexts.clone()))
+            .collect(),
+        worker_scripts: env
+            .workers
+            .iter()
+            .filter(|(worker, _)| !resources.contains_key(worker.as_str()))
+            .filter_map(|(worker, record)| Some((worker.clone(), record.script.clone()?)))
             .collect(),
         queues: env
             .queues
@@ -2516,6 +2566,7 @@ pub(crate) mod tests {
                             shapes: BTreeMap::new(),
                             expects_shapes: BTreeMap::new(),
                             contexts: Vec::new(),
+                            script: None,
                         },
                     )]),
                     queues: BTreeSet::from(["intake".to_string()]),
@@ -3967,6 +4018,31 @@ pub(crate) mod tests {
             shown.worker_contexts.contains_key("gone-group-staging"),
             "{:?}",
             shown.worker_contexts
+        );
+    }
+
+    /// #3562: a renamed group is named by its script, not its key, where the
+    /// account's name is wanted; a Worker with no recorded script is named by its key.
+    #[test]
+    fn a_renamed_groups_script_is_recorded_and_shown() {
+        let mut lock = DeployLock {
+            version: 1,
+            ..Default::default()
+        };
+        lock.record_deployed("default", "core", Some(BTreeMap::new()));
+        lock.record_script("default", "core", "core-script");
+        lock.record_deployed("default", "plain", Some(BTreeMap::new()));
+        lock.record_script("default", "plain", "plain");
+        assert_eq!(lock.script_of("default", "core"), "core-script");
+        assert_eq!(lock.script_of("default", "plain"), "plain");
+        assert_eq!(lock.script_of("default", "unrecorded"), "unrecorded");
+        let text = toml::to_string_pretty(&lock).unwrap();
+        assert_eq!(text.matches("script =").count(), 1, "{text}");
+        assert_eq!(toml::from_str::<DeployLock>(&text).unwrap(), lock);
+        let orphans = find_orphans(&lock, "default", &BTreeMap::new());
+        assert_eq!(
+            orphans.as_named_in("staging").workers,
+            ["core-script-staging", "plain-staging"]
         );
     }
 }

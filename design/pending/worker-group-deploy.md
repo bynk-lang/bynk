@@ -1,7 +1,6 @@
 ---
 level: minor
 changelog: `bynk deploy` deploys a `[deploy.workers.<key>]` group as one Worker, in dependency order with the others, and `--worker KEY` selects a Worker by its directory; the ledger records a group Worker's contexts, and a member cannot be deployed alone (#3562, G4-1)
-probes: ts_writes
 ---
 
 `bynk deploy` no longer refuses a project with a `[deploy.workers]` table (`bynk revert`
@@ -16,7 +15,7 @@ its members is no edge (it is the Worker binding to itself).
   are exclusive.
 - `--context X` for a member of a group is refused, naming the Worker that holds it
   (`context shop.a is in Worker core, which deploys as a unit: use --worker core`).
-- The ledger records a group Worker's `contexts` (additive; a ledger from before groups
+- The ledger records a group Worker's `contexts` and, when a group's `name` renames its script, the script name (additive; a ledger from before groups
   reads and is written back unchanged), and a removed group is reported as an
   orphan with its members (`orphan worker core (contexts shop.a, shop.b)`).
 - A dependency's contract, an accepted older contract and an email forward's Worker are

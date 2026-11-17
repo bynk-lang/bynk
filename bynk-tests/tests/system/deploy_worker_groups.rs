@@ -1070,6 +1070,12 @@ fn deploy_treats_a_group_as_one_worker() {
             && member.contains("--worker front"),
         "{member}"
     );
+    // The dashed form `--context` also takes is refused the same way.
+    let (ok, dashed) = deploy(&["--context", "shop-a1"]);
+    assert!(
+        !ok && dashed.contains("context `shop-a1` is in Worker `front`"),
+        "{dashed}"
+    );
     // A context on its own Worker still deploys by `--context`.
     let (ok, alone) = deploy(&["--context", "shop.pay"]);
     assert!(ok && alone.contains("deploy shop-pay"), "{alone}");

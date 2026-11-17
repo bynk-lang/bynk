@@ -463,12 +463,13 @@ fn record_pushed_contracts(
     lock: &mut DeployLock,
     environment: &str,
     (worker, dir): (&str, &Path),
-    members: &[String],
+    (members, script): (&[String], &str),
 ) {
     let manifest = read_contracts_manifest(dir);
     let provided = manifest.as_ref().ok().map(|m| m.provides.clone());
     lock.record_deployed(environment, worker, provided);
     lock.record_members(environment, worker, members);
+    lock.record_script(environment, worker, script);
     if let Ok(m) = &manifest {
         lock.record_expects(environment, worker, m.expects.clone());
         lock.record_shapes(m.provides_shapes.clone(), m.expects_shapes.clone());
@@ -1046,21 +1047,12 @@ pub fn run(
             callee_skews
         };
         if !callee_skews.is_empty() {
-            // A caller this build no longer has gets its own remedy: a
-            // whole-project deploy would not move it.
-            let (built, orphaned) = split_orphaned_callers(callee_skews, &graph);
-            if !built.is_empty() {
-                eprint!(
-                    "{}",
-                    callee_contract_skew_refusal(&opts.environment, worker, &built)
-                );
-            }
-            if !orphaned.is_empty() {
-                eprint!(
-                    "{}",
-                    orphaned_caller_skew_refusal(&opts.environment, worker, &orphaned, runner)
-                );
-            }
+            report_callee_skews(
+                callee_skews,
+                &graph,
+                (&opts.environment, worker),
+                (runner, &lock),
+            );
             return ExitCode::FAILURE;
         }
         // #2554: older contracts the lock still accepts that no live caller
@@ -1436,7 +1428,7 @@ pub fn run(
                     &mut lock,
                     &opts.environment,
                     (worker, &workers_dir.join(worker)),
-                    &groups.members(worker),
+                    (&groups.members(worker), &groups.script(worker)),
                 );
                 record_pushed_tombstones(&mut lock, &opts.environment, worker, &resources[worker]);
                 // P3 (#2342): the pushed Worker no longer binds a rate limiter
@@ -1780,6 +1772,31 @@ fn record_accepted(
     .map_err(|e| e.to_string())
 }
 
+/// What a push that would break live callers prints: a caller this build still has
+/// gets the callee's refusal, and one it no longer builds its own remedy, since a
+/// whole-project deploy would not move it (#3562: named by its script).
+fn report_callee_skews(
+    skews: Vec<CalleeSkew>,
+    graph: &BTreeMap<String, Vec<String>>,
+    (environment, worker): (&str, &str),
+    (runner, lock): (&str, &DeployLock),
+) {
+    let (built, orphaned) = split_orphaned_callers(skews, graph);
+    if !built.is_empty() {
+        eprint!(
+            "{}",
+            callee_contract_skew_refusal(environment, worker, &built)
+        );
+    }
+    if !orphaned.is_empty() {
+        let script_of = |c: &str| lock.script_of(environment, c);
+        eprint!(
+            "{}",
+            orphaned_caller_skew_refusal(environment, worker, &orphaned, (runner, &script_of))
+        );
+    }
+}
+
 /// The Workers a run deploys: every one, or the one `--context` or `--worker`
 /// names (#3562). A group is one Worker, so a member cannot deploy alone: naming
 /// one says which Worker holds it.
@@ -1791,13 +1808,17 @@ fn select_workers(
     let Some(name) = opts.context.as_deref().filter(|_| opts.by_worker) else {
         let found = workers::select_contexts(available, opts.context.as_slice());
         return found.map_err(|e| match (e, &opts.context) {
-            (workers::SelectError::NotFound { .. }, Some(context))
-                if GroupNames::of(project_root).dir(context) != context.replace('.', "-") =>
-            {
-                let worker = GroupNames::of(project_root).dir(context);
-                format!(
-                    "context `{context}` is in Worker `{worker}`, which deploys as a unit: use `--worker {worker}`"
-                )
+            (workers::SelectError::NotFound { .. }, Some(context)) => {
+                match GroupNames::of(project_root).holding(context) {
+                    Some(worker) => format!(
+                        "context `{context}` is in Worker `{worker}`, which deploys as a unit: use `--worker {worker}`"
+                    ),
+                    None => workers::SelectError::NotFound {
+                        requested: context.clone(),
+                        available: available.to_vec(),
+                    }
+                    .to_string(),
+                }
             }
             (e, _) => e.to_string(),
         });
@@ -1831,6 +1852,30 @@ impl GroupNames {
     /// The directory of the Worker `context` is in: its own, or its group's.
     pub(crate) fn dir(&self, context: &str) -> String {
         self.layout.dir(context)
+    }
+
+    /// The Worker that holds the group member named `context`, dotted
+    /// (`shop.a`) or dashed (`shop-a`) as `--context` takes it; `None` for a
+    /// context on its own Worker, or no context.
+    pub(crate) fn holding(&self, context: &str) -> Option<String> {
+        self.layout.groups().find_map(|(dir, members)| {
+            members
+                .iter()
+                .any(|m| m == context || m.replace('.', "-") == context)
+                .then(|| dir.to_string())
+        })
+    }
+
+    /// The name of `worker`'s script on Cloudflare: its group's `name` or key, or
+    /// the Worker's own name for a context on its own.
+    pub(crate) fn script(&self, worker: &str) -> String {
+        self.layout
+            .group_members(worker)
+            .and_then(<[String]>::first)
+            .map_or_else(
+                || worker.to_string(),
+                |first| self.layout.script_name(first),
+            )
     }
 
     /// The contexts of the group whose directory is `worker`; none for a
@@ -2177,7 +2222,7 @@ pub(crate) fn orphaned_caller_skew_refusal(
     environment: &str,
     worker: &str,
     skews: &[CalleeSkew],
-    runner: &str,
+    (runner, script_of): (&str, &dyn Fn(&str) -> String),
 ) -> String {
     let mut out = format!(
         "bynk: `{}` no longer provides the contract a live Worker this project no longer builds was compiled against ({CONTRACT_SKEW}):\n",
@@ -2211,7 +2256,7 @@ pub(crate) fn orphaned_caller_skew_refusal(
             .iter()
             .map(|c| format!(
                 "`{runner} wrangler delete --name {}`",
-                deployed_worker_name(environment, c)
+                deployed_worker_name(environment, &script_of(c))
             ))
             .collect::<Vec<_>>()
             .join(", "),
@@ -5489,7 +5534,12 @@ queue = "jobs"
         assert!(built.is_empty(), "{built:?}");
         assert_eq!(orphaned.len(), 1);
         assert_eq!(orphaned[0].caller, "shop-legacy");
-        let refusal = orphaned_caller_skew_refusal("staging", "shop-payment", &orphaned, "npx");
+        let refusal = orphaned_caller_skew_refusal(
+            "staging",
+            "shop-payment",
+            &orphaned,
+            ("npx", &|c: &str| c.to_string()),
+        );
         assert!(refusal.contains(CONTRACT_SKEW), "{refusal}");
         assert!(
             refusal.contains("`shop-legacy-staging` (orphaned) calls shop.payment.authorise"),
@@ -5524,7 +5574,7 @@ queue = "jobs"
                 "staging",
                 "shop-payment",
                 &orphaned,
-                secrets::wrangler_runner(manager),
+                (secrets::wrangler_runner(manager), &|c: &str| c.to_string()),
             );
             assert!(
                 refusal.contains(&format!(
