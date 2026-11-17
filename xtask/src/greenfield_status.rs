@@ -3655,10 +3655,10 @@ pub fn render_table(report: &Report) -> String {
 
 /// Every gated probe whose live reading disagrees with the committed table's, as
 /// `(probe name, committed, live)`. Trend probes are never compared, and never
-/// computed here — this only runs the sixteen gated probes, so checking currency never
+/// computed here — this only runs the twenty-one gated probes, so checking currency never
 /// pays for `wildcard_arms`'s workspace-wide clippy pass. For a caller that has already
 /// run the full report (e.g. to print it), use [`gated_disagreements_in`] instead so the
-/// sixteen gated probes aren't computed a second time.
+/// twenty-one gated probes aren't computed a second time.
 pub fn gated_disagreements(root: &Path) -> Vec<(String, String, String)> {
     gated_disagreements_in(&run_gated(root), root)
 }
@@ -3877,27 +3877,49 @@ fn seed_missing_gated_rows(
             unnamed.join(", ")
         ));
     }
-    let lines: Vec<&str> = committed.split_inclusive('\n').collect();
-    let Some(last) = lines.iter().rposition(|l| l.contains("| yes | ")) else {
+    let mut lines: Vec<String> = committed
+        .split_inclusive('\n')
+        .map(str::to_string)
+        .collect();
+    if !lines.iter().any(|l| l.contains("| yes | ")) {
         return Err(
             "design/greenfield-status.md has no gated rows to append to — run \
              `cargo xtask greenfield-status --apply`"
                 .to_string(),
         );
-    };
-    let mut out = String::with_capacity(committed.len() + 64 * missing.len());
-    for (i, line) in lines.iter().enumerate() {
-        out.push_str(line);
-        if i == last {
-            if !line.ends_with('\n') {
-                out.push('\n');
-            }
-            for p in &missing {
-                out.push_str(&format!("| `{}` | yes | {} |\n", p.name, p.reads));
-            }
-        }
     }
-    Ok(out)
+    let row_at = |lines: &[String], name: &str| {
+        let prefix = format!("| `{name}` | yes | ");
+        lines.iter().position(|l| l.starts_with(&prefix))
+    };
+    let gated_order: Vec<&Probe> = probes.iter().filter(|p| p.gated).collect();
+    // Insert in probe order (the order `render_table` writes), so a later `--apply`
+    // produces no churn: after the nearest preceding probe's row, else before the
+    // nearest following one's.
+    for (i, p) in gated_order.iter().enumerate() {
+        if row_at(&lines, p.name).is_some() {
+            continue;
+        }
+        let new_row = format!("| `{}` | yes | {} |\n", p.name, p.reads);
+        let after = gated_order[..i]
+            .iter()
+            .rev()
+            .find_map(|q| row_at(&lines, q.name));
+        let at = match after {
+            Some(idx) => {
+                if !lines[idx].ends_with('\n') {
+                    lines[idx].push('\n');
+                }
+                idx + 1
+            }
+            None => gated_order[i + 1..]
+                .iter()
+                .find_map(|q| row_at(&lines, q.name))
+                .unwrap_or(0),
+        };
+        lines.insert(at, new_row);
+    }
+    Ok(lines.concat())
 }
 
 #[cfg(test)]
@@ -4090,6 +4112,34 @@ mod tests {
         assert!(out.contains("| `wildcard_arms` | no (trend) | 355 |"));
         let err = refresh_for_stamp(committed, &live, &BTreeSet::new()).unwrap_err();
         assert!(err.contains("ts_raw_sites"), "{err}");
+    }
+
+    /// #3681 review: seeded rows land in probe order (where `render_table` puts them),
+    /// not after the last gated row, so a later `--apply` has nothing to move.
+    #[test]
+    fn seeded_rows_follow_probe_order() {
+        let committed = "| Probe | Gated | Reads |\n|---|---|---|\n\
+                         | `a` | yes | 1 |\n\
+                         | `d` | yes | 4 |\n\
+                         | `e` | yes | 5 |\n\n## Trend\n";
+        let live = [
+            gated("a", "1"),
+            gated("b", "2"),
+            gated("c", "3"),
+            gated("d", "4"),
+            gated("e", "5"),
+            gated("f", "6"),
+        ];
+        let ack: BTreeSet<String> = ["b", "c", "f"].map(String::from).into();
+        let out = refresh_for_stamp(committed, &live, &ack).unwrap();
+        let rows: Vec<&str> = out.lines().filter(|l| l.contains("| yes |")).collect();
+        let names: Vec<&str> = rows.iter().map(|l| l.split('`').nth(1).unwrap()).collect();
+        assert_eq!(names, ["a", "b", "c", "d", "e", "f"]);
+        // A missing first row goes before the first existing one.
+        let live = [gated("z", "0"), gated("a", "1")];
+        let ack: BTreeSet<String> = ["z".to_string()].into();
+        let out = refresh_for_stamp("| `a` | yes | 1 |\n\nx\n", &live, &ack).unwrap();
+        assert!(out.starts_with("| `z` | yes | 0 |\n| `a` | yes | 1 |\n"));
     }
 
     fn files_of(files: &[(&str, &str)]) -> Vec<(PathBuf, String)> {

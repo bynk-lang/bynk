@@ -9,7 +9,7 @@
 //! routine work.
 //!
 //! This runs under `cargo nextest run --workspace` (the main `test` job, for any
-//! Rust-touching PR — fifteen of the twenty-one probes read Rust source) and under
+//! Rust-touching PR — seventeen of the twenty-one probes read Rust source) and under
 //! `cargo test -p xtask` (the `drift` job, for the pending/decisions-only PRs the
 //! `rust`-filtered `test` job skips). A `drift`-job *step* alone would have missed the
 //! former; a `#[test]` here rides both paths with no new CI wiring.
