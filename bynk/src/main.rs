@@ -104,6 +104,7 @@ fn run() -> ExitCode {
             path,
             lock,
             context,
+            worker,
             env,
             dry_run,
             no_install,
@@ -123,7 +124,8 @@ fn run() -> ExitCode {
             run_deploy(
                 path,
                 DeployOptions {
-                    context,
+                    by_worker: worker.is_some(),
+                    context: context.or(worker),
                     environment: env,
                     dry_run,
                     no_install,

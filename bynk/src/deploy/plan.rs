@@ -30,6 +30,9 @@ pub struct DeployOptions {
     /// consumes are already live (slice 2, D4). Absent deploys the whole
     /// project in dependency order.
     pub context: Option<String>,
+    /// #3562: `context` was given as `--worker NAME`, a Worker directory (a group's
+    /// key) and not a context's name.
+    pub by_worker: bool,
     /// `--env NAME` — slice 4. Selects the `bynk.deploy.lock` section; for any
     /// value other than `"default"` also drives synthesis of an environment-
     /// scoped Wrangler config section, since Cloudflare does not inherit
@@ -442,6 +445,42 @@ fn qualified_class(worker: &str, class: &str) -> String {
     format!("{}.{class}", worker.replace('-', "."))
 }
 
+/// What the ledger learns from a successful push of `worker` (whose build
+/// directory is `dir`), from the build's contract manifest:
+///
+/// - v0.177 (#643): what it now *provides*, so a later `--context` push of one of
+///   its callers can be refused before it ships a caller that would 409. `Some`
+///   even when empty: this build *knows* what the Worker provides, and "knows it
+///   provides nothing" must not read as "no record" at the next gate.
+/// - #2077: what it was compiled against, so a later push of one of its callees
+///   can be refused before it ships a callee this Worker would 409 against, and
+///   #2485 the structure behind both, so the next gate can say whether a skew is
+///   compatible.
+/// - I4 (#1970): what its declared foreign callers may call it at, so the ledger
+///   knows the consumers no manifest of their own records.
+/// - #3562: the contexts of a group's Worker.
+fn record_pushed_contracts(
+    lock: &mut DeployLock,
+    environment: &str,
+    (worker, dir): (&str, &Path),
+    (members, script): (&[String], &str),
+) {
+    let manifest = read_contracts_manifest(dir);
+    let provided = manifest.as_ref().ok().map(|m| m.provides.clone());
+    lock.record_deployed(environment, worker, provided);
+    lock.record_members(environment, worker, members);
+    lock.record_script(environment, worker, script);
+    if let Ok(m) = &manifest {
+        lock.record_expects(environment, worker, m.expects.clone());
+        lock.record_shapes(m.provides_shapes.clone(), m.expects_shapes.clone());
+    }
+    lock.record_foreign(
+        environment,
+        worker,
+        manifest.map(|m| m.foreign).unwrap_or_default(),
+    );
+}
+
 /// The `exports` tombstones a successful push of `worker` carried, recorded
 /// so later plans show them as applied: its deletions (State-migrations S3,
 /// #2248, #2253 review) and its renames (#2276 Decision D). Each replaces what
@@ -822,7 +861,7 @@ pub fn run(
     // Slice 2: every context, ordered — not the one context slice 0 demanded.
     let workers_dir = build_dir.join("workers");
     let available = workers::discover_workers(&workers_dir);
-    let selected = match workers::select_contexts(&available, opts.context.as_slice()) {
+    let selected = match select_workers(opts, project_root, &available) {
         Ok(selected) => selected,
         Err(e) => {
             eprintln!("bynk: {e}");
@@ -839,7 +878,7 @@ pub fn run(
             return ExitCode::FAILURE;
         }
     };
-    let (graph, worker_of) = (service_graph(&resources), group_worker_of(project_root));
+    let (graph, groups) = (service_graph(&resources), GroupNames::of(project_root));
     // Read before the plan: a malformed `--secrets-file` is the user's typo, and
     // it should surface as one now rather than as a missing-secret failure
     // partway through a run that has already pushed a Worker.
@@ -889,12 +928,17 @@ pub fn run(
                 return ExitCode::FAILURE;
             }
         };
-        let mut skews = contract_skews(&manifest.expects, &lock, &worker_of, &opts.environment);
+        let mut skews = contract_skews(
+            &manifest.expects,
+            &lock,
+            |context: &str| groups.dir(context),
+            &opts.environment,
+        );
         classify_contract_skews(
             &mut skews,
             &manifest.expects_shapes,
             &lock,
-            &worker_of,
+            |context: &str| groups.dir(context),
             &opts.environment,
         );
         if !skews.is_empty() {
@@ -912,7 +956,7 @@ pub fn run(
             worker,
             &manifest.provides,
             &lock,
-            &worker_of,
+            |context: &str| groups.dir(context),
             &opts.environment,
         );
         classify_callee_skews(
@@ -973,7 +1017,7 @@ pub fn run(
                     worker,
                     &manifest.provides,
                     &lock,
-                    &worker_of,
+                    |context: &str| groups.dir(context),
                     &opts.environment,
                 );
                 classify_callee_skews(
@@ -1003,21 +1047,12 @@ pub fn run(
             callee_skews
         };
         if !callee_skews.is_empty() {
-            // A caller this build no longer has gets its own remedy: a
-            // whole-project deploy would not move it.
-            let (built, orphaned) = split_orphaned_callers(callee_skews, &graph);
-            if !built.is_empty() {
-                eprint!(
-                    "{}",
-                    callee_contract_skew_refusal(&opts.environment, worker, &built)
-                );
-            }
-            if !orphaned.is_empty() {
-                eprint!(
-                    "{}",
-                    orphaned_caller_skew_refusal(&opts.environment, worker, &orphaned, runner)
-                );
-            }
+            report_callee_skews(
+                callee_skews,
+                &graph,
+                (&opts.environment, worker),
+                (runner, &lock),
+            );
             return ExitCode::FAILURE;
         }
         // #2554: older contracts the lock still accepts that no live caller
@@ -1026,7 +1061,8 @@ pub fn run(
             && let Ok(contracts) =
                 bynk_project::contracts_lock::parse(existing.as_deref(), project_root)
         {
-            let unused = unused_accepted(&contracts, worker, &lock, &opts.environment);
+            let dir_of = |context: &str| groups.dir(context);
+            let unused = unused_accepted(&contracts, (worker, &dir_of), &lock, &opts.environment);
             if !unused.is_empty() {
                 eprint!("{}", unused_accepted_notice(&unused));
             }
@@ -1388,16 +1424,12 @@ pub fn run(
             &hyperdrive_run,
         ) {
             Ok(Pushed::Ok) => {
-                // v0.177 (#643): record what this Worker now *provides*, so a
-                // later `--context` push of one of its callers can be refused
-                // before it ships a caller that would 409.
-                // `Some` even when empty: this build *knows* what the Worker
-                // provides, and "knows it provides nothing" must not read as
-                // "no record" at the next gate.
-                let provided = read_contracts_manifest(&workers_dir.join(worker))
-                    .map(|m| Some(m.provides))
-                    .unwrap_or(None);
-                lock.record_deployed(&opts.environment, worker, provided);
+                record_pushed_contracts(
+                    &mut lock,
+                    &opts.environment,
+                    (worker, &workers_dir.join(worker)),
+                    (&groups.members(worker), &groups.script(worker)),
+                );
                 record_pushed_tombstones(&mut lock, &opts.environment, worker, &resources[worker]);
                 // P3 (#2342): the pushed Worker no longer binds a rate limiter
                 // its source dropped, so that id is free again.
@@ -1405,25 +1437,6 @@ pub fn run(
                     &opts.environment,
                     worker,
                     &resources[worker].ratelimits,
-                );
-                // #2077: and what it was compiled against, so a later
-                // `--context` push of one of its callees can be refused
-                // before it ships a callee this Worker would 409 against.
-                if let Ok(m) = read_contracts_manifest(&workers_dir.join(worker)) {
-                    lock.record_expects(&opts.environment, worker, m.expects);
-                    // #2485: and the structure behind both, so the next gate
-                    // can say whether a skew is compatible.
-                    lock.record_shapes(m.provides_shapes, m.expects_shapes);
-                }
-                // I4 (#1970): and what its declared foreign callers may call
-                // it at, so the ledger knows the consumers no manifest of
-                // their own records.
-                lock.record_foreign(
-                    &opts.environment,
-                    worker,
-                    read_contracts_manifest(&workers_dir.join(worker))
-                        .map(|m| m.foreign)
-                        .unwrap_or_default(),
                 );
                 // I3 (#1971): the secrets just minted for this context's
                 // foreign callers, handed to their operators.
@@ -1759,28 +1772,133 @@ fn record_accepted(
     .map_err(|e| e.to_string())
 }
 
-/// The directory of the Worker a context is in: its own, or its group's
-/// (#3562). What `deploy` keys the ledger by, so a dependency's contract is looked
-/// up under the Worker that provides it.
-fn group_worker_of(project_root: &Path) -> impl Fn(&str) -> String + use<> {
-    let layout = bynk_project::worker_layout::WorkerLayout::for_project(
-        project_root,
-        &std::collections::HashMap::new(),
-    );
-    move |context| layout.dir(context)
+/// What a push that would break live callers prints: a caller this build still has
+/// gets the callee's refusal, and one it no longer builds its own remedy, since a
+/// whole-project deploy would not move it (#3562: named by its script).
+fn report_callee_skews(
+    skews: Vec<CalleeSkew>,
+    graph: &BTreeMap<String, Vec<String>>,
+    (environment, worker): (&str, &str),
+    (runner, lock): (&str, &DeployLock),
+) {
+    let (built, orphaned) = split_orphaned_callers(skews, graph);
+    if !built.is_empty() {
+        eprint!(
+            "{}",
+            callee_contract_skew_refusal(environment, worker, &built)
+        );
+    }
+    if !orphaned.is_empty() {
+        let script_of = |c: &str| lock.script_of(environment, c);
+        eprint!(
+            "{}",
+            orphaned_caller_skew_refusal(environment, worker, &orphaned, (runner, &script_of))
+        );
+    }
+}
+
+/// The Workers a run deploys: every one, or the one `--context` or `--worker`
+/// names (#3562). A group is one Worker, so a member cannot deploy alone: naming
+/// one says which Worker holds it.
+fn select_workers(
+    opts: &DeployOptions,
+    project_root: &Path,
+    available: &[String],
+) -> Result<Vec<String>, String> {
+    let Some(name) = opts.context.as_deref().filter(|_| opts.by_worker) else {
+        let found = workers::select_contexts(available, opts.context.as_slice());
+        return found.map_err(|e| match (e, &opts.context) {
+            (workers::SelectError::NotFound { .. }, Some(context)) => {
+                match GroupNames::of(project_root).holding(context) {
+                    Some(worker) => format!(
+                        "context `{context}` is in Worker `{worker}`, which deploys as a unit: use `--worker {worker}`"
+                    ),
+                    None => workers::SelectError::NotFound {
+                        requested: context.clone(),
+                        available: available.to_vec(),
+                    }
+                    .to_string(),
+                }
+            }
+            (e, _) => e.to_string(),
+        });
+    };
+    if available.iter().any(|worker| worker == name) {
+        return Ok(vec![name.to_string()]);
+    }
+    Err(format!(
+        "no Worker `{name}` was built (available: {})",
+        available.join(", ")
+    ))
+}
+
+/// The project's Worker groups (#3562): which Worker directory a context is in,
+/// and which contexts a Worker holds. What `deploy` keys the ledger by, so a
+/// dependency's contract is looked up under the Worker that provides it.
+pub(crate) struct GroupNames {
+    layout: bynk_project::worker_layout::WorkerLayout,
+}
+
+impl GroupNames {
+    pub(crate) fn of(project_root: &Path) -> Self {
+        Self {
+            layout: bynk_project::worker_layout::WorkerLayout::for_project(
+                project_root,
+                &std::collections::HashMap::new(),
+            ),
+        }
+    }
+
+    /// The directory of the Worker `context` is in: its own, or its group's.
+    pub(crate) fn dir(&self, context: &str) -> String {
+        self.layout.dir(context)
+    }
+
+    /// The Worker that holds the group member named `context`, dotted
+    /// (`shop.a`) or dashed (`shop-a`) as `--context` takes it; `None` for a
+    /// context on its own Worker, or no context.
+    pub(crate) fn holding(&self, context: &str) -> Option<String> {
+        self.layout.groups().find_map(|(dir, members)| {
+            members
+                .iter()
+                .any(|m| m == context || m.replace('.', "-") == context)
+                .then(|| dir.to_string())
+        })
+    }
+
+    /// The name of `worker`'s script on Cloudflare: its group's `name` or key, or
+    /// the Worker's own name for a context on its own.
+    pub(crate) fn script(&self, worker: &str) -> String {
+        self.layout
+            .group_members(worker)
+            .and_then(<[String]>::first)
+            .map_or_else(
+                || worker.to_string(),
+                |first| self.layout.script_name(first),
+            )
+    }
+
+    /// The contexts of the group whose directory is `worker`; none for a
+    /// context's own Worker.
+    pub(crate) fn members(&self, worker: &str) -> Vec<String> {
+        self.layout
+            .group_members(worker)
+            .map(<[String]>::to_vec)
+            .unwrap_or_default()
+    }
 }
 
 /// #2554: the lock entries for `worker`'s context that no live caller in
 /// `environment` was compiled against: `(context, service, hash)`.
 pub(crate) fn unused_accepted(
     contracts: &bynk_project::contracts_lock::ContractsLock,
-    worker: &str,
+    (worker, dir_of): (&str, &dyn Fn(&str) -> String),
     lock: &DeployLock,
     environment: &str,
 ) -> Vec<(String, String, String)> {
     let mut out = Vec::new();
     for (context, services) in contracts.contexts() {
-        if bynk_driver::project::worker_dir_name(context) != worker {
+        if dir_of(context) != worker {
             continue;
         }
         for (service, shapes) in services {
@@ -2104,7 +2222,7 @@ pub(crate) fn orphaned_caller_skew_refusal(
     environment: &str,
     worker: &str,
     skews: &[CalleeSkew],
-    runner: &str,
+    (runner, script_of): (&str, &dyn Fn(&str) -> String),
 ) -> String {
     let mut out = format!(
         "bynk: `{}` no longer provides the contract a live Worker this project no longer builds was compiled against ({CONTRACT_SKEW}):\n",
@@ -2138,7 +2256,7 @@ pub(crate) fn orphaned_caller_skew_refusal(
             .iter()
             .map(|c| format!(
                 "`{runner} wrangler delete --name {}`",
-                deployed_worker_name(environment, c)
+                deployed_worker_name(environment, &script_of(c))
             ))
             .collect::<Vec<_>>()
             .join(", "),
@@ -2255,7 +2373,15 @@ pub(crate) fn plan_report(plan: &Plan<'_>, format: DeployFormat) -> String {
                 ));
             }
             for worker in &plan.shown_orphans.workers {
-                out.push_str(&format!("orphan worker {worker}\n"));
+                // #3562: a removed group's members, from the ledger.
+                let members = plan.shown_orphans.worker_contexts.get(worker);
+                match members {
+                    Some(contexts) => out.push_str(&format!(
+                        "orphan worker {worker} (contexts {})\n",
+                        contexts.join(", ")
+                    )),
+                    None => out.push_str(&format!("orphan worker {worker}\n")),
+                }
             }
             for queue in &plan.shown_orphans.queues {
                 out.push_str(&format!("orphan queue {queue}\n"));
@@ -5408,7 +5534,12 @@ queue = "jobs"
         assert!(built.is_empty(), "{built:?}");
         assert_eq!(orphaned.len(), 1);
         assert_eq!(orphaned[0].caller, "shop-legacy");
-        let refusal = orphaned_caller_skew_refusal("staging", "shop-payment", &orphaned, "npx");
+        let refusal = orphaned_caller_skew_refusal(
+            "staging",
+            "shop-payment",
+            &orphaned,
+            ("npx", &|c: &str| c.to_string()),
+        );
         assert!(refusal.contains(CONTRACT_SKEW), "{refusal}");
         assert!(
             refusal.contains("`shop-legacy-staging` (orphaned) calls shop.payment.authorise"),
@@ -5443,7 +5574,7 @@ queue = "jobs"
                 "staging",
                 "shop-payment",
                 &orphaned,
-                secrets::wrangler_runner(manager),
+                (secrets::wrangler_runner(manager), &|c: &str| c.to_string()),
             );
             assert!(
                 refusal.contains(&format!(
@@ -5823,7 +5954,12 @@ queue = "jobs"
             let mut contracts = bynk_project::contracts_lock::ContractsLock::new();
             contracts.accept("shop.payment", "charge", &old.to_text());
             contracts.accept("shop.payment", "charge", &unused_one.to_text());
-            let unused = unused_accepted(&contracts, "shop-payment", &lock, "default");
+            let unused = unused_accepted(
+                &contracts,
+                ("shop-payment", &|c: &str| c.replace('.', "-")),
+                &lock,
+                "default",
+            );
             assert_eq!(
                 unused,
                 [(
@@ -5833,7 +5969,15 @@ queue = "jobs"
                 )],
                 "the contract shop-orders was compiled against is still needed"
             );
-            assert!(unused_accepted(&contracts, "shop-orders", &lock, "default").is_empty());
+            assert!(
+                unused_accepted(
+                    &contracts,
+                    ("shop-orders", &|c: &str| c.replace('.', "-")),
+                    &lock,
+                    "default"
+                )
+                .is_empty()
+            );
             assert!(unused_accepted_notice(&unused).contains("shop.payment.charge"));
         }
 

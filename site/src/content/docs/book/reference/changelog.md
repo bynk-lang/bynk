@@ -3,7 +3,7 @@ title: Version compatibility & changelog
 ---
 Bynk is pre-1.0 and developed in small, spec-first increments (see
 [Versioning & roadmap](/book/about/versioning-and-roadmap/)). This book is
-written against **v0.635**.
+written against **v0.636**.
 
 This page is a high-level summary of notable increments, not an exhaustive
 per-commit history. While Bynk is pre-1.0, increments may change behaviour.
@@ -28,6 +28,7 @@ per-commit history. While Bynk is pre-1.0, increments may change behaviour.
 
 | Version | Highlights |
 |---|---|
+| **v0.636.0** | `bynk deploy` deploys a `[deploy.workers.<key>]` group as one Worker, in dependency order with the others, and `--worker KEY` selects a Worker by its directory; the ledger records a group Worker's contexts, and a member cannot be deployed alone (#3562, G4-1) |
 | **v0.635.1** | Deploy's groundwork for a `[deploy.workers]` group (#3562, G4-0): the binding graph is keyed by Worker directory (a group's `name` override and its binding to itself no longer break the order), a group has one merged `bynk-contracts.json` and `bynk-secrets.json`, and a dependency's contract is looked up under the Worker that provides it; `bynk deploy` still refuses a group |
 | **v0.635.0** | A `[deploy.workers.<key>]` group has one events fan-out for every member that publishes, so several members of a group may publish events; `bynk.deploy.multiple_publishers` is removed (#3562, G3-1) |
 | **v0.634.8** | A conformance harness drives a call, a refusal, a fault and an event between contexts through every topology (separate Workers, a Worker group) and asserts the same observations in each (#3562, G3-0), and a `[deploy.workers]` group's `<member>.bynk-client.ts` is left out of the generated `tsconfig.json` as a context's `bynk-client.ts` is |

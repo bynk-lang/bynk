@@ -425,6 +425,18 @@ struct WorkerRecord {
     shapes: BTreeMap<String, String>,
     #[serde(default, skip_serializing_if = "BTreeMap::is_empty")]
     expects_shapes: BTreeMap<String, BTreeMap<String, String>>,
+    /// #3562: the contexts a `[deploy.workers.<key>]` group's Worker held as of
+    /// the push that recorded it, in the manifest's order, so a plan, an orphan or a
+    /// revert can name the members of a Worker whose key is not any of their
+    /// names. Empty (and omitted) for a context on a Worker of its own, and for
+    /// a ledger written before groups; additive and `default`ed.
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    contexts: Vec<String>,
+    /// #3562: the Worker's script name on Cloudflare when it is not its key (a
+    /// group's `name`), so a report or a `wrangler delete` names the script that
+    /// exists. Omitted when the script is named by the key.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    script: Option<String>,
 }
 
 impl DeployLock {
@@ -602,8 +614,56 @@ impl DeployLock {
                     foreign: BTreeMap::new(),
                     shapes: BTreeMap::new(),
                     expects_shapes: BTreeMap::new(),
+                    contexts: Vec::new(),
+                    script: None,
                 },
             );
+    }
+
+    /// #3562: record the script name `worker` was pushed under, when it is not
+    /// the key ([`WorkerRecord::script`]). Called right after
+    /// [`DeployLock::record_deployed`].
+    pub(crate) fn record_script(&mut self, environment: &str, worker: &str, script: &str) {
+        if let Some(record) = self
+            .environments
+            .get_mut(environment)
+            .and_then(|env| env.workers.get_mut(worker))
+        {
+            record.script = (script != worker).then(|| script.to_string());
+        }
+    }
+
+    /// #3562: the name `worker`'s script has on Cloudflare: the recorded script
+    /// name, else the key.
+    pub(crate) fn script_of(&self, environment: &str, worker: &str) -> String {
+        self.environments
+            .get(environment)
+            .and_then(|env| env.workers.get(worker))
+            .and_then(|record| record.script.clone())
+            .unwrap_or_else(|| worker.to_string())
+    }
+
+    /// #3562: record the contexts a group's Worker holds as of this push
+    /// ([`WorkerRecord::contexts`]). Called right after
+    /// [`DeployLock::record_deployed`]; a Worker not yet recorded is ignored.
+    pub(crate) fn record_members(&mut self, environment: &str, worker: &str, members: &[String]) {
+        if let Some(record) = self
+            .environments
+            .get_mut(environment)
+            .and_then(|env| env.workers.get_mut(worker))
+        {
+            record.contexts = members.to_vec();
+        }
+    }
+
+    /// #3562: the contexts a Worker was last pushed with: empty for a context's
+    /// own Worker, an unrecorded one, and a ledger from before groups.
+    #[cfg(test)]
+    pub(crate) fn members_of(&self, environment: &str, worker: &str) -> &[String] {
+        self.environments
+            .get(environment)
+            .and_then(|env| env.workers.get(worker))
+            .map_or(&[], |record| record.contexts.as_slice())
     }
 
     /// I4 (#1970): record the contract `worker`'s declared foreign callers may
@@ -1254,6 +1314,14 @@ pub(crate) struct Orphans {
     #[serde(skip_serializing_if = "Vec::is_empty")]
     pub(crate) hyperdrive: Vec<OrphanHyperdrive>,
     pub(crate) workers: Vec<String>,
+    /// #3562: the contexts of each orphaned Worker the ledger recorded as a
+    /// group's, by Worker name, so the report names a removed group's members.
+    #[serde(skip_serializing_if = "BTreeMap::is_empty")]
+    pub(crate) worker_contexts: BTreeMap<String, Vec<String>>,
+    /// #3562: the script name of each orphaned Worker whose script is not named
+    /// by its key (a renamed group), by key.
+    #[serde(skip_serializing_if = "BTreeMap::is_empty")]
+    pub(crate) worker_scripts: BTreeMap<String, String>,
     pub(crate) queues: Vec<String>,
 }
 
@@ -1346,6 +1414,16 @@ impl Orphans {
     /// its Worker's ledger key: its line names the ledger entry, not the
     /// namespace's title ([`kv_title`]), which a namespace made before #2037
     /// may not match.
+    /// An orphaned Worker as the account names it: its script name when that is
+    /// not its key, in `environment`.
+    fn shown_worker(&self, environment: &str, worker: &str) -> String {
+        let script = self
+            .worker_scripts
+            .get(worker)
+            .map_or(worker, String::as_str);
+        deployed_worker_name(environment, script)
+    }
+
     pub(crate) fn as_named_in(&self, environment: &str) -> Orphans {
         Orphans {
             kv: self
@@ -1372,8 +1450,16 @@ impl Orphans {
             workers: self
                 .workers
                 .iter()
-                .map(|worker| deployed_worker_name(environment, worker))
+                .map(|worker| self.shown_worker(environment, worker))
                 .collect(),
+            worker_contexts: self
+                .worker_contexts
+                .iter()
+                .map(|(worker, contexts)| {
+                    (self.shown_worker(environment, worker), contexts.clone())
+                })
+                .collect(),
+            worker_scripts: BTreeMap::new(),
             queues: self
                 .queues
                 .iter()
@@ -1568,6 +1654,20 @@ pub(crate) fn find_orphans(
             .keys()
             .filter(|worker| !resources.contains_key(worker.as_str()))
             .cloned()
+            .collect(),
+        worker_contexts: env
+            .workers
+            .iter()
+            .filter(|(worker, record)| {
+                !resources.contains_key(worker.as_str()) && !record.contexts.is_empty()
+            })
+            .map(|(worker, record)| (worker.clone(), record.contexts.clone()))
+            .collect(),
+        worker_scripts: env
+            .workers
+            .iter()
+            .filter(|(worker, _)| !resources.contains_key(worker.as_str()))
+            .filter_map(|(worker, record)| Some((worker.clone(), record.script.clone()?)))
             .collect(),
         queues: env
             .queues
@@ -2465,6 +2565,8 @@ pub(crate) mod tests {
                             )]),
                             shapes: BTreeMap::new(),
                             expects_shapes: BTreeMap::new(),
+                            contexts: Vec::new(),
+                            script: None,
                         },
                     )]),
                     queues: BTreeSet::from(["intake".to_string()]),
@@ -3857,5 +3959,90 @@ pub(crate) mod tests {
             "the rewrite must carry the ledger's own mode across the rename"
         );
         let _ = std::fs::remove_dir_all(dir);
+    }
+
+    /// #3562: a ledger written before groups has no `contexts`, still reads, and
+    /// is written back unchanged; a group's Worker records its members.
+    #[test]
+    fn a_pre_groups_ledger_reads_and_a_groups_worker_records_its_members() {
+        let before = "version = 1\n\n[environments.default.workers.shop-orders]\ndeployed = true\n\n[environments.default.workers.shop-orders.contracts]\ncharge = \"abc\"\n";
+        let mut lock: DeployLock = toml::from_str(before).unwrap();
+        assert!(lock.is_deployed("default", "shop-orders"));
+        assert!(lock.members_of("default", "shop-orders").is_empty());
+        assert!(
+            !toml::to_string_pretty(&lock).unwrap().contains("contexts"),
+            "a Worker with no members writes no `contexts`"
+        );
+        lock.record_deployed("default", "core", Some(BTreeMap::new()));
+        lock.record_members(
+            "default",
+            "core",
+            &["shop.a".to_string(), "shop.b".to_string()],
+        );
+        let text = toml::to_string_pretty(&lock).unwrap();
+        assert!(text.contains("contexts = ["), "{text}");
+        let again: DeployLock = toml::from_str(&text).unwrap();
+        assert_eq!(again.members_of("default", "core"), ["shop.a", "shop.b"]);
+        assert!(again.members_of("default", "shop-orders").is_empty());
+        assert!(again.members_of("default", "unrecorded").is_empty());
+        assert_eq!(again, lock);
+    }
+
+    /// #3562: an orphaned Worker the ledger recorded as a group's is reported with
+    /// its members; one it recorded without any (a context's own Worker, or a
+    /// pre-groups ledger) is reported as before.
+    #[test]
+    fn an_orphaned_groups_members_are_named() {
+        let mut lock = DeployLock {
+            version: 1,
+            ..Default::default()
+        };
+        lock.record_deployed("default", "gone-group", Some(BTreeMap::new()));
+        lock.record_members(
+            "default",
+            "gone-group",
+            &["shop.a".to_string(), "shop.b".to_string()],
+        );
+        lock.record_deployed("default", "gone-alone", Some(BTreeMap::new()));
+        let orphans = find_orphans(&lock, "default", &BTreeMap::new());
+        assert_eq!(orphans.workers, ["gone-alone", "gone-group"]);
+        assert_eq!(
+            orphans.worker_contexts,
+            BTreeMap::from([(
+                "gone-group".to_string(),
+                vec!["shop.a".to_string(), "shop.b".to_string()]
+            )])
+        );
+        let shown = orphans.as_named_in("staging");
+        assert!(
+            shown.worker_contexts.contains_key("gone-group-staging"),
+            "{:?}",
+            shown.worker_contexts
+        );
+    }
+
+    /// #3562: a renamed group is named by its script, not its key, where the
+    /// account's name is wanted; a Worker with no recorded script is named by its key.
+    #[test]
+    fn a_renamed_groups_script_is_recorded_and_shown() {
+        let mut lock = DeployLock {
+            version: 1,
+            ..Default::default()
+        };
+        lock.record_deployed("default", "core", Some(BTreeMap::new()));
+        lock.record_script("default", "core", "core-script");
+        lock.record_deployed("default", "plain", Some(BTreeMap::new()));
+        lock.record_script("default", "plain", "plain");
+        assert_eq!(lock.script_of("default", "core"), "core-script");
+        assert_eq!(lock.script_of("default", "plain"), "plain");
+        assert_eq!(lock.script_of("default", "unrecorded"), "unrecorded");
+        let text = toml::to_string_pretty(&lock).unwrap();
+        assert_eq!(text.matches("script =").count(), 1, "{text}");
+        assert_eq!(toml::from_str::<DeployLock>(&text).unwrap(), lock);
+        let orphans = find_orphans(&lock, "default", &BTreeMap::new());
+        assert_eq!(
+            orphans.as_named_in("staging").workers,
+            ["core-script-staging", "plain-staging"]
+        );
     }
 }

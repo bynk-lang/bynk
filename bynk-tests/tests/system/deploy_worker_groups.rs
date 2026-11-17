@@ -984,6 +984,104 @@ fn a_group_has_one_contracts_manifest_for_its_members() {
     let _ = fs::remove_dir_all(&root);
 }
 
+/// `bynk deploy` over a group (#3562, G4-1): the group is one Worker, deployed in
+/// dependency order with the others, selectable by `--worker`, and a member cannot
+/// be deployed alone. Dry run, so nothing touches Cloudflare; skips when the
+/// environment has no way to run `wrangler`.
+#[test]
+fn deploy_treats_a_group_as_one_worker() {
+    let root = std::env::temp_dir().join(format!("bynk-deploy-groups-run-{}", std::process::id()));
+    write_project(
+        &root,
+        "[build]\ntarget = \"workers\"\n\n[deploy.workers.front]\ncontexts = [\"shop.a1\", \"shop.a2\"]\n",
+    );
+    fs::remove_file(root.join("src/shop/orders.bynk")).unwrap();
+    fs::remove_file(root.join("src/shop/payment.bynk")).unwrap();
+    // `a1` calls its member `a2` (the group binding to itself) and the outside `pay`.
+    fs::write(
+        root.join("src/shop/a1.bynk"),
+        "context shop.a1\n\nconsumes shop.a2\nconsumes shop.pay\n\nservice to_a1 {\n\ton call(n: Int) -> Effect[Int] {\n\t\tlet x <- shop.a2.to_a2(n)\n\t\tlet y <- shop.pay.to_pay(x)\n\t\tEffect.pure(y)\n\t}\n}\n",
+    )
+    .unwrap();
+    fs::write(
+        root.join("src/shop/a2.bynk"),
+        calling_context("shop.a2", None, "to_a2"),
+    )
+    .unwrap();
+    fs::write(
+        root.join("src/shop/pay.bynk"),
+        calling_context("shop.pay", None, "to_pay"),
+    )
+    .unwrap();
+    let deploy = |args: &[&str]| {
+        let out = Command::new(env!("CARGO_BIN_EXE_bynk-under-test"))
+            .args(["deploy", "--dry-run", "--no-install", "--yes"])
+            .args(args)
+            .arg(&root)
+            .env("CLOUDFLARE_API_TOKEN", "dummy")
+            .env("NO_COLOR", "1")
+            .output()
+            .expect("run bynk");
+        (
+            out.status.success(),
+            format!(
+                "{}{}",
+                String::from_utf8_lossy(&out.stdout),
+                String::from_utf8_lossy(&out.stderr)
+            ),
+        )
+    };
+    let (ok, all) = deploy(&[]);
+    if !ok && all.contains("environment not ready") {
+        eprintln!("skipping: no wrangler for a deploy dry run:\n{all}");
+        let _ = fs::remove_dir_all(&root);
+        return;
+    }
+    assert!(ok, "{all}");
+    // The group is one Worker, after the Worker it binds to; its members are not
+    // Workers of their own.
+    let pay = all.find("deploy shop-pay").expect(&all);
+    let front = all.find("deploy front").expect(&all);
+    assert!(pay < front, "a dependency deploys first:\n{all}");
+    assert!(
+        !all.contains("shop-a1") && !all.contains("shop-a2"),
+        "a member is not a Worker:\n{all}"
+    );
+
+    // `--worker` selects a Worker by its directory. Like `--context`, it assumes
+    // the Workers it binds to are live (D4): the group binds to `shop-pay`.
+    let (ok, one) = deploy(&["--worker", "front"]);
+    assert!(
+        !ok && one.contains("`front` binds to `shop-pay`, which has never been deployed"),
+        "{one}"
+    );
+    let (ok, pay) = deploy(&["--worker", "shop-pay"]);
+    assert!(
+        ok && pay.contains("deploy shop-pay") && !pay.contains("deploy front"),
+        "{pay}"
+    );
+    let (ok, none) = deploy(&["--worker", "nope"]);
+    assert!(!ok && none.contains("no Worker `nope` was built"), "{none}");
+
+    // A member cannot deploy alone: the refusal names its Worker.
+    let (ok, member) = deploy(&["--context", "shop.a1"]);
+    assert!(
+        !ok && member.contains("context `shop.a1` is in Worker `front`")
+            && member.contains("--worker front"),
+        "{member}"
+    );
+    // The dashed form `--context` also takes is refused the same way.
+    let (ok, dashed) = deploy(&["--context", "shop-a1"]);
+    assert!(
+        !ok && dashed.contains("context `shop-a1` is in Worker `front`"),
+        "{dashed}"
+    );
+    // A context on its own Worker still deploys by `--context`.
+    let (ok, alone) = deploy(&["--context", "shop.pay"]);
+    assert!(ok && alone.contains("deploy shop-pay"), "{alone}");
+    let _ = fs::remove_dir_all(&root);
+}
+
 /// A cycle between Workers that involves a group is refused at check time,
 /// whatever closes it, once and never beside `consumes_cycle`. One among contexts
 /// in no group is not: it builds, and `deploy` refuses it before uploading.

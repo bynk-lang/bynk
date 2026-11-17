@@ -283,14 +283,14 @@ fn destination_warning(to: &str, by: &[String], standing: &Standing) -> Option<S
 /// What a run prints before it confirms (and a `--dry-run` prints in place of
 /// it): the notes and warnings for the forwards of `order`'s Workers, with the
 /// account asked only when a literal destination needs it. Never refuses.
-pub(crate) fn forward_warnings_for_run(forwards: &[EmailForward], order: &[String]) -> Vec<String> {
+pub(crate) fn forward_warnings_for_run(
+    forwards: &[EmailForward],
+    order: &[String],
+    dir_of: &dyn Fn(&str) -> String,
+) -> Vec<String> {
     let forwards: Vec<EmailForward> = forwards
         .iter()
-        .filter(|f| {
-            order
-                .iter()
-                .any(|w| *w == bynk_driver::project::worker_dir_name(&f.context))
-        })
+        .filter(|f| order.iter().any(|w| *w == dir_of(&f.context)))
         .cloned()
         .collect();
     let rest = RestDestinations::from_env();
@@ -325,7 +325,9 @@ pub(crate) fn print_plan_then_forward_warnings(
 ) {
     print_plan(plan, opts.format);
     if any_email_handlers(order, resources) {
-        for warning in forward_warnings_for_run(&project_forwards(project_root), order) {
+        let groups = super::plan::GroupNames::of(project_root);
+        let dir_of = |context: &str| groups.dir(context);
+        for warning in forward_warnings_for_run(&project_forwards(project_root), order, &dir_of) {
             eprintln!("{warning}");
         }
     }
