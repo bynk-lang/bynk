@@ -162,14 +162,14 @@ pub fn lower_test_case_body_reporting(
         cx.record_span(out.len(), block.tail.span);
         let mut pre = Pre::new();
         if report_value && let Some(line) = eval_value_line(&mut pre, &block.tail, &mut cx) {
-            for s in pre.stmts() {
+            for s in &pre.stmts() {
                 write_line(&mut out, 0, s);
             }
             write_line(&mut out, 0, &line);
             return (out, smb.into_inner());
         }
         let tail = pre.lower(&block.tail, &mut cx);
-        for s in pre.stmts() {
+        for s in &pre.stmts() {
             write_line(&mut out, 0, s);
         }
         if !tail.is_empty() && tail != "undefined" {
@@ -271,7 +271,7 @@ pub fn lower_integration_case_body(
         cx.record_span(out.len(), block.tail.span);
         let mut pre = Pre::new();
         let tail = pre.lower(&block.tail, &mut cx);
-        for s in pre.stmts() {
+        for s in &pre.stmts() {
             write_line(&mut out, 0, s);
         }
         if !tail.is_empty() && tail != "undefined" {
@@ -559,7 +559,7 @@ fn emit_block_inner(
             let cond_expr = pre.lower(cond, cx);
             let then_tail = lower_tail_expr(&then_block.tail, cx, async_tail);
             let else_tail = lower_tail_expr(&else_block.tail, cx, async_tail);
-            for s in pre.stmts() {
+            for s in &pre.stmts() {
                 write_line(out, indent, s);
             }
             if then_tail.pre.is_empty() && else_tail.pre.is_empty() {
@@ -570,8 +570,8 @@ fn emit_block_inner(
                         cx,
                         &format!(
                             "({cond_expr} ? {t} : {e})",
-                            t = then_tail.expr,
-                            e = else_tail.expr
+                            t = then_tail.expr.into_text(),
+                            e = else_tail.expr.into_text()
                         ),
                     ),
                 );
@@ -602,10 +602,10 @@ fn emit_block_inner(
         _ if super::tco::emit_continue(out, &block.tail, cx, indent) => {}
         _ => {
             let tail = lower_tail_expr(&block.tail, cx, async_tail);
-            for s in &tail.pre {
+            for s in &tail.pre_texts() {
                 write_line(out, indent, s);
             }
-            write_line(out, indent, &tail_stmt(cx, &tail.expr));
+            write_line(out, indent, &tail_stmt(cx, &tail.expr.into_text()));
         }
     }
     cx.shadow_scopes.pop();
@@ -627,10 +627,10 @@ fn tail_stmt(cx: &LowerCtx, value: &str) -> String {
 /// body [`emit_block_inner`]'s own `_` arm writes for a statement-free block,
 /// which is what `emit_if_tail` would have recursed into.
 fn emit_pure_tail_branch(out: &mut String, tail: Lowered, cx: &LowerCtx, indent: usize) {
-    for s in &tail.pre {
+    for s in &tail.pre_texts() {
         write_line(out, indent, s);
     }
-    write_line(out, indent, &tail_stmt(cx, &tail.expr));
+    write_line(out, indent, &tail_stmt(cx, &tail.expr.into_text()));
 }
 
 /// Lower an expression that's in the tail position of a returning context.
@@ -665,16 +665,16 @@ fn lower_tail_expr(e: &Expr, cx: &mut LowerCtx, async_tail: bool) -> Lowered {
             let then_tail = lower_tail_expr(&then_block.tail, cx, true);
             let else_tail = lower_tail_expr(&else_block.tail, cx, true);
             if then_tail.pre.is_empty() && else_tail.pre.is_empty() {
-                return pre.finish(format!(
+                return pre.finish_text(format!(
                     "({cond_expr} ? {t} : {e})",
-                    t = then_tail.expr,
-                    e = else_tail.expr
+                    t = then_tail.expr.into_text(),
+                    e = else_tail.expr.into_text()
                 ));
             }
             let slot_ty = async_tail_slot_ty(e, cx);
             let value =
                 hoist_if_as_statement(&mut pre, cond_expr, then_tail, else_tail, slot_ty, cx);
-            pre.finish(value)
+            pre.finish_text(value)
         }
         _ => lower_expr(e, cx),
     }
@@ -740,14 +740,14 @@ fn hoist_if_as_statement(
     // `--strict`), which is exactly the shape a hoisted `?` produces — so take
     // the type the checker already recorded for the `if` expression.
     match &slot_ty {
-        Some(ty) => pre.push(format!("let {slot}: {ty};")),
-        None => pre.push(format!("let {slot};")),
+        Some(ty) => pre.push_text(format!("let {slot}: {ty};")),
+        None => pre.push_text(format!("let {slot};")),
     }
-    pre.push(format!("if ({cond_expr}) {{"));
-    pre.extend(assign_branch(then_tail, &slot));
-    pre.push("} else {".to_string());
-    pre.extend(assign_branch(else_tail, &slot));
-    pre.push("}".to_string());
+    pre.push_text(format!("if ({cond_expr}) {{"));
+    pre.extend_text(assign_branch(then_tail, &slot));
+    pre.push_text("} else {".to_string());
+    pre.extend_text(assign_branch(else_tail, &slot));
+    pre.push_text("}".to_string());
     slot
 }
 
@@ -789,8 +789,8 @@ fn hoist_value_as_statement(
     let annotation = checked_ty_ts(e, cx)
         .map(|ty| ": ".to_string() + &ty)
         .unwrap_or_default();
-    pre.push(format!("let {slot}{annotation};"));
-    pre.push(label.clone() + ": {");
+    pre.push_text(format!("let {slot}{annotation};"));
+    pre.push_text(label.clone() + ": {");
     let saved = cx.tail_slot.replace(TailSlot {
         slot: slot.clone(),
         label,
@@ -799,9 +799,9 @@ fn hoist_value_as_statement(
     let mut body = String::new();
     cx.without_source_map(|cx| emit(&mut body, cx));
     cx.tail_slot = saved;
-    pre.extend(body.lines().map(str::to_string));
-    pre.push("}".to_string());
-    pre.finish(slot)
+    pre.extend_text(body.lines().map(str::to_string));
+    pre.push_text("}".to_string());
+    pre.finish_text(slot)
 }
 
 /// #1750: whether a `?` in `b` would lower to a `return` inside `b`'s own
@@ -845,8 +845,12 @@ fn expr_contains_question(e: &Expr) -> bool {
 /// inside the string.
 fn assign_branch(tail: Lowered, slot: &str) -> Vec<String> {
     let pad = " ".repeat(INDENT_STEP);
-    let mut out: Vec<String> = tail.pre.iter().map(|s| format!("{pad}{s}")).collect();
-    out.push(format!("{pad}{slot} = {};", tail.expr));
+    let mut out: Vec<String> = tail
+        .pre_texts()
+        .iter()
+        .map(|s| format!("{pad}{s}"))
+        .collect();
+    out.push(format!("{pad}{slot} = {};", tail.expr.into_text()));
     out
 }
 
@@ -1095,7 +1099,7 @@ fn emit_statement(out: &mut String, stmt: &Statement, cx: &mut LowerCtx, indent:
             }
             let mut pre = Pre::new();
             let value = pre.lower(&l.value, cx);
-            for s in pre.stmts() {
+            for s in &pre.stmts() {
                 write_line(out, indent, s);
             }
             // #908: also covers `_` (a fresh throwaway local; TS allows
@@ -1120,7 +1124,7 @@ fn emit_statement(out: &mut String, stmt: &Statement, cx: &mut LowerCtx, indent:
             // `let x <- expr` → `const x = await expr;`
             let mut pre = Pre::new();
             let value = lower_effect_let_value(l, &mut pre, cx);
-            for s in pre.stmts() {
+            for s in &pre.stmts() {
                 write_line(out, indent, s);
             }
             let bind_name = cx.bind_local_name(&l.name.name);
@@ -1151,7 +1155,7 @@ fn emit_statement(out: &mut String, stmt: &Statement, cx: &mut LowerCtx, indent:
             let src = expect_source_text(cx, a.value.span);
             let mut pre = Pre::new();
             let json = json_encode_text(&mut pre, &a.value, cx, false);
-            for s in pre.stmts() {
+            for s in &pre.stmts() {
                 write_line(out, indent, s);
             }
             let name = bynk_project::json_string(&clause.name);
@@ -1214,7 +1218,7 @@ fn emit_statement(out: &mut String, stmt: &Statement, cx: &mut LowerCtx, indent:
             } else {
                 format!("\"expect {src}\"")
             };
-            for s in pre.stmts() {
+            for s in &pre.stmts() {
                 write_line(out, indent, s);
             }
             write_line(
@@ -1231,7 +1235,7 @@ fn emit_statement(out: &mut String, stmt: &Statement, cx: &mut LowerCtx, indent:
             // `Clock` double reads below it. A negative amount faults there.
             let mut pre = Pre::new();
             let amount = pre.lower(&a.amount, cx);
-            for s in pre.stmts() {
+            for s in &pre.stmts() {
                 write_line(out, indent, s);
             }
             write_line(out, indent, &format!("__bynkAdvanceClock({amount});"));
@@ -1242,7 +1246,7 @@ fn emit_statement(out: &mut String, stmt: &Statement, cx: &mut LowerCtx, indent:
             // result discarded (no `const`).
             let mut pre = Pre::new();
             let value = pre.lower(&d.value, cx);
-            for st in pre.stmts() {
+            for st in &pre.stmts() {
                 write_line(out, indent, st);
             }
             // T2.2 (R6.4): see the matching note at `EffectLet`.
@@ -1258,7 +1262,7 @@ fn emit_statement(out: &mut String, stmt: &Statement, cx: &mut LowerCtx, indent:
             // the durable write). A fault before that flush persists nothing.
             let mut pre = Pre::new();
             let value = pre.lower(&a.value, cx);
-            for st in pre.stmts() {
+            for st in &pre.stmts() {
                 write_line(out, indent, st);
             }
             let lhs = match cx.agent_store_cells() {
@@ -1353,6 +1357,49 @@ fn lower_const_literal_raw(e: &Expr) -> Option<String> {
     }
 }
 
+/// Slice 1A.2 (#3694): the literal family lowers to typed nodes. The string's
+/// escaping is `TsLit::Str`'s (the one shared escaper); numbers print their
+/// digits verbatim; `None` and the unit value are the runtime's `None` /
+/// `undefined`.
+fn lower_literal(e: &Expr) -> Lowered {
+    use bynk_ts::{TsExpr, TsLit};
+    Lowered::node(match &e.kind {
+        ExprKind::IntLit { value: n, .. } => num_lit(n.to_string()),
+        // v0.21: the stored lexeme verbatim — `1e10` must not normalise.
+        ExprKind::FloatLit { lexeme, .. } => num_lit(lexeme.clone()),
+        // #2622: a `Decimal` literal is an object literal (no runtime import).
+        ExprKind::DecimalLit { coef, scale, .. } => decimal_lit(coef, *scale),
+        // v0.86 (ADR 0112): a `Duration` literal lowers to its constant
+        // milliseconds (the value `Duration` erases to).
+        ExprKind::DurationLit { millis, .. } => num_lit(millis.to_string()),
+        ExprKind::StrLit(s) => TsExpr::Lit(TsLit::Str(s.clone())),
+        ExprKind::BoolLit(b) => TsExpr::Lit(TsLit::Bool(*b)),
+        ExprKind::None => TsExpr::Ident("None".to_string()),
+        ExprKind::UnitLit => TsExpr::Ident("undefined".to_string()),
+        _ => unreachable!("lower_literal is only called for literal expressions"),
+    })
+}
+
+/// A numeric literal node: the digits are printed verbatim (`TsLit::Num`), so a
+/// big integer, a float lexeme (`1e10`) or a duration's milliseconds render
+/// exactly as the old hand-built text did.
+fn num_lit(digits: String) -> bynk_ts::TsExpr {
+    bynk_ts::TsExpr::Lit(bynk_ts::TsLit::Num(digits))
+}
+
+/// #2622: a `Decimal` literal as an object-literal node — the node twin of
+/// [`decimal_ts_literal`](crate::emitter::ts_types::decimal_ts_literal)
+/// (`{ coefficient: <signed>n, scale: <scale> }`, no runtime import).
+fn decimal_lit(coef: &str, scale: u32) -> bynk_ts::TsExpr {
+    bynk_ts::TsExpr::object(vec![
+        (
+            "coefficient".to_string(),
+            num_lit(format!("{}n", decimal_signed_coef(coef))),
+        ),
+        ("scale".to_string(), num_lit(scale.to_string())),
+    ])
+}
+
 /// Lower an interpolated string (v0.43, ADR 0075) to a TS template literal.
 /// Chunks become escaped literal text; each hole becomes `${String(<expr>)}`.
 /// `String(…)` is identity for a `String` hole and the display form for
@@ -1384,7 +1431,7 @@ fn lower_interp_str(parts: &[InterpPart], cx: &mut LowerCtx) -> Lowered {
         }
     }
     out.push('`');
-    pre.finish(out)
+    pre.finish_text(out)
 }
 
 /// Escape a literal chunk for a TS template-literal context: backslash,
@@ -1424,17 +1471,89 @@ fn escape_ts_template(s: &str) -> String {
 /// statements to its caller. There is no sink parameter left in `bynk-emit`
 /// to hand them to instead.
 pub(crate) struct Lowered {
-    pub pre: Vec<String>,
-    pub expr: String,
+    pub pre: Vec<LoweredStmt>,
+    pub expr: LoweredExpr,
+}
+
+/// Slice 1A.2 (#3694): the expression side of the lowering bridge. A lowering
+/// function returns either a typed [`TsExpr`] (a *converted* family) or text
+/// (an *unconverted* one). Families convert one at a time, leaf first; a
+/// converted child reaches an unconverted parent as text printed by the
+/// `bynk_ts` printer, through [`LoweredExpr::into_text`] — the one place a node
+/// becomes text inside lowering. The `Text` side is counted by the
+/// `lowering_text_bridge` growth probe and is deleted when 1A exits.
+pub(crate) enum LoweredExpr {
+    Node(bynk_ts::TsExpr),
+    Text(String),
+}
+
+impl LoweredExpr {
+    /// The only node-to-text conversion inside lowering: a `Node` is printed
+    /// by the `bynk_ts` expression printer, `Text` passes through.
+    pub(crate) fn into_text(self) -> String {
+        match self {
+            LoweredExpr::Node(n) => bynk_ts::print_expr(&n),
+            LoweredExpr::Text(t) => t,
+        }
+    }
+}
+
+/// The statement side of the bridge: a hoisted statement is either a typed
+/// [`TsStmt`] or text. Where `pre` statements leave lowering into a `TsStmt`
+/// body ([`Pre::ts_stmts`]) a `Node` stays a node and a `Text` becomes
+/// `TsStmt::raw`, exactly as before.
+pub(crate) enum LoweredStmt {
+    // No family builds statement nodes yet (the first lands with a later 1A
+    // slice), so nothing constructs this variant today.
+    #[allow(dead_code)]
+    // Boxed: a `TsStmt` is ~350 bytes and almost every hoisted statement is text.
+    Node(Box<bynk_ts::TsStmt>),
+    Text(String),
+}
+
+impl LoweredStmt {
+    /// The statement's text, for a caller assembling statements as text (the
+    /// statement-side counterpart of [`LoweredExpr::into_text`]; no family
+    /// builds `Node` statements yet).
+    fn text(&self) -> String {
+        match self {
+            LoweredStmt::Node(n) => bynk_ts::print_stmt(n, 0).trim_end_matches('\n').to_string(),
+            LoweredStmt::Text(t) => t.clone(),
+        }
+    }
 }
 
 impl Lowered {
-    /// An expression that hoists nothing — the common leaf case.
+    /// An expression that hoists nothing, built as text — the common leaf
+    /// case. A text construction site: counted by `lowering_text_bridge`.
     pub(crate) fn bare(expr: impl Into<String>) -> Self {
         Lowered {
             pre: Vec::new(),
-            expr: expr.into(),
+            expr: LoweredExpr::Text(expr.into()),
         }
+    }
+
+    /// An expression that hoists nothing, built as a typed node.
+    pub(crate) fn node(expr: bynk_ts::TsExpr) -> Self {
+        Lowered {
+            pre: Vec::new(),
+            expr: LoweredExpr::Node(expr),
+        }
+    }
+
+    /// An expression built as text, preceded by text statements. A text
+    /// construction site: counted by `lowering_text_bridge`.
+    pub(crate) fn text_with_pre(pre: Vec<String>, expr: impl Into<String>) -> Self {
+        Lowered {
+            pre: pre.into_iter().map(LoweredStmt::Text).collect(),
+            expr: LoweredExpr::Text(expr.into()),
+        }
+    }
+
+    /// The hoisted statements as text, for a caller that assembles them into
+    /// text.
+    pub(crate) fn pre_texts(&self) -> Vec<String> {
+        self.pre.iter().map(LoweredStmt::text).collect()
     }
 }
 
@@ -1446,7 +1565,7 @@ impl Lowered {
 /// function cannot be handed somewhere to write statements, so it cannot write
 /// them anywhere but its own return value, and the caller decides where they
 /// land (a real statement position, or a hoist-safe wrapper).
-pub(crate) struct Pre(Vec<String>);
+pub(crate) struct Pre(Vec<LoweredStmt>);
 
 impl Pre {
     pub(crate) fn new() -> Self {
@@ -1458,12 +1577,24 @@ impl Pre {
     /// the callee's statements land here, in order, at the point of the call —
     /// but the callee never saw the buffer.
     pub(crate) fn lower(&mut self, e: &Expr, cx: &mut LowerCtx) -> String {
+        self.lower_node(e, cx).into_text()
+    }
+
+    /// As [`Pre::lower`], for a converted caller: hands back the bridge value
+    /// without printing it.
+    pub(crate) fn lower_node(&mut self, e: &Expr, cx: &mut LowerCtx) -> LoweredExpr {
         let lowered = lower_expr(e, cx);
-        self.absorb(lowered)
+        self.absorb_node(lowered)
     }
 
     /// Absorb an already-built [`Lowered`] and hand back its text.
     pub(crate) fn absorb(&mut self, lowered: Lowered) -> String {
+        self.absorb_node(lowered).into_text()
+    }
+
+    /// Absorb an already-built [`Lowered`] and hand back its expression as
+    /// the bridge value.
+    pub(crate) fn absorb_node(&mut self, lowered: Lowered) -> LoweredExpr {
         self.0.extend(lowered.pre);
         lowered.expr
     }
@@ -1475,31 +1606,48 @@ impl Pre {
     }
 
     /// Hoist a statement this function generated itself (a `?` temp, an
-    /// `is`-receiver binding, a match IIFE's scaffolding).
-    pub(crate) fn push(&mut self, stmt: String) {
-        self.0.push(stmt);
+    /// `is`-receiver binding, a match IIFE's scaffolding), built as text. A
+    /// text construction site: counted by `lowering_text_bridge`.
+    pub(crate) fn push_text(&mut self, stmt: String) {
+        self.0.push(LoweredStmt::Text(stmt));
     }
 
-    pub(crate) fn extend(&mut self, stmts: impl IntoIterator<Item = String>) {
-        self.0.extend(stmts);
+    /// Hoist several text statements; counted like [`Pre::push_text`].
+    pub(crate) fn extend_text(&mut self, stmts: impl IntoIterator<Item = String>) {
+        self.0.extend(stmts.into_iter().map(LoweredStmt::Text));
     }
 
     pub(crate) fn is_empty(&self) -> bool {
         self.0.is_empty()
     }
 
-    /// The accumulated statements, for a caller that is writing them into a
-    /// real statement position rather than hoisting them further.
-    pub(crate) fn stmts(&self) -> &[String] {
-        &self.0
+    /// The accumulated statements as text, for a caller that is writing them
+    /// into a text statement position rather than hoisting them further.
+    pub(crate) fn stmts(&self) -> Vec<String> {
+        self.0.iter().map(LoweredStmt::text).collect()
+    }
+
+    /// The accumulated statements as `TsStmt`s for a typed body: a `Node`
+    /// stays a node, a `Text` becomes `TsStmt::raw` indented by `indent`.
+    pub(crate) fn ts_stmts(&self, indent: &str) -> Vec<bynk_ts::TsStmt> {
+        self.0
+            .iter()
+            .map(|s| match s {
+                LoweredStmt::Node(n) => (**n).clone(),
+                LoweredStmt::Text(t) => bynk_ts::TsStmt::raw(format!("{indent}{t}\n"), None),
+            })
+            .collect()
     }
 
     /// Pair the accumulated statements with the expression they precede.
-    pub(crate) fn finish(self, expr: impl Into<String>) -> Lowered {
-        Lowered {
-            pre: self.0,
-            expr: expr.into(),
-        }
+    pub(crate) fn finish(self, expr: LoweredExpr) -> Lowered {
+        Lowered { pre: self.0, expr }
+    }
+
+    /// [`Pre::finish`] with an expression built as text. A text construction
+    /// site: counted by `lowering_text_bridge`.
+    pub(crate) fn finish_text(self, expr: impl Into<String>) -> Lowered {
+        self.finish(LoweredExpr::Text(expr.into()))
     }
 }
 
@@ -1539,25 +1687,22 @@ pub(crate) fn lower_expr(e: &Expr, cx: &mut LowerCtx) -> Lowered {
     }
     let mut pre = Pre::new();
     let expr = match &e.kind {
-        ExprKind::IntLit { value: n, .. } => n.to_string(),
+        // Literals are typed nodes (slice 1A.2): see `lower_literal`.
+        ExprKind::IntLit { .. }
+        | ExprKind::FloatLit { .. }
+        | ExprKind::DecimalLit { .. }
+        | ExprKind::DurationLit { .. }
+        | ExprKind::StrLit(_)
+        | ExprKind::BoolLit(_)
+        | ExprKind::None
+        | ExprKind::UnitLit => return lower_literal(e),
         // Slice C: `Wire(<String>)` in a generic position lowers to its raw inner
         // string. The system-http driver site intercepts `Wire` args before this
         // to route them raw (no serialisation) and switch to the outcome decoder.
         ExprKind::Wire(inner) => pre.lower(inner, cx),
-        // v0.21: the stored lexeme verbatim — `1e10` must not normalise.
-        ExprKind::FloatLit { lexeme, .. } => lexeme.clone(),
-        // #2622: a `Decimal` literal is an object literal (no runtime import).
-        ExprKind::DecimalLit { coef, scale, .. } => {
-            crate::emitter::ts_types::decimal_ts_literal(coef, *scale)
-        }
-        // v0.86 (ADR 0112): a `Duration` literal lowers to its constant
-        // milliseconds (the value `Duration` erases to).
-        ExprKind::DurationLit { millis, .. } => millis.to_string(),
-        ExprKind::StrLit(s) => format!("\"{}\"", escape_ts_string(s)),
         // v0.43 (ADR 0075): an interpolated string lowers to a TS template
         // literal — chunks as escaped literal text, holes as `${String(…)}`.
         ExprKind::InterpStr(parts) => pre.absorb(lower_interp_str(parts, cx)),
-        ExprKind::BoolLit(b) => b.to_string(),
         // v0.20b: a list literal lowers to a TS array literal; `readonly` is
         // a type-level property and the checker owns the element typing.
         ExprKind::ListLit(elems, ..) => {
@@ -1614,7 +1759,6 @@ pub(crate) fn lower_expr(e: &Expr, cx: &mut LowerCtx) -> Lowered {
             let s = pre.lower(inner, cx);
             format!("Some({s})")
         }
-        ExprKind::None => "None".to_string(),
         ExprKind::Question(inner) => {
             // v0.153 (ADR 0177): an `Option[T]?` operand lifts into an
             // HttpResult handler — `None` early-returns `NotFound` (404),
@@ -1645,7 +1789,7 @@ pub(crate) fn lower_expr(e: &Expr, cx: &mut LowerCtx) -> Lowered {
             };
             let inner_expr = pre.lower(inner, cx);
             let tmp = cx.fresh();
-            pre.push(format!("const {tmp} = {inner_expr};"));
+            pre.push_text(format!("const {tmp} = {inner_expr};"));
             if cx.question_fails_case() {
                 // #2857: a case returns a `CaseResult`, not the operand's
                 // `Result` — so the `?` fails the case, reporting the `Err`
@@ -1657,19 +1801,19 @@ pub(crate) fn lower_expr(e: &Expr, cx: &mut LowerCtx) -> Lowered {
                 let test = format!("{tmp}.tag === \"Err\"");
                 let detail =
                     format!("\"{src}\\n  the operand was Err: \" + __bynkShow({tmp}.error)");
-                pre.push(format!(
+                pre.push_text(format!(
                     "if ({test}) {{ throw __bynkExpectFailure(\"{location}\", {start}, {end}, {detail}); }}"
                 ));
             } else if is_option {
-                pre.push(format!(
+                pre.push_text(format!(
                     "if ({tmp}.tag === \"None\") return HttpResult.NotFound;"
                 ));
             } else if let Some((ty_name, variant)) = embed {
-                pre.push(format!(
+                pre.push_text(format!(
                     "if ({tmp}.tag === \"Err\") return Err({ty_name}.{variant}({tmp}.error));"
                 ));
             } else {
-                pre.push(format!("if ({tmp}.tag === \"Err\") return {tmp};"));
+                pre.push_text(format!("if ({tmp}.tag === \"Err\") return {tmp};"));
             }
             // T2.3 (R6.3): every branch above just pushed a `return` that must
             // exit the enclosing function, not whatever scope this `Lowered`
@@ -1746,7 +1890,6 @@ pub(crate) fn lower_expr(e: &Expr, cx: &mut LowerCtx) -> Lowered {
             pre.absorb(lower_match_as_iife(discriminant, arms, cx))
         }
         ExprKind::Is { value, pattern } => pre.absorb(lower_is(value, pattern, cx)),
-        ExprKind::UnitLit => "undefined".to_string(),
         ExprKind::EffectPure(inner) => {
             let inner_expr = pre.lower(inner, cx);
             format!("globalThis.Promise.resolve({inner_expr})")
@@ -1806,7 +1949,7 @@ pub(crate) fn lower_expr(e: &Expr, cx: &mut LowerCtx) -> Lowered {
             )
         }
     };
-    pre.finish(expr)
+    pre.finish_text(expr)
 }
 
 /// The parameter names of a capability operation, looked up from the capability
@@ -1915,7 +2058,7 @@ fn lower_observation(o: &ObservationExpr, cx: &mut LowerCtx) -> String {
             None => match count {
                 None => format!("({calls}.length >= 1)"),
                 Some(c) => {
-                    let n = lower_expr(c, cx).expr;
+                    let n = lower_expr(c, cx).expr.into_text();
                     format!("({calls}.length === ({n}))")
                 }
             },
@@ -1941,8 +2084,8 @@ fn lower_observation(o: &ObservationExpr, cx: &mut LowerCtx) -> String {
                     )
                 };
                 let pred_lowered = lower_expr(p, cx);
-                let pre_src = pred_lowered.pre.join(" ");
-                let pred = pred_lowered.expr;
+                let pre_src = pred_lowered.pre_texts().join(" ");
+                let pred = pred_lowered.expr.into_text();
                 // P7.2: same shape as `lower_observation`'s `Trace` sibling above — only
                 // `.args` is destructured, so `unknown[]` is what's actually known.
                 let matching = format!(
@@ -1951,7 +2094,7 @@ fn lower_observation(o: &ObservationExpr, cx: &mut LowerCtx) -> String {
                 match count {
                     None => format!("(({matching}) >= 1)"),
                     Some(c) => {
-                        let n = lower_expr(c, cx).expr;
+                        let n = lower_expr(c, cx).expr.into_text();
                         format!("(({matching}) === ({n}))")
                     }
                 }
@@ -2395,66 +2538,66 @@ fn lower_method_call(
     let mut pre = Pre::new();
     // Persisted-store receivers: held Map, Map, Set, Cache, Log, Cell (#3167).
     if let Some(s) = lower_store_method_call(e, receiver, method, args, cx, &mut pre) {
-        return pre.finish(s);
+        return pre.finish_text(s);
     }
     // Intrinsic statics: scalar and collection constructors, then runtime values (#3167).
     if let Some(s) = lower_scalar_static_call(e, receiver, method, args, cx, &mut pre) {
-        return pre.finish(s);
+        return pre.finish_text(s);
     }
     if let Some(s) = lower_runtime_value_static_call(e, receiver, method, args, cx, &mut pre) {
-        return pre.finish(s);
+        return pre.finish_text(s);
     }
     // Capability, cross-context, events and static-type calls (#3167).
     if let Some(s) = lower_d1_peek_call(e, cx) {
-        return pre.finish(s);
+        return pre.finish_text(s);
     }
     if let Some(s) = lower_d1_select_call(e, args, cx, &mut pre) {
-        return pre.finish(s);
+        return pre.finish_text(s);
     }
     if let Some(s) = lower_cross_context_call(e, receiver, method, type_args, args, cx, &mut pre) {
-        return pre.finish(s);
+        return pre.finish_text(s);
     }
     if let Some(s) = lower_events_emit_call(e, receiver, type_args, args, cx, &mut pre) {
-        return pre.finish(s);
+        return pre.finish_text(s);
     }
     if let Some(s) = lower_signed_cookie_call(e, args, cx, &mut pre) {
-        return pre.finish(s);
+        return pre.finish_text(s);
     }
     if let Some(s) = lower_cookie_field_call(e, args, cx, &mut pre) {
-        return pre.finish(s);
+        return pre.finish_text(s);
     }
     if let Some(s) = lower_capability_call(e, receiver, method, type_args, args, cx, &mut pre) {
-        return pre.finish(s);
+        return pre.finish_text(s);
     }
     if let Some(s) = lower_type_static_call(e, receiver, method, type_args, args, cx, &mut pre) {
-        return pre.finish(s);
+        return pre.finish_text(s);
     }
     // Test-case and system-tier service addresses, then agent invocations (#3167).
     if let Some(s) = lower_test_asset_fetch_call(e, receiver, args, cx, &mut pre) {
-        return pre.finish(s);
+        return pre.finish_text(s);
     }
     if let Some(s) = lower_system_schedule_call(receiver, method, args, cx, &mut pre) {
-        return pre.finish(s);
+        return pre.finish_text(s);
     }
     if let Some(s) = lower_system_http_call(e, receiver, method, args, cx, &mut pre) {
-        return pre.finish(s);
+        return pre.finish_text(s);
     }
     if let Some(s) = lower_test_service_call(e, receiver, method, args, cx, &mut pre) {
-        return pre.finish(s);
+        return pre.finish_text(s);
     }
     if let Some(s) = lower_inline_agent_call(e, receiver, method, args, cx, &mut pre) {
-        return pre.finish(s);
+        return pre.finish_text(s);
     }
     if let Some(s) = lower_let_bound_agent_call(e, receiver, method, args, cx, &mut pre) {
-        return pre.finish(s);
+        return pre.finish_text(s);
     }
     // v0.20b: built-in kernel methods, resolved by the checker (#3164).
     if let Some(s) = lower_kernel_method_call(e, receiver, method, args, cx, &mut pre) {
-        return pre.finish(s);
+        return pre.finish_text(s);
     }
     // Instance call: UFCS lowering with the receiver as first arg.
     let call = lower_ufcs_method_call(e, receiver, method, type_args, args, cx, &mut pre);
-    pre.finish(call)
+    pre.finish_text(call)
 }
 
 /// #3147: lower `D1.peek(<participant>.<Cap>)` in an integration or `system`
@@ -5040,7 +5183,7 @@ fn lower_json_codec_call(
         && let Some(decoder) = json_decoder_fn(t, DecodeSource::Yaml, cx)
     {
         let arg = pre.lower(&args[0], cx);
-        return Some(pre.finish(format!("({decoder})({arg})")));
+        return Some(pre.finish_text(format!("({decoder})({arg})")));
     }
     // #3276 (decision G): `Form.decode[T](text)` reads the text as the router reads
     // a `@form` body, then decodes through `T`'s codec; `Form.encode(v)` writes the
@@ -5055,7 +5198,7 @@ fn lower_json_codec_call(
             && let Some(decoder) = json_decoder_fn(t, DecodeSource::Form, cx)
         {
             let arg = pre.lower(&args[0], cx);
-            return Some(pre.finish(format!("({decoder})({arg})")));
+            return Some(pre.finish_text(format!("({decoder})({arg})")));
         }
         if method.name == "encode" {
             cx.runtime_use().note_form_codec();
@@ -5075,7 +5218,7 @@ fn lower_json_codec_call(
                 })
                 .map(|t| format!(", {t}"))
                 .unwrap_or_default();
-            return Some(pre.finish(format!("__formString({wire}{table})")));
+            return Some(pre.finish_text(format!("__formString({wire}{table})")));
         }
     }
     if matches!(
@@ -5087,7 +5230,7 @@ fn lower_json_codec_call(
             && let Some(text) =
                 json_encode_text(&mut pre, &args[0], cx, method.name == "encodePlain")
         {
-            return Some(pre.finish(text));
+            return Some(pre.finish_text(text));
         }
         if matches!(method.name.as_str(), "decode" | "decodeSql")
             && let Some(Ty::Result(t, _)) = cx.commons().expr_ty(e.id).as_deref().cloned()
@@ -5102,11 +5245,11 @@ fn lower_json_codec_call(
             )
         {
             let arg = pre.lower(&args[0], cx);
-            return Some(pre.finish(format!("({decoder})({arg})")));
+            return Some(pre.finish_text(format!("({decoder})({arg})")));
         }
     }
     let text: Option<String> = None;
-    text.map(|expr| pre.finish(expr))
+    text.map(|expr| pre.finish_text(expr))
 }
 
 /// Which text front end feeds a typed decode.
@@ -5323,7 +5466,7 @@ fn json_encode_text(pre: &mut Pre, arg: &Expr, cx: &mut LowerCtx, plain: bool) -
         // call time, before the body raises the flag (its type is inferred).
         let (param, tmp) = if v.contains("await") {
             let tmp = format!("__pj{}", arg.id.0);
-            pre.push(format!("const {tmp} = {v};"));
+            pre.push_text(format!("const {tmp} = {v};"));
             (format!("__pv = {tmp}"), "__pv".to_string())
         } else {
             (format!("__pv = {v}"), "__pv".to_string())
@@ -5497,13 +5640,13 @@ fn lower_cross_context_service_call(
                         receiver.span.start,
                         cx,
                     ));
-                    return Some(pre.finish(call));
+                    return Some(pre.finish_text(call));
                 }
             }
         } else {
             None
         };
-    text.map(|expr| pre.finish(expr))
+    text.map(|expr| pre.finish_text(expr))
 }
 
 fn lower_val(type_ref: &TypeRef, args: &[Expr], cx: &mut LowerCtx) -> Lowered {
@@ -5515,7 +5658,7 @@ fn lower_val(type_ref: &TypeRef, args: &[Expr], cx: &mut LowerCtx) -> Lowered {
     // to the emitter.
     let ty = match bynk_check::checker::resolve_type_ref(type_ref, &cx.commons().types, tys) {
         Some(t) => t,
-        None => return pre.finish("undefined /* mock: unresolved type */".to_string()),
+        None => return pre.finish_text("undefined /* mock: unresolved type */".to_string()),
     };
     // Refined literal pin. This `Val[T](lit)` path is test-only scaffolding, where
     // the branded type is an `any` value binding, not a type (ADR 0182) — so brand
@@ -5532,10 +5675,10 @@ fn lower_val(type_ref: &TypeRef, args: &[Expr], cx: &mut LowerCtx) -> Lowered {
     ) = (args.first(), &*ty_node)
     {
         let raw = lower_const_literal_raw(arg).unwrap_or_else(|| pre.lower(arg, cx));
-        return pre.finish(unchecked_construct_test(name, &raw, false));
+        return pre.finish_text(unchecked_construct_test(name, &raw, false));
     }
     // Bare mock (refined / opaque / sum / record).
-    pre.finish(mock_value(ty, cx, MOCK_DEPTH))
+    pre.finish_text(mock_value(ty, cx, MOCK_DEPTH))
 }
 
 /// When we encounter `lhs && rhs`, see if lhs is an `is` (possibly wrapped
@@ -5610,12 +5753,12 @@ fn lower_and_with_is(lhs: &Expr, rhs: &Expr, cx: &mut LowerCtx) -> Option<AndWit
     };
     let rhs_returns = cx.emitted_early_return;
     cx.emitted_early_return = saved_early_return || rhs_returns;
-    bindings.extend(rhs_lowered.pre);
+    bindings.extend(rhs_lowered.pre_texts());
     cx.shadow_scopes.pop();
     Some(AndWithIs {
         bindings,
         lhs: lhs_lowered,
-        rhs: rhs_lowered.expr,
+        rhs: rhs_lowered.expr.into_text(),
         rhs_returns,
         hoisted,
     })
@@ -6377,7 +6520,7 @@ fn lower_list_kernel(
         }
         _ => None,
     };
-    text.map(|expr| pre.finish(expr))
+    text.map(|expr| pre.finish_text(expr))
 }
 
 /// Slice 0b (#2662): the `parTraverse` family joins through `__bynkSettleAll`,
@@ -6791,7 +6934,7 @@ fn route_indexed_filter(
     }
     let v = pre.lower(value, cx);
     let text: Option<String> = Some(format!("(() => {m}.byIndex(\"{field}\", String({v})))"));
-    text.map(|expr| pre.finish(expr))
+    text.map(|expr| pre.finish_text(expr))
 }
 
 /// `e` as `<param>.<field>` → the field name; else `None`.
@@ -6893,7 +7036,7 @@ fn lower_int_kernel(
         }
         _ => None,
     };
-    text.map(|expr| pre.finish(expr))
+    text.map(|expr| pre.finish_text(expr))
 }
 
 /// The `Float` kernel's lowering (see [`lower_int_kernel`]).
@@ -6984,7 +7127,7 @@ fn lower_float_kernel(
         }
         _ => None,
     };
-    text.map(|expr| pre.finish(expr))
+    text.map(|expr| pre.finish_text(expr))
 }
 
 /// v0.86 (ADR 0112): lower a `Duration` kernel method. `toMillis` is the
@@ -7004,7 +7147,7 @@ fn lower_duration_kernel(
         }
         _ => None,
     };
-    text.map(|expr| pre.finish(expr))
+    text.map(|expr| pre.finish_text(expr))
 }
 
 /// v0.90 (ADR 0114): lower an `Instant` kernel method. `toEpochMillis` is the
@@ -7031,7 +7174,7 @@ fn lower_instant_kernel(
         }
         _ => None,
     };
-    text.map(|expr| pre.finish(expr))
+    text.map(|expr| pre.finish_text(expr))
 }
 
 /// v0.110 (ADR 0142 D3/D4): lower a `Bytes` kernel method. `length` is the
@@ -7095,7 +7238,7 @@ fn lower_bytes_kernel(
         }
         _ => None,
     };
-    text.map(|expr| pre.finish(expr))
+    text.map(|expr| pre.finish_text(expr))
 }
 
 /// v0.22a: lower a built-in `String` kernel method (ADR 0046). Pinned
@@ -7194,7 +7337,7 @@ fn lower_string_kernel(
             )),
             _ => None,
         };
-        return text.map(|expr| pre.finish(expr));
+        return text.map(|expr| pre.finish_text(expr));
     }
     let text: Option<String> = match (op, args) {
         (StringOp::Length, []) => {
@@ -7277,7 +7420,7 @@ fn lower_string_kernel(
         }
         _ => None,
     };
-    text.map(|expr| pre.finish(expr))
+    text.map(|expr| pre.finish_text(expr))
 }
 
 /// v0.22a: lower a built-in `Option[T]` kernel method (ADR 0048). Typed
@@ -7377,7 +7520,7 @@ fn lower_option_kernel(
         }
         _ => None,
     };
-    text.map(|expr| pre.finish(expr))
+    text.map(|expr| pre.finish_text(expr))
 }
 
 /// v0.22a: lower a built-in `Result[T, E]` kernel method (ADR 0048). The
@@ -7471,7 +7614,7 @@ fn lower_result_kernel(
         }
         _ => None,
     };
-    text.map(|expr| pre.finish(expr))
+    text.map(|expr| pre.finish_text(expr))
 }
 
 /// §2.8.3: lower an `Effect[Result[T, E]]` combinator. `Effect[T]` is
@@ -7549,7 +7692,7 @@ fn lower_effect_result_kernel(
         }
         _ => None,
     };
-    text.map(|expr| pre.finish(expr))
+    text.map(|expr| pre.finish_text(expr))
 }
 
 /// v0.20b: lower a built-in `Map` kernel method. `insert` copies — the
@@ -7613,7 +7756,7 @@ fn lower_set_kernel(
         }
         _ => None,
     };
-    text.map(|expr| pre.finish(expr))
+    text.map(|expr| pre.finish_text(expr))
 }
 
 fn lower_map_kernel(
@@ -7667,7 +7810,7 @@ fn lower_map_kernel(
         }
         _ => None,
     };
-    text.map(|expr| pre.finish(expr))
+    text.map(|expr| pre.finish_text(expr))
 }
 
 fn lower_if(
@@ -7706,10 +7849,10 @@ fn lower_if(
         let then_tail = lower_expr(&then_block.tail, cx);
         let else_tail = lower_expr(&else_block.tail, cx);
         if then_tail.pre.is_empty() && else_tail.pre.is_empty() {
-            return pre.finish(format!(
+            return pre.finish_text(format!(
                 "({cond_expr} ? {t} : {e})",
-                t = then_tail.expr,
-                e = else_tail.expr
+                t = then_tail.expr.into_text(),
+                e = else_tail.expr.into_text()
             ));
         }
         // A branch hoisted. Before T2.1 there was nowhere to put its statements
@@ -7720,7 +7863,7 @@ fn lower_if(
         // `return` keeps exiting the enclosing function. See
         // `hoist_if_as_statement`.
         let value = hoist_if_as_statement(&mut pre, cond_expr, then_tail, else_tail, slot_ty, cx);
-        pre.finish(value)
+        pre.finish_text(value)
     } else {
         // T2.2 (R6.4): isolate the effectfulness flag to just this IIFE's own
         // body. Unlike `lower_match_as_iife`'s `disc_expr` (spliced *outside*
@@ -7812,7 +7955,7 @@ fn lower_if(
         // ("Unexpected reserved word"), not merely a missed optimisation.
         let needs_async = cx.emitted_await;
         cx.emitted_await = saved_await || needs_async;
-        pre.finish(finish_async_iife(iife, needs_async))
+        pre.finish_text(finish_async_iife(iife, needs_async))
     }
 }
 
@@ -7881,7 +8024,7 @@ fn emit_if_tail(
 ) {
     let mut pre = Pre::new();
     let cond_expr = pre.lower(cond, cx);
-    for s in pre.stmts() {
+    for s in &pre.stmts() {
         write_line(out, indent, s);
     }
     write_line(out, indent, &format!("if ({cond_expr}) {{"));
@@ -8168,7 +8311,7 @@ fn lower_call(e: &Expr, name: &Ident, args: &[Expr], cx: &mut LowerCtx) -> Lower
             .map(|l| crate::emitter::escape_ts_string(&l))
             .unwrap_or_else(|| format!("offset {}", e.span.start));
         cx.note_fault();
-        return pre.finish(format!(
+        return pre.finish_text(format!(
             "__fault({kind:?}, {}, \"{location}\")",
             args_lowered.join(", ")
         ));
@@ -8187,7 +8330,7 @@ fn lower_call(e: &Expr, name: &Ident, args: &[Expr], cx: &mut LowerCtx) -> Lower
             ),
             _ => "unknown".to_string(),
         };
-        return pre.finish(format!("new TestConnection<{frame}>()"));
+        return pre.finish_text(format!("new TestConnection<{frame}>()"));
     }
     // v0.9: HttpResult variant call.
     //
@@ -8200,7 +8343,7 @@ fn lower_call(e: &Expr, name: &Ident, args: &[Expr], cx: &mut LowerCtx) -> Lower
         Some(Callee::Intrinsic { ns, .. }) if *ns == HTTP_RESULT
     ) {
         cx.note_http_result();
-        return pre.finish(format!(
+        return pre.finish_text(format!(
             "HttpResult.{}({})",
             name.name,
             args_lowered.join(", ")
@@ -8212,7 +8355,7 @@ fn lower_call(e: &Expr, name: &Ident, args: &[Expr], cx: &mut LowerCtx) -> Lower
         Some(Callee::Intrinsic { ns, .. }) if *ns == QUEUE_RESULT
     ) {
         cx.note_queue_result();
-        return pre.finish(format!(
+        return pre.finish_text(format!(
             "QueueResult.{}({})",
             name.name,
             args_lowered.join(", ")
@@ -8239,7 +8382,7 @@ fn lower_call(e: &Expr, name: &Ident, args: &[Expr], cx: &mut LowerCtx) -> Lower
                 args_lowered.len()
             )
         });
-        return pre.finish(cx.agent_construct(&name.name, key_expr));
+        return pre.finish_text(cx.agent_construct(&name.name, key_expr));
     }
     // P6.21: sum-variant construction is `Callee::Ctor` — reads the sum
     // type's own name and the variant's own tag straight off the checker's
@@ -8249,9 +8392,9 @@ fn lower_call(e: &Expr, name: &Ident, args: &[Expr], cx: &mut LowerCtx) -> Lower
     // exists to close).
     if let Some(Callee::Ctor { sum, tag }) = cx.commons().callee(e.id) {
         if let Some(lit) = consumed_variant_literal(e, &sum.name.name, tag, &args_lowered, cx) {
-            return pre.finish(lit);
+            return pre.finish_text(lit);
         }
-        return pre.finish(format!(
+        return pre.finish_text(format!(
             "{}.{}({})",
             sum.name.name,
             tag,
@@ -8276,7 +8419,7 @@ fn lower_call(e: &Expr, name: &Ident, args: &[Expr], cx: &mut LowerCtx) -> Lower
         }
     }
     let call = format!("{}({})", ts_ident(&name.name), args_lowered.join(", "));
-    pre.finish(if needs_exec {
+    pre.finish_text(if needs_exec {
         settle_exec_call(call, cx)
     } else {
         call
@@ -8305,10 +8448,10 @@ fn lower_bin_op(op: BinOp, lhs: &Expr, rhs: &Expr, cx: &mut LowerCtx) -> Lowered
             hoisted,
         }) = lower_and_with_is(lhs, rhs, cx)
     {
-        pre.extend(hoisted);
+        pre.extend_text(hoisted);
         let lhs_expr = pre.absorb(lhs_lowered);
         if bindings.is_empty() {
-            return pre.finish(format!("{lhs_expr} && {rhs_expr}"));
+            return pre.finish_text(format!("{lhs_expr} && {rhs_expr}"));
         }
         // Every path below emits `rhs` out of line.
         mark_unnarrowed(rhs, cx);
@@ -8339,15 +8482,12 @@ fn lower_bin_op(op: BinOp, lhs: &Expr, rhs: &Expr, cx: &mut LowerCtx) -> Lowered
             let slot = hoist_if_as_statement(
                 &mut pre,
                 lhs_expr.clone(),
-                Lowered {
-                    pre: bindings,
-                    expr: rhs_expr,
-                },
+                Lowered::text_with_pre(bindings, rhs_expr),
                 Lowered::bare("false"),
                 Some("boolean".to_string()),
                 cx,
             );
-            return pre.finish(format!("{lhs_expr} && {slot}"));
+            return pre.finish_text(format!("{lhs_expr} && {slot}"));
         }
         // Emit:  lhs && (() => { const n = ...; return rhs; })()
         let mut wrap = String::new();
@@ -8358,7 +8498,7 @@ fn lower_bin_op(op: BinOp, lhs: &Expr, rhs: &Expr, cx: &mut LowerCtx) -> Lowered
             wrap.push(' ');
         }
         wrap.push_str(&format!("return {rhs_expr}; }})())"));
-        return pre.finish(wrap);
+        return pre.finish_text(wrap);
     }
     // v0.80: `P implies Q` lowers to `(!(P) || Q)`. As with `&&`, an `is` test in
     // the antecedent binds into the consequent (the consequent is only reached
@@ -8372,10 +8512,10 @@ fn lower_bin_op(op: BinOp, lhs: &Expr, rhs: &Expr, cx: &mut LowerCtx) -> Lowered
             hoisted,
         }) = lower_and_with_is(lhs, rhs, cx)
     {
-        pre.extend(hoisted);
+        pre.extend_text(hoisted);
         let lhs_expr = pre.absorb(lhs_lowered);
         if bindings.is_empty() {
-            return pre.finish(format!("(!({lhs_expr}) || {rhs_expr})"));
+            return pre.finish_text(format!("(!({lhs_expr}) || {rhs_expr})"));
         }
         // Every path below emits `rhs` out of line.
         mark_unnarrowed(rhs, cx);
@@ -8389,15 +8529,12 @@ fn lower_bin_op(op: BinOp, lhs: &Expr, rhs: &Expr, cx: &mut LowerCtx) -> Lowered
             let slot = hoist_if_as_statement(
                 &mut pre,
                 lhs_expr.clone(),
-                Lowered {
-                    pre: bindings,
-                    expr: rhs_expr,
-                },
+                Lowered::text_with_pre(bindings, rhs_expr),
                 Lowered::bare("true"),
                 Some("boolean".to_string()),
                 cx,
             );
-            return pre.finish(format!("(!({lhs_expr}) || {slot})"));
+            return pre.finish_text(format!("(!({lhs_expr}) || {slot})"));
         }
         let mut wrap = String::new();
         wrap.push_str(&format!("(!({lhs_expr}) || ((() => {{ "));
@@ -8406,7 +8543,7 @@ fn lower_bin_op(op: BinOp, lhs: &Expr, rhs: &Expr, cx: &mut LowerCtx) -> Lowered
             wrap.push(' ');
         }
         wrap.push_str(&format!("return {rhs_expr}; }})()))"));
-        return pre.finish(wrap);
+        return pre.finish_text(wrap);
     }
     let l = pre.lower(lhs, cx);
     // #1/#3 review: `&&`/`||`/`implies` short-circuit — `design/bynk-type-
@@ -8446,7 +8583,7 @@ fn lower_bin_op(op: BinOp, lhs: &Expr, rhs: &Expr, cx: &mut LowerCtx) -> Lowered
         }
         let r = lower_expr(rhs, cx);
         if outermost {
-            pre.extend(cx.is_temp_hoist.take().unwrap_or_default());
+            pre.extend_text(cx.is_temp_hoist.take().unwrap_or_default());
         }
         let rhs_returns = cx.emitted_early_return;
         cx.emitted_early_return = saved_early_return || rhs_returns;
@@ -8482,20 +8619,20 @@ fn lower_bin_op(op: BinOp, lhs: &Expr, rhs: &Expr, cx: &mut LowerCtx) -> Lowered
                 ),
                 _ => unreachable!("guarded by the outer `matches!`"),
             };
-            return pre.finish(value);
+            return pre.finish_text(value);
         }
         let rhs_text = if r.pre.is_empty() {
-            r.expr
+            r.expr.into_text()
         } else {
             let mut s = String::from("(() => { ");
-            for p in &r.pre {
+            for p in &r.pre_texts() {
                 s.push_str(p);
                 s.push(' ');
             }
-            s.push_str(&format!("return {}; }})()", r.expr));
+            s.push_str(&format!("return {}; }})()", r.expr.into_text()));
             s
         };
-        return pre.finish(match op {
+        return pre.finish_text(match op {
             BinOp::And => format!("{l} && {rhs_text}"),
             BinOp::Or => format!("{l} || {rhs_text}"),
             // `P implies Q` ≡ `!P || Q` (no `is` bindings in the antecedent —
@@ -8573,7 +8710,7 @@ fn lower_bin_op(op: BinOp, lhs: &Expr, rhs: &Expr, cx: &mut LowerCtx) -> Lowered
     } else {
         format!("{l} {} {r}", ts_binop(op))
     };
-    pre.finish(text)
+    pre.finish_text(text)
 }
 
 /// The comparator an ordering kernel (`sortBy`/`min`/`max`) needs for its key
@@ -8813,7 +8950,7 @@ fn lower_record_construction(
             None => key,
         })
         .collect();
-    pre.finish(format!("{{ {} }}", parts.join(", ")))
+    pre.finish_text(format!("{{ {} }}", parts.join(", ")))
 }
 
 fn lower_field_access(e: &Expr, receiver: &Expr, field: &Ident, cx: &mut LowerCtx) -> Lowered {
@@ -8838,7 +8975,7 @@ fn lower_field_access(e: &Expr, receiver: &Expr, field: &Ident, cx: &mut LowerCt
     {
         let var = cx.agent_store_var().to_string();
         let m = format!("{var}.{}", id.name);
-        return pre.finish(match field.name.as_str() {
+        return pre.finish_text(match field.name.as_str() {
             map_query::VALUES => format!("(() => {m}.values())"),
             map_query::KEYS => {
                 let decoded = decode_map_key(map_key_ty(e, cx), "__k", tys);
@@ -8870,7 +9007,7 @@ fn lower_field_access(e: &Expr, receiver: &Expr, field: &Ident, cx: &mut LowerCt
         )
     {
         cx.note_http_result();
-        return pre.finish(format!("HttpResult.{}", field.name));
+        return pre.finish_text(format!("HttpResult.{}", field.name));
     }
     // #2073 (with #2045): a qualified nullary variant of a consumed context's
     // sum (`Region.Domestic`), on `workers`, is built inline as its bare form
@@ -8879,7 +9016,7 @@ fn lower_field_access(e: &Expr, receiver: &Expr, field: &Ident, cx: &mut LowerCt
         && !cx.is_local(&id.name)
         && let Some(lit) = consumed_variant_literal(e, &id.name, &field.name, &[], cx)
     {
-        return pre.finish(lit);
+        return pre.finish_text(lit);
     }
     // Agent-handler `self.<key>` rewrite.
     if cx.in_agent_handler()
@@ -8891,7 +9028,7 @@ fn lower_field_access(e: &Expr, receiver: &Expr, field: &Ident, cx: &mut LowerCt
         // #1818: the key this instance was addressed by. It used to read
         // `this.state.id.toString()` (the Durable Object's hex id on workers,
         // "[object Object]" on bundle) cast to the key's *name*.
-        return pre.finish("this.__key".to_string());
+        return pre.finish_text("this.__key".to_string());
     }
     // v0.45: `<binder>.identity` on a verified actor binding. The binder is not
     // a runtime value; the identity is minted at the verification seam. For the
@@ -8912,9 +9049,9 @@ fn lower_field_access(e: &Expr, receiver: &Expr, field: &Ident, cx: &mut LowerCt
         if let (Some(binder), ExprKind::Ident(id)) = (cx.deps_identity_binder(), &receiver.kind)
             && id.name == binder
         {
-            return pre.finish("deps.identity".to_string());
+            return pre.finish_text("deps.identity".to_string());
         }
-        return pre.finish("undefined".to_string());
+        return pre.finish_text("undefined".to_string());
     }
     // #2380 (L5): an `Oidc` binder's `.claims` reads `deps.claims`, which its
     // seam filled from the verified token.
@@ -8926,7 +9063,7 @@ fn lower_field_access(e: &Expr, receiver: &Expr, field: &Ident, cx: &mut LowerCt
         && let (Some(binder), ExprKind::Ident(id)) = (cx.deps_identity_binder(), &receiver.kind)
         && id.name == binder
     {
-        return pre.finish("deps.claims".to_string());
+        return pre.finish_text("deps.claims".to_string());
     }
     let r = pre.lower(receiver, cx);
     // `.raw` on an opaque value compiles to a TypeScript type
@@ -8939,9 +9076,9 @@ fn lower_field_access(e: &Expr, receiver: &Expr, field: &Ident, cx: &mut LowerCt
             ..
         }) = cx.commons().expr_ty(receiver.id).as_deref()
     {
-        return pre.finish(format!("({r} as {})", ts_base(*base)));
+        return pre.finish_text(format!("({r} as {})", ts_base(*base)));
     }
-    pre.finish(format!("{r}.{}", field.name))
+    pre.finish_text(format!("{r}.{}", field.name))
 }
 
 /// v0.158 (ADR 0184): the key type `K` of a map `.entries`/`.keys` query, read
@@ -9188,8 +9325,8 @@ fn lower_lambda(e: &Expr, lambda: &LambdaExpr, cx: &mut LowerCtx) -> String {
         }
         _ => {
             let lowered = lower_expr(&lambda.body, cx);
-            let body_stmts = lowered.pre;
-            let body = lowered.expr;
+            let body_stmts = lowered.pre_texts();
+            let body = lowered.expr.into_text();
             if body_stmts.is_empty() {
                 // An object-literal body (a record construction/spread) must be
                 // parenthesised, or `(x) => { … }` reads as a block, not an object.
@@ -9241,7 +9378,7 @@ fn lower_record_spread(base: &Expr, overrides: &[FieldInit], cx: &mut LowerCtx) 
             }
         }
     }
-    pre.finish(format!("{{ {} }}", parts.join(", ")))
+    pre.finish_text(format!("{{ {} }}", parts.join(", ")))
 }
 
 fn lower_block_as_expr(b: &Block, cx: &mut LowerCtx) -> String {
@@ -9312,7 +9449,7 @@ fn lower_match_as_iife(discriminant: &Expr, arms: &[MatchArm], cx: &mut LowerCtx
     let inner_iife = finish_async_iife(built, needs_async);
     cx.return_ty = saved;
     cx.tail_slot = saved_slot;
-    pre.finish(inner_iife)
+    pre.finish_text(inner_iife)
 }
 
 /// v0.9.2: a match/if lowered to an IIFE in *expression* position may have arms
@@ -9462,7 +9599,7 @@ fn emit_match_tail(
         .expr_types
         .get(&discriminant.id)
         .map(|te| te.ty);
-    for s in pre.stmts() {
+    for s in &pre.stmts() {
         write_line(out, indent, s);
     }
     // v0.9.2: a statement-position `switch` narrows the scrutinee only when it
@@ -9693,7 +9830,7 @@ fn emit_match_body(
             }
             let mut pre = Pre::new();
             let v = pre.absorb(lower_tail_expr(e, cx, async_tail));
-            for s in pre.stmts() {
+            for s in &pre.stmts() {
                 write_line(out, indent, s);
             }
             write_line(out, indent, &tail_stmt(cx, &v));
@@ -10209,10 +10346,10 @@ fn emit_match_if_chain(
         emit_pattern_bindings(out, body_indent, disc_var, *disc_ty, &arm.pattern, cx);
         if let Some(guard) = &arm.guard {
             let guard_lowered = lower_expr(guard, cx);
-            let gv = guard_lowered.expr;
-            for s in &guard_lowered.pre {
+            for s in &guard_lowered.pre_texts() {
                 write_line(out, body_indent, s);
             }
+            let gv = guard_lowered.expr.into_text();
             write_line(out, body_indent, &format!("if ({gv}) {{"));
             emit_match_body(out, &arm.body, cx, body_indent + INDENT_STEP, async_tail);
             write_line(out, body_indent, "}");
@@ -10256,7 +10393,7 @@ fn lower_is(value: &Expr, pattern: &Pattern, cx: &mut LowerCtx) -> Lowered {
         for p in refinement.iter().flat_map(|r| &r.predicates) {
             cx.note_predicate(&p.kind);
         }
-        return pre.finish(refined_check_as_bool(&recv, base, refinement.as_ref()));
+        return pre.finish_text(refined_check_as_bool(&recv, base, refinement.as_ref()));
     }
     let v = pre.absorb(cx.is_receiver_ref(value));
     let text = match pattern {
@@ -10347,7 +10484,7 @@ fn lower_is(value: &Expr, pattern: &Pattern, cx: &mut LowerCtx) -> Lowered {
     } else {
         text
     };
-    pre.finish(text)
+    pre.finish_text(text)
 }
 
 /// v0.13: render a refined type's predicates as a single boolean expression over
@@ -10840,7 +10977,7 @@ fn lower_decimal_kernel(
         }
         _ => None,
     };
-    text.map(|expr| pre.finish(expr))
+    text.map(|expr| pre.finish_text(expr))
 }
 
 /// #2622: whether a value of type `ty` can hold a `Decimal` anywhere: it is one
@@ -10893,4 +11030,116 @@ fn mentions_decimal(ty: TyId, cx: &LowerCtx) -> bool {
         }
     }
     by_ty(ty, cx, &mut HashSet::new())
+}
+
+#[cfg(test)]
+mod bridge_tests {
+    use super::*;
+
+    fn lit_text(l: Lowered) -> String {
+        assert!(l.pre.is_empty(), "a literal hoists nothing");
+        assert!(
+            matches!(l.expr, LoweredExpr::Node(_)),
+            "a literal is a node"
+        );
+        l.expr.into_text()
+    }
+
+    #[test]
+    fn numeric_literal_nodes_print_their_digits_verbatim() {
+        for digits in [
+            "0",
+            "42",
+            "170141183460469231731687303715884105727",
+            "1e10",
+            "1.50",
+        ] {
+            assert_eq!(lit_text(Lowered::node(num_lit(digits.to_string()))), digits);
+        }
+    }
+
+    #[test]
+    fn a_negative_literal_in_operand_position_prints_as_before() {
+        // `UnaryOp::Neg` splices its operand's text after `-`; a literal node
+        // must hand it exactly the digits the old text did, with no brackets.
+        let mut pre = Pre::new();
+        let inner = pre.absorb(Lowered::node(num_lit("5".to_string())));
+        assert_eq!(format!("-{inner}"), "-5");
+        let float = pre.absorb(Lowered::node(num_lit("1.5e3".to_string())));
+        assert_eq!(format!("{}{float}", "-"), "-1.5e3");
+        assert_eq!(format!("{inner} - {float}"), "5 - 1.5e3");
+    }
+
+    #[test]
+    fn decimal_literal_node_matches_the_text_form() {
+        for (coef, scale) in [
+            ("5", 2),
+            ("-5", 2),
+            ("007", 0),
+            ("-0", 3),
+            ("12345678901234567890", 18),
+        ] {
+            assert_eq!(
+                lit_text(Lowered::node(decimal_lit(coef, scale))),
+                crate::emitter::ts_types::decimal_ts_literal(coef, scale),
+                "{coef}/{scale}"
+            );
+        }
+    }
+
+    #[test]
+    fn string_literal_node_matches_the_hand_escaped_text() {
+        for s in [
+            "",
+            "plain",
+            "say \"hi\"",
+            "a\\b",
+            "line\nbreak\ttab\r",
+            "nul\0",
+            "ls\u{2028}ps\u{2029}",
+            "`tick` ${x}",
+            "unicode ·",
+        ] {
+            let node = bynk_ts::TsExpr::Lit(bynk_ts::TsLit::Str(s.to_string()));
+            assert_eq!(
+                lit_text(Lowered::node(node)),
+                format!("\"{}\"", escape_ts_string(s)),
+                "{s:?}"
+            );
+        }
+    }
+
+    #[test]
+    fn keyword_literal_nodes_print_as_before() {
+        let t = bynk_ts::TsExpr::Lit(bynk_ts::TsLit::Bool(true));
+        let f = bynk_ts::TsExpr::Lit(bynk_ts::TsLit::Bool(false));
+        assert_eq!(lit_text(Lowered::node(t)), "true");
+        assert_eq!(lit_text(Lowered::node(f)), "false");
+    }
+
+    #[test]
+    fn pre_hands_converted_and_unconverted_children_the_same_way() {
+        let mut pre = Pre::new();
+        assert_eq!(pre.absorb(Lowered::bare("x + 1")), "x + 1");
+        assert!(matches!(
+            pre.absorb_node(Lowered::bare("x")),
+            LoweredExpr::Text(_)
+        ));
+        assert!(matches!(
+            pre.absorb_node(Lowered::node(num_lit("1".to_string()))),
+            LoweredExpr::Node(_)
+        ));
+    }
+
+    #[test]
+    fn hoisted_statements_keep_their_order_and_text_becomes_raw() {
+        let mut pre = Pre::new();
+        pre.push_text("const a = 1;".to_string());
+        pre.push_text("const b = 2;".to_string());
+        assert_eq!(pre.stmts(), ["const a = 1;", "const b = 2;"]);
+        let out = pre.ts_stmts("  ");
+        assert_eq!(out.len(), 2);
+        let printed: String = out.iter().map(|s| bynk_ts::print_stmt(s, 0)).collect();
+        assert_eq!(printed, "  const a = 1;\n  const b = 2;\n");
+    }
 }

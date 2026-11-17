@@ -315,7 +315,7 @@ pub(crate) fn emit_continue(out: &mut String, e: &Expr, cx: &mut LowerCtx, inden
     };
     let mut pre = Pre::new();
     let vals: Vec<String> = args.iter().map(|a| pre.lower(a, cx)).collect();
-    for s in pre.stmts() {
+    for s in &pre.stmts() {
         write_line(out, indent, s);
     }
     // Every slot is assigned, even where the argument looks like the parameter's

@@ -73,4 +73,3 @@ bynk-emit/src/emitter/emit.rs::emit_ws_dispatch_handlers = 312
 bynk-emit/src/emitter/emit.rs::classify_agent_store = 310
 bynk-check/src/context_checks.rs::reject_fn_types = 306
 bynk-check/src/project_model.rs::phase_messages_bundles = 306
-bynk-emit/src/emitter/lower.rs::lower_expr = 303
