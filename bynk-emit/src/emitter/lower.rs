@@ -1357,6 +1357,25 @@ fn lower_const_literal_raw(e: &Expr) -> Option<String> {
     }
 }
 
+/// The text of a unary operator applied to its operand's lowered `inner`.
+///
+/// A negated negation (`- -x`, `- -5`) would otherwise splice to `--x`, which
+/// TypeScript reads as a pre-decrement (or, on a literal, a syntax error), so a
+/// `-` operand whose text begins with `-` is bracketed, as the `bynk_ts`
+/// printer does for `TsUnaryOp::Neg`: `-(-x)`.
+fn unary_text(op: UnaryOp, inner: &str) -> String {
+    let sym = match op {
+        UnaryOp::Neg => "-",
+        UnaryOp::Not => "!",
+    };
+    let (open, close) = if op == UnaryOp::Neg && inner.starts_with('-') {
+        ("(", ")")
+    } else {
+        ("", "")
+    };
+    format!("{sym}{open}{inner}{close}")
+}
+
 /// A literal's data, destructured from its `ExprKind` by `lower_expr`'s own
 /// arms, so [`Lit::lower`] matches an exhaustive type with no catch-all.
 enum Lit<'a> {
@@ -1748,23 +1767,7 @@ pub(crate) fn lower_expr(e: &Expr, cx: &mut LowerCtx) -> Lowered {
             cx.note_decimal("__bynkDecimalNeg");
             format!("__bynkDecimalNeg({inner})")
         }
-        ExprKind::UnaryOp(op, inner) => {
-            let inner = pre.lower(inner, cx);
-            let sym = match op {
-                UnaryOp::Neg => "-",
-                UnaryOp::Not => "!",
-            };
-            // A negated negation (`- -x`, `- -5`) would otherwise splice to
-            // `--x`, which TypeScript reads as a pre-decrement (or, on a
-            // literal, a syntax error). Bracket the operand, as the `bynk_ts`
-            // printer does for `TsUnaryOp::Neg`: `-(-x)`.
-            let (open, close) = if *op == UnaryOp::Neg && inner.starts_with('-') {
-                ("(", ")")
-            } else {
-                ("", "")
-            };
-            format!("{sym}{open}{inner}{close}")
-        }
+        ExprKind::UnaryOp(op, inner) => unary_text(*op, &pre.lower(inner, cx)),
         ExprKind::BinOp(op, lhs, rhs) => pre.absorb(lower_bin_op(*op, lhs, rhs, cx)),
         ExprKind::Paren(inner) => {
             let s = pre.lower(inner, cx);
@@ -11251,9 +11254,10 @@ fn minus(x: Int) -> Int { 5 - - -x }
             ("paren", "-(-x)"),
             ("minus", "5 - -(-x)"),
         ] {
-            assert_eq!(returned(&ts, name), want, "{name}");
+            let got = returned(&ts, name);
+            assert_eq!(got, want, "{name}");
+            assert!(!got.contains("--"), "{name}: `--` in {got}");
         }
-        assert!(!ts.contains("--"), "no `--` in:\n{ts}");
     }
 
     /// An `if (flag) { done(); }` statement node: multi-line when printed.
