@@ -1,5 +1,6 @@
 ---
 level: minor
+probes: diagnostic_coverage, explained_codes
 changelog: `bynk dev` serves a `[deploy.workers.<key>]` group as one Worker on one port (`--context` naming a member serves the whole group), and `bynk dev inspect` lists and reads the agents of every member; `bynk.deploy.worker_groups_unsupported` is removed (#3562, G6)
 ---
 
