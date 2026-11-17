@@ -110,15 +110,50 @@ fn unclaimed(entry: &GroupEntry<'_>) -> String {
 /// that is not a `404` is kept, so that if no member owns the request the answer
 /// lists the methods the whole Worker serves on the path, not one member's.
 const FETCH: &str = "  async fetch(request: globalThis.Request, env: unknown, ctx: __Ctx): Promise<globalThis.Response> {
-    const held: globalThis.Response[] = [];
-    for (const member of __members) {
-      const response = await member.entry.fetch(request, env as never, ctx);
-      if (!member.isMiss(response)) return response;
-      if (response.status !== 404) held.push(response);
-    }
-    return held.length === 0 ? await __unclaimed(request, env) : __withAllowed(held);
+    return __fetch(request, __loopback(env, ctx), ctx);
   },
 ";
+
+/// The dispatcher: members in manifest order, the first answer that is not a
+/// router's own miss wins. `env` already answers a call to a member in process
+/// ([`loopback`]).
+const DISPATCH: &str = "async function __fetch(request: globalThis.Request, env: unknown, ctx: __Ctx): Promise<globalThis.Response> {
+  const held: globalThis.Response[] = [];
+  for (const member of __members) {
+    const response = await member.entry.fetch(request, env as never, ctx);
+    if (!member.isMiss(response)) return response;
+    if (response.status !== 404) held.push(response);
+  }
+  return held.length === 0 ? await __unclaimed(request, env) : __withAllowed(held);
+}
+
+";
+
+/// A call from one member to another is a call from the Worker to itself, so it
+/// need not leave the Worker (#3562, G3-2): the binding a member names the other by
+/// answers in process, by running the request through the group's own dispatcher.
+/// It is the same request, signed, contract-checked, admitted and decoded as one
+/// over a Service Binding, so a value is copied across it, a callee's fault reaches
+/// the caller as the same `CalleeFaulted`, and a refusal is the same refusal; only
+/// the hop is gone. Anything the callee's `fetch` throws is the plain `500` a Service
+/// Binding would hand the caller (which maps it to `Transport`), never the callee's
+/// own exception. (The events fan-out's Durable Object runs elsewhere and keeps
+/// the Service Binding.)
+fn loopback(entry: &GroupEntry<'_>) -> String {
+    if entry.members.len() < 2 {
+        return "function __loopback(env: unknown, _ctx: __Ctx): unknown {\n  return env;\n}\n\n"
+            .to_string();
+    }
+    let names: Vec<String> = entry
+        .members
+        .iter()
+        .map(|m| crate::emitter::wrangler::service_binding(&m.context).name)
+        .collect();
+    format!(
+        "const __memberBindings: readonly string[] = {};\n\nfunction __loopback(env: unknown, ctx: __Ctx): unknown {{\n  const inner: globalThis.Record<string, unknown> = {{ ...(env as globalThis.Record<string, unknown>) }};\n  for (const name of __memberBindings) {{\n    inner[name] = {{ fetch: async (request: globalThis.Request) => {{\n      try {{\n        return await __fetch(request, inner, ctx);\n      }} catch {{\n        return new globalThis.Response(\"Internal Server Error\", {{ status: 500 }});\n      }}\n    }} }};\n  }}\n  return inner;\n}}\n\n",
+        array(&names)
+    )
+}
 
 /// The first held `405`/`204`, answering with the union of every member's
 /// `Allow` (RFC 9110 §10.2.1: the methods the target resource supports).
@@ -139,7 +174,7 @@ fn scheduled(members: &[(usize, &GroupMember)]) -> String {
     );
     for (i, m) in members.iter().filter(|(_, m)| !m.crons.is_empty()) {
         text.push_str(&format!(
-            "      ...({}.includes(event.cron) ? [__m{i}.scheduled(event as never, env as never, ctx)] : []),\n",
+            "      ...({}.includes(event.cron) ? [__m{i}.scheduled(event as never, __loopback(env, ctx) as never, ctx)] : []),\n",
             array(&m.crons)
         ));
     }
@@ -156,7 +191,7 @@ fn queue(members: &[(usize, &GroupMember)]) -> String {
             text.push_str(&format!("      case {q:?}:\n"));
         }
         text.push_str(&format!(
-            "        return __m{i}.queue(batch as never, env as never, ctx);\n"
+            "        return __m{i}.queue(batch as never, __loopback(env, ctx) as never, ctx);\n"
         ));
     }
     text.push_str("      default:\n        return;\n    }\n  },\n");
@@ -184,7 +219,7 @@ fn email(members: &[(usize, &GroupMember)]) -> String {
         .find(|(_, m)| !m.addresses.is_empty())
         .map_or(0, |(i, _)| *i);
     text.push_str(&format!(
-        "    ];\n    const claimant = routes.find((r) => r.address === to) ?? routes.find((r) => r.address === `*@${{domain}}`);\n    await (claimant?.member ?? __m{first}).email(message as never, env as never, ctx);\n  }},\n"
+        "    ];\n    const claimant = routes.find((r) => r.address === to) ?? routes.find((r) => r.address === `*@${{domain}}`);\n    await (claimant?.member ?? __m{first}).email(message as never, __loopback(env, ctx) as never, ctx);\n  }},\n"
     ));
     text
 }
@@ -287,7 +322,9 @@ pub fn emit_group_entry(entry: &GroupEntry<'_>) -> TsProgram {
     );
     text.push_str(WITH_ALLOWED);
     text.push_str(&unclaimed(entry));
-    text.push_str("\nexport default {\n");
+    text.push_str(DISPATCH);
+    text.push_str(&loopback(entry));
+    text.push_str("export default {\n");
     text.push_str(FETCH);
     if has_cron {
         text.push_str(&scheduled(&members));
@@ -301,4 +338,60 @@ pub fn emit_group_entry(entry: &GroupEntry<'_>) -> TsProgram {
     text.push_str("};\n");
     program.push(TsStmt::raw(text, None));
     program
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    fn member(context: &str) -> GroupMember {
+        GroupMember {
+            context: context.into(),
+            specifier: format!("./{context}.index.js"),
+            crons: vec!["* * * * *".into()],
+            queues: vec!["jobs".into()],
+            addresses: vec!["in@example.com".into()],
+            classes: vec![],
+        }
+    }
+
+    /// #3562, G3-2: a handler of one member reaching another goes in process, so
+    /// each of `scheduled`, `queue` and `email` runs its member on the loopback env.
+    #[test]
+    fn every_handler_runs_its_member_on_the_loopback_env() {
+        let members = [member("app.a"), member("app.b")];
+        let numbered: Vec<(usize, &GroupMember)> = members.iter().enumerate().collect();
+        for (name, text) in [
+            ("scheduled", scheduled(&numbered)),
+            ("queue", queue(&numbered)),
+            ("email", email(&numbered)),
+        ] {
+            assert!(
+                text.contains("__loopback(env, ctx) as never"),
+                "{name} does not pass the loopback env:\n{text}"
+            );
+            assert!(
+                !text.contains("(env as never"),
+                "{name} passes the raw env:\n{text}"
+            );
+        }
+    }
+
+    /// A callee that throws out of `fetch` is a plain `500` to its caller, as over
+    /// a Service Binding, not the callee's exception.
+    #[test]
+    fn a_callee_that_throws_is_a_plain_500() {
+        let entry = GroupEntry {
+            key: "core",
+            members: &[member("app.a"), member("app.b")],
+            container_classes: &[],
+            has_fanout: false,
+            has_events: false,
+            has_migrate: false,
+            has_inspect: false,
+        };
+        let text = loopback(&entry);
+        assert!(text.contains("catch {"), "{text}");
+        assert!(text.contains("status: 500"), "{text}");
+    }
 }

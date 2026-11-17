@@ -8,15 +8,17 @@
 //! subscriber and a client can see must not change. The topologies today:
 //!
 //! - `separate`: one Worker per context, reached over a Service Binding;
-//! - `grouped`: all four contexts in one `[deploy.workers.core]` Worker, where an
-//!   intra-group edge is a Service Binding to the Worker itself.
+//! - `grouped`: all four contexts in one `[deploy.workers.core]` Worker, where a
+//!   call between members is in process (G3-2): the member's binding answers by
+//!   running the request through the group's own dispatcher, with no Service Binding.
 //!
-//! G3-2 makes a call between a group's members in-process. It adds a third
-//! entry to [`TOPOLOGIES`] and these scenarios decide whether it conforms: the
-//! same status, body and logs, the same refusals, the same fault mapping. The
-//! `wire` record (which Service Binding each call went over) is the one thing a
-//! topology is *expected* to change, so [`assert_topologies_agree`] leaves it out
-//! and a topology that makes calls in-process states that it has no wire.
+//! These scenarios decide whether a topology conforms: the same status, body and
+//! logs, the same refusals, the same fault mapping. The `wire` record (which
+//! Service Binding each call went over) is the one thing a topology is *expected*
+//! to change, so [`assert_topologies_agree`] leaves it out, and each topology says
+//! whether it has a wire (`in_process`). A line a callee writes to its own log is
+//! its own whichever way it was called: attributed by the binding it ran under over
+//! a Service Binding, and by the context it names in process.
 //!
 //! Scenarios:
 //!
@@ -59,16 +61,21 @@ const INTERNAL: &str = "division by zero";
 struct Topology {
     name: &'static str,
     manifest: &'static str,
+    /// Whether a call between two contexts stays in the Worker (a group's members)
+    /// and so has no Service Binding on the wire.
+    in_process: bool,
 }
 
 const TOPOLOGIES: &[Topology] = &[
     Topology {
         name: "separate",
         manifest: "[build]\ntarget = \"workers\"\n",
+        in_process: false,
     },
     Topology {
         name: "grouped",
         manifest: "[build]\ntarget = \"workers\"\n\n[deploy.workers.core]\ncontexts = [\"app.a\", \"app.b\", \"app.pub\", \"app.sub\"]\n",
+        in_process: true,
     },
 ];
 
@@ -186,6 +193,7 @@ const binding = (c) => c.toUpperCase().replace(".", "_");
 // Which binding a log line was written under follows the call it ran in, even
 // when that work outlives the call that started it (a `waitUntil`).
 const owner = new AsyncLocalStorage();
+const CALLEE_LOGS = { "app.b ": "APP_B", "app.sub ": "APP_SUB", "app.pub ": "APP_PUB" };
 const logs = [];
 const wire = [];
 const show = (a) => typeof a === "string" ? a : a instanceof Error ? (a.stack ?? String(a)) : JSON.stringify(a);
@@ -193,7 +201,10 @@ console.error = (...args) => {
   // `raw` keeps any stack, for what must not leak; `text` is cut at it, which is
   // what topologies are compared on (their file names differ).
   const raw = args.map(show).join(" ");
-  logs.push({ owner: owner.getStore() ?? "client", text: raw.split("\n    at ")[0], raw });
+  // In process there is no binding to attribute a callee's own log to: its lines
+  // begin with the callee's context name (`app.b call boom faulted ...`).
+  const named = Object.entries(CALLEE_LOGS).find(([prefix]) => raw.startsWith(prefix))?.[1];
+  logs.push({ owner: owner.getStore() ?? named ?? "client", text: raw.split("\n    at ")[0], raw });
 };
 console.log = () => {};
 const pending = [];
@@ -266,6 +277,17 @@ const viaClient = async (path) => {
 await scenario("call-ok", () => viaClient("/ok/1"));
 await scenario("call-fault", () => viaClient("/boom/1"));
 await scenario("call-refused", () => viaClient("/legacy/1"));
+// A call is signed whichever way it travels, so a caller holding no key for the
+// edge cannot make it, in process too: nothing is trusted because it is local.
+await scenario("call-unkeyed", async () => {
+  const held = envs["app.a"]["BYNK_CALL_TO_APP__B"];
+  delete envs["app.a"]["BYNK_CALL_TO_APP__B"];
+  try {
+    return await viaClient("/ok/1");
+  } finally {
+    envs["app.a"]["BYNK_CALL_TO_APP__B"] = held;
+  }
+});
 await scenario("door-refused", async () => {
   const path = "/_bynk/call/only_legacy";
   const body = JSON.stringify(1);
@@ -469,6 +491,18 @@ fn assert_conforms(topology: &str, results: &[Value]) {
         at("call-ok")
     );
 
+    // No key for the edge: the call is refused before it is made, whichever way it
+    // would have travelled, and the client sees only a bare `500`.
+    let unkeyed = scenario(results, "call-unkeyed");
+    assert_eq!(unkeyed["status"], 500, "{}: {unkeyed}", at("call-unkeyed"));
+    assert_eq!(unkeyed["body"], "Internal Server Error", "{unkeyed}");
+    assert_eq!(
+        wire_of(unkeyed),
+        Vec::<(String, String, Option<u64>)>::new(),
+        "{}: nothing reached the callee",
+        at("call-unkeyed")
+    );
+
     // A callee that faults: `CalleeFaulted` for the caller, a bare `500` for the
     // client, and the callee's own exception in the callee's log alone.
     let fault = scenario(results, "call-fault");
@@ -628,12 +662,13 @@ fn a_call_and_an_event_between_contexts_conform_in_every_topology() {
     assert_topologies_agree(all);
 }
 
-/// Both topologies here go over a Service Binding: the call, the refusal, the
-/// event delivery and the fan-out each appear on the wire, in this order. A
-/// topology that makes a call in-process has no entry for it, and states so where
-/// it is added.
+/// Where each topology's calls travel. Over a Service Binding the call, the
+/// refusal, the event delivery and the fan-out each appear on the wire, in this
+/// order. A group's calls between members are in process and have no entry; its
+/// event delivery still does, since the fan-out is a Durable Object elsewhere and
+/// reaches a subscriber over the Worker's own binding.
 #[test]
-fn the_topologies_here_go_over_a_service_binding() {
+fn the_wire_says_how_each_topology_travels() {
     let Some(all) = observed() else { return };
     let wire = |entries: &[(&str, &str, u64)]| {
         entries
@@ -641,26 +676,41 @@ fn the_topologies_here_go_over_a_service_binding() {
             .map(|(to, path, status)| (to.to_string(), path.to_string(), Some(*status)))
             .collect::<Vec<_>>()
     };
-    for (name, results) in all {
-        assert_eq!(
-            wire_of(scenario(results, "call-ok")),
-            wire(&[("APP_B", "/_bynk/call/ok", 200)]),
-            "{name}"
-        );
+    for ((name, results), topology) in all.iter().zip(TOPOLOGIES) {
+        assert_eq!(*name, topology.name);
+        let (ok, refused): (&[WireEntry], &[WireEntry]) = if topology.in_process {
+            (&[], &[])
+        } else {
+            (
+                &[("APP_B", "/_bynk/call/ok", 200)],
+                &[("APP_B", "/_bynk/call/only_legacy", 403)],
+            )
+        };
+        assert_eq!(wire_of(scenario(results, "call-ok")), wire(ok), "{name}");
         assert_eq!(
             wire_of(scenario(results, "call-refused")),
-            wire(&[("APP_B", "/_bynk/call/only_legacy", 403)]),
+            wire(refused),
             "{name}"
         );
+        // The event: the emit is a call (in process in a group), then the fan-out
+        // and the delivery, which are not.
+        let event: Vec<_> = if topology.in_process {
+            WIRE_EVENT[1..].to_vec()
+        } else {
+            WIRE_EVENT.to_vec()
+        };
         assert_eq!(
             wire_of(scenario(results, "event-delivered")),
-            wire(WIRE_EVENT),
+            wire(&event),
             "{name}: the emit, the fan-out and the delivery"
         );
     }
 }
 
-const WIRE_EVENT: &[(&str, &str, u64)] = &[
+/// One expected wire entry: the binding, the path and the status.
+type WireEntry = (&'static str, &'static str, u64);
+
+const WIRE_EVENT: &[WireEntry] = &[
     ("APP_PUB", "/_bynk/call/place", 200),
     ("FANOUT", "/_bynk/fanout", 204),
     ("APP_SUB", "/_bynk/event/OnPlaced", 204),
