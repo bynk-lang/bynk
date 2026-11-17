@@ -1,5 +1,6 @@
 ---
 level: minor
+probes: diagnostic_coverage, explained_codes
 changelog: `bynk revert` reverts a `[deploy.workers.<key>]` group as one Worker (`--worker KEY`), so every member goes back together; a member named with `--context` is refused, naming the Worker that holds it (#3562, G4-3)
 ---
 
