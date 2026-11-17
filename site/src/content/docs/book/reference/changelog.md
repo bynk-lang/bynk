@@ -28,6 +28,7 @@ per-commit history. While Bynk is pre-1.0, increments may change behaviour.
 
 | Version | Highlights |
 |---|---|
+| **v0.639.14** | Value binary operators (arithmetic, comparison, equality, and the `Decimal`, `Int` division, structural-equality and `Ord` helper forms) now lower to typed TypeScript nodes; the printer brackets them by a precedence table |
 | **v0.639.13** | Identifiers, constant reads, `old`/`new` records, nullary `HttpResult`/`QueueResult`/sum-variant names and plain field access now lower to typed TypeScript nodes, so wrappers over them are nodes too |
 | **v0.639.12** | The `bynk` tests write their stand-in `wrangler`, `npm` and git-hook scripts from a child `sh`, so parallel test runs no longer fail intermittently with ETXTBSY (Text file busy) |
 | **v0.639.11** | Wrapper and simple composite expressions (`Paren`, unary operators, `Ok`/`Err`/`Some`, list literals) now lower to typed TypeScript nodes; a negated negation keeps the `-(-x)` bracketing #3698 introduced, on both the node and the text path |
