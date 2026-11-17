@@ -1,7 +1,10 @@
 # Back-half paydown — a feature freeze to pay down the code generator, driver and deploy debt
 
-- **Status:** Settling. This draft PR is its settling phase. The spine issue is not yet opened.
-  Development of new features on `bynk` is **paused** from v0.639.1 while this track runs (§2).
+- **Status:** Settling. The spine issue is not yet opened.
+- **The freeze:** the maintainer has paused new feature development on `bynk` from v0.639.1, and
+  the pause is in force now. §2 sets out its proposed terms. Their exact scope (Q1) and the ADR
+  that records them (§10) are still being settled. Until they are, a change that §2 would exclude
+  is held for the maintainer's decision, not built.
 - **Evidence:** [`../reviews/2026-11-17-back-half-debt-review.md`](../reviews/2026-11-17-back-half-debt-review.md).
   Section numbers below that start with "review §" refer to it.
 - **Theme:** internal architecture, not language surface. It continues the precedent of
@@ -226,13 +229,17 @@ out carries its unit tests with it.
 | Deploy: Cloudflare client layers | 2, untyped | 1 trait, typed errors | 1 |
 | `bynk-emit` dev-dependency on `bynk-driver` | yes | no | no |
 | Crates denying wildcard arms | 0 | bynk-ts, bynk-model, bynk-emit | + bynk-driver, bynk |
-| Files ≥ 5,000 lines | 18 | — | 0 in the back half |
-| Files ≥ 2,000 lines | 50 | — | per Q5 |
+| Back-half files ≥ 5,000 lines | 6 | — | 0 |
+| Back-half files ≥ 2,000 lines | 20 | — | per Q5 |
 | bynk-emit unit tests per 1k production lines | 7.1 | — | per 3.4's floor |
 
 The `ts_writes` and `TsStmt::raw` targets are measured over bynk-emit and bynk-driver *combined*,
 the scope P0.2 sets. 1B.2 moves `tests_emit` from the driver into bynk-emit, so the move itself
 is neither progress nor regression.
+
+The back-half file rows count `src/` files in `bynk-model`, `bynk-emit`, `bynk-ts`, `bynk-driver`,
+`bynk-strip` and `bynk`. On 1 October they read 5 and 10. Review §6.1's 18 and 50 count the whole
+workspace.
 
 The targets marked "≤ x%" are proposals for the settling review. The rest are structural yes/no.
 
