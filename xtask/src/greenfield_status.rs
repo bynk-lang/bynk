@@ -281,16 +281,21 @@ fn is_line_comment(line: &str) -> bool {
 /// crate inherits the root `[workspace.lints]`. A `[lints]` table that sets its own
 /// levels (and no `workspace = true`), or a `[lints.clippy]` sub-table, does not count.
 fn opts_into_workspace_lints(manifest: &str) -> bool {
-    let mut in_lints = false;
+    // `None` before the first `[header]`: the root table, where the dotted form
+    // `lints.workspace = true` is valid.
+    let mut table: Option<&str> = None;
     for line in manifest.lines() {
-        let t = line.trim();
+        // A TOML comment runs from `#` to the end of the line; none of the keys or
+        // headers read here contain a `#` inside a string.
+        let t = line.split('#').next().unwrap_or("").trim();
         if t.starts_with('[') {
-            in_lints = t == "[lints]";
-        } else if in_lints {
-            let compact: String = t.chars().filter(|c| !c.is_whitespace()).collect();
-            if compact == "workspace=true" {
-                return true;
-            }
+            table = Some(t);
+            continue;
+        }
+        let compact: String = t.chars().filter(|c| !c.is_whitespace()).collect();
+        match (table, compact.as_str()) {
+            (Some("[lints]"), "workspace=true") | (None, "lints.workspace=true") => return true,
+            _ => {}
         }
     }
     false
@@ -5129,6 +5134,37 @@ mod idempotency_scoping_tests {
     }
 
     #[test]
+    fn workspace_lints_ignores_trailing_comments() {
+        let m = vec![
+            (
+                "a".to_string(),
+                "[lints] # inherit\nworkspace = true  # from the root\n".to_string(),
+            ),
+            (
+                "b".to_string(),
+                "[lints]\n# workspace = true\nrust = \"warn\"\n".to_string(),
+            ),
+        ];
+        assert_eq!(opted_in_crates(&m), vec!["a"]);
+    }
+
+    #[test]
+    fn workspace_lints_accepts_the_dotted_top_level_form() {
+        let m = vec![
+            (
+                "dotted".to_string(),
+                "lints.workspace = true\n\n[package]\nname = \"x\"\n".to_string(),
+            ),
+            // Under another table the dotted key belongs to that table.
+            (
+                "nested".to_string(),
+                "[package]\nlints.workspace = true\n".to_string(),
+            ),
+        ];
+        assert_eq!(opted_in_crates(&m), vec!["dotted"]);
+    }
+
+    #[test]
     fn workspace_lints_opted_in_list_is_sorted() {
         let on = lints_manifest("[lints]\nworkspace = true\n");
         let m = vec![
@@ -5147,7 +5183,6 @@ mod idempotency_scoping_tests {
     fn workspace_lints_reading_comes_from_real_manifests() {
         let root = std::env::temp_dir().join(format!("xtask-ws-lints-{}", std::process::id()));
         let _ = std::fs::remove_dir_all(&root);
-        std::fs::write(root.join("Cargo.toml"), "").ok();
         std::fs::create_dir_all(&root).unwrap();
         std::fs::write(
             root.join("Cargo.toml"),

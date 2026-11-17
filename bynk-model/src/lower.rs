@@ -1286,57 +1286,36 @@ fn Bag.pair[B](self, other: B) -> Bag[A] {
             .commons
             .items
             .iter()
-            .filter_map(|item| match item {
-                CommonsItem::Agent(a) => Some((a.name.name.clone(), Arc::new(a.clone()))),
-                CommonsItem::Type(_)
-                | CommonsItem::Fn(_)
-                | CommonsItem::Capability(_)
-                | CommonsItem::Provider(_)
-                | CommonsItem::Service(_)
-                | CommonsItem::Actor(_)
-                | CommonsItem::Messages(_)
-                | CommonsItem::Event(_)
-                | CommonsItem::Asset(_)
-                | CommonsItem::Embed(_)
-                | CommonsItem::Const(_) => None,
+            .filter_map(|item| {
+                if let CommonsItem::Agent(a) = item {
+                    Some((a.name.name.clone(), Arc::new(a.clone())))
+                } else {
+                    None
+                }
             })
             .collect();
         let services: HashMap<String, ServiceDecl> = typed
             .commons
             .items
             .iter()
-            .filter_map(|item| match item {
-                CommonsItem::Service(s) => Some((s.name.name.clone(), s.clone())),
-                CommonsItem::Type(_)
-                | CommonsItem::Fn(_)
-                | CommonsItem::Capability(_)
-                | CommonsItem::Provider(_)
-                | CommonsItem::Agent(_)
-                | CommonsItem::Actor(_)
-                | CommonsItem::Messages(_)
-                | CommonsItem::Event(_)
-                | CommonsItem::Asset(_)
-                | CommonsItem::Embed(_)
-                | CommonsItem::Const(_) => None,
+            .filter_map(|item| {
+                if let CommonsItem::Service(s) = item {
+                    Some((s.name.name.clone(), s.clone()))
+                } else {
+                    None
+                }
             })
             .collect();
         let actors: HashMap<String, bynk_syntax::ast::ActorDecl> = typed
             .commons
             .items
             .iter()
-            .filter_map(|item| match item {
-                CommonsItem::Actor(a) => Some((a.name.name.clone(), a.clone())),
-                CommonsItem::Type(_)
-                | CommonsItem::Fn(_)
-                | CommonsItem::Capability(_)
-                | CommonsItem::Provider(_)
-                | CommonsItem::Service(_)
-                | CommonsItem::Agent(_)
-                | CommonsItem::Messages(_)
-                | CommonsItem::Event(_)
-                | CommonsItem::Asset(_)
-                | CommonsItem::Embed(_)
-                | CommonsItem::Const(_) => None,
+            .filter_map(|item| {
+                if let CommonsItem::Actor(a) = item {
+                    Some((a.name.name.clone(), a.clone()))
+                } else {
+                    None
+                }
             })
             .collect();
         // A `given <Cap>` clause on a handler resolves against
@@ -1350,19 +1329,12 @@ fn Bag.pair[B](self, other: B) -> Bag[A] {
             .commons
             .items
             .iter()
-            .filter_map(|item| match item {
-                CommonsItem::Capability(c) => Some((c.name.name.clone(), c.clone())),
-                CommonsItem::Type(_)
-                | CommonsItem::Fn(_)
-                | CommonsItem::Provider(_)
-                | CommonsItem::Service(_)
-                | CommonsItem::Agent(_)
-                | CommonsItem::Actor(_)
-                | CommonsItem::Messages(_)
-                | CommonsItem::Event(_)
-                | CommonsItem::Asset(_)
-                | CommonsItem::Embed(_)
-                | CommonsItem::Const(_) => None,
+            .filter_map(|item| {
+                if let CommonsItem::Capability(c) = item {
+                    Some((c.name.name.clone(), c.clone()))
+                } else {
+                    None
+                }
             })
             .collect();
         // P6.14 (#1174): `check_provider_decls` (the pass that actually
@@ -1378,19 +1350,12 @@ fn Bag.pair[B](self, other: B) -> Bag[A] {
             .commons
             .items
             .iter()
-            .filter_map(|item| match item {
-                CommonsItem::Provider(p) => Some((p.capability.name.clone(), p.clone())),
-                CommonsItem::Type(_)
-                | CommonsItem::Fn(_)
-                | CommonsItem::Capability(_)
-                | CommonsItem::Service(_)
-                | CommonsItem::Agent(_)
-                | CommonsItem::Actor(_)
-                | CommonsItem::Messages(_)
-                | CommonsItem::Event(_)
-                | CommonsItem::Asset(_)
-                | CommonsItem::Embed(_)
-                | CommonsItem::Const(_) => None,
+            .filter_map(|item| {
+                if let CommonsItem::Provider(p) = item {
+                    Some((p.capability.name.clone(), p.clone()))
+                } else {
+                    None
+                }
             })
             .collect();
         let table = symbols::UnitTable {
@@ -1426,20 +1391,14 @@ fn Bag.pair[B](self, other: B) -> Bag[A] {
             .commons
             .items
             .iter()
-            .find_map(|item| match item {
-                CommonsItem::Agent(a) if a.name.name == name => Some(a),
-                CommonsItem::Type(_)
-                | CommonsItem::Fn(_)
-                | CommonsItem::Capability(_)
-                | CommonsItem::Provider(_)
-                | CommonsItem::Service(_)
-                | CommonsItem::Agent(_)
-                | CommonsItem::Actor(_)
-                | CommonsItem::Messages(_)
-                | CommonsItem::Event(_)
-                | CommonsItem::Asset(_)
-                | CommonsItem::Embed(_)
-                | CommonsItem::Const(_) => None,
+            .find_map(|item| {
+                if let CommonsItem::Agent(a) = item
+                    && a.name.name == name
+                {
+                    Some(a)
+                } else {
+                    None
+                }
             })
             .unwrap_or_else(|| panic!("no agent named `{name}` in this fixture"))
     }
@@ -1455,19 +1414,12 @@ fn Bag.pair[B](self, other: B) -> Bag[A] {
             .commons
             .items
             .iter()
-            .filter_map(|item| match item {
-                CommonsItem::Actor(a) => Some((a.name.name.clone(), a.clone())),
-                CommonsItem::Type(_)
-                | CommonsItem::Fn(_)
-                | CommonsItem::Capability(_)
-                | CommonsItem::Provider(_)
-                | CommonsItem::Service(_)
-                | CommonsItem::Agent(_)
-                | CommonsItem::Messages(_)
-                | CommonsItem::Event(_)
-                | CommonsItem::Asset(_)
-                | CommonsItem::Embed(_)
-                | CommonsItem::Const(_) => None,
+            .filter_map(|item| {
+                if let CommonsItem::Actor(a) = item {
+                    Some((a.name.name.clone(), a.clone()))
+                } else {
+                    None
+                }
             })
             .collect()
     }
@@ -1478,20 +1430,14 @@ fn Bag.pair[B](self, other: B) -> Bag[A] {
             .commons
             .items
             .iter()
-            .find_map(|item| match item {
-                CommonsItem::Service(s) if s.name.name == name => Some(s),
-                CommonsItem::Type(_)
-                | CommonsItem::Fn(_)
-                | CommonsItem::Capability(_)
-                | CommonsItem::Provider(_)
-                | CommonsItem::Service(_)
-                | CommonsItem::Agent(_)
-                | CommonsItem::Actor(_)
-                | CommonsItem::Messages(_)
-                | CommonsItem::Event(_)
-                | CommonsItem::Asset(_)
-                | CommonsItem::Embed(_)
-                | CommonsItem::Const(_) => None,
+            .find_map(|item| {
+                if let CommonsItem::Service(s) = item
+                    && s.name.name == name
+                {
+                    Some(s)
+                } else {
+                    None
+                }
             })
             .unwrap_or_else(|| panic!("no service named `{name}` in this fixture"))
     }
@@ -1775,20 +1721,14 @@ service Subscriber from Events(OrderPlaced { status: Active, count: 3, .. }) {
         let service = ctx
             .items
             .iter()
-            .find_map(|item| match item {
-                CommonsItem::Service(s) if s.name.name == "Subscriber" => Some(s),
-                CommonsItem::Type(_)
-                | CommonsItem::Fn(_)
-                | CommonsItem::Capability(_)
-                | CommonsItem::Provider(_)
-                | CommonsItem::Service(_)
-                | CommonsItem::Agent(_)
-                | CommonsItem::Actor(_)
-                | CommonsItem::Messages(_)
-                | CommonsItem::Event(_)
-                | CommonsItem::Asset(_)
-                | CommonsItem::Embed(_)
-                | CommonsItem::Const(_) => None,
+            .find_map(|item| {
+                if let CommonsItem::Service(s) = item
+                    && s.name.name == "Subscriber"
+                {
+                    Some(s)
+                } else {
+                    None
+                }
             })
             .expect("no service named `Subscriber` in this fixture");
         let ServiceProtocol::Events { pattern, .. } = &service.protocol else {
@@ -1928,20 +1868,14 @@ capability Store {
         let service = ctx
             .items
             .iter()
-            .find_map(|item| match item {
-                CommonsItem::Service(s) if s.name.name == service => Some(s),
-                CommonsItem::Type(_)
-                | CommonsItem::Fn(_)
-                | CommonsItem::Capability(_)
-                | CommonsItem::Provider(_)
-                | CommonsItem::Service(_)
-                | CommonsItem::Agent(_)
-                | CommonsItem::Actor(_)
-                | CommonsItem::Messages(_)
-                | CommonsItem::Event(_)
-                | CommonsItem::Asset(_)
-                | CommonsItem::Embed(_)
-                | CommonsItem::Const(_) => None,
+            .find_map(|item| {
+                if let CommonsItem::Service(s) = item
+                    && s.name.name == service
+                {
+                    Some(s)
+                } else {
+                    None
+                }
             })
             .unwrap_or_else(|| panic!("no service named `{service}` in this fixture"));
         &service.handlers[index]
@@ -2438,20 +2372,14 @@ agent Widget {
             .commons
             .items
             .iter()
-            .find_map(|item| match item {
-                CommonsItem::Capability(c) if c.name.name == name => Some(c),
-                CommonsItem::Type(_)
-                | CommonsItem::Fn(_)
-                | CommonsItem::Capability(_)
-                | CommonsItem::Provider(_)
-                | CommonsItem::Service(_)
-                | CommonsItem::Agent(_)
-                | CommonsItem::Actor(_)
-                | CommonsItem::Messages(_)
-                | CommonsItem::Event(_)
-                | CommonsItem::Asset(_)
-                | CommonsItem::Embed(_)
-                | CommonsItem::Const(_) => None,
+            .find_map(|item| {
+                if let CommonsItem::Capability(c) = item
+                    && c.name.name == name
+                {
+                    Some(c)
+                } else {
+                    None
+                }
             })
             .unwrap_or_else(|| panic!("no capability named `{name}` in this fixture"))
     }
@@ -2462,20 +2390,14 @@ agent Widget {
             .commons
             .items
             .iter()
-            .find_map(|item| match item {
-                CommonsItem::Provider(p) if p.provider_name.name == name => Some(p),
-                CommonsItem::Type(_)
-                | CommonsItem::Fn(_)
-                | CommonsItem::Capability(_)
-                | CommonsItem::Provider(_)
-                | CommonsItem::Service(_)
-                | CommonsItem::Agent(_)
-                | CommonsItem::Actor(_)
-                | CommonsItem::Messages(_)
-                | CommonsItem::Event(_)
-                | CommonsItem::Asset(_)
-                | CommonsItem::Embed(_)
-                | CommonsItem::Const(_) => None,
+            .find_map(|item| {
+                if let CommonsItem::Provider(p) = item
+                    && p.provider_name.name == name
+                {
+                    Some(p)
+                } else {
+                    None
+                }
             })
             .unwrap_or_else(|| panic!("no provider named `{name}` in this fixture"))
     }
