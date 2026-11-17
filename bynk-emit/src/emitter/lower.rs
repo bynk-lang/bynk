@@ -1666,6 +1666,31 @@ fn runtime_ctor_call(object: Option<&'static str>, name: &'static str, arg: Lowe
     )
 }
 
+/// `callee(a, b, …)` over a genuine callee node: a `Call` node, or today's
+/// `callee(a, b)` text (the callee prints exactly as it is spelled).
+fn call_built(callee: bynk_ts::TsExpr, args: Vec<LoweredExpr>) -> Built {
+    let callee_text = bynk_ts::print_expr(&callee);
+    node_or_text(
+        args,
+        |args| bynk_ts::TsExpr::Call {
+            callee: Box::new(callee),
+            args,
+        },
+        |args| format!("{callee_text}({})", args.join(", ")),
+    )
+}
+
+/// Witness arguments are text until `CmpGen`/`CodecGen` build nodes.
+fn text_args(texts: Vec<String>) -> impl Iterator<Item = LoweredExpr> {
+    texts.into_iter().map(LoweredExpr::Text)
+}
+
+/// A string-literal node: the printer escapes it exactly as
+/// `escape_ts_string` does (they are one function, `escape_ts_literal`).
+fn str_node(s: impl Into<String>) -> bynk_ts::TsExpr {
+    bynk_ts::TsExpr::Lit(bynk_ts::TsLit::Str(s.into()))
+}
+
 /// The single element of a one-child builder's argument.
 fn one<T>(children: Vec<T>) -> T {
     let mut it = children.into_iter();
@@ -1847,6 +1872,15 @@ impl Pre {
     pub(crate) fn finish_text(self, expr: impl Into<String>) -> Lowered {
         self.finish(LoweredExpr::Text(expr.into()))
     }
+
+    /// Finish from a [`Built`]: a node exits as a node, text through
+    /// [`Pre::finish_text`] (the one shared text exit for the call family).
+    pub(crate) fn finish_built(self, built: Built) -> Lowered {
+        match built {
+            Ok(node) => self.finish(LoweredExpr::Node(node)),
+            Err(text) => self.finish_text(text),
+        }
+    }
 }
 
 /// The canonical entry point: lower `e`, returning its text and whatever
@@ -1912,7 +1946,7 @@ pub(crate) fn lower_expr(e: &Expr, cx: &mut LowerCtx) -> Lowered {
             built_or_text!(pre, array(children))
         }
         ExprKind::Ident(id) => built_or_text!(pre, lower_ident(e, id, cx)),
-        ExprKind::Call { name, args, .. } => pre.absorb(lower_call(e, name, args, cx)),
+        ExprKind::Call { name, args, .. } => lowered_or_text!(pre, lower_call(e, name, args, cx)),
         ExprKind::UnaryOp(UnaryOp::Neg, inner)
             if cx
                 .commons()
@@ -2035,13 +2069,7 @@ pub(crate) fn lower_expr(e: &Expr, cx: &mut LowerCtx) -> Lowered {
         ExprKind::FieldAccess { receiver, field } => {
             lowered_or_text!(pre, lower_field_access(e, receiver, field, cx))
         }
-        ExprKind::MethodCall {
-            receiver,
-            method,
-            type_args,
-            args,
-            ..
-        } => pre.absorb(lower_method_call(e, receiver, method, type_args, args, cx)),
+        ExprKind::MethodCall { .. } => lowered_or_text!(pre, lower_method_call(e, cx)),
         // #1750: a value-position `if`/`match`/block that holds a `?` becomes a
         // real statement, so the `?`'s `return` exits the function rather than
         // an arrow. A ternary-shaped `if` is left to `lower_if`, whose own
@@ -2725,15 +2753,23 @@ pub(crate) fn claim_scope_wrapper(indent: usize) -> (String, String) {
     (before, after)
 }
 
-fn lower_method_call(
-    e: &Expr,
-    receiver: &Expr,
-    method: &Ident,
-    type_args: &[TypeRef],
-    args: &[Expr],
-    cx: &mut LowerCtx,
-) -> Lowered {
+fn lower_method_call(e: &Expr, cx: &mut LowerCtx) -> Lowered {
+    let ExprKind::MethodCall {
+        receiver,
+        method,
+        type_args,
+        args,
+        ..
+    } = &e.kind
+    else {
+        unreachable!("lower_method_call is called on a method call")
+    };
     let mut pre = Pre::new();
+    // 1A: the domain-specific dispatchers below (store, scalar/collection
+    // statics, runtime values, D1, cross-context, events, cookies,
+    // capabilities, type statics, test and system services, agent calls,
+    // kernel methods) stay text, each its own family with its own runtime
+    // contract. Only the plain instance call that ends this function is a node.
     // Persisted-store receivers: held Map, Map, Set, Cache, Log, Cell (#3167).
     if let Some(s) = lower_store_method_call(e, receiver, method, args, cx, &mut pre) {
         return pre.finish_text(s);
@@ -2794,8 +2830,8 @@ fn lower_method_call(
         return pre.finish_text(s);
     }
     // Instance call: UFCS lowering with the receiver as first arg.
-    let call = lower_ufcs_method_call(e, receiver, method, type_args, args, cx, &mut pre);
-    pre.finish_text(call)
+    let built = lower_ufcs_method_call(e, receiver, method, type_args, args, cx, &mut pre);
+    pre.finish_built(built)
 }
 
 /// #3147: lower `D1.peek(<participant>.<Cap>)` in an integration or `system`
@@ -4066,7 +4102,11 @@ fn lower_scalar_static_call(
         )
     {
         cx.note_http_result();
-        let args_lowered = lower_http_variant_args(&method.name, args, pre, cx);
+        // 1A: the method-call dispatchers stay text (see `lower_method_call`).
+        let args_lowered: Vec<String> = lower_http_variant_args(&method.name, args, pre, cx)
+            .into_iter()
+            .map(LoweredExpr::into_text)
+            .collect();
         return Some(format!(
             "HttpResult.{}({})",
             method.name,
@@ -5251,7 +5291,7 @@ fn lower_ufcs_method_call(
     args: &[Expr],
     cx: &mut LowerCtx,
     pre: &mut Pre,
-) -> String {
+) -> Built {
     let tys = cx.commons().tys();
     // Instance call: UFCS lowering with the receiver as first arg. The
     // namespace comes from the receiver's checked type. Every method call the
@@ -5260,22 +5300,24 @@ fn lower_ufcs_method_call(
     // at `tsc` (#1931). The placeholder stays reachable for a program that
     // failed checking, which is still lowered and whose output is discarded,
     // so it is not a panic.
-    let ns = cx
-        .receiver_namespace(receiver)
+    let known_ns = cx.receiver_namespace(receiver);
+    let ns = known_ns
+        .clone()
         .unwrap_or_else(|| "/* unknown */".to_string());
-    let recv = pre.lower(receiver, cx);
+    let recv = pre.lower_node(receiver, cx);
     let mut all = vec![recv];
     for a in args {
-        all.push(pre.lower(a, cx));
+        all.push(pre.lower_node(a, cx));
     }
     // Constrained generics slice 1: the call's comparator witnesses follow the
     // ordinary arguments.
     let mut needs_exec = false;
     if let Some(Callee::Method(decl, witnesses)) = cx.commons().callees.get(&e.id) {
-        all.extend(cx.witness_args(decl, witnesses));
+        // 1A: witnesses are text until CmpGen/CodecGen build nodes.
+        all.extend(text_args(cx.witness_args(decl, witnesses)));
         // #2719: a method in the needs-context set takes the context last.
         if cx.commons().exec_plan.fn_needs(decl) {
-            all.push(cx.exec_expr());
+            all.push(LoweredExpr::Node(cx.exec_node()));
             needs_exec = true;
         }
     }
@@ -5318,11 +5360,31 @@ fn lower_ufcs_method_call(
             None => String::new(),
         }
     };
-    let call = format!("{ns}.{}{explicit}({})", method.name, all.join(", "));
+    // 1A: `bynk_ts` `Call` has no `type_args` field (#2795's explicit type
+    // arguments have no node home), and the `/* unknown */` namespace is a
+    // placeholder for a program that failed checking, not an identifier: both
+    // stay text.
+    let built = match known_ns {
+        Some(ns) if explicit.is_empty() => {
+            let callee = bynk_ts::TsExpr::Member {
+                object: Box::new(ident_node(&ns)),
+                property: method.name.clone(),
+            };
+            call_built(callee, all)
+        }
+        _ => Err(format!(
+            "{ns}.{}{explicit}({})",
+            method.name,
+            all.into_iter()
+                .map(LoweredExpr::into_text)
+                .collect::<Vec<_>>()
+                .join(", ")
+        )),
+    };
     if needs_exec {
-        settle_exec_call(call, cx)
+        settle_built(built, cx)
     } else {
-        call
+        built
     }
 }
 
@@ -8477,7 +8539,7 @@ fn lower_http_variant_args(
     args: &[Expr],
     pre: &mut Pre,
     cx: &mut LowerCtx,
-) -> Vec<String> {
+) -> Vec<LoweredExpr> {
     args.iter()
         .enumerate()
         .map(|(i, a)| {
@@ -8485,50 +8547,73 @@ fn lower_http_variant_args(
                 && i == 0
                 && let Some(status) = bynk_syntax::ast::raw_error_status(a)
             {
-                status.to_string()
+                LoweredExpr::Node(bynk_ts::TsExpr::Lit(bynk_ts::TsLit::Num(
+                    status.to_string(),
+                )))
             } else {
-                pre.lower(a, cx)
+                pre.lower_node(a, cx)
             }
         })
         .collect()
 }
 
-/// #2719 (G): a test `case` that calls a function in the needs-context set
-/// directly settles the call the way an addressed service call is settled: on
-/// virtual time it is driven (auto-advance) and then settled, otherwise the
-/// sends it handed the harness's execution context are awaited, so the case's
-/// `expect`s see their effects.
-fn settle_exec_call(call: String, cx: &LowerCtx) -> String {
+/// #2719 (G): which helper a test `case` that calls a function in the
+/// needs-context set directly settles the call with: on virtual time it is
+/// driven (auto-advance) and then settled, otherwise the sends it handed the
+/// harness's execution context are awaited, so the case's `expect`s see their
+/// effects. `None` outside a test case, or when nothing needs settling.
+fn settle_helper(cx: &LowerCtx) -> Option<&'static str> {
     if !cx.in_test_case() {
-        call
+        None
     } else if cx.runtime_use().virtual_time() {
-        format!("__bynkSettleVirtual(deps, {call})")
+        Some("__bynkSettleVirtual")
     } else if cx.test_settles_sends() {
-        format!("__bynkSettle(deps, {call})")
+        Some("__bynkSettle")
     } else {
-        call
+        None
+    }
+}
+
+/// [`settle_helper`] over a call built as text (the dispatchers' side).
+fn settle_exec_call(call: String, cx: &LowerCtx) -> String {
+    match settle_helper(cx) {
+        Some(helper) => format!("{helper}(deps, {call})"),
+        None => call,
+    }
+}
+
+/// [`settle_helper`] over a built call: `helper(deps, call)` as a node when the
+/// call is one, else today's text.
+fn settle_built(call: Built, cx: &LowerCtx) -> Built {
+    match (settle_helper(cx), call) {
+        (None, call) => call,
+        (Some(helper), Ok(node)) => Ok(bynk_ts::TsExpr::Call {
+            callee: Box::new(ident_node(helper)),
+            args: vec![ident_node("deps"), node],
+        }),
+        (Some(helper), Err(text)) => Err(format!("{helper}(deps, {text})")),
     }
 }
 
 fn lower_call(e: &Expr, name: &Ident, args: &[Expr], cx: &mut LowerCtx) -> Lowered {
     let mut pre = Pre::new();
     // Bare variant constructor with payload → qualify.
-    let args_lowered = lower_http_variant_args(&name.name, args, &mut pre, cx);
+    let mut args_lowered = lower_http_variant_args(&name.name, args, &mut pre, cx);
     // #2620: `unreachable(msg)` / `todo(msg)` lower to a call of the runtime's
     // `never`-returning `__fault`, which throws — valid in any expression
     // position, and inside an async body it rejects the effect.
     if let Some(Callee::Fault { kind }) = cx.commons().callee(e.id) {
+        // The location is a string-literal node: the printer escapes it with
+        // the same `escape_ts_literal` the text form used.
         let location = cx
             .assert_loc()
             .map(|_| expect_location(cx, e.span.start))
             .or_else(|| crate::emitter::ctx::fault_source_location(e.span.start))
-            .map(|l| crate::emitter::escape_ts_string(&l))
             .unwrap_or_else(|| format!("offset {}", e.span.start));
         cx.note_fault();
-        return pre.finish_text(format!(
-            "__fault({kind:?}, {}, \"{location}\")",
-            args_lowered.join(", ")
-        ));
+        args_lowered.insert(0, LoweredExpr::Node(str_node(*kind)));
+        args_lowered.push(LoweredExpr::Node(str_node(location)));
+        return pre.finish_built(call_built(ident_node("__fault"), args_lowered));
     }
     // #3051: `TestConnection[F]()` — a case's recording handle for a websocket
     // connection.
@@ -8544,6 +8629,8 @@ fn lower_call(e: &Expr, name: &Ident, args: &[Expr], cx: &mut LowerCtx) -> Lower
             ),
             _ => "unknown".to_string(),
         };
+        // 1A: `bynk_ts` `New` has no `type_args` field (the explicit
+        // `<frame>` has no node home), so this stays text.
         return pre.finish_text(format!("new TestConnection<{frame}>()"));
     }
     // v0.9: HttpResult variant call.
@@ -8557,11 +8644,11 @@ fn lower_call(e: &Expr, name: &Ident, args: &[Expr], cx: &mut LowerCtx) -> Lower
         Some(Callee::Intrinsic { ns, .. }) if *ns == HTTP_RESULT
     ) {
         cx.note_http_result();
-        return pre.finish_text(format!(
-            "HttpResult.{}({})",
-            name.name,
-            args_lowered.join(", ")
-        ));
+        let callee = bynk_ts::TsExpr::Member {
+            object: Box::new(ident_node("HttpResult")),
+            property: name.name.clone(),
+        };
+        return pre.finish_built(call_built(callee, args_lowered));
     }
     // v0.44: a QueueResult variant call (`Retry(reason)`) → `QueueResult.Retry(...)`.
     if matches!(
@@ -8569,11 +8656,11 @@ fn lower_call(e: &Expr, name: &Ident, args: &[Expr], cx: &mut LowerCtx) -> Lower
         Some(Callee::Intrinsic { ns, .. }) if *ns == QUEUE_RESULT
     ) {
         cx.note_queue_result();
-        return pre.finish_text(format!(
-            "QueueResult.{}({})",
-            name.name,
-            args_lowered.join(", ")
-        ));
+        let callee = bynk_ts::TsExpr::Member {
+            object: Box::new(ident_node("QueueResult")),
+            property: name.name.clone(),
+        };
+        return pre.finish_built(call_built(callee, args_lowered));
     }
     // P6.21 (real P6.2 cutover, partial — #1143/#1140's `Callee` classification
     // read back instead of re-derived): agent instantiation `AgentName(key)`
@@ -8587,16 +8674,22 @@ fn lower_call(e: &Expr, name: &Ident, args: &[Expr], cx: &mut LowerCtx) -> Lower
     // the same defect class `block_writes_state`'s receiver-name matching
     // carried before #1196 converted it to read `Callee::Store` directly.
     if matches!(cx.commons().callee(e.id), Some(Callee::AgentInit(_))) {
-        let key_expr = args_lowered.first().unwrap_or_else(|| {
-            panic!(
-                "bynk internal error (ADR 0334): Callee::AgentInit records agent construction \
-                 `{}(...)` with {} args, but every AgentDecl declares exactly one key field — \
-                 the checker already accepted this call",
-                name.name,
-                args_lowered.len()
-            )
-        });
-        return pre.finish_text(cx.agent_construct(&name.name, key_expr));
+        // 1A: `agent_construct` builds text over `cx` state, so the key is
+        // printed here.
+        let arg_count = args_lowered.len();
+        let key_expr = args_lowered
+            .into_iter()
+            .next()
+            .map(LoweredExpr::into_text)
+            .unwrap_or_else(|| {
+                panic!(
+                    "bynk internal error (ADR 0334): Callee::AgentInit records agent \
+                     construction `{}(...)` with {arg_count} args, but every AgentDecl \
+                     declares exactly one key field — the checker already accepted this call",
+                    name.name,
+                )
+            });
+        return pre.finish_text(cx.agent_construct(&name.name, &key_expr));
     }
     // P6.21: sum-variant construction is `Callee::Ctor` — reads the sum
     // type's own name and the variant's own tag straight off the checker's
@@ -8605,39 +8698,48 @@ fn lower_call(e: &Expr, name: &Ident, args: &[Expr], cx: &mut LowerCtx) -> Lower
     // type (the same re-derivation this whole `Callee` precedent, P6.0,
     // exists to close).
     if let Some(Callee::Ctor { sum, tag }) = cx.commons().callee(e.id) {
-        if let Some(lit) = consumed_variant_literal(e, &sum.name.name, tag, &args_lowered, cx) {
-            return pre.finish_text(lit);
+        if cx.is_consumed_context_type(&sum.name.name) {
+            // 1A: a consumed-context variant literal is built as text over the
+            // printed arguments; if it declines, the call falls back to text
+            // over the same printed arguments.
+            let texts: Vec<String> = args_lowered
+                .into_iter()
+                .map(LoweredExpr::into_text)
+                .collect();
+            if let Some(lit) = consumed_variant_literal(e, &sum.name.name, tag, &texts, cx) {
+                return pre.finish_text(lit);
+            }
+            return pre.finish_text(format!("{}.{}({})", sum.name.name, tag, texts.join(", ")));
         }
-        return pre.finish_text(format!(
-            "{}.{}({})",
-            sum.name.name,
-            tag,
-            args_lowered.join(", ")
-        ));
+        let callee = bynk_ts::TsExpr::Member {
+            object: Box::new(ident_node(&sum.name.name)),
+            property: tag.to_string(),
+        };
+        return pre.finish_built(call_built(callee, args_lowered));
     }
     // Constrained generics slice 1: the call's comparator witnesses follow the
     // ordinary arguments (an `Ord`-bounded callee's hidden trailing parameters).
-    let mut args_lowered = args_lowered;
     let mut needs_exec = false;
     if let Some(Callee::Fn(decl, witnesses)) = cx.commons().callee(e.id) {
-        args_lowered.extend(cx.witness_args(decl, witnesses));
+        // 1A: witnesses are text until CmpGen/CodecGen build nodes, so a call
+        // with witnesses falls back to text.
+        args_lowered.extend(text_args(cx.witness_args(decl, witnesses)));
         // #2868: a function that declares `given` takes the caller's `deps`,
         // which the checker has made carry its capabilities.
         if !decl.given.is_empty() {
-            args_lowered.push(cx.cap_deps_expr().to_string());
+            args_lowered.push(LoweredExpr::Node(cx.cap_deps_node()));
         }
         // #2719: a function in the needs-context set takes the context last.
         if cx.commons().exec_plan.fn_needs(decl) {
-            args_lowered.push(cx.exec_expr());
+            args_lowered.push(LoweredExpr::Node(cx.exec_node()));
             needs_exec = true;
         }
     }
-    let call = format!("{}({})", ts_ident(&name.name), args_lowered.join(", "));
-    pre.finish_text(if needs_exec {
-        settle_exec_call(call, cx)
-    } else {
-        call
-    })
+    let mut built = call_built(ident_node(&ts_ident(&name.name)), args_lowered);
+    if needs_exec {
+        built = settle_built(built, cx);
+    }
+    pre.finish_built(built)
 }
 
 fn lower_bin_op(op: BinOp, lhs: &Expr, rhs: &Expr, cx: &mut LowerCtx) -> Lowered {
@@ -12061,7 +12163,7 @@ fn minus(x: Int) -> Int { 5 - - -x }
             assert_eq!(returned(&ts, name), want, "{name}");
         }
         assert!(
-            ts.contains("return __w_T(x, y) < 0;") || ts.contains("(x, y) < 0;"),
+            ts.contains("export function ord<T>(x: T, y: T, __cmp_T: (a: T, b: T) => number): boolean {\n  return __cmp_T(x, y) < 0;\n}"),
             "{ts}"
         );
         for helper in [
@@ -12172,5 +12274,93 @@ fn minus(x: Int) -> Int { 5 - - -x }
         let printed = bynk_ts::print_stmt(&body, 0);
         let want = "{\n  const a = 1;\n  if (flag) {\n    done;\n  }\n  const b = 2;\n}\n";
         assert_eq!(printed, want);
+    }
+
+    // -- 1A.6 (#3705): calls --
+
+    const CALLS: &str = "commons calls\n\
+        type S = | A(n: Int) | B\n\
+        type Box2 = { v: Int }\n\
+        fn Box2.size(self) -> Int { self.v }\n\
+        fn g(x: Int, y: Int) -> Int { x }\n\
+        fn plain(x: Int, y: Int) -> Int { g(x, y) }\n\
+        fn ctor(x: Int) -> S { A(x) }\n\
+        fn ufcs(b: Box2) -> Int { b.size() }\n\
+        fn fault() -> Int { unreachable(\"no\\n\\\"way\\\"\") }\n";
+
+    #[test]
+    fn calls_over_identifiers_lower_to_nodes_and_still_note_their_imports() {
+        assert_eq!(text_exits(CALLS), 0);
+        let ts = crate::testkit::emit_source(CALLS);
+        for (name, want) in [
+            ("plain", "g(x, y)"),
+            ("ctor", "S.A(x)"),
+            ("ufcs", "Box2.size(b)"),
+        ] {
+            assert_eq!(returned(&ts, name), want, "{name}");
+        }
+        // The fault call is a node (kind and location are string nodes) and
+        // still imports `__fault`.
+        let fault = returned(&ts, "fault");
+        assert!(
+            fault.starts_with("__fault(\"Unreachable\", \"no\\n\\\"way\\\"\", \""),
+            "{fault}"
+        );
+        assert!(ts.contains("__fault"), "{ts}");
+    }
+
+    #[test]
+    fn a_call_with_a_text_argument_falls_back_to_today_s_text() {
+        // A short-circuit `&&` operand is still text (control-flow family), so
+        // each call over it is text, byte for byte.
+        let src = "commons calltext\n\
+            type S = | A(f: Bool) | B\n\
+            type Box2 = { v: Int }\n\
+            fn Box2.take(self, b: Bool) -> Int { self.v }\n\
+            fn g(b: Bool) -> Bool { b }\n\
+            fn plain(a: Bool, c: Bool) -> Bool { g(a && c) }\n\
+            fn ctor(a: Bool, c: Bool) -> S { A(a && c) }\n\
+            fn ufcs(b: Box2, a: Bool, c: Bool) -> Int { b.take(a && c) }\n";
+        let ts = crate::testkit::emit_source(src);
+        assert!(text_exits(src) > 0);
+        assert_eq!(returned(&ts, "plain"), "g(a && c)");
+        assert_eq!(returned(&ts, "ctor"), "S.A(a && c)");
+        assert_eq!(returned(&ts, "ufcs"), "Box2.take(b, a && c)");
+    }
+
+    #[test]
+    fn call_arguments_keep_their_precedence() {
+        let src = "commons callprec\n\
+            fn g(x: Int, y: Int) -> Int { x }\n\
+            fn sum(a: Int, b: Int) -> Int { g(a + b, a * b) }\n\
+            fn neg(a: Int, b: Int) -> Int { g(-a, b - a) }\n\
+            fn tern(a: Int, b: Int, c: Bool) -> Int { g(if c { a } else { b }, a) }\n";
+        let ts = crate::testkit::emit_source(src);
+        assert_eq!(returned(&ts, "sum"), "g(a + b, a * b)");
+        assert_eq!(returned(&ts, "neg"), "g(-a, b - a)");
+        let tern = returned(&ts, "tern");
+        assert!(tern.starts_with("g("), "{tern}");
+        assert!(tern.ends_with(", a)"), "{tern}");
+    }
+
+    #[test]
+    fn witness_and_explicit_type_argument_calls_stay_text() {
+        // An `Ord`-bounded callee takes comparator witnesses, which are text
+        // until CmpGen/CodecGen build nodes.
+        let witness = "commons witnesses\n\
+            fn lt[T: Ord](a: T, b: T) -> Bool { a < b }\n\
+            fn use(a: Int, b: Int) -> Bool { lt(a, b) }\n";
+        let before = text_exits("commons witnesses\nfn use(a: Int, b: Int) -> Bool { a < b }\n");
+        assert!(text_exits(witness) > before);
+        let ts = crate::testkit::emit_source(witness);
+        assert_eq!(returned(&ts, "use"), "lt(a, b, __bynkCmpInt)");
+        // Explicit type arguments on a generic instance method (#2795): `Call`
+        // has no `type_args`, so the call stays text.
+        let explicit = "commons explicit\n\
+            type Box2[A] = { v: A }\n\
+            fn Box2.cast[U](self) -> Option[U] { None }\n\
+            fn use(b: Box2[Int]) -> Option[Int] { b.cast[Int]() }\n";
+        let ts = crate::testkit::emit_source(explicit);
+        assert_eq!(returned(&ts, "use"), "Box2.cast<number, number>(b)");
     }
 }

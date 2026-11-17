@@ -108,6 +108,7 @@ impl<'a> ModuleCtx<'a> {
 /// lifecycle DO method. Every other kind carries no `HandlerShared` at all, and
 /// the [`LowerCtx`] accessors below hand those kinds the same defaults the flat
 /// struct used to give them (an empty capability set, no scope, `deps`).
+#[derive(Default)]
 pub(crate) struct HandlerShared {
     /// Names of capabilities in scope as `given C1, C2, ...`. Used to lower
     /// `Capability.op(args)` calls to `deps.Capability.op(args)`.
@@ -134,9 +135,11 @@ pub(crate) struct HandlerShared {
     /// alongside `handler_scope` at every construction site; never `None`
     /// in practice for a body that could contain an `Events.emit` call.
     pub(super) owning_context: String,
-    /// v0.12: the receiver expression a capability call resolves against —
-    /// `deps` in a handler body, `this.deps` in a composed provider body.
-    pub(super) cap_deps_expr: String,
+    /// v0.12: whether the receiver expression a capability call resolves
+    /// against is `this.deps` (a composed provider body) rather than `deps` (a
+    /// handler body). The fact, not the string: `LowerCtx::cap_deps_expr` and
+    /// `cap_deps_node` both read it (1A.6).
+    pub(super) deps_on_this: bool,
     /// The consumed contexts the current handler calls across the boundary.
     /// Non-empty drives whether `deps` gets a `surface` field type; in
     /// workers mode it is also exactly the Service Bindings the handler's
@@ -150,20 +153,6 @@ pub(crate) struct HandlerShared {
     /// deps key. After body lowering these widen the handler's deps *type* to
     /// match the runtime value compose builds (which always carried them).
     pub(super) agent_given_caps_used: std::collections::BTreeMap<String, bynk_model::CapRefIr>,
-}
-
-impl Default for HandlerShared {
-    fn default() -> Self {
-        Self {
-            capabilities: HashSet::new(),
-            handler_scope: None,
-            owning_context: String::new(),
-            cap_deps_expr: "deps".to_string(),
-            cross_contexts_called: std::collections::BTreeSet::new(),
-            agents_instantiated: false,
-            agent_given_caps_used: std::collections::BTreeMap::new(),
-        }
-    }
 }
 
 /// The lowering state shared by the three **generated test-scaffold** body
