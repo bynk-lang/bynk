@@ -98,13 +98,31 @@ within a group is one total order, and the cost is that a group's events share o
 instance's throughput.
 
 *D7: a group's self-binding is exempt from [[0193]] D1.* An edge between two members
-is a Service Binding from the group's Worker **to itself**, which Cloudflare
-accepts on a first deploy (probed on the scratch account with wrangler 4.162.0;
-wrangler then exits non-zero with `10007` from a follow-up lookup after the upload,
-which G4 must treat as non-fatal once the script is confirmed to exist). The rule
-that the target Worker must exist before the binding is declared cannot apply to a
-Worker binding to itself, so the dependencies-first ordering treats an intra-group
-edge as no edge.
+is a Service Binding from the group's Worker **to itself**, which Cloudflare accepts
+on a first deploy (probed on the scratch account with wrangler 4.162.0: first and
+second deploys and a rollback with the self-binding all succeed). The rule that the
+target Worker must exist before the binding is declared cannot apply to a Worker
+binding to itself, so the dependencies-first ordering treats an intra-group edge as
+no edge. By contrast two **different** Workers bound to each other cannot be
+uploaded at all: Cloudflare rejects the upload of a Worker whose binding target does
+not exist (code 10143, probed), which is why `bynk deploy` refuses that cycle.
+
+The `10007` this decision first recorded was **not** a property of the
+self-binding. It is a race on *any* first deploy of a name: after the upload lands,
+wrangler looks the Worker up and can be told `This Worker does not exist on your
+account [code: 10007]`, exiting non-zero (seen once on the scratch account, with
+`--secrets-file`, straight after deleting the same name; the identical deploys
+passed when repeated, with and without the self-binding). The upload is not what
+failed, so `bynk deploy` forgives it, and only when the account itself says the
+upload landed: the ledger has no record of the Worker, wrangler's output carries
+`[code: 10007]`, the account had **no** script of that name before the push, and it
+has **exactly one** version after it. The last two compare Cloudflare's state before
+and after, so no local clock is involved, and a same-named script that predates the
+deploy (another project, a lost ledger) is never mistaken for the upload. wrangler's lookup comes after the upload and before its triggers step
+(workers.dev, routes, custom domains, crons), which it therefore never ran, so a forgiven
+failure is followed by `wrangler triggers deploy`, and a failure of that is the
+deploy's failure. If the account cannot be asked (no API token), the failure stays as
+wrangler reported it.
 
 *D8: amendments.*
 
