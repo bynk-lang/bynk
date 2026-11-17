@@ -1,12 +1,6 @@
----
-level: patch
-probes: ast_importers
-changelog: The lowering context and TypeScript type rendering move out of `emitter.rs` into their own modules, with no change to emitted output
----
+# 0877 — Tree-native lowering is the route Part 15.1 left open
 
-## ADR: tree-native-lowering
-title: Tree-native lowering is the route Part 15.1 left open
-summary: Phase 1A lowers into the existing bynk_ts tree through a counted bridge, and no expression IR is built
+- **Status:** Accepted (v0.639.8)
 
 **Context.** `design/bynk-greenfield-compiler.md` Part 15.1 refuses a second expression code generator (the expression IR), at a measured cost of about 4,400 lines for three of seven entry points. Its trigger is an emit-side change that needs expression-level facts the checker already resolved, and which "the tree-native route (lowering to `bynk_ts` nodes, retiring `ts_writes`)" would not serve better. So the refusal leaves the tree-native route open rather than closing it. The back-half debt review (§2.1) found the lowering still builds text: `Lowered { pre: Vec<String>, expr: String }`, with `ts_writes`, `ts_raw_sites` and `ts_text_idents` counting the string-built sites. The back-half paydown track's Phase 1A is that route.
 

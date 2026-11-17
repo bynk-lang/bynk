@@ -28,6 +28,7 @@ per-commit history. While Bynk is pre-1.0, increments may change behaviour.
 
 | Version | Highlights |
 |---|---|
+| **v0.639.8** | The lowering context and TypeScript type rendering move out of `emitter.rs` into their own modules, with no change to emitted output |
 | **v0.639.7** | The back-half paydown track is settled, and a feature freeze on `bynk` is recorded until its Phase 1 exit criteria are met |
 | **v0.639.6** | `bynk-ts` and `bynk-model` deny wildcard enum arms, the `workspace_lints` probe lists the crates that opt in, and `module_lines` excludes declaration-gated test modules and reports `crate/src/` paths |
 | **v0.639.5** | A trend probe, `module_lines`, reports how many source files reach 2,000, 3,000 and 5,000 production lines, and names the largest back-half files |
