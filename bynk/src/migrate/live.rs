@@ -489,22 +489,20 @@ pub(crate) mod tests {
     #[cfg(unix)]
     #[test]
     fn secrets_go_through_wrangler_by_worker_name_on_stdin() {
-        use std::os::unix::fs::PermissionsExt;
         let dir =
             std::env::temp_dir().join(format!("bynk-migrate-wrangler-{}", std::process::id()));
         let _ = std::fs::remove_dir_all(&dir);
         std::fs::create_dir_all(&dir).unwrap();
         let log = dir.join("log");
         let script = dir.join("wrangler");
-        std::fs::write(
+        // Not `fs::write`: ETXTBSY under parallel tests (see the helper).
+        crate::test_support::write_executable(
             &script,
-            format!(
+            &format!(
                 "#!/bin/sh\necho \"$@ stdin=$(cat)\" >> {}\n[ \"$3\" = BAD ] && {{ echo nope >&2; exit 1; }}\nexit 0\n",
                 log.display()
             ),
-        )
-        .unwrap();
-        std::fs::set_permissions(&script, std::fs::Permissions::from_mode(0o755)).unwrap();
+        );
         let secrets = WranglerSecrets {
             provenance: Provenance::Path(script.clone()),
             scratch: dir.join("scratch"),

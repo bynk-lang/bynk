@@ -3,6 +3,9 @@
 //! `file://` index. No test touches the network. Each test has its own
 //! `BYNK_HOME`, and stdin is never a terminal, so nothing prompts.
 
+#[path = "support/stand_in.rs"]
+mod stand_in;
+
 use std::path::{Path, PathBuf};
 use std::process::{Command, Stdio};
 
@@ -386,20 +389,17 @@ fn a_fetch_off_a_terminal_writes_the_lock_and_says_what_awaits_approval() {
 /// that they ran (a file `ran` beside them) and install nothing.
 #[cfg(unix)]
 fn recording_tools(root: &Path) -> PathBuf {
-    use std::os::unix::fs::PermissionsExt;
     let bin = root.join("fakebin");
     std::fs::create_dir_all(&bin).unwrap();
     for tool in ["npm", "pnpm", "bun", "yarn"] {
         let path = bin.join(tool);
-        std::fs::write(
+        stand_in::write_executable(
             &path,
-            format!(
+            &format!(
                 "#!/bin/sh\necho \"{tool} $@\" >> \"{}\"\n",
                 bin.join("ran").display()
             ),
-        )
-        .unwrap();
-        std::fs::set_permissions(&path, std::fs::Permissions::from_mode(0o755)).unwrap();
+        );
     }
     bin
 }

@@ -42,16 +42,11 @@ impl Fake {
         std::fs::write(dir.join("get.json"), get).unwrap();
         std::fs::write(dir.join("meta.json"), meta).unwrap();
         let script = dir.join("wrangler");
-        std::fs::write(
+        // Not `fs::write`: ETXTBSY under parallel tests (see the helper).
+        crate::test_support::write_executable(
             &script,
             "#!/bin/sh\nd=$(dirname \"$0\")\necho \"$@\" >> \"$d/calls.log\"\n[ \"$1\" = vectorize ] || exit 2\ncase \"$2\" in\n  list) cat \"$d/list.json\";;\n  get) cat \"$d/get.json\";;\n  create-metadata-index) touch \"$d/created\"; if [ -f \"$d/exists\" ]; then echo \"metadata index already exists for this name [code: 40004]\" >&2; exit 1; fi;;\n  list-metadata-index)\n    if [ -f \"$d/created\" ]; then\n      n=$(cat \"$d/polls\" 2>/dev/null || echo 0); echo $((n+1)) > \"$d/polls\"\n      if [ -f \"$d/after.$n.json\" ]; then cat \"$d/after.$n.json\"; elif [ -f \"$d/after.json\" ]; then cat \"$d/after.json\"; else cat \"$d/meta.json\"; fi\n    else cat \"$d/meta.json\"; fi;;\n  *) exit 0;;\nesac\n",
-        )
-        .unwrap();
-        #[cfg(unix)]
-        {
-            use std::os::unix::fs::PermissionsExt;
-            std::fs::set_permissions(&script, std::fs::Permissions::from_mode(0o755)).unwrap();
-        }
+        );
         Self { dir }
     }
 

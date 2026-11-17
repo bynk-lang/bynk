@@ -1850,24 +1850,11 @@ mod tests {
     // and answers `kv namespace create` with an id. Nothing reaches
     // Cloudflare.
 
-    /// Write an executable stand-in `wrangler` at `path`.
-    ///
-    /// By a child `sh`, not by this process: a test thread that forks while
-    /// this process holds the script open for writing carries that descriptor
-    /// into its child until exec, and running the script in that window fails
-    /// with ETXTBSY ("Text file busy"). Seen once the #2055 tests ran beside
-    /// these in parallel.
+    /// Write an executable stand-in `wrangler` at `path`; see
+    /// [`crate::test_support::write_executable`] for why not in-process.
     #[cfg(unix)]
     fn write_stand_in(path: &Path, script: &str) {
-        let wrote = std::process::Command::new("sh")
-            .arg("-c")
-            .arg("printf '%s' \"$1\" > \"$2\" && chmod 755 \"$2\"")
-            .arg("sh")
-            .arg(script)
-            .arg(path)
-            .status()
-            .unwrap();
-        assert!(wrote.success(), "the stand-in wrangler is written");
+        crate::test_support::write_executable(path, script);
     }
 
     /// #3073: every push carries the facts variable (asserted here, for every
