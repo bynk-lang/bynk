@@ -262,6 +262,40 @@ fn append_missing_bindings(names: &mut Vec<String>, extra: &str) {
     names.extend(wanted);
 }
 
+/// The events a publishing handler hands its fan-out. A group's one fan-out
+/// serves every publishing member, so a member names itself on each event
+/// (`publisher`), as two members may declare an event of one name (#3562, G3-1).
+/// A context on a Worker of its own sends them as they are.
+fn fanout_events(context: &str, layout: &bynk_project::worker_layout::WorkerLayout) -> TsExpr {
+    if !layout.is_member(context) {
+        return ident("events");
+    }
+    let tagged = TsExpr::Arrow {
+        params: vec![TsParam {
+            name: "e".to_string(),
+            ty: None,
+            optional: false,
+        }],
+        is_async: false,
+        generics: Vec::new(),
+        return_type: None,
+        // Parenthesised, or the braces read as the arrow's body.
+        body: Box::new(TsArrowBody::Expr(Box::new(TsExpr::Paren(Box::new(
+            as_expr(
+                TsExpr::Object {
+                    entries: vec![
+                        TsObjectEntry::Spread(ident("e")),
+                        TsObjectEntry::Prop("publisher".to_string(), str_lit(context.to_string())),
+                    ],
+                    multiline: false,
+                },
+                TsType::named(crate::emitter::EVENTS_WIRE_EVENT_TS_TYPE),
+            ),
+        ))))),
+    };
+    method_call(ident("events"), "map", vec![tagged])
+}
+
 #[allow(clippy::too_many_arguments)]
 pub fn emit_worker_compose(
     context: &str,
@@ -652,7 +686,7 @@ pub fn emit_worker_compose(
             return_type: None,
             body: Box::new(TsArrowBody::Expr(Box::new(call(
                 ident("__dispatchToEventsFanout"),
-                vec![member(ident("env"), bind), ident("events")],
+                vec![member(ident("env"), bind), fanout_events(context, layout)],
             )))),
         };
         deps_entries.push(TsObjectEntry::Prop("__eventsDispatch".to_string(), arrow));

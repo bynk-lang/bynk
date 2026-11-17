@@ -39,8 +39,8 @@ pub struct GroupMember {
     /// The addresses its `from email` services claim (its entry has `email` iff
     /// there are any).
     pub addresses: Vec<String>,
-    /// The Durable Object classes its entry exports: agents, and the events
-    /// fan-out class when it publishes.
+    /// The Durable Object classes its entry exports: its agents. (The events
+    /// fan-out is the group's, not a member's.)
     pub classes: Vec<String>,
 }
 
@@ -50,6 +50,9 @@ pub struct GroupEntry<'a> {
     pub members: &'a [GroupMember],
     /// The container classes of `containers.ts`, exported once for the Worker.
     pub container_classes: &'a [String],
+    /// Whether any member publishes events: the Worker exports the one events
+    /// fan-out class, from `events_fanout.ts` (#3562, G3-1).
+    pub has_fanout: bool,
     /// Whether any member subscribes to events (answers `/_bynk/event/`).
     pub has_events: bool,
     /// Whether any member hosts a migratable agent (answers `/_bynk/migrate/`).
@@ -233,6 +236,12 @@ pub fn emit_group_entry(entry: &GroupEntry<'_>) -> TsProgram {
                 m.specifier
             ));
         }
+    }
+    if entry.has_fanout {
+        text.push_str(&format!(
+            "export {{ {} }} from \"./events_fanout.js\";\n",
+            crate::emitter::wrangler::EVENTS_FANOUT_CLASS_NAME
+        ));
     }
     if !entry.container_classes.is_empty() {
         text.push_str(&format!(
