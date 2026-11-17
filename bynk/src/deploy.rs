@@ -49,6 +49,7 @@ mod config;
 pub(crate) mod containers;
 mod destinations;
 mod facts;
+mod first_deploy;
 mod graph;
 mod hyperdrive;
 mod ledger;

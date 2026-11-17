@@ -378,7 +378,7 @@ pub(crate) fn deploy_one(
             worker,
             wrangler_args,
             environment,
-            None,
+            (None, false),
         );
     }
     if prepared.is_empty() {
@@ -388,7 +388,7 @@ pub(crate) fn deploy_one(
             worker,
             wrangler_args,
             environment,
-            None,
+            (None, true),
         );
     }
     if !secrets.with_upload {
@@ -403,7 +403,7 @@ pub(crate) fn deploy_one(
             worker,
             wrangler_args,
             environment,
-            None,
+            (None, true),
         )?;
         if pushed == Pushed::Ok {
             apply_secrets(provenance, &worker_dir, worker, &prepared, environment)?;
@@ -421,7 +421,7 @@ pub(crate) fn deploy_one(
         worker,
         wrangler_args,
         environment,
-        Some(file.path()),
+        (Some(file.path()), true),
     );
     // Removed whatever the push did, before anything else can fail.
     drop(file);
@@ -533,7 +533,7 @@ fn push(
     worker: &str,
     wrangler_args: &[String],
     environment: &str,
-    secrets_file: Option<&Path>,
+    (secrets_file, first_deploy): (Option<&Path>, bool),
 ) -> Result<Pushed, DeployFailure> {
     let Some(mut command) = workers::wrangler_command(provenance, "deploy") else {
         return Err(DeployFailure::driver("wrangler not found".into()));
@@ -545,10 +545,27 @@ fn push(
     if environment != "default" {
         command.arg("--env").arg(environment);
     }
-    if secrets_file.is_some() {
-        return push_holding_secrets_file(command, environment, worker);
+    // #3562 (G4-2): a first deploy is watched for wrangler's `10007` race, which
+    // needs wrangler's own output (copied through as it arrives).
+    let watch = first_deploy
+        .then(|| first_deploy::Watch::begin(worker_dir, environment))
+        .flatten();
+    if watch.is_some() {
+        command.stderr(Stdio::piped());
     }
-    match command.status() {
+    if secrets_file.is_some() {
+        return push_holding_secrets_file(command, environment, worker, watch.as_ref());
+    }
+    let status = match watch.as_ref() {
+        Some(watch) => command.spawn().and_then(|mut child| {
+            let said = first_deploy::tee_stderr(&mut child);
+            let status = child.wait()?;
+            let said = said.and_then(|t| t.join().ok()).unwrap_or_default();
+            Ok(watch.settle(status, &said))
+        }),
+        None => command.status(),
+    };
+    match status {
         Ok(status) => wrangler_outcome(environment, worker, &status),
         Err(e) => Err(DeployFailure::driver(format!(
             "could not run wrangler deploy for `{}`: {e}",
@@ -573,6 +590,7 @@ fn push_holding_secrets_file(
     mut command: std::process::Command,
     environment: &str,
     worker: &str,
+    watch: Option<&first_deploy::Watch>,
 ) -> Result<Pushed, DeployFailure> {
     let deployed = deployed_worker_name(environment, worker);
     let deferred = crate::stop::defer();
@@ -581,6 +599,7 @@ fn push_holding_secrets_file(
             "could not run wrangler deploy for `{deployed}`: {e}"
         ))
     })?;
+    let said = first_deploy::tee_stderr(&mut child);
     #[cfg_attr(not(unix), allow(unused_mut, unused_variables))]
     let mut forwarded = false;
     let status = loop {
@@ -605,6 +624,8 @@ fn push_holding_secrets_file(
     };
     let signalled = crate::stop::received();
     drop(deferred);
+    let said = said.and_then(|t| t.join().ok()).unwrap_or_default();
+    let status = watch.map_or(status, |watch| watch.settle(status, &said));
     match (wrangler_outcome(environment, worker, &status)?, signalled) {
         (Pushed::Ok, Some(sig)) if crate::stop::exit_byte(sig) == 0 => Ok(Pushed::Interrupted),
         (Pushed::Ok, Some(sig)) => Err(DeployFailure {
