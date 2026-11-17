@@ -8904,10 +8904,6 @@ pub const REGISTRY: &[DiagnosticInfo] = &[
         "A build breaks the contract a declared foreign caller's client was generated at, as pinned in `bynk.foreign.toml`, so `bynk deploy` refuses to ship it.",
     ),
     d(
-        "bynk.deploy.group_cycle",
-        "Workers bind to each other in a cycle once the contexts of `[deploy.workers.<key>]` groups are folded into their Workers, though the contexts themselves are acyclic; a Worker is uploaded after the Workers it binds to, so the cycle cannot be deployed.",
-    ),
-    d(
         "bynk.deploy.group_name_conflict",
         "A `[deploy.workers.<key>]` group's key or script name is another group's, or is the Worker of a context in no group.",
     ),
@@ -8930,6 +8926,10 @@ pub const REGISTRY: &[DiagnosticInfo] = &[
     d(
         "bynk.deploy.unknown_context",
         "A `[deploy.workers.<key>]` group lists a context the project does not declare.",
+    ),
+    d(
+        "bynk.deploy.worker_cycle",
+        "Workers bind to each other in a cycle that involves a `[deploy.workers.<key>]` group: a group folds its members into one Worker, which can close a cycle among contexts that are themselves acyclic. A Worker is uploaded after the Workers it binds to, so the cycle cannot be deployed.",
     ),
     d(
         "bynk.deploy.worker_groups_unsupported",
