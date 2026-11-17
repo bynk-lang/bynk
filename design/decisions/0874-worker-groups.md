@@ -13,8 +13,8 @@
 belong together cost a Worker and a network hop each. A group puts several in one
 Worker: a `[deploy.workers.<key>]` table in `bynk.toml` lists contexts, and the
 build emits one Worker for them. Everything below is built and merged for the
-**build**; `bynk deploy`, `revert` and `bynk dev` still refuse a group
-(`bynk.deploy.worker_groups_unsupported`) until G4 and G6.
+**build**; `bynk deploy`, `revert` and `bynk dev` were taught groups in G4 and G6, and
+the temporary `bynk.deploy.worker_groups_unsupported` refusal is gone.
 
 **Decision.**
 
@@ -125,9 +125,10 @@ edge as no edge. Edge keys are named per member context (the runtime signs as th
 
 **Consequences.**
 
-- A group builds today; it cannot yet be deployed or run in `bynk dev`. Both
-  refuse it with `bynk.deploy.worker_groups_unsupported`, which G4 (deploy,
-  `--worker`, ledger and facts versions, the `10007` handling) and G6 remove.
+- A group builds, deploys and reverts (G4: `--worker`, ledger and facts versions, the
+  `10007` handling) and runs in `bynk dev` (G6: one Worker on one port, `--context`
+  naming a member serving its whole group). The temporary
+  `bynk.deploy.worker_groups_unsupported` refusal is removed.
 - **Still open, G3:** in-process edges and events between members (an intra-group
   call is a Service Binding to itself today). The merged events fan-out has
   landed (G3-1); the conformance harness is #3663. The group cycle check

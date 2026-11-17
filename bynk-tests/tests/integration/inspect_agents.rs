@@ -218,7 +218,7 @@ fn a_deploy_build_of_a_group_has_no_inspection_route_anywhere() {
     assert!(
         !files
             .keys()
-            .any(|p| p.ends_with("__bynk_runtime/inspect.ts")),
+            .any(|p| p.ends_with("__bynk_runtime/inspect.ts") || p.ends_with("bynk-inspect.json")),
         "{:?}",
         files.keys()
     );
@@ -303,6 +303,19 @@ fn the_listing_goes_to_the_first_member_that_hosts_an_agent() {
             .lines()
             .any(|l| l.starts_with("export") && l.contains("shop-audit")),
         "{index}"
+    );
+    // `bynk dev inspect` signs for the first agent-hosting member (the listing) and for
+    // a class's owner (a read), so the build names them: the members that host an agent,
+    // in the entry's order, and none that does not.
+    let manifest: serde_json::Value =
+        serde_json::from_str(find(&files, "workers/core/bynk-inspect.json")).unwrap();
+    assert_eq!(
+        manifest,
+        serde_json::json!({ "members": [
+            { "context": "shop.orders", "classes": ["Cart"] },
+            { "context": "shop.payment", "classes": ["Wallet"] },
+        ]}),
+        "{manifest}"
     );
     let _ = std::fs::remove_dir_all(&root);
 }

@@ -8931,10 +8931,6 @@ pub const REGISTRY: &[DiagnosticInfo] = &[
         "bynk.deploy.unknown_context",
         "A `[deploy.workers.<key>]` group lists a context the project does not declare.",
     ),
-    d(
-        "bynk.deploy.worker_groups_unsupported",
-        "`bynk deploy`, `bynk revert` and `bynk dev` do not yet support `[deploy.workers.<key>]` Worker groups (temporary, #3562).",
-    ),
     warn(d(
         "bynk.deploy.workers_ignored_on_bundle",
         "`bynk.toml` declares `[deploy.workers]` groups, which only a `workers` build uses; this build is a `bundle`, which has every context in one program and ignores them (warning).",

@@ -1236,12 +1236,10 @@ fn deploy_refuses_release_contracts() {
     assert!(!proj.join(".bynk").exists(), "nothing was prepared: {err}");
 }
 
-/// #3562 (temporary): a project with a `[deploy.workers]` group is refused by
-/// `dev`, which would otherwise name each Worker after its context, before
-/// anything is prepared. `deploy` and `revert` accept one (G4): this project's group
-/// names contexts it does not declare, which the build refuses as for any project.
+/// #3562: `deploy` and `revert` accept a `[deploy.workers]` group (G4): this project's
+/// group names contexts it does not declare, which the build refuses as for any project.
 #[test]
-fn dev_refuses_a_worker_group_and_deploy_and_revert_do_not() {
+fn deploy_and_revert_accept_a_worker_group() {
     let proj = scratch("groups-deploy");
     write(
         &proj.join("bynk.toml"),
@@ -1259,23 +1257,6 @@ fn dev_refuses_a_worker_group_and_deploy_and_revert_do_not() {
     assert!(
         !err.contains("worker_groups_unsupported"),
         "revert reads the ledger like any project: {err}"
-    );
-    let args = &["dev"][..];
-    let proj = scratch("groups-refused");
-    write(
-        &proj.join("bynk.toml"),
-        "[project]\nname = \"shop\"\nversion = \"0.1.0\"\n\n[deploy.workers.core]\ncontexts = [\"shop.orders\", \"shop.pricing\"]\n",
-    );
-    write(&proj.join("src/calc.bynk"), CLEAN_COMMONS);
-    let (code, _, err) = run_bynk_in(&proj, args);
-    assert_ne!(code, 0, "{args:?}: {err}");
-    assert!(
-        err.contains("bynk.deploy.worker_groups_unsupported") && err.contains("`core`"),
-        "{args:?}: {err}"
-    );
-    assert!(
-        !proj.join(".bynk").exists(),
-        "{args:?}: nothing was prepared: {err}"
     );
 }
 

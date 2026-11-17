@@ -84,6 +84,14 @@ pub use revert::{RevertOptions, revert};
 // `deploy` does, and mints its run's key as an edge key is minted.
 pub(crate) use config::deployed_worker_name;
 pub(crate) use config::{VectorizeDecl, project_resources};
+
+/// The Cloudflare script name of each Worker directory: what a Service Binding to it
+/// names (`name` in its `wrangler.toml`, else the directory).
+pub(crate) fn script_names_of(workers_dir: &Path, workers: &[String]) -> Vec<String> {
+    config::script_names(workers_dir, workers)
+        .into_keys()
+        .collect()
+}
 pub(crate) use secrets::mint_edge_key as mint_key;
 
 /// State-migrations S4 (#2259): for each Worker directory in `workers`, the

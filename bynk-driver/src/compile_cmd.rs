@@ -68,29 +68,8 @@ pub fn refuse_release_contracts(root: &Path) -> Result<(), String> {
     Ok(())
 }
 
-/// #3562 (temporary): a `[deploy.workers.<key>]` group changes which Worker a
-/// context is in (its script name, its directory, its routes and domains).
-/// `bynk deploy` and `bynk revert` are taught groups (G4), but `bynk dev` still names
-/// each Worker after its context, so it would run the wrong thing. Until it is
-/// taught groups (G6), it refuses a project with any group, before touching anything. A project with no `[deploy.workers]` table is unaffected. A group of
-/// one context is refused too: it still moves that context to the group's Worker.
-pub fn refuse_worker_groups(root: &Path) -> Result<(), String> {
-    let groups = bynk_project::worker_groups::try_read_worker_groups(root)
-        .map_err(|e| format!("invalid `[deploy.workers]` in `bynk.toml`: {e}"))?;
-    if groups.is_empty() {
-        return Ok(());
-    }
-    let keys: Vec<String> = groups.keys().map(|k| format!("`{k}`")).collect();
-    Err(format!(
-        "bynk.deploy.worker_groups_unsupported: `[deploy.workers]` declares Worker groups ({}), which this command cannot yet deploy; grouping is not deployable until #3562 is finished, so leave the table out for now",
-        keys.join(", ")
-    ))
-}
-
 /// What a deployment refuses before it prepares anything: contract checks in the
-/// release profile ([`refuse_release_contracts`]). A `[deploy.workers]` group no
-/// longer is one (G4); `bynk revert` and `bynk dev` still refuse one
-/// ([`refuse_worker_groups`]).
+/// release profile ([`refuse_release_contracts`]). A `[deploy.workers]` group is not one.
 pub fn refuse_undeployable_project(root: &Path) -> Result<(), String> {
     // A group table that does not read must stop the run here: `deploy` places
     // every context by it, and would otherwise place each on its own Worker.
@@ -626,7 +605,6 @@ mod profile_tests {
 
 #[cfg(test)]
 mod worker_group_refusal_tests {
-    use super::refuse_worker_groups;
     use std::fs;
 
     fn project(name: &str, manifest: &str) -> std::path::PathBuf {
@@ -638,41 +616,7 @@ mod worker_group_refusal_tests {
         root
     }
 
-    /// A project with no table deploys as before.
-    #[test]
-    fn no_table_is_not_refused() {
-        let none = project("none", "[project]\nname = \"p\"\nversion = \"0.1.0\"\n");
-        assert_eq!(refuse_worker_groups(&none), Ok(()));
-        let _ = fs::remove_dir_all(&none);
-    }
-
     /// Any group is refused, a group of one included: it still moves the context
-    /// to the group's Worker.
-    #[test]
-    fn a_group_of_one_is_refused_too() {
-        let one = project(
-            "one",
-            "[project]\nname = \"p\"\nversion = \"0.1.0\"\n\n[deploy.workers.solo]\ncontexts = [\"shop.orders\"]\n",
-        );
-        let err = refuse_worker_groups(&one).unwrap_err();
-        assert!(err.contains("`solo`"), "{err}");
-        let _ = fs::remove_dir_all(&one);
-    }
-
-    /// A group of several contexts is refused, naming it.
-    #[test]
-    fn a_multi_member_group_is_refused_naming_it() {
-        let two = project(
-            "two",
-            "[project]\nname = \"p\"\nversion = \"0.1.0\"\n\n[deploy.workers.core]\ncontexts = [\"a\", \"b\"]\n",
-        );
-        let err = refuse_worker_groups(&two).unwrap_err();
-        assert!(
-            err.contains("bynk.deploy.worker_groups_unsupported") && err.contains("`core`"),
-            "{err}"
-        );
-    }
-
     /// `deploy` accepts a group, but a table that does not read stops it before
     /// it places each context on its own Worker (#3562).
     #[test]
@@ -689,21 +633,6 @@ mod worker_group_refusal_tests {
         let err = super::refuse_undeployable_project(&bad).unwrap_err();
         assert!(err.starts_with("invalid `[deploy.workers]`"), "{err}");
         let _ = fs::remove_dir_all(&good);
-        let _ = fs::remove_dir_all(&bad);
-    }
-
-    /// A malformed table is a clear error, not a refusal that blames groups.
-    #[test]
-    fn a_malformed_table_is_reported_as_invalid() {
-        let bad = project(
-            "bad",
-            "[project]\nname = \"p\"\nversion = \"0.1.0\"\n\n[deploy.workers]\ncore = 3\n",
-        );
-        let err = refuse_worker_groups(&bad).unwrap_err();
-        assert!(
-            err.starts_with("invalid `[deploy.workers]` in `bynk.toml`"),
-            "{err}"
-        );
         let _ = fs::remove_dir_all(&bad);
     }
 }

@@ -476,26 +476,52 @@ fn remote_env_conflict(opts: &DevOptions) -> bool {
     true
 }
 
+/// #3562 (G6): a group is one Worker, so `--context` naming a member selects the
+/// Worker that holds it, and says so: the rest of the group cannot be left out of a
+/// Worker. A name that is no member passes through (it is a Worker's own, or unknown).
+fn groups_serving(project_root: &Path, requested: &[String]) -> Result<Vec<String>, String> {
+    let groups = bynk_project::worker_groups::try_read_worker_groups(project_root)
+        .map_err(|e| format!("invalid `[deploy.workers]` in `bynk.toml`: {e}"))?;
+    Ok(requested
+        .iter()
+        .map(|name| {
+            let dotted = name.replace('-', ".");
+            let Some((key, _)) = groups
+                .iter()
+                .find(|(_, g)| g.contexts.contains(&dotted))
+            else {
+                return name.clone();
+            };
+            eprintln!(
+                "bynk: `{dotted}` is in the Worker group `{key}`, which runs as one Worker: serving the whole group"
+            );
+            key.clone()
+        })
+        .collect())
+}
+
+/// The Workers to serve: every one, or those `--context` names (a group member selecting
+/// its group, [`groups_serving`]).
+fn selected_workers(
+    project_root: &Path,
+    available: &[String],
+    requested: &[String],
+) -> Option<Vec<String>> {
+    let chosen = groups_serving(project_root, requested)
+        .and_then(|r| select_contexts(available, &r).map_err(|e| e.to_string()));
+    chosen.map_err(|e| eprintln!("bynk: {e}")).ok()
+}
+
 /// Orchestrate a local dev session: pre-flight, compile, select the worker, and
 /// hand off to `wrangler dev`. Returns wrangler's own exit code on a clean
 /// hand-off, or a pre-flight/build failure code before serving.
-/// #3562 (temporary, until G6): `bynk dev` names each Worker after its context,
-/// so a project with Worker groups is refused rather than run wrongly.
-fn worker_groups_refused(project_root: &Path) -> bool {
-    let Err(e) = bynk_driver::refuse_worker_groups(project_root) else {
-        return false;
-    };
-    eprintln!("bynk: {e}");
-    true
-}
-
 pub fn run(
     tb: &dyn Toolbox,
     project_root: &Path,
     node_floor: (u32, u32),
     opts: &DevOptions,
 ) -> ExitCode {
-    if remote_env_conflict(opts) || worker_groups_refused(project_root) {
+    if remote_env_conflict(opts) {
         return ExitCode::FAILURE;
     }
 
@@ -552,12 +578,8 @@ pub fn run(
     //    being withheld, not a project being wrong.
     let workers_dir = build_dir.join("workers");
     let available = discover_workers(&workers_dir);
-    let workers = match select_contexts(&available, &opts.contexts) {
-        Ok(w) => w,
-        Err(e) => {
-            eprintln!("bynk: {e}");
-            return ExitCode::FAILURE;
-        }
+    let Some(workers) = selected_workers(project_root, &available, &opts.contexts) else {
+        return ExitCode::FAILURE;
     };
     let mut serving = allocate(&workers, opts.base_port, opts);
     // #3237: a lone worker would otherwise take wrangler's default inspector,
@@ -824,7 +846,10 @@ pub fn run(
     eprint!("{}", stand_in_report(&stand_in_plans));
     let serving_now = serving_event(&serving, &opts.wrangler_args);
     emit(opts.format, &serving_now);
-    let _session = crate::dev_inspect::SessionFile::write(project_root, &session_of(&serving_now));
+    let _session = crate::dev_inspect::SessionFile::write(
+        project_root,
+        &session_of(&serving_now, &workers_dir),
+    );
     // #2138: `--ready-json` — written from the watch loop below once every
     // served context answers a probe. The probe is plain HTTP on localhost,
     // so a server it can't reach never reads as ready; say so up front.
@@ -947,7 +972,10 @@ fn plan_stand_ins(
     for s in serving {
         let config = std::fs::read_to_string(workers_dir.join(&s.worker).join("wrangler.toml"))
             .unwrap_or_default();
-        let foreign = foreign_services(&config, available);
+        let foreign = foreign_services(
+            &config,
+            &crate::deploy::script_names_of(workers_dir, available),
+        );
         bound_foreign.extend(foreign.iter().map(|(_, w)| w.clone()));
         let planned = stand_ins(&foreign, &opts.local_workers);
         if !remote && !planned.is_empty() {
@@ -2032,7 +2060,7 @@ fn serve_args(s: &Serving, edge_keys: &[String]) -> Vec<String> {
 }
 
 /// The session file's record (#3581) of the contexts a `serving` event names.
-fn session_of(serving: &DevEvent) -> crate::dev_inspect::Session {
+fn session_of(serving: &DevEvent, workers_dir: &Path) -> crate::dev_inspect::Session {
     let DevEvent::Serving { contexts } = serving else {
         unreachable!("serving_event builds a Serving event")
     };
@@ -2045,6 +2073,7 @@ fn session_of(serving: &DevEvent) -> crate::dev_inspect::Session {
                     crate::dev_inspect::SessionWorker {
                         context: crate::dev_inspect::context_of_worker(&c.name),
                         url: c.url.clone(),
+                        members: crate::dev_inspect::inspect_members(&workers_dir.join(&c.name)),
                     },
                 )
             })
@@ -2308,6 +2337,61 @@ mod tests {
 
     fn names(v: &[&str]) -> Vec<String> {
         v.iter().map(|s| s.to_string()).collect()
+    }
+
+    fn group_project(tag: &str, manifest: &str) -> std::path::PathBuf {
+        let root =
+            std::env::temp_dir().join(format!("bynk-dev-groups-{tag}-{}", std::process::id()));
+        let _ = std::fs::remove_dir_all(&root);
+        std::fs::create_dir_all(&root).unwrap();
+        std::fs::write(root.join("bynk.toml"), manifest).unwrap();
+        root
+    }
+
+    /// #3562 (G6): `--context` naming a member of a group serves the Worker that holds it
+    /// (dotted or dashed); a Worker's own name, or an unknown one, passes through.
+    #[test]
+    fn a_member_context_serves_the_group_that_holds_it() {
+        let root = group_project(
+            "serve",
+            "[project]\nname = \"p\"\nversion = \"0.1.0\"\n\n[deploy.workers.core]\ncontexts = [\"shop.a\", \"shop.b\"]\n",
+        );
+        let served = groups_serving(
+            &root,
+            &names(&["shop.a", "shop-b", "core", "shop.pay", "nope"]),
+        )
+        .unwrap();
+        assert_eq!(served, names(&["core", "core", "core", "shop.pay", "nope"]));
+        let _ = std::fs::remove_dir_all(&root);
+    }
+
+    #[test]
+    fn a_project_with_no_groups_passes_its_contexts_through() {
+        let root = group_project("none", "[project]\nname = \"p\"\nversion = \"0.1.0\"\n");
+        assert_eq!(
+            groups_serving(&root, &names(&["shop.a"])).unwrap(),
+            names(&["shop.a"])
+        );
+        let _ = std::fs::remove_dir_all(&root);
+    }
+
+    /// #3562 (G6): a Service Binding names its target's *script*, which a renamed group
+    /// is not its directory of: a binding to it is a project Worker, not a foreign one to
+    /// stand in for.
+    #[test]
+    fn a_renamed_groups_script_is_not_a_foreign_worker() {
+        let root = group_project("script", "");
+        let dir = root.join("core");
+        std::fs::create_dir_all(&dir).unwrap();
+        std::fs::write(dir.join("wrangler.toml"), "name = \"core-script\"\n").unwrap();
+        let known = crate::deploy::script_names_of(&root, &names(&["core"]));
+        assert_eq!(known, names(&["core-script"]));
+        let web = "[[services]]\nbinding = \"A\"\nservice = \"core-script\"\n\n[[services]]\nbinding = \"B\"\nservice = \"legacy\"\n";
+        assert_eq!(
+            foreign_services(web, &known),
+            vec![("B".to_string(), "legacy".to_string())]
+        );
+        let _ = std::fs::remove_dir_all(&root);
     }
 
     /// #3478: every served Worker is marked as a development session, and an

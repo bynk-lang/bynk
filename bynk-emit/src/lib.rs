@@ -220,6 +220,11 @@ pub const LOCAL_CALL_KEY: &str = "bynk-local-call-key";
 pub const INSPECT_CALLER: &str = "bynk.dev";
 pub const INSPECT_CALLER_KEY_VAR: &str = "BYNK_CALL_FROM_BYNK__DEV";
 
+/// #3562 (G6): the file a `bynk dev` group build stages beside its entry, naming each
+/// member that hosts an agent and its classes, so `bynk dev inspect` can sign a request
+/// for the member that answers it.
+pub const INSPECT_MEMBERS_FILE: &str = "bynk-inspect.json";
+
 /// The storage layout this emitter writes an agent's state in (#3189, the
 /// retired per-entry-storage track in `design/archive/retired-tracks.md`): 1 is
 /// the wholesale layout, with every collection inline in the one `"state"`
