@@ -96,7 +96,8 @@ Every slice keeps all of these:
    example a `LoweredExpr::Text` variant. The bridge is counted by a probe that can only fall, and
    it is gone when its phase exits.
 4. **No probe moves the wrong way.** Phase 0 makes this mechanical. Until then, a slice that raises
-   `ts_writes`, `TsStmt::raw`, `ts_any`, `emit_abi_shapes` or `wildcard_arms` must say why in its
+   `ts_writes`, `TsStmt::raw`, `ts_any`, `emit_abi_shapes`, `verbatim_sites`, `span_keyed_maps`
+   or `wildcard_arms` must say why in its
    PR description.
 5. **The integration corpus is not thinned before Phase 3.** It is the safety net for Phases 1
    and 2.
@@ -214,7 +215,7 @@ out carries its unit tests with it.
 |---|---:|---:|---:|
 | Gated growth probes | re-baselined (165 rises of `ts_writes`) | ratchets (P0.1) | ratchets |
 | `ts_writes` (bynk-emit + driver) | 1,502 + driver unmeasured | ≤ 40% of the P0.2 baseline | ≤ 20% |
-| `TsStmt::raw` sites | 112 | ≤ 10, each with a stated foreign-text reason | ≤ 5 |
+| Production `TsStmt::raw` sites (emit + driver) | 75 | ≤ 10, each with a stated foreign-text reason | ≤ 5 |
 | `TsExpr` constructions in lowering | 0 | lowering returns `TsExpr` only; `Text` bridge deleted | — |
 | Import-prediction functions | 17 | 0 | 0 |
 | `"any"` fallbacks in lowering | 5 | 0 | 0 |
@@ -227,6 +228,10 @@ out carries its unit tests with it.
 | Files ≥ 5,000 lines | 18 | — | 0 in the back half |
 | Files ≥ 2,000 lines | 50 | — | per Q5 |
 | bynk-emit unit tests per 1k production lines | 7.1 | — | per 3.4's floor |
+
+The `ts_writes` and `TsStmt::raw` targets are measured over bynk-emit and bynk-driver *combined*,
+the scope P0.2 sets. 1B.2 moves `tests_emit` from the driver into bynk-emit, so the move itself
+is neither progress nor regression.
 
 The targets marked "≤ x%" are proposals for the settling review. The rest are structural yes/no.
 

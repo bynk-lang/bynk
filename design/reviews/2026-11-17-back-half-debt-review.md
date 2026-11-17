@@ -1,6 +1,7 @@
 # The back half after seven weeks of features — a technical-debt review
 
-**Reviewed at:** v0.639.1, 17 November 2026 (`e43b4487`)
+**Reviewed at:** v0.639.1, 17 November 2026 (`e43b4487`). Every `file:line` citation refers to
+this commit; the lines will drift as the paydown proceeds, so search for the named symbol.
 **Baseline:** v0.291.0, 1 October 2026 (`76af4893`), the commit the
 [1 October review](2026-10-01-language-implementation-review.md) was taken against
 **Scope:** the back half of the toolchain: `bynk-model`, `bynk-emit` (with its TypeScript runtime),
@@ -80,7 +81,7 @@ Three findings carry the review:
   - `emit_abi_shapes`, the probe guarding ADR 0310's code-generation freeze, went from **1 to 104**.
   - The trend rows in `design/greenfield-status.md` have not been refreshed since **16 October**.
     The table says 356 wildcard arms; the probe reads **747**.
-  - Raw-text statements (`TsStmt::raw`) went from 50 to **112**, and no probe counts them.
+  - Production raw-text statements (`TsStmt::raw`) went from 19 to **75**, and no probe counts them.
 - **Finding 2: most generated TypeScript is still text** (§2).
   - Expression lowering returns `Lowered { pre: Vec<String>, expr: String }`, as it did on
     1 October.
@@ -166,8 +167,9 @@ no manifest). `bynk-ts` and `bynk-model` could opt in after an afternoon's work.
 ### 1.3 What the probes do not see
 
 - **`TsStmt::raw`.** It is a second whole-statement text escape, separate from `Verbatim`.
-  - It has **112** production sites: bynk-emit 52, bynk-driver `tests_emit` 60. On 1 October it
-    had 50.
+  - It has **75** production sites (test modules and comments excluded): bynk-emit 17,
+    bynk-driver 58. On 1 October it had 19, when `tests_emit` still lived in bynk-emit, so the
+    two figures cover the same code.
   - `verbatim_sites` looks only for `TsStmt::verbatim(` and `TsExpr::VerbatimExpr(`, so it
     reports 15.
   - The Worker-group emitter added on 16 November (`workers_group.rs`, #3649) builds its whole
@@ -195,7 +197,7 @@ over the 300-line threshold, the longest being `emit_system_http_support` (1,157
 ### 2.1 Lowering
 
 ```rust
-// bynk-emit/src/emitter/lower.rs:1418
+// bynk-emit/src/emitter/lower.rs:1422
 pub(crate) struct Lowered {
     pub pre: Vec<String>,
     pub expr: String,
@@ -571,12 +573,12 @@ the top-level directory of the primary span.
 
 **Raw-text statements:**
 
-```sh
-git grep -h 'TsStmt::raw' -- bynk-emit/src bynk-driver/src | wc -l
-```
+Count lines containing `TsStmt::raw` in each `bynk-emit/src` and `bynk-driver/src` file, above
+the file's first `#[cfg(test)] mod …` and excluding comment lines, as in the production-lines
+script above. For the 1 October figure, do the same over `git show $OLD:<f>`.
 
-For the 1 October figure, run `git show $OLD:<f> | grep -c 'TsStmt::raw'` over
-`git ls-tree -r --name-only $OLD bynk-emit/src`.
+`git grep -h 'TsStmt::raw' -- bynk-emit/src bynk-driver/src | wc -l` gives 112. That figure
+includes test modules and doc comments, so do not compare it with the production counts.
 
 **Lowering is text:**
 
