@@ -1,1 +1,1 @@
-bynk.deploy.group_cycle the Workers `front`, `shop.c` bind to each other in a cycle: `front` to `shop.c` (`shop.a1` binds to `shop.c`), `shop.c` to `front` (`shop.c` binds to `shop.a2`)
+bynk.deploy.worker_cycle the Workers `front`, `shop.c` bind to each other in a cycle: `front` to `shop.c` (`shop.a1` binds to `shop.c`), `shop.c` to `front` (`shop.c` binds to `shop.a2`)

@@ -136,10 +136,16 @@ wrangler reported it.
   and `B2 -> A2` with the `A`s in one group and the `B`s in another, or `A1 -> C`
   and `C -> A2` with `C` on its own. D2's conclusion, that no two-pass deploy is
   needed, stands **if** the Worker-level graph is acyclic. That is a check-time
-  error, `bynk.deploy.group_cycle`, over the Worker-level graph, naming the Workers
-  and one context edge per hop; it lands before G3 (its own PR), tested for both
-  shapes (group to group, and group to a single context), and G4 does not deploy a
-  group without it.
+  error, `bynk.deploy.worker_cycle`, over the Worker-level graph, for a cycle that
+  **involves a group** (a group is what makes a cycle with no cycle among contexts),
+  naming the Workers and one context edge per hop; it lands before G3, and G4 does
+  not deploy a group without it. A cycle among contexts in no group (a subscriber
+  that also calls its publisher binds back through the events fan-out) is not
+  refused at check time, since `bynk dev` and the tests run it fine, and
+  `bynk deploy` already refuses it before uploading (`OrderError::Cycle`):
+  Cloudflare rejects the upload of a Worker whose binding target does not exist
+  (code 10143, probed on the scratch account), so neither Worker of such a pair can
+  go first.
 
 **Consequences.**
 
@@ -148,8 +154,8 @@ wrangler reported it.
   `--worker`, ledger and facts versions, the `10007` handling) and G6 remove.
 - **Still open, G3:** in-process edges and events between members (an intra-group
   call is a Service Binding to itself today). The merged events fan-out has
-  landed (G3-1); the conformance harness is #3663. The group cycle check
-  (`bynk.deploy.group_cycle`) lands before G3.
+  landed (G3-1), and so has the conformance harness (G3-0). The Worker cycle check
+  (`bynk.deploy.worker_cycle`) lands before G3.
 - **Still open, G5:** moving an agent-owning context into or out of a group is
   refused in v1 (`bynk.deploy.agent_move_refused`); the scratch-account probe
   showed a data-preserving class transfer works with the declarative `exports` map

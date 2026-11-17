@@ -887,7 +887,7 @@ fn groups_may_depend_one_way_but_not_in_a_cycle() {
     write(Some("shop.b1"), None, None, Some("shop.a2"));
     let (ok, out) = build(&root);
     assert!(!ok, "{out}");
-    assert_eq!(out.matches("bynk.deploy.group_cycle").count(), 1, "{out}");
+    assert_eq!(out.matches("bynk.deploy.worker_cycle").count(), 1, "{out}");
     assert!(
         out.contains("`back`, `front`") || out.contains("`front`, `back`"),
         "{out}"
@@ -908,7 +908,7 @@ fn groups_may_depend_one_way_but_not_in_a_cycle() {
     write(Some("shop.b1"), None, Some("shop.a2"), None);
     let (ok, out) = build(&root);
     assert!(!ok, "{out}");
-    assert_eq!(out.matches("bynk.deploy.group_cycle").count(), 1, "{out}");
+    assert_eq!(out.matches("bynk.deploy.worker_cycle").count(), 1, "{out}");
     assert!(
         out.contains("`front` to `shop.b1` (`shop.a1` binds to `shop.b1`)"),
         "{out}"
@@ -1079,5 +1079,173 @@ fn deploy_treats_a_group_as_one_worker() {
     // A context on its own Worker still deploys by `--context`.
     let (ok, alone) = deploy(&["--context", "shop.pay"]);
     assert!(ok && alone.contains("deploy shop-pay"), "{alone}");
+    let _ = fs::remove_dir_all(&root);
+}
+
+/// A cycle between Workers that involves a group is refused at check time,
+/// whatever closes it, once and never beside `consumes_cycle`. One among contexts
+/// in no group is not: it builds, and `deploy` refuses it before uploading.
+#[test]
+fn a_worker_cycle_through_a_group_is_refused_once() {
+    let root =
+        std::env::temp_dir().join(format!("bynk-deploy-worker-cycle-{}", std::process::id()));
+    write_project(&root, "[build]\ntarget = \"workers\"\n");
+
+    // `shop.payment` subscribes to `shop.orders`' event and also calls it: the
+    // publisher's Worker binds to its subscriber for the fan-out, and the
+    // subscriber's to the publisher for the call. No group is involved, so the
+    // project builds (`bynk dev` and the tests run it), and `deploy` refuses it
+    // before uploading, as Cloudflare rejects a binding to a Worker that does not
+    // exist yet (code 10143).
+    fs::write(
+        root.join("src/shop/orders.bynk"),
+        publisher_context("shop.orders", "Placed"),
+    )
+    .unwrap();
+    fs::write(
+        root.join("src/shop/payment.bynk"),
+        "context shop.payment\n\nconsumes shop.orders as P\n\nservice OnPlaced from Events(Placed) {\n\ton event(e: Placed) -> Effect[()] {\n\t\tlet _ <- P.probe_shop_orders()\n\t\tEffect.pure(())\n\t}\n}\n",
+    )
+    .unwrap();
+    let (ok, out) = build(&root);
+    assert!(ok, "an ungrouped cycle builds:\n{out}");
+    assert!(!out.contains("worker_cycle"), "{out}");
+    let dry_run = Command::new(env!("CARGO_BIN_EXE_bynk-under-test"))
+        .args(["deploy", "--dry-run", "--no-install", "--yes"])
+        .arg(&root)
+        .env("CLOUDFLARE_API_TOKEN", "dummy")
+        .env("NO_COLOR", "1")
+        .output()
+        .expect("run bynk");
+    let said = format!(
+        "{}{}",
+        String::from_utf8_lossy(&dry_run.stdout),
+        String::from_utf8_lossy(&dry_run.stderr)
+    );
+    if !said.contains("environment not ready") {
+        assert!(!dry_run.status.success(), "{said}");
+        assert!(
+            said.contains("form a cycle") && said.contains("shop-orders"),
+            "deploy refuses it, naming the Workers:\n{said}"
+        );
+    }
+
+    // The same cycle with the publisher in a group is the check's: the group's
+    // Worker and `shop.payment`'s bind to each other.
+    fs::write(
+        root.join("bynk.toml"),
+        "[build]\ntarget = \"workers\"\n\n[deploy.workers.front]\ncontexts = [\"shop.orders\"]\n",
+    )
+    .unwrap();
+    let (ok, out) = build(&root);
+    assert!(!ok, "{out}");
+    assert_eq!(out.matches("bynk.deploy.worker_cycle").count(), 1, "{out}");
+    assert!(
+        out.contains("`front`") && out.contains("`shop.payment` binds to `shop.orders`"),
+        "{out}"
+    );
+    fs::write(root.join("bynk.toml"), "[build]\ntarget = \"workers\"\n").unwrap();
+
+    // Calling alone, one way, is fine.
+    fs::write(
+        root.join("src/shop/orders.bynk"),
+        calling_context("shop.orders", None, "to_orders"),
+    )
+    .unwrap();
+    fs::write(
+        root.join("src/shop/payment.bynk"),
+        calling_context("shop.payment", Some("shop.orders"), "to_payment"),
+    )
+    .unwrap();
+    let (ok, out) = build(&root);
+    assert!(ok, "a one-way call builds:\n{out}");
+
+    // A cycle through three Workers: front{a1, a2}, a1 -> b1 -> c1 -> a2.
+    fs::remove_file(root.join("src/shop/orders.bynk")).unwrap();
+    fs::remove_file(root.join("src/shop/payment.bynk")).unwrap();
+    fs::write(
+        root.join("bynk.toml"),
+        "[build]\ntarget = \"workers\"\n\n[deploy.workers.front]\ncontexts = [\"shop.a1\", \"shop.a2\"]\n",
+    )
+    .unwrap();
+    for (file, callee) in [
+        ("a1", Some("shop.b1")),
+        ("a2", None),
+        ("b1", Some("shop.c1")),
+        ("c1", Some("shop.a2")),
+    ] {
+        fs::write(
+            root.join(format!("src/shop/{file}.bynk")),
+            calling_context(&format!("shop.{file}"), callee, &format!("to_{file}")),
+        )
+        .unwrap();
+    }
+    let (ok, out) = build(&root);
+    assert!(!ok, "{out}");
+    assert_eq!(out.matches("bynk.deploy.worker_cycle").count(), 1, "{out}");
+    for hop in [
+        "`shop.a1` binds to `shop.b1`",
+        "`shop.b1` binds to `shop.c1`",
+        "`shop.c1` binds to `shop.a2`",
+    ] {
+        assert!(out.contains(hop), "{hop}:\n{out}");
+    }
+
+    // A cycle among the contexts is `consumes_cycle`'s alone.
+    fs::write(root.join("bynk.toml"), "[build]\ntarget = \"workers\"\n").unwrap();
+    fs::write(
+        root.join("src/shop/a2.bynk"),
+        calling_context("shop.a2", Some("shop.a1"), "to_a2"),
+    )
+    .unwrap();
+    fs::write(
+        root.join("src/shop/c1.bynk"),
+        calling_context("shop.c1", Some("shop.a2"), "to_c1"),
+    )
+    .unwrap();
+    let (ok, out) = build(&root);
+    assert!(!ok, "{out}");
+    assert!(out.contains("bynk.context.consumes_cycle"), "{out}");
+    assert_eq!(
+        out.matches("bynk.deploy.worker_cycle").count(),
+        0,
+        "one cycle, one error:\n{out}"
+    );
+
+    // A disjoint cycle through a group beside it is reported at the next build, once
+    // the `consumes` cycle is fixed: the bindings it reads are built only for a
+    // project with no error, so the two never appear together or twice.
+    fs::write(
+        root.join("bynk.toml"),
+        "[build]\ntarget = \"workers\"\n\n[deploy.workers.front]\ncontexts = [\"shop.orders\"]\n",
+    )
+    .unwrap();
+    fs::write(
+        root.join("src/shop/orders.bynk"),
+        publisher_context("shop.orders", "Placed"),
+    )
+    .unwrap();
+    fs::write(
+        root.join("src/shop/payment.bynk"),
+        "context shop.payment\n\nconsumes shop.orders as P\n\nservice OnPlaced from Events(Placed) {\n\ton event(e: Placed) -> Effect[()] {\n\t\tlet _ <- P.probe_shop_orders()\n\t\tEffect.pure(())\n\t}\n}\n",
+    )
+    .unwrap();
+    let (ok, out) = build(&root);
+    assert!(!ok, "{out}");
+    assert!(out.contains("bynk.context.consumes_cycle"), "{out}");
+    assert_eq!(out.matches("bynk.deploy.worker_cycle").count(), 0, "{out}");
+    fs::write(
+        root.join("src/shop/a2.bynk"),
+        calling_context("shop.a2", None, "to_a2"),
+    )
+    .unwrap();
+    let (ok, out) = build(&root);
+    assert!(!ok, "{out}");
+    assert!(!out.contains("bynk.context.consumes_cycle"), "{out}");
+    assert_eq!(out.matches("bynk.deploy.worker_cycle").count(), 1, "{out}");
+    assert!(
+        out.contains("`front`") && out.contains("`shop.payment`"),
+        "{out}"
+    );
     let _ = fs::remove_dir_all(&root);
 }
