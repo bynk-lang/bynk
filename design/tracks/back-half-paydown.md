@@ -1,10 +1,11 @@
 # Back-half paydown — a feature freeze to pay down the code generator, driver and deploy debt
 
-- **Status:** Settling. The spine issue is not yet opened.
-- **The freeze:** the maintainer has paused new feature development on `bynk` from v0.639.1, and
-  the pause is in force now. §2 sets out its proposed terms. Their exact scope (Q1) and the ADR
-  that records them (§10) are still being settled. Until they are, a change that §2 would exclude
-  is held for the maintainer's decision, not built.
+- **Status:** Settled. The §9 questions were closed with the maintainer on 17 November 2026.
+  Phase 0 is complete (P0.1–P0.5; P0.6 was retired into 1B.3). Phase 1 is next. Spine
+  bynk-lang/bynk#3676.
+- **The freeze:** the maintainer paused new feature development on `bynk` from v0.639.1. §2 sets
+  out its terms, as settled by Q1, and the freeze ADR added with this settling records them and
+  the lifting condition.
 - **Evidence:** [`../reviews/2026-11-17-back-half-debt-review.md`](../reviews/2026-11-17-back-half-debt-review.md).
   Section numbers below that start with "review §" refer to it.
 - **Theme:** internal architecture, not language surface. It continues the precedent of
@@ -59,7 +60,8 @@ From v0.639.1 until this track's Phase 1 exit criteria are met (§8):
 **Allowed on `main`:**
 
 - **This track's slices.**
-- **Defect fixes.** Each carries a test that fails without it, ideally at unit level.
+- **Defect fixes.** Each carries a test that fails without it, ideally at unit level. A fix to a
+  documented feature that does not work counts, provided it adds no syntax or API (Q1).
 - **Security fixes and advisories.**
 - **Dependency bumps.**
 - **CI, release and documentation changes.**
@@ -75,6 +77,9 @@ From v0.639.1 until this track's Phase 1 exit criteria are met (§8):
 - new CLI subcommands.
 
 This applies to `vscode-bynk` too, wherever a change would need a new compiler surface.
+Extension work that needs no compiler change, such as polish and fixes, is allowed (Q1). A
+`bynk-std` addition is not allowed, even one that needs no emitter change: one rule is easier to
+hold than a judgement call per PR (Q1).
 
 **Lifting the freeze.** The freeze lifts when Phase 1's exit criteria are met. Phases 2 and 3
 then run alongside resumed feature work. From then on the Phase 0 ratchets hold the line: a
@@ -197,8 +202,16 @@ feature work is frozen, such moves cost no merge conflicts.
   from rendering.
 
 **Ratchet.** P0.5's `module_lines` becomes a ratchet when this phase starts. A file over the
-threshold may not grow, and no file may newly cross it. Proposed threshold: 3,000 lines, falling
-to 2,000 at exit (settling question Q5).
+threshold may not grow, and no file may newly cross it. Settled by Q5:
+
+- the measure is `module_lines`' production lines;
+- no file may newly cross **2,000** lines;
+- a file already over 2,000 gets a recorded ceiling that can only fall, as `fn-length-ceilings.txt`
+  works for functions;
+- the track-exit target is that no back-half file exceeds **3,000** lines.
+
+`bynk-ts/src/printer.rs` is in scope: it is large, but it is the best-tested file in the back
+half, so splitting it is low-risk.
 
 ---
 
@@ -234,7 +247,8 @@ out carries its unit tests with it.
 | `bynk-emit` dev-dependency on `bynk-driver` | yes | no | no |
 | Crates denying wildcard arms | 2 (bynk-ts, bynk-model) | bynk-ts, bynk-model, bynk-emit | + bynk-driver, bynk |
 | Back-half files ≥ 5,000 lines | 6 | — | 0 |
-| Back-half files ≥ 2,000 lines | 20 | — | per Q5 |
+| Back-half files ≥ 3,000 lines (production) | per `module_lines` | — | 0 (Q5) |
+| Files newly crossing 2,000 production lines | — | — | 0, by ratchet (Q5) |
 | bynk-emit unit tests per 1k production lines | 7.1 | — | per 3.4's floor |
 
 The `ts_writes`, `ts_raw_sites` and `ts_text_idents` targets are measured over bynk-emit and
@@ -249,27 +263,54 @@ The targets marked "≤ x%" are proposals for the settling review. The rest are 
 
 ---
 
-## 9. Settling questions
+## 9. Settling questions (all resolved)
 
-- **Q1. Freeze scope.** Is §2's list right? In particular:
-  - Should fixes to *documented-but-broken* features count as defects? (Proposed: yes.)
-  - Should `bynk-std` additions that need no emitter change be allowed? (Proposed: no, for
-    simplicity.)
-- **Q2. Golden churn in 1A.** Is "layout-only, proven by `tsc_verify` plus run fixtures" enough? Or
-  should 1A first make the printer reproduce today's hand formatting, so that goldens do not move
-  at all? (Proposed: accept layout-only diffs. Reproducing hand formatting would pin the debt in
-  place.)
-- **Q3. Where test generation lives.** A `bynk-emit::testgen` module, or a new `bynk-testgen`
-  crate? (Proposed: a module first. Promote it to a crate only if build times argue for it.)
-- **Q4. Wrangler or REST for resource operations.** Moving everything to REST gives one
-  credential, typed errors and no matching on error text. But it re-implements what wrangler does,
-  and diverges from the documented `wrangler login` flow. (Open. 1D.3's trait makes the decision
-  reversible.)
-- **Q5. The module-size threshold.** 3,000 lines falling to 2,000, or a different measure, such as
-  items per module?
-- **Q6. Corpus-thinning criteria for 3.3.** Who decides that a fixture's assertion is "made by a
-  unit test", and how is it recorded? (Proposed: the retiring PR names the unit test per fixture.)
-- **Q7. ADR posture.** Which of §10's decisions need an ADR before slicing starts?
+Closed with the maintainer on 17 November 2026.
+
+- **Q1. Freeze scope.** §2 stands as written, with three clarifications, now written into §2:
+  - a fix to a documented feature that does not work is a defect fix, provided it adds no syntax
+    or API;
+  - no `bynk-std` additions, even ones that need no emitter change;
+  - `vscode-bynk` work that needs no compiler change is allowed.
+- **Q2. Golden churn in 1A.** Layout-only golden diffs are accepted. Each 1A PR states how many
+  goldens changed, shows representative diffs, and keeps `tsc_verify` and the run fixtures
+  unchanged and green. 1A does not first make the printer reproduce today's hand formatting:
+  that would pin the string-built layout in the goldens. Each 1A slice covers one expression
+  family, so its golden diff stays reviewable.
+- **Q3. Where test generation lives.** A `bynk-emit::testgen` module. A new crate would add a
+  publish-list entry, a version and a dependency edge for code only the emitter calls. Promote it
+  to a crate only if compile times measurably need it.
+- **Q4. Wrangler or REST for resource operations.** A deliberate hybrid for this track, with the
+  boundary recorded by an ADR when 1D.3 lands:
+  - **Wrangler** keeps building and running code: `deploy` (it bundles npm dependencies with
+    esbuild before uploading; the emitted `wrangler.toml` sets no `no_bundle`), `dev` (local
+    workerd), `tail`, D1 migrations (`wrangler d1 migrations apply` tracks applied migrations in
+    its own table) and `rollback`.
+  - **REST** takes creating, reading and deleting account resources (KV, D1 databases, R2,
+    queues, Vectorize, secrets, triggers, and listing deployments), behind 1D.3's client trait,
+    one kind at a time, starting with KV. This retires the matching on wrangler's error text,
+    gives a fake without on-disk shell scripts, and centralises retries and pagination.
+  - **Credentials.** `wrangler login` keeps working for everything wrangler still does. Resource
+    management requires `CLOUDFLARE_API_TOKEN`, and `bynk doctor` says so up front rather than
+    leaving it to be found mid-deploy.
+  - The longer-term direction this boundary leaves room for is recorded in §12.
+- **Q5. The module-size threshold.** A ratchet on `module_lines` production lines: no file may
+  newly cross 2,000 lines; existing files over 2,000 get ceilings that can only fall; the
+  track-exit target is no back-half file over 3,000. Written into §6 and §8.
+- **Q6. Corpus-thinning criteria for 3.3.** A fixture is retired only when all three hold:
+  1. the retiring PR names the unit test that now makes the same assertion;
+  2. the `diagnostic_coverage` gate does not move, so every diagnostic code stays asserted;
+  3. the fixture is not a run fixture or a `tsc_verify` golden, which stay as end-to-end
+     coverage.
+
+  The `fixture_kinds` trend row shows progress.
+- **Q7. ADR posture.**
+  - The freeze and its lifting condition: now, with this settling, because the freeze is already
+    in force.
+  - Tree-native lowering: with the first 1A slice.
+  - Where test generation lives (Q3): with 1B.2.
+  - The wrangler/REST boundary (Q4): with 1D.3.
+  - The growth ratchet: already recorded, with P0.1.
 
 ---
 
@@ -294,3 +335,26 @@ Numbers are assigned at merge by the stamp, as usual.
 - **No new deploy resource kinds, targets or protocols** during the freeze, even ones that 1D.1
   would make easy.
 - **No incremental-compilation scheduler** (R3.15 remains deferred).
+
+---
+
+## 12. Beyond this track
+
+Recorded so that Phase 1 does not close off a direction the maintainer is considering. None of
+this is built under this track or during the freeze.
+
+- **First-party bindings carry their platform-integration code** as well as their runtime code.
+  1D.1's `ResourceKind` is shaped for that move: each kind takes what it needs through the trait
+  and reaches into no CLI internals. A later track could then let a first-party binding supply its
+  own kind, so adding a resource kind becomes a binding change rather than a CLI change. 1D.3's
+  REST client is what makes this possible, since a binding can describe typed API calls but not
+  wrangler invocations.
+- **bynk owns a bundling step.** `wrangler deploy` and `wrangler dev` currently bundle for us.
+  A bynk-owned bundle (emitted TypeScript stripped by `bynk-strip`, plus npm dependencies) is the
+  hinge for the two moves below.
+- **Miniflare for `bynk dev`.** It gives programmatic binding configuration, faster starts, and
+  no `npx wrangler` fetch at dev time. It depends on the bundling step.
+- **REST script upload for `bynk deploy`.** It makes wrangler optional. It also depends on the
+  bundling step.
+
+That later track's ADRs would supersede Q4's interim boundary.
