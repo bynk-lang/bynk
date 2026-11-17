@@ -1357,6 +1357,25 @@ fn lower_const_literal_raw(e: &Expr) -> Option<String> {
     }
 }
 
+/// The text of a unary operator applied to its operand's lowered `inner`.
+///
+/// A negated negation (`- -x`, `- -5`) would otherwise splice to `--x`, which
+/// TypeScript reads as a pre-decrement (or, on a literal, a syntax error), so a
+/// `-` operand whose text begins with `-` is bracketed, as the `bynk_ts`
+/// printer does for `TsUnaryOp::Neg`: `-(-x)`.
+fn unary_text(op: UnaryOp, inner: &str) -> String {
+    let sym = match op {
+        UnaryOp::Neg => "-",
+        UnaryOp::Not => "!",
+    };
+    let (open, close) = if op == UnaryOp::Neg && inner.starts_with('-') {
+        ("(", ")")
+    } else {
+        ("", "")
+    };
+    format!("{sym}{open}{inner}{close}")
+}
+
 /// A literal's data, destructured from its `ExprKind` by `lower_expr`'s own
 /// arms, so [`Lit::lower`] matches an exhaustive type with no catch-all.
 enum Lit<'a> {
@@ -1548,9 +1567,9 @@ fn node_or_text(
 /// `-x` / `!x`: a `Unary` node (the printer brackets the operand), or today's
 /// `{sym}{operand}` text.
 fn unary_op(op: UnaryOp, child: LoweredExpr) -> Built {
-    let (ts_op, sym) = match op {
-        UnaryOp::Neg => (bynk_ts::TsUnaryOp::Neg, "-"),
-        UnaryOp::Not => (bynk_ts::TsUnaryOp::Not, "!"),
+    let ts_op = match op {
+        UnaryOp::Neg => bynk_ts::TsUnaryOp::Neg,
+        UnaryOp::Not => bynk_ts::TsUnaryOp::Not,
     };
     node_or_text(
         vec![child],
@@ -1558,16 +1577,9 @@ fn unary_op(op: UnaryOp, child: LoweredExpr) -> Built {
             op: ts_op,
             expr: Box::new(one(c)),
         },
-        |c| {
-            let operand = one(c);
-            // `- -x` must not print as the decrement `--x`: bracket a negated
-            // negation, as the node printer does.
-            if sym == "-" && operand.starts_with('-') {
-                format!("-({operand})")
-            } else {
-                format!("{sym}{operand}")
-            }
-        },
+        // The text side shares `unary_text` (#3698), which brackets a negated
+        // negation so `- -x` never prints as the decrement `--x`.
+        |c| unary_text(op, &one(c)),
     )
 }
 
@@ -11542,6 +11554,34 @@ fn minus_neg() -> Int { 5 - -3 }
             ("o", "-(-(-x))"),
         ] {
             assert_eq!(returned(&ts, name), want, "{name}");
+        }
+    }
+
+    #[test]
+    fn a_negated_negation_never_lowers_to_a_decrement() {
+        // `- -x` must not splice to `--x` (a TS pre-decrement) nor `- -5` to
+        // `--5` (a TS syntax error): the operand is bracketed, `-(-x)`.
+        let ts = crate::testkit::emit_source(
+            r#"
+commons negneg
+
+fn twice(x: Int) -> Int { - -x }
+fn lit() -> Int { - -5 }
+fn triple(x: Int) -> Int { - - -x }
+fn paren(x: Int) -> Int { -(-x) }
+fn minus(x: Int) -> Int { 5 - - -x }
+"#,
+        );
+        for (name, want) in [
+            ("twice", "-(-x)"),
+            ("lit", "-(-5)"),
+            ("triple", "-(-(-x))"),
+            ("paren", "-(-x)"),
+            ("minus", "5 - -(-x)"),
+        ] {
+            let got = returned(&ts, name);
+            assert_eq!(got, want, "{name}");
+            assert!(!got.contains("--"), "{name}: `--` in {got}");
         }
     }
 

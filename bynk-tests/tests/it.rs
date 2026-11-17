@@ -393,6 +393,8 @@ mod system {
     mod multi_actor_sum;
     #[path = "mutate_behaviour.rs"]
     mod mutate_behaviour;
+    #[path = "negated_negation_behaviour.rs"]
+    mod negated_negation_behaviour;
     #[path = "observation_behaviour.rs"]
     mod observation_behaviour;
     #[path = "oidc_auth.rs"]
