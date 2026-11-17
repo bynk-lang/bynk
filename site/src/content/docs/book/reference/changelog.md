@@ -28,6 +28,7 @@ per-commit history. While Bynk is pre-1.0, increments may change behaviour.
 
 | Version | Highlights |
 |---|---|
+| **v0.639.1** | `bynk deploy` refuses to put a context that hosts agents on a different Worker script than it was last deployed to (into or out of a `[deploy.workers.<key>]` group, between groups, or after a group is renamed or re-keyed), since its agents' state would start empty; `--accept-fresh-agent <context>` starts it fresh and the old script is then reported as holding agent data (#3562, G5) |
 | **v0.639.0** | `bynk dev` serves a `[deploy.workers.<key>]` group as one Worker on one port (`--context` naming a member serves the whole group), and `bynk dev inspect` lists and reads the agents of every member; `bynk.deploy.worker_groups_unsupported` is removed (#3562, G6) |
 | **v0.638.1** | A `[deploy.workers.<key>]` group's calls are signed and verified under keys named for its member contexts, so a group can call across an edge and its members can call each other once deployed or run under `bynk dev` (#3562, G4-4) |
 | **v0.638.0** | A call between two members of a `[deploy.workers]` group stays inside the Worker instead of crossing a Service Binding to itself; it is the same signed, contract-checked, admitted request, so values are copied, a callee's fault is the same `CalleeFaulted` and a refusal the same refusal (#3562, G3-2) |
