@@ -2013,7 +2013,7 @@ fn end_presence(
     lock: &DeployLock,
     environment: &str,
 ) -> Presence {
-    let held: Vec<Presence> = keys
+    let held: Vec<(&String, Presence)> = keys
         .iter()
         .map(|key| {
             let p = presence_of(
@@ -2021,17 +2021,29 @@ fn end_presence(
                 listed[worker].as_ref(),
                 !lock.is_deployed(environment, worker),
             );
-            // #2004 review: name the Workers whose answer could not be read, since the
-            // decision counts them as holding the key.
-            if p == Presence::Unknown {
-                eprint!(
-                    "{}",
-                    unknown_edge_key_notice(environment, worker, key, edge)
-                );
-            }
-            p
+            (key, p)
         })
         .collect();
+    // #2004 review: name the Workers whose answer could not be read, since the
+    // decision counts them as holding the key. One notice per end, naming its keys.
+    let unknown: Vec<&str> = held
+        .iter()
+        .filter(|(_, p)| *p == Presence::Unknown)
+        .map(|(key, _)| key.as_str())
+        .collect();
+    if !unknown.is_empty() {
+        eprint!(
+            "{}",
+            unknown_edge_key_notice(environment, worker, &unknown.join(", "), edge)
+        );
+    }
+    combine_presence(held.iter().map(|(_, p)| *p))
+}
+
+/// An end holds its key when it holds every name: one name absent makes it absent (it is
+/// keyed afresh), else one unread makes it unknown, else it holds it.
+fn combine_presence(held: impl IntoIterator<Item = Presence>) -> Presence {
+    let held: Vec<Presence> = held.into_iter().collect();
     if held.contains(&Presence::Absent) {
         Presence::Absent
     } else if held.contains(&Presence::Unknown) {
@@ -5316,6 +5328,19 @@ queue = "jobs"
             Some(("shop-cart", "KV")),
             "recorded under another environment is unrecorded here"
         );
+    }
+
+    /// #3562: a group's Worker holds one key name per member, and an end holding only
+    /// some of them is keyed afresh (absent), never kept.
+    #[test]
+    fn an_end_holding_only_some_of_its_keys_is_keyed_afresh() {
+        use Presence::{Absent, Present, Unknown};
+        assert_eq!(combine_presence([Present, Present]), Present);
+        assert_eq!(combine_presence([Present, Absent]), Absent);
+        assert_eq!(combine_presence([Absent, Present]), Absent);
+        assert_eq!(combine_presence([Present, Unknown]), Unknown);
+        assert_eq!(combine_presence([Unknown, Absent]), Absent);
+        assert_eq!(combine_presence([]), Present);
     }
 
     #[test]

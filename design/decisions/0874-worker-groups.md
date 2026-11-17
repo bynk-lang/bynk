@@ -124,7 +124,7 @@ failure is followed by `wrangler triggers deploy`, and a failure of that is the
 deploy's failure. If the account cannot be asked (no API token), the failure stays as
 wrangler reported it.
 
-Edge keys are named per member context (the runtime signs as the calling context): an edge between Workers is one secret, held by the callee as `BYNK_CALL_FROM_<m>` for each member `m` of the caller and by the caller as `BYNK_CALL_TO_<m>` for each member of the callee, and a group holds both for each of its own members. The members of a Worker share one `env`, so a key held for the Worker is held by all of them: within a Worker, a caller's identity between members is by convention, not cryptographically separable (any member could sign as another); across Workers it is per Worker edge.
+Edge keys are named per member context (the runtime signs as the calling context): an edge between Workers is one secret, held by the callee as `BYNK_CALL_FROM_<m>` for each member `m` of the caller and by the caller as `BYNK_CALL_TO_<m>` for each member of the callee, and a group holds both for each of its own members. The members of a Worker share one `env`, so a key held for the Worker is held by all of them: within a Worker, a caller's identity between members is by convention, not cryptographically separable (any member could sign as another); across Workers it is per Worker edge. A group deployed before edge keys were named per member holds none of the new names, so its edges are keyed afresh by the next whole-project deploy (a `--worker` or `--context` run is refused until then), and the old Worker-named secrets stay on its peers.
 
 *D8: amendments.*
 

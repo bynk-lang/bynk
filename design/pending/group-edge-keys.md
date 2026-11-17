@@ -18,3 +18,8 @@ deploy-order edge). An end holds the edge's key only if it holds every name, so 
 partly keyed Worker is keyed afresh. A Worker that is one context is named as before.
 ADR 0874 gains D7's note that the keys are per member and shared among a Worker's
 members, who share one `env` anyway.
+
+Upgrading a group already deployed: it holds none of the new names, so its edges are
+keyed afresh. A `--worker` or `--context` run is refused ("needs a new key on both
+Workers") until the whole project has been deployed once, and the old
+`BYNK_CALL_FROM_<key>` / `BYNK_CALL_TO_<key>` secrets stay on the Workers it calls.
