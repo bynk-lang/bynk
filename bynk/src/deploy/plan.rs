@@ -65,6 +65,9 @@ pub struct DeployOptions {
     /// is compatible for them. Records the older contracts in
     /// `bynk.contracts.lock` and rebuilds, so the callee answers them.
     pub accept_compatible_skew: bool,
+    /// #3562 (G5): `--accept-fresh-agent <context>` (repeatable): a context with agents that
+    /// moves to another Worker script starts fresh, its old state staying in the old script.
+    pub accept_fresh_agent: Vec<String>,
     pub wrangler_args: Vec<String>,
 }
 
@@ -1119,6 +1122,12 @@ pub fn run(
         }
     };
 
+    // #3562 (G5): a context with agent state that would change scripts is refused before
+    // anything is pushed, `--dry-run` included.
+    let Some(moves) = checked_agent_moves(&lock, opts, &resources, &order, &groups) else {
+        return ExitCode::FAILURE;
+    };
+
     // I4 (#1970, track §11 Q6): a declared foreign caller's pin. Refused
     // before the plan, `--dry-run` included, as a Bynk caller's skew is: the
     // foreign caller's client would be refused on every call.
@@ -1441,6 +1450,7 @@ pub fn run(
                         );
                     }
                 }
+                record_fresh_moves(&mut lock, opts, worker, &moves);
                 if let Err(e) = write_lock(&lock_path, &lock) {
                     eprint!(
                         "{}",
@@ -2420,6 +2430,10 @@ pub(crate) fn plan_report(plan: &Plan<'_>, format: DeployFormat) -> String {
                         contexts.join(", ")
                     )),
                     None => out.push_str(&format!("orphan worker {worker}\n")),
+                }
+                // #3562 (G5): it is not empty: it still holds an agent's state.
+                if let Some(state) = plan.shown_orphans.worker_agent_state.get(worker) {
+                    out.push_str(&agent_state_note(worker, state));
                 }
             }
             for queue in &plan.shown_orphans.queues {

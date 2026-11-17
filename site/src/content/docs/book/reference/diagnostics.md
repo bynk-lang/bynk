@@ -7,7 +7,7 @@ title: Diagnostic index
 
 Every diagnostic code the compiler can emit, with a one-line summary of the cause, grouped by category. For step-by-step cause-and-fix guidance on the most common ones, see the [troubleshooting guides](/book/troubleshooting/). For a code with a curated explanation, `bynk explain <code>` prints it in a terminal, and in VS Code the diagnostic's **Explain** quick fix (or **Bynk: Explain Diagnostic Code…**) shows the same text in a panel, offline.
 
-There are **893** codes in total.
+There are **894** codes in total.
 
 ## Agents
 
@@ -411,6 +411,7 @@ There are **893** codes in total.
 | [`bynk.d1.sql_invalid`](/book/reference/bynk-capabilities/#sql-checked-against-the-migrations) | A literal D1 statement does not prepare against the schema the binding's migrations build: a syntax error, or an unknown table or column. |  | — |
 | [`bynk.d1.sql_param_count`](/book/reference/bynk-capabilities/#sql-checked-against-the-migrations) | A literal D1 statement uses a different number of bound parameters (`?N`) than the list literal passed with it holds. |  | — |
 | [`bynk.dependency.path_outside_root`](/book/guides/projects-build-and-deployment/share-code-between-projects/#what-the-checks-catch) | A path dependency declared by a dependency resolves outside the workspace; a dependency's own path dependencies are honoured only between members of one workspace. |  | — |
+| `bynk.deploy.agent_move_refused` | `bynk deploy` refused to put a context that hosts agents on a different Worker script than it was last deployed to (into or out of a `[deploy.workers.<key>]` group, between groups, or after a group is renamed or re-keyed): an agent's state belongs to its script, so it would start empty and the old data would stay behind. Start it fresh deliberately with `--accept-fresh-agent <context>`, which a move out of a group that stays cannot use. |  | — |
 | `bynk.deploy.asset_path_conflict` | Two members of one `[deploy.workers.<key>]` group serve a fixed asset path (`at "/…"`) from different files, or one that would be a folder of the other; a group has one assets directory, so each fixed path names one file. |  | — |
 | `bynk.deploy.binding_collision` | Two members of one `[deploy.workers.<key>]` group declare different bindings under the same name; members share one `wrangler.toml`, so identical declarations share a binding and differing ones are refused. |  | — |
 | `bynk.deploy.context_in_two_groups` | A context is listed in two `[deploy.workers.<key>]` groups; a context is deployed in one Worker only. |  | — |

@@ -328,6 +328,15 @@ pub enum Command {
         /// for this.
         #[arg(long = "confirm-delete", value_name = "CONTEXT.CLASS")]
         confirm_delete: Vec<String>,
+        /// Let this context start with fresh agent state on another Worker script
+        /// than the one it was last deployed to (into or out of a
+        /// `[deploy.workers.<key>]` group, or after a group is renamed or re-keyed).
+        /// An agent's state belongs to its script, so without this such a move is
+        /// refused (`bynk.deploy.agent_move_refused`); with it the old state stays
+        /// in the old script, which the plan then reports as holding data.
+        /// Repeatable; each context is named, never a blanket.
+        #[arg(long = "accept-fresh-agent", value_name = "CONTEXT")]
+        accept_fresh_agent: Vec<String>,
         /// With `--context`: deploy a callee ahead of live callers still on an
         /// older contract, when every such change is compatible for them. The
         /// older contracts are recorded in `bynk.contracts.lock` (commit it),

@@ -560,6 +560,11 @@ pub(crate) struct Resources {
     /// #3562: the contexts of a `[deploy.workers]` group's Worker, in the manifest's
     /// order; empty for a context on its own Worker.
     pub(crate) members: Vec<String>,
+    /// #3562 (G5): each context of this Worker that hosts agents, with its agent classes: a
+    /// class's state belongs to the Worker's script, so a context moving to another script
+    /// leaves its agents' state behind. A group's comes from its `bynk-agents.json`; a
+    /// Worker that is one context owns its own durable-object classes.
+    pub(crate) agent_contexts: BTreeMap<String, Vec<String>>,
     /// The workers this one binds to — the edges the deploy order respects.
     /// Adapters are already excluded upstream (they are not Workers), and
     /// foreign Workers are in [`Resources::foreign_services`], so every edge
@@ -719,6 +724,7 @@ impl Default for Resources {
     fn default() -> Self {
         Self {
             members: Vec::new(),
+            agent_contexts: BTreeMap::new(),
             binds_to: Vec::new(),
             foreign_services: Vec::new(),
             queues: Vec::new(),
@@ -1056,6 +1062,7 @@ fn read_resources(config: &Path, project_workers: &[String]) -> Result<Resources
     hyperdrive.sort_by(|a, b| a.binding.cmp(&b.binding));
     Ok(Resources {
         members: Vec::new(),
+        agent_contexts: BTreeMap::new(),
         binds_to: binds_to.into_iter().map(|s| s.service).collect(),
         foreign_services: foreign
             .into_iter()
@@ -1127,6 +1134,9 @@ pub(crate) fn project_resources(
     for worker in workers {
         let mut resources = read_resources(&workers_dir.join(worker).join("wrangler.toml"), &known)
             .map_err(|e| format!("could not read the configuration for `{worker}`: {e}"))?;
+        resources.agent_contexts =
+            read_agent_contexts(&workers_dir.join(worker), worker, &resources)
+                .map_err(|e| format!("could not read the agent classes of `{worker}`: {e}"))?;
         resources.binds_to = resources
             .binds_to
             .into_iter()
@@ -1159,6 +1169,39 @@ pub(crate) fn project_resources_for(
             .unwrap_or_default();
     }
     Ok(all)
+}
+
+/// #3562 (G5): the contexts of one Worker that host agents, with their classes. A group
+/// stages `bynk-agents.json`; a Worker that is one context owns the durable-object classes
+/// its `exports` declare (not the events fan-out or the dev inspection registry, which hold
+/// no agent state).
+fn read_agent_contexts(
+    dir: &Path,
+    worker: &str,
+    resources: &Resources,
+) -> Result<BTreeMap<String, Vec<String>>, String> {
+    #[derive(Deserialize)]
+    struct File {
+        agents: BTreeMap<String, Vec<String>>,
+    }
+    // A manifest that is there but does not read is an error: this is a data-loss guard, so it
+    // must not fall silent.
+    if let Ok(text) = std::fs::read_to_string(dir.join(bynk_emit::AGENTS_MANIFEST)) {
+        return serde_json::from_str::<File>(&text)
+            .map(|f| f.agents)
+            .map_err(|e| format!("{}: {e}", bynk_emit::AGENTS_MANIFEST));
+    }
+    let own: Vec<String> = resources
+        .durable_objects
+        .iter()
+        .map(|d| d.class.clone())
+        .filter(|c| !c.starts_with("__") && c != "BynkInspectRegistry")
+        .collect();
+    Ok(if own.is_empty() {
+        BTreeMap::new()
+    } else {
+        BTreeMap::from([(super::secrets::context_of(worker), own)])
+    })
 }
 
 /// Each Worker's script name (`name` in its `wrangler.toml`, else its directory)
@@ -3540,5 +3583,26 @@ service = "legacy-billing"
             crate::deploy::graph::deploy_order(&workers, &graph).unwrap(),
             ["pay", "core", "odd", "web"]
         );
+    }
+
+    /// #3562 (G5): the agent-move guard reads a group's `bynk-agents.json`; one that is there but
+    /// unreadable is an error, never an empty answer that turns the guard off.
+    #[test]
+    fn a_malformed_agents_manifest_is_an_error() {
+        let dir = std::env::temp_dir().join(format!("bynk-agents-manifest-{}", std::process::id()));
+        let _ = std::fs::remove_dir_all(&dir);
+        std::fs::create_dir_all(&dir).unwrap();
+        let resources = Resources::default();
+        std::fs::write(dir.join(bynk_emit::AGENTS_MANIFEST), "{ not json").unwrap();
+        let err = read_agent_contexts(&dir, "core", &resources).unwrap_err();
+        assert!(err.contains("bynk-agents.json"), "{err}");
+        std::fs::write(
+            dir.join(bynk_emit::AGENTS_MANIFEST),
+            r#"{"agents":{"shop.orders":["Cart"]}}"#,
+        )
+        .unwrap();
+        let read = read_agent_contexts(&dir, "core", &resources).unwrap();
+        assert_eq!(read["shop.orders"], ["Cart"]);
+        let _ = std::fs::remove_dir_all(&dir);
     }
 }

@@ -115,6 +115,7 @@ fn run() -> ExitCode {
             force,
             prune,
             confirm_delete,
+            accept_fresh_agent,
             accept_compatible_skew,
             wrangler_args,
         } => {
@@ -136,6 +137,7 @@ fn run() -> ExitCode {
                     force,
                     prune,
                     confirm_delete,
+                    accept_fresh_agent,
                     accept_compatible_skew,
                     wrangler_args,
                 },

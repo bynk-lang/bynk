@@ -225,6 +225,10 @@ pub const INSPECT_CALLER_KEY_VAR: &str = "BYNK_CALL_FROM_BYNK__DEV";
 /// for the member that answers it.
 pub const INSPECT_MEMBERS_FILE: &str = "bynk-inspect.json";
 
+/// #3562 (G5): the file every Worker that hosts an agent stages beside its entry, naming each
+/// context and the agent classes it owns, which `bynk deploy` reads to guard a move.
+pub const AGENTS_MANIFEST: &str = "bynk-agents.json";
+
 /// The storage layout this emitter writes an agent's state in (#3189, the
 /// retired per-entry-storage track in `design/archive/retired-tracks.md`): 1 is
 /// the wholesale layout, with every collection inline in the one `"state"`

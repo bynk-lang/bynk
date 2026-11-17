@@ -747,6 +747,11 @@ order. `bynk revert --worker <key>` rolls the group back as one script, every me
 together. `bynk dev` serves a group as one Worker on one port; `--context` naming a
 member serves the whole group that holds it.
 
+A context that hosts agents keeps its agents' state with its Worker's script, so
+moving it into or out of a group, between groups, or renaming or re-keying its group
+is refused by `bynk deploy` (`bynk.deploy.agent_move_refused`); `--accept-fresh-agent
+<context>` starts it fresh and leaves the old state in the old script.
+
 ### Acknowledging a remote-only binding
 
 Some bindings have no local simulation: under `bynk dev`, a call to Workers AI
