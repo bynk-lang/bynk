@@ -139,6 +139,7 @@ binding model has one compose path to serve.
 | **1A.fallback** | One policy for a missing checker fact: an internal-compiler-error diagnostic, never `any` and never `undefined`. Remove the `"any"` fallbacks. |
 | **1A.resolve** | The checker records the resolved callee and store kind on the typed tree. Emit stops comparing names against string literals (for example `cap == "Idempotency"`, the store-head match in `emit.rs`). |
 | **1A.state** | Remove the two `thread_local!`s (`FAULT_SOURCE`, `type_renames::SPELLINGS`) by passing module context explicitly. |
+| **1A.lints** | Bring `bynk-emit` to zero wildcard arms (192 at v0.639.1, review §1.2) and opt it into `[lints] workspace = true`, which is a Phase 1 exit criterion. Its per-crate count is ratcheted from P0.4 onward. Each 1A slice removes the arms in the code it rewrites; this slice owns whatever remains, chiefly over `Ty`, `BodyMode` and `TypeRef` outside lowering. |
 
 ### 1B. One compose model; code generation out of the driver (review §2.3, §3)
 
