@@ -82,6 +82,9 @@ Three findings carry the review:
   - The trend rows in `design/greenfield-status.md` have not been refreshed since **16 October**.
     The table says 356 wildcard arms; the probe reads **747**.
   - Production raw-text statements (`TsStmt::raw`) went from 19 to **75**, and no probe counts them.
+
+    > **Correction (17 November 2026, #3681):** the corrected figures are 36 to 98, not 19 to
+    > 75; see the correction in §1.3.
 - **Finding 2: most generated TypeScript is still text** (§2).
   - Expression lowering returns `Lowered { pre: Vec<String>, expr: String }`, as it did on
     1 October.
@@ -179,6 +182,20 @@ no manifest). `bynk-ts` and `bynk-model` could opt in after an afternoon's work.
   arbitrary type text.
 - **`bynk-driver/src/project/tests_emit/`.** This is 12.6k lines that generate the test-harness
   TypeScript. `ts_writes` and `verbatim_*` scan `bynk-emit/src` only, so none of it is counted.
+
+> **Correction (17 November 2026, #3681):** the third bullet above is wrong. `ts_writes`,
+> `ts_any`, `verbatim_origins` and `verbatim_sites` have read `codegen_family_files`, that is
+> `bynk-emit/src` plus `bynk-driver/src/project{.rs,/**}` (including `tests_emit/`), since
+> crate-hygiene D1 (#2982). The 12.6k lines were counted. The genuine gap was the two escapes
+> no probe counted at all: `TsStmt::raw` and string-carrying `TsExpr::Ident`. Both are now gated
+> growth probes (`ts_raw_sites`, `ts_text_idents`). Measured with those probes' scanner, the
+> `TsStmt::raw` reading is 99 on 17 November (bynk-emit 41, bynk-driver 58). The review's
+> "19 to 75" also undercounted. Its method stopped at a file's *first* `#[cfg(test)] mod`
+> block, and several `bynk-emit` files have small inline test modules mid-file (`emit.rs` at
+> line 1520, `serialisation.rs` at 413). A block-aware recount of production `TsStmt::raw(`
+> over `bynk-emit/src` plus `bynk-driver/src/project/**` gives **36** at `76af4893` (1 October)
+> and **98** at `e43b4487` (this review's commit: bynk-emit 40, bynk-driver 58), so the
+> corrected growth is 36 to 98, not 19 to 75. The original text is kept as written.
 
 ### 1.4 The ratchet that works
 
@@ -491,6 +508,10 @@ The sequence, freeze policy and exit criteria are in
 1. **Make the gauges hold** (§1).
    - Turn the growth-type gated probes into ratchets that can only go down.
    - Count `TsStmt::raw`, and widen the TS-writing probes to `bynk-driver`.
+
+     > **Correction (17 November 2026, #3681):** the probes already scan `bynk-driver`'s
+     > `project/**` (see the correction in §1.3). Only the counting of `TsStmt::raw` and
+     > string-carrying `Ident` was missing.
    - Refresh the trend rows at stamp time.
    - Opt `bynk-ts` and `bynk-model` into the workspace lints.
 2. **Make lowering typed** (§2.1).
@@ -579,6 +600,10 @@ script above. For the 1 October figure, do the same over `git show $OLD:<f>`.
 
 `git grep -h 'TsStmt::raw' -- bynk-emit/src bynk-driver/src | wc -l` gives 112. That figure
 includes test modules and doc comments, so do not compare it with the production counts.
+
+> **Correction (17 November 2026, #3681):** the method above stops at a file's *first*
+> `#[cfg(test)] mod`, so it undercounts where a file has a small inline test module mid-file.
+> See the correction in §1.3 for the corrected 36 and 98.
 
 **Lowering is text:**
 

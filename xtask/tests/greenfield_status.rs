@@ -1,6 +1,6 @@
 //! Drift guard: `design/greenfield-status.md` matches a fresh probe run.
 //!
-//! Only the nineteen gated (zero/closure/existence) probes are diffed — `wildcard_arms`,
+//! Only the twenty-one gated (zero/closure/existence) probes are diffed — `wildcard_arms`,
 //! `keep_in_sync`, `test_density`, `fixture_kinds`, `keystroke_latency` are trend
 //! probes, recomputed and printed by `cargo xtask greenfield-status` but never gated
 //! here (#999 Decision D): they move on nearly any ordinary Rust PR (or, for
@@ -9,7 +9,7 @@
 //! routine work.
 //!
 //! This runs under `cargo nextest run --workspace` (the main `test` job, for any
-//! Rust-touching PR — fifteen of the nineteen probes read Rust source) and under
+//! Rust-touching PR — seventeen of the twenty-one probes read Rust source) and under
 //! `cargo test -p xtask` (the `drift` job, for the pending/decisions-only PRs the
 //! `rust`-filtered `test` job skips). A `drift`-job *step* alone would have missed the
 //! former; a `#[test]` here rides both paths with no new CI wiring.

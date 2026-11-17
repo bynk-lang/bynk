@@ -14,11 +14,11 @@
 //! crate-hygiene track's M-3 ratchet, `model_readers_beyond_emit` (B1, #2939), and its H-3 gate,
 //! `unused_deps` (A4, #2976).
 //!
-//! **Nineteen are gated**, committed and diffed: `workspace_lints`, `fs_below_driver`,
+//! **Twenty-one are gated**, committed and diffed: `workspace_lints`, `fs_below_driver`,
 //! `options_sources`, `hoist_sinks`, `span_keyed_maps`, `emit_diagnostics`,
 //! `ide_emit_edge`, `ast_importers`, `emit_abi_shapes`, `ts_writes`, `ts_any`,
 //! `verbatim_origins`, `verbatim_sites`, `incremental_query_types`,
-//! `unconsumed_ir_items`, `diagnostic_coverage`, `model_readers_beyond_emit`, `unused_deps`, `explained_codes`. Ten of these are
+//! `unconsumed_ir_items`, `diagnostic_coverage`, `model_readers_beyond_emit`, `unused_deps`, `explained_codes`, `ts_raw_sites`, `ts_text_idents`. Ten of these are
 //! zero/closure-shaped — a boolean, or a count pinned at a small, argued floor
 //! (`ast_importers` = 5, `emit_abi_shapes` = 1). Phase 7's own four are the same shape:
 //! each converged toward an argued floor over dozens of slices, the same trajectory
@@ -42,7 +42,7 @@
 //! **Two kinds of gate** (#3679, amending ADR 0389/0390). Every gated probe is
 //! *exact-match*: a live reading that differs from its committed row fails unless a
 //! pending file names it in `probes:`. The [`GROWTH_PROBES`] (`ts_writes`, `ts_any`,
-//! `emit_abi_shapes`, `verbatim_sites`, `span_keyed_maps`) are also *directional*:
+//! `emit_abi_shapes`, `verbatim_sites`, `ts_raw_sites`, `ts_text_idents`, `span_keyed_maps`) are also *directional*:
 //! `growth_probes_never_rise` (`xtask/tests/greenfield_status.rs`) fails when the
 //! live leading count exceeds the committed one unless a pending file *raises* the
 //! probe with a reason (`raises:`), which the stamp then records in
@@ -105,7 +105,7 @@ impl Report {
 }
 
 /// Run every probe against the tree rooted at `root` (the repo root). Used by the CLI's
-/// full report; the gating test uses the nineteen gated probes alone
+/// full report; the gating test uses the twenty-one gated probes alone
 /// ([`gated_disagreements`]) so it never pays for a workspace-wide clippy pass
 /// (`wildcard_arms`) just to check the probes that are actually diffed.
 pub fn run(root: &Path) -> Report {
@@ -117,7 +117,7 @@ pub fn run(root: &Path) -> Report {
 /// The gated probes' names, in [`run_gated`]'s order — what a pending file's
 /// `probes` key may cite. `greenfield_status_table_is_current` asserts this
 /// matches the probes [`run_gated`] actually returns, so the two cannot drift.
-pub const GATED_PROBES: [&str; 19] = [
+pub const GATED_PROBES: [&str; 21] = [
     "workspace_lints",
     "fs_below_driver",
     "options_sources",
@@ -131,6 +131,8 @@ pub const GATED_PROBES: [&str; 19] = [
     "ts_any",
     "verbatim_origins",
     "verbatim_sites",
+    "ts_raw_sites",
+    "ts_text_idents",
     "incremental_query_types",
     "unconsumed_ir_items",
     "diagnostic_coverage",
@@ -141,20 +143,22 @@ pub const GATED_PROBES: [&str; 19] = [
 
 /// The gated probes that only a reasoned, recorded `raises:` may increase
 /// (#3679, ADR 0389/0390 amended): `ts_writes`, `ts_any`, `emit_abi_shapes`,
-/// `verbatim_sites`, `span_keyed_maps`. Probes already at a zero or closure
+/// `verbatim_sites`, `ts_raw_sites`, `ts_text_idents` (both #3681), `span_keyed_maps`. Probes already at a zero or closure
 /// floor are excluded (their exact-match row pins them), as are
 /// `verbatim_origins` (an argued floor of 2) and `model_readers_beyond_emit`
 /// (which has the opposite direction). A subset of [`GATED_PROBES`], pinned by
 /// a unit test.
-pub const GROWTH_PROBES: [&str; 5] = [
+pub const GROWTH_PROBES: [&str; 7] = [
     "ts_writes",
     "ts_any",
     "emit_abi_shapes",
     "verbatim_sites",
+    "ts_raw_sites",
+    "ts_text_idents",
     "span_keyed_maps",
 ];
 
-/// The nineteen gated (zero/closure/ratchet) probes only — what [`gated_disagreements`] diffs.
+/// The twenty-one gated (zero/closure/ratchet) probes only — what [`gated_disagreements`] diffs.
 pub fn run_gated(root: &Path) -> Vec<Probe> {
     vec![
         workspace_lints(root),
@@ -170,6 +174,8 @@ pub fn run_gated(root: &Path) -> Vec<Probe> {
         ts_any(root),
         verbatim_origins(root),
         verbatim_sites(root),
+        ts_raw_sites(root),
+        ts_text_idents(root),
         incremental_query_types(root),
         unconsumed_ir_items(root),
         diagnostic_coverage(root),
@@ -2122,6 +2128,83 @@ fn verbatim_sites_violations(files: &[(PathBuf, String)]) -> usize {
     count
 }
 
+// --- Gated probes 20-21: ts_raw_sites, ts_text_idents (#3681) ---------------
+
+/// Counts non-comment lines outside `#[cfg(test)]` modules that contain any of
+/// `needles` with a non-identifier character (or the line start) immediately
+/// before it, so `MyTsStmt::raw(` or `FooIdent(format!(` do not count. The same
+/// scanner helpers [`verbatim_sites_violations`] uses. Text-level: a needle must
+/// open on a single line (see [`ts_text_idents`] for the known multi-line gap).
+fn opening_token_lines(files: &[(PathBuf, String)], needles: &[&str]) -> usize {
+    let is_word = |c: char| c.is_ascii_alphanumeric() || c == '_';
+    let mut count = 0usize;
+    for (_, contents) in files {
+        let lines: Vec<&str> = contents.lines().collect();
+        let ranges = test_mod_ranges(&lines);
+        for (i, line) in lines.iter().enumerate() {
+            if in_test_range(i, &ranges) || is_line_comment(line) {
+                continue;
+            }
+            let hit = needles.iter().any(|needle| {
+                line.match_indices(needle)
+                    .any(|(at, _)| !line[..at].chars().next_back().is_some_and(is_word))
+            });
+            if hit {
+                count += 1;
+            }
+        }
+    }
+    count
+}
+
+/// #3681: `TsStmt::raw(text, span)` construction sites in the emitter's source.
+/// `TsStmt::raw` prints a whole statement verbatim — a separate escape hatch from
+/// `TsStmt::verbatim`, which [`verbatim_sites`] counts and this probe deliberately
+/// does not fold into it (that would break `verbatim_sites`' history). Retired by
+/// building real nodes. A growth probe ([`GROWTH_PROBES`]): it may only fall
+/// unless a pending file `raises:` it with a reason.
+///
+/// Counts non-comment lines outside `#[cfg(test)]` modules in
+/// [`codegen_family_files`]. Text-level gaps: matched on the line that opens the
+/// call, so a call split after `TsStmt::` is missed; a bare `raw(` after a `use`
+/// of the type is not counted; two sites on one line count once.
+fn ts_raw_sites(root: &Path) -> Probe {
+    Probe {
+        name: "ts_raw_sites",
+        gated: true,
+        reads: ts_raw_sites_violations(&codegen_family_files(root)).to_string(),
+    }
+}
+
+/// [`ts_raw_sites`]'s counting logic over an explicit file list.
+fn ts_raw_sites_violations(files: &[(PathBuf, String)]) -> usize {
+    opening_token_lines(files, &["TsStmt::raw("])
+}
+
+/// #3681: `TsExpr::Ident(format!(…))` sites — arbitrary expression text wrapped in
+/// a node documented as holding an identifier (`bynk-ts/src/program.rs`). Retired
+/// by using the right expression node. A growth probe ([`GROWTH_PROBES`]).
+///
+/// Counts non-comment lines outside `#[cfg(test)]` modules in
+/// [`codegen_family_files`] containing `Ident(format!(` — which covers both
+/// `TsExpr::Ident(format!(` and the bare form after a `use`. **Known multi-line
+/// gap** (the same kind of text-level limit [`ts_writes`] records): the opening
+/// token and `format!(` are matched on one line, so `TsExpr::Ident(` with
+/// `format!(` on the next line is missed, as is any `Ident(` built from a
+/// `String` variable or a helper returning text. Do not build a parser for it.
+fn ts_text_idents(root: &Path) -> Probe {
+    Probe {
+        name: "ts_text_idents",
+        gated: true,
+        reads: ts_text_idents_violations(&codegen_family_files(root)).to_string(),
+    }
+}
+
+/// [`ts_text_idents`]'s counting logic over an explicit file list.
+fn ts_text_idents_violations(files: &[(PathBuf, String)]) -> usize {
+    opening_token_lines(files, &["Ident(format!("])
+}
+
 /// Named identifiers imported from the compiler-generated firstparty/runtime relative
 /// modules (`./bynk.js`, `./runtime.js`, `./bynk/locale/types.js`, `./cloudflare.js`,
 /// or their `../` forms) — `import type { A, B }`/`import { A, B }` braces, stripping
@@ -2556,7 +2639,9 @@ pub struct GrowthRise {
 /// than its committed row's in `committed` (the table text). `Err` lists every
 /// growth probe whose live or committed reading is missing or has no leading
 /// integer: that is a hard failure, never a skip (a probe that stopped reporting
-/// a count must not quietly leave the ratchet).
+/// a count must not quietly leave the ratchet). A growth probe with *no row at
+/// all* in `committed` is newly introduced and is skipped (#3681): it is checked
+/// from the first time its row exists.
 pub fn growth_rises(probes: &[Probe], committed: &str) -> Result<Vec<GrowthRise>, Vec<String>> {
     let mut rises = Vec::new();
     let mut errors = Vec::new();
@@ -2572,9 +2657,15 @@ pub fn growth_rises(probes: &[Probe], committed: &str) -> Result<Vec<GrowthRise>
             ));
             continue;
         };
-        let Some(floor) = committed_reading(committed, name).and_then(leading_count) else {
+        // No row at all: the probe is newly introduced by this change, so there is
+        // nothing to rise from (the exact-match gate and the stamp seed the row).
+        // A row that exists but has no leading count stays a hard failure.
+        let Some(row) = committed_reading(committed, name) else {
+            continue;
+        };
+        let Some(floor) = leading_count(row) else {
             errors.push(format!(
-                "growth probe {name}: the committed row is missing or has no leading count"
+                "growth probe {name}: the committed row {row:?} has no leading count"
             ));
             continue;
         };
@@ -3516,7 +3607,7 @@ pub fn render_table(report: &Report) -> String {
          `incremental_query_types`/`keystroke_latency` added by P8.0 (#1510); \
          `unconsumed_ir_items` added by Slice D3 of the IR cutover (#1542); \
          `diagnostic_coverage` added by #1662; `model_readers_beyond_emit` added by \
-         crate-hygiene B1 (#2939); `unused_deps` added by crate-hygiene A4 (#2976); `explained_codes` added by #3163. Nineteen \
+         crate-hygiene B1 (#2939); `unused_deps` added by crate-hygiene A4 (#2976); `explained_codes` added by #3163; `ts_raw_sites`/`ts_text_idents` added by #3681. Twenty-one \
          probes are gated — a disagreement between this file and a fresh run fails \
          `greenfield_status_table_is_current` (`xtask/tests/greenfield_status.rs`). \
          Five are trend probes, reported only.\n\n",
@@ -3564,10 +3655,10 @@ pub fn render_table(report: &Report) -> String {
 
 /// Every gated probe whose live reading disagrees with the committed table's, as
 /// `(probe name, committed, live)`. Trend probes are never compared, and never
-/// computed here — this only runs the sixteen gated probes, so checking currency never
+/// computed here — this only runs the twenty-one gated probes, so checking currency never
 /// pays for `wildcard_arms`'s workspace-wide clippy pass. For a caller that has already
 /// run the full report (e.g. to print it), use [`gated_disagreements_in`] instead so the
-/// sixteen gated probes aren't computed a second time.
+/// twenty-one gated probes aren't computed a second time.
 pub fn gated_disagreements(root: &Path) -> Vec<(String, String, String)> {
     gated_disagreements_in(&run_gated(root), root)
 }
@@ -3747,7 +3838,88 @@ pub fn refresh_for_stamp(
             unnamed.join("\n")
         ));
     }
-    refresh_gated_rows(committed, probes)
+    let seeded = seed_missing_gated_rows(committed, probes, acknowledged)?;
+    refresh_gated_rows(&seeded, probes)
+}
+
+/// `committed` with a row appended after the last gated row for every gated probe
+/// that has none, so a slice that introduces a probe can seed its row through
+/// `probes:` and the stamp, with no hand edit of the generated table (#3681). A
+/// missing row for a probe no increment names is refused, as any other
+/// unacknowledged move is. The appended row carries the live reading; the
+/// [`refresh_gated_rows`] pass that follows is then a no-op for it.
+fn seed_missing_gated_rows(
+    committed: &str,
+    probes: &[Probe],
+    acknowledged: &BTreeSet<String>,
+) -> Result<String, String> {
+    let has_row = |name: &str| {
+        let prefix = format!("| `{name}` | yes | ");
+        committed.lines().any(|l| l.starts_with(&prefix))
+    };
+    let missing: Vec<&Probe> = probes
+        .iter()
+        .filter(|p| p.gated && !has_row(p.name))
+        .collect();
+    if missing.is_empty() {
+        return Ok(committed.to_string());
+    }
+    let unnamed: Vec<&str> = missing
+        .iter()
+        .filter(|p| !acknowledged.contains(p.name))
+        .map(|p| p.name)
+        .collect();
+    if !unnamed.is_empty() {
+        return Err(format!(
+            "design/greenfield-status.md has no row for gated probe(s) {} and no increment \
+             being stamped names them in `probes:` — acknowledge them in a pending file or \
+             run `cargo xtask greenfield-status --apply`",
+            unnamed.join(", ")
+        ));
+    }
+    let mut lines: Vec<String> = committed
+        .split_inclusive('\n')
+        .map(str::to_string)
+        .collect();
+    if !lines.iter().any(|l| l.contains("| yes | ")) {
+        return Err(
+            "design/greenfield-status.md has no gated rows to append to — run \
+             `cargo xtask greenfield-status --apply`"
+                .to_string(),
+        );
+    }
+    let row_at = |lines: &[String], name: &str| {
+        let prefix = format!("| `{name}` | yes | ");
+        lines.iter().position(|l| l.starts_with(&prefix))
+    };
+    let gated_order: Vec<&Probe> = probes.iter().filter(|p| p.gated).collect();
+    // Insert in probe order (the order `render_table` writes), so a later `--apply`
+    // produces no churn: after the nearest preceding probe's row, else before the
+    // nearest following one's.
+    for (i, p) in gated_order.iter().enumerate() {
+        if row_at(&lines, p.name).is_some() {
+            continue;
+        }
+        let new_row = format!("| `{}` | yes | {} |\n", p.name, p.reads);
+        let after = gated_order[..i]
+            .iter()
+            .rev()
+            .find_map(|q| row_at(&lines, q.name));
+        let at = match after {
+            Some(idx) => {
+                if !lines[idx].ends_with('\n') {
+                    lines[idx].push('\n');
+                }
+                idx + 1
+            }
+            None => gated_order[i + 1..]
+                .iter()
+                .find_map(|q| row_at(&lines, q.name))
+                .unwrap_or(0),
+        };
+        lines.insert(at, new_row);
+    }
+    Ok(lines.concat())
 }
 
 #[cfg(test)]
@@ -3813,6 +3985,8 @@ mod tests {
         | `ts_any` | yes | 10 |\n\
         | `emit_abi_shapes` | yes | 4 (a, b) |\n\
         | `verbatim_sites` | yes | 3 |\n\
+        | `ts_raw_sites` | yes | 75 |\n\
+        | `ts_text_idents` | yes | 13 |\n\
         | `span_keyed_maps` | yes | 2 |\n";
 
     fn growth_live(ts_writes: &str, abi: &str) -> Vec<Probe> {
@@ -3821,6 +3995,8 @@ mod tests {
             gated("ts_any", "10"),
             gated("emit_abi_shapes", abi),
             gated("verbatim_sites", "3"),
+            gated("ts_raw_sites", "75"),
+            gated("ts_text_idents", "13"),
             gated("span_keyed_maps", "2"),
         ]
     }
@@ -3886,9 +4062,135 @@ mod tests {
         let live = growth_live("many", "4");
         let errs = growth_rises(&live, GROWTH_TABLE).unwrap_err();
         assert!(errs.iter().any(|e| e.contains("ts_writes")));
-        let no_row = "| Probe | Gated | Reads |\n|---|---|---|\n";
-        let errs = growth_rises(&growth_live("1", "1"), no_row).unwrap_err();
-        assert_eq!(errs.len(), GROWTH_PROBES.len());
+        let bad_row = "| Probe | Gated | Reads |\n|---|---|---|\n\
+                       | `ts_writes` | yes | many |\n";
+        let errs = growth_rises(&growth_live("1", "1"), bad_row).unwrap_err();
+        assert_eq!(errs.len(), 1, "{errs:?}");
+        assert!(errs[0].contains("ts_writes"));
+    }
+
+    /// #3681: a growth probe with no committed row is newly introduced — it passes
+    /// at any reading — while the same probe is checked once its row exists.
+    #[test]
+    fn a_growth_probe_with_no_committed_row_is_newly_introduced() {
+        let without = GROWTH_TABLE
+            .lines()
+            .filter(|l| !l.contains("ts_raw_sites") && !l.contains("ts_text_idents"))
+            .collect::<Vec<_>>()
+            .join("\n");
+        let mut live = growth_live("100", "4");
+        live.iter_mut()
+            .find(|p| p.name == "ts_raw_sites")
+            .unwrap()
+            .reads = "9999".to_string();
+        assert!(
+            growth_rises(&live, &without).unwrap().is_empty(),
+            "no row at the base: newly introduced, not a rise"
+        );
+        // Once the row exists, the same reading is a rise.
+        let rises = growth_rises(&live, GROWTH_TABLE).unwrap();
+        assert_eq!(rises.len(), 1);
+        assert_eq!(rises[0].probe, "ts_raw_sites");
+        // A probe that did not run is still a hard failure even with no row.
+        let mut missing = growth_live("100", "4");
+        missing.retain(|p| p.name != "ts_text_idents");
+        assert!(growth_rises(&missing, &without).is_err());
+    }
+
+    /// #3681: the stamp seeds the row of a newly introduced gated probe when an
+    /// increment names it, and refuses when none does.
+    #[test]
+    fn the_stamp_seeds_a_new_gated_probe_row_only_when_acknowledged() {
+        let committed = "| Probe | Gated | Reads |\n|---|---|---|\n\
+                         | `ts_writes` | yes | 850 |\n\
+                         \n## Trend probes (not gated)\n\n\
+                         | `wildcard_arms` | no (trend) | 355 |\n";
+        let live = [gated("ts_writes", "850"), gated("ts_raw_sites", "75")];
+        let ack: BTreeSet<String> = ["ts_raw_sites".to_string()].into();
+        let out = refresh_for_stamp(committed, &live, &ack).unwrap();
+        assert!(out.contains("| `ts_writes` | yes | 850 |\n| `ts_raw_sites` | yes | 75 |\n\n"));
+        assert!(out.contains("| `wildcard_arms` | no (trend) | 355 |"));
+        let err = refresh_for_stamp(committed, &live, &BTreeSet::new()).unwrap_err();
+        assert!(err.contains("ts_raw_sites"), "{err}");
+    }
+
+    /// #3681 review: seeded rows land in probe order (where `render_table` puts them),
+    /// not after the last gated row, so a later `--apply` has nothing to move.
+    #[test]
+    fn seeded_rows_follow_probe_order() {
+        let committed = "| Probe | Gated | Reads |\n|---|---|---|\n\
+                         | `a` | yes | 1 |\n\
+                         | `d` | yes | 4 |\n\
+                         | `e` | yes | 5 |\n\n## Trend\n";
+        let live = [
+            gated("a", "1"),
+            gated("b", "2"),
+            gated("c", "3"),
+            gated("d", "4"),
+            gated("e", "5"),
+            gated("f", "6"),
+        ];
+        let ack: BTreeSet<String> = ["b", "c", "f"].map(String::from).into();
+        let out = refresh_for_stamp(committed, &live, &ack).unwrap();
+        let rows: Vec<&str> = out.lines().filter(|l| l.contains("| yes |")).collect();
+        let names: Vec<&str> = rows.iter().map(|l| l.split('`').nth(1).unwrap()).collect();
+        assert_eq!(names, ["a", "b", "c", "d", "e", "f"]);
+        // A missing first row goes before the first existing one.
+        let live = [gated("z", "0"), gated("a", "1")];
+        let ack: BTreeSet<String> = ["z".to_string()].into();
+        let out = refresh_for_stamp("| `a` | yes | 1 |\n\nx\n", &live, &ack).unwrap();
+        assert!(out.starts_with("| `z` | yes | 0 |\n| `a` | yes | 1 |\n"));
+    }
+
+    fn files_of(files: &[(&str, &str)]) -> Vec<(PathBuf, String)> {
+        files
+            .iter()
+            .map(|(p, s)| (PathBuf::from(p), (*s).to_string()))
+            .collect()
+    }
+
+    #[test]
+    fn ts_raw_sites_counts_construction_lines_only() {
+        let src = "fn f() {\n    let a = TsStmt::raw(text, span);\n    \
+                   let b = TsStmt::raw(\n        x,\n        span,\n    );\n    \
+                   // TsStmt::raw(commented, span)\n    \
+                   let c = MyTsStmt::raw(x);\n    let d = TsStmt::verbatim(x);\n}\n";
+        assert_eq!(
+            ts_raw_sites_violations(&files_of(&[("a.rs", src)])),
+            2,
+            "two construction lines; comment, longer name and verbatim excluded"
+        );
+        // Sites in several files add up.
+        assert_eq!(
+            ts_raw_sites_violations(&files_of(&[("a.rs", src), ("b.rs", src)])),
+            4
+        );
+    }
+
+    #[test]
+    fn ts_raw_sites_excludes_cfg_test_ranges() {
+        let src = "fn p() { TsStmt::raw(a, s); }\n\n#[cfg(test)]\nmod tests {\n    \
+                   fn t() { TsStmt::raw(b, s); }\n}\n";
+        assert_eq!(ts_raw_sites_violations(&files_of(&[("a.rs", src)])), 1);
+    }
+
+    #[test]
+    fn ts_text_idents_counts_both_forms_and_documents_the_multiline_gap() {
+        let qualified = "fn f() { let a = TsExpr::Ident(format!(\"{x}.y\")); }\n";
+        let bare = "use TsExpr::Ident;\nfn f() { let a = Ident(format!(\"{x}\")); }\n";
+        let multiline =
+            "fn f() {\n    let a = TsExpr::Ident(\n        format!(\"{x}\"),\n    );\n}\n";
+        let comment = "// TsExpr::Ident(format!(\"x\"))\nfn f() {}\n";
+        let longer = "fn f() { let a = NotIdent(format!(\"x\")); }\n";
+        let tests = "fn p() {}\n\n#[cfg(test)]\nmod tests {\n    \
+                     fn t() { TsExpr::Ident(format!(\"x\")); }\n}\n";
+        let count = |src: &str| ts_text_idents_violations(&files_of(&[("a.rs", src)]));
+        assert_eq!(count(qualified), 1);
+        assert_eq!(count(bare), 1);
+        assert_eq!(count(multiline), 0, "documented multi-line gap");
+        assert_eq!(count(comment), 0);
+        assert_eq!(count(longer), 0);
+        assert_eq!(count(tests), 0);
     }
 
     const STAMP_TABLE: &str = "| Probe | Gated | Reads |\n|---|---|---|\n\
