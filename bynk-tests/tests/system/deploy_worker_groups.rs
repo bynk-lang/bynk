@@ -924,3 +924,62 @@ fn groups_may_depend_one_way_but_not_in_a_cycle() {
     assert!(ok, "ungrouped, the contexts form no cycle:\n{out}");
     let _ = fs::remove_dir_all(&root);
 }
+
+/// A group is one Worker with one `bynk-contracts.json`, which `deploy` reads
+/// beside it (#3562, G4-0): what its members provide, and what they expect of
+/// contexts outside it. A call between members has no contract to skew against.
+#[test]
+fn a_group_has_one_contracts_manifest_for_its_members() {
+    let root = std::env::temp_dir().join(format!(
+        "bynk-deploy-groups-manifest-{}",
+        std::process::id()
+    ));
+    write_project(
+        &root,
+        "[build]\ntarget = \"workers\"\n\n[deploy.workers.front]\ncontexts = [\"shop.a1\", \"shop.a2\"]\n",
+    );
+    // `a1` calls its member `a2` and the outside `b1`; `a2` provides one service.
+    fs::write(
+        root.join("src/shop/a1.bynk"),
+        "context shop.a1\n\nconsumes shop.a2\nconsumes shop.b1\n\nservice to_a1 {\n\ton call(n: Int) -> Effect[Int] {\n\t\tlet x <- shop.a2.to_a2(n)\n\t\tlet y <- shop.b1.to_b1(x)\n\t\tEffect.pure(y)\n\t}\n}\n",
+    )
+    .unwrap();
+    fs::write(
+        root.join("src/shop/a2.bynk"),
+        calling_context("shop.a2", None, "to_a2"),
+    )
+    .unwrap();
+    fs::write(
+        root.join("src/shop/b1.bynk"),
+        calling_context("shop.b1", None, "to_b1"),
+    )
+    .unwrap();
+    let (ok, out) = build(&root);
+    assert!(ok, "{out}");
+    let manifest = fs::read_to_string(root.join("out/workers/front/bynk-contracts.json")).unwrap();
+    let json: serde_json::Value = serde_json::from_str(&manifest).unwrap();
+    let keys =
+        |v: &serde_json::Value| -> Vec<String> { v.as_object().unwrap().keys().cloned().collect() };
+    assert_eq!(keys(&json["provides"]), ["to_a1", "to_a2"], "{manifest}");
+    assert_eq!(
+        keys(&json["expects"]),
+        ["shop.b1"],
+        "only the outside dependency is expected: {manifest}"
+    );
+    // The members' own manifests are not left beside it for `deploy` to miss.
+    for member in ["shop-a1", "shop-a2"] {
+        assert!(
+            !root
+                .join(format!("out/workers/front/{member}.bynk-contracts.json"))
+                .exists(),
+            "{member}"
+        );
+    }
+    // Ungrouped, each Worker has its own.
+    fs::write(root.join("bynk.toml"), "[build]\ntarget = \"workers\"\n").unwrap();
+    let (ok, out) = build(&root);
+    assert!(ok, "{out}");
+    let a1 = fs::read_to_string(root.join("out/workers/shop-a1/bynk-contracts.json")).unwrap();
+    assert!(a1.contains("shop.a2") && a1.contains("shop.b1"), "{a1}");
+    let _ = fs::remove_dir_all(&root);
+}

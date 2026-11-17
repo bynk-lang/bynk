@@ -1109,13 +1109,45 @@ pub(crate) fn project_resources(
     workers_dir: &Path,
     workers: &[String],
 ) -> Result<BTreeMap<String, Resources>, String> {
+    // A Service Binding names its target's *script* name. That is the Worker's
+    // directory unless a `[deploy.workers.<key>]` group overrides it with `name`
+    // (#3562), so each binding is read against the script names and turned back
+    // into the directory the rest of deploy keys a Worker by.
+    let scripts = script_names(workers_dir, workers);
+    // Only a script name is a Worker a binding can name: a directory that is not
+    // also its Worker's script name is no target (`core` for a group renamed
+    // `core-script`), and a binding to it is a foreign Worker like any other.
+    let known: Vec<String> = scripts.keys().cloned().collect();
     let mut all = BTreeMap::new();
     for worker in workers {
-        let resources = read_resources(&workers_dir.join(worker).join("wrangler.toml"), workers)
+        let mut resources = read_resources(&workers_dir.join(worker).join("wrangler.toml"), &known)
             .map_err(|e| format!("could not read the configuration for `{worker}`: {e}"))?;
+        resources.binds_to = resources
+            .binds_to
+            .into_iter()
+            .map(|service| scripts.get(&service).cloned().unwrap_or(service))
+            // A group's member calling another member is the Worker binding to
+            // itself, which exists as soon as it is uploaded: no edge (ADR 0874 D7).
+            .filter(|dir| dir != worker)
+            .collect();
         all.insert(worker.clone(), resources);
     }
     Ok(all)
+}
+
+/// Each Worker's script name (`name` in its `wrangler.toml`, else its directory)
+/// → its directory.
+fn script_names(workers_dir: &Path, workers: &[String]) -> BTreeMap<String, String> {
+    workers
+        .iter()
+        .map(|dir| {
+            let name = std::fs::read_to_string(workers_dir.join(dir).join("wrangler.toml"))
+                .ok()
+                .and_then(|text| text.parse::<toml::Table>().ok())
+                .and_then(|table| table.get("name")?.as_str().map(str::to_string));
+            (name.unwrap_or_else(|| dir.clone()), dir.clone())
+        })
+        .collect()
 }
 
 /// v0.177 (#643): the contract manifest a Worker's build emitted.
@@ -3435,6 +3467,52 @@ service = "legacy-billing"
                 ("SERVICE_LEDGER", "ledger"),
                 ("SERVICE_BILLING", "legacy-billing"),
             ]
+        );
+    }
+
+    /// #3562 (G4-0): a `[deploy.workers.<key>]` group is one Worker, keyed by its
+    /// directory. A Service Binding names its target's *script* name, which a
+    /// group's `name` makes differ from the directory; and a member calling another
+    /// member is the Worker binding to itself, which is no edge.
+    #[test]
+    fn a_group_is_one_node_in_the_deploy_graph() {
+        let root = std::env::temp_dir().join(format!("bynk-group-graph-{}", std::process::id()));
+        let _ = std::fs::remove_dir_all(&root);
+        let write = |dir: &str, name: &str, services: &[&str]| {
+            std::fs::create_dir_all(root.join(dir)).unwrap();
+            let mut text = format!("name = \"{name}\"\n");
+            for (i, service) in services.iter().enumerate() {
+                text.push_str(&format!(
+                    "\n[[services]]\nbinding = \"B{i}\"\nservice = \"{service}\"\n"
+                ));
+            }
+            std::fs::write(root.join(dir).join("wrangler.toml"), text).unwrap();
+        };
+        // `core` is a group renamed `core-script`; it binds to itself and to `pay`.
+        write("core", "core-script", &["core-script", "pay"]);
+        // `web` binds to the group by its script name.
+        write("web", "web", &["core-script"]);
+        write("pay", "pay", &[]);
+        // `odd` names the group's *directory*, which is not a script on Cloudflare.
+        write("odd", "odd", &["core"]);
+        let workers: Vec<String> = ["core", "odd", "pay", "web"]
+            .iter()
+            .map(|s| s.to_string())
+            .collect();
+        let resources = project_resources(&root, &workers).unwrap();
+        let _ = std::fs::remove_dir_all(&root);
+        assert_eq!(resources["core"].binds_to, ["pay"], "no edge to itself");
+        assert_eq!(resources["web"].binds_to, ["core"], "by directory");
+        assert!(resources["web"].foreign_services.is_empty());
+        assert!(
+            resources["odd"].binds_to.is_empty(),
+            "a directory is no target"
+        );
+        assert_eq!(resources["odd"].foreign_services.len(), 1);
+        let graph = crate::deploy::graph::service_graph(&resources);
+        assert_eq!(
+            crate::deploy::graph::deploy_order(&workers, &graph).unwrap(),
+            ["pay", "core", "odd", "web"]
         );
     }
 }

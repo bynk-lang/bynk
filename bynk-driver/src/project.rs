@@ -4081,7 +4081,8 @@ impl WorkersEmit<'_> {
             source_map: None,
             debug_metadata: None,
         });
-        self.emit_contract_manifests(ctx_name, table, &called, &own_types, &accepted, compiled);
+        let (contracts, secrets) =
+            self.emit_contract_manifests(ctx_name, table, &called, &own_types, &accepted, compiled);
         MemberParts {
             context: ctx_name.clone(),
             bindings,
@@ -4092,6 +4093,8 @@ impl WorkersEmit<'_> {
             has_migrate: !migratable.is_empty(),
             has_inspect: !inspect_classes.is_empty(),
             classes,
+            contracts,
+            secrets,
             publishes: (ctx_uses_emit && in_group).then_some(own_event_routes),
         }
     }
@@ -4240,6 +4243,7 @@ impl WorkersEmit<'_> {
             debug_metadata: None,
         });
         if layout.is_member(first) {
+            self.stage_group_manifests(first, members, compiled);
             // #3562 (G3-1): the group's one events fan-out, for every member that
             // publishes, in declaration order.
             let publishers: Vec<emitter::Publisher> = members
@@ -4264,6 +4268,36 @@ impl WorkersEmit<'_> {
                 source_map: None,
                 debug_metadata: None,
             });
+        }
+    }
+
+    /// A group's one `bynk-contracts.json` and `bynk-secrets.json`, which `deploy`
+    /// reads beside the Worker: the members' merged (#3562).
+    fn stage_group_manifests(
+        &self,
+        first: &str,
+        members: &[(&MemberParts, &UnitTable)],
+        compiled: &mut Vec<StagedFile>,
+    ) {
+        let names: Vec<String> = members.iter().map(|(p, _)| p.context.clone()).collect();
+        let contracts = emitter::contracts::ContractParts::merged(
+            members.iter().map(|(p, _)| p.contracts.clone()),
+            &names,
+        );
+        let secrets =
+            emitter::secrets::SecretsParts::merged(members.iter().map(|(p, _)| p.secrets.clone()));
+        for (file, text) in [
+            (emitter::contracts::CONTRACTS_MANIFEST, contracts.render()),
+            (emitter::secrets::SECRETS_MANIFEST, secrets.render()),
+        ] {
+            if let Some(text) = text {
+                compiled.push(StagedFile {
+                    output_path: self.layout.worker_file(first, file),
+                    document: Document::Json(text),
+                    source_map: None,
+                    debug_metadata: None,
+                });
+            }
         }
     }
 
@@ -4308,6 +4342,9 @@ impl WorkersEmit<'_> {
         own_types: &HashMap<String, Arc<TypeDecl>>,
         accepted: &bynk_check::contract_compat::ContextAccepted,
         compiled: &mut Vec<StagedFile>,
+    ) -> (
+        emitter::contracts::ContractParts,
+        emitter::secrets::SecretsParts,
     ) {
         let WorkersEmit {
             layout,
@@ -4370,16 +4407,19 @@ impl WorkersEmit<'_> {
         // client embeds, recorded beside `provides` so `deploy` can
         // hold it against the caller's pin.
         let foreign = emitter::client::foreign_contracts(table, own_types);
-        if let Some(manifest) = emitter::contracts::emit_contracts_manifest(
-            &bynk_check::contract::own_contract_hashes(table, own_types),
-            &expects,
-            &foreign,
-            &emitter::contracts::Shapes {
-                provides: bynk_check::contract_compat::own_contract_shapes(table, own_types),
-                expects: expects_shapes,
-                accepts: accepted.hashes.clone(),
-            },
-        ) {
+        let contracts = emitter::contracts::ContractParts {
+            provides: bynk_check::contract::own_contract_hashes(table, own_types),
+            expects,
+            foreign,
+            provides_shapes: bynk_check::contract_compat::own_contract_shapes(table, own_types),
+            expects_shapes,
+            accepts: accepted.hashes.clone(),
+        };
+        // A group's members share one Worker and so one manifest, merged by
+        // `finish_worker` (#3562).
+        if !layout.is_member(ctx_name)
+            && let Some(manifest) = contracts.render()
+        {
             compiled.push(StagedFile {
                 output_path: layout.member_file(ctx_name, emitter::contracts::CONTRACTS_MANIFEST),
                 document: Document::Json(manifest),
@@ -4419,7 +4459,10 @@ impl WorkersEmit<'_> {
             unit_consumes_aliases,
             unit_flattened,
         );
-        if let Some(manifest) = emitter::emit_secrets_manifest(table, &reads) {
+        let secrets = emitter::secrets::SecretsParts::of(table, &reads);
+        if !layout.is_member(ctx_name)
+            && let Some(manifest) = secrets.render()
+        {
             compiled.push(StagedFile {
                 output_path: layout.member_file(ctx_name, emitter::secrets::SECRETS_MANIFEST),
                 document: Document::Json(manifest),
@@ -4427,6 +4470,7 @@ impl WorkersEmit<'_> {
                 debug_metadata: None,
             });
         }
+        (contracts, secrets)
     }
 
     /// What a Worker's `wrangler.toml` gains beyond its bindings: the static
@@ -4516,6 +4560,10 @@ struct MemberParts {
     has_inspect: bool,
     /// The Durable Object classes its entry exports.
     classes: Vec<String>,
+    /// Its contract and secrets manifests, merged into the Worker's own when it is
+    /// in a group (#3562).
+    contracts: emitter::contracts::ContractParts,
+    secrets: emitter::secrets::SecretsParts,
     /// For a group member that publishes, its events' subscribers, which the
     /// group's one fan-out routes (#3562).
     publishes: Option<BTreeMap<String, Vec<(String, String)>>>,

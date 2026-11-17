@@ -839,7 +839,7 @@ pub fn run(
             return ExitCode::FAILURE;
         }
     };
-    let graph = service_graph(&resources);
+    let (graph, worker_of) = (service_graph(&resources), group_worker_of(project_root));
     // Read before the plan: a malformed `--secrets-file` is the user's typo, and
     // it should surface as one now rather than as a missing-secret failure
     // partway through a run that has already pushed a Worker.
@@ -889,17 +889,12 @@ pub fn run(
                 return ExitCode::FAILURE;
             }
         };
-        let mut skews = contract_skews(
-            &manifest.expects,
-            &lock,
-            bynk_driver::project::worker_dir_name,
-            &opts.environment,
-        );
+        let mut skews = contract_skews(&manifest.expects, &lock, &worker_of, &opts.environment);
         classify_contract_skews(
             &mut skews,
             &manifest.expects_shapes,
             &lock,
-            bynk_driver::project::worker_dir_name,
+            &worker_of,
             &opts.environment,
         );
         if !skews.is_empty() {
@@ -917,7 +912,7 @@ pub fn run(
             worker,
             &manifest.provides,
             &lock,
-            bynk_driver::project::worker_dir_name,
+            &worker_of,
             &opts.environment,
         );
         classify_callee_skews(
@@ -978,7 +973,7 @@ pub fn run(
                     worker,
                     &manifest.provides,
                     &lock,
-                    bynk_driver::project::worker_dir_name,
+                    &worker_of,
                     &opts.environment,
                 );
                 classify_callee_skews(
@@ -1762,6 +1757,17 @@ fn record_accepted(
         &bynk_project::contracts_lock::serialize(&lock),
     )
     .map_err(|e| e.to_string())
+}
+
+/// The directory of the Worker a context is in: its own, or its group's
+/// (#3562). What `deploy` keys the ledger by, so a dependency's contract is looked
+/// up under the Worker that provides it.
+fn group_worker_of(project_root: &Path) -> impl Fn(&str) -> String + use<> {
+    let layout = bynk_project::worker_layout::WorkerLayout::for_project(
+        project_root,
+        &std::collections::HashMap::new(),
+    );
+    move |context| layout.dir(context)
 }
 
 /// #2554: the lock entries for `worker`'s context that no live caller in
