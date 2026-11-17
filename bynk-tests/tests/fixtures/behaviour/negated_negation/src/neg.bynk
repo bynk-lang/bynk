@@ -1,0 +1,9 @@
+context neg
+
+// A negated negation must lower to `-(-x)`, never `--x` (a TS pre-decrement,
+// which would return `x - 1`) nor `--5` (a TS syntax error).
+fn twice(x: Int) -> Int { - -x }
+
+fn five() -> Int { - -5 }
+
+fn thrice(x: Int) -> Int { - - -x }

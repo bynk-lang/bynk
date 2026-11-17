@@ -1754,7 +1754,16 @@ pub(crate) fn lower_expr(e: &Expr, cx: &mut LowerCtx) -> Lowered {
                 UnaryOp::Neg => "-",
                 UnaryOp::Not => "!",
             };
-            format!("{sym}{inner}")
+            // A negated negation (`- -x`, `- -5`) would otherwise splice to
+            // `--x`, which TypeScript reads as a pre-decrement (or, on a
+            // literal, a syntax error). Bracket the operand, as the `bynk_ts`
+            // printer does for `TsUnaryOp::Neg`: `-(-x)`.
+            let (open, close) = if *op == UnaryOp::Neg && inner.starts_with('-') {
+                ("(", ")")
+            } else {
+                ("", "")
+            };
+            format!("{sym}{open}{inner}{close}")
         }
         ExprKind::BinOp(op, lhs, rhs) => pre.absorb(lower_bin_op(*op, lhs, rhs, cx)),
         ExprKind::Paren(inner) => {
@@ -11218,6 +11227,33 @@ fn minus_neg() -> Int { 5 - -3 }
         ] {
             assert_eq!(returned(&ts, name), want, "{name}");
         }
+    }
+
+    #[test]
+    fn a_negated_negation_never_lowers_to_a_decrement() {
+        // `- -x` must not splice to `--x` (a TS pre-decrement) nor `- -5` to
+        // `--5` (a TS syntax error): the operand is bracketed, `-(-x)`.
+        let ts = crate::testkit::emit_source(
+            r#"
+commons negneg
+
+fn twice(x: Int) -> Int { - -x }
+fn lit() -> Int { - -5 }
+fn triple(x: Int) -> Int { - - -x }
+fn paren(x: Int) -> Int { -(-x) }
+fn minus(x: Int) -> Int { 5 - - -x }
+"#,
+        );
+        for (name, want) in [
+            ("twice", "-(-x)"),
+            ("lit", "-(-5)"),
+            ("triple", "-(-(-x))"),
+            ("paren", "-(-x)"),
+            ("minus", "5 - -(-x)"),
+        ] {
+            assert_eq!(returned(&ts, name), want, "{name}");
+        }
+        assert!(!ts.contains("--"), "no `--` in:\n{ts}");
     }
 
     /// An `if (flag) { done(); }` statement node: multi-line when printed.

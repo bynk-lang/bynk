@@ -1,0 +1,16 @@
+suite neg
+
+// Driven by bynk-tests/tests/system/negated_negation_behaviour.rs.
+
+case "a negated negation is the identity" {
+	expect twice(7) == 7
+	expect twice(-3) == -3
+}
+
+case "a negated negative literal is positive" {
+	expect five() == 5
+}
+
+case "three negations negate" {
+	expect thrice(4) == -4
+}
