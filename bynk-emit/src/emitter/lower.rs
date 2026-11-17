@@ -1558,7 +1558,16 @@ fn unary_op(op: UnaryOp, child: LoweredExpr) -> Built {
             op: ts_op,
             expr: Box::new(one(c)),
         },
-        |c| format!("{sym}{}", one(c)),
+        |c| {
+            let operand = one(c);
+            // `- -x` must not print as the decrement `--x`: bracket a negated
+            // negation, as the node printer does.
+            if sym == "-" && operand.starts_with('-') {
+                format!("-({operand})")
+            } else {
+                format!("{sym}{operand}")
+            }
+        },
     )
 }
 
@@ -11369,15 +11378,15 @@ fn minus_neg() -> Int { 5 - -3 }
 
     // The production helpers return a `Built`; these shadow them with the
     // bridge value so the tests read the same either way.
-    fn unary_op(op: UnaryOp, c: LoweredExpr) -> LoweredExpr {
+    fn t_unary_op(op: UnaryOp, c: LoweredExpr) -> LoweredExpr {
         bridge(super::unary_op(op, c))
     }
 
-    fn paren(c: LoweredExpr) -> LoweredExpr {
+    fn t_paren(c: LoweredExpr) -> LoweredExpr {
         bridge(super::paren(c))
     }
 
-    fn runtime_ctor_call(
+    fn t_runtime_ctor_call(
         object: Option<&'static str>,
         name: &'static str,
         arg: LoweredExpr,
@@ -11385,7 +11394,7 @@ fn minus_neg() -> Int { 5 - -3 }
         bridge(super::runtime_ctor_call(object, name, arg))
     }
 
-    fn node_or_text(
+    fn t_node_or_text(
         children: Vec<LoweredExpr>,
         node: impl FnOnce(Vec<bynk_ts::TsExpr>) -> bynk_ts::TsExpr,
         text: impl FnOnce(Vec<String>) -> String,
@@ -11401,31 +11410,31 @@ fn minus_neg() -> Int { 5 - -3 }
     fn unary_operators_take_their_brackets_from_the_printer() {
         use bynk_ts::TsBinaryOp::{Add, And};
         // `-(a - b)`: the source's explicit `Paren` is kept as a node.
-        let sub = paren(node(bin(Add, "a", "b")));
-        let neg = unary_op(UnaryOp::Neg, sub);
+        let sub = t_paren(node(bin(Add, "a", "b")));
+        let neg = t_unary_op(UnaryOp::Neg, sub);
         assert!(is_node(&neg));
         assert_eq!(neg.into_text(), "-(a + b)");
         // `!(x && y)`.
-        let not = unary_op(UnaryOp::Not, paren(node(bin(And, "x", "y"))));
+        let not = t_unary_op(UnaryOp::Not, t_paren(node(bin(And, "x", "y"))));
         assert_eq!(not.into_text(), "!(x && y)");
         // A bare binary operand (no source `Paren`) is bracketed by the printer.
-        let bare = unary_op(UnaryOp::Not, node(bin(And, "x", "y")));
+        let bare = t_unary_op(UnaryOp::Not, node(bin(And, "x", "y")));
         assert_eq!(bare.into_text(), "!(x && y)");
-        let bare = unary_op(UnaryOp::Neg, node(bin(Add, "a", "b")));
+        let bare = t_unary_op(UnaryOp::Neg, node(bin(Add, "a", "b")));
         assert_eq!(bare.into_text(), "-(a + b)");
         // Nested unaries: `!!x`, `-!x`, and `-(-x)`, never the decrement `--x`.
-        let not_not = unary_op(UnaryOp::Not, unary_op(UnaryOp::Not, node(id("x"))));
+        let not_not = t_unary_op(UnaryOp::Not, t_unary_op(UnaryOp::Not, node(id("x"))));
         assert_eq!(not_not.into_text(), "!!x");
-        let neg_not = unary_op(UnaryOp::Neg, unary_op(UnaryOp::Not, node(id("x"))));
+        let neg_not = t_unary_op(UnaryOp::Neg, t_unary_op(UnaryOp::Not, node(id("x"))));
         assert_eq!(neg_not.into_text(), "-!x");
-        let neg_neg = unary_op(UnaryOp::Neg, unary_op(UnaryOp::Neg, node(id("x"))));
+        let neg_neg = t_unary_op(UnaryOp::Neg, t_unary_op(UnaryOp::Neg, node(id("x"))));
         assert_eq!(neg_neg.into_text(), "-(-x)");
     }
 
     #[test]
     fn a_negated_decimal_is_a_call_over_a_genuine_identifier() {
         let arg = node(decimal_lit("120", 2));
-        let neg = runtime_ctor_call(None, "__bynkDecimalNeg", arg);
+        let neg = t_runtime_ctor_call(None, "__bynkDecimalNeg", arg);
         match &neg {
             LoweredExpr::Node(bynk_ts::TsExpr::Call { callee, .. }) => {
                 assert!(matches!(&**callee, bynk_ts::TsExpr::Ident(n) if n == "__bynkDecimalNeg"));
@@ -11440,10 +11449,10 @@ fn minus_neg() -> Int { 5 - -3 }
 
     #[test]
     fn constructor_calls_and_lists_are_nodes_over_node_children() {
-        let ok = runtime_ctor_call(None, "Ok", node(num_lit("1".into())));
+        let ok = t_runtime_ctor_call(None, "Ok", node(num_lit("1".into())));
         assert!(is_node(&ok));
         assert_eq!(ok.into_text(), "Ok(1)");
-        let http = runtime_ctor_call(Some("HttpResult"), "Ok", node(id("v")));
+        let http = t_runtime_ctor_call(Some("HttpResult"), "Ok", node(id("v")));
         match &http {
             LoweredExpr::Node(bynk_ts::TsExpr::Call { callee, .. }) => {
                 assert!(matches!(**callee, bynk_ts::TsExpr::Member { .. }))
@@ -11452,14 +11461,14 @@ fn minus_neg() -> Int { 5 - -3 }
         }
         assert_eq!(http.into_text(), "HttpResult.Ok(v)");
         assert_eq!(
-            runtime_ctor_call(None, "Err", node(id("e"))).into_text(),
+            t_runtime_ctor_call(None, "Err", node(id("e"))).into_text(),
             "Err(e)"
         );
         assert_eq!(
-            runtime_ctor_call(None, "Some", node(id("s"))).into_text(),
+            t_runtime_ctor_call(None, "Some", node(id("s"))).into_text(),
             "Some(s)"
         );
-        let list = node_or_text(
+        let list = t_node_or_text(
             vec![node(id("a")), node(num_lit("2".into()))],
             |items| bynk_ts::TsExpr::Array {
                 items,
@@ -11475,18 +11484,18 @@ fn minus_neg() -> Int { 5 - -3 }
     fn a_text_child_makes_every_arm_fall_back_to_todays_text() {
         let t = || text("f(x) + 1");
         for (got, want) in [
-            (unary_op(UnaryOp::Neg, t()), "-f(x) + 1"),
-            (unary_op(UnaryOp::Not, t()), "!f(x) + 1"),
-            (paren(t()), "(f(x) + 1)"),
-            (runtime_ctor_call(None, "Ok", t()), "Ok(f(x) + 1)"),
-            (runtime_ctor_call(None, "Err", t()), "Err(f(x) + 1)"),
-            (runtime_ctor_call(None, "Some", t()), "Some(f(x) + 1)"),
+            (t_unary_op(UnaryOp::Neg, t()), "-f(x) + 1"),
+            (t_unary_op(UnaryOp::Not, t()), "!f(x) + 1"),
+            (t_paren(t()), "(f(x) + 1)"),
+            (t_runtime_ctor_call(None, "Ok", t()), "Ok(f(x) + 1)"),
+            (t_runtime_ctor_call(None, "Err", t()), "Err(f(x) + 1)"),
+            (t_runtime_ctor_call(None, "Some", t()), "Some(f(x) + 1)"),
             (
-                runtime_ctor_call(Some("HttpResult"), "Ok", t()),
+                t_runtime_ctor_call(Some("HttpResult"), "Ok", t()),
                 "HttpResult.Ok(f(x) + 1)",
             ),
             (
-                runtime_ctor_call(None, "__bynkDecimalNeg", t()),
+                t_runtime_ctor_call(None, "__bynkDecimalNeg", t()),
                 "__bynkDecimalNeg(f(x) + 1)",
             ),
         ] {
@@ -11494,7 +11503,7 @@ fn minus_neg() -> Int { 5 - -3 }
             assert_eq!(got.into_text(), want);
         }
         // A list with one text element among nodes renders every element as text.
-        let list = node_or_text(
+        let list = t_node_or_text(
             vec![node(id("a")), t()],
             |items| bynk_ts::TsExpr::Array {
                 items,
@@ -11514,7 +11523,10 @@ fn minus_neg() -> Int { 5 - -3 }
                    fn h() -> Result[Int, String] { Ok(1) }\n\
                    fn i() -> List[Int] { [1, 2, 3] }\n\
                    fn j() -> Option[Int] { Some(2) }\n\
-                   fn k() -> Decimal { -1.5d }\n";
+                   fn k() -> Decimal { -1.5d }\n\
+                   fn m() -> Int { - -1 }\n\
+                   fn n(x: Int) -> Int { - -x }\n\
+                   fn o(x: Int) -> Int { - - -x }\n";
         let ts = crate::testkit::emit_source(src);
         for (name, want) in [
             ("f", "-(a - b)"),
@@ -11523,6 +11535,11 @@ fn minus_neg() -> Int { 5 - -3 }
             ("i", "[1, 2, 3]"),
             ("j", "Some(2)"),
             ("k", "__bynkDecimalNeg({ coefficient: 15n, scale: 1 })"),
+            // A negated negation is `-(-x)`, never the decrement `--x`, whether
+            // the operand is a node (a literal) or still text (an identifier).
+            ("m", "-(-1)"),
+            ("n", "-(-x)"),
+            ("o", "-(-(-x))"),
         ] {
             assert_eq!(returned(&ts, name), want, "{name}");
         }
