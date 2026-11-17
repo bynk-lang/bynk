@@ -4244,6 +4244,14 @@ impl WorkersEmit<'_> {
             debug_metadata: None,
         });
         if layout.is_member(first) {
+            if let Some(text) = agents_manifest(members) {
+                compiled.push(StagedFile {
+                    output_path: layout.worker_file(first, bynk_emit::AGENTS_MANIFEST),
+                    document: Document::Json(text),
+                    source_map: None,
+                    debug_metadata: None,
+                });
+            }
             self.stage_group_manifests(first, members, compiled);
             // #3562 (G3-1): the group's one events fan-out, for every member that
             // publishes, in declaration order.
@@ -4593,6 +4601,25 @@ fn group_inspect_manifest(members: &[(&MemberParts, &UnitTable)]) -> Option<Stri
             .map(|(p, _)| serde_json::json!({ "context": p.context, "classes": p.inspect_classes }))
             .collect();
         serde_json::to_string_pretty(&serde_json::json!({ "members": all })).unwrap_or_default()
+            + "\n"
+    })
+}
+
+/// #3562 (G5): which context of a Worker owns which agent class, for `bynk deploy`: a
+/// class's state belongs to its Worker's script, so a context that hosts agents moving to
+/// another script must not be redeployed over empty state unannounced. Only a group has one
+/// (a Worker that is one context owns its own classes). `None` when no member hosts an agent.
+fn agents_manifest(members: &[(&MemberParts, &UnitTable)]) -> Option<String> {
+    let agents: serde_json::Map<String, serde_json::Value> = members
+        .iter()
+        .filter_map(|(parts, table)| {
+            let mut classes: Vec<&String> = table.agents.keys().collect();
+            classes.sort();
+            (!classes.is_empty()).then(|| (parts.context.clone(), serde_json::json!(classes)))
+        })
+        .collect();
+    (!agents.is_empty()).then(|| {
+        serde_json::to_string_pretty(&serde_json::json!({ "agents": agents })).unwrap_or_default()
             + "\n"
     })
 }

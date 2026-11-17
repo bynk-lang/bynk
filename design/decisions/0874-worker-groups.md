@@ -173,11 +173,35 @@ Edge keys are named per member context (the runtime signs as the calling context
   Dropping it would be safe only for a group where neither happens. The merged events
   fan-out has landed (G3-1), and so has the conformance harness (G3-0). The Worker cycle
   check (`bynk.deploy.worker_cycle`) has landed.
-- **Still open, G5:** moving an agent-owning context into or out of a group is
-  refused in v1 (`bynk.deploy.agent_move_refused`); the scratch-account probe
-  showed a data-preserving class transfer works with the declarative `exports` map
-  (a binding-free receiver, a `transferred` tombstone on the source, a cleanup
-  deploy), so supported moves are a follow-on before 1.0, with revert.
+- **G5, agent moves:** a Durable Object class's state belongs to its Worker's script. A
+  context that hosts agents and moves to another script (into or out of a group, between
+  groups, or with its group renamed or re-keyed: any change of the script it was last
+  deployed to) redeclares its classes in the new script, where Cloudflare creates empty
+  namespaces and says nothing (probed: a bare re-declare is a silent fresh start). So
+  `bynk deploy` refuses the move before pushing anything, `--dry-run` included
+  (`bynk.deploy.agent_move_refused`), deciding it from the ledger's record of the script
+  each context was last pushed under and each Worker's `bynk-agents.json` (a group) or
+  its exported classes (a context's own Worker). `--accept-fresh-agent <context>`
+  (repeatable, never a blanket) starts it fresh instead: the run warns naming the class
+  and the old script, the ledger records that script as holding the agent state, and the
+  orphan report says it is not empty. It cannot be used for a move out of a group that
+  stays, which would have to drop a class from a Worker that keeps running. Reverting past
+  a move stays refused by `bynk.revert.membership_changed` and `class_changed`.
+- **Future work: a state-preserving move.** The scratch-account probe showed a data-preserving
+  transfer works with the declarative `exports` map, in three steps: the receiver declares
+  the class `state = "expecting-transfer"` with `transfer_from` and **no binding** (a binding
+  fails with `100406`); the source drops the class, its binding and its code and declares
+  `state = "transferred"` with `transferred_to`; and the receiver redeploys with a plain live
+  class (it fails with `phase_one_transfer_after_commit_mismatch` while `transfer_from`
+  remains). Between the second and third step the class errors (`1101`): a short outage.
+  Callers bind a script by name, so the sequence would be: the receiver's phase 1 (it gets no
+  traffic while callers still bind the old script), then in one run the callers rebound to the
+  new script, the source's tombstone deploy, and the receiver's cleanup deploy, behind one
+  explicit `--move-agent <context>` after the dry-run plan and the outage note; state is not lost
+  by a failure before the tombstone commits, and the ledger would record each step so a rerun
+  resumes. Open limits: a context with `routes` or `custom_domains` (a domain attaches to one
+  Worker at a time), a move through two groups at once, and reversing a move (a second
+  transfer and a transfer back are unprobed).
 - **Still open, G6 (the rest of it):** `bynk dev` addressing a group's Worker. The
   inspect listing needs a stated contract: today the first member that hosts an
   agent answers `/_bynk/inspect/agents` and the request is verified for, and the

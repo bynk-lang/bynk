@@ -1264,3 +1264,77 @@ fn a_worker_cycle_through_a_group_is_refused_once() {
     );
     let _ = fs::remove_dir_all(&root);
 }
+
+/// #3562 (G5): a context that hosts an agent must not change scripts unannounced. `shop.orders`
+/// was last deployed on its own Worker (the ledger says so); the manifest now puts it in a group,
+/// where its agent would start empty. `deploy` refuses, `--dry-run` included, and
+/// `--accept-fresh-agent shop.orders` goes ahead, saying where the old data stays.
+#[test]
+fn deploy_refuses_a_group_move_of_a_context_with_an_agent() {
+    let root = std::env::temp_dir().join(format!("bynk-deploy-agent-move-{}", std::process::id()));
+    write_project(
+        &root,
+        "[build]\ntarget = \"workers\"\n\n[deploy.workers.core]\ncontexts = [\"shop.orders\", \"shop.payment\"]\n",
+    );
+    fs::write(
+        root.join("src/shop/orders.bynk"),
+        agent_context("shop.orders"),
+    )
+    .unwrap();
+    fs::write(
+        root.join("src/shop/payment.bynk"),
+        calling_context("shop.payment", None, "to_pay"),
+    )
+    .unwrap();
+    fs::write(
+        root.join("bynk.deploy.lock"),
+        "version = 1\n\n[environments.default.workers.shop-orders]\ndeployed = true\n",
+    )
+    .unwrap();
+    let deploy = |args: &[&str]| {
+        let out = Command::new(env!("CARGO_BIN_EXE_bynk-under-test"))
+            .args(["deploy", "--dry-run", "--no-install", "--yes"])
+            .args(args)
+            .arg(&root)
+            .env("CLOUDFLARE_API_TOKEN", "dummy")
+            .env("NO_COLOR", "1")
+            .output()
+            .expect("run bynk");
+        (
+            out.status.success(),
+            format!(
+                "{}{}",
+                String::from_utf8_lossy(&out.stdout),
+                String::from_utf8_lossy(&out.stderr)
+            ),
+        )
+    };
+    let (ok, refused) = deploy(&[]);
+    if !ok && refused.contains("environment not ready") {
+        eprintln!("skipping: no wrangler for a deploy dry run:\n{refused}");
+        let _ = fs::remove_dir_all(&root);
+        return;
+    }
+    assert!(!ok, "{refused}");
+    assert!(
+        refused.contains("bynk.deploy.agent_move_refused")
+            && refused.contains("`shop.orders`")
+            && refused.contains("`Cart`")
+            && refused.contains("`shop-orders`")
+            && refused.contains("--accept-fresh-agent shop.orders"),
+        "{refused}"
+    );
+    let (ok, accepted) = deploy(&["--accept-fresh-agent", "shop.orders"]);
+    assert!(ok, "{accepted}");
+    assert!(
+        accepted.contains("starts with fresh agent `Cart`")
+            && accepted.contains("script `shop-orders`"),
+        "{accepted}"
+    );
+    let (ok, typo) = deploy(&["--accept-fresh-agent", "shop.nope"]);
+    assert!(
+        !ok && typo.contains("`--accept-fresh-agent shop.nope` names no context"),
+        "{typo}"
+    );
+    let _ = fs::remove_dir_all(&root);
+}

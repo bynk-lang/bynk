@@ -437,6 +437,12 @@ struct WorkerRecord {
     /// exists. Omitted when the script is named by the key.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     script: Option<String>,
+    /// #3562 (G5): agent state this Worker's script still holds for a context that moved off
+    /// it with `--accept-fresh-agent` (context → its classes): the context now runs on
+    /// another script with fresh state, and this script's namespaces keep the old data.
+    /// Recorded so an orphan report never calls the script empty. Omitted when none.
+    #[serde(default, skip_serializing_if = "BTreeMap::is_empty")]
+    fresh_agents: BTreeMap<String, Vec<String>>,
 }
 
 impl DeployLock {
@@ -616,6 +622,7 @@ impl DeployLock {
                     expects_shapes: BTreeMap::new(),
                     contexts: Vec::new(),
                     script: None,
+                    fresh_agents: BTreeMap::new(),
                 },
             );
     }
@@ -670,6 +677,26 @@ impl DeployLock {
             .and_then(|env| env.workers.get_mut(worker))
         {
             record.contexts = members.to_vec();
+        }
+    }
+
+    /// #3562 (G5): record that `worker`'s script still holds the agent state of `context`'s
+    /// `classes`, which moved off it fresh ([`WorkerRecord::fresh_agents`]).
+    pub(crate) fn record_fresh_agents(
+        &mut self,
+        environment: &str,
+        worker: &str,
+        context: &str,
+        classes: &[String],
+    ) {
+        if let Some(record) = self
+            .environments
+            .get_mut(environment)
+            .and_then(|env| env.workers.get_mut(worker))
+        {
+            record
+                .fresh_agents
+                .insert(context.to_string(), classes.to_vec());
         }
     }
 
@@ -1339,6 +1366,10 @@ pub(crate) struct Orphans {
     /// by its key (a renamed group), by key.
     #[serde(skip_serializing_if = "BTreeMap::is_empty")]
     pub(crate) worker_scripts: BTreeMap<String, String>,
+    /// #3562 (G5): the agent state each orphaned Worker's script still holds (context →
+    /// classes), from a move accepted with `--accept-fresh-agent`, by Worker.
+    #[serde(skip_serializing_if = "BTreeMap::is_empty")]
+    pub(crate) worker_agent_state: BTreeMap<String, BTreeMap<String, Vec<String>>>,
     pub(crate) queues: Vec<String>,
 }
 
@@ -1477,6 +1508,11 @@ impl Orphans {
                 })
                 .collect(),
             worker_scripts: BTreeMap::new(),
+            worker_agent_state: self
+                .worker_agent_state
+                .iter()
+                .map(|(worker, state)| (self.shown_worker(environment, worker), state.clone()))
+                .collect(),
             queues: self
                 .queues
                 .iter()
@@ -1685,6 +1721,14 @@ pub(crate) fn find_orphans(
             .iter()
             .filter(|(worker, _)| !resources.contains_key(worker.as_str()))
             .filter_map(|(worker, record)| Some((worker.clone(), record.script.clone()?)))
+            .collect(),
+        worker_agent_state: env
+            .workers
+            .iter()
+            .filter(|(worker, record)| {
+                !resources.contains_key(worker.as_str()) && !record.fresh_agents.is_empty()
+            })
+            .map(|(worker, record)| (worker.clone(), record.fresh_agents.clone()))
             .collect(),
         queues: env
             .queues
@@ -2584,6 +2628,7 @@ pub(crate) mod tests {
                             expects_shapes: BTreeMap::new(),
                             contexts: Vec::new(),
                             script: None,
+                            fresh_agents: BTreeMap::new(),
                         },
                     )]),
                     queues: BTreeSet::from(["intake".to_string()]),
