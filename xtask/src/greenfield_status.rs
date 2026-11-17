@@ -1590,7 +1590,10 @@ fn ide_emit_edge(root: &Path) -> Probe {
 /// entries here.
 ///
 /// **P6.58/P6.59, 19 August 2026: phase 6 (`the-ir.md`, spine #1137) retired at this
-/// probe reading 5, not 0.** The floor is exactly `bynk-emit/src/emitter{,/**}` —
+/// probe reading 5, not 0.** *(Historical: the live reading is the committed one in
+/// `design/greenfield-status.md`, 13 at 1A.3. `bynk-emit/src` has since grown past the
+/// five files named next, which were the whole floor only at that retirement.)* The
+/// floor then was `bynk-emit/src/emitter{,/**}` —
 /// `emitter.rs`, `emitter/emit.rs`, `emitter/lower.rs`, `emitter/workers.rs`,
 /// `emitter/workers_entry.rs` — the TypeScript-rendering subtree phase 7's own printer
 /// inherits; each file's own structural reason, and the full slice history behind
@@ -1681,7 +1684,8 @@ fn ast_importer_files(root: &Path) -> Vec<PathBuf> {
 /// the unexcluded, crate-wide count could never reach 0 while `bynk-emit::ir`'s
 /// lowering pass exists at all; this exclusion is what let the probe track phase 6's
 /// real completion criterion instead of a floor its own IR module structurally could
-/// not clear. Gated at 5, phase 6's own retired floor, for phase 7 to drive down.
+/// not clear. Gated at phase 6's retired floor of 5 when it was set; the live reading is
+/// the committed one in `design/greenfield-status.md`.
 fn ast_importers(root: &Path) -> Probe {
     Probe {
         name: "ast_importers",

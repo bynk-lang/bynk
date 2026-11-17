@@ -1642,8 +1642,24 @@ fn render_expr(out: &mut String, expr: &TsExpr) {
             out.push_str(match op {
                 TsUnaryOp::Not => "!",
                 TsUnaryOp::Typeof => "typeof ",
+                TsUnaryOp::Neg => "-",
             });
-            render_operand(out, expr);
+            // `- -x` must not print as the decrement `--x`.
+            let nested_neg = *op == TsUnaryOp::Neg
+                && matches!(
+                    **expr,
+                    TsExpr::Unary {
+                        op: TsUnaryOp::Neg,
+                        ..
+                    }
+                );
+            if nested_neg {
+                out.push('(');
+                render_expr(out, expr);
+                out.push(')');
+            } else {
+                render_operand(out, expr);
+            }
         }
         TsExpr::Binary { op, left, right } => {
             render_binary_operand(out, *op, left, true);
@@ -4165,6 +4181,25 @@ mod tests {
             print(&await_program, "x.bynk", "", "x.ts").text,
             "await (a ?? b);\n"
         );
+    }
+
+    /// `TsUnaryOp::Neg` (1A.3, #3696): `-x`, a bracketed binary operand, and a
+    /// negated negation as `-(-x)` rather than the decrement `--x`.
+    #[test]
+    fn negation_prints_with_brackets_where_needed() {
+        let id = |n: &str| TsExpr::Ident(n.to_string());
+        let neg = |e: TsExpr| TsExpr::Unary {
+            op: TsUnaryOp::Neg,
+            expr: Box::new(e),
+        };
+        assert_eq!(print_expr(&neg(id("x"))), "-x");
+        let diff = TsExpr::Binary {
+            op: TsBinaryOp::Add,
+            left: Box::new(id("a")),
+            right: Box::new(id("b")),
+        };
+        assert_eq!(print_expr(&neg(diff)), "-(a + b)");
+        assert_eq!(print_expr(&neg(neg(id("x")))), "-(-x)");
     }
 
     /// Review of #1314, finding 2's fourth example: a right-nested `Binary`
