@@ -351,7 +351,7 @@ fn check_pending() -> ExitCode {
 
 fn stamp(apply: bool) -> ExitCode {
     let root = repo_root();
-    let plan = match xtask::stamp::plan(&root) {
+    let mut plan = match xtask::stamp::plan(&root) {
         Ok(p) => p,
         Err(errors) => {
             for e in &errors {
@@ -409,14 +409,15 @@ fn stamp(apply: bool) -> ExitCode {
         .flat_map(|inc| inc.probes.iter().cloned())
         .collect();
     let table_path = xtask::greenfield_status::table_path(&root);
+    // The raise ledger's from/to: the committed row before this stamp, and the
+    // live reading it commits (see `stamp::raise_ledger_rows`).
+    let live = xtask::greenfield_status::run_gated(&root);
     let refreshed_table = match std::fs::read_to_string(&table_path)
         .map_err(|e| format!("cannot read {}: {e}", table_path.display()))
         .and_then(|committed| {
-            xtask::greenfield_status::refresh_for_stamp(
-                &committed,
-                &xtask::greenfield_status::run_gated(&root),
-                &acknowledged,
-            )
+            plan.growth_rises = xtask::greenfield_status::growth_rises(&live, &committed)
+                .map_err(|errs| errs.join("\n"))?;
+            xtask::greenfield_status::refresh_for_stamp(&committed, &live, &acknowledged)
         }) {
         Ok(t) => t,
         Err(e) => {

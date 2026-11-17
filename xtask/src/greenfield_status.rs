@@ -39,6 +39,15 @@
 //! explains why a `drift`-job *step* would have been silently skipped on the PRs that
 //! move these probes most).
 //!
+//! **Two kinds of gate** (#3679, amending ADR 0389/0390). Every gated probe is
+//! *exact-match*: a live reading that differs from its committed row fails unless a
+//! pending file names it in `probes:`. The [`GROWTH_PROBES`] (`ts_writes`, `ts_any`,
+//! `emit_abi_shapes`, `verbatim_sites`, `span_keyed_maps`) are also *directional*:
+//! `growth_probes_never_rise` (`xtask/tests/greenfield_status.rs`) fails when the
+//! live leading count exceeds the committed one unless a pending file *raises* the
+//! probe with a reason (`raises:`), which the stamp then records in
+//! `design/greenfield-status-raises.md`. A fall needs only `probes:`.
+//!
 //! A disagreement a pending file acknowledges (its `probes` key) does not fail the
 //! gate: the increment leaves the shared table alone and `cargo xtask stamp --apply`
 //! rewrites the gated rows on `main` in merge order ([`refresh_gated_rows`]). The
@@ -125,6 +134,21 @@ pub const GATED_PROBES: [&str; 19] = [
     "model_readers_beyond_emit",
     "unused_deps",
     "explained_codes",
+];
+
+/// The gated probes that only a reasoned, recorded `raises:` may increase
+/// (#3679, ADR 0389/0390 amended): `ts_writes`, `ts_any`, `emit_abi_shapes`,
+/// `verbatim_sites`, `span_keyed_maps`. Probes already at a zero or closure
+/// floor are excluded (their exact-match row pins them), as are
+/// `verbatim_origins` (an argued floor of 2) and `model_readers_beyond_emit`
+/// (which has the opposite direction). A subset of [`GATED_PROBES`], pinned by
+/// a unit test.
+pub const GROWTH_PROBES: [&str; 5] = [
+    "ts_writes",
+    "ts_any",
+    "emit_abi_shapes",
+    "verbatim_sites",
+    "span_keyed_maps",
 ];
 
 /// The nineteen gated (zero/closure/ratchet) probes only — what [`gated_disagreements`] diffs.
@@ -2498,7 +2522,80 @@ fn model_readers_reading(read: &[String]) -> String {
 /// The leading count of a `model_readers_beyond_emit` reading, which is what
 /// the floor test compares. `None` if the reading doesn't start with a count.
 pub fn model_readers_count(reads: &str) -> Option<usize> {
+    leading_count(reads)
+}
+
+/// The leading integer of a reading such as `104 (bynk-browser.ts:Claim, …)`:
+/// the first whitespace-separated token, parsed. `None` if it is not an integer.
+/// The shared parser behind [`model_readers_count`] and [`growth_rises`].
+pub fn leading_count(reads: &str) -> Option<usize> {
     reads.split_whitespace().next()?.parse().ok()
+}
+
+/// The committed reading of gated probe `name` in the table text `committed`.
+pub fn committed_reading<'a>(committed: &'a str, name: &str) -> Option<&'a str> {
+    let prefix = format!("| `{name}` | yes | ");
+    committed
+        .lines()
+        .find_map(|l| l.strip_prefix(&prefix))?
+        .strip_suffix(" |")
+}
+
+/// A growth probe whose live count exceeds the committed one.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct GrowthRise {
+    pub probe: &'static str,
+    pub from: usize,
+    pub to: usize,
+}
+
+/// Every [`GROWTH_PROBES`] member whose live leading count in `probes` is higher
+/// than its committed row's in `committed` (the table text). `Err` lists every
+/// growth probe whose live or committed reading is missing or has no leading
+/// integer: that is a hard failure, never a skip (a probe that stopped reporting
+/// a count must not quietly leave the ratchet).
+pub fn growth_rises(probes: &[Probe], committed: &str) -> Result<Vec<GrowthRise>, Vec<String>> {
+    let mut rises = Vec::new();
+    let mut errors = Vec::new();
+    for name in GROWTH_PROBES {
+        let Some(live) = probes.iter().find(|p| p.name == name) else {
+            errors.push(format!("growth probe {name} did not run"));
+            continue;
+        };
+        let Some(now) = leading_count(&live.reads) else {
+            errors.push(format!(
+                "growth probe {name}: live reading {:?} has no leading count",
+                live.reads
+            ));
+            continue;
+        };
+        let Some(floor) = committed_reading(committed, name).and_then(leading_count) else {
+            errors.push(format!(
+                "growth probe {name}: the committed row is missing or has no leading count"
+            ));
+            continue;
+        };
+        if now > floor {
+            rises.push(GrowthRise {
+                probe: name,
+                from: floor,
+                to: now,
+            });
+        }
+    }
+    if errors.is_empty() {
+        Ok(rises)
+    } else {
+        Err(errors)
+    }
+}
+
+/// The `rises` no pending file `raised` — the ones that must fail the gate.
+pub fn unraised(rises: Vec<GrowthRise>, raised: &BTreeSet<String>) -> Vec<GrowthRise> {
+    rises
+        .into_iter()
+        .filter(|r| !raised.contains(r.probe))
+        .collect()
 }
 
 /// Every `.rs` file under `<crate>/src` for every workspace crate — each entry
@@ -3655,6 +3752,80 @@ mod tests {
         assert!(out.contains("| `wildcard_arms` | no (trend) | 355 |\n"));
         assert!(out.ends_with("\nfooter\n"));
         assert_eq!(out.lines().count(), committed.lines().count());
+    }
+
+    #[test]
+    fn growth_probes_are_a_subset_of_gated_probes() {
+        for g in GROWTH_PROBES {
+            assert!(GATED_PROBES.contains(&g), "{g} is not gated");
+        }
+    }
+
+    #[test]
+    fn leading_count_reads_compound_readings() {
+        assert_eq!(leading_count("104 (bynk-browser.ts:Claim, x)"), Some(104));
+        assert_eq!(leading_count("0"), Some(0));
+        assert_eq!(leading_count("explained=3"), None);
+        assert_eq!(leading_count(""), None);
+        assert_eq!(model_readers_count("7 (a)"), Some(7));
+    }
+
+    const GROWTH_TABLE: &str = "| Probe | Gated | Reads |\n|---|---|---|\n\
+        | `ts_writes` | yes | 100 |\n\
+        | `ts_any` | yes | 10 |\n\
+        | `emit_abi_shapes` | yes | 4 (a, b) |\n\
+        | `verbatim_sites` | yes | 3 |\n\
+        | `span_keyed_maps` | yes | 2 |\n";
+
+    fn growth_live(ts_writes: &str, abi: &str) -> Vec<Probe> {
+        vec![
+            gated("ts_writes", ts_writes),
+            gated("ts_any", "10"),
+            gated("emit_abi_shapes", abi),
+            gated("verbatim_sites", "3"),
+            gated("span_keyed_maps", "2"),
+        ]
+    }
+
+    #[test]
+    fn growth_rises_reports_only_rises() {
+        // Equal and falling readings are free; a compound reading compares by its count.
+        let live = growth_live("99", "5 (a, b, c)");
+        let rises = growth_rises(&live, GROWTH_TABLE).unwrap();
+        assert_eq!(
+            rises,
+            vec![GrowthRise {
+                probe: "emit_abi_shapes",
+                from: 4,
+                to: 5
+            }]
+        );
+        assert!(
+            growth_rises(&growth_live("100", "4 (z)"), GROWTH_TABLE)
+                .unwrap()
+                .is_empty()
+        );
+    }
+
+    #[test]
+    fn a_rise_needs_a_raise_and_passes_with_one() {
+        let rises = growth_rises(&growth_live("101", "4"), GROWTH_TABLE).unwrap();
+        assert_eq!(unraised(rises.clone(), &BTreeSet::new()).len(), 1);
+        let raised: BTreeSet<String> = ["ts_writes".to_string()].into();
+        assert!(unraised(rises.clone(), &raised).is_empty());
+        // Raising a different probe does not excuse this one.
+        let other: BTreeSet<String> = ["ts_any".to_string()].into();
+        assert_eq!(unraised(rises, &other).len(), 1);
+    }
+
+    #[test]
+    fn a_growth_probe_without_a_leading_count_is_a_hard_failure() {
+        let live = growth_live("many", "4");
+        let errs = growth_rises(&live, GROWTH_TABLE).unwrap_err();
+        assert!(errs.iter().any(|e| e.contains("ts_writes")));
+        let no_row = "| Probe | Gated | Reads |\n|---|---|---|\n";
+        let errs = growth_rises(&growth_live("1", "1"), no_row).unwrap_err();
+        assert_eq!(errs.len(), GROWTH_PROBES.len());
     }
 
     const STAMP_TABLE: &str = "| Probe | Gated | Reads |\n|---|---|---|\n\

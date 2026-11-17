@@ -81,6 +81,27 @@ summary: How a case addresses a handler and names its principal
   adjacent lines. If the bot PR conflicts, re-dispatch the workflow
   (`gh workflow run greenfield-trends.yml`); never hand-edit the bot branch.
 
+- **`raises`** — a growth probe this increment deliberately *raises*, with its
+  reason: `raises: ts_writes — the X emitter has no typed node for Y yet (#NNNN)`.
+  The key is **repeatable**, one line per probe, so each reason stays one line of
+  Markdown; the separator is ` — ` (an em dash; ` - ` also works). The probe must
+  be one of the growth probes (`ts_writes`, `ts_any`, `emit_abi_shapes`,
+  `verbatim_sites`, `span_keyed_maps`; `greenfield_status::GROWTH_PROBES`), the
+  reason is mandatory, and, like `changelog`, it must not contain a relative
+  Markdown link (or a `|`).
+
+  **`raises` versus `probes`.** `probes:` acknowledges that a gated reading
+  *moved*, in either direction, so the stamp rewrites its row. A growth probe may
+  only *fall* on that alone: `growth_probes_never_rise`
+  (`xtask/tests/greenfield_status.rs`) compares the live leading count with the
+  committed row's and fails on a rise unless a pending file raises that probe.
+  A raise therefore needs both keys: `probes:` for the exact-match gate and
+  `raises:` for the direction gate. The stamp appends one row per raise (probe,
+  from, to, version, PR, reason) to `design/greenfield-status-raises.md`, where
+  *from* is the committed count before the stamp and *to* the live count it
+  commits. The pending file is deleted at stamp, so that ledger is what keeps the
+  reason.
+
 - **`breaking`** — a one-line Markdown note for an increment that breaks
   existing programs: what breaks, the diagnostic a user will see, and the fix
   (`bynk check --fix` where it is machine-applicable). Omit it when nothing

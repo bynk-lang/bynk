@@ -133,3 +133,34 @@ fn explained_codes_never_fall() {
          the committed row in design/greenfield-status.md in the same PR."
     );
 }
+
+/// #3679 (ADR 0389/0390 amended): the growth probes can only fall in an
+/// ordinary PR. `greenfield_status_table_is_current` accepts any move a pending
+/// file's `probes:` acknowledges; this refuses a *rise* of the leading count
+/// even then, unless a pending file raises that probe with a reason
+/// (`raises: <probe> — <reason>`). A fall needs only `probes:`. A growth probe
+/// whose reading has no leading integer fails hard rather than being skipped.
+#[test]
+fn growth_probes_never_rise() {
+    let root = repo_root();
+    let probes = xtask::greenfield_status::run_gated(&root);
+    let committed = std::fs::read_to_string(xtask::greenfield_status::table_path(&root))
+        .expect("read the committed greenfield-status table");
+    let rises = xtask::greenfield_status::growth_rises(&probes, &committed)
+        .unwrap_or_else(|errs| panic!("growth probe reading unusable:\n{}", errs.join("\n")));
+    let raised = xtask::raised_probes(&root);
+    let unraised = xtask::greenfield_status::unraised(rises, &raised);
+    assert!(
+        unraised.is_empty(),
+        "growth probe(s) rose without a reasoned raise. A growth probe may only fall in an \
+         ordinary PR; if this rise is deliberate, add a line to your increment's \
+         `design/pending/<slug>.md` frontmatter, `raises: <probe> — <reason>` (one line per \
+         probe; see design/pending/README.md). The stamp records it in \
+         design/greenfield-status-raises.md. Otherwise, reduce the count:\n{}",
+        unraised
+            .iter()
+            .map(|r| format!("  {}: committed {}, live {}", r.probe, r.from, r.to))
+            .collect::<Vec<_>>()
+            .join("\n")
+    );
+}

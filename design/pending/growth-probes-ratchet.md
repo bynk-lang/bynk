@@ -1,0 +1,19 @@
+---
+level: patch
+changelog: The greenfield-status growth probes (`ts_writes`, `ts_any`, `emit_abi_shapes`, `verbatim_sites`, `span_keyed_maps`) can only fall unless a pending file raises them with a reason (`raises:`), which the stamp records in `design/greenfield-status-raises.md`
+---
+
+## ADR: gated-growth-probes-are-ratchets
+title: Gated growth probes are ratchets
+summary: The five growth probes can only fall in an ordinary PR; a rise needs a reasoned `raises:` entry, recorded in a ledger
+
+**Context.** ADR 0389 and ADR 0390 gated `ts_writes` and `ts_any` (and `ast_importers` before them) with the exact-match gate: a live reading that differs from the committed row fails unless a pending file names the probe in `probes:`. ADR 0389 named the cost: "the gate is equality, not a ratchet, so it fails identically whether either count rises or falls". The back-half debt review (`design/reviews/2026-11-17-back-half-debt-review.md`, section 1.1) shows what that became under feature velocity. The gate forces a PR to say that a value moved; it never asks whether it should have risen. Acknowledging a move became routine: `ts_writes` went 822 to 1,502 (rising in 165 commits, falling in 15), `emit_abi_shapes` 1 to 104, `ts_any` 26 to 38, `verbatim_sites` 11 to 15 and `span_keyed_maps` 4 to 6. ADR 0310's leak guard became a list. The one gauge that held, the function-length ratchet, is directional and records its exceptions in a committed file.
+
+**Decision.** Keep the exact-match gate for every gated probe, and add a direction gate for a named growth set.
+
+- A. `growth_probes_never_rise` (`xtask/tests/greenfield_status.rs`, modelled on `model_readers_beyond_emit_never_falls`) compares each growth probe's live count with the committed row's and fails if it is higher, unless a pending file raises that probe. The new optional frontmatter key `raises: <probe> — <reason>` is repeatable, one line per probe, the reason is mandatory, and it must be single-line Markdown with no relative link. A fall still needs only `probes:`. There is no ceilings file: the committed gated row already is the ceiling, and a second file would be two sources of truth.
+- B. The growth set is `GROWTH_PROBES` (`ts_writes`, `ts_any`, `emit_abi_shapes`, `verbatim_sites`, `span_keyed_maps`), next to `GATED_PROBES`, with a test that it is a subset. Probes at a zero or closure floor, `verbatim_origins` and `model_readers_beyond_emit` are not in it.
+- C. Readings are compared by their leading integer (`emit_abi_shapes` reads `104 (bynk-browser.ts:Claim, ...)`), through one shared `leading_count` parser. A growth probe whose reading has no leading integer is a hard failure, not a skip.
+- D. The stamp appends one row per raise to the generated, append-only `design/greenfield-status-raises.md` (probe, from, to, version, PR, reason), because the pending file is deleted at stamp. `from` is the committed count before the stamp and `to` the live count it commits. A declared raise whose probe did not rise records nothing.
+
+**Consequences.** "Gated" now means two things: exact-match for every gated probe, and directional as well for the growth set. A feature that legitimately moves a growth probe upward must say so, with a reason that is reviewed in the PR and kept in the ledger, so a raise is rare and conspicuous. This amends ADR 0389 and ADR 0390 (their equality-only consequence); it does not supersede them, since their decision to gate these probes stands. Two PRs that both raise are each checked against the committed row at their own base, as under exact-match. Because the committed row lags a merged fall until the stamp runs, the lag can only make the test more permissive, never wrongly red. Where one stamp run covers several increments raising the same probe, each ledger row carries the run's whole from/to.

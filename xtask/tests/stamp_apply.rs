@@ -589,3 +589,41 @@ fn breaking_without_the_page_fails_before_writing_anything() {
     assert!(!changelog.contains("Break a"), "nothing may be written");
     assert!(root.join("design/pending/a-break.md").exists());
 }
+
+#[test]
+fn stamp_records_a_raise_in_the_raise_ledger() {
+    let root = fixture("raise");
+    fs::write(
+        root.join("design/pending/feat-raise.md"),
+        "---\nlevel: patch\nchangelog: Raise a thing\nprobes: ts_writes, ts_any\nraises: ts_writes — no typed node for Y yet (#1)\nraises: ts_any — stale declaration\n---\n",
+    )
+    .unwrap();
+    let mut plan = stamp::plan(&root).expect("plan");
+    // Only ts_writes actually rose at stamp time.
+    plan.growth_rises = vec![xtask::greenfield_status::GrowthRise {
+        probe: "ts_writes",
+        from: 10,
+        to: 12,
+    }];
+    stamp::apply(&root, &plan, Some(7), bumper(&root)).expect("apply");
+
+    let ledger = fs::read_to_string(root.join(stamp::RAISE_LEDGER_PATH)).unwrap();
+    assert!(ledger.contains("| Probe | From | To | Version | PR | Reason |"));
+    assert!(
+        ledger.contains("| ts_writes | 10 | 12 | v0.185.1 | #7 | no typed node for Y yet (#1) |")
+    );
+    assert!(!ledger.contains("stale declaration"));
+}
+
+#[test]
+fn stamp_without_a_raise_writes_no_raise_ledger() {
+    let root = fixture("no-raise");
+    fs::write(
+        root.join("design/pending/feat-plain.md"),
+        "---\nlevel: patch\nchangelog: Plain\n---\n",
+    )
+    .unwrap();
+    let plan = stamp::plan(&root).expect("plan");
+    stamp::apply(&root, &plan, None, bumper(&root)).expect("apply");
+    assert!(!root.join(stamp::RAISE_LEDGER_PATH).exists());
+}
