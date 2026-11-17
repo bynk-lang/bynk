@@ -1047,26 +1047,12 @@ pub fn run(
             callee_skews
         };
         if !callee_skews.is_empty() {
-            // A caller this build no longer has gets its own remedy: a
-            // whole-project deploy would not move it.
-            let (built, orphaned) = split_orphaned_callers(callee_skews, &graph);
-            if !built.is_empty() {
-                eprint!(
-                    "{}",
-                    callee_contract_skew_refusal(&opts.environment, worker, &built)
-                );
-            }
-            if !orphaned.is_empty() {
-                eprint!(
-                    "{}",
-                    orphaned_caller_skew_refusal(
-                        &opts.environment,
-                        worker,
-                        &orphaned,
-                        (runner, &|c: &str| lock.script_of(&opts.environment, c)),
-                    )
-                );
-            }
+            report_callee_skews(
+                callee_skews,
+                &graph,
+                (&opts.environment, worker),
+                (runner, &lock),
+            );
             return ExitCode::FAILURE;
         }
         // #2554: older contracts the lock still accepts that no live caller
@@ -1784,6 +1770,31 @@ fn record_accepted(
         &bynk_project::contracts_lock::serialize(&lock),
     )
     .map_err(|e| e.to_string())
+}
+
+/// What a push that would break live callers prints: a caller this build still has
+/// gets the callee's refusal, and one it no longer builds its own remedy, since a
+/// whole-project deploy would not move it (#3562: named by its script).
+fn report_callee_skews(
+    skews: Vec<CalleeSkew>,
+    graph: &BTreeMap<String, Vec<String>>,
+    (environment, worker): (&str, &str),
+    (runner, lock): (&str, &DeployLock),
+) {
+    let (built, orphaned) = split_orphaned_callers(skews, graph);
+    if !built.is_empty() {
+        eprint!(
+            "{}",
+            callee_contract_skew_refusal(environment, worker, &built)
+        );
+    }
+    if !orphaned.is_empty() {
+        let script_of = |c: &str| lock.script_of(environment, c);
+        eprint!(
+            "{}",
+            orphaned_caller_skew_refusal(environment, worker, &orphaned, (runner, &script_of))
+        );
+    }
 }
 
 /// The Workers a run deploys: every one, or the one `--context` or `--worker`
