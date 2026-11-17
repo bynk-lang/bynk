@@ -14,3 +14,6 @@ homepage.workspace = true
 # `Span`/`LineIndex` only — see `src/lib.rs`'s own module doc for the load-bearing
 # invariant this crate depends on nothing else (P7.5, #1307, Decision A).
 bynk-syntax.workspace = true
+
+[lints]
+workspace = true

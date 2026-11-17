@@ -296,7 +296,24 @@ pub fn module_exports(program: &TsProgram) -> ModuleExports {
             TsStmtKind::Raw(text) | TsStmtKind::Verbatim { text, .. } => {
                 opaque_exports(text, &mut out.names)
             }
-            _ => {}
+            TsStmtKind::Const { .. }
+            | TsStmtKind::Let { .. }
+            | TsStmtKind::ExprStmt(_)
+            | TsStmtKind::Return(_)
+            | TsStmtKind::Throw(_)
+            | TsStmtKind::If { .. }
+            | TsStmtKind::ForOf { .. }
+            | TsStmtKind::For { .. }
+            | TsStmtKind::TryCatch { .. }
+            | TsStmtKind::Block(_)
+            | TsStmtKind::Continue
+            | TsStmtKind::Assign { .. }
+            | TsStmtKind::Comment(_)
+            | TsStmtKind::DocComment(_)
+            | TsStmtKind::Blank
+            | TsStmtKind::Switch { .. }
+            | TsStmtKind::InlineBlock(_)
+            | TsStmtKind::Increment(_) => {}
         }
     }
     out

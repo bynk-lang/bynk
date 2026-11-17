@@ -782,7 +782,25 @@ fn render_branch(out: &mut String, branch: &TsStmt, depth: usize) {
             out.push(' ');
             render_inline_block(out, stmts);
         }
-        _ => {
+        TsStmtKind::Verbatim { .. }
+        | TsStmtKind::Decl(_)
+        | TsStmtKind::Const { .. }
+        | TsStmtKind::Let { .. }
+        | TsStmtKind::ExprStmt(_)
+        | TsStmtKind::Return(_)
+        | TsStmtKind::Throw(_)
+        | TsStmtKind::If { .. }
+        | TsStmtKind::ForOf { .. }
+        | TsStmtKind::For { .. }
+        | TsStmtKind::TryCatch { .. }
+        | TsStmtKind::Continue
+        | TsStmtKind::Assign { .. }
+        | TsStmtKind::Comment(_)
+        | TsStmtKind::DocComment(_)
+        | TsStmtKind::Blank
+        | TsStmtKind::Switch { .. }
+        | TsStmtKind::Increment(_)
+        | TsStmtKind::Raw(_) => {
             out.push(' ');
             render_inline_stmt(out, branch);
         }
@@ -1169,13 +1187,37 @@ fn render_binary_operand(out: &mut String, outer_op: TsBinaryOp, expr: &TsExpr, 
                 match outer_op {
                     TsBinaryOp::Or | TsBinaryOp::And => false,
                     TsBinaryOp::Add => !is_left,
-                    _ => true,
+                    TsBinaryOp::NullishCoalescing
+                    | TsBinaryOp::StrictEq
+                    | TsBinaryOp::StrictNotEq
+                    | TsBinaryOp::GreaterThan
+                    | TsBinaryOp::InstanceOf
+                    | TsBinaryOp::LessThan
+                    | TsBinaryOp::In
+                    | TsBinaryOp::GreaterThanEq
+                    | TsBinaryOp::LessThanEq
+                    | TsBinaryOp::Mul
+                    | TsBinaryOp::Exp => true,
                 }
             } else {
                 binary_precedence(*inner_op) <= binary_precedence(outer_op)
             }
         }
-        _ => false,
+        TsExpr::Ident(_)
+        | TsExpr::VerbatimExpr(..)
+        | TsExpr::Member { .. }
+        | TsExpr::OptionalMember { .. }
+        | TsExpr::Index { .. }
+        | TsExpr::OptionalIndex { .. }
+        | TsExpr::Call { .. }
+        | TsExpr::New { .. }
+        | TsExpr::Object { .. }
+        | TsExpr::Array { .. }
+        | TsExpr::TemplateLit { .. }
+        | TsExpr::Await(_)
+        | TsExpr::Unary { .. }
+        | TsExpr::Paren(_)
+        | TsExpr::Lit(_) => false,
     };
     if needs_parens {
         out.push('(');

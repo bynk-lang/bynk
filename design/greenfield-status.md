@@ -34,12 +34,12 @@ Track slice T0.0 (#999); `ts_writes`/`ts_any` added by P7.0 (#1296); `verbatim_o
 
 | Probe | Gated | Reads |
 |---|---|---|
-| `wildcard_arms` | no (trend) | 747 |
+| `wildcard_arms` | no (trend) | 734 |
 | `keep_in_sync` | no (trend) | 222 |
-| `test_density` | no (trend) | bynk=20.4%, bynk-check=14.1%, bynk-driver=21.4%, bynk-emit=10.8%, bynk-fmt=21.2%, bynk-ide=41.4%, bynk-lsp=40.9%, bynk-model=53.2%, bynk-project=25.5%, bynk-registry-core=16.8%, bynk-std=43.3%, bynk-strip=45.1%, bynk-syntax=12.9%, bynk-testkit=0.0%, bynk-tests=0.0%, bynk-ts=52.2%, bynk-wasm=53.7%, xtask=36.1% |
+| `test_density` | no (trend) | bynk=20.4%, bynk-check=14.1%, bynk-driver=21.4%, bynk-emit=10.8%, bynk-fmt=21.2%, bynk-ide=41.4%, bynk-lsp=40.9%, bynk-model=54.2%, bynk-project=25.5%, bynk-registry-core=16.8%, bynk-std=43.3%, bynk-strip=45.1%, bynk-syntax=12.9%, bynk-testkit=0.0%, bynk-tests=0.0%, bynk-ts=51.5%, bynk-wasm=53.7%, xtask=36.4% |
 | `fixture_kinds` | no (trend) | contains=5, absent=2, diagnostics=17, error=1492, warnings=24, run=377 |
 | `keystroke_latency` | no (trend) | edit-to-diagnostics median: 10 contexts 5.8 ms, 50 contexts 20 ms, 200 contexts 90.5 ms, 500 contexts 262.4 ms; debounce excluded; budget p95 < 100 ms at 50 contexts: met (24.4 ms); scheduler yardstick p95 > 250 ms at 200 contexts: not reached (independent 103.1 ms, linked 220.3 ms) (v0.537.0, design/benchmarks/v0.537.0.json) |
-| `module_lines` | no (trend) | ≥2000: 35 (≥3000: 27, ≥5000: 13); largest: bynk-syntax/diagnostics.rs 12378; back half: bynk-emit/emitter/lower.rs 10385, bynk-emit/emitter/emit.rs 10274, bynk-emit/emitter.rs 7476 |
+| `module_lines` | no (trend) | ≥2000: 35 (≥3000: 27, ≥5000: 13); largest: bynk-syntax/src/diagnostics.rs 12378; back half: bynk-emit/src/emitter/lower.rs 10385, bynk-emit/src/emitter/emit.rs 10274, bynk-emit/src/emitter.rs 7476 |
 
 ## Rules closed
 
