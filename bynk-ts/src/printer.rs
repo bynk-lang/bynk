@@ -1097,10 +1097,20 @@ fn binary_precedence(op: TsBinaryOp) -> u8 {
         | TsBinaryOp::In
         | TsBinaryOp::GreaterThanEq
         | TsBinaryOp::LessThanEq => 5,
-        TsBinaryOp::Add => 6,
-        TsBinaryOp::Mul => 7,
+        TsBinaryOp::Add | TsBinaryOp::Sub => 6,
+        TsBinaryOp::Mul | TsBinaryOp::Div => 7,
         TsBinaryOp::Exp => 8,
     }
+}
+
+/// The left-associative arithmetic operators (`+ - * /`): the ones whose
+/// same-tier left nesting prints flat. Everything else keeps the
+/// conservative rule in [`render_binary_operand`].
+fn is_left_assoc_arith(op: TsBinaryOp) -> bool {
+    matches!(
+        op,
+        TsBinaryOp::Add | TsBinaryOp::Sub | TsBinaryOp::Mul | TsBinaryOp::Div
+    )
 }
 
 /// Render `expr` as one side of a `Binary { op: outer_op, .. }` — #1321's
@@ -1152,6 +1162,16 @@ fn render_binary_operand(out: &mut String, outer_op: TsBinaryOp, expr: &TsExpr, 
                 != (*inner_op == TsBinaryOp::NullishCoalescing);
             if mixes_nullish {
                 true
+            } else if is_left_assoc_arith(outer_op)
+                && is_left_assoc_arith(*inner_op)
+                && binary_precedence(*inner_op) == binary_precedence(outer_op)
+            {
+                // Slice 1A.5 (#3703): `+`/`-` and `*`/`/` are left-associative
+                // within their tier, so a left-nested operand prints flat
+                // (`a - b - c`, `a * b / c`) and a right-nested one keeps its
+                // brackets (`a - (b - c)`, `a / (b * c)`) — `+` right-nested in
+                // `+` included (see the same-operator note below).
+                !is_left
             } else if *inner_op == outer_op {
                 // Same operator chained with itself: only `||`/`&&` are
                 // associative, so only they may print flat with no parens —
@@ -1186,7 +1206,7 @@ fn render_binary_operand(out: &mut String, outer_op: TsBinaryOp, expr: &TsExpr, 
                 // primitive, not scoped to that one caller's own usage.
                 match outer_op {
                     TsBinaryOp::Or | TsBinaryOp::And => false,
-                    TsBinaryOp::Add => !is_left,
+                    TsBinaryOp::Add | TsBinaryOp::Sub => !is_left,
                     TsBinaryOp::NullishCoalescing
                     | TsBinaryOp::StrictEq
                     | TsBinaryOp::StrictNotEq
@@ -1197,6 +1217,7 @@ fn render_binary_operand(out: &mut String, outer_op: TsBinaryOp, expr: &TsExpr, 
                     | TsBinaryOp::GreaterThanEq
                     | TsBinaryOp::LessThanEq
                     | TsBinaryOp::Mul
+                    | TsBinaryOp::Div
                     | TsBinaryOp::Exp => true,
                 }
             } else {
@@ -1677,6 +1698,8 @@ fn render_expr(out: &mut String, expr: &TsExpr) {
                 TsBinaryOp::GreaterThanEq => " >= ",
                 TsBinaryOp::LessThanEq => " <= ",
                 TsBinaryOp::Mul => " * ",
+                TsBinaryOp::Div => " / ",
+                TsBinaryOp::Sub => " - ",
                 TsBinaryOp::Exp => " ** ",
             });
             render_binary_operand(out, *op, right, false);
@@ -4269,6 +4292,69 @@ mod tests {
                 ),
                 "a * b >= c * d",
             ),
+        ];
+        for (expr, want) in cases {
+            assert_eq!(crate::print_expr(&expr), want);
+        }
+    }
+
+    /// Slice 1A.5 (#3703), Decision C: the precedence/associativity audit for
+    /// every operator Bynk's value operators lower to, against TypeScript's
+    /// table. `+`/`-` share a tier and `*`/`/` the tier above; all four are
+    /// left-associative (left nesting flat, right nesting bracketed);
+    /// relational binds tighter than equality; unary binds tighter than any
+    /// binary and brackets a binary operand.
+    #[test]
+    fn value_operator_precedence_and_associativity_audit() {
+        let bin = |op, l: TsExpr, r: TsExpr| TsExpr::Binary {
+            op,
+            left: Box::new(l),
+            right: Box::new(r),
+        };
+        let un = |op, e: TsExpr| TsExpr::Unary {
+            op,
+            expr: Box::new(e),
+        };
+        let id = |s: &str| TsExpr::Ident(s.to_string());
+        use TsBinaryOp::*;
+        let cases = [
+            (bin(Sub, bin(Sub, id("a"), id("b")), id("c")), "a - b - c"),
+            (bin(Sub, id("a"), bin(Sub, id("b"), id("c"))), "a - (b - c)"),
+            (bin(Add, id("a"), bin(Add, id("b"), id("c"))), "a + (b + c)"),
+            (bin(Add, bin(Add, id("a"), id("b")), id("c")), "a + b + c"),
+            (bin(Add, bin(Sub, id("a"), id("b")), id("c")), "a - b + c"),
+            (bin(Add, id("a"), bin(Sub, id("b"), id("c"))), "a + (b - c)"),
+            (bin(Sub, id("a"), bin(Mul, id("b"), id("c"))), "a - b * c"),
+            (bin(Mul, bin(Add, id("a"), id("b")), id("c")), "(a + b) * c"),
+            (bin(Mul, id("a"), bin(Add, id("b"), id("c"))), "a * (b + c)"),
+            (bin(Mul, bin(Div, id("a"), id("b")), id("c")), "a / b * c"),
+            (bin(Div, bin(Mul, id("a"), id("b")), id("c")), "a * b / c"),
+            (bin(Div, id("a"), bin(Mul, id("b"), id("c"))), "a / (b * c)"),
+            (bin(Div, id("a"), bin(Div, id("b"), id("c"))), "a / (b / c)"),
+            (bin(Mul, bin(Mul, id("a"), id("b")), id("c")), "a * b * c"),
+            (
+                bin(
+                    StrictEq,
+                    bin(LessThan, id("a"), id("b")),
+                    bin(LessThan, id("c"), id("d")),
+                ),
+                "a < b === c < d",
+            ),
+            (
+                bin(LessThan, bin(StrictEq, id("a"), id("b")), id("c")),
+                "(a === b) < c",
+            ),
+            (
+                bin(Add, id("a"), bin(LessThan, id("b"), id("c"))),
+                "a + (b < c)",
+            ),
+            (
+                un(TsUnaryOp::Not, bin(StrictEq, id("a"), id("b"))),
+                "!(a === b)",
+            ),
+            (un(TsUnaryOp::Neg, bin(Mul, id("a"), id("b"))), "-(a * b)"),
+            (bin(Mul, un(TsUnaryOp::Neg, id("a")), id("b")), "-a * b"),
+            (bin(Sub, id("a"), un(TsUnaryOp::Neg, id("b"))), "a - -b"),
         ];
         for (expr, want) in cases {
             assert_eq!(crate::print_expr(&expr), want);

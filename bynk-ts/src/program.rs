@@ -1746,6 +1746,13 @@ pub enum TsBinaryOp {
     /// in JS/TS, so the printer's default "same operator nested in itself
     /// parenthesises" rule keeps any chained `**` correct.
     Exp,
+    /// `-` (binary) — slice 1A.5 (#3703): Bynk's `Sub`. Shares
+    /// [`TsBinaryOp::Add`]'s tier; left-associative, so a right-nested
+    /// same-tier operand keeps its brackets (`a - (b - c)`).
+    Sub,
+    /// `/` — slice 1A.5 (#3703): Bynk's `Div`. Shares [`TsBinaryOp::Mul`]'s
+    /// tier; left-associative.
+    Div,
 }
 
 /// A literal — the three kinds `events_fanout.rs` uses (a string, a number,
