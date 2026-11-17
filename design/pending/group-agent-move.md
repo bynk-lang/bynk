@@ -13,5 +13,6 @@ classes) so the plan can tell which members own agents; a context's own Worker i
 exported classes. `--accept-fresh-agent <context>` (repeatable, each context named) lets a move
 start fresh: it warns, names the old script, records in the ledger that the script still holds
 the agent state, and the orphan report then says that script is not empty. It cannot be used to
-move a context out of a group that stays. ADR 0874 records the state-preserving move (the
+move a context out of a group that stays or to rename a group in place. A push clears the contexts it
+now holds from the other ledger records, so an accepted move is not refused again on the next deploy. ADR 0874 records the state-preserving move (the
 three-step `exports` transfer, its outage window and open limits) as future work.

@@ -26,6 +26,9 @@ pub(crate) struct AgentMove {
     /// The old script is still a Worker of this build (a group that lost the member), so
     /// its classes would have to be dropped from a Worker that keeps running.
     pub(crate) old_script_built: bool,
+    /// The same Worker (key) now has another script (a group renamed in place): Cloudflare cannot
+    /// rename a script, and the ledger would keep no record of the script left holding the data.
+    pub(crate) renamed_in_place: bool,
 }
 
 /// The moves of the Workers this run deploys (`order`): each context that hosts agents whose
@@ -54,6 +57,7 @@ pub(crate) fn agent_moves(
                 context: context.clone(),
                 classes: classes.clone(),
                 old_script_built: built_scripts.contains(&from_script),
+                renamed_in_place: from_worker == *worker,
                 from_worker,
                 from_script,
                 to_worker: worker.clone(),
@@ -85,6 +89,10 @@ pub(crate) fn refusals(moves: &[AgentMove], accepted: &[String]) -> Vec<String> 
                 Some(format!(
                     "{what}.\n  Keep `{}` on `{}`, or, if its state may be discarded, start it fresh with `--accept-fresh-agent {}`.",
                     m.context, m.from_script, m.context
+                ))
+            } else if m.renamed_in_place {
+                Some(format!(
+                    "{what}, and the Worker is renamed in place: its old script would keep the data with nothing in the ledger to say so, so renaming a group that hosts agents is not supported (not even with `--accept-fresh-agent`); change its key as well, or keep its `name`."
                 ))
             } else if m.old_script_built {
                 Some(format!(
@@ -207,10 +215,11 @@ mod tests {
     use crate::deploy::ledger::find_orphans;
 
     fn names(manifest: &str) -> GroupNames {
+        static NEXT: std::sync::atomic::AtomicUsize = std::sync::atomic::AtomicUsize::new(0);
         let root = std::env::temp_dir().join(format!(
-            "bynk-agent-move-{}-{:x}",
+            "bynk-agent-move-{}-{}",
             std::process::id(),
-            manifest.len() * 31 + manifest.bytes().map(usize::from).sum::<usize>()
+            NEXT.fetch_add(1, std::sync::atomic::Ordering::Relaxed)
         ));
         let _ = std::fs::remove_dir_all(&root);
         std::fs::create_dir_all(&root).unwrap();
@@ -428,5 +437,83 @@ mod tests {
         let state = &orphans.worker_agent_state["shop-orders"];
         assert_eq!(state["shop.orders"], ["Cart"]);
         assert!(agent_state_note("shop-orders", state).contains("do not delete"));
+    }
+
+    /// After an accepted move the ledger agrees with the build: the same deploy again is no
+    /// move, even though the old group's record sorts first. The old record keeps no member that
+    /// is now elsewhere, and keeps the note of the data it holds.
+    #[test]
+    fn an_accepted_move_out_of_a_dissolved_group_is_not_refused_again() {
+        let mut l = lock();
+        deployed(&mut l, "core", &["shop.orders", "shop.pay"], None);
+        let groups = names("");
+        let build = [("shop-orders", worker(&[("shop.orders", "Cart")]))];
+        let m = moves(&l, &groups, &build);
+        assert_eq!(m.len(), 1, "{m:?}");
+        assert!(!m[0].old_script_built && !m[0].renamed_in_place);
+        let opts = DeployOptions {
+            environment: "default".into(),
+            accept_fresh_agent: vec!["shop.orders".to_string()],
+            ..DeployOptions::default()
+        };
+        assert!(refusals(&m, &opts.accept_fresh_agent).is_empty());
+        // The push: the context's own Worker is recorded, then the move.
+        deployed(&mut l, "shop-orders", &[], None);
+        record_fresh_moves(&mut l, &opts, "shop-orders", &m);
+        assert!(moves(&l, &groups, &build).is_empty(), "refused again");
+        let resources: BTreeMap<String, Resources> =
+            BTreeMap::from([("shop-orders".to_string(), Resources::default())]);
+        let orphans = find_orphans(&l, "default", &resources);
+        assert_eq!(orphans.worker_agent_state["core"]["shop.orders"], ["Cart"]);
+        // `shop.pay`, still listed by the dissolved group, is unaffected.
+        assert_eq!(orphans.worker_contexts["core"], ["shop.pay"]);
+    }
+
+    /// A move between groups, the old key sorting first, is not refused again either.
+    #[test]
+    fn an_accepted_move_between_groups_is_not_refused_again() {
+        let mut l = lock();
+        deployed(&mut l, "core", &["shop.orders", "shop.pay"], None);
+        let groups = names(
+            "\n[deploy.workers.hub]\ncontexts = [\"shop.orders\"]\n\n[deploy.workers.core]\ncontexts = [\"shop.pay\"]\n",
+        );
+        let build = [
+            ("hub", worker(&[("shop.orders", "Cart")])),
+            ("core", worker(&[])),
+        ];
+        let m = moves(&l, &groups, &build);
+        let opts = DeployOptions {
+            environment: "default".into(),
+            accept_fresh_agent: vec!["shop.orders".to_string()],
+            ..DeployOptions::default()
+        };
+        // Both Workers are pushed: the group the context left is built, so this is the old-script-built case.
+        assert!(m[0].old_script_built);
+        deployed(&mut l, "hub", &["shop.orders"], None);
+        deployed(&mut l, "core", &["shop.pay"], None);
+        assert!(moves(&l, &groups, &build).is_empty());
+        let _ = opts;
+    }
+
+    /// A group renamed in place (`name =` under the same key) is refused even with the flag: its
+    /// old script would hold the data with no record, and the live record would replace it.
+    #[test]
+    fn renaming_a_group_in_place_is_never_accepted() {
+        let mut l = lock();
+        deployed(&mut l, "core", &["shop.orders", "shop.pay"], None);
+        let renamed = names(
+            "\n[deploy.workers.core]\ncontexts = [\"shop.orders\", \"shop.pay\"]\nname = \"core-v2\"\n",
+        );
+        let m = moves(
+            &l,
+            &renamed,
+            &[("core", worker(&[("shop.orders", "Cart")]))],
+        );
+        assert!(m[0].renamed_in_place);
+        let why = refusals(&m, &["shop.orders".to_string()]);
+        assert!(
+            why[0].contains("renamed in place") && why[0].contains("not supported"),
+            "{why:?}"
+        );
     }
 }

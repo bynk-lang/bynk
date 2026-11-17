@@ -1135,7 +1135,8 @@ pub(crate) fn project_resources(
         let mut resources = read_resources(&workers_dir.join(worker).join("wrangler.toml"), &known)
             .map_err(|e| format!("could not read the configuration for `{worker}`: {e}"))?;
         resources.agent_contexts =
-            read_agent_contexts(&workers_dir.join(worker), worker, &resources);
+            read_agent_contexts(&workers_dir.join(worker), worker, &resources)
+                .map_err(|e| format!("could not read the agent classes of `{worker}`: {e}"))?;
         resources.binds_to = resources
             .binds_to
             .into_iter()
@@ -1178,13 +1179,17 @@ fn read_agent_contexts(
     dir: &Path,
     worker: &str,
     resources: &Resources,
-) -> BTreeMap<String, Vec<String>> {
+) -> Result<BTreeMap<String, Vec<String>>, String> {
     #[derive(Deserialize)]
     struct File {
         agents: BTreeMap<String, Vec<String>>,
     }
+    // A manifest that is there but does not read is an error: this is a data-loss guard, so it
+    // must not fall silent.
     if let Ok(text) = std::fs::read_to_string(dir.join(bynk_emit::AGENTS_MANIFEST)) {
-        return serde_json::from_str::<File>(&text).map_or_else(|_| BTreeMap::new(), |f| f.agents);
+        return serde_json::from_str::<File>(&text)
+            .map(|f| f.agents)
+            .map_err(|e| format!("{}: {e}", bynk_emit::AGENTS_MANIFEST));
     }
     let own: Vec<String> = resources
         .durable_objects
@@ -1192,11 +1197,11 @@ fn read_agent_contexts(
         .map(|d| d.class.clone())
         .filter(|c| !c.starts_with("__") && c != "BynkInspectRegistry")
         .collect();
-    if own.is_empty() {
+    Ok(if own.is_empty() {
         BTreeMap::new()
     } else {
         BTreeMap::from([(super::secrets::context_of(worker), own)])
-    }
+    })
 }
 
 /// Each Worker's script name (`name` in its `wrangler.toml`, else its directory)
@@ -3578,5 +3583,26 @@ service = "legacy-billing"
             crate::deploy::graph::deploy_order(&workers, &graph).unwrap(),
             ["pay", "core", "odd", "web"]
         );
+    }
+
+    /// #3562 (G5): the agent-move guard reads a group's `bynk-agents.json`; one that is there but
+    /// unreadable is an error, never an empty answer that turns the guard off.
+    #[test]
+    fn a_malformed_agents_manifest_is_an_error() {
+        let dir = std::env::temp_dir().join(format!("bynk-agents-manifest-{}", std::process::id()));
+        let _ = std::fs::remove_dir_all(&dir);
+        std::fs::create_dir_all(&dir).unwrap();
+        let resources = Resources::default();
+        std::fs::write(dir.join(bynk_emit::AGENTS_MANIFEST), "{ not json").unwrap();
+        let err = read_agent_contexts(&dir, "core", &resources).unwrap_err();
+        assert!(err.contains("bynk-agents.json"), "{err}");
+        std::fs::write(
+            dir.join(bynk_emit::AGENTS_MANIFEST),
+            r#"{"agents":{"shop.orders":["Cart"]}}"#,
+        )
+        .unwrap();
+        let read = read_agent_contexts(&dir, "core", &resources).unwrap();
+        assert_eq!(read["shop.orders"], ["Cart"]);
+        let _ = std::fs::remove_dir_all(&dir);
     }
 }

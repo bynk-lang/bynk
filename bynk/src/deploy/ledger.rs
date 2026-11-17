@@ -671,6 +671,21 @@ impl DeployLock {
     /// ([`WorkerRecord::contexts`]). Called right after
     /// [`DeployLock::record_deployed`]; a Worker not yet recorded is ignored.
     pub(crate) fn record_members(&mut self, environment: &str, worker: &str, members: &[String]) {
+        // A context is in one Worker: whatever other records still list the contexts this push
+        // holds are stale (a dissolved group, the group it left), and `worker_of` would find
+        // them first. A context's own Worker holds just that context.
+        let held: Vec<String> = if members.is_empty() {
+            vec![worker.replace('-', ".")]
+        } else {
+            members.to_vec()
+        };
+        if let Some(env) = self.environments.get_mut(environment) {
+            for (other, record) in env.workers.iter_mut() {
+                if other != worker {
+                    record.contexts.retain(|c| !held.contains(c));
+                }
+            }
+        }
         if let Some(record) = self
             .environments
             .get_mut(environment)

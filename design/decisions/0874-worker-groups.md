@@ -185,7 +185,11 @@ Edge keys are named per member context (the runtime signs as the calling context
   (repeatable, never a blanket) starts it fresh instead: the run warns naming the class
   and the old script, the ledger records that script as holding the agent state, and the
   orphan report says it is not empty. It cannot be used for a move out of a group that
-  stays, which would have to drop a class from a Worker that keeps running. Reverting past
+  stays (which would have to drop a class from a Worker that keeps running) or for a group
+  renamed in place (its old script would keep the data with no ledger record of it: change the
+  key too, or keep the `name`). A push clears the contexts it now holds from every other
+  ledger record, so the old record of a dissolved or left group no longer names them, and an
+  accepted move is not refused again on the next deploy. Reverting past
   a move stays refused by `bynk.revert.membership_changed` and `class_changed`.
 - **Future work: a state-preserving move.** The scratch-account probe showed a data-preserving
   transfer works with the declarative `exports` map, in three steps: the receiver declares
