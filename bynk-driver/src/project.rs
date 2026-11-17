@@ -2108,7 +2108,7 @@ fn emit_unit(
     // `Verbatim`-wrapping a pre-rendered string.
     // #1927: a `uses`-imported type this unit hides behind its own value is
     // spelled as an inline import type while the module is emitted
-    // (`emitter::type_renames`).
+    // (`emitter::ts_types::type_renames`).
     let hidden_type_spellings: HashMap<String, String> =
         bynk_check::project_model::shadowed_imports(name, unit_info)
             .into_iter()
@@ -2129,7 +2129,7 @@ fn emit_unit(
                 (type_name, spelling)
             })
             .collect();
-    let _spellings = emitter::type_renames::enter(hidden_type_spellings);
+    let _spellings = emitter::ts_types::type_renames::enter(hidden_type_spellings);
     let (program, source_map) =
         emitter::emit_project(program, &emit_ctx, pf.source(), &source_name);
     // Slice 3: the handler-label sidecar for this unit (ADR 0105) — names stack

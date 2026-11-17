@@ -520,7 +520,7 @@ impl Gen {
             // A `@multipart` file part: the standard `File` is a `Blob` here, which
             // is what a `File` input yields, and what `fetch` appends.
             TypeRef::Named(id) if self.is_file(&id.name) => TsType::named("globalThis.Blob"),
-            other => super::ts_type_ref_qualified_multi_ts_type(other, &HashMap::new()),
+            other => super::ts_types::ts_type_ref_qualified_multi_ts_type(other, &HashMap::new()),
         })
     }
 

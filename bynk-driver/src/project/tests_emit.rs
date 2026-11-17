@@ -972,31 +972,46 @@ mod tests {
 
     #[test]
     fn ts_type_ref_bases_and_generics() {
-        assert_eq!(emitter::ts_type_ref(&base(BaseType::Int)), "number");
-        assert_eq!(emitter::ts_type_ref(&base(BaseType::Float)), "number");
-        assert_eq!(emitter::ts_type_ref(&base(BaseType::String)), "string");
-        assert_eq!(emitter::ts_type_ref(&base(BaseType::Bool)), "boolean");
-        assert_eq!(emitter::ts_type_ref(&named("Order")), "Order");
         assert_eq!(
-            emitter::ts_type_ref(&TypeRef::List(Box::new(named("Order")), Span::default())),
+            emitter::ts_types::ts_type_ref(&base(BaseType::Int)),
+            "number"
+        );
+        assert_eq!(
+            emitter::ts_types::ts_type_ref(&base(BaseType::Float)),
+            "number"
+        );
+        assert_eq!(
+            emitter::ts_types::ts_type_ref(&base(BaseType::String)),
+            "string"
+        );
+        assert_eq!(
+            emitter::ts_types::ts_type_ref(&base(BaseType::Bool)),
+            "boolean"
+        );
+        assert_eq!(emitter::ts_types::ts_type_ref(&named("Order")), "Order");
+        assert_eq!(
+            emitter::ts_types::ts_type_ref(&TypeRef::List(
+                Box::new(named("Order")),
+                Span::default()
+            )),
             "readonly Order[]"
         );
         assert_eq!(
-            emitter::ts_type_ref(&TypeRef::Option(
+            emitter::ts_types::ts_type_ref(&TypeRef::Option(
                 Box::new(base(BaseType::Int)),
                 Span::default()
             )),
             "Option<number>"
         );
         assert_eq!(
-            emitter::ts_type_ref(&TypeRef::Effect(
+            emitter::ts_types::ts_type_ref(&TypeRef::Effect(
                 Box::new(TypeRef::Unit(Span::default())),
                 Span::default()
             )),
             "globalThis.Promise<void>"
         );
         assert_eq!(
-            emitter::ts_type_ref(&TypeRef::Map(
+            emitter::ts_types::ts_type_ref(&TypeRef::Map(
                 Box::new(base(BaseType::String)),
                 Box::new(named("V")),
                 Span::default()
@@ -1004,7 +1019,7 @@ mod tests {
             "ReadonlyMap<string, V>"
         );
         assert_eq!(
-            emitter::ts_type_ref(&TypeRef::Result(
+            emitter::ts_types::ts_type_ref(&TypeRef::Result(
                 Box::new(named("T")),
                 Box::new(named("E")),
                 Span::default()
@@ -1012,15 +1027,18 @@ mod tests {
             "Result<T, E>"
         );
         assert_eq!(
-            emitter::ts_type_ref(&TypeRef::HttpResult(Box::new(named("T")), Span::default())),
+            emitter::ts_types::ts_type_ref(&TypeRef::HttpResult(
+                Box::new(named("T")),
+                Span::default()
+            )),
             "HttpResult<T>"
         );
         assert_eq!(
-            emitter::ts_type_ref(&TypeRef::ValidationError(Span::default())),
+            emitter::ts_types::ts_type_ref(&TypeRef::ValidationError(Span::default())),
             "ValidationError"
         );
         assert_eq!(
-            emitter::ts_type_ref(&TypeRef::DecodeError(Span::default())),
+            emitter::ts_types::ts_type_ref(&TypeRef::DecodeError(Span::default())),
             "DecodeError"
         );
     }
@@ -1032,7 +1050,10 @@ mod tests {
             Box::new(TypeRef::Unit(Span::default())),
             Span::default(),
         );
-        assert_eq!(emitter::ts_type_ref(&f), "(a0: number, a1: Order) => void");
+        assert_eq!(
+            emitter::ts_types::ts_type_ref(&f),
+            "(a0: number, a1: Order) => void"
+        );
     }
 
     #[test]
@@ -1041,7 +1062,7 @@ mod tests {
         scope.insert("Order".to_string());
         // A named type in the privileged scope is qualified with the namespace.
         assert_eq!(
-            bynk_ts::print_type(&emitter::ts_type_ref_qualified_ts_type(
+            bynk_ts::print_type(&emitter::ts_types::ts_type_ref_qualified_ts_type(
                 &named("Order"),
                 &scope,
                 "Ns"
@@ -1050,7 +1071,7 @@ mod tests {
         );
         // A named type outside the scope is left bare.
         assert_eq!(
-            bynk_ts::print_type(&emitter::ts_type_ref_qualified_ts_type(
+            bynk_ts::print_type(&emitter::ts_types::ts_type_ref_qualified_ts_type(
                 &named("Other"),
                 &scope,
                 "Ns"
@@ -1059,7 +1080,7 @@ mod tests {
         );
         // Qualification recurses through generic arguments.
         assert_eq!(
-            bynk_ts::print_type(&emitter::ts_type_ref_qualified_ts_type(
+            bynk_ts::print_type(&emitter::ts_types::ts_type_ref_qualified_ts_type(
                 &TypeRef::List(Box::new(named("Order")), Span::default()),
                 &scope,
                 "Ns"
@@ -1068,7 +1089,7 @@ mod tests {
         );
         // Base types are unaffected by qualification.
         assert_eq!(
-            bynk_ts::print_type(&emitter::ts_type_ref_qualified_ts_type(
+            bynk_ts::print_type(&emitter::ts_types::ts_type_ref_qualified_ts_type(
                 &base(BaseType::Int),
                 &scope,
                 "Ns"

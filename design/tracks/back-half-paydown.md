@@ -143,8 +143,9 @@ binding model has one compose path to serve.
 
 | Slice | Change |
 |---|---|
-| **1A.1** | Introduce the bridge `enum LoweredExpr { Node(TsExpr), Text(String) }` and `pre: Vec<TsStmt>`. Make `ts_ty` return `TsType`. Move `LowerCtx`, `ModuleCtx` and type rendering out of `emitter.rs` into the lowering modules (a mechanical move, allowed early; see §6). |
-| **1A.2–n** | Convert lowerings to `Node`, leaves first: literals, identifiers, operators, calls, then control flow and the list kernel. One expression family per slice. Each slice lowers `ts_writes` and the `Text`-bridge count. |
+| **1A.1** | Move `LowerCtx`, `ModuleCtx` and type rendering out of `emitter.rs` into `emitter/ctx.rs`, `emitter/lower_ctx.rs` and `emitter/ts_types.rs` (a mechanical move, allowed early; see §6). Byte-identical goldens, no re-exports. |
+| **1A.2** | Introduce the bridge `enum LoweredExpr { Node(TsExpr), Text(String) }` and `pre: Vec<TsStmt>`. Make `ts_ty` return `TsType`. |
+| **1A.3–n** | Convert lowerings to `Node`, leaves first: literals, identifiers, operators, calls, then control flow and the list kernel. One expression family per slice. Each slice lowers `ts_writes` and the `Text`-bridge count. |
 | **1A.x** | Once nothing produces `Text`, delete the variant and `print_expr` round-trips. `ts_array_elem`-style text inspection goes too; the printer owns precedence. |
 | **1A.imports** | Derive each module's runtime and type imports from the built tree using `bynk-ts/src/name_closure.rs`. Delete the `*needs*` / `*mentions*` / `*uses*` prediction functions. |
 | **1A.fallback** | One policy for a missing checker fact: an internal-compiler-error diagnostic, never `any` and never `undefined`. Remove the `"any"` fallbacks. |

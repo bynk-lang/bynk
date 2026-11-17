@@ -30,6 +30,9 @@ use bynk_model::{
     lower_handler_kind_ir, lower_protocol_ir_from_commons,
 };
 
+use super::ctx::{AgentStoreState, BodyMode, HandlerShared, ModuleCtx};
+use super::lower_ctx::LowerCtx;
+use super::ts_types::{ts_base, ts_ty, ts_ty_to_ts_type, ts_type_ref, ts_type_ref_to_ts_type};
 use super::*;
 
 /// P6.x (#1188): reads `shape` — `t`'s already-lowered `bynk-emit::ir::TypeShape`
@@ -3414,7 +3417,7 @@ pub(crate) fn emit_service(
                 append_deps_field(
                     &mut deps_members,
                     "claims",
-                    crate::emitter::token_claims_ts_type(),
+                    crate::emitter::ts_types::token_claims_ts_type(),
                 );
             }
             // v0.54: a Caller-binding call handler's deps carries the
@@ -4893,7 +4896,8 @@ pub(crate) fn param_cast(
             } else {
                 qualified_to_ns(consumed)
             };
-            let ty = crate::emitter::ts_type_ref_qualified_ts_type(ptype_ref, &names, &ns);
+            let ty =
+                crate::emitter::ts_types::ts_type_ref_qualified_ts_type(ptype_ref, &names, &ns);
             return bynk_ts::print_expr(&bynk_ts::TsExpr::Paren(Box::new(bynk_ts::TsExpr::As {
                 expr: Box::new(bynk_ts::TsExpr::As {
                     expr: Box::new(bynk_ts::TsExpr::Ident(arg)),
@@ -5024,7 +5028,7 @@ pub(crate) fn return_cast(
             (n.clone(), ns_of(owner))
         })
         .collect();
-    let ty = crate::emitter::ts_type_ref_qualified_multi_ts_type(&return_type, &type_ns);
+    let ty = crate::emitter::ts_types::ts_type_ref_qualified_multi_ts_type(&return_type, &type_ns);
     bynk_ts::print_expr(&bynk_ts::TsExpr::Paren(Box::new(bynk_ts::TsExpr::As {
         expr: Box::new(bynk_ts::TsExpr::As {
             expr: Box::new(bynk_ts::TsExpr::Ident(call)),
@@ -7818,7 +7822,7 @@ fn emit_agent_dispatch(
         if reads_key {
             agent_dispatch_stmts.push(agent_key_assign(
                 &agent_key_codec_name(&a.name.name),
-                &crate::emitter::ts_type_ref(&a.key_type),
+                &crate::emitter::ts_types::ts_type_ref(&a.key_type),
                 "key",
             ));
         }
@@ -8869,7 +8873,7 @@ pub(crate) fn emit_agent(
         writeln!(
             out,
             "  __key!: {};",
-            crate::emitter::ts_type_ref(&a.key_type)
+            crate::emitter::ts_types::ts_type_ref(&a.key_type)
         )
         .unwrap();
     }
@@ -8966,7 +8970,7 @@ pub(crate) fn emit_agent(
         for host in &mut ws_open_hosts {
             host.agent_key = Some((
                 agent_key_codec_name(&a.name.name),
-                crate::emitter::ts_type_ref(&a.key_type),
+                crate::emitter::ts_types::ts_type_ref(&a.key_type),
             ));
         }
     }
