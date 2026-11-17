@@ -5437,6 +5437,16 @@ bynk deploy   # fix forward",
         anchor: "what-it-refuses",
     },
     Explain {
+        code: "bynk.revert.membership_changed",
+        blurb: "A `[deploy.workers.<key>]` group is one Worker script, so `bynk revert` puts every member back together. It refuses to go back to a version that held other contexts than the live one: a context that has moved into or out of the group since, or a version deployed before groups. Rolling back would take a member's code out from under its traffic. Redeploy forward instead.",
+        example: "bynk revert --dry-run --worker core\n\
+\x20\x20members   core  refused: the live version holds [shop.a, shop.b] and the target holds [shop.a]\n\
+\n\
+bynk deploy   # redeploy forward",
+        page: "/book/guides/projects-build-and-deployment/roll-back-a-deployment",
+        anchor: "what-it-refuses",
+    },
+    Explain {
         code: "bynk.revert.secret_changed",
         blurb: "A rollback can restore the old value of a secret that was rotated after the target was live, and its peers no longer accept that value. `bynk revert` counts the secret changes between the target and now and refuses if there are any. After a `bynk migrate sweep`, whose two changes touch only its own temporary key, pass `--accept-secret-changes`. A secret rotated before the release you are leaving is kept and does not count.",
         example: "bynk revert --dry-run\n\
@@ -10888,6 +10898,10 @@ pub const REGISTRY: &[DiagnosticInfo] = &[
     d(
         "bynk.revert.layout_older",
         "`bynk revert` refused because the target writes an older agent storage layout than the live one while stored instances exist or are not known to be absent, so the older code could not read the newer records.",
+    ),
+    d(
+        "bynk.revert.membership_changed",
+        "`bynk revert` refused because a `[deploy.workers.<key>]` group's target version held other contexts than the live one (a context moved into or out of the group since, or the version predates groups), so a rollback would take a member's code out of the Worker.",
     ),
     d(
         "bynk.revert.secret_changed",

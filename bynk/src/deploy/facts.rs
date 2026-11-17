@@ -53,6 +53,12 @@ pub(crate) struct Facts {
     /// database id, rate-limit namespace id).
     #[serde(default, skip_serializing_if = "BTreeMap::is_empty")]
     pub(crate) ids: BTreeMap<String, String>,
+    /// #3562: the contexts a `[deploy.workers]` group's Worker held, in the manifest's
+    /// order; empty for a context on its own Worker. A revert compares the two
+    /// versions' members, since rolling a group back to a version with other
+    /// members would take a context's code out from under it.
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub(crate) contexts: Vec<String>,
 }
 
 impl Facts {
@@ -126,6 +132,7 @@ pub(crate) fn build_facts(
         expects: manifest.expects.clone(),
         foreign: manifest.foreign.clone(),
         ids,
+        contexts: declared.members.clone(),
     }
 }
 

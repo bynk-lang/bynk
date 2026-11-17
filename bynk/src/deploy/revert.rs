@@ -162,6 +162,23 @@ mod code {
     pub(super) const ID_UNRECORDED: &str = "bynk.revert.id_unrecorded";
     pub(super) const SECRET_CHANGED: &str = "bynk.revert.secret_changed";
     pub(super) const HISTORY_UNPLACEABLE: &str = "bynk.revert.history_unplaceable";
+    pub(super) const MEMBERSHIP_CHANGED: &str = "bynk.revert.membership_changed";
+}
+
+/// A group is one script, so a rollback must go to a version holding the same members.
+fn membership_finding(c: &Case<'_>) -> Option<Finding> {
+    (c.live.contexts != c.target.contexts).then(|| {
+        Finding::refused(
+            "members",
+            code::MEMBERSHIP_CHANGED,
+            c.worker,
+            format!(
+                "the live version holds [{}] and the target holds [{}]; rolling back would take a context's code out of the Worker, or put one back that has since moved. Deploy forward instead",
+                c.live.contexts.join(", "),
+                c.target.contexts.join(", ")
+            ),
+        )
+    })
 }
 
 /// One check's outcome.
@@ -300,12 +317,8 @@ fn container_rollback_notes(target: &Facts) -> Vec<Finding> {
         .collect()
 }
 
-pub(crate) fn evaluate(c: &Case<'_>) -> Vec<Finding> {
-    let mut out = Vec::new();
-
-    out.extend(container_rollback_notes(c.target));
-
-    // D1 migrations are forward-only (ADR 0664).
+/// D1 migrations are forward-only (ADR 0664).
+fn d1_findings(c: &Case<'_>, out: &mut Vec<Finding>) {
     for binding in databases_to_read(c.live, c.target) {
         let target_files = c.target.migrations.get(&binding);
         if target_files.is_none() && !c.target.ids.contains_key(&binding) {
@@ -365,6 +378,20 @@ pub(crate) fn evaluate(c: &Case<'_>) -> Vec<Finding> {
             }
         }
     }
+}
+
+pub(crate) fn evaluate(c: &Case<'_>) -> Vec<Finding> {
+    let mut out = Vec::new();
+
+    out.extend(container_rollback_notes(c.target));
+
+    // #3562: a group is one script, so the version it goes back to must hold the
+    // contexts the live one does. Another membership (a context moved into or out of
+    // the group since, or a version from before groups) would take a context's code
+    // out from under its traffic.
+    out.extend(membership_finding(c));
+
+    d1_findings(c, &mut out);
 
     // Agent state is stamped with its schema version (ADR 0545) and faults on
     // newer records.
@@ -2218,5 +2245,101 @@ mod tests {
             revert_order(&map, &|c: &str| lock.worker_of("default", c)),
             ["shop", "core"]
         );
+    }
+
+    fn group_account(live: &Facts, target: &Facts, script: &str) -> Fake {
+        let mut fake = Fake::default();
+        fake.deployments.borrow_mut().insert(
+            script.into(),
+            vec![dep("d2", "upload", "v2"), dep("d1", "upload", "v1")],
+        );
+        fake.facts
+            .insert((script.into(), "v2".into()), live.encode().unwrap());
+        fake.facts
+            .insert((script.into(), "v1".into()), target.encode().unwrap());
+        fake
+    }
+
+    fn group_lock(script: &str) -> DeployLock {
+        let mut lock: DeployLock = toml::from_str("version = 1\n").unwrap();
+        lock.record_deployed("default", "core", Some(BTreeMap::new()));
+        lock.record_members(
+            "default",
+            "core",
+            &["shop.a".to_string(), "shop.b".to_string()],
+        );
+        lock.record_script("default", "core", script);
+        lock
+    }
+
+    /// #3562: a renamed group is read and rolled back under its script name, not
+    /// its key. The fake account knows only the script.
+    #[test]
+    fn a_renamed_group_is_rolled_back_under_its_script_name() {
+        let members = || {
+            facts(|f| {
+                f.contexts = vec!["shop.a".into(), "shop.b".into()];
+            })
+        };
+        let (live, target) = (members(), members());
+        let api = group_account(&live, &target, "core-script");
+        let lock = group_lock("core-script");
+        let planned = plan(
+            &api,
+            &lock,
+            &BTreeMap::new(),
+            &["core".to_string()],
+            &opts(),
+            long_ago(),
+        )
+        .unwrap();
+        assert!(planned.plan.ok, "{:?}", planned.plan.workers[0].checks);
+        assert_eq!(planned.plan.workers[0].script, "core-script");
+        // Keyed by the key, the account has no such script: that is the regression.
+        let wrong = group_lock("core");
+        let refused = plan(
+            &api,
+            &wrong,
+            &BTreeMap::new(),
+            &["core".to_string()],
+            &opts(),
+            long_ago(),
+        )
+        .unwrap();
+        assert!(!refused.plan.ok);
+    }
+
+    /// #3562: a group goes back only to a version that held the same contexts.
+    #[test]
+    fn a_group_is_not_reverted_across_a_membership_change() {
+        let live = facts(|f| {
+            f.contexts = vec!["shop.a".into(), "shop.b".into()];
+        });
+        let moved_in = facts(|f| {
+            f.contexts = vec!["shop.a".into()];
+        });
+        let before_groups = facts(|_| {});
+        for target in [&moved_in, &before_groups] {
+            let api = group_account(&live, target, "core");
+            let lock = group_lock("core");
+            let Planned { plan, .. } = plan(
+                &api,
+                &lock,
+                &BTreeMap::new(),
+                &["core".to_string()],
+                &opts(),
+                long_ago(),
+            )
+            .unwrap();
+            assert!(!plan.ok);
+            let finding = plan.workers[0]
+                .checks
+                .iter()
+                .find(|f| f.check == "members")
+                .expect("a membership finding");
+            assert_eq!(finding.code, Some("bynk.revert.membership_changed"));
+            assert!(finding.detail.contains("shop.b"), "{}", finding.detail);
+            assert!(api.rolled.borrow().is_empty());
+        }
     }
 }
