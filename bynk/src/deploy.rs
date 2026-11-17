@@ -107,8 +107,9 @@ pub(crate) fn deployed_environments(
 pub(crate) fn local_edge_keys(
     workers_dir: &Path,
     workers: &[String],
+    project_root: &Path,
 ) -> Result<BTreeMap<String, Vec<String>>, String> {
-    let resources = project_resources(workers_dir, workers)?;
+    let resources = project_resources_for(workers_dir, workers, project_root)?;
     let edges = project_edges(&resources);
     for edge in &edges {
         edge.ends()?;
@@ -723,6 +724,8 @@ mod tests {
         let edge = Edge {
             caller: "commerce-orders".into(),
             callee: "commerce-payment".into(),
+            caller_contexts: Vec::new(),
+            callee_contexts: Vec::new(),
         };
         let skews = vec![ContractSkew {
             dependency: "commerce.payment".into(),

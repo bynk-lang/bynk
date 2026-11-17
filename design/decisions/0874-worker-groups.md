@@ -104,7 +104,7 @@ wrangler then exits non-zero with `10007` from a follow-up lookup after the uplo
 which G4 must treat as non-fatal once the script is confirmed to exist). The rule
 that the target Worker must exist before the binding is declared cannot apply to a
 Worker binding to itself, so the dependencies-first ordering treats an intra-group
-edge as no edge.
+edge as no edge. Edge keys are named per member context (the runtime signs as the calling context): an edge between Workers is one secret, held by the callee as `BYNK_CALL_FROM_<m>` for each member `m` of the caller and by the caller as `BYNK_CALL_TO_<m>` for each member of the callee, and a group holds both for each of its own members. The members of a Worker share one `env`, so a key held for the Worker is held by all of them.
 
 *D8: amendments.*
 

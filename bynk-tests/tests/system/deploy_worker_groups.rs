@@ -1047,6 +1047,21 @@ fn deploy_treats_a_group_as_one_worker() {
         !all.contains("shop-a1") && !all.contains("shop-a2"),
         "a member is not a Worker:\n{all}"
     );
+    // The runtime signs as the calling member and verifies the key named for it, so the
+    // group's Worker holds a key per member (for the calls between them too) and the
+    // Worker it calls holds one for each member that might call it.
+    for key in [
+        "BYNK_CALL_FROM_SHOP__A1",
+        "BYNK_CALL_FROM_SHOP__A2",
+        "BYNK_CALL_TO_SHOP__A2",
+        "BYNK_CALL_TO_SHOP__PAY",
+    ] {
+        assert!(all.contains(key), "no key {key}:\n{all}");
+    }
+    assert!(
+        !all.contains("BYNK_CALL_FROM_FRONT"),
+        "a key by Worker:\n{all}"
+    );
 
     // `--worker` selects a Worker by its directory. Like `--context`, it assumes
     // the Workers it binds to are live (D4): the group binds to `shop-pay`.

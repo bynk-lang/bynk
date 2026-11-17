@@ -576,7 +576,7 @@ pub fn run(
     // I2 (#1971): over every built Worker, not only the served ones, so a
     // context served here alone still admits a caller served by another
     // `bynk dev --context` session.
-    let local = match LocalKeys::read(&workers_dir, &available) {
+    let local = match LocalKeys::read(&workers_dir, &available, project_root) {
         Ok(keys) => keys,
         Err(e) => {
             eprintln!("bynk: {e}");
@@ -1989,9 +1989,9 @@ struct LocalKeys {
 }
 
 impl LocalKeys {
-    fn read(workers_dir: &Path, available: &[String]) -> Result<Self, String> {
+    fn read(workers_dir: &Path, available: &[String], project_root: &Path) -> Result<Self, String> {
         Ok(Self {
-            edge: crate::deploy::local_edge_keys(workers_dir, available)?,
+            edge: crate::deploy::local_edge_keys(workers_dir, available, project_root)?,
             session: crate::deploy::local_session_keys(workers_dir, available)?,
         })
     }
