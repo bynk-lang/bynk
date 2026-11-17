@@ -69,11 +69,11 @@ pub fn refuse_release_contracts(root: &Path) -> Result<(), String> {
 }
 
 /// #3562 (temporary): a `[deploy.workers.<key>]` group changes which Worker a
-/// context is in (its script name, its directory, its routes and domains), but
-/// `bynk deploy`, `bynk revert` and `bynk dev` still name each Worker after its
-/// context, so they would deploy, revert or run the wrong thing. Until they are
-/// taught groups (G4, G6), they refuse a project with any group, before touching
-/// anything. A project with no `[deploy.workers]` table is unaffected. A group of
+/// context is in (its script name, its directory, its routes and domains).
+/// `bynk deploy` is taught groups (G4), but `bynk revert` and `bynk dev` still name
+/// each Worker after its context, so they would revert or run the wrong thing.
+/// Until they are taught groups (G4-3, G6), they refuse a project with any group,
+/// before touching anything. A project with no `[deploy.workers]` table is unaffected. A group of
 /// one context is refused too: it still moves that context to the group's Worker.
 pub fn refuse_worker_groups(root: &Path) -> Result<(), String> {
     let groups = bynk_project::worker_groups::try_read_worker_groups(root)
@@ -89,10 +89,14 @@ pub fn refuse_worker_groups(root: &Path) -> Result<(), String> {
 }
 
 /// What a deployment refuses before it prepares anything: contract checks in the
-/// release profile ([`refuse_release_contracts`]), and, until `bynk deploy` learns
-/// them (G4), Worker groups ([`refuse_worker_groups`]).
+/// release profile ([`refuse_release_contracts`]). A `[deploy.workers]` group no
+/// longer is one (G4); `bynk revert` and `bynk dev` still refuse one
+/// ([`refuse_worker_groups`]).
 pub fn refuse_undeployable_project(root: &Path) -> Result<(), String> {
-    refuse_worker_groups(root)?;
+    // A group table that does not read must stop the run here: `deploy` places
+    // every context by it, and would otherwise place each on its own Worker.
+    bynk_project::worker_groups::try_read_worker_groups(root)
+        .map_err(|e| format!("invalid `[deploy.workers]` in `bynk.toml`: {e}"))?;
     refuse_release_contracts(root)
 }
 
@@ -668,6 +672,25 @@ mod worker_group_refusal_tests {
             err.contains("bynk.deploy.worker_groups_unsupported") && err.contains("`core`"),
             "{err}"
         );
+    }
+
+    /// `deploy` accepts a group, but a table that does not read stops it before
+    /// it places each context on its own Worker (#3562).
+    #[test]
+    fn deploy_accepts_a_group_and_refuses_a_malformed_table() {
+        let good = project(
+            "good",
+            "[project]\nname = \"p\"\nversion = \"0.1.0\"\n\n[deploy.workers.core]\ncontexts = [\"a\", \"b\"]\n",
+        );
+        assert!(super::refuse_undeployable_project(&good).is_ok());
+        let bad = project(
+            "bad-deploy",
+            "[project]\nname = \"p\"\nversion = \"0.1.0\"\n\n[deploy.workers]\ncore = 3\n",
+        );
+        let err = super::refuse_undeployable_project(&bad).unwrap_err();
+        assert!(err.starts_with("invalid `[deploy.workers]`"), "{err}");
+        let _ = fs::remove_dir_all(&good);
+        let _ = fs::remove_dir_all(&bad);
     }
 
     /// A malformed table is a clear error, not a refusal that blames groups.

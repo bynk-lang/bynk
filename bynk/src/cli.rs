@@ -269,8 +269,14 @@ pub enum Command {
         /// already live; a dependency that has never been deployed is reported
         /// rather than pushed into. Accepts the dotted name or its dasherised
         /// worker-dir form. Omit to deploy the whole project in order.
-        #[arg(long, value_name = "NAME")]
+        #[arg(long, value_name = "NAME", conflicts_with = "worker")]
         context: Option<String>,
+        /// Deploy this Worker alone, by its directory name under `workers/`: a
+        /// `[deploy.workers.<key>]` group's key (the group is one Worker, so it
+        /// deploys, and rolls back, as a unit), or a context's dasherised name.
+        /// Like `--context`, it assumes the Workers it binds to are already live.
+        #[arg(long, value_name = "NAME")]
+        worker: Option<String>,
         /// Target environment. Selects the `bynk.deploy.lock` section and,
         /// for any value other than `default`, synthesises an environment-
         /// scoped Wrangler config section (KV, queues, Service Bindings all
