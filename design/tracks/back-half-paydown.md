@@ -121,7 +121,7 @@ Small, mostly in `xtask`. It lands first because every later slice is measured b
 | **P0.3** | Refresh trend rows at stamp time (`cargo xtask stamp --apply` regenerates the whole table), and drop the deleted crates from `test_density`. | §1.2 |
 | **P0.4** | Opt `bynk-ts` (8 wildcard arms) and `bynk-model` (5) into `[lints] workspace = true`, after fixing their arms. | §1.2 |
 | **P0.5** | Add a `module_lines` probe: the largest source file per crate, and files at or above 2,000 lines. Report only (trend) in this phase; it becomes a ratchet in Phase 2. | §6.1 |
-| **P0.6** | Bring `bynk-driver/src/project/test_runtime/*.ts` and `bynk-emit/src/emitter/http_client_runtime.ts` under the runtime's type check. This may mean turning the test-runtime fragments into modules (see 1B.3); if so, P0.6 adds only the check, and 1B.3 does the conversion. | §3 |
+| ~~**P0.6**~~ | **Retired into 1B.3** (#3686). The premise, that these files were unchecked, was wrong. The test-runtime fragments are type-checked under `tsc --strict` in context, because `bynk test` compiles each generated test module and fails on a `tsc` error. `http_client_runtime.ts` is checked by `system::http_client`. The residual gaps belong to 1B.3: the fragments aren't standalone modules, and a fragment no fixture includes goes unchecked. | §3 (corrected) |
 
 **Exit:** the ratchets are live, the trend rows are current, and `bynk-ts` and `bynk-model` deny
 wildcard arms.
@@ -153,7 +153,7 @@ binding model has one compose path to serve.
 |---|---|
 | **1B.1** | A target-neutral composition model, `ComposePlan`: units, their dependencies, event subscriptions with the envelope and isolation rules, and bindings. Both `emit_composition_root` (Bundle) and `emit_worker_compose` (Workers) render from it. The envelope and failure-isolation rules then exist once. |
 | **1B.2** | Move test-harness generation (`project/tests_emit/*`), `emit_composition_root` and the per-Worker emission out of `bynk-driver` and into `bynk-emit` (or a new crate; settling question Q3). The driver keeps orchestration, file I/O and process spawning. This removes `bynk-emit`'s dev-dependency on `bynk-driver`. |
-| **1B.3** | Turn the test runtime into real, type-checked modules under `bynk-emit/runtime/src/testing/`. Move the `makeIntegration*` / `makeTestState` fakes out of production `storage.ts` into it. Delete the driver's TS lexer (`names_ident`) and its text patching of emitted TypeScript (`merge_cookie`). |
+| **1B.3** | Turn the test runtime into real, type-checked modules under `bynk-emit/runtime/src/testing/`. Move the `makeIntegration*` / `makeTestState` fakes out of production `storage.ts` into it. Delete the driver's TS lexer (`names_ident`) and its text patching of emitted TypeScript (`merge_cookie`). Bring `http_client_runtime.ts` under the runtime's `tsconfig.json` and `bundle.mjs --check`, and add a guard that every test-runtime module is type-checked whether or not a fixture uses it (absorbs the retired P0.6). |
 | **1B.4** | Deduplicate the shared node builders (`str_lit`, `ident`, `member`, `call`) and `append_missing_bindings` (three copies) into one `bynk-emit` module. |
 
 ### 1C. One binding model (review §4)
