@@ -28,6 +28,7 @@ per-commit history. While Bynk is pre-1.0, increments may change behaviour.
 
 | Version | Highlights |
 |---|---|
+| **v0.639.11** | Wrapper and simple composite expressions (`Paren`, unary operators, `Ok`/`Err`/`Some`, list literals) now lower to typed TypeScript nodes; a negated negation keeps the `-(-x)` bracketing #3698 introduced, on both the node and the text path |
 | **v0.639.10** | A negated negation such as `- -x` now emits `-(-x)`, not `--x`, which TypeScript read as a pre-decrement (and `- -5` as a syntax error) |
 | **v0.639.9** | Expression lowering gains a counted node-or-text bridge and literals lower to typed TypeScript nodes, with no change to emitted output |
 | **v0.639.8** | The lowering context and TypeScript type rendering move out of `emitter.rs` into their own modules, with no change to emitted output |
