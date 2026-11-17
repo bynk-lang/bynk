@@ -154,10 +154,24 @@ Edge keys are named per member context (the runtime signs as the calling context
 - A group builds today; it cannot yet be deployed or run in `bynk dev`. Both
   refuse it with `bynk.deploy.worker_groups_unsupported`, which G4 (deploy,
   `--worker`, ledger and facts versions, the `10007` handling) and G6 remove.
-- **Still open, G3:** in-process edges and events between members (an intra-group
-  call is a Service Binding to itself today). The merged events fan-out has
-  landed (G3-1), and so has the conformance harness (G3-0). The Worker cycle check
-  (`bynk.deploy.worker_cycle`) lands before G3.
+- **G3-2, in-process calls:** a call between members stays in the Worker. The group's
+  entry answers the binding a member names another by with the group's own dispatcher,
+  so the request is still signed, contract-checked, admission-checked and decoded on
+  both sides (values are copied, a callee's fault is the same `CalleeFaulted`, a
+  refusal the same refusal); only the Service Binding hop is gone. It is not a direct
+  function call, which would need its own copy and error-mapping rules to be
+  conformant. The calls share one invocation's CPU and subrequest budget and one
+  `ctx`, so a callee's `waitUntil` attaches to the caller's request: that is what
+  "the same Worker" means, and it is the one thing beyond the hop that changes. A callee
+  that throws out of `fetch` is answered as the plain `500` a Service Binding gives.
+  **G3-3 is not planned; revisit if the self-binding ever costs something.** The
+  Worker's binding to itself stays in `wrangler.toml`: the fan-out Durable Object cannot
+  call back into the Worker's dispatcher and delivers over it, and so does anything else
+  that runs with the raw runtime `env` rather than `__loopback(env)` (a member agent's
+  Durable Object calling another member, whose constructor `env` is not wrapped).
+  Dropping it would be safe only for a group where neither happens. The merged events
+  fan-out has landed (G3-1), and so has the conformance harness (G3-0). The Worker cycle
+  check (`bynk.deploy.worker_cycle`) has landed.
 - **Still open, G5:** moving an agent-owning context into or out of a group is
   refused in v1 (`bynk.deploy.agent_move_refused`); the scratch-account probe
   showed a data-preserving class transfer works with the declarative `exports` map
