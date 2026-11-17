@@ -1,10 +1,15 @@
 # Model diagrams — a first-party UML renderer for the sequence, architecture and component views
 
-- **Status:** Settling. The doc merged in #3587 (v0.626.2) with its two
-  front-loaded ADRs, [0857](../decisions/0857-model-views-first-party-uml-renderer.md)
-  and [0858](../decisions/0858-diagram-models-are-complete.md), both
-  **Proposed** while the settling questions (§13) stay open. Slices 0 and 1
-  shipped in vscode-bynk #170 (§12). The spine issue is still to be opened.
+- **Status:** All six slices shipped (§12); retirement pending. The doc
+  merged in #3587 (v0.626.2) with its two front-loaded ADRs,
+  [0857](../decisions/0857-model-views-first-party-uml-renderer.md) and
+  [0858](../decisions/0858-diagram-models-are-complete.md). Both are still
+  **Proposed**: the work answered most settling questions (§13) by building,
+  and accepting the ADRs is the maintainer's call. Every model view now draws
+  through the first-party engine, and `mermaid` is no longer a dependency of
+  `vscode-bynk`. What stands between this and retirement is listed in §16.
+  The spine issue was never opened; the retirement PR can close the theme
+  without one, or open and close it for the record.
 - **Realises:** `design/bynk-lsp-spec.md` §3.23 (sequence diagram, #846) and
   §3.25 (architecture map, #851), and the "architecture in the language" claim
   in `design/bynk-design-notes.md`. If the architecture is written in the
@@ -594,38 +599,49 @@ Each fork is marked `[DECISION]`, with a recommendation.
 
 | # | Slice | Repos | Depends on | Status |
 |---|---|---|---|---|
-| 0 | **Mermaid hygiene.** One shared Mermaid bundle for the three views, and re-theme on theme change. Standalone and useful even if the track stalls | vscode-bynk | n/a | **Shipped** (vscode-bynk #170). Compare Model's diagrams, which landed meanwhile, share the bundle too |
+| 0 | **Mermaid hygiene.** One shared Mermaid bundle for the three views, and re-theme on theme change. Standalone and useful even if the track stalls | vscode-bynk | n/a | **Shipped** (vscode-bynk #170). Compare Model's diagrams, which landed meanwhile, shared the bundle too. Superseded by slice 6, which removed Mermaid and shares ELK the same way |
 | 1 | **Engine core plus sequence parity.** IR, grid layout, drawing, the interaction basics (reveal, hover, keyboard), notation from §5, and copy as Mermaid. No server change. Deletes `participant-map.ts` and the zip | vscode-bynk | n/a | **Shipped** (vscode-bynk #170) |
 | 2 | **Sequence interaction.** Sticky headers, folding, two-way cursor sync, pan and zoom, minimap, export | vscode-bynk | 1 | **Shipped** (vscode-bynk #174) |
-| 3 | **Sequence model deltas** (§6.3): full tree, `break`, triggers and found messages, callee identity with `ref` drill-down, hover detail | bynk (ide, lsp), vscode-bynk | 1 | Server half in progress: full tree with depths, `break` for `?`, trigger, agent key, located callee (pending ADR `sequence-model-slice-3`). The extension half follows. Hover detail is deferred: it needs the checker's types |
-| 4 | **ELK path plus architecture overhaul** (§7) with its model deltas. The deployment overlay may split off as 4b | bynk, vscode-bynk | 1 | Open. ADR 0854's events and capability use already landed |
-| 5 | **Component view** (§8): model enrichment, view, and cross-view navigation (§9) | bynk, vscode-bynk | 4 | Open. ADR 0854 already carries each handler's `given` |
-| 6 | **Agent state view port.** Mermaid leaves the extension, and the bundle budget is enforced | vscode-bynk | 4 | Open |
+| 3 | **Sequence model deltas** (§6.3): full tree, `break`, triggers and found messages, callee identity with `ref` drill-down, hover detail | bynk (ide, lsp), vscode-bynk | 1 | **Shipped** (bynk #3651, vscode-bynk #175): the full tree with depths, `break` for `?`, triggers as found messages, agent keys, and located callees with `ref` drill-down. **Deferred:** hover detail, which needs the checker's types; and locating a callee in a dependency package (§6.3's packaging follow-up) |
+| 4 | **ELK path plus architecture overhaul** (§7) with its model deltas. The deployment overlay may split off as 4b | bynk, vscode-bynk | 1 | **Shipped** (bynk #3654, vscode-bynk #176): the ELK path; units as components in a system boundary, opened in place; `consumes` cycles marked; actors calling in, labelled with the protocol; platform wiring from each handler's `uses`; events. **Deferred:** per-edge caller detail on hover, grouping by package or Worker group, the deployment overlay (4b), search, filter and path highlight |
+| 5 | **Component view** (§8): model enrichment, view, and cross-view navigation (§9) | bynk, vscode-bynk | 4 | **Shipped** (bynk #3657, vscode-bynk #177): each handler's `calls` and each agent's `key` and `state` on `architectureModel` (D4); the view, with parts, compartments, provided and required ports, and neighbours; navigation from the map, from an operation, and from the sequence diagram's **Components** button. **Deferred:** a sequence lifeline header opening its context's component view, events in the component view, and a multi-context selection from the map (§8.2) |
+| 6 | **Agent state view port.** Mermaid leaves the extension, and the bundle budget is enforced | vscode-bynk | 4 | **Shipped** (vscode-bynk #178): the agent state machine in UML notation on the ELK path, and Compare Model's map and machines on the engine. Mermaid left the dependencies; ELK ships once (`out/elk.js`) and `check-bundle.mjs` enforces per-page, ELK, extension and total budgets. Desktop bundles went from 9.1 MiB to 2.6 MiB |
 
 Slices 2 and 3 can run in parallel, as can 3 and 4.
 
 ## 13. Settling-review questions
 
 - **Q1.** The Sprotty spike (D1). Does it change the recommendation for
-  structure views?
+  structure views? **Overtaken:** the spike was not run. Slices 4–6 built the
+  structure views on the first-party engine over ELK (D1 (d), D2), and they
+  needed none of what Sprotty would have added.
 - **Q2.** The ELK bundle size in practice, with `elk.bundled.js` minified. Does
   G5 hold? If not, is a lazily loaded vendor chunk acceptable under the
-  webview CSP?
+  webview CSP? **Resolved in slices 4 and 6:** minified, ELK is about
+  1.45 MiB (as against Mermaid's 5.1 MiB). It ships once, as a vendor script
+  each ELK page loads under the existing nonce CSP, and every page stays under
+  110 KiB. `check-bundle.mjs` enforces the budgets.
 - **Q3.** Is ELK's model-order constraint enough for G3 on the architecture
-  map, or do we need to persist node order across sessions?
+  map, or do we need to persist node order across sessions? **Answered for
+  now:** the views use `considerModelOrder` over the server's deterministic
+  order, and no persisted order has been needed. Revisit if layout churn is
+  reported on large projects.
 - **Q4.** D4 at scale: what is the payload size of an enriched
   `architectureModel` on the largest example, and is it worth a per-context
-  request?
+  request? **Still open:** D4 shipped (slice 5), but the payload has not been
+  measured at scale.
 - **Q5.** The `break` rendering for `?`. Should every `?` site be a fragment,
   or only those whose `Err` actually reaches the handler's result (fewer, more
   honest fragments)? **Resolved in slice 3:** every `?` the walk sees. A `?`
   in a lambda returns from the lambda, and lambdas are not walked, so each one
   shown does reach the handler's result.
 - **Q6.** Headless rendering for `bynk doc` and the Book. Is it in scope for a
-  later slice of this track, or a separate track?
+  later slice of this track, or a separate track? **Out of this track:** no
+  slice took it on, so it is a separate increment if wanted.
 - **Q7.** Should the web extension (vscode.dev) get the same views? The engine
   is browser-only, so probably yes, at no extra cost. Confirm against
-  `check-bundle.mjs --web` budgets.
+  `check-bundle.mjs --web` budgets. **Still open:** the views remain
+  desktop-only (`!isWeb`), as before the track.
 
 ## 14. Front-loaded ADRs
 
@@ -636,13 +652,19 @@ settling questions moves them to Accepted:
 - [**ADR 0857**](../decisions/0857-model-views-first-party-uml-renderer.md): the
   model views render through a first-party engine in UML notation. This is D1,
   D3 and D6. It supersedes the Mermaid-mechanics consequences listed in §10.
-  Slice 1 put the sequence view on it.
+  Slice 1 put the sequence view on it; slices 4–6 put the rest there.
 - [**ADR 0858**](../decisions/0858-diagram-models-are-complete.md): the server's
   diagram models are complete, and the client decides how much to show. This
   is D5. It retires `MAX_BLOCK_DEPTH` as a presentation cut (slice 3).
 
 D2, D4, D7 and D8 are implementation-level and are recorded by the slices that
-make them.
+make them: D2 (ELK) in slice 4, D4 (enrich `architectureModel`) in slice 5,
+D7 (hand-built SVG) from slice 1, and D8 (in-tree, `vscode-bynk/src/diagram/`)
+throughout.
+
+Both ADRs are still **Proposed**. Every slice has shipped on them, and Q1 is
+overtaken (§13), so nothing is left that could change D1. Moving them to
+Accepted is the retirement PR's to do, once the maintainer agrees.
 
 ## 15. Risks
 
@@ -661,13 +683,27 @@ make them.
 
 ## 16. Done when
 
+Each condition, with where it stands after slice 6:
+
 - The sequence, architecture and component views render through the engine,
-  with every element linked to source by identity.
+  with every element linked to source by identity. **Met** (slices 1, 4
+  and 5).
 - The agent state view is ported, and `mermaid` is no longer a dependency of
-  `vscode-bynk`.
+  `vscode-bynk`. **Met** (slice 6).
 - The diagram bundle is within its budget (G5), and the visual regression
-  gallery passes in light, dark and high-contrast themes.
+  gallery passes in light, dark and high-contrast themes. **Half met:** the
+  budgets hold and CI enforces them (slice 6). There is no visual regression
+  gallery. The views are covered by pure layout tests and jsdom tests, and
+  were checked by eye in Chromium, but no screenshots are compared in CI.
 - LSP spec §3.23 and §3.25 (and a new section for the component view) describe
-  the enriched models.
+  the enriched models. **Met, with one change of plan:** both sections were
+  updated in place by slices 3–5. The component view needs no section of its
+  own, because D4 made it a projection of §3.25's `bynk/architectureModel`.
 - The Book's tooling page (`docs/tooling/vscode-bynk.md`) documents the three
-  views and their navigation.
+  views and their navigation. **Not met:** the page predates the track. It
+  does not mention the component view or the navigation between views, and it
+  still describes the Mermaid files slice 6 removed.
+
+Left before the retirement PR: the Book's tooling page, a decision on the
+visual regression gallery (build it, or drop the condition), and accepting
+ADRs 0857 and 0858. The deferred items in §12 are follow-ups, not conditions.
