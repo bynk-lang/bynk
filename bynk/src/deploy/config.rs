@@ -1114,8 +1114,10 @@ pub(crate) fn project_resources(
     // (#3562), so each binding is read against the script names and turned back
     // into the directory the rest of deploy keys a Worker by.
     let scripts = script_names(workers_dir, workers);
-    let mut known: Vec<String> = workers.to_vec();
-    known.extend(scripts.keys().cloned());
+    // Only a script name is a Worker a binding can name: a directory that is not
+    // also its Worker's script name is no target (`core` for a group renamed
+    // `core-script`), and a binding to it is a foreign Worker like any other.
+    let known: Vec<String> = scripts.keys().cloned().collect();
     let mut all = BTreeMap::new();
     for worker in workers {
         let mut resources = read_resources(&workers_dir.join(worker).join("wrangler.toml"), &known)
@@ -1133,20 +1135,17 @@ pub(crate) fn project_resources(
     Ok(all)
 }
 
-/// Each Worker's script name (`name` in its `wrangler.toml`) → its directory,
-/// for those whose script name is not the directory's.
+/// Each Worker's script name (`name` in its `wrangler.toml`, else its directory)
+/// → its directory.
 fn script_names(workers_dir: &Path, workers: &[String]) -> BTreeMap<String, String> {
     workers
         .iter()
-        .filter_map(|dir| {
-            let text = std::fs::read_to_string(workers_dir.join(dir).join("wrangler.toml")).ok()?;
-            let name = text
-                .parse::<toml::Table>()
-                .ok()?
-                .get("name")?
-                .as_str()?
-                .to_string();
-            (&name != dir).then(|| (name, dir.clone()))
+        .map(|dir| {
+            let name = std::fs::read_to_string(workers_dir.join(dir).join("wrangler.toml"))
+                .ok()
+                .and_then(|text| text.parse::<toml::Table>().ok())
+                .and_then(|table| table.get("name")?.as_str().map(str::to_string));
+            (name.unwrap_or_else(|| dir.clone()), dir.clone())
         })
         .collect()
 }
@@ -3494,7 +3493,9 @@ service = "legacy-billing"
         // `web` binds to the group by its script name.
         write("web", "web", &["core-script"]);
         write("pay", "pay", &[]);
-        let workers: Vec<String> = ["core", "pay", "web"]
+        // `odd` names the group's *directory*, which is not a script on Cloudflare.
+        write("odd", "odd", &["core"]);
+        let workers: Vec<String> = ["core", "odd", "pay", "web"]
             .iter()
             .map(|s| s.to_string())
             .collect();
@@ -3503,10 +3504,15 @@ service = "legacy-billing"
         assert_eq!(resources["core"].binds_to, ["pay"], "no edge to itself");
         assert_eq!(resources["web"].binds_to, ["core"], "by directory");
         assert!(resources["web"].foreign_services.is_empty());
+        assert!(
+            resources["odd"].binds_to.is_empty(),
+            "a directory is no target"
+        );
+        assert_eq!(resources["odd"].foreign_services.len(), 1);
         let graph = crate::deploy::graph::service_graph(&resources);
         assert_eq!(
             crate::deploy::graph::deploy_order(&workers, &graph).unwrap(),
-            ["pay", "core", "web"]
+            ["pay", "core", "odd", "web"]
         );
     }
 }

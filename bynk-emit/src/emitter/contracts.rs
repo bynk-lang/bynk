@@ -497,4 +497,37 @@ mod tests {
             "{manifest}"
         );
     }
+
+    /// #3562: two members expecting the same outside dependency are one `expects`
+    /// entry (services unioned), and a call between members is no expectation.
+    #[test]
+    fn a_groups_expects_union_outside_dependencies_and_drop_its_own_members() {
+        let part = |expects: &[(&str, &str, &str)]| {
+            let mut p = ContractParts::default();
+            for (dep, service, hash) in expects {
+                p.expects
+                    .entry(dep.to_string())
+                    .or_default()
+                    .insert(service.to_string(), hash.to_string());
+            }
+            p
+        };
+        let merged = ContractParts::merged(
+            [
+                part(&[("shop.pay", "charge", "h1"), ("shop.b", "inner", "h2")]),
+                part(&[("shop.pay", "refund", "h3")]),
+            ],
+            &["shop.a".to_string(), "shop.b".to_string()],
+        );
+        assert_eq!(
+            merged.expects.keys().collect::<Vec<_>>(),
+            ["shop.pay"],
+            "a member is not an outside dependency"
+        );
+        assert_eq!(
+            merged.expects["shop.pay"].keys().collect::<Vec<_>>(),
+            ["charge", "refund"],
+            "services of one dependency are unioned"
+        );
+    }
 }
