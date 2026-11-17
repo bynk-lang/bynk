@@ -82,7 +82,7 @@ pub mod workers_group;
 pub mod wrangler;
 
 pub use containers::{container_class_names, emit_containers_ts};
-pub use events_fanout::emit_events_fanout_do;
+pub use events_fanout::{Publisher, emit_events_fanout_do, emit_group_events_fanout_do};
 pub use secrets::emit_secrets_manifest;
 pub use toml_doc::print_toml_document;
 pub use workers::emit_worker_compose;

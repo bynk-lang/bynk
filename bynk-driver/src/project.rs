@@ -4048,7 +4048,10 @@ impl WorkersEmit<'_> {
         // `emit_worker_compose`'s own `unit_table_uses_emit` gate on
         // `deps.__eventsDispatch`, so the two never disagree about
         // whether `env.EVENTS_FANOUT` is real).
-        if ctx_uses_emit {
+        // #3562 (G3-1): a group's members share one fan-out, which the group
+        // emits from every publishing member's routes (`group_entry`).
+        let in_group = layout.is_member(ctx_name);
+        if ctx_uses_emit && !in_group {
             // Arc C's own first real conversion slice (#1317):
             // `emit_events_fanout_do` returns a real `TsProgram`
             // directly — the first `bynk-emit` construction site
@@ -4092,6 +4095,7 @@ impl WorkersEmit<'_> {
             classes,
             contracts,
             secrets,
+            publishes: (ctx_uses_emit && in_group).then_some(own_event_routes),
         }
     }
 
@@ -4240,6 +4244,23 @@ impl WorkersEmit<'_> {
         });
         if layout.is_member(first) {
             self.stage_group_manifests(first, members, compiled);
+            // #3562 (G3-1): the group's one events fan-out, for every member that
+            // publishes, in declaration order.
+            let publishers: Vec<emitter::Publisher> = members
+                .iter()
+                .filter_map(|(parts, _)| Some((parts.context.clone(), parts.publishes.clone()?)))
+                .collect();
+            if !publishers.is_empty() {
+                compiled.push(StagedFile {
+                    output_path: layout.worker_file(first, "events_fanout.ts"),
+                    document: Document::Ts(emitter::emit_group_events_fanout_do(
+                        &layout.dir(first),
+                        &publishers,
+                    )),
+                    source_map: None,
+                    debug_metadata: None,
+                });
+            }
             let entry = self.group_entry(first, members, &bindings);
             compiled.push(StagedFile {
                 output_path: layout.worker_file(first, "index.ts"),
@@ -4303,6 +4324,7 @@ impl WorkersEmit<'_> {
             key: &layout.dir(first),
             members: &facts,
             container_classes: &emitter::container_class_names(bindings),
+            has_fanout: members.iter().any(|(parts, _)| parts.publishes.is_some()),
             has_events: members.iter().any(|(parts, _)| parts.has_events),
             has_migrate: members.iter().any(|(parts, _)| parts.has_migrate),
             has_inspect: members.iter().any(|(parts, _)| parts.has_inspect),
@@ -4542,6 +4564,9 @@ struct MemberParts {
     /// in a group (#3562).
     contracts: emitter::contracts::ContractParts,
     secrets: emitter::secrets::SecretsParts,
+    /// For a group member that publishes, its events' subscribers, which the
+    /// group's one fan-out routes (#3562).
+    publishes: Option<BTreeMap<String, Vec<(String, String)>>>,
 }
 
 /// Whether any service of `table` has an `on event` handler.

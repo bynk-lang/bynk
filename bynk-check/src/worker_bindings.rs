@@ -433,7 +433,6 @@ pub fn phase_group_binding_collisions(
     group_worker_cycles(worker_groups, parsed, groups, bindings, errors);
     for (key, group) in worker_groups {
         group_service_names(key, &group.contexts, parsed, groups, errors);
-        group_publishers(key, &group.contexts, parsed, groups, bindings, errors);
         group_websockets(key, &group.contexts, parsed, groups, errors);
         crate::group_triggers::group_trigger_conflicts(
             key,
@@ -723,47 +722,6 @@ fn cycle_through(
     }
     let mut path = vec![scc.first()?.clone()];
     walk(edges, scc, &mut path).then_some(path)
-}
-
-/// `bynk.deploy.multiple_publishers` (#3562): a context that publishes events has
-/// its own events fan-out class, and a Worker has one, so a group with two
-/// publishing members would emit two classes of one name. A **temporary**
-/// restriction: the group's fan-out is to become one class routing every member's
-/// events, and this check goes when it does. One error, at the second publisher.
-fn group_publishers(
-    key: &str,
-    members: &[String],
-    parsed: &[ParsedFile],
-    groups: &BTreeMap<String, Vec<usize>>,
-    bindings: &BTreeMap<String, Vec<WorkerBinding>>,
-    errors: &mut ErrorSink,
-) {
-    let publishes = |ctx: &String| {
-        bindings.get(ctx).is_some_and(|b| {
-            b.iter()
-                .any(|b| matches!(b.source, BindingSource::EventsFanout { .. }))
-        })
-    };
-    let mut publishers = members.iter().filter(|c| publishes(c));
-    let (Some(first), Some(second)) = (publishers.next(), publishers.next()) else {
-        return;
-    };
-    let indices = groups.get(second).map(Vec::as_slice).unwrap_or_default();
-    let (file, span) = context_header(parsed, indices)
-        .map_or((None, Span::default()), |(file, span)| (Some(file), span));
-    errors.push_for(
-        file.as_deref(),
-        CompileError::new(
-            "bynk.deploy.multiple_publishers",
-            span,
-            format!(
-                "contexts `{first}` and `{second}` share Worker `{key}`, and both publish events"
-            ),
-        )
-        .with_note(
-            "for now a Worker group has at most one publishing member, because each publisher has its own events fan-out class; this restriction is temporary, and goes when a group's fan-out is merged. Put the publishers in different groups, or give one of them its own Worker",
-        ),
-    );
 }
 
 /// `bynk.deploy.multiple_websocket_members` (#3562): a WebSocket upgrade is an
