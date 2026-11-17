@@ -744,8 +744,8 @@ deploys it as a unit, in dependency order with the other Workers (`--worker
 <key>` deploys one Worker by its key). A call between two members of a group is
 a Service Binding from the Worker to itself, which is no edge in the deploy
 order. `bynk revert --worker <key>` rolls the group back as one script, every member
-together. `bynk dev` does not yet handle a group, and refuses one
-(`bynk.deploy.worker_groups_unsupported`).
+together. `bynk dev` serves a group as one Worker on one port; `--context` naming a
+member serves the whole group that holds it.
 
 ### Acknowledging a remote-only binding
 

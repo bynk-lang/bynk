@@ -283,6 +283,13 @@ pub(crate) fn is_edge_key(name: &str) -> bool {
     name.starts_with(bynk_emit::EDGE_FROM_PREFIX) || name.starts_with(bynk_emit::EDGE_TO_PREFIX)
 }
 
+/// The key names an edge puts on each of its Workers ([`Edge::keys`]).
+#[derive(Debug, Default, Clone, PartialEq, Eq)]
+pub(crate) struct EdgeKeyNames {
+    pub(crate) on_callee: Vec<String>,
+    pub(crate) on_caller: Vec<String>,
+}
+
 /// I2 (#1971): one edge of the deployment, by Worker: `caller` signs the
 /// requests it sends `callee` (a call, or an event delivery from a publisher
 /// to a subscriber) under a key the two share, and no one else holds.
@@ -290,6 +297,11 @@ pub(crate) fn is_edge_key(name: &str) -> bool {
 pub(crate) struct Edge {
     pub(crate) caller: String,
     pub(crate) callee: String,
+    /// The contexts each Worker serves (#3562): the runtime names an edge's key by the
+    /// calling and called *context*, and a group's Worker serves several. Empty for a
+    /// Worker that is one context, named by its directory.
+    pub(crate) caller_contexts: Vec<String>,
+    pub(crate) callee_contexts: Vec<String>,
 }
 
 /// The qualified context a Worker serves. A Worker is named after its context
@@ -304,18 +316,47 @@ impl Edge {
     /// callee's `BYNK_CALL_FROM_<caller>`, then the caller's
     /// `BYNK_CALL_TO_<callee>`. An error names a context whose name no key
     /// can be derived from.
-    pub(crate) fn ends(&self) -> Result<[(&str, String); 2], String> {
-        let unnamed = |worker: &str| {
+    pub(crate) fn ends(&self) -> Result<Vec<(&str, String)>, String> {
+        let keys = self.keys()?;
+        let mut ends: Vec<(&str, String)> = keys
+            .on_callee
+            .into_iter()
+            .map(|k| (self.callee.as_str(), k))
+            .collect();
+        ends.extend(
+            keys.on_caller
+                .into_iter()
+                .map(|k| (self.caller.as_str(), k)),
+        );
+        Ok(ends)
+    }
+
+    /// The key names each end holds: the callee a `BYNK_CALL_FROM_<caller>` for each
+    /// context of the calling Worker, the caller a `BYNK_CALL_TO_<callee>` for each
+    /// context of the called one (all one secret).
+    pub(crate) fn keys(&self) -> Result<EdgeKeyNames, String> {
+        let unnamed = |context: &str| {
             format!(
-                "context `{}` cannot sign or verify cross-context calls: an edge key is named from the context's name, which must be lowercase letters and digits in dot-separated segments, each starting with a letter, with single underscores between runs (no `__`, no trailing `_`)",
-                context_of(worker)
+                "context `{context}` cannot sign or verify cross-context calls: an edge key is named from the context's name, which must be lowercase letters and digits in dot-separated segments, each starting with a letter, with single underscores between runs (no `__`, no trailing `_`)"
             )
         };
-        let from = bynk_emit::edge_key_from(&context_of(&self.caller))
-            .ok_or_else(|| unnamed(&self.caller))?;
-        let to = bynk_emit::edge_key_to(&context_of(&self.callee))
-            .ok_or_else(|| unnamed(&self.callee))?;
-        Ok([(&self.callee, from), (&self.caller, to)])
+        let contexts = |worker: &str, members: &[String]| -> Vec<String> {
+            if members.is_empty() {
+                vec![context_of(worker)]
+            } else {
+                members.to_vec()
+            }
+        };
+        let mut names = EdgeKeyNames::default();
+        for caller in contexts(&self.caller, &self.caller_contexts) {
+            let key = bynk_emit::edge_key_from(&caller).ok_or_else(|| unnamed(&caller))?;
+            names.on_callee.push(key);
+        }
+        for callee in contexts(&self.callee, &self.callee_contexts) {
+            let key = bynk_emit::edge_key_to(&callee).ok_or_else(|| unnamed(&callee))?;
+            names.on_caller.push(key);
+        }
+        Ok(names)
     }
 
     /// `caller → callee`, for a message: each end by its
@@ -333,6 +374,7 @@ impl Edge {
 /// project's Workers is one (a caller to the context it calls, or a publisher
 /// to a subscriber). A binding to anything else is not a Bynk edge.
 pub(crate) fn project_edges(resources: &BTreeMap<String, Resources>) -> Vec<Edge> {
+    let members = |worker: &str| resources[worker].members.clone();
     let mut edges: Vec<Edge> = resources
         .iter()
         .flat_map(|(caller, r)| {
@@ -342,9 +384,25 @@ pub(crate) fn project_edges(resources: &BTreeMap<String, Resources>) -> Vec<Edge
                 .map(|callee| Edge {
                     caller: caller.clone(),
                     callee: callee.clone(),
+                    caller_contexts: members(caller),
+                    callee_contexts: members(callee),
                 })
         })
         .collect();
+    // #3562: a group's members call each other through the Worker's own dispatcher
+    // (G3-2), signed as any call is, so the Worker holds a key for each of them. The
+    // Worker binds to itself, which is no deploy-order edge but is a key edge.
+    edges.extend(
+        resources
+            .iter()
+            .filter(|(_, r)| r.members.len() > 1)
+            .map(|(worker, r)| Edge {
+                caller: worker.clone(),
+                callee: worker.clone(),
+                caller_contexts: r.members.clone(),
+                callee_contexts: r.members.clone(),
+            }),
+    );
     edges.sort();
     edges.dedup();
     edges
@@ -1234,6 +1292,8 @@ WITH_EQUALS=a=b
         Edge {
             caller: caller.to_string(),
             callee: callee.to_string(),
+            caller_contexts: Vec::new(),
+            callee_contexts: Vec::new(),
         }
     }
 
@@ -1283,6 +1343,105 @@ WITH_EQUALS=a=b
         );
         let refused = edge("a__b", "c").ends().expect_err("not an edge name");
         assert!(refused.contains("`a__b`"), "{refused}");
+    }
+
+    /// #3562: the runtime signs as the calling *context* and verifies the callee's
+    /// `BYNK_CALL_FROM_<that context>`, so a group's Worker holds a key per member and
+    /// the Worker it calls holds one for each caller member.
+    #[test]
+    fn a_groups_edge_names_a_key_per_member_context() {
+        let e = Edge {
+            caller: "front".into(),
+            callee: "shop-pay".into(),
+            caller_contexts: vec!["shop.a1".into(), "shop.a2".into()],
+            callee_contexts: Vec::new(),
+        };
+        let keys = e.keys().unwrap();
+        assert_eq!(
+            keys.on_callee,
+            ["BYNK_CALL_FROM_SHOP__A1", "BYNK_CALL_FROM_SHOP__A2"]
+        );
+        assert_eq!(keys.on_caller, ["BYNK_CALL_TO_SHOP__PAY"]);
+    }
+
+    /// #3562: for every call the runtime can make (its caller signs under
+    /// `BYNK_CALL_TO_<callee context>`, its callee verifies `BYNK_CALL_FROM_<caller
+    /// context>`), the keys `deploy` provisions are exactly the ones it reads: a group
+    /// calling a standalone Worker, a standalone Worker calling a group's member, and
+    /// one member calling another in process. Fails without per-member names.
+    #[test]
+    fn every_call_the_runtime_makes_finds_the_keys_it_reads() {
+        let mut resources = BTreeMap::new();
+        resources.insert(
+            "front".to_string(),
+            Resources {
+                members: vec!["shop.a1".to_string(), "shop.a2".to_string()],
+                binds_to: vec!["shop-pay".to_string()],
+                ..Resources::default()
+            },
+        );
+        resources.insert("shop-pay".to_string(), Resources::default());
+        resources.insert(
+            "shop-web".to_string(),
+            Resources {
+                binds_to: vec!["front".to_string()],
+                ..Resources::default()
+            },
+        );
+        let edges = project_edges(&resources);
+        let holds = |worker: &str, key: String| edge_keys_of(worker, &edges).contains(&key);
+        // (caller context, its Worker, callee context, its Worker)
+        let calls = [
+            ("shop.a1", "front", "shop.pay", "shop-pay"),
+            ("shop.a2", "front", "shop.pay", "shop-pay"),
+            ("shop.web", "shop-web", "shop.a1", "front"),
+            ("shop.web", "shop-web", "shop.a2", "front"),
+            ("shop.a1", "front", "shop.a2", "front"),
+            ("shop.a2", "front", "shop.a1", "front"),
+        ];
+        for (caller, caller_worker, callee, callee_worker) in calls {
+            let to = bynk_emit::edge_key_to(callee).unwrap();
+            let from = bynk_emit::edge_key_from(caller).unwrap();
+            assert!(
+                holds(caller_worker, to.clone()),
+                "{caller} signing a call to {callee} reads {to} on {caller_worker}"
+            );
+            assert!(
+                holds(callee_worker, from.clone()),
+                "{callee} verifying {caller} reads {from} on {callee_worker}"
+            );
+        }
+    }
+
+    /// A group's members call each other in process, signed as any call is: the Worker
+    /// holds a key for each of its members, by an edge to itself (no deploy-order edge).
+    #[test]
+    fn a_group_holds_a_key_for_its_own_members() {
+        let mut resources = BTreeMap::new();
+        resources.insert(
+            "front".to_string(),
+            Resources {
+                members: vec!["shop.a1".to_string(), "shop.a2".to_string()],
+                ..Resources::default()
+            },
+        );
+        resources.insert("shop-pay".to_string(), Resources::default());
+        let edges = project_edges(&resources);
+        assert_eq!(edges.len(), 1, "{edges:?}");
+        assert_eq!(edges[0].caller, "front");
+        assert_eq!(edges[0].callee, "front");
+        assert_eq!(
+            edge_keys_of("front", &edges),
+            [
+                "BYNK_CALL_FROM_SHOP__A1",
+                "BYNK_CALL_FROM_SHOP__A2",
+                "BYNK_CALL_TO_SHOP__A1",
+                "BYNK_CALL_TO_SHOP__A2",
+            ]
+        );
+        // A group of one has nobody to call.
+        resources.get_mut("front").unwrap().members.truncate(1);
+        assert!(project_edges(&resources).is_empty());
     }
 
     #[test]

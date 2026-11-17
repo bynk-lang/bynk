@@ -26,6 +26,46 @@ pub struct SessionWorker {
     pub context: String,
     /// `http://localhost:<port>`.
     pub url: String,
+    /// A Worker group's members (#3562, G6), in the order the
+    /// group's entry tries them. The group is one Worker with one registry, but
+    /// each member decides before it verifies whether a request is its own, so a
+    /// request is signed for the member that answers it. Empty for a Worker that
+    /// is one context, whose `context` is the audience of every request.
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub members: Vec<InspectMember>,
+}
+
+/// One member of a group, as `bynk-inspect.json` records it (`classes` empty for one
+/// that hosts no agent).
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+pub struct InspectMember {
+    pub context: String,
+    pub classes: Vec<String>,
+}
+
+impl SessionWorker {
+    /// The audience of the listing: the first member that hosts an agent answers it
+    /// (the registry is the Worker's, so it lists every member's instances).
+    fn lister(&self) -> &str {
+        self.members
+            .iter()
+            .find(|m| !m.classes.is_empty())
+            .map_or(&self.context, |m| &m.context)
+    }
+
+    /// The audience of a read of `class`: the member that owns the class.
+    fn owner(&self, class: &str) -> &str {
+        self.members
+            .iter()
+            .find(|m| m.classes.iter().any(|c| c == class))
+            .map_or(self.lister(), |m| &m.context)
+    }
+
+    /// Whether `context` is one this Worker serves.
+    fn serves(&self, context: &str) -> bool {
+        let dotted = context_of_worker(context);
+        self.context == context || self.members.iter().any(|m| m.context == dotted)
+    }
 }
 
 /// The session file: each served Worker by its worker-dir name.
@@ -58,6 +98,19 @@ impl Drop for SessionFile {
     fn drop(&mut self) {
         let _ = std::fs::remove_file(&self.0);
     }
+}
+
+/// The agent-hosting members a group's build records beside its entry
+/// (`bynk-inspect.json`); none for a Worker that is one context, or an unreadable file.
+pub fn inspect_members(worker_dir: &Path) -> Vec<InspectMember> {
+    #[derive(Deserialize)]
+    struct File {
+        members: Vec<InspectMember>,
+    }
+    std::fs::read_to_string(worker_dir.join(bynk_emit::INSPECT_MEMBERS_FILE))
+        .ok()
+        .and_then(|text| serde_json::from_str::<File>(&text).ok())
+        .map_or_else(Vec::new, |f| f.members)
 }
 
 /// The qualified context a worker-dir name serves.
@@ -211,11 +264,7 @@ fn selected<'a>(
     let chosen: Vec<_> = session
         .workers
         .iter()
-        .filter(|(dir, w)| {
-            context
-                .as_ref()
-                .is_none_or(|c| *c == w.context || c == *dir)
-        })
+        .filter(|(dir, w)| context.as_ref().is_none_or(|c| w.serves(c) || c == *dir))
         .collect();
     if chosen.is_empty() {
         return Err(match context {
@@ -229,10 +278,11 @@ fn selected<'a>(
 fn call(
     http: &dyn Post,
     worker: &SessionWorker,
+    audience: &str,
     path: &str,
     query: &[(&str, String)],
 ) -> Result<Value, String> {
-    let (url, headers) = signed_request(&worker.url, &worker.context, path, query, unix_now());
+    let (url, headers) = signed_request(&worker.url, audience, path, query, unix_now());
     let (status, body) = http.post(&url, &headers)?;
     match status {
         200 => serde_json::from_str(&body).map_err(|e| format!("unreadable answer: {e}")),
@@ -254,7 +304,7 @@ fn listing(
 ) -> Result<Value, String> {
     let (url, headers) = signed_request(
         &worker.url,
-        &worker.context,
+        worker.lister(),
         "/_bynk/inspect/agents",
         query,
         unix_now(),
@@ -282,14 +332,14 @@ pub fn run(session: &Session, what: &Inspect, http: &dyn Post) -> Result<Value, 
                     Ok(v) => {
                         for i in v["instances"].as_array().into_iter().flatten() {
                             agents.push(json!({
-                                "context": w.context,
+                                "context": i["class"].as_str().map_or(w.lister(), |c| w.owner(c)),
                                 "class": i["class"],
                                 "key": i["key"],
                                 "id": i["id"],
                             }));
                         }
                     }
-                    Err(e) => errors.push(json!({ "context": w.context, "error": e })),
+                    Err(e) => errors.push(json!({ "context": w.lister(), "error": e })),
                 }
             }
             Ok(json!({ "agents": agents, "errors": errors }))
@@ -318,7 +368,7 @@ fn read_agent(
         let listed = match listing(http, w, &class_query) {
             Ok(v) => v,
             Err(e) => {
-                failed.push(format!("{}: {e}", w.context));
+                failed.push(format!("{}: {e}", w.lister()));
                 continue;
             }
         };
@@ -332,9 +382,10 @@ fn read_agent(
         let mut query = vec![("id", id.clone())];
         query.extend(page.query());
         let path = format!("/_bynk/inspect/agent/{}", percent_encode(class));
-        let mut state = call(http, w, &path, &query)?;
+        let owner = w.owner(class);
+        let mut state = call(http, w, owner, &path, &query)?;
         if let Some(obj) = state.as_object_mut() {
-            obj.insert("context".into(), json!(w.context));
+            obj.insert("context".into(), json!(owner));
             obj.insert("key".into(), instance["key"].clone());
             obj.insert("id".into(), json!(id));
         }
@@ -397,6 +448,7 @@ mod tests {
                 SessionWorker {
                     context: "shop.orders".to_string(),
                     url: "http://localhost:8787".to_string(),
+                    members: vec![],
                 },
             )]),
         }
@@ -534,6 +586,7 @@ mod tests {
             SessionWorker {
                 context: "shop.api".to_string(),
                 url: "http://localhost:8788".to_string(),
+                members: vec![],
             },
         );
         // `shop-api` sorts before `shop-orders`.
@@ -542,6 +595,7 @@ mod tests {
             SessionWorker {
                 context: "shop.orders".to_string(),
                 url: "http://localhost:8787".to_string(),
+                members: vec![],
             },
         );
         session
@@ -675,5 +729,160 @@ mod tests {
         }
         assert!(!session_path(&dir).exists());
         let _ = std::fs::remove_dir_all(&dir);
+    }
+
+    /// One Worker, a group `core` of `shop.api` (no agent), `shop.orders` (`Ledger`) and
+    /// `shop.stock` (`Shelf`).
+    fn group() -> Session {
+        Session {
+            workers: BTreeMap::from([(
+                "core".to_string(),
+                SessionWorker {
+                    context: "core".to_string(),
+                    url: "http://localhost:8787".to_string(),
+                    members: vec![
+                        InspectMember {
+                            context: "shop.orders".to_string(),
+                            classes: vec!["Ledger".to_string()],
+                        },
+                        InspectMember {
+                            context: "shop.stock".to_string(),
+                            classes: vec!["Shelf".to_string()],
+                        },
+                    ],
+                },
+            )]),
+        }
+    }
+
+    /// Answers as the group's entry does: a request is answered only if it is signed for
+    /// the member that owns it (the listing: the first agent-hosting member; a read: the
+    /// class's owner), and refused with `401` otherwise.
+    struct Entry;
+
+    impl Entry {
+        fn signed_for(url: &str, headers: &[(String, String)], audience: &str) -> bool {
+            let path = url
+                .trim_start_matches("http://localhost:8787")
+                .split('?')
+                .next()
+                .unwrap();
+            let stamp: u64 = headers
+                .iter()
+                .find(|(k, _)| k.eq_ignore_ascii_case(bynk_check::wire_format::TIMESTAMP_HEADER))
+                .unwrap()
+                .1
+                .parse()
+                .unwrap();
+            crate::migrate::sweep::signed_headers_as(
+                bynk_emit::INSPECT_CALLER,
+                bynk_emit::LOCAL_CALL_KEY,
+                audience,
+                path,
+                "",
+                stamp,
+            ) == headers
+        }
+    }
+
+    impl Post for Entry {
+        fn post(&self, url: &str, headers: &[(String, String)]) -> Result<(u16, String), String> {
+            if url.contains("/_bynk/inspect/agents") {
+                return if Self::signed_for(url, headers, "shop.orders") {
+                    Ok((200, r#"{"context":"shop.orders","instances":[{"class":"Ledger","key":"u1","id":"a"},{"class":"Shelf","key":"s1","id":"b"}]}"#.into()))
+                } else {
+                    Ok((401, String::new()))
+                };
+            }
+            let owner = if url.contains("/agent/Shelf") {
+                "shop.stock"
+            } else {
+                "shop.orders"
+            };
+            if Self::signed_for(url, headers, owner) {
+                Ok((
+                    200,
+                    r#"{"exists":true,"readable":true,"cells":{},"collections":{}}"#.into(),
+                ))
+            } else {
+                Ok((401, String::new()))
+            }
+        }
+    }
+
+    #[test]
+    fn a_group_lists_every_members_agents_under_the_member_that_owns_each() {
+        let what = Inspect::Agents {
+            context: None,
+            class: None,
+        };
+        let out = run(&group(), &what, &Entry).unwrap();
+        assert_eq!(out["errors"], json!([]), "{out}");
+        let contexts: Vec<(&str, &str)> = out["agents"]
+            .as_array()
+            .unwrap()
+            .iter()
+            .map(|a| (a["class"].as_str().unwrap(), a["context"].as_str().unwrap()))
+            .collect();
+        assert_eq!(
+            contexts,
+            [("Ledger", "shop.orders"), ("Shelf", "shop.stock")]
+        );
+    }
+
+    #[test]
+    fn a_group_read_is_signed_for_the_member_that_owns_the_class() {
+        for (class, key, owner) in [
+            ("Ledger", "u1", "shop.orders"),
+            ("Shelf", "s1", "shop.stock"),
+        ] {
+            let what = Inspect::Agent {
+                context: None,
+                class: class.to_string(),
+                key: key.to_string(),
+                page: Page::default(),
+            };
+            let out = run(&group(), &what, &Entry).unwrap();
+            assert_eq!(out["context"], owner, "{out}");
+        }
+    }
+
+    #[test]
+    fn a_member_context_selects_the_group_that_serves_it() {
+        let what = Inspect::Agents {
+            context: Some("shop.stock".to_string()),
+            class: None,
+        };
+        assert!(run(&group(), &what, &Entry).is_ok());
+        let what = Inspect::Agents {
+            context: Some("shop.nowhere".to_string()),
+            class: None,
+        };
+        assert!(run(&group(), &what, &Entry).is_err());
+    }
+
+    /// `inspect --context` takes every name `dev --context` does: a member's dashed
+    /// form, and a member that hosts no agent (the group is served, and has none to list).
+    #[test]
+    fn a_context_names_a_member_dashed_or_agentless() {
+        let mut session = group();
+        let worker = session.workers.get_mut("core").unwrap();
+        worker.members.insert(
+            0,
+            InspectMember {
+                context: "shop.api".to_string(),
+                classes: vec![],
+            },
+        );
+        // The listing is still signed for the first member that hosts an agent.
+        assert_eq!(session.workers["core"].lister(), "shop.orders");
+        for context in ["shop-stock", "shop.api", "shop-api"] {
+            let what = Inspect::Agents {
+                context: Some(context.to_string()),
+                class: None,
+            };
+            let out = run(&session, &what, &Entry).unwrap();
+            assert_eq!(out["errors"], json!([]), "{context}: {out}");
+        }
     }
 }

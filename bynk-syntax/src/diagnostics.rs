@@ -8931,10 +8931,6 @@ pub const REGISTRY: &[DiagnosticInfo] = &[
         "bynk.deploy.worker_cycle",
         "Workers bind to each other in a cycle that involves a `[deploy.workers.<key>]` group: a group folds its members into one Worker, which can close a cycle among contexts that are themselves acyclic. A Worker is uploaded after the Workers it binds to, so the cycle cannot be deployed.",
     ),
-    d(
-        "bynk.deploy.worker_groups_unsupported",
-        "`bynk deploy`, `bynk revert` and `bynk dev` do not yet support `[deploy.workers.<key>]` Worker groups (temporary, #3562).",
-    ),
     warn(d(
         "bynk.deploy.workers_ignored_on_bundle",
         "`bynk.toml` declares `[deploy.workers]` groups, which only a `workers` build uses; this build is a `bundle`, which has every context in one program and ignores them (warning).",

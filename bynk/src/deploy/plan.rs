@@ -1327,29 +1327,18 @@ pub fn run(
         .collect();
     let mut edge_keys: BTreeMap<Edge, EdgeKey> = BTreeMap::new();
     for edge in &edges {
-        let ends = match edge.ends() {
-            Ok(ends) => ends,
+        let names = match edge.keys() {
+            Ok(names) => names,
             Err(e) => {
                 eprintln!("bynk: {e}");
                 return ExitCode::FAILURE;
             }
         };
-        let [callee, caller] = ends.map(|(worker, key)| {
-            let p = presence_of(
-                &key,
-                listed[worker].as_ref(),
-                !lock.is_deployed(&opts.environment, worker),
-            );
-            // #2004 review: name the Workers whose answer could not be read,
-            // since the decision counts them as holding the key.
-            if p == Presence::Unknown {
-                eprint!(
-                    "{}",
-                    unknown_edge_key_notice(&opts.environment, worker, &key, edge)
-                );
-            }
-            p
-        });
+        let held = |worker: &str, keys: &[String]| {
+            end_presence(edge, worker, keys, &listed, &lock, &opts.environment)
+        };
+        let callee = held(&edge.callee, &names.on_callee);
+        let caller = held(&edge.caller, &names.on_caller);
         let both_in_run =
             in_run.contains(edge.caller.as_str()) && in_run.contains(edge.callee.as_str());
         match decide_edge_key(
@@ -2012,6 +2001,56 @@ pub(crate) fn contract_skew_refusal(
         deploy_command(environment)
     ));
     out
+}
+
+/// Whether one end of `edge` holds its key: it holds each name the edge puts on it (a
+/// group's Worker holds one per member), and an end holding only some is keyed afresh.
+fn end_presence(
+    edge: &Edge,
+    worker: &str,
+    keys: &[String],
+    listed: &BTreeMap<String, Option<BTreeSet<String>>>,
+    lock: &DeployLock,
+    environment: &str,
+) -> Presence {
+    let held: Vec<(&String, Presence)> = keys
+        .iter()
+        .map(|key| {
+            let p = presence_of(
+                key,
+                listed[worker].as_ref(),
+                !lock.is_deployed(environment, worker),
+            );
+            (key, p)
+        })
+        .collect();
+    // #2004 review: name the Workers whose answer could not be read, since the
+    // decision counts them as holding the key. One notice per end, naming its keys.
+    let unknown: Vec<&str> = held
+        .iter()
+        .filter(|(_, p)| *p == Presence::Unknown)
+        .map(|(key, _)| key.as_str())
+        .collect();
+    if !unknown.is_empty() {
+        eprint!(
+            "{}",
+            unknown_edge_key_notice(environment, worker, &unknown.join(", "), edge)
+        );
+    }
+    combine_presence(held.iter().map(|(_, p)| *p))
+}
+
+/// An end holds its key when it holds every name: one name absent makes it absent (it is
+/// keyed afresh), else one unread makes it unknown, else it holds it.
+fn combine_presence(held: impl IntoIterator<Item = Presence>) -> Presence {
+    let held: Vec<Presence> = held.into_iter().collect();
+    if held.contains(&Presence::Absent) {
+        Presence::Absent
+    } else if held.contains(&Presence::Unknown) {
+        Presence::Unknown
+    } else {
+        Presence::Present
+    }
 }
 
 /// #2004 review: an end of `edge` whose secrets could not be listed, counted
@@ -5291,11 +5330,26 @@ queue = "jobs"
         );
     }
 
+    /// #3562: a group's Worker holds one key name per member, and an end holding only
+    /// some of them is keyed afresh (absent), never kept.
+    #[test]
+    fn an_end_holding_only_some_of_its_keys_is_keyed_afresh() {
+        use Presence::{Absent, Present, Unknown};
+        assert_eq!(combine_presence([Present, Present]), Present);
+        assert_eq!(combine_presence([Present, Absent]), Absent);
+        assert_eq!(combine_presence([Absent, Present]), Absent);
+        assert_eq!(combine_presence([Present, Unknown]), Unknown);
+        assert_eq!(combine_presence([Unknown, Absent]), Absent);
+        assert_eq!(combine_presence([]), Present);
+    }
+
     #[test]
     fn an_interrupted_rotation_says_how_to_repair_it() {
         let edge = |caller: &str, callee: &str| Edge {
             caller: caller.to_string(),
             callee: callee.to_string(),
+            caller_contexts: Vec::new(),
+            callee_contexts: Vec::new(),
         };
         let set = |rotating: bool| EdgeKey::Set {
             value: "minted-value".into(),

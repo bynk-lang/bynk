@@ -1163,7 +1163,7 @@ pub(crate) fn project_resources_for(
 
 /// Each Worker's script name (`name` in its `wrangler.toml`, else its directory)
 /// → its directory.
-fn script_names(workers_dir: &Path, workers: &[String]) -> BTreeMap<String, String> {
+pub(super) fn script_names(workers_dir: &Path, workers: &[String]) -> BTreeMap<String, String> {
     workers
         .iter()
         .map(|dir| {

@@ -13,8 +13,8 @@
 belong together cost a Worker and a network hop each. A group puts several in one
 Worker: a `[deploy.workers.<key>]` table in `bynk.toml` lists contexts, and the
 build emits one Worker for them. Everything below is built and merged for the
-**build**; `bynk deploy`, `revert` and `bynk dev` still refuse a group
-(`bynk.deploy.worker_groups_unsupported`) until G4 and G6.
+**build**; `bynk deploy`, `revert` and `bynk dev` were taught groups in G4 and G6, and
+the temporary `bynk.deploy.worker_groups_unsupported` refusal is gone.
 
 **Decision.**
 
@@ -124,6 +124,8 @@ failure is followed by `wrangler triggers deploy`, and a failure of that is the
 deploy's failure. If the account cannot be asked (no API token), the failure stays as
 wrangler reported it.
 
+Edge keys are named per member context (the runtime signs as the calling context): an edge between Workers is one secret, held by the callee as `BYNK_CALL_FROM_<m>` for each member `m` of the caller and by the caller as `BYNK_CALL_TO_<m>` for each member of the callee, and a group holds both for each of its own members. The members of a Worker share one `env`, so a key held for the Worker is held by all of them: within a Worker, a caller's identity between members is by convention, not cryptographically separable (any member could sign as another); across Workers it is per Worker edge. A group deployed before edge keys were named per member holds none of the new names, so its edges are keyed afresh by the next whole-project deploy (a `--worker` or `--context` run is refused until then), and the old Worker-named secrets stay on its peers.
+
 *D8: amendments.*
 
 - **[[0017]]:** the deployment unit under `workers` is a context **or a group of
@@ -149,9 +151,10 @@ wrangler reported it.
 
 **Consequences.**
 
-- A group builds today; it cannot yet be deployed or run in `bynk dev`. Both
-  refuse it with `bynk.deploy.worker_groups_unsupported`, which G4 (deploy,
-  `--worker`, ledger and facts versions, the `10007` handling) and G6 remove.
+- A group builds, deploys and reverts (G4: `--worker`, ledger and facts versions, the
+  `10007` handling) and runs in `bynk dev` (G6: one Worker on one port, `--context`
+  naming a member serving its whole group). The temporary
+  `bynk.deploy.worker_groups_unsupported` refusal is removed.
 - **G3-2, in-process calls:** a call between members stays in the Worker. The group's
   entry answers the binding a member names another by with the group's own dispatcher,
   so the request is still signed, contract-checked, admission-checked and decoded on

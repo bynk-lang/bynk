@@ -182,12 +182,12 @@ service OnPlaced from Events(Placed) {
 /// `wire`. A log line is attributed to the binding it was written under
 /// (`client` when under none), and cut at its stack.
 const DRIVER: &str = r#"import { AsyncLocalStorage } from "node:async_hooks";
+import { readFileSync } from "node:fs";
 import { signedHeaders } from "./out-js/__bynk_runtime/boundary.js";
 
 const grouped = process.argv[2] === "grouped";
 const KEY = "edge-key";
 const CONTEXTS = ["app.a", "app.b", "app.pub", "app.sub"];
-const upper = (c) => c.toUpperCase().replace(".", "__");
 const binding = (c) => c.toUpperCase().replace(".", "_");
 
 // Which binding a log line was written under follows the call it ran in, even
@@ -222,12 +222,12 @@ if (grouped) {
   Fanout = (await import("./out-js/workers/app-pub/index.js")).__EventsFanout;
 }
 
-// Every context holds the key for every edge, so a refusal is the callee's own.
-const keys = {};
-for (const c of CONTEXTS) {
-  keys["BYNK_CALL_TO_" + upper(c)] = KEY;
-  keys["BYNK_CALL_FROM_" + upper(c)] = KEY;
-}
+// A Worker holds only the keys `bynk deploy` would provision for it, read from the
+// deploy plan (`provisioned.json`): not a key for every edge, so a call the plan did
+// not key faults here as it would deployed, and a refusal is the callee's own.
+const provisioned = JSON.parse(readFileSync("provisioned.json", "utf8"));
+const workerOf = (c) => (grouped ? "core" : dir(c));
+const keysOf = (c) => Object.fromEntries((provisioned[workerOf(c)] ?? []).map((name) => [name, KEY]));
 const envs = {};
 const over = (name, target, run) => async (request) => {
   const record = { to: name, path: new URL(request.url).pathname };
@@ -237,7 +237,7 @@ const over = (name, target, run) => async (request) => {
   return response;
 };
 for (const c of CONTEXTS) {
-  envs[c] = { ...keys };
+  envs[c] = keysOf(c);
   for (const other of CONTEXTS) {
     if (other === c) continue;
     envs[c][binding(other)] = { fetch: over(binding(other), other, (r) => entries[other].fetch(r, envs[other], ctx)) };
@@ -328,6 +328,61 @@ fn stage(topology: &Topology) -> PathBuf {
     root
 }
 
+/// The secret names `bynk deploy` would provision on each Worker of the built project,
+/// by Worker, as JSON: read from the deploy plan, so the driver gives a Worker the keys
+/// a deployment would and no others. `None` when `wrangler` is missing (a dry run needs
+/// it) and the test skips.
+fn provisioned_keys(root: &std::path::Path) -> Option<String> {
+    let plan = Command::new(env!("CARGO_BIN_EXE_bynk-under-test"))
+        .args([
+            "deploy",
+            "--dry-run",
+            "--format",
+            "json",
+            "--no-install",
+            "--yes",
+        ])
+        .arg(root)
+        .env("CLOUDFLARE_API_TOKEN", "dummy")
+        .env("NO_COLOR", "1")
+        .output()
+        .expect("bynk runs");
+    if !plan.status.success() {
+        let shown = text(&plan);
+        if shown.contains("environment not ready") {
+            tools::skip(
+                "CROSS-CONTEXT CONFORMANCE (deploy plan)",
+                require::is_required(REQUIRE_ENV),
+                REQUIRE_ENV,
+                "`bynk deploy --dry-run` needs `wrangler`, which is not available",
+            );
+            return None;
+        }
+        panic!("bynk deploy --dry-run failed:\n{shown}");
+    }
+    let doc: Value = serde_json::from_slice(&plan.stdout)
+        .unwrap_or_else(|e| panic!("{e}: {}", String::from_utf8_lossy(&plan.stdout)));
+    let by_worker: serde_json::Map<String, Value> = doc["contexts"]
+        .as_array()
+        .expect("a plan lists its Workers")
+        .iter()
+        .map(|c| {
+            let names: Vec<Value> = c["secrets"]
+                .as_array()
+                .into_iter()
+                .flatten()
+                .filter(|s| s["origin"] == "managed")
+                .map(|s| s["name"].clone())
+                .collect();
+            (
+                c["worker"].as_str().unwrap().to_string(),
+                Value::Array(names),
+            )
+        })
+        .collect();
+    Some(Value::Object(by_worker).to_string())
+}
+
 /// Build the topology, compile it, and run [`DRIVER`]: one observation per
 /// scenario. `None` when the toolchain is missing and the test skips.
 fn observe(topology: &Topology) -> Option<(PathBuf, Vec<Value>)> {
@@ -375,6 +430,7 @@ fn observe(topology: &Topology) -> Option<(PathBuf, Vec<Value>)> {
         text(&emitted)
     );
     fs::write(root.join("out-js/package.json"), "{\"type\":\"module\"}").unwrap();
+    fs::write(root.join("provisioned.json"), provisioned_keys(&root)?).unwrap();
     fs::write(root.join("run.mjs"), DRIVER).unwrap();
     let ran = Command::new("node")
         .arg("run.mjs")

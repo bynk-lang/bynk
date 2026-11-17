@@ -85,6 +85,14 @@ pub use revert::{RevertOptions, revert};
 // `deploy` does, and mints its run's key as an edge key is minted.
 pub(crate) use config::deployed_worker_name;
 pub(crate) use config::{VectorizeDecl, project_resources};
+
+/// The Cloudflare script name of each Worker directory: what a Service Binding to it
+/// names (`name` in its `wrangler.toml`, else the directory).
+pub(crate) fn script_names_of(workers_dir: &Path, workers: &[String]) -> Vec<String> {
+    config::script_names(workers_dir, workers)
+        .into_keys()
+        .collect()
+}
 pub(crate) use secrets::mint_edge_key as mint_key;
 
 /// State-migrations S4 (#2259): for each Worker directory in `workers`, the
@@ -108,8 +116,9 @@ pub(crate) fn deployed_environments(
 pub(crate) fn local_edge_keys(
     workers_dir: &Path,
     workers: &[String],
+    project_root: &Path,
 ) -> Result<BTreeMap<String, Vec<String>>, String> {
-    let resources = project_resources(workers_dir, workers)?;
+    let resources = project_resources_for(workers_dir, workers, project_root)?;
     let edges = project_edges(&resources);
     for edge in &edges {
         edge.ends()?;
@@ -724,6 +733,8 @@ mod tests {
         let edge = Edge {
             caller: "commerce-orders".into(),
             callee: "commerce-payment".into(),
+            caller_contexts: Vec::new(),
+            callee_contexts: Vec::new(),
         };
         let skews = vec![ContractSkew {
             dependency: "commerce.payment".into(),

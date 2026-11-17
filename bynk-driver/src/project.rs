@@ -4092,6 +4092,7 @@ impl WorkersEmit<'_> {
             has_events: own_handles_events(table),
             has_migrate: !migratable.is_empty(),
             has_inspect: !inspect_classes.is_empty(),
+            inspect_classes,
             classes,
             contracts,
             secrets,
@@ -4257,6 +4258,14 @@ impl WorkersEmit<'_> {
                         &layout.dir(first),
                         &publishers,
                     )),
+                    source_map: None,
+                    debug_metadata: None,
+                });
+            }
+            if let Some(text) = group_inspect_manifest(members) {
+                compiled.push(StagedFile {
+                    output_path: layout.worker_file(first, bynk_emit::INSPECT_MEMBERS_FILE),
+                    document: Document::Json(text),
                     source_map: None,
                     debug_metadata: None,
                 });
@@ -4558,6 +4567,8 @@ struct MemberParts {
     has_migrate: bool,
     /// Whether it hosts an agent a `bynk dev` build can inspect.
     has_inspect: bool,
+    /// The agent classes a `bynk dev` build can inspect.
+    inspect_classes: Vec<String>,
     /// The Durable Object classes its entry exports.
     classes: Vec<String>,
     /// Its contract and secrets manifests, merged into the Worker's own when it is
@@ -4567,6 +4578,23 @@ struct MemberParts {
     /// For a group member that publishes, its events' subscribers, which the
     /// group's one fan-out routes (#3562).
     publishes: Option<BTreeMap<String, Vec<(String, String)>>>,
+}
+
+/// #3562 (G6): which member owns which agent class in a `bynk dev` group, for
+/// `bynk dev inspect`, which signs each request for the member that answers it: the
+/// listing for the first member that hosts an agent, a read for the class's owner.
+/// `None` when no member hosts one (and in a deploy build, which has no inspect).
+fn group_inspect_manifest(members: &[(&MemberParts, &UnitTable)]) -> Option<String> {
+    // Every member is named, those hosting no agent with no classes, so that
+    // `bynk dev inspect --context <member>` finds the group for any of them.
+    members.iter().any(|(p, _)| p.has_inspect).then(|| {
+        let all: Vec<serde_json::Value> = members
+            .iter()
+            .map(|(p, _)| serde_json::json!({ "context": p.context, "classes": p.inspect_classes }))
+            .collect();
+        serde_json::to_string_pretty(&serde_json::json!({ "members": all })).unwrap_or_default()
+            + "\n"
+    })
 }
 
 /// Whether any service of `table` has an `on event` handler.
