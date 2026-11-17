@@ -8,7 +8,7 @@ Track slice T0.0 (#999); `ts_writes`/`ts_any` added by P7.0 (#1296); `verbatim_o
 
 | Probe | Gated | Reads |
 |---|---|---|
-| `workspace_lints` | yes | present — wildcard_enum_match_arm = "warn" |
+| `workspace_lints` | yes | present — wildcard_enum_match_arm = "warn"; opted in: bynk-model, bynk-ts |
 | `fs_below_driver` | yes | 0 files (bynk-emit=0, bynk-ide=0, bynk-fmt=0) — 0 named floor, 0 residual total |
 | `options_sources` | yes | present |
 | `hoist_sinks` | yes | 0 |
