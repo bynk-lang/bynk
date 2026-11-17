@@ -102,6 +102,12 @@ summary: How a case addresses a handler and names its principal
   commits. The pending file is deleted at stamp, so that ledger is what keeps the
   reason.
 
+  CI also runs `cargo xtask greenfield-status --check-growth [--base <rev>]`
+  (a step of the `test` job), which judges the live counts against the table at
+  the PR's *base* revision, so editing a growth row in
+  `design/greenfield-status.md` by hand does not avoid a `raises:`. Locally it
+  defaults to `git merge-base HEAD origin/main`, and errors if no base is found.
+
 - **`breaking`** — a one-line Markdown note for an increment that breaks
   existing programs: what breaks, the diagnostic a user will see, and the fix
   (`bynk check --fix` where it is machine-applicable). Omit it when nothing

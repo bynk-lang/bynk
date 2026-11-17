@@ -46,7 +46,10 @@
 //! `growth_probes_never_rise` (`xtask/tests/greenfield_status.rs`) fails when the
 //! live leading count exceeds the committed one unless a pending file *raises* the
 //! probe with a reason (`raises:`), which the stamp then records in
-//! `design/greenfield-status-raises.md`. A fall needs only `probes:`.
+//! `design/greenfield-status-raises.md`. A fall needs only `probes:`. In CI the
+//! direction is also checked against the table at the PR's *base* revision
+//! (`greenfield-status --check-growth`, [`check_growth`]), so hand-editing a
+//! committed growth row upward does not launder a rise.
 //!
 //! A disagreement a pending file acknowledges (its `probes` key) does not fail the
 //! gate: the increment leaves the shared table alone and `cargo xtask stamp --apply`
@@ -2590,6 +2593,41 @@ pub fn growth_rises(probes: &[Probe], committed: &str) -> Result<Vec<GrowthRise>
     }
 }
 
+/// The one growth-direction check, shared by `growth_probes_never_rise` (base =
+/// the working-tree table) and `cargo xtask greenfield-status --check-growth`
+/// (base = the table at the PR's base revision, so a hand-edited row cannot
+/// launder a rise). Compares `live`'s growth probes with `base_table`'s rows and
+/// requires a pending file under `root` to `raises:` each rise.
+pub fn check_growth(live: &[Probe], base_table: &str, root: &Path) -> Result<(), String> {
+    let rises = growth_rises(live, base_table)
+        .map_err(|errs| format!("growth probe reading unusable:\n{}", errs.join("\n")))?;
+    if rises.is_empty() {
+        return Ok(());
+    }
+    let raised = crate::raised_probes_checked(root).map_err(|errs| {
+        format!(
+            "growth probe(s) rose, and the pending files are invalid, so no `raises:` could be \
+             read. Fix them first (run `cargo xtask check-pending`):\n{}",
+            errs.join("\n")
+        )
+    })?;
+    let left = unraised(rises, &raised);
+    if left.is_empty() {
+        return Ok(());
+    }
+    Err(format!(
+        "growth probe(s) rose without a reasoned raise. A growth probe may only fall in an \
+         ordinary PR; if this rise is deliberate, add a line to your increment's \
+         `design/pending/<slug>.md` frontmatter, `raises: <probe> — <reason>` (one line per \
+         probe; see design/pending/README.md). The stamp records it in \
+         design/greenfield-status-raises.md. Otherwise, reduce the count:\n{}",
+        left.iter()
+            .map(|r| format!("  {}: committed {}, live {}", r.probe, r.from, r.to))
+            .collect::<Vec<_>>()
+            .join("\n")
+    ))
+}
+
 /// The `rises` no pending file `raised` — the ones that must fail the gate.
 pub fn unraised(rises: Vec<GrowthRise>, raised: &BTreeSet<String>) -> Vec<GrowthRise> {
     rises
@@ -3816,6 +3854,31 @@ mod tests {
         // Raising a different probe does not excuse this one.
         let other: BTreeSet<String> = ["ts_any".to_string()].into();
         assert_eq!(unraised(rises, &other).len(), 1);
+    }
+
+    #[test]
+    fn check_growth_needs_a_valid_raise_and_names_invalid_pending_files() {
+        let root = std::env::temp_dir().join("xtask-check-growth");
+        let _ = std::fs::remove_dir_all(&root);
+        std::fs::create_dir_all(root.join("design/pending")).unwrap();
+        let live = growth_live("101", "4");
+        // No pending file: the rise is refused.
+        let e = check_growth(&live, GROWTH_TABLE, &root).unwrap_err();
+        assert!(e.contains("ts_writes: committed 100, live 101"), "{e}");
+        // A malformed pending file: say so, not a bare unraised rise.
+        std::fs::write(root.join("design/pending/bad.md"), "no frontmatter\n").unwrap();
+        let e = check_growth(&live, GROWTH_TABLE, &root).unwrap_err();
+        assert!(
+            e.contains("pending files are invalid") && e.contains("check-pending"),
+            "{e}"
+        );
+        // A valid raise passes.
+        std::fs::write(
+            root.join("design/pending/bad.md"),
+            "---\nlevel: patch\nchangelog: x\nraises: ts_writes — why\n---\n",
+        )
+        .unwrap();
+        assert!(check_growth(&live, GROWTH_TABLE, &root).is_ok());
     }
 
     #[test]

@@ -454,10 +454,16 @@ fn parse_frontmatter(content: &str, errors: &mut Vec<String>) -> Option<Frontmat
 /// with no relative link, and it must not contain `|`.
 fn parse_raise(value: &str) -> Result<Raise, String> {
     let growth = greenfield_status::GROWTH_PROBES.join(", ");
-    let (probe, reason) = value
-        .split_once(" — ")
-        .or_else(|| value.split_once(" - "))
-        .map(|(p, r)| (p.trim().trim_matches('`'), r.trim()))
+    // Split at whichever separator comes first, so a dash inside the reason
+    // (`ts_any - a — b`) stays in the reason.
+    let em = value.find(" — ").map(|i| (i, " — ".len()));
+    let hy = value.find(" - ").map(|i| (i, " - ".len()));
+    let sep = match (em, hy) {
+        (Some(a), Some(b)) => Some(if a.0 <= b.0 { a } else { b }),
+        (a, b) => a.or(b),
+    };
+    let (probe, reason) = sep
+        .map(|(i, n)| (value[..i].trim().trim_matches('`'), value[i + n..].trim()))
         .ok_or_else(|| {
             format!(
                 "raises must read `<probe> — <reason>` (the reason is mandatory), got {value:?}"
@@ -501,6 +507,19 @@ pub fn raised_probes(root: &Path) -> std::collections::BTreeSet<String> {
                 .collect()
         })
         .unwrap_or_default()
+}
+
+/// Like [`raised_probes`], but an invalid pending directory is an error (with
+/// each problem) rather than an empty set, so a caller can say the pending files
+/// are invalid instead of reporting a misleading "unraised" rise.
+pub fn raised_probes_checked(
+    root: &Path,
+) -> Result<std::collections::BTreeSet<String>, Vec<String>> {
+    validated_pending_in(root).map(|ps| {
+        ps.into_iter()
+            .flat_map(|(_, p)| p.raises.into_iter().map(|r| r.probe))
+            .collect()
+    })
 }
 
 /// The gated probes acknowledged by every pending file under `root` — the union
@@ -1322,6 +1341,18 @@ mod tests {
                 },
             ]
         );
+    }
+
+    #[test]
+    fn raises_splits_at_the_first_separator() {
+        let p = ok(
+            "x.md",
+            "---\nlevel: patch\nchangelog: x\nraises: ts_any - reason — more detail\nraises: ts_writes — a - b\n---\n",
+        );
+        assert_eq!(p.raises[0].probe, "ts_any");
+        assert_eq!(p.raises[0].reason, "reason — more detail");
+        assert_eq!(p.raises[1].probe, "ts_writes");
+        assert_eq!(p.raises[1].reason, "a - b");
     }
 
     #[test]

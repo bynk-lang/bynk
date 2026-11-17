@@ -146,21 +146,9 @@ fn growth_probes_never_rise() {
     let probes = xtask::greenfield_status::run_gated(&root);
     let committed = std::fs::read_to_string(xtask::greenfield_status::table_path(&root))
         .expect("read the committed greenfield-status table");
-    let rises = xtask::greenfield_status::growth_rises(&probes, &committed)
-        .unwrap_or_else(|errs| panic!("growth probe reading unusable:\n{}", errs.join("\n")));
-    let raised = xtask::raised_probes(&root);
-    let unraised = xtask::greenfield_status::unraised(rises, &raised);
-    assert!(
-        unraised.is_empty(),
-        "growth probe(s) rose without a reasoned raise. A growth probe may only fall in an \
-         ordinary PR; if this rise is deliberate, add a line to your increment's \
-         `design/pending/<slug>.md` frontmatter, `raises: <probe> — <reason>` (one line per \
-         probe; see design/pending/README.md). The stamp records it in \
-         design/greenfield-status-raises.md. Otherwise, reduce the count:\n{}",
-        unraised
-            .iter()
-            .map(|r| format!("  {}: committed {}, live {}", r.probe, r.from, r.to))
-            .collect::<Vec<_>>()
-            .join("\n")
-    );
+    // The working-tree table; CI's `greenfield-status --check-growth` repeats
+    // this against the base revision's table, which a hand-edited row cannot move.
+    if let Err(e) = xtask::greenfield_status::check_growth(&probes, &committed, &root) {
+        panic!("{e}");
+    }
 }

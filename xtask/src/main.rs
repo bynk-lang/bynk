@@ -34,10 +34,21 @@ fn main() -> ExitCode {
     match args.first().map(String::as_str) {
         Some("check-pending") => check_pending(),
         Some("greenfield-status") => {
-            if let Some(bad) = args[1..]
-                .iter()
-                .find(|a| *a != "--apply" && *a != "--list-unasserted" && *a != "--trend-only")
-            {
+            let mut rest = args[1..].iter();
+            let mut unknown = None;
+            while let Some(a) = rest.next() {
+                match a.as_str() {
+                    "--apply" | "--list-unasserted" | "--trend-only" | "--check-growth" => {}
+                    "--base" => {
+                        rest.next();
+                    }
+                    _ => {
+                        unknown = Some(a);
+                        break;
+                    }
+                }
+            }
+            if let Some(bad) = unknown {
                 eprintln!("xtask greenfield-status: unknown argument {bad:?}");
                 usage();
                 return ExitCode::from(2);
@@ -48,6 +59,9 @@ fn main() -> ExitCode {
                     println!("{code}");
                 }
                 return ExitCode::SUCCESS;
+            }
+            if args.iter().any(|a| a == "--check-growth") {
+                return greenfield_check_growth(&args[1..]);
             }
             let apply = args.iter().any(|a| a == "--apply");
             if args.iter().any(|a| a == "--trend-only") {
@@ -415,8 +429,12 @@ fn stamp(apply: bool) -> ExitCode {
     let refreshed_table = match std::fs::read_to_string(&table_path)
         .map_err(|e| format!("cannot read {}: {e}", table_path.display()))
         .and_then(|committed| {
-            plan.growth_rises = xtask::greenfield_status::growth_rises(&live, &committed)
-                .map_err(|errs| errs.join("\n"))?;
+            // Only when an increment declares `raises:`, so an unrelated stamp
+            // cannot be wedged by a growth-row problem.
+            if plan.increments.iter().any(|inc| !inc.raises.is_empty()) {
+                plan.growth_rises = xtask::greenfield_status::growth_rises(&live, &committed)
+                    .map_err(|errs| errs.join("\n"))?;
+            }
             xtask::greenfield_status::refresh_for_stamp(&committed, &live, &acknowledged)
         }) {
         Ok(t) => t,
@@ -517,6 +535,65 @@ fn ensure_clean_worktree(root: &Path) -> Result<(), String> {
         ));
     }
     Ok(())
+}
+
+/// `greenfield-status --check-growth [--base <rev>]`: the growth-direction gate
+/// against the committed table at the base revision (default: the merge base of
+/// `HEAD` and `origin/main`). See `greenfield_status::check_growth`. Errors,
+/// rather than passes, when no base can be determined.
+fn greenfield_check_growth(args: &[String]) -> ExitCode {
+    let root = repo_root();
+    let base = match args.iter().position(|a| a == "--base") {
+        Some(i) => match args.get(i + 1) {
+            Some(rev) => rev.clone(),
+            None => {
+                eprintln!("greenfield-status --check-growth: --base needs a revision");
+                return ExitCode::from(2);
+            }
+        },
+        None => match git_stdout(&root, &["merge-base", "HEAD", "origin/main"]) {
+            Ok(sha) => sha.trim().to_string(),
+            Err(e) => {
+                eprintln!(
+                    "greenfield-status --check-growth: no base revision (pass --base <rev>, or \
+                     fetch origin/main so `git merge-base HEAD origin/main` works): {e}"
+                );
+                return ExitCode::FAILURE;
+            }
+        },
+    };
+    let spec = format!("{base}:design/greenfield-status.md");
+    let base_table = match git_stdout(&root, &["show", &spec]) {
+        Ok(t) => t,
+        Err(e) => {
+            eprintln!("greenfield-status --check-growth: cannot read {spec}: {e}");
+            return ExitCode::FAILURE;
+        }
+    };
+    let live = xtask::greenfield_status::run_gated(&root);
+    match xtask::greenfield_status::check_growth(&live, &base_table, &root) {
+        Ok(()) => {
+            println!("greenfield-status: no growth probe rose against {base}");
+            ExitCode::SUCCESS
+        }
+        Err(e) => {
+            eprintln!("greenfield-status --check-growth (against {base}): {e}");
+            ExitCode::FAILURE
+        }
+    }
+}
+
+/// `git <args>` at `root`, stdout on success, or why it failed.
+fn git_stdout(root: &Path, args: &[&str]) -> Result<String, String> {
+    let out = Command::new("git")
+        .args(args)
+        .current_dir(root)
+        .output()
+        .map_err(|e| format!("cannot run git: {e}"))?;
+    if !out.status.success() {
+        return Err(String::from_utf8_lossy(&out.stderr).trim().to_string());
+    }
+    Ok(String::from_utf8_lossy(&out.stdout).into_owned())
 }
 
 /// `greenfield-status --trend-only`: run only the five trend probes (including the
@@ -910,7 +987,7 @@ fn release_notes(args: &[String]) -> ExitCode {
 
 fn usage() {
     eprintln!(
-        "usage: cargo xtask <check-pending | ci [--fast] | fn-lengths [--apply] | greenfield-status [--apply | --list-unasserted | --trend-only [--apply]] | manifest-schema [--check] | editor-contract [--check | --tag T --out F] | stamp [--apply] | release-notes <vX.Y.Z> | bench [--sizes N,N,…] [--shape independent|linked|both] [--runs N] [--edits N] [--record] | bench-runtime [--sizes-only] [--record] [--runs N] [--requests N] [--startups N] | tier-probe>"
+        "usage: cargo xtask <check-pending | ci [--fast] | fn-lengths [--apply] | greenfield-status [--apply | --list-unasserted | --check-growth [--base REV] | --trend-only [--apply]] | manifest-schema [--check] | editor-contract [--check | --tag T --out F] | stamp [--apply] | release-notes <vX.Y.Z> | bench [--sizes N,N,…] [--shape independent|linked|both] [--runs N] [--edits N] [--record] | bench-runtime [--sizes-only] [--record] [--runs N] [--requests N] [--startups N] | tier-probe>"
     );
 }
 
