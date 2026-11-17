@@ -133,3 +133,22 @@ fn explained_codes_never_fall() {
          the committed row in design/greenfield-status.md in the same PR."
     );
 }
+
+/// #3679 (ADR 0389/0390 amended): the growth probes can only fall in an
+/// ordinary PR. `greenfield_status_table_is_current` accepts any move a pending
+/// file's `probes:` acknowledges; this refuses a *rise* of the leading count
+/// even then, unless a pending file raises that probe with a reason
+/// (`raises: <probe> — <reason>`). A fall needs only `probes:`. A growth probe
+/// whose reading has no leading integer fails hard rather than being skipped.
+#[test]
+fn growth_probes_never_rise() {
+    let root = repo_root();
+    let probes = xtask::greenfield_status::run_gated(&root);
+    let committed = std::fs::read_to_string(xtask::greenfield_status::table_path(&root))
+        .expect("read the committed greenfield-status table");
+    // The working-tree table; CI's `greenfield-status --check-growth` repeats
+    // this against the base revision's table, which a hand-edited row cannot move.
+    if let Err(e) = xtask::greenfield_status::check_growth(&probes, &committed, &root) {
+        panic!("{e}");
+    }
+}

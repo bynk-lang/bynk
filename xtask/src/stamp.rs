@@ -93,6 +93,9 @@ pub struct Stamped {
     /// Gated greenfield-status probes this increment acknowledges moving — the
     /// stamp rewrites only these rows of the table.
     pub probes: Vec<String>,
+    /// Growth probes this increment raises, with reasons (#3679); the stamp
+    /// records each actual rise in `design/greenfield-status-raises.md`.
+    pub raises: Vec<crate::Raise>,
     /// The increment's breaking-change note (#3178), if it declared one; the
     /// stamp writes it, under this increment's version, into the Book's
     /// `reference/upgrading.md`.
@@ -106,6 +109,11 @@ pub struct Plan {
     pub increments: Vec<Stamped>,
     /// The next free ADR number, for materialisation.
     pub first_adr_number: u32,
+    /// Growth-probe rises measured at stamp time (committed row before the stamp
+    /// to the live reading), filled by the CLI after [`plan`] (which reads no
+    /// probes). A raise an increment declares is ledgered only if its probe
+    /// appears here; empty means no growth probe rose.
+    pub growth_rises: Vec<crate::greenfield_status::GrowthRise>,
 }
 
 impl Plan {
@@ -152,6 +160,7 @@ pub fn plan(root: &Path) -> Result<Plan, Vec<String>> {
             adrs: p.adrs,
             closes_rule: p.closes_rule,
             probes: p.probes,
+            raises: p.raises,
             breaking: p.breaking,
         });
     }
@@ -160,6 +169,7 @@ pub fn plan(root: &Path) -> Result<Plan, Vec<String>> {
         base_version,
         increments,
         first_adr_number,
+        growth_rises: Vec::new(),
     })
 }
 
@@ -208,6 +218,7 @@ pub fn apply(
     let changelog_path = root.join("site/src/content/docs/book/reference/changelog.md");
     let readme_path = decisions.join("README.md");
     let rule_ledger_path = root.join("design/greenfield-status-rules.md");
+    let raise_ledger_path = root.join(RAISE_LEDGER_PATH);
     let upgrading_path = root.join(crate::release_notes::UPGRADING_PAGE);
 
     // `pr_number` names the PR whose merge triggered *this run*, not any one
@@ -233,6 +244,7 @@ pub fn apply(
     let mut changelog_rows = Vec::new();
     let mut index_rows = Vec::new();
     let mut rule_ledger_rows_all = Vec::new();
+    let mut raise_ledger_rows_all = Vec::new();
     let mut upgrading_entries = Vec::new();
     for inc in &plan.increments {
         for adr in &inc.adrs {
@@ -255,6 +267,7 @@ pub fn apply(
         }
         changelog_rows.push(changelog_row(inc.version, &inc.changelog));
         rule_ledger_rows_all.extend(rule_ledger_rows(inc, ledger_pr_number));
+        raise_ledger_rows_all.extend(raise_ledger_rows(inc, &plan.growth_rises, ledger_pr_number));
         if let Some(note) = &inc.breaking {
             upgrading_entries.push(crate::release_notes::upgrading_entry(inc.version, note));
         }
@@ -265,6 +278,7 @@ pub fn apply(
     changelog_rows.reverse();
     index_rows.reverse();
     rule_ledger_rows_all.reverse();
+    raise_ledger_rows_all.reverse();
     upgrading_entries.reverse();
 
     let changelog_before = fs::read_to_string(&changelog_path)?;
@@ -304,6 +318,25 @@ pub fn apply(
         Some((ledger_before, after))
     };
 
+    // Same shape for the raise ledger: touched only when a declared raise
+    // actually happened, synthesised on first use, removed on rollback if new.
+    let raise_existed = raise_ledger_path.exists();
+    let raise_edit = if raise_ledger_rows_all.is_empty() {
+        None
+    } else {
+        let before = if raise_existed {
+            Some(fs::read_to_string(&raise_ledger_path)?)
+        } else {
+            None
+        };
+        let base = before
+            .clone()
+            .unwrap_or_else(|| RAISE_LEDGER_HEADER.to_string());
+        let after = insert_after_table_separator(&base, "| Probe |", &raise_ledger_rows_all)
+            .map_err(|e| io::Error::new(io::ErrorKind::InvalidData, e))?;
+        Some((before, after))
+    };
+
     // Only touch the upgrading page when some increment declared `breaking:` —
     // a tree whose increments break nothing never needs the page to exist, which
     // keeps the stamp backward-compatible with fixtures and forks that lack it.
@@ -330,6 +363,9 @@ pub fn apply(
         }
         if let Some((_, after)) = &ledger_edit {
             fs::write(&rule_ledger_path, after)?;
+        }
+        if let Some((_, after)) = &raise_edit {
+            fs::write(&raise_ledger_path, after)?;
         }
         if let Some((_, after)) = &upgrading_edit {
             fs::write(&upgrading_path, after)?;
@@ -358,6 +394,16 @@ pub fn apply(
                 }
                 None => {
                     let _ = fs::remove_file(&rule_ledger_path);
+                }
+            }
+        }
+        if let Some((before, _)) = &raise_edit {
+            match before {
+                Some(orig) => {
+                    let _ = fs::write(&raise_ledger_path, orig);
+                }
+                None => {
+                    let _ = fs::remove_file(&raise_ledger_path);
                 }
             }
         }
@@ -478,6 +524,43 @@ pub fn rule_ledger_rows(inc: &Stamped, pr: Option<u32>) -> Vec<String> {
         .collect()
 }
 
+/// Where the raise ledger lives, relative to the repo root.
+pub const RAISE_LEDGER_PATH: &str = "design/greenfield-status-raises.md";
+
+/// The header `design/greenfield-status-raises.md` is synthesised with the first
+/// time an increment raises a growth probe (#3679, ADR 0389/0390 amended).
+const RAISE_LEDGER_HEADER: &str = "<!-- GENERATED, APPEND-ONLY — written by `cargo xtask stamp \
+--apply` (xtask/src/stamp.rs) at merge, one row per growth probe an increment raises with its \
+`raises` frontmatter (#3679).\n     `from` is the probe's committed leading count before the \
+stamp and `to` the live count the stamp commits; a PR that moves no growth probe upward writes \
+nothing here. Do not hand-edit. -->\n\n# Growth-probe raises\n\n\
+| Probe | From | To | Version | PR | Reason |\n|---|---|---|---|---|---|\n";
+
+/// One `design/greenfield-status-raises.md` row per growth probe `inc` raises
+/// *and* that actually rose (`rises`: the committed row before the stamp to the
+/// live reading). A declared raise whose probe did not rise is a stale
+/// declaration and records nothing. When one stamp run covers several
+/// increments that raise the same probe, each row carries the run's whole
+/// from/to, since the stamp reads the probes once. `pr` as in
+/// [`rule_ledger_rows`].
+pub fn raise_ledger_rows(
+    inc: &Stamped,
+    rises: &[crate::greenfield_status::GrowthRise],
+    pr: Option<u32>,
+) -> Vec<String> {
+    let pr_cell = pr.map(|n| format!("#{n}")).unwrap_or_default();
+    inc.raises
+        .iter()
+        .filter_map(|raise| {
+            let rise = rises.iter().find(|r| r.probe == raise.probe)?;
+            Some(format!(
+                "| {} | {} | {} | v{} | {pr_cell} | {} |",
+                raise.probe, rise.from, rise.to, inc.version, raise.reason
+            ))
+        })
+        .collect()
+}
+
 /// Insert `rows` (already newest-first) immediately after the separator line of
 /// the table whose header row contains `header_anchor` (e.g. `"| Version |"`).
 /// Anchoring on the header — rather than the first separator in the file — keeps
@@ -537,6 +620,59 @@ mod tests {
             status: None,
             body: "**Decision.** Do the thing.".into(),
         }
+    }
+
+    fn stamped_with_raises(raises: Vec<crate::Raise>) -> Stamped {
+        Stamped {
+            file: "x.md".into(),
+            version: Version::parse("0.250.3").unwrap(),
+            changelog: "c".into(),
+            adrs: vec![],
+            closes_rule: vec![],
+            probes: vec![],
+            raises,
+            breaking: None,
+        }
+    }
+
+    #[test]
+    fn raise_ledger_rows_record_only_actual_rises() {
+        use crate::greenfield_status::GrowthRise;
+        let inc = stamped_with_raises(vec![
+            crate::Raise {
+                probe: "ts_writes".into(),
+                reason: "no typed node for Y yet (#1)".into(),
+            },
+            crate::Raise {
+                probe: "ts_any".into(),
+                reason: "stale declaration".into(),
+            },
+        ]);
+        let rises = [GrowthRise {
+            probe: "ts_writes",
+            from: 1502,
+            to: 1510,
+        }];
+        assert_eq!(
+            raise_ledger_rows(&inc, &rises, Some(42)),
+            vec!["| ts_writes | 1502 | 1510 | v0.250.3 | #42 | no typed node for Y yet (#1) |"]
+        );
+        // No PR recovered: an empty cell, not a placeholder.
+        assert!(raise_ledger_rows(&inc, &rises, None)[0].contains("| v0.250.3 |  |"));
+        assert!(raise_ledger_rows(&inc, &[], Some(42)).is_empty());
+        assert!(raise_ledger_rows(&stamped_with_raises(vec![]), &rises, None).is_empty());
+    }
+
+    #[test]
+    fn raise_ledger_header_has_the_anchored_table() {
+        let row = "| ts_any | 1 | 2 | v0.1.1 |  | why |".to_string();
+        let out = insert_after_table_separator(
+            RAISE_LEDGER_HEADER,
+            "| Probe |",
+            std::slice::from_ref(&row),
+        )
+        .unwrap();
+        assert!(out.trim_end().ends_with(&row));
     }
 
     #[test]

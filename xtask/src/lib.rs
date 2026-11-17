@@ -63,6 +63,13 @@ impl Adr {
     }
 }
 
+/// One `raises:` entry: a growth probe and the reason its reading may rise.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct Raise {
+    pub probe: String,
+    pub reason: String,
+}
+
 /// A parsed, validated pending-increment file.
 #[derive(Debug, PartialEq, Eq)]
 pub struct Pending {
@@ -84,6 +91,12 @@ pub struct Pending {
     /// merge order. Optional and usually empty. Each entry is checked against
     /// [`greenfield_status::GATED_PROBES`].
     pub probes: Vec<String>,
+    /// Growth probes this increment deliberately *raises*, each with its reason
+    /// (#3679). A [`greenfield_status::GROWTH_PROBES`] reading may fall under
+    /// `probes:` alone, but may only rise when a pending file also lists it
+    /// here. Optional and usually empty. A raised probe must still be named in
+    /// `probes:` (or have its table row committed) for the exact-match gate.
+    pub raises: Vec<Raise>,
     /// The increment's breaking-change note (#3178): one line of Markdown saying
     /// what breaks, the diagnostic a user will see and the fix. Optional — absent
     /// for the (vast majority of) increments that break nothing. The stamp
@@ -196,7 +209,7 @@ pub fn validate(filename: &str, content: &str) -> Result<Pending, Vec<String>> {
         ));
     }
 
-    let (level, changelog, closes_rule, probes, breaking) =
+    let (level, changelog, closes_rule, probes, raises, breaking) =
         match parse_frontmatter(content, &mut errors) {
             Some(fm) => fm,
             None => return Err(errors),
@@ -210,6 +223,7 @@ pub fn validate(filename: &str, content: &str) -> Result<Pending, Vec<String>> {
             adrs,
             closes_rule,
             probes,
+            raises,
             breaking,
         })
     } else {
@@ -218,12 +232,13 @@ pub fn validate(filename: &str, content: &str) -> Result<Pending, Vec<String>> {
 }
 
 /// The header fields [`parse_frontmatter`] recovers: `level`, `changelog`,
-/// `closes_rule`, `probes`, `breaking`.
+/// `closes_rule`, `probes`, `raises`, `breaking`.
 type Frontmatter = (
     Option<Level>,
     Option<String>,
     Vec<String>,
     Vec<String>,
+    Vec<Raise>,
     Option<String>,
 );
 
@@ -257,6 +272,7 @@ fn parse_frontmatter(content: &str, errors: &mut Vec<String>) -> Option<Frontmat
     let mut changelog = None;
     let mut closes_rule = Vec::new();
     let mut probes = Vec::new();
+    let mut raises: Vec<Raise> = Vec::new();
     let mut breaking = None;
     // Track key presence separately from a valid value: a key that is present
     // but malformed reports its own error and must not also be "missing".
@@ -373,6 +389,24 @@ fn parse_frontmatter(content: &str, errors: &mut Vec<String>) -> Option<Frontmat
                     }
                 }
             }
+            "raises" => {
+                // Repeatable: one line per raised probe, so each reason stays a
+                // single line of Markdown (a comma/semicolon list would collide
+                // with punctuation in the reasons).
+                match parse_raise(value) {
+                    Ok(raise) => {
+                        if raises.iter().any(|r| r.probe == raise.probe) {
+                            errors.push(format!(
+                                "duplicate `raises` entry for probe {:?}",
+                                raise.probe
+                            ));
+                        } else {
+                            raises.push(raise);
+                        }
+                    }
+                    Err(e) => errors.push(e),
+                }
+            }
             "breaking" => {
                 if saw_breaking {
                     errors.push("duplicate frontmatter key `breaking`".into());
@@ -410,7 +444,82 @@ fn parse_frontmatter(content: &str, errors: &mut Vec<String>) -> Option<Frontmat
         errors.push("frontmatter is missing `changelog`".into());
     }
 
-    Some((level, changelog, closes_rule, probes, breaking))
+    Some((level, changelog, closes_rule, probes, raises, breaking))
+}
+
+/// Parse one `raises:` value, `<probe> — <reason>` (an em dash; ` - ` is accepted
+/// too). The probe must be a [`greenfield_status::GROWTH_PROBES`] member and the
+/// reason is mandatory. The reason lands verbatim in a Markdown table cell of
+/// `design/greenfield-status-raises.md`, so like `changelog` it must be one line
+/// with no relative link, and it must not contain `|`.
+fn parse_raise(value: &str) -> Result<Raise, String> {
+    let growth = greenfield_status::GROWTH_PROBES.join(", ");
+    // Split at whichever separator comes first, so a dash inside the reason
+    // (`ts_any - a — b`) stays in the reason.
+    let em = value.find(" — ").map(|i| (i, " — ".len()));
+    let hy = value.find(" - ").map(|i| (i, " - ".len()));
+    let sep = match (em, hy) {
+        (Some(a), Some(b)) => Some(if a.0 <= b.0 { a } else { b }),
+        (a, b) => a.or(b),
+    };
+    let (probe, reason) = sep
+        .map(|(i, n)| (value[..i].trim().trim_matches('`'), value[i + n..].trim()))
+        .ok_or_else(|| {
+            format!(
+                "raises must read `<probe> — <reason>` (the reason is mandatory), got {value:?}"
+            )
+        })?;
+    if !greenfield_status::GROWTH_PROBES.contains(&probe) {
+        return Err(format!(
+            "raises entry {probe:?} is not a growth probe (one of: {growth}); only growth \
+             probes can rise, and any other probe needs no raise"
+        ));
+    }
+    if reason.is_empty() {
+        return Err(format!("raises entry for {probe:?} has an empty reason"));
+    }
+    if reason.contains('|') {
+        return Err(format!(
+            "raises reason for {probe:?} contains `|`, which would break the ledger's table row"
+        ));
+    }
+    if let Some(dest) = relative_markdown_link_in(reason) {
+        return Err(format!(
+            "raises reason for {probe:?} reads as a Markdown link to the relative destination \
+             {dest:?} — it is inserted verbatim into `design/greenfield-status-raises.md`. Wrap \
+             the code in backticks, or use an absolute URL."
+        ));
+    }
+    Ok(Raise {
+        probe: probe.to_string(),
+        reason: reason.to_string(),
+    })
+}
+
+/// The growth probes raised by every pending file under `root` — the union of
+/// their `raises` keys. Same reasoning as [`acknowledged_probes`] for why the
+/// pending files present in a tree are the right set.
+pub fn raised_probes(root: &Path) -> std::collections::BTreeSet<String> {
+    validated_pending_in(root)
+        .map(|ps| {
+            ps.into_iter()
+                .flat_map(|(_, p)| p.raises.into_iter().map(|r| r.probe))
+                .collect()
+        })
+        .unwrap_or_default()
+}
+
+/// Like [`raised_probes`], but an invalid pending directory is an error (with
+/// each problem) rather than an empty set, so a caller can say the pending files
+/// are invalid instead of reporting a misleading "unraised" rise.
+pub fn raised_probes_checked(
+    root: &Path,
+) -> Result<std::collections::BTreeSet<String>, Vec<String>> {
+    validated_pending_in(root).map(|ps| {
+        ps.into_iter()
+            .flat_map(|(_, p)| p.raises.into_iter().map(|r| r.probe))
+            .collect()
+    })
 }
 
 /// The gated probes acknowledged by every pending file under `root` — the union
@@ -1200,6 +1309,92 @@ mod tests {
             .iter()
             .any(|e| e.contains("duplicate frontmatter key `probes`"))
         );
+    }
+
+    // --- raises (#3679) ------------------------------------------------------
+
+    #[test]
+    fn raises_is_optional_and_defaults_empty() {
+        assert!(
+            ok("x.md", "---\nlevel: patch\nchangelog: x\n---\n")
+                .raises
+                .is_empty()
+        );
+    }
+
+    #[test]
+    fn raises_parses_one_line_per_probe_with_a_reason() {
+        let p = ok(
+            "x.md",
+            "---\nlevel: patch\nchangelog: x\nraises: `ts_writes` — no typed node for Y yet (#1)\nraises: ts_any - a bare `any` (#2): kept\n---\n",
+        );
+        assert_eq!(
+            p.raises,
+            vec![
+                Raise {
+                    probe: "ts_writes".into(),
+                    reason: "no typed node for Y yet (#1)".into()
+                },
+                Raise {
+                    probe: "ts_any".into(),
+                    reason: "a bare `any` (#2): kept".into()
+                },
+            ]
+        );
+    }
+
+    #[test]
+    fn raises_splits_at_the_first_separator() {
+        let p = ok(
+            "x.md",
+            "---\nlevel: patch\nchangelog: x\nraises: ts_any - reason — more detail\nraises: ts_writes — a - b\n---\n",
+        );
+        assert_eq!(p.raises[0].probe, "ts_any");
+        assert_eq!(p.raises[0].reason, "reason — more detail");
+        assert_eq!(p.raises[1].probe, "ts_writes");
+        assert_eq!(p.raises[1].reason, "a - b");
+    }
+
+    #[test]
+    fn raises_rejects_a_non_growth_probe() {
+        let errs = err(
+            "x.md",
+            "---\nlevel: patch\nchangelog: x\nraises: hoist_sinks — because\n---\n",
+        );
+        assert!(errs.iter().any(|e| e.contains("not a growth probe")));
+    }
+
+    #[test]
+    fn raises_rejects_a_missing_or_empty_reason() {
+        for bad in ["ts_writes", "ts_writes —"] {
+            let errs = err(
+                "x.md",
+                &format!("---\nlevel: patch\nchangelog: x\nraises: {bad}\n---\n"),
+            );
+            assert!(
+                errs.iter().any(|e| e.contains("raises")),
+                "{bad:?} should be rejected: {errs:?}"
+            );
+        }
+    }
+
+    #[test]
+    fn raises_rejects_a_duplicate_probe_a_pipe_and_a_relative_link() {
+        let dup = err(
+            "x.md",
+            "---\nlevel: patch\nchangelog: x\nraises: ts_any — a\nraises: ts_any — b\n---\n",
+        );
+        assert!(dup.iter().any(|e| e.contains("duplicate `raises`")));
+        let pipe = err(
+            "x.md",
+            "---\nlevel: patch\nchangelog: x\nraises: ts_any — a | b\n---\n",
+        );
+        assert!(pipe.iter().any(|e| e.contains("`|`")));
+        let link = err(
+            "x.md",
+            "---\nlevel: patch\nchangelog: x\nraises: ts_any — see [y](z)\n---\n",
+        );
+        assert!(link.iter().any(|e| e.contains("relative destination")));
     }
 
     // --- closes_rule (#1001) --------------------------------------------------
