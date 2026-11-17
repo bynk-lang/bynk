@@ -64,9 +64,9 @@
 //! opens one rolling PR from the bot branch `bot/greenfield-trends`; a person can run
 //! the same command locally. A full `--apply` still rewrites everything.
 //!
-//! **Five are count/ratio trend probes**, recomputed and printed but never diffed:
+//! **Six are count/ratio trend probes**, recomputed and printed but never diffed:
 //! `wildcard_arms`, `keep_in_sync`, `test_density`, `fixture_kinds`,
-//! `keystroke_latency`. The first four move on nearly any ordinary Rust PR with no
+//! `keystroke_latency`, `module_lines` (production lines per source file, #3683). The first four move on nearly any ordinary Rust PR with no
 //! slice actively driving them toward a floor (§8 calls two of them "trends, not
 //! gates"); hard-gating them would make the committed table churn, and conflict, on
 //! routine work for no corresponding benefit. `keystroke_latency` moves on nothing
@@ -185,7 +185,7 @@ pub fn run_gated(root: &Path) -> Vec<Probe> {
     ]
 }
 
-/// The five reported-only trend probes — never diffed, and notably including the one
+/// The six reported-only trend probes — never diffed, and notably including the one
 /// (`wildcard_arms`) that shells out to a full `cargo clippy --workspace` pass, which
 /// the gating test must not pay for on every run.
 pub fn run_trend(root: &Path) -> Vec<Probe> {
@@ -195,6 +195,7 @@ pub fn run_trend(root: &Path) -> Vec<Probe> {
         test_density(root),
         fixture_kinds(root),
         keystroke_latency(root),
+        module_lines(root),
     ]
 }
 
@@ -3051,6 +3052,96 @@ fn test_density(root: &Path) -> Probe {
     }
 }
 
+// --- Reported probe: module_lines -------------------------------------------
+
+/// A source file at least this many production lines long counts as large.
+const MODULE_LINES_THRESHOLDS: [usize; 3] = [2000, 3000, 5000];
+
+/// The crates of the "back half" whose largest files the probe names (track §8).
+const BACK_HALF_CRATES: [&str; 6] = [
+    "bynk-model",
+    "bynk-emit",
+    "bynk-ts",
+    "bynk-driver",
+    "bynk-strip",
+    "bynk",
+];
+
+/// True for a file under a crate's `src/` that is wholly tests: `tests.rs`,
+/// `*_tests.rs`, or anything beneath a `tests/` directory. `rel` is the path
+/// relative to `src/`, with `/` separators.
+fn is_whole_test_file(rel: &str) -> bool {
+    let mut parts: Vec<&str> = rel.split('/').collect();
+    let file = parts.pop().unwrap_or("");
+    file == "tests.rs" || file.ends_with("_tests.rs") || parts.contains(&"tests")
+}
+
+/// Lines of `source` outside its `#[cfg(test)]` module ranges. Comments and blank
+/// lines count; only each test module's own range is removed, wherever it sits.
+fn production_lines(source: &str) -> usize {
+    let lines: Vec<&str> = source.lines().collect();
+    let ranges = test_mod_ranges(&lines);
+    (0..lines.len())
+        .filter(|&i| !in_test_range(i, &ranges))
+        .count()
+}
+
+/// The probe's one-line reading from `(path from the repo root, production lines)`
+/// pairs: how many files reach each threshold, the largest file anywhere, and the
+/// three largest back-half files. Ties break on path so the reading is stable.
+fn module_lines_reading(files: &[(String, usize)]) -> String {
+    let at_least = |n: usize| files.iter().filter(|(_, l)| *l >= n).count();
+    let mut sorted: Vec<&(String, usize)> = files.iter().collect();
+    sorted.sort_by(|a, b| b.1.cmp(&a.1).then_with(|| a.0.cmp(&b.0)));
+    let named = |f: &&(String, usize)| format!("{} {}", f.0, f.1);
+    let largest = sorted.first().map(named).unwrap_or_else(|| "none".into());
+    let back_half: Vec<String> = sorted
+        .iter()
+        .filter(|(p, _)| {
+            p.split('/')
+                .next()
+                .is_some_and(|c| BACK_HALF_CRATES.contains(&c))
+        })
+        .take(3)
+        .map(named)
+        .collect();
+    let [a, b, c] = MODULE_LINES_THRESHOLDS;
+    format!(
+        "≥{a}: {} (≥{b}: {}, ≥{c}: {}); largest: {largest}; back half: {}",
+        at_least(a),
+        at_least(b),
+        at_least(c),
+        back_half.join(", ")
+    )
+}
+
+/// Phase 2 of the back-half paydown track (#3683). Production lines per
+/// `src/**/*.rs` file across every top-level crate, excluding `#[cfg(test)]`
+/// modules and whole-test files. A trend, not a gate: the threshold is still open.
+fn module_lines(root: &Path) -> Probe {
+    let mut files = Vec::new();
+    for krate in top_level_crate_dirs(root) {
+        let crate_name = krate.file_name().unwrap().to_string_lossy().to_string();
+        let src = krate.join("src");
+        for (path, contents) in rust_files(&src) {
+            let rel = path
+                .strip_prefix(&src)
+                .unwrap_or(&path)
+                .to_string_lossy()
+                .replace('\\', "/");
+            if is_whole_test_file(&rel) {
+                continue;
+            }
+            files.push((format!("{crate_name}/{rel}"), production_lines(&contents)));
+        }
+    }
+    Probe {
+        name: "module_lines",
+        gated: false,
+        reads: module_lines_reading(&files),
+    }
+}
+
 // --- diagnostic_coverage ---------------------------------------------------
 
 /// #1662 (track #1648, G2). Registry codes that some test **asserts**, out of all
@@ -4864,6 +4955,95 @@ mod idempotency_scoping_tests {
 }
 ";
         assert!(has_production_std_fs(src));
+    }
+
+    // --- module_lines -----------------------------------------------------
+
+    fn lines_of(n: usize) -> String {
+        "x\n".repeat(n)
+    }
+
+    #[test]
+    fn module_lines_excludes_a_trailing_test_module() {
+        let src = format!(
+            "{}#[cfg(test)]\nmod tests {{\n{}}}\n",
+            lines_of(5),
+            lines_of(100)
+        );
+        // 5 production lines plus the attribute line, which sits outside the range.
+        assert_eq!(production_lines(&src), 6);
+    }
+
+    #[test]
+    fn module_lines_excludes_a_mid_file_test_module_but_keeps_what_follows() {
+        let src = format!(
+            "{}#[cfg(test)]\nmod tests {{\n{}}}\n{}",
+            lines_of(3),
+            lines_of(50),
+            lines_of(4)
+        );
+        assert_eq!(production_lines(&src), 3 + 1 + 4);
+    }
+
+    #[test]
+    fn module_lines_counts_comments_and_blank_lines() {
+        assert_eq!(production_lines("// c\n\nfn a() {}\n"), 3);
+    }
+
+    #[test]
+    fn module_lines_skips_whole_test_files() {
+        assert!(is_whole_test_file("tests.rs"));
+        assert!(is_whole_test_file("emitter/tests.rs"));
+        assert!(is_whole_test_file("parser_tests.rs"));
+        assert!(is_whole_test_file("tests/fixtures/a.rs"));
+        assert!(!is_whole_test_file("emitter/emit.rs"));
+        assert!(!is_whole_test_file("attests.rs"));
+    }
+
+    #[test]
+    fn module_lines_threshold_counts_exactly_2000() {
+        let at = |n| vec![("bynk-emit/src/a.rs".to_string(), n)];
+        assert!(module_lines_reading(&at(2000)).starts_with("≥2000: 1 (≥3000: 0, ≥5000: 0)"));
+        assert!(module_lines_reading(&at(1999)).starts_with("≥2000: 0 "));
+        assert!(module_lines_reading(&at(3000)).contains("≥3000: 1"));
+        assert!(module_lines_reading(&at(5000)).contains("≥5000: 1"));
+    }
+
+    #[test]
+    fn module_lines_names_the_three_largest_back_half_files_in_order() {
+        let f = |p: &str, l| (p.to_string(), l);
+        let files = vec![
+            f("bynk-emit/src/small.rs", 10),
+            f("bynk-ts/src/b.rs", 300),
+            f("bynk-emit/src/a.rs", 500),
+            f("bynk-driver/src/c.rs", 200),
+            f("bynk-model/src/d.rs", 400),
+        ];
+        let reading = module_lines_reading(&files);
+        assert!(
+            reading.ends_with(
+                "back half: bynk-emit/src/a.rs 500, bynk-model/src/d.rs 400, bynk-ts/src/b.rs 300"
+            ),
+            "{reading}"
+        );
+    }
+
+    #[test]
+    fn module_lines_back_half_list_ignores_front_half_crates_but_largest_does_not() {
+        let f = |p: &str, l| (p.to_string(), l);
+        let files = vec![
+            f("bynk-check/src/big.rs", 900),
+            f("bynk-emit/src/a.rs", 100),
+        ];
+        let reading = module_lines_reading(&files);
+        assert!(
+            reading.contains("largest: bynk-check/src/big.rs 900;"),
+            "{reading}"
+        );
+        assert!(
+            reading.ends_with("back half: bynk-emit/src/a.rs 100"),
+            "{reading}"
+        );
     }
 
     /// The same fixture's `test_mod_ranges` shape, checked directly: two disjoint
