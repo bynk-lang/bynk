@@ -433,7 +433,6 @@ pub fn phase_group_binding_collisions(
     worker_cycles(worker_groups, parsed, groups, bindings, errors);
     for (key, group) in worker_groups {
         group_service_names(key, &group.contexts, parsed, groups, errors);
-        group_publishers(key, &group.contexts, parsed, groups, bindings, errors);
         group_websockets(key, &group.contexts, parsed, groups, errors);
         crate::group_triggers::group_trigger_conflicts(
             key,
@@ -531,23 +530,26 @@ fn group_service_names(
 }
 
 /// `bynk.deploy.worker_cycle` (#3562): a Worker must be uploaded after the Workers
-/// it binds to (ADR 0193 D1), so a cycle among Workers cannot be deployed. The
-/// graph is the Service Bindings the Workers would declare, read from `bindings`
-/// like deploy's ordering: a call, or the publisher-to-subscriber binding the
-/// events fan-out needs, which runs opposite to the subscriber's `consumes`. A
-/// context stands for its group's Worker, and an edge inside a group is a Worker
-/// binding to itself and is no edge. A group makes cycles the language does not
-/// otherwise rule out: two groups, or a group and a single context, can depend on
-/// each other with no cycle among their contexts. An ungrouped event edge can too
-/// (B calls A and subscribes to A's event).
+/// it binds to (ADR 0193 D1), and the language rules out a cycle among *contexts*
+/// (`bynk.context.consumes_cycle`), but a group folds its members into one node,
+/// so two groups, or a group and a single context, can depend on each other with
+/// no cycle among their contexts (`A1 -> B1` and `B2 -> A2`, with `A1`, `A2` in one
+/// group and `B1`, `B2` in another). The graph is the Service Bindings the Workers
+/// would declare, read from `bindings` like deploy's ordering: a call, or the
+/// publisher-to-subscriber binding the events fan-out needs. A context stands for
+/// its group's Worker, and an edge inside a group is a Worker binding to itself
+/// and is no edge.
 ///
-/// One error per strongly connected set of Workers, showing one representative
-/// cycle: the Workers and one context edge per hop, at the first hop's consumer.
-/// `bynk.context.consumes_cycle` owns a cycle among contexts' `consumes`. The
-/// bindings this reads are built only for a project with no error, so a project
-/// with a `consumes` cycle reports that first and this check runs once it is
-/// fixed: a cycle is never reported twice, and a disjoint Worker cycle is
-/// reported at the next build, not beside it.
+/// One error per strongly connected set of Workers **containing a group**, showing
+/// one representative cycle: the Workers and one context edge per hop, at the first
+/// hop's consumer. A cycle among Workers of contexts in no group is deliberately
+/// not reported: a subscriber that also calls its publisher closes one through the
+/// fan-out's binding, which `bynk dev` and the tests run, and `bynk deploy` refuses
+/// before uploading anything (Cloudflare rejects an upload whose binding target
+/// does not exist yet, code 10143). `bynk.context.consumes_cycle` owns a cycle
+/// among contexts' `consumes`: the bindings this reads are built only for a
+/// project with no error, so that cycle is reported first and this one once it is
+/// fixed, and a cycle is never reported twice.
 fn worker_cycles(
     worker_groups: &bynk_project::worker_groups::WorkerGroups,
     parsed: &[ParsedFile],
@@ -581,6 +583,9 @@ fn worker_cycles(
         }
     }
     for scc in strongly_connected(&edges) {
+        if !scc.iter().any(|w| worker_groups.contains_key(w)) {
+            continue;
+        }
         let Some(path) = cycle_through(&edges, &scc) else {
             continue;
         };
@@ -594,7 +599,6 @@ fn worker_cycles(
                 )
             })
             .collect();
-        let in_group = path.iter().any(|w| worker_groups.contains_key(w));
         let (consumer, _) = &edges[&path[0]][&path[1]];
         let indices = groups.get(consumer).map(Vec::as_slice).unwrap_or_default();
         let (file, span) = context_header(parsed, indices)
@@ -614,11 +618,9 @@ fn worker_cycles(
                     hops.join(", ")
                 ),
             )
-            .with_note(if in_group {
-                "a Worker is uploaded after the Workers it binds to, so a cycle between Workers cannot be deployed. A group folds its members into one Worker: move a context out of its group, or into the other, so the Workers' dependencies run one way"
-            } else {
-                "a Worker is uploaded after the Workers it binds to, so a cycle between Workers cannot be deployed. A context that subscribes to an event is bound by its publisher's Worker, so it cannot also call the publisher: have one side stop calling the other, or the subscriber stop subscribing, along the hops listed"
-            }),
+            .with_note(
+                "a Worker is uploaded after the Workers it binds to, so a cycle between Workers cannot be deployed. A group folds its members into one Worker: move a context out of its group, or into the other, so the Workers' dependencies run one way. (A publisher's Worker also binds to its subscribers, so a subscriber that calls its publisher closes a cycle too)",
+            ),
         );
     }
 }
@@ -727,47 +729,6 @@ fn cycle_through(
     }
     let mut path = vec![scc.first()?.clone()];
     walk(edges, scc, &mut path).then_some(path)
-}
-
-/// `bynk.deploy.multiple_publishers` (#3562): a context that publishes events has
-/// its own events fan-out class, and a Worker has one, so a group with two
-/// publishing members would emit two classes of one name. A **temporary**
-/// restriction: the group's fan-out is to become one class routing every member's
-/// events, and this check goes when it does. One error, at the second publisher.
-fn group_publishers(
-    key: &str,
-    members: &[String],
-    parsed: &[ParsedFile],
-    groups: &BTreeMap<String, Vec<usize>>,
-    bindings: &BTreeMap<String, Vec<WorkerBinding>>,
-    errors: &mut ErrorSink,
-) {
-    let publishes = |ctx: &String| {
-        bindings.get(ctx).is_some_and(|b| {
-            b.iter()
-                .any(|b| matches!(b.source, BindingSource::EventsFanout { .. }))
-        })
-    };
-    let mut publishers = members.iter().filter(|c| publishes(c));
-    let (Some(first), Some(second)) = (publishers.next(), publishers.next()) else {
-        return;
-    };
-    let indices = groups.get(second).map(Vec::as_slice).unwrap_or_default();
-    let (file, span) = context_header(parsed, indices)
-        .map_or((None, Span::default()), |(file, span)| (Some(file), span));
-    errors.push_for(
-        file.as_deref(),
-        CompileError::new(
-            "bynk.deploy.multiple_publishers",
-            span,
-            format!(
-                "contexts `{first}` and `{second}` share Worker `{key}`, and both publish events"
-            ),
-        )
-        .with_note(
-            "for now a Worker group has at most one publishing member, because each publisher has its own events fan-out class; this restriction is temporary, and goes when a group's fan-out is merged. Put the publishers in different groups, or give one of them its own Worker",
-        ),
-    );
 }
 
 /// `bynk.deploy.multiple_websocket_members` (#3562): a WebSocket upgrade is an

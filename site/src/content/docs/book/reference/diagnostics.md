@@ -7,7 +7,7 @@ title: Diagnostic index
 
 Every diagnostic code the compiler can emit, with a one-line summary of the cause, grouped by category. For step-by-step cause-and-fix guidance on the most common ones, see the [troubleshooting guides](/book/troubleshooting/). For a code with a curated explanation, `bynk explain <code>` prints it in a terminal, and in VS Code the diagnostic's **Explain** quick fix (or **Bynk: Explain Diagnostic Code…**) shows the same text in a panel, offline.
 
-There are **894** codes in total.
+There are **893** codes in total.
 
 ## Agents
 
@@ -419,13 +419,12 @@ There are **894** codes in total.
 | `bynk.deploy.empty_group` | A `[deploy.workers.<key>]` group lists no context. |  | — |
 | `bynk.deploy.foreign_contract_skew` | A build breaks the contract a declared foreign caller's client was generated at, as pinned in `bynk.foreign.toml`, so `bynk deploy` refuses to ship it. |  | — |
 | `bynk.deploy.group_name_conflict` | A `[deploy.workers.<key>]` group's key or script name is another group's, or is the Worker of a context in no group. |  | — |
-| `bynk.deploy.multiple_publishers` | More than one member of a `[deploy.workers.<key>]` group publishes events. A temporary restriction: each publisher has its own events fan-out class, and it goes when a group's fan-out is merged. |  | — |
 | `bynk.deploy.multiple_websocket_members` | More than one member of a `[deploy.workers.<key>]` group declares a `from websocket` service; an upgrade request names no path or service a group could route it by, so a group has at most one such member, which takes every upgrade request whatever the path. |  | — |
 | `bynk.deploy.not_a_context` | A `[deploy.workers.<key>]` group lists a unit that is not a `context`; only contexts are deployed as Workers. |  | — |
 | `bynk.deploy.route_conflict` | Two members of one `[deploy.workers.<key>]` group declare the same HTTP method and path; a Worker answers a route with one handler. |  | — |
 | `bynk.deploy.service_name_conflict` | Two members of one `[deploy.workers.<key>]` group declare a service of the same name; a Worker answers its members' services by name. |  | — |
 | `bynk.deploy.unknown_context` | A `[deploy.workers.<key>]` group lists a context the project does not declare. |  | — |
-| `bynk.deploy.worker_cycle` | Workers bind to each other in a cycle, so no upload order satisfies Cloudflare's rule that a Worker is uploaded after the Workers it binds to. A `[deploy.workers.<key>]` group folds its members into one Worker, which can close a cycle among contexts that are themselves acyclic; so can a context that both subscribes to a publisher's event and calls the publisher. |  | — |
+| `bynk.deploy.worker_cycle` | Workers bind to each other in a cycle that involves a `[deploy.workers.<key>]` group: a group folds its members into one Worker, which can close a cycle among contexts that are themselves acyclic. A Worker is uploaded after the Workers it binds to, so the cycle cannot be deployed. |  | — |
 | `bynk.deploy.worker_groups_unsupported` | `bynk deploy`, `bynk revert` and `bynk dev` do not yet support `[deploy.workers.<key>]` Worker groups (temporary, #3562). |  | — |
 | `bynk.deploy.workers_ignored_on_bundle` | `bynk.toml` declares `[deploy.workers]` groups, which only a `workers` build uses; this build is a `bundle`, which has every context in one program and ignores them (warning). |  | Warning |
 | [`bynk.detach.in_agent_handler`](/book/reference/capabilities/#detach) | A `detach` was used in an agent handler, which has no execution context to keep a detached effect alive. | [`method_call`](/book/reference/grammar/#rule-method_call) | — |

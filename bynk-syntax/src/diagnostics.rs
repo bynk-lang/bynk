@@ -8898,10 +8898,6 @@ pub const REGISTRY: &[DiagnosticInfo] = &[
         "A `[deploy.workers.<key>]` group's key or script name is another group's, or is the Worker of a context in no group.",
     ),
     d(
-        "bynk.deploy.multiple_publishers",
-        "More than one member of a `[deploy.workers.<key>]` group publishes events. A temporary restriction: each publisher has its own events fan-out class, and it goes when a group's fan-out is merged.",
-    ),
-    d(
         "bynk.deploy.multiple_websocket_members",
         "More than one member of a `[deploy.workers.<key>]` group declares a `from websocket` service; an upgrade request names no path or service a group could route it by, so a group has at most one such member, which takes every upgrade request whatever the path.",
     ),
@@ -8923,7 +8919,7 @@ pub const REGISTRY: &[DiagnosticInfo] = &[
     ),
     d(
         "bynk.deploy.worker_cycle",
-        "Workers bind to each other in a cycle, so no upload order satisfies Cloudflare's rule that a Worker is uploaded after the Workers it binds to. A `[deploy.workers.<key>]` group folds its members into one Worker, which can close a cycle among contexts that are themselves acyclic; so can a context that both subscribes to a publisher's event and calls the publisher.",
+        "Workers bind to each other in a cycle that involves a `[deploy.workers.<key>]` group: a group folds its members into one Worker, which can close a cycle among contexts that are themselves acyclic. A Worker is uploaded after the Workers it binds to, so the cycle cannot be deployed.",
     ),
     d(
         "bynk.deploy.worker_groups_unsupported",

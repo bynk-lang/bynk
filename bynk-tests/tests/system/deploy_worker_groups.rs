@@ -290,10 +290,9 @@ fn publisher_context(name: &str, event: &str) -> String {
     )
 }
 
-/// Temporary: each publisher has its own events fan-out class, so a group may
-/// have one publishing member only.
+/// A group's members may all publish: they share one events fan-out (G3-1).
 #[test]
-fn a_group_with_two_publishing_members_is_refused_for_now() {
+fn a_group_may_have_several_publishing_members() {
     let root = std::env::temp_dir().join(format!("bynk-deploy-groups-pub-{}", std::process::id()));
     write_project(&root, WORKERS_TARGET);
     fs::write(
@@ -307,18 +306,7 @@ fn a_group_with_two_publishing_members_is_refused_for_now() {
     )
     .unwrap();
     let (ok, out) = build(&root);
-    assert!(!ok, "{out}");
-    assert!(out.contains("bynk.deploy.multiple_publishers"), "{out}");
-    assert!(out.contains("temporary"), "{out}");
-
-    // One publisher, with a member that publishes nothing, is fine.
-    fs::write(
-        root.join("src/shop/payment.bynk"),
-        plain_context("shop.payment"),
-    )
-    .unwrap();
-    let (ok, out) = build(&root);
-    assert!(ok, "one publishing member is allowed:\n{out}");
+    assert!(ok, "two publishers share the group's fan-out:\n{out}");
     let _ = fs::remove_dir_all(&root);
 }
 
@@ -937,18 +925,21 @@ fn groups_may_depend_one_way_but_not_in_a_cycle() {
     let _ = fs::remove_dir_all(&root);
 }
 
-/// A cycle between Workers is refused whatever closes it: an event edge among
-/// contexts in no group, a longer cycle through a group, and not twice when
-/// `consumes_cycle` already owns it.
+/// A cycle between Workers that involves a group is refused at check time,
+/// whatever closes it, once and never beside `consumes_cycle`. One among contexts
+/// in no group is not: it builds, and `deploy` refuses it before uploading.
 #[test]
-fn any_worker_cycle_is_refused_once() {
+fn a_worker_cycle_through_a_group_is_refused_once() {
     let root =
         std::env::temp_dir().join(format!("bynk-deploy-worker-cycle-{}", std::process::id()));
     write_project(&root, "[build]\ntarget = \"workers\"\n");
 
-    // `shop.sub` subscribes to `shop.pub`'s event and also calls it: the
+    // `shop.payment` subscribes to `shop.orders`' event and also calls it: the
     // publisher's Worker binds to its subscriber for the fan-out, and the
-    // subscriber's to the publisher for the call. No group is involved.
+    // subscriber's to the publisher for the call. No group is involved, so the
+    // project builds (`bynk dev` and the tests run it), and `deploy` refuses it
+    // before uploading, as Cloudflare rejects a binding to a Worker that does not
+    // exist yet (code 10143).
     fs::write(
         root.join("src/shop/orders.bynk"),
         publisher_context("shop.orders", "Placed"),
@@ -960,13 +951,43 @@ fn any_worker_cycle_is_refused_once() {
     )
     .unwrap();
     let (ok, out) = build(&root);
+    assert!(ok, "an ungrouped cycle builds:\n{out}");
+    assert!(!out.contains("worker_cycle"), "{out}");
+    let dry_run = Command::new(env!("CARGO_BIN_EXE_bynk-under-test"))
+        .args(["deploy", "--dry-run", "--no-install", "--yes"])
+        .arg(&root)
+        .env("CLOUDFLARE_API_TOKEN", "dummy")
+        .env("NO_COLOR", "1")
+        .output()
+        .expect("run bynk");
+    let said = format!(
+        "{}{}",
+        String::from_utf8_lossy(&dry_run.stdout),
+        String::from_utf8_lossy(&dry_run.stderr)
+    );
+    if !said.contains("environment not ready") {
+        assert!(!dry_run.status.success(), "{said}");
+        assert!(
+            said.contains("form a cycle") && said.contains("shop-orders"),
+            "deploy refuses it, naming the Workers:\n{said}"
+        );
+    }
+
+    // The same cycle with the publisher in a group is the check's: the group's
+    // Worker and `shop.payment`'s bind to each other.
+    fs::write(
+        root.join("bynk.toml"),
+        "[build]\ntarget = \"workers\"\n\n[deploy.workers.front]\ncontexts = [\"shop.orders\"]\n",
+    )
+    .unwrap();
+    let (ok, out) = build(&root);
     assert!(!ok, "{out}");
     assert_eq!(out.matches("bynk.deploy.worker_cycle").count(), 1, "{out}");
     assert!(
-        out.contains("`shop.orders`") && out.contains("`shop.payment`"),
+        out.contains("`front`") && out.contains("`shop.payment` binds to `shop.orders`"),
         "{out}"
     );
-    assert!(!out.contains("group"), "no group is in this cycle:\n{out}");
+    fs::write(root.join("bynk.toml"), "[build]\ntarget = \"workers\"\n").unwrap();
 
     // Calling alone, one way, is fine.
     fs::write(
@@ -1034,9 +1055,14 @@ fn any_worker_cycle_is_refused_once() {
         "one cycle, one error:\n{out}"
     );
 
-    // A disjoint event-edge cycle beside it is reported at the next build, once
+    // A disjoint cycle through a group beside it is reported at the next build, once
     // the `consumes` cycle is fixed: the bindings it reads are built only for a
     // project with no error, so the two never appear together or twice.
+    fs::write(
+        root.join("bynk.toml"),
+        "[build]\ntarget = \"workers\"\n\n[deploy.workers.front]\ncontexts = [\"shop.orders\"]\n",
+    )
+    .unwrap();
     fs::write(
         root.join("src/shop/orders.bynk"),
         publisher_context("shop.orders", "Placed"),
@@ -1061,7 +1087,7 @@ fn any_worker_cycle_is_refused_once() {
     assert!(!out.contains("bynk.context.consumes_cycle"), "{out}");
     assert_eq!(out.matches("bynk.deploy.worker_cycle").count(), 1, "{out}");
     assert!(
-        out.contains("`shop.orders`") && out.contains("`shop.payment`"),
+        out.contains("`front`") && out.contains("`shop.payment`"),
         "{out}"
     );
     let _ = fs::remove_dir_all(&root);
