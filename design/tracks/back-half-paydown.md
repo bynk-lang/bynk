@@ -157,7 +157,7 @@ binding model has one compose path to serve.
 | Slice | Change |
 |---|---|
 | **1B.1** | A target-neutral composition model, `ComposePlan`: units, their dependencies, event subscriptions with the envelope and isolation rules, and bindings. Both `emit_composition_root` (Bundle) and `emit_worker_compose` (Workers) render from it. The envelope and failure-isolation rules then exist once. |
-| **1B.2** | Move test-harness generation (`project/tests_emit/*`), `emit_composition_root` and the per-Worker emission out of `bynk-driver` and into `bynk-emit` (or a new crate; settling question Q3). The driver keeps orchestration, file I/O and process spawning. This removes `bynk-emit`'s dev-dependency on `bynk-driver`. |
+| **1B.2** | Move test-harness generation (`project/tests_emit/*`), `emit_composition_root` and the per-Worker emission out of `bynk-driver` and into a `bynk-emit::testgen` module (Q3). The driver keeps orchestration, file I/O and process spawning. This removes `bynk-emit`'s dev-dependency on `bynk-driver`. |
 | **1B.3** | Turn the test runtime into real, type-checked modules under `bynk-emit/runtime/src/testing/`. Move the `makeIntegration*` / `makeTestState` fakes out of production `storage.ts` into it. Delete the driver's TS lexer (`names_ident`) and its text patching of emitted TypeScript (`merge_cookie`). Bring `http_client_runtime.ts` under the runtime's `tsconfig.json` and `bundle.mjs --check`, and add a guard that every test-runtime module is type-checked whether or not a fixture uses it (absorbs the retired P0.6). |
 | **1B.4** | Deduplicate the shared node builders (`str_lit`, `ident`, `member`, `call`) and `append_missing_bindings` (three copies) into one `bynk-emit` module. |
 
@@ -176,7 +176,7 @@ binding model has one compose path to serve.
 | **1D.1** | A `ResourceKind` abstraction. Each kind provides its parse-from-bindings, plan line, ledger record, orphan rule, provision and revert. The ledger stores kinds uniformly, with a migration that reads the current per-kind maps. `find_orphans` becomes one loop. Converted one kind per slice, KV first. |
 | **1D.2** | Apply executes the `Plan`: `derive_plan` produces typed steps, and `deploy_one` takes the steps, not `Resources`. The ledger is written per completed step, at one site. `plan.rs::run` shrinks to orchestration. |
 | **1D.3** | One Cloudflare client layer. A `Wrangler` trait with a recording fake (removing the on-disk `#!/bin/sh` fakes and their `cfg(unix)` gates). A REST client moved out of `migrate::live` into a shared module, constructed once. Typed errors replacing `Result<_, String>`. Retry with backoff for idempotent calls, and shared pagination. |
-| **1D.4** | Decide (settling question Q4) whether the wrangler-driven kinds move to REST, which would leave one credential and no matching on error text. If yes, convert them kind by kind, behind the 1D.3 trait. |
+| **1D.4** | Move account-resource management to REST, as Q4 settled. Resource create, read and delete moves kind by kind behind the 1D.3 trait, starting with KV. `deploy`, `dev`, `tail`, D1 migrations and `rollback` stay on wrangler. Add a `bynk doctor` check that `CLOUDFLARE_API_TOKEN` is set when resource management needs it. The ADR recording the boundary lands with 1D.3. |
 | **1D.5** | One module for external-tool versions and spawning: wrangler, npm, tsc, git. The `wrangler@4` pin lives in one place. The parallel `npx` flake is fixed by pre-warming or serialising the wrangler fetch. The `BYNK_*` environment-variable protocol becomes a single generated constant table shared by Rust and TypeScript. |
 
 ---
@@ -201,7 +201,10 @@ feature work is frozen, such moves cost no merge conflicts.
 - `bynk/src/deploy/plan.rs`, which becomes what remains after 1D.2, with orchestration separated
   from rendering.
 
-**Ratchet.** P0.5's `module_lines` becomes a ratchet when this phase starts. A file over the
+**Ratchet.** From settling onwards, a Phase 1 slice must not push a file newly across 2,000
+production lines; if it does, its PR says why, as invariant 4 requires for probe rises. 1A and
+1B reshape the largest files, so this rule applies before the mechanism exists. P0.5's
+`module_lines` then becomes a mechanical ratchet when this phase starts. A file over the
 threshold may not grow, and no file may newly cross it. Settled by Q5:
 
 - the measure is `module_lines`' production lines;
@@ -224,7 +227,7 @@ out carries its unit tests with it.
 |---|---|
 | **3.1** | Unit tests at each new seam: a lowering returns a `TsExpr` to assert on, a `ComposePlan` decision, a `WorkerBindings` derivation, and a `ResourceKind`'s plan and apply against the 1D.3 fakes. |
 | **3.2** | Re-measure coverage per crate with `cargo-llvm-cov`, as the [9 October review](../reviews/2026-10-09-unit-test-coverage-review.md) did, for own versus full coverage. Record the result as a new dated review. |
-| **3.3** | Thin the corpus. A fixture whose only assertion is now made by a unit test is retired. Goldens remain for end-to-end shape, `tsc_verify` coverage and a curated set of behavioural run fixtures. The criteria are settling question Q6. |
+| **3.3** | Thin the corpus. A fixture whose only assertion is now made by a unit test is retired. Goldens remain for end-to-end shape, `tsc_verify` coverage and a curated set of behavioural run fixtures. Retirement follows Q6's three conditions (§9). |
 | **3.4** | Per-crate floors on own-unit-test density (or own coverage, if 3.2 makes that cheap enough to gate), ratcheted. |
 
 ---
@@ -259,7 +262,7 @@ The back-half file rows count `src/` files in `bynk-model`, `bynk-emit`, `bynk-t
 `bynk-strip` and `bynk`. On 1 October they read 5 and 10. Review §6.1's 18 and 50 count the whole
 workspace.
 
-The targets marked "≤ x%" are proposals for the settling review. The rest are structural yes/no.
+The numeric targets (`ts_writes` ≤ 40% of the P0.2 baseline at Phase 1 exit and ≤ 20% at track exit; production `TsStmt::raw` sites ≤ 10 and ≤ 5) were adopted with the maintainer at settling, on 17 November 2026. They are part of the lifting condition the freeze ADR names. The other rows are structural yes/no.
 
 ---
 
@@ -310,6 +313,7 @@ Closed with the maintainer on 17 November 2026.
   - Tree-native lowering: with the first 1A slice.
   - Where test generation lives (Q3): with 1B.2.
   - The wrangler/REST boundary (Q4): with 1D.3.
+  - The test runtime is first-party runtime code: with 1B.3, which absorbed the retired P0.6.
   - The growth ratchet: already recorded, with P0.1.
 
 ---
