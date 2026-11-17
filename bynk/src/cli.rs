@@ -709,15 +709,20 @@ pub enum Command {
         path: PathBuf,
         /// Revert this context alone (dotted name or Worker directory).
         /// Default: every Worker the ledger records for the environment.
-        #[arg(long, value_name = "NAME")]
+        #[arg(long, value_name = "NAME", conflicts_with = "worker")]
         context: Option<String>,
+        /// Revert this Worker alone, by its directory name: a
+        /// `[deploy.workers.<key>]` group's key, or a context's dashed name. A
+        /// group is one script, so every member goes back together.
+        #[arg(long, value_name = "NAME")]
+        worker: Option<String>,
         /// The environment to revert.
         #[arg(long, default_value = "default", value_name = "NAME")]
         env: String,
         /// Go back to this Cloudflare Worker version id instead of the
         /// deployment before the live release. Needs `--context`, since
         /// a version id belongs to one Worker. The same checks apply.
-        #[arg(long, value_name = "VERSION", requires = "context")]
+        #[arg(long, value_name = "VERSION")]
         to: Option<String>,
         /// Print each check's verdict and stop. Still reads Cloudflare.
         #[arg(long, visible_alias = "plan")]

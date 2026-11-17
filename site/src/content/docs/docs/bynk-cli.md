@@ -1676,16 +1676,17 @@ cannot: migrations, agent schema versions, contracts, ids and secrets. See
 for what each check means and how to read a refusal.
 
 ```
-bynk revert [PATH] [--context NAME] [--env NAME] [--to VERSION] [--dry-run]
+bynk revert [PATH] [--context NAME | --worker NAME] [--env NAME] [--to VERSION] [--dry-run]
             [--format short|json] [--yes]
             [--accept-schema-ahead BINDING]... [--accept-secret-changes]
 ```
 
 | Flag | Default | Meaning |
 |---|---|---|
-| `--context NAME` | every recorded Worker | Revert this context alone (dotted name or Worker directory). |
+| `--context NAME` | every recorded Worker | Revert this context alone (dotted name or Worker directory). A member of a [`[deploy.workers.<key>]`](/docs/manifest/#worker-groups) group is refused, naming the Worker that holds it. |
+| `--worker NAME` | every recorded Worker | Revert this Worker alone, by its directory name: a group's key, or a context's worker-directory form. A group is one script, so every member goes back together, atomically. Not with `--context`. |
 | `--env NAME` | `default` | The environment to revert. |
-| `--to VERSION` | what was live before the live release | A Cloudflare Worker version id to go back to; needs `--context`, since a version id belongs to one Worker. A git tag is not accepted: it names source, which means a rebuild. |
+| `--to VERSION` | what was live before the live release | A Cloudflare Worker version id to go back to; needs `--context` or `--worker`, since a version id belongs to one Worker. A git tag is not accepted: it names source, which means a rebuild. |
 | `--dry-run`, `--plan` | off | Print each check's verdict and stop. Unlike `deploy --dry-run` it reads Cloudflare, so it needs credentials. |
 | `--format short\|json` | `short` | Plan format. `json` is for CI. |
 | `--yes` | off | Skip the confirmation. Never overrides a refusal. |

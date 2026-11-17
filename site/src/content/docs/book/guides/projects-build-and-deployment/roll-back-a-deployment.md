@@ -35,7 +35,14 @@ revert callers first.
 A plain `bynk revert` reverts **every** Worker the lock records for the environment,
 each to its own previous deployment, whatever the last release touched. If the last
 release changed one context, revert just that one with `--context`; the plan says
-so when it applies. `--to <version>` names one Worker's version and needs `--context`.
+so when it applies. `--to <version>` names one Worker's version and needs `--context` (or `--worker`).
+
+**A Worker group goes back as one.** The contexts of a [`[deploy.workers.<key>]`](/docs/manifest/#worker-groups)
+group are one Cloudflare script, so reverting it puts every member back to the
+previous version together, in one step, and a member cannot be reverted alone:
+naming one with `--context` is refused, with the Worker that holds it, and you
+revert the group with `--worker <key>`. A call between two members of a group never
+counts as contract skew, since both sides always move together.
 
 A dry run reads Cloudflare, so it needs `CLOUDFLARE_API_TOKEN` and
 `CLOUDFLARE_ACCOUNT_ID`; the token needs read access to D1 as well as Workers.

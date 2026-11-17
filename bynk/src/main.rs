@@ -283,6 +283,7 @@ fn run() -> ExitCode {
         Command::Revert {
             path,
             context,
+            worker,
             env,
             to,
             dry_run,
@@ -294,7 +295,8 @@ fn run() -> ExitCode {
             &path,
             &bynk::deploy::RevertOptions {
                 environment: env,
-                context,
+                by_worker: worker.is_some(),
+                context: context.or(worker),
                 to,
                 dry_run,
                 json: matches!(format, bynk::cli::DeployFormatArg::Json),
