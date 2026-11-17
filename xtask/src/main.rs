@@ -36,7 +36,7 @@ fn main() -> ExitCode {
         Some("greenfield-status") => {
             if let Some(bad) = args[1..]
                 .iter()
-                .find(|a| *a != "--apply" && *a != "--list-unasserted")
+                .find(|a| *a != "--apply" && *a != "--list-unasserted" && *a != "--trend-only")
             {
                 eprintln!("xtask greenfield-status: unknown argument {bad:?}");
                 usage();
@@ -49,7 +49,11 @@ fn main() -> ExitCode {
                 }
                 return ExitCode::SUCCESS;
             }
-            greenfield_status(args.iter().any(|a| a == "--apply"))
+            let apply = args.iter().any(|a| a == "--apply");
+            if args.iter().any(|a| a == "--trend-only") {
+                return greenfield_trend_only(apply);
+            }
+            greenfield_status(apply)
         }
         Some("fn-lengths") => {
             if let Some(bad) = args[1..].iter().find(|a| *a != "--apply") {
@@ -514,6 +518,47 @@ fn ensure_clean_worktree(root: &Path) -> Result<(), String> {
     Ok(())
 }
 
+/// `greenfield-status --trend-only`: run only the five trend probes (including the
+/// workspace-wide clippy pass), print them, and with `--apply` rewrite just the
+/// trend rows of the committed table ([`xtask::greenfield_status::refresh_trend_rows`]).
+/// Exits non-zero, writing nothing, if a probe failed to measure or a row is missing.
+fn greenfield_trend_only(apply: bool) -> ExitCode {
+    let root = repo_root();
+    let probes = xtask::greenfield_status::run_trend(&root);
+    for probe in &probes {
+        println!("  {:<20} trend      {}", probe.name, probe.reads);
+    }
+    let path = xtask::greenfield_status::table_path(&root);
+    let committed = match std::fs::read_to_string(&path) {
+        Ok(c) => c,
+        Err(e) => {
+            eprintln!("greenfield-status: cannot read {}: {e}", path.display());
+            return ExitCode::FAILURE;
+        }
+    };
+    let refreshed = match xtask::greenfield_status::refresh_trend_rows(&committed, &probes) {
+        Ok(r) => r,
+        Err(e) => {
+            eprintln!("greenfield-status: {e}");
+            return ExitCode::FAILURE;
+        }
+    };
+    if !apply {
+        println!("greenfield-status: dry run (pass --apply to write the trend rows)");
+        return ExitCode::SUCCESS;
+    }
+    if refreshed == committed {
+        println!("greenfield-status: trend rows already current");
+        return ExitCode::SUCCESS;
+    }
+    if let Err(e) = std::fs::write(&path, refreshed) {
+        eprintln!("greenfield-status: failed to write committed table: {e}");
+        return ExitCode::FAILURE;
+    }
+    println!("greenfield-status: refreshed trend rows of design/greenfield-status.md");
+    ExitCode::SUCCESS
+}
+
 /// Run the thirteen greenfield-status probes and print the report. Without `--apply`,
 /// this also diffs the nine gated probes against the committed table and exits
 /// non-zero on disagreement — the same check `xtask/tests/greenfield_status.rs` runs
@@ -864,7 +909,7 @@ fn release_notes(args: &[String]) -> ExitCode {
 
 fn usage() {
     eprintln!(
-        "usage: cargo xtask <check-pending | ci [--fast] | fn-lengths [--apply] | greenfield-status [--apply | --list-unasserted] | manifest-schema [--check] | editor-contract [--check | --tag T --out F] | stamp [--apply] | release-notes <vX.Y.Z> | bench [--sizes N,N,…] [--shape independent|linked|both] [--runs N] [--edits N] [--record] | bench-runtime [--sizes-only] [--record] [--runs N] [--requests N] [--startups N] | tier-probe>"
+        "usage: cargo xtask <check-pending | ci [--fast] | fn-lengths [--apply] | greenfield-status [--apply | --list-unasserted | --trend-only [--apply]] | manifest-schema [--check] | editor-contract [--check | --tag T --out F] | stamp [--apply] | release-notes <vX.Y.Z> | bench [--sizes N,N,…] [--shape independent|linked|both] [--runs N] [--edits N] [--record] | bench-runtime [--sizes-only] [--record] [--runs N] [--requests N] [--startups N] | tier-probe>"
     );
 }
 
