@@ -28,6 +28,7 @@ per-commit history. While Bynk is pre-1.0, increments may change behaviour.
 
 | Version | Highlights |
 |---|---|
+| **v0.639.5** | A trend probe, `module_lines`, reports how many source files reach 2,000, 3,000 and 5,000 production lines, and names the largest back-half files |
 | **v0.639.4** | Two gated growth probes, `ts_raw_sites` and `ts_text_idents`, count the raw-text TypeScript escapes (`TsStmt::raw(` and `TsExpr::Ident(format!(`) that `ts_writes` and `verbatim_sites` miss, so neither can grow without a reasoned `raises:` |
 | **v0.639.3** | The greenfield-status growth probes (`ts_writes`, `ts_any`, `emit_abi_shapes`, `verbatim_sites`, `span_keyed_maps`) can only fall unless a pending file raises them with a reason (`raises:`), which the stamp records in `design/greenfield-status-raises.md` |
 | **v0.639.2** | A weekly workflow refreshes the trend rows of `design/greenfield-status.md` through a rolling bot PR, via the new `cargo xtask greenfield-status --trend-only --apply` |
