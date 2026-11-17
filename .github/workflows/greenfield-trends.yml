@@ -1,0 +1,159 @@
+name: Greenfield trend rows
+
+# Keep the trend rows of design/greenfield-status.md current (#3677, part of the
+# back-half paydown track #3676). The stamp refreshes the GATED rows on every
+# merge, but never the trend rows: they need a workspace-wide clippy pass
+# (`wildcard_arms`), which is too dear to pay on every merge. Without this job
+# nothing ever rewrote them, and they drifted for weeks (`wildcard_arms` read
+# 356 against a live 747). Once a week this job runs only the trend probes on
+# `main` (`cargo xtask greenfield-status --trend-only --apply`) and, when a row
+# differs, opens or updates ONE rolling PR from the bot branch
+# `bot/greenfield-trends`. The PR changes trend rows only; gated rows stay the
+# stamp's job, so the two never write the same lines. It goes through normal CI
+# and the merge queue, and merging stays a person's decision: this job never
+# enables auto-merge.
+#
+# Why a separate GitHub App, and why not the stamp's. A PR opened, or a branch
+# pushed, with GITHUB_TOKEN starts no workflow runs, so CI would never run on
+# the bot PR and `CI green` would never report. A token from an App does start
+# them. The stamp's App cannot be reused: its credential is in the `main`
+# ruleset's bypass list (see stamp.yml), and that privilege stays with the stamp
+# alone. This job uses a second App, TRENDS_APP_*, that is installed on this
+# repository only, holds `contents: write` (the bot branch) and
+# `pull-requests: write` (the PR) and nothing else, and is NOT in the bypass
+# list. It can therefore push a branch and open a PR, but cannot push to `main`
+# or merge anything. If the secrets are missing the job fails and says so; it
+# never falls back to GITHUB_TOKEN, because that would open a PR on which CI
+# never runs.
+#
+# Least privilege, in the style of ci.yml's `promote` job: the workflow-level
+# GITHUB_TOKEN is read-only and the job asks for nothing more. The App token is
+# minted only AFTER every step that runs transitive-dependency code (the
+# toolchain setup, the build and the probes, whose build.rs and proc macros run
+# arbitrary code), and is handed to the push-and-PR step alone, through a
+# one-shot URL and `GH_TOKEN`, never persisted in .git/config (#727). The checkout
+# persists no credentials.
+#
+# A failed probe never reaches the table. `refresh_trend_rows` refuses an
+# `error running clippy: ...` reading and the probe step then fails, so the job
+# goes red and commits nothing.
+#
+# The bot branch is rebuilt from the tip of `main` on every run and force-pushed.
+# Only this job writes it. The PR body says so.
+#
+# Scheduled workflows run only from the default branch, so the whole job cannot
+# be exercised before it merges (ci-sweep.yml has the same constraint). Once on
+# `main`, run it by hand with `gh workflow run greenfield-trends.yml`.
+on:
+  schedule:
+    # Mondays, 05:23 UTC (off the hour; the nightly CI is at 07:00).
+    - cron: "23 5 * * 1"
+  workflow_dispatch:
+
+# One at a time; never cancel a run mid-push.
+concurrency:
+  group: greenfield-trends
+  cancel-in-progress: false
+
+permissions:
+  contents: read
+
+env:
+  BOT_BRANCH: bot/greenfield-trends
+
+jobs:
+  refresh:
+    name: Refresh the trend rows
+    runs-on: ubuntu-latest
+    timeout-minutes: 40
+    # A dispatch may name any ref and runs *that ref's* definition of this
+    # file, which would still mint the App token. Only ever run the reviewed one.
+    if: github.ref == 'refs/heads/main'
+    steps:
+      # Fail before the expensive work if the App is not set up, naming what is
+      # missing. Secrets reach the step through env, never the script text.
+      - name: Check the trends App is configured
+        env:
+          APP_ID: ${{ secrets.TRENDS_APP_ID }}
+          APP_KEY: ${{ secrets.TRENDS_APP_KEY }}
+        run: |
+          missing=""
+          [ -n "$APP_ID" ] || missing="$missing TRENDS_APP_ID"
+          [ -n "$APP_KEY" ] || missing="$missing TRENDS_APP_KEY"
+          if [ -n "$missing" ]; then
+            echo "::error::missing repository secret(s):$missing. This job opens its PR as a dedicated GitHub App (installed on this repo, contents: write + pull-requests: write, NOT in the main ruleset's bypass list) so that CI runs on the PR; it deliberately does not fall back to GITHUB_TOKEN or use the stamp's App. See the header of .github/workflows/greenfield-trends.yml."
+            exit 1
+          fi
+
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          # The tip of `main` as it stands now.
+          ref: main
+          fetch-depth: 1
+          persist-credentials: false
+
+      - uses: dtolnay/rust-toolchain@e081816240890017053eacbb1bdf337761dc5582 # 1.95.0
+      - uses: Swatinem/rust-cache@eedcf2fb1c22f010a0eb66b92f378c110977f266 # v2
+
+      # Runs the five trend probes (the workspace clippy pass is the slow one)
+      # and rewrites the trend rows of the table in the working tree. Fails, and
+      # writes nothing, if a probe could not measure or a row is missing.
+      - name: Measure and rewrite the trend rows
+        run: cargo run --quiet --package xtask -- greenfield-status --trend-only --apply
+
+      - name: Did any trend row change?
+        id: diff
+        run: |
+          if git diff --quiet -- design/greenfield-status.md; then
+            echo "Trend rows already current on main@$(git rev-parse --short HEAD) - nothing to do."
+            echo "changed=false" >> "$GITHUB_OUTPUT"
+          else
+            git --no-pager diff --stat -- design/greenfield-status.md
+            echo "changed=true" >> "$GITHUB_OUTPUT"
+          fi
+
+      # Only now, after every step that runs dependency code, mint the App token.
+      - name: Mint trends-app token
+        if: steps.diff.outputs.changed == 'true'
+        id: app-token
+        uses: actions/create-github-app-token@64ab729a6294000f5aa4a4bc0b73d1f32bc45510 # v3.3.0
+        with:
+          app-id: ${{ secrets.TRENDS_APP_ID }}
+          private-key: ${{ secrets.TRENDS_APP_KEY }}
+
+      - name: Push the bot branch and open or update the PR
+        if: steps.diff.outputs.changed == 'true'
+        env:
+          GH_TOKEN: ${{ steps.app-token.outputs.token }}
+          REPO: ${{ github.repository }}
+          APP_SLUG: ${{ steps.app-token.outputs.app-slug }}
+        run: |
+          set -euo pipefail
+          base="$(git rev-parse --short HEAD)"
+          uid="$(gh api "/users/${APP_SLUG}[bot]" --jq .id)"
+          git config user.name "${APP_SLUG}[bot]"
+          git config user.email "${uid}+${APP_SLUG}[bot]@users.noreply.github.com"
+          # Stage the one file the probe rewrites; never `git add -A`.
+          git add -- design/greenfield-status.md
+          git commit -q -m "chore(trends): refresh the greenfield-status trend rows" \
+            -m "Rewritten by .github/workflows/greenfield-trends.yml from main@${base}."
+
+          # The bot branch is rebuilt from main's tip each run, so the push is a
+          # force-push of that branch alone. The token travels in a one-shot URL,
+          # not in .git/config.
+          remote="https://x-access-token:${GH_TOKEN}@github.com/${REPO}.git"
+          git push --force "$remote" "HEAD:refs/heads/${BOT_BRANCH}"
+
+          body="Refreshes the trend rows of \`design/greenfield-status.md\` (the probes the stamp never runs, because of the workspace clippy pass) from \`main@${base}\`. Gated rows and prose are untouched.
+
+          This branch (\`${BOT_BRANCH}\`) is bot-owned: it is rebuilt from the tip of \`main\` and force-pushed by \`.github/workflows/greenfield-trends.yml\` on each run, so do not push to it. Merging is a person's decision; auto-merge is not enabled."
+
+          existing="$(gh pr list --repo "$REPO" --head "$BOT_BRANCH" --base main --state open --json number --jq '.[0].number // empty')"
+          if [ -n "$existing" ]; then
+            gh pr edit "$existing" --repo "$REPO" --body "$body"
+            echo "Updated PR #$existing."
+          else
+            gh pr create --repo "$REPO" --base main --head "$BOT_BRANCH" \
+              --title "chore(trends): refresh the greenfield-status trend rows" \
+              --body "$body"
+          fi

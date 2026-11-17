@@ -45,6 +45,13 @@
 //! acknowledgement still has to be written, and reviewed, in the PR — a gated probe
 //! still cannot move silently — but parallel PRs no longer conflict on these rows.
 //!
+//! **Who refreshes which rows.** The stamp rewrites the gated rows only (it never pays
+//! for the trend probes' workspace-wide clippy pass). The trend rows are rewritten by
+//! the weekly `.github/workflows/greenfield-trends.yml`, which runs
+//! `cargo xtask greenfield-status --trend-only --apply` ([`refresh_trend_rows`]) and
+//! opens one rolling PR from the bot branch `bot/greenfield-trends`; a person can run
+//! the same command locally. A full `--apply` still rewrites everything.
+//!
 //! **Five are count/ratio trend probes**, recomputed and printed but never diffed:
 //! `wildcard_arms`, `keep_in_sync`, `test_density`, `fixture_kinds`,
 //! `keystroke_latency`. The first four move on nearly any ordinary Rust PR with no
@@ -148,7 +155,7 @@ pub fn run_gated(root: &Path) -> Vec<Probe> {
 /// The five reported-only trend probes — never diffed, and notably including the one
 /// (`wildcard_arms`) that shells out to a full `cargo clippy --workspace` pass, which
 /// the gating test must not pay for on every run.
-fn run_trend(root: &Path) -> Vec<Probe> {
+pub fn run_trend(root: &Path) -> Vec<Probe> {
     vec![
         wildcard_arms(root),
         keep_in_sync(root),
@@ -3498,6 +3505,57 @@ pub fn refresh_gated_rows(committed: &str, probes: &[Probe]) -> Result<String, S
     }
 }
 
+/// `committed` (the table's current text) with every trend row's reading replaced
+/// by `probes`' live one: the mirror of [`refresh_gated_rows`]. Gated rows, prose
+/// and the rule-ledger pointer are left exactly as committed, so the weekly
+/// trend-refresh workflow (`.github/workflows/greenfield-trends.yml`) and the
+/// stamp never write the same lines.
+///
+/// Errors, rather than committing a bad table, when a trend probe has no row to
+/// rewrite, or when a probe's reading is a failure string (`wildcard_arms`
+/// reports `error running clippy: ...` as its reading when clippy cannot run; a
+/// failed pass must never be recorded as a measurement).
+pub fn refresh_trend_rows(committed: &str, probes: &[Probe]) -> Result<String, String> {
+    let failed: Vec<_> = probes
+        .iter()
+        .filter(|p| !p.gated && p.reads.starts_with("error running"))
+        .map(|p| format!("{}: {}", p.name, p.reads))
+        .collect();
+    if !failed.is_empty() {
+        return Err(format!(
+            "a trend probe failed to measure, refusing to write it as a reading: {}",
+            failed.join("; ")
+        ));
+    }
+    let mut out = String::with_capacity(committed.len());
+    let mut seen = BTreeSet::new();
+    for line in committed.split_inclusive('\n') {
+        let replacement = probes.iter().filter(|p| !p.gated).find_map(|p| {
+            let prefix = format!("| `{}` | no (trend) | ", p.name);
+            line.starts_with(&prefix).then(|| {
+                seen.insert(p.name);
+                let eol = if line.ends_with('\n') { "\n" } else { "" };
+                format!("{prefix}{} |{eol}", p.reads)
+            })
+        });
+        out.push_str(replacement.as_deref().unwrap_or(line));
+    }
+    let missing: Vec<_> = probes
+        .iter()
+        .filter(|p| !p.gated && !seen.contains(p.name))
+        .map(|p| p.name)
+        .collect();
+    if missing.is_empty() {
+        Ok(out)
+    } else {
+        Err(format!(
+            "design/greenfield-status.md has no row for trend probe(s) {} — run \
+             `cargo xtask greenfield-status --apply`",
+            missing.join(", ")
+        ))
+    }
+}
+
 /// The stamp's refreshed table: [`refresh_gated_rows`], but only if every gated
 /// probe whose live reading differs from `committed` is named by one of the
 /// increments being stamped (`acknowledged` — the union of their `probes`).
@@ -3620,6 +3678,54 @@ mod tests {
         let err = refresh_gated_rows("| Probe | Gated | Reads |\n", &[gated("ts_any", "26")])
             .unwrap_err();
         assert!(err.contains("ts_any"));
+    }
+
+    fn trend(name: &'static str, reads: &str) -> Probe {
+        Probe {
+            name,
+            gated: false,
+            reads: reads.to_string(),
+        }
+    }
+
+    #[test]
+    fn refresh_trend_rewrites_trend_rows_and_leaves_the_rest() {
+        let committed = "# Greenfield status\n\n| Probe | Gated | Reads |\n|---|---|---|\n\
+                         | `ts_writes` | yes | 850 |\n\
+                         | `wildcard_arms` | no (trend) | 355 |\n\nfooter\n";
+        let out = refresh_trend_rows(committed, &[trend("wildcard_arms", "747")]).unwrap();
+        assert!(out.contains("| `wildcard_arms` | no (trend) | 747 |\n"));
+        assert!(out.contains("| `ts_writes` | yes | 850 |\n"));
+        assert!(out.ends_with("\nfooter\n"));
+        assert_eq!(out.lines().count(), committed.lines().count());
+    }
+
+    #[test]
+    fn refresh_trend_ignores_gated_probes_and_is_idempotent() {
+        let committed = "| `ts_writes` | yes | 850 |\n| `wildcard_arms` | no (trend) | 747 |\n";
+        let probes = [gated("ts_writes", "999"), trend("wildcard_arms", "747")];
+        assert_eq!(refresh_trend_rows(committed, &probes).unwrap(), committed);
+    }
+
+    #[test]
+    fn refresh_trend_errors_on_a_missing_trend_row() {
+        let err = refresh_trend_rows(
+            "| Probe | Gated | Reads |\n",
+            &[trend("wildcard_arms", "747")],
+        )
+        .unwrap_err();
+        assert!(err.contains("wildcard_arms"));
+    }
+
+    #[test]
+    fn refresh_trend_refuses_a_failed_probe_reading() {
+        let committed = "| `wildcard_arms` | no (trend) | 747 |\n";
+        let err = refresh_trend_rows(
+            committed,
+            &[trend("wildcard_arms", "error running clippy: boom")],
+        )
+        .unwrap_err();
+        assert!(err.contains("error running clippy"), "{err}");
     }
 
     // --- emit_diagnostics (#999 Decision A) ---------------------------------
