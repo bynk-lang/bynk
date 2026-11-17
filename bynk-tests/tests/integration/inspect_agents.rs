@@ -305,13 +305,15 @@ fn the_listing_goes_to_the_first_member_that_hosts_an_agent() {
         "{index}"
     );
     // `bynk dev inspect` signs for the first agent-hosting member (the listing) and for
-    // a class's owner (a read), so the build names them: the members that host an agent,
-    // in the entry's order, and none that does not.
+    // a class's owner (a read), so the build names every member, in the entry's order,
+    // with the classes each hosts (none for a member that hosts no agent, so that
+    // `inspect --context <it>` still finds the group).
     let manifest: serde_json::Value =
         serde_json::from_str(find(&files, "workers/core/bynk-inspect.json")).unwrap();
     assert_eq!(
         manifest,
         serde_json::json!({ "members": [
+            { "context": "shop.audit", "classes": [] },
             { "context": "shop.orders", "classes": ["Cart"] },
             { "context": "shop.payment", "classes": ["Wallet"] },
         ]}),

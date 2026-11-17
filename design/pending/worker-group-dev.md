@@ -14,7 +14,7 @@ member's instances. Each request is still signed for the member that answers it 
 member decides ownership before it verifies, so a request for another member's agent
 passes it by): the listing for the first member that hosts an agent, and a read for the
 owner of the class. A dev build of a group stages `bynk-inspect.json` beside its entry
-naming those members and their classes (a deploy build has none), and the session file
+naming every member and the agent classes it hosts (a deploy build has none), and the session file
 carries them. The listing's `context` is the member that owns each class. The
 temporary `bynk.deploy.worker_groups_unsupported` refusal is removed, with the
 function and its tests. The self-binding stays in the Worker's `wrangler.toml`

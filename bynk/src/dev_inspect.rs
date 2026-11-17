@@ -26,7 +26,7 @@ pub struct SessionWorker {
     pub context: String,
     /// `http://localhost:<port>`.
     pub url: String,
-    /// A Worker group's members that host an agent (#3562, G6), in the order the
+    /// A Worker group's members (#3562, G6), in the order the
     /// group's entry tries them. The group is one Worker with one registry, but
     /// each member decides before it verifies whether a request is its own, so a
     /// request is signed for the member that answers it. Empty for a Worker that
@@ -35,7 +35,8 @@ pub struct SessionWorker {
     pub members: Vec<InspectMember>,
 }
 
-/// One member of a group that hosts agents, as `bynk-inspect.json` records it.
+/// One member of a group, as `bynk-inspect.json` records it (`classes` empty for one
+/// that hosts no agent).
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 pub struct InspectMember {
     pub context: String,
@@ -46,7 +47,10 @@ impl SessionWorker {
     /// The audience of the listing: the first member that hosts an agent answers it
     /// (the registry is the Worker's, so it lists every member's instances).
     fn lister(&self) -> &str {
-        self.members.first().map_or(&self.context, |m| &m.context)
+        self.members
+            .iter()
+            .find(|m| !m.classes.is_empty())
+            .map_or(&self.context, |m| &m.context)
     }
 
     /// The audience of a read of `class`: the member that owns the class.
@@ -59,7 +63,8 @@ impl SessionWorker {
 
     /// Whether `context` is one this Worker serves.
     fn serves(&self, context: &str) -> bool {
-        self.context == context || self.members.iter().any(|m| m.context == context)
+        let dotted = context_of_worker(context);
+        self.context == context || self.members.iter().any(|m| m.context == dotted)
     }
 }
 
@@ -854,5 +859,30 @@ mod tests {
             class: None,
         };
         assert!(run(&group(), &what, &Entry).is_err());
+    }
+
+    /// `inspect --context` takes every name `dev --context` does: a member's dashed
+    /// form, and a member that hosts no agent (the group is served, and has none to list).
+    #[test]
+    fn a_context_names_a_member_dashed_or_agentless() {
+        let mut session = group();
+        let worker = session.workers.get_mut("core").unwrap();
+        worker.members.insert(
+            0,
+            InspectMember {
+                context: "shop.api".to_string(),
+                classes: vec![],
+            },
+        );
+        // The listing is still signed for the first member that hosts an agent.
+        assert_eq!(session.workers["core"].lister(), "shop.orders");
+        for context in ["shop-stock", "shop.api", "shop-api"] {
+            let what = Inspect::Agents {
+                context: Some(context.to_string()),
+                class: None,
+            };
+            let out = run(&session, &what, &Entry).unwrap();
+            assert_eq!(out["errors"], json!([]), "{context}: {out}");
+        }
     }
 }

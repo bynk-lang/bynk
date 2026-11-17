@@ -968,14 +968,12 @@ fn plan_stand_ins(
     remote: bool,
 ) -> Vec<(String, Vec<StandIn>)> {
     let mut stand_in_plans: Vec<(String, Vec<StandIn>)> = Vec::new();
+    let known = crate::deploy::script_names_of(workers_dir, available);
     let mut bound_foreign: Vec<String> = Vec::new();
     for s in serving {
         let config = std::fs::read_to_string(workers_dir.join(&s.worker).join("wrangler.toml"))
             .unwrap_or_default();
-        let foreign = foreign_services(
-            &config,
-            &crate::deploy::script_names_of(workers_dir, available),
-        );
+        let foreign = foreign_services(&config, &known);
         bound_foreign.extend(foreign.iter().map(|(_, w)| w.clone()));
         let planned = stand_ins(&foreign, &opts.local_workers);
         if !remote && !planned.is_empty() {

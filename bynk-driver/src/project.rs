@@ -4585,13 +4585,14 @@ struct MemberParts {
 /// listing for the first member that hosts an agent, a read for the class's owner.
 /// `None` when no member hosts one (and in a deploy build, which has no inspect).
 fn group_inspect_manifest(members: &[(&MemberParts, &UnitTable)]) -> Option<String> {
-    let hosts: Vec<serde_json::Value> = members
-        .iter()
-        .filter(|(p, _)| p.has_inspect)
-        .map(|(p, _)| serde_json::json!({ "context": p.context, "classes": p.inspect_classes }))
-        .collect();
-    (!hosts.is_empty()).then(|| {
-        serde_json::to_string_pretty(&serde_json::json!({ "members": hosts })).unwrap_or_default()
+    // Every member is named, those hosting no agent with no classes, so that
+    // `bynk dev inspect --context <member>` finds the group for any of them.
+    members.iter().any(|(p, _)| p.has_inspect).then(|| {
+        let all: Vec<serde_json::Value> = members
+            .iter()
+            .map(|(p, _)| serde_json::json!({ "context": p.context, "classes": p.inspect_classes }))
+            .collect();
+        serde_json::to_string_pretty(&serde_json::json!({ "members": all })).unwrap_or_default()
             + "\n"
     })
 }
