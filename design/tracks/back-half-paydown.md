@@ -104,8 +104,8 @@ Every slice keeps all of these:
    example a `LoweredExpr::Text` variant. The bridge is counted by a probe that can only fall, and
    it is gone when its phase exits.
 4. **No probe moves the wrong way.** Phase 0 makes this mechanical. Until then, a slice that raises
-   `ts_writes`, `ts_raw_sites`, `ts_text_idents`, `ts_any`, `emit_abi_shapes`, `verbatim_sites`,
-   `span_keyed_maps` or `wildcard_arms` must say why in its PR description. For the growth probes
+   `ts_writes`, `ts_raw_sites`, `ts_text_idents`, `lowering_text_bridge`, `ts_any`,
+   `emit_abi_shapes`, `verbatim_sites`, `span_keyed_maps` or `wildcard_arms` must say why in its PR description. For the growth probes
    that is a `raises:` line. A Phase 1 slice that converts raw statements into nodes may
    legitimately raise `ts_writes` in the short term (retiring a raw string can add `format!`
    lines). It uses `raises:` with a reason such as "replaces N raw statements", and the
@@ -144,8 +144,8 @@ binding model has one compose path to serve.
 | Slice | Change |
 |---|---|
 | **1A.1** | Move `LowerCtx`, `ModuleCtx` and type rendering out of `emitter.rs` into `emitter/ctx.rs`, `emitter/lower_ctx.rs` and `emitter/ts_types.rs` (a mechanical move, allowed early; see §6). Byte-identical goldens, no re-exports. |
-| **1A.2** | Introduce the bridge `enum LoweredExpr { Node(TsExpr), Text(String) }` and `pre: Vec<TsStmt>`. Make `ts_ty` return `TsType`. |
-| **1A.3–n** | Convert lowerings to `Node`, leaves first: literals, identifiers, operators, calls, then control flow and the list kernel. One expression family per slice. Each slice lowers `ts_writes` and the `Text`-bridge count. |
+| **1A.2** | Introduce the bridge: `enum LoweredExpr { Node(TsExpr), Text(String) }`, `enum LoweredStmt { Node(TsStmt), Text(String) }` and `Lowered { pre: Vec<LoweredStmt>, expr: LoweredExpr }`. `Pre::lower` and `Pre::absorb` keep returning text for unconverted callers (the one place a node is printed); `Pre::lower_node` and `Pre::absorb_node` return the bridge value. Count the text side with the gated growth probe `lowering_text_bridge`. Convert the first family, literals (`IntLit`, `FloatLit`, `DecimalLit`, `DurationLit`, `StrLit`, `BoolLit`, `UnitLit`, `None`; not `InterpStr`), to prove the path. `ts_ty` keeps its signature: each family slice that converts a type-annotated construct switches its own call sites to `ts_ty_to_ts_type` instead. |
+| **1A.3–n** | Convert lowerings to `Node`, leaves first (literals are done in 1A.2): identifiers, operators, calls, then control flow and the list kernel. One expression family per slice. Each slice lowers `ts_writes` and `lowering_text_bridge`. |
 | **1A.x** | Once nothing produces `Text`, delete the variant and `print_expr` round-trips. `ts_array_elem`-style text inspection goes too; the printer owns precedence. |
 | **1A.imports** | Derive each module's runtime and type imports from the built tree using `bynk-ts/src/name_closure.rs`. Delete the `*needs*` / `*mentions*` / `*uses*` prediction functions. |
 | **1A.fallback** | One policy for a missing checker fact: an internal-compiler-error diagnostic, never `any` and never `undefined`. Remove the `"any"` fallbacks. |
@@ -241,7 +241,7 @@ out carries its unit tests with it.
 | `ts_writes` (bynk-emit + driver `project/**`) | 1,502 | ≤ 40% of today | ≤ 20% |
 | `ts_raw_sites`: `TsStmt::raw(` sites (emit + driver) | 99 | ≤ 10, each with a stated foreign-text reason | ≤ 5 |
 | `ts_text_idents`: `Ident(format!(` sites (emit + driver) | 14 | 0 | 0 |
-| `TsExpr` constructions in lowering | 0 | lowering returns `TsExpr` only; `Text` bridge deleted | — |
+| `lowering_text_bridge`: text construction sites of the lowering bridge | 127 (at 1A.2) | 0: lowering returns `TsExpr` only; `Text` bridge deleted | 0 |
 | Import-prediction functions | 17 | 0 | 0 |
 | `"any"` fallbacks in lowering | 5 | 0 | 0 |
 | Compose implementations | 2 | 1 (`ComposePlan`) | 1 |

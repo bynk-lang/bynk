@@ -1343,7 +1343,7 @@ fn emit_requires_guards(out: &mut String, f: &FnDecl, cx: &mut LowerCtx, depth: 
     for c in &f.requires {
         let mut pre = Pre::new();
         let pred = pre.lower(&c.predicate, cx);
-        for s in pre.stmts() {
+        for s in &pre.stmts() {
             out.push_str(&bynk_ts::print_stmt(
                 &bynk_ts::TsStmt::raw(format!("{}{s}\n", "  ".repeat(depth)), None),
                 0,
@@ -1459,7 +1459,7 @@ fn emit_contract_guarded_body(out: &mut String, f: &FnDecl, cx: &mut LowerCtx, a
     for c in &f.ensures {
         let mut pre = Pre::new();
         let pred = pre.lower(&c.predicate, cx);
-        for s in pre.stmts() {
+        for s in &pre.stmts() {
             out.push_str(&bynk_ts::print_stmt(
                 &bynk_ts::TsStmt::raw(format!("  {s}\n"), None),
                 0,
@@ -4761,7 +4761,7 @@ pub(crate) fn lower_workers_cross_context_call(
     };
     let call = bynk_ts::print_expr(&call_expr);
     let target = format!("{consumed}.{}", method.name);
-    pre.finish(cx.trace_step("call", &target, call_start, call))
+    pre.finish_text(cx.trace_step("call", &target, call_start, call))
 }
 
 /// If `receiver` is a dotted chain or single ident that matches one of the
@@ -6369,77 +6369,77 @@ fn emit_agent_load_commit_state(
         // un-derived literal here would have been silently wrong the day a
         // future caller printed this method at a non-zero depth, with
         // nothing but a fixture no one has written yet to catch it.
-        let build_violation_check = |name: &str,
-                                     declaration: &str,
-                                     location: &str,
-                                     pred: String,
-                                     pre_stmts: &[String],
-                                     hoist_depth: usize| {
-            let hoist_indent = "  ".repeat(hoist_depth);
-            let mut stmts: Vec<bynk_ts::TsStmt> = pre_stmts
-                .iter()
-                .map(|s| bynk_ts::TsStmt::raw(format!("{hoist_indent}{s}\n"), None))
-                .collect();
-            stmts.push(bynk_ts::TsStmt::if_stmt(
-                bynk_ts::TsExpr::Unary {
-                    op: bynk_ts::TsUnaryOp::Not,
-                    expr: Box::new(bynk_ts::TsExpr::Paren(Box::new(bynk_ts::TsExpr::Ident(
-                        pred,
-                    )))),
-                },
-                bynk_ts::TsStmt::block(
-                    vec![
-                        bynk_ts::TsStmt::expr_stmt(
-                            bynk_ts::TsExpr::Call {
-                                callee: Box::new(bynk_ts::TsExpr::Ident(
-                                    "globalThis.console.error".to_string(),
-                                )),
-                                args: vec![
-                                    bynk_ts::TsExpr::Lit(bynk_ts::TsLit::Str(format!(
-                                        "InvariantViolation {}.{name}",
-                                        a.name.name
-                                    ))),
-                                    bynk_ts::TsExpr::object(vec![
-                                        (
-                                            "agent".to_string(),
-                                            bynk_ts::TsExpr::Lit(bynk_ts::TsLit::Str(
-                                                a.name.name.clone(),
-                                            )),
-                                        ),
-                                        (
-                                            "invariant".to_string(),
-                                            bynk_ts::TsExpr::Lit(bynk_ts::TsLit::Str(
-                                                name.to_string(),
-                                            )),
-                                        ),
-                                    ]),
-                                ],
-                            },
-                            None,
-                        ),
-                        bynk_ts::TsStmt::throw_stmt(
-                            bynk_ts::TsExpr::Call {
-                                callee: Box::new(bynk_ts::TsExpr::Ident(
-                                    "__invariantViolation".to_string(),
-                                )),
-                                args: vec![
-                                    bynk_ts::TsExpr::Lit(bynk_ts::TsLit::Str(a.name.name.clone())),
-                                    bynk_ts::TsExpr::Lit(bynk_ts::TsLit::Str(name.to_string())),
-                                    bynk_ts::TsExpr::Lit(bynk_ts::TsLit::Str(
-                                        declaration.to_string(),
+        let build_violation_check =
+            |name: &str,
+             declaration: &str,
+             location: &str,
+             pred: String,
+             pre_stmts: Vec<bynk_ts::TsStmt>| {
+                let mut stmts = pre_stmts;
+                stmts.push(bynk_ts::TsStmt::if_stmt(
+                    bynk_ts::TsExpr::Unary {
+                        op: bynk_ts::TsUnaryOp::Not,
+                        expr: Box::new(bynk_ts::TsExpr::Paren(Box::new(bynk_ts::TsExpr::Ident(
+                            pred,
+                        )))),
+                    },
+                    bynk_ts::TsStmt::block(
+                        vec![
+                            bynk_ts::TsStmt::expr_stmt(
+                                bynk_ts::TsExpr::Call {
+                                    callee: Box::new(bynk_ts::TsExpr::Ident(
+                                        "globalThis.console.error".to_string(),
                                     )),
-                                    bynk_ts::TsExpr::Lit(bynk_ts::TsLit::Str(location.to_string())),
-                                ],
-                            },
-                            None,
-                        ),
-                    ],
+                                    args: vec![
+                                        bynk_ts::TsExpr::Lit(bynk_ts::TsLit::Str(format!(
+                                            "InvariantViolation {}.{name}",
+                                            a.name.name
+                                        ))),
+                                        bynk_ts::TsExpr::object(vec![
+                                            (
+                                                "agent".to_string(),
+                                                bynk_ts::TsExpr::Lit(bynk_ts::TsLit::Str(
+                                                    a.name.name.clone(),
+                                                )),
+                                            ),
+                                            (
+                                                "invariant".to_string(),
+                                                bynk_ts::TsExpr::Lit(bynk_ts::TsLit::Str(
+                                                    name.to_string(),
+                                                )),
+                                            ),
+                                        ]),
+                                    ],
+                                },
+                                None,
+                            ),
+                            bynk_ts::TsStmt::throw_stmt(
+                                bynk_ts::TsExpr::Call {
+                                    callee: Box::new(bynk_ts::TsExpr::Ident(
+                                        "__invariantViolation".to_string(),
+                                    )),
+                                    args: vec![
+                                        bynk_ts::TsExpr::Lit(bynk_ts::TsLit::Str(
+                                            a.name.name.clone(),
+                                        )),
+                                        bynk_ts::TsExpr::Lit(bynk_ts::TsLit::Str(name.to_string())),
+                                        bynk_ts::TsExpr::Lit(bynk_ts::TsLit::Str(
+                                            declaration.to_string(),
+                                        )),
+                                        bynk_ts::TsExpr::Lit(bynk_ts::TsLit::Str(
+                                            location.to_string(),
+                                        )),
+                                    ],
+                                },
+                                None,
+                            ),
+                        ],
+                        None,
+                    ),
                     None,
-                ),
-                None,
-            ));
-            stmts
-        };
+                ));
+                stmts
+            };
         let mut stmts: Vec<bynk_ts::TsStmt> = Vec::new();
         // v0.80 (§14): evaluate each invariant against the proposed state `s`
         // before the write. A violation throws `InvariantViolation` *before*
@@ -6468,8 +6468,7 @@ fn emit_agent_load_commit_state(
                     "invariant",
                     &declaration_location(ctx, source_text, inv.name.span),
                     pred,
-                    pre.stmts(),
-                    class_depth + 2,
+                    pre.ts_stmts(&"  ".repeat(class_depth + 2)),
                 ));
             }
         }
@@ -6538,8 +6537,7 @@ fn emit_agent_load_commit_state(
                     "transition",
                     &declaration_location(ctx, source_text, tr.name.span),
                     pred,
-                    pre.stmts(),
-                    class_depth + 3,
+                    pre.ts_stmts(&"  ".repeat(class_depth + 3)),
                 ));
             }
             stmts.push(bynk_ts::TsStmt::const_stmt(
@@ -7249,7 +7247,7 @@ fn emit_agent_state_persistence(
                     bynk_syntax::ast::MigrateItem::Let(l) => {
                         let mut pre = Pre::new();
                         let v = pre.lower(&l.value, &mut cx);
-                        for s in pre.stmts() {
+                        for s in &pre.stmts() {
                             writeln!(body, "    {s}").unwrap();
                         }
                         let js = cx.bind_local_name(&l.name.name);
@@ -7258,7 +7256,7 @@ fn emit_agent_state_persistence(
                     bynk_syntax::ast::MigrateItem::Assign(asg) => {
                         let mut pre = Pre::new();
                         let v = pre.lower(&asg.value, &mut cx);
-                        for s in pre.stmts() {
+                        for s in &pre.stmts() {
                             writeln!(body, "    {s}").unwrap();
                         }
                         let n = &asg.target.name;

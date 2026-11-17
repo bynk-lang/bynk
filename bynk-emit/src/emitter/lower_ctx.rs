@@ -1269,12 +1269,12 @@ impl<'a> LowerCtx<'a> {
         // which `value_text_for_is` cannot render, so it is lifted to a temp
         // like any other complex receiver.
         if is_simple_is_receiver(value) && !self.roots_at_const(value) {
-            return pre.finish(lowered);
+            return pre.finish_text(lowered);
         }
         let tmp = self.fresh();
         self.declare_is_temp(value, &tmp, &lowered, &mut pre);
         self.is_receiver_temps.insert(value.span, tmp.clone());
-        pre.finish(tmp)
+        pre.finish_text(tmp)
     }
 
     /// Declare an `is` receiver temp holding `lowered`: a `const` in place, or,
@@ -1297,9 +1297,9 @@ impl<'a> LowerCtx<'a> {
         match (self.is_temp_hoist.as_mut(), ty) {
             (Some(hoist), Some(ty)) => {
                 hoist.push(format!("let {tmp}!: {ty};"));
-                pre.push(format!("{tmp} = {lowered};"));
+                pre.push_text(format!("{tmp} = {lowered};"));
             }
-            _ => pre.push(format!("const {tmp} = {lowered};")),
+            _ => pre.push_text(format!("const {tmp} = {lowered};")),
         }
     }
 
@@ -1317,7 +1317,7 @@ impl<'a> LowerCtx<'a> {
         let tmp = self.fresh();
         self.declare_is_temp(value, &tmp, &lowered, &mut pre);
         self.is_receiver_temps.insert(value.span, tmp.clone());
-        pre.finish(tmp)
+        pre.finish_text(tmp)
     }
 
     /// v0.13: true when `value is Name` is a *refinement* check — the value is a
