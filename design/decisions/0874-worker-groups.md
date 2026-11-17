@@ -128,8 +128,16 @@ edge as no edge.
 - A group builds today; it cannot yet be deployed or run in `bynk dev`. Both
   refuse it with `bynk.deploy.worker_groups_unsupported`, which G4 (deploy,
   `--worker`, ledger and facts versions, the `10007` handling) and G6 remove.
-- **Still open, G3:** in-process edges and events between members (an intra-group
-  call is a Service Binding to itself today). The merged events fan-out has
+- **G3-2, in-process calls:** a call between members stays in the Worker. The group's
+  entry answers the binding a member names another by with the group's own dispatcher,
+  so the request is still signed, contract-checked, admission-checked and decoded on
+  both sides (values are copied, a callee's fault is the same `CalleeFaulted`, a
+  refusal the same refusal); only the Service Binding hop is gone. It is not a direct
+  function call, which would need its own copy and error-mapping rules to be
+  conformant. **Still open, G3-3:** the Worker's binding to itself stays in
+  `wrangler.toml` while a member subscribes to another member's event, because the
+  fan-out Durable Object cannot call back into the Worker's dispatcher and delivers
+  over that binding. The merged events fan-out has
   landed (G3-1); the conformance harness is #3663. The group cycle check
   (`bynk.deploy.group_cycle`) lands before G3.
 - **Still open, G5:** moving an agent-owning context into or out of a group is
