@@ -28,6 +28,7 @@ per-commit history. While Bynk is pre-1.0, increments may change behaviour.
 
 | Version | Highlights |
 |---|---|
+| **v0.636.2** | A cycle between Workers that involves a `[deploy.workers]` group is refused at check time as `bynk.deploy.worker_cycle` (renamed from `bynk.deploy.group_cycle`, never released), whichever two Workers and however the cycle is closed: a call, or a publisher's binding to its subscriber (#3562, G2b) |
 | **v0.636.1** | `bynk deploy` no longer fails a first deploy when wrangler uploads the Worker and then reports `[code: 10007]` (a race in its follow-up lookup), if the account shows the upload landed as the Worker's only version; any other failure, and a Worker that already existed, stay fatal (#3562, G4-2) |
 | **v0.636.0** | `bynk deploy` deploys a `[deploy.workers.<key>]` group as one Worker, in dependency order with the others, and `--worker KEY` selects a Worker by its directory; the ledger records a group Worker's contexts, and a member cannot be deployed alone (#3562, G4-1) |
 | **v0.635.1** | Deploy's groundwork for a `[deploy.workers]` group (#3562, G4-0): the binding graph is keyed by Worker directory (a group's `name` override and its binding to itself no longer break the order), a group has one merged `bynk-contracts.json` and `bynk-secrets.json`, and a dependency's contract is looked up under the Worker that provides it; `bynk deploy` still refuses a group |
