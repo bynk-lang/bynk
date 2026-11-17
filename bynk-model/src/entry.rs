@@ -285,13 +285,36 @@ fn shape_of(id: TyId, scope_unit: &str, sc: &mut Scopes, open: &mut Open) -> Ent
                                 })
                                 .collect(),
                         },
-                        _ => EntryShape::Other(id.display(&sc.tys)),
+                        TypeBody::Refined { .. } | TypeBody::Opaque { .. } => {
+                            EntryShape::Other(id.display(&sc.tys))
+                        }
                     };
                     open.pop();
                     shape
                 }
             }
         }
-        _ => EntryShape::Other(id.display(&sc.tys)),
+        Ty::Error
+        | Ty::Never
+        | Ty::Effect(_)
+        | Ty::HttpResult(_)
+        | Ty::QueueResult
+        | Ty::HttpOutcome(_)
+        | Ty::BoundaryRejection
+        | Ty::Asset
+        | Ty::RequestHeaders
+        | Ty::RequestQuery
+        | Ty::RequestCookies
+        | Ty::TokenClaims
+        | Ty::Query(_)
+        | Ty::Stream(_)
+        | Ty::Connection(_)
+        | Ty::TestConnection(_)
+        | Ty::ValidationError
+        | Ty::DecodeError
+        | Ty::Actor(_)
+        | Ty::ActorSum(_)
+        | Ty::Fn { .. }
+        | Ty::Var(_) => EntryShape::Other(id.display(&sc.tys)),
     }
 }

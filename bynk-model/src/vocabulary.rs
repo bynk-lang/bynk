@@ -449,7 +449,14 @@ impl ActorSeamIr {
         match self {
             ActorSeamIr::Bearer(s) if s.binder.is_some() => Some(&s.identity_type),
             ActorSeamIr::SignedCookie(s) if s.binder.is_some() => Some(&s.identity_type),
-            _ => None,
+            ActorSeamIr::None
+            | ActorSeamIr::Sum(_)
+            | ActorSeamIr::CallSum(_)
+            | ActorSeamIr::Bearer(_)
+            | ActorSeamIr::Oidc(_)
+            | ActorSeamIr::SignedCookie(_)
+            | ActorSeamIr::Caller(_)
+            | ActorSeamIr::Sender(_) => None,
         }
     }
 }
@@ -673,6 +680,6 @@ fn pattern_has_nested_test(pat: &Pattern) -> bool {
         Pattern::Or(alts, _) => alts
             .iter()
             .any(|p| !p.bound_names().is_empty() || pattern_has_nested_test(p)),
-        _ => false,
+        Pattern::Wildcard(_) | Pattern::Binding(_) | Pattern::Literal { .. } => false,
     }
 }

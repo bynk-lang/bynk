@@ -101,7 +101,14 @@ fn decimal_pred_condition(pred: &PredKind, recv: &str) -> Option<(TsExpr, String
                 bynk_syntax::decimal::render(&b.coef, b.scale)
             ),
         )),
-        _ => None,
+        PredKind::Matches(_)
+        | PredKind::InRange(..)
+        | PredKind::InRangeF(..)
+        | PredKind::MinLength(_)
+        | PredKind::MaxLength(_)
+        | PredKind::Length(_)
+        | PredKind::NonEmpty
+        | PredKind::IsoDate => None,
     }
 }
 

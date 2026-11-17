@@ -95,7 +95,27 @@ impl TsProgram {
                     | TsDecl::ImportNamespace { from, .. }
                     | TsDecl::ImportDefault { from, .. },
                 ) => Some(from.as_str()),
-                _ => None,
+                TsStmtKind::Verbatim { .. }
+                | TsStmtKind::Decl(_)
+                | TsStmtKind::Const { .. }
+                | TsStmtKind::Let { .. }
+                | TsStmtKind::ExprStmt(_)
+                | TsStmtKind::Return(_)
+                | TsStmtKind::Throw(_)
+                | TsStmtKind::If { .. }
+                | TsStmtKind::ForOf { .. }
+                | TsStmtKind::For { .. }
+                | TsStmtKind::TryCatch { .. }
+                | TsStmtKind::Block(_)
+                | TsStmtKind::Continue
+                | TsStmtKind::Assign { .. }
+                | TsStmtKind::Comment(_)
+                | TsStmtKind::DocComment(_)
+                | TsStmtKind::Blank
+                | TsStmtKind::Switch { .. }
+                | TsStmtKind::InlineBlock(_)
+                | TsStmtKind::Increment(_)
+                | TsStmtKind::Raw(_) => None,
             })
             .collect()
     }
@@ -823,9 +843,27 @@ impl TsStmt {
                     name,
                     has_value: true,
                 }],
-                _ => Vec::new(),
+                TsDecl::Import { .. }
+                | TsDecl::ImportNamespace { .. }
+                | TsDecl::ImportDefault { .. }
+                | TsDecl::ReExport { .. }
+                | TsDecl::ExportNames { .. }
+                | TsDecl::ReExportAll { .. }
+                | TsDecl::Export(_)
+                | TsDecl::ExportDefault(_)
+                | TsDecl::DeclareConst { .. } => Vec::new(),
             },
-            _ => Vec::new(),
+            TsDecl::Import { .. }
+            | TsDecl::ImportNamespace { .. }
+            | TsDecl::ImportDefault { .. }
+            | TsDecl::ReExportAll { .. }
+            | TsDecl::Interface { .. }
+            | TsDecl::ConstDecl { .. }
+            | TsDecl::Class { .. }
+            | TsDecl::Function { .. }
+            | TsDecl::TypeAlias { .. }
+            | TsDecl::ExportDefault(_)
+            | TsDecl::DeclareConst { .. } => Vec::new(),
         }
     }
 

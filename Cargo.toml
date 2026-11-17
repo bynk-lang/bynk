@@ -49,14 +49,14 @@ homepage = "https://github.com/bynk-lang/bynk"
 [workspace.lints.clippy]
 # R2.12 (design/bynk-greenfield-compiler.md): refuses the wildcard-arm class of drift
 # bug this rule exists to catch (`type_refs_match`, #8) at the type-aware clippy pass
-# rather than a hand-rolled scan. `warn`, not `deny`: nothing opts in yet — no crate
-# manifest sets `[lints] workspace = true` — so this table is a recorded target level,
-# not (yet) an enforced one. Track slice T0.3 (design/tracks/compiler-architecture.md);
-# the 296-violation inventory is recorded on the spine, #996. Per-crate `deny` lands as
-# each crate is cleaned, per the track's own sequencing — see T0.3's proposal for why
-# wiring `[lints] workspace = true` into a crate that still has violations is deferred
-# (CI runs `cargo clippy --workspace --all-targets -- -D warnings`, which would turn
-# every one of those warnings into a build failure the moment a crate opts in).
+# rather than a hand-rolled scan. `warn`, not `deny`: CI runs `cargo clippy --workspace
+# --all-targets -- -D warnings`, so for a crate that opts in with `[lints] workspace =
+# true` the lint is effectively deny. `bynk-ts` and `bynk-model` have opted in (P0.4,
+# #3685); the other crates opt in as each is cleaned (1A.lints for `bynk-emit`, per
+# design/tracks/back-half-paydown.md), because opting in a crate that still has
+# violations would turn every one into a build failure. Track slice T0.3
+# (design/tracks/compiler-architecture.md); the 296-violation inventory is recorded on
+# the spine, #996.
 # Note for future edits to this comment block: the `workspace_lints` probe (xtask)
 # reads the first line in this file that names the lint, so don't spell that name
 # out up here — say "the lint" instead — or the probe reads this comment instead

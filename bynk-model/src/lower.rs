@@ -524,7 +524,38 @@ pub fn body_writes_state(body: &Block, program: &TypedCommons) -> bool {
                             }
                     })
             }
-            _ => expr_children(e).into_iter().any(|c| expr(c, program)),
+            ExprKind::IntLit { .. }
+            | ExprKind::FloatLit { .. }
+            | ExprKind::DecimalLit { .. }
+            | ExprKind::DurationLit { .. }
+            | ExprKind::StrLit(_)
+            | ExprKind::InterpStr(_)
+            | ExprKind::BoolLit(_)
+            | ExprKind::Ident(_)
+            | ExprKind::Call { .. }
+            | ExprKind::Lambda(_)
+            | ExprKind::BinOp(..)
+            | ExprKind::UnaryOp(..)
+            | ExprKind::Paren(_)
+            | ExprKind::Ok(_)
+            | ExprKind::Err(_)
+            | ExprKind::Question(_)
+            | ExprKind::RecordConstruction { .. }
+            | ExprKind::FieldAccess { .. }
+            | ExprKind::MethodCall { .. }
+            | ExprKind::Is { .. }
+            | ExprKind::Some(_)
+            | ExprKind::None
+            | ExprKind::UnitLit
+            | ExprKind::RecordSpread { .. }
+            | ExprKind::EffectPure(_)
+            | ExprKind::Expect(_)
+            | ExprKind::Val { .. }
+            | ExprKind::Wire(_)
+            | ExprKind::ListLit(..)
+            | ExprKind::Observation(_)
+            | ExprKind::Faults(_)
+            | ExprKind::Trace { .. } => expr_children(e).into_iter().any(|c| expr(c, program)),
         }
     }
     body.statements.iter().any(|s| stmt(s, program)) || expr(&body.tail, program)
@@ -1255,27 +1286,36 @@ fn Bag.pair[B](self, other: B) -> Bag[A] {
             .commons
             .items
             .iter()
-            .filter_map(|item| match item {
-                CommonsItem::Agent(a) => Some((a.name.name.clone(), Arc::new(a.clone()))),
-                _ => None,
+            .filter_map(|item| {
+                if let CommonsItem::Agent(a) = item {
+                    Some((a.name.name.clone(), Arc::new(a.clone())))
+                } else {
+                    None
+                }
             })
             .collect();
         let services: HashMap<String, ServiceDecl> = typed
             .commons
             .items
             .iter()
-            .filter_map(|item| match item {
-                CommonsItem::Service(s) => Some((s.name.name.clone(), s.clone())),
-                _ => None,
+            .filter_map(|item| {
+                if let CommonsItem::Service(s) = item {
+                    Some((s.name.name.clone(), s.clone()))
+                } else {
+                    None
+                }
             })
             .collect();
         let actors: HashMap<String, bynk_syntax::ast::ActorDecl> = typed
             .commons
             .items
             .iter()
-            .filter_map(|item| match item {
-                CommonsItem::Actor(a) => Some((a.name.name.clone(), a.clone())),
-                _ => None,
+            .filter_map(|item| {
+                if let CommonsItem::Actor(a) = item {
+                    Some((a.name.name.clone(), a.clone()))
+                } else {
+                    None
+                }
             })
             .collect();
         // A `given <Cap>` clause on a handler resolves against
@@ -1289,9 +1329,12 @@ fn Bag.pair[B](self, other: B) -> Bag[A] {
             .commons
             .items
             .iter()
-            .filter_map(|item| match item {
-                CommonsItem::Capability(c) => Some((c.name.name.clone(), c.clone())),
-                _ => None,
+            .filter_map(|item| {
+                if let CommonsItem::Capability(c) = item {
+                    Some((c.name.name.clone(), c.clone()))
+                } else {
+                    None
+                }
             })
             .collect();
         // P6.14 (#1174): `check_provider_decls` (the pass that actually
@@ -1307,9 +1350,12 @@ fn Bag.pair[B](self, other: B) -> Bag[A] {
             .commons
             .items
             .iter()
-            .filter_map(|item| match item {
-                CommonsItem::Provider(p) => Some((p.capability.name.clone(), p.clone())),
-                _ => None,
+            .filter_map(|item| {
+                if let CommonsItem::Provider(p) = item {
+                    Some((p.capability.name.clone(), p.clone()))
+                } else {
+                    None
+                }
             })
             .collect();
         let table = symbols::UnitTable {
@@ -1345,9 +1391,14 @@ fn Bag.pair[B](self, other: B) -> Bag[A] {
             .commons
             .items
             .iter()
-            .find_map(|item| match item {
-                CommonsItem::Agent(a) if a.name.name == name => Some(a),
-                _ => None,
+            .find_map(|item| {
+                if let CommonsItem::Agent(a) = item
+                    && a.name.name == name
+                {
+                    Some(a)
+                } else {
+                    None
+                }
             })
             .unwrap_or_else(|| panic!("no agent named `{name}` in this fixture"))
     }
@@ -1363,9 +1414,12 @@ fn Bag.pair[B](self, other: B) -> Bag[A] {
             .commons
             .items
             .iter()
-            .filter_map(|item| match item {
-                CommonsItem::Actor(a) => Some((a.name.name.clone(), a.clone())),
-                _ => None,
+            .filter_map(|item| {
+                if let CommonsItem::Actor(a) = item {
+                    Some((a.name.name.clone(), a.clone()))
+                } else {
+                    None
+                }
             })
             .collect()
     }
@@ -1376,9 +1430,14 @@ fn Bag.pair[B](self, other: B) -> Bag[A] {
             .commons
             .items
             .iter()
-            .find_map(|item| match item {
-                CommonsItem::Service(s) if s.name.name == name => Some(s),
-                _ => None,
+            .find_map(|item| {
+                if let CommonsItem::Service(s) = item
+                    && s.name.name == name
+                {
+                    Some(s)
+                } else {
+                    None
+                }
             })
             .unwrap_or_else(|| panic!("no service named `{name}` in this fixture"))
     }
@@ -1662,9 +1721,14 @@ service Subscriber from Events(OrderPlaced { status: Active, count: 3, .. }) {
         let service = ctx
             .items
             .iter()
-            .find_map(|item| match item {
-                CommonsItem::Service(s) if s.name.name == "Subscriber" => Some(s),
-                _ => None,
+            .find_map(|item| {
+                if let CommonsItem::Service(s) = item
+                    && s.name.name == "Subscriber"
+                {
+                    Some(s)
+                } else {
+                    None
+                }
             })
             .expect("no service named `Subscriber` in this fixture");
         let ServiceProtocol::Events { pattern, .. } = &service.protocol else {
@@ -1804,9 +1868,14 @@ capability Store {
         let service = ctx
             .items
             .iter()
-            .find_map(|item| match item {
-                CommonsItem::Service(s) if s.name.name == service => Some(s),
-                _ => None,
+            .find_map(|item| {
+                if let CommonsItem::Service(s) = item
+                    && s.name.name == service
+                {
+                    Some(s)
+                } else {
+                    None
+                }
             })
             .unwrap_or_else(|| panic!("no service named `{service}` in this fixture"));
         &service.handlers[index]
@@ -2303,9 +2372,14 @@ agent Widget {
             .commons
             .items
             .iter()
-            .find_map(|item| match item {
-                CommonsItem::Capability(c) if c.name.name == name => Some(c),
-                _ => None,
+            .find_map(|item| {
+                if let CommonsItem::Capability(c) = item
+                    && c.name.name == name
+                {
+                    Some(c)
+                } else {
+                    None
+                }
             })
             .unwrap_or_else(|| panic!("no capability named `{name}` in this fixture"))
     }
@@ -2316,9 +2390,14 @@ agent Widget {
             .commons
             .items
             .iter()
-            .find_map(|item| match item {
-                CommonsItem::Provider(p) if p.provider_name.name == name => Some(p),
-                _ => None,
+            .find_map(|item| {
+                if let CommonsItem::Provider(p) = item
+                    && p.provider_name.name == name
+                {
+                    Some(p)
+                } else {
+                    None
+                }
             })
             .unwrap_or_else(|| panic!("no provider named `{name}` in this fixture"))
     }

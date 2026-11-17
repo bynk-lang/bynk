@@ -76,7 +76,9 @@ summary: How a case addresses a handler and names its principal
   rewrites trend rows. A weekly workflow (`.github/workflows/greenfield-trends.yml`)
   does, by running `cargo xtask greenfield-status --trend-only --apply` and
   opening one rolling bot PR (`bot/greenfield-trends`) that changes trend rows
-  only. A feature PR leaves them alone. The trend rows sit in their own table
+  only. A feature PR leaves them alone: it does not commit refreshed trend rows,
+  and the bot PR owns them. The one exception is a PR that *adds* a trend probe,
+  which creates its row once with a full `--apply`. The trend rows sit in their own table
   under `## Trend probes (not gated)`, so the stamp and the bot PR never write
   adjacent lines. If the bot PR conflicts, re-dispatch the workflow
   (`gh workflow run greenfield-trends.yml`); never hand-edit the bot branch.

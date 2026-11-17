@@ -232,7 +232,7 @@ out carries its unit tests with it.
 | Deploy: apply consumes `Plan` | no | yes | yes |
 | Deploy: Cloudflare client layers | 2, untyped | 1 trait, typed errors | 1 |
 | `bynk-emit` dev-dependency on `bynk-driver` | yes | no | no |
-| Crates denying wildcard arms | 0 | bynk-ts, bynk-model, bynk-emit | + bynk-driver, bynk |
+| Crates denying wildcard arms | 2 (bynk-ts, bynk-model) | bynk-ts, bynk-model, bynk-emit | + bynk-driver, bynk |
 | Back-half files ≥ 5,000 lines | 6 | — | 0 |
 | Back-half files ≥ 2,000 lines | 20 | — | per Q5 |
 | bynk-emit unit tests per 1k production lines | 7.1 | — | per 3.4's floor |

@@ -66,7 +66,7 @@
 //!
 //! **Six are count/ratio trend probes**, recomputed and printed but never diffed:
 //! `wildcard_arms`, `keep_in_sync`, `test_density`, `fixture_kinds`,
-//! `keystroke_latency`, `module_lines` (production lines per source file, #3683). The first four move on nearly any ordinary Rust PR with no
+//! `keystroke_latency`, `module_lines` (production lines per source file, #3683). The first four, and `module_lines` too, move on nearly any ordinary Rust PR with no
 //! slice actively driving them toward a floor (§8 calls two of them "trends, not
 //! gates"); hard-gating them would make the committed table churn, and conflict, on
 //! routine work for no corresponding benefit. `keystroke_latency` moves on nothing
@@ -277,9 +277,46 @@ fn is_line_comment(line: &str) -> bool {
 
 // --- Gated probe 1: workspace_lints --------------------------------------
 
+/// True when `manifest` has a `[lints]` table containing `workspace = true` — the
+/// crate inherits the root `[workspace.lints]`. A `[lints]` table that sets its own
+/// levels (and no `workspace = true`), or a `[lints.clippy]` sub-table, does not count.
+fn opts_into_workspace_lints(manifest: &str) -> bool {
+    // `None` before the first `[header]`: the root table, where the dotted form
+    // `lints.workspace = true` is valid.
+    let mut table: Option<&str> = None;
+    for line in manifest.lines() {
+        // A TOML comment runs from `#` to the end of the line; none of the keys or
+        // headers read here contain a `#` inside a string.
+        let t = line.split('#').next().unwrap_or("").trim();
+        if t.starts_with('[') {
+            table = Some(t);
+            continue;
+        }
+        let compact: String = t.chars().filter(|c| !c.is_whitespace()).collect();
+        match (table, compact.as_str()) {
+            (Some("[lints]"), "workspace=true") | (None, "lints.workspace=true") => return true,
+            _ => {}
+        }
+    }
+    false
+}
+
+/// The crates that opt into the workspace lints, from `(crate name, manifest)`
+/// pairs, sorted by name.
+fn opted_in_crates(manifests: &[(String, String)]) -> Vec<String> {
+    let mut names: Vec<String> = manifests
+        .iter()
+        .filter(|(_, m)| opts_into_workspace_lints(m))
+        .map(|(n, _)| n.clone())
+        .collect();
+    names.sort();
+    names
+}
+
 /// R2.12. `[workspace.lints]` presence and `clippy::wildcard_enum_match_arm`'s level in
-/// the root `Cargo.toml`. A boolean-shaped probe (not a count) — gated because it only
-/// ever changes once, when T0.3 lands it.
+/// the root `Cargo.toml`, then the top-level crates that opt in with `[lints]
+/// workspace = true` (P0.4, #3685). Not a count: gated because the exact-match gate
+/// makes a later opt-out, or a new opt-in, a visible and acknowledged move.
 fn workspace_lints(root: &Path) -> Probe {
     let cargo_toml = std::fs::read_to_string(root.join("Cargo.toml")).unwrap_or_default();
     let has_section = cargo_toml
@@ -289,9 +326,25 @@ fn workspace_lints(root: &Path) -> Probe {
         .lines()
         .find(|l| l.contains("wildcard_enum_match_arm"))
         .map(|l| l.trim().to_string());
+    let manifests: Vec<(String, String)> = top_level_crate_dirs(root)
+        .into_iter()
+        .map(|dir| {
+            let name = dir.file_name().unwrap().to_string_lossy().to_string();
+            let manifest = std::fs::read_to_string(dir.join("Cargo.toml")).unwrap_or_default();
+            (name, manifest)
+        })
+        .collect();
+    let opted_in = opted_in_crates(&manifests);
+    let opted_in = if opted_in.is_empty() {
+        "none".to_string()
+    } else {
+        opted_in.join(", ")
+    };
     let reads = match (has_section, level) {
-        (true, Some(l)) => format!("present — {l}"),
-        (true, None) => "present, wildcard_enum_match_arm not set".to_string(),
+        (true, Some(l)) => format!("present — {l}; opted in: {opted_in}"),
+        (true, None) => {
+            format!("present, wildcard_enum_match_arm not set; opted in: {opted_in}")
+        }
         (false, _) => "absent".to_string(),
     };
     Probe {
@@ -3115,25 +3168,113 @@ fn module_lines_reading(files: &[(String, usize)]) -> String {
     )
 }
 
+/// Names declared by `#[cfg(test)] [vis] mod name;` — an external-file module
+/// *declaration* gated by its attribute, whose file is therefore wholly test code
+/// (`bynk-check/src/testkit.rs`). The attribute must be the line directly above
+/// (blank lines allowed), as [`test_mod_ranges`] reads it.
+fn cfg_test_declared_mods(source: &str) -> Vec<String> {
+    let lines: Vec<&str> = source.lines().collect();
+    let mut out = Vec::new();
+    for (i, line) in lines.iter().enumerate() {
+        if line.trim() != "#[cfg(test)]" {
+            continue;
+        }
+        let Some(next) = lines[i + 1..].iter().find(|l| !l.trim().is_empty()) else {
+            continue;
+        };
+        let t = next.trim();
+        // Drop a `pub`, `pub(crate)`, `pub(super)` ... visibility prefix.
+        let t = match t.strip_prefix("pub") {
+            Some(rest) => match rest.trim_start().strip_prefix('(') {
+                Some(r) => r.split_once(')').map_or("", |(_, after)| after),
+                None => rest,
+            },
+            None => t,
+        };
+        if let Some(name) = t
+            .trim_start()
+            .strip_prefix("mod ")
+            .and_then(|r| r.strip_suffix(';'))
+        {
+            out.push(name.trim().to_string());
+        }
+    }
+    out
+}
+
+/// The `src/`-relative stems (`testkit`, `emitter/testkit`) of files and
+/// directories declared away as test-only by a `#[cfg(test)] mod name;` in some
+/// other file. A module file `a/b.rs` owns directory `a/b/`, except `lib.rs`,
+/// `main.rs` and `mod.rs`, which own their own directory.
+fn declaration_gated_stems(files: &[(String, String)]) -> BTreeSet<String> {
+    let mut stems = BTreeSet::new();
+    for (rel, contents) in files {
+        let (dir, file) = rel.rsplit_once('/').unwrap_or(("", rel.as_str()));
+        let stem = file.strip_suffix(".rs").unwrap_or(file);
+        let owned = match stem {
+            "lib" | "main" | "mod" => dir.to_string(),
+            _ if dir.is_empty() => stem.to_string(),
+            _ => format!("{dir}/{stem}"),
+        };
+        for name in cfg_test_declared_mods(contents) {
+            stems.insert(if owned.is_empty() {
+                name
+            } else {
+                format!("{owned}/{name}")
+            });
+        }
+    }
+    stems
+}
+
+/// True when `rel` is one of the declaration-gated stems' files (`stem.rs`,
+/// `stem/mod.rs`) or lies beneath such a module's directory.
+fn is_declaration_gated(rel: &str, stems: &BTreeSet<String>) -> bool {
+    let without_ext = rel.strip_suffix(".rs").unwrap_or(rel);
+    stems
+        .iter()
+        .any(|s| without_ext == s || rel.starts_with(&format!("{s}/")))
+}
+
+/// `(path from the repo root, production lines)` for one crate's `src/**/*.rs`
+/// files, given as `(src-relative path, contents)`. Whole-test files and files
+/// whose `mod` declaration is `#[cfg(test)]` are skipped; paths read
+/// `{crate}/src/{rel}`.
+fn module_lines_for_crate(crate_name: &str, files: &[(String, String)]) -> Vec<(String, usize)> {
+    let gated = declaration_gated_stems(files);
+    files
+        .iter()
+        .filter(|(rel, _)| !is_whole_test_file(rel) && !is_declaration_gated(rel, &gated))
+        .map(|(rel, contents)| {
+            (
+                format!("{crate_name}/src/{rel}"),
+                production_lines(contents),
+            )
+        })
+        .collect()
+}
+
 /// Phase 2 of the back-half paydown track (#3683). Production lines per
 /// `src/**/*.rs` file across every top-level crate, excluding `#[cfg(test)]`
-/// modules and whole-test files. A trend, not a gate: the threshold is still open.
+/// modules, whole-test files and files declared by `#[cfg(test)] mod name;`.
+/// A trend, not a gate: the threshold is still open.
 fn module_lines(root: &Path) -> Probe {
     let mut files = Vec::new();
     for krate in top_level_crate_dirs(root) {
         let crate_name = krate.file_name().unwrap().to_string_lossy().to_string();
         let src = krate.join("src");
-        for (path, contents) in rust_files(&src) {
-            let rel = path
-                .strip_prefix(&src)
-                .unwrap_or(&path)
-                .to_string_lossy()
-                .replace('\\', "/");
-            if is_whole_test_file(&rel) {
-                continue;
-            }
-            files.push((format!("{crate_name}/{rel}"), production_lines(&contents)));
-        }
+        let rels: Vec<(String, String)> = rust_files(&src)
+            .into_iter()
+            .map(|(path, contents)| {
+                let rel = path
+                    .strip_prefix(&src)
+                    .unwrap_or(&path)
+                    .to_string_lossy()
+                    .replace('\\', "/");
+                (rel, contents)
+            })
+            .collect();
+        files.extend(module_lines_for_crate(&crate_name, &rels));
     }
     Probe {
         name: "module_lines",
@@ -4957,6 +5098,113 @@ mod idempotency_scoping_tests {
         assert!(has_production_std_fs(src));
     }
 
+    // --- workspace_lints: opted-in crates ---------------------------------
+
+    fn lints_manifest(lints: &str) -> String {
+        format!("[package]\nname = \"x\"\n\n[dependencies]\na = \"1\"\n\n{lints}")
+    }
+
+    #[test]
+    fn workspace_lints_lists_a_crate_that_opts_in() {
+        let m = vec![(
+            "bynk-ts".to_string(),
+            lints_manifest("[lints]\nworkspace = true\n"),
+        )];
+        assert_eq!(opted_in_crates(&m), vec!["bynk-ts"]);
+    }
+
+    #[test]
+    fn workspace_lints_does_not_list_a_crate_with_its_own_lints_table() {
+        let m = vec![
+            (
+                "own".to_string(),
+                lints_manifest("[lints.clippy]\nall = \"warn\"\n"),
+            ),
+            (
+                "own2".to_string(),
+                lints_manifest("[lints]\nrust = \"warn\"\n"),
+            ),
+            ("none".to_string(), lints_manifest("")),
+            (
+                "elsewhere".to_string(),
+                "[lints.rust]\nworkspace = true\n".to_string(),
+            ),
+        ];
+        assert!(opted_in_crates(&m).is_empty());
+    }
+
+    #[test]
+    fn workspace_lints_ignores_trailing_comments() {
+        let m = vec![
+            (
+                "a".to_string(),
+                "[lints] # inherit\nworkspace = true  # from the root\n".to_string(),
+            ),
+            (
+                "b".to_string(),
+                "[lints]\n# workspace = true\nrust = \"warn\"\n".to_string(),
+            ),
+        ];
+        assert_eq!(opted_in_crates(&m), vec!["a"]);
+    }
+
+    #[test]
+    fn workspace_lints_accepts_the_dotted_top_level_form() {
+        let m = vec![
+            (
+                "dotted".to_string(),
+                "lints.workspace = true\n\n[package]\nname = \"x\"\n".to_string(),
+            ),
+            // Under another table the dotted key belongs to that table.
+            (
+                "nested".to_string(),
+                "[package]\nlints.workspace = true\n".to_string(),
+            ),
+        ];
+        assert_eq!(opted_in_crates(&m), vec!["dotted"]);
+    }
+
+    #[test]
+    fn workspace_lints_opted_in_list_is_sorted() {
+        let on = lints_manifest("[lints]\nworkspace = true\n");
+        let m = vec![
+            ("bynk-ts".to_string(), on.clone()),
+            ("bynk-model".to_string(), on.clone()),
+            ("bynk-emit".to_string(), lints_manifest("")),
+            ("a-first".to_string(), on),
+        ];
+        assert_eq!(
+            opted_in_crates(&m),
+            vec!["a-first", "bynk-model", "bynk-ts"]
+        );
+    }
+
+    #[test]
+    fn workspace_lints_reading_comes_from_real_manifests() {
+        let root = std::env::temp_dir().join(format!("xtask-ws-lints-{}", std::process::id()));
+        let _ = std::fs::remove_dir_all(&root);
+        std::fs::create_dir_all(&root).unwrap();
+        std::fs::write(
+            root.join("Cargo.toml"),
+            "[workspace.lints.clippy]\nwildcard_enum_match_arm = \"warn\"\n",
+        )
+        .unwrap();
+        for (name, lints) in [
+            ("zeta", "[lints]\nworkspace = true\n"),
+            ("alpha", "[lints]\nworkspace = true\n"),
+            ("plain", ""),
+        ] {
+            std::fs::create_dir_all(root.join(name).join("src")).unwrap();
+            std::fs::write(root.join(name).join("Cargo.toml"), lints_manifest(lints)).unwrap();
+        }
+        let reads = workspace_lints(&root).reads;
+        let _ = std::fs::remove_dir_all(&root);
+        assert_eq!(
+            reads,
+            "present — wildcard_enum_match_arm = \"warn\"; opted in: alpha, zeta"
+        );
+    }
+
     // --- module_lines -----------------------------------------------------
 
     fn lines_of(n: usize) -> String {
@@ -4998,6 +5246,49 @@ mod idempotency_scoping_tests {
         assert!(is_whole_test_file("tests/fixtures/a.rs"));
         assert!(!is_whole_test_file("emitter/emit.rs"));
         assert!(!is_whole_test_file("attests.rs"));
+    }
+
+    #[test]
+    fn module_lines_paths_read_crate_src_rel() {
+        let files = vec![("emitter/a.rs".to_string(), lines_of(7))];
+        assert_eq!(
+            module_lines_for_crate("bynk-emit", &files),
+            vec![("bynk-emit/src/emitter/a.rs".to_string(), 7)]
+        );
+    }
+
+    #[test]
+    fn module_lines_skips_files_declared_by_cfg_test_mod() {
+        let lib =
+            "#[cfg(test)]\npub(crate) mod testkit;\n\n#[cfg(test)]\nmod fixtures;\npub mod real;\n";
+        let files = vec![
+            ("lib.rs".to_string(), lib.to_string()),
+            ("testkit.rs".to_string(), lines_of(500)),
+            ("fixtures/mod.rs".to_string(), lines_of(50)),
+            ("fixtures/inner.rs".to_string(), lines_of(50)),
+            ("real.rs".to_string(), lines_of(9)),
+        ];
+        let got = module_lines_for_crate("c", &files);
+        let names: Vec<&str> = got.iter().map(|(p, _)| p.as_str()).collect();
+        assert_eq!(names, vec!["c/src/lib.rs", "c/src/real.rs"]);
+    }
+
+    #[test]
+    fn module_lines_declaration_gate_is_scoped_to_the_declaring_directory() {
+        // `emitter.rs` declares `emitter/testkit.rs`; a top-level `testkit.rs`
+        // that no `#[cfg(test)]` declaration gates stays production code.
+        let files = vec![
+            (
+                "emitter.rs".to_string(),
+                "#[cfg(test)]\nmod testkit;\n".to_string(),
+            ),
+            ("emitter/testkit.rs".to_string(), lines_of(30)),
+            ("testkit.rs".to_string(), lines_of(40)),
+            ("lib.rs".to_string(), "mod testkit;\n".to_string()),
+        ];
+        let got = module_lines_for_crate("c", &files);
+        assert!(got.iter().any(|(p, n)| p == "c/src/testkit.rs" && *n == 40));
+        assert!(!got.iter().any(|(p, _)| p.contains("emitter/testkit")));
     }
 
     #[test]
