@@ -159,6 +159,10 @@ const NOT_BYNK_SOURCE: &[(&str, &str)] = &[
         "a deploy-time refusal of `bynk revert`, shown as a command line and its plan; there is no Bynk program to compile",
     ),
     (
+        "bynk.revert.membership_changed",
+        "a deploy-time refusal of `bynk revert`, shown as a command line and its plan; there is no Bynk program to compile",
+    ),
+    (
         "bynk.package.alias_shadows_unit",
         "the example is a `[dependencies]` entry in `bynk.toml`, and the diagnostic is attributed to the manifest, which has no line to check",
     ),

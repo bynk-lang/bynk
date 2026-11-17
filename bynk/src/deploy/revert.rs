@@ -162,6 +162,23 @@ mod code {
     pub(super) const ID_UNRECORDED: &str = "bynk.revert.id_unrecorded";
     pub(super) const SECRET_CHANGED: &str = "bynk.revert.secret_changed";
     pub(super) const HISTORY_UNPLACEABLE: &str = "bynk.revert.history_unplaceable";
+    pub(super) const MEMBERSHIP_CHANGED: &str = "bynk.revert.membership_changed";
+}
+
+/// A group is one script, so a rollback must go to a version holding the same members.
+fn membership_finding(c: &Case<'_>) -> Option<Finding> {
+    (c.live.contexts != c.target.contexts).then(|| {
+        Finding::refused(
+            "members",
+            code::MEMBERSHIP_CHANGED,
+            c.worker,
+            format!(
+                "the live version holds [{}] and the target holds [{}]; rolling back would take a context's code out of the Worker, or put one back that has since moved. Deploy forward instead",
+                c.live.contexts.join(", "),
+                c.target.contexts.join(", ")
+            ),
+        )
+    })
 }
 
 /// One check's outcome.
@@ -265,10 +282,6 @@ pub(crate) fn classes_to_probe(live: &Facts, target: &Facts) -> BTreeSet<String>
         .collect()
 }
 
-fn worker_of_dependency(dependency: &str) -> String {
-    dependency.replace('.', "-")
-}
-
 /// The binding's id as the ledger records it now.
 fn recorded_id(
     lock: &DeployLock,
@@ -304,12 +317,8 @@ fn container_rollback_notes(target: &Facts) -> Vec<Finding> {
         .collect()
 }
 
-pub(crate) fn evaluate(c: &Case<'_>) -> Vec<Finding> {
-    let mut out = Vec::new();
-
-    out.extend(container_rollback_notes(c.target));
-
-    // D1 migrations are forward-only (ADR 0664).
+/// D1 migrations are forward-only (ADR 0664).
+fn d1_findings(c: &Case<'_>, out: &mut Vec<Finding>) {
     for binding in databases_to_read(c.live, c.target) {
         let target_files = c.target.migrations.get(&binding);
         if target_files.is_none() && !c.target.ids.contains_key(&binding) {
@@ -369,6 +378,20 @@ pub(crate) fn evaluate(c: &Case<'_>) -> Vec<Finding> {
             }
         }
     }
+}
+
+pub(crate) fn evaluate(c: &Case<'_>) -> Vec<Finding> {
+    let mut out = Vec::new();
+
+    out.extend(container_rollback_notes(c.target));
+
+    // #3562: a group is one script, so the version it goes back to must hold the
+    // contexts the live one does. Another membership (a context moved into or out of
+    // the group since, or a version from before groups) would take a context's code
+    // out from under its traffic.
+    out.extend(membership_finding(c));
+
+    d1_findings(c, &mut out);
 
     // Agent state is stamped with its schema version (ADR 0545) and faults on
     // newer records.
@@ -512,7 +535,7 @@ pub(crate) fn evaluate(c: &Case<'_>) -> Vec<Finding> {
     for s in contract_skews(
         &c.target.expects,
         c.after,
-        worker_of_dependency,
+        |dependency: &str| c.after.worker_of(c.environment, dependency),
         c.environment,
     ) {
         skew.push(format!(
@@ -524,7 +547,7 @@ pub(crate) fn evaluate(c: &Case<'_>) -> Vec<Finding> {
         c.worker,
         &c.target.provides,
         c.after,
-        worker_of_dependency,
+        |dependency: &str| c.after.worker_of(c.environment, dependency),
         c.environment,
     ) {
         skew.push(format!(
@@ -608,7 +631,10 @@ pub(crate) fn evaluate(c: &Case<'_>) -> Vec<Finding> {
 /// reverted callee never answers a caller still on the newer contract
 /// (ADR 0648 covers the window for compatible changes). Cycles and
 /// ties fall back to name order.
-pub(crate) fn revert_order(workers: &BTreeMap<String, &Facts>) -> Vec<String> {
+pub(crate) fn revert_order(
+    workers: &BTreeMap<String, &Facts>,
+    worker_of: &dyn Fn(&str) -> String,
+) -> Vec<String> {
     let mut remaining: BTreeSet<String> = workers.keys().cloned().collect();
     let mut order = Vec::new();
     while !remaining.is_empty() {
@@ -621,7 +647,7 @@ pub(crate) fn revert_order(workers: &BTreeMap<String, &Facts>) -> Vec<String> {
                         && workers[other]
                             .expects
                             .keys()
-                            .any(|dep| worker_of_dependency(dep) == **w)
+                            .any(|dep| worker_of(dep) == **w)
                 })
             })
             .or_else(|| remaining.iter().next())
@@ -669,6 +695,9 @@ pub struct RevertOptions {
     /// One context (dotted name or Worker directory); the whole project when
     /// `None`.
     pub context: Option<String>,
+    /// #3562: `context` was given as `--worker NAME`, a Worker directory (a group's
+    /// key) and not a context's name.
+    pub by_worker: bool,
     /// A Cloudflare version id to go back to instead of the previous upload.
     pub to: Option<String>,
     pub dry_run: bool,
@@ -764,7 +793,7 @@ pub(crate) fn plan(
     let mut target_facts = BTreeMap::new();
     let mut early: BTreeMap<String, Vec<Finding>> = BTreeMap::new();
     for worker in workers {
-        let script = deployed_worker_name(environment, worker);
+        let script = deployed_worker_name(environment, &lock.script_of(environment, worker));
         // Anything that cannot be read or placed for one Worker is that
         // Worker's refusal, not the run's error.
         let outcome = (|| -> Result<(Located, Option<Facts>, Option<Facts>), String> {
@@ -836,7 +865,7 @@ pub(crate) fn plan(
     let mut plans: BTreeMap<String, WorkerPlan> = BTreeMap::new();
     for worker in workers {
         let loc = located.get(worker);
-        let script = deployed_worker_name(environment, worker);
+        let script = deployed_worker_name(environment, &lock.script_of(environment, worker));
         let (checks, lock_changes) = match (loc, live_facts.get(worker), target_facts.get(worker)) {
             (Some(loc), Some(live), Some(target)) => {
                 let mut applied = BTreeMap::new();
@@ -910,6 +939,7 @@ pub(crate) fn plan(
             .iter()
             .map(|(w, f)| (w.clone(), f))
             .collect::<BTreeMap<_, _>>(),
+        &|dependency: &str| lock.worker_of(environment, dependency),
     );
     let mut ordered: Vec<WorkerPlan> = Vec::new();
     for w in order {
@@ -1119,24 +1149,50 @@ pub fn revert(root: &Path, opts: &RevertOptions) -> ExitCode {
     }
 }
 
+/// The one Worker `--context` or `--worker` names (#3562). A group is one script,
+/// so it reverts as a unit and a member cannot be reverted alone: naming one says
+/// which Worker holds it.
+fn select_worker(
+    lock: &DeployLock,
+    deployed: &[String],
+    name: &str,
+    opts: &RevertOptions,
+) -> Result<String, String> {
+    let environment = opts.environment.as_str();
+    let not_recorded =
+        || format!("`{name}` is not recorded as deployed in environment `{environment}`");
+    if opts.by_worker {
+        return deployed
+            .iter()
+            .find(|worker| *worker == name)
+            .cloned()
+            .ok_or_else(not_recorded);
+    }
+    let holder = lock.worker_of(environment, name);
+    let dashed = name.replace('.', "-");
+    if holder != dashed {
+        return Err(format!(
+            "context `{name}` is in Worker `{holder}`, which reverts as a unit: use `--worker {holder}`"
+        ));
+    }
+    if deployed.contains(&dashed) {
+        Ok(dashed)
+    } else {
+        Err(not_recorded())
+    }
+}
+
 fn revert_run(root: &Path, opts: &RevertOptions) -> Result<ExitCode, String> {
-    // #3562 (temporary, until G4): a multi-context Worker group is not revertable.
-    bynk_driver::refuse_worker_groups(root)?;
     if opts.to.is_some() && opts.context.is_none() {
-        return Err("`--to` names one Worker's version, so it needs `--context`".to_string());
+        return Err(
+            "`--to` names one Worker's version, so it needs `--context` or `--worker`".to_string(),
+        );
     }
     let lock_path = root.join(LOCK_FILE);
     let mut lock = read_lock(&lock_path)?;
     let mut workers = lock.deployed_workers(&opts.environment);
-    if let Some(context) = &opts.context {
-        let dir = context.replace('.', "-");
-        if !workers.contains(&dir) {
-            return Err(format!(
-                "`{context}` is not recorded as deployed in environment `{}`",
-                opts.environment
-            ));
-        }
-        workers = vec![dir];
+    if let Some(name) = &opts.context {
+        workers = vec![select_worker(&lock, &workers, name, opts)?];
     }
     if workers.is_empty() {
         return Err(format!(
@@ -1774,7 +1830,10 @@ mod tests {
         });
         let pay = facts(|_| {});
         let map = BTreeMap::from([("pay".to_string(), &pay), ("shop".to_string(), &shop)]);
-        assert_eq!(revert_order(&map), ["shop", "pay"]);
+        assert_eq!(
+            revert_order(&map, &|c: &str| c.replace('.', "-")),
+            ["shop", "pay"]
+        );
     }
 
     // ---- plan and execution against a fake account ----
@@ -2131,5 +2190,156 @@ mod tests {
         .unwrap_err();
         assert!(err.contains("--context"), "{err}");
         let _ = std::fs::remove_dir_all(dir);
+    }
+
+    /// #3562: a group is one script, so it reverts as a unit: selected by its key,
+    /// and a member named alone is refused with the Worker that holds it.
+    #[test]
+    fn a_group_reverts_as_a_unit_and_a_member_alone_is_refused() {
+        let mut lock = lock_with_shop();
+        lock.record_deployed("default", "core", Some(BTreeMap::new()));
+        lock.record_members(
+            "default",
+            "core",
+            &["shop.a".to_string(), "shop.b".to_string()],
+        );
+        let deployed = lock.deployed_workers("default");
+        let by = |name: &str, by_worker: bool| {
+            let opts = RevertOptions {
+                context: Some(name.into()),
+                by_worker,
+                ..opts()
+            };
+            select_worker(&lock, &deployed, name, &opts)
+        };
+        assert_eq!(by("core", true).unwrap(), "core");
+        assert_eq!(by("shop", false).unwrap(), "shop", "a context's own Worker");
+        for member in ["shop.a", "shop-a"] {
+            let err = by(member, false).unwrap_err();
+            assert!(
+                err.contains("is in Worker `core`, which reverts as a unit")
+                    && err.contains("--worker core"),
+                "{err}"
+            );
+        }
+        assert!(
+            by("nope", true)
+                .unwrap_err()
+                .contains("not recorded as deployed")
+        );
+    }
+
+    /// #3562: a dependency is found under the group's Worker, so callers revert
+    /// before the group they call and an intra-group call is not a dependency.
+    #[test]
+    fn a_dependency_in_a_group_orders_by_its_worker() {
+        let mut lock = DeployLock::default();
+        lock.record_deployed("default", "core", Some(BTreeMap::new()));
+        lock.record_members("default", "core", &["shop.a".to_string()]);
+        let shop = facts(|f| {
+            f.expects.insert("shop.a".into(), BTreeMap::new());
+        });
+        let core = facts(|_| {});
+        let map = BTreeMap::from([("core".to_string(), &core), ("shop".to_string(), &shop)]);
+        assert_eq!(
+            revert_order(&map, &|c: &str| lock.worker_of("default", c)),
+            ["shop", "core"]
+        );
+    }
+
+    fn group_account(live: &Facts, target: &Facts, script: &str) -> Fake {
+        let mut fake = Fake::default();
+        fake.deployments.borrow_mut().insert(
+            script.into(),
+            vec![dep("d2", "upload", "v2"), dep("d1", "upload", "v1")],
+        );
+        fake.facts
+            .insert((script.into(), "v2".into()), live.encode().unwrap());
+        fake.facts
+            .insert((script.into(), "v1".into()), target.encode().unwrap());
+        fake
+    }
+
+    fn group_lock(script: &str) -> DeployLock {
+        let mut lock: DeployLock = toml::from_str("version = 1\n").unwrap();
+        lock.record_deployed("default", "core", Some(BTreeMap::new()));
+        lock.record_members(
+            "default",
+            "core",
+            &["shop.a".to_string(), "shop.b".to_string()],
+        );
+        lock.record_script("default", "core", script);
+        lock
+    }
+
+    /// #3562: a renamed group is read and rolled back under its script name, not
+    /// its key. The fake account knows only the script.
+    #[test]
+    fn a_renamed_group_is_rolled_back_under_its_script_name() {
+        let members = || {
+            facts(|f| {
+                f.contexts = vec!["shop.a".into(), "shop.b".into()];
+            })
+        };
+        let (live, target) = (members(), members());
+        let api = group_account(&live, &target, "core-script");
+        let lock = group_lock("core-script");
+        let planned = plan(
+            &api,
+            &lock,
+            &BTreeMap::new(),
+            &["core".to_string()],
+            &opts(),
+            long_ago(),
+        )
+        .unwrap();
+        assert!(planned.plan.ok, "{:?}", planned.plan.workers[0].checks);
+        assert_eq!(planned.plan.workers[0].script, "core-script");
+        // Keyed by the key, the account has no such script: that is the regression.
+        let wrong = group_lock("core");
+        let refused = plan(
+            &api,
+            &wrong,
+            &BTreeMap::new(),
+            &["core".to_string()],
+            &opts(),
+            long_ago(),
+        )
+        .unwrap();
+        assert!(!refused.plan.ok);
+    }
+
+    /// #3562: a group goes back only to a version that held the same contexts.
+    #[test]
+    fn a_group_is_not_reverted_across_a_membership_change() {
+        let live = facts(|f| {
+            f.contexts = vec!["shop.a".into(), "shop.b".into()];
+        });
+        let moved_in = facts(|f| {
+            f.contexts = vec!["shop.a".into()];
+        });
+        let before_groups = facts(|_| {});
+        for target in [&moved_in, &before_groups] {
+            let api = group_account(&live, target, "core");
+            let lock = group_lock("core");
+            let Planned { plan, .. } = plan(
+                &api,
+                &lock,
+                &BTreeMap::new(),
+                &["core".to_string()],
+                &opts(),
+                long_ago(),
+            )
+            .unwrap();
+            assert!(!plan.ok);
+            let finding = plan.workers[0]
+                .checks
+                .iter()
+                .find(|f| f.check == "members")
+                .expect("a membership finding");
+            assert_eq!(finding.code, Some("bynk.revert.membership_changed"));
+            assert!(finding.detail.contains("shop.b"), "{}", finding.detail);
+            assert!(api.rolled.borrow().is_empty());
+        }
     }
 }

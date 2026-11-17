@@ -633,6 +633,23 @@ impl DeployLock {
         }
     }
 
+    /// #3562: the Worker `context` was last pushed in, by the members the ledger
+    /// recorded for each group's Worker; a context on its own Worker (or one the
+    /// ledger does not know) is the Worker its dashed name gives.
+    pub(crate) fn worker_of(&self, environment: &str, context: &str) -> String {
+        self.environments
+            .get(environment)
+            .and_then(|env| {
+                env.workers.iter().find(|(_, record)| {
+                    record
+                        .contexts
+                        .iter()
+                        .any(|c| c == context || c.replace('.', "-") == context)
+                })
+            })
+            .map_or_else(|| context.replace('.', "-"), |(worker, _)| worker.clone())
+    }
+
     /// #3562: the name `worker`'s script has on Cloudflare: the recorded script
     /// name, else the key.
     pub(crate) fn script_of(&self, environment: &str, worker: &str) -> String {

@@ -35,7 +35,14 @@ revert callers first.
 A plain `bynk revert` reverts **every** Worker the lock records for the environment,
 each to its own previous deployment, whatever the last release touched. If the last
 release changed one context, revert just that one with `--context`; the plan says
-so when it applies. `--to <version>` names one Worker's version and needs `--context`.
+so when it applies. `--to <version>` names one Worker's version and needs `--context` (or `--worker`).
+
+**A Worker group goes back as one.** The contexts of a [`[deploy.workers.<key>]`](/docs/manifest/#worker-groups)
+group are one Cloudflare script, so reverting it puts every member back to the
+previous version together, in one step, and a member cannot be reverted alone:
+naming one with `--context` is refused, with the Worker that holds it, and you
+revert the group with `--worker <key>`. A call between two members of a group never
+counts as contract skew, since both sides always move together.
 
 A dry run reads Cloudflare, so it needs `CLOUDFLARE_API_TOKEN` and
 `CLOUDFLARE_ACCOUNT_ID`; the token needs read access to D1 as well as Workers.
@@ -54,6 +61,7 @@ Each refusal names its reason and carries a registered diagnostic code, so `bynk
 | `contracts` (`bynk.revert.contract_skew`) | the target's contracts no longer match another live Worker, judged as if every selected Worker were reverted together | Revert the whole project, or redeploy forward. See [Contract skew](/book/guides/projects-build-and-deployment/contract-skew/). |
 | `ids` (`bynk.revert.id_unrecorded`) | the target binds a KV namespace, database or limiter the lock no longer records | A namespace was re-provisioned since. Redeploy forward. |
 | `secrets` (`bynk.revert.secret_changed`) | a secret changed after the target was live | A rollback may restore the *old* value of a secret that was rotated since, which peers no longer accept. After a `bynk migrate sweep`, whose two changes touch only its own temporary key, pass `--accept-secret-changes`. |
+| `members` (`bynk.revert.membership_changed`) | a group's target version held other contexts than the live one (a context moved into or out of the group since, or the version is from before groups) | A group is one script, so a rollback would take a member's code out of the Worker. Redeploy forward. |
 | `history` (`bynk.revert.history_unplaceable`) | the Worker's history cannot be placed (a Worker first added in the bad release has nothing before it, the live upload is out of the listed history, a gradual deployment is in progress) | Refused for that Worker only; the plan still judges the others. |
 
 `--yes` only skips the confirmation. It never overrides a refusal.

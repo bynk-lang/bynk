@@ -557,6 +557,9 @@ pub(crate) struct ContainerDecl {
 /// The provisioning surface one context's closure locks it to.
 #[derive(Debug, PartialEq, Eq)]
 pub(crate) struct Resources {
+    /// #3562: the contexts of a `[deploy.workers]` group's Worker, in the manifest's
+    /// order; empty for a context on its own Worker.
+    pub(crate) members: Vec<String>,
     /// The workers this one binds to — the edges the deploy order respects.
     /// Adapters are already excluded upstream (they are not Workers), and
     /// foreign Workers are in [`Resources::foreign_services`], so every edge
@@ -715,6 +718,7 @@ impl Default for Resources {
     /// would make every resource-less context claim an incomplete list.
     fn default() -> Self {
         Self {
+            members: Vec::new(),
             binds_to: Vec::new(),
             foreign_services: Vec::new(),
             queues: Vec::new(),
@@ -1051,6 +1055,7 @@ fn read_resources(config: &Path, project_workers: &[String]) -> Result<Resources
         .collect();
     hyperdrive.sort_by(|a, b| a.binding.cmp(&b.binding));
     Ok(Resources {
+        members: Vec::new(),
         binds_to: binds_to.into_iter().map(|s| s.service).collect(),
         foreign_services: foreign
             .into_iter()
@@ -1131,6 +1136,27 @@ pub(crate) fn project_resources(
             .filter(|dir| dir != worker)
             .collect();
         all.insert(worker.clone(), resources);
+    }
+    Ok(all)
+}
+
+/// [`project_resources`] with each group Worker's members from the project's
+/// layout (#3562), which a push records in the version's deploy facts.
+pub(crate) fn project_resources_for(
+    workers_dir: &Path,
+    workers: &[String],
+    project_root: &Path,
+) -> Result<BTreeMap<String, Resources>, String> {
+    let layout = bynk_project::worker_layout::WorkerLayout::for_project(
+        project_root,
+        &std::collections::HashMap::new(),
+    );
+    let mut all = project_resources(workers_dir, workers)?;
+    for (worker, resources) in &mut all {
+        resources.members = layout
+            .group_members(worker)
+            .map(<[String]>::to_vec)
+            .unwrap_or_default();
     }
     Ok(all)
 }

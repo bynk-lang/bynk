@@ -743,7 +743,8 @@ a key or name that is the Worker of a context in no group
 deploys it as a unit, in dependency order with the other Workers (`--worker
 <key>` deploys one Worker by its key). A call between two members of a group is
 a Service Binding from the Worker to itself, which is no edge in the deploy
-order. `bynk revert` and `bynk dev` do not yet handle a group, and refuse one
+order. `bynk revert --worker <key>` rolls the group back as one script, every member
+together. `bynk dev` does not yet handle a group, and refuses one
 (`bynk.deploy.worker_groups_unsupported`).
 
 ### Acknowledging a remote-only binding

@@ -871,7 +871,7 @@ pub fn run(
     // Read spans the *whole* project even under `--context`: D4 needs the
     // selected context's binding targets to check they are live, and they are
     // by definition outside the selection.
-    let mut resources = match project_resources(&workers_dir, &available) {
+    let mut resources = match project_resources_for(&workers_dir, &available, project_root) {
         Ok(resources) => resources,
         Err(e) => {
             eprintln!("bynk: {e}");

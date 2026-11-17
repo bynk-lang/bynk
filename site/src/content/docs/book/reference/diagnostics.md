@@ -7,7 +7,7 @@ title: Diagnostic index
 
 Every diagnostic code the compiler can emit, with a one-line summary of the cause, grouped by category. For step-by-step cause-and-fix guidance on the most common ones, see the [troubleshooting guides](/book/troubleshooting/). For a code with a curated explanation, `bynk explain <code>` prints it in a terminal, and in VS Code the diagnostic's **Explain** quick fix (or **Bynk: Explain Diagnostic Code…**) shows the same text in a panel, offline.
 
-There are **893** codes in total.
+There are **894** codes in total.
 
 ## Agents
 
@@ -565,6 +565,7 @@ There are **893** codes in total.
 | [`bynk.revert.history_unplaceable`](/book/guides/projects-build-and-deployment/roll-back-a-deployment/#what-it-refuses) | `bynk revert` refused for one Worker because its deployment history cannot be placed: it has no earlier deployment, the live upload is outside the listed history, a gradual deployment is in progress, or the history could not be read. |  | — |
 | [`bynk.revert.id_unrecorded`](/book/guides/projects-build-and-deployment/roll-back-a-deployment/#what-it-refuses) | `bynk revert` refused because the target binds a KV namespace, database or limiter that the deploy lock no longer records, usually because the resource was re-provisioned since. |  | — |
 | [`bynk.revert.layout_older`](/book/guides/projects-build-and-deployment/roll-back-a-deployment/#what-it-refuses) | `bynk revert` refused because the target writes an older agent storage layout than the live one while stored instances exist or are not known to be absent, so the older code could not read the newer records. |  | — |
+| [`bynk.revert.membership_changed`](/book/guides/projects-build-and-deployment/roll-back-a-deployment/#what-it-refuses) | `bynk revert` refused because a `[deploy.workers.<key>]` group's target version held other contexts than the live one (a context moved into or out of the group since, or the version predates groups), so a rollback would take a member's code out of the Worker. |  | — |
 | [`bynk.revert.secret_changed`](/book/guides/projects-build-and-deployment/roll-back-a-deployment/#what-it-refuses) | `bynk revert` refused because a secret changed after the target was live, so the rollback could restore an old secret value that its peers no longer accept. |  | — |
 | `bynk.secrets.computed_name` | A `bynk.Secrets` read names its secret with a computed expression rather than a literal, so `bynk deploy` cannot plan it (warning). |  | Warning |
 | [`bynk.store.annotation_kind_mismatch`](/book/reference/agents/#storage-annotations) | A storage annotation is used on a kind it does not apply to (e.g. `@ttl` on a `Map`). |  | — |

@@ -70,10 +70,9 @@ pub fn refuse_release_contracts(root: &Path) -> Result<(), String> {
 
 /// #3562 (temporary): a `[deploy.workers.<key>]` group changes which Worker a
 /// context is in (its script name, its directory, its routes and domains).
-/// `bynk deploy` is taught groups (G4), but `bynk revert` and `bynk dev` still name
-/// each Worker after its context, so they would revert or run the wrong thing.
-/// Until they are taught groups (G4-3, G6), they refuse a project with any group,
-/// before touching anything. A project with no `[deploy.workers]` table is unaffected. A group of
+/// `bynk deploy` and `bynk revert` are taught groups (G4), but `bynk dev` still names
+/// each Worker after its context, so it would run the wrong thing. Until it is
+/// taught groups (G6), it refuses a project with any group, before touching anything. A project with no `[deploy.workers]` table is unaffected. A group of
 /// one context is refused too: it still moves that context to the group's Worker.
 pub fn refuse_worker_groups(root: &Path) -> Result<(), String> {
     let groups = bynk_project::worker_groups::try_read_worker_groups(root)
