@@ -1929,7 +1929,7 @@ pub(crate) fn lower_expr(e: &Expr, cx: &mut LowerCtx) -> Lowered {
         ExprKind::UnaryOp(op, inner) => {
             built_or_text!(pre, unary_op(*op, pre.lower_node(inner, cx)))
         }
-        ExprKind::BinOp(op, lhs, rhs) => pre.absorb(lower_bin_op(*op, lhs, rhs, cx)),
+        ExprKind::BinOp(op, lhs, rhs) => lowered_or_text!(pre, lower_bin_op(*op, lhs, rhs, cx)),
         ExprKind::Paren(inner) => {
             built_or_text!(pre, paren(pre.lower_node(inner, cx)))
         }
@@ -8759,7 +8759,7 @@ fn lower_bin_op(op: BinOp, lhs: &Expr, rhs: &Expr, cx: &mut LowerCtx) -> Lowered
         wrap.push_str(&format!("return {rhs_expr}; }})()))"));
         return pre.finish_text(wrap);
     }
-    let l = pre.lower(lhs, cx);
+    let l_lowered = pre.lower_node(lhs, cx);
     // #1/#3 review: `&&`/`||`/`implies` short-circuit — `design/bynk-type-
     // system.md:1671-1678` calls this "both a performance property and a
     // safety property … developers can rely on." Lowering rhs into the same
@@ -8784,7 +8784,10 @@ fn lower_bin_op(op: BinOp, lhs: &Expr, rhs: &Expr, cx: &mut LowerCtx) -> Lowered
     // involved) keeps the cheaper arrow form; nothing inside it needs to
     // escape past the arrow, and this is the shape the `947_short_circuit_rhs_hoist`
     // fixture pins.
+    // 1A: text until the control-flow family converts (the short-circuit
+    // operators' rhs hoisting, IIFEs and `hoist_if_as_statement`).
     if matches!(op, BinOp::And | BinOp::Or | BinOp::Implies) {
+        let l = l_lowered.into_text();
         let saved_early_return = std::mem::take(&mut cx.emitted_early_return);
         // #1751: `rhs` may be lowered inside an arrow (below), which would scope
         // an `is` receiver temp it introduces away from a branch that reads it
@@ -8855,7 +8858,8 @@ fn lower_bin_op(op: BinOp, lhs: &Expr, rhs: &Expr, cx: &mut LowerCtx) -> Lowered
             _ => unreachable!("guarded by the outer `matches!`"),
         });
     }
-    let r = pre.lower(rhs, cx);
+    let r_lowered = pre.lower_node(rhs, cx);
+    let children = vec![l_lowered, r_lowered];
     // #2622: `Decimal` arithmetic is exact and goes through the runtime; the
     // checker rejects `/` and any mixed operand, so the left operand decides.
     let decimal_helper = matches!(op, BinOp::Add | BinOp::Sub | BinOp::Mul)
@@ -8872,9 +8876,12 @@ fn lower_bin_op(op: BinOp, lhs: &Expr, rhs: &Expr, cx: &mut LowerCtx) -> Lowered
             BinOp::Sub => "__bynkDecimalSub",
             _ => "__bynkDecimalMul",
         });
-    let text = if let Some(helper) = decimal_helper {
+    // Slice 1A.5 (#3703): each value-operator branch builds a node when both
+    // operands are nodes (`node_or_text`), today's text otherwise. The
+    // `cx.note_*` side effects fire here, once, on both paths.
+    let built = if let Some(helper) = decimal_helper {
         cx.note_decimal(helper);
-        format!("{helper}({l}, {r})")
+        helper_call(helper, children)
     } else if op == BinOp::Div {
         // v0.21: division is operand-typed (ADR 0042) — `Float`
         // true-divides; `Int` keeps truncating. The checker rejects
@@ -8887,13 +8894,13 @@ fn lower_bin_op(op: BinOp, lhs: &Expr, rhs: &Expr, cx: &mut LowerCtx) -> Lowered
             .and_then(|te| te.ty.base(tys))
             == Some(BaseType::Float);
         if lhs_is_float {
-            format!("{l} / {r}")
+            plain_binary(op, children)
         } else {
             // #1657: `Int` division by zero traps, a runtime fault, rather than
             // producing `Infinity`/`NaN` as an `Int`. A runtime helper rather than
             // an inline guard, so coverage never reports its fault branch.
             cx.note_int();
-            format!("__bynkIntDiv({l}, {r})")
+            helper_call("__bynkIntDiv", children)
         }
     } else if let Some(helper) = matches!(op, BinOp::Eq | BinOp::NotEq)
         .then(|| cx.commons().expr_types.get(&lhs.id).map(|te| te.ty))
@@ -8904,12 +8911,8 @@ fn lower_bin_op(op: BinOp, lhs: &Expr, rhs: &Expr, cx: &mut LowerCtx) -> Lowered
         // `Bytes`, ADR 0142 D4). The checker rejects mixed operands, so the left
         // operand decides. A primitive operand returns `None` here and falls
         // through to host `===`/`!==` below.
-        let call = format!("{helper}({l}, {r})");
-        if op == BinOp::Eq {
-            call
-        } else {
-            format!("!{call}")
-        }
+        let call = helper_call(helper, children);
+        if op == BinOp::Eq { call } else { negated(call) }
     } else if let Some(operand) = matches!(op, BinOp::Lt | BinOp::LtEq | BinOp::Gt | BinOp::GtEq)
         .then(|| cx.commons().expr_types.get(&lhs.id).map(|te| te.ty))
         .flatten()
@@ -8920,11 +8923,129 @@ fn lower_bin_op(op: BinOp, lhs: &Expr, rhs: &Expr, cx: &mut LowerCtx) -> Lowered
         // bare JS operator (and so `Float` keeps its IEEE meaning, `NaN < x` is
         // `false`).
         let cmp = cx.comparator(operand);
-        format!("{cmp}({l}, {r}) {} 0", ts_binop(op))
+        ordered_comparison(op, &cmp, children)
     } else {
-        format!("{l} {} {r}", ts_binop(op))
+        plain_binary(op, children)
     };
-    pre.finish_text(text)
+    match built {
+        Ok(node) => pre.finish(LoweredExpr::Node(node)),
+        Err(text) => pre.finish_text(text),
+    }
+}
+
+/// The `TsBinaryOp` for a value operator (the short-circuit operators are
+/// lowered as text above and never reach a node).
+fn value_binary_op(op: BinOp) -> bynk_ts::TsBinaryOp {
+    use bynk_ts::TsBinaryOp as T;
+    match op {
+        BinOp::Eq => T::StrictEq,
+        BinOp::NotEq => T::StrictNotEq,
+        BinOp::Lt => T::LessThan,
+        BinOp::LtEq => T::LessThanEq,
+        BinOp::Gt => T::GreaterThan,
+        BinOp::GtEq => T::GreaterThanEq,
+        BinOp::Add => T::Add,
+        BinOp::Sub => T::Sub,
+        BinOp::Mul => T::Mul,
+        BinOp::Div => T::Div,
+        BinOp::And | BinOp::Or | BinOp::Implies => {
+            unreachable!("short-circuit operators are lowered as text before `value_binary_op`")
+        }
+    }
+}
+
+/// `l <op> r`: a `Binary` node (the printer decides the brackets), or today's
+/// `{l} {op} {r}` text.
+fn plain_binary(op: BinOp, children: Vec<LoweredExpr>) -> Built {
+    node_or_text(
+        children,
+        |c| {
+            let (l, r) = two(c);
+            bynk_ts::TsExpr::Binary {
+                op: value_binary_op(op),
+                left: Box::new(l),
+                right: Box::new(r),
+            }
+        },
+        |c| {
+            let (l, r) = two(c);
+            format!("{l} {} {r}", ts_binop(op))
+        },
+    )
+}
+
+/// `helper(l, r)` over a runtime helper's genuine identifier.
+fn helper_call(helper: &'static str, children: Vec<LoweredExpr>) -> Built {
+    node_or_text(
+        children,
+        |c| {
+            let (l, r) = two(c);
+            bynk_ts::TsExpr::Call {
+                callee: Box::new(ident_node(helper)),
+                args: vec![l, r],
+            }
+        },
+        |c| {
+            let (l, r) = two(c);
+            format!("{helper}({l}, {r})")
+        },
+    )
+}
+
+/// `!call`: a `Unary(Not)` node over a call node, or today's `!{call}` text.
+fn negated(call: Built) -> Built {
+    match call {
+        Ok(node) => Ok(bynk_ts::TsExpr::Unary {
+            op: bynk_ts::TsUnaryOp::Not,
+            expr: Box::new(node),
+        }),
+        Err(text) => Err(format!("!{text}")),
+    }
+}
+
+/// `cmp(l, r) <op> 0` for a non-base `Ord` type. The comparator is a node only
+/// when it is a plain identifier (a derived or base comparator); a composite
+/// comparator expression (`__bynkCmpList(__bynkCmpInt)`) is text, and is never
+/// wrapped in an `Ident`, so that case keeps today's text.
+fn ordered_comparison(op: BinOp, cmp: &str, children: Vec<LoweredExpr>) -> Built {
+    let is_plain_ident = !cmp.is_empty()
+        && cmp
+            .chars()
+            .all(|c| c.is_ascii_alphanumeric() || c == '_' || c == '$')
+        && !cmp.starts_with(|c: char| c.is_ascii_digit());
+    let text = |c: Vec<String>| {
+        let (l, r) = two(c);
+        format!("{cmp}({l}, {r}) {} 0", ts_binop(op))
+    };
+    if !is_plain_ident {
+        return Err(text(
+            children.into_iter().map(LoweredExpr::into_text).collect(),
+        ));
+    }
+    node_or_text(
+        children,
+        |c| {
+            let (l, r) = two(c);
+            bynk_ts::TsExpr::Binary {
+                op: value_binary_op(op),
+                left: Box::new(bynk_ts::TsExpr::Call {
+                    callee: Box::new(ident_node(cmp)),
+                    args: vec![l, r],
+                }),
+                right: Box::new(num_lit("0".to_string())),
+            }
+        },
+        text,
+    )
+}
+
+/// The two elements of a two-child builder's argument.
+fn two<T>(children: Vec<T>) -> (T, T) {
+    let mut it = children.into_iter();
+    match (it.next(), it.next(), it.next()) {
+        (Some(l), Some(r), None) => (l, r),
+        _ => unreachable!("a two-child builder is given exactly two children"),
+    }
 }
 
 /// The comparator an ordering kernel (`sortBy`/`min`/`max`) needs for its key
@@ -11708,25 +11829,274 @@ fn minus(x: Int) -> Int { 5 - - -x }
     }
 
     #[test]
-    fn the_retained_text_branches_produce_their_old_text() {
-        // A nullary sum variant is `Type.Variant`, a node over genuine names.
-        let ts = crate::testkit::emit_source(
-            "commons variants\n\
-             type Colour = | Red | Green\n\
-             fn a() -> Colour { Red }\n",
-        );
+    fn a_nullary_variant_is_a_node_over_genuine_names() {
+        let src = "commons variants\n\
+                   type Colour = | Red | Green\n\
+                   fn a() -> Colour { Red }\n";
+        assert_eq!(text_exits(src), 0);
+        let ts = crate::testkit::emit_source(src);
         assert_eq!(returned(&ts, "a"), "Colour.Red");
+    }
+
+    #[test]
+    fn the_retained_text_branches_produce_their_old_text() {
         // A generic function used as a value keeps its text closure.
-        let ts = crate::testkit::emit_source(
-            "commons closures\n\
-             fn pick[T: Ord](a: T, b: T) -> T { if a < b { a } else { b } }\n\
-             fn f() -> (Int, Int) -> Int { pick }\n",
-        );
+        let src = "commons closures\n\
+                   fn pick[T: Ord](a: T, b: T) -> T { if a < b { a } else { b } }\n\
+                   fn f() -> (Int, Int) -> Int { pick }\n";
+        let ts = crate::testkit::emit_source(src);
         assert!(
             returned(&ts, "f").starts_with("((__a0: number, __a1: number) => pick("),
             "{}",
             returned(&ts, "f")
         );
+        // ... and it leaves lowering as text: one more text exit than the
+        // same module without the reference.
+        let without = "commons closures\n\
+                       fn pick[T: Ord](a: T, b: T) -> T { if a < b { a } else { b } }\n";
+        assert!(text_exits(src) > text_exits(without));
+    }
+
+    #[test]
+    fn an_http_result_variant_read_is_a_node() {
+        // 1A.4's `HttpResult.X` read leaves no text exit of its own.
+        let src = "commons hr\n\
+                   fn f() -> HttpResult[Int] { HttpResult.NotFound }\n";
+        assert_eq!(text_exits(src), 0);
+        assert_eq!(
+            returned(&crate::testkit::emit_source(src), "f"),
+            "HttpResult.NotFound"
+        );
+    }
+
+    // ---- 1A.5 (#3703): value binary operators -------------------------------
+
+    fn t_plain_binary(op: BinOp, l: LoweredExpr, r: LoweredExpr) -> LoweredExpr {
+        bridge(super::plain_binary(op, vec![l, r]))
+    }
+
+    fn t_helper_call(helper: &'static str, l: LoweredExpr, r: LoweredExpr) -> LoweredExpr {
+        bridge(super::helper_call(helper, vec![l, r]))
+    }
+
+    #[test]
+    fn each_value_operator_shape_is_a_node_over_node_children() {
+        let n = |s: &str| node(id(s));
+        // Plain operator and `Float /`: `Binary`.
+        for (op, want) in [
+            (BinOp::Add, "a + b"),
+            (BinOp::Sub, "a - b"),
+            (BinOp::Mul, "a * b"),
+            (BinOp::Div, "a / b"),
+            (BinOp::Eq, "a === b"),
+            (BinOp::NotEq, "a !== b"),
+            (BinOp::Lt, "a < b"),
+            (BinOp::LtEq, "a <= b"),
+            (BinOp::Gt, "a > b"),
+            (BinOp::GtEq, "a >= b"),
+        ] {
+            let got = t_plain_binary(op, n("a"), n("b"));
+            assert!(
+                matches!(&got, LoweredExpr::Node(bynk_ts::TsExpr::Binary { .. })),
+                "{want}"
+            );
+            assert_eq!(got.into_text(), want);
+        }
+        // Decimal, `Int /` and structural `==`: a call over a genuine identifier.
+        let call = t_helper_call("__bynkDecimalAdd", n("a"), n("b"));
+        match &call {
+            LoweredExpr::Node(bynk_ts::TsExpr::Call { callee, args }) => {
+                assert!(matches!(&**callee, bynk_ts::TsExpr::Ident(h) if h == "__bynkDecimalAdd"));
+                assert_eq!(args.len(), 2);
+            }
+            _ => panic!("a node pair gives a call node"),
+        }
+        assert_eq!(call.into_text(), "__bynkDecimalAdd(a, b)");
+        // Structural `!=`: `Unary(Not, Call)`.
+        let ne = bridge(super::negated(super::helper_call(
+            "__bynkEq",
+            vec![n("a"), n("b")],
+        )));
+        assert!(matches!(
+            &ne,
+            LoweredExpr::Node(bynk_ts::TsExpr::Unary {
+                op: bynk_ts::TsUnaryOp::Not,
+                ..
+            })
+        ));
+        assert_eq!(ne.into_text(), "!__bynkEq(a, b)");
+        // `Ord`: `cmp(l, r) < 0`.
+        let ord = bridge(super::ordered_comparison(
+            BinOp::Lt,
+            "__cmp_P",
+            vec![n("a"), n("b")],
+        ));
+        assert!(matches!(
+            &ord,
+            LoweredExpr::Node(bynk_ts::TsExpr::Binary { .. })
+        ));
+        assert_eq!(ord.into_text(), "__cmp_P(a, b) < 0");
+    }
+
+    #[test]
+    fn a_text_operand_makes_each_value_operator_fall_back_to_todays_text() {
+        let t = || text("f(x)");
+        let n = || node(id("b"));
+        for (got, want) in [
+            (t_plain_binary(BinOp::Sub, t(), n()), "f(x) - b"),
+            (t_plain_binary(BinOp::Div, n(), t()), "b / f(x)"),
+            (
+                t_helper_call("__bynkDecimalMul", t(), n()),
+                "__bynkDecimalMul(f(x), b)",
+            ),
+            (
+                t_helper_call("__bynkIntDiv", n(), t()),
+                "__bynkIntDiv(b, f(x))",
+            ),
+            (
+                bridge(super::negated(super::helper_call(
+                    "__bynkEq",
+                    vec![t(), n()],
+                ))),
+                "!__bynkEq(f(x), b)",
+            ),
+            (
+                bridge(super::ordered_comparison(
+                    BinOp::GtEq,
+                    "__cmp_P",
+                    vec![t(), n()],
+                )),
+                "__cmp_P(f(x), b) >= 0",
+            ),
+        ] {
+            assert!(!is_node(&got), "{want}");
+            assert_eq!(got.into_text(), want);
+        }
+    }
+
+    #[test]
+    fn a_composite_comparator_stays_text_even_over_nodes() {
+        // The comparator is an expression, never an `Ident`'s name.
+        let got = bridge(super::ordered_comparison(
+            BinOp::Lt,
+            "__bynkCmpList(__bynkCmpInt)",
+            vec![node(id("a")), node(id("b"))],
+        ));
+        assert!(!is_node(&got));
+        assert_eq!(got.into_text(), "__bynkCmpList(__bynkCmpInt)(a, b) < 0");
+    }
+
+    #[test]
+    fn binary_nodes_keep_their_brackets_inside_text_parents() {
+        // Source brackets are `Paren` nodes, so a printed operator node spliced
+        // into an unconverted text parent (a method-call receiver, a unary
+        // operand) keeps them end to end.
+        let ts = crate::testkit::emit_source(
+            "commons parents\n\
+             fn f(a: Int, b: Int) -> String { (a + b).toString() }\n\
+             fn g(a: Int, b: Int, c: Int) -> Int { (a - b) * c }\n\
+             fn h(a: Int, b: Int) -> Int { -(a + b) }\n",
+        );
+        assert_eq!(returned(&ts, "g"), "(a - b) * c");
+        assert_eq!(returned(&ts, "h"), "-(a + b)");
+        assert!(
+            returned(&ts, "f").contains("(a + b)"),
+            "{}",
+            returned(&ts, "f")
+        );
+    }
+
+    #[test]
+    fn value_operators_over_identifiers_print_by_the_precedence_table() {
+        let src = "commons prec\n\
+                   fn a(a: Int, b: Int, c: Int) -> Int { a - b - c }\n\
+                   fn b(a: Int, b: Int, c: Int) -> Int { a - (b - c) }\n\
+                   fn c(a: Float, b: Float, c: Float) -> Float { a / b * c }\n\
+                   fn d(a: Int, b: Int, c: Int) -> Int { a * (b + c) }\n\
+                   fn e(a: Int, b: Int, c: Int, d: Int) -> Bool { a < b == c < d }\n\
+                   fn f(a: Int, b: Int) -> Bool { !(a == b) }\n\
+                   fn g(a: Int, b: Int) -> Int { -(a * b) }\n\
+                   fn h(a: Int, b: Int, c: Int) -> Int { a + b * c }\n\
+                   fn i(a: Int, b: Int, c: Int) -> Int { a - b + c }\n";
+        assert_eq!(text_exits(src), 0);
+        let ts = crate::testkit::emit_source(src);
+        for (name, want) in [
+            ("a", "a - b - c"),
+            ("b", "a - (b - c)"),
+            ("c", "a / b * c"),
+            ("d", "a * (b + c)"),
+            ("e", "a < b === c < d"),
+            ("f", "!(a === b)"),
+            ("g", "-(a * b)"),
+            ("h", "a + b * c"),
+            ("i", "a - b + c"),
+        ] {
+            assert_eq!(returned(&ts, name), want, "{name}");
+        }
+    }
+
+    #[test]
+    fn helper_branches_lower_to_nodes_and_still_note_their_imports() {
+        let src = "commons helpers\n\
+                   type P = { a: Int }\n\
+                   fn dec(x: Decimal, y: Decimal) -> Decimal { x + y }\n\
+                   fn decs(x: Decimal, y: Decimal) -> Decimal { x - y }\n\
+                   fn decm(x: Decimal, y: Decimal) -> Decimal { x * y }\n\
+                   fn idiv(x: Int, y: Int) -> Int { x / y }\n\
+                   fn fdiv(x: Float, y: Float) -> Float { x / y }\n\
+                   fn eq(x: P, y: P) -> Bool { x == y }\n\
+                   fn ne(x: P, y: P) -> Bool { x != y }\n\
+                   fn ord[T: Ord](x: T, y: T) -> Bool { x < y }\n";
+        assert_eq!(text_exits(src), 0);
+        let ts = crate::testkit::emit_source(src);
+        for (name, want) in [
+            ("dec", "__bynkDecimalAdd(x, y)"),
+            ("decs", "__bynkDecimalSub(x, y)"),
+            ("decm", "__bynkDecimalMul(x, y)"),
+            ("idiv", "__bynkIntDiv(x, y)"),
+            ("fdiv", "x / y"),
+            ("eq", "__bynkEq(x, y)"),
+            ("ne", "!__bynkEq(x, y)"),
+        ] {
+            assert_eq!(returned(&ts, name), want, "{name}");
+        }
+        assert!(
+            ts.contains("return __w_T(x, y) < 0;") || ts.contains("(x, y) < 0;"),
+            "{ts}"
+        );
+        for helper in [
+            "__bynkDecimalAdd",
+            "__bynkDecimalSub",
+            "__bynkDecimalMul",
+            "__bynkIntDiv",
+            "__bynkEq",
+        ] {
+            assert!(
+                ts.contains(&format!("{helper},")) || ts.contains(&format!("{helper} }}")),
+                "{helper} is imported:\n{ts}"
+            );
+        }
+        // The text path (a call operand) imports the same helpers.
+        let text_src = "commons helpers2\n\
+                        fn d() -> Decimal { 1.5d }\n\
+                        fn dec(x: Decimal) -> Decimal { x + d() }\n\
+                        fn idiv(x: Int) -> Int { x / 2 }\n";
+        let ts = crate::testkit::emit_source(text_src);
+        assert!(ts.contains("__bynkDecimalAdd"), "{ts}");
+        assert!(ts.contains("__bynkIntDiv"), "{ts}");
+    }
+
+    #[test]
+    fn short_circuit_operators_still_lower_as_text() {
+        let src = "commons shortc\n\
+                   fn a(x: Bool, y: Bool) -> Bool { x && y }\n\
+                   fn b(x: Bool, y: Bool) -> Bool { x || y }\n\
+                   fn c(x: Bool, y: Bool) -> Bool { x implies y }\n";
+        assert!(text_exits(src) >= 3);
+        let ts = crate::testkit::emit_source(src);
+        assert_eq!(returned(&ts, "a"), "x && y");
+        assert_eq!(returned(&ts, "b"), "x || y");
+        assert_eq!(returned(&ts, "c"), "(!(x) || y)");
     }
 
     #[test]
