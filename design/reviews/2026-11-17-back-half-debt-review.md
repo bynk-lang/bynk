@@ -315,6 +315,23 @@ Consequences:
   (545 lines, `include_str!`) are outside the runtime's `tsconfig.json` and `bundle.mjs --check`.
   The runtime's version-skew guard covers everything else. The test-runtime files are script
   fragments that use free names (`ExpectationError`), so they cannot be type-checked on their own.
+
+  > **Correction (17 November 2026, #3689):** "unchecked" overstates this. Both are type-checked
+  > under `tsc --strict` *in context*:
+  >
+  > - The test-runtime fragments are spliced into each generated test module, and `bynk test`
+  >   compiles that module with `tsc -p` against a strict tsconfig. A `tsc` error fails the run
+  >   (`bynk-driver/src/test_runner.rs`, the `tsc_ok` branch). So every fragment a behaviour
+  >   fixture exercises is checked, and CI enforces it with `BYNK_REQUIRE_TSC=1`.
+  > - `http_client_runtime.ts` is inlined into the module `bynk client` generates, and
+  >   `system::http_client` type-checks that module under `tsc --strict`.
+  >
+  > What remains is narrower:
+  >
+  > - the fragments are not modules, so they can't be checked on their own;
+  > - a fragment is checked only when some fixture's test module includes it.
+  >
+  > Slice 1B.3 addresses both. The original text above is kept as written.
 - **Test support is split across two places.** About 900 of `storage.ts`'s 1,230 lines are test
   fakes (`makeIntegration*`, `makeTestState`) shipped in the production runtime, while the rest of
   the test runtime lives in the driver.
