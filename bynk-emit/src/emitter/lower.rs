@@ -1357,27 +1357,41 @@ fn lower_const_literal_raw(e: &Expr) -> Option<String> {
     }
 }
 
-/// Slice 1A.2 (#3694): the literal family lowers to typed nodes. The string's
+/// A literal's data, destructured from its `ExprKind` by `lower_expr`'s own
+/// arms, so [`Lit::lower`] matches an exhaustive type with no catch-all.
+enum Lit<'a> {
+    /// The integer's digits.
+    Int(String),
+    /// The stored lexeme, verbatim.
+    Float(&'a str),
+    Decimal(&'a str, u32),
+    /// The duration's resolved milliseconds (v0.86, ADR 0112): the value `Duration` erases to.
+    Duration(String),
+    Str(&'a str),
+    Bool(bool),
+    Unit,
+    None,
+}
+
+/// Slice 1A.2 (#3694): the literal family lowers to typed nodes ([`Lit::lower`]). The string's
 /// escaping is `TsLit::Str`'s (the one shared escaper); numbers print their
 /// digits verbatim; `None` and the unit value are the runtime's `None` /
 /// `undefined`.
-fn lower_literal(e: &Expr) -> Lowered {
-    use bynk_ts::{TsExpr, TsLit};
-    Lowered::node(match &e.kind {
-        ExprKind::IntLit { value: n, .. } => num_lit(n.to_string()),
-        // v0.21: the stored lexeme verbatim — `1e10` must not normalise.
-        ExprKind::FloatLit { lexeme, .. } => num_lit(lexeme.clone()),
-        // #2622: a `Decimal` literal is an object literal (no runtime import).
-        ExprKind::DecimalLit { coef, scale, .. } => decimal_lit(coef, *scale),
-        // v0.86 (ADR 0112): a `Duration` literal lowers to its constant
-        // milliseconds (the value `Duration` erases to).
-        ExprKind::DurationLit { millis, .. } => num_lit(millis.to_string()),
-        ExprKind::StrLit(s) => TsExpr::Lit(TsLit::Str(s.clone())),
-        ExprKind::BoolLit(b) => TsExpr::Lit(TsLit::Bool(*b)),
-        ExprKind::None => TsExpr::Ident("None".to_string()),
-        ExprKind::UnitLit => TsExpr::Ident("undefined".to_string()),
-        _ => unreachable!("lower_literal is only called for literal expressions"),
-    })
+impl Lit<'_> {
+    fn lower(self) -> Lowered {
+        use bynk_ts::{TsExpr, TsLit};
+        Lowered::node(match self {
+            Lit::Int(digits) | Lit::Duration(digits) => num_lit(digits),
+            // v0.21: the stored lexeme verbatim — `1e10` must not normalise.
+            Lit::Float(lexeme) => num_lit(lexeme.to_string()),
+            // #2622: a `Decimal` literal is an object literal (no runtime import).
+            Lit::Decimal(coef, scale) => decimal_lit(coef, scale),
+            Lit::Str(s) => TsExpr::Lit(TsLit::Str(s.to_string())),
+            Lit::Bool(b) => TsExpr::Lit(TsLit::Bool(b)),
+            Lit::None => TsExpr::Ident("None".to_string()),
+            Lit::Unit => TsExpr::Ident("undefined".to_string()),
+        })
+    }
 }
 
 /// A numeric literal node: the digits are printed verbatim (`TsLit::Num`), so a
@@ -1512,13 +1526,20 @@ pub(crate) enum LoweredStmt {
 }
 
 impl LoweredStmt {
-    /// The statement's text, for a caller assembling statements as text (the
-    /// statement-side counterpart of [`LoweredExpr::into_text`]; no family
-    /// builds `Node` statements yet).
-    fn text(&self) -> String {
+    /// The statement as lines of text, for a caller assembling statements as
+    /// text (the statement-side counterpart of [`LoweredExpr::into_text`]; no
+    /// family builds `Node` statements yet). A `Text` is one entry, as it
+    /// always was. A `Node` prints at depth 0 and yields one entry per line,
+    /// the printer's own nesting kept as leading spaces, so a caller that
+    /// indents each entry (`write_line`) indents every line of a multi-line
+    /// statement, not only the first.
+    fn lines(&self) -> Vec<String> {
         match self {
-            LoweredStmt::Node(n) => bynk_ts::print_stmt(n, 0).trim_end_matches('\n').to_string(),
-            LoweredStmt::Text(t) => t.clone(),
+            LoweredStmt::Node(n) => bynk_ts::print_stmt(n, 0)
+                .lines()
+                .map(str::to_string)
+                .collect(),
+            LoweredStmt::Text(t) => vec![t.clone()],
         }
     }
 }
@@ -1553,7 +1574,7 @@ impl Lowered {
     /// The hoisted statements as text, for a caller that assembles them into
     /// text.
     pub(crate) fn pre_texts(&self) -> Vec<String> {
-        self.pre.iter().map(LoweredStmt::text).collect()
+        self.pre.iter().flat_map(LoweredStmt::lines).collect()
     }
 }
 
@@ -1624,11 +1645,14 @@ impl Pre {
     /// The accumulated statements as text, for a caller that is writing them
     /// into a text statement position rather than hoisting them further.
     pub(crate) fn stmts(&self) -> Vec<String> {
-        self.0.iter().map(LoweredStmt::text).collect()
+        self.0.iter().flat_map(LoweredStmt::lines).collect()
     }
 
     /// The accumulated statements as `TsStmt`s for a typed body: a `Node`
     /// stays a node, a `Text` becomes `TsStmt::raw` indented by `indent`.
+    /// `indent` is the indentation the printer will give the body's own
+    /// statements (verbatim raw text carries its own); a `Node` needs none
+    /// because the printer nests it at that same depth.
     pub(crate) fn ts_stmts(&self, indent: &str) -> Vec<bynk_ts::TsStmt> {
         self.0
             .iter()
@@ -1687,15 +1711,15 @@ pub(crate) fn lower_expr(e: &Expr, cx: &mut LowerCtx) -> Lowered {
     }
     let mut pre = Pre::new();
     let expr = match &e.kind {
-        // Literals are typed nodes (slice 1A.2): see `lower_literal`.
-        ExprKind::IntLit { .. }
-        | ExprKind::FloatLit { .. }
-        | ExprKind::DecimalLit { .. }
-        | ExprKind::DurationLit { .. }
-        | ExprKind::StrLit(_)
-        | ExprKind::BoolLit(_)
-        | ExprKind::None
-        | ExprKind::UnitLit => return lower_literal(e),
+        // Literals are typed nodes (slice 1A.2): see `Lit::lower`.
+        ExprKind::IntLit { value, .. } => return Lit::Int(value.to_string()).lower(),
+        ExprKind::FloatLit { lexeme, .. } => return Lit::Float(lexeme).lower(),
+        ExprKind::DecimalLit { coef, scale, .. } => return Lit::Decimal(coef, *scale).lower(),
+        ExprKind::DurationLit { millis, .. } => return Lit::Duration(millis.to_string()).lower(),
+        ExprKind::StrLit(s) => return Lit::Str(s).lower(),
+        ExprKind::BoolLit(b) => return Lit::Bool(*b).lower(),
+        ExprKind::None => return Lit::None.lower(),
+        ExprKind::UnitLit => return Lit::Unit.lower(),
         // Slice C: `Wire(<String>)` in a generic position lowers to its raw inner
         // string. The system-http driver site intercepts `Wire` args before this
         // to route them raw (no serialisation) and switch to the outcome decoder.
@@ -11059,18 +11083,6 @@ mod bridge_tests {
     }
 
     #[test]
-    fn a_negative_literal_in_operand_position_prints_as_before() {
-        // `UnaryOp::Neg` splices its operand's text after `-`; a literal node
-        // must hand it exactly the digits the old text did, with no brackets.
-        let mut pre = Pre::new();
-        let inner = pre.absorb(Lowered::node(num_lit("5".to_string())));
-        assert_eq!(format!("-{inner}"), "-5");
-        let float = pre.absorb(Lowered::node(num_lit("1.5e3".to_string())));
-        assert_eq!(format!("{}{float}", "-"), "-1.5e3");
-        assert_eq!(format!("{inner} - {float}"), "5 - 1.5e3");
-    }
-
-    #[test]
     fn decimal_literal_node_matches_the_text_form() {
         for (coef, scale) in [
             ("5", 2),
@@ -11141,5 +11153,133 @@ mod bridge_tests {
         assert_eq!(out.len(), 2);
         let printed: String = out.iter().map(|s| bynk_ts::print_stmt(s, 0)).collect();
         assert_eq!(printed, "  const a = 1;\n  const b = 2;\n");
+    }
+
+    const LITERALS: &str = r#"
+commons lits
+
+fn int() -> Int { 42 }
+fn big() -> Int { 9007199254740991 }
+fn float() -> Float { 1.5e3 }
+fn dec() -> Decimal { 1.20d }
+fn dur() -> Duration { 5.minutes }
+fn text() -> String { "a\"b\nc" }
+fn yes() -> Bool { true }
+fn no() -> Bool { false }
+fn unit() -> () { () }
+fn none() -> Option[Int] { None }
+fn neg() -> Int { -5 }
+fn negd() -> Decimal { -1.20d }
+fn minus() -> Float { 2.5 - 1.5e3 }
+fn minus_neg() -> Int { 5 - -3 }
+"#;
+
+    /// The body of the emitted function `name`: the text of its `return`.
+    fn returned(ts: &str, name: &str) -> String {
+        let head = format!("export function {name}(");
+        let from = ts
+            .find(&head)
+            .unwrap_or_else(|| panic!("no {name} in:\n{ts}"));
+        let rest = &ts[from..];
+        let ret = rest.find("return ").expect("a return") + "return ".len();
+        let end = rest[ret..].find(";\n").expect("a terminator");
+        rest[ret..ret + end].to_string()
+    }
+
+    #[test]
+    fn each_literal_kind_lowers_to_its_emitted_text() {
+        let ts = crate::testkit::emit_source(LITERALS);
+        for (name, want) in [
+            ("int", "42"),
+            ("big", "9007199254740991"),
+            ("float", "1.5e3"),
+            ("dec", "{ coefficient: 120n, scale: 2 }"),
+            ("dur", "300000"),
+            ("text", "\"a\\\"b\\nc\""),
+            ("yes", "true"),
+            ("no", "false"),
+            ("unit", "undefined"),
+            ("none", "None"),
+        ] {
+            assert_eq!(returned(&ts, name), want, "{name}");
+        }
+    }
+
+    #[test]
+    fn a_negative_literal_in_operand_position_lowers_as_before() {
+        // `UnaryOp::Neg` splices its operand's printed text after `-`, and a
+        // binary operator splices a node child between its own spaces.
+        let ts = crate::testkit::emit_source(LITERALS);
+        for (name, want) in [
+            ("neg", "-5"),
+            ("negd", "__bynkDecimalNeg({ coefficient: 120n, scale: 2 })"),
+            ("minus", "2.5 - 1.5e3"),
+            ("minus_neg", "5 - -3"),
+        ] {
+            assert_eq!(returned(&ts, name), want, "{name}");
+        }
+    }
+
+    /// An `if (flag) { done(); }` statement node: multi-line when printed.
+    fn if_node() -> bynk_ts::TsStmt {
+        bynk_ts::TsStmt::if_stmt(
+            bynk_ts::TsExpr::Ident("flag".to_string()),
+            bynk_ts::TsStmt::block(
+                vec![bynk_ts::TsStmt::expr_stmt(
+                    bynk_ts::TsExpr::Ident("done".to_string()),
+                    None,
+                )],
+                None,
+            ),
+            None,
+        )
+    }
+
+    /// The same statement as three text hoists, one per line, the shape a text
+    /// producer gives a nested statement (nesting travels inside the string).
+    fn if_text(pre: &mut Pre) {
+        pre.push_text("if (flag) {".to_string());
+        pre.push_text("  done;".to_string());
+        pre.push_text("}".to_string());
+    }
+
+    #[test]
+    fn a_node_statement_indents_every_line_like_its_text_equivalent() {
+        let mut as_node = Pre::new();
+        as_node.0.push(LoweredStmt::Node(Box::new(if_node())));
+        let mut as_text = Pre::new();
+        if_text(&mut as_text);
+        assert_eq!(as_node.stmts(), as_text.stmts());
+        for indent in [0, 2, 6] {
+            let (mut n, mut t) = (String::new(), String::new());
+            for s in &as_node.stmts() {
+                write_line(&mut n, indent, s);
+            }
+            for s in &as_text.stmts() {
+                write_line(&mut t, indent, s);
+            }
+            assert_eq!(n, t, "indent {indent}");
+            assert!(
+                n.lines().all(|l| l.starts_with(&" ".repeat(indent))),
+                "every line carries the caller's indentation:\n{n}"
+            );
+        }
+        // `Lowered::pre_texts` takes the same path.
+        let lowered = as_node.finish(LoweredExpr::Node(num_lit("1".to_string())));
+        assert_eq!(lowered.pre_texts(), ["if (flag) {", "  done;", "}"]);
+    }
+
+    #[test]
+    fn a_node_statement_sits_at_the_depth_of_its_raw_text_siblings() {
+        // `ts_stmts` feeds a body the printer nests: raw text carries its own
+        // indent, a node is nested by the printer at the same depth.
+        let mut pre = Pre::new();
+        pre.push_text("const a = 1;".to_string());
+        pre.0.push(LoweredStmt::Node(Box::new(if_node())));
+        pre.push_text("const b = 2;".to_string());
+        let body = bynk_ts::TsStmt::block(pre.ts_stmts("  "), None);
+        let printed = bynk_ts::print_stmt(&body, 0);
+        let want = "{\n  const a = 1;\n  if (flag) {\n    done;\n  }\n  const b = 2;\n}\n";
+        assert_eq!(printed, want);
     }
 }

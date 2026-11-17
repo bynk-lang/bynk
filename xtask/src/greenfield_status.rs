@@ -2193,7 +2193,13 @@ fn verbatim_sites_violations(files: &[(PathBuf, String)]) -> usize {
 /// scanner helpers [`verbatim_sites_violations`] uses. Text-level: a needle must
 /// open on a single line (see [`ts_text_idents`] for the known multi-line gap).
 fn opening_token_lines(files: &[(PathBuf, String)], needles: &[&str]) -> usize {
-    let is_word = |c: char| c.is_ascii_alphanumeric() || c == '_';
+    production_lines_matching(files, |line| line_has_token(line, needles))
+}
+
+/// The count of non-comment lines outside `#[cfg(test)]` modules for which
+/// `hit` holds — the scan [`opening_token_lines`] and
+/// [`lowering_text_bridge_violations`] share.
+fn production_lines_matching(files: &[(PathBuf, String)], hit: impl Fn(&str) -> bool) -> usize {
     let mut count = 0usize;
     for (_, contents) in files {
         let lines: Vec<&str> = contents.lines().collect();
@@ -2202,19 +2208,24 @@ fn opening_token_lines(files: &[(PathBuf, String)], needles: &[&str]) -> usize {
             if in_test_range(i, &ranges) || is_line_comment(line) {
                 continue;
             }
-            let hit = needles.iter().any(|needle| {
-                // A method-call needle (`.finish_text(`) carries its own left
-                // boundary; only an identifier-led needle needs the check.
-                let dot_led = needle.starts_with('.');
-                line.match_indices(needle)
-                    .any(|(at, _)| dot_led || !line[..at].chars().next_back().is_some_and(is_word))
-            });
-            if hit {
+            if hit(line) {
                 count += 1;
             }
         }
     }
     count
+}
+
+/// Whether `line` contains any of `needles` with a non-identifier character (or
+/// the line start) immediately before it. A method-call needle (`.finish_text(`)
+/// carries its own left boundary; only an identifier-led needle needs the check.
+fn line_has_token(line: &str, needles: &[&str]) -> bool {
+    let is_word = |c: char| c.is_ascii_alphanumeric() || c == '_';
+    needles.iter().any(|needle| {
+        let dot_led = needle.starts_with('.');
+        line.match_indices(needle)
+            .any(|(at, _)| dot_led || !line[..at].chars().next_back().is_some_and(is_word))
+    })
 }
 
 /// #3681: `TsStmt::raw(text, span)` construction sites in the emitter's source.
@@ -2275,12 +2286,14 @@ fn ts_text_idents_violations(files: &[(PathBuf, String)]) -> usize {
 ///
 /// Counts non-comment lines outside `#[cfg(test)]` modules in
 /// [`codegen_family_files`] that contain any text constructor: the variants
-/// `LoweredExpr::Text(` and `LoweredStmt::Text(`, `Lowered::bare(`,
+/// `LoweredExpr::Text(` and `LoweredStmt::Text(` (as constructions only; see
+/// [`is_pattern_use`]), the same variants as bare paths used as functions
+/// (`.map(LoweredStmt::Text)`, so `Text)` or `Text,` follows), `Lowered::bare(`,
 /// `Lowered::text_with_pre(`, and the `Pre` methods that wrap text
 /// (`.finish_text(`, `.push_text(`, `.extend_text(`). Definitions (`fn bare(`,
-/// the variant declarations) do not match. Text-level gaps, as for
-/// [`ts_raw_sites`]: a constructor must open on one line, two on one line count
-/// once, and a bare path (`.map(LoweredStmt::Text)`) is not a call.
+/// the variant declarations) and pattern uses (`LoweredExpr::Text(t) => …`) do
+/// not match. Text-level gaps, as for [`ts_raw_sites`]: a constructor must open
+/// on one line, and two on one line count once.
 fn lowering_text_bridge(root: &Path) -> Probe {
     Probe {
         name: "lowering_text_bridge",
@@ -2291,18 +2304,65 @@ fn lowering_text_bridge(root: &Path) -> Probe {
 
 /// [`lowering_text_bridge`]'s counting logic over an explicit file list.
 fn lowering_text_bridge_violations(files: &[(PathBuf, String)]) -> usize {
-    opening_token_lines(
-        files,
-        &[
-            "LoweredExpr::Text(",
-            "LoweredStmt::Text(",
-            "Lowered::bare(",
-            "Lowered::text_with_pre(",
-            ".finish_text(",
-            ".push_text(",
-            ".extend_text(",
-        ],
-    )
+    const VARIANT_CALLS: [&str; 2] = ["LoweredExpr::Text(", "LoweredStmt::Text("];
+    const OTHER_NEEDLES: [&str; 13] = [
+        "LoweredExpr::Text)",
+        "LoweredExpr::Text,",
+        "LoweredStmt::Text)",
+        "LoweredStmt::Text,",
+        "Lowered::bare(",
+        "Lowered::text_with_pre(",
+        ".finish_text(",
+        ".push_text(",
+        ".extend_text(",
+        // Method-path forms (`.map(Pre::push_text)`) let text in without a call.
+        "Pre::finish_text",
+        "Pre::push_text",
+        "Pre::extend_text",
+        "Lowered::bare)",
+    ];
+    production_lines_matching(files, |line| {
+        line_has_token(line, &OTHER_NEEDLES)
+            || VARIANT_CALLS.iter().any(|needle| {
+                line.match_indices(needle).any(|(at, _)| {
+                    let word_before = line[..at]
+                        .chars()
+                        .next_back()
+                        .is_some_and(|c| c.is_ascii_alphanumeric() || c == '_');
+                    !word_before && !is_pattern_use(line, at, needle)
+                })
+            })
+    })
+}
+
+/// Whether the `needle` (`Variant::Text(`) occurrence at byte `at` of `line` is a
+/// pattern (a match arm, `if let`, `let`, `matches!`) rather than a
+/// construction. Heuristic, text-level: a pattern is followed, past its closing
+/// parenthesis, by `=>`, `|` or a single `=`, or is preceded by `let` or inside
+/// `matches!(`. A construction whose closing parenthesis is on a later line is
+/// counted as a construction.
+fn is_pattern_use(line: &str, at: usize, needle: &str) -> bool {
+    let before = line[..at].trim_end();
+    if before.ends_with("let") || line[..at].contains("matches!(") {
+        return true;
+    }
+    let mut depth = 0usize;
+    for (i, c) in line[at + needle.len() - 1..].char_indices() {
+        match c {
+            '(' => depth += 1,
+            ')' => {
+                depth -= 1;
+                if depth == 0 {
+                    let after = line[at + needle.len() - 1 + i + 1..].trim_start();
+                    return after.starts_with("=>")
+                        || after.starts_with('|')
+                        || (after.starts_with('=') && !after.starts_with("=="));
+                }
+            }
+            _ => {}
+        }
+    }
+    false
 }
 
 /// Named identifiers imported from the compiler-generated firstparty/runtime relative
@@ -4501,6 +4561,62 @@ mod tests {
     }
 
     #[test]
+    fn lowering_text_bridge_counts_path_forms_that_let_text_in_without_a_call() {
+        let count = |src: &str| lowering_text_bridge_violations(&files_of(&[("a.rs", src)]));
+        for (name, src) in [
+            ("expr map", "fn f() { v.map(LoweredExpr::Text) }\n"),
+            ("stmt map", "fn f() { v.map(LoweredStmt::Text) }\n"),
+            ("expr arg", "fn f() { g(LoweredExpr::Text, 1) }\n"),
+            ("stmt arg", "fn f() { g(LoweredStmt::Text, 1) }\n"),
+            ("method path", "fn f() { v.map(Pre::push_text) }\n"),
+            ("bare path", "fn f() { v.map(Lowered::bare) }\n"),
+        ] {
+            assert_eq!(count(src), 1, "{name} must count");
+        }
+    }
+
+    #[test]
+    fn lowering_text_bridge_does_not_count_pattern_uses_as_constructions() {
+        let count = |src: &str| lowering_text_bridge_violations(&files_of(&[("a.rs", src)]));
+        for (name, src) in [
+            (
+                "match arm",
+                "fn f() { match e { LoweredExpr::Text(t) => t, _ => d } }\n",
+            ),
+            (
+                "stmt arm",
+                "fn f() { match s { LoweredStmt::Text(t) => vec![t], _ => d } }\n",
+            ),
+            (
+                "or pattern",
+                "fn f() { match e { LoweredExpr::Text(_) | Other => 1 } }\n",
+            ),
+            (
+                "if let",
+                "fn f() { if let LoweredExpr::Text(t) = e { g(t) } }\n",
+            ),
+            (
+                "let else",
+                "fn f() { let LoweredStmt::Text(t) = s else { return }; }\n",
+            ),
+            (
+                "matches",
+                "fn f() { assert!(matches!(e, LoweredExpr::Text(_))); }\n",
+            ),
+        ] {
+            assert_eq!(count(src), 0, "{name} is a pattern, not a construction");
+        }
+        // A construction on the right of an arm still counts, and so does one
+        // whose argument holds parentheses.
+        assert_eq!(
+            count("fn f() { match e { A => LoweredExpr::Text(format!(\"{}\", (x))), } }\n"),
+            1
+        );
+        assert_eq!(count("fn f() { let x = LoweredStmt::Text(s); }\n"), 1);
+        assert_eq!(count("fn f() { x == LoweredExpr::Text(s) }\n"), 1);
+    }
+
+    #[test]
     fn lowering_text_bridge_ignores_nodes_definitions_comments_and_tests() {
         let count = |src: &str| lowering_text_bridge_violations(&files_of(&[("a.rs", src)]));
         assert_eq!(
@@ -4512,6 +4628,7 @@ mod tests {
             0
         );
         assert_eq!(count("pub(crate) fn finish_text(self, e: String) {}\n"), 0);
+        assert_eq!(count("enum E { Text(String), }\n"), 0);
         assert_eq!(
             count("fn f() { MyLowered::bare(s); XLoweredExpr::Text(s); }\n"),
             0
@@ -4520,12 +4637,7 @@ mod tests {
             count("// Lowered::bare(s); pre.push_text(s)\nfn f() {}\n"),
             0
         );
-        assert_eq!(
-            count("fn f() { map(LoweredStmt::Text); }\n"),
-            0,
-            "a path without a call is not a construction"
-        );
-        let tests = "fn p() {}\n\n#[cfg(test)]\nmod tests {\n    fn t() { Lowered::bare(s); pre.push_text(s); }\n}\n";
+        let tests = "fn p() {}\n\n#[cfg(test)]\nmod tests {\n    fn t() { Lowered::bare(s); pre.push_text(s); v.map(LoweredStmt::Text); }\n}\n";
         assert_eq!(count(tests), 0);
     }
 

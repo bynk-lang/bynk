@@ -241,7 +241,7 @@ out carries its unit tests with it.
 | `ts_writes` (bynk-emit + driver `project/**`) | 1,502 | ≤ 40% of today | ≤ 20% |
 | `ts_raw_sites`: `TsStmt::raw(` sites (emit + driver) | 99 | ≤ 10, each with a stated foreign-text reason | ≤ 5 |
 | `ts_text_idents`: `Ident(format!(` sites (emit + driver) | 14 | 0 | 0 |
-| `lowering_text_bridge`: text construction sites of the lowering bridge | 128 (at 1A.2) | 0: lowering returns `TsExpr` only; `Text` bridge deleted | 0 |
+| `lowering_text_bridge`: text construction sites of the lowering bridge | 127 (at 1A.2) | 0: lowering returns `TsExpr` only; `Text` bridge deleted | 0 |
 | Import-prediction functions | 17 | 0 | 0 |
 | `"any"` fallbacks in lowering | 5 | 0 | 0 |
 | Compose implementations | 2 | 1 (`ComposePlan`) | 1 |
