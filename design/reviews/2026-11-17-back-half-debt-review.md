@@ -316,7 +316,7 @@ Consequences:
   The runtime's version-skew guard covers everything else. The test-runtime files are script
   fragments that use free names (`ExpectationError`), so they cannot be type-checked on their own.
 
-  > **Correction (17 November 2026, #3686):** "unchecked" overstates this. Both are type-checked
+  > **Correction (17 November 2026, #3689):** "unchecked" overstates this. Both are type-checked
   > under `tsc --strict` *in context*:
   >
   > - The test-runtime fragments are spliced into each generated test module, and `bynk test`

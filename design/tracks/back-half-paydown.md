@@ -121,7 +121,7 @@ Small, mostly in `xtask`. It lands first because every later slice is measured b
 | **P0.3** | Refresh trend rows at stamp time (`cargo xtask stamp --apply` regenerates the whole table), and drop the deleted crates from `test_density`. | §1.2 |
 | **P0.4** | Opt `bynk-ts` (8 wildcard arms) and `bynk-model` (5) into `[lints] workspace = true`, after fixing their arms. | §1.2 |
 | **P0.5** | Add a `module_lines` probe: the largest source file per crate, and files at or above 2,000 lines. Report only (trend) in this phase; it becomes a ratchet in Phase 2. | §6.1 |
-| ~~**P0.6**~~ | **Retired into 1B.3** (#3686). The premise, that these files were unchecked, was wrong. The test-runtime fragments are type-checked under `tsc --strict` in context, because `bynk test` compiles each generated test module and fails on a `tsc` error. `http_client_runtime.ts` is checked by `system::http_client`. The residual gaps belong to 1B.3: the fragments aren't standalone modules, and a fragment no fixture includes goes unchecked. | §3 (corrected) |
+| ~~**P0.6**~~ | **Retired into 1B.3** (#3689). The premise, that these files were unchecked, was wrong. The test-runtime fragments are type-checked under `tsc --strict` in context, because `bynk test` compiles each generated test module and fails on a `tsc` error. `http_client_runtime.ts` is checked by `system::http_client`. The residual gaps belong to 1B.3: the fragments aren't standalone modules, and a fragment no fixture includes goes unchecked. | §3 (corrected) |
 
 **Exit:** the ratchets are live, the trend rows are current, and `bynk-ts` and `bynk-model` deny
 wildcard arms.
