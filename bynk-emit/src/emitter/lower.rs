@@ -1605,6 +1605,19 @@ fn paren(child: LoweredExpr) -> Built {
     )
 }
 
+/// A genuine identifier node. Never built from expression text.
+fn ident_node(name: &str) -> bynk_ts::TsExpr {
+    bynk_ts::TsExpr::Ident(name.to_string())
+}
+
+/// `object.property` over a genuine identifier `object`.
+fn member_node(object: &str, property: &str) -> bynk_ts::TsExpr {
+    bynk_ts::TsExpr::Member {
+        object: Box::new(ident_node(object)),
+        property: property.to_string(),
+    }
+}
+
 /// Finish `lower_expr`'s arm from a [`Built`]: a node returns at once; text
 /// falls out of the match as the arm's `String`, to the shared `finish_text`.
 macro_rules! built_or_text {
@@ -1612,6 +1625,17 @@ macro_rules! built_or_text {
         match $built {
             Ok(node) => return $pre.finish(LoweredExpr::Node(node)),
             Err(text) => text,
+        }
+    };
+}
+
+/// As [`built_or_text!`], for an already-built [`Lowered`] (its hoists join
+/// `$pre`): a node returns at once, text falls out to the shared exit.
+macro_rules! lowered_or_text {
+    ($pre:ident, $lowered:expr) => {
+        match $pre.absorb_node($lowered) {
+            LoweredExpr::Node(node) => return $pre.finish(LoweredExpr::Node(node)),
+            LoweredExpr::Text(text) => text,
         }
     };
 }
@@ -1727,6 +1751,13 @@ impl Lowered {
 /// land (a real statement position, or a hoist-safe wrapper).
 pub(crate) struct Pre(Vec<LoweredStmt>);
 
+#[cfg(test)]
+thread_local! {
+    /// Test-only: how many expressions left lowering as text (1A.4's
+    /// "now lowers to a node" tests read it; never compiled into the emitter).
+    static TEXT_EXITS: std::cell::Cell<usize> = const { std::cell::Cell::new(0) };
+}
+
 impl Pre {
     pub(crate) fn new() -> Self {
         Pre(Vec::new())
@@ -1804,6 +1835,10 @@ impl Pre {
 
     /// Pair the accumulated statements with the expression they precede.
     pub(crate) fn finish(self, expr: LoweredExpr) -> Lowered {
+        #[cfg(test)]
+        if matches!(expr, LoweredExpr::Text(_)) {
+            TEXT_EXITS.with(|c| c.set(c.get() + 1));
+        }
         Lowered { pre: self.0, expr }
     }
 
@@ -1876,7 +1911,7 @@ pub(crate) fn lower_expr(e: &Expr, cx: &mut LowerCtx) -> Lowered {
                 elems.iter().map(|el| pre.lower_node(el, cx)).collect();
             built_or_text!(pre, array(children))
         }
-        ExprKind::Ident(id) => lower_ident(e, id, cx),
+        ExprKind::Ident(id) => built_or_text!(pre, lower_ident(e, id, cx)),
         ExprKind::Call { name, args, .. } => pre.absorb(lower_call(e, name, args, cx)),
         ExprKind::UnaryOp(UnaryOp::Neg, inner)
             if cx
@@ -1995,10 +2030,10 @@ pub(crate) fn lower_expr(e: &Expr, cx: &mut LowerCtx) -> Lowered {
             ) =>
         {
             // #2138: `run.id` — the module's `__bynkRunId`.
-            "__bynkRunId".to_string()
+            return pre.finish(LoweredExpr::Node(ident_node("__bynkRunId")));
         }
         ExprKind::FieldAccess { receiver, field } => {
-            pre.absorb(lower_field_access(e, receiver, field, cx))
+            lowered_or_text!(pre, lower_field_access(e, receiver, field, cx))
         }
         ExprKind::MethodCall {
             receiver,
@@ -8215,12 +8250,21 @@ fn emit_if_tail(
     write_line(out, indent, "}");
 }
 
-fn lower_ident(e: &Expr, id: &Ident, cx: &mut LowerCtx) -> String {
+/// Slice 1A.4 (#3701): the identifier lowering, as a [`Built`] (a node, or the
+/// text of a branch that still builds a closure or thunk). The branch order is
+/// deliberate and unchanged: constants, `Ord`/needs closures, transition
+/// records, invariant fields, store cells, the held/store-`Map` and `Log`
+/// thunks, `HttpResult`/`QueueResult` constructors, sum variants, the actor-sum
+/// binder, then a plain local.
+fn lower_ident(e: &Expr, id: &Ident, cx: &mut LowerCtx) -> Built {
     // #2617: a constant is a hoisted, cached function (`emit_consts`), so a
     // name the checker resolved to one reads it with a call. First, since the
     // checker has already ruled out a local or any other meaning of the name.
     if let Some(name) = cx.const_ref(e) {
-        return format!("{}()", ts_ident(name));
+        return Ok(bynk_ts::TsExpr::Call {
+            callee: Box::new(ident_node(&ts_ident(name))),
+            args: Vec::new(),
+        });
     }
     // Constrained generics slice 1 (DECISION E): a generic function with `Ord`
     // bounds used as a value is instantiated at the reference, as a closure that
@@ -8259,12 +8303,13 @@ fn lower_ident(e: &Expr, id: &Ident, cx: &mut LowerCtx) -> String {
         if cx.commons().exec_plan.fn_needs(decl) {
             args.push(cx.exec_expr());
         }
-        return format!(
+        // 1A: text until the closure/query family converts
+        return Err(format!(
             "(({}) => {}({}))",
             params.join(", "),
             ts_ident(&id.name),
             args.join(", ")
-        );
+        ));
     }
     // v0.116: inside a `transition` predicate, the contextual `old`/`new` idents
     // are the pre-/post-commit state records, lowered to their JS names (`new` is
@@ -8272,10 +8317,10 @@ fn lower_ident(e: &Expr, id: &Ident, cx: &mut LowerCtx) -> String {
     // Checked first so `old`/`new` never collide with the heuristics below.
     if let Some((old_var, new_var)) = cx.transition_states() {
         if id.name == "old" {
-            return old_var.to_string();
+            return Ok(ident_node(old_var));
         }
         if id.name == "new" {
-            return new_var.to_string();
+            return Ok(ident_node(new_var));
         }
     }
     // v0.80: inside an invariant predicate, a bare ident naming a state field
@@ -8284,7 +8329,7 @@ fn lower_ident(e: &Expr, id: &Ident, cx: &mut LowerCtx) -> String {
     if let Some((var, fields)) = cx.invariant_state()
         && fields.contains(&id.name)
     {
-        return format!("{var}.{}", id.name);
+        return Ok(member_node(var, &id.name));
     }
     // v0.81: inside a `store`-agent handler, a bare ident naming a `Cell` field
     // reads it off the mutable working state (`__state.<cell>`), so a read after
@@ -8292,7 +8337,7 @@ fn lower_ident(e: &Expr, id: &Ident, cx: &mut LowerCtx) -> String {
     if let Some((var, cells)) = cx.agent_store_cells()
         && cells.contains(&id.name)
     {
-        return format!("{var}.{}", id.name);
+        return Ok(member_node(var, &id.name));
     }
     // v0.104/v0.105 (real-time track slice 3b): a bare held-`Map` ident used as a
     // value is a lazy `Query` over its **resolved** connections — the persisted
@@ -8303,10 +8348,11 @@ fn lower_ident(e: &Expr, id: &Ident, cx: &mut LowerCtx) -> String {
         && let Some(f_ts) = cx.agent_held_map_frame(&id.name)
     {
         let var = cx.agent_store_var();
-        return format!(
+        // 1A: text until the closure/query family converts
+        return Err(format!(
             "(() => {var}.{name}.values().flatMap((__cid) => {{ const __c = __resolveConnection<{f_ts}>(this.state, __cid); return __c.tag === \"Some\" ? [__c.value] : []; }}))",
             name = id.name
-        );
+        ));
     }
     // v0.94 (ADR 0120): a bare `store Map` ident used as a **value** — not a
     // method receiver (those are handled in the method dispatch) — is a lazy
@@ -8314,13 +8360,15 @@ fn lower_ident(e: &Expr, id: &Ident, cx: &mut LowerCtx) -> String {
     // the same deferred thunk a query builder yields: `() => Object.values(map)`.
     if !cx.is_local(&id.name) && cx.is_agent_store_map(&id.name) {
         let var = cx.agent_store_var();
-        return format!("(() => {var}.{}.values())", id.name);
+        // 1A: text until the closure/query family converts
+        return Err(format!("(() => {var}.{}.values())", id.name));
     }
     // v0.95 (ADR 0121): a bare `store Log` ident used as a value is a lazy
     // `Query` over its entry values — `() => log.map((__e) => __e.v)`.
     if !cx.is_local(&id.name) && cx.is_agent_store_log(&id.name) {
         let var = cx.agent_store_var();
-        return format!("(() => {var}.{}.values())", id.name);
+        // 1A: text until the closure/query family converts
+        return Err(format!("(() => {var}.{}.values())", id.name));
     }
     // v0.9: a nullary HttpResult variant (whose checker type is
     // `HttpResult[_]`) constructs an HttpResult.<Variant>.
@@ -8336,7 +8384,7 @@ fn lower_ident(e: &Expr, id: &Ident, cx: &mut LowerCtx) -> String {
         Some(Callee::Intrinsic { ns, .. }) if *ns == HTTP_RESULT
     ) {
         cx.note_http_result();
-        return format!("HttpResult.{}", id.name);
+        return Ok(member_node("HttpResult", &id.name));
     }
     // v0.44: a nullary QueueResult variant (`Ack`) constructs `QueueResult.Ack`.
     if matches!(
@@ -8344,7 +8392,7 @@ fn lower_ident(e: &Expr, id: &Ident, cx: &mut LowerCtx) -> String {
         Some(Callee::Intrinsic { ns, .. }) if *ns == QUEUE_RESULT
     ) {
         cx.note_queue_result();
-        return format!("QueueResult.{}", id.name);
+        return Ok(member_node("QueueResult", &id.name));
     }
     // A bare ident whose name matches a declared variant of a sum
     // type (and whose checker type is that sum) is a nullary
@@ -8360,9 +8408,10 @@ fn lower_ident(e: &Expr, id: &Ident, cx: &mut LowerCtx) -> String {
         && s.variants.iter().any(|v| v.name.name == id.name)
     {
         if let Some(lit) = consumed_variant_literal(e, type_name, &id.name, &[], cx) {
-            return lit;
+            // 1A: text until the consumed-variant literal converts
+            return Err(lit);
         }
-        return format!("{}.{}", type_name, id.name);
+        return Ok(member_node(type_name, &id.name));
     }
     // v0.52: the multi-actor sum binder is not a runtime local — the resolved
     // actor is threaded through `deps.who` at the boundary wrapper, so the
@@ -8370,13 +8419,15 @@ fn lower_ident(e: &Expr, id: &Ident, cx: &mut LowerCtx) -> String {
     if cx.actor_sum_binder() == Some(id.name.as_str())
         && matches!(cx.commons().expr_ty(e.id).as_deref(), Some(Ty::ActorSum(_)))
     {
-        return "deps.who".to_string();
+        return Ok(member_node("deps", "who"));
     }
     // #908: a re-`let` of this name (in this or an enclosing block) renamed
     // its emitted binding — resolve to it rather than the natural
     // (now-shadowed) `ts_ident` name.
-    cx.resolved_local_name(&id.name)
-        .unwrap_or_else(|| ts_ident(&id.name))
+    Ok(ident_node(
+        &cx.resolved_local_name(&id.name)
+            .unwrap_or_else(|| ts_ident(&id.name)),
+    ))
 }
 
 /// #2045: on `workers`, a variant of a consumed context's sum built inline —
@@ -9116,6 +9167,14 @@ fn lower_record_construction(
     pre.finish_text(format!("{{ {} }}", parts.join(", ")))
 }
 
+/// `lower_field_access`'s tail: finish a [`Built`] as a node or as text.
+fn built_or_text_lowered(pre: Pre, built: Built) -> Lowered {
+    match built {
+        Ok(node) => pre.finish(LoweredExpr::Node(node)),
+        Err(text) => pre.finish_text(text),
+    }
+}
+
 fn lower_field_access(e: &Expr, receiver: &Expr, field: &Ident, cx: &mut LowerCtx) -> Lowered {
     let tys = cx.commons().tys();
     let mut pre = Pre::new();
@@ -9170,7 +9229,7 @@ fn lower_field_access(e: &Expr, receiver: &Expr, field: &Ident, cx: &mut LowerCt
         )
     {
         cx.note_http_result();
-        return pre.finish_text(format!("HttpResult.{}", field.name));
+        return pre.finish(LoweredExpr::Node(member_node("HttpResult", &field.name)));
     }
     // #2073 (with #2045): a qualified nullary variant of a consumed context's
     // sum (`Region.Domestic`), on `workers`, is built inline as its bare form
@@ -9191,7 +9250,7 @@ fn lower_field_access(e: &Expr, receiver: &Expr, field: &Ident, cx: &mut LowerCt
         // #1818: the key this instance was addressed by. It used to read
         // `this.state.id.toString()` (the Durable Object's hex id on workers,
         // "[object Object]" on bundle) cast to the key's *name*.
-        return pre.finish_text("this.__key".to_string());
+        return pre.finish(LoweredExpr::Node(member_node("this", "__key")));
     }
     // v0.45: `<binder>.identity` on a verified actor binding. The binder is not
     // a runtime value; the identity is minted at the verification seam. For the
@@ -9212,9 +9271,9 @@ fn lower_field_access(e: &Expr, receiver: &Expr, field: &Ident, cx: &mut LowerCt
         if let (Some(binder), ExprKind::Ident(id)) = (cx.deps_identity_binder(), &receiver.kind)
             && id.name == binder
         {
-            return pre.finish_text("deps.identity".to_string());
+            return pre.finish(LoweredExpr::Node(member_node("deps", "identity")));
         }
-        return pre.finish_text("undefined".to_string());
+        return pre.finish(LoweredExpr::Node(ident_node("undefined")));
     }
     // #2380 (L5): an `Oidc` binder's `.claims` reads `deps.claims`, which its
     // seam filled from the verified token.
@@ -9226,9 +9285,9 @@ fn lower_field_access(e: &Expr, receiver: &Expr, field: &Ident, cx: &mut LowerCt
         && let (Some(binder), ExprKind::Ident(id)) = (cx.deps_identity_binder(), &receiver.kind)
         && id.name == binder
     {
-        return pre.finish_text("deps.claims".to_string());
+        return pre.finish(LoweredExpr::Node(member_node("deps", "claims")));
     }
-    let r = pre.lower(receiver, cx);
+    let r = pre.lower_node(receiver, cx);
     // `.raw` on an opaque value compiles to a TypeScript type
     // assertion back to the base type. The checker has already
     // verified that the receiver is opaque and the call site is
@@ -9239,9 +9298,20 @@ fn lower_field_access(e: &Expr, receiver: &Expr, field: &Ident, cx: &mut LowerCt
             ..
         }) = cx.commons().expr_ty(receiver.id).as_deref()
     {
-        return pre.finish_text(format!("({r} as {})", ts_base(*base)));
+        // 1A: text until the `as` assertion has a node for a base-type name
+        return pre.finish_text(format!("({} as {})", r.into_text(), ts_base(*base)));
     }
-    pre.finish_text(format!("{r}.{}", field.name))
+    built_or_text_lowered(
+        pre,
+        node_or_text(
+            vec![r],
+            |c| bynk_ts::TsExpr::Member {
+                object: Box::new(one(c)),
+                property: field.name.clone(),
+            },
+            |c| format!("{}.{}", one(c), field.name),
+        ),
+    )
 }
 
 /// v0.158 (ADR 0184): the key type `K` of a map `.entries`/`.keys` query, read
@@ -11583,6 +11653,92 @@ fn minus(x: Int) -> Int { 5 - - -x }
             assert_eq!(got, want, "{name}");
             assert!(!got.contains("--"), "{name}: `--` in {got}");
         }
+    }
+
+    /// The number of expressions that left lowering as text while emitting `src`.
+    fn text_exits(src: &str) -> usize {
+        TEXT_EXITS.with(|c| c.set(0));
+        let _ = crate::testkit::emit_source(src);
+        TEXT_EXITS.with(|c| c.get())
+    }
+
+    #[test]
+    fn identifiers_and_wrappers_over_them_lower_to_nodes() {
+        // 1A.4 (#3701): an identifier is a node, so `Some(x)`, `-x` and
+        // `[x, y]` over identifiers are nodes too (before, each was text
+        // because its child was). No expression below leaves as text.
+        let src = "commons idnodes\n\
+                   fn a(x: Int) -> Option[Int] { Some(x) }\n\
+                   fn b(x: Int) -> Int { -x }\n\
+                   fn c(x: Int, y: Int) -> List[Int] { [x, y] }\n\
+                   fn d(x: Int) -> Int { - -x }\n\
+                   fn e(ok: Bool) -> Bool { !ok }\n";
+        assert_eq!(text_exits(src), 0);
+        let ts = crate::testkit::emit_source(src);
+        for (name, want) in [
+            ("a", "Some(x)"),
+            ("b", "-x"),
+            ("c", "[x, y]"),
+            // Now on the node path, a negated negation still brackets.
+            ("d", "-(-x)"),
+            ("e", "!ok"),
+        ] {
+            assert_eq!(returned(&ts, name), want, "{name}");
+        }
+    }
+
+    #[test]
+    fn field_access_and_constant_reads_over_identifiers_lower_to_nodes() {
+        let head = "commons fieldnodes\n\
+                    type P = { name: String, age: Int }\n\
+                    const K: Int = 4\n";
+        let fields = "fn a(p: P) -> String { p.name }\n\
+                      fn c(p: P) -> Int { p.age }\n";
+        // The constant's own initialiser still leaves as text (not this
+        // slice), so a constant read is measured against that baseline: adding
+        // `fn b() -> Int { K }` adds no text exit.
+        let base = text_exits(head);
+        assert_eq!(text_exits(&format!("{head}{fields}")), base);
+        let src = format!("{head}{fields}fn b() -> Int {{ K }}\n");
+        assert_eq!(text_exits(&src), base);
+        let ts = crate::testkit::emit_source(&src);
+        for (name, want) in [("a", "p.name"), ("b", "K()"), ("c", "p.age")] {
+            assert_eq!(returned(&ts, name), want, "{name}");
+        }
+    }
+
+    #[test]
+    fn the_retained_text_branches_produce_their_old_text() {
+        // A nullary sum variant is `Type.Variant`, a node over genuine names.
+        let ts = crate::testkit::emit_source(
+            "commons variants\n\
+             type Colour = | Red | Green\n\
+             fn a() -> Colour { Red }\n",
+        );
+        assert_eq!(returned(&ts, "a"), "Colour.Red");
+        // A generic function used as a value keeps its text closure.
+        let ts = crate::testkit::emit_source(
+            "commons closures\n\
+             fn pick[T: Ord](a: T, b: T) -> T { if a < b { a } else { b } }\n\
+             fn f() -> (Int, Int) -> Int { pick }\n",
+        );
+        assert!(
+            returned(&ts, "f").starts_with("((__a0: number, __a1: number) => pick("),
+            "{}",
+            returned(&ts, "f")
+        );
+    }
+
+    #[test]
+    fn identifier_node_helpers_build_genuine_names() {
+        let m = member_node("deps", "who");
+        assert!(matches!(&m, bynk_ts::TsExpr::Member { object, property }
+            if property == "who" && matches!(&**object, bynk_ts::TsExpr::Ident(n) if n == "deps")));
+        assert_eq!(bynk_ts::print_expr(&m), "deps.who");
+        assert_eq!(
+            bynk_ts::print_expr(&ident_node("__bynkRunId")),
+            "__bynkRunId"
+        );
     }
 
     /// An `if (flag) { done(); }` statement node: multi-line when printed.
