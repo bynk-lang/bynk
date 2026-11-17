@@ -1364,6 +1364,55 @@ WITH_EQUALS=a=b
         assert_eq!(keys.on_caller, ["BYNK_CALL_TO_SHOP__PAY"]);
     }
 
+    /// #3562: for every call the runtime can make (its caller signs under
+    /// `BYNK_CALL_TO_<callee context>`, its callee verifies `BYNK_CALL_FROM_<caller
+    /// context>`), the keys `deploy` provisions are exactly the ones it reads: a group
+    /// calling a standalone Worker, a standalone Worker calling a group's member, and
+    /// one member calling another in process. Fails without per-member names.
+    #[test]
+    fn every_call_the_runtime_makes_finds_the_keys_it_reads() {
+        let mut resources = BTreeMap::new();
+        resources.insert(
+            "front".to_string(),
+            Resources {
+                members: vec!["shop.a1".to_string(), "shop.a2".to_string()],
+                binds_to: vec!["shop-pay".to_string()],
+                ..Resources::default()
+            },
+        );
+        resources.insert("shop-pay".to_string(), Resources::default());
+        resources.insert(
+            "shop-web".to_string(),
+            Resources {
+                binds_to: vec!["front".to_string()],
+                ..Resources::default()
+            },
+        );
+        let edges = project_edges(&resources);
+        let holds = |worker: &str, key: String| edge_keys_of(worker, &edges).contains(&key);
+        // (caller context, its Worker, callee context, its Worker)
+        let calls = [
+            ("shop.a1", "front", "shop.pay", "shop-pay"),
+            ("shop.a2", "front", "shop.pay", "shop-pay"),
+            ("shop.web", "shop-web", "shop.a1", "front"),
+            ("shop.web", "shop-web", "shop.a2", "front"),
+            ("shop.a1", "front", "shop.a2", "front"),
+            ("shop.a2", "front", "shop.a1", "front"),
+        ];
+        for (caller, caller_worker, callee, callee_worker) in calls {
+            let to = bynk_emit::edge_key_to(callee).unwrap();
+            let from = bynk_emit::edge_key_from(caller).unwrap();
+            assert!(
+                holds(caller_worker, to.clone()),
+                "{caller} signing a call to {callee} reads {to} on {caller_worker}"
+            );
+            assert!(
+                holds(callee_worker, from.clone()),
+                "{callee} verifying {caller} reads {from} on {callee_worker}"
+            );
+        }
+    }
+
     /// A group's members call each other in process, signed as any call is: the Worker
     /// holds a key for each of its members, by an edge to itself (no deploy-order edge).
     #[test]
