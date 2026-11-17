@@ -556,7 +556,7 @@ Cloudflare](/book/guides/projects-build-and-deployment/deploy-to-cloudflare/)
 for the workflow.
 
 ```text
-bynk deploy [PATH] [--context NAME] [--dry-run] [--no-install] [--format short|json] [--yes]
+bynk deploy [PATH] [--context NAME | --worker NAME] [--dry-run] [--no-install] [--format short|json] [--yes]
             [--secrets-file PATH] [--secret NAME]... [--force] [-- <wrangler args>]
 ```
 
@@ -568,6 +568,7 @@ run it inside a member. Each member keeps its own deploy state.
 |---|---|---|
 | `PATH` | `.` | A directory inside the project. The root is found by walking up for `bynk.toml`. |
 | `--context NAME` | every context | Deploy this context alone, assuming the contexts it consumes are already live. A dependency that has never been deployed is named and refused rather than pushed into — as is one that is live but no longer provides the contract this context was compiled against, and a build of this context that no longer provides what a live caller was compiled against (`bynk.deploy.contract_skew`; see [Contract skew](/book/guides/projects-build-and-deployment/contract-skew/)). Accepts the dotted name (`a.b`) or its worker-directory form (`a-b`). |
+| `--worker NAME` | every Worker | Deploy one Worker by its directory name under `workers/`: a [`[deploy.workers.<key>]`](/docs/manifest/#worker-groups) group's key, or a context's worker-directory form (`a-b`). A group is one Worker, so it deploys as a unit; naming one of its members with `--context` is refused, with the Worker that holds it. Like `--context`, it assumes the Workers it binds to are already live. Not with `--context`. |
 | `--dry-run`, `--plan` | off | Print the per-context plan and resolved order, then exit without changing Cloudflare or `bynk.deploy.lock`. Works offline — it never authenticates. |
 | `--no-install` | off | Do not install the build's npm packages; stop, naming the detected install command, when one is missing. Also `BYNK_NO_INSTALL=1`. See [Installing npm packages](#installing-npm-packages). |
 | `--format FORMAT` | `short` | Plan output: line-oriented `short` or machine-readable `json`. |
