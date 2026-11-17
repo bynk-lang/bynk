@@ -134,10 +134,16 @@ edge as no edge.
   both sides (values are copied, a callee's fault is the same `CalleeFaulted`, a
   refusal the same refusal); only the Service Binding hop is gone. It is not a direct
   function call, which would need its own copy and error-mapping rules to be
-  conformant. **Still open, G3-3:** the Worker's binding to itself stays in
-  `wrangler.toml` while a member subscribes to another member's event, because the
-  fan-out Durable Object cannot call back into the Worker's dispatcher and delivers
-  over that binding. The merged events fan-out has
+  conformant. The calls share one invocation's CPU and subrequest budget and one
+  `ctx`, so a callee's `waitUntil` attaches to the caller's request: that is what
+  "the same Worker" means, and it is the one thing beyond the hop that changes. A callee
+  that throws out of `fetch` is answered as the plain `500` a Service Binding gives.
+  **G3-3 is not planned; revisit if the self-binding ever costs something.** The
+  Worker's binding to itself stays in `wrangler.toml`: the fan-out Durable Object cannot
+  call back into the Worker's dispatcher and delivers over it, and so does anything else
+  that runs with the raw runtime `env` rather than `__loopback(env)` (a member agent's
+  Durable Object calling another member, whose constructor `env` is not wrapped).
+  Dropping it would be safe only for a group where neither happens. The merged events fan-out has
   landed (G3-1); the conformance harness is #3663. The group cycle check
   (`bynk.deploy.group_cycle`) lands before G3.
 - **Still open, G5:** moving an agent-owning context into or out of a group is

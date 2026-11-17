@@ -135,7 +135,9 @@ const DISPATCH: &str = "async function __fetch(request: globalThis.Request, env:
 /// It is the same request, signed, contract-checked, admitted and decoded as one
 /// over a Service Binding, so a value is copied across it, a callee's fault reaches
 /// the caller as the same `CalleeFaulted`, and a refusal is the same refusal; only
-/// the hop is gone. (The events fan-out's Durable Object runs elsewhere and keeps
+/// the hop is gone. Anything the callee's `fetch` throws is the plain `500` a Service
+/// Binding would hand the caller (which maps it to `Transport`), never the callee's
+/// own exception. (The events fan-out's Durable Object runs elsewhere and keeps
 /// the Service Binding.)
 fn loopback(entry: &GroupEntry<'_>) -> String {
     if entry.members.len() < 2 {
@@ -148,7 +150,7 @@ fn loopback(entry: &GroupEntry<'_>) -> String {
         .map(|m| crate::emitter::wrangler::service_binding(&m.context).name)
         .collect();
     format!(
-        "const __memberBindings: readonly string[] = {};\n\nfunction __loopback(env: unknown, ctx: __Ctx): unknown {{\n  const inner: globalThis.Record<string, unknown> = {{ ...(env as globalThis.Record<string, unknown>) }};\n  for (const name of __memberBindings) {{\n    inner[name] = {{ fetch: (request: globalThis.Request) => __fetch(request, inner, ctx) }};\n  }}\n  return inner;\n}}\n\n",
+        "const __memberBindings: readonly string[] = {};\n\nfunction __loopback(env: unknown, ctx: __Ctx): unknown {{\n  const inner: globalThis.Record<string, unknown> = {{ ...(env as globalThis.Record<string, unknown>) }};\n  for (const name of __memberBindings) {{\n    inner[name] = {{ fetch: async (request: globalThis.Request) => {{\n      try {{\n        return await __fetch(request, inner, ctx);\n      }} catch {{\n        return new globalThis.Response(\"Internal Server Error\", {{ status: 500 }});\n      }}\n    }} }};\n  }}\n  return inner;\n}}\n\n",
         array(&names)
     )
 }
@@ -336,4 +338,60 @@ pub fn emit_group_entry(entry: &GroupEntry<'_>) -> TsProgram {
     text.push_str("};\n");
     program.push(TsStmt::raw(text, None));
     program
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    fn member(context: &str) -> GroupMember {
+        GroupMember {
+            context: context.into(),
+            specifier: format!("./{context}.index.js"),
+            crons: vec!["* * * * *".into()],
+            queues: vec!["jobs".into()],
+            addresses: vec!["in@example.com".into()],
+            classes: vec![],
+        }
+    }
+
+    /// #3562, G3-2: a handler of one member reaching another goes in process, so
+    /// each of `scheduled`, `queue` and `email` runs its member on the loopback env.
+    #[test]
+    fn every_handler_runs_its_member_on_the_loopback_env() {
+        let members = [member("app.a"), member("app.b")];
+        let numbered: Vec<(usize, &GroupMember)> = members.iter().enumerate().collect();
+        for (name, text) in [
+            ("scheduled", scheduled(&numbered)),
+            ("queue", queue(&numbered)),
+            ("email", email(&numbered)),
+        ] {
+            assert!(
+                text.contains("__loopback(env, ctx) as never"),
+                "{name} does not pass the loopback env:\n{text}"
+            );
+            assert!(
+                !text.contains("(env as never"),
+                "{name} passes the raw env:\n{text}"
+            );
+        }
+    }
+
+    /// A callee that throws out of `fetch` is a plain `500` to its caller, as over
+    /// a Service Binding, not the callee's exception.
+    #[test]
+    fn a_callee_that_throws_is_a_plain_500() {
+        let entry = GroupEntry {
+            key: "core",
+            members: &[member("app.a"), member("app.b")],
+            container_classes: &[],
+            has_fanout: false,
+            has_events: false,
+            has_migrate: false,
+            has_inspect: false,
+        };
+        let text = loopback(&entry);
+        assert!(text.contains("catch {"), "{text}");
+        assert!(text.contains("status: 500"), "{text}");
+    }
 }
