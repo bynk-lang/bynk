@@ -3,7 +3,7 @@ title: Version compatibility & changelog
 ---
 Bynk is pre-1.0 and developed in small, spec-first increments (see
 [Versioning & roadmap](/book/about/versioning-and-roadmap/)). This book is
-written against **v0.638**.
+written against **v0.639**.
 
 This page is a high-level summary of notable increments, not an exhaustive
 per-commit history. While Bynk is pre-1.0, increments may change behaviour.
@@ -28,6 +28,8 @@ per-commit history. While Bynk is pre-1.0, increments may change behaviour.
 
 | Version | Highlights |
 |---|---|
+| **v0.639.0** | `bynk dev` serves a `[deploy.workers.<key>]` group as one Worker on one port (`--context` naming a member serves the whole group), and `bynk dev inspect` lists and reads the agents of every member; `bynk.deploy.worker_groups_unsupported` is removed (#3562, G6) |
+| **v0.638.1** | A `[deploy.workers.<key>]` group's calls are signed and verified under keys named for its member contexts, so a group can call across an edge and its members can call each other once deployed or run under `bynk dev` (#3562, G4-4) |
 | **v0.638.0** | A call between two members of a `[deploy.workers]` group stays inside the Worker instead of crossing a Service Binding to itself; it is the same signed, contract-checked, admitted request, so values are copied, a callee's fault is the same `CalleeFaulted` and a refusal the same refusal (#3562, G3-2) |
 | **v0.637.0** | `bynk revert` reverts a `[deploy.workers.<key>]` group as one Worker (`--worker KEY`), so every member goes back together; a member named with `--context` is refused, naming the Worker that holds it (#3562, G4-3) |
 | **v0.636.2** | A cycle between Workers that involves a `[deploy.workers]` group is refused at check time as `bynk.deploy.worker_cycle` (renamed from `bynk.deploy.group_cycle`, never released), whichever two Workers and however the cycle is closed: a call, or a publisher's binding to its subscriber (#3562, G2b) |
