@@ -99,9 +99,12 @@ Every slice keeps all of these:
    example a `LoweredExpr::Text` variant. The bridge is counted by a probe that can only fall, and
    it is gone when its phase exits.
 4. **No probe moves the wrong way.** Phase 0 makes this mechanical. Until then, a slice that raises
-   `ts_writes`, `TsStmt::raw`, `ts_any`, `emit_abi_shapes`, `verbatim_sites`, `span_keyed_maps`
-   or `wildcard_arms` must say why in its
-   PR description.
+   `ts_writes`, `ts_raw_sites`, `ts_text_idents`, `ts_any`, `emit_abi_shapes`, `verbatim_sites`,
+   `span_keyed_maps` or `wildcard_arms` must say why in its PR description. For the growth probes
+   that is a `raises:` line. A Phase 1 slice that converts raw statements into nodes may
+   legitimately raise `ts_writes` in the short term (retiring a raw string can add `format!`
+   lines). It uses `raises:` with a reason such as "replaces N raw statements", and the
+   `ts_raw_sites` fall in the same PR shows the trade.
 5. **The integration corpus is not thinned before Phase 3.** It is the safety net for Phases 1
    and 2.
 
@@ -114,7 +117,7 @@ Small, mostly in `xtask`. It lands first because every later slice is measured b
 | Slice | Change | Closes (review) |
 |---|---|---|
 | **P0.1** | Turn `ts_writes`, `ts_any`, `emit_abi_shapes`, `verbatim_sites` and `span_keyed_maps` from "differs from committed" gates into **ratchets**, the `fn-lengths` model: a fall may be applied freely; a rise fails unless the committed ceiling is raised in the same PR, where review sees it. | §1.1 |
-| **P0.2** | Widen the TypeScript-text probes. Add a gated `ts_raw_sites` probe counting `TsStmt::raw`. Extend `ts_writes` and `ts_raw_sites` to `bynk-driver/src` (chiefly `project/tests_emit/`). Optionally count `TsExpr::Ident` whose argument is a `format!`. | §1.3 |
+| **P0.2** | Count the raw-text escapes the TypeScript probes miss. Add two gated growth probes: `ts_raw_sites` (`TsStmt::raw(`) and `ts_text_idents` (`TsExpr::Ident(format!(`). `ts_writes`, `ts_any` and `verbatim_*` already scan `bynk-driver/src/project/**`, including `tests_emit/`, via `codegen_family_files` (#2982), so no widening is needed (#3681). | §1.3 |
 | **P0.3** | Refresh trend rows at stamp time (`cargo xtask stamp --apply` regenerates the whole table), and drop the deleted crates from `test_density`. | §1.2 |
 | **P0.4** | Opt `bynk-ts` (8 wildcard arms) and `bynk-model` (5) into `[lints] workspace = true`, after fixing their arms. | §1.2 |
 | **P0.5** | Add a `module_lines` probe: the largest source file per crate, and files at or above 2,000 lines. Report only (trend) in this phase; it becomes a ratchet in Phase 2. | §6.1 |
@@ -218,8 +221,9 @@ out carries its unit tests with it.
 | Measure | Today (v0.639.1) | Phase 1 exit (freeze lifts) | Track exit |
 |---|---:|---:|---:|
 | Gated growth probes | re-baselined (165 rises of `ts_writes`) | ratchets (P0.1) | ratchets |
-| `ts_writes` (bynk-emit + driver) | 1,502 + driver unmeasured | ≤ 40% of the P0.2 baseline | ≤ 20% |
-| Production `TsStmt::raw` sites (emit + driver) | 75 | ≤ 10, each with a stated foreign-text reason | ≤ 5 |
+| `ts_writes` (bynk-emit + driver `project/**`) | 1,502 | ≤ 40% of today | ≤ 20% |
+| `ts_raw_sites`: `TsStmt::raw(` sites (emit + driver) | 99 | ≤ 10, each with a stated foreign-text reason | ≤ 5 |
+| `ts_text_idents`: `Ident(format!(` sites (emit + driver) | 14 | 0 | 0 |
 | `TsExpr` constructions in lowering | 0 | lowering returns `TsExpr` only; `Text` bridge deleted | — |
 | Import-prediction functions | 17 | 0 | 0 |
 | `"any"` fallbacks in lowering | 5 | 0 | 0 |
@@ -233,8 +237,8 @@ out carries its unit tests with it.
 | Back-half files ≥ 2,000 lines | 20 | — | per Q5 |
 | bynk-emit unit tests per 1k production lines | 7.1 | — | per 3.4's floor |
 
-The `ts_writes` and `TsStmt::raw` targets are measured over bynk-emit and bynk-driver *combined*,
-the scope P0.2 sets. 1B.2 moves `tests_emit` from the driver into bynk-emit, so the move itself
+The `ts_writes`, `ts_raw_sites` and `ts_text_idents` targets are measured over bynk-emit and
+bynk-driver's `project/**` *combined* (`codegen_family_files`). 1B.2 moves `tests_emit` from the driver into bynk-emit, so the move itself
 is neither progress nor regression.
 
 The back-half file rows count `src/` files in `bynk-model`, `bynk-emit`, `bynk-ts`, `bynk-driver`,

@@ -180,6 +180,15 @@ no manifest). `bynk-ts` and `bynk-model` could opt in after an afternoon's work.
 - **`bynk-driver/src/project/tests_emit/`.** This is 12.6k lines that generate the test-harness
   TypeScript. `ts_writes` and `verbatim_*` scan `bynk-emit/src` only, so none of it is counted.
 
+> **Correction (17 November 2026, #3681):** the third bullet above is wrong. `ts_writes`,
+> `ts_any`, `verbatim_origins` and `verbatim_sites` have read `codegen_family_files`, that is
+> `bynk-emit/src` plus `bynk-driver/src/project{.rs,/**}` (including `tests_emit/`), since
+> crate-hygiene D1 (#2982). The 12.6k lines were counted. The genuine gap was the two escapes
+> no probe counted at all: `TsStmt::raw` and string-carrying `TsExpr::Ident`. Both are now gated
+> growth probes (`ts_raw_sites`, `ts_text_idents`). Measured with those probes' scanner, the
+> `TsStmt::raw` reading is 99 (bynk-emit 41, bynk-driver 58), not the 75 above. The original
+> text is kept as written.
+
 ### 1.4 The ratchet that works
 
 `cargo xtask fn-lengths` (#3167) works the other way round. A ceiling may go down freely, and
@@ -491,6 +500,10 @@ The sequence, freeze policy and exit criteria are in
 1. **Make the gauges hold** (§1).
    - Turn the growth-type gated probes into ratchets that can only go down.
    - Count `TsStmt::raw`, and widen the TS-writing probes to `bynk-driver`.
+
+     > **Correction (17 November 2026, #3681):** the probes already scan `bynk-driver`'s
+     > `project/**` (see the correction in §1.3). Only the counting of `TsStmt::raw` and
+     > string-carrying `Ident` was missing.
    - Refresh the trend rows at stamp time.
    - Opt `bynk-ts` and `bynk-model` into the workspace lints.
 2. **Make lowering typed** (§2.1).
