@@ -3386,8 +3386,11 @@ pub fn render_table(report: &Report) -> String {
          `greenfield_status_table_is_current` (`xtask/tests/greenfield_status.rs`). \
          Five are trend probes, reported only.\n\n",
     );
-    out.push_str("| Probe | Gated | Reads |\n|---|---|---|\n");
-    for probe in &report.probes {
+    // Two tables, not one: the stamp rewrites the gated rows and the weekly
+    // trend workflow rewrites the trend rows, and git treats changed hunks on
+    // adjacent lines as a conflict. The sub-heading keeps unchanged lines
+    // between the two blocks, so the two writers never conflict.
+    let row = |out: &mut String, probe: &Probe| {
         let _ = writeln!(
             out,
             "| `{}` | {} | {} |",
@@ -3395,6 +3398,15 @@ pub fn render_table(report: &Report) -> String {
             if probe.gated { "yes" } else { "no (trend)" },
             probe.reads
         );
+    };
+    out.push_str("| Probe | Gated | Reads |\n|---|---|---|\n");
+    for probe in report.probes.iter().filter(|p| p.gated) {
+        row(&mut out, probe);
+    }
+    out.push_str("\n## Trend probes (not gated)\n\n");
+    out.push_str("| Probe | Gated | Reads |\n|---|---|---|\n");
+    for probe in report.probes.iter().filter(|p| !p.gated) {
+        row(&mut out, probe);
     }
 
     out.push_str("\n## Rules closed\n\n");
@@ -3512,9 +3524,11 @@ pub fn refresh_gated_rows(committed: &str, probes: &[Probe]) -> Result<String, S
 /// stamp never write the same lines.
 ///
 /// Errors, rather than committing a bad table, when a trend probe has no row to
-/// rewrite, or when a probe's reading is a failure string (`wildcard_arms`
-/// reports `error running clippy: ...` as its reading when clippy cannot run; a
-/// failed pass must never be recorded as a measurement).
+/// rewrite, or when a probe reports a *measurement failure* as its reading. Today
+/// that is only `wildcard_arms`' `error running clippy: ...`; a failed clippy pass
+/// must never be recorded as a measurement. Other non-figure readings are not
+/// refused: `keystroke_latency` reads a committed benchmark file, so its
+/// `not measured ...` is a truthful reading when the file is absent, not a failure.
 pub fn refresh_trend_rows(committed: &str, probes: &[Probe]) -> Result<String, String> {
     let failed: Vec<_> = probes
         .iter()
@@ -5026,6 +5040,45 @@ commons app.demo {
             out.contains("may not exist yet"),
             "the wording must not claim to know whether the ledger exists: {out}"
         );
+    }
+
+    /// The stamp rewrites the gated rows and the weekly workflow the trend rows;
+    /// adjacent changed lines conflict in git, so the two blocks must always have
+    /// an unchanged line between them.
+    #[test]
+    fn render_table_separates_gated_and_trend_blocks() {
+        let probe = |name, gated| Probe {
+            name,
+            gated,
+            reads: "1".to_string(),
+        };
+        let report = Report {
+            probes: vec![
+                probe("ts_writes", true),
+                probe("explained_codes", true),
+                probe("wildcard_arms", false),
+                probe("keep_in_sync", false),
+            ],
+        };
+        let out = render_table(&report);
+        let lines: Vec<&str> = out.lines().collect();
+        let is_row = |l: &str, gated: bool| {
+            l.starts_with("| `") && l.contains(if gated { "| yes |" } else { "| no (trend) |" })
+        };
+        for (i, l) in lines.iter().enumerate() {
+            if is_row(l, true) {
+                assert!(
+                    !lines.get(i + 1).is_some_and(|n| is_row(n, false)),
+                    "a gated row is directly above a trend row: {l}"
+                );
+            }
+        }
+        assert!(out.contains("## Trend probes (not gated)"), "{out}");
+        // Both refreshers still find their rows in the rendered table.
+        let g = refresh_gated_rows(&out, &report.probes).unwrap();
+        let t = refresh_trend_rows(&out, &report.probes).unwrap();
+        assert_eq!(g, out);
+        assert_eq!(t, out);
     }
 
     // --- ts_writes / ts_any (P7.0, #1296; testability + widening, review of #1297) --

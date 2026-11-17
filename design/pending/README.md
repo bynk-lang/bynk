@@ -76,7 +76,10 @@ summary: How a case addresses a handler and names its principal
   rewrites trend rows. A weekly workflow (`.github/workflows/greenfield-trends.yml`)
   does, by running `cargo xtask greenfield-status --trend-only --apply` and
   opening one rolling bot PR (`bot/greenfield-trends`) that changes trend rows
-  only. A feature PR leaves them alone.
+  only. A feature PR leaves them alone. The trend rows sit in their own table
+  under `## Trend probes (not gated)`, so the stamp and the bot PR never write
+  adjacent lines. If the bot PR conflicts, re-dispatch the workflow
+  (`gh workflow run greenfield-trends.yml`); never hand-edit the bot branch.
 
 - **`breaking`** — a one-line Markdown note for an increment that breaks
   existing programs: what breaks, the diagnostic a user will see, and the fix

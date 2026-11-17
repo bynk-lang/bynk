@@ -41,6 +41,12 @@ name: Greenfield trend rows
 # The bot branch is rebuilt from the tip of `main` on every run and force-pushed.
 # Only this job writes it. The PR body says so.
 #
+# The table keeps the trend rows in their own block under a sub-heading, so a
+# stamp commit (gated rows) and this PR (trend rows) never touch adjacent lines.
+# If the bot PR ever conflicts anyway, re-dispatch this workflow
+# (`gh workflow run greenfield-trends.yml`): it rebuilds the branch from `main`.
+# Never hand-edit the bot branch; the next run overwrites it.
+#
 # Scheduled workflows run only from the default branch, so the whole job cannot
 # be exercised before it merges (ci-sweep.yml has the same constraint). Once on
 # `main`, run it by hand with `gh workflow run greenfield-trends.yml`.
@@ -92,7 +98,10 @@ jobs:
           fetch-depth: 1
           persist-credentials: false
 
+      # `components: clippy`: the `wildcard_arms` probe shells out to clippy.
       - uses: dtolnay/rust-toolchain@e081816240890017053eacbb1bdf337761dc5582 # 1.95.0
+        with:
+          components: clippy
       - uses: Swatinem/rust-cache@eedcf2fb1c22f010a0eb66b92f378c110977f266 # v2
 
       # Runs the five trend probes (the workspace clippy pass is the slow one)
