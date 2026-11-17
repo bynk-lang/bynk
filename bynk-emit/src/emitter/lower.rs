@@ -1512,6 +1512,124 @@ impl LoweredExpr {
     }
 }
 
+/// Slice 1A.3 (#3696), Decision A: the one mixed-children rule, and the 1A
+/// convention. A converted parent builds a node only when *every* child is a
+/// node (`node` receives them in order); if any child is still text, every
+/// child is rendered through [`LoweredExpr::into_text`] and `text` builds
+/// today's string. A text child is never wrapped in a `VerbatimExpr` or an
+/// `Ident` carrying expression text.
+///
+/// It returns `Ok(node)` or `Err(text)`: the text side leaves through
+/// `lower_expr`'s one shared text exit (`finish_text`) rather than opening a
+/// second text construction site (see `built_or_text!`).
+type Built = Result<bynk_ts::TsExpr, String>;
+
+fn node_or_text(
+    children: Vec<LoweredExpr>,
+    node: impl FnOnce(Vec<bynk_ts::TsExpr>) -> bynk_ts::TsExpr,
+    text: impl FnOnce(Vec<String>) -> String,
+) -> Built {
+    if children.iter().all(|c| matches!(c, LoweredExpr::Node(_))) {
+        let nodes = children
+            .into_iter()
+            .filter_map(|c| match c {
+                LoweredExpr::Node(n) => Some(n),
+                LoweredExpr::Text(_) => None,
+            })
+            .collect();
+        Ok(node(nodes))
+    } else {
+        Err(text(
+            children.into_iter().map(LoweredExpr::into_text).collect(),
+        ))
+    }
+}
+
+/// `-x` / `!x`: a `Unary` node (the printer brackets the operand), or today's
+/// `{sym}{operand}` text.
+fn unary_op(op: UnaryOp, child: LoweredExpr) -> Built {
+    let (ts_op, sym) = match op {
+        UnaryOp::Neg => (bynk_ts::TsUnaryOp::Neg, "-"),
+        UnaryOp::Not => (bynk_ts::TsUnaryOp::Not, "!"),
+    };
+    node_or_text(
+        vec![child],
+        |c| bynk_ts::TsExpr::Unary {
+            op: ts_op,
+            expr: Box::new(one(c)),
+        },
+        |c| format!("{sym}{}", one(c)),
+    )
+}
+
+/// `[a, b, …]`: an `Array` node, or today's `[a, b]` text.
+fn array(children: Vec<LoweredExpr>) -> Built {
+    node_or_text(
+        children,
+        |items| bynk_ts::TsExpr::Array {
+            items,
+            multiline: false,
+        },
+        |items| format!("[{}]", items.join(", ")),
+    )
+}
+
+/// An explicit source `( … )`: `bynk_ts` has `TsExpr::Paren`, so the source's
+/// own parentheses are kept as a node.
+fn paren(child: LoweredExpr) -> Built {
+    node_or_text(
+        vec![child],
+        |c| bynk_ts::TsExpr::Paren(Box::new(one(c))),
+        |c| format!("({})", one(c)),
+    )
+}
+
+/// Finish `lower_expr`'s arm from a [`Built`]: a node returns at once; text
+/// falls out of the match as the arm's `String`, to the shared `finish_text`.
+macro_rules! built_or_text {
+    ($pre:ident, $built:expr) => {
+        match $built {
+            Ok(node) => return $pre.finish(LoweredExpr::Node(node)),
+            Err(text) => text,
+        }
+    };
+}
+
+/// A runtime-constructor call with one argument — `Ok(x)`, `Some(x)`,
+/// `__bynkDecimalNeg(x)`, or `HttpResult.Ok(x)` when `object` is given — as a
+/// call node over genuine identifiers, or today's text if the argument is text.
+fn runtime_ctor_call(object: Option<&'static str>, name: &'static str, arg: LoweredExpr) -> Built {
+    node_or_text(
+        vec![arg],
+        |c| {
+            let callee = match object {
+                Some(o) => bynk_ts::TsExpr::Member {
+                    object: Box::new(bynk_ts::TsExpr::Ident(o.to_string())),
+                    property: name.to_string(),
+                },
+                None => bynk_ts::TsExpr::Ident(name.to_string()),
+            };
+            bynk_ts::TsExpr::Call {
+                callee: Box::new(callee),
+                args: vec![one(c)],
+            }
+        },
+        |c| match object {
+            Some(o) => format!("{o}.{name}({})", one(c)),
+            None => format!("{name}({})", one(c)),
+        },
+    )
+}
+
+/// The single element of a one-child builder's argument.
+fn one<T>(children: Vec<T>) -> T {
+    let mut it = children.into_iter();
+    match (it.next(), it.next()) {
+        (Some(only), None) => only,
+        _ => unreachable!("a one-child builder is given exactly one child"),
+    }
+}
+
 /// The statement side of the bridge: a hoisted statement is either a typed
 /// [`TsStmt`] or text. Where `pre` statements leave lowering into a `TsStmt`
 /// body ([`Pre::ts_stmts`]) a `Node` stays a node and a `Text` becomes
@@ -1723,15 +1841,19 @@ pub(crate) fn lower_expr(e: &Expr, cx: &mut LowerCtx) -> Lowered {
         // Slice C: `Wire(<String>)` in a generic position lowers to its raw inner
         // string. The system-http driver site intercepts `Wire` args before this
         // to route them raw (no serialisation) and switch to the outcome decoder.
-        ExprKind::Wire(inner) => pre.lower(inner, cx),
+        ExprKind::Wire(inner) => {
+            let child = pre.lower_node(inner, cx);
+            return pre.finish(child);
+        }
         // v0.43 (ADR 0075): an interpolated string lowers to a TS template
         // literal — chunks as escaped literal text, holes as `${String(…)}`.
         ExprKind::InterpStr(parts) => pre.absorb(lower_interp_str(parts, cx)),
         // v0.20b: a list literal lowers to a TS array literal; `readonly` is
         // a type-level property and the checker owns the element typing.
         ExprKind::ListLit(elems, ..) => {
-            let lowered: Vec<String> = elems.iter().map(|el| pre.lower(el, cx)).collect();
-            format!("[{}]", lowered.join(", "))
+            let children: Vec<LoweredExpr> =
+                elems.iter().map(|el| pre.lower_node(el, cx)).collect();
+            built_or_text!(pre, array(children))
         }
         ExprKind::Ident(id) => lower_ident(e, id, cx),
         ExprKind::Call { name, args, .. } => pre.absorb(lower_call(e, name, args, cx)),
@@ -1744,44 +1866,40 @@ pub(crate) fn lower_expr(e: &Expr, cx: &mut LowerCtx) -> Lowered {
                 == Some(BaseType::Decimal) =>
         {
             // #2622: negating a `Decimal` is exact, not a JS unary minus.
-            let inner = pre.lower(inner, cx);
+            let child = pre.lower_node(inner, cx);
             cx.note_decimal("__bynkDecimalNeg");
-            format!("__bynkDecimalNeg({inner})")
+            built_or_text!(pre, runtime_ctor_call(None, "__bynkDecimalNeg", child))
         }
         ExprKind::UnaryOp(op, inner) => {
-            let inner = pre.lower(inner, cx);
-            let sym = match op {
-                UnaryOp::Neg => "-",
-                UnaryOp::Not => "!",
-            };
-            format!("{sym}{inner}")
+            built_or_text!(pre, unary_op(*op, pre.lower_node(inner, cx)))
         }
         ExprKind::BinOp(op, lhs, rhs) => pre.absorb(lower_bin_op(*op, lhs, rhs, cx)),
         ExprKind::Paren(inner) => {
-            let s = pre.lower(inner, cx);
-            format!("({s})")
+            built_or_text!(pre, paren(pre.lower_node(inner, cx)))
         }
         ExprKind::Ok(inner) => {
-            let s = pre.lower(inner, cx);
+            let child = pre.lower_node(inner, cx);
             // v0.9: `Ok` is overloaded — use the checker's recorded type to
             // decide between `Result.Ok` and `HttpResult.Ok`.
-            if matches!(
+            let http = matches!(
                 cx.commons().expr_ty(e.id).as_deref(),
                 Some(Ty::HttpResult(_))
-            ) {
+            );
+            if http {
                 cx.note_http_result();
-                format!("HttpResult.Ok({s})")
-            } else {
-                format!("Ok({s})")
             }
+            built_or_text!(
+                pre,
+                runtime_ctor_call(http.then_some("HttpResult"), "Ok", child)
+            )
         }
         ExprKind::Err(inner) => {
-            let s = pre.lower(inner, cx);
-            format!("Err({s})")
+            let arg = pre.lower_node(inner, cx);
+            built_or_text!(pre, runtime_ctor_call(None, "Err", arg))
         }
         ExprKind::Some(inner) => {
-            let s = pre.lower(inner, cx);
-            format!("Some({s})")
+            let child = pre.lower_node(inner, cx);
+            built_or_text!(pre, runtime_ctor_call(None, "Some", child))
         }
         ExprKind::Question(inner) => {
             // v0.153 (ADR 0177): an `Option[T]?` operand lifts into an
@@ -11215,6 +11333,196 @@ fn minus_neg() -> Int { 5 - -3 }
             ("negd", "__bynkDecimalNeg({ coefficient: 120n, scale: 2 })"),
             ("minus", "2.5 - 1.5e3"),
             ("minus_neg", "5 - -3"),
+        ] {
+            assert_eq!(returned(&ts, name), want, "{name}");
+        }
+    }
+
+    fn id(n: &str) -> bynk_ts::TsExpr {
+        bynk_ts::TsExpr::Ident(n.to_string())
+    }
+
+    fn bin(op: bynk_ts::TsBinaryOp, l: &str, r: &str) -> bynk_ts::TsExpr {
+        bynk_ts::TsExpr::Binary {
+            op,
+            left: Box::new(id(l)),
+            right: Box::new(id(r)),
+        }
+    }
+
+    fn node(e: bynk_ts::TsExpr) -> LoweredExpr {
+        LoweredExpr::Node(e)
+    }
+
+    fn text(t: &str) -> LoweredExpr {
+        LoweredExpr::Text(t.to_string())
+    }
+
+    /// A [`Built`] as the bridge value (test-only; production text leaves
+    /// through `lower_expr`'s shared exit).
+    fn bridge(b: Built) -> LoweredExpr {
+        match b {
+            Ok(n) => LoweredExpr::Node(n),
+            Err(t) => LoweredExpr::Text(t),
+        }
+    }
+
+    // The production helpers return a `Built`; these shadow them with the
+    // bridge value so the tests read the same either way.
+    fn unary_op(op: UnaryOp, c: LoweredExpr) -> LoweredExpr {
+        bridge(super::unary_op(op, c))
+    }
+
+    fn paren(c: LoweredExpr) -> LoweredExpr {
+        bridge(super::paren(c))
+    }
+
+    fn runtime_ctor_call(
+        object: Option<&'static str>,
+        name: &'static str,
+        arg: LoweredExpr,
+    ) -> LoweredExpr {
+        bridge(super::runtime_ctor_call(object, name, arg))
+    }
+
+    fn node_or_text(
+        children: Vec<LoweredExpr>,
+        node: impl FnOnce(Vec<bynk_ts::TsExpr>) -> bynk_ts::TsExpr,
+        text: impl FnOnce(Vec<String>) -> String,
+    ) -> LoweredExpr {
+        bridge(super::node_or_text(children, node, text))
+    }
+
+    fn is_node(e: &LoweredExpr) -> bool {
+        matches!(e, LoweredExpr::Node(_))
+    }
+
+    #[test]
+    fn unary_operators_take_their_brackets_from_the_printer() {
+        use bynk_ts::TsBinaryOp::{Add, And};
+        // `-(a - b)`: the source's explicit `Paren` is kept as a node.
+        let sub = paren(node(bin(Add, "a", "b")));
+        let neg = unary_op(UnaryOp::Neg, sub);
+        assert!(is_node(&neg));
+        assert_eq!(neg.into_text(), "-(a + b)");
+        // `!(x && y)`.
+        let not = unary_op(UnaryOp::Not, paren(node(bin(And, "x", "y"))));
+        assert_eq!(not.into_text(), "!(x && y)");
+        // A bare binary operand (no source `Paren`) is bracketed by the printer.
+        let bare = unary_op(UnaryOp::Not, node(bin(And, "x", "y")));
+        assert_eq!(bare.into_text(), "!(x && y)");
+        let bare = unary_op(UnaryOp::Neg, node(bin(Add, "a", "b")));
+        assert_eq!(bare.into_text(), "-(a + b)");
+        // Nested unaries: `!!x`, `-!x`, and `-(-x)`, never the decrement `--x`.
+        let not_not = unary_op(UnaryOp::Not, unary_op(UnaryOp::Not, node(id("x"))));
+        assert_eq!(not_not.into_text(), "!!x");
+        let neg_not = unary_op(UnaryOp::Neg, unary_op(UnaryOp::Not, node(id("x"))));
+        assert_eq!(neg_not.into_text(), "-!x");
+        let neg_neg = unary_op(UnaryOp::Neg, unary_op(UnaryOp::Neg, node(id("x"))));
+        assert_eq!(neg_neg.into_text(), "-(-x)");
+    }
+
+    #[test]
+    fn a_negated_decimal_is_a_call_over_a_genuine_identifier() {
+        let arg = node(decimal_lit("120", 2));
+        let neg = runtime_ctor_call(None, "__bynkDecimalNeg", arg);
+        match &neg {
+            LoweredExpr::Node(bynk_ts::TsExpr::Call { callee, .. }) => {
+                assert!(matches!(&**callee, bynk_ts::TsExpr::Ident(n) if n == "__bynkDecimalNeg"));
+            }
+            _ => panic!("a node child gives a call node"),
+        }
+        assert_eq!(
+            neg.into_text(),
+            "__bynkDecimalNeg({ coefficient: 120n, scale: 2 })"
+        );
+    }
+
+    #[test]
+    fn constructor_calls_and_lists_are_nodes_over_node_children() {
+        let ok = runtime_ctor_call(None, "Ok", node(num_lit("1".into())));
+        assert!(is_node(&ok));
+        assert_eq!(ok.into_text(), "Ok(1)");
+        let http = runtime_ctor_call(Some("HttpResult"), "Ok", node(id("v")));
+        match &http {
+            LoweredExpr::Node(bynk_ts::TsExpr::Call { callee, .. }) => {
+                assert!(matches!(**callee, bynk_ts::TsExpr::Member { .. }))
+            }
+            _ => panic!("expected a call node"),
+        }
+        assert_eq!(http.into_text(), "HttpResult.Ok(v)");
+        assert_eq!(
+            runtime_ctor_call(None, "Err", node(id("e"))).into_text(),
+            "Err(e)"
+        );
+        assert_eq!(
+            runtime_ctor_call(None, "Some", node(id("s"))).into_text(),
+            "Some(s)"
+        );
+        let list = node_or_text(
+            vec![node(id("a")), node(num_lit("2".into()))],
+            |items| bynk_ts::TsExpr::Array {
+                items,
+                multiline: false,
+            },
+            |items| format!("[{}]", items.join(", ")),
+        );
+        assert!(is_node(&list));
+        assert_eq!(list.into_text(), "[a, 2]");
+    }
+
+    #[test]
+    fn a_text_child_makes_every_arm_fall_back_to_todays_text() {
+        let t = || text("f(x) + 1");
+        for (got, want) in [
+            (unary_op(UnaryOp::Neg, t()), "-f(x) + 1"),
+            (unary_op(UnaryOp::Not, t()), "!f(x) + 1"),
+            (paren(t()), "(f(x) + 1)"),
+            (runtime_ctor_call(None, "Ok", t()), "Ok(f(x) + 1)"),
+            (runtime_ctor_call(None, "Err", t()), "Err(f(x) + 1)"),
+            (runtime_ctor_call(None, "Some", t()), "Some(f(x) + 1)"),
+            (
+                runtime_ctor_call(Some("HttpResult"), "Ok", t()),
+                "HttpResult.Ok(f(x) + 1)",
+            ),
+            (
+                runtime_ctor_call(None, "__bynkDecimalNeg", t()),
+                "__bynkDecimalNeg(f(x) + 1)",
+            ),
+        ] {
+            assert!(!is_node(&got));
+            assert_eq!(got.into_text(), want);
+        }
+        // A list with one text element among nodes renders every element as text.
+        let list = node_or_text(
+            vec![node(id("a")), t()],
+            |items| bynk_ts::TsExpr::Array {
+                items,
+                multiline: false,
+            },
+            |items| format!("[{}]", items.join(", ")),
+        );
+        assert!(!is_node(&list));
+        assert_eq!(list.into_text(), "[a, f(x) + 1]");
+    }
+
+    #[test]
+    fn wrappers_over_source_lower_as_before() {
+        let src = "commons wraps\n\
+                   fn f(a: Int, b: Int) -> Int { -(a - b) }\n\
+                   fn g(ok: Bool) -> Bool { !(ok && ok) }\n\
+                   fn h() -> Result[Int, String] { Ok(1) }\n\
+                   fn i() -> List[Int] { [1, 2, 3] }\n\
+                   fn j() -> Option[Int] { Some(2) }\n\
+                   fn k() -> Decimal { -1.5d }\n";
+        let ts = crate::testkit::emit_source(src);
+        for (name, want) in [
+            ("f", "-(a - b)"),
+            ("g", "!(ok && ok)"),
+            ("h", "Ok(1)"),
+            ("i", "[1, 2, 3]"),
+            ("j", "Some(2)"),
+            ("k", "__bynkDecimalNeg({ coefficient: 15n, scale: 1 })"),
         ] {
             assert_eq!(returned(&ts, name), want, "{name}");
         }

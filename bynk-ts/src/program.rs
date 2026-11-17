@@ -1650,6 +1650,10 @@ pub enum TsObjectEntry {
 pub enum TsUnaryOp {
     Not,
     Typeof,
+    /// Arithmetic negation, `-x` (1A.3, #3696). Printed with its operand
+    /// parenthesised by the same rule as `!`, and a negated negation as
+    /// `-(-x)`, never the decrement `--x`.
+    Neg,
 }
 
 /// `??` (`events_fanout.rs`'s `env ?? {}`), plus three more real operators
