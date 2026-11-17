@@ -272,7 +272,7 @@ pub(super) fn emit_integration_module(
     let job_support = if remote.is_some() {
         SystemJobSupport {
             code: Vec::new(),
-            services: emitter::SystemJobServices::default(),
+            services: emitter::ctx::SystemJobServices::default(),
         }
     } else {
         emit_system_job_support(

@@ -346,7 +346,7 @@ fn splice_stmts(out: &mut String, stmts: Vec<TsStmt>) {
 /// see [`qual_type`].
 type Qual = std::collections::HashMap<String, String>;
 
-/// #1437 (Arc E slice 2): [`crate::emitter::ts_type_ref_qualified_multi_ts_type`]
+/// #1437 (Arc E slice 2): [`crate::emitter::ts_types::ts_type_ref_qualified_multi_ts_type`]
 /// as a real `TsType`, over this file's own dotted-prefix [`Qual`] convention
 /// — a real, empirically-found convention mismatch, not assumed compatible
 /// from the two functions' identical `HashMap<String, String>` shapes alone.
@@ -403,9 +403,12 @@ pub(crate) fn qualified_ts_type(t: &TypeRef, qual: &Qual) -> bynk_ts::TsType {
         .map(|(k, v)| (k.clone(), v.clone()))
         .collect();
     if whole.is_empty() {
-        crate::emitter::ts_type_ref_qualified_multi_ts_type(t, &bare)
+        crate::emitter::ts_types::ts_type_ref_qualified_multi_ts_type(t, &bare)
     } else {
-        crate::emitter::ts_type_ref_qualified_multi_ts_type(&rename_type_ref(t, &whole), &bare)
+        crate::emitter::ts_types::ts_type_ref_qualified_multi_ts_type(
+            &rename_type_ref(t, &whole),
+            &bare,
+        )
     }
 }
 
@@ -950,7 +953,7 @@ fn emit_decimal_named_codec(
                 ident("__bynkDecimalToString"),
                 vec![as_expr(
                     as_expr(ident("value"), TsType::named("unknown")),
-                    TsType::named(crate::emitter::DECIMAL_TS_TYPE),
+                    TsType::named(crate::emitter::ts_types::DECIMAL_TS_TYPE),
                 )],
             ),
             TsType::named("__JsonValue"),
@@ -2347,7 +2350,7 @@ fn emit_field_deserialise_wire(
                 // (`bynk.types.asset_at_boundary`); total for the model.
                 UncheckedReason::Asset => as_expr(
                     as_expr(ident(json), TsType::named("unknown")),
-                    crate::emitter::asset_ts_type(),
+                    crate::emitter::ts_types::asset_ts_type(),
                 ),
             };
             vec![const_(format!("__{name}"), value)]
@@ -2778,7 +2781,7 @@ pub(crate) fn serialise_ref_via(t: &TypeRef, ns: &str, ru: &RuntimeUse) -> TsExp
         other => TsExpr::Arrow {
             params: vec![TsParam {
                 name: "__v".to_string(),
-                ty: Some(TsType::named(crate::emitter::ts_type_ref(other))),
+                ty: Some(TsType::named(crate::emitter::ts_types::ts_type_ref(other))),
                 optional: false,
             }],
             is_async: false,
@@ -2813,7 +2816,7 @@ pub(crate) fn witness_codec_expr(t: &TypeRef, ru: &RuntimeUse) -> TsExpr {
                 ident("Ok"),
                 vec![as_expr(
                     ident("__v"),
-                    TsType::named(crate::emitter::ts_type_ref(other)),
+                    TsType::named(crate::emitter::ts_types::ts_type_ref(other)),
                 )],
             )));
             // The statements are printed and joined onto one line: the printer's
@@ -3027,7 +3030,7 @@ pub(crate) fn deserialise_expr_via(
         // other `HttpResult<...>` position in this file already uses —
         // instead of dropping the payload.
         TypeRef::HttpResult(inner, _) => {
-            let ty = format!("HttpResult<{}>", crate::emitter::ts_type_ref(inner));
+            let ty = format!("HttpResult<{}>", crate::emitter::ts_types::ts_type_ref(inner));
             ok_unknown_cast(&ty)
         }
         TypeRef::QueueResult(_) => ok_unknown_cast("QueueResult"),

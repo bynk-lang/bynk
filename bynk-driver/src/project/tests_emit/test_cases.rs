@@ -828,8 +828,10 @@ pub(super) fn observation_call_record_types(
                     ty: {
                         // A generic operation's own type parameter (`Events.emit[E]`)
                         // has no binding here, so a field mentioning one is `unknown`.
-                        let ty =
-                            emitter::ts_type_ref_qualified_multi_ts_type(&p.type_ref, &type_ns);
+                        let ty = emitter::ts_types::ts_type_ref_qualified_multi_ts_type(
+                            &p.type_ref,
+                            &type_ns,
+                        );
                         let printed = bynk_ts::print_type(&ty);
                         let generic = op.type_params.iter().any(|tp| {
                             printed

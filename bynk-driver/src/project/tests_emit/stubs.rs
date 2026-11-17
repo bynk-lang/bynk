@@ -4,6 +4,7 @@
 
 use super::*;
 use bynk_emit::emitter::RuntimeUse;
+use bynk_emit::emitter::ts_types::ts_type_ref_qualified_multi_ts_type;
 // #1759: every namespace a test module imports, from one definition.
 use bynk_check::checker::Types;
 use bynk_check::d1_migrations::MigrationFile;
@@ -227,14 +228,14 @@ pub(super) fn emit_stub_class(
             .iter()
             .map(|p| TsParam {
                 name: p.name.name.clone(),
-                ty: Some(emitter::ts_type_ref_qualified_multi_ts_type(
+                ty: Some(ts_type_ref_qualified_multi_ts_type(
                     &p.type_ref,
                     &sig_type_ns,
                 )),
                 optional: false,
             })
             .collect();
-        let return_ty = emitter::ts_type_ref_qualified_multi_ts_type(&op.return_type, &sig_type_ns);
+        let return_ty = ts_type_ref_qualified_multi_ts_type(&op.return_type, &sig_type_ns);
 
         let mut body_text = String::new();
         bynk_emit::emitter::extend_printed_at(

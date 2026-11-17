@@ -1241,7 +1241,7 @@ fn emit_call_wrapper(
         .iter()
         .map(|p| TsParam {
             name: wire_ident(&p.name.name),
-            ty: Some(crate::emitter::ts_type_ref_qualified_ts_type(
+            ty: Some(crate::emitter::ts_types::ts_type_ref_qualified_ts_type(
                 &p.type_ref,
                 &scope,
                 "handlers",
@@ -3048,7 +3048,7 @@ fn collect_runtime_type_names(r: &TypeRef, out: &mut std::collections::BTreeSet<
     }
 }
 
-/// P7.2: [`crate::emitter::ts_type_ref_qualified_ts_type`] over `r`, scoped
+/// P7.2: [`crate::emitter::ts_types::ts_type_ref_qualified_ts_type`] over `r`, scoped
 /// to `r`'s own named types — the minimal correct qualification for a single
 /// type-ref rendered in isolation, the same helper `emit_call_wrapper` uses
 /// across a whole param list. A bare `ts_type_ref` collides with anything of
@@ -3060,7 +3060,7 @@ fn collect_runtime_type_names(r: &TypeRef, out: &mut std::collections::BTreeSet<
 ///
 /// #1321: renamed from `qualified_type_ref` (returned `String`) — every real
 /// caller now builds a `TsProgram` directly, so this returns the `TsType`
-/// [`crate::emitter::ts_type_ref_qualified_ts_type`] (Decision B) itself
+/// [`crate::emitter::ts_types::ts_type_ref_qualified_ts_type`] (Decision B) itself
 /// builds, not its printed text. That function originally had a
 /// `String`-returning sibling, `ts_type_ref_qualified`, kept for a
 /// still-`String`-based caller elsewhere in the crate; Arc C slice 32
@@ -3069,7 +3069,7 @@ fn collect_runtime_type_names(r: &TypeRef, out: &mut std::collections::BTreeSet<
 /// form.
 fn qualified_ts_type_ref(r: &TypeRef) -> TsType {
     let scope: HashSet<String> = named_types_in(r).into_iter().collect();
-    crate::emitter::ts_type_ref_qualified_ts_type(r, &scope, "handlers")
+    crate::emitter::ts_types::ts_type_ref_qualified_ts_type(r, &scope, "handlers")
 }
 
 /// #1944: the runtime types the `Env` members of `bindings` name for the

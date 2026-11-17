@@ -228,7 +228,7 @@ pub(super) fn refined_gen_ts(
     // opaque `Ident` instead, the same "an unconverted shared sibling's own
     // text stays opaque" posture this track already uses (P7.9's `ts_base`,
     // #1369's `Cell` zero value).
-    ident(emitter::unchecked_construct_test(
+    ident(emitter::ts_types::unchecked_construct_test(
         name,
         &bynk_ts::print_expr(&draw),
         is_opaque,
@@ -610,7 +610,7 @@ pub(super) fn canon_ts_for_ty(
                     base, refinement, ..
                 } => {
                     let lit = base_canon_ts(*base, refinement.as_ref());
-                    ident(emitter::unchecked_construct_test(
+                    ident(emitter::ts_types::unchecked_construct_test(
                         name,
                         &bynk_ts::print_expr(&lit),
                         matches!(decl.body, TypeBody::Opaque { .. }),
@@ -738,15 +738,16 @@ pub(super) fn binding_gen(
                 match base {
                     BaseType::Int => {
                         let (lo, hi, floor) = int_bounds(refinement.as_ref());
-                        let shrunk = emitter::unchecked_construct_test(name, "__n", is_opaque);
+                        let shrunk =
+                            emitter::ts_types::unchecked_construct_test(name, "__n", is_opaque);
                         (
                             vec![
-                                ident(emitter::unchecked_construct_test(
+                                ident(emitter::ts_types::unchecked_construct_test(
                                     name,
                                     &format!("{lo}n"),
                                     is_opaque,
                                 )),
-                                ident(emitter::unchecked_construct_test(
+                                ident(emitter::ts_types::unchecked_construct_test(
                                     name,
                                     &format!("{hi}n"),
                                     is_opaque,
@@ -775,9 +776,10 @@ pub(super) fn binding_gen(
                     BaseType::String => {
                         let min = str_min(refinement.as_ref());
                         let lit = format!("\"{}\"", "x".repeat(min.max(0) as usize));
-                        let shrunk = emitter::unchecked_construct_test(name, "__s", is_opaque);
+                        let shrunk =
+                            emitter::ts_types::unchecked_construct_test(name, "__s", is_opaque);
                         (
-                            vec![ident(emitter::unchecked_construct_test(
+                            vec![ident(emitter::ts_types::unchecked_construct_test(
                                 name, &lit, is_opaque,
                             ))],
                             method_call(

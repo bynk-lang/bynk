@@ -24,6 +24,8 @@ use bynk_check::checker::{Callee, TypedCommons};
 use bynk_syntax::ast::{Block, Expr, ExprId, ExprKind, FnDecl, FnName, MatchBody};
 
 use super::lower::{Pre, emit_block_as_function_body_with_return, write_line};
+use super::lower_ctx::LowerCtx;
+use super::ts_types::{ts_ty, ts_type_ref};
 use super::*;
 
 /// The label of the loop; a `continue` to it passes through any emitted

@@ -604,7 +604,7 @@ fn service_return(svc: &CrossContextService, renamed: &dyn Fn(&TypeRef) -> TypeR
 
 /// The TypeScript type of a boundary type reference, every name bare.
 fn ts_type(t: &TypeRef) -> TsType {
-    super::ts_type_ref_qualified_multi_ts_type(t, &HashMap::new())
+    super::ts_types::ts_type_ref_qualified_multi_ts_type(t, &HashMap::new())
 }
 
 /// A boundary type's declaration in the client: its in-memory shape, which is

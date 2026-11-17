@@ -179,7 +179,7 @@ pub(super) struct SystemHttpSupport {
     pub(super) type_ns: String,
     /// #2019: the refinement-guarded routes and each refinement actor's
     /// witness claims, so a call acting as a refinement signs its claims.
-    pub(super) claims: emitter::SystemHttpClaims,
+    pub(super) claims: emitter::ctx::SystemHttpClaims,
 }
 
 /// #2135: what a `Signature`-secured route's drivers sign with — the actor's
@@ -355,7 +355,7 @@ pub(super) fn emit_system_http_support(
             declared_routes: declared,
             route_body,
             type_ns: String::new(),
-            claims: emitter::SystemHttpClaims::default(),
+            claims: emitter::ctx::SystemHttpClaims::default(),
         };
     };
     let ns = test_ns(target);
@@ -373,7 +373,7 @@ pub(super) fn emit_system_http_support(
     let mut has_oidc = false;
     // #2019: each refinement actor's witness claims, signed when a case acts
     // as it on a refinement-guarded route.
-    let mut claims = emitter::SystemHttpClaims {
+    let mut claims = emitter::ctx::SystemHttpClaims {
         routes: std::collections::HashSet::new(),
         sum_routes: HashMap::new(),
         oidc_routes: std::collections::HashSet::new(),
@@ -459,7 +459,7 @@ pub(super) fn emit_system_http_support(
                     name: "__extraHeaders".to_string(),
                     ty: Some(TsType::named(format!(
                         "{} | undefined",
-                        bynk_emit::emitter::ts_type_ref(
+                        bynk_emit::emitter::ts_types::ts_type_ref(
                             &bynk_syntax::ast::TypeRef::RequestHeaders(Default::default())
                         )
                     ))),
@@ -1387,7 +1387,7 @@ pub(super) fn emit_system_http_support(
             declared_routes: declared,
             route_body,
             type_ns: String::new(),
-            claims: emitter::SystemHttpClaims::default(),
+            claims: emitter::ctx::SystemHttpClaims::default(),
         };
     }
 
@@ -1487,10 +1487,10 @@ pub(super) fn emit_system_http_support(
 }
 
 /// #2136: the cron and queue drivers of a `system` suite's target, and the
-/// services they cover ([`emitter::SystemJobServices`]).
+/// services they cover ([`emitter::ctx::SystemJobServices`]).
 pub(super) struct SystemJobSupport {
     pub(super) code: Vec<TsStmt>,
-    pub(super) services: emitter::SystemJobServices,
+    pub(super) services: emitter::ctx::SystemJobServices,
 }
 
 /// #2136: one driver per cron handler and per queue service of the `system`
@@ -1515,7 +1515,7 @@ pub(super) fn emit_system_job_support(
 ) -> SystemJobSupport {
     use bynk_model::{IrHandlerKind, lower_handler_kind_ir};
     use bynk_syntax::ast::ServiceProtocol;
-    let mut services = emitter::SystemJobServices::default();
+    let mut services = emitter::ctx::SystemJobServices::default();
     let mut drivers: Vec<TsStmt> = Vec::new();
     let Some(table) = unit_tables.get(target) else {
         return SystemJobSupport {
@@ -1690,7 +1690,7 @@ pub(super) fn driver_param_ty(t: &bynk_syntax::ast::TypeRef, _ns: &str) -> Strin
         // (Slice A), so the driver forwards the value to the namespace's
         // `serialise_*`. Primitives stay precise.
         TypeRef::Named(_) => "any".to_string(),
-        other => bynk_emit::emitter::ts_type_ref(other),
+        other => bynk_emit::emitter::ts_types::ts_type_ref(other),
     }
 }
 

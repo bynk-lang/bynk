@@ -20,6 +20,11 @@ use bynk_syntax::ast::{
 use bynk_model::is_effectful_return;
 use bynk_model::{ConstVal, EventPatternIr, EventPatternValueIr, IrHttpMethod};
 
+use super::ctx::{BodyMode, ModuleCtx, TailSlot, TestShared};
+use super::lower_ctx::LowerCtx;
+use super::ts_types::{
+    ts_array_elem, ts_base, ts_ty, ts_type_ref, unchecked_construct, unchecked_construct_test,
+};
 use super::*;
 
 /// Lower a block to a sequence of TypeScript statements suitable for use as
@@ -132,7 +137,7 @@ pub fn lower_test_case_body_reporting(
             BodyMode::TestCase {
                 test: TestShared {
                     test_scaffold: true,
-                    assert_loc: Some(crate::emitter::AssertLoc {
+                    assert_loc: Some(crate::emitter::ctx::AssertLoc {
                         source: source.to_string(),
                         rel_path: rel_path.to_string(),
                     }),
@@ -189,9 +194,9 @@ pub fn lower_integration_case_body(
     system_http_routes: std::collections::HashSet<(String, String, String)>,
     system_http_route_body: HashMap<(String, String, String), (usize, bynk_syntax::ast::TypeRef)>,
     system_http_type_ns: String,
-    system_http_claims: crate::emitter::SystemHttpClaims,
+    system_http_claims: crate::emitter::ctx::SystemHttpClaims,
     // #2136: the target's cron and queue services, driven through the Worker.
-    system_jobs: crate::emitter::SystemJobServices,
+    system_jobs: crate::emitter::ctx::SystemJobServices,
     // #2024: the names the case scaffold binds in the body's scope.
     harness_bound: HashSet<String>,
     source: &str,
@@ -220,7 +225,7 @@ pub fn lower_integration_case_body(
             BodyMode::IntegrationCase {
                 test: TestShared {
                     test_scaffold: true,
-                    assert_loc: Some(crate::emitter::AssertLoc {
+                    assert_loc: Some(crate::emitter::ctx::AssertLoc {
                         source: source.to_string(),
                         rel_path: rel_path.to_string(),
                     }),
@@ -1268,7 +1273,7 @@ fn emit_statement(out: &mut String, stmt: &Statement, cx: &mut LowerCtx, indent:
 }
 
 /// v0.59: the `location` string an `expect` failure carries. With a test-body
-/// [`AssertLoc`](crate::emitter::AssertLoc) in scope it is a real, escaped
+/// [`AssertLoc`](crate::emitter::ctx::AssertLoc) in scope it is a real, escaped
 /// `path:line:col` (so `--format json` consumers can link to the source);
 /// otherwise it falls back to the bare byte offset (`expect`s only appear in test
 /// bodies, so the fallback is defensive).
@@ -1330,7 +1335,7 @@ fn lower_const_literal_raw(e: &Expr) -> Option<String> {
         // v0.21: the stored lexeme verbatim.
         ExprKind::FloatLit { lexeme, .. } => Some(lexeme.clone()),
         ExprKind::DecimalLit { coef, scale, .. } => {
-            Some(crate::emitter::decimal_ts_literal(coef, *scale))
+            Some(crate::emitter::ts_types::decimal_ts_literal(coef, *scale))
         }
         ExprKind::StrLit(s) => Some(format!("\"{}\"", escape_ts_string(s))),
         // A negated numeric literal — admissible at compile time (the
@@ -1339,10 +1344,9 @@ fn lower_const_literal_raw(e: &Expr) -> Option<String> {
         ExprKind::UnaryOp(UnaryOp::Neg, inner) => match &inner.kind {
             ExprKind::IntLit { value: n, .. } => Some(format!("-{n}")),
             ExprKind::FloatLit { lexeme, .. } => Some(format!("-{lexeme}")),
-            ExprKind::DecimalLit { coef, scale, .. } => Some(crate::emitter::decimal_ts_literal(
-                &format!("-{coef}"),
-                *scale,
-            )),
+            ExprKind::DecimalLit { coef, scale, .. } => Some(
+                crate::emitter::ts_types::decimal_ts_literal(&format!("-{coef}"), *scale),
+            ),
             _ => None,
         },
         _ => None,
@@ -1544,7 +1548,7 @@ pub(crate) fn lower_expr(e: &Expr, cx: &mut LowerCtx) -> Lowered {
         ExprKind::FloatLit { lexeme, .. } => lexeme.clone(),
         // #2622: a `Decimal` literal is an object literal (no runtime import).
         ExprKind::DecimalLit { coef, scale, .. } => {
-            crate::emitter::decimal_ts_literal(coef, *scale)
+            crate::emitter::ts_types::decimal_ts_literal(coef, *scale)
         }
         // v0.86 (ADR 0112): a `Duration` literal lowers to its constant
         // milliseconds (the value `Duration` erases to).
@@ -2072,7 +2076,7 @@ fn refinement_default(base: BaseType, refinement: Option<&Refinement>) -> Option
                                 // common scale: the bound itself, at its own
                                 // scale, is the smallest value in range.
                                 None => {
-                                    return Some(crate::emitter::decimal_ts_literal(
+                                    return Some(crate::emitter::ts_types::decimal_ts_literal(
                                         &a.coef, a.scale,
                                     ));
                                 }
@@ -2091,7 +2095,10 @@ fn refinement_default(base: BaseType, refinement: Option<&Refinement>) -> Option
             {
                 lo = h;
             }
-            Some(crate::emitter::decimal_ts_literal(&lo.to_string(), scale))
+            Some(crate::emitter::ts_types::decimal_ts_literal(
+                &lo.to_string(),
+                scale,
+            ))
         }
     }
 }
@@ -2121,7 +2128,7 @@ fn base_default_ts(base: BaseType) -> String {
         BaseType::Float => "0".to_string(),
         BaseType::Duration | BaseType::Instant => "0".to_string(),
         BaseType::Bytes => "new globalThis.Uint8Array()".to_string(),
-        BaseType::Decimal => crate::emitter::decimal_ts_literal("0", 0),
+        BaseType::Decimal => crate::emitter::ts_types::decimal_ts_literal("0", 0),
     }
 }
 
@@ -2138,7 +2145,7 @@ fn mock_value(ty: TyId, cx: &LowerCtx, depth: u32) -> String {
         Ty::Base(BaseType::String) => "\"\"".to_string(),
         Ty::Base(BaseType::Bool) => "true".to_string(),
         Ty::Base(BaseType::Float) => "0".to_string(),
-        Ty::Base(BaseType::Decimal) => crate::emitter::decimal_ts_literal("0", 0),
+        Ty::Base(BaseType::Decimal) => crate::emitter::ts_types::decimal_ts_literal("0", 0),
         Ty::Named { name, .. } => {
             let Some(decl) = cx.commons().types.get(name.as_str()) else {
                 return "undefined".to_string();
@@ -4619,7 +4626,7 @@ fn lower_effect_kernel_call(
             let site = cx
                 .assert_loc()
                 .map(|_| expect_location(cx, e.span.start))
-                .or_else(|| crate::emitter::fault_source_location(e.span.start))
+                .or_else(|| crate::emitter::ctx::fault_source_location(e.span.start))
                 .map(|l| crate::emitter::escape_ts_string(&l))
                 .unwrap_or_else(|| format!("offset {}", e.span.start));
             let err_type = match &recv_ty {
@@ -6274,8 +6281,8 @@ fn lower_list_kernel(
             cx.note_decimal("__bynkDecimalAdd");
             Some(format!(
                 "({recv}).reduce((__s: {}, __x: {elem_ts}) => __bynkDecimalAdd(__s, ({key})(__x)), {})",
-                crate::emitter::DECIMAL_TS_TYPE,
-                crate::emitter::decimal_ts_literal("0", 0)
+                crate::emitter::ts_types::DECIMAL_TS_TYPE,
+                crate::emitter::ts_types::decimal_ts_literal("0", 0)
             ))
         }
         (ListOp::Sum, [key]) => {
@@ -6662,8 +6669,8 @@ fn lower_query_method(
             runtime_use.note_decimal("__bynkDecimalAdd");
             terminal(format!(
                 "{source}.reduce((__s: {}, __x) => __bynkDecimalAdd(__s, ({key})(__x)), {})",
-                crate::emitter::DECIMAL_TS_TYPE,
-                crate::emitter::decimal_ts_literal("0", 0)
+                crate::emitter::ts_types::DECIMAL_TS_TYPE,
+                crate::emitter::ts_types::decimal_ts_literal("0", 0)
             ))
         }
         (QueryOp::Sum, [key]) => terminal(format!(
@@ -8091,7 +8098,7 @@ fn consumed_variant_literal(
         return None;
     }
     let ty = cx.commons().expr_types.get(&e.id)?.ty;
-    let ts_ty = bynk_ts::print_type(&crate::emitter::ts_ty_to_ts_type(
+    let ts_ty = bynk_ts::print_type(&crate::emitter::ts_types::ts_ty_to_ts_type(
         ty,
         &cx.commons().ty_intern,
     ));
@@ -8157,7 +8164,7 @@ fn lower_call(e: &Expr, name: &Ident, args: &[Expr], cx: &mut LowerCtx) -> Lower
         let location = cx
             .assert_loc()
             .map(|_| expect_location(cx, e.span.start))
-            .or_else(|| crate::emitter::fault_source_location(e.span.start))
+            .or_else(|| crate::emitter::ctx::fault_source_location(e.span.start))
             .map(|l| crate::emitter::escape_ts_string(&l))
             .unwrap_or_else(|| format!("offset {}", e.span.start));
         cx.note_fault();
@@ -8175,9 +8182,9 @@ fn lower_call(e: &Expr, name: &Ident, args: &[Expr], cx: &mut LowerCtx) -> Lower
     {
         cx.runtime_use().note_test_connection();
         let frame = match cx.commons().expr_ty(e.id).as_deref() {
-            Some(Ty::TestConnection(f)) => {
-                bynk_ts::print_type(&crate::emitter::ts_ty_to_ts_type(*f, cx.commons().tys()))
-            }
+            Some(Ty::TestConnection(f)) => bynk_ts::print_type(
+                &crate::emitter::ts_types::ts_ty_to_ts_type(*f, cx.commons().tys()),
+            ),
             _ => "unknown".to_string(),
         };
         return pre.finish(format!("new TestConnection<{frame}>()"));
@@ -10396,6 +10403,7 @@ fn refined_check_as_bool(recv: &str, base: BaseType, refinement: Option<&Refinem
 #[cfg(test)]
 mod idempotency_scoping_tests {
     use super::*;
+    use crate::emitter::ctx::HandlerShared;
     use bynk_check::checker::TypedCommons;
 
     // P6.38 (design/tracks/the-ir.md §6a): reads `TypedCommons::empty()`
