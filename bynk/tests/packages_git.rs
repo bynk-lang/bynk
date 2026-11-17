@@ -15,6 +15,9 @@
 //!    revisions conflict;
 //!  - `[dev-dependencies]` reach only suites, and never a deployable build.
 
+#[path = "support/stand_in.rs"]
+mod stand_in;
+
 use std::path::{Path, PathBuf};
 use std::process::{Command, Stdio};
 
@@ -515,7 +518,6 @@ fn a_missing_revision_and_a_truncated_lock_are_reported() {
 #[cfg(unix)]
 #[test]
 fn hooks_in_the_git_cache_never_run() {
-    use std::os::unix::fs::PermissionsExt;
     let root = scratch("hooks");
     let url = ledger_repo(&root.join("ledger"), POST_PLUS_ONE);
     let app = root.join("app");
@@ -533,8 +535,9 @@ fn hooks_in_the_git_cache_never_run() {
     let marker = root.join("hook-ran");
     for hook in ["reference-transaction", "post-checkout", "post-merge"] {
         let path = cache.join("hooks").join(hook);
-        write(&path, &format!("#!/bin/sh\ntouch '{}'\n", marker.display()));
-        std::fs::set_permissions(&path, std::fs::Permissions::from_mode(0o755)).unwrap();
+        // A hook git could not exec (ETXTBSY) would pass this vacuously.
+        std::fs::create_dir_all(path.parent().unwrap()).unwrap();
+        stand_in::write_executable(&path, &format!("#!/bin/sh\ntouch '{}'\n", marker.display()));
     }
     let (code, out) = run("bynk", &app, &home, &["update"]);
     assert_eq!(code, 0, "{out}");

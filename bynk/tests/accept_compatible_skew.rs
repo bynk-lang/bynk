@@ -6,6 +6,9 @@
 //! Cloudflare; the live state is a `bynk.deploy.lock` seeded from the first
 //! build's own manifests, as a real deploy would have recorded it.
 
+#[path = "support/stand_in.rs"]
+mod stand_in;
+
 use std::path::{Path, PathBuf};
 use std::process::Command;
 
@@ -206,14 +209,12 @@ fn a_compatible_callee_ahead_of_its_callers_needs_the_flag_and_a_breaking_one_is
 /// then been done.
 #[cfg(unix)]
 fn fake_wrangler(dir: &Path) -> PathBuf {
-    use std::os::unix::fs::PermissionsExt;
     let bin = dir.join("fakebin");
     std::fs::create_dir_all(&bin).unwrap();
     let script = "#!/bin/sh\ncase \"$1$2\" in\n  --version|wrangler--version) echo \"4.50.0\";;\n  *) echo \"fake wrangler: $*\" >&2; exit 1;;\nesac\n";
     for name in ["wrangler", "npx"] {
         let path = bin.join(name);
-        std::fs::write(&path, script).unwrap();
-        std::fs::set_permissions(&path, std::fs::Permissions::from_mode(0o755)).unwrap();
+        stand_in::write_executable(&path, script);
     }
     bin
 }
