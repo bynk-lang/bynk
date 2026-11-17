@@ -430,7 +430,7 @@ pub fn phase_group_binding_collisions(
     bindings: &BTreeMap<String, Vec<WorkerBinding>>,
     errors: &mut ErrorSink,
 ) {
-    group_worker_cycles(worker_groups, parsed, groups, bindings, errors);
+    worker_cycles(worker_groups, parsed, groups, bindings, errors);
     for (key, group) in worker_groups {
         group_service_names(key, &group.contexts, parsed, groups, errors);
         group_websockets(key, &group.contexts, parsed, groups, errors);
@@ -529,21 +529,28 @@ fn group_service_names(
     }
 }
 
-/// `bynk.deploy.group_cycle` (#3562): a Worker must be uploaded after the Workers
+/// `bynk.deploy.worker_cycle` (#3562): a Worker must be uploaded after the Workers
 /// it binds to (ADR 0193 D1), and the language rules out a cycle among *contexts*
 /// (`bynk.context.consumes_cycle`), but a group folds its members into one node,
-/// so two groups can depend on each other with no cycle among their contexts
-/// (`A1 -> B1` and `B2 -> A2`, with `A1`, `A2` in one group and `B1`, `B2` in
-/// another). The graph is the Service Bindings the Workers would declare, read
-/// from `bindings` like deploy's ordering, a context standing for its group's
-/// Worker. An edge inside a group is a Worker binding to itself and is no edge.
-/// One error per strongly connected set of Workers containing a group, showing one
-/// representative cycle: the Workers and one context edge per hop, at the first
-/// hop's consumer. A cycle among ungrouped Workers is deliberately not reported
-/// here. `consumes_cycle` covers service calls, but `bindings` also holds the
-/// publisher-to-subscriber edges, so an ungrouped event-edge cycle is a known gap
-/// that predates this check.
-fn group_worker_cycles(
+/// so two groups, or a group and a single context, can depend on each other with
+/// no cycle among their contexts (`A1 -> B1` and `B2 -> A2`, with `A1`, `A2` in one
+/// group and `B1`, `B2` in another). The graph is the Service Bindings the Workers
+/// would declare, read from `bindings` like deploy's ordering: a call, or the
+/// publisher-to-subscriber binding the events fan-out needs. A context stands for
+/// its group's Worker, and an edge inside a group is a Worker binding to itself
+/// and is no edge.
+///
+/// One error per strongly connected set of Workers **containing a group**, showing
+/// one representative cycle: the Workers and one context edge per hop, at the first
+/// hop's consumer. A cycle among Workers of contexts in no group is deliberately
+/// not reported: a subscriber that also calls its publisher closes one through the
+/// fan-out's binding, which `bynk dev` and the tests run, and `bynk deploy` refuses
+/// before uploading anything (Cloudflare rejects an upload whose binding target
+/// does not exist yet, code 10143). `bynk.context.consumes_cycle` owns a cycle
+/// among contexts' `consumes`: the bindings this reads are built only for a
+/// project with no error, so that cycle is reported first and this one once it is
+/// fixed, and a cycle is never reported twice.
+fn worker_cycles(
     worker_groups: &bynk_project::worker_groups::WorkerGroups,
     parsed: &[ParsedFile],
     groups: &BTreeMap<String, Vec<usize>>,
@@ -599,7 +606,7 @@ fn group_worker_cycles(
         errors.push_for(
             file.as_deref(),
             CompileError::new(
-                "bynk.deploy.group_cycle",
+                "bynk.deploy.worker_cycle",
                 span,
                 format!(
                     "the Workers {} bind to each other in a cycle: {}",
@@ -612,7 +619,7 @@ fn group_worker_cycles(
                 ),
             )
             .with_note(
-                "a Worker is uploaded after the Workers it binds to, so a cycle between Workers cannot be deployed. The contexts themselves are acyclic, but a group folds its members into one Worker: move a context out of its group, or into the other, so the Workers' dependencies run one way",
+                "a Worker is uploaded after the Workers it binds to, so a cycle between Workers cannot be deployed. A group folds its members into one Worker: move a context out of its group, or into the other, so the Workers' dependencies run one way. (A publisher's Worker also binds to its subscribers, so a subscriber that calls its publisher closes a cycle too)",
             ),
         );
     }
