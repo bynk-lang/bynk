@@ -3,7 +3,7 @@ title: Version compatibility & changelog
 ---
 Bynk is pre-1.0 and developed in small, spec-first increments (see
 [Versioning & roadmap](/book/about/versioning-and-roadmap/)). This book is
-written against **v0.636**.
+written against **v0.637**.
 
 This page is a high-level summary of notable increments, not an exhaustive
 per-commit history. While Bynk is pre-1.0, increments may change behaviour.
@@ -28,6 +28,7 @@ per-commit history. While Bynk is pre-1.0, increments may change behaviour.
 
 | Version | Highlights |
 |---|---|
+| **v0.637.0** | `bynk revert` reverts a `[deploy.workers.<key>]` group as one Worker (`--worker KEY`), so every member goes back together; a member named with `--context` is refused, naming the Worker that holds it (#3562, G4-3) |
 | **v0.636.2** | A cycle between Workers that involves a `[deploy.workers]` group is refused at check time as `bynk.deploy.worker_cycle` (renamed from `bynk.deploy.group_cycle`, never released), whichever two Workers and however the cycle is closed: a call, or a publisher's binding to its subscriber (#3562, G2b) |
 | **v0.636.1** | `bynk deploy` no longer fails a first deploy when wrangler uploads the Worker and then reports `[code: 10007]` (a race in its follow-up lookup), if the account shows the upload landed as the Worker's only version; any other failure, and a Worker that already existed, stay fatal (#3562, G4-2) |
 | **v0.636.0** | `bynk deploy` deploys a `[deploy.workers.<key>]` group as one Worker, in dependency order with the others, and `--worker KEY` selects a Worker by its directory; the ledger records a group Worker's contexts, and a member cannot be deployed alone (#3562, G4-1) |

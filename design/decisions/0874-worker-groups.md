@@ -124,7 +124,7 @@ failure is followed by `wrangler triggers deploy`, and a failure of that is the
 deploy's failure. If the account cannot be asked (no API token), the failure stays as
 wrangler reported it.
 
-Edge keys are named per member context (the runtime signs as the calling context): an edge between Workers is one secret, held by the callee as `BYNK_CALL_FROM_<m>` for each member `m` of the caller and by the caller as `BYNK_CALL_TO_<m>` for each member of the callee, and a group holds both for each of its own members. The members of a Worker share one `env`, so a key held for the Worker is held by all of them: within a Worker, a caller's identity between members is by convention, not cryptographically separable (any member could sign as another); across Workers it is per Worker edge.
+Edge keys are named per member context (the runtime signs as the calling context): an edge between Workers is one secret, held by the callee as `BYNK_CALL_FROM_<m>` for each member `m` of the caller and by the caller as `BYNK_CALL_TO_<m>` for each member of the callee, and a group holds both for each of its own members. The members of a Worker share one `env`, so a key held for the Worker is held by all of them: within a Worker, a caller's identity between members is by convention, not cryptographically separable (any member could sign as another); across Workers it is per Worker edge. A group deployed before edge keys were named per member holds none of the new names, so its edges are keyed afresh by the next whole-project deploy (a `--worker` or `--context` run is refused until then), and the old Worker-named secrets stay on its peers.
 
 *D8: amendments.*
 
@@ -155,10 +155,24 @@ Edge keys are named per member context (the runtime signs as the calling context
   `10007` handling) and runs in `bynk dev` (G6: one Worker on one port, `--context`
   naming a member serving its whole group). The temporary
   `bynk.deploy.worker_groups_unsupported` refusal is removed.
-- **Still open, G3:** in-process edges and events between members (an intra-group
-  call is a Service Binding to itself today). The merged events fan-out has
-  landed (G3-1), and so has the conformance harness (G3-0). The Worker cycle check
-  (`bynk.deploy.worker_cycle`) lands before G3.
+- **G3-2, in-process calls:** a call between members stays in the Worker. The group's
+  entry answers the binding a member names another by with the group's own dispatcher,
+  so the request is still signed, contract-checked, admission-checked and decoded on
+  both sides (values are copied, a callee's fault is the same `CalleeFaulted`, a
+  refusal the same refusal); only the Service Binding hop is gone. It is not a direct
+  function call, which would need its own copy and error-mapping rules to be
+  conformant. The calls share one invocation's CPU and subrequest budget and one
+  `ctx`, so a callee's `waitUntil` attaches to the caller's request: that is what
+  "the same Worker" means, and it is the one thing beyond the hop that changes. A callee
+  that throws out of `fetch` is answered as the plain `500` a Service Binding gives.
+  **G3-3 is not planned; revisit if the self-binding ever costs something.** The
+  Worker's binding to itself stays in `wrangler.toml`: the fan-out Durable Object cannot
+  call back into the Worker's dispatcher and delivers over it, and so does anything else
+  that runs with the raw runtime `env` rather than `__loopback(env)` (a member agent's
+  Durable Object calling another member, whose constructor `env` is not wrapped).
+  Dropping it would be safe only for a group where neither happens. The merged events
+  fan-out has landed (G3-1), and so has the conformance harness (G3-0). The Worker cycle
+  check (`bynk.deploy.worker_cycle`) has landed.
 - **Still open, G5:** moving an agent-owning context into or out of a group is
   refused in v1 (`bynk.deploy.agent_move_refused`); the scratch-account probe
   showed a data-preserving class transfer works with the declarative `exports` map

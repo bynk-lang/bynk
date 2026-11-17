@@ -8,15 +8,17 @@
 //! subscriber and a client can see must not change. The topologies today:
 //!
 //! - `separate`: one Worker per context, reached over a Service Binding;
-//! - `grouped`: all four contexts in one `[deploy.workers.core]` Worker, where an
-//!   intra-group edge is a Service Binding to the Worker itself.
+//! - `grouped`: all four contexts in one `[deploy.workers.core]` Worker, where a
+//!   call between members is in process (G3-2): the member's binding answers by
+//!   running the request through the group's own dispatcher, with no Service Binding.
 //!
-//! G3-2 makes a call between a group's members in-process. It adds a third
-//! entry to [`TOPOLOGIES`] and these scenarios decide whether it conforms: the
-//! same status, body and logs, the same refusals, the same fault mapping. The
-//! `wire` record (which Service Binding each call went over) is the one thing a
-//! topology is *expected* to change, so [`assert_topologies_agree`] leaves it out
-//! and a topology that makes calls in-process states that it has no wire.
+//! These scenarios decide whether a topology conforms: the same status, body and
+//! logs, the same refusals, the same fault mapping. The `wire` record (which
+//! Service Binding each call went over) is the one thing a topology is *expected*
+//! to change, so [`assert_topologies_agree`] leaves it out, and each topology says
+//! whether it has a wire (`in_process`). A line a callee writes to its own log is
+//! its own whichever way it was called: attributed by the binding it ran under over
+//! a Service Binding, and by the context it names in process.
 //!
 //! Scenarios:
 //!
@@ -59,16 +61,21 @@ const INTERNAL: &str = "division by zero";
 struct Topology {
     name: &'static str,
     manifest: &'static str,
+    /// Whether a call between two contexts stays in the Worker (a group's members)
+    /// and so has no Service Binding on the wire.
+    in_process: bool,
 }
 
 const TOPOLOGIES: &[Topology] = &[
     Topology {
         name: "separate",
         manifest: "[build]\ntarget = \"workers\"\n",
+        in_process: false,
     },
     Topology {
         name: "grouped",
         manifest: "[build]\ntarget = \"workers\"\n\n[deploy.workers.core]\ncontexts = [\"app.a\", \"app.b\", \"app.pub\", \"app.sub\"]\n",
+        in_process: true,
     },
 ];
 
@@ -175,17 +182,18 @@ service OnPlaced from Events(Placed) {
 /// `wire`. A log line is attributed to the binding it was written under
 /// (`client` when under none), and cut at its stack.
 const DRIVER: &str = r#"import { AsyncLocalStorage } from "node:async_hooks";
+import { readFileSync } from "node:fs";
 import { signedHeaders } from "./out-js/__bynk_runtime/boundary.js";
 
 const grouped = process.argv[2] === "grouped";
 const KEY = "edge-key";
 const CONTEXTS = ["app.a", "app.b", "app.pub", "app.sub"];
-const upper = (c) => c.toUpperCase().replace(".", "__");
 const binding = (c) => c.toUpperCase().replace(".", "_");
 
 // Which binding a log line was written under follows the call it ran in, even
 // when that work outlives the call that started it (a `waitUntil`).
 const owner = new AsyncLocalStorage();
+const CALLEE_LOGS = { "app.b ": "APP_B", "app.sub ": "APP_SUB", "app.pub ": "APP_PUB" };
 const logs = [];
 const wire = [];
 const show = (a) => typeof a === "string" ? a : a instanceof Error ? (a.stack ?? String(a)) : JSON.stringify(a);
@@ -193,7 +201,10 @@ console.error = (...args) => {
   // `raw` keeps any stack, for what must not leak; `text` is cut at it, which is
   // what topologies are compared on (their file names differ).
   const raw = args.map(show).join(" ");
-  logs.push({ owner: owner.getStore() ?? "client", text: raw.split("\n    at ")[0], raw });
+  // In process there is no binding to attribute a callee's own log to: its lines
+  // begin with the callee's context name (`app.b call boom faulted ...`).
+  const named = Object.entries(CALLEE_LOGS).find(([prefix]) => raw.startsWith(prefix))?.[1];
+  logs.push({ owner: owner.getStore() ?? named ?? "client", text: raw.split("\n    at ")[0], raw });
 };
 console.log = () => {};
 const pending = [];
@@ -211,12 +222,12 @@ if (grouped) {
   Fanout = (await import("./out-js/workers/app-pub/index.js")).__EventsFanout;
 }
 
-// Every context holds the key for every edge, so a refusal is the callee's own.
-const keys = {};
-for (const c of CONTEXTS) {
-  keys["BYNK_CALL_TO_" + upper(c)] = KEY;
-  keys["BYNK_CALL_FROM_" + upper(c)] = KEY;
-}
+// A Worker holds only the keys `bynk deploy` would provision for it, read from the
+// deploy plan (`provisioned.json`): not a key for every edge, so a call the plan did
+// not key faults here as it would deployed, and a refusal is the callee's own.
+const provisioned = JSON.parse(readFileSync("provisioned.json", "utf8"));
+const workerOf = (c) => (grouped ? "core" : dir(c));
+const keysOf = (c) => Object.fromEntries((provisioned[workerOf(c)] ?? []).map((name) => [name, KEY]));
 const envs = {};
 const over = (name, target, run) => async (request) => {
   const record = { to: name, path: new URL(request.url).pathname };
@@ -226,7 +237,7 @@ const over = (name, target, run) => async (request) => {
   return response;
 };
 for (const c of CONTEXTS) {
-  envs[c] = { ...keys };
+  envs[c] = keysOf(c);
   for (const other of CONTEXTS) {
     if (other === c) continue;
     envs[c][binding(other)] = { fetch: over(binding(other), other, (r) => entries[other].fetch(r, envs[other], ctx)) };
@@ -266,6 +277,17 @@ const viaClient = async (path) => {
 await scenario("call-ok", () => viaClient("/ok/1"));
 await scenario("call-fault", () => viaClient("/boom/1"));
 await scenario("call-refused", () => viaClient("/legacy/1"));
+// A call is signed whichever way it travels, so a caller holding no key for the
+// edge cannot make it, in process too: nothing is trusted because it is local.
+await scenario("call-unkeyed", async () => {
+  const held = envs["app.a"]["BYNK_CALL_TO_APP__B"];
+  delete envs["app.a"]["BYNK_CALL_TO_APP__B"];
+  try {
+    return await viaClient("/ok/1");
+  } finally {
+    envs["app.a"]["BYNK_CALL_TO_APP__B"] = held;
+  }
+});
 await scenario("door-refused", async () => {
   const path = "/_bynk/call/only_legacy";
   const body = JSON.stringify(1);
@@ -304,6 +326,61 @@ fn stage(topology: &Topology) -> PathBuf {
         fs::write(root.join(format!("src/app/{file}.bynk")), source).unwrap();
     }
     root
+}
+
+/// The secret names `bynk deploy` would provision on each Worker of the built project,
+/// by Worker, as JSON: read from the deploy plan, so the driver gives a Worker the keys
+/// a deployment would and no others. `None` when `wrangler` is missing (a dry run needs
+/// it) and the test skips.
+fn provisioned_keys(root: &std::path::Path) -> Option<String> {
+    let plan = Command::new(env!("CARGO_BIN_EXE_bynk-under-test"))
+        .args([
+            "deploy",
+            "--dry-run",
+            "--format",
+            "json",
+            "--no-install",
+            "--yes",
+        ])
+        .arg(root)
+        .env("CLOUDFLARE_API_TOKEN", "dummy")
+        .env("NO_COLOR", "1")
+        .output()
+        .expect("bynk runs");
+    if !plan.status.success() {
+        let shown = text(&plan);
+        if shown.contains("environment not ready") {
+            tools::skip(
+                "CROSS-CONTEXT CONFORMANCE (deploy plan)",
+                require::is_required(REQUIRE_ENV),
+                REQUIRE_ENV,
+                "`bynk deploy --dry-run` needs `wrangler`, which is not available",
+            );
+            return None;
+        }
+        panic!("bynk deploy --dry-run failed:\n{shown}");
+    }
+    let doc: Value = serde_json::from_slice(&plan.stdout)
+        .unwrap_or_else(|e| panic!("{e}: {}", String::from_utf8_lossy(&plan.stdout)));
+    let by_worker: serde_json::Map<String, Value> = doc["contexts"]
+        .as_array()
+        .expect("a plan lists its Workers")
+        .iter()
+        .map(|c| {
+            let names: Vec<Value> = c["secrets"]
+                .as_array()
+                .into_iter()
+                .flatten()
+                .filter(|s| s["origin"] == "managed")
+                .map(|s| s["name"].clone())
+                .collect();
+            (
+                c["worker"].as_str().unwrap().to_string(),
+                Value::Array(names),
+            )
+        })
+        .collect();
+    Some(Value::Object(by_worker).to_string())
 }
 
 /// Build the topology, compile it, and run [`DRIVER`]: one observation per
@@ -353,6 +430,7 @@ fn observe(topology: &Topology) -> Option<(PathBuf, Vec<Value>)> {
         text(&emitted)
     );
     fs::write(root.join("out-js/package.json"), "{\"type\":\"module\"}").unwrap();
+    fs::write(root.join("provisioned.json"), provisioned_keys(&root)?).unwrap();
     fs::write(root.join("run.mjs"), DRIVER).unwrap();
     let ran = Command::new("node")
         .arg("run.mjs")
@@ -467,6 +545,18 @@ fn assert_conforms(topology: &str, results: &[Value]) {
         logs_of(ok, "client").is_empty() && logs_of(ok, "APP_B").is_empty(),
         "{}: a call that succeeds logs nothing: {ok}",
         at("call-ok")
+    );
+
+    // No key for the edge: the call is refused before it is made, whichever way it
+    // would have travelled, and the client sees only a bare `500`.
+    let unkeyed = scenario(results, "call-unkeyed");
+    assert_eq!(unkeyed["status"], 500, "{}: {unkeyed}", at("call-unkeyed"));
+    assert_eq!(unkeyed["body"], "Internal Server Error", "{unkeyed}");
+    assert_eq!(
+        wire_of(unkeyed),
+        Vec::<(String, String, Option<u64>)>::new(),
+        "{}: nothing reached the callee",
+        at("call-unkeyed")
     );
 
     // A callee that faults: `CalleeFaulted` for the caller, a bare `500` for the
@@ -628,12 +718,13 @@ fn a_call_and_an_event_between_contexts_conform_in_every_topology() {
     assert_topologies_agree(all);
 }
 
-/// Both topologies here go over a Service Binding: the call, the refusal, the
-/// event delivery and the fan-out each appear on the wire, in this order. A
-/// topology that makes a call in-process has no entry for it, and states so where
-/// it is added.
+/// Where each topology's calls travel. Over a Service Binding the call, the
+/// refusal, the event delivery and the fan-out each appear on the wire, in this
+/// order. A group's calls between members are in process and have no entry; its
+/// event delivery still does, since the fan-out is a Durable Object elsewhere and
+/// reaches a subscriber over the Worker's own binding.
 #[test]
-fn the_topologies_here_go_over_a_service_binding() {
+fn the_wire_says_how_each_topology_travels() {
     let Some(all) = observed() else { return };
     let wire = |entries: &[(&str, &str, u64)]| {
         entries
@@ -641,26 +732,41 @@ fn the_topologies_here_go_over_a_service_binding() {
             .map(|(to, path, status)| (to.to_string(), path.to_string(), Some(*status)))
             .collect::<Vec<_>>()
     };
-    for (name, results) in all {
-        assert_eq!(
-            wire_of(scenario(results, "call-ok")),
-            wire(&[("APP_B", "/_bynk/call/ok", 200)]),
-            "{name}"
-        );
+    for ((name, results), topology) in all.iter().zip(TOPOLOGIES) {
+        assert_eq!(*name, topology.name);
+        let (ok, refused): (&[WireEntry], &[WireEntry]) = if topology.in_process {
+            (&[], &[])
+        } else {
+            (
+                &[("APP_B", "/_bynk/call/ok", 200)],
+                &[("APP_B", "/_bynk/call/only_legacy", 403)],
+            )
+        };
+        assert_eq!(wire_of(scenario(results, "call-ok")), wire(ok), "{name}");
         assert_eq!(
             wire_of(scenario(results, "call-refused")),
-            wire(&[("APP_B", "/_bynk/call/only_legacy", 403)]),
+            wire(refused),
             "{name}"
         );
+        // The event: the emit is a call (in process in a group), then the fan-out
+        // and the delivery, which are not.
+        let event: Vec<_> = if topology.in_process {
+            WIRE_EVENT[1..].to_vec()
+        } else {
+            WIRE_EVENT.to_vec()
+        };
         assert_eq!(
             wire_of(scenario(results, "event-delivered")),
-            wire(WIRE_EVENT),
+            wire(&event),
             "{name}: the emit, the fan-out and the delivery"
         );
     }
 }
 
-const WIRE_EVENT: &[(&str, &str, u64)] = &[
+/// One expected wire entry: the binding, the path and the status.
+type WireEntry = (&'static str, &'static str, u64);
+
+const WIRE_EVENT: &[WireEntry] = &[
     ("APP_PUB", "/_bynk/call/place", 200),
     ("FANOUT", "/_bynk/fanout", 204),
     ("APP_SUB", "/_bynk/event/OnPlaced", 204),
