@@ -32,7 +32,7 @@ export const Chain = {
 };
 
 export function ordered(xs: readonly Expr[]): readonly Expr[] {
-  return sort(xs, __bynkCmpFix((__self0) => __bynkCmpSum(["Num", "Neg", "Add"], {"Num": [["n", __bynkCmpInt]], "Neg": [["inner", __self0]], "Add": [["left", __self0], ["right", __self0]]})));
+  return sort(xs, __bynkCmpFix((__self0) => __bynkCmpSum(["Num", "Neg", "Add"], { "Num": [["n", __bynkCmpInt]], "Neg": [["inner", __self0]], "Add": [["left", __self0], ["right", __self0]] })));
 }
 
 export function chains(xs: readonly Chain[]): Option<Chain> {

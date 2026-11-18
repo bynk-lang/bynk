@@ -43,9 +43,9 @@ export function firstEntry<K, V>(xs: readonly Entry<K, V>[], __cmp_K: (a: K, b: 
 }
 
 export function maybes(xs: readonly Maybe<number>[]): readonly Maybe<number>[] {
-  return sort(xs, __bynkCmpSum(["Missing", "Present"], {"Present": [["item", __bynkCmpInt]]}));
+  return sort(xs, __bynkCmpSum(["Missing", "Present"], { "Present": [["item", __bynkCmpInt]] }));
 }
 
 export function nested(xs: readonly Entry<Maybe<number>, readonly number[]>[]): Option<Entry<Maybe<number>, readonly number[]>> {
-  return max(xs, __bynkCmpRecord([["key", __bynkCmpSum(["Missing", "Present"], {"Present": [["item", __bynkCmpInt]]})], ["value", __bynkCmpList(__bynkCmpInt)]]));
+  return max(xs, __bynkCmpRecord([["key", __bynkCmpSum(["Missing", "Present"], { "Present": [["item", __bynkCmpInt]] })], ["value", __bynkCmpList(__bynkCmpInt)]]));
 }

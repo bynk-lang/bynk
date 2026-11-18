@@ -255,7 +255,7 @@ impl<'a> LowerCtx<'a> {
         &self,
         decl: &FnDecl,
         witnesses: &[bynk_check::checker::TyId],
-    ) -> Vec<String> {
+    ) -> Vec<bynk_ts::TsExpr> {
         use bynk_check::checker::codable::{WitnessKind, witness_list};
         witness_list(decl, &self.commons().types)
             .iter()
@@ -269,6 +269,8 @@ impl<'a> LowerCtx<'a> {
 
     /// `value` encoded with the codec of `ty`: the generated `__serialise_X` for a
     /// variable-free type, the witness (or a combinator over witnesses) otherwise.
+    /// `value` is already text, and so is the result: the capability-call family
+    /// that uses it is still text (1A: witness printed for a text caller).
     pub(crate) fn encode_call(&self, ty: bynk_check::checker::TyId, value: &str) -> String {
         let commons = self.commons();
         if !codec::has_var(ty, commons)
@@ -283,20 +285,20 @@ impl<'a> LowerCtx<'a> {
         // A capability call inside a generic function would reach here, but only
         // handlers hold `given` today, so no program does yet: the first one that
         // does needs a fixture for this branch.
-        format!("{}.encode({value})", self.codec(ty))
+        format!("{}.encode({value})", bynk_ts::print_expr(&self.codec(ty)))
     }
 
     /// The codec witness for `ty`: the witness of a type parameter in scope, a
     /// runtime combinator over such witnesses, or the generated pair for a
     /// variable-free type.
-    pub(crate) fn codec(&self, ty: bynk_check::checker::TyId) -> String {
-        codec::CodecGen::new(self.commons(), self.runtime_use(), &self.codec_scope).for_ty(ty)
+    pub(crate) fn codec(&self, ty: bynk_check::checker::TyId) -> bynk_ts::TsExpr {
+        codec::CodecGen::new(self.commons(), self.runtime_use(), &self.codec_scope).for_ty_node(ty)
     }
 
     /// The comparator expression for `ty`: the witness of a type parameter in
     /// scope, a runtime comparator, or one built from a `derives Ord` declaration.
-    pub(crate) fn comparator(&self, ty: bynk_check::checker::TyId) -> String {
-        cmp::CmpGen::new(self.commons(), self.runtime_use(), &self.cmp_scope).for_ty(ty)
+    pub(crate) fn comparator(&self, ty: bynk_check::checker::TyId) -> bynk_ts::TsExpr {
+        cmp::CmpGen::new(self.commons(), self.runtime_use(), &self.cmp_scope).for_ty_node(ty)
     }
 
     // ---- `ModuleCtx` passthroughs -----------------------------------------
