@@ -56,7 +56,7 @@ pub(crate) struct TcoPlan {
 /// Decide whether `f` is rewritten. `None` when it has an `ensures` clause (a
 /// loop has one frame, so the postcondition could only be checked for the
 /// outermost call, which is weaker), or has no tail self call.
-pub(crate) fn plan(f: &FnDecl, commons: &TypedCommons) -> Option<Rc<TcoPlan>> {
+pub(crate) fn plan(f: &FnDecl, commons: &TypedCommons, tys: TyRender<'_>) -> Option<Rc<TcoPlan>> {
     if !f.ensures.is_empty() {
         return None;
     }
@@ -65,7 +65,7 @@ pub(crate) fn plan(f: &FnDecl, commons: &TypedCommons) -> Option<Rc<TcoPlan>> {
         ifs: HashSet::new(),
         slots: Vec::new(),
     };
-    walk_block(&f.body, f, commons, &mut p);
+    walk_block(&f.body, f, commons, tys, &mut p);
     if p.calls.is_empty() {
         return None;
     }
@@ -89,9 +89,15 @@ pub(crate) fn plan(f: &FnDecl, commons: &TypedCommons) -> Option<Rc<TcoPlan>> {
 /// branches, `match` arms and a block's final expression. Anything else (an
 /// argument, `?`, a lambda, `par`, `let`, a wrapper) is not walked into.
 /// Returns whether a tail self call was found below `e`.
-fn walk_expr(e: &Expr, f: &FnDecl, commons: &TypedCommons, p: &mut TcoPlan) -> bool {
+fn walk_expr(
+    e: &Expr,
+    f: &FnDecl,
+    commons: &TypedCommons,
+    tys: TyRender<'_>,
+    p: &mut TcoPlan,
+) -> bool {
     match &e.kind {
-        ExprKind::Call { .. } | ExprKind::MethodCall { .. } if is_self_call(e, f, commons) => {
+        ExprKind::Call { .. } | ExprKind::MethodCall { .. } if is_self_call(e, f, commons, tys) => {
             p.calls.insert(e.id);
             true
         }
@@ -100,8 +106,8 @@ fn walk_expr(e: &Expr, f: &FnDecl, commons: &TypedCommons, p: &mut TcoPlan) -> b
             else_block,
             ..
         } => {
-            let a = walk_block(then_block, f, commons, p);
-            let b = walk_block(else_block, f, commons, p);
+            let a = walk_block(then_block, f, commons, tys, p);
+            let b = walk_block(else_block, f, commons, tys, p);
             if a || b {
                 p.ifs.insert(e.id);
             }
@@ -111,8 +117,8 @@ fn walk_expr(e: &Expr, f: &FnDecl, commons: &TypedCommons, p: &mut TcoPlan) -> b
             let mut any = false;
             for arm in arms {
                 any |= match &arm.body {
-                    MatchBody::Expr(e) => walk_expr(e, f, commons, p),
-                    MatchBody::Block(b) => walk_block(b, f, commons, p),
+                    MatchBody::Expr(e) => walk_expr(e, f, commons, tys, p),
+                    MatchBody::Block(b) => walk_block(b, f, commons, tys, p),
                 };
             }
             if any {
@@ -124,8 +130,14 @@ fn walk_expr(e: &Expr, f: &FnDecl, commons: &TypedCommons, p: &mut TcoPlan) -> b
     }
 }
 
-fn walk_block(b: &Block, f: &FnDecl, commons: &TypedCommons, p: &mut TcoPlan) -> bool {
-    walk_expr(&b.tail, f, commons, p)
+fn walk_block(
+    b: &Block,
+    f: &FnDecl,
+    commons: &TypedCommons,
+    tys: TyRender<'_>,
+    p: &mut TcoPlan,
+) -> bool {
+    walk_expr(&b.tail, f, commons, tys, p)
 }
 
 fn same_fn(decl: &FnDecl, f: &FnDecl) -> bool {
@@ -175,7 +187,12 @@ fn call_parts<'e>(
 
 /// The expressions a self call passes, in slot order, or `None` when `e` is
 /// not a self call or not at the function's own instantiation.
-fn self_call_args<'e>(e: &'e Expr, f: &FnDecl, commons: &'e TypedCommons) -> Option<Vec<&'e Expr>> {
+fn self_call_args<'e>(
+    e: &'e Expr,
+    f: &FnDecl,
+    commons: &'e TypedCommons,
+    tys: TyRender<'_>,
+) -> Option<Vec<&'e Expr>> {
     let (callee, all, type_args) = call_parts(e, commons)?;
     let (decl, witnesses) = match callee {
         Callee::Fn(d, w) | Callee::Static(d, w) | Callee::Method(d, w) => (d, w),
@@ -201,7 +218,6 @@ fn self_call_args<'e>(e: &'e Expr, f: &FnDecl, commons: &'e TypedCommons) -> Opt
     let mut own: Vec<String> = owner_params.clone();
     own.extend(f.type_params.iter().map(|p| p.name.name.clone()));
     if !own.is_empty() {
-        let tys = commons.tys();
         let rendered = |ex: &Expr| commons.expr_types.get(&ex.id).map(|te| ts_ty(te.ty, tys));
         // Explicit method-level type arguments must be the function's own.
         if !type_args.is_empty()
@@ -240,8 +256,8 @@ fn self_call_args<'e>(e: &'e Expr, f: &FnDecl, commons: &'e TypedCommons) -> Opt
     Some(all)
 }
 
-fn is_self_call(e: &Expr, f: &FnDecl, commons: &TypedCommons) -> bool {
-    self_call_args(e, f, commons).is_some()
+fn is_self_call(e: &Expr, f: &FnDecl, commons: &TypedCommons, tys: TyRender<'_>) -> bool {
+    self_call_args(e, f, commons, tys).is_some()
 }
 
 impl TcoPlan {

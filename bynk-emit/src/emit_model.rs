@@ -974,6 +974,30 @@ pub struct TraceLoc {
     pub rel_path: String,
 }
 
+/// #2620: the `.bynk` source of the unit being emitted and its project-relative
+/// identity path, so a `unreachable(…)` / `todo(…)` / `detach` lowering can name
+/// its own `path:line:col`. Built once per unit by the driver; `None` on
+/// [`EmitProjectCtx::unit_source`] is the single-file path, which has no identity.
+pub struct UnitSource {
+    text: String,
+    identity_path: String,
+}
+
+impl UnitSource {
+    pub fn new(text: &str, identity_path: &str) -> Self {
+        Self {
+            text: text.to_string(),
+            identity_path: identity_path.replace('\\', "/"),
+        }
+    }
+
+    /// The `path:line:col` of a byte offset in the unit's source.
+    pub fn location(&self, offset: usize) -> String {
+        let (line, col) = bynk_syntax::span::line_col(&self.text, offset);
+        format!("{}:{line}:{col}", self.identity_path)
+    }
+}
+
 pub struct EmitProjectCtx {
     /// Source path of the file being emitted (relative to project root).
     pub source_path: PathBuf,
@@ -1108,6 +1132,13 @@ pub struct EmitProjectCtx {
     pub runtime_use: crate::emitter::RuntimeUse,
     /// #3562: where each context's generated files go on Workers.
     pub worker_layout: bynk_project::worker_layout::WorkerLayout,
+    /// #2620: the unit's source and identity path; `None` for single-file emission.
+    pub unit_source: Option<UnitSource>,
+    /// #1927: a `uses`-imported type this unit hides behind its own value (a
+    /// function, asset, service, agent or provider of the same name), type name
+    /// to the inline import type that names it, `import("<module>").Name`. Empty
+    /// for a unit that hides none.
+    pub type_spellings: HashMap<String, String>,
 }
 
 impl EmitProjectCtx {

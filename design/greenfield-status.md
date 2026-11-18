@@ -21,10 +21,12 @@ Track slice T0.0 (#999); `ts_writes`/`ts_any` added by P7.0 (#1296); `verbatim_o
 | `ts_any` | yes | 38 |
 | `verbatim_origins` | yes | 2 |
 | `verbatim_sites` | yes | 15 |
-| `ts_raw_sites` | yes | 99 |
+| `ts_raw_sites_emit` | yes | 41 |
+| `ts_raw_sites_testgen` | yes | 58 |
 | `ts_text_idents` | yes | 14 |
 | `lowering_text_bridge` | yes | 111 |
 | `stmt_text_lines` | yes | 67 |
+| `emit_thread_locals` | yes | 0 |
 | `incremental_query_types` | yes | unit_signature present; shared_cache migrated; stability_test present; definition/project levels absent (deleted by #1537) |
 | `unconsumed_ir_items` | yes | 0 |
 | `diagnostic_coverage` | yes | unasserted=30 (asserted 864/894) |

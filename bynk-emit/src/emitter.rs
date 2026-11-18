@@ -13,7 +13,7 @@
 //! (`ts_specifier`, `ts_ident`, `ts_type_ref`, `cross_commons_import_specifier_for_path`),
 //! the table walkers (`walk_unit_table_bodies`, `block_uses_emit`,
 //! `any_service_binds_caller`, `table_has_plain_json`, …), the runtime-import
-//! constants and `runtime_files` / `runtime_use` / `type_renames`, and the
+//! constants and `runtime_files` / `runtime_use`, and the
 //! `wrangler`, `client`, `contracts`, `secrets`, `serialisation` and `emit`
 //! submodules' items the orchestrator consumes. The shared output and context
 //! model lives in [`crate::emit_model`]. Anything not reachable from a path
@@ -66,8 +66,8 @@ use bynk_syntax::ast::{
     InterpPart, MatchBody, MessagesDecl, ObservationMatcher, Param, Pattern, PredKind, ServiceDecl,
     ServiceProtocol, Statement, TypeBody, TypeDecl, TypeRef,
 };
-use ctx::FaultSourceGuard;
-use ts_types::{asset_ts_type, ts_base};
+use ctx::UnitFacts;
+use ts_types::{TyRender, asset_ts_type, ts_base};
 
 pub mod client;
 pub mod containers;
@@ -99,6 +99,8 @@ mod cmp;
 mod codec;
 pub mod ctx;
 mod lower;
+#[cfg(feature = "text-exit-counters")]
+pub use lower::text_counters;
 mod lower_ctx;
 mod lower_stmt;
 pub(crate) mod runtime_use;
@@ -277,6 +279,7 @@ pub(crate) fn emit(program: &CheckedProgram) -> String {
                 false,
                 &dummy_ctx.runtime_use,
                 &dummy_ctx.cross_context,
+                UnitFacts::of(&dummy_ctx),
             ));
         }
     }
@@ -379,6 +382,8 @@ fn single_file_ctx() -> EmitProjectCtx {
         imported_methods: HashMap::new(),
         runtime_use: Default::default(),
         worker_layout: Default::default(),
+        unit_source: None,
+        type_spellings: HashMap::new(),
     }
 }
 
@@ -399,7 +404,6 @@ pub fn emit_project(
     source_name: &str,
 ) -> (bynk_ts::TsProgram, Option<String>) {
     let commons = program.program();
-    let _fault_source = FaultSourceGuard::set(source_text, &ctx.identity_path);
     // #1486: no more `RefCell<SourceMapBuilder>` — every top-level item's
     // own checkpoint is `stmt.span` on the first statement its own emitter
     // returns, and `bynk_ts::print`'s own top-level loop (per #1477's own
@@ -515,6 +519,7 @@ pub fn emit_project(
                 ctx.contracts,
                 &ctx.runtime_use,
                 &ctx.cross_context,
+                UnitFacts::of(ctx),
             );
             if let Some(first) = item_stmts.first_mut() {
                 first.span = Some(f.span);
@@ -564,7 +569,7 @@ pub fn emit_project(
                 // `TypeRef`s (Decision B, #1193) — no separate helper, this
                 // is `emit_capability`'s one and only call site.
                 let ops = lower_capability_ops_ir(c, program);
-                let mut item_stmts = emit_capability(c, &ops, commons);
+                let mut item_stmts = emit_capability(c, &ops, commons, UnitFacts::of(ctx));
                 if let Some(first) = item_stmts.first_mut() {
                     first.span = Some(c.span);
                 }
@@ -2571,7 +2576,11 @@ fn emit_context_rebrands(
             // this context's own `commons` (only imported *types* are merged);
             // they arrive via `ctx.imported_methods`, keyed by type name.
             if let Some(methods) = ctx.imported_methods.get(name) {
-                entries.extend(emit_forwarded_methods(name, methods, &commons.ty_intern));
+                entries.extend(emit_forwarded_methods(
+                    name,
+                    methods,
+                    UnitFacts::of(ctx).render(commons),
+                ));
             }
             let const_decl = bynk_ts::TsStmt::decl(
                 bynk_ts::TsDecl::Export(Box::new(bynk_ts::TsDecl::ConstDecl {

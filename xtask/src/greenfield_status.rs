@@ -1,6 +1,6 @@
 //! `cargo xtask greenfield-status` — the probe harness (track doc §8, proposal #999).
 //!
-//! Twenty-three probes measuring the tree against `design/bynk-greenfield-compiler.md`:
+//! Twenty-five probes measuring the tree against `design/bynk-greenfield-compiler.md`:
 //! the twelve in track doc §8, `emit_abi_shapes` (ADR 0310's probe, #999 Decision E —
 //! this slice measures the emit-ABI enumeration guard but does not wire it; wiring is
 //! packaging-track work), phase 7's own four — `ts_writes`, `ts_any`,
@@ -14,11 +14,11 @@
 //! crate-hygiene track's M-3 ratchet, `model_readers_beyond_emit` (B1, #2939), and its H-3 gate,
 //! `unused_deps` (A4, #2976).
 //!
-//! **Twenty-three are gated**, committed and diffed: `workspace_lints`, `fs_below_driver`,
+//! **Twenty-five are gated**, committed and diffed: `workspace_lints`, `fs_below_driver`,
 //! `options_sources`, `hoist_sinks`, `span_keyed_maps`, `emit_diagnostics`,
 //! `ide_emit_edge`, `ast_importers`, `emit_abi_shapes`, `ts_writes`, `ts_any`,
 //! `verbatim_origins`, `verbatim_sites`, `incremental_query_types`,
-//! `unconsumed_ir_items`, `diagnostic_coverage`, `model_readers_beyond_emit`, `unused_deps`, `explained_codes`, `ts_raw_sites`, `ts_text_idents`, `lowering_text_bridge`, `stmt_text_lines`. Ten of these are
+//! `unconsumed_ir_items`, `diagnostic_coverage`, `model_readers_beyond_emit`, `unused_deps`, `explained_codes`, `ts_raw_sites_emit`, `ts_raw_sites_testgen`, `ts_text_idents`, `lowering_text_bridge`, `stmt_text_lines`, `emit_thread_locals`. Ten of these are
 //! zero/closure-shaped — a boolean, or a count pinned at a small, argued floor
 //! (`ast_importers` = 5, `emit_abi_shapes` = 1). Phase 7's own four are the same shape:
 //! each converged toward an argued floor over dozens of slices, the same trajectory
@@ -42,7 +42,7 @@
 //! **Two kinds of gate** (#3679, amending ADR 0389/0390). Every gated probe is
 //! *exact-match*: a live reading that differs from its committed row fails unless a
 //! pending file names it in `probes:`. The [`GROWTH_PROBES`] (`ts_writes`, `ts_any`,
-//! `emit_abi_shapes`, `verbatim_sites`, `ts_raw_sites`, `ts_text_idents`, `lowering_text_bridge`, `stmt_text_lines`, `span_keyed_maps`) are also *directional*:
+//! `emit_abi_shapes`, `verbatim_sites`, `ts_raw_sites_emit`, `ts_raw_sites_testgen`, `ts_text_idents`, `lowering_text_bridge`, `stmt_text_lines`, `span_keyed_maps`, `emit_thread_locals`) are also *directional*:
 //! `growth_probes_never_rise` (`xtask/tests/greenfield_status.rs`) fails when the
 //! live leading count exceeds the committed one unless a pending file *raises* the
 //! probe with a reason (`raises:`), which the stamp then records in
@@ -117,7 +117,7 @@ pub fn run(root: &Path) -> Report {
 /// The gated probes' names, in [`run_gated`]'s order — what a pending file's
 /// `probes` key may cite. `greenfield_status_table_is_current` asserts this
 /// matches the probes [`run_gated`] actually returns, so the two cannot drift.
-pub const GATED_PROBES: [&str; 23] = [
+pub const GATED_PROBES: [&str; 25] = [
     "workspace_lints",
     "fs_below_driver",
     "options_sources",
@@ -131,10 +131,12 @@ pub const GATED_PROBES: [&str; 23] = [
     "ts_any",
     "verbatim_origins",
     "verbatim_sites",
-    "ts_raw_sites",
+    "ts_raw_sites_emit",
+    "ts_raw_sites_testgen",
     "ts_text_idents",
     "lowering_text_bridge",
     "stmt_text_lines",
+    "emit_thread_locals",
     "incremental_query_types",
     "unconsumed_ir_items",
     "diagnostic_coverage",
@@ -145,24 +147,26 @@ pub const GATED_PROBES: [&str; 23] = [
 
 /// The gated probes that only a reasoned, recorded `raises:` may increase
 /// (#3679, ADR 0389/0390 amended): `ts_writes`, `ts_any`, `emit_abi_shapes`,
-/// `verbatim_sites`, `ts_raw_sites`, `ts_text_idents` (both #3681), `lowering_text_bridge` (1A.2, #3694), `stmt_text_lines` (1A.10, #3711), `span_keyed_maps`. Probes already at a zero or closure
+/// `verbatim_sites`, `ts_raw_sites_emit` and `ts_raw_sites_testgen` (the split of `ts_raw_sites`, #3681), `ts_text_idents` (#3681), `lowering_text_bridge` (1A.2, #3694), `stmt_text_lines` (1A.10, #3711), `span_keyed_maps`, `emit_thread_locals` (1A.19). Probes already at a zero or closure
 /// floor are excluded (their exact-match row pins them), as are
 /// `verbatim_origins` (an argued floor of 2) and `model_readers_beyond_emit`
 /// (which has the opposite direction). A subset of [`GATED_PROBES`], pinned by
 /// a unit test.
-pub const GROWTH_PROBES: [&str; 9] = [
+pub const GROWTH_PROBES: [&str; 11] = [
     "ts_writes",
     "ts_any",
     "emit_abi_shapes",
     "verbatim_sites",
-    "ts_raw_sites",
+    "ts_raw_sites_emit",
+    "ts_raw_sites_testgen",
     "ts_text_idents",
     "lowering_text_bridge",
     "stmt_text_lines",
     "span_keyed_maps",
+    "emit_thread_locals",
 ];
 
-/// The twenty-three gated (zero/closure/ratchet) probes only — what [`gated_disagreements`] diffs.
+/// The twenty-five gated (zero/closure/ratchet) probes only — what [`gated_disagreements`] diffs.
 pub fn run_gated(root: &Path) -> Vec<Probe> {
     vec![
         workspace_lints(root),
@@ -178,10 +182,12 @@ pub fn run_gated(root: &Path) -> Vec<Probe> {
         ts_any(root),
         verbatim_origins(root),
         verbatim_sites(root),
-        ts_raw_sites(root),
+        ts_raw_sites_emit(root),
+        ts_raw_sites_testgen(root),
         ts_text_idents(root),
         lowering_text_bridge(root),
         stmt_text_lines(root),
+        emit_thread_locals(root),
         incremental_query_types(root),
         unconsumed_ir_items(root),
         diagnostic_coverage(root),
@@ -2235,28 +2241,112 @@ fn line_has_token(line: &str, needles: &[&str]) -> bool {
     })
 }
 
-/// #3681: `TsStmt::raw(text, span)` construction sites in the emitter's source.
-/// `TsStmt::raw` prints a whole statement verbatim — a separate escape hatch from
-/// `TsStmt::verbatim`, which [`verbatim_sites`] counts and this probe deliberately
-/// does not fold into it (that would break `verbatim_sites`' history). Retired by
-/// building real nodes. A growth probe ([`GROWTH_PROBES`]): it may only fall
-/// unless a pending file `raises:` it with a reason.
+/// #3681, split by origin in 1A.19: `TsStmt::raw(text, span)` construction sites
+/// in the emitter's source. `TsStmt::raw` prints a whole statement verbatim — a
+/// separate escape hatch from `TsStmt::verbatim`, which [`verbatim_sites`] counts and
+/// this probe deliberately does not fold into it (that would break `verbatim_sites`'
+/// history). Retired by building real nodes.
+///
+/// The one probe `ts_raw_sites` became two, by where the site lives
+/// ([`is_testgen_path`]): production emission here, test-harness generation in
+/// [`ts_raw_sites_testgen`]. The split is a reclassification: the two readings sum
+/// to the old probe's (41 + 58 = 99 on the commit it landed), so nothing fell. Both
+/// are growth probes ([`GROWTH_PROBES`]): each may only fall unless a pending file
+/// `raises:` it with a reason.
 ///
 /// Counts non-comment lines outside `#[cfg(test)]` modules in
-/// [`codegen_family_files`]. Text-level gaps: matched on the line that opens the
-/// call, so a call split after `TsStmt::` is missed; a bare `raw(` after a `use`
-/// of the type is not counted; two sites on one line count once.
-fn ts_raw_sites(root: &Path) -> Probe {
+/// [`codegen_family_files`] that are not test-harness generation. Text-level gaps:
+/// matched on the line that opens the call, so a call split after `TsStmt::` is
+/// missed; a bare `raw(` after a `use` of the type is not counted; two sites on one
+/// line count once.
+fn ts_raw_sites_emit(root: &Path) -> Probe {
     Probe {
-        name: "ts_raw_sites",
+        name: "ts_raw_sites_emit",
         gated: true,
-        reads: ts_raw_sites_violations(&codegen_family_files(root)).to_string(),
+        reads: ts_raw_sites_violations(&codegen_family_files(root), false).to_string(),
     }
 }
 
-/// [`ts_raw_sites`]'s counting logic over an explicit file list.
-fn ts_raw_sites_violations(files: &[(PathBuf, String)]) -> usize {
-    opening_token_lines(files, &["TsStmt::raw("])
+/// Test-harness generation's share of the old `ts_raw_sites` (see
+/// [`ts_raw_sites_emit`]): the same count over [`is_testgen_path`] files.
+fn ts_raw_sites_testgen(root: &Path) -> Probe {
+    Probe {
+        name: "ts_raw_sites_testgen",
+        gated: true,
+        reads: ts_raw_sites_violations(&codegen_family_files(root), true).to_string(),
+    }
+}
+
+/// Whether `rel` (relative to the `src/` of the crate it lives in, as
+/// [`codegen_family_files`] gives it) generates the *test harness* rather than
+/// production emission: the driver's `project/tests_emit/**` today, and a
+/// `testgen` module or directory in `bynk-emit` once 1B.2 moves it there.
+fn is_testgen_path(rel: &Path) -> bool {
+    rel.starts_with("project/tests_emit")
+        || rel.starts_with("project/tests_emit.rs")
+        || rel
+            .components()
+            .any(|c| c.as_os_str().to_string_lossy().starts_with("testgen"))
+}
+
+/// [`ts_raw_sites_emit`]'s and [`ts_raw_sites_testgen`]'s counting logic over an
+/// explicit file list: the files [`is_testgen_path`] accepts when `testgen`, the
+/// rest otherwise.
+fn ts_raw_sites_violations(files: &[(PathBuf, String)], testgen: bool) -> usize {
+    let part: Vec<(PathBuf, String)> = files
+        .iter()
+        .filter(|(p, _)| is_testgen_path(p) == testgen)
+        .cloned()
+        .collect();
+    opening_token_lines(&part, &["TsStmt::raw("])
+}
+
+/// 1A.19: unconditional `thread_local!` declarations in `bynk-emit`'s production
+/// source. Per-unit context travels in the unit's `EmitProjectCtx` and `ModuleCtx`;
+/// a thread-local stood in for it twice (`FAULT_SOURCE`, `type_renames::SPELLINGS`),
+/// which made a function's behaviour depend on its call stack. It reads 0 and a
+/// growth probe ([`GROWTH_PROBES`]) keeps it there: a new one needs a pending
+/// file's `raises:` with a reason.
+///
+/// Counts non-comment lines outside `#[cfg(test)]` modules in `bynk-emit/src` that
+/// contain `thread_local!`, except one whose preceding attribute is a `cfg` that
+/// names `test` (`#[cfg(test)]`, or `#[cfg(any(test, feature = "…"))]`): the
+/// test-only counters are not compiled into a product build. `bynk-ts`, the
+/// driver and the checker keep their own thread-locals, which this does not count.
+fn emit_thread_locals(root: &Path) -> Probe {
+    Probe {
+        name: "emit_thread_locals",
+        gated: true,
+        reads: emit_thread_locals_violations(&rust_files_relative(&root.join("bynk-emit/src")))
+            .to_string(),
+    }
+}
+
+/// [`emit_thread_locals`]'s counting logic over an explicit file list.
+fn emit_thread_locals_violations(files: &[(PathBuf, String)]) -> usize {
+    let mut count = 0usize;
+    for (_, contents) in files {
+        let lines: Vec<&str> = contents.lines().collect();
+        let ranges = test_mod_ranges(&lines);
+        for (i, line) in lines.iter().enumerate() {
+            if in_test_range(i, &ranges)
+                || is_line_comment(line)
+                || !line_has_token(line, &["thread_local!"])
+            {
+                continue;
+            }
+            let attr = lines[..i]
+                .iter()
+                .rev()
+                .map(|l| l.trim())
+                .find(|l| !l.is_empty());
+            let test_only = attr.is_some_and(|a| a.starts_with("#[cfg(") && a.contains("test"));
+            if !test_only {
+                count += 1;
+            }
+        }
+    }
+    count
 }
 
 /// #3681: `TsExpr::Ident(format!(…))` sites — arbitrary expression text wrapped in
@@ -3993,7 +4083,9 @@ pub fn render_table(report: &Report) -> String {
          `incremental_query_types`/`keystroke_latency` added by P8.0 (#1510); \
          `unconsumed_ir_items` added by Slice D3 of the IR cutover (#1542); \
          `diagnostic_coverage` added by #1662; `model_readers_beyond_emit` added by \
-         crate-hygiene B1 (#2939); `unused_deps` added by crate-hygiene A4 (#2976); `explained_codes` added by #3163; `ts_raw_sites`/`ts_text_idents` added by #3681; `lowering_text_bridge` added by #3694; `stmt_text_lines` added by #3711. Twenty-three \
+         crate-hygiene B1 (#2939); `unused_deps` added by crate-hygiene A4 (#2976); `explained_codes` added by #3163; `ts_raw_sites`/`ts_text_idents` added by #3681; `lowering_text_bridge` added by #3694; `stmt_text_lines` added by #3711; \
+         `ts_raw_sites` split into `ts_raw_sites_emit`/`ts_raw_sites_testgen` and `emit_thread_locals` \
+         added by 1A.19. Twenty-five \
          probes are gated — a disagreement between this file and a fresh run fails \
          `greenfield_status_table_is_current` (`xtask/tests/greenfield_status.rs`). \
          Five are trend probes, reported only.\n\n",
@@ -4371,11 +4463,13 @@ mod tests {
         | `ts_any` | yes | 10 |\n\
         | `emit_abi_shapes` | yes | 4 (a, b) |\n\
         | `verbatim_sites` | yes | 3 |\n\
-        | `ts_raw_sites` | yes | 75 |\n\
+        | `ts_raw_sites_emit` | yes | 41 |\n\
+        | `ts_raw_sites_testgen` | yes | 58 |\n\
         | `ts_text_idents` | yes | 13 |\n\
         | `lowering_text_bridge` | yes | 128 |\n\
         | `stmt_text_lines` | yes | 70 |\n\
-        | `span_keyed_maps` | yes | 2 |\n";
+        | `span_keyed_maps` | yes | 2 |\n\
+        | `emit_thread_locals` | yes | 2 |\n";
 
     fn growth_live(ts_writes: &str, abi: &str) -> Vec<Probe> {
         vec![
@@ -4383,11 +4477,13 @@ mod tests {
             gated("ts_any", "10"),
             gated("emit_abi_shapes", abi),
             gated("verbatim_sites", "3"),
-            gated("ts_raw_sites", "75"),
+            gated("ts_raw_sites_emit", "41"),
+            gated("ts_raw_sites_testgen", "58"),
             gated("ts_text_idents", "13"),
             gated("lowering_text_bridge", "128"),
             gated("stmt_text_lines", "70"),
             gated("span_keyed_maps", "2"),
+            gated("emit_thread_locals", "2"),
         ]
     }
 
@@ -4465,12 +4561,12 @@ mod tests {
     fn a_growth_probe_with_no_committed_row_is_newly_introduced() {
         let without = GROWTH_TABLE
             .lines()
-            .filter(|l| !l.contains("ts_raw_sites") && !l.contains("ts_text_idents"))
+            .filter(|l| !l.contains("emit_thread_locals") && !l.contains("ts_text_idents"))
             .collect::<Vec<_>>()
             .join("\n");
         let mut live = growth_live("100", "4");
         live.iter_mut()
-            .find(|p| p.name == "ts_raw_sites")
+            .find(|p| p.name == "emit_thread_locals")
             .unwrap()
             .reads = "9999".to_string();
         assert!(
@@ -4480,7 +4576,7 @@ mod tests {
         // Once the row exists, the same reading is a rise.
         let rises = growth_rises(&live, GROWTH_TABLE).unwrap();
         assert_eq!(rises.len(), 1);
-        assert_eq!(rises[0].probe, "ts_raw_sites");
+        assert_eq!(rises[0].probe, "emit_thread_locals");
         // A probe that did not run is still a hard failure even with no row.
         let mut missing = growth_live("100", "4");
         missing.retain(|p| p.name != "ts_text_idents");
@@ -4546,13 +4642,13 @@ mod tests {
                    // TsStmt::raw(commented, span)\n    \
                    let c = MyTsStmt::raw(x);\n    let d = TsStmt::verbatim(x);\n}\n";
         assert_eq!(
-            ts_raw_sites_violations(&files_of(&[("a.rs", src)])),
+            ts_raw_sites_violations(&files_of(&[("a.rs", src)]), false),
             2,
             "two construction lines; comment, longer name and verbatim excluded"
         );
         // Sites in several files add up.
         assert_eq!(
-            ts_raw_sites_violations(&files_of(&[("a.rs", src), ("b.rs", src)])),
+            ts_raw_sites_violations(&files_of(&[("a.rs", src), ("b.rs", src)]), false),
             4
         );
     }
@@ -4561,7 +4657,59 @@ mod tests {
     fn ts_raw_sites_excludes_cfg_test_ranges() {
         let src = "fn p() { TsStmt::raw(a, s); }\n\n#[cfg(test)]\nmod tests {\n    \
                    fn t() { TsStmt::raw(b, s); }\n}\n";
-        assert_eq!(ts_raw_sites_violations(&files_of(&[("a.rs", src)])), 1);
+        assert_eq!(
+            ts_raw_sites_violations(&files_of(&[("a.rs", src)]), false),
+            1
+        );
+    }
+
+    #[test]
+    fn ts_raw_sites_splits_production_from_test_harness_generation() {
+        let src = "fn f() { let a = TsStmt::raw(text, span); }\n";
+        let files = files_of(&[
+            ("emitter/emit.rs", src),
+            ("emitter/http_client.rs", src),
+            ("project/tests_emit/test_module.rs", src),
+            ("project/tests_emit.rs", src),
+            ("project/tests_emit/harness.rs", src),
+            ("emitter/testgen/stubs.rs", src),
+            ("testgen.rs", src),
+            ("project.rs", src),
+        ]);
+        // A driver `tests_emit` file and a `testgen` module or file are the harness.
+        assert_eq!(ts_raw_sites_violations(&files, true), 5);
+        // Everything else, the driver's `project.rs` orchestration included, is emission.
+        assert_eq!(ts_raw_sites_violations(&files, false), 3);
+        // Together they are the old combined probe: a reclassification, not a fall.
+        assert_eq!(
+            ts_raw_sites_violations(&files, true) + ts_raw_sites_violations(&files, false),
+            files.len()
+        );
+    }
+
+    #[test]
+    fn emit_thread_locals_counts_unconditional_declarations_only() {
+        let src = "thread_local! {\n    static A: Cell<u8> = const { Cell::new(0) };\n}\n\n\
+                   #[cfg(test)]\nthread_local! {\n    static B: Cell<u8> = const { Cell::new(0) };\n}\n\n\
+                   #[cfg(any(test, feature = \"counters\"))]\n\nthread_local! {\n    static C: Cell<u8> = const { Cell::new(0) };\n}\n\n\
+                   #[cfg(windows)]\nthread_local! {\n    static D: Cell<u8> = const { Cell::new(0) };\n}\n\n\
+                   // thread_local! in a comment\n\
+                   fn f() { let x = my_thread_local!(1); }\n";
+        assert_eq!(
+            emit_thread_locals_violations(&files_of(&[("a.rs", src)])),
+            2,
+            "the bare one and the `windows`-gated one; test-gated, commented and longer names excluded"
+        );
+    }
+
+    #[test]
+    fn emit_thread_locals_excludes_cfg_test_modules() {
+        let src = "#[cfg(test)]\nmod tests {\n    thread_local! {\n        static A: u8 = 0;\n    }\n}\n\
+                   thread_local! {\n    static B: u8 = 0;\n}\n";
+        assert_eq!(
+            emit_thread_locals_violations(&files_of(&[("a.rs", src)])),
+            1
+        );
     }
 
     #[test]

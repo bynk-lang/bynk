@@ -1974,7 +1974,7 @@ fn emit_unit(
         emitter::agent_cross_context_targets(&info.table, |c| cross_context_info.resolve_prefix(c))
             .into_iter()
             .collect();
-    let emit_ctx = EmitProjectCtx {
+    let mut emit_ctx = EmitProjectCtx {
         source_path: emit_source_path,
         identity_path: pf.identity_path().to_string_lossy().into_owned(),
         commons_name: name.to_string(),
@@ -2084,6 +2084,14 @@ fn emit_unit(
         embed_text: embed_text.clone(),
         runtime_use: Default::default(),
         worker_layout: unit_ctx.layout.clone(),
+        // #2620: the unit's own source, so a fault lowering names `path:line:col`.
+        unit_source: Some(UnitSource::new(
+            pf.source(),
+            &pf.identity_path().to_string_lossy(),
+        )),
+        // #1927: filled below, once the import specifiers can be built from
+        // `source_path`.
+        type_spellings: HashMap::new(),
     };
     // #2858: any plain-JSON route in the project (project-wide, not per Worker;
     // the branch is inert unless `withPlainJson` sets the flag) switches the generated `Option`
@@ -2108,7 +2116,7 @@ fn emit_unit(
     // `Verbatim`-wrapping a pre-rendered string.
     // #1927: a `uses`-imported type this unit hides behind its own value is
     // spelled as an inline import type while the module is emitted
-    // (`emitter::ts_types::type_renames`).
+    // (`EmitProjectCtx::type_spellings`).
     let hidden_type_spellings: HashMap<String, String> =
         bynk_check::project_model::shadowed_imports(name, unit_info)
             .into_iter()
@@ -2129,7 +2137,7 @@ fn emit_unit(
                 (type_name, spelling)
             })
             .collect();
-    let _spellings = emitter::ts_types::type_renames::enter(hidden_type_spellings);
+    emit_ctx.type_spellings = hidden_type_spellings;
     let (program, source_map) =
         emitter::emit_project(program, &emit_ctx, pf.source(), &source_name);
     // Slice 3: the handler-label sidecar for this unit (ADR 0105) — names stack

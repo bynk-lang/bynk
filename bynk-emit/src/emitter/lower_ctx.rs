@@ -310,6 +310,17 @@ impl<'a> LowerCtx<'a> {
         self.module.commons
     }
 
+    /// #2620: where the unit being emitted names a byte offset (see
+    /// [`ModuleCtx::fault_location`]).
+    pub(crate) fn fault_location(&self, offset: usize) -> Option<String> {
+        self.module.fault_location(offset)
+    }
+
+    /// How this module renders a checked `Ty` as TypeScript (#1927).
+    pub(crate) fn ty_render(&self) -> TyRender<'a> {
+        self.module.ty_render()
+    }
+
     /// Cross-context info for v0.6 cross-context call lowering.
     pub(crate) fn cross_context(&self) -> &'a bynk_check::resolver::CrossContextInfo {
         self.module.cross_context
@@ -1328,7 +1339,7 @@ impl<'a> LowerCtx<'a> {
             .commons()
             .expr_types
             .get(&value.id)
-            .map(|te| ts_ty(te.ty, self.commons().tys()));
+            .map(|te| ts_ty(te.ty, self.ty_render()));
         match (self.is_temp_hoist.as_mut(), ty) {
             (Some(hoist), Some(ty)) => {
                 hoist.push(format!("let {tmp}!: {ty};"));

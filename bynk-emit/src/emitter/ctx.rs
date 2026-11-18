@@ -71,6 +71,44 @@ pub(crate) struct ModuleCtx<'a> {
     /// #3580: [`crate::emit_model::EmitProjectCtx::trace`]. `None` (the default)
     /// emits no trace recording.
     pub(super) trace: Option<crate::emit_model::TraceLoc>,
+    /// The per-unit facts a lowering reads but the body does not carry: the
+    /// `.bynk` source of the unit (#2620) and its hidden-type spellings (#1927).
+    pub(super) unit: UnitFacts<'a>,
+}
+
+/// #2620 and #1927: the two per-unit facts lowering reads from the unit being
+/// emitted, both fields of its [`EmitProjectCtx`]. Every [`ModuleCtx`] is built
+/// with one, so a lowering cannot be reached without saying where they come
+/// from: [`UnitFacts::of`] for a unit of a project, [`UnitFacts::detached`] for
+/// a scaffold lowered outside one.
+#[derive(Clone, Copy)]
+pub(crate) struct UnitFacts<'a> {
+    source: Option<&'a crate::emit_model::UnitSource>,
+    spellings: &'a HashMap<String, String>,
+}
+
+impl<'a> UnitFacts<'a> {
+    /// The facts of the unit `ctx` describes.
+    pub(crate) fn of(ctx: &'a EmitProjectCtx) -> Self {
+        Self {
+            source: ctx.unit_source.as_ref(),
+            spellings: &ctx.type_spellings,
+        }
+    }
+
+    /// How the unit renders a checked `Ty` as TypeScript (#1927).
+    pub(crate) fn render(&self, commons: &'a TypedCommons) -> TyRender<'a> {
+        TyRender::new(commons.tys(), self.spellings)
+    }
+
+    /// No unit behind the lowering (a test or contract scaffold): faults name
+    /// `offset N`, and no type is respelled.
+    pub(crate) fn detached() -> Self {
+        Self {
+            source: None,
+            spellings: ts_types::no_spellings(),
+        }
+    }
 }
 
 impl<'a> ModuleCtx<'a> {
@@ -81,12 +119,36 @@ impl<'a> ModuleCtx<'a> {
         self.trace = ctx.trace.clone();
     }
 
+    /// #2620: the `path:line:col` of a byte offset in the unit being emitted,
+    /// or `None` when no unit stands behind the lowering.
+    pub(super) fn fault_location(&self, offset: usize) -> Option<String> {
+        self.unit.source.map(|s| s.location(offset))
+    }
+
+    /// How this module renders a checked `Ty` as TypeScript.
+    pub(super) fn ty_render(&self) -> TyRender<'a> {
+        self.unit.render(self.commons)
+    }
+
+    /// A module of the project unit `ctx` describes: its cross-context facts,
+    /// runtime-use accumulator, source and spellings all come from `ctx`.
+    pub(super) fn for_unit(commons: &'a TypedCommons, ctx: &'a EmitProjectCtx) -> Self {
+        Self::new(
+            commons,
+            &ctx.cross_context,
+            &ctx.runtime_use,
+            UnitFacts::of(ctx),
+        )
+    }
+
     pub(super) fn new(
         commons: &'a TypedCommons,
         cross_context: &'a bynk_check::resolver::CrossContextInfo,
         runtime_use: &'a RuntimeUse,
+        unit: UnitFacts<'a>,
     ) -> Self {
         Self {
+            unit,
             commons,
             cross_context,
             runtime_use,
@@ -426,43 +488,6 @@ pub struct SystemHttpClaims {
 pub(crate) struct TailSlot {
     pub(crate) slot: String,
     pub(crate) label: String,
-}
-
-thread_local! {
-    /// #2620: the `.bynk` source being emitted and its project-relative identity
-    /// path, so a `unreachable(…)` / `todo(…)` lowering can name its own
-    /// `path:line:col`. Lowering reaches every body kind through a `LowerCtx`
-    /// built at many sites; this is set once per unit by [`emit_project`].
-    static FAULT_SOURCE: std::cell::RefCell<Option<(String, String)>> =
-        const { std::cell::RefCell::new(None) };
-}
-
-/// Installs [`FAULT_SOURCE`] for the unit being emitted and restores the
-/// previous value on drop.
-pub(super) struct FaultSourceGuard(Option<(String, String)>);
-
-impl FaultSourceGuard {
-    pub(super) fn set(source: &str, identity_path: &str) -> Self {
-        let next = Some((source.to_string(), identity_path.replace('\\', "/")));
-        Self(FAULT_SOURCE.with(|s| s.replace(next)))
-    }
-}
-
-impl Drop for FaultSourceGuard {
-    fn drop(&mut self) {
-        FAULT_SOURCE.with(|s| *s.borrow_mut() = self.0.take());
-    }
-}
-
-/// #2620: the `path:line:col` of a byte offset in the unit being emitted, or
-/// `None` outside [`emit_project`] (the single-file path has no identity).
-pub(crate) fn fault_source_location(offset: usize) -> Option<String> {
-    FAULT_SOURCE.with(|s| {
-        s.borrow().as_ref().map(|(source, path)| {
-            let (line, col) = bynk_syntax::span::line_col(source, offset);
-            format!("{path}:{line}:{col}")
-        })
-    })
 }
 
 /// v0.59: the source context an `assert` lowering needs to turn its span into a

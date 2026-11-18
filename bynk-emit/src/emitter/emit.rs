@@ -67,7 +67,14 @@ pub(crate) fn emit_type(
         .as_deref()
         .map(|c| format!("{c}."))
         .unwrap_or_default();
-    emit_type_in(t, shape, commons, &brand_prefix, &ctx.runtime_use)
+    emit_type_in(
+        t,
+        shape,
+        commons,
+        &brand_prefix,
+        &ctx.runtime_use,
+        UnitFacts::of(ctx),
+    )
 }
 
 /// [`emit_type`] with the brand prefix and runtime-use accumulator supplied
@@ -79,6 +86,7 @@ pub(crate) fn emit_type_in(
     commons: &TypedCommons,
     brand_prefix: &str,
     runtime_use: &RuntimeUse,
+    unit: UnitFacts<'_>,
 ) -> Vec<bynk_ts::TsStmt> {
     let mut stmts = Vec::new();
     let has_doc = t.documentation.is_some();
@@ -107,13 +115,14 @@ pub(crate) fn emit_type_in(
             commons,
             brand_prefix,
             runtime_use,
+            unit,
         ),
-        TypeShape::Record { fields } => emit_record_type(t, fields, commons, runtime_use),
+        TypeShape::Record { fields } => emit_record_type(t, fields, commons, runtime_use, unit),
         // `embeds` is not read here — today's emitter has no reader for
         // `SumBody::embeds` anywhere (confirmed by grep; `embeds` is checker-
         // enforced construction-time only), so `TypeShape::Sum::embeds` stays
         // unread by this slice too, not a gap introduced by it.
-        TypeShape::Sum { variants, .. } => emit_sum_type(t, variants, commons, runtime_use),
+        TypeShape::Sum { variants, .. } => emit_sum_type(t, variants, commons, runtime_use, unit),
     };
     // #1486: a leading doc comment sits directly above the declaration it
     // documents, no blank between them — unlike `Comment`, `DocComment` is
@@ -239,6 +248,7 @@ fn emit_refined_type(
     commons: &TypedCommons,
     brand_prefix: &str,
     runtime_use: &RuntimeUse,
+    unit: UnitFacts<'_>,
 ) -> Vec<bynk_ts::TsStmt> {
     let RefinedShape {
         base,
@@ -333,6 +343,7 @@ fn emit_refined_type(
         &t.type_params,
         commons,
         runtime_use,
+        unit,
     ));
     let const_decl = bynk_ts::TsStmt::decl(
         bynk_ts::TsDecl::Export(Box::new(bynk_ts::TsDecl::ConstDecl {
@@ -508,6 +519,7 @@ fn emit_record_type(
     fields: &[(String, TyId)],
     commons: &TypedCommons,
     runtime_use: &RuntimeUse,
+    unit: UnitFacts<'_>,
 ) -> Vec<bynk_ts::TsStmt> {
     let type_params: Vec<String> = t.type_params.iter().map(|p| p.name.name.clone()).collect();
     let members: Vec<bynk_ts::TsTypeMember> = fields
@@ -515,7 +527,7 @@ fn emit_record_type(
         .map(|(name, ty)| {
             bynk_ts::TsTypeMember::readonly_prop(
                 name.clone(),
-                ts_ty_to_ts_type(*ty, &commons.ty_intern),
+                ts_ty_to_ts_type(*ty, unit.render(commons)),
             )
         })
         .collect();
@@ -527,7 +539,7 @@ fn emit_record_type(
         })),
         None,
     );
-    let entries = emit_attached_methods(&t.name.name, &t.type_params, commons, runtime_use);
+    let entries = emit_attached_methods(&t.name.name, &t.type_params, commons, runtime_use, unit);
     let const_decl = bynk_ts::TsStmt::decl(
         bynk_ts::TsDecl::Export(Box::new(bynk_ts::TsDecl::ConstDecl {
             name: t.name.name.clone(),
@@ -567,6 +579,7 @@ fn emit_sum_type(
     variants: &[(String, Vec<(String, TyId)>)],
     commons: &TypedCommons,
     runtime_use: &RuntimeUse,
+    unit: UnitFacts<'_>,
 ) -> Vec<bynk_ts::TsStmt> {
     // #593: a generic sum erases to a TypeScript generic discriminated union,
     // exactly as a generic record erases to `interface Name<T>`. The type
@@ -610,7 +623,7 @@ fn emit_sum_type(
             members.extend(payload.iter().map(|(field, ty)| {
                 bynk_ts::TsTypeMember::readonly_prop(
                     payload_prop(field),
-                    ts_ty_to_ts_type(*ty, &commons.ty_intern),
+                    ts_ty_to_ts_type(*ty, unit.render(commons)),
                 )
             }));
             bynk_ts::TsType::Object(members)
@@ -645,7 +658,7 @@ fn emit_sum_type(
                 .iter()
                 .map(|(field, ty)| bynk_ts::TsParam {
                     name: ts_ident(&payload_prop(field)),
-                    ty: Some(ts_ty_to_ts_type(*ty, &commons.ty_intern)),
+                    ty: Some(ts_ty_to_ts_type(*ty, unit.render(commons))),
                     optional: false,
                 })
                 .collect();
@@ -684,6 +697,7 @@ fn emit_sum_type(
         &t.type_params,
         commons,
         runtime_use,
+        unit,
     ));
     let const_decl = bynk_ts::TsStmt::decl(
         bynk_ts::TsDecl::Export(Box::new(bynk_ts::TsDecl::ConstDecl {
@@ -707,6 +721,7 @@ fn emit_attached_methods(
     type_params: &[TypeParam],
     commons: &TypedCommons,
     runtime_use: &RuntimeUse,
+    unit: UnitFacts<'_>,
 ) -> Vec<bynk_ts::TsObjectEntry> {
     let mut entries = Vec::new();
     for item in &commons.commons.items {
@@ -728,6 +743,7 @@ fn emit_attached_methods(
             method_name,
             commons,
             runtime_use,
+            unit,
         ));
     }
     entries
@@ -775,7 +791,7 @@ fn emit_attached_methods(
 pub(crate) fn emit_forwarded_methods(
     type_name: &str,
     methods: &[FnSig],
-    tys: &Arc<Types>,
+    tys: TyRender<'_>,
 ) -> Vec<bynk_ts::TsObjectEntry> {
     let mut entries = Vec::new();
     for f in methods {
@@ -877,6 +893,7 @@ fn emit_method(
     method_name: &Ident,
     commons: &TypedCommons,
     runtime_use: &RuntimeUse,
+    unit: UnitFacts<'_>,
 ) -> bynk_ts::TsObjectEntry {
     // #1337: a real gap the accepted proposal's own citation missed (it
     // searched for `///`-style doc markers; this language's own doc block
@@ -931,7 +948,7 @@ fn emit_method(
     }
     let empty = bynk_check::resolver::CrossContextInfo::default();
     let mut cx = LowerCtx::new(
-        ModuleCtx::new(commons, &empty, runtime_use),
+        ModuleCtx::new(commons, &empty, runtime_use, unit),
         BodyMode::Method,
     );
     // Constrained generics slice 1: one trailing comparator parameter per
@@ -956,7 +973,7 @@ fn emit_method(
     // carries no contract clauses (`emit_method` guards none), so there are no
     // `requires` to re-check per iteration; if methods gain them, they belong in
     // the guards closure below.
-    if let Some(plan) = super::tco::plan(f, commons) {
+    if let Some(plan) = super::tco::plan(f, commons, unit.render(commons)) {
         super::tco::emit_loop_body(
             &mut body_text,
             f,
@@ -1035,6 +1052,7 @@ pub(crate) fn emit_free_fn(
     contracts: bool,
     runtime_use: &RuntimeUse,
     cross_context: &bynk_check::resolver::CrossContextInfo,
+    unit: UnitFacts<'_>,
 ) -> Vec<bynk_ts::TsStmt> {
     emit_free_fn_in(
         f,
@@ -1044,6 +1062,7 @@ pub(crate) fn emit_free_fn(
         cross_context,
         true,
         false,
+        unit,
     )
 }
 
@@ -1057,9 +1076,19 @@ pub fn emit_suite_fn(
     // A suite is only ever built for `bynk test`, which guards every contract.
     // A suite helper cannot declare `given`, so it has no capability types to name.
     let empty = bynk_check::resolver::CrossContextInfo::default();
-    emit_free_fn_in(f, commons, true, runtime_use, &empty, false, true)
+    emit_free_fn_in(
+        f,
+        commons,
+        true,
+        runtime_use,
+        &empty,
+        false,
+        true,
+        UnitFacts::detached(),
+    )
 }
 
+#[allow(clippy::too_many_arguments)]
 fn emit_free_fn_in(
     f: &FnDecl,
     commons: &TypedCommons,
@@ -1068,6 +1097,7 @@ fn emit_free_fn_in(
     cross_context: &bynk_check::resolver::CrossContextInfo,
     export: bool,
     suite_fn: bool,
+    unit: UnitFacts<'_>,
 ) -> Vec<bynk_ts::TsStmt> {
     let FnName::Free(name) = &f.name else {
         return Vec::new();
@@ -1100,12 +1130,12 @@ fn emit_free_fn_in(
         f.given.iter().map(bynk_model::lower_cap_ref_ir).collect();
     let cx = if given_ir.is_empty() {
         LowerCtx::new(
-            ModuleCtx::new(commons, &empty, runtime_use),
+            ModuleCtx::new(commons, &empty, runtime_use, unit),
             BodyMode::FreeFn,
         )
     } else {
         LowerCtx::new(
-            ModuleCtx::new(commons, cross_context, runtime_use),
+            ModuleCtx::new(commons, cross_context, runtime_use, unit),
             BodyMode::GivenFn {
                 handler: HandlerShared {
                     capabilities: given_ir.iter().map(|c| c.name.clone()).collect(),
@@ -1157,7 +1187,7 @@ fn emit_free_fn_in(
     }
     let mut body_text = String::new();
     // #3193: a direct self tail call runs as a loop, in constant stack.
-    if let Some(plan) = super::tco::plan(f, commons) {
+    if let Some(plan) = super::tco::plan(f, commons, unit.render(commons)) {
         let check_requires = contracts && !f.requires.is_empty();
         let guards = |out: &mut String, cx: &mut LowerCtx, depth: usize| {
             if check_requires {
@@ -1241,7 +1271,7 @@ pub(crate) fn emit_consts(commons: &TypedCommons, ctx: &EmitProjectCtx) -> Vec<b
         let CommonsItem::Const(c) = item else {
             continue;
         };
-        let mut module = ModuleCtx::new(commons, &ctx.cross_context, &ctx.runtime_use);
+        let mut module = ModuleCtx::for_unit(commons, ctx);
         module.target = ctx.target;
         module.consumed_type_ns = consumed_type_ns(ctx);
         module.consumed_type_declared = ctx.consumed_type_aliases.clone();
@@ -2471,6 +2501,7 @@ pub(crate) fn emit_capability(
     c: &CapabilityDecl,
     ops: &[OpSig],
     commons: &TypedCommons,
+    unit: UnitFacts<'_>,
 ) -> Vec<bynk_ts::TsStmt> {
     let mut stmts = Vec::new();
     if let Some(doc) = c.documentation.as_deref() {
@@ -2509,7 +2540,7 @@ pub(crate) fn emit_capability(
                     ty: Some(if *encoded {
                         bynk_ts::TsType::named("unknown")
                     } else {
-                        ts_ty_to_ts_type(*ty, &commons.ty_intern)
+                        ts_ty_to_ts_type(*ty, unit.render(commons))
                     }),
                     optional: false,
                 })
@@ -2564,7 +2595,7 @@ pub(crate) fn emit_capability(
                         vec![bynk_ts::TsType::named("unknown")],
                     )
                 } else {
-                    ts_ty_to_ts_type(sig.return_ty, &commons.ty_intern)
+                    ts_ty_to_ts_type(sig.return_ty, unit.render(commons))
                 },
                 doc: op.documentation.as_deref().map(str::to_owned),
             }
@@ -2933,7 +2964,7 @@ pub(crate) fn emit_provider(
         // again for the identical value (the same duplicate-computation
         // pattern P6.54 fixed in `emit_agent`).
         let effectful = is_effectful_return(&op.return_type);
-        let mut module = ModuleCtx::new(commons, &ctx.cross_context, &ctx.runtime_use);
+        let mut module = ModuleCtx::for_unit(commons, ctx);
         module.agent_method_givens = ctx.agent_method_givens.clone();
         module.agent_called_contexts = ctx.agent_called_contexts.clone();
         module.event_schema_versions = ctx.event_schema_versions.clone();
@@ -3114,7 +3145,7 @@ pub(crate) fn emit_service(
     commons: &TypedCommons,
     ctx: &EmitProjectCtx,
 ) -> bynk_ts::TsStmt {
-    let tys = commons.tys();
+    let tys = UnitFacts::of(ctx).render(commons);
     let mut out = String::new();
     let mut service_smb = SourceMapBuilder::new();
     emit_doc_block(&mut out, s.documentation.as_deref(), 0);
@@ -3274,7 +3305,7 @@ pub(crate) fn emit_service(
         } else {
             None
         };
-        let mut module = ModuleCtx::new(commons, &ctx.cross_context, &ctx.runtime_use);
+        let mut module = ModuleCtx::for_unit(commons, ctx);
         module.note_unit(ctx);
         module.agent_method_givens = ctx.agent_method_givens.clone();
         module.agent_called_contexts = ctx.agent_called_contexts.clone();
@@ -5305,7 +5336,7 @@ fn emit_lazy_field_spec(
     for (name, v, _) in &layout.store_cache_fields {
         let ts = match layout.store_field_ty.get(name.name.as_str()) {
             Some(StoreKindIr::Cache(_, v_ty, _)) => {
-                bynk_ts::print_type(&ts_ty_to_ts_type(*v_ty, commons.tys()))
+                bynk_ts::print_type(&ts_ty_to_ts_type(*v_ty, UnitFacts::of(ctx).render(commons)))
             }
             _ => ts_type_ref(v),
         };
@@ -5743,7 +5774,7 @@ fn classify_agent_store<'a>(
     commons: &TypedCommons,
     ctx: &EmitProjectCtx,
 ) -> AgentStoreLayout<'a> {
-    let tys = commons.tys();
+    let tys = UnitFacts::of(ctx).render(commons);
     // #1187's Agent state-field slice: the checker-resolved TyId for each
     // Cell/Map/Cache/Log field's element type, keyed by field name — read
     // once here so the state-interface block below can render through
@@ -5845,7 +5876,7 @@ fn classify_agent_store<'a>(
             let ts = store_field_ty
                 .get(n.name.as_str())
                 .and_then(|kind| match kind {
-                    StoreKindIr::Map(_, v_ty) => held_frame_ty(*v_ty, tys),
+                    StoreKindIr::Map(_, v_ty) => held_frame_ty(*v_ty, tys.types()),
                     _ => None,
                 })
                 .map(|frame_ty| ts_ty(frame_ty, tys))
@@ -6452,7 +6483,7 @@ fn emit_agent_load_commit_state(
                 .collect();
             for inv in &a.invariants {
                 let mut cx = LowerCtx::new(
-                    ModuleCtx::new(commons, &ctx.cross_context, &ctx.runtime_use),
+                    ModuleCtx::for_unit(commons, ctx),
                     BodyMode::Invariant {
                         name: "s".to_string(),
                         fields: field_names.clone(),
@@ -6521,7 +6552,7 @@ fn emit_agent_load_commit_state(
             }
             for tr in &a.transitions {
                 let mut cx = LowerCtx::new(
-                    ModuleCtx::new(commons, &ctx.cross_context, &ctx.runtime_use),
+                    ModuleCtx::for_unit(commons, ctx),
                     BodyMode::Transition {
                         old: "__old".to_string(),
                         new: "__new".to_string(),
@@ -7142,7 +7173,7 @@ fn emit_agent_state_persistence(
                 }
             }
             let mut cx = LowerCtx::new(
-                ModuleCtx::new(commons, &ctx.cross_context, &ctx.runtime_use),
+                ModuleCtx::for_unit(commons, ctx),
                 BodyMode::Invariant {
                     name: "__c".to_string(),
                     fields: cell_names.difference(&shadowed).cloned().collect(),
@@ -7430,7 +7461,7 @@ fn emit_agent_handlers(
             .as_ref()
             .map(|m| m.name.clone())
             .unwrap_or_else(|| "call".to_string());
-        let mut module = ModuleCtx::new(commons, &ctx.cross_context, &ctx.runtime_use);
+        let mut module = ModuleCtx::for_unit(commons, ctx);
         module.note_unit(ctx);
         // #1960: the body lowers for the build target, as a service body
         // does, so a cross-context call reads the Service Binding its `deps`
@@ -7694,7 +7725,7 @@ fn emit_agent_dispatch(
     ctx: &EmitProjectCtx,
     class_smb: &RefCell<SourceMapBuilder>,
 ) {
-    let tys = commons.tys();
+    let tys = UnitFacts::of(ctx).render(commons);
     let AgentDispatchFacts {
         reads_key,
         given_deps_expr,
@@ -8414,7 +8445,7 @@ fn emit_agent_state_record(
     ctx: &EmitProjectCtx,
     stmts: &mut Vec<bynk_ts::TsStmt>,
 ) -> AgentStateNames {
-    let tys = commons.tys();
+    let tys = UnitFacts::of(ctx).render(commons);
     let state_ty = format!("{}State", a.name.name);
     let AgentStoreLayout {
         store_field_ty,
@@ -8609,7 +8640,7 @@ fn emit_agent_state_record(
     for f in effective_fields {
         let val = if let Some(init) = &f.init {
             let mut pre = Pre::new();
-            let mut module = ModuleCtx::new(commons, &ctx.cross_context, &ctx.runtime_use);
+            let mut module = ModuleCtx::for_unit(commons, ctx);
             module.target = ctx.target;
             module.agent_method_givens = ctx.agent_method_givens.clone();
             module.agent_called_contexts = ctx.agent_called_contexts.clone();
@@ -9237,7 +9268,7 @@ fn emit_ws_do_method(
         name: "connection".to_string(),
         ty: Some(bynk_ts::TsType::named(format!(
             "Connection<{}>",
-            ts_ty(host.out_ty, commons.tys())
+            ts_ty(host.out_ty, UnitFacts::of(ctx).render(commons))
         ))),
         optional: false,
     }];
@@ -9249,7 +9280,7 @@ fn emit_ws_do_method(
         });
     }
     let body_smb = RefCell::new(SourceMapBuilder::new());
-    let mut module = ModuleCtx::new(commons, &ctx.cross_context, &ctx.runtime_use);
+    let mut module = ModuleCtx::for_unit(commons, ctx);
     module.note_unit(ctx);
     module.agent_method_givens = ctx.agent_method_givens.clone();
     module.agent_called_contexts = ctx.agent_called_contexts.clone();
@@ -9659,7 +9690,7 @@ fn agent_env_const_stmt() -> bynk_ts::TsStmt {
     )
 }
 
-fn ws_open_fetch_branch_stmt(host: &WsOpenHost<'_>, tys: &Arc<Types>) -> bynk_ts::TsStmt {
+fn ws_open_fetch_branch_stmt(host: &WsOpenHost<'_>, tys: TyRender<'_>) -> bynk_ts::TsStmt {
     let h = host.handler;
     let path = format!("/_bynk/ws/open/{}", host.service);
     let method = ws_open_do_method_name(host.service);
@@ -9923,7 +9954,7 @@ fn emit_ws_dispatch_handlers(
     host: &WsOpenHost<'_>,
     runtime_use: &RuntimeUse,
     types: &HashMap<String, Arc<TypeDecl>>,
-    tys: &Arc<Types>,
+    tys: TyRender<'_>,
 ) {
     if !host.has_inbound() {
         return;
@@ -10033,7 +10064,7 @@ fn emit_ws_dispatch_handlers(
         // websocket` service's own `in:` frame type can ever resolve to,
         // since `check_service_protocols` already constrains it to a
         // codec-eligible type before this function ever runs.
-        let in_type = ty_to_type_ref(host.in_ty, tys).unwrap_or_else(|| {
+        let in_type = ty_to_type_ref(host.in_ty, tys.types()).unwrap_or_else(|| {
             panic!(
                 "bynk internal error: a `from websocket` service's own `in:` frame type did \
                  not round-trip to a TypeRef, but check_service_protocols already certified it \
@@ -10115,7 +10146,7 @@ fn emit_ws_dispatch_handlers(
         // program this picks a different (or no) param's argument for.
         let no_vars = HashSet::new();
         let resolve_ty = |t: &TypeRef| {
-            bynk_check::checker::resolve_type_ref_in(t, types, &no_vars, tys)
+            bynk_check::checker::resolve_type_ref_in(t, types, &no_vars, tys.types())
                 .unwrap_or(tys.intern(bynk_check::checker::Ty::Unit))
         };
         for p in &m.params {
@@ -10945,7 +10976,14 @@ pub fn emit_suite_decls(
             continue;
         };
         let shape = bynk_model::lower_suite_type_shape_ir(def, typed);
-        stmts.extend(emit_type_in(t, &shape, typed, "", runtime_use));
+        stmts.extend(emit_type_in(
+            t,
+            &shape,
+            typed,
+            "",
+            runtime_use,
+            UnitFacts::detached(),
+        ));
     }
     if !types.is_empty() {
         // The type itself plus the wrappers a test reads one through: a
@@ -10974,7 +11012,10 @@ pub fn emit_suite_decls(
     }
     let empty = bynk_check::resolver::CrossContextInfo::default();
     for c in consts {
-        stmts.extend(emit_const_in(c, ModuleCtx::new(typed, &empty, runtime_use)));
+        stmts.extend(emit_const_in(
+            c,
+            ModuleCtx::new(typed, &empty, runtime_use, UnitFacts::detached()),
+        ));
     }
     stmts
         .iter()

@@ -12,6 +12,16 @@ categories = ["compilers"]
 [lib]
 path = "src/lib.rs"
 
+[features]
+# Compiles the text-exit counters (`lower::TEXT_EXITS`, `TEXT_STMTS`,
+# `lower_stmt::LINES_RENDERED`) into this crate and exposes them as
+# `emitter::text_counters`. They exist under `cfg(test)` too, but only in this
+# crate's own test build: a test that lowers through `bynk-driver` runs the
+# driver's non-test copy of this crate, where `cfg(test)` is off and the counters
+# would read 0. A crate whose tests drive the driver enables this feature in its
+# dev-dependencies (`bynk-tests` does). Never enabled by a product build.
+text-exit-counters = []
+
 [dependencies]
 # #521: bynk.toml parsing (read_project_paths). #980: also the schema
 # registry (`bynk.schema.lock`), same format.
