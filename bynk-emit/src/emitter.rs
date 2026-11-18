@@ -100,6 +100,7 @@ mod codec;
 pub mod ctx;
 mod lower;
 mod lower_ctx;
+mod lower_stmt;
 pub(crate) mod runtime_use;
 mod tco;
 pub mod ts_types;
