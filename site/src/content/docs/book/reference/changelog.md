@@ -28,6 +28,7 @@ per-commit history. While Bynk is pre-1.0, increments may change behaviour.
 
 | Version | Highlights |
 |---|---|
+| **v0.639.19** | The statement emitter builds a list of body items and renders it through one adapter, with no change to the generated output or its source maps |
 | **v0.639.18** | The statement emitter moves out of `lower.rs` into `emitter/lower_stmt.rs`, with no change to the generated output |
 | **v0.639.17** | The `?` expansion and the value-position ternary `if` now lower to typed TypeScript statement nodes |
 | **v0.639.16** | Interpolated strings, record construction and spread, and the expression form of `expect` now lower to typed TypeScript nodes |
