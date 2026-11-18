@@ -494,12 +494,12 @@ async function test_a_handled_raw_body_carries_the_handler_s_typed_result() {
     const deps = __makeHarness();
     const r = await __sysdrive_raw_api_http_POST_cart("{\"sku\": \"raw-ok\"}", undefined, ("alice" as any));
     void (((__d) => {
-        if (__d.tag === "Handled" && __d.value.tag === "Created") {
-          const item = __d.value.value;
-          return __bynkExpect((item.sku === "raw-ok"), "shop/tests/api.test.bynk:83:40", 4013, 4033, "expect item.sku == \"raw-ok\"");
-        }
-        return __bynkExpect((false), "shop/tests/api.test.bynk:84:19", 4052, 4057, "expect false");
-      })(r));
+      if (__d.tag === "Handled" && __d.value.tag === "Created") {
+        const item = __d.value.value;
+        return __bynkExpect((item.sku === "raw-ok"), "shop/tests/api.test.bynk:83:40", 4013, 4033, "expect item.sku == \"raw-ok\"");
+      }
+      return __bynkExpect((false), "shop/tests/api.test.bynk:84:19", 4052, 4057, "expect false");
+    })(r));
     return { pass: true };
   } catch (e) {
     if (e instanceof ExpectationError) {

@@ -60,13 +60,13 @@ async function test_a_fresh_Slot_key_resolves_to_Empty() {
               case "Err": {
                 const slotError = outcome.error;
                 return ((__d) => {
-        switch (__d.tag) {
-          case "Empty": {
-            return __bynkExpect((true), "tests/demo/slot.bynk:14:22", 358, 362, "expect true");
-          }
-        }
-        throw new globalThis.Error("non-exhaustive match");
-      })(slotError);
+                  switch (__d.tag) {
+                    case "Empty": {
+                      return __bynkExpect((true), "tests/demo/slot.bynk:14:22", 358, 362, "expect true");
+                    }
+                  }
+                  throw new globalThis.Error("non-exhaustive match");
+                })(slotError);
               }
             }
             throw new globalThis.Error("non-exhaustive match");

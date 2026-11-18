@@ -69,17 +69,17 @@ async function test_a_service_answers_with_a_used_constant() {
     type Tier = __ns_shop_limits.Tier;
     const r = await api.http_GET_limit(deps);
     void (((__d) => {
-        switch (__d.tag) {
-          case "Ok": {
-            const n = __d.value;
-            return __bynkExpect((n === 20), "tests/shop/api.bynk:15:21", 328, 335, "expect n == 20");
-          }
-          default: {
-            return __bynkExpect((false), "tests/shop/api.bynk:16:17", 352, 357, "expect false");
-          }
+      switch (__d.tag) {
+        case "Ok": {
+          const n = __d.value;
+          return __bynkExpect((n === 20), "tests/shop/api.bynk:15:21", 328, 335, "expect n == 20");
         }
-        throw new globalThis.Error("non-exhaustive match");
-      })(r));
+        default: {
+          return __bynkExpect((false), "tests/shop/api.bynk:16:17", 352, 357, "expect false");
+        }
+      }
+      throw new globalThis.Error("non-exhaustive match");
+    })(r));
     return { pass: true };
   } catch (e) {
     if (e instanceof ExpectationError) {
@@ -100,17 +100,17 @@ async function test_a_service_answers_with_the_context_s_own_constant() {
     type Tier = __ns_shop_limits.Tier;
     const r = await api.http_GET_greeting(deps);
     void (((__d) => {
-        switch (__d.tag) {
-          case "Ok": {
-            const s = __d.value;
-            return __bynkExpect((s === Welcome()), "tests/shop/api.bynk:23:21", 488, 500, "expect s == Welcome");
-          }
-          default: {
-            return __bynkExpect((false), "tests/shop/api.bynk:24:17", 517, 522, "expect false");
-          }
+      switch (__d.tag) {
+        case "Ok": {
+          const s = __d.value;
+          return __bynkExpect((s === Welcome()), "tests/shop/api.bynk:23:21", 488, 500, "expect s == Welcome");
         }
-        throw new globalThis.Error("non-exhaustive match");
-      })(r));
+        default: {
+          return __bynkExpect((false), "tests/shop/api.bynk:24:17", 517, 522, "expect false");
+        }
+      }
+      throw new globalThis.Error("non-exhaustive match");
+    })(r));
     return { pass: true };
   } catch (e) {
     if (e instanceof ExpectationError) {
@@ -131,17 +131,17 @@ async function test_a_sibling_file_s_function_reads_its_sibling_s_constants() {
     type Tier = __ns_shop_limits.Tier;
     const r = await api.http_GET_pages(deps);
     void (((__d) => {
-        switch (__d.tag) {
-          case "Ok": {
-            const n = __d.value;
-            return __bynkExpect((n === 2), "tests/shop/api.bynk:31:21", 656, 662, "expect n == 2");
-          }
-          default: {
-            return __bynkExpect((false), "tests/shop/api.bynk:32:17", 679, 684, "expect false");
-          }
+      switch (__d.tag) {
+        case "Ok": {
+          const n = __d.value;
+          return __bynkExpect((n === 2), "tests/shop/api.bynk:31:21", 656, 662, "expect n == 2");
         }
-        throw new globalThis.Error("non-exhaustive match");
-      })(r));
+        default: {
+          return __bynkExpect((false), "tests/shop/api.bynk:32:17", 679, 684, "expect false");
+        }
+      }
+      throw new globalThis.Error("non-exhaustive match");
+    })(r));
     return { pass: true };
   } catch (e) {
     if (e instanceof ExpectationError) {
@@ -162,17 +162,17 @@ async function test_a_refined_constant_crosses_the_context_s_rebrand() {
     type Tier = __ns_shop_limits.Tier;
     const b = await api.http_GET_batch(deps);
     void (((__d) => {
-        switch (__d.tag) {
-          case "Ok": {
-            const q = __d.value;
-            return __bynkExpect((q === SmallBatch()), "tests/shop/api.bynk:39:21", 811, 826, "expect q == SmallBatch");
-          }
-          default: {
-            return __bynkExpect((false), "tests/shop/api.bynk:40:17", 843, 848, "expect false");
-          }
+      switch (__d.tag) {
+        case "Ok": {
+          const q = __d.value;
+          return __bynkExpect((q === SmallBatch()), "tests/shop/api.bynk:39:21", 811, 826, "expect q == SmallBatch");
         }
-        throw new globalThis.Error("non-exhaustive match");
-      })(b));
+        default: {
+          return __bynkExpect((false), "tests/shop/api.bynk:40:17", 843, 848, "expect false");
+        }
+      }
+      throw new globalThis.Error("non-exhaustive match");
+    })(b));
     return { pass: true };
   } catch (e) {
     if (e instanceof ExpectationError) {
@@ -193,17 +193,17 @@ async function test_a_sum_constant_crosses_the_context_s_rebrand() {
     type Tier = __ns_shop_limits.Tier;
     const t = await api.http_GET_tier(deps);
     void (((__d) => {
-        switch (__d.tag) {
-          case "Ok": {
-            const s = __d.value;
-            return __bynkExpect((s === "gold"), "tests/shop/api.bynk:47:21", 970, 981, "expect s == \"gold\"");
-          }
-          default: {
-            return __bynkExpect((false), "tests/shop/api.bynk:48:17", 998, 1003, "expect false");
-          }
+      switch (__d.tag) {
+        case "Ok": {
+          const s = __d.value;
+          return __bynkExpect((s === "gold"), "tests/shop/api.bynk:47:21", 970, 981, "expect s == \"gold\"");
         }
-        throw new globalThis.Error("non-exhaustive match");
-      })(t));
+        default: {
+          return __bynkExpect((false), "tests/shop/api.bynk:48:17", 998, 1003, "expect false");
+        }
+      }
+      throw new globalThis.Error("non-exhaustive match");
+    })(t));
     return { pass: true };
   } catch (e) {
     if (e instanceof ExpectationError) {

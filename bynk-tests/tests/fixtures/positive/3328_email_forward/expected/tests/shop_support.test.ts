@@ -218,17 +218,17 @@ async function test_anything_else_goes_to_the_team() {
     type WorkerVersion = __ns_bynk_cloudflare.WorkerVersion;
     const r = await ((__m: any) => support.queue_support_0(__m, { ...deps, identity: { address: __m.from, dmarc: { tag: "DmarcNone" } } }))({ from: "a@b.example", to: "support@shop.example", subject: "hello", messageId: "", headers: new globalThis.Map(), text: { tag: "None" as const }, html: { tag: "None" as const }, attachments: [], size: 0 });
     void (((__d) => {
-        switch (__d.tag) {
-          case "Forward": {
-            const dest = __d.to;
-            return __bynkExpect((dest === "team@shop.example"), "tests/support.bynk:11:31", 481, 508, "expect dest == \"team@shop.example\"");
-          }
-          default: {
-            return __bynkExpect((false), "tests/support.bynk:12:19", 527, 532, "expect false");
-          }
+      switch (__d.tag) {
+        case "Forward": {
+          const dest = __d.to;
+          return __bynkExpect((dest === "team@shop.example"), "tests/support.bynk:11:31", 481, 508, "expect dest == \"team@shop.example\"");
         }
-        throw new globalThis.Error("non-exhaustive match");
-      })(r));
+        default: {
+          return __bynkExpect((false), "tests/support.bynk:12:19", 527, 532, "expect false");
+        }
+      }
+      throw new globalThis.Error("non-exhaustive match");
+    })(r));
     return { pass: true };
   } catch (e) {
     if (e instanceof ExpectationError) {

@@ -93,16 +93,16 @@ async function test_a_suite_matches_a_reached_sum() {
     type Status = __ns_t_core.Status;
     const r = { repo: ("y" as any), status: Status.Done };
     const done = ((__d) => {
-        switch (__d.tag) {
-          case "Pending": {
-            return false;
-          }
-          case "Done": {
-            return true;
-          }
+      switch (__d.tag) {
+        case "Pending": {
+          return false;
         }
-        throw new globalThis.Error("non-exhaustive match");
-      })(r.status);
+        case "Done": {
+          return true;
+        }
+      }
+      throw new globalThis.Error("non-exhaustive match");
+    })(r.status);
     if (!(done)) { throw __bynkExpectFailure("tests/t/web.bynk:23:10", 695, 699, "expect done"); }
     return { pass: true };
   } catch (e) {

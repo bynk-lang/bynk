@@ -42,28 +42,28 @@ export const Session = {
 export const api = {
   async http_GET_me(cookies: Session, deps: {}): globalThis.Promise<HttpResult<string>> {
     const sid = ((__d) => {
-    switch (__d.tag) {
-      case "Some": {
-        const s = __d.value;
-        return `${String(s)}`;
+      switch (__d.tag) {
+        case "Some": {
+          const s = __d.value;
+          return `${String(s)}`;
+        }
+        case "None": {
+          return "-";
+        }
       }
-      case "None": {
-        return "-";
-      }
-    }
-    throw new globalThis.Error("non-exhaustive match");
-  })(cookies.sid);
+      throw new globalThis.Error("non-exhaustive match");
+    })(cookies.sid);
     const theme = ((__d) => {
-    switch (__d.tag) {
-      case "Light": {
-        return "light";
+      switch (__d.tag) {
+        case "Light": {
+          return "light";
+        }
+        case "Dark": {
+          return "dark";
+        }
       }
-      case "Dark": {
-        return "dark";
-      }
-    }
-    throw new globalThis.Error("non-exhaustive match");
-  })(cookies.theme);
+      throw new globalThis.Error("non-exhaustive match");
+    })(cookies.theme);
     return HttpResult.Ok(`${String(sid)} ${String(theme)} ${String(cookies.visits)} ${String((cookies.tags).length)}`);
   },
   async http_GET_items_Param_id(id: string, cookies: Session, deps: {}): globalThis.Promise<HttpResult<string>> {

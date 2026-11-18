@@ -100,17 +100,17 @@ export function sameToken(a: string, b: string): boolean {
     case "Some": {
       const x = __r0.value;
       return ((__d) => {
-    switch (__d.tag) {
-      case "Some": {
-        const y = __d.value;
-        return __bynkBytesEqual(x, y);
-      }
-      case "None": {
-        return false;
-      }
-    }
-    throw new globalThis.Error("non-exhaustive match");
-  })(token(b));
+        switch (__d.tag) {
+          case "Some": {
+            const y = __d.value;
+            return __bynkBytesEqual(x, y);
+          }
+          case "None": {
+            return false;
+          }
+        }
+        throw new globalThis.Error("non-exhaustive match");
+      })(token(b));
     }
     case "None": {
       return false;

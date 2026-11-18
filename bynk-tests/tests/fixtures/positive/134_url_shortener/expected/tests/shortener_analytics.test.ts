@@ -45,16 +45,16 @@ async function test_short_code_rejects_too_short_input() {
     type ShortCode = __ns_shortener_analytics.ShortCode;
     const result = ShortCode.fromString("ab");
     void (((__d) => {
-        switch (__d.tag) {
-          case "Ok": {
-            return __bynkExpect((false), "tests/shortener/analytics.bynk:5:23", 159, 164, "expect false");
-          }
-          case "Err": {
-            return __bynkExpect((true), "tests/shortener/analytics.bynk:6:24", 188, 192, "expect true");
-          }
+      switch (__d.tag) {
+        case "Ok": {
+          return __bynkExpect((false), "tests/shortener/analytics.bynk:5:23", 159, 164, "expect false");
         }
-        throw new globalThis.Error("non-exhaustive match");
-      })(result));
+        case "Err": {
+          return __bynkExpect((true), "tests/shortener/analytics.bynk:6:24", 188, 192, "expect true");
+        }
+      }
+      throw new globalThis.Error("non-exhaustive match");
+    })(result));
     return { pass: true };
   } catch (e) {
     if (e instanceof ExpectationError) {
@@ -73,16 +73,16 @@ async function test_short_code_accepts_valid_input() {
     type ShortCode = __ns_shortener_analytics.ShortCode;
     const result = ShortCode.fromString("abc123");
     void (((__d) => {
-        switch (__d.tag) {
-          case "Ok": {
-            return __bynkExpect((true), "tests/shortener/analytics.bynk:13:23", 335, 339, "expect true");
-          }
-          case "Err": {
-            return __bynkExpect((false), "tests/shortener/analytics.bynk:14:24", 363, 368, "expect false");
-          }
+      switch (__d.tag) {
+        case "Ok": {
+          return __bynkExpect((true), "tests/shortener/analytics.bynk:13:23", 335, 339, "expect true");
         }
-        throw new globalThis.Error("non-exhaustive match");
-      })(result));
+        case "Err": {
+          return __bynkExpect((false), "tests/shortener/analytics.bynk:14:24", 363, 368, "expect false");
+        }
+      }
+      throw new globalThis.Error("non-exhaustive match");
+    })(result));
     return { pass: true };
   } catch (e) {
     if (e instanceof ExpectationError) {

@@ -15,8 +15,8 @@ use bynk_syntax::span::Span;
 
 use super::ctx::TailSlot;
 use super::lower::{
-    Lowered, LoweredExpr, LoweredStmt, PatPath, Pre, and_join, emit_pattern_bindings,
-    literal_label_node, member_node, pattern_tests, ternary_built,
+    CLAIM_SCOPE_DECLARATION, Lowered, LoweredExpr, LoweredStmt, PatPath, Pre, and_join,
+    emit_pattern_bindings, literal_label_node, member_node, pattern_tests, ternary_built,
 };
 use super::lower_ctx::LowerCtx;
 use super::ts_types::{ts_ty, ts_type_ref, ts_type_ref_to_ts_type};
@@ -99,22 +99,6 @@ impl Body {
         }
         pending.is_none().then_some(stmts)
     }
-
-    /// As [`Body::to_nodes`], but every [`Item::Mark`] is dropped (1A.12,
-    /// Decision C of #3713): the body of a value-position `if`, block or lambda
-    /// is lowered under `without_source_map`, so today it carries no
-    /// checkpoints, and the node path must not gain any. `None` if any item is
-    /// text or a nested [`Item::Indent`].
-    pub(super) fn to_nodes_unmapped(&self) -> Option<Vec<bynk_ts::TsStmt>> {
-        self.0
-            .iter()
-            .filter_map(|item| match item {
-                Item::Mark(_) => None,
-                Item::Node(stmt) => Some(Some((**stmt).clone())),
-                Item::Line(_) | Item::Indent(_) => Some(None),
-            })
-            .collect()
-    }
 }
 
 impl Body {
@@ -140,6 +124,12 @@ impl Body {
         let mut stmts = Vec::with_capacity(self.0.len());
         let mut pending = None;
         self.push_stmts(&mut stmts, indent, indent, &mut pending);
+        // A mark with no statement after it would be dropped silently. Every
+        // producer pushes its content after its mark; this makes that explicit.
+        debug_assert!(
+            pending.is_none(),
+            "into_stmts: a trailing Item::Mark has no statement to carry its span"
+        );
         stmts
     }
 
@@ -191,6 +181,19 @@ thread_local! {
 /// Render `body` into `out` at `indent`, recording each [`Item::Mark`] with
 /// `cx.record_span` at the offset where it is reached.
 pub(super) fn render(body: &Body, out: &mut String, indent: usize, cx: &LowerCtx) {
+    render_with(body, out, indent, Some(cx));
+}
+
+/// [`render`] without recording any checkpoint: for a body whose text is
+/// spliced into a larger buffer at an offset the caller cannot know (a
+/// value-position `if`/`match` or lambda body that did not reach the tree as
+/// nodes). 1A.15, Decision D of #3716 replaces `without_source_map` with this:
+/// a body that is nodes keeps its marks, and only the text fallback drops them.
+pub(super) fn render_text(body: &Body, out: &mut String, indent: usize) {
+    render_with(body, out, indent, None);
+}
+
+fn render_with(body: &Body, out: &mut String, indent: usize, cx: Option<&LowerCtx>) {
     for item in &body.0 {
         match item {
             Item::Line(text) => {
@@ -207,38 +210,32 @@ pub(super) fn render(body: &Body, out: &mut String, indent: usize, cx: &LowerCtx
                 // when it is mid-line (an inline branch), after its own line's
                 // indentation.
                 let (text, spans) = bynk_ts::print_stmt_with_spans(stmt, 0);
-                let base = out.len();
-                for (offset, span) in spans {
-                    let before = &text[..offset];
-                    let mid_line = !before.is_empty() && !before.ends_with('\n');
-                    let lines = before.matches('\n').count() + usize::from(mid_line);
-                    cx.record_span(base + offset + lines * indent, span);
+                if let Some(cx) = cx {
+                    let base = out.len();
+                    for (offset, span) in spans {
+                        let before = &text[..offset];
+                        let mid_line = !before.is_empty() && !before.ends_with('\n');
+                        let lines = before.matches('\n').count() + usize::from(mid_line);
+                        cx.record_span(base + offset + lines * indent, span);
+                    }
                 }
                 for line in text.lines() {
                     write_line(out, indent, line);
                 }
             }
-            Item::Mark(span) => cx.record_span(out.len(), *span),
-            Item::Indent(inner) => render(inner, out, indent + INDENT_STEP, cx),
+            Item::Mark(span) => {
+                if let Some(cx) = cx {
+                    cx.record_span(out.len(), *span);
+                }
+            }
+            Item::Indent(inner) => render_with(inner, out, indent + INDENT_STEP, cx),
         }
     }
 }
 
-pub(crate) fn emit_block_as_function_body(
-    out: &mut String,
-    block: &Block,
-    cx: &mut LowerCtx,
-    indent: usize,
-    async_tail: bool,
-) {
-    let body = block_body(block, cx, async_tail);
-    render(&body, out, indent, cx);
-}
-
-/// The items of a block lowered as a function body, not yet rendered: what
-/// [`emit_block_as_function_body`] renders, for a caller that may turn it into
-/// nodes instead (1A.12). It preserves the enclosing `return_ty` exactly as
-/// that function does.
+/// The items of a block lowered as a function body, not yet rendered, for a
+/// caller that may turn it into nodes (1A.12) or render it. It preserves the
+/// enclosing `return_ty`.
 pub(super) fn block_body(block: &Block, cx: &mut LowerCtx, async_tail: bool) -> Body {
     let mut body = Body::new();
     block_body_into(&mut body, block, cx, async_tail);
@@ -316,20 +313,70 @@ pub(super) fn block_body_with_return(
     body
 }
 
-/// `body` between [`claim_scope_wrapper`]'s `before` and `after` text. The
-/// wrapper's text carries its own `indent` padding on every line, and
-/// [`Item::Line`] supplies the first line's, so that one is stripped here.
-fn claim_scoped(body: Body, indent: usize) -> Body {
-    let (before, after) = claim_scope_wrapper(indent);
-    let pad = " ".repeat(indent);
-    let as_line = |text: &str| {
-        let text = text.strip_prefix(pad.as_str()).unwrap_or(text);
-        Item::line(text.strip_suffix('\n').unwrap_or(text))
+/// `body` inside the claim scope (W30, #2840), as nodes (1A.15, Decision C of
+/// #3716): the `__claims` scope, `let __r;`, then a `try` whose block assigns the
+/// body's result, run in an async closure, to `__r`, and whose `catch` releases
+/// the claims and rethrows; after it the claims are confirmed and the result is
+/// returned. `indent` is the column of the first statement.
+///
+/// The `__claims` initialiser stays one text statement (`// 1A:`): its type
+/// assertion carries a generic method signature (`note<C>(...)`), which
+/// `bynk_ts`'s type members cannot express. The rest is the printer's own
+/// layout, which puts the body one `try` block and one closure deeper than the
+/// text wrapper did.
+pub(super) fn claim_scoped(body: Body, indent: usize) -> Body {
+    use bynk_ts::{TsBindingName, TsExpr, TsLit, TsStmt};
+    let ident = |name: &str| TsExpr::Ident(name.to_string());
+    let settle = |result: TsExpr, threw: bool| {
+        TsStmt::expr_stmt(
+            TsExpr::Await(Box::new(TsExpr::Call {
+                callee: Box::new(member_node("__claims", "settle")),
+                args: vec![result, TsExpr::Lit(TsLit::Bool(threw))],
+            })),
+            None,
+        )
     };
+    // The body sits in the closure, a `try` block and an arrow body deeper.
+    let inner = body.into_stmts(indent + INDENT_STEP * 2);
+    let closure = TsExpr::Arrow {
+        params: Vec::new(),
+        is_async: true,
+        generics: Vec::new(),
+        return_type: None,
+        body: Box::new(bynk_ts::TsArrowBody::Multiline(inner)),
+    };
+    let run = TsStmt::assign(
+        ident("__r"),
+        TsExpr::Await(Box::new(TsExpr::Call {
+            callee: Box::new(TsExpr::Paren(Box::new(closure))),
+            args: Vec::new(),
+        })),
+        None,
+    );
+    let on_throw = TsStmt::block(
+        vec![
+            settle(ident("undefined"), true),
+            TsStmt::throw_stmt(ident("__e"), None),
+        ],
+        None,
+    );
     let mut wrapped = Body::new();
-    wrapped.push(as_line(&before));
-    wrapped.extend(body.0);
-    wrapped.push(as_line(&after));
+    // 1A: a text statement, as `bynk_ts` cannot write the type assertion.
+    wrapped.push(Item::line(CLAIM_SCOPE_DECLARATION));
+    wrapped.push(stmt_item(TsStmt::let_stmt(
+        TsBindingName::Ident("__r".to_string()),
+        None,
+        None,
+        None,
+    )));
+    wrapped.push(stmt_item(TsStmt::try_catch(
+        TsStmt::block(vec![run], None),
+        Some("__e"),
+        on_throw,
+        None,
+    )));
+    wrapped.push(stmt_item(settle(TsExpr::Ident("__r".to_string()), false)));
+    wrapped.push(stmt_item(TsStmt::return_stmt(Some(ident("__r")), None)));
     wrapped
 }
 
@@ -379,7 +426,7 @@ fn emit_block_inner(body: &mut Body, block: &Block, cx: &mut LowerCtx, async_tai
                 // mispredict (#945, and the `ListLit`/`InterpStr` fallthrough
                 // this slice closes). A statement `if` is where a hoisted `?`'s
                 // early return belongs, so emit that instead of a ternary that
-                // has nowhere to put it. Byte-identical to what `emit_if_tail`
+                // has nowhere to put it. Byte-identical to what `if_tail`
                 // produces for this shape (both branches are statement-free and
                 // their tails lower as plain expressions), rebuilt from the
                 // values already in hand.
@@ -674,7 +721,7 @@ pub(super) fn hoist_if_as_statement(
 /// expression's value instead of leaving the function: the same miscompile
 /// [`hoist_if_as_statement`] closes for a ternary-shaped `if`, which has only
 /// branch tails to place. Here `emit` writes the form through its ordinary
-/// statement-position emitter (`emit_if_tail`, `emit_match_tail`,
+/// statement-position emitter (`if_tail`, `emit_match_tail`,
 /// `emit_block_as_function_body`) with [`LowerCtx::tail_slot`] set, so every
 /// tail, however deeply nested, assigns the slot and breaks out of the
 /// labelled block:
@@ -696,7 +743,7 @@ pub(super) fn hoist_if_as_statement(
 pub(super) fn hoist_value_as_statement(
     e: &Expr,
     cx: &mut LowerCtx,
-    emit: impl FnOnce(&mut String, &mut LowerCtx),
+    emit: impl FnOnce(&mut Body, &mut LowerCtx),
 ) -> Lowered {
     let slot = cx.fresh();
     let label = slot.clone() + "_out";
@@ -712,11 +759,13 @@ pub(super) fn hoist_value_as_statement(
         slot: slot.clone(),
         label,
     });
-    // The body is a local buffer spliced into `pre` — see `without_source_map`.
-    let mut body = String::new();
-    cx.without_source_map(|cx| emit(&mut body, cx));
+    // The body is spliced into `pre` as text, so it records no checkpoints.
+    let mut body = Body::new();
+    emit(&mut body, cx);
     cx.tail_slot = saved;
-    pre.extend_text(body.lines().map(str::to_string));
+    let mut text = String::new();
+    render_text(&body, &mut text, INDENT_STEP);
+    pre.extend_text(text.lines().map(str::to_string));
     pre.push_text("}".to_string());
     pre.finish_text(slot)
 }
@@ -1323,21 +1372,7 @@ fn pattern_is_has_bindings(pattern: &Pattern, value: &Expr, cx: &LowerCtx) -> bo
     }
 }
 
-pub(super) fn emit_if_tail(
-    out: &mut String,
-    cond: &Expr,
-    then_block: &Block,
-    else_block: &Block,
-    cx: &mut LowerCtx,
-    indent: usize,
-    async_tail: bool,
-) {
-    let mut body = Body::new();
-    if_tail(&mut body, cond, then_block, else_block, cx, async_tail);
-    render(&body, out, indent, cx);
-}
-
-fn if_tail(
+pub(super) fn if_tail(
     body: &mut Body,
     cond: &Expr,
     then_block: &Block,
@@ -1396,30 +1431,6 @@ fn is_narrowable_path(e: &Expr) -> bool {
     }
 }
 
-pub(super) fn emit_match_tail(
-    out: &mut String,
-    discriminant: &Expr,
-    arms: &[MatchArm],
-    cx: &mut LowerCtx,
-    indent: usize,
-    async_tail: bool,
-) {
-    let mut body = Body::new();
-    match_tail(&mut body, discriminant, arms, cx, async_tail);
-    render(&body, out, indent, cx);
-}
-
-/// The body's statements as nodes, with its checkpoints carried onto them
-/// (`mapped`: tail position) or dropped (a value-position `match`, lowered under
-/// `without_source_map`). `None` if any item is text.
-fn body_stmts(body: &Body, mapped: bool) -> Option<Vec<bynk_ts::TsStmt>> {
-    if mapped {
-        body.to_nodes()
-    } else {
-        body.to_nodes_unmapped()
-    }
-}
-
 /// `throw new globalThis.Error("non-exhaustive match");`.
 fn non_exhaustive_throw() -> Item {
     stmt_item(bynk_ts::TsStmt::throw_stmt(
@@ -1433,7 +1444,7 @@ fn non_exhaustive_throw() -> Item {
     ))
 }
 
-fn match_tail(
+pub(super) fn match_tail(
     body: &mut Body,
     discriminant: &Expr,
     arms: &[MatchArm],
@@ -1464,13 +1475,12 @@ fn match_tail(
     } else {
         PatPath::from_lowered(disc)
     };
-    match_dispatch(body, &path, &disc_ty, arms, cx, async_tail, true);
+    match_dispatch(body, &path, &disc_ty, arms, cx, async_tail);
 }
 
 /// The `switch` or `if` chain over `arms`, then the non-exhaustive `throw`:
 /// what follows the discriminant in a tail `match` and fills a value-position
-/// `match`'s arrow. `mapped` is whether its checkpoints are recorded (tail
-/// position) or not (the arrow, lowered under `without_source_map`).
+/// `match`'s arrow.
 pub(super) fn match_dispatch(
     body: &mut Body,
     path: &PatPath,
@@ -1478,13 +1488,12 @@ pub(super) fn match_dispatch(
     arms: &[MatchArm],
     cx: &mut LowerCtx,
     async_tail: bool,
-    mapped: bool,
 ) {
     let tys = cx.commons().tys();
     // ADR 0169: nested/guarded matches lower to an if-chain; flat/unguarded
     // matches keep the `switch`.
     if bynk_model::match_needs_if_chain(arms) {
-        match_if_chain(body, path, disc_ty, arms, cx, async_tail, mapped);
+        match_if_chain(body, path, disc_ty, arms, cx, async_tail);
         return;
     }
     // v0.130: literal-kind matches switch on the value; variant-kind on `.tag`.
@@ -1501,7 +1510,7 @@ pub(super) fn match_dispatch(
     let nodes = scrutinee.node().and_then(|scrutinee| {
         let cases = cases
             .iter()
-            .map(|c| c.to_node(mapped))
+            .map(|c| c.to_node())
             .collect::<Option<Vec<_>>>()?;
         Some(bynk_ts::TsStmt::switch_stmt(scrutinee.clone(), cases, None))
     });
@@ -1532,13 +1541,13 @@ struct MatchCase {
 impl MatchCase {
     /// The arm as a typed case, if its body is all nodes. Its span is carried on
     /// the case only when checkpoints are recorded.
-    fn to_node(&self, mapped: bool) -> Option<bynk_ts::TsSwitchCase> {
+    fn to_node(&self) -> Option<bynk_ts::TsSwitchCase> {
         Some(bynk_ts::TsSwitchCase {
             labels: self.labels.clone(),
-            body: body_stmts(&self.inner, mapped)?,
+            body: self.inner.to_nodes()?,
             default_braced: self.labels.is_empty(),
             case_braced: true,
-            span: mapped.then_some(self.span),
+            span: Some(self.span),
         })
     }
 
@@ -1721,10 +1730,10 @@ fn match_body(body: &mut Body, arm_body: &MatchBody, cx: &mut LowerCtx, async_ta
                     _ => {}
                 }
             }
-            let mut pre = Pre::new();
-            let v = pre.absorb(lower_tail_expr(e, cx, async_tail));
-            body.extend(pre.items());
-            body.push(Item::Line(tail_stmt(cx, &v)));
+            let tail = lower_tail_expr(e, cx, async_tail);
+            body.extend(tail.pre_items());
+            let pre_nodes = tail.pre_all_nodes();
+            body.push(tail_item(cx, pre_nodes, tail.expr));
         }
         MatchBody::Block(b) => emit_block_inner(body, b, cx, async_tail),
     }
@@ -1733,10 +1742,10 @@ fn match_body(body: &mut Body, arm_body: &MatchBody, cx: &mut LowerCtx, async_ta
 /// `if (cond) { then }` as items: an `If` node when the condition and the
 /// statements hoisted before it are nodes and the body converts, otherwise
 /// today's lines around the same body, which keeps its marks.
-fn push_if_then(body: &mut Body, cond: LoweredExpr, pre_nodes: bool, then: Body, mapped: bool) {
+fn push_if_then(body: &mut Body, cond: LoweredExpr, pre_nodes: bool, then: Body) {
     if pre_nodes
         && let LoweredExpr::Node(_) = &cond
-        && let Some(stmts) = body_stmts(&then, mapped)
+        && let Some(stmts) = then.to_nodes()
         && let LoweredExpr::Node(cond) = cond
     {
         body.push(stmt_item(bynk_ts::TsStmt::if_stmt(
@@ -1766,7 +1775,6 @@ fn match_if_chain(
     arms: &[MatchArm],
     cx: &mut LowerCtx,
     async_tail: bool,
-    mapped: bool,
 ) {
     // An unguarded irrefutable arm is a catch-all: its body always returns, so
     // the trailing non-exhaustive `throw` would be unreachable (tsc rejects it).
@@ -1813,15 +1821,15 @@ fn match_if_chain(
                 let pre_nodes = guard_lowered.pre_all_nodes();
                 let mut guarded = Body::new();
                 match_body(&mut guarded, &arm.body, cx, async_tail);
-                push_if_then(arm_body, guard_lowered.expr, pre_nodes, guarded, mapped);
+                push_if_then(arm_body, guard_lowered.expr, pre_nodes, guarded);
             } else {
                 match_body(arm_body, &arm.body, cx, async_tail);
             }
         }
         if has_tests {
-            push_if_then(body, and_join(tests), true, nested, mapped);
+            push_if_then(body, and_join(tests), true, nested);
         } else if needs_block {
-            match body_stmts(&nested, mapped) {
+            match nested.to_nodes() {
                 Some(stmts) => body.push(stmt_item(bynk_ts::TsStmt::block(stmts, None))),
                 None => {
                     body.push(Item::Line("{".to_string()));
@@ -2004,42 +2012,45 @@ mod body_tests {
         assert_eq!(got.to_v3(&out, "t.js"), want.to_v3(&out, "t.js"));
     }
 
-    /// The claim-scope wrapper (#3711, Decision D) as `Line` items around the
-    /// body gives the text and the map the old insert-and-shift did.
+    /// The claim-scope wrapper (1A.15, Decision C of #3716) as nodes: the
+    /// declaration, `let __r;`, the `try` over an async closure holding the
+    /// body, the `catch` that releases the claims, the confirmation and the
+    /// result. The body's checkpoints survive on its statements.
     #[test]
-    fn the_claim_scope_wrapper_matches_insert_and_shift() {
-        let build = || {
-            let mut inner = Body::new();
-            inner.push(line("if (x) {"));
-            let mut nested = Body::new();
-            nested.push(Item::Mark(Span::new(40, 50)));
-            nested.push(line("return 1;"));
-            inner.push(Item::Indent(nested));
-            inner.push(line("}"));
-            let mut body = Body::new();
-            body.push(Item::Mark(Span::new(0, 10)));
-            body.push(line("const a = 1;"));
-            body.push(Item::Mark(Span::new(10, 30)));
-            body.push(Item::Node(Box::new(if_node())));
-            body.push(Item::Mark(Span::new(30, 60)));
-            body.push(Item::Indent(inner));
-            body
-        };
-        for indent in [0, 4] {
-            // The old way: render, insert the wrapper's text, shift the map.
-            let (plain, mut shifted) = rendered(&build(), indent);
-            let (before, after) = claim_scope_wrapper(indent);
-            let old_text = format!("{before}{plain}{after}");
-            shifted.shift_checkpoints(before.len());
-            // The new way: the wrapper is part of the body.
-            let (new_text, new_map) = rendered(&claim_scoped(build(), indent), indent);
-            assert_eq!(new_text, old_text, "indent {indent}");
-            assert_eq!(
-                new_map.to_v3(&new_text, "t.js"),
-                shifted.to_v3(&old_text, "t.js"),
-                "indent {indent}"
-            );
-        }
+    fn the_claim_scope_wrapper_is_nodes_around_the_body() {
+        let mut inner = Body::new();
+        inner.push(Item::Mark(Span::new(0, 10)));
+        inner.push(line("const a = 1;"));
+        inner.push(Item::Mark(Span::new(10, 30)));
+        inner.push(Item::Node(Box::new(if_node())));
+        let stmt = bynk_ts::TsStmt::decl(
+            bynk_ts::TsDecl::Function {
+                name: "f".to_string(),
+                generics: Vec::new(),
+                params: Vec::new(),
+                return_type: None,
+                body: claim_scoped(inner, INDENT_STEP).into_stmts(INDENT_STEP),
+                is_async: false,
+                inline: false,
+            },
+            None,
+        );
+        let mut out = String::new();
+        let mut map = SourceMapBuilder::new();
+        map.add_source("t.bynk", "x".repeat(200));
+        bynk_ts::print_stmt_and_merge(&mut out, &stmt, 0, &mut map, 0);
+        let declaration = format!("function f() {{\n  {CLAIM_SCOPE_DECLARATION}\n");
+        let rest = out.strip_prefix(&declaration).expect("declaration first");
+        assert_eq!(
+            rest,
+            "  let __r;\n  try {\n    __r = await (async () => {\n      const a = 1;\n      if (flag) {\n        done;\n      }\n    })();\n  } catch (__e) {\n    await __claims.settle(undefined, true);\n    throw __e;\n  }\n  await __claims.settle(__r, false);\n  return __r;\n}\n"
+        );
+        // Both checkpoints land on the statements they were put on.
+        let mut want = SourceMapBuilder::new();
+        want.add_source("t.bynk", "x".repeat(200));
+        want.record(out.find("      const a = 1;").unwrap(), Span::new(0, 10));
+        want.record(out.find("      if (flag)").unwrap(), Span::new(10, 30));
+        assert_eq!(map.to_v3(&out, "t.js"), want.to_v3(&out, "t.js"));
     }
 
     /// `into_stmts` (1A.15, Decision A): the statements of a function body print
@@ -2919,26 +2930,29 @@ mod par_node_tests {
     /// them as lines, which a later slice converts), so this pins the bytes.
     #[test]
     fn a_guarded_value_match_is_an_arrow_over_an_if_chain() {
-        let (_, ts) = emitted(
+        let (lines, ts) = emitted(
             "commons m1\n\ntype Shape = | Circle(r: Int) | Square(w: Int) | Dot\n\nfn f(s: Shape, k: Int) -> Int {\n  let x = match s {\n    Circle(r) if r > k => r\n    Circle(r) => 0\n    Square(w) => w\n    Dot => 1\n  }\n  x\n}\n",
         );
         assert_eq!(
             func(&ts, "export function f("),
             "export function f(s: Shape, k: number): number {\n  const x = ((__d) => {\n    if (__d.tag === \"Circle\") {\n      const r = __d.r;\n      if (r > k) {\n        return r;\n      }\n    }\n    if (__d.tag === \"Circle\") {\n      const r = __d.r;\n      return 0;\n    }\n    if (__d.tag === \"Square\") {\n      const w = __d.w;\n      return w;\n    }\n    if (__d.tag === \"Dot\") {\n      return 1;\n    }\n    throw new globalThis.Error(\"non-exhaustive match\");\n  })(s);\n  return x;\n}\n"
         );
+        // 1A.15: the arm tails are nodes too, so the whole function is.
+        assert_eq!(lines, 0, "{ts}");
     }
 
     /// 1A.13 review: a list pattern's elements read `path[i]` and its `..rest`
-    /// reads `path.slice(n)` (the binding `const`s are nodes over the
-    /// discriminant; the arm's `return` line is text, as above).
+    /// reads `path.slice(n)` (the binding `const`s and the arm's `return` are nodes).
     #[test]
     fn a_list_pattern_binds_elements_by_index_and_the_rest_by_slice() {
-        let (_, ts) = emitted(
+        let (lines, ts) = emitted(
             "commons m2\n\nfn f(xs: List[Int]) -> Int {\n  let x = match xs {\n    [a, b, ..rest] => a + b\n    _ => 0\n  }\n  x\n}\n",
         );
         assert_eq!(
             func(&ts, "export function f("),
             "export function f(xs: readonly number[]): number {\n  const x = ((__d) => {\n    if (__d.length >= 2) {\n      const a = __d[0];\n      const b = __d[1];\n      const rest = __d.slice(2);\n      return a + b;\n    }\n    return 0;\n  })(xs);\n  return x;\n}\n"
         );
+        // 1A.15: the arm tails are nodes too, so the whole function is.
+        assert_eq!(lines, 0, "{ts}");
     }
 }

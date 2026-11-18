@@ -72,40 +72,40 @@ export const Priced = {
 export const api = {
   async http_POST_signup(body: SignupForm, deps: {}): globalThis.Promise<HttpResult<string>> {
     const age = ((__d) => {
-    switch (__d.tag) {
-      case "Some": {
-        const a = __d.value;
-        return `${String(a)}`;
+      switch (__d.tag) {
+        case "Some": {
+          const a = __d.value;
+          return `${String(a)}`;
+        }
+        case "None": {
+          return "-";
+        }
       }
-      case "None": {
-        return "-";
-      }
-    }
-    throw new globalThis.Error("non-exhaustive match");
-  })(body.age);
+      throw new globalThis.Error("non-exhaustive match");
+    })(body.age);
     const nick = ((__d) => {
-    switch (__d.tag) {
-      case "Some": {
-        const n = __d.value;
-        return n;
+      switch (__d.tag) {
+        case "Some": {
+          const n = __d.value;
+          return n;
+        }
+        case "None": {
+          return "-";
+        }
       }
-      case "None": {
-        return "-";
-      }
-    }
-    throw new globalThis.Error("non-exhaustive match");
-  })(body.nickname);
+      throw new globalThis.Error("non-exhaustive match");
+    })(body.nickname);
     const plan = ((__d) => {
-    switch (__d.tag) {
-      case "Free": {
-        return "free";
+      switch (__d.tag) {
+        case "Free": {
+          return "free";
+        }
+        case "Pro": {
+          return "pro";
+        }
       }
-      case "Pro": {
-        return "pro";
-      }
-    }
-    throw new globalThis.Error("non-exhaustive match");
-  })(body.plan);
+      throw new globalThis.Error("non-exhaustive match");
+    })(body.plan);
     return HttpResult.Ok(`${String(body.email)} ${String(age)} ${String(plan)} ${String((body.tags).length)} ${String(body.remember)} ${String(nick)} [${String(body.title)}]`);
   },
   async http_PUT_profile_Param_owner(owner: string, body: Search, deps: {}): globalThis.Promise<HttpResult<string>> {

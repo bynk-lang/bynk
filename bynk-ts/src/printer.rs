@@ -498,7 +498,7 @@ fn render_stmt_kind(
                 render_type(out, ty);
             }
             out.push_str(" = ");
-            render_stmt_level_expr(out, init, depth);
+            render_stmt_level_expr(out, init, depth, &mut map);
             out.push_str(";\n");
         }
         TsStmtKind::Let {
@@ -516,13 +516,13 @@ fn render_stmt_kind(
             }
             if let Some(init) = init {
                 out.push_str(" = ");
-                render_stmt_level_expr(out, init, depth);
+                render_stmt_level_expr(out, init, depth, &mut map);
             }
             out.push_str(";\n");
         }
         TsStmtKind::ExprStmt(expr) => {
             out.push_str(&indent(depth));
-            render_expr(out, expr, depth);
+            render_expr(out, expr, depth, &mut map);
             out.push_str(";\n");
         }
         TsStmtKind::Return(expr) => {
@@ -537,14 +537,14 @@ fn render_stmt_kind(
                 // `Method` entry per wrapper, one per line), a shape
                 // `render_expr`'s plain recursion can't render correctly
                 // (see `TsExpr::Object`'s own doc).
-                render_stmt_level_expr(out, expr, depth);
+                render_stmt_level_expr(out, expr, depth, &mut map);
             }
             out.push_str(";\n");
         }
         TsStmtKind::Throw(expr) => {
             out.push_str(&indent(depth));
             out.push_str("throw ");
-            render_stmt_level_expr(out, expr, depth);
+            render_stmt_level_expr(out, expr, depth, &mut map);
             out.push_str(";\n");
         }
         TsStmtKind::If {
@@ -555,7 +555,7 @@ fn render_stmt_kind(
         } => {
             out.push_str(&indent(depth));
             out.push_str("if (");
-            render_expr(out, cond, depth);
+            render_expr(out, cond, depth, &mut map);
             out.push(')');
             // `} else {` on one line — #1325's own real gap, all three of
             // `emit_test_main`'s own real `if`/`else` sites (one `Block`,
@@ -612,7 +612,7 @@ fn render_stmt_kind(
             out.push_str("for (const ");
             out.push_str(binding);
             out.push_str(" of ");
-            render_expr(out, iter, depth);
+            render_expr(out, iter, depth, &mut map);
             out.push(')');
             render_branch(out, body, depth, map.as_mut().map(|t| t.reborrow()));
         }
@@ -626,9 +626,9 @@ fn render_stmt_kind(
             out.push_str("for (let ");
             out.push_str(name);
             out.push_str(" = ");
-            render_expr(out, init, depth);
+            render_expr(out, init, depth, &mut map);
             out.push_str("; ");
-            render_expr(out, test, depth);
+            render_expr(out, test, depth, &mut map);
             out.push_str("; ");
             out.push_str(name);
             out.push_str("++)");
@@ -666,9 +666,9 @@ fn render_stmt_kind(
         }
         TsStmtKind::Assign { target, value } => {
             out.push_str(&indent(depth));
-            render_expr(out, target, depth);
+            render_expr(out, target, depth, &mut map);
             out.push_str(" = ");
-            render_stmt_level_expr(out, value, depth);
+            render_stmt_level_expr(out, value, depth, &mut map);
             out.push_str(";\n");
         }
         TsStmtKind::Comment(text) => {
@@ -687,7 +687,7 @@ fn render_stmt_kind(
         } => {
             out.push_str(&indent(depth));
             out.push_str("switch (");
-            render_expr(out, discriminant, depth);
+            render_expr(out, discriminant, depth, &mut map);
             out.push_str(") {\n");
             for case in cases {
                 debug_assert!(
@@ -732,7 +732,7 @@ fn render_stmt_kind(
                 for (i, label) in case.labels.iter().enumerate() {
                     out.push_str(&indent(depth + 1));
                     out.push_str("case ");
-                    render_expr(out, label, depth);
+                    render_expr(out, label, depth, &mut map);
                     if i < last {
                         out.push_str(":\n");
                     }
@@ -766,7 +766,7 @@ fn render_stmt_kind(
         }
         TsStmtKind::Increment(expr) => {
             out.push_str(&indent(depth));
-            render_expr(out, expr, depth);
+            render_expr(out, expr, depth, &mut map);
             out.push_str("++;\n");
         }
         // Same rendering as `Verbatim` above — the text is printed exactly
@@ -884,12 +884,12 @@ fn render_inline_stmt(out: &mut String, stmt: &TsStmt, depth: usize) {
             out.push_str("return");
             if let Some(expr) = expr {
                 out.push(' ');
-                render_expr(out, expr, depth);
+                render_expr(out, expr, depth, &mut None);
             }
             out.push_str(";\n");
         }
         TsStmtKind::ExprStmt(expr) => {
-            render_expr(out, expr, depth);
+            render_expr(out, expr, depth, &mut None);
             out.push_str(";\n");
         }
         // Review of #1317/#1318, finding 2: every other variant in the
@@ -1090,13 +1090,13 @@ fn needs_parens_as_operand(expr: &TsExpr) -> bool {
     )
 }
 
-fn render_operand(out: &mut String, expr: &TsExpr, depth: usize) {
+fn render_operand(out: &mut String, expr: &TsExpr, depth: usize, m: &mut Option<MergeTarget<'_>>) {
     if needs_parens_as_operand(expr) {
         out.push('(');
-        render_expr(out, expr, depth);
+        render_expr(out, expr, depth, m);
         out.push(')');
     } else {
-        render_expr(out, expr, depth);
+        render_expr(out, expr, depth, m);
     }
 }
 
@@ -1166,6 +1166,7 @@ fn render_binary_operand(
     expr: &TsExpr,
     is_left: bool,
     depth: usize,
+    m: &mut Option<MergeTarget<'_>>,
 ) {
     let needs_parens = match expr {
         // `Arrow`/`Conditional` are the two lowest-precedence expression
@@ -1267,10 +1268,10 @@ fn render_binary_operand(
     };
     if needs_parens {
         out.push('(');
-        render_expr(out, expr, depth);
+        render_expr(out, expr, depth, m);
         out.push(')');
     } else {
-        render_expr(out, expr, depth);
+        render_expr(out, expr, depth, m);
     }
 }
 
@@ -1284,21 +1285,26 @@ fn render_binary_operand(
 /// shape defers to the ordinary, depth-unaware [`render_expr`] unchanged;
 /// this exists only to intercept the one shape that needs `depth` before it
 /// gets there.
-fn render_stmt_level_expr(out: &mut String, expr: &TsExpr, depth: usize) {
+fn render_stmt_level_expr(
+    out: &mut String,
+    expr: &TsExpr,
+    depth: usize,
+    m: &mut Option<MergeTarget<'_>>,
+) {
     if let TsExpr::Object {
         entries,
         multiline: true,
     } = expr
     {
-        render_multiline_object(out, entries, depth);
+        render_multiline_object(out, entries, depth, m);
     } else if let TsExpr::Array {
         items,
         multiline: true,
     } = expr
     {
-        render_multiline_array(out, items, depth);
+        render_multiline_array(out, items, depth, m);
     } else {
-        render_expr(out, expr, depth);
+        render_expr(out, expr, depth, m);
     }
 }
 
@@ -1310,7 +1316,12 @@ fn render_stmt_level_expr(out: &mut String, expr: &TsExpr, depth: usize) {
 /// #1321 (`workers.rs`): entries may now be [`TsObjectEntry`], not just
 /// `Prop` — the `compose`-returned surface object is one shorthand async
 /// `Method` entry per wrapper, one per line.
-fn render_multiline_object(out: &mut String, entries: &[TsObjectEntry], depth: usize) {
+fn render_multiline_object(
+    out: &mut String,
+    entries: &[TsObjectEntry],
+    depth: usize,
+    m: &mut Option<MergeTarget<'_>>,
+) {
     // Deliberately no empty-entries shortcut (review of #1317/#1318, finding
     // 1): `events_fanout.rs`'s own `__eventRoutes` table is reachable with
     // zero entries (a context can `ctx_uses_emit` while publishing only
@@ -1325,7 +1336,7 @@ fn render_multiline_object(out: &mut String, entries: &[TsObjectEntry], depth: u
     // entries.
     out.push_str("{\n");
     for entry in entries {
-        render_multiline_object_entry(out, entry, depth, None);
+        render_multiline_object_entry(out, entry, depth, m.as_mut().map(|t| t.reborrow()));
     }
     out.push_str(&indent(depth));
     out.push('}');
@@ -1344,7 +1355,7 @@ fn render_multiline_object_entry(
     out: &mut String,
     entry: &TsObjectEntry,
     depth: usize,
-    map: Option<MergeTarget<'_>>,
+    mut map: Option<MergeTarget<'_>>,
 ) {
     // Review of #1340, finding 1: a `Raw`-bodied `Method` entry's own text
     // is captured pre-indented at a fixed absolute depth by its caller (see
@@ -1376,7 +1387,7 @@ fn render_multiline_object_entry(
             // — a nested multiline object value previously fell back to
             // single-line silently (the plain, depth-unaware `render_expr`
             // recursion ignores `multiline` entirely).
-            render_stmt_level_expr(out, v, depth + 1);
+            render_stmt_level_expr(out, v, depth + 1, &mut map);
             out.push_str(",\n");
         }
         TsObjectEntry::Shorthand(name) => {
@@ -1387,7 +1398,7 @@ fn render_multiline_object_entry(
         TsObjectEntry::Spread(e) => {
             out.push_str(&indent(depth + 1));
             out.push_str("...");
-            render_expr(out, e, depth + 1);
+            render_expr(out, e, depth + 1, &mut map);
             out.push_str(",\n");
         }
         // `workers.rs`'s own dominant real shape (Decision A, gap 1):
@@ -1464,11 +1475,16 @@ fn render_bare_generics(out: &mut String, names: &[String]) {
 /// matching the pre-conversion `writeln!` code's own unconditional
 /// open/close-bracket-on-separate-lines shape (rather than assuming an
 /// untested empty case) is the same precedent review of #1317/#1318 set.
-fn render_multiline_array(out: &mut String, items: &[TsExpr], depth: usize) {
+fn render_multiline_array(
+    out: &mut String,
+    items: &[TsExpr],
+    depth: usize,
+    m: &mut Option<MergeTarget<'_>>,
+) {
     out.push_str("[\n");
     for item in items {
         out.push_str(&indent(depth + 1));
-        render_expr(out, item, depth + 1);
+        render_expr(out, item, depth + 1, m);
         out.push_str(",\n");
     }
     out.push_str(&indent(depth));
@@ -1484,17 +1500,22 @@ fn render_multiline_array(out: &mut String, items: &[TsExpr], depth: usize) {
 /// (not panicking) rather than left unreachable, matching this crate's own
 /// "no wildcard, but still sensible on an unanticipated shape" posture
 /// elsewhere (e.g. `render_block_body`'s own non-`Block` fallback).
-fn render_object_entry_inline(out: &mut String, entry: &TsObjectEntry, depth: usize) {
+fn render_object_entry_inline(
+    out: &mut String,
+    entry: &TsObjectEntry,
+    depth: usize,
+    m: &mut Option<MergeTarget<'_>>,
+) {
     match entry {
         TsObjectEntry::Prop(k, v) => {
             out.push_str(k);
             out.push_str(": ");
-            render_expr(out, v, depth);
+            render_expr(out, v, depth, m);
         }
         TsObjectEntry::Shorthand(name) => out.push_str(name),
         TsObjectEntry::Spread(e) => {
             out.push_str("...");
-            render_expr(out, e, depth);
+            render_expr(out, e, depth, m);
         }
         TsObjectEntry::Method {
             name,
@@ -1544,7 +1565,7 @@ fn render_object_entry_inline(out: &mut String, entry: &TsObjectEntry, depth: us
     }
 }
 
-fn render_expr(out: &mut String, expr: &TsExpr, depth: usize) {
+fn render_expr(out: &mut String, expr: &TsExpr, depth: usize, m: &mut Option<MergeTarget<'_>>) {
     match expr {
         TsExpr::Ident(name) => out.push_str(name),
         // #1539: printed exactly as `Ident` always was — raw text, no
@@ -1553,25 +1574,25 @@ fn render_expr(out: &mut String, expr: &TsExpr, depth: usize) {
         // printer to branch on.
         TsExpr::VerbatimExpr(text, _origin) => out.push_str(text),
         TsExpr::Member { object, property } => {
-            render_operand(out, object, depth);
+            render_operand(out, object, depth, m);
             out.push('.');
             out.push_str(property);
         }
         TsExpr::OptionalMember { object, property } => {
-            render_operand(out, object, depth);
+            render_operand(out, object, depth, m);
             out.push_str("?.");
             out.push_str(property);
         }
         TsExpr::Index { object, index } => {
-            render_operand(out, object, depth);
+            render_operand(out, object, depth, m);
             out.push('[');
-            render_expr(out, index, depth);
+            render_expr(out, index, depth, m);
             out.push(']');
         }
         TsExpr::OptionalIndex { object, index } => {
-            render_operand(out, object, depth);
+            render_operand(out, object, depth, m);
             out.push_str("?.[");
-            render_expr(out, index, depth);
+            render_expr(out, index, depth, m);
             out.push(']');
         }
         TsExpr::Arrow {
@@ -1593,19 +1614,19 @@ fn render_expr(out: &mut String, expr: &TsExpr, depth: usize) {
                 render_type(out, rt);
             }
             out.push_str(" => ");
-            render_arrow_body(out, body, depth);
+            render_arrow_body(out, body, depth, m);
         }
         TsExpr::Call { callee, args } => {
-            render_operand(out, callee, depth);
+            render_operand(out, callee, depth, m);
             out.push('(');
-            render_expr_list(out, args, depth);
+            render_expr_list(out, args, depth, m);
             out.push(')');
         }
         TsExpr::New { callee, args } => {
             out.push_str("new ");
-            render_operand(out, callee, depth);
+            render_operand(out, callee, depth, m);
             out.push('(');
-            render_expr_list(out, args, depth);
+            render_expr_list(out, args, depth, m);
             out.push(')');
         }
         // `multiline` is ignored here deliberately: this recursion has no
@@ -1623,7 +1644,7 @@ fn render_expr(out: &mut String, expr: &TsExpr, depth: usize) {
                     if i > 0 {
                         out.push_str(", ");
                     }
-                    render_object_entry_inline(out, entry, depth);
+                    render_object_entry_inline(out, entry, depth, m);
                 }
                 out.push_str(" }");
             }
@@ -1636,17 +1657,17 @@ fn render_expr(out: &mut String, expr: &TsExpr, depth: usize) {
         // that must break across lines is a [`TsExpr::LinesArray`].
         TsExpr::Array { items, .. } => {
             out.push('[');
-            render_expr_list(out, items, depth);
+            render_expr_list(out, items, depth, m);
             out.push(']');
         }
-        TsExpr::LinesArray(items) => render_multiline_array(out, items, depth),
+        TsExpr::LinesArray(items) => render_multiline_array(out, items, depth, m),
         TsExpr::TemplateLit { parts, exprs } => {
             out.push('`');
             for (i, part) in parts.iter().enumerate() {
                 out.push_str(part);
                 if let Some(e) = exprs.get(i) {
                     out.push_str("${");
-                    render_expr(out, e, depth);
+                    render_expr(out, e, depth, m);
                     out.push('}');
                 }
             }
@@ -1654,7 +1675,7 @@ fn render_expr(out: &mut String, expr: &TsExpr, depth: usize) {
         }
         TsExpr::Await(inner) => {
             out.push_str("await ");
-            render_operand(out, inner, depth);
+            render_operand(out, inner, depth, m);
         }
         TsExpr::As { expr, ty } => {
             // `(a ?? b) as T` / `((x) => y) as T` / `((a ? b : c)) as T` — a
@@ -1678,10 +1699,10 @@ fn render_expr(out: &mut String, expr: &TsExpr, depth: usize) {
             );
             if needs_parens {
                 out.push('(');
-                render_expr(out, expr, depth);
+                render_expr(out, expr, depth, m);
                 out.push(')');
             } else {
-                render_expr(out, expr, depth);
+                render_expr(out, expr, depth, m);
             }
             out.push_str(" as ");
             render_type(out, ty);
@@ -1703,14 +1724,14 @@ fn render_expr(out: &mut String, expr: &TsExpr, depth: usize) {
                 );
             if nested_neg {
                 out.push('(');
-                render_expr(out, expr, depth);
+                render_expr(out, expr, depth, m);
                 out.push(')');
             } else {
-                render_operand(out, expr, depth);
+                render_operand(out, expr, depth, m);
             }
         }
         TsExpr::Binary { op, left, right } => {
-            render_binary_operand(out, *op, left, true, depth);
+            render_binary_operand(out, *op, left, true, depth, m);
             out.push_str(match op {
                 TsBinaryOp::NullishCoalescing => " ?? ",
                 TsBinaryOp::Or => " || ",
@@ -1729,7 +1750,7 @@ fn render_expr(out: &mut String, expr: &TsExpr, depth: usize) {
                 TsBinaryOp::Sub => " - ",
                 TsBinaryOp::Exp => " ** ",
             });
-            render_binary_operand(out, *op, right, false, depth);
+            render_binary_operand(out, *op, right, false, depth, m);
         }
         TsExpr::Conditional {
             test,
@@ -1748,19 +1769,19 @@ fn render_expr(out: &mut String, expr: &TsExpr, depth: usize) {
                 matches!(**test, TsExpr::Arrow { .. } | TsExpr::Conditional { .. });
             if test_needs_parens {
                 out.push('(');
-                render_expr(out, test, depth);
+                render_expr(out, test, depth, m);
                 out.push(')');
             } else {
-                render_expr(out, test, depth);
+                render_expr(out, test, depth, m);
             }
             out.push_str(" ? ");
-            render_expr(out, consequent, depth);
+            render_expr(out, consequent, depth, m);
             out.push_str(" : ");
-            render_expr(out, alternate, depth);
+            render_expr(out, alternate, depth, m);
         }
         TsExpr::Paren(inner) => {
             out.push('(');
-            render_expr(out, inner, depth);
+            render_expr(out, inner, depth, m);
             out.push(')');
         }
         TsExpr::Lit(lit) => render_lit(out, lit),
@@ -1803,7 +1824,12 @@ fn starts_with_object(expr: &TsExpr) -> bool {
     }
 }
 
-fn render_arrow_body(out: &mut String, body: &TsArrowBody, depth: usize) {
+fn render_arrow_body(
+    out: &mut String,
+    body: &TsArrowBody,
+    depth: usize,
+    m: &mut Option<MergeTarget<'_>>,
+) {
     match body {
         TsArrowBody::Expr(expr) => {
             // An expression body that starts with an object literal reads as a
@@ -1813,10 +1839,10 @@ fn render_arrow_body(out: &mut String, body: &TsArrowBody, depth: usize) {
             // path bracketed by the printed text starting `{`.
             if starts_with_object(expr) {
                 out.push('(');
-                render_expr(out, expr, depth);
+                render_expr(out, expr, depth, m);
                 out.push(')');
             } else {
-                render_expr(out, expr, depth);
+                render_expr(out, expr, depth, m);
             }
         }
         TsArrowBody::Block(stmts) => {
@@ -1826,13 +1852,13 @@ fn render_arrow_body(out: &mut String, body: &TsArrowBody, depth: usize) {
         }
         // The multi-line form: `{`, each statement on its own line one level
         // deeper than the arrow's own line, `}` back at that line's indent.
-        // Statements inside carry no source-map checkpoints: no map is threaded
-        // into an expression (1A.15's second half gives IIFE and lambda bodies
-        // their mappings, by threading one through here).
+        // Each statement records its own span, and merges its own `nested_map`,
+        // into the target the enclosing statement is printed against (1A.15,
+        // Decision D of #3716: IIFE and lambda bodies are mapped).
         TsArrowBody::Multiline(stmts) => {
             out.push_str("{\n");
             for s in stmts {
-                render_stmt(out, s, depth + 1, None);
+                render_stmt(out, s, depth + 1, m.as_mut().map(|t| t.reborrow()));
             }
             out.push_str(&indent(depth));
             out.push('}');
@@ -1840,12 +1866,17 @@ fn render_arrow_body(out: &mut String, body: &TsArrowBody, depth: usize) {
     }
 }
 
-fn render_expr_list(out: &mut String, exprs: &[TsExpr], depth: usize) {
+fn render_expr_list(
+    out: &mut String,
+    exprs: &[TsExpr],
+    depth: usize,
+    m: &mut Option<MergeTarget<'_>>,
+) {
     for (i, e) in exprs.iter().enumerate() {
         if i > 0 {
             out.push_str(", ");
         }
-        render_expr(out, e, depth);
+        render_expr(out, e, depth, m);
     }
 }
 
@@ -2082,7 +2113,7 @@ pub fn print_type(ty: &TsType) -> String {
 /// own scope exactly.
 pub fn print_expr(expr: &TsExpr) -> String {
     let mut out = String::new();
-    render_expr(&mut out, expr, 0);
+    render_expr(&mut out, expr, 0, &mut None);
     out
 }
 
@@ -2534,7 +2565,7 @@ fn render_decl_body(
                 render_type(out, ty);
             }
             out.push_str(" = ");
-            render_stmt_level_expr(out, init, depth);
+            render_stmt_level_expr(out, init, depth, &mut None);
             out.push_str(";\n");
         }
         TsDecl::Class {
@@ -2645,7 +2676,7 @@ fn render_decl_body(
         }
         TsDecl::ExportDefault(expr) => {
             out.push_str("export default ");
-            render_stmt_level_expr(out, expr, depth);
+            render_stmt_level_expr(out, expr, depth, &mut None);
             out.push_str(";\n");
         }
         TsDecl::DeclareConst { name, ty } => {
@@ -6363,6 +6394,7 @@ mod tests {
                 body: vec![TsStmt::raw("    return value as Uuid;\n", None)],
             }],
             0,
+            &mut None,
         );
         assert_eq!(
             out,
@@ -6405,6 +6437,7 @@ mod tests {
                 )],
             }],
             0,
+            &mut None,
         );
         assert_eq!(
             out,
@@ -6432,6 +6465,7 @@ mod tests {
                 body: vec![],
             }],
             0,
+            &mut None,
         );
         assert_eq!(out, "{\n  get(): void {\n  },\n}");
     }
@@ -6462,6 +6496,7 @@ mod tests {
                 body: vec![TsStmt::raw("    return 0;\n", None)],
             }],
             0,
+            &mut None,
         );
         assert_eq!(
             out,
@@ -6522,6 +6557,7 @@ mod tests {
                 )],
             }],
             0,
+            &mut None,
         );
         assert_eq!(
             out,
@@ -6568,7 +6604,12 @@ mod tests {
         };
 
         let mut whole_object = String::new();
-        render_multiline_object(&mut whole_object, std::slice::from_ref(&entry), 0);
+        render_multiline_object(
+            &mut whole_object,
+            std::slice::from_ref(&entry),
+            0,
+            &mut None,
+        );
         // `render_multiline_object`'s own entry line is followed by `\n`
         // then the closing `}` (no blank line between them for a single
         // entry) — `print_object_entry`'s own output keeps that same
@@ -7370,18 +7411,47 @@ mod tests {
         );
     }
 
-    /// 1A.12: statements inside a multi-line arrow carry no checkpoints, though
-    /// the statement holding the arrow does.
+    /// 1A.15: statements inside a multi-line arrow record their spans, at the
+    /// start of their own line, after the statement that holds the arrow.
     #[test]
-    fn a_multiline_arrow_body_records_no_checkpoints() {
+    fn a_multiline_arrow_body_records_its_statement_spans() {
         let call = iife(multiline_arrow(
             false,
             vec![TsStmt::return_stmt(Some(id("x")), sp(9))],
         ));
         let stmt = TsStmt::expr_stmt(call, sp(3));
-        let (_, spans) = print_stmt_with_spans(&stmt, 0);
-        assert_eq!(spans.len(), 1);
-        assert_eq!(spans[0].1.start, 3);
+        let (text, spans) = print_stmt_with_spans(&stmt, 0);
+        let lines: Vec<(&str, usize)> = spans
+            .iter()
+            .map(|(o, s)| (line_at(&text, *o), s.start))
+            .collect();
+        assert_eq!(lines, [("(() => {", 3), ("  return x;", 9)]);
+    }
+
+    /// 1A.15: a lambda passed as an argument is mapped too.
+    #[test]
+    fn a_lambda_argument_body_records_its_statement_spans() {
+        let lambda = TsExpr::Arrow {
+            params: Vec::new(),
+            is_async: false,
+            generics: Vec::new(),
+            return_type: None,
+            body: Box::new(TsArrowBody::Multiline(vec![TsStmt::return_stmt(
+                Some(id("x")),
+                sp(8),
+            )])),
+        };
+        let call = TsExpr::Call {
+            callee: Box::new(id("f")),
+            args: vec![id("xs"), lambda],
+        };
+        let stmt = TsStmt::return_stmt(Some(call), sp(2));
+        let (text, spans) = print_stmt_with_spans(&stmt, 1);
+        let lines: Vec<(&str, usize)> = spans
+            .iter()
+            .map(|(o, s)| (line_at(&text, *o), s.start))
+            .collect();
+        assert_eq!(lines, [("  return f(xs, () => {", 2), ("    return x;", 8)]);
     }
 
     // --- `TsSwitchCase.labels` and `.span` (back-half paydown 1A.13) ---
@@ -7713,15 +7783,28 @@ mod tests {
         assert_eq!(lines, ["  const a = x;", "    carried();", "  return a;"]);
     }
 
-    /// Statements inside an arrow body record nothing yet: no map is threaded
-    /// into an expression. 1A.15's second half lifts this, and this test with it.
+    /// A `nested_map` on a statement inside an arrow body merges next to the
+    /// spans around it, at the statement's real offset (1A.15, Decision D).
     #[test]
-    fn an_arrow_bodys_statements_record_no_spans_yet() {
-        let arrow = multiline_arrow(false, vec![TsStmt::return_stmt(Some(id("x")), sp(7))]);
+    fn a_nested_map_inside_an_arrow_body_merges_at_its_real_offset() {
+        let mut sub = SourceMapBuilder::new();
+        sub.record(0, Span::new(41, 42));
+        let mut raw = TsStmt::raw("    carried();\n", None);
+        raw.nested_map = Some(sub);
+        let arrow = multiline_arrow(false, vec![TsStmt::return_stmt(Some(id("a")), sp(7)), raw]);
         let stmt = TsStmt::expr_stmt(iife(arrow), sp(3));
-        let (text, spans) = print_stmt_with_spans(&stmt, 0);
-        assert_eq!(text, "(() => {\n  return x;\n})();\n");
-        assert_eq!(spans, vec![(0, Span::new(3, 4))]);
+        let mut out = String::new();
+        let mut map = SourceMapBuilder::new();
+        print_stmt_and_merge(&mut out, &stmt, 0, &mut map, 0);
+        let spans = map.checkpoint_spans();
+        let lines: Vec<(&str, usize)> = spans
+            .iter()
+            .map(|(o, s)| (line_at(&out, *o), s.start))
+            .collect();
+        assert_eq!(
+            lines,
+            [("(() => {", 3), ("  return a;", 7), ("    carried();", 41)]
+        );
     }
 
     /// Nothing is recorded when the print has no map to record into.

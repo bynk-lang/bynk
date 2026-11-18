@@ -75,29 +75,29 @@ export const PriceFilter = {
 export const api = {
   async http_GET_activity(query: ActivityFilter, deps: {}): globalThis.Promise<HttpResult<string>> {
     const repo = ((__d) => {
-    switch (__d.tag) {
-      case "Some": {
-        const r = __d.value;
-        return `${String(r)}`;
+      switch (__d.tag) {
+        case "Some": {
+          const r = __d.value;
+          return `${String(r)}`;
+        }
+        case "None": {
+          return "any";
+        }
       }
-      case "None": {
-        return "any";
-      }
-    }
-    throw new globalThis.Error("non-exhaustive match");
-  })(query.repo);
+      throw new globalThis.Error("non-exhaustive match");
+    })(query.repo);
     const since = ((__d) => {
-    switch (__d.tag) {
-      case "Some": {
-        const d = __d.value;
-        return `${String(d)}`;
+      switch (__d.tag) {
+        case "Some": {
+          const d = __d.value;
+          return `${String(d)}`;
+        }
+        case "None": {
+          return "-";
+        }
       }
-      case "None": {
-        return "-";
-      }
-    }
-    throw new globalThis.Error("non-exhaustive match");
-  })(query.since);
+      throw new globalThis.Error("non-exhaustive match");
+    })(query.since);
     return HttpResult.Ok(`${String(repo)} ${String(since)} ${String((query.tag).length)} ${String(query.fresh)} ${String(query.limit)}`);
   },
   async http_GET_activity_Param_owner(owner: string, query: ActivityFilter, deps: {}): globalThis.Promise<HttpResult<string>> {
@@ -112,17 +112,17 @@ export const api = {
   },
   async http_GET_priced(query: PriceFilter, deps: {}): globalThis.Promise<HttpResult<string>> {
     const price = ((__d) => {
-    switch (__d.tag) {
-      case "Some": {
-        const p = __d.value;
-        return `${__bynkDecimalToString(p)}`;
+      switch (__d.tag) {
+        case "Some": {
+          const p = __d.value;
+          return `${__bynkDecimalToString(p)}`;
+        }
+        case "None": {
+          return "-";
+        }
       }
-      case "None": {
-        return "-";
-      }
-    }
-    throw new globalThis.Error("non-exhaustive match");
-  })(query.price);
+      throw new globalThis.Error("non-exhaustive match");
+    })(query.price);
     return HttpResult.Ok(price);
   },
 };

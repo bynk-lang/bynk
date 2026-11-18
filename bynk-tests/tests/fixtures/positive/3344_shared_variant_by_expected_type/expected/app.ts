@@ -113,17 +113,17 @@ export const go = {
 export const local = {
   async call(deps: {}): globalThis.Promise<string> {
     const m = ((__d) => {
-    switch (__d.tag) {
-      case "Ok": {
-        return "none";
+      switch (__d.tag) {
+        case "Ok": {
+          return "none";
+        }
+        case "Err": {
+          const e = __d.error;
+          return describe(e);
+        }
       }
-      case "Err": {
-        const e = __d.error;
-        return describe(e);
-      }
-    }
-    throw new globalThis.Error("non-exhaustive match");
-  })(mailFailure());
+      throw new globalThis.Error("non-exhaustive match");
+    })(mailFailure());
     const viaParam = describe(MailError.Failed("arg"));
     const p: Paint = Paint.Red;
     return `${String(m)} / ${String(describeDb(dbFailure()))} / ${String(viaParam)} / ${String(paintName(p))} / ${String(lightName(light()))} / ${String(paintName(DEFAULT_PAINT()))}`;

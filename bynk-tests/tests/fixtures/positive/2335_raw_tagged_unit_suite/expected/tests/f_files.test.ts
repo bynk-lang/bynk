@@ -43,19 +43,19 @@ async function test_an_archive_carries_its_content_hash_tag() {
     const { api } = __ns_f_files;
     const r = await api.http_GET_dl_latest(deps);
     void (((__d) => {
-        switch (__d.tag) {
-          case "RawTagged": {
-            const body = __d.body;
-            const ct = __d.contentType;
-            const etag = __d.etag;
-            return __bynkExpect((etag === "\"sha256-9f00\"" && ct === "application/octet-stream"), "tests/f/files.bynk:8:43", 341, 402, "expect etag == \"\\\"sha256-9f00\\\"\" && ct == \"application/octet-stream\"");
-          }
-          default: {
-            return __bynkExpect((false), "tests/f/files.bynk:9:19", 421, 426, "expect false");
-          }
+      switch (__d.tag) {
+        case "RawTagged": {
+          const body = __d.body;
+          const ct = __d.contentType;
+          const etag = __d.etag;
+          return __bynkExpect((etag === "\"sha256-9f00\"" && ct === "application/octet-stream"), "tests/f/files.bynk:8:43", 341, 402, "expect etag == \"\\\"sha256-9f00\\\"\" && ct == \"application/octet-stream\"");
         }
-        throw new globalThis.Error("non-exhaustive match");
-      })(r));
+        default: {
+          return __bynkExpect((false), "tests/f/files.bynk:9:19", 421, 426, "expect false");
+        }
+      }
+      throw new globalThis.Error("non-exhaustive match");
+    })(r));
     return { pass: true };
   } catch (e) {
     if (e instanceof ExpectationError) {

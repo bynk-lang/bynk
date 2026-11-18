@@ -32,10 +32,7 @@ use bynk_model::{
 
 use super::ctx::{AgentStoreState, BodyMode, HandlerShared, ModuleCtx};
 use super::lower_ctx::LowerCtx;
-use super::lower_stmt::{
-    Body, Item, block_body_with_return, emit_block_as_function_body_with_return,
-    function_body_stmts,
-};
+use super::lower_stmt::{Body, Item, block_body_with_return, claim_scoped, function_body_stmts};
 use super::ts_types::{ts_base, ts_ty, ts_ty_to_ts_type, ts_type_ref, ts_type_ref_to_ts_type};
 use super::*;
 
@@ -2703,87 +2700,17 @@ capability Clock {
     }
 }
 
-/// The text held by a `TsClassMethod`'s sole `Raw` body statement, and where
-/// the sub-slice `body_smb` was built against starts within it: the agent
-/// handlers' (#1375) prologue + lowered body + epilogue. `blob` is the exact
-/// `Raw` text; `inner` is the further-nested `body_out` captured inside it,
-/// and `inner_offset_in_blob` is its start within `blob`, tracked by
-/// construction rather than searched for. (A method whose body is real
-/// statements needs none of this: the printer records its checkpoints, 1A.15.)
-struct RawBody<'a> {
-    blob: &'a str,
-    inner: &'a str,
-    inner_offset_in_blob: usize,
-}
-
-impl<'a> RawBody<'a> {
-    fn nested(blob: &'a str, inner: &'a str, inner_offset_in_blob: usize) -> Self {
-        RawBody {
-            blob,
-            inner,
-            inner_offset_in_blob,
-        }
-    }
-}
-
-/// Prints `method` (always at `class_depth = 0` — every call site here
-/// prints a whole class body) into `out`, then — if `source_map` is
-/// `Some` — merges `body_smb`'s own per-statement mappings into it. Despite
-/// the name, `source_map` isn't necessarily the real module map any more:
-/// `emit_agent`'s own callers (#1482) pass a class-local map that its own
-/// caller merges into the module map one level up, the same two-level
-/// composition `emit_provider`'s own doc comment (below) already
-/// establishes for its own class wrapper.
-///
-/// Degrades to no merge (no mapping for this method) rather than risk a
-/// confidently WRONG one if any assumption is ever violated — the same
-/// "suppress rather than mis-record" discipline #1360 finding 3
-/// established, now shared by every `print_class_method` merge site
-/// instead of copied at each one (review of #1381, finding 2).
-fn emit_class_method_and_merge_source_map(
-    out: &mut String,
-    method: &bynk_ts::TsClassMethod,
-    class_depth: usize,
-    body: RawBody<'_>,
-    body_smb: &RefCell<SourceMapBuilder>,
-    source_map: Option<&RefCell<SourceMapBuilder>>,
-) {
-    let printed = bynk_ts::print_class_method(method, class_depth);
-    out.push_str(&printed);
-    if let Some(module_smb) = source_map {
-        let trailing = format!("{}}}\n", "  ".repeat(class_depth + 1));
-        if let Some(blob_offset_in_printed) =
-            printed.len().checked_sub(body.blob.len() + trailing.len())
-            && printed
-                .get(blob_offset_in_printed..)
-                .is_some_and(|tail| tail.starts_with(body.blob))
-            && printed.ends_with(&trailing)
-        {
-            let base =
-                out.len() - printed.len() + blob_offset_in_printed + body.inner_offset_in_blob;
-            module_smb
-                .borrow_mut()
-                .merge(&body_smb.borrow(), body.inner, out, base, 0);
-        }
-    }
-}
-
 /// #1480: returns one real [`bynk_ts::TsStmt`] (was `out: &mut String`) — a
 /// `Raw` carrier for the whole provider declaration (class header/
 /// wrapper text, Decision C: a real `TsDecl::Class` would need every
 /// method's own body captured into a local buffer for `Raw`-embedding
 /// anyway, and this class's own spacing convention already disagrees with
 /// `TsDecl::Class`'s own — not a further decomposition this slice attempts),
-/// with a class-wide `nested_map` combining every op method's own
-/// `body_smb` at its own real print-time offset *within this function's own
-/// local `out` buffer* — computed by `bynk_ts::print_class_method_and_merge`
-/// itself (#1477) rather than the exact-arithmetic recovery
-/// `emit_class_method_and_merge_source_map` (above) still performs —
-/// `emit_service` no longer calls it at all (#1481); `emit_agent`'s own
-/// per-handler loop and `emit_ws_do_method` are its only remaining callers
-/// (#1482 converted `emit_agent`'s own top-level signature, but left this
-/// hand-rolled per-method recovery itself untouched, same as #1481 did).
-/// The
+/// with a class-wide `nested_map` combining every op method's own checkpoints
+/// at their real print-time offsets *within this function's own local `out`
+/// buffer* — recorded by `bynk_ts::print_class_method_and_merge` itself
+/// (#1477; 1A.15: the op bodies are statements, which the printer records
+/// the spans of). The
 /// caller then merges this ONE combined map into its own real module map at
 /// the class's own real splice offset, via `print_stmt_and_merge` — the same
 /// two-level "local map merges into a local buffer, that buffer's own map
@@ -3069,13 +2996,11 @@ fn seam_identity_ts_type(seam: &ActorSeamIr) -> bynk_ts::TsType {
 /// target into its own `init` — only a `TsDecl::Function`/`TsDecl::Class`
 /// body does, #1477's own scope — so a top-level `ConstDecl` here would
 /// silently lose every handler's own per-statement mapping), with a
-/// service-wide `service_smb` combining every handler's own `body_smb` at
+/// service-wide `service_smb` combining every handler's own checkpoints at
 /// its own real print-time offset *within this function's own local `out`
-/// buffer* — computed by [`bynk_ts::print_object_entry_and_merge`] itself
-/// (#1477) rather than the exact-arithmetic/text-search recovery this
-/// function used to perform by hand, once per handler rather than once per
-/// function (the clearest, most recurring live instance of the
-/// nested-source-map gap #1477 closed). The caller merges this ONE combined
+/// buffer* — recorded by [`bynk_ts::print_object_entry_and_merge`] itself
+/// (#1477; 1A.15: a handler body is statements, which the printer records the
+/// spans of, so no per-body map is built or shifted). The caller merges this ONE combined
 /// map into its own real module map at the object's own real splice offset,
 /// via `print_stmt_and_merge` — the same two-level composition
 /// `emit_provider`'s own doc comment already establishes.
@@ -3212,12 +3137,6 @@ pub(crate) fn emit_service(
         };
         // Lower the body first so we can detect cross-context usage and
         // adjust the deps shape accordingly.
-        let mut body_out = String::new();
-        // v0.70: each handler body lowers into its own source-map sub-builder
-        // (offsets relative to `body_out`), merged into the module builder at the
-        // splice below so handler statements map per-statement, not to the
-        // `service` declaration line.
-        let body_smb = RefCell::new(SourceMapBuilder::new());
         // v0.52: a multi-actor sum handler's resolved actor is threaded through
         // `deps.who`; the binder ident lowers to it so the body can `match`. A
         // sum supersedes the single-actor Bearer identity path (the per-arm
@@ -3276,8 +3195,7 @@ pub(crate) fn emit_service(
                 deps_identity_binder,
                 actor_sum_binder,
             },
-        )
-        .with_source_map(Some(&body_smb));
+        );
         cx.local_agents = ctx.local_agents.clone();
         // #1653: parameters are bindings of the body's own scope, so a `let` that
         // re-binds one gets a fresh name instead of redeclaring it.
@@ -3285,14 +3203,17 @@ pub(crate) fn emit_service(
             cx.declare_binder(&p.name.name);
         }
         let async_tail = *ir_effectful;
-        emit_block_as_function_body_with_return(
-            &mut body_out,
+        // 1A.15: the body is items, not text: the prologue guards, the lowered
+        // body and the events wrapper reach the printer as statements, which
+        // records their checkpoints.
+        let lowered_body = block_body_with_return(
             &handler.body,
             &mut cx,
             INDENT_STEP * 2,
             async_tail,
             Some(&handler.return_type),
         );
+        let mut guards = Body::new();
         // Events track, slice 1 (spine #936): a `from Events(E { ... })`
         // subscription filter is deliver-and-filter (ADR 0286, unchanged by
         // this slice) — the fan-out mechanism still delivers every emission
@@ -3314,18 +3235,7 @@ pub(crate) fn emit_service(
             && let Some((param_name, _)) = ir_params.first()
             && let Some(guard) = event_pattern_guard_ir(&ts_ident(param_name), Some(pattern))
         {
-            let prologue = format!(
-                "{}if (!({guard})) return undefined;\n",
-                " ".repeat(INDENT_STEP * 2)
-            );
-            body_out.insert_str(0, &prologue);
-            // #1363: `body_smb`'s checkpoints were recorded against
-            // `body_out`'s pre-insert contents — rebase them by the
-            // prologue's own byte length so `merge`'s line lookup (against
-            // the post-insert `body_out` handed to it below) still resolves
-            // each statement to its own real line rather than one line too
-            // early.
-            body_smb.borrow_mut().shift_checkpoints(prologue.len());
+            guards.push(Item::line(format!("if (!({guard})) return undefined;")));
         }
         // Events track, slice 4 (spine #936): a `via schema(N)` guard,
         // independent of and in addition to the payload-pattern guard above
@@ -3340,16 +3250,11 @@ pub(crate) fn emit_service(
             && let Some(env_binder) = &schema_dispatch_env_binder
             && let Some(test) = schema_version_test(env_binder, *version)
         {
-            let prologue = format!(
-                "{}if (!({test})) return undefined;\n",
-                " ".repeat(INDENT_STEP * 2)
-            );
-            body_out.insert_str(0, &prologue);
-            // #1363: same rebase as the subscriber-filter prologue above —
-            // a handler with both prologues shifts `body_smb`'s checkpoints
-            // twice, once per insert, matching the two lines actually
-            // prepended to `body_out`.
-            body_smb.borrow_mut().shift_checkpoints(prologue.len());
+            // Inserted ahead of the subscriber-filter guard, as it always was.
+            let mut schema_guard = Body::new();
+            schema_guard.push(Item::line(format!("if (!({test})) return undefined;")));
+            schema_guard.append(std::mem::replace(&mut guards, Body::new()));
+            guards = schema_guard;
         }
         // Append the deps parameter (may include surface field if the body
         // made cross-context calls). v0.47: a Bearer handler's deps also carries
@@ -3509,47 +3414,19 @@ pub(crate) fn emit_service(
         // buffer or flush, so it keeps byte-identical output, mirroring
         // `__exec`'s gate on `block_uses_send`.
         let body_emits_directly = bynk_model::block_uses_emit(&handler.body, &commons.callees);
-        // #1361: the whole method body — the events-IIFE wrapper (if any)
-        // and `body_out` — is captured as ONE opaque `TsStmtKind::Raw` blob,
-        // the `emit_provider` precedent (#1359) exactly; the events-IIFE
-        // stays opaque for the same reason #1327/#1352/#1359 already
-        // declined to build a block-bodied `Arrow`. `raw_body`'s own
-        // internal layout is built by straight concatenation, so
-        // `body_out`'s own starting offset within it is known by
-        // construction, not a text search.
-        let mut raw_body = String::new();
-        if body_emits_directly {
-            writeln!(
-                raw_body,
-                "    const __events: globalThis.Array<{}> = [];",
-                crate::emitter::EVENTS_WIRE_EVENT_TS_TYPE
-            )
-            .unwrap();
-            writeln!(raw_body, "    const __result = await (async () => {{").unwrap();
-        }
-        let body_out_offset_in_raw = raw_body.len();
-        raw_body.push_str(&body_out);
-        if body_emits_directly {
-            writeln!(raw_body, "    }})();").unwrap();
-            writeln!(raw_body, "    if (__events.length > 0) {{").unwrap();
-            writeln!(raw_body, "      await deps.__eventsDispatch(__events);").unwrap();
-            writeln!(raw_body, "    }}").unwrap();
-            writeln!(raw_body, "    return __result;").unwrap();
-        }
-
-        // #1481: `body_smb`'s own checkpoints were recorded relative to
-        // `body_out` (offset 0 = `body_out`'s own first byte) — rebase them
-        // by `body_out_offset_in_raw` so they land relative to `raw_body`'s
-        // own start instead, the coordinate space `nested_map` requires (its
-        // checkpoints are relative to the `Raw` node's own whole text, not a
-        // sub-slice of it — `TsStmt::nested_map`'s own doc). The same rebase
-        // `shift_checkpoints` already performs above for the two prologues,
-        // applied once more for the events-IIFE wrapper this prepends.
-        body_smb
-            .borrow_mut()
-            .shift_checkpoints(body_out_offset_in_raw);
-        let mut raw_stmt = bynk_ts::TsStmt::raw(raw_body, None);
-        raw_stmt.nested_map = Some(body_smb.into_inner());
+        // #1361: the events-IIFE wrapper (if any) surrounds the guards and the
+        // lowered body. 1A.15: the whole method body is statements now; the
+        // wrapper's own lines are nodes where the printer would lay them out
+        // the same way, and text where it would not (the body sits at the
+        // IIFE's own indentation, which a nested arrow body would not).
+        let mut body = guards;
+        body.append(lowered_body);
+        let body = if body_emits_directly {
+            events_release_body(body)
+        } else {
+            body
+        };
+        let body = body.into_stmts(INDENT_STEP * 2);
 
         let method_entry = bynk_ts::TsObjectEntry::Method {
             name: kind_name,
@@ -3559,7 +3436,7 @@ pub(crate) fn emit_service(
             return_type: Some(ts_ty_to_ts_type(*ir_ret, tys)),
             doc: handler.documentation.as_deref().map(str::to_owned),
             inline: false,
-            body: vec![raw_stmt],
+            body,
         };
         // The object (`export const {name} = { ... }`) is always printed at
         // depth 0 — `object_depth` names that once so this call's own depth
@@ -7317,7 +7194,6 @@ fn emit_agent_handlers(
     ctx: &EmitProjectCtx,
     class_smb: &RefCell<SourceMapBuilder>,
 ) {
-    let source_map = Some(class_smb);
     let is_store_agent = true;
     let class_depth = 0;
     let AgentStoreLayout {
@@ -7360,9 +7236,6 @@ fn emit_agent_handlers(
             .collect();
         // Lower body into a buffer so we can detect cross-context usage and
         // shape the deps type accordingly.
-        let mut body_out = String::new();
-        // v0.70: per-statement maps for the spliced handler body (see emit_service).
-        let body_smb = RefCell::new(SourceMapBuilder::new());
         // v0.81: a store-agent handler reads/writes cells over a mutable working
         // record `__state`; a state-record handler uses `currentState`/`self.state`.
         // A store handler that performs any `:=` wraps its body in a closure so an
@@ -7433,8 +7306,7 @@ fn emit_agent_handlers(
                 agent_key_field: Some(a.key_name.name.clone()),
                 store,
             },
-        )
-        .with_source_map(Some(&body_smb));
+        );
         cx.local_agents = ctx.local_agents.clone();
         // A handler param is emitted at its natural `ts_ident` name (above), so
         // it must be declared into scope the same way: otherwise a param that
@@ -7456,8 +7328,7 @@ fn emit_agent_handlers(
         } else {
             INDENT_STEP * 2
         };
-        emit_block_as_function_body_with_return(
-            &mut body_out,
+        let lowered_body = block_body_with_return(
             &h.body,
             &mut cx,
             body_indent,
@@ -7522,17 +7393,12 @@ fn emit_agent_handlers(
         // implicit, atomic commit (ADR 0109). A fault before that flush persists
         // nothing; the invariant gate inside `commitState` runs before the write.
         //
-        // The whole prologue+body+epilogue is captured into one local
-        // `raw_body` buffer instead of `out` directly — the same
-        // restructuring #1361 (`emit_service`) already made for its own
-        // near-identical events-IIFE wrapping, needed here because the
-        // method's own params/return-type/doc now print through
-        // `print_class_method` as one fragment, which can no longer be
-        // interleaved with direct `writeln!`s into `out` the way the
-        // pre-conversion code was.
+        // 1A.15: the whole prologue + body + epilogue is statements, which the
+        // printer records the checkpoints of (it was one raw text blob with
+        // a source map of its own, merged at a computed offset).
         let body_emits_directly = bynk_model::block_uses_emit(&h.body, &commons.callees);
-        let (mut raw_body, mut body_out_offset_in_raw) = assemble_agent_raw_body(
-            &body_out,
+        let mut body = assemble_agent_body(
+            lowered_body,
             is_store_agent,
             writes_state,
             body_emits_directly,
@@ -7541,7 +7407,7 @@ fn emit_agent_handlers(
         // #3465: an agent handler that claimed settles its claims after the state
         // commit and the events flush, so a failure of either releases them.
         if cx.claim_scope_used {
-            wrap_agent_claims(&mut raw_body, &mut body_out_offset_in_raw);
+            body = claim_scoped(body, INDENT_STEP * 2);
         }
         let handler_method = bynk_ts::TsClassMethod {
             name: method,
@@ -7550,20 +7416,19 @@ fn emit_agent_handlers(
             params,
             return_type: Some(ret),
             doc: h.documentation.as_deref().map(str::to_owned),
-            body: vec![bynk_ts::TsStmt::raw(raw_body.clone(), None)],
+            body: body.into_stmts(INDENT_STEP * 2),
         };
         // #2270: anchor the method header and prologue to the handler's own
         // `on call` line. Without this they inherit the previous checkpoint,
         // so an uncalled handler's header leaked onto the preceding body's
         // last line in coverage.
         class_smb.borrow_mut().record(out.len(), h.span);
-        emit_class_method_and_merge_source_map(
+        bynk_ts::print_class_method_and_merge(
             out,
             &handler_method,
             class_depth,
-            RawBody::nested(&raw_body, &body_out, body_out_offset_in_raw),
-            &body_smb,
-            source_map,
+            &mut class_smb.borrow_mut(),
+            0,
         );
         writeln!(out).unwrap();
     }
@@ -7575,66 +7440,163 @@ fn history_handler<'a>(ctx: &EmitProjectCtx, handler: &'a str) -> Option<&'a str
     ctx.inspect_agents.then_some(handler)
 }
 
-/// One agent handler method's prologue + lowered body + epilogue (#3167), and
-/// the offset inside it at which the lowered body begins. A store handler that
-/// writes wraps its body in the implicit-commit closure; one that emits events
-/// directly flushes them after it.
-fn assemble_agent_raw_body(
-    body_out: &str,
+/// `const __events: ... = [];`.
+fn events_decl_item() -> Item {
+    Item::Node(Box::new(bynk_ts::TsStmt::const_stmt(
+        bynk_ts::TsBindingName::Ident("__events".to_string()),
+        Some(bynk_ts::TsType::named_with_args(
+            "globalThis.Array",
+            vec![bynk_ts::TsType::named(
+                crate::emitter::EVENTS_WIRE_EVENT_TS_TYPE,
+            )],
+        )),
+        bynk_ts::TsExpr::array(Vec::new()),
+        None,
+    )))
+}
+
+/// The line that opens the closure a handler body runs in so that its own
+/// `return`s resolve `__result`. Text, because the body sits at this line's own
+/// indentation, where a nested arrow body would sit one step deeper.
+fn result_closure_open() -> Item {
+    Item::line("const __result = await (async () => {")
+}
+
+fn result_closure_close() -> Item {
+    Item::line("})();")
+}
+
+/// `if (__events.length > 0) { await deps.__eventsDispatch(__events); }`, with
+/// the call on its own lines in a braced block, or `inline` on one.
+fn events_flush_item(inline: bool) -> Item {
+    let ident = |name: &str| bynk_ts::TsExpr::Ident(name.to_string());
+    let dispatch = bynk_ts::TsStmt::expr_stmt(
+        bynk_ts::TsExpr::Await(Box::new(bynk_ts::TsExpr::Call {
+            callee: Box::new(bynk_ts::TsExpr::Member {
+                object: Box::new(ident("deps")),
+                property: "__eventsDispatch".to_string(),
+            }),
+            args: vec![ident("__events")],
+        })),
+        None,
+    );
+    let then = if inline {
+        bynk_ts::TsStmt::inline_block(vec![dispatch], None)
+    } else {
+        bynk_ts::TsStmt::block(vec![dispatch], None)
+    };
+    let cond = bynk_ts::TsExpr::Binary {
+        op: bynk_ts::TsBinaryOp::GreaterThan,
+        left: Box::new(bynk_ts::TsExpr::Member {
+            object: Box::new(ident("__events")),
+            property: "length".to_string(),
+        }),
+        right: Box::new(bynk_ts::TsExpr::Lit(bynk_ts::TsLit::Num("0".to_string()))),
+    };
+    Item::Node(Box::new(bynk_ts::TsStmt::if_stmt(cond, then, None)))
+}
+
+fn return_result_item() -> Item {
+    Item::Node(Box::new(bynk_ts::TsStmt::return_stmt(
+        Some(bynk_ts::TsExpr::Ident("__result".to_string())),
+        None,
+    )))
+}
+
+/// A service handler's body when it emits events directly: the buffered
+/// `__events`, the body inside the closure that resolves `__result`, then the
+/// flush to whatever composed the handler, and the result.
+fn events_release_body(body: Body) -> Body {
+    let mut wrapped = Body::new();
+    wrapped.push(events_decl_item());
+    wrapped.push(result_closure_open());
+    wrapped.append(body);
+    wrapped.push(result_closure_close());
+    wrapped.push(events_flush_item(false));
+    wrapped.push(return_result_item());
+    wrapped
+}
+
+/// `await this.<method>(<args>)`.
+fn this_await(method: &str, args: Vec<bynk_ts::TsExpr>) -> bynk_ts::TsExpr {
+    bynk_ts::TsExpr::Await(Box::new(bynk_ts::TsExpr::Call {
+        callee: Box::new(bynk_ts::TsExpr::Member {
+            object: Box::new(bynk_ts::TsExpr::Ident("this".to_string())),
+            property: method.to_string(),
+        }),
+        args,
+    }))
+}
+
+/// One agent handler method's prologue + lowered body + epilogue (#3167). A
+/// store handler that writes wraps its body in the implicit-commit closure; one
+/// that emits events directly flushes them after it. The body items are
+/// `lowered`, lowered at one step deeper when the closure wraps them.
+fn assemble_agent_body(
+    lowered: Body,
     is_store_agent: bool,
     writes_state: bool,
     body_emits_directly: bool,
     history_handler: Option<&str>,
-) -> (String, usize) {
-    let events_decl = format!(
-        "    const __events: globalThis.Array<{}> = [];",
-        crate::emitter::EVENTS_WIRE_EVENT_TS_TYPE
-    );
-    let flush = "    if (__events.length > 0) { await deps.__eventsDispatch(__events); }";
-    let mut raw = String::new();
+) -> Body {
+    let mut body = Body::new();
+    let ident = |name: &str| bynk_ts::TsBindingName::Ident(name.to_string());
     let state_decl = if !is_store_agent {
-        "    const currentState = await this.loadState();"
+        bynk_ts::TsStmt::const_stmt(
+            ident("currentState"),
+            None,
+            this_await("loadState", Vec::new()),
+            None,
+        )
     } else if writes_state {
-        "    const __state = { ...(await this.loadState()) };"
+        bynk_ts::TsStmt::const_stmt(
+            ident("__state"),
+            None,
+            bynk_ts::TsExpr::object_entries(vec![bynk_ts::TsObjectEntry::Spread(
+                bynk_ts::TsExpr::Paren(Box::new(this_await("loadState", Vec::new()))),
+            )]),
+            None,
+        )
     } else {
-        "    const __state = await this.loadState();"
+        bynk_ts::TsStmt::const_stmt(
+            ident("__state"),
+            None,
+            this_await("loadState", Vec::new()),
+            None,
+        )
     };
-    writeln!(raw, "{state_decl}").unwrap();
+    body.push(Item::Node(Box::new(state_decl)));
     // Only a handler that wraps its body (a commit, or direct events) needs the closure.
     if !writes_state && !body_emits_directly {
-        let offset = raw.len();
-        raw.push_str(body_out);
-        return (raw, offset);
+        body.append(lowered);
+        return body;
     }
     if body_emits_directly {
-        writeln!(raw, "{events_decl}").unwrap();
+        body.push(events_decl_item());
     }
-    writeln!(raw, "    const __result = await (async () => {{").unwrap();
-    let offset = raw.len();
-    raw.push_str(body_out);
-    writeln!(raw, "    }})();").unwrap();
+    body.push(result_closure_open());
+    // A writing handler's body sits one step deeper, inside the closure.
     if writes_state {
-        match history_handler {
-            Some(h) => writeln!(raw, "    await this.commitState(__state, \"{h}\");").unwrap(),
-            None => writeln!(raw, "    await this.commitState(__state);").unwrap(),
+        body.push(Item::Indent(lowered));
+    } else {
+        body.append(lowered);
+    }
+    body.push(result_closure_close());
+    if writes_state {
+        let mut args = vec![bynk_ts::TsExpr::Ident("__state".to_string())];
+        if let Some(h) = history_handler {
+            args.push(bynk_ts::TsExpr::Lit(bynk_ts::TsLit::Str(h.to_string())));
         }
+        body.push(Item::Node(Box::new(bynk_ts::TsStmt::expr_stmt(
+            this_await("commitState", args),
+            None,
+        ))));
     }
     if body_emits_directly {
-        writeln!(raw, "{flush}").unwrap();
+        body.push(events_flush_item(true));
     }
-    writeln!(raw, "    return __result;").unwrap();
-    (raw, offset)
-}
-
-/// #3465: wrap a whole agent handler method body so the claims it made are
-/// settled once the state commit and events flush have run (a failure of either
-/// releases them). `offset` is where the lowered body begins in `raw`, moved to
-/// stay valid for the source map.
-fn wrap_agent_claims(raw: &mut String, offset: &mut usize) {
-    let (before, after) = crate::emitter::lower::claim_scope_wrapper(4);
-    raw.insert_str(0, &before);
-    raw.push_str(&after);
-    *offset += before.len();
+    body.push(return_result_item());
+    body
 }
 
 /// What an agent class's dispatch methods depend on, decided while the class

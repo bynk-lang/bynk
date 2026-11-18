@@ -28,16 +28,16 @@ export const place = {
       case "Err": {
         const error = auth.error;
         return ((__d) => {
-    switch (__d.tag) {
-      case "Declined": {
-        return Err(OrderError.PaymentDeclined);
-      }
-      case "InsufficientFunds": {
-        return Err(OrderError.PaymentInsufficient);
-      }
-    }
-    throw new globalThis.Error("non-exhaustive match");
-  })(error);
+          switch (__d.tag) {
+            case "Declined": {
+              return Err(OrderError.PaymentDeclined);
+            }
+            case "InsufficientFunds": {
+              return Err(OrderError.PaymentInsufficient);
+            }
+          }
+          throw new globalThis.Error("non-exhaustive match");
+        })(error);
       }
     }
     throw new globalThis.Error("non-exhaustive match");

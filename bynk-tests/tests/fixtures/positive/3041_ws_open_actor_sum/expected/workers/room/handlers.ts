@@ -111,34 +111,34 @@ export class Room {
   async __wsOpen_chat(connection: Connection<Frame>, room: RoomKey, deps: { who: { tag: "User", identity: UserId } | { tag: "Visitor" } }): globalThis.Promise<void> {
     const nobody: Option<string> = None;
     const name = ((__d) => {
-    switch (__d.tag) {
-      case "User": {
-        const u = __d.identity;
-        return Some(`${String(u)}`);
+      switch (__d.tag) {
+        case "User": {
+          const u = __d.identity;
+          return Some(`${String(u)}`);
+        }
+        case "Visitor": {
+          return nobody;
+        }
       }
-      case "Visitor": {
-        return nobody;
-      }
-    }
-    throw new globalThis.Error("non-exhaustive match");
-  })(deps.who);
+      throw new globalThis.Error("non-exhaustive match");
+    })(deps.who);
     const __r0 = await this.join(name, connection, deps);
     return undefined;
   }
 
   async __wsMessage_chat(connection: Connection<Frame>, room: RoomKey, frame: Frame, deps: { who: { tag: "User", identity: UserId } | { tag: "Visitor" } }): globalThis.Promise<void> {
     const name = ((__d) => {
-    switch (__d.tag) {
-      case "User": {
-        const u = __d.identity;
-        return `${String(u)}`;
+      switch (__d.tag) {
+        case "User": {
+          const u = __d.identity;
+          return `${String(u)}`;
+        }
+        case "Visitor": {
+          return "visitor";
+        }
       }
-      case "Visitor": {
-        return "visitor";
-      }
-    }
-    throw new globalThis.Error("non-exhaustive match");
-  })(deps.who);
+      throw new globalThis.Error("non-exhaustive match");
+    })(deps.who);
     const __r0 = await this.say(name, frame.text, deps);
     return undefined;
   }

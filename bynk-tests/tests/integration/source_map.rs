@@ -304,6 +304,53 @@ fn value_position_if_iife_does_not_corrupt_earlier_checkpoints() {
     );
 }
 
+#[test]
+fn value_position_if_iife_statements_map_to_their_own_lines() {
+    // 1A.15 (Decision D of #3716): the IIFE's statements are mapped, where
+    // before they inherited the `let r` line's checkpoint and a debugger
+    // could not step through them one by one.
+    let (ts, map) = compile_reps(IIFE_FIXTURE);
+    let lines = decode(extract_field(&map, "mappings"));
+    let at = |needle: &str| {
+        lines[gen_line_of(&ts, needle)].unwrap_or_else(|| panic!("{needle:?} unmapped\n{ts}"))
+    };
+    // Source (0-based): line 4 = `let y = 2`, line 5 = `y + 1`, line 7 = `0`.
+    assert_eq!(at("const y = "), 4, "{ts}");
+    assert_eq!(at("return y + 1"), 5, "{ts}");
+    assert_eq!(at("return 0"), 7, "{ts}");
+}
+
+const LAMBDA_FIXTURE: &str = "commons reps {
+  fn run() -> Int {
+    let f = (x: Int) => {
+      let y = x * 2
+      y + 1
+    }
+    f(3)
+  }
+}
+";
+
+/// The inspector test of 1A.15 (Decision D of #3716): `bynk test --inspect`
+/// steps into a lambda body, because each of its statements maps to its own
+/// source line. Before, a lambda body was lowered with its checkpoints
+/// suppressed, so every line of it belonged to the statement holding the
+/// lambda (source line 2) and a debugger skipped the body in one step.
+#[test]
+fn a_lambda_body_steps_through_its_own_source_lines() {
+    let (ts, map) = compile_reps(LAMBDA_FIXTURE);
+    let lines = decode(extract_field(&map, "mappings"));
+    let at = |needle: &str| {
+        lines[gen_line_of(&ts, needle)].unwrap_or_else(|| panic!("{needle:?} unmapped\n{ts}"))
+    };
+    // Source (0-based): line 2 = `let f = ...`, line 3 = `let y`, line 4 = `y + 1`,
+    // line 6 = `f(3)`.
+    assert_eq!(at("const f = "), 2, "{ts}");
+    assert_eq!(at("const y = "), 3, "{ts}");
+    assert_eq!(at("return y + 1"), 4, "{ts}");
+    assert_eq!(at("return f(3)"), 6, "{ts}");
+}
+
 /// #1359: like [`compile_reps`], but for a `context`-rooted fixture (a
 /// `capability`/`provides` pair can't live in a bare `commons` at all —
 /// `emit_capability`'s own #1358 test hit the identical constraint) —

@@ -59,18 +59,18 @@ async function test_a_consumed_badge_is_served() {
     const other = (deps as any).surface?.other;
     const r = await __bynkAssetGet((badge).url);
     void (((__d) => {
-        switch (__d.tag) {
-          case "Raw": {
-            const body = __d.body;
-            const ct = __d.contentType;
-            return __bynkExpect((ct === "image/svg+xml"), "tests/t/web.bynk:7:31", 280, 301, "expect ct == \"image/svg+xml\"");
-          }
-          default: {
-            return __bynkExpect((false), "tests/t/web.bynk:8:19", 320, 325, "expect false");
-          }
+      switch (__d.tag) {
+        case "Raw": {
+          const body = __d.body;
+          const ct = __d.contentType;
+          return __bynkExpect((ct === "image/svg+xml"), "tests/t/web.bynk:7:31", 280, 301, "expect ct == \"image/svg+xml\"");
         }
-        throw new globalThis.Error("non-exhaustive match");
-      })(r));
+        default: {
+          return __bynkExpect((false), "tests/t/web.bynk:8:19", 320, 325, "expect false");
+        }
+      }
+      throw new globalThis.Error("non-exhaustive match");
+    })(r));
     return { pass: true };
   } catch (e) {
     if (e instanceof ExpectationError) {

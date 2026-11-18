@@ -39,18 +39,18 @@ export const api = {
     const __claims = (deps.Idempotency as unknown as { __track?: () => { note<C>(k: string, c: C, t: number): C; lease(t: number): number; settle(r: unknown, threw: boolean): globalThis.Promise<void> } }).__track?.() ?? { note: <C>(_k: string, c: C, _t: number) => c, lease: (t: number) => t, settle: async (_r: unknown, _threw: boolean) => {} };
     let __r;
     try {
-    __r = await (async () => {
-    const __letElse184 = await (await (async (__k: string, __t: number) => __claims.note(__k, await deps.Idempotency.claim(__k, __claims.lease(__t)), __t))(`shop.hooks.api.http_POST_hooks_Param_id::${id}`, 3600000));
-    switch (__letElse184.tag) {
-      case "Claimed": {
-        return HttpResult.Ok("processed");
-      }
-      default: {
-        return HttpResult.Ok("duplicate");
-      }
-    }
-    throw new globalThis.Error("non-exhaustive match");
-    })();
+      __r = await (async () => {
+        const __letElse184 = await (await (async (__k: string, __t: number) => __claims.note(__k, await deps.Idempotency.claim(__k, __claims.lease(__t)), __t))(`shop.hooks.api.http_POST_hooks_Param_id::${id}`, 3600000));
+        switch (__letElse184.tag) {
+          case "Claimed": {
+            return HttpResult.Ok("processed");
+          }
+          default: {
+            return HttpResult.Ok("duplicate");
+          }
+        }
+        throw new globalThis.Error("non-exhaustive match");
+      })();
     } catch (__e) {
       await __claims.settle(undefined, true);
       throw __e;
@@ -62,18 +62,18 @@ export const api = {
     const __claims = (deps.Idempotency as unknown as { __track?: () => { note<C>(k: string, c: C, t: number): C; lease(t: number): number; settle(r: unknown, threw: boolean): globalThis.Promise<void> } }).__track?.() ?? { note: <C>(_k: string, c: C, _t: number) => c, lease: (t: number) => t, settle: async (_r: unknown, _threw: boolean) => {} };
     let __r;
     try {
-    __r = await (async () => {
-    const __letElse504 = await (await (async (__k: string, __t: number) => __claims.note(__k, await deps.Idempotency.claim(__k, __claims.lease(__t)), __t))(`shop.hooks.api.http_POST_flaky_Param_id::${id}`, 3600000));
-    switch (__letElse504.tag) {
-      case "Claimed": {
-        return (id === "down" ? HttpResult.ServerError("upstream down") : (id === "invalid" ? HttpResult.BadRequest("invalid payload") : HttpResult.Ok("processed")));
-      }
-      default: {
-        return HttpResult.Ok("duplicate");
-      }
-    }
-    throw new globalThis.Error("non-exhaustive match");
-    })();
+      __r = await (async () => {
+        const __letElse504 = await (await (async (__k: string, __t: number) => __claims.note(__k, await deps.Idempotency.claim(__k, __claims.lease(__t)), __t))(`shop.hooks.api.http_POST_flaky_Param_id::${id}`, 3600000));
+        switch (__letElse504.tag) {
+          case "Claimed": {
+            return (id === "down" ? HttpResult.ServerError("upstream down") : (id === "invalid" ? HttpResult.BadRequest("invalid payload") : HttpResult.Ok("processed")));
+          }
+          default: {
+            return HttpResult.Ok("duplicate");
+          }
+        }
+        throw new globalThis.Error("non-exhaustive match");
+      })();
     } catch (__e) {
       await __claims.settle(undefined, true);
       throw __e;
@@ -105,18 +105,18 @@ export const ledger = {
     const __claims = (deps.Idempotency as unknown as { __track?: () => { note<C>(k: string, c: C, t: number): C; lease(t: number): number; settle(r: unknown, threw: boolean): globalThis.Promise<void> } }).__track?.() ?? { note: <C>(_k: string, c: C, _t: number) => c, lease: (t: number) => t, settle: async (_r: unknown, _threw: boolean) => {} };
     let __r;
     try {
-    __r = await (async () => {
-    const __letElse1240 = await (await (async (__k: string, __t: number) => __claims.note(__k, await deps.Idempotency.claim(__k, __claims.lease(__t)), __t))(`shop.hooks.ledger.call::${id}`, 3600000));
-    switch (__letElse1240.tag) {
-      case "Claimed": {
-        return (id === "bad" ? Err("rejected") : Ok("done"));
-      }
-      default: {
-        return Ok("duplicate");
-      }
-    }
-    throw new globalThis.Error("non-exhaustive match");
-    })();
+      __r = await (async () => {
+        const __letElse1240 = await (await (async (__k: string, __t: number) => __claims.note(__k, await deps.Idempotency.claim(__k, __claims.lease(__t)), __t))(`shop.hooks.ledger.call::${id}`, 3600000));
+        switch (__letElse1240.tag) {
+          case "Claimed": {
+            return (id === "bad" ? Err("rejected") : Ok("done"));
+          }
+          default: {
+            return Ok("duplicate");
+          }
+        }
+        throw new globalThis.Error("non-exhaustive match");
+      })();
     } catch (__e) {
       await __claims.settle(undefined, true);
       throw __e;

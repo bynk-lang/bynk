@@ -28,39 +28,39 @@ export function readNested(event: Option<string>, delivery: Option<string>, text
     case "Some": {
       const e = event.value;
       return ((__d) => {
-    switch (__d.tag) {
-      case "None": {
-        return Err(Failure.MissingDelivery);
-      }
-      case "Some": {
-        const d = __d.value;
-        return ((__d) => {
-    switch (__d.tag) {
-      case "None": {
-        return Err(Failure.NotUtf8);
-      }
-      case "Some": {
-        const t = __d.value;
-        return ((__d) => {
-    switch (__d.tag) {
-      case "Err": {
-        return Err(Failure.NotJson);
-      }
-      case "Ok": {
-        const n = __d.value;
-        return Ok(`${String(e)}/${String(d)}/${String(t)}/${String(n)}`);
-      }
-    }
-    throw new globalThis.Error("non-exhaustive match");
-  })(parsed);
-      }
-    }
-    throw new globalThis.Error("non-exhaustive match");
-  })(text);
-      }
-    }
-    throw new globalThis.Error("non-exhaustive match");
-  })(delivery);
+        switch (__d.tag) {
+          case "None": {
+            return Err(Failure.MissingDelivery);
+          }
+          case "Some": {
+            const d = __d.value;
+            return ((__d) => {
+              switch (__d.tag) {
+                case "None": {
+                  return Err(Failure.NotUtf8);
+                }
+                case "Some": {
+                  const t = __d.value;
+                  return ((__d) => {
+                    switch (__d.tag) {
+                      case "Err": {
+                        return Err(Failure.NotJson);
+                      }
+                      case "Ok": {
+                        const n = __d.value;
+                        return Ok(`${String(e)}/${String(d)}/${String(t)}/${String(n)}`);
+                      }
+                    }
+                    throw new globalThis.Error("non-exhaustive match");
+                  })(parsed);
+                }
+              }
+              throw new globalThis.Error("non-exhaustive match");
+            })(text);
+          }
+        }
+        throw new globalThis.Error("non-exhaustive match");
+      })(delivery);
     }
   }
   throw new globalThis.Error("non-exhaustive match");

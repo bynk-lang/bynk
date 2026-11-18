@@ -88,17 +88,17 @@ async function test_a_participant_s_private_type() {
     const l = { name: "tea", price: 3 };
     const r = await __sysdrive_api_http_GET_tea(undefined, "");
     void (((__d) => {
-        switch (__d.tag) {
-          case "Ok": {
-            const body = __d.value;
-            return __bynkExpect((body === `${String(l.name)}: ${String(l.price)}`), "tests/shop/till_system.bynk:8:26", 304, 335, "expect body == \"\\(l.name): \\(l.price)\"");
-          }
-          default: {
-            return __bynkExpect((false), "tests/shop/till_system.bynk:9:19", 354, 359, "expect false");
-          }
+      switch (__d.tag) {
+        case "Ok": {
+          const body = __d.value;
+          return __bynkExpect((body === `${String(l.name)}: ${String(l.price)}`), "tests/shop/till_system.bynk:8:26", 304, 335, "expect body == \"\\(l.name): \\(l.price)\"");
         }
-        throw new globalThis.Error("non-exhaustive match");
-      })(r));
+        default: {
+          return __bynkExpect((false), "tests/shop/till_system.bynk:9:19", 354, 359, "expect false");
+        }
+      }
+      throw new globalThis.Error("non-exhaustive match");
+    })(r));
     return { pass: true };
   } catch (e) {
     if (e instanceof ExpectationError) {

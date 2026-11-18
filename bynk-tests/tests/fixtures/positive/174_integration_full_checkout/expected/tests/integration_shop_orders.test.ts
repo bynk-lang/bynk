@@ -77,17 +77,17 @@ async function test_successful_orders_accumulate_in_the_ledger() {
     const first = await __callService(deps.env.SHOP_ORDERS, "place", { id: "acct-1" as __JsonValue, cents: ((v: number) => { if (!globalThis.Number.isSafeInteger(v)) throw new globalThis.Error("Int outside the safe-integer range at boundary"); return v as __JsonValue; })(100) }, __ns_shop_orders.__deserialise_Result_Int_OrderError, "integration", "57187b6ef9a23726", deps.env, "shop.orders");
     const second = await __callService(deps.env.SHOP_ORDERS, "place", { id: "acct-1" as __JsonValue, cents: ((v: number) => { if (!globalThis.Number.isSafeInteger(v)) throw new globalThis.Error("Int outside the safe-integer range at boundary"); return v as __JsonValue; })(200) }, __ns_shop_orders.__deserialise_Result_Int_OrderError, "integration", "57187b6ef9a23726", deps.env, "shop.orders");
     void (((__d) => {
-        switch (__d.tag) {
-          case "Ok": {
-            const n = __d.value;
-            return __bynkExpect((n === 2), "check.bynk:12:24", 522, 528, "expect n == 2");
-          }
-          case "Err": {
-            return __bynkExpect((false), "check.bynk:13:24", 552, 557, "expect false");
-          }
+      switch (__d.tag) {
+        case "Ok": {
+          const n = __d.value;
+          return __bynkExpect((n === 2), "check.bynk:12:24", 522, 528, "expect n == 2");
         }
-        throw new globalThis.Error("non-exhaustive match");
-      })(second));
+        case "Err": {
+          return __bynkExpect((false), "check.bynk:13:24", 552, 557, "expect false");
+        }
+      }
+      throw new globalThis.Error("non-exhaustive match");
+    })(second));
     return { pass: true };
   } catch (e) {
     if (e instanceof ExpectationError) {
@@ -104,11 +104,11 @@ async function test_a_declined_payment_is_rejected_and_does_not_record() {
     const deps = __makeHarness();
     const r = await __callService(deps.env.SHOP_ORDERS, "place", { id: "acct-2" as __JsonValue, cents: ((v: number) => { if (!globalThis.Number.isSafeInteger(v)) throw new globalThis.Error("Int outside the safe-integer range at boundary"); return v as __JsonValue; })(50000) }, __ns_shop_orders.__deserialise_Result_Int_OrderError, "integration", "57187b6ef9a23726", deps.env, "shop.orders");
     void (((__d) => {
-        if (__d.tag === "Err" && __d.error.tag === "Rejected") {
-          return __bynkExpect((true), "check.bynk:20:31", 723, 727, "expect true");
-        }
-        return __bynkExpect((false), "check.bynk:21:31", 758, 763, "expect false");
-      })(r));
+      if (__d.tag === "Err" && __d.error.tag === "Rejected") {
+        return __bynkExpect((true), "check.bynk:20:31", 723, 727, "expect true");
+      }
+      return __bynkExpect((false), "check.bynk:21:31", 758, 763, "expect false");
+    })(r));
     return { pass: true };
   } catch (e) {
     if (e instanceof ExpectationError) {

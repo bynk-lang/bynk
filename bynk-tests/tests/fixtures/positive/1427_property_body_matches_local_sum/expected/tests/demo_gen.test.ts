@@ -185,17 +185,17 @@ async function __prop_test_for_all_body_matches_a_locally_constructed_sum() {
       const n = globalThis.Number(__vals[0]);
       const o = Outcome.Hit(5);
       void (((__d) => {
-          switch (__d.tag) {
-            case "Hit": {
-              const score = __d.score;
-              return __bynkExpect((score === 5), "tests/gen.test.bynk:15:30", 780, 790, "expect score == 5");
-            }
-            case "Miss": {
-              return __bynkExpect((false), "tests/gen.test.bynk:16:24", 814, 819, "expect false");
-            }
+        switch (__d.tag) {
+          case "Hit": {
+            const score = __d.score;
+            return __bynkExpect((score === 5), "tests/gen.test.bynk:15:30", 780, 790, "expect score == 5");
           }
-          throw new globalThis.Error("non-exhaustive match");
-        })(o));
+          case "Miss": {
+            return __bynkExpect((false), "tests/gen.test.bynk:16:24", 814, 819, "expect false");
+          }
+        }
+        throw new globalThis.Error("non-exhaustive match");
+      })(o));
     };
     return await __bynkRunProperty({ seed: __bynkMix(__bynkSeed, 0), cases: 100, gens: __gens, where: __where, body: __body, name: "for-all body matches a locally constructed sum", location: "tests/gen.test.bynk", file: "tests/gen.test.bynk" });
 }

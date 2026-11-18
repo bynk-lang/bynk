@@ -66,17 +66,17 @@ export const setup = {
 export const save = {
   async call(id: string, active: boolean, seen: Option<boolean>, deps: { Flags: Flags }): globalThis.Promise<Result<SqlRun, SqlError>> {
     const s = ((__d) => {
-    switch (__d.tag) {
-      case "Some": {
-        const b = __d.value;
-        return SqlValue.Boolean(b);
+      switch (__d.tag) {
+        case "Some": {
+          const b = __d.value;
+          return SqlValue.Boolean(b);
+        }
+        case "None": {
+          return SqlValue.Null;
+        }
       }
-      case "None": {
-        return SqlValue.Null;
-      }
-    }
-    throw new globalThis.Error("non-exhaustive match");
-  })(seen);
+      throw new globalThis.Error("non-exhaustive match");
+    })(seen);
     return deps.Flags.run("INSERT INTO flags (id, active, seen) VALUES (?1, ?2, ?3)", [SqlValue.Text(id), SqlValue.Boolean(active), s]);
   },
 };

@@ -1160,35 +1160,13 @@ impl<'a> LowerCtx<'a> {
     /// buffer* the attached builder is tracking. A caller building an IIFE
     /// into its own local `String` — `lower_if`'s value-position wrapper,
     /// `build_match_iife`'s — before splicing it elsewhere must not call this
-    /// with that buffer's own length; see [`Self::without_source_map`].
+    /// with that buffer's own length (render it with `render_text`).
     pub(super) fn record_span(&self, out_len: usize, span: bynk_syntax::span::Span) {
         if let Some(map) = self.source_map {
             map.borrow_mut().record(out_len, span);
         }
     }
 
-    /// #4 review: run `f` with source-map recording suppressed, restoring it
-    /// after. For lowering into a local IIFE buffer that will later be
-    /// spliced into the real module text at some other offset — `record_span`
-    /// has no way to know that offset, so a checkpoint taken here would
-    /// silently corrupt the map with a position relative to the wrong
-    /// buffer. `SourceMapBuilder::merge` already solves the equivalent
-    /// problem one level up (a handler/test body's own local buffer, spliced
-    /// into the module) by recording into a *sub*-builder and rebasing at the
-    /// splice — but that needs a builder that outlives the call, and
-    /// `source_map` is `Option<&'a RefCell<SourceMapBuilder>>` tied to the
-    /// whole emission's lifetime, so a function-local sub-builder can't be
-    /// substituted in. Suppressing instead of mis-recording means the
-    /// nearest-enclosing-checkpoint rule (ADR 0103 D2) falls back to whatever
-    /// was correctly mapped just before the IIFE started, rather than a wrong
-    /// one silently taking over — degraded stepping through the IIFE's own
-    /// lines in `bynk test --inspect`, not a corrupted map.
-    pub(super) fn without_source_map<R>(&mut self, f: impl FnOnce(&mut Self) -> R) -> R {
-        let saved = self.source_map.take();
-        let result = f(self);
-        self.source_map = saved;
-        result
-    }
     /// v0.9.2: lower an agent instantiation `AgentName(key)` to its factory
     /// call. Bundle/test mode passes only the key; workers mode also threads
     /// `deps.env` so the factory can reach the agent's DO namespace — #2355:

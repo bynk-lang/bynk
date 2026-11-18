@@ -14,10 +14,10 @@ export const api = {
     const __claims = (deps.Idempotency as unknown as { __track?: () => { note<C>(k: string, c: C, t: number): C; lease(t: number): number; settle(r: unknown, threw: boolean): globalThis.Promise<void> } }).__track?.() ?? { note: <C>(_k: string, c: C, _t: number) => c, lease: (t: number) => t, settle: async (_r: unknown, _threw: boolean) => {} };
     let __r;
     try {
-    __r = await (async () => {
-    const [c, d] = await __bynkSettleAll([async () => (await (async (__k: string, __t: number) => __claims.note(__k, await deps.Idempotency.claim(__k, __claims.lease(__t)), __t))(`shop.hooks.api.http_POST_hooks_Param_id::${id}`, 3600000)), async () => (await (async (__k: string, __t: number) => __claims.note(__k, await deps.Idempotency.claim(__k, __claims.lease(__t)), __t))(`shop.hooks.api.http_POST_hooks_Param_id::${"other"}`, 3600000))]);
-    return HttpResult.Ok("processed");
-    })();
+      __r = await (async () => {
+        const [c, d] = await __bynkSettleAll([async () => (await (async (__k: string, __t: number) => __claims.note(__k, await deps.Idempotency.claim(__k, __claims.lease(__t)), __t))(`shop.hooks.api.http_POST_hooks_Param_id::${id}`, 3600000)), async () => (await (async (__k: string, __t: number) => __claims.note(__k, await deps.Idempotency.claim(__k, __claims.lease(__t)), __t))(`shop.hooks.api.http_POST_hooks_Param_id::${"other"}`, 3600000))]);
+        return HttpResult.Ok("processed");
+      })();
     } catch (__e) {
       await __claims.settle(undefined, true);
       throw __e;

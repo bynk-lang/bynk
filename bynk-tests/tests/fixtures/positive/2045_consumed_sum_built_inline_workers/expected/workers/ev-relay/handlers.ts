@@ -26,16 +26,16 @@ export const active = {
 export const held = {
   async call(b: Batch, deps: {}): globalThis.Promise<boolean> {
     return ((__d) => {
-    switch (__d.tag) {
-      case "Active": {
-        return false;
+      switch (__d.tag) {
+        case "Active": {
+          return false;
+        }
+        case "Held": {
+          return true;
+        }
       }
-      case "Held": {
-        return true;
-      }
-    }
-    throw new globalThis.Error("non-exhaustive match");
-  })(b.status);
+      throw new globalThis.Error("non-exhaustive match");
+    })(b.status);
   },
 };
 
