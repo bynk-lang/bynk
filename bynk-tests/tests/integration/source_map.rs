@@ -1032,3 +1032,77 @@ agent Room {
         "a type maps to its declaration in types.bynk"
     );
 }
+
+/// 1A.11 (#3712, Decision C/D): an `if` tail nested two deep, with a `let` and a
+/// `?` in each branch, lowers its statements to nodes, and the checkpoint of each
+/// nested statement still lands on its own generated line. `NESTED_IF_MAPPINGS`
+/// is the `mappings` string the compiler produced **before** the slice, when this
+/// `if` was text lines, so the test is a before/after equality: the generated
+/// text and the map are byte-identical.
+const NESTED_IF: &str = "commons reps {
+  fn pick(a: Bool, b: Bool, r: Result[Int, String]) -> Result[Int, String] {
+    if a {
+      let x = r?
+      if b {
+        let y = r?
+        Ok(x + y)
+      } else {
+        let z = r?
+        Ok(x + z)
+      }
+    } else {
+      let w = r?
+      Ok(w)
+    }
+  }
+}
+";
+
+const NESTED_IF_TS_BODY: &str = r#"export function pick(a: boolean, b: boolean, r: Result<number, string>): Result<number, string> {
+  if (a) {
+    const __r0 = r;
+    if (__r0.tag === "Err") return __r0;
+    const x = __r0.value;
+    if (b) {
+      const __r1 = r;
+      if (__r1.tag === "Err") return __r1;
+      const y = __r1.value;
+      return Ok(x + y);
+    } else {
+      const __r2 = r;
+      if (__r2.tag === "Err") return __r2;
+      const z = __r2.value;
+      return Ok(x + z);
+    }
+  } else {
+    const __r3 = r;
+    if (__r3.tag === "Err") return __r3;
+    const w = __r3.value;
+    return Ok(w);
+  }
+}
+"#;
+const NESTED_IF_MAPPINGS: &str = ";;;;;;AACE;AACE;AACE;AAAA;AAAA;AACA;AACE;AAAA;AAAA;AACA;AAAA;AAEA;AAAA;AAAA;AACA;AAAA;AAAA;AAGF;AAAA;AAAA;AACA;AAAA;AAAA;AAAA";
+
+#[test]
+fn a_nested_if_tail_maps_as_it_did_when_it_was_text() {
+    let (ts, map) = compile_reps(NESTED_IF);
+    let mappings = extract_field(&map, "mappings");
+    let at = ts.find("export function pick").expect("pick");
+    let body = &ts[at..];
+    let body = &body[..body.find("\n}\n").unwrap() + 3];
+    assert_eq!(body, NESTED_IF_TS_BODY);
+    assert_eq!(mappings, NESTED_IF_MAPPINGS);
+    // And, readably: each statement of every branch maps to its own source line
+    // (0-based: `let x` 3, `let y` 5, `Ok(x + y)` 6, `let z` 8, `Ok(x + z)` 9,
+    // `let w` 12, `Ok(w)` 13).
+    let lines = decode(mappings);
+    let src_of = |needle: &str| lines[gen_line_of(&ts, needle)].expect("mapped");
+    assert_eq!(src_of("const x = "), 3);
+    assert_eq!(src_of("const y = "), 5);
+    assert_eq!(src_of("return Ok(x + y)"), 6);
+    assert_eq!(src_of("const z = "), 8);
+    assert_eq!(src_of("return Ok(x + z)"), 9);
+    assert_eq!(src_of("const w = "), 12);
+    assert_eq!(src_of("return Ok(w)"), 13);
+}

@@ -220,6 +220,7 @@ use crate::program::{
     TsParam, TsProgram, TsStmt, TsStmtKind, TsType, TsTypeMember, TsUnaryOp,
 };
 use crate::source_map::SourceMapBuilder;
+use bynk_syntax::span::Span;
 
 /// The result of printing a [`TsProgram`]: the emitted text, and its source
 /// map — `None` when no checkpoint resolved, either because no statement
@@ -462,6 +463,7 @@ impl MergeTarget<'_> {
 /// `depth` already threads through unconditionally; a caller that has
 /// nothing to merge just passes `None`, as most still do.
 fn render_stmt(out: &mut String, stmt: &TsStmt, depth: usize, mut map: Option<MergeTarget<'_>>) {
+    note_span(out.len(), stmt);
     if let Some(nested) = &stmt.nested_map
         && let Some(target) = map.as_mut()
     {
@@ -802,6 +804,7 @@ fn render_branch(out: &mut String, branch: &TsStmt, depth: usize) {
         | TsStmtKind::Increment(_)
         | TsStmtKind::Raw(_) => {
             out.push(' ');
+            note_span(out.len(), branch);
             render_inline_stmt(out, branch);
         }
     }
@@ -2072,6 +2075,50 @@ pub fn print_stmt_and_merge(
         "print_stmt_and_merge: a Raw-bearing statement's own baked-in indent only matches depth 0"
     );
     render_stmt(out, stmt, depth, Some(MergeTarget { map, source_id }));
+}
+
+thread_local! {
+    /// The sink [`print_stmt_with_spans`] installs for the duration of one
+    /// print; `None` otherwise, so every other entry point records nothing.
+    static SPAN_SINK: std::cell::RefCell<Option<Vec<(usize, Span)>>> =
+        const { std::cell::RefCell::new(None) };
+}
+
+/// Record `stmt`'s span at `offset` if a [`print_stmt_with_spans`] is in
+/// progress and the statement carries one. The same statement can be reached
+/// twice at one offset (an inline branch is noted by `render_branch` and again
+/// by a `render_stmt` fallback), so an identical consecutive entry is dropped.
+fn note_span(offset: usize, stmt: &TsStmt) {
+    let Some(span) = stmt.span else { return };
+    SPAN_SINK.with(|sink| {
+        if let Some(spans) = sink.borrow_mut().as_mut()
+            && spans.last() != Some(&(offset, span))
+        {
+            spans.push((offset, span));
+        }
+    });
+}
+
+/// [`print_stmt`], also reporting where each statement that carries a
+/// [`TsStmt::span`] starts in the printed text (back-half paydown 1A.11,
+/// Decision C of #3712). The offset is a byte offset into the returned text,
+/// at the start of the statement's own line, so *before* its indentation; an
+/// inline `if`/`else` branch (no braces, same line as its `if`) starts after
+/// the space that separates it. The statement itself, then every statement
+/// nested in it, is reported in the order printed; a statement with no span
+/// is not reported.
+///
+/// It is the mechanism S5 of the statement-emitter design note (#3708) moves
+/// source-map recording onto, applied one statement at a time: the adapter in
+/// `bynk-emit` adds the indentation it writes before each line and records the
+/// adjusted offsets, which is what a nested checkpoint needs.
+pub fn print_stmt_with_spans(stmt: &TsStmt, depth: usize) -> (String, Vec<(usize, Span)>) {
+    let previous = SPAN_SINK.with(|sink| sink.borrow_mut().replace(Vec::new()));
+    let text = print_stmt(stmt, depth);
+    let spans = SPAN_SINK
+        .with(|sink| std::mem::replace(&mut *sink.borrow_mut(), previous))
+        .unwrap_or_default();
+    (text, spans)
 }
 
 /// Print a single [`TsObjectEntry`] on its own, at `depth` — the
@@ -6997,5 +7044,132 @@ mod tests {
         ));
         let printed = print(&program, "x.bynk", "", "x.ts");
         assert_eq!(printed.text, "a >= (b >= c);\n");
+    }
+
+    // --- `print_stmt_with_spans` (back-half paydown 1A.11) ---
+
+    fn id(name: &str) -> TsExpr {
+        TsExpr::Ident(name.to_string())
+    }
+
+    fn sp(start: usize) -> Option<Span> {
+        Some(Span::new(start, start + 1))
+    }
+
+    /// Each reported offset is the start of the statement's own line, before
+    /// its indentation.
+    fn line_at(text: &str, offset: usize) -> &str {
+        text[offset..].lines().next().expect("a line")
+    }
+
+    #[test]
+    fn spans_of_a_flat_statement_are_its_own_start() {
+        let stmt = TsStmt::return_stmt(Some(id("x")), sp(7));
+        let (text, spans) = print_stmt_with_spans(&stmt, 0);
+        assert_eq!(text, "return x;\n");
+        assert_eq!(spans, vec![(0, Span::new(7, 8))]);
+        // At a depth the offset is still before the indentation.
+        let (text, spans) = print_stmt_with_spans(&stmt, 2);
+        assert_eq!(text, "    return x;\n");
+        assert_eq!(spans, vec![(0, Span::new(7, 8))]);
+    }
+
+    #[test]
+    fn a_statement_without_a_span_is_not_reported() {
+        let stmt = TsStmt::return_stmt(Some(id("x")), None);
+        assert!(print_stmt_with_spans(&stmt, 0).1.is_empty());
+    }
+
+    #[test]
+    fn spans_of_nested_blocks_are_reported_in_printed_order() {
+        let inner = TsStmt::if_else_same_line_stmt(
+            id("b"),
+            TsStmt::block(vec![TsStmt::return_stmt(Some(id("1")), sp(40))], None),
+            TsStmt::block(vec![TsStmt::return_stmt(Some(id("2")), sp(50))], None),
+            sp(30),
+        );
+        let outer = TsStmt::if_else_same_line_stmt(
+            id("a"),
+            TsStmt::block(
+                vec![
+                    TsStmt::const_stmt(TsBindingName::Ident("v".into()), None, id("w"), sp(10)),
+                    inner,
+                ],
+                None,
+            ),
+            TsStmt::block(vec![TsStmt::return_stmt(Some(id("3")), sp(60))], None),
+            None,
+        );
+        let (text, spans) = print_stmt_with_spans(&outer, 0);
+        assert_eq!(
+            text,
+            "if (a) {\n  const v = w;\n  if (b) {\n    return 1;\n  } else {\n    return 2;\n  }\n} else {\n  return 3;\n}\n"
+        );
+        let starts: Vec<usize> = spans.iter().map(|(_, s)| s.start).collect();
+        assert_eq!(starts, [10, 30, 40, 50, 60]);
+        let lines: Vec<&str> = spans.iter().map(|(o, _)| line_at(&text, *o)).collect();
+        assert_eq!(
+            lines,
+            [
+                "  const v = w;",
+                "  if (b) {",
+                "    return 1;",
+                "    return 2;",
+                "  return 3;"
+            ]
+        );
+    }
+
+    #[test]
+    fn an_inline_branch_starts_after_its_separating_space() {
+        let stmt = TsStmt::if_else_stmt(
+            id("c"),
+            TsStmt::return_stmt(Some(id("1")), sp(5)),
+            TsStmt::return_stmt(Some(id("2")), sp(6)),
+            sp(4),
+        );
+        let (text, spans) = print_stmt_with_spans(&stmt, 0);
+        assert_eq!(text, "if (c) return 1;\nelse return 2;\n");
+        let at: Vec<(&str, usize)> = spans
+            .iter()
+            .map(|(o, s)| (&text[*o..*o + 8.min(text.len() - o)], s.start))
+            .collect();
+        assert_eq!(at, [("if (c) r", 4), ("return 1", 5), ("return 2", 6)]);
+    }
+
+    #[test]
+    fn a_multi_line_node_reports_offsets_that_count_every_line() {
+        let stmt = TsStmt::block(
+            vec![
+                TsStmt::if_stmt(
+                    id("x"),
+                    TsStmt::block(vec![TsStmt::expr_stmt(id("a"), sp(1))], None),
+                    sp(0),
+                ),
+                TsStmt::expr_stmt(id("b"), sp(2)),
+            ],
+            None,
+        );
+        let (text, spans) = print_stmt_with_spans(&stmt, 0);
+        let lines: Vec<(&str, usize)> = spans
+            .iter()
+            .map(|(o, s)| (line_at(&text, *o), s.start))
+            .collect();
+        assert_eq!(lines, [("  if (x) {", 0), ("    a;", 1), ("  b;", 2)]);
+    }
+
+    #[test]
+    fn other_printing_records_nothing_and_the_sink_is_restored() {
+        let stmt = TsStmt::return_stmt(Some(id("x")), sp(7));
+        let _ = print_stmt_with_spans(&stmt, 0);
+        // A plain print afterwards must not leave anything behind.
+        let _ = print_stmt(&stmt, 0);
+        assert!(
+            print_stmt_with_spans(&TsStmt::continue_stmt(None), 0)
+                .1
+                .is_empty()
+        );
+        let again = print_stmt_with_spans(&stmt, 0);
+        assert_eq!(again.1.len(), 1);
     }
 }
