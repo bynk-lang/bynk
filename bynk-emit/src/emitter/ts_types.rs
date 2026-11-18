@@ -662,7 +662,7 @@ mod ts_type_ref_tests {
 /// review, not speculative): a resolved multi-actor sum lowers to a genuine
 /// type-position union no existing `TsType` variant could represent, closed
 /// by adding `TsType::Union` (see its own doc).
-pub(super) fn ts_ty(t: TyId, tys: &Arc<Types>) -> String {
+pub(super) fn ts_ty(t: TyId, tys: TyRender<'_>) -> String {
     bynk_ts::print_type(&ts_ty_to_ts_type(t, tys))
 }
 
@@ -700,39 +700,48 @@ pub(super) fn ts_array_elem(elem_ts: &str) -> String {
 /// `Ty::Named`, so within the unit a hidden name always means the imported
 /// type.
 ///
-/// Scoped per module, not threaded: `ts_ty` has ~45 callers and no module
-/// context. [`type_renames::enter`] sets the spellings for this thread until its
-/// guard drops, and a module is lowered on one thread.
-pub mod type_renames {
-    use std::cell::RefCell;
-    use std::collections::HashMap;
+/// Scoped per module and carried by [`TyRender`]: the spellings are a field of
+/// the unit's [`EmitProjectCtx`] (`type_spellings`), built by the driver from
+/// `shadowed_imports`, and every renderer reaches them through the `TyRender`
+/// it is handed instead of a thread-local.
+#[derive(Clone, Copy)]
+pub(crate) struct TyRender<'a> {
+    tys: &'a Arc<Types>,
+    spellings: &'a HashMap<String, String>,
+}
 
-    thread_local! {
-        static SPELLINGS: RefCell<HashMap<String, String>> = RefCell::new(HashMap::new());
+impl<'a> TyRender<'a> {
+    /// The checker's interner plus the unit's hidden-type spellings.
+    pub(crate) fn new(tys: &'a Arc<Types>, spellings: &'a HashMap<String, String>) -> Self {
+        Self { tys, spellings }
     }
 
-    /// Restores the spellings in force before [`enter`] when it drops.
-    pub struct Guard(HashMap<String, String>);
-
-    impl Drop for Guard {
-        fn drop(&mut self) {
-            let previous = std::mem::take(&mut self.0);
-            SPELLINGS.with(|s| *s.borrow_mut() = previous);
-        }
+    /// The interner, for a caller that wants `Ty` structure and not text.
+    pub(crate) fn types(&self) -> &'a Arc<Types> {
+        self.tys
     }
 
-    /// Spell each type in `spellings` (name → TypeScript text) until the
-    /// returned guard drops.
-    #[must_use]
-    pub fn enter(spellings: HashMap<String, String>) -> Guard {
-        Guard(SPELLINGS.with(|s| std::mem::replace(&mut *s.borrow_mut(), spellings)))
-    }
-
-    /// How the current module spells the type `name`: its rename, if any.
-    pub(crate) fn spelling(name: &str) -> String {
-        SPELLINGS
-            .with(|s| s.borrow().get(name).cloned())
+    /// How the unit spells the type `name`: its rename, if any.
+    pub(crate) fn spelling(&self, name: &str) -> String {
+        self.spellings
+            .get(name)
+            .cloned()
             .unwrap_or_else(|| name.to_string())
+    }
+}
+
+/// The spellings of a unit that hides no imported type (and of a lowering with
+/// no unit behind it): every name is spelled as itself.
+pub(crate) fn no_spellings() -> &'static HashMap<String, String> {
+    static NONE: std::sync::LazyLock<HashMap<String, String>> =
+        std::sync::LazyLock::new(HashMap::new);
+    &NONE
+}
+
+impl std::ops::Deref for TyRender<'_> {
+    type Target = Arc<Types>;
+    fn deref(&self) -> &Arc<Types> {
+        self.tys
     }
 }
 
@@ -747,7 +756,7 @@ pub(super) fn query_result_ty(elem: TsType) -> TsType {
     ])
 }
 
-pub(super) fn ts_ty_to_ts_type(t: TyId, tys: &Arc<Types>) -> TsType {
+pub(super) fn ts_ty_to_ts_type(t: TyId, tys: TyRender<'_>) -> TsType {
     match &*tys.get(t) {
         // bynk internal error (finding #28, R4.3): `Ty::Error` records a
         // resolution failure, which per R4.3 is always accompanied by a
@@ -777,11 +786,9 @@ pub(super) fn ts_ty_to_ts_type(t: TyId, tys: &Arc<Types>) -> TsType {
         ]),
         // v0.157 (ADR 0183): a generic record instantiation renders as the
         // erased TS generic `Name<Arg, …>`; a non-generic named type is bare.
-        Ty::Named { name, args, .. } if args.is_empty() => {
-            TsType::named(type_renames::spelling(name))
-        }
+        Ty::Named { name, args, .. } if args.is_empty() => TsType::named(tys.spelling(name)),
         Ty::Named { name, args, .. } => TsType::named_with_args(
-            type_renames::spelling(name),
+            tys.spelling(name),
             args.iter().map(|a| ts_ty_to_ts_type(*a, tys)).collect(),
         ),
         Ty::Result(t, e) => TsType::named_with_args(
@@ -884,7 +891,13 @@ mod ts_ty_tests {
     #[test]
     fn base_types() {
         let tys = Arc::new(Types::new());
-        assert_eq!(ts_ty(tys.intern(Ty::Base(BaseType::Int)), &tys), "number");
+        assert_eq!(
+            ts_ty(
+                tys.intern(Ty::Base(BaseType::Int)),
+                TyRender::new(&tys, no_spellings())
+            ),
+            "number"
+        );
     }
 
     #[test]
@@ -895,7 +908,7 @@ mod ts_ty_tests {
             kind: NamedKind::Record,
             args: vec![],
         });
-        assert_eq!(ts_ty(bare, &tys), "Order");
+        assert_eq!(ts_ty(bare, TyRender::new(&tys, no_spellings())), "Order");
 
         let arg = tys.intern(Ty::Base(BaseType::String));
         let generic = tys.intern(Ty::Named {
@@ -903,7 +916,10 @@ mod ts_ty_tests {
             kind: NamedKind::Record,
             args: vec![arg],
         });
-        assert_eq!(ts_ty(generic, &tys), "Paginated<string>");
+        assert_eq!(
+            ts_ty(generic, TyRender::new(&tys, no_spellings())),
+            "Paginated<string>"
+        );
     }
 
     #[test]
@@ -914,12 +930,12 @@ mod ts_ty_tests {
         let v = tys.intern(Ty::Base(BaseType::Int));
         let entry = bynk_check::checker::map_entry_ty(k, v, &tys);
         assert_eq!(
-            ts_ty(entry, &tys),
+            ts_ty(entry, TyRender::new(&tys, no_spellings())),
             "{ readonly key: string; readonly value: number }"
         );
         let list = tys.intern(Ty::List(entry));
         assert_eq!(
-            ts_ty(list, &tys),
+            ts_ty(list, TyRender::new(&tys, no_spellings())),
             "readonly { readonly key: string; readonly value: number }[]"
         );
     }
@@ -934,20 +950,35 @@ mod ts_ty_tests {
             args: vec![],
         });
         let result = tys.intern(Ty::Result(int, err));
-        assert_eq!(ts_ty(result, &tys), "Result<number, MyError>");
+        assert_eq!(
+            ts_ty(result, TyRender::new(&tys, no_spellings())),
+            "Result<number, MyError>"
+        );
 
         let option = tys.intern(Ty::Option(int));
-        assert_eq!(ts_ty(option, &tys), "Option<number>");
+        assert_eq!(
+            ts_ty(option, TyRender::new(&tys, no_spellings())),
+            "Option<number>"
+        );
 
         let effect = tys.intern(Ty::Effect(int));
-        assert_eq!(ts_ty(effect, &tys), "globalThis.Promise<number>");
+        assert_eq!(
+            ts_ty(effect, TyRender::new(&tys, no_spellings())),
+            "globalThis.Promise<number>"
+        );
 
         let unit = tys.intern(Ty::Unit);
         let effect_unit = tys.intern(Ty::Effect(unit));
-        assert_eq!(ts_ty(effect_unit, &tys), "globalThis.Promise<void>");
+        assert_eq!(
+            ts_ty(effect_unit, TyRender::new(&tys, no_spellings())),
+            "globalThis.Promise<void>"
+        );
 
         let http_result = tys.intern(Ty::HttpResult(int));
-        assert_eq!(ts_ty(http_result, &tys), "HttpResult<number>");
+        assert_eq!(
+            ts_ty(http_result, TyRender::new(&tys, no_spellings())),
+            "HttpResult<number>"
+        );
     }
 
     #[test]
@@ -958,27 +989,51 @@ mod ts_ty_tests {
             kind: NamedKind::Record,
             args: vec![],
         });
-        assert_eq!(ts_ty(tys.intern(Ty::List(order)), &tys), "readonly Order[]");
+        assert_eq!(
+            ts_ty(
+                tys.intern(Ty::List(order)),
+                TyRender::new(&tys, no_spellings())
+            ),
+            "readonly Order[]"
+        );
         // A nested list's inner readonly array is parenthesised (TS1354).
         let orders = tys.intern(Ty::List(order));
         assert_eq!(
-            ts_ty(tys.intern(Ty::List(orders)), &tys),
+            ts_ty(
+                tys.intern(Ty::List(orders)),
+                TyRender::new(&tys, no_spellings())
+            ),
             "readonly (readonly Order[])[]"
         );
-        assert_eq!(ts_array_elem(&ts_ty(orders, &tys)), "(readonly Order[])");
-        assert_eq!(ts_array_elem(&ts_ty(order, &tys)), "Order");
+        assert_eq!(
+            ts_array_elem(&ts_ty(orders, TyRender::new(&tys, no_spellings()))),
+            "(readonly Order[])"
+        );
+        assert_eq!(
+            ts_array_elem(&ts_ty(order, TyRender::new(&tys, no_spellings()))),
+            "Order"
+        );
 
         let s = tys.intern(Ty::Base(BaseType::String));
         assert_eq!(
-            ts_ty(tys.intern(Ty::Map(s, order)), &tys),
+            ts_ty(
+                tys.intern(Ty::Map(s, order)),
+                TyRender::new(&tys, no_spellings())
+            ),
             "ReadonlyMap<string, Order>"
         );
         assert_eq!(
-            ts_ty(tys.intern(Ty::Stream(order)), &tys),
+            ts_ty(
+                tys.intern(Ty::Stream(order)),
+                TyRender::new(&tys, no_spellings())
+            ),
             "AsyncIterable<Order>"
         );
         assert_eq!(
-            ts_ty(tys.intern(Ty::Connection(order)), &tys),
+            ts_ty(
+                tys.intern(Ty::Connection(order)),
+                TyRender::new(&tys, no_spellings())
+            ),
             "Connection<Order>"
         );
     }
@@ -995,7 +1050,10 @@ mod ts_ty_tests {
             args: vec![],
         });
         assert_eq!(
-            ts_ty(tys.intern(Ty::Query(order)), &tys),
+            ts_ty(
+                tys.intern(Ty::Query(order)),
+                TyRender::new(&tys, no_spellings())
+            ),
             "(() => readonly Order[] | globalThis.Promise<readonly Order[]>)"
         );
     }
@@ -1003,13 +1061,31 @@ mod ts_ty_tests {
     #[test]
     fn bare_types_and_fn() {
         let tys = Arc::new(Types::new());
-        assert_eq!(ts_ty(tys.intern(Ty::QueueResult), &tys), "QueueResult");
         assert_eq!(
-            ts_ty(tys.intern(Ty::ValidationError), &tys),
+            ts_ty(
+                tys.intern(Ty::QueueResult),
+                TyRender::new(&tys, no_spellings())
+            ),
+            "QueueResult"
+        );
+        assert_eq!(
+            ts_ty(
+                tys.intern(Ty::ValidationError),
+                TyRender::new(&tys, no_spellings())
+            ),
             "ValidationError"
         );
-        assert_eq!(ts_ty(tys.intern(Ty::DecodeError), &tys), "DecodeError");
-        assert_eq!(ts_ty(tys.intern(Ty::Unit), &tys), "void");
+        assert_eq!(
+            ts_ty(
+                tys.intern(Ty::DecodeError),
+                TyRender::new(&tys, no_spellings())
+            ),
+            "DecodeError"
+        );
+        assert_eq!(
+            ts_ty(tys.intern(Ty::Unit), TyRender::new(&tys, no_spellings())),
+            "void"
+        );
 
         let int = tys.intern(Ty::Base(BaseType::Int));
         let s = tys.intern(Ty::Base(BaseType::String));
@@ -1017,7 +1093,10 @@ mod ts_ty_tests {
             params: vec![int, s],
             ret: int,
         });
-        assert_eq!(ts_ty(f, &tys), "(a0: number, a1: string) => number");
+        assert_eq!(
+            ts_ty(f, TyRender::new(&tys, no_spellings())),
+            "(a0: number, a1: string) => number"
+        );
     }
 
     /// The real gap found during implementation review: a resolved
@@ -1039,7 +1118,7 @@ mod ts_ty_tests {
             ("Admin".to_string(), identity),
         ]));
         assert_eq!(
-            ts_ty(sum, &tys),
+            ts_ty(sum, TyRender::new(&tys, no_spellings())),
             "{ tag: \"Guest\" } | { tag: \"Admin\", identity: AdminIdentity }"
         );
     }
@@ -1050,7 +1129,13 @@ mod ts_ty_tests {
     #[test]
     fn var_and_actor() {
         let tys = Arc::new(Types::new());
-        assert_eq!(ts_ty(tys.intern(Ty::Var("T".to_string())), &tys), "T");
+        assert_eq!(
+            ts_ty(
+                tys.intern(Ty::Var("T".to_string())),
+                TyRender::new(&tys, no_spellings())
+            ),
+            "T"
+        );
 
         let identity = tys.intern(Ty::Named {
             name: "AdminIdentity".to_string(),
@@ -1058,6 +1143,9 @@ mod ts_ty_tests {
             args: vec![],
         });
         let actor = tys.intern(Ty::Actor(identity));
-        assert_eq!(ts_ty(actor, &tys), "AdminIdentity");
+        assert_eq!(
+            ts_ty(actor, TyRender::new(&tys, no_spellings())),
+            "AdminIdentity"
+        );
     }
 }

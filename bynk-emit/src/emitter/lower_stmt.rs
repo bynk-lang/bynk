@@ -83,10 +83,10 @@ impl Body {
     }
 }
 
-#[cfg(test)]
+#[cfg(any(test, feature = "text-exit-counters"))]
 thread_local! {
     /// Test-only: how many `Item::Line`s have been rendered (1A.11's "converted
-    /// to nodes" tests read it; never compiled into the emitter).
+    /// to nodes" tests read it; see `lower::text_counters`).
     static LINES_RENDERED: std::cell::Cell<usize> = const { std::cell::Cell::new(0) };
 }
 
@@ -96,7 +96,7 @@ pub(super) fn render(body: &Body, out: &mut String, indent: usize, cx: &LowerCtx
     for item in &body.0 {
         match item {
             Item::Line(text) => {
-                #[cfg(test)]
+                #[cfg(any(test, feature = "text-exit-counters"))]
                 LINES_RENDERED.with(|c| c.set(c.get() + 1));
                 write_line(out, indent, text);
             }
@@ -484,7 +484,7 @@ fn lower_tail_expr(e: &Expr, cx: &mut LowerCtx, async_tail: bool) -> Lowered {
 /// `Effect`-typed falls through to `lower_expr` and yields `Promise<T>` — so the
 /// annotation admits both rather than picking one.
 fn async_tail_slot_ty(e: &Expr, cx: &LowerCtx) -> Option<String> {
-    let tys = cx.commons().tys();
+    let tys = cx.ty_render();
     match cx.commons().expr_ty(e.id).as_deref() {
         Some(Ty::Effect(inner)) => {
             let inner_ts = match &*tys.get(*inner) {
@@ -1612,7 +1612,12 @@ mod body_tests {
         let cross_context = bynk_check::resolver::CrossContextInfo::default();
         let runtime_use = RuntimeUse::default();
         let cx = LowerCtx::new(
-            ModuleCtx::new(&commons, &cross_context, &runtime_use),
+            ModuleCtx::new(
+                &commons,
+                &cross_context,
+                &runtime_use,
+                UnitFacts::detached(),
+            ),
             BodyMode::Method,
         )
         .with_source_map(Some(smb));

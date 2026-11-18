@@ -158,11 +158,13 @@ binding model has one compose path to serve.
 | **1A.13** (S4) | `match` in tail position (`emit_match_*`, as `Switch` or an `if` chain), `par`, `emit_is_test_bindings` and the short-circuit operators `&&`, `||` and `implies` (as `Arrow` IIFEs, Decision F of #3708). Expected output change: possibly layout only. Reasoning in #3708. |
 | **1A.14** (S5) | Callers take statements: handler, method, function and TCO bodies become `Vec<TsStmt>`, the `TsStmt::raw(body_text)` sites are deleted, the claim-scope wrapper becomes a `TryCatch`/`finally` node, and source maps move to the printer (`record_span`, `merge` and `without_source_map` go). Lowers `ts_raw_sites`. Expected output change: source maps, where IIFE lines gain mappings. Reasoning in #3708. |
 | **1A.15–n** | Convert the remaining lowerings to `Node`, leaves first (literals are done in 1A.2, wrappers in 1A.3, identifiers in 1A.4, value operators in 1A.5, calls in 1A.6, data literals in 1A.7, `?` and the ternary `if` in 1A.8, and the statement emitter and the control-flow forms that build their bodies through it in 1A.9–1A.14): the method-call dispatch families (store, scalar/collection statics, runtime values, D1, cross-context, events, cookies, capabilities, type statics, test and system services, agent calls, kernel methods), witnesses (`CmpGen`/`CodecGen`), the open `type_args` question, the test-domain constructs (`Val`, `Observation`, `Faults`, `Trace`), field defaults (an emitter-side builder mirroring `lower_field_default_value`, as its own proposal), `Is`, and the list kernel. One expression family per slice, each following the 1A.3 mixed-children rule. Each slice lowers `ts_writes`; `lowering_text_bridge` falls as text construction sites are replaced. |
+| **1A.32c** | The 17 non-carrier `TsStmt::raw(` sites in `emit.rs`. **Required, not optional** (amended 2026-11-18): the production target in §8 cannot be met without it. Lowers `ts_raw_sites_emit`. |
+| **1A.38** | Remaining production raw sites: `http_client.rs`, `serialisation.rs`, `workers_*`, `emitter.rs`. Convert each, or keep it with a stated foreign-text reason, so that production is at most 10 (§8). Added 2026-11-18; proposal to follow. |
 | **1A.x** | Once nothing produces `Text`, delete the variant and `print_expr` round-trips. `ts_array_elem`-style text inspection goes too; the printer owns precedence. |
 | **1A.imports** | Derive each module's runtime and type imports from the built tree using `bynk-ts/src/name_closure.rs`. Delete the `*needs*` / `*mentions*` / `*uses*` prediction functions. |
 | **1A.fallback** | One policy for a missing checker fact: an internal-compiler-error diagnostic, never `any` and never `undefined`. Remove the `"any"` fallbacks. |
 | **1A.resolve** | The checker records the resolved callee and store kind on the typed tree. Emit stops comparing names against string literals (for example `cap == "Idempotency"`, the store-head match in `emit.rs`). |
-| **1A.state** | Remove the two `thread_local!`s (`FAULT_SOURCE`, `type_renames::SPELLINGS`) by passing module context explicitly. |
+| **1A.state** (1A.19, #3720) | Remove the two `thread_local!`s (`FAULT_SOURCE`, `type_renames::SPELLINGS`) by passing module context explicitly: the unit's source and hidden-type spellings are fields of `EmitProjectCtx`, reached through `UnitFacts` on `ModuleCtx` and a `TyRender` in place of the bare `tys` argument. A gated growth probe, `emit_thread_locals`, holds `bynk-emit` at 0. |
 | **1A.lints** | Bring `bynk-emit` to zero wildcard arms (192 at v0.639.1, review §1.2) and opt it into `[lints] workspace = true`, which is a Phase 1 exit criterion. Until it lands, a slice that adds an arm to `bynk-emit` says why (invariant 4). Each 1A slice removes the arms in the code it rewrites; this slice owns whatever remains, chiefly over `Ty`, `BodyMode` and `TypeRef` outside lowering. |
 
 ### 1B. One compose model; code generation out of the driver (review §2.3, §3)
@@ -173,6 +175,7 @@ binding model has one compose path to serve.
 | **1B.2** | Move test-harness generation (`project/tests_emit/*`), `emit_composition_root` and the per-Worker emission out of `bynk-driver` and into a `bynk-emit::testgen` module (Q3). The driver keeps orchestration, file I/O and process spawning. This removes `bynk-emit`'s dev-dependency on `bynk-driver`. |
 | **1B.3** | Turn the test runtime into real, type-checked modules under `bynk-emit/runtime/src/testing/`. Move the `makeIntegration*` / `makeTestState` fakes out of production `storage.ts` into it. Delete the driver's TS lexer (`names_ident`) and its text patching of emitted TypeScript (`merge_cookie`). Bring `http_client_runtime.ts` under the runtime's `tsconfig.json` and `bundle.mjs --check`, and add a guard that every test-runtime module is type-checked whether or not a fixture uses it (absorbs the retired P0.6). |
 | **1B.4** | Deduplicate the shared node builders (`str_lit`, `ident`, `member`, `call`) and `append_missing_bindings` (three copies) into one `bynk-emit` module. |
+| **1B.5** | Test-harness generation builds nodes, after 1B.2: the `TsStmt::raw(` sites in `bynk-emit::testgen` are converted or kept with a stated foreign-text reason. A track-exit item (§8), not a lifting condition. Lowers `ts_raw_sites_testgen`. Added 2026-11-18. |
 
 ### 1C. One binding model (review §4)
 
@@ -253,11 +256,13 @@ out carries its unit tests with it.
 |---|---:|---:|---:|
 | Gated growth probes | re-baselined (165 rises of `ts_writes`) | ratchets (P0.1) | ratchets |
 | `ts_writes` (bynk-emit + driver `project/**`) | 1,502 | ≤ 40% of today | ≤ 20% |
-| `ts_raw_sites`: `TsStmt::raw(` sites (emit + driver) | 99 | ≤ 10, each with a stated foreign-text reason | ≤ 5 |
+| `ts_raw_sites_emit`, production emission: `TsStmt::raw(` sites in `bynk-emit`, excluding test-harness generation | 41 | ≤ 10, each with a stated foreign-text reason | ≤ 5 |
+| `ts_raw_sites_testgen`, test-harness generation: the driver's `project/tests_emit/**`, which becomes `bynk-emit::testgen` after 1B.2 | 58 | no rise (ratchet), each site listed with its reason | ≤ 5 |
 | `ts_text_idents`: `Ident(format!(` sites (emit + driver) | 14 | 0 | 0 |
 | `lowering_text_bridge`: text construction sites of the lowering bridge | 127 (at 1A.2) | 0: lowering returns `TsExpr` only; `Text` bridge deleted | 0 |
 | Import-prediction functions | 17 | 0 | 0 |
-| `"any"` fallbacks in lowering | 5 | 0 | 0 |
+| `"any"` in lowering: missing-fact fallbacks | 4 | 0: a missing checker fact is an internal-compiler-error diagnostic (1A.34) | 0 |
+| `"any"` in lowering: deliberate widenings | 1 (#2795 receiver slot) | 1, named in one function with its reason | reviewed (kept only with a recorded reason) |
 | Compose implementations | 2 | 1 (`ComposePlan`) | 1 |
 | Places a binding kind is defined | ≥ 3 | 1 (`WorkerBindings`) | 1 |
 | Deploy: apply consumes `Plan` | no | yes | yes |
@@ -269,9 +274,13 @@ out carries its unit tests with it.
 | Files newly crossing 2,000 production lines | — | — | 0, by ratchet (Q5) |
 | bynk-emit unit tests per 1k production lines | 7.1 | — | per 3.4's floor |
 
-The `ts_writes`, `ts_raw_sites` and `ts_text_idents` targets are measured over bynk-emit and
+The `ts_writes` and `ts_text_idents` targets are measured over bynk-emit and
 bynk-driver's `project/**` *combined* (`codegen_family_files`). 1B.2 moves `tests_emit` from the driver into bynk-emit, so the move itself
 is neither progress nor regression.
+
+`ts_raw_sites` is split by origin (amended 2026-11-18). Production emission is what users deploy, and it is what the Phase 1 target is about. Test-harness generation is generated test scaffolding, which moves wholesale in 1B.2 and is converted after Phase 1. Meeting the production target needs 1A.32c, which is no longer optional, and one more slice (§5 row 1A.38) for the `http_client.rs`, `serialisation.rs` and `workers_*` sites, or a stated foreign-text reason for each that stays. Converting the test-harness sites is a 1B row after 1B.2 (1B.5), and is a track-exit item, not a lifting condition. The probe is split the same way: `ts_raw_sites_emit` and `ts_raw_sites_testgen` are both gated growth probes with the same counting logic divided by path, and together they read what `ts_raw_sites` read (41 + 58 = 99 when it was split), so the split is a reclassification and not a fall.
+
+The `"any"` row is split (amended 2026-11-18) after 1A.34 classified the five sites: four were missing-fact fallbacks and one is a deliberate type widening (#2795). The widening is not debt in the sense this track pays down. Removing it would change emitted types, which a paydown slice may not do (invariant 2). So it is kept, named, and reviewed at track exit.
 
 The back-half file rows count `src/` files in `bynk-model`, `bynk-emit`, `bynk-ts`, `bynk-driver`,
 `bynk-strip` and `bynk`. On 1 October they read 5 and 10. Review §6.1's 18 and 50 count the whole

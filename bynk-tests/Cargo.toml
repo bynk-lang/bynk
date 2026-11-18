@@ -35,6 +35,8 @@ clap.workspace = true
 bynk-std = { workspace = true, features = ["test-support"] }
 
 [dev-dependencies]
+# The text-exit counters, real on the driver's own copy of the emitter (see the feature's note).
+bynk-emit = { workspace = true, features = ["text-exit-counters"] }
 serde_json.workspace = true
 # `xtask::site_page` (the generated-page transform `wire_reference` uses).
 xtask = { path = "../xtask" }
