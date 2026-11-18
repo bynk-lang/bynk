@@ -896,7 +896,7 @@ impl Walk {
                 self.opt_ty(return_type);
                 match body.as_ref() {
                     TsArrowBody::Expr(e) => self.expr(e),
-                    TsArrowBody::Block(stmts) => self.stmts(stmts),
+                    TsArrowBody::Block(stmts) | TsArrowBody::Multiline(stmts) => self.stmts(stmts),
                 }
             }
             TsExpr::Call { callee, args } | TsExpr::New { callee, args } => {

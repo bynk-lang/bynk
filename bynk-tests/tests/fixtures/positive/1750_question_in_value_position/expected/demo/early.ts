@@ -163,11 +163,11 @@ export function inLambda(c: boolean, r: Result<number, string>): Result<number, 
     if (c) {
       const k = 1;
       return apply((x: Result<number, string>) => {
-    const __r0 = x;
-    if (__r0.tag === "Err") return __r0;
-    const y = __r0.value;
-    return Ok(y + k);
-  }, r);
+        const __r0 = x;
+        if (__r0.tag === "Err") return __r0;
+        const y = __r0.value;
+        return Ok(y + k);
+      }, r);
     } else {
       return Ok(0);
     }
