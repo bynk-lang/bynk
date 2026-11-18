@@ -95,13 +95,13 @@ async function test_authorise_returns_Err_Declined__for_zero() {
     type PaymentError = __ns_commerce_payment.PaymentError;
     const result = await authorise.call(0, deps);
     void (((__d) => {
-        if (__d.tag === "Err" && __d.error.tag === "Declined") {
-          if (!(true)) { throw __bynkExpectFailure("tests/payment.test.bynk:12:33", 327, 331, "expect true"); }
-          return undefined;
-        }
-        if (!(false)) { throw __bynkExpectFailure("tests/payment.test.bynk:13:33", 366, 371, "expect false"); }
+      if (__d.tag === "Err" && __d.error.tag === "Declined") {
+        if (!(true)) { throw __bynkExpectFailure("tests/payment.test.bynk:12:33", 327, 331, "expect true"); }
         return undefined;
-      })(result));
+      }
+      if (!(false)) { throw __bynkExpectFailure("tests/payment.test.bynk:13:33", 366, 371, "expect false"); }
+      return undefined;
+    })(result));
     return { pass: true };
   } catch (e) {
     if (e instanceof ExpectationError) {
@@ -120,13 +120,13 @@ async function test_authorise_returns_Err_InsufficientFunds__for_large_amounts()
     type PaymentError = __ns_commerce_payment.PaymentError;
     const result = await authorise.call(2000000, deps);
     void (((__d) => {
-        if (__d.tag === "Err" && __d.error.tag === "InsufficientFunds") {
-          if (!(true)) { throw __bynkExpectFailure("tests/payment.test.bynk:20:42", 557, 561, "expect true"); }
-          return undefined;
-        }
-        if (!(false)) { throw __bynkExpectFailure("tests/payment.test.bynk:21:42", 605, 610, "expect false"); }
+      if (__d.tag === "Err" && __d.error.tag === "InsufficientFunds") {
+        if (!(true)) { throw __bynkExpectFailure("tests/payment.test.bynk:20:42", 557, 561, "expect true"); }
         return undefined;
-      })(result));
+      }
+      if (!(false)) { throw __bynkExpectFailure("tests/payment.test.bynk:21:42", 605, 610, "expect false"); }
+      return undefined;
+    })(result));
     return { pass: true };
   } catch (e) {
     if (e instanceof ExpectationError) {

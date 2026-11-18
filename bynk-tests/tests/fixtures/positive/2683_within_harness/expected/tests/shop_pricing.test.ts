@@ -628,7 +628,10 @@ async function test_the_abandoned_call_is_observed_once_the_case_settles() {
     const r = await __bynkSettleVirtual(deps, quotes.call(4, deps));
     if (!(r === "timed out after 2000")) { throw __bynkExpectFailure("tests/pricing.bynk:39:12", 1193, 1220, "expect r == \"timed out after 2000\"\n  expected: r == \"timed out after 2000\"\n  actual:   " + __bynkShow((r)) + " == " + __bynkShow(("timed out after 2000"))); }
     if (!(((__obs.log["Pricing.quote"] ?? []).length === (1)))) { throw __bynkExpectFailure("tests/pricing.bynk:40:12", 1232, 1257, "expect Pricing.quote called once"); }
-    if (!((((__obs.log["Pricing.quote"] ?? []).filter((__c: { args: unknown[] }) => { const { id } = { id: __c.args[0] } as __Pricing_quote_Call; return (id === 4); }).length) >= 1))) { throw __bynkExpectFailure("tests/pricing.bynk:41:12", 1269, 1302, "expect Pricing.quote called with id == 4"); }
+    if (!((((__obs.log["Pricing.quote"] ?? []).filter((__c: { args: unknown[] }) => {
+      const { id } = { id: __c.args[0] } as __Pricing_quote_Call;
+      return (id === 4);
+    }).length) >= 1))) { throw __bynkExpectFailure("tests/pricing.bynk:41:12", 1269, 1302, "expect Pricing.quote called with id == 4"); }
     return { pass: true };
   } catch (e) {
     if (e instanceof ExpectationError) {

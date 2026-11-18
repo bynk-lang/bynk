@@ -247,6 +247,13 @@ mod tests {
             "{ encode: __serialise_Rec, decode: __deserialise_Rec }"
         );
         assert!(witness_of(&ts, "base").starts_with("{ encode: (__v: number) => "));
-        assert!(imports(&ts, "JsonValue") || ts.contains("__JsonValue"));
+        // The runtime import the boundary codec adds (`note_boundary_codec`).
+        assert!(
+            ts.lines().any(
+                |l| l.starts_with("import type { __JsonValue, __BoundaryError }")
+                    && l.contains("__bynk_runtime/boundary.js")
+            ),
+            "{ts}"
+        );
     }
 }

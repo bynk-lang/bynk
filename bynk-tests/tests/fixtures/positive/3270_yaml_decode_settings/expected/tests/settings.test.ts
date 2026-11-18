@@ -83,19 +83,19 @@ async function test_an_absent_Option_key_and_an_absent_default_take_their_defaul
     type Settings = __ns_settings.Settings;
     type Triage = __ns_settings.Triage;
     void (((__d) => {
-        switch (__d.tag) {
-          case "Ok": {
-            const s = __d.value;
-            if (!(__bynkEq(s.nudges, None))) { throw __bynkExpectFailure("tests/settings.test.bynk:20:16", 879, 895, "expect s.nudges == None\n  expected: s.nudges == None\n  actual:   " + __bynkShow((s.nudges)) + " == " + __bynkShow((None))); }
-            if (!(s.mode === "auto")) { throw __bynkExpectFailure("tests/settings.test.bynk:21:16", 911, 927, "expect s.mode == \"auto\"\n  expected: s.mode == \"auto\"\n  actual:   " + __bynkShow((s.mode)) + " == " + __bynkShow(("auto"))); }
-            return undefined;
-          }
-          case "Err": {
-            return __bynkExpect((false), "tests/settings.test.bynk:23:24", 959, 964, "expect false");
-          }
+      switch (__d.tag) {
+        case "Ok": {
+          const s = __d.value;
+          if (!(__bynkEq(s.nudges, None))) { throw __bynkExpectFailure("tests/settings.test.bynk:20:16", 879, 895, "expect s.nudges == None\n  expected: s.nudges == None\n  actual:   " + __bynkShow((s.nudges)) + " == " + __bynkShow((None))); }
+          if (!(s.mode === "auto")) { throw __bynkExpectFailure("tests/settings.test.bynk:21:16", 911, 927, "expect s.mode == \"auto\"\n  expected: s.mode == \"auto\"\n  actual:   " + __bynkShow((s.mode)) + " == " + __bynkShow(("auto"))); }
+          return undefined;
         }
-        throw new globalThis.Error("non-exhaustive match");
-      })(load("triage:\n  enabled: false\n  labels: []\n")));
+        case "Err": {
+          return __bynkExpect((false), "tests/settings.test.bynk:23:24", 959, 964, "expect false");
+        }
+      }
+      throw new globalThis.Error("non-exhaustive match");
+    })(load("triage:\n  enabled: false\n  labels: []\n")));
     return { pass: true };
   } catch (e) {
     if (e instanceof ExpectationError) {
@@ -179,19 +179,19 @@ async function test_a_refinement_violation_names_its_path() {
     type Triage = __ns_settings.Triage;
     const text = "triage:\n  enabled: true\n  labels: []\nnudges:\n  after_days: 31\n";
     void (((__d) => {
-        switch (__d.tag) {
-          case "Ok": {
-            return __bynkExpect((false), "tests/settings.test.bynk:44:23", 1612, 1617, "expect false");
-          }
-          case "Err": {
-            const e = __d.error;
-            if (!(e.kind === "RefinementViolation")) { throw __bynkExpectFailure("tests/settings.test.bynk:46:16", 1651, 1682, "expect e.kind == \"RefinementViolation\"\n  expected: e.kind == \"RefinementViolation\"\n  actual:   " + __bynkShow((e.kind)) + " == " + __bynkShow(("RefinementViolation"))); }
-            if (!(e.path === "$.nudges.after_days")) { throw __bynkExpectFailure("tests/settings.test.bynk:47:16", 1698, 1729, "expect e.path == \"$.nudges.after_days\"\n  expected: e.path == \"$.nudges.after_days\"\n  actual:   " + __bynkShow((e.path)) + " == " + __bynkShow(("$.nudges.after_days"))); }
-            return undefined;
-          }
+      switch (__d.tag) {
+        case "Ok": {
+          return __bynkExpect((false), "tests/settings.test.bynk:44:23", 1612, 1617, "expect false");
         }
-        throw new globalThis.Error("non-exhaustive match");
-      })(load(text)));
+        case "Err": {
+          const e = __d.error;
+          if (!(e.kind === "RefinementViolation")) { throw __bynkExpectFailure("tests/settings.test.bynk:46:16", 1651, 1682, "expect e.kind == \"RefinementViolation\"\n  expected: e.kind == \"RefinementViolation\"\n  actual:   " + __bynkShow((e.kind)) + " == " + __bynkShow(("RefinementViolation"))); }
+          if (!(e.path === "$.nudges.after_days")) { throw __bynkExpectFailure("tests/settings.test.bynk:47:16", 1698, 1729, "expect e.path == \"$.nudges.after_days\"\n  expected: e.path == \"$.nudges.after_days\"\n  actual:   " + __bynkShow((e.path)) + " == " + __bynkShow(("$.nudges.after_days"))); }
+          return undefined;
+        }
+      }
+      throw new globalThis.Error("non-exhaustive match");
+    })(load(text)));
     return { pass: true };
   } catch (e) {
     if (e instanceof ExpectationError) {
@@ -212,19 +212,19 @@ async function test_a_structural_mismatch_names_its_path() {
     type Settings = __ns_settings.Settings;
     type Triage = __ns_settings.Triage;
     void (((__d) => {
-        switch (__d.tag) {
-          case "Ok": {
-            return __bynkExpect((false), "tests/settings.test.bynk:54:23", 1879, 1884, "expect false");
-          }
-          case "Err": {
-            const e = __d.error;
-            if (!(e.kind === "StructuralMismatch")) { throw __bynkExpectFailure("tests/settings.test.bynk:56:16", 1918, 1948, "expect e.kind == \"StructuralMismatch\"\n  expected: e.kind == \"StructuralMismatch\"\n  actual:   " + __bynkShow((e.kind)) + " == " + __bynkShow(("StructuralMismatch"))); }
-            if (!(e.path === "$.triage.enabled")) { throw __bynkExpectFailure("tests/settings.test.bynk:57:16", 1964, 1992, "expect e.path == \"$.triage.enabled\"\n  expected: e.path == \"$.triage.enabled\"\n  actual:   " + __bynkShow((e.path)) + " == " + __bynkShow(("$.triage.enabled"))); }
-            return undefined;
-          }
+      switch (__d.tag) {
+        case "Ok": {
+          return __bynkExpect((false), "tests/settings.test.bynk:54:23", 1879, 1884, "expect false");
         }
-        throw new globalThis.Error("non-exhaustive match");
-      })(load("triage:\n  enabled: yes\n  labels: []\n")));
+        case "Err": {
+          const e = __d.error;
+          if (!(e.kind === "StructuralMismatch")) { throw __bynkExpectFailure("tests/settings.test.bynk:56:16", 1918, 1948, "expect e.kind == \"StructuralMismatch\"\n  expected: e.kind == \"StructuralMismatch\"\n  actual:   " + __bynkShow((e.kind)) + " == " + __bynkShow(("StructuralMismatch"))); }
+          if (!(e.path === "$.triage.enabled")) { throw __bynkExpectFailure("tests/settings.test.bynk:57:16", 1964, 1992, "expect e.path == \"$.triage.enabled\"\n  expected: e.path == \"$.triage.enabled\"\n  actual:   " + __bynkShow((e.path)) + " == " + __bynkShow(("$.triage.enabled"))); }
+          return undefined;
+        }
+      }
+      throw new globalThis.Error("non-exhaustive match");
+    })(load("triage:\n  enabled: yes\n  labels: []\n")));
     return { pass: true };
   } catch (e) {
     if (e instanceof ExpectationError) {
@@ -276,21 +276,21 @@ async function test_on__off__yes_and_no_stay_strings() {
     type Settings = __ns_settings.Settings;
     type Triage = __ns_settings.Triage;
     void (((__d) => {
-        switch (__d.tag) {
-          case "Ok": {
-            const f = __d.value;
-            if (!(f.a === "on")) { throw __bynkExpectFailure("tests/settings.test.bynk:72:16", 2381, 2392, "expect f.a == \"on\"\n  expected: f.a == \"on\"\n  actual:   " + __bynkShow((f.a)) + " == " + __bynkShow(("on"))); }
-            if (!(f.b === "off")) { throw __bynkExpectFailure("tests/settings.test.bynk:73:16", 2408, 2420, "expect f.b == \"off\"\n  expected: f.b == \"off\"\n  actual:   " + __bynkShow((f.b)) + " == " + __bynkShow(("off"))); }
-            if (!(f.c === "yes")) { throw __bynkExpectFailure("tests/settings.test.bynk:74:16", 2436, 2448, "expect f.c == \"yes\"\n  expected: f.c == \"yes\"\n  actual:   " + __bynkShow((f.c)) + " == " + __bynkShow(("yes"))); }
-            if (!(f.d === "no")) { throw __bynkExpectFailure("tests/settings.test.bynk:75:16", 2464, 2475, "expect f.d == \"no\"\n  expected: f.d == \"no\"\n  actual:   " + __bynkShow((f.d)) + " == " + __bynkShow(("no"))); }
-            return undefined;
-          }
-          case "Err": {
-            return __bynkExpect((false), "tests/settings.test.bynk:77:24", 2507, 2512, "expect false");
-          }
+      switch (__d.tag) {
+        case "Ok": {
+          const f = __d.value;
+          if (!(f.a === "on")) { throw __bynkExpectFailure("tests/settings.test.bynk:72:16", 2381, 2392, "expect f.a == \"on\"\n  expected: f.a == \"on\"\n  actual:   " + __bynkShow((f.a)) + " == " + __bynkShow(("on"))); }
+          if (!(f.b === "off")) { throw __bynkExpectFailure("tests/settings.test.bynk:73:16", 2408, 2420, "expect f.b == \"off\"\n  expected: f.b == \"off\"\n  actual:   " + __bynkShow((f.b)) + " == " + __bynkShow(("off"))); }
+          if (!(f.c === "yes")) { throw __bynkExpectFailure("tests/settings.test.bynk:74:16", 2436, 2448, "expect f.c == \"yes\"\n  expected: f.c == \"yes\"\n  actual:   " + __bynkShow((f.c)) + " == " + __bynkShow(("yes"))); }
+          if (!(f.d === "no")) { throw __bynkExpectFailure("tests/settings.test.bynk:75:16", 2464, 2475, "expect f.d == \"no\"\n  expected: f.d == \"no\"\n  actual:   " + __bynkShow((f.d)) + " == " + __bynkShow(("no"))); }
+          return undefined;
         }
-        throw new globalThis.Error("non-exhaustive match");
-      })(loadFlags("a: on\nb: off\nc: yes\nd: no\n")));
+        case "Err": {
+          return __bynkExpect((false), "tests/settings.test.bynk:77:24", 2507, 2512, "expect false");
+        }
+      }
+      throw new globalThis.Error("non-exhaustive match");
+    })(loadFlags("a: on\nb: off\nc: yes\nd: no\n")));
     return { pass: true };
   } catch (e) {
     if (e instanceof ExpectationError) {
@@ -311,19 +311,19 @@ async function test_quoted_scalars_are_strings__and_a_timestamp_stays_a_string()
     type Settings = __ns_settings.Settings;
     type Triage = __ns_settings.Triage;
     void (((__d) => {
-        switch (__d.tag) {
-          case "Ok": {
-            const f = __d.value;
-            if (!(f.a === "1")) { throw __bynkExpectFailure("tests/settings.test.bynk:84:16", 2691, 2701, "expect f.a == \"1\"\n  expected: f.a == \"1\"\n  actual:   " + __bynkShow((f.a)) + " == " + __bynkShow(("1"))); }
-            if (!(f.c === "2001-12-14")) { throw __bynkExpectFailure("tests/settings.test.bynk:85:16", 2717, 2736, "expect f.c == \"2001-12-14\"\n  expected: f.c == \"2001-12-14\"\n  actual:   " + __bynkShow((f.c)) + " == " + __bynkShow(("2001-12-14"))); }
-            return undefined;
-          }
-          case "Err": {
-            return __bynkExpect((false), "tests/settings.test.bynk:87:24", 2768, 2773, "expect false");
-          }
+      switch (__d.tag) {
+        case "Ok": {
+          const f = __d.value;
+          if (!(f.a === "1")) { throw __bynkExpectFailure("tests/settings.test.bynk:84:16", 2691, 2701, "expect f.a == \"1\"\n  expected: f.a == \"1\"\n  actual:   " + __bynkShow((f.a)) + " == " + __bynkShow(("1"))); }
+          if (!(f.c === "2001-12-14")) { throw __bynkExpectFailure("tests/settings.test.bynk:85:16", 2717, 2736, "expect f.c == \"2001-12-14\"\n  expected: f.c == \"2001-12-14\"\n  actual:   " + __bynkShow((f.c)) + " == " + __bynkShow(("2001-12-14"))); }
+          return undefined;
         }
-        throw new globalThis.Error("non-exhaustive match");
-      })(loadFlags("a: \"1\"\nb: '2'\nc: 2001-12-14\nd: x\n")));
+        case "Err": {
+          return __bynkExpect((false), "tests/settings.test.bynk:87:24", 2768, 2773, "expect false");
+        }
+      }
+      throw new globalThis.Error("non-exhaustive match");
+    })(loadFlags("a: \"1\"\nb: '2'\nc: 2001-12-14\nd: x\n")));
     return { pass: true };
   } catch (e) {
     if (e instanceof ExpectationError) {
@@ -375,19 +375,19 @@ async function test_a_syntax_error_is_Malformed() {
     type Settings = __ns_settings.Settings;
     type Triage = __ns_settings.Triage;
     void (((__d) => {
-        switch (__d.tag) {
-          case "Ok": {
-            return __bynkExpect((false), "tests/settings.test.bynk:100:23", 3070, 3075, "expect false");
-          }
-          case "Err": {
-            const e = __d.error;
-            if (!(e.kind === "Malformed")) { throw __bynkExpectFailure("tests/settings.test.bynk:102:16", 3109, 3130, "expect e.kind == \"Malformed\"\n  expected: e.kind == \"Malformed\"\n  actual:   " + __bynkShow((e.kind)) + " == " + __bynkShow(("Malformed"))); }
-            if (!(e.path === "$.triage")) { throw __bynkExpectFailure("tests/settings.test.bynk:103:16", 3146, 3166, "expect e.path == \"$.triage\"\n  expected: e.path == \"$.triage\"\n  actual:   " + __bynkShow((e.path)) + " == " + __bynkShow(("$.triage"))); }
-            return undefined;
-          }
+      switch (__d.tag) {
+        case "Ok": {
+          return __bynkExpect((false), "tests/settings.test.bynk:100:23", 3070, 3075, "expect false");
         }
-        throw new globalThis.Error("non-exhaustive match");
-      })(load("triage: [unclosed\n")));
+        case "Err": {
+          const e = __d.error;
+          if (!(e.kind === "Malformed")) { throw __bynkExpectFailure("tests/settings.test.bynk:102:16", 3109, 3130, "expect e.kind == \"Malformed\"\n  expected: e.kind == \"Malformed\"\n  actual:   " + __bynkShow((e.kind)) + " == " + __bynkShow(("Malformed"))); }
+          if (!(e.path === "$.triage")) { throw __bynkExpectFailure("tests/settings.test.bynk:103:16", 3146, 3166, "expect e.path == \"$.triage\"\n  expected: e.path == \"$.triage\"\n  actual:   " + __bynkShow((e.path)) + " == " + __bynkShow(("$.triage"))); }
+          return undefined;
+        }
+      }
+      throw new globalThis.Error("non-exhaustive match");
+    })(load("triage: [unclosed\n")));
     return { pass: true };
   } catch (e) {
     if (e instanceof ExpectationError) {

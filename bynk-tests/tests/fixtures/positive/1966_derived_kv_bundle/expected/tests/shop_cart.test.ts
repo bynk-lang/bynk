@@ -566,7 +566,10 @@ async function test_an_instance_is_in_memory() {
     type WorkerVersion = __ns_bynk_cloudflare.WorkerVersion;
     const r = await remember.call("a", "1", deps);
     if (!(__bynkEq(r, Some("1")))) { throw __bynkExpectFailure("tests/shop/cart.bynk:7:9", 211, 225, "expect r == Some(\"1\")\n  expected: r == Some(\"1\")\n  actual:   " + __bynkShow((r)) + " == " + __bynkShow((Some("1")))); }
-    if (!((((__obs.log["Sessions.put"] ?? []).filter((__c: { args: unknown[] }) => { const { key, value } = { key: __c.args[0], value: __c.args[1] } as __Sessions_put_Call; return (key === "a"); }).length) === (1)))) { throw __bynkExpectFailure("tests/shop/cart.bynk:8:9", 234, 274, "expect Sessions.put called once with key == \"a\""); }
+    if (!((((__obs.log["Sessions.put"] ?? []).filter((__c: { args: unknown[] }) => {
+      const { key, value } = { key: __c.args[0], value: __c.args[1] } as __Sessions_put_Call;
+      return (key === "a");
+    }).length) === (1)))) { throw __bynkExpectFailure("tests/shop/cart.bynk:8:9", 234, 274, "expect Sessions.put called once with key == \"a\""); }
     return { pass: true };
   } catch (e) {
     if (e instanceof ExpectationError) {

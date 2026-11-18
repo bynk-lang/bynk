@@ -166,7 +166,17 @@ async function test_encoding_a_chain_one_level_past_the_bound_faults() {
     type Index = __ns_demo_depth.Index;
     type Stmt = __ns_demo_depth.Stmt;
     type Tree = __ns_demo_depth.Tree;
-    if (!((await (async () => { try { await (encodeChain(chain(257))); return false; } catch (__e) { if (__e instanceof ExpectationError) { throw __e; } return true; } })()))) { throw __bynkExpectFailure("tests/demo/depth.bynk:33:10", 1014, 1044, "expect encodeChain(chain(257)) faults\n  the call returned without faulting"); }
+    if (!((await (async () => {
+      try {
+        await (encodeChain(chain(257)));
+        return false;
+      } catch (__e) {
+        if (__e instanceof ExpectationError) {
+          throw __e;
+        }
+        return true;
+      }
+    })()))) { throw __bynkExpectFailure("tests/demo/depth.bynk:33:10", 1014, 1044, "expect encodeChain(chain(257)) faults\n  the call returned without faulting"); }
     return { pass: true };
   } catch (e) {
     if (e instanceof ExpectationError) {
@@ -186,7 +196,17 @@ async function test_encoding_a_tree_one_level_past_the_bound_faults() {
     type Index = __ns_demo_depth.Index;
     type Stmt = __ns_demo_depth.Stmt;
     type Tree = __ns_demo_depth.Tree;
-    if (!((await (async () => { try { await (encodeTree(tree(257))); return false; } catch (__e) { if (__e instanceof ExpectationError) { throw __e; } return true; } })()))) { throw __bynkExpectFailure("tests/demo/depth.bynk:37:10", 1114, 1142, "expect encodeTree(tree(257)) faults\n  the call returned without faulting"); }
+    if (!((await (async () => {
+      try {
+        await (encodeTree(tree(257)));
+        return false;
+      } catch (__e) {
+        if (__e instanceof ExpectationError) {
+          throw __e;
+        }
+        return true;
+      }
+    })()))) { throw __bynkExpectFailure("tests/demo/depth.bynk:37:10", 1114, 1142, "expect encodeTree(tree(257)) faults\n  the call returned without faulting"); }
     return { pass: true };
   } catch (e) {
     if (e instanceof ExpectationError) {
@@ -206,7 +226,17 @@ async function test_encoding_an_index_one_level_past_the_bound_faults() {
     type Index = __ns_demo_depth.Index;
     type Stmt = __ns_demo_depth.Stmt;
     type Tree = __ns_demo_depth.Tree;
-    if (!((await (async () => { try { await (encodeIndex(index(257))); return false; } catch (__e) { if (__e instanceof ExpectationError) { throw __e; } return true; } })()))) { throw __bynkExpectFailure("tests/demo/depth.bynk:41:10", 1214, 1244, "expect encodeIndex(index(257)) faults\n  the call returned without faulting"); }
+    if (!((await (async () => {
+      try {
+        await (encodeIndex(index(257)));
+        return false;
+      } catch (__e) {
+        if (__e instanceof ExpectationError) {
+          throw __e;
+        }
+        return true;
+      }
+    })()))) { throw __bynkExpectFailure("tests/demo/depth.bynk:41:10", 1214, 1244, "expect encodeIndex(index(257)) faults\n  the call returned without faulting"); }
     return { pass: true };
   } catch (e) {
     if (e instanceof ExpectationError) {
@@ -226,7 +256,17 @@ async function test_encoding_mutually_recursive_sums_past_the_bound_faults() {
     type Index = __ns_demo_depth.Index;
     type Stmt = __ns_demo_depth.Stmt;
     type Tree = __ns_demo_depth.Tree;
-    if (!((await (async () => { try { await (encodeExpr(expr(257))); return false; } catch (__e) { if (__e instanceof ExpectationError) { throw __e; } return true; } })()))) { throw __bynkExpectFailure("tests/demo/depth.bynk:45:10", 1321, 1349, "expect encodeExpr(expr(257)) faults\n  the call returned without faulting"); }
+    if (!((await (async () => {
+      try {
+        await (encodeExpr(expr(257)));
+        return false;
+      } catch (__e) {
+        if (__e instanceof ExpectationError) {
+          throw __e;
+        }
+        return true;
+      }
+    })()))) { throw __bynkExpectFailure("tests/demo/depth.bynk:45:10", 1321, 1349, "expect encodeExpr(expr(257)) faults\n  the call returned without faulting"); }
     return { pass: true };
   } catch (e) {
     if (e instanceof ExpectationError) {

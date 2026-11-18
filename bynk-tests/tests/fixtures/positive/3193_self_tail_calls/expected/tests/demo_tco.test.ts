@@ -264,7 +264,17 @@ async function test_requires_reports_the_iteration_whose_arguments_violate_it() 
     const deps = __makeTestDeps();
     const { Chain, adders, collatz, count, countE, countEnsured, countdown, down, downE, drain, fibLoop, firstDiff, isDrain, isEven, isOdd, lastOf, lastOr, nest, nestTail, nestedDrain, repeat, sumTo, tried, wrapped } = __ns_demo_tco;
     type Chain = __ns_demo_tco.Chain;
-    if (!((await (async () => { try { await (downE(5, 0)); return false; } catch (__e) { if (__e instanceof ExpectationError) { throw __e; } return true; } })()))) { throw __bynkExpectFailure("tests/demo/tco.bynk:73:10", 1842, 1860, "expect downE(5, 0) faults\n  the call returned without faulting"); }
+    if (!((await (async () => {
+      try {
+        await (downE(5, 0));
+        return false;
+      } catch (__e) {
+        if (__e instanceof ExpectationError) {
+          throw __e;
+        }
+        return true;
+      }
+    })()))) { throw __bynkExpectFailure("tests/demo/tco.bynk:73:10", 1842, 1860, "expect downE(5, 0) faults\n  the call returned without faulting"); }
     return { pass: true };
   } catch (e) {
     if (e instanceof ExpectationError) {

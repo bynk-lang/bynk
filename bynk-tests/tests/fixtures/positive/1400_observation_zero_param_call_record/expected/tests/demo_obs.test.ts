@@ -63,7 +63,7 @@ async function test_traces_the_zero_param_clock_read() {
     const { tick } = __ns_demo_obs;
     const r = await tick.call(deps);
     if (!(r === 0)) { throw __bynkExpectFailure("tests/obs.test.bynk:8:12", 375, 381, "expect r == 0\n  expected: r == 0\n  actual:   " + __bynkShow((r)) + " == " + __bynkShow((0))); }
-    const calls = (((__obs.log["Clock.now"] ?? []).map((__c: { args: unknown[] }) => ({  }))) as __Clock_now_Call[]);
+    const calls = (((__obs.log["Clock.now"] ?? []).map((__c: { args: unknown[] }) => ({}))) as __Clock_now_Call[]);
     if (!((calls).length === 1)) { throw __bynkExpectFailure("tests/obs.test.bynk:10:12", 426, 445, "expect calls.length() == 1\n  expected: calls.length() == 1\n  actual:   " + __bynkShow(((calls).length)) + " == " + __bynkShow((1))); }
     return { pass: true };
   } catch (e) {

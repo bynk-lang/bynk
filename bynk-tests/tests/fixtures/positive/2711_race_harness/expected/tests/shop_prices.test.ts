@@ -894,7 +894,10 @@ async function test_the_loser_is_still_recorded() {
     const p = await __bynkSettleVirtual(deps, prices.call(7, deps));
     if (!(p === 2)) { throw __bynkExpectFailure("tests/prices.bynk:65:12", 2059, 2065, "expect p == 2\n  expected: p == 2\n  actual:   " + __bynkShow((p)) + " == " + __bynkShow((2))); }
     if (!(((__obs.log["Prices.get"] ?? []).length === (2)))) { throw __bynkExpectFailure("tests/prices.bynk:66:12", 2077, 2102, "expect Prices.get called 2 times"); }
-    if (!((((__obs.log["Prices.get"] ?? []).filter((__c: { args: unknown[] }) => { const { region, sku } = { region: __c.args[0], sku: __c.args[1] } as __Prices_get_Call; return (region === "east"); }).length) >= 1))) { throw __bynkExpectFailure("tests/prices.bynk:67:12", 2114, 2153, "expect Prices.get called with region == \"east\""); }
+    if (!((((__obs.log["Prices.get"] ?? []).filter((__c: { args: unknown[] }) => {
+      const { region, sku } = { region: __c.args[0], sku: __c.args[1] } as __Prices_get_Call;
+      return (region === "east");
+    }).length) >= 1))) { throw __bynkExpectFailure("tests/prices.bynk:67:12", 2114, 2153, "expect Prices.get called with region == \"east\""); }
     return { pass: true };
   } catch (e) {
     if (e instanceof ExpectationError) {

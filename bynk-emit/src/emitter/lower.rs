@@ -30,7 +30,7 @@ use super::lower_stmt::{
 };
 use super::ts_types::{
     ts_array_elem, ts_base, ts_ty, ts_ty_to_ts_type, ts_type_ref, ts_type_ref_to_ts_type,
-    unchecked_construct, unchecked_construct_test,
+    unchecked_construct, unchecked_construct_test, unchecked_construct_test_node,
 };
 use super::*;
 
@@ -763,7 +763,7 @@ pub(super) fn expect_location(cx: &LowerCtx, offset: usize) -> String {
 
 /// [`expect_location`] before escaping, for a `Str` node (the printer escapes
 /// it with the same one function, `escape_ts_literal`).
-fn expect_location_raw(cx: &LowerCtx, offset: usize) -> String {
+pub(super) fn expect_location_raw(cx: &LowerCtx, offset: usize) -> String {
     match cx.assert_loc() {
         Some(loc) => {
             let (line, col) = bynk_syntax::span::line_col(&loc.source, offset);
@@ -777,16 +777,12 @@ fn expect_location_raw(cx: &LowerCtx, offset: usize) -> String {
     }
 }
 
-/// v0.112: the trimmed, TS-escaped source text of an `expect` predicate, embedded
-/// in the structural failure report (`expect <src>`). Escaped for a
-/// double-quoted TS string literal (no surrounding quotes); empty when no
-/// test-body source is in scope (defensive — `expect`s only appear in test bodies).
-pub(super) fn expect_source_text(cx: &LowerCtx, span: bynk_syntax::span::Span) -> String {
-    crate::emitter::escape_ts_string(&expect_source_text_raw(cx, span))
-}
-
-/// [`expect_source_text`] before escaping, for a `Str` node.
-fn expect_source_text_raw(cx: &LowerCtx, span: bynk_syntax::span::Span) -> String {
+/// v0.112: the trimmed source text of an `expect` predicate, embedded in the
+/// structural failure report (`expect <src>`), unescaped: it goes into a `Str`
+/// node (the printer escapes it) or through `escape_ts_string` for the text form.
+/// Empty when no test-body source is in scope (defensive — `expect`s only appear
+/// in test bodies).
+pub(super) fn expect_source_text_raw(cx: &LowerCtx, span: bynk_syntax::span::Span) -> String {
     match cx.assert_loc() {
         Some(loc) => loc
             .source
@@ -798,30 +794,34 @@ fn expect_source_text_raw(cx: &LowerCtx, span: bynk_syntax::span::Span) -> Strin
     }
 }
 
-/// The raw TypeScript form of a compile-time literal that v0.9.4 may admit as a
-/// refined type (int or string). `None` for anything else.
-fn lower_const_literal_raw(e: &Expr) -> Option<String> {
+/// A compile-time literal that v0.9.4 may admit as a refined type (int, float,
+/// decimal or string), as a node (1A.17, Decision D). `None` for anything else.
+fn lower_const_literal_node(e: &Expr) -> Option<bynk_ts::TsExpr> {
     match &e.kind {
-        ExprKind::IntLit { value: n, .. } => Some(n.to_string()),
+        ExprKind::IntLit { value: n, .. } => Some(num_lit(n.to_string())),
         // v0.21: the stored lexeme verbatim.
-        ExprKind::FloatLit { lexeme, .. } => Some(lexeme.clone()),
-        ExprKind::DecimalLit { coef, scale, .. } => {
-            Some(crate::emitter::ts_types::decimal_ts_literal(coef, *scale))
-        }
-        ExprKind::StrLit(s) => Some(format!("\"{}\"", escape_ts_string(s))),
+        ExprKind::FloatLit { lexeme, .. } => Some(num_lit(lexeme.clone())),
+        ExprKind::DecimalLit { coef, scale, .. } => Some(decimal_lit(coef, *scale)),
+        ExprKind::StrLit(s) => Some(str_node(s.as_str())),
         // A negated numeric literal — admissible at compile time (the
         // checker folds the sign in `const_literal`), so the lowering must
         // route it through `unsafe` like any other admitted literal.
         ExprKind::UnaryOp(UnaryOp::Neg, inner) => match &inner.kind {
-            ExprKind::IntLit { value: n, .. } => Some(format!("-{n}")),
-            ExprKind::FloatLit { lexeme, .. } => Some(format!("-{lexeme}")),
-            ExprKind::DecimalLit { coef, scale, .. } => Some(
-                crate::emitter::ts_types::decimal_ts_literal(&format!("-{coef}"), *scale),
-            ),
+            ExprKind::IntLit { value: n, .. } => Some(num_lit(format!("-{n}"))),
+            ExprKind::FloatLit { lexeme, .. } => Some(num_lit(format!("-{lexeme}"))),
+            ExprKind::DecimalLit { coef, scale, .. } => {
+                Some(decimal_lit(&format!("-{coef}"), *scale))
+            }
             _ => None,
         },
         _ => None,
     }
+}
+
+/// [`lower_const_literal_node`] printed, for `lower_expr`'s refined-literal
+/// branch (still text: it also builds the production `(lit as T)` form).
+fn lower_const_literal_raw(e: &Expr) -> Option<String> {
+    lower_const_literal_node(e).map(|n| bynk_ts::print_expr(&n))
 }
 
 /// The text of a unary operator applied to its operand's lowered `inner`.
@@ -883,7 +883,7 @@ impl Lit<'_> {
 /// A numeric literal node: the digits are printed verbatim (`TsLit::Num`), so a
 /// big integer, a float lexeme (`1e10`) or a duration's milliseconds render
 /// exactly as the old hand-built text did.
-fn num_lit(digits: String) -> bynk_ts::TsExpr {
+pub(super) fn num_lit(digits: String) -> bynk_ts::TsExpr {
     bynk_ts::TsExpr::Lit(bynk_ts::TsLit::Num(digits))
 }
 
@@ -1224,16 +1224,12 @@ fn call_built(callee: bynk_ts::TsExpr, args: Vec<LoweredExpr>) -> Built {
 /// Witness nodes printed for a text caller (1A: the capability, closure and
 /// kernel families are still text).
 fn print_witnesses(nodes: Vec<bynk_ts::TsExpr>) -> impl Iterator<Item = String> {
-    nodes
-        .iter()
-        .map(bynk_ts::print_expr)
-        .collect::<Vec<_>>()
-        .into_iter()
+    nodes.into_iter().map(|n| bynk_ts::print_expr(&n))
 }
 
 /// A string-literal node: the printer escapes it exactly as
 /// `escape_ts_string` does (they are one function, `escape_ts_literal`).
-fn str_node(s: impl Into<String>) -> bynk_ts::TsExpr {
+pub(super) fn str_node(s: impl Into<String>) -> bynk_ts::TsExpr {
     bynk_ts::TsExpr::Lit(bynk_ts::TsLit::Str(s.into()))
 }
 
@@ -1708,41 +1704,22 @@ pub(crate) fn lower_expr(e: &Expr, cx: &mut LowerCtx) -> Lowered {
             let built = expect_built(inner, &mut pre, cx);
             built_or_text!(pre, built)
         }
-        // 1A: the test-domain constructs (`Val`, `Observation`, `Faults`,
-        // `Trace`) stay text — their lowering reads harness state; they move
-        // with the test-harness family.
-        ExprKind::Val { type_ref, args, .. } => pre.absorb(lower_val(type_ref, args, cx)),
-        ExprKind::Observation(o) => lower_observation(o, cx),
-        ExprKind::Faults(f) => lower_faults(f, cx),
+        // 1A.17: the test-domain constructs build nodes.
+        ExprKind::Val { type_ref, args, .. } => {
+            lowered_or_text!(pre, lower_val(type_ref, args, cx))
+        }
+        ExprKind::Observation(o) => {
+            let built = lower_observation(o, cx);
+            built_or_text!(pre, built)
+        }
+        ExprKind::Faults(f) => {
+            let built = lower_faults(f, cx);
+            built_or_text!(pre, built)
+        }
+        // `trace(Cap.op)` → the recorded calls mapped to per-call records
+        // whose fields are the operation's parameters (positionally).
         ExprKind::Trace { cap, op } => {
-            // `trace(Cap.op)` → the recorded calls mapped to per-call records
-            // whose fields are the operation's parameters (positionally).
-            let obs = cx
-                .observation_trace()
-                .map(str::to_string)
-                .unwrap_or_else(|| "__obs".to_string());
-            let key = format!("{}.{}", cap.name, op.name);
-            let names = cap_op_param_names(cx, &cap.name, &op.name);
-            let fields = names
-                .iter()
-                .enumerate()
-                .map(|(i, n)| format!("{n}: __c.args[{i}]"))
-                .collect::<Vec<_>>()
-                .join(", ");
-            // P7.2: only `.args` is read below (positionally), so `unknown[]` is
-            // what's actually known about a recorded call's arguments here — but
-            // the mapped-out `{ msg: unknown, … }` shape then flows into whatever
-            // this `trace()` result feeds (a test's own `.filter`/projection,
-            // typed against the checker's own per-op record type), which needs
-            // the real field types, not `unknown`. Asserted into
-            // `observation_call_record_types`' own generated alias (same name
-            // `checker::call_record_type_name` derives, same test module, so no
-            // qualification needed) — legal under `tsc --strict` because every
-            // field of that alias is structurally assignable to `unknown`.
-            let record_ty = bynk_check::checker::call_record_type_name(&cap.name, &op.name);
-            format!(
-                "((({obs}.log[{key:?}] ?? []).map((__c: {{ args: unknown[] }}) => ({{ {fields} }}))) as {record_ty}[])"
-            )
+            return pre.finish(LoweredExpr::Node(trace_node(cx, &cap.name, &op.name)));
         }
     };
     pre.finish_text(expr)
@@ -1760,7 +1737,7 @@ fn expect_built(inner: &Expr, pre: &mut Pre, cx: &mut LowerCtx) -> Built {
     let location = expect_location_raw(cx, span_start);
     let src = format!("expect {}", expect_source_text_raw(cx, inner.span));
     // The `Paren` keeps today's `((value))` bytes; the `Str` nodes
-    // escape exactly as `expect_location`/`expect_source_text` do.
+    // escape exactly as `escape_ts_string` does.
     node_or_text(
         vec![value],
         |c| bynk_ts::TsExpr::Call {
@@ -1832,7 +1809,7 @@ pub(super) fn bad_signature_driver(actor: &str) -> Option<&'static str> {
     }
 }
 
-fn lower_faults(faults: &FaultsExpr, cx: &mut LowerCtx) -> String {
+fn lower_faults(faults: &FaultsExpr, cx: &mut LowerCtx) -> Built {
     let FaultsExpr { call, principal } = faults;
     let saved_identity = cx.call_site_identity.take();
     let saved_actor = cx.call_site_actor.take();
@@ -1853,7 +1830,7 @@ fn lower_faults(faults: &FaultsExpr, cx: &mut LowerCtx) -> String {
             cx.call_site_actor = Some(principal.actor.name.clone());
         }
     }
-    let value = inner.lower(call, cx);
+    let value = inner.lower_node(call, cx);
     cx.call_site_identity = saved_identity;
     cx.call_site_actor = saved_actor;
     cx.call_site_no_credential = saved_no_credential;
@@ -1861,75 +1838,313 @@ fn lower_faults(faults: &FaultsExpr, cx: &mut LowerCtx) -> String {
     // The literal `await` below is a real source of effectfulness for any
     // synchronous-looking IIFE further out — see `emitted_await`.
     cx.emitted_await = true;
-    let hoisted: String = inner.stmts().iter().map(|s| format!("{s} ")).collect();
-    format!(
-        "(await (async () => {{ try {{ {hoisted}await ({value}); return false; }} catch (__e) {{ if (__e instanceof ExpectationError) {{ throw __e; }} return true; }} }})())"
+    // 1A.17, Decision F: an async arrow IIFE over a `try`/`catch`, a node only
+    // when the call and everything it hoisted are nodes.
+    let value = if inner.all_nodes() {
+        value
+    } else {
+        LoweredExpr::Text(value.into_text())
+    };
+    node_or_text(
+        vec![value],
+        |c| {
+            use bynk_ts::{TsBinaryOp, TsExpr, TsLit, TsStmt};
+            let mut try_body = inner.ts_stmts("");
+            try_body.push(TsStmt::expr_stmt(
+                TsExpr::Await(Box::new(TsExpr::Paren(Box::new(one(c))))),
+                None,
+            ));
+            try_body.push(TsStmt::return_stmt(
+                Some(TsExpr::Lit(TsLit::Bool(false))),
+                None,
+            ));
+            let rethrow = TsStmt::if_stmt(
+                TsExpr::Binary {
+                    op: TsBinaryOp::InstanceOf,
+                    left: Box::new(ident_node("__e")),
+                    right: Box::new(ident_node("ExpectationError")),
+                },
+                TsStmt::block(vec![TsStmt::throw_stmt(ident_node("__e"), None)], None),
+                None,
+            );
+            let catch_body = vec![
+                rethrow,
+                TsStmt::return_stmt(Some(TsExpr::Lit(TsLit::Bool(true))), None),
+            ];
+            let try_catch = TsStmt::try_catch(
+                TsStmt::block(try_body, None),
+                Some("__e"),
+                TsStmt::block(catch_body, None),
+                None,
+            );
+            TsExpr::Paren(Box::new(arrow_call(
+                Vec::new(),
+                Vec::new(),
+                true,
+                vec![try_catch],
+            )))
+        },
+        |c| {
+            let hoisted: String = inner.stmts().iter().map(|s| format!("{s} ")).collect();
+            let value = one(c);
+            format!(
+                "(await (async () => {{ try {{ {hoisted}await ({value}); return false; }} catch (__e) {{ if (__e instanceof ExpectationError) {{ throw __e; }} return true; }} }})())"
+            )
+        },
     )
+}
+
+/// `(<obs>.log["Cap.op"] ?? [])`: the calls recorded for one capability
+/// operation (v0.117). `obs` is the per-case trace object, always `__obs`.
+fn recorded_calls(cx: &LowerCtx, cap: &str, op: &str) -> bynk_ts::TsExpr {
+    use bynk_ts::{TsBinaryOp, TsExpr};
+    let obs = cx.observation_trace().unwrap_or("__obs");
+    TsExpr::Paren(Box::new(TsExpr::Binary {
+        op: TsBinaryOp::NullishCoalescing,
+        left: Box::new(TsExpr::Index {
+            object: Box::new(member_node(obs, "log")),
+            index: Box::new(str_node(format!("{cap}.{op}"))),
+        }),
+        right: Box::new(TsExpr::array(Vec::new())),
+    }))
+}
+
+/// `{ args: unknown[] }`, the recorded call's shape as far as `.args` is read
+/// positionally (P7.2).
+fn call_args_type() -> bynk_ts::TsType {
+    use bynk_ts::{TsType, TsTypeMember};
+    TsType::Object(vec![TsTypeMember::prop(
+        "args",
+        TsType::array(TsType::named("unknown")),
+    )])
+}
+
+/// `{ n: __c.args[0], … }`: the operation's parameters read positionally off a
+/// recorded call.
+fn call_fields(names: &[String]) -> bynk_ts::TsExpr {
+    bynk_ts::TsExpr::object(
+        names
+            .iter()
+            .enumerate()
+            .map(|(i, n)| {
+                (
+                    n.clone(),
+                    bynk_ts::TsExpr::Index {
+                        object: Box::new(member_node("__c", "args")),
+                        index: Box::new(num_lit(i.to_string())),
+                    },
+                )
+            })
+            .collect(),
+    )
+}
+
+/// `trace(Cap.op)` (v0.117): the recorded calls mapped to per-call records.
+fn trace_node(cx: &LowerCtx, cap: &str, op: &str) -> bynk_ts::TsExpr {
+    use bynk_ts::{TsArrowBody, TsExpr, TsParam, TsType};
+    let names = cap_op_param_names(cx, cap, op);
+    // P7.2: only `.args` is read below (positionally), so `unknown[]` is
+    // what's actually known about a recorded call's arguments here — but
+    // the mapped-out `{ msg: unknown, … }` shape then flows into whatever
+    // this `trace()` result feeds (a test's own `.filter`/projection,
+    // typed against the checker's own per-op record type), which needs
+    // the real field types, not `unknown`. Asserted into
+    // `observation_call_record_types`' own generated alias (same name
+    // `checker::call_record_type_name` derives, same test module, so no
+    // qualification needed) — legal under `tsc --strict` because every
+    // field of that alias is structurally assignable to `unknown`.
+    let record_ty = bynk_check::checker::call_record_type_name(cap, op);
+    let map = TsExpr::Call {
+        callee: Box::new(TsExpr::Member {
+            object: Box::new(recorded_calls(cx, cap, op)),
+            property: "map".to_string(),
+        }),
+        args: vec![TsExpr::Arrow {
+            params: vec![TsParam {
+                name: "__c".to_string(),
+                ty: Some(call_args_type()),
+                optional: false,
+            }],
+            is_async: false,
+            generics: Vec::new(),
+            return_type: None,
+            body: Box::new(TsArrowBody::Expr(Box::new(call_fields(&names)))),
+        }],
+    };
+    TsExpr::Paren(Box::new(TsExpr::As {
+        expr: Box::new(TsExpr::Paren(Box::new(map))),
+        ty: TsType::array(TsType::named(record_ty)),
+    }))
 }
 
 /// Lower an observation (v0.117) to a `Bool` JavaScript expression over the
 /// recorded trace object. `total`/`matching` counts drive the sugar; `before`
 /// compares call order.
-fn lower_observation(o: &ObservationExpr, cx: &mut LowerCtx) -> String {
-    let obs = cx
-        .observation_trace()
-        .map(str::to_string)
-        .unwrap_or_else(|| "__obs".to_string());
-    let key = format!("{}.{}", o.cap.name, o.op.name);
-    let calls = format!("({obs}.log[{key:?}] ?? [])");
+fn lower_observation(o: &ObservationExpr, cx: &mut LowerCtx) -> Built {
+    use bynk_ts::{TsBinaryOp, TsExpr};
+    let calls = recorded_calls(cx, &o.cap.name, &o.op.name);
+    let length = |calls: &TsExpr| TsExpr::Member {
+        object: Box::new(calls.clone()),
+        property: "length".to_string(),
+    };
+    let binary = |op: TsBinaryOp, left: TsExpr, right: TsExpr| TsExpr::Binary {
+        op,
+        left: Box::new(left),
+        right: Box::new(right),
+    };
+    let paren = |e: TsExpr| TsExpr::Paren(Box::new(e));
+    // The text twin of `recorded_calls`, for the fallbacks below.
+    let calls_text = bynk_ts::print_expr(&calls);
     match &o.matcher {
-        ObservationMatcher::NeverCalled => format!("({calls}.length === 0)"),
+        ObservationMatcher::NeverCalled => Ok(paren(binary(
+            TsBinaryOp::StrictEq,
+            length(&calls),
+            num_lit("0".to_string()),
+        ))),
         ObservationMatcher::Before { cap, op } => {
-            let key2 = format!("{}.{}", cap.name, op.name);
-            let calls2 = format!("({obs}.log[{key2:?}] ?? [])");
-            format!(
-                "({calls}.length > 0 && {calls2}.length > 0 && {calls}[0].order < {calls2}[0].order)"
-            )
+            let calls2 = recorded_calls(cx, &cap.name, &op.name);
+            let order = |calls: &TsExpr| TsExpr::Member {
+                object: Box::new(TsExpr::Index {
+                    object: Box::new(calls.clone()),
+                    index: Box::new(num_lit("0".to_string())),
+                }),
+                property: "order".to_string(),
+            };
+            let zero = || num_lit("0".to_string());
+            let both = binary(
+                TsBinaryOp::And,
+                binary(TsBinaryOp::GreaterThan, length(&calls), zero()),
+                binary(TsBinaryOp::GreaterThan, length(&calls2), zero()),
+            );
+            Ok(paren(binary(
+                TsBinaryOp::And,
+                both,
+                binary(TsBinaryOp::LessThan, order(&calls), order(&calls2)),
+            )))
         }
         ObservationMatcher::Called { count, with_pred } => match with_pred {
             None => match count {
-                None => format!("({calls}.length >= 1)"),
+                None => Ok(paren(binary(
+                    TsBinaryOp::GreaterThanEq,
+                    length(&calls),
+                    num_lit("1".to_string()),
+                ))),
                 Some(c) => {
-                    let n = lower_expr(c, cx).expr.into_text();
-                    format!("({calls}.length === ({n}))")
+                    let n = lower_expr(c, cx).expr;
+                    node_or_text(
+                        vec![n],
+                        |c| paren(binary(TsBinaryOp::StrictEq, length(&calls), paren(one(c)))),
+                        |c| format!("({calls_text}.length === ({}))", one(c)),
+                    )
                 }
             },
             Some(p) => {
                 let names = cap_op_param_names(cx, &o.cap.name, &o.op.name);
-                // #291: typed through the operation's call-record alias (as
-                // `trace` is), so a predicate may read a record parameter's
-                // fields (`with req.url == …`) — `__c.args` is `unknown[]`.
-                let destructure = if names.is_empty() {
-                    String::new()
-                } else {
-                    let record_ty =
-                        bynk_check::checker::call_record_type_name(&o.cap.name, &o.op.name);
-                    let fields = names
-                        .iter()
-                        .enumerate()
-                        .map(|(i, n)| format!("{n}: __c.args[{i}]"))
-                        .collect::<Vec<_>>()
-                        .join(", ");
-                    format!(
-                        "const {{ {} }} = {{ {fields} }} as {record_ty}; ",
-                        names.join(", ")
-                    )
-                };
+                let record_ty = bynk_check::checker::call_record_type_name(&o.cap.name, &o.op.name);
                 let pred_lowered = lower_expr(p, cx);
+                // The predicate's hoisted statements go in the arrow body: they
+                // are nodes only if every one is.
+                let pre_nodes = pred_lowered.pre_all_nodes();
+                let pre_stmts: Vec<bynk_ts::TsStmt> = pred_lowered
+                    .pre
+                    .iter()
+                    .filter_map(|s| match s {
+                        LoweredStmt::Node(n) => Some((**n).clone()),
+                        LoweredStmt::Text(_) => None,
+                    })
+                    .collect();
                 let pre_src = pred_lowered.pre_texts().join(" ");
-                let pred = pred_lowered.expr.into_text();
-                // P7.2: same shape as `lower_observation`'s `Trace` sibling above — only
-                // `.args` is destructured, so `unknown[]` is what's actually known.
-                let matching = format!(
-                    "{calls}.filter((__c: {{ args: unknown[] }}) => {{ {destructure}{pre_src}return ({pred}); }}).length"
-                );
-                match count {
-                    None => format!("(({matching}) >= 1)"),
-                    Some(c) => {
-                        let n = lower_expr(c, cx).expr.into_text();
-                        format!("(({matching}) === ({n}))")
-                    }
+                let pred = if pre_nodes {
+                    pred_lowered.expr
+                } else {
+                    LoweredExpr::Text(pred_lowered.expr.into_text())
+                };
+                let mut children = vec![pred];
+                if let Some(c) = count {
+                    children.push(lower_expr(c, cx).expr);
                 }
+                let has_count = count.is_some();
+                node_or_text(
+                    children,
+                    |mut c| {
+                        let n = has_count.then(|| c.pop()).flatten();
+                        let pred = one(c);
+                        let mut stmts = Vec::new();
+                        // #291: typed through the operation's call-record alias (as
+                        // `trace` is), so a predicate may read a record parameter's
+                        // fields (`with req.url == …`) — `__c.args` is `unknown[]`.
+                        if !names.is_empty() {
+                            stmts.push(bynk_ts::TsStmt::const_stmt(
+                                bynk_ts::TsBindingName::ObjectPattern(names.clone()),
+                                None,
+                                TsExpr::As {
+                                    expr: Box::new(call_fields(&names)),
+                                    ty: bynk_ts::TsType::named(record_ty.clone()),
+                                },
+                                None,
+                            ));
+                        }
+                        stmts.extend(pre_stmts);
+                        stmts.push(bynk_ts::TsStmt::return_stmt(Some(paren(pred)), None));
+                        // P7.2: same shape as `trace` — only `.args` is destructured,
+                        // so `unknown[]` is what's actually known.
+                        let matching = TsExpr::Member {
+                            object: Box::new(TsExpr::Call {
+                                callee: Box::new(TsExpr::Member {
+                                    object: Box::new(calls.clone()),
+                                    property: "filter".to_string(),
+                                }),
+                                args: vec![TsExpr::Arrow {
+                                    params: vec![bynk_ts::TsParam {
+                                        name: "__c".to_string(),
+                                        ty: Some(call_args_type()),
+                                        optional: false,
+                                    }],
+                                    is_async: false,
+                                    generics: Vec::new(),
+                                    return_type: None,
+                                    body: Box::new(bynk_ts::TsArrowBody::Multiline(stmts)),
+                                }],
+                            }),
+                            property: "length".to_string(),
+                        };
+                        match n {
+                            None => paren(binary(
+                                TsBinaryOp::GreaterThanEq,
+                                paren(matching),
+                                num_lit("1".to_string()),
+                            )),
+                            Some(n) => {
+                                paren(binary(TsBinaryOp::StrictEq, paren(matching), paren(n)))
+                            }
+                        }
+                    },
+                    |mut c| {
+                        let n = has_count.then(|| c.pop()).flatten();
+                        let pred = one(c);
+                        let destructure = if names.is_empty() {
+                            String::new()
+                        } else {
+                            let fields = names
+                                .iter()
+                                .enumerate()
+                                .map(|(i, n)| format!("{n}: __c.args[{i}]"))
+                                .collect::<Vec<_>>()
+                                .join(", ");
+                            format!(
+                                "const {{ {} }} = {{ {fields} }} as {record_ty}; ",
+                                names.join(", ")
+                            )
+                        };
+                        let matching = format!(
+                            "{calls_text}.filter((__c: {{ args: unknown[] }}) => {{ {destructure}{pre_src}return ({pred}); }}).length"
+                        );
+                        match n {
+                            None => format!("(({matching}) >= 1)"),
+                            Some(n) => format!("(({matching}) === ({n}))"),
+                        }
+                    },
+                )
             }
         },
     }
@@ -1938,7 +2153,7 @@ fn lower_observation(o: &ObservationExpr, cx: &mut LowerCtx) -> String {
 /// A default base-type literal (as TypeScript source) that satisfies a refined
 /// type's predicates, for bare `Val[T]`. `None` when no default can be derived
 /// (a `Matches` refinement — the checker rejects bare `Val` for those).
-fn refined_default(decl: &TypeDecl) -> Option<String> {
+fn refined_default(decl: &TypeDecl) -> Option<bynk_ts::TsExpr> {
     match &decl.body {
         TypeBody::Refined {
             base, refinement, ..
@@ -1950,12 +2165,12 @@ fn refined_default(decl: &TypeDecl) -> Option<String> {
 /// [`refined_default`] over a base type and its refinement, wherever it is
 /// written: a refined type's declaration, or a record field's inline `where`
 /// (#2658: `qty: Int where Positive` must fabricate `1`, not `0`).
-fn refinement_default(base: BaseType, refinement: Option<&Refinement>) -> Option<String> {
+fn refinement_default(base: BaseType, refinement: Option<&Refinement>) -> Option<bynk_ts::TsExpr> {
     // #2686: an `@example` is the value for a refinement `Val` cannot generate
     // (`Matches`, `IsoDate`); the checker proved it satisfies the refinement.
     if let Some(lit) = refinement
         .and_then(bynk_check::checker::refinement_example)
-        .and_then(lower_const_literal_raw)
+        .and_then(lower_const_literal_node)
     {
         return Some(lit);
     }
@@ -1982,7 +2197,7 @@ fn refinement_default(base: BaseType, refinement: Option<&Refinement>) -> Option
             if lo > hi {
                 lo = hi;
             }
-            Some(lo.to_string())
+            Some(num_lit(lo.to_string()))
         }
         BaseType::String => {
             let mut len: i64 = 0;
@@ -1999,9 +2214,9 @@ fn refinement_default(base: BaseType, refinement: Option<&Refinement>) -> Option
             if len < 1 {
                 len = 1;
             }
-            Some(format!("\"{}\"", "x".repeat(len as usize)))
+            Some(str_node("x".repeat(len as usize)))
         }
-        BaseType::Bool => Some("true".to_string()),
+        BaseType::Bool => Some(bynk_ts::TsExpr::Lit(bynk_ts::TsLit::Bool(true))),
         BaseType::Float => {
             let mut lo: f64 = 0.0;
             let mut hi = f64::INFINITY;
@@ -2023,13 +2238,13 @@ fn refinement_default(base: BaseType, refinement: Option<&Refinement>) -> Option
             if lo > hi {
                 lo = hi;
             }
-            Some(lo.to_string())
+            Some(num_lit(lo.to_string()))
         }
         // v0.86: `Duration` carries no refinement; `0` millis is its default.
-        BaseType::Duration | BaseType::Instant => Some("0".to_string()),
+        BaseType::Duration | BaseType::Instant => Some(num_lit("0".to_string())),
         // v0.110: `Bytes` carries no refinement; the empty octet sequence is
         // its default.
-        BaseType::Bytes => Some("new globalThis.Uint8Array()".to_string()),
+        BaseType::Bytes => Some(empty_bytes_node()),
         // #2622: the smallest value the refinement admits, at scale 2.
         BaseType::Decimal => {
             let mut lo: i128 = 0;
@@ -2051,9 +2266,7 @@ fn refinement_default(base: BaseType, refinement: Option<&Refinement>) -> Option
                                 // common scale: the bound itself, at its own
                                 // scale, is the smallest value in range.
                                 None => {
-                                    return Some(crate::emitter::ts_types::decimal_ts_literal(
-                                        &a.coef, a.scale,
-                                    ));
+                                    return Some(decimal_lit(&a.coef, a.scale));
                                 }
                             }
                             if let Some(v) = scaled_coef(&b.coef, b.scale, scale) {
@@ -2070,10 +2283,7 @@ fn refinement_default(base: BaseType, refinement: Option<&Refinement>) -> Option
             {
                 lo = h;
             }
-            Some(crate::emitter::ts_types::decimal_ts_literal(
-                &lo.to_string(),
-                scale,
-            ))
+            Some(decimal_lit(&lo.to_string(), scale))
         }
     }
 }
@@ -2092,52 +2302,62 @@ fn scaled_coef(coef: &str, from: u32, to: u32) -> Option<i128> {
 /// checker's `MOCK_DEPTH`).
 const MOCK_DEPTH: u32 = 12;
 
-/// A TypeScript base-literal default for an opaque type's underlying base. Not
+/// `new globalThis.Uint8Array()`: the empty octet sequence, `Bytes`'s default.
+fn empty_bytes_node() -> bynk_ts::TsExpr {
+    bynk_ts::TsExpr::New {
+        callee: Box::new(member_node("globalThis", "Uint8Array")),
+        args: Vec::new(),
+    }
+}
+
+/// A base-literal default for an opaque type's underlying base, as a node. Not
 /// distinct per call in this increment — per-call distinctness via a runtime
 /// counter is a follow-up.
-fn base_default_ts(base: BaseType) -> String {
+fn base_default_ts(base: BaseType) -> bynk_ts::TsExpr {
     match base {
-        BaseType::Int => "0".to_string(),
-        BaseType::String => "\"mock\"".to_string(),
-        BaseType::Bool => "true".to_string(),
-        BaseType::Float => "0".to_string(),
-        BaseType::Duration | BaseType::Instant => "0".to_string(),
-        BaseType::Bytes => "new globalThis.Uint8Array()".to_string(),
-        BaseType::Decimal => crate::emitter::ts_types::decimal_ts_literal("0", 0),
+        BaseType::Int => num_lit("0".to_string()),
+        BaseType::String => str_node("mock"),
+        BaseType::Bool => bynk_ts::TsExpr::Lit(bynk_ts::TsLit::Bool(true)),
+        BaseType::Float => num_lit("0".to_string()),
+        BaseType::Duration | BaseType::Instant => num_lit("0".to_string()),
+        BaseType::Bytes => empty_bytes_node(),
+        BaseType::Decimal => decimal_lit("0", 0),
     }
 }
 
 /// Generate a TypeScript expression for a bare `Val` of `ty` (v0.9.4 Part B,
-/// slice 2). Recurses through sum payloads and record fields; refined types use
-/// `refined_default`, opaque types wrap a base default, bare bases use 0/""/true.
-fn mock_value(ty: TyId, cx: &LowerCtx, depth: u32) -> String {
+/// slice 2), as a node (1A.17, Decision D). Recurses through sum payloads and
+/// record fields; refined types use `refined_default`, opaque types wrap a base
+/// default, bare bases use 0/""/true.
+fn mock_value(ty: TyId, cx: &LowerCtx, depth: u32) -> bynk_ts::TsExpr {
+    let undefined = || ident_node("undefined");
     let tys = cx.ty_render();
     if depth == 0 {
-        return "undefined".to_string();
+        return undefined();
     }
     match &*tys.get(ty) {
-        Ty::Base(BaseType::Int) => "0".to_string(),
-        Ty::Base(BaseType::String) => "\"\"".to_string(),
-        Ty::Base(BaseType::Bool) => "true".to_string(),
-        Ty::Base(BaseType::Float) => "0".to_string(),
-        Ty::Base(BaseType::Decimal) => crate::emitter::ts_types::decimal_ts_literal("0", 0),
+        Ty::Base(BaseType::Int) => num_lit("0".to_string()),
+        Ty::Base(BaseType::String) => str_node(""),
+        Ty::Base(BaseType::Bool) => bynk_ts::TsExpr::Lit(bynk_ts::TsLit::Bool(true)),
+        Ty::Base(BaseType::Float) => num_lit("0".to_string()),
+        Ty::Base(BaseType::Decimal) => decimal_lit("0", 0),
         Ty::Named { name, .. } => {
             let Some(decl) = cx.commons().types.get(name.as_str()) else {
-                return "undefined".to_string();
+                return undefined();
             };
             match &decl.body {
                 TypeBody::Refined { .. } => {
-                    let d = refined_default(decl).unwrap_or_else(|| "0".to_string());
-                    unchecked_construct_test(name, &d, false)
+                    let d = refined_default(decl).unwrap_or_else(|| num_lit("0".to_string()));
+                    unchecked_construct_test_node(name, d, false)
                 }
                 TypeBody::Opaque { base, .. } => {
-                    unchecked_construct_test(name, &base_default_ts(*base), true)
+                    unchecked_construct_test_node(name, base_default_ts(*base), true)
                 }
                 TypeBody::Sum(s) => match s.variants.first() {
-                    None => "undefined".to_string(),
-                    Some(v) if v.payload.is_empty() => format!("{name}.{}", v.name.name),
+                    None => undefined(),
+                    Some(v) if v.payload.is_empty() => member_node(name, &v.name.name),
                     Some(v) => {
-                        let args: Vec<String> = v
+                        let args = v
                             .payload
                             .iter()
                             .map(|f| {
@@ -2147,15 +2367,17 @@ fn mock_value(ty: TyId, cx: &LowerCtx, depth: u32) -> String {
                                     tys.types(),
                                 )
                                 .map(|t| mock_value(t, cx, depth - 1))
-                                .unwrap_or_else(|| "undefined".to_string())
+                                .unwrap_or_else(undefined)
                             })
                             .collect();
-                        format!("{name}.{}({})", v.name.name, args.join(", "))
+                        bynk_ts::TsExpr::Call {
+                            callee: Box::new(member_node(name, &v.name.name)),
+                            args,
+                        }
                     }
                 },
-                TypeBody::Record(r) => {
-                    let parts: Vec<String> = r
-                        .fields
+                TypeBody::Record(r) => bynk_ts::TsExpr::object(
+                    r.fields
                         .iter()
                         .map(|f| {
                             // An inline `where` on a base-typed field narrows
@@ -2174,16 +2396,15 @@ fn mock_value(ty: TyId, cx: &LowerCtx, depth: u32) -> String {
                                     tys.types(),
                                 )
                                 .map(|t| mock_value(t, cx, depth - 1))
-                                .unwrap_or_else(|| "undefined".to_string())
+                                .unwrap_or_else(undefined)
                             });
-                            format!("{}: {}", f.name.name, fv)
+                            (f.name.name.clone(), fv)
                         })
-                        .collect();
-                    format!("{{ {} }}", parts.join(", "))
-                }
+                        .collect(),
+                ),
             }
         }
-        _ => "undefined".to_string(),
+        _ => undefined(),
     }
 }
 
@@ -5531,6 +5752,8 @@ fn lower_val(type_ref: &TypeRef, args: &[Expr], cx: &mut LowerCtx) -> Lowered {
     let ty = match bynk_check::checker::resolve_type_ref(type_ref, &cx.commons().types, tys.types())
     {
         Some(t) => t,
+        // 1A: text, not a node: the comment is part of the output, and an
+        // `Ident` carrying it is the escape the rule forbids.
         None => return pre.finish_text("undefined /* mock: unresolved type */".to_string()),
     };
     // Refined literal pin. This `Val[T](lit)` path is test-only scaffolding, where
@@ -5547,11 +5770,19 @@ fn lower_val(type_ref: &TypeRef, args: &[Expr], cx: &mut LowerCtx) -> Lowered {
         },
     ) = (args.first(), &*ty_node)
     {
-        let raw = lower_const_literal_raw(arg).unwrap_or_else(|| pre.lower(arg, cx));
-        return pre.finish_text(unchecked_construct_test(name, &raw, false));
+        let value = match lower_const_literal_node(arg) {
+            Some(n) => LoweredExpr::Node(n),
+            None => pre.lower_node(arg, cx),
+        };
+        let built = node_or_text(
+            vec![value],
+            |c| unchecked_construct_test_node(name, one(c), false),
+            |c| unchecked_construct_test(name, &one(c), false),
+        );
+        return pre.finish_built(built);
     }
     // Bare mock (refined / opaque / sum / record).
-    pre.finish_text(mock_value(ty, cx, MOCK_DEPTH))
+    pre.finish(LoweredExpr::Node(mock_value(ty, cx, MOCK_DEPTH)))
 }
 
 /// When we encounter `lhs && rhs`, see if lhs is an `is` (possibly wrapped
