@@ -28,6 +28,7 @@ per-commit history. While Bynk is pre-1.0, increments may change behaviour.
 
 | Version | Highlights |
 |---|---|
+| **v0.639.25** | The code generator hands function and method bodies to the TypeScript printer as statements, and the printer records their source-map checkpoints, with output unchanged |
 | **v0.639.24** | The code generator builds `is`, `&&`, `||`, `implies` and `par` as nodes where it can, with output unchanged apart from the layout of a multi-line `par` |
 | **v0.639.23** | The code generator builds `match` in tail and value position as switch, if-chain and arrow nodes where it can, with tail-position output and source maps unchanged |
 | **v0.639.22** | The code generator builds value-position `if`, block and lambda bodies as arrow nodes where it can, printing them at their real nesting depth, with no change to behaviour or source maps |
