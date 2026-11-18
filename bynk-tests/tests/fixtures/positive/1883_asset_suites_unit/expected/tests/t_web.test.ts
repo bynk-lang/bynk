@@ -59,18 +59,18 @@ async function test_the_stylesheet_is_served() {
     const { link, style } = __ns_t_page;
     const r = await __bynkAssetGet((style).url);
     void (((__d) => {
-        switch (__d.tag) {
-          case "Raw": {
-            const body = __d.body;
-            const ct = __d.contentType;
-            return __bynkExpect((ct === "text/css; charset=utf-8"), "tests/t/web.bynk:8:31", 345, 376, "expect ct == \"text/css; charset=utf-8\"");
-          }
-          default: {
-            return __bynkExpect((false), "tests/t/web.bynk:9:19", 395, 400, "expect false");
-          }
+      switch (__d.tag) {
+        case "Raw": {
+          const body = __d.body;
+          const ct = __d.contentType;
+          return __bynkExpect((ct === "text/css; charset=utf-8"), "tests/t/web.bynk:8:31", 345, 376, "expect ct == \"text/css; charset=utf-8\"");
         }
-        throw new globalThis.Error("non-exhaustive match");
-      })(r));
+        default: {
+          return __bynkExpect((false), "tests/t/web.bynk:9:19", 395, 400, "expect false");
+        }
+      }
+      throw new globalThis.Error("non-exhaustive match");
+    })(r));
     return { pass: true };
   } catch (e) {
     if (e instanceof ExpectationError) {
@@ -106,17 +106,17 @@ async function test_a_refusal_carries_its_message() {
     const { link, style } = __ns_t_page;
     const r = await api.http_GET_refuse(deps);
     void (((__d) => {
-        switch (__d.tag) {
-          case "BadRequest": {
-            const m = __d.message;
-            return __bynkExpect((m === "no"), "tests/t/web.bynk:22:31", 814, 823, "expect m == \"no\"");
-          }
-          default: {
-            return __bynkExpect((false), "tests/t/web.bynk:23:19", 842, 847, "expect false");
-          }
+      switch (__d.tag) {
+        case "BadRequest": {
+          const m = __d.message;
+          return __bynkExpect((m === "no"), "tests/t/web.bynk:22:31", 814, 823, "expect m == \"no\"");
         }
-        throw new globalThis.Error("non-exhaustive match");
-      })(r));
+        default: {
+          return __bynkExpect((false), "tests/t/web.bynk:23:19", 842, 847, "expect false");
+        }
+      }
+      throw new globalThis.Error("non-exhaustive match");
+    })(r));
     return { pass: true };
   } catch (e) {
     if (e instanceof ExpectationError) {

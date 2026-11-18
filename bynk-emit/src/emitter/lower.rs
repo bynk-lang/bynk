@@ -24,9 +24,9 @@ use super::ctx::{BodyMode, ModuleCtx, TestShared};
 use super::lower_ctx::LowerCtx;
 use super::lower_stmt::{
     Body, Item, arms_contain_question, block_body, block_body_into, block_contains_question,
-    emit_block_as_function_body, emit_block_as_function_body_with_return, emit_if_tail,
-    emit_match_tail, emit_statement, hoist_if_as_statement, hoist_value_as_statement,
-    match_dispatch, render, ternary_shaped, write_line,
+    emit_block_as_function_body_with_return, emit_statement, hoist_if_as_statement,
+    hoist_value_as_statement, if_tail, match_dispatch, match_tail, render_text, ternary_shaped,
+    write_line,
 };
 use super::ts_types::{
     ts_array_elem, ts_base, ts_ty, ts_ty_to_ts_type, ts_type_ref, ts_type_ref_to_ts_type,
@@ -1654,8 +1654,8 @@ pub(crate) fn lower_expr(e: &Expr, cx: &mut LowerCtx) -> Lowered {
         } if !ternary_shaped(cond, then_block, else_block, cx)
             && (block_contains_question(then_block) || block_contains_question(else_block)) =>
         {
-            pre.absorb(hoist_value_as_statement(e, cx, |out, cx| {
-                emit_if_tail(out, cond, then_block, else_block, cx, INDENT_STEP, false)
+            pre.absorb(hoist_value_as_statement(e, cx, |body, cx| {
+                if_tail(body, cond, then_block, else_block, cx, false)
             }))
         }
         ExprKind::If {
@@ -1675,18 +1675,18 @@ pub(crate) fn lower_expr(e: &Expr, cx: &mut LowerCtx) -> Lowered {
         // today. Routed like `if`/`match` so a future value-position block
         // with a `?` would not reintroduce the arrow miscompile.
         ExprKind::Block(b) if block_contains_question(b) => {
-            pre.absorb(hoist_value_as_statement(e, cx, |out, cx| {
-                emit_block_as_function_body(out, b, cx, INDENT_STEP, false)
+            pre.absorb(hoist_value_as_statement(e, cx, |body, cx| {
+                block_body_into(body, b, cx, false)
             }))
         }
         ExprKind::Block(b) => built_or_text!(pre, lower_block_as_expr(b, cx)),
         ExprKind::Match { discriminant, arms } if arms_contain_question(arms) => {
-            pre.absorb(hoist_value_as_statement(e, cx, |out, cx| {
-                emit_match_tail(out, discriminant, arms, cx, INDENT_STEP, false)
+            pre.absorb(hoist_value_as_statement(e, cx, |body, cx| {
+                match_tail(body, discriminant, arms, cx, false)
             }))
         }
         ExprKind::Match { discriminant, arms } => {
-            pre.absorb(lower_match_as_iife(discriminant, arms, cx))
+            lowered_or_text!(pre, lower_match_as_iife(discriminant, arms, cx))
         }
         ExprKind::Is { value, pattern } => lowered_or_text!(pre, lower_is(value, pattern, cx)),
         ExprKind::EffectPure(inner) => {
@@ -2321,7 +2321,7 @@ fn scope_idempotency_key(
 
 /// W30 (#2840): lower a first-party `Idempotency.claim(key, expiresAfter)` made
 /// in a service handler so the claim is recorded in the handler's claim scope
-/// (`__claims`, declared by [`claim_scope_wrapper`]). The scope decides how long
+/// (`__claims`, declared by [`CLAIM_SCOPE_DECLARATION`]). The scope decides how long
 /// the claim is first taken for (`lease`: a short lease when the provider will
 /// settle it, the full `expiresAfter` when it won't); `note` remembers the key
 /// when it was `Claimed`, and the scope confirms it for the full `expiresAfter`
@@ -2338,24 +2338,15 @@ fn tracked_claim_call(cap_expr: &str, args: &[String], cx: &mut LowerCtx) -> Str
     )
 }
 
-/// W30 (#2840): wrap a service handler's already-lowered function body so the
+/// W30 (#2840): the statement that opens a service handler's claim scope, which
+/// wraps the already-lowered function body (`lower_stmt::claim_scoped`) so the
 /// claims it made are settled when it exits. `__claims` is the provider's own
 /// scope (`Idempotency.__track()`, hidden: not in the capability), or a no-op
 /// scope for a provider without one, which takes the claim for its full
 /// window and never settles it. A thrown fault releases the claims; a
 /// returned `Err` or a 5xx `HttpResult` does too; any other outcome confirms
-/// them. Returns the text to put before and after the body, which is left
-/// where it is so its source-map checkpoints stay valid.
-pub(crate) fn claim_scope_wrapper(indent: usize) -> (String, String) {
-    let pad = " ".repeat(indent);
-    let before = format!(
-        "{pad}const __claims = (deps.Idempotency as unknown as {{ __track?: () => {{ note<C>(k: string, c: C, t: number): C; lease(t: number): number; settle(r: unknown, threw: boolean): globalThis.Promise<void> }} }}).__track?.() ?? {{ note: <C>(_k: string, c: C, _t: number) => c, lease: (t: number) => t, settle: async (_r: unknown, _threw: boolean) => {{}} }};\n{pad}let __r;\n{pad}try {{\n{pad}__r = await (async () => {{\n"
-    );
-    let after = format!(
-        "{pad}}})();\n{pad}}} catch (__e) {{\n{pad}  await __claims.settle(undefined, true);\n{pad}  throw __e;\n{pad}}}\n{pad}await __claims.settle(__r, false);\n{pad}return __r;\n"
-    );
-    (before, after)
-}
+/// them.
+pub(crate) const CLAIM_SCOPE_DECLARATION: &str = "const __claims = (deps.Idempotency as unknown as { __track?: () => { note<C>(k: string, c: C, t: number): C; lease(t: number): number; settle(r: unknown, threw: boolean): globalThis.Promise<void> } }).__track?.() ?? { note: <C>(_k: string, c: C, _t: number) => c, lease: (t: number) => t, settle: async (_r: unknown, _threw: boolean) => {} };";
 
 fn lower_method_call(e: &Expr, cx: &mut LowerCtx) -> Lowered {
     let ExprKind::MethodCall {
@@ -7825,10 +7816,9 @@ fn lower_if(
         let saved = cx.return_ty.take();
         // #1750: the arrow's own tails `return` from the arrow.
         let saved_slot = cx.tail_slot.take();
-        // #4 review: the arrow's text is spliced into the caller's output
-        // later, at an offset `record_span` has no way to learn — see
-        // `without_source_map`.
-        cx.without_source_map(|cx| block_body_into(&mut then_body, then_block, cx, false));
+        // The branches keep their marks (1A.15, Decision D): as nodes the printer
+        // records them, and the text fallback below drops them (`render_text`).
+        block_body_into(&mut then_body, then_block, cx, false);
         cx.shadow_scopes.pop();
         // #1654: the bindings the condition's falsity proves, scoped to the
         // else-branch the same way.
@@ -7837,7 +7827,7 @@ fn lower_if(
         gather_is_bindings_for_emit(cond, false, cx, &mut else_bindings, &mut found);
         let mut else_body = Body::new();
         else_body.extend(else_bindings.iter().map(LoweredStmt::item));
-        cx.without_source_map(|cx| block_body_into(&mut else_body, else_block, cx, false));
+        block_body_into(&mut else_body, else_block, cx, false);
         cx.shadow_scopes.pop();
         cx.return_ty = saved;
         cx.tail_slot = saved_slot;
@@ -7856,8 +7846,8 @@ fn lower_if(
             LoweredExpr::Text(t) => Err(t),
         };
         if let Ok(cond) = &cond_node
-            && let Some(then_stmts) = then_body.to_nodes_unmapped()
-            && let Some(else_stmts) = else_body.to_nodes_unmapped()
+            && let Some(then_stmts) = then_body.to_nodes()
+            && let Some(else_stmts) = else_body.to_nodes()
         {
             let branch = bynk_ts::TsStmt::if_else_same_line_stmt(
                 cond.clone(),
@@ -7877,12 +7867,12 @@ fn lower_if(
         iife.push_str("    if (");
         iife.push_str(&cond_expr);
         iife.push_str(") {\n");
-        cx.without_source_map(|cx| render(&then_body, &mut iife, INDENT_STEP * 3, cx));
+        render_text(&then_body, &mut iife, INDENT_STEP * 3);
         for _ in 0..(INDENT_STEP * 2) {
             iife.push(' ');
         }
         iife.push_str("} else {\n");
-        cx.without_source_map(|cx| render(&else_body, &mut iife, INDENT_STEP * 3, cx));
+        render_text(&else_body, &mut iife, INDENT_STEP * 3);
         for _ in 0..(INDENT_STEP * 2) {
             iife.push(' ');
         }
@@ -9576,10 +9566,9 @@ fn lower_lambda(e: &Expr, lambda: &LambdaExpr, cx: &mut LowerCtx) -> Built {
     let saved_hoist = cx.is_temp_hoist.take();
     let result: Built = match &lambda.body.kind {
         ExprKind::Block(b) => {
-            // #4 review: the body's text is spliced into the caller's output
-            // later — see `without_source_map`.
-            let body = cx.without_source_map(|cx| block_body(b, cx, is_async));
-            match (node_params, body.to_nodes_unmapped()) {
+            // The body keeps its marks (1A.15, Decision D).
+            let body = block_body(b, cx, is_async);
+            match (node_params, body.to_nodes()) {
                 (Some(params), Some(stmts)) => Ok(lambda_node(
                     params,
                     is_async,
@@ -9587,7 +9576,7 @@ fn lower_lambda(e: &Expr, lambda: &LambdaExpr, cx: &mut LowerCtx) -> Built {
                 )),
                 _ => {
                     let mut out = format!("{prefix}({params}) => {{\n");
-                    cx.without_source_map(|cx| render(&body, &mut out, INDENT_STEP * 2, cx));
+                    render_text(&body, &mut out, INDENT_STEP * 2);
                     for _ in 0..INDENT_STEP {
                         out.push(' ');
                     }
@@ -9689,17 +9678,16 @@ fn lower_block_as_expr(b: &Block, cx: &mut LowerCtx) -> Built {
     // clear `return_ty`. #1750: a block holding a `?` no longer reaches here
     // (`hoist_value_as_statement`).
     let saved = cx.return_ty.take();
-    // #4 review: the IIFE's text is spliced into the caller's output later —
-    // see `without_source_map`.
-    let body = cx.without_source_map(|cx| block_body(b, cx, false));
+    // The body keeps its marks (1A.15, Decision D).
+    let body = block_body(b, cx, false);
     cx.return_ty = saved;
     cx.tail_slot = saved_slot;
-    if let Some(stmts) = body.to_nodes_unmapped() {
+    if let Some(stmts) = body.to_nodes() {
         return Ok(iife_call(false, stmts));
     }
     let mut iife = String::new();
     iife.push_str("(() => {\n");
-    cx.without_source_map(|cx| render(&body, &mut iife, INDENT_STEP * 2, cx));
+    render_text(&body, &mut iife, INDENT_STEP * 2);
     for _ in 0..INDENT_STEP {
         iife.push(' ');
     }
@@ -9741,33 +9729,20 @@ fn lower_match_as_iife(discriminant: &Expr, arms: &[MatchArm], cx: &mut LowerCtx
     // *caller's* scope — the propagation the old text scan got for free from
     // the substring surviving in the returned string.
     let saved_await = std::mem::take(&mut cx.emitted_await);
-    // #4 review: the arrow's body is spliced into the caller's output later
-    // — see `without_source_map`.
-    let body = cx.without_source_map(|cx| {
-        let mut body = Body::new();
-        match_dispatch(
-            &mut body,
-            &PatPath::ident("__d"),
-            &disc_ty,
-            arms,
-            cx,
-            false,
-            false,
-        );
-        body
-    });
+    // The arrow's body keeps its marks (1A.15, Decision D).
+    let mut body = Body::new();
+    match_dispatch(&mut body, &PatPath::ident("__d"), &disc_ty, arms, cx, false);
     let needs_async = cx.emitted_await;
     cx.emitted_await = saved_await || needs_async;
     cx.return_ty = saved;
     cx.tail_slot = saved_slot;
-    // The node form (1A.13): a node discriminant and a body that is all nodes,
-    // its checkpoints dropped as they are today.
+    // The node form (1A.13): a node discriminant and a body that is all nodes.
     let disc = match disc {
         LoweredExpr::Node(n) => Ok(n),
         LoweredExpr::Text(t) => Err(t),
     };
     if let Ok(disc) = &disc
-        && let Some(stmts) = body.to_nodes_unmapped()
+        && let Some(stmts) = body.to_nodes()
     {
         let params = vec![bynk_ts::TsParam {
             name: "__d".to_string(),
@@ -9788,7 +9763,7 @@ fn lower_match_as_iife(discriminant: &Expr, arms: &[MatchArm], cx: &mut LowerCtx
     };
     let mut iife = String::new();
     iife.push_str("((__d) => {\n");
-    cx.without_source_map(|cx| render(&body, &mut iife, INDENT_STEP * 2, cx));
+    render_text(&body, &mut iife, INDENT_STEP * 2);
     for _ in 0..INDENT_STEP {
         iife.push(' ');
     }
@@ -10773,7 +10748,7 @@ mod idempotency_scoping_tests {
     /// whole window, so nothing is cut to the lease with no settle to extend it.
     #[test]
     fn a_provider_without_a_scope_takes_the_full_window() {
-        let (before, _) = claim_scope_wrapper(4);
+        let before = CLAIM_SCOPE_DECLARATION;
         assert!(before.contains("lease: (t: number) => t"), "{before}");
         assert!(before.contains("__track?.() ??"), "{before}");
     }
@@ -12262,16 +12237,16 @@ fn minus(x: Int) -> Int { 5 - - -x }
     }
 
     #[test]
-    fn a_question_over_a_text_operand_falls_back_to_text_lines() {
-        // A `match` in value position still lowers to text (its IIFE), so a
-        // `?` over one cannot be a node: both statements stay text lines, byte
-        // for byte, and the yielded `__rN.value` is still a member node.
+    fn a_question_over_a_value_position_match_is_a_node() {
+        // 1A.15: a `match` in value position is a node (its IIFE) when its arm
+        // tails are, so a `?` over one is a node as well: no statement stays a
+        // text line, and the guard is the same bytes.
         let src = "commons qtext\n\
             fn f(x: Result[Int, String], n: Int) -> Result[Int, String] {\n\
               Ok((match n { 0 => x, _ => x })?)\n\
             }\n";
         let (exits, stmts, ts) = exits_and_stmts(src);
-        assert!(exits > 0 && stmts == 2, "{exits} {stmts}\n{ts}");
+        assert_eq!((exits, stmts), (0, 0), "{ts}");
         assert!(
             ts.contains("  const __r0 = (((__d) => {")
                 && ts.contains(

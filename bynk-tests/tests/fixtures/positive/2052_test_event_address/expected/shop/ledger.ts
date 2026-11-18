@@ -95,19 +95,19 @@ export const OnPlaced = {
     const __claims = (deps.Idempotency as unknown as { __track?: () => { note<C>(k: string, c: C, t: number): C; lease(t: number): number; settle(r: unknown, threw: boolean): globalThis.Promise<void> } }).__track?.() ?? { note: <C>(_k: string, c: C, _t: number) => c, lease: (t: number) => t, settle: async (_r: unknown, _threw: boolean) => {} };
     let __r;
     try {
-    __r = await (async () => {
-    const __letElse714 = await (await (async (__k: string, __t: number) => __claims.note(__k, await deps.Idempotency.claim(__k, __claims.lease(__t)), __t))(`shop.ledger.OnPlaced.event::${env.eventId}`, 604800000));
-    switch (__letElse714.tag) {
-      case "Claimed": {
-        const __r0 = await __makeBooks("publisher").note(env.publisherId, deps);
-        return __makeBooks("all").bump(deps);
-      }
-      default: {
-        return undefined;
-      }
-    }
-    throw new globalThis.Error("non-exhaustive match");
-    })();
+      __r = await (async () => {
+        const __letElse714 = await (await (async (__k: string, __t: number) => __claims.note(__k, await deps.Idempotency.claim(__k, __claims.lease(__t)), __t))(`shop.ledger.OnPlaced.event::${env.eventId}`, 604800000));
+        switch (__letElse714.tag) {
+          case "Claimed": {
+            const __r0 = await __makeBooks("publisher").note(env.publisherId, deps);
+            return __makeBooks("all").bump(deps);
+          }
+          default: {
+            return undefined;
+          }
+        }
+        throw new globalThis.Error("non-exhaustive match");
+      })();
     } catch (__e) {
       await __claims.settle(undefined, true);
       throw __e;

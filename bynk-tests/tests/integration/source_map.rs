@@ -304,6 +304,53 @@ fn value_position_if_iife_does_not_corrupt_earlier_checkpoints() {
     );
 }
 
+#[test]
+fn value_position_if_iife_statements_map_to_their_own_lines() {
+    // 1A.15 (Decision D of #3716): the IIFE's statements are mapped, where
+    // before they inherited the `let r` line's checkpoint and a debugger
+    // could not step through them one by one.
+    let (ts, map) = compile_reps(IIFE_FIXTURE);
+    let lines = decode(extract_field(&map, "mappings"));
+    let at = |needle: &str| {
+        lines[gen_line_of(&ts, needle)].unwrap_or_else(|| panic!("{needle:?} unmapped\n{ts}"))
+    };
+    // Source (0-based): line 4 = `let y = 2`, line 5 = `y + 1`, line 7 = `0`.
+    assert_eq!(at("const y = "), 4, "{ts}");
+    assert_eq!(at("return y + 1"), 5, "{ts}");
+    assert_eq!(at("return 0"), 7, "{ts}");
+}
+
+const LAMBDA_FIXTURE: &str = "commons reps {
+  fn run() -> Int {
+    let f = (x: Int) => {
+      let y = x * 2
+      y + 1
+    }
+    f(3)
+  }
+}
+";
+
+/// The inspector test of 1A.15 (Decision D of #3716): `bynk test --inspect`
+/// steps into a lambda body, because each of its statements maps to its own
+/// source line. Before, a lambda body was lowered with its checkpoints
+/// suppressed, so every line of it belonged to the statement holding the
+/// lambda (source line 2) and a debugger skipped the body in one step.
+#[test]
+fn a_lambda_body_steps_through_its_own_source_lines() {
+    let (ts, map) = compile_reps(LAMBDA_FIXTURE);
+    let lines = decode(extract_field(&map, "mappings"));
+    let at = |needle: &str| {
+        lines[gen_line_of(&ts, needle)].unwrap_or_else(|| panic!("{needle:?} unmapped\n{ts}"))
+    };
+    // Source (0-based): line 2 = `let f = ...`, line 3 = `let y`, line 4 = `y + 1`,
+    // line 6 = `f(3)`.
+    assert_eq!(at("const f = "), 2, "{ts}");
+    assert_eq!(at("const y = "), 3, "{ts}");
+    assert_eq!(at("return y + 1"), 4, "{ts}");
+    assert_eq!(at("return f(3)"), 6, "{ts}");
+}
+
 /// #1359: like [`compile_reps`], but for a `context`-rooted fixture (a
 /// `capability`/`provides` pair can't live in a bare `commons` at all —
 /// `emit_capability`'s own #1358 test hit the identical constraint) —
@@ -460,6 +507,44 @@ const SERVICE_FIXTURE: &str = "context reps {
   }
 }
 ";
+
+const CLAIM_FIXTURE: &str = "context reps {
+  consumes bynk { Idempotency, Claim }
+
+  service ledger {
+    on call(id: String) -> Effect[Result[String, String]] given Idempotency {
+      let Claim.Claimed <- Idempotency.claim(id, 1.hours) else { Ok(\"duplicate\") }
+      let tagged = \"\\(id)!\"
+      if id == \"bad\" { Err(tagged) } else { Ok(tagged) }
+    }
+  }
+}
+";
+
+/// 1A.15 review (#3757): a handler that claims runs its body inside the
+/// claim-scope wrapper's `try { __r = await (async () => { … })(); }`, two
+/// expression levels deep (`Assign` → `Await` → `Call` → `Arrow`). Its
+/// checkpoints survive only through the printer's map threading into arrow
+/// bodies, so each statement inside that closure must map to its own line.
+#[test]
+fn claim_scoped_handler_body_keeps_its_own_statement_lines() {
+    let (ts, map) = compile_reps_context(CLAIM_FIXTURE);
+    assert!(ts.contains("__r = await (async () => {"), "{ts}");
+    let lines = decode(extract_field(&map, "mappings"));
+    let at = |g: usize| lines[g].unwrap_or_else(|| panic!("gen line {g} unmapped\n{ts}"));
+    // Source (0-based): line 5 = the claim `let … else`, line 6 = `let tagged`,
+    // line 7 = the `if`.
+    assert_eq!(
+        at(gen_line_of(&ts, "Idempotency.claim(__k")),
+        5,
+        "the claim call inside the closure keeps its own line"
+    );
+    assert_eq!(
+        at(gen_line_of(&ts, "const tagged = ")),
+        6,
+        "`let tagged` inside the claim closure keeps its own line"
+    );
+}
 
 #[test]
 fn service_handler_body_keeps_its_own_statement_lines_inside_the_events_iife() {

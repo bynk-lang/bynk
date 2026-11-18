@@ -71,19 +71,19 @@ export const placement = {
       case "Err": {
         const error = auth.error;
         return ((__d) => {
-    switch (__d.tag) {
-      case "Declined": {
-        return Err(OrderError.PaymentDeclined);
-      }
-      case "InsufficientFunds": {
-        return Err(OrderError.PaymentInsufficientFunds);
-      }
-      case "GatewayDown": {
-        return Err(OrderError.PaymentInfrastructureError);
-      }
-    }
-    throw new globalThis.Error("non-exhaustive match");
-  })(error);
+          switch (__d.tag) {
+            case "Declined": {
+              return Err(OrderError.PaymentDeclined);
+            }
+            case "InsufficientFunds": {
+              return Err(OrderError.PaymentInsufficientFunds);
+            }
+            case "GatewayDown": {
+              return Err(OrderError.PaymentInfrastructureError);
+            }
+          }
+          throw new globalThis.Error("non-exhaustive match");
+        })(error);
       }
     }
     throw new globalThis.Error("non-exhaustive match");
@@ -105,19 +105,19 @@ export const orders = {
       case "Err": {
         const error = auth.error;
         return ((__d) => {
-    switch (__d.tag) {
-      case "Declined": {
-        return HttpResult.UnprocessableEntity("payment declined");
-      }
-      case "InsufficientFunds": {
-        return HttpResult.UnprocessableEntity("insufficient funds");
-      }
-      case "GatewayDown": {
-        return HttpResult.ServerError("payment system unavailable");
-      }
-    }
-    throw new globalThis.Error("non-exhaustive match");
-  })(error);
+          switch (__d.tag) {
+            case "Declined": {
+              return HttpResult.UnprocessableEntity("payment declined");
+            }
+            case "InsufficientFunds": {
+              return HttpResult.UnprocessableEntity("insufficient funds");
+            }
+            case "GatewayDown": {
+              return HttpResult.ServerError("payment system unavailable");
+            }
+          }
+          throw new globalThis.Error("non-exhaustive match");
+        })(error);
       }
     }
     throw new globalThis.Error("non-exhaustive match");

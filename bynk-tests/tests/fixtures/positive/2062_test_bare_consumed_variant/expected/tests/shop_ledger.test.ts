@@ -90,16 +90,16 @@ async function test_a_bare_consumed_variant_as_a_value_and_a_pattern() {
     const order = (deps as any).surface?.order;
     const r = Region.International;
     const label = ((__d) => {
-        switch (__d.tag) {
-          case "Domestic": {
-            return "home";
-          }
-          case "International": {
-            return "abroad";
-          }
+      switch (__d.tag) {
+        case "Domestic": {
+          return "home";
         }
-        throw new globalThis.Error("non-exhaustive match");
-      })(r);
+        case "International": {
+          return "abroad";
+        }
+      }
+      throw new globalThis.Error("non-exhaustive match");
+    })(r);
     if (!(label === "abroad")) { throw __bynkExpectFailure("tests/ledger.bynk:23:12", 749, 766, "expect label == \"abroad\"\n  expected: label == \"abroad\"\n  actual:   " + __bynkShow((label)) + " == " + __bynkShow(("abroad"))); }
     return { pass: true };
   } catch (e) {

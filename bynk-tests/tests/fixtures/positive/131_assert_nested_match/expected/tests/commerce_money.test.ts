@@ -45,26 +45,26 @@ async function test_nested_match_expect() {
     const outer = Money.fromMinorUnits(10);
     const inner = Money.fromMinorUnits(-1);
     void (((__d) => {
-        switch (__d.tag) {
-          case "Ok": {
-            return ((__d) => {
-        switch (__d.tag) {
-          case "Ok": {
-            return __bynkExpect((false), "tests/money.test.bynk:7:25", 207, 212, "expect false");
-          }
-          case "Err": {
-            return __bynkExpect((true), "tests/money.test.bynk:8:26", 238, 242, "expect true");
-          }
+      switch (__d.tag) {
+        case "Ok": {
+          return ((__d) => {
+            switch (__d.tag) {
+              case "Ok": {
+                return __bynkExpect((false), "tests/money.test.bynk:7:25", 207, 212, "expect false");
+              }
+              case "Err": {
+                return __bynkExpect((true), "tests/money.test.bynk:8:26", 238, 242, "expect true");
+              }
+            }
+            throw new globalThis.Error("non-exhaustive match");
+          })(inner);
         }
-        throw new globalThis.Error("non-exhaustive match");
-      })(inner);
-          }
-          case "Err": {
-            return __bynkExpect((false), "tests/money.test.bynk:10:24", 274, 279, "expect false");
-          }
+        case "Err": {
+          return __bynkExpect((false), "tests/money.test.bynk:10:24", 274, 279, "expect false");
         }
-        throw new globalThis.Error("non-exhaustive match");
-      })(outer));
+      }
+      throw new globalThis.Error("non-exhaustive match");
+    })(outer));
     return { pass: true };
   } catch (e) {
     if (e instanceof ExpectationError) {

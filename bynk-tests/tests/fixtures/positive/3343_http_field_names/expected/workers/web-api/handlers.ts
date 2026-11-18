@@ -60,32 +60,32 @@ export const Upload = {
 export const api = {
   async http_GET_me(cookies: Session, deps: {}): globalThis.Promise<HttpResult<string>> {
     const sid = ((__d) => {
-    switch (__d.tag) {
-      case "Some": {
-        const s = __d.value;
-        return `${String(s)}`;
+      switch (__d.tag) {
+        case "Some": {
+          const s = __d.value;
+          return `${String(s)}`;
+        }
+        case "None": {
+          return "-";
+        }
       }
-      case "None": {
-        return "-";
-      }
-    }
-    throw new globalThis.Error("non-exhaustive match");
-  })(cookies.sid);
+      throw new globalThis.Error("non-exhaustive match");
+    })(cookies.sid);
     return HttpResult.Ok(`${String(sid)} ${String(cookies.theme)}`);
   },
   async http_GET_items(query: Filter, deps: {}): globalThis.Promise<HttpResult<string>> {
     const status = ((__d) => {
-    switch (__d.tag) {
-      case "Some": {
-        const s = __d.value;
-        return s;
+      switch (__d.tag) {
+        case "Some": {
+          const s = __d.value;
+          return s;
+        }
+        case "None": {
+          return "-";
+        }
       }
-      case "None": {
-        return "-";
-      }
-    }
-    throw new globalThis.Error("non-exhaustive match");
-  })(query.status);
+      throw new globalThis.Error("non-exhaustive match");
+    })(query.status);
     return HttpResult.Ok(`${String(query.pageSize)} ${String(status)}`);
   },
   async http_POST_signup(body: Signup, deps: {}): globalThis.Promise<HttpResult<string>> {

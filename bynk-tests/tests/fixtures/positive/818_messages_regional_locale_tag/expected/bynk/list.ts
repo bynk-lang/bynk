@@ -34,17 +34,17 @@ export function filter<A>(xs: readonly A[], p: (a0: A) => boolean): readonly A[]
 export function find<A>(xs: readonly A[], p: (a0: A) => boolean): Option<A> {
   const init: Option<A> = None;
   return ((__xs: readonly A[], __acc: Option<A>, __f: (acc: Option<A>, x: A) => Option<A>) => { for (const __x of __xs) __acc = __f(__acc, __x); return __acc; })(xs, init, (acc: Option<A>, x: A) => ((__d) => {
-    switch (__d.tag) {
-      case "Some": {
-        const v = __d.value;
-        return Some(v);
-      }
-      case "None": {
-        return (p(x) ? Some(x) : None);
-      }
+  switch (__d.tag) {
+    case "Some": {
+      const v = __d.value;
+      return Some(v);
     }
-    throw new globalThis.Error("non-exhaustive match");
-  })(acc));
+    case "None": {
+      return (p(x) ? Some(x) : None);
+    }
+  }
+  throw new globalThis.Error("non-exhaustive match");
+})(acc));
 }
 
 /**
@@ -70,17 +70,17 @@ export function any<A>(xs: readonly A[], p: (a0: A) => boolean): boolean {
 export function all<A>(xs: readonly A[], p: (a0: A) => boolean): boolean {
   const init: Option<A> = None;
   const failed = ((__xs: readonly A[], __acc: Option<A>, __f: (acc: Option<A>, x: A) => Option<A>) => { for (const __x of __xs) __acc = __f(__acc, __x); return __acc; })(xs, init, (acc: Option<A>, x: A) => ((__d) => {
-    switch (__d.tag) {
-      case "Some": {
-        const v = __d.value;
-        return Some(v);
-      }
-      case "None": {
-        return (p(x) ? None : Some(x));
-      }
+  switch (__d.tag) {
+    case "Some": {
+      const v = __d.value;
+      return Some(v);
     }
-    throw new globalThis.Error("non-exhaustive match");
-  })(acc));
+    case "None": {
+      return (p(x) ? None : Some(x));
+    }
+  }
+  throw new globalThis.Error("non-exhaustive match");
+})(acc));
   switch (failed.tag) {
     case "Some": {
       const v = failed.value;

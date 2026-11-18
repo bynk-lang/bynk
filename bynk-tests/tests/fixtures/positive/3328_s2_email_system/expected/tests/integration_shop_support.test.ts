@@ -266,17 +266,17 @@ async function test_a_message_Cloudflare_authenticated_is_answered() {
     const signed: ReadonlyMap<string, string> = new globalThis.Map(new globalThis.Map<string, string>()).set("authentication-results", "mx.cloudflare.net; dmarc=pass header.from=b.example");
     const r = await __sysdrive_message_support({ from: "a@b.example", to: "support@shop.example", subject: "hello", headers: signed, messageId: "", text: { tag: "None" as const }, html: { tag: "None" as const }, attachments: [], size: 0 });
     void (((__d) => {
-        switch (__d.tag) {
-          case "Reply": {
-            const m = __d.message;
-            return __bynkExpect((__bynkEq(m.text, Some("Thanks, we have your message."))), "src/shop/tests/support.test.bynk:24:26", 1254, 1301, "expect m.text == Some(\"Thanks, we have your message.\")");
-          }
-          default: {
-            return __bynkExpect((false), "src/shop/tests/support.test.bynk:25:19", 1320, 1325, "expect false");
-          }
+      switch (__d.tag) {
+        case "Reply": {
+          const m = __d.message;
+          return __bynkExpect((__bynkEq(m.text, Some("Thanks, we have your message."))), "src/shop/tests/support.test.bynk:24:26", 1254, 1301, "expect m.text == Some(\"Thanks, we have your message.\")");
         }
-        throw new globalThis.Error("non-exhaustive match");
-      })(r));
+        default: {
+          return __bynkExpect((false), "src/shop/tests/support.test.bynk:25:19", 1320, 1325, "expect false");
+        }
+      }
+      throw new globalThis.Error("non-exhaustive match");
+    })(r));
     return { pass: true };
   } catch (e) {
     if (e instanceof ExpectationError) {

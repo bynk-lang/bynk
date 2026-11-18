@@ -68,24 +68,24 @@ export class Gate {
     const __claims = (deps.Idempotency as unknown as { __track?: () => { note<C>(k: string, c: C, t: number): C; lease(t: number): number; settle(r: unknown, threw: boolean): globalThis.Promise<void> } }).__track?.() ?? { note: <C>(_k: string, c: C, _t: number) => c, lease: (t: number) => t, settle: async (_r: unknown, _threw: boolean) => {} };
     let __r;
     try {
-    __r = await (async () => {
-    const __state = { ...(await this.loadState()) };
-    const __result = await (async () => {
-      const __letElse487 = await (await (async (__k: string, __t: number) => __claims.note(__k, await deps.Idempotency.claim(__k, __claims.lease(__t)), __t))(`shop.gate.Gate.take::${job}`, 3600000));
-      switch (__letElse487.tag) {
-        case "Claimed": {
-          const __r0 = await (() => { __state.taken = ((n: number) => n + 1)(__state.taken); return undefined; })();
-          return (job === "bad" ? Err("rejected") : Ok("done"));
-        }
-        default: {
-          return Ok("duplicate");
-        }
-      }
-      throw new globalThis.Error("non-exhaustive match");
-    })();
-    await this.commitState(__state);
-    return __result;
-    })();
+      __r = await (async () => {
+        const __state = { ...(await this.loadState()) };
+        const __result = await (async () => {
+          const __letElse487 = await (await (async (__k: string, __t: number) => __claims.note(__k, await deps.Idempotency.claim(__k, __claims.lease(__t)), __t))(`shop.gate.Gate.take::${job}`, 3600000));
+          switch (__letElse487.tag) {
+            case "Claimed": {
+              const __r0 = await (() => { __state.taken = ((n: number) => n + 1)(__state.taken); return undefined; })();
+              return (job === "bad" ? Err("rejected") : Ok("done"));
+            }
+            default: {
+              return Ok("duplicate");
+            }
+          }
+          throw new globalThis.Error("non-exhaustive match");
+        })();
+        await this.commitState(__state);
+        return __result;
+      })();
     } catch (__e) {
       await __claims.settle(undefined, true);
       throw __e;
@@ -98,24 +98,24 @@ export class Gate {
     const __claims = (deps.Idempotency as unknown as { __track?: () => { note<C>(k: string, c: C, t: number): C; lease(t: number): number; settle(r: unknown, threw: boolean): globalThis.Promise<void> } }).__track?.() ?? { note: <C>(_k: string, c: C, _t: number) => c, lease: (t: number) => t, settle: async (_r: unknown, _threw: boolean) => {} };
     let __r;
     try {
-    __r = await (async () => {
-    const __state = { ...(await this.loadState()) };
-    const __result = await (async () => {
-      const __letElse838 = await (await (async (__k: string, __t: number) => __claims.note(__k, await deps.Idempotency.claim(__k, __claims.lease(__t)), __t))(`shop.gate.Gate.burst::${job}`, 3600000));
-      switch (__letElse838.tag) {
-        case "Claimed": {
-          __state.taken = 99;
-          return Ok("done");
-        }
-        default: {
-          return Ok("duplicate");
-        }
-      }
-      throw new globalThis.Error("non-exhaustive match");
-    })();
-    await this.commitState(__state);
-    return __result;
-    })();
+      __r = await (async () => {
+        const __state = { ...(await this.loadState()) };
+        const __result = await (async () => {
+          const __letElse838 = await (await (async (__k: string, __t: number) => __claims.note(__k, await deps.Idempotency.claim(__k, __claims.lease(__t)), __t))(`shop.gate.Gate.burst::${job}`, 3600000));
+          switch (__letElse838.tag) {
+            case "Claimed": {
+              __state.taken = 99;
+              return Ok("done");
+            }
+            default: {
+              return Ok("duplicate");
+            }
+          }
+          throw new globalThis.Error("non-exhaustive match");
+        })();
+        await this.commitState(__state);
+        return __result;
+      })();
     } catch (__e) {
       await __claims.settle(undefined, true);
       throw __e;

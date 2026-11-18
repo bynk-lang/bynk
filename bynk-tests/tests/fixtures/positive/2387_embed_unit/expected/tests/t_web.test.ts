@@ -81,17 +81,17 @@ async function test_the_service_serves_the_embed_as_it_is() {
     const { render, shell } = __ns_t_page;
     const r = await api.http_GET_raw(deps);
     void (((__d) => {
-        switch (__d.tag) {
-          case "Ok": {
-            const body = __d.value;
-            return __bynkExpect((body === shell), "tests/t/web.bynk:18:26", 654, 667, "expect body == shell");
-          }
-          default: {
-            return __bynkExpect((false), "tests/t/web.bynk:19:19", 686, 691, "expect false");
-          }
+      switch (__d.tag) {
+        case "Ok": {
+          const body = __d.value;
+          return __bynkExpect((body === shell), "tests/t/web.bynk:18:26", 654, 667, "expect body == shell");
         }
-        throw new globalThis.Error("non-exhaustive match");
-      })(r));
+        default: {
+          return __bynkExpect((false), "tests/t/web.bynk:19:19", 686, 691, "expect false");
+        }
+      }
+      throw new globalThis.Error("non-exhaustive match");
+    })(r));
     return { pass: true };
   } catch (e) {
     if (e instanceof ExpectationError) {

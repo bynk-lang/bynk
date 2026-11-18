@@ -77,17 +77,17 @@ async function test_two_ticks_on_the_same_id_accumulate_across_the_wire() {
     const a = await __callService(deps.env.DEMO_API, "tick", "c1" as __JsonValue, __ns_demo_api.__deserialise_Result_Int_ApiError, "integration", "309a1117c5ee9379", deps.env, "demo.api");
     const b = await __callService(deps.env.DEMO_API, "tick", "c1" as __JsonValue, __ns_demo_api.__deserialise_Result_Int_ApiError, "integration", "309a1117c5ee9379", deps.env, "demo.api");
     void (((__d) => {
-        switch (__d.tag) {
-          case "Ok": {
-            const n = __d.value;
-            return __bynkExpect((n === 2), "check.bynk:7:24", 194, 200, "expect n == 2");
-          }
-          case "Err": {
-            return __bynkExpect((false), "check.bynk:8:24", 224, 229, "expect false");
-          }
+      switch (__d.tag) {
+        case "Ok": {
+          const n = __d.value;
+          return __bynkExpect((n === 2), "check.bynk:7:24", 194, 200, "expect n == 2");
         }
-        throw new globalThis.Error("non-exhaustive match");
-      })(b));
+        case "Err": {
+          return __bynkExpect((false), "check.bynk:8:24", 224, 229, "expect false");
+        }
+      }
+      throw new globalThis.Error("non-exhaustive match");
+    })(b));
     return { pass: true };
   } catch (e) {
     if (e instanceof ExpectationError) {
@@ -104,17 +104,17 @@ async function test_a_fresh_id_starts_from_zero_in_a_new_case() {
     const deps = __makeHarness();
     const a = await __callService(deps.env.DEMO_API, "tick", "c2" as __JsonValue, __ns_demo_api.__deserialise_Result_Int_ApiError, "integration", "309a1117c5ee9379", deps.env, "demo.api");
     void (((__d) => {
-        switch (__d.tag) {
-          case "Ok": {
-            const n = __d.value;
-            return __bynkExpect((n === 1), "check.bynk:15:24", 364, 370, "expect n == 1");
-          }
-          case "Err": {
-            return __bynkExpect((false), "check.bynk:16:24", 394, 399, "expect false");
-          }
+      switch (__d.tag) {
+        case "Ok": {
+          const n = __d.value;
+          return __bynkExpect((n === 1), "check.bynk:15:24", 364, 370, "expect n == 1");
         }
-        throw new globalThis.Error("non-exhaustive match");
-      })(a));
+        case "Err": {
+          return __bynkExpect((false), "check.bynk:16:24", 394, 399, "expect false");
+        }
+      }
+      throw new globalThis.Error("non-exhaustive match");
+    })(a));
     return { pass: true };
   } catch (e) {
     if (e instanceof ExpectationError) {

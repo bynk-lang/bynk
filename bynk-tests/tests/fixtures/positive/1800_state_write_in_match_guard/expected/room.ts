@@ -56,13 +56,13 @@ export class Counter {
       if (__r0.tag === "Some") {
         const x = __r0.value;
         if ((() => {
-  if (x > 0) {
-    __state.hits = x;
-    return true;
-  } else {
-    return false;
-  }
-})()) {
+          if (x > 0) {
+            __state.hits = x;
+            return true;
+          } else {
+            return false;
+          }
+        })()) {
           return undefined;
         }
       }
@@ -79,13 +79,13 @@ export class Counter {
       if (__r0.tag === "Some") {
         const x = __r0.value;
         if ((() => {
-  if (positive(x)) {
-    __state.hits = x;
-    return false;
-  } else {
-    return false;
-  }
-})()) {
+          if (positive(x)) {
+            __state.hits = x;
+            return false;
+          } else {
+            return false;
+          }
+        })()) {
           return undefined;
         }
       }

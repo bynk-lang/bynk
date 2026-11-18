@@ -190,16 +190,16 @@ export class Log {
   async matchedTotal(deps: {}): globalThis.Promise<number> {
     const __state = await this.loadState();
     return __bynkThen(((() => __bynkThen(__state.visits.values(), async (__q) => __bynkLeftJoin(__q, await ((() => __state.labels.values()))(), (v: Visit) => v.site, (l: Label) => l.site, (v: Visit, l: Option<Label>) => ((__d) => {
-    switch (__d.tag) {
-      case "Some": {
-        return v.n;
-      }
-      case "None": {
-        return 0;
-      }
+  switch (__d.tag) {
+    case "Some": {
+      return v.n;
     }
-    throw new globalThis.Error("non-exhaustive match");
-  })(l)))))(), (__q) => __q.reduce((__s: number, __x) => __s + ((x: number) => x)(__x), 0));
+    case "None": {
+      return 0;
+    }
+  }
+  throw new globalThis.Error("non-exhaustive match");
+})(l)))))(), (__q) => __q.reduce((__s: number, __x) => __s + ((x: number) => x)(__x), 0));
   }
 
   async logSite(region: Region, code: number, deps: { Clock: Clock }): globalThis.Promise<void> {

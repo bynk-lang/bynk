@@ -19,17 +19,17 @@ export const api = {
       }
       case "None": {
         return ((__d) => {
-    switch (__d.tag) {
-      case "Some": {
-        const k = __d.value;
-        return HttpResult.Ok(k);
-      }
-      case "None": {
-        return HttpResult.Ok("none");
-      }
-    }
-    throw new globalThis.Error("non-exhaustive match");
-  })(known);
+          switch (__d.tag) {
+            case "Some": {
+              const k = __d.value;
+              return HttpResult.Ok(k);
+            }
+            case "None": {
+              return HttpResult.Ok("none");
+            }
+          }
+          throw new globalThis.Error("non-exhaustive match");
+        })(known);
       }
     }
     throw new globalThis.Error("non-exhaustive match");

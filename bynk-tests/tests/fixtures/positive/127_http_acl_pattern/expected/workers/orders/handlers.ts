@@ -47,19 +47,19 @@ export const api = {
       case "Err": {
         const error = result.error;
         return ((__d) => {
-    switch (__d.tag) {
-      case "EmptyCart": {
-        return HttpResult.BadRequest("cart is empty");
-      }
-      case "OutOfStock": {
-        return HttpResult.Conflict("item out of stock");
-      }
-      case "PaymentDeclined": {
-        return HttpResult.UnprocessableEntity("payment declined");
-      }
-    }
-    throw new globalThis.Error("non-exhaustive match");
-  })(error);
+          switch (__d.tag) {
+            case "EmptyCart": {
+              return HttpResult.BadRequest("cart is empty");
+            }
+            case "OutOfStock": {
+              return HttpResult.Conflict("item out of stock");
+            }
+            case "PaymentDeclined": {
+              return HttpResult.UnprocessableEntity("payment declined");
+            }
+          }
+          throw new globalThis.Error("non-exhaustive match");
+        })(error);
       }
     }
     throw new globalThis.Error("non-exhaustive match");

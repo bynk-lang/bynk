@@ -92,17 +92,17 @@ async function test_the_public_label_of_the_second_commons() {
     const { label } = __ns_shop_labels;
     const r = await __sysdrive_api_http_GET_tea(undefined, "");
     void (((__d) => {
-        switch (__d.tag) {
-          case "Ok": {
-            const body = __d.value;
-            return __bynkExpect((label(body) === "[tea: 3]"), "tests/shop/till_system.bynk:11:26", 385, 410, "expect label(body) == \"[tea: 3]\"");
-          }
-          default: {
-            return __bynkExpect((false), "tests/shop/till_system.bynk:12:19", 429, 434, "expect false");
-          }
+      switch (__d.tag) {
+        case "Ok": {
+          const body = __d.value;
+          return __bynkExpect((label(body) === "[tea: 3]"), "tests/shop/till_system.bynk:11:26", 385, 410, "expect label(body) == \"[tea: 3]\"");
         }
-        throw new globalThis.Error("non-exhaustive match");
-      })(r));
+        default: {
+          return __bynkExpect((false), "tests/shop/till_system.bynk:12:19", 429, 434, "expect false");
+        }
+      }
+      throw new globalThis.Error("non-exhaustive match");
+    })(r));
     return { pass: true };
   } catch (e) {
     if (e instanceof ExpectationError) {
