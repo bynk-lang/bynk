@@ -1026,6 +1026,8 @@ fn render_block_body(
         // is one compact line — `workers_entry.rs`'s own real queue-consumer
         // catch clause (`console.error(...); msg.retry();`).
         out.push_str(&indent(depth + 1));
+        // `depth + 1` has no test: the debug assertion in `render_compact_stmts`
+        // forbids a multi-line child here, so no printed output depends on it.
         render_compact_stmts(out, stmts, depth + 1);
         out.push('\n');
     } else {
@@ -1047,6 +1049,11 @@ fn render_binding_name(out: &mut String, name: &TsBindingName) {
                 out.push_str(n);
             }
             out.push_str(" }");
+        }
+        TsBindingName::ArrayPattern(names) => {
+            out.push('[');
+            out.push_str(&names.join(", "));
+            out.push(']');
         }
     }
 }
@@ -1252,6 +1259,7 @@ fn render_binary_operand(
         | TsExpr::New { .. }
         | TsExpr::Object { .. }
         | TsExpr::Array { .. }
+        | TsExpr::LinesArray(_)
         | TsExpr::TemplateLit { .. }
         | TsExpr::Await(_)
         | TsExpr::Unary { .. }
@@ -1625,12 +1633,14 @@ fn render_expr(out: &mut String, expr: &TsExpr, depth: usize) {
         // `TsExpr::Object`'s own arm just above ignores it: this recursion
         // has no `depth` to render a multi-line array correctly against.
         // Every real `bynk-emit` call site that needs `multiline: true`
-        // reaches it through `render_stmt_level_expr` instead.
+        // reaches it through `render_stmt_level_expr` instead. A nested one
+        // that must break across lines is a [`TsExpr::LinesArray`].
         TsExpr::Array { items, .. } => {
             out.push('[');
             render_expr_list(out, items, depth);
             out.push(']');
         }
+        TsExpr::LinesArray(items) => render_multiline_array(out, items, depth),
         TsExpr::TemplateLit { parts, exprs } => {
             out.push('`');
             for (i, part) in parts.iter().enumerate() {
@@ -1785,6 +1795,7 @@ fn starts_with_object(expr: &TsExpr) -> bool {
         | TsExpr::Arrow { .. }
         | TsExpr::New { .. }
         | TsExpr::Array { .. }
+        | TsExpr::LinesArray(_)
         | TsExpr::TemplateLit { .. }
         | TsExpr::Await(_)
         | TsExpr::Unary { .. }
@@ -7501,6 +7512,100 @@ mod tests {
         assert_eq!(
             print_stmt(&stmt, 0),
             "const a = [\n  (() => {\n    return x;\n  })(),\n];\n"
+        );
+    }
+    /// 1A.14 (Decision B of #3715, which asked for an `InlineBlock` arrow body):
+    /// the compact `{ s1; s2; }` form already exists as [`TsArrowBody::Block`],
+    /// so the short-circuit IIFEs use it. It prints on one line with a `const`
+    /// and a `return`, inside brackets and a call.
+    #[test]
+    fn a_compact_arrow_body_prints_a_const_and_a_return_on_one_line() {
+        let arrow = TsExpr::Arrow {
+            params: Vec::new(),
+            is_async: false,
+            generics: Vec::new(),
+            return_type: None,
+            body: Box::new(TsArrowBody::Block(vec![
+                TsStmt::const_stmt(
+                    TsBindingName::Ident("n".to_string()),
+                    None,
+                    TsExpr::Member {
+                        object: Box::new(id("r")),
+                        property: "value".to_string(),
+                    },
+                    None,
+                ),
+                TsStmt::return_stmt(Some(id("n")), None),
+            ])),
+        };
+        let call = TsExpr::Paren(Box::new(iife(arrow)));
+        let and = TsExpr::Binary {
+            op: TsBinaryOp::And,
+            left: Box::new(id("ok")),
+            right: Box::new(call),
+        };
+        assert_eq!(
+            print_expr(&and),
+            "ok && ((() => { const n = r.value; return n; })())"
+        );
+    }
+
+    /// 1A.14: an array-destructuring pattern; an empty name is a hole.
+    #[test]
+    fn an_array_pattern_prints_holes_as_empty_entries() {
+        let init = TsExpr::Await(Box::new(id("p")));
+        let named = TsStmt::const_stmt(
+            TsBindingName::ArrayPattern(vec!["a".to_string(), "b".to_string()]),
+            None,
+            init.clone(),
+            None,
+        );
+        assert_eq!(print_stmt(&named, 0), "const [a, b] = await p;\n");
+        let hole = TsStmt::const_stmt(
+            TsBindingName::ArrayPattern(vec![String::new(), "b".to_string()]),
+            None,
+            init,
+            None,
+        );
+        assert_eq!(print_stmt(&hole, 0), "const [, b] = await p;\n");
+    }
+
+    /// 1A.14: `par`'s join: thunks with a return annotation, `async` when asked,
+    /// in a lines array (one item per line) under an `await` call.
+    #[test]
+    fn typed_and_async_thunks_print_in_a_multiline_array() {
+        let thunk = |is_async: bool, ret: Option<TsType>, body: TsArrowBody| TsExpr::Arrow {
+            params: Vec::new(),
+            is_async,
+            generics: Vec::new(),
+            return_type: ret,
+            body: Box::new(body),
+        };
+        let promise = TsType::named_with_args("globalThis.Promise", vec![TsType::named("number")]);
+        let items = vec![
+            thunk(false, Some(promise), TsArrowBody::Expr(Box::new(id("a")))),
+            thunk(
+                true,
+                None,
+                TsArrowBody::Multiline(vec![
+                    TsStmt::const_stmt(TsBindingName::Ident("t".to_string()), None, id("x"), None),
+                    TsStmt::return_stmt(Some(id("t")), None),
+                ]),
+            ),
+        ];
+        let call = TsExpr::Await(Box::new(TsExpr::Call {
+            callee: Box::new(id("__join")),
+            args: vec![TsExpr::LinesArray(items)],
+        }));
+        let stmt = TsStmt::const_stmt(
+            TsBindingName::ArrayPattern(vec!["a".to_string(), "b".to_string()]),
+            None,
+            call,
+            None,
+        );
+        assert_eq!(
+            print_stmt(&stmt, 1),
+            "  const [a, b] = await __join([\n    (): globalThis.Promise<number> => a,\n    async () => {\n      const t = x;\n      return t;\n    },\n  ]);\n"
         );
     }
 }

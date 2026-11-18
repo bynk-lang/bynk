@@ -39,12 +39,12 @@ fn queue_service(body: &str) -> String {
     )
 }
 
-/// The counter is live on this path: an expression that stays text (`&&` over
-/// non-literal operands) is counted. Without this, the `==` below could pass
+/// The counter is live on this path: an expression that stays text (a string
+/// `contains`, a method-call family) is counted. Without this, the `==` below could pass
 /// because nothing is counted at all.
 #[test]
 fn the_counter_counts_on_the_driver_path() {
-    let src = "context ops.jobs\n\nservice inbox from queue(\"jobs\") {\n\ton message(n: Int) -> Effect[QueueResult] {\n\t\tlet ok = n > 0 && n < 10\n\t\tAck\n\t}\n}\n";
+    let src = "context ops.jobs\n\nservice inbox from queue(\"jobs\") {\n\ton message(n: Int) -> Effect[QueueResult] {\n\t\tlet ok = \"abc\".contains(\"b\")\n\t\tAck\n\t}\n}\n";
     let (exits, _, text) = workers_counts(src);
     assert!(exits > 0, "no text exit counted:\n{text}");
 }

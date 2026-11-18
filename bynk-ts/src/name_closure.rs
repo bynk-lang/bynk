@@ -437,6 +437,11 @@ impl Walk {
         match name {
             TsBindingName::Ident(n) => self.bind(n),
             TsBindingName::ObjectPattern(names) => self.bind_pattern(names),
+            TsBindingName::ArrayPattern(names) => {
+                for n in names.iter().filter(|n| !n.is_empty()) {
+                    self.bind(n);
+                }
+            }
         }
     }
 
@@ -923,7 +928,7 @@ impl Walk {
                     }
                 }
             }
-            TsExpr::Array { items, .. } => {
+            TsExpr::Array { items, .. } | TsExpr::LinesArray(items) => {
                 for i in items {
                     self.expr(i);
                 }
