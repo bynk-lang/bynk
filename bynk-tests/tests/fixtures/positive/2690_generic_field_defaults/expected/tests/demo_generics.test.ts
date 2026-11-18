@@ -177,21 +177,21 @@ async function test_the_generic_decode_path_applies_the_pass_through_default() {
     type Paginated<T> = __ns_demo_generics.Paginated<T>;
     type Search = __ns_demo_generics.Search;
     void (((__d) => {
-        switch (__d.tag) {
-          case "Some": {
-            const c = __d.value;
-            if (!(c.key === "g")) { throw __bynkExpectFailure("tests/demo/generics.bynk:48:14", 1358, 1370, "expect c.key == \"g\"\n  expected: c.key == \"g\"\n  actual:   " + __bynkShow((c.key)) + " == " + __bynkShow(("g"))); }
-            if (!((c.warm.items).length === 0)) { throw __bynkExpectFailure("tests/demo/generics.bynk:49:14", 1384, 1410, "expect c.warm.items.length() == 0\n  expected: c.warm.items.length() == 0\n  actual:   " + __bynkShow(((c.warm.items).length)) + " == " + __bynkShow((0))); }
-            if (!(isPending(c.last, "cold"))) { throw __bynkExpectFailure("tests/demo/generics.bynk:50:14", 1424, 1449, "expect isPending(c.last, \"cold\")"); }
-            return undefined;
-          }
-          case "None": {
-            if (!(false)) { throw __bynkExpectFailure("tests/demo/generics.bynk:52:22", 1477, 1482, "expect false"); }
-            return undefined;
-          }
+      switch (__d.tag) {
+        case "Some": {
+          const c = __d.value;
+          if (!(c.key === "g")) { throw __bynkExpectFailure("tests/demo/generics.bynk:48:14", 1358, 1370, "expect c.key == \"g\"\n  expected: c.key == \"g\"\n  actual:   " + __bynkShow((c.key)) + " == " + __bynkShow(("g"))); }
+          if (!((c.warm.items).length === 0)) { throw __bynkExpectFailure("tests/demo/generics.bynk:49:14", 1384, 1410, "expect c.warm.items.length() == 0\n  expected: c.warm.items.length() == 0\n  actual:   " + __bynkShow(((c.warm.items).length)) + " == " + __bynkShow((0))); }
+          if (!(isPending(c.last, "cold"))) { throw __bynkExpectFailure("tests/demo/generics.bynk:50:14", 1424, 1449, "expect isPending(c.last, \"cold\")"); }
+          return undefined;
         }
-        throw new globalThis.Error("non-exhaustive match");
-      })(decodedCacheOf("{\"key\":\"g\"}", { encode: (__v: string) => __v as __JsonValue, decode: (__j: __JsonValue, __p: string) => { if (typeof __j !== "string") { return Err({ kind: "StructuralMismatch", path: __p, expected: "string", actual: typeof __j }); } const __v = __j; return Ok(__v as string); } })));
+        case "None": {
+          if (!(false)) { throw __bynkExpectFailure("tests/demo/generics.bynk:52:22", 1477, 1482, "expect false"); }
+          return undefined;
+        }
+      }
+      throw new globalThis.Error("non-exhaustive match");
+    })(decodedCacheOf("{\"key\":\"g\"}", { encode: (__v: string) => __v as __JsonValue, decode: (__j: __JsonValue, __p: string) => { if (typeof __j !== "string") { return Err({ kind: "StructuralMismatch", path: __p, expected: "string", actual: typeof __j }); } const __v = __j; return Ok(__v as string); } })));
     return { pass: true };
   } catch (e) {
     if (e instanceof ExpectationError) {

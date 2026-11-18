@@ -318,7 +318,7 @@ fn walk_expr<'a>(expr: &'a TsExpr, out: &mut Vec<(VerbatimOrigin, &'a str)>) {
             walk_expr(consequent, out);
             walk_expr(alternate, out);
         }
-        TsExpr::Paren(e) => walk_expr(e, out),
+        TsExpr::Paren(e) | TsExpr::Spread(e) => walk_expr(e, out),
         TsExpr::Lit(_) => {}
     }
 }
@@ -1456,6 +1456,13 @@ pub enum TsExpr {
     /// real site in this file's own content still goes through the ordinary
     /// precedence machinery unchanged.
     Paren(Box<TsExpr>),
+    /// `...x`, an array spread element (1A.18a, #3719). Legal only as an item of
+    /// [`TsExpr::Array`], where it prints `...` then its operand with no brackets
+    /// of its own: a spread operand is an assignment expression, so anything but a
+    /// comma expression (which `TsExpr` cannot build) stands there as it is. A new
+    /// variant rather than an item type on `Array`, which every existing array
+    /// site would then have to change.
+    Spread(Box<TsExpr>),
     Lit(TsLit),
 }
 

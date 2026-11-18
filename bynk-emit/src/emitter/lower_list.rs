@@ -4,14 +4,14 @@
 //! builder, and the pieces the sibling kernels will want (comparator binding,
 //! keyed-helper choice, key-function types) are plain functions here.
 
-use bynk_check::checker::{Ty, TyId, Types};
+use bynk_check::checker::{NamedKind, Ty, TyId, Types};
 use bynk_check::kernel_op::ListOp;
-use bynk_syntax::ast::{BaseType, Expr};
+use bynk_ts::{TsArrowBody, TsBinaryOp, TsExpr, TsParam, TsType};
 
-use super::lower::{Lowered, Pre};
+use super::lower::{Built, LoweredExpr, Pre, decimal_lit, ident_node, node_or_text, num_lit};
 use super::lower_ctx::LowerCtx;
-use super::ts_types::{TyRender, ts_array_elem, ts_ty};
-use super::*;
+use super::ts_types::{TyRender, ts_array_elem, ts_ty, ts_ty_to_ts_type};
+use super::{BaseType, Expr};
 
 /// v0.150 (ADR 0174): peel a `traverseTry`/`parTraverseTry` call's checked type
 /// `Effect[Result[List[U], E]]` to the `U` TS — the short-circuit collect's
@@ -37,12 +37,145 @@ struct ListArm<'a> {
     args: &'a [Expr],
     elem_ts: String,
     elem_el: String,
+    /// The same element type as a node, for the arms that build nodes.
+    elem: TsType,
+}
+
+// ---- Node builders shared by the arms and, by design, the sibling kernels ----
+
+/// The `N` children of an `N`-child builder, in order.
+fn take<const N: usize, T>(children: Vec<T>) -> [T; N] {
+    children
+        .try_into()
+        .unwrap_or_else(|_| unreachable!("an {N}-child builder is given exactly {N} children"))
+}
+
+fn id(name: &str) -> TsExpr {
+    ident_node(name)
+}
+
+fn member(object: TsExpr, property: &str) -> TsExpr {
+    TsExpr::Member {
+        object: Box::new(object),
+        property: property.to_string(),
+    }
+}
+
+fn call(callee: TsExpr, args: Vec<TsExpr>) -> TsExpr {
+    TsExpr::Call {
+        callee: Box::new(callee),
+        args,
+    }
+}
+
+fn paren(e: TsExpr) -> TsExpr {
+    TsExpr::Paren(Box::new(e))
+}
+
+/// `(recv).method(args)`: the receiver is always bracketed, as the text forms did.
+fn method_call(recv: TsExpr, method: &str, args: Vec<TsExpr>) -> TsExpr {
+    call(member(paren(recv), method), args)
+}
+
+/// `(f)(x)`: a Bynk function value applied to one argument.
+fn applied(f: TsExpr, x: TsExpr) -> TsExpr {
+    call(paren(f), vec![x])
+}
+
+fn param(name: &str, ty: Option<TsType>) -> TsParam {
+    TsParam {
+        name: name.to_string(),
+        ty,
+        optional: false,
+    }
+}
+
+/// An expression-bodied arrow; `is_async` makes it `async`.
+fn arrow_with(params: Vec<TsParam>, is_async: bool, body: TsExpr) -> TsExpr {
+    TsExpr::Arrow {
+        params,
+        is_async,
+        generics: vec![],
+        return_type: None,
+        body: Box::new(TsArrowBody::Expr(Box::new(body))),
+    }
+}
+
+fn arrow(params: Vec<TsParam>, body: TsExpr) -> TsExpr {
+    arrow_with(params, false, body)
+}
+
+/// An immediately-invoked arrow: the kernels' way of naming the receiver once.
+fn iife(params: Vec<TsParam>, body: TsExpr, args: Vec<TsExpr>) -> TsExpr {
+    call(arrow(params, body), args)
+}
+
+fn binary(op: TsBinaryOp, left: TsExpr, right: TsExpr) -> TsExpr {
+    TsExpr::Binary {
+        op,
+        left: Box::new(left),
+        right: Box::new(right),
+    }
+}
+
+fn spread(e: TsExpr) -> TsExpr {
+    TsExpr::Spread(Box::new(e))
+}
+
+fn zero() -> TsExpr {
+    num_lit("0".to_string())
+}
+
+/// `readonly E[]`: the array type of a list parameter.
+fn xs_ty(elem: &TsType) -> TsType {
+    TsType::readonly_array(elem.clone())
+}
+
+/// `(__xs: readonly E[])`: the single list parameter most arms close over.
+fn xs_param(elem: &TsType) -> TsParam {
+    param("__xs", Some(xs_ty(elem)))
+}
+
+/// `globalThis.Math.max(0, n)`.
+fn clamped_at_zero(n: TsExpr) -> TsExpr {
+    call(
+        member(member(id("globalThis"), "Math"), "max"),
+        vec![zero(), n],
+    )
+}
+
+/// `[...xs].sort((__a: E, __b: E) => body)`.
+fn sorted_copy(xs: TsExpr, elem: &TsType, body: TsExpr) -> TsExpr {
+    let pair = arrow(
+        vec![
+            param("__a", Some(elem.clone())),
+            param("__b", Some(elem.clone())),
+        ],
+        body,
+    );
+    method_sort(TsExpr::array(vec![spread(xs)]), pair)
+}
+
+/// `array.sort(compare)`: the array is not bracketed, so `[...xs].sort(…)` prints bare.
+fn method_sort(array: TsExpr, compare: TsExpr) -> TsExpr {
+    call(member(array, "sort"), vec![compare])
+}
+
+/// The comparator when it is a bare identifier (a runtime comparator or an
+/// in-scope witness), which is then substituted directly rather than bound.
+fn bare_comparator(cmp: &TsExpr) -> Option<&TsExpr> {
+    match cmp {
+        TsExpr::Ident(name) if name.chars().all(|c| c.is_alphanumeric() || c == '_') => Some(cmp),
+        _ => None,
+    }
 }
 
 /// v0.20b: lower a built-in `List` kernel method. Returns None for a method
 /// name the kernel doesn't own (the checker has already rejected it; this
 /// keeps the dispatch defensive). All forms are pure expressions; `foldEff`
-/// returns a Promise that the surrounding `<-` bind awaits.
+/// returns a Promise that the surrounding `<-` bind awaits. A node when the
+/// operands are nodes and the arm's body is an expression, else text (see
+/// `node_or_text`); anything an operand hoists lands in `pre`.
 pub(super) fn lower_list_kernel(
     e: &Expr,
     receiver: &Expr,
@@ -50,9 +183,9 @@ pub(super) fn lower_list_kernel(
     args: &[Expr],
     elem: TyId,
     cx: &mut LowerCtx,
-) -> Option<Lowered> {
+    pre: &mut Pre,
+) -> Option<Built> {
     let tys = cx.ty_render();
-    let mut pre = Pre::new();
     let elem_ts = ts_ty(elem, tys);
     let a = ListArm {
         e,
@@ -60,25 +193,26 @@ pub(super) fn lower_list_kernel(
         args,
         elem_el: ts_array_elem(&elem_ts),
         elem_ts,
+        elem: ts_ty_to_ts_type(elem, tys),
     };
-    let p = &mut pre;
-    let text: Option<String> = match (op, args) {
+    let p = pre;
+    let built: Option<Built> = match (op, args) {
         (ListOp::Length | ListOp::Count, []) => Some(list_length(&a, p, cx)),
         (ListOp::Get, [index]) => Some(list_get(&a, index, p, cx)),
         (ListOp::Prepend, [head]) => Some(list_prepend(&a, head, p, cx)),
         (ListOp::Append, [item]) => Some(list_append(&a, item, p, cx)),
         (ListOp::Concat, [other]) => Some(list_concat(&a, other, p, cx)),
-        (ListOp::Fold, [init, f]) => Some(list_fold(&a, init, f, p, cx)),
-        (ListOp::FoldEff, [init, f]) => Some(list_fold_eff(&a, init, f, p, cx)),
-        (ListOp::ForEach, [f]) => Some(list_for_each(&a, f, p, cx)),
-        (ListOp::ParTraverse, [f]) => Some(list_par_traverse(&a, f, p, cx)),
-        (ListOp::TraverseAll, [f]) => Some(list_traverse_all(&a, f, p, cx)),
+        (ListOp::Fold, [init, f]) => Some(Err(list_fold(&a, init, f, p, cx))),
+        (ListOp::FoldEff, [init, f]) => Some(Err(list_fold_eff(&a, init, f, p, cx))),
+        (ListOp::ForEach, [f]) => Some(Err(list_for_each(&a, f, p, cx))),
+        (ListOp::ParTraverse, [f]) => Some(Err(list_par_traverse(&a, f, p, cx))),
+        (ListOp::TraverseAll, [f]) => Some(Err(list_traverse_all(&a, f, p, cx))),
         (ListOp::ParTraverseAll, [f]) => Some(list_par_traverse_all(&a, f, p, cx)),
         (name @ (ListOp::SequenceAll | ListOp::SequenceTry), []) => {
-            Some(list_sequence(&a, name, p, cx))
+            Some(Err(list_sequence(&a, name, p, cx)))
         }
-        (ListOp::TraverseTry, [f]) => Some(list_traverse_try(&a, f, p, cx)),
-        (ListOp::ParTraverseTry, [f]) => Some(list_par_traverse_try(&a, f, p, cx)),
+        (ListOp::TraverseTry, [f]) => Some(Err(list_traverse_try(&a, f, p, cx))),
+        (ListOp::ParTraverseTry, [f]) => Some(Err(list_par_traverse_try(&a, f, p, cx))),
         (ListOp::Map, [f]) => Some(list_callback(&a, "map", f, p, cx)),
         (ListOp::Filter, [f]) => Some(list_callback(&a, "filter", f, p, cx)),
         (ListOp::FlatMap, [f]) => Some(list_callback(&a, "flatMap", f, p, cx)),
@@ -107,55 +241,133 @@ pub(super) fn lower_list_kernel(
             Some(list_keyed(&a, "__bynkGroupBy", p, cx))
         }
         (ListOp::Distinct, []) => Some(list_distinct(&a, p, cx)),
-        (ListOp::DistinctBy, [key]) => Some(list_distinct_by(&a, key, p, cx)),
+        (ListOp::DistinctBy, [key]) => Some(Err(list_distinct_by(&a, key, p, cx))),
         (ListOp::Sum, [key]) => Some(list_sum(&a, key, p, cx)),
-        (ListOp::Min | ListOp::Max, [key]) => Some(list_min_max(&a, op, key, p, cx)),
-        (ListOp::Average, [key]) => Some(list_average(&a, key, p, cx)),
-        (ListOp::JoinOn, [other, left, right, into]) => {
-            Some(list_join_on(&a, false, other, left, right, into, p, cx))
-        }
+        (ListOp::Min | ListOp::Max, [key]) => Some(Err(list_min_max(&a, op, key, p, cx))),
+        (ListOp::Average, [key]) => Some(Err(list_average(&a, key, p, cx))),
+        (ListOp::JoinOn, [other, left, right, into]) => Some(Err(list_join_on(
+            &a, false, other, left, right, into, p, cx,
+        ))),
         (ListOp::LeftJoin, [other, left, right, into]) => {
-            Some(list_join_on(&a, true, other, left, right, into, p, cx))
+            Some(Err(list_join_on(&a, true, other, left, right, into, p, cx)))
         }
-        (ListOp::Join, [other, on, into]) => Some(list_join(&a, other, on, into, p, cx)),
-        (ListOp::GroupBy, [key, into]) => Some(list_group_by(&a, key, into, p, cx)),
+        (ListOp::Join, [other, on, into]) => Some(Err(list_join(&a, other, on, into, p, cx))),
+        (ListOp::GroupBy, [key, into]) => Some(Err(list_group_by(&a, key, into, p, cx))),
         _ => None,
     };
-    text.map(|expr| pre.finish_text(expr))
+    built
 }
 
-fn list_length(a: &ListArm, pre: &mut Pre, cx: &mut LowerCtx) -> String {
-    let recv = pre.lower(a.receiver, cx);
-    format!("({recv}).length")
-}
-
-fn list_get(a: &ListArm, index: &Expr, pre: &mut Pre, cx: &mut LowerCtx) -> String {
-    let (elem_el, elem_ts) = (&a.elem_el, &a.elem_ts);
-    let recv = pre.lower(a.receiver, cx);
-    let idx = pre.lower(index, cx);
-    format!(
-        "((__xs: readonly {elem_el}[], __i: number) => __i >= 0 && __i < __xs.length ? Some(__xs[__i] as {elem_ts}) : None)({recv}, {idx})"
+fn list_length(a: &ListArm, pre: &mut Pre, cx: &mut LowerCtx) -> Built {
+    let recv = pre.lower_node(a.receiver, cx);
+    node_or_text(
+        vec![recv],
+        |n| {
+            let [recv] = take(n);
+            member(paren(recv), "length")
+        },
+        |t| {
+            let [recv] = take(t);
+            format!("({recv}).length")
+        },
     )
 }
 
-fn list_prepend(a: &ListArm, head: &Expr, pre: &mut Pre, cx: &mut LowerCtx) -> String {
-    let head = pre.lower(head, cx);
-    let recv = pre.lower(a.receiver, cx);
-    format!("[{head}, ...{recv}]")
+fn list_get(a: &ListArm, index: &Expr, pre: &mut Pre, cx: &mut LowerCtx) -> Built {
+    let (elem_el, elem_ts) = (&a.elem_el, &a.elem_ts);
+    let recv = pre.lower_node(a.receiver, cx);
+    let idx = pre.lower_node(index, cx);
+    node_or_text(
+        vec![recv, idx],
+        |n| {
+            let [recv, idx] = take(n);
+            let in_range = binary(
+                TsBinaryOp::And,
+                binary(TsBinaryOp::GreaterThanEq, id("__i"), zero()),
+                binary(
+                    TsBinaryOp::LessThan,
+                    id("__i"),
+                    member(id("__xs"), "length"),
+                ),
+            );
+            let item = TsExpr::As {
+                expr: Box::new(TsExpr::Index {
+                    object: Box::new(id("__xs")),
+                    index: Box::new(id("__i")),
+                }),
+                ty: a.elem.clone(),
+            };
+            let body = TsExpr::Conditional {
+                test: Box::new(in_range),
+                consequent: Box::new(call(id("Some"), vec![item])),
+                alternate: Box::new(id("None")),
+            };
+            iife(
+                vec![
+                    xs_param(&a.elem),
+                    param("__i", Some(TsType::named("number"))),
+                ],
+                body,
+                vec![recv, idx],
+            )
+        },
+        |t| {
+            let [recv, idx] = take(t);
+            format!(
+                "((__xs: readonly {elem_el}[], __i: number) => __i >= 0 && __i < __xs.length ? Some(__xs[__i] as {elem_ts}) : None)({recv}, {idx})"
+            )
+        },
+    )
+}
+
+fn list_prepend(a: &ListArm, head: &Expr, pre: &mut Pre, cx: &mut LowerCtx) -> Built {
+    let head = pre.lower_node(head, cx);
+    let recv = pre.lower_node(a.receiver, cx);
+    node_or_text(
+        vec![head, recv],
+        |n| {
+            let [head, recv] = take(n);
+            TsExpr::array(vec![head, spread(recv)])
+        },
+        |t| {
+            let [head, recv] = take(t);
+            format!("[{head}, ...{recv}]")
+        },
+    )
 }
 
 // #1889: the receiver lowers before the argument, as written, so any
 // hoisted effects keep source order.
-fn list_append(a: &ListArm, item: &Expr, pre: &mut Pre, cx: &mut LowerCtx) -> String {
-    let recv = pre.lower(a.receiver, cx);
-    let item = pre.lower(item, cx);
-    format!("[...{recv}, {item}]")
+fn list_append(a: &ListArm, item: &Expr, pre: &mut Pre, cx: &mut LowerCtx) -> Built {
+    let recv = pre.lower_node(a.receiver, cx);
+    let item = pre.lower_node(item, cx);
+    node_or_text(
+        vec![recv, item],
+        |n| {
+            let [recv, item] = take(n);
+            TsExpr::array(vec![spread(recv), item])
+        },
+        |t| {
+            let [recv, item] = take(t);
+            format!("[...{recv}, {item}]")
+        },
+    )
 }
 
-fn list_concat(a: &ListArm, other: &Expr, pre: &mut Pre, cx: &mut LowerCtx) -> String {
-    let recv = pre.lower(a.receiver, cx);
-    let other = pre.lower(other, cx);
-    format!("[...{recv}, ...{other}]")
+fn list_concat(a: &ListArm, other: &Expr, pre: &mut Pre, cx: &mut LowerCtx) -> Built {
+    let recv = pre.lower_node(a.receiver, cx);
+    let other = pre.lower_node(other, cx);
+    node_or_text(
+        vec![recv, other],
+        |n| {
+            let [recv, other] = take(n);
+            TsExpr::array(vec![spread(recv), spread(other)])
+        },
+        |t| {
+            let [recv, other] = take(t);
+            format!("[...{recv}, ...{other}]")
+        },
+    )
 }
 
 fn list_fold(a: &ListArm, init: &Expr, f: &Expr, pre: &mut Pre, cx: &mut LowerCtx) -> String {
@@ -260,13 +472,34 @@ fn list_traverse_all(a: &ListArm, f: &Expr, pre: &mut Pre, cx: &mut LowerCtx) ->
     )
 }
 
-fn list_par_traverse_all(a: &ListArm, f: &Expr, pre: &mut Pre, cx: &mut LowerCtx) -> String {
+fn list_par_traverse_all(a: &ListArm, f: &Expr, pre: &mut Pre, cx: &mut LowerCtx) -> Built {
     let (elem_el, elem_ts) = (&a.elem_el, &a.elem_ts);
     cx.note_settle_all();
-    let recv = pre.lower(a.receiver, cx);
-    let f = pre.lower(f, cx);
-    format!(
-        "(async (__xs: readonly {elem_el}[]) => await __bynkSettleAll(__xs.map((__x: {elem_ts}) => () => ({f})(__x))))({recv})"
+    let recv = pre.lower_node(a.receiver, cx);
+    let f = pre.lower_node(f, cx);
+    node_or_text(
+        vec![recv, f],
+        |n| {
+            let [recv, f] = take(n);
+            let thunks = call(
+                member(id("__xs"), "map"),
+                vec![arrow(
+                    vec![param("__x", Some(a.elem.clone()))],
+                    arrow(vec![], applied(f, id("__x"))),
+                )],
+            );
+            let settled = TsExpr::Await(Box::new(call(id("__bynkSettleAll"), vec![thunks])));
+            call(
+                arrow_with(vec![xs_param(&a.elem)], true, settled),
+                vec![recv],
+            )
+        },
+        |t| {
+            let [recv, f] = take(t);
+            format!(
+                "(async (__xs: readonly {elem_el}[]) => await __bynkSettleAll(__xs.map((__x: {elem_ts}) => () => ({f})(__x))))({recv})"
+            )
+        },
     )
 }
 
@@ -337,50 +570,151 @@ fn list_par_traverse_try(a: &ListArm, f: &Expr, pre: &mut Pre, cx: &mut LowerCtx
 // to native array methods; callbacks are wrapped in a single-arg arrow
 // so the array index/array extra args never reach a Bynk one-param fn.
 // `map`, `filter`, `flatMap`, `any` (`some`) and `all` (`every`) share this.
-fn list_callback(a: &ListArm, method: &str, f: &Expr, pre: &mut Pre, cx: &mut LowerCtx) -> String {
+fn list_callback(a: &ListArm, method: &str, f: &Expr, pre: &mut Pre, cx: &mut LowerCtx) -> Built {
     let elem_ts = &a.elem_ts;
-    let recv = pre.lower(a.receiver, cx);
-    let f = pre.lower(f, cx);
-    format!("({recv}).{method}((__x: {elem_ts}) => ({f})(__x))")
+    let recv = pre.lower_node(a.receiver, cx);
+    let f = pre.lower_node(f, cx);
+    node_or_text(
+        vec![recv, f],
+        |n| {
+            let [recv, f] = take(n);
+            let each = arrow(
+                vec![param("__x", Some(a.elem.clone()))],
+                applied(f, id("__x")),
+            );
+            method_call(recv, method, vec![each])
+        },
+        |t| {
+            let [recv, f] = take(t);
+            format!("({recv}).{method}((__x: {elem_ts}) => ({f})(__x))")
+        },
+    )
 }
 
-fn list_take(a: &ListArm, n: &Expr, pre: &mut Pre, cx: &mut LowerCtx) -> String {
-    let recv = pre.lower(a.receiver, cx);
-    let n = pre.lower(n, cx);
-    format!("({recv}).slice(0, globalThis.Math.max(0, {n}))")
+fn list_take(a: &ListArm, n: &Expr, pre: &mut Pre, cx: &mut LowerCtx) -> Built {
+    let recv = pre.lower_node(a.receiver, cx);
+    let n = pre.lower_node(n, cx);
+    node_or_text(
+        vec![recv, n],
+        |c| {
+            let [recv, n] = take(c);
+            method_call(recv, "slice", vec![zero(), clamped_at_zero(n)])
+        },
+        |t| {
+            let [recv, n] = take(t);
+            format!("({recv}).slice(0, globalThis.Math.max(0, {n}))")
+        },
+    )
 }
 
-fn list_skip(a: &ListArm, n: &Expr, pre: &mut Pre, cx: &mut LowerCtx) -> String {
-    let recv = pre.lower(a.receiver, cx);
-    let n = pre.lower(n, cx);
-    format!("({recv}).slice(globalThis.Math.max(0, {n}))")
+fn list_skip(a: &ListArm, n: &Expr, pre: &mut Pre, cx: &mut LowerCtx) -> Built {
+    let recv = pre.lower_node(a.receiver, cx);
+    let n = pre.lower_node(n, cx);
+    node_or_text(
+        vec![recv, n],
+        |c| {
+            let [recv, n] = take(c);
+            method_call(recv, "slice", vec![clamped_at_zero(n)])
+        },
+        |t| {
+            let [recv, n] = take(t);
+            format!("({recv}).slice(globalThis.Math.max(0, {n}))")
+        },
+    )
 }
 
 // v0.119 (ADR 0155, DECISION C-a): `run.upTo(step)` — the driven history
 // strictly before `step`. Steps are distinct object instances in the run
 // array, so `indexOf` is reference identity. An IIFE avoids re-evaluating
 // the receiver.
-fn list_up_to(a: &ListArm, step: &Expr, pre: &mut Pre, cx: &mut LowerCtx) -> String {
+fn list_up_to(a: &ListArm, step: &Expr, pre: &mut Pre, cx: &mut LowerCtx) -> Built {
     let (elem_el, elem_ts) = (&a.elem_el, &a.elem_ts);
-    let recv = pre.lower(a.receiver, cx);
-    let step = pre.lower(step, cx);
-    format!(
-        "((__xs: readonly {elem_el}[], __s: {elem_ts}) => __xs.slice(0, __xs.indexOf(__s)))({recv}, {step})"
+    let recv = pre.lower_node(a.receiver, cx);
+    let step = pre.lower_node(step, cx);
+    node_or_text(
+        vec![recv, step],
+        |n| {
+            let [recv, step] = take(n);
+            let index = call(member(id("__xs"), "indexOf"), vec![id("__s")]);
+            iife(
+                vec![xs_param(&a.elem), param("__s", Some(a.elem.clone()))],
+                call(member(id("__xs"), "slice"), vec![zero(), index]),
+                vec![recv, step],
+            )
+        },
+        |t| {
+            let [recv, step] = take(t);
+            format!(
+                "((__xs: readonly {elem_el}[], __s: {elem_ts}) => __xs.slice(0, __xs.indexOf(__s)))({recv}, {step})"
+            )
+        },
     )
 }
 
-fn list_first(a: &ListArm, pre: &mut Pre, cx: &mut LowerCtx) -> String {
+fn list_first(a: &ListArm, pre: &mut Pre, cx: &mut LowerCtx) -> Built {
     let elem_el = &a.elem_el;
-    let recv = pre.lower(a.receiver, cx);
-    format!("((__xs: readonly {elem_el}[]) => __xs.length > 0 ? Some(__xs[0]) : None)({recv})")
+    let recv = pre.lower_node(a.receiver, cx);
+    node_or_text(
+        vec![recv],
+        |n| {
+            let [recv] = take(n);
+            let body = TsExpr::Conditional {
+                test: Box::new(binary(
+                    TsBinaryOp::GreaterThan,
+                    member(id("__xs"), "length"),
+                    zero(),
+                )),
+                consequent: Box::new(call(id("Some"), vec![first_item()])),
+                alternate: Box::new(id("None")),
+            };
+            iife(vec![xs_param(&a.elem)], body, vec![recv])
+        },
+        |t| {
+            let [recv] = take(t);
+            format!(
+                "((__xs: readonly {elem_el}[]) => __xs.length > 0 ? Some(__xs[0]) : None)({recv})"
+            )
+        },
+    )
 }
 
-fn list_first_or_else(a: &ListArm, default: &Expr, pre: &mut Pre, cx: &mut LowerCtx) -> String {
+/// `__xs[0]`.
+fn first_item() -> TsExpr {
+    TsExpr::Index {
+        object: Box::new(id("__xs")),
+        index: Box::new(zero()),
+    }
+}
+
+fn list_first_or_else(a: &ListArm, default: &Expr, pre: &mut Pre, cx: &mut LowerCtx) -> Built {
     let (elem_el, elem_ts) = (&a.elem_el, &a.elem_ts);
-    let recv = pre.lower(a.receiver, cx);
-    let default = pre.lower(default, cx);
-    format!(
-        "((__xs: readonly {elem_el}[], __d: {elem_ts}) => __xs.length > 0 ? __xs[0] : __d)({recv}, {default})"
+    let recv = pre.lower_node(a.receiver, cx);
+    let default = pre.lower_node(default, cx);
+    node_or_text(
+        vec![recv, default],
+        |n| {
+            let [recv, default] = take(n);
+            let body = TsExpr::Conditional {
+                test: Box::new(binary(
+                    TsBinaryOp::GreaterThan,
+                    member(id("__xs"), "length"),
+                    zero(),
+                )),
+                consequent: Box::new(first_item()),
+                alternate: Box::new(id("__d")),
+            };
+            iife(
+                vec![xs_param(&a.elem), param("__d", Some(a.elem.clone()))],
+                body,
+                vec![recv, default],
+            )
+        },
+        |t| {
+            let [recv, default] = take(t);
+            format!(
+                "((__xs: readonly {elem_el}[], __d: {elem_ts}) => __xs.length > 0 ? __xs[0] : __d)({recv}, {default})"
+            )
+        },
     )
 }
 
@@ -395,52 +729,125 @@ fn list_sort_by(
     descending: bool,
     pre: &mut Pre,
     cx: &mut LowerCtx,
-) -> String {
-    let (elem_el, elem_ts) = (&a.elem_el, &a.elem_ts);
+) -> Built {
+    // The comparator is bound before the receiver and key lower: `note_cmp` fires first.
     let cmp = kernel_key_comparator(&a.args[0], cx);
-    let recv = pre.lower(a.receiver, cx);
-    let key = pre.lower(key, cx);
-    // Descending swaps the comparator's arguments (and flips the bare form's signs).
-    let (lo, hi, first, second) = if descending {
-        ("1", "-1", "__b", "__a")
-    } else {
-        ("-1", "1", "__a", "__b")
+    let recv = pre.lower_node(a.receiver, cx);
+    let key = pre.lower_node(key, cx);
+    // 1A: the plain-key form is statement-bodied (`const __ka = …, __kb = …;`) and
+    // stays text until 1A.18b; the comparator forms below are expressions.
+    let Some(cmp) = cmp else {
+        return Err(sort_plain_text(a, descending, recv, key));
     };
-    match cmp {
-        // A plain base key: the bare operators, as before.
-        None => format!(
-            "[...{recv}].sort((__a: {elem_ts}, __b: {elem_ts}) => {{ const __ka = ({key})(__a), __kb = ({key})(__b); return __ka < __kb ? {lo} : __ka > __kb ? {hi} : 0; }})"
-        ),
-        // Constrained generics slice 1 (DECISION H): `Float` (total
-        // order, DECISION G), `Bytes`, and every other `Ord` key.
-        // `recv` is an argument, not part of the arrow's body, so it
-        // lowers exactly where it did before.
-        Some(cmp) if cmp.chars().all(|c| c.is_alphanumeric() || c == '_') => format!(
-            "[...{recv}].sort((__a: {elem_ts}, __b: {elem_ts}) => {cmp}(({key})({first}), ({key})({second})))"
-        ),
-        Some(cmp) => format!(
-            "((__c, __r: readonly {elem_el}[]) => [...__r].sort((__a: {elem_ts}, __b: {elem_ts}) => __c(({key})({first}), ({key})({second}))))({cmp}, {recv})"
+    node_or_text(
+        vec![recv, key],
+        |n| {
+            let [recv, key] = take(n);
+            sort_node(a, descending, &cmp, recv, key)
+        },
+        |t| {
+            let [recv, key] = take(t);
+            sort_comparator_text(a, descending, &cmp, &recv, &key)
+        },
+    )
+}
+
+/// The argument order of the key comparison: swapped for `sortByDescending`.
+fn sort_order(descending: bool) -> (&'static str, &'static str) {
+    if descending {
+        ("__b", "__a")
+    } else {
+        ("__a", "__b")
+    }
+}
+
+/// The comparator forms as nodes: a bare comparator substituted directly, or a
+/// built one bound as `__c` beside the receiver (`__r`).
+fn sort_node(a: &ListArm, descending: bool, cmp: &TsExpr, recv: TsExpr, key: TsExpr) -> TsExpr {
+    let (first, second) = sort_order(descending);
+    let compare = |c: TsExpr, xs: TsExpr| {
+        let body = call(
+            c,
+            vec![
+                applied(key.clone(), id(first)),
+                applied(key.clone(), id(second)),
+            ],
+        );
+        sorted_copy(xs, &a.elem, body)
+    };
+    match bare_comparator(cmp) {
+        Some(cmp) => compare(cmp.clone(), recv),
+        None => iife(
+            vec![param("__c", None), param("__r", Some(xs_ty(&a.elem)))],
+            compare(id("__c"), id("__r")),
+            vec![cmp.clone(), recv],
         ),
     }
+}
+
+/// The text of the two comparator forms, for a text receiver or key.
+fn sort_comparator_text(
+    a: &ListArm,
+    descending: bool,
+    cmp: &TsExpr,
+    recv: &str,
+    key: &str,
+) -> String {
+    let (elem_el, elem_ts) = (&a.elem_el, &a.elem_ts);
+    let (first, second) = sort_order(descending);
+    let cmp_text = bynk_ts::print_expr(cmp);
+    match bare_comparator(cmp) {
+        Some(_) => format!(
+            "[...{recv}].sort((__a: {elem_ts}, __b: {elem_ts}) => {cmp_text}(({key})({first}), ({key})({second})))"
+        ),
+        None => format!(
+            "((__c, __r: readonly {elem_el}[]) => [...__r].sort((__a: {elem_ts}, __b: {elem_ts}) => __c(({key})({first}), ({key})({second}))))({cmp_text}, {recv})"
+        ),
+    }
+}
+
+/// The plain-key form: the bare operators, as before.
+fn sort_plain_text(a: &ListArm, descending: bool, recv: LoweredExpr, key: LoweredExpr) -> String {
+    let elem_ts = &a.elem_ts;
+    let (recv, key) = (recv.into_text(), key.into_text());
+    let (lo, hi) = if descending { ("1", "-1") } else { ("-1", "1") };
+    format!(
+        "[...{recv}].sort((__a: {elem_ts}, __b: {elem_ts}) => {{ const __ka = ({key})(__a), __kb = ({key})(__b); return __ka < __kb ? {lo} : __ka > __kb ? {hi} : 0; }})"
+    )
 }
 
 /// `distinct`, `distinctBy`, `joinOn`, `leftJoin` and `groupBy` over a key that
 /// is not a JS primitive: the `keys` runtime helper `helper` takes the
 /// receiver, then each remaining argument in order. `note_key` fires before
 /// anything lowers.
-fn list_keyed(a: &ListArm, helper: &'static str, pre: &mut Pre, cx: &mut LowerCtx) -> String {
+fn list_keyed(a: &ListArm, helper: &'static str, pre: &mut Pre, cx: &mut LowerCtx) -> Built {
     cx.runtime_use().note_key(helper);
-    let recv = pre.lower(a.receiver, cx);
-    let rest: Vec<String> = a.args.iter().map(|x| pre.lower(x, cx)).collect();
-    format!(
-        "{helper}({recv}{})",
-        rest.iter().map(|r| format!(", {r}")).collect::<String>()
+    let mut children = vec![pre.lower_node(a.receiver, cx)];
+    children.extend(a.args.iter().map(|x| pre.lower_node(x, cx)));
+    node_or_text(
+        children,
+        |n| call(id(helper), n),
+        |t| format!("{helper}({})", t.join(", ")),
     )
 }
 
-fn list_distinct(a: &ListArm, pre: &mut Pre, cx: &mut LowerCtx) -> String {
-    let recv = pre.lower(a.receiver, cx);
-    format!("[...new globalThis.Set({recv})]")
+fn list_distinct(a: &ListArm, pre: &mut Pre, cx: &mut LowerCtx) -> Built {
+    let recv = pre.lower_node(a.receiver, cx);
+    node_or_text(
+        vec![recv],
+        |n| {
+            let [recv] = take(n);
+            let set = TsExpr::New {
+                callee: Box::new(member(id("globalThis"), "Set")),
+                args: vec![recv],
+            };
+            TsExpr::array(vec![spread(set)])
+        },
+        |t| {
+            let [recv] = take(t);
+            format!("[...new globalThis.Set({recv})]")
+        },
+    )
 }
 
 fn list_distinct_by(a: &ListArm, key: &Expr, pre: &mut Pre, cx: &mut LowerCtx) -> String {
@@ -452,24 +859,58 @@ fn list_distinct_by(a: &ListArm, key: &Expr, pre: &mut Pre, cx: &mut LowerCtx) -
     )
 }
 
-fn list_sum(a: &ListArm, key: &Expr, pre: &mut Pre, cx: &mut LowerCtx) -> String {
+fn list_sum(a: &ListArm, key: &Expr, pre: &mut Pre, cx: &mut LowerCtx) -> Built {
     let elem_ts = &a.elem_ts;
     let tys = cx.ty_render();
-    if key_fn_ret(key, cx).and_then(|t| t.base(tys.types())) == Some(BaseType::Decimal) {
+    let decimal = key_fn_ret(key, cx).and_then(|t| t.base(tys.types())) == Some(BaseType::Decimal);
+    let recv = pre.lower_node(a.receiver, cx);
+    let key = pre.lower_node(key, cx);
+    if decimal {
         // #2622: an exact sum, from the zero decimal.
-        let recv = pre.lower(a.receiver, cx);
-        let key = pre.lower(key, cx);
         cx.note_decimal("__bynkDecimalAdd");
-        format!(
-            "({recv}).reduce((__s: {}, __x: {elem_ts}) => __bynkDecimalAdd(__s, ({key})(__x)), {})",
-            crate::emitter::ts_types::DECIMAL_TS_TYPE,
-            crate::emitter::ts_types::decimal_ts_literal("0", 0)
-        )
-    } else {
-        let recv = pre.lower(a.receiver, cx);
-        let key = pre.lower(key, cx);
-        format!("({recv}).reduce((__s: number, __x: {elem_ts}) => __s + ({key})(__x), 0)")
     }
+    node_or_text(
+        vec![recv, key],
+        |n| {
+            let [recv, key] = take(n);
+            let (acc_ty, add, init) = if decimal {
+                (
+                    TsType::named(crate::emitter::ts_types::DECIMAL_TS_TYPE),
+                    call(
+                        id("__bynkDecimalAdd"),
+                        vec![id("__s"), applied(key, id("__x"))],
+                    ),
+                    decimal_lit("0", 0),
+                )
+            } else {
+                (
+                    TsType::named("number"),
+                    binary(TsBinaryOp::Add, id("__s"), applied(key, id("__x"))),
+                    zero(),
+                )
+            };
+            let step = arrow(
+                vec![
+                    param("__s", Some(acc_ty)),
+                    param("__x", Some(a.elem.clone())),
+                ],
+                add,
+            );
+            method_call(recv, "reduce", vec![step, init])
+        },
+        |t| {
+            let [recv, key] = take(t);
+            if decimal {
+                format!(
+                    "({recv}).reduce((__s: {}, __x: {elem_ts}) => __bynkDecimalAdd(__s, ({key})(__x)), {})",
+                    crate::emitter::ts_types::DECIMAL_TS_TYPE,
+                    crate::emitter::ts_types::decimal_ts_literal("0", 0)
+                )
+            } else {
+                format!("({recv}).reduce((__s: number, __x: {elem_ts}) => __s + ({key})(__x), 0)")
+            }
+        },
+    )
 }
 
 fn list_min_max(a: &ListArm, op: ListOp, key: &Expr, pre: &mut Pre, cx: &mut LowerCtx) -> String {
@@ -594,7 +1035,7 @@ pub(super) fn join_other_elem_ts(args: &[Expr], cx: &LowerCtx) -> String {
 /// plain: the kernels use its total order (DECISION G), so `NaN` sorts last
 /// instead of making the sort inconsistent. A key type the checker did not record
 /// keeps the bare operators.
-pub(super) fn kernel_key_comparator(key: &Expr, cx: &LowerCtx) -> Option<String> {
+pub(super) fn kernel_key_comparator(key: &Expr, cx: &LowerCtx) -> Option<TsExpr> {
     let tys = cx.ty_render();
     let fn_ty = cx.commons().expr_types.get(&key.id)?.ty;
     let Ty::Fn { ret, .. } = &*tys.get(fn_ty) else {
@@ -604,8 +1045,7 @@ pub(super) fn kernel_key_comparator(key: &Expr, cx: &LowerCtx) -> Option<String>
         ret.base(tys.types()),
         Some(BaseType::Int | BaseType::String | BaseType::Duration | BaseType::Instant)
     );
-    // 1A: witness printed for a text caller
-    (!plain).then(|| bynk_ts::print_expr(&cx.comparator(*ret)))
+    (!plain).then(|| cx.comparator(*ret))
 }
 
 /// Constrained generics slice 2: whether a `Map` key / `Set` element of this
@@ -644,10 +1084,13 @@ pub(super) fn key_fn_is_plain(key: &Expr, cx: &LowerCtx) -> bool {
 /// Bind comparator expression `cmp` as `__c` around `body`. A bare identifier (a
 /// runtime comparator or an in-scope witness) is substituted directly; a built
 /// comparator is evaluated once, outside the loop that calls it.
-pub(super) fn with_comparator(cmp: &str, body: impl FnOnce(&str) -> String) -> String {
-    if cmp.chars().all(|c| c.is_alphanumeric() || c == '_') {
-        body(cmp)
+///
+/// 1A: `body` builds text for the `min`/`max` arms and the `Query` kernel, which
+/// stay text until their own slices; `cmp` is matched as the node it is.
+pub(super) fn with_comparator(cmp: &TsExpr, body: impl FnOnce(&str) -> String) -> String {
+    if bare_comparator(cmp).is_some() {
+        body(&bynk_ts::print_expr(cmp))
     } else {
-        format!("((__c) => {})({cmp})", body("__c"))
+        format!("((__c) => {})({})", body("__c"), bynk_ts::print_expr(cmp))
     }
 }

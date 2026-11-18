@@ -894,7 +894,7 @@ pub(super) fn num_lit(digits: String) -> bynk_ts::TsExpr {
 /// #2622: a `Decimal` literal as an object-literal node — the node twin of
 /// [`decimal_ts_literal`](crate::emitter::ts_types::decimal_ts_literal)
 /// (`{ coefficient: <signed>n, scale: <scale> }`, no runtime import).
-fn decimal_lit(coef: &str, scale: u32) -> bynk_ts::TsExpr {
+pub(super) fn decimal_lit(coef: &str, scale: u32) -> bynk_ts::TsExpr {
     bynk_ts::TsExpr::object(vec![
         (
             "coefficient".to_string(),
@@ -2593,9 +2593,10 @@ fn lower_method_call(e: &Expr, cx: &mut LowerCtx) -> Lowered {
     let mut pre = Pre::new();
     // 1A: the domain-specific dispatchers below (store, scalar/collection
     // statics, runtime values, D1, cross-context, events, cookies,
-    // capabilities, type statics, test and system services, agent calls,
-    // kernel methods) stay text, each its own family with its own runtime
-    // contract. Only the plain instance call that ends this function is a node.
+    // capabilities, type statics, test and system services, agent calls) stay
+    // text, each its own family with its own runtime contract. Of the kernel
+    // methods only the `List` kernel builds nodes (1A.18a); the plain instance
+    // call that ends this function is a node.
     // Persisted-store receivers: held Map, Map, Set, Cache, Log, Cell (#3167).
     if let Some(s) = lower_store_method_call(e, receiver, method, args, cx, &mut pre) {
         return pre.finish_text(s);
@@ -2652,8 +2653,8 @@ fn lower_method_call(e: &Expr, cx: &mut LowerCtx) -> Lowered {
         return pre.finish_text(s);
     }
     // v0.20b: built-in kernel methods, resolved by the checker (#3164).
-    if let Some(s) = lower_kernel_method_call(e, receiver, method, args, cx, &mut pre) {
-        return pre.finish_text(s);
+    if let Some(built) = lower_kernel_method_call(e, receiver, method, args, cx, &mut pre) {
+        return pre.finish_built(built);
     }
     // Instance call: UFCS lowering with the receiver as first arg.
     let built = lower_ufcs_method_call(e, receiver, method, type_args, args, cx, &mut pre);
@@ -4861,7 +4862,9 @@ fn lower_effect_kernel_call(
 /// the one place the emitter turns a kernel operation into TypeScript, matching
 /// on the receiver kind and the operation. `None` when the operation has no
 /// inline lowering here, so the caller falls through to the UFCS lowering; any
-/// hoisted statements the attempt produced stay in `pre`.
+/// hoisted statements the attempt produced stay in `pre`. The `List` kernel
+/// returns a node when its operands are nodes (1A.18a); every other family is
+/// still text, wrapped here as `Err` (`// 1A:` at its arm below).
 fn lower_kernel_method_call(
     e: &Expr,
     receiver: &Expr,
@@ -4869,7 +4872,7 @@ fn lower_kernel_method_call(
     args: &[Expr],
     cx: &mut LowerCtx,
     pre: &mut Pre,
-) -> Option<String> {
+) -> Option<Built> {
     let tys = cx.ty_render();
     // v0.20b: built-in kernel methods on the collection types, dispatched on the
     // receiver's checked type. Emitted inline (typed IIFEs / spreads) — no runtime
@@ -4888,14 +4891,16 @@ fn lower_kernel_method_call(
         let mismatch = |kop: KernelOp| -> ! {
             panic!("bynk internal error (#3164): kernel op {kop:?} on a mismatched receiver type")
         };
+        // 1A: every arm below but `List` is text until its own family slice (the
+        // track's `1A.query`, `1A.stream`, `1A.map`, `1A.set`, `1A.option`,
+        // `1A.result`, `1A.string` and `1A.numeric` rows).
         match kop {
             KernelOp::List(op) => {
                 let Ty::List(elem) = &recv_ty else {
                     mismatch(kop)
                 };
-                if let Some(s) = pre.absorb_opt(lower_list_kernel(e, receiver, op, args, *elem, cx))
-                {
-                    return Some(s);
+                if let Some(built) = lower_list_kernel(e, receiver, op, args, *elem, cx, pre) {
+                    return Some(built);
                 }
             }
             // v0.91 (ADR 0119): a chained op on a lazy `Query` — the source is
@@ -4927,7 +4932,7 @@ fn lower_kernel_method_call(
                     },
                     tys,
                 ) {
-                    return Some(s);
+                    return Some(Err(s));
                 }
             }
             // v0.100: a chained op on a `Stream` — the receiver already *is* an
@@ -4937,7 +4942,7 @@ fn lower_kernel_method_call(
                 let recv = pre.lower(receiver, cx);
                 let a: Vec<String> = args.iter().map(|x| pre.lower(x, cx)).collect();
                 if let Some(s) = lower_stream_method(recv, op, &a) {
-                    return Some(s);
+                    return Some(Err(s));
                 }
             }
             // #3051: a case's recording `TestConnection[F]`.
@@ -4948,7 +4953,7 @@ fn lower_kernel_method_call(
                     TestConnectionOp::Closed => format!("({recv}).closed"),
                     TestConnectionOp::Connection => format!("({recv}).mint()"),
                 };
-                return Some(s);
+                return Some(Err(s));
             }
             // v0.102: the held-resource operations on a `Connection[F]` lower to
             // method calls on the runtime `Connection` object — `send(frame)` and
@@ -4956,7 +4961,7 @@ fn lower_kernel_method_call(
             KernelOp::Connection(op) => {
                 let recv = pre.lower(receiver, cx);
                 let a: Vec<String> = args.iter().map(|x| pre.lower(x, cx)).collect();
-                return Some(format!("({recv}).{}({})", op.name(), a.join(", ")));
+                return Some(Err(format!("({recv}).{}({})", op.name(), a.join(", "))));
             }
             KernelOp::Map(op) => {
                 let Ty::Map(key, val) = &recv_ty else {
@@ -4965,7 +4970,7 @@ fn lower_kernel_method_call(
                 if let Some(s) =
                     pre.absorb_opt(lower_map_kernel(receiver, op, args, *key, *val, cx))
                 {
-                    return Some(s);
+                    return Some(Err(s));
                 }
             }
             // K6a (#2596): the `Set` kernel.
@@ -4974,7 +4979,7 @@ fn lower_kernel_method_call(
                     mismatch(kop)
                 };
                 if let Some(s) = pre.absorb_opt(lower_set_kernel(receiver, op, args, *elem, cx)) {
-                    return Some(s);
+                    return Some(Err(s));
                 }
             }
             // v0.21: the numeric kernel. `toFloat` is the identity
@@ -4983,12 +4988,12 @@ fn lower_kernel_method_call(
             // v0.22a extends it (abs/min/max/clamp, isNaN/isFinite).
             KernelOp::Int(op) => {
                 if let Some(s) = pre.absorb_opt(lower_int_kernel(receiver, op, args, cx)) {
-                    return Some(s);
+                    return Some(Err(s));
                 }
             }
             KernelOp::Float(op) => {
                 if let Some(s) = pre.absorb_opt(lower_float_kernel(receiver, op, args, cx)) {
-                    return Some(s);
+                    return Some(Err(s));
                 }
             }
             // v0.86 (ADR 0112): the `Duration` kernel. `toMillis` is the identity
@@ -4996,7 +5001,7 @@ fn lower_kernel_method_call(
             // renders the number.
             KernelOp::Duration(op) => {
                 if let Some(s) = pre.absorb_opt(lower_duration_kernel(receiver, op, args, cx)) {
-                    return Some(s);
+                    return Some(Err(s));
                 }
             }
             // v0.90 (ADR 0114): the `Instant` kernel. `toEpochMillis` is the
@@ -5004,7 +5009,7 @@ fn lower_kernel_method_call(
             // renders the number.
             KernelOp::Instant(op) => {
                 if let Some(s) = pre.absorb_opt(lower_instant_kernel(receiver, op, args, cx)) {
-                    return Some(s);
+                    return Some(Err(s));
                 }
             }
             // #3277: a cookie rides beside an `HttpResult` as a `cookies` list the
@@ -5027,7 +5032,7 @@ fn lower_kernel_method_call(
                         format!("((({recv}) as any).cookies ?? [])")
                     }
                 };
-                return Some(expr);
+                return Some(Err(expr));
             }
             // #2341 (decision A): an HTTP handler's `headers` is a runtime
             // object with these very methods, each answering an `Option`.
@@ -5037,26 +5042,26 @@ fn lower_kernel_method_call(
             | KernelOp::TokenClaims(_) => {
                 let recv = pre.lower(receiver, cx);
                 let args: Vec<String> = args.iter().map(|a| pre.lower(a, cx)).collect();
-                return Some(format!("({recv}).{}({})", kop.name(), args.join(", ")));
+                return Some(Err(format!("({recv}).{}({})", kop.name(), args.join(", "))));
             }
             // v0.110 (ADR 0142): the `Bytes` kernel. `length` is the octet
             // count; `toBase64` encodes; `decodeUtf8` is a guarded UTF-8 decode
             // returning `Option`.
             KernelOp::Bytes(op) => {
                 if let Some(s) = pre.absorb_opt(lower_bytes_kernel(receiver, op, args, cx)) {
-                    return Some(s);
+                    return Some(Err(s));
                 }
             }
             // #2622: the `Decimal` kernel.
             KernelOp::Decimal(op) => {
                 if let Some(s) = pre.absorb_opt(lower_decimal_kernel(receiver, op, args, cx)) {
-                    return Some(s);
+                    return Some(Err(s));
                 }
             }
             // v0.22a: the string kernel (ADR 0046).
             KernelOp::String(op) => {
                 if let Some(s) = pre.absorb_opt(lower_string_kernel(receiver, op, args, cx)) {
-                    return Some(s);
+                    return Some(Err(s));
                 }
             }
             // v0.22a: Option/Result combinators (ADR 0048).
@@ -5067,7 +5072,7 @@ fn lower_kernel_method_call(
                 if let Some(s) =
                     pre.absorb_opt(lower_option_kernel(e, receiver, op, args, *inner, cx))
                 {
-                    return Some(s);
+                    return Some(Err(s));
                 }
             }
             KernelOp::Result(op) => {
@@ -5077,14 +5082,14 @@ fn lower_kernel_method_call(
                 if let Some(s) =
                     pre.absorb_opt(lower_result_kernel(e, receiver, op, args, *ok, *err, cx))
                 {
-                    return Some(s);
+                    return Some(Err(s));
                 }
             }
             // #2683 / #2711 / #3437: `within`, `race` and `detach`, on every `Effect[T]`.
             KernelOp::Effect(op) => {
                 if let Some(s) = lower_effect_kernel_call(e, receiver, op, args, &recv_ty, cx, pre)
                 {
-                    return Some(s);
+                    return Some(Err(s));
                 }
             }
             // §2.8.3: the `Effect[Result[T, E]]` combinators — `mapOk`/`mapErr`/
@@ -5099,7 +5104,7 @@ fn lower_kernel_method_call(
                         e, receiver, op, args, *ok, *err, cx,
                     ))
                 {
-                    return Some(s);
+                    return Some(Err(s));
                 }
             }
         }
@@ -6258,7 +6263,7 @@ struct QueryShape<'a> {
     keyed: bool,
     /// The comparator expression for `sortBy`/`min`/`max` (#2787); `None` keeps
     /// the bare `<`/`>` operators, for `Int`/`String`/`Duration`/`Instant` keys.
-    key_cmp: Option<String>,
+    key_cmp: Option<bynk_ts::TsExpr>,
     /// The module's runtime-helper record, so a lowering that needs a helper
     /// imports it (`Query.sum` over a `Decimal` key needs `__bynkDecimalAdd`, #3421).
     runtime_use: &'a RuntimeUse,
@@ -6266,7 +6271,7 @@ struct QueryShape<'a> {
 
 /// The comparator for a `Query` `sortBy`/`min`/`max` key, as `lower_list_kernel`
 /// picks it: `None` for a plain base key, otherwise the key type's comparator.
-fn query_key_cmp(method: &Ident, args: &[Expr], cx: &LowerCtx) -> Option<String> {
+fn query_key_cmp(method: &Ident, args: &[Expr], cx: &LowerCtx) -> Option<bynk_ts::TsExpr> {
     match (method.name.as_str(), args) {
         ("sortBy" | "min" | "max", [key]) => kernel_key_comparator(key, cx),
         ("sortByDescending", [key]) => kernel_key_comparator(key, cx),
@@ -12349,5 +12354,154 @@ fn minus(x: Int) -> Int { 5 - - -x }
             func(&ts, "b"),
             "export function b(s: string, x: number): Result<boolean, string> {\n  let __r1: boolean;\n  if (s.includes(s)) {\n    const __r0 = risky(x);\n    if (__r0.tag === \"Err\") return __r0;\n    __r1 = __r0.value > 0;\n  } else {\n    __r1 = false;\n  }\n  return Ok(__r1);\n}\n"
         );
+    }
+}
+
+/// 1A.18a (#3719): the `List` kernel's expression-bodied arms build nodes.
+#[cfg(test)]
+mod list_kernel_tests {
+    use crate::testkit::emit_source;
+
+    /// `(text exits, emitted TypeScript)` for a one-function commons.
+    fn exits(body: &str) -> (usize, String) {
+        super::TEXT_EXITS.with(|c| c.set(0));
+        let ts = emit_source(&format!("commons lk\n{body}\n"));
+        (super::TEXT_EXITS.with(|c| c.get()), ts)
+    }
+
+    /// The returned expression of `export function f`.
+    fn returned(ts: &str) -> String {
+        let at = ts.find("export function f(").expect("f");
+        let rest = &ts[at..];
+        let ret = rest.find("  return ").expect("a return") + "  return ".len();
+        let end = rest[ret..].find(";\n}\n").expect("end");
+        rest[ret..ret + end].to_string()
+    }
+
+    /// Each arm over node operands prints exactly today's text and leaves no
+    /// expression as text.
+    #[test]
+    fn expression_arms_over_nodes_print_as_before_with_no_text_exit() {
+        for (body, want) in [
+            ("fn f(xs: List[Int]) -> Int { xs.length() }", "(xs).length"),
+            ("fn f(xs: List[Int]) -> Int { xs.count() }", "(xs).length"),
+            (
+                "fn f(xs: List[Int], i: Int) -> Option[Int] { xs.get(i) }",
+                "((__xs: readonly number[], __i: number) => __i >= 0 && __i < __xs.length ? Some(__xs[__i] as number) : None)(xs, i)",
+            ),
+            (
+                "fn f(xs: List[Int], y: List[Int]) -> List[Int] { xs.concat(y).append(1).prepend(0) }",
+                "[0, ...[...[...xs, ...y], 1]]",
+            ),
+            (
+                "fn f(xs: List[Int]) -> List[Int] { xs.map((x) => x + 1).filter((x) => x > 1).take(2).skip(1) }",
+                "((((xs).map((__x: number) => ((x: number) => x + 1)(__x))).filter((__x: number) => ((x: number) => x > 1)(__x))).slice(0, globalThis.Math.max(0, 2))).slice(globalThis.Math.max(0, 1))",
+            ),
+            (
+                "fn f(xs: List[Int]) -> Bool { xs.any((x) => x > 1) && xs.all((x) => x > 0) }",
+                "(xs).some((__x: number) => ((x: number) => x > 1)(__x)) && (xs).every((__x: number) => ((x: number) => x > 0)(__x))",
+            ),
+            (
+                "fn f(xs: List[Int]) -> List[Int] { xs.flatMap((x) => [x, x]) }",
+                "(xs).flatMap((__x: number) => ((x: number) => [x, x])(__x))",
+            ),
+            (
+                "fn f(xs: List[Int]) -> Option[Int] { xs.first() }",
+                "((__xs: readonly number[]) => __xs.length > 0 ? Some(__xs[0]) : None)(xs)",
+            ),
+            (
+                "fn f(xs: List[Int]) -> Int { xs.firstOrElse(0) }",
+                "((__xs: readonly number[], __d: number) => __xs.length > 0 ? __xs[0] : __d)(xs, 0)",
+            ),
+            (
+                "fn f(xs: List[Int]) -> Int { xs.sum((x) => x) }",
+                "(xs).reduce((__s: number, __x: number) => __s + ((x: number) => x)(__x), 0)",
+            ),
+            (
+                "fn f(xs: List[Int]) -> List[Int] { xs.distinct() }",
+                "[...new globalThis.Set(xs)]",
+            ),
+            (
+                "fn f(xs: List[Bytes]) -> List[Bytes] { xs.distinct() }",
+                "__bynkDistinct(xs)",
+            ),
+            (
+                "fn f(xs: List[Float]) -> List[Float] { xs.sortBy((x) => x) }",
+                "[...xs].sort((__a: number, __b: number) => __bynkCmpFloat(((x: number) => x)(__a), ((x: number) => x)(__b)))",
+            ),
+            (
+                "fn f(xs: List[Float]) -> List[Float] { xs.sortByDescending((x) => x) }",
+                "[...xs].sort((__a: number, __b: number) => __bynkCmpFloat(((x: number) => x)(__b), ((x: number) => x)(__a)))",
+            ),
+        ] {
+            let (n, ts) = exits(body);
+            assert_eq!(returned(&ts), want, "{body}");
+            assert_eq!(n, 0, "{body}: text exits\n{ts}");
+        }
+    }
+
+    /// The `Decimal` sum starts from the zero decimal and notes its helper.
+    #[test]
+    fn a_decimal_sum_is_a_node_and_imports_its_helper() {
+        let (n, ts) = exits("fn f(xs: List[Decimal]) -> Decimal { xs.sum((x) => x) }");
+        assert_eq!(n, 0, "{ts}");
+        assert!(ts.contains("__bynkDecimalAdd(__s, ((x: { readonly coefficient: bigint; readonly scale: number }) => x)(__x)), { coefficient: 0n, scale: 0 })"), "{ts}");
+        assert!(ts.contains("import { __bynkDecimalAdd }"), "{ts}");
+    }
+
+    /// A text operand falls back to today's text, byte for byte: a plain-key
+    /// `sortBy` is statement-bodied and still text (1A.18b), and the `map` over
+    /// it keeps its text form.
+    #[test]
+    fn a_text_operand_keeps_the_text_form() {
+        let (n, ts) =
+            exits("fn f(xs: List[Int]) -> List[Int] { xs.sortBy((x) => x).map((x) => x) }");
+        assert!(n > 0, "{ts}");
+        assert_eq!(
+            returned(&ts),
+            "([...xs].sort((__a: number, __b: number) => { const __ka = ((x: number) => x)(__a), __kb = ((x: number) => x)(__b); return __ka < __kb ? -1 : __ka > __kb ? 1 : 0; })).map((__x: number) => ((x: number) => x)(__x))"
+        );
+    }
+
+    /// Hoisted effects keep source order: the receiver's `?` lowers before the
+    /// argument's for `append`/`concat`, after it for `prepend`.
+    #[test]
+    fn hoisted_operands_keep_source_order() {
+        let src = "commons lk\n\
+            fn p(x: Int) -> Result[Int, String] { Ok(x) }\n\
+            fn f(xs: List[Int]) -> Result[List[Int], String] { Ok(xs.append(p(1)?).concat([p(2)?])) }\n\
+            fn g(xs: List[Int]) -> Result[List[Int], String] { Ok(xs.prepend(p(3)?)) }\n";
+        let ts = emit_source(src);
+        let at = |n: &str| ts.find(n).unwrap_or_else(|| panic!("{n}\n{ts}"));
+        let f = at("export function f(");
+        let one = ts[f..].find("p(1)").unwrap();
+        let two = ts[f..].find("p(2)").unwrap();
+        assert!(one < two, "{ts}");
+        assert!(
+            ts.contains("return Ok([...[...xs, __r0.value], ...[__r1.value]]);"),
+            "{ts}"
+        );
+        assert!(ts.contains("return Ok([__r0.value, ...xs]);"), "{ts}");
+    }
+
+    /// Decision G: the imports derive from the printed output, so a module using
+    /// `get`, `first`, `sequenceAll` and `traverseTry` imports what it did before.
+    #[test]
+    fn imports_follow_the_printed_kernel_output() {
+        let src = "commons lk\n\
+            fn a(xs: List[Int]) -> Option[Int] { xs.get(0) }\n\
+            fn a2(xs: List[Int]) -> Option[Int] { xs.first() }\n\
+            fn b(xs: List[Result[Int, String]]) -> Result[List[Int], List[String]] { xs.sequenceAll() }\n\
+            fn c(xs: List[Int]) -> Effect[Result[List[Int], String]] {\n\
+              xs.traverseTry((x) => { let r: Result[Int, String] = Ok(x)\n  Effect.pure(r) })\n\
+            }\n";
+        let ts = emit_source(src);
+        assert!(
+            ts.contains(
+                "import { Ok, Err, Some, None, type Result, type Option } from \"./__bynk_runtime/result.js\";"
+            ),
+            "{ts}"
+        );
+        assert_eq!(ts.matches("import ").count(), 2, "{ts}");
     }
 }
