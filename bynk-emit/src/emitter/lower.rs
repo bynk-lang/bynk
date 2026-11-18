@@ -23,7 +23,7 @@ use bynk_model::{ConstVal, EventPatternIr, EventPatternValueIr, IrHttpMethod};
 use super::ctx::{BodyMode, ModuleCtx, TestShared};
 use super::lower_ctx::LowerCtx;
 use super::lower_stmt::{
-    arms_contain_question, block_contains_question, emit_block_as_function_body,
+    Body, Item, arms_contain_question, block_contains_question, emit_block_as_function_body,
     emit_block_as_function_body_with_return, emit_if_tail, emit_match_case, emit_match_if_chain,
     emit_match_tail, emit_statement, hoist_if_as_statement, hoist_value_as_statement,
     is_literal_match, ternary_shaped, write_line,
@@ -1218,6 +1218,14 @@ pub(crate) enum LoweredStmt {
 }
 
 impl LoweredStmt {
+    /// The statement as a statement-body item (see [`Lowered::pre_items`]).
+    fn item(&self) -> Item {
+        match self {
+            LoweredStmt::Node(n) => Item::Node(n.clone()),
+            LoweredStmt::Text(t) => Item::Line(t.clone()),
+        }
+    }
+
     /// The statement as lines of text, for a caller assembling statements as
     /// text (the statement-side counterpart of [`LoweredExpr::into_text`]; no
     /// family builds `Node` statements yet). A `Text` is one entry, as it
@@ -1267,6 +1275,12 @@ impl Lowered {
     /// text.
     pub(crate) fn pre_texts(&self) -> Vec<String> {
         self.pre.iter().flat_map(LoweredStmt::lines).collect()
+    }
+
+    /// The hoisted statements as statement-body items, for the statement
+    /// emitter: a `Text` becomes a `Line`, a `Node` stays a `Node`.
+    pub(super) fn pre_items(&self) -> Vec<Item> {
+        self.pre.iter().map(LoweredStmt::item).collect()
     }
 }
 
@@ -1388,6 +1402,12 @@ impl Pre {
     /// into a text statement position rather than hoisting them further.
     pub(crate) fn stmts(&self) -> Vec<String> {
         self.0.iter().flat_map(LoweredStmt::lines).collect()
+    }
+
+    /// The accumulated statements as statement-body items (see
+    /// [`Lowered::pre_items`]).
+    pub(super) fn items(&self) -> Vec<Item> {
+        self.0.iter().map(LoweredStmt::item).collect()
     }
 
     /// The accumulated statements as `TsStmt`s for a typed body: a `Node`
@@ -9765,8 +9785,7 @@ mod event_pattern_guard_ir_tests {
 /// Emit `const` declarations binding the names in `pattern` from runtime `path`,
 /// recursing through nested payloads (ADR 0169).
 pub(super) fn emit_pattern_bindings(
-    out: &mut String,
-    indent: usize,
+    body: &mut Body,
     path: &str,
     path_ty: Option<TyId>,
     pattern: &Pattern,
@@ -9777,24 +9796,24 @@ pub(super) fn emit_pattern_bindings(
         Pattern::Wildcard(_) | Pattern::Literal { .. } | Pattern::Range(_) => {}
         Pattern::Binding(id) => {
             let local = cx.bind_local_name(&id.name);
-            write_line(out, indent, &format!("const {local} = {path};"));
+            body.push(Item::Line(format!("const {local} = {path};")));
         }
         // #472: a refined pattern binds only what its inner pattern binds
         // (`_ where P` binds nothing today).
         Pattern::Refined { inner, .. } => {
-            emit_pattern_bindings(out, indent, path, path_ty, inner, cx);
+            emit_pattern_bindings(body, path, path_ty, inner, cx);
         }
         // #2680: each element binds from `path[i]`; a named rest from the
         // remaining elements.
         Pattern::List { elems, rest, .. } => {
             let elem_ty = list_elem_ty(path_ty, cx);
             for (i, sub) in elems.iter().enumerate() {
-                emit_pattern_bindings(out, indent, &format!("{path}[{i}]"), elem_ty, sub, cx);
+                emit_pattern_bindings(body, &format!("{path}[{i}]"), elem_ty, sub, cx);
             }
             if let Some(binder) = rest.as_ref().and_then(|r| r.binder.as_ref()) {
                 let local = cx.bind_local_name(&binder.name);
                 let value = list_rest_expr(path, elems.len());
-                write_line(out, indent, &format!("const {local} = {value};"));
+                body.push(Item::Line(format!("const {local} = {value};")));
             }
         }
         // #2641: a shorthand field binds a local of its own name; `f: p`
@@ -9805,11 +9824,11 @@ pub(super) fn emit_pattern_bindings(
                 match sub {
                     Some(sub) => {
                         let field_ty = record_field_ty(path_ty, &name.name, cx);
-                        emit_pattern_bindings(out, indent, &field_path, field_ty, sub, cx);
+                        emit_pattern_bindings(body, &field_path, field_ty, sub, cx);
                     }
                     None => {
                         let local = cx.bind_local_name(&name.name);
-                        write_line(out, indent, &format!("const {local} = {field_path};"));
+                        body.push(Item::Line(format!("const {local} = {field_path};")));
                     }
                 }
             }
@@ -9825,14 +9844,7 @@ pub(super) fn emit_pattern_bindings(
                     }
                 };
                 let field_ty = cx.payload_field_ty(path_ty, &variant.name, i, tys);
-                emit_pattern_bindings(
-                    out,
-                    indent,
-                    &format!("{path}.{field}"),
-                    field_ty,
-                    b.pattern(),
-                    cx,
-                );
+                emit_pattern_bindings(body, &format!("{path}.{field}"), field_ty, b.pattern(), cx);
             }
         }
         // #474: different alternatives can bind the same name at different
@@ -9853,11 +9865,11 @@ pub(super) fn emit_pattern_bindings(
                 .iter()
                 .map(|id| cx.bind_local_name(&id.name))
                 .collect();
-            write_line(out, indent, &format!("let {};", decl.join(", ")));
+            body.push(Item::Line(format!("let {};", decl.join(", "))));
             let last = alts.len() - 1;
             for (i, alt) in alts.iter().enumerate() {
                 if i == last {
-                    write_line(out, indent, "} else {");
+                    body.push(Item::Line("} else {".to_string()));
                 } else {
                     let mut t = Vec::new();
                     pattern_match_tests(path, path_ty, alt, cx, &mut t);
@@ -9867,18 +9879,20 @@ pub(super) fn emit_pattern_bindings(
                         t.join(" && ")
                     };
                     let kw = if i == 0 { "if" } else { "} else if" };
-                    write_line(out, indent, &format!("{kw} ({cond}) {{"));
+                    body.push(Item::Line(format!("{kw} ({cond}) {{")));
                 }
+                let mut assigns = Body::new();
                 let mut pairs = Vec::new();
                 pattern_binding_paths(path, path_ty, alt, cx, &mut pairs);
                 for (name, p) in &pairs {
                     let local = cx
                         .resolved_local_name(name)
                         .unwrap_or_else(|| ts_ident(name));
-                    write_line(out, indent + INDENT_STEP, &format!("{local} = {p};"));
+                    assigns.push(Item::Line(format!("{local} = {p};")));
                 }
+                body.push(Item::Indent(assigns));
             }
-            write_line(out, indent, "}");
+            body.push(Item::Line("}".to_string()));
         }
     }
 }

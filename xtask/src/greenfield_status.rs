@@ -1,6 +1,6 @@
 //! `cargo xtask greenfield-status` — the probe harness (track doc §8, proposal #999).
 //!
-//! Twenty-two probes measuring the tree against `design/bynk-greenfield-compiler.md`:
+//! Twenty-three probes measuring the tree against `design/bynk-greenfield-compiler.md`:
 //! the twelve in track doc §8, `emit_abi_shapes` (ADR 0310's probe, #999 Decision E —
 //! this slice measures the emit-ABI enumeration guard but does not wire it; wiring is
 //! packaging-track work), phase 7's own four — `ts_writes`, `ts_any`,
@@ -14,11 +14,11 @@
 //! crate-hygiene track's M-3 ratchet, `model_readers_beyond_emit` (B1, #2939), and its H-3 gate,
 //! `unused_deps` (A4, #2976).
 //!
-//! **Twenty-two are gated**, committed and diffed: `workspace_lints`, `fs_below_driver`,
+//! **Twenty-three are gated**, committed and diffed: `workspace_lints`, `fs_below_driver`,
 //! `options_sources`, `hoist_sinks`, `span_keyed_maps`, `emit_diagnostics`,
 //! `ide_emit_edge`, `ast_importers`, `emit_abi_shapes`, `ts_writes`, `ts_any`,
 //! `verbatim_origins`, `verbatim_sites`, `incremental_query_types`,
-//! `unconsumed_ir_items`, `diagnostic_coverage`, `model_readers_beyond_emit`, `unused_deps`, `explained_codes`, `ts_raw_sites`, `ts_text_idents`, `lowering_text_bridge`. Ten of these are
+//! `unconsumed_ir_items`, `diagnostic_coverage`, `model_readers_beyond_emit`, `unused_deps`, `explained_codes`, `ts_raw_sites`, `ts_text_idents`, `lowering_text_bridge`, `stmt_text_lines`. Ten of these are
 //! zero/closure-shaped — a boolean, or a count pinned at a small, argued floor
 //! (`ast_importers` = 5, `emit_abi_shapes` = 1). Phase 7's own four are the same shape:
 //! each converged toward an argued floor over dozens of slices, the same trajectory
@@ -42,7 +42,7 @@
 //! **Two kinds of gate** (#3679, amending ADR 0389/0390). Every gated probe is
 //! *exact-match*: a live reading that differs from its committed row fails unless a
 //! pending file names it in `probes:`. The [`GROWTH_PROBES`] (`ts_writes`, `ts_any`,
-//! `emit_abi_shapes`, `verbatim_sites`, `ts_raw_sites`, `ts_text_idents`, `lowering_text_bridge`, `span_keyed_maps`) are also *directional*:
+//! `emit_abi_shapes`, `verbatim_sites`, `ts_raw_sites`, `ts_text_idents`, `lowering_text_bridge`, `stmt_text_lines`, `span_keyed_maps`) are also *directional*:
 //! `growth_probes_never_rise` (`xtask/tests/greenfield_status.rs`) fails when the
 //! live leading count exceeds the committed one unless a pending file *raises* the
 //! probe with a reason (`raises:`), which the stamp then records in
@@ -117,7 +117,7 @@ pub fn run(root: &Path) -> Report {
 /// The gated probes' names, in [`run_gated`]'s order — what a pending file's
 /// `probes` key may cite. `greenfield_status_table_is_current` asserts this
 /// matches the probes [`run_gated`] actually returns, so the two cannot drift.
-pub const GATED_PROBES: [&str; 22] = [
+pub const GATED_PROBES: [&str; 23] = [
     "workspace_lints",
     "fs_below_driver",
     "options_sources",
@@ -134,6 +134,7 @@ pub const GATED_PROBES: [&str; 22] = [
     "ts_raw_sites",
     "ts_text_idents",
     "lowering_text_bridge",
+    "stmt_text_lines",
     "incremental_query_types",
     "unconsumed_ir_items",
     "diagnostic_coverage",
@@ -144,12 +145,12 @@ pub const GATED_PROBES: [&str; 22] = [
 
 /// The gated probes that only a reasoned, recorded `raises:` may increase
 /// (#3679, ADR 0389/0390 amended): `ts_writes`, `ts_any`, `emit_abi_shapes`,
-/// `verbatim_sites`, `ts_raw_sites`, `ts_text_idents` (both #3681), `lowering_text_bridge` (1A.2, #3694), `span_keyed_maps`. Probes already at a zero or closure
+/// `verbatim_sites`, `ts_raw_sites`, `ts_text_idents` (both #3681), `lowering_text_bridge` (1A.2, #3694), `stmt_text_lines` (1A.10, #3711), `span_keyed_maps`. Probes already at a zero or closure
 /// floor are excluded (their exact-match row pins them), as are
 /// `verbatim_origins` (an argued floor of 2) and `model_readers_beyond_emit`
 /// (which has the opposite direction). A subset of [`GATED_PROBES`], pinned by
 /// a unit test.
-pub const GROWTH_PROBES: [&str; 8] = [
+pub const GROWTH_PROBES: [&str; 9] = [
     "ts_writes",
     "ts_any",
     "emit_abi_shapes",
@@ -157,10 +158,11 @@ pub const GROWTH_PROBES: [&str; 8] = [
     "ts_raw_sites",
     "ts_text_idents",
     "lowering_text_bridge",
+    "stmt_text_lines",
     "span_keyed_maps",
 ];
 
-/// The twenty-two gated (zero/closure/ratchet) probes only — what [`gated_disagreements`] diffs.
+/// The twenty-three gated (zero/closure/ratchet) probes only — what [`gated_disagreements`] diffs.
 pub fn run_gated(root: &Path) -> Vec<Probe> {
     vec![
         workspace_lints(root),
@@ -179,6 +181,7 @@ pub fn run_gated(root: &Path) -> Vec<Probe> {
         ts_raw_sites(root),
         ts_text_idents(root),
         lowering_text_bridge(root),
+        stmt_text_lines(root),
         incremental_query_types(root),
         unconsumed_ir_items(root),
         diagnostic_coverage(root),
@@ -2339,6 +2342,47 @@ fn lowering_text_bridge_violations(files: &[(PathBuf, String)]) -> usize {
     })
 }
 
+/// Slice 1A.10 (#3711, S1 of the statement-emitter design note #3708): the
+/// production sites where *text* enters a statement `Body`
+/// (`bynk-emit/src/emitter/lower_stmt.rs`), each an `Item::Line` the statement
+/// emitter builds as a string instead of a `bynk_ts` statement node. A separate
+/// probe from [`lowering_text_bridge`] so the two trends stay readable: counting
+/// `Line` there would only re-label text that already exists. Slices S2-S4
+/// convert one producer at a time to node items and each lowers this; it reaches
+/// 0 when the last statement producer builds nodes. A growth probe
+/// ([`GROWTH_PROBES`]): it may only fall unless a pending file `raises:` it with
+/// a reason.
+///
+/// Counts non-comment lines outside `#[cfg(test)]` modules in
+/// [`codegen_family_files`] that construct an `Item::Line`: a call
+/// (`Item::Line(` — pattern uses such as a match arm are not constructions, see
+/// [`is_pattern_use`]) or the variant used as a function (`.map(Item::Line)`).
+/// Text-level gaps, as for [`lowering_text_bridge`]: a constructor must open on
+/// one line, and two on one line count once.
+fn stmt_text_lines(root: &Path) -> Probe {
+    Probe {
+        name: "stmt_text_lines",
+        gated: true,
+        reads: stmt_text_lines_violations(&codegen_family_files(root)).to_string(),
+    }
+}
+
+/// [`stmt_text_lines`]'s counting logic over an explicit file list.
+fn stmt_text_lines_violations(files: &[(PathBuf, String)]) -> usize {
+    const CALL: &str = "Item::Line(";
+    const PATH_FORMS: [&str; 2] = ["Item::Line)", "Item::Line,"];
+    production_lines_matching(files, |line| {
+        line_has_token(line, &PATH_FORMS)
+            || line.match_indices(CALL).any(|(at, _)| {
+                let word_before = line[..at]
+                    .chars()
+                    .next_back()
+                    .is_some_and(|c| c.is_ascii_alphanumeric() || c == '_');
+                !word_before && !is_pattern_use(line, at, CALL)
+            })
+    })
+}
+
 /// Whether the `needle` (`Variant::Text(`) occurrence at byte `at` of `line` is a
 /// pattern (a match arm, `if let`, `let`, `matches!`) rather than a
 /// construction. Heuristic, text-level: a pattern is followed, past its closing
@@ -3949,7 +3993,7 @@ pub fn render_table(report: &Report) -> String {
          `incremental_query_types`/`keystroke_latency` added by P8.0 (#1510); \
          `unconsumed_ir_items` added by Slice D3 of the IR cutover (#1542); \
          `diagnostic_coverage` added by #1662; `model_readers_beyond_emit` added by \
-         crate-hygiene B1 (#2939); `unused_deps` added by crate-hygiene A4 (#2976); `explained_codes` added by #3163; `ts_raw_sites`/`ts_text_idents` added by #3681; `lowering_text_bridge` added by #3694. Twenty-two \
+         crate-hygiene B1 (#2939); `unused_deps` added by crate-hygiene A4 (#2976); `explained_codes` added by #3163; `ts_raw_sites`/`ts_text_idents` added by #3681; `lowering_text_bridge` added by #3694; `stmt_text_lines` added by #3711. Twenty-three \
          probes are gated — a disagreement between this file and a fresh run fails \
          `greenfield_status_table_is_current` (`xtask/tests/greenfield_status.rs`). \
          Five are trend probes, reported only.\n\n",
@@ -4330,6 +4374,7 @@ mod tests {
         | `ts_raw_sites` | yes | 75 |\n\
         | `ts_text_idents` | yes | 13 |\n\
         | `lowering_text_bridge` | yes | 128 |\n\
+        | `stmt_text_lines` | yes | 70 |\n\
         | `span_keyed_maps` | yes | 2 |\n";
 
     fn growth_live(ts_writes: &str, abi: &str) -> Vec<Probe> {
@@ -4341,6 +4386,7 @@ mod tests {
             gated("ts_raw_sites", "75"),
             gated("ts_text_idents", "13"),
             gated("lowering_text_bridge", "128"),
+            gated("stmt_text_lines", "70"),
             gated("span_keyed_maps", "2"),
         ]
     }
@@ -4642,6 +4688,57 @@ mod tests {
             0
         );
         let tests = "fn p() {}\n\n#[cfg(test)]\nmod tests {\n    fn t() { Lowered::bare(s); pre.push_text(s); v.map(LoweredStmt::Text); }\n}\n";
+        assert_eq!(count(tests), 0);
+    }
+
+    #[test]
+    fn stmt_text_lines_counts_every_way_text_enters_a_body() {
+        let count = |src: &str| stmt_text_lines_violations(&files_of(&[("a.rs", src)]));
+        for (name, src) in [
+            (
+                "call",
+                "fn f() { body.push(Item::Line(format!(\"x\"))); }\n",
+            ),
+            (
+                "arm result",
+                "fn f() { match s { A => Item::Line(t.clone()), } }\n",
+            ),
+            ("bare path", "fn f() { v.map(Item::Line) }\n"),
+            ("path then comma", "fn f() { g(Item::Line, 1) }\n"),
+        ] {
+            assert_eq!(count(src), 1, "{name} must count");
+        }
+        // One per line, however many files.
+        let two = "fn f() {\n    b.push(Item::Line(a));\n    b.push(Item::Line(c));\n}\n";
+        assert_eq!(count(two), 2);
+        assert_eq!(
+            stmt_text_lines_violations(&files_of(&[("a.rs", two), ("b.rs", two)])),
+            4
+        );
+    }
+
+    #[test]
+    fn stmt_text_lines_ignores_nodes_patterns_definitions_comments_and_tests() {
+        let count = |src: &str| stmt_text_lines_violations(&files_of(&[("a.rs", src)]));
+        assert_eq!(
+            count("fn f() { body.push(Item::Node(n)); Item::Mark(s); }\n"),
+            0
+        );
+        // A match arm, `if let` and `matches!` are patterns, not constructions.
+        assert_eq!(
+            count("fn f() { match i { Item::Line(t) => g(t), _ => d } }\n"),
+            0
+        );
+        assert_eq!(count("fn f() { if let Item::Line(t) = i { g(t) } }\n"), 0);
+        assert_eq!(
+            count("fn f() { assert!(matches!(i, Item::Line(_))); }\n"),
+            0
+        );
+        assert_eq!(count("enum Item { Line(String), }\n"), 0);
+        assert_eq!(count("fn f() { MyItem::Line(s); XItem::Line(s); }\n"), 0);
+        assert_eq!(count("// body.push(Item::Line(s));\nfn f() {}\n"), 0);
+        let tests =
+            "fn p() {}\n\n#[cfg(test)]\nmod tests {\n    fn t() { b.push(Item::Line(s)); }\n}\n";
         assert_eq!(count(tests), 0);
     }
 

@@ -25,7 +25,7 @@ use bynk_syntax::ast::{Block, Expr, ExprId, ExprKind, FnDecl, FnName, MatchBody}
 
 use super::lower::Pre;
 use super::lower_ctx::LowerCtx;
-use super::lower_stmt::{emit_block_as_function_body_with_return, write_line};
+use super::lower_stmt::{Body, Item, emit_block_as_function_body_with_return, write_line};
 use super::ts_types::{ts_ty, ts_type_ref};
 use super::*;
 
@@ -300,7 +300,7 @@ pub(crate) fn emit_loop_body(
 /// Emit the tail self call `e` as a reassignment and `continue`. Returns
 /// `false` (writing nothing) when `e` is not one, so the caller lowers it as it
 /// always did.
-pub(crate) fn emit_continue(out: &mut String, e: &Expr, cx: &mut LowerCtx, indent: usize) -> bool {
+pub(super) fn emit_continue(body: &mut Body, e: &Expr, cx: &mut LowerCtx) -> bool {
     // A tail-slot sink is a value-position form, never a function tail.
     if cx.tail_slot.is_some() {
         return false;
@@ -316,9 +316,7 @@ pub(crate) fn emit_continue(out: &mut String, e: &Expr, cx: &mut LowerCtx, inden
     };
     let mut pre = Pre::new();
     let vals: Vec<String> = args.iter().map(|a| pre.lower(a, cx)).collect();
-    for s in &pre.stmts() {
-        write_line(out, indent, s);
-    }
+    body.extend(pre.items());
     // Every slot is assigned, even where the argument looks like the parameter's
     // own name: a binder in the body can share a parameter's name, and the
     // assignment is the only thing that can tell them apart. Every new argument
@@ -326,11 +324,11 @@ pub(crate) fn emit_continue(out: &mut String, e: &Expr, cx: &mut LowerCtx, inden
     // `f(b, a)` swaps and `f(n - 1, acc + n)` reads the old `n`.
     let temps: Vec<String> = vals.iter().map(|_| cx.fresh()).collect();
     for (v, t) in vals.iter().zip(&temps) {
-        write_line(out, indent, &format!("const {t} = {v};"));
+        body.push(Item::Line(format!("const {t} = {v};")));
     }
     for (s, t) in plan.slots.iter().zip(&temps) {
-        write_line(out, indent, &format!("{} = {t};", s.var));
+        body.push(Item::Line(format!("{} = {t};", s.var)));
     }
-    write_line(out, indent, &format!("continue {LABEL};"));
+    body.push(Item::Line(format!("continue {LABEL};")));
     true
 }
