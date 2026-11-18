@@ -2179,39 +2179,7 @@ pub(crate) fn lower_expr(e: &Expr, cx: &mut LowerCtx) -> Lowered {
             ..
         } => lowered_or_text!(pre, lower_record_spread(base, overrides, cx)),
         ExprKind::Expect(inner) => {
-            // v0.9.1: expect as an expression (v0.112, renamed from `assert`).
-            // Emit a runtime helper call that returns void (i.e., evaluates to
-            // `undefined` at runtime and is treated as the unit value `()` in Bynk
-            // terms). The expression form reports the predicate source only — the
-            // statement form carries the structural expected-vs-actual report.
-            let value = pre.lower_node(inner, cx);
-            let span_start = inner.span.start;
-            let span_end = inner.span.end;
-            let location = expect_location_raw(cx, span_start);
-            let src = format!("expect {}", expect_source_text_raw(cx, inner.span));
-            // The `Paren` keeps today's `((value))` bytes; the `Str` nodes
-            // escape exactly as `expect_location`/`expect_source_text` do.
-            let built = node_or_text(
-                vec![value],
-                |c| bynk_ts::TsExpr::Call {
-                    callee: Box::new(ident_node("__bynkExpect")),
-                    args: vec![
-                        bynk_ts::TsExpr::Paren(Box::new(one(c))),
-                        str_node(location.clone()),
-                        num_lit(span_start.to_string()),
-                        num_lit(span_end.to_string()),
-                        str_node(src.clone()),
-                    ],
-                },
-                |c| {
-                    format!(
-                        "__bynkExpect(({}), \"{}\", {span_start}, {span_end}, \"{}\")",
-                        one(c),
-                        crate::emitter::escape_ts_string(&location),
-                        crate::emitter::escape_ts_string(&src),
-                    )
-                },
-            );
+            let built = expect_built(inner, &mut pre, cx);
             built_or_text!(pre, built)
         }
         // 1A: the test-domain constructs (`Val`, `Observation`, `Faults`,
@@ -2252,6 +2220,42 @@ pub(crate) fn lower_expr(e: &Expr, cx: &mut LowerCtx) -> Lowered {
         }
     };
     pre.finish_text(expr)
+}
+
+/// v0.9.1: expect as an expression (v0.112, renamed from `assert`).
+/// Emit a runtime helper call that returns void (i.e., evaluates to
+/// `undefined` at runtime and is treated as the unit value `()` in Bynk
+/// terms). The expression form reports the predicate source only — the
+/// statement form carries the structural expected-vs-actual report.
+fn expect_built(inner: &Expr, pre: &mut Pre, cx: &mut LowerCtx) -> Built {
+    let value = pre.lower_node(inner, cx);
+    let span_start = inner.span.start;
+    let span_end = inner.span.end;
+    let location = expect_location_raw(cx, span_start);
+    let src = format!("expect {}", expect_source_text_raw(cx, inner.span));
+    // The `Paren` keeps today's `((value))` bytes; the `Str` nodes
+    // escape exactly as `expect_location`/`expect_source_text` do.
+    node_or_text(
+        vec![value],
+        |c| bynk_ts::TsExpr::Call {
+            callee: Box::new(ident_node("__bynkExpect")),
+            args: vec![
+                bynk_ts::TsExpr::Paren(Box::new(one(c))),
+                str_node(location.clone()),
+                num_lit(span_start.to_string()),
+                num_lit(span_end.to_string()),
+                str_node(src.clone()),
+            ],
+        },
+        |c| {
+            format!(
+                "__bynkExpect(({}), \"{}\", {span_start}, {span_end}, \"{}\")",
+                one(c),
+                crate::emitter::escape_ts_string(&location),
+                crate::emitter::escape_ts_string(&src),
+            )
+        },
+    )
 }
 
 /// The parameter names of a capability operation, looked up from the capability
@@ -12579,6 +12583,17 @@ fn minus(x: Int) -> Int { 5 - - -x }
             fn full(n: Int) -> C { C { n, label: \"x\" } }\n";
         assert!(text_exits(src) > text_exits(only_full));
         assert_eq!(text_exits(only_full), 0);
+    }
+
+    #[test]
+    fn a_zero_field_record_prints_as_empty_braces() {
+        // Layout-only: the old text was `{  }`, the printer's form is `{}`.
+        // No fixture reaches a zero-field record.
+        let src = "commons empty\n\
+            type E = {}\n\
+            fn mk() -> E { E {} }\n";
+        let ts = crate::testkit::emit_source(src);
+        assert_eq!(returned(&ts, "mk"), "{}");
     }
 
     #[test]
