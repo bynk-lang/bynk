@@ -2340,13 +2340,38 @@ fn emit_thread_locals_violations(files: &[(PathBuf, String)]) -> usize {
                 .rev()
                 .map(|l| l.trim())
                 .find(|l| !l.is_empty());
-            let test_only = attr.is_some_and(|a| a.starts_with("#[cfg(") && a.contains("test"));
+            let test_only = attr.is_some_and(cfg_is_test_only);
             if !test_only {
                 count += 1;
             }
         }
     }
     count
+}
+
+/// Whether a `#[cfg(..)]` attribute line gates the next item on `test` alone, or on
+/// `any(..)` with a bare `test` arm. Anything else counts as production: a `not(..)`
+/// predicate (`#[cfg(not(test))]` compiles into every product build), `all(..)`,
+/// and any predicate that merely contains the substring `test`
+/// (`feature = "attestation"`). Review of #3746.
+fn cfg_is_test_only(attr: &str) -> bool {
+    let Some(pred) = attr
+        .strip_prefix("#[cfg(")
+        .and_then(|rest| rest.strip_suffix(")]"))
+        .map(str::trim)
+    else {
+        return false;
+    };
+    if pred == "test" {
+        return true;
+    }
+    let Some(arms) = pred
+        .strip_prefix("any(")
+        .and_then(|rest| rest.strip_suffix(')'))
+    else {
+        return false;
+    };
+    !arms.contains("not(") && arms.split(',').any(|arm| arm.trim() == "test")
 }
 
 /// #3681: `TsExpr::Ident(format!(…))` sites — arbitrary expression text wrapped in
@@ -4693,12 +4718,14 @@ mod tests {
                    #[cfg(test)]\nthread_local! {\n    static B: Cell<u8> = const { Cell::new(0) };\n}\n\n\
                    #[cfg(any(test, feature = \"counters\"))]\n\nthread_local! {\n    static C: Cell<u8> = const { Cell::new(0) };\n}\n\n\
                    #[cfg(windows)]\nthread_local! {\n    static D: Cell<u8> = const { Cell::new(0) };\n}\n\n\
+                   #[cfg(not(test))]\nthread_local! {\n    static E: Cell<u8> = const { Cell::new(0) };\n}\n\n\
+                   #[cfg(feature = \"attestation\")]\nthread_local! {\n    static F: Cell<u8> = const { Cell::new(0) };\n}\n\n\
                    // thread_local! in a comment\n\
                    fn f() { let x = my_thread_local!(1); }\n";
         assert_eq!(
             emit_thread_locals_violations(&files_of(&[("a.rs", src)])),
-            2,
-            "the bare one and the `windows`-gated one; test-gated, commented and longer names excluded"
+            4,
+            "the bare one and the `windows`-, `not(test)`- and `attestation`-gated ones; test-gated, commented and longer names excluded"
         );
     }
 
