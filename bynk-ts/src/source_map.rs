@@ -99,14 +99,30 @@ impl SourceMapBuilder {
     /// Callers pass `out.len()` before appending the statement's text.
     /// Sub-builders use this; `merge` re-tags the source id.
     pub fn record(&mut self, byte_offset: usize, span: Span) {
+        self.record_in(byte_offset, 0, span);
+    }
+
+    /// [`record`](Self::record) against the registered source `source_id`
+    /// rather than the primary one: the printer records a statement's span in
+    /// whichever source the statement it is printing belongs to (1A.15).
+    pub fn record_in(&mut self, byte_offset: usize, source_id: usize, span: Span) {
         if let Some(last) = self.checkpoints.last_mut()
             && last.0 == byte_offset
-            && last.1 == 0
+            && last.1 == source_id
         {
             last.2 = span;
             return;
         }
-        self.checkpoints.push((byte_offset, 0, span));
+        self.checkpoints.push((byte_offset, source_id, span));
+    }
+
+    /// Every checkpoint as `(generated offset, span)`, in recording order: what
+    /// `bynk_ts::print_stmt_with_spans` reports.
+    pub(crate) fn checkpoint_spans(&self) -> Vec<(usize, Span)> {
+        self.checkpoints
+            .iter()
+            .map(|&(offset, _, span)| (offset, span))
+            .collect()
     }
 
     /// Shift every recorded checkpoint's generated-buffer offset forward by
