@@ -32,7 +32,10 @@ use bynk_model::{
 
 use super::ctx::{AgentStoreState, BodyMode, HandlerShared, ModuleCtx};
 use super::lower_ctx::LowerCtx;
-use super::lower_stmt::emit_block_as_function_body_with_return;
+use super::lower_stmt::{
+    Body, Item, block_body_with_return, emit_block_as_function_body_with_return,
+    function_body_stmts,
+};
 use super::ts_types::{ts_base, ts_ty, ts_ty_to_ts_type, ts_type_ref, ts_type_ref_to_ts_type};
 use super::*;
 
@@ -959,7 +962,6 @@ fn emit_method(
         params.push(exec_param("__exec"));
     }
     // A pure method is a plain member; an effectful one is `async` (below).
-    let mut body_text = String::new();
     // #1653: parameters are bindings of the body's own scope, so a `let` that
     // re-binds one gets a fresh name instead of redeclaring it.
     for p in &f.params {
@@ -973,26 +975,19 @@ fn emit_method(
     // carries no contract clauses (`emit_method` guards none), so there are no
     // `requires` to re-check per iteration; if methods gain them, they belong in
     // the guards closure below.
-    if let Some(plan) = super::tco::plan(f, commons, unit.render(commons)) {
-        super::tco::emit_loop_body(
-            &mut body_text,
-            f,
-            &plan,
-            &mut cx,
-            is_async,
-            INDENT_STEP * 2,
-            |_, _, _| {},
-        );
+    let body = if let Some(plan) = super::tco::plan(f, commons, unit.render(commons)) {
+        super::tco::loop_body_stmts(f, &plan, &mut cx, is_async, INDENT_STEP * 2, |_| {
+            Body::new()
+        })
     } else {
-        emit_block_as_function_body_with_return(
-            &mut body_text,
+        function_body_stmts(
             &f.body,
             &mut cx,
             INDENT_STEP * 2,
             is_async,
             Some(&f.return_type),
-        );
-    }
+        )
+    };
     bynk_ts::TsObjectEntry::Method {
         name: method_name.name.clone(),
         is_async,
@@ -1001,7 +996,7 @@ fn emit_method(
         return_type: Some(bynk_ts::TsType::named(ts_type_ref(&f.return_type))),
         doc,
         inline: false,
-        body: vec![bynk_ts::TsStmt::raw(body_text, None)],
+        body,
     }
 }
 
@@ -1125,7 +1120,6 @@ fn emit_free_fn_in(
         .collect();
 
     let empty = bynk_check::resolver::CrossContextInfo::default();
-    let body_smb = RefCell::new(SourceMapBuilder::new());
     let given_ir: Vec<bynk_model::CapRefIr> =
         f.given.iter().map(bynk_model::lower_cap_ref_ir).collect();
     let cx = if given_ir.is_empty() {
@@ -1149,8 +1143,7 @@ fn emit_free_fn_in(
                 },
             },
         )
-    }
-    .with_source_map(Some(&body_smb));
+    };
     // #2990: a suite helper records its `Json` codec roots for the test module
     // that splices it in.
     let mut cx = if suite_fn { cx.with_suite_fn() } else { cx };
@@ -1185,39 +1178,29 @@ fn emit_free_fn_in(
     for p in &f.params {
         cx.declare_binder(&p.name.name);
     }
-    let mut body_text = String::new();
     // #3193: a direct self tail call runs as a loop, in constant stack.
-    if let Some(plan) = super::tco::plan(f, commons, unit.render(commons)) {
+    let body = if let Some(plan) = super::tco::plan(f, commons, unit.render(commons)) {
         let check_requires = contracts && !f.requires.is_empty();
-        let guards = |out: &mut String, cx: &mut LowerCtx, depth: usize| {
+        let guards = |cx: &mut LowerCtx| {
+            let mut guards = Body::new();
             if check_requires {
-                emit_requires_guards(out, f, cx, depth);
+                requires_guards(&mut guards, f, cx);
             }
+            guards
         };
-        super::tco::emit_loop_body(
-            &mut body_text,
-            f,
-            &plan,
-            &mut cx,
-            async_tail,
-            INDENT_STEP,
-            guards,
-        );
+        super::tco::loop_body_stmts(f, &plan, &mut cx, async_tail, INDENT_STEP, guards)
     } else if guarded {
-        emit_contract_guarded_body(&mut body_text, f, &mut cx, async_tail);
+        contract_guarded_body_stmts(f, &mut cx, async_tail)
     } else {
-        emit_block_as_function_body_with_return(
-            &mut body_text,
+        function_body_stmts(
             &f.body,
             &mut cx,
             INDENT_STEP,
             async_tail,
             Some(&f.return_type),
-        );
-    }
+        )
+    };
 
-    let mut raw_body = bynk_ts::TsStmt::raw(body_text, None);
-    raw_body.nested_map = Some(body_smb.into_inner());
     // #1486: `no_blank_before` when this function's own doc comment is the
     // preceding statement — `bynk_ts::print` itself now supplies the one
     // blank line between adjacent real statements (a fresh call site's own
@@ -1229,7 +1212,7 @@ fn emit_free_fn_in(
         generics,
         params,
         return_type: Some(ts_type_ref_to_ts_type(&f.return_type, None)),
-        body: vec![raw_body],
+        body,
         is_async,
         inline: false,
     };
@@ -1365,7 +1348,7 @@ fn contract_param_dump(f: &FnDecl, extra_result: bool) -> String {
 
 /// `requires` guards of a contracted free function, parameters in scope. Also
 /// re-run at the top of each iteration of a self-tail-call loop (#3193).
-fn emit_requires_guards(out: &mut String, f: &FnDecl, cx: &mut LowerCtx, depth: usize) {
+fn requires_guards(body: &mut Body, f: &FnDecl, cx: &mut LowerCtx) {
     let FnName::Free(name) = &f.name else {
         return;
     };
@@ -1374,21 +1357,13 @@ fn emit_requires_guards(out: &mut String, f: &FnDecl, cx: &mut LowerCtx, depth: 
     for c in &f.requires {
         let mut pre = Pre::new();
         let pred = pre.lower(&c.predicate, cx);
-        for s in &pre.stmts() {
-            out.push_str(&bynk_ts::print_stmt(
-                &bynk_ts::TsStmt::raw(format!("{}{s}\n", "  ".repeat(depth)), None),
-                0,
-            ));
-        }
+        body.extend(pre.items());
         let msg = format!(
             "contract violated: precondition \\`{clause}\\` of {fn_name} ({dump})",
             clause = c.name.name,
             dump = contract_param_dump(f, false),
         );
-        out.push_str(&bynk_ts::print_stmt(
-            &contract_guard_if_stmt(&pred, &msg),
-            depth,
-        ));
+        body.push(Item::Node(Box::new(contract_guard_if_stmt(&pred, &msg))));
     }
 }
 
@@ -1447,69 +1422,53 @@ fn emit_requires_guards(out: &mut String, f: &FnDecl, cx: &mut LowerCtx, depth: 
 /// `result` before it is returned. Each violation throws with the clause name
 /// and the offending argument/`result` values. This wrapper is emitted only in
 /// the dev/test profile and is O(1) in code size (one guard, not per call site).
-fn emit_contract_guarded_body(out: &mut String, f: &FnDecl, cx: &mut LowerCtx, async_tail: bool) {
+///
+/// 1A.15: the body is the statements of the function body, not text — the
+/// original body runs inside the `(() => { ... })()` text, whose lowered
+/// statements nest one step deeper, so they reach the printer through
+/// [`Body::into_stmts`] with their checkpoints.
+fn contract_guarded_body_stmts(
+    f: &FnDecl,
+    cx: &mut LowerCtx,
+    async_tail: bool,
+) -> Vec<bynk_ts::TsStmt> {
     let FnName::Free(name) = &f.name else {
-        return;
+        return Vec::new();
     };
     let fn_name = name.name.clone();
-    emit_requires_guards(out, f, cx, 1);
+    let mut body = Body::new();
+    requires_guards(&mut body, f, cx);
     // Run the original body, capturing its value as `result` for the `ensures`.
-    //
-    // Written directly into `out`, NOT captured into a local buffer and
-    // wrapped as one opaque `TsStmt::raw` the way #1339's own `emit_refined_
-    // type` does for `emit_refined_checks`'s output — that precedent is safe
-    // only because `emit_refined_checks` never touches source-map recording.
-    // `emit_block_as_function_body_with_return` calls `cx.record_span(out.
-    // len(), ...)` internally: a local buffer's own length starts at 0, so
-    // any checkpoint recorded during its lowering would land at the WRONG
-    // offset once its text is later spliced into `out` at a non-zero
-    // position — the exact bug #1352 already found and fixed one level up
-    // (in `emit_free_fn`, for `body_text` itself); introducing a second
-    // local buffer HERE reproduces it one level deeper, silently, since
-    // `out` (this function's own parameter, = `emit_free_fn`'s `body_text`)
-    // is the one buffer whose offsets `emit_free_fn`'s own `body_smb`/
-    // `merge` machinery is already correctly rebased against. Writing here
-    // exactly as the pre-conversion code did — directly into `out`, no
-    // wrapping — keeps every `record_span` call's own `out.len()` correct
-    // by construction, with no merge of its own needed at this level.
-    if async_tail {
-        writeln!(out, "  const result = await (async () => {{").unwrap();
+    body.push(Item::line(if async_tail {
+        "const result = await (async () => {"
     } else {
-        writeln!(out, "  const result = (() => {{").unwrap();
-    }
-    emit_block_as_function_body_with_return(
-        out,
+        "const result = (() => {"
+    }));
+    body.push(Item::Indent(block_body_with_return(
         &f.body,
         cx,
         INDENT_STEP * 2,
         async_tail,
         Some(&f.return_type),
-    );
-    writeln!(out, "  }})();").unwrap();
+    )));
+    body.push(Item::line("})();"));
     // Postcondition guards — `result` (and the parameters) are in scope.
     for c in &f.ensures {
         let mut pre = Pre::new();
         let pred = pre.lower(&c.predicate, cx);
-        for s in &pre.stmts() {
-            out.push_str(&bynk_ts::print_stmt(
-                &bynk_ts::TsStmt::raw(format!("  {s}\n"), None),
-                0,
-            ));
-        }
+        body.extend(pre.items());
         let msg = format!(
             "contract violated: postcondition \\`{clause}\\` of {fn_name} ({dump})",
             clause = c.name.name,
             dump = contract_param_dump(f, true),
         );
-        out.push_str(&bynk_ts::print_stmt(
-            &contract_guard_if_stmt(&pred, &msg),
-            1,
-        ));
+        body.push(Item::Node(Box::new(contract_guard_if_stmt(&pred, &msg))));
     }
-    out.push_str(&bynk_ts::print_stmt(
-        &bynk_ts::TsStmt::return_stmt(Some(bynk_ts::TsExpr::Ident("result".to_string())), None),
-        1,
-    ));
+    body.push(Item::Node(Box::new(bynk_ts::TsStmt::return_stmt(
+        Some(bynk_ts::TsExpr::Ident("result".to_string())),
+        None,
+    ))));
+    body.into_stmts(INDENT_STEP)
 }
 
 /// Shared builder for the contract call-site guard's own real `if (!(pred))
@@ -2744,17 +2703,13 @@ capability Clock {
     }
 }
 
-/// The text held by a `TsClassMethod`'s sole `Raw` body statement, and —
-/// when `body_smb` was built against only a sub-slice of it — where that
-/// sub-slice starts.
-///
-/// `blob` is the exact `Raw` text. For the single-level shape (#1359's
-/// provider ops, #1380's WS DO methods, [`RawBody::flat`]) `inner` IS
-/// `blob` and the offset is 0; for the two-level shape (#1361's
-/// events-IIFE wrapping, reused by #1375's agent handlers,
-/// [`RawBody::nested`]) `inner` is the further-nested `body_out` captured
-/// inside `blob`, and `inner_offset_in_blob` is its start within `blob`,
-/// tracked by construction rather than searched for.
+/// The text held by a `TsClassMethod`'s sole `Raw` body statement, and where
+/// the sub-slice `body_smb` was built against starts within it: the agent
+/// handlers' (#1375) prologue + lowered body + epilogue. `blob` is the exact
+/// `Raw` text; `inner` is the further-nested `body_out` captured inside it,
+/// and `inner_offset_in_blob` is its start within `blob`, tracked by
+/// construction rather than searched for. (A method whose body is real
+/// statements needs none of this: the printer records its checkpoints, 1A.15.)
 struct RawBody<'a> {
     blob: &'a str,
     inner: &'a str,
@@ -2762,14 +2717,6 @@ struct RawBody<'a> {
 }
 
 impl<'a> RawBody<'a> {
-    fn flat(text: &'a str) -> Self {
-        RawBody {
-            blob: text,
-            inner: text,
-            inner_offset_in_blob: 0,
-        }
-    }
-
     fn nested(blob: &'a str, inner: &'a str, inner_offset_in_blob: usize) -> Self {
         RawBody {
             blob,
@@ -2973,7 +2920,6 @@ pub(crate) fn emit_provider(
         module.consumed_context_types = ctx.consumed_context_types();
         module.target = ctx.target;
         module.note_unit(ctx);
-        let body_smb = RefCell::new(SourceMapBuilder::new());
         let mut cx = LowerCtx::new(
             module,
             BodyMode::ProviderOp {
@@ -2993,17 +2939,14 @@ pub(crate) fn emit_provider(
                     ..HandlerShared::default()
                 },
             },
-        )
-        .with_source_map(Some(&body_smb));
+        );
         cx.local_agents = ctx.local_agents.clone();
         // #1653: parameters are bindings of the body's own scope, so a `let` that
         // re-binds one gets a fresh name instead of redeclaring it.
         for p in &op.params {
             cx.declare_binder(&p.name.name);
         }
-        let mut body_text = String::new();
-        emit_block_as_function_body_with_return(
-            &mut body_text,
+        let body = function_body_stmts(
             &op.body,
             &mut cx,
             INDENT_STEP * 2,
@@ -3016,8 +2959,6 @@ pub(crate) fn emit_provider(
         // of lockstep with the depth `print_class_method_and_merge` is
         // actually called with.
         let class_depth = 0;
-        let mut raw_body = bynk_ts::TsStmt::raw(body_text, None);
-        raw_body.nested_map = Some(body_smb.into_inner());
         let method = bynk_ts::TsClassMethod {
             name: op.name.name.clone(),
             private: false,
@@ -3025,7 +2966,7 @@ pub(crate) fn emit_provider(
             params,
             return_type: Some(ts_type_ref_to_ts_type(&op.return_type, None)),
             doc: None,
-            body: vec![raw_body],
+            body,
         };
         // #2280: anchor the op's header and prologue to its own `fn` line
         // rather than the previous op's last body line.
@@ -9279,7 +9220,6 @@ fn emit_ws_do_method(
             optional: false,
         });
     }
-    let body_smb = RefCell::new(SourceMapBuilder::new());
     let mut module = ModuleCtx::for_unit(commons, ctx);
     module.note_unit(ctx);
     module.agent_method_givens = ctx.agent_method_givens.clone();
@@ -9325,8 +9265,7 @@ fn emit_ws_do_method(
                 .map(|b| b.name.clone()),
             ws_self_agent: Some(agent.name.name.clone()),
         },
-    )
-    .with_source_map(Some(&body_smb));
+    );
     cx.local_agents = ctx.local_agents.clone();
     // #1653: parameters are bindings of the body's own scope, so a `let` that
     // re-binds one gets a fresh name instead of redeclaring it.
@@ -9334,9 +9273,7 @@ fn emit_ws_do_method(
         cx.declare_binder(&p.name.name);
     }
     let async_tail = is_effectful_return(&h.return_type);
-    let mut body_out = String::new();
-    emit_block_as_function_body_with_return(
-        &mut body_out,
+    let body = function_body_stmts(
         &h.body,
         &mut cx,
         INDENT_STEP * 2,
@@ -9393,17 +9330,21 @@ fn emit_ws_do_method(
         params,
         return_type: Some(ts_type_ref_to_ts_type(&h.return_type, None)),
         doc: None,
-        body: vec![bynk_ts::TsStmt::raw(body_out.clone(), None)],
+        body,
     };
     let class_depth = 0;
-    emit_class_method_and_merge_source_map(
-        out,
-        &method_entry,
-        class_depth,
-        RawBody::flat(&body_out),
-        &body_smb,
-        source_map,
-    );
+    // The printer records each body statement's checkpoint at its own offset in
+    // `out`, which is the buffer `source_map`'s offsets are relative to.
+    match source_map {
+        Some(map) => bynk_ts::print_class_method_and_merge(
+            out,
+            &method_entry,
+            class_depth,
+            &mut map.borrow_mut(),
+            0,
+        ),
+        None => out.push_str(&bynk_ts::print_class_method(&method_entry, class_depth)),
+    }
     writeln!(out).unwrap();
 }
 

@@ -25,7 +25,7 @@ use bynk_syntax::ast::{Block, Expr, ExprId, ExprKind, FnDecl, FnName, MatchBody}
 
 use super::lower::Pre;
 use super::lower_ctx::LowerCtx;
-use super::lower_stmt::{Body, Item, emit_block_as_function_body_with_return, write_line};
+use super::lower_stmt::{Body, Item, block_body_with_return};
 use super::ts_types::{ts_ty, ts_type_ref};
 use super::*;
 
@@ -272,45 +272,46 @@ impl TcoPlan {
     }
 }
 
-/// Write `f`'s body as the loop: the loop variables, the per-iteration
-/// bindings, `requires` (re-checked every iteration, so each recursive call's
-/// arguments are still checked), then the ordinary body lowering, whose tail
-/// self calls [`emit_continue`] turns into `continue`.
-pub(crate) fn emit_loop_body(
-    out: &mut String,
+/// `f`'s body as the loop: the loop variables, the per-iteration bindings,
+/// `requires` (re-checked every iteration, so each recursive call's arguments
+/// are still checked), then the ordinary body lowering, whose tail self calls
+/// [`emit_continue`] turns into `continue`. The statements of a typed function
+/// body (1A.15): the loop itself is text, with everything inside it one step
+/// deeper, so [`Body::into_stmts`] carries the nested nodes as `raw` text with
+/// their checkpoints. `guards` builds the `requires` checks, inside the loop.
+pub(crate) fn loop_body_stmts(
     f: &FnDecl,
     plan: &Rc<TcoPlan>,
     cx: &mut LowerCtx,
     async_tail: bool,
     base: usize,
-    guards: impl FnOnce(&mut String, &mut LowerCtx, usize),
-) {
+    guards: impl FnOnce(&mut LowerCtx) -> Body,
+) -> Vec<bynk_ts::TsStmt> {
     let init: Vec<String> = plan
         .slots
         .iter()
         .map(|s| format!("{} = {}", s.var, s.binder))
         .collect();
-    write_line(out, base, &format!("let {};", init.join(", ")));
-    write_line(out, base, &format!("{LABEL}: while (true) {{"));
+    let mut inner = Body::new();
     for s in &plan.slots {
-        write_line(
-            out,
-            base + INDENT_STEP,
-            &format!("const {} = {};", s.binder, s.var),
-        );
+        inner.push(Item::line(format!("const {} = {};", s.binder, s.var)));
     }
-    guards(out, cx, base / INDENT_STEP + 1);
+    inner.append(guards(cx));
     let prev = cx.tco.replace(Rc::clone(plan));
-    emit_block_as_function_body_with_return(
-        out,
+    inner.append(block_body_with_return(
         &f.body,
         cx,
         base + INDENT_STEP,
         async_tail,
         Some(&f.return_type),
-    );
+    ));
     cx.tco = prev;
-    write_line(out, base, "}");
+    let mut body = Body::new();
+    body.push(Item::line(format!("let {};", init.join(", "))));
+    body.push(Item::line(format!("{LABEL}: while (true) {{")));
+    body.push(Item::Indent(inner));
+    body.push(Item::line("}"));
+    body.into_stmts(base)
 }
 
 /// Emit the tail self call `e` as a reassignment and `continue`. Returns

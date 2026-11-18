@@ -44,6 +44,16 @@ pub(super) enum Item {
     Indent(Body),
 }
 
+impl Item {
+    /// A line of text, for the wrappers around a lowered body that are text
+    /// because `bynk_ts` has no node for them (the self-tail-call `while` loop,
+    /// the contract-guard closure, the claim-scope wrapper until it becomes
+    /// nodes). The one place such a line is made.
+    pub(super) fn line(text: impl Into<String>) -> Item {
+        Item::Line(text.into())
+    }
+}
+
 impl Body {
     pub(super) fn new() -> Self {
         Body(Vec::new())
@@ -55,6 +65,11 @@ impl Body {
 
     pub(super) fn extend(&mut self, items: impl IntoIterator<Item = Item>) {
         self.0.extend(items);
+    }
+
+    /// Append `other`'s items, at the same level.
+    pub(super) fn append(&mut self, other: Body) {
+        self.0.extend(other.0);
     }
 
     /// The body as statements, if every item is a [`Item::Node`] or an
@@ -99,6 +114,70 @@ impl Body {
                 Item::Line(_) | Item::Indent(_) => Some(None),
             })
             .collect()
+    }
+}
+
+impl Body {
+    /// The body as the statements of a typed function or method body (1A.15,
+    /// Decision A of #3716): what the callers of the statement emitter hand to
+    /// their `TsDecl::Function` or `TsObjectEntry::Method` instead of
+    /// rendering the body to text. `indent` is the indentation, in columns,
+    /// the printer will give those statements.
+    ///
+    /// - an [`Item::Node`] passes through, as itself;
+    /// - an [`Item::Mark`] goes on the **next** statement's
+    ///   [`bynk_ts::TsStmt::span`] ([`Body::to_nodes`]'s rule), and the printer
+    ///   records it where that statement starts;
+    /// - an [`Item::Line`] that remains becomes one `raw` statement carrying
+    ///   the mark's span, padded to its column: the one place in the emitter
+    ///   where a statement of text becomes a statement (like
+    ///   `Pre::ts_stmts`);
+    /// - an [`Item::Indent`] nests its items one step deeper, which a flat list
+    ///   of statements cannot express for a node, so a node inside one is
+    ///   printed at its depth into one `raw` statement that carries its
+    ///   checkpoints as a `nested_map`.
+    pub(super) fn into_stmts(self, indent: usize) -> Vec<bynk_ts::TsStmt> {
+        let mut stmts = Vec::with_capacity(self.0.len());
+        let mut pending = None;
+        self.push_stmts(&mut stmts, indent, indent, &mut pending);
+        stmts
+    }
+
+    fn push_stmts(
+        self,
+        stmts: &mut Vec<bynk_ts::TsStmt>,
+        base: usize,
+        indent: usize,
+        pending: &mut Option<Span>,
+    ) {
+        for item in self.0 {
+            match item {
+                Item::Mark(span) => *pending = Some(span),
+                Item::Node(stmt) => {
+                    let mut stmt = *stmt;
+                    stmt.span = stmt.span.or(pending.take());
+                    if indent == base {
+                        stmts.push(stmt);
+                        continue;
+                    }
+                    let (text, spans) = bynk_ts::print_stmt_with_spans(&stmt, indent / INDENT_STEP);
+                    let mut map = bynk_ts::SourceMapBuilder::new();
+                    for (offset, span) in spans {
+                        map.record(offset, span);
+                    }
+                    let mut raw = bynk_ts::TsStmt::raw(text, None);
+                    raw.nested_map = Some(map);
+                    stmts.push(raw);
+                }
+                Item::Line(text) => {
+                    #[cfg(any(test, feature = "text-exit-counters"))]
+                    LINES_RENDERED.with(|c| c.set(c.get() + 1));
+                    let text = format!("{}{text}\n", " ".repeat(indent));
+                    stmts.push(bynk_ts::TsStmt::raw(text, pending.take()));
+                }
+                Item::Indent(inner) => inner.push_stmts(stmts, base, indent + INDENT_STEP, pending),
+            }
+        }
     }
 }
 
@@ -192,6 +271,32 @@ pub(crate) fn emit_block_as_function_body_with_return(
     async_tail: bool,
     return_type: Option<&TypeRef>,
 ) {
+    let body = block_body_with_return(block, cx, indent, async_tail, return_type);
+    render(&body, out, indent, cx);
+}
+
+/// [`emit_block_as_function_body_with_return`], as the statements of a typed
+/// function or method body rather than text (1A.15, Decision A of #3716).
+/// `indent` is the indentation the printer will give them.
+pub(crate) fn function_body_stmts(
+    block: &Block,
+    cx: &mut LowerCtx,
+    indent: usize,
+    async_tail: bool,
+    return_type: Option<&TypeRef>,
+) -> Vec<bynk_ts::TsStmt> {
+    block_body_with_return(block, cx, indent, async_tail, return_type).into_stmts(indent)
+}
+
+/// The items of a function body lowered with its enclosing return type bound,
+/// not yet rendered: what both entry points above start from.
+pub(super) fn block_body_with_return(
+    block: &Block,
+    cx: &mut LowerCtx,
+    indent: usize,
+    async_tail: bool,
+    return_type: Option<&TypeRef>,
+) -> Body {
     let tys = cx.commons().tys();
     let prev = cx.return_ty.take();
     cx.return_ty = return_type
@@ -208,7 +313,7 @@ pub(crate) fn emit_block_as_function_body_with_return(
     if cx.claim_scope_used && cx.wraps_claims_in_body() {
         body = claim_scoped(body, indent);
     }
-    render(&body, out, indent, cx);
+    body
 }
 
 /// `body` between [`claim_scope_wrapper`]'s `before` and `after` text. The
@@ -219,7 +324,7 @@ fn claim_scoped(body: Body, indent: usize) -> Body {
     let pad = " ".repeat(indent);
     let as_line = |text: &str| {
         let text = text.strip_prefix(pad.as_str()).unwrap_or(text);
-        Item::Line(text.strip_suffix('\n').unwrap_or(text).to_string())
+        Item::line(text.strip_suffix('\n').unwrap_or(text))
     };
     let mut wrapped = Body::new();
     wrapped.push(as_line(&before));
@@ -1935,6 +2040,101 @@ mod body_tests {
                 "indent {indent}"
             );
         }
+    }
+
+    /// `into_stmts` (1A.15, Decision A): the statements of a function body print
+    /// to the text `render` writes at the same indent, and the printer records
+    /// the checkpoints `render` records, for a body mixing marks, text, nodes
+    /// and a nested `Indent` that holds a node.
+    #[test]
+    fn into_stmts_prints_what_render_writes_with_the_same_checkpoints() {
+        let build = || {
+            let mut inner = Body::new();
+            inner.push(line("if (x) {"));
+            let mut nested = Body::new();
+            nested.push(Item::Mark(Span::new(40, 50)));
+            nested.push(line("return 1;"));
+            nested.push(Item::Mark(Span::new(50, 55)));
+            nested.push(Item::Node(Box::new(if_node())));
+            inner.push(Item::Indent(nested));
+            inner.push(line("}"));
+            let mut body = Body::new();
+            body.push(Item::Mark(Span::new(0, 10)));
+            body.push(line("const a = 1;"));
+            body.push(Item::Mark(Span::new(10, 30)));
+            body.push(Item::Node(Box::new(if_node())));
+            body.push(Item::Mark(Span::new(30, 60)));
+            body.push(Item::Indent(inner));
+            body
+        };
+        for indent in [2usize, 4] {
+            let (text, want) = rendered(&build(), indent);
+            let method = bynk_ts::TsClassMethod {
+                name: "m".to_string(),
+                private: false,
+                is_async: false,
+                params: Vec::new(),
+                return_type: None,
+                doc: None,
+                body: build().into_stmts(indent),
+            };
+            // A method's body sits two steps in, so only indent 4 is a method.
+            if indent != 4 {
+                let stmt = bynk_ts::TsStmt::decl(
+                    bynk_ts::TsDecl::Function {
+                        name: "f".to_string(),
+                        generics: Vec::new(),
+                        params: Vec::new(),
+                        return_type: None,
+                        body: build().into_stmts(indent),
+                        is_async: false,
+                        inline: false,
+                    },
+                    None,
+                );
+                let mut out = String::new();
+                let mut map = SourceMapBuilder::new();
+                map.add_source("t.bynk", "x".repeat(200));
+                bynk_ts::print_stmt_and_merge(&mut out, &stmt, 0, &mut map, 0);
+                let body_text = out
+                    .strip_prefix("function f() {\n")
+                    .and_then(|o| o.strip_suffix("}\n"))
+                    .expect("a function");
+                assert_eq!(body_text, text, "indent {indent}");
+                // Compare the checkpoints line for line, shifted by the header.
+                let mut shifted = SourceMapBuilder::new();
+                shifted.add_source("t.bynk", "x".repeat(200));
+                shifted.merge(&want, &text, &out, "function f() {\n".len(), 0);
+                assert_eq!(map.to_v3(&out, "t.js"), shifted.to_v3(&out, "t.js"));
+            } else {
+                let mut out = String::from("class C {\n");
+                let mut map = SourceMapBuilder::new();
+                map.add_source("t.bynk", "x".repeat(200));
+                bynk_ts::print_class_method_and_merge(&mut out, &method, 0, &mut map, 0);
+                let header = "class C {\n  m() {\n";
+                let body_text = out
+                    .strip_prefix(header)
+                    .and_then(|o| o.strip_suffix("  }\n"))
+                    .expect("a method");
+                assert_eq!(body_text, text, "indent {indent}");
+                let mut shifted = SourceMapBuilder::new();
+                shifted.add_source("t.bynk", "x".repeat(200));
+                shifted.merge(&want, &text, &out, header.len(), 0);
+                assert_eq!(map.to_v3(&out, "t.js"), shifted.to_v3(&out, "t.js"));
+            }
+        }
+    }
+
+    /// A `Line` becomes one padded `raw` statement carrying the pending mark.
+    #[test]
+    fn into_stmts_turns_a_line_into_a_padded_raw_statement_with_its_span() {
+        let mut body = Body::new();
+        body.push(Item::Mark(Span::new(3, 4)));
+        body.push(line("a;"));
+        let stmts = body.into_stmts(4);
+        assert_eq!(stmts.len(), 1);
+        assert_eq!(stmts[0].span, Some(Span::new(3, 4)));
+        assert_eq!(bynk_ts::print_stmt(&stmts[0], 0), "    a;\n");
     }
 
     fn ident(name: &str) -> bynk_ts::TsExpr {

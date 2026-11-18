@@ -236,10 +236,9 @@ pub struct Printed {
 /// the `.bynk` source every statement's own span is measured against —
 /// today always exactly one, since nothing spans two files yet;
 /// `output_file` names the generated file in the source map's own `file`
-/// field. Only a *top-level* statement's own span is recorded as a
-/// checkpoint (R7.4's existing scope, unchanged by P7.8 — see
-/// [`TsStmt::span`]'s own doc for why a nested statement's span isn't
-/// recorded yet).
+/// field. Every statement's own span is recorded as a checkpoint, at
+/// any depth (1A.15; before that only a top-level statement's was, R7.4's
+/// original scope) — except inside an arrow body, which carries none yet.
 pub fn print(
     program: &TsProgram,
     source_name: &str,
@@ -282,9 +281,8 @@ pub fn print_multi_source(
 fn print_with_map(program: &TsProgram, mut map: SourceMapBuilder, output_file: &str) -> Printed {
     let mut out = String::new();
     for (i, stmt) in program.stmts.iter().enumerate() {
-        if let Some(span) = stmt.span {
-            map.record(out.len(), span);
-        }
+        // The statement's own span, and every nested statement's, are
+        // recorded by `render_stmt` as it prints (1A.15, Decision B of #3716).
         // #1477: also merges any nested checkpoints this top-level
         // statement (or anything nested inside it) itself carries — the
         // same mechanism `print_stmt_and_merge`/`print_class_method_and_
@@ -463,7 +461,7 @@ impl MergeTarget<'_> {
 /// `depth` already threads through unconditionally; a caller that has
 /// nothing to merge just passes `None`, as most still do.
 fn render_stmt(out: &mut String, stmt: &TsStmt, depth: usize, mut map: Option<MergeTarget<'_>>) {
-    note_span(out.len(), stmt);
+    note_span(out.len(), stmt, map.as_mut());
     if let Some(nested) = &stmt.nested_map
         && let Some(target) = map.as_mut()
     {
@@ -592,16 +590,16 @@ fn render_stmt_kind(
                     render_compact_stmts(out, stmts, depth);
                     out.push_str(" }");
                 } else {
-                    render_block_body(out, then_branch, depth, None);
+                    render_block_body(out, then_branch, depth, map.as_mut().map(|t| t.reborrow()));
                 }
                 out.push_str(" else");
-                render_branch(out, else_branch, depth);
+                render_branch(out, else_branch, depth, map.as_mut().map(|t| t.reborrow()));
             } else {
-                render_branch(out, then_branch, depth);
+                render_branch(out, then_branch, depth, map.as_mut().map(|t| t.reborrow()));
                 if let Some(else_branch) = else_branch {
                     out.push_str(&indent(depth));
                     out.push_str("else");
-                    render_branch(out, else_branch, depth);
+                    render_branch(out, else_branch, depth, map.as_mut().map(|t| t.reborrow()));
                 }
             }
         }
@@ -616,7 +614,7 @@ fn render_stmt_kind(
             out.push_str(" of ");
             render_expr(out, iter, depth);
             out.push(')');
-            render_branch(out, body, depth);
+            render_branch(out, body, depth, map.as_mut().map(|t| t.reborrow()));
         }
         TsStmtKind::For {
             name,
@@ -634,7 +632,7 @@ fn render_stmt_kind(
             out.push_str("; ");
             out.push_str(name);
             out.push_str("++)");
-            render_branch(out, body, depth);
+            render_branch(out, body, depth, map.as_mut().map(|t| t.reborrow()));
         }
         TsStmtKind::TryCatch {
             try_block,
@@ -709,7 +707,7 @@ fn render_stmt_kind(
                 // 1A.13 (#3714): a case's span is recorded at the start of its
                 // first label line, before its indentation.
                 if let Some(span) = case.span {
-                    note_span_at(out.len(), span);
+                    note_span_at(out.len(), span, map.as_mut());
                 }
                 if case.labels.is_empty() {
                     out.push_str(&indent(depth + 1));
@@ -783,10 +781,15 @@ fn render_stmt_kind(
 /// itself a `Block`, otherwise printed inline on the same line — matching
 /// `events_fanout.rs`'s own `if (!Array.isArray(subs)) continue;` (no
 /// braces) alongside its always-braced `for...of` bodies.
-fn render_branch(out: &mut String, branch: &TsStmt, depth: usize) {
+fn render_branch(
+    out: &mut String,
+    branch: &TsStmt,
+    depth: usize,
+    mut map: Option<MergeTarget<'_>>,
+) {
     match &branch.kind {
         TsStmtKind::Block(_) => {
-            render_block_body(out, branch, depth, None);
+            render_block_body(out, branch, depth, map);
             out.push('\n');
         }
         TsStmtKind::InlineBlock(stmts) => {
@@ -813,7 +816,7 @@ fn render_branch(out: &mut String, branch: &TsStmt, depth: usize) {
         | TsStmtKind::Increment(_)
         | TsStmtKind::Raw(_) => {
             out.push(' ');
-            note_span(out.len(), branch);
+            note_span(out.len(), branch, map.as_mut());
             render_inline_stmt(out, branch, depth);
         }
     }
@@ -1003,12 +1006,8 @@ fn render_inline_stmt(out: &mut String, stmt: &TsStmt, depth: usize) {
 /// panicking.
 ///
 /// `map`: forwarded into `stmts` when `block` is a real `Block` (#1477) —
-/// `TryCatch`'s own `try`/`catch` bodies are the one real site this covers
-/// (a `nested_map`-bearing statement inside either); `render_branch`'s own
-/// `If`/`ForOf`/`For` call sites always pass `None`, since nothing threads
-/// a map into `render_branch` itself (out of scope — ADR 0391's own
-/// permanently-opaque content is always a whole function/method/constructor
-/// body, never embedded directly inside an `if`/loop branch).
+/// `TryCatch`'s own `try`/`catch` bodies, and (1A.15) every `if`/`for` branch
+/// body, so a nested statement's own span is recorded wherever it sits.
 fn render_block_body(
     out: &mut String,
     block: &TsStmt,
@@ -1031,7 +1030,7 @@ fn render_block_body(
         render_compact_stmts(out, stmts, depth + 1);
         out.push('\n');
     } else {
-        render_stmt(out, block, depth + 1, None);
+        render_stmt(out, block, depth + 1, map);
     }
     out.push_str(&indent(depth));
     out.push('}');
@@ -1827,17 +1826,16 @@ fn render_arrow_body(out: &mut String, body: &TsArrowBody, depth: usize) {
         }
         // The multi-line form: `{`, each statement on its own line one level
         // deeper than the arrow's own line, `}` back at that line's indent.
-        // Statements inside carry no source-map checkpoints (S5 gives IIFE and
-        // lambda bodies their mappings).
+        // Statements inside carry no source-map checkpoints: no map is threaded
+        // into an expression (1A.15's second half gives IIFE and lambda bodies
+        // their mappings, by threading one through here).
         TsArrowBody::Multiline(stmts) => {
-            let outer = SPAN_SINK.with(|sink| sink.borrow_mut().take());
             out.push_str("{\n");
             for s in stmts {
                 render_stmt(out, s, depth + 1, None);
             }
             out.push_str(&indent(depth));
             out.push('}');
-            SPAN_SINK.with(|sink| *sink.borrow_mut() = outer);
         }
     }
 }
@@ -2155,32 +2153,22 @@ pub fn print_stmt_and_merge(
     render_stmt(out, stmt, depth, Some(MergeTarget { map, source_id }));
 }
 
-thread_local! {
-    /// The sink [`print_stmt_with_spans`] installs for the duration of one
-    /// print; `None` otherwise, so every other entry point records nothing.
-    static SPAN_SINK: std::cell::RefCell<Option<Vec<(usize, Span)>>> =
-        const { std::cell::RefCell::new(None) };
-}
-
-/// Record `stmt`'s span at `offset` if a [`print_stmt_with_spans`] is in
-/// progress and the statement carries one. The same statement can be reached
-/// twice at one offset (an inline branch is noted by `render_branch` and again
-/// by a `render_stmt` fallback), so an identical consecutive entry is dropped.
-fn note_span(offset: usize, stmt: &TsStmt) {
+/// Record `stmt`'s span at `offset` in the target's map, if the print has one
+/// and the statement carries a span (1A.15, Decision B of #3716). The same
+/// statement can be reached twice at one offset (an inline branch is noted by
+/// `render_branch` and again by a `render_stmt` fallback); the map keeps the
+/// later span at an offset, which is the same one.
+fn note_span(offset: usize, stmt: &TsStmt, map: Option<&mut MergeTarget<'_>>) {
     if let Some(span) = stmt.span {
-        note_span_at(offset, span);
+        note_span_at(offset, span, map);
     }
 }
 
 /// [`note_span`] for a span that is not a statement's own: a `switch` case's.
-fn note_span_at(offset: usize, span: Span) {
-    SPAN_SINK.with(|sink| {
-        if let Some(spans) = sink.borrow_mut().as_mut()
-            && spans.last() != Some(&(offset, span))
-        {
-            spans.push((offset, span));
-        }
-    });
+fn note_span_at(offset: usize, span: Span, map: Option<&mut MergeTarget<'_>>) {
+    if let Some(target) = map {
+        target.map.record_in(offset, target.source_id, span);
+    }
 }
 
 /// [`print_stmt`], also reporting where each statement that carries a
@@ -2197,12 +2185,22 @@ fn note_span_at(offset: usize, span: Span) {
 /// `bynk-emit` adds the indentation it writes before each line and records the
 /// adjusted offsets, which is what a nested checkpoint needs.
 pub fn print_stmt_with_spans(stmt: &TsStmt, depth: usize) -> (String, Vec<(usize, Span)>) {
-    let previous = SPAN_SINK.with(|sink| sink.borrow_mut().replace(Vec::new()));
-    let text = print_stmt(stmt, depth);
-    let spans = SPAN_SINK
-        .with(|sink| std::mem::replace(&mut *sink.borrow_mut(), previous))
-        .unwrap_or_default();
-    (text, spans)
+    debug_assert!(
+        depth == 0 || matches!(stmt.kind, TsStmtKind::Raw(_)) || !stmt_contains_raw(stmt),
+        "print_stmt_with_spans: a Raw-bearing statement's own baked-in indent only matches depth 0"
+    );
+    let mut map = SourceMapBuilder::new();
+    let mut out = String::new();
+    render_stmt(
+        &mut out,
+        stmt,
+        depth,
+        Some(MergeTarget {
+            map: &mut map,
+            source_id: 0,
+        }),
+    );
+    (out, map.checkpoint_spans())
 }
 
 /// Print a single [`TsObjectEntry`] on its own, at `depth` — the
@@ -7607,5 +7605,132 @@ mod tests {
             print_stmt(&stmt, 1),
             "  const [a, b] = await __join([\n    (): globalThis.Promise<number> => a,\n    async () => {\n      const t = x;\n      return t;\n    },\n  ]);\n"
         );
+    }
+    // --- nested spans through the program printer (1A.15, Decision B of #3716) ---
+
+    fn function(body: Vec<TsStmt>) -> TsDecl {
+        TsDecl::Function {
+            name: "f".to_string(),
+            generics: Vec::new(),
+            params: Vec::new(),
+            return_type: None,
+            body,
+            is_async: false,
+            inline: false,
+        }
+    }
+
+    /// Every statement of a function body records its span, at any depth,
+    /// through `print` itself: `print_with_map` no longer stops at the top level.
+    #[test]
+    fn a_program_records_nested_statement_spans_at_any_depth() {
+        let body = vec![
+            TsStmt::const_stmt(TsBindingName::Ident("a".into()), None, id("x"), sp(10)),
+            TsStmt::if_stmt(
+                id("c"),
+                TsStmt::block(vec![TsStmt::return_stmt(Some(id("a")), sp(30))], sp(20)),
+                sp(15),
+            ),
+        ];
+        let mut program = TsProgram::new();
+        program.push(TsStmt::decl(function(body), None));
+        let mut map = SourceMapBuilder::new();
+        map.add_source("x.bynk", " ".repeat(100));
+        let printed = print_multi_source(&program, map, "x.ts");
+        assert_eq!(
+            printed.text,
+            "function f() {\n  const a = x;\n  if (c) {\n    return a;\n  }\n}\n"
+        );
+        // The same program, printed through the fragment entry point, shows
+        // where each checkpoint falls.
+        let mut out = String::new();
+        let mut map = SourceMapBuilder::new();
+        let decl = TsStmt::decl(
+            function(vec![
+                TsStmt::const_stmt(TsBindingName::Ident("a".into()), None, id("x"), sp(10)),
+                TsStmt::if_stmt(
+                    id("c"),
+                    TsStmt::block(vec![TsStmt::return_stmt(Some(id("a")), sp(30))], sp(20)),
+                    sp(15),
+                ),
+            ]),
+            None,
+        );
+        print_stmt_and_merge(&mut out, &decl, 0, &mut map, 0);
+        let spans = map.checkpoint_spans();
+        let starts: Vec<usize> = spans.iter().map(|(_, s)| s.start).collect();
+        assert_eq!(starts, [10, 15, 30]);
+        let lines: Vec<&str> = spans.iter().map(|(o, _)| line_at(&out, *o)).collect();
+        assert_eq!(lines, ["  const a = x;", "  if (c) {", "    return a;"]);
+    }
+
+    /// A class method's body records its statements' spans too.
+    #[test]
+    fn a_class_method_records_its_body_statement_spans() {
+        let method = TsClassMethod {
+            name: "m".to_string(),
+            private: false,
+            is_async: false,
+            params: Vec::new(),
+            return_type: None,
+            doc: None,
+            body: vec![
+                TsStmt::const_stmt(TsBindingName::Ident("a".into()), None, id("x"), sp(5)),
+                TsStmt::return_stmt(Some(id("a")), sp(9)),
+            ],
+        };
+        let mut out = String::from("class C {\n");
+        let mut map = SourceMapBuilder::new();
+        print_class_method_and_merge(&mut out, &method, 0, &mut map, 0);
+        let spans = map.checkpoint_spans();
+        let lines: Vec<&str> = spans.iter().map(|(o, _)| line_at(&out, *o)).collect();
+        assert_eq!(lines, ["    const a = x;", "    return a;"]);
+        let starts: Vec<usize> = spans.iter().map(|(_, s)| s.start).collect();
+        assert_eq!(starts, [5, 9]);
+    }
+
+    /// A `nested_map` on one body statement still merges, next to spans the
+    /// statements around it carry.
+    #[test]
+    fn a_nested_map_merges_next_to_nested_spans() {
+        let mut sub = SourceMapBuilder::new();
+        sub.record(0, Span::new(41, 42));
+        let mut raw = TsStmt::raw("    carried();\n    more();\n", None);
+        raw.nested_map = Some(sub);
+        let body = vec![
+            TsStmt::const_stmt(TsBindingName::Ident("a".into()), None, id("x"), sp(10)),
+            raw,
+            TsStmt::return_stmt(Some(id("a")), sp(60)),
+        ];
+        let mut out = String::new();
+        let mut map = SourceMapBuilder::new();
+        let decl = TsStmt::decl(function(body), None);
+        print_stmt_and_merge(&mut out, &decl, 0, &mut map, 0);
+        let spans = map.checkpoint_spans();
+        let starts: Vec<usize> = spans.iter().map(|(_, s)| s.start).collect();
+        assert_eq!(starts, [10, 41, 60]);
+        let lines: Vec<&str> = spans.iter().map(|(o, _)| line_at(&out, *o)).collect();
+        assert_eq!(lines, ["  const a = x;", "    carried();", "  return a;"]);
+    }
+
+    /// Statements inside an arrow body record nothing yet: no map is threaded
+    /// into an expression. 1A.15's second half lifts this, and this test with it.
+    #[test]
+    fn an_arrow_bodys_statements_record_no_spans_yet() {
+        let arrow = multiline_arrow(false, vec![TsStmt::return_stmt(Some(id("x")), sp(7))]);
+        let stmt = TsStmt::expr_stmt(iife(arrow), sp(3));
+        let (text, spans) = print_stmt_with_spans(&stmt, 0);
+        assert_eq!(text, "(() => {\n  return x;\n})();\n");
+        assert_eq!(spans, vec![(0, Span::new(3, 4))]);
+    }
+
+    /// Nothing is recorded when the print has no map to record into.
+    #[test]
+    fn a_print_without_a_map_records_nothing() {
+        let decl = TsStmt::decl(
+            function(vec![TsStmt::return_stmt(Some(id("a")), sp(9))]),
+            sp(1),
+        );
+        assert_eq!(print_stmt(&decl, 0), "function f() {\n  return a;\n}\n");
     }
 }
