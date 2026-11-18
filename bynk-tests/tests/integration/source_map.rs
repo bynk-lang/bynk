@@ -508,6 +508,44 @@ const SERVICE_FIXTURE: &str = "context reps {
 }
 ";
 
+const CLAIM_FIXTURE: &str = "context reps {
+  consumes bynk { Idempotency, Claim }
+
+  service ledger {
+    on call(id: String) -> Effect[Result[String, String]] given Idempotency {
+      let Claim.Claimed <- Idempotency.claim(id, 1.hours) else { Ok(\"duplicate\") }
+      let tagged = \"\\(id)!\"
+      if id == \"bad\" { Err(tagged) } else { Ok(tagged) }
+    }
+  }
+}
+";
+
+/// 1A.15 review (#3757): a handler that claims runs its body inside the
+/// claim-scope wrapper's `try { __r = await (async () => { … })(); }`, two
+/// expression levels deep (`Assign` → `Await` → `Call` → `Arrow`). Its
+/// checkpoints survive only through the printer's map threading into arrow
+/// bodies, so each statement inside that closure must map to its own line.
+#[test]
+fn claim_scoped_handler_body_keeps_its_own_statement_lines() {
+    let (ts, map) = compile_reps_context(CLAIM_FIXTURE);
+    assert!(ts.contains("__r = await (async () => {"), "{ts}");
+    let lines = decode(extract_field(&map, "mappings"));
+    let at = |g: usize| lines[g].unwrap_or_else(|| panic!("gen line {g} unmapped\n{ts}"));
+    // Source (0-based): line 5 = the claim `let … else`, line 6 = `let tagged`,
+    // line 7 = the `if`.
+    assert_eq!(
+        at(gen_line_of(&ts, "Idempotency.claim(__k")),
+        5,
+        "the claim call inside the closure keeps its own line"
+    );
+    assert_eq!(
+        at(gen_line_of(&ts, "const tagged = ")),
+        6,
+        "`let tagged` inside the claim closure keeps its own line"
+    );
+}
+
 #[test]
 fn service_handler_body_keeps_its_own_statement_lines_inside_the_events_iife() {
     // #1361: emit_service's own per-handler bodies were already using the

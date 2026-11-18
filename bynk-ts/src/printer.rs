@@ -7454,6 +7454,37 @@ mod tests {
         assert_eq!(lines, [("  return f(xs, () => {", 2), ("    return x;", 8)]);
     }
 
+    /// 1A.15 review (#3757): `render_multiline_object` now passes the
+    /// caller's map to its entries, so a `Method` entry of a multiline object
+    /// in statement position records its body's statement spans. No producer
+    /// gives those bodies spans today (`__makeSurface` and the workers
+    /// wrappers build them with `span: None`); this pins the behaviour so a
+    /// caller that also merges a method body's map by hand is caught.
+    #[test]
+    fn a_multiline_object_method_body_records_its_statement_spans() {
+        let entry = TsObjectEntry::Method {
+            name: "m".to_string(),
+            is_async: false,
+            generics: Vec::new(),
+            params: Vec::new(),
+            return_type: None,
+            doc: None,
+            inline: false,
+            body: vec![TsStmt::return_stmt(Some(id("x")), sp(7))],
+        };
+        let object = TsExpr::Object {
+            entries: vec![entry],
+            multiline: true,
+        };
+        let stmt = TsStmt::return_stmt(Some(object), sp(3));
+        let (text, spans) = print_stmt_with_spans(&stmt, 1);
+        let lines: Vec<(&str, usize)> = spans
+            .iter()
+            .map(|(o, s)| (line_at(&text, *o), s.start))
+            .collect();
+        assert_eq!(lines, [("  return {", 3), ("      return x;", 7)], "{text}");
+    }
+
     // --- `TsSwitchCase.labels` and `.span` (back-half paydown 1A.13) ---
 
     fn case(labels: Vec<TsExpr>, body: Vec<TsStmt>, span: Option<Span>) -> TsSwitchCase {

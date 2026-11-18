@@ -20,6 +20,8 @@ Closes #3716. This is the second half of the Decision F split. The first half, #
 - IIFE, `match`-IIFE and lambda bodies are mapped for the first time, which ends the `bynk test --inspect` degradation inside them.
 - Two new inspector-style tests step into a lambda body and into a value-position `if`. Both fail before this change.
 - A lambda reached through the text method-call dispatchers (for example a list `.map`) is still text and stays unmapped.
+- `Method` entries of a multiline object literal in a mapped body now record their statement spans too. No producer gives those bodies spans today, so no output map changes; a printer test pins it.
+- A new decode test pins the statement lines inside a claim-scoped handler's closure.
 
 **Value-position `match` (carried over from 1A.14).** `match_body` writes each arm tail through `tail_item`, and `lower_expr`'s `Match` arm keeps the node.
 
