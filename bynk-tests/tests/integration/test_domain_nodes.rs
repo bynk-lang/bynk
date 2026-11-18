@@ -230,3 +230,50 @@ fn advance_is_a_call_statement() {
     assert!(text.contains("__bynkAdvanceClock(960000);"), "{text}");
     assert!(text.contains("__bynkAdvanceClock(back);"), "{text}");
 }
+
+/// Hoisting order (#3718, Risks). `expect len(Day.of("x")?) == 1` hoists the
+/// `?` guard out of the comparison's left operand. The hoisted statements must
+/// land before the `if (!(…))`, and the failure detail, which lowers the
+/// operands a second time, hoists its own guard and reads its own temporary
+/// (`__r1`), as it did before the statement became a node.
+#[test]
+fn a_hoisting_operand_runs_before_the_expect_and_its_detail_reads_the_temporary() {
+    const DAY: &str = "commons demo.day\n\ntype Day = String where NonEmpty\n\nfn len(d: Day) -> Int { d.length() }\n";
+    let (_, text) = emit(
+        "demo/day.bynk",
+        DAY,
+        "suite demo.day\n\ncase \"q\" {\n  expect len(Day.of(\"x\")?) == 1\n}\n",
+    );
+    let lines: Vec<&str> = text.lines().map(str::trim).collect();
+    let at = |needle: &str| {
+        lines
+            .iter()
+            .position(|l| l.contains(needle))
+            .unwrap_or_else(|| panic!("no line with {needle:?} in:\n{text}"))
+    };
+    let guard = at("tag === \"Err\"");
+    let temp = at("const __r");
+    let expect = lines
+        .iter()
+        .position(|l| l.starts_with("if (!("))
+        .unwrap_or_else(|| panic!("no expect in:\n{text}"));
+    assert!(
+        temp < guard && guard < expect,
+        "hoisted statements precede the expect:\n{text}"
+    );
+    // The comparison's operands are lowered twice (condition, then the
+    // failure detail), and each lowering hoists its own guard: the condition
+    // reads the first temporary and the detail the second, both declared
+    // before the `if`. The source text inside the message is a string, so
+    // `Day.of(` is evaluated exactly twice, once per hoisted guard.
+    let line = lines[expect];
+    assert!(line.starts_with("if (!(len(__r0.value) === 1))"), "{line}");
+    assert!(line.contains("__bynkShow((len(__r1.value)))"), "{line}");
+    let second = at("const __r1");
+    assert!(temp < guard && guard < second && second < expect, "{text}");
+    assert_eq!(
+        lines.iter().filter(|l| l.contains("= Day.of(")).count(),
+        2,
+        "{text}"
+    );
+}

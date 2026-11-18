@@ -1,7 +1,7 @@
 ---
 level: patch
 probes: ts_writes, lowering_text_bridge, stmt_text_lines, ts_any
-raises: ts_any — the node form of the test-scaffold refined brand (`unchecked_construct_test_node`, `TsType::named("any")`) sits beside the text `unchecked_construct_test`, which the driver's property generators still call; the cast itself is unchanged (P7.2) and the count falls when those callers convert
+raises: ts_any — the node form of the test-scaffold refined brand (`unchecked_construct_test_node`, `TsType::named("any")`) sits beside the text `unchecked_construct_test`, which the driver's `property_generators.rs` still calls; the cast itself is unchanged (P7.2) and the count falls when those callers convert
 changelog: The test-domain constructs (`expect`, `advance`, `Val`, observations, `trace` and fault claims) are built as TypeScript nodes rather than text; no change to emitted code beyond layout in test modules
 ---
 refactor(emit): test-domain constructs lower to nodes (1A.17)
