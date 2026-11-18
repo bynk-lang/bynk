@@ -28,6 +28,7 @@ per-commit history. While Bynk is pre-1.0, increments may change behaviour.
 
 | Version | Highlights |
 |---|---|
+| **v0.639.15** | Function calls, variant and constructor calls, `unreachable`/`todo`, and the plain method call now lower to typed TypeScript nodes |
 | **v0.639.14** | Value binary operators (arithmetic, comparison, equality, and the `Decimal`, `Int` division, structural-equality and `Ord` helper forms) now lower to typed TypeScript nodes; the printer brackets them by a precedence table |
 | **v0.639.13** | Identifiers, constant reads, `old`/`new` records, nullary `HttpResult`/`QueueResult`/sum-variant names and plain field access now lower to typed TypeScript nodes, so wrappers over them are nodes too |
 | **v0.639.12** | The `bynk` tests write their stand-in `wrangler`, `npm` and git-hook scripts from a child `sh`, so parallel test runs no longer fail intermittently with ETXTBSY (Text file busy) |
