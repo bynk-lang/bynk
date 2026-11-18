@@ -16,7 +16,8 @@ use bynk_syntax::span::Span;
 use super::ctx::TailSlot;
 use super::lower::{
     CLAIM_SCOPE_DECLARATION, Lowered, LoweredExpr, LoweredStmt, PatPath, Pre, and_join,
-    emit_pattern_bindings, literal_label_node, member_node, pattern_tests, ternary_built,
+    emit_pattern_bindings, expect_location_raw, expect_source_text_raw, literal_label_node,
+    member_node, num_lit, pattern_tests, str_node, ternary_built,
 };
 use super::lower_ctx::LowerCtx;
 use super::ts_types::{ts_ty, ts_type_ref, ts_type_ref_to_ts_type};
@@ -1201,21 +1202,35 @@ fn statement(body: &mut Body, stmt: &Statement, cx: &mut LowerCtx) {
             let clause = a.snapshot.as_ref().expect("guarded by is_some");
             let span_start = a.span.start;
             let span_end = a.span.end;
-            let location = expect_location(cx, span_start);
-            let src = expect_source_text(cx, a.value.span);
+            let location = expect_location_raw(cx, span_start);
+            let src = expect_source_text_raw(cx, a.value.span);
             let mut pre = Pre::new();
             let json = json_encode_text(&mut pre, &a.value, cx, false);
             body.extend(pre.items());
-            let name = bynk_project::json_string(&clause.name);
-            let shown = crate::emitter::escape_ts_string(&clause.name);
             match json {
-                Some(json) => body.push(Item::Line(format!(
+                // 1A: the known-type arm stays text — `json` is the serialisers'
+                // `&str` output (they take no node yet; see the track's
+                // "serialisers take `&TsExpr`" row).
+                Some(json) => {
+                    let name = bynk_project::json_string(&clause.name);
+                    let location = crate::emitter::escape_ts_string(&location);
+                    let src = crate::emitter::escape_ts_string(&src);
+                    let shown = crate::emitter::escape_ts_string(&clause.name);
+                    body.push(Item::Line(format!(
                         "{{ const __d = __bynkSnapshotCheck({name}, {json}); if (__d !== undefined) {{ throw __bynkExpectFailure(\"{location}\", {span_start}, {span_end}, \"expect {src} matches snapshot \\\"{shown}\\\"\\n  \" + __d); }} }}",
-                    ))),
+                    )));
+                }
                 // The checker typed the value; a missing type is drift, said at run time.
-                None => body.push(Item::Line(format!(
-                        "throw __bynkExpectFailure(\"{location}\", {span_start}, {span_end}, \"expect {src} matches snapshot \\\"{shown}\\\"\\n  the value's type is not known to the snapshot\");",
-                    ))),
+                None => {
+                    let message = format!(
+                        "expect {src} matches snapshot \"{}\"\n  the value's type is not known to the snapshot",
+                        clause.name
+                    );
+                    body.push(stmt_item(bynk_ts::TsStmt::throw_stmt(
+                        expect_failure_call(&location, span_start, span_end, str_node(message)),
+                        None,
+                    )));
+                }
             }
         }
         Statement::Expect(a) => {
@@ -1224,18 +1239,18 @@ fn statement(body: &mut Body, stmt: &Statement, cx: &mut LowerCtx) {
             // catches it and records the failure (v0.112, renamed from `assert`).
             let span_start = a.value.span.start;
             let span_end = a.value.span.end;
-            let location = expect_location(cx, span_start);
-            let src = expect_source_text(cx, a.value.span);
+            let location = expect_location_raw(cx, span_start);
+            let src = expect_source_text_raw(cx, a.value.span);
             let mut pre = Pre::new();
-            let cond = pre.lower(&a.value, cx);
+            let cond = pre.lower_node(&a.value, cx);
             // Structural expected-vs-actual for a top-level comparison. The
             // predicate is pure (ADR 0144), so re-evaluating the operands for the
             // failure message is observationally identical to the condition.
             let detail = if let ExprKind::BinOp(op, l, r) = &a.value.kind
                 && let Some(sym) = comparison_op_symbol(*op)
             {
-                let lv = pre.lower(l, cx);
-                let rv = pre.lower(r, cx);
+                let lv = pre.lower_node(l, cx);
+                let rv = pre.lower_node(r, cx);
                 // #2622: an operand that holds a `Decimal` prints through the
                 // decimal-aware show, since `JSON.stringify` throws on a `bigint`.
                 let decimal = cx
@@ -1249,28 +1264,44 @@ fn statement(body: &mut Body, stmt: &Statement, cx: &mut LowerCtx) {
                 } else {
                     "__bynkShow"
                 };
-                format!(
-                    "\"expect {src}\\n  expected: {src}\\n  actual:   \" + {show}(({lv})) + \" {sym} \" + {show}(({rv}))"
-                )
+                ExpectDetail::Compare {
+                    show,
+                    sym,
+                    operands: Box::new((lv, rv)),
+                }
             } else if matches!(a.value.kind, ExprKind::Faults(_)) {
                 // #1706: the claim's only failure is a call that returned.
-                format!("\"expect {src}\\n  the call returned without faulting\"")
+                ExpectDetail::Message(format!(
+                    "expect {src}\n  the call returned without faulting"
+                ))
             } else {
-                format!("\"expect {src}\"")
+                ExpectDetail::Message(format!("expect {src}"))
             };
+            let pre_nodes = pre.all_nodes();
             body.extend(pre.items());
-            body.push(Item::Line(format!(
-                    "if (!({cond})) {{ throw __bynkExpectFailure(\"{location}\", {span_start}, {span_end}, {detail}); }}",
-                )));
+            body.push(expect_item(
+                pre_nodes, cond, detail, &location, &src, span_start, span_end,
+            ));
         }
         Statement::Advance(a) => {
             // #2137: move the case's harness clock (`project/test_runtime/clock.ts`),
             // which every participant's `Clock` reads at `system` and the
             // `Clock` double reads below it. A negative amount faults there.
             let mut pre = Pre::new();
-            let amount = pre.lower(&a.amount, cx);
+            let amount = pre.lower_node(&a.amount, cx);
+            let pre_nodes = pre.all_nodes();
             body.extend(pre.items());
-            body.push(Item::Line(format!("__bynkAdvanceClock({amount});")));
+            body.push(match amount {
+                LoweredExpr::Node(n) if pre_nodes => stmt_item(bynk_ts::TsStmt::expr_stmt(
+                    bynk_ts::TsExpr::Call {
+                        callee: Box::new(bynk_ts::TsExpr::Ident("__bynkAdvanceClock".to_string())),
+                        args: vec![n],
+                    },
+                    None,
+                )),
+                // 1A: a text amount or hoisted statement keeps the text.
+                amount => Item::Line(format!("__bynkAdvanceClock({});", amount.into_text())),
+            });
         }
         Statement::Do(d) => {
             // v0.146 (ADR 0170): `do expr` → `await expr;`. The binder-free
@@ -1303,6 +1334,135 @@ fn statement(body: &mut Body, stmt: &Statement, cx: &mut LowerCtx) {
             body.push(assign_item(pre.all_nodes(), target, value));
         }
     }
+}
+
+/// `__bynkExpectFailure(<location>, <start>, <end>, <detail>)`.
+fn expect_failure_call(
+    location: &str,
+    start: usize,
+    end: usize,
+    detail: bynk_ts::TsExpr,
+) -> bynk_ts::TsExpr {
+    bynk_ts::TsExpr::Call {
+        callee: Box::new(bynk_ts::TsExpr::Ident("__bynkExpectFailure".to_string())),
+        args: vec![
+            str_node(location),
+            num_lit(start.to_string()),
+            num_lit(end.to_string()),
+            detail,
+        ],
+    }
+}
+
+/// The failure message of an `expect <pred>` statement.
+enum ExpectDetail {
+    /// A top-level comparison: both operands, shown through `show`.
+    Compare {
+        show: &'static str,
+        sym: &'static str,
+        /// The left and right operands (boxed: a lowered expression is large).
+        operands: Box<(LoweredExpr, LoweredExpr)>,
+    },
+    /// A fixed message (the unescaped text).
+    Message(String),
+}
+
+/// `if (!(<cond>)) { throw __bynkExpectFailure(…); }` as an item (1A.17,
+/// Decision C): an `If` over an `InlineBlock` when the condition, the operands
+/// and every hoisted statement are nodes, otherwise today's one-line text.
+/// `location` and `src` are unescaped: the printer escapes them once, and the
+/// text form escapes them with the same function.
+fn expect_item(
+    pre_nodes: bool,
+    cond: LoweredExpr,
+    detail: ExpectDetail,
+    location: &str,
+    src: &str,
+    start: usize,
+    end: usize,
+) -> Item {
+    use bynk_ts::{TsBinaryOp, TsExpr};
+    let compare_head = format!("expect {src}\n  expected: {src}\n  actual:   ");
+    match (cond, detail) {
+        (
+            LoweredExpr::Node(cond),
+            ExpectDetail::Compare {
+                show,
+                sym,
+                operands,
+            },
+        ) if pre_nodes && matches!(&*operands, (LoweredExpr::Node(_), LoweredExpr::Node(_))) => {
+            let (LoweredExpr::Node(lv), LoweredExpr::Node(rv)) = *operands else {
+                unreachable!("guarded above")
+            };
+            let shown = |v: TsExpr| TsExpr::Call {
+                callee: Box::new(TsExpr::Ident(show.to_string())),
+                args: vec![TsExpr::Paren(Box::new(v))],
+            };
+            let add = |l: TsExpr, r: TsExpr| TsExpr::Binary {
+                op: TsBinaryOp::Add,
+                left: Box::new(l),
+                right: Box::new(r),
+            };
+            let detail = add(
+                add(
+                    add(str_node(compare_head), shown(lv)),
+                    str_node(format!(" {sym} ")),
+                ),
+                shown(rv),
+            );
+            expect_if(cond, location, start, end, detail)
+        }
+        (LoweredExpr::Node(cond), ExpectDetail::Message(m)) if pre_nodes => {
+            expect_if(cond, location, start, end, str_node(m))
+        }
+        // 1A: the text form, for a condition, operand or hoisted statement that
+        // is still text.
+        (cond, detail) => {
+            let esc = crate::emitter::escape_ts_string;
+            let detail = match detail {
+                ExpectDetail::Compare {
+                    show,
+                    sym,
+                    operands,
+                } => {
+                    let (lv, rv) = *operands;
+                    format!(
+                        "\"{}\" + {show}(({})) + \" {sym} \" + {show}(({}))",
+                        esc(&compare_head),
+                        lv.into_text(),
+                        rv.into_text()
+                    )
+                }
+                ExpectDetail::Message(m) => format!("\"{}\"", esc(&m)),
+            };
+            Item::Line(format!(
+                "if (!({})) {{ throw __bynkExpectFailure(\"{}\", {start}, {end}, {detail}); }}",
+                cond.into_text(),
+                esc(location),
+            ))
+        }
+    }
+}
+
+/// `if (!(<cond>)) { throw __bynkExpectFailure(…); }` over nodes.
+fn expect_if(
+    cond: bynk_ts::TsExpr,
+    location: &str,
+    start: usize,
+    end: usize,
+    detail: bynk_ts::TsExpr,
+) -> Item {
+    use bynk_ts::{TsExpr, TsStmt, TsUnaryOp};
+    let throw = TsStmt::throw_stmt(expect_failure_call(location, start, end, detail), None);
+    stmt_item(TsStmt::if_stmt(
+        TsExpr::Unary {
+            op: TsUnaryOp::Not,
+            expr: Box::new(TsExpr::Paren(Box::new(cond))),
+        },
+        TsStmt::inline_block(vec![throw], None),
+        None,
+    ))
 }
 
 /// v0.112: the source operator symbol for a comparison `BinOp`, or `None` for
@@ -2954,5 +3114,156 @@ mod par_node_tests {
         );
         // 1A.15: the arm tails are nodes too, so the whole function is.
         assert_eq!(lines, 0, "{ts}");
+    }
+}
+
+/// 1A.17 (#3718): the `expect` statement's node and text forms.
+#[cfg(test)]
+mod expect_item_tests {
+    use super::*;
+
+    /// The item as the one line it prints to.
+    fn line(item: Item) -> String {
+        match item {
+            Item::Line(l) => l,
+            Item::Node(n) => bynk_ts::print_stmt(&n, 0).trim_end().to_string(),
+            _ => unreachable!("an expect is one statement"),
+        }
+    }
+
+    fn node(name: &str) -> LoweredExpr {
+        LoweredExpr::Node(bynk_ts::TsExpr::Ident(name.to_string()))
+    }
+
+    fn compare(lv: LoweredExpr, rv: LoweredExpr) -> ExpectDetail {
+        ExpectDetail::Compare {
+            show: "__bynkShow",
+            sym: "==",
+            operands: Box::new((lv, rv)),
+        }
+    }
+
+    /// Both forms print the same bytes, whatever the location and source hold:
+    /// a backslash, a quote, a newline, non-ASCII, U+2028 and a control
+    /// character. The node path escapes once, in the printer; the text path
+    /// with `escape_ts_string`: the one function.
+    #[test]
+    fn the_node_and_text_forms_print_the_same_bytes() {
+        for raw in [
+            "plain",
+            "a\\b",
+            "say \"hi\"",
+            "line one\nline two",
+            "caf\u{e9} \u{1F600}",
+            "sep\u{2028}arator\u{2029}",
+            "bell\u{7} nul\u{1} del\u{7f}",
+        ] {
+            let node_form = line(expect_item(
+                true,
+                node("c"),
+                compare(node("l"), node("r")),
+                raw,
+                raw,
+                3,
+                9,
+            ));
+            // A text operand forces the text form for the same statement.
+            let text_form = line(expect_item(
+                true,
+                node("c"),
+                compare(LoweredExpr::Text("l".to_string()), node("r")),
+                raw,
+                raw,
+                3,
+                9,
+            ));
+            assert_eq!(node_form, text_form, "{raw:?}");
+            assert!(!node_form.contains('\n'), "one line: {raw:?}");
+            // And the plain-message form.
+            let node_msg = line(expect_item(
+                true,
+                node("c"),
+                ExpectDetail::Message(format!("expect {raw}")),
+                raw,
+                raw,
+                3,
+                9,
+            ));
+            let text_msg = line(expect_item(
+                true,
+                LoweredExpr::Text("c".to_string()),
+                ExpectDetail::Message(format!("expect {raw}")),
+                raw,
+                raw,
+                3,
+                9,
+            ));
+            assert_eq!(node_msg, text_msg, "{raw:?}");
+        }
+    }
+
+    /// The printer layout probes: `!(cond)` takes no extra brackets, and the
+    /// `if`/`throw` stays on one line.
+    #[test]
+    fn the_node_prints_as_the_one_line_if_with_a_bare_not_paren() {
+        let got = line(expect_item(
+            true,
+            node("ok"),
+            ExpectDetail::Message("expect ok".to_string()),
+            "t:1:1",
+            "ok",
+            0,
+            2,
+        ));
+        assert_eq!(
+            got,
+            "if (!(ok)) { throw __bynkExpectFailure(\"t:1:1\", 0, 2, \"expect ok\"); }"
+        );
+        // A hoisted text statement keeps the whole statement text.
+        let text = line(expect_item(
+            false,
+            node("ok"),
+            ExpectDetail::Message("expect ok".to_string()),
+            "t:1:1",
+            "ok",
+            0,
+            2,
+        ));
+        assert_eq!(text, got);
+        assert!(matches!(
+            expect_item(
+                false,
+                node("ok"),
+                ExpectDetail::Message(String::new()),
+                "",
+                "",
+                0,
+                0
+            ),
+            Item::Line(_)
+        ));
+        assert!(matches!(
+            expect_item(
+                true,
+                node("ok"),
+                ExpectDetail::Message(String::new()),
+                "",
+                "",
+                0,
+                0
+            ),
+            Item::Node(_)
+        ));
+    }
+
+    /// The snapshot name and the `"Cap.op"` observation key: identifiers need no
+    /// escape, so Rust's Debug form and the printer's `Str` agree.
+    #[test]
+    fn the_capability_op_key_prints_as_rust_debug_did() {
+        let key = "Logger.log";
+        assert_eq!(
+            bynk_ts::print_expr(&bynk_ts::TsExpr::Lit(bynk_ts::TsLit::Str(key.to_string()))),
+            format!("{key:?}")
+        );
     }
 }

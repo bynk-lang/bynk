@@ -1249,7 +1249,10 @@ async function test_the_logger_records_without_printing() {
     type VectorOf<M> = __ns_bynk_cloudflare.VectorOf<M>;
     type WorkerVersion = __ns_bynk_cloudflare.WorkerVersion;
     const __r0 = await greet.call("ann", deps);
-    if (!((((__obs.log["Logger.info"] ?? []).filter((__c: { args: unknown[] }) => { const { msg } = { msg: __c.args[0] } as __Logger_info_Call; return (msg === "hello ann"); }).length) === (1)))) { throw __bynkExpectFailure("tests/demo/plat.bynk:36:10", 808, 855, "expect Logger.info called once with msg == \"hello ann\""); }
+    if (!((((__obs.log["Logger.info"] ?? []).filter((__c: { args: unknown[] }) => {
+      const { msg } = { msg: __c.args[0] } as __Logger_info_Call;
+      return (msg === "hello ann");
+    }).length) === (1)))) { throw __bynkExpectFailure("tests/demo/plat.bynk:36:10", 808, 855, "expect Logger.info called once with msg == \"hello ann\""); }
     if (!(((__obs.log["Logger.error"] ?? []).length === 0))) { throw __bynkExpectFailure("tests/demo/plat.bynk:37:10", 865, 890, "expect Logger.error never called"); }
     return { pass: true };
   } catch (e) {
@@ -1602,7 +1605,10 @@ async function test_kv_is_in_memory() {
     type WorkerVersion = __ns_bynk_cloudflare.WorkerVersion;
     const r = await store.call("a", "1", deps);
     if (!(__bynkEq(r, Some("1")))) { throw __bynkExpectFailure("tests/demo/plat.bynk:54:10", 1212, 1226, "expect r == Some(\"1\")\n  expected: r == Some(\"1\")\n  actual:   " + __bynkShow((r)) + " == " + __bynkShow((Some("1")))); }
-    if (!((((__obs.log["Kv.put"] ?? []).filter((__c: { args: unknown[] }) => { const { key, value } = { key: __c.args[0], value: __c.args[1] } as __Kv_put_Call; return (key === "a"); }).length) === (1)))) { throw __bynkExpectFailure("tests/demo/plat.bynk:55:10", 1236, 1270, "expect Kv.put called once with key == \"a\""); }
+    if (!((((__obs.log["Kv.put"] ?? []).filter((__c: { args: unknown[] }) => {
+      const { key, value } = { key: __c.args[0], value: __c.args[1] } as __Kv_put_Call;
+      return (key === "a");
+    }).length) === (1)))) { throw __bynkExpectFailure("tests/demo/plat.bynk:55:10", 1236, 1270, "expect Kv.put called once with key == \"a\""); }
     return { pass: true };
   } catch (e) {
     if (e instanceof ExpectationError) {
@@ -1954,7 +1960,10 @@ async function test_a_stubbed_fetch_answers_for_the_network() {
     type WorkerVersion = __ns_bynk_cloudflare.WorkerVersion;
     const s = await relay.call("https://example.test", deps);
     if (!(s === 204)) { throw __bynkExpectFailure("tests/demo/plat.bynk:75:10", 1892, 1900, "expect s == 204\n  expected: s == 204\n  actual:   " + __bynkShow((s)) + " == " + __bynkShow((204))); }
-    if (!((((__obs.log["Fetch.send"] ?? []).filter((__c: { args: unknown[] }) => { const { req } = { req: __c.args[0] } as __Fetch_send_Call; return (req.url === "https://example.test"); }).length) === (1)))) { throw __bynkExpectFailure("tests/demo/plat.bynk:76:10", 1910, 1971, "expect Fetch.send called once with req.url == \"https://example.test\""); }
+    if (!((((__obs.log["Fetch.send"] ?? []).filter((__c: { args: unknown[] }) => {
+      const { req } = { req: __c.args[0] } as __Fetch_send_Call;
+      return (req.url === "https://example.test");
+    }).length) === (1)))) { throw __bynkExpectFailure("tests/demo/plat.bynk:76:10", 1910, 1971, "expect Fetch.send called once with req.url == \"https://example.test\""); }
     return { pass: true };
   } catch (e) {
     if (e instanceof ExpectationError) {

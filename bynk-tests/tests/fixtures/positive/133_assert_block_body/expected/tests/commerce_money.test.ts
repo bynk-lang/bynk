@@ -44,18 +44,18 @@ async function test_block_arm_expect() {
     type Money = __ns_commerce_money.Money;
     const m = Money.fromMinorUnits(10);
     void (((__d) => {
-        switch (__d.tag) {
-          case "Ok": {
-            if (!(true)) { throw __bynkExpectFailure("tests/money.test.bynk:6:16", 134, 138, "expect true"); }
-            return undefined;
-          }
-          case "Err": {
-            if (!(false)) { throw __bynkExpectFailure("tests/money.test.bynk:9:16", 180, 185, "expect false"); }
-            return undefined;
-          }
+      switch (__d.tag) {
+        case "Ok": {
+          if (!(true)) { throw __bynkExpectFailure("tests/money.test.bynk:6:16", 134, 138, "expect true"); }
+          return undefined;
         }
-        throw new globalThis.Error("non-exhaustive match");
-      })(m));
+        case "Err": {
+          if (!(false)) { throw __bynkExpectFailure("tests/money.test.bynk:9:16", 180, 185, "expect false"); }
+          return undefined;
+        }
+      }
+      throw new globalThis.Error("non-exhaustive match");
+    })(m));
     return { pass: true };
   } catch (e) {
     if (e instanceof ExpectationError) {

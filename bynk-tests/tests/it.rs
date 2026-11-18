@@ -147,6 +147,8 @@ mod integration {
     mod suggestions;
     #[path = "suite_diagnostics_attributed.rs"]
     mod suite_diagnostics_attributed;
+    #[path = "test_domain_nodes.rs"]
+    mod test_domain_nodes;
     #[path = "text_exit_counters.rs"]
     mod text_exit_counters;
     #[path = "trace_requests.rs"]

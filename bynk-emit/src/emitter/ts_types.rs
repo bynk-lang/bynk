@@ -42,6 +42,26 @@ pub fn unchecked_construct_test(name: &str, value: &str, is_opaque: bool) -> Str
     }
 }
 
+/// [`unchecked_construct_test`] as a node (1A.17): `Name.unsafe(value)` for an
+/// opaque type, `(value as any)` otherwise (the cast stays: see the note there).
+pub(super) fn unchecked_construct_test_node(
+    name: &str,
+    value: bynk_ts::TsExpr,
+    is_opaque: bool,
+) -> bynk_ts::TsExpr {
+    if is_opaque {
+        bynk_ts::TsExpr::Call {
+            callee: Box::new(super::lower::member_node(name, "unsafe")),
+            args: vec![value],
+        }
+    } else {
+        bynk_ts::TsExpr::Paren(Box::new(bynk_ts::TsExpr::As {
+            expr: Box::new(value),
+            ty: bynk_ts::TsType::named("any"),
+        }))
+    }
+}
+
 pub(super) fn ts_base(b: BaseType) -> &'static str {
     match b {
         BaseType::Int => "number",

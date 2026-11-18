@@ -46,22 +46,22 @@ async function test_decodes_a_payload_keyed_by_reserved_words() {
     type Event = __ns_demo_payload.Event;
     type Sorted = __ns_demo_payload.Sorted;
     void (((__d) => {
-        switch (__d.tag) {
-          case "Ok": {
-            const e = __d.value;
-            if (!(e.type === "push")) { throw __bynkExpectFailure("tests/demo/payload.bynk:8:16", 428, 444, "expect e.type == \"push\"\n  expected: e.type == \"push\"\n  actual:   " + __bynkShow((e.type)) + " == " + __bynkShow(("push"))); }
-            if (!(e.from === 7)) { throw __bynkExpectFailure("tests/demo/payload.bynk:9:16", 460, 471, "expect e.from == 7\n  expected: e.from == 7\n  actual:   " + __bynkShow((e.from)) + " == " + __bynkShow((7))); }
-            if (!(selfFlag(e))) { throw __bynkExpectFailure("tests/demo/payload.bynk:10:16", 487, 498, "expect selfFlag(e)"); }
-            if (!(isOrg(e.account))) { throw __bynkExpectFailure("tests/demo/payload.bynk:11:16", 514, 530, "expect isOrg(e.account)"); }
-            if (!(kindOf(e) === "push7")) { throw __bynkExpectFailure("tests/demo/payload.bynk:12:16", 546, 566, "expect kindOf(e) == \"push7\"\n  expected: kindOf(e) == \"push7\"\n  actual:   " + __bynkShow((kindOf(e))) + " == " + __bynkShow(("push7"))); }
-            return undefined;
-          }
-          case "Err": {
-            return __bynkExpect((false), "tests/demo/payload.bynk:14:24", 598, 603, "expect false");
-          }
+      switch (__d.tag) {
+        case "Ok": {
+          const e = __d.value;
+          if (!(e.type === "push")) { throw __bynkExpectFailure("tests/demo/payload.bynk:8:16", 428, 444, "expect e.type == \"push\"\n  expected: e.type == \"push\"\n  actual:   " + __bynkShow((e.type)) + " == " + __bynkShow(("push"))); }
+          if (!(e.from === 7)) { throw __bynkExpectFailure("tests/demo/payload.bynk:9:16", 460, 471, "expect e.from == 7\n  expected: e.from == 7\n  actual:   " + __bynkShow((e.from)) + " == " + __bynkShow((7))); }
+          if (!(selfFlag(e))) { throw __bynkExpectFailure("tests/demo/payload.bynk:10:16", 487, 498, "expect selfFlag(e)"); }
+          if (!(isOrg(e.account))) { throw __bynkExpectFailure("tests/demo/payload.bynk:11:16", 514, 530, "expect isOrg(e.account)"); }
+          if (!(kindOf(e) === "push7")) { throw __bynkExpectFailure("tests/demo/payload.bynk:12:16", 546, 566, "expect kindOf(e) == \"push7\"\n  expected: kindOf(e) == \"push7\"\n  actual:   " + __bynkShow((kindOf(e))) + " == " + __bynkShow(("push7"))); }
+          return undefined;
         }
-        throw new globalThis.Error("non-exhaustive match");
-      })(load("{\"type\": \"push\", \"from\": 7, \"self\": true, \"do\": null, \"account\": {\"login\": \"octo\", \"type\": \"Organization\"}}")));
+        case "Err": {
+          return __bynkExpect((false), "tests/demo/payload.bynk:14:24", 598, 603, "expect false");
+        }
+      }
+      throw new globalThis.Error("non-exhaustive match");
+    })(load("{\"type\": \"push\", \"from\": 7, \"self\": true, \"do\": null, \"account\": {\"login\": \"octo\", \"type\": \"Organization\"}}")));
     return { pass: true };
   } catch (e) {
     if (e instanceof ExpectationError) {

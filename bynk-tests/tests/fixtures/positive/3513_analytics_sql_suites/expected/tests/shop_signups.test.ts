@@ -917,7 +917,10 @@ async function test_the_query_reads_the_environment_s_own_dataset() {
     type WorkerVersion = __ns_bynk_cloudflare.WorkerVersion;
     const r = await report.http_GET_signups_Param_country("uk", deps);
     if (!(((__c: boolean) => __c)(r.tag === "Ok" && r.value === 0))) { throw __bynkExpectFailure("tests/shop/signups.bynk:36:9", 1525, 1535, "expect r is Ok(0)"); }
-    if (!((((__obs.log["AnalyticsSql.query"] ?? []).filter((__c: { args: unknown[] }) => { const { sql, params } = { sql: __c.args[0], params: __c.args[1] } as __AnalyticsSql_query_Call; return (sql === "SELECT count() AS n FROM events.analyticsEngine.shop_signups_signups_staging WHERE blob1 = $1 AND timestamp > NOW() - INTERVAL '1' DAY"); }).length) >= 1))) { throw __bynkExpectFailure("tests/shop/signups.bynk:37:9", 1544, 1718, "expect AnalyticsSql.query called with sql == \"SELECT count() AS n FROM events.analyticsEngine.shop_signups_signups_staging WHERE blob1 = $1 AND timestamp > NOW() - INTERVAL '1' DAY\""); }
+    if (!((((__obs.log["AnalyticsSql.query"] ?? []).filter((__c: { args: unknown[] }) => {
+      const { sql, params } = { sql: __c.args[0], params: __c.args[1] } as __AnalyticsSql_query_Call;
+      return (sql === "SELECT count() AS n FROM events.analyticsEngine.shop_signups_signups_staging WHERE blob1 = $1 AND timestamp > NOW() - INTERVAL '1' DAY");
+    }).length) >= 1))) { throw __bynkExpectFailure("tests/shop/signups.bynk:37:9", 1544, 1718, "expect AnalyticsSql.query called with sql == \"SELECT count() AS n FROM events.analyticsEngine.shop_signups_signups_staging WHERE blob1 = $1 AND timestamp > NOW() - INTERVAL '1' DAY\""); }
     return { pass: true };
   } catch (e) {
     if (e instanceof ExpectationError) {
