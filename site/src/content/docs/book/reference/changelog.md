@@ -28,6 +28,7 @@ per-commit history. While Bynk is pre-1.0, increments may change behaviour.
 
 | Version | Highlights |
 |---|---|
+| **v0.639.16** | Interpolated strings, record construction and spread, and the expression form of `expect` now lower to typed TypeScript nodes |
 | **v0.639.15** | Function calls, variant and constructor calls, `unreachable`/`todo`, and the plain method call now lower to typed TypeScript nodes |
 | **v0.639.14** | Value binary operators (arithmetic, comparison, equality, and the `Decimal`, `Int` division, structural-equality and `Ord` helper forms) now lower to typed TypeScript nodes; the printer brackets them by a precedence table |
 | **v0.639.13** | Identifiers, constant reads, `old`/`new` records, nullary `HttpResult`/`QueueResult`/sum-variant names and plain field access now lower to typed TypeScript nodes, so wrappers over them are nodes too |
