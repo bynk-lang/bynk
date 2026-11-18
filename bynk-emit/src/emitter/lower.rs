@@ -1048,9 +1048,9 @@ impl LoweredExpr {
 /// It returns `Ok(node)` or `Err(text)`: the text side leaves through
 /// `lower_expr`'s one shared text exit (`finish_text`) rather than opening a
 /// second text construction site (see `built_or_text!`).
-type Built = Result<bynk_ts::TsExpr, String>;
+pub(super) type Built = Result<bynk_ts::TsExpr, String>;
 
-fn node_or_text(
+pub(super) fn node_or_text(
     children: Vec<LoweredExpr>,
     node: impl FnOnce(Vec<bynk_ts::TsExpr>) -> bynk_ts::TsExpr,
     text: impl FnOnce(Vec<String>) -> String,
@@ -1117,8 +1117,32 @@ fn ident_node(name: &str) -> bynk_ts::TsExpr {
     bynk_ts::TsExpr::Ident(name.to_string())
 }
 
+/// `(test ? consequent : alternate)`: a `Paren(Conditional)` node, or today's
+/// text. Shared by the value-position ternary `if` and the statement emitter's
+/// ternary tail (1A.11), so both keep today's outer brackets.
+pub(super) fn ternary_built(
+    test: LoweredExpr,
+    consequent: LoweredExpr,
+    alternate: LoweredExpr,
+) -> Built {
+    node_or_text(
+        vec![test, consequent, alternate],
+        |c| {
+            let [test, consequent, alternate]: [bynk_ts::TsExpr; 3] = c
+                .try_into()
+                .unwrap_or_else(|_| unreachable!("a ternary has three children"));
+            bynk_ts::TsExpr::Paren(Box::new(bynk_ts::TsExpr::Conditional {
+                test: Box::new(test),
+                consequent: Box::new(consequent),
+                alternate: Box::new(alternate),
+            }))
+        },
+        |c| format!("({} ? {} : {})", c[0], c[1], c[2]),
+    )
+}
+
 /// `object.property` over a genuine identifier `object`.
-fn member_node(object: &str, property: &str) -> bynk_ts::TsExpr {
+pub(super) fn member_node(object: &str, property: &str) -> bynk_ts::TsExpr {
     bynk_ts::TsExpr::Member {
         object: Box::new(ident_node(object)),
         property: property.to_string(),
@@ -1282,6 +1306,12 @@ impl Lowered {
     pub(super) fn pre_items(&self) -> Vec<Item> {
         self.pre.iter().map(LoweredStmt::item).collect()
     }
+
+    /// Whether every hoisted statement is a node (1A.11: a statement built
+    /// over these is a node only if it absorbs nothing but nodes).
+    pub(super) fn pre_all_nodes(&self) -> bool {
+        self.pre.iter().all(|s| matches!(s, LoweredStmt::Node(_)))
+    }
 }
 
 /// T2.1 (R6.2): the statements an expression under construction has hoisted so
@@ -1408,6 +1438,12 @@ impl Pre {
     /// [`Lowered::pre_items`]).
     pub(super) fn items(&self) -> Vec<Item> {
         self.0.iter().map(LoweredStmt::item).collect()
+    }
+
+    /// Whether every statement hoisted so far is a node (see
+    /// [`Lowered::pre_all_nodes`]).
+    pub(super) fn all_nodes(&self) -> bool {
+        self.0.iter().all(|s| matches!(s, LoweredStmt::Node(_)))
     }
 
     /// The accumulated statements as `TsStmt`s for a typed body: a `Node`
@@ -7647,20 +7683,7 @@ fn lower_if(
         let else_tail = lower_expr(&else_block.tail, cx);
         if then_tail.pre.is_empty() && else_tail.pre.is_empty() {
             // The `Paren` keeps today's outer brackets.
-            return pre.finish_built(node_or_text(
-                vec![cond_lowered, then_tail.expr, else_tail.expr],
-                |c| {
-                    let [test, consequent, alternate]: [bynk_ts::TsExpr; 3] = c
-                        .try_into()
-                        .unwrap_or_else(|_| unreachable!("a ternary has three children"));
-                    bynk_ts::TsExpr::Paren(Box::new(bynk_ts::TsExpr::Conditional {
-                        test: Box::new(test),
-                        consequent: Box::new(consequent),
-                        alternate: Box::new(alternate),
-                    }))
-                },
-                |c| format!("({} ? {} : {})", c[0], c[1], c[2]),
-            ));
+            return pre.finish_built(ternary_built(cond_lowered, then_tail.expr, else_tail.expr));
         }
         // A branch hoisted. Before T2.1 there was nowhere to put its statements
         // from here — a value position had no statement slot — and the only
@@ -11661,6 +11684,40 @@ fn minus(x: Int) -> Int { 5 - - -x }
         assert!(
             ts.contains(
                 "  const __r0 = x;\n  if (__r0.tag === \"Err\") return __r0;\n  return Ok(__r0.value + 1);\n"
+            ),
+            "{ts}"
+        );
+    }
+
+    #[test]
+    fn a_question_over_an_option_in_an_http_result_function_exits_with_not_found() {
+        // 1A.8 review nit: the `NotFound` exit, driven from source. Both
+        // statements are nodes, and the guard prints as today's text does.
+        let src = "commons nf\n\
+            fn lookup(i: Int) -> Option[Int] { if i > 0 { Some(i) } else { None } }\n\
+            fn f(i: Int) -> HttpResult[Int] { Ok(lookup(i)?) }\n";
+        let (exits, stmts, ts) = exits_and_stmts(src);
+        assert_eq!((exits, stmts), (0, 0), "{ts}");
+        assert!(
+            ts.contains(
+                "  const __r0 = lookup(i);\n  if (__r0.tag === \"None\") return HttpResult.NotFound;\n  return HttpResult.Ok(__r0.value);\n"
+            ),
+            "{ts}"
+        );
+    }
+
+    #[test]
+    fn a_question_that_embeds_its_error_wraps_it_in_the_declared_variant() {
+        // 1A.8 review nit: the `Embed` exit (`embeds E as V`), driven from source.
+        let src = "commons emb\n\
+            type IoError = enum { Disk }\n\
+            type AppError =\n  | Io(reason: IoError)\n  | Other\n  embeds IoError as Io\n\
+            fn g(r: Result[Int, IoError]) -> Result[Int, AppError] { Ok(r? + 1) }\n";
+        let (exits, stmts, ts) = exits_and_stmts(src);
+        assert_eq!((exits, stmts), (0, 0), "{ts}");
+        assert!(
+            ts.contains(
+                "  const __r0 = r;\n  if (__r0.tag === \"Err\") return Err(AppError.Io(__r0.error));\n  return Ok(__r0.value + 1);\n"
             ),
             "{ts}"
         );

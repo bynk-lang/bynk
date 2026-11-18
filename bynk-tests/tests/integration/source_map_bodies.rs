@@ -387,3 +387,52 @@ fn service_handler_with_subscriber_and_schema_prologue_maps_per_statement() {
         "trailing call -> .bynk:12"
     );
 }
+
+/// 1A.11 (#3712): a handler body's `if` tail nested two deep, with a `let` and a
+/// `?` (over an `Option`, so the guard is the `NotFound` exit) in each branch,
+/// lowers to nodes at the handler's own indentation. `HANDLER_IF_MAPPINGS` is the
+/// map the compiler produced before the slice, when these were text lines, so
+/// the nested checkpoints are pinned to the same offsets they had.
+#[test]
+fn a_handler_with_a_nested_if_tail_maps_as_it_did_when_it_was_text() {
+    let dir = tmp("nested_if");
+    std::fs::create_dir_all(dir.join("src")).unwrap();
+    std::fs::write(dir.join("bynk.toml"), "[project]\nname = \"nestedif\"\n").unwrap();
+    std::fs::write(
+        dir.join("src").join("svc.bynk"),
+        "context svc\n\nfn find(i: Int) -> Option[Int] {\n\tif i > 0 { Some(i) } else { None }\n}\n\nservice api from http {\n\ton GET(\"/\") () -> Effect[HttpResult[Int]] by v: Visitor {\n\t\tlet k = 1\n\t\tif k > 0 {\n\t\t\tlet a = find(k)?\n\t\t\tif a > 1 {\n\t\t\t\tlet b = find(a)?\n\t\t\t\tOk(b)\n\t\t\t} else {\n\t\t\t\tlet c = find(a + 1)?\n\t\t\t\tOk(c)\n\t\t\t}\n\t\t} else {\n\t\t\tlet d = find(k)?\n\t\t\tOk(d)\n\t\t}\n\t}\n}\n",
+    )
+    .unwrap();
+    let (ts, map) = compile_file(&dir, true, "handlers.ts");
+    let _ = std::fs::remove_dir_all(&dir);
+    let (_, mappings) = parse_map(&map);
+    let start = ts.find("const k = 1;").expect("the handler body");
+    let end = ts[start..].find("\n    }\n").expect("the end of the body");
+    let body = &ts[start..start + end + "\n    }".len()];
+    assert_eq!(body, HANDLER_IF_BODY);
+    assert_eq!(mappings, HANDLER_IF_MAPPINGS);
+}
+
+const HANDLER_IF_BODY: &str = r#"const k = 1;
+    if (k > 0) {
+      const __r0 = find(k);
+      if (__r0.tag === "None") return HttpResult.NotFound;
+      const a = __r0.value;
+      if (a > 1) {
+        const __r1 = find(a);
+        if (__r1.tag === "None") return HttpResult.NotFound;
+        const b = __r1.value;
+        return HttpResult.Ok(b);
+      } else {
+        const __r2 = find(a + 1);
+        if (__r2.tag === "None") return HttpResult.NotFound;
+        const c = __r2.value;
+        return HttpResult.Ok(c);
+      }
+    } else {
+      const __r3 = find(k);
+      if (__r3.tag === "None") return HttpResult.NotFound;
+      const d = __r3.value;
+      return HttpResult.Ok(d);
+    }"#;
+const HANDLER_IF_MAPPINGS: &str = ";;;;;;;;AAEA;AACC;AAAA;AAAA;AAGD;AACC;AACC;AACA;AACC;AAAA;AAAA;AACA;AACC;AAAA;AAAA;AACA;AAAA;AAEA;AAAA;AAAA;AACA;AAAA;AAAA;AAGD;AAAA;AAAA;AACA;AAAA;AAAA;AAdH;AAAA";

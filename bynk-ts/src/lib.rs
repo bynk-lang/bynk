@@ -52,7 +52,7 @@ pub use predicate::{
 pub use printer::{
     Printed, print, print_class_method, print_class_method_and_merge, print_expr,
     print_multi_source, print_object_entry, print_object_entry_and_merge, print_stmt,
-    print_stmt_and_merge, print_type,
+    print_stmt_and_merge, print_stmt_with_spans, print_type,
 };
 pub use program::{
     ExportedName, TsArrowBody, TsBinaryOp, TsBindingName, TsClassCtor, TsClassField, TsClassMethod,
