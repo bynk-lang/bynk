@@ -415,9 +415,44 @@ impl<'a> LowerCtx<'a> {
         }
     }
 
+    /// [`Self::exec_expr`] as a node, built from the same `BodyMode` and
+    /// `HandlerShared` facts (1A.6), never by parsing the string.
+    pub(crate) fn exec_node(&self) -> bynk_ts::TsExpr {
+        match &self.mode {
+            BodyMode::FreeFn | BodyMode::GivenFn { .. } | BodyMode::Method => {
+                bynk_ts::TsExpr::Ident("__exec".to_string())
+            }
+            _ => bynk_ts::TsExpr::Member {
+                object: Box::new(self.cap_deps_node()),
+                property: "__exec".to_string(),
+            },
+        }
+    }
+
     /// v0.12: the receiver expression a capability call resolves against.
     pub(crate) fn cap_deps_expr(&self) -> &str {
-        self.handler().map_or("deps", |h| h.cap_deps_expr.as_str())
+        if self.deps_on_this() {
+            "this.deps"
+        } else {
+            "deps"
+        }
+    }
+
+    /// [`Self::cap_deps_expr`] as a node: `deps`, or `this.deps` in a composed
+    /// provider body (1A.6).
+    pub(crate) fn cap_deps_node(&self) -> bynk_ts::TsExpr {
+        if self.deps_on_this() {
+            bynk_ts::TsExpr::Member {
+                object: Box::new(bynk_ts::TsExpr::Ident("this".to_string())),
+                property: "deps".to_string(),
+            }
+        } else {
+            bynk_ts::TsExpr::Ident("deps".to_string())
+        }
+    }
+
+    fn deps_on_this(&self) -> bool {
+        self.handler().is_some_and(|h| h.deps_on_this)
     }
 
     /// Note that this body called a service of `consumed`. A no-op in a body

@@ -2949,11 +2949,7 @@ pub(crate) fn emit_provider(
                     // The provider's `given` capabilities are in scope in its
                     // bodies, and resolve against the injected `this.deps`.
                     capabilities: given_ir.iter().map(|c| c.name.clone()).collect(),
-                    cap_deps_expr: if takes_deps {
-                        "this.deps".to_string()
-                    } else {
-                        "deps".to_string()
-                    },
+                    deps_on_this: takes_deps,
                     // #934: a provider's own op body can itself call a `given`
                     // capability (e.g. a provider that dedups its own work via
                     // `Idempotency`).
