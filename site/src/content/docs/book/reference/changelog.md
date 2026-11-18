@@ -28,6 +28,7 @@ per-commit history. While Bynk is pre-1.0, increments may change behaviour.
 
 | Version | Highlights |
 |---|---|
+| **v0.639.21** | The code generator carries a unit's source and hidden-type spellings in its context instead of thread-locals, with no change to the generated output or its source maps |
 | **v0.639.20** | Statements and the if tail in a function or handler body are built as typed nodes where their expressions are nodes, with no change to the generated output or its source maps |
 | **v0.639.19** | The statement emitter builds a list of body items and renders it through one adapter, with no change to the generated output or its source maps |
 | **v0.639.18** | The statement emitter moves out of `lower.rs` into `emitter/lower_stmt.rs`, with no change to the generated output |
