@@ -11,12 +11,66 @@ use bynk_syntax::ast::{
     BaseType, BinOp, Block, Expr, ExprKind, MatchArm, Pattern, PatternBindingKind, Statement,
     TypeBody,
 };
+use bynk_syntax::span::Span;
 
 use super::ctx::TailSlot;
 use super::lower::{Lowered, Pre};
 use super::lower_ctx::LowerCtx;
 use super::ts_types::{ts_ty, ts_type_ref};
 use super::*;
+
+/// The statement emitter builds a [`Body`] — a list of [`Item`]s — instead of
+/// appending text to a caller's buffer; [`render`] is the one adapter that
+/// turns it back into text and records the source-map checkpoints (back-half
+/// paydown 1A.10, S1 of the statement-emitter design note #3708). The producers
+/// below nest with [`Item::Indent`] (always `+ INDENT_STEP`) rather than by
+/// threading an `indent` through every call; the entry points keep their
+/// `(out, …, indent)` signatures as build-then-render wrappers.
+pub(super) struct Body(Vec<Item>);
+
+pub(super) enum Item {
+    /// Verbatim text, indented on its first line only: today's [`write_line`].
+    /// A multi-line string keeps whatever continuation indentation it carries.
+    Line(String),
+    /// A typed statement, printed at depth 0 with every line indented.
+    // Boxed, like `LoweredStmt::Node`: a `TsStmt` dwarfs the other variants.
+    Node(Box<bynk_ts::TsStmt>),
+    /// A source-map checkpoint at the offset where the next item starts.
+    Mark(Span),
+    /// A nested body, rendered at `indent + INDENT_STEP`.
+    Indent(Body),
+}
+
+impl Body {
+    pub(super) fn new() -> Self {
+        Body(Vec::new())
+    }
+
+    pub(super) fn push(&mut self, item: Item) {
+        self.0.push(item);
+    }
+
+    pub(super) fn extend(&mut self, items: impl IntoIterator<Item = Item>) {
+        self.0.extend(items);
+    }
+}
+
+/// Render `body` into `out` at `indent`, recording each [`Item::Mark`] with
+/// `cx.record_span` at the offset where it is reached.
+pub(super) fn render(body: &Body, out: &mut String, indent: usize, cx: &LowerCtx) {
+    for item in &body.0 {
+        match item {
+            Item::Line(text) => write_line(out, indent, text),
+            Item::Node(stmt) => {
+                for line in bynk_ts::print_stmt(stmt, 0).lines() {
+                    write_line(out, indent, line);
+                }
+            }
+            Item::Mark(span) => cx.record_span(out.len(), *span),
+            Item::Indent(inner) => render(inner, out, indent + INDENT_STEP, cx),
+        }
+    }
+}
 
 pub(crate) fn emit_block_as_function_body(
     out: &mut String,
@@ -33,7 +87,9 @@ pub(crate) fn emit_block_as_function_body(
     // (`_with_return`) rebinds it. A top-level body with no embedding context
     // (a mock/test that never called `_with_return`) simply inherits the
     // ambient `None`.
-    emit_block_inner(out, block, cx, indent, async_tail);
+    let mut body = Body::new();
+    emit_block_inner(&mut body, block, cx, async_tail);
+    render(&body, out, indent, cx);
 }
 
 /// As [`emit_block_as_function_body`], but records the enclosing return type on
@@ -55,28 +111,37 @@ pub(crate) fn emit_block_as_function_body_with_return(
         .and_then(|rt| bynk_check::checker::resolve_type_ref(rt, &cx.commons().types, tys));
     // #1750: a function body's tails `return`, whatever sink encloses it.
     let prev_slot = cx.tail_slot.take();
-    let start = out.len();
-    emit_block_inner(out, block, cx, indent, async_tail);
+    let mut body = Body::new();
+    emit_block_inner(&mut body, block, cx, async_tail);
     cx.tail_slot = prev_slot;
     cx.return_ty = prev;
     // W30 (#2840): a service handler that claimed settles its claims on exit.
+    // The wrapper's text goes around the body as `Line` items, so the body's
+    // checkpoints land at the right offsets without being shifted.
     if cx.claim_scope_used && cx.wraps_claims_in_body() {
-        let (before, after) = claim_scope_wrapper(indent);
-        out.insert_str(start, &before);
-        out.push_str(&after);
-        if let Some(map) = cx.source_map {
-            map.borrow_mut().shift_checkpoints(before.len());
-        }
+        body = claim_scoped(body, indent);
     }
+    render(&body, out, indent, cx);
 }
 
-fn emit_block_inner(
-    out: &mut String,
-    block: &Block,
-    cx: &mut LowerCtx,
-    indent: usize,
-    async_tail: bool,
-) {
+/// `body` between [`claim_scope_wrapper`]'s `before` and `after` text. The
+/// wrapper's text carries its own `indent` padding on every line, and
+/// [`Item::Line`] supplies the first line's, so that one is stripped here.
+fn claim_scoped(body: Body, indent: usize) -> Body {
+    let (before, after) = claim_scope_wrapper(indent);
+    let pad = " ".repeat(indent);
+    let as_line = |text: &str| {
+        let text = text.strip_prefix(pad.as_str()).unwrap_or(text);
+        Item::Line(text.strip_suffix('\n').unwrap_or(text).to_string())
+    };
+    let mut wrapped = Body::new();
+    wrapped.push(as_line(&before));
+    wrapped.extend(body.0);
+    wrapped.push(as_line(&after));
+    wrapped
+}
+
+fn emit_block_inner(body: &mut Body, block: &Block, cx: &mut LowerCtx, async_tail: bool) {
     // #908: every nested block (if/else branch, match arm, lambda body) as
     // well as a function/handler's own body reaches here, so this is the one
     // place that needs to push/pop a shadow-rename frame to match the
@@ -84,14 +149,14 @@ fn emit_block_inner(
     // past the block it was declared in.
     cx.shadow_scopes.push(HashMap::new());
     for stmt in &block.statements {
-        emit_statement(out, stmt, cx, indent);
+        statement(body, stmt, cx);
     }
     // Tail position: match → inline switch, if → inline if, otherwise return expr.
     // Anchor the tail's generated lines to the tail expression's span (slice 1).
-    cx.record_span(out.len(), block.tail.span);
+    body.push(Item::Mark(block.tail.span));
     match &block.tail.kind {
         ExprKind::Match { discriminant, arms } => {
-            emit_match_tail(out, discriminant, arms, cx, indent, async_tail);
+            match_tail(body, discriminant, arms, cx, async_tail);
         }
         ExprKind::If {
             cond,
@@ -109,22 +174,16 @@ fn emit_block_inner(
             let cond_expr = pre.lower(cond, cx);
             let then_tail = lower_tail_expr(&then_block.tail, cx, async_tail);
             let else_tail = lower_tail_expr(&else_block.tail, cx, async_tail);
-            for s in &pre.stmts() {
-                write_line(out, indent, s);
-            }
+            body.extend(pre.items());
             if then_tail.pre.is_empty() && else_tail.pre.is_empty() {
-                write_line(
-                    out,
-                    indent,
-                    &tail_stmt(
-                        cx,
-                        &format!(
-                            "({cond_expr} ? {t} : {e})",
-                            t = then_tail.expr.into_text(),
-                            e = else_tail.expr.into_text()
-                        ),
+                body.push(Item::Line(tail_stmt(
+                    cx,
+                    &format!(
+                        "({cond_expr} ? {t} : {e})",
+                        t = then_tail.expr.into_text(),
+                        e = else_tail.expr.into_text()
                     ),
-                );
+                )));
             } else {
                 // A branch hoisted after all — the case `simple_expr` used to
                 // mispredict (#945, and the `ListLit`/`InterpStr` fallthrough
@@ -134,11 +193,11 @@ fn emit_block_inner(
                 // produces for this shape (both branches are statement-free and
                 // their tails lower as plain expressions), rebuilt from the
                 // values already in hand.
-                write_line(out, indent, &format!("if ({cond_expr}) {{"));
-                emit_pure_tail_branch(out, then_tail, cx, indent + INDENT_STEP);
-                write_line(out, indent, "} else {");
-                emit_pure_tail_branch(out, else_tail, cx, indent + INDENT_STEP);
-                write_line(out, indent, "}");
+                body.push(Item::Line(format!("if ({cond_expr}) {{")));
+                body.push(Item::Indent(pure_tail_branch(then_tail, cx)));
+                body.push(Item::Line("} else {".to_string()));
+                body.push(Item::Indent(pure_tail_branch(else_tail, cx)));
+                body.push(Item::Line("}".to_string()));
             }
         }
         ExprKind::If {
@@ -146,16 +205,14 @@ fn emit_block_inner(
             then_block,
             else_block,
         } => {
-            emit_if_tail(out, cond, then_block, else_block, cx, indent, async_tail);
+            if_tail(body, cond, then_block, else_block, cx, async_tail);
         }
         // #3193: a self tail call is a `continue`, not a `return`.
-        _ if super::tco::emit_continue(out, &block.tail, cx, indent) => {}
+        _ if super::tco::emit_continue(body, &block.tail, cx) => {}
         _ => {
             let tail = lower_tail_expr(&block.tail, cx, async_tail);
-            for s in &tail.pre_texts() {
-                write_line(out, indent, s);
-            }
-            write_line(out, indent, &tail_stmt(cx, &tail.expr.into_text()));
+            body.extend(tail.pre_items());
+            body.push(Item::Line(tail_stmt(cx, &tail.expr.into_text())));
         }
     }
     cx.shadow_scopes.pop();
@@ -172,15 +229,15 @@ fn tail_stmt(cx: &LowerCtx, value: &str) -> String {
     }
 }
 
-/// Write one branch of the statement `if` above: the tail's hoisted statements
+/// One branch of the statement `if` above: the tail's hoisted statements
 /// followed by its `return` (or, #1750, its sink's [`tail_stmt`]). Exactly the
-/// body [`emit_block_inner`]'s own `_` arm writes for a statement-free block,
-/// which is what `emit_if_tail` would have recursed into.
-fn emit_pure_tail_branch(out: &mut String, tail: Lowered, cx: &LowerCtx, indent: usize) {
-    for s in &tail.pre_texts() {
-        write_line(out, indent, s);
-    }
-    write_line(out, indent, &tail_stmt(cx, &tail.expr.into_text()));
+/// body [`emit_block_inner`]'s own `_` arm builds for a statement-free block,
+/// which is what `if_tail` would have recursed into.
+fn pure_tail_branch(tail: Lowered, cx: &LowerCtx) -> Body {
+    let mut body = Body::new();
+    body.extend(tail.pre_items());
+    body.push(Item::Line(tail_stmt(cx, &tail.expr.into_text())));
+    body
 }
 
 /// Lower an expression that's in the tail position of a returning context.
@@ -535,7 +592,7 @@ fn lower_effect_let_value(
 /// its thunk's result (`(): Promise<T> => …`), so the destructured name has the
 /// type `const x: T = await e` gives it. Every effect is still awaited, so
 /// ADR 0426's guarantee holds.
-fn emit_par(out: &mut String, p: &bynk_syntax::ast::ParStmt, cx: &mut LowerCtx, indent: usize) {
+fn emit_par(body: &mut Body, p: &bynk_syntax::ast::ParStmt, cx: &mut LowerCtx) {
     // `None` for a `do`, which binds nothing; the name (or `_`) for a `let`.
     let mut names: Vec<Option<&bynk_syntax::ast::Ident>> = Vec::new();
     // Each binding's hoisted statements, its value, and its annotation.
@@ -584,9 +641,9 @@ fn emit_par(out: &mut String, p: &bynk_syntax::ast::ParStmt, cx: &mut LowerCtx, 
         if hoists.is_empty() {
             (format!("{head} {value}"), Vec::new())
         } else {
-            let mut body = hoists.to_vec();
-            body.push(format!("return {value};"));
-            (format!("{head} {{"), body)
+            let mut lines = hoists.to_vec();
+            lines.push(format!("return {value};"));
+            (format!("{head} {{"), lines)
         }
     };
     let open = if pattern.is_empty() {
@@ -599,35 +656,43 @@ fn emit_par(out: &mut String, p: &bynk_syntax::ast::ParStmt, cx: &mut LowerCtx, 
             .iter()
             .map(|(pre, value, annot)| thunk(pre, value, annot).0)
             .collect();
-        write_line(
-            out,
-            indent,
-            &format!("{open}await __bynkSettleAll([{}]);", items.join(", ")),
-        );
+        body.push(Item::Line(format!(
+            "{open}await __bynkSettleAll([{}]);",
+            items.join(", ")
+        )));
         return;
     }
-    write_line(out, indent, &format!("{open}await __bynkSettleAll(["));
+    body.push(Item::Line(format!("{open}await __bynkSettleAll([")));
     for (pre, value, annot) in &parts {
-        let (head, body) = thunk(pre, value, annot);
-        if body.is_empty() {
-            write_line(out, indent + 1, &format!("{head},"));
+        // The thunks sit one column in and their bodies two, not a whole
+        // `INDENT_STEP` (an odd offset the goldens pin), so the extra columns
+        // are part of the line's text rather than an `Indent`.
+        let (head, lines) = thunk(pre, value, annot);
+        if lines.is_empty() {
+            body.push(Item::Line(format!(" {head},")));
         } else {
-            write_line(out, indent + 1, &head);
-            for line in body {
-                write_line(out, indent + 2, &line);
+            body.push(Item::Line([" ", head.as_str()].concat()));
+            for line in lines {
+                body.push(Item::Line(["  ", line.as_str()].concat()));
             }
-            write_line(out, indent + 1, "},");
+            body.push(Item::Line(" },".to_string()));
         }
     }
-    write_line(out, indent, "]);");
+    body.push(Item::Line("]);".to_string()));
 }
 
 pub(super) fn emit_statement(out: &mut String, stmt: &Statement, cx: &mut LowerCtx, indent: usize) {
+    let mut body = Body::new();
+    statement(&mut body, stmt, cx);
+    render(&body, out, indent, cx);
+}
+
+fn statement(body: &mut Body, stmt: &Statement, cx: &mut LowerCtx) {
     // Slice 1 (ADR 0103 D2): every generated line this statement emits — including
     // the multi-line `?` expansion (temp / Err-guard / unwrap) — anchors to the
     // statement's source span, so a source-map-aware stepper coalesces them into
     // one source step (the slice-0 spike confirmed this).
-    cx.record_span(out.len(), stmt.span());
+    body.push(Item::Mark(stmt.span()));
     match stmt {
         Statement::Let(l) => {
             // Track `let x = AgentName(key)` so subsequent `x.method(args)`
@@ -646,9 +711,7 @@ pub(super) fn emit_statement(out: &mut String, stmt: &Statement, cx: &mut LowerC
             }
             let mut pre = Pre::new();
             let value = pre.lower(&l.value, cx);
-            for s in &pre.stmts() {
-                write_line(out, indent, s);
-            }
+            body.extend(pre.items());
             // #908: also covers `_` (a fresh throwaway local; TS allows
             // `const _ = ...` only once per scope) and a re-`let` of a name
             // already bound in this or an enclosing block (which otherwise
@@ -656,39 +719,29 @@ pub(super) fn emit_statement(out: &mut String, stmt: &Statement, cx: &mut LowerC
             // or, one block deeper, shadows it into a TDZ read).
             let bind_name = cx.bind_local_name(&l.name.name);
             match &l.type_annot {
-                Some(annot) => write_line(
-                    out,
-                    indent,
-                    &format!(
-                        "const {bind_name}: {ty} = {value};",
-                        ty = ts_type_ref(annot),
-                    ),
-                ),
-                None => write_line(out, indent, &format!("const {bind_name} = {value};")),
+                Some(annot) => body.push(Item::Line(format!(
+                    "const {bind_name}: {ty} = {value};",
+                    ty = ts_type_ref(annot),
+                ))),
+                None => body.push(Item::Line(format!("const {bind_name} = {value};"))),
             }
         }
         Statement::EffectLet(l) => {
             // `let x <- expr` → `const x = await expr;`
             let mut pre = Pre::new();
             let value = lower_effect_let_value(l, &mut pre, cx);
-            for s in &pre.stmts() {
-                write_line(out, indent, s);
-            }
+            body.extend(pre.items());
             let bind_name = cx.bind_local_name(&l.name.name);
             // T2.2 (R6.4): the literal `await` below is one of the two real
             // sources of effectfulness a synchronous-looking IIFE further out
             // needs to know about — see `emitted_await`.
             cx.emitted_await = true;
             match &l.type_annot {
-                Some(annot) => write_line(
-                    out,
-                    indent,
-                    &format!(
-                        "const {bind_name}: {ty} = await {value};",
-                        ty = ts_type_ref(annot),
-                    ),
-                ),
-                None => write_line(out, indent, &format!("const {bind_name} = await {value};")),
+                Some(annot) => body.push(Item::Line(format!(
+                    "const {bind_name}: {ty} = await {value};",
+                    ty = ts_type_ref(annot),
+                ))),
+                None => body.push(Item::Line(format!("const {bind_name} = await {value};"))),
             }
         }
         Statement::Expect(a) if a.snapshot.is_some() => {
@@ -702,27 +755,17 @@ pub(super) fn emit_statement(out: &mut String, stmt: &Statement, cx: &mut LowerC
             let src = expect_source_text(cx, a.value.span);
             let mut pre = Pre::new();
             let json = json_encode_text(&mut pre, &a.value, cx, false);
-            for s in &pre.stmts() {
-                write_line(out, indent, s);
-            }
+            body.extend(pre.items());
             let name = bynk_project::json_string(&clause.name);
             let shown = crate::emitter::escape_ts_string(&clause.name);
             match json {
-                Some(json) => write_line(
-                    out,
-                    indent,
-                    &format!(
+                Some(json) => body.push(Item::Line(format!(
                         "{{ const __d = __bynkSnapshotCheck({name}, {json}); if (__d !== undefined) {{ throw __bynkExpectFailure(\"{location}\", {span_start}, {span_end}, \"expect {src} matches snapshot \\\"{shown}\\\"\\n  \" + __d); }} }}",
-                    ),
-                ),
+                    ))),
                 // The checker typed the value; a missing type is drift, said at run time.
-                None => write_line(
-                    out,
-                    indent,
-                    &format!(
+                None => body.push(Item::Line(format!(
                         "throw __bynkExpectFailure(\"{location}\", {span_start}, {span_end}, \"expect {src} matches snapshot \\\"{shown}\\\"\\n  the value's type is not known to the snapshot\");",
-                    ),
-                ),
+                    ))),
             }
         }
         Statement::Expect(a) => {
@@ -765,16 +808,10 @@ pub(super) fn emit_statement(out: &mut String, stmt: &Statement, cx: &mut LowerC
             } else {
                 format!("\"expect {src}\"")
             };
-            for s in &pre.stmts() {
-                write_line(out, indent, s);
-            }
-            write_line(
-                out,
-                indent,
-                &format!(
+            body.extend(pre.items());
+            body.push(Item::Line(format!(
                     "if (!({cond})) {{ throw __bynkExpectFailure(\"{location}\", {span_start}, {span_end}, {detail}); }}",
-                ),
-            );
+                )));
         }
         Statement::Advance(a) => {
             // #2137: move the case's harness clock (`project/test_runtime/clock.ts`),
@@ -782,10 +819,8 @@ pub(super) fn emit_statement(out: &mut String, stmt: &Statement, cx: &mut LowerC
             // `Clock` double reads below it. A negative amount faults there.
             let mut pre = Pre::new();
             let amount = pre.lower(&a.amount, cx);
-            for s in &pre.stmts() {
-                write_line(out, indent, s);
-            }
-            write_line(out, indent, &format!("__bynkAdvanceClock({amount});"));
+            body.extend(pre.items());
+            body.push(Item::Line(format!("__bynkAdvanceClock({amount});")));
         }
         Statement::Do(d) => {
             // v0.146 (ADR 0170): `do expr` → `await expr;`. The binder-free
@@ -793,14 +828,12 @@ pub(super) fn emit_statement(out: &mut String, stmt: &Statement, cx: &mut LowerC
             // result discarded (no `const`).
             let mut pre = Pre::new();
             let value = pre.lower(&d.value, cx);
-            for st in &pre.stmts() {
-                write_line(out, indent, st);
-            }
+            body.extend(pre.items());
             // T2.2 (R6.4): see the matching note at `EffectLet`.
             cx.emitted_await = true;
-            write_line(out, indent, &format!("await {value};"));
+            body.push(Item::Line(format!("await {value};")));
         }
-        Statement::Par(p) => emit_par(out, p, cx, indent),
+        Statement::Par(p) => emit_par(body, p, cx),
         Statement::Assign(a) => {
             // v0.81 (storage track, ADR 0109): `cell := expr` writes the mutable
             // working state in place (`__state.cell = <expr>`). It is staged in
@@ -809,16 +842,14 @@ pub(super) fn emit_statement(out: &mut String, stmt: &Statement, cx: &mut LowerC
             // the durable write). A fault before that flush persists nothing.
             let mut pre = Pre::new();
             let value = pre.lower(&a.value, cx);
-            for st in &pre.stmts() {
-                write_line(out, indent, st);
-            }
+            body.extend(pre.items());
             let lhs = match cx.agent_store_cells() {
                 Some((var, _)) => format!("{var}.{}", a.target.name),
                 // Defensive: the checker resolves `:=` to a store cell, so a
                 // write outside a store-agent handler does not reach emission.
                 None => a.target.name.clone(),
             };
-            write_line(out, indent, &format!("{lhs} = {value};"));
+            body.push(Item::Line(format!("{lhs} = {value};")));
         }
     }
 }
@@ -899,34 +930,49 @@ pub(super) fn emit_if_tail(
     indent: usize,
     async_tail: bool,
 ) {
+    let mut body = Body::new();
+    if_tail(&mut body, cond, then_block, else_block, cx, async_tail);
+    render(&body, out, indent, cx);
+}
+
+fn if_tail(
+    body: &mut Body,
+    cond: &Expr,
+    then_block: &Block,
+    else_block: &Block,
+    cx: &mut LowerCtx,
+    async_tail: bool,
+) {
     let mut pre = Pre::new();
     let cond_expr = pre.lower(cond, cx);
-    for s in &pre.stmts() {
-        write_line(out, indent, s);
-    }
-    write_line(out, indent, &format!("if ({cond_expr}) {{"));
+    body.extend(pre.items());
+    body.push(Item::Line(format!("if ({cond_expr}) {{")));
     // is-binding declarations on the truthy path. #908: scoped to the
     // then-branch only (see the IIFE sibling above for the same reasoning).
     cx.shadow_scopes.push(HashMap::new());
     let mut is_bindings = Vec::new();
     let mut found = false;
     gather_is_bindings_for_emit(cond, true, cx, &mut is_bindings, &mut found);
+    let mut then_body = Body::new();
     for b in &is_bindings {
-        write_line(out, indent + INDENT_STEP, b);
+        then_body.push(Item::Line(b.to_string()));
     }
-    emit_block_as_function_body(out, then_block, cx, indent + INDENT_STEP, async_tail);
+    emit_block_inner(&mut then_body, then_block, cx, async_tail);
+    body.push(Item::Indent(then_body));
     cx.shadow_scopes.pop();
-    write_line(out, indent, "} else {");
+    body.push(Item::Line("} else {".to_string()));
     // #1654: the else-branch's bindings, those the condition's falsity proves.
     cx.shadow_scopes.push(HashMap::new());
     let mut else_bindings = Vec::new();
     gather_is_bindings_for_emit(cond, false, cx, &mut else_bindings, &mut found);
+    let mut else_body = Body::new();
     for b in &else_bindings {
-        write_line(out, indent + INDENT_STEP, b);
+        else_body.push(Item::Line(b.to_string()));
     }
-    emit_block_as_function_body(out, else_block, cx, indent + INDENT_STEP, async_tail);
+    emit_block_inner(&mut else_body, else_block, cx, async_tail);
+    body.push(Item::Indent(else_body));
     cx.shadow_scopes.pop();
-    write_line(out, indent, "}");
+    body.push(Item::Line("}".to_string()));
 }
 
 /// v0.130: whether a `match` is literal-kind — its scrutinee is a primitive
@@ -964,10 +1010,22 @@ pub(super) fn emit_match_tail(
     indent: usize,
     async_tail: bool,
 ) {
+    let mut body = Body::new();
+    match_tail(&mut body, discriminant, arms, cx, async_tail);
+    render(&body, out, indent, cx);
+}
+
+fn match_tail(
+    body: &mut Body,
+    discriminant: &Expr,
+    arms: &[MatchArm],
+    cx: &mut LowerCtx,
+    async_tail: bool,
+) {
     let tys = cx.commons().tys();
     // Anchor the discriminant lowering + `switch (…) {` header to the match's
     // scrutinee span (slice 1); each arm re-anchors to its own span below.
-    cx.record_span(out.len(), discriminant.span);
+    body.push(Item::Mark(discriminant.span));
     let mut pre = Pre::new();
     let mut disc = pre.lower(discriminant, cx);
     let disc_ty = cx
@@ -975,9 +1033,7 @@ pub(super) fn emit_match_tail(
         .expr_types
         .get(&discriminant.id)
         .map(|te| te.ty);
-    for s in &pre.stmts() {
-        write_line(out, indent, s);
-    }
+    body.extend(pre.items());
     // v0.9.2: a statement-position `switch` narrows the scrutinee only when it
     // is a stable reference (a variable or property path). A call discriminant
     // such as `ShortCode.of(raw)` is re-evaluated per arm and TypeScript cannot
@@ -986,13 +1042,13 @@ pub(super) fn emit_match_tail(
     // lowers to a call (`Fallback()`), so it is bound to a temp too.
     if !is_narrowable_path(discriminant) || cx.roots_at_const(discriminant) {
         let tmp = cx.fresh();
-        write_line(out, indent, &format!("const {tmp} = {disc};"));
+        body.push(Item::Line(format!("const {tmp} = {disc};")));
         disc = tmp;
     }
     // ADR 0169: nested/guarded matches lower to an if-chain; flat/unguarded
     // matches keep the `switch`.
     if bynk_model::match_needs_if_chain(arms) {
-        emit_match_if_chain(out, &disc, &disc_ty, arms, cx, indent, async_tail);
+        match_if_chain(body, &disc, &disc_ty, arms, cx, async_tail);
         return;
     }
     // v0.130: literal-kind matches switch on the value; variant-kind on `.tag`.
@@ -1001,24 +1057,16 @@ pub(super) fn emit_match_tail(
     } else {
         format!("{disc}.tag")
     };
-    write_line(out, indent, &format!("switch ({scrutinee}) {{"));
+    body.push(Item::Line(format!("switch ({scrutinee}) {{")));
+    let mut cases = Body::new();
     for arm in arms {
-        emit_match_case(
-            out,
-            &disc,
-            &disc_ty,
-            arm,
-            cx,
-            indent + INDENT_STEP,
-            async_tail,
-        );
+        match_case(&mut cases, &disc, &disc_ty, arm, cx, async_tail);
     }
-    write_line(out, indent, "}");
-    write_line(
-        out,
-        indent,
-        "throw new globalThis.Error(\"non-exhaustive match\");",
-    );
+    body.push(Item::Indent(cases));
+    body.push(Item::Line("}".to_string()));
+    body.push(Item::Line(
+        "throw new globalThis.Error(\"non-exhaustive match\");".to_string(),
+    ));
 }
 
 pub(super) fn emit_match_case(
@@ -1030,10 +1078,23 @@ pub(super) fn emit_match_case(
     indent: usize,
     async_tail: bool,
 ) {
+    let mut body = Body::new();
+    match_case(&mut body, disc_var, disc_ty, arm, cx, async_tail);
+    render(&body, out, indent, cx);
+}
+
+fn match_case(
+    body: &mut Body,
+    disc_var: &str,
+    disc_ty: &Option<TyId>,
+    arm: &MatchArm,
+    cx: &mut LowerCtx,
+    async_tail: bool,
+) {
     let tys = cx.commons().tys();
     // Anchor this arm's `case`/binding/`return` lines to the arm's source span
     // (slice 1, ADR 0103 D2) — so stepping a `match` walks arm-to-arm.
-    cx.record_span(out.len(), arm.span);
+    body.push(Item::Mark(arm.span));
     // #908: this arm's payload/catch-all bindings live in the `case`'s own JS
     // block, so a read inside the body must resolve to them rather than an
     // outer `let` rename — push a frame and register each below, popped once
@@ -1041,33 +1102,34 @@ pub(super) fn emit_match_case(
     cx.shadow_scopes.push(HashMap::new());
     match &arm.pattern {
         Pattern::Wildcard(_) => {
-            write_line(out, indent, "default: {");
-            emit_match_body(out, &arm.body, cx, indent + INDENT_STEP, async_tail);
-            write_line(out, indent, "}");
+            body.push(Item::Line("default: {".to_string()));
+            let mut inner = Body::new();
+            match_body(&mut inner, &arm.body, cx, async_tail);
+            body.push(Item::Indent(inner));
+            body.push(Item::Line("}".to_string()));
         }
         // A bare name binding is a catch-all that binds the scrutinee (ADR 0169).
         Pattern::Binding(id) => {
-            write_line(out, indent, "default: {");
+            body.push(Item::Line("default: {".to_string()));
             let local = cx.bind_local_name(&id.name);
-            write_line(
-                out,
-                indent + INDENT_STEP,
-                &format!("const {local} = {disc_var};"),
-            );
-            emit_match_body(out, &arm.body, cx, indent + INDENT_STEP, async_tail);
-            write_line(out, indent, "}");
+            let mut inner = Body::new();
+            inner.push(Item::Line(format!("const {local} = {disc_var};")));
+            match_body(&mut inner, &arm.body, cx, async_tail);
+            body.push(Item::Indent(inner));
+            body.push(Item::Line("}".to_string()));
         }
         // v0.130: a literal pattern lowers to `case <literal>:`. JS `switch`
         // compares with `===`, matching the value semantics we want for
         // `Int`/`String`/`Bool`.
         Pattern::Literal { value, .. } => {
-            write_line(
-                out,
-                indent,
-                &format!("case {}: {{", literal_case_label(value)),
-            );
-            emit_match_body(out, &arm.body, cx, indent + INDENT_STEP, async_tail);
-            write_line(out, indent, "}");
+            body.push(Item::Line(format!(
+                "case {}: {{",
+                literal_case_label(value)
+            )));
+            let mut inner = Body::new();
+            match_body(&mut inner, &arm.body, cx, async_tail);
+            body.push(Item::Indent(inner));
+            body.push(Item::Line("}".to_string()));
         }
         // #472: a refined arm always trips `match_needs_if_chain`, so the
         // switch path (this function) never sees one in practice — a
@@ -1089,14 +1151,14 @@ pub(super) fn emit_match_case(
         Pattern::Variant {
             variant, bindings, ..
         } => {
-            write_line(
-                out,
-                indent,
-                &format!("case \"{tag}\": {{", tag = variant.name),
-            );
+            body.push(Item::Line(format!(
+                "case \"{tag}\": {{",
+                tag = variant.name
+            )));
             // The switch path only handles flat, unguarded arms (nested/guarded
             // matches take the if-chain path), so each payload binding is an
             // irrefutable name or `_`.
+            let mut inner = Body::new();
             for (i, b) in bindings.iter().enumerate() {
                 let Pattern::Binding(name) = b.pattern() else {
                     continue;
@@ -1108,14 +1170,11 @@ pub(super) fn emit_match_case(
                     }
                 };
                 let local = cx.bind_local_name(&name.name);
-                write_line(
-                    out,
-                    indent + INDENT_STEP,
-                    &format!("const {local} = {disc_var}.{field};"),
-                );
+                inner.push(Item::Line(format!("const {local} = {disc_var}.{field};")));
             }
-            emit_match_body(out, &arm.body, cx, indent + INDENT_STEP, async_tail);
-            write_line(out, indent, "}");
+            match_body(&mut inner, &arm.body, cx, async_tail);
+            body.push(Item::Indent(inner));
+            body.push(Item::Line("}".to_string()));
         }
         // #474: a bindingless or-pattern (guaranteed by `match_needs_if_chain`
         // routing — a bound/guarded one takes the if-chain path instead) lowers
@@ -1127,9 +1186,11 @@ pub(super) fn emit_match_case(
         // labels for the other (now-redundant) alternatives and dropping the
         // wildcard produced malformed, `tsc`-rejected output.
         Pattern::Or(alts, _) if arm.pattern.is_irrefutable() => {
-            write_line(out, indent, "default: {");
-            emit_match_body(out, &arm.body, cx, indent + INDENT_STEP, async_tail);
-            write_line(out, indent, "}");
+            body.push(Item::Line("default: {".to_string()));
+            let mut inner = Body::new();
+            match_body(&mut inner, &arm.body, cx, async_tail);
+            body.push(Item::Indent(inner));
+            body.push(Item::Line("}".to_string()));
         }
         Pattern::Or(alts, _) => {
             let last = alts.len() - 1;
@@ -1160,28 +1221,24 @@ pub(super) fn emit_match_case(
                     }
                 };
                 if i == last {
-                    write_line(out, indent, &format!("case {label}: {{"));
+                    body.push(Item::Line(format!("case {label}: {{")));
                 } else {
-                    write_line(out, indent, &format!("case {label}:"));
+                    body.push(Item::Line(format!("case {label}:")));
                 }
             }
-            emit_match_body(out, &arm.body, cx, indent + INDENT_STEP, async_tail);
-            write_line(out, indent, "}");
+            let mut inner = Body::new();
+            match_body(&mut inner, &arm.body, cx, async_tail);
+            body.push(Item::Indent(inner));
+            body.push(Item::Line("}".to_string()));
         }
     }
     cx.shadow_scopes.pop();
 }
 
-fn emit_match_body(
-    out: &mut String,
-    body: &MatchBody,
-    cx: &mut LowerCtx,
-    indent: usize,
-    async_tail: bool,
-) {
-    match body {
+fn match_body(body: &mut Body, arm_body: &MatchBody, cx: &mut LowerCtx, async_tail: bool) {
+    match arm_body {
         MatchBody::Expr(e) => {
-            if super::tco::emit_continue(out, e, cx, indent) {
+            if super::tco::emit_continue(body, e, cx) {
                 return;
             }
             // #3193: a bare `match` or `if` arm body holding a tail self call is
@@ -1190,7 +1247,7 @@ fn emit_match_body(
             if cx.tail_slot.is_none() && cx.tco.as_ref().is_some_and(|p| p.has_call_in(e)) {
                 match &e.kind {
                     ExprKind::Match { discriminant, arms } => {
-                        emit_match_tail(out, discriminant, arms, cx, indent, async_tail);
+                        match_tail(body, discriminant, arms, cx, async_tail);
                         return;
                     }
                     ExprKind::If {
@@ -1198,7 +1255,7 @@ fn emit_match_body(
                         then_block,
                         else_block,
                     } => {
-                        emit_if_tail(out, cond, then_block, else_block, cx, indent, async_tail);
+                        if_tail(body, cond, then_block, else_block, cx, async_tail);
                         return;
                     }
                     _ => {}
@@ -1206,12 +1263,10 @@ fn emit_match_body(
             }
             let mut pre = Pre::new();
             let v = pre.absorb(lower_tail_expr(e, cx, async_tail));
-            for s in &pre.stmts() {
-                write_line(out, indent, s);
-            }
-            write_line(out, indent, &tail_stmt(cx, &v));
+            body.extend(pre.items());
+            body.push(Item::Line(tail_stmt(cx, &v)));
         }
-        MatchBody::Block(b) => emit_block_as_function_body(out, b, cx, indent, async_tail),
+        MatchBody::Block(b) => emit_block_inner(body, b, cx, async_tail),
     }
 }
 
@@ -1230,6 +1285,19 @@ pub(super) fn emit_match_if_chain(
     indent: usize,
     async_tail: bool,
 ) {
+    let mut body = Body::new();
+    match_if_chain(&mut body, disc_var, disc_ty, arms, cx, async_tail);
+    render(&body, out, indent, cx);
+}
+
+fn match_if_chain(
+    body: &mut Body,
+    disc_var: &str,
+    disc_ty: &Option<TyId>,
+    arms: &[MatchArm],
+    cx: &mut LowerCtx,
+    async_tail: bool,
+) {
     // An unguarded irrefutable arm is a catch-all: its body always returns, so
     // the trailing non-exhaustive `throw` would be unreachable (tsc rejects it).
     let has_catchall = arms
@@ -1237,7 +1305,7 @@ pub(super) fn emit_match_if_chain(
         .any(|a| a.guard.is_none() && a.pattern.is_irrefutable());
     let mut declared_here: std::collections::HashSet<&str> = std::collections::HashSet::new();
     for arm in arms {
-        cx.record_span(out.len(), arm.span);
+        body.push(Item::Mark(arm.span));
         // #908: this arm's bindings must resolve within its own body rather
         // than falling through to an outer `let` rename — see the identical
         // reasoning in `emit_match_case`. Pushed/popped once per arm
@@ -1263,40 +1331,40 @@ pub(super) fn emit_match_if_chain(
             declared_here.extend(names.iter().copied());
         }
         if has_tests {
-            write_line(out, indent, &format!("if ({}) {{", tests.join(" && ")));
+            body.push(Item::Line(format!("if ({}) {{", tests.join(" && "))));
         } else if needs_block {
-            write_line(out, indent, "{");
+            body.push(Item::Line("{".to_string()));
         }
         let has_tests = has_tests || needs_block;
-        let body_indent = if has_tests {
-            indent + INDENT_STEP
-        } else {
-            indent
-        };
-        emit_pattern_bindings(out, body_indent, disc_var, *disc_ty, &arm.pattern, cx);
-        if let Some(guard) = &arm.guard {
-            let guard_lowered = lower_expr(guard, cx);
-            for s in &guard_lowered.pre_texts() {
-                write_line(out, body_indent, s);
+        // The arm's own lines sit one level in when it opened a block (`if (…) {`
+        // or `{`), and at this level otherwise.
+        let mut nested = Body::new();
+        {
+            let arm_body: &mut Body = if has_tests { &mut nested } else { &mut *body };
+            emit_pattern_bindings(arm_body, disc_var, *disc_ty, &arm.pattern, cx);
+            if let Some(guard) = &arm.guard {
+                let guard_lowered = lower_expr(guard, cx);
+                arm_body.extend(guard_lowered.pre_items());
+                let gv = guard_lowered.expr.into_text();
+                arm_body.push(Item::Line(format!("if ({gv}) {{")));
+                let mut guarded = Body::new();
+                match_body(&mut guarded, &arm.body, cx, async_tail);
+                arm_body.push(Item::Indent(guarded));
+                arm_body.push(Item::Line("}".to_string()));
+            } else {
+                match_body(arm_body, &arm.body, cx, async_tail);
             }
-            let gv = guard_lowered.expr.into_text();
-            write_line(out, body_indent, &format!("if ({gv}) {{"));
-            emit_match_body(out, &arm.body, cx, body_indent + INDENT_STEP, async_tail);
-            write_line(out, body_indent, "}");
-        } else {
-            emit_match_body(out, &arm.body, cx, body_indent, async_tail);
         }
         if has_tests {
-            write_line(out, indent, "}");
+            body.push(Item::Indent(nested));
+            body.push(Item::Line("}".to_string()));
         }
         cx.shadow_scopes.pop();
     }
     if !has_catchall {
-        write_line(
-            out,
-            indent,
-            "throw new globalThis.Error(\"non-exhaustive match\");",
-        );
+        body.push(Item::Line(
+            "throw new globalThis.Error(\"non-exhaustive match\");".to_string(),
+        ));
     }
 }
 
@@ -1350,4 +1418,153 @@ fn mentions_decimal(ty: TyId, cx: &LowerCtx) -> bool {
         }
     }
     by_ty(ty, cx, &mut HashSet::new())
+}
+
+#[cfg(test)]
+mod body_tests {
+    use super::*;
+    use crate::emitter::ctx::{BodyMode, ModuleCtx};
+    use bynk_check::checker::TypedCommons;
+    use bynk_ts::SourceMapBuilder;
+    use std::cell::RefCell;
+
+    /// Run `f` with a `LowerCtx` that records into `smb`.
+    fn with_cx<R>(smb: &RefCell<SourceMapBuilder>, f: impl FnOnce(&LowerCtx) -> R) -> R {
+        let commons = TypedCommons::empty();
+        let cross_context = bynk_check::resolver::CrossContextInfo::default();
+        let runtime_use = RuntimeUse::default();
+        let cx = LowerCtx::new(
+            ModuleCtx::new(&commons, &cross_context, &runtime_use),
+            BodyMode::Method,
+        )
+        .with_source_map(Some(smb));
+        f(&cx)
+    }
+
+    fn line(text: &str) -> Item {
+        Item::Line(text.to_string())
+    }
+
+    fn rendered(body: &Body, indent: usize) -> (String, SourceMapBuilder) {
+        let smb = RefCell::new(SourceMapBuilder::new());
+        smb.borrow_mut().add_source("t.bynk", "x".repeat(200));
+        let mut out = String::new();
+        with_cx(&smb, |cx| render(body, &mut out, indent, cx));
+        (out, smb.into_inner())
+    }
+
+    fn if_node() -> bynk_ts::TsStmt {
+        bynk_ts::TsStmt::if_stmt(
+            bynk_ts::TsExpr::Ident("flag".to_string()),
+            bynk_ts::TsStmt::block(
+                vec![bynk_ts::TsStmt::expr_stmt(
+                    bynk_ts::TsExpr::Ident("done".to_string()),
+                    None,
+                )],
+                None,
+            ),
+            None,
+        )
+    }
+
+    /// A `Line` is `write_line`: only its first line takes the indentation, so
+    /// continuation lines keep whatever they carry (#3711, Decision B).
+    #[test]
+    fn a_line_indents_its_first_line_only() {
+        let mut body = Body::new();
+        body.push(line("a;\n  b;"));
+        let (out, _) = rendered(&body, 4);
+        assert_eq!(out, "    a;\n  b;\n");
+        let mut expected = String::new();
+        write_line(&mut expected, 4, "a;\n  b;");
+        assert_eq!(out, expected);
+    }
+
+    /// A `Node` is printed at depth 0 with every line indented.
+    #[test]
+    fn a_node_indents_every_line() {
+        let mut body = Body::new();
+        body.push(Item::Node(Box::new(if_node())));
+        let (out, _) = rendered(&body, 2);
+        assert!(out.lines().count() > 1, "{out}");
+        assert!(out.lines().all(|l| l.starts_with("  ")), "{out}");
+    }
+
+    /// `Indent` nests one `INDENT_STEP` per level, and an empty one is nothing.
+    #[test]
+    fn indent_nests_one_step_per_level() {
+        let mut inner = Body::new();
+        inner.push(line("b;"));
+        let mut mid = Body::new();
+        mid.push(line("a {"));
+        mid.push(Item::Indent(inner));
+        mid.push(line("}"));
+        let mut body = Body::new();
+        body.push(Item::Indent(mid));
+        body.push(Item::Indent(Body::new()));
+        let (out, _) = rendered(&body, 2);
+        assert_eq!(out, "    a {\n      b;\n    }\n");
+    }
+
+    /// A `Mark` records the offset where the next item starts, including inside
+    /// a nested `Indent`.
+    #[test]
+    fn a_mark_records_the_offset_where_it_is_reached() {
+        let mut inner = Body::new();
+        inner.push(Item::Mark(Span::new(30, 40)));
+        inner.push(line("c;"));
+        let mut body = Body::new();
+        body.push(Item::Mark(Span::new(0, 10)));
+        body.push(line("a;"));
+        body.push(Item::Mark(Span::new(10, 20)));
+        body.push(line("b {"));
+        body.push(Item::Indent(inner));
+        body.push(line("}"));
+        let (out, got) = rendered(&body, 0);
+        let mut want = SourceMapBuilder::new();
+        want.add_source("t.bynk", "x".repeat(200));
+        want.record(0, Span::new(0, 10));
+        want.record("a;\n".len(), Span::new(10, 20));
+        want.record("a;\nb {\n".len(), Span::new(30, 40));
+        assert_eq!(out, "a;\nb {\n  c;\n}\n");
+        assert_eq!(got.to_v3(&out, "t.js"), want.to_v3(&out, "t.js"));
+    }
+
+    /// The claim-scope wrapper (#3711, Decision D) as `Line` items around the
+    /// body gives the text and the map the old insert-and-shift did.
+    #[test]
+    fn the_claim_scope_wrapper_matches_insert_and_shift() {
+        let build = || {
+            let mut inner = Body::new();
+            inner.push(line("if (x) {"));
+            let mut nested = Body::new();
+            nested.push(Item::Mark(Span::new(40, 50)));
+            nested.push(line("return 1;"));
+            inner.push(Item::Indent(nested));
+            inner.push(line("}"));
+            let mut body = Body::new();
+            body.push(Item::Mark(Span::new(0, 10)));
+            body.push(line("const a = 1;"));
+            body.push(Item::Mark(Span::new(10, 30)));
+            body.push(Item::Node(Box::new(if_node())));
+            body.push(Item::Mark(Span::new(30, 60)));
+            body.push(Item::Indent(inner));
+            body
+        };
+        for indent in [0, 4] {
+            // The old way: render, insert the wrapper's text, shift the map.
+            let (plain, mut shifted) = rendered(&build(), indent);
+            let (before, after) = claim_scope_wrapper(indent);
+            let old_text = format!("{before}{plain}{after}");
+            shifted.shift_checkpoints(before.len());
+            // The new way: the wrapper is part of the body.
+            let (new_text, new_map) = rendered(&claim_scoped(build(), indent), indent);
+            assert_eq!(new_text, old_text, "indent {indent}");
+            assert_eq!(
+                new_map.to_v3(&new_text, "t.js"),
+                shifted.to_v3(&old_text, "t.js"),
+                "indent {indent}"
+            );
+        }
+    }
 }
