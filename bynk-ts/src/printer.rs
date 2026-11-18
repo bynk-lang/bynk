@@ -693,60 +693,69 @@ fn render_stmt_kind(
             out.push_str(") {\n");
             for case in cases {
                 debug_assert!(
-                    !(case.test.is_some() && case.default_braced),
-                    "TsSwitchCase.default_braced only means something on the default (test: None) case — review of #1402's own nit"
+                    case.labels.is_empty() || !case.default_braced,
+                    "TsSwitchCase.default_braced only means something on the default (no labels) case — review of #1402's own nit"
                 );
                 // Review of #1446: the mirror invariant for `case_braced`
                 // (Arc E slice 6, #1445) — it only means something on a
-                // non-`default` (`test: Some(..)`) case; every real
-                // `test: None` call site sets it `true` with no effect
-                // (`default_braced` owns that arm's bracing instead), which
-                // would silently swallow a future caller's `false` there.
+                // non-`default` (labelled) case; every real label-less call
+                // site sets it `true` with no effect (`default_braced` owns
+                // that arm's bracing instead), which would silently swallow a
+                // future caller's `false` there.
                 debug_assert!(
-                    case.test.is_some() || case.case_braced,
-                    "TsSwitchCase.case_braced only means something on a non-default (test: Some(..)) case"
+                    !case.labels.is_empty() || case.case_braced,
+                    "TsSwitchCase.case_braced only means something on a non-default (labelled) case"
                 );
-                out.push_str(&indent(depth + 1));
-                match &case.test {
-                    Some(test) => {
-                        out.push_str("case ");
-                        render_expr(out, test, depth);
-                        // Arc E slice 6 (#1445): `case_braced` is the
-                        // non-`default` mirror of `default_braced` just
-                        // below — `emit_sum_codec`'s own payload-free
-                        // variant case (`case "Pending":\n  return { kind:
-                        // "Pending" };`) is real, unbraced content sitting
-                        // right beside a braced payload-carrying sibling in
-                        // the same switch (`212_json_codec`'s own `Status`
-                        // fixture).
-                        if case.case_braced {
-                            out.push_str(": {\n");
-                            for s in &case.body {
-                                render_stmt(out, s, depth + 2, map.as_mut().map(|t| t.reborrow()));
-                            }
-                            out.push_str(&indent(depth + 1));
-                            out.push_str("}\n");
-                        } else {
-                            out.push_str(":\n");
-                            for s in &case.body {
-                                render_stmt(out, s, depth + 2, map.as_mut().map(|t| t.reborrow()));
-                            }
+                // 1A.13 (#3714): a case's span is recorded at the start of its
+                // first label line, before its indentation.
+                if let Some(span) = case.span {
+                    note_span_at(out.len(), span);
+                }
+                if case.labels.is_empty() {
+                    out.push_str(&indent(depth + 1));
+                    if case.default_braced {
+                        out.push_str("default: {\n");
+                        for s in &case.body {
+                            render_stmt(out, s, depth + 2, map.as_mut().map(|t| t.reborrow()));
+                        }
+                        out.push_str(&indent(depth + 1));
+                        out.push_str("}\n");
+                    } else {
+                        out.push_str("default:\n");
+                        for s in &case.body {
+                            render_stmt(out, s, depth + 2, map.as_mut().map(|t| t.reborrow()));
                         }
                     }
-                    None => {
-                        if case.default_braced {
-                            out.push_str("default: {\n");
-                            for s in &case.body {
-                                render_stmt(out, s, depth + 2, map.as_mut().map(|t| t.reborrow()));
-                            }
-                            out.push_str(&indent(depth + 1));
-                            out.push_str("}\n");
-                        } else {
-                            out.push_str("default:\n");
-                            for s in &case.body {
-                                render_stmt(out, s, depth + 2, map.as_mut().map(|t| t.reborrow()));
-                            }
-                        }
+                    continue;
+                }
+                // Shared-body labels stack, one `case x:` line each; only the
+                // last carries the opening brace.
+                let last = case.labels.len() - 1;
+                for (i, label) in case.labels.iter().enumerate() {
+                    out.push_str(&indent(depth + 1));
+                    out.push_str("case ");
+                    render_expr(out, label, depth);
+                    if i < last {
+                        out.push_str(":\n");
+                    }
+                }
+                // Arc E slice 6 (#1445): `case_braced` is the non-`default`
+                // mirror of `default_braced` — `emit_sum_codec`'s own
+                // payload-free variant case (`case "Pending":\n  return {
+                // kind: "Pending" };`) is real, unbraced content sitting
+                // right beside a braced payload-carrying sibling in the same
+                // switch (`212_json_codec`'s own `Status` fixture).
+                if case.case_braced {
+                    out.push_str(": {\n");
+                    for s in &case.body {
+                        render_stmt(out, s, depth + 2, map.as_mut().map(|t| t.reborrow()));
+                    }
+                    out.push_str(&indent(depth + 1));
+                    out.push_str("}\n");
+                } else {
+                    out.push_str(":\n");
+                    for s in &case.body {
+                        render_stmt(out, s, depth + 2, map.as_mut().map(|t| t.reborrow()));
                     }
                 }
             }
@@ -1017,7 +1026,7 @@ fn render_block_body(
         // is one compact line — `workers_entry.rs`'s own real queue-consumer
         // catch clause (`console.error(...); msg.retry();`).
         out.push_str(&indent(depth + 1));
-        render_compact_stmts(out, stmts, depth);
+        render_compact_stmts(out, stmts, depth + 1);
         out.push('\n');
     } else {
         render_stmt(out, block, depth + 1, None);
@@ -1371,7 +1380,7 @@ fn render_multiline_object_entry(
         TsObjectEntry::Spread(e) => {
             out.push_str(&indent(depth + 1));
             out.push_str("...");
-            render_expr(out, e, depth);
+            render_expr(out, e, depth + 1);
             out.push_str(",\n");
         }
         // `workers.rs`'s own dominant real shape (Decision A, gap 1):
@@ -1452,7 +1461,7 @@ fn render_multiline_array(out: &mut String, items: &[TsExpr], depth: usize) {
     out.push_str("[\n");
     for item in items {
         out.push_str(&indent(depth + 1));
-        render_expr(out, item, depth);
+        render_expr(out, item, depth + 1);
         out.push_str(",\n");
     }
     out.push_str(&indent(depth));
@@ -2147,7 +2156,13 @@ thread_local! {
 /// twice at one offset (an inline branch is noted by `render_branch` and again
 /// by a `render_stmt` fallback), so an identical consecutive entry is dropped.
 fn note_span(offset: usize, stmt: &TsStmt) {
-    let Some(span) = stmt.span else { return };
+    if let Some(span) = stmt.span {
+        note_span_at(offset, span);
+    }
+}
+
+/// [`note_span`] for a span that is not a statement's own: a `switch` case's.
+fn note_span_at(offset: usize, span: Span) {
     SPAN_SINK.with(|sink| {
         if let Some(spans) = sink.borrow_mut().as_mut()
             && spans.last() != Some(&(offset, span))
@@ -5046,13 +5061,14 @@ mod tests {
             TsExpr::Ident("servicePath".to_string()),
             vec![
                 TsSwitchCase {
-                    test: Some(TsExpr::Lit(TsLit::Str("orders".to_string()))),
+                    labels: vec![TsExpr::Lit(TsLit::Str("orders".to_string()))],
                     body: vec![TsStmt::return_stmt(None, None)],
                     default_braced: false,
                     case_braced: true,
+                    span: None,
                 },
                 TsSwitchCase {
-                    test: None,
+                    labels: vec![],
                     body: vec![TsStmt::expr_stmt(
                         TsExpr::Call {
                             callee: Box::new(TsExpr::Member {
@@ -5065,6 +5081,7 @@ mod tests {
                     )],
                     default_braced: false,
                     case_braced: true,
+                    span: None,
                 },
             ],
             None,
@@ -5086,10 +5103,11 @@ mod tests {
         program.push(TsStmt::switch_stmt(
             TsExpr::Ident("__k".to_string()),
             vec![TsSwitchCase {
-                test: None,
+                labels: vec![],
                 body: vec![TsStmt::expr_stmt(TsExpr::Ident("x".to_string()), None)],
                 default_braced: true,
                 case_braced: true,
+                span: None,
             }],
             None,
         ));
@@ -5113,22 +5131,24 @@ mod tests {
             TsExpr::Ident("kind".to_string()),
             vec![
                 TsSwitchCase {
-                    test: Some(TsExpr::Lit(TsLit::Str("Pending".to_string()))),
+                    labels: vec![TsExpr::Lit(TsLit::Str("Pending".to_string()))],
                     body: vec![TsStmt::return_stmt(
                         Some(TsExpr::Ident("a".to_string())),
                         None,
                     )],
                     default_braced: false,
                     case_braced: false,
+                    span: None,
                 },
                 TsSwitchCase {
-                    test: Some(TsExpr::Lit(TsLit::Str("Shipped".to_string()))),
+                    labels: vec![TsExpr::Lit(TsLit::Str("Shipped".to_string()))],
                     body: vec![TsStmt::return_stmt(
                         Some(TsExpr::Ident("b".to_string())),
                         None,
                     )],
                     default_braced: false,
                     case_braced: true,
+                    span: None,
                 },
             ],
             None,
@@ -7353,5 +7373,134 @@ mod tests {
         let (_, spans) = print_stmt_with_spans(&stmt, 0);
         assert_eq!(spans.len(), 1);
         assert_eq!(spans[0].1.start, 3);
+    }
+
+    // --- `TsSwitchCase.labels` and `.span` (back-half paydown 1A.13) ---
+
+    fn case(labels: Vec<TsExpr>, body: Vec<TsStmt>, span: Option<Span>) -> TsSwitchCase {
+        let default = labels.is_empty();
+        TsSwitchCase {
+            labels,
+            body,
+            default_braced: default,
+            case_braced: true,
+            span,
+        }
+    }
+
+    fn lit(s: &str) -> TsExpr {
+        TsExpr::Lit(TsLit::Str(s.to_string()))
+    }
+
+    /// 1A.13: labels sharing one body print stacked, the brace on the last, as
+    /// an or-pattern's `match` does today.
+    #[test]
+    fn shared_labels_print_stacked_with_the_brace_on_the_last() {
+        let stmt = TsStmt::switch_stmt(
+            id("__d"),
+            vec![
+                case(
+                    vec![lit("A"), lit("B"), lit("C")],
+                    vec![TsStmt::return_stmt(Some(id("1")), None)],
+                    None,
+                ),
+                case(vec![], vec![TsStmt::return_stmt(Some(id("2")), None)], None),
+            ],
+            None,
+        );
+        assert_eq!(
+            print_stmt(&stmt, 0),
+            "switch (__d) {\n  case \"A\":\n  case \"B\":\n  case \"C\": {\n    return 1;\n  }\n  default: {\n    return 2;\n  }\n}\n"
+        );
+    }
+
+    /// 1A.13: shared labels over an unbraced body stack the same way.
+    #[test]
+    fn shared_labels_over_an_unbraced_body() {
+        let mut shared = case(
+            vec![lit("A"), lit("B")],
+            vec![TsStmt::return_stmt(Some(id("1")), None)],
+            None,
+        );
+        shared.case_braced = false;
+        let stmt = TsStmt::switch_stmt(id("k"), vec![shared], None);
+        assert_eq!(
+            print_stmt(&stmt, 0),
+            "switch (k) {\n  case \"A\":\n  case \"B\":\n    return 1;\n}\n"
+        );
+    }
+
+    /// 1A.13: a case's span is recorded at the start of its first label line,
+    /// before its indentation, ahead of the spans inside it, at any depth.
+    #[test]
+    fn a_case_span_is_recorded_at_its_first_label_line() {
+        let stmt = TsStmt::switch_stmt(
+            id("k"),
+            vec![
+                case(
+                    vec![lit("A"), lit("B")],
+                    vec![TsStmt::return_stmt(Some(id("1")), sp(11))],
+                    sp(10),
+                ),
+                case(
+                    vec![],
+                    vec![TsStmt::return_stmt(Some(id("2")), None)],
+                    sp(20),
+                ),
+            ],
+            sp(5),
+        );
+        let (text, spans) = print_stmt_with_spans(&stmt, 0);
+        let lines: Vec<(&str, usize)> = spans
+            .iter()
+            .map(|(o, s)| (line_at(&text, *o), s.start))
+            .collect();
+        assert_eq!(
+            lines,
+            [
+                ("switch (k) {", 5),
+                ("  case \"A\":", 10),
+                ("    return 1;", 11),
+                ("  default: {", 20),
+            ]
+        );
+        // The offset is before the indentation at a depth too.
+        let (text, spans) = print_stmt_with_spans(&stmt, 2);
+        assert_eq!(line_at(&text, spans[1].0), "      case \"A\":");
+        assert_eq!(spans[1].0, text.find("      case").unwrap());
+    }
+
+    /// 1A.13: a case without a span records nothing, and plain printing never
+    /// does.
+    #[test]
+    fn a_spanless_case_records_nothing() {
+        let stmt = TsStmt::switch_stmt(id("k"), vec![case(vec![lit("A")], vec![], None)], None);
+        assert!(print_stmt_with_spans(&stmt, 0).1.is_empty());
+    }
+
+    /// 1A.13 (review of #3750): a multi-line arrow reaching a spread entry or a
+    /// multi-line array item sits one level below the line the entry is on.
+    #[test]
+    fn a_multiline_arrow_in_a_spread_entry_or_array_item_prints_at_its_depth() {
+        let spread = TsObjectEntry::Spread(iife(multiline_arrow(
+            false,
+            vec![TsStmt::return_stmt(Some(id("x")), None)],
+        )));
+        assert_eq!(
+            print_object_entry(&spread, 0),
+            "  ...(() => {\n    return x;\n  })(),\n"
+        );
+        let array = TsExpr::Array {
+            items: vec![iife(multiline_arrow(
+                false,
+                vec![TsStmt::return_stmt(Some(id("x")), None)],
+            ))],
+            multiline: true,
+        };
+        let stmt = TsStmt::const_stmt(TsBindingName::Ident("a".to_string()), None, array, None);
+        assert_eq!(
+            print_stmt(&stmt, 0),
+            "const a = [\n  (() => {\n    return x;\n  })(),\n];\n"
+        );
     }
 }

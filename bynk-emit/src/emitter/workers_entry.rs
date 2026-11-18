@@ -371,21 +371,23 @@ fn switch_stmt(discriminant: TsExpr, cases: Vec<TsSwitchCase>) -> TsStmt {
 
 fn case_(test: TsExpr, body: Vec<TsStmt>) -> TsSwitchCase {
     TsSwitchCase {
-        test: Some(test),
+        labels: vec![test],
         body,
         default_braced: false,
         // Arc E slice 6 (#1445): every real non-`default` case in this file
         // is `{ }`-blocked, same as before `case_braced` existed.
         case_braced: true,
+        span: None,
     }
 }
 
 fn default_case(body: Vec<TsStmt>) -> TsSwitchCase {
     TsSwitchCase {
-        test: None,
+        labels: vec![],
         body,
         default_braced: false,
         case_braced: true,
+        span: None,
     }
 }
 

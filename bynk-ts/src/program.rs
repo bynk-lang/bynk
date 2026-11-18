@@ -193,7 +193,7 @@ fn walk_stmt<'a>(stmt: &'a TsStmt, out: &mut Vec<(VerbatimOrigin, &'a str)>) {
         } => {
             walk_expr(discriminant, out);
             for case in cases {
-                if let Some(t) = &case.test {
+                for t in &case.labels {
                     walk_expr(t, out);
                 }
                 for s in &case.body {
@@ -741,7 +741,7 @@ pub(crate) enum TsStmtKind {
     Raw(String),
 }
 
-/// One `case`/`default` arm of a `TsStmtKind::Switch`. `test: None` is the
+/// One `case`/`default` arm of a `TsStmtKind::Switch`. empty `labels` is the
 /// `default:` case — every real `default` in `workers_entry.rs` prints its
 /// body directly under `default:` with no `{ }` block, while every real
 /// non-`default` `case` (regardless of `test`) always prints a `{ }`-blocked
@@ -771,14 +771,20 @@ pub(crate) enum TsStmtKind {
 /// outcome cases) already wants braces, so those call sites all set this
 /// `true` — the same "narrow, argued, backward-compatible extension"
 /// shape `default_braced` itself set as precedent. Only meaningful when
-/// `test` is `Some(..)` (a `default` case's bracing is `default_braced`'s
+/// it has a label (a `default` case's bracing is `default_braced`'s
 /// business, not this field's — the inverse of that field's own scoping).
 #[derive(Debug, Clone)]
 pub struct TsSwitchCase {
-    pub test: Option<TsExpr>,
+    /// The `case` labels: empty is `default`; more than one prints stacked,
+    /// `case a:` / `case b: {`, sharing the one body (1A.13, #3714: the
+    /// or-pattern's shape, widened from the single `test` it replaced).
+    pub labels: Vec<TsExpr>,
     pub body: Vec<TsStmt>,
     pub default_braced: bool,
     pub case_braced: bool,
+    /// The source span recorded by `print_stmt_with_spans` at the start of the
+    /// case's first label line (1A.13, #3714). Plain printing ignores it.
+    pub span: Option<Span>,
 }
 
 impl TsStmt {
