@@ -28,6 +28,7 @@ per-commit history. While Bynk is pre-1.0, increments may change behaviour.
 
 | Version | Highlights |
 |---|---|
+| **v0.639.24** | The code generator builds `is`, `&&`, `||`, `implies` and `par` as nodes where it can, with output unchanged apart from the layout of a multi-line `par` |
 | **v0.639.23** | The code generator builds `match` in tail and value position as switch, if-chain and arrow nodes where it can, with tail-position output and source maps unchanged |
 | **v0.639.22** | The code generator builds value-position `if`, block and lambda bodies as arrow nodes where it can, printing them at their real nesting depth, with no change to behaviour or source maps |
 | **v0.639.21** | The code generator carries a unit's source and hidden-type spellings in its context instead of thread-locals, with no change to the generated output or its source maps |
