@@ -15,8 +15,8 @@ use bynk_syntax::span::Span;
 
 use super::ctx::TailSlot;
 use super::lower::{
-    Lowered, LoweredExpr, PatPath, Pre, and_join, emit_pattern_bindings, literal_label_node,
-    member_node, pattern_tests, ternary_built,
+    Lowered, LoweredExpr, LoweredStmt, PatPath, Pre, and_join, emit_pattern_bindings,
+    literal_label_node, member_node, pattern_tests, ternary_built,
 };
 use super::lower_ctx::LowerCtx;
 use super::ts_types::{ts_ty, ts_type_ref, ts_type_ref_to_ts_type};
@@ -800,24 +800,39 @@ fn lower_effect_let_value(
 fn emit_par(body: &mut Body, p: &bynk_syntax::ast::ParStmt, cx: &mut LowerCtx) {
     // `None` for a `do`, which binds nothing; the name (or `_`) for a `let`.
     let mut names: Vec<Option<&bynk_syntax::ast::Ident>> = Vec::new();
-    // Each binding's hoisted statements, its value, and its annotation.
-    let mut parts: Vec<(Pre, String, Option<String>)> = Vec::new();
+    // Each binding's hoisted statements, its value, its annotation, and whether
+    // lowering it awaited (1A.14, Decision D of #3715).
+    let mut parts: Vec<ParPart> = Vec::new();
     for st in &p.statements {
         let mut pre = Pre::new();
-        match st {
+        // Each part has its own flag, as 1A.12 gave each IIFE, so a thunk is
+        // `async` because *its* lowering awaited, not because its hoisted text
+        // happens to contain `"await "` (a string literal can).
+        let saved_await = std::mem::take(&mut cx.emitted_await);
+        let (value, annot) = match st {
             Statement::EffectLet(l) => {
-                let value = lower_effect_let_value(l, &mut pre, cx).into_text();
+                let value = lower_effect_let_value(l, &mut pre, cx);
                 names.push(Some(&l.name));
-                parts.push((pre, value, l.type_annot.as_ref().map(ts_type_ref)));
+                (value, l.type_annot.as_ref())
             }
             Statement::Do(d) => {
-                let value = pre.lower(&d.value, cx);
+                let value = pre.lower_node(&d.value, cx);
                 names.push(None);
-                parts.push((pre, value, None));
+                (value, None)
             }
             // The checker refuses every other statement in a `par` block.
-            _ => {}
-        }
+            _ => {
+                cx.emitted_await = saved_await;
+                continue;
+            }
+        };
+        let asynchronous = std::mem::replace(&mut cx.emitted_await, saved_await);
+        parts.push(ParPart {
+            pre,
+            value,
+            annot,
+            asynchronous,
+        });
     }
     // The names are bound only after every value is lowered, so a binding that
     // reads an outer name its own `let` re-binds still sees the outer one.
@@ -831,18 +846,23 @@ fn emit_par(body: &mut Body, p: &bynk_syntax::ast::ParStmt, cx: &mut LowerCtx) {
     cx.note_settle_all();
     // T2.2 (R6.4): see the matching note at `EffectLet`.
     cx.emitted_await = true;
-    let hoisted = parts.iter().any(|(pre, ..)| !pre.stmts().is_empty());
-    let thunk = |pre: &Pre, value: &str, annot: &Option<String>| -> (String, Vec<String>) {
-        let hoists = pre.stmts();
-        let asynchronous = hoists.iter().any(|s| s.contains("await "));
+    let hoisted = parts.iter().any(|part| !part.pre.is_empty());
+    if let Some(stmt) = par_node(&parts, &pattern, hoisted) {
+        body.push(stmt_item(stmt));
+        return;
+    }
+    // 1A: a text value, a text hoisted statement or an annotation that does not
+    // print through its type node keeps today's text lines.
+    let thunk = |part: &ParPart| -> (String, Vec<String>) {
+        let hoists = part.pre.stmts();
         let head = format!(
             "{}(){} =>",
-            if asynchronous { "async " } else { "" },
-            annot
-                .as_ref()
-                .map(|t| format!(": globalThis.Promise<{t}>"))
+            if part.asynchronous { "async " } else { "" },
+            part.annot
+                .map(|t| format!(": globalThis.Promise<{}>", ts_type_ref(t)))
                 .unwrap_or_default()
         );
+        let value = part.value.clone().into_text();
         if hoists.is_empty() {
             (format!("{head} {value}"), Vec::new())
         } else {
@@ -856,34 +876,105 @@ fn emit_par(body: &mut Body, p: &bynk_syntax::ast::ParStmt, cx: &mut LowerCtx) {
     } else {
         format!("const [{}] = ", pattern.join(", "))
     };
+    let mut lines: Vec<String> = Vec::new();
     if !hoisted {
-        let items: Vec<String> = parts
-            .iter()
-            .map(|(pre, value, annot)| thunk(pre, value, annot).0)
-            .collect();
-        body.push(Item::Line(format!(
+        let items: Vec<String> = parts.iter().map(|part| thunk(part).0).collect();
+        lines.push(format!(
             "{open}await __bynkSettleAll([{}]);",
             items.join(", ")
-        )));
-        return;
-    }
-    body.push(Item::Line(format!("{open}await __bynkSettleAll([")));
-    for (pre, value, annot) in &parts {
-        // The thunks sit one column in and their bodies two, not a whole
-        // `INDENT_STEP` (an odd offset the goldens pin), so the extra columns
-        // are part of the line's text rather than an `Indent`.
-        let (head, lines) = thunk(pre, value, annot);
-        if lines.is_empty() {
-            body.push(Item::Line(format!(" {head},")));
-        } else {
-            body.push(Item::Line([" ", head.as_str()].concat()));
-            for line in lines {
-                body.push(Item::Line(["  ", line.as_str()].concat()));
+        ));
+    } else {
+        lines.push(format!("{open}await __bynkSettleAll(["));
+        for part in &parts {
+            // The thunks sit one column in and their bodies two, not a whole
+            // `INDENT_STEP` (an odd offset the goldens pin), so the extra columns
+            // are part of the line's text rather than an `Indent`.
+            let (head, body_lines) = thunk(part);
+            if body_lines.is_empty() {
+                lines.push(format!(" {head},"));
+            } else {
+                lines.push([" ", head.as_str()].concat());
+                for line in body_lines {
+                    lines.push(["  ", line.as_str()].concat());
+                }
+                lines.push(" },".to_string());
             }
-            body.push(Item::Line(" },".to_string()));
         }
+        lines.push("]);".to_string());
     }
-    body.push(Item::Line("]);".to_string()));
+    body.extend(lines.into_iter().map(Item::Line));
+}
+
+/// One `par` binding: its hoisted statements, value, annotation, and whether
+/// lowering it awaited.
+struct ParPart<'a> {
+    pre: Pre,
+    value: LoweredExpr,
+    annot: Option<&'a bynk_syntax::ast::TypeRef>,
+    asynchronous: bool,
+}
+
+/// `par`'s join as a statement node: `const [a, b] = await __bynkSettleAll([…]);`
+/// over thunk arrows (an `await …;` with no binding when the pattern is empty).
+/// A node only when every value and hoisted statement is a node and every
+/// annotation prints the same through its type node; the array is one item per
+/// line when any part hoisted, in the printer's own layout (the old text indented
+/// items by one column, an odd offset that is normalised here: 1A.14).
+fn par_node(parts: &[ParPart], pattern: &[String], hoisted: bool) -> Option<bynk_ts::TsStmt> {
+    let mut items = Vec::with_capacity(parts.len());
+    for part in parts {
+        let LoweredExpr::Node(value) = &part.value else {
+            return None;
+        };
+        let return_type = match part.annot {
+            None => None,
+            Some(a) => {
+                let ty = ts_type_ref_to_ts_type(a, None);
+                if bynk_ts::print_type(&ty) != ts_type_ref(a) {
+                    return None;
+                }
+                Some(bynk_ts::TsType::named_with_args(
+                    "globalThis.Promise",
+                    vec![ty],
+                ))
+            }
+        };
+        let arrow_body = if part.pre.is_empty() {
+            bynk_ts::TsArrowBody::Expr(Box::new(value.clone()))
+        } else {
+            if !part.pre.all_nodes() {
+                return None;
+            }
+            let mut stmts = part.pre.ts_stmts("");
+            stmts.push(bynk_ts::TsStmt::return_stmt(Some(value.clone()), None));
+            bynk_ts::TsArrowBody::Multiline(stmts)
+        };
+        items.push(bynk_ts::TsExpr::Arrow {
+            params: Vec::new(),
+            is_async: part.asynchronous,
+            generics: Vec::new(),
+            return_type,
+            body: Box::new(arrow_body),
+        });
+    }
+    let join = bynk_ts::TsExpr::Await(Box::new(bynk_ts::TsExpr::Call {
+        callee: Box::new(bynk_ts::TsExpr::Ident("__bynkSettleAll".to_string())),
+        args: vec![if hoisted {
+            bynk_ts::TsExpr::LinesArray(items)
+        } else {
+            bynk_ts::TsExpr::array(items)
+        }],
+    }));
+    Some(if pattern.is_empty() {
+        bynk_ts::TsStmt::expr_stmt(join, None)
+    } else {
+        bynk_ts::TsStmt::const_stmt(
+            bynk_ts::TsBindingName::ArrayPattern(pattern.to_vec()),
+            None,
+            join,
+            None,
+        )
+    })
 }
 
 pub(super) fn emit_statement(out: &mut String, stmt: &Statement, cx: &mut LowerCtx, indent: usize) {
@@ -1159,9 +1250,7 @@ fn if_tail(
     let mut found = false;
     gather_is_bindings_for_emit(cond, true, cx, &mut is_bindings, &mut found);
     let mut then_body = Body::new();
-    for b in &is_bindings {
-        then_body.push(Item::Line(b.to_string()));
-    }
+    then_body.extend(is_bindings.iter().map(LoweredStmt::item));
     emit_block_inner(&mut then_body, then_block, cx, async_tail);
     cx.shadow_scopes.pop();
     // #1654: the else-branch's bindings, those the condition's falsity proves.
@@ -1169,9 +1258,7 @@ fn if_tail(
     let mut else_bindings = Vec::new();
     gather_is_bindings_for_emit(cond, false, cx, &mut else_bindings, &mut found);
     let mut else_body = Body::new();
-    for b in &else_bindings {
-        else_body.push(Item::Line(b.to_string()));
-    }
+    else_body.extend(else_bindings.iter().map(LoweredStmt::item));
     emit_block_inner(&mut else_body, else_block, cx, async_tail);
     cx.shadow_scopes.pop();
     push_if(body, cond_expr, pre.all_nodes(), then_body, else_body);
@@ -2127,15 +2214,15 @@ mod stmt_node_tests {
 
     #[test]
     fn text_valued_statements_keep_their_text_byte_for_byte() {
-        // `&&` and `Effect.pure(…)` still lower to text, so the statement that
-        // holds one is a `Line` with today's bytes.
+        // A string `contains` and `Effect.pure(…)` still lower to text, so the
+        // statement that holds one is a `Line` with today's bytes.
         let src = "commons texty\n\n\
-            fn f(a: Bool, b: Bool) -> Bool {\n  let v = a && b\n  let w: Bool = a && b\n  a && b\n}\n\n\
+            fn f(a: String, b: String) -> Bool {\n  let v = a.contains(b)\n  let w: Bool = a.contains(b)\n  a.contains(b)\n}\n\n\
             fn g(x: Int) -> Effect[Int] {\n  let r <- Effect.pure(x)\n  let s: Int <- Effect.pure(r)\n  do Effect.pure(s)\n  Effect.pure(s)\n}\n";
         let (lines, ts) = emitted(src);
         assert_eq!(
             body_of(&ts, "f"),
-            "  const v = a && b;\n  const w: boolean = a && b;\n  return a && b;\n"
+            "  const v = a.includes(b);\n  const w: boolean = a.includes(b);\n  return a.includes(b);\n"
         );
         assert_eq!(
             body_of(&ts, "g"),
@@ -2458,16 +2545,16 @@ mod match_node_tests {
         );
     }
 
-    /// A part that is still text (`&&` until 1A.14) keeps the whole `match`
+    /// A part that is still text (a string `contains`) keeps the whole `match`
     /// IIFE as text, byte for byte.
     #[test]
     fn a_value_match_with_a_text_arm_keeps_its_iife_text() {
         let (_, ts) = emitted(
-            "commons t10\n\nfn f(n: Int, a: Bool, b: Bool) -> Bool {\n  let r = match n {\n    1 => a && b\n    _ => false\n  }\n  r\n}\n",
+            "commons t10\n\nfn f(n: Int, a: String, b: String) -> Bool {\n  let r = match n {\n    1 => a.contains(b)\n    _ => false\n  }\n  r\n}\n",
         );
         assert!(
             ts.contains(
-                "  const r = ((__d) => {\n    switch (__d) {\n      case 1: {\n        return a && b;\n      }\n      default: {\n        return false;\n      }\n    }\n    throw new globalThis.Error(\"non-exhaustive match\");\n  })(n);\n"
+                "  const r = ((__d) => {\n    switch (__d) {\n      case 1: {\n        return a.includes(b);\n      }\n      default: {\n        return false;\n      }\n    }\n    throw new globalThis.Error(\"non-exhaustive match\");\n  })(n);\n"
             ),
             "{ts}"
         );
@@ -2477,10 +2564,10 @@ mod match_node_tests {
     #[test]
     fn a_tail_match_on_a_text_discriminant_keeps_its_text() {
         let (_, ts) = emitted(
-            "commons t11\n\nfn f(a: Bool, b: Bool) -> Int {\n  match a && b {\n    true => 1\n    false => 0\n  }\n}\n",
+            "commons t11\n\nfn f(a: String, b: String) -> Int {\n  match a.contains(b) {\n    true => 1\n    false => 0\n  }\n}\n",
         );
         assert!(
-            ts.contains("  const __r0 = a && b;\n  switch (__r0) {"),
+            ts.contains("  const __r0 = a.includes(b);\n  switch (__r0) {"),
             "{ts}"
         );
         assert!(
@@ -2515,6 +2602,143 @@ mod match_node_tests {
                 "= async (y: number) => {\n    const z = await bump(y);\n    return z + 1;\n  };\n"
             ),
             "{ts}"
+        );
+    }
+}
+
+/// 1A.14: `par` lowers to a node (an `async` thunk because *its* lowering
+/// awaited), and the 1A.13 review's two extra `match` shapes.
+#[cfg(test)]
+mod par_node_tests {
+    use super::*;
+
+    fn emitted(src: &str) -> (usize, String) {
+        LINES_RENDERED.with(|c| c.set(0));
+        let ts = crate::testkit::emit_source(src);
+        (LINES_RENDERED.with(|c| c.get()), ts)
+    }
+
+    fn func(ts: &str, head: &str) -> String {
+        let at = ts.find(head).unwrap_or_else(|| panic!("no {head}:\n{ts}"));
+        let rest = &ts[at..];
+        rest[..rest.find("\n}\n").expect("a closing brace") + 3].to_string()
+    }
+
+    const HDR: &str = "commons par1\n\ntype Shape = | Circle(r: Int) | Dot\nfn mk(s: Shape) -> Shape { s }\nfn mk2(t: String) -> Shape { Dot }\nfn bump(n: Int) -> Effect[Int] { Effect.pure(n) }\nfn pick(b: Bool) -> Effect[Int] { Effect.pure(1) }\n\n";
+
+    #[test]
+    fn a_single_line_par_is_a_destructuring_const_over_thunks() {
+        let (lines, ts) = emitted(&format!(
+            "{HDR}fn f(x: Int) -> Effect[Int] {{\n  par {{\n    let a <- bump(x)\n    let b <- bump(2)\n  }}\n  Effect.pure(a + b)\n}}\n"
+        ));
+        assert_eq!(lines, 0, "{ts}");
+        assert_eq!(
+            func(&ts, "export async function f("),
+            "export async function f(x: number): globalThis.Promise<number> {\n  const [a, b] = await __bynkSettleAll([() => bump(x), () => bump(2)]);\n  return a + b;\n}\n"
+        );
+    }
+
+    #[test]
+    fn a_typed_part_annotates_its_thunk_and_a_do_leaves_a_hole() {
+        let (lines, ts) = emitted(&format!(
+            "{HDR}fn f(x: Int) -> Effect[Int] {{\n  par {{\n    let a: Int <- bump(x)\n    do bump(2)\n    let c <- bump(3)\n  }}\n  Effect.pure(a + c)\n}}\n"
+        ));
+        assert_eq!(lines, 0, "{ts}");
+        assert!(
+            ts.contains(
+                "  const [a, , c] = await __bynkSettleAll([(): globalThis.Promise<number> => bump(x), () => bump(2), () => bump(3)]);\n"
+            ),
+            "{ts}"
+        );
+    }
+
+    /// The multi-line form's items sit at the printer's own depth: the old text
+    /// indented them by one column, an odd offset (group (b) of #3715).
+    #[test]
+    fn a_par_that_hoists_prints_one_thunk_per_line_at_the_printers_depth() {
+        let (lines, ts) = emitted(&format!(
+            "{HDR}fn f(s: Shape) -> Effect[Int] {{\n  par {{\n    let a <- pick(mk(s) is Dot)\n    let b: Int <- bump(2)\n  }}\n  Effect.pure(a + b)\n}}\n"
+        ));
+        assert_eq!(lines, 0, "{ts}");
+        assert_eq!(
+            func(&ts, "export async function f("),
+            "export async function f(s: Shape): globalThis.Promise<number> {\n  const [a, b] = await __bynkSettleAll([\n    () => {\n      const __r0 = mk(s);\n      return pick(((__c: boolean) => __c)(__r0.tag === \"Dot\"));\n    },\n    (): globalThis.Promise<number> => bump(2),\n  ]);\n  return a + b;\n}\n"
+        );
+    }
+
+    /// Decision D: a thunk is `async` because its lowering awaited, not because
+    /// its hoisted text contains `"await "`. The string literal here puts that
+    /// text in the hoisted `const`; the thunk must stay synchronous.
+    #[test]
+    fn a_string_literal_containing_await_does_not_make_a_thunk_async() {
+        let (_, ts) = emitted(&format!(
+            "{HDR}fn f() -> Effect[Int] {{\n  par {{\n    let a <- pick(mk2(\"await \") is Dot)\n    let b <- bump(2)\n  }}\n  Effect.pure(a + b)\n}}\n"
+        ));
+        assert!(
+            ts.contains("    () => {\n      const __r0 = mk2(\"await \");\n"),
+            "{ts}"
+        );
+        assert!(!ts.contains("async () =>"), "{ts}");
+    }
+
+    /// An effectful value-position `if` inside a part awaits in its own
+    /// lowering, so that thunk is `async` (the old text search missed it, as the
+    /// `await` sat in the value, not in a hoisted statement).
+    #[test]
+    fn a_part_whose_lowering_awaited_is_an_async_thunk() {
+        let (lines, ts) = emitted(&format!(
+            "{HDR}fn f(c: Bool) -> Effect[Int] {{\n  par {{\n    let a <- bump(if c {{\n      let y <- bump(1)\n      y\n    }} else {{ 0 }})\n    let b <- bump(2)\n  }}\n  Effect.pure(a + b)\n}}\n"
+        ));
+        assert_eq!(lines, 0, "{ts}");
+        assert!(
+            ts.contains("[async () => bump(await (async () => {\n"),
+            "{ts}"
+        );
+        assert!(
+            ts.contains("}, () => bump(2)]);\n") || ts.contains(", () => bump(2)]);"),
+            "{ts}"
+        );
+    }
+
+    /// A part still text (a string `contains`) keeps today's text lines, the
+    /// one-column item indent included, byte for byte.
+    #[test]
+    fn a_par_with_a_text_part_keeps_its_text_lines() {
+        let (lines, ts) = emitted(&format!(
+            "{HDR}fn f(s: Shape, t: String) -> Effect[Int] {{\n  par {{\n    let a <- pick(mk(s) is Dot && t.contains(t))\n    let b <- bump(2)\n  }}\n  Effect.pure(a + b)\n}}\n"
+        ));
+        assert!(lines > 0, "{ts}");
+        assert_eq!(
+            func(&ts, "export async function f("),
+            "export async function f(s: Shape, t: string): globalThis.Promise<number> {\n  const [a, b] = await __bynkSettleAll([\n   () => {\n    const __r0 = mk(s);\n    return pick(((__c: boolean) => __c)(__r0.tag === \"Dot\") && t.includes(t));\n   },\n   () => bump(2),\n  ]);\n  return a + b;\n}\n"
+        );
+    }
+
+    /// 1A.13 review: a value-position `match` with a guard is an arrow over an
+    /// `if` chain. The arms' `return` lines are still text (`match_body` writes
+    /// them as lines, which a later slice converts), so this pins the bytes.
+    #[test]
+    fn a_guarded_value_match_is_an_arrow_over_an_if_chain() {
+        let (_, ts) = emitted(
+            "commons m1\n\ntype Shape = | Circle(r: Int) | Square(w: Int) | Dot\n\nfn f(s: Shape, k: Int) -> Int {\n  let x = match s {\n    Circle(r) if r > k => r\n    Circle(r) => 0\n    Square(w) => w\n    Dot => 1\n  }\n  x\n}\n",
+        );
+        assert_eq!(
+            func(&ts, "export function f("),
+            "export function f(s: Shape, k: number): number {\n  const x = ((__d) => {\n    if (__d.tag === \"Circle\") {\n      const r = __d.r;\n      if (r > k) {\n        return r;\n      }\n    }\n    if (__d.tag === \"Circle\") {\n      const r = __d.r;\n      return 0;\n    }\n    if (__d.tag === \"Square\") {\n      const w = __d.w;\n      return w;\n    }\n    if (__d.tag === \"Dot\") {\n      return 1;\n    }\n    throw new globalThis.Error(\"non-exhaustive match\");\n  })(s);\n  return x;\n}\n"
+        );
+    }
+
+    /// 1A.13 review: a list pattern's elements read `path[i]` and its `..rest`
+    /// reads `path.slice(n)` (the binding `const`s are nodes over the
+    /// discriminant; the arm's `return` line is text, as above).
+    #[test]
+    fn a_list_pattern_binds_elements_by_index_and_the_rest_by_slice() {
+        let (_, ts) = emitted(
+            "commons m2\n\nfn f(xs: List[Int]) -> Int {\n  let x = match xs {\n    [a, b, ..rest] => a + b\n    _ => 0\n  }\n  x\n}\n",
+        );
+        assert_eq!(
+            func(&ts, "export function f("),
+            "export function f(xs: readonly number[]): number {\n  const x = ((__d) => {\n    if (__d.length >= 2) {\n      const a = __d[0];\n      const b = __d[1];\n      const rest = __d.slice(2);\n      return a + b;\n    }\n    return 0;\n  })(xs);\n  return x;\n}\n"
         );
     }
 }

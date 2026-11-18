@@ -292,7 +292,7 @@ fn walk_expr<'a>(expr: &'a TsExpr, out: &mut Vec<(VerbatimOrigin, &'a str)>) {
                 walk_object_entry(e, out);
             }
         }
-        TsExpr::Array { items, .. } => {
+        TsExpr::Array { items, .. } | TsExpr::LinesArray(items) => {
             for i in items {
                 walk_expr(i, out);
             }
@@ -1206,6 +1206,10 @@ impl TsStmt {
 pub enum TsBindingName {
     Ident(String),
     ObjectPattern(Vec<String>),
+    /// An array-destructuring pattern (`const [a, b] = …`, back-half paydown
+    /// 1A.14, for `par`'s join). An empty name is a hole (`[, b]`), which is how
+    /// a `do` part binds nothing.
+    ArrayPattern(Vec<String>),
 }
 
 /// An expression. Only the shapes `events_fanout.rs` concretely uses
@@ -1268,6 +1272,12 @@ pub enum TsExpr {
         object: Box<TsExpr>,
         property: String,
     },
+    /// An array printed one item per line, each with a trailing comma and the
+    /// closing bracket back at the enclosing depth, wherever it sits (1A.14:
+    /// `par`'s `await __bynkSettleAll([…])`). Unlike [`TsExpr::Array`] with
+    /// `multiline: true`, which breaks only as a whole statement's initialiser,
+    /// this breaks as a call argument too.
+    LinesArray(Vec<TsExpr>),
     /// `object[index]`.
     Index {
         object: Box<TsExpr>,

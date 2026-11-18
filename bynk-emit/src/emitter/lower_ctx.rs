@@ -1307,32 +1307,34 @@ impl<'a> LowerCtx<'a> {
     /// expression.
     pub(super) fn is_receiver_ref(&mut self, value: &Expr) -> Lowered {
         if let Some(t) = self.is_receiver_temps.get(&value.span) {
-            return Lowered::bare(t.clone());
+            return Lowered::node(super::lower::ident_node(t));
         }
         let mut pre = Pre::new();
-        let lowered = pre.lower(value, self);
+        let lowered = pre.lower_node(value, self);
         // #2617: a chain rooted at a constant lowers to a call (`Name()`),
         // which `value_text_for_is` cannot render, so it is lifted to a temp
         // like any other complex receiver.
         if is_simple_is_receiver(value) && !self.roots_at_const(value) {
-            return pre.finish_text(lowered);
+            return pre.finish(lowered);
         }
         let tmp = self.fresh();
-        self.declare_is_temp(value, &tmp, &lowered, &mut pre);
+        self.declare_is_temp(value, &tmp, lowered, &mut pre);
         self.is_receiver_temps.insert(value.span, tmp.clone());
-        pre.finish_text(tmp)
+        pre.finish(LoweredExpr::Node(super::lower::ident_node(&tmp)))
     }
 
     /// Declare an `is` receiver temp holding `lowered`: a `const` in place, or,
     /// inside a hoisting right operand (`is_temp_hoist`), a hoisted
     /// definite-assignment declaration plus an in-place assignment. The
     /// assignment stays where the receiver was evaluated, so the right operand
-    /// is still evaluated only when the left operand holds.
+    /// is still evaluated only when the left operand holds. The in-place
+    /// statement is a node when `lowered` is; the hoisted `let tmp!: T;` stays
+    /// text (1A: `bynk_ts` has no definite-assignment `let`).
     pub(super) fn declare_is_temp(
         &mut self,
         value: &Expr,
         tmp: &str,
-        lowered: &str,
+        lowered: LoweredExpr,
         pre: &mut Pre,
     ) {
         let ty = self
@@ -1340,12 +1342,28 @@ impl<'a> LowerCtx<'a> {
             .expr_types
             .get(&value.id)
             .map(|te| ts_ty(te.ty, self.ty_render()));
-        match (self.is_temp_hoist.as_mut(), ty) {
+        let hoisting = match (self.is_temp_hoist.as_mut(), ty) {
             (Some(hoist), Some(ty)) => {
                 hoist.push(format!("let {tmp}!: {ty};"));
-                pre.push_text(format!("{tmp} = {lowered};"));
+                true
             }
-            _ => pre.push_text(format!("const {tmp} = {lowered};")),
+            _ => false,
+        };
+        match lowered {
+            LoweredExpr::Node(n) if hoisting => pre.push_node(bynk_ts::TsStmt::assign(
+                super::lower::ident_node(tmp),
+                n,
+                None,
+            )),
+            LoweredExpr::Node(n) => pre.push_node(bynk_ts::TsStmt::const_stmt(
+                bynk_ts::TsBindingName::Ident(tmp.to_string()),
+                None,
+                n,
+                None,
+            )),
+            // 1A: a text receiver keeps its text statement.
+            text if hoisting => pre.push_text(format!("{tmp} = {};", text.into_text())),
+            text => pre.push_text(format!("const {tmp} = {};", text.into_text())),
         }
     }
 
@@ -1356,14 +1374,14 @@ impl<'a> LowerCtx<'a> {
     /// temp first and both the check and the binding read the temp.
     pub(super) fn is_receiver_ref_forced(&mut self, value: &Expr) -> Lowered {
         if let Some(t) = self.is_receiver_temps.get(&value.span) {
-            return Lowered::bare(t.clone());
+            return Lowered::node(super::lower::ident_node(t));
         }
         let mut pre = Pre::new();
-        let lowered = pre.lower(value, self);
+        let lowered = pre.lower_node(value, self);
         let tmp = self.fresh();
-        self.declare_is_temp(value, &tmp, &lowered, &mut pre);
+        self.declare_is_temp(value, &tmp, lowered, &mut pre);
         self.is_receiver_temps.insert(value.span, tmp.clone());
-        pre.finish_text(tmp)
+        pre.finish(LoweredExpr::Node(super::lower::ident_node(&tmp)))
     }
 
     /// v0.13: true when `value is Name` is a *refinement* check — the value is a
@@ -1410,6 +1428,14 @@ impl<'a> LowerCtx<'a> {
             _ => false,
         }
     }
+    /// The receiver as a [`PatPath`]: its temp, or the simple lvalue chain.
+    pub(super) fn is_receiver_path(&self, value: &Expr) -> super::lower::PatPath {
+        if let Some(t) = self.is_receiver_temps.get(&value.span) {
+            return super::lower::PatPath::ident(t);
+        }
+        super::lower::path_for_is(value)
+    }
+
     /// Read-only counterpart for the binding gatherer (which returns no
     /// `Lowered`, so it has nowhere to hoist and cannot lift). If the receiver was already lifted to a temp during
     /// condition lowering, reuse that temp; otherwise it must be a simple

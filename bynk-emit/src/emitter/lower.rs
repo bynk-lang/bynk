@@ -495,7 +495,11 @@ fn hoist_if_value(
         });
     if all_nodes {
         let slot = cx.fresh();
-        hoisted_if_nodes(pre, &slot, cond, then_tail, else_tail, e, cx);
+        let ty = cx
+            .commons()
+            .expr_ty(e.id)
+            .map(|_| ts_ty_to_ts_type(cx.commons().expr_types[&e.id].ty, cx.ty_render()));
+        hoisted_if_nodes(pre, &slot, ty, cond, then_tail, else_tail);
         slot
     } else {
         let slot_ty = checked_ty_ts(e, cx);
@@ -510,16 +514,11 @@ fn hoist_if_value(
 fn hoisted_if_nodes(
     pre: &mut Pre,
     slot: &str,
+    ty: Option<bynk_ts::TsType>,
     cond: LoweredExpr,
     then_tail: Lowered,
     else_tail: Lowered,
-    e: &Expr,
-    cx: &LowerCtx,
 ) {
-    let ty = cx
-        .commons()
-        .expr_ty(e.id)
-        .map(|_| ts_ty_to_ts_type(cx.commons().expr_types[&e.id].ty, cx.ty_render()));
     pre.push_node(bynk_ts::TsStmt::let_stmt(
         bynk_ts::TsBindingName::Ident(slot.to_string()),
         ty,
@@ -1022,6 +1021,7 @@ pub(crate) struct Lowered {
 /// `bynk_ts` printer, through [`LoweredExpr::into_text`] — the one place a node
 /// becomes text inside lowering. The `Text` side is counted by the
 /// `lowering_text_bridge` growth probe and is deleted when 1A exits.
+#[derive(Clone)]
 pub(crate) enum LoweredExpr {
     Node(bynk_ts::TsExpr),
     Text(String),
@@ -1123,7 +1123,7 @@ fn paren(child: LoweredExpr) -> Built {
 }
 
 /// A genuine identifier node. Never built from expression text.
-fn ident_node(name: &str) -> bynk_ts::TsExpr {
+pub(super) fn ident_node(name: &str) -> bynk_ts::TsExpr {
     bynk_ts::TsExpr::Ident(name.to_string())
 }
 
@@ -1253,7 +1253,7 @@ pub(crate) enum LoweredStmt {
 
 impl LoweredStmt {
     /// The statement as a statement-body item (see [`Lowered::pre_items`]).
-    fn item(&self) -> Item {
+    pub(super) fn item(&self) -> Item {
         match self {
             LoweredStmt::Node(n) => Item::Node(n.clone()),
             LoweredStmt::Text(t) => Item::Line(t.clone()),
@@ -1293,15 +1293,6 @@ impl Lowered {
         Lowered {
             pre: Vec::new(),
             expr: LoweredExpr::Node(expr),
-        }
-    }
-
-    /// An expression built as text, preceded by text statements. A text
-    /// construction site: counted by `lowering_text_bridge`.
-    pub(crate) fn text_with_pre(pre: Vec<String>, expr: impl Into<String>) -> Self {
-        Lowered {
-            pre: pre.into_iter().map(LoweredStmt::Text).collect(),
-            expr: LoweredExpr::Text(expr.into()),
         }
     }
 
@@ -1697,7 +1688,7 @@ pub(crate) fn lower_expr(e: &Expr, cx: &mut LowerCtx) -> Lowered {
         ExprKind::Match { discriminant, arms } => {
             pre.absorb(lower_match_as_iife(discriminant, arms, cx))
         }
-        ExprKind::Is { value, pattern } => pre.absorb(lower_is(value, pattern, cx)),
+        ExprKind::Is { value, pattern } => lowered_or_text!(pre, lower_is(value, pattern, cx)),
         ExprKind::EffectPure(inner) => {
             let inner_expr = pre.lower(inner, cx);
             format!("globalThis.Promise.resolve({inner_expr})")
@@ -2338,6 +2329,9 @@ fn scope_idempotency_key(
 /// `<deps>.Idempotency.claim`, so a `stub` of it applies.
 fn tracked_claim_call(cap_expr: &str, args: &[String], cx: &mut LowerCtx) -> String {
     cx.claim_scope_used = true;
+    // The bare `await` below makes any enclosing thunk or IIFE effectful —
+    // see `emitted_await` (a `par` part that is a claim call must be `async`).
+    cx.emitted_await = true;
     format!(
         "(await (async (__k: string, __t: number) => __claims.note(__k, await {cap_expr}.claim(__k, __claims.lease(__t)), __t))({}, {}))",
         args[0], args[1]
@@ -5565,9 +5559,9 @@ fn lower_val(type_ref: &TypeRef, args: &[Expr], cx: &mut LowerCtx) -> Lowered {
 struct AndWithIs {
     /// The left operand's `is` bindings, then the right operand's own hoisted
     /// statements: both run, in order, inside the right operand's IIFE.
-    bindings: Vec<String>,
+    bindings: Vec<LoweredStmt>,
     lhs: Lowered,
-    rhs: String,
+    rhs: LoweredExpr,
     /// The right operand hoisted a `?`'s propagating early return.
     rhs_returns: bool,
     /// #1654: declarations of the `is` receiver temps the right operand
@@ -5629,12 +5623,16 @@ fn lower_and_with_is(lhs: &Expr, rhs: &Expr, cx: &mut LowerCtx) -> Option<AndWit
     };
     let rhs_returns = cx.emitted_early_return;
     cx.emitted_early_return = saved_early_return || rhs_returns;
-    bindings.extend(rhs_lowered.pre_texts());
+    let Lowered {
+        pre: rhs_pre,
+        expr: rhs_expr,
+    } = rhs_lowered;
+    bindings.extend(rhs_pre);
     cx.shadow_scopes.pop();
     Some(AndWithIs {
         bindings,
         lhs: lhs_lowered,
-        rhs: rhs_lowered.expr.into_text(),
+        rhs: rhs_expr,
         rhs_returns,
         hoisted,
     })
@@ -5672,7 +5670,7 @@ pub(super) fn gather_is_bindings_for_emit(
     e: &Expr,
     when_true: bool,
     cx: &mut LowerCtx,
-    out: &mut Vec<String>,
+    out: &mut Vec<LoweredStmt>,
     found: &mut bool,
 ) {
     // #1654: which `is` tests `e` proves is the shared rule the resolver and
@@ -5682,8 +5680,32 @@ pub(super) fn gather_is_bindings_for_emit(
     }
 }
 
-/// The `const name = …;` declarations for one matched `is` test.
-fn emit_is_test_bindings(e: &Expr, cx: &mut LowerCtx, out: &mut Vec<String>, found: &mut bool) {
+/// `const <local> = <init>;`: a `Const` node over a node initialiser, else
+/// today's text statement (1A.14: the variant-payload reads stay text, as the
+/// `Extract<typeof …>` cast has no type node).
+fn binding_stmt(local: &str, init: LoweredExpr) -> LoweredStmt {
+    match init {
+        LoweredExpr::Node(n) => LoweredStmt::Node(Box::new(bynk_ts::TsStmt::const_stmt(
+            bynk_ts::TsBindingName::Ident(local.to_string()),
+            None,
+            n,
+            None,
+        ))),
+        text => LoweredStmt::Text(format!("const {local} = {};", text.into_text())),
+    }
+}
+
+/// The `const name = …;` declarations for one matched `is` test: nodes where
+/// the receiver is a node and the read has a node form (a record field, a list
+/// element or rest, the refined narrowing cast), text otherwise (a variant
+/// payload read through its `Extract` cast, and an or-pattern's `let` and
+/// `if`/`else` dispatch).
+fn emit_is_test_bindings(
+    e: &Expr,
+    cx: &mut LowerCtx,
+    out: &mut Vec<LoweredStmt>,
+    found: &mut bool,
+) {
     let tys = cx.ty_render();
     let ExprKind::Is { value, pattern } = &e.kind else {
         return;
@@ -5691,6 +5713,7 @@ fn emit_is_test_bindings(e: &Expr, cx: &mut LowerCtx, out: &mut Vec<String>, fou
     {
         *found = true;
         let value_text = cx.is_receiver_text(value);
+        let recv = cx.is_receiver_path(value);
         let disc_ty = cx.commons().expr_types.get(&value.id).map(|te| te.ty);
         if let Pattern::Variant {
             variant, bindings, ..
@@ -5708,11 +5731,14 @@ fn emit_is_test_bindings(e: &Expr, cx: &mut LowerCtx, out: &mut Vec<String>, fou
                 && cx.is_refined_is_check(value, &variant.name)
                 && let ExprKind::Ident(id) = &value.kind
             {
-                out.push(format!(
-                    "const {name} = {value_text} as {refined};",
-                    name = ts_ident(&id.name),
-                    refined = variant.name,
-                ));
+                let cast: Built = match recv.node() {
+                    Some(r) => Ok(bynk_ts::TsExpr::As {
+                        expr: Box::new(r.clone()),
+                        ty: bynk_ts::TsType::named(variant.name.clone()),
+                    }),
+                    None => Err(format!("{value_text} as {}", variant.name)),
+                };
+                out.push(binding_stmt(&ts_ident(&id.name), cast.into()));
                 cx.declare_binder(&id.name);
                 return;
             }
@@ -5731,7 +5757,9 @@ fn emit_is_test_bindings(e: &Expr, cx: &mut LowerCtx, out: &mut Vec<String>, fou
                 // #1653: renamed when it shadows (`o is Some(o)`), so the
                 // declaration can't read itself in its temporal dead zone.
                 let local = cx.bind_local_name(&name.name);
-                out.push(format!("const {local} = {payload}.{field};"));
+                // 1A: the payload read goes through the `Extract<typeof …>` cast.
+                let read: Built = Err(format!("{payload}.{field}"));
+                out.push(binding_stmt(&local, read.into()));
             }
         }
         // #2641: a record pattern's depth-1 names — shorthand fields and
@@ -5744,7 +5772,7 @@ fn emit_is_test_bindings(e: &Expr, cx: &mut LowerCtx, out: &mut Vec<String>, fou
                     Some(_) => continue,
                 };
                 let local = cx.bind_local_name(&bound.name);
-                out.push(format!("const {local} = {value_text}.{};", fname.name));
+                out.push(binding_stmt(&local, recv.member(&fname.name).lowered()));
             }
         }
         // #2680: a list pattern's depth-1 names — bare-name elements and a
@@ -5753,13 +5781,12 @@ fn emit_is_test_bindings(e: &Expr, cx: &mut LowerCtx, out: &mut Vec<String>, fou
             for (i, sub) in elems.iter().enumerate() {
                 if let Pattern::Binding(n) = sub {
                     let local = cx.bind_local_name(&n.name);
-                    out.push(format!("const {local} = {value_text}[{i}];"));
+                    out.push(binding_stmt(&local, recv.index(i).lowered()));
                 }
             }
             if let Some(binder) = rest.as_ref().and_then(|r| r.binder.as_ref()) {
                 let local = cx.bind_local_name(&binder.name);
-                let value = list_rest_expr(&value_text, elems.len());
-                out.push(format!("const {local} = {value};"));
+                out.push(binding_stmt(&local, list_rest_value(&recv, elems.len())));
             }
         }
         // #474 §2.3.6: an or-pattern's shared names can live at different
@@ -5779,7 +5806,8 @@ fn emit_is_test_bindings(e: &Expr, cx: &mut LowerCtx, out: &mut Vec<String>, fou
                 .iter()
                 .map(|id| cx.bind_local_name(&id.name))
                 .collect();
-            out.push(format!("let {};", decl.join(", ")));
+            let mut lines: Vec<String> = Vec::new();
+            lines.push(format!("let {};", decl.join(", ")));
             let last = alts.len() - 1;
             for (i, alt) in alts.iter().enumerate() {
                 let (tag, pairs) = match alt {
@@ -5802,11 +5830,11 @@ fn emit_is_test_bindings(e: &Expr, cx: &mut LowerCtx, out: &mut Vec<String>, fou
                             pairs.push((local, list_rest_expr(&value_text, elems.len())));
                         }
                         let mut tests = Vec::new();
-                        pattern_match_tests(&value_text, disc_ty, alt, cx, &mut tests);
+                        pattern_tests(&recv, disc_ty, alt, cx, &mut tests);
                         let cond = if tests.is_empty() {
                             "true".to_string()
                         } else {
-                            tests.join(" && ")
+                            and_join(tests).into_text()
                         };
                         (Some(cond), pairs)
                     }
@@ -5860,17 +5888,19 @@ fn emit_is_test_bindings(e: &Expr, cx: &mut LowerCtx, out: &mut Vec<String>, fou
                     _ => (None, Vec::new()),
                 };
                 if i == last {
-                    out.push("} else {".to_string());
+                    lines.push("} else {".to_string());
                 } else {
                     let cond = tag.unwrap_or_else(|| "true".to_string());
                     let kw = if i == 0 { "if" } else { "} else if" };
-                    out.push(format!("{kw} ({cond}) {{"));
+                    lines.push(format!("{kw} ({cond}) {{"));
                 }
                 for (name, path) in &pairs {
-                    out.push(format!("  {name} = {path};"));
+                    lines.push(format!("  {name} = {path};"));
                 }
             }
-            out.push("}".to_string());
+            lines.push("}".to_string());
+            // 1A: the `let` and the dispatch stay text statements.
+            out.extend(lines.into_iter().map(LoweredStmt::Text));
         }
     }
 }
@@ -5917,6 +5947,18 @@ pub(crate) fn value_text_for_is(value: &Expr) -> String {
              — the condition must be lowered first",
             value.span
         ),
+    }
+}
+
+/// [`value_text_for_is`] as a [`PatPath`] (1A.14): the same chain, each step a
+/// node when it prints as the text step does.
+pub(super) fn path_for_is(value: &Expr) -> PatPath {
+    match &value.kind {
+        ExprKind::Ident(id) => PatPath::ident(&ts_ident(&id.name)),
+        ExprKind::FieldAccess { receiver, field } => path_for_is(receiver).member(&field.name),
+        ExprKind::Paren(inner) => path_for_is(inner),
+        // Panics, with the invariant's message (#1668).
+        _ => PatPath::from_text(&value_text_for_is(value)),
     }
 }
 
@@ -7768,11 +7810,13 @@ fn lower_if(
         let mut found = false;
         gather_is_bindings_for_emit(cond, true, cx, &mut is_bindings, &mut found);
         // 1A.12: each branch is built as a `Body` and rendered, or turned into
-        // nodes, once both are in hand (its `is` bindings stay text lines in
-        // front of it); the context saves and restores below
+        // nodes, once both are in hand (its `is` bindings, nodes or text lines,
+        // open it); the context saves and restores below
         // sit around the same lowering calls, in the same order, as when each
         // branch was rendered straight into the text.
         let mut then_body = Body::new();
+        // The `is` bindings open their branch, before its statements.
+        then_body.extend(is_bindings.iter().map(LoweredStmt::item));
         // v0.154 (ADR 0178): a value-position `if` lowers to an IIFE, whose
         // `return`s exit the arrow, so clear the enclosing `return_ty`. #1750:
         // an `if` whose branches hold a `?` no longer reaches here (it becomes a
@@ -7792,6 +7836,7 @@ fn lower_if(
         let mut else_bindings = Vec::new();
         gather_is_bindings_for_emit(cond, false, cx, &mut else_bindings, &mut found);
         let mut else_body = Body::new();
+        else_body.extend(else_bindings.iter().map(LoweredStmt::item));
         cx.without_source_map(|cx| block_body_into(&mut else_body, else_block, cx, false));
         cx.shadow_scopes.pop();
         cx.return_ty = saved;
@@ -7804,15 +7849,13 @@ fn lower_if(
         let needs_async = cx.emitted_await;
         cx.emitted_await = saved_await || needs_async;
         // The node form: a node condition and branches that are all nodes. An
-        // `is` binding is a text line (`gather_is_bindings_for_emit`), so a
-        // branch that opens with one keeps the text form below.
+        // `is` binding that is still text (a variant payload read) keeps the
+        // text form below.
         let cond_node = match cond_lowered {
             LoweredExpr::Node(n) => Ok(n),
             LoweredExpr::Text(t) => Err(t),
         };
         if let Ok(cond) = &cond_node
-            && is_bindings.is_empty()
-            && else_bindings.is_empty()
             && let Some(then_stmts) = then_body.to_nodes_unmapped()
             && let Some(else_stmts) = else_body.to_nodes_unmapped()
         {
@@ -7834,18 +7877,11 @@ fn lower_if(
         iife.push_str("    if (");
         iife.push_str(&cond_expr);
         iife.push_str(") {\n");
-        // The `is` bindings open their branch, before its statements.
-        for b in &is_bindings {
-            write_line(&mut iife, INDENT_STEP * 3, b);
-        }
         cx.without_source_map(|cx| render(&then_body, &mut iife, INDENT_STEP * 3, cx));
         for _ in 0..(INDENT_STEP * 2) {
             iife.push(' ');
         }
         iife.push_str("} else {\n");
-        for b in &else_bindings {
-            write_line(&mut iife, INDENT_STEP * 3, b);
-        }
         cx.without_source_map(|cx| render(&else_body, &mut iife, INDENT_STEP * 3, cx));
         for _ in 0..(INDENT_STEP * 2) {
             iife.push(' ');
@@ -8331,6 +8367,153 @@ fn lower_call(e: &Expr, name: &Ident, args: &[Expr], cx: &mut LowerCtx) -> Lower
     pre.finish_built(built)
 }
 
+/// `true` / `false` as a node.
+fn bool_node(value: bool) -> bynk_ts::TsExpr {
+    bynk_ts::TsExpr::Lit(bynk_ts::TsLit::Bool(value))
+}
+
+/// `!(l)`: a `Unary(Not)` over an explicit `Paren` (Decision C of #3715: the
+/// printer's own brackets would give `!x`), or today's `!({l})` text.
+fn negated_paren(l: LoweredExpr) -> LoweredExpr {
+    node_or_text(
+        vec![l],
+        |c| bynk_ts::TsExpr::Unary {
+            op: bynk_ts::TsUnaryOp::Not,
+            expr: Box::new(bynk_ts::TsExpr::Paren(Box::new(one(c)))),
+        },
+        |c| format!("!({})", one(c)),
+    )
+    .into()
+}
+
+/// The short-circuit operators over two operands: `l && r`, `l || r`, and
+/// `P implies Q` as `(!(P) || Q)` with its explicit brackets kept. A node when
+/// both operands are nodes (the printer brackets `&&`/`||` by precedence, as
+/// the text's own spelling already did), else today's text. The left operand is
+/// one value used once, so it stays textually present for `tsc`'s narrowing
+/// (#1044).
+fn short_circuit(op: BinOp, l: LoweredExpr, r: LoweredExpr) -> Built {
+    let (ts_op, implies) = match op {
+        BinOp::And => (bynk_ts::TsBinaryOp::And, false),
+        BinOp::Or => (bynk_ts::TsBinaryOp::Or, false),
+        BinOp::Implies => (bynk_ts::TsBinaryOp::Or, true),
+        _ => unreachable!("only the short-circuit operators reach `short_circuit`"),
+    };
+    node_or_text(
+        vec![l, r],
+        |c| {
+            let (l, r) = two(c);
+            if implies {
+                bynk_ts::TsExpr::Paren(Box::new(bynk_ts::TsExpr::Binary {
+                    op: ts_op,
+                    left: Box::new(bynk_ts::TsExpr::Unary {
+                        op: bynk_ts::TsUnaryOp::Not,
+                        expr: Box::new(bynk_ts::TsExpr::Paren(Box::new(l))),
+                    }),
+                    right: Box::new(r),
+                }))
+            } else {
+                bynk_ts::TsExpr::Binary {
+                    op: ts_op,
+                    left: Box::new(l),
+                    right: Box::new(r),
+                }
+            }
+        },
+        |c| {
+            let (l, r) = two(c);
+            match op {
+                BinOp::And => format!("{l} && {r}"),
+                BinOp::Or => format!("{l} || {r}"),
+                _ => format!("(!({l}) || {r})"),
+            }
+        },
+    )
+}
+
+/// `(() => { s1; s2; return r; })()` on one line: a `Call` over a bracketed
+/// compact-block `Arrow` when `r` and every statement are nodes and each prints
+/// on one line, else today's text. The statements are an expression's own
+/// hoists (and an `is` test's bindings), which must run only when the operator
+/// reaches its right operand. A statement or value that prints over several
+/// lines keeps the text, which joins a statement's lines with spaces.
+fn compact_iife(stmts: Vec<LoweredStmt>, ret: LoweredExpr) -> Built {
+    let one_line = |n: &bynk_ts::TsStmt| !bynk_ts::print_stmt(n, 0).trim_end().contains('\n');
+    let ret_one_line = match &ret {
+        LoweredExpr::Node(n) => !bynk_ts::print_expr(n).contains('\n'),
+        LoweredExpr::Text(_) => false,
+    };
+    let all_nodes = ret_one_line
+        && stmts
+            .iter()
+            .all(|s| matches!(s, LoweredStmt::Node(n) if one_line(n)));
+    if all_nodes {
+        let mut body: Vec<bynk_ts::TsStmt> = stmts
+            .into_iter()
+            .filter_map(|s| match s {
+                LoweredStmt::Node(n) => Some(*n),
+                LoweredStmt::Text(_) => None,
+            })
+            .collect();
+        if let LoweredExpr::Node(value) = ret {
+            body.push(bynk_ts::TsStmt::return_stmt(Some(value), None));
+        }
+        return Ok(bynk_ts::TsExpr::Call {
+            callee: Box::new(bynk_ts::TsExpr::Paren(Box::new(bynk_ts::TsExpr::Arrow {
+                params: Vec::new(),
+                is_async: false,
+                generics: Vec::new(),
+                return_type: None,
+                body: Box::new(bynk_ts::TsArrowBody::Block(body)),
+            }))),
+            args: Vec::new(),
+        });
+    }
+    let mut s = String::from("(() => { ");
+    for p in &stmts {
+        for line in p.lines() {
+            s.push_str(&line);
+            s.push(' ');
+        }
+    }
+    s.push_str(&format!("return {}; }})()", ret.into_text()));
+    Err(s)
+}
+
+/// A short-circuit operator's `?`-hoisting form (T2.1/T2.3): `let slot:
+/// boolean; if (cond) { …; slot = then; } else { …; slot = else; }` as
+/// statement nodes when the condition, both tails and everything they hoisted
+/// are nodes ([`hoisted_if_nodes`]), else today's text
+/// ([`hoist_if_as_statement`]). Returns the slot.
+fn hoist_bool_if(
+    pre: &mut Pre,
+    cond: LoweredExpr,
+    then_tail: Lowered,
+    else_tail: Lowered,
+    cx: &mut LowerCtx,
+) -> String {
+    let all_nodes = matches!(cond, LoweredExpr::Node(_))
+        && [&then_tail, &else_tail].iter().all(|t| {
+            matches!(t.expr, LoweredExpr::Node(_))
+                && t.pre.iter().all(|s| matches!(s, LoweredStmt::Node(_)))
+        });
+    if all_nodes {
+        let slot = cx.fresh();
+        let ty = Some(bynk_ts::TsType::named("boolean"));
+        hoisted_if_nodes(pre, &slot, ty, cond, then_tail, else_tail);
+        slot
+    } else {
+        hoist_if_as_statement(
+            pre,
+            cond.into_text(),
+            then_tail,
+            else_tail,
+            Some("boolean".to_string()),
+            cx,
+        )
+    }
+}
+
 fn lower_bin_op(op: BinOp, lhs: &Expr, rhs: &Expr, cx: &mut LowerCtx) -> Lowered {
     let tys = cx.ty_render();
     let mut pre = Pre::new();
@@ -8344,7 +8527,12 @@ fn lower_bin_op(op: BinOp, lhs: &Expr, rhs: &Expr, cx: &mut LowerCtx) -> Lowered
     // `is` patterns. For now, for the special pattern `x is Ok(n)`
     // we lower the rhs assuming the binding `n = x.value` was
     // captured. We use a parenthesised IIFE to scope the binding.
-    if op == BinOp::And
+    // `&&` and `implies` with an `is` in the antecedent: its bindings go in the
+    // consequent's scope. v0.80: `P implies Q` lowers to `(!(P) || Q)`, and as
+    // with `&&` an `is` test in the antecedent binds into the consequent (only
+    // reached when the antecedent holds), so both reuse the same is-binding IIFE
+    // flow.
+    if matches!(op, BinOp::And | BinOp::Implies)
         && let Some(AndWithIs {
             bindings,
             lhs: lhs_lowered,
@@ -8354,9 +8542,9 @@ fn lower_bin_op(op: BinOp, lhs: &Expr, rhs: &Expr, cx: &mut LowerCtx) -> Lowered
         }) = lower_and_with_is(lhs, rhs, cx)
     {
         pre.extend_text(hoisted);
-        let lhs_expr = pre.absorb(lhs_lowered);
+        let lhs_expr = pre.absorb_node(lhs_lowered);
         if bindings.is_empty() {
-            return pre.finish_text(format!("{lhs_expr} && {rhs_expr}"));
+            return pre.finish_built(short_circuit(op, lhs_expr, rhs_expr));
         }
         // Every path below emits `rhs` out of line.
         mark_unnarrowed(rhs, cx);
@@ -8364,8 +8552,8 @@ fn lower_bin_op(op: BinOp, lhs: &Expr, rhs: &Expr, cx: &mut LowerCtx) -> Lowered
         // (`lower_and_with_is`'s doc comment above), so if one of those is a
         // `?`'s propagating early return, the arrow-IIFE below would capture
         // it instead of letting it exit the enclosing function — reuse
-        // `hoist_if_as_statement` (built for T2.1's `if`-hoisting) to hoist
-        // this `&&` as a real `if` statement instead.
+        // `hoist_bool_if` (built on T2.1's `if`-hoisting) to hoist this
+        // operator as a real `if` statement instead.
         //
         // #1044 review: `hoist_if_as_statement`'s bare `slot` return is right
         // for the general path (no narrowing at stake there — see below), but
@@ -8382,73 +8570,29 @@ fn lower_bin_op(op: BinOp, lhs: &Expr, rhs: &Expr, cx: &mut LowerCtx) -> Lowered
         // the original (possibly effectful) `is` subject — keeps the
         // conjunction's left side exactly where a caller's narrowing expects
         // to find it; `slot` only stands in for rhs's value, gated by the
-        // same `if` that already guards evaluating it.
+        // same `if` that already guards evaluating it. (For `implies` the guard
+        // is `lhs_expr` itself, not its negation, for the same reason.)
         if rhs_returns {
-            let slot = hoist_if_as_statement(
+            let otherwise = if op == BinOp::And { "false" } else { "true" };
+            let slot = hoist_bool_if(
                 &mut pre,
                 lhs_expr.clone(),
-                Lowered::text_with_pre(bindings, rhs_expr),
-                Lowered::bare("false"),
-                Some("boolean".to_string()),
+                Lowered {
+                    pre: bindings,
+                    expr: rhs_expr,
+                },
+                Lowered::node(bool_node(otherwise == "true")),
                 cx,
             );
-            return pre.finish_text(format!("{lhs_expr} && {slot}"));
+            return pre.finish_built(short_circuit(
+                op,
+                lhs_expr,
+                LoweredExpr::Node(ident_node(&slot)),
+            ));
         }
-        // Emit:  lhs && (() => { const n = ...; return rhs; })()
-        let mut wrap = String::new();
-        wrap.push_str(&lhs_expr);
-        wrap.push_str(" && ((() => { ");
-        for b in &bindings {
-            wrap.push_str(b);
-            wrap.push(' ');
-        }
-        wrap.push_str(&format!("return {rhs_expr}; }})())"));
-        return pre.finish_text(wrap);
-    }
-    // v0.80: `P implies Q` lowers to `(!(P) || Q)`. As with `&&`, an `is` test in
-    // the antecedent binds into the consequent (the consequent is only reached
-    // when the antecedent holds), so reuse the same is-binding IIFE flow.
-    if op == BinOp::Implies
-        && let Some(AndWithIs {
-            bindings,
-            lhs: lhs_lowered,
-            rhs: rhs_expr,
-            rhs_returns,
-            hoisted,
-        }) = lower_and_with_is(lhs, rhs, cx)
-    {
-        pre.extend_text(hoisted);
-        let lhs_expr = pre.absorb(lhs_lowered);
-        if bindings.is_empty() {
-            return pre.finish_text(format!("(!({lhs_expr}) || {rhs_expr})"));
-        }
-        // Every path below emits `rhs` out of line.
-        mark_unnarrowed(rhs, cx);
-        // #1044 review: same fix as the `And` arm above — `lhs_expr` (the
-        // antecedent's `is`-check) must stay in the returned text for a
-        // caller's narrowing to hold, so gate `slot`'s computation on
-        // `lhs_expr` directly (rhs is only reached when the antecedent
-        // holds, same guard as `&&`) rather than folding the negation into
-        // the hoisted `if`'s own condition.
-        if rhs_returns {
-            let slot = hoist_if_as_statement(
-                &mut pre,
-                lhs_expr.clone(),
-                Lowered::text_with_pre(bindings, rhs_expr),
-                Lowered::bare("true"),
-                Some("boolean".to_string()),
-                cx,
-            );
-            return pre.finish_text(format!("(!({lhs_expr}) || {slot})"));
-        }
-        let mut wrap = String::new();
-        wrap.push_str(&format!("(!({lhs_expr}) || ((() => {{ "));
-        for b in &bindings {
-            wrap.push_str(b);
-            wrap.push(' ');
-        }
-        wrap.push_str(&format!("return {rhs_expr}; }})()))"));
-        return pre.finish_text(wrap);
+        // Emit:  lhs && ((() => { const n = ...; return rhs; })())
+        let iife: LoweredExpr = compact_iife(bindings, rhs_expr).into();
+        return pre.finish_built(short_circuit(op, lhs_expr, paren(iife).into()));
     }
     let l_lowered = pre.lower_node(lhs, cx);
     // #1/#3 review: `&&`/`||`/`implies` short-circuit — `design/bynk-type-
@@ -8468,17 +8612,14 @@ fn lower_bin_op(op: BinOp, lhs: &Expr, rhs: &Expr, cx: &mut LowerCtx) -> Lowered
     // instead of letting it exit the enclosing function — the same class of
     // miscompile `lower_match_as_iife` had. `LowerCtx::emitted_early_return`
     // says whether rhs's own lowering hit that case; when it did, hoist this
-    // operator as a real `if` statement via `hoist_if_as_statement` (built for
-    // T2.1's `if`-hoisting) instead of an expression-position IIFE — the
-    // `return` then keeps exiting the enclosing function, and still only runs
-    // when the operator actually reaches rhs. An ordinary hoist (no `?`
-    // involved) keeps the cheaper arrow form; nothing inside it needs to
-    // escape past the arrow, and this is the shape the `947_short_circuit_rhs_hoist`
-    // fixture pins.
-    // 1A: text until the control-flow family converts (the short-circuit
-    // operators' rhs hoisting, IIFEs and `hoist_if_as_statement`).
+    // operator as a real `if` statement via `hoist_bool_if` instead of an
+    // expression-position IIFE — the `return` then keeps exiting the
+    // enclosing function, and still only runs when the operator actually
+    // reaches rhs. An ordinary hoist (no `?` involved) keeps the cheaper arrow
+    // form; nothing inside it needs to escape past the arrow, and this is the
+    // shape the `947_short_circuit_rhs_hoist` fixture pins.
     if matches!(op, BinOp::And | BinOp::Or | BinOp::Implies) {
-        let l = l_lowered.into_text();
+        let l = l_lowered;
         let saved_early_return = std::mem::take(&mut cx.emitted_early_return);
         // #1751: `rhs` may be lowered inside an arrow (below), which would scope
         // an `is` receiver temp it introduces away from a branch that reads it
@@ -8501,53 +8642,31 @@ fn lower_bin_op(op: BinOp, lhs: &Expr, rhs: &Expr, cx: &mut LowerCtx) -> Lowered
         }
         if !r.pre.is_empty() && rhs_returns {
             let value = match op {
-                BinOp::And => hoist_if_as_statement(
+                BinOp::And => hoist_bool_if(&mut pre, l, r, Lowered::node(bool_node(false)), cx),
+                BinOp::Or => hoist_bool_if(&mut pre, l, Lowered::node(bool_node(true)), r, cx),
+                BinOp::Implies => hoist_bool_if(
                     &mut pre,
-                    l,
+                    negated_paren(l),
+                    Lowered::node(bool_node(true)),
                     r,
-                    Lowered::bare("false"),
-                    Some("boolean".to_string()),
-                    cx,
-                ),
-                BinOp::Or => hoist_if_as_statement(
-                    &mut pre,
-                    l,
-                    Lowered::bare("true"),
-                    r,
-                    Some("boolean".to_string()),
-                    cx,
-                ),
-                BinOp::Implies => hoist_if_as_statement(
-                    &mut pre,
-                    format!("!({l})"),
-                    Lowered::bare("true"),
-                    r,
-                    Some("boolean".to_string()),
                     cx,
                 ),
                 _ => unreachable!("guarded by the outer `matches!`"),
             };
-            return pre.finish_text(value);
+            return pre.finish(LoweredExpr::Node(ident_node(&value)));
         }
-        let rhs_text = if r.pre.is_empty() {
-            r.expr.into_text()
+        let Lowered {
+            pre: r_pre,
+            expr: r_expr,
+        } = r;
+        let rhs_value: LoweredExpr = if r_pre.is_empty() {
+            r_expr
         } else {
-            let mut s = String::from("(() => { ");
-            for p in &r.pre_texts() {
-                s.push_str(p);
-                s.push(' ');
-            }
-            s.push_str(&format!("return {}; }})()", r.expr.into_text()));
-            s
+            compact_iife(r_pre, r_expr).into()
         };
-        return pre.finish_text(match op {
-            BinOp::And => format!("{l} && {rhs_text}"),
-            BinOp::Or => format!("{l} || {rhs_text}"),
-            // `P implies Q` ≡ `!P || Q` (no `is` bindings in the antecedent —
-            // that case returned above via `lower_and_with_is`).
-            BinOp::Implies => format!("(!({l}) || {rhs_text})"),
-            _ => unreachable!("guarded by the outer `matches!`"),
-        });
+        // `P implies Q` ≡ `!P || Q` (no `is` bindings in the antecedent — that
+        // case returned above via `lower_and_with_is`).
+        return pre.finish_built(short_circuit(op, l, rhs_value));
     }
     let r_lowered = pre.lower_node(rhs, cx);
     let children = vec![l_lowered, r_lowered];
@@ -9913,23 +10032,10 @@ fn list_rest_expr(path: &str, n: usize) -> String {
 }
 
 /// Emit the boolean tests that must hold for `pattern` to match the value at
-/// runtime `path` (static type `path_ty`), as text: the form the `is` lowering
-/// keeps until 1A.14. Irrefutable patterns add nothing; nested variant/literal
-/// payloads recurse into `path.<field>`.
-pub(super) fn pattern_match_tests(
-    path: &str,
-    path_ty: Option<TyId>,
-    pattern: &Pattern,
-    cx: &LowerCtx,
-    tests: &mut Vec<String>,
-) {
-    let mut found = Vec::new();
-    pattern_tests(&PatPath::from_text(path), path_ty, pattern, cx, &mut found);
-    tests.extend(found.into_iter().map(LoweredExpr::into_text));
-}
-
-/// [`pattern_match_tests`] over a [`PatPath`], each test a node when the path is
-/// one and the test builds from nodes (1A.13, Decision C of #3714), else text.
+/// runtime `path` (static type `path_ty`), each a node when the path is one and the
+/// test builds from nodes (1A.13, Decision C of #3714), else text. Irrefutable
+/// patterns add nothing; nested variant/literal payloads recurse into
+/// `path.<field>`.
 pub(super) fn pattern_tests(
     path: &PatPath,
     path_ty: Option<TyId>,
@@ -10286,11 +10392,11 @@ pub(super) fn emit_pattern_bindings(
                     body.push(Item::Line("} else {".to_string()));
                 } else {
                     let mut t = Vec::new();
-                    pattern_match_tests(path.as_str(), path_ty, alt, cx, &mut t);
+                    pattern_tests(path, path_ty, alt, cx, &mut t);
                     let cond = if t.is_empty() {
                         "true".to_string()
                     } else {
-                        t.join(" && ")
+                        and_join(t).into_text()
                     };
                     let kw = if i == 0 { "if" } else { "} else if" };
                     body.push(Item::Line(format!("{kw} ({cond}) {{")));
@@ -10427,82 +10533,61 @@ fn lower_is(value: &Expr, pattern: &Pattern, cx: &mut LowerCtx) -> Lowered {
         }
         return pre.finish_text(refined_check_as_bool(&recv, base, refinement.as_ref()));
     }
-    let v = pre.absorb(cx.is_receiver_ref(value));
-    let text = match pattern {
-        Pattern::Wildcard(_) => "true".to_string(),
+    let path = PatPath::from_lowered(pre.absorb_node(cx.is_receiver_ref(value)));
+    let scrut_ty = cx.commons().expr_types.get(&value.id).map(|te| te.ty);
+    let tested: LoweredExpr = match pattern {
         // A bare name binding after `is` matches anything over a sum (ADR 0169).
-        Pattern::Binding(_) => "true".to_string(),
+        Pattern::Wildcard(_) | Pattern::Binding(_) => LoweredExpr::Node(bool_node(true)),
         // v0.130 (DECISION F): the checker rejects a literal on the RHS of `is`,
         // so this is unreachable for a well-typed program; lower it to the
         // value-equality it would mean, defensively.
-        Pattern::Literal { value, .. } => {
-            format!("{v} === {}", literal_case_label(value))
-        }
+        Pattern::Literal { value, .. } => path_test(
+            &path,
+            bynk_ts::TsBinaryOp::StrictEq,
+            literal_label_node(value),
+            format!("{} === {}", path.as_str(), literal_case_label(value)),
+        ),
         // #472: the checker rejects a refined pattern on the RHS of `is`
         // (D5), so this is unreachable for a well-typed program; lower it
-        // defensively via the same `pattern_match_tests` a `match` arm uses
-        // (which already handles `Pattern::Refined` — inner tests plus the
-        // predicate via `refined_check_as_bool`).
-        Pattern::Refined { .. } => {
-            let scrut_ty = cx.commons().expr_types.get(&value.id).map(|te| te.ty);
-            let mut tests = Vec::new();
-            pattern_match_tests(&v, scrut_ty, pattern, cx, &mut tests);
-            if tests.is_empty() {
-                "true".to_string()
-            } else {
-                tests.join(" && ")
-            }
-        }
+        // defensively via the same `pattern_tests` a `match` arm uses (which
+        // already handles `Pattern::Refined` — inner tests plus the predicate
+        // via `refined_check_as_bool`).
+        //
         // #705: a variant pattern lowers to its full structural test — the outer
         // tag *and* any nested refutable payload patterns, so
         // `r is Rejected(RefinementViolation(_))` checks both levels (the same
-        // tests a `match` arm emits, via `pattern_match_tests`). A plain
-        // `is Ok(_)` / `is Rejected(_)` still yields a single `.tag` test (the
-        // `_` payload is irrefutable). For a loose scrutinee — the `Wire`-call
-        // outcome — the single-field `"value"` fallback matches the runtime
-        // `{ tag, value }` shape, so the nested test lands without a static type.
-        // #2641: a record pattern is its fields' tests, `true` when every
-        // field is irrefutable.
-        Pattern::Record { .. } | Pattern::List { .. } | Pattern::Range(_) => {
-            let scrut_ty = cx.commons().expr_types.get(&value.id).map(|te| te.ty);
+        // tests a `match` arm emits). A plain `is Ok(_)` / `is Rejected(_)` still
+        // yields a single `.tag` test (the `_` payload is irrefutable). For a
+        // loose scrutinee — the `Wire`-call outcome — the single-field `"value"`
+        // fallback matches the runtime `{ tag, value }` shape, so the nested test
+        // lands without a static type. A multi-payload nested pattern on a loose
+        // scrutinee is unreachable today (the only loose variant sums are
+        // single-field) and shared with `match`'s lowering; precise for any
+        // typed scrutinee.
+        //
+        // #2641: a record pattern is its fields' tests, `true` when every field
+        // is irrefutable. #474 §2.3.6: an or-pattern is legal after `is`;
+        // `pattern_tests` ORs its alternatives into one combined term.
+        Pattern::Refined { .. }
+        | Pattern::Record { .. }
+        | Pattern::List { .. }
+        | Pattern::Range(_)
+        | Pattern::Variant { .. }
+        | Pattern::Or(..) => {
             let mut tests = Vec::new();
-            pattern_match_tests(&v, scrut_ty, pattern, cx, &mut tests);
-            if tests.is_empty() {
-                "true".to_string()
-            } else {
-                tests.join(" && ")
-            }
-        }
-        Pattern::Variant { .. } => {
-            let scrut_ty = cx.commons().expr_types.get(&value.id).map(|te| te.ty);
-            let mut tests = Vec::new();
-            // For a loose scrutinee, a *multi*-payload nested pattern would map
-            // every positional field to the single-field `"value"` fallback; that
-            // is unreachable today (the only loose variant sums — the `Wire`
-            // outcome's rejection kinds — are single-field) and is shared with
-            // `match`'s lowering. Precise for any typed scrutinee.
-            pattern_match_tests(&v, scrut_ty, pattern, cx, &mut tests);
-            // `pattern_match_tests` always pushes the outer `.tag` test for a
-            // variant pattern, so a variant `is` is never vacuously `true` — a
+            pattern_tests(&path, scrut_ty, pattern, cx, &mut tests);
+            // `pattern_tests` always pushes the outer `.tag` test for a variant
+            // pattern, so a variant `is` is never vacuously `true` — a
             // silently-passing `expect` is exactly the failure this reuse removes.
             debug_assert!(
-                !tests.is_empty(),
+                !matches!(pattern, Pattern::Variant { .. }) || !tests.is_empty(),
                 "a variant `is` pattern must emit at least its outer tag test"
             );
             if tests.is_empty() {
-                "true".to_string()
+                LoweredExpr::Node(bool_node(true))
             } else {
-                tests.join(" && ")
+                and_join(tests)
             }
-        }
-        // #474 §2.3.6: an or-pattern is legal after `is`. `pattern_match_tests`
-        // already knows how to OR its alternatives together (pushing one
-        // combined `(...) || (...)` term), so this is a thin wrapper.
-        Pattern::Or(..) => {
-            let scrut_ty = cx.commons().expr_types.get(&value.id).map(|te| te.ty);
-            let mut tests = Vec::new();
-            pattern_match_tests(&v, scrut_ty, pattern, cx, &mut tests);
-            tests.join(" && ")
         }
     };
     // #2836: a bare `r.tag === "Ok"` condition makes tsc narrow `r` for the code
@@ -10511,12 +10596,31 @@ fn lower_is(value: &Expr, pattern: &Pattern, cx: &mut LowerCtx) -> Lowered {
     // Passing the boolean through an identity arrow keeps the test and hands tsc
     // nothing to narrow by; the bindings read the payload through the proven
     // variant instead (`variant_payload`).
-    let text = if matches!(pattern, Pattern::Variant { .. } | Pattern::Or(..)) && text != "true" {
-        format!("((__c: boolean) => __c)({text})")
-    } else {
-        text
-    };
-    pre.finish_text(text)
+    let is_true = matches!(
+        &tested,
+        LoweredExpr::Node(bynk_ts::TsExpr::Lit(bynk_ts::TsLit::Bool(true)))
+    );
+    if matches!(pattern, Pattern::Variant { .. } | Pattern::Or(..)) && !is_true {
+        return pre.finish_built(node_or_text(
+            vec![tested],
+            |c| bynk_ts::TsExpr::Call {
+                callee: Box::new(bynk_ts::TsExpr::Paren(Box::new(bynk_ts::TsExpr::Arrow {
+                    params: vec![bynk_ts::TsParam {
+                        name: "__c".to_string(),
+                        ty: Some(bynk_ts::TsType::named("boolean")),
+                        optional: false,
+                    }],
+                    is_async: false,
+                    generics: Vec::new(),
+                    return_type: None,
+                    body: Box::new(bynk_ts::TsArrowBody::Expr(Box::new(ident_node("__c")))),
+                }))),
+                args: vec![one(c)],
+            },
+            |c| format!("((__c: boolean) => __c)({})", one(c)),
+        ));
+    }
+    pre.finish(tested)
 }
 
 /// v0.13: render a refined type's predicates as a single boolean expression over
@@ -11733,16 +11837,35 @@ fn minus(x: Int) -> Int { 5 - - -x }
     }
 
     #[test]
-    fn short_circuit_operators_still_lower_as_text() {
+    fn short_circuit_operators_over_nodes_lower_to_nodes() {
+        // 1A.14: `&&`, `||` and `implies` over node operands are nodes; `implies`
+        // keeps its explicit brackets.
         let src = "commons shortc\n\
                    fn a(x: Bool, y: Bool) -> Bool { x && y }\n\
                    fn b(x: Bool, y: Bool) -> Bool { x || y }\n\
-                   fn c(x: Bool, y: Bool) -> Bool { x implies y }\n";
-        assert!(text_exits(src) >= 3);
+                   fn c(x: Bool, y: Bool) -> Bool { x implies y }\n\
+                   fn d(x: Bool, y: Bool, z: Bool) -> Bool { (x || y) && z }\n";
+        assert_eq!(text_exits(src), 0);
         let ts = crate::testkit::emit_source(src);
         assert_eq!(returned(&ts, "a"), "x && y");
         assert_eq!(returned(&ts, "b"), "x || y");
         assert_eq!(returned(&ts, "c"), "(!(x) || y)");
+        assert_eq!(returned(&ts, "d"), "(x || y) && z");
+    }
+
+    #[test]
+    fn short_circuit_operators_over_a_text_operand_keep_their_text() {
+        // A string `contains` is still text (a method-call family), so the
+        // operator over it is text, byte for byte.
+        let src = "commons shortt\n\
+                   fn a(s: String, t: String, y: Bool) -> Bool { s.contains(t) && y }\n\
+                   fn b(s: String, t: String, y: Bool) -> Bool { y || s.contains(t) }\n\
+                   fn c(s: String, t: String, y: Bool) -> Bool { s.contains(t) implies y }\n";
+        assert!(text_exits(src) >= 3);
+        let ts = crate::testkit::emit_source(src);
+        assert_eq!(returned(&ts, "a"), "s.includes(t) && y");
+        assert_eq!(returned(&ts, "b"), "y || s.includes(t)");
+        assert_eq!(returned(&ts, "c"), "(!(s.includes(t)) || y)");
     }
 
     #[test]
@@ -11855,21 +11978,21 @@ fn minus(x: Int) -> Int { 5 - - -x }
 
     #[test]
     fn a_call_with_a_text_argument_falls_back_to_today_s_text() {
-        // A short-circuit `&&` operand is still text (control-flow family), so
+        // A string `contains` operand is still text (a method-call family), so
         // each call over it is text, byte for byte.
         let src = "commons calltext\n\
             type S = | A(f: Bool) | B\n\
             type Box2 = { v: Int }\n\
             fn Box2.take(self, b: Bool) -> Int { self.v }\n\
             fn g(b: Bool) -> Bool { b }\n\
-            fn plain(a: Bool, c: Bool) -> Bool { g(a && c) }\n\
-            fn ctor(a: Bool, c: Bool) -> S { A(a && c) }\n\
-            fn ufcs(b: Box2, a: Bool, c: Bool) -> Int { b.take(a && c) }\n";
+            fn plain(a: String, c: String) -> Bool { g(a.contains(c)) }\n\
+            fn ctor(a: String, c: String) -> S { A(a.contains(c)) }\n\
+            fn ufcs(b: Box2, a: String, c: String) -> Int { b.take(a.contains(c)) }\n";
         let ts = crate::testkit::emit_source(src);
         assert!(text_exits(src) > 0);
-        assert_eq!(returned(&ts, "plain"), "g(a && c)");
-        assert_eq!(returned(&ts, "ctor"), "S.A(a && c)");
-        assert_eq!(returned(&ts, "ufcs"), "Box2.take(b, a && c)");
+        assert_eq!(returned(&ts, "plain"), "g(a.includes(c))");
+        assert_eq!(returned(&ts, "ctor"), "S.A(a.includes(c))");
+        assert_eq!(returned(&ts, "ufcs"), "Box2.take(b, a.includes(c))");
     }
 
     #[test]
@@ -12235,10 +12358,10 @@ fn minus(x: Int) -> Int { 5 - - -x }
     #[test]
     fn a_ternary_over_a_text_branch_falls_back_to_text() {
         let src = "commons ternt\n\
-            fn f(c: Bool, x: Bool, y: Bool) -> Bool { if c { x && y } else { false } }\n";
+            fn f(c: Bool, x: String, y: String) -> Bool { if c { x.contains(y) } else { false } }\n";
         let (exits, _, ts) = exits_and_stmts(src);
         assert!(exits > 0, "{ts}");
-        assert_eq!(returned(&ts, "f"), "(c ? x && y : false)");
+        assert_eq!(returned(&ts, "f"), "(c ? x.includes(y) : false)");
     }
 
     #[test]
@@ -12347,18 +12470,197 @@ fn minus(x: Int) -> Int { 5 - - -x }
 
     #[test]
     fn a_hoisted_if_with_a_text_branch_keeps_its_text_lines() {
-        // A branch tail that is still text (`&&`) keeps the whole hoist as text
-        // lines, byte for byte, with `assign_branch`'s padding.
+        // A branch tail that is still text (a string `contains`) keeps the whole
+        // hoist as text lines, byte for byte, with `assign_branch`'s padding.
         let src = "commons iftext\n\
-            fn f(c: Bool, x: Bool, y: Bool, r: Result[Bool, String]) -> Result[Bool, String] {\n\
-              let v = if c { r? } else { x && y }\n\
+            fn f(c: Bool, x: String, y: String, r: Result[Bool, String]) -> Result[Bool, String] {\n\
+              let v = if c { r? } else { x.contains(y) }\n\
               Ok(v)\n\
             }\n";
         let (exits, stmts, ts) = exits_and_stmts(src);
         assert!(exits > 0 && stmts > 0, "{ts}");
         assert!(
-            ts.contains("  let __r1: boolean;\n  if (c) {\n    const __r0 = r;\n    if (__r0.tag === \"Err\") return __r0;\n    __r1 = __r0.value;\n  } else {\n    __r1 = x && y;\n  }\n"),
+            ts.contains("  let __r1: boolean;\n  if (c) {\n    const __r0 = r;\n    if (__r0.tag === \"Err\") return __r0;\n    __r1 = __r0.value;\n  } else {\n    __r1 = x.includes(y);\n  }\n"),
             "{ts}"
+        );
+    }
+
+    /// The function `name` as emitted, from its header to its closing brace.
+    fn func(ts: &str, name: &str) -> String {
+        let head = format!("export function {name}(");
+        let at = ts.find(&head).unwrap_or_else(|| panic!("no {name}:\n{ts}"));
+        let rest = &ts[at..];
+        rest[..rest.find("\n}\n").expect("a closing brace") + 3].to_string()
+    }
+
+    const IS_HDR: &str = "commons is1\n\ntype Shape = | Circle(r: Int) | Square(w: Int) | Dot\nfn mk(s: Shape) -> Shape { s }\nfn bump(n: Int) -> Int { n }\nfn risky(n: Int) -> Result[Int, String] { Ok(n) }\n";
+
+    /// 1A.14: `is` over every pattern kind is a node, with the identity-arrow
+    /// wrapper (#2836) on a tag test and none on a wildcard.
+    #[test]
+    fn is_over_every_pattern_kind_lowers_to_nodes() {
+        let src = format!(
+            "{IS_HDR}fn v(s: Shape) -> Bool {{ s is Circle(_) }}\n\
+             fn n(s: Option[Shape]) -> Bool {{ s is Some(Circle(_)) }}\n\
+             fn o(s: Shape) -> Bool {{ s is Circle(_) | Square(_) }}\n\
+             fn w(s: Shape) -> Bool {{ s is _ }}\n\
+             fn l(xs: List[Int]) -> Bool {{ xs is [1, ..] }}\n"
+        );
+        let (exits, stmts, ts) = exits_and_stmts(&src);
+        assert_eq!((exits, stmts), (0, 0), "{ts}");
+        assert_eq!(
+            returned(&ts, "v"),
+            "((__c: boolean) => __c)(s.tag === \"Circle\")"
+        );
+        assert_eq!(
+            returned(&ts, "n"),
+            "((__c: boolean) => __c)(s.tag === \"Some\" && s.value.tag === \"Circle\")"
+        );
+        assert_eq!(
+            returned(&ts, "o"),
+            "((__c: boolean) => __c)((s.tag === \"Circle\" || s.tag === \"Square\"))"
+        );
+        assert_eq!(returned(&ts, "w"), "true");
+        assert_eq!(returned(&ts, "l"), "xs.length >= 1 && xs[0] === 1");
+    }
+
+    /// A complex receiver is evaluated once into a temp, a `const` statement
+    /// node; inside a hoisting right operand it is a hoisted declaration and an
+    /// in-place assignment (#1654), the assignment a node.
+    #[test]
+    fn an_is_receiver_temp_is_a_const_node_or_an_in_place_assignment() {
+        let src = format!(
+            "{IS_HDR}fn a(s: Shape, k: Int) -> Bool {{ mk(s) is Dot && k > 0 }}\n\
+             fn b(s: Shape, k: Int) -> Bool {{ k > 0 && mk(s) is Dot }}\n"
+        );
+        let (exits, stmts, ts) = exits_and_stmts(&src);
+        // The hoisted `let __r0!: Shape;` declaration is the one text statement.
+        assert_eq!((exits, stmts), (0, 1), "{ts}");
+        assert_eq!(
+            func(&ts, "a"),
+            "export function a(s: Shape, k: number): boolean {\n  const __r0 = mk(s);\n  return ((__c: boolean) => __c)(__r0.tag === \"Dot\") && k > 0;\n}\n"
+        );
+        assert_eq!(
+            func(&ts, "b"),
+            "export function b(s: Shape, k: number): boolean {\n  let __r0!: Shape;\n  return k > 0 && (() => { __r0 = mk(s); return ((__c: boolean) => __c)(__r0.tag === \"Dot\"); })();\n}\n"
+        );
+    }
+
+    /// `&&` and `implies` with an `is` antecedent, the three cases: no
+    /// bindings, the binding IIFE, and a right operand holding a `?` (hoisted
+    /// as an `if`, the antecedent kept in the returned expression for `tsc`'s
+    /// narrowing, #1044).
+    #[test]
+    fn and_and_implies_with_is_bindings_cover_their_three_cases() {
+        let src = format!(
+            "{IS_HDR}fn none(s: Shape, k: Bool) -> Bool {{ s is Dot && k }}\n\
+             fn iife(xs: List[Int], k: Int) -> Bool {{ xs is [x] && x > k }}\n\
+             fn imp(xs: List[Int], k: Int) -> Bool {{ xs is [x, ..rest] implies x > k }}\n\
+             fn ret(xs: List[Int], k: Int) -> Result[Bool, String] {{ Ok(xs is [x, ..] && risky(x)? > k) }}\n\
+             fn retimp(xs: List[Int], k: Int) -> Result[Bool, String] {{ Ok(xs is [x, ..] implies risky(x)? > k) }}\n"
+        );
+        let (exits, stmts, ts) = exits_and_stmts(&src);
+        assert_eq!((exits, stmts), (0, 0), "{ts}");
+        assert_eq!(
+            returned(&ts, "none"),
+            "((__c: boolean) => __c)(s.tag === \"Dot\") && k"
+        );
+        assert_eq!(
+            returned(&ts, "iife"),
+            "xs.length === 1 && ((() => { const x = xs[0]; return x > k; })())"
+        );
+        assert_eq!(
+            returned(&ts, "imp"),
+            "(!(xs.length >= 1) || ((() => { const x = xs[0]; const rest = xs.slice(1); return x > k; })()))"
+        );
+        assert_eq!(
+            func(&ts, "ret"),
+            "export function ret(xs: readonly number[], k: number): Result<boolean, string> {\n  let __r1: boolean;\n  if (xs.length >= 1) {\n    const x = xs[0];\n    const __r0 = risky(x);\n    if (__r0.tag === \"Err\") return __r0;\n    __r1 = __r0.value > k;\n  } else {\n    __r1 = false;\n  }\n  return Ok(xs.length >= 1 && __r1);\n}\n"
+        );
+        assert_eq!(
+            func(&ts, "retimp"),
+            "export function retimp(xs: readonly number[], k: number): Result<boolean, string> {\n  let __r1: boolean;\n  if (xs.length >= 1) {\n    const x = xs[0];\n    const __r0 = risky(x);\n    if (__r0.tag === \"Err\") return __r0;\n    __r1 = __r0.value > k;\n  } else {\n    __r1 = true;\n  }\n  return Ok((!(xs.length >= 1) || __r1));\n}\n"
+        );
+    }
+
+    /// A variant binding reads its payload through the `Extract` cast, which has
+    /// no type node, so the whole IIFE keeps its text, byte for byte; the
+    /// antecedent stays in the hoisted form for narrowing (#1044).
+    #[test]
+    fn a_variant_payload_binding_keeps_its_iife_text() {
+        let src = format!(
+            "{IS_HDR}fn g(s: Shape, k: Int) -> Bool {{ s is Circle(r) && r > k }}\n\
+             fn h(s: Shape, k: Int) -> Result[Bool, String] {{ Ok(s is Circle(r) && risky(r)? > k) }}\n"
+        );
+        let (exits, stmts, ts) = exits_and_stmts(&src);
+        assert!(exits > 0 && stmts > 0, "{ts}");
+        assert_eq!(
+            returned(&ts, "g"),
+            "((__c: boolean) => __c)(s.tag === \"Circle\") && ((() => { const r = (s as Extract<typeof s, { tag: \"Circle\" }>).r; return r > k; })())"
+        );
+        assert_eq!(
+            func(&ts, "h"),
+            "export function h(s: Shape, k: number): Result<boolean, string> {\n  let __r1: boolean;\n  if (((__c: boolean) => __c)(s.tag === \"Circle\")) {\n    const r = (s as Extract<typeof s, { tag: \"Circle\" }>).r;\n    const __r0 = risky(r);\n    if (__r0.tag === \"Err\") return __r0;\n    __r1 = __r0.value > k;\n  } else {\n    __r1 = false;\n  }\n  return Ok(((__c: boolean) => __c)(s.tag === \"Circle\") && __r1);\n}\n"
+        );
+    }
+
+    /// Plain `&&`, `||` and `implies` with a hoisting right operand: without an
+    /// early return the right operand sits in a compact arrow so its hoist runs
+    /// only when reached; with one it is a hoisted `if`, `false` / `true` in the
+    /// other arm.
+    #[test]
+    fn plain_short_circuit_with_a_hoisting_rhs_is_an_arrow_or_a_hoisted_if() {
+        let src = format!(
+            "{IS_HDR}fn a(x: Int, s: Shape) -> Bool {{ x > 0 && mk(s) is Dot }}\n\
+             fn b(x: Int, s: Shape) -> Bool {{ x > 0 || mk(s) is Dot }}\n\
+             fn c(x: Int, s: Shape) -> Bool {{ x > 0 implies mk(s) is Dot }}\n\
+             fn d(x: Int) -> Result[Bool, String] {{ Ok(x > 0 && risky(x)? > 0) }}\n\
+             fn e(x: Int) -> Result[Bool, String] {{ Ok(x > 0 || risky(x)? > 0) }}\n\
+             fn f(x: Int) -> Result[Bool, String] {{ Ok(x > 0 implies risky(x)? > 0) }}\n"
+        );
+        let (exits, _, ts) = exits_and_stmts(&src);
+        assert_eq!(exits, 0, "{ts}");
+        let arrow =
+            "(() => { __r0 = mk(s); return ((__c: boolean) => __c)(__r0.tag === \"Dot\"); })()";
+        assert_eq!(returned(&ts, "a"), format!("x > 0 && {arrow}"));
+        assert_eq!(returned(&ts, "b"), format!("x > 0 || {arrow}"));
+        assert_eq!(returned(&ts, "c"), format!("(!(x > 0) || {arrow})"));
+        let hoisted = |cond: &str, then: &str, other: &str| {
+            format!(
+                "  let __r1: boolean;\n  if ({cond}) {{\n{then}  }} else {{\n{other}  }}\n  return Ok(__r1);\n}}\n"
+            )
+        };
+        let reached = "    const __r0 = risky(x);\n    if (__r0.tag === \"Err\") return __r0;\n    __r1 = __r0.value > 0;\n";
+        let skipped_true = "    __r1 = true;\n";
+        let skipped_false = "    __r1 = false;\n";
+        assert!(
+            func(&ts, "d").ends_with(&hoisted("x > 0", reached, skipped_false)),
+            "{ts}"
+        );
+        assert!(
+            func(&ts, "e").ends_with(&hoisted("x > 0", skipped_true, reached)),
+            "{ts}"
+        );
+        assert!(
+            func(&ts, "f").ends_with(&hoisted("!(x > 0)", skipped_true, reached)),
+            "{ts}"
+        );
+    }
+
+    /// A text operand or hoisted statement (a string `contains`) keeps the text
+    /// forms byte for byte: the binding arrow, the hoisted `if`, the plain arrow.
+    #[test]
+    fn short_circuit_text_fallbacks_keep_their_text() {
+        let src = "commons sct\n\
+             fn risky(n: Int) -> Result[Int, String] { Ok(n) }\n\
+             fn a(s: String, k: Bool) -> Bool { k && s.contains(s) }\n\
+             fn b(s: String, x: Int) -> Result[Bool, String] { Ok(s.contains(s) && risky(x)? > 0) }\n";
+        let (exits, _, ts) = exits_and_stmts(src);
+        assert!(exits > 0, "{ts}");
+        assert_eq!(returned(&ts, "a"), "k && s.includes(s)");
+        assert_eq!(
+            func(&ts, "b"),
+            "export function b(s: string, x: number): Result<boolean, string> {\n  let __r1: boolean;\n  if (s.includes(s)) {\n    const __r0 = risky(x);\n    if (__r0.tag === \"Err\") return __r0;\n    __r1 = __r0.value > 0;\n  } else {\n    __r1 = false;\n  }\n  return Ok(__r1);\n}\n"
         );
     }
 }
