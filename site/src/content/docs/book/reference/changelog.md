@@ -28,6 +28,7 @@ per-commit history. While Bynk is pre-1.0, increments may change behaviour.
 
 | Version | Highlights |
 |---|---|
+| **v0.639.28** | The test-domain constructs (`expect`, `advance`, `Val`, observations, `trace` and fault claims) are built as TypeScript nodes rather than text; no change to emitted code beyond layout in test modules |
 | **v0.639.27** | Comparator and codec witnesses are built as TypeScript nodes rather than text; no change to emitted code beyond possible layout |
 | **v0.639.26** | Service and agent handler bodies reach the TypeScript printer as statements, and IIFE and lambda bodies are now source-mapped, so `bynk test --inspect` can step into them; output differs only in indentation |
 | **v0.639.25** | The code generator hands function and method bodies to the TypeScript printer as statements, and the printer records their source-map checkpoints, with output unchanged |
