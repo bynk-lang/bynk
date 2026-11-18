@@ -23,8 +23,9 @@ use std::rc::Rc;
 use bynk_check::checker::{Callee, TypedCommons};
 use bynk_syntax::ast::{Block, Expr, ExprId, ExprKind, FnDecl, FnName, MatchBody};
 
-use super::lower::{Pre, emit_block_as_function_body_with_return, write_line};
+use super::lower::Pre;
 use super::lower_ctx::LowerCtx;
+use super::lower_stmt::{emit_block_as_function_body_with_return, write_line};
 use super::ts_types::{ts_ty, ts_type_ref};
 use super::*;
 

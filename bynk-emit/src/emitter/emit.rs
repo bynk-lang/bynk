@@ -32,6 +32,7 @@ use bynk_model::{
 
 use super::ctx::{AgentStoreState, BodyMode, HandlerShared, ModuleCtx};
 use super::lower_ctx::LowerCtx;
+use super::lower_stmt::emit_block_as_function_body_with_return;
 use super::ts_types::{ts_base, ts_ty, ts_ty_to_ts_type, ts_type_ref, ts_type_ref_to_ts_type};
 use super::*;
 
