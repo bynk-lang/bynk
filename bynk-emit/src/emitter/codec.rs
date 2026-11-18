@@ -21,6 +21,7 @@ use std::collections::HashMap;
 
 use bynk_check::checker::{Ty, TyId, TypedCommons};
 use bynk_syntax::ast::TypeRef;
+use bynk_ts::TsExpr;
 
 use super::runtime_use::RuntimeUse;
 use super::serialisation;
@@ -107,39 +108,40 @@ impl<'a> CodecGen<'a> {
         }
     }
 
-    fn wrap(&self, helper: &'static str, parts: Vec<String>) -> String {
+    fn wrap(&self, helper: &'static str, parts: Vec<TsExpr>) -> TsExpr {
         self.runtime_use.note_cmp(helper);
-        format!("{helper}({})", parts.join(", "))
+        call(helper, parts)
     }
 
-    /// The `{ encode, decode }` witness for `ty`.
-    pub(crate) fn for_ty(&self, ty: TyId) -> String {
+    /// The `{ encode, decode }` witness for `ty`, as a node.
+    pub(crate) fn for_ty_node(&self, ty: TyId) -> TsExpr {
         let tys = self.commons.tys();
         if !has_var(ty, self.commons) {
             return self.ground(ty);
         }
         match &*tys.get(ty) {
-            Ty::Var(name) => self
-                .scope
-                .get(name)
-                .cloned()
-                .unwrap_or_else(|| witness_ident(name)),
-            Ty::Option(a) => self.wrap("__bynkCodecOption", vec![self.for_ty(*a)]),
-            Ty::List(a) => self.wrap("__bynkCodecList", vec![self.for_ty(*a)]),
-            Ty::Set(a) => self.wrap("__bynkCodecSet", vec![self.for_ty(*a)]),
-            Ty::Map(k, v) => self.wrap("__bynkCodecMap", vec![self.for_ty(*k), self.for_ty(*v)]),
-            Ty::Result(a, b) => {
-                self.wrap("__bynkCodecResult", vec![self.for_ty(*a), self.for_ty(*b)])
-            }
+            Ty::Var(name) => TsExpr::Ident(
+                self.scope
+                    .get(name)
+                    .cloned()
+                    .unwrap_or_else(|| witness_ident(name)),
+            ),
+            Ty::Option(a) => self.wrap("__bynkCodecOption", vec![self.for_ty_node(*a)]),
+            Ty::List(a) => self.wrap("__bynkCodecList", vec![self.for_ty_node(*a)]),
+            Ty::Set(a) => self.wrap("__bynkCodecSet", vec![self.for_ty_node(*a)]),
+            Ty::Map(k, v) => self.wrap(
+                "__bynkCodecMap",
+                vec![self.for_ty_node(*k), self.for_ty_node(*v)],
+            ),
+            Ty::Result(a, b) => self.wrap(
+                "__bynkCodecResult",
+                vec![self.for_ty_node(*a), self.for_ty_node(*b)],
+            ),
             // #2792: a user generic type over a type variable is its declaration's
             // factory applied to the witnesses of its arguments.
-            Ty::Named { name, args, .. } => format!(
-                "{}({})",
-                serialisation::codec_factory_ident(name),
-                args.iter()
-                    .map(|a| self.for_ty(*a))
-                    .collect::<Vec<_>>()
-                    .join(", ")
+            Ty::Named { name, args, .. } => call(
+                &serialisation::codec_factory_ident(name),
+                args.iter().map(|a| self.for_ty_node(*a)).collect(),
             ),
             other => {
                 unreachable!("bynk internal error: no codec over a type variable in {other:?}")
@@ -148,7 +150,7 @@ impl<'a> CodecGen<'a> {
     }
 
     /// The generated pair for a variable-free type.
-    fn ground(&self, ty: TyId) -> String {
+    fn ground(&self, ty: TyId) -> TsExpr {
         let tys = self.commons.tys();
         let tref: TypeRef = super::ty_to_type_ref(ty, tys)
             .unwrap_or_else(|| unreachable!("bynk internal error: no TypeRef for a codec target"));
@@ -158,6 +160,93 @@ impl<'a> CodecGen<'a> {
         // them brought in.
         self.runtime_use.note_json_codec();
         self.runtime_use.note_boundary_codec();
-        bynk_ts::print_expr(&serialisation::witness_codec_expr(&tref, self.runtime_use))
+        serialisation::witness_codec_expr(&tref, self.runtime_use)
+    }
+}
+
+/// `helper(args…)`.
+fn call(helper: &str, args: Vec<TsExpr>) -> TsExpr {
+    TsExpr::Call {
+        callee: Box::new(TsExpr::Ident(helper.to_string())),
+        args,
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use crate::testkit::emit_source;
+
+    const BASE: &str = "commons codecgen\n\
+        fn enc[T: Codable](v: T) -> String { Json.encode(v) }\n\
+        type Packed[T: Codable] = { json: String }\n\
+        type Rec = { a: Int }\n";
+
+    fn emitted(body: &str) -> String {
+        emit_source(&format!("{BASE}{body}"))
+    }
+
+    /// The last argument of the `enc(v, …)` call in `return enc(v, …);`.
+    fn witness_of(ts: &str, f: &str) -> String {
+        let at = [
+            format!("export function {f}<"),
+            format!("export function {f}("),
+        ]
+        .iter()
+        .find_map(|h| ts.find(h))
+        .expect("fn emitted");
+        let rest = &ts[at..];
+        let from = rest.find("return enc(v, ").expect("a call") + "return enc(v, ".len();
+        let end = rest[from..].find(");\n").expect("a terminator");
+        rest[from..from + end].to_string()
+    }
+
+    fn imports(ts: &str, helper: &str) -> bool {
+        ts.lines()
+            .any(|l| l.starts_with("import") && l.contains(helper))
+    }
+
+    #[test]
+    fn a_scoped_variable_and_each_wrapper_build_from_witnesses() {
+        let ts = emitted(
+            "fn a[T: Codable](v: T) -> String { enc(v) }\n\
+             fn b[T: Codable](v: List[T]) -> String { enc(v) }\n\
+             fn c[T: Codable](v: Option[T]) -> String { enc(v) }\n\
+             fn d[T: Codable](v: Map[String, T]) -> String { enc(v) }\n\
+             fn e[T: Codable](v: Result[T, String]) -> String { enc(v) }\n",
+        );
+        assert_eq!(witness_of(&ts, "a"), "__codec_T");
+        assert_eq!(witness_of(&ts, "b"), "__bynkCodecList(__codec_T)");
+        assert_eq!(witness_of(&ts, "c"), "__bynkCodecOption(__codec_T)");
+        assert!(witness_of(&ts, "d").starts_with("__bynkCodecMap({ encode: "));
+        assert!(witness_of(&ts, "d").ends_with(", __codec_T)"));
+        assert!(witness_of(&ts, "e").starts_with("__bynkCodecResult(__codec_T, { encode: "));
+        for h in [
+            "__bynkCodecList",
+            "__bynkCodecOption",
+            "__bynkCodecMap",
+            "__bynkCodecResult",
+        ] {
+            assert!(imports(&ts, h), "{h} not imported");
+        }
+    }
+
+    #[test]
+    fn a_generic_type_is_its_codec_factory_over_the_argument_witnesses() {
+        let ts = emitted("fn f[T: Codable](v: Packed[T]) -> String { enc(v) }\n");
+        assert_eq!(witness_of(&ts, "f"), "__codecOf_Packed(__codec_T)");
+    }
+
+    #[test]
+    fn a_ground_type_is_the_generated_pair_node() {
+        let ts = emitted(
+            "fn base(v: Int) -> String { enc(v) }\n\
+             fn rec(v: Rec) -> String { enc(v) }\n",
+        );
+        assert_eq!(
+            witness_of(&ts, "rec"),
+            "{ encode: __serialise_Rec, decode: __deserialise_Rec }"
+        );
+        assert!(witness_of(&ts, "base").starts_with("{ encode: (__v: number) => "));
+        assert!(imports(&ts, "JsonValue") || ts.contains("__JsonValue"));
     }
 }

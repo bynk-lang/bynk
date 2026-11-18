@@ -1169,7 +1169,7 @@ fn collect_json_codec_roots(commons: &TypedCommons) -> Vec<TypeRef> {
             codec::generic_factories(t, commons, &mut factories);
             for f in factories {
                 let root = serialisation::codec_factory_root(&f, &commons.types);
-                // `CodecGen::for_ty` names `__codecOf_<f>` for exactly these, so a
+                // `CodecGen::for_ty_node` names `__codecOf_<f>` for exactly these, so a
                 // declaration that is not a generic record or sum here would leave
                 // a reference to a function nothing emits.
                 debug_assert!(

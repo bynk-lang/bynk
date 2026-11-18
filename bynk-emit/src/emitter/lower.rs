@@ -1221,9 +1221,14 @@ fn call_built(callee: bynk_ts::TsExpr, args: Vec<LoweredExpr>) -> Built {
     )
 }
 
-/// Witness arguments are text until `CmpGen`/`CodecGen` build nodes.
-fn text_args(texts: Vec<String>) -> impl Iterator<Item = LoweredExpr> {
-    texts.into_iter().map(LoweredExpr::Text)
+/// Witness nodes printed for a text caller (1A: the capability, closure and
+/// kernel families are still text).
+fn print_witnesses(nodes: Vec<bynk_ts::TsExpr>) -> impl Iterator<Item = String> {
+    nodes
+        .iter()
+        .map(bynk_ts::print_expr)
+        .collect::<Vec<_>>()
+        .into_iter()
 }
 
 /// A string-literal node: the printer escapes it exactly as
@@ -2276,7 +2281,8 @@ fn decode_capability_reply(
     };
     format!(
         "__bynkCapabilityReply({call}, {}, {{ capability: \"{}\", operation: \"{}\", type: \"{}\" }}, \"{policy}\")",
-        cx.codec(reply.payload),
+        // 1A: witness printed for a text caller
+        bynk_ts::print_expr(&cx.codec(reply.payload)),
         escape_ts_string(cap),
         escape_ts_string(op),
         escape_ts_string(&reply.payload.display(cx.commons().tys())),
@@ -2918,7 +2924,8 @@ fn lower_type_static_call(
         if let Some(Callee::Static(decl, witnesses)) = cx.commons().callees.get(&e.id) {
             // Constrained generics slice 4: the call's witnesses follow the
             // ordinary arguments, as for an instance method.
-            args_lowered.extend(cx.witness_args(decl, witnesses));
+            // 1A: witness printed for a text caller
+            args_lowered.extend(print_witnesses(cx.witness_args(decl, witnesses)));
             if cx.commons().exec_plan.fn_needs(decl) {
                 args_lowered.push(cx.exec_expr());
                 needs_exec = true;
@@ -4908,8 +4915,11 @@ fn lower_ufcs_method_call(
     // ordinary arguments.
     let mut needs_exec = false;
     if let Some(Callee::Method(decl, witnesses)) = cx.commons().callees.get(&e.id) {
-        // 1A: witnesses are text until CmpGen/CodecGen build nodes.
-        all.extend(text_args(cx.witness_args(decl, witnesses)));
+        all.extend(
+            cx.witness_args(decl, witnesses)
+                .into_iter()
+                .map(LoweredExpr::Node),
+        );
         // #2719: a method in the needs-context set takes the context last.
         if cx.commons().exec_plan.fn_needs(decl) {
             all.push(LoweredExpr::Node(cx.exec_node()));
@@ -5163,7 +5173,8 @@ fn json_decoder_fn(
     // otherwise emits all three unimported.
     cx.runtime_use().note_json_codec();
     let des = if rigid {
-        format!("{}.decode(__j, \"$\")", cx.codec(t))
+        // 1A: witness printed for a text caller
+        format!("{}.decode(__j, \"$\")", bynk_ts::print_expr(&cx.codec(t)))
     } else {
         bynk_ts::print_expr(&serialisation::deserialise_expr(
             &tref,
@@ -5293,7 +5304,8 @@ pub(super) fn json_encode_text(
         if cx.records_codec_roots() {
             note_ground_roots(arg_ty, cx);
         }
-        let codec = cx.codec(arg_ty);
+        // 1A: witness printed for a text caller
+        let codec = bynk_ts::print_expr(&cx.codec(arg_ty));
         let v = pre.lower(arg, cx);
         // `plain` never reaches a generic argument: the checker refused it.
         return Some(format!("globalThis.JSON.stringify({codec}.encode({v}))"));
@@ -7969,7 +7981,8 @@ fn lower_ident(e: &Expr, id: &Ident, cx: &mut LowerCtx) -> Built {
         };
         let names: Vec<String> = (0..params.len()).map(|i| format!("__a{i}")).collect();
         let mut args = names.clone();
-        args.extend(cx.witness_args(decl, witnesses));
+        // 1A: witness printed for a text caller
+        args.extend(print_witnesses(cx.witness_args(decl, witnesses)));
         // #2868: a `given` function closes over the `deps` in scope where it is
         // named.
         if !decl.given.is_empty() {
@@ -8336,9 +8349,11 @@ fn lower_call(e: &Expr, name: &Ident, args: &[Expr], cx: &mut LowerCtx) -> Lower
     // ordinary arguments (an `Ord`-bounded callee's hidden trailing parameters).
     let mut needs_exec = false;
     if let Some(Callee::Fn(decl, witnesses)) = cx.commons().callee(e.id) {
-        // 1A: witnesses are text until CmpGen/CodecGen build nodes, so a call
-        // with witnesses falls back to text.
-        args_lowered.extend(text_args(cx.witness_args(decl, witnesses)));
+        args_lowered.extend(
+            cx.witness_args(decl, witnesses)
+                .into_iter()
+                .map(LoweredExpr::Node),
+        );
         // #2868: a function that declares `given` takes the caller's `deps`,
         // which the checker has made carry its capabilities.
         if !decl.given.is_empty() {
@@ -8723,7 +8738,7 @@ fn lower_bin_op(op: BinOp, lhs: &Expr, rhs: &Expr, cx: &mut LowerCtx) -> Lowered
         // bare JS operator (and so `Float` keeps its IEEE meaning, `NaN < x` is
         // `false`).
         let cmp = cx.comparator(operand);
-        ordered_comparison(op, &cmp, children)
+        ordered_comparison(op, cmp, children)
     } else {
         plain_binary(op, children)
     };
@@ -8803,25 +8818,11 @@ fn negated(call: Built) -> Built {
     }
 }
 
-/// `cmp(l, r) <op> 0` for a non-base `Ord` type. The comparator is a node only
-/// when it is a plain identifier (a derived or base comparator); a composite
-/// comparator expression (`__bynkCmpList(__bynkCmpInt)`) is text, and is never
-/// wrapped in an `Ident`, so that case keeps today's text.
-fn ordered_comparison(op: BinOp, cmp: &str, children: Vec<LoweredExpr>) -> Built {
-    let is_plain_ident = !cmp.is_empty()
-        && cmp
-            .chars()
-            .all(|c| c.is_ascii_alphanumeric() || c == '_' || c == '$')
-        && !cmp.starts_with(|c: char| c.is_ascii_digit());
-    let text = |c: Vec<String>| {
-        let (l, r) = two(c);
-        format!("{cmp}({l}, {r}) {} 0", ts_binop(op))
-    };
-    if !is_plain_ident {
-        return Err(text(
-            children.into_iter().map(LoweredExpr::into_text).collect(),
-        ));
-    }
+/// `cmp(l, r) <op> 0` for a non-base `Ord` type. The comparator is a node, so a
+/// composite comparator (`__bynkCmpList(__bynkCmpInt)`) is a callee like any
+/// other (1A.16 closes the text path 1A.5 left for it).
+fn ordered_comparison(op: BinOp, cmp: bynk_ts::TsExpr, children: Vec<LoweredExpr>) -> Built {
+    let cmp_text = bynk_ts::print_expr(&cmp);
     node_or_text(
         children,
         |c| {
@@ -8829,13 +8830,16 @@ fn ordered_comparison(op: BinOp, cmp: &str, children: Vec<LoweredExpr>) -> Built
             bynk_ts::TsExpr::Binary {
                 op: value_binary_op(op),
                 left: Box::new(bynk_ts::TsExpr::Call {
-                    callee: Box::new(ident_node(cmp)),
+                    callee: Box::new(cmp),
                     args: vec![l, r],
                 }),
                 right: Box::new(num_lit("0".to_string())),
             }
         },
-        text,
+        |c| {
+            let (l, r) = two(c);
+            format!("{cmp_text}({l}, {r}) {} 0", ts_binop(op))
+        },
     )
 }
 
@@ -8864,7 +8868,8 @@ fn kernel_key_comparator(key: &Expr, cx: &LowerCtx) -> Option<String> {
         ret.base(tys.types()),
         Some(BaseType::Int | BaseType::String | BaseType::Duration | BaseType::Instant)
     );
-    (!plain).then(|| cx.comparator(*ret))
+    // 1A: witness printed for a text caller
+    (!plain).then(|| bynk_ts::print_expr(&cx.comparator(*ret)))
 }
 
 /// Constrained generics slice 2: whether a `Map` key / `Set` element of this
@@ -11653,7 +11658,7 @@ fn minus(x: Int) -> Int { 5 - - -x }
         // `Ord`: `cmp(l, r) < 0`.
         let ord = bridge(super::ordered_comparison(
             BinOp::Lt,
-            "__cmp_P",
+            id("__cmp_P"),
             vec![n("a"), n("b")],
         ));
         assert!(matches!(
@@ -11688,7 +11693,7 @@ fn minus(x: Int) -> Int { 5 - - -x }
             (
                 bridge(super::ordered_comparison(
                     BinOp::GtEq,
-                    "__cmp_P",
+                    id("__cmp_P"),
                     vec![t(), n()],
                 )),
                 "__cmp_P(f(x), b) >= 0",
@@ -11700,15 +11705,40 @@ fn minus(x: Int) -> Int { 5 - - -x }
     }
 
     #[test]
-    fn a_composite_comparator_stays_text_even_over_nodes() {
-        // The comparator is an expression, never an `Ident`'s name.
+    fn a_composite_comparator_is_a_node_over_nodes() {
+        // 1A.16: the comparator is itself a node, so a composite one is an
+        // ordinary callee (the 1A.5 text path is closed).
+        let cmp = bynk_ts::TsExpr::Call {
+            callee: Box::new(id("__bynkCmpList")),
+            args: vec![id("__bynkCmpInt")],
+        };
         let got = bridge(super::ordered_comparison(
             BinOp::Lt,
-            "__bynkCmpList(__bynkCmpInt)",
+            cmp,
             vec![node(id("a")), node(id("b"))],
         ));
-        assert!(!is_node(&got));
+        assert!(is_node(&got));
         assert_eq!(got.into_text(), "__bynkCmpList(__bynkCmpInt)(a, b) < 0");
+    }
+
+    #[test]
+    fn comparison_over_a_derived_ord_record_lowers_with_zero_text_exits() {
+        // 1A.5's composite-comparator fallback, closed by 1A.16.
+        let src = "commons ordrec\n\
+            type P = { a: Int, b: String } derives Ord\n\
+            fn lt(x: P, y: P) -> Bool { x < y }\n\
+            fn lts(x: List[Int], y: List[Int]) -> Bool { x < y }\n";
+        assert_eq!(text_exits(src), 0);
+        let ts = crate::testkit::emit_source(src);
+        assert!(
+            returned(&ts, "lt").contains("(x, y) < 0"),
+            "{}",
+            returned(&ts, "lt")
+        );
+        assert_eq!(
+            returned(&ts, "lts"),
+            "__bynkCmpList(__bynkCmpInt)(x, y) < 0"
+        );
     }
 
     #[test]
@@ -11986,14 +12016,14 @@ fn minus(x: Int) -> Int { 5 - - -x }
     }
 
     #[test]
-    fn witness_and_explicit_type_argument_calls_stay_text() {
-        // An `Ord`-bounded callee takes comparator witnesses, which are text
-        // until CmpGen/CodecGen build nodes.
+    fn witness_calls_are_nodes_and_explicit_type_argument_calls_stay_text() {
+        // An `Ord`-bounded callee takes comparator witnesses, which are nodes
+        // (1A.16 closes 1A.6's witness fallback).
         let witness = "commons witnesses\n\
             fn lt[T: Ord](a: T, b: T) -> Bool { a < b }\n\
             fn use(a: Int, b: Int) -> Bool { lt(a, b) }\n";
         let before = text_exits("commons witnesses\nfn use(a: Int, b: Int) -> Bool { a < b }\n");
-        assert!(text_exits(witness) > before);
+        assert_eq!(text_exits(witness), before);
         let ts = crate::testkit::emit_source(witness);
         assert_eq!(returned(&ts, "use"), "lt(a, b, __bynkCmpInt)");
         // Explicit type arguments on a generic instance method (#2795): `Call`
@@ -12050,13 +12080,14 @@ fn minus(x: Int) -> Int { 5 - - -x }
 
     #[test]
     fn a_data_literal_with_a_text_child_falls_back_byte_for_byte() {
-        // A witness call is still text, so a record / string around one stays
-        // text, printed exactly as before.
+        // An explicit-type-argument method call is still text, so a record /
+        // string around one stays text, printed exactly as before.
         let src = "commons textchild\n\
-            type P = { name: String, age: Int }\n\
-            fn lt[T: Ord](a: T, b: T) -> Bool { a < b }\n\
-            fn rec(a: Int, b: Int) -> P { P { name: \"x\", age: if lt(a, b) { a } else { b } } }\n\
-            fn s(a: Int, b: Int) -> String { \"v \\(if lt(a, b) { a } else { b })\" }\n";
+            type P = { name: String, age: Option[Int] }\n\
+            type Box2[A] = { v: A }\n\
+            fn Box2.cast[U](self) -> Option[U] { None }\n\
+            fn rec(b: Box2[Int]) -> P { P { name: \"x\", age: b.cast[Int]() } }\n\
+            fn s(b: Box2[Int]) -> String { \"v \\(b.cast[Int]().getOrElse(0))\" }\n";
         assert!(text_exits(src) > 0);
         let ts = crate::testkit::emit_source(src);
         assert!(ts.contains("{ name: \"x\", age: "), "{ts}");
