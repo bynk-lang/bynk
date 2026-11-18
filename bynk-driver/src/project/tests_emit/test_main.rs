@@ -338,6 +338,7 @@ pub(super) fn build_run_function(entries: &[(String, String)]) -> Vec<TsStmt> {
                     TsParam {
                         name: "onCase".to_string(),
                         ty: Some(TsType::Fn {
+                            names: vec![],
                             params: vec![TsType::named("CaseResult")],
                             ret: Box::new(TsType::named("void")),
                         }),

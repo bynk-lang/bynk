@@ -319,6 +319,10 @@ fn walk_expr<'a>(expr: &'a TsExpr, out: &mut Vec<(VerbatimOrigin, &'a str)>) {
             walk_expr(alternate, out);
         }
         TsExpr::Paren(e) | TsExpr::Spread(e) => walk_expr(e, out),
+        TsExpr::Assign { target, value } | TsExpr::AddAssign { target, value } => {
+            walk_expr(target, out);
+            walk_expr(value, out);
+        }
         TsExpr::Lit(_) => {}
     }
 }
@@ -1463,6 +1467,22 @@ pub enum TsExpr {
     /// variant rather than an item type on `Array`, which every existing array
     /// site would then have to change.
     Spread(Box<TsExpr>),
+    /// `target = value`, an assignment *expression* (1A.18b, #3719): the one
+    /// place a value is assigned and used at once, `(__h[__k] = __h[__k] ?? [])
+    /// .push(__u)`. An assignment as a whole statement is
+    /// [`TsStmtKind::Assign`]. The printer brackets it wherever it is an
+    /// operand; a builder that wants the brackets for readability, as that
+    /// example does, adds an explicit [`TsExpr::Paren`].
+    Assign {
+        target: Box<TsExpr>,
+        value: Box<TsExpr>,
+    },
+    /// `target += value` (1A.18b, #3719), the list kernel's `average` sum. A
+    /// sibling of [`TsExpr::Assign`], used as an expression statement.
+    AddAssign {
+        target: Box<TsExpr>,
+        value: Box<TsExpr>,
+    },
     Lit(TsLit),
 }
 
@@ -1881,8 +1901,15 @@ pub enum TsType {
     /// shape, `() => Ret`. Inside a [`TsType::Array`] the printer
     /// parenthesises it (`readonly ((a0: T) => U)[]`); see that variant's
     /// own doc.
+    ///
+    /// `names` (1A.18b, #3719): optional parameter names, for a function type
+    /// whose names are part of its spelling (`(acc: A, x: T) => A`, the list
+    /// kernel's `fold`). Empty is the positional `a0, a1, …` form above, which
+    /// every other site builds; otherwise one name per entry of `params`, in
+    /// order.
     Fn {
         params: Vec<TsType>,
+        names: Vec<String>,
         ret: Box<TsType>,
     },
     /// `A | B | C` — a type-position union. Added in review of #1315:

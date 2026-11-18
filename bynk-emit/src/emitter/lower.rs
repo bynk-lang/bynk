@@ -2595,7 +2595,7 @@ fn lower_method_call(e: &Expr, cx: &mut LowerCtx) -> Lowered {
     // statics, runtime values, D1, cross-context, events, cookies,
     // capabilities, type statics, test and system services, agent calls) stay
     // text, each its own family with its own runtime contract. Of the kernel
-    // methods only the `List` kernel builds nodes (1A.18a); the plain instance
+    // methods only the `List` kernel builds nodes (1A.18a and 1A.18b); the plain instance
     // call that ends this function is a node.
     // Persisted-store receivers: held Map, Map, Set, Cache, Log, Cell (#3167).
     if let Some(s) = lower_store_method_call(e, receiver, method, args, cx, &mut pre) {
@@ -12449,17 +12449,284 @@ mod list_kernel_tests {
         assert!(ts.contains("import { __bynkDecimalAdd }"), "{ts}");
     }
 
-    /// A text operand falls back to today's text, byte for byte: a plain-key
-    /// `sortBy` is statement-bodied and still text (1A.18b), and the `map` over
-    /// it keeps its text form.
+    /// A receiver that is still text (`Map.values()`) makes the arm fall back to
+    /// today's one-line text, byte for byte: the mixed-operand path of
+    /// `node_or_text`, which the node tests above never reach.
     #[test]
-    fn a_text_operand_keeps_the_text_form() {
-        let (n, ts) =
-            exits("fn f(xs: List[Int]) -> List[Int] { xs.sortBy((x) => x).map((x) => x) }");
-        assert!(n > 0, "{ts}");
-        assert_eq!(
-            returned(&ts),
-            "([...xs].sort((__a: number, __b: number) => { const __ka = ((x: number) => x)(__a), __kb = ((x: number) => x)(__b); return __ka < __kb ? -1 : __ka > __kb ? 1 : 0; })).map((__x: number) => ((x: number) => x)(__x))"
+    fn a_text_receiver_keeps_the_text_form() {
+        let values = "[...(m).values()]";
+        for (elem, ret, expr, want) in [
+            (
+                "Int",
+                "List[Int]",
+                "m.values().map((x) => x)",
+                format!("({values}).map((__x: number) => ((x: number) => x)(__x))"),
+            ),
+            (
+                "Int",
+                "List[Int]",
+                "m.values().sortBy((x) => x)",
+                format!(
+                    "[...{values}].sort((__a: number, __b: number) => {{ const __ka = ((x: number) => x)(__a), __kb = ((x: number) => x)(__b); return __ka < __kb ? -1 : __ka > __kb ? 1 : 0; }})"
+                ),
+            ),
+            (
+                "Float",
+                "List[Float]",
+                "m.values().sortBy((x) => x)",
+                format!(
+                    "[...{values}].sort((__a: number, __b: number) => __bynkCmpFloat(((x: number) => x)(__a), ((x: number) => x)(__b)))"
+                ),
+            ),
+            (
+                "Decimal",
+                "Decimal",
+                "m.values().sum((x) => x)",
+                format!(
+                    "({values}).reduce((__s: {d}, __x: {d}) => __bynkDecimalAdd(__s, ((x: {d}) => x)(__x)), {{ coefficient: 0n, scale: 0 }})",
+                    d = "{ readonly coefficient: bigint; readonly scale: number }"
+                ),
+            ),
+            (
+                "Int",
+                "Int",
+                "m.values().fold(0, (a, x) => a + x)",
+                format!(
+                    "((__xs: readonly number[], __acc: number, __f: (acc: number, x: number) => number) => {{ for (const __x of __xs) __acc = __f(__acc, __x); return __acc; }})({values}, 0, (a: number, x: number) => a + x)"
+                ),
+            ),
+        ] {
+            let (n, ts) = exits(&format!(
+                "fn f(m: Map[String, {elem}]) -> {ret} {{ {expr} }}"
+            ));
+            assert!(n > 0, "{expr}\n{ts}");
+            assert_eq!(returned_any(&ts), want, "{expr}");
+        }
+    }
+
+    /// The statement-bodied arms (1A.18b, #3719), each over a list parameter
+    /// (nodes) and over `Map.values()`, which is still text.
+    /// `(element type, return type, extra parameters, expression over {R})`.
+    const STATEMENT_ARMS: &[(&str, &str, &str, &str)] = &[
+        ("Int", "Int", "", "{R}.fold(0, (a, x) => a + x)"),
+        (
+            "Int",
+            "Effect[Int]",
+            ", g: (Int, Int) -> Effect[Int]",
+            "{R}.foldEff(0, g)",
+        ),
+        (
+            "Int",
+            "Effect[()]",
+            ", g: (Int) -> Effect[()]",
+            "{R}.forEach(g)",
+        ),
+        (
+            "Int",
+            "Effect[()]",
+            ", g: (Int) -> Effect[()]",
+            "{R}.parTraverse(g)",
+        ),
+        (
+            "Int",
+            "Effect[List[Result[Int, String]]]",
+            ", g: (Int) -> Effect[Result[Int, String]]",
+            "{R}.traverseAll(g)",
+        ),
+        (
+            "Int",
+            "Effect[Result[List[Int], String]]",
+            ", g: (Int) -> Effect[Result[Int, String]]",
+            "{R}.traverseTry(g)",
+        ),
+        (
+            "Int",
+            "Effect[Result[List[Int], String]]",
+            ", g: (Int) -> Effect[Result[Int, String]]",
+            "{R}.parTraverseTry(g)",
+        ),
+        (
+            "Result[Int, String]",
+            "Result[List[Int], List[String]]",
+            "",
+            "{R}.sequenceAll()",
+        ),
+        (
+            "Result[Int, String]",
+            "Result[List[Int], String]",
+            "",
+            "{R}.sequenceTry()",
+        ),
+        ("Int", "List[Int]", "", "{R}.sortBy((x) => x)"),
+        ("Int", "List[Int]", "", "{R}.sortByDescending((x) => x)"),
+        ("Int", "List[Int]", "", "{R}.distinctBy((x) => x)"),
+        ("Int", "Option[Int]", "", "{R}.min((x) => x)"),
+        ("Int", "Option[Int]", "", "{R}.max((x) => x)"),
+        ("Float", "Option[Float]", "", "{R}.min((x) => x)"),
+        ("Int", "Option[Float]", "", "{R}.average((x) => x)"),
+        (
+            "Int",
+            "List[Int]",
+            ", ys: List[Int]",
+            "{R}.joinOn(ys, (x) => x, (y) => y, (x, y) => x + y)",
+        ),
+        (
+            "Int",
+            "List[Option[Int]]",
+            ", ys: List[Int]",
+            "{R}.leftJoin(ys, (x) => x, (y) => y, (x, y) => y)",
+        ),
+        (
+            "Int",
+            "List[Int]",
+            ", ys: List[Int]",
+            "{R}.join(ys, (x, y) => x == y, (x, y) => x + y)",
+        ),
+        (
+            "Int",
+            "List[Int]",
+            "",
+            "{R}.groupBy((x) => x, (k, rows) => rows.length())",
+        ),
+    ];
+
+    /// The one returned expression of `f`, async or not.
+    fn returned_any(ts: &str) -> String {
+        let at = ts.find("function f(").expect("f");
+        let rest = &ts[at..];
+        let ret = rest.find("  return ").expect("a return") + "  return ".len();
+        let end = rest[ret..].find(";\n}\n").expect("end");
+        rest[ret..ret + end].to_string()
+    }
+
+    fn arm_source(elem: &str, ret: &str, extra: &str, expr: &str, text_receiver: bool) -> String {
+        let (param, recv) = if text_receiver {
+            (format!("m: Map[String, {elem}]"), "m.values()")
+        } else {
+            (format!("xs: List[{elem}]"), "xs")
+        };
+        let body = expr.replace("{R}", recv);
+        format!("fn f({param}{extra}) -> {ret} {{ {body} }}")
+    }
+
+    /// Every statement-bodied arm over node operands builds a node (no text
+    /// exit), prints on several lines, and says exactly what the text fallback
+    /// says apart from layout: the two forms agree once whitespace is removed.
+    /// The one exception is the plain-key sorts, whose `const a = …, b = …;`
+    /// splits into two statements.
+    #[test]
+    fn statement_arms_over_nodes_match_their_text_forms_modulo_layout() {
+        let squash = |s: &str| s.chars().filter(|c| !c.is_whitespace()).collect::<String>();
+        for (elem, ret, extra, expr) in STATEMENT_ARMS {
+            let (n_node, node_ts) = exits(&arm_source(elem, ret, extra, expr, false));
+            let (n_text, text_ts) = exits(&arm_source(elem, ret, extra, expr, true));
+            assert_eq!(n_node, 0, "{expr}\n{node_ts}");
+            assert!(n_text > 0, "{expr}\n{text_ts}");
+            let node = returned_any(&node_ts);
+            let text = returned_any(&text_ts).replace("[...(m).values()]", "xs");
+            assert!(
+                node.contains('\n'),
+                "{expr} should print on several lines\n{node}"
+            );
+            assert!(
+                !text.contains('\n'),
+                "{expr} text fallback is one line\n{text}"
+            );
+            let node = squash(&node);
+            let node = if expr.contains("sortBy") {
+                node.replace(";const__kb=", ",__kb=")
+            } else {
+                node
+            };
+            assert_eq!(node, squash(&text), "{expr}");
+        }
+    }
+
+    /// The layout of the statement arms: a block-bodied arrow, one statement per
+    /// line, an unbraced loop body inline, `} else {` on one line, and the
+    /// accumulator's function type keeps its parameter names.
+    #[test]
+    fn statement_arms_print_as_multi_line_arrows() {
+        for (elem, ret, extra, expr, want) in [
+            (
+                "Int",
+                "Effect[Int]",
+                ", g: (Int, Int) -> Effect[Int]",
+                "{R}.foldEff(0, g)",
+                "(async (__xs: readonly number[], __acc: number, __f: (acc: number, x: number) => globalThis.Promise<number>) => {
+    for (const __x of __xs) __acc = await __f(__acc, __x);
+    return __acc;
+  })(xs, 0, g)",
+            ),
+            (
+                "Result[Int, String]",
+                "Result[List[Int], List[String]]",
+                "",
+                "{R}.sequenceAll()",
+                "((__xs: readonly Result<number, string>[]) => {
+    const __ok: number[] = [];
+    const __errs: string[] = [];
+    for (const __r of __xs) {
+      if (__r.tag === \"Err\") {
+        __errs.push(__r.error);
+      } else {
+        __ok.push(__r.value);
+      }
+    }
+    return __errs.length > 0 ? Err(__errs) : Ok(__ok);
+  })(xs)",
+            ),
+            (
+                "Int",
+                "List[Int]",
+                "",
+                "{R}.sortByDescending((x) => x)",
+                "[...xs].sort((__a: number, __b: number) => {
+    const __ka = ((x: number) => x)(__a);
+    const __kb = ((x: number) => x)(__b);
+    return __ka < __kb ? 1 : __ka > __kb ? -1 : 0;
+  })",
+            ),
+            (
+                "Int",
+                "List[Int]",
+                ", ys: List[Int]",
+                "{R}.joinOn(ys, (x) => x, (y) => y, (x, y) => x + y)",
+                "(() => {
+    const __h: globalThis.Record<string, number[]> = globalThis.Object.create(null);
+    for (const __u of ys) {
+      const __k = String(((y: number) => y)(__u));
+      (__h[__k] = __h[__k] ?? []).push(__u);
+    }
+    return (xs).flatMap((__t: number) => {
+      const __m = __h[String(((x: number) => x)(__t))] ?? [];
+      return __m.map((__u: number) => ((x: number, y: number) => x + y)(__t, __u));
+    });
+  })()",
+            ),
+        ] {
+            let (n, ts) = exits(&arm_source(elem, ret, extra, expr, false));
+            assert_eq!(n, 0, "{ts}");
+            assert_eq!(returned_any(&ts), want, "{expr}");
+        }
+    }
+
+    /// The async arms stay async by construction and still import the settle
+    /// helper that `par*` calls: `note_settle_all` fires as it did.
+    #[test]
+    fn par_arms_import_their_settle_helper() {
+        let (n, ts) = exits(&arm_source(
+            "Int",
+            "Effect[()]",
+            ", g: (Int) -> Effect[()]",
+            "{R}.parTraverse(g)",
+            false,
+        ));
+        assert_eq!(n, 0, "{ts}");
+        assert!(ts.contains("__bynkSettleAll"), "{ts}");
+        assert!(
+            ts.contains("(async (__xs: readonly number[]) => {\n"),
+            "{ts}"
         );
     }
 
