@@ -43,10 +43,10 @@ export const Box = {
  */
 export function skus(items: readonly Item[]): readonly string[] {
   return (items).map((__x: Item) => ((__lambdaArg440: Item) => {
-  const __letElse440 = __lambdaArg440;
-  const sku = __letElse440.sku;
-  return sku;
-})(__x));
+    const __letElse440 = __lambdaArg440;
+    const sku = __letElse440.sku;
+    return sku;
+  })(__x));
 }
 
 /**
@@ -66,12 +66,12 @@ export function total(items: readonly Item[]): number {
  */
 export function lines(items: readonly Item[]): readonly string[] {
   return (items).map((__x: Item) => ((__lambdaArg780: Item) => {
-  const __letElse780 = __lambdaArg780;
-  const sku = __letElse780.sku;
-  const n = __letElse780.qty;
-  const doubled = n * 2;
-  return `${String(sku)} x${String(doubled)}`;
-})(__x));
+    const __letElse780 = __lambdaArg780;
+    const sku = __letElse780.sku;
+    const n = __letElse780.qty;
+    const doubled = n * 2;
+    return `${String(sku)} x${String(doubled)}`;
+  })(__x));
 }
 
 /**
@@ -79,14 +79,14 @@ export function lines(items: readonly Item[]): readonly string[] {
  */
 export function vips(orders: readonly Order[]): readonly string[] {
   return ((orders).filter((__x: Order) => ((__lambdaArg1021: Order) => {
-  const __letElse1021 = __lambdaArg1021;
-  const vip = __letElse1021.customer.vip;
-  return vip;
-})(__x))).map((__x: Order) => ((__lambdaArg1087: Order) => {
-  const __letElse1087 = __lambdaArg1087;
-  const id = __letElse1087.id;
-  return id;
-})(__x));
+    const __letElse1021 = __lambdaArg1021;
+    const vip = __letElse1021.customer.vip;
+    return vip;
+  })(__x))).map((__x: Order) => ((__lambdaArg1087: Order) => {
+    const __letElse1087 = __lambdaArg1087;
+    const id = __letElse1087.id;
+    return id;
+  })(__x));
 }
 
 /**
@@ -94,10 +94,10 @@ export function vips(orders: readonly Order[]): readonly string[] {
  */
 export function unboxed(boxes: readonly Box<number>[]): readonly number[] {
   return (boxes).map((__x: Box<number>) => ((__lambdaArg1269: Box<number>) => {
-  const __letElse1269 = __lambdaArg1269;
-  const value = __letElse1269.value;
-  return value + 1;
-})(__x));
+    const __letElse1269 = __lambdaArg1269;
+    const value = __letElse1269.value;
+    return value + 1;
+  })(__x));
 }
 
 /**

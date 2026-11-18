@@ -9,7 +9,7 @@ use std::sync::Arc;
 use bynk_check::checker::{Callee, NamedKind, Ty, TyId, TypedCommons};
 use bynk_check::kernel_op::{
     BytesOp, DecimalOp, DurationOp, EffectOp, EffectResultOp, FloatOp, InstantOp, IntOp, KernelOp,
-    ListOp, MapOp, OptionOp, QueryOp, ResultOp, SetOp, StreamOp, StringOp, TestConnectionOp,
+    MapOp, OptionOp, QueryOp, ResultOp, SetOp, StreamOp, StringOp, TestConnectionOp,
 };
 use bynk_syntax::ast::{
     BaseType, BinOp, Block, Expr, ExprKind, FaultsExpr, FieldInit, Ident, InterpPart, LambdaExpr,
@@ -22,6 +22,10 @@ use bynk_model::{ConstVal, EventPatternIr, EventPatternValueIr, IrHttpMethod};
 
 use super::ctx::{BodyMode, ModuleCtx, TestShared};
 use super::lower_ctx::LowerCtx;
+use super::lower_list::{
+    join_other_elem_ts, kernel_key_comparator, key_fn_is_plain, key_is_plain, list_ok_elem_ts,
+    lower_list_kernel, with_comparator,
+};
 use super::lower_stmt::{
     Body, Item, arms_contain_question, block_body, block_body_into, block_contains_question,
     emit_block_as_function_body_with_return, emit_statement, hoist_if_as_statement,
@@ -890,7 +894,7 @@ pub(super) fn num_lit(digits: String) -> bynk_ts::TsExpr {
 /// #2622: a `Decimal` literal as an object-literal node — the node twin of
 /// [`decimal_ts_literal`](crate::emitter::ts_types::decimal_ts_literal)
 /// (`{ coefficient: <signed>n, scale: <scale> }`, no runtime import).
-fn decimal_lit(coef: &str, scale: u32) -> bynk_ts::TsExpr {
+pub(super) fn decimal_lit(coef: &str, scale: u32) -> bynk_ts::TsExpr {
     bynk_ts::TsExpr::object(vec![
         (
             "coefficient".to_string(),
@@ -2589,9 +2593,10 @@ fn lower_method_call(e: &Expr, cx: &mut LowerCtx) -> Lowered {
     let mut pre = Pre::new();
     // 1A: the domain-specific dispatchers below (store, scalar/collection
     // statics, runtime values, D1, cross-context, events, cookies,
-    // capabilities, type statics, test and system services, agent calls,
-    // kernel methods) stay text, each its own family with its own runtime
-    // contract. Only the plain instance call that ends this function is a node.
+    // capabilities, type statics, test and system services, agent calls) stay
+    // text, each its own family with its own runtime contract. Of the kernel
+    // methods only the `List` kernel builds nodes (1A.18a); the plain instance
+    // call that ends this function is a node.
     // Persisted-store receivers: held Map, Map, Set, Cache, Log, Cell (#3167).
     if let Some(s) = lower_store_method_call(e, receiver, method, args, cx, &mut pre) {
         return pre.finish_text(s);
@@ -2648,8 +2653,8 @@ fn lower_method_call(e: &Expr, cx: &mut LowerCtx) -> Lowered {
         return pre.finish_text(s);
     }
     // v0.20b: built-in kernel methods, resolved by the checker (#3164).
-    if let Some(s) = lower_kernel_method_call(e, receiver, method, args, cx, &mut pre) {
-        return pre.finish_text(s);
+    if let Some(built) = lower_kernel_method_call(e, receiver, method, args, cx, &mut pre) {
+        return pre.finish_built(built);
     }
     // Instance call: UFCS lowering with the receiver as first arg.
     let built = lower_ufcs_method_call(e, receiver, method, type_args, args, cx, &mut pre);
@@ -4857,7 +4862,9 @@ fn lower_effect_kernel_call(
 /// the one place the emitter turns a kernel operation into TypeScript, matching
 /// on the receiver kind and the operation. `None` when the operation has no
 /// inline lowering here, so the caller falls through to the UFCS lowering; any
-/// hoisted statements the attempt produced stay in `pre`.
+/// hoisted statements the attempt produced stay in `pre`. The `List` kernel
+/// returns a node when its operands are nodes (1A.18a); every other family is
+/// still text, wrapped here as `Err` (`// 1A:` at its arm below).
 fn lower_kernel_method_call(
     e: &Expr,
     receiver: &Expr,
@@ -4865,7 +4872,7 @@ fn lower_kernel_method_call(
     args: &[Expr],
     cx: &mut LowerCtx,
     pre: &mut Pre,
-) -> Option<String> {
+) -> Option<Built> {
     let tys = cx.ty_render();
     // v0.20b: built-in kernel methods on the collection types, dispatched on the
     // receiver's checked type. Emitted inline (typed IIFEs / spreads) — no runtime
@@ -4884,14 +4891,16 @@ fn lower_kernel_method_call(
         let mismatch = |kop: KernelOp| -> ! {
             panic!("bynk internal error (#3164): kernel op {kop:?} on a mismatched receiver type")
         };
+        // 1A: every arm below but `List` is text until its own family slice (the
+        // track's `1A.query`, `1A.stream`, `1A.map`, `1A.set`, `1A.option`,
+        // `1A.result`, `1A.string` and `1A.numeric` rows).
         match kop {
             KernelOp::List(op) => {
                 let Ty::List(elem) = &recv_ty else {
                     mismatch(kop)
                 };
-                if let Some(s) = pre.absorb_opt(lower_list_kernel(e, receiver, op, args, *elem, cx))
-                {
-                    return Some(s);
+                if let Some(built) = lower_list_kernel(e, receiver, op, args, *elem, cx, pre) {
+                    return Some(built);
                 }
             }
             // v0.91 (ADR 0119): a chained op on a lazy `Query` — the source is
@@ -4923,7 +4932,7 @@ fn lower_kernel_method_call(
                     },
                     tys,
                 ) {
-                    return Some(s);
+                    return Some(Err(s));
                 }
             }
             // v0.100: a chained op on a `Stream` — the receiver already *is* an
@@ -4933,7 +4942,7 @@ fn lower_kernel_method_call(
                 let recv = pre.lower(receiver, cx);
                 let a: Vec<String> = args.iter().map(|x| pre.lower(x, cx)).collect();
                 if let Some(s) = lower_stream_method(recv, op, &a) {
-                    return Some(s);
+                    return Some(Err(s));
                 }
             }
             // #3051: a case's recording `TestConnection[F]`.
@@ -4944,7 +4953,7 @@ fn lower_kernel_method_call(
                     TestConnectionOp::Closed => format!("({recv}).closed"),
                     TestConnectionOp::Connection => format!("({recv}).mint()"),
                 };
-                return Some(s);
+                return Some(Err(s));
             }
             // v0.102: the held-resource operations on a `Connection[F]` lower to
             // method calls on the runtime `Connection` object — `send(frame)` and
@@ -4952,7 +4961,7 @@ fn lower_kernel_method_call(
             KernelOp::Connection(op) => {
                 let recv = pre.lower(receiver, cx);
                 let a: Vec<String> = args.iter().map(|x| pre.lower(x, cx)).collect();
-                return Some(format!("({recv}).{}({})", op.name(), a.join(", ")));
+                return Some(Err(format!("({recv}).{}({})", op.name(), a.join(", "))));
             }
             KernelOp::Map(op) => {
                 let Ty::Map(key, val) = &recv_ty else {
@@ -4961,7 +4970,7 @@ fn lower_kernel_method_call(
                 if let Some(s) =
                     pre.absorb_opt(lower_map_kernel(receiver, op, args, *key, *val, cx))
                 {
-                    return Some(s);
+                    return Some(Err(s));
                 }
             }
             // K6a (#2596): the `Set` kernel.
@@ -4970,7 +4979,7 @@ fn lower_kernel_method_call(
                     mismatch(kop)
                 };
                 if let Some(s) = pre.absorb_opt(lower_set_kernel(receiver, op, args, *elem, cx)) {
-                    return Some(s);
+                    return Some(Err(s));
                 }
             }
             // v0.21: the numeric kernel. `toFloat` is the identity
@@ -4979,12 +4988,12 @@ fn lower_kernel_method_call(
             // v0.22a extends it (abs/min/max/clamp, isNaN/isFinite).
             KernelOp::Int(op) => {
                 if let Some(s) = pre.absorb_opt(lower_int_kernel(receiver, op, args, cx)) {
-                    return Some(s);
+                    return Some(Err(s));
                 }
             }
             KernelOp::Float(op) => {
                 if let Some(s) = pre.absorb_opt(lower_float_kernel(receiver, op, args, cx)) {
-                    return Some(s);
+                    return Some(Err(s));
                 }
             }
             // v0.86 (ADR 0112): the `Duration` kernel. `toMillis` is the identity
@@ -4992,7 +5001,7 @@ fn lower_kernel_method_call(
             // renders the number.
             KernelOp::Duration(op) => {
                 if let Some(s) = pre.absorb_opt(lower_duration_kernel(receiver, op, args, cx)) {
-                    return Some(s);
+                    return Some(Err(s));
                 }
             }
             // v0.90 (ADR 0114): the `Instant` kernel. `toEpochMillis` is the
@@ -5000,7 +5009,7 @@ fn lower_kernel_method_call(
             // renders the number.
             KernelOp::Instant(op) => {
                 if let Some(s) = pre.absorb_opt(lower_instant_kernel(receiver, op, args, cx)) {
-                    return Some(s);
+                    return Some(Err(s));
                 }
             }
             // #3277: a cookie rides beside an `HttpResult` as a `cookies` list the
@@ -5023,7 +5032,7 @@ fn lower_kernel_method_call(
                         format!("((({recv}) as any).cookies ?? [])")
                     }
                 };
-                return Some(expr);
+                return Some(Err(expr));
             }
             // #2341 (decision A): an HTTP handler's `headers` is a runtime
             // object with these very methods, each answering an `Option`.
@@ -5033,26 +5042,26 @@ fn lower_kernel_method_call(
             | KernelOp::TokenClaims(_) => {
                 let recv = pre.lower(receiver, cx);
                 let args: Vec<String> = args.iter().map(|a| pre.lower(a, cx)).collect();
-                return Some(format!("({recv}).{}({})", kop.name(), args.join(", ")));
+                return Some(Err(format!("({recv}).{}({})", kop.name(), args.join(", "))));
             }
             // v0.110 (ADR 0142): the `Bytes` kernel. `length` is the octet
             // count; `toBase64` encodes; `decodeUtf8` is a guarded UTF-8 decode
             // returning `Option`.
             KernelOp::Bytes(op) => {
                 if let Some(s) = pre.absorb_opt(lower_bytes_kernel(receiver, op, args, cx)) {
-                    return Some(s);
+                    return Some(Err(s));
                 }
             }
             // #2622: the `Decimal` kernel.
             KernelOp::Decimal(op) => {
                 if let Some(s) = pre.absorb_opt(lower_decimal_kernel(receiver, op, args, cx)) {
-                    return Some(s);
+                    return Some(Err(s));
                 }
             }
             // v0.22a: the string kernel (ADR 0046).
             KernelOp::String(op) => {
                 if let Some(s) = pre.absorb_opt(lower_string_kernel(receiver, op, args, cx)) {
-                    return Some(s);
+                    return Some(Err(s));
                 }
             }
             // v0.22a: Option/Result combinators (ADR 0048).
@@ -5063,7 +5072,7 @@ fn lower_kernel_method_call(
                 if let Some(s) =
                     pre.absorb_opt(lower_option_kernel(e, receiver, op, args, *inner, cx))
                 {
-                    return Some(s);
+                    return Some(Err(s));
                 }
             }
             KernelOp::Result(op) => {
@@ -5073,14 +5082,14 @@ fn lower_kernel_method_call(
                 if let Some(s) =
                     pre.absorb_opt(lower_result_kernel(e, receiver, op, args, *ok, *err, cx))
                 {
-                    return Some(s);
+                    return Some(Err(s));
                 }
             }
             // #2683 / #2711 / #3437: `within`, `race` and `detach`, on every `Effect[T]`.
             KernelOp::Effect(op) => {
                 if let Some(s) = lower_effect_kernel_call(e, receiver, op, args, &recv_ty, cx, pre)
                 {
-                    return Some(s);
+                    return Some(Err(s));
                 }
             }
             // §2.8.3: the `Effect[Result[T, E]]` combinators — `mapOk`/`mapErr`/
@@ -5095,7 +5104,7 @@ fn lower_kernel_method_call(
                         e, receiver, op, args, *ok, *err, cx,
                     ))
                 {
-                    return Some(s);
+                    return Some(Err(s));
                 }
             }
         }
@@ -6196,485 +6205,6 @@ pub(super) fn path_for_is(value: &Expr) -> PatPath {
     }
 }
 
-/// v0.150 (ADR 0174): peel a `traverseTry`/`parTraverseTry` call's checked type
-/// `Effect[Result[List[U], E]]` to the `U` TS — the short-circuit collect's
-/// output-array element annotation. Falls back to `any` if the shape is absent.
-fn list_ok_elem_ts(call_ty: Option<TyId>, tys: TyRender<'_>) -> String {
-    match call_ty.map(|t| tys.get(t)).as_deref() {
-        Some(Ty::Effect(inner)) => match &*tys.get(*inner) {
-            Ty::Result(ok, _) => match &*tys.get(*ok) {
-                Ty::List(u) => ts_ty(*u, tys),
-                _ => ts_ty(*ok, tys),
-            },
-            _ => ts_ty(*inner, tys),
-        },
-        _ => "any".to_string(),
-    }
-}
-
-/// v0.20b: lower a built-in `List` kernel method. Returns None for a method
-/// name the kernel doesn't own (the checker has already rejected it; this
-/// keeps the dispatch defensive). All forms are pure expressions; `foldEff`
-/// returns a Promise that the surrounding `<-` bind awaits.
-fn lower_list_kernel(
-    e: &Expr,
-    receiver: &Expr,
-    op: ListOp,
-    args: &[Expr],
-    elem: TyId,
-    cx: &mut LowerCtx,
-) -> Option<Lowered> {
-    let tys = cx.ty_render();
-    let mut pre = Pre::new();
-    let elem_ts = ts_ty(elem, tys);
-    let elem_el = ts_array_elem(&elem_ts);
-    let text: Option<String> = match (op, args) {
-        (ListOp::Length, []) => {
-            let recv = pre.lower(receiver, cx);
-            Some(format!("({recv}).length"))
-        }
-        (ListOp::Get, [index]) => {
-            let recv = pre.lower(receiver, cx);
-            let idx = pre.lower(index, cx);
-            Some(format!(
-                "((__xs: readonly {elem_el}[], __i: number) => __i >= 0 && __i < __xs.length ? Some(__xs[__i] as {elem_ts}) : None)({recv}, {idx})"
-            ))
-        }
-        (ListOp::Prepend, [head]) => {
-            let head = pre.lower(head, cx);
-            let recv = pre.lower(receiver, cx);
-            Some(format!("[{head}, ...{recv}]"))
-        }
-        // #1889: the receiver lowers before the argument, as written, so any
-        // hoisted effects keep source order.
-        (ListOp::Append, [item]) => {
-            let recv = pre.lower(receiver, cx);
-            let item = pre.lower(item, cx);
-            Some(format!("[...{recv}, {item}]"))
-        }
-        (ListOp::Concat, [other]) => {
-            let recv = pre.lower(receiver, cx);
-            let other = pre.lower(other, cx);
-            Some(format!("[...{recv}, ...{other}]"))
-        }
-        (ListOp::Fold, [init, f]) => {
-            // The call's checked type is the accumulator type.
-            let acc_ts = cx
-                .commons()
-                .expr_types
-                .get(&e.id)
-                .map(|te| ts_ty(te.ty, tys))
-                .unwrap_or_else(|| {
-                    panic!(
-                        "bynk internal error (finding #28): emitter has no recorded type for a \
-                     `fold` call at {:?} — the checker should already have typed it",
-                        e.span
-                    )
-                });
-            let recv = pre.lower(receiver, cx);
-            let init = pre.lower(init, cx);
-            let f = pre.lower(f, cx);
-            Some(format!(
-                "((__xs: readonly {elem_el}[], __acc: {acc_ts}, __f: (acc: {acc_ts}, x: {elem_ts}) => {acc_ts}) => {{ for (const __x of __xs) __acc = __f(__acc, __x); return __acc; }})({recv}, {init}, {f})"
-            ))
-        }
-        (ListOp::FoldEff, [init, f]) => {
-            // The call's checked type is `Effect[Acc]` — peel for the TS
-            // accumulator annotation.
-            let acc_ts = match cx.commons().expr_ty(e.id).as_deref() {
-                Some(Ty::Effect(acc)) => ts_ty(*acc, tys),
-                Some(_) => ts_ty(cx.commons().expr_types[&e.id].ty, tys),
-                None => panic!(
-                    "bynk internal error (finding #28): emitter has no recorded type for a \
-                     `foldEff` call at {:?} — the checker should already have typed it",
-                    e.span
-                ),
-            };
-            let recv = pre.lower(receiver, cx);
-            let init = pre.lower(init, cx);
-            let f = pre.lower(f, cx);
-            Some(format!(
-                "(async (__xs: readonly {elem_el}[], __acc: {acc_ts}, __f: (acc: {acc_ts}, x: {elem_ts}) => globalThis.Promise<{acc_ts}>) => {{ for (const __x of __xs) __acc = await __f(__acc, __x); return __acc; }})({recv}, {init}, {f})"
-            ))
-        }
-        // v0.146 (ADR 0170): `forEach` — run an effectful step per element in
-        // order, awaiting each; yields `Promise<void>`. The eager `List`
-        // analogue of the `Query.forEach` terminal, emitted inline.
-        (ListOp::ForEach, [f]) => {
-            let recv = pre.lower(receiver, cx);
-            let f = pre.lower(f, cx);
-            Some(format!(
-                "(async (__xs: readonly {elem_el}[]) => {{ for (const __x of __xs) {{ await ({f})(__x); }} }})({recv})"
-            ))
-        }
-        // v0.147 (ADR 0171): `parTraverse` — issue the effectful fn over every
-        // element concurrently and await them together, so one slow element does
-        // not head-of-line-block the rest. The eager `List` analogue of the
-        // `Query.parTraverse` terminal, emitted inline.
-        (ListOp::ParTraverse, [f]) => {
-            cx.note_settle_all();
-            let recv = pre.lower(receiver, cx);
-            let f = pre.lower(f, cx);
-            Some(format!(
-                "(async (__xs: readonly {elem_el}[]) => {{ await __bynkSettleAll(__xs.map((__x: {elem_ts}) => () => ({f})(__x))); }})({recv})"
-            ))
-        }
-        // v0.148 (ADR 0172): the collect-all iterators — every element's
-        // `Result` outcome is gathered (an `Err` is a value, so nothing rejects).
-        // `traverseAll` awaits each in order into a typed array; `parTraverseAll`
-        // issues all at once and `Promise.all`s the resolved `Result`s. Both
-        // yield `Promise<Result<…>[]>`.
-        (ListOp::TraverseAll, [f]) => {
-            // The call's checked type is `Effect[List[Result[B, E]]]` — peel to
-            // the `Result[B, E]` TS for the output-array annotation.
-            let res_ts = match cx.commons().expr_ty(e.id).as_deref() {
-                Some(Ty::Effect(inner)) => match &*tys.get(*inner) {
-                    Ty::List(el) => ts_ty(*el, tys),
-                    _ => ts_ty(*inner, tys),
-                },
-                other => panic!(
-                    "bynk internal error (finding #28): emitter expected `Effect[List[_]]` \
-                     recorded for a `traverseAll` call at {:?}, but found {other:?} — the \
-                     checker should already have typed it",
-                    e.span
-                ),
-            };
-            let res_el = ts_array_elem(&res_ts);
-            let recv = pre.lower(receiver, cx);
-            let f = pre.lower(f, cx);
-            Some(format!(
-                "(async (__xs: readonly {elem_el}[]) => {{ const __out: {res_el}[] = []; for (const __x of __xs) {{ __out.push(await ({f})(__x)); }} return __out; }})({recv})"
-            ))
-        }
-        (ListOp::ParTraverseAll, [f]) => {
-            cx.note_settle_all();
-            let recv = pre.lower(receiver, cx);
-            let f = pre.lower(f, cx);
-            Some(format!(
-                "(async (__xs: readonly {elem_el}[]) => await __bynkSettleAll(__xs.map((__x: {elem_ts}) => () => ({f})(__x))))({recv})"
-            ))
-        }
-        // #2806: pure `Result` accumulation. The call's checked type is
-        // `Result[List[T], E']`; `T` and `E` (the element's own `Err` type) type
-        // the accumulators.
-        (name @ (ListOp::SequenceAll | ListOp::SequenceTry), []) => {
-            let (ok_ts, err_ts) = match cx.commons().expr_ty(e.id).as_deref() {
-                Some(Ty::Result(ok, err)) => {
-                    let ok_ts = match &*tys.get(*ok) {
-                        Ty::List(t) => ts_ty(*t, tys),
-                        _ => ts_ty(*ok, tys),
-                    };
-                    let err_ts = match &*tys.get(*err) {
-                        Ty::List(t) if name == ListOp::SequenceAll => ts_ty(*t, tys),
-                        _ => ts_ty(*err, tys),
-                    };
-                    (ok_ts, err_ts)
-                }
-                _ => ("any".to_string(), "any".to_string()),
-            };
-            let ok_el = ts_array_elem(&ok_ts);
-            let err_el = ts_array_elem(&err_ts);
-            let recv = pre.lower(receiver, cx);
-            Some(if name == ListOp::SequenceAll {
-                format!(
-                    "((__xs: readonly {elem_el}[]) => {{ const __ok: {ok_el}[] = []; const __errs: {err_el}[] = []; for (const __r of __xs) {{ if (__r.tag === \"Err\") {{ __errs.push(__r.error); }} else {{ __ok.push(__r.value); }} }} return __errs.length > 0 ? Err(__errs) : Ok(__ok); }})({recv})"
-                )
-            } else {
-                format!(
-                    "((__xs: readonly {elem_el}[]) => {{ const __ok: {ok_el}[] = []; for (const __r of __xs) {{ if (__r.tag === \"Err\") {{ return Err(__r.error); }} __ok.push(__r.value); }} return Ok(__ok); }})({recv})"
-                )
-            })
-        }
-        // v0.150 (ADR 0174): the short-circuit collect iterators — stop at the
-        // first `Err` and return it (`Effect[Result[List[U], E]]`). `traverseTry`
-        // awaits each in order, bailing on the first `Err`; `parTraverseTry`
-        // issues all at once, then scans the resolved `Result`s in input order.
-        (ListOp::TraverseTry, [f]) => {
-            let u_ts = list_ok_elem_ts(cx.commons().expr_types.get(&e.id).map(|te| te.ty), tys);
-            let u_el = ts_array_elem(&u_ts);
-            let recv = pre.lower(receiver, cx);
-            let f = pre.lower(f, cx);
-            Some(format!(
-                "(async (__xs: readonly {elem_el}[]) => {{ const __out: {u_el}[] = []; for (const __x of __xs) {{ const __r = await ({f})(__x); if (__r.tag === \"Err\") {{ return Err(__r.error); }} __out.push(__r.value); }} return Ok(__out); }})({recv})"
-            ))
-        }
-        (ListOp::ParTraverseTry, [f]) => {
-            cx.note_settle_all();
-            let u_ts = list_ok_elem_ts(cx.commons().expr_types.get(&e.id).map(|te| te.ty), tys);
-            let u_el = ts_array_elem(&u_ts);
-            let recv = pre.lower(receiver, cx);
-            let f = pre.lower(f, cx);
-            Some(format!(
-                "(async (__xs: readonly {elem_el}[]) => {{ const __rs = await __bynkSettleAll(__xs.map((__x: {elem_ts}) => () => ({f})(__x))); const __out: {u_el}[] = []; for (const __r of __rs) {{ if (__r.tag === \"Err\") {{ return Err(__r.error); }} __out.push(__r.value); }} return Ok(__out); }})({recv})"
-            ))
-        }
-        // v0.88 (ADR 0116): the eager builder/terminal vocabulary. Most lower
-        // to native array methods; callbacks are wrapped in a single-arg arrow
-        // so the array index/array extra args never reach a Bynk one-param fn.
-        (ListOp::Map, [f]) => {
-            let recv = pre.lower(receiver, cx);
-            let f = pre.lower(f, cx);
-            Some(format!("({recv}).map((__x: {elem_ts}) => ({f})(__x))"))
-        }
-        (ListOp::Filter, [p]) => {
-            let recv = pre.lower(receiver, cx);
-            let p = pre.lower(p, cx);
-            Some(format!("({recv}).filter((__x: {elem_ts}) => ({p})(__x))"))
-        }
-        (ListOp::FlatMap, [f]) => {
-            let recv = pre.lower(receiver, cx);
-            let f = pre.lower(f, cx);
-            Some(format!("({recv}).flatMap((__x: {elem_ts}) => ({f})(__x))"))
-        }
-        (ListOp::Take, [n]) => {
-            let recv = pre.lower(receiver, cx);
-            let n = pre.lower(n, cx);
-            Some(format!("({recv}).slice(0, globalThis.Math.max(0, {n}))"))
-        }
-        (ListOp::Skip, [n]) => {
-            let recv = pre.lower(receiver, cx);
-            let n = pre.lower(n, cx);
-            Some(format!("({recv}).slice(globalThis.Math.max(0, {n}))"))
-        }
-        (ListOp::Count, []) => {
-            let recv = pre.lower(receiver, cx);
-            Some(format!("({recv}).length"))
-        }
-        (ListOp::Any, [p]) => {
-            let recv = pre.lower(receiver, cx);
-            let p = pre.lower(p, cx);
-            Some(format!("({recv}).some((__x: {elem_ts}) => ({p})(__x))"))
-        }
-        (ListOp::All, [p]) => {
-            let recv = pre.lower(receiver, cx);
-            let p = pre.lower(p, cx);
-            Some(format!("({recv}).every((__x: {elem_ts}) => ({p})(__x))"))
-        }
-        // v0.119 (ADR 0155, DECISION C-a): `run.upTo(step)` — the driven history
-        // strictly before `step`. Steps are distinct object instances in the run
-        // array, so `indexOf` is reference identity. An IIFE avoids re-evaluating
-        // the receiver.
-        (ListOp::UpTo, [step]) => {
-            let recv = pre.lower(receiver, cx);
-            let step = pre.lower(step, cx);
-            Some(format!(
-                "((__xs: readonly {elem_el}[], __s: {elem_ts}) => __xs.slice(0, __xs.indexOf(__s)))({recv}, {step})"
-            ))
-        }
-        (ListOp::First, []) => {
-            let recv = pre.lower(receiver, cx);
-            Some(format!(
-                "((__xs: readonly {elem_el}[]) => __xs.length > 0 ? Some(__xs[0]) : None)({recv})"
-            ))
-        }
-        (ListOp::FirstOrElse, [default]) => {
-            let recv = pre.lower(receiver, cx);
-            let default = pre.lower(default, cx);
-            Some(format!(
-                "((__xs: readonly {elem_el}[], __d: {elem_ts}) => __xs.length > 0 ? __xs[0] : __d)({recv}, {default})"
-            ))
-        }
-        // v0.88 (ADR 0116 D2/D3/D4): ordering + aggregates. The comparator
-        // `<`/`>` works for the numeric- and string-erased orderable keys
-        // alike, so no key-type branch is needed (except average's rounding).
-        (ListOp::SortBy, [key]) => {
-            let cmp = kernel_key_comparator(&args[0], cx);
-            let recv = pre.lower(receiver, cx);
-            let key = pre.lower(key, cx);
-            Some(match cmp {
-                // A plain base key: the bare operators, as before.
-                None => format!(
-                    "[...{recv}].sort((__a: {elem_ts}, __b: {elem_ts}) => {{ const __ka = ({key})(__a), __kb = ({key})(__b); return __ka < __kb ? -1 : __ka > __kb ? 1 : 0; }})"
-                ),
-                // Constrained generics slice 1 (DECISION H): `Float` (total
-                // order, DECISION G), `Bytes`, and every other `Ord` key.
-                // `recv` is an argument, not part of the arrow's body, so it
-                // lowers exactly where it did before.
-                Some(cmp) if cmp.chars().all(|c| c.is_alphanumeric() || c == '_') => format!(
-                    "[...{recv}].sort((__a: {elem_ts}, __b: {elem_ts}) => {cmp}(({key})(__a), ({key})(__b)))"
-                ),
-                Some(cmp) => format!(
-                    "((__c, __r: readonly {elem_el}[]) => [...__r].sort((__a: {elem_ts}, __b: {elem_ts}) => __c(({key})(__a), ({key})(__b))))({cmp}, {recv})"
-                ),
-            })
-        }
-        // #2805: `sortByDescending` is the exact reverse of `sortBy`'s order
-        // (the comparator's arguments swapped, so `NaN` is first), and stable.
-        (ListOp::SortByDescending, [key]) => {
-            let cmp = kernel_key_comparator(&args[0], cx);
-            let recv = pre.lower(receiver, cx);
-            let key = pre.lower(key, cx);
-            Some(match cmp {
-                None => format!(
-                    "[...{recv}].sort((__a: {elem_ts}, __b: {elem_ts}) => {{ const __ka = ({key})(__a), __kb = ({key})(__b); return __ka < __kb ? 1 : __ka > __kb ? -1 : 0; }})"
-                ),
-                Some(cmp) if cmp.chars().all(|c| c.is_alphanumeric() || c == '_') => format!(
-                    "[...{recv}].sort((__a: {elem_ts}, __b: {elem_ts}) => {cmp}(({key})(__b), ({key})(__a)))"
-                ),
-                Some(cmp) => format!(
-                    "((__c, __r: readonly {elem_el}[]) => [...__r].sort((__a: {elem_ts}, __b: {elem_ts}) => __c(({key})(__b), ({key})(__a))))({cmp}, {recv})"
-                ),
-            })
-        }
-        (ListOp::Distinct, []) if !key_is_plain(elem, tys.types()) => {
-            cx.runtime_use().note_key("__bynkDistinct");
-            let recv = pre.lower(receiver, cx);
-            Some(format!("__bynkDistinct({recv})"))
-        }
-        (ListOp::DistinctBy, [key]) if !key_fn_is_plain(key, cx) => {
-            cx.runtime_use().note_key("__bynkDistinctBy");
-            let recv = pre.lower(receiver, cx);
-            let key = pre.lower(key, cx);
-            Some(format!("__bynkDistinctBy({recv}, {key})"))
-        }
-        (ListOp::JoinOn, [other, left, ..]) if !key_fn_is_plain(left, cx) => {
-            cx.runtime_use().note_key("__bynkJoinOn");
-            let recv = pre.lower(receiver, cx);
-            let other = pre.lower(other, cx);
-            let left = pre.lower(left, cx);
-            let right = pre.lower(&args[2], cx);
-            let into = pre.lower(&args[3], cx);
-            Some(format!(
-                "__bynkJoinOn({recv}, {other}, {left}, {right}, {into})"
-            ))
-        }
-        (ListOp::LeftJoin, [other, left, ..]) if !key_fn_is_plain(left, cx) => {
-            cx.runtime_use().note_key("__bynkLeftJoin");
-            let recv = pre.lower(receiver, cx);
-            let other = pre.lower(other, cx);
-            let left = pre.lower(left, cx);
-            let right = pre.lower(&args[2], cx);
-            let into = pre.lower(&args[3], cx);
-            Some(format!(
-                "__bynkLeftJoin({recv}, {other}, {left}, {right}, {into})"
-            ))
-        }
-        (ListOp::GroupBy, [key, into]) if !key_fn_is_plain(key, cx) => {
-            cx.runtime_use().note_key("__bynkGroupBy");
-            let recv = pre.lower(receiver, cx);
-            let key = pre.lower(key, cx);
-            let into = pre.lower(into, cx);
-            Some(format!("__bynkGroupBy({recv}, {key}, {into})"))
-        }
-        (ListOp::Distinct, []) => {
-            let recv = pre.lower(receiver, cx);
-            Some(format!("[...new globalThis.Set({recv})]"))
-        }
-        (ListOp::DistinctBy, [key]) => {
-            let recv = pre.lower(receiver, cx);
-            let key = pre.lower(key, cx);
-            Some(format!(
-                "((__xs: readonly {elem_el}[]) => {{ const __seen = new globalThis.Set(); const __out: {elem_el}[] = []; for (const __x of __xs) {{ const __k = ({key})(__x); if (!__seen.has(__k)) {{ __seen.add(__k); __out.push(__x); }} }} return __out; }})({recv})"
-            ))
-        }
-        (ListOp::Sum, [key])
-            if key_fn_ret(key, cx).and_then(|t| t.base(tys.types())) == Some(BaseType::Decimal) =>
-        {
-            // #2622: an exact sum, from the zero decimal.
-            let recv = pre.lower(receiver, cx);
-            let key = pre.lower(key, cx);
-            cx.note_decimal("__bynkDecimalAdd");
-            Some(format!(
-                "({recv}).reduce((__s: {}, __x: {elem_ts}) => __bynkDecimalAdd(__s, ({key})(__x)), {})",
-                crate::emitter::ts_types::DECIMAL_TS_TYPE,
-                crate::emitter::ts_types::decimal_ts_literal("0", 0)
-            ))
-        }
-        (ListOp::Sum, [key]) => {
-            let recv = pre.lower(receiver, cx);
-            let key = pre.lower(key, cx);
-            Some(format!(
-                "({recv}).reduce((__s: number, __x: {elem_ts}) => __s + ({key})(__x), 0)"
-            ))
-        }
-        (ListOp::Min | ListOp::Max, [key]) => {
-            let cmp = if op == ListOp::Min { "<" } else { ">" };
-            let key_cmp = kernel_key_comparator(&args[0], cx);
-            let recv = pre.lower(receiver, cx);
-            let key = pre.lower(key, cx);
-            Some(match key_cmp {
-                None => format!(
-                    "((__xs: readonly {elem_el}[]) => {{ if (__xs.length === 0) return None; let __m = ({key})(__xs[0]); for (const __x of __xs) {{ const __k = ({key})(__x); if (__k {cmp} __m) __m = __k; }} return Some(__m); }})({recv})"
-                ),
-                Some(key_cmp) => with_comparator(&key_cmp, |c| {
-                    format!(
-                        "((__xs: readonly {elem_el}[]) => {{ if (__xs.length === 0) return None; let __m = ({key})(__xs[0]); for (const __x of __xs) {{ const __k = ({key})(__x); if ({c}(__k, __m) {cmp} 0) __m = __k; }} return Some(__m); }})({recv})"
-                    )
-                }),
-            })
-        }
-        (ListOp::Average, [key]) => {
-            // D3: Duration averages round to integer millis; Int/Float -> Float.
-            let round = matches!(
-                cx.commons().expr_ty(e.id).as_deref(),
-                Some(Ty::Option(inner)) if matches!(&*tys.get(*inner), Ty::Base(BaseType::Duration))
-            );
-            let mean = if round {
-                "globalThis.Math.round(__s / __xs.length)"
-            } else {
-                "__s / __xs.length"
-            };
-            let recv = pre.lower(receiver, cx);
-            let key = pre.lower(key, cx);
-            Some(format!(
-                "((__xs: readonly {elem_el}[]) => {{ if (__xs.length === 0) return None; let __s = 0; for (const __x of __xs) __s += ({key})(__x); return Some({mean}); }})({recv})"
-            ))
-        }
-        // v0.94 (ADR 0116/0120): joins & grouping. Hash on a stringified key
-        // (value-keyable, like the `@indexed` posting list), probe, and project
-        // each result through `into` — there is no pair value. `joinOn`/`leftJoin`
-        // build the hash from `other`'s key; `join` is a nested-loop predicate;
-        // `groupBy` partitions in first-seen key order. Group/`into` receive the
-        // **original** key (re-derived from a representative row), not the
-        // stringified hash key.
-        (ListOp::JoinOn, [other, left, right, into]) => {
-            let recv = pre.lower(receiver, cx);
-            let u_ts = join_other_elem_ts(args, cx);
-            let u_el = ts_array_elem(&u_ts);
-            let other = pre.lower(other, cx);
-            let left = pre.lower(left, cx);
-            let right = pre.lower(right, cx);
-            let into = pre.lower(into, cx);
-            Some(format!(
-                "(() => {{ const __h: globalThis.Record<string, {u_el}[]> = globalThis.Object.create(null); for (const __u of {other}) {{ const __k = String(({right})(__u)); (__h[__k] = __h[__k] ?? []).push(__u); }} return ({recv}).flatMap((__t: {elem_ts}) => {{ const __m = __h[String(({left})(__t))] ?? []; return __m.map((__u: {u_ts}) => ({into})(__t, __u)); }}); }})()"
-            ))
-        }
-        (ListOp::LeftJoin, [other, left, right, into]) => {
-            let recv = pre.lower(receiver, cx);
-            let u_ts = join_other_elem_ts(args, cx);
-            let u_el = ts_array_elem(&u_ts);
-            let other = pre.lower(other, cx);
-            let left = pre.lower(left, cx);
-            let right = pre.lower(right, cx);
-            let into = pre.lower(into, cx);
-            Some(format!(
-                "(() => {{ const __h: globalThis.Record<string, {u_el}[]> = globalThis.Object.create(null); for (const __u of {other}) {{ const __k = String(({right})(__u)); (__h[__k] = __h[__k] ?? []).push(__u); }} return ({recv}).flatMap((__t: {elem_ts}) => {{ const __m = __h[String(({left})(__t))] ?? []; return __m.length > 0 ? __m.map((__u: {u_ts}) => ({into})(__t, Some(__u))) : [({into})(__t, None)]; }}); }})()"
-            ))
-        }
-        (ListOp::Join, [other, on, into]) => {
-            let recv = pre.lower(receiver, cx);
-            let u_ts = join_other_elem_ts(args, cx);
-            let u_el = ts_array_elem(&u_ts);
-            let other = pre.lower(other, cx);
-            let on = pre.lower(on, cx);
-            let into = pre.lower(into, cx);
-            Some(format!(
-                "(() => {{ const __b: readonly {u_el}[] = {other}; return ({recv}).flatMap((__t: {elem_ts}) => __b.filter((__u: {u_ts}) => ({on})(__t, __u)).map((__u: {u_ts}) => ({into})(__t, __u))); }})()"
-            ))
-        }
-        (ListOp::GroupBy, [key, into]) => {
-            let recv = pre.lower(receiver, cx);
-            let key = pre.lower(key, cx);
-            let into = pre.lower(into, cx);
-            Some(format!(
-                "(() => {{ const __h: globalThis.Record<string, {elem_el}[]> = globalThis.Object.create(null); const __order: string[] = []; for (const __t of {recv}) {{ const __k = String(({key})(__t)); if (!(__k in __h)) {{ __h[__k] = []; __order.push(__k); }} __h[__k].push(__t); }} return __order.map((__k) => {{ const __rows = __h[__k]; return ({into})(({key})(__rows[0]), __rows); }}); }})()"
-            ))
-        }
-        _ => None,
-    };
-    text.map(|expr| pre.finish_text(expr))
-}
-
 /// Slice 0b (#2662): the `parTraverse` family joins through `__bynkSettleAll`,
 /// so a module using it needs the import even with no `par` block.
 /// `lower_query_method` has no `cx`, so its callers note it here.
@@ -6684,17 +6214,6 @@ fn note_par_fan_out(cx: &LowerCtx, method: &Ident) {
         "parTraverse" | "parTraverseAll" | "parTraverseTry"
     ) {
         cx.note_settle_all();
-    }
-}
-
-/// v0.94 (ADR 0120): the TS element type of a join's `other` collection (its
-/// `List`/`Query` element), for typing the hash-map buckets. Falls back to
-/// `unknown` if the checker recorded no type (an already-diagnosed program).
-fn join_other_elem_ts(args: &[Expr], cx: &LowerCtx) -> String {
-    let tys = cx.ty_render();
-    match cx.commons().expr_ty(args[0].id).as_deref() {
-        Some(Ty::List(u) | Ty::Query(u)) => ts_ty(*u, tys),
-        _ => "unknown".to_string(),
     }
 }
 
@@ -6744,7 +6263,7 @@ struct QueryShape<'a> {
     keyed: bool,
     /// The comparator expression for `sortBy`/`min`/`max` (#2787); `None` keeps
     /// the bare `<`/`>` operators, for `Int`/`String`/`Duration`/`Instant` keys.
-    key_cmp: Option<String>,
+    key_cmp: Option<bynk_ts::TsExpr>,
     /// The module's runtime-helper record, so a lowering that needs a helper
     /// imports it (`Query.sum` over a `Decimal` key needs `__bynkDecimalAdd`, #3421).
     runtime_use: &'a RuntimeUse,
@@ -6752,7 +6271,7 @@ struct QueryShape<'a> {
 
 /// The comparator for a `Query` `sortBy`/`min`/`max` key, as `lower_list_kernel`
 /// picks it: `None` for a plain base key, otherwise the key type's comparator.
-fn query_key_cmp(method: &Ident, args: &[Expr], cx: &LowerCtx) -> Option<String> {
+fn query_key_cmp(method: &Ident, args: &[Expr], cx: &LowerCtx) -> Option<bynk_ts::TsExpr> {
     match (method.name.as_str(), args) {
         ("sortBy" | "min" | "max", [key]) => kernel_key_comparator(key, cx),
         ("sortByDescending", [key]) => kernel_key_comparator(key, cx),
@@ -9080,70 +8599,6 @@ fn two<T>(children: Vec<T>) -> (T, T) {
     match (it.next(), it.next(), it.next()) {
         (Some(l), Some(r), None) => (l, r),
         _ => unreachable!("a two-child builder is given exactly two children"),
-    }
-}
-
-/// The comparator an ordering kernel (`sortBy`/`min`/`max`) needs for its key
-/// function's result type, or `None` when the key is a plain base type that keeps
-/// the bare `<`/`>` (constrained-generics slice 1, DECISION H). `Float` is not
-/// plain: the kernels use its total order (DECISION G), so `NaN` sorts last
-/// instead of making the sort inconsistent. A key type the checker did not record
-/// keeps the bare operators.
-fn kernel_key_comparator(key: &Expr, cx: &LowerCtx) -> Option<String> {
-    let tys = cx.ty_render();
-    let fn_ty = cx.commons().expr_types.get(&key.id)?.ty;
-    let Ty::Fn { ret, .. } = &*tys.get(fn_ty) else {
-        return None;
-    };
-    let plain = matches!(
-        ret.base(tys.types()),
-        Some(BaseType::Int | BaseType::String | BaseType::Duration | BaseType::Instant)
-    );
-    // 1A: witness printed for a text caller
-    (!plain).then(|| bynk_ts::print_expr(&cx.comparator(*ret)))
-}
-
-/// Constrained generics slice 2: whether a `Map` key / `Set` element of this
-/// static type is a JS primitive (`string`, `number`, `boolean`), so the plain
-/// `Map`/`Set` compares it by value. Every other `Key` type (`Bytes`, `Option`,
-/// `List`, a record, a sum, a type parameter) takes the keyed helpers in
-/// `keys.ts`; a plain-keyed site emits exactly what it did before.
-fn key_is_plain(ty: TyId, tys: &Types) -> bool {
-    match &*tys.get(ty) {
-        Ty::Base(b) => !matches!(b, BaseType::Bytes | BaseType::Decimal),
-        Ty::Named {
-            kind: NamedKind::Refined(b) | NamedKind::Opaque(b),
-            ..
-        } => !matches!(b, BaseType::Bytes | BaseType::Decimal),
-        _ => false,
-    }
-}
-
-/// The result type of a function-typed argument (a kernel's key function).
-fn key_fn_ret(key: &Expr, cx: &LowerCtx) -> Option<TyId> {
-    let tys = cx.ty_render();
-    let fn_ty = cx.commons().expr_types.get(&key.id)?.ty;
-    match &*tys.get(fn_ty) {
-        Ty::Fn { ret, .. } => Some(*ret),
-        _ => None,
-    }
-}
-
-/// Whether a kernel keyed by the result of `key` hashes through the plain
-/// `String(key)` path. An unknown type takes the helpers, which are correct for
-/// every key.
-fn key_fn_is_plain(key: &Expr, cx: &LowerCtx) -> bool {
-    key_fn_ret(key, cx).is_some_and(|t| key_is_plain(t, cx.commons().tys()))
-}
-
-/// Bind comparator expression `cmp` as `__c` around `body`. A bare identifier (a
-/// runtime comparator or an in-scope witness) is substituted directly; a built
-/// comparator is evaluated once, outside the loop that calls it.
-fn with_comparator(cmp: &str, body: impl FnOnce(&str) -> String) -> String {
-    if cmp.chars().all(|c| c.is_alphanumeric() || c == '_') {
-        body(cmp)
-    } else {
-        format!("((__c) => {})({cmp})", body("__c"))
     }
 }
 
@@ -12899,5 +12354,154 @@ fn minus(x: Int) -> Int { 5 - - -x }
             func(&ts, "b"),
             "export function b(s: string, x: number): Result<boolean, string> {\n  let __r1: boolean;\n  if (s.includes(s)) {\n    const __r0 = risky(x);\n    if (__r0.tag === \"Err\") return __r0;\n    __r1 = __r0.value > 0;\n  } else {\n    __r1 = false;\n  }\n  return Ok(__r1);\n}\n"
         );
+    }
+}
+
+/// 1A.18a (#3719): the `List` kernel's expression-bodied arms build nodes.
+#[cfg(test)]
+mod list_kernel_tests {
+    use crate::testkit::emit_source;
+
+    /// `(text exits, emitted TypeScript)` for a one-function commons.
+    fn exits(body: &str) -> (usize, String) {
+        super::TEXT_EXITS.with(|c| c.set(0));
+        let ts = emit_source(&format!("commons lk\n{body}\n"));
+        (super::TEXT_EXITS.with(|c| c.get()), ts)
+    }
+
+    /// The returned expression of `export function f`.
+    fn returned(ts: &str) -> String {
+        let at = ts.find("export function f(").expect("f");
+        let rest = &ts[at..];
+        let ret = rest.find("  return ").expect("a return") + "  return ".len();
+        let end = rest[ret..].find(";\n}\n").expect("end");
+        rest[ret..ret + end].to_string()
+    }
+
+    /// Each arm over node operands prints exactly today's text and leaves no
+    /// expression as text.
+    #[test]
+    fn expression_arms_over_nodes_print_as_before_with_no_text_exit() {
+        for (body, want) in [
+            ("fn f(xs: List[Int]) -> Int { xs.length() }", "(xs).length"),
+            ("fn f(xs: List[Int]) -> Int { xs.count() }", "(xs).length"),
+            (
+                "fn f(xs: List[Int], i: Int) -> Option[Int] { xs.get(i) }",
+                "((__xs: readonly number[], __i: number) => __i >= 0 && __i < __xs.length ? Some(__xs[__i] as number) : None)(xs, i)",
+            ),
+            (
+                "fn f(xs: List[Int], y: List[Int]) -> List[Int] { xs.concat(y).append(1).prepend(0) }",
+                "[0, ...[...[...xs, ...y], 1]]",
+            ),
+            (
+                "fn f(xs: List[Int]) -> List[Int] { xs.map((x) => x + 1).filter((x) => x > 1).take(2).skip(1) }",
+                "((((xs).map((__x: number) => ((x: number) => x + 1)(__x))).filter((__x: number) => ((x: number) => x > 1)(__x))).slice(0, globalThis.Math.max(0, 2))).slice(globalThis.Math.max(0, 1))",
+            ),
+            (
+                "fn f(xs: List[Int]) -> Bool { xs.any((x) => x > 1) && xs.all((x) => x > 0) }",
+                "(xs).some((__x: number) => ((x: number) => x > 1)(__x)) && (xs).every((__x: number) => ((x: number) => x > 0)(__x))",
+            ),
+            (
+                "fn f(xs: List[Int]) -> List[Int] { xs.flatMap((x) => [x, x]) }",
+                "(xs).flatMap((__x: number) => ((x: number) => [x, x])(__x))",
+            ),
+            (
+                "fn f(xs: List[Int]) -> Option[Int] { xs.first() }",
+                "((__xs: readonly number[]) => __xs.length > 0 ? Some(__xs[0]) : None)(xs)",
+            ),
+            (
+                "fn f(xs: List[Int]) -> Int { xs.firstOrElse(0) }",
+                "((__xs: readonly number[], __d: number) => __xs.length > 0 ? __xs[0] : __d)(xs, 0)",
+            ),
+            (
+                "fn f(xs: List[Int]) -> Int { xs.sum((x) => x) }",
+                "(xs).reduce((__s: number, __x: number) => __s + ((x: number) => x)(__x), 0)",
+            ),
+            (
+                "fn f(xs: List[Int]) -> List[Int] { xs.distinct() }",
+                "[...new globalThis.Set(xs)]",
+            ),
+            (
+                "fn f(xs: List[Bytes]) -> List[Bytes] { xs.distinct() }",
+                "__bynkDistinct(xs)",
+            ),
+            (
+                "fn f(xs: List[Float]) -> List[Float] { xs.sortBy((x) => x) }",
+                "[...xs].sort((__a: number, __b: number) => __bynkCmpFloat(((x: number) => x)(__a), ((x: number) => x)(__b)))",
+            ),
+            (
+                "fn f(xs: List[Float]) -> List[Float] { xs.sortByDescending((x) => x) }",
+                "[...xs].sort((__a: number, __b: number) => __bynkCmpFloat(((x: number) => x)(__b), ((x: number) => x)(__a)))",
+            ),
+        ] {
+            let (n, ts) = exits(body);
+            assert_eq!(returned(&ts), want, "{body}");
+            assert_eq!(n, 0, "{body}: text exits\n{ts}");
+        }
+    }
+
+    /// The `Decimal` sum starts from the zero decimal and notes its helper.
+    #[test]
+    fn a_decimal_sum_is_a_node_and_imports_its_helper() {
+        let (n, ts) = exits("fn f(xs: List[Decimal]) -> Decimal { xs.sum((x) => x) }");
+        assert_eq!(n, 0, "{ts}");
+        assert!(ts.contains("__bynkDecimalAdd(__s, ((x: { readonly coefficient: bigint; readonly scale: number }) => x)(__x)), { coefficient: 0n, scale: 0 })"), "{ts}");
+        assert!(ts.contains("import { __bynkDecimalAdd }"), "{ts}");
+    }
+
+    /// A text operand falls back to today's text, byte for byte: a plain-key
+    /// `sortBy` is statement-bodied and still text (1A.18b), and the `map` over
+    /// it keeps its text form.
+    #[test]
+    fn a_text_operand_keeps_the_text_form() {
+        let (n, ts) =
+            exits("fn f(xs: List[Int]) -> List[Int] { xs.sortBy((x) => x).map((x) => x) }");
+        assert!(n > 0, "{ts}");
+        assert_eq!(
+            returned(&ts),
+            "([...xs].sort((__a: number, __b: number) => { const __ka = ((x: number) => x)(__a), __kb = ((x: number) => x)(__b); return __ka < __kb ? -1 : __ka > __kb ? 1 : 0; })).map((__x: number) => ((x: number) => x)(__x))"
+        );
+    }
+
+    /// Hoisted effects keep source order: the receiver's `?` lowers before the
+    /// argument's for `append`/`concat`, after it for `prepend`.
+    #[test]
+    fn hoisted_operands_keep_source_order() {
+        let src = "commons lk\n\
+            fn p(x: Int) -> Result[Int, String] { Ok(x) }\n\
+            fn f(xs: List[Int]) -> Result[List[Int], String] { Ok(xs.append(p(1)?).concat([p(2)?])) }\n\
+            fn g(xs: List[Int]) -> Result[List[Int], String] { Ok(xs.prepend(p(3)?)) }\n";
+        let ts = emit_source(src);
+        let at = |n: &str| ts.find(n).unwrap_or_else(|| panic!("{n}\n{ts}"));
+        let f = at("export function f(");
+        let one = ts[f..].find("p(1)").unwrap();
+        let two = ts[f..].find("p(2)").unwrap();
+        assert!(one < two, "{ts}");
+        assert!(
+            ts.contains("return Ok([...[...xs, __r0.value], ...[__r1.value]]);"),
+            "{ts}"
+        );
+        assert!(ts.contains("return Ok([__r0.value, ...xs]);"), "{ts}");
+    }
+
+    /// Decision G: the imports derive from the printed output, so a module using
+    /// `get`, `first`, `sequenceAll` and `traverseTry` imports what it did before.
+    #[test]
+    fn imports_follow_the_printed_kernel_output() {
+        let src = "commons lk\n\
+            fn a(xs: List[Int]) -> Option[Int] { xs.get(0) }\n\
+            fn a2(xs: List[Int]) -> Option[Int] { xs.first() }\n\
+            fn b(xs: List[Result[Int, String]]) -> Result[List[Int], List[String]] { xs.sequenceAll() }\n\
+            fn c(xs: List[Int]) -> Effect[Result[List[Int], String]] {\n\
+              xs.traverseTry((x) => { let r: Result[Int, String] = Ok(x)\n  Effect.pure(r) })\n\
+            }\n";
+        let ts = emit_source(src);
+        assert!(
+            ts.contains(
+                "import { Ok, Err, Some, None, type Result, type Option } from \"./__bynk_runtime/result.js\";"
+            ),
+            "{ts}"
+        );
+        assert_eq!(ts.matches("import ").count(), 2, "{ts}");
     }
 }

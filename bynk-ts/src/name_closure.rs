@@ -938,7 +938,10 @@ impl Walk {
                     self.expr(e);
                 }
             }
-            TsExpr::Await(e) | TsExpr::Paren(e) | TsExpr::Unary { expr: e, .. } => self.expr(e),
+            TsExpr::Await(e)
+            | TsExpr::Paren(e)
+            | TsExpr::Spread(e)
+            | TsExpr::Unary { expr: e, .. } => self.expr(e),
             TsExpr::As { expr, ty } => {
                 self.expr(expr);
                 self.ty(ty);

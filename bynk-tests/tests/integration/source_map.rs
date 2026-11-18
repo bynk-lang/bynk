@@ -351,6 +351,31 @@ fn a_lambda_body_steps_through_its_own_source_lines() {
     assert_eq!(at("return f(3)"), 6, "{ts}");
 }
 
+const LIST_MAP_LAMBDA_FIXTURE: &str = "commons reps {
+  fn run(xs: List[Int]) -> List[Int] {
+    xs.map((x) => {
+      let y = x * 2
+      y + 1
+    })
+  }
+}
+";
+
+/// 1A.18a (#3719): a lambda passed to a list `.map(...)` stepped as one line
+/// while the list dispatcher was text. The call is now a node, so each of the
+/// lambda's statements maps to its own Bynk line.
+#[test]
+fn a_lambda_passed_to_list_map_steps_through_its_own_source_lines() {
+    let (ts, map) = compile_reps(LIST_MAP_LAMBDA_FIXTURE);
+    let lines = decode(extract_field(&map, "mappings"));
+    let at = |needle: &str| {
+        lines[gen_line_of(&ts, needle)].unwrap_or_else(|| panic!("{needle:?} unmapped\n{ts}"))
+    };
+    // Source (0-based): line 3 = `let y`, line 4 = `y + 1`.
+    assert_eq!(at("const y = "), 3, "{ts}");
+    assert_eq!(at("return y + 1"), 4, "{ts}");
+}
+
 /// #1359: like [`compile_reps`], but for a `context`-rooted fixture (a
 /// `capability`/`provides` pair can't live in a bare `commons` at all —
 /// `emit_capability`'s own #1358 test hit the identical constraint) —

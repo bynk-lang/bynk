@@ -24,17 +24,17 @@ export function countBelow<T>(xs: readonly T[], x: T, n: number, __cmp_T: (a: T,
     return 0;
   } else {
     const here = ((__d) => {
-    switch (__d.tag) {
-      case "Some": {
-        const y = __d.value;
-        return (__cmp_T(y, x) < 0 ? 1 : 0);
+      switch (__d.tag) {
+        case "Some": {
+          const y = __d.value;
+          return (__cmp_T(y, x) < 0 ? 1 : 0);
+        }
+        case "None": {
+          return 0;
+        }
       }
-      case "None": {
-        return 0;
-      }
-    }
-    throw new globalThis.Error("non-exhaustive match");
-  })(((__xs: readonly T[]) => __xs.length > 0 ? Some(__xs[0]) : None)((xs).slice(globalThis.Math.max(0, n - 1))));
+      throw new globalThis.Error("non-exhaustive match");
+    })(((__xs: readonly T[]) => __xs.length > 0 ? Some(__xs[0]) : None)((xs).slice(globalThis.Math.max(0, n - 1))));
     return here + countBelow(xs, x, n - 1, __cmp_T);
   }
 }

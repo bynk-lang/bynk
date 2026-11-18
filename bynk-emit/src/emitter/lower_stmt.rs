@@ -2763,7 +2763,7 @@ mod arrow_node_tests {
         assert!(ts.contains("((x: number) => x + 1)(__x)"), "{ts}");
         assert!(ts.contains("((x: number) => ({ a: x }))(__x)"), "{ts}");
         assert!(
-            ts.contains("((x: number) => {\n  const y = x * 2;\n  return y + 1;\n})(__x)"),
+            ts.contains("((x: number) => {\n    const y = x * 2;\n    return y + 1;\n  })(__x)"),
             "{ts}"
         );
     }

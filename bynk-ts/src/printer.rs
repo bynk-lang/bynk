@@ -1264,6 +1264,7 @@ fn render_binary_operand(
         | TsExpr::Await(_)
         | TsExpr::Unary { .. }
         | TsExpr::Paren(_)
+        | TsExpr::Spread(_)
         | TsExpr::Lit(_) => false,
     };
     if needs_parens {
@@ -1784,6 +1785,10 @@ fn render_expr(out: &mut String, expr: &TsExpr, depth: usize, m: &mut Option<Mer
             render_expr(out, inner, depth, m);
             out.push(')');
         }
+        TsExpr::Spread(inner) => {
+            out.push_str("...");
+            render_expr(out, inner, depth, m);
+        }
         TsExpr::Lit(lit) => render_lit(out, lit),
     }
 }
@@ -1820,6 +1825,7 @@ fn starts_with_object(expr: &TsExpr) -> bool {
         | TsExpr::Await(_)
         | TsExpr::Unary { .. }
         | TsExpr::Paren(_)
+        | TsExpr::Spread(_)
         | TsExpr::Lit(_) => false,
     }
 }
@@ -4383,6 +4389,49 @@ mod tests {
         };
         assert_eq!(print_expr(&neg(diff)), "-(a + b)");
         assert_eq!(print_expr(&neg(neg(id("x")))), "-(-x)");
+    }
+
+    /// `TsExpr::Spread` (1A.18a, #3719): `...x` as an array item, in any
+    /// position, over an identifier, a call, a bracketed operand and another
+    /// array; the operand prints as it would anywhere else, with no brackets of
+    /// the spread's own.
+    #[test]
+    fn spread_prints_as_an_array_item() {
+        let id = |n: &str| TsExpr::Ident(n.to_string());
+        let spread = |e: TsExpr| TsExpr::Spread(Box::new(e));
+        let arr = |items: Vec<TsExpr>| TsExpr::array(items);
+        assert_eq!(
+            print_expr(&arr(vec![id("a"), spread(id("b"))])),
+            "[a, ...b]"
+        );
+        assert_eq!(
+            print_expr(&arr(vec![spread(id("a")), id("b")])),
+            "[...a, b]"
+        );
+        assert_eq!(
+            print_expr(&arr(vec![spread(id("a")), spread(id("b"))])),
+            "[...a, ...b]"
+        );
+        let call = TsExpr::Call {
+            callee: Box::new(id("f")),
+            args: vec![id("x")],
+        };
+        assert_eq!(print_expr(&arr(vec![spread(call)])), "[...f(x)]");
+        let new_set = TsExpr::New {
+            callee: Box::new(TsExpr::Member {
+                object: Box::new(id("globalThis")),
+                property: "Set".to_string(),
+            }),
+            args: vec![id("xs")],
+        };
+        assert_eq!(
+            print_expr(&arr(vec![spread(new_set)])),
+            "[...new globalThis.Set(xs)]"
+        );
+        let paren = TsExpr::Paren(Box::new(id("xs")));
+        assert_eq!(print_expr(&arr(vec![spread(paren)])), "[...(xs)]");
+        let inner = arr(vec![id("a")]);
+        assert_eq!(print_expr(&arr(vec![spread(inner)])), "[...[a]]");
     }
 
     /// Review of #1314, finding 2's fourth example: a right-nested `Binary`

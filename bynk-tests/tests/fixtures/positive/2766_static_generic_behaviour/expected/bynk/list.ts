@@ -100,9 +100,9 @@ export function all<A>(xs: readonly A[], p: (a0: A) => boolean): boolean {
 export async function traverse<A, B>(xs: readonly A[], f: (a0: A) => globalThis.Promise<B>): globalThis.Promise<readonly B[]> {
   const init: readonly B[] = ([] as readonly B[]);
   const rev = await (async (__xs: readonly A[], __acc: readonly B[], __f: (acc: readonly B[], x: A) => globalThis.Promise<readonly B[]>) => { for (const __x of __xs) __acc = await __f(__acc, __x); return __acc; })(xs, init, async (acc: readonly B[], x: A) => {
-    const y = await f(x);
-    return [y, ...acc];
-  });
+  const y = await f(x);
+  return [y, ...acc];
+});
   return reverse(rev);
 }
 
