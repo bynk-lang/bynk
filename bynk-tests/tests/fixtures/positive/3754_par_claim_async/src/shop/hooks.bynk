@@ -1,0 +1,14 @@
+// #3754 review: a `par` part that is an idempotency claim awaits, so its thunk is `async`.
+context shop.hooks
+
+consumes bynk { Idempotency, Claim }
+
+service api from http {
+  on POST("/hooks/:id") (id: String) -> Effect[HttpResult[String]] by Visitor given Idempotency {
+    par {
+      let c <- Idempotency.claim(id, 1.hours)
+      let d <- Idempotency.claim("other", 1.hours)
+    }
+    Ok("processed")
+  }
+}

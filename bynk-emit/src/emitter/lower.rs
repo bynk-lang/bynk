@@ -2329,6 +2329,9 @@ fn scope_idempotency_key(
 /// `<deps>.Idempotency.claim`, so a `stub` of it applies.
 fn tracked_claim_call(cap_expr: &str, args: &[String], cx: &mut LowerCtx) -> String {
     cx.claim_scope_used = true;
+    // The bare `await` below makes any enclosing thunk or IIFE effectful —
+    // see `emitted_await` (a `par` part that is a claim call must be `async`).
+    cx.emitted_await = true;
     format!(
         "(await (async (__k: string, __t: number) => __claims.note(__k, await {cap_expr}.claim(__k, __claims.lease(__t)), __t))({}, {}))",
         args[0], args[1]
