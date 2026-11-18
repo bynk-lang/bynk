@@ -23,7 +23,8 @@ use bynk_model::{ConstVal, EventPatternIr, EventPatternValueIr, IrHttpMethod};
 use super::ctx::{BodyMode, ModuleCtx, TailSlot, TestShared};
 use super::lower_ctx::LowerCtx;
 use super::ts_types::{
-    ts_array_elem, ts_base, ts_ty, ts_type_ref, unchecked_construct, unchecked_construct_test,
+    ts_array_elem, ts_base, ts_ty, ts_ty_to_ts_type, ts_type_ref, unchecked_construct,
+    unchecked_construct_test,
 };
 use super::*;
 
@@ -751,6 +752,84 @@ fn hoist_if_as_statement(
     slot
 }
 
+/// Slice 1A.8: the value-position `if`'s hoist, with the node form. Statement
+/// nodes only when the condition, both tails and every statement the branches
+/// hoisted are nodes; otherwise today's text form ([`hoist_if_as_statement`],
+/// still the entry for the short-circuit operators and the async tail). A text
+/// statement is never wrapped to fit inside a node.
+fn hoist_if_value(
+    pre: &mut Pre,
+    cond: LoweredExpr,
+    then_tail: Lowered,
+    else_tail: Lowered,
+    e: &Expr,
+    cx: &mut LowerCtx,
+) -> String {
+    let all_nodes = matches!(cond, LoweredExpr::Node(_))
+        && [&then_tail, &else_tail].iter().all(|t| {
+            matches!(t.expr, LoweredExpr::Node(_))
+                && t.pre.iter().all(|s| matches!(s, LoweredStmt::Node(_)))
+        });
+    if all_nodes {
+        let slot = cx.fresh();
+        hoisted_if_nodes(pre, &slot, cond, then_tail, else_tail, e, cx);
+        slot
+    } else {
+        let slot_ty = checked_ty_ts(e, cx);
+        hoist_if_as_statement(pre, cond.into_text(), then_tail, else_tail, slot_ty, cx)
+    }
+}
+
+/// [`hoist_if_value`]'s node form. The slot's type is taken from the
+/// checker's record of the `if` expression (see the TS7034/TS7005 note on the
+/// text form), as a type node. The branches are `Block`s, so the printer nests
+/// them one level per `if`, as `assign_branch`'s padding did.
+fn hoisted_if_nodes(
+    pre: &mut Pre,
+    slot: &str,
+    cond: LoweredExpr,
+    then_tail: Lowered,
+    else_tail: Lowered,
+    e: &Expr,
+    cx: &LowerCtx,
+) {
+    let ty = cx
+        .commons()
+        .expr_ty(e.id)
+        .map(|_| ts_ty_to_ts_type(cx.commons().expr_types[&e.id].ty, cx.commons().tys()));
+    pre.push_node(bynk_ts::TsStmt::let_stmt(
+        bynk_ts::TsBindingName::Ident(slot.to_string()),
+        ty,
+        None,
+        None,
+    ));
+    let LoweredExpr::Node(cond) = cond else {
+        unreachable!("hoisted_if_nodes is given a node condition")
+    };
+    let branch = |tail: Lowered| {
+        let mut stmts: Vec<bynk_ts::TsStmt> = tail
+            .pre
+            .into_iter()
+            .filter_map(|s| match s {
+                LoweredStmt::Node(n) => Some(*n),
+                LoweredStmt::Text(_) => None,
+            })
+            .collect();
+        if let LoweredExpr::Node(value) = tail.expr {
+            stmts.push(bynk_ts::TsStmt::assign(ident_node(slot), value, None));
+        }
+        bynk_ts::TsStmt::block(stmts, None)
+    };
+    let then_branch = branch(then_tail);
+    let else_branch = branch(else_tail);
+    pre.push_node(bynk_ts::TsStmt::if_else_same_line_stmt(
+        cond,
+        then_branch,
+        else_branch,
+        None,
+    ));
+}
+
 /// #1750: emit a value-position `if`, `match` or block (`e`) as a real
 /// statement, for when its branches hold a `?`. The arrow (IIFE) these forms
 /// otherwise lower to would capture the `?`'s `return`, so its `Err` became the
@@ -860,6 +939,198 @@ fn checked_ty_ts(e: &Expr, cx: &LowerCtx) -> Option<String> {
     cx.commons()
         .expr_ty(e.id)
         .map(|_| ts_ty(cx.commons().expr_types[&e.id].ty, cx.commons().tys()))
+}
+
+/// How a `?` leaves the function when its operand is the failing side. One
+/// value drives both the node guard and today's text guard, so they cannot
+/// disagree about which case applies.
+enum QuestionExit {
+    /// #2857: a test case's `?` fails the case, reporting the `Err` at the
+    /// `?`'s location. Strings are raw (the printer, or `escape_ts_string` on
+    /// the text side, escapes them).
+    Case {
+        location: String,
+        start: usize,
+        end: usize,
+        src: String,
+    },
+    /// v0.153 (ADR 0177): `None` early-returns `HttpResult.NotFound`.
+    NotFound,
+    /// v0.154 (ADR 0178): `Err(T.V(__rN.error))`.
+    Embed { ty_name: String, variant: String },
+    /// `Err` propagates unchanged.
+    Plain,
+}
+
+/// The `?` guard as a statement node: `if (__rN.tag === "Err") return …;`. The
+/// return is not a `Block`, so the printer keeps it inline and the output is
+/// byte-identical to the text form. The case form is an `InlineBlock`, which
+/// prints `{ throw …; }` on the one line today's text has.
+fn question_guard_node(tmp: &str, exit: &QuestionExit) -> bynk_ts::TsStmt {
+    let tag = if matches!(exit, QuestionExit::NotFound) {
+        "None"
+    } else {
+        "Err"
+    };
+    let cond = bynk_ts::TsExpr::Binary {
+        op: bynk_ts::TsBinaryOp::StrictEq,
+        left: Box::new(member_node(tmp, "tag")),
+        right: Box::new(str_node(tag)),
+    };
+    let call = |callee: bynk_ts::TsExpr, args: Vec<bynk_ts::TsExpr>| bynk_ts::TsExpr::Call {
+        callee: Box::new(callee),
+        args,
+    };
+    let then = match exit {
+        QuestionExit::Case {
+            location,
+            start,
+            end,
+            src,
+        } => {
+            let detail = bynk_ts::TsExpr::Binary {
+                op: bynk_ts::TsBinaryOp::Add,
+                left: Box::new(str_node(format!("{src}\n  the operand was Err: "))),
+                right: Box::new(call(
+                    ident_node("__bynkShow"),
+                    vec![member_node(tmp, "error")],
+                )),
+            };
+            let failure = call(
+                ident_node("__bynkExpectFailure"),
+                vec![
+                    str_node(location.clone()),
+                    num_lit(start.to_string()),
+                    num_lit(end.to_string()),
+                    detail,
+                ],
+            );
+            bynk_ts::TsStmt::inline_block(vec![bynk_ts::TsStmt::throw_stmt(failure, None)], None)
+        }
+        QuestionExit::NotFound => {
+            bynk_ts::TsStmt::return_stmt(Some(member_node("HttpResult", "NotFound")), None)
+        }
+        QuestionExit::Embed { ty_name, variant } => bynk_ts::TsStmt::return_stmt(
+            Some(call(
+                ident_node("Err"),
+                vec![call(
+                    member_node(ty_name, variant),
+                    vec![member_node(tmp, "error")],
+                )],
+            )),
+            None,
+        ),
+        QuestionExit::Plain => bynk_ts::TsStmt::return_stmt(Some(ident_node(tmp)), None),
+    };
+    bynk_ts::TsStmt::if_stmt(cond, then, None)
+}
+
+/// [`question_guard_node`]'s text twin, kept for a text operand.
+fn question_guard_text(tmp: &str, exit: &QuestionExit) -> String {
+    match exit {
+        QuestionExit::Case {
+            location,
+            start,
+            end,
+            src,
+        } => {
+            let location = crate::emitter::escape_ts_string(location);
+            let src = crate::emitter::escape_ts_string(src);
+            let detail = format!("\"{src}\\n  the operand was Err: \" + __bynkShow({tmp}.error)");
+            format!(
+                "if ({tmp}.tag === \"Err\") {{ throw __bynkExpectFailure(\"{location}\", {start}, {end}, {detail}); }}"
+            )
+        }
+        QuestionExit::NotFound => {
+            format!("if ({tmp}.tag === \"None\") return HttpResult.NotFound;")
+        }
+        QuestionExit::Embed { ty_name, variant } => {
+            format!("if ({tmp}.tag === \"Err\") return Err({ty_name}.{variant}({tmp}.error));")
+        }
+        QuestionExit::Plain => format!("if ({tmp}.tag === \"Err\") return {tmp};"),
+    }
+}
+
+/// `inner?` (slice 1A.8): hoists `const __rN = <inner>;` and the early-return
+/// guard, and yields `__rN.value`. The two statements are nodes when the
+/// operand is a node, and today's text lines otherwise (see
+/// [`Pre::push_nodes_or_text`]); the yielded `__rN.value` is a genuine member
+/// node either way.
+fn lower_question(e: &Expr, inner: &Expr, cx: &mut LowerCtx) -> Lowered {
+    let tys = cx.commons().tys();
+    // v0.153 (ADR 0177): an `Option[T]?` operand lifts into an
+    // HttpResult handler — `None` early-returns `NotFound` (404),
+    // `Some(v)` yields `v`. Any other operand is a `Result`: `Err`
+    // propagates unchanged. Branch on the operand's checked type.
+    // The checker rejects any other `?` operand, so a typed operand is
+    // always present — assert it, so a future gap surfaces loudly in
+    // tests rather than silently emitting the `Result` branch (which on
+    // an untyped `Option` would leak `None` → `undefined`).
+    let operand_ty = cx.commons().expr_types.get(&inner.id).map(|te| te.ty);
+    let operand_node = operand_ty.map(|t| tys.get(t));
+    debug_assert!(
+        matches!(
+            operand_node.as_deref(),
+            Some(Ty::Option(_) | Ty::Result(_, _))
+        ),
+        "`?` operand has no `Option`/`Result` checked type at {:?}: {operand_node:?}",
+        inner.span,
+    );
+    let is_option = matches!(operand_node.as_deref(), Some(Ty::Option(_)));
+    // v0.154 (ADR 0178): a `Result` operand whose error type differs from
+    // the enclosing return's is converted by a declared embedding
+    // (`embeds E as V`) — the same rule the checker accepted it under.
+    let embed = if is_option || cx.question_fails_case() {
+        None
+    } else {
+        embed_conversion(operand_ty, cx)
+    };
+    let mut pre = Pre::new();
+    let operand = pre.lower_node(inner, cx);
+    let tmp = cx.fresh();
+    let exit = if cx.question_fails_case() {
+        // #2857: a case returns a `CaseResult`, not the operand's
+        // `Result` — so the `?` fails the case, reporting the `Err`
+        // value at the `?`'s location. (The checker rejects an `Option`
+        // operand outside an `HttpResult` handler.)
+        QuestionExit::Case {
+            location: expect_location_raw(cx, e.span.start),
+            start: e.span.start,
+            end: e.span.end,
+            src: expect_source_text_raw(cx, e.span),
+        }
+    } else if is_option {
+        QuestionExit::NotFound
+    } else if let Some((ty_name, variant)) = embed {
+        QuestionExit::Embed { ty_name, variant }
+    } else {
+        QuestionExit::Plain
+    };
+    pre.push_nodes_or_text(
+        vec![operand],
+        |c| {
+            vec![
+                bynk_ts::TsStmt::const_stmt(
+                    bynk_ts::TsBindingName::Ident(tmp.clone()),
+                    None,
+                    one(c),
+                    None,
+                ),
+                question_guard_node(&tmp, &exit),
+            ]
+        },
+        |c| {
+            vec![
+                format!("const {tmp} = {};", one(c)),
+                question_guard_text(&tmp, &exit),
+            ]
+        },
+    );
+    // T2.3 (R6.3): every branch above just pushed a `return` that must
+    // exit the enclosing function, not whatever scope this `Lowered`
+    // eventually lands in — see `LowerCtx::emitted_early_return`.
+    cx.emitted_early_return = true;
+    pre.finish(LoweredExpr::Node(member_node(&tmp, "value")))
 }
 
 /// T2.1 (R6.2): the ternary form's **structural** precondition — everything
@@ -1757,9 +2028,6 @@ fn one<T>(children: Vec<T>) -> T {
 /// body ([`Pre::ts_stmts`]) a `Node` stays a node and a `Text` becomes
 /// `TsStmt::raw`, exactly as before.
 pub(crate) enum LoweredStmt {
-    // No family builds statement nodes yet (the first lands with a later 1A
-    // slice), so nothing constructs this variant today.
-    #[allow(dead_code)]
     // Boxed: a `TsStmt` is ~350 bytes and almost every hoisted statement is text.
     Node(Box<bynk_ts::TsStmt>),
     Text(String),
@@ -1833,6 +2101,9 @@ thread_local! {
     /// Test-only: how many expressions left lowering as text (1A.4's
     /// "now lowers to a node" tests read it; never compiled into the emitter).
     static TEXT_EXITS: std::cell::Cell<usize> = const { std::cell::Cell::new(0) };
+    /// Test-only: how many statements were hoisted into a [`Pre`] as text
+    /// (1A.8's "now hoists nodes" tests read it).
+    static TEXT_STMTS: std::cell::Cell<usize> = const { std::cell::Cell::new(0) };
 }
 
 impl Pre {
@@ -1877,11 +2148,51 @@ impl Pre {
     /// `is`-receiver binding, a match IIFE's scaffolding), built as text. A
     /// text construction site: counted by `lowering_text_bridge`.
     pub(crate) fn push_text(&mut self, stmt: String) {
+        #[cfg(test)]
+        TEXT_STMTS.with(|c| c.set(c.get() + 1));
         self.0.push(LoweredStmt::Text(stmt));
+    }
+
+    /// Hoist a statement this function generated itself, built as a typed
+    /// node. The statement-side counterpart of [`Pre::finish`] with a node:
+    /// never built from statement text.
+    pub(crate) fn push_node(&mut self, stmt: bynk_ts::TsStmt) {
+        self.0.push(LoweredStmt::Node(Box::new(stmt)));
+    }
+
+    /// Slice 1A.8, Decision A: [`node_or_text`]'s rule for hoisted statements.
+    /// Statement nodes are hoisted only when *every* child expression is a node
+    /// (`node` receives them in order); if any is text, every child is rendered
+    /// through [`LoweredExpr::into_text`] and `text` builds today's lines. A
+    /// text statement is never wrapped in `TsStmt::raw` to fit inside a node.
+    pub(crate) fn push_nodes_or_text(
+        &mut self,
+        children: Vec<LoweredExpr>,
+        node: impl FnOnce(Vec<bynk_ts::TsExpr>) -> Vec<bynk_ts::TsStmt>,
+        text: impl FnOnce(Vec<String>) -> Vec<String>,
+    ) {
+        if children.iter().all(|c| matches!(c, LoweredExpr::Node(_))) {
+            let nodes = children
+                .into_iter()
+                .filter_map(|c| match c {
+                    LoweredExpr::Node(n) => Some(n),
+                    LoweredExpr::Text(_) => None,
+                })
+                .collect();
+            for stmt in node(nodes) {
+                self.push_node(stmt);
+            }
+        } else {
+            let texts = children.into_iter().map(LoweredExpr::into_text).collect();
+            self.extend_text(text(texts));
+        }
     }
 
     /// Hoist several text statements; counted like [`Pre::push_text`].
     pub(crate) fn extend_text(&mut self, stmts: impl IntoIterator<Item = String>) {
+        let stmts: Vec<String> = stmts.into_iter().collect();
+        #[cfg(test)]
+        TEXT_STMTS.with(|c| c.set(c.get() + stmts.len()));
         self.0.extend(stmts.into_iter().map(LoweredStmt::Text));
     }
 
@@ -1938,7 +2249,6 @@ impl Pre {
 /// The canonical entry point: lower `e`, returning its text and whatever
 /// statements must run first.
 pub(crate) fn lower_expr(e: &Expr, cx: &mut LowerCtx) -> Lowered {
-    let tys = cx.commons().tys();
     // v0.9.4: a literal the checker admitted as a refined type (expected-type-
     // directed construction) is branded directly — the refinement was already
     // verified at compile time, so there is no runtime check and no `Result`.
@@ -2043,68 +2353,7 @@ pub(crate) fn lower_expr(e: &Expr, cx: &mut LowerCtx) -> Lowered {
             let child = pre.lower_node(inner, cx);
             built_or_text!(pre, runtime_ctor_call(None, "Some", child))
         }
-        ExprKind::Question(inner) => {
-            // v0.153 (ADR 0177): an `Option[T]?` operand lifts into an
-            // HttpResult handler — `None` early-returns `NotFound` (404),
-            // `Some(v)` yields `v`. Any other operand is a `Result`: `Err`
-            // propagates unchanged. Branch on the operand's checked type.
-            // The checker rejects any other `?` operand, so a typed operand is
-            // always present — assert it, so a future gap surfaces loudly in
-            // tests rather than silently emitting the `Result` branch (which on
-            // an untyped `Option` would leak `None` → `undefined`).
-            let operand_ty = cx.commons().expr_types.get(&inner.id).map(|te| te.ty);
-            let operand_node = operand_ty.map(|t| tys.get(t));
-            debug_assert!(
-                matches!(
-                    operand_node.as_deref(),
-                    Some(Ty::Option(_) | Ty::Result(_, _))
-                ),
-                "`?` operand has no `Option`/`Result` checked type at {:?}: {operand_node:?}",
-                inner.span,
-            );
-            let is_option = matches!(operand_node.as_deref(), Some(Ty::Option(_)));
-            // v0.154 (ADR 0178): a `Result` operand whose error type differs from
-            // the enclosing return's is converted by a declared embedding
-            // (`embeds E as V`) — the same rule the checker accepted it under.
-            let embed = if is_option || cx.question_fails_case() {
-                None
-            } else {
-                embed_conversion(operand_ty, cx)
-            };
-            let inner_expr = pre.lower(inner, cx);
-            let tmp = cx.fresh();
-            pre.push_text(format!("const {tmp} = {inner_expr};"));
-            if cx.question_fails_case() {
-                // #2857: a case returns a `CaseResult`, not the operand's
-                // `Result` — so the `?` fails the case, reporting the `Err`
-                // value at the `?`'s location. (The checker rejects an `Option`
-                // operand outside an `HttpResult` handler.)
-                let (start, end) = (e.span.start, e.span.end);
-                let location = expect_location(cx, start);
-                let src = expect_source_text(cx, e.span);
-                let test = format!("{tmp}.tag === \"Err\"");
-                let detail =
-                    format!("\"{src}\\n  the operand was Err: \" + __bynkShow({tmp}.error)");
-                pre.push_text(format!(
-                    "if ({test}) {{ throw __bynkExpectFailure(\"{location}\", {start}, {end}, {detail}); }}"
-                ));
-            } else if is_option {
-                pre.push_text(format!(
-                    "if ({tmp}.tag === \"None\") return HttpResult.NotFound;"
-                ));
-            } else if let Some((ty_name, variant)) = embed {
-                pre.push_text(format!(
-                    "if ({tmp}.tag === \"Err\") return Err({ty_name}.{variant}({tmp}.error));"
-                ));
-            } else {
-                pre.push_text(format!("if ({tmp}.tag === \"Err\") return {tmp};"));
-            }
-            // T2.3 (R6.3): every branch above just pushed a `return` that must
-            // exit the enclosing function, not whatever scope this `Lowered`
-            // eventually lands in — see `LowerCtx::emitted_early_return`.
-            cx.emitted_early_return = true;
-            format!("{tmp}.value")
-        }
+        ExprKind::Question(inner) => return lower_question(e, inner, cx),
         ExprKind::RecordConstruction {
             type_name, fields, ..
         } => lowered_or_text!(pre, lower_record_construction(type_name, fields, cx)),
@@ -2141,7 +2390,7 @@ pub(crate) fn lower_expr(e: &Expr, cx: &mut LowerCtx) -> Lowered {
             cond,
             then_block,
             else_block,
-        } => pre.absorb(lower_if(e, cond, then_block, else_block, cx)),
+        } => lowered_or_text!(pre, lower_if(e, cond, then_block, else_block, cx)),
         // v0.20a: a lambda lowers to a TS arrow; `async` iff its checked type
         // is an effectful function. A lambda is deliberately its own return
         // scope (ADR 0178) — its body is lowered with no access to the outer
@@ -8161,8 +8410,7 @@ fn lower_if(
     cx: &mut LowerCtx,
 ) -> Lowered {
     let mut pre = Pre::new();
-    let slot_ty = checked_ty_ts(e, cx);
-    let cond_expr = pre.lower(cond, cx);
+    let cond_lowered = pre.lower_node(cond, cx);
     // If the cond contains `is`-bindings, the then-branch needs a place
     // for the `const name = receiver.field;` declarations — a ternary
     // has no such place. Force the IIFE form. (`ternary_shaped`.)
@@ -8189,10 +8437,20 @@ fn lower_if(
         let then_tail = lower_expr(&then_block.tail, cx);
         let else_tail = lower_expr(&else_block.tail, cx);
         if then_tail.pre.is_empty() && else_tail.pre.is_empty() {
-            return pre.finish_text(format!(
-                "({cond_expr} ? {t} : {e})",
-                t = then_tail.expr.into_text(),
-                e = else_tail.expr.into_text()
+            // The `Paren` keeps today's outer brackets.
+            return pre.finish_built(node_or_text(
+                vec![cond_lowered, then_tail.expr, else_tail.expr],
+                |c| {
+                    let [test, consequent, alternate]: [bynk_ts::TsExpr; 3] = c
+                        .try_into()
+                        .unwrap_or_else(|_| unreachable!("a ternary has three children"));
+                    bynk_ts::TsExpr::Paren(Box::new(bynk_ts::TsExpr::Conditional {
+                        test: Box::new(test),
+                        consequent: Box::new(consequent),
+                        alternate: Box::new(alternate),
+                    }))
+                },
+                |c| format!("({} ? {} : {})", c[0], c[1], c[2]),
             ));
         }
         // A branch hoisted. Before T2.1 there was nowhere to put its statements
@@ -8202,9 +8460,10 @@ fn lower_if(
         // as a real statement in the caller's statement position and the
         // `return` keeps exiting the enclosing function. See
         // `hoist_if_as_statement`.
-        let value = hoist_if_as_statement(&mut pre, cond_expr, then_tail, else_tail, slot_ty, cx);
-        pre.finish_text(value)
+        let slot = hoist_if_value(&mut pre, cond_lowered, then_tail, else_tail, e, cx);
+        pre.finish(LoweredExpr::Node(ident_node(&slot)))
     } else {
+        let cond_expr = cond_lowered.into_text();
         // T2.2 (R6.4): isolate the effectfulness flag to just this IIFE's own
         // body. Unlike `lower_match_as_iife`'s `disc_expr` (spliced *outside*
         // the returned arrow, at the call site), `cond_expr`'s *text* is
@@ -12681,5 +12940,260 @@ fn minus(x: Int) -> Int { 5 - - -x }
         let (retry, text) = measure("Retry(\"x\")");
         assert_eq!(retry, ack);
         assert!(text.contains("QueueResult.Retry(\"x\")"), "{text}");
+    }
+
+    /// 1A.8: `(text expressions, text statements)` hoisted while emitting
+    /// `src`, with the emitted TypeScript.
+    fn exits_and_stmts(src: &str) -> (usize, usize, String) {
+        TEXT_EXITS.with(|c| c.set(0));
+        TEXT_STMTS.with(|c| c.set(0));
+        let ts = crate::testkit::emit_source(src);
+        (
+            TEXT_EXITS.with(|c| c.get()),
+            TEXT_STMTS.with(|c| c.get()),
+            ts,
+        )
+    }
+
+    #[test]
+    fn a_question_over_a_node_operand_hoists_statement_nodes() {
+        let src = "commons qnodes\n\
+            fn f(x: Result[Int, String]) -> Result[Int, String] { Ok(x? + 1) }\n\
+            fn g(x: Result[Int, String]) -> Result[Int, String] { Ok(x?) }\n";
+        let (exits, stmts, ts) = exits_and_stmts(src);
+        assert_eq!((exits, stmts), (0, 0), "{ts}");
+        assert!(
+            ts.contains(
+                "  const __r0 = x;\n  if (__r0.tag === \"Err\") return __r0;\n  return Ok(__r0.value + 1);\n"
+            ),
+            "{ts}"
+        );
+    }
+
+    #[test]
+    fn a_question_over_a_text_operand_falls_back_to_text_lines() {
+        // A `match` in value position still lowers to text (its IIFE), so a
+        // `?` over one cannot be a node: both statements stay text lines, byte
+        // for byte, and the yielded `__rN.value` is still a member node.
+        let src = "commons qtext\n\
+            fn f(x: Result[Int, String], n: Int) -> Result[Int, String] {\n\
+              Ok((match n { 0 => x, _ => x })?)\n\
+            }\n";
+        let (exits, stmts, ts) = exits_and_stmts(src);
+        assert!(exits > 0 && stmts == 2, "{exits} {stmts}\n{ts}");
+        assert!(
+            ts.contains("  const __r0 = (((__d) => {")
+                && ts.contains(
+                    "\n  if (__r0.tag === \"Err\") return __r0;\n  return Ok(__r0.value);\n"
+                ),
+            "{ts}"
+        );
+    }
+
+    #[test]
+    fn every_question_guard_prints_as_its_text_twin() {
+        // The node guard and the text guard are one shape; print each exit
+        // both ways and require the same bytes (including the case form's
+        // escaped location, source and `\n` in the detail).
+        for exit in [
+            QuestionExit::Plain,
+            QuestionExit::NotFound,
+            QuestionExit::Embed {
+                ty_name: "AppError".to_string(),
+                variant: "Db".to_string(),
+            },
+            QuestionExit::Case {
+                location: "tests/a \"b\".test.bynk:3:7".to_string(),
+                start: 10,
+                end: 22,
+                src: "f(\"\u{e9}\\n\")?\n`x` ${y}".to_string(),
+            },
+        ] {
+            let node = bynk_ts::print_stmt(&question_guard_node("__r4", &exit), 0);
+            assert_eq!(node, format!("{}\n", question_guard_text("__r4", &exit)));
+        }
+    }
+
+    #[test]
+    fn statement_nodes_re_indent_at_depth_through_both_consumers() {
+        // 1A.8, Decision C: a multi-line node (the hoisted `if`) printed at
+        // depth 0 by `lines()` and re-indented by the caller must equal the
+        // flat text lines it replaces; `ts_stmts` keeps it as a node.
+        let node = bynk_ts::TsStmt::if_else_same_line_stmt(
+            ident_node("c"),
+            bynk_ts::TsStmt::block(
+                vec![bynk_ts::TsStmt::assign(
+                    ident_node("__r1"),
+                    ident_node("a"),
+                    None,
+                )],
+                None,
+            ),
+            bynk_ts::TsStmt::block(
+                vec![bynk_ts::TsStmt::assign(
+                    ident_node("__r1"),
+                    ident_node("b"),
+                    None,
+                )],
+                None,
+            ),
+            None,
+        );
+        let mut pre = Pre::new();
+        pre.push_node(node);
+        let text_lines = [
+            "if (c) {".to_string(),
+            "  __r1 = a;".to_string(),
+            "} else {".to_string(),
+            "  __r1 = b;".to_string(),
+            "}".to_string(),
+        ];
+        assert_eq!(pre.stmts(), text_lines);
+        // Written two levels deep, as `write_line` indents each entry.
+        let mut out = String::new();
+        for l in pre.stmts() {
+            write_line(&mut out, INDENT_STEP * 2, &l);
+        }
+        assert_eq!(
+            out,
+            "    if (c) {\n      __r1 = a;\n    } else {\n      __r1 = b;\n    }\n"
+        );
+        // `ts_stmts` keeps the node; the printer at depth 2 prints the same bytes.
+        let stmts = pre.ts_stmts("    ");
+        assert_eq!(stmts.len(), 1);
+        assert_eq!(bynk_ts::print_stmt(&stmts[0], 2), out);
+    }
+
+    #[test]
+    fn a_ternary_over_a_text_branch_falls_back_to_text() {
+        let src = "commons ternt\n\
+            fn f(c: Bool, x: Bool, y: Bool) -> Bool { if c { x && y } else { false } }\n";
+        let (exits, _, ts) = exits_and_stmts(src);
+        assert!(exits > 0, "{ts}");
+        assert_eq!(returned(&ts, "f"), "(c ? x && y : false)");
+    }
+
+    #[test]
+    fn a_hoisted_if_over_nodes_is_built_from_nodes() {
+        let src = "commons ifnodes\n\
+            fn f(c: Bool, x: Result[Int, String]) -> Result[Int, String] {\n\
+              let v = if c { x? } else { 0 }\n\
+              Ok(v)\n\
+            }\n";
+        let (exits, stmts, ts) = exits_and_stmts(src);
+        assert_eq!((exits, stmts), (0, 0), "{ts}");
+        assert!(
+            ts.contains(
+                "  let __r1: number;\n  if (c) {\n    const __r0 = x;\n    if (__r0.tag === \"Err\") return __r0;\n    __r1 = __r0.value;\n  } else {\n    __r1 = 0;\n  }\n"
+            ),
+            "{ts}"
+        );
+    }
+
+    #[test]
+    fn a_question_nested_two_deep_in_hoisted_ifs_indents_per_level() {
+        // #1750 / T2.1: the multi-line node is re-indented by `lines()` into a
+        // handler body at depth, one printer level per nested `if`.
+        let src = "commons ifnest\n\
+            fn f(a: Bool, b: Bool, x: Result[Int, String]) -> Result[Int, String] {\n\
+              let v = if a { if b { x? } else { 1 } } else { 2 }\n\
+              Ok(v)\n\
+            }\n";
+        let (exits, stmts, ts) = exits_and_stmts(src);
+        assert_eq!((exits, stmts), (0, 0), "{ts}");
+        assert!(
+            ts.contains("  let __r2: number;\n  if (a) {\n    let __r1: number;\n    if (b) {\n"),
+            "{ts}"
+        );
+        assert!(
+            ts.contains(
+                "    if (b) {\n      const __r0 = x;\n      if (__r0.tag === \"Err\") return __r0;\n      __r1 = __r0.value;\n    } else {\n      __r1 = 1;\n    }\n    __r2 = __r1;\n  } else {\n    __r2 = 2;\n  }\n"
+            ),
+            "{ts}"
+        );
+    }
+
+    #[test]
+    fn a_ternary_over_nodes_is_a_paren_conditional() {
+        let src = "commons tern\n\
+            fn f(c: Bool, x: Int, y: Int) -> Int { if c { x } else { y } }\n";
+        let (exits, stmts, ts) = exits_and_stmts(src);
+        assert_eq!((exits, stmts), (0, 0), "{ts}");
+        assert_eq!(returned(&ts, "f"), "(c ? x : y)");
+    }
+
+    /// The emitted suite module for a one-case suite over `src`.
+    fn suite_ts(src: &str, suite: &str) -> (usize, usize, String) {
+        TEXT_EXITS.with(|c| c.set(0));
+        TEXT_STMTS.with(|c| c.set(0));
+        let out = crate::testkit::emit_project(
+            &[("demo/day.bynk", src), ("tests/day.bynk", suite)],
+            bynk_check::project_model::BuildTarget::Bundle,
+        );
+        (
+            TEXT_EXITS.with(|c| c.get()),
+            TEXT_STMTS.with(|c| c.get()),
+            out.text("tests/demo_day.test.ts").to_string(),
+        )
+    }
+
+    const DAY: &str = "commons demo.day\n\ntype Day = String where NonEmpty\n\nfn len(d: Day) -> Int { d.length() }\n";
+
+    #[test]
+    fn a_question_in_a_test_case_fails_the_case_from_nodes() {
+        // #2857: the case form is an `InlineBlock` holding the `throw`; it
+        // prints on the one line the text form has, escapes included.
+        let (_, _, ts) = suite_ts(
+            DAY,
+            "suite demo.day\n\ncase \"q\" {\n  let d = Day.of(\"x\")?\n  expect len(d) == 1\n}\n",
+        );
+        let at = ts.find("if (__r").expect("a `?` guard");
+        let line = ts[at..].lines().next().unwrap();
+        assert!(
+            line.starts_with(
+                "if (__r0.tag === \"Err\") { throw __bynkExpectFailure(\"tests/day.bynk:4:11\", "
+            ) && line.ends_with("\\n  the operand was Err: \" + __bynkShow(__r0.error)); }"),
+            "{line}"
+        );
+    }
+
+    #[test]
+    fn a_question_in_a_hoisted_if_branch_in_a_test_case_is_nodes() {
+        let (_, _, ts) = suite_ts(
+            DAY,
+            "suite demo.day\n\ncase \"q\" {\n  let c = true\n  let n = if c { len(Day.of(\"x\")?) } else { 0 }\n  expect n == 1\n}\n",
+        );
+        // The nested statements keep the printer's one-level indent per `if`
+        // inside the case body.
+        assert!(ts.contains("if (c) {\n"), "{ts}");
+        let at = ts.find("let __r").expect("a hoisted slot");
+        let slot_block: Vec<&str> = ts[at..].lines().take(8).collect();
+        let indent = |l: &str| l.len() - l.trim_start().len();
+        let base = indent(slot_block[1]);
+        assert_eq!(slot_block[1].trim_start(), "if (c) {");
+        assert_eq!(indent(slot_block[2]), base + 2, "{slot_block:?}");
+        assert!(
+            slot_block[3].trim_start().starts_with("if (__r0.tag"),
+            "{slot_block:?}"
+        );
+        assert_eq!(indent(slot_block[3]), base + 2, "{slot_block:?}");
+        assert_eq!(indent(slot_block[5]), base, "{slot_block:?}");
+    }
+
+    #[test]
+    fn a_hoisted_if_with_a_text_branch_keeps_its_text_lines() {
+        // A branch tail that is still text (`&&`) keeps the whole hoist as text
+        // lines, byte for byte, with `assign_branch`'s padding.
+        let src = "commons iftext\n\
+            fn f(c: Bool, x: Bool, y: Bool, r: Result[Bool, String]) -> Result[Bool, String] {\n\
+              let v = if c { r? } else { x && y }\n\
+              Ok(v)\n\
+            }\n";
+        let (exits, stmts, ts) = exits_and_stmts(src);
+        assert!(exits > 0 && stmts > 0, "{ts}");
+        assert!(
+            ts.contains("  let __r1: boolean;\n  if (c) {\n    const __r0 = r;\n    if (__r0.tag === \"Err\") return __r0;\n    __r1 = __r0.value;\n  } else {\n    __r1 = x && y;\n  }\n"),
+            "{ts}"
+        );
     }
 }
