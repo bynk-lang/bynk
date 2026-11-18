@@ -1282,6 +1282,12 @@ fn emit_statement(out: &mut String, stmt: &Statement, cx: &mut LowerCtx, indent:
 /// otherwise it falls back to the bare byte offset (`expect`s only appear in test
 /// bodies, so the fallback is defensive).
 fn expect_location(cx: &LowerCtx, offset: usize) -> String {
+    crate::emitter::escape_ts_string(&expect_location_raw(cx, offset))
+}
+
+/// [`expect_location`] before escaping, for a `Str` node (the printer escapes
+/// it with the same one function, `escape_ts_literal`).
+fn expect_location_raw(cx: &LowerCtx, offset: usize) -> String {
     match cx.assert_loc() {
         Some(loc) => {
             let (line, col) = bynk_syntax::span::line_col(&loc.source, offset);
@@ -1289,7 +1295,7 @@ fn expect_location(cx: &LowerCtx, offset: usize) -> String {
             // Windows (where `PathBuf` joins with `\`) — matching the
             // diagnostic path rendering and the committed goldens.
             let path = loc.rel_path.replace('\\', "/");
-            crate::emitter::escape_ts_string(&format!("{path}:{line}:{col}"))
+            format!("{path}:{line}:{col}")
         }
         None => format!("offset {offset}"),
     }
@@ -1300,11 +1306,18 @@ fn expect_location(cx: &LowerCtx, offset: usize) -> String {
 /// double-quoted TS string literal (no surrounding quotes); empty when no
 /// test-body source is in scope (defensive — `expect`s only appear in test bodies).
 fn expect_source_text(cx: &LowerCtx, span: bynk_syntax::span::Span) -> String {
+    crate::emitter::escape_ts_string(&expect_source_text_raw(cx, span))
+}
+
+/// [`expect_source_text`] before escaping, for a `Str` node.
+fn expect_source_text_raw(cx: &LowerCtx, span: bynk_syntax::span::Span) -> String {
     match cx.assert_loc() {
-        Some(loc) => {
-            let raw = loc.source.get(span.start..span.end).unwrap_or("").trim();
-            crate::emitter::escape_ts_string(raw)
-        }
+        Some(loc) => loc
+            .source
+            .get(span.start..span.end)
+            .unwrap_or("")
+            .trim()
+            .to_string(),
         None => String::new(),
     }
 }
@@ -1440,12 +1453,21 @@ fn decimal_lit(coef: &str, scale: u32) -> bynk_ts::TsExpr {
 /// here, so no `[object Object]` can be emitted.
 fn lower_interp_str(parts: &[InterpPart], cx: &mut LowerCtx) -> Lowered {
     let mut pre = Pre::new();
-    let mut out = String::from("`");
+    // `chunks` are the already-escaped literal parts (`escape_ts_template`, which
+    // `TemplateLit` prints verbatim): always one more than there are holes, with
+    // an empty chunk between adjacent holes.
+    let mut chunks: Vec<String> = vec![String::new()];
+    let mut holes: Vec<LoweredExpr> = Vec::new();
+    let mut decimal_holes: Vec<bool> = Vec::new();
     for part in parts {
         match part {
-            InterpPart::Chunk(text) => out.push_str(&escape_ts_template(text)),
+            InterpPart::Chunk(text) => {
+                if let Some(last) = chunks.last_mut() {
+                    last.push_str(&escape_ts_template(text));
+                }
+            }
             InterpPart::Hole(hole) => {
-                let lowered = pre.lower(hole, cx);
+                holes.push(pre.lower_node(hole, cx));
                 // #2622: a `Decimal` prints as its canonical text, not as the
                 // host's `[object Object]`.
                 let decimal = cx
@@ -1456,15 +1478,45 @@ fn lower_interp_str(parts: &[InterpPart], cx: &mut LowerCtx) -> Lowered {
                     == Some(BaseType::Decimal);
                 if decimal {
                     cx.note_decimal("__bynkDecimalToString");
-                    out.push_str(&format!("${{__bynkDecimalToString({lowered})}}"));
-                } else {
-                    out.push_str(&format!("${{String({lowered})}}"));
                 }
+                decimal_holes.push(decimal);
+                chunks.push(String::new());
             }
         }
     }
-    out.push('`');
-    pre.finish_text(out)
+    let wrapper = |decimal: bool| {
+        if decimal {
+            "__bynkDecimalToString"
+        } else {
+            "String"
+        }
+    };
+    let built = node_or_text(
+        holes,
+        |nodes| {
+            let exprs = nodes
+                .into_iter()
+                .zip(&decimal_holes)
+                .map(|(hole, d)| bynk_ts::TsExpr::Call {
+                    callee: Box::new(ident_node(wrapper(*d))),
+                    args: vec![hole],
+                })
+                .collect();
+            bynk_ts::TsExpr::template_lit(chunks.clone(), exprs)
+        },
+        |texts| {
+            let mut out = String::from("`");
+            for (i, chunk) in chunks.iter().enumerate() {
+                out.push_str(chunk);
+                if let Some(text) = texts.get(i) {
+                    out.push_str(&format!("${{{}({text})}}", wrapper(decimal_holes[i])));
+                }
+            }
+            out.push('`');
+            out
+        },
+    );
+    pre.finish_built(built)
 }
 
 /// Escape a literal chunk for a TS template-literal context: backslash,
@@ -1937,7 +1989,7 @@ pub(crate) fn lower_expr(e: &Expr, cx: &mut LowerCtx) -> Lowered {
         }
         // v0.43 (ADR 0075): an interpolated string lowers to a TS template
         // literal — chunks as escaped literal text, holes as `${String(…)}`.
-        ExprKind::InterpStr(parts) => pre.absorb(lower_interp_str(parts, cx)),
+        ExprKind::InterpStr(parts) => lowered_or_text!(pre, lower_interp_str(parts, cx)),
         // v0.20b: a list literal lowers to a TS array literal; `readonly` is
         // a type-level property and the checker owns the element typing.
         ExprKind::ListLit(elems, ..) => {
@@ -2055,7 +2107,7 @@ pub(crate) fn lower_expr(e: &Expr, cx: &mut LowerCtx) -> Lowered {
         }
         ExprKind::RecordConstruction {
             type_name, fields, ..
-        } => pre.absorb(lower_record_construction(type_name, fields, cx)),
+        } => lowered_or_text!(pre, lower_record_construction(type_name, fields, cx)),
         ExprKind::FieldAccess { .. }
             if matches!(
                 cx.commons().callees.get(&e.id),
@@ -2125,22 +2177,46 @@ pub(crate) fn lower_expr(e: &Expr, cx: &mut LowerCtx) -> Lowered {
             base,
             overrides,
             ..
-        } => pre.absorb(lower_record_spread(base, overrides, cx)),
+        } => lowered_or_text!(pre, lower_record_spread(base, overrides, cx)),
         ExprKind::Expect(inner) => {
             // v0.9.1: expect as an expression (v0.112, renamed from `assert`).
             // Emit a runtime helper call that returns void (i.e., evaluates to
             // `undefined` at runtime and is treated as the unit value `()` in Bynk
             // terms). The expression form reports the predicate source only — the
             // statement form carries the structural expected-vs-actual report.
-            let value = pre.lower(inner, cx);
+            let value = pre.lower_node(inner, cx);
             let span_start = inner.span.start;
             let span_end = inner.span.end;
-            let location = expect_location(cx, span_start);
-            let src = expect_source_text(cx, inner.span);
-            format!(
-                "__bynkExpect(({value}), \"{location}\", {span_start}, {span_end}, \"expect {src}\")"
-            )
+            let location = expect_location_raw(cx, span_start);
+            let src = format!("expect {}", expect_source_text_raw(cx, inner.span));
+            // The `Paren` keeps today's `((value))` bytes; the `Str` nodes
+            // escape exactly as `expect_location`/`expect_source_text` do.
+            let built = node_or_text(
+                vec![value],
+                |c| bynk_ts::TsExpr::Call {
+                    callee: Box::new(ident_node("__bynkExpect")),
+                    args: vec![
+                        bynk_ts::TsExpr::Paren(Box::new(one(c))),
+                        str_node(location.clone()),
+                        num_lit(span_start.to_string()),
+                        num_lit(span_end.to_string()),
+                        str_node(src.clone()),
+                    ],
+                },
+                |c| {
+                    format!(
+                        "__bynkExpect(({}), \"{}\", {span_start}, {span_end}, \"{}\")",
+                        one(c),
+                        crate::emitter::escape_ts_string(&location),
+                        crate::emitter::escape_ts_string(&src),
+                    )
+                },
+            );
+            built_or_text!(pre, built)
         }
+        // 1A: the test-domain constructs (`Val`, `Observation`, `Faults`,
+        // `Trace`) stay text — their lowering reads harness state; they move
+        // with the test-harness family.
         ExprKind::Val { type_ref, args, .. } => pre.absorb(lower_val(type_ref, args, cx)),
         ExprKind::Observation(o) => lower_observation(o, cx),
         ExprKind::Faults(f) => lower_faults(f, cx),
@@ -9326,36 +9402,106 @@ fn equality_lowering(ty: TyId, tys: &Types) -> EqualityLowering {
     }
 }
 
+/// How one object-literal field is written: `key: <child>` (taking the next
+/// child), or the bare shorthand `key`.
+enum FieldSlot {
+    Prop(String),
+    Shorthand(String),
+}
+
+/// The fields of a record literal as `(slot, child)` pairs, lowering each
+/// value through `pre`. A shorthand `{ x }` references the binding `x`; if the
+/// binding was renamed (a reserved word) it expands to `x: __id_x` — the key is
+/// wire format and must keep the source spelling.
+fn field_inits(
+    fields: &[FieldInit],
+    pre: &mut Pre,
+    cx: &mut LowerCtx,
+) -> (Vec<FieldSlot>, Vec<LoweredExpr>) {
+    let mut slots = Vec::new();
+    let mut children = Vec::new();
+    for f in fields {
+        match &f.value {
+            Some(v) => {
+                children.push(pre.lower_node(v, cx));
+                slots.push(FieldSlot::Prop(f.name.name.clone()));
+            }
+            None => {
+                let v = ts_ident(&f.name.name);
+                if v == f.name.name {
+                    slots.push(FieldSlot::Shorthand(f.name.name.clone()));
+                } else {
+                    children.push(LoweredExpr::Node(ident_node(&v)));
+                    slots.push(FieldSlot::Prop(f.name.name.clone()));
+                }
+            }
+        }
+    }
+    (slots, children)
+}
+
+/// `{ k: v, … }` (or, with `spread`, `{ ...base, k: v, … }`): an `Object` node,
+/// or today's text. `children` holds the spread base first (when present), then
+/// one child per [`FieldSlot::Prop`], in order.
+fn object_built(has_spread: bool, slots: Vec<FieldSlot>, children: Vec<LoweredExpr>) -> Built {
+    node_or_text(
+        children,
+        |nodes| {
+            let mut nodes = nodes.into_iter();
+            let mut entries = Vec::new();
+            if has_spread && let Some(base) = nodes.next() {
+                entries.push(bynk_ts::TsObjectEntry::Spread(base));
+            }
+            for slot in &slots {
+                entries.push(match slot {
+                    FieldSlot::Prop(key) => match nodes.next() {
+                        Some(v) => bynk_ts::TsObjectEntry::Prop(key.clone(), v),
+                        None => unreachable!("one child per `Prop` slot"),
+                    },
+                    FieldSlot::Shorthand(key) => bynk_ts::TsObjectEntry::Shorthand(key.clone()),
+                });
+            }
+            bynk_ts::TsExpr::Object {
+                entries,
+                multiline: false,
+            }
+        },
+        |texts| {
+            let mut texts = texts.into_iter();
+            let mut parts = Vec::new();
+            if has_spread && let Some(base) = texts.next() {
+                parts.push(format!("...{base}"));
+            }
+            for slot in &slots {
+                parts.push(match slot {
+                    FieldSlot::Prop(key) => match texts.next() {
+                        Some(v) => format!("{key}: {v}"),
+                        None => unreachable!("one child per `Prop` slot"),
+                    },
+                    FieldSlot::Shorthand(key) => key.clone(),
+                });
+            }
+            format!("{{ {} }}", parts.join(", "))
+        },
+    )
+}
+
 fn lower_record_construction(
     type_name: &Ident,
     fields: &[FieldInit],
     cx: &mut LowerCtx,
 ) -> Lowered {
     let mut pre = Pre::new();
-    // Each entry is `(key, value)`; a `None` value is a shorthand `{ x }` whose
-    // binding kept its name, written as the bare key.
-    let mut entries: Vec<(String, Option<String>)> = Vec::new();
-    for f in fields {
-        match &f.value {
-            Some(v) => {
-                let val = pre.lower(v, cx);
-                entries.push((f.name.name.clone(), Some(val)));
-            }
-            None => {
-                // Shorthand `{ x }` references the binding `x`; if the binding
-                // was renamed (a reserved word), expand to `x: __id_x` — the
-                // key is wire format and must keep the source spelling.
-                let v = ts_ident(&f.name.name);
-                let renamed = (v != f.name.name).then_some(v);
-                entries.push((f.name.name.clone(), renamed));
-            }
-        }
-    }
+    let (mut slots, mut children) = field_inits(fields, &mut pre, cx);
     // #2607 (Decision C): each declared field the literal leaves out takes its
     // default, written as a self-contained value (`lower_field_default_value`)
     // so it needs nothing imported into this module. The checker has already
     // required every field without a default, and rejected any default that
     // has no such value.
+    //
+    // 1A: field defaults are front-half text (bynk_check::wire_default). A
+    // default is a `Text` child, so a record that takes one is never a node
+    // (`node_or_text`) and keeps today's text byte for byte.
     let types = &cx.commons().types;
     if let Some(decl) = types.get(&type_name.name)
         && let TypeBody::Record(r) = &decl.body
@@ -9372,7 +9518,10 @@ fn lower_record_construction(
                 &declared.type_ref,
                 types,
             ) {
-                Ok(v) => entries.push((declared.name.name.clone(), Some(v))),
+                Ok(v) => {
+                    slots.push(FieldSlot::Prop(declared.name.name.clone()));
+                    children.push(LoweredExpr::Text(v));
+                }
                 Err(reason) => unreachable!(
                     "field `{}`'s default passed the checker but has no value: {reason}",
                     declared.name.name
@@ -9380,14 +9529,8 @@ fn lower_record_construction(
             }
         }
     }
-    let parts: Vec<String> = entries
-        .into_iter()
-        .map(|(key, value)| match value {
-            Some(v) => format!("{key}: {v}"),
-            None => key,
-        })
-        .collect();
-    pre.finish_text(format!("{{ {} }}", parts.join(", ")))
+    let built = object_built(false, slots, children);
+    pre.finish_built(built)
 }
 
 /// `lower_field_access`'s tail: finish a [`Built`] as a node or as text.
@@ -9813,28 +9956,11 @@ fn lower_lambda(e: &Expr, lambda: &LambdaExpr, cx: &mut LowerCtx) -> String {
 
 fn lower_record_spread(base: &Expr, overrides: &[FieldInit], cx: &mut LowerCtx) -> Lowered {
     let mut pre = Pre::new();
-    let base_expr = pre.lower(base, cx);
-    let mut parts = vec![format!("...{base_expr}")];
-    for f in overrides {
-        match &f.value {
-            Some(v) => {
-                let val = pre.lower(v, cx);
-                parts.push(format!("{}: {}", f.name.name, val));
-            }
-            None => {
-                // Shorthand `{ x }` references the binding `x`; if the binding
-                // was renamed (a reserved word), expand to `x: __id_x` — the
-                // key is wire format and must keep the source spelling.
-                let v = ts_ident(&f.name.name);
-                if v == f.name.name {
-                    parts.push(f.name.name.clone());
-                } else {
-                    parts.push(format!("{}: {v}", f.name.name));
-                }
-            }
-        }
-    }
-    pre.finish_text(format!("{{ {} }}", parts.join(", ")))
+    let mut children = vec![pre.lower_node(base, cx)];
+    let (slots, field_children) = field_inits(overrides, &mut pre, cx);
+    children.extend(field_children);
+    let built = object_built(true, slots, children);
+    pre.finish_built(built)
 }
 
 fn lower_block_as_expr(b: &Block, cx: &mut LowerCtx) -> String {
@@ -12362,5 +12488,183 @@ fn minus(x: Int) -> Int { 5 - - -x }
             fn use(b: Box2[Int]) -> Option[Int] { b.cast[Int]() }\n";
         let ts = crate::testkit::emit_source(explicit);
         assert_eq!(returned(&ts, "use"), "Box2.cast<number, number>(b)");
+    }
+
+    // -- 1A.7 (#3706): data literals --
+
+    const DATA: &str = "commons data\n\
+        type P = { name: String, age: Int }\n\
+        fn mk(n: String, a: Int) -> P { P { name: n, age: a } }\n\
+        fn short(name: String, age: Int) -> P { P { name, age } }\n\
+        fn spread(p: P, a: Int) -> P { P { ...p, age: a } }\n\
+        fn greet(n: String) -> String { \"hi \\(n)!\" }\n\
+        fn adjacent(a: Int, b: Int) -> String { \"\\(a)\\(b)\" }\n\
+        fn money(d: Decimal) -> String { \"cost \\(d)\" }\n";
+
+    #[test]
+    fn data_literals_over_nodes_lower_to_nodes() {
+        assert_eq!(text_exits(DATA), 0);
+        let ts = crate::testkit::emit_source(DATA);
+        for (name, want) in [
+            ("mk", "{ name: n, age: a }"),
+            ("short", "{ name, age }"),
+            ("spread", "{ ...p, age: a }"),
+            ("greet", "`hi ${String(n)}!`"),
+            ("adjacent", "`${String(a)}${String(b)}`"),
+            ("money", "`cost ${__bynkDecimalToString(d)}`"),
+        ] {
+            assert_eq!(returned(&ts, name), want, "{name}");
+        }
+        // `note_decimal` fires on the node path.
+        assert!(ts.contains("__bynkDecimalToString"), "{ts}");
+    }
+
+    #[test]
+    fn an_interpolated_string_escapes_its_chunks_exactly() {
+        let src = "commons esc\n\
+            fn f(n: String) -> String { \"a`b\\(n)c\\\\d $ ${n}\" }\n\
+            fn g(n: String) -> String { \"\\(n)\" }\n\
+            fn h(n: String) -> String { \"x\\(n)\\n\" }\n";
+        assert_eq!(text_exits(src), 0);
+        let ts = crate::testkit::emit_source(src);
+        assert_eq!(returned(&ts, "f"), "`a\\`b${String(n)}c\\\\d \\$ \\${n}`");
+        assert_eq!(returned(&ts, "g"), "`${String(n)}`");
+        assert_eq!(returned(&ts, "h"), "`x${String(n)}\\n`");
+    }
+
+    #[test]
+    fn a_data_literal_with_a_text_child_falls_back_byte_for_byte() {
+        // A witness call is still text, so a record / string around one stays
+        // text, printed exactly as before.
+        let src = "commons textchild\n\
+            type P = { name: String, age: Int }\n\
+            fn lt[T: Ord](a: T, b: T) -> Bool { a < b }\n\
+            fn rec(a: Int, b: Int) -> P { P { name: \"x\", age: if lt(a, b) { a } else { b } } }\n\
+            fn s(a: Int, b: Int) -> String { \"v \\(if lt(a, b) { a } else { b })\" }\n";
+        assert!(text_exits(src) > 0);
+        let ts = crate::testkit::emit_source(src);
+        assert!(ts.contains("{ name: \"x\", age: "), "{ts}");
+        assert!(ts.contains("`v ${String("), "{ts}");
+    }
+
+    #[test]
+    fn a_renamed_shorthand_field_keeps_its_wire_key() {
+        // `default` and `class` are TS reserved words: the binding is renamed,
+        // the key is not, and it prints unquoted (legal in an object literal).
+        let src = "commons renamed\n\
+            type R = { default: Int, class: Int }\n\
+            fn mk(default: Int, class: Int) -> R { R { default, class } }\n\
+            fn sp(r: R, default: Int) -> R { R { ...r, default } }\n";
+        assert_eq!(text_exits(src), 0);
+        let ts = crate::testkit::emit_source(src);
+        assert_eq!(
+            returned(&ts, "mk"),
+            "{ default: __id_default, class: __id_class }"
+        );
+        assert_eq!(returned(&ts, "sp"), "{ ...r, default: __id_default }");
+    }
+
+    #[test]
+    fn a_record_that_takes_a_declared_default_stays_text() {
+        let src = "commons defaults\n\
+            type C = { n: Int, label: String = \"none\" }\n\
+            fn mk(n: Int) -> C { C { n } }\n\
+            fn full(n: Int) -> C { C { n, label: \"x\" } }\n";
+        let ts = crate::testkit::emit_source(src);
+        assert_eq!(returned(&ts, "mk"), "{ n, label: \"none\" }");
+        assert_eq!(returned(&ts, "full"), "{ n, label: \"x\" }");
+        // Only the defaulted construction leaves as text.
+        let only_full = "commons defaults\n\
+            type C = { n: Int, label: String = \"none\" }\n\
+            fn full(n: Int) -> C { C { n, label: \"x\" } }\n";
+        assert!(text_exits(src) > text_exits(only_full));
+        assert_eq!(text_exits(only_full), 0);
+    }
+
+    #[test]
+    fn a_record_literal_as_a_lambda_body_keeps_its_brackets() {
+        let src = "commons lam\n\
+            type P = { v: Int }\n\
+            fn f(xs: List[Int]) -> List[P] { xs.map((x) => P { v: x }) }\n";
+        let ts = crate::testkit::emit_source(src);
+        assert!(ts.contains("=> ({ v: x })"), "{ts}");
+    }
+
+    #[test]
+    fn an_expect_expression_is_a_node_with_the_same_bytes() {
+        // `_ => expect <pred>` is the expression form (the statement form has
+        // its own structural report). Quotes and non-ASCII in the predicate's
+        // source text are escaped exactly as `escape_ts_string` does.
+        let out = crate::testkit::emit_project(
+            &[
+                ("a/m.bynk", "commons a.m\n\nfn one() -> Int { 1 }\n"),
+                (
+                    "tests/m.bynk",
+                    "suite a.m\n\ncase \"c\" {\n  let r = match one() {\n    _ => expect \"q\\\"\u{e9}\" == \"x\"\n  }\n}\n",
+                ),
+            ],
+            bynk_check::project_model::BuildTarget::Bundle,
+        );
+        let text: String = out.docs.values().cloned().collect();
+        let at = text
+            .find("__bynkExpect((")
+            .unwrap_or_else(|| panic!("no expression-form expect in:\n{text}"));
+        let line = text[at..].lines().next().unwrap_or_default();
+        let want_src = crate::emitter::escape_ts_string("expect \"q\\\"\u{e9}\" == \"x\"");
+        assert!(line.contains(&want_src), "{line}");
+        assert!(line.starts_with("__bynkExpect((\""), "{line}");
+    }
+
+    #[test]
+    fn expect_location_and_source_print_as_their_escaped_text() {
+        // The `Str` nodes carry the raw strings; the printer's escape is the
+        // one `escape_ts_string` applies to the text form.
+        for raw in [
+            "tests/a.test.bynk:3:7",
+            "expect a == \"\u{e9}\\n\" `x` ${y}",
+        ] {
+            let node = str_node(raw);
+            assert_eq!(
+                bynk_ts::print_expr(&node),
+                format!("\"{}\"", crate::emitter::escape_ts_string(raw))
+            );
+        }
+    }
+
+    #[test]
+    fn http_and_queue_result_variant_calls_are_nodes() {
+        // 1A.6 review nit: direct node-path assertions for the `HttpResult.V(…)`
+        // and `QueueResult.V(…)` call forms, with no text exit.
+        let src = "commons results\n\
+            fn created(x: Int) -> HttpResult[Int] { Created(x) }\n\
+            fn raw(b: Bytes) -> HttpResult[Int] { RawError(Forbidden, b, \"text/plain\") }\n";
+        assert_eq!(text_exits(src), 0);
+        let ts = crate::testkit::emit_source(src);
+        assert_eq!(returned(&ts, "created"), "HttpResult.Created(x)");
+        assert_eq!(
+            returned(&ts, "raw"),
+            "HttpResult.RawError(403, b, \"text/plain\")"
+        );
+    }
+
+    #[test]
+    fn a_queue_result_variant_call_is_a_node() {
+        // `Retry("x")` instead of `Ack` adds no text exit, and prints as the
+        // `QueueResult.Retry(…)` call.
+        let svc = |body: &str| {
+            format!(
+                "context ops.jobs\n\nservice inbox from queue(\"jobs\") {{\n\ton message(n: Int) -> Effect[QueueResult] {{\n\t\t{body}\n\t}}\n}}\n"
+            )
+        };
+        let measure = |body: &str| {
+            TEXT_EXITS.with(|c| c.set(0));
+            let out = crate::testkit::emit_workers(&[("ops/jobs.bynk", &svc(body))]);
+            let text: String = out.docs.values().cloned().collect();
+            (TEXT_EXITS.with(|c| c.get()), text)
+        };
+        let (ack, _) = measure("Ack");
+        let (retry, text) = measure("Retry(\"x\")");
+        assert_eq!(retry, ack);
+        assert!(text.contains("QueueResult.Retry(\"x\")"), "{text}");
     }
 }
