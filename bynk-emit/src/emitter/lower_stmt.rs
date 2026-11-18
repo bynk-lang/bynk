@@ -81,6 +81,22 @@ impl Body {
         }
         pending.is_none().then_some(stmts)
     }
+
+    /// As [`Body::to_nodes`], but every [`Item::Mark`] is dropped (1A.12,
+    /// Decision C of #3713): the body of a value-position `if`, block or lambda
+    /// is lowered under `without_source_map`, so today it carries no
+    /// checkpoints, and the node path must not gain any. `None` if any item is
+    /// text or a nested [`Item::Indent`].
+    pub(super) fn to_nodes_unmapped(&self) -> Option<Vec<bynk_ts::TsStmt>> {
+        self.0
+            .iter()
+            .filter_map(|item| match item {
+                Item::Mark(_) => None,
+                Item::Node(stmt) => Some(Some((**stmt).clone())),
+                Item::Line(_) | Item::Indent(_) => Some(None),
+            })
+            .collect()
+    }
 }
 
 #[cfg(any(test, feature = "text-exit-counters"))]
@@ -133,6 +149,22 @@ pub(crate) fn emit_block_as_function_body(
     indent: usize,
     async_tail: bool,
 ) {
+    let body = block_body(block, cx, async_tail);
+    render(&body, out, indent, cx);
+}
+
+/// The items of a block lowered as a function body, not yet rendered: what
+/// [`emit_block_as_function_body`] renders, for a caller that may turn it into
+/// nodes instead (1A.12). It preserves the enclosing `return_ty` exactly as
+/// that function does.
+pub(super) fn block_body(block: &Block, cx: &mut LowerCtx, async_tail: bool) -> Body {
+    let mut body = Body::new();
+    block_body_into(&mut body, block, cx, async_tail);
+    body
+}
+
+/// As [`block_body`], appending to `body`.
+pub(super) fn block_body_into(body: &mut Body, block: &Block, cx: &mut LowerCtx, async_tail: bool) {
     // v0.154 (ADR 0178): **preserve** the enclosing `return_ty` rather than
     // resetting it. Nested control-flow blocks (an `if`/`else` or `match` arm
     // *within* a function body) reach here, and a `return` from them returns
@@ -141,9 +173,7 @@ pub(crate) fn emit_block_as_function_body(
     // (`_with_return`) rebinds it. A top-level body with no embedding context
     // (a mock/test that never called `_with_return`) simply inherits the
     // ambient `None`.
-    let mut body = Body::new();
-    emit_block_inner(&mut body, block, cx, async_tail);
-    render(&body, out, indent, cx);
+    emit_block_inner(body, block, cx, async_tail);
 }
 
 /// As [`emit_block_as_function_body`], but records the enclosing return type on
@@ -282,13 +312,6 @@ fn tail_stmt(cx: &LowerCtx, value: &str) -> String {
     }
 }
 
-/// A single-line expression, which prints the same wherever it sits. A multi-line
-/// one (an arrow with a block body) keeps today's text, whose continuation lines
-/// the adapter would otherwise indent where `Line` does not.
-fn single_line(e: &bynk_ts::TsExpr) -> bool {
-    !bynk_ts::print_expr(e).contains('\n')
-}
-
 fn stmt_item(stmt: bynk_ts::TsStmt) -> Item {
     Item::Node(Box::new(stmt))
 }
@@ -299,7 +322,7 @@ fn stmt_item(stmt: bynk_ts::TsStmt) -> Item {
 /// `Line` until the slot's labelled block is a node too (S3).
 fn tail_item(cx: &LowerCtx, pre_nodes: bool, value: LoweredExpr) -> Item {
     match (&cx.tail_slot, value) {
-        (None, LoweredExpr::Node(n)) if pre_nodes && single_line(&n) => {
+        (None, LoweredExpr::Node(n)) if pre_nodes => {
             stmt_item(bynk_ts::TsStmt::return_stmt(Some(n), None))
         }
         // 1A: the `TailSlot` form and a text value are `Line`s.
@@ -313,8 +336,7 @@ fn tail_item(cx: &LowerCtx, pre_nodes: bool, value: LoweredExpr) -> Item {
 /// today's lines around the same two bodies, which keep their marks.
 fn push_if(body: &mut Body, cond: LoweredExpr, pre_nodes: bool, then_body: Body, else_body: Body) {
     if pre_nodes
-        && let LoweredExpr::Node(c) = &cond
-        && single_line(c)
+        && let LoweredExpr::Node(_) = &cond
         && let Some(then_stmts) = then_body.to_nodes()
         && let Some(else_stmts) = else_body.to_nodes()
         && let LoweredExpr::Node(cond) = cond
@@ -340,9 +362,10 @@ fn push_if(body: &mut Body, cond: LoweredExpr, pre_nodes: bool, then_body: Body,
 /// today's text.
 fn do_item(pre_nodes: bool, value: LoweredExpr) -> Item {
     match value {
-        LoweredExpr::Node(n) if pre_nodes && single_line(&n) => stmt_item(
-            bynk_ts::TsStmt::expr_stmt(bynk_ts::TsExpr::Await(Box::new(n)), None),
-        ),
+        LoweredExpr::Node(n) if pre_nodes => stmt_item(bynk_ts::TsStmt::expr_stmt(
+            bynk_ts::TsExpr::Await(Box::new(n)),
+            None,
+        )),
         // 1A: a text value or hoisted statement keeps the text.
         value => Item::Line(format!("await {};", value.into_text())),
     }
@@ -352,9 +375,7 @@ fn do_item(pre_nodes: bool, value: LoweredExpr) -> Item {
 /// today's text. `target` is a genuine `Ident` or `Member`.
 fn assign_item(pre_nodes: bool, target: bynk_ts::TsExpr, value: LoweredExpr) -> Item {
     match value {
-        LoweredExpr::Node(n) if pre_nodes && single_line(&n) => {
-            stmt_item(bynk_ts::TsStmt::assign(target, n, None))
-        }
+        LoweredExpr::Node(n) if pre_nodes => stmt_item(bynk_ts::TsStmt::assign(target, n, None)),
         // 1A: a text value or hoisted statement keeps the text.
         value => Item::Line(format!(
             "{} = {};",
@@ -383,7 +404,7 @@ fn const_item(
         }
     };
     match (value, ty) {
-        (LoweredExpr::Node(n), Some(ty)) if pre_nodes && single_line(&n) => {
+        (LoweredExpr::Node(n), Some(ty)) if pre_nodes => {
             let init = if awaited {
                 bynk_ts::TsExpr::Await(Box::new(n))
             } else {
@@ -2042,8 +2063,9 @@ mod stmt_node_tests {
             body_of(&ts, "g"),
             "  const r = await globalThis.Promise.resolve(x);\n  const s: number = await globalThis.Promise.resolve(r);\n  await globalThis.Promise.resolve(s);\n  return s;\n"
         );
-        // Five text statements and the tail `return undefined`-style ones.
-        assert!(lines >= 6, "{lines}\n{ts}");
+        // Six `Line`s: the two `let`s and the `&&` tail in `f`, and in `g` the two
+        // effect `let`s and the `do` (the tail `Effect.pure(s)` is a node).
+        assert_eq!(lines, 6, "{ts}");
     }
 
     #[test]
@@ -2127,5 +2149,98 @@ mod stmt_node_tests {
             "{body}"
         );
         assert!(body.contains("      __r0 = 0; break __r0_out;\n"), "{body}");
+    }
+}
+
+/// 1A.12 (#3713): value-position `if`, block and lambda bodies are arrow nodes
+/// printed at their real depth, with today's text when a part is text.
+#[cfg(test)]
+mod arrow_node_tests {
+    use super::*;
+
+    fn emitted(src: &str) -> (usize, String) {
+        LINES_RENDERED.with(|c| c.set(0));
+        let ts = crate::testkit::emit_source(src);
+        (LINES_RENDERED.with(|c| c.get()), ts)
+    }
+
+    fn after(ts: &str, head: &str) -> String {
+        let at = ts.find(head).unwrap_or_else(|| panic!("no {head}:\n{ts}"));
+        let rest = &ts[at..];
+        rest[..rest.find("\n}\n").expect("a closing brace") + 3].to_string()
+    }
+
+    #[test]
+    fn an_if_iife_over_nodes_prints_at_its_real_depth() {
+        let src = "commons p1\n\nfn f(c: Bool, x: Int) -> Int {\n  let r = if c {\n    let y = x + 1\n    y * 2\n  } else {\n    0\n  }\n  r + 1\n}\n";
+        let (lines, ts) = emitted(src);
+        assert_eq!(lines, 0, "{ts}");
+        assert_eq!(
+            after(&ts, "export function f("),
+            "export function f(c: boolean, x: number): number {\n  const r = (() => {\n    if (c) {\n      const y = x + 1;\n      return y * 2;\n    } else {\n      return 0;\n    }\n  })();\n  return r + 1;\n}\n"
+        );
+    }
+
+    #[test]
+    fn an_async_if_iife_is_an_awaited_async_arrow() {
+        // The #2 review's case: a bare `await` inside the arrow needs `async`.
+        let src = "commons p2\n\nfn bump(n: Int) -> Effect[Int] {\n  Effect.pure(n)\n}\n\nfn f(c: Bool) -> Effect[Int] {\n  let r = if c {\n    let y <- bump(1)\n    y + 1\n  } else {\n    0\n  }\n  Effect.pure(r)\n}\n";
+        let (_, ts) = emitted(src);
+        assert!(
+            ts.contains(
+                "  const r = await (async () => {\n    if (c) {\n      const y = await bump(1);\n      return y + 1;\n    } else {\n      return 0;\n    }\n  })();\n"
+            ),
+            "{ts}"
+        );
+    }
+
+    #[test]
+    fn if_iifes_nest_three_deep_at_their_real_depths() {
+        let src = "commons p4\n\nfn f(c: Bool, d: Bool, x: Int) -> Int {\n  let r = if c {\n    let a = x\n    if d {\n      let b = a + 1\n      if c {\n        let e = b + 1\n        e\n      } else {\n        0\n      }\n    } else {\n      1\n    }\n  } else {\n    2\n  }\n  r\n}\n";
+        let (lines, ts) = emitted(src);
+        assert_eq!(lines, 0, "{ts}");
+        assert!(
+            ts.contains(
+                "  const r = (() => {\n    if (c) {\n      const a = x;\n      if (d) {\n        const b = a + 1;\n        if (c) {\n          const e = b + 1;\n          return e;\n        } else {\n          return 0;\n        }\n      } else {\n        return 1;\n      }\n    } else {\n      return 2;\n    }\n  })();\n"
+            ),
+            "{ts}"
+        );
+    }
+
+    #[test]
+    fn an_if_iife_with_a_text_condition_keeps_its_text_byte_for_byte() {
+        let src = "commons p7\n\nfn f(a: Bool, b: Bool, x: Int) -> Int {\n  let r = if a && b {\n    let y = x + 1\n    y\n  } else {\n    0\n  }\n  r\n}\n";
+        let (_, ts) = emitted(src);
+        assert!(
+            ts.contains(
+                "  const r = (() => {\n    if (a && b) {\n      const y = x + 1;\n      return y;\n    } else {\n      return 0;\n    }\n  })();\n"
+            ),
+            "{ts}"
+        );
+    }
+
+    #[test]
+    fn a_lambda_with_typed_and_inferred_params_is_an_arrow_node() {
+        let src = "commons p3\n\ntype P = { a: Int }\n\nfn g(xs: List[Int]) -> List[P] {\n  xs.map((x: Int) => P { a: x })\n}\n\nfn f(xs: List[Int]) -> List[Int] {\n  xs.map((x) => x + 1)\n}\n\nfn h(xs: List[Int]) -> List[Int] {\n  xs.map((x) => {\n    let y = x * 2\n    y + 1\n  })\n}\n";
+        let (_, ts) = emitted(src);
+        // Typed and inferred params; an object-literal body is bracketed.
+        assert!(ts.contains("((x: number) => x + 1)(__x)"), "{ts}");
+        assert!(ts.contains("((x: number) => ({ a: x }))(__x)"), "{ts}");
+        assert!(
+            ts.contains("((x: number) => {\n  const y = x * 2;\n  return y + 1;\n})(__x)"),
+            "{ts}"
+        );
+    }
+
+    #[test]
+    fn a_lambda_expression_body_that_hoists_a_question_is_a_block() {
+        let src = "commons p6\n\nfn parse(x: Int) -> Result[Int, String] {\n  Ok(x)\n}\n\nfn f(x: Int) -> Result[Int, String] {\n  let g: (Int) -> Result[Int, String] = (y: Int) => Ok(parse(y)? + 1)\n  g(x)\n}\n";
+        let (_, ts) = emitted(src);
+        assert!(
+            ts.contains(
+                "= (y: number) => {\n    const __r0 = parse(y);\n    if (__r0.tag === \"Err\") return __r0;\n    return Ok(__r0.value + 1);\n  };\n"
+            ),
+            "{ts}"
+        );
     }
 }

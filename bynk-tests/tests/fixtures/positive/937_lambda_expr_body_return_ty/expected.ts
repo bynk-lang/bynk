@@ -32,10 +32,10 @@ export function applyToEach(f: (a0: number) => Result<number, PaymentError>, amo
 
 export function placeViaLambda(amount: number): Result<number, OrderError> {
   const outcome = applyToEach((a: number) => {
-const __r0 = authorise(a);
-if (__r0.tag === "Err") return __r0;
-  return Ok(__r0.value);
-}, amount);
+    const __r0 = authorise(a);
+    if (__r0.tag === "Err") return __r0;
+    return Ok(__r0.value);
+  }, amount);
   switch (outcome.tag) {
     case "Ok": {
       const v = outcome.value;

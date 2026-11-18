@@ -23,14 +23,14 @@ use bynk_model::{ConstVal, EventPatternIr, EventPatternValueIr, IrHttpMethod};
 use super::ctx::{BodyMode, ModuleCtx, TestShared};
 use super::lower_ctx::LowerCtx;
 use super::lower_stmt::{
-    Body, Item, arms_contain_question, block_contains_question, emit_block_as_function_body,
-    emit_block_as_function_body_with_return, emit_if_tail, emit_match_case, emit_match_if_chain,
-    emit_match_tail, emit_statement, hoist_if_as_statement, hoist_value_as_statement,
-    is_literal_match, ternary_shaped, write_line,
+    Body, Item, arms_contain_question, block_body, block_body_into, block_contains_question,
+    emit_block_as_function_body, emit_block_as_function_body_with_return, emit_if_tail,
+    emit_match_case, emit_match_if_chain, emit_match_tail, emit_statement, hoist_if_as_statement,
+    hoist_value_as_statement, is_literal_match, render, ternary_shaped, write_line,
 };
 use super::ts_types::{
-    ts_array_elem, ts_base, ts_ty, ts_ty_to_ts_type, ts_type_ref, unchecked_construct,
-    unchecked_construct_test,
+    ts_array_elem, ts_base, ts_ty, ts_ty_to_ts_type, ts_type_ref, ts_type_ref_to_ts_type,
+    unchecked_construct, unchecked_construct_test,
 };
 use super::*;
 
@@ -1668,7 +1668,7 @@ pub(crate) fn lower_expr(e: &Expr, cx: &mut LowerCtx) -> Lowered {
         // `pre`, so anything it hoists (match-as-IIFE etc.) stays local to
         // the arrow, correctly, because a `?`'s `return` there is supposed to
         // exit the lambda.
-        ExprKind::Lambda(lambda) => lower_lambda(e, lambda, cx),
+        ExprKind::Lambda(lambda) => built_or_text!(pre, lower_lambda(e, lambda, cx)),
         // Defensive: the parser builds `ExprKind::Block` only for a lambda body,
         // which `lower_lambda` emits itself, so neither `Block` arm is reached
         // today. Routed like `if`/`match` so a future value-position block
@@ -1678,7 +1678,7 @@ pub(crate) fn lower_expr(e: &Expr, cx: &mut LowerCtx) -> Lowered {
                 emit_block_as_function_body(out, b, cx, INDENT_STEP, false)
             }))
         }
-        ExprKind::Block(b) => lower_block_as_expr(b, cx),
+        ExprKind::Block(b) => built_or_text!(pre, lower_block_as_expr(b, cx)),
         ExprKind::Match { discriminant, arms } if arms_contain_question(arms) => {
             pre.absorb(hoist_value_as_statement(e, cx, |out, cx| {
                 emit_match_tail(out, discriminant, arms, cx, INDENT_STEP, false)
@@ -7727,13 +7727,12 @@ fn lower_if(
         let slot = hoist_if_value(&mut pre, cond_lowered, then_tail, else_tail, e, cx);
         pre.finish(LoweredExpr::Node(ident_node(&slot)))
     } else {
-        let cond_expr = cond_lowered.into_text();
         // T2.2 (R6.4): isolate the effectfulness flag to just this IIFE's own
         // body. Unlike `lower_match_as_iife`'s `disc_expr` (spliced *outside*
-        // the returned arrow, at the call site), `cond_expr`'s *text* is
-        // spliced inside this arrow's own `if (...)` below — only its hoisted
-        // statements landed in `pre` above. A bare `await` in `cond_expr`'s
-        // text would need to feed `needs_async`, not `saved_await`; the
+        // the returned arrow, at the call site), `cond`'s *text* is spliced
+        // inside this arrow's own `if (...)` below — only its hoisted
+        // statements landed in `pre` above. A bare `await` in `cond`'s text
+        // would need to feed `needs_async`, not `saved_await`; the
         // debug_assert after the arrow closes documents that this can't
         // happen today (a literal `await` comes only from `EffectLet`/`Do`,
         // both hoisted to `pre`, or from a nested `finish_async_iife` wrap,
@@ -7742,14 +7741,13 @@ fn lower_if(
         // Effect-typing) rather than silently trusting it.
         let saved_await = std::mem::take(&mut cx.emitted_await);
         debug_assert!(
-            !cond_expr.contains("await "),
-            "cond text lands inside this arrow; its awaits must feed `needs_async`, not `saved_await`: {cond_expr}"
+            !match &cond_lowered {
+                LoweredExpr::Node(n) => bynk_ts::print_expr(n),
+                LoweredExpr::Text(t) => t.clone(),
+            }
+            .contains("await "),
+            "cond lands inside this arrow; its awaits must feed `needs_async`, not `saved_await`"
         );
-        let mut iife = String::new();
-        iife.push_str("(() => {\n");
-        iife.push_str("    if (");
-        iife.push_str(&cond_expr);
-        iife.push_str(") {\n");
         // Inject is-binding declarations on the truthy side. #908: scoped to
         // the then-branch only — pushed here, popped once it's emitted —
         // so a read inside resolves to the binding rather than an outer
@@ -7759,13 +7757,12 @@ fn lower_if(
         let mut is_bindings = Vec::new();
         let mut found = false;
         gather_is_bindings_for_emit(cond, true, cx, &mut is_bindings, &mut found);
-        for b in &is_bindings {
-            for _ in 0..(INDENT_STEP * 3) {
-                iife.push(' ');
-            }
-            iife.push_str(b);
-            iife.push('\n');
-        }
+        // 1A.12: each branch is built as a `Body` and rendered, or turned into
+        // nodes, once both are in hand (its `is` bindings stay text lines in
+        // front of it); the context saves and restores below
+        // sit around the same lowering calls, in the same order, as when each
+        // branch was rendered straight into the text.
+        let mut then_body = Body::new();
         // v0.154 (ADR 0178): a value-position `if` lowers to an IIFE, whose
         // `return`s exit the arrow, so clear the enclosing `return_ty`. #1750:
         // an `if` whose branches hold a `?` no longer reaches here (it becomes a
@@ -7774,35 +7771,72 @@ fn lower_if(
         let saved = cx.return_ty.take();
         // #1750: the arrow's own tails `return` from the arrow.
         let saved_slot = cx.tail_slot.take();
-        // #4 review: `iife` is a local buffer spliced into the caller's
-        // output later, at an offset `record_span` has no way to learn —
-        // see `without_source_map`.
-        cx.without_source_map(|cx| {
-            emit_block_as_function_body(&mut iife, then_block, cx, INDENT_STEP * 3, false)
-        });
+        // #4 review: the arrow's text is spliced into the caller's output
+        // later, at an offset `record_span` has no way to learn — see
+        // `without_source_map`.
+        cx.without_source_map(|cx| block_body_into(&mut then_body, then_block, cx, false));
         cx.shadow_scopes.pop();
-        for _ in 0..(INDENT_STEP * 2) {
-            iife.push(' ');
-        }
-        iife.push_str("} else {\n");
         // #1654: the bindings the condition's falsity proves, scoped to the
         // else-branch the same way.
         cx.shadow_scopes.push(HashMap::new());
         let mut else_bindings = Vec::new();
         gather_is_bindings_for_emit(cond, false, cx, &mut else_bindings, &mut found);
-        for b in &else_bindings {
-            for _ in 0..(INDENT_STEP * 3) {
-                iife.push(' ');
-            }
-            iife.push_str(b);
-            iife.push('\n');
-        }
-        cx.without_source_map(|cx| {
-            emit_block_as_function_body(&mut iife, else_block, cx, INDENT_STEP * 3, false)
-        });
+        let mut else_body = Body::new();
+        cx.without_source_map(|cx| block_body_into(&mut else_body, else_block, cx, false));
         cx.shadow_scopes.pop();
         cx.return_ty = saved;
         cx.tail_slot = saved_slot;
+        // #2 review: unlike `lower_match_as_iife`'s IIFE, this one used to never
+        // consult the async-wrap decision at all — confirmed live: `let r = if
+        // c { let y <- fetch(); y + 1 } else { 0 }` emitted a bare `await`
+        // inside this arrow with no `async` keyword, a hard JS syntax error
+        // ("Unexpected reserved word"), not merely a missed optimisation.
+        let needs_async = cx.emitted_await;
+        cx.emitted_await = saved_await || needs_async;
+        // The node form: a node condition and branches that are all nodes. An
+        // `is` binding is a text line (`gather_is_bindings_for_emit`), so a
+        // branch that opens with one keeps the text form below.
+        let cond_node = match cond_lowered {
+            LoweredExpr::Node(n) => Ok(n),
+            LoweredExpr::Text(t) => Err(t),
+        };
+        if let Ok(cond) = &cond_node
+            && is_bindings.is_empty()
+            && else_bindings.is_empty()
+            && let Some(then_stmts) = then_body.to_nodes_unmapped()
+            && let Some(else_stmts) = else_body.to_nodes_unmapped()
+        {
+            let branch = bynk_ts::TsStmt::if_else_same_line_stmt(
+                cond.clone(),
+                bynk_ts::TsStmt::block(then_stmts, None),
+                bynk_ts::TsStmt::block(else_stmts, None),
+                None,
+            );
+            return pre.finish(LoweredExpr::Node(iife_call(needs_async, vec![branch])));
+        }
+        // The text form, byte for byte what it was.
+        let cond_expr = match cond_node {
+            Ok(n) => bynk_ts::print_expr(&n),
+            Err(t) => t,
+        };
+        let mut iife = String::new();
+        iife.push_str("(() => {\n");
+        iife.push_str("    if (");
+        iife.push_str(&cond_expr);
+        iife.push_str(") {\n");
+        // The `is` bindings open their branch, before its statements.
+        for b in &is_bindings {
+            write_line(&mut iife, INDENT_STEP * 3, b);
+        }
+        cx.without_source_map(|cx| render(&then_body, &mut iife, INDENT_STEP * 3, cx));
+        for _ in 0..(INDENT_STEP * 2) {
+            iife.push(' ');
+        }
+        iife.push_str("} else {\n");
+        for b in &else_bindings {
+            write_line(&mut iife, INDENT_STEP * 3, b);
+        }
+        cx.without_source_map(|cx| render(&else_body, &mut iife, INDENT_STEP * 3, cx));
         for _ in 0..(INDENT_STEP * 2) {
             iife.push(' ');
         }
@@ -7811,14 +7845,28 @@ fn lower_if(
             iife.push(' ');
         }
         iife.push_str("})()");
-        // #2 review: unlike `lower_match_as_iife`'s IIFE, this one used to never
-        // consult the async-wrap decision at all — confirmed live: `let r = if
-        // c { let y <- fetch(); y + 1 } else { 0 }` emitted a bare `await`
-        // inside this arrow with no `async` keyword, a hard JS syntax error
-        // ("Unexpected reserved word"), not merely a missed optimisation.
-        let needs_async = cx.emitted_await;
-        cx.emitted_await = saved_await || needs_async;
         pre.finish_text(finish_async_iife(iife, needs_async))
+    }
+}
+
+/// `(() => { <body> })()`, an immediately invoked arrow over statement nodes,
+/// `async` and awaited when `is_async` (1A.12). The text counterpart is
+/// `finish_async_iife`, now only the `match` IIFE's and the text fallbacks'.
+fn iife_call(is_async: bool, body: Vec<bynk_ts::TsStmt>) -> bynk_ts::TsExpr {
+    let call = bynk_ts::TsExpr::Call {
+        callee: Box::new(bynk_ts::TsExpr::Paren(Box::new(bynk_ts::TsExpr::Arrow {
+            params: Vec::new(),
+            is_async,
+            generics: Vec::new(),
+            return_type: None,
+            body: Box::new(bynk_ts::TsArrowBody::Multiline(body)),
+        }))),
+        args: Vec::new(),
+    };
+    if is_async {
+        bynk_ts::TsExpr::Await(Box::new(call))
+    } else {
+        call
     }
 }
 
@@ -9305,7 +9353,7 @@ mod value_text_for_is_tests {
     }
 }
 
-fn lower_lambda(e: &Expr, lambda: &LambdaExpr, cx: &mut LowerCtx) -> String {
+fn lower_lambda(e: &Expr, lambda: &LambdaExpr, cx: &mut LowerCtx) -> Built {
     let tys = cx.ty_render();
     let is_async = matches!(
         cx.commons().expr_ty(e.id).as_deref(),
@@ -9335,6 +9383,29 @@ fn lower_lambda(e: &Expr, lambda: &LambdaExpr, cx: &mut LowerCtx) -> String {
         })
         .collect();
     let params = params.join(", ");
+    // 1A.12: the same parameters as nodes, when each type prints through the
+    // type builders exactly as the text above did; otherwise the lambda stays
+    // text.
+    let node_params: Option<Vec<bynk_ts::TsParam>> = lambda
+        .params
+        .iter()
+        .enumerate()
+        .map(|(i, p)| {
+            let ty = match (&p.type_ref, &p.pattern, fn_params.get(i)) {
+                (Some(tr), _, _) => {
+                    let ty = ts_type_ref_to_ts_type(tr, None);
+                    (bynk_ts::print_type(&ty) == ts_type_ref(tr)).then_some(Some(ty))
+                }
+                (None, _, Some(ty)) => Some(Some(ts_ty_to_ts_type(*ty, tys))),
+                _ => Some(None),
+            }?;
+            Some(bynk_ts::TsParam {
+                name: ts_ident(&p.name.name),
+                ty,
+                optional: false,
+            })
+        })
+        .collect();
     // #908: a param's name is the lambda body's own binding — push a frame and
     // register each so a body read resolves to the param rather than an
     // outer `let` rename, popped once the body is lowered so the
@@ -9361,41 +9432,76 @@ fn lower_lambda(e: &Expr, lambda: &LambdaExpr, cx: &mut LowerCtx) -> String {
     // receiver temp inside the lambda is read only inside it, and hoisting its
     // declaration out would share one slot between the lambda's invocations.
     let saved_hoist = cx.is_temp_hoist.take();
-    let result = match &lambda.body.kind {
+    let result: Built = match &lambda.body.kind {
         ExprKind::Block(b) => {
-            let mut out = format!("{prefix}({params}) => {{\n");
-            // #4 review: `out` is a local buffer spliced into the caller's
-            // output later — see `without_source_map`.
-            cx.without_source_map(|cx| {
-                emit_block_as_function_body(&mut out, b, cx, INDENT_STEP * 2, is_async)
-            });
-            for _ in 0..INDENT_STEP {
-                out.push(' ');
+            // #4 review: the body's text is spliced into the caller's output
+            // later — see `without_source_map`.
+            let body = cx.without_source_map(|cx| block_body(b, cx, is_async));
+            match (node_params, body.to_nodes_unmapped()) {
+                (Some(params), Some(stmts)) => Ok(lambda_node(
+                    params,
+                    is_async,
+                    bynk_ts::TsArrowBody::Multiline(stmts),
+                )),
+                _ => {
+                    let mut out = format!("{prefix}({params}) => {{\n");
+                    cx.without_source_map(|cx| render(&body, &mut out, INDENT_STEP * 2, cx));
+                    for _ in 0..INDENT_STEP {
+                        out.push(' ');
+                    }
+                    out.push('}');
+                    Err(out)
+                }
             }
-            out.push('}');
-            out
         }
         _ => {
             let lowered = lower_expr(&lambda.body, cx);
-            let body_stmts = lowered.pre_texts();
-            let body = lowered.expr.into_text();
-            if body_stmts.is_empty() {
-                // An object-literal body (a record construction/spread) must be
-                // parenthesised, or `(x) => { … }` reads as a block, not an object.
-                let body = if body.trim_start().starts_with('{') {
-                    format!("({body})")
-                } else {
-                    body
-                };
-                format!("{prefix}({params}) => {body}")
-            } else {
-                let mut out = format!("{prefix}({params}) => {{\n");
-                for s in &body_stmts {
-                    out.push_str(s);
-                    out.push('\n');
+            match (node_params, lowered) {
+                (
+                    Some(params),
+                    Lowered {
+                        pre: hoisted,
+                        expr: LoweredExpr::Node(value),
+                    },
+                ) if hoisted.iter().all(|s| matches!(s, LoweredStmt::Node(_))) => {
+                    let body = if hoisted.is_empty() {
+                        // An object-literal body is bracketed by the printer.
+                        bynk_ts::TsArrowBody::Expr(Box::new(value))
+                    } else {
+                        let mut stmts: Vec<bynk_ts::TsStmt> = hoisted
+                            .into_iter()
+                            .filter_map(|s| match s {
+                                LoweredStmt::Node(n) => Some(*n),
+                                LoweredStmt::Text(_) => None,
+                            })
+                            .collect();
+                        stmts.push(bynk_ts::TsStmt::return_stmt(Some(value), None));
+                        bynk_ts::TsArrowBody::Multiline(stmts)
+                    };
+                    Ok(lambda_node(params, is_async, body))
                 }
-                out.push_str(&format!("  return {body};\n}}"));
-                out
+                (_, lowered) => {
+                    let body_stmts = lowered.pre_texts();
+                    let body = lowered.expr.into_text();
+                    Err(if body_stmts.is_empty() {
+                        // An object-literal body (a record construction/spread) must be
+                        // parenthesised, or `(x) => { … }` reads as a block, not an object.
+                        let body = if body.trim_start().starts_with('{') {
+                            format!("({body})")
+                        } else {
+                            body
+                        };
+                        format!("{prefix}({params}) => {body}")
+                    } else {
+                        let mut out = format!("{prefix}({params}) => {{\n");
+                        for s in &body_stmts {
+                            out.push_str(s);
+                            out.push('\n');
+                        }
+                        out.push_str(&format!("  return {body};\n}}"));
+                        out
+                    })
+                }
             }
         }
     };
@@ -9407,6 +9513,21 @@ fn lower_lambda(e: &Expr, lambda: &LambdaExpr, cx: &mut LowerCtx) -> String {
     result
 }
 
+/// A lambda as an arrow node (1A.12).
+fn lambda_node(
+    params: Vec<bynk_ts::TsParam>,
+    is_async: bool,
+    body: bynk_ts::TsArrowBody,
+) -> bynk_ts::TsExpr {
+    bynk_ts::TsExpr::Arrow {
+        params,
+        is_async,
+        generics: Vec::new(),
+        return_type: None,
+        body: Box::new(body),
+    }
+}
+
 fn lower_record_spread(base: &Expr, overrides: &[FieldInit], cx: &mut LowerCtx) -> Lowered {
     let mut pre = Pre::new();
     let mut children = vec![pre.lower_node(base, cx)];
@@ -9416,11 +9537,9 @@ fn lower_record_spread(base: &Expr, overrides: &[FieldInit], cx: &mut LowerCtx) 
     pre.finish_built(built)
 }
 
-fn lower_block_as_expr(b: &Block, cx: &mut LowerCtx) -> String {
+fn lower_block_as_expr(b: &Block, cx: &mut LowerCtx) -> Built {
     // #1750: the arrow's own tails `return` from the arrow.
     let saved_slot = cx.tail_slot.take();
-    let mut iife = String::new();
-    iife.push_str("(() => {\n");
     // IIFE is a synchronous arrow function; the surrounding expression context
     // expects a concrete value, so `Effect.pure(...)` must still wrap as
     // `Promise.resolve(...)`.
@@ -9428,18 +9547,22 @@ fn lower_block_as_expr(b: &Block, cx: &mut LowerCtx) -> String {
     // clear `return_ty`. #1750: a block holding a `?` no longer reaches here
     // (`hoist_value_as_statement`).
     let saved = cx.return_ty.take();
-    // #4 review: `iife` is a local buffer spliced into the caller's output
-    // later — see `without_source_map`.
-    cx.without_source_map(|cx| {
-        emit_block_as_function_body(&mut iife, b, cx, INDENT_STEP * 2, false)
-    });
+    // #4 review: the IIFE's text is spliced into the caller's output later —
+    // see `without_source_map`.
+    let body = cx.without_source_map(|cx| block_body(b, cx, false));
     cx.return_ty = saved;
     cx.tail_slot = saved_slot;
+    if let Some(stmts) = body.to_nodes_unmapped() {
+        return Ok(iife_call(false, stmts));
+    }
+    let mut iife = String::new();
+    iife.push_str("(() => {\n");
+    cx.without_source_map(|cx| render(&body, &mut iife, INDENT_STEP * 2, cx));
     for _ in 0..INDENT_STEP {
         iife.push(' ');
     }
     iife.push_str("})()");
-    iife
+    Err(iife)
 }
 
 /// #1 review: the discriminant's hoisted statements (`pre`) are the

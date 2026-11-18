@@ -524,7 +524,7 @@ fn render_stmt_kind(
         }
         TsStmtKind::ExprStmt(expr) => {
             out.push_str(&indent(depth));
-            render_expr(out, expr);
+            render_expr(out, expr, depth);
             out.push_str(";\n");
         }
         TsStmtKind::Return(expr) => {
@@ -557,7 +557,7 @@ fn render_stmt_kind(
         } => {
             out.push_str(&indent(depth));
             out.push_str("if (");
-            render_expr(out, cond);
+            render_expr(out, cond, depth);
             out.push(')');
             // `} else {` on one line — #1325's own real gap, all three of
             // `emit_test_main`'s own real `if`/`else` sites (one `Block`,
@@ -589,7 +589,7 @@ fn render_stmt_kind(
                 // guaranteed by `then_is_braced` above.
                 if let TsStmtKind::InlineBlock(stmts) = &then_branch.kind {
                     out.push_str(" { ");
-                    render_compact_stmts(out, stmts);
+                    render_compact_stmts(out, stmts, depth);
                     out.push_str(" }");
                 } else {
                     render_block_body(out, then_branch, depth, None);
@@ -614,7 +614,7 @@ fn render_stmt_kind(
             out.push_str("for (const ");
             out.push_str(binding);
             out.push_str(" of ");
-            render_expr(out, iter);
+            render_expr(out, iter, depth);
             out.push(')');
             render_branch(out, body, depth);
         }
@@ -628,9 +628,9 @@ fn render_stmt_kind(
             out.push_str("for (let ");
             out.push_str(name);
             out.push_str(" = ");
-            render_expr(out, init);
+            render_expr(out, init, depth);
             out.push_str("; ");
-            render_expr(out, test);
+            render_expr(out, test, depth);
             out.push_str("; ");
             out.push_str(name);
             out.push_str("++)");
@@ -668,7 +668,7 @@ fn render_stmt_kind(
         }
         TsStmtKind::Assign { target, value } => {
             out.push_str(&indent(depth));
-            render_expr(out, target);
+            render_expr(out, target, depth);
             out.push_str(" = ");
             render_stmt_level_expr(out, value, depth);
             out.push_str(";\n");
@@ -689,7 +689,7 @@ fn render_stmt_kind(
         } => {
             out.push_str(&indent(depth));
             out.push_str("switch (");
-            render_expr(out, discriminant);
+            render_expr(out, discriminant, depth);
             out.push_str(") {\n");
             for case in cases {
                 debug_assert!(
@@ -710,7 +710,7 @@ fn render_stmt_kind(
                 match &case.test {
                     Some(test) => {
                         out.push_str("case ");
-                        render_expr(out, test);
+                        render_expr(out, test, depth);
                         // Arc E slice 6 (#1445): `case_braced` is the
                         // non-`default` mirror of `default_braced` just
                         // below — `emit_sum_codec`'s own payload-free
@@ -759,7 +759,7 @@ fn render_stmt_kind(
         }
         TsStmtKind::Increment(expr) => {
             out.push_str(&indent(depth));
-            render_expr(out, expr);
+            render_expr(out, expr, depth);
             out.push_str("++;\n");
         }
         // Same rendering as `Verbatim` above — the text is printed exactly
@@ -805,7 +805,7 @@ fn render_branch(out: &mut String, branch: &TsStmt, depth: usize) {
         | TsStmtKind::Raw(_) => {
             out.push(' ');
             note_span(out.len(), branch);
-            render_inline_stmt(out, branch);
+            render_inline_stmt(out, branch, depth);
         }
     }
 }
@@ -820,7 +820,7 @@ fn render_branch(out: &mut String, branch: &TsStmt, depth: usize) {
 /// space — matching the real, hand-written `{ a; b; c; }` shape exactly.
 fn render_inline_block(out: &mut String, stmts: &[TsStmt]) {
     out.push_str("{ ");
-    render_compact_stmts(out, stmts);
+    render_compact_stmts(out, stmts, 0);
     out.push_str(" }\n");
 }
 
@@ -835,13 +835,13 @@ fn render_inline_block(out: &mut String, stmts: &[TsStmt]) {
 /// `workers_entry.rs`'s own two real shapes, distinguished by whether the
 /// pre-conversion `writeln!` code put the opening brace on the same
 /// physical line as the content or not.
-fn render_compact_stmts(out: &mut String, stmts: &[TsStmt]) {
+fn render_compact_stmts(out: &mut String, stmts: &[TsStmt], depth: usize) {
     for (i, s) in stmts.iter().enumerate() {
         if i > 0 {
             out.push(' ');
         }
         let mut piece = String::new();
-        render_inline_stmt(&mut piece, s);
+        render_inline_stmt(&mut piece, s, depth);
         // Review of #1324, finding 2: only `trim_end_matches('\n')`'s own
         // trailing newline is stripped — an *embedded* newline (a genuinely
         // multi-line statement, e.g. `Block`/`Switch`/`TryCatch`, rendered
@@ -865,19 +865,19 @@ fn render_compact_stmts(out: &mut String, stmts: &[TsStmt]) {
 /// handling; anything else falls back to a normal indented render (depth 0)
 /// rather than panicking, so an unanticipated future shape still prints
 /// something plausible instead of crashing.
-fn render_inline_stmt(out: &mut String, stmt: &TsStmt) {
+fn render_inline_stmt(out: &mut String, stmt: &TsStmt, depth: usize) {
     match &stmt.kind {
         TsStmtKind::Continue => out.push_str("continue;\n"),
         TsStmtKind::Return(expr) => {
             out.push_str("return");
             if let Some(expr) = expr {
                 out.push(' ');
-                render_expr(out, expr);
+                render_expr(out, expr, depth);
             }
             out.push_str(";\n");
         }
         TsStmtKind::ExprStmt(expr) => {
-            render_expr(out, expr);
+            render_expr(out, expr, depth);
             out.push_str(";\n");
         }
         // Review of #1317/#1318, finding 2: every other variant in the
@@ -1017,7 +1017,7 @@ fn render_block_body(
         // is one compact line — `workers_entry.rs`'s own real queue-consumer
         // catch clause (`console.error(...); msg.retry();`).
         out.push_str(&indent(depth + 1));
-        render_compact_stmts(out, stmts);
+        render_compact_stmts(out, stmts, depth);
         out.push('\n');
     } else {
         render_stmt(out, block, depth + 1, None);
@@ -1075,13 +1075,13 @@ fn needs_parens_as_operand(expr: &TsExpr) -> bool {
     )
 }
 
-fn render_operand(out: &mut String, expr: &TsExpr) {
+fn render_operand(out: &mut String, expr: &TsExpr, depth: usize) {
     if needs_parens_as_operand(expr) {
         out.push('(');
-        render_expr(out, expr);
+        render_expr(out, expr, depth);
         out.push(')');
     } else {
-        render_expr(out, expr);
+        render_expr(out, expr, depth);
     }
 }
 
@@ -1145,7 +1145,13 @@ fn is_left_assoc_arith(op: TsBinaryOp) -> bool {
 /// binary`'s own test, still `a ?? (b ?? c)`), since nothing in real
 /// content needs a flattened `??` chain and this slice's own grounding
 /// gives no reason to widen that boundary opportunistically.
-fn render_binary_operand(out: &mut String, outer_op: TsBinaryOp, expr: &TsExpr, is_left: bool) {
+fn render_binary_operand(
+    out: &mut String,
+    outer_op: TsBinaryOp,
+    expr: &TsExpr,
+    is_left: bool,
+    depth: usize,
+) {
     let needs_parens = match expr {
         // `Arrow`/`Conditional` are the two lowest-precedence expression
         // forms in JS/TS — `(x) => y || z` as a binary operand must print
@@ -1245,10 +1251,10 @@ fn render_binary_operand(out: &mut String, outer_op: TsBinaryOp, expr: &TsExpr, 
     };
     if needs_parens {
         out.push('(');
-        render_expr(out, expr);
+        render_expr(out, expr, depth);
         out.push(')');
     } else {
-        render_expr(out, expr);
+        render_expr(out, expr, depth);
     }
 }
 
@@ -1276,7 +1282,7 @@ fn render_stmt_level_expr(out: &mut String, expr: &TsExpr, depth: usize) {
     {
         render_multiline_array(out, items, depth);
     } else {
-        render_expr(out, expr);
+        render_expr(out, expr, depth);
     }
 }
 
@@ -1365,7 +1371,7 @@ fn render_multiline_object_entry(
         TsObjectEntry::Spread(e) => {
             out.push_str(&indent(depth + 1));
             out.push_str("...");
-            render_expr(out, e);
+            render_expr(out, e, depth);
             out.push_str(",\n");
         }
         // `workers.rs`'s own dominant real shape (Decision A, gap 1):
@@ -1401,7 +1407,7 @@ fn render_multiline_object_entry(
             }
             if *inline {
                 out.push_str(" { ");
-                render_compact_stmts(out, body);
+                render_compact_stmts(out, body, depth);
                 out.push_str(" }");
             } else {
                 render_block_stmts(out, body, depth + 1, map);
@@ -1446,7 +1452,7 @@ fn render_multiline_array(out: &mut String, items: &[TsExpr], depth: usize) {
     out.push_str("[\n");
     for item in items {
         out.push_str(&indent(depth + 1));
-        render_expr(out, item);
+        render_expr(out, item, depth);
         out.push_str(",\n");
     }
     out.push_str(&indent(depth));
@@ -1462,17 +1468,17 @@ fn render_multiline_array(out: &mut String, items: &[TsExpr], depth: usize) {
 /// (not panicking) rather than left unreachable, matching this crate's own
 /// "no wildcard, but still sensible on an unanticipated shape" posture
 /// elsewhere (e.g. `render_block_body`'s own non-`Block` fallback).
-fn render_object_entry_inline(out: &mut String, entry: &TsObjectEntry) {
+fn render_object_entry_inline(out: &mut String, entry: &TsObjectEntry, depth: usize) {
     match entry {
         TsObjectEntry::Prop(k, v) => {
             out.push_str(k);
             out.push_str(": ");
-            render_expr(out, v);
+            render_expr(out, v, depth);
         }
         TsObjectEntry::Shorthand(name) => out.push_str(name),
         TsObjectEntry::Spread(e) => {
             out.push_str("...");
-            render_expr(out, e);
+            render_expr(out, e, depth);
         }
         TsObjectEntry::Method {
             name,
@@ -1513,7 +1519,7 @@ fn render_object_entry_inline(out: &mut String, entry: &TsObjectEntry) {
             }
             if *inline {
                 out.push_str(" { ");
-                render_compact_stmts(out, body);
+                render_compact_stmts(out, body, depth);
                 out.push_str(" }");
             } else {
                 render_block_stmts(out, body, 0, None);
@@ -1522,7 +1528,7 @@ fn render_object_entry_inline(out: &mut String, entry: &TsObjectEntry) {
     }
 }
 
-fn render_expr(out: &mut String, expr: &TsExpr) {
+fn render_expr(out: &mut String, expr: &TsExpr, depth: usize) {
     match expr {
         TsExpr::Ident(name) => out.push_str(name),
         // #1539: printed exactly as `Ident` always was — raw text, no
@@ -1531,25 +1537,25 @@ fn render_expr(out: &mut String, expr: &TsExpr) {
         // printer to branch on.
         TsExpr::VerbatimExpr(text, _origin) => out.push_str(text),
         TsExpr::Member { object, property } => {
-            render_operand(out, object);
+            render_operand(out, object, depth);
             out.push('.');
             out.push_str(property);
         }
         TsExpr::OptionalMember { object, property } => {
-            render_operand(out, object);
+            render_operand(out, object, depth);
             out.push_str("?.");
             out.push_str(property);
         }
         TsExpr::Index { object, index } => {
-            render_operand(out, object);
+            render_operand(out, object, depth);
             out.push('[');
-            render_expr(out, index);
+            render_expr(out, index, depth);
             out.push(']');
         }
         TsExpr::OptionalIndex { object, index } => {
-            render_operand(out, object);
+            render_operand(out, object, depth);
             out.push_str("?.[");
-            render_expr(out, index);
+            render_expr(out, index, depth);
             out.push(']');
         }
         TsExpr::Arrow {
@@ -1571,19 +1577,19 @@ fn render_expr(out: &mut String, expr: &TsExpr) {
                 render_type(out, rt);
             }
             out.push_str(" => ");
-            render_arrow_body(out, body);
+            render_arrow_body(out, body, depth);
         }
         TsExpr::Call { callee, args } => {
-            render_operand(out, callee);
+            render_operand(out, callee, depth);
             out.push('(');
-            render_expr_list(out, args);
+            render_expr_list(out, args, depth);
             out.push(')');
         }
         TsExpr::New { callee, args } => {
             out.push_str("new ");
-            render_operand(out, callee);
+            render_operand(out, callee, depth);
             out.push('(');
-            render_expr_list(out, args);
+            render_expr_list(out, args, depth);
             out.push(')');
         }
         // `multiline` is ignored here deliberately: this recursion has no
@@ -1601,7 +1607,7 @@ fn render_expr(out: &mut String, expr: &TsExpr) {
                     if i > 0 {
                         out.push_str(", ");
                     }
-                    render_object_entry_inline(out, entry);
+                    render_object_entry_inline(out, entry, depth);
                 }
                 out.push_str(" }");
             }
@@ -1613,7 +1619,7 @@ fn render_expr(out: &mut String, expr: &TsExpr) {
         // reaches it through `render_stmt_level_expr` instead.
         TsExpr::Array { items, .. } => {
             out.push('[');
-            render_expr_list(out, items);
+            render_expr_list(out, items, depth);
             out.push(']');
         }
         TsExpr::TemplateLit { parts, exprs } => {
@@ -1622,7 +1628,7 @@ fn render_expr(out: &mut String, expr: &TsExpr) {
                 out.push_str(part);
                 if let Some(e) = exprs.get(i) {
                     out.push_str("${");
-                    render_expr(out, e);
+                    render_expr(out, e, depth);
                     out.push('}');
                 }
             }
@@ -1630,7 +1636,7 @@ fn render_expr(out: &mut String, expr: &TsExpr) {
         }
         TsExpr::Await(inner) => {
             out.push_str("await ");
-            render_operand(out, inner);
+            render_operand(out, inner, depth);
         }
         TsExpr::As { expr, ty } => {
             // `(a ?? b) as T` / `((x) => y) as T` / `((a ? b : c)) as T` — a
@@ -1654,10 +1660,10 @@ fn render_expr(out: &mut String, expr: &TsExpr) {
             );
             if needs_parens {
                 out.push('(');
-                render_expr(out, expr);
+                render_expr(out, expr, depth);
                 out.push(')');
             } else {
-                render_expr(out, expr);
+                render_expr(out, expr, depth);
             }
             out.push_str(" as ");
             render_type(out, ty);
@@ -1679,14 +1685,14 @@ fn render_expr(out: &mut String, expr: &TsExpr) {
                 );
             if nested_neg {
                 out.push('(');
-                render_expr(out, expr);
+                render_expr(out, expr, depth);
                 out.push(')');
             } else {
-                render_operand(out, expr);
+                render_operand(out, expr, depth);
             }
         }
         TsExpr::Binary { op, left, right } => {
-            render_binary_operand(out, *op, left, true);
+            render_binary_operand(out, *op, left, true, depth);
             out.push_str(match op {
                 TsBinaryOp::NullishCoalescing => " ?? ",
                 TsBinaryOp::Or => " || ",
@@ -1705,7 +1711,7 @@ fn render_expr(out: &mut String, expr: &TsExpr) {
                 TsBinaryOp::Sub => " - ",
                 TsBinaryOp::Exp => " ** ",
             });
-            render_binary_operand(out, *op, right, false);
+            render_binary_operand(out, *op, right, false, depth);
         }
         TsExpr::Conditional {
             test,
@@ -1724,19 +1730,19 @@ fn render_expr(out: &mut String, expr: &TsExpr) {
                 matches!(**test, TsExpr::Arrow { .. } | TsExpr::Conditional { .. });
             if test_needs_parens {
                 out.push('(');
-                render_expr(out, test);
+                render_expr(out, test, depth);
                 out.push(')');
             } else {
-                render_expr(out, test);
+                render_expr(out, test, depth);
             }
             out.push_str(" ? ");
-            render_expr(out, consequent);
+            render_expr(out, consequent, depth);
             out.push_str(" : ");
-            render_expr(out, alternate);
+            render_expr(out, alternate, depth);
         }
         TsExpr::Paren(inner) => {
             out.push('(');
-            render_expr(out, inner);
+            render_expr(out, inner, depth);
             out.push(')');
         }
         TsExpr::Lit(lit) => render_lit(out, lit),
@@ -1753,23 +1759,75 @@ fn render_expr(out: &mut String, expr: &TsExpr) {
 /// this one-line-IIFE shape, so no trailing newline is added here (unlike
 /// `render_inline_block`'s own statement-position form): this text is
 /// embedded mid-expression, not standing alone as a statement.
-fn render_arrow_body(out: &mut String, body: &TsArrowBody) {
+/// Whether `expr` prints with an object literal as its first token.
+fn starts_with_object(expr: &TsExpr) -> bool {
+    match expr {
+        TsExpr::Object { .. } => true,
+        TsExpr::Member { object, .. }
+        | TsExpr::OptionalMember { object, .. }
+        | TsExpr::Index { object, .. }
+        | TsExpr::OptionalIndex { object, .. } => starts_with_object(object),
+        TsExpr::Call { callee, .. } => starts_with_object(callee),
+        TsExpr::As { expr, .. } => starts_with_object(expr),
+        TsExpr::Binary { left, .. } => starts_with_object(left),
+        TsExpr::Conditional { test, .. } => starts_with_object(test),
+        TsExpr::Ident(_)
+        | TsExpr::VerbatimExpr(..)
+        | TsExpr::Arrow { .. }
+        | TsExpr::New { .. }
+        | TsExpr::Array { .. }
+        | TsExpr::TemplateLit { .. }
+        | TsExpr::Await(_)
+        | TsExpr::Unary { .. }
+        | TsExpr::Paren(_)
+        | TsExpr::Lit(_) => false,
+    }
+}
+
+fn render_arrow_body(out: &mut String, body: &TsArrowBody, depth: usize) {
     match body {
-        TsArrowBody::Expr(expr) => render_expr(out, expr),
+        TsArrowBody::Expr(expr) => {
+            // An expression body that starts with an object literal reads as a
+            // block, not a value, so it is bracketed: `(x) => ({ a: x })`. That
+            // is the leftmost operand being an `Object`, directly or under a
+            // member access, call, `as` or operator: what the emitter's text
+            // path bracketed by the printed text starting `{`.
+            if starts_with_object(expr) {
+                out.push('(');
+                render_expr(out, expr, depth);
+                out.push(')');
+            } else {
+                render_expr(out, expr, depth);
+            }
+        }
         TsArrowBody::Block(stmts) => {
             out.push_str("{ ");
-            render_compact_stmts(out, stmts);
+            render_compact_stmts(out, stmts, depth);
             out.push_str(" }");
+        }
+        // The multi-line form: `{`, each statement on its own line one level
+        // deeper than the arrow's own line, `}` back at that line's indent.
+        // Statements inside carry no source-map checkpoints (S5 gives IIFE and
+        // lambda bodies their mappings).
+        TsArrowBody::Multiline(stmts) => {
+            let outer = SPAN_SINK.with(|sink| sink.borrow_mut().take());
+            out.push_str("{\n");
+            for s in stmts {
+                render_stmt(out, s, depth + 1, None);
+            }
+            out.push_str(&indent(depth));
+            out.push('}');
+            SPAN_SINK.with(|sink| *sink.borrow_mut() = outer);
         }
     }
 }
 
-fn render_expr_list(out: &mut String, exprs: &[TsExpr]) {
+fn render_expr_list(out: &mut String, exprs: &[TsExpr], depth: usize) {
     for (i, e) in exprs.iter().enumerate() {
         if i > 0 {
             out.push_str(", ");
         }
-        render_expr(out, e);
+        render_expr(out, e, depth);
     }
 }
 
@@ -2006,7 +2064,7 @@ pub fn print_type(ty: &TsType) -> String {
 /// own scope exactly.
 pub fn print_expr(expr: &TsExpr) -> String {
     let mut out = String::new();
-    render_expr(&mut out, expr);
+    render_expr(&mut out, expr, 0);
     out
 }
 
@@ -7171,5 +7229,129 @@ mod tests {
         );
         let again = print_stmt_with_spans(&stmt, 0);
         assert_eq!(again.1.len(), 1);
+    }
+
+    fn multiline_arrow(is_async: bool, stmts: Vec<TsStmt>) -> TsExpr {
+        TsExpr::Arrow {
+            params: Vec::new(),
+            is_async,
+            generics: Vec::new(),
+            return_type: None,
+            body: Box::new(TsArrowBody::Multiline(stmts)),
+        }
+    }
+
+    fn iife(arrow: TsExpr) -> TsExpr {
+        TsExpr::Call {
+            callee: Box::new(TsExpr::Paren(Box::new(arrow))),
+            args: Vec::new(),
+        }
+    }
+
+    /// 1A.12: an object-literal expression body is bracketed, or it would read
+    /// as a block.
+    #[test]
+    fn an_object_literal_expression_body_is_bracketed() {
+        let arrow = TsExpr::Arrow {
+            params: vec![TsParam {
+                name: "x".to_string(),
+                ty: None,
+                optional: false,
+            }],
+            is_async: false,
+            generics: Vec::new(),
+            return_type: None,
+            body: Box::new(TsArrowBody::Expr(Box::new(TsExpr::object(vec![(
+                "a".to_string(),
+                id("x"),
+            )])))),
+        };
+        assert_eq!(print_expr(&arrow), "(x) => ({ a: x })");
+    }
+
+    /// 1A.12: a multi-line arrow body nests one level below the line the arrow
+    /// starts on, and closes back at that line's indent, at any depth.
+    #[test]
+    fn a_multiline_arrow_body_prints_at_its_real_depth() {
+        let call = iife(multiline_arrow(
+            false,
+            vec![
+                TsStmt::const_stmt(TsBindingName::Ident("y".to_string()), None, id("a"), None),
+                TsStmt::return_stmt(Some(id("y")), None),
+            ],
+        ));
+        let stmt = TsStmt::const_stmt(TsBindingName::Ident("r".to_string()), None, call, None);
+        assert_eq!(
+            print_stmt(&stmt, 0),
+            "const r = (() => {\n  const y = a;\n  return y;\n})();\n"
+        );
+        assert_eq!(
+            print_stmt(&stmt, 1),
+            "  const r = (() => {\n    const y = a;\n    return y;\n  })();\n"
+        );
+    }
+
+    /// 1A.12: three IIFEs deep, each body one level below its own line.
+    #[test]
+    fn nested_multiline_arrows_indent_one_level_each() {
+        let inner = iife(multiline_arrow(
+            false,
+            vec![TsStmt::return_stmt(Some(id("z")), None)],
+        ));
+        let middle = iife(multiline_arrow(
+            false,
+            vec![TsStmt::return_stmt(Some(inner), None)],
+        ));
+        let outer = iife(multiline_arrow(
+            true,
+            vec![TsStmt::return_stmt(Some(middle), None)],
+        ));
+        let stmt = TsStmt::return_stmt(Some(TsExpr::Await(Box::new(outer))), None);
+        assert_eq!(
+            print_stmt(&stmt, 0),
+            "return await (async () => {\n  return (() => {\n    return (() => {\n      return z;\n    })();\n  })();\n})();\n"
+        );
+    }
+
+    /// 1A.12: a multi-line arrow inside a call argument sits at the enclosing
+    /// statement's depth.
+    #[test]
+    fn a_multiline_arrow_as_an_argument_uses_the_statement_depth() {
+        let lambda = TsExpr::Arrow {
+            params: vec![TsParam {
+                name: "x".to_string(),
+                ty: None,
+                optional: false,
+            }],
+            is_async: false,
+            generics: Vec::new(),
+            return_type: None,
+            body: Box::new(TsArrowBody::Multiline(vec![TsStmt::return_stmt(
+                Some(id("x")),
+                None,
+            )])),
+        };
+        let call = TsExpr::Call {
+            callee: Box::new(id("f")),
+            args: vec![id("xs"), lambda],
+        };
+        assert_eq!(
+            print_stmt(&TsStmt::expr_stmt(call, None), 2),
+            "    f(xs, (x) => {\n      return x;\n    });\n"
+        );
+    }
+
+    /// 1A.12: statements inside a multi-line arrow carry no checkpoints, though
+    /// the statement holding the arrow does.
+    #[test]
+    fn a_multiline_arrow_body_records_no_checkpoints() {
+        let call = iife(multiline_arrow(
+            false,
+            vec![TsStmt::return_stmt(Some(id("x")), sp(9))],
+        ));
+        let stmt = TsStmt::expr_stmt(call, sp(3));
+        let (_, spans) = print_stmt_with_spans(&stmt, 0);
+        assert_eq!(spans.len(), 1);
+        assert_eq!(spans[0].1.start, 3);
     }
 }

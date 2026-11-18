@@ -248,7 +248,7 @@ fn walk_decl<'a>(decl: &'a TsDecl, out: &mut Vec<(VerbatimOrigin, &'a str)>) {
 fn walk_arrow_body<'a>(body: &'a TsArrowBody, out: &mut Vec<(VerbatimOrigin, &'a str)>) {
     match body {
         TsArrowBody::Expr(e) => walk_expr(e, out),
-        TsArrowBody::Block(stmts) => {
+        TsArrowBody::Block(stmts) | TsArrowBody::Multiline(stmts) => {
             for s in stmts {
                 walk_stmt(s, out);
             }
@@ -1462,6 +1462,12 @@ pub enum TsExpr {
 pub enum TsArrowBody {
     Expr(Box<TsExpr>),
     Block(Vec<TsStmt>),
+    /// A genuinely multi-line block body (back-half paydown 1A.12): `{`, one
+    /// statement per line one level deeper than the line the arrow starts on,
+    /// and `}` back at that line's indent. Unlike [`TsArrowBody::Block`]'s
+    /// compact one-line form, it may hold any statement, nested at its real
+    /// depth, and it records no source-map checkpoints for them.
+    Multiline(Vec<TsStmt>),
 }
 
 impl TsExpr {
