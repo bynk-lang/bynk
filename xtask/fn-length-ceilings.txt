@@ -31,7 +31,6 @@ bynk-check/src/context_checks.rs::check_agent_decls = 472
 bynk-check/src/check_pipeline.rs::check_file_core = 470
 bynk-syntax/src/parser/declarations.rs::parse_context_body = 468
 bynk-emit/src/emitter/emit.rs::emit_service = 461
-bynk-emit/src/emitter/lower.rs::lower_list_kernel = 458
 bynk-check/src/context_checks.rs::check_actor_contracts = 456
 bynk-driver/src/project.rs::emit_composition_root = 447
 bynk-emit/src/emitter.rs::write_header = 446

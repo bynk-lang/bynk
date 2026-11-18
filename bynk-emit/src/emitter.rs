@@ -102,6 +102,7 @@ mod lower;
 #[cfg(feature = "text-exit-counters")]
 pub use lower::text_counters;
 mod lower_ctx;
+mod lower_list;
 mod lower_stmt;
 pub(crate) mod runtime_use;
 mod tco;
