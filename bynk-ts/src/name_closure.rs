@@ -751,7 +751,7 @@ impl Walk {
             } => {
                 self.expr(discriminant);
                 for case in cases {
-                    if let Some(t) = &case.test {
+                    for t in &case.labels {
                         self.expr(t);
                     }
                     self.stmts(&case.body);

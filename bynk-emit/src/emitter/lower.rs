@@ -25,8 +25,8 @@ use super::lower_ctx::LowerCtx;
 use super::lower_stmt::{
     Body, Item, arms_contain_question, block_body, block_body_into, block_contains_question,
     emit_block_as_function_body, emit_block_as_function_body_with_return, emit_if_tail,
-    emit_match_case, emit_match_if_chain, emit_match_tail, emit_statement, hoist_if_as_statement,
-    hoist_value_as_statement, is_literal_match, render, ternary_shaped, write_line,
+    emit_match_tail, emit_statement, hoist_if_as_statement, hoist_value_as_statement,
+    match_dispatch, render, ternary_shaped, write_line,
 };
 use super::ts_types::{
     ts_array_elem, ts_base, ts_ty, ts_ty_to_ts_type, ts_type_ref, ts_type_ref_to_ts_type,
@@ -1049,6 +1049,16 @@ impl LoweredExpr {
 /// `lower_expr`'s one shared text exit (`finish_text`) rather than opening a
 /// second text construction site (see `built_or_text!`).
 pub(super) type Built = Result<bynk_ts::TsExpr, String>;
+
+impl From<Built> for LoweredExpr {
+    /// A built value as a bridge value: the node, else its text.
+    fn from(built: Built) -> Self {
+        match built {
+            Ok(n) => LoweredExpr::Node(n),
+            Err(t) => LoweredExpr::Text(t),
+        }
+    }
+}
 
 pub(super) fn node_or_text(
     children: Vec<LoweredExpr>,
@@ -7853,15 +7863,27 @@ fn lower_if(
 /// `async` and awaited when `is_async` (1A.12). The text counterpart is
 /// `finish_async_iife`, now only the `match` IIFE's and the text fallbacks'.
 fn iife_call(is_async: bool, body: Vec<bynk_ts::TsStmt>) -> bynk_ts::TsExpr {
+    arrow_call(Vec::new(), Vec::new(), is_async, body)
+}
+
+/// `((params) => { <body> })(args)`, `async` and awaited when `is_async`: the
+/// `match` IIFE's `(__d) => { … }` over its discriminant, and [`iife_call`]'s
+/// parameterless one (1A.13).
+fn arrow_call(
+    params: Vec<bynk_ts::TsParam>,
+    args: Vec<bynk_ts::TsExpr>,
+    is_async: bool,
+    body: Vec<bynk_ts::TsStmt>,
+) -> bynk_ts::TsExpr {
     let call = bynk_ts::TsExpr::Call {
         callee: Box::new(bynk_ts::TsExpr::Paren(Box::new(bynk_ts::TsExpr::Arrow {
-            params: Vec::new(),
+            params,
             is_async,
             generics: Vec::new(),
             return_type: None,
             body: Box::new(bynk_ts::TsArrowBody::Multiline(body)),
         }))),
-        args: Vec::new(),
+        args,
     };
     if is_async {
         bynk_ts::TsExpr::Await(Box::new(call))
@@ -9011,7 +9033,8 @@ fn lower_record_construction(
             ) {
                 Ok(v) => {
                     slots.push(FieldSlot::Prop(declared.name.name.clone()));
-                    children.push(LoweredExpr::Text(v));
+                    let text: Built = Err(v);
+                    children.push(text.into());
                 }
                 Err(reason) => unreachable!(
                     "field `{}`'s default passed the checker but has no value: {reason}",
@@ -9585,7 +9608,7 @@ fn lower_match_as_iife(discriminant: &Expr, arms: &[MatchArm], cx: &mut LowerCtx
         .expr_types
         .get(&discriminant.id)
         .map(|te| te.ty);
-    let disc = pre.lower(discriminant, cx);
+    let disc = pre.lower_node(discriminant, cx);
     // v0.154 (ADR 0178): a value-position `match` lowers to an IIFE, whose
     // `return`s exit the arrow, so clear `return_ty`. #1750: a `match` whose
     // arms hold a `?` no longer reaches here (`hoist_value_as_statement`).
@@ -9599,15 +9622,59 @@ fn lower_match_as_iife(discriminant: &Expr, arms: &[MatchArm], cx: &mut LowerCtx
     // *caller's* scope — the propagation the old text scan got for free from
     // the substring surviving in the returned string.
     let saved_await = std::mem::take(&mut cx.emitted_await);
-    // #4 review: `build_match_iife` accumulates into its own local buffer,
-    // spliced into the caller's output later — see `without_source_map`.
-    let built = cx.without_source_map(|cx| build_match_iife(&disc, &disc_ty, arms, cx));
+    // #4 review: the arrow's body is spliced into the caller's output later
+    // — see `without_source_map`.
+    let body = cx.without_source_map(|cx| {
+        let mut body = Body::new();
+        match_dispatch(
+            &mut body,
+            &PatPath::ident("__d"),
+            &disc_ty,
+            arms,
+            cx,
+            false,
+            false,
+        );
+        body
+    });
     let needs_async = cx.emitted_await;
     cx.emitted_await = saved_await || needs_async;
-    let inner_iife = finish_async_iife(built, needs_async);
     cx.return_ty = saved;
     cx.tail_slot = saved_slot;
-    pre.finish_text(inner_iife)
+    // The node form (1A.13): a node discriminant and a body that is all nodes,
+    // its checkpoints dropped as they are today.
+    let disc = match disc {
+        LoweredExpr::Node(n) => Ok(n),
+        LoweredExpr::Text(t) => Err(t),
+    };
+    if let Ok(disc) = &disc
+        && let Some(stmts) = body.to_nodes_unmapped()
+    {
+        let params = vec![bynk_ts::TsParam {
+            name: "__d".to_string(),
+            ty: None,
+            optional: false,
+        }];
+        return pre.finish(LoweredExpr::Node(arrow_call(
+            params,
+            vec![disc.clone()],
+            needs_async,
+            stmts,
+        )));
+    }
+    // The text form, byte for byte what it was.
+    let disc = match disc {
+        Ok(n) => bynk_ts::print_expr(&n),
+        Err(t) => t,
+    };
+    let mut iife = String::new();
+    iife.push_str("((__d) => {\n");
+    cx.without_source_map(|cx| render(&body, &mut iife, INDENT_STEP * 2, cx));
+    for _ in 0..INDENT_STEP {
+        iife.push(' ');
+    }
+    iife.push_str(&format!("}})({disc})"));
+    pre.finish_text(finish_async_iife(iife, needs_async))
 }
 
 /// v0.9.2: a match/if lowered to an IIFE in *expression* position may have arms
@@ -9640,49 +9707,139 @@ fn finish_async_iife(iife: String, needs_async: bool) -> String {
     format!("await {async_iife}")
 }
 
-fn build_match_iife(
-    disc_expr: &str,
-    disc_ty: &Option<TyId>,
-    arms: &[MatchArm],
-    cx: &mut LowerCtx,
-) -> String {
-    let tys = cx.ty_render();
-    let mut out = String::new();
-    out.push_str("((__d) => {\n");
-    // ADR 0169: nested/guarded matches lower to an if-chain (which emits its own
-    // per-arm bodies and trailing `throw`); flat/unguarded matches keep the switch.
-    if bynk_model::match_needs_if_chain(arms) {
-        emit_match_if_chain(&mut out, "__d", disc_ty, arms, cx, INDENT_STEP * 2, false);
-    } else {
-        for _ in 0..(INDENT_STEP * 2) {
-            out.push(' ');
+/// A literal pattern's value as a node (1A.13, Decision C of #3714): the twin of
+/// [`literal_case_label`], which prints byte for byte the same (`TsLit::Str`
+/// shares `escape_ts_string`'s escaper, `TsLit::Num` is verbatim).
+pub(super) fn literal_label_node(value: &LiteralValue) -> bynk_ts::TsExpr {
+    use bynk_ts::{TsExpr, TsLit};
+    match value {
+        LiteralValue::Int(n) => num_lit(n.to_string()),
+        LiteralValue::Str(s) => TsExpr::Lit(TsLit::Str(s.clone())),
+        LiteralValue::Bool(b) => TsExpr::Lit(TsLit::Bool(*b)),
+    }
+}
+
+/// The runtime path a pattern is tested against (`__d`, `x.f`, `x[0].g`): its
+/// text, which is what the `is` lowering and every text fallback use, and its
+/// node when the scrutinee lowered to one (1A.13, Decision C of #3714). A step
+/// keeps the node only when it prints exactly as the text step reads, so the
+/// node form can never differ from the text form.
+#[derive(Clone)]
+pub(super) struct PatPath {
+    text: String,
+    node: Option<bynk_ts::TsExpr>,
+}
+
+impl PatPath {
+    /// A path known only as text: every test and binding built over it is text.
+    pub(super) fn from_text(text: &str) -> Self {
+        PatPath {
+            text: text.to_string(),
+            node: None,
         }
-        // v0.130: literal-kind matches switch on the value; variant-kind on `.tag`.
-        let scrutinee = if is_literal_match(disc_ty, tys.types()) {
-            "__d"
-        } else {
-            "__d.tag"
+    }
+
+    /// A bare local.
+    pub(super) fn ident(name: &str) -> Self {
+        PatPath {
+            text: name.to_string(),
+            node: Some(ident_node(name)),
+        }
+    }
+
+    pub(super) fn from_lowered(value: LoweredExpr) -> Self {
+        match value {
+            LoweredExpr::Node(n) => PatPath {
+                text: bynk_ts::print_expr(&n),
+                node: Some(n),
+            },
+            LoweredExpr::Text(text) => PatPath { text, node: None },
+        }
+    }
+
+    pub(super) fn as_str(&self) -> &str {
+        &self.text
+    }
+
+    pub(super) fn node(&self) -> Option<&bynk_ts::TsExpr> {
+        self.node.as_ref()
+    }
+
+    /// The path as a bridge value.
+    pub(super) fn lowered(&self) -> LoweredExpr {
+        let built: Built = match &self.node {
+            Some(n) => Ok(n.clone()),
+            None => Err(self.text.clone()),
         };
-        out.push_str(&format!("switch ({scrutinee}) {{\n"));
-        for arm in arms {
-            // IIFE form (non-tail match expression): `Effect.pure(...)` must keep
-            // its `Promise.resolve` wrapper because the IIFE is a synchronous arrow.
-            emit_match_case(&mut out, "__d", disc_ty, arm, cx, INDENT_STEP * 3, false);
-        }
-        for _ in 0..(INDENT_STEP * 2) {
-            out.push(' ');
-        }
-        out.push_str("}\n");
-        for _ in 0..(INDENT_STEP * 2) {
-            out.push(' ');
-        }
-        out.push_str("throw new globalThis.Error(\"non-exhaustive match\");\n");
+        built.into()
     }
-    for _ in 0..INDENT_STEP {
-        out.push(' ');
+
+    /// `path.property`.
+    pub(super) fn member(&self, property: &str) -> Self {
+        let text = format!("{}.{property}", self.text);
+        let node = self
+            .node
+            .as_ref()
+            .map(|n| bynk_ts::TsExpr::Member {
+                object: Box::new(n.clone()),
+                property: property.to_string(),
+            })
+            .filter(|n| bynk_ts::print_expr(n) == text);
+        PatPath { text, node }
     }
-    out.push_str(&format!("}})({disc_expr})"));
-    out
+
+    /// `path[i]`.
+    pub(super) fn index(&self, i: usize) -> Self {
+        let text = format!("{}[{i}]", self.text);
+        let node = self
+            .node
+            .as_ref()
+            .map(|n| bynk_ts::TsExpr::Index {
+                object: Box::new(n.clone()),
+                index: Box::new(num_lit(i.to_string())),
+            })
+            .filter(|n| bynk_ts::print_expr(n) == text);
+        PatPath { text, node }
+    }
+}
+
+/// `path <op> rhs`, a node when the path is one, else the `text` the caller
+/// built from the same pieces.
+fn path_test(
+    path: &PatPath,
+    op: bynk_ts::TsBinaryOp,
+    rhs: bynk_ts::TsExpr,
+    text: String,
+) -> LoweredExpr {
+    let built: Built = match path.node() {
+        Some(n) => Ok(bynk_ts::TsExpr::Binary {
+            op,
+            left: Box::new(n.clone()),
+            right: Box::new(rhs),
+        }),
+        None => Err(text),
+    };
+    built.into()
+}
+
+/// `a && b && …`: a left-leaning `And` chain when every test is a node, else
+/// today's ` && `-joined text. `tests` is not empty.
+pub(super) fn and_join(tests: Vec<LoweredExpr>) -> LoweredExpr {
+    let built = node_or_text(
+        tests,
+        |nodes| {
+            nodes
+                .into_iter()
+                .reduce(|left, right| bynk_ts::TsExpr::Binary {
+                    op: bynk_ts::TsBinaryOp::And,
+                    left: Box::new(left),
+                    right: Box::new(right),
+                })
+                .unwrap_or_else(|| unreachable!("and_join is given at least one test"))
+        },
+        |texts| texts.join(" && "),
+    );
+    built.into()
 }
 
 /// v0.130: render a literal pattern's value as a JS `switch` case label.
@@ -9756,8 +9913,9 @@ fn list_rest_expr(path: &str, n: usize) -> String {
 }
 
 /// Emit the boolean tests that must hold for `pattern` to match the value at
-/// runtime `path` (static type `path_ty`). Irrefutable patterns add nothing;
-/// nested variant/literal payloads recurse into `path.<field>`.
+/// runtime `path` (static type `path_ty`), as text: the form the `is` lowering
+/// keeps until 1A.14. Irrefutable patterns add nothing; nested variant/literal
+/// payloads recurse into `path.<field>`.
 pub(super) fn pattern_match_tests(
     path: &str,
     path_ty: Option<TyId>,
@@ -9765,35 +9923,67 @@ pub(super) fn pattern_match_tests(
     cx: &LowerCtx,
     tests: &mut Vec<String>,
 ) {
+    let mut found = Vec::new();
+    pattern_tests(&PatPath::from_text(path), path_ty, pattern, cx, &mut found);
+    tests.extend(found.into_iter().map(LoweredExpr::into_text));
+}
+
+/// [`pattern_match_tests`] over a [`PatPath`], each test a node when the path is
+/// one and the test builds from nodes (1A.13, Decision C of #3714), else text.
+pub(super) fn pattern_tests(
+    path: &PatPath,
+    path_ty: Option<TyId>,
+    pattern: &Pattern,
+    cx: &LowerCtx,
+    tests: &mut Vec<LoweredExpr>,
+) {
+    use bynk_ts::{TsBinaryOp, TsExpr, TsLit};
     let tys = cx.ty_render();
+    let p = path.as_str();
     match pattern {
         Pattern::Wildcard(_) | Pattern::Binding(_) => {}
         Pattern::Literal { value, .. } => {
-            tests.push(format!("{path} === {}", literal_case_label(value)));
+            tests.push(path_test(
+                path,
+                TsBinaryOp::StrictEq,
+                literal_label_node(value),
+                format!("{p} === {}", literal_case_label(value)),
+            ));
         }
         // #2699: `x >= lo && x <= hi`, or the one side an open range has.
         Pattern::Range(r) => {
             if let Some(lo) = r.lo {
-                tests.push(format!("{path} >= {}", lo));
+                tests.push(path_test(
+                    path,
+                    TsBinaryOp::GreaterThanEq,
+                    num_lit(lo.to_string()),
+                    format!("{p} >= {}", lo),
+                ));
             }
             if let Some(hi) = r.hi {
-                tests.push(format!("{path} <= {}", hi));
+                tests.push(path_test(
+                    path,
+                    TsBinaryOp::LessThanEq,
+                    num_lit(hi.to_string()),
+                    format!("{p} <= {}", hi),
+                ));
             }
         }
         // #472: `p where predicate` — the inner pattern's own tests, then the
         // predicate as a boolean guard over the runtime value at `path`,
         // reusing `refined_check_as_bool` verbatim (the same helper `value is
-        // RefinedType` lowers through).
+        // RefinedType` lowers through). That helper builds text, so a refined
+        // arm's tests stay text.
         Pattern::Refined {
             inner, predicate, ..
         } => {
-            pattern_match_tests(path, path_ty, inner, cx, tests);
+            pattern_tests(path, path_ty, inner, cx, tests);
             // The checker (`check_pattern`) already rejected any scrutinee
             // that isn't literal-kind before this point, so `path_ty` is
             // always `Int` or `String` here for a well-typed program — a
             // silent fallback would mask a real bug (wrong predicate codegen
             // against the wrong base) rather than surfacing it loudly, the
-            // same posture as `emit_match_case`'s `Pattern::Refined` arm.
+            // same posture as `match_case`'s `Pattern::Refined` arm.
             let base = path_ty
                 .and_then(|t| literal_base_of_ty(t, tys.types()))
                 .unwrap_or_else(|| {
@@ -9805,22 +9995,35 @@ pub(super) fn pattern_match_tests(
             for p in &predicate.predicates {
                 cx.note_predicate(&p.kind);
             }
-            tests.push(refined_check_as_bool(path, base, Some(predicate)));
+            let check: Built = Err(refined_check_as_bool(path.as_str(), base, Some(predicate)));
+            tests.push(check.into());
         }
         // #2680: a length test (none for `[..]`, which matches every list),
         // then each refutable element against `path[i]`.
         Pattern::List { elems, rest, .. } => {
+            let length = path.member("length");
+            let length_test = |op: TsBinaryOp, n: usize, sym: &str| -> LoweredExpr {
+                let built: Built = match length.node() {
+                    Some(l) => Ok(TsExpr::Binary {
+                        op,
+                        left: Box::new(l.clone()),
+                        right: Box::new(num_lit(n.to_string())),
+                    }),
+                    None => Err(format!("{p}.length {sym} {n}")),
+                };
+                built.into()
+            };
             match (rest.is_some(), elems.len()) {
                 (true, 0) => {}
-                (true, n) => tests.push(format!("{path}.length >= {n}")),
-                (false, n) => tests.push(format!("{path}.length === {n}")),
+                (true, n) => tests.push(length_test(TsBinaryOp::GreaterThanEq, n, ">=")),
+                (false, n) => tests.push(length_test(TsBinaryOp::StrictEq, n, "===")),
             }
             let elem_ty = list_elem_ty(path_ty, cx);
             for (i, sub) in elems.iter().enumerate() {
                 if sub.is_irrefutable() {
                     continue;
                 }
-                pattern_match_tests(&format!("{path}[{i}]"), elem_ty, sub, cx, tests);
+                pattern_tests(&path.index(i), elem_ty, sub, cx, tests);
             }
         }
         // #2641: test each refutable field sub-pattern against `path.field`;
@@ -9833,13 +10036,18 @@ pub(super) fn pattern_match_tests(
                     continue;
                 }
                 let field_ty = record_field_ty(path_ty, &name.name, cx);
-                pattern_match_tests(&format!("{path}.{}", name.name), field_ty, sub, cx, tests);
+                pattern_tests(&path.member(&name.name), field_ty, sub, cx, tests);
             }
         }
         Pattern::Variant {
             variant, bindings, ..
         } => {
-            tests.push(format!("{path}.tag === \"{}\"", variant.name));
+            tests.push(path_test(
+                &path.member("tag"),
+                TsBinaryOp::StrictEq,
+                TsExpr::Lit(TsLit::Str(variant.name.clone())),
+                format!("{p}.tag === \"{}\"", variant.name),
+            ));
             for (i, b) in bindings.iter().enumerate() {
                 let sp = b.pattern();
                 if sp.is_irrefutable() {
@@ -9852,7 +10060,7 @@ pub(super) fn pattern_match_tests(
                     }
                 };
                 let field_ty = cx.payload_field_ty(path_ty, &variant.name, i, tys.types());
-                pattern_match_tests(&format!("{path}.{field}"), field_ty, sp, cx, tests);
+                pattern_tests(&path.member(&field), field_ty, sp, cx, tests);
             }
         }
         // #474: an or-pattern matches `path` when any alternative does — AND
@@ -9861,19 +10069,35 @@ pub(super) fn pattern_match_tests(
         // AND-joining `tests` composes it correctly with sibling tests, e.g. a
         // nested `Some(1 | 2)`'s outer `.tag === "Some"` test).
         Pattern::Or(alts, _) => {
-            let terms: Vec<String> = alts
+            let terms: Vec<LoweredExpr> = alts
                 .iter()
                 .map(|alt| {
                     let mut t = Vec::new();
-                    pattern_match_tests(path, path_ty, alt, cx, &mut t);
+                    pattern_tests(path, path_ty, alt, cx, &mut t);
                     if t.is_empty() {
-                        "true".to_string()
+                        LoweredExpr::Node(TsExpr::Lit(TsLit::Bool(true)))
                     } else {
-                        t.join(" && ")
+                        and_join(t)
                     }
                 })
                 .collect();
-            tests.push(format!("({})", terms.join(" || ")));
+            let built = node_or_text(
+                terms,
+                |nodes| {
+                    TsExpr::Paren(Box::new(
+                        nodes
+                            .into_iter()
+                            .reduce(|left, right| TsExpr::Binary {
+                                op: TsBinaryOp::Or,
+                                left: Box::new(left),
+                                right: Box::new(right),
+                            })
+                            .unwrap_or_else(|| unreachable!("an or-pattern has alternatives")),
+                    ))
+                },
+                |texts| format!("({})", texts.join(" || ")),
+            );
+            tests.push(built.into());
         }
     }
 }
@@ -9971,10 +10195,12 @@ mod event_pattern_guard_ir_tests {
 }
 
 /// Emit `const` declarations binding the names in `pattern` from runtime `path`,
-/// recursing through nested payloads (ADR 0169).
+/// recursing through nested payloads (ADR 0169). Each is a `Const` node when
+/// the path is one (1A.13, Decision C of #3714), else its text line; an
+/// or-pattern's `let` and `if`/`else` dispatch stays text lines.
 pub(super) fn emit_pattern_bindings(
     body: &mut Body,
-    path: &str,
+    path: &PatPath,
     path_ty: Option<TyId>,
     pattern: &Pattern,
     cx: &mut LowerCtx,
@@ -9984,7 +10210,7 @@ pub(super) fn emit_pattern_bindings(
         Pattern::Wildcard(_) | Pattern::Literal { .. } | Pattern::Range(_) => {}
         Pattern::Binding(id) => {
             let local = cx.bind_local_name(&id.name);
-            body.push(Item::Line(format!("const {local} = {path};")));
+            body.push(const_binding(&local, path.lowered()));
         }
         // #472: a refined pattern binds only what its inner pattern binds
         // (`_ where P` binds nothing today).
@@ -9996,19 +10222,19 @@ pub(super) fn emit_pattern_bindings(
         Pattern::List { elems, rest, .. } => {
             let elem_ty = list_elem_ty(path_ty, cx);
             for (i, sub) in elems.iter().enumerate() {
-                emit_pattern_bindings(body, &format!("{path}[{i}]"), elem_ty, sub, cx);
+                emit_pattern_bindings(body, &path.index(i), elem_ty, sub, cx);
             }
             if let Some(binder) = rest.as_ref().and_then(|r| r.binder.as_ref()) {
                 let local = cx.bind_local_name(&binder.name);
-                let value = list_rest_expr(path, elems.len());
-                body.push(Item::Line(format!("const {local} = {value};")));
+                let value = list_rest_value(path, elems.len());
+                body.push(const_binding(&local, value));
             }
         }
         // #2641: a shorthand field binds a local of its own name; `f: p`
         // recurses into `path.f`.
         Pattern::Record { fields, .. } => {
             for (name, sub) in fields {
-                let field_path = format!("{path}.{}", name.name);
+                let field_path = path.member(&name.name);
                 match sub {
                     Some(sub) => {
                         let field_ty = record_field_ty(path_ty, &name.name, cx);
@@ -10016,7 +10242,7 @@ pub(super) fn emit_pattern_bindings(
                     }
                     None => {
                         let local = cx.bind_local_name(&name.name);
-                        body.push(Item::Line(format!("const {local} = {field_path};")));
+                        body.push(const_binding(&local, field_path.lowered()));
                     }
                 }
             }
@@ -10032,7 +10258,7 @@ pub(super) fn emit_pattern_bindings(
                     }
                 };
                 let field_ty = cx.payload_field_ty(path_ty, &variant.name, i, tys.types());
-                emit_pattern_bindings(body, &format!("{path}.{field}"), field_ty, b.pattern(), cx);
+                emit_pattern_bindings(body, &path.member(&field), field_ty, b.pattern(), cx);
             }
         }
         // #474: different alternatives can bind the same name at different
@@ -10043,7 +10269,7 @@ pub(super) fn emit_pattern_bindings(
         // follows. Alternatives are mutually exclusive at runtime (a value has
         // exactly one tag, or a literal one value), so a plain if/else-if/else
         // chain is exhaustive over them once the caller's own combined test
-        // (built by `pattern_match_tests`) has already passed.
+        // (built by `pattern_tests`) has already passed.
         Pattern::Or(alts, _) => {
             let names = pattern.bound_names();
             if names.is_empty() {
@@ -10060,7 +10286,7 @@ pub(super) fn emit_pattern_bindings(
                     body.push(Item::Line("} else {".to_string()));
                 } else {
                     let mut t = Vec::new();
-                    pattern_match_tests(path, path_ty, alt, cx, &mut t);
+                    pattern_match_tests(path.as_str(), path_ty, alt, cx, &mut t);
                     let cond = if t.is_empty() {
                         "true".to_string()
                     } else {
@@ -10071,7 +10297,7 @@ pub(super) fn emit_pattern_bindings(
                 }
                 let mut assigns = Body::new();
                 let mut pairs = Vec::new();
-                pattern_binding_paths(path, path_ty, alt, cx, &mut pairs);
+                pattern_binding_paths(path.as_str(), path_ty, alt, cx, &mut pairs);
                 for (name, p) in &pairs {
                     let local = cx
                         .resolved_local_name(name)
@@ -10083,6 +10309,31 @@ pub(super) fn emit_pattern_bindings(
             body.push(Item::Line("}".to_string()));
         }
     }
+}
+
+/// `const <local> = <value>;` as an item (see `lower_stmt::const_item`).
+fn const_binding(local: &str, value: LoweredExpr) -> Item {
+    super::lower_stmt::const_item(true, local, None, value, false)
+}
+
+/// The value a list pattern's `..rest` binds, as a bridge value: the list
+/// itself, or `path.slice(n)` (see [`list_rest_expr`], which is the text).
+fn list_rest_value(path: &PatPath, n: usize) -> LoweredExpr {
+    if n == 0 {
+        return path.lowered();
+    }
+    let text = list_rest_expr(path.as_str(), n);
+    let built: Built = match path.node() {
+        Some(p) => Ok(bynk_ts::TsExpr::Call {
+            callee: Box::new(bynk_ts::TsExpr::Member {
+                object: Box::new(p.clone()),
+                property: "slice".to_string(),
+            }),
+            args: vec![num_lit(n.to_string())],
+        }),
+        None => Err(text),
+    };
+    built.into()
 }
 
 /// Collect `(name, runtime-path)` pairs for the names `pattern` binds from

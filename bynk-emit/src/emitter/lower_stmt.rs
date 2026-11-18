@@ -14,7 +14,10 @@ use bynk_syntax::ast::{
 use bynk_syntax::span::Span;
 
 use super::ctx::TailSlot;
-use super::lower::{Lowered, LoweredExpr, Pre, member_node, ternary_built};
+use super::lower::{
+    Lowered, LoweredExpr, PatPath, Pre, and_join, emit_pattern_bindings, literal_label_node,
+    member_node, pattern_tests, ternary_built,
+};
 use super::lower_ctx::LowerCtx;
 use super::ts_types::{ts_ty, ts_type_ref, ts_type_ref_to_ts_type};
 use super::*;
@@ -389,7 +392,7 @@ fn assign_item(pre_nodes: bool, target: bynk_ts::TsExpr, value: LoweredExpr) -> 
 /// when the value and every hoisted statement are nodes, and any annotation
 /// prints byte-identically through `ts_type_ref_to_ts_type`; otherwise today's
 /// text.
-fn const_item(
+pub(super) fn const_item(
     pre_nodes: bool,
     name: &str,
     annot: Option<&TypeRef>,
@@ -1214,6 +1217,30 @@ pub(super) fn emit_match_tail(
     render(&body, out, indent, cx);
 }
 
+/// The body's statements as nodes, with its checkpoints carried onto them
+/// (`mapped`: tail position) or dropped (a value-position `match`, lowered under
+/// `without_source_map`). `None` if any item is text.
+fn body_stmts(body: &Body, mapped: bool) -> Option<Vec<bynk_ts::TsStmt>> {
+    if mapped {
+        body.to_nodes()
+    } else {
+        body.to_nodes_unmapped()
+    }
+}
+
+/// `throw new globalThis.Error("non-exhaustive match");`.
+fn non_exhaustive_throw() -> Item {
+    stmt_item(bynk_ts::TsStmt::throw_stmt(
+        bynk_ts::TsExpr::New {
+            callee: Box::new(member_node("globalThis", "Error")),
+            args: vec![bynk_ts::TsExpr::Lit(bynk_ts::TsLit::Str(
+                "non-exhaustive match".to_string(),
+            ))],
+        },
+        None,
+    ))
+}
+
 fn match_tail(
     body: &mut Body,
     discriminant: &Expr,
@@ -1221,12 +1248,11 @@ fn match_tail(
     cx: &mut LowerCtx,
     async_tail: bool,
 ) {
-    let tys = cx.commons().tys();
     // Anchor the discriminant lowering + `switch (…) {` header to the match's
     // scrutinee span (slice 1); each arm re-anchors to its own span below.
     body.push(Item::Mark(discriminant.span));
     let mut pre = Pre::new();
-    let mut disc = pre.lower(discriminant, cx);
+    let disc = pre.lower_node(discriminant, cx);
     let disc_ty = cx
         .commons()
         .expr_types
@@ -1239,125 +1265,170 @@ fn match_tail(
     // narrow it (and re-evaluation could repeat side effects), so bind it to a
     // fresh temp once and switch on that. #2617: a path rooted at a constant
     // lowers to a call (`Fallback()`), so it is bound to a temp too.
-    if !is_narrowable_path(discriminant) || cx.roots_at_const(discriminant) {
+    let path = if !is_narrowable_path(discriminant) || cx.roots_at_const(discriminant) {
         let tmp = cx.fresh();
-        body.push(Item::Line(format!("const {tmp} = {disc};")));
-        disc = tmp;
-    }
+        body.push(const_item(true, &tmp, None, disc, false));
+        PatPath::ident(&tmp)
+    } else {
+        PatPath::from_lowered(disc)
+    };
+    match_dispatch(body, &path, &disc_ty, arms, cx, async_tail, true);
+}
+
+/// The `switch` or `if` chain over `arms`, then the non-exhaustive `throw`:
+/// what follows the discriminant in a tail `match` and fills a value-position
+/// `match`'s arrow. `mapped` is whether its checkpoints are recorded (tail
+/// position) or not (the arrow, lowered under `without_source_map`).
+pub(super) fn match_dispatch(
+    body: &mut Body,
+    path: &PatPath,
+    disc_ty: &Option<TyId>,
+    arms: &[MatchArm],
+    cx: &mut LowerCtx,
+    async_tail: bool,
+    mapped: bool,
+) {
+    let tys = cx.commons().tys();
     // ADR 0169: nested/guarded matches lower to an if-chain; flat/unguarded
     // matches keep the `switch`.
     if bynk_model::match_needs_if_chain(arms) {
-        match_if_chain(body, &disc, &disc_ty, arms, cx, async_tail);
+        match_if_chain(body, path, disc_ty, arms, cx, async_tail, mapped);
         return;
     }
     // v0.130: literal-kind matches switch on the value; variant-kind on `.tag`.
-    let scrutinee = if is_literal_match(&disc_ty, tys) {
-        disc.clone()
+    let scrutinee = if is_literal_match(disc_ty, tys) {
+        path.clone()
     } else {
-        format!("{disc}.tag")
+        path.member("tag")
     };
-    body.push(Item::Line(format!("switch ({scrutinee}) {{")));
-    let mut cases = Body::new();
-    for arm in arms {
-        match_case(&mut cases, &disc, &disc_ty, arm, cx, async_tail);
+    let cases: Vec<MatchCase> = arms
+        .iter()
+        .map(|arm| match_case(path, disc_ty, arm, cx, async_tail))
+        .collect();
+    // The node form: a node scrutinee and arms that are all nodes.
+    let nodes = scrutinee.node().and_then(|scrutinee| {
+        let cases = cases
+            .iter()
+            .map(|c| c.to_node(mapped))
+            .collect::<Option<Vec<_>>>()?;
+        Some(bynk_ts::TsStmt::switch_stmt(scrutinee.clone(), cases, None))
+    });
+    match nodes {
+        Some(switch) => body.push(stmt_item(switch)),
+        None => {
+            // 1A: the text form, for a scrutinee or an arm still text.
+            body.push(Item::Line(format!("switch ({}) {{", scrutinee.as_str())));
+            let mut lines = Body::new();
+            for case in cases {
+                case.push_lines(&mut lines);
+            }
+            body.push(Item::Indent(lines));
+            body.push(Item::Line("}".to_string()));
+        }
     }
-    body.push(Item::Indent(cases));
-    body.push(Item::Line("}".to_string()));
-    body.push(Item::Line(
-        "throw new globalThis.Error(\"non-exhaustive match\");".to_string(),
-    ));
+    body.push(non_exhaustive_throw());
 }
 
-pub(super) fn emit_match_case(
-    out: &mut String,
-    disc_var: &str,
-    disc_ty: &Option<TyId>,
-    arm: &MatchArm,
-    cx: &mut LowerCtx,
-    indent: usize,
-    async_tail: bool,
-) {
-    let mut body = Body::new();
-    match_case(&mut body, disc_var, disc_ty, arm, cx, async_tail);
-    render(&body, out, indent, cx);
+/// One lowered `switch` arm: its labels (none is `default`), the statements
+/// inside its braces, and the arm's span.
+struct MatchCase {
+    labels: Vec<bynk_ts::TsExpr>,
+    inner: Body,
+    span: Span,
+}
+
+impl MatchCase {
+    /// The arm as a typed case, if its body is all nodes. Its span is carried on
+    /// the case only when checkpoints are recorded.
+    fn to_node(&self, mapped: bool) -> Option<bynk_ts::TsSwitchCase> {
+        Some(bynk_ts::TsSwitchCase {
+            labels: self.labels.clone(),
+            body: body_stmts(&self.inner, mapped)?,
+            default_braced: self.labels.is_empty(),
+            case_braced: true,
+            span: mapped.then_some(self.span),
+        })
+    }
+
+    /// The arm as text lines: its checkpoint, the stacked labels (`case a:` /
+    /// `case b: {`, or `default: {`), its body and the closing brace.
+    fn push_lines(self, out: &mut Body) {
+        out.push(Item::Mark(self.span));
+        if self.labels.is_empty() {
+            out.push(Item::Line("default: {".to_string()));
+        }
+        let last = self.labels.len().wrapping_sub(1);
+        for (i, label) in self.labels.iter().enumerate() {
+            let label = bynk_ts::print_expr(label);
+            out.push(Item::Line(if i == last {
+                format!("case {label}: {{")
+            } else {
+                format!("case {label}:")
+            }));
+        }
+        out.push(Item::Indent(self.inner));
+        out.push(Item::Line("}".to_string()));
+    }
 }
 
 fn match_case(
-    body: &mut Body,
-    disc_var: &str,
+    disc: &PatPath,
     disc_ty: &Option<TyId>,
     arm: &MatchArm,
     cx: &mut LowerCtx,
     async_tail: bool,
-) {
+) -> MatchCase {
     let tys = cx.commons().tys();
-    // Anchor this arm's `case`/binding/`return` lines to the arm's source span
-    // (slice 1, ADR 0103 D2) — so stepping a `match` walks arm-to-arm.
-    body.push(Item::Mark(arm.span));
     // #908: this arm's payload/catch-all bindings live in the `case`'s own JS
     // block, so a read inside the body must resolve to them rather than an
     // outer `let` rename — push a frame and register each below, popped once
     // the whole arm (bindings + body) is emitted.
     cx.shadow_scopes.push(HashMap::new());
+    let mut labels = Vec::new();
+    let mut inner = Body::new();
     match &arm.pattern {
         Pattern::Wildcard(_) => {
-            body.push(Item::Line("default: {".to_string()));
-            let mut inner = Body::new();
             match_body(&mut inner, &arm.body, cx, async_tail);
-            body.push(Item::Indent(inner));
-            body.push(Item::Line("}".to_string()));
         }
         // A bare name binding is a catch-all that binds the scrutinee (ADR 0169).
         Pattern::Binding(id) => {
-            body.push(Item::Line("default: {".to_string()));
             let local = cx.bind_local_name(&id.name);
-            let mut inner = Body::new();
-            inner.push(Item::Line(format!("const {local} = {disc_var};")));
+            inner.push(const_item(true, &local, None, disc.lowered(), false));
             match_body(&mut inner, &arm.body, cx, async_tail);
-            body.push(Item::Indent(inner));
-            body.push(Item::Line("}".to_string()));
         }
         // v0.130: a literal pattern lowers to `case <literal>:`. JS `switch`
         // compares with `===`, matching the value semantics we want for
         // `Int`/`String`/`Bool`.
         Pattern::Literal { value, .. } => {
-            body.push(Item::Line(format!(
-                "case {}: {{",
-                literal_case_label(value)
-            )));
-            let mut inner = Body::new();
+            labels.push(literal_label_node(value));
             match_body(&mut inner, &arm.body, cx, async_tail);
-            body.push(Item::Indent(inner));
-            body.push(Item::Line("}".to_string()));
         }
         // #472: a refined arm always trips `match_needs_if_chain`, so the
         // switch path (this function) never sees one in practice — a
         // predicate has no `case`-label lowering, unlike a literal or a tag.
         Pattern::Refined { .. } => {
-            unreachable!("a Pattern::Refined arm always routes through emit_match_if_chain")
+            unreachable!("a Pattern::Refined arm always routes through match_if_chain")
         }
         // #2641: a record has no tag to switch on, so a record pattern always
         // trips `match_needs_if_chain`.
         Pattern::Record { .. } => {
-            unreachable!("a Pattern::Record arm always routes through emit_match_if_chain")
+            unreachable!("a Pattern::Record arm always routes through match_if_chain")
         }
         Pattern::List { .. } => {
-            unreachable!("a Pattern::List arm always routes through emit_match_if_chain")
+            unreachable!("a Pattern::List arm always routes through match_if_chain")
         }
         Pattern::Range(_) => {
-            unreachable!("a Pattern::Range arm always routes through emit_match_if_chain")
+            unreachable!("a Pattern::Range arm always routes through match_if_chain")
         }
         Pattern::Variant {
             variant, bindings, ..
         } => {
-            body.push(Item::Line(format!(
-                "case \"{tag}\": {{",
-                tag = variant.name
+            labels.push(bynk_ts::TsExpr::Lit(bynk_ts::TsLit::Str(
+                variant.name.clone(),
             )));
             // The switch path only handles flat, unguarded arms (nested/guarded
             // matches take the if-chain path), so each payload binding is an
             // irrefutable name or `_`.
-            let mut inner = Body::new();
             for (i, b) in bindings.iter().enumerate() {
                 let Pattern::Binding(name) = b.pattern() else {
                     continue;
@@ -1369,11 +1440,15 @@ fn match_case(
                     }
                 };
                 let local = cx.bind_local_name(&name.name);
-                inner.push(Item::Line(format!("const {local} = {disc_var}.{field};")));
+                inner.push(const_item(
+                    true,
+                    &local,
+                    None,
+                    disc.member(&field).lowered(),
+                    false,
+                ));
             }
             match_body(&mut inner, &arm.body, cx, async_tail);
-            body.push(Item::Indent(inner));
-            body.push(Item::Line("}".to_string()));
         }
         // #474: a bindingless or-pattern (guaranteed by `match_needs_if_chain`
         // routing — a bound/guarded one takes the if-chain path instead) lowers
@@ -1384,31 +1459,28 @@ fn match_case(
         // `switch` has no `case _:` form, only `default:`. Emitting case
         // labels for the other (now-redundant) alternatives and dropping the
         // wildcard produced malformed, `tsc`-rejected output.
-        Pattern::Or(alts, _) if arm.pattern.is_irrefutable() => {
-            body.push(Item::Line("default: {".to_string()));
-            let mut inner = Body::new();
+        Pattern::Or(_, _) if arm.pattern.is_irrefutable() => {
             match_body(&mut inner, &arm.body, cx, async_tail);
-            body.push(Item::Indent(inner));
-            body.push(Item::Line("}".to_string()));
         }
         Pattern::Or(alts, _) => {
-            let last = alts.len() - 1;
-            for (i, alt) in alts.iter().enumerate() {
-                let label = match alt {
-                    Pattern::Literal { value, .. } => literal_case_label(value),
-                    Pattern::Variant { variant, .. } => format!("\"{}\"", variant.name),
+            for alt in alts {
+                labels.push(match alt {
+                    Pattern::Literal { value, .. } => literal_label_node(value),
+                    Pattern::Variant { variant, .. } => {
+                        bynk_ts::TsExpr::Lit(bynk_ts::TsLit::Str(variant.name.clone()))
+                    }
                     Pattern::Wildcard(_) | Pattern::Binding(_) => unreachable!(
                         "pattern.is_irrefutable() is false, so no alternative is a wildcard or binding"
                     ),
                     Pattern::Or(..) => unreachable!("an Or's alternatives are always leaves"),
                     Pattern::Record { .. } => {
-                        unreachable!("a record alternative routes through emit_match_if_chain")
+                        unreachable!("a record alternative routes through match_if_chain")
                     }
                     Pattern::List { .. } => {
-                        unreachable!("a list alternative routes through emit_match_if_chain")
+                        unreachable!("a list alternative routes through match_if_chain")
                     }
                     Pattern::Range(_) => {
-                        unreachable!("a range alternative routes through emit_match_if_chain")
+                        unreachable!("a range alternative routes through match_if_chain")
                     }
                     // #472/#474: the parser only ever wraps a *whole*,
                     // already-folded `|`-chain in `Refined` (never the other
@@ -1418,20 +1490,17 @@ fn match_case(
                     Pattern::Refined { .. } => {
                         unreachable!("an Or's alternatives are never a Refined pattern")
                     }
-                };
-                if i == last {
-                    body.push(Item::Line(format!("case {label}: {{")));
-                } else {
-                    body.push(Item::Line(format!("case {label}:")));
-                }
+                });
             }
-            let mut inner = Body::new();
             match_body(&mut inner, &arm.body, cx, async_tail);
-            body.push(Item::Indent(inner));
-            body.push(Item::Line("}".to_string()));
         }
     }
     cx.shadow_scopes.pop();
+    MatchCase {
+        labels,
+        inner,
+        span: arm.span,
+    }
 }
 
 fn match_body(body: &mut Body, arm_body: &MatchBody, cx: &mut LowerCtx, async_tail: bool) {
@@ -1469,33 +1538,43 @@ fn match_body(body: &mut Body, arm_body: &MatchBody, cx: &mut LowerCtx, async_ta
     }
 }
 
+/// `if (cond) { then }` as items: an `If` node when the condition and the
+/// statements hoisted before it are nodes and the body converts, otherwise
+/// today's lines around the same body, which keeps its marks.
+fn push_if_then(body: &mut Body, cond: LoweredExpr, pre_nodes: bool, then: Body, mapped: bool) {
+    if pre_nodes
+        && let LoweredExpr::Node(_) = &cond
+        && let Some(stmts) = body_stmts(&then, mapped)
+        && let LoweredExpr::Node(cond) = cond
+    {
+        body.push(stmt_item(bynk_ts::TsStmt::if_stmt(
+            cond,
+            bynk_ts::TsStmt::block(stmts, None),
+            None,
+        )));
+        return;
+    }
+    // 1A: the text form, for a condition, body or hoisted statement that is
+    // still text.
+    body.push(Item::Line(format!("if ({}) {{", cond.into_text())));
+    body.push(Item::Indent(then));
+    body.push(Item::Line("}".to_string()));
+}
+
 /// Lower a nested/guarded match to a sequence of independent `if` blocks
 /// (ADR 0169, DECISION E). Each arm tests its structural pattern; on a match it
 /// binds names, then (if guarded) tests the guard, then runs its body — whose
 /// tail `return` short-circuits the remaining arms. A guard failing falls
 /// through to the next arm, which a `switch` cannot express. Per-arm span
 /// anchoring is preserved (ADR 0103).
-pub(super) fn emit_match_if_chain(
-    out: &mut String,
-    disc_var: &str,
-    disc_ty: &Option<TyId>,
-    arms: &[MatchArm],
-    cx: &mut LowerCtx,
-    indent: usize,
-    async_tail: bool,
-) {
-    let mut body = Body::new();
-    match_if_chain(&mut body, disc_var, disc_ty, arms, cx, async_tail);
-    render(&body, out, indent, cx);
-}
-
 fn match_if_chain(
     body: &mut Body,
-    disc_var: &str,
+    path: &PatPath,
     disc_ty: &Option<TyId>,
     arms: &[MatchArm],
     cx: &mut LowerCtx,
     async_tail: bool,
+    mapped: bool,
 ) {
     // An unguarded irrefutable arm is a catch-all: its body always returns, so
     // the trailing non-exhaustive `throw` would be unreachable (tsc rejects it).
@@ -1507,13 +1586,13 @@ fn match_if_chain(
         body.push(Item::Mark(arm.span));
         // #908: this arm's bindings must resolve within its own body rather
         // than falling through to an outer `let` rename — see the identical
-        // reasoning in `emit_match_case`. Pushed/popped once per arm
+        // reasoning in `match_case`. Pushed/popped once per arm
         // regardless of `has_tests` below, since the concern is which
         // binding a read resolves to, not whether the arm also happens to
         // emit a wrapping JS block.
         cx.shadow_scopes.push(HashMap::new());
         let mut tests = Vec::new();
-        pattern_match_tests(disc_var, *disc_ty, &arm.pattern, cx, &mut tests);
+        pattern_tests(path, *disc_ty, &arm.pattern, cx, &mut tests);
         let has_tests = !tests.is_empty();
         // #2641: an arm with no tests declares its bindings at this level, so
         // a second such arm (guarded ones fall through) binding the same name
@@ -1529,41 +1608,40 @@ fn match_if_chain(
         if !has_tests && !needs_block {
             declared_here.extend(names.iter().copied());
         }
-        if has_tests {
-            body.push(Item::Line(format!("if ({}) {{", tests.join(" && "))));
-        } else if needs_block {
-            body.push(Item::Line("{".to_string()));
-        }
-        let has_tests = has_tests || needs_block;
+        let opens_block = has_tests || needs_block;
         // The arm's own lines sit one level in when it opened a block (`if (…) {`
         // or `{`), and at this level otherwise.
         let mut nested = Body::new();
         {
-            let arm_body: &mut Body = if has_tests { &mut nested } else { &mut *body };
-            emit_pattern_bindings(arm_body, disc_var, *disc_ty, &arm.pattern, cx);
+            let arm_body: &mut Body = if opens_block { &mut nested } else { &mut *body };
+            emit_pattern_bindings(arm_body, path, *disc_ty, &arm.pattern, cx);
             if let Some(guard) = &arm.guard {
                 let guard_lowered = lower_expr(guard, cx);
                 arm_body.extend(guard_lowered.pre_items());
-                let gv = guard_lowered.expr.into_text();
-                arm_body.push(Item::Line(format!("if ({gv}) {{")));
+                let pre_nodes = guard_lowered.pre_all_nodes();
                 let mut guarded = Body::new();
                 match_body(&mut guarded, &arm.body, cx, async_tail);
-                arm_body.push(Item::Indent(guarded));
-                arm_body.push(Item::Line("}".to_string()));
+                push_if_then(arm_body, guard_lowered.expr, pre_nodes, guarded, mapped);
             } else {
                 match_body(arm_body, &arm.body, cx, async_tail);
             }
         }
         if has_tests {
-            body.push(Item::Indent(nested));
-            body.push(Item::Line("}".to_string()));
+            push_if_then(body, and_join(tests), true, nested, mapped);
+        } else if needs_block {
+            match body_stmts(&nested, mapped) {
+                Some(stmts) => body.push(stmt_item(bynk_ts::TsStmt::block(stmts, None))),
+                None => {
+                    body.push(Item::Line("{".to_string()));
+                    body.push(Item::Indent(nested));
+                    body.push(Item::Line("}".to_string()));
+                }
+            }
         }
         cx.shadow_scopes.pop();
     }
     if !has_catchall {
-        body.push(Item::Line(
-            "throw new globalThis.Error(\"non-exhaustive match\");".to_string(),
-        ));
+        body.push(non_exhaustive_throw());
     }
 }
 
@@ -2239,6 +2317,202 @@ mod arrow_node_tests {
         assert!(
             ts.contains(
                 "= (y: number) => {\n    const __r0 = parse(y);\n    if (__r0.tag === \"Err\") return __r0;\n    return Ok(__r0.value + 1);\n  };\n"
+            ),
+            "{ts}"
+        );
+    }
+}
+
+/// 1A.13: `match` lowers to nodes. `LINES_RENDERED == 0` means no text line was
+/// rendered, i.e. every statement of the function went down the node path.
+#[cfg(test)]
+mod match_node_tests {
+    use super::*;
+
+    fn emitted(src: &str) -> (usize, String) {
+        LINES_RENDERED.with(|c| c.set(0));
+        let ts = crate::testkit::emit_source(src);
+        (LINES_RENDERED.with(|c| c.get()), ts)
+    }
+
+    #[test]
+    fn a_tail_switch_over_variants_prints_stacked_cases_with_bindings() {
+        let (_, ts) = emitted(
+            "commons t1\n\ntype Shape = | Circle(r: Int) | Square(w: Int) | Dot\n\nfn f(s: Shape) -> Int {\n  match s {\n    Circle(r) => r\n    Square(w) => w * 2\n    Dot => 0\n  }\n}\n",
+        );
+        assert!(
+            ts.contains(
+                "  switch (s.tag) {\n    case \"Circle\": {\n      const r = s.r;\n      return r;\n    }\n    case \"Square\": {\n      const w = s.w;\n      return w * 2;\n    }\n    case \"Dot\": {\n      return 0;\n    }\n  }\n  throw new globalThis.Error(\"non-exhaustive match\");\n"
+            ),
+            "{ts}"
+        );
+    }
+
+    #[test]
+    fn a_tail_switch_over_literals_stacks_or_pattern_labels() {
+        let (_, ts) = emitted(
+            "commons t2\n\nfn f(n: Int) -> String {\n  match n {\n    1 => \"a\"\n    2 | 3 => \"b\"\n    _ => \"c\"\n  }\n}\n",
+        );
+        assert!(
+            ts.contains(
+                "    case 1: {\n      return \"a\";\n    }\n    case 2:\n    case 3: {\n      return \"b\";\n    }\n    default: {\n      return \"c\";\n    }\n"
+            ),
+            "{ts}"
+        );
+    }
+
+    #[test]
+    fn an_or_pattern_with_a_shared_binding_is_an_if_chain_over_a_disjunction() {
+        let (_, ts) = emitted(
+            "commons t3\n\ntype Shape = | Circle(r: Int) | Square(w: Int) | Dot\n\nfn f(s: Shape) -> Int {\n  match s {\n    Circle(r) | Square(r) => r\n    Dot => 0\n  }\n}\n",
+        );
+        assert!(
+            ts.contains(
+                "  if ((s.tag === \"Circle\" || s.tag === \"Square\")) {\n    let r;\n    if (s.tag === \"Circle\") {\n      r = s.r;\n    } else {\n      r = s.w;\n    }\n    return r;\n  }\n"
+            ),
+            "{ts}"
+        );
+    }
+
+    #[test]
+    fn a_guard_lowers_to_an_if_chain_with_the_guard_inside_the_bindings() {
+        let (_, ts) = emitted(
+            "commons t4\n\ntype Shape = | Circle(r: Int) | Square(w: Int) | Dot\n\nfn f(s: Shape, k: Int) -> Int {\n  match s {\n    Circle(r) if r > k => r\n    Circle(r) => 0\n    Square(w) => w\n    Dot => 1\n  }\n}\n",
+        );
+        assert!(
+            ts.contains(
+                "  if (s.tag === \"Circle\") {\n    const r = s.r;\n    if (r > k) {\n      return r;\n    }\n  }\n  if (s.tag === \"Circle\") {"
+            ),
+            "{ts}"
+        );
+    }
+
+    #[test]
+    fn a_nested_pattern_is_an_if_chain_over_a_conjunction() {
+        let (_, ts) = emitted(
+            "commons t5\n\ntype Shape = | Circle(r: Int) | Square(w: Int) | Dot\n\nfn f(s: Option[Shape]) -> Int {\n  match s {\n    Some(Circle(r)) => r\n    Some(Square(w)) => w\n    Some(Dot) => 1\n    None => 0\n  }\n}\n",
+        );
+        assert!(
+            ts.contains(
+                "  if (s.tag === \"Some\" && s.value.tag === \"Circle\") {\n    const r = s.value.r;\n    return r;\n  }\n"
+            ),
+            "{ts}"
+        );
+        assert!(
+            ts.contains(
+                "  if (s.tag === \"None\") {\n    return 0;\n  }\n  throw new globalThis.Error(\"non-exhaustive match\");\n"
+            ),
+            "{ts}"
+        );
+    }
+
+    #[test]
+    fn a_value_position_match_is_a_sync_arrow_over_the_discriminant() {
+        let (_, ts) = emitted(
+            "commons t6\n\ntype Shape = | Circle(r: Int) | Square(w: Int) | Dot\n\nfn f(s: Shape) -> Int {\n  let n = match s {\n    Circle(r) => r\n    Square(w) => w * 2\n    Dot => 0\n  }\n  n + 1\n}\n",
+        );
+        assert!(
+            ts.contains(
+                "  const n = ((__d) => {\n    switch (__d.tag) {\n      case \"Circle\": {\n        const r = __d.r;\n        return r;\n      }\n      case \"Square\": {\n        const w = __d.w;\n        return w * 2;\n      }\n      case \"Dot\": {\n        return 0;\n      }\n    }\n    throw new globalThis.Error(\"non-exhaustive match\");\n  })(s);\n  return n + 1;\n"
+            ),
+            "{ts}"
+        );
+    }
+
+    #[test]
+    fn an_effectful_value_position_match_is_an_awaited_async_arrow() {
+        let (_, ts) = emitted(
+            "commons t7\n\ntype Shape = | Circle(r: Int) | Square(w: Int) | Dot\n\nfn bump(n: Int) -> Effect[Int] {\n  Effect.pure(n)\n}\n\nfn f(s: Shape) -> Effect[Int] {\n  let n = match s {\n    Circle(r) => {\n      let y <- bump(r)\n      y\n    }\n    Square(w) => w\n    Dot => 0\n  }\n  Effect.pure(n)\n}\n",
+        );
+        assert!(
+            ts.contains(
+                "  const n = await (async (__d) => {\n    switch (__d.tag) {\n      case \"Circle\": {\n        const r = __d.r;\n        const y = await bump(r);\n        return y;\n      }\n"
+            ),
+            "{ts}"
+        );
+    }
+
+    #[test]
+    fn a_question_in_a_tail_arm_hoists_inside_its_case() {
+        let (_, ts) = emitted(
+            "commons t8\n\ntype Shape = | Circle(r: Int) | Square(w: Int) | Dot\n\nfn parse(x: Int) -> Result[Int, String] {\n  Ok(x)\n}\n\nfn f(s: Shape) -> Result[Int, String] {\n  match s {\n    Circle(r) => Ok(parse(r)? + 1)\n    Square(w) => Ok(w)\n    Dot => Ok(0)\n  }\n}\n",
+        );
+        assert!(
+            ts.contains(
+                "    case \"Circle\": {\n      const r = s.r;\n      const __r0 = parse(r);\n      if (__r0.tag === \"Err\") return __r0;\n      return Ok(__r0.value + 1);\n    }\n"
+            ),
+            "{ts}"
+        );
+    }
+
+    #[test]
+    fn a_question_in_a_value_position_arm_breaks_out_of_the_labelled_switch() {
+        let (_, ts) = emitted(
+            "commons t9\n\ntype Shape = | Circle(r: Int) | Square(w: Int) | Dot\n\nfn parse(x: Int) -> Result[Int, String] {\n  Ok(x)\n}\n\nfn f(s: Shape) -> Result[Int, String] {\n  let n = match s {\n    Circle(r) => parse(r)?\n    Square(w) => w\n    Dot => 0\n  }\n  Ok(n)\n}\n",
+        );
+        assert!(
+            ts.contains(
+                "  __r0_out: {\n    switch (s.tag) {\n      case \"Circle\": {\n        const r = s.r;\n        const __r1 = parse(r);\n        if (__r1.tag === \"Err\") return __r1;\n        __r0 = __r1.value; break __r0_out;\n      }\n"
+            ),
+            "{ts}"
+        );
+    }
+
+    /// A part that is still text (`&&` until 1A.14) keeps the whole `match`
+    /// IIFE as text, byte for byte.
+    #[test]
+    fn a_value_match_with_a_text_arm_keeps_its_iife_text() {
+        let (_, ts) = emitted(
+            "commons t10\n\nfn f(n: Int, a: Bool, b: Bool) -> Bool {\n  let r = match n {\n    1 => a && b\n    _ => false\n  }\n  r\n}\n",
+        );
+        assert!(
+            ts.contains(
+                "  const r = ((__d) => {\n    switch (__d) {\n      case 1: {\n        return a && b;\n      }\n      default: {\n        return false;\n      }\n    }\n    throw new globalThis.Error(\"non-exhaustive match\");\n  })(n);\n"
+            ),
+            "{ts}"
+        );
+    }
+
+    /// A text discriminant keeps the tail `match` text too.
+    #[test]
+    fn a_tail_match_on_a_text_discriminant_keeps_its_text() {
+        let (_, ts) = emitted(
+            "commons t11\n\nfn f(a: Bool, b: Bool) -> Int {\n  match a && b {\n    true => 1\n    false => 0\n  }\n}\n",
+        );
+        assert!(
+            ts.contains("  const __r0 = a && b;\n  switch (__r0) {"),
+            "{ts}"
+        );
+        assert!(
+            ts.contains("    case true: {\n      return 1;\n    }\n"),
+            "{ts}"
+        );
+    }
+
+    /// A typed lambda parameter whose type is built by the type builders keeps
+    /// the exact bytes `ts_type_ref` printed. (The node path's guard that the two
+    /// prints agree cannot fire while `ts_type_ref` is `print_type` of the same
+    /// builder, so there is no input that stays text for that reason.)
+    #[test]
+    fn a_typed_lambda_param_prints_as_it_always_did() {
+        let (_, ts) = emitted(
+            "commons l1\n\nfn i(xs: List[(Int) -> Int]) -> List[Int] {\n  xs.map((x: (Int) -> Int) => 1)\n}\n",
+        );
+        assert!(
+            ts.contains("((x: (a0: number) => number) => 1)(__x)"),
+            "{ts}"
+        );
+    }
+
+    /// An `Effect`-returning lambda is an `async` arrow node with a block body.
+    #[test]
+    fn an_async_lambda_is_an_async_arrow_with_a_block_body() {
+        let (_, ts) = emitted(
+            "commons l2\n\nfn bump(n: Int) -> Effect[Int] {\n  Effect.pure(n)\n}\n\nfn f(x: Int) -> Effect[Int] {\n  let g: (Int) -> Effect[Int] = (y: Int) => {\n    let z <- bump(y)\n    Effect.pure(z + 1)\n  }\n  g(x)\n}\n",
+        );
+        assert!(
+            ts.contains(
+                "= async (y: number) => {\n    const z = await bump(y);\n    return z + 1;\n  };\n"
             ),
             "{ts}"
         );

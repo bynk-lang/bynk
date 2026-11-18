@@ -182,10 +182,11 @@ fn switch_stmt(discriminant: TsExpr, cases: Vec<TsSwitchCase>) -> TsStmt {
 /// of a heuristic derived from `body`'s own shape.
 fn case_(test: TsExpr, body: Vec<TsStmt>, braced: bool) -> TsSwitchCase {
     TsSwitchCase {
-        test: Some(test),
+        labels: vec![test],
         body,
         default_braced: false,
         case_braced: braced,
+        span: None,
     }
 }
 
@@ -194,10 +195,11 @@ fn case_(test: TsExpr, body: Vec<TsStmt>, braced: bool) -> TsSwitchCase {
 /// arm this file's own sum codec has (a `StructuralMismatch` one-liner).
 fn default_case(body: Vec<TsStmt>) -> TsSwitchCase {
     TsSwitchCase {
-        test: None,
+        labels: vec![],
         body,
         default_braced: false,
         case_braced: true,
+        span: None,
     }
 }
 
