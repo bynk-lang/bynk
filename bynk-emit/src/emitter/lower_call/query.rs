@@ -172,24 +172,15 @@ pub(in crate::emitter) enum QuerySource {
     Thunk(LoweredExpr),
 }
 
-/// A store field's path (`__state.items`, the working-state variable and the field's name,
-/// each an identifier) as a node. 1A.23 (the store family) replaces these paths with nodes of
-/// its own.
-fn field_path(path: &str) -> TsExpr {
-    let mut segments = path.split('.');
-    let first = segments.next().expect("a path has a first segment");
-    segments.fold(id(first), member)
-}
-
-/// `path.values()`: a plain `store Map`'s or a `store Log`'s entries.
-pub(in crate::emitter) fn path_values_source(path: &str) -> LoweredExpr {
-    LoweredExpr::Node(call(member(field_path(path), "values"), vec![]))
+/// `recv.values()`: a plain `store Map`'s or a `store Log`'s entries, over its handle node.
+pub(in crate::emitter) fn path_values_source(recv: TsExpr) -> TsExpr {
+    call(member(recv, "values"), vec![])
 }
 
 /// A held `store Map[K, Connection[F]]`'s resolved connections: its stored connection ids
 /// resolved through the runtime, the present ones kept. The callback is the one-line block
 /// the text printed, so the source reads as it did.
-pub(in crate::emitter) fn held_values_source(path: &str, frame: &TsType) -> LoweredExpr {
+pub(in crate::emitter) fn held_values_source(recv: TsExpr, frame: &TsType) -> TsExpr {
     let resolve = call(
         TsExpr::TypeApp {
             callee: Box::new(id("__resolveConnection")),
@@ -219,8 +210,8 @@ pub(in crate::emitter) fn held_values_source(path: &str, frame: &TsType) -> Lowe
             ret(present),
         ])),
     };
-    let values = call(member(field_path(path), "values"), vec![]);
-    LoweredExpr::Node(method_call_bare(values, "flatMap", vec![each_id]))
+    let values = call(member(recv, "values"), vec![]);
+    method_call_bare(values, "flatMap", vec![each_id])
 }
 
 // ---- The thunk wrappers -----------------------------------------------------------------
@@ -1609,21 +1600,24 @@ mod tests {
     /// paths (a text receiver is invoked as text).
     #[test]
     fn the_callers_sources_are_nodes_over_plain_paths() {
-        let print = |e: LoweredExpr| match e {
-            LoweredExpr::Node(n) => bynk_ts::print_expr(&n),
-            LoweredExpr::Text(t) => panic!("a node was expected, found text: {t}"),
-        };
+        let print = |e: TsExpr| bynk_ts::print_expr(&e);
         assert_eq!(
-            print(path_values_source("__state.items")),
+            print(path_values_source(member(id("__state"), "items"))),
             "__state.items.values()"
         );
         assert_eq!(
-            print(path_values_source("this.state.log")),
+            print(path_values_source(member(
+                super::super::super::lower::member_node("this", "state"),
+                "log"
+            ))),
             "this.state.log.values()"
         );
         let frame = named("Frame");
         let held = "__state.conns.values().flatMap((__cid) => { const __c = __resolveConnection<Frame>(this.state, __cid); return __c.tag === \"Some\" ? [__c.value] : []; })";
-        assert_eq!(print(held_values_source("__state.conns", &frame)), held);
+        assert_eq!(
+            print(held_values_source(member(id("__state"), "conns"), &frame)),
+            held
+        );
     }
 
     const BAG: &str = "context demo.bag

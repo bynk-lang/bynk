@@ -143,6 +143,8 @@ mod integration {
     mod storage_layout_marker;
     #[path = "store_checker.rs"]
     mod store_checker;
+    #[path = "store_nodes.rs"]
+    mod store_nodes;
     #[path = "store_op_registry.rs"]
     mod store_op_registry;
     #[path = "suggestions.rs"]

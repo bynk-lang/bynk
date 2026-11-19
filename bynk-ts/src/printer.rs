@@ -1175,6 +1175,7 @@ fn new_callee_needs_parens(callee: &TsExpr) -> bool {
         | TsExpr::Conditional { .. }
         | TsExpr::Paren(_)
         | TsExpr::Spread(_)
+        | TsExpr::NonNull(_)
         | TsExpr::Assign { .. }
         | TsExpr::AddAssign { .. }
         | TsExpr::Lit(_) => false,
@@ -1362,6 +1363,7 @@ fn render_binary_operand(
         | TsExpr::Unary { .. }
         | TsExpr::Paren(_)
         | TsExpr::Spread(_)
+        | TsExpr::NonNull(_)
         | TsExpr::Lit(_) => false,
     };
     if needs_parens {
@@ -1939,6 +1941,10 @@ fn render_expr(out: &mut String, expr: &TsExpr, depth: usize, m: &mut Option<Mer
             );
             render_spread(out, inner, depth, m);
         }
+        TsExpr::NonNull(inner) => {
+            render_operand(out, inner, depth, m);
+            out.push('!');
+        }
         TsExpr::Assign { target, value } => {
             render_expr(out, target, depth, m);
             out.push_str(" = ");
@@ -2007,6 +2013,7 @@ fn starts_with_object(expr: &TsExpr) -> bool {
         | TsExpr::Unary { .. }
         | TsExpr::Paren(_)
         | TsExpr::Spread(_)
+        | TsExpr::NonNull(_)
         | TsExpr::Assign { .. }
         | TsExpr::AddAssign { .. }
         | TsExpr::Lit(_) => false,
@@ -4699,6 +4706,31 @@ mod tests {
             print_expr(&app(vec![TsType::named("A"), TsType::named("B")])),
             "f<A, B>"
         );
+    }
+
+    /// `TsExpr::NonNull` (1A.23, #3724): a postfix `!`, bracketing an operand that binds looser
+    /// than a postfix, as a member's object does.
+    #[test]
+    fn a_non_null_assertion_is_a_postfix() {
+        let id = |n: &str| TsExpr::Ident(n.to_string());
+        let non_null = |e: TsExpr| TsExpr::NonNull(Box::new(e));
+        assert_eq!(print_expr(&non_null(id("c"))), "c!");
+        let member = TsExpr::Member {
+            object: Box::new(id("a")),
+            property: "b".to_string(),
+        };
+        assert_eq!(print_expr(&non_null(member)), "a.b!");
+        let sum = TsExpr::Binary {
+            op: TsBinaryOp::Add,
+            left: Box::new(id("a")),
+            right: Box::new(id("b")),
+        };
+        assert_eq!(print_expr(&non_null(sum)), "(a + b)!");
+        let call = TsExpr::Call {
+            callee: Box::new(non_null(id("f"))),
+            args: vec![id("x")],
+        };
+        assert_eq!(print_expr(&call), "f!(x)");
     }
 
     /// `TsExpr::Spread` (1A.18a, #3719): `...x` as an array item, in any

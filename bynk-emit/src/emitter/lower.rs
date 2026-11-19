@@ -23,8 +23,8 @@ use bynk_model::{ConstVal, EventPatternIr, EventPatternValueIr, IrHttpMethod};
 use super::ctx::{BodyMode, ModuleCtx, TestShared};
 use super::lower_call::codec_statics::{DecodeSource, eval_value_line, json_decoder_fn};
 use super::lower_call::query::{
-    QueryShape, QuerySource, lower_query_method, lower_stream_method, note_par_fan_out,
-    query_key_cmp, query_keyed, query_other_elem,
+    QueryShape, QuerySource, held_values_source, lower_query_method, lower_stream_method,
+    note_par_fan_out, path_values_source, query_key_cmp, query_keyed, query_other_elem,
 };
 use super::lower_call::statics::{
     lower_runtime_value_static_call, lower_scalar_static_call, lower_type_static_call,
@@ -2637,8 +2637,8 @@ fn lower_method_call(e: &Expr, cx: &mut LowerCtx) -> Lowered {
     // (1A.18a and 1A.18b) and every delegated kernel's node passes through
     // unprinted; the plain instance call that ends this function is a node.
     // Persisted-store receivers: held Map, Map, Set, Cache, Log, Cell (#3167).
-    if let Some(s) = lower_store_method_call(e, receiver, method, args, cx, &mut pre) {
-        return pre.finish_built(Err(s));
+    if let Some(built) = lower_store_method_call(e, receiver, method, args, cx, &mut pre) {
+        return pre.finish_built(built);
     }
     // Intrinsic statics: scalar and collection constructors, then runtime values (#3167).
     if let Some(built) = lower_scalar_static_call(e, receiver, method, args, cx, &mut pre) {
@@ -5975,6 +5975,17 @@ fn cond_contains_is(e: &Expr) -> bool {
 /// records, invariant fields, store cells, the held/store-`Map` and `Log`
 /// thunks, `HttpResult`/`QueueResult` constructors, sum variants, the actor-sum
 /// binder, then a plain local.
+/// `(() => values)`: a store read used as a value, the deferred `Query` thunk (1A.23, #3724).
+fn store_thunk(values: bynk_ts::TsExpr) -> bynk_ts::TsExpr {
+    bynk_ts::TsExpr::Paren(Box::new(bynk_ts::TsExpr::Arrow {
+        params: vec![],
+        is_async: false,
+        generics: vec![],
+        return_type: None,
+        body: Box::new(bynk_ts::TsArrowBody::Expr(Box::new(values))),
+    }))
+}
+
 fn lower_ident(e: &Expr, id: &Ident, cx: &mut LowerCtx) -> Built {
     // #2617: a constant is a hoisted, cached function (`emit_consts`), so a
     // name the checker resolved to one reads it with a call. First, since the
@@ -6065,30 +6076,24 @@ fn lower_ident(e: &Expr, id: &Ident, cx: &mut LowerCtx) -> Built {
     // ones. Checked before the persisted-`Map` branch (held maps are excluded from
     // `agent_store_maps`).
     if !cx.is_local(&id.name)
-        && let Some(f_ts) = cx.agent_held_map_frame(&id.name).map(bynk_ts::print_type)
+        && let Some(frame) = cx.agent_held_map_frame(&id.name).cloned()
     {
-        let var = cx.agent_store_var();
-        // 1A: text until the closure/query family converts
-        return Err(format!(
-            "(() => {var}.{name}.values().flatMap((__cid) => {{ const __c = __resolveConnection<{f_ts}>(this.state, __cid); return __c.tag === \"Some\" ? [__c.value] : []; }}))",
-            name = id.name
-        ));
+        let recv = member_node(cx.agent_store_var(), &id.name);
+        return Ok(store_thunk(held_values_source(recv, &frame)));
     }
     // v0.94 (ADR 0120): a bare `store Map` ident used as a **value** — not a
     // method receiver (those are handled in the method dispatch) — is a lazy
     // `Query` over the whole map, e.g. the `other` side of a join. It lowers to
     // the same deferred thunk a query builder yields: `() => Object.values(map)`.
     if !cx.is_local(&id.name) && cx.is_agent_store_map(&id.name) {
-        let var = cx.agent_store_var();
-        // 1A: text until the closure/query family converts
-        return Err(format!("(() => {var}.{}.values())", id.name));
+        let recv = member_node(cx.agent_store_var(), &id.name);
+        return Ok(store_thunk(path_values_source(recv)));
     }
     // v0.95 (ADR 0121): a bare `store Log` ident used as a value is a lazy
     // `Query` over its entry values — `() => log.map((__e) => __e.v)`.
     if !cx.is_local(&id.name) && cx.is_agent_store_log(&id.name) {
-        let var = cx.agent_store_var();
-        // 1A: text until the closure/query family converts
-        return Err(format!("(() => {var}.{}.values())", id.name));
+        let recv = member_node(cx.agent_store_var(), &id.name);
+        return Ok(store_thunk(path_values_source(recv)));
     }
     // v0.9: a nullary HttpResult variant (whose checker type is
     // `HttpResult[_]`) constructs an HttpResult.<Variant>.
@@ -7152,26 +7157,66 @@ fn lower_field_access(e: &Expr, receiver: &Expr, field: &Ident, cx: &mut LowerCt
             map_query::ENTRIES | map_query::KEYS | map_query::VALUES
         )
     {
-        let var = cx.agent_store_var().to_string();
-        let m = format!("{var}.{}", id.name);
-        return pre.finish_text(match field.name.as_str() {
-            map_query::VALUES => format!("(() => {m}.values())"),
+        let m = member_node(cx.agent_store_var(), &id.name);
+        let key = |cx: &LowerCtx| decode_map_key(map_key_ty(e, cx), ident_node("__k"), tys);
+        let is_identity =
+            |k: &bynk_ts::TsExpr| matches!(k, bynk_ts::TsExpr::Ident(n) if n == "__k");
+        let values = |call: &str| bynk_ts::TsExpr::Call {
+            callee: Box::new(bynk_ts::TsExpr::Member {
+                object: Box::new(m.clone()),
+                property: call.to_string(),
+            }),
+            args: vec![],
+        };
+        let arrow = |params: Vec<&str>, body: bynk_ts::TsExpr| bynk_ts::TsExpr::Arrow {
+            params: params
+                .into_iter()
+                .map(|p| bynk_ts::TsParam {
+                    name: p.to_string(),
+                    ty: None,
+                    optional: false,
+                })
+                .collect(),
+            is_async: false,
+            generics: vec![],
+            return_type: None,
+            body: Box::new(bynk_ts::TsArrowBody::Expr(Box::new(body))),
+        };
+        let call = |f: &str, args: Vec<bynk_ts::TsExpr>| bynk_ts::TsExpr::Call {
+            callee: Box::new(ident_node(f)),
+            args,
+        };
+        let built: Built = match field.name.as_str() {
+            map_query::VALUES => Ok(store_thunk(values("values"))),
             map_query::KEYS => {
-                let decoded = decode_map_key(map_key_ty(e, cx), "__k", tys);
-                if decoded == "__k" {
-                    format!("(() => {m}.keys())")
+                let decoded = key(cx);
+                if is_identity(&decoded) {
+                    Ok(store_thunk(values("keys")))
                 } else {
-                    format!("(() => __bynkThen({m}.keys(), (__ks) => __ks.map((__k) => {decoded})))")
+                    let map = bynk_ts::TsExpr::Call {
+                        callee: Box::new(bynk_ts::TsExpr::Member {
+                            object: Box::new(ident_node("__ks")),
+                            property: "map".to_string(),
+                        }),
+                        args: vec![arrow(vec!["__k"], decoded)],
+                    };
+                    Ok(store_thunk(call(
+                        "__bynkThen",
+                        vec![values("keys"), arrow(vec!["__ks"], map)],
+                    )))
                 }
             }
             // entries
             _ => {
-                let decoded = decode_map_key(map_key_ty(e, cx), "__k", tys);
-                format!(
+                let decoded = bynk_ts::print_expr(&key(cx));
+                let m = bynk_ts::print_expr(&m);
+                // 1A: the `[__k, __v]` destructuring parameter has no `bynk_ts` node
+                Err(format!(
                     "(() => __bynkThen({m}.entries(), (__es) => __es.map(([__k, __v]) => ({{ key: {decoded}, value: __v }}))))"
-                )
+                ))
             }
-        });
+        };
+        return built_or_text_lowered(pre, built);
     }
     // v0.9: `HttpResult.Variant` (nullary).
     //
@@ -7297,7 +7342,7 @@ fn map_key_ty(e: &Expr, cx: &LowerCtx) -> Option<TyId> {
 /// `number`, so it is parsed with `Number(...)`, while a `String`-based key is
 /// already correct and passes through unchanged. A refined or opaque key is
 /// then asserted back to its branded type (#1982).
-fn decode_map_key(k: Option<TyId>, raw: &str, tys: TyRender<'_>) -> String {
+fn decode_map_key(k: Option<TyId>, raw: bynk_ts::TsExpr, tys: TyRender<'_>) -> bynk_ts::TsExpr {
     // The key type is always recorded for a well-typed `.entries`/`.keys` — a
     // `None` means the checker failed to stamp it, and the identity fallback
     // below would silently emit a string for an `Int` key. Pin the invariant in
@@ -7318,13 +7363,19 @@ fn decode_map_key(k: Option<TyId>, raw: &str, tys: TyRender<'_>) -> String {
     // readonly __brand: "Sku" }`), which neither the raw string nor its
     // `Number(...)` is. The key was that type when it was put, and its storage
     // is the base value, so asserting it back is sound.
-    let brand = |decoded: String| match (branded, k) {
-        (true, Some(k)) => format!("({decoded} as {})", ts_ty(k, tys)),
+    let brand = |decoded: bynk_ts::TsExpr| match (branded, k) {
+        (true, Some(k)) => bynk_ts::TsExpr::Paren(Box::new(bynk_ts::TsExpr::As {
+            expr: Box::new(decoded),
+            ty: ts_ty_to_ts_type(k, tys),
+        })),
         _ => decoded,
     };
     match base {
-        Some(BaseType::Int) => brand(format!("globalThis.Number({raw})")),
-        Some(BaseType::String) => brand(raw.to_string()),
+        Some(BaseType::Int) => brand(bynk_ts::TsExpr::Call {
+            callee: Box::new(member_node("globalThis", "Number")),
+            args: vec![raw],
+        }),
+        Some(BaseType::String) => brand(raw),
         // #70/#71 review: `resolver.rs`'s `check_map_key_keyable` and
         // `validate.rs`'s `@indexed`-field check both gate value-keyability
         // (ADR 0110 D5) on exactly `String`/`Int` — the same pair this match
@@ -7337,7 +7388,7 @@ fn decode_map_key(k: Option<TyId>, raw: &str, tys: TyRender<'_>) -> String {
             "map key base type {other:?} is not value-keyable (ADR 0110 D5) — \
              decode_map_key has no wire-decode case for it"
         ),
-        None => raw.to_string(),
+        None => raw,
     }
 }
 
@@ -7351,22 +7402,24 @@ mod decode_map_key_tests {
     static TYS: std::sync::LazyLock<Arc<Types>> =
         std::sync::LazyLock::new(|| Arc::new(Types::new()));
 
+    fn print_decoded(k: Option<TyId>) -> String {
+        bynk_ts::print_expr(&decode_map_key(
+            k,
+            ident_node("k"),
+            TyRender::new(&TYS, no_spellings()),
+        ))
+    }
+
     #[test]
     fn int_key_is_parsed_with_number() {
         let int = TYS.intern(Ty::Base(BaseType::Int));
-        assert_eq!(
-            decode_map_key(Some(int), "k", TyRender::new(&TYS, no_spellings())),
-            "globalThis.Number(k)"
-        );
+        assert_eq!(print_decoded(Some(int)), "globalThis.Number(k)");
     }
 
     #[test]
     fn string_key_passes_through() {
         let string = TYS.intern(Ty::Base(BaseType::String));
-        assert_eq!(
-            decode_map_key(Some(string), "k", TyRender::new(&TYS, no_spellings())),
-            "k"
-        );
+        assert_eq!(print_decoded(Some(string)), "k");
     }
 
     #[test]
@@ -7377,7 +7430,7 @@ mod decode_map_key_tests {
             args: Vec::new(),
         });
         assert_eq!(
-            decode_map_key(Some(refined), "k", TyRender::new(&TYS, no_spellings())),
+            print_decoded(Some(refined)),
             "(globalThis.Number(k) as UserId)"
         );
     }
@@ -7390,10 +7443,7 @@ mod decode_map_key_tests {
             kind: NamedKind::Opaque(BaseType::String),
             args: Vec::new(),
         });
-        assert_eq!(
-            decode_map_key(Some(opaque), "k", TyRender::new(&TYS, no_spellings())),
-            "(k as Slug)"
-        );
+        assert_eq!(print_decoded(Some(opaque)), "(k as Slug)");
     }
 
     // #70/#71 review: a non-`String`/`Int` base reaching here means the
@@ -7404,7 +7454,7 @@ mod decode_map_key_tests {
     #[should_panic(expected = "is not value-keyable")]
     fn a_widened_non_string_int_base_panics_instead_of_silently_passing_through() {
         let b = TYS.intern(Ty::Base(BaseType::Bool));
-        decode_map_key(Some(b), "k", TyRender::new(&TYS, no_spellings()));
+        print_decoded(Some(b));
     }
 }
 
