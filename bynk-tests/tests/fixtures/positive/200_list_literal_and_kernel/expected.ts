@@ -5,7 +5,10 @@ import { Ok, Err, Some, None, type Result, type Option } from "./__bynk_runtime/
 import type { ValidationError } from "./__bynk_runtime/errors.js";
 
 export function sum(xs: readonly number[]): number {
-  return ((__xs: readonly number[], __acc: number, __f: (acc: number, x: number) => number) => { for (const __x of __xs) __acc = __f(__acc, __x); return __acc; })(xs, 0, (acc: number, x: number) => acc + x);
+  return ((__xs: readonly number[], __acc: number, __f: (acc: number, x: number) => number) => {
+    for (const __x of __xs) __acc = __f(__acc, __x);
+    return __acc;
+  })(xs, 0, (acc: number, x: number) => acc + x);
 }
 
 export function firstOrZero(xs: readonly number[]): number {
@@ -45,5 +48,8 @@ export function keyList(m: ReadonlyMap<string, number>): readonly string[] {
 
 export function inOrder(xs: readonly number[]): readonly number[] {
   const none: readonly number[] = [];
-  return [...((__xs: readonly number[], __acc: readonly number[], __f: (acc: readonly number[], x: number) => readonly number[]) => { for (const __x of __xs) __acc = __f(__acc, __x); return __acc; })(xs, none, (acc: readonly number[], x: number) => [...acc, x]), ...[0]];
+  return [...((__xs: readonly number[], __acc: readonly number[], __f: (acc: readonly number[], x: number) => readonly number[]) => {
+    for (const __x of __xs) __acc = __f(__acc, __x);
+    return __acc;
+  })(xs, none, (acc: readonly number[], x: number) => [...acc, x]), ...[0]];
 }

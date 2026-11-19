@@ -1470,7 +1470,7 @@ pub enum TsExpr {
     /// `target = value`, an assignment *expression* (1A.18b, #3719): the one
     /// place a value is assigned and used at once, `(__h[__k] = __h[__k] ?? [])
     /// .push(__u)`. An assignment as a whole statement is
-    /// [`TsStmtKind::Assign`]. The printer brackets it wherever it is an
+    /// `TsStmtKind::Assign`. The printer brackets it wherever it is an
     /// operand; a builder that wants the brackets for readability, as that
     /// example does, adds an explicit [`TsExpr::Paren`].
     Assign {

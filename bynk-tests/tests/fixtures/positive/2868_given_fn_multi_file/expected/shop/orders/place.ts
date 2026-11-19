@@ -14,7 +14,11 @@ import type { Audit, Meter } from "./audit.js";
 import * as bynk from "../../bynk.js";
 
 export async function eachNote(items: readonly number[], f: (a0: number) => globalThis.Promise<void>): globalThis.Promise<void> {
-  return (async (__xs: readonly number[]) => { for (const __x of __xs) { await (f)(__x); } })(items);
+  return (async (__xs: readonly number[]) => {
+    for (const __x of __xs) {
+      await (f)(__x);
+    }
+  })(items);
 }
 
 export const place = {

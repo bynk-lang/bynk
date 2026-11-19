@@ -9,7 +9,10 @@ export function recover(r: Result<number, string>): Result<number, number> {
 }
 
 export function second(xs: readonly number[]): number {
-  return ((__xs: readonly number[], __acc: number, __f: (acc: number, x: number) => number) => { for (const __x of __xs) __acc = __f(__acc, __x); return __acc; })(xs, 0, (a: number, __wild162: number) => a + 1);
+  return ((__xs: readonly number[], __acc: number, __f: (acc: number, x: number) => number) => {
+    for (const __x of __xs) __acc = __f(__acc, __x);
+    return __acc;
+  })(xs, 0, (a: number, __wild162: number) => a + 1);
 }
 
 export function constant(r: Result<number, string>): Result<number, number> {
@@ -17,7 +20,10 @@ export function constant(r: Result<number, string>): Result<number, number> {
 }
 
 export function pick(xs: readonly number[]): number {
-  return ((__xs: readonly number[], __acc: number, __f: (acc: number, x: number) => number) => { for (const __x of __xs) __acc = __f(__acc, __x); return __acc; })(xs, 0, (__wild326: number, x: number) => x);
+  return ((__xs: readonly number[], __acc: number, __f: (acc: number, x: number) => number) => {
+    for (const __x of __xs) __acc = __f(__acc, __x);
+    return __acc;
+  })(xs, 0, (__wild326: number, x: number) => x);
 }
 
 export function applyTwo(f: (a0: number, a1: number) => number): number {

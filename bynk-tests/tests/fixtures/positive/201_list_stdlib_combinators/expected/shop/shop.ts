@@ -27,7 +27,10 @@ export function allBig(xs: readonly number[]): boolean {
 }
 
 export function sumBy<A>(xs: readonly A[], f: (a0: A) => number): number {
-  return ((__xs: readonly A[], __acc: number, __f: (acc: number, x: A) => number) => { for (const __x of __xs) __acc = __f(__acc, __x); return __acc; })(xs, 0, (acc: number, x: A) => acc + f(x));
+  return ((__xs: readonly A[], __acc: number, __f: (acc: number, x: A) => number) => {
+    for (const __x of __xs) __acc = __f(__acc, __x);
+    return __acc;
+  })(xs, 0, (acc: number, x: A) => acc + f(x));
 }
 
 export function total(xs: readonly number[]): number {

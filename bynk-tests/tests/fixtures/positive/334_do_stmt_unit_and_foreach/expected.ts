@@ -9,7 +9,11 @@ export async function noop(): globalThis.Promise<void> {
 }
 
 export async function greetAll(names: readonly string[]): globalThis.Promise<void> {
-  await (async (__xs: readonly string[]) => { for (const __x of __xs) { await (async (n: string) => noop())(__x); } })(names);
+  await (async (__xs: readonly string[]) => {
+    for (const __x of __xs) {
+      await (async (n: string) => noop())(__x);
+    }
+  })(names);
   return undefined;
 }
 

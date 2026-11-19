@@ -211,7 +211,15 @@ export function total(prices: readonly { readonly coefficient: bigint; readonly 
 }
 
 export function cheapest(prices: readonly { readonly coefficient: bigint; readonly scale: number }[]): Option<{ readonly coefficient: bigint; readonly scale: number }> {
-  return ((__xs: readonly { readonly coefficient: bigint; readonly scale: number }[]) => { if (__xs.length === 0) return None; let __m = ((p: { readonly coefficient: bigint; readonly scale: number }) => p)(__xs[0]); for (const __x of __xs) { const __k = ((p: { readonly coefficient: bigint; readonly scale: number }) => p)(__x); if (__bynkCmpDecimal(__k, __m) < 0) __m = __k; } return Some(__m); })(prices);
+  return ((__xs: readonly { readonly coefficient: bigint; readonly scale: number }[]) => {
+    if (__xs.length === 0) return None;
+    let __m = ((p: { readonly coefficient: bigint; readonly scale: number }) => p)(__xs[0]);
+    for (const __x of __xs) {
+      const __k = ((p: { readonly coefficient: bigint; readonly scale: number }) => p)(__x);
+      if (__bynkCmpDecimal(__k, __m) < 0) __m = __k;
+    }
+    return Some(__m);
+  })(prices);
 }
 
 export function sorted(prices: readonly { readonly coefficient: bigint; readonly scale: number }[]): readonly { readonly coefficient: bigint; readonly scale: number }[] {

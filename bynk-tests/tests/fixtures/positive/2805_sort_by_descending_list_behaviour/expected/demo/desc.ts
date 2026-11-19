@@ -47,11 +47,19 @@ export function names(xs: readonly Item[]): readonly string[] {
 }
 
 export function byTier(xs: readonly Item[]): readonly Item[] {
-  return [...xs].sort((__a: Item, __b: Item) => { const __ka = ((i: Item) => i.tier)(__a), __kb = ((i: Item) => i.tier)(__b); return __ka < __kb ? 1 : __ka > __kb ? -1 : 0; });
+  return [...xs].sort((__a: Item, __b: Item) => {
+    const __ka = ((i: Item) => i.tier)(__a);
+    const __kb = ((i: Item) => i.tier)(__b);
+    return __ka < __kb ? 1 : __ka > __kb ? -1 : 0;
+  });
 }
 
 export function byTierReversed(xs: readonly Item[]): readonly Item[] {
-  return reverse([...xs].sort((__a: Item, __b: Item) => { const __ka = ((i: Item) => i.tier)(__a), __kb = ((i: Item) => i.tier)(__b); return __ka < __kb ? -1 : __ka > __kb ? 1 : 0; }));
+  return reverse([...xs].sort((__a: Item, __b: Item) => {
+    const __ka = ((i: Item) => i.tier)(__a);
+    const __kb = ((i: Item) => i.tier)(__b);
+    return __ka < __kb ? -1 : __ka > __kb ? 1 : 0;
+  }));
 }
 
 export function byScore(xs: readonly Item[]): readonly Item[] {
@@ -59,7 +67,11 @@ export function byScore(xs: readonly Item[]): readonly Item[] {
 }
 
 export function byName(xs: readonly Item[]): readonly Item[] {
-  return [...xs].sort((__a: Item, __b: Item) => { const __ka = ((i: Item) => i.name)(__a), __kb = ((i: Item) => i.name)(__b); return __ka < __kb ? 1 : __ka > __kb ? -1 : 0; });
+  return [...xs].sort((__a: Item, __b: Item) => {
+    const __ka = ((i: Item) => i.name)(__a);
+    const __kb = ((i: Item) => i.name)(__b);
+    return __ka < __kb ? 1 : __ka > __kb ? -1 : 0;
+  });
 }
 
 export function byRank(xs: readonly Item[]): readonly Item[] {

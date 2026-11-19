@@ -53,12 +53,15 @@ export function skus(items: readonly Item[]): readonly string[] {
  * Name parameters and pattern parameters mix freely.
  */
 export function total(items: readonly Item[]): number {
-  return ((__xs: readonly Item[], __acc: number, __f: (acc: number, x: Item) => number) => { for (const __x of __xs) __acc = __f(__acc, __x); return __acc; })(items, 0, (sum: number, __lambdaArg599: Item) => {
-  const __letElse599 = __lambdaArg599;
-  const qty = __letElse599.qty;
-  const price = __letElse599.price;
-  return sum + qty * price;
-});
+  return ((__xs: readonly Item[], __acc: number, __f: (acc: number, x: Item) => number) => {
+    for (const __x of __xs) __acc = __f(__acc, __x);
+    return __acc;
+  })(items, 0, (sum: number, __lambdaArg599: Item) => {
+    const __letElse599 = __lambdaArg599;
+    const qty = __letElse599.qty;
+    const price = __letElse599.price;
+    return sum + qty * price;
+  });
 }
 
 /**
@@ -104,14 +107,20 @@ export function unboxed(boxes: readonly Box<number>[]): readonly number[] {
  * Two pattern parameters in one lambda.
  */
 export function pairUp(items: readonly Item[], orders: readonly Order[]): number {
-  return ((__xs: readonly Item[], __acc: number, __f: (acc: number, x: Item) => number) => { for (const __x of __xs) __acc = __f(__acc, __x); return __acc; })(items, 0, (acc: number, __lambdaArg1444: Item) => {
+  return ((__xs: readonly Item[], __acc: number, __f: (acc: number, x: Item) => number) => {
+    for (const __x of __xs) __acc = __f(__acc, __x);
+    return __acc;
+  })(items, 0, (acc: number, __lambdaArg1444: Item) => {
     const __letElse1444 = __lambdaArg1444;
     const qty = __letElse1444.qty;
-    return acc + qty + ((__xs: readonly Order[], __acc: number, __f: (acc: number, x: Order) => number) => { for (const __x of __xs) __acc = __f(__acc, __x); return __acc; })(orders, 0, (inner: number, __lambdaArg1500: Order) => {
-  const __letElse1500 = __lambdaArg1500;
-  const total = __letElse1500.total;
-  return inner + total;
-});
+    return acc + qty + ((__xs: readonly Order[], __acc: number, __f: (acc: number, x: Order) => number) => {
+      for (const __x of __xs) __acc = __f(__acc, __x);
+      return __acc;
+    })(orders, 0, (inner: number, __lambdaArg1500: Order) => {
+      const __letElse1500 = __lambdaArg1500;
+      const total = __letElse1500.total;
+      return inner + total;
+    });
   });
 }
 
