@@ -118,7 +118,17 @@ async function test_the_principal_s_identity_may_be_any_expression() {
     type Order = __ns_shop_orders.Order;
     type UserId = __ns_shop_orders.UserId;
     const who: UserId = ("bob" as any);
-    if (!((await (async () => { try { await (api.http_POST_orders({ sku: "w" }, { ...deps, identity: (who as any) })); return false; } catch (__e) { if (__e instanceof ExpectationError) { throw __e; } return true; } })()))) { throw __bynkExpectFailure("tests/shop/orders.bynk:21:12", 684, 744, "expect api.POST(\"/orders\", Order { sku: \"w\" }) by Buyer(who) faults\n  the call returned without faulting"); }
+    if (!((await (async () => {
+      try {
+        await (api.http_POST_orders({ sku: "w" }, { ...deps, identity: (who as any) }));
+        return false;
+      } catch (__e) {
+        if (__e instanceof ExpectationError) {
+          throw __e;
+        }
+        return true;
+      }
+    })()))) { throw __bynkExpectFailure("tests/shop/orders.bynk:21:12", 684, 744, "expect api.POST(\"/orders\", Order { sku: \"w\" }) by Buyer(who) faults\n  the call returned without faulting"); }
     return { pass: true };
   } catch (e) {
     if (e instanceof ExpectationError) {

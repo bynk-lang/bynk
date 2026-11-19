@@ -45,20 +45,20 @@ async function test_a_sibling_file_s_agent_is_constructed_and_called() {
     const { Book, OrderId, Tally, __makeBook, __makeTally, count, place } = __ns_shop_orders;
     type OrderId = __ns_shop_orders.OrderId;
     void (await (async (__d) => {
-        switch (__d.tag) {
-          case "Err": {
-            return __bynkExpect((false), "tests/orders.bynk:8:22", 215, 220, "expect false");
-          }
-          case "Ok": {
-            const id = __d.value;
-            const first = await place.call(id, 2, deps);
-            const second = await place.call(id, 3, deps);
-            if (!(second === 5)) { throw __bynkExpectFailure("tests/orders.bynk:12:14", 325, 336, "expect second == 5\n  expected: second == 5\n  actual:   " + __bynkShow((second)) + " == " + __bynkShow((5))); }
-            return undefined;
-          }
+      switch (__d.tag) {
+        case "Err": {
+          return __bynkExpect((false), "tests/orders.bynk:8:22", 215, 220, "expect false");
         }
-        throw new globalThis.Error("non-exhaustive match");
-      })(OrderId.of("o-1")));
+        case "Ok": {
+          const id = __d.value;
+          const first = await place.call(id, 2, deps);
+          const second = await place.call(id, 3, deps);
+          if (!(second === 5)) { throw __bynkExpectFailure("tests/orders.bynk:12:14", 325, 336, "expect second == 5\n  expected: second == 5\n  actual:   " + __bynkShow((second)) + " == " + __bynkShow((5))); }
+          return undefined;
+        }
+      }
+      throw new globalThis.Error("non-exhaustive match");
+    })(OrderId.of("o-1")));
     return { pass: true };
   } catch (e) {
     if (e instanceof ExpectationError) {

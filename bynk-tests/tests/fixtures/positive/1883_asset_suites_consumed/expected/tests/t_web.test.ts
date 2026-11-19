@@ -57,7 +57,7 @@ async function test_a_consumed_badge_is_served() {
     const { api } = __ns_t_web;
     const { badge } = __ns_t_other;
     const other = (deps as any).surface?.other;
-    const r = await __bynkAssetGet((badge).url);
+    const r = await __bynkAssetGet(badge.url);
     void (((__d) => {
       switch (__d.tag) {
         case "Raw": {

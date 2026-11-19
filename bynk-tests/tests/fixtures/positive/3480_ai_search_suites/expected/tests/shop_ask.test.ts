@@ -422,7 +422,17 @@ async function test_an_unstubbed_search_faults() {
     type VectorMatch = __ns_bynk_cloudflare.VectorMatch;
     type VectorOf<M> = __ns_bynk_cloudflare.VectorOf<M>;
     type WorkerVersion = __ns_bynk_cloudflare.WorkerVersion;
-    if (!((await (async () => { try { await (api.http_POST_search("refunds", deps)); return false; } catch (__e) { if (__e instanceof ExpectationError) { throw __e; } return true; } })()))) { throw __bynkExpectFailure("tests/shop/ask.bynk:9:9", 232, 280, "expect api.POST(\"/search\", \"refunds\") by Visitor faults\n  the call returned without faulting"); }
+    if (!((await (async () => {
+      try {
+        await (api.http_POST_search("refunds", deps));
+        return false;
+      } catch (__e) {
+        if (__e instanceof ExpectationError) {
+          throw __e;
+        }
+        return true;
+      }
+    })()))) { throw __bynkExpectFailure("tests/shop/ask.bynk:9:9", 232, 280, "expect api.POST(\"/search\", \"refunds\") by Visitor faults\n  the call returned without faulting"); }
     return { pass: true };
   } catch (e) {
     if (e instanceof ExpectationError) {
@@ -533,7 +543,17 @@ async function test_an_unstubbed_answer_faults() {
     type VectorMatch = __ns_bynk_cloudflare.VectorMatch;
     type VectorOf<M> = __ns_bynk_cloudflare.VectorOf<M>;
     type WorkerVersion = __ns_bynk_cloudflare.WorkerVersion;
-    if (!((await (async () => { try { await (api.http_POST_ask("refunds", deps)); return false; } catch (__e) { if (__e instanceof ExpectationError) { throw __e; } return true; } })()))) { throw __bynkExpectFailure("tests/shop/ask.bynk:13:9", 328, 373, "expect api.POST(\"/ask\", \"refunds\") by Visitor faults\n  the call returned without faulting"); }
+    if (!((await (async () => {
+      try {
+        await (api.http_POST_ask("refunds", deps));
+        return false;
+      } catch (__e) {
+        if (__e instanceof ExpectationError) {
+          throw __e;
+        }
+        return true;
+      }
+    })()))) { throw __bynkExpectFailure("tests/shop/ask.bynk:13:9", 328, 373, "expect api.POST(\"/ask\", \"refunds\") by Visitor faults\n  the call returned without faulting"); }
     return { pass: true };
   } catch (e) {
     if (e instanceof ExpectationError) {

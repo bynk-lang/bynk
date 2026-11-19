@@ -46,27 +46,27 @@ async function test_a_fresh_Meter_key_reads_its_match_shaped_zero() {
     type MeterError = __ns_demo_meter.MeterError;
     type MeterId = __ns_demo_meter.MeterId;
     void (await (async (__d) => {
-        switch (__d.tag) {
-          case "Err": {
-            return __bynkExpect((false), "tests/demo/meter.bynk:8:20", 203, 208, "expect false");
-          }
-          case "Ok": {
-            const id = __d.value;
-            const reading = await hits.call(id, deps);
-            switch (reading.tag) {
-              case "Ok": {
-                const n = reading.value;
-                return __bynkExpect((n === 1), "tests/demo/meter.bynk:12:22", 295, 301, "expect n == 1");
-              }
-              case "Err": {
-                return __bynkExpect((false), "tests/demo/meter.bynk:13:22", 323, 328, "expect false");
-              }
-            }
-            throw new globalThis.Error("non-exhaustive match");
-          }
+      switch (__d.tag) {
+        case "Err": {
+          return __bynkExpect((false), "tests/demo/meter.bynk:8:20", 203, 208, "expect false");
         }
-        throw new globalThis.Error("non-exhaustive match");
-      })(MeterId.of("fresh")));
+        case "Ok": {
+          const id = __d.value;
+          const reading = await hits.call(id, deps);
+          switch (reading.tag) {
+            case "Ok": {
+              const n = reading.value;
+              return __bynkExpect((n === 1), "tests/demo/meter.bynk:12:22", 295, 301, "expect n == 1");
+            }
+            case "Err": {
+              return __bynkExpect((false), "tests/demo/meter.bynk:13:22", 323, 328, "expect false");
+            }
+          }
+          throw new globalThis.Error("non-exhaustive match");
+        }
+      }
+      throw new globalThis.Error("non-exhaustive match");
+    })(MeterId.of("fresh")));
     return { pass: true };
   } catch (e) {
     if (e instanceof ExpectationError) {

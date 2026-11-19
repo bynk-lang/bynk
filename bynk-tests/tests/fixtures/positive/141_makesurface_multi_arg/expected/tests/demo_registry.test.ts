@@ -78,38 +78,38 @@ async function test_create_accepts_two_args_and_threads_deps() {
     type RegError = __ns_demo_registry.RegError;
     type Target = __ns_demo_registry.Target;
     void (await (async (__d) => {
-        switch (__d.tag) {
-          case "Err": {
-            return __bynkExpect((false), "tests/demo/registry.bynk:11:20", 251, 256, "expect false");
-          }
-          case "Ok": {
-            const code = __d.value;
-            return await (async (__d) => {
-        switch (__d.tag) {
-          case "Err": {
-            return __bynkExpect((false), "tests/demo/registry.bynk:13:21", 332, 337, "expect false");
-          }
-          case "Ok": {
-            const target = __d.value;
-            const outcome = await create.call(code, target, deps);
-            switch (outcome.tag) {
-              case "Ok": {
-                const t = outcome.value;
-                return __bynkExpect((t === 7), "tests/demo/registry.bynk:17:23", 444, 450, "expect t == 7");
-              }
+      switch (__d.tag) {
+        case "Err": {
+          return __bynkExpect((false), "tests/demo/registry.bynk:11:20", 251, 256, "expect false");
+        }
+        case "Ok": {
+          const code = __d.value;
+          return await (async (__d) => {
+            switch (__d.tag) {
               case "Err": {
-                return __bynkExpect((false), "tests/demo/registry.bynk:18:23", 473, 478, "expect false");
+                return __bynkExpect((false), "tests/demo/registry.bynk:13:21", 332, 337, "expect false");
+              }
+              case "Ok": {
+                const target = __d.value;
+                const outcome = await create.call(code, target, deps);
+                switch (outcome.tag) {
+                  case "Ok": {
+                    const t = outcome.value;
+                    return __bynkExpect((t === 7), "tests/demo/registry.bynk:17:23", 444, 450, "expect t == 7");
+                  }
+                  case "Err": {
+                    return __bynkExpect((false), "tests/demo/registry.bynk:18:23", 473, 478, "expect false");
+                  }
+                }
+                throw new globalThis.Error("non-exhaustive match");
               }
             }
             throw new globalThis.Error("non-exhaustive match");
-          }
+          })(Target.of("https://example.com"));
         }
-        throw new globalThis.Error("non-exhaustive match");
-      })(Target.of("https://example.com"));
-          }
-        }
-        throw new globalThis.Error("non-exhaustive match");
-      })(Code.of("abc123")));
+      }
+      throw new globalThis.Error("non-exhaustive match");
+    })(Code.of("abc123")));
     return { pass: true };
   } catch (e) {
     if (e instanceof ExpectationError) {

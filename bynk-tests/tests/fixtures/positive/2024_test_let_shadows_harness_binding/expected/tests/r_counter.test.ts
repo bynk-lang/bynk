@@ -378,7 +378,7 @@ async function test_a_local_named_like_an_asset() {
     const { Counter, __makeCounter, api, level, style } = __ns_r_counter;
     const { badge } = __ns_r_other;
     const other = (deps as any).surface?.other;
-    const r = await __bynkAssetGet((style).url);
+    const r = await __bynkAssetGet(style.url);
     const __r0 = "shadowed";
     if (!(__r0 === "shadowed")) { throw __bynkExpectFailure("tests/r/counter.bynk:32:10", 699, 718, "expect style == \"shadowed\"\n  expected: style == \"shadowed\"\n  actual:   " + __bynkShow((__r0)) + " == " + __bynkShow(("shadowed"))); }
     if (!(((__c: boolean) => __c)(r.tag === "Raw"))) { throw __bynkExpectFailure("tests/r/counter.bynk:33:10", 728, 742, "expect r is Raw(_, _)"); }

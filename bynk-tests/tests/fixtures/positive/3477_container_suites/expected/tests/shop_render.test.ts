@@ -330,7 +330,17 @@ async function test_an_unstubbed_send_faults() {
     type VectorMatch = __ns_bynk_cloudflare.VectorMatch;
     type VectorOf<M> = __ns_bynk_cloudflare.VectorOf<M>;
     type WorkerVersion = __ns_bynk_cloudflare.WorkerVersion;
-    if (!((await (async () => { try { await (api.http_GET_render_Param_name("a", deps)); return false; } catch (__e) { if (__e instanceof ExpectationError) { throw __e; } return true; } })()))) { throw __bynkExpectFailure("tests/shop/render.bynk:10:9", 249, 296, "expect api.GET(\"/render/:name\", \"a\") by Visitor faults\n  the call returned without faulting"); }
+    if (!((await (async () => {
+      try {
+        await (api.http_GET_render_Param_name("a", deps));
+        return false;
+      } catch (__e) {
+        if (__e instanceof ExpectationError) {
+          throw __e;
+        }
+        return true;
+      }
+    })()))) { throw __bynkExpectFailure("tests/shop/render.bynk:10:9", 249, 296, "expect api.GET(\"/render/:name\", \"a\") by Visitor faults\n  the call returned without faulting"); }
     return { pass: true };
   } catch (e) {
     if (e instanceof ExpectationError) {

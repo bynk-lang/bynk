@@ -46,27 +46,27 @@ async function test_a_fresh_counter_reads_zero() {
     type CounterError = __ns_demo_counter.CounterError;
     type CounterId = __ns_demo_counter.CounterId;
     void (await (async (__d) => {
-        switch (__d.tag) {
-          case "Err": {
-            return __bynkExpect((false), "tests/demo/counter.bynk:9:20", 230, 235, "expect false");
-          }
-          case "Ok": {
-            const id = __d.value;
-            const total = await read.call(id, deps);
-            switch (total.tag) {
-              case "Ok": {
-                const n = total.value;
-                return __bynkExpect((n === 0), "tests/demo/counter.bynk:13:22", 318, 324, "expect n == 0");
-              }
-              case "Err": {
-                return __bynkExpect((false), "tests/demo/counter.bynk:14:22", 346, 351, "expect false");
-              }
-            }
-            throw new globalThis.Error("non-exhaustive match");
-          }
+      switch (__d.tag) {
+        case "Err": {
+          return __bynkExpect((false), "tests/demo/counter.bynk:9:20", 230, 235, "expect false");
         }
-        throw new globalThis.Error("non-exhaustive match");
-      })(CounterId.of("c1")));
+        case "Ok": {
+          const id = __d.value;
+          const total = await read.call(id, deps);
+          switch (total.tag) {
+            case "Ok": {
+              const n = total.value;
+              return __bynkExpect((n === 0), "tests/demo/counter.bynk:13:22", 318, 324, "expect n == 0");
+            }
+            case "Err": {
+              return __bynkExpect((false), "tests/demo/counter.bynk:14:22", 346, 351, "expect false");
+            }
+          }
+          throw new globalThis.Error("non-exhaustive match");
+        }
+      }
+      throw new globalThis.Error("non-exhaustive match");
+    })(CounterId.of("c1")));
     return { pass: true };
   } catch (e) {
     if (e instanceof ExpectationError) {
@@ -85,28 +85,28 @@ async function test_bumping_twice_accumulates() {
     type CounterError = __ns_demo_counter.CounterError;
     type CounterId = __ns_demo_counter.CounterId;
     void (await (async (__d) => {
-        switch (__d.tag) {
-          case "Err": {
-            return __bynkExpect((false), "tests/demo/counter.bynk:22:20", 449, 454, "expect false");
-          }
-          case "Ok": {
-            const id = __d.value;
-            const __r0 = await bump.call(id, deps);
-            const second = await bump.call(id, deps);
-            switch (second.tag) {
-              case "Ok": {
-                const n = second.value;
-                return __bynkExpect((n === 2), "tests/demo/counter.bynk:27:22", 565, 571, "expect n == 2");
-              }
-              case "Err": {
-                return __bynkExpect((false), "tests/demo/counter.bynk:28:22", 593, 598, "expect false");
-              }
-            }
-            throw new globalThis.Error("non-exhaustive match");
-          }
+      switch (__d.tag) {
+        case "Err": {
+          return __bynkExpect((false), "tests/demo/counter.bynk:22:20", 449, 454, "expect false");
         }
-        throw new globalThis.Error("non-exhaustive match");
-      })(CounterId.of("c2")));
+        case "Ok": {
+          const id = __d.value;
+          const __r0 = await bump.call(id, deps);
+          const second = await bump.call(id, deps);
+          switch (second.tag) {
+            case "Ok": {
+              const n = second.value;
+              return __bynkExpect((n === 2), "tests/demo/counter.bynk:27:22", 565, 571, "expect n == 2");
+            }
+            case "Err": {
+              return __bynkExpect((false), "tests/demo/counter.bynk:28:22", 593, 598, "expect false");
+            }
+          }
+          throw new globalThis.Error("non-exhaustive match");
+        }
+      }
+      throw new globalThis.Error("non-exhaustive match");
+    })(CounterId.of("c2")));
     return { pass: true };
   } catch (e) {
     if (e instanceof ExpectationError) {

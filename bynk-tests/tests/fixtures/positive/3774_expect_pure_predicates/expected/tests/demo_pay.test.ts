@@ -102,7 +102,17 @@ async function test_a_fault_claim_runs_its_call() {
     const { AuthId, Day, authorise } = __ns_demo_pay;
     type AuthId = __ns_demo_pay.AuthId;
     type Day = __ns_demo_pay.Day;
-    if (!((await (async () => { try { await (authorise.call(1, deps)); return false; } catch (__e) { if (__e instanceof ExpectationError) { throw __e; } return true; } })()))) { throw __bynkExpectFailure("tests/pay.test.bynk:7:12", 246, 270, "expect authorise.call(1) faults\n  the call returned without faulting"); }
+    if (!((await (async () => {
+      try {
+        await (authorise.call(1, deps));
+        return false;
+      } catch (__e) {
+        if (__e instanceof ExpectationError) {
+          throw __e;
+        }
+        return true;
+      }
+    })()))) { throw __bynkExpectFailure("tests/pay.test.bynk:7:12", 246, 270, "expect authorise.call(1) faults\n  the call returned without faulting"); }
     return { pass: true };
   } catch (e) {
     if (e instanceof ExpectationError) {
