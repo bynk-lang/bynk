@@ -738,7 +738,11 @@ mod tests {
         );
     }
 
-    /// A static over a text argument (`s.trim()` is still a kernel text) falls
+    /// An `Option` `getOrElse` is still a kernel text.
+    const TEXT_ARG: &str =
+        "((__o: Option<string>, __d: string) => __o.tag === \"Some\" ? __o.value : __d)(o, \"\")";
+
+    /// A static over a text argument (an `Option` `getOrElse` is still a kernel text) falls
     /// back to today's text, byte for byte.
     #[test]
     fn a_text_argument_keeps_the_text_form() {
@@ -746,38 +750,38 @@ mod tests {
             INT_RE,
             "globalThis.Number(__s) + 0",
             "globalThis.Number.isSafeInteger(__n)",
-            "s.trim()",
+            TEXT_ARG,
         );
         let float_parse = parse_text(
             FLOAT_RE,
             "globalThis.Number(__s)",
             "globalThis.Number.isFinite(__n)",
-            "s.trim()",
+            TEXT_ARG,
         );
         for (body, want) in [
             (
-                "fn f(s: String) -> Option[Int] { Int.parse(s.trim()) }",
+                "fn f(o: Option[String]) -> Option[Int] { Int.parse(o.getOrElse(\"\")) }",
                 int_parse,
             ),
             (
-                "fn f(s: String) -> Option[Float] { Float.parse(s.trim()) }",
+                "fn f(o: Option[String]) -> Option[Float] { Float.parse(o.getOrElse(\"\")) }",
                 float_parse,
             ),
             (
-                "fn f(s: String) -> Option[Instant] { Instant.fromIso(s.trim()) }",
-                "__bynkInstantFromIso(s.trim())".to_string(),
+                "fn f(o: Option[String]) -> Option[Instant] { Instant.fromIso(o.getOrElse(\"\")) }",
+                format!("__bynkInstantFromIso({TEXT_ARG})"),
             ),
             (
-                "fn f(s: String) -> Bytes { Bytes.fromUtf8(s.trim()) }",
-                "new globalThis.TextEncoder().encode(s.trim())".to_string(),
+                "fn f(o: Option[String]) -> Bytes { Bytes.fromUtf8(o.getOrElse(\"\")) }",
+                format!("new globalThis.TextEncoder().encode({TEXT_ARG})"),
             ),
             (
-                "fn f(s: String) -> Option[Decimal] { Decimal.parse(s.trim()) }",
-                "__bynkDecimalParse(s.trim())".to_string(),
+                "fn f(o: Option[String]) -> Option[Decimal] { Decimal.parse(o.getOrElse(\"\")) }",
+                format!("__bynkDecimalParse({TEXT_ARG})"),
             ),
             (
-                "fn f(s: String) -> Duration { Duration.millis(s.length()) }",
-                "(s).length".to_string(),
+                "fn f(s: Set[String]) -> Duration { Duration.millis(s.length()) }",
+                "(s).size".to_string(),
             ),
         ] {
             let (n, ts) = exits(body);
@@ -833,9 +837,9 @@ mod tests {
             assert_eq!(n, 0, "{f}: text exits\n{ts}");
         }
         let (n, ts) = exits(&format!(
-            "{box_}fn f(s: String) -> Box[Int] {{ Box.of(s.length()) }}"
+            "{box_}fn f(s: Set[String]) -> Box[Int] {{ Box.of(s.length()) }}"
         ));
-        assert_eq!(returned(&ts), "Box.of((s).length)");
+        assert_eq!(returned(&ts), "Box.of((s).size)");
         assert!(n > 0, "{ts}");
         // A comparator witness follows the arguments.
         let (n, ts) = exits(
@@ -892,12 +896,12 @@ mod tests {
             ),
             ("fn f(d: Duration) -> Int { d.toMillis() }", "d"),
             ("fn f(i: Instant) -> Int { i.toEpochMillis() }", "i"),
-            ("fn f(b: Bytes) -> Int { b.length() }", "(b).length"),
+            ("fn f(b: Bytes) -> Int { b.length() }", "b.length"),
             (
                 "fn f(d: Decimal) -> String { d.toString() }",
                 "__bynkDecimalToString(d)",
             ),
-            ("fn f(s: String) -> Int { s.length() }", "(s).length"),
+            ("fn f(s: String) -> Int { s.length() }", "s.length"),
             (
                 "fn f(o: Option[Int]) -> Int { o.getOrElse(0) }",
                 "((__o: Option<number>, __d: number) => __o.tag === \"Some\" ? __o.value : __d)(o, 0)",

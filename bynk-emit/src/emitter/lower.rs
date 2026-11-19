@@ -7581,17 +7581,17 @@ fn minus(x: Int) -> Int { 5 - - -x }
 
     #[test]
     fn short_circuit_operators_over_a_text_operand_keep_their_text() {
-        // A string `contains` is still text (a method-call family), so the
+        // A `Set` `contains` is still text (the container kernels), so the
         // operator over it is text, byte for byte.
         let src = "commons shortt\n\
-                   fn a(s: String, t: String, y: Bool) -> Bool { s.contains(t) && y }\n\
-                   fn b(s: String, t: String, y: Bool) -> Bool { y || s.contains(t) }\n\
-                   fn c(s: String, t: String, y: Bool) -> Bool { s.contains(t) implies y }\n";
+                   fn a(s: Set[String], t: String, y: Bool) -> Bool { s.contains(t) && y }\n\
+                   fn b(s: Set[String], t: String, y: Bool) -> Bool { y || s.contains(t) }\n\
+                   fn c(s: Set[String], t: String, y: Bool) -> Bool { s.contains(t) implies y }\n";
         assert!(text_exits(src) >= 3);
         let ts = crate::testkit::emit_source(src);
-        assert_eq!(returned(&ts, "a"), "s.includes(t) && y");
-        assert_eq!(returned(&ts, "b"), "y || s.includes(t)");
-        assert_eq!(returned(&ts, "c"), "(!(s.includes(t)) || y)");
+        assert_eq!(returned(&ts, "a"), "(s).has(t) && y");
+        assert_eq!(returned(&ts, "b"), "y || (s).has(t)");
+        assert_eq!(returned(&ts, "c"), "(!((s).has(t)) || y)");
     }
 
     #[test]
@@ -7704,21 +7704,21 @@ fn minus(x: Int) -> Int { 5 - - -x }
 
     #[test]
     fn a_call_with_a_text_argument_falls_back_to_today_s_text() {
-        // A string `contains` operand is still text (a method-call family), so
+        // A `Set` `contains` operand is still text (the container kernels), so
         // each call over it is text, byte for byte.
         let src = "commons calltext\n\
             type S = | A(f: Bool) | B\n\
             type Box2 = { v: Int }\n\
             fn Box2.take(self, b: Bool) -> Int { self.v }\n\
             fn g(b: Bool) -> Bool { b }\n\
-            fn plain(a: String, c: String) -> Bool { g(a.contains(c)) }\n\
-            fn ctor(a: String, c: String) -> S { A(a.contains(c)) }\n\
-            fn ufcs(b: Box2, a: String, c: String) -> Int { b.take(a.contains(c)) }\n";
+            fn plain(a: Set[String], c: String) -> Bool { g(a.contains(c)) }\n\
+            fn ctor(a: Set[String], c: String) -> S { A(a.contains(c)) }\n\
+            fn ufcs(b: Box2, a: Set[String], c: String) -> Int { b.take(a.contains(c)) }\n";
         let ts = crate::testkit::emit_source(src);
         assert!(text_exits(src) > 0);
-        assert_eq!(returned(&ts, "plain"), "g(a.includes(c))");
-        assert_eq!(returned(&ts, "ctor"), "S.A(a.includes(c))");
-        assert_eq!(returned(&ts, "ufcs"), "Box2.take(b, a.includes(c))");
+        assert_eq!(returned(&ts, "plain"), "g((a).has(c))");
+        assert_eq!(returned(&ts, "ctor"), "S.A((a).has(c))");
+        assert_eq!(returned(&ts, "ufcs"), "Box2.take(b, (a).has(c))");
     }
 
     #[test]
@@ -8085,10 +8085,10 @@ fn minus(x: Int) -> Int { 5 - - -x }
     #[test]
     fn a_ternary_over_a_text_branch_falls_back_to_text() {
         let src = "commons ternt\n\
-            fn f(c: Bool, x: String, y: String) -> Bool { if c { x.contains(y) } else { false } }\n";
+            fn f(c: Bool, x: Set[String], y: String) -> Bool { if c { x.contains(y) } else { false } }\n";
         let (exits, _, ts) = exits_and_stmts(src);
         assert!(exits > 0, "{ts}");
-        assert_eq!(returned(&ts, "f"), "(c ? x.includes(y) : false)");
+        assert_eq!(returned(&ts, "f"), "(c ? (x).has(y) : false)");
     }
 
     #[test]
@@ -8197,17 +8197,17 @@ fn minus(x: Int) -> Int { 5 - - -x }
 
     #[test]
     fn a_hoisted_if_with_a_text_branch_keeps_its_text_lines() {
-        // A branch tail that is still text (a string `contains`) keeps the whole
+        // A branch tail that is still text (a `Set` `contains`) keeps the whole
         // hoist as text lines, byte for byte, with `assign_branch`'s padding.
         let src = "commons iftext\n\
-            fn f(c: Bool, x: String, y: String, r: Result[Bool, String]) -> Result[Bool, String] {\n\
+            fn f(c: Bool, x: Set[String], y: String, r: Result[Bool, String]) -> Result[Bool, String] {\n\
               let v = if c { r? } else { x.contains(y) }\n\
               Ok(v)\n\
             }\n";
         let (exits, stmts, ts) = exits_and_stmts(src);
         assert!(exits > 0 && stmts > 0, "{ts}");
         assert!(
-            ts.contains("  let __r1: boolean;\n  if (c) {\n    const __r0 = r;\n    if (__r0.tag === \"Err\") return __r0;\n    __r1 = __r0.value;\n  } else {\n    __r1 = x.includes(y);\n  }\n"),
+            ts.contains("  let __r1: boolean;\n  if (c) {\n    const __r0 = r;\n    if (__r0.tag === \"Err\") return __r0;\n    __r1 = __r0.value;\n  } else {\n    __r1 = (x).has(y);\n  }\n"),
             "{ts}"
         );
     }
@@ -8374,20 +8374,20 @@ fn minus(x: Int) -> Int { 5 - - -x }
         );
     }
 
-    /// A text operand or hoisted statement (a string `contains`) keeps the text
+    /// A text operand or hoisted statement (a `Set` `contains`) keeps the text
     /// forms byte for byte: the binding arrow, the hoisted `if`, the plain arrow.
     #[test]
     fn short_circuit_text_fallbacks_keep_their_text() {
         let src = "commons sct\n\
              fn risky(n: Int) -> Result[Int, String] { Ok(n) }\n\
-             fn a(s: String, k: Bool) -> Bool { k && s.contains(s) }\n\
-             fn b(s: String, x: Int) -> Result[Bool, String] { Ok(s.contains(s) && risky(x)? > 0) }\n";
+             fn a(s: Set[String], u: String, k: Bool) -> Bool { k && s.contains(u) }\n\
+             fn b(s: Set[String], u: String, x: Int) -> Result[Bool, String] { Ok(s.contains(u) && risky(x)? > 0) }\n";
         let (exits, _, ts) = exits_and_stmts(src);
         assert!(exits > 0, "{ts}");
-        assert_eq!(returned(&ts, "a"), "k && s.includes(s)");
+        assert_eq!(returned(&ts, "a"), "k && (s).has(u)");
         assert_eq!(
             func(&ts, "b"),
-            "export function b(s: string, x: number): Result<boolean, string> {\n  let __r1: boolean;\n  if (s.includes(s)) {\n    const __r0 = risky(x);\n    if (__r0.tag === \"Err\") return __r0;\n    __r1 = __r0.value > 0;\n  } else {\n    __r1 = false;\n  }\n  return Ok(__r1);\n}\n"
+            "export function b(s: ReadonlySet<string>, u: string, x: number): Result<boolean, string> {\n  let __r1: boolean;\n  if ((s).has(u)) {\n    const __r0 = risky(x);\n    if (__r0.tag === \"Err\") return __r0;\n    __r1 = __r0.value > 0;\n  } else {\n    __r1 = false;\n  }\n  return Ok(__r1);\n}\n"
         );
     }
 }

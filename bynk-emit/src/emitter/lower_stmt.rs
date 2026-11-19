@@ -2608,15 +2608,15 @@ mod stmt_node_tests {
 
     #[test]
     fn text_valued_statements_keep_their_text_byte_for_byte() {
-        // A string `contains` and `Effect.pure(…)` still lower to text, so the
+        // A `Set` `contains` and `Effect.pure(…)` still lower to text, so the
         // statement that holds one is a `Line` with today's bytes.
         let src = "commons texty\n\n\
-            fn f(a: String, b: String) -> Bool {\n  let v = a.contains(b)\n  let w: Bool = a.contains(b)\n  a.contains(b)\n}\n\n\
+            fn f(a: Set[String], b: String) -> Bool {\n  let v = a.contains(b)\n  let w: Bool = a.contains(b)\n  a.contains(b)\n}\n\n\
             fn g(x: Int) -> Effect[Int] {\n  let r <- Effect.pure(x)\n  let s: Int <- Effect.pure(r)\n  do Effect.pure(s)\n  Effect.pure(s)\n}\n";
         let (lines, ts) = emitted(src);
         assert_eq!(
             body_of(&ts, "f"),
-            "  const v = a.includes(b);\n  const w: boolean = a.includes(b);\n  return a.includes(b);\n"
+            "  const v = (a).has(b);\n  const w: boolean = (a).has(b);\n  return (a).has(b);\n"
         );
         assert_eq!(
             body_of(&ts, "g"),
@@ -2939,16 +2939,16 @@ mod match_node_tests {
         );
     }
 
-    /// A part that is still text (a string `contains`) keeps the whole `match`
+    /// A part that is still text (a `Set` `contains`) keeps the whole `match`
     /// IIFE as text, byte for byte.
     #[test]
     fn a_value_match_with_a_text_arm_keeps_its_iife_text() {
         let (_, ts) = emitted(
-            "commons t10\n\nfn f(n: Int, a: String, b: String) -> Bool {\n  let r = match n {\n    1 => a.contains(b)\n    _ => false\n  }\n  r\n}\n",
+            "commons t10\n\nfn f(n: Int, a: Set[String], b: String) -> Bool {\n  let r = match n {\n    1 => a.contains(b)\n    _ => false\n  }\n  r\n}\n",
         );
         assert!(
             ts.contains(
-                "  const r = ((__d) => {\n    switch (__d) {\n      case 1: {\n        return a.includes(b);\n      }\n      default: {\n        return false;\n      }\n    }\n    throw new globalThis.Error(\"non-exhaustive match\");\n  })(n);\n"
+                "  const r = ((__d) => {\n    switch (__d) {\n      case 1: {\n        return (a).has(b);\n      }\n      default: {\n        return false;\n      }\n    }\n    throw new globalThis.Error(\"non-exhaustive match\");\n  })(n);\n"
             ),
             "{ts}"
         );
@@ -2958,10 +2958,10 @@ mod match_node_tests {
     #[test]
     fn a_tail_match_on_a_text_discriminant_keeps_its_text() {
         let (_, ts) = emitted(
-            "commons t11\n\nfn f(a: String, b: String) -> Int {\n  match a.contains(b) {\n    true => 1\n    false => 0\n  }\n}\n",
+            "commons t11\n\nfn f(a: Set[String], b: String) -> Int {\n  match a.contains(b) {\n    true => 1\n    false => 0\n  }\n}\n",
         );
         assert!(
-            ts.contains("  const __r0 = a.includes(b);\n  switch (__r0) {"),
+            ts.contains("  const __r0 = (a).has(b);\n  switch (__r0) {"),
             "{ts}"
         );
         assert!(
@@ -3094,17 +3094,17 @@ mod par_node_tests {
         );
     }
 
-    /// A part still text (a string `contains`) keeps today's text lines, the
+    /// A part still text (a `Set` `contains`) keeps today's text lines, the
     /// one-column item indent included, byte for byte.
     #[test]
     fn a_par_with_a_text_part_keeps_its_text_lines() {
         let (lines, ts) = emitted(&format!(
-            "{HDR}fn f(s: Shape, t: String) -> Effect[Int] {{\n  par {{\n    let a <- pick(mk(s) is Dot && t.contains(t))\n    let b <- bump(2)\n  }}\n  Effect.pure(a + b)\n}}\n"
+            "{HDR}fn f(s: Shape, t: Set[String], u: String) -> Effect[Int] {{\n  par {{\n    let a <- pick(mk(s) is Dot && t.contains(u))\n    let b <- bump(2)\n  }}\n  Effect.pure(a + b)\n}}\n"
         ));
         assert!(lines > 0, "{ts}");
         assert_eq!(
             func(&ts, "export async function f("),
-            "export async function f(s: Shape, t: string): globalThis.Promise<number> {\n  const [a, b] = await __bynkSettleAll([\n   () => {\n    const __r0 = mk(s);\n    return pick(((__c: boolean) => __c)(__r0.tag === \"Dot\") && t.includes(t));\n   },\n   () => bump(2),\n  ]);\n  return a + b;\n}\n"
+            "export async function f(s: Shape, t: ReadonlySet<string>, u: string): globalThis.Promise<number> {\n  const [a, b] = await __bynkSettleAll([\n   () => {\n    const __r0 = mk(s);\n    return pick(((__c: boolean) => __c)(__r0.tag === \"Dot\") && (t).has(u));\n   },\n   () => bump(2),\n  ]);\n  return a + b;\n}\n"
         );
     }
 

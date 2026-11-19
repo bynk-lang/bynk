@@ -111,6 +111,8 @@ mod integration {
     mod kernel_nodes;
     #[path = "kernel_registry.rs"]
     mod kernel_registry;
+    #[path = "kernel_scalar_nodes.rs"]
+    mod kernel_scalar_nodes;
     #[path = "key_bound_fixes.rs"]
     mod key_bound_fixes;
     #[path = "locals_capture.rs"]

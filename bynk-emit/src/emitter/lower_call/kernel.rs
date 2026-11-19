@@ -1,7 +1,8 @@
 //! The kernel-method dispatcher and the arms it owns (back-half paydown 1A.28, #3729,
 //! Decision D): `lower_kernel_method_call`, the `Effect` kernels (`within`, `race`, `detach`) and
 //! the `EffectResult` combinators. Moved out of `lower.rs` byte for byte, then the inline and
-//! `Effect` arms converted. The sibling kernels (scalar, container) stay in `lower.rs`.
+//! `Effect` arms converted. The scalar kernels live in `kernel_scalar.rs` (1A.29); the container
+//! kernels stay in `lower.rs`.
 
 use bynk_check::checker::{Callee, Ty, TyId};
 use bynk_check::kernel_op::{EffectOp, EffectResultOp, HttpResultOp, KernelOp, TestConnectionOp};
@@ -539,10 +540,12 @@ fn effect_result_text(op: EffectResultOp, ts: &[&str; 4], recv: &str, f: &str) -
 }
 
 /// A receiver as the object of a member access. The printer brackets a binary, a cast, an arrow, a
-/// conditional or an assignment there, but not an `await`, a unary operator or a number literal,
-/// which would then read as `await f().op()` or `1.op()`: those keep the brackets the text form
-/// always wrote (1A.28, #3729, Decision B).
-fn receiver_object(recv: TsExpr) -> TsExpr {
+/// conditional or an assignment there, but not an `await`, a unary operator or a number literal
+/// (`Num` or `Raw`), which would then read as `await f().op()` or `1.op()`: those keep the brackets
+/// the text form always wrote (1A.28, #3729, Decision B). A `Spread` is bracketed too, defensively:
+/// it is legal only as an array item, so a receiver is never one today. Shared with the scalar
+/// kernels (1A.29).
+pub(super) fn receiver_object(recv: TsExpr) -> TsExpr {
     match recv {
         TsExpr::Await(_)
         | TsExpr::Unary { .. }
