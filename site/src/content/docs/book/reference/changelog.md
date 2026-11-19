@@ -28,6 +28,7 @@ per-commit history. While Bynk is pre-1.0, increments may change behaviour.
 
 | Version | Highlights |
 |---|---|
+| **v0.639.37** | Cross-context service calls, on the bundle and the Workers target, are built as TypeScript nodes rather than text, so a call with no arguments sends `{}` rather than `{  }`; no change to what the emitted code does |
 | **v0.639.36** | Capability calls, `Events.emit`, the session and typed cookies and the derived-`D1` `select` are built as TypeScript nodes rather than text, so an event emission and a `D1` read are laid out as indented blocks; no change to what the emitted code does |
 | **v0.639.35** | An `expect` predicate and an observation's `with` predicate may not hold an effectful call (`bynk.expect.impure_predicate`, `bynk.observe.impure_with`), and an `expect` comparison evaluates each operand once, so a capability call can no longer be recorded twice by a claim about it |
 | **v0.639.34** | The persisted-store operations (held `Map`, `Map`, `Set`, `Cache`, `Log`, `Cell`) are built as TypeScript nodes rather than text, so each operation's statement IIFE is laid out as an indented block; no change to what the emitted code does |
