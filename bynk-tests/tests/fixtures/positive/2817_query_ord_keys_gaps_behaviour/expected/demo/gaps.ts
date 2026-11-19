@@ -121,12 +121,30 @@ export class Shelf {
 
   async minScore(deps: {}): globalThis.Promise<Option<number>> {
     const __state = await this.loadState();
-    return __bynkThen(__state.items.values(), (__q) => (() => { const __a = __q; if (__a.length === 0) return None; let __m = ((i: Item) => i.score / i.div)(__a[0]); for (const __x of __a) { const __k = ((i: Item) => i.score / i.div)(__x); if (__bynkCmpFloat(__k, __m) < 0) __m = __k; } return Some(__m); })());
+    return __bynkThen(__state.items.values(), (__q) => (() => {
+  const __a = __q;
+  if (__a.length === 0) return None;
+  let __m = ((i: Item) => i.score / i.div)(__a[0]);
+  for (const __x of __a) {
+    const __k = ((i: Item) => i.score / i.div)(__x);
+    if (__bynkCmpFloat(__k, __m) < 0) __m = __k;
+  }
+  return Some(__m);
+})());
   }
 
   async maxScore(deps: {}): globalThis.Promise<Option<number>> {
     const __state = await this.loadState();
-    return __bynkThen(__state.items.values(), (__q) => (() => { const __a = __q; if (__a.length === 0) return None; let __m = ((i: Item) => i.score / i.div)(__a[0]); for (const __x of __a) { const __k = ((i: Item) => i.score / i.div)(__x); if (__bynkCmpFloat(__k, __m) > 0) __m = __k; } return Some(__m); })());
+    return __bynkThen(__state.items.values(), (__q) => (() => {
+  const __a = __q;
+  if (__a.length === 0) return None;
+  let __m = ((i: Item) => i.score / i.div)(__a[0]);
+  for (const __x of __a) {
+    const __k = ((i: Item) => i.score / i.div)(__x);
+    if (__bynkCmpFloat(__k, __m) > 0) __m = __k;
+  }
+  return Some(__m);
+})());
   }
 
   async byTag(deps: {}): globalThis.Promise<readonly string[]> {

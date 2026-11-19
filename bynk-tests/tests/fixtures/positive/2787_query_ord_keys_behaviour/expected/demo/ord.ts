@@ -118,12 +118,30 @@ export class Board {
 
   async topPriority(deps: {}): globalThis.Promise<Option<Priority>> {
     const __state = await this.loadState();
-    return ((__c) => __bynkThen(__state.jobs.values(), (__q) => (() => { const __a = __q; if (__a.length === 0) return None; let __m = ((j: Job) => j.priority)(__a[0]); for (const __x of __a) { const __k = ((j: Job) => j.priority)(__x); if (__c(__k, __m) > 0) __m = __k; } return Some(__m); })()))(__bynkCmpSum(["Low", "Medium", "High"], {}));
+    return ((__c) => __bynkThen(__state.jobs.values(), (__q) => (() => {
+  const __a = __q;
+  if (__a.length === 0) return None;
+  let __m = ((j: Job) => j.priority)(__a[0]);
+  for (const __x of __a) {
+    const __k = ((j: Job) => j.priority)(__x);
+    if (__c(__k, __m) > 0) __m = __k;
+  }
+  return Some(__m);
+})()))(__bynkCmpSum(["Low", "Medium", "High"], {}));
   }
 
   async lowestRank(deps: {}): globalThis.Promise<Option<Rank>> {
     const __state = await this.loadState();
-    return ((__c) => __bynkThen(__state.jobs.values(), (__q) => (() => { const __a = __q; if (__a.length === 0) return None; let __m = ((j: Job) => ({ priority: j.priority, due: j.due }))(__a[0]); for (const __x of __a) { const __k = ((j: Job) => ({ priority: j.priority, due: j.due }))(__x); if (__c(__k, __m) < 0) __m = __k; } return Some(__m); })()))(__bynkCmpRecord([["priority", __bynkCmpSum(["Low", "Medium", "High"], {})], ["due", __bynkCmpInt]]));
+    return ((__c) => __bynkThen(__state.jobs.values(), (__q) => (() => {
+  const __a = __q;
+  if (__a.length === 0) return None;
+  let __m = ((j: Job) => ({ priority: j.priority, due: j.due }))(__a[0]);
+  for (const __x of __a) {
+    const __k = ((j: Job) => ({ priority: j.priority, due: j.due }))(__x);
+    if (__c(__k, __m) < 0) __m = __k;
+  }
+  return Some(__m);
+})()))(__bynkCmpRecord([["priority", __bynkCmpSum(["Low", "Medium", "High"], {})], ["due", __bynkCmpInt]]));
   }
 
   async byScore(deps: {}): globalThis.Promise<readonly string[]> {

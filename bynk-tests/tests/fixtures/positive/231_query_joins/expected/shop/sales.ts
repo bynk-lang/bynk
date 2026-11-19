@@ -108,7 +108,22 @@ export class Sales {
 
   async totals(deps: {}): globalThis.Promise<readonly Tot[]> {
     const __state = await this.loadState();
-    return __bynkThen(((() => __bynkThen(__state.lines.values(), (__q) => { const __h: globalThis.Record<string, Line[]> = globalThis.Object.create(null); const __order: string[] = []; for (const __t of __q) { const __k = String(((l: Line) => l.orderId)(__t)); if (!(__k in __h)) { __h[__k] = []; __order.push(__k); } __h[__k].push(__t); } return __order.map((__k) => { const __rows = __h[__k]; return ((oid: string, rows: readonly Line[]) => ({ orderId: oid, total: (rows).reduce((__s: number, __x: Line) => __s + ((r: Line) => r.qty)(__x), 0) }))(((l: Line) => l.orderId)(__rows[0]), __rows); }); })))(), (__q) => __q);
+    return __bynkThen(((() => __bynkThen(__state.lines.values(), (__q) => {
+  const __h: globalThis.Record<string, Line[]> = globalThis.Object.create(null);
+  const __order: string[] = [];
+  for (const __t of __q) {
+    const __k = String(((l: Line) => l.orderId)(__t));
+    if (!(__k in __h)) {
+      __h[__k] = [];
+      __order.push(__k);
+    }
+    __h[__k].push(__t);
+  }
+  return __order.map((__k) => {
+    const __rows = __h[__k];
+    return ((oid: string, rows: readonly Line[]) => ({ orderId: oid, total: (rows).reduce((__s: number, __x: Line) => __s + ((r: Line) => r.qty)(__x), 0) }))(((l: Line) => l.orderId)(__rows[0]), __rows);
+  });
+})))(), (__q) => __q);
   }
 
 }
