@@ -3,4 +3,5 @@
 //! dispatchers of one family, moved byte for byte before they convert to nodes.
 
 pub(super) mod codec_statics;
+pub(super) mod query;
 pub(super) mod statics;
