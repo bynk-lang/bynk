@@ -33,8 +33,9 @@ pub(super) fn list_ok_elem(call_ty: Option<TyId>, tys: TyRender<'_>) -> TsType {
 }
 
 /// The `any` fallback of a checked shape that is absent (an already-diagnosed
-/// program), the one place the list kernel names it.
-fn any_ty() -> TsType {
+/// program), the one place the lowering names it: the list kernel's and a UFCS
+/// call's receiver argument that is not in scope everywhere.
+pub(super) fn any_ty() -> TsType {
     TsType::named("any")
 }
 

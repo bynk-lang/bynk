@@ -1092,6 +1092,37 @@ fn needs_parens_as_operand(expr: &TsExpr) -> bool {
     )
 }
 
+/// Whether a `new` callee must be bracketed: a member chain that passes
+/// through a call or a `new` (`new (f().g)()`), which `new f().g()` would
+/// re-read as `(new f()).g()`.
+fn new_callee_needs_parens(callee: &TsExpr) -> bool {
+    match callee {
+        TsExpr::Call { .. } | TsExpr::New { .. } => true,
+        TsExpr::Member { object, .. }
+        | TsExpr::OptionalMember { object, .. }
+        | TsExpr::Index { object, .. }
+        | TsExpr::OptionalIndex { object, .. } => new_callee_needs_parens(object),
+        TsExpr::TypeApp { callee, .. } => new_callee_needs_parens(callee),
+        TsExpr::Ident(_)
+        | TsExpr::VerbatimExpr(..)
+        | TsExpr::LinesArray(_)
+        | TsExpr::Arrow { .. }
+        | TsExpr::Object { .. }
+        | TsExpr::Array { .. }
+        | TsExpr::TemplateLit { .. }
+        | TsExpr::Await(_)
+        | TsExpr::As { .. }
+        | TsExpr::Unary { .. }
+        | TsExpr::Binary { .. }
+        | TsExpr::Conditional { .. }
+        | TsExpr::Paren(_)
+        | TsExpr::Spread(_)
+        | TsExpr::Assign { .. }
+        | TsExpr::AddAssign { .. }
+        | TsExpr::Lit(_) => false,
+    }
+}
+
 fn render_operand(out: &mut String, expr: &TsExpr, depth: usize, m: &mut Option<MergeTarget<'_>>) {
     if needs_parens_as_operand(expr) {
         out.push('(');
@@ -1261,6 +1292,7 @@ fn render_binary_operand(
         | TsExpr::OptionalMember { .. }
         | TsExpr::Index { .. }
         | TsExpr::OptionalIndex { .. }
+        | TsExpr::TypeApp { .. }
         | TsExpr::Call { .. }
         | TsExpr::New { .. }
         | TsExpr::Object { .. }
@@ -1629,9 +1661,29 @@ fn render_expr(out: &mut String, expr: &TsExpr, depth: usize, m: &mut Option<Mer
             render_expr_list(out, args, depth, m);
             out.push(')');
         }
+        // 1A.20 (#3721, Decision A): the instantiation expression `f<A, B>`.
+        TsExpr::TypeApp { callee, type_args } => {
+            render_operand(out, callee, depth, m);
+            out.push('<');
+            for (i, arg) in type_args.iter().enumerate() {
+                if i > 0 {
+                    out.push_str(", ");
+                }
+                render_type(out, arg);
+            }
+            out.push('>');
+        }
         TsExpr::New { callee, args } => {
             out.push_str("new ");
-            render_operand(out, callee, depth, m);
+            // `new (f().g)()` is not `new f().g()`: a callee that reaches a
+            // call through its member chain keeps its brackets.
+            if new_callee_needs_parens(callee) {
+                out.push('(');
+                render_expr(out, callee, depth, m);
+                out.push(')');
+            } else {
+                render_operand(out, callee, depth, m);
+            }
             out.push('(');
             render_expr_list(out, args, depth, m);
             out.push(')');
@@ -1859,7 +1911,7 @@ fn starts_with_object(expr: &TsExpr) -> bool {
         | TsExpr::OptionalMember { object, .. }
         | TsExpr::Index { object, .. }
         | TsExpr::OptionalIndex { object, .. } => starts_with_object(object),
-        TsExpr::Call { callee, .. } => starts_with_object(callee),
+        TsExpr::Call { callee, .. } | TsExpr::TypeApp { callee, .. } => starts_with_object(callee),
         TsExpr::As { expr, .. } => starts_with_object(expr),
         TsExpr::Binary { left, .. } => starts_with_object(left),
         TsExpr::Conditional { test, .. } => starts_with_object(test),
@@ -4447,6 +4499,91 @@ mod tests {
         };
         assert_eq!(print_expr(&neg(diff)), "-(a + b)");
         assert_eq!(print_expr(&neg(neg(id("x")))), "-(-x)");
+    }
+
+    /// `TsExpr::TypeApp` (1A.20, #3721, Decision A): the instantiation expression
+    /// `f<A, B>`, under a call, a `new` and a member chain, with a type argument
+    /// that is itself generic or an array. A `new` that is a member's object keeps
+    /// its `()`, and a `new` callee that reaches a call through its members is
+    /// bracketed.
+    #[test]
+    fn type_app_prints_as_an_instantiation_expression() {
+        let id = |n: &str| TsExpr::Ident(n.to_string());
+        let member = |o: TsExpr, p: &str| TsExpr::Member {
+            object: Box::new(o),
+            property: p.to_string(),
+        };
+        let app = |c: TsExpr, args: Vec<TsType>| TsExpr::TypeApp {
+            callee: Box::new(c),
+            type_args: args,
+        };
+        let call = |c: TsExpr, args: Vec<TsExpr>| TsExpr::Call {
+            callee: Box::new(c),
+            args,
+        };
+        let new = |c: TsExpr, args: Vec<TsExpr>| TsExpr::New {
+            callee: Box::new(c),
+            args,
+        };
+        let named = |n: &str| TsType::named(n);
+        assert_eq!(
+            print_expr(&call(app(id("f"), vec![named("number")]), vec![id("a")])),
+            "f<number>(a)"
+        );
+        assert_eq!(
+            print_expr(&call(
+                app(
+                    member(member(id("deps"), "Cap"), "op"),
+                    vec![named("A"), named("U")]
+                ),
+                vec![id("x"), id("y")]
+            )),
+            "deps.Cap.op<A, U>(x, y)"
+        );
+        assert_eq!(
+            print_expr(&new(
+                app(
+                    member(id("globalThis"), "Map"),
+                    vec![named("string"), named("number")]
+                ),
+                vec![]
+            )),
+            "new globalThis.Map<string, number>()"
+        );
+        let nested = TsType::Named {
+            name: "Option".to_string(),
+            type_args: vec![TsType::Array {
+                element: Box::new(named("number")),
+                readonly: true,
+            }],
+        };
+        assert_eq!(
+            print_expr(&call(app(id("__bynkSetOf"), vec![nested]), vec![id("xs")])),
+            "__bynkSetOf<Option<readonly number[]>>(xs)"
+        );
+        // A `new` that is a member's object keeps its `()`.
+        assert_eq!(
+            print_expr(&call(
+                member(
+                    new(member(id("globalThis"), "TextEncoder"), vec![]),
+                    "encode"
+                ),
+                vec![id("s")]
+            )),
+            "new globalThis.TextEncoder().encode(s)"
+        );
+        // A `new` callee reaching a call through its members is bracketed.
+        assert_eq!(
+            print_expr(&new(member(call(id("f"), vec![]), "C"), vec![])),
+            "new (f().C)()"
+        );
+        assert_eq!(
+            print_expr(&new(
+                app(member(call(id("f"), vec![]), "C"), vec![named("T")]),
+                vec![]
+            )),
+            "new (f().C<T>)()"
+        );
     }
 
     /// `TsExpr::Spread` (1A.18a, #3719): `...x` as an array item, in any

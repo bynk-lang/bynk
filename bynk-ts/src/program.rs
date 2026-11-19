@@ -276,6 +276,7 @@ fn walk_expr<'a>(expr: &'a TsExpr, out: &mut Vec<(VerbatimOrigin, &'a str)>) {
         TsExpr::Member { object, .. } | TsExpr::OptionalMember { object, .. } => {
             walk_expr(object, out);
         }
+        TsExpr::TypeApp { callee, .. } => walk_expr(callee, out),
         TsExpr::Index { object, index } | TsExpr::OptionalIndex { object, index } => {
             walk_expr(object, out);
             walk_expr(index, out);
@@ -1275,6 +1276,16 @@ pub enum TsExpr {
     OptionalMember {
         object: Box<TsExpr>,
         property: String,
+    },
+    /// `callee<A, B>`: a TypeScript instantiation expression (1A.20, #3721,
+    /// Decision A). A generic call is `Call { callee: TypeApp { .. }, args }`
+    /// (`f<T>(a)`) and a generic constructor `New { callee: TypeApp { .. }, args }`
+    /// (`new C<T>(a)`), so `Call` and `New` stay as they are. Postfix like
+    /// [`TsExpr::Member`]: the callee is bracketed under the rule `Call`'s own
+    /// callee uses.
+    TypeApp {
+        callee: Box<TsExpr>,
+        type_args: Vec<TsType>,
     },
     /// An array printed one item per line, each with a trailing comma and the
     /// closing bracket back at the enclosing depth, wherever it sits (1A.14:

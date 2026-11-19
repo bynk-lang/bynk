@@ -43,17 +43,17 @@ async function test_decodes_base64() {
     const deps = {};
     const { size } = __ns_blobs;
     void (((__d) => {
-        switch (__d.tag) {
-          case "Some": {
-            const b = __d.value;
-            return __bynkExpect((size(b) === 2), "tests/blobs.test.bynk:8:25", 353, 365, "expect size(b) == 2");
-          }
-          case "None": {
-            return __bynkExpect((false), "tests/blobs.test.bynk:9:22", 387, 392, "expect false");
-          }
+      switch (__d.tag) {
+        case "Some": {
+          const b = __d.value;
+          return __bynkExpect((size(b) === 2), "tests/blobs.test.bynk:8:25", 353, 365, "expect size(b) == 2");
         }
-        throw new globalThis.Error("non-exhaustive match");
-      })(__bynkBytesFromBase64("aGk=")));
+        case "None": {
+          return __bynkExpect((false), "tests/blobs.test.bynk:9:22", 387, 392, "expect false");
+        }
+      }
+      throw new globalThis.Error("non-exhaustive match");
+    })(__bynkBytesFromBase64("aGk=")));
     return { pass: true };
   } catch (e) {
     if (e instanceof ExpectationError) {
