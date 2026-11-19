@@ -135,25 +135,26 @@ pub(in crate::emitter) fn capability_wire(
 /// instantiated type. The provider receives plain JSON and no witness.
 pub(in crate::emitter) fn encode_capability_args(
     wire: Option<&CapEncoding>,
-    args: &mut [LoweredExpr],
+    args: Vec<LoweredExpr>,
     cx: &LowerCtx,
-) {
+) -> Vec<LoweredExpr> {
     let Some(wire) = wire else {
-        return;
+        return args;
     };
-    for (arg, ty) in args.iter_mut().zip(&wire.encode) {
-        let Some(ty) = ty else {
-            continue;
-        };
-        let value = std::mem::replace(arg, LoweredExpr::Text(String::new()));
-        *arg = match value {
-            LoweredExpr::Node(n) => LoweredExpr::Node(cx.encode_call(*ty, n)),
-            // A text argument is encoded as text: the same node, over the text as an operand.
-            LoweredExpr::Text(t) => {
-                LoweredExpr::Text(bynk_ts::print_expr(&cx.encode_call(*ty, ident_node(&t))))
-            }
-        };
-    }
+    let encoded = |ty: &bynk_check::checker::TyId, arg: LoweredExpr| match arg {
+        LoweredExpr::Node(n) => LoweredExpr::Node(cx.encode_call(*ty, n)),
+        // A text argument is encoded as text: the same node, over the text as an operand.
+        LoweredExpr::Text(t) => LoweredExpr::from(Err(bynk_ts::print_expr(
+            &cx.encode_call(*ty, ident_node(&t)),
+        ))),
+    };
+    let mut types = wire.encode.iter();
+    args.into_iter()
+        .map(|arg| match types.next() {
+            Some(Some(ty)) => encoded(ty, arg),
+            _ => arg,
+        })
+        .collect()
 }
 
 /// Typed capability reads (#3458): a call to an operation whose `Effect[P]`
@@ -228,7 +229,7 @@ pub(in crate::emitter) fn decode_capability_reply(
 pub(in crate::emitter) fn scope_idempotency_key(
     is_first_party: bool,
     method: &str,
-    args_lowered: &mut [LoweredExpr],
+    args_lowered: &mut Vec<LoweredExpr>,
     cx: &LowerCtx,
 ) {
     if !is_first_party || !matches!(method, "dedup" | "remember" | "claim") {
@@ -237,8 +238,8 @@ pub(in crate::emitter) fn scope_idempotency_key(
     let scope = cx
         .handler_scope()
         .unwrap_or_else(|| panic!("Idempotency.{method} lowered with no handler_scope set"));
-    let key = std::mem::replace(&mut args_lowered[0], LoweredExpr::Text(String::new()));
-    args_lowered[0] = match key {
+    let key = args_lowered.remove(0);
+    let scoped = match key {
         // `TemplateLit` parts print verbatim, so a scope that a template literal would read
         // differently (a backtick, `${`, a backslash) keeps the text form, which prints it the
         // same way and is no worse off.
@@ -246,8 +247,9 @@ pub(in crate::emitter) fn scope_idempotency_key(
             vec![format!("{scope}::"), String::new()],
             vec![n],
         )),
-        other => LoweredExpr::Text(format!("`{scope}::${{{}}}`", other.into_text())),
+        other => LoweredExpr::from(Err(format!("`{scope}::${{{}}}`", other.into_text()))),
     };
+    args_lowered.insert(0, scoped);
 }
 
 /// Whether `scope` prints the same inside a template literal's text as it reads.
@@ -779,9 +781,9 @@ pub(in crate::emitter) fn lower_capability_call(
             Some(Callee::Capability { cap, .. }) if *cap == recv.name
         )
     {
-        let mut args_lowered = lower_args(args, cx, pre);
+        let args_lowered = lower_args(args, cx, pre);
         let wire = capability_wire(e, cx);
-        encode_capability_args(wire.as_deref(), &mut args_lowered, cx);
+        let args_lowered = encode_capability_args(wire.as_deref(), args_lowered, cx);
         let call = capability_op_call(
             id("deps"),
             "deps".to_string(),
@@ -805,9 +807,9 @@ pub(in crate::emitter) fn lower_capability_call(
         && cap.starts_with(bynk_check::checker::peek::LOCAL_PREFIX)
     {
         let cap = cap.clone();
-        let mut args_lowered = lower_args(args, cx, pre);
+        let args_lowered = lower_args(args, cx, pre);
         let wire = capability_wire(e, cx);
-        encode_capability_args(wire.as_deref(), &mut args_lowered, cx);
+        let args_lowered = encode_capability_args(wire.as_deref(), args_lowered, cx);
         let call = capability_op_call(
             id("deps"),
             "deps".to_string(),
@@ -854,7 +856,7 @@ pub(in crate::emitter) fn lower_capability_call(
             return Some(tracked_claim_call(cap_node, &cap_expr, args_lowered, cx));
         }
         let wire = capability_wire(e, cx);
-        encode_capability_args(wire.as_deref(), &mut args_lowered, cx);
+        let args_lowered = encode_capability_args(wire.as_deref(), args_lowered, cx);
         let call = capability_op_call(
             cx.cap_deps_node(),
             cx.cap_deps_expr().to_string(),
@@ -899,7 +901,7 @@ pub(in crate::emitter) fn lower_cross_capability_call(
         return Some(tracked_claim_call(cap_node, &cap_expr, args_lowered, cx));
     }
     let wire = capability_wire(e, cx);
-    encode_capability_args(wire.as_deref(), &mut args_lowered, cx);
+    let args_lowered = encode_capability_args(wire.as_deref(), args_lowered, cx);
     let call = capability_op_call(
         cx.cap_deps_node(),
         cx.cap_deps_expr().to_string(),
@@ -950,4 +952,405 @@ fn capability_op_call(
             )
         },
     )
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use crate::emitter::ctx::{BodyMode, ModuleCtx, UnitFacts};
+    use crate::emitter::runtime_use::RuntimeUse;
+    use crate::testkit::{emit_project, emit_workers};
+    use bynk_check::checker::TypedCommons;
+    use bynk_check::project_model::BuildTarget;
+
+    const LEDGER: &str = "context ledger
+
+consumes bynk { Events }
+
+event Bumped = {
+  amount: Int,
+}
+
+agent Ledger {
+  key id: String
+  store total: Cell[Int]
+
+  on call bump(amount: Int) -> Effect[Int] given Events {
+    let next = total + amount
+    total := next
+    let _ <- Events.emit[Bumped](Bumped { amount: amount })
+    next
+  }
+}
+";
+
+    const HOOKS: &str = "context shop.hooks
+
+consumes bynk { Idempotency, Claim }
+
+service api from http {
+  on POST(\"/hooks/:id\") (id: String) -> Effect[HttpResult[String]] by Visitor given Idempotency {
+    let Claim.Claimed <- Idempotency.claim(id, 1.hours) else { Ok(\"duplicate\") }
+    Ok(\"processed\")
+  }
+}
+
+service replay from http {
+  on POST(\"/replay/:id\") (id: String) -> Effect[HttpResult[String]] by Visitor given Idempotency {
+    let cached <- Idempotency.dedup[String](id)
+    match cached {
+      Some(v) => Ok(v),
+      None => {
+        let _ <- Idempotency.remember[String](id, \"computed\", 1.hours)
+        Ok(\"fresh\")
+      }
+    }
+  }
+}
+
+fn once[T: Codable](key: String, value: T) -> Effect[Option[T]] given Idempotency {
+  let seen <- Idempotency.dedup[T](key)
+  match seen {
+    Some(v) => Some(v),
+    None => None,
+  }
+}
+
+type Receipt = { id: String, total: Int }
+
+service skew from http {
+  on POST(\"/receipt/:id\") (id: String) -> Effect[HttpResult[String]] by Visitor given Idempotency {
+    let r <- once[Receipt](id, Receipt { id: id, total: 42 })
+    match r {
+      Some(v) => Ok(\"hit\"),
+      None => Ok(\"stored\"),
+    }
+  }
+}
+";
+
+    const COOKIES: &str = "context site.prefs
+
+consumes bynk { Cookie }
+
+type Theme = enum { Light, Dark }
+type Qty = Int where Positive
+
+type Prefs = {
+	theme: Theme = Light,
+	@name(\"__Host-visits\") visits: Int = 0,
+	price: Option[Decimal],
+	qty: Option[Qty],
+}
+
+service site from http {
+	on GET(\"/visit\") (cookies: Prefs) -> Effect[HttpResult[String]] by v: Visitor {
+		Ok(\"visit\")
+	}
+
+	on POST(\"/leaves\") () -> Effect[HttpResult[()]] by v: Visitor {
+		NoContent
+			.withCookie(Prefs.price.cookie(1.50d))
+			.withCookie(Prefs.visits.cookie(42))
+			.withCookie(Prefs.qty.cookie(7))
+	}
+
+	on POST(\"/theme/reset\") () -> Effect[HttpResult[()]] by v: Visitor {
+		NoContent.withCookie(Prefs.theme.expire())
+	}
+}
+";
+
+    const SESSION: &str = "context shop.api
+
+consumes bynk { Cookie, Clock }
+
+type UserId = String where NonEmpty && MaxLength(64)
+
+type Login = { user: String }
+
+actor User { auth = SignedCookie(secret = \"SESSION_KEY\", ttl = 12.hours), identity = UserId }
+
+service api from http {
+	on POST(\"/login\") (body: Login) -> Effect[HttpResult[String]] by v: Visitor given Clock {
+		let Ok(id) = UserId.of(body.user) else {
+			BadRequest(\"bad user\")
+		}
+		let c <- User.issue(id)
+		Created(\"welcome\").withCookie(c)
+	}
+
+	on POST(\"/logout\") () -> Effect[HttpResult[()]] by u: User {
+		NoContent.withCookie(User.expire())
+	}
+}
+";
+
+    const STOCK: &str = "context shop.stock
+
+consumes bynk
+consumes bynk.cloudflare { D1, SqlValue, SqlReadError, SqlError }
+
+capability Stock = D1
+
+type Item = { id: String, qty: Int, note: Option[String] }
+
+service listing {
+	on call(min: Int) -> Effect[Result[List[Item], SqlReadError]] given Stock {
+		Stock.select[Item](\"FROM items WHERE note = 'caf\\u{e9} \\\"q\\\"' AND qty >= ?1 ORDER BY id\", [Integer(min)])
+	}
+}
+
+service lookup {
+	on call(id: String) -> Effect[Result[Option[Item], SqlReadError]] given Stock {
+		Stock.firstAs[Item](\"FROM items WHERE id = ?1\", [Text(id)])
+	}
+}
+";
+
+    fn handlers(file: &str, source: &str, path: &str) -> String {
+        emit_workers(&[(file, source)]).text(path).to_string()
+    }
+
+    /// `Events.emit`: the envelope is one block-bodied IIFE, with the event name and the
+    /// publisher as plain strings.
+    #[test]
+    fn events_emit_is_a_block_iife_with_the_envelope() {
+        let ts = handlers("ledger.bynk", LEDGER, "workers/ledger/handlers.ts");
+        assert!(
+            ts.contains(
+                "await (async () => {\n        __events.push({ type: \"Bumped\", payload: { amount: amount }, envelope: { eventId: globalThis.crypto.randomUUID(), publisherId: \"ledger\", emittedAt: globalThis.Date.now(), schemaVersion: 1 } });\n      })();"
+            ),
+            "{ts}"
+        );
+    }
+
+    /// First-party `Idempotency` scopes its key once, as a template literal; a tracked `claim`
+    /// brackets its `await` (the shape #3725's table gets wrong) and wraps the handler in the
+    /// claim scope; a generic call encodes with the caller's witness.
+    #[test]
+    fn idempotency_keys_are_scoped_once_and_claims_are_tracked() {
+        let ts = handlers("shop/hooks.bynk", HOOKS, "workers/shop-hooks/handlers.ts");
+        assert!(
+            ts.contains("(await (async (__k: string, __t: number) => __claims.note(__k, await deps.Idempotency.claim(__k, __claims.lease(__t)), __t))(`shop.hooks.api.http_POST_hooks_Param_id::${id}`, 3600000))"),
+            "{ts}"
+        );
+        assert!(ts.contains("const __claims = "), "{ts}");
+        // `wire`: the type argument is dropped, the reply decodes under the `miss` policy, and an
+        // encoded argument is the serialised value.
+        assert!(
+            ts.contains("__bynkCapabilityReply(deps.Idempotency.dedup(`shop.hooks.replay.http_POST_replay_Param_id::${id}`), { encode: __serialise_Option_String, decode: __deserialise_Option_String }, { capability: \"Idempotency\", operation: \"dedup\", type: \"Option[String]\" }, \"miss\")"),
+            "{ts}"
+        );
+        assert!(
+            ts.contains("deps.Idempotency.remember(`shop.hooks.replay.http_POST_replay_Param_id::${id}`, \"computed\" as __JsonValue, 3600000)"),
+            "{ts}"
+        );
+        // A generic body encodes with the caller's witness and is scoped to the function.
+        assert!(
+            ts.contains(
+                "deps.Idempotency.dedup(`shop.hooks.fn.once::${key}`), __bynkCodecOption(__codec_T)"
+            ),
+            "{ts}"
+        );
+    }
+
+    /// A typed cookie over each leaf kind; a `Decimal` wraps and imports its helper; expiry is
+    /// the deletion literal.
+    #[test]
+    fn typed_cookies_cover_each_leaf_kind() {
+        let ts = handlers("site/prefs.bynk", COOKIES, "workers/site-prefs/handlers.ts");
+        for want in [
+            "value: __cookieValue(\"decimal\", __bynkDecimalToString({ coefficient: 150n, scale: 2 }))",
+            "value: __cookieValue(\"int\", 42)",
+            "value: __cookieValue(\"int\", (7 as Qty))",
+            "name: \"__Host-visits\"",
+            "({ name: \"theme\", value: \"\", maxAge: Some(0), expires: Some(0), domain: { tag: \"None\" as const }, path: \"/\", secure: true, httpOnly: true, sameSite: { tag: \"Lax\" as const }, partitioned: false })",
+        ] {
+            assert!(ts.contains(want), "missing {want}\n{ts}");
+        }
+        assert!(ts.contains("__bynkDecimalToString"), "{ts}");
+        assert!(
+            ts.lines()
+                .any(|l| l.starts_with("import") && l.contains("__bynkDecimalToString")),
+            "{ts}"
+        );
+    }
+
+    /// A signed-cookie issue is an async-arrow IIFE over the runtime helper, and expiry a plain
+    /// call.
+    #[test]
+    fn signed_cookies_issue_and_expire() {
+        let ts = handlers("shop/api.bynk", SESSION, "workers/shop-api/handlers.ts");
+        assert!(
+            ts.contains("(async () => __issueSessionCookie(__sessionKeysOf(deps, \"User\"), \"User\", \"__Host-session\", \"Lax\", id, 43200, await deps.Clock.now()))()"),
+            "{ts}"
+        );
+        assert!(
+            ts.contains("__expireSessionCookie(\"__Host-session\", \"Lax\")"),
+            "{ts}"
+        );
+    }
+
+    /// `D1.select` and `firstAs`: a block-bodied IIFE, the SQL text intact (a non-ASCII character
+    /// and escaped quotes included), the error tags `as const`.
+    #[test]
+    fn d1_select_and_first_as_build_block_iifes() {
+        let ts = handlers("shop/stock.bynk", STOCK, "workers/shop-stock/handlers.ts");
+        assert!(
+            ts.contains("const __r = await deps.Stock.all(\"SELECT \\\"id\\\", \\\"qty\\\", \\\"note\\\" FROM items WHERE note = 'caf\u{e9} \\\"q\\\"' AND qty >= ?1 ORDER BY id\", [SqlValue.Integer(min)]);"),
+            "{ts}"
+        );
+        assert!(
+            ts.contains("      if (__r.tag === \"Err\") return Err({ tag: \"Sql\" as const, error: __r.error });\n      const __d = __decode(__r.value);"),
+            "{ts}"
+        );
+        assert!(ts.contains("await deps.Stock.first(\"SELECT"), "{ts}");
+        assert!(
+            ts.contains("if (__r.value.tag === \"None\") return Ok(None);"),
+            "{ts}"
+        );
+        assert!(
+            ts.contains("Err({ tag: \"Decode\" as const, error: __d.error })"),
+            "{ts}"
+        );
+    }
+
+    /// Both escapers are one function, so a raw-text `Str` node prints what the text path
+    /// printed, for any name, path or SQL string, non-ASCII included.
+    #[test]
+    fn the_node_and_text_escapers_agree() {
+        for s in [
+            "plain",
+            "caf\u{e9}",
+            "\u{65e5}\u{672c}\u{8a9e}",
+            "a \"q\" \\ b",
+            "line\nbreak\ttab\r",
+            "nul\0ctl\u{7f}",
+            "sep\u{2028}\u{2029}",
+            "\u{1f600} emoji",
+            "SELECT \"a\" FROM t WHERE x = 'y'",
+        ] {
+            assert_eq!(
+                bynk_ts::print_expr(&lit_str(s)),
+                format!("\"{}\"", escape_ts_string(s)),
+                "{s:?}"
+            );
+        }
+    }
+
+    /// The node and text type-argument forms share one filter: with a `wire` encoding only the
+    /// kept flags survive, and none kept names nothing.
+    #[test]
+    fn the_wire_filter_drops_the_same_type_arguments_in_both_forms() {
+        use bynk_check::checker::codable::CapEncoding;
+        use bynk_syntax::span::Span;
+        let named = |n: &str| {
+            TypeRef::Named(Ident {
+                name: n.to_string(),
+                span: Span::default(),
+            })
+        };
+        let args = [named("A"), named("B"), named("C")];
+        let wire = |keep: Vec<bool>| CapEncoding {
+            encode: vec![None; 3],
+            keep_type_args: keep,
+            reply: None,
+        };
+        for (keep, text) in [
+            (vec![true, false, true], "<A, C>"),
+            (vec![false, false, false], ""),
+            (vec![true, true, true], "<A, B, C>"),
+        ] {
+            let w = wire(keep);
+            assert_eq!(capability_call_type_args_ts(&args, Some(&w)), text);
+            let nodes = capability_call_type_args_node(&args, Some(&w));
+            let printed = if nodes.is_empty() {
+                String::new()
+            } else {
+                format!(
+                    "<{}>",
+                    nodes
+                        .iter()
+                        .map(bynk_ts::print_type)
+                        .collect::<Vec<_>>()
+                        .join(", ")
+                )
+            };
+            assert_eq!(printed, text);
+        }
+        assert_eq!(capability_call_type_args_ts(&args, None), "<A, B, C>");
+        assert_eq!(capability_call_type_args_node(&args, None).len(), 3);
+    }
+
+    /// A scope a template literal would read differently keeps the text form.
+    #[test]
+    fn an_unsafe_idempotency_scope_stays_text() {
+        assert!(template_safe("shop.hooks.api.http_POST"));
+        assert!(!template_safe("a`b"));
+        assert!(!template_safe("a${b"));
+        assert!(!template_safe("a\\b"));
+        assert!(template_safe("a$b"));
+    }
+
+    /// The typed-cookie node and the text literal print the same bytes.
+    #[test]
+    fn the_typed_cookie_node_prints_as_the_text_does() {
+        let none = || object(vec![("tag", tag_const("None"))]);
+        let node = typed_cookie_node("a\"b", lit_str("v"), none(), none());
+        let text = typed_cookie_literal(
+            &escape_ts_string("a\"b"),
+            "\"v\"",
+            "{ tag: \"None\" as const }",
+            "{ tag: \"None\" as const }",
+        );
+        assert_eq!(bynk_ts::print_expr(&node), text);
+    }
+
+    /// `trace_step_node` prints what `trace_step` prints in a traced build, and returns the call
+    /// unchanged in a deploy build.
+    #[test]
+    fn the_trace_step_node_and_text_forms_agree() {
+        let commons = TypedCommons::empty();
+        let cross = bynk_check::resolver::CrossContextInfo::default();
+        let source: std::sync::Arc<str> = std::sync::Arc::from("a\n  Greeter.hello(\"x\")\n");
+        let offset = source.find("Greeter").expect("the call is in the source");
+        for traced in [false, true] {
+            let ru = RuntimeUse::default();
+            let mut module = ModuleCtx::new(&commons, &cross, &ru, UnitFacts::detached());
+            if traced {
+                module.trace = Some(crate::emit_model::TraceLoc {
+                    source: source.clone(),
+                    rel_path: "shop\\api \"x\".bynk".to_string(),
+                });
+            }
+            let cx = LowerCtx::new(module, BodyMode::Method);
+            let node = cx.trace_step_node(
+                "capability",
+                "Greeter.hello",
+                offset,
+                call(chain(id("deps"), &["Greeter", "hello"]), vec![]),
+            );
+            let text = cx.trace_step(
+                "capability",
+                "Greeter.hello",
+                offset,
+                "deps.Greeter.hello()".to_string(),
+            );
+            assert_eq!(bynk_ts::print_expr(&node), text, "traced: {traced}");
+            assert_eq!(text.starts_with("__traceStep("), traced);
+            assert_eq!(ru.trace_step(), traced);
+        }
+    }
+
+    /// The emitted build also compiles for the bundle target (`D1.peek` aside).
+    #[test]
+    fn the_bundle_target_emits_events_too() {
+        let out = emit_project(&[("ledger.bynk", LEDGER)], BuildTarget::Bundle);
+        assert!(
+            out.docs
+                .values()
+                .any(|t| t.contains("__events.push({ type: \"Bumped\""))
+        );
+    }
 }
