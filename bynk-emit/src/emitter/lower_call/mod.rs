@@ -5,3 +5,4 @@
 pub(super) mod codec_statics;
 pub(super) mod query;
 pub(super) mod statics;
+pub(super) mod store;
