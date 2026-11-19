@@ -626,7 +626,7 @@ fn lower_http_result(
     let arg = lowered
         .into_iter()
         .next()
-        .unwrap_or_else(|| LoweredExpr::Text(String::new()));
+        .unwrap_or_else(|| LoweredExpr::from(Err(String::new())));
     let clear = matches!(op, HttpResultOp::ClearCookie);
     node_or_text(
         vec![arg, recv],
@@ -688,7 +688,7 @@ fn quoted_or_text(raw: &str, escaped: &str) -> LoweredExpr {
     if print_expr(&node) == quoted {
         LoweredExpr::Node(node)
     } else {
-        LoweredExpr::Text(quoted)
+        LoweredExpr::from(Err(quoted))
     }
 }
 

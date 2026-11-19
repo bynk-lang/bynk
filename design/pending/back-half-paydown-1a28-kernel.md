@@ -1,6 +1,6 @@
 ---
 level: patch
-probes: ts_writes
+probes: ts_writes, lowering_text_bridge
 changelog: The built-in kernel methods on connections, request views, cookies, `within`, `race`, `detach` and `Effect[Result]` combinators in generated code are built as TypeScript nodes rather than text, so redundant brackets round receivers are gone and twelve generated files print an enclosing closure with different layout; no change to what the emitted code does
 ---
 refactor(emit): the inline and Effect kernel arms lower to nodes (1A.28)
@@ -19,6 +19,6 @@ Closes #3729. Part of #3676.
 
 **Source maps.** Source maps are line-granular. In ten of the twelve re-layout files the enclosing closure now prints over more lines, so the map gains rows and shifts. The ten are 1769_send_in_match_guard, 1818_ws_agent_reads_its_key, 236_websocket_chatroom, 238_websocket_inbound_workers, 3041_ws_open_actor_sum, 3051_test_websocket_address, 3051_test_websocket_param_order, 338_ws_broadcast_collect_all, 340_ws_broadcast_try and 3437_detach_shapes. The mappings become more precise: in 1769 the nine lines of the closure mapped to source 12:6 each and now map to 13:8, 14:8 and 16:8. The Q2 rule is read as "no map change beyond what the ruled re-layout implies". Earlier re-layout slices most likely shifted maps the same way without detection, because the repo has no `.map` goldens.
 
-**Probes.** `ts_writes` 1323 to 1322. `lowering_text_bridge` stays at 58, against the proposal's expectation that it would fall: none of these arms was a counted `into_text` bridge site, since each built its text with `format!`. `ts_any` stays at 38 (the cast and the `__r` parameter are named through `any_ty()`), `ast_importers` at 14 and `ts_text_idents` at 14.
+**Probes.** `ts_writes` 1323 to 1322. `lowering_text_bridge` 57 to 56: the old `pre.finish_text` exit goes, and the two retained text fallbacks (an absent cookie argument, a `detach` site where the escapers disagree) travel through the existing `Built` bridge (`LoweredExpr::from(Err(..))`), as 1A.24 did, rather than adding `LoweredExpr::Text` sites. `ts_any` stays at 38 (the cast and the `__r` parameter are named through `any_ty()`), `ast_importers` at 14 and `ts_text_idents` at 14.
 
 **From the 1A.27 review (#3783).** The three stale doc comments in `lower_call/agents.rs` describe the node form, and `agent_construct_node` builds its deps argument only on Workers. No output change.
