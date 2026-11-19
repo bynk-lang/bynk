@@ -120,7 +120,7 @@ async function test_the_target_s_own_same_named_type_is_its_own() {
     const deps = __makeHarness();
     const { Region } = __ns_shop_ledger;
     type Region = __ns_shop_ledger.Region;
-    const h = await __callService(deps.env.SHOP_LEDGER, "here", {  }, __ns_shop_ledger.__deserialise_Region, "integration", "8636e891054e2b67", deps.env, "shop.ledger");
+    const h = await __callService(deps.env.SHOP_LEDGER, "here", {}, __ns_shop_ledger.__deserialise_Region, "integration", "8636e891054e2b67", deps.env, "shop.ledger");
     if (!(__bynkEq(h, Region.Here))) { throw __bynkExpectFailure("tests/system.bynk:27:12", 894, 910, "expect h == Region.Here\n  expected: h == Region.Here\n  actual:   " + __bynkShow((h)) + " == " + __bynkShow((Region.Here))); }
     return { pass: true };
   } catch (e) {

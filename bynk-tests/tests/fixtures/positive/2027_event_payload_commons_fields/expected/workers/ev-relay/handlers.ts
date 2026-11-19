@@ -19,7 +19,7 @@ export const Qty = {
 
 export const relay = {
   async call(deps: { env: { EV_STORE: __ServiceBinding } }): globalThis.Promise<number> {
-    const b = await __callService(deps.env.EV_STORE, "sample", {  }, __deserialise_Batch, "ev.relay", "4736c99a4848e569", deps.env, "ev.store");
+    const b = await __callService(deps.env.EV_STORE, "sample", {}, __deserialise_Batch, "ev.relay", "4736c99a4848e569", deps.env, "ev.store");
     const r = await __callService(deps.env.EV_STORE, "batch", __serialise_Batch((b as unknown as ev_store.Batch)), __deserialise_Batch, "ev.relay", "dfe34381a63b312b", deps.env, "ev.store");
     return (r.lines).length;
   },

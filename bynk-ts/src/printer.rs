@@ -8526,4 +8526,57 @@ mod tests {
         );
         assert_eq!(print_stmt(&decl, 0), "function f() {\n  return a;\n}\n");
     }
+
+    /// 1A.25 (#3726, Decision C): `as` is left-associative, so a left-nested `As` operand needs no
+    /// brackets; the cast chain the cross-context boundary builds prints as `a as unknown as T`.
+    #[test]
+    fn a_left_nested_as_prints_without_brackets() {
+        let cast = TsExpr::As {
+            expr: Box::new(TsExpr::As {
+                expr: Box::new(TsExpr::Ident("a".to_string())),
+                ty: TsType::named("unknown"),
+            }),
+            ty: TsType::named("T"),
+        };
+        assert_eq!(print_expr(&cast), "a as unknown as T");
+        assert_eq!(
+            print_expr(&TsExpr::Paren(Box::new(cast))),
+            "(a as unknown as T)"
+        );
+    }
+
+    /// A cast that is the operand of a tighter-binding position (a member object, a call callee, an
+    /// `await`) is bracketed, and an explicit `Paren` under an `As` is kept: only the plain
+    /// left-nested chain is bracket-free.
+    #[test]
+    fn an_as_in_an_operand_position_keeps_its_brackets() {
+        let inner = || TsExpr::As {
+            expr: Box::new(TsExpr::Ident("a".to_string())),
+            ty: TsType::named("T"),
+        };
+        assert_eq!(
+            print_expr(&TsExpr::Member {
+                object: Box::new(inner()),
+                property: "x".to_string(),
+            }),
+            "(a as T).x"
+        );
+        assert_eq!(
+            print_expr(&TsExpr::Call {
+                callee: Box::new(inner()),
+                args: vec![],
+            }),
+            "(a as T)()"
+        );
+        assert_eq!(
+            print_expr(&TsExpr::As {
+                expr: Box::new(TsExpr::Paren(Box::new(TsExpr::As {
+                    expr: Box::new(TsExpr::Ident("a".to_string())),
+                    ty: TsType::named("unknown"),
+                }))),
+                ty: TsType::named("T"),
+            }),
+            "(a as unknown) as T"
+        );
+    }
 }

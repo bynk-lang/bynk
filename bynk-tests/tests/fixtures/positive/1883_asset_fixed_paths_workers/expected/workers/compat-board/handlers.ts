@@ -12,7 +12,7 @@ export const favicon: { readonly url: string } = { url: "/favicon.ico" };
 
 export const web = {
   async http_GET(deps: { env: { COMPAT_WIDGETS: __ServiceBinding } }): globalThis.Promise<HttpResult<string>> {
-    const html = await __callService(deps.env.COMPAT_WIDGETS, "fragment", {  }, (__j: __JsonValue) => ((__v) => typeof __v === "string" ? Ok(__v) : Err({ kind: "StructuralMismatch", path: "$", expected: "string", actual: typeof __v } as __BoundaryError))(__j), "compat.board", "611920cdc38d1482", deps.env, "compat.widgets");
+    const html = await __callService(deps.env.COMPAT_WIDGETS, "fragment", {}, (__j: __JsonValue) => ((__v) => typeof __v === "string" ? Ok(__v) : Err({ kind: "StructuralMismatch", path: "$", expected: "string", actual: typeof __v } as __BoundaryError))(__j), "compat.board", "611920cdc38d1482", deps.env, "compat.widgets");
     return HttpResult.Ok(`<link rel="icon" href="${String(favicon.url)}">${String(html)}`);
   },
 };

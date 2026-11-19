@@ -74,7 +74,7 @@ async function test_placing_crosses_the_payment_edge() {
     __bynkHarness = undefined;
     __bynkClockNow = 0;
     const deps = __makeHarness();
-    const ok = await __callService(deps.env.SHOP_ORDERS, "place", {  }, (__j: __JsonValue) => ((__v) => typeof __v === "boolean" ? Ok(__v) : Err({ kind: "StructuralMismatch", path: "$", expected: "boolean", actual: typeof __v } as __BoundaryError))(__j), "integration", "3a1dda0cc2000672", deps.env, "shop.orders");
+    const ok = await __callService(deps.env.SHOP_ORDERS, "place", {}, (__j: __JsonValue) => ((__v) => typeof __v === "boolean" ? Ok(__v) : Err({ kind: "StructuralMismatch", path: "$", expected: "boolean", actual: typeof __v } as __BoundaryError))(__j), "integration", "3a1dda0cc2000672", deps.env, "shop.orders");
     if (!(ok)) { throw __bynkExpectFailure("tests/place.bynk:8:12", 236, 238, "expect ok"); }
     return { pass: true };
   } catch (e) {
