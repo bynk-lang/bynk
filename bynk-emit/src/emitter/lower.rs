@@ -1882,7 +1882,11 @@ fn lower_faults(faults: &FaultsExpr, cx: &mut LowerCtx) -> Built {
         } else if let Some(variant) = bad_signature_driver(&principal.actor.name) {
             cx.call_site_bad_signature = Some(variant);
         } else {
-            cx.call_site_identity = principal.identity.as_ref().map(|id| inner.lower(id, cx));
+            // 1A: a still-text principal makes the call text (`call_site_identity`).
+            cx.call_site_identity = principal
+                .identity
+                .as_ref()
+                .map(|id| inner.lower_node(id, cx));
             cx.call_site_actor = Some(principal.actor.name.clone());
         }
     }
@@ -2540,18 +2544,18 @@ fn lower_method_call(e: &Expr, cx: &mut LowerCtx) -> Lowered {
     {
         return pre.finish_built(built);
     }
-    // Test-case and system-tier service addresses, then agent invocations (#3167).
-    if let Some(s) = lower_test_asset_fetch_call(e, receiver, args, cx, &mut pre) {
-        return pre.finish_built(Err(s));
+    // Test-case and system-tier service addresses (1A.26, #3727), then agent invocations (#3167).
+    if let Some(built) = lower_test_asset_fetch_call(e, receiver, args, cx, &mut pre) {
+        return pre.finish_built(built);
     }
-    if let Some(s) = lower_system_schedule_call(receiver, method, args, cx, &mut pre) {
-        return pre.finish_built(Err(s));
+    if let Some(built) = lower_system_schedule_call(receiver, method, args, cx, &mut pre) {
+        return pre.finish_built(built);
     }
-    if let Some(s) = lower_system_http_call(e, receiver, method, args, cx, &mut pre) {
-        return pre.finish_built(Err(s));
+    if let Some(built) = lower_system_http_call(e, receiver, method, args, cx, &mut pre) {
+        return pre.finish_built(built);
     }
-    if let Some(s) = lower_test_service_call(e, receiver, method, args, cx, &mut pre) {
-        return pre.finish_built(Err(s));
+    if let Some(built) = lower_test_service_call(e, receiver, method, args, cx, &mut pre) {
+        return pre.finish_built(built);
     }
     if let Some(s) = lower_inline_agent_call(e, receiver, method, args, cx, &mut pre) {
         return pre.finish_built(Err(s));
@@ -4976,7 +4980,7 @@ pub(super) fn lower_http_variant_args(
 /// driven (auto-advance) and then settled, otherwise the sends it handed the
 /// harness's execution context are awaited, so the case's `expect`s see their
 /// effects. `None` outside a test case, or when nothing needs settling.
-fn settle_helper(cx: &LowerCtx) -> Option<&'static str> {
+pub(super) fn settle_helper(cx: &LowerCtx) -> Option<&'static str> {
     if !cx.in_test_case() {
         None
     } else if cx.runtime_use().virtual_time() {
@@ -4991,7 +4995,14 @@ fn settle_helper(cx: &LowerCtx) -> Option<&'static str> {
 /// [`settle_helper`] over a built call: `helper(deps, call)` as a node when the
 /// call is one, else today's text.
 pub(super) fn settle_built(call: Built, cx: &LowerCtx) -> Built {
-    match (settle_helper(cx), call) {
+    settle_with(settle_helper(cx), call)
+}
+
+/// [`settle_built`] with the helper already read, for a caller that lowers its
+/// arguments between reading the settle state and settling (the test-case
+/// service call reads it first, as it always has).
+pub(super) fn settle_with(helper: Option<&'static str>, call: Built) -> Built {
+    match (helper, call) {
         (None, call) => call,
         (Some(helper), Ok(node)) => Ok(bynk_ts::TsExpr::Call {
             callee: Box::new(ident_node(helper)),

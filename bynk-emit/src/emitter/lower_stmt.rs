@@ -900,7 +900,9 @@ fn lower_effect_let_value(
             // #2135: `by Forged` / `by Stale` name no identity either.
             cx.call_site_bad_signature = Some(variant);
         } else {
-            cx.call_site_identity = principal.identity.as_ref().map(|id| pre.lower(id, cx));
+            // 1A: a still-text principal makes the call text (`call_site_identity`,
+            // `call_site_claims`, `call_site_claim_lines`).
+            cx.call_site_identity = principal.identity.as_ref().map(|id| pre.lower_node(id, cx));
             // #3052: a `system` call mints its `Oidc` token's claims from the
             // lines of a literal `TokenClaims.of(lines)` (the checker admits
             // no other form there, `bynk.test.system_claims_need_literal`),
@@ -922,9 +924,9 @@ fn lower_effect_let_value(
                 _ => None,
             };
             if let Some(lines) = literal_lines {
-                cx.call_site_claim_lines = Some(pre.lower(lines, cx));
+                cx.call_site_claim_lines = Some(pre.lower_node(lines, cx));
             } else {
-                cx.call_site_claims = principal.claims.as_ref().map(|c| pre.lower(c, cx));
+                cx.call_site_claims = principal.claims.as_ref().map(|c| pre.lower_node(c, cx));
             }
             cx.call_site_actor = Some(principal.actor.name.clone());
         }
