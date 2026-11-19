@@ -475,6 +475,44 @@ fn render_stmt(out: &mut String, stmt: &TsStmt, depth: usize, mut map: Option<Me
     render_stmt_kind(out, stmt, depth, map);
 }
 
+/// `try { … }` with its optional `catch` and `finally` (1A.21, #3722, Decision C).
+fn render_try_catch(
+    out: &mut String,
+    depth: usize,
+    try_block: &TsStmt,
+    catch_param: Option<&str>,
+    catch_block: Option<&TsStmt>,
+    finally_block: Option<&TsStmt>,
+    mut map: Option<MergeTarget<'_>>,
+) {
+    debug_assert!(
+        catch_block.is_some() || finally_block.is_some(),
+        "TsStmtKind::TryCatch needs a `catch` or a `finally`; a bare `try` is a syntax error"
+    );
+    out.push_str(&indent(depth));
+    out.push_str("try");
+    render_block_body(out, try_block, depth, map.as_mut().map(|t| t.reborrow()));
+    if let Some(catch_block) = catch_block {
+        out.push_str(" catch");
+        if let Some(p) = catch_param {
+            out.push_str(" (");
+            out.push_str(p);
+            out.push(')');
+        }
+        render_block_body(out, catch_block, depth, map.as_mut().map(|t| t.reborrow()));
+    }
+    if let Some(finally_block) = finally_block {
+        out.push_str(" finally");
+        render_block_body(
+            out,
+            finally_block,
+            depth,
+            map.as_mut().map(|t| t.reborrow()),
+        );
+    }
+    out.push('\n');
+}
+
 /// [`render_stmt`]'s own per-`kind` dispatch, split out so the nested-
 /// checkpoint check above runs exactly once per statement regardless of
 /// which arm below ends up recursing back into `render_stmt` for a child.
@@ -638,19 +676,16 @@ fn render_stmt_kind(
             try_block,
             catch_param,
             catch_block,
-        } => {
-            out.push_str(&indent(depth));
-            out.push_str("try");
-            render_block_body(out, try_block, depth, map.as_mut().map(|t| t.reborrow()));
-            out.push_str(" catch");
-            if let Some(p) = catch_param {
-                out.push_str(" (");
-                out.push_str(p);
-                out.push(')');
-            }
-            render_block_body(out, catch_block, depth, map.as_mut().map(|t| t.reborrow()));
-            out.push('\n');
-        }
+            finally_block,
+        } => render_try_catch(
+            out,
+            depth,
+            try_block,
+            catch_param.as_deref(),
+            catch_block.as_deref(),
+            finally_block.as_deref(),
+            map,
+        ),
         TsStmtKind::Block(stmts) => {
             out.push_str(&indent(depth));
             out.push_str("{\n");
@@ -793,8 +828,21 @@ fn render_branch(
             out.push('\n');
         }
         TsStmtKind::InlineBlock(stmts) => {
-            out.push(' ');
-            render_inline_block(out, stmts);
+            if inline_block_fits_one_line(stmts) {
+                out.push(' ');
+                render_inline_block(out, stmts);
+            } else {
+                // 1A.21 (#3722): a statement that holds a multi-line expression (a typed
+                // decoder's block-bodied arrow, in a failure message) cannot be written on one
+                // line, so the branch takes the braced, indented form instead.
+                render_block_body(
+                    out,
+                    &TsStmt::block(stmts.clone(), None),
+                    depth,
+                    map.as_mut().map(|t| t.reborrow()),
+                );
+                out.push('\n');
+            }
         }
         TsStmtKind::Verbatim { .. }
         | TsStmtKind::Decl(_)
@@ -820,6 +868,16 @@ fn render_branch(
             render_inline_stmt(out, branch, depth);
         }
     }
+}
+
+/// Whether every statement of an [`TsStmtKind::InlineBlock`] renders on one line, so that the
+/// block may be written `{ a; b; }`.
+fn inline_block_fits_one_line(stmts: &[TsStmt]) -> bool {
+    stmts.iter().all(|s| {
+        let mut piece = String::new();
+        render_inline_stmt(&mut piece, s, 0);
+        !piece.trim_end_matches('\n').contains('\n')
+    })
 }
 
 /// `{ stmt; stmt; ... }` on one generated line — [`TsStmtKind::InlineBlock`]'s
@@ -1097,7 +1155,7 @@ fn needs_parens_as_operand(expr: &TsExpr) -> bool {
 /// re-read as `(new f()).g()`.
 fn new_callee_needs_parens(callee: &TsExpr) -> bool {
     match callee {
-        TsExpr::Call { .. } | TsExpr::New { .. } => true,
+        TsExpr::Call { .. } | TsExpr::DefaultIife { .. } | TsExpr::New { .. } => true,
         TsExpr::Member { object, .. }
         | TsExpr::OptionalMember { object, .. }
         | TsExpr::Index { object, .. }
@@ -1294,6 +1352,7 @@ fn render_binary_operand(
         | TsExpr::OptionalIndex { .. }
         | TsExpr::TypeApp { .. }
         | TsExpr::Call { .. }
+        | TsExpr::DefaultIife { .. }
         | TsExpr::New { .. }
         | TsExpr::Object { .. }
         | TsExpr::Array { .. }
@@ -1655,6 +1714,23 @@ fn render_expr(out: &mut String, expr: &TsExpr, depth: usize, m: &mut Option<Mer
             out.push_str(" => ");
             render_arrow_body(out, body, depth, m);
         }
+        // 1A.21 (#3722): `((name = default): ret => { body })()`.
+        TsExpr::DefaultIife {
+            name,
+            default,
+            return_type,
+            body,
+        } => {
+            out.push_str("((");
+            out.push_str(name);
+            out.push_str(" = ");
+            render_expr(out, default, depth, m);
+            out.push_str("): ");
+            render_type(out, return_type);
+            out.push_str(" => ");
+            render_arrow_body(out, &TsArrowBody::Multiline(body.clone()), depth, m);
+            out.push_str(")()");
+        }
         TsExpr::Call { callee, args } => {
             render_operand(out, callee, depth, m);
             out.push('(');
@@ -1663,6 +1739,10 @@ fn render_expr(out: &mut String, expr: &TsExpr, depth: usize, m: &mut Option<Mer
         }
         // 1A.20 (#3721, Decision A): the instantiation expression `f<A, B>`.
         TsExpr::TypeApp { callee, type_args } => {
+            debug_assert!(
+                !type_args.is_empty(),
+                "TsExpr::TypeApp needs at least one type argument; `f<>` is a syntax error"
+            );
             render_operand(out, callee, depth, m);
             out.push('<');
             for (i, arg) in type_args.iter().enumerate() {
@@ -1913,6 +1993,7 @@ fn starts_with_object(expr: &TsExpr) -> bool {
         | TsExpr::OptionalIndex { object, .. } => starts_with_object(object),
         TsExpr::Call { callee, .. } | TsExpr::TypeApp { callee, .. } => starts_with_object(callee),
         TsExpr::As { expr, .. } => starts_with_object(expr),
+        TsExpr::DefaultIife { .. } => false,
         TsExpr::Binary { left, .. } => starts_with_object(left),
         TsExpr::Conditional { test, .. } => starts_with_object(test),
         TsExpr::Ident(_)
@@ -2441,8 +2522,13 @@ fn stmt_contains_raw(stmt: &TsStmt) -> bool {
         TsStmtKind::TryCatch {
             try_block,
             catch_block,
+            finally_block,
             ..
-        } => stmt_contains_raw(try_block) || stmt_contains_raw(catch_block),
+        } => {
+            stmt_contains_raw(try_block)
+                || catch_block.as_deref().is_some_and(stmt_contains_raw)
+                || finally_block.as_deref().is_some_and(stmt_contains_raw)
+        }
         TsStmtKind::Block(stmts) | TsStmtKind::InlineBlock(stmts) => contains_raw(stmts),
         TsStmtKind::Switch { cases, .. } => cases.iter().any(|c| contains_raw(&c.body)),
     }
@@ -4586,6 +4672,35 @@ mod tests {
         );
     }
 
+    /// `TsExpr::TypeApp` with no type arguments would print `f<>`, a syntax error.
+    #[test]
+    #[should_panic(expected = "TypeApp needs at least one type argument")]
+    fn type_app_with_no_type_arguments_is_refused() {
+        let app = TsExpr::TypeApp {
+            callee: Box::new(TsExpr::Ident("f".to_string())),
+            type_args: vec![],
+        };
+        let _ = print_expr(&TsExpr::Call {
+            callee: Box::new(app),
+            args: vec![],
+        });
+    }
+
+    /// `TsExpr::TypeApp` under a `Call` and a `New` keeps its type arguments in
+    /// order, and a bare instantiation of one argument prints `f<T>`.
+    #[test]
+    fn type_app_prints_one_and_many_type_arguments() {
+        let app = |args: Vec<TsType>| TsExpr::TypeApp {
+            callee: Box::new(TsExpr::Ident("f".to_string())),
+            type_args: args,
+        };
+        assert_eq!(print_expr(&app(vec![TsType::named("T")])), "f<T>");
+        assert_eq!(
+            print_expr(&app(vec![TsType::named("A"), TsType::named("B")])),
+            "f<A, B>"
+        );
+    }
+
     /// `TsExpr::Spread` (1A.18a, #3719): `...x` as an array item, in any
     /// position, over an identifier, a call, a bracketed operand and another
     /// array; the operand prints as it would anywhere else, with no brackets of
@@ -5925,6 +6040,157 @@ mod tests {
             printed.text,
             "try {\n  work;\n} catch (e) {\n  console.error(e); msg.retry();\n}\n"
         );
+    }
+
+    /// `TsExpr::DefaultIife` (1A.21): `((name = default): ret => { body })()`, as a call operand
+    /// and with a default that is a call or an object literal.
+    #[test]
+    fn a_default_iife_prints_its_argument_as_the_parameter_default() {
+        let id = |n: &str| TsExpr::Ident(n.to_string());
+        let iife = |default: TsExpr| TsExpr::DefaultIife {
+            name: "__pv".to_string(),
+            default: Box::new(default),
+            return_type: TsType::named("string"),
+            body: vec![TsStmt::return_stmt(Some(id("__pv")), None)],
+        };
+        assert_eq!(
+            print_expr(&iife(id("p"))),
+            "((__pv = p): string => {\n  return __pv;\n})()"
+        );
+        let object = TsExpr::object(vec![("a".to_string(), id("b"))]);
+        assert!(print_expr(&iife(object)).starts_with("((__pv = { a: b }): string => {"));
+        let member = TsExpr::Member {
+            object: Box::new(iife(id("p"))),
+            property: "length".to_string(),
+        };
+        assert!(print_expr(&member).ends_with("})().length"));
+    }
+
+    /// An `if` whose inline block holds a multi-line expression (a block-bodied arrow in a
+    /// call argument, 1A.21) cannot be one line, so it takes the braced form, while a block of
+    /// one-line statements keeps `{ a; }`.
+    #[test]
+    fn an_inline_block_with_a_multiline_statement_takes_braces() {
+        let id = |n: &str| TsExpr::Ident(n.to_string());
+        let arrow = TsExpr::Arrow {
+            params: vec![],
+            is_async: false,
+            generics: Vec::new(),
+            return_type: None,
+            body: Box::new(TsArrowBody::Multiline(vec![TsStmt::return_stmt(
+                Some(id("x")),
+                None,
+            )])),
+        };
+        let throw = |e: TsExpr| {
+            TsStmt::throw_stmt(
+                TsExpr::Call {
+                    callee: Box::new(id("fail")),
+                    args: vec![e],
+                },
+                None,
+            )
+        };
+        let text = |stmt: TsStmt| {
+            let mut program = TsProgram::new();
+            program.push(stmt);
+            print(&program, "x.bynk", "", "x.ts").text
+        };
+        assert_eq!(
+            text(TsStmt::if_stmt(
+                id("c"),
+                TsStmt::inline_block(vec![throw(id("m"))], None),
+                None
+            )),
+            "if (c) { throw fail(m); }\n"
+        );
+        assert_eq!(
+            text(TsStmt::if_stmt(
+                id("c"),
+                TsStmt::inline_block(vec![throw(TsExpr::Paren(Box::new(arrow)))], None),
+                None
+            )),
+            "if (c) {\n  throw fail((() => {\n    return x;\n  }));\n}\n"
+        );
+    }
+
+    /// `TsStmtKind::TryCatch` with an optional `catch` and a `finally` (1A.21, #3722,
+    /// Decision C; reused by 1A.32): `try`/`catch`, `try`/`finally` and
+    /// `try`/`catch`/`finally`, with and without a catch binding.
+    #[test]
+    fn a_try_prints_catch_finally_or_both() {
+        let work = || {
+            TsStmt::block(
+                vec![TsStmt::expr_stmt(TsExpr::Ident("work".to_string()), None)],
+                None,
+            )
+        };
+        let handle = || {
+            TsStmt::block(
+                vec![TsStmt::expr_stmt(TsExpr::Ident("handle".to_string()), None)],
+                None,
+            )
+        };
+        let tidy = || {
+            TsStmt::block(
+                vec![TsStmt::expr_stmt(TsExpr::Ident("tidy".to_string()), None)],
+                None,
+            )
+        };
+        let text = |stmt: TsStmt| {
+            let mut program = TsProgram::new();
+            program.push(stmt);
+            print(&program, "x.bynk", "", "x.ts").text
+        };
+        assert_eq!(
+            text(TsStmt::try_catch(work(), Some("e"), handle(), None)),
+            "try {\n  work;\n} catch (e) {\n  handle;\n}\n"
+        );
+        assert_eq!(
+            text(TsStmt::try_finally(work(), tidy(), None)),
+            "try {\n  work;\n} finally {\n  tidy;\n}\n"
+        );
+        assert_eq!(
+            text(TsStmt::try_catch_finally(
+                work(),
+                Some("e"),
+                handle(),
+                tidy(),
+                None
+            )),
+            "try {\n  work;\n} catch (e) {\n  handle;\n} finally {\n  tidy;\n}\n"
+        );
+        assert_eq!(
+            text(TsStmt::try_catch_finally(
+                work(),
+                None::<String>,
+                handle(),
+                tidy(),
+                None
+            )),
+            "try {\n  work;\n} catch {\n  handle;\n} finally {\n  tidy;\n}\n"
+        );
+    }
+
+    /// A `try` with neither a `catch` nor a `finally` is a syntax error, so the printer
+    /// refuses it.
+    #[test]
+    #[should_panic(expected = "needs a `catch` or a `finally`")]
+    fn a_bare_try_is_refused() {
+        let mut program = TsProgram::new();
+        program.push(TsStmt {
+            kind: TsStmtKind::TryCatch {
+                try_block: Box::new(TsStmt::block(vec![], None)),
+                catch_param: None,
+                catch_block: None,
+                finally_block: None,
+            },
+            span: None,
+            nested_map: None,
+            no_blank_before: false,
+            nested_map_source_id: 0,
+        });
+        let _ = print(&program, "x.bynk", "", "x.ts");
     }
 
     /// #1323's own real gap: `TsBinaryOp::GreaterThan` — the request-body

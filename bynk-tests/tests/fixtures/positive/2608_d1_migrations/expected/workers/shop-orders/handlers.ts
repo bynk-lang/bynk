@@ -37,17 +37,28 @@ export const listing = {
       case "Ok": {
         const text = rows.value;
         return ((__d) => {
-    switch (__d.tag) {
-      case "Ok": {
-        const orders = __d.value;
-        return Ok(orders);
-      }
-      case "Err": {
-        return Err("rows did not decode");
-      }
-    }
-    throw new globalThis.Error("non-exhaustive match");
-  })(((__s: string): Result<readonly Order[], DecodeError> => { let __j: __JsonValue; try { __j = globalThis.JSON.parse(__s) as __JsonValue; } catch (__e) { return Err({ kind: "Malformed", path: "$", message: String(__e) }); } const __r = __deserialise_List_Order(__j, "$"); if (__r.tag === "Ok") return Ok(__r.value as readonly Order[]); const __be = __r.error; return Err({ kind: __be.kind, path: (__be.kind === "StructuralMismatch" || __be.kind === "RefinementViolation") ? __be.path : "$", message: __be.kind === "StructuralMismatch" ? `expected ${__be.expected}, got ${String(__be.actual)}` : __be.kind === "RefinementViolation" ? __be.violation.message : __be.details }); })(text));
+          switch (__d.tag) {
+            case "Ok": {
+              const orders = __d.value;
+              return Ok(orders);
+            }
+            case "Err": {
+              return Err("rows did not decode");
+            }
+          }
+          throw new globalThis.Error("non-exhaustive match");
+        })(((__s: string): Result<readonly Order[], DecodeError> => {
+          let __j: __JsonValue;
+          try {
+            __j = globalThis.JSON.parse(__s) as __JsonValue;
+          } catch (__e) {
+            return Err({ kind: "Malformed", path: "$", message: String(__e) });
+          }
+          const __r = __deserialise_List_Order(__j, "$");
+          if (__r.tag === "Ok") return Ok(__r.value as readonly Order[]);
+          const __be = __r.error;
+          return Err({ kind: __be.kind, path: (__be.kind === "StructuralMismatch" || __be.kind === "RefinementViolation") ? __be.path : "$", message: __be.kind === "StructuralMismatch" ? `expected ${__be.expected}, got ${String(__be.actual)}` : __be.kind === "RefinementViolation" ? __be.violation.message : __be.details });
+        })(text));
       }
       case "Err": {
         return Err("query failed");

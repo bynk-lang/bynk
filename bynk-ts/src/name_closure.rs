@@ -738,12 +738,18 @@ impl Walk {
                 try_block,
                 catch_param,
                 catch_block,
+                finally_block,
             } => {
                 if let Some(p) = catch_param {
                     self.bind(p);
                 }
                 self.stmt(try_block);
-                self.stmt(catch_block);
+                if let Some(c) = catch_block {
+                    self.stmt(c);
+                }
+                if let Some(f) = finally_block {
+                    self.stmt(f);
+                }
             }
             TsStmtKind::Block(stmts) | TsStmtKind::InlineBlock(stmts) => self.stmts(stmts),
             TsStmtKind::Assign { target, value } => {
@@ -903,6 +909,18 @@ impl Walk {
                     TsArrowBody::Expr(e) => self.expr(e),
                     TsArrowBody::Block(stmts) | TsArrowBody::Multiline(stmts) => self.stmts(stmts),
                 }
+            }
+            // 1A.21: the default is read in the enclosing scope; the parameter is bound for the body.
+            TsExpr::DefaultIife {
+                name,
+                default,
+                return_type,
+                body,
+            } => {
+                self.expr(default);
+                self.bind(name);
+                self.ty(return_type);
+                self.stmts(body);
             }
             TsExpr::Call { callee, args } | TsExpr::New { callee, args } => {
                 self.expr(callee);
@@ -1207,6 +1225,25 @@ mod tests {
             codec("__serialise_Note", "Note", "__serialise_Base"),
         ]);
         assert_eq!(unbound_names(&p), ["Note"]);
+    }
+
+    /// 1A.21: a `DefaultIife`'s default is a name use, so a name only the default uses is unbound
+    /// when nothing declares it.
+    #[test]
+    fn a_default_iife_default_is_a_name_use() {
+        let iife = |name: &str| TsExpr::DefaultIife {
+            name: "p".to_string(),
+            default: Box::new(TsExpr::Ident(name.to_string())),
+            return_type: TsType::named("string"),
+            body: vec![TsStmt::return_stmt(
+                Some(TsExpr::Ident("p".to_string())),
+                None,
+            )],
+        };
+        let p = program(vec![TsStmt::expr_stmt(iife("missing"), None)]);
+        assert_eq!(unbound_names(&p), ["missing"]);
+        let p = program(vec![TsStmt::expr_stmt(iife("Err"), None), import(&["Err"])]);
+        assert!(unbound_names(&p).is_empty(), "{:?}", unbound_names(&p));
     }
 
     #[test]

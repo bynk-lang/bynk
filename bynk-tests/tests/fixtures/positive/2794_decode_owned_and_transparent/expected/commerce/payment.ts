@@ -24,7 +24,18 @@ export const Token = {
 };
 
 export function parse(raw: string): Result<Token, DecodeError> {
-  return ((__s: string): Result<Token, DecodeError> => { let __j: __JsonValue; try { __j = globalThis.JSON.parse(__s) as __JsonValue; } catch (__e) { return Err({ kind: "Malformed", path: "$", message: String(__e) }); } const __r = __deserialise_Token(__j, "$"); if (__r.tag === "Ok") return Ok(__r.value as Token); const __be = __r.error; return Err({ kind: __be.kind, path: (__be.kind === "StructuralMismatch" || __be.kind === "RefinementViolation") ? __be.path : "$", message: __be.kind === "StructuralMismatch" ? `expected ${__be.expected}, got ${String(__be.actual)}` : __be.kind === "RefinementViolation" ? __be.violation.message : __be.details }); })(raw);
+  return ((__s: string): Result<Token, DecodeError> => {
+    let __j: __JsonValue;
+    try {
+      __j = globalThis.JSON.parse(__s) as __JsonValue;
+    } catch (__e) {
+      return Err({ kind: "Malformed", path: "$", message: String(__e) });
+    }
+    const __r = __deserialise_Token(__j, "$");
+    if (__r.tag === "Ok") return Ok(__r.value as Token);
+    const __be = __r.error;
+    return Err({ kind: __be.kind, path: (__be.kind === "StructuralMismatch" || __be.kind === "RefinementViolation") ? __be.path : "$", message: __be.kind === "StructuralMismatch" ? `expected ${__be.expected}, got ${String(__be.actual)}` : __be.kind === "RefinementViolation" ? __be.violation.message : __be.details });
+  })(raw);
 }
 
 export const authorise = {

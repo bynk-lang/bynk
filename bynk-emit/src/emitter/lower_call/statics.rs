@@ -12,12 +12,13 @@ use bynk_ts::{
 
 use super::super::lower::{
     Built, LoweredExpr, Pre, built_of, call_built, ident_node, lower_http_variant_args,
-    lower_json_codec_call, member_node, node_or_text, runtime_ctor_call, settle_built,
+    member_node, node_or_text, runtime_ctor_call, settle_built,
 };
 use super::super::lower_ctx::LowerCtx;
 use super::super::lower_list::key_is_plain;
 use super::super::ts_types::{ts_ty_to_ts_type, ts_type_ref_to_ts_type};
 use super::super::{Expr, ExprKind, Ident, TypeRef};
+use super::codec_statics::lower_json_codec_call;
 
 /// `a.b`.
 fn member(object: TsExpr, property: &str) -> TsExpr {
@@ -361,7 +362,7 @@ pub(in crate::emitter) fn lower_scalar_static_call(
     // v0.22b: the typed JSON codec (ADR 0045).
     // 1A: the codec's decoders and encoders are their own family (1A.21); it
     // stays as it is, and a node it returns passes through.
-    if let Some(built) = pre.absorb_built(lower_json_codec_call(e, receiver, method, args, cx)) {
+    if let Some(built) = lower_json_codec_call(e, receiver, method, args, cx, pre) {
         return Some(built);
     }
     // K6b (#2598): `Float.pi()` and `Float.e()`.

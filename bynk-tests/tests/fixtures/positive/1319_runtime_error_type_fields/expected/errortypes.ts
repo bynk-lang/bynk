@@ -22,7 +22,18 @@ export function save(w: WithErrors): string {
 }
 
 export function load(s: string): Result<WithErrors, DecodeError> {
-  return ((__s: string): Result<WithErrors, DecodeError> => { let __j: __JsonValue; try { __j = globalThis.JSON.parse(__s) as __JsonValue; } catch (__e) { return Err({ kind: "Malformed", path: "$", message: String(__e) }); } const __r = __deserialise_WithErrors(__j, "$"); if (__r.tag === "Ok") return Ok(__r.value as WithErrors); const __be = __r.error; return Err({ kind: __be.kind, path: (__be.kind === "StructuralMismatch" || __be.kind === "RefinementViolation") ? __be.path : "$", message: __be.kind === "StructuralMismatch" ? `expected ${__be.expected}, got ${String(__be.actual)}` : __be.kind === "RefinementViolation" ? __be.violation.message : __be.details }); })(s);
+  return ((__s: string): Result<WithErrors, DecodeError> => {
+    let __j: __JsonValue;
+    try {
+      __j = globalThis.JSON.parse(__s) as __JsonValue;
+    } catch (__e) {
+      return Err({ kind: "Malformed", path: "$", message: String(__e) });
+    }
+    const __r = __deserialise_WithErrors(__j, "$");
+    if (__r.tag === "Ok") return Ok(__r.value as WithErrors);
+    const __be = __r.error;
+    return Err({ kind: __be.kind, path: (__be.kind === "StructuralMismatch" || __be.kind === "RefinementViolation") ? __be.path : "$", message: __be.kind === "StructuralMismatch" ? `expected ${__be.expected}, got ${String(__be.actual)}` : __be.kind === "RefinementViolation" ? __be.violation.message : __be.details });
+  })(s);
 }
 
 export function __serialise_WithErrors(value: WithErrors): __JsonValue {

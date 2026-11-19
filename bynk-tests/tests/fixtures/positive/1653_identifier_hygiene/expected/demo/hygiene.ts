@@ -309,7 +309,18 @@ export function keywordSum(k: Keyword): number {
 }
 
 export function keywordRoundTrip(k: Keyword): boolean {
-  const __r0 = ((__s: string): Result<Keyword, DecodeError> => { let __j: __JsonValue; try { __j = globalThis.JSON.parse(__s) as __JsonValue; } catch (__e) { return Err({ kind: "Malformed", path: "$", message: String(__e) }); } const __r = __deserialise_Keyword(__j, "$"); if (__r.tag === "Ok") return Ok(__r.value as Keyword); const __be = __r.error; return Err({ kind: __be.kind, path: (__be.kind === "StructuralMismatch" || __be.kind === "RefinementViolation") ? __be.path : "$", message: __be.kind === "StructuralMismatch" ? `expected ${__be.expected}, got ${String(__be.actual)}` : __be.kind === "RefinementViolation" ? __be.violation.message : __be.details }); })(globalThis.JSON.stringify(__serialise_Keyword(k)));
+  const __r0 = ((__s: string): Result<Keyword, DecodeError> => {
+    let __j: __JsonValue;
+    try {
+      __j = globalThis.JSON.parse(__s) as __JsonValue;
+    } catch (__e) {
+      return Err({ kind: "Malformed", path: "$", message: String(__e) });
+    }
+    const __r = __deserialise_Keyword(__j, "$");
+    if (__r.tag === "Ok") return Ok(__r.value as Keyword);
+    const __be = __r.error;
+    return Err({ kind: __be.kind, path: (__be.kind === "StructuralMismatch" || __be.kind === "RefinementViolation") ? __be.path : "$", message: __be.kind === "StructuralMismatch" ? `expected ${__be.expected}, got ${String(__be.actual)}` : __be.kind === "RefinementViolation" ? __be.violation.message : __be.details });
+  })(globalThis.JSON.stringify(__serialise_Keyword(k)));
   switch (__r0.tag) {
     case "Ok": {
       const back = __r0.value;
@@ -384,7 +395,18 @@ export function encodeLabel(l: Labelled): string {
 }
 
 export function roundTrip(l: Labelled): boolean {
-  const __r0 = ((__s: string): Result<Labelled, DecodeError> => { let __j: __JsonValue; try { __j = globalThis.JSON.parse(__s) as __JsonValue; } catch (__e) { return Err({ kind: "Malformed", path: "$", message: String(__e) }); } const __r = __deserialise_Labelled(__j, "$"); if (__r.tag === "Ok") return Ok(__r.value as Labelled); const __be = __r.error; return Err({ kind: __be.kind, path: (__be.kind === "StructuralMismatch" || __be.kind === "RefinementViolation") ? __be.path : "$", message: __be.kind === "StructuralMismatch" ? `expected ${__be.expected}, got ${String(__be.actual)}` : __be.kind === "RefinementViolation" ? __be.violation.message : __be.details }); })(globalThis.JSON.stringify(__serialise_Labelled(l)));
+  const __r0 = ((__s: string): Result<Labelled, DecodeError> => {
+    let __j: __JsonValue;
+    try {
+      __j = globalThis.JSON.parse(__s) as __JsonValue;
+    } catch (__e) {
+      return Err({ kind: "Malformed", path: "$", message: String(__e) });
+    }
+    const __r = __deserialise_Labelled(__j, "$");
+    if (__r.tag === "Ok") return Ok(__r.value as Labelled);
+    const __be = __r.error;
+    return Err({ kind: __be.kind, path: (__be.kind === "StructuralMismatch" || __be.kind === "RefinementViolation") ? __be.path : "$", message: __be.kind === "StructuralMismatch" ? `expected ${__be.expected}, got ${String(__be.actual)}` : __be.kind === "RefinementViolation" ? __be.violation.message : __be.details });
+  })(globalThis.JSON.stringify(__serialise_Labelled(l)));
   switch (__r0.tag) {
     case "Ok": {
       const back = __r0.value;

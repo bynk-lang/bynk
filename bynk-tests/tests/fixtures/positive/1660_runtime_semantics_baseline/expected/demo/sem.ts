@@ -48,7 +48,18 @@ export function literalReplace(): string {
 }
 
 export function survivesJson(l: Light): boolean {
-  const __r0 = ((__s: string): Result<Light, DecodeError> => { let __j: __JsonValue; try { __j = globalThis.JSON.parse(__s) as __JsonValue; } catch (__e) { return Err({ kind: "Malformed", path: "$", message: String(__e) }); } const __r = __deserialise_Light(__j, "$"); if (__r.tag === "Ok") return Ok(__r.value as Light); const __be = __r.error; return Err({ kind: __be.kind, path: (__be.kind === "StructuralMismatch" || __be.kind === "RefinementViolation") ? __be.path : "$", message: __be.kind === "StructuralMismatch" ? `expected ${__be.expected}, got ${String(__be.actual)}` : __be.kind === "RefinementViolation" ? __be.violation.message : __be.details }); })(globalThis.JSON.stringify(__serialise_Light(l)));
+  const __r0 = ((__s: string): Result<Light, DecodeError> => {
+    let __j: __JsonValue;
+    try {
+      __j = globalThis.JSON.parse(__s) as __JsonValue;
+    } catch (__e) {
+      return Err({ kind: "Malformed", path: "$", message: String(__e) });
+    }
+    const __r = __deserialise_Light(__j, "$");
+    if (__r.tag === "Ok") return Ok(__r.value as Light);
+    const __be = __r.error;
+    return Err({ kind: __be.kind, path: (__be.kind === "StructuralMismatch" || __be.kind === "RefinementViolation") ? __be.path : "$", message: __be.kind === "StructuralMismatch" ? `expected ${__be.expected}, got ${String(__be.actual)}` : __be.kind === "RefinementViolation" ? __be.violation.message : __be.details });
+  })(globalThis.JSON.stringify(__serialise_Light(l)));
   switch (__r0.tag) {
     case "Ok": {
       const decoded = __r0.value;

@@ -505,7 +505,7 @@ pub(super) fn emit_system_http_support(
                             let ser = bynk_ts::print_expr(
                                 &bynk_emit::emitter::serialisation::serialise_expr_via(
                                     record,
-                                    &var,
+                                    &bynk_ts::TsExpr::Ident(var.clone()),
                                     &type_ns,
                                     runtime_use,
                                 ),
@@ -756,7 +756,7 @@ pub(super) fn emit_system_http_support(
                     let ser = bynk_ts::print_expr(
                         &bynk_emit::emitter::serialisation::serialise_expr_via(
                             &p.type_ref,
-                            &bynk_emit::emitter::ts_ident(&p.name.name),
+                            &bynk_ts::TsExpr::Ident(bynk_emit::emitter::ts_ident(&p.name.name)),
                             &type_ns,
                             runtime_use,
                         ),
@@ -783,7 +783,7 @@ pub(super) fn emit_system_http_support(
                     let ser = bynk_ts::print_expr(
                         &bynk_emit::emitter::serialisation::serialise_expr_via(
                             &p.type_ref,
-                            &bynk_emit::emitter::ts_ident(&p.name.name),
+                            &bynk_ts::TsExpr::Ident(bynk_emit::emitter::ts_ident(&p.name.name)),
                             &type_ns,
                             runtime_use,
                         ),
@@ -825,7 +825,7 @@ pub(super) fn emit_system_http_support(
                     let ser = bynk_ts::print_expr(
                         &bynk_emit::emitter::serialisation::serialise_expr_via(
                             &p.type_ref,
-                            &bynk_emit::emitter::ts_ident(&p.name.name),
+                            &bynk_ts::TsExpr::Ident(bynk_emit::emitter::ts_ident(&p.name.name)),
                             &type_ns,
                             runtime_use,
                         ),
@@ -1576,7 +1576,7 @@ pub(super) fn emit_system_job_support(
                 let body =
                     bynk_ts::print_expr(&bynk_emit::emitter::serialisation::serialise_expr_via(
                         &p.type_ref,
-                        &param,
+                        &bynk_ts::TsExpr::Ident(param.clone()),
                         &type_ns,
                         runtime_use,
                     ));
@@ -1833,7 +1833,7 @@ fn cookie_header_texts(
     runtime_use.note_cookie_string();
     let ser = bynk_ts::print_expr(&bynk_emit::emitter::serialisation::serialise_expr_via(
         &p.type_ref,
-        &var,
+        &bynk_ts::TsExpr::Ident(var.clone()),
         type_ns,
         runtime_use,
     ));
