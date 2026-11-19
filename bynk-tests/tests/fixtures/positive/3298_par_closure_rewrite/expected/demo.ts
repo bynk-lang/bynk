@@ -158,13 +158,13 @@ export class Tally {
         return undefined;
       })();
       const seen = await (async (__xs: readonly number[]) => await __bynkSettleAll(__xs.map((__x: number) => () => (async (i: number) => {
-    const o = await (async () => {
-      const __k = String("k");
-      return __bynkThen(__state.counts.has(__k), (__h) => __h ? __bynkThen(__state.counts.get(__k), (__v) => Some(__v!)) : None);
-    })();
-    const r: Result<number, string> = Ok(((__o: Option<number>, __d: number) => __o.tag === "Some" ? __o.value : __d)(o, 0));
-    return r;
-  })(__x))))([1, 2]);
+        const o = await (async () => {
+          const __k = String("k");
+          return __bynkThen(__state.counts.has(__k), (__h) => __h ? __bynkThen(__state.counts.get(__k), (__v) => Some(__v!)) : None);
+        })();
+        const r: Result<number, string> = Ok(((__o: Option<number>, __d: number) => __o.tag === "Some" ? __o.value : __d)(o, 0));
+        return r;
+      })(__x))))([1, 2]);
       const __r1 = await __bynkThen(((() => __state.counts.values()))(), (__q) => (async () => {
         await __bynkSettleAll(__q.map((__x) => () => (async (v: number) => __makeHits("h").bump(v, deps))(__x)));
       })());

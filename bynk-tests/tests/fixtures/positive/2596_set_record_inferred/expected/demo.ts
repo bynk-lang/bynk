@@ -14,7 +14,7 @@ export const Point = {
 };
 
 export function size(p: Point): number {
-  return (__bynkSetOf<Point>([p])).size;
+  return __bynkSetOf<Point>([p]).size;
 }
 
 export const probe = {

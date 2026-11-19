@@ -73,7 +73,7 @@ async function test_a_set_goes_out_and_comes_back_merged() {
     __bynkClockNow = 0;
     const deps = __makeHarness();
     const all = await __callService(deps.env.CLUB_ROSTER, "members", __ns_club_roster.__serialise_Set_String(new globalThis.Set<string>(["cy", "ada"])), __ns_club_roster.__deserialise_Set_String, "integration", "a47af6d47d577cc2", deps.env, "club.roster");
-    if (!(__bynkEq(([...(all)] as readonly string[]), ["ada", "bo", "cy"]))) { throw __bynkExpectFailure("tests/system.bynk:5:12", 212, 247, "expect all.toList() == [\"ada\", \"bo\", \"cy\"]\n  expected: all.toList() == [\"ada\", \"bo\", \"cy\"]\n  actual:   " + __bynkShow((([...(all)] as readonly string[]))) + " == " + __bynkShow((["ada", "bo", "cy"]))); }
+    if (!(__bynkEq(([...all] as readonly string[]), ["ada", "bo", "cy"]))) { throw __bynkExpectFailure("tests/system.bynk:5:12", 212, 247, "expect all.toList() == [\"ada\", \"bo\", \"cy\"]\n  expected: all.toList() == [\"ada\", \"bo\", \"cy\"]\n  actual:   " + __bynkShow((([...all] as readonly string[]))) + " == " + __bynkShow((["ada", "bo", "cy"]))); }
     return { pass: true };
   } catch (e) {
     if (e instanceof ExpectationError) {

@@ -107,6 +107,8 @@ mod integration {
     mod inspect_agents;
     #[path = "interpolation.rs"]
     mod interpolation;
+    #[path = "kernel_container_nodes.rs"]
+    mod kernel_container_nodes;
     #[path = "kernel_nodes.rs"]
     mod kernel_nodes;
     #[path = "kernel_registry.rs"]

@@ -724,25 +724,50 @@ mod tests {
         assert!(ts.contains("__bynkSetOf"), "{ts}");
 
         // A text argument falls back to today's text, with the import still noted.
-        let (n, ts) = exits("fn f(m: Map[String, Bytes]) -> Set[Bytes] { Set.of(m.values()) }");
+        let text_list = |elem: &str| {
+            let (n, ts) = exits(&format!(
+                "fn f(p: String, c: {elem}) -> List[{elem}] {{ p.splitRegex(\",\").map((x) => c) }}"
+            ));
+            assert!(n > 0, "{ts}");
+            returned(&ts)
+        };
+        let (n, ts) = exits(
+            "fn f(p: String, c: Bytes) -> Set[Bytes] { Set.of(p.splitRegex(\",\").map((x) => c)) }",
+        );
         assert_eq!(
             returned(&ts),
-            "__bynkSetOf<globalThis.Uint8Array>([...(m).values()])"
+            format!("__bynkSetOf<globalThis.Uint8Array>({})", text_list("Bytes"))
         );
         assert!(n > 0, "{ts}");
         assert!(ts.contains("__bynkSetOf"), "{ts}");
-        let (_, ts) = exits("fn f(m: Map[String, Int]) -> Set[Int] { Set.of(m.values()) }");
+        let (_, ts) = exits(
+            "fn f(p: String, c: Int) -> Set[Int] { Set.of(p.splitRegex(\",\").map((x) => c)) }",
+        );
         assert_eq!(
             returned(&ts),
-            "new globalThis.Set<number>([...(m).values()])"
+            format!("new globalThis.Set<number>({})", text_list("Int"))
         );
     }
 
-    /// An `Option` `getOrElse` is still a kernel text.
-    const TEXT_ARG: &str =
-        "((__o: Option<string>, __d: string) => __o.tag === \"Some\" ? __o.value : __d)(o, \"\")";
+    /// The source of a `String` that is still text: `String.splitRegex`'s arm is a statement block,
+    /// so the `List` kernel over it is text too (1A.30 moved the `Option` kernels to nodes).
+    const TEXT_STRING: &str = "p.splitRegex(\",\").map((x) => \"\").firstOrElse(\"\")";
 
-    /// A static over a text argument (an `Option` `getOrElse` is still a kernel text) falls
+    /// `p.splitRegex(",")` as printed.
+    fn split_text() -> String {
+        let (n, ts) = exits("fn f(p: String) -> List[String] { p.splitRegex(\",\") }");
+        assert!(n > 0, "{ts}");
+        returned(&ts)
+    }
+
+    /// [`TEXT_STRING`] as printed.
+    fn text_arg() -> String {
+        let (n, ts) = exits(&format!("fn f(p: String) -> String {{ {TEXT_STRING} }}"));
+        assert!(n > 0, "{ts}");
+        returned(&ts)
+    }
+
+    /// A static over a text argument (a `splitRegex` list is still text) falls
     /// back to today's text, byte for byte.
     #[test]
     fn a_text_argument_keeps_the_text_form() {
@@ -750,38 +775,38 @@ mod tests {
             INT_RE,
             "globalThis.Number(__s) + 0",
             "globalThis.Number.isSafeInteger(__n)",
-            TEXT_ARG,
+            &text_arg(),
         );
         let float_parse = parse_text(
             FLOAT_RE,
             "globalThis.Number(__s)",
             "globalThis.Number.isFinite(__n)",
-            TEXT_ARG,
+            &text_arg(),
         );
         for (body, want) in [
             (
-                "fn f(o: Option[String]) -> Option[Int] { Int.parse(o.getOrElse(\"\")) }",
+                "fn f(p: String) -> Option[Int] { Int.parse(p.splitRegex(\",\").map((x) => \"\").firstOrElse(\"\")) }",
                 int_parse,
             ),
             (
-                "fn f(o: Option[String]) -> Option[Float] { Float.parse(o.getOrElse(\"\")) }",
+                "fn f(p: String) -> Option[Float] { Float.parse(p.splitRegex(\",\").map((x) => \"\").firstOrElse(\"\")) }",
                 float_parse,
             ),
             (
-                "fn f(o: Option[String]) -> Option[Instant] { Instant.fromIso(o.getOrElse(\"\")) }",
-                format!("__bynkInstantFromIso({TEXT_ARG})"),
+                "fn f(p: String) -> Option[Instant] { Instant.fromIso(p.splitRegex(\",\").map((x) => \"\").firstOrElse(\"\")) }",
+                format!("__bynkInstantFromIso({})", text_arg()),
             ),
             (
-                "fn f(o: Option[String]) -> Bytes { Bytes.fromUtf8(o.getOrElse(\"\")) }",
-                format!("new globalThis.TextEncoder().encode({TEXT_ARG})"),
+                "fn f(p: String) -> Bytes { Bytes.fromUtf8(p.splitRegex(\",\").map((x) => \"\").firstOrElse(\"\")) }",
+                format!("new globalThis.TextEncoder().encode({})", text_arg()),
             ),
             (
-                "fn f(o: Option[String]) -> Option[Decimal] { Decimal.parse(o.getOrElse(\"\")) }",
-                format!("__bynkDecimalParse({TEXT_ARG})"),
+                "fn f(p: String) -> Option[Decimal] { Decimal.parse(p.splitRegex(\",\").map((x) => \"\").firstOrElse(\"\")) }",
+                format!("__bynkDecimalParse({})", text_arg()),
             ),
             (
-                "fn f(s: Set[String]) -> Duration { Duration.millis(s.length()) }",
-                "(s).size".to_string(),
+                "fn f(p: String) -> Duration { Duration.millis(p.splitRegex(\",\").length()) }",
+                format!("({}).length", split_text()),
             ),
         ] {
             let (n, ts) = exits(body);
@@ -837,9 +862,9 @@ mod tests {
             assert_eq!(n, 0, "{f}: text exits\n{ts}");
         }
         let (n, ts) = exits(&format!(
-            "{box_}fn f(s: Set[String]) -> Box[Int] {{ Box.of(s.length()) }}"
+            "{box_}fn f(p: String) -> Box[Int] {{ Box.of(p.splitRegex(\",\").length()) }}"
         ));
-        assert_eq!(returned(&ts), "Box.of((s).size)");
+        assert_eq!(returned(&ts), format!("Box.of(({}).length)", split_text()));
         assert!(n > 0, "{ts}");
         // A comparator witness follows the arguments.
         let (n, ts) = exits(
@@ -878,17 +903,14 @@ mod tests {
         }
     }
 
-    /// Decision G, the pass-through: a delegated kernel that is still text
-    /// reaches the call's caller as the same text, byte for byte (one call per
-    /// kernel family).
+    /// Decision G, the pass-through: a delegated kernel reaches the call's caller as
+    /// the print it has (one call per kernel family). The `Map` and `Set` arms are
+    /// nodes since 1A.30, so their receivers print without the text form's brackets.
     #[test]
     fn delegated_kernels_print_as_before() {
         for (body, want) in [
-            (
-                "fn f(m: Map[String, Int]) -> Int { m.length() }",
-                "(m).size",
-            ),
-            ("fn f(s: Set[Int]) -> Bool { s.contains(1) }", "(s).has(1)"),
+            ("fn f(m: Map[String, Int]) -> Int { m.length() }", "m.size"),
+            ("fn f(s: Set[Int]) -> Bool { s.contains(1) }", "s.has(1)"),
             ("fn f(n: Int) -> Int { n.abs() }", "globalThis.Math.abs(n)"),
             (
                 "fn f(x: Float) -> Int { x.floor() }",

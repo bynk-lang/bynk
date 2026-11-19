@@ -97,7 +97,7 @@ consumes commerce.payment
 
 service placeOrder {
   on call(total: Int) -> Effect[Result[Int, Int]] {
-    let _ <- commerce.payment.authorise(Some(true).getOrElse(false))
+    let _ <- commerce.payment.authorise(\"a\".splitRegex(\",\").length() > 0)
     Ok(total)
   }
 }
@@ -288,7 +288,7 @@ fn a_text_argument_falls_back_byte_for_byte() {
     for (fixture, call) in [
         (
             "97_simple_cross_context_call",
-            "await deps.surface.payment.authorise(((__o: Option<boolean>, __d: boolean) => __o.tag === \"Some\" ? __o.value : __d)(Some(true), false))",
+            "await deps.surface.payment.authorise((((__s: string, __r: globalThis.RegExp): readonly string[] => { if (__s.length === 0) { return __r.exec(__s) === null ? [\"\"] : []; } const __out: string[] = []; let __p = 0; let __q = 0; while (__q < __s.length) { __r.lastIndex = __q; const __hit = __r.exec(__s); const __e = __r.lastIndex; if (__hit === null || __e === __p) { __q++; } else { __out.push(__s.slice(__p, __q)); __p = __e; __q = __p; } } __out.push(__s.slice(__p)); return __out; })(\"a\", new globalThis.RegExp(\",\", \"y\"))).length > 0)",
         ),
         (
             "118_workers_target_with_consume",

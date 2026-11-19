@@ -18,6 +18,9 @@ use super::super::lower_list::{
 };
 use super::super::ts_types::{ts_ty, ts_ty_to_ts_type};
 use super::super::*;
+use super::kernel_container::{
+    lower_map_kernel, lower_option_kernel, lower_result_kernel, lower_set_kernel,
+};
 use super::kernel_scalar::{
     lower_bytes_kernel, lower_decimal_kernel, lower_duration_kernel, lower_float_kernel,
     lower_instant_kernel, lower_int_kernel, lower_string_kernel,

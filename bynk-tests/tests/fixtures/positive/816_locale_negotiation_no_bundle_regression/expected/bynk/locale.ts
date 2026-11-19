@@ -16,22 +16,29 @@ import { join } from "./string.js";
  * slice — it is not yet consulted.
  */
 export function render(tag: LocaleTag, msg: Message): string {
-  if ((msg.params).size === 0) {
+  if (msg.params.size === 0) {
     return msg.code;
   } else {
     const init: readonly string[] = ([] as readonly string[]);
-    const parts = reverse(((__xs: readonly string[], __acc: readonly string[], __f: (acc: readonly string[], x: string) => readonly string[]) => { for (const __x of __xs) __acc = __f(__acc, __x); return __acc; })([...[...(msg.params).keys()]].sort((__a: string, __b: string) => { const __ka = ((k: string) => k)(__a), __kb = ((k: string) => k)(__b); return __ka < __kb ? -1 : __ka > __kb ? 1 : 0; }), init, (acc: readonly string[], k: string) => ((__d) => {
-    switch (__d.tag) {
-      case "Some": {
-        const arg = __d.value;
-        return [k.concat("=").concat(renderArg(arg)), ...acc];
+    const parts = reverse(((__xs: readonly string[], __acc: readonly string[], __f: (acc: readonly string[], x: string) => readonly string[]) => {
+      for (const __x of __xs) __acc = __f(__acc, __x);
+      return __acc;
+    })([...[...msg.params.keys()]].sort((__a: string, __b: string) => {
+      const __ka = ((k: string) => k)(__a);
+      const __kb = ((k: string) => k)(__b);
+      return __ka < __kb ? -1 : __ka > __kb ? 1 : 0;
+    }), init, (acc: readonly string[], k: string) => ((__d) => {
+      switch (__d.tag) {
+        case "Some": {
+          const arg = __d.value;
+          return [k.concat("=").concat(renderArg(arg)), ...acc];
+        }
+        case "None": {
+          return acc;
+        }
       }
-      case "None": {
-        return acc;
-      }
-    }
-    throw new globalThis.Error("non-exhaustive match");
-  })(((__m: ReadonlyMap<string, MessageArg>, __k: string) => __m.has(__k) ? Some(__m.get(__k) as MessageArg) : None)(msg.params, k))));
+      throw new globalThis.Error("non-exhaustive match");
+    })(((__m: ReadonlyMap<string, MessageArg>, __k: string) => __m.has(__k) ? Some(__m.get(__k) as MessageArg) : None)(msg.params, k))));
     return msg.code.concat(" {").concat(join(parts, ", ")).concat("}");
   }
 }

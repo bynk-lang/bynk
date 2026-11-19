@@ -5,5 +5,5 @@ import { Ok, Err, Some, None, type Result, type Option } from "./__bynk_runtime/
 import type { ValidationError } from "./__bynk_runtime/errors.js";
 
 export function count(m: ReadonlyMap<globalThis.Uint8Array, number>): number {
-  return (m).size;
+  return m.size;
 }

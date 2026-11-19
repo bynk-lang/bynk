@@ -90,17 +90,17 @@ async function test_a_decoded_map_looks_up_by_value() {
     type OrderId = __ns_demo_wire.OrderId;
     type Status = __ns_demo_wire.Status;
     void (((__d) => {
-        switch (__d.tag) {
-          case "Ok": {
-            const back = __d.value;
-            return __bynkExpect((__bynkEq(((__m: ReadonlyMap<OrderId, number>, __k: OrderId) => __m.has(__k) ? Some(__m.get(__k) as number) : None)(back.totals, { n: 7, region: "eu" }), Some(3))), "tests/demo/wire.bynk:17:24", 471, 529, "expect back.totals.get(OrderId { n: 7, region: \"eu\" }) == Some(3)");
-          }
-          case "Err": {
-            return __bynkExpect((false), "tests/demo/wire.bynk:18:22", 551, 556, "expect false");
-          }
+      switch (__d.tag) {
+        case "Ok": {
+          const back = __d.value;
+          return __bynkExpect((__bynkEq(((__m: ReadonlyMap<OrderId, number>, __k: OrderId) => __m.has(__k) ? Some(__m.get(__k) as number) : None)(back.totals, { n: 7, region: "eu" }), Some(3))), "tests/demo/wire.bynk:17:24", 471, 529, "expect back.totals.get(OrderId { n: 7, region: \"eu\" }) == Some(3)");
         }
-        throw new globalThis.Error("non-exhaustive match");
-      })(((__s: string): Result<__ns_demo_wire.Ledger, DecodeError> => {
+        case "Err": {
+          return __bynkExpect((false), "tests/demo/wire.bynk:18:22", 551, 556, "expect false");
+        }
+      }
+      throw new globalThis.Error("non-exhaustive match");
+    })(((__s: string): Result<__ns_demo_wire.Ledger, DecodeError> => {
       let __j: __JsonValue;
       try {
         __j = globalThis.JSON.parse(__s) as __JsonValue;
@@ -130,17 +130,17 @@ async function test_a_decoded_set_is_keyed_by_value() {
     type OrderId = __ns_demo_wire.OrderId;
     type Status = __ns_demo_wire.Status;
     void (((__d) => {
-        switch (__d.tag) {
-          case "Ok": {
-            const back = __d.value;
-            return __bynkExpect(((back.seen).has(Status.Shipped)), "tests/demo/wire.bynk:24:24", 681, 708, "expect back.seen.contains(Shipped)");
-          }
-          case "Err": {
-            return __bynkExpect((false), "tests/demo/wire.bynk:25:22", 730, 735, "expect false");
-          }
+      switch (__d.tag) {
+        case "Ok": {
+          const back = __d.value;
+          return __bynkExpect((back.seen.has(Status.Shipped)), "tests/demo/wire.bynk:24:24", 681, 708, "expect back.seen.contains(Shipped)");
         }
-        throw new globalThis.Error("non-exhaustive match");
-      })(((__s: string): Result<__ns_demo_wire.Ledger, DecodeError> => {
+        case "Err": {
+          return __bynkExpect((false), "tests/demo/wire.bynk:25:22", 730, 735, "expect false");
+        }
+      }
+      throw new globalThis.Error("non-exhaustive match");
+    })(((__s: string): Result<__ns_demo_wire.Ledger, DecodeError> => {
       let __j: __JsonValue;
       try {
         __j = globalThis.JSON.parse(__s) as __JsonValue;
@@ -209,17 +209,17 @@ async function test_a_distinct_set_decodes() {
     type OrderId = __ns_demo_wire.OrderId;
     type Status = __ns_demo_wire.Status;
     void (((__d) => {
-        switch (__d.tag) {
-          case "Ok": {
-            const s = __d.value;
-            return __bynkExpect(((s).size === 2), "tests/demo/wire.bynk:38:21", 1024, 1039, "expect s.length() == 2");
-          }
-          case "Err": {
-            return __bynkExpect((false), "tests/demo/wire.bynk:39:22", 1061, 1066, "expect false");
-          }
+      switch (__d.tag) {
+        case "Ok": {
+          const s = __d.value;
+          return __bynkExpect((s.size === 2), "tests/demo/wire.bynk:38:21", 1024, 1039, "expect s.length() == 2");
         }
-        throw new globalThis.Error("non-exhaustive match");
-      })(((__s: string): Result<ReadonlySet<__ns_demo_wire.Status>, DecodeError> => {
+        case "Err": {
+          return __bynkExpect((false), "tests/demo/wire.bynk:39:22", 1061, 1066, "expect false");
+        }
+      }
+      throw new globalThis.Error("non-exhaustive match");
+    })(((__s: string): Result<ReadonlySet<__ns_demo_wire.Status>, DecodeError> => {
       let __j: __JsonValue;
       try {
         __j = globalThis.JSON.parse(__s) as __JsonValue;
@@ -335,17 +335,17 @@ async function test_a_repeated_Decimal_map_key_is_rejected_on_its_canonical_valu
     })("[[\"1.20\",1],[\"1.2\",2]]");
     if (!(((__c: boolean) => __c)(__r0.tag === "Err"))) { throw __bynkExpectFailure("tests/demo/wire.bynk:53:10", 1560, 1630, "expect Json.decode[Map[Decimal, Int]](\"[[\\\"1.20\\\",1],[\\\"1.2\\\",2]]\") is Err(_)"); }
     void (((__d) => {
-        switch (__d.tag) {
-          case "Ok": {
-            const m = __d.value;
-            return __bynkExpect(((m).size === 2), "tests/demo/wire.bynk:55:21", 1722, 1737, "expect m.length() == 2");
-          }
-          case "Err": {
-            return __bynkExpect((false), "tests/demo/wire.bynk:56:22", 1759, 1764, "expect false");
-          }
+      switch (__d.tag) {
+        case "Ok": {
+          const m = __d.value;
+          return __bynkExpect((m.size === 2), "tests/demo/wire.bynk:55:21", 1722, 1737, "expect m.length() == 2");
         }
-        throw new globalThis.Error("non-exhaustive match");
-      })(((__s: string): Result<ReadonlyMap<{ readonly coefficient: bigint; readonly scale: number }, number>, DecodeError> => {
+        case "Err": {
+          return __bynkExpect((false), "tests/demo/wire.bynk:56:22", 1759, 1764, "expect false");
+        }
+      }
+      throw new globalThis.Error("non-exhaustive match");
+    })(((__s: string): Result<ReadonlyMap<{ readonly coefficient: bigint; readonly scale: number }, number>, DecodeError> => {
       let __j: __JsonValue;
       try {
         __j = globalThis.JSON.parse(__s) as __JsonValue;
@@ -375,17 +375,17 @@ async function test_distinct_map_keys_still_decode___2707_() {
     type OrderId = __ns_demo_wire.OrderId;
     type Status = __ns_demo_wire.Status;
     void (((__d) => {
-        switch (__d.tag) {
-          case "Ok": {
-            const m = __d.value;
-            return __bynkExpect(((m).size === 2), "tests/demo/wire.bynk:62:21", 1905, 1920, "expect m.length() == 2");
-          }
-          case "Err": {
-            return __bynkExpect((false), "tests/demo/wire.bynk:63:22", 1942, 1947, "expect false");
-          }
+      switch (__d.tag) {
+        case "Ok": {
+          const m = __d.value;
+          return __bynkExpect((m.size === 2), "tests/demo/wire.bynk:62:21", 1905, 1920, "expect m.length() == 2");
         }
-        throw new globalThis.Error("non-exhaustive match");
-      })(((__s: string): Result<ReadonlyMap<string, number>, DecodeError> => {
+        case "Err": {
+          return __bynkExpect((false), "tests/demo/wire.bynk:63:22", 1942, 1947, "expect false");
+        }
+      }
+      throw new globalThis.Error("non-exhaustive match");
+    })(((__s: string): Result<ReadonlyMap<string, number>, DecodeError> => {
       let __j: __JsonValue;
       try {
         __j = globalThis.JSON.parse(__s) as __JsonValue;

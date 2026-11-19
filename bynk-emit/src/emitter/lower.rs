@@ -7,7 +7,6 @@ use std::collections::HashSet;
 use std::sync::Arc;
 
 use bynk_check::checker::{Callee, NamedKind, Ty, TyId, TypedCommons};
-use bynk_check::kernel_op::{MapOp, OptionOp, ResultOp, SetOp};
 use bynk_syntax::ast::{
     BaseType, BinOp, Block, Expr, ExprKind, FaultsExpr, FieldInit, Ident, InterpPart, LambdaExpr,
     LiteralValue, MatchArm, ObservationExpr, ObservationMatcher, Pattern, PatternBindingKind,
@@ -38,7 +37,7 @@ use super::lower_call::test_calls::{
     lower_test_service_call,
 };
 use super::lower_ctx::LowerCtx;
-use super::lower_list::{any_ty, key_is_plain};
+use super::lower_list::any_ty;
 use super::lower_stmt::{
     Body, Item, arms_contain_question, block_body, block_body_into, block_contains_question,
     emit_block_as_function_body_with_return, emit_statement, hoist_if_as_statement,
@@ -46,8 +45,8 @@ use super::lower_stmt::{
     write_line,
 };
 use super::ts_types::{
-    ts_array_elem, ts_base, ts_ty, ts_ty_to_ts_type, ts_type_ref, ts_type_ref_to_ts_type,
-    unchecked_construct, unchecked_construct_test, unchecked_construct_test_node,
+    ts_base, ts_ty, ts_ty_to_ts_type, ts_type_ref, ts_type_ref_to_ts_type, unchecked_construct,
+    unchecked_construct_test, unchecked_construct_test_node,
 };
 use super::*;
 
@@ -3190,318 +3189,6 @@ pub(super) fn path_for_is(value: &Expr) -> PatPath {
         // Panics, with the invariant's message (#1668).
         _ => PatPath::from_text(&value_text_for_is(value)),
     }
-}
-
-/// v0.22a: lower a built-in `Option[T]` kernel method (ADR 0048). Typed
-/// IIFEs in the v0.20b posture — no runtime imports beyond the
-/// `Some`/`None`/`Ok`/`Err` constructors every module already has.
-#[allow(clippy::too_many_arguments)]
-pub(in crate::emitter) fn lower_option_kernel(
-    e: &Expr,
-    receiver: &Expr,
-    op: OptionOp,
-    args: &[Expr],
-    inner: TyId,
-    cx: &mut LowerCtx,
-) -> Option<Lowered> {
-    let tys = cx.ty_render();
-    let mut pre = Pre::new();
-    let t = ts_ty(inner, tys);
-    let text: Option<String> = match (op, args) {
-        (OptionOp::Map, [f]) => {
-            // The call's checked type is `Option[B]` — peel for B.
-            let b = match cx.commons().expr_ty(e.id).as_deref() {
-                Some(Ty::Option(b)) => ts_ty(*b, tys),
-                other => panic!(
-                    "bynk internal error (finding #28): emitter expected `Option[_]` recorded \
-                     for an `Option.map` call at {:?}, but found {other:?} — the checker \
-                     should already have typed it",
-                    e.span
-                ),
-            };
-            let recv = pre.lower(receiver, cx);
-            let f = pre.lower(f, cx);
-            Some(format!(
-                "((__o: Option<{t}>, __f: (x: {t}) => {b}) => __o.tag === \"Some\" ? Some(__f(__o.value)) : None)({recv}, {f})"
-            ))
-        }
-        (OptionOp::AndThen, [f]) => {
-            let b = match cx.commons().expr_ty(e.id).as_deref() {
-                Some(Ty::Option(b)) => ts_ty(*b, tys),
-                other => panic!(
-                    "bynk internal error (finding #28): emitter expected `Option[_]` recorded \
-                     for an `Option.andThen` call at {:?}, but found {other:?} — the checker \
-                     should already have typed it",
-                    e.span
-                ),
-            };
-            let recv = pre.lower(receiver, cx);
-            let f = pre.lower(f, cx);
-            Some(format!(
-                "((__o: Option<{t}>, __f: (x: {t}) => Option<{b}>) => __o.tag === \"Some\" ? __f(__o.value) : None)({recv}, {f})"
-            ))
-        }
-        (OptionOp::GetOrElse, [fallback]) => {
-            let recv = pre.lower(receiver, cx);
-            let fallback = pre.lower(fallback, cx);
-            Some(format!(
-                "((__o: Option<{t}>, __d: {t}) => __o.tag === \"Some\" ? __o.value : __d)({recv}, {fallback})"
-            ))
-        }
-        (OptionOp::IsSome, []) => {
-            let recv = pre.lower(receiver, cx);
-            Some(format!("({recv}.tag === \"Some\")"))
-        }
-        (OptionOp::OkOr, [error]) => {
-            // The call's checked type is `Result[T, E]` — peel for E.
-            let err = match cx.commons().expr_ty(e.id).as_deref() {
-                Some(Ty::Result(_, err)) => ts_ty(*err, tys),
-                other => panic!(
-                    "bynk internal error (finding #28): emitter expected `Result[_, _]` \
-                     recorded for an `Option.okOr` call at {:?}, but found {other:?} — the \
-                     checker should already have typed it",
-                    e.span
-                ),
-            };
-            let recv = pre.lower(receiver, cx);
-            let error = pre.lower(error, cx);
-            Some(format!(
-                "((__o: Option<{t}>, __e: {err}) => __o.tag === \"Some\" ? Ok(__o.value) : Err(__e))({recv}, {error})"
-            ))
-        }
-        (OptionOp::IsNone, []) => {
-            let recv = pre.lower(receiver, cx);
-            Some(format!("({recv}.tag === \"None\")"))
-        }
-        (OptionOp::OrElse, [f]) => {
-            let recv = pre.lower(receiver, cx);
-            let f = pre.lower(f, cx);
-            Some(format!(
-                "((__o: Option<{t}>, __f: () => Option<{t}>) => __o.tag === \"Some\" ? __o : __f())({recv}, {f})"
-            ))
-        }
-        (OptionOp::Filter, [p]) => {
-            let recv = pre.lower(receiver, cx);
-            let p = pre.lower(p, cx);
-            Some(format!(
-                "((__o: Option<{t}>, __p: (x: {t}) => boolean) => __o.tag === \"Some\" && __p(__o.value) ? __o : None)({recv}, {p})"
-            ))
-        }
-        _ => None,
-    };
-    text.map(|expr| pre.finish_text(expr))
-}
-
-/// v0.22a: lower a built-in `Result[T, E]` kernel method (ADR 0048). The
-/// miss branches return the narrowed receiver — TS's discriminated-union
-/// narrowing makes the `Err` arm assignable to `Result<B, E>` directly.
-#[allow(clippy::too_many_arguments)]
-pub(in crate::emitter) fn lower_result_kernel(
-    e: &Expr,
-    receiver: &Expr,
-    op: ResultOp,
-    args: &[Expr],
-    ok: TyId,
-    err: TyId,
-    cx: &mut LowerCtx,
-) -> Option<Lowered> {
-    let tys = cx.ty_render();
-    let mut pre = Pre::new();
-    let t = ts_ty(ok, tys);
-    let et = ts_ty(err, tys);
-    let text: Option<String> = match (op, args) {
-        (ResultOp::Map, [f]) => {
-            // The call's checked type is `Result[B, E]` — peel for B.
-            let b = match cx.commons().expr_ty(e.id).as_deref() {
-                Some(Ty::Result(b, _)) => ts_ty(*b, tys),
-                other => panic!(
-                    "bynk internal error (finding #28): emitter expected `Result[_, _]` \
-                     recorded for a `Result.map` call at {:?}, but found {other:?} — the \
-                     checker should already have typed it",
-                    e.span
-                ),
-            };
-            let recv = pre.lower(receiver, cx);
-            let f = pre.lower(f, cx);
-            Some(format!(
-                "((__r: Result<{t}, {et}>, __f: (x: {t}) => {b}) => __r.tag === \"Ok\" ? Ok(__f(__r.value)) : __r)({recv}, {f})"
-            ))
-        }
-        (ResultOp::AndThen, [f]) => {
-            let b = match cx.commons().expr_ty(e.id).as_deref() {
-                Some(Ty::Result(b, _)) => ts_ty(*b, tys),
-                other => panic!(
-                    "bynk internal error (finding #28): emitter expected `Result[_, _]` \
-                     recorded for a `Result.andThen` call at {:?}, but found {other:?} — the \
-                     checker should already have typed it",
-                    e.span
-                ),
-            };
-            let recv = pre.lower(receiver, cx);
-            let f = pre.lower(f, cx);
-            Some(format!(
-                "((__r: Result<{t}, {et}>, __f: (x: {t}) => Result<{b}, {et}>) => __r.tag === \"Ok\" ? __f(__r.value) : __r)({recv}, {f})"
-            ))
-        }
-        (ResultOp::MapErr, [f]) => {
-            // The call's checked type is `Result[T, F]` — peel for F.
-            let fts = match cx.commons().expr_ty(e.id).as_deref() {
-                Some(Ty::Result(_, f)) => ts_ty(*f, tys),
-                other => panic!(
-                    "bynk internal error (finding #28): emitter expected `Result[_, _]` \
-                     recorded for a `Result.mapErr` call at {:?}, but found {other:?} — the \
-                     checker should already have typed it",
-                    e.span
-                ),
-            };
-            let recv = pre.lower(receiver, cx);
-            let f = pre.lower(f, cx);
-            Some(format!(
-                "((__r: Result<{t}, {et}>, __f: (e: {et}) => {fts}) => __r.tag === \"Err\" ? Err(__f(__r.error)) : __r)({recv}, {f})"
-            ))
-        }
-        (ResultOp::GetOrElse, [fallback]) => {
-            let recv = pre.lower(receiver, cx);
-            let fallback = pre.lower(fallback, cx);
-            Some(format!(
-                "((__r: Result<{t}, {et}>, __d: {t}) => __r.tag === \"Ok\" ? __r.value : __d)({recv}, {fallback})"
-            ))
-        }
-        (ResultOp::IsOk, []) => {
-            let recv = pre.lower(receiver, cx);
-            Some(format!("({recv}.tag === \"Ok\")"))
-        }
-        (ResultOp::IsErr, []) => {
-            let recv = pre.lower(receiver, cx);
-            Some(format!("({recv}.tag === \"Err\")"))
-        }
-        (ResultOp::Ok, []) => {
-            let recv = pre.lower(receiver, cx);
-            Some(format!(
-                "((__r: Result<{t}, {et}>) => __r.tag === \"Ok\" ? Some(__r.value) : None)({recv})"
-            ))
-        }
-        _ => None,
-    };
-    text.map(|expr| pre.finish_text(expr))
-}
-
-/// v0.20b: lower a built-in `Map` kernel method. `insert` copies — the
-/// emitted `ReadonlyMap` is never mutated in place; updating an existing key
-/// keeps its insertion position (JS `Map` semantics, normative in §7).
-/// K6a (#2596): lower a `Set` kernel method over the `ReadonlySet`. `insert`
-/// and `remove` copy, so the receiver is never mutated; a copy keeps the
-/// insertion order, and inserting a present element keeps its position.
-pub(in crate::emitter) fn lower_set_kernel(
-    receiver: &Expr,
-    op: SetOp,
-    args: &[Expr],
-    elem: TyId,
-    cx: &mut LowerCtx,
-) -> Option<Lowered> {
-    let tys = cx.ty_render();
-    let mut pre = Pre::new();
-    let elem_ts = ts_ty(elem, tys);
-    let text: Option<String> = match (op, args) {
-        (SetOp::Length, []) => {
-            let recv = pre.lower(receiver, cx);
-            Some(format!("({recv}).size"))
-        }
-        (SetOp::Contains, [x]) => {
-            let recv = pre.lower(receiver, cx);
-            let x = pre.lower(x, cx);
-            Some(format!("({recv}).has({x})"))
-        }
-        (SetOp::Insert, [x]) if !key_is_plain(elem, tys.types()) => {
-            cx.runtime_use().note_key("__bynkSetInsert");
-            let recv = pre.lower(receiver, cx);
-            let x = pre.lower(x, cx);
-            Some(format!("__bynkSetInsert<{elem_ts}>({recv}, {x})"))
-        }
-        (SetOp::Remove, [x]) if !key_is_plain(elem, tys.types()) => {
-            cx.runtime_use().note_key("__bynkSetRemove");
-            let recv = pre.lower(receiver, cx);
-            let x = pre.lower(x, cx);
-            Some(format!("__bynkSetRemove<{elem_ts}>({recv}, {x})"))
-        }
-        (SetOp::Insert, [x]) => {
-            let recv = pre.lower(receiver, cx);
-            let x = pre.lower(x, cx);
-            Some(format!(
-                "(new globalThis.Set<{elem_ts}>({recv}).add({x}) as ReadonlySet<{elem_ts}>)"
-            ))
-        }
-        (SetOp::Remove, [x]) => {
-            let recv = pre.lower(receiver, cx);
-            let x = pre.lower(x, cx);
-            Some(format!(
-                "((__s: globalThis.Set<{elem_ts}>) => (__s.delete({x}), __s as ReadonlySet<{elem_ts}>))(new globalThis.Set<{elem_ts}>({recv}))"
-            ))
-        }
-        (SetOp::ToList, []) => {
-            let recv = pre.lower(receiver, cx);
-            Some(format!(
-                "([...({recv})] as readonly {}[])",
-                ts_array_elem(&elem_ts)
-            ))
-        }
-        _ => None,
-    };
-    text.map(|expr| pre.finish_text(expr))
-}
-
-pub(in crate::emitter) fn lower_map_kernel(
-    receiver: &Expr,
-    op: MapOp,
-    args: &[Expr],
-    key: TyId,
-    val: TyId,
-    cx: &mut LowerCtx,
-) -> Option<Lowered> {
-    let tys = cx.ty_render();
-    let mut pre = Pre::new();
-    let key_ts = ts_ty(key, tys);
-    let val_ts = ts_ty(val, tys);
-    let text: Option<String> = match (op, args) {
-        (MapOp::Length, []) => {
-            let recv = pre.lower(receiver, cx);
-            Some(format!("({recv}).size"))
-        }
-        (MapOp::Keys, []) => {
-            let recv = pre.lower(receiver, cx);
-            Some(format!("[...({recv}).keys()]"))
-        }
-        // v0.149 (ADR 0173): the values in key order — the `keys()` sibling over
-        // the in-memory `ReadonlyMap`.
-        (MapOp::Values, []) => {
-            let recv = pre.lower(receiver, cx);
-            Some(format!("[...({recv}).values()]"))
-        }
-        (MapOp::Get, [k]) => {
-            let recv = pre.lower(receiver, cx);
-            let k = pre.lower(k, cx);
-            Some(format!(
-                "((__m: ReadonlyMap<{key_ts}, {val_ts}>, __k: {key_ts}) => __m.has(__k) ? Some(__m.get(__k) as {val_ts}) : None)({recv}, {k})"
-            ))
-        }
-        (MapOp::Insert, [k, v]) if !key_is_plain(key, tys.types()) => {
-            cx.runtime_use().note_key("__bynkMapInsert");
-            let recv = pre.lower(receiver, cx);
-            let k = pre.lower(k, cx);
-            let v = pre.lower(v, cx);
-            Some(format!(
-                "__bynkMapInsert<{key_ts}, {val_ts}>({recv}, {k}, {v})"
-            ))
-        }
-        (MapOp::Insert, [k, v]) => {
-            let recv = pre.lower(receiver, cx);
-            let k = pre.lower(k, cx);
-            let v = pre.lower(v, cx);
-            Some(format!("new globalThis.Map({recv}).set({k}, {v})"))
-        }
-        _ => None,
-    };
-    text.map(|expr| pre.finish_text(expr))
 }
 
 fn lower_if(
@@ -6816,6 +6503,14 @@ mod settle_tests {
 mod bridge_tests {
     use super::*;
 
+    /// A plain `Set.remove`: its body is a comma expression `bynk_ts` cannot build, so it is
+    /// still text (1A.30). `contains` over it is text too, in the bracketed form.
+    fn removed(set: &str, key: &str) -> String {
+        format!(
+            "((__s: globalThis.Set<string>) => (__s.delete({key}), __s as ReadonlySet<string>))(new globalThis.Set<string>({set}))"
+        )
+    }
+
     fn lit_text(l: Lowered) -> String {
         assert!(l.pre.is_empty(), "a literal hoists nothing");
         assert!(
@@ -7581,17 +7276,18 @@ fn minus(x: Int) -> Int { 5 - - -x }
 
     #[test]
     fn short_circuit_operators_over_a_text_operand_keep_their_text() {
-        // A `Set` `contains` is still text (the container kernels), so the
-        // operator over it is text, byte for byte.
+        // A plain `Set` `remove` is still text (a comma expression), so the
+        // operator over a `contains` of it is text, byte for byte.
         let src = "commons shortt\n\
-                   fn a(s: Set[String], t: String, y: Bool) -> Bool { s.contains(t) && y }\n\
-                   fn b(s: Set[String], t: String, y: Bool) -> Bool { y || s.contains(t) }\n\
-                   fn c(s: Set[String], t: String, y: Bool) -> Bool { s.contains(t) implies y }\n";
+                   fn a(s: Set[String], t: String, y: Bool) -> Bool { s.remove(t).contains(t) && y }\n\
+                   fn b(s: Set[String], t: String, y: Bool) -> Bool { y || s.remove(t).contains(t) }\n\
+                   fn c(s: Set[String], t: String, y: Bool) -> Bool { s.remove(t).contains(t) implies y }\n";
         assert!(text_exits(src) >= 3);
         let ts = crate::testkit::emit_source(src);
-        assert_eq!(returned(&ts, "a"), "(s).has(t) && y");
-        assert_eq!(returned(&ts, "b"), "y || (s).has(t)");
-        assert_eq!(returned(&ts, "c"), "(!((s).has(t)) || y)");
+        let has = format!("({}).has(t)", removed("s", "t"));
+        assert_eq!(returned(&ts, "a"), format!("{has} && y"));
+        assert_eq!(returned(&ts, "b"), format!("y || {has}"));
+        assert_eq!(returned(&ts, "c"), format!("(!({has}) || y)"));
     }
 
     #[test]
@@ -7704,21 +7400,22 @@ fn minus(x: Int) -> Int { 5 - - -x }
 
     #[test]
     fn a_call_with_a_text_argument_falls_back_to_today_s_text() {
-        // A `Set` `contains` operand is still text (the container kernels), so
-        // each call over it is text, byte for byte.
+        // A `contains` over a plain `Set` `remove` is still text (a comma
+        // expression), so each call over it is text, byte for byte.
         let src = "commons calltext\n\
             type S = | A(f: Bool) | B\n\
             type Box2 = { v: Int }\n\
             fn Box2.take(self, b: Bool) -> Int { self.v }\n\
             fn g(b: Bool) -> Bool { b }\n\
-            fn plain(a: Set[String], c: String) -> Bool { g(a.contains(c)) }\n\
-            fn ctor(a: Set[String], c: String) -> S { A(a.contains(c)) }\n\
-            fn ufcs(b: Box2, a: Set[String], c: String) -> Int { b.take(a.contains(c)) }\n";
+            fn plain(a: Set[String], c: String) -> Bool { g(a.remove(c).contains(c)) }\n\
+            fn ctor(a: Set[String], c: String) -> S { A(a.remove(c).contains(c)) }\n\
+            fn ufcs(b: Box2, a: Set[String], c: String) -> Int { b.take(a.remove(c).contains(c)) }\n";
         let ts = crate::testkit::emit_source(src);
         assert!(text_exits(src) > 0);
-        assert_eq!(returned(&ts, "plain"), "g((a).has(c))");
-        assert_eq!(returned(&ts, "ctor"), "S.A((a).has(c))");
-        assert_eq!(returned(&ts, "ufcs"), "Box2.take(b, (a).has(c))");
+        let has = format!("({}).has(c)", removed("a", "c"));
+        assert_eq!(returned(&ts, "plain"), format!("g({has})"));
+        assert_eq!(returned(&ts, "ctor"), format!("S.A({has})"));
+        assert_eq!(returned(&ts, "ufcs"), format!("Box2.take(b, {has})"));
     }
 
     #[test]
@@ -7808,7 +7505,7 @@ fn minus(x: Int) -> Int { 5 - - -x }
             type Box2[A] = { v: A }\n\
             fn Box2.cast[U](self) -> Option[U] { None }\n\
             fn rec(b: Box2[Int]) -> P { P { name: \"x\", age: b.cast[Int]() } }\n\
-            fn s(b: Box2[Int]) -> String { \"v \\(b.cast[Int]().getOrElse(0))\" }\n";
+            fn s(a: Set[String], c: String) -> String { \"v \\(a.remove(c).length())\" }\n";
         assert!(text_exits(src) > 0);
         let ts = crate::testkit::emit_source(src);
         assert!(ts.contains("{ name: \"x\", age: "), "{ts}");
@@ -8085,10 +7782,13 @@ fn minus(x: Int) -> Int { 5 - - -x }
     #[test]
     fn a_ternary_over_a_text_branch_falls_back_to_text() {
         let src = "commons ternt\n\
-            fn f(c: Bool, x: Set[String], y: String) -> Bool { if c { x.contains(y) } else { false } }\n";
+            fn f(c: Bool, x: Set[String], y: String) -> Bool { if c { x.remove(y).contains(y) } else { false } }\n";
         let (exits, _, ts) = exits_and_stmts(src);
         assert!(exits > 0, "{ts}");
-        assert_eq!(returned(&ts, "f"), "(c ? (x).has(y) : false)");
+        assert_eq!(
+            returned(&ts, "f"),
+            format!("(c ? ({}).has(y) : false)", removed("x", "y"))
+        );
     }
 
     #[test]
@@ -8197,17 +7897,17 @@ fn minus(x: Int) -> Int { 5 - - -x }
 
     #[test]
     fn a_hoisted_if_with_a_text_branch_keeps_its_text_lines() {
-        // A branch tail that is still text (a `Set` `contains`) keeps the whole
+        // A branch tail that is still text (a `contains` over a `Set` `remove`) keeps the whole
         // hoist as text lines, byte for byte, with `assign_branch`'s padding.
         let src = "commons iftext\n\
             fn f(c: Bool, x: Set[String], y: String, r: Result[Bool, String]) -> Result[Bool, String] {\n\
-              let v = if c { r? } else { x.contains(y) }\n\
+              let v = if c { r? } else { x.remove(y).contains(y) }\n\
               Ok(v)\n\
             }\n";
         let (exits, stmts, ts) = exits_and_stmts(src);
         assert!(exits > 0 && stmts > 0, "{ts}");
         assert!(
-            ts.contains("  let __r1: boolean;\n  if (c) {\n    const __r0 = r;\n    if (__r0.tag === \"Err\") return __r0;\n    __r1 = __r0.value;\n  } else {\n    __r1 = (x).has(y);\n  }\n"),
+            ts.contains(&format!("  let __r1: boolean;\n  if (c) {{\n    const __r0 = r;\n    if (__r0.tag === \"Err\") return __r0;\n    __r1 = __r0.value;\n  }} else {{\n    __r1 = ({}).has(y);\n  }}\n", removed("x", "y"))),
             "{ts}"
         );
     }
@@ -8374,20 +8074,23 @@ fn minus(x: Int) -> Int { 5 - - -x }
         );
     }
 
-    /// A text operand or hoisted statement (a `Set` `contains`) keeps the text
+    /// A text operand or hoisted statement (a `contains` over a `Set` `remove`) keeps the text
     /// forms byte for byte: the binding arrow, the hoisted `if`, the plain arrow.
     #[test]
     fn short_circuit_text_fallbacks_keep_their_text() {
         let src = "commons sct\n\
              fn risky(n: Int) -> Result[Int, String] { Ok(n) }\n\
-             fn a(s: Set[String], u: String, k: Bool) -> Bool { k && s.contains(u) }\n\
-             fn b(s: Set[String], u: String, x: Int) -> Result[Bool, String] { Ok(s.contains(u) && risky(x)? > 0) }\n";
+             fn a(s: Set[String], u: String, k: Bool) -> Bool { k && s.remove(u).contains(u) }\n\
+             fn b(s: Set[String], u: String, x: Int) -> Result[Bool, String] { Ok(s.remove(u).contains(u) && risky(x)? > 0) }\n";
         let (exits, _, ts) = exits_and_stmts(src);
         assert!(exits > 0, "{ts}");
-        assert_eq!(returned(&ts, "a"), "k && (s).has(u)");
+        let has = format!("({}).has(u)", removed("s", "u"));
+        assert_eq!(returned(&ts, "a"), format!("k && {has}"));
         assert_eq!(
             func(&ts, "b"),
-            "export function b(s: ReadonlySet<string>, u: string, x: number): Result<boolean, string> {\n  let __r1: boolean;\n  if ((s).has(u)) {\n    const __r0 = risky(x);\n    if (__r0.tag === \"Err\") return __r0;\n    __r1 = __r0.value > 0;\n  } else {\n    __r1 = false;\n  }\n  return Ok(__r1);\n}\n"
+            format!(
+                "export function b(s: ReadonlySet<string>, u: string, x: number): Result<boolean, string> {{\n  let __r1: boolean;\n  if ({has}) {{\n    const __r0 = risky(x);\n    if (__r0.tag === \"Err\") return __r0;\n    __r1 = __r0.value > 0;\n  }} else {{\n    __r1 = false;\n  }}\n  return Ok(__r1);\n}}\n"
+            )
         );
     }
 }
@@ -8484,55 +8187,45 @@ mod list_kernel_tests {
         assert!(ts.contains("import { __bynkDecimalAdd }"), "{ts}");
     }
 
-    /// A receiver that is still text (`Map.values()`) makes the arm fall back to
+    /// A receiver that is still text (`String.splitRegex` mapped, whose regex arm is still text) makes the arm fall back to
     /// today's one-line text, byte for byte: the mixed-operand path of
     /// `node_or_text`, which the node tests above never reach.
     #[test]
     fn a_text_receiver_keeps_the_text_form() {
-        let values = "[...(m).values()]";
         for (elem, ret, expr, want) in [
-            (
-                "Int",
-                "List[Int]",
-                "m.values().map((x) => x)",
-                format!("({values}).map((__x: number) => ((x: number) => x)(__x))"),
-            ),
-            (
-                "Int",
-                "List[Int]",
-                "m.values().sortBy((x) => x)",
+            ("Int", "List[Int]", "{R}.map((x) => x)", {
+                let values = text_values("Int");
+                format!("({values}).map((__x: number) => ((x: number) => x)(__x))")
+            }),
+            ("Int", "List[Int]", "{R}.sortBy((x) => x)", {
+                let values = text_values("Int");
                 format!(
                     "[...{values}].sort((__a: number, __b: number) => {{ const __ka = ((x: number) => x)(__a), __kb = ((x: number) => x)(__b); return __ka < __kb ? -1 : __ka > __kb ? 1 : 0; }})"
-                ),
-            ),
-            (
-                "Float",
-                "List[Float]",
-                "m.values().sortBy((x) => x)",
+                )
+            }),
+            ("Float", "List[Float]", "{R}.sortBy((x) => x)", {
+                let values = text_values("Float");
                 format!(
                     "[...{values}].sort((__a: number, __b: number) => __bynkCmpFloat(((x: number) => x)(__a), ((x: number) => x)(__b)))"
-                ),
-            ),
-            (
-                "Decimal",
-                "Decimal",
-                "m.values().sum((x) => x)",
+                )
+            }),
+            ("Decimal", "Decimal", "{R}.sum((x) => x)", {
+                let values = text_values("Decimal");
                 format!(
                     "({values}).reduce((__s: {d}, __x: {d}) => __bynkDecimalAdd(__s, ((x: {d}) => x)(__x)), {{ coefficient: 0n, scale: 0 }})",
                     d = "{ readonly coefficient: bigint; readonly scale: number }"
-                ),
-            ),
-            (
-                "Int",
-                "Int",
-                "m.values().fold(0, (a, x) => a + x)",
+                )
+            }),
+            ("Int", "Int", "{R}.fold(0, (a, x) => a + x)", {
+                let values = text_values("Int");
                 format!(
                     "((__xs: readonly number[], __acc: number, __f: (acc: number, x: number) => number) => {{ for (const __x of __xs) __acc = __f(__acc, __x); return __acc; }})({values}, 0, (a: number, x: number) => a + x)"
-                ),
-            ),
+                )
+            }),
         ] {
             let (n, ts) = exits(&format!(
-                "fn f(m: Map[String, {elem}]) -> {ret} {{ {expr} }}"
+                "fn f(s: String, v: {elem}) -> {ret} {{ {} }}",
+                expr.replace("{R}", TEXT_RECEIVER)
             ));
             assert!(n > 0, "{expr}\n{ts}");
             assert_eq!(returned_any(&ts), want, "{expr}");
@@ -8540,7 +8233,7 @@ mod list_kernel_tests {
     }
 
     /// The statement-bodied arms (1A.18b, #3719), each over a list parameter
-    /// (nodes) and over `Map.values()`, which is still text.
+    /// (nodes) and over a text receiver (`TEXT_RECEIVER`).
     /// `(element type, return type, extra parameters, expression over {R})`.
     const STATEMENT_ARMS: &[(&str, &str, &str, &str)] = &[
         ("Int", "Int", "", "{R}.fold(0, (a, x) => a + x)"),
@@ -8625,6 +8318,19 @@ mod list_kernel_tests {
         ),
     ];
 
+    /// A `List` receiver that is still text: `String.splitRegex`'s arm is a statement block, so
+    /// the `map` over it is text too. The element type is the parameter `v`'s.
+    const TEXT_RECEIVER: &str = "s.splitRegex(\",\").map((x) => v)";
+
+    /// `TEXT_RECEIVER` as printed, for an element type.
+    fn text_values(elem: &str) -> String {
+        let (n, ts) = exits(&format!(
+            "fn f(s: String, v: {elem}) -> List[{elem}] {{ {TEXT_RECEIVER} }}"
+        ));
+        assert!(n > 0, "{ts}");
+        returned_any(&ts)
+    }
+
     /// The one returned expression of `f`, async or not.
     fn returned_any(ts: &str) -> String {
         let at = ts.find("function f(").expect("f");
@@ -8636,7 +8342,7 @@ mod list_kernel_tests {
 
     fn arm_source(elem: &str, ret: &str, extra: &str, expr: &str, text_receiver: bool) -> String {
         let (param, recv) = if text_receiver {
-            (format!("m: Map[String, {elem}]"), "m.values()")
+            (format!("s: String, v: {elem}"), TEXT_RECEIVER)
         } else {
             (format!("xs: List[{elem}]"), "xs")
         };
@@ -8658,7 +8364,7 @@ mod list_kernel_tests {
             assert_eq!(n_node, 0, "{expr}\n{node_ts}");
             assert!(n_text > 0, "{expr}\n{text_ts}");
             let node = returned_any(&node_ts);
-            let text = returned_any(&text_ts).replace("[...(m).values()]", "xs");
+            let text = returned_any(&text_ts).replace(&text_values(elem), "xs");
             assert!(
                 node.contains('\n'),
                 "{expr} should print on several lines\n{node}"

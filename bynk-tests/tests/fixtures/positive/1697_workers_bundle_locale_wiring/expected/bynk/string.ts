@@ -12,18 +12,18 @@ import { type __JsonValue, type __BoundaryError, type __ServiceBinding, __callSe
 export function join(parts: readonly string[], sep: string): string {
   const init: Option<string> = None;
   return ((__o: Option<string>, __d: string) => __o.tag === "Some" ? __o.value : __d)(((__xs: readonly string[], __acc: Option<string>, __f: (acc: Option<string>, x: string) => Option<string>) => {
-  for (const __x of __xs) __acc = __f(__acc, __x);
-  return __acc;
-})(parts, init, (acc: Option<string>, p: string) => ((__d) => {
-  switch (__d.tag) {
-    case "Some": {
-      const s = __d.value;
-      return Some(s.concat(sep).concat(p));
+    for (const __x of __xs) __acc = __f(__acc, __x);
+    return __acc;
+  })(parts, init, (acc: Option<string>, p: string) => ((__d) => {
+    switch (__d.tag) {
+      case "Some": {
+        const s = __d.value;
+        return Some(s.concat(sep).concat(p));
+      }
+      case "None": {
+        return Some(p);
+      }
     }
-    case "None": {
-      return Some(p);
-    }
-  }
-  throw new globalThis.Error("non-exhaustive match");
-})(acc)), "");
+    throw new globalThis.Error("non-exhaustive match");
+  })(acc)), "");
 }

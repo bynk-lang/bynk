@@ -68,7 +68,7 @@ async function test_a_record_keyed_map_is_returned_to_the_caller_keyed_by_value(
     type OrderId = __ns_tally.OrderId;
     const __r0 = await __makeRegistry("s").tally({ region: "us", n: 1 }, 5, deps);
     const m = await __makeRegistry("s").snapshot(deps);
-    if (!((m).size === 1)) { throw __bynkExpectFailure("tests/tally.bynk:14:10", 452, 467, "expect m.length() == 1\n  expected: m.length() == 1\n  actual:   " + __bynkShow(((m).size)) + " == " + __bynkShow((1))); }
+    if (!(m.size === 1)) { throw __bynkExpectFailure("tests/tally.bynk:14:10", 452, 467, "expect m.length() == 1\n  expected: m.length() == 1\n  actual:   " + __bynkShow((m.size)) + " == " + __bynkShow((1))); }
     if (!(__bynkEq(((__m: ReadonlyMap<OrderId, number>, __k: OrderId) => __m.has(__k) ? Some(__m.get(__k) as number) : None)(m, { n: 1, region: "us" }), Some(5)))) { throw __bynkExpectFailure("tests/tally.bynk:15:10", 477, 525, "expect m.get(OrderId { n: 1, region: \"us\" }) == Some(5)\n  expected: m.get(OrderId { n: 1, region: \"us\" }) == Some(5)\n  actual:   " + __bynkShow((((__m: ReadonlyMap<OrderId, number>, __k: OrderId) => __m.has(__k) ? Some(__m.get(__k) as number) : None)(m, { n: 1, region: "us" }))) + " == " + __bynkShow((Some(5)))); }
     return { pass: true };
   } catch (e) {

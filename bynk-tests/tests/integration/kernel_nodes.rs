@@ -102,7 +102,7 @@ fn the_request_views_print_without_receiver_brackets() {
     );
     let (_, text) = emit("2854_http_query");
     assert_contains(&text, r#"query.get("q")"#);
-    assert_contains(&text, "(query.params()).size");
+    assert_contains(&text, "query.params().size");
     assert!(!text.contains("(query)."), "{text}");
 }
 

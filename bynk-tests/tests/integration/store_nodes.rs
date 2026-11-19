@@ -139,7 +139,7 @@ agent Inventory {
 
   on call routed(oid: String) -> Effect[Int] { reservations.filter((r) => r.orderId == oid).count() }
   on call routedFlipped(oid: String) -> Effect[Int] { reservations.filter((r) => oid == r.orderId).count() }
-  on call routedText(oid: String) -> Effect[Int] { reservations.filter((r) => r.orderId == Some(oid).getOrElse(oid)).count() }
+  on call routedText(oid: String) -> Effect[Int] { reservations.filter((r) => r.orderId == oid.splitRegex(\",\").firstOrElse(oid)).count() }
   on call byId(rid: String) -> Effect[Int] { reservations.filter((r) => r.id == rid).count() }
   on call scan(oid: String) -> Effect[Int] { reservations.filter((r) => r.qty == 1).count() }
   on call dependent() -> Effect[Int] { reservations.filter((r) => r.orderId == r.id).count() }
@@ -158,11 +158,11 @@ agent Bag {
 
   on call each() -> Effect[()] { items.parTraverse((i) => Effect.pure(())) }
   on call bump() -> Effect[()] { let _ <- n.update((c) => match c { 0 => 1, _ => c + 1 })\n Effect.pure(()) }
-  on call bumpText(k: String) -> Effect[()] { let _ <- n.update((c) => c + Some(k).getOrElse(k).length())\n Effect.pure(()) }
+  on call bumpText(k: String) -> Effect[()] { let _ <- n.update((c) => c + k.splitRegex(\",\").firstOrElse(k).length())\n Effect.pure(()) }
   on call keysOf() -> Effect[List[String]] { items.keys.collect() }
   on call valuesOf() -> Effect[Int] { items.values.count() }
   on call entriesOf() -> Effect[Int] { items.entries.count() }
-  on call addText(k: String) -> Effect[()] { let _ <- seen.add(Some(k).getOrElse(k))\n Effect.pure(()) }
+  on call addText(k: String) -> Effect[()] { let _ <- seen.add(k.splitRegex(\",\").firstOrElse(k))\n Effect.pure(()) }
 }
 ";
 
@@ -190,15 +190,15 @@ agent Fall {
   store n: Cell[Int] = 0
   store conns: Map[String, Connection[Frame]]
 
-  on call mapPut(k: String) -> Effect[()] { let _ <- items.put(Some(k).getOrElse(k), 1)\n Effect.pure(()) }
-  on call mapGet(o: Option[String]) -> Effect[Option[Int]] { items.get(o.getOrElse(\"\")) }
-  on call setAdd(k: String) -> Effect[()] { let _ <- tags.add(Some(k).getOrElse(k))\n Effect.pure(()) }
-  on call cachePut(k: String) -> Effect[()] given Clock { let _ <- seen.put(Some(k).getOrElse(k), 1)\n Effect.pure(()) }
-  on call logAppend(k: String) -> Effect[()] given Clock { let _ <- history.append(Hit { sku: Some(k).getOrElse(k), qty: 1 })\n Effect.pure(()) }
-  on call logSince(t: Instant, k: String) -> Effect[Int] { history.since(t).filter((h) => h.sku == Some(k).getOrElse(k)).count() }
-  on call cellUpdate(k: String) -> Effect[()] { let _ <- n.update((c) => c + Some(k).getOrElse(k).length())\n Effect.pure(()) }
-  on call join(k: String, conn: Connection[Frame]) -> Effect[()] { let _ <- conns.put(Some(k).getOrElse(k), conn)\n () }
-  on call leave(k: String) -> Effect[()] { let _ <- conns.remove(Some(k).getOrElse(k))\n () }
+  on call mapPut(k: String) -> Effect[()] { let _ <- items.put(k.splitRegex(\",\").firstOrElse(k), 1)\n Effect.pure(()) }
+  on call mapGet(k: String) -> Effect[Option[Int]] { items.get(k.splitRegex(\",\").firstOrElse(\"\")) }
+  on call setAdd(k: String) -> Effect[()] { let _ <- tags.add(k.splitRegex(\",\").firstOrElse(k))\n Effect.pure(()) }
+  on call cachePut(k: String) -> Effect[()] given Clock { let _ <- seen.put(k.splitRegex(\",\").firstOrElse(k), 1)\n Effect.pure(()) }
+  on call logAppend(k: String) -> Effect[()] given Clock { let _ <- history.append(Hit { sku: k.splitRegex(\",\").firstOrElse(k), qty: 1 })\n Effect.pure(()) }
+  on call logSince(t: Instant, k: String) -> Effect[Int] { history.since(t).filter((h) => h.sku == k.splitRegex(\",\").firstOrElse(k)).count() }
+  on call cellUpdate(k: String) -> Effect[()] { let _ <- n.update((c) => c + k.splitRegex(\",\").firstOrElse(k).length())\n Effect.pure(()) }
+  on call join(k: String, conn: Connection[Frame]) -> Effect[()] { let _ <- conns.put(k.splitRegex(\",\").firstOrElse(k), conn)\n () }
+  on call leave(k: String) -> Effect[()] { let _ <- conns.remove(k.splitRegex(\",\").firstOrElse(k))\n () }
 }
 ";
 
@@ -312,23 +312,23 @@ fn a_text_argument_falls_back_to_the_one_line_text_byte_for_byte() {
     for (name, want) in [
         (
             "mapPut",
-            "const __r0 = await (async () => { await __state.items.put(String(((__o: Option<string>, __d: string) => __o.tag === \"Some\" ? __o.value : __d)(Some(k), k)), 1); return undefined; })();",
+            "const __r0 = await (async () => { await __state.items.put(String(((__xs: readonly string[], __d: string) => __xs.length > 0 ? __xs[0] : __d)(((__s: string, __r: globalThis.RegExp): readonly string[] => { if (__s.length === 0) { return __r.exec(__s) === null ? [\"\"] : []; } const __out: string[] = []; let __p = 0; let __q = 0; while (__q < __s.length) { __r.lastIndex = __q; const __hit = __r.exec(__s); const __e = __r.lastIndex; if (__hit === null || __e === __p) { __q++; } else { __out.push(__s.slice(__p, __q)); __p = __e; __q = __p; } } __out.push(__s.slice(__p)); return __out; })(k, new globalThis.RegExp(\",\", \"y\")), k)), 1); return undefined; })();",
         ),
         (
             "setAdd",
-            "const __r0 = await (async () => { await __state.tags.add(String(((__o: Option<string>, __d: string) => __o.tag === \"Some\" ? __o.value : __d)(Some(k), k))); return undefined; })();",
+            "const __r0 = await (async () => { await __state.tags.add(String(((__xs: readonly string[], __d: string) => __xs.length > 0 ? __xs[0] : __d)(((__s: string, __r: globalThis.RegExp): readonly string[] => { if (__s.length === 0) { return __r.exec(__s) === null ? [\"\"] : []; } const __out: string[] = []; let __p = 0; let __q = 0; while (__q < __s.length) { __r.lastIndex = __q; const __hit = __r.exec(__s); const __e = __r.lastIndex; if (__hit === null || __e === __p) { __q++; } else { __out.push(__s.slice(__p, __q)); __p = __e; __q = __p; } } __out.push(__s.slice(__p)); return __out; })(k, new globalThis.RegExp(\",\", \"y\")), k))); return undefined; })();",
         ),
         (
             "cachePut",
-            "const __r0 = await (async () => { const __now = __noteClock(__state, await deps.Clock.now()); await __state.seen.put(String(((__o: Option<string>, __d: string) => __o.tag === \"Some\" ? __o.value : __d)(Some(k), k)), { v: 1, exp: __now + 300000 }); return undefined; })();",
+            "const __r0 = await (async () => { const __now = __noteClock(__state, await deps.Clock.now()); await __state.seen.put(String(((__xs: readonly string[], __d: string) => __xs.length > 0 ? __xs[0] : __d)(((__s: string, __r: globalThis.RegExp): readonly string[] => { if (__s.length === 0) { return __r.exec(__s) === null ? [\"\"] : []; } const __out: string[] = []; let __p = 0; let __q = 0; while (__q < __s.length) { __r.lastIndex = __q; const __hit = __r.exec(__s); const __e = __r.lastIndex; if (__hit === null || __e === __p) { __q++; } else { __out.push(__s.slice(__p, __q)); __p = __e; __q = __p; } } __out.push(__s.slice(__p)); return __out; })(k, new globalThis.RegExp(\",\", \"y\")), k)), { v: 1, exp: __now + 300000 }); return undefined; })();",
         ),
         (
             "logAppend",
-            "const __r0 = await (async () => { const __now = await deps.Clock.now(); await __state.history.append({ sku: ((__o: Option<string>, __d: string) => __o.tag === \"Some\" ? __o.value : __d)(Some(k), k), qty: 1 }, __now); await __state.history.prune(__now - 2592000000); return undefined; })();",
+            "const __r0 = await (async () => { const __now = await deps.Clock.now(); await __state.history.append({ sku: ((__xs: readonly string[], __d: string) => __xs.length > 0 ? __xs[0] : __d)(((__s: string, __r: globalThis.RegExp): readonly string[] => { if (__s.length === 0) { return __r.exec(__s) === null ? [\"\"] : []; } const __out: string[] = []; let __p = 0; let __q = 0; while (__q < __s.length) { __r.lastIndex = __q; const __hit = __r.exec(__s); const __e = __r.lastIndex; if (__hit === null || __e === __p) { __q++; } else { __out.push(__s.slice(__p, __q)); __p = __e; __q = __p; } } __out.push(__s.slice(__p)); return __out; })(k, new globalThis.RegExp(\",\", \"y\")), k), qty: 1 }, __now); await __state.history.prune(__now - 2592000000); return undefined; })();",
         ),
         (
             "cellUpdate",
-            "const __r0 = await (() => { __state.n = ((c: number) => c + (((__o: Option<string>, __d: string) => __o.tag === \"Some\" ? __o.value : __d)(Some(k), k)).length)(__state.n); return undefined; })();",
+            "const __r0 = await (() => { __state.n = ((c: number) => c + (((__xs: readonly string[], __d: string) => __xs.length > 0 ? __xs[0] : __d)(((__s: string, __r: globalThis.RegExp): readonly string[] => { if (__s.length === 0) { return __r.exec(__s) === null ? [\"\"] : []; } const __out: string[] = []; let __p = 0; let __q = 0; while (__q < __s.length) { __r.lastIndex = __q; const __hit = __r.exec(__s); const __e = __r.lastIndex; if (__hit === null || __e === __p) { __q++; } else { __out.push(__s.slice(__p, __q)); __p = __e; __q = __p; } } __out.push(__s.slice(__p)); return __out; })(k, new globalThis.RegExp(\",\", \"y\")), k)).length)(__state.n); return undefined; })();",
         ),
     ] {
         assert!(
@@ -344,9 +344,9 @@ fn a_text_argument_falls_back_to_the_one_line_text_byte_for_byte() {
         "fall/handlers.ts",
     );
     assert!(handler(&workers, "join").contains(
-        "(async () => { const __k = String(((__o: Option<string>, __d: string) => __o.tag === \"Some\" ? __o.value : __d)(Some(k), k)); const __new = __connIdOf(conn);"
+        "(async () => { const __k = String(((__xs: readonly string[], __d: string) => __xs.length > 0 ? __xs[0] : __d)(((__s: string, __r: globalThis.RegExp): readonly string[] => { if (__s.length === 0) { return __r.exec(__s) === null ? [\"\"] : []; } const __out: string[] = []; let __p = 0; let __q = 0; while (__q < __s.length) { __r.lastIndex = __q; const __hit = __r.exec(__s); const __e = __r.lastIndex; if (__hit === null || __e === __p) { __q++; } else { __out.push(__s.slice(__p, __q)); __p = __e; __q = __p; } } __out.push(__s.slice(__p)); return __out; })(k, new globalThis.RegExp(\",\", \"y\")), k)); const __new = __connIdOf(conn);"
     ));
-    assert!(handler(&workers, "leave").contains("(async () => { const __k = String(((__o: Option<string>, __d: string) => __o.tag === \"Some\" ? __o.value : __d)(Some(k), k)); const __cid = await __state.conns.get(__k);"));
+    assert!(handler(&workers, "leave").contains("(async () => { const __k = String(((__xs: readonly string[], __d: string) => __xs.length > 0 ? __xs[0] : __d)(((__s: string, __r: globalThis.RegExp): readonly string[] => { if (__s.length === 0) { return __r.exec(__s) === null ? [\"\"] : []; } const __out: string[] = []; let __p = 0; let __q = 0; while (__q < __s.length) { __r.lastIndex = __q; const __hit = __r.exec(__s); const __e = __r.lastIndex; if (__hit === null || __e === __p) { __q++; } else { __out.push(__s.slice(__p, __q)); __p = __e; __q = __p; } } __out.push(__s.slice(__p)); return __out; })(k, new globalThis.RegExp(\",\", \"y\")), k)); const __cid = await __state.conns.get(__k);"));
 }
 
 #[test]
