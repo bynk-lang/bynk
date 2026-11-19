@@ -17,6 +17,10 @@ use super::super::lower_list::{
 };
 use super::super::ts_types::{ts_ty, ts_ty_to_ts_type};
 use super::super::*;
+use super::kernel_scalar::{
+    lower_bytes_kernel, lower_decimal_kernel, lower_duration_kernel, lower_float_kernel,
+    lower_instant_kernel, lower_int_kernel, lower_string_kernel,
+};
 use super::query::{
     QueryShape, QuerySource, lower_query_method, lower_stream_method, note_par_fan_out,
     query_key_cmp, query_keyed, query_other_elem,
