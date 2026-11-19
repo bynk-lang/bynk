@@ -412,7 +412,12 @@ pub fn emit_client(
             .params
             .iter()
             .map(|(name, t)| {
-                serialisation::serialise_expr_via(&renamed(t), &super::ts_ident(name), "", &ru)
+                serialisation::serialise_expr_via(
+                    &renamed(t),
+                    &TsExpr::Ident(super::ts_ident(name)),
+                    "",
+                    &ru,
+                )
             })
             .collect();
         let args = match encoded.len() {

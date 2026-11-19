@@ -4616,7 +4616,12 @@ pub(crate) fn deserialise_call(
 }
 
 fn serialise_call(t: &TypeRef, value: &str, ru: &RuntimeUse) -> TsExpr {
-    crate::emitter::serialisation::serialise_expr_via(t, value, "handlers.", ru)
+    crate::emitter::serialisation::serialise_expr_via(
+        t,
+        &bynk_ts::TsExpr::Ident(value.to_string()),
+        "handlers.",
+        ru,
+    )
 }
 
 #[cfg(test)]

@@ -266,7 +266,11 @@ fn form_encode_wire(pre: &mut Pre, arg: &Expr, cx: &mut LowerCtx) -> Option<Stri
     }
     let v = pre.lower(arg, cx);
     Some(bynk_ts::print_expr(
-        &super::super::serialisation::serialise_expr(&tref, &v, cx.runtime_use()),
+        &super::super::serialisation::serialise_expr(
+            &tref,
+            &bynk_ts::TsExpr::Ident(v),
+            cx.runtime_use(),
+        ),
     ))
 }
 
@@ -356,7 +360,7 @@ pub(in super::super) fn json_encode_text(
         };
         let ser = bynk_ts::print_expr(&super::super::serialisation::serialise_expr(
             &tref,
-            &tmp,
+            &bynk_ts::TsExpr::Ident(tmp.clone()),
             cx.runtime_use(),
         ));
         return Some(format!(
@@ -368,7 +372,7 @@ pub(in super::super) fn json_encode_text(
     }
     let ser = bynk_ts::print_expr(&super::super::serialisation::serialise_expr(
         &tref,
-        &v,
+        &bynk_ts::TsExpr::Ident(v),
         cx.runtime_use(),
     ));
     Some(format!("globalThis.JSON.stringify({ser})"))

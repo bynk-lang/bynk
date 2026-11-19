@@ -1138,6 +1138,13 @@ pub(super) fn built_of(expr: LoweredExpr) -> Built {
     }
 }
 
+/// 1A: serialiser value is text. A still-text operand handed to a serialiser entry point (the
+/// entry points take a node since 1A.21, #3722, Decision B). The family that lowers the operand
+/// converts, and its call site passes the node instead.
+pub(super) fn text_value(text: impl Into<String>) -> bynk_ts::TsExpr {
+    bynk_ts::TsExpr::Ident(text.into())
+}
+
 /// A genuine identifier node. Never built from expression text.
 pub(super) fn ident_node(name: &str) -> bynk_ts::TsExpr {
     bynk_ts::TsExpr::Ident(name.to_string())
@@ -3343,7 +3350,7 @@ fn lower_system_http_call(
                         "__cookieString({})",
                         bynk_ts::print_expr(&crate::emitter::serialisation::serialise_expr_via(
                             ty,
-                            &format!("({lowered} as any)"),
+                            &text_value(format!("({lowered} as any)")),
                             cx.system_http_type_ns(),
                             cx.runtime_use()
                         ))
@@ -3359,7 +3366,7 @@ fn lower_system_http_call(
                         "__queryString({})",
                         bynk_ts::print_expr(&crate::emitter::serialisation::serialise_expr_via(
                             ty,
-                            &format!("({lowered} as any)"),
+                            &text_value(format!("({lowered} as any)")),
                             cx.system_http_type_ns(),
                             cx.runtime_use()
                         ))
@@ -3399,7 +3406,7 @@ fn lower_system_http_call(
                             bynk_ts::print_expr(
                                 &crate::emitter::serialisation::serialise_expr_via(
                                     ty,
-                                    &format!("({lowered} as any)"),
+                                    &text_value(format!("({lowered} as any)")),
                                     cx.system_http_type_ns(),
                                     cx.runtime_use()
                                 )
@@ -3410,7 +3417,7 @@ fn lower_system_http_call(
                         "globalThis.JSON.stringify({})",
                         bynk_ts::print_expr(&crate::emitter::serialisation::serialise_expr_via(
                             ty,
-                            &format!("({lowered} as any)"),
+                            &text_value(format!("({lowered} as any)")),
                             cx.system_http_type_ns(),
                             cx.runtime_use()
                         ))

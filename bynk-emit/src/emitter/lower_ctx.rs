@@ -278,7 +278,7 @@ impl<'a> LowerCtx<'a> {
         {
             return bynk_ts::print_expr(&serialisation::serialise_expr(
                 &tref,
-                value,
+                &bynk_ts::TsExpr::Ident(value.to_string()),
                 self.runtime_use(),
             ));
         }
