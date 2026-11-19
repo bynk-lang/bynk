@@ -1433,12 +1433,6 @@ impl Pre {
         lowered.expr
     }
 
-    /// Absorb an optional [`Lowered`] — a kernel lowerer that may decline the
-    /// shape. Declining hoists nothing, so `None` leaves `self` untouched.
-    pub(crate) fn absorb_opt(&mut self, lowered: Option<Lowered>) -> Option<String> {
-        lowered.map(|l| self.absorb(l))
-    }
-
     /// Absorb an optional [`Lowered`] as a [`Built`]: a delegated kernel's node
     /// passes through to the dispatcher's caller as a node (1A.20, #3721,
     /// Decision G), and an unconverted kernel's text as `Err`. Declining hoists
@@ -2571,7 +2565,7 @@ fn lower_method_call(e: &Expr, cx: &mut LowerCtx) -> Lowered {
 }
 
 /// Lower a cross-context capability call (`B.Cap.op(…)`) or service call, or `None` when the call is not one. The
-/// capability half is `lower_call/platform.rs`'s (1A.24); the service-call half is still text (1A.25).
+/// capability half is `lower_call/platform.rs`'s (1A.24), the service-call half `lower_call/cross_context.rs`'s (1A.25).
 fn lower_cross_context_call(
     e: &Expr,
     receiver: &Expr,
@@ -2591,12 +2585,8 @@ fn lower_cross_context_call(
     // (`1203_cross_context_call_shadowed_by_local`) is a UFCS call, and
     // lowering it over the wire named a Service Binding the Worker, which
     // binds only what it calls, does not declare.
-    if !matches!(cx.commons().callee(e.id), Some(c) if !matches!(c, Callee::Cross { .. }))
-        && let Some(s) =
-            pre.absorb_opt(lower_cross_context_service_call(receiver, method, args, cx))
-    {
-        // 1A: the service-call half is text until 1A.25.
-        return Some(Err(s));
+    if !matches!(cx.commons().callee(e.id), Some(c) if !matches!(c, Callee::Cross { .. })) {
+        return lower_cross_context_service_call(receiver, method, args, cx, pre);
     }
     None
 }

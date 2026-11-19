@@ -1307,9 +1307,7 @@ pub enum TsExpr {
     /// `verbatim_sites` gated probes, which had nothing to watch at the
     /// expression level before this variant existed. What ends up here after
     /// #1539's own conversion pass: a generic-typed method/constructor
-    /// callee (`Call`/`New` have no `type_args` field), a nested
-    /// `As`-under-`As` cast chain the printer's own operand-parenthesisation
-    /// rule would otherwise mis-wrap (review of #1390), a block-bodied IIFE
+    /// callee (`Call`/`New` have no `type_args` field), a block-bodied IIFE
     /// with no matching `TsArrowBody` shape, and a `pred_condition_and_
     /// message`-style message that is already pre-escaped or unescaped by
     /// contract (a second escaping pass through `TsLit::Str` would corrupt
