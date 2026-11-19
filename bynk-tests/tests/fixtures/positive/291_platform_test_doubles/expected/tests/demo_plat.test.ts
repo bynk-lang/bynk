@@ -2081,7 +2081,10 @@ async function test_a_fetch_double_sees_the_request_s_headers() {
     type WorkerVersion = __ns_bynk_cloudflare.WorkerVersion;
     const s = await relay.call("https://example.test", deps);
     if (!(s === 200)) { throw __bynkExpectFailure("tests/demo/plat.bynk:83:10", 2251, 2259, "expect s == 200\n  expected: s == 200\n  actual:   " + __bynkShow((s)) + " == " + __bynkShow((200))); }
-    if (!((((__obs.log["Fetch.send"] ?? []).filter((__c: { args: unknown[] }) => { const { req } = { req: __c.args[0] } as __Fetch_send_Call; return (__bynkEq(((__m: ReadonlyMap<string, string>, __k: string) => __m.has(__k) ? Some(__m.get(__k) as string) : None)(req.headers, "user-agent"), Some("bynk-demo/1.0"))); }).length) === (1)))) { throw __bynkExpectFailure("tests/demo/plat.bynk:84:10", 2269, 2351, "expect Fetch.send called once with req.headers.get(\"user-agent\") == Some(\"bynk-demo/1.0\")"); }
+    if (!((((__obs.log["Fetch.send"] ?? []).filter((__c: { args: unknown[] }) => {
+      const { req } = { req: __c.args[0] } as __Fetch_send_Call;
+      return (__bynkEq(((__m: ReadonlyMap<string, string>, __k: string) => __m.has(__k) ? Some(__m.get(__k) as string) : None)(req.headers, "user-agent"), Some("bynk-demo/1.0")));
+    }).length) === (1)))) { throw __bynkExpectFailure("tests/demo/plat.bynk:84:10", 2269, 2351, "expect Fetch.send called once with req.headers.get(\"user-agent\") == Some(\"bynk-demo/1.0\")"); }
     return { pass: true };
   } catch (e) {
     if (e instanceof ExpectationError) {

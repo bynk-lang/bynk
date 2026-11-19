@@ -55,8 +55,8 @@ async function test_a_literal_that_leaves_fields_out_takes_their_defaults() {
     if (!(__bynkEq(o.timeout, None))) { throw __bynkExpectFailure("tests/demo/defaults.bynk:12:10", 276, 293, "expect o.timeout == None\n  expected: o.timeout == None\n  actual:   " + __bynkShow((o.timeout)) + " == " + __bynkShow((None))); }
     if (!(__bynkEq(o.note, Some("default note")))) { throw __bynkExpectFailure("tests/demo/defaults.bynk:13:10", 303, 333, "expect o.note == Some(\"default note\")\n  expected: o.note == Some(\"default note\")\n  actual:   " + __bynkShow((o.note)) + " == " + __bynkShow((Some("default note")))); }
     if (!(__bynkEq(o.tags, ["a"]))) { throw __bynkExpectFailure("tests/demo/defaults.bynk:14:10", 343, 358, "expect o.tags == [\"a\"]\n  expected: o.tags == [\"a\"]\n  actual:   " + __bynkShow((o.tags)) + " == " + __bynkShow((["a"]))); }
-    if (!((o.meta).size === 0)) { throw __bynkExpectFailure("tests/demo/defaults.bynk:15:10", 368, 388, "expect o.meta.length() == 0\n  expected: o.meta.length() == 0\n  actual:   " + __bynkShow(((o.meta).size)) + " == " + __bynkShow((0))); }
-    if (!((o.seen).size === 0)) { throw __bynkExpectFailure("tests/demo/defaults.bynk:16:10", 398, 418, "expect o.seen.length() == 0\n  expected: o.seen.length() == 0\n  actual:   " + __bynkShow(((o.seen).size)) + " == " + __bynkShow((0))); }
+    if (!(o.meta.size === 0)) { throw __bynkExpectFailure("tests/demo/defaults.bynk:15:10", 368, 388, "expect o.meta.length() == 0\n  expected: o.meta.length() == 0\n  actual:   " + __bynkShow((o.meta.size)) + " == " + __bynkShow((0))); }
+    if (!(o.seen.size === 0)) { throw __bynkExpectFailure("tests/demo/defaults.bynk:16:10", 398, 418, "expect o.seen.length() == 0\n  expected: o.seen.length() == 0\n  actual:   " + __bynkShow((o.seen.size)) + " == " + __bynkShow((0))); }
     if (!(__bynkEq(o.inner, { a: 7, label: "inner" }))) { throw __bynkExpectFailure("tests/demo/defaults.bynk:17:10", 428, 469, "expect o.inner == Inner { a: 7, label: \"inner\" }\n  expected: o.inner == Inner { a: 7, label: \"inner\" }\n  actual:   " + __bynkShow((o.inner)) + " == " + __bynkShow(({ a: 7, label: "inner" }))); }
     return { pass: true };
   } catch (e) {
@@ -150,8 +150,8 @@ async function test_a_body_with_no_key_for_a_defaulted_field_decodes_to_the_defa
     if (!(__bynkEq(o.retry, Retry.Times(2)))) { throw __bynkExpectFailure("tests/demo/defaults.bynk:43:10", 1158, 1177, "expect o.retry == Times(2)\n  expected: o.retry == Times(2)\n  actual:   " + __bynkShow((o.retry)) + " == " + __bynkShow((Retry.Times(2)))); }
     if (!(__bynkEq(o.note, Some("default note")))) { throw __bynkExpectFailure("tests/demo/defaults.bynk:44:10", 1187, 1217, "expect o.note == Some(\"default note\")\n  expected: o.note == Some(\"default note\")\n  actual:   " + __bynkShow((o.note)) + " == " + __bynkShow((Some("default note")))); }
     if (!(__bynkEq(o.inner, { a: 7, label: "inner" }))) { throw __bynkExpectFailure("tests/demo/defaults.bynk:45:10", 1227, 1268, "expect o.inner == Inner { a: 7, label: \"inner\" }\n  expected: o.inner == Inner { a: 7, label: \"inner\" }\n  actual:   " + __bynkShow((o.inner)) + " == " + __bynkShow(({ a: 7, label: "inner" }))); }
-    if (!((o.meta).size === 0)) { throw __bynkExpectFailure("tests/demo/defaults.bynk:46:10", 1278, 1298, "expect o.meta.length() == 0\n  expected: o.meta.length() == 0\n  actual:   " + __bynkShow(((o.meta).size)) + " == " + __bynkShow((0))); }
-    if (!((o.seen).size === 0)) { throw __bynkExpectFailure("tests/demo/defaults.bynk:47:10", 1308, 1328, "expect o.seen.length() == 0\n  expected: o.seen.length() == 0\n  actual:   " + __bynkShow(((o.seen).size)) + " == " + __bynkShow((0))); }
+    if (!(o.meta.size === 0)) { throw __bynkExpectFailure("tests/demo/defaults.bynk:46:10", 1278, 1298, "expect o.meta.length() == 0\n  expected: o.meta.length() == 0\n  actual:   " + __bynkShow((o.meta.size)) + " == " + __bynkShow((0))); }
+    if (!(o.seen.size === 0)) { throw __bynkExpectFailure("tests/demo/defaults.bynk:47:10", 1308, 1328, "expect o.seen.length() == 0\n  expected: o.seen.length() == 0\n  actual:   " + __bynkShow((o.seen.size)) + " == " + __bynkShow((0))); }
     return { pass: true };
   } catch (e) {
     if (e instanceof ExpectationError) {

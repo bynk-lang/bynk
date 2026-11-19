@@ -471,7 +471,7 @@
 === indexed routedText
   async routedText(oid: string, deps: {}): globalThis.Promise<number> {
     const __state = await this.loadState();
-    return __bynkThen(((() => __bynkThen(__state.reservations.values(), (__q) => __q.filter((__x) => ((r: Reservation) => r.orderId === ((__o: Option<string>, __d: string) => __o.tag === "Some" ? __o.value : __d)(Some(oid), oid))(__x)))))(), (__q) => __q.length);
+    return __bynkThen(((() => __bynkThen(__state.reservations.values(), (__q) => __q.filter((__x) => ((r: Reservation) => r.orderId === ((__xs: readonly string[], __d: string) => __xs.length > 0 ? __xs[0] : __d)(((__s: string, __r: globalThis.RegExp): readonly string[] => { if (__s.length === 0) { return __r.exec(__s) === null ? [""] : []; } const __out: string[] = []; let __p = 0; let __q = 0; while (__q < __s.length) { __r.lastIndex = __q; const __hit = __r.exec(__s); const __e = __r.lastIndex; if (__hit === null || __e === __p) { __q++; } else { __out.push(__s.slice(__p, __q)); __p = __e; __q = __p; } } __out.push(__s.slice(__p)); return __out; })(oid, new globalThis.RegExp(",", "y")), oid))(__x)))))(), (__q) => __q.length);
   }
 === indexed byId
   async byId(rid: string, deps: {}): globalThis.Promise<number> {
@@ -515,7 +515,7 @@
   async bumpText(k: string, deps: {}): globalThis.Promise<void> {
     const __state = { ...(await this.loadState()) };
     const __result = await (async () => {
-      const __r0 = await (() => { __state.n = ((c: number) => c + (((__o: Option<string>, __d: string) => __o.tag === "Some" ? __o.value : __d)(Some(k), k)).length)(__state.n); return undefined; })();
+      const __r0 = await (() => { __state.n = ((c: number) => c + (((__xs: readonly string[], __d: string) => __xs.length > 0 ? __xs[0] : __d)(((__s: string, __r: globalThis.RegExp): readonly string[] => { if (__s.length === 0) { return __r.exec(__s) === null ? [""] : []; } const __out: string[] = []; let __p = 0; let __q = 0; while (__q < __s.length) { __r.lastIndex = __q; const __hit = __r.exec(__s); const __e = __r.lastIndex; if (__hit === null || __e === __p) { __q++; } else { __out.push(__s.slice(__p, __q)); __p = __e; __q = __p; } } __out.push(__s.slice(__p)); return __out; })(k, new globalThis.RegExp(",", "y")), k)).length)(__state.n); return undefined; })();
       return undefined;
     })();
     await this.commitState(__state);
@@ -540,7 +540,7 @@
   async addText(k: string, deps: {}): globalThis.Promise<void> {
     const __state = { ...(await this.loadState()) };
     const __result = await (async () => {
-      const __r0 = await (async () => { await __state.seen.add(String(((__o: Option<string>, __d: string) => __o.tag === "Some" ? __o.value : __d)(Some(k), k))); return undefined; })();
+      const __r0 = await (async () => { await __state.seen.add(String(((__xs: readonly string[], __d: string) => __xs.length > 0 ? __xs[0] : __d)(((__s: string, __r: globalThis.RegExp): readonly string[] => { if (__s.length === 0) { return __r.exec(__s) === null ? [""] : []; } const __out: string[] = []; let __p = 0; let __q = 0; while (__q < __s.length) { __r.lastIndex = __q; const __hit = __r.exec(__s); const __e = __r.lastIndex; if (__hit === null || __e === __p) { __q++; } else { __out.push(__s.slice(__p, __q)); __p = __e; __q = __p; } } __out.push(__s.slice(__p)); return __out; })(k, new globalThis.RegExp(",", "y")), k))); return undefined; })();
       return undefined;
     })();
     await this.commitState(__state);
@@ -554,22 +554,22 @@
   async mapPut(k: string, deps: {}): globalThis.Promise<void> {
     const __state = { ...(await this.loadState()) };
     const __result = await (async () => {
-      const __r0 = await (async () => { await __state.items.put(String(((__o: Option<string>, __d: string) => __o.tag === "Some" ? __o.value : __d)(Some(k), k)), 1); return undefined; })();
+      const __r0 = await (async () => { await __state.items.put(String(((__xs: readonly string[], __d: string) => __xs.length > 0 ? __xs[0] : __d)(((__s: string, __r: globalThis.RegExp): readonly string[] => { if (__s.length === 0) { return __r.exec(__s) === null ? [""] : []; } const __out: string[] = []; let __p = 0; let __q = 0; while (__q < __s.length) { __r.lastIndex = __q; const __hit = __r.exec(__s); const __e = __r.lastIndex; if (__hit === null || __e === __p) { __q++; } else { __out.push(__s.slice(__p, __q)); __p = __e; __q = __p; } } __out.push(__s.slice(__p)); return __out; })(k, new globalThis.RegExp(",", "y")), k)), 1); return undefined; })();
       return undefined;
     })();
     await this.commitState(__state);
     return __result;
   }
 === fall_bundle mapGet
-  async mapGet(o: Option<string>, deps: {}): globalThis.Promise<Option<number>> {
+  async mapGet(k: string, deps: {}): globalThis.Promise<Option<number>> {
     const __state = await this.loadState();
-    return (async () => { const __k = String(((__o: Option<string>, __d: string) => __o.tag === "Some" ? __o.value : __d)(o, "")); return __bynkThen(__state.items.has(__k), (__h) => __h ? __bynkThen(__state.items.get(__k), (__v) => Some(__v!)) : None); })();
+    return (async () => { const __k = String(((__xs: readonly string[], __d: string) => __xs.length > 0 ? __xs[0] : __d)(((__s: string, __r: globalThis.RegExp): readonly string[] => { if (__s.length === 0) { return __r.exec(__s) === null ? [""] : []; } const __out: string[] = []; let __p = 0; let __q = 0; while (__q < __s.length) { __r.lastIndex = __q; const __hit = __r.exec(__s); const __e = __r.lastIndex; if (__hit === null || __e === __p) { __q++; } else { __out.push(__s.slice(__p, __q)); __p = __e; __q = __p; } } __out.push(__s.slice(__p)); return __out; })(k, new globalThis.RegExp(",", "y")), "")); return __bynkThen(__state.items.has(__k), (__h) => __h ? __bynkThen(__state.items.get(__k), (__v) => Some(__v!)) : None); })();
   }
 === fall_bundle setAdd
   async setAdd(k: string, deps: {}): globalThis.Promise<void> {
     const __state = { ...(await this.loadState()) };
     const __result = await (async () => {
-      const __r0 = await (async () => { await __state.tags.add(String(((__o: Option<string>, __d: string) => __o.tag === "Some" ? __o.value : __d)(Some(k), k))); return undefined; })();
+      const __r0 = await (async () => { await __state.tags.add(String(((__xs: readonly string[], __d: string) => __xs.length > 0 ? __xs[0] : __d)(((__s: string, __r: globalThis.RegExp): readonly string[] => { if (__s.length === 0) { return __r.exec(__s) === null ? [""] : []; } const __out: string[] = []; let __p = 0; let __q = 0; while (__q < __s.length) { __r.lastIndex = __q; const __hit = __r.exec(__s); const __e = __r.lastIndex; if (__hit === null || __e === __p) { __q++; } else { __out.push(__s.slice(__p, __q)); __p = __e; __q = __p; } } __out.push(__s.slice(__p)); return __out; })(k, new globalThis.RegExp(",", "y")), k))); return undefined; })();
       return undefined;
     })();
     await this.commitState(__state);
@@ -579,7 +579,7 @@
   async cachePut(k: string, deps: { Clock: Clock }): globalThis.Promise<void> {
     const __state = { ...(await this.loadState()) };
     const __result = await (async () => {
-      const __r0 = await (async () => { const __now = __noteClock(__state, await deps.Clock.now()); await __state.seen.put(String(((__o: Option<string>, __d: string) => __o.tag === "Some" ? __o.value : __d)(Some(k), k)), { v: 1, exp: __now + 300000 }); return undefined; })();
+      const __r0 = await (async () => { const __now = __noteClock(__state, await deps.Clock.now()); await __state.seen.put(String(((__xs: readonly string[], __d: string) => __xs.length > 0 ? __xs[0] : __d)(((__s: string, __r: globalThis.RegExp): readonly string[] => { if (__s.length === 0) { return __r.exec(__s) === null ? [""] : []; } const __out: string[] = []; let __p = 0; let __q = 0; while (__q < __s.length) { __r.lastIndex = __q; const __hit = __r.exec(__s); const __e = __r.lastIndex; if (__hit === null || __e === __p) { __q++; } else { __out.push(__s.slice(__p, __q)); __p = __e; __q = __p; } } __out.push(__s.slice(__p)); return __out; })(k, new globalThis.RegExp(",", "y")), k)), { v: 1, exp: __now + 300000 }); return undefined; })();
       return undefined;
     })();
     await this.commitState(__state);
@@ -589,7 +589,7 @@
   async logAppend(k: string, deps: { Clock: Clock }): globalThis.Promise<void> {
     const __state = { ...(await this.loadState()) };
     const __result = await (async () => {
-      const __r0 = await (async () => { const __now = await deps.Clock.now(); await __state.history.append({ sku: ((__o: Option<string>, __d: string) => __o.tag === "Some" ? __o.value : __d)(Some(k), k), qty: 1 }, __now); await __state.history.prune(__now - 2592000000); return undefined; })();
+      const __r0 = await (async () => { const __now = await deps.Clock.now(); await __state.history.append({ sku: ((__xs: readonly string[], __d: string) => __xs.length > 0 ? __xs[0] : __d)(((__s: string, __r: globalThis.RegExp): readonly string[] => { if (__s.length === 0) { return __r.exec(__s) === null ? [""] : []; } const __out: string[] = []; let __p = 0; let __q = 0; while (__q < __s.length) { __r.lastIndex = __q; const __hit = __r.exec(__s); const __e = __r.lastIndex; if (__hit === null || __e === __p) { __q++; } else { __out.push(__s.slice(__p, __q)); __p = __e; __q = __p; } } __out.push(__s.slice(__p)); return __out; })(k, new globalThis.RegExp(",", "y")), k), qty: 1 }, __now); await __state.history.prune(__now - 2592000000); return undefined; })();
       return undefined;
     })();
     await this.commitState(__state);
@@ -598,13 +598,13 @@
 === fall_bundle logSince
   async logSince(t: number, k: string, deps: {}): globalThis.Promise<number> {
     const __state = await this.loadState();
-    return __bynkThen(((() => __bynkThen(((() => __state.history.since(t)))(), (__q) => __q.filter((__x) => ((h: Hit) => h.sku === ((__o: Option<string>, __d: string) => __o.tag === "Some" ? __o.value : __d)(Some(k), k))(__x)))))(), (__q) => __q.length);
+    return __bynkThen(((() => __bynkThen(((() => __state.history.since(t)))(), (__q) => __q.filter((__x) => ((h: Hit) => h.sku === ((__xs: readonly string[], __d: string) => __xs.length > 0 ? __xs[0] : __d)(((__s: string, __r: globalThis.RegExp): readonly string[] => { if (__s.length === 0) { return __r.exec(__s) === null ? [""] : []; } const __out: string[] = []; let __p = 0; let __q = 0; while (__q < __s.length) { __r.lastIndex = __q; const __hit = __r.exec(__s); const __e = __r.lastIndex; if (__hit === null || __e === __p) { __q++; } else { __out.push(__s.slice(__p, __q)); __p = __e; __q = __p; } } __out.push(__s.slice(__p)); return __out; })(k, new globalThis.RegExp(",", "y")), k))(__x)))))(), (__q) => __q.length);
   }
 === fall_bundle cellUpdate
   async cellUpdate(k: string, deps: {}): globalThis.Promise<void> {
     const __state = { ...(await this.loadState()) };
     const __result = await (async () => {
-      const __r0 = await (() => { __state.n = ((c: number) => c + (((__o: Option<string>, __d: string) => __o.tag === "Some" ? __o.value : __d)(Some(k), k)).length)(__state.n); return undefined; })();
+      const __r0 = await (() => { __state.n = ((c: number) => c + (((__xs: readonly string[], __d: string) => __xs.length > 0 ? __xs[0] : __d)(((__s: string, __r: globalThis.RegExp): readonly string[] => { if (__s.length === 0) { return __r.exec(__s) === null ? [""] : []; } const __out: string[] = []; let __p = 0; let __q = 0; while (__q < __s.length) { __r.lastIndex = __q; const __hit = __r.exec(__s); const __e = __r.lastIndex; if (__hit === null || __e === __p) { __q++; } else { __out.push(__s.slice(__p, __q)); __p = __e; __q = __p; } } __out.push(__s.slice(__p)); return __out; })(k, new globalThis.RegExp(",", "y")), k)).length)(__state.n); return undefined; })();
       return undefined;
     })();
     await this.commitState(__state);
@@ -614,7 +614,7 @@
   async join(k: string, conn: Connection<Frame>, deps: {}): globalThis.Promise<void> {
     const __state = { ...(await this.loadState()) };
     const __result = await (async () => {
-      const __r0 = await (async () => { const __k = String(((__o: Option<string>, __d: string) => __o.tag === "Some" ? __o.value : __d)(Some(k), k)); const __new = conn; const __old = await __state.conns.get(__k); if (__old !== undefined && __old !== __new) { await __old.close(); } await __state.conns.put(__k, __new); return undefined; })();
+      const __r0 = await (async () => { const __k = String(((__xs: readonly string[], __d: string) => __xs.length > 0 ? __xs[0] : __d)(((__s: string, __r: globalThis.RegExp): readonly string[] => { if (__s.length === 0) { return __r.exec(__s) === null ? [""] : []; } const __out: string[] = []; let __p = 0; let __q = 0; while (__q < __s.length) { __r.lastIndex = __q; const __hit = __r.exec(__s); const __e = __r.lastIndex; if (__hit === null || __e === __p) { __q++; } else { __out.push(__s.slice(__p, __q)); __p = __e; __q = __p; } } __out.push(__s.slice(__p)); return __out; })(k, new globalThis.RegExp(",", "y")), k)); const __new = conn; const __old = await __state.conns.get(__k); if (__old !== undefined && __old !== __new) { await __old.close(); } await __state.conns.put(__k, __new); return undefined; })();
       return undefined;
     })();
     await this.commitState(__state);
@@ -624,7 +624,7 @@
   async leave(k: string, deps: {}): globalThis.Promise<void> {
     const __state = { ...(await this.loadState()) };
     const __result = await (async () => {
-      const __r0 = await (async () => { const __k = String(((__o: Option<string>, __d: string) => __o.tag === "Some" ? __o.value : __d)(Some(k), k)); const __o = await __state.conns.get(__k); if (__o !== undefined) { await __o.close(); await __state.conns.remove(__k); } return undefined; })();
+      const __r0 = await (async () => { const __k = String(((__xs: readonly string[], __d: string) => __xs.length > 0 ? __xs[0] : __d)(((__s: string, __r: globalThis.RegExp): readonly string[] => { if (__s.length === 0) { return __r.exec(__s) === null ? [""] : []; } const __out: string[] = []; let __p = 0; let __q = 0; while (__q < __s.length) { __r.lastIndex = __q; const __hit = __r.exec(__s); const __e = __r.lastIndex; if (__hit === null || __e === __p) { __q++; } else { __out.push(__s.slice(__p, __q)); __p = __e; __q = __p; } } __out.push(__s.slice(__p)); return __out; })(k, new globalThis.RegExp(",", "y")), k)); const __o = await __state.conns.get(__k); if (__o !== undefined) { await __o.close(); await __state.conns.remove(__k); } return undefined; })();
       return undefined;
     })();
     await this.commitState(__state);
@@ -638,22 +638,22 @@
   async mapPut(k: string, deps: {}): globalThis.Promise<void> {
     const __state = { ...(await this.loadState()) };
     const __result = await (async () => {
-      const __r0 = await (async () => { await __state.items.put(String(((__o: Option<string>, __d: string) => __o.tag === "Some" ? __o.value : __d)(Some(k), k)), 1); return undefined; })();
+      const __r0 = await (async () => { await __state.items.put(String(((__xs: readonly string[], __d: string) => __xs.length > 0 ? __xs[0] : __d)(((__s: string, __r: globalThis.RegExp): readonly string[] => { if (__s.length === 0) { return __r.exec(__s) === null ? [""] : []; } const __out: string[] = []; let __p = 0; let __q = 0; while (__q < __s.length) { __r.lastIndex = __q; const __hit = __r.exec(__s); const __e = __r.lastIndex; if (__hit === null || __e === __p) { __q++; } else { __out.push(__s.slice(__p, __q)); __p = __e; __q = __p; } } __out.push(__s.slice(__p)); return __out; })(k, new globalThis.RegExp(",", "y")), k)), 1); return undefined; })();
       return undefined;
     })();
     await this.commitState(__state);
     return __result;
   }
 === fall_workers mapGet
-  async mapGet(o: Option<string>, deps: {}): globalThis.Promise<Option<number>> {
+  async mapGet(k: string, deps: {}): globalThis.Promise<Option<number>> {
     const __state = await this.loadState();
-    return (async () => { const __k = String(((__o: Option<string>, __d: string) => __o.tag === "Some" ? __o.value : __d)(o, "")); return __bynkThen(__state.items.has(__k), (__h) => __h ? __bynkThen(__state.items.get(__k), (__v) => Some(__v!)) : None); })();
+    return (async () => { const __k = String(((__xs: readonly string[], __d: string) => __xs.length > 0 ? __xs[0] : __d)(((__s: string, __r: globalThis.RegExp): readonly string[] => { if (__s.length === 0) { return __r.exec(__s) === null ? [""] : []; } const __out: string[] = []; let __p = 0; let __q = 0; while (__q < __s.length) { __r.lastIndex = __q; const __hit = __r.exec(__s); const __e = __r.lastIndex; if (__hit === null || __e === __p) { __q++; } else { __out.push(__s.slice(__p, __q)); __p = __e; __q = __p; } } __out.push(__s.slice(__p)); return __out; })(k, new globalThis.RegExp(",", "y")), "")); return __bynkThen(__state.items.has(__k), (__h) => __h ? __bynkThen(__state.items.get(__k), (__v) => Some(__v!)) : None); })();
   }
 === fall_workers setAdd
   async setAdd(k: string, deps: {}): globalThis.Promise<void> {
     const __state = { ...(await this.loadState()) };
     const __result = await (async () => {
-      const __r0 = await (async () => { await __state.tags.add(String(((__o: Option<string>, __d: string) => __o.tag === "Some" ? __o.value : __d)(Some(k), k))); return undefined; })();
+      const __r0 = await (async () => { await __state.tags.add(String(((__xs: readonly string[], __d: string) => __xs.length > 0 ? __xs[0] : __d)(((__s: string, __r: globalThis.RegExp): readonly string[] => { if (__s.length === 0) { return __r.exec(__s) === null ? [""] : []; } const __out: string[] = []; let __p = 0; let __q = 0; while (__q < __s.length) { __r.lastIndex = __q; const __hit = __r.exec(__s); const __e = __r.lastIndex; if (__hit === null || __e === __p) { __q++; } else { __out.push(__s.slice(__p, __q)); __p = __e; __q = __p; } } __out.push(__s.slice(__p)); return __out; })(k, new globalThis.RegExp(",", "y")), k))); return undefined; })();
       return undefined;
     })();
     await this.commitState(__state);
@@ -663,7 +663,7 @@
   async cachePut(k: string, deps: { Clock: Clock }): globalThis.Promise<void> {
     const __state = { ...(await this.loadState()) };
     const __result = await (async () => {
-      const __r0 = await (async () => { const __now = __noteClock(__state, await deps.Clock.now()); await __state.seen.put(String(((__o: Option<string>, __d: string) => __o.tag === "Some" ? __o.value : __d)(Some(k), k)), { v: 1, exp: __now + 300000 }); return undefined; })();
+      const __r0 = await (async () => { const __now = __noteClock(__state, await deps.Clock.now()); await __state.seen.put(String(((__xs: readonly string[], __d: string) => __xs.length > 0 ? __xs[0] : __d)(((__s: string, __r: globalThis.RegExp): readonly string[] => { if (__s.length === 0) { return __r.exec(__s) === null ? [""] : []; } const __out: string[] = []; let __p = 0; let __q = 0; while (__q < __s.length) { __r.lastIndex = __q; const __hit = __r.exec(__s); const __e = __r.lastIndex; if (__hit === null || __e === __p) { __q++; } else { __out.push(__s.slice(__p, __q)); __p = __e; __q = __p; } } __out.push(__s.slice(__p)); return __out; })(k, new globalThis.RegExp(",", "y")), k)), { v: 1, exp: __now + 300000 }); return undefined; })();
       return undefined;
     })();
     await this.commitState(__state);
@@ -673,7 +673,7 @@
   async logAppend(k: string, deps: { Clock: Clock }): globalThis.Promise<void> {
     const __state = { ...(await this.loadState()) };
     const __result = await (async () => {
-      const __r0 = await (async () => { const __now = await deps.Clock.now(); await __state.history.append({ sku: ((__o: Option<string>, __d: string) => __o.tag === "Some" ? __o.value : __d)(Some(k), k), qty: 1 }, __now); await __state.history.prune(__now - 2592000000); return undefined; })();
+      const __r0 = await (async () => { const __now = await deps.Clock.now(); await __state.history.append({ sku: ((__xs: readonly string[], __d: string) => __xs.length > 0 ? __xs[0] : __d)(((__s: string, __r: globalThis.RegExp): readonly string[] => { if (__s.length === 0) { return __r.exec(__s) === null ? [""] : []; } const __out: string[] = []; let __p = 0; let __q = 0; while (__q < __s.length) { __r.lastIndex = __q; const __hit = __r.exec(__s); const __e = __r.lastIndex; if (__hit === null || __e === __p) { __q++; } else { __out.push(__s.slice(__p, __q)); __p = __e; __q = __p; } } __out.push(__s.slice(__p)); return __out; })(k, new globalThis.RegExp(",", "y")), k), qty: 1 }, __now); await __state.history.prune(__now - 2592000000); return undefined; })();
       return undefined;
     })();
     await this.commitState(__state);
@@ -682,13 +682,13 @@
 === fall_workers logSince
   async logSince(t: number, k: string, deps: {}): globalThis.Promise<number> {
     const __state = await this.loadState();
-    return __bynkThen(((() => __bynkThen(((() => __state.history.since(t)))(), (__q) => __q.filter((__x) => ((h: Hit) => h.sku === ((__o: Option<string>, __d: string) => __o.tag === "Some" ? __o.value : __d)(Some(k), k))(__x)))))(), (__q) => __q.length);
+    return __bynkThen(((() => __bynkThen(((() => __state.history.since(t)))(), (__q) => __q.filter((__x) => ((h: Hit) => h.sku === ((__xs: readonly string[], __d: string) => __xs.length > 0 ? __xs[0] : __d)(((__s: string, __r: globalThis.RegExp): readonly string[] => { if (__s.length === 0) { return __r.exec(__s) === null ? [""] : []; } const __out: string[] = []; let __p = 0; let __q = 0; while (__q < __s.length) { __r.lastIndex = __q; const __hit = __r.exec(__s); const __e = __r.lastIndex; if (__hit === null || __e === __p) { __q++; } else { __out.push(__s.slice(__p, __q)); __p = __e; __q = __p; } } __out.push(__s.slice(__p)); return __out; })(k, new globalThis.RegExp(",", "y")), k))(__x)))))(), (__q) => __q.length);
   }
 === fall_workers cellUpdate
   async cellUpdate(k: string, deps: {}): globalThis.Promise<void> {
     const __state = { ...(await this.loadState()) };
     const __result = await (async () => {
-      const __r0 = await (() => { __state.n = ((c: number) => c + (((__o: Option<string>, __d: string) => __o.tag === "Some" ? __o.value : __d)(Some(k), k)).length)(__state.n); return undefined; })();
+      const __r0 = await (() => { __state.n = ((c: number) => c + (((__xs: readonly string[], __d: string) => __xs.length > 0 ? __xs[0] : __d)(((__s: string, __r: globalThis.RegExp): readonly string[] => { if (__s.length === 0) { return __r.exec(__s) === null ? [""] : []; } const __out: string[] = []; let __p = 0; let __q = 0; while (__q < __s.length) { __r.lastIndex = __q; const __hit = __r.exec(__s); const __e = __r.lastIndex; if (__hit === null || __e === __p) { __q++; } else { __out.push(__s.slice(__p, __q)); __p = __e; __q = __p; } } __out.push(__s.slice(__p)); return __out; })(k, new globalThis.RegExp(",", "y")), k)).length)(__state.n); return undefined; })();
       return undefined;
     })();
     await this.commitState(__state);
@@ -698,7 +698,7 @@
   async join(k: string, conn: Connection<Frame>, deps: {}): globalThis.Promise<void> {
     const __state = { ...(await this.loadState()) };
     const __result = await (async () => {
-      const __r0 = await (async () => { const __k = String(((__o: Option<string>, __d: string) => __o.tag === "Some" ? __o.value : __d)(Some(k), k)); const __new = __connIdOf(conn); const __old = await __state.conns.get(__k); if (__old !== undefined && __old !== __new) { const __c = __resolveConnection<Frame>(this.state, __old); if (__c.tag === "Some") { await __c.value.close(); } } await __state.conns.put(__k, __new); return undefined; })();
+      const __r0 = await (async () => { const __k = String(((__xs: readonly string[], __d: string) => __xs.length > 0 ? __xs[0] : __d)(((__s: string, __r: globalThis.RegExp): readonly string[] => { if (__s.length === 0) { return __r.exec(__s) === null ? [""] : []; } const __out: string[] = []; let __p = 0; let __q = 0; while (__q < __s.length) { __r.lastIndex = __q; const __hit = __r.exec(__s); const __e = __r.lastIndex; if (__hit === null || __e === __p) { __q++; } else { __out.push(__s.slice(__p, __q)); __p = __e; __q = __p; } } __out.push(__s.slice(__p)); return __out; })(k, new globalThis.RegExp(",", "y")), k)); const __new = __connIdOf(conn); const __old = await __state.conns.get(__k); if (__old !== undefined && __old !== __new) { const __c = __resolveConnection<Frame>(this.state, __old); if (__c.tag === "Some") { await __c.value.close(); } } await __state.conns.put(__k, __new); return undefined; })();
       return undefined;
     })();
     await this.commitState(__state);
@@ -708,7 +708,7 @@
   async leave(k: string, deps: {}): globalThis.Promise<void> {
     const __state = { ...(await this.loadState()) };
     const __result = await (async () => {
-      const __r0 = await (async () => { const __k = String(((__o: Option<string>, __d: string) => __o.tag === "Some" ? __o.value : __d)(Some(k), k)); const __cid = await __state.conns.get(__k); if (__cid !== undefined) { const __c = __resolveConnection<Frame>(this.state, __cid); if (__c.tag === "Some") { await __c.value.close(); } await __state.conns.remove(__k); } return undefined; })();
+      const __r0 = await (async () => { const __k = String(((__xs: readonly string[], __d: string) => __xs.length > 0 ? __xs[0] : __d)(((__s: string, __r: globalThis.RegExp): readonly string[] => { if (__s.length === 0) { return __r.exec(__s) === null ? [""] : []; } const __out: string[] = []; let __p = 0; let __q = 0; while (__q < __s.length) { __r.lastIndex = __q; const __hit = __r.exec(__s); const __e = __r.lastIndex; if (__hit === null || __e === __p) { __q++; } else { __out.push(__s.slice(__p, __q)); __p = __e; __q = __p; } } __out.push(__s.slice(__p)); return __out; })(k, new globalThis.RegExp(",", "y")), k)); const __cid = await __state.conns.get(__k); if (__cid !== undefined) { const __c = __resolveConnection<Frame>(this.state, __cid); if (__c.tag === "Some") { await __c.value.close(); } await __state.conns.remove(__k); } return undefined; })();
       return undefined;
     })();
     await this.commitState(__state);

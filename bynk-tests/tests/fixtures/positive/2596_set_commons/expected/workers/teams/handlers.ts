@@ -16,23 +16,23 @@ export function b(): ReadonlySet<string> {
 }
 
 export function joined(): readonly string[] {
-  return ([...(union(a(), b()))] as readonly string[]);
+  return ([...union(a(), b())] as readonly string[]);
 }
 
 export function shared(): readonly string[] {
-  return ([...(intersect(a(), b()))] as readonly string[]);
+  return ([...intersect(a(), b())] as readonly string[]);
 }
 
 export function onlyA(): readonly string[] {
-  return ([...(difference(a(), b()))] as readonly string[]);
+  return ([...difference(a(), b())] as readonly string[]);
 }
 
 export function lengths(): readonly number[] {
-  return ([...(mapSet(a(), (s: string) => s.length))] as readonly number[]);
+  return ([...mapSet(a(), (s: string) => s.length)] as readonly number[]);
 }
 
 export function short(): readonly string[] {
-  return ([...(filterSet(a(), (s: string) => s.length < 3))] as readonly string[]);
+  return ([...filterSet(a(), (s: string) => s.length < 3)] as readonly string[]);
 }
 
 export function within(): boolean {

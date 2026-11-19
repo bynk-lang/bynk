@@ -11,28 +11,31 @@ import { type __JsonValue, type __BoundaryError, type __ServiceBinding, __callSe
  * that order.
  */
 export function union<T>(a: ReadonlySet<T>, b: ReadonlySet<T>): ReadonlySet<T> {
-  return ((__xs: readonly T[], __acc: ReadonlySet<T>, __f: (acc: ReadonlySet<T>, x: T) => ReadonlySet<T>) => { for (const __x of __xs) __acc = __f(__acc, __x); return __acc; })(([...(b)] as readonly T[]), a, (acc: ReadonlySet<T>, x: T) => __bynkSetInsert<T>(acc, x));
+  return ((__xs: readonly T[], __acc: ReadonlySet<T>, __f: (acc: ReadonlySet<T>, x: T) => ReadonlySet<T>) => {
+    for (const __x of __xs) __acc = __f(__acc, __x);
+    return __acc;
+  })(([...b] as readonly T[]), a, (acc: ReadonlySet<T>, x: T) => __bynkSetInsert<T>(acc, x));
 }
 
 /**
  * The elements of `a` that are also in `b`, in `a`'s order.
  */
 export function intersect<T>(a: ReadonlySet<T>, b: ReadonlySet<T>): ReadonlySet<T> {
-  return __bynkSetOf<T>((([...(a)] as readonly T[])).filter((__x: T) => ((x: T) => (b).has(x))(__x)));
+  return __bynkSetOf<T>((([...a] as readonly T[])).filter((__x: T) => ((x: T) => b.has(x))(__x)));
 }
 
 /**
  * The elements of `a` that are not in `b`, in `a`'s order.
  */
 export function difference<T>(a: ReadonlySet<T>, b: ReadonlySet<T>): ReadonlySet<T> {
-  return __bynkSetOf<T>((([...(a)] as readonly T[])).filter((__x: T) => ((x: T) => !(b).has(x))(__x)));
+  return __bynkSetOf<T>((([...a] as readonly T[])).filter((__x: T) => ((x: T) => !b.has(x))(__x)));
 }
 
 /**
  * Whether every element of `a` is in `b`.
  */
 export function isSubsetOf<T>(a: ReadonlySet<T>, b: ReadonlySet<T>): boolean {
-  return (([...(a)] as readonly T[])).every((__x: T) => ((x: T) => (b).has(x))(__x));
+  return (([...a] as readonly T[])).every((__x: T) => ((x: T) => b.has(x))(__x));
 }
 
 /**
@@ -40,7 +43,7 @@ export function isSubsetOf<T>(a: ReadonlySet<T>, b: ReadonlySet<T>): boolean {
  * `bynk.list`'s `filter`, so a unit can use both commons.
  */
 export function filterSet<T>(s: ReadonlySet<T>, p: (a0: T) => boolean): ReadonlySet<T> {
-  return __bynkSetOf<T>((([...(s)] as readonly T[])).filter((__x: T) => (p)(__x)));
+  return __bynkSetOf<T>((([...s] as readonly T[])).filter((__x: T) => (p)(__x)));
 }
 
 /**
@@ -50,5 +53,5 @@ export function filterSet<T>(s: ReadonlySet<T>, p: (a0: T) => boolean): Readonly
  * use both commons.
  */
 export function mapSet<A, B>(s: ReadonlySet<A>, f: (a0: A) => B): ReadonlySet<B> {
-  return __bynkSetOf<B>((([...(s)] as readonly A[])).map((__x: A) => (f)(__x)));
+  return __bynkSetOf<B>((([...s] as readonly A[])).map((__x: A) => (f)(__x)));
 }

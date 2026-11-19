@@ -49,7 +49,7 @@ export function decoded(text: string): boolean {
   switch (__r0.tag) {
     case "Ok": {
       const s = __r0.value;
-      return (s).size === 2;
+      return s.size === 2;
     }
     case "Err": {
       return false;
@@ -60,7 +60,7 @@ export function decoded(text: string): boolean {
 
 export const count = {
   async call(xs: readonly number[], deps: {}): globalThis.Promise<number> {
-    return (new globalThis.Set<number>(xs)).size;
+    return new globalThis.Set<number>(xs).size;
   },
 };
 

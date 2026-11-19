@@ -6503,6 +6503,14 @@ mod settle_tests {
 mod bridge_tests {
     use super::*;
 
+    /// A plain `Set.remove`: its body is a comma expression `bynk_ts` cannot build, so it is
+    /// still text (1A.30). `contains` over it is text too, in the bracketed form.
+    fn removed(set: &str, key: &str) -> String {
+        format!(
+            "((__s: globalThis.Set<string>) => (__s.delete({key}), __s as ReadonlySet<string>))(new globalThis.Set<string>({set}))"
+        )
+    }
+
     fn lit_text(l: Lowered) -> String {
         assert!(l.pre.is_empty(), "a literal hoists nothing");
         assert!(
@@ -7268,17 +7276,18 @@ fn minus(x: Int) -> Int { 5 - - -x }
 
     #[test]
     fn short_circuit_operators_over_a_text_operand_keep_their_text() {
-        // A `Set` `contains` is still text (the container kernels), so the
-        // operator over it is text, byte for byte.
+        // A plain `Set` `remove` is still text (a comma expression), so the
+        // operator over a `contains` of it is text, byte for byte.
         let src = "commons shortt\n\
-                   fn a(s: Set[String], t: String, y: Bool) -> Bool { s.contains(t) && y }\n\
-                   fn b(s: Set[String], t: String, y: Bool) -> Bool { y || s.contains(t) }\n\
-                   fn c(s: Set[String], t: String, y: Bool) -> Bool { s.contains(t) implies y }\n";
+                   fn a(s: Set[String], t: String, y: Bool) -> Bool { s.remove(t).contains(t) && y }\n\
+                   fn b(s: Set[String], t: String, y: Bool) -> Bool { y || s.remove(t).contains(t) }\n\
+                   fn c(s: Set[String], t: String, y: Bool) -> Bool { s.remove(t).contains(t) implies y }\n";
         assert!(text_exits(src) >= 3);
         let ts = crate::testkit::emit_source(src);
-        assert_eq!(returned(&ts, "a"), "(s).has(t) && y");
-        assert_eq!(returned(&ts, "b"), "y || (s).has(t)");
-        assert_eq!(returned(&ts, "c"), "(!((s).has(t)) || y)");
+        let has = format!("({}).has(t)", removed("s", "t"));
+        assert_eq!(returned(&ts, "a"), format!("{has} && y"));
+        assert_eq!(returned(&ts, "b"), format!("y || {has}"));
+        assert_eq!(returned(&ts, "c"), format!("(!({has}) || y)"));
     }
 
     #[test]
@@ -7391,21 +7400,22 @@ fn minus(x: Int) -> Int { 5 - - -x }
 
     #[test]
     fn a_call_with_a_text_argument_falls_back_to_today_s_text() {
-        // A `Set` `contains` operand is still text (the container kernels), so
-        // each call over it is text, byte for byte.
+        // A `contains` over a plain `Set` `remove` is still text (a comma
+        // expression), so each call over it is text, byte for byte.
         let src = "commons calltext\n\
             type S = | A(f: Bool) | B\n\
             type Box2 = { v: Int }\n\
             fn Box2.take(self, b: Bool) -> Int { self.v }\n\
             fn g(b: Bool) -> Bool { b }\n\
-            fn plain(a: Set[String], c: String) -> Bool { g(a.contains(c)) }\n\
-            fn ctor(a: Set[String], c: String) -> S { A(a.contains(c)) }\n\
-            fn ufcs(b: Box2, a: Set[String], c: String) -> Int { b.take(a.contains(c)) }\n";
+            fn plain(a: Set[String], c: String) -> Bool { g(a.remove(c).contains(c)) }\n\
+            fn ctor(a: Set[String], c: String) -> S { A(a.remove(c).contains(c)) }\n\
+            fn ufcs(b: Box2, a: Set[String], c: String) -> Int { b.take(a.remove(c).contains(c)) }\n";
         let ts = crate::testkit::emit_source(src);
         assert!(text_exits(src) > 0);
-        assert_eq!(returned(&ts, "plain"), "g((a).has(c))");
-        assert_eq!(returned(&ts, "ctor"), "S.A((a).has(c))");
-        assert_eq!(returned(&ts, "ufcs"), "Box2.take(b, (a).has(c))");
+        let has = format!("({}).has(c)", removed("a", "c"));
+        assert_eq!(returned(&ts, "plain"), format!("g({has})"));
+        assert_eq!(returned(&ts, "ctor"), format!("S.A({has})"));
+        assert_eq!(returned(&ts, "ufcs"), format!("Box2.take(b, {has})"));
     }
 
     #[test]
@@ -7495,7 +7505,7 @@ fn minus(x: Int) -> Int { 5 - - -x }
             type Box2[A] = { v: A }\n\
             fn Box2.cast[U](self) -> Option[U] { None }\n\
             fn rec(b: Box2[Int]) -> P { P { name: \"x\", age: b.cast[Int]() } }\n\
-            fn s(b: Box2[Int]) -> String { \"v \\(b.cast[Int]().getOrElse(0))\" }\n";
+            fn s(a: Set[String], c: String) -> String { \"v \\(a.remove(c).length())\" }\n";
         assert!(text_exits(src) > 0);
         let ts = crate::testkit::emit_source(src);
         assert!(ts.contains("{ name: \"x\", age: "), "{ts}");
@@ -7772,10 +7782,13 @@ fn minus(x: Int) -> Int { 5 - - -x }
     #[test]
     fn a_ternary_over_a_text_branch_falls_back_to_text() {
         let src = "commons ternt\n\
-            fn f(c: Bool, x: Set[String], y: String) -> Bool { if c { x.contains(y) } else { false } }\n";
+            fn f(c: Bool, x: Set[String], y: String) -> Bool { if c { x.remove(y).contains(y) } else { false } }\n";
         let (exits, _, ts) = exits_and_stmts(src);
         assert!(exits > 0, "{ts}");
-        assert_eq!(returned(&ts, "f"), "(c ? (x).has(y) : false)");
+        assert_eq!(
+            returned(&ts, "f"),
+            format!("(c ? ({}).has(y) : false)", removed("x", "y"))
+        );
     }
 
     #[test]
@@ -7884,17 +7897,17 @@ fn minus(x: Int) -> Int { 5 - - -x }
 
     #[test]
     fn a_hoisted_if_with_a_text_branch_keeps_its_text_lines() {
-        // A branch tail that is still text (a `Set` `contains`) keeps the whole
+        // A branch tail that is still text (a `contains` over a `Set` `remove`) keeps the whole
         // hoist as text lines, byte for byte, with `assign_branch`'s padding.
         let src = "commons iftext\n\
             fn f(c: Bool, x: Set[String], y: String, r: Result[Bool, String]) -> Result[Bool, String] {\n\
-              let v = if c { r? } else { x.contains(y) }\n\
+              let v = if c { r? } else { x.remove(y).contains(y) }\n\
               Ok(v)\n\
             }\n";
         let (exits, stmts, ts) = exits_and_stmts(src);
         assert!(exits > 0 && stmts > 0, "{ts}");
         assert!(
-            ts.contains("  let __r1: boolean;\n  if (c) {\n    const __r0 = r;\n    if (__r0.tag === \"Err\") return __r0;\n    __r1 = __r0.value;\n  } else {\n    __r1 = (x).has(y);\n  }\n"),
+            ts.contains(&format!("  let __r1: boolean;\n  if (c) {{\n    const __r0 = r;\n    if (__r0.tag === \"Err\") return __r0;\n    __r1 = __r0.value;\n  }} else {{\n    __r1 = ({}).has(y);\n  }}\n", removed("x", "y"))),
             "{ts}"
         );
     }
@@ -8061,20 +8074,23 @@ fn minus(x: Int) -> Int { 5 - - -x }
         );
     }
 
-    /// A text operand or hoisted statement (a `Set` `contains`) keeps the text
+    /// A text operand or hoisted statement (a `contains` over a `Set` `remove`) keeps the text
     /// forms byte for byte: the binding arrow, the hoisted `if`, the plain arrow.
     #[test]
     fn short_circuit_text_fallbacks_keep_their_text() {
         let src = "commons sct\n\
              fn risky(n: Int) -> Result[Int, String] { Ok(n) }\n\
-             fn a(s: Set[String], u: String, k: Bool) -> Bool { k && s.contains(u) }\n\
-             fn b(s: Set[String], u: String, x: Int) -> Result[Bool, String] { Ok(s.contains(u) && risky(x)? > 0) }\n";
+             fn a(s: Set[String], u: String, k: Bool) -> Bool { k && s.remove(u).contains(u) }\n\
+             fn b(s: Set[String], u: String, x: Int) -> Result[Bool, String] { Ok(s.remove(u).contains(u) && risky(x)? > 0) }\n";
         let (exits, _, ts) = exits_and_stmts(src);
         assert!(exits > 0, "{ts}");
-        assert_eq!(returned(&ts, "a"), "k && (s).has(u)");
+        let has = format!("({}).has(u)", removed("s", "u"));
+        assert_eq!(returned(&ts, "a"), format!("k && {has}"));
         assert_eq!(
             func(&ts, "b"),
-            "export function b(s: ReadonlySet<string>, u: string, x: number): Result<boolean, string> {\n  let __r1: boolean;\n  if ((s).has(u)) {\n    const __r0 = risky(x);\n    if (__r0.tag === \"Err\") return __r0;\n    __r1 = __r0.value > 0;\n  } else {\n    __r1 = false;\n  }\n  return Ok(__r1);\n}\n"
+            format!(
+                "export function b(s: ReadonlySet<string>, u: string, x: number): Result<boolean, string> {{\n  let __r1: boolean;\n  if ({has}) {{\n    const __r0 = risky(x);\n    if (__r0.tag === \"Err\") return __r0;\n    __r1 = __r0.value > 0;\n  }} else {{\n    __r1 = false;\n  }}\n  return Ok(__r1);\n}}\n"
+            )
         );
     }
 }
@@ -8171,55 +8187,45 @@ mod list_kernel_tests {
         assert!(ts.contains("import { __bynkDecimalAdd }"), "{ts}");
     }
 
-    /// A receiver that is still text (`Map.values()`) makes the arm fall back to
+    /// A receiver that is still text (`String.splitRegex` mapped, whose regex arm is still text) makes the arm fall back to
     /// today's one-line text, byte for byte: the mixed-operand path of
     /// `node_or_text`, which the node tests above never reach.
     #[test]
     fn a_text_receiver_keeps_the_text_form() {
-        let values = "[...(m).values()]";
         for (elem, ret, expr, want) in [
-            (
-                "Int",
-                "List[Int]",
-                "m.values().map((x) => x)",
-                format!("({values}).map((__x: number) => ((x: number) => x)(__x))"),
-            ),
-            (
-                "Int",
-                "List[Int]",
-                "m.values().sortBy((x) => x)",
+            ("Int", "List[Int]", "{R}.map((x) => x)", {
+                let values = text_values("Int");
+                format!("({values}).map((__x: number) => ((x: number) => x)(__x))")
+            }),
+            ("Int", "List[Int]", "{R}.sortBy((x) => x)", {
+                let values = text_values("Int");
                 format!(
                     "[...{values}].sort((__a: number, __b: number) => {{ const __ka = ((x: number) => x)(__a), __kb = ((x: number) => x)(__b); return __ka < __kb ? -1 : __ka > __kb ? 1 : 0; }})"
-                ),
-            ),
-            (
-                "Float",
-                "List[Float]",
-                "m.values().sortBy((x) => x)",
+                )
+            }),
+            ("Float", "List[Float]", "{R}.sortBy((x) => x)", {
+                let values = text_values("Float");
                 format!(
                     "[...{values}].sort((__a: number, __b: number) => __bynkCmpFloat(((x: number) => x)(__a), ((x: number) => x)(__b)))"
-                ),
-            ),
-            (
-                "Decimal",
-                "Decimal",
-                "m.values().sum((x) => x)",
+                )
+            }),
+            ("Decimal", "Decimal", "{R}.sum((x) => x)", {
+                let values = text_values("Decimal");
                 format!(
                     "({values}).reduce((__s: {d}, __x: {d}) => __bynkDecimalAdd(__s, ((x: {d}) => x)(__x)), {{ coefficient: 0n, scale: 0 }})",
                     d = "{ readonly coefficient: bigint; readonly scale: number }"
-                ),
-            ),
-            (
-                "Int",
-                "Int",
-                "m.values().fold(0, (a, x) => a + x)",
+                )
+            }),
+            ("Int", "Int", "{R}.fold(0, (a, x) => a + x)", {
+                let values = text_values("Int");
                 format!(
                     "((__xs: readonly number[], __acc: number, __f: (acc: number, x: number) => number) => {{ for (const __x of __xs) __acc = __f(__acc, __x); return __acc; }})({values}, 0, (a: number, x: number) => a + x)"
-                ),
-            ),
+                )
+            }),
         ] {
             let (n, ts) = exits(&format!(
-                "fn f(m: Map[String, {elem}]) -> {ret} {{ {expr} }}"
+                "fn f(s: String, v: {elem}) -> {ret} {{ {} }}",
+                expr.replace("{R}", TEXT_RECEIVER)
             ));
             assert!(n > 0, "{expr}\n{ts}");
             assert_eq!(returned_any(&ts), want, "{expr}");
@@ -8227,7 +8233,7 @@ mod list_kernel_tests {
     }
 
     /// The statement-bodied arms (1A.18b, #3719), each over a list parameter
-    /// (nodes) and over `Map.values()`, which is still text.
+    /// (nodes) and over a text receiver (`TEXT_RECEIVER`).
     /// `(element type, return type, extra parameters, expression over {R})`.
     const STATEMENT_ARMS: &[(&str, &str, &str, &str)] = &[
         ("Int", "Int", "", "{R}.fold(0, (a, x) => a + x)"),
@@ -8312,6 +8318,19 @@ mod list_kernel_tests {
         ),
     ];
 
+    /// A `List` receiver that is still text: `String.splitRegex`'s arm is a statement block, so
+    /// the `map` over it is text too. The element type is the parameter `v`'s.
+    const TEXT_RECEIVER: &str = "s.splitRegex(\",\").map((x) => v)";
+
+    /// `TEXT_RECEIVER` as printed, for an element type.
+    fn text_values(elem: &str) -> String {
+        let (n, ts) = exits(&format!(
+            "fn f(s: String, v: {elem}) -> List[{elem}] {{ {TEXT_RECEIVER} }}"
+        ));
+        assert!(n > 0, "{ts}");
+        returned_any(&ts)
+    }
+
     /// The one returned expression of `f`, async or not.
     fn returned_any(ts: &str) -> String {
         let at = ts.find("function f(").expect("f");
@@ -8323,7 +8342,7 @@ mod list_kernel_tests {
 
     fn arm_source(elem: &str, ret: &str, extra: &str, expr: &str, text_receiver: bool) -> String {
         let (param, recv) = if text_receiver {
-            (format!("m: Map[String, {elem}]"), "m.values()")
+            (format!("s: String, v: {elem}"), TEXT_RECEIVER)
         } else {
             (format!("xs: List[{elem}]"), "xs")
         };
@@ -8345,7 +8364,7 @@ mod list_kernel_tests {
             assert_eq!(n_node, 0, "{expr}\n{node_ts}");
             assert!(n_text > 0, "{expr}\n{text_ts}");
             let node = returned_any(&node_ts);
-            let text = returned_any(&text_ts).replace("[...(m).values()]", "xs");
+            let text = returned_any(&text_ts).replace(&text_values(elem), "xs");
             assert!(
                 node.contains('\n'),
                 "{expr} should print on several lines\n{node}"

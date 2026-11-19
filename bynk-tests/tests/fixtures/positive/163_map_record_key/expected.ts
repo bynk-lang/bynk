@@ -12,5 +12,5 @@ export const Order = {
 };
 
 export function count(m: ReadonlyMap<Order, number>): number {
-  return (m).size;
+  return m.size;
 }

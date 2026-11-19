@@ -40,7 +40,7 @@ export const api = {
     return HttpResult.Ok(body);
   },
   async http_POST_status(body: ReadonlySet<Status>, deps: {}): globalThis.Promise<HttpResult<number>> {
-    return HttpResult.Ok((body).size);
+    return HttpResult.Ok(body.size);
   },
 };
 

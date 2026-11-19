@@ -61,7 +61,7 @@ export const settle = {
 
 export const many = {
   async call(all: readonly Cents[], one: Option<Cents>, by_name: ReadonlyMap<string, Cents>, deps: { identity: string }): globalThis.Promise<number> {
-    return (all).length + (by_name).size;
+    return (all).length + by_name.size;
   },
 };
 

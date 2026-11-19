@@ -105,7 +105,7 @@ export const api = {
   },
   async http_GET_echo(query: { get(name: string): { readonly tag: "Some"; readonly value: string } | { readonly tag: "None" }; all(name: string): readonly string[]; params(): globalThis.ReadonlyMap<string, readonly string[]> }, deps: {}): globalThis.Promise<HttpResult<string>> {
     const first = ((__o: Option<string>, __d: string) => __o.tag === "Some" ? __o.value : __d)(query.get("q"), "-");
-    return HttpResult.Ok(`${String(first)} ${String((query.all("q")).length)} ${String((query.params()).size)}`);
+    return HttpResult.Ok(`${String(first)} ${String((query.all("q")).length)} ${String(query.params().size)}`);
   },
   async http_GET_cached(query: ActivityFilter, deps: {}): globalThis.Promise<HttpResult<string>> {
     return HttpResult.Ok(`limit ${String(query.limit)}`);

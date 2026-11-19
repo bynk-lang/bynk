@@ -2531,6 +2531,15 @@ mod body_tests {
 /// 1A.11 (#3712): the statement producers build nodes when every part is a
 /// node, and today's text otherwise. `LINES_RENDERED` counts the `Item::Line`s
 /// the emitter rendered, so "0" means every statement was a node.
+/// A plain `Set.remove`, printed: its body is a comma expression `bynk_ts` cannot build, so it
+/// is still text (1A.30), and the `contains` over it is text too.
+#[cfg(test)]
+fn removed_set(set: &str, key: &str) -> String {
+    format!(
+        "((__s: globalThis.Set<string>) => (__s.delete({key}), __s as ReadonlySet<string>))(new globalThis.Set<string>({set}))"
+    )
+}
+
 #[cfg(test)]
 mod stmt_node_tests {
     use super::*;
@@ -2608,15 +2617,16 @@ mod stmt_node_tests {
 
     #[test]
     fn text_valued_statements_keep_their_text_byte_for_byte() {
-        // A `Set` `contains` and `Effect.pure(…)` still lower to text, so the
+        // A `contains` over a plain `Set` `remove` and `Effect.pure(…)` still lower to text, so the
         // statement that holds one is a `Line` with today's bytes.
         let src = "commons texty\n\n\
-            fn f(a: Set[String], b: String) -> Bool {\n  let v = a.contains(b)\n  let w: Bool = a.contains(b)\n  a.contains(b)\n}\n\n\
+            fn f(a: Set[String], b: String) -> Bool {\n  let v = a.remove(b).contains(b)\n  let w: Bool = a.remove(b).contains(b)\n  a.remove(b).contains(b)\n}\n\n\
             fn g(x: Int) -> Effect[Int] {\n  let r <- Effect.pure(x)\n  let s: Int <- Effect.pure(r)\n  do Effect.pure(s)\n  Effect.pure(s)\n}\n";
         let (lines, ts) = emitted(src);
+        let has = format!("({}).has(b)", removed_set("a", "b"));
         assert_eq!(
             body_of(&ts, "f"),
-            "  const v = (a).has(b);\n  const w: boolean = (a).has(b);\n  return (a).has(b);\n"
+            format!("  const v = {has};\n  const w: boolean = {has};\n  return {has};\n")
         );
         assert_eq!(
             body_of(&ts, "g"),
@@ -2939,17 +2949,18 @@ mod match_node_tests {
         );
     }
 
-    /// A part that is still text (a `Set` `contains`) keeps the whole `match`
+    /// A part that is still text (a `contains` over a `Set` `remove`) keeps the whole `match`
     /// IIFE as text, byte for byte.
     #[test]
     fn a_value_match_with_a_text_arm_keeps_its_iife_text() {
         let (_, ts) = emitted(
-            "commons t10\n\nfn f(n: Int, a: Set[String], b: String) -> Bool {\n  let r = match n {\n    1 => a.contains(b)\n    _ => false\n  }\n  r\n}\n",
+            "commons t10\n\nfn f(n: Int, a: Set[String], b: String) -> Bool {\n  let r = match n {\n    1 => a.remove(b).contains(b)\n    _ => false\n  }\n  r\n}\n",
         );
         assert!(
-            ts.contains(
-                "  const r = ((__d) => {\n    switch (__d) {\n      case 1: {\n        return (a).has(b);\n      }\n      default: {\n        return false;\n      }\n    }\n    throw new globalThis.Error(\"non-exhaustive match\");\n  })(n);\n"
-            ),
+            ts.contains(&format!(
+                "  const r = ((__d) => {{\n    switch (__d) {{\n      case 1: {{\n        return ({}).has(b);\n      }}\n      default: {{\n        return false;\n      }}\n    }}\n    throw new globalThis.Error(\"non-exhaustive match\");\n  }})(n);\n",
+                removed_set("a", "b")
+            )),
             "{ts}"
         );
     }
@@ -2958,10 +2969,13 @@ mod match_node_tests {
     #[test]
     fn a_tail_match_on_a_text_discriminant_keeps_its_text() {
         let (_, ts) = emitted(
-            "commons t11\n\nfn f(a: Set[String], b: String) -> Int {\n  match a.contains(b) {\n    true => 1\n    false => 0\n  }\n}\n",
+            "commons t11\n\nfn f(a: Set[String], b: String) -> Int {\n  match a.remove(b).contains(b) {\n    true => 1\n    false => 0\n  }\n}\n",
         );
         assert!(
-            ts.contains("  const __r0 = (a).has(b);\n  switch (__r0) {"),
+            ts.contains(&format!(
+                "  const __r0 = ({}).has(b);\n  switch (__r0) {{",
+                removed_set("a", "b")
+            )),
             "{ts}"
         );
         assert!(
@@ -3094,17 +3108,20 @@ mod par_node_tests {
         );
     }
 
-    /// A part still text (a `Set` `contains`) keeps today's text lines, the
+    /// A part still text (a `contains` over a `Set` `remove`) keeps today's text lines, the
     /// one-column item indent included, byte for byte.
     #[test]
     fn a_par_with_a_text_part_keeps_its_text_lines() {
         let (lines, ts) = emitted(&format!(
-            "{HDR}fn f(s: Shape, t: Set[String], u: String) -> Effect[Int] {{\n  par {{\n    let a <- pick(mk(s) is Dot && t.contains(u))\n    let b <- bump(2)\n  }}\n  Effect.pure(a + b)\n}}\n"
+            "{HDR}fn f(s: Shape, t: Set[String], u: String) -> Effect[Int] {{\n  par {{\n    let a <- pick(mk(s) is Dot && t.remove(u).contains(u))\n    let b <- bump(2)\n  }}\n  Effect.pure(a + b)\n}}\n"
         ));
         assert!(lines > 0, "{ts}");
         assert_eq!(
             func(&ts, "export async function f("),
-            "export async function f(s: Shape, t: ReadonlySet<string>, u: string): globalThis.Promise<number> {\n  const [a, b] = await __bynkSettleAll([\n   () => {\n    const __r0 = mk(s);\n    return pick(((__c: boolean) => __c)(__r0.tag === \"Dot\") && (t).has(u));\n   },\n   () => bump(2),\n  ]);\n  return a + b;\n}\n"
+            format!(
+                "export async function f(s: Shape, t: ReadonlySet<string>, u: string): globalThis.Promise<number> {{\n  const [a, b] = await __bynkSettleAll([\n   () => {{\n    const __r0 = mk(s);\n    return pick(((__c: boolean) => __c)(__r0.tag === \"Dot\") && ({}).has(u));\n   }},\n   () => bump(2),\n  ]);\n  return a + b;\n}}\n",
+                removed_set("t", "u")
+            )
         );
     }
 

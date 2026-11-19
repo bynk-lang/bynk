@@ -33,7 +33,7 @@ export function demo(): number {
   switch (__r0.tag) {
     case "Some": {
       const v = __r0.value;
-      return sum(ys) + v + (m).size + (xs).length;
+      return sum(ys) + v + m.size + (xs).length;
     }
     case "None": {
       return firstOrZero(ys);
@@ -43,7 +43,7 @@ export function demo(): number {
 }
 
 export function keyList(m: ReadonlyMap<string, number>): readonly string[] {
-  return [...(m).keys()];
+  return [...m.keys()];
 }
 
 export function inOrder(xs: readonly number[]): readonly number[] {

@@ -1248,69 +1248,77 @@ mod tests {
         }
     }
 
-    /// A text receiver or argument (an `Option` `getOrElse` is still a kernel text) falls back to
+    /// A text receiver or argument (a `splitRegex` list is still text) falls back to
     /// today's text byte for byte, with the text form's own bracketing.
     #[test]
     fn a_text_operand_falls_back_to_todays_text() {
-        let s = "((__o: Option<string>, __d: string) => __o.tag === \"Some\" ? __o.value : __d)(o, \"\")";
-        let n =
-            "((__o: Option<number>, __d: number) => __o.tag === \"Some\" ? __o.value : __d)(o, 0)";
-        let b = "((__o: Option<globalThis.Uint8Array>, __d: globalThis.Uint8Array) => __o.tag === \"Some\" ? __o.value : __d)(o, c)";
-        let d = "((__o: Option<{ readonly coefficient: bigint; readonly scale: number }>, __d: { readonly coefficient: bigint; readonly scale: number }) => __o.tag === \"Some\" ? __o.value : __d)(o, c)";
+        // `String.splitRegex`'s arm is a statement block, so a `List` kernel over it is text.
+        let text_of = |ty: &str, y: &str| {
+            let (n, ts) = exits(
+                &format!("p: String, c: {ty}"),
+                &format!("{ty} {{ p.splitRegex(\",\").map((x) => {y}).firstOrElse({y}) }}"),
+            );
+            assert!(n > 0, "{ts}");
+            returned(&ts)
+        };
+        let s = text_of("String", "\"\"");
+        let n = text_of("Int", "0");
+        let b = text_of("Bytes", "c");
+        let d = text_of("Decimal", "c");
         for (sig, body, want) in [
             (
-                "o: Option[String]",
-                "String { o.getOrElse(\"\").trim() }",
+                "p: String",
+                "String { p.splitRegex(\",\").map((x) => \"\").firstOrElse(\"\").trim() }",
                 format!("{s}.trim()"),
             ),
             (
-                "o: Option[String]",
-                "Int { o.getOrElse(\"\").length() }",
+                "p: String",
+                "Int { p.splitRegex(\",\").map((x) => \"\").firstOrElse(\"\").length() }",
                 format!("({s}).length"),
             ),
             (
-                "o: Option[String]",
-                "List[String] { o.getOrElse(\"\").chars() }",
+                "p: String",
+                "List[String] { p.splitRegex(\",\").map((x) => \"\").firstOrElse(\"\").chars() }",
                 format!("[...{s}]"),
             ),
             (
-                "o: Option[String], t: String",
-                "String { t.concat(o.getOrElse(\"\")) }",
+                "p: String, t: String",
+                "String { t.concat(p.splitRegex(\",\").map((x) => \"\").firstOrElse(\"\")) }",
                 format!("t.concat({s})"),
             ),
             (
-                "o: Option[String], t: String",
-                "String { t.replace(t, o.getOrElse(\"\")) }",
+                "p: String, t: String",
+                "String { t.replace(t, p.splitRegex(\",\").map((x) => \"\").firstOrElse(\"\")) }",
                 format!("t.replaceAll(t, () => {s})"),
             ),
             (
-                "o: Option[String]",
-                "String { o.getOrElse(\"\").replaceRegex(\"a\", \"b\") }",
+                "p: String",
+                "String { p.splitRegex(\",\").map((x) => \"\").firstOrElse(\"\").replaceRegex(\"a\", \"b\") }",
                 format!("({s}).replace(new globalThis.RegExp(\"a\", \"g\"), \"b\")"),
             ),
             (
-                "o: Option[Int]",
-                "Int { o.getOrElse(0).abs() }",
+                "p: String",
+                "Int { p.splitRegex(\",\").map((x) => 0).firstOrElse(0).abs() }",
                 format!("globalThis.Math.abs({n})"),
             ),
             (
-                "o: Option[Int]",
-                "Int { o.getOrElse(0).clamp(0, 5) }",
+                "p: String",
+                "Int { p.splitRegex(\",\").map((x) => 0).firstOrElse(0).clamp(0, 5) }",
                 format!("globalThis.Math.min(globalThis.Math.max({n}, 0), 5)"),
             ),
             (
-                "o: Option[Bytes], c: Bytes",
-                "Int { o.getOrElse(c).length() }",
+                "p: String, c: Bytes",
+                "Int { p.splitRegex(\",\").map((x) => c).firstOrElse(c).length() }",
                 format!("({b}).length"),
             ),
             (
-                "o: Option[Decimal], c: Decimal",
-                "Int { o.getOrElse(c).scale() }",
+                "p: String, c: Decimal",
+                "Int { p.splitRegex(\",\").map((x) => c).firstOrElse(c).scale() }",
                 format!("({d}).scale"),
             ),
             (
-                "o: Option[Decimal], c: Decimal, k: Int",
-                "Decimal { c.round(k, RoundingMode.Up).min(o.getOrElse(c)) }",
+                "p: String, c: Decimal, k: Int",
+                "Decimal { c.round(k, RoundingMode.Up).min(p.splitRegex(\",\").map((x) => c).firstOrElse(c)) }",
                 format!("__bynkDecimalMin(__bynkDecimalRound(c, k, \"Up\"), {d})"),
             ),
         ] {

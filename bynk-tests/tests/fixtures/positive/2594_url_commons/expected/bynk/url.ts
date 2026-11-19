@@ -152,21 +152,21 @@ export function parseQuery(s: string): readonly QueryParam[] {
 export function formatQuery(params: readonly QueryParam[]): string {
   const init: Option<string> = None;
   return ((__o: Option<string>, __d: string) => __o.tag === "Some" ? __o.value : __d)(((__xs: readonly QueryParam[], __acc: Option<string>, __f: (acc: Option<string>, x: QueryParam) => Option<string>) => {
-  for (const __x of __xs) __acc = __f(__acc, __x);
-  return __acc;
-})(params, init, (acc: Option<string>, p: QueryParam) => {
-  const pair = __bynkPercentEncode(p.name).concat("=").concat(__bynkPercentEncode(p.value));
-  switch (acc.tag) {
-    case "Some": {
-      const s = acc.value;
-      return Some(s.concat("&").concat(pair));
+    for (const __x of __xs) __acc = __f(__acc, __x);
+    return __acc;
+  })(params, init, (acc: Option<string>, p: QueryParam) => {
+    const pair = __bynkPercentEncode(p.name).concat("=").concat(__bynkPercentEncode(p.value));
+    switch (acc.tag) {
+      case "Some": {
+        const s = acc.value;
+        return Some(s.concat("&").concat(pair));
+      }
+      case "None": {
+        return Some(pair);
+      }
     }
-    case "None": {
-      return Some(pair);
-    }
-  }
-  throw new globalThis.Error("non-exhaustive match");
-}), "");
+    throw new globalThis.Error("non-exhaustive match");
+  }), "");
 }
 
 /**

@@ -39,9 +39,9 @@ export function chained(r: Result<number, string>): boolean {
 
 export function viaLambda(r: Result<number, string>): Result<number, string> {
   return ((__r: Result<number, string>, __f: (x: number) => Result<number, string>) => __r.tag === "Ok" ? __f(__r.value) : __r)(r, (n: number) => {
-  const out: Result<number, string> = (n > 0 ? Ok(n) : Err("negative"));
-  return out;
-});
+    const out: Result<number, string> = (n > 0 ? Ok(n) : Err("negative"));
+    return out;
+  });
 }
 
 export function orZero(r: Result<number, string>): number {

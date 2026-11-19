@@ -5,9 +5,9 @@ import { Ok, Err, Some, None, type Result, type Option } from "./__bynk_runtime/
 import type { ValidationError } from "./__bynk_runtime/errors.js";
 
 export function totals(m: ReadonlyMap<string, number>): readonly number[] {
-  return [...(m).values()];
+  return [...m.values()];
 }
 
 export function names(m: ReadonlyMap<string, number>): readonly string[] {
-  return [...(m).keys()];
+  return [...m.keys()];
 }
