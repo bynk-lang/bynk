@@ -2,6 +2,7 @@
 //! Decision E). `lower.rs` keeps `lower_method_call`; each file here holds the
 //! dispatchers of one family, moved byte for byte before they convert to nodes.
 
+pub(super) mod agents;
 pub(super) mod codec_statics;
 pub(super) mod cross_context;
 pub(super) mod platform;
