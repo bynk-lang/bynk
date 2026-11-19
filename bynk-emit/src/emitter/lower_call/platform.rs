@@ -293,7 +293,7 @@ pub(in crate::emitter) fn tracked_claim_call(
                 return_type: None,
                 body: Box::new(bynk_ts::TsArrowBody::Expr(Box::new(note))),
             };
-            TsExpr::Await(Box::new(paren(call(paren(note_arrow), nodes))))
+            paren(TsExpr::Await(Box::new(call(paren(note_arrow), nodes))))
         },
         |texts| {
             format!(
