@@ -724,6 +724,7 @@ pub(in crate::emitter) fn lower_events_emit_call(
         let schema_version = cx.event_schema_version(&event_name);
         let owner = cx.owning_context().unwrap_or_default().to_string();
         let publisher_id = escape_ts_string(&owner);
+        let escaped_event = escape_ts_string(&event_name);
         // The envelope is a node over raw text; the text form escapes it as it always did.
         return Some(node_or_text(
             vec![payload],
@@ -750,7 +751,7 @@ pub(in crate::emitter) fn lower_events_emit_call(
             |texts| {
                 let [payload] = super::super::lower_list::take(texts);
                 format!(
-                    "(async () => {{ __events.push({{ type: \"{event_name}\", payload: {payload}, envelope: {{ eventId: globalThis.crypto.randomUUID(), publisherId: \"{publisher_id}\", emittedAt: globalThis.Date.now(), schemaVersion: {schema_version} }} }}); }})()"
+                    "(async () => {{ __events.push({{ type: \"{escaped_event}\", payload: {payload}, envelope: {{ eventId: globalThis.crypto.randomUUID(), publisherId: \"{publisher_id}\", emittedAt: globalThis.Date.now(), schemaVersion: {schema_version} }} }}); }})()"
                 )
             },
         ));
