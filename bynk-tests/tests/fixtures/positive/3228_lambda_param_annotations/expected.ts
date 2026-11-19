@@ -25,7 +25,10 @@ export function big(xs: readonly number[]): readonly number[] {
 }
 
 export function total(xs: readonly number[]): number {
-  return ((__xs: readonly number[], __acc: number, __f: (acc: number, x: number) => number) => { for (const __x of __xs) __acc = __f(__acc, __x); return __acc; })(xs, 0, (acc: number, x: number) => acc + x);
+  return ((__xs: readonly number[], __acc: number, __f: (acc: number, x: number) => number) => {
+    for (const __x of __xs) __acc = __f(__acc, __x);
+    return __acc;
+  })(xs, 0, (acc: number, x: number) => acc + x);
 }
 
 export function pairs(xs: readonly number[]): readonly number[] {
@@ -45,7 +48,10 @@ export function skus(items: readonly Item[]): readonly string[] {
 }
 
 export function stock(items: readonly Item[]): number {
-  return ((__xs: readonly Item[], __acc: number, __f: (acc: number, x: Item) => number) => { for (const __x of __xs) __acc = __f(__acc, __x); return __acc; })(items, 0, (acc: number, i: Item) => acc + i.qty);
+  return ((__xs: readonly Item[], __acc: number, __f: (acc: number, x: Item) => number) => {
+    for (const __x of __xs) __acc = __f(__acc, __x);
+    return __acc;
+  })(items, 0, (acc: number, i: Item) => acc + i.qty);
 }
 
 export function double(o: Option<number>): Option<number> {

@@ -92,7 +92,10 @@ export class Box {
   async total(deps: {}): globalThis.Promise<number> {
     const __state = await this.loadState();
     const all = await __bynkThen(((() => __bynkThen(__state.items.entries(), (__es) => __es.map(([__k, __v]) => ({ key: __k, value: __v })))))(), (__q) => __q);
-    return ((__xs: readonly { readonly key: string; readonly value: number }[], __acc: number, __f: (acc: number, x: { readonly key: string; readonly value: number }) => number) => { for (const __x of __xs) __acc = __f(__acc, __x); return __acc; })(all, 0, (n: number, e: { readonly key: string; readonly value: number }) => n + e.value);
+    return ((__xs: readonly { readonly key: string; readonly value: number }[], __acc: number, __f: (acc: number, x: { readonly key: string; readonly value: number }) => number) => {
+      for (const __x of __xs) __acc = __f(__acc, __x);
+      return __acc;
+    })(all, 0, (n: number, e: { readonly key: string; readonly value: number }) => n + e.value);
   }
 
   async totalEff(deps: {}): globalThis.Promise<number> {
@@ -179,7 +182,10 @@ export class ByKey {
   async keyCount(deps: {}): globalThis.Promise<number> {
     const __state = await this.loadState();
     const ks = await __bynkThen(((() => __bynkThen(__state.items.keys(), (__ks) => __ks.map((__k) => (__k as Sku)))))(), (__q) => __q);
-    return ((__xs: readonly Sku[], __acc: number, __f: (acc: number, x: Sku) => number) => { for (const __x of __xs) __acc = __f(__acc, __x); return __acc; })(ks, 0, (n: number, k: Sku) => n + 1);
+    return ((__xs: readonly Sku[], __acc: number, __f: (acc: number, x: Sku) => number) => {
+      for (const __x of __xs) __acc = __f(__acc, __x);
+      return __acc;
+    })(ks, 0, (n: number, k: Sku) => n + 1);
   }
 
   async has(k: string, deps: {}): globalThis.Promise<boolean> {
@@ -274,7 +280,10 @@ export class Ledger {
   async sum(deps: {}): globalThis.Promise<number> {
     const __state = await this.loadState();
     const all = await __bynkThen(((() => __bynkThen(__state.balances.entries(), (__es) => __es.map(([__k, __v]) => ({ key: (globalThis.Number(__k) as Acct), value: __v })))))(), (__q) => __q);
-    return ((__xs: readonly { readonly key: Acct; readonly value: number }[], __acc: number, __f: (acc: number, x: { readonly key: Acct; readonly value: number }) => number) => { for (const __x of __xs) __acc = __f(__acc, __x); return __acc; })(all, 0, (n: number, e: { readonly key: Acct; readonly value: number }) => n + e.key + e.value);
+    return ((__xs: readonly { readonly key: Acct; readonly value: number }[], __acc: number, __f: (acc: number, x: { readonly key: Acct; readonly value: number }) => number) => {
+      for (const __x of __xs) __acc = __f(__acc, __x);
+      return __acc;
+    })(all, 0, (n: number, e: { readonly key: Acct; readonly value: number }) => n + e.key + e.value);
   }
 
 }

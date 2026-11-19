@@ -14,17 +14,57 @@ export function check(n: number): Result<number, string> {
 }
 
 export function all(xs: readonly number[]): Result<readonly number[], readonly string[]> {
-  return ((__xs: readonly Result<number, string>[]) => { const __ok: number[] = []; const __errs: string[] = []; for (const __r of __xs) { if (__r.tag === "Err") { __errs.push(__r.error); } else { __ok.push(__r.value); } } return __errs.length > 0 ? Err(__errs) : Ok(__ok); })((xs).map((__x: number) => (check)(__x)));
+  return ((__xs: readonly Result<number, string>[]) => {
+    const __ok: number[] = [];
+    const __errs: string[] = [];
+    for (const __r of __xs) {
+      if (__r.tag === "Err") {
+        __errs.push(__r.error);
+      } else {
+        __ok.push(__r.value);
+      }
+    }
+    return __errs.length > 0 ? Err(__errs) : Ok(__ok);
+  })((xs).map((__x: number) => (check)(__x)));
 }
 
 export function first(xs: readonly number[]): Result<readonly number[], string> {
-  return ((__xs: readonly Result<number, string>[]) => { const __ok: number[] = []; for (const __r of __xs) { if (__r.tag === "Err") { return Err(__r.error); } __ok.push(__r.value); } return Ok(__ok); })((xs).map((__x: number) => (check)(__x)));
+  return ((__xs: readonly Result<number, string>[]) => {
+    const __ok: number[] = [];
+    for (const __r of __xs) {
+      if (__r.tag === "Err") {
+        return Err(__r.error);
+      }
+      __ok.push(__r.value);
+    }
+    return Ok(__ok);
+  })((xs).map((__x: number) => (check)(__x)));
 }
 
 export function allOf(rs: readonly Result<number, string>[]): Result<readonly number[], readonly string[]> {
-  return ((__xs: readonly Result<number, string>[]) => { const __ok: number[] = []; const __errs: string[] = []; for (const __r of __xs) { if (__r.tag === "Err") { __errs.push(__r.error); } else { __ok.push(__r.value); } } return __errs.length > 0 ? Err(__errs) : Ok(__ok); })(rs);
+  return ((__xs: readonly Result<number, string>[]) => {
+    const __ok: number[] = [];
+    const __errs: string[] = [];
+    for (const __r of __xs) {
+      if (__r.tag === "Err") {
+        __errs.push(__r.error);
+      } else {
+        __ok.push(__r.value);
+      }
+    }
+    return __errs.length > 0 ? Err(__errs) : Ok(__ok);
+  })(rs);
 }
 
 export function firstOf(rs: readonly Result<number, string>[]): Result<readonly number[], string> {
-  return ((__xs: readonly Result<number, string>[]) => { const __ok: number[] = []; for (const __r of __xs) { if (__r.tag === "Err") { return Err(__r.error); } __ok.push(__r.value); } return Ok(__ok); })(rs);
+  return ((__xs: readonly Result<number, string>[]) => {
+    const __ok: number[] = [];
+    for (const __r of __xs) {
+      if (__r.tag === "Err") {
+        return Err(__r.error);
+      }
+      __ok.push(__r.value);
+    }
+    return Ok(__ok);
+  })(rs);
 }

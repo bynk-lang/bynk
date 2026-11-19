@@ -10,9 +10,29 @@ export async function check(x: number): globalThis.Promise<Result<number, string
 }
 
 export async function seqTry(xs: readonly number[]): globalThis.Promise<Result<readonly number[], string>> {
-  return (async (__xs: readonly number[]) => { const __out: number[] = []; for (const __x of __xs) { const __r = await (async (x: number) => check(x))(__x); if (__r.tag === "Err") { return Err(__r.error); } __out.push(__r.value); } return Ok(__out); })(xs);
+  return (async (__xs: readonly number[]) => {
+    const __out: number[] = [];
+    for (const __x of __xs) {
+      const __r = await (async (x: number) => check(x))(__x);
+      if (__r.tag === "Err") {
+        return Err(__r.error);
+      }
+      __out.push(__r.value);
+    }
+    return Ok(__out);
+  })(xs);
 }
 
 export async function parTry(xs: readonly number[]): globalThis.Promise<Result<readonly number[], string>> {
-  return (async (__xs: readonly number[]) => { const __rs = await __bynkSettleAll(__xs.map((__x: number) => () => (async (x: number) => check(x))(__x))); const __out: number[] = []; for (const __r of __rs) { if (__r.tag === "Err") { return Err(__r.error); } __out.push(__r.value); } return Ok(__out); })(xs);
+  return (async (__xs: readonly number[]) => {
+    const __rs = await __bynkSettleAll(__xs.map((__x: number) => () => (async (x: number) => check(x))(__x)));
+    const __out: number[] = [];
+    for (const __r of __rs) {
+      if (__r.tag === "Err") {
+        return Err(__r.error);
+      }
+      __out.push(__r.value);
+    }
+    return Ok(__out);
+  })(xs);
 }

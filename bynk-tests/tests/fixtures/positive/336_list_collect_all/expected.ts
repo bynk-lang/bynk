@@ -10,7 +10,13 @@ export async function check(x: number): globalThis.Promise<Result<number, string
 }
 
 export async function seqAll(xs: readonly number[]): globalThis.Promise<readonly Result<number, string>[]> {
-  return (async (__xs: readonly number[]) => { const __out: Result<number, string>[] = []; for (const __x of __xs) { __out.push(await (async (x: number) => check(x))(__x)); } return __out; })(xs);
+  return (async (__xs: readonly number[]) => {
+    const __out: Result<number, string>[] = [];
+    for (const __x of __xs) {
+      __out.push(await (async (x: number) => check(x))(__x));
+    }
+    return __out;
+  })(xs);
 }
 
 export async function parAll(xs: readonly number[]): globalThis.Promise<readonly Result<number, string>[]> {

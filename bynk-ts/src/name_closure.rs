@@ -614,7 +614,7 @@ impl Walk {
             }
             TsType::Array { element, .. } => self.ty(element),
             TsType::Object(members) => self.members(members),
-            TsType::Fn { params, ret } => {
+            TsType::Fn { params, ret, .. } => {
                 for p in params {
                     self.ty(p);
                 }
@@ -945,6 +945,10 @@ impl Walk {
             TsExpr::As { expr, ty } => {
                 self.expr(expr);
                 self.ty(ty);
+            }
+            TsExpr::Assign { target, value } | TsExpr::AddAssign { target, value } => {
+                self.expr(target);
+                self.expr(value);
             }
             TsExpr::Binary { left, right, .. } => {
                 self.expr(left);

@@ -10,6 +10,8 @@ export async function notify(id: number): globalThis.Promise<void> {
 }
 
 export async function notifyAll(ids: readonly number[]): globalThis.Promise<void> {
-  await (async (__xs: readonly number[]) => { await __bynkSettleAll(__xs.map((__x: number) => () => (async (id: number) => notify(id))(__x))); })(ids);
+  await (async (__xs: readonly number[]) => {
+    await __bynkSettleAll(__xs.map((__x: number) => () => (async (id: number) => notify(id))(__x)));
+  })(ids);
   return undefined;
 }

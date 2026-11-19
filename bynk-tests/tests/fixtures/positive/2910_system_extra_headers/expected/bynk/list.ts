@@ -10,7 +10,10 @@ import { type __JsonValue, type __BoundaryError, type __ServiceBinding, __callSe
  */
 export function reverse<A>(xs: readonly A[]): readonly A[] {
   const init: readonly A[] = ([] as readonly A[]);
-  return ((__xs: readonly A[], __acc: readonly A[], __f: (acc: readonly A[], x: A) => readonly A[]) => { for (const __x of __xs) __acc = __f(__acc, __x); return __acc; })(xs, init, (acc: readonly A[], x: A) => [x, ...acc]);
+  return ((__xs: readonly A[], __acc: readonly A[], __f: (acc: readonly A[], x: A) => readonly A[]) => {
+    for (const __x of __xs) __acc = __f(__acc, __x);
+    return __acc;
+  })(xs, init, (acc: readonly A[], x: A) => [x, ...acc]);
 }
 
 /**
@@ -18,7 +21,10 @@ export function reverse<A>(xs: readonly A[]): readonly A[] {
  */
 export function map<A, B>(xs: readonly A[], f: (a0: A) => B): readonly B[] {
   const init: readonly B[] = ([] as readonly B[]);
-  return reverse(((__xs: readonly A[], __acc: readonly B[], __f: (acc: readonly B[], x: A) => readonly B[]) => { for (const __x of __xs) __acc = __f(__acc, __x); return __acc; })(xs, init, (acc: readonly B[], x: A) => [f(x), ...acc]));
+  return reverse(((__xs: readonly A[], __acc: readonly B[], __f: (acc: readonly B[], x: A) => readonly B[]) => {
+    for (const __x of __xs) __acc = __f(__acc, __x);
+    return __acc;
+  })(xs, init, (acc: readonly B[], x: A) => [f(x), ...acc]));
 }
 
 /**
@@ -26,7 +32,10 @@ export function map<A, B>(xs: readonly A[], f: (a0: A) => B): readonly B[] {
  */
 export function filter<A>(xs: readonly A[], p: (a0: A) => boolean): readonly A[] {
   const init: readonly A[] = ([] as readonly A[]);
-  return reverse(((__xs: readonly A[], __acc: readonly A[], __f: (acc: readonly A[], x: A) => readonly A[]) => { for (const __x of __xs) __acc = __f(__acc, __x); return __acc; })(xs, init, (acc: readonly A[], x: A) => (p(x) ? [x, ...acc] : acc)));
+  return reverse(((__xs: readonly A[], __acc: readonly A[], __f: (acc: readonly A[], x: A) => readonly A[]) => {
+    for (const __x of __xs) __acc = __f(__acc, __x);
+    return __acc;
+  })(xs, init, (acc: readonly A[], x: A) => (p(x) ? [x, ...acc] : acc)));
 }
 
 /**
@@ -34,18 +43,21 @@ export function filter<A>(xs: readonly A[], p: (a0: A) => boolean): readonly A[]
  */
 export function find<A>(xs: readonly A[], p: (a0: A) => boolean): Option<A> {
   const init: Option<A> = None;
-  return ((__xs: readonly A[], __acc: Option<A>, __f: (acc: Option<A>, x: A) => Option<A>) => { for (const __x of __xs) __acc = __f(__acc, __x); return __acc; })(xs, init, (acc: Option<A>, x: A) => ((__d) => {
-  switch (__d.tag) {
-    case "Some": {
-      const v = __d.value;
-      return Some(v);
+  return ((__xs: readonly A[], __acc: Option<A>, __f: (acc: Option<A>, x: A) => Option<A>) => {
+    for (const __x of __xs) __acc = __f(__acc, __x);
+    return __acc;
+  })(xs, init, (acc: Option<A>, x: A) => ((__d) => {
+    switch (__d.tag) {
+      case "Some": {
+        const v = __d.value;
+        return Some(v);
+      }
+      case "None": {
+        return (p(x) ? Some(x) : None);
+      }
     }
-    case "None": {
-      return (p(x) ? Some(x) : None);
-    }
-  }
-  throw new globalThis.Error("non-exhaustive match");
-})(acc));
+    throw new globalThis.Error("non-exhaustive match");
+  })(acc));
 }
 
 /**
@@ -70,18 +82,21 @@ export function any<A>(xs: readonly A[], p: (a0: A) => boolean): boolean {
  */
 export function all<A>(xs: readonly A[], p: (a0: A) => boolean): boolean {
   const init: Option<A> = None;
-  const failed = ((__xs: readonly A[], __acc: Option<A>, __f: (acc: Option<A>, x: A) => Option<A>) => { for (const __x of __xs) __acc = __f(__acc, __x); return __acc; })(xs, init, (acc: Option<A>, x: A) => ((__d) => {
-  switch (__d.tag) {
-    case "Some": {
-      const v = __d.value;
-      return Some(v);
+  const failed = ((__xs: readonly A[], __acc: Option<A>, __f: (acc: Option<A>, x: A) => Option<A>) => {
+    for (const __x of __xs) __acc = __f(__acc, __x);
+    return __acc;
+  })(xs, init, (acc: Option<A>, x: A) => ((__d) => {
+    switch (__d.tag) {
+      case "Some": {
+        const v = __d.value;
+        return Some(v);
+      }
+      case "None": {
+        return (p(x) ? None : Some(x));
+      }
     }
-    case "None": {
-      return (p(x) ? None : Some(x));
-    }
-  }
-  throw new globalThis.Error("non-exhaustive match");
-})(acc));
+    throw new globalThis.Error("non-exhaustive match");
+  })(acc));
   switch (failed.tag) {
     case "Some": {
       const v = failed.value;
@@ -100,10 +115,13 @@ export function all<A>(xs: readonly A[], p: (a0: A) => boolean): boolean {
  */
 export async function traverse<A, B>(xs: readonly A[], f: (a0: A) => globalThis.Promise<B>): globalThis.Promise<readonly B[]> {
   const init: readonly B[] = ([] as readonly B[]);
-  const rev = await (async (__xs: readonly A[], __acc: readonly B[], __f: (acc: readonly B[], x: A) => globalThis.Promise<readonly B[]>) => { for (const __x of __xs) __acc = await __f(__acc, __x); return __acc; })(xs, init, async (acc: readonly B[], x: A) => {
-  const y = await f(x);
-  return [y, ...acc];
-});
+  const rev = await (async (__xs: readonly A[], __acc: readonly B[], __f: (acc: readonly B[], x: A) => globalThis.Promise<readonly B[]>) => {
+    for (const __x of __xs) __acc = await __f(__acc, __x);
+    return __acc;
+  })(xs, init, async (acc: readonly B[], x: A) => {
+    const y = await f(x);
+    return [y, ...acc];
+  });
   return reverse(rev);
 }
 
@@ -120,12 +138,28 @@ export function sort<T>(xs: readonly T[], __cmp_T: (a: T, b: T) => number): read
  * Returns the smallest element of `xs`, or `None` for an empty list.
  */
 export function min<T>(xs: readonly T[], __cmp_T: (a: T, b: T) => number): Option<T> {
-  return ((__xs: readonly T[]) => { if (__xs.length === 0) return None; let __m = ((x: T) => x)(__xs[0]); for (const __x of __xs) { const __k = ((x: T) => x)(__x); if (__cmp_T(__k, __m) < 0) __m = __k; } return Some(__m); })(xs);
+  return ((__xs: readonly T[]) => {
+    if (__xs.length === 0) return None;
+    let __m = ((x: T) => x)(__xs[0]);
+    for (const __x of __xs) {
+      const __k = ((x: T) => x)(__x);
+      if (__cmp_T(__k, __m) < 0) __m = __k;
+    }
+    return Some(__m);
+  })(xs);
 }
 
 /**
  * Returns the largest element of `xs`, or `None` for an empty list.
  */
 export function max<T>(xs: readonly T[], __cmp_T: (a: T, b: T) => number): Option<T> {
-  return ((__xs: readonly T[]) => { if (__xs.length === 0) return None; let __m = ((x: T) => x)(__xs[0]); for (const __x of __xs) { const __k = ((x: T) => x)(__x); if (__cmp_T(__k, __m) > 0) __m = __k; } return Some(__m); })(xs);
+  return ((__xs: readonly T[]) => {
+    if (__xs.length === 0) return None;
+    let __m = ((x: T) => x)(__xs[0]);
+    for (const __x of __xs) {
+      const __k = ((x: T) => x)(__x);
+      if (__cmp_T(__k, __m) > 0) __m = __k;
+    }
+    return Some(__m);
+  })(xs);
 }

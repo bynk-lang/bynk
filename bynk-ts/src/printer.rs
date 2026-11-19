@@ -1087,6 +1087,8 @@ fn needs_parens_as_operand(expr: &TsExpr) -> bool {
             | TsExpr::As { .. }
             | TsExpr::Arrow { .. }
             | TsExpr::Conditional { .. }
+            | TsExpr::Assign { .. }
+            | TsExpr::AddAssign { .. }
     )
 }
 
@@ -1177,7 +1179,11 @@ fn render_binary_operand(
         // identical protection for the identical reason (review of #1322,
         // finding 1, for `Arrow`; #1323 adds `Conditional` proactively, the
         // same class of gap).
-        TsExpr::As { .. } | TsExpr::Arrow { .. } | TsExpr::Conditional { .. } => true,
+        TsExpr::As { .. }
+        | TsExpr::Arrow { .. }
+        | TsExpr::Conditional { .. }
+        | TsExpr::Assign { .. }
+        | TsExpr::AddAssign { .. } => true,
         // #2955 review: a unary or `await` operand directly left of `**` is a
         // JS syntax error (`!a ** b`, `typeof a ** b`, `await a ** b`), not a
         // precedence question, so it always parenthesizes there.
@@ -1485,7 +1491,7 @@ fn render_multiline_array(
     out.push_str("[\n");
     for item in items {
         out.push_str(&indent(depth + 1));
-        render_expr(out, item, depth + 1, m);
+        render_array_item(out, item, depth + 1, m);
         out.push_str(",\n");
     }
     out.push_str(&indent(depth));
@@ -1658,7 +1664,12 @@ fn render_expr(out: &mut String, expr: &TsExpr, depth: usize, m: &mut Option<Mer
         // that must break across lines is a [`TsExpr::LinesArray`].
         TsExpr::Array { items, .. } => {
             out.push('[');
-            render_expr_list(out, items, depth, m);
+            for (i, item) in items.iter().enumerate() {
+                if i > 0 {
+                    out.push_str(", ");
+                }
+                render_array_item(out, item, depth, m);
+            }
             out.push(']');
         }
         TsExpr::LinesArray(items) => render_multiline_array(out, items, depth, m),
@@ -1785,12 +1796,49 @@ fn render_expr(out: &mut String, expr: &TsExpr, depth: usize, m: &mut Option<Mer
             render_expr(out, inner, depth, m);
             out.push(')');
         }
+        // A spread element is legal only as an array item, and `render_array_item`
+        // prints it there. Reaching it from any other position (an operand, an
+        // argument) would print `...a + b`, which reads as a different tree, so
+        // it is a construction bug: fail loudly in a debug build.
         TsExpr::Spread(inner) => {
-            out.push_str("...");
-            render_expr(out, inner, depth, m);
+            debug_assert!(
+                false,
+                "TsExpr::Spread is legal only as an array item; it was rendered elsewhere"
+            );
+            render_spread(out, inner, depth, m);
+        }
+        TsExpr::Assign { target, value } => {
+            render_expr(out, target, depth, m);
+            out.push_str(" = ");
+            render_expr(out, value, depth, m);
+        }
+        TsExpr::AddAssign { target, value } => {
+            render_expr(out, target, depth, m);
+            out.push_str(" += ");
+            render_expr(out, value, depth, m);
         }
         TsExpr::Lit(lit) => render_lit(out, lit),
     }
+}
+
+/// An array item: a [`TsExpr::Spread`] prints `...` and its operand, anything
+/// else is an ordinary expression. The one place a spread is legal.
+fn render_array_item(
+    out: &mut String,
+    item: &TsExpr,
+    depth: usize,
+    m: &mut Option<MergeTarget<'_>>,
+) {
+    if let TsExpr::Spread(inner) = item {
+        render_spread(out, inner, depth, m);
+    } else {
+        render_expr(out, item, depth, m);
+    }
+}
+
+fn render_spread(out: &mut String, inner: &TsExpr, depth: usize, m: &mut Option<MergeTarget<'_>>) {
+    out.push_str("...");
+    render_expr(out, inner, depth, m);
 }
 
 /// [`TsExpr::Arrow`]'s own `body` renderer — see [`TsArrowBody`]'s own doc
@@ -1826,6 +1874,8 @@ fn starts_with_object(expr: &TsExpr) -> bool {
         | TsExpr::Unary { .. }
         | TsExpr::Paren(_)
         | TsExpr::Spread(_)
+        | TsExpr::Assign { .. }
+        | TsExpr::AddAssign { .. }
         | TsExpr::Lit(_) => false,
     }
 }
@@ -1967,14 +2017,19 @@ fn render_type(out: &mut String, ty: &TsType) {
                 out.push_str(" }");
             }
         }
-        TsType::Fn { params, ret } => {
+        TsType::Fn { params, names, ret } => {
             out.push('(');
             for (i, p) in params.iter().enumerate() {
                 if i > 0 {
                     out.push_str(", ");
                 }
-                out.push('a');
-                out.push_str(&i.to_string());
+                match names.get(i) {
+                    Some(name) => out.push_str(name),
+                    None => {
+                        out.push('a');
+                        out.push_str(&i.to_string());
+                    }
+                }
                 out.push_str(": ");
                 render_type(out, p);
             }
@@ -4054,6 +4109,7 @@ mod tests {
         );
         assert_eq!(
             print_type(&TsType::readonly_array(TsType::Fn {
+                names: vec![],
                 params: vec![order()],
                 ret: Box::new(order()),
             })),
@@ -4080,6 +4136,7 @@ mod tests {
     #[test]
     fn print_type_renders_a_zero_param_function_type() {
         let ty = TsType::Fn {
+            names: vec![],
             params: vec![],
             ret: Box::new(TsType::readonly_array(TsType::named("Order"))),
         };
@@ -4092,6 +4149,7 @@ mod tests {
     #[test]
     fn print_type_renders_a_parametered_function_type_with_positional_names() {
         let ty = TsType::Fn {
+            names: vec![],
             params: vec![TsType::named("string"), TsType::named("number")],
             ret: Box::new(TsType::named("void")),
         };
@@ -4432,6 +4490,110 @@ mod tests {
         assert_eq!(print_expr(&arr(vec![spread(paren)])), "[...(xs)]");
         let inner = arr(vec![id("a")]);
         assert_eq!(print_expr(&arr(vec![spread(inner)])), "[...[a]]");
+    }
+
+    /// 1A.18b: a spread outside an array would print as `...a + b`, which reads
+    /// as a different tree. The printer fails loudly in a debug build rather
+    /// than misprint it (the same arm is the only way to reach it, since an
+    /// array item goes through its own renderer).
+    #[cfg(debug_assertions)]
+    #[test]
+    #[should_panic(expected = "Spread is legal only as an array item")]
+    fn a_spread_outside_an_array_is_refused() {
+        let id = |n: &str| TsExpr::Ident(n.to_string());
+        let operand = TsExpr::Binary {
+            op: TsBinaryOp::Add,
+            left: Box::new(TsExpr::Spread(Box::new(id("a")))),
+            right: Box::new(id("b")),
+        };
+        let _ = print_expr(&operand);
+    }
+
+    /// 1A.18b: a spread is legal as an item of a multi-line array too.
+    #[test]
+    fn a_spread_prints_in_a_lines_array() {
+        let id = |n: &str| TsExpr::Ident(n.to_string());
+        let lines = TsExpr::LinesArray(vec![TsExpr::Spread(Box::new(id("a"))), id("b")]);
+        assert_eq!(print_expr(&lines), "[\n  ...a,\n  b,\n]");
+    }
+
+    /// `TsExpr::Assign` (1A.18b, #3719): an assignment expression, bracketed by
+    /// the builder where it is a member object (`(h[k] = h[k] ?? []).push(u)`),
+    /// and by the printer wherever it is an operand.
+    #[test]
+    fn an_assignment_expression_prints_and_brackets() {
+        let id = |n: &str| TsExpr::Ident(n.to_string());
+        let slot = || TsExpr::Index {
+            object: Box::new(id("h")),
+            index: Box::new(id("k")),
+        };
+        let assign = TsExpr::Assign {
+            target: Box::new(slot()),
+            value: Box::new(TsExpr::Binary {
+                op: TsBinaryOp::NullishCoalescing,
+                left: Box::new(slot()),
+                right: Box::new(TsExpr::array(vec![])),
+            }),
+        };
+        assert_eq!(print_expr(&assign), "h[k] = h[k] ?? []");
+        let push = TsExpr::Call {
+            callee: Box::new(TsExpr::Member {
+                object: Box::new(TsExpr::Paren(Box::new(assign.clone()))),
+                property: "push".to_string(),
+            }),
+            args: vec![id("u")],
+        };
+        assert_eq!(print_expr(&push), "(h[k] = h[k] ?? []).push(u)");
+        // Bare as an object, the printer brackets it.
+        let bare = TsExpr::Member {
+            object: Box::new(assign.clone()),
+            property: "length".to_string(),
+        };
+        assert_eq!(print_expr(&bare), "(h[k] = h[k] ?? []).length");
+        let sum = TsExpr::Binary {
+            op: TsBinaryOp::Add,
+            left: Box::new(id("a")),
+            right: Box::new(assign),
+        };
+        assert_eq!(print_expr(&sum), "a + (h[k] = h[k] ?? [])");
+    }
+
+    #[test]
+    fn a_compound_assignment_prints_as_a_statement() {
+        let id = |n: &str| TsExpr::Ident(n.to_string());
+        let add = TsExpr::AddAssign {
+            target: Box::new(id("s")),
+            value: Box::new(TsExpr::Call {
+                callee: Box::new(id("f")),
+                args: vec![id("x")],
+            }),
+        };
+        assert_eq!(print_expr(&add), "s += f(x)");
+        let stmt = TsStmt::expr_stmt(add, None);
+        assert_eq!(print_stmt(&stmt, 0), "s += f(x);\n");
+    }
+
+    /// `TsType::Fn` with names (1A.18b, #3719): `(acc: A, x: T) => A`; without
+    /// them the positional `a0, a1` form is unchanged, and a short list names
+    /// the leading parameters and numbers the rest.
+    #[test]
+    fn a_function_type_prints_its_names_when_it_has_them() {
+        let named = TsType::Fn {
+            params: vec![TsType::named("A"), TsType::named("T")],
+            names: vec!["acc".to_string(), "x".to_string()],
+            ret: Box::new(TsType::named("A")),
+        };
+        assert_eq!(print_type(&named), "(acc: A, x: T) => A");
+        let positional = TsType::Fn {
+            params: vec![TsType::named("A"), TsType::named("T")],
+            names: vec![],
+            ret: Box::new(TsType::named("A")),
+        };
+        assert_eq!(print_type(&positional), "(a0: A, a1: T) => A");
+        assert_eq!(
+            print_type(&TsType::readonly_array(named)),
+            "readonly ((acc: A, x: T) => A)[]"
+        );
     }
 
     /// Review of #1314, finding 2's fourth example: a right-nested `Binary`
