@@ -4,11 +4,15 @@
 //! `Effect` arms converted. The sibling kernels (scalar, container) stay in `lower.rs`.
 
 use bynk_check::checker::{Callee, Ty, TyId};
-use bynk_check::kernel_op::{EffectOp, EffectResultOp, KernelOp, TestConnectionOp};
+use bynk_check::kernel_op::{EffectOp, EffectResultOp, HttpResultOp, KernelOp, TestConnectionOp};
+use bynk_ts::{TsArrowBody, TsBinaryOp, TsExpr, TsLit, TsObjectEntry, TsType, print_expr};
 
 use super::super::lower::*;
 use super::super::lower_ctx::LowerCtx;
-use super::super::lower_list::lower_list_kernel;
+use super::super::lower_list::{
+    any_ty, arrow, binary, call, const_, fn_type, id, lower_list_kernel, member, param, paren,
+    promise, ret, spread, take,
+};
 use super::super::ts_types::{ts_ty, ts_ty_to_ts_type};
 use super::super::*;
 use super::query::{
@@ -27,7 +31,7 @@ fn lower_effect_kernel_call(
     recv_ty: &Ty,
     cx: &mut LowerCtx,
     pre: &mut Pre,
-) -> Option<String> {
+) -> Option<Built> {
     let tys = cx.ty_render();
     match op {
         // #2683: `e.within(d)` races the effect against a deadline
@@ -35,9 +39,15 @@ fn lower_effect_kernel_call(
         // context.
         EffectOp::Within if args.len() == 1 => {
             cx.note_within();
-            let recv = pre.lower(receiver, cx);
-            let after = pre.lower(&args[0], cx);
-            return Some(format!("__bynkWithin({recv}, {after}, {})", cx.exec_expr()));
+            let recv = pre.lower_node(receiver, cx);
+            let after = pre.lower_node(&args[0], cx);
+            let exec = LoweredExpr::Node(cx.exec_node());
+            let exec_text = cx.exec_expr();
+            return Some(node_or_text(
+                vec![recv, after, exec],
+                |n| call(id("__bynkWithin"), n),
+                |t| format!("__bynkWithin({}, {}, {exec_text})", t[0], t[1]),
+            ));
         }
         // #2711: `a.race(b)` takes the first side to succeed and
         // hands the rest to the same execution context, uncancelled.
@@ -72,11 +82,25 @@ fn lower_effect_kernel_call(
             }
             operands.push(head);
             operands.reverse();
-            let lowered: Vec<String> = operands.into_iter().map(|o| pre.lower(o, cx)).collect();
-            return Some(format!(
-                "__bynkRace([{}], {})",
-                lowered.join(", "),
-                cx.exec_expr()
+            let operand_count = operands.len();
+            let mut children: Vec<LoweredExpr> = operands
+                .into_iter()
+                .map(|o| pre.lower_node(o, cx))
+                .collect();
+            children.push(LoweredExpr::Node(cx.exec_node()));
+            let exec_text = cx.exec_expr();
+            return Some(node_or_text(
+                children,
+                |mut n| {
+                    let exec = n.pop().expect("the execution context is the last child");
+                    call(id("__bynkRace"), vec![TsExpr::array(n), exec])
+                },
+                |t| {
+                    format!(
+                        "__bynkRace([{}], {exec_text})",
+                        t[..operand_count].join(", ")
+                    )
+                },
             ));
         }
         // #3437: `e.detach()` hands the already-running effect to
@@ -86,26 +110,48 @@ fn lower_effect_kernel_call(
         // type to the helper.
         EffectOp::Detach if args.is_empty() => {
             cx.note_detach();
-            let recv = pre.lower(receiver, cx);
-            let site = cx
-                .assert_loc()
-                .map(|_| expect_location(cx, e.span.start))
-                .or_else(|| cx.fault_location(e.span.start))
-                .map(|l| crate::emitter::escape_ts_string(&l))
-                .unwrap_or_else(|| format!("offset {}", e.span.start));
-            let err_type = match &recv_ty {
+            let recv = pre.lower_node(receiver, cx);
+            // The site is the assertion location in a test body, else the fault
+            // location, else the offset. The text path escapes the assertion
+            // location twice (`expect_location` has already escaped it), so a site
+            // is a `Str` node only where the printer's one escape prints the same
+            // bytes; otherwise it stays text.
+            let site_raw = if cx.assert_loc().is_some() {
+                Some(expect_location_raw(cx, e.span.start))
+            } else {
+                cx.fault_location(e.span.start)
+            };
+            let site = match &site_raw {
+                Some(_) if cx.assert_loc().is_some() => {
+                    crate::emitter::escape_ts_string(&expect_location(cx, e.span.start))
+                }
+                Some(raw) => crate::emitter::escape_ts_string(raw),
+                None => format!("offset {}", e.span.start),
+            };
+            let site_raw = site_raw.unwrap_or_else(|| format!("offset {}", e.span.start));
+            let err_raw = match &recv_ty {
                 Ty::Effect(inner) => match &*tys.get(*inner) {
-                    Ty::Result(_, err) => Some(crate::emitter::escape_ts_string(
-                        &err.display(tys.types()).to_string(),
-                    )),
+                    Ty::Result(_, err) => Some(err.display(tys.types()).to_string()),
                     _ => None,
                 },
                 _ => None,
             };
-            let tail = err_type.map(|t| format!(", \"{t}\"")).unwrap_or_default();
-            return Some(format!(
-                "__bynkDetach({recv}, {}, \"{site}\"{tail})",
-                cx.exec_expr()
+            let mut children = vec![
+                recv,
+                LoweredExpr::Node(cx.exec_node()),
+                quoted_or_text(&site_raw, &site),
+            ];
+            let mut tail = String::new();
+            if let Some(raw) = &err_raw {
+                let escaped = crate::emitter::escape_ts_string(raw);
+                tail = format!(", \"{escaped}\"");
+                children.push(quoted_or_text(raw, &escaped));
+            }
+            let exec_text = cx.exec_expr();
+            return Some(node_or_text(
+                children,
+                |n| call(id("__bynkDetach"), n),
+                |t| format!("__bynkDetach({}, {exec_text}, \"{site}\"{tail})", t[0]),
             ));
         }
         EffectOp::Within | EffectOp::Race | EffectOp::Detach => {}
@@ -201,21 +247,14 @@ pub(in crate::emitter) fn lower_kernel_method_call(
             }
             // #3051: a case's recording `TestConnection[F]`.
             KernelOp::TestConnection(op) => {
-                let recv = pre.lower(receiver, cx);
-                let s = match op {
-                    TestConnectionOp::Sent => format!("[...({recv}).sent]"),
-                    TestConnectionOp::Closed => format!("({recv}).closed"),
-                    TestConnectionOp::Connection => format!("({recv}).mint()"),
-                };
-                return Some(Err(s));
+                let recv = pre.lower_node(receiver, cx);
+                return Some(lower_test_connection(op, recv));
             }
             // v0.102: the held-resource operations on a `Connection[F]` lower to
             // method calls on the runtime `Connection` object — `send(frame)` and
             // `close()`. The linearity pass has already verified ownership.
             KernelOp::Connection(op) => {
-                let recv = pre.lower(receiver, cx);
-                let a: Vec<String> = args.iter().map(|x| pre.lower(x, cx)).collect();
-                return Some(Err(format!("({recv}).{}({})", op.name(), a.join(", "))));
+                return Some(lower_receiver_call(op.name(), receiver, args, cx, pre));
             }
             KernelOp::Map(op) => {
                 let Ty::Map(key, val) = &recv_ty else {
@@ -276,21 +315,7 @@ pub(in crate::emitter) fn lower_kernel_method_call(
             // and `Path`, which is what removes it.
             KernelOp::HttpResult(op) => {
                 cx.note_http_result_cookie();
-                let recv = pre.lower(receiver, cx);
-                let args: Vec<String> = args.iter().map(|a| pre.lower(a, cx)).collect();
-                let arg = args.first().cloned().unwrap_or_default();
-                let expr = match op {
-                    bynk_check::kernel_op::HttpResultOp::WithCookie => format!(
-                        "((__r: any) => ({{ ...__r, cookies: [...(__r.cookies ?? []), ({arg})] }}))({recv})"
-                    ),
-                    bynk_check::kernel_op::HttpResultOp::ClearCookie => format!(
-                        "((__r: any) => ({{ ...__r, cookies: [...(__r.cookies ?? []), {{ ...({arg}), value: \"\", maxAge: Some(0), expires: Some(0) }}] }}))({recv})"
-                    ),
-                    bynk_check::kernel_op::HttpResultOp::Cookies => {
-                        format!("((({recv}) as any).cookies ?? [])")
-                    }
-                };
-                return Some(Err(expr));
+                return Some(lower_http_result(op, receiver, args, cx, pre));
             }
             // #2341 (decision A): an HTTP handler's `headers` is a runtime
             // object with these very methods, each answering an `Option`.
@@ -298,9 +323,7 @@ pub(in crate::emitter) fn lower_kernel_method_call(
             | KernelOp::RequestQuery(_)
             | KernelOp::RequestCookies(_)
             | KernelOp::TokenClaims(_) => {
-                let recv = pre.lower(receiver, cx);
-                let args: Vec<String> = args.iter().map(|a| pre.lower(a, cx)).collect();
-                return Some(Err(format!("({recv}).{}({})", kop.name(), args.join(", "))));
+                return Some(lower_receiver_call(kop.name(), receiver, args, cx, pre));
             }
             // v0.110 (ADR 0142): the `Bytes` kernel. `length` is the octet
             // count; `toBase64` encodes; `decodeUtf8` is a guarded UTF-8 decode
@@ -346,9 +369,10 @@ pub(in crate::emitter) fn lower_kernel_method_call(
             }
             // #2683 / #2711 / #3437: `within`, `race` and `detach`, on every `Effect[T]`.
             KernelOp::Effect(op) => {
-                if let Some(s) = lower_effect_kernel_call(e, receiver, op, args, &recv_ty, cx, pre)
+                if let Some(built) =
+                    lower_effect_kernel_call(e, receiver, op, args, &recv_ty, cx, pre)
                 {
-                    return Some(Err(s));
+                    return Some(built);
                 }
             }
             // §2.8.3: the `Effect[Result[T, E]]` combinators — `mapOk`/`mapErr`/
@@ -359,9 +383,8 @@ pub(in crate::emitter) fn lower_kernel_method_call(
                     mismatch(kop)
                 };
                 if let Ty::Result(ok, err) = &*tys.get(*inner)
-                    && let Some(built) = pre.absorb_built(lower_effect_result_kernel(
-                        e, receiver, op, args, *ok, *err, cx,
-                    ))
+                    && let Some(built) =
+                        lower_effect_result_kernel(e, receiver, op, args, *ok, *err, cx, pre)
                 {
                     return Some(built);
                 }
@@ -387,16 +410,21 @@ fn lower_effect_result_kernel(
     ok: TyId,
     err: TyId,
     cx: &mut LowerCtx,
-) -> Option<Lowered> {
+    pre: &mut Pre,
+) -> Option<Built> {
     let tys = cx.ty_render();
-    let mut pre = Pre::new();
-    let t = ts_ty(ok, tys);
-    let et = ts_ty(err, tys);
+    let t = ts_ty_to_ts_type(ok, tys);
+    let et = ts_ty_to_ts_type(err, tys);
     // The call's checked type is `Effect[Result[a, b]]`; peel `(a, b)` for the
     // transformed parameter's TS type.
-    let (a_ts, b_ts) = match cx.commons().expr_ty(e.id).as_deref() {
+    let (a_ts, b_ts, a_text, b_text) = match cx.commons().expr_ty(e.id).as_deref() {
         Some(Ty::Effect(inner)) => match &*tys.get(*inner) {
-            Ty::Result(a, b) => (ts_ty(*a, tys), ts_ty(*b, tys)),
+            Ty::Result(a, b) => (
+                ts_ty_to_ts_type(*a, tys),
+                ts_ty_to_ts_type(*b, tys),
+                ts_ty(*a, tys),
+                ts_ty(*b, tys),
+            ),
             other => panic!(
                 "bynk internal error (finding #28): emitter expected `Effect[Result[_, _]]` \
                  recorded for an effectful `Result` combinator call at {:?}, but found \
@@ -411,40 +439,253 @@ fn lower_effect_result_kernel(
             e.span
         ),
     };
-    let text: Option<String> = match (op, args) {
-        (EffectResultOp::MapOk, [f]) => {
-            // result `Effect[Result[U, E]]` — `a_ts` is `U`.
-            let recv = pre.lower(receiver, cx);
-            let f = pre.lower(f, cx);
-            Some(format!(
-                "(async (__e: globalThis.Promise<Result<{t}, {et}>>, __f: (x: {t}) => {a_ts}) => {{ const __r = await __e; return __r.tag === \"Ok\" ? Ok(__f(__r.value)) : __r; }})({recv}, {f})"
-            ))
-        }
-        (EffectResultOp::MapErr, [f]) => {
-            // result `Effect[Result[T, F]]` — `b_ts` is `F`.
-            let recv = pre.lower(receiver, cx);
-            let f = pre.lower(f, cx);
-            Some(format!(
-                "(async (__e: globalThis.Promise<Result<{t}, {et}>>, __f: (e: {et}) => {b_ts}) => {{ const __r = await __e; return __r.tag === \"Err\" ? Err(__f(__r.error)) : __r; }})({recv}, {f})"
-            ))
-        }
-        (EffectResultOp::FlatMapOk, [f]) => {
-            // `f: T -> Effect[Result[U, E]]`; result `Effect[Result[U, E]]`.
-            let recv = pre.lower(receiver, cx);
-            let f = pre.lower(f, cx);
-            Some(format!(
-                "(async (__e: globalThis.Promise<Result<{t}, {et}>>, __f: (x: {t}) => globalThis.Promise<Result<{a_ts}, {et}>>) => {{ const __r = await __e; return __r.tag === \"Ok\" ? await __f(__r.value) : __r; }})({recv}, {f})"
-            ))
-        }
-        (EffectResultOp::FlatMapErr, [f]) => {
-            // `f: E -> Effect[Result[T, F]]`; result `Effect[Result[T, F]]`.
-            let recv = pre.lower(receiver, cx);
-            let f = pre.lower(f, cx);
-            Some(format!(
-                "(async (__e: globalThis.Promise<Result<{t}, {et}>>, __f: (e: {et}) => globalThis.Promise<Result<{t}, {b_ts}>>) => {{ const __r = await __e; return __r.tag === \"Err\" ? await __f(__r.error) : __r; }})({recv}, {f})"
-            ))
-        }
-        _ => None,
+    let [f] = args else {
+        return None;
     };
-    text.map(|expr| pre.finish_text(expr))
+    // `__e: Promise<Result<T, E>>`, then `__f: <the callback's type>`; the body
+    // awaits the receiver and rebuilds the `Result`.
+    let result_of = |ok: &TsType, err: &TsType| {
+        TsType::named_with_args("Result", vec![ok.clone(), err.clone()])
+    };
+    let effect_of = |ok: &TsType, err: &TsType| promise(result_of(ok, err));
+    let cb = |param: &str, from: &TsType, to: TsType| fn_type(&[(param, from)], to);
+    // (callback type, the tag tested, the field read, whether the callback is
+    // awaited, the constructor wrapping an unawaited result).
+    let (cb_ty, tag, field, awaited, wrap) = match op {
+        // result `Effect[Result[U, E]]` — `a_ts` is `U`.
+        EffectResultOp::MapOk => (cb("x", &t, a_ts), "Ok", "value", false, Some("Ok")),
+        // result `Effect[Result[T, F]]` — `b_ts` is `F`.
+        EffectResultOp::MapErr => (cb("e", &et, b_ts), "Err", "error", false, Some("Err")),
+        // `f: T -> Effect[Result[U, E]]`; result `Effect[Result[U, E]]`.
+        EffectResultOp::FlatMapOk => (
+            cb("x", &t, effect_of(&a_ts, &et)),
+            "Ok",
+            "value",
+            true,
+            None,
+        ),
+        // `f: E -> Effect[Result[T, F]]`; result `Effect[Result[T, F]]`.
+        EffectResultOp::FlatMapErr => (
+            cb("e", &et, effect_of(&t, &b_ts)),
+            "Err",
+            "error",
+            true,
+            None,
+        ),
+    };
+    let recv = pre.lower_node(receiver, cx);
+    let f = pre.lower_node(f, cx);
+    let params = vec![
+        param("__e", Some(effect_of(&t, &et))),
+        param("__f", Some(cb_ty)),
+    ];
+    let applied = call(id("__f"), vec![member(id("__r"), field)]);
+    let hit = match (awaited, wrap) {
+        (true, _) => TsExpr::Await(Box::new(applied)),
+        (false, Some(ctor)) => call(id(ctor), vec![applied]),
+        (false, None) => applied,
+    };
+    let body = vec![
+        const_("__r", None, TsExpr::Await(Box::new(id("__e")))),
+        ret(TsExpr::Conditional {
+            test: Box::new(binary(
+                TsBinaryOp::StrictEq,
+                member(id("__r"), "tag"),
+                TsExpr::Lit(TsLit::Str(tag.to_string())),
+            )),
+            consequent: Box::new(hit),
+            alternate: Box::new(id("__r")),
+        }),
+    ];
+    let async_arrow = TsExpr::Arrow {
+        params,
+        is_async: true,
+        generics: vec![],
+        return_type: None,
+        body: Box::new(TsArrowBody::Block(body)),
+    };
+    let (t_text, et_text) = (ts_ty(ok, tys), ts_ty(err, tys));
+    Some(node_or_text(
+        vec![recv, f],
+        |n| call(paren(async_arrow), n),
+        |t| effect_result_text(op, &[&t_text, &et_text, &a_text, &b_text], &t[0], &t[1]),
+    ))
+}
+
+/// The text form of an `EffectResult` combinator, for a receiver or callback that is still text:
+/// an `async` IIFE over `(__e, __f)`. `ts` is `[T, E, A, B]`, the receiver's and the result's
+/// type arguments.
+fn effect_result_text(op: EffectResultOp, ts: &[&str; 4], recv: &str, f: &str) -> String {
+    let [t, et, a_ts, b_ts] = *ts;
+    match op {
+        EffectResultOp::MapOk => format!(
+            "(async (__e: globalThis.Promise<Result<{t}, {et}>>, __f: (x: {t}) => {a_ts}) => {{ const __r = await __e; return __r.tag === \"Ok\" ? Ok(__f(__r.value)) : __r; }})({recv}, {f})"
+        ),
+        EffectResultOp::MapErr => format!(
+            "(async (__e: globalThis.Promise<Result<{t}, {et}>>, __f: (e: {et}) => {b_ts}) => {{ const __r = await __e; return __r.tag === \"Err\" ? Err(__f(__r.error)) : __r; }})({recv}, {f})"
+        ),
+        EffectResultOp::FlatMapOk => format!(
+            "(async (__e: globalThis.Promise<Result<{t}, {et}>>, __f: (x: {t}) => globalThis.Promise<Result<{a_ts}, {et}>>) => {{ const __r = await __e; return __r.tag === \"Ok\" ? await __f(__r.value) : __r; }})({recv}, {f})"
+        ),
+        EffectResultOp::FlatMapErr => format!(
+            "(async (__e: globalThis.Promise<Result<{t}, {et}>>, __f: (e: {et}) => globalThis.Promise<Result<{t}, {b_ts}>>) => {{ const __r = await __e; return __r.tag === \"Err\" ? await __f(__r.error) : __r; }})({recv}, {f})"
+        ),
+    }
+}
+
+/// A receiver as the object of a member access. The printer brackets a binary, a cast, an arrow, a
+/// conditional or an assignment there, but not an `await`, a unary operator or a number literal,
+/// which would then read as `await f().op()` or `1.op()`: those keep the brackets the text form
+/// always wrote (1A.28, #3729, Decision B).
+fn receiver_object(recv: TsExpr) -> TsExpr {
+    match recv {
+        TsExpr::Await(_)
+        | TsExpr::Unary { .. }
+        | TsExpr::Lit(TsLit::Num(_) | TsLit::Raw(_))
+        | TsExpr::Spread(_) => paren(recv),
+        other => other,
+    }
+}
+
+/// `recv.method(args)` for a runtime object that has the method (`Connection.send`, the request
+/// views): the receiver is bracketed only where precedence needs it. The text fallback keeps
+/// `(recv).method(args)`.
+fn lower_receiver_call(
+    method: &str,
+    receiver: &Expr,
+    args: &[Expr],
+    cx: &mut LowerCtx,
+    pre: &mut Pre,
+) -> Built {
+    let mut children = vec![pre.lower_node(receiver, cx)];
+    children.extend(args.iter().map(|a| pre.lower_node(a, cx)));
+    node_or_text(
+        children,
+        |mut n| {
+            let recv = receiver_object(n.remove(0));
+            call(member(recv, method), n)
+        },
+        |t| format!("({}).{method}({})", t[0], t[1..].join(", ")),
+    )
+}
+
+/// A case's recording `TestConnection[F]`: `[...recv.sent]`, `recv.closed`, `recv.mint()`.
+fn lower_test_connection(op: TestConnectionOp, recv: LoweredExpr) -> Built {
+    node_or_text(
+        vec![recv],
+        |n| {
+            let [recv] = take::<1, _>(n);
+            let recv = receiver_object(recv);
+            match op {
+                TestConnectionOp::Sent => TsExpr::array(vec![spread(member(recv, "sent"))]),
+                TestConnectionOp::Closed => member(recv, "closed"),
+                TestConnectionOp::Connection => call(member(recv, "mint"), vec![]),
+            }
+        },
+        |t| match op {
+            TestConnectionOp::Sent => format!("[...({}).sent]", t[0]),
+            TestConnectionOp::Closed => format!("({}).closed", t[0]),
+            TestConnectionOp::Connection => format!("({}).mint()", t[0]),
+        },
+    )
+}
+
+/// `withCookie`, `clearCookie` and `cookies` on an `HttpResult` (#3277).
+fn lower_http_result(
+    op: HttpResultOp,
+    receiver: &Expr,
+    args: &[Expr],
+    cx: &mut LowerCtx,
+    pre: &mut Pre,
+) -> Built {
+    let recv = pre.lower_node(receiver, cx);
+    let lowered: Vec<LoweredExpr> = args.iter().map(|a| pre.lower_node(a, cx)).collect();
+    if matches!(op, HttpResultOp::Cookies) {
+        // `((recv as any).cookies ?? [])`
+        return node_or_text(
+            vec![recv],
+            |n| {
+                let [recv] = take::<1, _>(n);
+                let cast = TsExpr::As {
+                    expr: Box::new(recv),
+                    ty: any_ty(),
+                };
+                paren(binary(
+                    TsBinaryOp::NullishCoalescing,
+                    member(paren(cast), "cookies"),
+                    TsExpr::array(vec![]),
+                ))
+            },
+            |t| format!("((({}) as any).cookies ?? [])", t[0]),
+        );
+    }
+    // The cookie argument; absent only for a program that failed checking, which keeps the text
+    // form's empty `()`.
+    let arg = lowered
+        .into_iter()
+        .next()
+        .unwrap_or_else(|| LoweredExpr::Text(String::new()));
+    let clear = matches!(op, HttpResultOp::ClearCookie);
+    node_or_text(
+        vec![arg, recv],
+        |n| {
+            let [arg, recv] = take::<2, _>(n);
+            // `[...(__r.cookies ?? []), <added>]`
+            let held = spread(paren(binary(
+                TsBinaryOp::NullishCoalescing,
+                member(id("__r"), "cookies"),
+                TsExpr::array(vec![]),
+            )));
+            let added = if clear {
+                TsExpr::object_entries(vec![
+                    TsObjectEntry::Spread(paren(arg)),
+                    TsObjectEntry::Prop("value".to_string(), str_node("")),
+                    TsObjectEntry::Prop(
+                        "maxAge".to_string(),
+                        call(id("Some"), vec![TsExpr::Lit(TsLit::Num("0".to_string()))]),
+                    ),
+                    TsObjectEntry::Prop(
+                        "expires".to_string(),
+                        call(id("Some"), vec![TsExpr::Lit(TsLit::Num("0".to_string()))]),
+                    ),
+                ])
+            } else {
+                paren(arg)
+            };
+            let record = TsExpr::object_entries(vec![
+                TsObjectEntry::Spread(id("__r")),
+                TsObjectEntry::Prop("cookies".to_string(), TsExpr::array(vec![held, added])),
+            ]);
+            call(
+                paren(arrow(vec![param("__r", Some(any_ty()))], paren(record))),
+                vec![recv],
+            )
+        },
+        |t| {
+            let (arg, recv) = (&t[0], &t[1]);
+            if clear {
+                format!(
+                    "((__r: any) => ({{ ...__r, cookies: [...(__r.cookies ?? []), {{ ...({arg}), value: \"\", maxAge: Some(0), expires: Some(0) }}] }}))({recv})"
+                )
+            } else {
+                format!(
+                    "((__r: any) => ({{ ...__r, cookies: [...(__r.cookies ?? []), ({arg})] }}))({recv})"
+                )
+            }
+        },
+    )
+}
+
+/// `raw` as a string literal node when the printer's escape prints the same bytes as the text
+/// path's `escaped` (which is `escape_ts_string` applied once or twice), else the text the
+/// fallback wrote. The two escapers agree on every location shape the fixtures produce; where they
+/// do not, the text path stays.
+fn quoted_or_text(raw: &str, escaped: &str) -> LoweredExpr {
+    let node = str_node(raw);
+    let quoted = format!("\"{escaped}\"");
+    if print_expr(&node) == quoted {
+        LoweredExpr::Node(node)
+    } else {
+        LoweredExpr::Text(quoted)
+    }
 }
