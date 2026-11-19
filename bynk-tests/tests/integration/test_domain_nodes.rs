@@ -274,6 +274,35 @@ fn a_hoisting_operand_runs_once_before_the_expect_and_its_detail_reads_the_tempo
     );
 }
 
+/// When only the right operand hoists, the left one is still bound after the
+/// right one's hoists, so the order matches the single condition it replaces
+/// (`1 === len(__r0.value)` read the left operand after the guard too).
+#[test]
+fn a_hoisting_right_operand_binds_both_temporaries_after_its_hoists() {
+    const DAY: &str = "commons demo.day\n\ntype Day = String where NonEmpty\n\nfn len(d: Day) -> Int { d.length() }\n";
+    let (_, text) = emit(
+        "demo/day.bynk",
+        DAY,
+        "suite demo.day\n\ncase \"q\" {\n  expect 1 == len(Day.of(\"x\")?)\n}\n",
+    );
+    let lines: Vec<&str> = text.lines().map(str::trim).collect();
+    let at = |needle: &str| {
+        lines
+            .iter()
+            .position(|l| l.contains(needle))
+            .unwrap_or_else(|| panic!("no line with {needle:?} in:\n{text}"))
+    };
+    let temp = at("const __r0 = Day.of(");
+    let guard = at("tag === \"Err\"");
+    let left = at("const __r1 = 1;");
+    let right = at("const __r2 = len(__r0.value);");
+    let expect = at("if (!(__r1 === __r2))");
+    assert!(
+        temp < guard && guard < left && left < right && right < expect,
+        "{text}"
+    );
+}
+
 /// An operand with no hoist is not bound: the condition and the detail read
 /// the operand itself, as before.
 #[test]

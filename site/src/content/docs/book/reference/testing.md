@@ -834,6 +834,8 @@ let r <- authorise.call(100)
 expect r is Ok(_)                         // ✓
 ```
 
+The rule reads the predicate, not what runs: a lambda that would make such a call
+is refused even if nothing applies it (`[() => Logger.log("x")].length() == 1`).
 `expect`'s own forms are the exceptions: a [fault claim](#faults) runs its call,
 and an [observation](#observation) or `trace(Cap.op)` reads the calls already
 recorded.

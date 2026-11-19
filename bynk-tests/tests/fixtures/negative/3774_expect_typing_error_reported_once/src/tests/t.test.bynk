@@ -1,0 +1,10 @@
+suite demo.pay {
+  // #3774 review: a predicate that typing already refuses is reported once,
+  // by typing; the purity walk runs only over a well-typed `Bool` predicate.
+  case "a bare effect" {
+    expect Logger.log("x")
+  }
+  case "a compared effect" {
+    expect authorise.call(1) == authorise.call(2)
+  }
+}

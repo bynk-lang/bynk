@@ -2910,6 +2910,15 @@ pub(crate) fn effect_in_predicate(
     }
 }
 
+/// Whether a test predicate typed to `Bool` with no new error since
+/// `errors_before`: the purity walk runs only then, so a predicate typing has
+/// already refused (`bynk.expect.not_bool`, `bynk.types.not_comparable`) is not
+/// reported a second time at the same span.
+pub(crate) fn predicate_typed_clean(ty: Option<TyId>, errors_before: usize, ctx: &Ctx) -> bool {
+    ctx.errors.len() == errors_before
+        && ty.is_some_and(|t| compatible(t, ctx.tys.intern(Ty::Base(BaseType::Bool)), ctx.tys))
+}
+
 /// `bynk.expect.impure_predicate` at the effectful sub-expression `span`.
 pub(crate) fn expect_impure_error(span: Span) -> CompileError {
     CompileError::new(
@@ -4692,8 +4701,11 @@ pub(crate) fn type_of_block(block: &Block, expected: Option<TyId>, ctx: &mut Ctx
                     }
                     continue;
                 }
+                let typed_errors = ctx.errors.len();
                 let val_ty = type_of(&a.value, Some(tys.intern(Ty::Base(BaseType::Bool))), ctx);
-                if let Some(span) = effect_in_predicate(&a.value, ctx.expr_types, tys) {
+                if predicate_typed_clean(val_ty, typed_errors, ctx)
+                    && let Some(span) = effect_in_predicate(&a.value, ctx.expr_types, tys)
+                {
                     ctx.errors.push(expect_impure_error(span));
                 }
                 if let Some(actual) = val_ty

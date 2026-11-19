@@ -642,8 +642,11 @@ pub(crate) fn check_expect(inner: &Expr, span: Span, ctx: &mut Ctx) -> Option<Ty
             ),
         );
     }
+    let typed_errors = ctx.errors.len();
     let val_ty = type_of(inner, Some(tys.intern(Ty::Base(BaseType::Bool))), ctx);
-    if let Some(span) = effect_in_predicate(inner, ctx.expr_types, tys) {
+    if predicate_typed_clean(val_ty, typed_errors, ctx)
+        && let Some(span) = effect_in_predicate(inner, ctx.expr_types, tys)
+    {
         ctx.errors.push(expect_impure_error(span));
     }
     if let Some(actual) = val_ty
@@ -739,12 +742,14 @@ pub(crate) fn check_observation(o: &ObservationExpr, _span: Span, ctx: &mut Ctx)
                     }
                 }
                 ctx.push_scope_with(scope);
+                let typed_errors = ctx.errors.len();
                 let pred_ty = type_of(p, Some(tys.intern(Ty::Base(BaseType::Bool))), ctx);
                 ctx.pop_scope();
                 // #3774: an `Effect`-typed sub-expression (a capability or service
                 // call held in a pure expression) would run once per recorded
-                // call. Reported once: the syntactic gate above wins.
+                // call. Reported once: the syntactic gate above, or a typing error, wins.
                 if syntactic.is_none()
+                    && predicate_typed_clean(pred_ty, typed_errors, ctx)
                     && let Some(span) = effect_in_predicate(p, ctx.expr_types, tys)
                 {
                     ctx.errors.push(impure_with_error(span));
