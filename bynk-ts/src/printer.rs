@@ -1941,19 +1941,7 @@ fn render_expr(out: &mut String, expr: &TsExpr, depth: usize, m: &mut Option<Mer
             );
             render_spread(out, inner, depth, m);
         }
-        // A postfix `!` binds tighter than `await` and unary `!`/`-`/`typeof`, so those operands
-        // are bracketed here: `(await x)!`, `(!x)!` (1A.23 review, #3779). The bracket set is
-        // local to the postfix, so `render_operand`'s other callers print as before.
-        TsExpr::NonNull(inner) => {
-            if matches!(**inner, TsExpr::Await(_) | TsExpr::Unary { .. }) {
-                out.push('(');
-                render_expr(out, inner, depth, m);
-                out.push(')');
-            } else {
-                render_operand(out, inner, depth, m);
-            }
-            out.push('!');
-        }
+        TsExpr::NonNull(inner) => render_non_null(out, inner, depth, m),
         TsExpr::Assign { target, value } => {
             render_expr(out, target, depth, m);
             out.push_str(" = ");
@@ -1966,6 +1954,25 @@ fn render_expr(out: &mut String, expr: &TsExpr, depth: usize, m: &mut Option<Mer
         }
         TsExpr::Lit(lit) => render_lit(out, lit),
     }
+}
+
+/// A postfix `!` binds tighter than `await` and unary `!`/`-`/`typeof`, so those operands are
+/// bracketed here: `(await x)!`, `(!x)!` (1A.23 review, #3779). The bracket set is local to the
+/// postfix, so `render_operand`'s other callers print as before.
+fn render_non_null(
+    out: &mut String,
+    inner: &TsExpr,
+    depth: usize,
+    m: &mut Option<MergeTarget<'_>>,
+) {
+    if matches!(inner, TsExpr::Await(_) | TsExpr::Unary { .. }) {
+        out.push('(');
+        render_expr(out, inner, depth, m);
+        out.push(')');
+    } else {
+        render_operand(out, inner, depth, m);
+    }
+    out.push('!');
 }
 
 /// An array item: a [`TsExpr::Spread`] prints `...` and its operand, anything
