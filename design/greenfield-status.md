@@ -24,7 +24,7 @@ Track slice T0.0 (#999); `ts_writes`/`ts_any` added by P7.0 (#1296); `verbatim_o
 | `ts_raw_sites_emit` | yes | 35 |
 | `ts_raw_sites_testgen` | yes | 58 |
 | `ts_text_idents` | yes | 14 |
-| `lowering_text_bridge` | yes | 58 |
+| `lowering_text_bridge` | yes | 57 |
 | `stmt_text_lines` | yes | 30 |
 | `emit_thread_locals` | yes | 0 |
 | `incremental_query_types` | yes | unit_signature present; shared_cache migrated; stability_test present; definition/project levels absent (deleted by #1537) |
