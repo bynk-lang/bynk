@@ -475,6 +475,44 @@ fn render_stmt(out: &mut String, stmt: &TsStmt, depth: usize, mut map: Option<Me
     render_stmt_kind(out, stmt, depth, map);
 }
 
+/// `try { … }` with its optional `catch` and `finally` (1A.21, #3722, Decision C).
+fn render_try_catch(
+    out: &mut String,
+    depth: usize,
+    try_block: &TsStmt,
+    catch_param: Option<&str>,
+    catch_block: Option<&TsStmt>,
+    finally_block: Option<&TsStmt>,
+    mut map: Option<MergeTarget<'_>>,
+) {
+    debug_assert!(
+        catch_block.is_some() || finally_block.is_some(),
+        "TsStmtKind::TryCatch needs a `catch` or a `finally`; a bare `try` is a syntax error"
+    );
+    out.push_str(&indent(depth));
+    out.push_str("try");
+    render_block_body(out, try_block, depth, map.as_mut().map(|t| t.reborrow()));
+    if let Some(catch_block) = catch_block {
+        out.push_str(" catch");
+        if let Some(p) = catch_param {
+            out.push_str(" (");
+            out.push_str(p);
+            out.push(')');
+        }
+        render_block_body(out, catch_block, depth, map.as_mut().map(|t| t.reborrow()));
+    }
+    if let Some(finally_block) = finally_block {
+        out.push_str(" finally");
+        render_block_body(
+            out,
+            finally_block,
+            depth,
+            map.as_mut().map(|t| t.reborrow()),
+        );
+    }
+    out.push('\n');
+}
+
 /// [`render_stmt`]'s own per-`kind` dispatch, split out so the nested-
 /// checkpoint check above runs exactly once per statement regardless of
 /// which arm below ends up recursing back into `render_stmt` for a child.
@@ -639,29 +677,15 @@ fn render_stmt_kind(
             catch_param,
             catch_block,
             finally_block,
-        } => {
-            debug_assert!(
-                catch_block.is_some() || finally_block.is_some(),
-                "TsStmtKind::TryCatch needs a `catch` or a `finally`; a bare `try` is a syntax error"
-            );
-            out.push_str(&indent(depth));
-            out.push_str("try");
-            render_block_body(out, try_block, depth, map.as_mut().map(|t| t.reborrow()));
-            if let Some(catch_block) = catch_block {
-                out.push_str(" catch");
-                if let Some(p) = catch_param {
-                    out.push_str(" (");
-                    out.push_str(p);
-                    out.push(')');
-                }
-                render_block_body(out, catch_block, depth, map.as_mut().map(|t| t.reborrow()));
-            }
-            if let Some(finally_block) = finally_block {
-                out.push_str(" finally");
-                render_block_body(out, finally_block, depth, map.as_mut().map(|t| t.reborrow()));
-            }
-            out.push('\n');
-        }
+        } => render_try_catch(
+            out,
+            depth,
+            try_block,
+            catch_param.as_deref(),
+            catch_block.as_deref(),
+            finally_block.as_deref(),
+            map,
+        ),
         TsStmtKind::Block(stmts) => {
             out.push_str(&indent(depth));
             out.push_str("{\n");
