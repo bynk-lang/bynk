@@ -21,10 +21,14 @@ use bynk_model::is_effectful_return;
 use bynk_model::{ConstVal, EventPatternIr, EventPatternValueIr, IrHttpMethod};
 
 use super::ctx::{BodyMode, ModuleCtx, TestShared};
+use super::lower_call::codec_statics::{DecodeSource, eval_value_line, json_decoder_fn};
+use super::lower_call::statics::{
+    lower_runtime_value_static_call, lower_scalar_static_call, lower_type_static_call,
+};
 use super::lower_ctx::LowerCtx;
 use super::lower_list::{
-    join_other_elem_ts, kernel_key_comparator, key_fn_is_plain, key_is_plain, list_ok_elem_ts,
-    lower_list_kernel, with_comparator,
+    any_ty, join_other_elem_ts, kernel_key_comparator, key_fn_is_plain, key_is_plain,
+    list_ok_elem_ts, lower_list_kernel, with_comparator,
 };
 use super::lower_stmt::{
     Body, Item, arms_contain_question, block_body, block_body_into, block_contains_question,
@@ -1126,6 +1130,21 @@ fn paren(child: LoweredExpr) -> Built {
     )
 }
 
+/// A bridge value as a [`Built`]: the node, else its text.
+pub(super) fn built_of(expr: LoweredExpr) -> Built {
+    match expr {
+        LoweredExpr::Node(n) => Ok(n),
+        LoweredExpr::Text(t) => Err(t),
+    }
+}
+
+/// 1A: serialiser value is text. A still-text operand handed to a serialiser entry point (the
+/// entry points take a node since 1A.21, #3722, Decision B). The family that lowers the operand
+/// converts, and its call site passes the node instead.
+pub(super) fn text_value(text: impl Into<String>) -> bynk_ts::TsExpr {
+    bynk_ts::TsExpr::Ident(text.into())
+}
+
 /// A genuine identifier node. Never built from expression text.
 pub(super) fn ident_node(name: &str) -> bynk_ts::TsExpr {
     bynk_ts::TsExpr::Ident(name.to_string())
@@ -1188,7 +1207,11 @@ macro_rules! lowered_or_text {
 /// A runtime-constructor call with one argument — `Ok(x)`, `Some(x)`,
 /// `__bynkDecimalNeg(x)`, or `HttpResult.Ok(x)` when `object` is given — as a
 /// call node over genuine identifiers, or today's text if the argument is text.
-fn runtime_ctor_call(object: Option<&'static str>, name: &'static str, arg: LoweredExpr) -> Built {
+pub(super) fn runtime_ctor_call(
+    object: Option<&'static str>,
+    name: &'static str,
+    arg: LoweredExpr,
+) -> Built {
     node_or_text(
         vec![arg],
         |c| {
@@ -1213,7 +1236,7 @@ fn runtime_ctor_call(object: Option<&'static str>, name: &'static str, arg: Lowe
 
 /// `callee(a, b, …)` over a genuine callee node: a `Call` node, or today's
 /// `callee(a, b)` text (the callee prints exactly as it is spelled).
-fn call_built(callee: bynk_ts::TsExpr, args: Vec<LoweredExpr>) -> Built {
+pub(super) fn call_built(callee: bynk_ts::TsExpr, args: Vec<LoweredExpr>) -> Built {
     let callee_text = bynk_ts::print_expr(&callee);
     node_or_text(
         args,
@@ -1365,7 +1388,7 @@ thread_local! {
     /// Test-only: how many expressions left lowering as text (1A.4's
     /// "now lowers to a node" tests read it). Compiled only for bynk-emit's own
     /// test build and under the `text-exit-counters` feature (see `lower::text_counters`).
-    static TEXT_EXITS: std::cell::Cell<usize> = const { std::cell::Cell::new(0) };
+    pub(super) static TEXT_EXITS: std::cell::Cell<usize> = const { std::cell::Cell::new(0) };
     /// Test-only: how many statements were hoisted into a [`Pre`] as text
     /// (1A.8's "now hoists nodes" tests read it).
     static TEXT_STMTS: std::cell::Cell<usize> = const { std::cell::Cell::new(0) };
@@ -1407,6 +1430,17 @@ impl Pre {
     /// shape. Declining hoists nothing, so `None` leaves `self` untouched.
     pub(crate) fn absorb_opt(&mut self, lowered: Option<Lowered>) -> Option<String> {
         lowered.map(|l| self.absorb(l))
+    }
+
+    /// Absorb an optional [`Lowered`] as a [`Built`]: a delegated kernel's node
+    /// passes through to the dispatcher's caller as a node (1A.20, #3721,
+    /// Decision G), and an unconverted kernel's text as `Err`. Declining hoists
+    /// nothing.
+    pub(crate) fn absorb_built(&mut self, lowered: Option<Lowered>) -> Option<Built> {
+        lowered.map(|l| match self.absorb_node(l) {
+            LoweredExpr::Node(n) => Ok(n),
+            LoweredExpr::Text(t) => Err(t),
+        })
     }
 
     /// Hoist a statement this function generated itself (a `?` temp, an
@@ -2604,66 +2638,70 @@ fn lower_method_call(e: &Expr, cx: &mut LowerCtx) -> Lowered {
         unreachable!("lower_method_call is called on a method call")
     };
     let mut pre = Pre::new();
-    // 1A: the domain-specific dispatchers below (store, scalar/collection
-    // statics, runtime values, D1, cross-context, events, cookies,
-    // capabilities, type statics, test and system services, agent calls) stay
-    // text, each its own family with its own runtime contract. Of the kernel
-    // methods only the `List` kernel builds nodes (1A.18a and 1A.18b); the plain instance
-    // call that ends this function is a node.
+    // Each dispatcher below returns a bridge value that ends in
+    // `pre.finish_built` (1A.20, #3721, Decision G): the statics (scalar,
+    // runtime value, declared type) build nodes (`lower_call/statics.rs`), and a
+    // dispatcher that has not converted yet returns `Option<String>`, wrapped
+    // here as `Err` (1A: the store, D1, cross-context, events, cookie,
+    // capability, test-service and agent families, each its own slice under
+    // `lower_call/`). Of the kernel methods the `List` kernel builds nodes
+    // (1A.18a and 1A.18b) and every delegated kernel's node passes through
+    // unprinted; the plain instance call that ends this function is a node.
     // Persisted-store receivers: held Map, Map, Set, Cache, Log, Cell (#3167).
     if let Some(s) = lower_store_method_call(e, receiver, method, args, cx, &mut pre) {
-        return pre.finish_text(s);
+        return pre.finish_built(Err(s));
     }
     // Intrinsic statics: scalar and collection constructors, then runtime values (#3167).
-    if let Some(s) = lower_scalar_static_call(e, receiver, method, args, cx, &mut pre) {
-        return pre.finish_text(s);
+    if let Some(built) = lower_scalar_static_call(e, receiver, method, args, cx, &mut pre) {
+        return pre.finish_built(built);
     }
-    if let Some(s) = lower_runtime_value_static_call(e, receiver, method, args, cx, &mut pre) {
-        return pre.finish_text(s);
+    if let Some(built) = lower_runtime_value_static_call(e, receiver, method, args, cx, &mut pre) {
+        return pre.finish_built(built);
     }
     // Capability, cross-context, events and static-type calls (#3167).
     if let Some(s) = lower_d1_peek_call(e, cx) {
-        return pre.finish_text(s);
+        return pre.finish_built(Err(s));
     }
     if let Some(s) = lower_d1_select_call(e, args, cx, &mut pre) {
-        return pre.finish_text(s);
+        return pre.finish_built(Err(s));
     }
     if let Some(s) = lower_cross_context_call(e, receiver, method, type_args, args, cx, &mut pre) {
-        return pre.finish_text(s);
+        return pre.finish_built(Err(s));
     }
     if let Some(s) = lower_events_emit_call(e, receiver, type_args, args, cx, &mut pre) {
-        return pre.finish_text(s);
+        return pre.finish_built(Err(s));
     }
     if let Some(s) = lower_signed_cookie_call(e, args, cx, &mut pre) {
-        return pre.finish_text(s);
+        return pre.finish_built(Err(s));
     }
     if let Some(s) = lower_cookie_field_call(e, args, cx, &mut pre) {
-        return pre.finish_text(s);
+        return pre.finish_built(Err(s));
     }
     if let Some(s) = lower_capability_call(e, receiver, method, type_args, args, cx, &mut pre) {
-        return pre.finish_text(s);
+        return pre.finish_built(Err(s));
     }
-    if let Some(s) = lower_type_static_call(e, receiver, method, type_args, args, cx, &mut pre) {
-        return pre.finish_text(s);
+    if let Some(built) = lower_type_static_call(e, receiver, method, type_args, args, cx, &mut pre)
+    {
+        return pre.finish_built(built);
     }
     // Test-case and system-tier service addresses, then agent invocations (#3167).
     if let Some(s) = lower_test_asset_fetch_call(e, receiver, args, cx, &mut pre) {
-        return pre.finish_text(s);
+        return pre.finish_built(Err(s));
     }
     if let Some(s) = lower_system_schedule_call(receiver, method, args, cx, &mut pre) {
-        return pre.finish_text(s);
+        return pre.finish_built(Err(s));
     }
     if let Some(s) = lower_system_http_call(e, receiver, method, args, cx, &mut pre) {
-        return pre.finish_text(s);
+        return pre.finish_built(Err(s));
     }
     if let Some(s) = lower_test_service_call(e, receiver, method, args, cx, &mut pre) {
-        return pre.finish_text(s);
+        return pre.finish_built(Err(s));
     }
     if let Some(s) = lower_inline_agent_call(e, receiver, method, args, cx, &mut pre) {
-        return pre.finish_text(s);
+        return pre.finish_built(Err(s));
     }
     if let Some(s) = lower_let_bound_agent_call(e, receiver, method, args, cx, &mut pre) {
-        return pre.finish_text(s);
+        return pre.finish_built(Err(s));
     }
     // v0.20b: built-in kernel methods, resolved by the checker (#3164).
     if let Some(built) = lower_kernel_method_call(e, receiver, method, args, cx, &mut pre) {
@@ -2745,8 +2783,12 @@ fn lower_d1_select_call(
         } else {
             ("Sql", "Decode")
         };
-        let decoder = json_decoder_fn(target, source, cx)
-            .expect("a checked D1 select row type has a JSON decoder");
+        // 1A: the D1 `select` caller splices the decoder into a text IIFE until 1A.24.
+        let decoder = LoweredExpr::from(
+            json_decoder_fn(target, source, cx)
+                .expect("a checked D1 select row type has a JSON decoder"),
+        )
+        .into_text();
         {
             let params = pre.lower(params, cx);
             let deps =
@@ -3133,61 +3175,6 @@ fn lower_capability_call(
     None
 }
 
-/// Lower a static call on a declared type (`Box.empty[Int]()`), or `None` when the call is not one. Moved out of
-/// `lower_method_call` (#3167) unchanged.
-fn lower_type_static_call(
-    e: &Expr,
-    receiver: &Expr,
-    method: &Ident,
-    type_args: &[TypeRef],
-    args: &[Expr],
-    cx: &mut LowerCtx,
-    pre: &mut Pre,
-) -> Option<String> {
-    // Static call: receiver is a bare ident naming a declared type — unless
-    // the checker resolved it as a test-service address, which a target's
-    // service named like a `uses`-imported type it hides is (#1927).
-    if let ExprKind::Ident(id) = &receiver.kind
-        && cx.commons().types.contains_key(&id.name)
-        && !matches!(
-            cx.commons().callees.get(&e.id),
-            Some(
-                bynk_check::checker::Callee::TestService { .. }
-                    | bynk_check::checker::Callee::TestAssetFetch { .. }
-            )
-        )
-    {
-        let mut args_lowered: Vec<String> = args.iter().map(|a| pre.lower(a, cx)).collect();
-        // #2719: a static method in the needs-context set takes the context last.
-        let mut needs_exec = false;
-        if let Some(Callee::Static(decl, witnesses)) = cx.commons().callees.get(&e.id) {
-            // Constrained generics slice 4: the call's witnesses follow the
-            // ordinary arguments, as for an instance method.
-            // 1A: witness printed for a text caller
-            args_lowered.extend(print_witnesses(cx.witness_args(decl, witnesses)));
-            if cx.commons().exec_plan.fn_needs(decl) {
-                args_lowered.push(cx.exec_expr());
-                needs_exec = true;
-            }
-        }
-        // Slice 4 (DECISION B): explicit type arguments (`Box.empty[Int]()`) are
-        // kept, so a call with no argument of type `T` still types as written.
-        let call = format!(
-            "{}.{}{}({})",
-            id.name,
-            method.name,
-            capability_call_type_args_ts(type_args, None),
-            args_lowered.join(", ")
-        );
-        return Some(if needs_exec {
-            settle_exec_call(call, cx)
-        } else {
-            call
-        });
-    }
-    None
-}
-
 /// Lower a test `case` asset fetch (`svc.GET(asset)`), or `None` when the call is not one. Moved out of
 /// `lower_method_call` (#3167) unchanged.
 fn lower_test_asset_fetch_call(
@@ -3380,7 +3367,7 @@ fn lower_system_http_call(
                         "__cookieString({})",
                         bynk_ts::print_expr(&crate::emitter::serialisation::serialise_expr_via(
                             ty,
-                            &format!("({lowered} as any)"),
+                            &text_value(format!("({lowered} as any)")),
                             cx.system_http_type_ns(),
                             cx.runtime_use()
                         ))
@@ -3396,7 +3383,7 @@ fn lower_system_http_call(
                         "__queryString({})",
                         bynk_ts::print_expr(&crate::emitter::serialisation::serialise_expr_via(
                             ty,
-                            &format!("({lowered} as any)"),
+                            &text_value(format!("({lowered} as any)")),
                             cx.system_http_type_ns(),
                             cx.runtime_use()
                         ))
@@ -3436,7 +3423,7 @@ fn lower_system_http_call(
                             bynk_ts::print_expr(
                                 &crate::emitter::serialisation::serialise_expr_via(
                                     ty,
-                                    &format!("({lowered} as any)"),
+                                    &text_value(format!("({lowered} as any)")),
                                     cx.system_http_type_ns(),
                                     cx.runtime_use()
                                 )
@@ -3447,7 +3434,7 @@ fn lower_system_http_call(
                         "globalThis.JSON.stringify({})",
                         bynk_ts::print_expr(&crate::emitter::serialisation::serialise_expr_via(
                             ty,
-                            &format!("({lowered} as any)"),
+                            &text_value(format!("({lowered} as any)")),
                             cx.system_http_type_ns(),
                             cx.runtime_use()
                         ))
@@ -3912,350 +3899,6 @@ fn lower_let_bound_agent_call(
             None => method.name.clone(),
         };
         return Some(cx.trace_step("agent", &target, e.span.start, call));
-    }
-    None
-}
-
-/// Lower the built-in scalar and collection statics (`HttpResult.*`, `List.empty`, `Map.empty`, `Set.empty`/`of`, the JSON codec, `Float.pi`/`e`, the numeric parses, `Duration.millis`, `Instant.from*`), or `None` when the call is none of them. Moved out of
-/// `lower_method_call` (#3167) unchanged.
-fn lower_scalar_static_call(
-    e: &Expr,
-    receiver: &Expr,
-    method: &Ident,
-    args: &[Expr],
-    cx: &mut LowerCtx,
-    pre: &mut Pre,
-) -> Option<String> {
-    let tys = cx.ty_render();
-    // v0.9: explicit `HttpResult.Variant(args)` construction. The
-    // checker has already recorded the expression's type — emit it
-    // directly through the runtime's HttpResult namespace.
-    //
-    // P6.21/P6.23 (review of #1251): reads `Callee::Intrinsic` (the sink
-    // #1251 added) instead of `id.name == HTTP_RESULT` — closes the last
-    // real instance of R6.5's name-matched-receiver defect class this
-    // session's own P6.21 slices left open, since Decision C originally
-    // excluded this shape for lack of a `Callee` to read.
-    if let ExprKind::Ident(_) = &receiver.kind
-        && matches!(
-            cx.commons().callee(e.id),
-            Some(Callee::Intrinsic { ns, .. }) if *ns == HTTP_RESULT
-        )
-    {
-        cx.note_http_result();
-        // 1A: the method-call dispatchers stay text (see `lower_method_call`).
-        let args_lowered: Vec<String> = lower_http_variant_args(&method.name, args, pre, cx)
-            .into_iter()
-            .map(LoweredExpr::into_text)
-            .collect();
-        return Some(format!(
-            "HttpResult.{}({})",
-            method.name,
-            args_lowered.join(", ")
-        ));
-    }
-    // v0.20b: built-in collection statics — `List.empty()` /
-    // `Map.empty()`. The checker recorded the instantiated type;
-    // emit it explicitly so the TS value doesn't infer as `never[]`
-    // / `Map<unknown, unknown>` outside contextually-typed positions.
-    //
-    // P6.21 (partial, continued — the earlier #1247 attempt reverted this
-    // exact conversion after a zero-diff bless caught it silently dropping
-    // `Instant`/`Bytes` statics inside `.test.bynk` bodies; root-caused and
-    // fixed separately — `typecheck_case_body` now returns its own
-    // `callees` map instead of discarding it, so `Callee::Intrinsic` is
-    // populated for test-case bodies too): reads `Callee::Intrinsic` (P6.0)
-    // instead of `id.name == LIST || id.name == MAP` plus
-    // `!cx.commons().types.contains_key` — the checker's own
-    // `check_method_call` already resolves the identical shadowing question
-    // (`ctx.lookup(...).is_none() && !ctx.input.types.contains_key(...)`,
-    // `calls.rs`) before ever recording this `Callee`, closing a real gap
-    // the emitter's own guard left open: no `cx.is_local(&id.name)` check,
-    // unlike every other branch this session already converted.
-    if let ExprKind::Ident(_) = &receiver.kind
-        && matches!(
-            cx.commons().callee(e.id),
-            Some(Callee::Intrinsic { ns, op }) if (*ns == LIST || *ns == MAP || *ns == SET) && op == "empty"
-        )
-        && args.is_empty()
-    {
-        match cx.commons().expr_ty(e.id).as_deref() {
-            // K6a (#2596).
-            Some(Ty::Set(t)) => {
-                return Some(format!("new globalThis.Set<{}>()", ts_ty(*t, tys)));
-            }
-            Some(Ty::List(t)) => {
-                return Some(format!(
-                    "([] as readonly {}[])",
-                    ts_array_elem(&ts_ty(*t, tys))
-                ));
-            }
-            Some(Ty::Map(k, v)) => {
-                return Some(format!(
-                    "new globalThis.Map<{}, {}>()",
-                    ts_ty(*k, tys),
-                    ts_ty(*v, tys)
-                ));
-            }
-            _ => {}
-        }
-    }
-    // K6a (#2596): `Set.of(xs)` — a set of the list's elements; the first
-    // occurrence keeps its position.
-    if let ExprKind::Ident(_) = &receiver.kind
-        && matches!(
-            cx.commons().callee(e.id),
-            Some(Callee::Intrinsic { ns, op }) if *ns == SET && op == "of"
-        )
-        && args.len() == 1
-        && let Some(Ty::Set(t)) = cx.commons().expr_ty(e.id).as_deref()
-    {
-        let t = *t;
-        let xs = pre.lower(&args[0], cx);
-        if !key_is_plain(t, tys.types()) {
-            cx.runtime_use().note_key("__bynkSetOf");
-            return Some(format!("__bynkSetOf<{}>({xs})", ts_ty(t, tys)));
-        }
-        return Some(format!("new globalThis.Set<{}>({xs})", ts_ty(t, tys)));
-    }
-    // v0.22b: the typed JSON codec (ADR 0045).
-    if let Some(s) = pre.absorb_opt(lower_json_codec_call(e, receiver, method, args, cx)) {
-        return Some(s);
-    }
-    // K6b (#2598): `Float.pi()` and `Float.e()`.
-    if let ExprKind::Ident(_) = &receiver.kind
-        && matches!(
-            cx.commons().callee(e.id),
-            Some(Callee::Intrinsic { ns, op }) if *ns == FLOAT && (op == "pi" || op == "e")
-        )
-        && args.is_empty()
-    {
-        let constant = if method.name == "pi" { "PI" } else { "E" };
-        return Some(format!("globalThis.Math.{constant}"));
-    }
-    // v0.22a: the numeric parse statics — `Int.parse(s)` /
-    // `Float.parse(s)` (ADR 0048). #1657 (runtime-semantics track §3.4): the
-    // whole string must match a strict decimal grammar before `Number(…)` sees
-    // it. `Number` alone accepts surrounding whitespace, `0x`/`0b`/`0o` prefixes
-    // and (for `Int`) exponents, so `" 7 "`, `"0x10"` and `"1e3"` parsed. `Int`
-    // is `[+-]?digits`, then a safe integer (`+ 0` turns `-0` into `0`); `Float`
-    // is a decimal with an optional exponent, then finite (the 0040 posture).
-    // P6.21 (partial, continued): reads `Callee::Intrinsic` instead of
-    // `id.name == INT || id.name == FLOAT` — see the `List`/`Map` branch
-    // above. `Int`/`Float` are lexically reserved (the parser only admits
-    // them here followed by `.`), so unlike `List`/`Map` this specific guard
-    // never had a real shadowing gap to close — converted for consistency
-    // with every other static-constructor branch in this function.
-    if let ExprKind::Ident(id) = &receiver.kind
-        && matches!(
-            cx.commons().callee(e.id),
-            Some(Callee::Intrinsic { ns, op }) if (*ns == INT || *ns == FLOAT) && op == "parse"
-        )
-        && args.len() == 1
-    {
-        let s = pre.lower(&args[0], cx);
-        let (grammar, value, guard) = if id.name == INT {
-            (
-                "/^[+-]?[0-9]+$/",
-                "globalThis.Number(__s) + 0",
-                "globalThis.Number.isSafeInteger(__n)",
-            )
-        } else {
-            (
-                "/^[+-]?([0-9]+(\\.[0-9]*)?|\\.[0-9]+)([eE][+-]?[0-9]+)?$/",
-                "globalThis.Number(__s)",
-                "globalThis.Number.isFinite(__n)",
-            )
-        };
-        return Some(format!(
-            "((__s: string) => {{ if (!{grammar}.test(__s)) return None; const __n = {value}; return {guard} ? Some(__n) : None; }})({s})"
-        ));
-    }
-    // v0.86 (ADR 0112): `Duration.millis(n)` — the runtime `Int`→`Duration`
-    // constructor. A `Duration` lowers to its milliseconds, so this is the
-    // identity on the argument.
-    //
-    // P6.21 (partial, continued): reads `Callee::Intrinsic` instead of
-    // `id.name == DURATION` — see the `List`/`Map` branch above for why this
-    // closes a real shadowing gap the bare name check left open (the checker
-    // itself guards `ctx.lookup(DURATION).is_none()` before ever recording
-    // this `Callee`; the same applies to `Instant`/`Bytes`/`Stream` below).
-    if let ExprKind::Ident(_) = &receiver.kind
-        && matches!(
-            cx.commons().callee(e.id),
-            Some(Callee::Intrinsic { ns, op }) if *ns == DURATION && op == "millis"
-        )
-        && args.len() == 1
-    {
-        let inner = pre.lower(&args[0], cx);
-        return Some(inner);
-    }
-    // K3 (#2592): `Instant.fromIso(s)`, a guarded RFC 3339 read.
-    if let ExprKind::Ident(_) = &receiver.kind
-        && matches!(
-            cx.commons().callee(e.id),
-            Some(Callee::Intrinsic { ns, op }) if *ns == INSTANT && op == "fromIso"
-        )
-        && args.len() == 1
-    {
-        let s = pre.lower(&args[0], cx);
-        cx.note_time_ops();
-        return Some(format!("__bynkInstantFromIso({s})"));
-    }
-    // v0.90 (ADR 0114): `Instant.fromEpochMillis(n)` — an `Instant` lowers to
-    // its epoch milliseconds, so this is the identity on the argument.
-    if let ExprKind::Ident(_) = &receiver.kind
-        && matches!(
-            cx.commons().callee(e.id),
-            Some(Callee::Intrinsic { ns, op }) if *ns == INSTANT && op == "fromEpochMillis"
-        )
-        && args.len() == 1
-    {
-        let inner = pre.lower(&args[0], cx);
-        return Some(inner);
-    }
-    None
-}
-
-/// Lower the statics that build a runtime value (`Bytes.*`, `Decimal.*`, `TokenClaims.of`, `RequestHeaders.*`, `RequestQuery.*`, `Stream.of`), or `None` when the call is none of them. Moved out of
-/// `lower_method_call` (#3167) unchanged.
-fn lower_runtime_value_static_call(
-    e: &Expr,
-    receiver: &Expr,
-    method: &Ident,
-    args: &[Expr],
-    cx: &mut LowerCtx,
-    pre: &mut Pre,
-) -> Option<String> {
-    // v0.110 (ADR 0142 D2): the `Bytes` static constructors. `fromUtf8` is the
-    // UTF-8 encoding of a string (total); `fromBase64` is a guarded base64
-    // decode returning `Option` (`None` on invalid base64); `empty` is the
-    // zero octet sequence.
-    if let ExprKind::Ident(_) = &receiver.kind
-        && matches!(cx.commons().callee(e.id), Some(Callee::Intrinsic { ns, .. }) if *ns == BYTES)
-    {
-        match (method.name.as_str(), args.len()) {
-            ("fromUtf8", 1) => {
-                let s = pre.lower(&args[0], cx);
-                return Some(format!("new globalThis.TextEncoder().encode({s})"));
-            }
-            ("fromBase64", 1) => {
-                let s = pre.lower(&args[0], cx);
-                cx.note_bytes();
-                return Some(format!("__bynkBytesFromBase64({s})"));
-            }
-            // #2016: the guarded hex and base64url decodes, `None` on bad input.
-            ("fromHex", 1) => {
-                let s = pre.lower(&args[0], cx);
-                cx.note_bytes_ops();
-                return Some(format!("__bynkBytesFromHex({s})"));
-            }
-            ("fromBase64Url", 1) => {
-                let s = pre.lower(&args[0], cx);
-                cx.note_bytes_ops();
-                return Some(format!("__bynkBytesFromBase64Url({s})"));
-            }
-            ("empty", 0) => {
-                return Some("new globalThis.Uint8Array()".to_string());
-            }
-            _ => {}
-        }
-    }
-    // #2622: `Decimal.parse(s)` and `Decimal.fromInt(n)`.
-    if let ExprKind::Ident(_) = &receiver.kind
-        && matches!(cx.commons().callee(e.id), Some(Callee::Intrinsic { ns, .. }) if *ns == DECIMAL)
-    {
-        match (method.name.as_str(), args.len()) {
-            ("parse", 1) => {
-                let s = pre.lower(&args[0], cx);
-                cx.note_decimal("__bynkDecimalParse");
-                return Some(format!("__bynkDecimalParse({s})"));
-            }
-            ("fromInt", 1) => {
-                let n = pre.lower(&args[0], cx);
-                cx.note_decimal("__bynkDecimalFromInt");
-                return Some(format!("__bynkDecimalFromInt({n})"));
-            }
-            _ => {}
-        }
-    }
-    // #2380 (L5): `TokenClaims.of(lines)` builds the runtime's claims view.
-    if let ExprKind::Ident(_) = &receiver.kind
-        && matches!(cx.commons().callee(e.id), Some(Callee::Intrinsic { ns, op }) if *ns == TOKEN_CLAIMS && op == "of")
-        && args.len() == 1
-    {
-        let xs = pre.lower(&args[0], cx);
-        cx.note_token_claims();
-        return Some(format!("__tokenClaims({xs})"));
-    }
-    // #2341 (L4): `RequestHeaders.of(lines)` / `RequestHeaders.empty()` build
-    // the runtime's headers view from `"name: value"` lines.
-    if let ExprKind::Ident(_) = &receiver.kind
-        && matches!(cx.commons().callee(e.id), Some(Callee::Intrinsic { ns, .. }) if *ns == REQUEST_HEADERS)
-    {
-        match (method.name.as_str(), args.len()) {
-            ("of", 1) => {
-                let xs = pre.lower(&args[0], cx);
-                cx.note_request_headers();
-                return Some(format!("__requestHeaders({xs})"));
-            }
-            ("empty", 0) => {
-                cx.note_request_headers();
-                return Some("__requestHeaders([])".to_string());
-            }
-            _ => {}
-        }
-    }
-    // #2854: `RequestQuery.of(pairs)` / `RequestQuery.empty()` build the
-    // runtime's query view from `"name=value"` pairs.
-    if let ExprKind::Ident(_) = &receiver.kind
-        && matches!(cx.commons().callee(e.id), Some(Callee::Intrinsic { ns, .. }) if *ns == REQUEST_QUERY)
-    {
-        match (method.name.as_str(), args.len()) {
-            ("of", 1) => {
-                let xs = pre.lower(&args[0], cx);
-                cx.note_request_query();
-                return Some(format!("__requestQuery({xs})"));
-            }
-            ("empty", 0) => {
-                cx.note_request_query();
-                return Some("__requestQuery([])".to_string());
-            }
-            _ => {}
-        }
-    }
-    // #3277: `RequestCookies.of(pairs)` / `RequestCookies.empty()` build the
-    // runtime's cookies view from `"name=value"` pairs.
-    if let ExprKind::Ident(_) = &receiver.kind
-        && matches!(cx.commons().callee(e.id), Some(Callee::Intrinsic { ns, .. }) if *ns == REQUEST_COOKIES)
-    {
-        match (method.name.as_str(), args.len()) {
-            ("of", 1) => {
-                let xs = pre.lower(&args[0], cx);
-                cx.note_request_cookies();
-                return Some(format!("__requestCookies({xs})"));
-            }
-            ("empty", 0) => {
-                cx.note_request_cookies();
-                return Some("__requestCookies([])".to_string());
-            }
-            _ => {}
-        }
-    }
-    // v0.100: `Stream.of(xs)` — the deterministic in-memory source. A `Stream`
-    // lowers to a host async iterable; `of` wraps a list as an async generator.
-    // Emitted inline (no runtime import), like the collection kernels.
-    if let ExprKind::Ident(_) = &receiver.kind
-        && matches!(
-            cx.commons().callee(e.id),
-            Some(Callee::Intrinsic { ns, op }) if *ns == STREAM && op == "of"
-        )
-        && args.len() == 1
-    {
-        let xs = pre.lower(&args[0], cx);
-        return Some(format!(
-            "(async function* () {{ for (const __e of {xs}) {{ yield __e; }} }})()"
-        ));
     }
     None
 }
@@ -4875,9 +4518,11 @@ fn lower_effect_kernel_call(
 /// the one place the emitter turns a kernel operation into TypeScript, matching
 /// on the receiver kind and the operation. `None` when the operation has no
 /// inline lowering here, so the caller falls through to the UFCS lowering; any
-/// hoisted statements the attempt produced stay in `pre`. The `List` kernel
-/// returns a node when its operands are nodes (1A.18a); every other family is
-/// still text, wrapped here as `Err` (`// 1A:` at its arm below).
+/// hoisted statements the attempt produced stay in `pre`. The result is a
+/// [`Built`] (1A.20, Decision G): the `List` kernel returns a node when its
+/// operands are nodes (1A.18a), a delegated kernel's `Lowered` passes through
+/// `Pre::absorb_built` unprinted, and a family that is still text is `Err`
+/// (`// 1A:` at its arm below).
 fn lower_kernel_method_call(
     e: &Expr,
     receiver: &Expr,
@@ -4980,10 +4625,10 @@ fn lower_kernel_method_call(
                 let Ty::Map(key, val) = &recv_ty else {
                     mismatch(kop)
                 };
-                if let Some(s) =
-                    pre.absorb_opt(lower_map_kernel(receiver, op, args, *key, *val, cx))
+                if let Some(built) =
+                    pre.absorb_built(lower_map_kernel(receiver, op, args, *key, *val, cx))
                 {
-                    return Some(Err(s));
+                    return Some(built);
                 }
             }
             // K6a (#2596): the `Set` kernel.
@@ -4991,8 +4636,10 @@ fn lower_kernel_method_call(
                 let Ty::Set(elem) = &recv_ty else {
                     mismatch(kop)
                 };
-                if let Some(s) = pre.absorb_opt(lower_set_kernel(receiver, op, args, *elem, cx)) {
-                    return Some(Err(s));
+                if let Some(built) =
+                    pre.absorb_built(lower_set_kernel(receiver, op, args, *elem, cx))
+                {
+                    return Some(built);
                 }
             }
             // v0.21: the numeric kernel. `toFloat` is the identity
@@ -5000,29 +4647,31 @@ fn lower_kernel_method_call(
             // the four `Float -> Int` roundings map onto `Math.*`.
             // v0.22a extends it (abs/min/max/clamp, isNaN/isFinite).
             KernelOp::Int(op) => {
-                if let Some(s) = pre.absorb_opt(lower_int_kernel(receiver, op, args, cx)) {
-                    return Some(Err(s));
+                if let Some(built) = pre.absorb_built(lower_int_kernel(receiver, op, args, cx)) {
+                    return Some(built);
                 }
             }
             KernelOp::Float(op) => {
-                if let Some(s) = pre.absorb_opt(lower_float_kernel(receiver, op, args, cx)) {
-                    return Some(Err(s));
+                if let Some(built) = pre.absorb_built(lower_float_kernel(receiver, op, args, cx)) {
+                    return Some(built);
                 }
             }
             // v0.86 (ADR 0112): the `Duration` kernel. `toMillis` is the identity
             // at runtime (a `Duration` already *is* its milliseconds); `toString`
             // renders the number.
             KernelOp::Duration(op) => {
-                if let Some(s) = pre.absorb_opt(lower_duration_kernel(receiver, op, args, cx)) {
-                    return Some(Err(s));
+                if let Some(built) = pre.absorb_built(lower_duration_kernel(receiver, op, args, cx))
+                {
+                    return Some(built);
                 }
             }
             // v0.90 (ADR 0114): the `Instant` kernel. `toEpochMillis` is the
             // identity (an `Instant` lowers to its epoch millis); `toString`
             // renders the number.
             KernelOp::Instant(op) => {
-                if let Some(s) = pre.absorb_opt(lower_instant_kernel(receiver, op, args, cx)) {
-                    return Some(Err(s));
+                if let Some(built) = pre.absorb_built(lower_instant_kernel(receiver, op, args, cx))
+                {
+                    return Some(built);
                 }
             }
             // #3277: a cookie rides beside an `HttpResult` as a `cookies` list the
@@ -5061,20 +4710,21 @@ fn lower_kernel_method_call(
             // count; `toBase64` encodes; `decodeUtf8` is a guarded UTF-8 decode
             // returning `Option`.
             KernelOp::Bytes(op) => {
-                if let Some(s) = pre.absorb_opt(lower_bytes_kernel(receiver, op, args, cx)) {
-                    return Some(Err(s));
+                if let Some(built) = pre.absorb_built(lower_bytes_kernel(receiver, op, args, cx)) {
+                    return Some(built);
                 }
             }
             // #2622: the `Decimal` kernel.
             KernelOp::Decimal(op) => {
-                if let Some(s) = pre.absorb_opt(lower_decimal_kernel(receiver, op, args, cx)) {
-                    return Some(Err(s));
+                if let Some(built) = pre.absorb_built(lower_decimal_kernel(receiver, op, args, cx))
+                {
+                    return Some(built);
                 }
             }
             // v0.22a: the string kernel (ADR 0046).
             KernelOp::String(op) => {
-                if let Some(s) = pre.absorb_opt(lower_string_kernel(receiver, op, args, cx)) {
-                    return Some(Err(s));
+                if let Some(built) = pre.absorb_built(lower_string_kernel(receiver, op, args, cx)) {
+                    return Some(built);
                 }
             }
             // v0.22a: Option/Result combinators (ADR 0048).
@@ -5082,20 +4732,20 @@ fn lower_kernel_method_call(
                 let Ty::Option(inner) = &recv_ty else {
                     mismatch(kop)
                 };
-                if let Some(s) =
-                    pre.absorb_opt(lower_option_kernel(e, receiver, op, args, *inner, cx))
+                if let Some(built) =
+                    pre.absorb_built(lower_option_kernel(e, receiver, op, args, *inner, cx))
                 {
-                    return Some(Err(s));
+                    return Some(built);
                 }
             }
             KernelOp::Result(op) => {
                 let Ty::Result(ok, err) = &recv_ty else {
                     mismatch(kop)
                 };
-                if let Some(s) =
-                    pre.absorb_opt(lower_result_kernel(e, receiver, op, args, *ok, *err, cx))
+                if let Some(built) =
+                    pre.absorb_built(lower_result_kernel(e, receiver, op, args, *ok, *err, cx))
                 {
-                    return Some(Err(s));
+                    return Some(built);
                 }
             }
             // #2683 / #2711 / #3437: `within`, `race` and `detach`, on every `Effect[T]`.
@@ -5113,11 +4763,11 @@ fn lower_kernel_method_call(
                     mismatch(kop)
                 };
                 if let Ty::Result(ok, err) = &*tys.get(*inner)
-                    && let Some(s) = pre.absorb_opt(lower_effect_result_kernel(
+                    && let Some(built) = pre.absorb_built(lower_effect_result_kernel(
                         e, receiver, op, args, *ok, *err, cx,
                     ))
                 {
-                    return Some(Err(s));
+                    return Some(built);
                 }
             }
         }
@@ -5177,8 +4827,8 @@ fn lower_ufcs_method_call(
     // `any` otherwise (a type the calling module may never import, or a type
     // variable that may not be this function's). The checker has already typed
     // the call, so `any` in a receiver slot loses nothing.
-    let explicit = if type_args.is_empty() {
-        String::new()
+    let explicit: Vec<bynk_ts::TsType> = if type_args.is_empty() {
+        Vec::new()
     } else {
         let recv_args: Option<Vec<TyId>> =
             cx.commons()
@@ -5189,45 +4839,62 @@ fn lower_ufcs_method_call(
                     _ => None,
                 });
         match recv_args {
-            Some(recv_args) => {
-                let parts: Vec<String> = recv_args
-                    .iter()
-                    .map(|a| {
-                        if ts_spelling_in_scope_everywhere(*a, tys.types()) {
-                            ty_to_type_ref(*a, tys.types())
-                                .map(|r| ts_type_ref(&r))
-                                .unwrap_or_else(|| "any".to_string())
-                        } else {
-                            "any".to_string()
-                        }
-                    })
-                    .chain(type_args.iter().map(ts_type_ref))
-                    .collect();
-                format!("<{}>", parts.join(", "))
-            }
-            None => String::new(),
+            Some(recv_args) => recv_args
+                .iter()
+                .map(|a| {
+                    if ts_spelling_in_scope_everywhere(*a, tys.types()) {
+                        ty_to_type_ref(*a, tys.types())
+                            .map(|r| ts_type_ref_to_ts_type(&r, None))
+                            .unwrap_or_else(any_ty)
+                    } else {
+                        any_ty()
+                    }
+                })
+                .chain(type_args.iter().map(|t| ts_type_ref_to_ts_type(t, None)))
+                .collect(),
+            None => Vec::new(),
         }
     };
-    // 1A: `bynk_ts` `Call` has no `type_args` field (#2795's explicit type
-    // arguments have no node home), and the `/* unknown */` namespace is a
-    // placeholder for a program that failed checking, not an identifier: both
-    // stay text.
+    // The `/* unknown */` namespace is a placeholder for a program that failed
+    // checking, not an identifier, so that one shape stays text; every other
+    // call is a node, with a `TypeApp` callee when type arguments are explicit
+    // (1A.20, #3721, Decision A).
     let built = match known_ns {
-        Some(ns) if explicit.is_empty() => {
-            let callee = bynk_ts::TsExpr::Member {
+        Some(ns) => {
+            let mut callee = bynk_ts::TsExpr::Member {
                 object: Box::new(ident_node(&ns)),
                 property: method.name.clone(),
             };
+            if !explicit.is_empty() {
+                callee = bynk_ts::TsExpr::TypeApp {
+                    callee: Box::new(callee),
+                    type_args: explicit,
+                };
+            }
             call_built(callee, all)
         }
-        _ => Err(format!(
-            "{ns}.{}{explicit}({})",
-            method.name,
-            all.into_iter()
-                .map(LoweredExpr::into_text)
-                .collect::<Vec<_>>()
-                .join(", ")
-        )),
+        None => {
+            let explicit = if explicit.is_empty() {
+                String::new()
+            } else {
+                format!(
+                    "<{}>",
+                    explicit
+                        .iter()
+                        .map(bynk_ts::print_type)
+                        .collect::<Vec<_>>()
+                        .join(", ")
+                )
+            };
+            Err(format!(
+                "{ns}.{}{explicit}({})",
+                method.name,
+                all.into_iter()
+                    .map(LoweredExpr::into_text)
+                    .collect::<Vec<_>>()
+                    .join(", ")
+            ))
+        }
     };
     if needs_exec {
         settle_built(built, cx)
@@ -5247,447 +4914,6 @@ fn ts_spelling_in_scope_everywhere(t: TyId, tys: &Arc<Types>) -> bool {
         }
         _ => false,
     }
-}
-
-/// v0.22b: the typed JSON codec (ADR 0045). `encode` dispatches to the
-/// module-local `serialise_*` helpers + `JSON.stringify`; `decode[T]` to
-/// `JSON.parse` + `deserialise_*`, mapping a parse failure to a `Malformed`
-/// DecodeError and a BoundaryError to the uniform `kind`/`path`/`message`
-/// record (ADR 0047). Returns `None` when the receiver is not `Json` or the
-/// shape does not match, so the dispatcher falls through.
-///
-/// R8.14 (Arc D, P7.15 review): reads the same `Callee::Intrinsic { ns: JSON,
-/// .. }` this call's own root gets classified under in
-/// `collect_json_codec_roots` (`bynk-emit/src/emitter.rs`) — not the bare
-/// `id.name == JSON` receiver-name match this function used before. The two
-/// must agree on what a codec call *is*: `collect_json_codec_roots` decides
-/// whether a `serialise_T`/`deserialise_T` helper gets emitted at all, this
-/// function decides whether a call site references one. Read using the
-/// syntactic match alone, a `Json` shadowed by a local value/type would have
-/// disagreed with the (already `Callee`-based) seed collector — no helper
-/// emitted, but a reference to one generated anyway, a `tsc` "cannot find
-/// name" strictly worse than the syntactic match's own pre-existing
-/// wrong-but-well-formed output.
-fn lower_json_codec_call(
-    e: &Expr,
-    // Unused now that the guard below reads the checker's own resolved
-    // `Callee::Intrinsic` instead of matching the receiver's own shape —
-    // kept in the signature for uniformity with this dispatcher's sibling
-    // `lower_*_call` functions, which all share this exact parameter list.
-    _receiver: &Expr,
-    method: &Ident,
-    args: &[Expr],
-    cx: &mut LowerCtx,
-) -> Option<Lowered> {
-    let mut pre = Pre::new();
-    // #3214: `Yaml.decode[T](text)` is `Json.decode[T]` with the YAML parser in
-    // place of `JSON.parse`; the typed decode and its errors are the same.
-    if matches!(
-        cx.commons().callees.get(&e.id),
-        Some(Callee::Intrinsic { ns, .. }) if *ns == YAML
-    ) && args.len() == 1
-        && method.name == "decode"
-        && let Some(Ty::Result(t, _)) = cx.commons().expr_ty(e.id).as_deref().cloned()
-        && let Some(decoder) = json_decoder_fn(t, DecodeSource::Yaml, cx)
-    {
-        let arg = pre.lower(&args[0], cx);
-        return Some(pre.finish_text(format!("({decoder})({arg})")));
-    }
-    // #3276 (decision G): `Form.decode[T](text)` reads the text as the router reads
-    // a `@form` body, then decodes through `T`'s codec; `Form.encode(v)` writes the
-    // form text such a route reads.
-    if matches!(
-        cx.commons().callees.get(&e.id),
-        Some(Callee::Intrinsic { ns, .. }) if *ns == FORM
-    ) && args.len() == 1
-    {
-        if method.name == "decode"
-            && let Some(Ty::Result(t, _)) = cx.commons().expr_ty(e.id).as_deref().cloned()
-            && let Some(decoder) = json_decoder_fn(t, DecodeSource::Form, cx)
-        {
-            let arg = pre.lower(&args[0], cx);
-            return Some(pre.finish_text(format!("({decoder})({arg})")));
-        }
-        if method.name == "encode" {
-            cx.runtime_use().note_form_codec();
-            // The checker admits only a concrete record of form fields, so the wire
-            // value is always available; a miss is a compiler fault, not a user error.
-            let wire = form_encode_wire(&mut pre, &args[0], cx)
-                .expect("`Form.encode` checked a concrete record of form fields");
-            // #3343: a field renamed by `@name` is written under its wire key.
-            let table = cx
-                .commons()
-                .expr_types
-                .get(&args[0].id)
-                .map(|te| te.ty)
-                .and_then(|ty| ty_to_type_ref(ty, cx.commons().tys()))
-                .and_then(|tref| {
-                    super::workers_entry::renamed_specs_source(&tref, &cx.commons().types)
-                })
-                .map(|t| format!(", {t}"))
-                .unwrap_or_default();
-            return Some(pre.finish_text(format!("__formString({wire}{table})")));
-        }
-    }
-    if matches!(
-        cx.commons().callees.get(&e.id),
-        Some(Callee::Intrinsic { ns, .. }) if *ns == JSON
-    ) && args.len() == 1
-    {
-        if matches!(method.name.as_str(), "encode" | "encodePlain")
-            && let Some(text) =
-                json_encode_text(&mut pre, &args[0], cx, method.name == "encodePlain")
-        {
-            return Some(pre.finish_text(text));
-        }
-        if matches!(method.name.as_str(), "decode" | "decodeSql")
-            && let Some(Ty::Result(t, _)) = cx.commons().expr_ty(e.id).as_deref().cloned()
-            && let Some(decoder) = json_decoder_fn(
-                t,
-                if method.name == "decodeSql" {
-                    DecodeSource::Sql
-                } else {
-                    DecodeSource::Json
-                },
-                cx,
-            )
-        {
-            let arg = pre.lower(&args[0], cx);
-            return Some(pre.finish_text(format!("({decoder})({arg})")));
-        }
-    }
-    let text: Option<String> = None;
-    text.map(|expr| pre.finish_text(expr))
-}
-
-/// Which text front end feeds a typed decode.
-#[derive(Clone, Copy, PartialEq, Eq)]
-enum DecodeSource {
-    /// `Json.decode`: the text is JSON.
-    Json,
-    /// `Json.decodeSql` and the typed `D1` reads: JSON, with SQLite's `0`/`1` flags read as `Bool`.
-    Sql,
-    /// Hyperdrive H3 (#3320), the typed `Postgres` reads: JSON, with an `int8`'s
-    /// text read at an `Int` field and a `timestamptz`'s text at an `Instant`.
-    Pg,
-    /// #3214, `Yaml.decode`: the text is YAML, parsed to the same JSON-shaped tree.
-    Yaml,
-    /// #3276, `Form.decode`: the text is a form body, read by the router's own rules.
-    Form,
-}
-
-/// The arrow function that decodes text into `t`:
-/// `((__s: string): Result<T, DecodeError> => …)`, for `Json.decode` /
-/// `Json.decodeSql` / `Yaml.decode` (`source`) and for the typed `D1` reads
-/// (#2865), which apply it to the rows `all`/`first` return. `None` when `t`
-/// has no TS rendering.
-fn json_decoder_fn(
-    t: bynk_check::checker::TyId,
-    source: DecodeSource,
-    cx: &mut LowerCtx,
-) -> Option<String> {
-    let sql = source == DecodeSource::Sql;
-    let tys = cx.ty_render();
-    let rigid = super::codec::has_var(t, cx.commons());
-    let tref = if rigid {
-        // A target that mentions a type parameter decodes through the
-        // codec witness; `tref` is then only a placeholder.
-        Some(TypeRef::Unit(bynk_syntax::span::Span::default()))
-    } else {
-        ty_to_type_ref(t, tys.types())
-    }?;
-    // #917: in a test-scaffold module `T` may be foreign (owned by the
-    // suite target or one of its `uses`, never declared locally), so its
-    // TS type positions reach through the module's namespace qualifier —
-    // empty everywhere else, where this renders identically to `ts_ty`.
-    let ts = if cx.in_test_scaffold() && !rigid {
-        let qual = cx.runtime_use().json_codec_qual();
-        bynk_ts::print_type(&serialisation::qualified_ts_type(&tref, &qual))
-    } else {
-        ts_ty(t, tys)
-    };
-    if cx.records_codec_roots() {
-        note_ground_roots(t, cx);
-    }
-    // #914: the wrapper below names `Result`, `JsonValue` and `DecodeError`
-    // in its own signature and body, whichever arm the inner deserialiser
-    // takes — including the delegating ones, which record nothing. A
-    // module that curates its import list (the test-scaffold modules)
-    // otherwise emits all three unimported.
-    cx.runtime_use().note_json_codec();
-    let des = if rigid {
-        // 1A: witness printed for a text caller
-        format!("{}.decode(__j, \"$\")", bynk_ts::print_expr(&cx.codec(t)))
-    } else {
-        bynk_ts::print_expr(&serialisation::deserialise_expr(
-            &tref,
-            "__j",
-            "$",
-            cx.runtime_use(),
-        ))
-    };
-    let sql_bools = if sql {
-        sql_bool_pass(t, cx)
-    } else if source == DecodeSource::Pg {
-        pg_row_pass(t, cx)
-    } else {
-        String::new()
-    };
-    // The parse step: `JSON.parse`, or (#3214) the YAML parser, whose failures
-    // are already positioned `DecodeError`s.
-    let parse = if source == DecodeSource::Form {
-        cx.runtime_use().note_form_codec();
-        let specs = form_specs_literal(t, cx)?;
-        format!(
-            "const __p = __formDecode(__s, {specs}); \
-             if (__p.tag === \"Err\") return Err(__p.error); \
-             const __j: __JsonValue = __p.value; "
-        )
-    } else if source == DecodeSource::Yaml {
-        cx.runtime_use().note_yaml();
-        "const __p = __bynkYamlParse(__s); \
-         if (__p.tag === \"Err\") return Err(__p.error); \
-         const __j: __JsonValue = __p.value; "
-            .to_string()
-    } else {
-        "let __j: __JsonValue; \
-         try { __j = globalThis.JSON.parse(__s) as __JsonValue; } \
-         catch (__e) { return Err({ kind: \"Malformed\", path: \"$\", message: String(__e) }); } "
-            .to_string()
-    };
-    Some(format!(
-        "(__s: string): Result<{ts}, DecodeError> => {{ \
-         {parse}\
-         {sql_bools}const __r = {des}; \
-         if (__r.tag === \"Ok\") return Ok(__r.value as {ts}); \
-         const __be = __r.error; \
-         return Err({{ kind: __be.kind, \
-         path: (__be.kind === \"StructuralMismatch\" || __be.kind === \"RefinementViolation\") ? __be.path : \"$\", \
-         message: __be.kind === \"StructuralMismatch\" ? `expected ${{__be.expected}}, got ${{String(__be.actual)}}` : __be.kind === \"RefinementViolation\" ? __be.violation.message : __be.details }}); }}"
-    ))
-}
-
-/// #3276: the field table `Form.decode[T]` hands the form reader, as the TS array
-/// literal of `{ name, kind, list, option }` the router's `@form` path builds. `None`
-/// when `t` is not a record of the module's types.
-fn form_specs_literal(t: bynk_check::checker::TyId, cx: &LowerCtx) -> Option<String> {
-    use bynk_syntax::ast::TypeBody;
-    let tys = cx.ty_render();
-    let Ty::Named { name, .. } = &*tys.get(t) else {
-        return None;
-    };
-    let decl = cx.commons().types.get(name.as_str())?;
-    let TypeBody::Record(rec) = &decl.body else {
-        return None;
-    };
-    let specs = super::workers_entry::record_field_specs(rec, &cx.commons().types, false);
-    let items: Vec<String> = specs
-        .iter()
-        .map(super::workers_entry::field_spec_source)
-        .collect();
-    Some(format!("[{}]", items.join(", ")))
-}
-
-/// #3276: the wire value `Form.encode(arg)` writes flat: `arg` serialised exactly as
-/// `Json.encode` serialises it, before the JSON text step. `None` only for a type
-/// the lowering cannot render, which the checker has already refused for `Form`.
-fn form_encode_wire(pre: &mut Pre, arg: &Expr, cx: &mut LowerCtx) -> Option<String> {
-    let tys = cx.ty_render();
-    let arg_ty = cx.commons().expr_types.get(&arg.id).map(|te| te.ty)?;
-    let tref = ty_to_type_ref(arg_ty, tys.types())?;
-    if cx.records_codec_roots() {
-        cx.runtime_use().note_json_codec_root(arg_ty);
-    }
-    let v = pre.lower(arg, cx);
-    Some(bynk_ts::print_expr(&serialisation::serialise_expr(
-        &tref,
-        &v,
-        cx.runtime_use(),
-    )))
-}
-
-/// #3585: the statement that reports a `bynk eval` case's tail value: its
-/// `Json.encode` text and its type, as one NDJSON line. `None` when the value's
-/// type is unknown to the lowering, so the case runs without reporting.
-fn eval_value_line(pre: &mut Pre, tail: &Expr, cx: &mut LowerCtx) -> Option<String> {
-    let ty = cx.commons().expr_types.get(&tail.id).map(|te| te.ty)?;
-    let shown = bynk_check::symbols::display_type_names_in(&cx.commons().tys().display(ty));
-    let shown = bynk_project::json_string(&shown);
-    let head = format!(
-        "globalThis.console.log('{{\"type\":\"eval-value\",\"valueType\":' + globalThis.JSON.stringify({shown})"
-    );
-    // A value with no wire shape (a function, say) still reports its type, and
-    // no value.
-    let Some(json) = json_encode_text(pre, tail, cx, false) else {
-        let _ = pre.lower(tail, cx);
-        return Some(format!("{head} + '}}');"));
-    };
-    // The encoder names `JsonValue` and `BoundaryError`, whether or not the
-    // value's type needs a closure of codecs of its own.
-    cx.runtime_use().note_json_codec();
-    cx.runtime_use().note_boundary_codec();
-    Some(format!("{head} + ',\"value\":' + {json} + '}}');"))
-}
-
-/// `Json.encode(arg)`'s text: `globalThis.JSON.stringify(<serialised arg>)`, with
-/// the codec roots the module needs recorded. Shared by the `Json.encode` call
-/// and the snapshot `expect` (#2842), so both encode a value one way. `None`
-/// when the argument's type is unknown to the lowering.
-pub(super) fn json_encode_text(
-    pre: &mut Pre,
-    arg: &Expr,
-    cx: &mut LowerCtx,
-    plain: bool,
-) -> Option<String> {
-    let tys = cx.ty_render();
-    // Constrained generics slice 3: a value whose type mentions a type
-    // parameter encodes through the codec witness of that type.
-    let arg_ty = cx.commons().expr_types.get(&arg.id).map(|te| te.ty)?;
-    if super::codec::has_var(arg_ty, cx.commons()) {
-        if cx.records_codec_roots() {
-            note_ground_roots(arg_ty, cx);
-        }
-        // 1A: witness printed for a text caller
-        let codec = bynk_ts::print_expr(&cx.codec(arg_ty));
-        let v = pre.lower(arg, cx);
-        // `plain` never reaches a generic argument: the checker refused it.
-        return Some(format!("globalThis.JSON.stringify({codec}.encode({v}))"));
-    }
-    let tref = ty_to_type_ref(arg_ty, tys.types())?;
-    // #917: a test-scaffold module's target/`uses` types export no codec
-    // of their own — record the root so the module that spliced this
-    // body in can generate its own `serialise_*`/`deserialise_*` closure,
-    // the same way a workers cross-context caller generates one for a
-    // consumed context's boundary types (#661). P6.28: pushes the `TyId`
-    // already in hand, not a re-derived `TypeRef` — `tref` below still
-    // exists for this call site's own, separate codec-rendering use.
-    if cx.records_codec_roots() {
-        cx.runtime_use().note_json_codec_root(arg_ty);
-    }
-    let v = pre.lower(arg, cx);
-    // #1435 (Arc E slice 1): boundary-print, same treatment as this
-    // file's own `serialise_expr_via` call site above.
-    if plain {
-        // #2991: `Json.encodePlain`. The one `Option` encoder reads
-        // `__bynkPlainJson`, so raise it for this one synchronous serialisation
-        // and restore it in a `finally` (the encoder throws on a non-finite
-        // `Float`). The checker has refused a generic argument, so only
-        // monomorphic encoders (which read the flag) run here. Inlined rather
-        // than a runtime helper, so no module needs a new import.
-        // The argument must be evaluated *before* the flag is raised, or a tagged
-        // `Json.encode` (or a function that calls one) inside it would come out
-        // plain. An argument that awaits is hoisted to a temporary; any other
-        // is the default of the arrow's one parameter, which JS evaluates at
-        // call time, before the body raises the flag (its type is inferred).
-        let (param, tmp) = if v.contains("await") {
-            let tmp = format!("__pj{}", arg.id.0);
-            pre.push_text(format!("const {tmp} = {v};"));
-            (format!("__pv = {tmp}"), "__pv".to_string())
-        } else {
-            (format!("__pv = {v}"), "__pv".to_string())
-        };
-        let ser = bynk_ts::print_expr(&serialisation::serialise_expr(
-            &tref,
-            &tmp,
-            cx.runtime_use(),
-        ));
-        return Some(format!(
-            "(({param}): string => {{ const __g = globalThis as {{ __bynkPlainJson?: boolean }}; \
-             const __was = __g.__bynkPlainJson; __g.__bynkPlainJson = true; \
-             try {{ return globalThis.JSON.stringify({ser}); }} \
-             finally {{ __g.__bynkPlainJson = __was; }} }})()"
-        ));
-    }
-    let ser = bynk_ts::print_expr(&serialisation::serialise_expr(&tref, &v, cx.runtime_use()));
-    Some(format!("globalThis.JSON.stringify({ser})"))
-}
-
-/// #917 and constrained generics slice 3: record the variable-free parts of a
-/// codec target as roots, so the test-scaffold module that spliced the body in
-/// generates the codecs its witnesses name.
-fn note_ground_roots(t: bynk_check::checker::TyId, cx: &LowerCtx) {
-    let mut parts = Vec::new();
-    super::codec::ground_parts(t, cx.commons(), &mut parts);
-    for p in parts {
-        cx.runtime_use().note_json_codec_root(p);
-    }
-}
-
-/// P4c (#2628): `Json.decodeSql[T]`'s pass over the parsed rows before the
-/// ordinary codec runs. SQLite has no boolean, so a flag column arrives as
-/// `0`/`1`; at each `Bool` field of the row record (the checker has confined
-/// `T` to a row or a `List` of one) exactly those two numbers become
-/// `false`/`true`. Anything else is left for the codec to accept or refuse,
-/// so every generated codec stays the one `Json.decode` uses. Empty when the
-/// row has no `Bool` field.
-fn sql_bool_pass(t: bynk_check::checker::TyId, cx: &LowerCtx) -> String {
-    let tys = cx.ty_render();
-    let row = match &*tys.get(t) {
-        Ty::List(r) => *r,
-        _ => t,
-    };
-    let Ty::Named { name, .. } = &*tys.get(row) else {
-        return String::new();
-    };
-    // The checker resolved this row in the same table, so a miss is a
-    // compiler bug that would silently skip the pass.
-    debug_assert!(
-        cx.commons().types.contains_key(name.as_str()),
-        "Json.decodeSql row `{name}` is not in the module's type table"
-    );
-    let fields = bynk_check::checker::row_bool_fields(name, &cx.commons().types);
-    if fields.is_empty() {
-        return String::new();
-    }
-    let keys = fields
-        .iter()
-        .map(|f| format!("\"{f}\""))
-        .collect::<Vec<_>>()
-        .join(", ");
-    format!(
-        "const __flags = (__o: __JsonValue): void => {{ \
-         if (__o === null || typeof __o !== \"object\" || globalThis.Array.isArray(__o)) return; \
-         const __row = __o as {{ [k: string]: __JsonValue }}; \
-         for (const __k of [{keys}]) {{ if (__row[__k] === 0 || __row[__k] === 1) __row[__k] = __row[__k] === 1; }} }}; \
-         if (globalThis.Array.isArray(__j)) __j.forEach(__flags); else __flags(__j); "
-    )
-}
-
-/// Hyperdrive H3 (#3320): a typed `Postgres` read's pass over the parsed rows
-/// before the ordinary codec runs, the counterpart of [`sql_bool_pass`]. The
-/// codec reads an `Instant` as epoch milliseconds and an `Int` as a number; a
-/// Postgres row carries a `timestamptz` as ISO-8601 text and an `int8` as text
-/// (ADR 0799 F), so the runtime's `__bynkPgRow` converts exactly the row's
-/// `Instant` and `Int` fields, and leaves anything it cannot convert for the
-/// codec to refuse. Empty when the row has neither.
-fn pg_row_pass(t: bynk_check::checker::TyId, cx: &LowerCtx) -> String {
-    let tys = cx.ty_render();
-    let row = match &*tys.get(t) {
-        Ty::List(r) => *r,
-        _ => t,
-    };
-    let Ty::Named { name, .. } = &*tys.get(row) else {
-        return String::new();
-    };
-    let types = &cx.commons().types;
-    let instants = bynk_check::checker::row_base_fields(name, types, BaseType::Instant);
-    let ints = bynk_check::checker::row_base_fields(name, types, BaseType::Int);
-    if instants.is_empty() && ints.is_empty() {
-        return String::new();
-    }
-    cx.runtime_use().note_pg_rows();
-    let list = |names: &[String]| {
-        names
-            .iter()
-            .map(|f| format!("\"{f}\""))
-            .collect::<Vec<_>>()
-            .join(", ")
-    };
-    let (instants, ints) = (list(&instants), list(&ints));
-    format!(
-        "const __fix = (__o: __JsonValue): void => __bynkPgRow(__o, [{instants}], [{ints}]); \
-         if (globalThis.Array.isArray(__j)) __j.forEach(__fix); else __fix(__j); "
-    )
 }
 
 /// v0.6 cross-context service call: receiver is an alias or the dotted name
@@ -7925,7 +7151,7 @@ fn consumed_variant_literal(
 /// Lower a variant call's arguments. #2341 (L4): a `RawError`'s first argument
 /// is an `ErrorStatus` name the checker resolved, so it lowers to its number
 /// (`Forbidden` → `403`), not to the `HttpResult` value of that name.
-fn lower_http_variant_args(
+pub(super) fn lower_http_variant_args(
     variant: &str,
     args: &[Expr],
     pre: &mut Pre,
@@ -7965,17 +7191,9 @@ fn settle_helper(cx: &LowerCtx) -> Option<&'static str> {
     }
 }
 
-/// [`settle_helper`] over a call built as text (the dispatchers' side).
-fn settle_exec_call(call: String, cx: &LowerCtx) -> String {
-    match settle_helper(cx) {
-        Some(helper) => format!("{helper}(deps, {call})"),
-        None => call,
-    }
-}
-
 /// [`settle_helper`] over a built call: `helper(deps, call)` as a node when the
 /// call is one, else today's text.
-fn settle_built(call: Built, cx: &LowerCtx) -> Built {
+pub(super) fn settle_built(call: Built, cx: &LowerCtx) -> Built {
     match (settle_helper(cx), call) {
         (None, call) => call,
         (Some(helper), Ok(node)) => Ok(bynk_ts::TsExpr::Call {
@@ -8015,14 +7233,19 @@ fn lower_call(e: &Expr, name: &Ident, args: &[Expr], cx: &mut LowerCtx) -> Lower
     {
         cx.runtime_use().note_test_connection();
         let frame = match cx.commons().expr_ty(e.id).as_deref() {
-            Some(Ty::TestConnection(f)) => bynk_ts::print_type(
-                &crate::emitter::ts_types::ts_ty_to_ts_type(*f, cx.ty_render()),
-            ),
-            _ => "unknown".to_string(),
+            Some(Ty::TestConnection(f)) => {
+                crate::emitter::ts_types::ts_ty_to_ts_type(*f, cx.ty_render())
+            }
+            _ => bynk_ts::TsType::named("unknown"),
         };
-        // 1A: `bynk_ts` `New` has no `type_args` field (the explicit
-        // `<frame>` has no node home), so this stays text.
-        return pre.finish_text(format!("new TestConnection<{frame}>()"));
+        // `new TestConnection<F>()`: a `New` over a `TypeApp` (1A.20, #3721).
+        return pre.finish_built(Ok(bynk_ts::TsExpr::New {
+            callee: Box::new(bynk_ts::TsExpr::TypeApp {
+                callee: Box::new(ident_node("TestConnection")),
+                type_args: vec![frame],
+            }),
+            args: vec![],
+        }));
     }
     // v0.9: HttpResult variant call.
     //
@@ -10839,6 +10062,31 @@ mod bridge_tests {
             "a literal is a node"
         );
         l.expr.into_text()
+    }
+
+    /// 1A.20, Decision G: a delegated kernel's `Lowered` passes through
+    /// `Pre::absorb_built` as a node (not printed), an unconverted one's text as
+    /// `Err`, a declined kernel as `None`, and the hoisted statements land in the
+    /// `Pre` in each case.
+    #[test]
+    fn absorb_built_passes_a_kernel_node_through() {
+        let mut pre = Pre::new();
+        let stub = Lowered {
+            pre: vec![LoweredStmt::Text("const __t = 1;".to_string())],
+            expr: LoweredExpr::Node(ident_node("x")),
+        };
+        match pre.absorb_built(Some(stub)) {
+            Some(Ok(bynk_ts::TsExpr::Ident(name))) => assert_eq!(name, "x"),
+            other => panic!("expected a node, got {other:?}"),
+        }
+        assert_eq!(pre.stmts(), ["const __t = 1;"]);
+        let text = Lowered::bare("(m).size".to_string());
+        match pre.absorb_built(Some(text)) {
+            Some(Err(t)) => assert_eq!(t, "(m).size"),
+            other => panic!("expected text, got {other:?}"),
+        }
+        assert!(pre.absorb_built(None).is_none());
+        assert_eq!(pre.stmts().len(), 1, "declining hoists nothing");
     }
 
     #[test]

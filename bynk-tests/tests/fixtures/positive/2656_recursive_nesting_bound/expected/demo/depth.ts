@@ -94,7 +94,18 @@ export async function encodeExpr(e: Expr): globalThis.Promise<string> {
 }
 
 export function indexRoundTrips(i: Index): boolean {
-  const __r0 = ((__s: string): Result<Index, DecodeError> => { let __j: __JsonValue; try { __j = globalThis.JSON.parse(__s) as __JsonValue; } catch (__e) { return Err({ kind: "Malformed", path: "$", message: String(__e) }); } const __r = __deserialise_Index(__j, "$"); if (__r.tag === "Ok") return Ok(__r.value as Index); const __be = __r.error; return Err({ kind: __be.kind, path: (__be.kind === "StructuralMismatch" || __be.kind === "RefinementViolation") ? __be.path : "$", message: __be.kind === "StructuralMismatch" ? `expected ${__be.expected}, got ${String(__be.actual)}` : __be.kind === "RefinementViolation" ? __be.violation.message : __be.details }); })(globalThis.JSON.stringify(__serialise_Index(i)));
+  const __r0 = ((__s: string): Result<Index, DecodeError> => {
+    let __j: __JsonValue;
+    try {
+      __j = globalThis.JSON.parse(__s) as __JsonValue;
+    } catch (__e) {
+      return Err({ kind: "Malformed", path: "$", message: String(__e) });
+    }
+    const __r = __deserialise_Index(__j, "$");
+    if (__r.tag === "Ok") return Ok(__r.value as Index);
+    const __be = __r.error;
+    return Err({ kind: __be.kind, path: (__be.kind === "StructuralMismatch" || __be.kind === "RefinementViolation") ? __be.path : "$", message: __be.kind === "StructuralMismatch" ? `expected ${__be.expected}, got ${String(__be.actual)}` : __be.kind === "RefinementViolation" ? __be.violation.message : __be.details });
+  })(globalThis.JSON.stringify(__serialise_Index(i)));
   switch (__r0.tag) {
     case "Ok": {
       const d = __r0.value;
@@ -108,7 +119,18 @@ export function indexRoundTrips(i: Index): boolean {
 }
 
 export function exprRoundTrips(e: Expr): boolean {
-  const __r0 = ((__s: string): Result<Expr, DecodeError> => { let __j: __JsonValue; try { __j = globalThis.JSON.parse(__s) as __JsonValue; } catch (__e) { return Err({ kind: "Malformed", path: "$", message: String(__e) }); } const __r = __deserialise_Expr(__j, "$"); if (__r.tag === "Ok") return Ok(__r.value as Expr); const __be = __r.error; return Err({ kind: __be.kind, path: (__be.kind === "StructuralMismatch" || __be.kind === "RefinementViolation") ? __be.path : "$", message: __be.kind === "StructuralMismatch" ? `expected ${__be.expected}, got ${String(__be.actual)}` : __be.kind === "RefinementViolation" ? __be.violation.message : __be.details }); })(globalThis.JSON.stringify(__serialise_Expr(e)));
+  const __r0 = ((__s: string): Result<Expr, DecodeError> => {
+    let __j: __JsonValue;
+    try {
+      __j = globalThis.JSON.parse(__s) as __JsonValue;
+    } catch (__e) {
+      return Err({ kind: "Malformed", path: "$", message: String(__e) });
+    }
+    const __r = __deserialise_Expr(__j, "$");
+    if (__r.tag === "Ok") return Ok(__r.value as Expr);
+    const __be = __r.error;
+    return Err({ kind: __be.kind, path: (__be.kind === "StructuralMismatch" || __be.kind === "RefinementViolation") ? __be.path : "$", message: __be.kind === "StructuralMismatch" ? `expected ${__be.expected}, got ${String(__be.actual)}` : __be.kind === "RefinementViolation" ? __be.violation.message : __be.details });
+  })(globalThis.JSON.stringify(__serialise_Expr(e)));
   switch (__r0.tag) {
     case "Ok": {
       const d = __r0.value;
@@ -122,7 +144,18 @@ export function exprRoundTrips(e: Expr): boolean {
 }
 
 export function chainRoundTrips(c: Chain): boolean {
-  const __r0 = ((__s: string): Result<Chain, DecodeError> => { let __j: __JsonValue; try { __j = globalThis.JSON.parse(__s) as __JsonValue; } catch (__e) { return Err({ kind: "Malformed", path: "$", message: String(__e) }); } const __r = __deserialise_Chain(__j, "$"); if (__r.tag === "Ok") return Ok(__r.value as Chain); const __be = __r.error; return Err({ kind: __be.kind, path: (__be.kind === "StructuralMismatch" || __be.kind === "RefinementViolation") ? __be.path : "$", message: __be.kind === "StructuralMismatch" ? `expected ${__be.expected}, got ${String(__be.actual)}` : __be.kind === "RefinementViolation" ? __be.violation.message : __be.details }); })(globalThis.JSON.stringify(__serialise_Chain(c)));
+  const __r0 = ((__s: string): Result<Chain, DecodeError> => {
+    let __j: __JsonValue;
+    try {
+      __j = globalThis.JSON.parse(__s) as __JsonValue;
+    } catch (__e) {
+      return Err({ kind: "Malformed", path: "$", message: String(__e) });
+    }
+    const __r = __deserialise_Chain(__j, "$");
+    if (__r.tag === "Ok") return Ok(__r.value as Chain);
+    const __be = __r.error;
+    return Err({ kind: __be.kind, path: (__be.kind === "StructuralMismatch" || __be.kind === "RefinementViolation") ? __be.path : "$", message: __be.kind === "StructuralMismatch" ? `expected ${__be.expected}, got ${String(__be.actual)}` : __be.kind === "RefinementViolation" ? __be.violation.message : __be.details });
+  })(globalThis.JSON.stringify(__serialise_Chain(c)));
   switch (__r0.tag) {
     case "Ok": {
       const d = __r0.value;
@@ -136,7 +169,18 @@ export function chainRoundTrips(c: Chain): boolean {
 }
 
 export function treeRoundTrips(t: Tree): boolean {
-  const __r0 = ((__s: string): Result<Tree, DecodeError> => { let __j: __JsonValue; try { __j = globalThis.JSON.parse(__s) as __JsonValue; } catch (__e) { return Err({ kind: "Malformed", path: "$", message: String(__e) }); } const __r = __deserialise_Tree(__j, "$"); if (__r.tag === "Ok") return Ok(__r.value as Tree); const __be = __r.error; return Err({ kind: __be.kind, path: (__be.kind === "StructuralMismatch" || __be.kind === "RefinementViolation") ? __be.path : "$", message: __be.kind === "StructuralMismatch" ? `expected ${__be.expected}, got ${String(__be.actual)}` : __be.kind === "RefinementViolation" ? __be.violation.message : __be.details }); })(globalThis.JSON.stringify(__serialise_Tree(t)));
+  const __r0 = ((__s: string): Result<Tree, DecodeError> => {
+    let __j: __JsonValue;
+    try {
+      __j = globalThis.JSON.parse(__s) as __JsonValue;
+    } catch (__e) {
+      return Err({ kind: "Malformed", path: "$", message: String(__e) });
+    }
+    const __r = __deserialise_Tree(__j, "$");
+    if (__r.tag === "Ok") return Ok(__r.value as Tree);
+    const __be = __r.error;
+    return Err({ kind: __be.kind, path: (__be.kind === "StructuralMismatch" || __be.kind === "RefinementViolation") ? __be.path : "$", message: __be.kind === "StructuralMismatch" ? `expected ${__be.expected}, got ${String(__be.actual)}` : __be.kind === "RefinementViolation" ? __be.violation.message : __be.details });
+  })(globalThis.JSON.stringify(__serialise_Tree(t)));
   switch (__r0.tag) {
     case "Ok": {
       const d = __r0.value;
@@ -150,7 +194,18 @@ export function treeRoundTrips(t: Tree): boolean {
 }
 
 export function decodesChain(s: string): boolean {
-  const __r0 = ((__s: string): Result<Chain, DecodeError> => { let __j: __JsonValue; try { __j = globalThis.JSON.parse(__s) as __JsonValue; } catch (__e) { return Err({ kind: "Malformed", path: "$", message: String(__e) }); } const __r = __deserialise_Chain(__j, "$"); if (__r.tag === "Ok") return Ok(__r.value as Chain); const __be = __r.error; return Err({ kind: __be.kind, path: (__be.kind === "StructuralMismatch" || __be.kind === "RefinementViolation") ? __be.path : "$", message: __be.kind === "StructuralMismatch" ? `expected ${__be.expected}, got ${String(__be.actual)}` : __be.kind === "RefinementViolation" ? __be.violation.message : __be.details }); })(s);
+  const __r0 = ((__s: string): Result<Chain, DecodeError> => {
+    let __j: __JsonValue;
+    try {
+      __j = globalThis.JSON.parse(__s) as __JsonValue;
+    } catch (__e) {
+      return Err({ kind: "Malformed", path: "$", message: String(__e) });
+    }
+    const __r = __deserialise_Chain(__j, "$");
+    if (__r.tag === "Ok") return Ok(__r.value as Chain);
+    const __be = __r.error;
+    return Err({ kind: __be.kind, path: (__be.kind === "StructuralMismatch" || __be.kind === "RefinementViolation") ? __be.path : "$", message: __be.kind === "StructuralMismatch" ? `expected ${__be.expected}, got ${String(__be.actual)}` : __be.kind === "RefinementViolation" ? __be.violation.message : __be.details });
+  })(s);
   switch (__r0.tag) {
     case "Ok": {
       return true;
@@ -163,7 +218,18 @@ export function decodesChain(s: string): boolean {
 }
 
 export function chainError(s: string): string {
-  const __r0 = ((__s: string): Result<Chain, DecodeError> => { let __j: __JsonValue; try { __j = globalThis.JSON.parse(__s) as __JsonValue; } catch (__e) { return Err({ kind: "Malformed", path: "$", message: String(__e) }); } const __r = __deserialise_Chain(__j, "$"); if (__r.tag === "Ok") return Ok(__r.value as Chain); const __be = __r.error; return Err({ kind: __be.kind, path: (__be.kind === "StructuralMismatch" || __be.kind === "RefinementViolation") ? __be.path : "$", message: __be.kind === "StructuralMismatch" ? `expected ${__be.expected}, got ${String(__be.actual)}` : __be.kind === "RefinementViolation" ? __be.violation.message : __be.details }); })(s);
+  const __r0 = ((__s: string): Result<Chain, DecodeError> => {
+    let __j: __JsonValue;
+    try {
+      __j = globalThis.JSON.parse(__s) as __JsonValue;
+    } catch (__e) {
+      return Err({ kind: "Malformed", path: "$", message: String(__e) });
+    }
+    const __r = __deserialise_Chain(__j, "$");
+    if (__r.tag === "Ok") return Ok(__r.value as Chain);
+    const __be = __r.error;
+    return Err({ kind: __be.kind, path: (__be.kind === "StructuralMismatch" || __be.kind === "RefinementViolation") ? __be.path : "$", message: __be.kind === "StructuralMismatch" ? `expected ${__be.expected}, got ${String(__be.actual)}` : __be.kind === "RefinementViolation" ? __be.violation.message : __be.details });
+  })(s);
   switch (__r0.tag) {
     case "Ok": {
       return "decoded";

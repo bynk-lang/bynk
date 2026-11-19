@@ -19,6 +19,7 @@ use super::lower::{
     build_value_bin_op, emit_pattern_bindings, expect_location_raw, expect_source_text_raw,
     literal_label_node, member_node, num_lit, pattern_tests, str_node, ternary_built,
 };
+use super::lower_call::codec_statics::json_encode;
 use super::lower_ctx::LowerCtx;
 use super::ts_types::{ts_ty, ts_type_ref, ts_type_ref_to_ts_type};
 use super::*;
@@ -1205,12 +1206,13 @@ fn statement(body: &mut Body, stmt: &Statement, cx: &mut LowerCtx) {
             let location = expect_location_raw(cx, span_start);
             let src = expect_source_text_raw(cx, a.value.span);
             let mut pre = Pre::new();
-            let json = json_encode_text(&mut pre, &a.value, cx, false);
+            let json = json_encode(&mut pre, &a.value, cx, false)
+                .map(|j| LoweredExpr::from(j).into_text());
             body.extend(pre.items());
             match json {
-                // 1A: the known-type arm stays text — `json` is the serialisers'
-                // `&str` output (they take no node yet; see the track's
-                // "serialisers take `&TsExpr`" row).
+                // 1A: the known-type arm stays text — the serialisers take a node
+                // (1A.21), but this block is one text line, and its node layout needs its
+                // own golden ruling (see the track's `1A.ser` row).
                 Some(json) => {
                     let name = bynk_project::json_string(&clause.name);
                     let location = crate::emitter::escape_ts_string(&location);

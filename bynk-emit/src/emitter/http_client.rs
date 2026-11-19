@@ -1333,7 +1333,10 @@ impl Gen {
                         TypeRef::Base(..) => format!("globalThis.String({id})"),
                         _ => {
                             let ser = bynk_ts::print_expr(&serialisation::serialise_expr_via(
-                                &ty, &id, "", &self.ru,
+                                &ty,
+                                &bynk_ts::TsExpr::Ident(id.clone()),
+                                "",
+                                &self.ru,
                             ));
                             let de = bynk_ts::print_expr(&serialisation::deserialise_ref_via(
                                 &ty, "", &self.ru,
@@ -1354,7 +1357,10 @@ impl Gen {
                     signature.push(format!("body: {}", self.public_text(&ty)?));
                     let wired = self.convert(&ty, Dir::ToWire, "body", 0)?;
                     let ser = bynk_ts::print_expr(&serialisation::serialise_expr_via(
-                        &ty, &wired, "", &self.ru,
+                        &ty,
+                        &bynk_ts::TsExpr::Ident(wired.clone()),
+                        "",
+                        &self.ru,
                     ));
                     let de =
                         bynk_ts::print_expr(&serialisation::deserialise_ref_via(&ty, "", &self.ru));
@@ -1469,7 +1475,7 @@ impl Gen {
                 let wired = self.convert(&f.type_ref, Dir::ToWire, &format!("body.{fname}"), 0)?;
                 let ser = bynk_ts::print_expr(&serialisation::serialise_expr_via(
                     &f.type_ref,
-                    &wired,
+                    &bynk_ts::TsExpr::Ident(wired.clone()),
                     "",
                     &self.ru,
                 ));
@@ -1557,7 +1563,7 @@ impl Gen {
             let wired = self.convert(&f.type_ref, Dir::ToWire, &format!("{arg}.{fname}"), 0)?;
             let ser = bynk_ts::print_expr(&serialisation::serialise_expr_via(
                 &f.type_ref,
-                &wired,
+                &bynk_ts::TsExpr::Ident(wired.clone()),
                 "",
                 &self.ru,
             ));

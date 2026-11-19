@@ -48,17 +48,28 @@ async function test_decodes_the_visible_Tag() {
     type Tag = __ns_labels.Tag;
     const order = (deps as any).surface?.order;
     void (((__d) => {
-        switch (__d.tag) {
-          case "Ok": {
-            const t = __d.value;
-            return __bynkExpect((t.name === "tea"), "tests/ledger.bynk:6:23", 264, 279, "expect t.name == \"tea\"");
-          }
-          case "Err": {
-            return __bynkExpect((false), "tests/ledger.bynk:7:24", 303, 308, "expect false");
-          }
+      switch (__d.tag) {
+        case "Ok": {
+          const t = __d.value;
+          return __bynkExpect((t.name === "tea"), "tests/ledger.bynk:6:23", 264, 279, "expect t.name == \"tea\"");
         }
-        throw new globalThis.Error("non-exhaustive match");
-      })(((__s: string): Result<__ns_labels.Tag, DecodeError> => { let __j: __JsonValue; try { __j = globalThis.JSON.parse(__s) as __JsonValue; } catch (__e) { return Err({ kind: "Malformed", path: "$", message: String(__e) }); } const __r = __deserialise_Tag(__j, "$"); if (__r.tag === "Ok") return Ok(__r.value as __ns_labels.Tag); const __be = __r.error; return Err({ kind: __be.kind, path: (__be.kind === "StructuralMismatch" || __be.kind === "RefinementViolation") ? __be.path : "$", message: __be.kind === "StructuralMismatch" ? `expected ${__be.expected}, got ${String(__be.actual)}` : __be.kind === "RefinementViolation" ? __be.violation.message : __be.details }); })("{\"name\": \"tea\"}")));
+        case "Err": {
+          return __bynkExpect((false), "tests/ledger.bynk:7:24", 303, 308, "expect false");
+        }
+      }
+      throw new globalThis.Error("non-exhaustive match");
+    })(((__s: string): Result<__ns_labels.Tag, DecodeError> => {
+      let __j: __JsonValue;
+      try {
+        __j = globalThis.JSON.parse(__s) as __JsonValue;
+      } catch (__e) {
+        return Err({ kind: "Malformed", path: "$", message: String(__e) });
+      }
+      const __r = __deserialise_Tag(__j, "$");
+      if (__r.tag === "Ok") return Ok(__r.value as __ns_labels.Tag);
+      const __be = __r.error;
+      return Err({ kind: __be.kind, path: (__be.kind === "StructuralMismatch" || __be.kind === "RefinementViolation") ? __be.path : "$", message: __be.kind === "StructuralMismatch" ? `expected ${__be.expected}, got ${String(__be.actual)}` : __be.kind === "RefinementViolation" ? __be.violation.message : __be.details });
+    })("{\"name\": \"tea\"}")));
     return { pass: true };
   } catch (e) {
     if (e instanceof ExpectationError) {

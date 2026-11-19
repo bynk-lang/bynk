@@ -33,6 +33,7 @@
 //! "carve prospectively, at the moment the dependency appears" precedent
 //! (`bynk-strip`'s own carve is the control case cited for this).
 
+mod await_scan;
 mod lint;
 mod name_closure;
 mod predicate;
@@ -40,6 +41,7 @@ mod printer;
 mod program;
 mod source_map;
 
+pub use await_scan::expr_contains_await;
 pub use lint::{Violation, verbatim_violations};
 pub use name_closure::{
     ModuleExports, NamespaceMemberUse, module_exports, namespace_member_uses, type_only_value_uses,

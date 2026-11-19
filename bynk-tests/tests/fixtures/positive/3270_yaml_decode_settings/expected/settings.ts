@@ -56,19 +56,51 @@ export const Flags = {
 };
 
 export function load(text: string): Result<Settings, DecodeError> {
-  return ((__s: string): Result<Settings, DecodeError> => { const __p = __bynkYamlParse(__s); if (__p.tag === "Err") return Err(__p.error); const __j: __JsonValue = __p.value; const __r = __deserialise_Settings(__j, "$"); if (__r.tag === "Ok") return Ok(__r.value as Settings); const __be = __r.error; return Err({ kind: __be.kind, path: (__be.kind === "StructuralMismatch" || __be.kind === "RefinementViolation") ? __be.path : "$", message: __be.kind === "StructuralMismatch" ? `expected ${__be.expected}, got ${String(__be.actual)}` : __be.kind === "RefinementViolation" ? __be.violation.message : __be.details }); })(text);
+  return ((__s: string): Result<Settings, DecodeError> => {
+    const __p = __bynkYamlParse(__s);
+    if (__p.tag === "Err") return Err(__p.error);
+    const __j: __JsonValue = __p.value;
+    const __r = __deserialise_Settings(__j, "$");
+    if (__r.tag === "Ok") return Ok(__r.value as Settings);
+    const __be = __r.error;
+    return Err({ kind: __be.kind, path: (__be.kind === "StructuralMismatch" || __be.kind === "RefinementViolation") ? __be.path : "$", message: __be.kind === "StructuralMismatch" ? `expected ${__be.expected}, got ${String(__be.actual)}` : __be.kind === "RefinementViolation" ? __be.violation.message : __be.details });
+  })(text);
 }
 
 export function loadInferred(text: string): Result<Settings, DecodeError> {
-  return ((__s: string): Result<Settings, DecodeError> => { const __p = __bynkYamlParse(__s); if (__p.tag === "Err") return Err(__p.error); const __j: __JsonValue = __p.value; const __r = __deserialise_Settings(__j, "$"); if (__r.tag === "Ok") return Ok(__r.value as Settings); const __be = __r.error; return Err({ kind: __be.kind, path: (__be.kind === "StructuralMismatch" || __be.kind === "RefinementViolation") ? __be.path : "$", message: __be.kind === "StructuralMismatch" ? `expected ${__be.expected}, got ${String(__be.actual)}` : __be.kind === "RefinementViolation" ? __be.violation.message : __be.details }); })(text);
+  return ((__s: string): Result<Settings, DecodeError> => {
+    const __p = __bynkYamlParse(__s);
+    if (__p.tag === "Err") return Err(__p.error);
+    const __j: __JsonValue = __p.value;
+    const __r = __deserialise_Settings(__j, "$");
+    if (__r.tag === "Ok") return Ok(__r.value as Settings);
+    const __be = __r.error;
+    return Err({ kind: __be.kind, path: (__be.kind === "StructuralMismatch" || __be.kind === "RefinementViolation") ? __be.path : "$", message: __be.kind === "StructuralMismatch" ? `expected ${__be.expected}, got ${String(__be.actual)}` : __be.kind === "RefinementViolation" ? __be.violation.message : __be.details });
+  })(text);
 }
 
 export function loadFlags(text: string): Result<Flags, DecodeError> {
-  return ((__s: string): Result<Flags, DecodeError> => { const __p = __bynkYamlParse(__s); if (__p.tag === "Err") return Err(__p.error); const __j: __JsonValue = __p.value; const __r = __deserialise_Flags(__j, "$"); if (__r.tag === "Ok") return Ok(__r.value as Flags); const __be = __r.error; return Err({ kind: __be.kind, path: (__be.kind === "StructuralMismatch" || __be.kind === "RefinementViolation") ? __be.path : "$", message: __be.kind === "StructuralMismatch" ? `expected ${__be.expected}, got ${String(__be.actual)}` : __be.kind === "RefinementViolation" ? __be.violation.message : __be.details }); })(text);
+  return ((__s: string): Result<Flags, DecodeError> => {
+    const __p = __bynkYamlParse(__s);
+    if (__p.tag === "Err") return Err(__p.error);
+    const __j: __JsonValue = __p.value;
+    const __r = __deserialise_Flags(__j, "$");
+    if (__r.tag === "Ok") return Ok(__r.value as Flags);
+    const __be = __r.error;
+    return Err({ kind: __be.kind, path: (__be.kind === "StructuralMismatch" || __be.kind === "RefinementViolation") ? __be.path : "$", message: __be.kind === "StructuralMismatch" ? `expected ${__be.expected}, got ${String(__be.actual)}` : __be.kind === "RefinementViolation" ? __be.violation.message : __be.details });
+  })(text);
 }
 
 export function loadList(text: string): Result<readonly Triage[], DecodeError> {
-  return ((__s: string): Result<readonly Triage[], DecodeError> => { const __p = __bynkYamlParse(__s); if (__p.tag === "Err") return Err(__p.error); const __j: __JsonValue = __p.value; const __r = __deserialise_List_Triage(__j, "$"); if (__r.tag === "Ok") return Ok(__r.value as readonly Triage[]); const __be = __r.error; return Err({ kind: __be.kind, path: (__be.kind === "StructuralMismatch" || __be.kind === "RefinementViolation") ? __be.path : "$", message: __be.kind === "StructuralMismatch" ? `expected ${__be.expected}, got ${String(__be.actual)}` : __be.kind === "RefinementViolation" ? __be.violation.message : __be.details }); })(text);
+  return ((__s: string): Result<readonly Triage[], DecodeError> => {
+    const __p = __bynkYamlParse(__s);
+    if (__p.tag === "Err") return Err(__p.error);
+    const __j: __JsonValue = __p.value;
+    const __r = __deserialise_List_Triage(__j, "$");
+    if (__r.tag === "Ok") return Ok(__r.value as readonly Triage[]);
+    const __be = __r.error;
+    return Err({ kind: __be.kind, path: (__be.kind === "StructuralMismatch" || __be.kind === "RefinementViolation") ? __be.path : "$", message: __be.kind === "StructuralMismatch" ? `expected ${__be.expected}, got ${String(__be.actual)}` : __be.kind === "RefinementViolation" ? __be.violation.message : __be.details });
+  })(text);
 }
 
 export function describe(r: Result<Settings, DecodeError>): string {

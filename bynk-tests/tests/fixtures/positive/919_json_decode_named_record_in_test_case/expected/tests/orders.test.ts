@@ -44,17 +44,28 @@ async function test_decodes_a_named_type() {
     const { Order } = __ns_orders;
     type Order = __ns_orders.Order;
     void (((__d) => {
-        switch (__d.tag) {
-          case "Ok": {
-            const o = __d.value;
-            return __bynkExpect((o.qty === 2), "tests/orders.test.bynk:13:23", 753, 763, "expect o.qty == 2");
-          }
-          case "Err": {
-            return __bynkExpect((false), "tests/orders.test.bynk:14:24", 787, 792, "expect false");
-          }
+      switch (__d.tag) {
+        case "Ok": {
+          const o = __d.value;
+          return __bynkExpect((o.qty === 2), "tests/orders.test.bynk:13:23", 753, 763, "expect o.qty == 2");
         }
-        throw new globalThis.Error("non-exhaustive match");
-      })(((__s: string): Result<__ns_orders.Order, DecodeError> => { let __j: __JsonValue; try { __j = globalThis.JSON.parse(__s) as __JsonValue; } catch (__e) { return Err({ kind: "Malformed", path: "$", message: String(__e) }); } const __r = __deserialise_Order(__j, "$"); if (__r.tag === "Ok") return Ok(__r.value as __ns_orders.Order); const __be = __r.error; return Err({ kind: __be.kind, path: (__be.kind === "StructuralMismatch" || __be.kind === "RefinementViolation") ? __be.path : "$", message: __be.kind === "StructuralMismatch" ? `expected ${__be.expected}, got ${String(__be.actual)}` : __be.kind === "RefinementViolation" ? __be.violation.message : __be.details }); })("{\"id\": \"a1\", \"qty\": 2}")));
+        case "Err": {
+          return __bynkExpect((false), "tests/orders.test.bynk:14:24", 787, 792, "expect false");
+        }
+      }
+      throw new globalThis.Error("non-exhaustive match");
+    })(((__s: string): Result<__ns_orders.Order, DecodeError> => {
+      let __j: __JsonValue;
+      try {
+        __j = globalThis.JSON.parse(__s) as __JsonValue;
+      } catch (__e) {
+        return Err({ kind: "Malformed", path: "$", message: String(__e) });
+      }
+      const __r = __deserialise_Order(__j, "$");
+      if (__r.tag === "Ok") return Ok(__r.value as __ns_orders.Order);
+      const __be = __r.error;
+      return Err({ kind: __be.kind, path: (__be.kind === "StructuralMismatch" || __be.kind === "RefinementViolation") ? __be.path : "$", message: __be.kind === "StructuralMismatch" ? `expected ${__be.expected}, got ${String(__be.actual)}` : __be.kind === "RefinementViolation" ? __be.violation.message : __be.details });
+    })("{\"id\": \"a1\", \"qty\": 2}")));
     return { pass: true };
   } catch (e) {
     if (e instanceof ExpectationError) {

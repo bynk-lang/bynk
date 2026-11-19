@@ -51,6 +51,8 @@ mod integration {
     mod capability_paths;
     #[path = "check_format_short.rs"]
     mod check_format_short;
+    #[path = "codec_statics_nodes.rs"]
+    mod codec_statics_nodes;
     #[path = "comment_syntax_fixes.rs"]
     mod comment_syntax_fixes;
     #[path = "consumes_per_file.rs"]

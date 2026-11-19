@@ -1607,7 +1607,7 @@ fn emit_record_codec(
                     field.name.clone(),
                     serialise_field_expr_wire(
                         &field.shape,
-                        &format!("value.{}", field.name),
+                        &ident(format!("value.{}", field.name)),
                         "",
                         depth,
                         ru,
@@ -1889,7 +1889,7 @@ fn emit_sum_codec(
                         field.name.clone(),
                         serialise_field_expr_wire(
                             &field.shape,
-                            &format!("value.{}", payload_prop(&field.name)),
+                            &ident(format!("value.{}", payload_prop(&field.name))),
                             "",
                             depth,
                             ru,
@@ -2497,9 +2497,19 @@ mod emit_field_deserialise_wire_tests {
     }
 }
 
-fn serialise_field_expr(
+/// [`serialise_field_expr`] over a value that is an identifier's text (`value.value`, `k`).
+fn serialise_field_ident(
     t: &TypeRef,
     value: &str,
+    depth: Option<Depth<'_>>,
+    ru: &RuntimeUse,
+) -> TsExpr {
+    serialise_field_expr(t, &ident(value), depth, ru)
+}
+
+fn serialise_field_expr(
+    t: &TypeRef,
+    value: &TsExpr,
     depth: Option<Depth<'_>>,
     ru: &RuntimeUse,
 ) -> TsExpr {
@@ -2525,7 +2535,7 @@ fn serialise_field_expr(
 /// cast. Routing `Effect` through `wire_ref` here would silently change that
 /// to an unchecked cast, so it stays a manual peel rather than becoming a
 /// second `WireRef` arm with no second consumer.
-fn serialise_field_expr_via(t: &TypeRef, value: &str, ns: &str, ru: &RuntimeUse) -> TsExpr {
+fn serialise_field_expr_via(t: &TypeRef, value: &TsExpr, ns: &str, ru: &RuntimeUse) -> TsExpr {
     if let TypeRef::Effect(inner, _) = t {
         return serialise_field_expr_via(inner, value, ns, ru);
     }
@@ -2541,7 +2551,7 @@ fn serialise_field_expr_via(t: &TypeRef, value: &str, ns: &str, ru: &RuntimeUse)
 /// expression the way every other arm here is. See that type's own doc
 /// (`bynk-ts/src/program.rs`) for why this widens the existing `Arrow.body`
 /// field rather than adding a new `TsExpr` variant.
-fn guarded_number(value: &str, check: &str, message: &str) -> TsExpr {
+fn guarded_number(value: &TsExpr, check: &str, message: &str) -> TsExpr {
     call(
         TsExpr::Arrow {
             params: vec![TsParam {
@@ -2576,7 +2586,7 @@ fn guarded_number(value: &str, check: &str, message: &str) -> TsExpr {
                 ),
             ])),
         },
-        vec![ident(value)],
+        vec![value.clone()],
     )
 }
 
@@ -2591,7 +2601,7 @@ fn guarded_number(value: &str, check: &str, message: &str) -> TsExpr {
 /// the same dispatch on a shape the peel could never have matched anyway.
 fn serialise_field_expr_wire(
     wire: &WireRef,
-    value: &str,
+    value: &TsExpr,
     ns: &str,
     depth: Option<Depth<'_>>,
     ru: &RuntimeUse,
@@ -2603,7 +2613,7 @@ fn serialise_field_expr_wire(
         // type cycle passes the nesting depth on to a callee on one.
         WireRef::Named { name: key } | WireRef::Inst { key } => call(
             ident(format!("{ns}__serialise_{key}")),
-            std::iter::once(ident(value))
+            std::iter::once(value.clone())
                 .chain(depth_arg(depth, key))
                 .collect(),
         ),
@@ -2644,7 +2654,7 @@ fn serialise_field_expr_wire(
         WireRef::Bytes => {
             ru.note_bytes();
             as_expr(
-                call(ident("__bynkBytesToBase64"), vec![ident(value)]),
+                call(ident("__bynkBytesToBase64"), vec![value.clone()]),
                 TsType::named("__JsonValue"),
             )
         }
@@ -2653,11 +2663,11 @@ fn serialise_field_expr_wire(
         WireRef::Decimal => {
             ru.note_decimal("__bynkDecimalToString");
             as_expr(
-                call(ident("__bynkDecimalToString"), vec![ident(value)]),
+                call(ident("__bynkDecimalToString"), vec![value.clone()]),
                 TsType::named("__JsonValue"),
             )
         }
-        WireRef::Base { .. } => as_expr(ident(value), TsType::named("__JsonValue")),
+        WireRef::Base { .. } => as_expr(value.clone(), TsType::named("__JsonValue")),
         // The runtime-owned error types have no *generated* codec — they are
         // declared by the runtime, not by a `TypeDecl` this emitter can walk, so
         // there is no `serialise_ValidationError` to name. They keep the
@@ -2690,7 +2700,7 @@ fn serialise_field_expr_wire(
         // never a nested `As` — so this renders as the intended, parenless
         // `value as unknown as JsonValue`.
         WireRef::Unchecked { .. } => as_expr(
-            as_expr(ident(value), TsType::named("unknown")),
+            as_expr(value.clone(), TsType::named("unknown")),
             TsType::named("__JsonValue"),
         ),
         WireRef::Unit => TsExpr::Lit(TsLit::Null),
@@ -2722,8 +2732,19 @@ fn is_plain_key_ref(t: &TypeRef, types: &std::collections::HashMap<String, Arc<T
 
 /// v0.22b: an expression-form serialise for a codec target — the same
 /// dispatch as a record field's serialisation.
-pub(crate) fn serialise_expr(t: &TypeRef, value: &str, ru: &RuntimeUse) -> TsExpr {
+pub(crate) fn serialise_expr(t: &TypeRef, value: &TsExpr, ru: &RuntimeUse) -> TsExpr {
     serialise_field_expr(t, value, None, ru)
+}
+
+/// [`serialise_expr`] over a value that is an identifier's text (a parameter or a local), for the
+/// callers that hold its name.
+pub(crate) fn serialise_text(t: &TypeRef, value: &str, ru: &RuntimeUse) -> TsExpr {
+    serialise_expr(t, &ident(value), ru)
+}
+
+/// [`serialise_expr_via`] over a value that is an identifier's text.
+pub(crate) fn serialise_via_text(t: &TypeRef, value: &str, ns: &str, ru: &RuntimeUse) -> TsExpr {
+    serialise_expr_via(t, &ident(value), ns, ru)
 }
 
 /// v0.176 (#642): the one serialise dispatch for the workers cross-context
@@ -2732,7 +2753,7 @@ pub(crate) fn serialise_expr(t: &TypeRef, value: &str, ru: &RuntimeUse) -> TsExp
 /// (which dropped `List`/`Map` to a bare `as JsonValue` cast) and
 /// `workers_entry.rs`'s `serialise_call` (which did the same to `Bytes`, the
 /// asymmetry that forced `bynk.types.bytes_at_workers_boundary`).
-pub fn serialise_expr_via(t: &TypeRef, value: &str, ns: &str, ru: &RuntimeUse) -> TsExpr {
+pub fn serialise_expr_via(t: &TypeRef, value: &TsExpr, ns: &str, ru: &RuntimeUse) -> TsExpr {
     serialise_field_expr_via(t, value, ns, ru)
 }
 
@@ -2790,7 +2811,10 @@ pub(crate) fn serialise_ref_via(t: &TypeRef, ns: &str, ru: &RuntimeUse) -> TsExp
             generics: Vec::new(),
             return_type: None,
             body: Box::new(TsArrowBody::Expr(Box::new(serialise_field_expr_via(
-                other, "__v", ns, ru,
+                other,
+                &ident("__v"),
+                ns,
+                ru,
             )))),
         },
     }
@@ -4086,7 +4110,7 @@ pub fn emit_generic_helpers_qualified(
                                 ("kind".to_string(), str_lit("Ok")),
                                 (
                                     "value".to_string(),
-                                    serialise_field_expr(ok, "value.value", depth, ru),
+                                    serialise_field_ident(ok, "value.value", depth, ru),
                                 ),
                             ])),
                         ),
@@ -4094,7 +4118,7 @@ pub fn emit_generic_helpers_qualified(
                             ("kind".to_string(), str_lit("Err")),
                             (
                                 "error".to_string(),
-                                serialise_field_expr(err, "value.error", depth, ru),
+                                serialise_field_ident(err, "value.error", depth, ru),
                             ),
                         ])),
                     ],
@@ -4161,7 +4185,7 @@ pub fn emit_generic_helpers_qualified(
                 // `__bynkPlainJson` set, `Some(v)` is `v` and `None` is `null`.
                 // Otherwise (and in every project without such a route) it is the
                 // tagged encoder alone.
-                let some_value = serialise_field_expr(inner, "value.value", depth, ru);
+                let some_value = serialise_field_ident(inner, "value.value", depth, ru);
                 let tagged_some = TsExpr::object(vec![
                     ("kind".to_string(), str_lit("Some")),
                     ("value".to_string(), some_value.clone()),
@@ -4245,7 +4269,7 @@ pub fn emit_generic_helpers_qualified(
                             is_async: false,
                             generics: Vec::new(),
                             return_type: None,
-                            body: Box::new(TsArrowBody::Expr(Box::new(serialise_field_expr(
+                            body: Box::new(TsArrowBody::Expr(Box::new(serialise_field_ident(
                                 elem, "v", depth, ru,
                             )))),
                         }],
@@ -4346,7 +4370,7 @@ pub fn emit_generic_helpers_qualified(
                             is_async: false,
                             generics: Vec::new(),
                             return_type: None,
-                            body: Box::new(TsArrowBody::Expr(Box::new(serialise_field_expr(
+                            body: Box::new(TsArrowBody::Expr(Box::new(serialise_field_ident(
                                 elem, "v", depth, ru,
                             )))),
                         }],
@@ -4467,8 +4491,8 @@ pub fn emit_generic_helpers_qualified(
                                 call(
                                     member(ident("entries"), "push"),
                                     vec![TsExpr::array(vec![
-                                        serialise_field_expr(key, "k", depth, ru),
-                                        serialise_field_expr(val, "v", depth, ru),
+                                        serialise_field_ident(key, "k", depth, ru),
+                                        serialise_field_ident(val, "v", depth, ru),
                                     ])],
                                 ),
                                 None,
@@ -4953,4 +4977,136 @@ pub fn root_names_any(root: &TypeRef, names: &std::collections::HashSet<String>)
         && super::workers::named_types_in(root)
             .iter()
             .any(|n| names.contains(n))
+}
+
+/// 1A.21 (#3722, Decision B): the serialiser entry points take their value as a node. This
+/// corpus is the old-versus-new equality check: `serialiser_corpus.txt` was printed by the
+/// text-valued entry points (`serialise_expr(t, "v", ..)`, `serialise_expr_via(t, "a.b", ns,
+/// ..)`) before they changed, over every base type and a spread of nested shapes, and the
+/// node-valued entries must print exactly the same.
+#[cfg(test)]
+mod serialiser_corpus_tests {
+    use super::*;
+    use bynk_syntax::ast::Ident;
+    use bynk_syntax::span::Span;
+
+    fn sp() -> Span {
+        Span::new(0, 0)
+    }
+
+    fn named(n: &str) -> TypeRef {
+        TypeRef::Named(Ident {
+            name: n.to_string(),
+            span: sp(),
+        })
+    }
+
+    fn b(t: TypeRef) -> Box<TypeRef> {
+        Box::new(t)
+    }
+
+    fn elements() -> Vec<(&'static str, TypeRef)> {
+        let base = |n, t| (n, TypeRef::Base(t, sp()));
+        vec![
+            base("Int", BaseType::Int),
+            base("String", BaseType::String),
+            base("Bool", BaseType::Bool),
+            base("Float", BaseType::Float),
+            base("Duration", BaseType::Duration),
+            base("Instant", BaseType::Instant),
+            base("Bytes", BaseType::Bytes),
+            base("Decimal", BaseType::Decimal),
+            ("Foo", named("Foo")),
+            ("ValidationError", TypeRef::ValidationError(sp())),
+            ("DecodeError", TypeRef::DecodeError(sp())),
+            ("QueueResult", TypeRef::QueueResult(sp())),
+        ]
+    }
+
+    fn shapes(e: &TypeRef) -> Vec<(&'static str, TypeRef)> {
+        let s = TypeRef::Base(BaseType::String, sp());
+        vec![
+            ("bare", e.clone()),
+            ("Option", TypeRef::Option(b(e.clone()), sp())),
+            ("List", TypeRef::List(b(e.clone()), sp())),
+            ("Set", TypeRef::Set(b(e.clone()), sp())),
+            ("Map", TypeRef::Map(b(s.clone()), b(e.clone()), sp())),
+            ("Result", TypeRef::Result(b(e.clone()), b(s), sp())),
+            ("Effect", TypeRef::Effect(b(e.clone()), sp())),
+            ("HttpResult", TypeRef::HttpResult(b(e.clone()), sp())),
+            (
+                "Option<List>",
+                TypeRef::Option(b(TypeRef::List(b(e.clone()), sp())), sp()),
+            ),
+            (
+                "List<Option>",
+                TypeRef::List(b(TypeRef::Option(b(e.clone()), sp())), sp()),
+            ),
+            (
+                "Map<Foo,List>",
+                TypeRef::Map(b(named("Foo")), b(TypeRef::List(b(e.clone()), sp())), sp()),
+            ),
+            (
+                "App",
+                TypeRef::App {
+                    name: Ident {
+                        name: "Pair".to_string(),
+                        span: sp(),
+                    },
+                    args: vec![e.clone(), named("Foo")],
+                    span: sp(),
+                },
+            ),
+        ]
+    }
+
+    /// Every case's printed text, one `label | entry | text` line each.
+    fn corpus() -> String {
+        let ru = RuntimeUse::default();
+        let mut out = String::new();
+        let mut cases = vec![("Unit", TypeRef::Unit(sp()))];
+        for (en, e) in elements() {
+            for (sn, t) in shapes(&e) {
+                cases.push((Box::leak(format!("{sn}[{en}]").into_boxed_str()) as &str, t));
+            }
+        }
+        for (label, t) in &cases {
+            for value in ["v", "value.items"] {
+                let node = serialise_expr(t, &ident(value), &ru);
+                out.push_str(&format!(
+                    "{label} | {value} | {}\n",
+                    bynk_ts::print_expr(&node)
+                ));
+            }
+            for ns in ["", "handlers."] {
+                let node = serialise_expr_via(t, &ident("a.b"), ns, &ru);
+                out.push_str(&format!(
+                    "{label} | via {ns:?} | {}\n",
+                    bynk_ts::print_expr(&node)
+                ));
+            }
+        }
+        out
+    }
+
+    #[test]
+    fn the_node_entry_prints_what_the_text_entry_printed() {
+        let want = include_str!("serialiser_corpus.txt");
+        let got = corpus();
+        if std::env::var_os("BYNK_WRITE_SERIALISER_CORPUS").is_some() {
+            std::fs::write(
+                concat!(
+                    env!("CARGO_MANIFEST_DIR"),
+                    "/src/emitter/serialiser_corpus.txt"
+                ),
+                &got,
+            )
+            .unwrap();
+            return;
+        }
+        assert_eq!(got.lines().count(), want.lines().count(), "corpus size");
+        for (g, w) in got.lines().zip(want.lines()) {
+            assert_eq!(g, w);
+        }
+    }
 }

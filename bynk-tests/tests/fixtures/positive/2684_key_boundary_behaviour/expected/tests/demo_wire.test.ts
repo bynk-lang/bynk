@@ -50,17 +50,28 @@ async function test_a_record_keyed_map_round_trips() {
     type Status = __ns_demo_wire.Status;
     const l = sample();
     void (((__d) => {
-        switch (__d.tag) {
-          case "Ok": {
-            const back = __d.value;
-            return __bynkExpect((__bynkEq(back, l)), "tests/demo/wire.bynk:10:24", 310, 319, "expect back == l");
-          }
-          case "Err": {
-            return __bynkExpect((false), "tests/demo/wire.bynk:11:22", 341, 346, "expect false");
-          }
+      switch (__d.tag) {
+        case "Ok": {
+          const back = __d.value;
+          return __bynkExpect((__bynkEq(back, l)), "tests/demo/wire.bynk:10:24", 310, 319, "expect back == l");
         }
-        throw new globalThis.Error("non-exhaustive match");
-      })(((__s: string): Result<__ns_demo_wire.Ledger, DecodeError> => { let __j: __JsonValue; try { __j = globalThis.JSON.parse(__s) as __JsonValue; } catch (__e) { return Err({ kind: "Malformed", path: "$", message: String(__e) }); } const __r = __deserialise_Ledger(__j, "$"); if (__r.tag === "Ok") return Ok(__r.value as __ns_demo_wire.Ledger); const __be = __r.error; return Err({ kind: __be.kind, path: (__be.kind === "StructuralMismatch" || __be.kind === "RefinementViolation") ? __be.path : "$", message: __be.kind === "StructuralMismatch" ? `expected ${__be.expected}, got ${String(__be.actual)}` : __be.kind === "RefinementViolation" ? __be.violation.message : __be.details }); })(globalThis.JSON.stringify(__serialise_Ledger(l)))));
+        case "Err": {
+          return __bynkExpect((false), "tests/demo/wire.bynk:11:22", 341, 346, "expect false");
+        }
+      }
+      throw new globalThis.Error("non-exhaustive match");
+    })(((__s: string): Result<__ns_demo_wire.Ledger, DecodeError> => {
+      let __j: __JsonValue;
+      try {
+        __j = globalThis.JSON.parse(__s) as __JsonValue;
+      } catch (__e) {
+        return Err({ kind: "Malformed", path: "$", message: String(__e) });
+      }
+      const __r = __deserialise_Ledger(__j, "$");
+      if (__r.tag === "Ok") return Ok(__r.value as __ns_demo_wire.Ledger);
+      const __be = __r.error;
+      return Err({ kind: __be.kind, path: (__be.kind === "StructuralMismatch" || __be.kind === "RefinementViolation") ? __be.path : "$", message: __be.kind === "StructuralMismatch" ? `expected ${__be.expected}, got ${String(__be.actual)}` : __be.kind === "RefinementViolation" ? __be.violation.message : __be.details });
+    })(globalThis.JSON.stringify(__serialise_Ledger(l)))));
     return { pass: true };
   } catch (e) {
     if (e instanceof ExpectationError) {
@@ -89,7 +100,18 @@ async function test_a_decoded_map_looks_up_by_value() {
           }
         }
         throw new globalThis.Error("non-exhaustive match");
-      })(((__s: string): Result<__ns_demo_wire.Ledger, DecodeError> => { let __j: __JsonValue; try { __j = globalThis.JSON.parse(__s) as __JsonValue; } catch (__e) { return Err({ kind: "Malformed", path: "$", message: String(__e) }); } const __r = __deserialise_Ledger(__j, "$"); if (__r.tag === "Ok") return Ok(__r.value as __ns_demo_wire.Ledger); const __be = __r.error; return Err({ kind: __be.kind, path: (__be.kind === "StructuralMismatch" || __be.kind === "RefinementViolation") ? __be.path : "$", message: __be.kind === "StructuralMismatch" ? `expected ${__be.expected}, got ${String(__be.actual)}` : __be.kind === "RefinementViolation" ? __be.violation.message : __be.details }); })(globalThis.JSON.stringify(__serialise_Ledger(sample())))));
+      })(((__s: string): Result<__ns_demo_wire.Ledger, DecodeError> => {
+      let __j: __JsonValue;
+      try {
+        __j = globalThis.JSON.parse(__s) as __JsonValue;
+      } catch (__e) {
+        return Err({ kind: "Malformed", path: "$", message: String(__e) });
+      }
+      const __r = __deserialise_Ledger(__j, "$");
+      if (__r.tag === "Ok") return Ok(__r.value as __ns_demo_wire.Ledger);
+      const __be = __r.error;
+      return Err({ kind: __be.kind, path: (__be.kind === "StructuralMismatch" || __be.kind === "RefinementViolation") ? __be.path : "$", message: __be.kind === "StructuralMismatch" ? `expected ${__be.expected}, got ${String(__be.actual)}` : __be.kind === "RefinementViolation" ? __be.violation.message : __be.details });
+    })(globalThis.JSON.stringify(__serialise_Ledger(sample())))));
     return { pass: true };
   } catch (e) {
     if (e instanceof ExpectationError) {
@@ -118,7 +140,18 @@ async function test_a_decoded_set_is_keyed_by_value() {
           }
         }
         throw new globalThis.Error("non-exhaustive match");
-      })(((__s: string): Result<__ns_demo_wire.Ledger, DecodeError> => { let __j: __JsonValue; try { __j = globalThis.JSON.parse(__s) as __JsonValue; } catch (__e) { return Err({ kind: "Malformed", path: "$", message: String(__e) }); } const __r = __deserialise_Ledger(__j, "$"); if (__r.tag === "Ok") return Ok(__r.value as __ns_demo_wire.Ledger); const __be = __r.error; return Err({ kind: __be.kind, path: (__be.kind === "StructuralMismatch" || __be.kind === "RefinementViolation") ? __be.path : "$", message: __be.kind === "StructuralMismatch" ? `expected ${__be.expected}, got ${String(__be.actual)}` : __be.kind === "RefinementViolation" ? __be.violation.message : __be.details }); })(globalThis.JSON.stringify(__serialise_Ledger(sample())))));
+      })(((__s: string): Result<__ns_demo_wire.Ledger, DecodeError> => {
+      let __j: __JsonValue;
+      try {
+        __j = globalThis.JSON.parse(__s) as __JsonValue;
+      } catch (__e) {
+        return Err({ kind: "Malformed", path: "$", message: String(__e) });
+      }
+      const __r = __deserialise_Ledger(__j, "$");
+      if (__r.tag === "Ok") return Ok(__r.value as __ns_demo_wire.Ledger);
+      const __be = __r.error;
+      return Err({ kind: __be.kind, path: (__be.kind === "StructuralMismatch" || __be.kind === "RefinementViolation") ? __be.path : "$", message: __be.kind === "StructuralMismatch" ? `expected ${__be.expected}, got ${String(__be.actual)}` : __be.kind === "RefinementViolation" ? __be.violation.message : __be.details });
+    })(globalThis.JSON.stringify(__serialise_Ledger(sample())))));
     return { pass: true };
   } catch (e) {
     if (e instanceof ExpectationError) {
@@ -137,16 +170,27 @@ async function test_a_repeated_set_member_is_rejected() {
     type OrderId = __ns_demo_wire.OrderId;
     type Status = __ns_demo_wire.Status;
     void (((__d) => {
-        switch (__d.tag) {
-          case "Ok": {
-            return __bynkExpect((false), "tests/demo/wire.bynk:31:21", 868, 873, "expect false");
-          }
-          case "Err": {
-            return __bynkExpect((true), "tests/demo/wire.bynk:32:22", 895, 899, "expect true");
-          }
+      switch (__d.tag) {
+        case "Ok": {
+          return __bynkExpect((false), "tests/demo/wire.bynk:31:21", 868, 873, "expect false");
         }
-        throw new globalThis.Error("non-exhaustive match");
-      })(((__s: string): Result<ReadonlySet<__ns_demo_wire.Status>, DecodeError> => { let __j: __JsonValue; try { __j = globalThis.JSON.parse(__s) as __JsonValue; } catch (__e) { return Err({ kind: "Malformed", path: "$", message: String(__e) }); } const __r = __deserialise_Set_Status(__j, "$"); if (__r.tag === "Ok") return Ok(__r.value as ReadonlySet<__ns_demo_wire.Status>); const __be = __r.error; return Err({ kind: __be.kind, path: (__be.kind === "StructuralMismatch" || __be.kind === "RefinementViolation") ? __be.path : "$", message: __be.kind === "StructuralMismatch" ? `expected ${__be.expected}, got ${String(__be.actual)}` : __be.kind === "RefinementViolation" ? __be.violation.message : __be.details }); })(globalThis.JSON.stringify(__serialise_List_Status([Status.Open, Status.Open])))));
+        case "Err": {
+          return __bynkExpect((true), "tests/demo/wire.bynk:32:22", 895, 899, "expect true");
+        }
+      }
+      throw new globalThis.Error("non-exhaustive match");
+    })(((__s: string): Result<ReadonlySet<__ns_demo_wire.Status>, DecodeError> => {
+      let __j: __JsonValue;
+      try {
+        __j = globalThis.JSON.parse(__s) as __JsonValue;
+      } catch (__e) {
+        return Err({ kind: "Malformed", path: "$", message: String(__e) });
+      }
+      const __r = __deserialise_Set_Status(__j, "$");
+      if (__r.tag === "Ok") return Ok(__r.value as ReadonlySet<__ns_demo_wire.Status>);
+      const __be = __r.error;
+      return Err({ kind: __be.kind, path: (__be.kind === "StructuralMismatch" || __be.kind === "RefinementViolation") ? __be.path : "$", message: __be.kind === "StructuralMismatch" ? `expected ${__be.expected}, got ${String(__be.actual)}` : __be.kind === "RefinementViolation" ? __be.violation.message : __be.details });
+    })(globalThis.JSON.stringify(__serialise_List_Status([Status.Open, Status.Open])))));
     return { pass: true };
   } catch (e) {
     if (e instanceof ExpectationError) {
@@ -175,7 +219,18 @@ async function test_a_distinct_set_decodes() {
           }
         }
         throw new globalThis.Error("non-exhaustive match");
-      })(((__s: string): Result<ReadonlySet<__ns_demo_wire.Status>, DecodeError> => { let __j: __JsonValue; try { __j = globalThis.JSON.parse(__s) as __JsonValue; } catch (__e) { return Err({ kind: "Malformed", path: "$", message: String(__e) }); } const __r = __deserialise_Set_Status(__j, "$"); if (__r.tag === "Ok") return Ok(__r.value as ReadonlySet<__ns_demo_wire.Status>); const __be = __r.error; return Err({ kind: __be.kind, path: (__be.kind === "StructuralMismatch" || __be.kind === "RefinementViolation") ? __be.path : "$", message: __be.kind === "StructuralMismatch" ? `expected ${__be.expected}, got ${String(__be.actual)}` : __be.kind === "RefinementViolation" ? __be.violation.message : __be.details }); })(globalThis.JSON.stringify(__serialise_List_Status([Status.Open, Status.Shipped])))));
+      })(((__s: string): Result<ReadonlySet<__ns_demo_wire.Status>, DecodeError> => {
+      let __j: __JsonValue;
+      try {
+        __j = globalThis.JSON.parse(__s) as __JsonValue;
+      } catch (__e) {
+        return Err({ kind: "Malformed", path: "$", message: String(__e) });
+      }
+      const __r = __deserialise_Set_Status(__j, "$");
+      if (__r.tag === "Ok") return Ok(__r.value as ReadonlySet<__ns_demo_wire.Status>);
+      const __be = __r.error;
+      return Err({ kind: __be.kind, path: (__be.kind === "StructuralMismatch" || __be.kind === "RefinementViolation") ? __be.path : "$", message: __be.kind === "StructuralMismatch" ? `expected ${__be.expected}, got ${String(__be.actual)}` : __be.kind === "RefinementViolation" ? __be.violation.message : __be.details });
+    })(globalThis.JSON.stringify(__serialise_List_Status([Status.Open, Status.Shipped])))));
     return { pass: true };
   } catch (e) {
     if (e instanceof ExpectationError) {
@@ -193,9 +248,31 @@ async function test_a_repeated_map_key_is_rejected__not_last_entry_wins___2707_(
     type Ledger = __ns_demo_wire.Ledger;
     type OrderId = __ns_demo_wire.OrderId;
     type Status = __ns_demo_wire.Status;
-    const __r0 = ((__s: string): Result<ReadonlyMap<string, number>, DecodeError> => { let __j: __JsonValue; try { __j = globalThis.JSON.parse(__s) as __JsonValue; } catch (__e) { return Err({ kind: "Malformed", path: "$", message: String(__e) }); } const __r = __deserialise_Map_String_Int(__j, "$"); if (__r.tag === "Ok") return Ok(__r.value as ReadonlyMap<string, number>); const __be = __r.error; return Err({ kind: __be.kind, path: (__be.kind === "StructuralMismatch" || __be.kind === "RefinementViolation") ? __be.path : "$", message: __be.kind === "StructuralMismatch" ? `expected ${__be.expected}, got ${String(__be.actual)}` : __be.kind === "RefinementViolation" ? __be.violation.message : __be.details }); })("[[\"a\",1],[\"a\",2]]");
+    const __r0 = ((__s: string): Result<ReadonlyMap<string, number>, DecodeError> => {
+      let __j: __JsonValue;
+      try {
+        __j = globalThis.JSON.parse(__s) as __JsonValue;
+      } catch (__e) {
+        return Err({ kind: "Malformed", path: "$", message: String(__e) });
+      }
+      const __r = __deserialise_Map_String_Int(__j, "$");
+      if (__r.tag === "Ok") return Ok(__r.value as ReadonlyMap<string, number>);
+      const __be = __r.error;
+      return Err({ kind: __be.kind, path: (__be.kind === "StructuralMismatch" || __be.kind === "RefinementViolation") ? __be.path : "$", message: __be.kind === "StructuralMismatch" ? `expected ${__be.expected}, got ${String(__be.actual)}` : __be.kind === "RefinementViolation" ? __be.violation.message : __be.details });
+    })("[[\"a\",1],[\"a\",2]]");
     if (!(((__c: boolean) => __c)(__r0.tag === "Err"))) { throw __bynkExpectFailure("tests/demo/wire.bynk:44:10", 1152, 1216, "expect Json.decode[Map[String, Int]](\"[[\\\"a\\\",1],[\\\"a\\\",2]]\") is Err(_)"); }
-    const __r1 = ((__s: string): Result<ReadonlyMap<number, number>, DecodeError> => { let __j: __JsonValue; try { __j = globalThis.JSON.parse(__s) as __JsonValue; } catch (__e) { return Err({ kind: "Malformed", path: "$", message: String(__e) }); } const __r = __deserialise_Map_Int_Int(__j, "$"); if (__r.tag === "Ok") return Ok(__r.value as ReadonlyMap<number, number>); const __be = __r.error; return Err({ kind: __be.kind, path: (__be.kind === "StructuralMismatch" || __be.kind === "RefinementViolation") ? __be.path : "$", message: __be.kind === "StructuralMismatch" ? `expected ${__be.expected}, got ${String(__be.actual)}` : __be.kind === "RefinementViolation" ? __be.violation.message : __be.details }); })("[[1,1],[1,2]]");
+    const __r1 = ((__s: string): Result<ReadonlyMap<number, number>, DecodeError> => {
+      let __j: __JsonValue;
+      try {
+        __j = globalThis.JSON.parse(__s) as __JsonValue;
+      } catch (__e) {
+        return Err({ kind: "Malformed", path: "$", message: String(__e) });
+      }
+      const __r = __deserialise_Map_Int_Int(__j, "$");
+      if (__r.tag === "Ok") return Ok(__r.value as ReadonlyMap<number, number>);
+      const __be = __r.error;
+      return Err({ kind: __be.kind, path: (__be.kind === "StructuralMismatch" || __be.kind === "RefinementViolation") ? __be.path : "$", message: __be.kind === "StructuralMismatch" ? `expected ${__be.expected}, got ${String(__be.actual)}` : __be.kind === "RefinementViolation" ? __be.violation.message : __be.details });
+    })("[[1,1],[1,2]]");
     if (!(((__c: boolean) => __c)(__r1.tag === "Err"))) { throw __bynkExpectFailure("tests/demo/wire.bynk:45:10", 1226, 1279, "expect Json.decode[Map[Int, Int]](\"[[1,1],[1,2]]\") is Err(_)"); }
     return { pass: true };
   } catch (e) {
@@ -214,7 +291,18 @@ async function test_a_repeated_composite_map_key_is_rejected_by_value___2707_() 
     type Ledger = __ns_demo_wire.Ledger;
     type OrderId = __ns_demo_wire.OrderId;
     type Status = __ns_demo_wire.Status;
-    const __r0 = ((__s: string): Result<ReadonlyMap<__ns_demo_wire.OrderId, number>, DecodeError> => { let __j: __JsonValue; try { __j = globalThis.JSON.parse(__s) as __JsonValue; } catch (__e) { return Err({ kind: "Malformed", path: "$", message: String(__e) }); } const __r = __deserialise_Map_OrderId_Int(__j, "$"); if (__r.tag === "Ok") return Ok(__r.value as ReadonlyMap<__ns_demo_wire.OrderId, number>); const __be = __r.error; return Err({ kind: __be.kind, path: (__be.kind === "StructuralMismatch" || __be.kind === "RefinementViolation") ? __be.path : "$", message: __be.kind === "StructuralMismatch" ? `expected ${__be.expected}, got ${String(__be.actual)}` : __be.kind === "RefinementViolation" ? __be.violation.message : __be.details }); })("[[{\"region\":\"eu\",\"n\":7},1],[{\"n\":7,\"region\":\"eu\"},2]]");
+    const __r0 = ((__s: string): Result<ReadonlyMap<__ns_demo_wire.OrderId, number>, DecodeError> => {
+      let __j: __JsonValue;
+      try {
+        __j = globalThis.JSON.parse(__s) as __JsonValue;
+      } catch (__e) {
+        return Err({ kind: "Malformed", path: "$", message: String(__e) });
+      }
+      const __r = __deserialise_Map_OrderId_Int(__j, "$");
+      if (__r.tag === "Ok") return Ok(__r.value as ReadonlyMap<__ns_demo_wire.OrderId, number>);
+      const __be = __r.error;
+      return Err({ kind: __be.kind, path: (__be.kind === "StructuralMismatch" || __be.kind === "RefinementViolation") ? __be.path : "$", message: __be.kind === "StructuralMismatch" ? `expected ${__be.expected}, got ${String(__be.actual)}` : __be.kind === "RefinementViolation" ? __be.violation.message : __be.details });
+    })("[[{\"region\":\"eu\",\"n\":7},1],[{\"n\":7,\"region\":\"eu\"},2]]");
     if (!(((__c: boolean) => __c)(__r0.tag === "Err"))) { throw __bynkExpectFailure("tests/demo/wire.bynk:49:10", 1359, 1468, "expect Json.decode[Map[OrderId, Int]](\"[[{\\\"region\\\":\\\"eu\\\",\\\"n\\\":7},1],[{\\\"n\\\":7,\\\"region\\\":\\\"eu\\\"},2]]\") is Err(_)"); }
     return { pass: true };
   } catch (e) {
@@ -233,7 +321,18 @@ async function test_a_repeated_Decimal_map_key_is_rejected_on_its_canonical_valu
     type Ledger = __ns_demo_wire.Ledger;
     type OrderId = __ns_demo_wire.OrderId;
     type Status = __ns_demo_wire.Status;
-    const __r0 = ((__s: string): Result<ReadonlyMap<{ readonly coefficient: bigint; readonly scale: number }, number>, DecodeError> => { let __j: __JsonValue; try { __j = globalThis.JSON.parse(__s) as __JsonValue; } catch (__e) { return Err({ kind: "Malformed", path: "$", message: String(__e) }); } const __r = __deserialise_Map_Decimal_Int(__j, "$"); if (__r.tag === "Ok") return Ok(__r.value as ReadonlyMap<{ readonly coefficient: bigint; readonly scale: number }, number>); const __be = __r.error; return Err({ kind: __be.kind, path: (__be.kind === "StructuralMismatch" || __be.kind === "RefinementViolation") ? __be.path : "$", message: __be.kind === "StructuralMismatch" ? `expected ${__be.expected}, got ${String(__be.actual)}` : __be.kind === "RefinementViolation" ? __be.violation.message : __be.details }); })("[[\"1.20\",1],[\"1.2\",2]]");
+    const __r0 = ((__s: string): Result<ReadonlyMap<{ readonly coefficient: bigint; readonly scale: number }, number>, DecodeError> => {
+      let __j: __JsonValue;
+      try {
+        __j = globalThis.JSON.parse(__s) as __JsonValue;
+      } catch (__e) {
+        return Err({ kind: "Malformed", path: "$", message: String(__e) });
+      }
+      const __r = __deserialise_Map_Decimal_Int(__j, "$");
+      if (__r.tag === "Ok") return Ok(__r.value as ReadonlyMap<{ readonly coefficient: bigint; readonly scale: number }, number>);
+      const __be = __r.error;
+      return Err({ kind: __be.kind, path: (__be.kind === "StructuralMismatch" || __be.kind === "RefinementViolation") ? __be.path : "$", message: __be.kind === "StructuralMismatch" ? `expected ${__be.expected}, got ${String(__be.actual)}` : __be.kind === "RefinementViolation" ? __be.violation.message : __be.details });
+    })("[[\"1.20\",1],[\"1.2\",2]]");
     if (!(((__c: boolean) => __c)(__r0.tag === "Err"))) { throw __bynkExpectFailure("tests/demo/wire.bynk:53:10", 1560, 1630, "expect Json.decode[Map[Decimal, Int]](\"[[\\\"1.20\\\",1],[\\\"1.2\\\",2]]\") is Err(_)"); }
     void (((__d) => {
         switch (__d.tag) {
@@ -246,7 +345,18 @@ async function test_a_repeated_Decimal_map_key_is_rejected_on_its_canonical_valu
           }
         }
         throw new globalThis.Error("non-exhaustive match");
-      })(((__s: string): Result<ReadonlyMap<{ readonly coefficient: bigint; readonly scale: number }, number>, DecodeError> => { let __j: __JsonValue; try { __j = globalThis.JSON.parse(__s) as __JsonValue; } catch (__e) { return Err({ kind: "Malformed", path: "$", message: String(__e) }); } const __r = __deserialise_Map_Decimal_Int(__j, "$"); if (__r.tag === "Ok") return Ok(__r.value as ReadonlyMap<{ readonly coefficient: bigint; readonly scale: number }, number>); const __be = __r.error; return Err({ kind: __be.kind, path: (__be.kind === "StructuralMismatch" || __be.kind === "RefinementViolation") ? __be.path : "$", message: __be.kind === "StructuralMismatch" ? `expected ${__be.expected}, got ${String(__be.actual)}` : __be.kind === "RefinementViolation" ? __be.violation.message : __be.details }); })("[[\"1.20\",1],[\"1.3\",2]]")));
+      })(((__s: string): Result<ReadonlyMap<{ readonly coefficient: bigint; readonly scale: number }, number>, DecodeError> => {
+      let __j: __JsonValue;
+      try {
+        __j = globalThis.JSON.parse(__s) as __JsonValue;
+      } catch (__e) {
+        return Err({ kind: "Malformed", path: "$", message: String(__e) });
+      }
+      const __r = __deserialise_Map_Decimal_Int(__j, "$");
+      if (__r.tag === "Ok") return Ok(__r.value as ReadonlyMap<{ readonly coefficient: bigint; readonly scale: number }, number>);
+      const __be = __r.error;
+      return Err({ kind: __be.kind, path: (__be.kind === "StructuralMismatch" || __be.kind === "RefinementViolation") ? __be.path : "$", message: __be.kind === "StructuralMismatch" ? `expected ${__be.expected}, got ${String(__be.actual)}` : __be.kind === "RefinementViolation" ? __be.violation.message : __be.details });
+    })("[[\"1.20\",1],[\"1.3\",2]]")));
     return { pass: true };
   } catch (e) {
     if (e instanceof ExpectationError) {
@@ -275,7 +385,18 @@ async function test_distinct_map_keys_still_decode___2707_() {
           }
         }
         throw new globalThis.Error("non-exhaustive match");
-      })(((__s: string): Result<ReadonlyMap<string, number>, DecodeError> => { let __j: __JsonValue; try { __j = globalThis.JSON.parse(__s) as __JsonValue; } catch (__e) { return Err({ kind: "Malformed", path: "$", message: String(__e) }); } const __r = __deserialise_Map_String_Int(__j, "$"); if (__r.tag === "Ok") return Ok(__r.value as ReadonlyMap<string, number>); const __be = __r.error; return Err({ kind: __be.kind, path: (__be.kind === "StructuralMismatch" || __be.kind === "RefinementViolation") ? __be.path : "$", message: __be.kind === "StructuralMismatch" ? `expected ${__be.expected}, got ${String(__be.actual)}` : __be.kind === "RefinementViolation" ? __be.violation.message : __be.details }); })("[[\"a\",1],[\"b\",2]]")));
+      })(((__s: string): Result<ReadonlyMap<string, number>, DecodeError> => {
+      let __j: __JsonValue;
+      try {
+        __j = globalThis.JSON.parse(__s) as __JsonValue;
+      } catch (__e) {
+        return Err({ kind: "Malformed", path: "$", message: String(__e) });
+      }
+      const __r = __deserialise_Map_String_Int(__j, "$");
+      if (__r.tag === "Ok") return Ok(__r.value as ReadonlyMap<string, number>);
+      const __be = __r.error;
+      return Err({ kind: __be.kind, path: (__be.kind === "StructuralMismatch" || __be.kind === "RefinementViolation") ? __be.path : "$", message: __be.kind === "StructuralMismatch" ? `expected ${__be.expected}, got ${String(__be.actual)}` : __be.kind === "RefinementViolation" ? __be.violation.message : __be.details });
+    })("[[\"a\",1],[\"b\",2]]")));
     return { pass: true };
   } catch (e) {
     if (e instanceof ExpectationError) {

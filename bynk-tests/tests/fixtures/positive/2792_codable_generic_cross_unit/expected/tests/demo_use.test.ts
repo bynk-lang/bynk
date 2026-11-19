@@ -52,19 +52,19 @@ async function test_encoding_agrees_across_units() {
     const { decode, encode, forward } = __ns_demo_algo;
     const c = { name: "a", rank: 1 };
     void (((__d) => {
-        switch (__d.tag) {
-          case "Ok": {
-            const code = __d.value;
-            const e: Envelope<Card> = { payload: c, code: code };
-            if (!(shown(c, code) === globalThis.JSON.stringify(__serialise_Envelope_Card(e)))) { throw __bynkExpectFailure("tests/demo/use.bynk:12:14", 323, 355, "expect shown(c, code) == Json.encode(e)\n  expected: shown(c, code) == Json.encode(e)\n  actual:   " + __bynkShow((shown(c, code))) + " == " + __bynkShow((globalThis.JSON.stringify(__serialise_Envelope_Card(e))))); }
-            return undefined;
-          }
-          case "Err": {
-            return __bynkExpect((false), "tests/demo/use.bynk:14:22", 383, 388, "expect false");
-          }
+      switch (__d.tag) {
+        case "Ok": {
+          const code = __d.value;
+          const e: Envelope<Card> = { payload: c, code: code };
+          if (!(shown(c, code) === globalThis.JSON.stringify(__serialise_Envelope_Card(e)))) { throw __bynkExpectFailure("tests/demo/use.bynk:12:14", 323, 355, "expect shown(c, code) == Json.encode(e)\n  expected: shown(c, code) == Json.encode(e)\n  actual:   " + __bynkShow((shown(c, code))) + " == " + __bynkShow((globalThis.JSON.stringify(__serialise_Envelope_Card(e))))); }
+          return undefined;
         }
-        throw new globalThis.Error("non-exhaustive match");
-      })(Code.of("abc")));
+        case "Err": {
+          return __bynkExpect((false), "tests/demo/use.bynk:14:22", 383, 388, "expect false");
+        }
+      }
+      throw new globalThis.Error("non-exhaustive match");
+    })(Code.of("abc")));
     return { pass: true };
   } catch (e) {
     if (e instanceof ExpectationError) {
@@ -86,9 +86,57 @@ async function test_decoding_agrees_across_units__a_refinement_violation_include
     const { decode, encode, forward } = __ns_demo_algo;
     const good = "{\"payload\":{\"name\":\"a\",\"rank\":1},\"code\":\"abc\"}";
     const bad = "{\"payload\":{\"name\":\"a\",\"rank\":1},\"code\":\"ab\"}";
-    if (!(__bynkEq(read(good), ((__s: string): Result<__ns_demo_shapes.Envelope<__ns_demo_shapes.Card>, DecodeError> => { let __j: __JsonValue; try { __j = globalThis.JSON.parse(__s) as __JsonValue; } catch (__e) { return Err({ kind: "Malformed", path: "$", message: String(__e) }); } const __r = __deserialise_Envelope_Card(__j, "$"); if (__r.tag === "Ok") return Ok(__r.value as __ns_demo_shapes.Envelope<__ns_demo_shapes.Card>); const __be = __r.error; return Err({ kind: __be.kind, path: (__be.kind === "StructuralMismatch" || __be.kind === "RefinementViolation") ? __be.path : "$", message: __be.kind === "StructuralMismatch" ? `expected ${__be.expected}, got ${String(__be.actual)}` : __be.kind === "RefinementViolation" ? __be.violation.message : __be.details }); })(good)))) { throw __bynkExpectFailure("tests/demo/use.bynk:21:10", 622, 669, "expect read(good) == Json.decode[Envelope[Card]](good)\n  expected: read(good) == Json.decode[Envelope[Card]](good)\n  actual:   " + __bynkShow((read(good))) + " == " + __bynkShow((((__s: string): Result<__ns_demo_shapes.Envelope<__ns_demo_shapes.Card>, DecodeError> => { let __j: __JsonValue; try { __j = globalThis.JSON.parse(__s) as __JsonValue; } catch (__e) { return Err({ kind: "Malformed", path: "$", message: String(__e) }); } const __r = __deserialise_Envelope_Card(__j, "$"); if (__r.tag === "Ok") return Ok(__r.value as __ns_demo_shapes.Envelope<__ns_demo_shapes.Card>); const __be = __r.error; return Err({ kind: __be.kind, path: (__be.kind === "StructuralMismatch" || __be.kind === "RefinementViolation") ? __be.path : "$", message: __be.kind === "StructuralMismatch" ? `expected ${__be.expected}, got ${String(__be.actual)}` : __be.kind === "RefinementViolation" ? __be.violation.message : __be.details }); })(good)))); }
+    if (!(__bynkEq(read(good), ((__s: string): Result<__ns_demo_shapes.Envelope<__ns_demo_shapes.Card>, DecodeError> => {
+      let __j: __JsonValue;
+      try {
+        __j = globalThis.JSON.parse(__s) as __JsonValue;
+      } catch (__e) {
+        return Err({ kind: "Malformed", path: "$", message: String(__e) });
+      }
+      const __r = __deserialise_Envelope_Card(__j, "$");
+      if (__r.tag === "Ok") return Ok(__r.value as __ns_demo_shapes.Envelope<__ns_demo_shapes.Card>);
+      const __be = __r.error;
+      return Err({ kind: __be.kind, path: (__be.kind === "StructuralMismatch" || __be.kind === "RefinementViolation") ? __be.path : "$", message: __be.kind === "StructuralMismatch" ? `expected ${__be.expected}, got ${String(__be.actual)}` : __be.kind === "RefinementViolation" ? __be.violation.message : __be.details });
+    })(good)))) {
+      throw __bynkExpectFailure("tests/demo/use.bynk:21:10", 622, 669, "expect read(good) == Json.decode[Envelope[Card]](good)\n  expected: read(good) == Json.decode[Envelope[Card]](good)\n  actual:   " + __bynkShow((read(good))) + " == " + __bynkShow((((__s: string): Result<__ns_demo_shapes.Envelope<__ns_demo_shapes.Card>, DecodeError> => {
+        let __j: __JsonValue;
+        try {
+          __j = globalThis.JSON.parse(__s) as __JsonValue;
+        } catch (__e) {
+          return Err({ kind: "Malformed", path: "$", message: String(__e) });
+        }
+        const __r = __deserialise_Envelope_Card(__j, "$");
+        if (__r.tag === "Ok") return Ok(__r.value as __ns_demo_shapes.Envelope<__ns_demo_shapes.Card>);
+        const __be = __r.error;
+        return Err({ kind: __be.kind, path: (__be.kind === "StructuralMismatch" || __be.kind === "RefinementViolation") ? __be.path : "$", message: __be.kind === "StructuralMismatch" ? `expected ${__be.expected}, got ${String(__be.actual)}` : __be.kind === "RefinementViolation" ? __be.violation.message : __be.details });
+      })(good))));
+    }
     if (!((read(good).tag === "Ok"))) { throw __bynkExpectFailure("tests/demo/use.bynk:22:10", 679, 696, "expect read(good).isOk()"); }
-    if (!(__bynkEq(read(bad), ((__s: string): Result<__ns_demo_shapes.Envelope<__ns_demo_shapes.Card>, DecodeError> => { let __j: __JsonValue; try { __j = globalThis.JSON.parse(__s) as __JsonValue; } catch (__e) { return Err({ kind: "Malformed", path: "$", message: String(__e) }); } const __r = __deserialise_Envelope_Card(__j, "$"); if (__r.tag === "Ok") return Ok(__r.value as __ns_demo_shapes.Envelope<__ns_demo_shapes.Card>); const __be = __r.error; return Err({ kind: __be.kind, path: (__be.kind === "StructuralMismatch" || __be.kind === "RefinementViolation") ? __be.path : "$", message: __be.kind === "StructuralMismatch" ? `expected ${__be.expected}, got ${String(__be.actual)}` : __be.kind === "RefinementViolation" ? __be.violation.message : __be.details }); })(bad)))) { throw __bynkExpectFailure("tests/demo/use.bynk:23:10", 706, 751, "expect read(bad) == Json.decode[Envelope[Card]](bad)\n  expected: read(bad) == Json.decode[Envelope[Card]](bad)\n  actual:   " + __bynkShow((read(bad))) + " == " + __bynkShow((((__s: string): Result<__ns_demo_shapes.Envelope<__ns_demo_shapes.Card>, DecodeError> => { let __j: __JsonValue; try { __j = globalThis.JSON.parse(__s) as __JsonValue; } catch (__e) { return Err({ kind: "Malformed", path: "$", message: String(__e) }); } const __r = __deserialise_Envelope_Card(__j, "$"); if (__r.tag === "Ok") return Ok(__r.value as __ns_demo_shapes.Envelope<__ns_demo_shapes.Card>); const __be = __r.error; return Err({ kind: __be.kind, path: (__be.kind === "StructuralMismatch" || __be.kind === "RefinementViolation") ? __be.path : "$", message: __be.kind === "StructuralMismatch" ? `expected ${__be.expected}, got ${String(__be.actual)}` : __be.kind === "RefinementViolation" ? __be.violation.message : __be.details }); })(bad)))); }
+    if (!(__bynkEq(read(bad), ((__s: string): Result<__ns_demo_shapes.Envelope<__ns_demo_shapes.Card>, DecodeError> => {
+      let __j: __JsonValue;
+      try {
+        __j = globalThis.JSON.parse(__s) as __JsonValue;
+      } catch (__e) {
+        return Err({ kind: "Malformed", path: "$", message: String(__e) });
+      }
+      const __r = __deserialise_Envelope_Card(__j, "$");
+      if (__r.tag === "Ok") return Ok(__r.value as __ns_demo_shapes.Envelope<__ns_demo_shapes.Card>);
+      const __be = __r.error;
+      return Err({ kind: __be.kind, path: (__be.kind === "StructuralMismatch" || __be.kind === "RefinementViolation") ? __be.path : "$", message: __be.kind === "StructuralMismatch" ? `expected ${__be.expected}, got ${String(__be.actual)}` : __be.kind === "RefinementViolation" ? __be.violation.message : __be.details });
+    })(bad)))) {
+      throw __bynkExpectFailure("tests/demo/use.bynk:23:10", 706, 751, "expect read(bad) == Json.decode[Envelope[Card]](bad)\n  expected: read(bad) == Json.decode[Envelope[Card]](bad)\n  actual:   " + __bynkShow((read(bad))) + " == " + __bynkShow((((__s: string): Result<__ns_demo_shapes.Envelope<__ns_demo_shapes.Card>, DecodeError> => {
+        let __j: __JsonValue;
+        try {
+          __j = globalThis.JSON.parse(__s) as __JsonValue;
+        } catch (__e) {
+          return Err({ kind: "Malformed", path: "$", message: String(__e) });
+        }
+        const __r = __deserialise_Envelope_Card(__j, "$");
+        if (__r.tag === "Ok") return Ok(__r.value as __ns_demo_shapes.Envelope<__ns_demo_shapes.Card>);
+        const __be = __r.error;
+        return Err({ kind: __be.kind, path: (__be.kind === "StructuralMismatch" || __be.kind === "RefinementViolation") ? __be.path : "$", message: __be.kind === "StructuralMismatch" ? `expected ${__be.expected}, got ${String(__be.actual)}` : __be.kind === "RefinementViolation" ? __be.violation.message : __be.details });
+      })(bad))));
+    }
     if (!(!(read(bad).tag === "Ok"))) { throw __bynkExpectFailure("tests/demo/use.bynk:24:10", 761, 778, "expect !read(bad).isOk()"); }
     return { pass: true };
   } catch (e) {
