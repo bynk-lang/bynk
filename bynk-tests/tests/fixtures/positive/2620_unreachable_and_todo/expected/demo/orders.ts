@@ -230,7 +230,10 @@ export class Ledger {
   async bump(fail: boolean, deps: {}): globalThis.Promise<number> {
     const __state = { ...(await this.loadState()) };
     const __result = await (async () => {
-      const __r0 = await (() => { __state.total = ((n: number) => n + 1)(__state.total); return undefined; })();
+      const __r0 = await (() => {
+        __state.total = ((n: number) => n + 1)(__state.total);
+        return undefined;
+      })();
       return (fail ? __fault("Unreachable", "the ledger was told to fail", "demo/orders.bynk:155:17") : __state.total);
     })();
     await this.commitState(__state);

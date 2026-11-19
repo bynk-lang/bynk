@@ -72,7 +72,10 @@ export class Inventory {
   async reserve(rid: string, r: Reservation, deps: {}): globalThis.Promise<void> {
     const __state = { ...(await this.loadState()) };
     const __result = await (async () => {
-      const __r0 = await (async () => { await __state.reservations.put(String(rid), r); return undefined; })();
+      const __r0 = await (async () => {
+        await __state.reservations.put(String(rid), r);
+        return undefined;
+      })();
       return undefined;
     })();
     await this.commitState(__state);
@@ -82,7 +85,15 @@ export class Inventory {
   async retag(rid: string, oid: string, deps: {}): globalThis.Promise<void> {
     const __state = { ...(await this.loadState()) };
     const __result = await (async () => {
-      const __r0 = await (async () => { await __state.reservations.modify(String(rid), (__c, __p) => { if (!__p) { throw new globalThis.Error("Map.update: key absent"); } return ((r: Reservation) => ({ ...r, orderId: oid }))(__c!); }); return undefined; })();
+      const __r0 = await (async () => {
+        await __state.reservations.modify(String(rid), (__c, __p) => {
+          if (!__p) {
+            throw new globalThis.Error("Map.update: key absent");
+          }
+          return ((r: Reservation) => ({ ...r, orderId: oid }))(__c!);
+        });
+        return undefined;
+      })();
       return undefined;
     })();
     await this.commitState(__state);
@@ -92,7 +103,10 @@ export class Inventory {
   async drop(rid: string, deps: {}): globalThis.Promise<void> {
     const __state = { ...(await this.loadState()) };
     const __result = await (async () => {
-      const __r0 = await (async () => { await __state.reservations.remove(String(rid)); return undefined; })();
+      const __r0 = await (async () => {
+        await __state.reservations.remove(String(rid));
+        return undefined;
+      })();
       return undefined;
     })();
     await this.commitState(__state);

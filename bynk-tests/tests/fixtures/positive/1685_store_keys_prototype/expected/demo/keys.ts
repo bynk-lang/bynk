@@ -125,7 +125,10 @@ export class Bag {
   async put(k: string, v: number, deps: {}): globalThis.Promise<void> {
     const __state = { ...(await this.loadState()) };
     const __result = await (async () => {
-      const __r0 = await (async () => { await __state.items.put(String(k), v); return undefined; })();
+      const __r0 = await (async () => {
+        await __state.items.put(String(k), v);
+        return undefined;
+      })();
       return undefined;
     })();
     await this.commitState(__state);
@@ -134,7 +137,10 @@ export class Bag {
 
   async get(k: string, deps: {}): globalThis.Promise<Option<number>> {
     const __state = await this.loadState();
-    const r = await (async () => { const __k = String(k); return __bynkThen(__state.items.has(__k), (__h) => __h ? __bynkThen(__state.items.get(__k), (__v) => Some(__v!)) : None); })();
+    const r = await (async () => {
+      const __k = String(k);
+      return __bynkThen(__state.items.has(__k), (__h) => __h ? __bynkThen(__state.items.get(__k), (__v) => Some(__v!)) : None);
+    })();
     return r;
   }
 
@@ -153,7 +159,10 @@ export class Bag {
   async drop(k: string, deps: {}): globalThis.Promise<void> {
     const __state = { ...(await this.loadState()) };
     const __result = await (async () => {
-      const __r0 = await (async () => { await __state.items.remove(String(k)); return undefined; })();
+      const __r0 = await (async () => {
+        await __state.items.remove(String(k));
+        return undefined;
+      })();
       return undefined;
     })();
     await this.commitState(__state);
@@ -163,7 +172,10 @@ export class Bag {
   async bump(k: string, deps: {}): globalThis.Promise<void> {
     const __state = { ...(await this.loadState()) };
     const __result = await (async () => {
-      const __r0 = await (async () => { await __state.items.modify(String(k), (__c, __p) => ((n: number) => n + 1)(__p ? __c! : (0))); return undefined; })();
+      const __r0 = await (async () => {
+        await __state.items.modify(String(k), (__c, __p) => ((n: number) => n + 1)(__p ? __c! : (0)));
+        return undefined;
+      })();
       return undefined;
     })();
     await this.commitState(__state);
@@ -173,7 +185,15 @@ export class Bag {
   async add10(k: string, deps: {}): globalThis.Promise<void> {
     const __state = { ...(await this.loadState()) };
     const __result = await (async () => {
-      const __r0 = await (async () => { await __state.items.modify(String(k), (__c, __p) => { if (!__p) { throw new globalThis.Error("Map.update: key absent"); } return ((n: number) => n + 10)(__c!); }); return undefined; })();
+      const __r0 = await (async () => {
+        await __state.items.modify(String(k), (__c, __p) => {
+          if (!__p) {
+            throw new globalThis.Error("Map.update: key absent");
+          }
+          return ((n: number) => n + 10)(__c!);
+        });
+        return undefined;
+      })();
       return undefined;
     })();
     await this.commitState(__state);
@@ -239,7 +259,10 @@ export class Points {
   async put(k: string, x: number, deps: {}): globalThis.Promise<void> {
     const __state = { ...(await this.loadState()) };
     const __result = await (async () => {
-      const __r0 = await (async () => { await __state.pts.put(String(k), { x: x, y: 0 }); return undefined; })();
+      const __r0 = await (async () => {
+        await __state.pts.put(String(k), { x: x, y: 0 });
+        return undefined;
+      })();
       return undefined;
     })();
     await this.commitState(__state);
@@ -316,7 +339,10 @@ export class Tags {
   async add(k: string, deps: {}): globalThis.Promise<void> {
     const __state = { ...(await this.loadState()) };
     const __result = await (async () => {
-      const __r0 = await (async () => { await __state.tags.add(String(k)); return undefined; })();
+      const __r0 = await (async () => {
+        await __state.tags.add(String(k));
+        return undefined;
+      })();
       return undefined;
     })();
     await this.commitState(__state);
@@ -338,7 +364,10 @@ export class Tags {
   async drop(k: string, deps: {}): globalThis.Promise<void> {
     const __state = { ...(await this.loadState()) };
     const __result = await (async () => {
-      const __r0 = await (async () => { await __state.tags.remove(String(k)); return undefined; })();
+      const __r0 = await (async () => {
+        await __state.tags.remove(String(k));
+        return undefined;
+      })();
       return undefined;
     })();
     await this.commitState(__state);
@@ -403,7 +432,11 @@ export class Memo {
   async put(k: string, v: number, deps: { Clock: Clock }): globalThis.Promise<void> {
     const __state = { ...(await this.loadState()) };
     const __result = await (async () => {
-      const __r0 = await (async () => { const __now = __noteClock(__state, await deps.Clock.now()); await __state.c.put(String(k), { v: v, exp: __now + 300000 }); return undefined; })();
+      const __r0 = await (async () => {
+        const __now = __noteClock(__state, await deps.Clock.now());
+        await __state.c.put(String(k), { v: v, exp: __now + 300000 });
+        return undefined;
+      })();
       return undefined;
     })();
     await this.commitState(__state);
@@ -412,26 +445,40 @@ export class Memo {
 
   async get(k: string, deps: { Clock: Clock }): globalThis.Promise<Option<number>> {
     const __state = await this.loadState();
-    const r = await (async () => { const __now = __noteClock(__state, await deps.Clock.now()); const __e = await __state.c.get(String(k)); return (__e !== undefined && __e.exp > __now) ? Some(__e.v) : None; })();
+    const r = await (async () => {
+      const __now = __noteClock(__state, await deps.Clock.now());
+      const __e = await __state.c.get(String(k));
+      return (__e !== undefined && __e.exp > __now) ? Some(__e.v) : None;
+    })();
     return r;
   }
 
   async has(k: string, deps: { Clock: Clock }): globalThis.Promise<boolean> {
     const __state = await this.loadState();
-    const r = await (async () => { const __now = __noteClock(__state, await deps.Clock.now()); const __e = await __state.c.get(String(k)); return __e !== undefined && __e.exp > __now; })();
+    const r = await (async () => {
+      const __now = __noteClock(__state, await deps.Clock.now());
+      const __e = await __state.c.get(String(k));
+      return __e !== undefined && __e.exp > __now;
+    })();
     return r;
   }
 
   async count(deps: { Clock: Clock }): globalThis.Promise<number> {
     const __state = await this.loadState();
-    const n = await (async () => { const __now = __noteClock(__state, await deps.Clock.now()); return await __state.c.liveSize(__now); })();
+    const n = await (async () => {
+      const __now = __noteClock(__state, await deps.Clock.now());
+      return await __state.c.liveSize(__now);
+    })();
     return n;
   }
 
   async drop(k: string, deps: {}): globalThis.Promise<void> {
     const __state = { ...(await this.loadState()) };
     const __result = await (async () => {
-      const __r0 = await (async () => { await __state.c.remove(String(k)); return undefined; })();
+      const __r0 = await (async () => {
+        await __state.c.remove(String(k));
+        return undefined;
+      })();
       return undefined;
     })();
     await this.commitState(__state);
@@ -441,7 +488,17 @@ export class Memo {
   async add10(k: string, deps: { Clock: Clock }): globalThis.Promise<void> {
     const __state = { ...(await this.loadState()) };
     const __result = await (async () => {
-      const __r0 = await (async () => { const __now = __noteClock(__state, await deps.Clock.now()); const __k = String(k); await __state.c.modify(__k, (__e) => { if (!(__e !== undefined && __e.exp > __now)) { throw new globalThis.Error("Cache.update: key absent"); } return { v: ((n: number) => n + 10)(__e.v), exp: __now + 300000 }; }); return undefined; })();
+      const __r0 = await (async () => {
+        const __now = __noteClock(__state, await deps.Clock.now());
+        const __k = String(k);
+        await __state.c.modify(__k, (__e) => {
+          if (!(__e !== undefined && __e.exp > __now)) {
+            throw new globalThis.Error("Cache.update: key absent");
+          }
+          return { v: ((n: number) => n + 10)(__e.v), exp: __now + 300000 };
+        });
+        return undefined;
+      })();
       return undefined;
     })();
     await this.commitState(__state);
@@ -507,7 +564,10 @@ export class Ledger {
   async add(id: string, tag: string, deps: {}): globalThis.Promise<void> {
     const __state = { ...(await this.loadState()) };
     const __result = await (async () => {
-      const __r0 = await (async () => { await __state.entries.put(String(id), { id: id, tag: tag }); return undefined; })();
+      const __r0 = await (async () => {
+        await __state.entries.put(String(id), { id: id, tag: tag });
+        return undefined;
+      })();
       return undefined;
     })();
     await this.commitState(__state);
@@ -517,7 +577,10 @@ export class Ledger {
   async drop(id: string, deps: {}): globalThis.Promise<void> {
     const __state = { ...(await this.loadState()) };
     const __result = await (async () => {
-      const __r0 = await (async () => { await __state.entries.remove(String(id)); return undefined; })();
+      const __r0 = await (async () => {
+        await __state.entries.remove(String(id));
+        return undefined;
+      })();
       return undefined;
     })();
     await this.commitState(__state);
@@ -527,7 +590,15 @@ export class Ledger {
   async retag(id: string, tag: string, deps: {}): globalThis.Promise<void> {
     const __state = { ...(await this.loadState()) };
     const __result = await (async () => {
-      const __r0 = await (async () => { await __state.entries.modify(String(id), (__c, __p) => { if (!__p) { throw new globalThis.Error("Map.update: key absent"); } return ((e: Entry) => ({ ...e, tag: tag }))(__c!); }); return undefined; })();
+      const __r0 = await (async () => {
+        await __state.entries.modify(String(id), (__c, __p) => {
+          if (!__p) {
+            throw new globalThis.Error("Map.update: key absent");
+          }
+          return ((e: Entry) => ({ ...e, tag: tag }))(__c!);
+        });
+        return undefined;
+      })();
       return undefined;
     })();
     await this.commitState(__state);
@@ -602,7 +673,10 @@ export class Sales {
   async order(id: string, customer: string, deps: {}): globalThis.Promise<void> {
     const __state = { ...(await this.loadState()) };
     const __result = await (async () => {
-      const __r0 = await (async () => { await __state.orders.put(String(id), { id: id, customer: customer }); return undefined; })();
+      const __r0 = await (async () => {
+        await __state.orders.put(String(id), { id: id, customer: customer });
+        return undefined;
+      })();
       return undefined;
     })();
     await this.commitState(__state);
@@ -612,7 +686,10 @@ export class Sales {
   async line(k: string, orderId: string, qty: number, deps: {}): globalThis.Promise<void> {
     const __state = { ...(await this.loadState()) };
     const __result = await (async () => {
-      const __r0 = await (async () => { await __state.lines.put(String(k), { orderId: orderId, qty: qty }); return undefined; })();
+      const __r0 = await (async () => {
+        await __state.lines.put(String(k), { orderId: orderId, qty: qty });
+        return undefined;
+      })();
       return undefined;
     })();
     await this.commitState(__state);
@@ -622,26 +699,36 @@ export class Sales {
   async totals(deps: {}): globalThis.Promise<readonly Total[]> {
     const __state = await this.loadState();
     return __bynkThen(((() => __bynkThen(__state.lines.values(), (__q) => {
-  const __h: globalThis.Record<string, Line[]> = globalThis.Object.create(null);
-  const __order: string[] = [];
-  for (const __t of __q) {
-    const __k = String(((l: Line) => l.orderId)(__t));
-    if (!(__k in __h)) {
-      __h[__k] = [];
-      __order.push(__k);
-    }
-    __h[__k].push(__t);
-  }
-  return __order.map((__k) => {
-    const __rows = __h[__k];
-    return ((oid: string, rows: readonly Line[]) => ({ orderId: oid, total: (rows).reduce((__s: number, __x: Line) => __s + ((r: Line) => r.qty)(__x), 0) }))(((l: Line) => l.orderId)(__rows[0]), __rows);
-  });
-})))(), (__q) => __q);
+      const __h: globalThis.Record<string, Line[]> = globalThis.Object.create(null);
+      const __order: string[] = [];
+      for (const __t of __q) {
+        const __k = String(((l: Line) => l.orderId)(__t));
+        if (!(__k in __h)) {
+          __h[__k] = [];
+          __order.push(__k);
+        }
+        __h[__k].push(__t);
+      }
+      return __order.map((__k) => {
+        const __rows = __h[__k];
+        return ((oid: string, rows: readonly Line[]) => ({ orderId: oid, total: (rows).reduce((__s: number, __x: Line) => __s + ((r: Line) => r.qty)(__x), 0) }))(((l: Line) => l.orderId)(__rows[0]), __rows);
+      });
+    })))(), (__q) => __q);
   }
 
   async joined(deps: {}): globalThis.Promise<number> {
     const __state = await this.loadState();
-    return __bynkThen(((() => __bynkThen(__state.lines.values(), async (__q) => { const __h: globalThis.Record<string, Order[]> = globalThis.Object.create(null); for (const __u of (await ((() => __state.orders.values()))())) { const __k = String(((o: Order) => o.id)(__u)); (__h[__k] = __h[__k] ?? []).push(__u); } return __q.flatMap((__t: Line) => { const __m = __h[String(((l: Line) => l.orderId)(__t))] ?? []; return __m.map((__u: Order) => ((l: Line, o: Order) => l.qty)(__t, __u)); }); })))(), (__q) => __q.length);
+    return __bynkThen(((() => __bynkThen(__state.lines.values(), async (__q) => {
+      const __h: globalThis.Record<string, Order[]> = globalThis.Object.create(null);
+      for (const __u of (await ((() => __state.orders.values()))())) {
+        const __k = String(((o: Order) => o.id)(__u));
+        (__h[__k] = __h[__k] ?? []).push(__u);
+      }
+      return __q.flatMap((__t: Line) => {
+        const __m = __h[String(((l: Line) => l.orderId)(__t))] ?? [];
+        return __m.map((__u: Order) => ((l: Line, o: Order) => l.qty)(__t, __u));
+      });
+    })))(), (__q) => __q.length);
   }
 
 }

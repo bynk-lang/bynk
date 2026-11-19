@@ -79,7 +79,10 @@ export class Account {
   async deposit(amount: { readonly coefficient: bigint; readonly scale: number }, deps: {}): globalThis.Promise<void> {
     const __state = { ...(await this.loadState()) };
     const __result = await (async () => {
-      return (() => { __state.balance = ((b: { readonly coefficient: bigint; readonly scale: number }) => __bynkDecimalAdd(b, amount))(__state.balance); return undefined; })();
+      return (() => {
+        __state.balance = ((b: { readonly coefficient: bigint; readonly scale: number }) => __bynkDecimalAdd(b, amount))(__state.balance);
+        return undefined;
+      })();
     })();
     await this.commitState(__state);
     return __result;
@@ -88,7 +91,10 @@ export class Account {
   async quote(sku: string, price: Price, deps: {}): globalThis.Promise<void> {
     const __state = { ...(await this.loadState()) };
     const __result = await (async () => {
-      return (async () => { await __state.prices.put(String(sku), price); return undefined; })();
+      return (async () => {
+        await __state.prices.put(String(sku), price);
+        return undefined;
+      })();
     })();
     await this.commitState(__state);
     return __result;
@@ -112,7 +118,10 @@ export class Account {
 
   async priceText(sku: string, deps: {}): globalThis.Promise<string> {
     const __state = await this.loadState();
-    const p = await (async () => { const __k = String(sku); return __bynkThen(__state.prices.has(__k), (__h) => __h ? __bynkThen(__state.prices.get(__k), (__v) => Some(__v!)) : None); })();
+    const p = await (async () => {
+      const __k = String(sku);
+      return __bynkThen(__state.prices.has(__k), (__h) => __h ? __bynkThen(__state.prices.get(__k), (__v) => Some(__v!)) : None);
+    })();
     switch (p.tag) {
       case "Some": {
         const d = p.value;

@@ -62,7 +62,10 @@ export class Audience {
   async join(who: string, deps: {}): globalThis.Promise<void> {
     const __state = { ...(await this.loadState()) };
     const __result = await (async () => {
-      const __r0 = await (async () => { await __state.members.add(String(who)); return undefined; })();
+      const __r0 = await (async () => {
+        await __state.members.add(String(who));
+        return undefined;
+      })();
       return undefined;
     })();
     await this.commitState(__state);
@@ -72,7 +75,10 @@ export class Audience {
   async leave(who: string, deps: {}): globalThis.Promise<void> {
     const __state = { ...(await this.loadState()) };
     const __result = await (async () => {
-      const __r0 = await (async () => { await __state.members.remove(String(who)); return undefined; })();
+      const __r0 = await (async () => {
+        await __state.members.remove(String(who));
+        return undefined;
+      })();
       return undefined;
     })();
     await this.commitState(__state);

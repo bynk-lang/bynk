@@ -83,7 +83,10 @@ export class Box {
   async add(k: string, n: number, deps: {}): globalThis.Promise<void> {
     const __state = { ...(await this.loadState()) };
     const __result = await (async () => {
-      return (async () => { await __state.items.put(String(k), n); return undefined; })();
+      return (async () => {
+        await __state.items.put(String(k), n);
+        return undefined;
+      })();
     })();
     await this.commitState(__state);
     return __result;
@@ -163,7 +166,10 @@ export class ByKey {
   async add(k: string, n: number, deps: {}): globalThis.Promise<void> {
     const __state = { ...(await this.loadState()) };
     const __result = await (async () => {
-      return (async () => { await __state.items.put(String(sku(k)), n); return undefined; })();
+      return (async () => {
+        await __state.items.put(String(sku(k)), n);
+        return undefined;
+      })();
     })();
     await this.commitState(__state);
     return __result;
@@ -195,7 +201,10 @@ export class ByKey {
 
   async qty(k: string, deps: {}): globalThis.Promise<Option<number>> {
     const __state = await this.loadState();
-    return (async () => { const __k = String(sku(k)); return __bynkThen(__state.items.has(__k), (__h) => __h ? __bynkThen(__state.items.get(__k), (__v) => Some(__v!)) : None); })();
+    return (async () => {
+      const __k = String(sku(k));
+      return __bynkThen(__state.items.has(__k), (__h) => __h ? __bynkThen(__state.items.get(__k), (__v) => Some(__v!)) : None);
+    })();
   }
 
 }
@@ -260,7 +269,10 @@ export class Ledger {
       switch (__r0.tag) {
         case "Ok": {
           const acct = __r0.value;
-          return (async () => { await __state.balances.put(String(acct), n); return undefined; })();
+          return (async () => {
+            await __state.balances.put(String(acct), n);
+            return undefined;
+          })();
         }
         case "Err": {
           return undefined;
@@ -274,7 +286,11 @@ export class Ledger {
 
   async accounts(deps: {}): globalThis.Promise<readonly Acct[]> {
     const __state = await this.loadState();
-    return __bynkThen(((() => __bynkThen(((() => __bynkThen(__state.balances.keys(), (__ks) => __ks.map((__k) => (globalThis.Number(__k) as Acct)))))(), (__q) => [...__q].sort((__a, __b) => { const __ka = ((k: Acct) => k)(__a), __kb = ((k: Acct) => k)(__b); return __ka < __kb ? -1 : __ka > __kb ? 1 : 0; }))))(), (__q) => __q);
+    return __bynkThen(((() => __bynkThen(((() => __bynkThen(__state.balances.keys(), (__ks) => __ks.map((__k) => (globalThis.Number(__k) as Acct)))))(), (__q) => [...__q].sort((__a, __b) => {
+      const __ka = ((k: Acct) => k)(__a);
+      const __kb = ((k: Acct) => k)(__b);
+      return __ka < __kb ? -1 : __ka > __kb ? 1 : 0;
+    }))))(), (__q) => __q);
   }
 
   async sum(deps: {}): globalThis.Promise<number> {

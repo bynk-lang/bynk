@@ -97,7 +97,10 @@ export class Book {
   async put(k: string, v: number, deps: {}): globalThis.Promise<void> {
     const __state = { ...(await this.loadState()) };
     const __result = await (async () => {
-      const __r0 = await (async () => { await __state.scores.put(String(k), v); return undefined; })();
+      const __r0 = await (async () => {
+        await __state.scores.put(String(k), v);
+        return undefined;
+      })();
       return undefined;
     })();
     await this.commitState(__state);
@@ -107,7 +110,10 @@ export class Book {
   async drop(k: string, deps: {}): globalThis.Promise<void> {
     const __state = { ...(await this.loadState()) };
     const __result = await (async () => {
-      const __r0 = await (async () => { await __state.scores.remove(String(k)); return undefined; })();
+      const __r0 = await (async () => {
+        await __state.scores.remove(String(k));
+        return undefined;
+      })();
       return undefined;
     })();
     await this.commitState(__state);
@@ -127,10 +133,22 @@ export class Book {
   async seed(deps: {}): globalThis.Promise<readonly string[]> {
     const __state = { ...(await this.loadState()) };
     const __result = await (async () => {
-      const __r0 = await (async () => { await __state.scores.put(String("10"), 1); return undefined; })();
-      const __r1 = await (async () => { await __state.scores.put(String("2"), 2); return undefined; })();
-      const __r2 = await (async () => { await __state.scores.put(String("a"), 3); return undefined; })();
-      const __r3 = await (async () => { await __state.scores.put(String("5"), 4); return undefined; })();
+      const __r0 = await (async () => {
+        await __state.scores.put(String("10"), 1);
+        return undefined;
+      })();
+      const __r1 = await (async () => {
+        await __state.scores.put(String("2"), 2);
+        return undefined;
+      })();
+      const __r2 = await (async () => {
+        await __state.scores.put(String("a"), 3);
+        return undefined;
+      })();
+      const __r3 = await (async () => {
+        await __state.scores.put(String("5"), 4);
+        return undefined;
+      })();
       return __bynkThen(((() => __state.scores.keys()))(), (__q) => __q);
     })();
     await this.commitState(__state);
@@ -140,7 +158,10 @@ export class Book {
   async addLine(k: string, order: string, sku: string, deps: {}): globalThis.Promise<void> {
     const __state = { ...(await this.loadState()) };
     const __result = await (async () => {
-      const __r0 = await (async () => { await __state.lines.put(String(k), { order: order, sku: sku }); return undefined; })();
+      const __r0 = await (async () => {
+        await __state.lines.put(String(k), { order: order, sku: sku });
+        return undefined;
+      })();
       return undefined;
     })();
     await this.commitState(__state);
@@ -155,7 +176,10 @@ export class Book {
   async see(k: string, deps: {}): globalThis.Promise<void> {
     const __state = { ...(await this.loadState()) };
     const __result = await (async () => {
-      const __r0 = await (async () => { await __state.seen.add(String(k)); return undefined; })();
+      const __r0 = await (async () => {
+        await __state.seen.add(String(k));
+        return undefined;
+      })();
       return undefined;
     })();
     await this.commitState(__state);
@@ -165,7 +189,10 @@ export class Book {
   async forget(k: string, deps: {}): globalThis.Promise<void> {
     const __state = { ...(await this.loadState()) };
     const __result = await (async () => {
-      const __r0 = await (async () => { await __state.seen.remove(String(k)); return undefined; })();
+      const __r0 = await (async () => {
+        await __state.seen.remove(String(k));
+        return undefined;
+      })();
       return undefined;
     })();
     await this.commitState(__state);
@@ -185,7 +212,11 @@ export class Book {
   async hit(k: string, v: number, deps: { Clock: Clock }): globalThis.Promise<void> {
     const __state = { ...(await this.loadState()) };
     const __result = await (async () => {
-      const __r0 = await (async () => { const __now = __noteClock(__state, await deps.Clock.now()); await __state.hits.put(String(k), { v: v, exp: __now + 300000 }); return undefined; })();
+      const __r0 = await (async () => {
+        const __now = __noteClock(__state, await deps.Clock.now());
+        await __state.hits.put(String(k), { v: v, exp: __now + 300000 });
+        return undefined;
+      })();
       return undefined;
     })();
     await this.commitState(__state);
@@ -194,13 +225,20 @@ export class Book {
 
   async hitCount(deps: { Clock: Clock }): globalThis.Promise<number> {
     const __state = await this.loadState();
-    const n = await (async () => { const __now = __noteClock(__state, await deps.Clock.now()); return await __state.hits.liveSize(__now); })();
+    const n = await (async () => {
+      const __now = __noteClock(__state, await deps.Clock.now());
+      return await __state.hits.liveSize(__now);
+    })();
     return n;
   }
 
   async hitOf(k: string, deps: { Clock: Clock }): globalThis.Promise<Option<number>> {
     const __state = await this.loadState();
-    const r = await (async () => { const __now = __noteClock(__state, await deps.Clock.now()); const __e = await __state.hits.get(String(k)); return (__e !== undefined && __e.exp > __now) ? Some(__e.v) : None; })();
+    const r = await (async () => {
+      const __now = __noteClock(__state, await deps.Clock.now());
+      const __e = await __state.hits.get(String(k));
+      return (__e !== undefined && __e.exp > __now) ? Some(__e.v) : None;
+    })();
     return r;
   }
 

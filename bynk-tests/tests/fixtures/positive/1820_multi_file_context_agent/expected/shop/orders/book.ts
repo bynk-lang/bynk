@@ -61,7 +61,10 @@ export class Book {
   async add(n: number, deps: {}): globalThis.Promise<number> {
     const __state = { ...(await this.loadState()) };
     const __result = await (async () => {
-      const __r0 = await (() => { __state.count = ((c: number) => c + n)(__state.count); return undefined; })();
+      const __r0 = await (() => {
+        __state.count = ((c: number) => c + n)(__state.count);
+        return undefined;
+      })();
       return __state.count;
     })();
     await this.commitState(__state);

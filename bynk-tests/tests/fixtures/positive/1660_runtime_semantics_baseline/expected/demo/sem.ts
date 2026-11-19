@@ -376,7 +376,10 @@ export class Bag {
   async add(k: string, deps: {}): globalThis.Promise<void> {
     const __state = { ...(await this.loadState()) };
     const __result = await (async () => {
-      await (async () => { await __state.items.put(String(k), 1); return undefined; })();
+      await (async () => {
+        await __state.items.put(String(k), 1);
+        return undefined;
+      })();
       return undefined;
     })();
     await this.commitState(__state);
@@ -391,7 +394,10 @@ export class Bag {
 
   async has(k: string, deps: {}): globalThis.Promise<boolean> {
     const __state = await this.loadState();
-    const r = await (async () => { const __k = String(k); return __bynkThen(__state.items.has(__k), (__h) => __h ? __bynkThen(__state.items.get(__k), (__v) => Some(__v!)) : None); })();
+    const r = await (async () => {
+      const __k = String(k);
+      return __bynkThen(__state.items.has(__k), (__h) => __h ? __bynkThen(__state.items.get(__k), (__v) => Some(__v!)) : None);
+    })();
     return (r.tag === "Some");
   }
 

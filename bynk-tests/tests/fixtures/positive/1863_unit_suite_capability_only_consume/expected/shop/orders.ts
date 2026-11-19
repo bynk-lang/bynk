@@ -84,7 +84,10 @@ export class Till {
     const __state = { ...(await this.loadState()) };
     const __result = await (async () => {
       const t = await deps.Tax.tax();
-      const __r0 = await (() => { __state.total = ((n: number) => n + t)(__state.total); return undefined; })();
+      const __r0 = await (() => {
+        __state.total = ((n: number) => n + t)(__state.total);
+        return undefined;
+      })();
       return __state.total;
     })();
     await this.commitState(__state);

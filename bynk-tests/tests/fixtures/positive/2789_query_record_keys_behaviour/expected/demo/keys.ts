@@ -135,7 +135,10 @@ export class Log {
   async visit(k: string, region: Region, code: number, n: number, deps: {}): globalThis.Promise<void> {
     const __state = { ...(await this.loadState()) };
     const __result = await (async () => {
-      const __r0 = await (async () => { await __state.visits.put(String(k), { site: { region: region, code: code }, n: n }); return undefined; })();
+      const __r0 = await (async () => {
+        await __state.visits.put(String(k), { site: { region: region, code: code }, n: n });
+        return undefined;
+      })();
       return undefined;
     })();
     await this.commitState(__state);
@@ -145,7 +148,10 @@ export class Log {
   async label(k: string, region: Region, code: number, name: string, deps: {}): globalThis.Promise<void> {
     const __state = { ...(await this.loadState()) };
     const __result = await (async () => {
-      const __r0 = await (async () => { await __state.labels.put(String(k), { site: { region: region, code: code }, name: name }); return undefined; })();
+      const __r0 = await (async () => {
+        await __state.labels.put(String(k), { site: { region: region, code: code }, name: name });
+        return undefined;
+      })();
       return undefined;
     })();
     await this.commitState(__state);
@@ -155,7 +161,10 @@ export class Log {
   async region(k: string, r: Region, deps: {}): globalThis.Promise<void> {
     const __state = { ...(await this.loadState()) };
     const __result = await (async () => {
-      const __r0 = await (async () => { await __state.regions.put(String(k), r); return undefined; })();
+      const __r0 = await (async () => {
+        await __state.regions.put(String(k), r);
+        return undefined;
+      })();
       return undefined;
     })();
     await this.commitState(__state);
@@ -190,22 +199,27 @@ export class Log {
   async matchedTotal(deps: {}): globalThis.Promise<number> {
     const __state = await this.loadState();
     return __bynkThen(((() => __bynkThen(__state.visits.values(), async (__q) => __bynkLeftJoin(__q, await ((() => __state.labels.values()))(), (v: Visit) => v.site, (l: Label) => l.site, (v: Visit, l: Option<Label>) => ((__d) => {
-  switch (__d.tag) {
-    case "Some": {
-      return v.n;
-    }
-    case "None": {
-      return 0;
-    }
-  }
-  throw new globalThis.Error("non-exhaustive match");
-})(l)))))(), (__q) => __q.reduce((__s: number, __x) => __s + ((x: number) => x)(__x), 0));
+      switch (__d.tag) {
+        case "Some": {
+          return v.n;
+        }
+        case "None": {
+          return 0;
+        }
+      }
+      throw new globalThis.Error("non-exhaustive match");
+    })(l)))))(), (__q) => __q.reduce((__s: number, __x) => __s + ((x: number) => x)(__x), 0));
   }
 
   async logSite(region: Region, code: number, deps: { Clock: Clock }): globalThis.Promise<void> {
     const __state = { ...(await this.loadState()) };
     const __result = await (async () => {
-      const __r0 = await (async () => { const __now = await deps.Clock.now(); await __state.trail.append({ region: region, code: code }, __now); await __state.trail.prune(__now - 2592000000); return undefined; })();
+      const __r0 = await (async () => {
+        const __now = await deps.Clock.now();
+        await __state.trail.append({ region: region, code: code }, __now);
+        await __state.trail.prune(__now - 2592000000);
+        return undefined;
+      })();
       return undefined;
     })();
     await this.commitState(__state);

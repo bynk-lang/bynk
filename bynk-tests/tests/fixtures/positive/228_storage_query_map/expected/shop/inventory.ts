@@ -76,10 +76,10 @@ export class Inventory {
   async pageById(deps: {}): globalThis.Promise<readonly Reservation[]> {
     const __state = await this.loadState();
     return __bynkThen(((() => __bynkThen(((() => __bynkThen(((() => __bynkThen(__state.reservations.values(), (__q) => [...__q].sort((__a, __b) => {
-  const __ka = ((r: Reservation) => r.id)(__a);
-  const __kb = ((r: Reservation) => r.id)(__b);
-  return __ka < __kb ? -1 : __ka > __kb ? 1 : 0;
-}))))(), (__q) => __q.slice(globalThis.Math.max(0, 1)))))(), (__q) => __q.slice(0, globalThis.Math.max(0, 10)))))(), (__q) => __q);
+      const __ka = ((r: Reservation) => r.id)(__a);
+      const __kb = ((r: Reservation) => r.id)(__b);
+      return __ka < __kb ? -1 : __ka > __kb ? 1 : 0;
+    }))))(), (__q) => __q.slice(globalThis.Math.max(0, 1)))))(), (__q) => __q.slice(0, globalThis.Math.max(0, 10)))))(), (__q) => __q);
   }
 
   async total(deps: {}): globalThis.Promise<number> {
@@ -90,15 +90,15 @@ export class Inventory {
   async largest(deps: {}): globalThis.Promise<Option<number>> {
     const __state = await this.loadState();
     return __bynkThen(__state.reservations.values(), (__q) => (() => {
-  const __a = __q;
-  if (__a.length === 0) return None;
-  let __m = ((r: Reservation) => r.qty)(__a[0]);
-  for (const __x of __a) {
-    const __k = ((r: Reservation) => r.qty)(__x);
-    if (__k > __m) __m = __k;
-  }
-  return Some(__m);
-})());
+      const __a = __q;
+      if (__a.length === 0) return None;
+      let __m = ((r: Reservation) => r.qty)(__a[0]);
+      for (const __x of __a) {
+        const __k = ((r: Reservation) => r.qty)(__x);
+        if (__k > __m) __m = __k;
+      }
+      return Some(__m);
+    })());
   }
 
   async howMany(deps: {}): globalThis.Promise<number> {
@@ -130,7 +130,10 @@ export class Inventory {
 
   async firstBig(deps: {}): globalThis.Promise<Reservation> {
     const __state = await this.loadState();
-    return __bynkThen(((() => __bynkThen(__state.reservations.values(), (__q) => __q.filter((__x) => ((r: Reservation) => r.qty > 50)(__x)))))(), (__q) => (() => { const __a = __q; return __a.length > 0 ? __a[0] : ({ id: "none", qty: 0 }); })());
+    return __bynkThen(((() => __bynkThen(__state.reservations.values(), (__q) => __q.filter((__x) => ((r: Reservation) => r.qty > 50)(__x)))))(), (__q) => (() => {
+      const __a = __q;
+      return __a.length > 0 ? __a[0] : ({ id: "none", qty: 0 });
+    })());
   }
 
 }

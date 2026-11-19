@@ -331,7 +331,7 @@ fn walk_expr<'a>(expr: &'a TsExpr, out: &mut Vec<(VerbatimOrigin, &'a str)>) {
             walk_expr(consequent, out);
             walk_expr(alternate, out);
         }
-        TsExpr::Paren(e) | TsExpr::Spread(e) => walk_expr(e, out),
+        TsExpr::Paren(e) | TsExpr::Spread(e) | TsExpr::NonNull(e) => walk_expr(e, out),
         TsExpr::Assign { target, value } | TsExpr::AddAssign { target, value } => {
             walk_expr(target, out);
             walk_expr(value, out);
@@ -1552,6 +1552,11 @@ pub enum TsExpr {
     /// variant rather than an item type on `Array`, which every existing array
     /// site would then have to change.
     Spread(Box<TsExpr>),
+    /// `operand!`, the non-null assertion (1A.23, #3724): the persisted-store arms read a
+    /// `modify` callback's current value, typed `V | undefined`, as a `V` once the key is known
+    /// present. Postfix like [`TsExpr::Member`]: the operand is bracketed under the rule a
+    /// member's object uses.
+    NonNull(Box<TsExpr>),
     /// `target = value`, an assignment *expression* (1A.18b, #3719): the one
     /// place a value is assigned and used at once, `(__h[__k] = __h[__k] ?? [])
     /// .push(__u)`. An assignment as a whole statement is

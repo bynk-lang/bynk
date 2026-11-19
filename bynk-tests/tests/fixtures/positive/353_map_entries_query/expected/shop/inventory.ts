@@ -87,7 +87,11 @@ export class Inventory {
 
   async skus(deps: {}): globalThis.Promise<readonly string[]> {
     const __state = await this.loadState();
-    return __bynkThen(((() => __bynkThen(((() => __state.items.keys()))(), (__q) => [...__q].sort((__a, __b) => { const __ka = ((k: string) => k)(__a), __kb = ((k: string) => k)(__b); return __ka < __kb ? -1 : __ka > __kb ? 1 : 0; }))))(), (__q) => __q);
+    return __bynkThen(((() => __bynkThen(((() => __state.items.keys()))(), (__q) => [...__q].sort((__a, __b) => {
+      const __ka = ((k: string) => k)(__a);
+      const __kb = ((k: string) => k)(__b);
+      return __ka < __kb ? -1 : __ka > __kb ? 1 : 0;
+    }))))(), (__q) => __q);
   }
 
   async quantities(deps: {}): globalThis.Promise<readonly number[]> {
@@ -163,7 +167,11 @@ export class Ledger {
 
   async accounts(deps: {}): globalThis.Promise<readonly number[]> {
     const __state = await this.loadState();
-    return __bynkThen(((() => __bynkThen(((() => __bynkThen(__state.balances.keys(), (__ks) => __ks.map((__k) => globalThis.Number(__k)))))(), (__q) => [...__q].sort((__a, __b) => { const __ka = ((k: number) => k)(__a), __kb = ((k: number) => k)(__b); return __ka < __kb ? -1 : __ka > __kb ? 1 : 0; }))))(), (__q) => __q);
+    return __bynkThen(((() => __bynkThen(((() => __bynkThen(__state.balances.keys(), (__ks) => __ks.map((__k) => globalThis.Number(__k)))))(), (__q) => [...__q].sort((__a, __b) => {
+      const __ka = ((k: number) => k)(__a);
+      const __kb = ((k: number) => k)(__b);
+      return __ka < __kb ? -1 : __ka > __kb ? 1 : 0;
+    }))))(), (__q) => __q);
   }
 
   async maxAccount(deps: {}): globalThis.Promise<Option<number>> {

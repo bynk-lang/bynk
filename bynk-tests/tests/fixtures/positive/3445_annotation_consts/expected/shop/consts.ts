@@ -125,7 +125,11 @@ export class Memo {
   async set(k: string, v: number, deps: { Clock: bynk.Clock }): globalThis.Promise<void> {
     const __state = { ...(await this.loadState()) };
     const __result = await (async () => {
-      const __r0 = await (async () => { const __now = __noteClock(__state, await deps.Clock.now()); await __state.c.put(String(k), { v: v, exp: __now + 300000 }); return undefined; })();
+      const __r0 = await (async () => {
+        const __now = __noteClock(__state, await deps.Clock.now());
+        await __state.c.put(String(k), { v: v, exp: __now + 300000 });
+        return undefined;
+      })();
       return undefined;
     })();
     await this.commitState(__state);

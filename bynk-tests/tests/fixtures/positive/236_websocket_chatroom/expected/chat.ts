@@ -116,8 +116,20 @@ export class Room {
   async join(u: UserId, conn: Connection<ServerFrame>, deps: {}): globalThis.Promise<void> {
     const __state = { ...(await this.loadState()) };
     const __result = await (async () => {
-      const __r0 = await (async () => { await __state.members.add(String(u)); return undefined; })();
-      const __r1 = await (async () => { const __k = String(u); const __new = conn; const __old = await __state.conns.get(__k); if (__old !== undefined && __old !== __new) { await __old.close(); } await __state.conns.put(__k, __new); return undefined; })();
+      const __r0 = await (async () => {
+        await __state.members.add(String(u));
+        return undefined;
+      })();
+      const __r1 = await (async () => {
+        const __k = String(u);
+        const __new = conn;
+        const __old = await __state.conns.get(__k);
+        if (__old !== undefined && __old !== __new) {
+          await __old.close();
+        }
+        await __state.conns.put(__k, __new);
+        return undefined;
+      })();
       return undefined;
     })();
     await this.commitState(__state);
@@ -127,8 +139,19 @@ export class Room {
   async leave(u: UserId, deps: {}): globalThis.Promise<void> {
     const __state = { ...(await this.loadState()) };
     const __result = await (async () => {
-      const __r0 = await (async () => { await __state.members.remove(String(u)); return undefined; })();
-      const __r1 = await (async () => { const __k = String(u); const __o = await __state.conns.get(__k); if (__o !== undefined) { await __o.close(); await __state.conns.remove(__k); } return undefined; })();
+      const __r0 = await (async () => {
+        await __state.members.remove(String(u));
+        return undefined;
+      })();
+      const __r1 = await (async () => {
+        const __k = String(u);
+        const __o = await __state.conns.get(__k);
+        if (__o !== undefined) {
+          await __o.close();
+          await __state.conns.remove(__k);
+        }
+        return undefined;
+      })();
       return undefined;
     })();
     await this.commitState(__state);

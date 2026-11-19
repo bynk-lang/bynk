@@ -966,6 +966,7 @@ impl Walk {
             TsExpr::Await(e)
             | TsExpr::Paren(e)
             | TsExpr::Spread(e)
+            | TsExpr::NonNull(e)
             | TsExpr::Unary { expr: e, .. } => self.expr(e),
             TsExpr::As { expr, ty } => {
                 self.expr(expr);

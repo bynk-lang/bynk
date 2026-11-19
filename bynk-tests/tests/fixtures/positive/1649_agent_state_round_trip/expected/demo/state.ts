@@ -539,7 +539,10 @@ export class Board {
   async set(k: string, l: Light, deps: {}): globalThis.Promise<void> {
     const __state = { ...(await this.loadState()) };
     const __result = await (async () => {
-      await (async () => { await __state.lights.put(String(k), l); return undefined; })();
+      await (async () => {
+        await __state.lights.put(String(k), l);
+        return undefined;
+      })();
       return undefined;
     })();
     await this.commitState(__state);
@@ -548,7 +551,10 @@ export class Board {
 
   async get(k: string, deps: {}): globalThis.Promise<Option<Light>> {
     const __state = await this.loadState();
-    const l = await (async () => { const __k = String(k); return __bynkThen(__state.lights.has(__k), (__h) => __h ? __bynkThen(__state.lights.get(__k), (__v) => Some(__v!)) : None); })();
+    const l = await (async () => {
+      const __k = String(k);
+      return __bynkThen(__state.lights.has(__k), (__h) => __h ? __bynkThen(__state.lights.get(__k), (__v) => Some(__v!)) : None);
+    })();
     return l;
   }
 
@@ -610,7 +616,11 @@ export class Memo {
   async set(k: string, v: number, deps: { Clock: Clock }): globalThis.Promise<void> {
     const __state = { ...(await this.loadState()) };
     const __result = await (async () => {
-      const __r0 = await (async () => { const __now = __noteClock(__state, await deps.Clock.now()); await __state.c.put(String(k), { v: Some(v), exp: __now + 300000 }); return undefined; })();
+      const __r0 = await (async () => {
+        const __now = __noteClock(__state, await deps.Clock.now());
+        await __state.c.put(String(k), { v: Some(v), exp: __now + 300000 });
+        return undefined;
+      })();
       return undefined;
     })();
     await this.commitState(__state);
@@ -619,7 +629,11 @@ export class Memo {
 
   async get(k: string, deps: { Clock: Clock }): globalThis.Promise<Option<Option<number>>> {
     const __state = await this.loadState();
-    const v = await (async () => { const __now = __noteClock(__state, await deps.Clock.now()); const __e = await __state.c.get(String(k)); return (__e !== undefined && __e.exp > __now) ? Some(__e.v) : None; })();
+    const v = await (async () => {
+      const __now = __noteClock(__state, await deps.Clock.now());
+      const __e = await __state.c.get(String(k));
+      return (__e !== undefined && __e.exp > __now) ? Some(__e.v) : None;
+    })();
     return v;
   }
 
@@ -681,7 +695,12 @@ export class History {
   async add(s: Shape, deps: { Clock: Clock }): globalThis.Promise<void> {
     const __state = { ...(await this.loadState()) };
     const __result = await (async () => {
-      const __r0 = await (async () => { const __now = await deps.Clock.now(); await __state.l.append(s, __now); await __state.l.prune(__now - 2592000000); return undefined; })();
+      const __r0 = await (async () => {
+        const __now = await deps.Clock.now();
+        await __state.l.append(s, __now);
+        await __state.l.prune(__now - 2592000000);
+        return undefined;
+      })();
       return undefined;
     })();
     await this.commitState(__state);

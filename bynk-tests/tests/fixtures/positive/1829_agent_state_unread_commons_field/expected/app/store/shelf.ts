@@ -65,7 +65,10 @@ export class Bin {
   async put(c: Crate, deps: {}): globalThis.Promise<boolean> {
     const __state = { ...(await this.loadState()) };
     const __result = await (async () => {
-      const __r0 = await (async () => { await __state.items.put(String(c.label), c); return undefined; })();
+      const __r0 = await (async () => {
+        await __state.items.put(String(c.label), c);
+        return undefined;
+      })();
       return true;
     })();
     await this.commitState(__state);

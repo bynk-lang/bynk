@@ -73,7 +73,10 @@ export class Basket {
   async add(sku: string, price: { readonly coefficient: bigint; readonly scale: number }, deps: {}): globalThis.Promise<void> {
     const __state = { ...(await this.loadState()) };
     const __result = await (async () => {
-      return (async () => { await __state.lines.put(String(sku), { sku: sku, price: price }); return undefined; })();
+      return (async () => {
+        await __state.lines.put(String(sku), { sku: sku, price: price });
+        return undefined;
+      })();
     })();
     await this.commitState(__state);
     return __result;

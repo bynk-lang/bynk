@@ -76,7 +76,11 @@ export class Sessions {
   async put(token: string, userId: number, deps: { Clock: Clock }): globalThis.Promise<void> {
     const __state = { ...(await this.loadState()) };
     const __result = await (async () => {
-      const __r0 = await (async () => { const __now = __noteClock(__state, await deps.Clock.now()); await __state.live.put(String(token), { v: userId, exp: __now + 300000 }); return undefined; })();
+      const __r0 = await (async () => {
+        const __now = __noteClock(__state, await deps.Clock.now());
+        await __state.live.put(String(token), { v: userId, exp: __now + 300000 });
+        return undefined;
+      })();
       return undefined;
     })();
     await this.commitState(__state);
@@ -85,13 +89,20 @@ export class Sessions {
 
   async lookup(token: string, deps: { Clock: Clock }): globalThis.Promise<Option<number>> {
     const __state = await this.loadState();
-    const found = await (async () => { const __now = __noteClock(__state, await deps.Clock.now()); const __e = await __state.live.get(String(token)); return (__e !== undefined && __e.exp > __now) ? Some(__e.v) : None; })();
+    const found = await (async () => {
+      const __now = __noteClock(__state, await deps.Clock.now());
+      const __e = await __state.live.get(String(token));
+      return (__e !== undefined && __e.exp > __now) ? Some(__e.v) : None;
+    })();
     return found;
   }
 
   async active(deps: { Clock: Clock }): globalThis.Promise<number> {
     const __state = await this.loadState();
-    const n = await (async () => { const __now = __noteClock(__state, await deps.Clock.now()); return await __state.live.liveSize(__now); })();
+    const n = await (async () => {
+      const __now = __noteClock(__state, await deps.Clock.now());
+      return await __state.live.liveSize(__now);
+    })();
     return n;
   }
 

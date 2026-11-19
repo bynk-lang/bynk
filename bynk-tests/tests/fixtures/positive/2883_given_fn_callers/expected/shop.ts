@@ -137,7 +137,16 @@ export class Room {
   async join(u: UserId, conn: Connection<Frame>, deps: {}): globalThis.Promise<void> {
     const __state = { ...(await this.loadState()) };
     const __result = await (async () => {
-      const __r0 = await (async () => { const __k = String(u); const __new = conn; const __old = await __state.conns.get(__k); if (__old !== undefined && __old !== __new) { await __old.close(); } await __state.conns.put(__k, __new); return undefined; })();
+      const __r0 = await (async () => {
+        const __k = String(u);
+        const __new = conn;
+        const __old = await __state.conns.get(__k);
+        if (__old !== undefined && __old !== __new) {
+          await __old.close();
+        }
+        await __state.conns.put(__k, __new);
+        return undefined;
+      })();
       return undefined;
     })();
     await this.commitState(__state);

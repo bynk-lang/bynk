@@ -1,0 +1,716 @@
+=== agents now
+  async now(): globalThis.Promise<number> {
+    return 0;
+  }
+=== agents mapPut
+  async mapPut(k: string, v: Item, deps: {}): globalThis.Promise<void> {
+    const __state = { ...(await this.loadState()) };
+    const __result = await (async () => {
+      const __r0 = await (async () => {
+        await __state.items.put(String(k), v);
+        return undefined;
+      })();
+      return undefined;
+    })();
+    await this.commitState(__state);
+    return __result;
+  }
+=== agents mapRemove
+  async mapRemove(k: string, deps: {}): globalThis.Promise<void> {
+    const __state = { ...(await this.loadState()) };
+    const __result = await (async () => {
+      const __r0 = await (async () => {
+        await __state.items.remove(String(k));
+        return undefined;
+      })();
+      return undefined;
+    })();
+    await this.commitState(__state);
+    return __result;
+  }
+=== agents mapContains
+  async mapContains(k: string, deps: {}): globalThis.Promise<boolean> {
+    const __state = await this.loadState();
+    return __state.items.has(String(k));
+  }
+=== agents mapSize
+  async mapSize(deps: {}): globalThis.Promise<number> {
+    const __state = await this.loadState();
+    return __state.items.size();
+  }
+=== agents mapGet
+  async mapGet(k: string, deps: {}): globalThis.Promise<Option<Item>> {
+    const __state = await this.loadState();
+    return (async () => {
+      const __k = String(k);
+      return __bynkThen(__state.items.has(__k), (__h) => __h ? __bynkThen(__state.items.get(__k), (__v) => Some(__v!)) : None);
+    })();
+  }
+=== agents mapUpdate
+  async mapUpdate(k: string, deps: {}): globalThis.Promise<void> {
+    const __state = { ...(await this.loadState()) };
+    const __result = await (async () => {
+      const __r0 = await (async () => {
+        await __state.items.modify(String(k), (__c, __p) => {
+          if (!__p) {
+            throw new globalThis.Error("Map.update: key absent");
+          }
+          return ((i: Item) => ({ ...i, qty: i.qty + 1 }))(__c!);
+        });
+        return undefined;
+      })();
+      return undefined;
+    })();
+    await this.commitState(__state);
+    return __result;
+  }
+=== agents mapUpsert
+  async mapUpsert(k: string, d: Item, deps: {}): globalThis.Promise<void> {
+    const __state = { ...(await this.loadState()) };
+    const __result = await (async () => {
+      const __r0 = await (async () => {
+        await __state.items.modify(String(k), (__c, __p) => ((i: Item) => ({ ...i, qty: i.qty + 1 }))(__p ? __c! : (d)));
+        return undefined;
+      })();
+      return undefined;
+    })();
+    await this.commitState(__state);
+    return __result;
+  }
+=== agents mapCount
+  async mapCount(deps: {}): globalThis.Promise<number> {
+    const __state = await this.loadState();
+    return __bynkThen(((() => __bynkThen(__state.items.values(), (__q) => __q.filter((__x) => ((i: Item) => i.qty > 1)(__x)))))(), (__q) => __q.length);
+  }
+=== agents setAdd
+  async setAdd(k: string, deps: {}): globalThis.Promise<void> {
+    const __state = { ...(await this.loadState()) };
+    const __result = await (async () => {
+      const __r0 = await (async () => {
+        await __state.tags.add(String(k));
+        return undefined;
+      })();
+      return undefined;
+    })();
+    await this.commitState(__state);
+    return __result;
+  }
+=== agents setRemove
+  async setRemove(k: string, deps: {}): globalThis.Promise<void> {
+    const __state = { ...(await this.loadState()) };
+    const __result = await (async () => {
+      const __r0 = await (async () => {
+        await __state.tags.remove(String(k));
+        return undefined;
+      })();
+      return undefined;
+    })();
+    await this.commitState(__state);
+    return __result;
+  }
+=== agents setContains
+  async setContains(k: string, deps: {}): globalThis.Promise<boolean> {
+    const __state = await this.loadState();
+    return __state.tags.has(String(k));
+  }
+=== agents setSize
+  async setSize(deps: {}): globalThis.Promise<number> {
+    const __state = await this.loadState();
+    return __state.tags.size();
+  }
+=== agents cachePut
+  async cachePut(k: string, v: number, deps: { Clock: Clock }): globalThis.Promise<void> {
+    const __state = { ...(await this.loadState()) };
+    const __result = await (async () => {
+      const __r0 = await (async () => {
+        const __now = __noteClock(__state, await deps.Clock.now());
+        await __state.seen.put(String(k), { v: v, exp: __now + 300000 });
+        return undefined;
+      })();
+      return undefined;
+    })();
+    await this.commitState(__state);
+    return __result;
+  }
+=== agents cacheRemove
+  async cacheRemove(k: string, deps: { Clock: Clock }): globalThis.Promise<void> {
+    const __state = { ...(await this.loadState()) };
+    const __result = await (async () => {
+      const __r0 = await (async () => {
+        await __state.seen.remove(String(k));
+        return undefined;
+      })();
+      return undefined;
+    })();
+    await this.commitState(__state);
+    return __result;
+  }
+=== agents cacheGet
+  async cacheGet(k: string, deps: { Clock: Clock }): globalThis.Promise<Option<number>> {
+    const __state = await this.loadState();
+    return (async () => {
+      const __now = __noteClock(__state, await deps.Clock.now());
+      const __e = await __state.seen.get(String(k));
+      return (__e !== undefined && __e.exp > __now) ? Some(__e.v) : None;
+    })();
+  }
+=== agents cacheContains
+  async cacheContains(k: string, deps: { Clock: Clock }): globalThis.Promise<boolean> {
+    const __state = await this.loadState();
+    return (async () => {
+      const __now = __noteClock(__state, await deps.Clock.now());
+      const __e = await __state.seen.get(String(k));
+      return __e !== undefined && __e.exp > __now;
+    })();
+  }
+=== agents cacheSize
+  async cacheSize(deps: { Clock: Clock }): globalThis.Promise<number> {
+    const __state = await this.loadState();
+    return (async () => {
+      const __now = __noteClock(__state, await deps.Clock.now());
+      return await __state.seen.liveSize(__now);
+    })();
+  }
+=== agents cacheUpdate
+  async cacheUpdate(k: string, deps: { Clock: Clock }): globalThis.Promise<void> {
+    const __state = { ...(await this.loadState()) };
+    const __result = await (async () => {
+      const __r0 = await (async () => {
+        const __now = __noteClock(__state, await deps.Clock.now());
+        const __k = String(k);
+        await __state.seen.modify(__k, (__e) => {
+          if (!(__e !== undefined && __e.exp > __now)) {
+            throw new globalThis.Error("Cache.update: key absent");
+          }
+          return { v: ((v: number) => v + 1)(__e.v), exp: __now + 300000 };
+        });
+        return undefined;
+      })();
+      return undefined;
+    })();
+    await this.commitState(__state);
+    return __result;
+  }
+=== agents cacheUpsert
+  async cacheUpsert(k: string, d: number, deps: { Clock: Clock }): globalThis.Promise<void> {
+    const __state = { ...(await this.loadState()) };
+    const __result = await (async () => {
+      const __r0 = await (async () => {
+        const __now = __noteClock(__state, await deps.Clock.now());
+        const __k = String(k);
+        await __state.seen.modify(__k, (__e) => {
+          const __cur = (__e !== undefined && __e.exp > __now) ? __e.v : (d);
+          return { v: ((v: number) => v + 1)(__cur), exp: __now + 300000 };
+        });
+        return undefined;
+      })();
+      return undefined;
+    })();
+    await this.commitState(__state);
+    return __result;
+  }
+=== agents logAppend
+  async logAppend(h: Hit, deps: { Clock: Clock }): globalThis.Promise<void> {
+    const __state = { ...(await this.loadState()) };
+    const __result = await (async () => {
+      const __r0 = await (async () => {
+        const __now = await deps.Clock.now();
+        await __state.history.append(h, __now);
+        await __state.history.prune(__now - 2592000000);
+        return undefined;
+      })();
+      return undefined;
+    })();
+    await this.commitState(__state);
+    return __result;
+  }
+=== agents trailAppend
+  async trailAppend(h: Hit, deps: { Clock: Clock }): globalThis.Promise<void> {
+    const __state = { ...(await this.loadState()) };
+    const __result = await (async () => {
+      const __r0 = await (async () => {
+        const __now = await deps.Clock.now();
+        await __state.trail.append(h, __now);
+        return undefined;
+      })();
+      return undefined;
+    })();
+    await this.commitState(__state);
+    return __result;
+  }
+=== agents logRecent
+  async logRecent(c: number, deps: {}): globalThis.Promise<number> {
+    const __state = await this.loadState();
+    return __bynkThen(((() => __state.history.recent(c)))(), (__q) => __q.length);
+  }
+=== agents logSince
+  async logSince(t: number, deps: {}): globalThis.Promise<number> {
+    const __state = await this.loadState();
+    return __bynkThen(((() => __state.history.since(t)))(), (__q) => __q.length);
+  }
+=== agents logBefore
+  async logBefore(t: number, deps: {}): globalThis.Promise<number> {
+    const __state = await this.loadState();
+    return __bynkThen(((() => __state.history.before(t)))(), (__q) => __q.length);
+  }
+=== agents logBetween
+  async logBetween(a: number, b: number, deps: {}): globalThis.Promise<number> {
+    const __state = await this.loadState();
+    return __bynkThen(((() => __state.history.between(a, b)))(), (__q) => __q.length);
+  }
+=== agents logReversed
+  async logReversed(deps: {}): globalThis.Promise<number> {
+    const __state = await this.loadState();
+    return __bynkThen(((() => __state.history.reversed()))(), (__q) => __q.length);
+  }
+=== agents logCount
+  async logCount(deps: {}): globalThis.Promise<number> {
+    const __state = await this.loadState();
+    return __bynkThen(((() => __bynkThen(__state.history.values(), (__q) => __q.filter((__x) => ((h: Hit) => h.qty > 1)(__x)))))(), (__q) => __q.length);
+  }
+=== agents cellUpdate
+  async cellUpdate(deps: {}): globalThis.Promise<void> {
+    const __state = { ...(await this.loadState()) };
+    const __result = await (async () => {
+      const __r0 = await (() => {
+        __state.n = ((c: number) => c + 1)(__state.n);
+        return undefined;
+      })();
+      return undefined;
+    })();
+    await this.commitState(__state);
+    return __result;
+  }
+=== room_bundle join
+  async join(u: UserId, conn: Connection<ServerFrame>, deps: {}): globalThis.Promise<void> {
+    const __state = { ...(await this.loadState()) };
+    const __result = await (async () => {
+      const __r0 = await (async () => {
+        const __k = String(u);
+        const __new = conn;
+        const __old = await __state.conns.get(__k);
+        if (__old !== undefined && __old !== __new) {
+          await __old.close();
+        }
+        await __state.conns.put(__k, __new);
+        return undefined;
+      })();
+      return undefined;
+    })();
+    await this.commitState(__state);
+    return __result;
+  }
+=== room_bundle rejoin
+  async rejoin(u: UserId, deps: {}): globalThis.Promise<void> {
+    const __state = { ...(await this.loadState()) };
+    const __result = await (async () => {
+      const held = await (async () => {
+        const __k = String(u);
+        return __bynkThen(__state.conns.has(__k), (__h) => __h ? __bynkThen(__state.conns.get(__k), (__v) => Some(__v!)) : None);
+      })();
+      switch (held.tag) {
+        case "Some": {
+          const c = held.value;
+          const __r0 = await (async () => {
+            const __k = String(u);
+            const __new = c;
+            const __old = await __state.conns.get(__k);
+            if (__old !== undefined && __old !== __new) {
+              await __old.close();
+            }
+            await __state.conns.put(__k, __new);
+            return undefined;
+          })();
+          return undefined;
+        }
+        case "None": {
+          return undefined;
+        }
+      }
+      throw new globalThis.Error("non-exhaustive match");
+    })();
+    await this.commitState(__state);
+    return __result;
+  }
+=== room_bundle leave
+  async leave(u: UserId, deps: {}): globalThis.Promise<void> {
+    const __state = { ...(await this.loadState()) };
+    const __result = await (async () => {
+      const __r0 = await (async () => {
+        const __k = String(u);
+        const __o = await __state.conns.get(__k);
+        if (__o !== undefined) {
+          await __o.close();
+          await __state.conns.remove(__k);
+        }
+        return undefined;
+      })();
+      return undefined;
+    })();
+    await this.commitState(__state);
+    return __result;
+  }
+=== room_bundle has
+  async has(u: UserId, deps: {}): globalThis.Promise<boolean> {
+    const __state = await this.loadState();
+    return __state.conns.has(String(u));
+  }
+=== room_bundle count
+  async count(deps: {}): globalThis.Promise<number> {
+    const __state = await this.loadState();
+    return __state.conns.size();
+  }
+=== room_bundle open
+  async open(deps: {}): globalThis.Promise<number> {
+    const __state = await this.loadState();
+    return __bynkThen(((() => __bynkThen(__state.conns.values(), (__q) => __q.filter((__x) => ((c: Connection<ServerFrame>) => true)(__x)))))(), (__q) => __q.length);
+  }
+=== room_workers join
+  async join(u: UserId, conn: Connection<ServerFrame>, deps: {}): globalThis.Promise<void> {
+    const __state = { ...(await this.loadState()) };
+    const __result = await (async () => {
+      const __r0 = await (async () => {
+        const __k = String(u);
+        const __new = __connIdOf(conn);
+        const __old = await __state.conns.get(__k);
+        if (__old !== undefined && __old !== __new) {
+          const __c = __resolveConnection<ServerFrame>(this.state, __old);
+          if (__c.tag === "Some") {
+            await __c.value.close();
+          }
+        }
+        await __state.conns.put(__k, __new);
+        return undefined;
+      })();
+      return undefined;
+    })();
+    await this.commitState(__state);
+    return __result;
+  }
+=== room_workers rejoin
+  async rejoin(u: UserId, deps: {}): globalThis.Promise<void> {
+    const __state = { ...(await this.loadState()) };
+    const __result = await (async () => {
+      const held = await (() => {
+        const __cid = __state.conns.get(String(u));
+        return __cid !== undefined ? __resolveConnection<ServerFrame>(this.state, __cid) : None;
+      })();
+      switch (held.tag) {
+        case "Some": {
+          const c = held.value;
+          const __r0 = await (async () => {
+            const __k = String(u);
+            const __new = __connIdOf(c);
+            const __old = await __state.conns.get(__k);
+            if (__old !== undefined && __old !== __new) {
+              const __c = __resolveConnection<ServerFrame>(this.state, __old);
+              if (__c.tag === "Some") {
+                await __c.value.close();
+              }
+            }
+            await __state.conns.put(__k, __new);
+            return undefined;
+          })();
+          return undefined;
+        }
+        case "None": {
+          return undefined;
+        }
+      }
+      throw new globalThis.Error("non-exhaustive match");
+    })();
+    await this.commitState(__state);
+    return __result;
+  }
+=== room_workers leave
+  async leave(u: UserId, deps: {}): globalThis.Promise<void> {
+    const __state = { ...(await this.loadState()) };
+    const __result = await (async () => {
+      const __r0 = await (async () => {
+        const __k = String(u);
+        const __cid = await __state.conns.get(__k);
+        if (__cid !== undefined) {
+          const __c = __resolveConnection<ServerFrame>(this.state, __cid);
+          if (__c.tag === "Some") {
+            await __c.value.close();
+          }
+          await __state.conns.remove(__k);
+        }
+        return undefined;
+      })();
+      return undefined;
+    })();
+    await this.commitState(__state);
+    return __result;
+  }
+=== room_workers has
+  async has(u: UserId, deps: {}): globalThis.Promise<boolean> {
+    const __state = await this.loadState();
+    return __state.conns.has(String(u));
+  }
+=== room_workers count
+  async count(deps: {}): globalThis.Promise<number> {
+    const __state = await this.loadState();
+    return __state.conns.size();
+  }
+=== room_workers open
+  async open(deps: {}): globalThis.Promise<number> {
+    const __state = await this.loadState();
+    return __bynkThen(((() => __bynkThen(__state.conns.values().flatMap((__cid) => { const __c = __resolveConnection<ServerFrame>(this.state, __cid); return __c.tag === "Some" ? [__c.value] : []; }), (__q) => __q.filter((__x) => ((c: Connection<ServerFrame>) => true)(__x)))))(), (__q) => __q.length);
+  }
+=== indexed routed
+  async routed(oid: string, deps: {}): globalThis.Promise<number> {
+    const __state = await this.loadState();
+    return __bynkThen(((() => __state.reservations.byIndex("orderId", String(oid))))(), (__q) => __q.length);
+  }
+=== indexed routedFlipped
+  async routedFlipped(oid: string, deps: {}): globalThis.Promise<number> {
+    const __state = await this.loadState();
+    return __bynkThen(((() => __state.reservations.byIndex("orderId", String(oid))))(), (__q) => __q.length);
+  }
+=== indexed routedText
+  async routedText(oid: string, deps: {}): globalThis.Promise<number> {
+    const __state = await this.loadState();
+    return __bynkThen(((() => __bynkThen(__state.reservations.values(), (__q) => __q.filter((__x) => ((r: Reservation) => r.orderId === oid.toUpperCase())(__x)))))(), (__q) => __q.length);
+  }
+=== indexed byId
+  async byId(rid: string, deps: {}): globalThis.Promise<number> {
+    const __state = await this.loadState();
+    return __bynkThen(((() => __state.reservations.byIndex("id", String(rid))))(), (__q) => __q.length);
+  }
+=== indexed scan
+  async scan(oid: string, deps: {}): globalThis.Promise<number> {
+    const __state = await this.loadState();
+    return __bynkThen(((() => __bynkThen(__state.reservations.values(), (__q) => __q.filter((__x) => ((r: Reservation) => r.qty === 1)(__x)))))(), (__q) => __q.length);
+  }
+=== indexed dependent
+  async dependent(deps: {}): globalThis.Promise<number> {
+    const __state = await this.loadState();
+    return __bynkThen(((() => __bynkThen(__state.reservations.values(), (__q) => __q.filter((__x) => ((r: Reservation) => r.orderId === r.id)(__x)))))(), (__q) => __q.length);
+  }
+=== par_bundle bump
+  async bump(deps: {}): globalThis.Promise<void> {
+    const __state = { ...(await this.loadState()) };
+    const __result = await (async () => {
+      const __r0 = await (() => {
+        __state.n = ((c: number) => ((__d) => {
+          switch (__d) {
+            case 0: {
+              return 1;
+            }
+            default: {
+              return c + 1;
+            }
+          }
+          throw new globalThis.Error("non-exhaustive match");
+        })(c))(__state.n);
+        return undefined;
+      })();
+      return undefined;
+    })();
+    await this.commitState(__state);
+    return __result;
+  }
+=== par_bundle bumpText
+  async bumpText(k: string, deps: {}): globalThis.Promise<void> {
+    const __state = { ...(await this.loadState()) };
+    const __result = await (async () => {
+      const __r0 = await (() => { __state.n = ((c: number) => c + (k.toUpperCase()).length)(__state.n); return undefined; })();
+      return undefined;
+    })();
+    await this.commitState(__state);
+    return __result;
+  }
+=== par_bundle keysOf
+  async keysOf(deps: {}): globalThis.Promise<readonly string[]> {
+    const __state = await this.loadState();
+    return __bynkThen(((() => __state.items.keys()))(), (__q) => __q);
+  }
+=== par_bundle valuesOf
+  async valuesOf(deps: {}): globalThis.Promise<number> {
+    const __state = await this.loadState();
+    return __bynkThen(((() => __state.items.values()))(), (__q) => __q.length);
+  }
+=== par_bundle entriesOf
+  async entriesOf(deps: {}): globalThis.Promise<number> {
+    const __state = await this.loadState();
+    return __bynkThen(((() => __bynkThen(__state.items.entries(), (__es) => __es.map(([__k, __v]) => ({ key: __k, value: __v })))))(), (__q) => __q.length);
+  }
+=== par_bundle addText
+  async addText(k: string, deps: {}): globalThis.Promise<void> {
+    const __state = { ...(await this.loadState()) };
+    const __result = await (async () => {
+      const __r0 = await (async () => { await __state.seen.add(String(k.toUpperCase())); return undefined; })();
+      return undefined;
+    })();
+    await this.commitState(__state);
+    return __result;
+  }
+=== fall_bundle now
+  async now(): globalThis.Promise<number> {
+    return 0;
+  }
+=== fall_bundle mapPut
+  async mapPut(k: string, deps: {}): globalThis.Promise<void> {
+    const __state = { ...(await this.loadState()) };
+    const __result = await (async () => {
+      const __r0 = await (async () => { await __state.items.put(String(k.toUpperCase()), 1); return undefined; })();
+      return undefined;
+    })();
+    await this.commitState(__state);
+    return __result;
+  }
+=== fall_bundle mapGet
+  async mapGet(k: string, deps: {}): globalThis.Promise<Option<number>> {
+    const __state = await this.loadState();
+    return (async () => { const __k = String(k.toUpperCase()); return __bynkThen(__state.items.has(__k), (__h) => __h ? __bynkThen(__state.items.get(__k), (__v) => Some(__v!)) : None); })();
+  }
+=== fall_bundle setAdd
+  async setAdd(k: string, deps: {}): globalThis.Promise<void> {
+    const __state = { ...(await this.loadState()) };
+    const __result = await (async () => {
+      const __r0 = await (async () => { await __state.tags.add(String(k.toUpperCase())); return undefined; })();
+      return undefined;
+    })();
+    await this.commitState(__state);
+    return __result;
+  }
+=== fall_bundle cachePut
+  async cachePut(k: string, deps: { Clock: Clock }): globalThis.Promise<void> {
+    const __state = { ...(await this.loadState()) };
+    const __result = await (async () => {
+      const __r0 = await (async () => { const __now = __noteClock(__state, await deps.Clock.now()); await __state.seen.put(String(k.toUpperCase()), { v: 1, exp: __now + 300000 }); return undefined; })();
+      return undefined;
+    })();
+    await this.commitState(__state);
+    return __result;
+  }
+=== fall_bundle logAppend
+  async logAppend(k: string, deps: { Clock: Clock }): globalThis.Promise<void> {
+    const __state = { ...(await this.loadState()) };
+    const __result = await (async () => {
+      const __r0 = await (async () => { const __now = await deps.Clock.now(); await __state.history.append({ sku: k.toUpperCase(), qty: 1 }, __now); await __state.history.prune(__now - 2592000000); return undefined; })();
+      return undefined;
+    })();
+    await this.commitState(__state);
+    return __result;
+  }
+=== fall_bundle logSince
+  async logSince(t: number, k: string, deps: {}): globalThis.Promise<number> {
+    const __state = await this.loadState();
+    return __bynkThen(((() => __bynkThen(((() => __state.history.since(t)))(), (__q) => __q.filter((__x) => ((h: Hit) => h.sku === k.toUpperCase())(__x)))))(), (__q) => __q.length);
+  }
+=== fall_bundle cellUpdate
+  async cellUpdate(k: string, deps: {}): globalThis.Promise<void> {
+    const __state = { ...(await this.loadState()) };
+    const __result = await (async () => {
+      const __r0 = await (() => { __state.n = ((c: number) => c + (k.toUpperCase()).length)(__state.n); return undefined; })();
+      return undefined;
+    })();
+    await this.commitState(__state);
+    return __result;
+  }
+=== fall_bundle join
+  async join(k: string, conn: Connection<Frame>, deps: {}): globalThis.Promise<void> {
+    const __state = { ...(await this.loadState()) };
+    const __result = await (async () => {
+      const __r0 = await (async () => { const __k = String(k.toUpperCase()); const __new = conn; const __old = await __state.conns.get(__k); if (__old !== undefined && __old !== __new) { await __old.close(); } await __state.conns.put(__k, __new); return undefined; })();
+      return undefined;
+    })();
+    await this.commitState(__state);
+    return __result;
+  }
+=== fall_bundle leave
+  async leave(k: string, deps: {}): globalThis.Promise<void> {
+    const __state = { ...(await this.loadState()) };
+    const __result = await (async () => {
+      const __r0 = await (async () => { const __k = String(k.toUpperCase()); const __o = await __state.conns.get(__k); if (__o !== undefined) { await __o.close(); await __state.conns.remove(__k); } return undefined; })();
+      return undefined;
+    })();
+    await this.commitState(__state);
+    return __result;
+  }
+=== fall_workers now
+  async now(): globalThis.Promise<number> {
+    return 0;
+  }
+=== fall_workers mapPut
+  async mapPut(k: string, deps: {}): globalThis.Promise<void> {
+    const __state = { ...(await this.loadState()) };
+    const __result = await (async () => {
+      const __r0 = await (async () => { await __state.items.put(String(k.toUpperCase()), 1); return undefined; })();
+      return undefined;
+    })();
+    await this.commitState(__state);
+    return __result;
+  }
+=== fall_workers mapGet
+  async mapGet(k: string, deps: {}): globalThis.Promise<Option<number>> {
+    const __state = await this.loadState();
+    return (async () => { const __k = String(k.toUpperCase()); return __bynkThen(__state.items.has(__k), (__h) => __h ? __bynkThen(__state.items.get(__k), (__v) => Some(__v!)) : None); })();
+  }
+=== fall_workers setAdd
+  async setAdd(k: string, deps: {}): globalThis.Promise<void> {
+    const __state = { ...(await this.loadState()) };
+    const __result = await (async () => {
+      const __r0 = await (async () => { await __state.tags.add(String(k.toUpperCase())); return undefined; })();
+      return undefined;
+    })();
+    await this.commitState(__state);
+    return __result;
+  }
+=== fall_workers cachePut
+  async cachePut(k: string, deps: { Clock: Clock }): globalThis.Promise<void> {
+    const __state = { ...(await this.loadState()) };
+    const __result = await (async () => {
+      const __r0 = await (async () => { const __now = __noteClock(__state, await deps.Clock.now()); await __state.seen.put(String(k.toUpperCase()), { v: 1, exp: __now + 300000 }); return undefined; })();
+      return undefined;
+    })();
+    await this.commitState(__state);
+    return __result;
+  }
+=== fall_workers logAppend
+  async logAppend(k: string, deps: { Clock: Clock }): globalThis.Promise<void> {
+    const __state = { ...(await this.loadState()) };
+    const __result = await (async () => {
+      const __r0 = await (async () => { const __now = await deps.Clock.now(); await __state.history.append({ sku: k.toUpperCase(), qty: 1 }, __now); await __state.history.prune(__now - 2592000000); return undefined; })();
+      return undefined;
+    })();
+    await this.commitState(__state);
+    return __result;
+  }
+=== fall_workers logSince
+  async logSince(t: number, k: string, deps: {}): globalThis.Promise<number> {
+    const __state = await this.loadState();
+    return __bynkThen(((() => __bynkThen(((() => __state.history.since(t)))(), (__q) => __q.filter((__x) => ((h: Hit) => h.sku === k.toUpperCase())(__x)))))(), (__q) => __q.length);
+  }
+=== fall_workers cellUpdate
+  async cellUpdate(k: string, deps: {}): globalThis.Promise<void> {
+    const __state = { ...(await this.loadState()) };
+    const __result = await (async () => {
+      const __r0 = await (() => { __state.n = ((c: number) => c + (k.toUpperCase()).length)(__state.n); return undefined; })();
+      return undefined;
+    })();
+    await this.commitState(__state);
+    return __result;
+  }
+=== fall_workers join
+  async join(k: string, conn: Connection<Frame>, deps: {}): globalThis.Promise<void> {
+    const __state = { ...(await this.loadState()) };
+    const __result = await (async () => {
+      const __r0 = await (async () => { const __k = String(k.toUpperCase()); const __new = __connIdOf(conn); const __old = await __state.conns.get(__k); if (__old !== undefined && __old !== __new) { const __c = __resolveConnection<Frame>(this.state, __old); if (__c.tag === "Some") { await __c.value.close(); } } await __state.conns.put(__k, __new); return undefined; })();
+      return undefined;
+    })();
+    await this.commitState(__state);
+    return __result;
+  }
+=== fall_workers leave
+  async leave(k: string, deps: {}): globalThis.Promise<void> {
+    const __state = { ...(await this.loadState()) };
+    const __result = await (async () => {
+      const __r0 = await (async () => { const __k = String(k.toUpperCase()); const __cid = await __state.conns.get(__k); if (__cid !== undefined) { const __c = __resolveConnection<Frame>(this.state, __cid); if (__c.tag === "Some") { await __c.value.close(); } await __state.conns.remove(__k); } return undefined; })();
+      return undefined;
+    })();
+    await this.commitState(__state);
+    return __result;
+  }
