@@ -19,7 +19,7 @@ export const WorkloadId = {
 
 export const api = {
   async http_GET_who(deps: { identity: WorkloadId; claims: { get(name: string): { readonly tag: "Some"; readonly value: string } | { readonly tag: "None" }; has(name: string): boolean } }): globalThis.Promise<HttpResult<string>> {
-    const repo = ((__o: Option<string>, __d: string) => __o.tag === "Some" ? __o.value : __d)((deps.claims).get("repository"), "-");
-    return HttpResult.Ok(`${String(deps.identity)} ${String(repo)} ${String((deps.claims).has("environment"))}`);
+    const repo = ((__o: Option<string>, __d: string) => __o.tag === "Some" ? __o.value : __d)(deps.claims.get("repository"), "-");
+    return HttpResult.Ok(`${String(deps.identity)} ${String(repo)} ${String(deps.claims.has("environment"))}`);
   },
 };

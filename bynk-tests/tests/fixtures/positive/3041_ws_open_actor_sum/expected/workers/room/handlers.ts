@@ -104,7 +104,9 @@ export class Room {
 
   async say(name: string, text: string, deps: {}): globalThis.Promise<void> {
     const __state = await this.loadState();
-    const __r0 = await __bynkThen(__state.conns.values().flatMap((__cid) => { const __c = __resolveConnection<Frame>(this.state, __cid); return __c.tag === "Some" ? [__c.value] : []; }), (__q) => (async () => { await __bynkSettleAll(__q.map((__x) => () => (async (c: Connection<Frame>) => (c).send({ text: `${String(name)}: ${String(text)}` }))(__x))); })());
+    const __r0 = await __bynkThen(__state.conns.values().flatMap((__cid) => { const __c = __resolveConnection<Frame>(this.state, __cid); return __c.tag === "Some" ? [__c.value] : []; }), (__q) => (async () => {
+      await __bynkSettleAll(__q.map((__x) => () => (async (c: Connection<Frame>) => c.send({ text: `${String(name)}: ${String(text)}` }))(__x)));
+    })());
     return undefined;
   }
 

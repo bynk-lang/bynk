@@ -127,7 +127,7 @@ export class Room {
   }
 
   async __wsOpen_ChatGateway(connection: Connection<ServerFrame>, roomId: RoomId, deps: { identity: UserId }): globalThis.Promise<void> {
-    const __r0 = await (connection).send({ text: "welcome" });
+    const __r0 = await connection.send({ text: "welcome" });
     const __r1 = await this.track(deps.identity, connection, deps);
     return undefined;
   }

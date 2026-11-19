@@ -9,7 +9,7 @@ import { HttpResult } from "../../__bynk_runtime/httpresult.js";
 
 export const github = {
   async http_POST_github(headers: { get(name: string): { readonly tag: "Some"; readonly value: string } | { readonly tag: "None" }; bearer(): { readonly tag: "Some"; readonly value: string } | { readonly tag: "None" }; clientIp(): { readonly tag: "Some"; readonly value: string } | { readonly tag: "None" } }, body: globalThis.Uint8Array, deps: {}): globalThis.Promise<HttpResult<string>> {
-    const __letElse587 = (headers).get("X-GitHub-Event");
+    const __letElse587 = headers.get("X-GitHub-Event");
     switch (__letElse587.tag) {
       case "Some": {
         const event = __letElse587.value;
@@ -22,6 +22,6 @@ export const github = {
     throw new globalThis.Error("non-exhaustive match");
   },
   async http_POST_echo(body: globalThis.Uint8Array, headers: { get(name: string): { readonly tag: "Some"; readonly value: string } | { readonly tag: "None" }; bearer(): { readonly tag: "Some"; readonly value: string } | { readonly tag: "None" }; clientIp(): { readonly tag: "Some"; readonly value: string } | { readonly tag: "None" } }, deps: {}): globalThis.Promise<HttpResult<string>> {
-    return HttpResult.Ok(`${String(((__o: Option<string>, __d: string) => __o.tag === "Some" ? __o.value : __d)((headers).get("x-trace"), "-"))} ${String(__bynkBytesToBase64(body))}`);
+    return HttpResult.Ok(`${String(((__o: Option<string>, __d: string) => __o.tag === "Some" ? __o.value : __d)(headers.get("x-trace"), "-"))} ${String(__bynkBytesToBase64(body))}`);
   },
 };

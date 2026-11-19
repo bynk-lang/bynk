@@ -1,0 +1,913 @@
+//! The kernel-method dispatcher and the arms it owns (back-half paydown 1A.28, #3729,
+//! Decision D): `lower_kernel_method_call`, the `Effect` kernels (`within`, `race`, `detach`) and
+//! the `EffectResult` combinators. Moved out of `lower.rs` byte for byte, then the inline and
+//! `Effect` arms converted. The sibling kernels (scalar, container) stay in `lower.rs`.
+
+use bynk_check::checker::{Callee, Ty, TyId};
+use bynk_check::kernel_op::{EffectOp, EffectResultOp, HttpResultOp, KernelOp, TestConnectionOp};
+use bynk_ts::{TsArrowBody, TsBinaryOp, TsExpr, TsLit, TsObjectEntry, TsType, print_expr};
+
+use super::super::lower::{
+    Built, LoweredExpr, Pre, expect_location, expect_location_raw, node_or_text, str_node,
+};
+use super::super::lower_ctx::LowerCtx;
+use super::super::lower_list::{
+    any_ty, arrow, binary, call, const_, fn_type, id, lower_list_kernel, member, param, paren,
+    promise, ret, spread, take,
+};
+use super::super::ts_types::{ts_ty, ts_ty_to_ts_type};
+use super::super::*;
+use super::query::{
+    QueryShape, QuerySource, lower_query_method, lower_stream_method, note_par_fan_out,
+    query_key_cmp, query_keyed, query_other_elem,
+};
+
+/// `within`, `race` and `detach` on an `Effect[T]` (#2683, #2711, #3437). `None`
+/// when the call's shape is not one the kernel method lowers (the caller falls
+/// through to the instance-call lowering).
+fn lower_effect_kernel_call(
+    e: &Expr,
+    receiver: &Expr,
+    op: EffectOp,
+    args: &[Expr],
+    recv_ty: &Ty,
+    cx: &mut LowerCtx,
+    pre: &mut Pre,
+) -> Option<Built> {
+    let tys = cx.ty_render();
+    match op {
+        // #2683: `e.within(d)` races the effect against a deadline
+        // and hands the abandoned effect to the handler's execution
+        // context.
+        EffectOp::Within if args.len() == 1 => {
+            cx.note_within();
+            let recv = pre.lower_node(receiver, cx);
+            let after = pre.lower_node(&args[0], cx);
+            let exec = LoweredExpr::Node(cx.exec_node());
+            let exec_text = cx.exec_expr();
+            return Some(node_or_text(
+                vec![recv, after, exec],
+                |n| call(id("__bynkWithin"), n),
+                |t| format!("__bynkWithin({}, {}, {exec_text})", t[0], t[1]),
+            ));
+        }
+        // #2711: `a.race(b)` takes the first side to succeed and
+        // hands the rest to the same execution context, uncancelled.
+        EffectOp::Race if args.len() == 1 => {
+            cx.note_race();
+            // A chain `a.race(b).race(c)` lowers to one
+            // `__bynkRace([a, b, c], …)`: nesting would let `c` beat
+            // `a` in a same-instant tie, as the inner race settles a
+            // microtask later, and ties go to source order.
+            let mut operands: Vec<&Expr> = vec![&args[0]];
+            let mut head: &Expr = receiver;
+            while let ExprKind::MethodCall {
+                receiver: inner,
+                args: a,
+                ..
+            } = &head.kind
+                && matches!(
+                    cx.commons().callee(head.id),
+                    Some(Callee::Kernel {
+                        op: KernelOp::Effect(EffectOp::Race),
+                        ..
+                    })
+                )
+                && a.len() == 1
+                && matches!(
+                    cx.commons().expr_ty(inner.id).as_deref(),
+                    Some(Ty::Effect(_))
+                )
+            {
+                operands.push(&a[0]);
+                head = inner;
+            }
+            operands.push(head);
+            operands.reverse();
+            let operand_count = operands.len();
+            let mut children: Vec<LoweredExpr> = operands
+                .into_iter()
+                .map(|o| pre.lower_node(o, cx))
+                .collect();
+            children.push(LoweredExpr::Node(cx.exec_node()));
+            let exec_text = cx.exec_expr();
+            return Some(node_or_text(
+                children,
+                |mut n| {
+                    let exec = n.pop().expect("the execution context is the last child");
+                    call(id("__bynkRace"), vec![TsExpr::array(n), exec])
+                },
+                |t| {
+                    format!(
+                        "__bynkRace([{}], {exec_text})",
+                        t[..operand_count].join(", ")
+                    )
+                },
+            ));
+        }
+        // #3437: `e.detach()` hands the already-running effect to
+        // the execution context and reports a failure (a fault, or
+        // an `Err` when the payload is a `Result`). The static type
+        // picks the route: only a `Result` payload names its error
+        // type to the helper.
+        EffectOp::Detach if args.is_empty() => {
+            cx.note_detach();
+            let recv = pre.lower_node(receiver, cx);
+            // The site is the assertion location in a test body, else the fault
+            // location, else the offset. The text path escapes the assertion
+            // location twice (`expect_location` has already escaped it), so a site
+            // is a `Str` node only where the printer's one escape prints the same
+            // bytes; otherwise it stays text.
+            let in_test = cx.assert_loc().is_some();
+            let site_raw = if in_test {
+                expect_location_raw(cx, e.span.start)
+            } else {
+                cx.fault_location(e.span.start)
+                    .unwrap_or_else(|| format!("offset {}", e.span.start))
+            };
+            let site = if in_test {
+                crate::emitter::escape_ts_string(&expect_location(cx, e.span.start))
+            } else {
+                crate::emitter::escape_ts_string(&site_raw)
+            };
+            let err_raw = match &recv_ty {
+                Ty::Effect(inner) => match &*tys.get(*inner) {
+                    Ty::Result(_, err) => Some(err.display(tys.types()).to_string()),
+                    _ => None,
+                },
+                _ => None,
+            };
+            let mut children = vec![
+                recv,
+                LoweredExpr::Node(cx.exec_node()),
+                quoted_or_text(&site_raw, &site),
+            ];
+            let mut tail = String::new();
+            if let Some(raw) = &err_raw {
+                let escaped = crate::emitter::escape_ts_string(raw);
+                tail = format!(", \"{escaped}\"");
+                children.push(quoted_or_text(raw, &escaped));
+            }
+            let exec_text = cx.exec_expr();
+            return Some(node_or_text(
+                children,
+                |n| call(id("__bynkDetach"), n),
+                |t| format!("__bynkDetach({}, {exec_text}, \"{site}\"{tail})", t[0]),
+            ));
+        }
+        EffectOp::Within | EffectOp::Race | EffectOp::Detach => {}
+    }
+    None
+}
+
+/// A built-in method call the checker resolved to a typed [`KernelOp`] (#3164):
+/// the one place the emitter turns a kernel operation into TypeScript, matching
+/// on the receiver kind and the operation. `None` when the operation has no
+/// inline lowering here, so the caller falls through to the UFCS lowering; any
+/// hoisted statements the attempt produced stay in `pre`. The result is a
+/// [`Built`] (1A.20, Decision G): the `List` kernel returns a node when its
+/// operands are nodes (1A.18a), a delegated kernel's `Lowered` passes through
+/// `Pre::absorb_built` unprinted, and a family that is still text is `Err`
+/// (`// 1A:` at its arm below).
+pub(in crate::emitter) fn lower_kernel_method_call(
+    e: &Expr,
+    receiver: &Expr,
+    method: &Ident,
+    args: &[Expr],
+    cx: &mut LowerCtx,
+    pre: &mut Pre,
+) -> Option<Built> {
+    let tys = cx.ty_render();
+    // v0.20b: built-in kernel methods on the collection types, dispatched on the
+    // receiver's checked type. Emitted inline (typed IIFEs / spreads) — no runtime
+    // imports, so files that never touch collections emit byte-identically to v0.20a.
+    // The checker resolved this call to a typed `KernelOp` (#3164), so each arm
+    // matches on the resolved operation, not on the method's spelling, and the
+    // receiver's type arguments are read off its checked type.
+    if let Some(Callee::Kernel {
+        op: kop,
+        recv: kernel_recv,
+    }) = cx.commons().callee(e.id).cloned()
+    {
+        let recv_ty = (*tys.get(kernel_recv)).clone();
+        // The receiver's checked type disagrees with the resolved op only if
+        // the checker and the emitter have drifted.
+        let mismatch = |kop: KernelOp| -> ! {
+            panic!("bynk internal error (#3164): kernel op {kop:?} on a mismatched receiver type")
+        };
+        // 1A: every arm below but `List` is text until its own family slice (the
+        // track's `1A.query`, `1A.stream`, `1A.map`, `1A.set`, `1A.option`,
+        // `1A.result`, `1A.string` and `1A.numeric` rows).
+        match kop {
+            KernelOp::List(op) => {
+                let Ty::List(elem) = &recv_ty else {
+                    mismatch(kop)
+                };
+                if let Some(built) = lower_list_kernel(e, receiver, op, args, *elem, cx, pre) {
+                    return Some(built);
+                }
+            }
+            // v0.91 (ADR 0119): a chained op on a lazy `Query` — the source is
+            // the receiver thunk, invoked (`(recv)()`).
+            KernelOp::Query(op) => {
+                let Ty::Query(elem) = &recv_ty else {
+                    mismatch(kop)
+                };
+                let elem_node = ts_ty_to_ts_type(*elem, tys);
+                let recv = pre.lower_node(receiver, cx);
+                let a: Vec<LoweredExpr> = args.iter().map(|x| pre.lower_node(x, cx)).collect();
+                let result_ty = cx.commons().expr_types.get(&e.id).map(|te| te.ty);
+                note_par_fan_out(cx, method);
+                let other_elem = query_other_elem(args, cx);
+                if let Some(built) = lower_query_method(
+                    QuerySource::Thunk(recv),
+                    op,
+                    a,
+                    result_ty,
+                    &QueryShape {
+                        elem: &elem_node,
+                        other_elem: &other_elem,
+                        keyed: query_keyed(e, method, args, cx),
+                        key_cmp: query_key_cmp(method, args, cx),
+                        runtime_use: cx.runtime_use(),
+                    },
+                    tys,
+                ) {
+                    return Some(built);
+                }
+            }
+            // v0.100: a chained op on a `Stream` — the receiver already *is* an
+            // async iterable, so it is the source directly. Emitted inline as
+            // async-generator IIFEs (builders) / an async drain (`collect`).
+            KernelOp::Stream(op) => {
+                let recv = pre.lower(receiver, cx);
+                let a: Vec<String> = args.iter().map(|x| pre.lower(x, cx)).collect();
+                if let Some(s) = lower_stream_method(recv, op, &a) {
+                    return Some(Err(s));
+                }
+            }
+            // #3051: a case's recording `TestConnection[F]`.
+            KernelOp::TestConnection(op) => {
+                let recv = pre.lower_node(receiver, cx);
+                return Some(lower_test_connection(op, recv));
+            }
+            // v0.102: the held-resource operations on a `Connection[F]` lower to
+            // method calls on the runtime `Connection` object — `send(frame)` and
+            // `close()`. The linearity pass has already verified ownership.
+            KernelOp::Connection(op) => {
+                return Some(lower_receiver_call(op.name(), receiver, args, cx, pre));
+            }
+            KernelOp::Map(op) => {
+                let Ty::Map(key, val) = &recv_ty else {
+                    mismatch(kop)
+                };
+                if let Some(built) =
+                    pre.absorb_built(lower_map_kernel(receiver, op, args, *key, *val, cx))
+                {
+                    return Some(built);
+                }
+            }
+            // K6a (#2596): the `Set` kernel.
+            KernelOp::Set(op) => {
+                let Ty::Set(elem) = &recv_ty else {
+                    mismatch(kop)
+                };
+                if let Some(built) =
+                    pre.absorb_built(lower_set_kernel(receiver, op, args, *elem, cx))
+                {
+                    return Some(built);
+                }
+            }
+            // v0.21: the numeric kernel. `toFloat` is the identity
+            // at runtime (the Int/Float distinction is erased);
+            // the four `Float -> Int` roundings map onto `Math.*`.
+            // v0.22a extends it (abs/min/max/clamp, isNaN/isFinite).
+            KernelOp::Int(op) => {
+                if let Some(built) = pre.absorb_built(lower_int_kernel(receiver, op, args, cx)) {
+                    return Some(built);
+                }
+            }
+            KernelOp::Float(op) => {
+                if let Some(built) = pre.absorb_built(lower_float_kernel(receiver, op, args, cx)) {
+                    return Some(built);
+                }
+            }
+            // v0.86 (ADR 0112): the `Duration` kernel. `toMillis` is the identity
+            // at runtime (a `Duration` already *is* its milliseconds); `toString`
+            // renders the number.
+            KernelOp::Duration(op) => {
+                if let Some(built) = pre.absorb_built(lower_duration_kernel(receiver, op, args, cx))
+                {
+                    return Some(built);
+                }
+            }
+            // v0.90 (ADR 0114): the `Instant` kernel. `toEpochMillis` is the
+            // identity (an `Instant` lowers to its epoch millis); `toString`
+            // renders the number.
+            KernelOp::Instant(op) => {
+                if let Some(built) = pre.absorb_built(lower_instant_kernel(receiver, op, args, cx))
+                {
+                    return Some(built);
+                }
+            }
+            // #3277: a cookie rides beside an `HttpResult` as a `cookies` list the
+            // router turns into one `Set-Cookie` each. `clearCookie` is the cookie
+            // sent again, empty and already expired, under the same name, `Domain`
+            // and `Path`, which is what removes it.
+            KernelOp::HttpResult(op) => {
+                cx.note_http_result_cookie();
+                return Some(lower_http_result(op, receiver, args, cx, pre));
+            }
+            // #2341 (decision A): an HTTP handler's `headers` is a runtime
+            // object with these very methods, each answering an `Option`.
+            KernelOp::RequestHeaders(_)
+            | KernelOp::RequestQuery(_)
+            | KernelOp::RequestCookies(_)
+            | KernelOp::TokenClaims(_) => {
+                return Some(lower_receiver_call(kop.name(), receiver, args, cx, pre));
+            }
+            // v0.110 (ADR 0142): the `Bytes` kernel. `length` is the octet
+            // count; `toBase64` encodes; `decodeUtf8` is a guarded UTF-8 decode
+            // returning `Option`.
+            KernelOp::Bytes(op) => {
+                if let Some(built) = pre.absorb_built(lower_bytes_kernel(receiver, op, args, cx)) {
+                    return Some(built);
+                }
+            }
+            // #2622: the `Decimal` kernel.
+            KernelOp::Decimal(op) => {
+                if let Some(built) = pre.absorb_built(lower_decimal_kernel(receiver, op, args, cx))
+                {
+                    return Some(built);
+                }
+            }
+            // v0.22a: the string kernel (ADR 0046).
+            KernelOp::String(op) => {
+                if let Some(built) = pre.absorb_built(lower_string_kernel(receiver, op, args, cx)) {
+                    return Some(built);
+                }
+            }
+            // v0.22a: Option/Result combinators (ADR 0048).
+            KernelOp::Option(op) => {
+                let Ty::Option(inner) = &recv_ty else {
+                    mismatch(kop)
+                };
+                if let Some(built) =
+                    pre.absorb_built(lower_option_kernel(e, receiver, op, args, *inner, cx))
+                {
+                    return Some(built);
+                }
+            }
+            KernelOp::Result(op) => {
+                let Ty::Result(ok, err) = &recv_ty else {
+                    mismatch(kop)
+                };
+                if let Some(built) =
+                    pre.absorb_built(lower_result_kernel(e, receiver, op, args, *ok, *err, cx))
+                {
+                    return Some(built);
+                }
+            }
+            // #2683 / #2711 / #3437: `within`, `race` and `detach`, on every `Effect[T]`.
+            KernelOp::Effect(op) => {
+                if let Some(built) =
+                    lower_effect_kernel_call(e, receiver, op, args, &recv_ty, cx, pre)
+                {
+                    return Some(built);
+                }
+            }
+            // §2.8.3: the `Effect[Result[T, E]]` combinators — `mapOk`/`mapErr`/
+            // `flatMapOk`/`flatMapErr`. Lowered as an `async` IIFE that awaits the
+            // receiver `Promise<Result<…>>` and rebuilds the transformed Result.
+            KernelOp::EffectResult(op) => {
+                let Ty::Effect(inner) = &recv_ty else {
+                    mismatch(kop)
+                };
+                if let Ty::Result(ok, err) = &*tys.get(*inner)
+                    && let Some(built) =
+                        lower_effect_result_kernel(e, receiver, op, args, *ok, *err, cx, pre)
+                {
+                    return Some(built);
+                }
+            }
+        }
+    }
+    None
+}
+
+/// §2.8.3: lower an `Effect[Result[T, E]]` combinator. `Effect[T]` is
+/// `Promise<T>` at runtime, so each method is an `async` IIFE that `await`s the
+/// receiver Promise and rebuilds the transformed `Result` — the exact
+/// desugaring the spec gives (`mapOk` ≡ `map(r => r.map(f))`, etc.), inlined so
+/// no runtime helper is needed. `ok`/`err` are the receiver's peeled `Result`
+/// parameters; the call's checked type supplies the transformed parameter for
+/// the TS annotation.
+#[allow(clippy::too_many_arguments)]
+fn lower_effect_result_kernel(
+    e: &Expr,
+    receiver: &Expr,
+    op: EffectResultOp,
+    args: &[Expr],
+    ok: TyId,
+    err: TyId,
+    cx: &mut LowerCtx,
+    pre: &mut Pre,
+) -> Option<Built> {
+    let tys = cx.ty_render();
+    let t = ts_ty_to_ts_type(ok, tys);
+    let et = ts_ty_to_ts_type(err, tys);
+    // The call's checked type is `Effect[Result[a, b]]`; peel `(a, b)` for the
+    // transformed parameter's TS type.
+    let (a_ts, b_ts, a_text, b_text) = match cx.commons().expr_ty(e.id).as_deref() {
+        Some(Ty::Effect(inner)) => match &*tys.get(*inner) {
+            Ty::Result(a, b) => (
+                ts_ty_to_ts_type(*a, tys),
+                ts_ty_to_ts_type(*b, tys),
+                ts_ty(*a, tys),
+                ts_ty(*b, tys),
+            ),
+            other => panic!(
+                "bynk internal error (finding #28): emitter expected `Effect[Result[_, _]]` \
+                 recorded for an effectful `Result` combinator call at {:?}, but found \
+                 `Effect[{other:?}]` — the checker should already have typed it",
+                e.span
+            ),
+        },
+        other => panic!(
+            "bynk internal error (finding #28): emitter expected `Effect[Result[_, _]]` \
+             recorded for an effectful `Result` combinator call at {:?}, but found {other:?} \
+             — the checker should already have typed it",
+            e.span
+        ),
+    };
+    let [f] = args else {
+        return None;
+    };
+    // `__e: Promise<Result<T, E>>`, then `__f: <the callback's type>`; the body
+    // awaits the receiver and rebuilds the `Result`.
+    let result_of = |ok: &TsType, err: &TsType| {
+        TsType::named_with_args("Result", vec![ok.clone(), err.clone()])
+    };
+    let effect_of = |ok: &TsType, err: &TsType| promise(result_of(ok, err));
+    let cb = |param: &str, from: &TsType, to: TsType| fn_type(&[(param, from)], to);
+    // (callback type, the tag tested, the field read, whether the callback is
+    // awaited, the constructor wrapping an unawaited result).
+    let (cb_ty, tag, field, awaited, wrap) = match op {
+        // result `Effect[Result[U, E]]` — `a_ts` is `U`.
+        EffectResultOp::MapOk => (cb("x", &t, a_ts), "Ok", "value", false, Some("Ok")),
+        // result `Effect[Result[T, F]]` — `b_ts` is `F`.
+        EffectResultOp::MapErr => (cb("e", &et, b_ts), "Err", "error", false, Some("Err")),
+        // `f: T -> Effect[Result[U, E]]`; result `Effect[Result[U, E]]`.
+        EffectResultOp::FlatMapOk => (
+            cb("x", &t, effect_of(&a_ts, &et)),
+            "Ok",
+            "value",
+            true,
+            None,
+        ),
+        // `f: E -> Effect[Result[T, F]]`; result `Effect[Result[T, F]]`.
+        EffectResultOp::FlatMapErr => (
+            cb("e", &et, effect_of(&t, &b_ts)),
+            "Err",
+            "error",
+            true,
+            None,
+        ),
+    };
+    let recv = pre.lower_node(receiver, cx);
+    let f = pre.lower_node(f, cx);
+    let params = vec![
+        param("__e", Some(effect_of(&t, &et))),
+        param("__f", Some(cb_ty)),
+    ];
+    let applied = call(id("__f"), vec![member(id("__r"), field)]);
+    let hit = match (awaited, wrap) {
+        (true, _) => TsExpr::Await(Box::new(applied)),
+        (false, Some(ctor)) => call(id(ctor), vec![applied]),
+        (false, None) => applied,
+    };
+    let body = vec![
+        const_("__r", None, TsExpr::Await(Box::new(id("__e")))),
+        ret(TsExpr::Conditional {
+            test: Box::new(binary(
+                TsBinaryOp::StrictEq,
+                member(id("__r"), "tag"),
+                TsExpr::Lit(TsLit::Str(tag.to_string())),
+            )),
+            consequent: Box::new(hit),
+            alternate: Box::new(id("__r")),
+        }),
+    ];
+    let async_arrow = TsExpr::Arrow {
+        params,
+        is_async: true,
+        generics: vec![],
+        return_type: None,
+        body: Box::new(TsArrowBody::Block(body)),
+    };
+    let (t_text, et_text) = (ts_ty(ok, tys), ts_ty(err, tys));
+    Some(node_or_text(
+        vec![recv, f],
+        |n| call(paren(async_arrow), n),
+        |t| effect_result_text(op, &[&t_text, &et_text, &a_text, &b_text], &t[0], &t[1]),
+    ))
+}
+
+/// The text form of an `EffectResult` combinator, for a receiver or callback that is still text:
+/// an `async` IIFE over `(__e, __f)`. `ts` is `[T, E, A, B]`, the receiver's and the result's
+/// type arguments.
+fn effect_result_text(op: EffectResultOp, ts: &[&str; 4], recv: &str, f: &str) -> String {
+    let [t, et, a_ts, b_ts] = *ts;
+    match op {
+        EffectResultOp::MapOk => format!(
+            "(async (__e: globalThis.Promise<Result<{t}, {et}>>, __f: (x: {t}) => {a_ts}) => {{ const __r = await __e; return __r.tag === \"Ok\" ? Ok(__f(__r.value)) : __r; }})({recv}, {f})"
+        ),
+        EffectResultOp::MapErr => format!(
+            "(async (__e: globalThis.Promise<Result<{t}, {et}>>, __f: (e: {et}) => {b_ts}) => {{ const __r = await __e; return __r.tag === \"Err\" ? Err(__f(__r.error)) : __r; }})({recv}, {f})"
+        ),
+        EffectResultOp::FlatMapOk => format!(
+            "(async (__e: globalThis.Promise<Result<{t}, {et}>>, __f: (x: {t}) => globalThis.Promise<Result<{a_ts}, {et}>>) => {{ const __r = await __e; return __r.tag === \"Ok\" ? await __f(__r.value) : __r; }})({recv}, {f})"
+        ),
+        EffectResultOp::FlatMapErr => format!(
+            "(async (__e: globalThis.Promise<Result<{t}, {et}>>, __f: (e: {et}) => globalThis.Promise<Result<{t}, {b_ts}>>) => {{ const __r = await __e; return __r.tag === \"Err\" ? await __f(__r.error) : __r; }})({recv}, {f})"
+        ),
+    }
+}
+
+/// A receiver as the object of a member access. The printer brackets a binary, a cast, an arrow, a
+/// conditional or an assignment there, but not an `await`, a unary operator or a number literal,
+/// which would then read as `await f().op()` or `1.op()`: those keep the brackets the text form
+/// always wrote (1A.28, #3729, Decision B).
+fn receiver_object(recv: TsExpr) -> TsExpr {
+    match recv {
+        TsExpr::Await(_)
+        | TsExpr::Unary { .. }
+        | TsExpr::Lit(TsLit::Num(_) | TsLit::Raw(_))
+        | TsExpr::Spread(_) => paren(recv),
+        other => other,
+    }
+}
+
+/// `recv.method(args)` for a runtime object that has the method (`Connection.send`, the request
+/// views): the receiver is bracketed only where precedence needs it. The text fallback keeps
+/// `(recv).method(args)`.
+fn lower_receiver_call(
+    method: &str,
+    receiver: &Expr,
+    args: &[Expr],
+    cx: &mut LowerCtx,
+    pre: &mut Pre,
+) -> Built {
+    let mut children = vec![pre.lower_node(receiver, cx)];
+    children.extend(args.iter().map(|a| pre.lower_node(a, cx)));
+    node_or_text(
+        children,
+        |mut n| {
+            let recv = receiver_object(n.remove(0));
+            call(member(recv, method), n)
+        },
+        |t| format!("({}).{method}({})", t[0], t[1..].join(", ")),
+    )
+}
+
+/// A case's recording `TestConnection[F]`: `[...recv.sent]`, `recv.closed`, `recv.mint()`.
+fn lower_test_connection(op: TestConnectionOp, recv: LoweredExpr) -> Built {
+    node_or_text(
+        vec![recv],
+        |n| {
+            let [recv] = take::<1, _>(n);
+            let recv = receiver_object(recv);
+            match op {
+                TestConnectionOp::Sent => TsExpr::array(vec![spread(member(recv, "sent"))]),
+                TestConnectionOp::Closed => member(recv, "closed"),
+                TestConnectionOp::Connection => call(member(recv, "mint"), vec![]),
+            }
+        },
+        |t| match op {
+            TestConnectionOp::Sent => format!("[...({}).sent]", t[0]),
+            TestConnectionOp::Closed => format!("({}).closed", t[0]),
+            TestConnectionOp::Connection => format!("({}).mint()", t[0]),
+        },
+    )
+}
+
+/// `withCookie`, `clearCookie` and `cookies` on an `HttpResult` (#3277).
+fn lower_http_result(
+    op: HttpResultOp,
+    receiver: &Expr,
+    args: &[Expr],
+    cx: &mut LowerCtx,
+    pre: &mut Pre,
+) -> Built {
+    let recv = pre.lower_node(receiver, cx);
+    let lowered: Vec<LoweredExpr> = args.iter().map(|a| pre.lower_node(a, cx)).collect();
+    if matches!(op, HttpResultOp::Cookies) {
+        // The `cookies` list of the receiver, read through a cast, or empty.
+        return node_or_text(
+            vec![recv],
+            |n| {
+                let [recv] = take::<1, _>(n);
+                let ty = any_ty();
+                let cast = TsExpr::As {
+                    expr: Box::new(recv),
+                    ty,
+                };
+                paren(binary(
+                    TsBinaryOp::NullishCoalescing,
+                    member(paren(cast), "cookies"),
+                    TsExpr::array(vec![]),
+                ))
+            },
+            |t| format!("((({}) as any).cookies ?? [])", t[0]),
+        );
+    }
+    // The cookie argument; absent only for a program that failed checking, which keeps the text
+    // form's empty `()`.
+    let arg = lowered
+        .into_iter()
+        .next()
+        .unwrap_or_else(|| LoweredExpr::from(Err(String::new())));
+    let clear = matches!(op, HttpResultOp::ClearCookie);
+    node_or_text(
+        vec![arg, recv],
+        |n| {
+            let [arg, recv] = take::<2, _>(n);
+            // `[...(__r.cookies ?? []), <added>]`
+            let held = spread(paren(binary(
+                TsBinaryOp::NullishCoalescing,
+                member(id("__r"), "cookies"),
+                TsExpr::array(vec![]),
+            )));
+            let added = if clear {
+                TsExpr::object_entries(vec![
+                    TsObjectEntry::Spread(paren(arg)),
+                    TsObjectEntry::Prop("value".to_string(), str_node("")),
+                    TsObjectEntry::Prop(
+                        "maxAge".to_string(),
+                        call(id("Some"), vec![TsExpr::Lit(TsLit::Num("0".to_string()))]),
+                    ),
+                    TsObjectEntry::Prop(
+                        "expires".to_string(),
+                        call(id("Some"), vec![TsExpr::Lit(TsLit::Num("0".to_string()))]),
+                    ),
+                ])
+            } else {
+                paren(arg)
+            };
+            let record = TsExpr::object_entries(vec![
+                TsObjectEntry::Spread(id("__r")),
+                TsObjectEntry::Prop("cookies".to_string(), TsExpr::array(vec![held, added])),
+            ]);
+            call(
+                paren(arrow(vec![param("__r", Some(any_ty()))], paren(record))),
+                vec![recv],
+            )
+        },
+        |t| {
+            let (arg, recv) = (&t[0], &t[1]);
+            if clear {
+                format!(
+                    "((__r: any) => ({{ ...__r, cookies: [...(__r.cookies ?? []), {{ ...({arg}), value: \"\", maxAge: Some(0), expires: Some(0) }}] }}))({recv})"
+                )
+            } else {
+                format!(
+                    "((__r: any) => ({{ ...__r, cookies: [...(__r.cookies ?? []), ({arg})] }}))({recv})"
+                )
+            }
+        },
+    )
+}
+
+/// `raw` as a string literal node when the printer's escape prints the same bytes as the text
+/// path's `escaped` (which is `escape_ts_string` applied once or twice), else the text the
+/// fallback wrote. The two escapers agree on every location shape the fixtures produce; where they
+/// do not, the text path stays.
+fn quoted_or_text(raw: &str, escaped: &str) -> LoweredExpr {
+    let node = str_node(raw);
+    let quoted = ["\"", escaped, "\""].concat();
+    if print_expr(&node) == quoted {
+        LoweredExpr::Node(node)
+    } else {
+        LoweredExpr::from(Err(quoted))
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::super::super::lower::ident_node;
+    use super::*;
+    use crate::emitter::ctx::{BodyMode, ModuleCtx, UnitFacts};
+    use crate::emitter::runtime_use::RuntimeUse;
+    use bynk_check::checker::{ExprId, TypedCommons, TypedExpr};
+    use bynk_syntax::span::Span;
+
+    fn printed(e: TsExpr) -> String {
+        print_expr(&e)
+    }
+
+    fn text(s: &str) -> LoweredExpr {
+        LoweredExpr::Text(s.to_string())
+    }
+
+    fn node(s: &str) -> LoweredExpr {
+        LoweredExpr::Node(ident_node(s))
+    }
+
+    fn built_text(b: Built) -> String {
+        LoweredExpr::from(b).into_text()
+    }
+
+    /// A receiver is bracketed only where precedence needs it: a plain identifier or call is not, a
+    /// binary, a conditional, an `await`, a unary operator or a number literal is.
+    #[test]
+    fn a_receiver_is_bracketed_only_where_precedence_needs_it() {
+        let a = || ident_node("a");
+        let b = || ident_node("b");
+        let sum = TsExpr::Binary {
+            op: TsBinaryOp::Add,
+            left: Box::new(a()),
+            right: Box::new(b()),
+        };
+        let awaited = TsExpr::Await(Box::new(call(id("f"), vec![])));
+        let cond = TsExpr::Conditional {
+            test: Box::new(id("c")),
+            consequent: Box::new(id("x")),
+            alternate: Box::new(id("y")),
+        };
+        let not = TsExpr::Unary {
+            op: bynk_ts::TsUnaryOp::Not,
+            expr: Box::new(id("z")),
+        };
+        let on = |recv: TsExpr| printed(call(member(receiver_object(recv), "op"), vec![]));
+        assert_eq!(on(a()), "a.op()");
+        assert_eq!(on(call(id("f"), vec![])), "f().op()");
+        assert_eq!(on(member(id("deps"), "claims")), "deps.claims.op()");
+        assert_eq!(on(sum), "(a + b).op()");
+        assert_eq!(on(awaited), "(await f()).op()");
+        assert_eq!(on(cond), "(c ? x : y).op()");
+        assert_eq!(on(not), "(!z).op()");
+        assert_eq!(on(TsExpr::Lit(TsLit::Num("1".to_string()))), "(1).op()");
+    }
+
+    /// The `TestConnection` arms: node forms drop the receiver brackets; a text receiver falls back
+    /// to the bracketed text.
+    #[test]
+    fn the_test_connection_arms_print_both_forms() {
+        for (op, node_form, text_form) in [
+            (TestConnectionOp::Sent, "[...c.sent]", "[...(a + b).sent]"),
+            (TestConnectionOp::Closed, "c.closed", "(a + b).closed"),
+            (TestConnectionOp::Connection, "c.mint()", "(a + b).mint()"),
+        ] {
+            let built = lower_test_connection(op, node("c"));
+            assert!(built.is_ok());
+            assert_eq!(built_text(built), node_form);
+            let built = lower_test_connection(op, text("a + b"));
+            assert!(built.is_err());
+            assert_eq!(built_text(built), text_form);
+        }
+        // A receiver that needs brackets keeps them as a node.
+        let sum = LoweredExpr::Node(TsExpr::Binary {
+            op: TsBinaryOp::Add,
+            left: Box::new(id("a")),
+            right: Box::new(id("b")),
+        });
+        assert_eq!(
+            built_text(lower_test_connection(TestConnectionOp::Closed, sum)),
+            "(a + b).closed"
+        );
+    }
+
+    /// `detach`'s site is a `Str` node only where the printer's escape prints the bytes the text
+    /// path does. The single escape (a fault location) agrees on every shape, non-ASCII included;
+    /// the doubly escaped assertion location agrees where escaping is the identity and keeps the
+    /// text elsewhere.
+    #[test]
+    fn the_site_string_is_a_node_only_where_the_escapers_agree() {
+        use crate::emitter::escape_ts_string;
+        for raw in [
+            "src/shapes.bynk:47:20",
+            "tests/a.test.bynk:3:7",
+            "offset 120",
+            "src/caf\u{e9}/\u{4e2d}\u{6587}.bynk:1:1",
+            "dir with space/x.bynk:2:3",
+            "a\"b.bynk:1:1",
+            "a\\b.bynk:1:1",
+            "tab\there.bynk:1:1",
+            "line\u{2028}sep.bynk:1:1",
+        ] {
+            let once = escape_ts_string(raw);
+            let single = quoted_or_text(raw, &once);
+            assert!(matches!(single, LoweredExpr::Node(_)), "{raw}");
+            assert_eq!(single.into_text(), format!("\"{once}\""));
+            let twice = escape_ts_string(&once);
+            let double = quoted_or_text(raw, &twice);
+            let expect_node = once == raw;
+            assert_eq!(matches!(double, LoweredExpr::Node(_)), expect_node, "{raw}");
+            assert_eq!(double.into_text(), format!("\"{twice}\""), "{raw}");
+        }
+    }
+
+    /// The four `EffectResult` text forms, for a receiver or callback that is still text.
+    #[test]
+    fn the_effect_result_text_forms_are_unchanged() {
+        let ts = ["T", "E", "A", "B"];
+        let want = [
+            (
+                EffectResultOp::MapOk,
+                r#"(async (__e: globalThis.Promise<Result<T, E>>, __f: (x: T) => A) => { const __r = await __e; return __r.tag === "Ok" ? Ok(__f(__r.value)) : __r; })(r, f)"#,
+            ),
+            (
+                EffectResultOp::MapErr,
+                r#"(async (__e: globalThis.Promise<Result<T, E>>, __f: (e: E) => B) => { const __r = await __e; return __r.tag === "Err" ? Err(__f(__r.error)) : __r; })(r, f)"#,
+            ),
+            (
+                EffectResultOp::FlatMapOk,
+                r#"(async (__e: globalThis.Promise<Result<T, E>>, __f: (x: T) => globalThis.Promise<Result<A, E>>) => { const __r = await __e; return __r.tag === "Ok" ? await __f(__r.value) : __r; })(r, f)"#,
+            ),
+            (
+                EffectResultOp::FlatMapErr,
+                r#"(async (__e: globalThis.Promise<Result<T, E>>, __f: (e: E) => globalThis.Promise<Result<T, B>>) => { const __r = await __e; return __r.tag === "Err" ? await __f(__r.error) : __r; })(r, f)"#,
+            ),
+        ];
+        for (op, expected) in want {
+            assert_eq!(effect_result_text(op, &ts, "r", "f"), expected);
+        }
+    }
+
+    fn expr(id: u32) -> Expr {
+        Expr {
+            id: ExprId(id),
+            kind: ExprKind::Ident(Ident {
+                name: "x".to_string(),
+                span: Span::new(0, 0),
+            }),
+            span: Span::new(0, 0),
+        }
+    }
+
+    /// A kernel op on a receiver whose checked type is not the op's own receiver kind is checker and
+    /// emitter drift: the dispatcher panics (#3164), with no fallback.
+    #[test]
+    #[should_panic(
+        expected = "bynk internal error (#3164): kernel op EffectResult(MapOk) on a mismatched receiver type"
+    )]
+    fn a_mismatched_receiver_type_panics_with_the_3164_message() {
+        let mut commons = TypedCommons::empty();
+        let int = commons.tys().intern(Ty::Base(BaseType::Int));
+        commons.callees.insert(
+            ExprId(1),
+            Callee::Kernel {
+                op: KernelOp::EffectResult(EffectResultOp::MapOk),
+                recv: int,
+            },
+        );
+        let cross = bynk_check::resolver::CrossContextInfo::default();
+        let ru = RuntimeUse::default();
+        let mut cx = LowerCtx::new(
+            ModuleCtx::new(&commons, &cross, &ru, UnitFacts::detached()),
+            BodyMode::Method,
+        );
+        let method = Ident {
+            name: "mapOk".to_string(),
+            span: Span::new(0, 0),
+        };
+        let (e, recv) = (expr(1), expr(2));
+        let _ = lower_kernel_method_call(&e, &recv, &method, &[], &mut cx, &mut Pre::new());
+    }
+
+    /// An `Effect[Result]` combinator call the checker recorded no `Effect[Result[_, _]]` type for
+    /// panics with the finding #28 message, naming the found type.
+    #[test]
+    #[should_panic(
+        expected = "bynk internal error (finding #28): emitter expected `Effect[Result[_, _]]`"
+    )]
+    fn an_untyped_effect_result_call_panics_with_the_finding_28_message() {
+        let mut commons = TypedCommons::empty();
+        let int = commons.tys().intern(Ty::Base(BaseType::Int));
+        let cross = bynk_check::resolver::CrossContextInfo::default();
+        let ru = RuntimeUse::default();
+        // The call is typed `Int`, not `Effect[Result[_, _]]`.
+        commons.expr_types.insert(
+            ExprId(1),
+            TypedExpr {
+                span: Span::new(0, 0),
+                ty: int,
+            },
+        );
+        let mut cx = LowerCtx::new(
+            ModuleCtx::new(&commons, &cross, &ru, UnitFacts::detached()),
+            BodyMode::Method,
+        );
+        let (e, recv) = (expr(1), expr(2));
+        let _ = lower_effect_result_kernel(
+            &e,
+            &recv,
+            EffectResultOp::MapOk,
+            &[],
+            int,
+            int,
+            &mut cx,
+            &mut Pre::new(),
+        );
+    }
+}

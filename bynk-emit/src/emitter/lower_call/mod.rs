@@ -5,6 +5,7 @@
 pub(super) mod agents;
 pub(super) mod codec_statics;
 pub(super) mod cross_context;
+pub(super) mod kernel;
 pub(super) mod platform;
 pub(super) mod query;
 pub(super) mod statics;

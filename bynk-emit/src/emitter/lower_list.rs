@@ -203,7 +203,7 @@ pub(super) fn awaited_apply(f: TsExpr) -> TsExpr {
 }
 
 /// `(a: A, b: B) => R`: a function type whose parameter names are part of its spelling.
-fn fn_type(params: &[(&str, &TsType)], ret: TsType) -> TsType {
+pub(super) fn fn_type(params: &[(&str, &TsType)], ret: TsType) -> TsType {
     TsType::Fn {
         params: params.iter().map(|(_, t)| (*t).clone()).collect(),
         names: params.iter().map(|(n, _)| (*n).to_string()).collect(),
@@ -212,7 +212,7 @@ fn fn_type(params: &[(&str, &TsType)], ret: TsType) -> TsType {
 }
 
 /// `globalThis.Promise<T>`.
-fn promise(t: TsType) -> TsType {
+pub(super) fn promise(t: TsType) -> TsType {
     TsType::named_with_args("globalThis.Promise", vec![t])
 }
 

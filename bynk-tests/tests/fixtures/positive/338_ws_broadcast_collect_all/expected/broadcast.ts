@@ -89,20 +89,26 @@ export class Room {
 
   async fanout(text: string, deps: {}): globalThis.Promise<readonly Result<void, string>[]> {
     const __state = await this.loadState();
-    return __bynkThen(__state.conns.values(), (__q) => (async () => { const __out: Result<void, string>[] = []; for (const __x of __q) { __out.push(await (async (c: Connection<ServerFrame>) => {
-    await (c).send({ text: text });
-    const r: Result<void, string> = Ok(undefined);
-    return r;
-  })(__x)); } return __out; })());
+    return __bynkThen(__state.conns.values(), (__q) => (async () => {
+      const __out: Result<void, string>[] = [];
+      for (const __x of __q) {
+        __out.push(await (async (c: Connection<ServerFrame>) => {
+          await c.send({ text: text });
+          const r: Result<void, string> = Ok(undefined);
+          return r;
+        })(__x));
+      }
+      return __out;
+    })());
   }
 
   async fanoutPar(text: string, deps: {}): globalThis.Promise<readonly Result<void, string>[]> {
     const __state = await this.loadState();
     return __bynkThen(__state.conns.values(), (__q) => (async () => await __bynkSettleAll(__q.map((__x) => () => (async (c: Connection<ServerFrame>) => {
-    await (c).send({ text: text });
-    const r: Result<void, string> = Ok(undefined);
-    return r;
-  })(__x))))());
+      await c.send({ text: text });
+      const r: Result<void, string> = Ok(undefined);
+      return r;
+    })(__x))))());
   }
 
 }
