@@ -1242,18 +1242,23 @@ impl<'a> LowerCtx<'a> {
         }
         let factory = agent_factory_name(agent);
         let workers = matches!(self.target(), BuildTarget::Workers);
-        let deps_text = self.cap_deps_expr().to_string();
-        let deps_env = bynk_ts::TsExpr::Member {
-            object: Box::new(self.cap_deps_node()),
-            property: "env".to_string(),
+        // The deps argument is read only on Workers, where the factory reaches the agent's namespace.
+        let (deps_text, deps_env) = if workers {
+            (
+                self.cap_deps_expr().to_string(),
+                Some(bynk_ts::TsExpr::Member {
+                    object: Box::new(self.cap_deps_node()),
+                    property: "env".to_string(),
+                }),
+            )
+        } else {
+            (String::new(), None)
         };
         node_or_text(
             vec![key],
             |k| {
                 let mut args = k;
-                if workers {
-                    args.push(deps_env);
-                }
+                args.extend(deps_env);
                 call(id(&factory), args)
             },
             |k| {

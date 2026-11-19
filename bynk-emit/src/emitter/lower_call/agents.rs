@@ -1,6 +1,8 @@
 //! Agent construction and agent calls (back-half paydown 1A.27, #3728): the inline call
-//! `Agent(<key>).method(args)`, the let-bound call `x.method(args)` and (below) `AgentName(key)`.
-//! Moved out of `lower.rs` byte for byte (Decision D) before they convert to nodes.
+//! `Agent(<key>).method(args)`, the let-bound call `x.method(args)` and `AgentName(key)`
+//! (`lower_agent_init`, further down). Each is built as a node when its key and arguments are nodes
+//! and falls back to the same text otherwise; they were moved here from `lower.rs` byte for byte
+//! first (Decision D).
 
 use bynk_check::checker::Callee;
 
@@ -9,8 +11,9 @@ use super::super::lower_ctx::LowerCtx;
 use super::super::lower_list::{call, id, member};
 use super::super::*;
 
-/// Lower an inline agent invocation, `Agent(<key>).method(args)`, or `None` when the call is not one. Moved out of
-/// `lower_method_call` (#3167) unchanged.
+/// Lower an inline agent invocation, `Agent(<key>).method(args)`, or `None` when the call is not one. A node
+/// (`Call(Member(<construction>, method), args)`, wrapped in the trace step on a traced build) when the key and
+/// arguments are nodes, else the text form.
 pub(in crate::emitter) fn lower_inline_agent_call(
     e: &Expr,
     receiver: &Expr,
@@ -88,8 +91,9 @@ pub(in crate::emitter) fn lower_inline_agent_call(
     None
 }
 
-/// Lower a method call on a let-bound agent instance, or `None` when the call is not one. Moved out of
-/// `lower_method_call` (#3167) unchanged.
+/// Lower a method call on a let-bound agent instance, or `None` when the call is not one. A node
+/// (`Call(Member(<binding>, method), args)`, wrapped in the trace step on a traced build) when the arguments are
+/// nodes, else the text form.
 pub(in crate::emitter) fn lower_let_bound_agent_call(
     e: &Expr,
     receiver: &Expr,

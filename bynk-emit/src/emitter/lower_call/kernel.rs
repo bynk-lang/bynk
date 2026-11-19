@@ -7,7 +7,9 @@ use bynk_check::checker::{Callee, Ty, TyId};
 use bynk_check::kernel_op::{EffectOp, EffectResultOp, HttpResultOp, KernelOp, TestConnectionOp};
 use bynk_ts::{TsArrowBody, TsBinaryOp, TsExpr, TsLit, TsObjectEntry, TsType, print_expr};
 
-use super::super::lower::*;
+use super::super::lower::{
+    Built, LoweredExpr, Pre, expect_location, expect_location_raw, node_or_text, str_node,
+};
 use super::super::lower_ctx::LowerCtx;
 use super::super::lower_list::{
     any_ty, arrow, binary, call, const_, fn_type, id, lower_list_kernel, member, param, paren,
@@ -116,19 +118,18 @@ fn lower_effect_kernel_call(
             // location twice (`expect_location` has already escaped it), so a site
             // is a `Str` node only where the printer's one escape prints the same
             // bytes; otherwise it stays text.
-            let site_raw = if cx.assert_loc().is_some() {
-                Some(expect_location_raw(cx, e.span.start))
+            let in_test = cx.assert_loc().is_some();
+            let site_raw = if in_test {
+                expect_location_raw(cx, e.span.start)
             } else {
                 cx.fault_location(e.span.start)
+                    .unwrap_or_else(|| format!("offset {}", e.span.start))
             };
-            let site = match &site_raw {
-                Some(_) if cx.assert_loc().is_some() => {
-                    crate::emitter::escape_ts_string(&expect_location(cx, e.span.start))
-                }
-                Some(raw) => crate::emitter::escape_ts_string(raw),
-                None => format!("offset {}", e.span.start),
+            let site = if in_test {
+                crate::emitter::escape_ts_string(&expect_location(cx, e.span.start))
+            } else {
+                crate::emitter::escape_ts_string(&site_raw)
             };
-            let site_raw = site_raw.unwrap_or_else(|| format!("offset {}", e.span.start));
             let err_raw = match &recv_ty {
                 Ty::Effect(inner) => match &*tys.get(*inner) {
                     Ty::Result(_, err) => Some(err.display(tys.types()).to_string()),
@@ -601,14 +602,15 @@ fn lower_http_result(
     let recv = pre.lower_node(receiver, cx);
     let lowered: Vec<LoweredExpr> = args.iter().map(|a| pre.lower_node(a, cx)).collect();
     if matches!(op, HttpResultOp::Cookies) {
-        // `((recv as any).cookies ?? [])`
+        // The `cookies` list of the receiver, read through a cast, or empty.
         return node_or_text(
             vec![recv],
             |n| {
                 let [recv] = take::<1, _>(n);
+                let ty = any_ty();
                 let cast = TsExpr::As {
                     expr: Box::new(recv),
-                    ty: any_ty(),
+                    ty,
                 };
                 paren(binary(
                     TsBinaryOp::NullishCoalescing,
@@ -682,10 +684,230 @@ fn lower_http_result(
 /// do not, the text path stays.
 fn quoted_or_text(raw: &str, escaped: &str) -> LoweredExpr {
     let node = str_node(raw);
-    let quoted = format!("\"{escaped}\"");
+    let quoted = ["\"", escaped, "\""].concat();
     if print_expr(&node) == quoted {
         LoweredExpr::Node(node)
     } else {
         LoweredExpr::Text(quoted)
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::super::super::lower::ident_node;
+    use super::*;
+    use crate::emitter::ctx::{BodyMode, ModuleCtx, UnitFacts};
+    use crate::emitter::runtime_use::RuntimeUse;
+    use bynk_check::checker::{ExprId, TypedCommons, TypedExpr};
+    use bynk_syntax::span::Span;
+
+    fn printed(e: TsExpr) -> String {
+        print_expr(&e)
+    }
+
+    fn text(s: &str) -> LoweredExpr {
+        LoweredExpr::Text(s.to_string())
+    }
+
+    fn node(s: &str) -> LoweredExpr {
+        LoweredExpr::Node(ident_node(s))
+    }
+
+    fn built_text(b: Built) -> String {
+        LoweredExpr::from(b).into_text()
+    }
+
+    /// A receiver is bracketed only where precedence needs it: a plain identifier or call is not, a
+    /// binary, a conditional, an `await`, a unary operator or a number literal is.
+    #[test]
+    fn a_receiver_is_bracketed_only_where_precedence_needs_it() {
+        let a = || ident_node("a");
+        let b = || ident_node("b");
+        let sum = TsExpr::Binary {
+            op: TsBinaryOp::Add,
+            left: Box::new(a()),
+            right: Box::new(b()),
+        };
+        let awaited = TsExpr::Await(Box::new(call(id("f"), vec![])));
+        let cond = TsExpr::Conditional {
+            test: Box::new(id("c")),
+            consequent: Box::new(id("x")),
+            alternate: Box::new(id("y")),
+        };
+        let not = TsExpr::Unary {
+            op: bynk_ts::TsUnaryOp::Not,
+            expr: Box::new(id("z")),
+        };
+        let on = |recv: TsExpr| printed(call(member(receiver_object(recv), "op"), vec![]));
+        assert_eq!(on(a()), "a.op()");
+        assert_eq!(on(call(id("f"), vec![])), "f().op()");
+        assert_eq!(on(member(id("deps"), "claims")), "deps.claims.op()");
+        assert_eq!(on(sum), "(a + b).op()");
+        assert_eq!(on(awaited), "(await f()).op()");
+        assert_eq!(on(cond), "(c ? x : y).op()");
+        assert_eq!(on(not), "(!z).op()");
+        assert_eq!(on(TsExpr::Lit(TsLit::Num("1".to_string()))), "(1).op()");
+    }
+
+    /// The `TestConnection` arms: node forms drop the receiver brackets; a text receiver falls back
+    /// to the bracketed text.
+    #[test]
+    fn the_test_connection_arms_print_both_forms() {
+        for (op, node_form, text_form) in [
+            (TestConnectionOp::Sent, "[...c.sent]", "[...(a + b).sent]"),
+            (TestConnectionOp::Closed, "c.closed", "(a + b).closed"),
+            (TestConnectionOp::Connection, "c.mint()", "(a + b).mint()"),
+        ] {
+            let built = lower_test_connection(op, node("c"));
+            assert!(built.is_ok());
+            assert_eq!(built_text(built), node_form);
+            let built = lower_test_connection(op, text("a + b"));
+            assert!(built.is_err());
+            assert_eq!(built_text(built), text_form);
+        }
+        // A receiver that needs brackets keeps them as a node.
+        let sum = LoweredExpr::Node(TsExpr::Binary {
+            op: TsBinaryOp::Add,
+            left: Box::new(id("a")),
+            right: Box::new(id("b")),
+        });
+        assert_eq!(
+            built_text(lower_test_connection(TestConnectionOp::Closed, sum)),
+            "(a + b).closed"
+        );
+    }
+
+    /// `detach`'s site is a `Str` node only where the printer's escape prints the bytes the text
+    /// path does. The single escape (a fault location) agrees on every shape, non-ASCII included;
+    /// the doubly escaped assertion location agrees where escaping is the identity and keeps the
+    /// text elsewhere.
+    #[test]
+    fn the_site_string_is_a_node_only_where_the_escapers_agree() {
+        use crate::emitter::escape_ts_string;
+        for raw in [
+            "src/shapes.bynk:47:20",
+            "tests/a.test.bynk:3:7",
+            "offset 120",
+            "src/caf\u{e9}/\u{4e2d}\u{6587}.bynk:1:1",
+            "dir with space/x.bynk:2:3",
+            "a\"b.bynk:1:1",
+            "a\\b.bynk:1:1",
+            "tab\there.bynk:1:1",
+            "line\u{2028}sep.bynk:1:1",
+        ] {
+            let once = escape_ts_string(raw);
+            let single = quoted_or_text(raw, &once);
+            assert!(matches!(single, LoweredExpr::Node(_)), "{raw}");
+            assert_eq!(single.into_text(), format!("\"{once}\""));
+            let twice = escape_ts_string(&once);
+            let double = quoted_or_text(raw, &twice);
+            let expect_node = once == raw;
+            assert_eq!(matches!(double, LoweredExpr::Node(_)), expect_node, "{raw}");
+            assert_eq!(double.into_text(), format!("\"{twice}\""), "{raw}");
+        }
+    }
+
+    /// The four `EffectResult` text forms, for a receiver or callback that is still text.
+    #[test]
+    fn the_effect_result_text_forms_are_unchanged() {
+        let ts = ["T", "E", "A", "B"];
+        let want = [
+            (
+                EffectResultOp::MapOk,
+                r#"(async (__e: globalThis.Promise<Result<T, E>>, __f: (x: T) => A) => { const __r = await __e; return __r.tag === "Ok" ? Ok(__f(__r.value)) : __r; })(r, f)"#,
+            ),
+            (
+                EffectResultOp::MapErr,
+                r#"(async (__e: globalThis.Promise<Result<T, E>>, __f: (e: E) => B) => { const __r = await __e; return __r.tag === "Err" ? Err(__f(__r.error)) : __r; })(r, f)"#,
+            ),
+            (
+                EffectResultOp::FlatMapOk,
+                r#"(async (__e: globalThis.Promise<Result<T, E>>, __f: (x: T) => globalThis.Promise<Result<A, E>>) => { const __r = await __e; return __r.tag === "Ok" ? await __f(__r.value) : __r; })(r, f)"#,
+            ),
+            (
+                EffectResultOp::FlatMapErr,
+                r#"(async (__e: globalThis.Promise<Result<T, E>>, __f: (e: E) => globalThis.Promise<Result<T, B>>) => { const __r = await __e; return __r.tag === "Err" ? await __f(__r.error) : __r; })(r, f)"#,
+            ),
+        ];
+        for (op, expected) in want {
+            assert_eq!(effect_result_text(op, &ts, "r", "f"), expected);
+        }
+    }
+
+    fn expr(id: u32) -> Expr {
+        Expr {
+            id: ExprId(id),
+            kind: ExprKind::Ident(Ident {
+                name: "x".to_string(),
+                span: Span::new(0, 0),
+            }),
+            span: Span::new(0, 0),
+        }
+    }
+
+    /// A kernel op on a receiver whose checked type is not the op's own receiver kind is checker and
+    /// emitter drift: the dispatcher panics (#3164), with no fallback.
+    #[test]
+    #[should_panic(
+        expected = "bynk internal error (#3164): kernel op EffectResult(MapOk) on a mismatched receiver type"
+    )]
+    fn a_mismatched_receiver_type_panics_with_the_3164_message() {
+        let mut commons = TypedCommons::empty();
+        let int = commons.tys().intern(Ty::Base(BaseType::Int));
+        commons.callees.insert(
+            ExprId(1),
+            Callee::Kernel {
+                op: KernelOp::EffectResult(EffectResultOp::MapOk),
+                recv: int,
+            },
+        );
+        let cross = bynk_check::resolver::CrossContextInfo::default();
+        let ru = RuntimeUse::default();
+        let mut cx = LowerCtx::new(
+            ModuleCtx::new(&commons, &cross, &ru, UnitFacts::detached()),
+            BodyMode::Method,
+        );
+        let method = Ident {
+            name: "mapOk".to_string(),
+            span: Span::new(0, 0),
+        };
+        let (e, recv) = (expr(1), expr(2));
+        let _ = lower_kernel_method_call(&e, &recv, &method, &[], &mut cx, &mut Pre::new());
+    }
+
+    /// An `Effect[Result]` combinator call the checker recorded no `Effect[Result[_, _]]` type for
+    /// panics with the finding #28 message, naming the found type.
+    #[test]
+    #[should_panic(
+        expected = "bynk internal error (finding #28): emitter expected `Effect[Result[_, _]]`"
+    )]
+    fn an_untyped_effect_result_call_panics_with_the_finding_28_message() {
+        let mut commons = TypedCommons::empty();
+        let int = commons.tys().intern(Ty::Base(BaseType::Int));
+        let cross = bynk_check::resolver::CrossContextInfo::default();
+        let ru = RuntimeUse::default();
+        // The call is typed `Int`, not `Effect[Result[_, _]]`.
+        commons.expr_types.insert(
+            ExprId(1),
+            TypedExpr {
+                span: Span::new(0, 0),
+                ty: int,
+            },
+        );
+        let mut cx = LowerCtx::new(
+            ModuleCtx::new(&commons, &cross, &ru, UnitFacts::detached()),
+            BodyMode::Method,
+        );
+        let (e, recv) = (expr(1), expr(2));
+        let _ = lower_effect_result_kernel(
+            &e,
+            &recv,
+            EffectResultOp::MapOk,
+            &[],
+            int,
+            int,
+            &mut cx,
+            &mut Pre::new(),
+        );
     }
 }
