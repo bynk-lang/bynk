@@ -71,7 +71,7 @@ async function test_a_literal_from_a_caller_with_its_own_Cents() {
     __bynkHarness = undefined;
     __bynkClockNow = 0;
     const deps = __makeHarness();
-    const r = await __callService(deps.env.T_SHADOW, "go", {  }, (__j: __JsonValue) => ((__v) => typeof __v !== "number" ? Err({ kind: "StructuralMismatch", path: "$", expected: "safe integer", actual: typeof __v } as __BoundaryError) : globalThis.Number.isSafeInteger(__v) ? Ok(__v) : Err({ kind: "StructuralMismatch", path: "$", expected: "safe integer", actual: String(__v) } as __BoundaryError))(__j), "integration", "5e7a0d0ca04f13c2", deps.env, "t.shadow");
+    const r = await __callService(deps.env.T_SHADOW, "go", {}, (__j: __JsonValue) => ((__v) => typeof __v !== "number" ? Err({ kind: "StructuralMismatch", path: "$", expected: "safe integer", actual: typeof __v } as __BoundaryError) : globalThis.Number.isSafeInteger(__v) ? Ok(__v) : Err({ kind: "StructuralMismatch", path: "$", expected: "safe integer", actual: String(__v) } as __BoundaryError))(__j), "integration", "5e7a0d0ca04f13c2", deps.env, "t.shadow");
     if (!(r === 250)) { throw __bynkExpectFailure("tests/shadow.bynk:5:10", 200, 208, "expect r == 250\n  expected: r == 250\n  actual:   " + __bynkShow((r)) + " == " + __bynkShow((250))); }
     return { pass: true };
   } catch (e) {

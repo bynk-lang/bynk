@@ -16,7 +16,7 @@ export const Amount = {
 
 export const total = {
   async call(deps: { env: { SHOP_QUOTES: __ServiceBinding } }): globalThis.Promise<number> {
-    const a = await __callService(deps.env.SHOP_QUOTES, "price", {  }, __deserialise_shop_quotes__Amount, "shop.till", "13d2ae969f935116", deps.env, "shop.quotes");
+    const a = await __callService(deps.env.SHOP_QUOTES, "price", {}, __deserialise_shop_quotes__Amount, "shop.till", "13d2ae969f935116", deps.env, "shop.quotes");
     const paid = await __callService(deps.env.SHOP_QUOTES, "pay", __serialise_shop_quotes__Amount(({ cents: a.cents + 1 } as unknown as shop_quotes.Amount)), (__j: __JsonValue) => ((__v) => typeof __v !== "number" ? Err({ kind: "StructuralMismatch", path: "$", expected: "safe integer", actual: typeof __v } as __BoundaryError) : globalThis.Number.isSafeInteger(__v) ? Ok(__v) : Err({ kind: "StructuralMismatch", path: "$", expected: "safe integer", actual: String(__v) } as __BoundaryError))(__j), "shop.till", "0a863ca09197a185", deps.env, "shop.quotes");
     return paid;
   },

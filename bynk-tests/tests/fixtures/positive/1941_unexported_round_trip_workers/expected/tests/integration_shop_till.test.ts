@@ -91,7 +91,7 @@ async function test_each_value_crosses_back_and_is_read_by_its_own_context() {
     __bynkHarness = undefined;
     __bynkClockNow = 0;
     const deps = __makeHarness();
-    const n = await __callService(deps.env.SHOP_TILL, "total", {  }, (__j: __JsonValue) => ((__v) => typeof __v !== "number" ? Err({ kind: "StructuralMismatch", path: "$", expected: "safe integer", actual: typeof __v } as __BoundaryError) : globalThis.Number.isSafeInteger(__v) ? Ok(__v) : Err({ kind: "StructuralMismatch", path: "$", expected: "safe integer", actual: String(__v) } as __BoundaryError))(__j), "integration", "33d600cce42e97f8", deps.env, "shop.till");
+    const n = await __callService(deps.env.SHOP_TILL, "total", {}, (__j: __JsonValue) => ((__v) => typeof __v !== "number" ? Err({ kind: "StructuralMismatch", path: "$", expected: "safe integer", actual: typeof __v } as __BoundaryError) : globalThis.Number.isSafeInteger(__v) ? Ok(__v) : Err({ kind: "StructuralMismatch", path: "$", expected: "safe integer", actual: String(__v) } as __BoundaryError))(__j), "integration", "33d600cce42e97f8", deps.env, "shop.till");
     if (!(n === 4)) { throw __bynkExpectFailure("tests/shop/till.bynk:7:12", 224, 230, "expect n == 4\n  expected: n == 4\n  actual:   " + __bynkShow((n)) + " == " + __bynkShow((4))); }
     return { pass: true };
   } catch (e) {

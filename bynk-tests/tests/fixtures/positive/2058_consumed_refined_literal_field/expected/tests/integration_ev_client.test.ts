@@ -78,7 +78,7 @@ async function test_a_record_bound_before_the_call() {
     __bynkHarness = undefined;
     __bynkClockNow = 0;
     const deps = __makeHarness();
-    const r = await __callService(deps.env.EV_CLIENT, "bound", {  }, (__j: __JsonValue) => ((__v) => typeof __v !== "number" ? Err({ kind: "StructuralMismatch", path: "$", expected: "safe integer", actual: typeof __v } as __BoundaryError) : globalThis.Number.isSafeInteger(__v) ? Ok(__v) : Err({ kind: "StructuralMismatch", path: "$", expected: "safe integer", actual: String(__v) } as __BoundaryError))(__j), "integration", "ca650fc30d20ca42", deps.env, "ev.client");
+    const r = await __callService(deps.env.EV_CLIENT, "bound", {}, (__j: __JsonValue) => ((__v) => typeof __v !== "number" ? Err({ kind: "StructuralMismatch", path: "$", expected: "safe integer", actual: typeof __v } as __BoundaryError) : globalThis.Number.isSafeInteger(__v) ? Ok(__v) : Err({ kind: "StructuralMismatch", path: "$", expected: "safe integer", actual: String(__v) } as __BoundaryError))(__j), "integration", "ca650fc30d20ca42", deps.env, "ev.client");
     if (!(r === 1)) { throw __bynkExpectFailure("tests/client.bynk:5:12", 141, 147, "expect r == 1\n  expected: r == 1\n  actual:   " + __bynkShow((r)) + " == " + __bynkShow((1))); }
     return { pass: true };
   } catch (e) {
@@ -94,7 +94,7 @@ async function test_a_record_of_a_consumed_context_with_no_service() {
     __bynkHarness = undefined;
     __bynkClockNow = 0;
     const deps = __makeHarness();
-    const r = await __callService(deps.env.EV_CLIENT, "tagged", {  }, (__j: __JsonValue) => ((__v) => typeof __v !== "number" ? Err({ kind: "StructuralMismatch", path: "$", expected: "safe integer", actual: typeof __v } as __BoundaryError) : globalThis.Number.isSafeInteger(__v) ? Ok(__v) : Err({ kind: "StructuralMismatch", path: "$", expected: "safe integer", actual: String(__v) } as __BoundaryError))(__j), "integration", "1c72e694be51e388", deps.env, "ev.client");
+    const r = await __callService(deps.env.EV_CLIENT, "tagged", {}, (__j: __JsonValue) => ((__v) => typeof __v !== "number" ? Err({ kind: "StructuralMismatch", path: "$", expected: "safe integer", actual: typeof __v } as __BoundaryError) : globalThis.Number.isSafeInteger(__v) ? Ok(__v) : Err({ kind: "StructuralMismatch", path: "$", expected: "safe integer", actual: String(__v) } as __BoundaryError))(__j), "integration", "1c72e694be51e388", deps.env, "ev.client");
     if (!(r === 3)) { throw __bynkExpectFailure("tests/client.bynk:10:12", 254, 260, "expect r == 3\n  expected: r == 3\n  actual:   " + __bynkShow((r)) + " == " + __bynkShow((3))); }
     return { pass: true };
   } catch (e) {
@@ -110,7 +110,7 @@ async function test_a_record_built_in_the_call() {
     __bynkHarness = undefined;
     __bynkClockNow = 0;
     const deps = __makeHarness();
-    const r = await __callService(deps.env.EV_CLIENT, "direct", {  }, (__j: __JsonValue) => ((__v) => typeof __v !== "number" ? Err({ kind: "StructuralMismatch", path: "$", expected: "safe integer", actual: typeof __v } as __BoundaryError) : globalThis.Number.isSafeInteger(__v) ? Ok(__v) : Err({ kind: "StructuralMismatch", path: "$", expected: "safe integer", actual: String(__v) } as __BoundaryError))(__j), "integration", "76f6dbd04a55794f", deps.env, "ev.client");
+    const r = await __callService(deps.env.EV_CLIENT, "direct", {}, (__j: __JsonValue) => ((__v) => typeof __v !== "number" ? Err({ kind: "StructuralMismatch", path: "$", expected: "safe integer", actual: typeof __v } as __BoundaryError) : globalThis.Number.isSafeInteger(__v) ? Ok(__v) : Err({ kind: "StructuralMismatch", path: "$", expected: "safe integer", actual: String(__v) } as __BoundaryError))(__j), "integration", "76f6dbd04a55794f", deps.env, "ev.client");
     if (!(r === 2)) { throw __bynkExpectFailure("tests/client.bynk:15:12", 347, 353, "expect r == 2\n  expected: r == 2\n  actual:   " + __bynkShow((r)) + " == " + __bynkShow((2))); }
     return { pass: true };
   } catch (e) {
