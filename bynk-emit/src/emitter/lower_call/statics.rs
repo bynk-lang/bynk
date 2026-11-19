@@ -362,7 +362,7 @@ pub(in crate::emitter) fn lower_scalar_static_call(
     // v0.22b: the typed JSON codec (ADR 0045).
     // 1A: the codec's decoders and encoders are their own family (1A.21); it
     // stays as it is, and a node it returns passes through.
-    if let Some(built) = pre.absorb_built(lower_json_codec_call(e, receiver, method, args, cx)) {
+    if let Some(built) = lower_json_codec_call(e, receiver, method, args, cx, pre) {
         return Some(built);
     }
     // K6b (#2598): `Float.pi()` and `Float.e()`.

@@ -2770,8 +2770,12 @@ fn lower_d1_select_call(
         } else {
             ("Sql", "Decode")
         };
-        let decoder = json_decoder_fn(target, source, cx)
-            .expect("a checked D1 select row type has a JSON decoder");
+        // 1A: the D1 `select` caller splices the decoder into a text IIFE until 1A.24.
+        let decoder = LoweredExpr::from(
+            json_decoder_fn(target, source, cx)
+                .expect("a checked D1 select row type has a JSON decoder"),
+        )
+        .into_text();
         {
             let params = pre.lower(params, cx);
             let deps =
