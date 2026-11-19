@@ -8,12 +8,12 @@
 //! body is a statement block `bynk_ts` cannot yet express in an expression position.
 
 use bynk_check::kernel_op::{BytesOp, DecimalOp, DurationOp, FloatOp, InstantOp, IntOp, StringOp};
-use bynk_syntax::ast::{Expr, ExprKind};
 use bynk_ts::{TsArrowBody, TsBinaryOp, TsExpr, TsType};
 
 use super::super::lower::{Built, Lowered, LoweredExpr, Pre, node_or_text, str_node};
 use super::super::lower_ctx::LowerCtx;
 use super::super::lower_list::{arrow, call, id, member, param, spread, take, zero};
+use super::super::{Expr, ExprKind, rounding_mode};
 use super::kernel::receiver_object;
 
 /// The receiver and then each argument, lowered in order as bridge values.
@@ -799,7 +799,7 @@ pub(in crate::emitter) fn lower_decimal_kernel(
     cx: &mut LowerCtx,
 ) -> Option<Lowered> {
     let mut pre = Pre::new();
-    let mode = |a: &Expr| bynk_syntax::ast::rounding_mode(a).map(|m| m.name());
+    let mode = |a: &Expr| rounding_mode(a).map(|m| m.name());
     // A helper call whose last operand is the rounding mode, a string literal.
     let with_mode = |helper: &str, mut kids: Vec<LoweredExpr>, mode: &str| {
         kids.push(LoweredExpr::Node(str_node(mode)));
