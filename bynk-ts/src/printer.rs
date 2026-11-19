@@ -828,8 +828,21 @@ fn render_branch(
             out.push('\n');
         }
         TsStmtKind::InlineBlock(stmts) => {
-            out.push(' ');
-            render_inline_block(out, stmts);
+            if inline_block_fits_one_line(stmts) {
+                out.push(' ');
+                render_inline_block(out, stmts);
+            } else {
+                // 1A.21 (#3722): a statement that holds a multi-line expression (a typed
+                // decoder's block-bodied arrow, in a failure message) cannot be written on one
+                // line, so the branch takes the braced, indented form instead.
+                render_block_body(
+                    out,
+                    &TsStmt::block(stmts.clone(), None),
+                    depth,
+                    map.as_mut().map(|t| t.reborrow()),
+                );
+                out.push('\n');
+            }
         }
         TsStmtKind::Verbatim { .. }
         | TsStmtKind::Decl(_)
@@ -855,6 +868,16 @@ fn render_branch(
             render_inline_stmt(out, branch, depth);
         }
     }
+}
+
+/// Whether every statement of an [`TsStmtKind::InlineBlock`] renders on one line, so that the
+/// block may be written `{ a; b; }`.
+fn inline_block_fits_one_line(stmts: &[TsStmt]) -> bool {
+    stmts.iter().all(|s| {
+        let mut piece = String::new();
+        render_inline_stmt(&mut piece, s, 0);
+        !piece.trim_end_matches('\n').contains('\n')
+    })
 }
 
 /// `{ stmt; stmt; ... }` on one generated line — [`TsStmtKind::InlineBlock`]'s
@@ -5997,6 +6020,54 @@ mod tests {
         assert_eq!(
             printed.text,
             "try {\n  work;\n} catch (e) {\n  console.error(e); msg.retry();\n}\n"
+        );
+    }
+
+    /// An `if` whose inline block holds a multi-line expression (a block-bodied arrow in a
+    /// call argument, 1A.21) cannot be one line, so it takes the braced form, while a block of
+    /// one-line statements keeps `{ a; }`.
+    #[test]
+    fn an_inline_block_with_a_multiline_statement_takes_braces() {
+        let id = |n: &str| TsExpr::Ident(n.to_string());
+        let arrow = TsExpr::Arrow {
+            params: vec![],
+            is_async: false,
+            generics: Vec::new(),
+            return_type: None,
+            body: Box::new(TsArrowBody::Multiline(vec![TsStmt::return_stmt(
+                Some(id("x")),
+                None,
+            )])),
+        };
+        let throw = |e: TsExpr| {
+            TsStmt::throw_stmt(
+                TsExpr::Call {
+                    callee: Box::new(id("fail")),
+                    args: vec![e],
+                },
+                None,
+            )
+        };
+        let text = |stmt: TsStmt| {
+            let mut program = TsProgram::new();
+            program.push(stmt);
+            print(&program, "x.bynk", "", "x.ts").text
+        };
+        assert_eq!(
+            text(TsStmt::if_stmt(
+                id("c"),
+                TsStmt::inline_block(vec![throw(id("m"))], None),
+                None
+            )),
+            "if (c) { throw fail(m); }\n"
+        );
+        assert_eq!(
+            text(TsStmt::if_stmt(
+                id("c"),
+                TsStmt::inline_block(vec![throw(TsExpr::Paren(Box::new(arrow)))], None),
+                None
+            )),
+            "if (c) {\n  throw fail((() => {\n    return x;\n  }));\n}\n"
         );
     }
 
