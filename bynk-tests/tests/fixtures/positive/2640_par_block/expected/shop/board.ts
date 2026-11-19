@@ -94,17 +94,17 @@ export const branch = {
 export const shadow = {
   async call(id: number, deps: { Users: Users; Orders: Orders }): globalThis.Promise<number> {
     const [user, n, m] = await __bynkSettleAll([() => deps.Users.get(id), () => deps.Orders.forUser((([1, 2]).map((__x: number) => ((user: number) => user + 1)(__x))).length), () => deps.Orders.forUser(((__d) => {
-  switch (__d.tag) {
-    case "Some": {
-      const user = __d.value;
-      return user;
-    }
-    case "None": {
-      return 0;
-    }
-  }
-  throw new globalThis.Error("non-exhaustive match");
-})(Some(id)))]);
+      switch (__d.tag) {
+        case "Some": {
+          const user = __d.value;
+          return user;
+        }
+        case "None": {
+          return 0;
+        }
+      }
+      throw new globalThis.Error("non-exhaustive match");
+    })(Some(id)))]);
     return (user).length + n + m;
   },
 };
@@ -112,16 +112,16 @@ export const shadow = {
 export const hoist = {
   async call(id: number, deps: { Orders: Orders }): globalThis.Promise<number> {
     const [a, b] = await __bynkSettleAll([() => deps.Orders.forUser(id), (): globalThis.Promise<number> => deps.Orders.forUser(((__d) => {
-  switch (__d) {
-    case 0: {
-      return 1;
-    }
-    default: {
-      return id;
-    }
-  }
-  throw new globalThis.Error("non-exhaustive match");
-})(id))]);
+      switch (__d) {
+        case 0: {
+          return 1;
+        }
+        default: {
+          return id;
+        }
+      }
+      throw new globalThis.Error("non-exhaustive match");
+    })(id))]);
     return a + b;
   },
 };

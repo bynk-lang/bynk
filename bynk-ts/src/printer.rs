@@ -1941,10 +1941,7 @@ fn render_expr(out: &mut String, expr: &TsExpr, depth: usize, m: &mut Option<Mer
             );
             render_spread(out, inner, depth, m);
         }
-        TsExpr::NonNull(inner) => {
-            render_operand(out, inner, depth, m);
-            out.push('!');
-        }
+        TsExpr::NonNull(inner) => render_non_null(out, inner, depth, m),
         TsExpr::Assign { target, value } => {
             render_expr(out, target, depth, m);
             out.push_str(" = ");
@@ -1957,6 +1954,25 @@ fn render_expr(out: &mut String, expr: &TsExpr, depth: usize, m: &mut Option<Mer
         }
         TsExpr::Lit(lit) => render_lit(out, lit),
     }
+}
+
+/// A postfix `!` binds tighter than `await` and unary `!`/`-`/`typeof`, so those operands are
+/// bracketed here: `(await x)!`, `(!x)!` (1A.23 review, #3779). The bracket set is local to the
+/// postfix, so `render_operand`'s other callers print as before.
+fn render_non_null(
+    out: &mut String,
+    inner: &TsExpr,
+    depth: usize,
+    m: &mut Option<MergeTarget<'_>>,
+) {
+    if matches!(inner, TsExpr::Await(_) | TsExpr::Unary { .. }) {
+        out.push('(');
+        render_expr(out, inner, depth, m);
+        out.push(')');
+    } else {
+        render_operand(out, inner, depth, m);
+    }
+    out.push('!');
 }
 
 /// An array item: a [`TsExpr::Spread`] prints `...` and its operand, anything
@@ -4731,6 +4747,23 @@ mod tests {
             args: vec![id("x")],
         };
         assert_eq!(print_expr(&call), "f!(x)");
+    }
+
+    /// A postfix `!` over an `await` or a unary operand is bracketed: `await x!` would assert
+    /// `x`, and `!x!` would negate `x!` (1A.23 review, #3779).
+    #[test]
+    fn a_non_null_assertion_brackets_await_and_unary_operands() {
+        let id = |n: &str| TsExpr::Ident(n.to_string());
+        let awaited = TsExpr::Await(Box::new(id("x")));
+        assert_eq!(
+            print_expr(&TsExpr::NonNull(Box::new(awaited))),
+            "(await x)!"
+        );
+        let negated = TsExpr::Unary {
+            op: TsUnaryOp::Not,
+            expr: Box::new(id("x")),
+        };
+        assert_eq!(print_expr(&TsExpr::NonNull(Box::new(negated))), "(!x)!");
     }
 
     /// `TsExpr::Spread` (1A.18a, #3719): `...x` as an array item, in any

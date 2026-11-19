@@ -115,6 +115,8 @@ mod integration {
     mod multi_file_commons_barrel;
     #[path = "ord_bound_fixes.rs"]
     mod ord_bound_fixes;
+    #[path = "platform_nodes.rs"]
+    mod platform_nodes;
     #[path = "provider_agent_cross_context_target.rs"]
     mod provider_agent_cross_context_target;
     #[path = "query_kernel_registry.rs"]
