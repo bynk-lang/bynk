@@ -62,7 +62,17 @@ async function test_an_unreachable_arm_faults_when_evaluated() {
     const deps = __makeTestDeps();
     const { Ledger, Status, __makeLedger, awaits, bumps, effectGuards, firstArm, firsts, guard, guards, half, halves, label, labels, lambdas, pick, pickFirst, pickSecond, picks, reads, refund, refunds, shadowed, unwrap, unwraps, viaLambda } = __ns_demo_orders;
     type Status = __ns_demo_orders.Status;
-    if (!((await (async () => { try { await (labels.call(Status.Archived, deps)); return false; } catch (__e) { if (__e instanceof ExpectationError) { throw __e; } return true; } })()))) { throw __bynkExpectFailure("tests/orders.test.bynk:8:12", 187, 215, "expect labels.call(Archived) faults\n  the call returned without faulting"); }
+    if (!((await (async () => {
+      try {
+        await (labels.call(Status.Archived, deps));
+        return false;
+      } catch (__e) {
+        if (__e instanceof ExpectationError) {
+          throw __e;
+        }
+        return true;
+      }
+    })()))) { throw __bynkExpectFailure("tests/orders.test.bynk:8:12", 187, 215, "expect labels.call(Archived) faults\n  the call returned without faulting"); }
     return { pass: true };
   } catch (e) {
     if (e instanceof ExpectationError) {
@@ -97,7 +107,17 @@ async function test_an_unreachable_branch_faults_on_an_invalid_input() {
     const deps = __makeTestDeps();
     const { Ledger, Status, __makeLedger, awaits, bumps, effectGuards, firstArm, firsts, guard, guards, half, halves, label, labels, lambdas, pick, pickFirst, pickSecond, picks, reads, refund, refunds, shadowed, unwrap, unwraps, viaLambda } = __ns_demo_orders;
     type Status = __ns_demo_orders.Status;
-    if (!((await (async () => { try { await (halves.call(0 - 1, deps)); return false; } catch (__e) { if (__e instanceof ExpectationError) { throw __e; } return true; } })()))) { throw __bynkExpectFailure("tests/orders.test.bynk:17:12", 407, 432, "expect halves.call(0 - 1) faults\n  the call returned without faulting"); }
+    if (!((await (async () => {
+      try {
+        await (halves.call(0 - 1, deps));
+        return false;
+      } catch (__e) {
+        if (__e instanceof ExpectationError) {
+          throw __e;
+        }
+        return true;
+      }
+    })()))) { throw __bynkExpectFailure("tests/orders.test.bynk:17:12", 407, 432, "expect halves.call(0 - 1) faults\n  the call returned without faulting"); }
     return { pass: true };
   } catch (e) {
     if (e instanceof ExpectationError) {
@@ -114,7 +134,17 @@ async function test_todo_faults_when_it_runs() {
     const deps = __makeTestDeps();
     const { Ledger, Status, __makeLedger, awaits, bumps, effectGuards, firstArm, firsts, guard, guards, half, halves, label, labels, lambdas, pick, pickFirst, pickSecond, picks, reads, refund, refunds, shadowed, unwrap, unwraps, viaLambda } = __ns_demo_orders;
     type Status = __ns_demo_orders.Status;
-    if (!((await (async () => { try { await (refunds.call(Status.Open, deps)); return false; } catch (__e) { if (__e instanceof ExpectationError) { throw __e; } return true; } })()))) { throw __bynkExpectFailure("tests/orders.test.bynk:21:12", 485, 510, "expect refunds.call(Open) faults\n  the call returned without faulting"); }
+    if (!((await (async () => {
+      try {
+        await (refunds.call(Status.Open, deps));
+        return false;
+      } catch (__e) {
+        if (__e instanceof ExpectationError) {
+          throw __e;
+        }
+        return true;
+      }
+    })()))) { throw __bynkExpectFailure("tests/orders.test.bynk:21:12", 485, 510, "expect refunds.call(Open) faults\n  the call returned without faulting"); }
     return { pass: true };
   } catch (e) {
     if (e instanceof ExpectationError) {
@@ -133,7 +163,17 @@ async function test_a_handler_that_faults_does_not_commit_agent_state() {
     type Status = __ns_demo_orders.Status;
     const a = await bumps.call(false, deps);
     if (!(a === 1)) { throw __bynkExpectFailure("tests/orders.test.bynk:26:12", 619, 625, "expect a == 1\n  expected: a == 1\n  actual:   " + __bynkShow((a)) + " == " + __bynkShow((1))); }
-    if (!((await (async () => { try { await (bumps.call(true, deps)); return false; } catch (__e) { if (__e instanceof ExpectationError) { throw __e; } return true; } })()))) { throw __bynkExpectFailure("tests/orders.test.bynk:27:12", 637, 660, "expect bumps.call(true) faults\n  the call returned without faulting"); }
+    if (!((await (async () => {
+      try {
+        await (bumps.call(true, deps));
+        return false;
+      } catch (__e) {
+        if (__e instanceof ExpectationError) {
+          throw __e;
+        }
+        return true;
+      }
+    })()))) { throw __bynkExpectFailure("tests/orders.test.bynk:27:12", 637, 660, "expect bumps.call(true) faults\n  the call returned without faulting"); }
     const after = await reads.call(deps);
     if (!(after === 1)) { throw __bynkExpectFailure("tests/orders.test.bynk:29:12", 702, 712, "expect after == 1\n  expected: after == 1\n  actual:   " + __bynkShow((after)) + " == " + __bynkShow((1))); }
     return { pass: true };
@@ -152,7 +192,17 @@ async function test_bind_on_a_fault_call_faults() {
     const deps = __makeTestDeps();
     const { Ledger, Status, __makeLedger, awaits, bumps, effectGuards, firstArm, firsts, guard, guards, half, halves, label, labels, lambdas, pick, pickFirst, pickSecond, picks, reads, refund, refunds, shadowed, unwrap, unwraps, viaLambda } = __ns_demo_orders;
     type Status = __ns_demo_orders.Status;
-    if (!((await (async () => { try { await (awaits.call(deps)); return false; } catch (__e) { if (__e instanceof ExpectationError) { throw __e; } return true; } })()))) { throw __bynkExpectFailure("tests/orders.test.bynk:33:12", 768, 788, "expect awaits.call() faults\n  the call returned without faulting"); }
+    if (!((await (async () => {
+      try {
+        await (awaits.call(deps));
+        return false;
+      } catch (__e) {
+        if (__e instanceof ExpectationError) {
+          throw __e;
+        }
+        return true;
+      }
+    })()))) { throw __bynkExpectFailure("tests/orders.test.bynk:33:12", 768, 788, "expect awaits.call() faults\n  the call returned without faulting"); }
     return { pass: true };
   } catch (e) {
     if (e instanceof ExpectationError) {
@@ -171,7 +221,17 @@ async function test_a_fault_in_the_first_arm_joins_with_the_others() {
     type Status = __ns_demo_orders.Status;
     const l = await firsts.call(Status.Closed, deps);
     if (!(l === "closed")) { throw __bynkExpectFailure("tests/orders.test.bynk:38:12", 896, 909, "expect l == \"closed\"\n  expected: l == \"closed\"\n  actual:   " + __bynkShow((l)) + " == " + __bynkShow(("closed"))); }
-    if (!((await (async () => { try { await (firsts.call(Status.Archived, deps)); return false; } catch (__e) { if (__e instanceof ExpectationError) { throw __e; } return true; } })()))) { throw __bynkExpectFailure("tests/orders.test.bynk:39:12", 921, 949, "expect firsts.call(Archived) faults\n  the call returned without faulting"); }
+    if (!((await (async () => {
+      try {
+        await (firsts.call(Status.Archived, deps));
+        return false;
+      } catch (__e) {
+        if (__e instanceof ExpectationError) {
+          throw __e;
+        }
+        return true;
+      }
+    })()))) { throw __bynkExpectFailure("tests/orders.test.bynk:39:12", 921, 949, "expect firsts.call(Archived) faults\n  the call returned without faulting"); }
     return { pass: true };
   } catch (e) {
     if (e instanceof ExpectationError) {
@@ -190,7 +250,17 @@ async function test_a_faulting_guard_with_no_else() {
     type Status = __ns_demo_orders.Status;
     const n = await guards.call(3, deps);
     if (!(n === 3)) { throw __bynkExpectFailure("tests/orders.test.bynk:44:12", 1035, 1041, "expect n == 3\n  expected: n == 3\n  actual:   " + __bynkShow((n)) + " == " + __bynkShow((3))); }
-    if (!((await (async () => { try { await (guards.call(0 - 1, deps)); return false; } catch (__e) { if (__e instanceof ExpectationError) { throw __e; } return true; } })()))) { throw __bynkExpectFailure("tests/orders.test.bynk:45:12", 1053, 1078, "expect guards.call(0 - 1) faults\n  the call returned without faulting"); }
+    if (!((await (async () => {
+      try {
+        await (guards.call(0 - 1, deps));
+        return false;
+      } catch (__e) {
+        if (__e instanceof ExpectationError) {
+          throw __e;
+        }
+        return true;
+      }
+    })()))) { throw __bynkExpectFailure("tests/orders.test.bynk:45:12", 1053, 1078, "expect guards.call(0 - 1) faults\n  the call returned without faulting"); }
     return { pass: true };
   } catch (e) {
     if (e instanceof ExpectationError) {
@@ -209,7 +279,17 @@ async function test_let_else_with_a_fault() {
     type Status = __ns_demo_orders.Status;
     const n = await unwraps.call(Some(5), deps);
     if (!(n === 5)) { throw __bynkExpectFailure("tests/orders.test.bynk:50:12", 1163, 1169, "expect n == 5\n  expected: n == 5\n  actual:   " + __bynkShow((n)) + " == " + __bynkShow((5))); }
-    if (!((await (async () => { try { await (unwraps.call(None, deps)); return false; } catch (__e) { if (__e instanceof ExpectationError) { throw __e; } return true; } })()))) { throw __bynkExpectFailure("tests/orders.test.bynk:51:12", 1181, 1206, "expect unwraps.call(None) faults\n  the call returned without faulting"); }
+    if (!((await (async () => {
+      try {
+        await (unwraps.call(None, deps));
+        return false;
+      } catch (__e) {
+        if (__e instanceof ExpectationError) {
+          throw __e;
+        }
+        return true;
+      }
+    })()))) { throw __bynkExpectFailure("tests/orders.test.bynk:51:12", 1181, 1206, "expect unwraps.call(None) faults\n  the call returned without faulting"); }
     return { pass: true };
   } catch (e) {
     if (e instanceof ExpectationError) {
@@ -228,7 +308,17 @@ async function test_a_fault_in_a_lambda_body() {
     type Status = __ns_demo_orders.Status;
     const ok = await lambdas.call(1, deps);
     if (!(ok === "ok")) { throw __bynkExpectFailure("tests/orders.test.bynk:56:12", 1289, 1299, "expect ok == \"ok\"\n  expected: ok == \"ok\"\n  actual:   " + __bynkShow((ok)) + " == " + __bynkShow(("ok"))); }
-    if (!((await (async () => { try { await (lambdas.call(0, deps)); return false; } catch (__e) { if (__e instanceof ExpectationError) { throw __e; } return true; } })()))) { throw __bynkExpectFailure("tests/orders.test.bynk:57:12", 1311, 1333, "expect lambdas.call(0) faults\n  the call returned without faulting"); }
+    if (!((await (async () => {
+      try {
+        await (lambdas.call(0, deps));
+        return false;
+      } catch (__e) {
+        if (__e instanceof ExpectationError) {
+          throw __e;
+        }
+        return true;
+      }
+    })()))) { throw __bynkExpectFailure("tests/orders.test.bynk:57:12", 1311, 1333, "expect lambdas.call(0) faults\n  the call returned without faulting"); }
     return { pass: true };
   } catch (e) {
     if (e instanceof ExpectationError) {
@@ -264,7 +354,17 @@ async function test_a_faulting_guard_in_an_effectful_body() {
     type Status = __ns_demo_orders.Status;
     const n = await effectGuards.call(4, deps);
     if (!(n === 8)) { throw __bynkExpectFailure("tests/orders.test.bynk:66:12", 1537, 1543, "expect n == 8\n  expected: n == 8\n  actual:   " + __bynkShow((n)) + " == " + __bynkShow((8))); }
-    if (!((await (async () => { try { await (effectGuards.call(0 - 1, deps)); return false; } catch (__e) { if (__e instanceof ExpectationError) { throw __e; } return true; } })()))) { throw __bynkExpectFailure("tests/orders.test.bynk:67:12", 1555, 1586, "expect effectGuards.call(0 - 1) faults\n  the call returned without faulting"); }
+    if (!((await (async () => {
+      try {
+        await (effectGuards.call(0 - 1, deps));
+        return false;
+      } catch (__e) {
+        if (__e instanceof ExpectationError) {
+          throw __e;
+        }
+        return true;
+      }
+    })()))) { throw __bynkExpectFailure("tests/orders.test.bynk:67:12", 1555, 1586, "expect effectGuards.call(0 - 1) faults\n  the call returned without faulting"); }
     return { pass: true };
   } catch (e) {
     if (e instanceof ExpectationError) {
@@ -281,7 +381,17 @@ async function test_a_fault_argument_does_not_bind_a_type_variable() {
     const deps = __makeTestDeps();
     const { Ledger, Status, __makeLedger, awaits, bumps, effectGuards, firstArm, firsts, guard, guards, half, halves, label, labels, lambdas, pick, pickFirst, pickSecond, picks, reads, refund, refunds, shadowed, unwrap, unwraps, viaLambda } = __ns_demo_orders;
     type Status = __ns_demo_orders.Status;
-    if (!((await (async () => { try { await (picks.call(3, deps)); return false; } catch (__e) { if (__e instanceof ExpectationError) { throw __e; } return true; } })()))) { throw __bynkExpectFailure("tests/orders.test.bynk:72:12", 1743, 1763, "expect picks.call(3) faults\n  the call returned without faulting"); }
+    if (!((await (async () => {
+      try {
+        await (picks.call(3, deps));
+        return false;
+      } catch (__e) {
+        if (__e instanceof ExpectationError) {
+          throw __e;
+        }
+        return true;
+      }
+    })()))) { throw __bynkExpectFailure("tests/orders.test.bynk:72:12", 1743, 1763, "expect picks.call(3) faults\n  the call returned without faulting"); }
     return { pass: true };
   } catch (e) {
     if (e instanceof ExpectationError) {

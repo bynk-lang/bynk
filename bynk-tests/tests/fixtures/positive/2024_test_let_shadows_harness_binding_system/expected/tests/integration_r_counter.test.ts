@@ -99,7 +99,7 @@ async function test_a_system_tier_local_named_like_an_asset() {
     __bynkClockNow = 0;
     const deps = __makeHarness();
     const { style } = __ns_r_counter;
-    const css = await __bynkAssetGet((style).url);
+    const css = await __bynkAssetGet(style.url);
     const __r0 = 1;
     if (!(__r0 === 1)) { throw __bynkExpectFailure("tests/r/counter_system.bynk:7:12", 246, 256, "expect style == 1\n  expected: style == 1\n  actual:   " + __bynkShow((__r0)) + " == " + __bynkShow((1))); }
     if (!(((__c: boolean) => __c)(css.tag === "Raw"))) { throw __bynkExpectFailure("tests/r/counter_system.bynk:8:12", 268, 284, "expect css is Raw(_, _)"); }

@@ -1,6 +1,9 @@
 //! `LowerCtx`: the per-body lowering context and its `impl`.
 
 use super::ctx::*;
+use super::lower::{Built, LoweredExpr, node_or_text};
+use super::lower_call::test_calls::debug_str;
+use super::lower_list::{call, id};
 use super::ts_types::ts_ty;
 use super::*;
 
@@ -93,14 +96,14 @@ pub(crate) struct LowerCtx<'a> {
     /// lowered), if the statement carries `by <Actor>(<identity>)`. The
     /// address-call lowering reads it to build the handler's `deps.identity`.
     /// `None` for a unit-identity actor or a non-principal statement.
-    pub call_site_identity: Option<String>,
+    pub call_site_identity: Option<LoweredExpr>,
     /// #2380 (L5): the call-site principal's claims (already lowered), for an
     /// `Oidc` handler's `deps.claims`.
-    pub call_site_claims: Option<String>,
+    pub call_site_claims: Option<LoweredExpr>,
     /// #3052: the lowered `"name: value"` lines of the call-site principal's
     /// literal `TokenClaims.of(lines)`, which a `system` call mints an `Oidc`
     /// token's claims from.
-    pub call_site_claim_lines: Option<String>,
+    pub call_site_claim_lines: Option<LoweredExpr>,
     /// I3 (#1971): the call-site principal's actor name, beside
     /// [`Self::call_site_identity`], for a `call` sum's `deps.who`.
     pub call_site_actor: Option<String>,
@@ -941,25 +944,45 @@ impl<'a> LowerCtx<'a> {
     /// #2019: the claims argument a `system`-tier call on `route` passes, if
     /// the route is refinement-guarded: the acting refinement's witness
     /// claims, or `{}` for any other actor.
+    ///
+    /// A node, except for an actor's witness claims, which stay text: the
+    /// table (`SystemHttpClaims::actors`) is built in `bynk-driver`
+    /// (`tests_emit/system_support.rs`) from `bynk_check::actors::claim_witness_js`,
+    /// outside `bynk-emit/src/emitter` (1A.26, #3727, Decision B).
     pub(crate) fn system_http_claims_arg(
         &self,
         route: &(String, String, String),
-    ) -> Option<String> {
+    ) -> Option<LoweredExpr> {
         match &self.mode {
             BodyMode::IntegrationCase {
                 system_http_claims, ..
-            } if system_http_claims.oidc_routes.contains(route) => Some(format!(
-                "__bynkOidcClaims({})",
-                self.call_site_claim_lines.as_deref().unwrap_or("[]")
-            )),
+            } if system_http_claims.oidc_routes.contains(route) => {
+                let lines = self
+                    .call_site_claim_lines
+                    .clone()
+                    .unwrap_or_else(|| LoweredExpr::Node(bynk_ts::TsExpr::array(vec![])));
+                Some(
+                    node_or_text(
+                        vec![lines],
+                        |c| call(id("__bynkOidcClaims"), c),
+                        |t| format!("__bynkOidcClaims({})", t.join(", ")),
+                    )
+                    .into(),
+                )
+            }
             BodyMode::IntegrationCase {
                 system_http_claims, ..
             } if system_http_claims.routes.contains(route) => Some(
-                self.call_site_actor
+                match self
+                    .call_site_actor
                     .as_ref()
                     .and_then(|a| system_http_claims.actors.get(a))
-                    .cloned()
-                    .unwrap_or_else(|| "{}".to_string()),
+                {
+                    // 1A: the witness claims are a JavaScript object literal built in
+                    // `bynk-driver` (`system_support.rs`), outside the emitter.
+                    Some(witness) => Built::Err(witness.clone()).into(),
+                    None => LoweredExpr::Node(bynk_ts::TsExpr::object(vec![])),
+                },
             ),
             _ => None,
         }
@@ -981,14 +1004,13 @@ impl<'a> LowerCtx<'a> {
     pub(crate) fn system_http_sum_actor_arg(
         &self,
         route: &(String, String, String),
-    ) -> Option<String> {
+    ) -> Option<LoweredExpr> {
         match &self.mode {
             BodyMode::IntegrationCase {
                 system_http_claims, ..
-            } => system_http_claims
-                .sum_routes
-                .get(route)
-                .map(|primary| format!("{:?}", self.call_site_actor.as_deref().unwrap_or(primary))),
+            } => system_http_claims.sum_routes.get(route).map(|primary| {
+                debug_str(self.call_site_actor.as_deref().unwrap_or(primary)).into()
+            }),
             _ => None,
         }
     }

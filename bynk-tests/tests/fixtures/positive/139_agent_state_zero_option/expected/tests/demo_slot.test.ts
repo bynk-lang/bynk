@@ -46,34 +46,34 @@ async function test_a_fresh_Slot_key_resolves_to_Empty() {
     type Label = __ns_demo_slot.Label;
     type SlotError = __ns_demo_slot.SlotError;
     void (await (async (__d) => {
-        switch (__d.tag) {
-          case "Err": {
-            return __bynkExpect((false), "tests/demo/slot.bynk:8:20", 196, 201, "expect false");
-          }
-          case "Ok": {
-            const id = __d.value;
-            const outcome = await resolve.call(id, deps);
-            switch (outcome.tag) {
-              case "Ok": {
-                return __bynkExpect((false), "tests/demo/slot.bynk:12:22", 291, 296, "expect false");
-              }
-              case "Err": {
-                const slotError = outcome.error;
-                return ((__d) => {
-                  switch (__d.tag) {
-                    case "Empty": {
-                      return __bynkExpect((true), "tests/demo/slot.bynk:14:22", 358, 362, "expect true");
-                    }
-                  }
-                  throw new globalThis.Error("non-exhaustive match");
-                })(slotError);
-              }
-            }
-            throw new globalThis.Error("non-exhaustive match");
-          }
+      switch (__d.tag) {
+        case "Err": {
+          return __bynkExpect((false), "tests/demo/slot.bynk:8:20", 196, 201, "expect false");
         }
-        throw new globalThis.Error("non-exhaustive match");
-      })(Label.of("fresh")));
+        case "Ok": {
+          const id = __d.value;
+          const outcome = await resolve.call(id, deps);
+          switch (outcome.tag) {
+            case "Ok": {
+              return __bynkExpect((false), "tests/demo/slot.bynk:12:22", 291, 296, "expect false");
+            }
+            case "Err": {
+              const slotError = outcome.error;
+              return ((__d) => {
+                switch (__d.tag) {
+                  case "Empty": {
+                    return __bynkExpect((true), "tests/demo/slot.bynk:14:22", 358, 362, "expect true");
+                  }
+                }
+                throw new globalThis.Error("non-exhaustive match");
+              })(slotError);
+            }
+          }
+          throw new globalThis.Error("non-exhaustive match");
+        }
+      }
+      throw new globalThis.Error("non-exhaustive match");
+    })(Label.of("fresh")));
     return { pass: true };
   } catch (e) {
     if (e instanceof ExpectationError) {

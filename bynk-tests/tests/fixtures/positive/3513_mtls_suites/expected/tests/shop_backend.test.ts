@@ -533,7 +533,17 @@ async function test_an_unstubbed_send_faults() {
     type VectorMatch = __ns_bynk_cloudflare.VectorMatch;
     type VectorOf<M> = __ns_bynk_cloudflare.VectorOf<M>;
     type WorkerVersion = __ns_bynk_cloudflare.WorkerVersion;
-    if (!((await (async () => { try { await (api.http_GET_orders(deps)); return false; } catch (__e) { if (__e instanceof ExpectationError) { throw __e; } return true; } })()))) { throw __bynkExpectFailure("tests/shop/backend.bynk:9:9", 237, 273, "expect api.GET(\"/orders\") by Visitor faults\n  the call returned without faulting"); }
+    if (!((await (async () => {
+      try {
+        await (api.http_GET_orders(deps));
+        return false;
+      } catch (__e) {
+        if (__e instanceof ExpectationError) {
+          throw __e;
+        }
+        return true;
+      }
+    })()))) { throw __bynkExpectFailure("tests/shop/backend.bynk:9:9", 237, 273, "expect api.GET(\"/orders\") by Visitor faults\n  the call returned without faulting"); }
     return { pass: true };
   } catch (e) {
     if (e instanceof ExpectationError) {
@@ -870,8 +880,28 @@ async function test_the_byte_forms_fault_until_stubbed_too() {
     type VectorMatch = __ns_bynk_cloudflare.VectorMatch;
     type VectorOf<M> = __ns_bynk_cloudflare.VectorOf<M>;
     type WorkerVersion = __ns_bynk_cloudflare.WorkerVersion;
-    if (!((await (async () => { try { await (api.http_GET_orders_raw(deps)); return false; } catch (__e) { if (__e instanceof ExpectationError) { throw __e; } return true; } })()))) { throw __bynkExpectFailure("tests/shop/backend.bynk:26:9", 756, 796, "expect api.GET(\"/orders/raw\") by Visitor faults\n  the call returned without faulting"); }
-    if (!((await (async () => { try { await (api.http_POST_orders("x", deps)); return false; } catch (__e) { if (__e instanceof ExpectationError) { throw __e; } return true; } })()))) { throw __bynkExpectFailure("tests/shop/backend.bynk:27:9", 805, 847, "expect api.POST(\"/orders\", \"x\") by Visitor faults\n  the call returned without faulting"); }
+    if (!((await (async () => {
+      try {
+        await (api.http_GET_orders_raw(deps));
+        return false;
+      } catch (__e) {
+        if (__e instanceof ExpectationError) {
+          throw __e;
+        }
+        return true;
+      }
+    })()))) { throw __bynkExpectFailure("tests/shop/backend.bynk:26:9", 756, 796, "expect api.GET(\"/orders/raw\") by Visitor faults\n  the call returned without faulting"); }
+    if (!((await (async () => {
+      try {
+        await (api.http_POST_orders("x", deps));
+        return false;
+      } catch (__e) {
+        if (__e instanceof ExpectationError) {
+          throw __e;
+        }
+        return true;
+      }
+    })()))) { throw __bynkExpectFailure("tests/shop/backend.bynk:27:9", 805, 847, "expect api.POST(\"/orders\", \"x\") by Visitor faults\n  the call returned without faulting"); }
     return { pass: true };
   } catch (e) {
     if (e instanceof ExpectationError) {

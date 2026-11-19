@@ -276,20 +276,20 @@ async function test_a_raw_body_arrives_byte_for_byte__including_bytes_that_are_n
     __bynkClockNow = 0;
     const deps = __makeHarness();
     void (await (async (__d) => {
-        switch (__d.tag) {
-          case "Some": {
-            const tree = __d.value;
-            const r = await __sysdrive_uploads_http_PUT_api_Param_org_Param_package("acme", "widgets", tree, undefined, "");
-            if (!(((__c: boolean) => __c)(r.tag === "Ok" && r.value === "acme/widgets gP8AAf7/AIA="))) { throw __bynkExpectFailure("tests/uploads.bynk:8:12", 296, 332, "expect r is Ok(\"acme/widgets gP8AAf7/AIA=\")"); }
-            return undefined;
-          }
-          case "None": {
-            if (!(false)) { throw __bynkExpectFailure("tests/uploads.bynk:11:12", 362, 367, "expect false"); }
-            return undefined;
-          }
+      switch (__d.tag) {
+        case "Some": {
+          const tree = __d.value;
+          const r = await __sysdrive_uploads_http_PUT_api_Param_org_Param_package("acme", "widgets", tree, undefined, "");
+          if (!(((__c: boolean) => __c)(r.tag === "Ok" && r.value === "acme/widgets gP8AAf7/AIA="))) { throw __bynkExpectFailure("tests/uploads.bynk:8:12", 296, 332, "expect r is Ok(\"acme/widgets gP8AAf7/AIA=\")"); }
+          return undefined;
         }
-        throw new globalThis.Error("non-exhaustive match");
-      })(__bynkBytesFromBase64("gP8AAf7/AIA=")));
+        case "None": {
+          if (!(false)) { throw __bynkExpectFailure("tests/uploads.bynk:11:12", 362, 367, "expect false"); }
+          return undefined;
+        }
+      }
+      throw new globalThis.Error("non-exhaustive match");
+    })(__bynkBytesFromBase64("gP8AAf7/AIA=")));
     return { pass: true };
   } catch (e) {
     if (e instanceof ExpectationError) {
@@ -359,22 +359,22 @@ async function test_a_raw_body_is_signed_as_sent__and_a_forged_one_refused() {
     __bynkClockNow = 0;
     const deps = __makeHarness();
     void (await (async (__d) => {
-        switch (__d.tag) {
-          case "Some": {
-            const payload = __d.value;
-            const ok = await __sysdrive_uploads_http_POST_signed(payload, undefined, "");
-            const forged = await __sysdrive_forged_uploads_http_POST_signed(payload, undefined, "");
-            if (!(((__c: boolean) => __c)(ok.tag === "Ok" && ok.value === "gP8AAQ=="))) { throw __bynkExpectFailure("tests/uploads.bynk:38:12", 1305, 1325, "expect ok is Ok(\"gP8AAQ==\")"); }
-            if (!(((__c: boolean) => __c)(forged.tag === "Rejected" && forged.value.tag === "Unauthorized"))) { throw __bynkExpectFailure("tests/uploads.bynk:39:12", 1337, 1369, "expect forged is Rejected(Unauthorized)"); }
-            return undefined;
-          }
-          case "None": {
-            if (!(false)) { throw __bynkExpectFailure("tests/uploads.bynk:42:12", 1399, 1404, "expect false"); }
-            return undefined;
-          }
+      switch (__d.tag) {
+        case "Some": {
+          const payload = __d.value;
+          const ok = await __sysdrive_uploads_http_POST_signed(payload, undefined, "");
+          const forged = await __sysdrive_forged_uploads_http_POST_signed(payload, undefined, "");
+          if (!(((__c: boolean) => __c)(ok.tag === "Ok" && ok.value === "gP8AAQ=="))) { throw __bynkExpectFailure("tests/uploads.bynk:38:12", 1305, 1325, "expect ok is Ok(\"gP8AAQ==\")"); }
+          if (!(((__c: boolean) => __c)(forged.tag === "Rejected" && forged.value.tag === "Unauthorized"))) { throw __bynkExpectFailure("tests/uploads.bynk:39:12", 1337, 1369, "expect forged is Rejected(Unauthorized)"); }
+          return undefined;
         }
-        throw new globalThis.Error("non-exhaustive match");
-      })(__bynkBytesFromBase64("gP8AAQ==")));
+        case "None": {
+          if (!(false)) { throw __bynkExpectFailure("tests/uploads.bynk:42:12", 1399, 1404, "expect false"); }
+          return undefined;
+        }
+      }
+      throw new globalThis.Error("non-exhaustive match");
+    })(__bynkBytesFromBase64("gP8AAQ==")));
     return { pass: true };
   } catch (e) {
     if (e instanceof ExpectationError) {
@@ -444,20 +444,20 @@ async function test_a_Bytes_body_without__raw_is_still_base64_in_JSON() {
     __bynkClockNow = 0;
     const deps = __makeHarness();
     void (await (async (__d) => {
-        switch (__d.tag) {
-          case "Some": {
-            const b = __d.value;
-            const r = await __sysdrive_uploads_http_POST_json(b, undefined, "");
-            if (!(((__c: boolean) => __c)(r.tag === "Ok" && r.value === "aGk="))) { throw __bynkExpectFailure("tests/uploads.bynk:74:12", 2408, 2423, "expect r is Ok(\"aGk=\")"); }
-            return undefined;
-          }
-          case "None": {
-            if (!(false)) { throw __bynkExpectFailure("tests/uploads.bynk:77:12", 2453, 2458, "expect false"); }
-            return undefined;
-          }
+      switch (__d.tag) {
+        case "Some": {
+          const b = __d.value;
+          const r = await __sysdrive_uploads_http_POST_json(b, undefined, "");
+          if (!(((__c: boolean) => __c)(r.tag === "Ok" && r.value === "aGk="))) { throw __bynkExpectFailure("tests/uploads.bynk:74:12", 2408, 2423, "expect r is Ok(\"aGk=\")"); }
+          return undefined;
         }
-        throw new globalThis.Error("non-exhaustive match");
-      })(__bynkBytesFromBase64("aGk=")));
+        case "None": {
+          if (!(false)) { throw __bynkExpectFailure("tests/uploads.bynk:77:12", 2453, 2458, "expect false"); }
+          return undefined;
+        }
+      }
+      throw new globalThis.Error("non-exhaustive match");
+    })(__bynkBytesFromBase64("aGk=")));
     return { pass: true };
   } catch (e) {
     if (e instanceof ExpectationError) {

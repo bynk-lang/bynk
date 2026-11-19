@@ -465,7 +465,17 @@ async function test_an_unstubbed_query_faults() {
     type VectorMatch = __ns_bynk_cloudflare.VectorMatch;
     type VectorOf<M> = __ns_bynk_cloudflare.VectorOf<M>;
     type WorkerVersion = __ns_bynk_cloudflare.WorkerVersion;
-    if (!((await (async () => { try { await (report.http_GET_signups_Param_country("uk", deps)); return false; } catch (__e) { if (__e instanceof ExpectationError) { throw __e; } return true; } })()))) { throw __bynkExpectFailure("tests/shop/signups.bynk:10:9", 330, 385, "expect report.GET(\"/signups/:country\", \"uk\") by Visitor faults\n  the call returned without faulting"); }
+    if (!((await (async () => {
+      try {
+        await (report.http_GET_signups_Param_country("uk", deps));
+        return false;
+      } catch (__e) {
+        if (__e instanceof ExpectationError) {
+          throw __e;
+        }
+        return true;
+      }
+    })()))) { throw __bynkExpectFailure("tests/shop/signups.bynk:10:9", 330, 385, "expect report.GET(\"/signups/:country\", \"uk\") by Visitor faults\n  the call returned without faulting"); }
     return { pass: true };
   } catch (e) {
     if (e instanceof ExpectationError) {

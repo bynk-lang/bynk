@@ -249,21 +249,21 @@ async function test_a_typed_multipart_body_is_written_under_its_wire_names() {
     __bynkClockNow = 0;
     const deps = __makeHarness();
     void (await (async (__d) => {
-        switch (__d.tag) {
-          case "Some": {
-            const png = __d.value;
-            const photo = { filename: Some("a.png"), contentType: "image/png", bytes: png };
-            const r = await __sysdrive_api_http_POST_upload({ title: "Hi", photo: photo }, undefined, "");
-            if (!(((__c: boolean) => __c)(r.tag === "Ok" && r.value === "Hi 7"))) { throw __bynkExpectFailure("tests/api.bynk:78:12", 2802, 2817, "expect r is Ok(\"Hi 7\")"); }
-            return undefined;
-          }
-          case "None": {
-            if (!(false)) { throw __bynkExpectFailure("tests/api.bynk:81:12", 2847, 2852, "expect false"); }
-            return undefined;
-          }
+      switch (__d.tag) {
+        case "Some": {
+          const png = __d.value;
+          const photo = { filename: Some("a.png"), contentType: "image/png", bytes: png };
+          const r = await __sysdrive_api_http_POST_upload({ title: "Hi", photo: photo }, undefined, "");
+          if (!(((__c: boolean) => __c)(r.tag === "Ok" && r.value === "Hi 7"))) { throw __bynkExpectFailure("tests/api.bynk:78:12", 2802, 2817, "expect r is Ok(\"Hi 7\")"); }
+          return undefined;
         }
-        throw new globalThis.Error("non-exhaustive match");
-      })(__bynkBytesFromBase64("UE5HREFUQQ==")));
+        case "None": {
+          if (!(false)) { throw __bynkExpectFailure("tests/api.bynk:81:12", 2847, 2852, "expect false"); }
+          return undefined;
+        }
+      }
+      throw new globalThis.Error("non-exhaustive match");
+    })(__bynkBytesFromBase64("UE5HREFUQQ==")));
     return { pass: true };
   } catch (e) {
     if (e instanceof ExpectationError) {

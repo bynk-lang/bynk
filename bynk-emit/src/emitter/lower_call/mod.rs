@@ -8,3 +8,4 @@ pub(super) mod platform;
 pub(super) mod query;
 pub(super) mod statics;
 pub(super) mod store;
+pub(super) mod test_calls;

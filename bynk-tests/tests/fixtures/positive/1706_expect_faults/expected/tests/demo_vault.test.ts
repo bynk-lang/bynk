@@ -97,7 +97,17 @@ async function test_a_fails_stub_faults_the_call() {
   try {
     const deps = __makeTestDeps("a fails stub faults the call");
     const { box } = __ns_demo_vault;
-    if (!((await (async () => { try { await (box.call(deps)); return false; } catch (__e) { if (__e instanceof ExpectationError) { throw __e; } return true; } })()))) { throw __bynkExpectFailure("tests/vault.test.bynk:7:12", 259, 276, "expect box.call() faults\n  the call returned without faulting"); }
+    if (!((await (async () => {
+      try {
+        await (box.call(deps));
+        return false;
+      } catch (__e) {
+        if (__e instanceof ExpectationError) {
+          throw __e;
+        }
+        return true;
+      }
+    })()))) { throw __bynkExpectFailure("tests/vault.test.bynk:7:12", 259, 276, "expect box.call() faults\n  the call returned without faulting"); }
     return { pass: true };
   } catch (e) {
     if (e instanceof ExpectationError) {
@@ -112,7 +122,17 @@ async function test_a_sequence_serves_a_fault__then_a_value() {
   try {
     const deps = __makeTestDeps("a sequence serves a fault, then a value");
     const { box } = __ns_demo_vault;
-    if (!((await (async () => { try { await (box.call(deps)); return false; } catch (__e) { if (__e instanceof ExpectationError) { throw __e; } return true; } })()))) { throw __bynkExpectFailure("tests/vault.test.bynk:12:12", 391, 408, "expect box.call() faults\n  the call returned without faulting"); }
+    if (!((await (async () => {
+      try {
+        await (box.call(deps));
+        return false;
+      } catch (__e) {
+        if (__e instanceof ExpectationError) {
+          throw __e;
+        }
+        return true;
+      }
+    })()))) { throw __bynkExpectFailure("tests/vault.test.bynk:12:12", 391, 408, "expect box.call() faults\n  the call returned without faulting"); }
     const r = await box.call(deps);
     if (!(r === 42)) { throw __bynkExpectFailure("tests/vault.test.bynk:14:12", 444, 451, "expect r == 42\n  expected: r == 42\n  actual:   " + __bynkShow((r)) + " == " + __bynkShow((42))); }
     return { pass: true };
@@ -129,7 +149,17 @@ async function test_a_call_that_returns_does_not_fault() {
   try {
     const deps = __makeTestDeps("a call that returns does not fault");
     const { box } = __ns_demo_vault;
-    if (!((await (async () => { try { await (box.call(deps)); return false; } catch (__e) { if (__e instanceof ExpectationError) { throw __e; } return true; } })()))) { throw __bynkExpectFailure("tests/vault.test.bynk:19:12", 546, 563, "expect box.call() faults\n  the call returned without faulting"); }
+    if (!((await (async () => {
+      try {
+        await (box.call(deps));
+        return false;
+      } catch (__e) {
+        if (__e instanceof ExpectationError) {
+          throw __e;
+        }
+        return true;
+      }
+    })()))) { throw __bynkExpectFailure("tests/vault.test.bynk:19:12", 546, 563, "expect box.call() faults\n  the call returned without faulting"); }
     return { pass: true };
   } catch (e) {
     if (e instanceof ExpectationError) {

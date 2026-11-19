@@ -155,6 +155,8 @@ mod integration {
     mod suggestions;
     #[path = "suite_diagnostics_attributed.rs"]
     mod suite_diagnostics_attributed;
+    #[path = "test_calls_nodes.rs"]
+    mod test_calls_nodes;
     #[path = "test_domain_nodes.rs"]
     mod test_domain_nodes;
     #[path = "text_exit_counters.rs"]

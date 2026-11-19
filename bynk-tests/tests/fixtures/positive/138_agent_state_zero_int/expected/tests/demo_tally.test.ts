@@ -46,27 +46,27 @@ async function test_a_fresh_Tally_key_reads_count_as_0() {
     type TallyError = __ns_demo_tally.TallyError;
     type TallyId = __ns_demo_tally.TallyId;
     void (await (async (__d) => {
-        switch (__d.tag) {
-          case "Err": {
-            return __bynkExpect((false), "tests/demo/tally.bynk:8:20", 168, 173, "expect false");
-          }
-          case "Ok": {
-            const id = __d.value;
-            const reading = await read.call(id, deps);
-            switch (reading.tag) {
-              case "Ok": {
-                const n = reading.value;
-                return __bynkExpect((n === 0), "tests/demo/tally.bynk:12:22", 260, 266, "expect n == 0");
-              }
-              case "Err": {
-                return __bynkExpect((false), "tests/demo/tally.bynk:13:22", 288, 293, "expect false");
-              }
-            }
-            throw new globalThis.Error("non-exhaustive match");
-          }
+      switch (__d.tag) {
+        case "Err": {
+          return __bynkExpect((false), "tests/demo/tally.bynk:8:20", 168, 173, "expect false");
         }
-        throw new globalThis.Error("non-exhaustive match");
-      })(TallyId.of("fresh")));
+        case "Ok": {
+          const id = __d.value;
+          const reading = await read.call(id, deps);
+          switch (reading.tag) {
+            case "Ok": {
+              const n = reading.value;
+              return __bynkExpect((n === 0), "tests/demo/tally.bynk:12:22", 260, 266, "expect n == 0");
+            }
+            case "Err": {
+              return __bynkExpect((false), "tests/demo/tally.bynk:13:22", 288, 293, "expect false");
+            }
+          }
+          throw new globalThis.Error("non-exhaustive match");
+        }
+      }
+      throw new globalThis.Error("non-exhaustive match");
+    })(TallyId.of("fresh")));
     return { pass: true };
   } catch (e) {
     if (e instanceof ExpectationError) {

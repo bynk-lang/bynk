@@ -759,7 +759,17 @@ async function test_when_every_side_faults__the_call_faults() {
     type StreamResponse = __ns_bynk.StreamResponse;
     type TimedOut = __ns_bynk.TimedOut;
     type Uuid = __ns_bynk.Uuid;
-    if (!((await (async () => { try { await (__bynkSettleVirtual(deps, prices.call(7, deps))); return false; } catch (__e) { if (__e instanceof ExpectationError) { throw __e; } return true; } })()))) { throw __bynkExpectFailure("tests/prices.bynk:35:12", 1073, 1094, "expect prices.call(7) faults\n  the call returned without faulting"); }
+    if (!((await (async () => {
+      try {
+        await (__bynkSettleVirtual(deps, prices.call(7, deps)));
+        return false;
+      } catch (__e) {
+        if (__e instanceof ExpectationError) {
+          throw __e;
+        }
+        return true;
+      }
+    })()))) { throw __bynkExpectFailure("tests/prices.bynk:35:12", 1073, 1094, "expect prices.call(7) faults\n  the call returned without faulting"); }
     return { pass: true };
   } catch (e) {
     if (e instanceof ExpectationError) {
