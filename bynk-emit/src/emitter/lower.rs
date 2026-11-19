@@ -21,6 +21,9 @@ use bynk_model::is_effectful_return;
 use bynk_model::{ConstVal, EventPatternIr, EventPatternValueIr};
 
 use super::ctx::{BodyMode, ModuleCtx, TestShared};
+use super::lower_call::agents::{
+    lower_agent_init, lower_inline_agent_call, lower_let_bound_agent_call,
+};
 use super::lower_call::codec_statics::eval_value_line;
 use super::lower_call::cross_context::lower_cross_context_service_call;
 use super::lower_call::platform::{
@@ -2557,11 +2560,11 @@ fn lower_method_call(e: &Expr, cx: &mut LowerCtx) -> Lowered {
     if let Some(built) = lower_test_service_call(e, receiver, method, args, cx, &mut pre) {
         return pre.finish_built(built);
     }
-    if let Some(s) = lower_inline_agent_call(e, receiver, method, args, cx, &mut pre) {
-        return pre.finish_built(Err(s));
+    if let Some(built) = lower_inline_agent_call(e, receiver, method, args, cx, &mut pre) {
+        return pre.finish_built(built);
     }
-    if let Some(s) = lower_let_bound_agent_call(e, receiver, method, args, cx, &mut pre) {
-        return pre.finish_built(Err(s));
+    if let Some(built) = lower_let_bound_agent_call(e, receiver, method, args, cx, &mut pre) {
+        return pre.finish_built(built);
     }
     // v0.20b: built-in kernel methods, resolved by the checker (#3164).
     if let Some(built) = lower_kernel_method_call(e, receiver, method, args, cx, &mut pre) {
@@ -2595,128 +2598,6 @@ fn lower_cross_context_call(
     // binds only what it calls, does not declare.
     if !matches!(cx.commons().callee(e.id), Some(c) if !matches!(c, Callee::Cross { .. })) {
         return lower_cross_context_service_call(receiver, method, args, cx, pre);
-    }
-    None
-}
-
-/// Lower an inline agent invocation, `Agent(<key>).method(args)`, or `None` when the call is not one. Moved out of
-/// `lower_method_call` (#3167) unchanged.
-fn lower_inline_agent_call(
-    e: &Expr,
-    receiver: &Expr,
-    method: &Ident,
-    args: &[Expr],
-    cx: &mut LowerCtx,
-    pre: &mut Pre,
-) -> Option<String> {
-    // v0.9.2: inline agent invocation. Source form is
-    // `Agent(<key>).method(args)`; receiver parses as
-    // `Call(Agent, [<key>])`. Lower to
-    // `__makeAgent(<key>).method(args, deps)`. Works in service and
-    // agent-handler bodies (deps is the handler's deps parameter) and
-    // test bodies (deps is the locally-built __makeTestDeps record).
-    //
-    // P6.21 (partial, continued): reads `Callee::Agent` (P6.0) instead of
-    // `cx.local_agents.contains(&name.name)` — the checker's own
-    // `check_method_call` records this the moment a receiver's *checked
-    // type* resolves to an agent, uniformly for this shape, the let-bound
-    // shape below, and the self-agent WS-transfer case inside this branch —
-    // closing a real instance of R6.5's name-matched-receiver defect class
-    // (a free function or local sharing an agent's own name could misfire
-    // the old check; the checker's own type-driven resolution cannot).
-    if let ExprKind::Call {
-        name,
-        args: ctor_args,
-        ..
-    } = &receiver.kind
-        && matches!(cx.commons().callee(e.id), Some(Callee::Agent { .. }))
-    {
-        // v0.104 (real-time track slice 3b): when lowering a `from websocket`
-        // `on open` body inside its hosting Durable Object, a transfer to the
-        // self-agent is a direct `this.method(args, deps)` self-call — the key
-        // addresses *this* DO, and the held connection never crosses an RPC
-        // boundary (DECISION A). The key expression is **not** emitted: the shape
-        // constraint (`bynk.ws.open_transfer_shape`, D2) restricts it to a
-        // request-derivable param ident — side-effect-free and equal to this
-        // instance's own key — so dropping it is sound. #2959 widened the key to a
-        // context `const` or a literal (`bynk.ws.open_transfer_key`), and #2967
-        // to a used commons' `const`; all are pure and the edge routed the
-        // upgrade by the same value, so it still is.
-        if cx.ws_self_agent() == Some(name.name.as_str()) {
-            cx.record_agent_call(&name.name, &method.name);
-            let args_lowered: Vec<String> = args.iter().map(|a| pre.lower(a, cx)).collect();
-            let mut all = args_lowered;
-            all.push("deps".to_string());
-            return Some(format!(
-                "this.{method}({args})",
-                method = method.name,
-                args = all.join(", ")
-            ));
-        }
-        cx.record_agent_call(&name.name, &method.name);
-        let key_arg = ctor_args
-            .first()
-            .map(|a| pre.lower(a, cx))
-            .unwrap_or_else(|| "\"default\"".to_string());
-        let instance = cx.agent_construct(&name.name, &key_arg);
-        let args_lowered: Vec<String> = args.iter().map(|a| pre.lower(a, cx)).collect();
-        let mut all = args_lowered;
-        // #2355: `this.deps` in a provider body.
-        all.push(cx.cap_deps_expr().to_string());
-        let call = format!(
-            "{instance}.{method}({args})",
-            method = method.name,
-            args = all.join(", ")
-        );
-        let target = format!("{}.{}", name.name, method.name);
-        return Some(cx.trace_step("agent", &target, e.span.start, call));
-    }
-    None
-}
-
-/// Lower a method call on a let-bound agent instance, or `None` when the call is not one. Moved out of
-/// `lower_method_call` (#3167) unchanged.
-fn lower_let_bound_agent_call(
-    e: &Expr,
-    receiver: &Expr,
-    method: &Ident,
-    args: &[Expr],
-    cx: &mut LowerCtx,
-    pre: &mut Pre,
-) -> Option<String> {
-    // Let-bound agent invocation. `let x = Agent(key); x.method(args)`
-    // — the statement emitter recorded `x` as an agent variable when
-    // it lowered the let. Method calls on `x` go straight to the
-    // class instance with `deps` threaded through.
-    //
-    // P6.21 (partial, continued): reads `Callee::Agent` instead of
-    // `cx.local_agent_vars.contains_key(&id.name)` — see the inline
-    // agent-invocation branch above. `cx.local_agent_vars` stays: it still
-    // answers "which agent does this bind name refer to" (needed for
-    // `record_agent_call`'s own bookkeeping and the #908 rename-resolution
-    // below), a different question from "is this receiver really an agent
-    // instance at all," which `Callee` now settles.
-    if let ExprKind::Ident(id) = &receiver.kind
-        && matches!(cx.commons().callee(e.id), Some(Callee::Agent { .. }))
-    {
-        if let Some(agent) = cx.local_agent_vars.get(&id.name).cloned() {
-            cx.record_agent_call(&agent, &method.name);
-        }
-        let args_lowered: Vec<String> = args.iter().map(|a| pre.lower(a, cx)).collect();
-        let mut all = args_lowered;
-        all.push(cx.cap_deps_expr().to_string());
-        // #908: `local_agent_vars` is keyed by the bynk source name, which a
-        // re-`let` may have renamed — resolve to the actual JS binding rather
-        // than assuming the source name is still it.
-        let recv = cx
-            .resolved_local_name(&id.name)
-            .unwrap_or_else(|| id.name.clone());
-        let call = format!("{}.{}({})", recv, method.name, all.join(", "));
-        let target = match cx.local_agent_vars.get(&id.name) {
-            Some(agent) => format!("{agent}.{}", method.name),
-            None => method.name.clone(),
-        };
-        return Some(cx.trace_step("agent", &target, e.span.start, call));
     }
     None
 }
@@ -5096,22 +4977,7 @@ fn lower_call(e: &Expr, name: &Ident, args: &[Expr], cx: &mut LowerCtx) -> Lower
     // the same defect class `block_writes_state`'s receiver-name matching
     // carried before #1196 converted it to read `Callee::Store` directly.
     if matches!(cx.commons().callee(e.id), Some(Callee::AgentInit(_))) {
-        // 1A: `agent_construct` builds text over `cx` state, so the key is
-        // printed here.
-        let arg_count = args_lowered.len();
-        let key_expr = args_lowered
-            .into_iter()
-            .next()
-            .map(LoweredExpr::into_text)
-            .unwrap_or_else(|| {
-                panic!(
-                    "bynk internal error (ADR 0334): Callee::AgentInit records agent \
-                     construction `{}(...)` with {arg_count} args, but every AgentDecl \
-                     declares exactly one key field — the checker already accepted this call",
-                    name.name,
-                )
-            });
-        return pre.finish_text(cx.agent_construct(&name.name, &key_expr));
+        return pre.finish_built(lower_agent_init(name, args_lowered, cx));
     }
     // P6.21: sum-variant construction is `Callee::Ctor` — reads the sum
     // type's own name and the variant's own tag straight off the checker's

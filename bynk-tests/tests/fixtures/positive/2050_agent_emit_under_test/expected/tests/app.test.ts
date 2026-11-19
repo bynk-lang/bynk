@@ -307,7 +307,17 @@ async function test_a_faulting_handler_releases_nothing() {
     type TimedOut = __ns_bynk.TimedOut;
     type Uuid = __ns_bynk.Uuid;
     const __r0 = await __makeCounter("c").bump(deps);
-    if (!((await (async () => { try { await (__makeCounter("c").bump(deps)); return false; } catch (__e) { if (__e instanceof ExpectationError) { throw __e; } return true; } })()))) { throw __bynkExpectFailure("tests/app.bynk:44:10", 1269, 1295, "expect Counter(\"c\").bump() faults\n  the call returned without faulting"); }
+    if (!((await (async () => {
+      try {
+        await (__makeCounter("c").bump(deps));
+        return false;
+      } catch (__e) {
+        if (__e instanceof ExpectationError) {
+          throw __e;
+        }
+        return true;
+      }
+    })()))) { throw __bynkExpectFailure("tests/app.bynk:44:10", 1269, 1295, "expect Counter(\"c\").bump() faults\n  the call returned without faulting"); }
     if (!(((__obs.log["Events.emit"] ?? []).length === (1)))) { throw __bynkExpectFailure("tests/app.bynk:45:10", 1305, 1328, "expect Events.emit called once"); }
     return { pass: true };
   } catch (e) {

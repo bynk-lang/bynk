@@ -1232,16 +1232,38 @@ impl<'a> LowerCtx<'a> {
     /// call. Bundle/test mode passes only the key; workers mode also threads
     /// `deps.env` so the factory can reach the agent's DO namespace — #2355:
     /// `this.deps.env` in a provider body, whose composer supplies it.
-    pub(super) fn agent_construct(&mut self, agent: &str, key_expr: &str) -> String {
+    ///
+    /// 1A.27 (#3728): `<factory>(key)` or `<factory>(key, <deps>.env)` as a `Call` node when
+    /// the key is one, else today's text. The factory is a naming function's result, so the
+    /// callee is an `Ident` over it.
+    pub(super) fn agent_construct_node(&mut self, agent: &str, key: LoweredExpr) -> Built {
         if let Some(h) = self.handler_mut() {
             h.agents_instantiated = true;
         }
         let factory = agent_factory_name(agent);
-        if matches!(self.target(), BuildTarget::Workers) {
-            format!("{factory}({key_expr}, {}.env)", self.cap_deps_expr())
-        } else {
-            format!("{factory}({key_expr})")
-        }
+        let workers = matches!(self.target(), BuildTarget::Workers);
+        let deps_text = self.cap_deps_expr().to_string();
+        let deps_env = bynk_ts::TsExpr::Member {
+            object: Box::new(self.cap_deps_node()),
+            property: "env".to_string(),
+        };
+        node_or_text(
+            vec![key],
+            |k| {
+                let mut args = k;
+                if workers {
+                    args.push(deps_env);
+                }
+                call(id(&factory), args)
+            },
+            |k| {
+                if workers {
+                    format!("{factory}({}, {deps_text}.env)", k[0])
+                } else {
+                    format!("{factory}({})", k[0])
+                }
+            },
+        )
     }
 
     /// #527: note that the body calls `agent.method`, folding the method's
