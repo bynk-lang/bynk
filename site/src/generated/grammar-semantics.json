@@ -664,6 +664,10 @@
   ],
   "expect_expr": [
     {
+      "code": "bynk.expect.impure_predicate",
+      "summary": "An `expect` predicate contains an effectful call (a sub-expression of type `Effect[_]`); a predicate must be pure."
+    },
+    {
       "code": "bynk.expect.not_bool",
       "summary": "`expect` was given a non-`Bool` predicate."
     },

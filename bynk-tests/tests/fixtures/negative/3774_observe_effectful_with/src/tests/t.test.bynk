@@ -1,0 +1,8 @@
+suite demo.pay {
+  // #3774: a `with` predicate is tested against every recorded call, so an
+  // effectful call inside it would run once per call and be recorded too.
+  case "c" {
+    let _ <- authorise.call(1)
+    expect Logger.log called with [Logger.log("w")].length() == 1
+  }
+}

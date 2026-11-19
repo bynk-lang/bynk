@@ -1,0 +1,2 @@
+# exact
+bynk.observe.impure_with a `with` predicate uses an effectful or test-only construct; it must be pure

@@ -2219,6 +2219,22 @@ pub const EXPLANATIONS: &[Explain] = &[
         anchor: "faults",
     },
     Explain {
+        code: "bynk.expect.impure_predicate",
+        blurb: "An `expect` predicate is a pure claim: the same predicate surface \
+                as `invariant` and `ensures`. A capability or service call inside \
+                it, even one held in a list or returned by a lambda, would run \
+                when the claim is checked, and its call would be recorded as if \
+                the unit under test had made it. Run the call before the claim \
+                with `let x <- …`, then state the claim about `x`. A fault claim \
+                (`expect <call> faults`) is the one form that runs its call.",
+        example: "// tests/pay.test.bynk\n\
+                  expect [Logger.log(\"x\")].length() == 1   // ✗ runs Logger.log\n\
+                  let r <- authorise.call(100)\n\
+                  expect r is Ok(_)                         // ✓ the call runs first",
+        page: "/book/reference/testing",
+        anchor: "expect",
+    },
+    Explain {
         code: "bynk.expect.not_bool",
         blurb: "`expect` states a claim that is checked when the case runs, so its \
                 predicate must be a `Bool`: true, or the case fails. A count or a \
@@ -9150,6 +9166,11 @@ pub const REGISTRY: &[DiagnosticInfo] = &[
         &["faults_expr"],
     ),
     dg(
+        "bynk.expect.impure_predicate",
+        "An `expect` predicate contains an effectful call (a sub-expression of type `Effect[_]`); a predicate must be pure.",
+        &["expect_expr"],
+    ),
+    dg(
         "bynk.expect.not_bool",
         "`expect` was given a non-`Bool` predicate.",
         &["expect_expr"],
@@ -9999,7 +10020,7 @@ pub const REGISTRY: &[DiagnosticInfo] = &[
     ),
     d(
         "bynk.observe.impure_with",
-        "A `with` predicate uses an effectful or test-only construct; it must be pure.",
+        "A `with` predicate uses an effectful or test-only construct, or an effectful call (a sub-expression of type `Effect[_]`); it must be pure.",
     ),
     d(
         "bynk.observe.not_a_seam",

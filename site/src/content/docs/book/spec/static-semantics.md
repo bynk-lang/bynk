@@ -2530,7 +2530,13 @@ wired by construction.
 
 An `expect` MUST occur only in a `case` body and MUST be given a `Bool` predicate
 (`bynk.expect.outside_case`, `bynk.expect.not_bool`) — the same invariant
-predicate surface as `invariant`/`ensures` (one predicate surface, ADR 0144). A
+predicate surface as `invariant`/`ensures` (one predicate surface, ADR 0144). The
+predicate MUST be pure: no sub-expression of it may have type `Effect[_]`
+(`bynk.expect.impure_predicate`, #3774), so a capability, service or agent call
+held inside it (in a list, or returned by a lambda) is refused rather than run.
+`expect`'s own constructs are not sub-expressions in this sense: a fault claim's
+subject (§5.9e), which the claim awaits; an observation's `Cap.op`
+subject, which is named, not called; and `trace(Cap.op)`. A
 `suite` MUST target an existing unit and MUST NOT duplicate a case description
 (`bynk.suite.unknown_target`, `bynk.suite.duplicate_case_name`).
 
@@ -2889,7 +2895,9 @@ capability and one of its operations, named not called). Well-formedness:
   (`bynk.observe.unknown_op`);
 - a `with <pred>` predicate is the one predicate surface with the operation's
   parameters in scope by their declared names; it MUST type to `Bool`
-  (`bynk.observe.with_not_bool`) and MUST be pure (`bynk.observe.impure_with`);
+  (`bynk.observe.with_not_bool`) and MUST be pure (`bynk.observe.impure_with`):
+  it MUST NOT use an effectful or test-only construct, and no sub-expression of it
+  may have type `Effect[_]` (#3774), since it is evaluated once per recorded call;
 - a call count is `once` or a non-negative integer literal followed by `times`
   (the grammar admits nothing else) — `called once` desugars to a count of one.
 

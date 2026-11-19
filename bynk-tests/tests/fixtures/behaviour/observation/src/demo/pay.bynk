@@ -1,9 +1,5 @@
 context demo.pay {
   exports opaque { AuthId }
-  exports transparent { Day }
-
-  // A refined type whose `of` returns a `Result`, for a `?` inside an `expect`.
-  type Day = String where NonEmpty
 
   type AuthId = opaque String
 

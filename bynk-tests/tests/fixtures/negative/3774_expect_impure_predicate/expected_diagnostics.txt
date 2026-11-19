@@ -1,0 +1,6 @@
+# exact
+bynk.expect.impure_predicate	tests/t.test.bynk:6:13
+bynk.expect.impure_predicate	tests/t.test.bynk:9:27
+bynk.expect.impure_predicate	tests/t.test.bynk:12:13
+bynk.expect.impure_predicate	tests/t.test.bynk:15:23
+bynk.expect.impure_predicate	tests/t.test.bynk:18:23

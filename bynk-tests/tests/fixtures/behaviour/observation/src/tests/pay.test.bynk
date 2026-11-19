@@ -21,12 +21,4 @@ suite demo.pay {
     expect logs.filter((c) => c.msg == "start").length() == 1
     expect logs.filter((c) => c.msg == "checking").length() == 1
   }
-
-  // An `expect` comparison operand that hoists a `?` guard is evaluated once,
-  // so a capability call inside it is recorded once, not once for the
-  // condition and again for the failure detail.
-  case "an expect operand that hoists runs once" {
-    expect Day.of(if [Logger.log("x")].length() == 1 { "d" } else { "e" })?.length() == 1
-    expect Logger.log called once
-  }
 }

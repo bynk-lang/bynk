@@ -1,0 +1,6 @@
+# exact
+bynk.expect.impure_predicate an `expect` predicate performs an effect; a predicate must be pure
+bynk.expect.impure_predicate an `expect` predicate performs an effect; a predicate must be pure
+bynk.expect.impure_predicate an `expect` predicate performs an effect; a predicate must be pure
+bynk.expect.impure_predicate an `expect` predicate performs an effect; a predicate must be pure
+bynk.expect.impure_predicate an `expect` predicate performs an effect; a predicate must be pure

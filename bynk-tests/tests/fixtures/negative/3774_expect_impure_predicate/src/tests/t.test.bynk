@@ -1,0 +1,20 @@
+suite demo.pay {
+  // #3774: an `Effect`-typed sub-expression in an `expect` predicate runs its
+  // call when the claim is checked. Each claim below is refused once, at the
+  // effectful call.
+  case "a capability call held in a list" {
+    expect [Logger.log("x")].length() == 1
+  }
+  case "a capability call returned by a lambda" {
+    expect [1].map((i) => Logger.log("x")).length() == 1
+  }
+  case "a service call held in a list" {
+    expect [authorise.call(1)].length() == 1
+  }
+  case "a capability call inside a hoisting operand (#3768)" {
+    expect Day.of(if [Logger.log("x")].length() == 1 { "d" } else { "e" })?.length() == 1
+  }
+  case "an expect in expression position" {
+    if true { expect [Logger.log("x")].length() == 1 } else { () }
+  }
+}

@@ -1,0 +1,2 @@
+# exact
+bynk.observe.impure_with	tests/t.test.bynk:6:36
