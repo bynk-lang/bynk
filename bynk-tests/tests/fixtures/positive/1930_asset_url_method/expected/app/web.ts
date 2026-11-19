@@ -10,7 +10,7 @@ import { brand } from "./brand.js";
 export const sheet: { readonly url: string } = { url: "/_assets/site.94fe1aa214bf93ad.css" };
 
 export function hashed(): boolean {
-  return sheet.url.startsWith("/_assets/") && (brand.url).length > 0;
+  return sheet.url.startsWith("/_assets/") && brand.url.length > 0;
 }
 
 export const web = {

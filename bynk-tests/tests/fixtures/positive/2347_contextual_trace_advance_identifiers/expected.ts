@@ -26,7 +26,7 @@ export function names(span: Span): string {
 export function calls(s: string): number {
   const trace = (label: string) => `[${String(label)}]`;
   const advance = (n: number) => n + 1;
-  return advance((trace(s)).length);
+  return advance(trace(s).length);
 }
 
 export function lambdas(xs: readonly number[]): readonly number[] {

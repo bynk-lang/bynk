@@ -60,7 +60,7 @@ export const blob = {
     switch (back.tag) {
       case "Some": {
         const b = back.value;
-        return (b).length;
+        return b.length;
       }
       case "None": {
         return -1;

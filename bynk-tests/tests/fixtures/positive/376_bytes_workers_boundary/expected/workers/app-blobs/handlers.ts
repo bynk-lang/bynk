@@ -7,7 +7,7 @@ import { type __JsonValue, type __BoundaryError, type __ServiceBinding, __callSe
 
 export const objects = {
   async call(payload: globalThis.Uint8Array, deps: {}): globalThis.Promise<Result<number, void>> {
-    return Ok((payload).length);
+    return Ok(payload.length);
   },
 };
 

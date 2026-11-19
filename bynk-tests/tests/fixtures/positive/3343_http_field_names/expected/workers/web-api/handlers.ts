@@ -92,7 +92,7 @@ export const api = {
     return HttpResult.Ok(`${String(body.email)} ${String(body.remember)}`);
   },
   async http_POST_upload(body: Upload, deps: {}): globalThis.Promise<HttpResult<string>> {
-    return HttpResult.Ok(`${String(body.title)} ${String((body.photo.bytes).length)}`);
+    return HttpResult.Ok(`${String(body.title)} ${String(body.photo.bytes.length)}`);
   },
   async http_GET_roundtrip(deps: {}): globalThis.Promise<HttpResult<string>> {
     const text = __formString(__serialise_Signup({ email: "a@b.c", remember: true }), [{ name: "email", wire: "e-mail", kind: "string", list: false, option: false }, { name: "remember", wire: "remember-me", kind: "bool", list: false, option: false }] as const);

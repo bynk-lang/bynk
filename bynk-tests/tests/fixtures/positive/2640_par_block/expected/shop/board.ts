@@ -84,7 +84,7 @@ export const branch = {
   async call(id: number, deps: { Users: Users; Orders: Orders }): globalThis.Promise<number> {
     if (id > 0) {
       const [user, orders] = await __bynkSettleAll([() => deps.Users.get(id), () => deps.Orders.forUser(id)]);
-      return (user).length + orders;
+      return user.length + orders;
     } else {
       return 0;
     }
@@ -105,7 +105,7 @@ export const shadow = {
       }
       throw new globalThis.Error("non-exhaustive match");
     })(Some(id)))]);
-    return (user).length + n + m;
+    return user.length + n + m;
   },
 };
 

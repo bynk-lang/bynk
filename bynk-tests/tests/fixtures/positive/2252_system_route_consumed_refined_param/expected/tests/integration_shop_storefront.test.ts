@@ -116,12 +116,12 @@ async function test_a_segment_that_breaks_the_consumed_refinement_is_refused() {
     const deps = __makeHarness();
     const r = await __sysdrive_raw_api_http_GET_items_Param_sku("NOT-A-SKU", undefined, "");
     void (((__d) => {
-        if (__d.tag === "Rejected" && __d.value.tag === "RefinementViolation") {
-          const d = __d.value.detail;
-          return __bynkExpect((d.includes("path.sku")), "tests/storefront_system.bynk:16:47", 755, 777, "expect d.contains(\"path.sku\")");
-        }
-        return __bynkExpect((false), "tests/storefront_system.bynk:17:16", 793, 798, "expect false");
-      })(r));
+      if (__d.tag === "Rejected" && __d.value.tag === "RefinementViolation") {
+        const d = __d.value.detail;
+        return __bynkExpect((d.includes("path.sku")), "tests/storefront_system.bynk:16:47", 755, 777, "expect d.contains(\"path.sku\")");
+      }
+      return __bynkExpect((false), "tests/storefront_system.bynk:17:16", 793, 798, "expect false");
+    })(r));
     return { pass: true };
   } catch (e) {
     if (e instanceof ExpectationError) {

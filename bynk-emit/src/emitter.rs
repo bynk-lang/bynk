@@ -64,7 +64,7 @@ use bynk_project::UnitKind;
 use bynk_syntax::ast::{
     AgentDecl, BaseType, BinOp, Block, CommonsItem, Expr, ExprKind, FnDecl, FnName, Ident,
     InterpPart, LambdaExpr, MatchBody, MessagesDecl, ObservationMatcher, Param, Pattern, PredKind,
-    ServiceDecl, ServiceProtocol, Statement, TypeBody, TypeDecl, TypeRef, UnaryOp,
+    ServiceDecl, ServiceProtocol, Statement, TypeBody, TypeDecl, TypeRef, UnaryOp, rounding_mode,
 };
 use ctx::UnitFacts;
 use ts_types::{TyRender, asset_ts_type, ts_base};

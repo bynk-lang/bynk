@@ -97,7 +97,7 @@ consumes commerce.payment
 
 service placeOrder {
   on call(total: Int) -> Effect[Result[Int, Int]] {
-    let _ <- commerce.payment.authorise(\"ab\".contains(\"a\"))
+    let _ <- commerce.payment.authorise(Some(true).getOrElse(false))
     Ok(total)
   }
 }
@@ -288,7 +288,7 @@ fn a_text_argument_falls_back_byte_for_byte() {
     for (fixture, call) in [
         (
             "97_simple_cross_context_call",
-            "await deps.surface.payment.authorise(\"ab\".includes(\"a\"))",
+            "await deps.surface.payment.authorise(((__o: Option<boolean>, __d: boolean) => __o.tag === \"Some\" ? __o.value : __d)(Some(true), false))",
         ),
         (
             "118_workers_target_with_consume",

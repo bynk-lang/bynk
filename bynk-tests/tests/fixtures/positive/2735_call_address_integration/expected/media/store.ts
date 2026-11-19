@@ -13,7 +13,7 @@ export const api = {
 
 export const save = {
   async call(key: string, deps: {}): globalThis.Promise<number> {
-    return (key).length;
+    return key.length;
   },
 };
 

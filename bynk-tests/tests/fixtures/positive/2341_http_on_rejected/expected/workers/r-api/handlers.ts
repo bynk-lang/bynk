@@ -33,7 +33,7 @@ export const api = {
     return HttpResult.Ok(`${String(id)} ${String(body.name)}`);
   },
   async http_PUT_blobs(body: globalThis.Uint8Array, deps: {}): globalThis.Promise<HttpResult<number>> {
-    return HttpResult.Ok((body).length);
+    return HttpResult.Ok(body.length);
   },
   async http_POST_signed(body: string, deps: {}): globalThis.Promise<HttpResult<string>> {
     return HttpResult.Ok(body);

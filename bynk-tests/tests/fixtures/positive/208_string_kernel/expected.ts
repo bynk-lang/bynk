@@ -21,7 +21,7 @@ export function initials(s: string): readonly string[] {
 }
 
 export function middle(s: string): string {
-  return s.slice(globalThis.Math.max(0, 1), globalThis.Math.max(0, (s).length - 1));
+  return s.slice(globalThis.Math.max(0, 1), globalThis.Math.max(0, s.length - 1));
 }
 
 export function findIn(s: string, sub: string): Option<number> {

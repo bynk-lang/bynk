@@ -13,7 +13,10 @@ export function problem(code: string, message: string): globalThis.Uint8Array {
 export const blobs = {
   async http_PUT_blobs_Param_name(name: string, body: AsyncIterable<globalThis.Uint8Array>, deps: {}): globalThis.Promise<HttpResult<string>> {
     const chunks = await (async (__s) => { const __m = __s as unknown as { [k: symbol]: boolean }; const __k = globalThis.Symbol.for("bynk.stream.read"); if (__m[__k]) { throw new globalThis.Error("bynk: a stream can be read only once"); } __m[__k] = true; const __r = []; for await (const __e of __s) { __r.push(__e); } return __r; })(body);
-    const total = ((__xs: readonly globalThis.Uint8Array[], __acc: number, __f: (acc: number, x: globalThis.Uint8Array) => number) => { for (const __x of __xs) __acc = __f(__acc, __x); return __acc; })(chunks, 0, (acc: number, b: globalThis.Uint8Array) => acc + (b).length);
+    const total = ((__xs: readonly globalThis.Uint8Array[], __acc: number, __f: (acc: number, x: globalThis.Uint8Array) => number) => {
+      for (const __x of __xs) __acc = __f(__acc, __x);
+      return __acc;
+    })(chunks, 0, (acc: number, b: globalThis.Uint8Array) => acc + b.length);
     return HttpResult.Ok(`${String(name)} ${String(total)}`);
   },
   async http_PUT_zips_Param_name(name: string, body: AsyncIterable<globalThis.Uint8Array>, deps: {}): globalThis.Promise<HttpResult<string>> {

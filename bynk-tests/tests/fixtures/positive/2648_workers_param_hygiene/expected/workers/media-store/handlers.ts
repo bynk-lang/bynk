@@ -35,31 +35,31 @@ export const __FixedClockProvider = { token: __ClockToken, factory: () => new Fi
 export const one = {
   async call(body: string, deps: { Clock: Clock }): globalThis.Promise<number> {
     const t = await deps.Clock.now();
-    return t + (body).length;
+    return t + body.length;
   },
 };
 
 export const many = {
   async call(key: string, body: string, result: string, args: string, argsObj: string, surface: string, request: string, env: string, ctx: string, handlers: string, __id_deps: string, deps: {}): globalThis.Promise<number> {
-    return (body).length + (result).length + (args).length + (argsObj).length + (surface).length + (request).length + (env).length + (ctx).length + (handlers).length + (__id_deps).length + (key).length;
+    return body.length + result.length + args.length + argsObj.length + surface.length + request.length + env.length + ctx.length + handlers.length + __id_deps.length + key.length;
   },
 };
 
 export const api = {
   async http_GET_by_Param_request_Param_result_Param_surface(request: string, result: string, surface: string, deps: {}): globalThis.Promise<HttpResult<number>> {
-    return HttpResult.Ok((request).length + (result).length + (surface).length);
+    return HttpResult.Ok(request.length + result.length + surface.length);
   },
   async http_GET_at_Param_url_Param_path(url: string, path: string, deps: {}): globalThis.Promise<HttpResult<number>> {
-    return HttpResult.Ok((url).length + (path).length);
+    return HttpResult.Ok(url.length + path.length);
   },
   async http_GET_bearer_Param_request_Param_result(request: string, result: string, deps: { identity: UserId }): globalThis.Promise<HttpResult<number>> {
-    return HttpResult.Ok((request).length + (result).length);
+    return HttpResult.Ok(request.length + result.length);
   },
   async http_GET_sum_Param_request_Param_result(request: string, result: string, deps: { who: { tag: "User", identity: UserId } | { tag: "Visitor" } }): globalThis.Promise<HttpResult<number>> {
-    return HttpResult.Ok((request).length + (result).length);
+    return HttpResult.Ok(request.length + result.length);
   },
   async http_POST_echo(body: string, deps: {}): globalThis.Promise<HttpResult<number>> {
-    return HttpResult.Ok((body).length);
+    return HttpResult.Ok(body.length);
   },
 };
 

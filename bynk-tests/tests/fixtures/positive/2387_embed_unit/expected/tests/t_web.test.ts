@@ -109,17 +109,17 @@ async function test_the_service_answers_with_the_filled_shell() {
     const { render, shell } = __ns_t_page;
     const r = await api.http_GET(deps);
     void (((__d) => {
-        switch (__d.tag) {
-          case "Ok": {
-            const body = __d.value;
-            return __bynkExpect((body.includes("<main>hello</main>")), "tests/t/web.bynk:25:26", 820, 855, "expect body.contains(\"<main>hello</main>\")");
-          }
-          default: {
-            return __bynkExpect((false), "tests/t/web.bynk:26:19", 874, 879, "expect false");
-          }
+      switch (__d.tag) {
+        case "Ok": {
+          const body = __d.value;
+          return __bynkExpect((body.includes("<main>hello</main>")), "tests/t/web.bynk:25:26", 820, 855, "expect body.contains(\"<main>hello</main>\")");
         }
-        throw new globalThis.Error("non-exhaustive match");
-      })(r));
+        default: {
+          return __bynkExpect((false), "tests/t/web.bynk:26:19", 874, 879, "expect false");
+        }
+      }
+      throw new globalThis.Error("non-exhaustive match");
+    })(r));
     return { pass: true };
   } catch (e) {
     if (e instanceof ExpectationError) {

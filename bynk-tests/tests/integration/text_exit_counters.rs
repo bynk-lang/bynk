@@ -44,7 +44,7 @@ fn queue_service(body: &str) -> String {
 /// because nothing is counted at all.
 #[test]
 fn the_counter_counts_on_the_driver_path() {
-    let src = "context ops.jobs\n\nservice inbox from queue(\"jobs\") {\n\ton message(n: Int) -> Effect[QueueResult] {\n\t\tlet ok = \"abc\".contains(\"b\")\n\t\tAck\n\t}\n}\n";
+    let src = "context ops.jobs\n\nservice inbox from queue(\"jobs\") {\n\ton message(n: Int) -> Effect[QueueResult] {\n\t\tlet ok = Some(true).getOrElse(false)\n\t\tAck\n\t}\n}\n";
     let (exits, _, text) = workers_counts(src);
     assert!(exits > 0, "no text exit counted:\n{text}");
 }

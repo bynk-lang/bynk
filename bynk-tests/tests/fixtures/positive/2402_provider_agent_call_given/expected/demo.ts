@@ -16,7 +16,7 @@ export const __FilesToken: symbol = globalThis.Symbol("Files");
 
 export class MemFiles implements Files {
   async write(name: string): globalThis.Promise<number> {
-    return (name).length;
+    return name.length;
   }
 }
 

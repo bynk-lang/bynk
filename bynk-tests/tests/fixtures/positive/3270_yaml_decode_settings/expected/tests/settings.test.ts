@@ -433,17 +433,17 @@ async function test_a_refusal_says_where() {
     type Settings = __ns_settings.Settings;
     type Triage = __ns_settings.Triage;
     void (((__d) => {
-        switch (__d.tag) {
-          case "Ok": {
-            return __bynkExpect((false), "tests/settings.test.bynk:119:23", 3923, 3928, "expect false");
-          }
-          case "Err": {
-            const e = __d.error;
-            return __bynkExpect((e.message.includes("line 4, column 7")), "tests/settings.test.bynk:120:24", 3952, 3990, "expect e.message.contains(\"line 4, column 7\")");
-          }
+      switch (__d.tag) {
+        case "Ok": {
+          return __bynkExpect((false), "tests/settings.test.bynk:119:23", 3923, 3928, "expect false");
         }
-        throw new globalThis.Error("non-exhaustive match");
-      })(load("triage:\n  enabled: true\n  labels: []\nmode: &m x\n")));
+        case "Err": {
+          const e = __d.error;
+          return __bynkExpect((e.message.includes("line 4, column 7")), "tests/settings.test.bynk:120:24", 3952, 3990, "expect e.message.contains(\"line 4, column 7\")");
+        }
+      }
+      throw new globalThis.Error("non-exhaustive match");
+    })(load("triage:\n  enabled: true\n  labels: []\nmode: &m x\n")));
     return { pass: true };
   } catch (e) {
     if (e instanceof ExpectationError) {

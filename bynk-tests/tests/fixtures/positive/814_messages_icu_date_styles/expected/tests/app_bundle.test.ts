@@ -71,7 +71,7 @@ async function test_full_style_is_longer_than_short_style__more_detail__not_less
     type MessageArg = __ns_bynk_locale_types.MessageArg;
     const short = render(("en" as any), withMoment(message("published.short"), "d", 1592222400000));
     const full = render(("en" as any), withMoment(message("published.full"), "d", 1592222400000));
-    if (!((full).length > (short).length)) { throw __bynkExpectFailure("tests/bundle.test.bynk:18:12", 935, 965, "expect full.length() > short.length()\n  expected: full.length() > short.length()\n  actual:   " + __bynkShow(((full).length)) + " > " + __bynkShow(((short).length))); }
+    if (!(full.length > short.length)) { throw __bynkExpectFailure("tests/bundle.test.bynk:18:12", 935, 965, "expect full.length() > short.length()\n  expected: full.length() > short.length()\n  actual:   " + __bynkShow((full.length)) + " > " + __bynkShow((short.length))); }
     return { pass: true };
   } catch (e) {
     if (e instanceof ExpectationError) {
