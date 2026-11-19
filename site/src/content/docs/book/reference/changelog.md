@@ -28,6 +28,7 @@ per-commit history. While Bynk is pre-1.0, increments may change behaviour.
 
 | Version | Highlights |
 |---|---|
+| **v0.639.32** | The `Json`, `Yaml` and `Form` codec calls and the typed decoders are built as TypeScript nodes rather than text, so a typed decoder is laid out as an indented block; no change to what the emitted code does |
 | **v0.639.31** | Intrinsic and type statics (`List.empty()`, `Int.parse`, `Bytes.*`, a static on a declared type and others) are built as TypeScript nodes rather than text, so a match expression passed to one is indented by the printer; no change to what the emitted code does |
 | **v0.639.30** | The `List` kernel's statement-bodied operations are built as TypeScript nodes rather than text, so each prints as a multi-line arrow function; no change to what the emitted code does |
 | **v0.639.29** | The `List` kernel's lowering moves into its own module and its expression-bodied operations are built as TypeScript nodes rather than text; no change to emitted code beyond indentation |
