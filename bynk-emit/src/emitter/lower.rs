@@ -22,6 +22,7 @@ use bynk_model::{ConstVal, EventPatternIr, EventPatternValueIr, IrHttpMethod};
 
 use super::ctx::{BodyMode, ModuleCtx, TestShared};
 use super::lower_call::codec_statics::eval_value_line;
+use super::lower_call::cross_context::lower_cross_context_service_call;
 use super::lower_call::platform::{
     lower_capability_call, lower_cookie_field_call, lower_cross_capability_call,
     lower_d1_peek_call, lower_d1_select_call, lower_events_emit_call, lower_signed_cookie_call,
@@ -3822,80 +3823,6 @@ fn ts_spelling_in_scope_everywhere(t: TyId, tys: &Arc<Types>) -> bool {
         }
         _ => false,
     }
-}
-
-/// v0.6 cross-context service call: receiver is an alias or the dotted name
-/// of a consumed context. In bundle mode, lower to
-/// `deps.surface.<key>.<method>(args as <consumed_ns>.<T>)`; in workers mode
-/// (v0.8), lower to
-/// `callService(deps.env.<BINDING>, "<method>", serialise...(args), deserialise_<R>)`.
-/// Returns `None` when the receiver is not a consumed-context prefix.
-fn lower_cross_context_service_call(
-    receiver: &Expr,
-    method: &Ident,
-    args: &[Expr],
-    cx: &mut LowerCtx,
-) -> Option<Lowered> {
-    let mut pre = Pre::new();
-    let text: Option<String> =
-        if let Some((consumed, key)) = cross_context_lowering_prefix(receiver, cx) {
-            cx.note_cross_context_used(&consumed);
-            match cx.target() {
-                BuildTarget::Bundle => {
-                    let args_lowered: Vec<String> = args
-                        .iter()
-                        .enumerate()
-                        .map(|(i, a)| {
-                            let lowered = pre.lower(a, cx);
-                            // #2042: every argument at a generic parameter
-                            // that names a user type is cast, not only one
-                            // holding a callee-typed part (#2039): a value the
-                            // caller typed itself (`byKey: Map[String, Line]`)
-                            // carries the caller's brand against the callee's.
-                            param_cast(
-                                &consumed,
-                                cx.cross_context(),
-                                method,
-                                i,
-                                lowered,
-                                true,
-                                cx.in_test_scaffold(),
-                            )
-                        })
-                        .collect();
-                    let call = format!(
-                        "deps.surface.{key}.{}({})",
-                        method.name,
-                        args_lowered.join(", ")
-                    );
-                    // #2825: the result takes the caller's declaration of a
-                    // same-named refined or opaque type, whose brand differs.
-                    Some(return_cast(
-                        &consumed,
-                        cx.cross_context(),
-                        &cx.commons().types,
-                        cx.consumed_type_ns(),
-                        method,
-                        call,
-                        cx.in_test_scaffold(),
-                    ))
-                }
-                BuildTarget::Workers => {
-                    let _ = key;
-                    let call = pre.absorb(lower_workers_cross_context_call(
-                        &consumed,
-                        method,
-                        args,
-                        receiver.span.start,
-                        cx,
-                    ));
-                    return Some(pre.finish_text(call));
-                }
-            }
-        } else {
-            None
-        };
-    text.map(|expr| pre.finish_text(expr))
 }
 
 fn lower_val(type_ref: &TypeRef, args: &[Expr], cx: &mut LowerCtx) -> Lowered {
