@@ -5,4 +5,5 @@
 
 | Probe | From | To | Version | PR | Reason |
 |---|---|---|---|---|---|
+| ts_any | 39 | 40 | v0.639.30 | #3764 | the list kernel's two `any` fallbacks (a checked `traverseTry` shape and a `sequenceAll`/`sequenceTry` shape that are absent) were the text `any`, which the probe does not see; they are now one `TsType::named("any")` in `lower_list.rs` (`any_ty`), kept at the same points as #3719 Decision D requires, and fall when the `1A.fallback` slice removes them |
 | ts_any | 38 | 39 | v0.639.28 | #3762 | the node form of the test-scaffold refined brand (`unchecked_construct_test_node`, `TsType::named("any")`) sits beside the text `unchecked_construct_test`, which the driver's `property_generators.rs` still calls; the cast itself is unchanged (P7.2) and the count falls when those callers convert |
