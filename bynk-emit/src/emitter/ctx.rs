@@ -277,18 +277,18 @@ pub(crate) struct AgentStoreState {
     /// `__state.<map>` (the connId record) with `connIdOf`/`resolveConnection<F>` —
     /// not the plain `Record<string, V>` ops (held maps are excluded from
     /// [`AgentStoreState::maps`]).
-    pub(super) held_maps: HashMap<String, String>,
+    pub(super) held_maps: HashMap<String, bynk_ts::TsType>,
     /// Review of #1460: a plain `store Map[K, V]` field's own value type `V`
     /// (name → its rendered TS type), for `lower_query_method`'s own
     /// collection-kernel sites (`distinctBy`/`joinOn`/`leftJoin`/`groupBy`)
     /// when the receiver is a plain map's own value scan lifted into the
     /// general query vocabulary — mirrors `held_maps`'s own construction
     /// exactly, just for the non-held case.
-    pub(super) map_values: HashMap<String, String>,
+    pub(super) map_values: HashMap<String, bynk_ts::TsType>,
     /// Review of #1460: a `store Log[T]` field's own element type `T` (name →
     /// its rendered TS type), for the identical reason `map_values` exists —
     /// a Log's value scan is also lifted into the general query vocabulary.
-    pub(super) log_values: HashMap<String, String>,
+    pub(super) log_values: HashMap<String, bynk_ts::TsType>,
 }
 
 /// What [`LowerCtx`] is lowering *right now*. One variant per real body-emission

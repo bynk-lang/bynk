@@ -5139,7 +5139,7 @@ fn emit_lazy_field_spec(
         let ts = layout
             .map_value_ts
             .get(&name.name)
-            .cloned()
+            .map(bynk_ts::print_type)
             .unwrap_or_default();
         let checked = key_check(store_field_key_type(a, &name.name), &name.name);
         spec.push(field(
@@ -5164,7 +5164,7 @@ fn emit_lazy_field_spec(
         let ts = layout
             .log_value_ts
             .get(&name.name)
-            .cloned()
+            .map(bynk_ts::print_type)
             .unwrap_or_default();
         spec.push(field(&name.name, "log", codec(v, &name.name, &ts)));
     }
@@ -5570,10 +5570,10 @@ pub(crate) struct AgentStoreLayout<'a> {
     pub(crate) effective_fields: Vec<RecordField>,
     pub(crate) is_workers: bool,
     pub(crate) held_maps: Vec<(&'a Ident, &'a TypeRef)>,
-    pub(crate) held_maps_ts: HashMap<String, String>,
+    pub(crate) held_maps_ts: HashMap<String, bynk_ts::TsType>,
     pub(crate) store_map_fields: Vec<(&'a Ident, &'a TypeRef)>,
     pub(crate) map_names: HashSet<String>,
-    pub(crate) map_value_ts: HashMap<String, String>,
+    pub(crate) map_value_ts: HashMap<String, bynk_ts::TsType>,
     pub(crate) store_map_indexes: HashMap<String, Vec<String>>,
     pub(crate) store_set_fields: Vec<(&'a Ident, &'a TypeRef)>,
     pub(crate) set_field_names: Vec<&'a str>,
@@ -5582,7 +5582,7 @@ pub(crate) struct AgentStoreLayout<'a> {
     pub(crate) cache_ttls: HashMap<String, i64>,
     pub(crate) store_log_fields: Vec<(&'a Ident, &'a TypeRef, Option<i64>)>,
     pub(crate) log_retains: HashMap<String, Option<i64>>,
-    pub(crate) log_value_ts: HashMap<String, String>,
+    pub(crate) log_value_ts: HashMap<String, bynk_ts::TsType>,
 }
 
 /// Classify an agent's `store` fields (see [`AgentStoreLayout`]).
@@ -5674,7 +5674,7 @@ fn classify_agent_store<'a>(
     // `Option`/`Effect` (`bynk-check/src/context_checks.rs`) — fell into
     // the `_` arm and rendered the whole `Option<Connection<F>>` wrapper,
     // not `F`. No existing fixture exercised this shape to catch it.
-    let held_maps_ts: HashMap<String, String> = held_maps
+    let held_maps_ts: HashMap<String, bynk_ts::TsType> = held_maps
         .iter()
         .map(|(n, v)| {
             // Review of #1187's slice 2c: no checker pass validates a store
@@ -5697,8 +5697,8 @@ fn classify_agent_store<'a>(
                     StoreKindIr::Map(_, v_ty) => held_frame_ty(*v_ty, tys.types()),
                     _ => None,
                 })
-                .map(|frame_ty| ts_ty(frame_ty, tys))
-                .unwrap_or_else(|| ts_type_ref(held_frame_ty_ref(v)));
+                .map(|frame_ty| ts_ty_to_ts_type(frame_ty, tys))
+                .unwrap_or_else(|| ts_type_ref_to_ts_type(held_frame_ty_ref(v), None));
             (n.name.clone(), ts)
         })
         .collect();
@@ -5728,16 +5728,16 @@ fn classify_agent_store<'a>(
     // `lower_query_method`'s collection-kernel sites can narrow a plain map's
     // own value scan lifted into the general query vocabulary the same way a
     // real `store Query[T]` field already can.
-    let map_value_ts: HashMap<String, String> = store_map_fields
+    let map_value_ts: HashMap<String, bynk_ts::TsType> = store_map_fields
         .iter()
         .map(|(n, v)| {
             let ts = store_field_ty
                 .get(n.name.as_str())
                 .and_then(|kind| match kind {
-                    StoreKindIr::Map(_, v_ty) => Some(ts_ty(*v_ty, tys)),
+                    StoreKindIr::Map(_, v_ty) => Some(ts_ty_to_ts_type(*v_ty, tys)),
                     _ => None,
                 })
-                .unwrap_or_else(|| ts_type_ref(v));
+                .unwrap_or_else(|| ts_type_ref_to_ts_type(v, None));
             (n.name.clone(), ts)
         })
         .collect();
@@ -5863,16 +5863,16 @@ fn classify_agent_store<'a>(
         .collect();
     // Review of #1460: a Log's own element type `T`, same reason and
     // construction as `map_value_ts` above.
-    let log_value_ts: HashMap<String, String> = store_log_fields
+    let log_value_ts: HashMap<String, bynk_ts::TsType> = store_log_fields
         .iter()
         .map(|(n, v, _)| {
             let ts = store_field_ty
                 .get(n.name.as_str())
                 .and_then(|kind| match kind {
-                    StoreKindIr::Log(elem_ty, _) => Some(ts_ty(*elem_ty, tys)),
+                    StoreKindIr::Log(elem_ty, _) => Some(ts_ty_to_ts_type(*elem_ty, tys)),
                     _ => None,
                 })
-                .unwrap_or_else(|| ts_type_ref(v));
+                .unwrap_or_else(|| ts_type_ref_to_ts_type(v, None));
             (n.name.clone(), ts)
         })
         .collect();

@@ -39,11 +39,6 @@ pub(super) fn any_ty() -> TsType {
     TsType::named("any")
 }
 
-/// [`list_ok_elem`] as text, for the `Query` kernel's still-text builders.
-pub(super) fn list_ok_elem_ts(call_ty: Option<TyId>, tys: TyRender<'_>) -> String {
-    print_type(&list_ok_elem(call_ty, tys))
-}
-
 /// What every arm reads: the call, its receiver and arguments, and the element
 /// type spelled once as a type (`elem_ts`) and as the list parameter's type
 /// (`xs_ts`, `readonly E[]`). Both come from the node, so the text fallbacks and
@@ -61,45 +56,45 @@ struct ListArm<'a> {
 // ---- Node builders shared by the arms and, by design, the sibling kernels ----
 
 /// The `N` children of an `N`-child builder, in order.
-fn take<const N: usize, T>(children: Vec<T>) -> [T; N] {
+pub(super) fn take<const N: usize, T>(children: Vec<T>) -> [T; N] {
     children
         .try_into()
         .unwrap_or_else(|_| unreachable!("an {N}-child builder is given exactly {N} children"))
 }
 
-fn id(name: &str) -> TsExpr {
+pub(super) fn id(name: &str) -> TsExpr {
     ident_node(name)
 }
 
-fn member(object: TsExpr, property: &str) -> TsExpr {
+pub(super) fn member(object: TsExpr, property: &str) -> TsExpr {
     TsExpr::Member {
         object: Box::new(object),
         property: property.to_string(),
     }
 }
 
-fn call(callee: TsExpr, args: Vec<TsExpr>) -> TsExpr {
+pub(super) fn call(callee: TsExpr, args: Vec<TsExpr>) -> TsExpr {
     TsExpr::Call {
         callee: Box::new(callee),
         args,
     }
 }
 
-fn paren(e: TsExpr) -> TsExpr {
+pub(super) fn paren(e: TsExpr) -> TsExpr {
     TsExpr::Paren(Box::new(e))
 }
 
 /// `(recv).method(args)`: the receiver is always bracketed, as the text forms did.
-fn method_call(recv: TsExpr, method: &str, args: Vec<TsExpr>) -> TsExpr {
+pub(super) fn method_call(recv: TsExpr, method: &str, args: Vec<TsExpr>) -> TsExpr {
     call(member(paren(recv), method), args)
 }
 
 /// `(f)(x)`: a Bynk function value applied to one argument.
-fn applied(f: TsExpr, x: TsExpr) -> TsExpr {
+pub(super) fn applied(f: TsExpr, x: TsExpr) -> TsExpr {
     call(paren(f), vec![x])
 }
 
-fn param(name: &str, ty: Option<TsType>) -> TsParam {
+pub(super) fn param(name: &str, ty: Option<TsType>) -> TsParam {
     TsParam {
         name: name.to_string(),
         ty,
@@ -108,7 +103,7 @@ fn param(name: &str, ty: Option<TsType>) -> TsParam {
 }
 
 /// An expression-bodied arrow; `is_async` makes it `async`.
-fn arrow_with(params: Vec<TsParam>, is_async: bool, body: TsExpr) -> TsExpr {
+pub(super) fn arrow_with(params: Vec<TsParam>, is_async: bool, body: TsExpr) -> TsExpr {
     TsExpr::Arrow {
         params,
         is_async,
@@ -118,7 +113,7 @@ fn arrow_with(params: Vec<TsParam>, is_async: bool, body: TsExpr) -> TsExpr {
     }
 }
 
-fn arrow(params: Vec<TsParam>, body: TsExpr) -> TsExpr {
+pub(super) fn arrow(params: Vec<TsParam>, body: TsExpr) -> TsExpr {
     arrow_with(params, false, body)
 }
 
@@ -127,7 +122,7 @@ fn iife(params: Vec<TsParam>, body: TsExpr, args: Vec<TsExpr>) -> TsExpr {
     call(arrow(params, body), args)
 }
 
-fn binary(op: TsBinaryOp, left: TsExpr, right: TsExpr) -> TsExpr {
+pub(super) fn binary(op: TsBinaryOp, left: TsExpr, right: TsExpr) -> TsExpr {
     TsExpr::Binary {
         op,
         left: Box::new(left),
@@ -135,17 +130,17 @@ fn binary(op: TsBinaryOp, left: TsExpr, right: TsExpr) -> TsExpr {
     }
 }
 
-fn spread(e: TsExpr) -> TsExpr {
+pub(super) fn spread(e: TsExpr) -> TsExpr {
     TsExpr::Spread(Box::new(e))
 }
 
 /// `array.method(args)`: the object is not bracketed (`__xs.map(…)`, `__out.push(…)`).
-fn method_call_bare(object: TsExpr, method: &str, args: Vec<TsExpr>) -> TsExpr {
+pub(super) fn method_call_bare(object: TsExpr, method: &str, args: Vec<TsExpr>) -> TsExpr {
     call(member(object, method), args)
 }
 
 /// An arrow with a multi-line block body, one statement per line.
-fn block_arrow(params: Vec<TsParam>, is_async: bool, body: Vec<TsStmt>) -> TsExpr {
+pub(super) fn block_arrow(params: Vec<TsParam>, is_async: bool, body: Vec<TsStmt>) -> TsExpr {
     TsExpr::Arrow {
         params,
         is_async,
@@ -158,7 +153,7 @@ fn block_arrow(params: Vec<TsParam>, is_async: bool, body: Vec<TsStmt>) -> TsExp
 /// An immediately-invoked block-bodied arrow. `is_async` is the arm's own: an
 /// `await` in its body needs it, and the call is not awaited here (the
 /// surrounding `<-` bind awaits the promise).
-fn iife_block(
+pub(super) fn iife_block(
     params: Vec<TsParam>,
     is_async: bool,
     body: Vec<TsStmt>,
@@ -169,11 +164,11 @@ fn iife_block(
 
 // ---- Statements ----
 
-fn const_(name: &str, ty: Option<TsType>, init: TsExpr) -> TsStmt {
+pub(super) fn const_(name: &str, ty: Option<TsType>, init: TsExpr) -> TsStmt {
     TsStmt::const_stmt(TsBindingName::Ident(name.to_string()), ty, init, None)
 }
 
-fn let_(name: &str, init: TsExpr) -> TsStmt {
+pub(super) fn let_(name: &str, init: TsExpr) -> TsStmt {
     TsStmt::let_stmt(
         TsBindingName::Ident(name.to_string()),
         None,
@@ -182,28 +177,28 @@ fn let_(name: &str, init: TsExpr) -> TsStmt {
     )
 }
 
-fn ret(e: TsExpr) -> TsStmt {
+pub(super) fn ret(e: TsExpr) -> TsStmt {
     TsStmt::return_stmt(Some(e), None)
 }
 
-fn expr_stmt(e: TsExpr) -> TsStmt {
+pub(super) fn expr_stmt(e: TsExpr) -> TsStmt {
     TsStmt::expr_stmt(e, None)
 }
 
-fn assign(target: TsExpr, value: TsExpr) -> TsStmt {
+pub(super) fn assign(target: TsExpr, value: TsExpr) -> TsStmt {
     TsStmt::assign(target, value, None)
 }
 
-fn block(stmts: Vec<TsStmt>) -> TsStmt {
+pub(super) fn block(stmts: Vec<TsStmt>) -> TsStmt {
     TsStmt::block(stmts, None)
 }
 
-fn for_of(binding: &str, iter: TsExpr, body: TsStmt) -> TsStmt {
+pub(super) fn for_of(binding: &str, iter: TsExpr, body: TsStmt) -> TsStmt {
     TsStmt::for_of(binding, iter, body, None)
 }
 
 /// `await (f)(__x)`: an effectful step applied to the loop's element.
-fn awaited_apply(f: TsExpr) -> TsExpr {
+pub(super) fn awaited_apply(f: TsExpr) -> TsExpr {
     TsExpr::Await(Box::new(applied(f, id("__x"))))
 }
 
@@ -222,11 +217,11 @@ fn promise(t: TsType) -> TsType {
 }
 
 /// `T[]` as text, for the text fallbacks.
-fn array_ts(t: &TsType) -> String {
+pub(super) fn array_ts(t: &TsType) -> String {
     print_type(&TsType::array(t.clone()))
 }
 
-fn zero() -> TsExpr {
+pub(super) fn zero() -> TsExpr {
     num_lit("0".to_string())
 }
 
@@ -241,7 +236,7 @@ fn xs_param(elem: &TsType) -> TsParam {
 }
 
 /// `globalThis.Math.max(0, n)`.
-fn clamped_at_zero(n: TsExpr) -> TsExpr {
+pub(super) fn clamped_at_zero(n: TsExpr) -> TsExpr {
     call(
         member(member(id("globalThis"), "Math"), "max"),
         vec![zero(), n],
@@ -261,7 +256,7 @@ fn sorted_copy(xs: TsExpr, elem: &TsType, body: TsExpr) -> TsExpr {
 }
 
 /// `array.sort(compare)`: the array is not bracketed, so `[...xs].sort(…)` prints bare.
-fn method_sort(array: TsExpr, compare: TsExpr) -> TsExpr {
+pub(super) fn method_sort(array: TsExpr, compare: TsExpr) -> TsExpr {
     call(member(array, "sort"), vec![compare])
 }
 
@@ -918,7 +913,7 @@ fn result_is_err(result: &str) -> TsExpr {
 }
 
 /// `if (__r.tag === "Err") { return Err(__r.error); }`.
-fn bail_on_err() -> TsStmt {
+pub(super) fn bail_on_err() -> TsStmt {
     TsStmt::if_stmt(
         result_is_err("__r"),
         block(vec![ret(call(id("Err"), vec![member(id("__r"), "error")]))]),
@@ -927,7 +922,7 @@ fn bail_on_err() -> TsStmt {
 }
 
 /// `__out.push(__r.value);`.
-fn push_value() -> TsStmt {
+pub(super) fn push_value() -> TsStmt {
     expr_stmt(method_call_bare(
         id("__out"),
         "push",
@@ -1085,6 +1080,40 @@ fn list_first_or_else(a: &ListArm, default: &Expr, pre: &mut Pre, cx: &mut Lower
     )
 }
 
+/// The `distinctBy` kernel over `iter`: first-seen order, keyed by `key` (shared with the
+/// `Query` vocabulary, whose iterable is `__q`).
+pub(super) fn distinct_by_body(elem: &TsType, iter: TsExpr, key: TsExpr) -> Vec<TsStmt> {
+    let seen = TsExpr::New {
+        callee: Box::new(member(id("globalThis"), "Set")),
+        args: vec![],
+    };
+    let fresh = TsStmt::if_stmt(
+        TsExpr::Unary {
+            op: TsUnaryOp::Not,
+            expr: Box::new(method_call_bare(id("__seen"), "has", vec![id("__k")])),
+        },
+        block(vec![
+            expr_stmt(method_call_bare(id("__seen"), "add", vec![id("__k")])),
+            expr_stmt(method_call_bare(id("__out"), "push", vec![id("__x")])),
+        ]),
+        None,
+    );
+    vec![
+        const_("__seen", None, seen),
+        const_(
+            "__out",
+            Some(TsType::array(elem.clone())),
+            TsExpr::array(vec![]),
+        ),
+        for_of(
+            "__x",
+            iter,
+            block(vec![const_("__k", None, applied(key, id("__x"))), fresh]),
+        ),
+        ret(id("__out")),
+    ]
+}
+
 // v0.88 (ADR 0116 D2/D3/D4): ordering + aggregates. The comparator
 // `<`/`>` works for the numeric- and string-erased orderable keys
 // alike, so no key-type branch is needed (except average's rounding).
@@ -1128,7 +1157,7 @@ fn list_sort_by(
 }
 
 /// The argument order of the key comparison: swapped for `sortByDescending`.
-fn sort_order(descending: bool) -> (&'static str, &'static str) {
+pub(super) fn sort_order(descending: bool) -> (&'static str, &'static str) {
     if descending {
         ("__b", "__a")
     } else {
@@ -1183,6 +1212,17 @@ fn sort_comparator_text(
 
 /// The plain-key form as a node: the bare operators over two bound keys.
 fn sort_plain_node(a: &ListArm, descending: bool, recv: TsExpr, key: TsExpr) -> TsExpr {
+    sort_plain_by(Some(&a.elem), descending, recv, key)
+}
+
+/// [`sort_plain_node`] over a copy of `recv`; the pair's parameters are annotated with `elem`
+/// when it is known (the `Query` vocabulary's are not).
+pub(super) fn sort_plain_by(
+    elem: Option<&TsType>,
+    descending: bool,
+    recv: TsExpr,
+    key: TsExpr,
+) -> TsExpr {
     let (lo, hi) = if descending { ("1", "-1") } else { ("-1", "1") };
     let ordered = |op, then: &str, otherwise: TsExpr| TsExpr::Conditional {
         test: Box::new(binary(op, id("__ka"), id("__kb"))),
@@ -1200,10 +1240,7 @@ fn sort_plain_node(a: &ListArm, descending: bool, recv: TsExpr, key: TsExpr) -> 
         ret(outcome),
     ];
     let pair = block_arrow(
-        vec![
-            param("__a", Some(a.elem.clone())),
-            param("__b", Some(a.elem.clone())),
-        ],
+        vec![param("__a", elem.cloned()), param("__b", elem.cloned())],
         false,
         body,
     );
@@ -1262,35 +1299,7 @@ fn list_distinct_by(a: &ListArm, key: &Expr, pre: &mut Pre, cx: &mut LowerCtx) -
         vec![recv, key],
         |n| {
             let [recv, key] = take(n);
-            let seen = TsExpr::New {
-                callee: Box::new(member(id("globalThis"), "Set")),
-                args: vec![],
-            };
-            let fresh = TsStmt::if_stmt(
-                TsExpr::Unary {
-                    op: TsUnaryOp::Not,
-                    expr: Box::new(method_call_bare(id("__seen"), "has", vec![id("__k")])),
-                },
-                block(vec![
-                    expr_stmt(method_call_bare(id("__seen"), "add", vec![id("__k")])),
-                    expr_stmt(method_call_bare(id("__out"), "push", vec![id("__x")])),
-                ]),
-                None,
-            );
-            let body = vec![
-                const_("__seen", None, seen),
-                const_(
-                    "__out",
-                    Some(TsType::array(a.elem.clone())),
-                    TsExpr::array(vec![]),
-                ),
-                for_of(
-                    "__x",
-                    id("__xs"),
-                    block(vec![const_("__k", None, applied(key, id("__x"))), fresh]),
-                ),
-                ret(id("__out")),
-            ];
+            let body = distinct_by_body(&a.elem, id("__xs"), key);
             iife_block(vec![xs_param(&a.elem)], false, body, vec![recv])
         },
         |t| {
@@ -1507,68 +1516,16 @@ fn list_join_on(
         vec![recv, other, left, right, into],
         |n| {
             let [recv, other, left, right, into] = take(n);
-            // `const __h: Record<string, U[]> = Object.create(null)`, filled from `other`.
-            let bucket = TsExpr::Assign {
-                target: Box::new(hash_slot()),
-                value: Box::new(binary(
-                    TsBinaryOp::NullishCoalescing,
-                    hash_slot(),
-                    TsExpr::array(vec![]),
-                )),
-            };
-            let fill = block(vec![
-                const_("__k", None, string_of(applied(right, id("__u")))),
-                expr_stmt(method_call_bare(paren(bucket), "push", vec![id("__u")])),
-            ]);
-            let matches = TsExpr::Index {
-                object: Box::new(id("__h")),
-                index: Box::new(string_of(applied(left, id("__t")))),
-            };
-            let found = const_(
-                "__m",
-                None,
-                binary(
-                    TsBinaryOp::NullishCoalescing,
-                    matches,
-                    TsExpr::array(vec![]),
-                ),
+            let body = join_body(
+                &JoinSides {
+                    left_join,
+                    elem: &a.elem,
+                    other: &u,
+                },
+                other,
+                [left, right, into],
+                |probe| method_call(recv, "flatMap", vec![probe]),
             );
-            let project = |u_arg: TsExpr| {
-                arrow(
-                    vec![param("__u", Some(u.clone()))],
-                    call(paren(into.clone()), vec![id("__t"), u_arg]),
-                )
-            };
-            let result = if left_join {
-                TsExpr::Conditional {
-                    test: Box::new(binary(
-                        TsBinaryOp::GreaterThan,
-                        member(id("__m"), "length"),
-                        zero(),
-                    )),
-                    consequent: Box::new(method_call_bare(
-                        id("__m"),
-                        "map",
-                        vec![project(call(id("Some"), vec![id("__u")]))],
-                    )),
-                    alternate: Box::new(TsExpr::array(vec![call(
-                        paren(into.clone()),
-                        vec![id("__t"), id("None")],
-                    )])),
-                }
-            } else {
-                method_call_bare(id("__m"), "map", vec![project(id("__u"))])
-            };
-            let probe = block_arrow(
-                vec![param("__t", Some(a.elem.clone()))],
-                false,
-                vec![found, ret(result)],
-            );
-            let body = vec![
-                const_("__h", Some(record_of(&u)), create_null()),
-                for_of("__u", other, fill),
-                ret(method_call(recv, "flatMap", vec![probe])),
-            ];
             iife_block(vec![], false, body, vec![])
         },
         |t| {
@@ -1586,8 +1543,96 @@ fn list_join_on(
     )
 }
 
+/// What a keyed join is over: the receiver's element, the `other` side's element, and
+/// whether unmatched rows survive (`leftJoin`).
+#[derive(Clone, Copy)]
+pub(super) struct JoinSides<'a> {
+    pub left_join: bool,
+    pub elem: &'a TsType,
+    pub other: &'a TsType,
+}
+
+/// The hash-join kernel of `joinOn`/`leftJoin`: bucket `iter` (the `other` rows) by
+/// `right`, then probe by `left` and project through `into`. `probed` wraps the probe arrow
+/// in the receiver's own `flatMap` call (the list kernel brackets its receiver, the `Query`
+/// vocabulary's is the bare `__q`).
+pub(super) fn join_body(
+    sides: &JoinSides,
+    iter: TsExpr,
+    [left, right, into]: [TsExpr; 3],
+    probed: impl FnOnce(TsExpr) -> TsExpr,
+) -> Vec<TsStmt> {
+    let JoinSides {
+        left_join,
+        elem,
+        other: u,
+    } = *sides;
+    // `const __h: Record<string, U[]> = Object.create(null)`, filled from `other`.
+    let bucket = TsExpr::Assign {
+        target: Box::new(hash_slot()),
+        value: Box::new(binary(
+            TsBinaryOp::NullishCoalescing,
+            hash_slot(),
+            TsExpr::array(vec![]),
+        )),
+    };
+    let fill = block(vec![
+        const_("__k", None, string_of(applied(right, id("__u")))),
+        expr_stmt(method_call_bare(paren(bucket), "push", vec![id("__u")])),
+    ]);
+    let matches = TsExpr::Index {
+        object: Box::new(id("__h")),
+        index: Box::new(string_of(applied(left, id("__t")))),
+    };
+    let found = const_(
+        "__m",
+        None,
+        binary(
+            TsBinaryOp::NullishCoalescing,
+            matches,
+            TsExpr::array(vec![]),
+        ),
+    );
+    let project = |u_arg: TsExpr| {
+        arrow(
+            vec![param("__u", Some(u.clone()))],
+            call(paren(into.clone()), vec![id("__t"), u_arg]),
+        )
+    };
+    let result = if left_join {
+        TsExpr::Conditional {
+            test: Box::new(binary(
+                TsBinaryOp::GreaterThan,
+                member(id("__m"), "length"),
+                zero(),
+            )),
+            consequent: Box::new(method_call_bare(
+                id("__m"),
+                "map",
+                vec![project(call(id("Some"), vec![id("__u")]))],
+            )),
+            alternate: Box::new(TsExpr::array(vec![call(
+                paren(into.clone()),
+                vec![id("__t"), id("None")],
+            )])),
+        }
+    } else {
+        method_call_bare(id("__m"), "map", vec![project(id("__u"))])
+    };
+    let probe = block_arrow(
+        vec![param("__t", Some(elem.clone()))],
+        false,
+        vec![found, ret(result)],
+    );
+    vec![
+        const_("__h", Some(record_of(u)), create_null()),
+        for_of("__u", iter, fill),
+        ret(probed(probe)),
+    ]
+}
+
 /// `__h[__k]`.
-fn hash_slot() -> TsExpr {
+pub(super) fn hash_slot() -> TsExpr {
     TsExpr::Index {
         object: Box::new(id("__h")),
         index: Box::new(id("__k")),
@@ -1595,12 +1640,12 @@ fn hash_slot() -> TsExpr {
 }
 
 /// `String(x)`: the stringified hash key.
-fn string_of(x: TsExpr) -> TsExpr {
+pub(super) fn string_of(x: TsExpr) -> TsExpr {
     call(id("String"), vec![x])
 }
 
 /// `globalThis.Record<string, E[]>`: the hash of buckets.
-fn record_of(elem: &TsType) -> TsType {
+pub(super) fn record_of(elem: &TsType) -> TsType {
     TsType::named_with_args(
         "globalThis.Record",
         vec![TsType::named("string"), TsType::array(elem.clone())],
@@ -1608,7 +1653,7 @@ fn record_of(elem: &TsType) -> TsType {
 }
 
 /// `globalThis.Object.create(null)`.
-fn create_null() -> TsExpr {
+pub(super) fn create_null() -> TsExpr {
     call(
         member(member(id("globalThis"), "Object"), "create"),
         vec![TsExpr::Lit(TsLit::Null)],
@@ -1665,44 +1710,7 @@ fn list_group_by(a: &ListArm, key: &Expr, into: &Expr, pre: &mut Pre, cx: &mut L
         vec![recv, key, into],
         |n| {
             let [recv, key, into] = take(n);
-            let first_seen = TsStmt::if_stmt(
-                TsExpr::Unary {
-                    op: TsUnaryOp::Not,
-                    expr: Box::new(binary(TsBinaryOp::In, id("__k"), id("__h"))),
-                },
-                block(vec![
-                    assign(hash_slot(), TsExpr::array(vec![])),
-                    expr_stmt(method_call_bare(id("__order"), "push", vec![id("__k")])),
-                ]),
-                None,
-            );
-            let partition = block(vec![
-                const_("__k", None, string_of(applied(key.clone(), id("__t")))),
-                first_seen,
-                expr_stmt(method_call_bare(hash_slot(), "push", vec![id("__t")])),
-            ]);
-            let rows = TsExpr::Index {
-                object: Box::new(id("__rows")),
-                index: Box::new(zero()),
-            };
-            let emit = block_arrow(
-                vec![param("__k", None)],
-                false,
-                vec![
-                    const_("__rows", None, hash_slot()),
-                    ret(call(paren(into), vec![applied(key, rows), id("__rows")])),
-                ],
-            );
-            let body = vec![
-                const_("__h", Some(record.clone()), create_null()),
-                const_(
-                    "__order",
-                    Some(TsType::array(TsType::named("string"))),
-                    TsExpr::array(vec![]),
-                ),
-                for_of("__t", recv, partition),
-                ret(method_call_bare(id("__order"), "map", vec![emit])),
-            ];
+            let body = group_by_body(&a.elem, recv, key, into);
             iife_block(vec![], false, body, vec![])
         },
         |t| {
@@ -1714,6 +1722,49 @@ fn list_group_by(a: &ListArm, key: &Expr, into: &Expr, pre: &mut Pre, cx: &mut L
     )
 }
 
+/// The `groupBy` kernel over `iter`: rows partitioned by `String(key)` in first-seen order,
+/// each group handed to `into` with its original key.
+pub(super) fn group_by_body(elem: &TsType, iter: TsExpr, key: TsExpr, into: TsExpr) -> Vec<TsStmt> {
+    let first_seen = TsStmt::if_stmt(
+        TsExpr::Unary {
+            op: TsUnaryOp::Not,
+            expr: Box::new(binary(TsBinaryOp::In, id("__k"), id("__h"))),
+        },
+        block(vec![
+            assign(hash_slot(), TsExpr::array(vec![])),
+            expr_stmt(method_call_bare(id("__order"), "push", vec![id("__k")])),
+        ]),
+        None,
+    );
+    let partition = block(vec![
+        const_("__k", None, string_of(applied(key.clone(), id("__t")))),
+        first_seen,
+        expr_stmt(method_call_bare(hash_slot(), "push", vec![id("__t")])),
+    ]);
+    let rows = TsExpr::Index {
+        object: Box::new(id("__rows")),
+        index: Box::new(zero()),
+    };
+    let emit = block_arrow(
+        vec![param("__k", None)],
+        false,
+        vec![
+            const_("__rows", None, hash_slot()),
+            ret(call(paren(into), vec![applied(key, rows), id("__rows")])),
+        ],
+    );
+    vec![
+        const_("__h", Some(record_of(elem)), create_null()),
+        const_(
+            "__order",
+            Some(TsType::array(TsType::named("string"))),
+            TsExpr::array(vec![]),
+        ),
+        for_of("__t", iter, partition),
+        ret(method_call_bare(id("__order"), "map", vec![emit])),
+    ]
+}
+
 /// v0.94 (ADR 0120): the TS element type of a join's `other` collection (its
 /// `List`/`Query` element), for typing the hash-map buckets. Falls back to
 /// `unknown` if the checker recorded no type (an already-diagnosed program).
@@ -1723,11 +1774,6 @@ pub(super) fn join_other_elem(args: &[Expr], cx: &LowerCtx) -> TsType {
         Some(Ty::List(u) | Ty::Query(u)) => ts_ty_to_ts_type(*u, tys),
         _ => TsType::named("unknown"),
     }
-}
-
-/// [`join_other_elem`] as text, for the `Query` kernel's still-text builders.
-pub(super) fn join_other_elem_ts(args: &[Expr], cx: &LowerCtx) -> String {
-    print_type(&join_other_elem(args, cx))
 }
 
 /// The comparator an ordering kernel (`sortBy`/`min`/`max`) needs for its key

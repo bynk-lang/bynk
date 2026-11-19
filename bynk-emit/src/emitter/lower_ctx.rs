@@ -661,7 +661,7 @@ impl<'a> LowerCtx<'a> {
 
     /// v0.105: the connection **frame type** of the held `store Map[K,
     /// Connection]` field `name`, if it is one.
-    pub(crate) fn agent_held_map_frame(&self, name: &str) -> Option<&String> {
+    pub(crate) fn agent_held_map_frame(&self, name: &str) -> Option<&bynk_ts::TsType> {
         self.agent_store().and_then(|s| s.held_maps.get(name))
     }
 
@@ -674,13 +674,13 @@ impl<'a> LowerCtx<'a> {
     /// Review of #1460: the value type `V` of the plain `store Map[K, V]`
     /// field `name`, if it is one (`None` for a held map — see
     /// [`Self::agent_held_map_frame`] instead).
-    pub(crate) fn agent_store_map_value_ts(&self, name: &str) -> Option<&String> {
+    pub(crate) fn agent_store_map_value_ts(&self, name: &str) -> Option<&bynk_ts::TsType> {
         self.agent_store().and_then(|s| s.map_values.get(name))
     }
 
     /// Review of #1460: the element type `T` of the `store Log[T]` field
     /// `name`, if it is one.
-    pub(crate) fn agent_store_log_value_ts(&self, name: &str) -> Option<&String> {
+    pub(crate) fn agent_store_log_value_ts(&self, name: &str) -> Option<&bynk_ts::TsType> {
         self.agent_store().and_then(|s| s.log_values.get(name))
     }
 

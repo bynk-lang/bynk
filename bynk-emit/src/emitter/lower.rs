@@ -23,14 +23,15 @@ use bynk_model::{ConstVal, EventPatternIr, EventPatternValueIr, IrHttpMethod};
 use super::ctx::{BodyMode, ModuleCtx, TestShared};
 use super::lower_call::codec_statics::{DecodeSource, eval_value_line, json_decoder_fn};
 use super::lower_call::query::{
-    QueryShape, lower_query_by_name, lower_query_method, lower_stream_method, note_par_fan_out,
-    query_key_cmp, query_keyed,
+    QueryShape, QuerySource, held_values_source, lower_query_by_name, lower_query_method,
+    lower_stream_method, note_par_fan_out, path_values_source, query_key_cmp, query_keyed,
+    query_other_elem,
 };
 use super::lower_call::statics::{
     lower_runtime_value_static_call, lower_scalar_static_call, lower_type_static_call,
 };
 use super::lower_ctx::LowerCtx;
-use super::lower_list::{any_ty, join_other_elem_ts, key_is_plain, lower_list_kernel};
+use super::lower_list::{any_ty, key_is_plain, lower_list_kernel};
 use super::lower_stmt::{
     Body, Item, arms_contain_question, block_body, block_body_into, block_contains_question,
     emit_block_as_function_body_with_return, emit_statement, hoist_if_as_statement,
@@ -3948,11 +3949,17 @@ fn lower_store_held_map_call(
             cx.commons().callee(e.id),
             Some(Callee::Store { .. } | Callee::Query { .. })
         )
-        && let Some(f_ts) = cx.agent_held_map_frame(&id.name).cloned()
+        && let Some(f_node) = cx.agent_held_map_frame(&id.name).cloned()
     {
+        let f_ts = bynk_ts::print_type(&f_node);
         let var = cx.agent_store_var().to_string();
         let m = format!("{var}.{}", id.name);
-        let a: Vec<String> = args.iter().map(|x| pre.lower(x, cx)).collect();
+        let a_nodes: Vec<LoweredExpr> = args.iter().map(|x| pre.lower_node(x, cx)).collect();
+        let a: Vec<String> = a_nodes
+            .iter()
+            .cloned()
+            .map(LoweredExpr::into_text)
+            .collect();
         return Some(match method.name.as_str() {
             // #3261: `put` over a key that already holds a connection closes the
             // displaced one first, as `remove` does, so a held connection cannot
@@ -3977,30 +3984,26 @@ fn lower_store_held_map_call(
             // closed drops out).
             _ => {
                 note_par_fan_out(cx, method);
-                let other_elem_ts = args
-                    .first()
-                    .map(|_| join_other_elem_ts(args, cx))
-                    .unwrap_or_default();
+                let other_elem = query_other_elem(args, cx);
                 lower_query_by_name(
-                    format!(
-                        "{m}.values().flatMap((__cid) => {{ const __c = __resolveConnection<{f_ts}>(this.state, __cid); return __c.tag === \"Some\" ? [__c.value] : []; }})"
-                    ),
+                    QuerySource::Values(held_values_source(&m, &f_node)),
                     method,
-                    &a,
+                    a_nodes,
                     cx.commons().expr_types.get(&e.id).map(|te| te.ty),
                     &QueryShape {
-                        elem_ts: &f_ts,
-                        other_elem_ts: &other_elem_ts,
+                        elem: &f_node,
+                        other_elem: &other_elem,
                         keyed: query_keyed(e, method, args, cx),
                         key_cmp: query_key_cmp(method, args, cx),
                         runtime_use: cx.runtime_use(),
                     },
                     tys,
                 )
+                .map_or_else(
+                    || format!("(/* unsupported held Map op {} */ undefined)", method.name),
+                    |built| LoweredExpr::from(built).into_text(),
+                )
             }
-            .unwrap_or_else(|| {
-                format!("(/* unsupported held Map op {} */ undefined)", method.name)
-            }),
         });
     }
     None
@@ -4055,7 +4058,12 @@ fn lower_store_map_call(
         {
             return Some(routed);
         }
-        let a: Vec<String> = args.iter().map(|x| pre.lower(x, cx)).collect();
+        let a_nodes: Vec<LoweredExpr> = args.iter().map(|x| pre.lower_node(x, cx)).collect();
+        let a: Vec<String> = a_nodes
+            .iter()
+            .cloned()
+            .map(LoweredExpr::into_text)
+            .collect();
         // A key may be a number or a branded value: the handle is keyed by its string.
         let k = a
             .first()
@@ -4071,9 +4079,9 @@ fn lower_store_map_call(
             // Workers build does; re-putting the same connection under its own key leaves
             // it open (compared by identity).
             "put"
-                if cx
-                    .agent_store_map_value_ts(&id.name)
-                    .is_some_and(|v| v.starts_with("Connection<")) =>
+                if cx.agent_store_map_value_ts(&id.name).is_some_and(
+                    |v| matches!(v, bynk_ts::TsType::Named { name, .. } if name == "Connection"),
+                ) =>
             {
                 format!(
                     "(async () => {{ const __k = {0}; const __new = {1}; const __old = await {m}.get(__k); if (__old !== undefined && __old !== __new) {{ await __old.close(); }} await {m}.put(__k, __new); return undefined; }})()",
@@ -4092,9 +4100,9 @@ fn lower_store_map_call(
             // removes *and closes*: close the connection the entry holds, then
             // delete it, as the Workers lowering does.
             "remove"
-                if cx
-                    .agent_store_map_value_ts(&id.name)
-                    .is_some_and(|v| v.starts_with("Connection<")) =>
+                if cx.agent_store_map_value_ts(&id.name).is_some_and(
+                    |v| matches!(v, bynk_ts::TsType::Named { name, .. } if name == "Connection"),
+                ) =>
             {
                 format!(
                     "(async () => {{ const __k = {0}; const __o = await {m}.get(__k); if (__o !== undefined) {{ await __o.close(); await {m}.remove(__k); }} return undefined; }})()",
@@ -4131,30 +4139,30 @@ fn lower_store_map_call(
             // `cx.is_agent_store_map` already matched, so `map_values` always
             // has an entry for `id.name` here.
             _ => {
-                let elem_ts = cx
+                let elem = cx
                     .agent_store_map_value_ts(&id.name)
                     .cloned()
-                    .unwrap_or_else(|| "unknown".to_string());
+                    .unwrap_or_else(|| bynk_ts::TsType::named("unknown"));
                 note_par_fan_out(cx, method);
-                let other_elem_ts = args
-                    .first()
-                    .map(|_| join_other_elem_ts(args, cx))
-                    .unwrap_or_default();
+                let other_elem = query_other_elem(args, cx);
                 lower_query_by_name(
-                    format!("{m}.values()"),
+                    QuerySource::Values(path_values_source(&m)),
                     method,
-                    &a,
+                    a_nodes,
                     cx.commons().expr_types.get(&e.id).map(|te| te.ty),
                     &QueryShape {
-                        elem_ts: &elem_ts,
-                        other_elem_ts: &other_elem_ts,
+                        elem: &elem,
+                        other_elem: &other_elem,
                         keyed: query_keyed(e, method, args, cx),
                         key_cmp: query_key_cmp(method, args, cx),
                         runtime_use: cx.runtime_use(),
                     },
                     tys,
                 )
-                .unwrap_or_else(|| format!("(/* unsupported Map op {} */ undefined)", method.name))
+                .map_or_else(
+                    || format!("(/* unsupported Map op {} */ undefined)", method.name),
+                    |built| LoweredExpr::from(built).into_text(),
+                )
             }
         });
     }
@@ -4310,7 +4318,12 @@ fn lower_store_log_call(
     {
         let var = cx.agent_store_var().to_string();
         let g = format!("{var}.{}", id.name);
-        let a: Vec<String> = args.iter().map(|x| pre.lower(x, cx)).collect();
+        let a_nodes: Vec<LoweredExpr> = args.iter().map(|x| pre.lower_node(x, cx)).collect();
+        let a: Vec<String> = a_nodes
+            .iter()
+            .cloned()
+            .map(LoweredExpr::into_text)
+            .collect();
         if method.name == "append" {
             let now = format!("await {}.Clock.now()", cx.cap_deps_expr());
             let prune = match retain {
@@ -4322,8 +4335,6 @@ fn lower_store_log_call(
                 a[0]
             ));
         }
-        // The values feeding the general query pipeline.
-        let values = format!("{g}.values()");
         let thunk = |body: String| format!("(() => {body})");
         return Some(match method.name.as_str() {
             // Time-window roots → a `Query` thunk over the windowed values.
@@ -4338,30 +4349,31 @@ fn lower_store_log_call(
             // (`agent_store_log_value_ts`) — same construction and fallback
             // posture as the plain-Map scan above.
             _ => {
-                let elem_ts = cx
+                let elem = cx
                     .agent_store_log_value_ts(&id.name)
                     .cloned()
-                    .unwrap_or_else(|| "unknown".to_string());
+                    .unwrap_or_else(|| bynk_ts::TsType::named("unknown"));
                 note_par_fan_out(cx, method);
-                let other_elem_ts = args
-                    .first()
-                    .map(|_| join_other_elem_ts(args, cx))
-                    .unwrap_or_default();
+                let other_elem = query_other_elem(args, cx);
+                // The values feeding the general query pipeline.
                 lower_query_by_name(
-                    values,
+                    QuerySource::Values(path_values_source(&g)),
                     method,
-                    &a,
+                    a_nodes,
                     cx.commons().expr_types.get(&e.id).map(|te| te.ty),
                     &QueryShape {
-                        elem_ts: &elem_ts,
-                        other_elem_ts: &other_elem_ts,
+                        elem: &elem,
+                        other_elem: &other_elem,
                         keyed: query_keyed(e, method, args, cx),
                         key_cmp: query_key_cmp(method, args, cx),
                         runtime_use: cx.runtime_use(),
                     },
                     tys,
                 )
-                .unwrap_or_else(|| format!("(/* unsupported Log op {} */ undefined)", method.name))
+                .map_or_else(
+                    || format!("(/* unsupported Log op {} */ undefined)", method.name),
+                    |built| LoweredExpr::from(built).into_text(),
+                )
             }
         });
     }
@@ -4555,30 +4567,27 @@ fn lower_kernel_method_call(
                 let Ty::Query(elem) = &recv_ty else {
                     mismatch(kop)
                 };
-                let elem_ts = ts_ty(*elem, tys);
-                let recv = pre.lower(receiver, cx);
-                let a: Vec<String> = args.iter().map(|x| pre.lower(x, cx)).collect();
+                let elem_node = ts_ty_to_ts_type(*elem, tys);
+                let recv = pre.lower_node(receiver, cx);
+                let a: Vec<LoweredExpr> = args.iter().map(|x| pre.lower_node(x, cx)).collect();
                 let result_ty = cx.commons().expr_types.get(&e.id).map(|te| te.ty);
                 note_par_fan_out(cx, method);
-                let other_elem_ts = args
-                    .first()
-                    .map(|_| join_other_elem_ts(args, cx))
-                    .unwrap_or_default();
-                if let Some(s) = lower_query_method(
-                    format!("({recv})()"),
+                let other_elem = query_other_elem(args, cx);
+                if let Some(built) = lower_query_method(
+                    QuerySource::Thunk(recv),
                     op,
-                    &a,
+                    a,
                     result_ty,
                     &QueryShape {
-                        elem_ts: &elem_ts,
-                        other_elem_ts: &other_elem_ts,
+                        elem: &elem_node,
+                        other_elem: &other_elem,
                         keyed: query_keyed(e, method, args, cx),
                         key_cmp: query_key_cmp(method, args, cx),
                         runtime_use: cx.runtime_use(),
                     },
                     tys,
                 ) {
-                    return Some(Err(s));
+                    return Some(built);
                 }
             }
             // v0.100: a chained op on a `Stream` — the receiver already *is* an
@@ -6649,7 +6658,7 @@ fn lower_ident(e: &Expr, id: &Ident, cx: &mut LowerCtx) -> Built {
     // ones. Checked before the persisted-`Map` branch (held maps are excluded from
     // `agent_store_maps`).
     if !cx.is_local(&id.name)
-        && let Some(f_ts) = cx.agent_held_map_frame(&id.name)
+        && let Some(f_ts) = cx.agent_held_map_frame(&id.name).map(bynk_ts::print_type)
     {
         let var = cx.agent_store_var();
         // 1A: text until the closure/query family converts
