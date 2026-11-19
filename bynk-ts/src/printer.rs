@@ -1663,6 +1663,10 @@ fn render_expr(out: &mut String, expr: &TsExpr, depth: usize, m: &mut Option<Mer
         }
         // 1A.20 (#3721, Decision A): the instantiation expression `f<A, B>`.
         TsExpr::TypeApp { callee, type_args } => {
+            debug_assert!(
+                !type_args.is_empty(),
+                "TsExpr::TypeApp needs at least one type argument; `f<>` is a syntax error"
+            );
             render_operand(out, callee, depth, m);
             out.push('<');
             for (i, arg) in type_args.iter().enumerate() {
@@ -4583,6 +4587,35 @@ mod tests {
                 vec![]
             )),
             "new (f().C<T>)()"
+        );
+    }
+
+    /// `TsExpr::TypeApp` with no type arguments would print `f<>`, a syntax error.
+    #[test]
+    #[should_panic(expected = "TypeApp needs at least one type argument")]
+    fn type_app_with_no_type_arguments_is_refused() {
+        let app = TsExpr::TypeApp {
+            callee: Box::new(TsExpr::Ident("f".to_string())),
+            type_args: vec![],
+        };
+        let _ = print_expr(&TsExpr::Call {
+            callee: Box::new(app),
+            args: vec![],
+        });
+    }
+
+    /// `TsExpr::TypeApp` under a `Call` and a `New` keeps its type arguments in
+    /// order, and a bare instantiation of one argument prints `f<T>`.
+    #[test]
+    fn type_app_prints_one_and_many_type_arguments() {
+        let app = |args: Vec<TsType>| TsExpr::TypeApp {
+            callee: Box::new(TsExpr::Ident("f".to_string())),
+            type_args: args,
+        };
+        assert_eq!(print_expr(&app(vec![TsType::named("T")])), "f<T>");
+        assert_eq!(
+            print_expr(&app(vec![TsType::named("A"), TsType::named("B")])),
+            "f<A, B>"
         );
     }
 

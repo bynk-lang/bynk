@@ -1283,6 +1283,10 @@ pub enum TsExpr {
     /// (`new C<T>(a)`), so `Call` and `New` stay as they are. Postfix like
     /// [`TsExpr::Member`]: the callee is bracketed under the rule `Call`'s own
     /// callee uses.
+    ///
+    /// Valid only as the callee of a `Call` or a `New`: `f<T>.x` is TS1477 and `f<>` is a
+    /// syntax error, so `type_args` must not be empty and the printer asserts it, as it does
+    /// for [`TsExpr::Spread`].
     TypeApp {
         callee: Box<TsExpr>,
         type_args: Vec<TsType>,
