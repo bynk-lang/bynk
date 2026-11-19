@@ -157,15 +157,15 @@ async function test_a_destructuring_let_in_a_test_body() {
     type Status = __ns_shop_orders.Status;
     const __letElse1103 = { sku: "nut", qty: 2, note: "" };
     void (await (async (__d) => {
-        const sku = __d.sku;
-        const qty = __d.qty;
-        if (!(sku === "nut")) { throw __bynkExpectFailure("tests/orders.test.bynk:37:12", 1180, 1192, "expect sku == \"nut\"\n  expected: sku == \"nut\"\n  actual:   " + __bynkShow((sku)) + " == " + __bynkShow(("nut"))); }
-        if (!(qty === 2)) { throw __bynkExpectFailure("tests/orders.test.bynk:38:12", 1204, 1212, "expect qty == 2\n  expected: qty == 2\n  actual:   " + __bynkShow((qty)) + " == " + __bynkShow((2))); }
-        const __letElse1217 = await __makeBasket("b2").current(deps);
-        const s2 = __letElse1217.sku;
-        if (!(s2 === "widget")) { throw __bynkExpectFailure("tests/orders.test.bynk:40:12", 1279, 1293, "expect s2 == \"widget\"\n  expected: s2 == \"widget\"\n  actual:   " + __bynkShow((s2)) + " == " + __bynkShow(("widget"))); }
-        return undefined;
-      })(__letElse1103));
+      const sku = __d.sku;
+      const qty = __d.qty;
+      if (!(sku === "nut")) { throw __bynkExpectFailure("tests/orders.test.bynk:37:12", 1180, 1192, "expect sku == \"nut\"\n  expected: sku == \"nut\"\n  actual:   " + __bynkShow((sku)) + " == " + __bynkShow(("nut"))); }
+      if (!(qty === 2)) { throw __bynkExpectFailure("tests/orders.test.bynk:38:12", 1204, 1212, "expect qty == 2\n  expected: qty == 2\n  actual:   " + __bynkShow((qty)) + " == " + __bynkShow((2))); }
+      const __letElse1217 = await __makeBasket("b2").current(deps);
+      const s2 = __letElse1217.sku;
+      if (!(s2 === "widget")) { throw __bynkExpectFailure("tests/orders.test.bynk:40:12", 1279, 1293, "expect s2 == \"widget\"\n  expected: s2 == \"widget\"\n  actual:   " + __bynkShow((s2)) + " == " + __bynkShow(("widget"))); }
+      return undefined;
+    })(__letElse1103));
     return { pass: true };
   } catch (e) {
     if (e instanceof ExpectationError) {

@@ -92,28 +92,28 @@ async function test_a_written_Slot_key_reads_back_after_a_reload() {
     type Label = __ns_demo_slot.Label;
     type SlotError = __ns_demo_slot.SlotError;
     void (await (async (__d) => {
-        switch (__d.tag) {
-          case "Err": {
-            return __bynkExpect((false), "tests/demo/slot.bynk:23:20", 486, 491, "expect false");
-          }
-          case "Ok": {
-            const id = __d.value;
-            await __makeSlot(id).assign(42, deps);
-            const outcome = await resolve.call(id, deps);
-            switch (outcome.tag) {
-              case "Ok": {
-                const v = outcome.value;
-                return __bynkExpect((v === 42), "tests/demo/slot.bynk:28:21", 606, 613, "expect v == 42");
-              }
-              case "Err": {
-                return __bynkExpect((false), "tests/demo/slot.bynk:29:22", 635, 640, "expect false");
-              }
-            }
-            throw new globalThis.Error("non-exhaustive match");
-          }
+      switch (__d.tag) {
+        case "Err": {
+          return __bynkExpect((false), "tests/demo/slot.bynk:23:20", 486, 491, "expect false");
         }
-        throw new globalThis.Error("non-exhaustive match");
-      })(Label.of("written")));
+        case "Ok": {
+          const id = __d.value;
+          await __makeSlot(id).assign(42, deps);
+          const outcome = await resolve.call(id, deps);
+          switch (outcome.tag) {
+            case "Ok": {
+              const v = outcome.value;
+              return __bynkExpect((v === 42), "tests/demo/slot.bynk:28:21", 606, 613, "expect v == 42");
+            }
+            case "Err": {
+              return __bynkExpect((false), "tests/demo/slot.bynk:29:22", 635, 640, "expect false");
+            }
+          }
+          throw new globalThis.Error("non-exhaustive match");
+        }
+      }
+      throw new globalThis.Error("non-exhaustive match");
+    })(Label.of("written")));
     return { pass: true };
   } catch (e) {
     if (e instanceof ExpectationError) {

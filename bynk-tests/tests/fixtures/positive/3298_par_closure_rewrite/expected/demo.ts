@@ -165,7 +165,9 @@ export class Tally {
     const r: Result<number, string> = Ok(((__o: Option<number>, __d: number) => __o.tag === "Some" ? __o.value : __d)(o, 0));
     return r;
   })(__x))))([1, 2]);
-      const __r1 = await __bynkThen(((() => __state.counts.values()))(), (__q) => (async () => { await __bynkSettleAll(__q.map((__x) => () => (async (v: number) => __makeHits("h").bump(v, deps))(__x))); })());
+      const __r1 = await __bynkThen(((() => __state.counts.values()))(), (__q) => (async () => {
+        await __bynkSettleAll(__q.map((__x) => () => (async (v: number) => __makeHits("h").bump(v, deps))(__x)));
+      })());
       return [];
     })();
     await this.commitState(__state);
@@ -174,7 +176,9 @@ export class Tally {
 
   async viaAgent(x: number, deps: {}): globalThis.Promise<void> {
     const __state = await this.loadState();
-    const __r0 = await (async (__xs: readonly number[]) => { await __bynkSettleAll(__xs.map((__x: number) => () => (async (i: number) => __makeHits(`k${String(i)}`).bump(i, deps))(__x))); })([1, 2, 3]);
+    const __r0 = await (async (__xs: readonly number[]) => {
+      await __bynkSettleAll(__xs.map((__x: number) => () => (async (i: number) => __makeHits(`k${String(i)}`).bump(i, deps))(__x)));
+    })([1, 2, 3]);
     return undefined;
   }
 
