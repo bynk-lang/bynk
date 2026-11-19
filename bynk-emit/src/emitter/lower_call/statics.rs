@@ -12,12 +12,13 @@ use bynk_ts::{
 
 use super::super::lower::{
     Built, LoweredExpr, Pre, built_of, call_built, ident_node, lower_http_variant_args,
-    lower_json_codec_call, member_node, node_or_text, runtime_ctor_call, settle_built,
+    member_node, node_or_text, runtime_ctor_call, settle_built,
 };
 use super::super::lower_ctx::LowerCtx;
 use super::super::lower_list::key_is_plain;
 use super::super::ts_types::{ts_ty_to_ts_type, ts_type_ref_to_ts_type};
 use super::super::{Expr, ExprKind, Ident, TypeRef};
+use super::codec_statics::lower_json_codec_call;
 
 /// `a.b`.
 fn member(object: TsExpr, property: &str) -> TsExpr {
