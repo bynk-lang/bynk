@@ -26,8 +26,8 @@ use super::lower_call::statics::{
 };
 use super::lower_ctx::LowerCtx;
 use super::lower_list::{
-    join_other_elem_ts, kernel_key_comparator, key_fn_is_plain, key_is_plain, list_ok_elem_ts,
-    lower_list_kernel, with_comparator,
+    any_ty, join_other_elem_ts, kernel_key_comparator, key_fn_is_plain, key_is_plain,
+    list_ok_elem_ts, lower_list_kernel, with_comparator,
 };
 use super::lower_stmt::{
     Body, Item, arms_contain_question, block_body, block_body_into, block_contains_question,
@@ -1129,6 +1129,14 @@ fn paren(child: LoweredExpr) -> Built {
     )
 }
 
+/// A bridge value as a [`Built`]: the node, else its text.
+pub(super) fn built_of(expr: LoweredExpr) -> Built {
+    match expr {
+        LoweredExpr::Node(n) => Ok(n),
+        LoweredExpr::Text(t) => Err(t),
+    }
+}
+
 /// A genuine identifier node. Never built from expression text.
 pub(super) fn ident_node(name: &str) -> bynk_ts::TsExpr {
     bynk_ts::TsExpr::Ident(name.to_string())
@@ -1191,7 +1199,11 @@ macro_rules! lowered_or_text {
 /// A runtime-constructor call with one argument — `Ok(x)`, `Some(x)`,
 /// `__bynkDecimalNeg(x)`, or `HttpResult.Ok(x)` when `object` is given — as a
 /// call node over genuine identifiers, or today's text if the argument is text.
-fn runtime_ctor_call(object: Option<&'static str>, name: &'static str, arg: LoweredExpr) -> Built {
+pub(super) fn runtime_ctor_call(
+    object: Option<&'static str>,
+    name: &'static str,
+    arg: LoweredExpr,
+) -> Built {
     node_or_text(
         vec![arg],
         |c| {
@@ -1216,7 +1228,7 @@ fn runtime_ctor_call(object: Option<&'static str>, name: &'static str, arg: Lowe
 
 /// `callee(a, b, …)` over a genuine callee node: a `Call` node, or today's
 /// `callee(a, b)` text (the callee prints exactly as it is spelled).
-fn call_built(callee: bynk_ts::TsExpr, args: Vec<LoweredExpr>) -> Built {
+pub(super) fn call_built(callee: bynk_ts::TsExpr, args: Vec<LoweredExpr>) -> Built {
     let callee_text = bynk_ts::print_expr(&callee);
     node_or_text(
         args,
@@ -1230,7 +1242,7 @@ fn call_built(callee: bynk_ts::TsExpr, args: Vec<LoweredExpr>) -> Built {
 
 /// Witness nodes printed for a text caller (1A: the capability, closure and
 /// kernel families are still text).
-pub(super) fn print_witnesses(nodes: Vec<bynk_ts::TsExpr>) -> impl Iterator<Item = String> {
+fn print_witnesses(nodes: Vec<bynk_ts::TsExpr>) -> impl Iterator<Item = String> {
     nodes.into_iter().map(|n| bynk_ts::print_expr(&n))
 }
 
@@ -1410,6 +1422,17 @@ impl Pre {
     /// shape. Declining hoists nothing, so `None` leaves `self` untouched.
     pub(crate) fn absorb_opt(&mut self, lowered: Option<Lowered>) -> Option<String> {
         lowered.map(|l| self.absorb(l))
+    }
+
+    /// Absorb an optional [`Lowered`] as a [`Built`]: a delegated kernel's node
+    /// passes through to the dispatcher's caller as a node (1A.20, #3721,
+    /// Decision G), and an unconverted kernel's text as `Err`. Declining hoists
+    /// nothing.
+    pub(crate) fn absorb_built(&mut self, lowered: Option<Lowered>) -> Option<Built> {
+        lowered.map(|l| match self.absorb_node(l) {
+            LoweredExpr::Node(n) => Ok(n),
+            LoweredExpr::Text(t) => Err(t),
+        })
     }
 
     /// Hoist a statement this function generated itself (a `?` temp, an
@@ -2429,7 +2452,7 @@ fn mock_value(ty: TyId, cx: &LowerCtx, depth: u32) -> bynk_ts::TsExpr {
 /// interface method (Decision C) — with no argument of type `T`, TypeScript
 /// cannot infer a return-position-only parameter, so the call site must
 /// name it explicitly.
-pub(super) fn capability_call_type_args_ts(
+fn capability_call_type_args_ts(
     type_args: &[TypeRef],
     wire: Option<&bynk_check::checker::codable::CapEncoding>,
 ) -> String {
@@ -2602,58 +2625,59 @@ fn lower_method_call(e: &Expr, cx: &mut LowerCtx) -> Lowered {
     // call that ends this function is a node.
     // Persisted-store receivers: held Map, Map, Set, Cache, Log, Cell (#3167).
     if let Some(s) = lower_store_method_call(e, receiver, method, args, cx, &mut pre) {
-        return pre.finish_text(s);
+        return pre.finish_built(Err(s));
     }
     // Intrinsic statics: scalar and collection constructors, then runtime values (#3167).
-    if let Some(s) = lower_scalar_static_call(e, receiver, method, args, cx, &mut pre) {
-        return pre.finish_text(s);
+    if let Some(built) = lower_scalar_static_call(e, receiver, method, args, cx, &mut pre) {
+        return pre.finish_built(built);
     }
-    if let Some(s) = lower_runtime_value_static_call(e, receiver, method, args, cx, &mut pre) {
-        return pre.finish_text(s);
+    if let Some(built) = lower_runtime_value_static_call(e, receiver, method, args, cx, &mut pre) {
+        return pre.finish_built(built);
     }
     // Capability, cross-context, events and static-type calls (#3167).
     if let Some(s) = lower_d1_peek_call(e, cx) {
-        return pre.finish_text(s);
+        return pre.finish_built(Err(s));
     }
     if let Some(s) = lower_d1_select_call(e, args, cx, &mut pre) {
-        return pre.finish_text(s);
+        return pre.finish_built(Err(s));
     }
     if let Some(s) = lower_cross_context_call(e, receiver, method, type_args, args, cx, &mut pre) {
-        return pre.finish_text(s);
+        return pre.finish_built(Err(s));
     }
     if let Some(s) = lower_events_emit_call(e, receiver, type_args, args, cx, &mut pre) {
-        return pre.finish_text(s);
+        return pre.finish_built(Err(s));
     }
     if let Some(s) = lower_signed_cookie_call(e, args, cx, &mut pre) {
-        return pre.finish_text(s);
+        return pre.finish_built(Err(s));
     }
     if let Some(s) = lower_cookie_field_call(e, args, cx, &mut pre) {
-        return pre.finish_text(s);
+        return pre.finish_built(Err(s));
     }
     if let Some(s) = lower_capability_call(e, receiver, method, type_args, args, cx, &mut pre) {
-        return pre.finish_text(s);
+        return pre.finish_built(Err(s));
     }
-    if let Some(s) = lower_type_static_call(e, receiver, method, type_args, args, cx, &mut pre) {
-        return pre.finish_text(s);
+    if let Some(built) = lower_type_static_call(e, receiver, method, type_args, args, cx, &mut pre)
+    {
+        return pre.finish_built(built);
     }
     // Test-case and system-tier service addresses, then agent invocations (#3167).
     if let Some(s) = lower_test_asset_fetch_call(e, receiver, args, cx, &mut pre) {
-        return pre.finish_text(s);
+        return pre.finish_built(Err(s));
     }
     if let Some(s) = lower_system_schedule_call(receiver, method, args, cx, &mut pre) {
-        return pre.finish_text(s);
+        return pre.finish_built(Err(s));
     }
     if let Some(s) = lower_system_http_call(e, receiver, method, args, cx, &mut pre) {
-        return pre.finish_text(s);
+        return pre.finish_built(Err(s));
     }
     if let Some(s) = lower_test_service_call(e, receiver, method, args, cx, &mut pre) {
-        return pre.finish_text(s);
+        return pre.finish_built(Err(s));
     }
     if let Some(s) = lower_inline_agent_call(e, receiver, method, args, cx, &mut pre) {
-        return pre.finish_text(s);
+        return pre.finish_built(Err(s));
     }
     if let Some(s) = lower_let_bound_agent_call(e, receiver, method, args, cx, &mut pre) {
-        return pre.finish_text(s);
+        return pre.finish_built(Err(s));
     }
     // v0.20b: built-in kernel methods, resolved by the checker (#3164).
     if let Some(built) = lower_kernel_method_call(e, receiver, method, args, cx, &mut pre) {
@@ -4571,10 +4595,10 @@ fn lower_kernel_method_call(
                 let Ty::Map(key, val) = &recv_ty else {
                     mismatch(kop)
                 };
-                if let Some(s) =
-                    pre.absorb_opt(lower_map_kernel(receiver, op, args, *key, *val, cx))
+                if let Some(built) =
+                    pre.absorb_built(lower_map_kernel(receiver, op, args, *key, *val, cx))
                 {
-                    return Some(Err(s));
+                    return Some(built);
                 }
             }
             // K6a (#2596): the `Set` kernel.
@@ -4582,8 +4606,10 @@ fn lower_kernel_method_call(
                 let Ty::Set(elem) = &recv_ty else {
                     mismatch(kop)
                 };
-                if let Some(s) = pre.absorb_opt(lower_set_kernel(receiver, op, args, *elem, cx)) {
-                    return Some(Err(s));
+                if let Some(built) =
+                    pre.absorb_built(lower_set_kernel(receiver, op, args, *elem, cx))
+                {
+                    return Some(built);
                 }
             }
             // v0.21: the numeric kernel. `toFloat` is the identity
@@ -4591,29 +4617,31 @@ fn lower_kernel_method_call(
             // the four `Float -> Int` roundings map onto `Math.*`.
             // v0.22a extends it (abs/min/max/clamp, isNaN/isFinite).
             KernelOp::Int(op) => {
-                if let Some(s) = pre.absorb_opt(lower_int_kernel(receiver, op, args, cx)) {
-                    return Some(Err(s));
+                if let Some(built) = pre.absorb_built(lower_int_kernel(receiver, op, args, cx)) {
+                    return Some(built);
                 }
             }
             KernelOp::Float(op) => {
-                if let Some(s) = pre.absorb_opt(lower_float_kernel(receiver, op, args, cx)) {
-                    return Some(Err(s));
+                if let Some(built) = pre.absorb_built(lower_float_kernel(receiver, op, args, cx)) {
+                    return Some(built);
                 }
             }
             // v0.86 (ADR 0112): the `Duration` kernel. `toMillis` is the identity
             // at runtime (a `Duration` already *is* its milliseconds); `toString`
             // renders the number.
             KernelOp::Duration(op) => {
-                if let Some(s) = pre.absorb_opt(lower_duration_kernel(receiver, op, args, cx)) {
-                    return Some(Err(s));
+                if let Some(built) = pre.absorb_built(lower_duration_kernel(receiver, op, args, cx))
+                {
+                    return Some(built);
                 }
             }
             // v0.90 (ADR 0114): the `Instant` kernel. `toEpochMillis` is the
             // identity (an `Instant` lowers to its epoch millis); `toString`
             // renders the number.
             KernelOp::Instant(op) => {
-                if let Some(s) = pre.absorb_opt(lower_instant_kernel(receiver, op, args, cx)) {
-                    return Some(Err(s));
+                if let Some(built) = pre.absorb_built(lower_instant_kernel(receiver, op, args, cx))
+                {
+                    return Some(built);
                 }
             }
             // #3277: a cookie rides beside an `HttpResult` as a `cookies` list the
@@ -4652,20 +4680,21 @@ fn lower_kernel_method_call(
             // count; `toBase64` encodes; `decodeUtf8` is a guarded UTF-8 decode
             // returning `Option`.
             KernelOp::Bytes(op) => {
-                if let Some(s) = pre.absorb_opt(lower_bytes_kernel(receiver, op, args, cx)) {
-                    return Some(Err(s));
+                if let Some(built) = pre.absorb_built(lower_bytes_kernel(receiver, op, args, cx)) {
+                    return Some(built);
                 }
             }
             // #2622: the `Decimal` kernel.
             KernelOp::Decimal(op) => {
-                if let Some(s) = pre.absorb_opt(lower_decimal_kernel(receiver, op, args, cx)) {
-                    return Some(Err(s));
+                if let Some(built) = pre.absorb_built(lower_decimal_kernel(receiver, op, args, cx))
+                {
+                    return Some(built);
                 }
             }
             // v0.22a: the string kernel (ADR 0046).
             KernelOp::String(op) => {
-                if let Some(s) = pre.absorb_opt(lower_string_kernel(receiver, op, args, cx)) {
-                    return Some(Err(s));
+                if let Some(built) = pre.absorb_built(lower_string_kernel(receiver, op, args, cx)) {
+                    return Some(built);
                 }
             }
             // v0.22a: Option/Result combinators (ADR 0048).
@@ -4673,20 +4702,20 @@ fn lower_kernel_method_call(
                 let Ty::Option(inner) = &recv_ty else {
                     mismatch(kop)
                 };
-                if let Some(s) =
-                    pre.absorb_opt(lower_option_kernel(e, receiver, op, args, *inner, cx))
+                if let Some(built) =
+                    pre.absorb_built(lower_option_kernel(e, receiver, op, args, *inner, cx))
                 {
-                    return Some(Err(s));
+                    return Some(built);
                 }
             }
             KernelOp::Result(op) => {
                 let Ty::Result(ok, err) = &recv_ty else {
                     mismatch(kop)
                 };
-                if let Some(s) =
-                    pre.absorb_opt(lower_result_kernel(e, receiver, op, args, *ok, *err, cx))
+                if let Some(built) =
+                    pre.absorb_built(lower_result_kernel(e, receiver, op, args, *ok, *err, cx))
                 {
-                    return Some(Err(s));
+                    return Some(built);
                 }
             }
             // #2683 / #2711 / #3437: `within`, `race` and `detach`, on every `Effect[T]`.
@@ -4704,11 +4733,11 @@ fn lower_kernel_method_call(
                     mismatch(kop)
                 };
                 if let Ty::Result(ok, err) = &*tys.get(*inner)
-                    && let Some(s) = pre.absorb_opt(lower_effect_result_kernel(
+                    && let Some(built) = pre.absorb_built(lower_effect_result_kernel(
                         e, receiver, op, args, *ok, *err, cx,
                     ))
                 {
-                    return Some(Err(s));
+                    return Some(built);
                 }
             }
         }
@@ -4768,8 +4797,8 @@ fn lower_ufcs_method_call(
     // `any` otherwise (a type the calling module may never import, or a type
     // variable that may not be this function's). The checker has already typed
     // the call, so `any` in a receiver slot loses nothing.
-    let explicit = if type_args.is_empty() {
-        String::new()
+    let explicit: Vec<bynk_ts::TsType> = if type_args.is_empty() {
+        Vec::new()
     } else {
         let recv_args: Option<Vec<TyId>> =
             cx.commons()
@@ -4780,45 +4809,62 @@ fn lower_ufcs_method_call(
                     _ => None,
                 });
         match recv_args {
-            Some(recv_args) => {
-                let parts: Vec<String> = recv_args
-                    .iter()
-                    .map(|a| {
-                        if ts_spelling_in_scope_everywhere(*a, tys.types()) {
-                            ty_to_type_ref(*a, tys.types())
-                                .map(|r| ts_type_ref(&r))
-                                .unwrap_or_else(|| "any".to_string())
-                        } else {
-                            "any".to_string()
-                        }
-                    })
-                    .chain(type_args.iter().map(ts_type_ref))
-                    .collect();
-                format!("<{}>", parts.join(", "))
-            }
-            None => String::new(),
+            Some(recv_args) => recv_args
+                .iter()
+                .map(|a| {
+                    if ts_spelling_in_scope_everywhere(*a, tys.types()) {
+                        ty_to_type_ref(*a, tys.types())
+                            .map(|r| ts_type_ref_to_ts_type(&r, None))
+                            .unwrap_or_else(any_ty)
+                    } else {
+                        any_ty()
+                    }
+                })
+                .chain(type_args.iter().map(|t| ts_type_ref_to_ts_type(t, None)))
+                .collect(),
+            None => Vec::new(),
         }
     };
-    // 1A: `bynk_ts` `Call` has no `type_args` field (#2795's explicit type
-    // arguments have no node home), and the `/* unknown */` namespace is a
-    // placeholder for a program that failed checking, not an identifier: both
-    // stay text.
+    // The `/* unknown */` namespace is a placeholder for a program that failed
+    // checking, not an identifier, so that one shape stays text; every other
+    // call is a node, with a `TypeApp` callee when type arguments are explicit
+    // (1A.20, #3721, Decision A).
     let built = match known_ns {
-        Some(ns) if explicit.is_empty() => {
-            let callee = bynk_ts::TsExpr::Member {
+        Some(ns) => {
+            let mut callee = bynk_ts::TsExpr::Member {
                 object: Box::new(ident_node(&ns)),
                 property: method.name.clone(),
             };
+            if !explicit.is_empty() {
+                callee = bynk_ts::TsExpr::TypeApp {
+                    callee: Box::new(callee),
+                    type_args: explicit,
+                };
+            }
             call_built(callee, all)
         }
-        _ => Err(format!(
-            "{ns}.{}{explicit}({})",
-            method.name,
-            all.into_iter()
-                .map(LoweredExpr::into_text)
-                .collect::<Vec<_>>()
-                .join(", ")
-        )),
+        None => {
+            let explicit = if explicit.is_empty() {
+                String::new()
+            } else {
+                format!(
+                    "<{}>",
+                    explicit
+                        .iter()
+                        .map(bynk_ts::print_type)
+                        .collect::<Vec<_>>()
+                        .join(", ")
+                )
+            };
+            Err(format!(
+                "{ns}.{}{explicit}({})",
+                method.name,
+                all.into_iter()
+                    .map(LoweredExpr::into_text)
+                    .collect::<Vec<_>>()
+                    .join(", ")
+            ))
+        }
     };
     if needs_exec {
         settle_built(built, cx)
@@ -7556,17 +7602,9 @@ fn settle_helper(cx: &LowerCtx) -> Option<&'static str> {
     }
 }
 
-/// [`settle_helper`] over a call built as text (the dispatchers' side).
-pub(super) fn settle_exec_call(call: String, cx: &LowerCtx) -> String {
-    match settle_helper(cx) {
-        Some(helper) => format!("{helper}(deps, {call})"),
-        None => call,
-    }
-}
-
 /// [`settle_helper`] over a built call: `helper(deps, call)` as a node when the
 /// call is one, else today's text.
-fn settle_built(call: Built, cx: &LowerCtx) -> Built {
+pub(super) fn settle_built(call: Built, cx: &LowerCtx) -> Built {
     match (settle_helper(cx), call) {
         (None, call) => call,
         (Some(helper), Ok(node)) => Ok(bynk_ts::TsExpr::Call {
@@ -7606,14 +7644,19 @@ fn lower_call(e: &Expr, name: &Ident, args: &[Expr], cx: &mut LowerCtx) -> Lower
     {
         cx.runtime_use().note_test_connection();
         let frame = match cx.commons().expr_ty(e.id).as_deref() {
-            Some(Ty::TestConnection(f)) => bynk_ts::print_type(
-                &crate::emitter::ts_types::ts_ty_to_ts_type(*f, cx.ty_render()),
-            ),
-            _ => "unknown".to_string(),
+            Some(Ty::TestConnection(f)) => {
+                crate::emitter::ts_types::ts_ty_to_ts_type(*f, cx.ty_render())
+            }
+            _ => bynk_ts::TsType::named("unknown"),
         };
-        // 1A: `bynk_ts` `New` has no `type_args` field (the explicit
-        // `<frame>` has no node home), so this stays text.
-        return pre.finish_text(format!("new TestConnection<{frame}>()"));
+        // `new TestConnection<F>()`: a `New` over a `TypeApp` (1A.20, #3721).
+        return pre.finish_built(Ok(bynk_ts::TsExpr::New {
+            callee: Box::new(bynk_ts::TsExpr::TypeApp {
+                callee: Box::new(ident_node("TestConnection")),
+                type_args: vec![frame],
+            }),
+            args: vec![],
+        }));
     }
     // v0.9: HttpResult variant call.
     //
