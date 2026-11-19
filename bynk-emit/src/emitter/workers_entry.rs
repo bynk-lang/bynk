@@ -1228,10 +1228,12 @@ pub fn emit_worker_entry(
                         vec![TsType::named("unknown")],
                     )),
                     optional: false,
+                    default: None,
                 }],
                 TsType::named("void"),
             )])),
             optional: false,
+            default: None,
         }]
     } else {
         Vec::new()
@@ -1258,10 +1260,12 @@ pub fn emit_worker_entry(
                         vec![TsType::named("unknown")],
                     )),
                     optional: false,
+                    default: None,
                 }],
                 TsType::named("void"),
             )])),
             optional: true,
+            default: None,
         }]
     };
     // `fetch` alone has a `request` in scope; `scheduled`/`queue` never do.
@@ -1633,11 +1637,13 @@ pub fn emit_worker_entry(
             name: "request".to_string(),
             ty: Some(TsType::named("globalThis.Request")),
             optional: false,
+            default: None,
         },
         TsParam {
             name: "env".to_string(),
             ty: Some(TsType::named("Env")),
             optional: false,
+            default: None,
         },
     ];
     fetch_params.extend(fault_exec_params.iter().cloned());
@@ -2287,11 +2293,13 @@ fn emit_scheduled_handler(
             TsTypeMember::readonly_prop("scheduledTime", TsType::named("number")),
         ])),
         optional: false,
+        default: None,
     }];
     params.push(TsParam {
         name: "env".to_string(),
         ty: Some(TsType::named("Env")),
         optional: false,
+        default: None,
     });
     let result_member = TsTypeMember::optional_prop("__bynkResult", TsType::named("unknown"));
     if !result_hook {
@@ -2308,6 +2316,7 @@ fn emit_scheduled_handler(
             name: "ctx".to_string(),
             ty: Some(TsType::Object(vec![result_member])),
             optional: true,
+            default: None,
         });
     }
     let ctx_optional = exec_params.first().is_none_or(|p| p.optional);
@@ -2430,11 +2439,13 @@ fn emit_queue_handler(
             ),
         ])),
         optional: false,
+        default: None,
     }];
     params.push(TsParam {
         name: "env".to_string(),
         ty: Some(TsType::named("Env")),
         optional: false,
+        default: None,
     });
     params.extend(exec_params.iter().cloned());
 

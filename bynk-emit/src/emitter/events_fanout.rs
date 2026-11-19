@@ -242,11 +242,13 @@ fn events_fanout_ctor() -> TsClassCtor {
                 name: "_state".to_string(),
                 ty: Some(TsType::named("__DurableObjectState")),
                 optional: false,
+                default: None,
             },
             TsParam {
                 name: "env".to_string(),
                 ty: Some(TsType::named("unknown")),
                 optional: true,
+                default: None,
             },
         ],
         body: vec![TsStmt::assign(
@@ -432,6 +434,7 @@ fn events_fanout_fetch(publisher: Option<&str>) -> TsClassMethod {
             name: "request".to_string(),
             ty: Some(TsType::named("globalThis.Request")),
             optional: false,
+            default: None,
         }],
         return_type: Some(TsType::named_with_args(
             "globalThis.Promise",

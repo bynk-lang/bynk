@@ -215,6 +215,7 @@ fn param(name: &str, ty: TsType) -> TsParam {
         name: name.to_string(),
         ty: Some(ty),
         optional: false,
+        default: None,
     }
 }
 
@@ -721,13 +722,14 @@ fn encode_plain(pre: &mut Pre, arg: &Expr, tref: &TypeRef, v: LoweredExpr, cx: &
                 name: "__pv".to_string(),
                 ty: None,
                 optional: false,
+                default: Some(argument),
             }],
             is_async: false,
             generics: Vec::new(),
             return_type: Some(TsType::named("string")),
             body: Box::new(TsArrowBody::Multiline(body)),
         })),
-        vec![argument],
+        Vec::new(),
     ))
 }
 

@@ -63,11 +63,13 @@ pub(super) fn emit_email_handler(
             name: "message".to_string(),
             ty: Some(TsType::named("__InboundMessage")),
             optional: false,
+            default: None,
         },
         TsParam {
             name: "env".to_string(),
             ty: Some(TsType::named("Env")),
             optional: false,
+            default: None,
         },
     ];
     params.extend(exec_params.iter().cloned());

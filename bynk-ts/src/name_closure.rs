@@ -663,6 +663,9 @@ impl Walk {
             if let Some(t) = &p.ty {
                 self.ty(t);
             }
+            if let Some(default) = &p.default {
+                self.expr(default);
+            }
         }
     }
 
@@ -1010,6 +1013,7 @@ mod tests {
                     name: "value".to_string(),
                     ty: Some(TsType::named(param_ty)),
                     optional: false,
+                    default: None,
                 }],
                 return_type: Some(TsType::named("__JsonValue")),
                 body: vec![TsStmt::return_stmt(
@@ -1132,6 +1136,7 @@ mod tests {
                     name: "path: string = \"$\"".to_string(),
                     ty: Some(TsType::named("T")),
                     optional: false,
+                    default: None,
                 }],
                 return_type: None,
                 body: vec![
@@ -1213,6 +1218,31 @@ mod tests {
             codec("__serialise_Note", "Note", "__serialise_Base"),
         ]);
         assert_eq!(unbound_names(&p), ["Note"]);
+    }
+
+    /// 1A.21: a parameter's default is an expression that uses names, so a name only a default
+    /// uses is still unbound when nothing declares it.
+    #[test]
+    fn a_parameter_default_is_a_name_use() {
+        let arrow = |name: &str| TsExpr::Arrow {
+            params: vec![TsParam {
+                name: "p".to_string(),
+                ty: None,
+                optional: false,
+                default: Some(TsExpr::Ident(name.to_string())),
+            }],
+            is_async: false,
+            generics: Vec::new(),
+            return_type: None,
+            body: Box::new(TsArrowBody::Expr(Box::new(TsExpr::Ident("p".to_string())))),
+        };
+        let p = program(vec![TsStmt::expr_stmt(arrow("missing"), None)]);
+        assert_eq!(unbound_names(&p), ["missing"]);
+        let p = program(vec![
+            TsStmt::expr_stmt(arrow("Err"), None),
+            import(&["Err"]),
+        ]);
+        assert!(unbound_names(&p).is_empty(), "{:?}", unbound_names(&p));
     }
 
     #[test]

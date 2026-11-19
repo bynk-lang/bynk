@@ -287,7 +287,14 @@ fn walk_expr<'a>(expr: &'a TsExpr, out: &mut Vec<(VerbatimOrigin, &'a str)>) {
             walk_expr(object, out);
             walk_expr(index, out);
         }
-        TsExpr::Arrow { body, .. } => walk_arrow_body(body, out),
+        TsExpr::Arrow { params, body, .. } => {
+            for p in params {
+                if let Some(default) = &p.default {
+                    walk_expr(default, out);
+                }
+            }
+            walk_arrow_body(body, out)
+        }
         TsExpr::Call { callee, args } | TsExpr::New { callee, args } => {
             walk_expr(callee, out);
             for a in args {
@@ -2201,6 +2208,9 @@ pub struct TsParam {
     /// parameter needs this; nothing in the grounding file needs a default
     /// value, so only optionality is represented, not defaults.
     pub optional: bool,
+    /// `name[: ty] = default` (1A.21, #3722): a parameter default, which JS evaluates at call time.
+    /// `Json.encodePlain` needs it to evaluate its argument before raising a flag in the body.
+    pub default: Option<TsExpr>,
 }
 
 /// One `class` field.

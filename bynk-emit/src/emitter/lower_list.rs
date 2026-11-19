@@ -104,6 +104,7 @@ fn param(name: &str, ty: Option<TsType>) -> TsParam {
         name: name.to_string(),
         ty,
         optional: false,
+        default: None,
     }
 }
 

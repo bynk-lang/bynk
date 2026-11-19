@@ -233,6 +233,7 @@ pub(super) fn emit_stub_class(
                     &sig_type_ns,
                 )),
                 optional: false,
+                default: None,
             })
             .collect();
         let return_ty = ts_type_ref_qualified_multi_ts_type(&op.return_type, &sig_type_ns);

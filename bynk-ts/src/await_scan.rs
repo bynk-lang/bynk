@@ -19,6 +19,14 @@ pub fn expr_contains_await(expr: &TsExpr) -> bool {
         TsExpr::Index { object, index } | TsExpr::OptionalIndex { object, index } => {
             expr_contains_await(object) || expr_contains_await(index)
         }
+        TsExpr::Arrow { params, body, .. }
+            if params
+                .iter()
+                .any(|p| p.default.as_ref().is_some_and(expr_contains_await)) =>
+        {
+            let _ = body;
+            true
+        }
         TsExpr::Arrow { body, .. } => match &**body {
             TsArrowBody::Expr(e) => expr_contains_await(e),
             TsArrowBody::Block(stmts) | TsArrowBody::Multiline(stmts) => {
@@ -164,6 +172,7 @@ mod tests {
                 name: "x".to_string(),
                 ty: None,
                 optional: false,
+                default: None,
             }],
             is_async: true,
             generics: Vec::new(),

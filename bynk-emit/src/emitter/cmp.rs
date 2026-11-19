@@ -230,6 +230,7 @@ impl<'a> CmpGen<'a> {
                         name: self_ident,
                         ty: None,
                         optional: false,
+                        default: None,
                     }],
                     is_async: false,
                     generics: Vec::new(),

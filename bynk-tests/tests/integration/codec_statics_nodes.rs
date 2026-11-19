@@ -212,7 +212,7 @@ fn json_encode_plain_raises_the_flag_for_one_serialisation() {
     );
     let iife = |arg: &str| {
         format!(
-            "((__pv): string => {{\n    const __g = globalThis as {{ __bynkPlainJson?: boolean }};\n    const __was = __g.__bynkPlainJson;\n    __g.__bynkPlainJson = true;\n    try {{\n      return globalThis.JSON.stringify(__serialise_{});\n    }} finally {{\n      __g.__bynkPlainJson = __was;\n    }}\n  }})({arg})",
+            "((__pv = {arg}): string => {{\n    const __g = globalThis as {{ __bynkPlainJson?: boolean }};\n    const __was = __g.__bynkPlainJson;\n    __g.__bynkPlainJson = true;\n    try {{\n      return globalThis.JSON.stringify(__serialise_{});\n    }} finally {{\n      __g.__bynkPlainJson = __was;\n    }}\n  }})()",
             if arg == "r" { "Row(__pv)" } else { "Env(__pv)" }
         )
     };
@@ -223,11 +223,14 @@ fn json_encode_plain_raises_the_flag_for_one_serialisation() {
             iife("r")
         )
     );
-    // The argument is evaluated by the call, before the body raises the flag, so the inner
+    // The argument is the parameter default, evaluated at call time before the body raises the flag, so the inner
     // `Json.encode` stays tagged.
     let x = function(&text, "x");
-    assert!(x.contains("})({ body: globalThis.JSON.stringify("), "{x}");
-    assert!(x.contains("qty: None });"), "{x}");
+    assert!(
+        x.contains("((__pv = { body: globalThis.JSON.stringify("),
+        "{x}"
+    );
+    assert!(x.contains("qty: None }): string =>"), "{x}");
 }
 
 #[test]
