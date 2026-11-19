@@ -165,3 +165,101 @@ pub(in crate::emitter) fn lower_agent_init(
     });
     cx.agent_construct_node(&name.name, key)
 }
+
+#[cfg(test)]
+mod tests {
+    use super::super::super::lower::ident_node;
+    use super::*;
+    use crate::emitter::ctx::{BodyMode, HandlerShared, ModuleCtx, UnitFacts};
+    use crate::emitter::runtime_use::RuntimeUse;
+    use bynk_check::checker::TypedCommons;
+    use bynk_check::project_model::BuildTarget;
+
+    fn node(text: &str) -> LoweredExpr {
+        LoweredExpr::Node(ident_node(text))
+    }
+
+    fn text(text: &str) -> LoweredExpr {
+        LoweredExpr::Text(text.to_string())
+    }
+
+    fn printed(built: Built) -> String {
+        LoweredExpr::from(built).into_text()
+    }
+
+    /// `agent_construct_node` for one build target and body kind, over a node key and a text key:
+    /// the two print the same bytes, and the handler's deps shape widens either way.
+    fn construct(workers: bool, provider: bool, key: LoweredExpr) -> (Built, bool) {
+        let commons = TypedCommons::empty();
+        let cross = bynk_check::resolver::CrossContextInfo::default();
+        let ru = RuntimeUse::default();
+        let mut module = ModuleCtx::new(&commons, &cross, &ru, UnitFacts::detached());
+        if workers {
+            module.target = BuildTarget::Workers;
+        }
+        let handler = HandlerShared {
+            deps_on_this: provider,
+            ..HandlerShared::default()
+        };
+        let mode = if provider {
+            BodyMode::ProviderOp { handler }
+        } else {
+            BodyMode::ServiceHandler {
+                handler,
+                deps_identity_binder: None,
+                actor_sum_binder: None,
+            }
+        };
+        let mut cx = LowerCtx::new(module, mode);
+        let built = cx.agent_construct_node("Room", key);
+        let widened = cx.handler().is_some_and(|h| h.agents_instantiated);
+        (built, widened)
+    }
+
+    #[test]
+    fn a_bundle_construction_passes_only_the_key() {
+        for provider in [false, true] {
+            let (built, widened) = construct(false, provider, node("k"));
+            assert!(built.is_ok() && widened);
+            assert_eq!(printed(built), "__makeRoom(k)");
+            let (built, widened) = construct(false, provider, text("a + b"));
+            assert!(built.is_err() && widened);
+            assert_eq!(printed(built), "__makeRoom(a + b)");
+        }
+    }
+
+    /// Workers threads `deps.env`, and `this.deps.env` in a provider body, whose composer
+    /// supplies it (#2355), as a node and as the text it falls back to.
+    #[test]
+    fn a_workers_construction_threads_the_deps_env() {
+        for (provider, deps) in [(false, "deps"), (true, "this.deps")] {
+            let want = format!("__makeRoom(k, {deps}.env)");
+            let (built, widened) = construct(true, provider, node("k"));
+            assert!(built.is_ok() && widened);
+            assert_eq!(printed(built), want);
+            let (built, widened) = construct(true, provider, text("k"));
+            assert!(built.is_err() && widened);
+            assert_eq!(printed(built), want);
+        }
+    }
+
+    /// A malformed init (no key argument) panics with the ADR 0334 message, unchanged.
+    #[test]
+    #[should_panic(
+        expected = "bynk internal error (ADR 0334): Callee::AgentInit records agent \
+                               construction `Room(...)` with 0 args, but every AgentDecl \
+                               declares exactly one key field"
+    )]
+    fn a_malformed_init_panics_with_the_adr_0334_message() {
+        let commons = TypedCommons::empty();
+        let cross = bynk_check::resolver::CrossContextInfo::default();
+        let ru = RuntimeUse::default();
+        let module = ModuleCtx::new(&commons, &cross, &ru, UnitFacts::detached());
+        let mut cx = LowerCtx::new(module, BodyMode::Method);
+        let name = Ident {
+            name: "Room".to_string(),
+            span: bynk_syntax::span::Span::default(),
+        };
+        let _ = lower_agent_init(&name, vec![], &mut cx);
+    }
+}

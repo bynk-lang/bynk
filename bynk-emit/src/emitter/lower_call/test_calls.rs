@@ -115,7 +115,6 @@ fn who_deps(actor: &str, identity: Option<LoweredExpr>) -> LoweredExpr {
 /// `{ ...deps, identity: (identity as any), claims? }`; an `Oidc` handler also reads its token's
 /// claims from `deps.claims` (#2380): the principal's, or none.
 fn identity_deps(identity: LoweredExpr, claims: Option<LoweredExpr>) -> LoweredExpr {
-    let has_claims = claims.is_some();
     let mut children = vec![identity];
     children.extend(claims);
     bridge(node_or_text(
@@ -137,7 +136,6 @@ fn identity_deps(identity: LoweredExpr, claims: Option<LoweredExpr>) -> LoweredE
             let identity = texts.next().unwrap_or_default();
             let claims = texts
                 .next()
-                .filter(|_| has_claims)
                 .map(|c| format!(", claims: {c}"))
                 .unwrap_or_default();
             format!("{{ ...deps, identity: ({identity} as any){claims} }}")
