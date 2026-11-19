@@ -51,17 +51,17 @@ export const api = {
       throw new globalThis.Error("non-exhaustive match");
     })(body.photo.filename);
     const cover = ((__d) => {
-    switch (__d.tag) {
-      case "Some": {
-        const c = __d.value;
-        return `${String((c.bytes).length)}`;
+      switch (__d.tag) {
+        case "Some": {
+          const c = __d.value;
+          return `${String(c.bytes.length)}`;
+        }
+        case "None": {
+          return "-";
+        }
       }
-      case "None": {
-        return "-";
-      }
-    }
-    throw new globalThis.Error("non-exhaustive match");
-  })(body.cover);
+      throw new globalThis.Error("non-exhaustive match");
+    })(body.cover);
     const caption = ((__d) => {
       switch (__d.tag) {
         case "Some": {
@@ -74,10 +74,10 @@ export const api = {
       }
       throw new globalThis.Error("non-exhaustive match");
     })(body.caption);
-    return HttpResult.Ok(`${String(body.title)} ${String(caption)} ${String(name)} ${String(body.photo.contentType)} ${String((body.photo.bytes).length)} ${String(cover)} ${String((body.extras).length)} ${String((body.tags).length)}`);
+    return HttpResult.Ok(`${String(body.title)} ${String(caption)} ${String(name)} ${String(body.photo.contentType)} ${String(body.photo.bytes.length)} ${String(cover)} ${String((body.extras).length)} ${String((body.tags).length)}`);
   },
   async http_POST_tiny(body: Upload, deps: {}): globalThis.Promise<HttpResult<string>> {
-    return HttpResult.Ok(`${String((body.photo.bytes).length)}`);
+    return HttpResult.Ok(`${String(body.photo.bytes.length)}`);
   },
   async http_POST_json(body: Title, deps: {}): globalThis.Promise<HttpResult<string>> {
     return HttpResult.Ok("json");

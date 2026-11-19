@@ -44,18 +44,18 @@ async function test_a_Raw_body__matched_in_the_case() {
     const { api } = __ns_app_web;
     const r = await api.http_GET_raw(deps);
     void (((__d) => {
-        switch (__d.tag) {
-          case "Raw": {
-            const body = __d.body;
-            const ct = __d.contentType;
-            return __bynkExpect(((body).length === 2 && ct.startsWith("text/")), "tests/app/web.bynk:9:31", 415, 459, "expect body.length() == 2 && ct.startsWith(\"text/\")");
-          }
-          default: {
-            return __bynkExpect((false), "tests/app/web.bynk:10:19", 478, 483, "expect false");
-          }
+      switch (__d.tag) {
+        case "Raw": {
+          const body = __d.body;
+          const ct = __d.contentType;
+          return __bynkExpect((body.length === 2 && ct.startsWith("text/")), "tests/app/web.bynk:9:31", 415, 459, "expect body.length() == 2 && ct.startsWith(\"text/\")");
         }
-        throw new globalThis.Error("non-exhaustive match");
-      })(r));
+        default: {
+          return __bynkExpect((false), "tests/app/web.bynk:10:19", 478, 483, "expect false");
+        }
+      }
+      throw new globalThis.Error("non-exhaustive match");
+    })(r));
     return { pass: true };
   } catch (e) {
     if (e instanceof ExpectationError) {
@@ -97,17 +97,17 @@ async function test_a_match_on_the_outcome__used_as_a_value() {
     const { api } = __ns_app_web;
     const r = await api.http_GET_raw(deps);
     const n = ((__d) => {
-        switch (__d.tag) {
-          case "Raw": {
-            const body = __d.body;
-            return (body).length;
-          }
-          default: {
-            return 0;
-          }
+      switch (__d.tag) {
+        case "Raw": {
+          const body = __d.body;
+          return body.length;
         }
-        throw new globalThis.Error("non-exhaustive match");
-      })(r);
+        default: {
+          return 0;
+        }
+      }
+      throw new globalThis.Error("non-exhaustive match");
+    })(r);
     if (!(n === 2)) { throw __bynkExpectFailure("tests/app/web.bynk:27:12", 863, 869, "expect n == 2\n  expected: n == 2\n  actual:   " + __bynkShow((n)) + " == " + __bynkShow((2))); }
     return { pass: true };
   } catch (e) {
@@ -125,17 +125,17 @@ async function test_a_message_variant_binds_a_String() {
     const { api } = __ns_app_web;
     const r = await api.http_GET_refuse(deps);
     void (((__d) => {
-        switch (__d.tag) {
-          case "BadRequest": {
-            const m = __d.message;
-            return __bynkExpect(((m).length === 9), "tests/app/web.bynk:32:31", 1005, 1020, "expect m.length() == 9");
-          }
-          default: {
-            return __bynkExpect((false), "tests/app/web.bynk:33:19", 1039, 1044, "expect false");
-          }
+      switch (__d.tag) {
+        case "BadRequest": {
+          const m = __d.message;
+          return __bynkExpect((m.length === 9), "tests/app/web.bynk:32:31", 1005, 1020, "expect m.length() == 9");
         }
-        throw new globalThis.Error("non-exhaustive match");
-      })(r));
+        default: {
+          return __bynkExpect((false), "tests/app/web.bynk:33:19", 1039, 1044, "expect false");
+        }
+      }
+      throw new globalThis.Error("non-exhaustive match");
+    })(r));
     return { pass: true };
   } catch (e) {
     if (e instanceof ExpectationError) {

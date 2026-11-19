@@ -7,6 +7,6 @@ import { type __JsonValue, type __BoundaryError, type __ServiceBinding, __callSe
 
 export const tally = {
   async call(text: string, deps: {}): globalThis.Promise<number> {
-    return (text).length;
+    return text.length;
   },
 };

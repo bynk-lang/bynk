@@ -22,7 +22,7 @@ export function label(b: Box<number>): Box<string> {
 }
 
 export function label_len(b: Box<number>): number {
-  return (Box.get(Box.map(b, (n: number) => "boxed"))).length;
+  return Box.get(Box.map(b, (n: number) => "boxed")).length;
 }
 
 export function first(b: Box<readonly number[]>): Option<number> {

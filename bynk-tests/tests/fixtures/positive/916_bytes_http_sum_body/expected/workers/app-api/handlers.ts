@@ -21,7 +21,7 @@ export const api = {
   async http_POST_blobs(body: globalThis.Uint8Array, deps: { who: { tag: "User", identity: UserId } | { tag: "Visitor" } }): globalThis.Promise<HttpResult<number>> {
     switch (deps.who.tag) {
       case "User": {
-        return HttpResult.Ok((body).length);
+        return HttpResult.Ok(body.length);
       }
       case "Visitor": {
         return HttpResult.Ok(0);

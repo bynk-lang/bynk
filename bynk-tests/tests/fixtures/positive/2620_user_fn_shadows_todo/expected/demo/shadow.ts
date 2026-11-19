@@ -9,7 +9,7 @@ import type { ValidationError } from "../__bynk_runtime/errors.js";
  * ordinary function, with no `bynk.fault.todo` warning and no fault.
  */
 export function todo(note: string): number {
-  return (note).length;
+  return note.length;
 }
 
 export function count(): number {

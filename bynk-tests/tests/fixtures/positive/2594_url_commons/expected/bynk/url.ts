@@ -46,19 +46,19 @@ export const Url = {
 export function parse(s: string): Option<Url> {
   const schemeEnd = ((__o: Option<number>, __d: number) => __o.tag === "Some" ? __o.value : __d)(((__i: number) => __i < 0 ? None : Some(__i))(s.indexOf("://")), -1);
   const scheme = s.slice(globalThis.Math.max(0, 0), globalThis.Math.max(0, schemeEnd));
-  const rest = s.slice(globalThis.Math.max(0, schemeEnd + 3), globalThis.Math.max(0, (s).length));
-  const hashAt = ((__o: Option<number>, __d: number) => __o.tag === "Some" ? __o.value : __d)(((__i: number) => __i < 0 ? None : Some(__i))(rest.indexOf("#")), (rest).length);
+  const rest = s.slice(globalThis.Math.max(0, schemeEnd + 3), globalThis.Math.max(0, s.length));
+  const hashAt = ((__o: Option<number>, __d: number) => __o.tag === "Some" ? __o.value : __d)(((__i: number) => __i < 0 ? None : Some(__i))(rest.indexOf("#")), rest.length);
   const beforeHash = rest.slice(globalThis.Math.max(0, 0), globalThis.Math.max(0, hashAt));
-  const fragment: Option<Option<string>> = (hashAt === (rest).length ? Some(None) : ((__o: Option<string>, __f: (x: string) => Option<string>) => __o.tag === "Some" ? Some(__f(__o.value)) : None)(__bynkPercentDecode(rest.slice(globalThis.Math.max(0, hashAt + 1), globalThis.Math.max(0, (rest).length))), (f: string) => Some(f)));
-  const queryAt = ((__o: Option<number>, __d: number) => __o.tag === "Some" ? __o.value : __d)(((__i: number) => __i < 0 ? None : Some(__i))(beforeHash.indexOf("?")), (beforeHash).length);
+  const fragment: Option<Option<string>> = (hashAt === rest.length ? Some(None) : ((__o: Option<string>, __f: (x: string) => Option<string>) => __o.tag === "Some" ? Some(__f(__o.value)) : None)(__bynkPercentDecode(rest.slice(globalThis.Math.max(0, hashAt + 1), globalThis.Math.max(0, rest.length))), (f: string) => Some(f)));
+  const queryAt = ((__o: Option<number>, __d: number) => __o.tag === "Some" ? __o.value : __d)(((__i: number) => __i < 0 ? None : Some(__i))(beforeHash.indexOf("?")), beforeHash.length);
   const beforeQuery = beforeHash.slice(globalThis.Math.max(0, 0), globalThis.Math.max(0, queryAt));
-  const query: Option<readonly QueryParam[]> = (queryAt === (beforeHash).length ? Some(([] as readonly QueryParam[])) : decodeQuery(beforeHash.slice(globalThis.Math.max(0, queryAt + 1), globalThis.Math.max(0, (beforeHash).length))));
-  const pathAt = ((__o: Option<number>, __d: number) => __o.tag === "Some" ? __o.value : __d)(((__i: number) => __i < 0 ? None : Some(__i))(beforeQuery.indexOf("/")), (beforeQuery).length);
+  const query: Option<readonly QueryParam[]> = (queryAt === beforeHash.length ? Some(([] as readonly QueryParam[])) : decodeQuery(beforeHash.slice(globalThis.Math.max(0, queryAt + 1), globalThis.Math.max(0, beforeHash.length))));
+  const pathAt = ((__o: Option<number>, __d: number) => __o.tag === "Some" ? __o.value : __d)(((__i: number) => __i < 0 ? None : Some(__i))(beforeQuery.indexOf("/")), beforeQuery.length);
   const authority = beforeQuery.slice(globalThis.Math.max(0, 0), globalThis.Math.max(0, pathAt));
-  const path = beforeQuery.slice(globalThis.Math.max(0, pathAt), globalThis.Math.max(0, (beforeQuery).length));
-  const colonAt = ((__o: Option<number>, __d: number) => __o.tag === "Some" ? __o.value : __d)(((__i: number) => __i < 0 ? None : Some(__i))(authority.indexOf(":")), (authority).length);
+  const path = beforeQuery.slice(globalThis.Math.max(0, pathAt), globalThis.Math.max(0, beforeQuery.length));
+  const colonAt = ((__o: Option<number>, __d: number) => __o.tag === "Some" ? __o.value : __d)(((__i: number) => __i < 0 ? None : Some(__i))(authority.indexOf(":")), authority.length);
   const host = authority.slice(globalThis.Math.max(0, 0), globalThis.Math.max(0, colonAt));
-  const port: Option<Option<number>> = (colonAt === (authority).length ? Some(None) : ((__o: Option<number>, __f: (x: number) => Option<number>) => __o.tag === "Some" ? Some(__f(__o.value)) : None)(parsePort(authority.slice(globalThis.Math.max(0, colonAt + 1), globalThis.Math.max(0, (authority).length))), (p: number) => Some(p)));
+  const port: Option<Option<number>> = (colonAt === authority.length ? Some(None) : ((__o: Option<number>, __f: (x: number) => Option<number>) => __o.tag === "Some" ? Some(__f(__o.value)) : None)(parsePort(authority.slice(globalThis.Math.max(0, colonAt + 1), globalThis.Math.max(0, authority.length))), (p: number) => Some(p)));
   return (schemeEnd < 0 || !isScheme(scheme) || !isHost(host) || !isPath(path) ? None : ((__o: Option<Option<string>>, __f: (x: Option<string>) => Option<Url>) => __o.tag === "Some" ? __f(__o.value) : None)(fragment, (f: Option<string>) => ((__o: Option<readonly QueryParam[]>, __f: (x: readonly QueryParam[]) => Option<Url>) => __o.tag === "Some" ? __f(__o.value) : None)(query, (q: readonly QueryParam[]) => ((__o: Option<Option<number>>, __f: (x: Option<number>) => Url) => __o.tag === "Some" ? Some(__f(__o.value)) : None)(port, (p: Option<number>) => ({ scheme: scheme.toLowerCase(), host: host.toLowerCase(), port: p, path: path, query: q, fragment: f })))));
 }
 
@@ -82,7 +82,7 @@ export function format(u: Url): string {
 export function isScheme(s: string): boolean {
   const letters = "abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ";
   const rest = letters.concat("0123456789+-.");
-  return (s).length > 0 && letters.includes(s.slice(globalThis.Math.max(0, 0), globalThis.Math.max(0, 1))) && ([...s]).every((__x: string) => ((c: string) => rest.includes(c))(__x));
+  return s.length > 0 && letters.includes(s.slice(globalThis.Math.max(0, 0), globalThis.Math.max(0, 1))) && ([...s]).every((__x: string) => ((c: string) => rest.includes(c))(__x));
 }
 
 /**
@@ -90,7 +90,7 @@ export function isScheme(s: string): boolean {
  * no `@`, `[`, `]`, `:`, `/`, `?`, `#`, space or `%`.
  */
 export function isHost(s: string): boolean {
-  return (s).length > 0 && ([...s]).every((__x: string) => ((c: string) => !"@[]:/?# %".includes(c))(__x));
+  return s.length > 0 && ([...s]).every((__x: string) => ((c: string) => !"@[]:/?# %".includes(c))(__x));
 }
 
 /**
@@ -101,7 +101,7 @@ export function isHost(s: string): boolean {
  */
 export function isPath(s: string): boolean {
   const allowed = "abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789-._~!$&'()*+,;=:@/%";
-  return ((s).length === 0 || s.startsWith("/")) && ([...s]).every((__x: string) => ((c: string) => allowed.includes(c))(__x)) && (__bynkPercentDecode(s).tag === "Some");
+  return (s.length === 0 || s.startsWith("/")) && ([...s]).every((__x: string) => ((c: string) => allowed.includes(c))(__x)) && (__bynkPercentDecode(s).tag === "Some");
 }
 
 /**
@@ -109,7 +109,7 @@ export function isPath(s: string): boolean {
  */
 export function parsePort(s: string): Option<number> {
   const none: Option<number> = None;
-  const digits = (s).length > 0 && (s).length <= 5 && ([...s]).every((__x: string) => ((c: string) => "0123456789".includes(c))(__x));
+  const digits = s.length > 0 && s.length <= 5 && ([...s]).every((__x: string) => ((c: string) => "0123456789".includes(c))(__x));
   const parsed = (digits ? ((__s: string) => { if (!/^[+-]?[0-9]+$/.test(__s)) return None; const __n = globalThis.Number(__s) + 0; return globalThis.Number.isSafeInteger(__n) ? Some(__n) : None; })(s) : none);
   return ((__o: Option<number>, __f: (x: number) => Option<number>) => __o.tag === "Some" ? __f(__o.value) : None)(parsed, (p: number) => (p > 65535 ? none : Some(p)));
 }
@@ -121,7 +121,7 @@ export function parsePort(s: string): Option<number> {
  * is part of the first name; `parseQuery` drops it.
  */
 export function decodeQuery(raw: string): Option<readonly QueryParam[]> {
-  const pairs = ((raw.split("&")).filter((__x: string) => ((p: string) => (p).length > 0)(__x))).map((__x: string) => ((p: string) => decodePair(p))(__x));
+  const pairs = ((raw.split("&")).filter((__x: string) => ((p: string) => p.length > 0)(__x))).map((__x: string) => ((p: string) => decodePair(p))(__x));
   return ((pairs).every((__x: Option<QueryParam>) => ((p: Option<QueryParam>) => (p.tag === "Some"))(__x)) ? Some((pairs).flatMap((__x: Option<QueryParam>) => ((p: Option<QueryParam>) => ((__o: Option<readonly QueryParam[]>, __d: readonly QueryParam[]) => __o.tag === "Some" ? __o.value : __d)(((__o: Option<QueryParam>, __f: (x: QueryParam) => readonly QueryParam[]) => __o.tag === "Some" ? Some(__f(__o.value)) : None)(p, (q: QueryParam) => [q]), ([] as readonly QueryParam[])))(__x))) : None);
 }
 
@@ -129,9 +129,9 @@ export function decodeQuery(raw: string): Option<readonly QueryParam[]> {
  * Reads one `name=value` pair as `decodeQuery` does.
  */
 export function decodePair(pair: string): Option<QueryParam> {
-  const eqAt = ((__o: Option<number>, __d: number) => __o.tag === "Some" ? __o.value : __d)(((__i: number) => __i < 0 ? None : Some(__i))(pair.indexOf("=")), (pair).length);
+  const eqAt = ((__o: Option<number>, __d: number) => __o.tag === "Some" ? __o.value : __d)(((__i: number) => __i < 0 ? None : Some(__i))(pair.indexOf("=")), pair.length);
   const name = __bynkPercentDecode(pair.slice(globalThis.Math.max(0, 0), globalThis.Math.max(0, eqAt)).replaceAll("+", () => " "));
-  const value = __bynkPercentDecode(pair.slice(globalThis.Math.max(0, eqAt + 1), globalThis.Math.max(0, (pair).length)).replaceAll("+", () => " "));
+  const value = __bynkPercentDecode(pair.slice(globalThis.Math.max(0, eqAt + 1), globalThis.Math.max(0, pair.length)).replaceAll("+", () => " "));
   return ((__o: Option<string>, __f: (x: string) => Option<QueryParam>) => __o.tag === "Some" ? __f(__o.value) : None)(name, (n: string) => ((__o: Option<string>, __f: (x: string) => QueryParam) => __o.tag === "Some" ? Some(__f(__o.value)) : None)(value, (v: string) => ({ name: n, value: v })));
 }
 
@@ -141,8 +141,8 @@ export function decodePair(pair: string): Option<QueryParam> {
  * skipped rather than failing the whole string.
  */
 export function parseQuery(s: string): readonly QueryParam[] {
-  const raw = (s.startsWith("?") ? s.slice(globalThis.Math.max(0, 1), globalThis.Math.max(0, (s).length)) : s);
-  return ((raw.split("&")).filter((__x: string) => ((p: string) => (p).length > 0)(__x))).flatMap((__x: string) => ((p: string) => ((__o: Option<readonly QueryParam[]>, __d: readonly QueryParam[]) => __o.tag === "Some" ? __o.value : __d)(((__o: Option<QueryParam>, __f: (x: QueryParam) => readonly QueryParam[]) => __o.tag === "Some" ? Some(__f(__o.value)) : None)(decodePair(p), (q: QueryParam) => [q]), ([] as readonly QueryParam[])))(__x));
+  const raw = (s.startsWith("?") ? s.slice(globalThis.Math.max(0, 1), globalThis.Math.max(0, s.length)) : s);
+  return ((raw.split("&")).filter((__x: string) => ((p: string) => p.length > 0)(__x))).flatMap((__x: string) => ((p: string) => ((__o: Option<readonly QueryParam[]>, __d: readonly QueryParam[]) => __o.tag === "Some" ? __o.value : __d)(((__o: Option<QueryParam>, __f: (x: QueryParam) => readonly QueryParam[]) => __o.tag === "Some" ? Some(__f(__o.value)) : None)(decodePair(p), (q: QueryParam) => [q]), ([] as readonly QueryParam[])))(__x));
 }
 
 /**
@@ -151,19 +151,22 @@ export function parseQuery(s: string): readonly QueryParam[] {
  */
 export function formatQuery(params: readonly QueryParam[]): string {
   const init: Option<string> = None;
-  return ((__o: Option<string>, __d: string) => __o.tag === "Some" ? __o.value : __d)(((__xs: readonly QueryParam[], __acc: Option<string>, __f: (acc: Option<string>, x: QueryParam) => Option<string>) => { for (const __x of __xs) __acc = __f(__acc, __x); return __acc; })(params, init, (acc: Option<string>, p: QueryParam) => {
-    const pair = __bynkPercentEncode(p.name).concat("=").concat(__bynkPercentEncode(p.value));
-    switch (acc.tag) {
-      case "Some": {
-        const s = acc.value;
-        return Some(s.concat("&").concat(pair));
-      }
-      case "None": {
-        return Some(pair);
-      }
+  return ((__o: Option<string>, __d: string) => __o.tag === "Some" ? __o.value : __d)(((__xs: readonly QueryParam[], __acc: Option<string>, __f: (acc: Option<string>, x: QueryParam) => Option<string>) => {
+  for (const __x of __xs) __acc = __f(__acc, __x);
+  return __acc;
+})(params, init, (acc: Option<string>, p: QueryParam) => {
+  const pair = __bynkPercentEncode(p.name).concat("=").concat(__bynkPercentEncode(p.value));
+  switch (acc.tag) {
+    case "Some": {
+      const s = acc.value;
+      return Some(s.concat("&").concat(pair));
     }
-    throw new globalThis.Error("non-exhaustive match");
-  }), "");
+    case "None": {
+      return Some(pair);
+    }
+  }
+  throw new globalThis.Error("non-exhaustive match");
+}), "");
 }
 
 /**
@@ -204,7 +207,7 @@ export function withoutParam(u: Url, name: string): Url {
 export function segments(u: Url): readonly string[] {
   const parts = u.path.split("/");
   const rest = (u.path.startsWith("/") ? (parts).slice(globalThis.Math.max(0, 1)) : parts);
-  return ((u.path).length === 0 ? ([] as readonly string[]) : (rest).map((__x: string) => ((s: string) => ((__o: Option<string>, __d: string) => __o.tag === "Some" ? __o.value : __d)(__bynkPercentDecode(s), s))(__x)));
+  return (u.path.length === 0 ? ([] as readonly string[]) : (rest).map((__x: string) => ((s: string) => ((__o: Option<string>, __d: string) => __o.tag === "Some" ? __o.value : __d)(__bynkPercentDecode(s), s))(__x)));
 }
 
 export function __serialise_QueryParam(value: QueryParam): __JsonValue {

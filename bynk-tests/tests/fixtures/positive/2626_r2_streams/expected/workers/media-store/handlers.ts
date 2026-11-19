@@ -31,7 +31,7 @@ export const api = {
   },
   async http_GET_echo_Param_text(text: string, deps: { Videos: Videos }): globalThis.Promise<HttpResult<void>> {
     const body = new globalThis.TextEncoder().encode(text);
-    const __r0 = await deps.Videos.putStream("echo", (async function* () { for (const __e of [body]) { yield __e; } })(), (body).length);
+    const __r0 = await deps.Videos.putStream("echo", (async function* () { for (const __e of [body]) { yield __e; } })(), body.length);
     const found = await deps.Videos.getStream("echo");
     switch (found.tag) {
       case "Some": {
@@ -48,7 +48,7 @@ export const api = {
 
 export const save = {
   async call(key: string, data: globalThis.Uint8Array, deps: { Videos: Videos }): globalThis.Promise<number> {
-    const o = await deps.Videos.putStream(key, (async function* () { for (const __e of [(data).slice(globalThis.Math.max(0, 0), globalThis.Math.max(0, 2)), (data).slice(globalThis.Math.max(0, 2), globalThis.Math.max(0, (data).length))]) { yield __e; } })(), (data).length);
+    const o = await deps.Videos.putStream(key, (async function* () { for (const __e of [data.slice(globalThis.Math.max(0, 0), globalThis.Math.max(0, 2)), data.slice(globalThis.Math.max(0, 2), globalThis.Math.max(0, data.length))]) { yield __e; } })(), data.length);
     return o.size;
   },
 };
@@ -62,7 +62,7 @@ export const saveExactly = {
 
 export const saveNew = {
   async call(key: string, data: globalThis.Uint8Array, deps: { Videos: Videos }): globalThis.Promise<boolean> {
-    const stored = await deps.Videos.putStreamWith(key, (async function* () { for (const __e of [data]) { yield __e; } })(), (data).length, { contentType: Some("video/mp4"), metadata: new globalThis.Map<string, string>(), onlyIf: R2Condition.Absent });
+    const stored = await deps.Videos.putStreamWith(key, (async function* () { for (const __e of [data]) { yield __e; } })(), data.length, { contentType: Some("video/mp4"), metadata: new globalThis.Map<string, string>(), onlyIf: R2Condition.Absent });
     return (stored.tag === "Some");
   },
 };
@@ -91,7 +91,10 @@ export const read = {
       case "Some": {
         const o = found.value;
         const parts = await (async (__s) => { const __m = __s as unknown as { [k: symbol]: boolean }; const __k = globalThis.Symbol.for("bynk.stream.read"); if (__m[__k]) { throw new globalThis.Error("bynk: a stream can be read only once"); } __m[__k] = true; const __r = []; for await (const __e of __s) { __r.push(__e); } return __r; })(o.body);
-        return __bynkBytesDecodeUtf8(((__xs: readonly globalThis.Uint8Array[], __acc: globalThis.Uint8Array, __f: (acc: globalThis.Uint8Array, x: globalThis.Uint8Array) => globalThis.Uint8Array) => { for (const __x of __xs) __acc = __f(__acc, __x); return __acc; })(parts, new globalThis.TextEncoder().encode(""), (acc: globalThis.Uint8Array, b: globalThis.Uint8Array) => __bynkBytesConcat(acc, b)));
+        return __bynkBytesDecodeUtf8(((__xs: readonly globalThis.Uint8Array[], __acc: globalThis.Uint8Array, __f: (acc: globalThis.Uint8Array, x: globalThis.Uint8Array) => globalThis.Uint8Array) => {
+          for (const __x of __xs) __acc = __f(__acc, __x);
+          return __acc;
+        })(parts, new globalThis.TextEncoder().encode(""), (acc: globalThis.Uint8Array, b: globalThis.Uint8Array) => __bynkBytesConcat(acc, b)));
       }
       case "None": {
         return None;

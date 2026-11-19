@@ -136,7 +136,10 @@ async function test_an_observation_and_a_pure_with_predicate() {
       const { msg } = { msg: __c.args[0] } as __Logger_log_Call;
       return (msg === "start");
     }).length) >= 1))) { throw __bynkExpectFailure("tests/pay.test.bynk:13:12", 407, 444, "expect Logger.log called with msg == \"start\""); }
-    if (!((((__obs.log["Logger.log"] ?? []).filter((__c: { args: unknown[] }) => { const { msg } = { msg: __c.args[0] } as __Logger_log_Call; return ((msg).length === 8); }).length) === (1)))) { throw __bynkExpectFailure("tests/pay.test.bynk:14:12", 456, 501, "expect Logger.log called once with msg.length() == 8"); }
+    if (!((((__obs.log["Logger.log"] ?? []).filter((__c: { args: unknown[] }) => {
+      const { msg } = { msg: __c.args[0] } as __Logger_log_Call;
+      return (msg.length === 8);
+    }).length) === (1)))) { throw __bynkExpectFailure("tests/pay.test.bynk:14:12", 456, 501, "expect Logger.log called once with msg.length() == 8"); }
     return { pass: true };
   } catch (e) {
     if (e instanceof ExpectationError) {
@@ -157,7 +160,7 @@ async function test_trace__inline_and_bound() {
     const __r0 = await authorise.call(1, deps);
     if (!(((((__obs.log["Logger.log"] ?? []).map((__c: { args: unknown[] }) => ({ msg: __c.args[0] }))) as __Logger_log_Call[])).length === 2)) { throw __bynkExpectFailure("tests/pay.test.bynk:19:12", 584, 615, "expect trace(Logger.log).length() == 2\n  expected: trace(Logger.log).length() == 2\n  actual:   " + __bynkShow((((((__obs.log["Logger.log"] ?? []).map((__c: { args: unknown[] }) => ({ msg: __c.args[0] }))) as __Logger_log_Call[])).length)) + " == " + __bynkShow((2))); }
     const logs = (((__obs.log["Logger.log"] ?? []).map((__c: { args: unknown[] }) => ({ msg: __c.args[0] }))) as __Logger_log_Call[]);
-    if (!((logs).every((__x: __Logger_log_Call) => ((c: __Logger_log_Call) => (c.msg).length > 0)(__x)))) { throw __bynkExpectFailure("tests/pay.test.bynk:21:12", 660, 695, "expect logs.all((c) => c.msg.length() > 0)"); }
+    if (!((logs).every((__x: __Logger_log_Call) => ((c: __Logger_log_Call) => c.msg.length > 0)(__x)))) { throw __bynkExpectFailure("tests/pay.test.bynk:21:12", 660, 695, "expect logs.all((c) => c.msg.length() > 0)"); }
     return { pass: true };
   } catch (e) {
     if (e instanceof ExpectationError) {
@@ -176,11 +179,11 @@ async function test_a_question_mark__a_pure_lambda_and_Val() {
     type Day = __ns_demo_pay.Day;
     const __r0 = Day.of("d");
     if (__r0.tag === "Err") { throw __bynkExpectFailure("tests/pay.test.bynk:25:12", 762, 774, "Day.of(\"d\")?\n  the operand was Err: " + __bynkShow(__r0.error)); }
-    const __r1 = (__r0.value).length;
+    const __r1 = __r0.value.length;
     const __r2 = 1;
     if (!(__r1 === __r2)) { throw __bynkExpectFailure("tests/pay.test.bynk:25:12", 762, 788, "expect Day.of(\"d\")?.length() == 1\n  expected: Day.of(\"d\")?.length() == 1\n  actual:   " + __bynkShow((__r1)) + " == " + __bynkShow((__r2))); }
     if (!((([1, 2]).map((__x: number) => ((i: number) => i + 1)(__x))).length === 2)) { throw __bynkExpectFailure("tests/pay.test.bynk:26:12", 800, 838, "expect [1, 2].map((i) => i + 1).length() == 2\n  expected: [1, 2].map((i) => i + 1).length() == 2\n  actual:   " + __bynkShow(((([1, 2]).map((__x: number) => ((i: number) => i + 1)(__x))).length)) + " == " + __bynkShow((2))); }
-    if (!((("d" as any)).length === 1)) { throw __bynkExpectFailure("tests/pay.test.bynk:27:12", 850, 877, "expect Val[Day](\"d\").length() == 1\n  expected: Val[Day](\"d\").length() == 1\n  actual:   " + __bynkShow(((("d" as any)).length)) + " == " + __bynkShow((1))); }
+    if (!(("d" as any).length === 1)) { throw __bynkExpectFailure("tests/pay.test.bynk:27:12", 850, 877, "expect Val[Day](\"d\").length() == 1\n  expected: Val[Day](\"d\").length() == 1\n  actual:   " + __bynkShow((("d" as any).length)) + " == " + __bynkShow((1))); }
     return { pass: true };
   } catch (e) {
     if (e instanceof ExpectationError) {

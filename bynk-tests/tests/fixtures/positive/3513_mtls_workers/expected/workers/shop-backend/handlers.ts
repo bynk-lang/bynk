@@ -35,7 +35,7 @@ export const api = {
     switch (res.tag) {
       case "Ok": {
         const r = res.value;
-        return HttpResult.Ok((r.body).length);
+        return HttpResult.Ok(r.body.length);
       }
       case "Err": {
         return HttpResult.ServerError("the origin is unreachable");

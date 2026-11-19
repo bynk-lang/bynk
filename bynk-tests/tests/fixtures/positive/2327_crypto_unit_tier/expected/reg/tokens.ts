@@ -51,7 +51,7 @@ export const webhook = {
 export const token = {
   async call(deps: { Random: bynk.Random }): globalThis.Promise<number> {
     const raw = await deps.Random.bytes(32);
-    return (__bynkBytesToHex(raw)).length;
+    return __bynkBytesToHex(raw).length;
   },
 };
 

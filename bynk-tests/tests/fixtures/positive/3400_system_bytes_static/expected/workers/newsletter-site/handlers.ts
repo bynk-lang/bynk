@@ -27,7 +27,7 @@ export const Remembered = {
 
 export const site = {
   async http_POST_photos(body: PhotoForm, deps: {}): globalThis.Promise<HttpResult<string>> {
-    return HttpResult.Ok(`${String((body.photo.bytes).length)}`);
+    return HttpResult.Ok(`${String(body.photo.bytes.length)}`);
   },
 };
 

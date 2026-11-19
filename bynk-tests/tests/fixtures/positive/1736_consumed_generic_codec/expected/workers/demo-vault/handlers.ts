@@ -69,7 +69,7 @@ export const readBack = {
 
 export const read = {
   async call(e: Envelope<string>, deps: {}): globalThis.Promise<number> {
-    return (e.item).length;
+    return e.item.length;
   },
 };
 

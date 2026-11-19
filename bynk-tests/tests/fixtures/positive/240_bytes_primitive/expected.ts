@@ -29,7 +29,7 @@ export function decode(s: string): Option<globalThis.Uint8Array> {
 }
 
 export function size(b: globalThis.Uint8Array): number {
-  return (b).length;
+  return b.length;
 }
 
 export function encode(b: globalThis.Uint8Array): string {

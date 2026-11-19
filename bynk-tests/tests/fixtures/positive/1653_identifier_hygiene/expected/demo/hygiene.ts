@@ -420,7 +420,7 @@ export function roundTrip(l: Labelled): boolean {
 }
 
 export function size(b: globalThis.Uint8Array): number {
-  return (b).length;
+  return b.length;
 }
 
 export interface Clock {

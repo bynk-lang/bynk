@@ -46,7 +46,7 @@ export function unsignedOrder(): number {
   switch (__r0.tag) {
     case "Some": {
       const b = __r0.value;
-      return __bynkBytesCompare((b).slice(globalThis.Math.max(0, 0), globalThis.Math.max(0, 1)), (b).slice(globalThis.Math.max(0, 1), globalThis.Math.max(0, 2)));
+      return __bynkBytesCompare(b.slice(globalThis.Math.max(0, 0), globalThis.Math.max(0, 1)), b.slice(globalThis.Math.max(0, 1), globalThis.Math.max(0, 2)));
     }
     case "None": {
       return 0;

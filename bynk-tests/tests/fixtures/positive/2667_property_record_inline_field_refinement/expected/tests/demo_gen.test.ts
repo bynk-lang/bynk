@@ -188,7 +188,7 @@ async function __prop_test_inline_field_refinements_hold_for_every_drawn_item() 
       if (!(i.pct <= 100)) { throw __bynkExpectFailure("tests/gen.test.bynk:10:14", 452, 464, "expect i.pct <= 100\n  expected: i.pct <= 100\n  actual:   " + __bynkShow((i.pct)) + " <= " + __bynkShow((100))); }
       if (!(i.ratio >= 0.5)) { throw __bynkExpectFailure("tests/gen.test.bynk:11:14", 478, 492, "expect i.ratio >= 0.5\n  expected: i.ratio >= 0.5\n  actual:   " + __bynkShow((i.ratio)) + " >= " + __bynkShow((0.5))); }
       if (!(i.ratio <= 2.5)) { throw __bynkExpectFailure("tests/gen.test.bynk:12:14", 506, 520, "expect i.ratio <= 2.5\n  expected: i.ratio <= 2.5\n  actual:   " + __bynkShow((i.ratio)) + " <= " + __bynkShow((2.5))); }
-      if (!((i.code).length >= 3)) { throw __bynkExpectFailure("tests/gen.test.bynk:13:14", 534, 554, "expect i.code.length() >= 3\n  expected: i.code.length() >= 3\n  actual:   " + __bynkShow(((i.code).length)) + " >= " + __bynkShow((3))); }
+      if (!(i.code.length >= 3)) { throw __bynkExpectFailure("tests/gen.test.bynk:13:14", 534, 554, "expect i.code.length() >= 3\n  expected: i.code.length() >= 3\n  actual:   " + __bynkShow((i.code.length)) + " >= " + __bynkShow((3))); }
     };
     return await __bynkRunProperty({ seed: __bynkMix(__bynkSeed, 0), cases: 100, gens: __gens, where: __where, body: __body, name: "inline field refinements hold for every drawn item", location: "tests/gen.test.bynk", file: "tests/gen.test.bynk" });
 }

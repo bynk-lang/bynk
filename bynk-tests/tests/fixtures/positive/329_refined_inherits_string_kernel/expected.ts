@@ -20,7 +20,7 @@ export function shout(n: Name): string {
 }
 
 export function size(n: Name): number {
-  return (n).length;
+  return n.length;
 }
 
 export function head(n: Name): string {

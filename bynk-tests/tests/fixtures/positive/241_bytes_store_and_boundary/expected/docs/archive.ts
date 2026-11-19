@@ -64,7 +64,7 @@ export class Vault {
     const __state = { ...(await this.loadState()) };
     const __result = await (async () => {
       __state.latest = b;
-      return Ok((b.bytes).length);
+      return Ok(b.bytes.length);
     })();
     await this.commitState(__state);
     return __result;
@@ -78,7 +78,7 @@ export function __makeVault(key: string, env?: { VAULT?: __DurableObjectNamespac
 
 export const intake = {
   async call(d: Doc, deps: {}): globalThis.Promise<Result<number, void>> {
-    return Ok((d.body).length);
+    return Ok(d.body.length);
   },
 };
 

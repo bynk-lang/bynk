@@ -12,7 +12,7 @@ export type Note = __CommonsNote & { readonly __ctxBrand?: "shop.orders" };
 
 export const length = {
   async call(n: Note, deps: {}): globalThis.Promise<number> {
-    return (n.text).length;
+    return n.text.length;
   },
 };
 

@@ -22,7 +22,7 @@ export const place = {
 
 export const length = {
   async call(n: Note, deps: {}): globalThis.Promise<number> {
-    return (n.text).length;
+    return n.text.length;
   },
 };
 

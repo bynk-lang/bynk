@@ -46,17 +46,17 @@ async function test_a_method_on_an_Ok_payload() {
     type Item = __ns_app_web.Item;
     const r = await api.http_GET_name(deps);
     void (((__d) => {
-        switch (__d.tag) {
-          case "Ok": {
-            const name = __d.value;
-            return __bynkExpect(((name).length === 4), "tests/app/web.bynk:8:26", 350, 368, "expect name.length() == 4");
-          }
-          default: {
-            return __bynkExpect((false), "tests/app/web.bynk:9:19", 387, 392, "expect false");
-          }
+      switch (__d.tag) {
+        case "Ok": {
+          const name = __d.value;
+          return __bynkExpect((name.length === 4), "tests/app/web.bynk:8:26", 350, 368, "expect name.length() == 4");
         }
-        throw new globalThis.Error("non-exhaustive match");
-      })(r));
+        default: {
+          return __bynkExpect((false), "tests/app/web.bynk:9:19", 387, 392, "expect false");
+        }
+      }
+      throw new globalThis.Error("non-exhaustive match");
+    })(r));
     return { pass: true };
   } catch (e) {
     if (e instanceof ExpectationError) {
@@ -125,17 +125,17 @@ async function test_a_cron_outcome_is_the_handler_s_Result() {
     type Item = __ns_app_web.Item;
     const r = await sweeper.cron_sweeper_0(deps);
     void (((__d) => {
-        switch (__d.tag) {
-          case "Err": {
-            const why = __d.error;
-            return __bynkExpect((why.includes("sweep")), "tests/app/web.bynk:27:26", 894, 915, "expect why.contains(\"sweep\")");
-          }
-          case "Ok": {
-            return __bynkExpect((false), "tests/app/web.bynk:28:23", 938, 943, "expect false");
-          }
+      switch (__d.tag) {
+        case "Err": {
+          const why = __d.error;
+          return __bynkExpect((why.includes("sweep")), "tests/app/web.bynk:27:26", 894, 915, "expect why.contains(\"sweep\")");
         }
-        throw new globalThis.Error("non-exhaustive match");
-      })(r));
+        case "Ok": {
+          return __bynkExpect((false), "tests/app/web.bynk:28:23", 938, 943, "expect false");
+        }
+      }
+      throw new globalThis.Error("non-exhaustive match");
+    })(r));
     return { pass: true };
   } catch (e) {
     if (e instanceof ExpectationError) {
@@ -153,17 +153,17 @@ async function test_a_queue_verdict_binds_its_reason() {
     type Item = __ns_app_web.Item;
     const r = await intake.queue_intake_0({ sku: "" }, deps);
     void (((__d) => {
-        switch (__d.tag) {
-          case "Retry": {
-            const why = __d.reason;
-            return __bynkExpect(((why).length === 9), "tests/app/web.bynk:34:28", 1085, 1102, "expect why.length() == 9");
-          }
-          case "Ack": {
-            return __bynkExpect((false), "tests/app/web.bynk:35:21", 1123, 1128, "expect false");
-          }
+      switch (__d.tag) {
+        case "Retry": {
+          const why = __d.reason;
+          return __bynkExpect((why.length === 9), "tests/app/web.bynk:34:28", 1085, 1102, "expect why.length() == 9");
         }
-        throw new globalThis.Error("non-exhaustive match");
-      })(r));
+        case "Ack": {
+          return __bynkExpect((false), "tests/app/web.bynk:35:21", 1123, 1128, "expect false");
+        }
+      }
+      throw new globalThis.Error("non-exhaustive match");
+    })(r));
     return { pass: true };
   } catch (e) {
     if (e instanceof ExpectationError) {
