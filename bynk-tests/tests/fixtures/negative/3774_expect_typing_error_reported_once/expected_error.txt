@@ -1,0 +1,3 @@
+# exact
+bynk.expect.not_bool `expect` predicate has type `Effect[()]`, but a `Bool` is required
+bynk.types.not_comparable operator `==` cannot compare `Effect[Result[AuthId, String]]`

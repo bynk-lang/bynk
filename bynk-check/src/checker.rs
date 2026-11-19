@@ -2882,6 +2882,53 @@ pub(crate) fn predicate_impure_construct(e: &Expr) -> Option<Span> {
     }
 }
 
+/// #3774 (ADR 0144 D3): the first sub-expression of a test predicate (an
+/// `expect`, or an observation's `with`) whose checked type is `Effect[_]`.
+///
+/// Typing already refuses an `Effect` where a value is compared, matched or
+/// unwrapped, but not one held inside a pure expression
+/// (`[Logger.log("x")].length() == 1`). A capability call lowers to an eager
+/// call on the case's recording `deps`, so such a predicate would run the
+/// effect and corrupt the observation counts (#3768). Run after the predicate
+/// is typed: the rule reads `expr_types`, not call shapes.
+///
+/// `expect`'s own constructs are not walked: a `faults` claim awaits its call
+/// by design (#1706), an observation's subject is named rather than called, and
+/// `trace(Cap.op)` reads the recording. An observation's `with` predicate is
+/// checked where the observation is, under its own code.
+pub(crate) fn effect_in_predicate(
+    e: &Expr,
+    expr_types: &HashMap<ExprId, TypedExpr>,
+    tys: &Types,
+) -> Option<Span> {
+    match &e.kind {
+        ExprKind::Faults(_) | ExprKind::Observation(_) | ExprKind::Trace { .. } => None,
+        _ if expr_types.get(&e.id).is_some_and(|t| t.ty.is_effect(tys)) => Some(e.span),
+        _ => bynk_syntax::ast::expr_children(e)
+            .into_iter()
+            .find_map(|c| effect_in_predicate(c, expr_types, tys)),
+    }
+}
+
+/// Whether a test predicate typed to `Bool` with no new error since
+/// `errors_before`: the purity walk runs only then, so a predicate typing has
+/// already refused (`bynk.expect.not_bool`, `bynk.types.not_comparable`) is not
+/// reported a second time at the same span.
+pub(crate) fn predicate_typed_clean(ty: Option<TyId>, errors_before: usize, ctx: &Ctx) -> bool {
+    ctx.errors.len() == errors_before
+        && ty.is_some_and(|t| compatible(t, ctx.tys.intern(Ty::Base(BaseType::Bool)), ctx.tys))
+}
+
+/// `bynk.expect.impure_predicate` at the effectful sub-expression `span`.
+pub(crate) fn expect_impure_error(span: Span) -> CompileError {
+    CompileError::new(
+        "bynk.expect.impure_predicate",
+        span,
+        "an `expect` predicate performs an effect; a predicate must be pure",
+    )
+    .with_note("run the call before the `expect` with `let x <- …`, then state the claim about `x`")
+}
+
 /// Whether `e` reads the identifier `name` anywhere — used by the `:=`
 /// read-modify-write rule (a cell write whose RHS reads its own LHS).
 pub(crate) fn expr_reads_ident(e: &Expr, name: &str) -> bool {
@@ -4654,7 +4701,13 @@ pub(crate) fn type_of_block(block: &Block, expected: Option<TyId>, ctx: &mut Ctx
                     }
                     continue;
                 }
+                let typed_errors = ctx.errors.len();
                 let val_ty = type_of(&a.value, Some(tys.intern(Ty::Base(BaseType::Bool))), ctx);
+                if predicate_typed_clean(val_ty, typed_errors, ctx)
+                    && let Some(span) = effect_in_predicate(&a.value, ctx.expr_types, tys)
+                {
+                    ctx.errors.push(expect_impure_error(span));
+                }
                 if let Some(actual) = val_ty
                     && !compatible(actual, tys.intern(Ty::Base(BaseType::Bool)), tys)
                 {

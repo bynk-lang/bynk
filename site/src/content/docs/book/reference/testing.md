@@ -821,6 +821,25 @@ Ok(_)`. When the predicate is a top-level comparison (`==`, `!=`, `<`, `<=`, `>`
 `>=`), a failure reports the predicate and its **expected-vs-actual** operands, not
 just a location.
 
+The predicate is **pure**: it states a claim, it does not run anything. A call that
+has an effect, such as a capability operation or a service call, is refused
+inside it (`bynk.expect.impure_predicate`), even when it is held in a list or
+returned by a lambda, because it would run when the claim is checked and be
+recorded as if the unit under test had made it. Run the call first and state the
+claim about its result:
+
+```bynk,fragment
+expect [Logger.log("x")].length() == 1   // ✗ bynk.expect.impure_predicate
+let r <- authorise.call(100)
+expect r is Ok(_)                         // ✓
+```
+
+The rule reads the predicate, not what runs: a lambda that would make such a call
+is refused even if nothing applies it (`[() => Logger.log("x")].length() == 1`).
+`expect`'s own forms are the exceptions: a [fault claim](#faults) runs its call,
+and an [observation](#observation) or `trace(Cap.op)` reads the calls already
+recorded.
+
 ### `?` in a case {#question-in-case}
 
 A `case` body returns no `Result`, so `?` has nowhere to propagate to. Instead,
@@ -1855,7 +1874,9 @@ completion order is testing a race: write it against a stub that controls it.
 
 A **`with` predicate** is the ordinary predicate surface with the operation's
 parameters in scope by their declared names (`Logger.log(msg: String)` → `msg`), so
-`with msg == "…"` reads directly; it must be pure `Bool`.
+`with msg == "…"` reads directly; it must be pure `Bool`. It is checked against
+every recorded call, so an effectful call inside it is refused
+(`bynk.observe.impure_with`) rather than run once per call.
 
 For anything the sugar does not cover, the **escape hatch** binds the recorded calls
 as an ordinary value:

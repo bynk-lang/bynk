@@ -642,7 +642,13 @@ pub(crate) fn check_expect(inner: &Expr, span: Span, ctx: &mut Ctx) -> Option<Ty
             ),
         );
     }
+    let typed_errors = ctx.errors.len();
     let val_ty = type_of(inner, Some(tys.intern(Ty::Base(BaseType::Bool))), ctx);
+    if predicate_typed_clean(val_ty, typed_errors, ctx)
+        && let Some(span) = effect_in_predicate(inner, ctx.expr_types, tys)
+    {
+        ctx.errors.push(expect_impure_error(span));
+    }
     if let Some(actual) = val_ty
         && !compatible(actual, tys.intern(Ty::Base(BaseType::Bool)), tys)
     {
@@ -724,17 +730,9 @@ pub(crate) fn check_observation(o: &ObservationExpr, _span: Span, ctx: &mut Ctx)
                 "an observation count is always a non-negative literal"
             );
             if let Some(p) = with_pred {
-                if let Some(impure) = predicate_impure_construct(p) {
-                    ctx.errors.push(
-                        CompileError::new(
-                            "bynk.observe.impure_with",
-                            impure,
-                            "a `with` predicate uses an effectful or test-only construct; it must be pure",
-                        )
-                        .with_note(
-                            "a `with` predicate may read the operation's arguments and call pure value methods only",
-                        ),
-                    );
+                let syntactic = predicate_impure_construct(p);
+                if let Some(impure) = syntactic {
+                    ctx.errors.push(impure_with_error(impure));
                 }
                 // Scope the predicate over the operation's parameters by name.
                 let mut scope: HashMap<String, TyId> = HashMap::new();
@@ -744,8 +742,18 @@ pub(crate) fn check_observation(o: &ObservationExpr, _span: Span, ctx: &mut Ctx)
                     }
                 }
                 ctx.push_scope_with(scope);
+                let typed_errors = ctx.errors.len();
                 let pred_ty = type_of(p, Some(tys.intern(Ty::Base(BaseType::Bool))), ctx);
                 ctx.pop_scope();
+                // #3774: an `Effect`-typed sub-expression (a capability or service
+                // call held in a pure expression) would run once per recorded
+                // call. Reported once: the syntactic gate above, or a typing error, wins.
+                if syntactic.is_none()
+                    && predicate_typed_clean(pred_ty, typed_errors, ctx)
+                    && let Some(span) = effect_in_predicate(p, ctx.expr_types, tys)
+                {
+                    ctx.errors.push(impure_with_error(span));
+                }
                 if let Some(t) = pred_ty
                     && !compatible(t, tys.intern(Ty::Base(BaseType::Bool)), tys)
                 {
@@ -766,6 +774,18 @@ pub(crate) fn check_observation(o: &ObservationExpr, _span: Span, ctx: &mut Ctx)
         }
     }
     Some(tys.intern(Ty::Base(BaseType::Bool)))
+}
+
+/// `bynk.observe.impure_with` at `span`.
+fn impure_with_error(span: Span) -> CompileError {
+    CompileError::new(
+        "bynk.observe.impure_with",
+        span,
+        "a `with` predicate uses an effectful or test-only construct; it must be pure",
+    )
+    .with_note(
+        "a `with` predicate may read the operation's arguments and call pure value methods only",
+    )
 }
 
 /// Type-check a fault claim, `expect <call> faults` (#1706). The subject must

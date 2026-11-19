@@ -1501,6 +1501,19 @@ impl Pre {
         self.0.is_empty()
     }
 
+    /// How many statements have been hoisted so far.
+    pub(crate) fn len(&self) -> usize {
+        self.0.len()
+    }
+
+    /// Hoist `const __rN = <value>;` and hand back a read of `__rN`, so a
+    /// value used twice is evaluated once.
+    pub(super) fn bind_temp(&mut self, value: LoweredExpr, cx: &mut LowerCtx) -> LoweredExpr {
+        let tmp = cx.fresh();
+        self.0.push(binding_stmt(&tmp, value));
+        LoweredExpr::Node(ident_node(&tmp))
+    }
+
     /// The accumulated statements as text, for a caller that is writing them
     /// into a text statement position rather than hoisting them further.
     pub(crate) fn stmts(&self) -> Vec<String> {
@@ -6552,7 +6565,6 @@ fn hoist_bool_if(
 }
 
 fn lower_bin_op(op: BinOp, lhs: &Expr, rhs: &Expr, cx: &mut LowerCtx) -> Lowered {
-    let tys = cx.ty_render();
     let mut pre = Pre::new();
     // For `&&` we need to lower `is` bindings into the rhs scope.
     // We handle that here by collecting bindings from lhs, emitting
@@ -6706,7 +6718,25 @@ fn lower_bin_op(op: BinOp, lhs: &Expr, rhs: &Expr, cx: &mut LowerCtx) -> Lowered
         return pre.finish_built(short_circuit(op, l, rhs_value));
     }
     let r_lowered = pre.lower_node(rhs, cx);
-    let children = vec![l_lowered, r_lowered];
+    match build_value_bin_op(op, lhs, vec![l_lowered, r_lowered], cx) {
+        Ok(node) => pre.finish(LoweredExpr::Node(node)),
+        Err(text) => pre.finish_text(text),
+    }
+}
+
+/// A value operator (`==`, `<`, `+`, …; never `&&`/`||`/`implies`) over
+/// operands that are already lowered, `children` = `[lhs, rhs]`. `lhs` is the
+/// source operand, read only for its type. Split out of [`lower_bin_op`] so
+/// that `expect` can build its condition over operands it lowered once and
+/// also shows in the failure detail.
+pub(super) fn build_value_bin_op(
+    op: BinOp,
+    lhs: &Expr,
+    children: Vec<LoweredExpr>,
+    cx: &mut LowerCtx,
+) -> Built {
+    debug_assert!(!matches!(op, BinOp::And | BinOp::Or | BinOp::Implies));
+    let tys = cx.ty_render();
     // #2622: `Decimal` arithmetic is exact and goes through the runtime; the
     // checker rejects `/` and any mixed operand, so the left operand decides.
     let decimal_helper = matches!(op, BinOp::Add | BinOp::Sub | BinOp::Mul)
@@ -6726,7 +6756,7 @@ fn lower_bin_op(op: BinOp, lhs: &Expr, rhs: &Expr, cx: &mut LowerCtx) -> Lowered
     // Slice 1A.5 (#3703): each value-operator branch builds a node when both
     // operands are nodes (`node_or_text`), today's text otherwise. The
     // `cx.note_*` side effects fire here, once, on both paths.
-    let built = if let Some(helper) = decimal_helper {
+    if let Some(helper) = decimal_helper {
         cx.note_decimal(helper);
         helper_call(helper, children)
     } else if op == BinOp::Div {
@@ -6773,10 +6803,6 @@ fn lower_bin_op(op: BinOp, lhs: &Expr, rhs: &Expr, cx: &mut LowerCtx) -> Lowered
         ordered_comparison(op, cmp, children)
     } else {
         plain_binary(op, children)
-    };
-    match built {
-        Ok(node) => pre.finish(LoweredExpr::Node(node)),
-        Err(text) => pre.finish_text(text),
     }
 }
 

@@ -48,7 +48,10 @@ block).
 ```
 
 **Cause:** a `with` predicate uses an effect, `?` propagation, `expect`, `Val`, or
-`trace` — a `with` predicate is the one predicate surface and must be pure.
+`trace`, or holds an effectful call such as a capability operation inside a list or
+a lambda (`with [Logger.warn("w")].length() == 1`). A `with` predicate is the one
+predicate surface and must be pure: it is checked against every recorded call, so
+an effectful call in it would run, and be recorded, once per call.
 
 **Fix:** remove the effectful/test-only construct. A `with` predicate may read the
 operation's arguments and call pure value methods only.

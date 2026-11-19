@@ -1,0 +1,3 @@
+# #3774: `expect`'s own constructs (a fault claim, an observation and its
+# `with`, `trace`, `?`, a pure lambda, `Val`) are not refused as effects.
+passed=4 failed=0

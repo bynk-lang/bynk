@@ -7,7 +7,7 @@ title: Diagnostic index
 
 Every diagnostic code the compiler can emit, with a one-line summary of the cause, grouped by category. For step-by-step cause-and-fix guidance on the most common ones, see the [troubleshooting guides](/book/troubleshooting/). For a code with a curated explanation, `bynk explain <code>` prints it in a terminal, and in VS Code the diagnostic's **Explain** quick fix (or **Bynk: Explain Diagnostic Code…**) shows the same text in a panel, offline.
 
-There are **894** codes in total.
+There are **895** codes in total.
 
 ## Agents
 
@@ -165,6 +165,7 @@ There are **894** codes in total.
 | Code | Summary | Construct | Severity |
 |---|---|---|---|
 | [`bynk.expect.faults_not_effect`](/book/reference/testing/#faults) | A fault claim's subject (`expect <call> faults`) is not an effectful call: a value, or a call whose type is not `Effect[_]`. | [`faults_expr`](/book/reference/grammar/#rule-faults_expr) | — |
+| [`bynk.expect.impure_predicate`](/book/reference/testing/#expect) | An `expect` predicate contains an effectful call (a sub-expression of type `Effect[_]`); a predicate must be pure. | [`expect_expr`](/book/reference/grammar/#rule-expect_expr) | — |
 | [`bynk.expect.not_bool`](/book/reference/testing/#expect) | `expect` was given a non-`Bool` predicate. | [`expect_expr`](/book/reference/grammar/#rule-expect_expr) | — |
 | [`bynk.expect.outside_case`](/book/reference/testing/#expect) | `expect` was used outside a `case` body. | [`expect_expr`](/book/reference/grammar/#rule-expect_expr) | — |
 
@@ -323,7 +324,7 @@ There are **894** codes in total.
 
 | Code | Summary | Construct | Severity |
 |---|---|---|---|
-| [`bynk.observe.impure_with`](/book/reference/testing/#observation) | A `with` predicate uses an effectful or test-only construct; it must be pure. |  | — |
+| [`bynk.observe.impure_with`](/book/reference/testing/#observation) | A `with` predicate uses an effectful or test-only construct, or an effectful call (a sub-expression of type `Effect[_]`); it must be pure. |  | — |
 | [`bynk.observe.not_a_seam`](/book/reference/testing/#observation) | An observation targets a capability the unit under test does not consume. |  | — |
 | [`bynk.observe.trace_outside_test`](/book/reference/testing/#observation) | `trace(Cap.op)` appears outside a `case` body. |  | — |
 | [`bynk.observe.unknown_op`](/book/reference/testing/#observation) | An observation names an operation the capability does not declare. |  | — |

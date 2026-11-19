@@ -1,0 +1,6 @@
+suite demo.pay {
+  case "c" {
+    let r <- authorise.call(100)
+    expect r is Ok(_)
+  }
+}

@@ -1,0 +1,29 @@
+suite demo.pay {
+  // #3774: an `expect` predicate may not hold an `Effect`, but `expect`'s own
+  // constructs are not effects in this sense, and each still checks.
+
+  case "a fault claim runs its call" {
+    stub Logger.log(_) fails
+    expect authorise.call(1) faults
+  }
+
+  case "an observation and a pure with predicate" {
+    let _ <- authorise.call(1)
+    expect Logger.log called 2 times
+    expect Logger.log called with msg == "start"
+    expect Logger.log called once with msg.length() == 8
+  }
+
+  case "trace, inline and bound" {
+    let _ <- authorise.call(1)
+    expect trace(Logger.log).length() == 2
+    let logs = trace(Logger.log)
+    expect logs.all((c) => c.msg.length() > 0)
+  }
+
+  case "a question mark, a pure lambda and Val" {
+    expect Day.of("d")?.length() == 1
+    expect [1, 2].map((i) => i + 1).length() == 2
+    expect Val[Day]("d").length() == 1
+  }
+}
