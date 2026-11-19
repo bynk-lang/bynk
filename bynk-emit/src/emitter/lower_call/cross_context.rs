@@ -775,3 +775,96 @@ pub(crate) fn type_ref_named_root(r: &TypeRef) -> Option<&str> {
         _ => None,
     }
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use crate::emitter::ctx::{BodyMode, ModuleCtx, UnitFacts};
+    use crate::emitter::runtime_use::RuntimeUse;
+    use bynk_check::checker::TypedCommons;
+    use bynk_check::resolver::{CrossContextInfo, CrossContextService};
+    use bynk_syntax::span::Span;
+
+    fn ident(name: &str) -> Ident {
+        Ident {
+            name: name.to_string(),
+            span: Span::default(),
+        }
+    }
+
+    fn named(name: &str) -> TypeRef {
+        TypeRef::Named(ident(name))
+    }
+
+    /// A consumer that consumes `shop.pay`, whose `charge` service takes `params` (none, when
+    /// `signed` is false: the consumed context then has no signature for it at all).
+    fn info_with(signed: bool, params: Vec<(String, TypeRef)>) -> CrossContextInfo {
+        let mut info = CrossContextInfo::default();
+        info.consumed_contexts.push("shop.pay".to_string());
+        if signed {
+            let service = CrossContextService {
+                name: "charge".to_string(),
+                params,
+                return_type: named("Receipt"),
+                span: Span::default(),
+                foreign_callers: Vec::new(),
+            };
+            info.consumed_services.insert(
+                "shop.pay".to_string(),
+                std::iter::once(("charge".to_string(), service)).collect(),
+            );
+        }
+        info
+    }
+
+    fn lower_workers(info: &CrossContextInfo, args: &[Expr]) -> Built {
+        let commons = TypedCommons::empty();
+        let ru = RuntimeUse::default();
+        let module = ModuleCtx::new(&commons, info, &ru, UnitFacts::detached());
+        let mut cx = LowerCtx::new(module, BodyMode::Method);
+        let mut pre = Pre::new();
+        lower_workers_cross_context_call("shop.pay", &ident("charge"), args, 0, &mut cx, &mut pre)
+    }
+
+    /// The checker resolved the call before the emitter ran, so an absent signature is a compiler
+    /// bug and fails (#642), as it did before the call was a node.
+    #[test]
+    #[should_panic(expected = "bynk.emit.unresolved_cross_context_signature: no signature for")]
+    fn a_call_with_no_signature_is_an_internal_fault() {
+        let _ = lower_workers(&info_with(false, Vec::new()), &[]);
+    }
+
+    /// An arity mismatch is the same fault, in either direction.
+    #[test]
+    #[should_panic(expected = "takes 1 argument(s) but the call site has 0")]
+    fn a_call_whose_arity_disagrees_with_the_signature_is_an_internal_fault() {
+        let info = info_with(true, vec![("total".to_string(), named("Int"))]);
+        let _ = lower_workers(&info, &[]);
+    }
+
+    /// A zero-argument call is a node whose payload is the empty object.
+    #[test]
+    fn a_zero_argument_workers_call_is_a_node_with_an_empty_payload() {
+        let mut info = info_with(true, Vec::new());
+        info.consumed_types
+            .insert("shop.pay".to_string(), Default::default());
+        let call = lower_workers(&info, &[]).expect("a zero-argument call is a node");
+        let printed = bynk_ts::print_expr(&call);
+        assert!(
+            printed.starts_with("__callService(deps.env.SHOP_PAY, \"charge\", {}, "),
+            "{printed}"
+        );
+    }
+
+    /// A node operand builds `Paren(As(As(..)))`; a text operand prints the same bytes as text.
+    #[test]
+    fn the_cast_prints_the_same_bytes_as_a_node_and_as_text() {
+        let ty = || TsType::named("shop_pay.Money");
+        let node = cast_through_unknown(LoweredExpr::Node(id("total")), ty());
+        let text = cast_through_unknown(LoweredExpr::Text("total".to_string()), ty());
+        let expected = "(total as unknown as shop_pay.Money)";
+        assert!(matches!(&node, LoweredExpr::Node(_)));
+        assert_eq!(node.into_text(), expected);
+        assert!(matches!(&text, LoweredExpr::Text(t) if t == expected));
+    }
+}

@@ -59,6 +59,8 @@ mod integration {
     mod consumes_per_file;
     #[path = "contract_hash.rs"]
     mod contract_hash;
+    #[path = "cross_context_nodes.rs"]
+    mod cross_context_nodes;
     #[path = "debug_metadata.rs"]
     mod debug_metadata;
     #[path = "diagnose_project.rs"]
