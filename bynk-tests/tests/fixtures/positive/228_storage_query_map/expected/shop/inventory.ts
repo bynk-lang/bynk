@@ -75,7 +75,11 @@ export class Inventory {
 
   async pageById(deps: {}): globalThis.Promise<readonly Reservation[]> {
     const __state = await this.loadState();
-    return __bynkThen(((() => __bynkThen(((() => __bynkThen(((() => __bynkThen(__state.reservations.values(), (__q) => [...__q].sort((__a, __b) => { const __ka = ((r: Reservation) => r.id)(__a), __kb = ((r: Reservation) => r.id)(__b); return __ka < __kb ? -1 : __ka > __kb ? 1 : 0; }))))(), (__q) => __q.slice(globalThis.Math.max(0, 1)))))(), (__q) => __q.slice(0, globalThis.Math.max(0, 10)))))(), (__q) => __q);
+    return __bynkThen(((() => __bynkThen(((() => __bynkThen(((() => __bynkThen(__state.reservations.values(), (__q) => [...__q].sort((__a, __b) => {
+  const __ka = ((r: Reservation) => r.id)(__a);
+  const __kb = ((r: Reservation) => r.id)(__b);
+  return __ka < __kb ? -1 : __ka > __kb ? 1 : 0;
+}))))(), (__q) => __q.slice(globalThis.Math.max(0, 1)))))(), (__q) => __q.slice(0, globalThis.Math.max(0, 10)))))(), (__q) => __q);
   }
 
   async total(deps: {}): globalThis.Promise<number> {
@@ -85,7 +89,16 @@ export class Inventory {
 
   async largest(deps: {}): globalThis.Promise<Option<number>> {
     const __state = await this.loadState();
-    return __bynkThen(__state.reservations.values(), (__q) => (() => { const __a = __q; if (__a.length === 0) return None; let __m = ((r: Reservation) => r.qty)(__a[0]); for (const __x of __a) { const __k = ((r: Reservation) => r.qty)(__x); if (__k > __m) __m = __k; } return Some(__m); })());
+    return __bynkThen(__state.reservations.values(), (__q) => (() => {
+  const __a = __q;
+  if (__a.length === 0) return None;
+  let __m = ((r: Reservation) => r.qty)(__a[0]);
+  for (const __x of __a) {
+    const __k = ((r: Reservation) => r.qty)(__x);
+    if (__k > __m) __m = __k;
+  }
+  return Some(__m);
+})());
   }
 
   async howMany(deps: {}): globalThis.Promise<number> {
@@ -101,7 +114,18 @@ export class Inventory {
   async pending(deps: {}): globalThis.Promise<readonly Reservation[]> {
     const __state = await this.loadState();
     const q = (() => __bynkThen(__state.reservations.values(), (__q) => __q.filter((__x) => ((r: Reservation) => r.qty > 0)(__x))));
-    return __bynkThen(((() => __bynkThen((q)(), (__q) => (() => { const __seen = new globalThis.Set(); const __out: Reservation[] = []; for (const __x of __q) { const __k = ((r: Reservation) => r.id)(__x); if (!__seen.has(__k)) { __seen.add(__k); __out.push(__x); } } return __out; })())))(), (__q) => __q);
+    return __bynkThen(((() => __bynkThen((q)(), (__q) => (() => {
+      const __seen = new globalThis.Set();
+      const __out: Reservation[] = [];
+      for (const __x of __q) {
+        const __k = ((r: Reservation) => r.id)(__x);
+        if (!__seen.has(__k)) {
+          __seen.add(__k);
+          __out.push(__x);
+        }
+      }
+      return __out;
+    })())))(), (__q) => __q);
   }
 
   async firstBig(deps: {}): globalThis.Promise<Reservation> {
