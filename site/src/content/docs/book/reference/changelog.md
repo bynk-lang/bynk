@@ -28,6 +28,7 @@ per-commit history. While Bynk is pre-1.0, increments may change behaviour.
 
 | Version | Highlights |
 |---|---|
+| **v0.639.40** | The built-in kernel methods on connections, request views, cookies, `within`, `race`, `detach` and `Effect[Result]` combinators in generated code are built as TypeScript nodes rather than text, so redundant brackets round receivers are gone and twelve generated files print an enclosing closure with different layout; no change to what the emitted code does |
 | **v0.639.39** | Agent construction and agent calls in generated code are built as TypeScript nodes rather than text, so four generated test and demo files print an enclosing closure with different layout; no change to what the emitted code does |
 | **v0.639.38** | Test-case and system-tier service calls in generated test harnesses are built as TypeScript nodes rather than text, so a few expressions print with different layout and six redundant brackets (`(x).url`) are dropped; no change to what the emitted code does |
 | **v0.639.37** | Cross-context service calls, on the bundle and the Workers target, are built as TypeScript nodes rather than text, so a call with no arguments sends `{}` rather than `{  }`; no change to what the emitted code does |
