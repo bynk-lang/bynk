@@ -976,7 +976,7 @@ mod tests {
     fn ident(id: u32) -> Expr {
         Expr {
             id: ExprId(id),
-            kind: ExprKind::Ident(bynk_syntax::ast::Ident {
+            kind: ExprKind::Ident(Ident {
                 name: "x".to_string(),
                 span: Span::new(0, 0),
             }),
