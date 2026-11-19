@@ -6,7 +6,6 @@
 
 use bynk_check::builtin_names::types::*;
 use bynk_check::checker::{Callee, Ty};
-use bynk_syntax::ast::BaseType;
 use bynk_ts::{
     TsArrowBody, TsBinaryOp, TsBindingName, TsExpr, TsLit, TsParam, TsStmt, TsType, TsTypeMember,
     TsUnaryOp,
@@ -17,7 +16,7 @@ use super::super::lower::{
 };
 use super::super::lower_ctx::LowerCtx;
 use super::super::ts_types::ts_ty_to_ts_type;
-use super::super::{Expr, Ident, TypeRef, ty_to_type_ref};
+use super::super::{BaseType, Expr, Ident, TypeBody, TypeRef, ty_to_type_ref};
 
 /// v0.22b: the typed JSON codec (ADR 0045). `encode` dispatches to the
 /// module-local `serialise_*` helpers + `JSON.stringify`; `decode[T]` to
@@ -480,7 +479,6 @@ fn form_decoder_text(ts: &TsType, specs: &str, des: &TsExpr) -> String {
 /// literal of `{ name, kind, list, option }` the router's `@form` path builds. `None`
 /// when `t` is not a record of the module's types.
 fn form_specs_literal(t: bynk_check::checker::TyId, cx: &LowerCtx) -> Option<String> {
-    use bynk_syntax::ast::TypeBody;
     let tys = cx.ty_render();
     let Ty::Named { name, .. } = &*tys.get(t) else {
         return None;

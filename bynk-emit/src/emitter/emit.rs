@@ -5110,11 +5110,7 @@ fn emit_lazy_field_spec(
             path,
             &ctx.runtime_use,
         ));
-        let e = bynk_ts::print_expr(&serialisation::serialise_expr(
-            ty,
-            &bynk_ts::TsExpr::Ident("__v".to_string()),
-            &ctx.runtime_use,
-        ));
+        let e = bynk_ts::print_expr(&serialisation::serialise_text(ty, "__v", &ctx.runtime_use));
         format!(
             ", decode: (__w: unknown) => {{ const __r = {d}; if (__r.tag === \"Err\") throw __rehydrationViolation(\"{agent_name}\", __r.error); return __r.value; }}, encode: (__u: unknown) => {{ const __v = __u as {value_ts}; return {e}; }}"
         )
@@ -6690,11 +6686,7 @@ fn emit_agent_state_persistence(
     let present =
         |name: &str| format!("globalThis.Object.prototype.hasOwnProperty.call(stored, \"{name}\")");
     let ser = |ty: &TypeRef, value: &str| {
-        bynk_ts::print_expr(&serialisation::serialise_expr(
-            ty,
-            &bynk_ts::TsExpr::Ident(value.to_string()),
-            &ctx.runtime_use,
-        ))
+        bynk_ts::print_expr(&serialisation::serialise_text(ty, value, &ctx.runtime_use))
     };
     let push_value_check = |checks: &mut Vec<String>,
                             ty: &TypeRef,
@@ -6967,11 +6959,7 @@ fn emit_agent_state_persistence(
             format!("globalThis.Object.prototype.hasOwnProperty.call(stored, \"{name}\")")
         };
         let ser = |ty: &TypeRef, value: &str| {
-            bynk_ts::print_expr(&serialisation::serialise_expr(
-                ty,
-                &bynk_ts::TsExpr::Ident(value.to_string()),
-                &ctx.runtime_use,
-            ))
+            bynk_ts::print_expr(&serialisation::serialise_text(ty, value, &ctx.runtime_use))
         };
         let cell_names: HashSet<String> = effective_fields
             .iter()

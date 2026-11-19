@@ -1210,9 +1210,9 @@ fn statement(body: &mut Body, stmt: &Statement, cx: &mut LowerCtx) {
                 .map(|j| LoweredExpr::from(j).into_text());
             body.extend(pre.items());
             match json {
-                // 1A: the known-type arm stays text — `json` is the serialisers'
-                // `&str` output (they take no node yet; see the track's
-                // "serialisers take `&TsExpr`" row).
+                // 1A: the known-type arm stays text — the serialisers take a node
+                // (1A.21), but this block is one text line, and its node layout needs its
+                // own golden ruling (see the track's `1A.ser` row).
                 Some(json) => {
                     let name = bynk_project::json_string(&clause.name);
                     let location = crate::emitter::escape_ts_string(&location);

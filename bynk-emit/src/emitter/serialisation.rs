@@ -2497,6 +2497,16 @@ mod emit_field_deserialise_wire_tests {
     }
 }
 
+/// [`serialise_field_expr`] over a value that is an identifier's text (`value.value`, `k`).
+fn serialise_field_ident(
+    t: &TypeRef,
+    value: &str,
+    depth: Option<Depth<'_>>,
+    ru: &RuntimeUse,
+) -> TsExpr {
+    serialise_field_expr(t, &ident(value), depth, ru)
+}
+
 fn serialise_field_expr(
     t: &TypeRef,
     value: &TsExpr,
@@ -2724,6 +2734,17 @@ fn is_plain_key_ref(t: &TypeRef, types: &std::collections::HashMap<String, Arc<T
 /// dispatch as a record field's serialisation.
 pub(crate) fn serialise_expr(t: &TypeRef, value: &TsExpr, ru: &RuntimeUse) -> TsExpr {
     serialise_field_expr(t, value, None, ru)
+}
+
+/// [`serialise_expr`] over a value that is an identifier's text (a parameter or a local), for the
+/// callers that hold its name.
+pub(crate) fn serialise_text(t: &TypeRef, value: &str, ru: &RuntimeUse) -> TsExpr {
+    serialise_expr(t, &ident(value), ru)
+}
+
+/// [`serialise_expr_via`] over a value that is an identifier's text.
+pub(crate) fn serialise_via_text(t: &TypeRef, value: &str, ns: &str, ru: &RuntimeUse) -> TsExpr {
+    serialise_expr_via(t, &ident(value), ns, ru)
 }
 
 /// v0.176 (#642): the one serialise dispatch for the workers cross-context
@@ -4089,7 +4110,7 @@ pub fn emit_generic_helpers_qualified(
                                 ("kind".to_string(), str_lit("Ok")),
                                 (
                                     "value".to_string(),
-                                    serialise_field_expr(ok, &ident("value.value"), depth, ru),
+                                    serialise_field_ident(ok, "value.value", depth, ru),
                                 ),
                             ])),
                         ),
@@ -4097,7 +4118,7 @@ pub fn emit_generic_helpers_qualified(
                             ("kind".to_string(), str_lit("Err")),
                             (
                                 "error".to_string(),
-                                serialise_field_expr(err, &ident("value.error"), depth, ru),
+                                serialise_field_ident(err, "value.error", depth, ru),
                             ),
                         ])),
                     ],
@@ -4164,7 +4185,7 @@ pub fn emit_generic_helpers_qualified(
                 // `__bynkPlainJson` set, `Some(v)` is `v` and `None` is `null`.
                 // Otherwise (and in every project without such a route) it is the
                 // tagged encoder alone.
-                let some_value = serialise_field_expr(inner, &ident("value.value"), depth, ru);
+                let some_value = serialise_field_ident(inner, "value.value", depth, ru);
                 let tagged_some = TsExpr::object(vec![
                     ("kind".to_string(), str_lit("Some")),
                     ("value".to_string(), some_value.clone()),
@@ -4248,11 +4269,8 @@ pub fn emit_generic_helpers_qualified(
                             is_async: false,
                             generics: Vec::new(),
                             return_type: None,
-                            body: Box::new(TsArrowBody::Expr(Box::new(serialise_field_expr(
-                                elem,
-                                &ident("v"),
-                                depth,
-                                ru,
+                            body: Box::new(TsArrowBody::Expr(Box::new(serialise_field_ident(
+                                elem, "v", depth, ru,
                             )))),
                         }],
                     ))],
@@ -4352,11 +4370,8 @@ pub fn emit_generic_helpers_qualified(
                             is_async: false,
                             generics: Vec::new(),
                             return_type: None,
-                            body: Box::new(TsArrowBody::Expr(Box::new(serialise_field_expr(
-                                elem,
-                                &ident("v"),
-                                depth,
-                                ru,
+                            body: Box::new(TsArrowBody::Expr(Box::new(serialise_field_ident(
+                                elem, "v", depth, ru,
                             )))),
                         }],
                     ))],
@@ -4476,8 +4491,8 @@ pub fn emit_generic_helpers_qualified(
                                 call(
                                     member(ident("entries"), "push"),
                                     vec![TsExpr::array(vec![
-                                        serialise_field_expr(key, &ident("k"), depth, ru),
-                                        serialise_field_expr(val, &ident("v"), depth, ru),
+                                        serialise_field_ident(key, "k", depth, ru),
+                                        serialise_field_ident(val, "v", depth, ru),
                                     ])],
                                 ),
                                 None,
