@@ -28,7 +28,21 @@ export const __MainToken: symbol = globalThis.Symbol("Main");
 
 export const api = {
   async http_GET_orders(deps: { Main: Main }): globalThis.Promise<HttpResult<number>> {
-    const rows = await (async () => { const __decode = (__s: string): Result<readonly Order[], DecodeError> => { let __j: __JsonValue; try { __j = globalThis.JSON.parse(__s) as __JsonValue; } catch (__e) { return Err({ kind: "Malformed", path: "$", message: String(__e) }); } const __fix = (__o: __JsonValue): void => __bynkPgRow(__o, ["placed"], ["id"]); if (globalThis.Array.isArray(__j)) __j.forEach(__fix); else __fix(__j); const __r = __deserialise_List_Order(__j, "$"); if (__r.tag === "Ok") return Ok(__r.value as readonly Order[]); const __be = __r.error; return Err({ kind: __be.kind, path: (__be.kind === "StructuralMismatch" || __be.kind === "RefinementViolation") ? __be.path : "$", message: __be.kind === "StructuralMismatch" ? `expected ${__be.expected}, got ${String(__be.actual)}` : __be.kind === "RefinementViolation" ? __be.violation.message : __be.details }); }; const __r = await deps.Main.all("SELECT \"id\", \"name\", \"placed\", \"note\", \"paid\" FROM orders WHERE id > $1 ORDER BY id", [PgValue.PgInteger(0)]); if (__r.tag === "Err") return Err({ tag: "PgSql" as const, error: __r.error }); const __d = __decode(__r.value); return __d.tag === "Ok" ? Ok(__d.value) : Err({ tag: "PgDecode" as const, error: __d.error }); })();
+    const rows = await (async () => { const __decode = (__s: string): Result<readonly Order[], DecodeError> => {
+  let __j: __JsonValue;
+  try {
+    __j = globalThis.JSON.parse(__s) as __JsonValue;
+  } catch (__e) {
+    return Err({ kind: "Malformed", path: "$", message: String(__e) });
+  }
+  const __fix = (__o: __JsonValue): void => __bynkPgRow(__o, ["placed"], ["id"]);
+  if (globalThis.Array.isArray(__j)) __j.forEach(__fix);
+  else __fix(__j);
+  const __r = __deserialise_List_Order(__j, "$");
+  if (__r.tag === "Ok") return Ok(__r.value as readonly Order[]);
+  const __be = __r.error;
+  return Err({ kind: __be.kind, path: (__be.kind === "StructuralMismatch" || __be.kind === "RefinementViolation") ? __be.path : "$", message: __be.kind === "StructuralMismatch" ? `expected ${__be.expected}, got ${String(__be.actual)}` : __be.kind === "RefinementViolation" ? __be.violation.message : __be.details });
+}; const __r = await deps.Main.all("SELECT \"id\", \"name\", \"placed\", \"note\", \"paid\" FROM orders WHERE id > $1 ORDER BY id", [PgValue.PgInteger(0)]); if (__r.tag === "Err") return Err({ tag: "PgSql" as const, error: __r.error }); const __d = __decode(__r.value); return __d.tag === "Ok" ? Ok(__d.value) : Err({ tag: "PgDecode" as const, error: __d.error }); })();
     if (rows.tag === "Ok") {
       const list = rows.value;
       return HttpResult.Ok((list).length);
@@ -42,7 +56,21 @@ export const api = {
     throw new globalThis.Error("non-exhaustive match");
   },
   async http_GET_orders_latest(deps: { Main: Main }): globalThis.Promise<HttpResult<string>> {
-    const one = await (async () => { const __decode = (__s: string): Result<Order, DecodeError> => { let __j: __JsonValue; try { __j = globalThis.JSON.parse(__s) as __JsonValue; } catch (__e) { return Err({ kind: "Malformed", path: "$", message: String(__e) }); } const __fix = (__o: __JsonValue): void => __bynkPgRow(__o, ["placed"], ["id"]); if (globalThis.Array.isArray(__j)) __j.forEach(__fix); else __fix(__j); const __r = __deserialise_Order(__j, "$"); if (__r.tag === "Ok") return Ok(__r.value as Order); const __be = __r.error; return Err({ kind: __be.kind, path: (__be.kind === "StructuralMismatch" || __be.kind === "RefinementViolation") ? __be.path : "$", message: __be.kind === "StructuralMismatch" ? `expected ${__be.expected}, got ${String(__be.actual)}` : __be.kind === "RefinementViolation" ? __be.violation.message : __be.details }); }; const __r = await deps.Main.first("SELECT \"id\", \"name\", \"placed\", \"note\", \"paid\" FROM orders ORDER BY placed DESC LIMIT 1", []); if (__r.tag === "Err") return Err({ tag: "PgSql" as const, error: __r.error }); if (__r.value.tag === "None") return Ok(None); const __d = __decode(__r.value.value); return __d.tag === "Ok" ? Ok(Some(__d.value)) : Err({ tag: "PgDecode" as const, error: __d.error }); })();
+    const one = await (async () => { const __decode = (__s: string): Result<Order, DecodeError> => {
+  let __j: __JsonValue;
+  try {
+    __j = globalThis.JSON.parse(__s) as __JsonValue;
+  } catch (__e) {
+    return Err({ kind: "Malformed", path: "$", message: String(__e) });
+  }
+  const __fix = (__o: __JsonValue): void => __bynkPgRow(__o, ["placed"], ["id"]);
+  if (globalThis.Array.isArray(__j)) __j.forEach(__fix);
+  else __fix(__j);
+  const __r = __deserialise_Order(__j, "$");
+  if (__r.tag === "Ok") return Ok(__r.value as Order);
+  const __be = __r.error;
+  return Err({ kind: __be.kind, path: (__be.kind === "StructuralMismatch" || __be.kind === "RefinementViolation") ? __be.path : "$", message: __be.kind === "StructuralMismatch" ? `expected ${__be.expected}, got ${String(__be.actual)}` : __be.kind === "RefinementViolation" ? __be.violation.message : __be.details });
+}; const __r = await deps.Main.first("SELECT \"id\", \"name\", \"placed\", \"note\", \"paid\" FROM orders ORDER BY placed DESC LIMIT 1", []); if (__r.tag === "Err") return Err({ tag: "PgSql" as const, error: __r.error }); if (__r.value.tag === "None") return Ok(None); const __d = __decode(__r.value.value); return __d.tag === "Ok" ? Ok(Some(__d.value)) : Err({ tag: "PgDecode" as const, error: __d.error }); })();
     if (one.tag === "Ok" && one.value.tag === "Some") {
       const o = one.value.value;
       return HttpResult.Ok(o.name);

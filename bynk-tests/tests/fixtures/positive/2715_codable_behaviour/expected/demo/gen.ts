@@ -45,11 +45,33 @@ export function enc<T>(v: T, __codec_T: { encode: (v: T) => __JsonValue; decode:
 }
 
 export function dec<T>(s: string, __codec_T: { encode: (v: T) => __JsonValue; decode: (j: __JsonValue, path: string) => Result<T, __BoundaryError> }): Result<T, DecodeError> {
-  return ((__s: string): Result<T, DecodeError> => { let __j: __JsonValue; try { __j = globalThis.JSON.parse(__s) as __JsonValue; } catch (__e) { return Err({ kind: "Malformed", path: "$", message: String(__e) }); } const __r = __codec_T.decode(__j, "$"); if (__r.tag === "Ok") return Ok(__r.value as T); const __be = __r.error; return Err({ kind: __be.kind, path: (__be.kind === "StructuralMismatch" || __be.kind === "RefinementViolation") ? __be.path : "$", message: __be.kind === "StructuralMismatch" ? `expected ${__be.expected}, got ${String(__be.actual)}` : __be.kind === "RefinementViolation" ? __be.violation.message : __be.details }); })(s);
+  return ((__s: string): Result<T, DecodeError> => {
+    let __j: __JsonValue;
+    try {
+      __j = globalThis.JSON.parse(__s) as __JsonValue;
+    } catch (__e) {
+      return Err({ kind: "Malformed", path: "$", message: String(__e) });
+    }
+    const __r = __codec_T.decode(__j, "$");
+    if (__r.tag === "Ok") return Ok(__r.value as T);
+    const __be = __r.error;
+    return Err({ kind: __be.kind, path: (__be.kind === "StructuralMismatch" || __be.kind === "RefinementViolation") ? __be.path : "$", message: __be.kind === "StructuralMismatch" ? `expected ${__be.expected}, got ${String(__be.actual)}` : __be.kind === "RefinementViolation" ? __be.violation.message : __be.details });
+  })(s);
 }
 
 export function roundTrip<T>(v: T, __codec_T: { encode: (v: T) => __JsonValue; decode: (j: __JsonValue, path: string) => Result<T, __BoundaryError> }): Result<T, DecodeError> {
-  return ((__s: string): Result<T, DecodeError> => { let __j: __JsonValue; try { __j = globalThis.JSON.parse(__s) as __JsonValue; } catch (__e) { return Err({ kind: "Malformed", path: "$", message: String(__e) }); } const __r = __codec_T.decode(__j, "$"); if (__r.tag === "Ok") return Ok(__r.value as T); const __be = __r.error; return Err({ kind: __be.kind, path: (__be.kind === "StructuralMismatch" || __be.kind === "RefinementViolation") ? __be.path : "$", message: __be.kind === "StructuralMismatch" ? `expected ${__be.expected}, got ${String(__be.actual)}` : __be.kind === "RefinementViolation" ? __be.violation.message : __be.details }); })(globalThis.JSON.stringify(__codec_T.encode(v)));
+  return ((__s: string): Result<T, DecodeError> => {
+    let __j: __JsonValue;
+    try {
+      __j = globalThis.JSON.parse(__s) as __JsonValue;
+    } catch (__e) {
+      return Err({ kind: "Malformed", path: "$", message: String(__e) });
+    }
+    const __r = __codec_T.decode(__j, "$");
+    if (__r.tag === "Ok") return Ok(__r.value as T);
+    const __be = __r.error;
+    return Err({ kind: __be.kind, path: (__be.kind === "StructuralMismatch" || __be.kind === "RefinementViolation") ? __be.path : "$", message: __be.kind === "StructuralMismatch" ? `expected ${__be.expected}, got ${String(__be.actual)}` : __be.kind === "RefinementViolation" ? __be.violation.message : __be.details });
+  })(globalThis.JSON.stringify(__codec_T.encode(v)));
 }
 
 export function viaTwo<T>(v: T, __codec_T: { encode: (v: T) => __JsonValue; decode: (j: __JsonValue, path: string) => Result<T, __BoundaryError> }): Result<T, DecodeError> {
@@ -61,7 +83,18 @@ export function encList<T>(v: readonly T[], __codec_T: { encode: (v: T) => __Jso
 }
 
 export function decList<T>(s: string, __codec_T: { encode: (v: T) => __JsonValue; decode: (j: __JsonValue, path: string) => Result<T, __BoundaryError> }): Result<readonly T[], DecodeError> {
-  return ((__s: string): Result<readonly T[], DecodeError> => { let __j: __JsonValue; try { __j = globalThis.JSON.parse(__s) as __JsonValue; } catch (__e) { return Err({ kind: "Malformed", path: "$", message: String(__e) }); } const __r = __bynkCodecList(__codec_T).decode(__j, "$"); if (__r.tag === "Ok") return Ok(__r.value as readonly T[]); const __be = __r.error; return Err({ kind: __be.kind, path: (__be.kind === "StructuralMismatch" || __be.kind === "RefinementViolation") ? __be.path : "$", message: __be.kind === "StructuralMismatch" ? `expected ${__be.expected}, got ${String(__be.actual)}` : __be.kind === "RefinementViolation" ? __be.violation.message : __be.details }); })(s);
+  return ((__s: string): Result<readonly T[], DecodeError> => {
+    let __j: __JsonValue;
+    try {
+      __j = globalThis.JSON.parse(__s) as __JsonValue;
+    } catch (__e) {
+      return Err({ kind: "Malformed", path: "$", message: String(__e) });
+    }
+    const __r = __bynkCodecList(__codec_T).decode(__j, "$");
+    if (__r.tag === "Ok") return Ok(__r.value as readonly T[]);
+    const __be = __r.error;
+    return Err({ kind: __be.kind, path: (__be.kind === "StructuralMismatch" || __be.kind === "RefinementViolation") ? __be.path : "$", message: __be.kind === "StructuralMismatch" ? `expected ${__be.expected}, got ${String(__be.actual)}` : __be.kind === "RefinementViolation" ? __be.violation.message : __be.details });
+  })(s);
 }
 
 export function encOpt<T>(v: Option<T>, __codec_T: { encode: (v: T) => __JsonValue; decode: (j: __JsonValue, path: string) => Result<T, __BoundaryError> }): string {
@@ -69,7 +102,18 @@ export function encOpt<T>(v: Option<T>, __codec_T: { encode: (v: T) => __JsonVal
 }
 
 export function decOpt<T>(s: string, __codec_T: { encode: (v: T) => __JsonValue; decode: (j: __JsonValue, path: string) => Result<T, __BoundaryError> }): Result<Option<T>, DecodeError> {
-  return ((__s: string): Result<Option<T>, DecodeError> => { let __j: __JsonValue; try { __j = globalThis.JSON.parse(__s) as __JsonValue; } catch (__e) { return Err({ kind: "Malformed", path: "$", message: String(__e) }); } const __r = __bynkCodecOption(__codec_T).decode(__j, "$"); if (__r.tag === "Ok") return Ok(__r.value as Option<T>); const __be = __r.error; return Err({ kind: __be.kind, path: (__be.kind === "StructuralMismatch" || __be.kind === "RefinementViolation") ? __be.path : "$", message: __be.kind === "StructuralMismatch" ? `expected ${__be.expected}, got ${String(__be.actual)}` : __be.kind === "RefinementViolation" ? __be.violation.message : __be.details }); })(s);
+  return ((__s: string): Result<Option<T>, DecodeError> => {
+    let __j: __JsonValue;
+    try {
+      __j = globalThis.JSON.parse(__s) as __JsonValue;
+    } catch (__e) {
+      return Err({ kind: "Malformed", path: "$", message: String(__e) });
+    }
+    const __r = __bynkCodecOption(__codec_T).decode(__j, "$");
+    if (__r.tag === "Ok") return Ok(__r.value as Option<T>);
+    const __be = __r.error;
+    return Err({ kind: __be.kind, path: (__be.kind === "StructuralMismatch" || __be.kind === "RefinementViolation") ? __be.path : "$", message: __be.kind === "StructuralMismatch" ? `expected ${__be.expected}, got ${String(__be.actual)}` : __be.kind === "RefinementViolation" ? __be.violation.message : __be.details });
+  })(s);
 }
 
 export function encRes<T, E>(v: Result<T, E>, __codec_T: { encode: (v: T) => __JsonValue; decode: (j: __JsonValue, path: string) => Result<T, __BoundaryError> }, __codec_E: { encode: (v: E) => __JsonValue; decode: (j: __JsonValue, path: string) => Result<E, __BoundaryError> }): string {
@@ -77,7 +121,18 @@ export function encRes<T, E>(v: Result<T, E>, __codec_T: { encode: (v: T) => __J
 }
 
 export function decRes<T, E>(s: string, __codec_T: { encode: (v: T) => __JsonValue; decode: (j: __JsonValue, path: string) => Result<T, __BoundaryError> }, __codec_E: { encode: (v: E) => __JsonValue; decode: (j: __JsonValue, path: string) => Result<E, __BoundaryError> }): Result<Result<T, E>, DecodeError> {
-  return ((__s: string): Result<Result<T, E>, DecodeError> => { let __j: __JsonValue; try { __j = globalThis.JSON.parse(__s) as __JsonValue; } catch (__e) { return Err({ kind: "Malformed", path: "$", message: String(__e) }); } const __r = __bynkCodecResult(__codec_T, __codec_E).decode(__j, "$"); if (__r.tag === "Ok") return Ok(__r.value as Result<T, E>); const __be = __r.error; return Err({ kind: __be.kind, path: (__be.kind === "StructuralMismatch" || __be.kind === "RefinementViolation") ? __be.path : "$", message: __be.kind === "StructuralMismatch" ? `expected ${__be.expected}, got ${String(__be.actual)}` : __be.kind === "RefinementViolation" ? __be.violation.message : __be.details }); })(s);
+  return ((__s: string): Result<Result<T, E>, DecodeError> => {
+    let __j: __JsonValue;
+    try {
+      __j = globalThis.JSON.parse(__s) as __JsonValue;
+    } catch (__e) {
+      return Err({ kind: "Malformed", path: "$", message: String(__e) });
+    }
+    const __r = __bynkCodecResult(__codec_T, __codec_E).decode(__j, "$");
+    if (__r.tag === "Ok") return Ok(__r.value as Result<T, E>);
+    const __be = __r.error;
+    return Err({ kind: __be.kind, path: (__be.kind === "StructuralMismatch" || __be.kind === "RefinementViolation") ? __be.path : "$", message: __be.kind === "StructuralMismatch" ? `expected ${__be.expected}, got ${String(__be.actual)}` : __be.kind === "RefinementViolation" ? __be.violation.message : __be.details });
+  })(s);
 }
 
 export function encSet<T>(v: ReadonlySet<T>, __codec_T: { encode: (v: T) => __JsonValue; decode: (j: __JsonValue, path: string) => Result<T, __BoundaryError> }): string {
@@ -85,7 +140,18 @@ export function encSet<T>(v: ReadonlySet<T>, __codec_T: { encode: (v: T) => __Js
 }
 
 export function decSet<T>(s: string, __codec_T: { encode: (v: T) => __JsonValue; decode: (j: __JsonValue, path: string) => Result<T, __BoundaryError> }): Result<ReadonlySet<T>, DecodeError> {
-  return ((__s: string): Result<ReadonlySet<T>, DecodeError> => { let __j: __JsonValue; try { __j = globalThis.JSON.parse(__s) as __JsonValue; } catch (__e) { return Err({ kind: "Malformed", path: "$", message: String(__e) }); } const __r = __bynkCodecSet(__codec_T).decode(__j, "$"); if (__r.tag === "Ok") return Ok(__r.value as ReadonlySet<T>); const __be = __r.error; return Err({ kind: __be.kind, path: (__be.kind === "StructuralMismatch" || __be.kind === "RefinementViolation") ? __be.path : "$", message: __be.kind === "StructuralMismatch" ? `expected ${__be.expected}, got ${String(__be.actual)}` : __be.kind === "RefinementViolation" ? __be.violation.message : __be.details }); })(s);
+  return ((__s: string): Result<ReadonlySet<T>, DecodeError> => {
+    let __j: __JsonValue;
+    try {
+      __j = globalThis.JSON.parse(__s) as __JsonValue;
+    } catch (__e) {
+      return Err({ kind: "Malformed", path: "$", message: String(__e) });
+    }
+    const __r = __bynkCodecSet(__codec_T).decode(__j, "$");
+    if (__r.tag === "Ok") return Ok(__r.value as ReadonlySet<T>);
+    const __be = __r.error;
+    return Err({ kind: __be.kind, path: (__be.kind === "StructuralMismatch" || __be.kind === "RefinementViolation") ? __be.path : "$", message: __be.kind === "StructuralMismatch" ? `expected ${__be.expected}, got ${String(__be.actual)}` : __be.kind === "RefinementViolation" ? __be.violation.message : __be.details });
+  })(s);
 }
 
 export function encMap<K, V>(v: ReadonlyMap<K, V>, __codec_K: { encode: (v: K) => __JsonValue; decode: (j: __JsonValue, path: string) => Result<K, __BoundaryError> }, __codec_V: { encode: (v: V) => __JsonValue; decode: (j: __JsonValue, path: string) => Result<V, __BoundaryError> }): string {
@@ -93,7 +159,18 @@ export function encMap<K, V>(v: ReadonlyMap<K, V>, __codec_K: { encode: (v: K) =
 }
 
 export function decMap<K, V>(s: string, __codec_K: { encode: (v: K) => __JsonValue; decode: (j: __JsonValue, path: string) => Result<K, __BoundaryError> }, __codec_V: { encode: (v: V) => __JsonValue; decode: (j: __JsonValue, path: string) => Result<V, __BoundaryError> }): Result<ReadonlyMap<K, V>, DecodeError> {
-  return ((__s: string): Result<ReadonlyMap<K, V>, DecodeError> => { let __j: __JsonValue; try { __j = globalThis.JSON.parse(__s) as __JsonValue; } catch (__e) { return Err({ kind: "Malformed", path: "$", message: String(__e) }); } const __r = __bynkCodecMap(__codec_K, __codec_V).decode(__j, "$"); if (__r.tag === "Ok") return Ok(__r.value as ReadonlyMap<K, V>); const __be = __r.error; return Err({ kind: __be.kind, path: (__be.kind === "StructuralMismatch" || __be.kind === "RefinementViolation") ? __be.path : "$", message: __be.kind === "StructuralMismatch" ? `expected ${__be.expected}, got ${String(__be.actual)}` : __be.kind === "RefinementViolation" ? __be.violation.message : __be.details }); })(s);
+  return ((__s: string): Result<ReadonlyMap<K, V>, DecodeError> => {
+    let __j: __JsonValue;
+    try {
+      __j = globalThis.JSON.parse(__s) as __JsonValue;
+    } catch (__e) {
+      return Err({ kind: "Malformed", path: "$", message: String(__e) });
+    }
+    const __r = __bynkCodecMap(__codec_K, __codec_V).decode(__j, "$");
+    if (__r.tag === "Ok") return Ok(__r.value as ReadonlyMap<K, V>);
+    const __be = __r.error;
+    return Err({ kind: __be.kind, path: (__be.kind === "StructuralMismatch" || __be.kind === "RefinementViolation") ? __be.path : "$", message: __be.kind === "StructuralMismatch" ? `expected ${__be.expected}, got ${String(__be.actual)}` : __be.kind === "RefinementViolation" ? __be.violation.message : __be.details });
+  })(s);
 }
 
 export function nested<T>(v: Option<readonly T[]>, __codec_T: { encode: (v: T) => __JsonValue; decode: (j: __JsonValue, path: string) => Result<T, __BoundaryError> }): string {
@@ -101,7 +178,18 @@ export function nested<T>(v: Option<readonly T[]>, __codec_T: { encode: (v: T) =
 }
 
 export function decNested<T>(s: string, __codec_T: { encode: (v: T) => __JsonValue; decode: (j: __JsonValue, path: string) => Result<T, __BoundaryError> }): Result<Option<readonly T[]>, DecodeError> {
-  return ((__s: string): Result<Option<readonly T[]>, DecodeError> => { let __j: __JsonValue; try { __j = globalThis.JSON.parse(__s) as __JsonValue; } catch (__e) { return Err({ kind: "Malformed", path: "$", message: String(__e) }); } const __r = __bynkCodecOption(__bynkCodecList(__codec_T)).decode(__j, "$"); if (__r.tag === "Ok") return Ok(__r.value as Option<readonly T[]>); const __be = __r.error; return Err({ kind: __be.kind, path: (__be.kind === "StructuralMismatch" || __be.kind === "RefinementViolation") ? __be.path : "$", message: __be.kind === "StructuralMismatch" ? `expected ${__be.expected}, got ${String(__be.actual)}` : __be.kind === "RefinementViolation" ? __be.violation.message : __be.details }); })(s);
+  return ((__s: string): Result<Option<readonly T[]>, DecodeError> => {
+    let __j: __JsonValue;
+    try {
+      __j = globalThis.JSON.parse(__s) as __JsonValue;
+    } catch (__e) {
+      return Err({ kind: "Malformed", path: "$", message: String(__e) });
+    }
+    const __r = __bynkCodecOption(__bynkCodecList(__codec_T)).decode(__j, "$");
+    if (__r.tag === "Ok") return Ok(__r.value as Option<readonly T[]>);
+    const __be = __r.error;
+    return Err({ kind: __be.kind, path: (__be.kind === "StructuralMismatch" || __be.kind === "RefinementViolation") ? __be.path : "$", message: __be.kind === "StructuralMismatch" ? `expected ${__be.expected}, got ${String(__be.actual)}` : __be.kind === "RefinementViolation" ? __be.violation.message : __be.details });
+  })(s);
 }
 
 export function ordered<T>(a: T, b: T, __cmp_T: (a: T, b: T) => number, __codec_T: { encode: (v: T) => __JsonValue; decode: (j: __JsonValue, path: string) => Result<T, __BoundaryError> }): string {

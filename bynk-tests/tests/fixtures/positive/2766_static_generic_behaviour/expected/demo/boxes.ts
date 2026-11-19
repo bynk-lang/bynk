@@ -81,7 +81,18 @@ export const Packed = {
     return { json: globalThis.JSON.stringify(__codec_T.encode(v)) };
   },
   unpack<T>(w: Packed<T>, __codec_T: { encode: (v: T) => __JsonValue; decode: (j: __JsonValue, path: string) => Result<T, __BoundaryError> }): Result<T, DecodeError> {
-    return ((__s: string): Result<T, DecodeError> => { let __j: __JsonValue; try { __j = globalThis.JSON.parse(__s) as __JsonValue; } catch (__e) { return Err({ kind: "Malformed", path: "$", message: String(__e) }); } const __r = __codec_T.decode(__j, "$"); if (__r.tag === "Ok") return Ok(__r.value as T); const __be = __r.error; return Err({ kind: __be.kind, path: (__be.kind === "StructuralMismatch" || __be.kind === "RefinementViolation") ? __be.path : "$", message: __be.kind === "StructuralMismatch" ? `expected ${__be.expected}, got ${String(__be.actual)}` : __be.kind === "RefinementViolation" ? __be.violation.message : __be.details }); })(w.json);
+    return ((__s: string): Result<T, DecodeError> => {
+      let __j: __JsonValue;
+      try {
+        __j = globalThis.JSON.parse(__s) as __JsonValue;
+      } catch (__e) {
+        return Err({ kind: "Malformed", path: "$", message: String(__e) });
+      }
+      const __r = __codec_T.decode(__j, "$");
+      if (__r.tag === "Ok") return Ok(__r.value as T);
+      const __be = __r.error;
+      return Err({ kind: __be.kind, path: (__be.kind === "StructuralMismatch" || __be.kind === "RefinementViolation") ? __be.path : "$", message: __be.kind === "StructuralMismatch" ? `expected ${__be.expected}, got ${String(__be.actual)}` : __be.kind === "RefinementViolation" ? __be.violation.message : __be.details });
+    })(w.json);
   },
 };
 

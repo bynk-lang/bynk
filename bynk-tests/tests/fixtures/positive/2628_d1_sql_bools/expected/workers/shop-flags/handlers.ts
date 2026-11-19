@@ -88,17 +88,37 @@ export const listing = {
       case "Ok": {
         const text = rows.value;
         return ((__d) => {
-    switch (__d.tag) {
-      case "Ok": {
-        const flags = __d.value;
-        return Ok(flags);
-      }
-      case "Err": {
-        return Err("rows did not decode");
-      }
-    }
-    throw new globalThis.Error("non-exhaustive match");
-  })(((__s: string): Result<readonly Flag[], DecodeError> => { let __j: __JsonValue; try { __j = globalThis.JSON.parse(__s) as __JsonValue; } catch (__e) { return Err({ kind: "Malformed", path: "$", message: String(__e) }); } const __flags = (__o: __JsonValue): void => { if (__o === null || typeof __o !== "object" || globalThis.Array.isArray(__o)) return; const __row = __o as { [k: string]: __JsonValue }; for (const __k of ["active", "seen"]) { if (__row[__k] === 0 || __row[__k] === 1) __row[__k] = __row[__k] === 1; } }; if (globalThis.Array.isArray(__j)) __j.forEach(__flags); else __flags(__j); const __r = __deserialise_List_Flag(__j, "$"); if (__r.tag === "Ok") return Ok(__r.value as readonly Flag[]); const __be = __r.error; return Err({ kind: __be.kind, path: (__be.kind === "StructuralMismatch" || __be.kind === "RefinementViolation") ? __be.path : "$", message: __be.kind === "StructuralMismatch" ? `expected ${__be.expected}, got ${String(__be.actual)}` : __be.kind === "RefinementViolation" ? __be.violation.message : __be.details }); })(text));
+          switch (__d.tag) {
+            case "Ok": {
+              const flags = __d.value;
+              return Ok(flags);
+            }
+            case "Err": {
+              return Err("rows did not decode");
+            }
+          }
+          throw new globalThis.Error("non-exhaustive match");
+        })(((__s: string): Result<readonly Flag[], DecodeError> => {
+          let __j: __JsonValue;
+          try {
+            __j = globalThis.JSON.parse(__s) as __JsonValue;
+          } catch (__e) {
+            return Err({ kind: "Malformed", path: "$", message: String(__e) });
+          }
+          const __flags = (__o: __JsonValue): void => {
+            if (__o === null || typeof __o !== "object" || globalThis.Array.isArray(__o)) return;
+            const __row = __o as { [k: string]: __JsonValue };
+            for (const __k of ["active", "seen"]) {
+              if (__row[__k] === 0 || __row[__k] === 1) __row[__k] = __row[__k] === 1;
+            }
+          };
+          if (globalThis.Array.isArray(__j)) __j.forEach(__flags);
+          else __flags(__j);
+          const __r = __deserialise_List_Flag(__j, "$");
+          if (__r.tag === "Ok") return Ok(__r.value as readonly Flag[]);
+          const __be = __r.error;
+          return Err({ kind: __be.kind, path: (__be.kind === "StructuralMismatch" || __be.kind === "RefinementViolation") ? __be.path : "$", message: __be.kind === "StructuralMismatch" ? `expected ${__be.expected}, got ${String(__be.actual)}` : __be.kind === "RefinementViolation" ? __be.violation.message : __be.details });
+        })(text));
       }
       case "Err": {
         return Err("query failed");
@@ -114,17 +134,37 @@ export const lookup = {
     if (row.tag === "Ok" && row.value.tag === "Some") {
       const text = row.value.value;
       return ((__d) => {
-    switch (__d.tag) {
-      case "Ok": {
-        const flag = __d.value;
-        return Some(flag);
-      }
-      case "Err": {
-        return None;
-      }
-    }
-    throw new globalThis.Error("non-exhaustive match");
-  })(((__s: string): Result<Flag, DecodeError> => { let __j: __JsonValue; try { __j = globalThis.JSON.parse(__s) as __JsonValue; } catch (__e) { return Err({ kind: "Malformed", path: "$", message: String(__e) }); } const __flags = (__o: __JsonValue): void => { if (__o === null || typeof __o !== "object" || globalThis.Array.isArray(__o)) return; const __row = __o as { [k: string]: __JsonValue }; for (const __k of ["active", "seen"]) { if (__row[__k] === 0 || __row[__k] === 1) __row[__k] = __row[__k] === 1; } }; if (globalThis.Array.isArray(__j)) __j.forEach(__flags); else __flags(__j); const __r = __deserialise_Flag(__j, "$"); if (__r.tag === "Ok") return Ok(__r.value as Flag); const __be = __r.error; return Err({ kind: __be.kind, path: (__be.kind === "StructuralMismatch" || __be.kind === "RefinementViolation") ? __be.path : "$", message: __be.kind === "StructuralMismatch" ? `expected ${__be.expected}, got ${String(__be.actual)}` : __be.kind === "RefinementViolation" ? __be.violation.message : __be.details }); })(text));
+        switch (__d.tag) {
+          case "Ok": {
+            const flag = __d.value;
+            return Some(flag);
+          }
+          case "Err": {
+            return None;
+          }
+        }
+        throw new globalThis.Error("non-exhaustive match");
+      })(((__s: string): Result<Flag, DecodeError> => {
+        let __j: __JsonValue;
+        try {
+          __j = globalThis.JSON.parse(__s) as __JsonValue;
+        } catch (__e) {
+          return Err({ kind: "Malformed", path: "$", message: String(__e) });
+        }
+        const __flags = (__o: __JsonValue): void => {
+          if (__o === null || typeof __o !== "object" || globalThis.Array.isArray(__o)) return;
+          const __row = __o as { [k: string]: __JsonValue };
+          for (const __k of ["active", "seen"]) {
+            if (__row[__k] === 0 || __row[__k] === 1) __row[__k] = __row[__k] === 1;
+          }
+        };
+        if (globalThis.Array.isArray(__j)) __j.forEach(__flags);
+        else __flags(__j);
+        const __r = __deserialise_Flag(__j, "$");
+        if (__r.tag === "Ok") return Ok(__r.value as Flag);
+        const __be = __r.error;
+        return Err({ kind: __be.kind, path: (__be.kind === "StructuralMismatch" || __be.kind === "RefinementViolation") ? __be.path : "$", message: __be.kind === "StructuralMismatch" ? `expected ${__be.expected}, got ${String(__be.actual)}` : __be.kind === "RefinementViolation" ? __be.violation.message : __be.details });
+      })(text));
     }
     return None;
   },
@@ -137,16 +177,36 @@ export const strange = {
     if (row.tag === "Ok" && row.value.tag === "Some") {
       const text = row.value.value;
       return ((__d) => {
-    switch (__d.tag) {
-      case "Ok": {
-        return true;
-      }
-      case "Err": {
-        return false;
-      }
-    }
-    throw new globalThis.Error("non-exhaustive match");
-  })(((__s: string): Result<Flag, DecodeError> => { let __j: __JsonValue; try { __j = globalThis.JSON.parse(__s) as __JsonValue; } catch (__e) { return Err({ kind: "Malformed", path: "$", message: String(__e) }); } const __flags = (__o: __JsonValue): void => { if (__o === null || typeof __o !== "object" || globalThis.Array.isArray(__o)) return; const __row = __o as { [k: string]: __JsonValue }; for (const __k of ["active", "seen"]) { if (__row[__k] === 0 || __row[__k] === 1) __row[__k] = __row[__k] === 1; } }; if (globalThis.Array.isArray(__j)) __j.forEach(__flags); else __flags(__j); const __r = __deserialise_Flag(__j, "$"); if (__r.tag === "Ok") return Ok(__r.value as Flag); const __be = __r.error; return Err({ kind: __be.kind, path: (__be.kind === "StructuralMismatch" || __be.kind === "RefinementViolation") ? __be.path : "$", message: __be.kind === "StructuralMismatch" ? `expected ${__be.expected}, got ${String(__be.actual)}` : __be.kind === "RefinementViolation" ? __be.violation.message : __be.details }); })(text));
+        switch (__d.tag) {
+          case "Ok": {
+            return true;
+          }
+          case "Err": {
+            return false;
+          }
+        }
+        throw new globalThis.Error("non-exhaustive match");
+      })(((__s: string): Result<Flag, DecodeError> => {
+        let __j: __JsonValue;
+        try {
+          __j = globalThis.JSON.parse(__s) as __JsonValue;
+        } catch (__e) {
+          return Err({ kind: "Malformed", path: "$", message: String(__e) });
+        }
+        const __flags = (__o: __JsonValue): void => {
+          if (__o === null || typeof __o !== "object" || globalThis.Array.isArray(__o)) return;
+          const __row = __o as { [k: string]: __JsonValue };
+          for (const __k of ["active", "seen"]) {
+            if (__row[__k] === 0 || __row[__k] === 1) __row[__k] = __row[__k] === 1;
+          }
+        };
+        if (globalThis.Array.isArray(__j)) __j.forEach(__flags);
+        else __flags(__j);
+        const __r = __deserialise_Flag(__j, "$");
+        if (__r.tag === "Ok") return Ok(__r.value as Flag);
+        const __be = __r.error;
+        return Err({ kind: __be.kind, path: (__be.kind === "StructuralMismatch" || __be.kind === "RefinementViolation") ? __be.path : "$", message: __be.kind === "StructuralMismatch" ? `expected ${__be.expected}, got ${String(__be.actual)}` : __be.kind === "RefinementViolation" ? __be.violation.message : __be.details });
+      })(text));
     }
     return false;
   },

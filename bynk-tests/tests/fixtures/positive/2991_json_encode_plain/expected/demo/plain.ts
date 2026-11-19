@@ -66,11 +66,29 @@ export function tagged(p: Pull): string {
 }
 
 export function plain(p: Pull): string {
-  return ((__pv = p): string => { const __g = globalThis as { __bynkPlainJson?: boolean }; const __was = __g.__bynkPlainJson; __g.__bynkPlainJson = true; try { return globalThis.JSON.stringify(__serialise_Pull(__pv)); } finally { __g.__bynkPlainJson = __was; } })();
+  return ((__pv = p): string => {
+    const __g = globalThis as { __bynkPlainJson?: boolean };
+    const __was = __g.__bynkPlainJson;
+    __g.__bynkPlainJson = true;
+    try {
+      return globalThis.JSON.stringify(__serialise_Pull(__pv));
+    } finally {
+      __g.__bynkPlainJson = __was;
+    }
+  })();
 }
 
 export function tagged_inside(x: Option<number>): string {
-  return ((__pv = { body: globalThis.JSON.stringify(__serialise_Option_Int(x)), note: None }): string => { const __g = globalThis as { __bynkPlainJson?: boolean }; const __was = __g.__bynkPlainJson; __g.__bynkPlainJson = true; try { return globalThis.JSON.stringify(__serialise_Env(__pv)); } finally { __g.__bynkPlainJson = __was; } })();
+  return ((__pv = { body: globalThis.JSON.stringify(__serialise_Option_Int(x)), note: None }): string => {
+    const __g = globalThis as { __bynkPlainJson?: boolean };
+    const __was = __g.__bynkPlainJson;
+    __g.__bynkPlainJson = true;
+    try {
+      return globalThis.JSON.stringify(__serialise_Env(__pv));
+    } finally {
+      __g.__bynkPlainJson = __was;
+    }
+  })();
 }
 
 export function build(): Env {

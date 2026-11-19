@@ -43,17 +43,28 @@ async function test_decodes_a_base_type() {
     const deps = {};
     const { double } = __ns_orders;
     void (((__d) => {
-        switch (__d.tag) {
-          case "Ok": {
-            const n = __d.value;
-            return __bynkExpect((double(n) === 84), "tests/orders.test.bynk:17:23", 925, 940, "expect double(n) == 84");
-          }
-          case "Err": {
-            return __bynkExpect((false), "tests/orders.test.bynk:18:24", 964, 969, "expect false");
-          }
+      switch (__d.tag) {
+        case "Ok": {
+          const n = __d.value;
+          return __bynkExpect((double(n) === 84), "tests/orders.test.bynk:17:23", 925, 940, "expect double(n) == 84");
         }
-        throw new globalThis.Error("non-exhaustive match");
-      })(((__s: string): Result<number, DecodeError> => { let __j: __JsonValue; try { __j = globalThis.JSON.parse(__s) as __JsonValue; } catch (__e) { return Err({ kind: "Malformed", path: "$", message: String(__e) }); } const __r = ((__v) => typeof __v !== "number" ? Err({ kind: "StructuralMismatch", path: "$", expected: "safe integer", actual: typeof __v } as __BoundaryError) : globalThis.Number.isSafeInteger(__v) ? Ok(__v) : Err({ kind: "StructuralMismatch", path: "$", expected: "safe integer", actual: String(__v) } as __BoundaryError))(__j); if (__r.tag === "Ok") return Ok(__r.value as number); const __be = __r.error; return Err({ kind: __be.kind, path: (__be.kind === "StructuralMismatch" || __be.kind === "RefinementViolation") ? __be.path : "$", message: __be.kind === "StructuralMismatch" ? `expected ${__be.expected}, got ${String(__be.actual)}` : __be.kind === "RefinementViolation" ? __be.violation.message : __be.details }); })("42")));
+        case "Err": {
+          return __bynkExpect((false), "tests/orders.test.bynk:18:24", 964, 969, "expect false");
+        }
+      }
+      throw new globalThis.Error("non-exhaustive match");
+    })(((__s: string): Result<number, DecodeError> => {
+      let __j: __JsonValue;
+      try {
+        __j = globalThis.JSON.parse(__s) as __JsonValue;
+      } catch (__e) {
+        return Err({ kind: "Malformed", path: "$", message: String(__e) });
+      }
+      const __r = ((__v) => typeof __v !== "number" ? Err({ kind: "StructuralMismatch", path: "$", expected: "safe integer", actual: typeof __v } as __BoundaryError) : globalThis.Number.isSafeInteger(__v) ? Ok(__v) : Err({ kind: "StructuralMismatch", path: "$", expected: "safe integer", actual: String(__v) } as __BoundaryError))(__j);
+      if (__r.tag === "Ok") return Ok(__r.value as number);
+      const __be = __r.error;
+      return Err({ kind: __be.kind, path: (__be.kind === "StructuralMismatch" || __be.kind === "RefinementViolation") ? __be.path : "$", message: __be.kind === "StructuralMismatch" ? `expected ${__be.expected}, got ${String(__be.actual)}` : __be.kind === "RefinementViolation" ? __be.violation.message : __be.details });
+    })("42")));
     return { pass: true };
   } catch (e) {
     if (e instanceof ExpectationError) {

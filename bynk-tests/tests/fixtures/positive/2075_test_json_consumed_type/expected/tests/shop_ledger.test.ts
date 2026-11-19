@@ -68,17 +68,28 @@ async function test_decodes_a_consumed_record_with_an_enum_field() {
     type Region = __ns_shop_order.Region;
     const order = (deps as any).surface?.order;
     void (((__d) => {
-        switch (__d.tag) {
-          case "Ok": {
-            const o = __d.value;
-            return __bynkExpect((__bynkEq(o.region, Region.International)), "tests/ledger.bynk:12:23", 624, 649, "expect o.region == International");
-          }
-          case "Err": {
-            return __bynkExpect((false), "tests/ledger.bynk:13:24", 673, 678, "expect false");
-          }
+      switch (__d.tag) {
+        case "Ok": {
+          const o = __d.value;
+          return __bynkExpect((__bynkEq(o.region, Region.International)), "tests/ledger.bynk:12:23", 624, 649, "expect o.region == International");
         }
-        throw new globalThis.Error("non-exhaustive match");
-      })(((__s: string): Result<__ns_shop_order.Order, DecodeError> => { let __j: __JsonValue; try { __j = globalThis.JSON.parse(__s) as __JsonValue; } catch (__e) { return Err({ kind: "Malformed", path: "$", message: String(__e) }); } const __r = __deserialise_Order(__j, "$"); if (__r.tag === "Ok") return Ok(__r.value as __ns_shop_order.Order); const __be = __r.error; return Err({ kind: __be.kind, path: (__be.kind === "StructuralMismatch" || __be.kind === "RefinementViolation") ? __be.path : "$", message: __be.kind === "StructuralMismatch" ? `expected ${__be.expected}, got ${String(__be.actual)}` : __be.kind === "RefinementViolation" ? __be.violation.message : __be.details }); })("{\"id\": \"o2\", \"region\": {\"kind\": \"International\"}}")));
+        case "Err": {
+          return __bynkExpect((false), "tests/ledger.bynk:13:24", 673, 678, "expect false");
+        }
+      }
+      throw new globalThis.Error("non-exhaustive match");
+    })(((__s: string): Result<__ns_shop_order.Order, DecodeError> => {
+      let __j: __JsonValue;
+      try {
+        __j = globalThis.JSON.parse(__s) as __JsonValue;
+      } catch (__e) {
+        return Err({ kind: "Malformed", path: "$", message: String(__e) });
+      }
+      const __r = __deserialise_Order(__j, "$");
+      if (__r.tag === "Ok") return Ok(__r.value as __ns_shop_order.Order);
+      const __be = __r.error;
+      return Err({ kind: __be.kind, path: (__be.kind === "StructuralMismatch" || __be.kind === "RefinementViolation") ? __be.path : "$", message: __be.kind === "StructuralMismatch" ? `expected ${__be.expected}, got ${String(__be.actual)}` : __be.kind === "RefinementViolation" ? __be.violation.message : __be.details });
+    })("{\"id\": \"o2\", \"region\": {\"kind\": \"International\"}}")));
     return { pass: true };
   } catch (e) {
     if (e instanceof ExpectationError) {
@@ -98,17 +109,28 @@ async function test_decodes_a_consumed_enum() {
     type Region = __ns_shop_order.Region;
     const order = (deps as any).surface?.order;
     void (((__d) => {
-        switch (__d.tag) {
-          case "Ok": {
-            const r = __d.value;
-            return __bynkExpect((__bynkEq(r, Region.Domestic)), "tests/ledger.bynk:19:23", 807, 820, "expect r == Domestic");
-          }
-          case "Err": {
-            return __bynkExpect((false), "tests/ledger.bynk:20:24", 844, 849, "expect false");
-          }
+      switch (__d.tag) {
+        case "Ok": {
+          const r = __d.value;
+          return __bynkExpect((__bynkEq(r, Region.Domestic)), "tests/ledger.bynk:19:23", 807, 820, "expect r == Domestic");
         }
-        throw new globalThis.Error("non-exhaustive match");
-      })(((__s: string): Result<__ns_shop_order.Region, DecodeError> => { let __j: __JsonValue; try { __j = globalThis.JSON.parse(__s) as __JsonValue; } catch (__e) { return Err({ kind: "Malformed", path: "$", message: String(__e) }); } const __r = __deserialise_Region(__j, "$"); if (__r.tag === "Ok") return Ok(__r.value as __ns_shop_order.Region); const __be = __r.error; return Err({ kind: __be.kind, path: (__be.kind === "StructuralMismatch" || __be.kind === "RefinementViolation") ? __be.path : "$", message: __be.kind === "StructuralMismatch" ? `expected ${__be.expected}, got ${String(__be.actual)}` : __be.kind === "RefinementViolation" ? __be.violation.message : __be.details }); })("{\"kind\": \"Domestic\"}")));
+        case "Err": {
+          return __bynkExpect((false), "tests/ledger.bynk:20:24", 844, 849, "expect false");
+        }
+      }
+      throw new globalThis.Error("non-exhaustive match");
+    })(((__s: string): Result<__ns_shop_order.Region, DecodeError> => {
+      let __j: __JsonValue;
+      try {
+        __j = globalThis.JSON.parse(__s) as __JsonValue;
+      } catch (__e) {
+        return Err({ kind: "Malformed", path: "$", message: String(__e) });
+      }
+      const __r = __deserialise_Region(__j, "$");
+      if (__r.tag === "Ok") return Ok(__r.value as __ns_shop_order.Region);
+      const __be = __r.error;
+      return Err({ kind: __be.kind, path: (__be.kind === "StructuralMismatch" || __be.kind === "RefinementViolation") ? __be.path : "$", message: __be.kind === "StructuralMismatch" ? `expected ${__be.expected}, got ${String(__be.actual)}` : __be.kind === "RefinementViolation" ? __be.violation.message : __be.details });
+    })("{\"kind\": \"Domestic\"}")));
     return { pass: true };
   } catch (e) {
     if (e instanceof ExpectationError) {

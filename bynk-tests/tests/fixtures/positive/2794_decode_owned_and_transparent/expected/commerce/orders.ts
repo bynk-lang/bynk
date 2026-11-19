@@ -13,7 +13,18 @@ export type Money = __CommonsMoney & { readonly __ctxBrand?: "commerce.orders" }
 
 export const placeOrder = {
   async call(total: Money, raw: string, deps: { surface: { payment: globalThis.ReturnType<typeof commerce_payment.__makeSurface> } }): globalThis.Promise<Result<number, number>> {
-    const m = ((__s: string): Result<Money, DecodeError> => { let __j: __JsonValue; try { __j = globalThis.JSON.parse(__s) as __JsonValue; } catch (__e) { return Err({ kind: "Malformed", path: "$", message: String(__e) }); } const __r = __deserialise_Money(__j, "$"); if (__r.tag === "Ok") return Ok(__r.value as Money); const __be = __r.error; return Err({ kind: __be.kind, path: (__be.kind === "StructuralMismatch" || __be.kind === "RefinementViolation") ? __be.path : "$", message: __be.kind === "StructuralMismatch" ? `expected ${__be.expected}, got ${String(__be.actual)}` : __be.kind === "RefinementViolation" ? __be.violation.message : __be.details }); })(raw);
+    const m = ((__s: string): Result<Money, DecodeError> => {
+      let __j: __JsonValue;
+      try {
+        __j = globalThis.JSON.parse(__s) as __JsonValue;
+      } catch (__e) {
+        return Err({ kind: "Malformed", path: "$", message: String(__e) });
+      }
+      const __r = __deserialise_Money(__j, "$");
+      if (__r.tag === "Ok") return Ok(__r.value as Money);
+      const __be = __r.error;
+      return Err({ kind: __be.kind, path: (__be.kind === "StructuralMismatch" || __be.kind === "RefinementViolation") ? __be.path : "$", message: __be.kind === "StructuralMismatch" ? `expected ${__be.expected}, got ${String(__be.actual)}` : __be.kind === "RefinementViolation" ? __be.violation.message : __be.details });
+    })(raw);
     const t = await deps.surface.payment.authorise((total as unknown as commerce_payment.Money));
     return Ok(0);
   },
