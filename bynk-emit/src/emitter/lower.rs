@@ -23,9 +23,8 @@ use bynk_model::{ConstVal, EventPatternIr, EventPatternValueIr, IrHttpMethod};
 use super::ctx::{BodyMode, ModuleCtx, TestShared};
 use super::lower_call::codec_statics::eval_value_line;
 use super::lower_call::platform::{
-    capability_call_type_args_ts, capability_wire, decode_capability_reply, encode_capability_args,
-    lower_capability_call, lower_cookie_field_call, lower_d1_peek_call, lower_d1_select_call,
-    lower_events_emit_call, lower_signed_cookie_call, scope_idempotency_key, tracked_claim_call,
+    lower_capability_call, lower_cookie_field_call, lower_cross_capability_call,
+    lower_d1_peek_call, lower_d1_select_call, lower_events_emit_call, lower_signed_cookie_call,
 };
 use super::lower_call::query::{
     QueryShape, QuerySource, held_values_source, lower_query_method, lower_stream_method,
@@ -2502,26 +2501,28 @@ fn lower_method_call(e: &Expr, cx: &mut LowerCtx) -> Lowered {
         return pre.finish_built(built);
     }
     // Capability, cross-context, events and static-type calls (#3167).
-    if let Some(s) = lower_d1_peek_call(e, cx) {
-        return pre.finish_built(Err(s));
+    if let Some(built) = lower_d1_peek_call(e, cx) {
+        return pre.finish_built(built);
     }
-    if let Some(s) = lower_d1_select_call(e, args, cx, &mut pre) {
-        return pre.finish_built(Err(s));
+    if let Some(built) = lower_d1_select_call(e, args, cx, &mut pre) {
+        return pre.finish_built(built);
     }
-    if let Some(s) = lower_cross_context_call(e, receiver, method, type_args, args, cx, &mut pre) {
-        return pre.finish_built(Err(s));
+    if let Some(built) =
+        lower_cross_context_call(e, receiver, method, type_args, args, cx, &mut pre)
+    {
+        return pre.finish_built(built);
     }
-    if let Some(s) = lower_events_emit_call(e, receiver, type_args, args, cx, &mut pre) {
-        return pre.finish_built(Err(s));
+    if let Some(built) = lower_events_emit_call(e, receiver, type_args, args, cx, &mut pre) {
+        return pre.finish_built(built);
     }
-    if let Some(s) = lower_signed_cookie_call(e, args, cx, &mut pre) {
-        return pre.finish_built(Err(s));
+    if let Some(built) = lower_signed_cookie_call(e, args, cx, &mut pre) {
+        return pre.finish_built(built);
     }
-    if let Some(s) = lower_cookie_field_call(e, args, cx, &mut pre) {
-        return pre.finish_built(Err(s));
+    if let Some(built) = lower_cookie_field_call(e, args, cx, &mut pre) {
+        return pre.finish_built(built);
     }
-    if let Some(s) = lower_capability_call(e, receiver, method, type_args, args, cx, &mut pre) {
-        return pre.finish_built(Err(s));
+    if let Some(built) = lower_capability_call(e, receiver, method, type_args, args, cx, &mut pre) {
+        return pre.finish_built(built);
     }
     if let Some(built) = lower_type_static_call(e, receiver, method, type_args, args, cx, &mut pre)
     {
@@ -2555,8 +2556,8 @@ fn lower_method_call(e: &Expr, cx: &mut LowerCtx) -> Lowered {
     pre.finish_built(built)
 }
 
-/// Lower a cross-context capability call (`B.Cap.op(…)`) or service call, or `None` when the call is not one. Moved out of
-/// `lower_method_call` (#3167) unchanged.
+/// Lower a cross-context capability call (`B.Cap.op(…)`) or service call, or `None` when the call is not one. The
+/// capability half is `lower_call/platform.rs`'s (1A.24); the service-call half is still text (1A.25).
 fn lower_cross_context_call(
     e: &Expr,
     receiver: &Expr,
@@ -2565,47 +2566,10 @@ fn lower_cross_context_call(
     args: &[Expr],
     cx: &mut LowerCtx,
     pre: &mut Pre,
-) -> Option<String> {
-    // v0.15 cross-context capability call: `B.Cap.op(args)` /
-    // `Alias.Cap.op(args)`. The provider is instantiated locally in
-    // the composition root, so this lowers to an in-process
-    // `<deps>.<Cap>.op(args)` exactly like a local capability call —
-    // the consumed-context prefix is resolved away.
-    if let Some(chain) = flatten_emit_ident_chain(receiver)
-        && let Some((consumed, cap)) = cx.cross_context().resolve_cross_capability(&chain)
+) -> Option<Built> {
+    if let Some(built) = lower_cross_capability_call(e, receiver, method, type_args, args, cx, pre)
     {
-        let mut args_lowered: Vec<String> = args.iter().map(|a| pre.lower(a, cx)).collect();
-        scope_idempotency_key(
-            cap == "Idempotency" && consumed == "bynk",
-            &method.name,
-            &mut args_lowered,
-            cx,
-        );
-        if cap == "Idempotency"
-            && consumed == "bynk"
-            && method.name == "claim"
-            && cx.tracks_claims()
-        {
-            let cap_expr = format!("{}.{}", cx.cap_deps_expr(), cap);
-            return Some(tracked_claim_call(&cap_expr, &args_lowered, cx));
-        }
-        let wire = capability_wire(e, cx);
-        encode_capability_args(wire.as_deref(), &mut args_lowered, cx);
-        let call = format!(
-            "{}.{}.{}{}({})",
-            cx.cap_deps_expr(),
-            cap,
-            method.name,
-            capability_call_type_args_ts(type_args, wire.as_deref()),
-            args_lowered.join(", ")
-        );
-        return Some(decode_capability_reply(
-            call,
-            wire.as_deref(),
-            &cap,
-            &method.name,
-            cx,
-        ));
+        return Some(built);
     }
     // v0.6 cross-context service call: receiver is an alias or the
     // dotted name of a consumed context. #1961: unless the checker resolved
@@ -2617,7 +2581,8 @@ fn lower_cross_context_call(
         && let Some(s) =
             pre.absorb_opt(lower_cross_context_service_call(receiver, method, args, cx))
     {
-        return Some(s);
+        // 1A: the service-call half is text until 1A.25.
+        return Some(Err(s));
     }
     None
 }
@@ -8128,6 +8093,7 @@ fn refined_check_as_bool(recv: &str, base: BaseType, refinement: Option<&Refinem
 mod idempotency_scoping_tests {
     use super::*;
     use crate::emitter::ctx::HandlerShared;
+    use crate::emitter::lower_call::platform::scope_idempotency_key;
     use bynk_check::checker::TypedCommons;
 
     // P6.38 (design/tracks/the-ir.md §6a): reads `TypedCommons::empty()`
@@ -8158,7 +8124,7 @@ mod idempotency_scoping_tests {
             ),
             BodyMode::Method,
         );
-        let mut args = vec!["orderId".to_string()];
+        let mut args = vec![LoweredExpr::Text("orderId".to_string())];
         scope_idempotency_key(true, "dedup", &mut args, &cx);
     }
 
@@ -8186,9 +8152,12 @@ mod idempotency_scoping_tests {
                 actor_sum_binder: None,
             },
         );
-        let mut args = vec!["orderId".to_string()];
+        let mut args = vec![LoweredExpr::Text("orderId".to_string())];
         scope_idempotency_key(true, "dedup", &mut args, &cx);
-        assert_eq!(args[0], "`shop.reserve.ordering.call::${orderId}`");
+        assert_eq!(
+            args[0].clone().into_text(),
+            "`shop.reserve.ordering.call::${orderId}`"
+        );
     }
 
     /// `claim` takes its key first, like `dedup` and `remember`, so it is
@@ -8214,10 +8183,13 @@ mod idempotency_scoping_tests {
                 actor_sum_binder: None,
             },
         );
-        let mut args = vec!["id".to_string(), "3600000".to_string()];
+        let mut args = vec![
+            LoweredExpr::Text("id".to_string()),
+            LoweredExpr::Text("3600000".to_string()),
+        ];
         scope_idempotency_key(true, "claim", &mut args, &cx);
-        assert_eq!(args[0], "`shop.hooks.api.POST::${id}`");
-        assert_eq!(args[1], "3600000");
+        assert_eq!(args[0].clone().into_text(), "`shop.hooks.api.POST::${id}`");
+        assert_eq!(args[1].clone().into_text(), "3600000");
     }
 
     /// A provider with no `__track` gets a scope that takes a claim for its
@@ -8247,9 +8219,9 @@ mod idempotency_scoping_tests {
             ),
             BodyMode::Method,
         );
-        let mut args = vec!["orderId".to_string()];
+        let mut args = vec![LoweredExpr::Text("orderId".to_string())];
         scope_idempotency_key(false, "dedup", &mut args, &cx);
-        assert_eq!(args[0], "orderId");
+        assert_eq!(args[0].clone().into_text(), "orderId");
     }
 }
 

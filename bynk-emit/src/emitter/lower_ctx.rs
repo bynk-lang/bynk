@@ -269,23 +269,27 @@ impl<'a> LowerCtx<'a> {
 
     /// `value` encoded with the codec of `ty`: the generated `__serialise_X` for a
     /// variable-free type, the witness (or a combinator over witnesses) otherwise.
-    /// `value` is already text, and so is the result: the capability-call family
-    /// that uses it is still text (1A: witness printed for a text caller).
-    pub(crate) fn encode_call(&self, ty: bynk_check::checker::TyId, value: &str) -> String {
+    pub(crate) fn encode_call(
+        &self,
+        ty: bynk_check::checker::TyId,
+        value: bynk_ts::TsExpr,
+    ) -> bynk_ts::TsExpr {
         let commons = self.commons();
         if !codec::has_var(ty, commons)
             && let Some(tref) = ty_to_type_ref(ty, commons.tys())
         {
-            return bynk_ts::print_expr(&serialisation::serialise_expr(
-                &tref,
-                &bynk_ts::TsExpr::Ident(value.to_string()),
-                self.runtime_use(),
-            ));
+            return serialisation::serialise_expr(&tref, &value, self.runtime_use());
         }
         // A capability call inside a generic function would reach here, but only
         // handlers hold `given` today, so no program does yet: the first one that
         // does needs a fixture for this branch.
-        format!("{}.encode({value})", bynk_ts::print_expr(&self.codec(ty)))
+        bynk_ts::TsExpr::Call {
+            callee: Box::new(bynk_ts::TsExpr::Member {
+                object: Box::new(self.codec(ty)),
+                property: "encode".to_string(),
+            }),
+            args: vec![value],
+        }
     }
 
     /// The codec witness for `ty`: the witness of a type parameter in scope, a
@@ -558,6 +562,39 @@ impl<'a> LowerCtx<'a> {
             escape_ts_string(target),
             escape_ts_string(&path),
         )
+    }
+
+    /// [`Self::trace_step`] over a call node (1A.24, #3725, Decision C): the same wrapper, built
+    /// as `__traceStep("kind", "target", { file, line, col })(call)`. A deploy build returns
+    /// `call` unchanged. The string form stays for the callers that are still text.
+    pub(crate) fn trace_step_node(
+        &self,
+        kind: &str,
+        target: &str,
+        offset: usize,
+        call: bynk_ts::TsExpr,
+    ) -> bynk_ts::TsExpr {
+        let Some(loc) = self.module.trace.as_ref() else {
+            return call;
+        };
+        self.runtime_use().note_trace_step();
+        let (line, col) = bynk_syntax::span::line_col(&loc.source, offset);
+        let path = loc.rel_path.replace('\\', "/");
+        let lit = |s: &str| bynk_ts::TsExpr::Lit(bynk_ts::TsLit::Str(s.to_string()));
+        let num = |n: usize| bynk_ts::TsExpr::Lit(bynk_ts::TsLit::Num(n.to_string()));
+        let site = bynk_ts::TsExpr::object(vec![
+            ("file".to_string(), lit(&path)),
+            ("line".to_string(), num(line)),
+            ("col".to_string(), num(col)),
+        ]);
+        let step = bynk_ts::TsExpr::Call {
+            callee: Box::new(bynk_ts::TsExpr::Ident("__traceStep".to_string())),
+            args: vec![lit(kind), lit(target), site],
+        };
+        bynk_ts::TsExpr::Call {
+            callee: Box::new(step),
+            args: vec![call],
+        }
     }
 
     /// #3580: in a traced build, `binding` wrapped so the request it makes to its
