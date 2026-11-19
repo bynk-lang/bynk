@@ -910,6 +910,13 @@ impl Walk {
                     self.expr(a);
                 }
             }
+            // 1A.20: the names the type arguments mention are uses, as for `As`.
+            TsExpr::TypeApp { callee, type_args } => {
+                self.expr(callee);
+                for t in type_args {
+                    self.ty(t);
+                }
+            }
             TsExpr::Object { entries, .. } => {
                 for e in entries {
                     match e {
@@ -1365,6 +1372,29 @@ mod tests {
         ]);
         assert_eq!(type_only_value_uses(&p), ["Status"]);
         assert!(unbound_names(&p).is_empty());
+    }
+
+    /// 1A.20: a name that only a `TypeApp`'s type argument mentions is a use, so
+    /// an import it needs is not reported as missing or dropped.
+    #[test]
+    fn a_type_application_argument_is_a_name_use() {
+        let p = program(vec![
+            import(&["type Batch"]),
+            TsStmt::let_stmt(
+                TsBindingName::Ident("a".to_string()),
+                None,
+                Some(TsExpr::Call {
+                    callee: Box::new(TsExpr::TypeApp {
+                        callee: Box::new(TsExpr::Ident("f".to_string())),
+                        type_args: vec![TsType::named("Batch")],
+                    }),
+                    args: vec![],
+                }),
+                None,
+            ),
+        ]);
+        assert_eq!(unbound_names(&p), ["f"]);
+        assert!(type_only_value_uses(&p).is_empty());
     }
 
     #[test]
