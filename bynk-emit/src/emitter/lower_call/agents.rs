@@ -4,8 +4,9 @@
 
 use bynk_check::checker::Callee;
 
-use super::super::lower::Pre;
+use super::super::lower::{Built, LoweredExpr, Pre, node_or_text, str_node};
 use super::super::lower_ctx::LowerCtx;
+use super::super::lower_list::{call, id, member};
 use super::super::*;
 
 /// Lower an inline agent invocation, `Agent(<key>).method(args)`, or `None` when the call is not one. Moved out of
@@ -17,7 +18,7 @@ pub(in crate::emitter) fn lower_inline_agent_call(
     args: &[Expr],
     cx: &mut LowerCtx,
     pre: &mut Pre,
-) -> Option<String> {
+) -> Option<Built> {
     // v0.9.2: inline agent invocation. Source form is
     // `Agent(<key>).method(args)`; receiver parses as
     // `Call(Agent, [<key>])`. Lower to
@@ -53,32 +54,36 @@ pub(in crate::emitter) fn lower_inline_agent_call(
         // upgrade by the same value, so it still is.
         if cx.ws_self_agent() == Some(name.name.as_str()) {
             cx.record_agent_call(&name.name, &method.name);
-            let args_lowered: Vec<String> = args.iter().map(|a| pre.lower(a, cx)).collect();
-            let mut all = args_lowered;
-            all.push("deps".to_string());
-            return Some(format!(
-                "this.{method}({args})",
-                method = method.name,
-                args = all.join(", ")
+            let mut children: Vec<LoweredExpr> =
+                args.iter().map(|a| pre.lower_node(a, cx)).collect();
+            children.push(LoweredExpr::Node(id("deps")));
+            return Some(node_or_text(
+                children,
+                |nodes| call(member(id("this"), &method.name), nodes),
+                |texts| format!("this.{}({})", method.name, texts.join(", ")),
             ));
         }
         cx.record_agent_call(&name.name, &method.name);
-        let key_arg = ctor_args
+        // The key is lowered first, so its hoisted statements precede the call.
+        let key = ctor_args
             .first()
-            .map(|a| pre.lower(a, cx))
-            .unwrap_or_else(|| "\"default\"".to_string());
-        let instance = cx.agent_construct(&name.name, &key_arg);
-        let args_lowered: Vec<String> = args.iter().map(|a| pre.lower(a, cx)).collect();
-        let mut all = args_lowered;
+            .map(|a| pre.lower_node(a, cx))
+            .unwrap_or_else(|| LoweredExpr::Node(str_node("default")));
+        let instance = cx.agent_construct_node(&name.name, key);
+        let mut children: Vec<LoweredExpr> = vec![instance.into()];
+        children.extend(args.iter().map(|a| pre.lower_node(a, cx)));
         // #2355: `this.deps` in a provider body.
-        all.push(cx.cap_deps_expr().to_string());
-        let call = format!(
-            "{instance}.{method}({args})",
-            method = method.name,
-            args = all.join(", ")
+        children.push(LoweredExpr::Node(cx.cap_deps_node()));
+        let built = node_or_text(
+            children,
+            |mut nodes| {
+                let instance = nodes.remove(0);
+                call(member(instance, &method.name), nodes)
+            },
+            |texts| format!("{}.{}({})", texts[0], method.name, texts[1..].join(", ")),
         );
         let target = format!("{}.{}", name.name, method.name);
-        return Some(cx.trace_step("agent", &target, e.span.start, call));
+        return Some(trace_built(cx, &target, e.span.start, built));
     }
     None
 }
@@ -92,7 +97,7 @@ pub(in crate::emitter) fn lower_let_bound_agent_call(
     args: &[Expr],
     cx: &mut LowerCtx,
     pre: &mut Pre,
-) -> Option<String> {
+) -> Option<Built> {
     // Let-bound agent invocation. `let x = Agent(key); x.method(args)`
     // — the statement emitter recorded `x` as an agent variable when
     // it lowered the let. Method calls on `x` go straight to the
@@ -105,27 +110,58 @@ pub(in crate::emitter) fn lower_let_bound_agent_call(
     // `record_agent_call`'s own bookkeeping and the #908 rename-resolution
     // below), a different question from "is this receiver really an agent
     // instance at all," which `Callee` now settles.
-    if let ExprKind::Ident(id) = &receiver.kind
+    if let ExprKind::Ident(id_) = &receiver.kind
         && matches!(cx.commons().callee(e.id), Some(Callee::Agent { .. }))
     {
-        if let Some(agent) = cx.local_agent_vars.get(&id.name).cloned() {
+        if let Some(agent) = cx.local_agent_vars.get(&id_.name).cloned() {
             cx.record_agent_call(&agent, &method.name);
         }
-        let args_lowered: Vec<String> = args.iter().map(|a| pre.lower(a, cx)).collect();
-        let mut all = args_lowered;
-        all.push(cx.cap_deps_expr().to_string());
+        let mut children: Vec<LoweredExpr> = args.iter().map(|a| pre.lower_node(a, cx)).collect();
+        children.push(LoweredExpr::Node(cx.cap_deps_node()));
         // #908: `local_agent_vars` is keyed by the bynk source name, which a
         // re-`let` may have renamed — resolve to the actual JS binding rather
         // than assuming the source name is still it.
         let recv = cx
-            .resolved_local_name(&id.name)
-            .unwrap_or_else(|| id.name.clone());
-        let call = format!("{}.{}({})", recv, method.name, all.join(", "));
-        let target = match cx.local_agent_vars.get(&id.name) {
+            .resolved_local_name(&id_.name)
+            .unwrap_or_else(|| id_.name.clone());
+        let built = node_or_text(
+            children,
+            |nodes| call(member(id(&recv), &method.name), nodes),
+            |texts| format!("{}.{}({})", recv, method.name, texts.join(", ")),
+        );
+        let target = match cx.local_agent_vars.get(&id_.name) {
             Some(agent) => format!("{agent}.{}", method.name),
             None => method.name.clone(),
         };
-        return Some(cx.trace_step("agent", &target, e.span.start, call));
+        return Some(trace_built(cx, &target, e.span.start, built));
     }
     None
+}
+
+/// The trace wrapper over a built agent call (1A.24's `trace_step_node` when it is a node, the
+/// string wrapper when an argument is still text).
+fn trace_built(cx: &LowerCtx, target: &str, offset: usize, built: Built) -> Built {
+    match built {
+        Ok(node) => Ok(cx.trace_step_node("agent", target, offset, node)),
+        Err(text) => Err(cx.trace_step("agent", target, offset, text)),
+    }
+}
+
+/// `AgentName(key)` (the `Callee::AgentInit` branch of `lower_call`): the factory call over
+/// the first lowered argument. Panics (ADR 0334) when there is none.
+pub(in crate::emitter) fn lower_agent_init(
+    name: &Ident,
+    args_lowered: Vec<LoweredExpr>,
+    cx: &mut LowerCtx,
+) -> Built {
+    let arg_count = args_lowered.len();
+    let key = args_lowered.into_iter().next().unwrap_or_else(|| {
+        panic!(
+            "bynk internal error (ADR 0334): Callee::AgentInit records agent \
+             construction `{}(...)` with {arg_count} args, but every AgentDecl \
+             declares exactly one key field — the checker already accepted this call",
+            name.name,
+        )
+    });
+    cx.agent_construct_node(&name.name, key)
 }

@@ -21,7 +21,9 @@ use bynk_model::is_effectful_return;
 use bynk_model::{ConstVal, EventPatternIr, EventPatternValueIr};
 
 use super::ctx::{BodyMode, ModuleCtx, TestShared};
-use super::lower_call::agents::{lower_inline_agent_call, lower_let_bound_agent_call};
+use super::lower_call::agents::{
+    lower_agent_init, lower_inline_agent_call, lower_let_bound_agent_call,
+};
 use super::lower_call::codec_statics::eval_value_line;
 use super::lower_call::cross_context::lower_cross_context_service_call;
 use super::lower_call::platform::{
@@ -2558,11 +2560,11 @@ fn lower_method_call(e: &Expr, cx: &mut LowerCtx) -> Lowered {
     if let Some(built) = lower_test_service_call(e, receiver, method, args, cx, &mut pre) {
         return pre.finish_built(built);
     }
-    if let Some(s) = lower_inline_agent_call(e, receiver, method, args, cx, &mut pre) {
-        return pre.finish_built(Err(s));
+    if let Some(built) = lower_inline_agent_call(e, receiver, method, args, cx, &mut pre) {
+        return pre.finish_built(built);
     }
-    if let Some(s) = lower_let_bound_agent_call(e, receiver, method, args, cx, &mut pre) {
-        return pre.finish_built(Err(s));
+    if let Some(built) = lower_let_bound_agent_call(e, receiver, method, args, cx, &mut pre) {
+        return pre.finish_built(built);
     }
     // v0.20b: built-in kernel methods, resolved by the checker (#3164).
     if let Some(built) = lower_kernel_method_call(e, receiver, method, args, cx, &mut pre) {
@@ -4975,22 +4977,7 @@ fn lower_call(e: &Expr, name: &Ident, args: &[Expr], cx: &mut LowerCtx) -> Lower
     // the same defect class `block_writes_state`'s receiver-name matching
     // carried before #1196 converted it to read `Callee::Store` directly.
     if matches!(cx.commons().callee(e.id), Some(Callee::AgentInit(_))) {
-        // 1A: `agent_construct` builds text over `cx` state, so the key is
-        // printed here.
-        let arg_count = args_lowered.len();
-        let key_expr = args_lowered
-            .into_iter()
-            .next()
-            .map(LoweredExpr::into_text)
-            .unwrap_or_else(|| {
-                panic!(
-                    "bynk internal error (ADR 0334): Callee::AgentInit records agent \
-                     construction `{}(...)` with {arg_count} args, but every AgentDecl \
-                     declares exactly one key field — the checker already accepted this call",
-                    name.name,
-                )
-            });
-        return pre.finish_text(cx.agent_construct(&name.name, &key_expr));
+        return pre.finish_built(lower_agent_init(name, args_lowered, cx));
     }
     // P6.21: sum-variant construction is `Callee::Ctor` — reads the sum
     // type's own name and the variant's own tag straight off the checker's
