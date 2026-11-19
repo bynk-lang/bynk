@@ -75,8 +75,8 @@ fn observation_sugar_and_trace_agree_at_runtime() {
         "expected the observation case to be reported, got:\n{report}"
     );
     assert!(
-        report.contains("1 passed, 0 failed"),
-        "expected the observation case to pass, got:\n{report}"
+        report.contains("2 passed, 0 failed"),
+        "expected both observation cases to pass, got:\n{report}"
     );
     assert!(
         out.status.success(),

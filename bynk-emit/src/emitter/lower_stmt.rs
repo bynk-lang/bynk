@@ -16,8 +16,8 @@ use bynk_syntax::span::Span;
 use super::ctx::TailSlot;
 use super::lower::{
     CLAIM_SCOPE_DECLARATION, Lowered, LoweredExpr, LoweredStmt, PatPath, Pre, and_join,
-    emit_pattern_bindings, expect_location_raw, expect_source_text_raw, literal_label_node,
-    member_node, num_lit, pattern_tests, str_node, ternary_built,
+    build_value_bin_op, emit_pattern_bindings, expect_location_raw, expect_source_text_raw,
+    literal_label_node, member_node, num_lit, pattern_tests, str_node, ternary_built,
 };
 use super::lower_ctx::LowerCtx;
 use super::ts_types::{ts_ty, ts_type_ref, ts_type_ref_to_ts_type};
@@ -1242,15 +1242,25 @@ fn statement(body: &mut Body, stmt: &Statement, cx: &mut LowerCtx) {
             let location = expect_location_raw(cx, span_start);
             let src = expect_source_text_raw(cx, a.value.span);
             let mut pre = Pre::new();
-            let cond = pre.lower_node(&a.value, cx);
-            // Structural expected-vs-actual for a top-level comparison. The
-            // predicate is pure (ADR 0144), so re-evaluating the operands for the
-            // failure message is observationally identical to the condition.
-            let detail = if let ExprKind::BinOp(op, l, r) = &a.value.kind
+            // Structural expected-vs-actual for a top-level comparison. Each
+            // operand is lowered once and both the condition and the failure
+            // detail read it. When an operand hoists statements (a `?` guard),
+            // both operands are bound to temporaries after the hoists, so
+            // nothing in the operand runs twice: lowering the operands a second
+            // time for the detail would hoist a second copy, which runs before
+            // the `if` on every `expect`, pass or fail (#3768).
+            let (cond, detail) = if let ExprKind::BinOp(op, l, r) = &a.value.kind
                 && let Some(sym) = comparison_op_symbol(*op)
             {
-                let lv = pre.lower_node(l, cx);
-                let rv = pre.lower_node(r, cx);
+                let before = pre.len();
+                let mut lv = pre.lower_node(l, cx);
+                let mut rv = pre.lower_node(r, cx);
+                if pre.len() != before {
+                    lv = pre.bind_temp(lv, cx);
+                    rv = pre.bind_temp(rv, cx);
+                }
+                let cond =
+                    LoweredExpr::from(build_value_bin_op(*op, l, vec![lv.clone(), rv.clone()], cx));
                 // #2622: an operand that holds a `Decimal` prints through the
                 // decimal-aware show, since `JSON.stringify` throws on a `bigint`.
                 let decimal = cx
@@ -1264,18 +1274,27 @@ fn statement(body: &mut Body, stmt: &Statement, cx: &mut LowerCtx) {
                 } else {
                     "__bynkShow"
                 };
-                ExpectDetail::Compare {
-                    show,
-                    sym,
-                    operands: Box::new((lv, rv)),
-                }
+                (
+                    cond,
+                    ExpectDetail::Compare {
+                        show,
+                        sym,
+                        operands: Box::new((lv, rv)),
+                    },
+                )
             } else if matches!(a.value.kind, ExprKind::Faults(_)) {
                 // #1706: the claim's only failure is a call that returned.
-                ExpectDetail::Message(format!(
-                    "expect {src}\n  the call returned without faulting"
-                ))
+                (
+                    pre.lower_node(&a.value, cx),
+                    ExpectDetail::Message(format!(
+                        "expect {src}\n  the call returned without faulting"
+                    )),
+                )
             } else {
-                ExpectDetail::Message(format!("expect {src}"))
+                (
+                    pre.lower_node(&a.value, cx),
+                    ExpectDetail::Message(format!("expect {src}")),
+                )
             };
             let pre_nodes = pre.all_nodes();
             body.extend(pre.items());
