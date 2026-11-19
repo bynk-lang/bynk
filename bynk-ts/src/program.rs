@@ -172,9 +172,15 @@ fn walk_stmt<'a>(stmt: &'a TsStmt, out: &mut Vec<(VerbatimOrigin, &'a str)>) {
             try_block,
             catch_param: _,
             catch_block,
+            finally_block,
         } => {
             walk_stmt(try_block, out);
-            walk_stmt(catch_block, out);
+            if let Some(c) = catch_block {
+                walk_stmt(c, out);
+            }
+            if let Some(f) = finally_block {
+                walk_stmt(f, out);
+            }
         }
         TsStmtKind::Block(stmts) | TsStmtKind::InlineBlock(stmts) => {
             for s in stmts {
@@ -564,10 +570,17 @@ pub(crate) enum TsStmtKind {
     /// `workers.rs`'s `emit_http_sum_wrapper` reads the raw request body in
     /// a `try`/`catch` that never uses the caught error (`} catch {`, no
     /// `(e)` at all).
+    ///
+    /// 1A.21 (#3722, Decision C): `catch_block` is optional and a `finally_block` joins
+    /// it, so `try { … } finally { … }` (no `catch`) and `try { … } catch (e) { … }
+    /// finally { … }` are expressible. At least one of the two must be present (a bare
+    /// `try` is a syntax error); the printer asserts it. `catch_param` is meaningful only
+    /// with a `catch_block`.
     TryCatch {
         try_block: Box<TsStmt>,
         catch_param: Option<String>,
-        catch_block: Box<TsStmt>,
+        catch_block: Option<Box<TsStmt>>,
+        finally_block: Option<Box<TsStmt>>,
     },
     /// `{ <stmts> }` — the body container for `If`/`ForOf`/`TryCatch`/
     /// constructor and method bodies.
@@ -1085,7 +1098,47 @@ impl TsStmt {
             kind: TsStmtKind::TryCatch {
                 try_block: Box::new(try_block),
                 catch_param: catch_param.map(Into::into),
-                catch_block: Box::new(catch_block),
+                catch_block: Some(Box::new(catch_block)),
+                finally_block: None,
+            },
+            span,
+            nested_map: None,
+            no_blank_before: false,
+            nested_map_source_id: 0,
+        }
+    }
+
+    /// `try <try_block> finally <finally_block>`, with no `catch` (1A.21, #3722).
+    pub fn try_finally(try_block: TsStmt, finally_block: TsStmt, span: Option<Span>) -> Self {
+        Self {
+            kind: TsStmtKind::TryCatch {
+                try_block: Box::new(try_block),
+                catch_param: None,
+                catch_block: None,
+                finally_block: Some(Box::new(finally_block)),
+            },
+            span,
+            nested_map: None,
+            no_blank_before: false,
+            nested_map_source_id: 0,
+        }
+    }
+
+    /// `try <try_block> catch (<catch_param>) <catch_block> finally <finally_block>`
+    /// (1A.21, #3722).
+    pub fn try_catch_finally(
+        try_block: TsStmt,
+        catch_param: Option<impl Into<String>>,
+        catch_block: TsStmt,
+        finally_block: TsStmt,
+        span: Option<Span>,
+    ) -> Self {
+        Self {
+            kind: TsStmtKind::TryCatch {
+                try_block: Box::new(try_block),
+                catch_param: catch_param.map(Into::into),
+                catch_block: Some(Box::new(catch_block)),
+                finally_block: Some(Box::new(finally_block)),
             },
             span,
             nested_map: None,

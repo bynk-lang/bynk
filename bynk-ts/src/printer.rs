@@ -638,17 +638,28 @@ fn render_stmt_kind(
             try_block,
             catch_param,
             catch_block,
+            finally_block,
         } => {
+            debug_assert!(
+                catch_block.is_some() || finally_block.is_some(),
+                "TsStmtKind::TryCatch needs a `catch` or a `finally`; a bare `try` is a syntax error"
+            );
             out.push_str(&indent(depth));
             out.push_str("try");
             render_block_body(out, try_block, depth, map.as_mut().map(|t| t.reborrow()));
-            out.push_str(" catch");
-            if let Some(p) = catch_param {
-                out.push_str(" (");
-                out.push_str(p);
-                out.push(')');
+            if let Some(catch_block) = catch_block {
+                out.push_str(" catch");
+                if let Some(p) = catch_param {
+                    out.push_str(" (");
+                    out.push_str(p);
+                    out.push(')');
+                }
+                render_block_body(out, catch_block, depth, map.as_mut().map(|t| t.reborrow()));
             }
-            render_block_body(out, catch_block, depth, map.as_mut().map(|t| t.reborrow()));
+            if let Some(finally_block) = finally_block {
+                out.push_str(" finally");
+                render_block_body(out, finally_block, depth, map.as_mut().map(|t| t.reborrow()));
+            }
             out.push('\n');
         }
         TsStmtKind::Block(stmts) => {
@@ -2445,8 +2456,13 @@ fn stmt_contains_raw(stmt: &TsStmt) -> bool {
         TsStmtKind::TryCatch {
             try_block,
             catch_block,
+            finally_block,
             ..
-        } => stmt_contains_raw(try_block) || stmt_contains_raw(catch_block),
+        } => {
+            stmt_contains_raw(try_block)
+                || catch_block.as_deref().is_some_and(stmt_contains_raw)
+                || finally_block.as_deref().is_some_and(stmt_contains_raw)
+        }
         TsStmtKind::Block(stmts) | TsStmtKind::InlineBlock(stmts) => contains_raw(stmts),
         TsStmtKind::Switch { cases, .. } => cases.iter().any(|c| contains_raw(&c.body)),
     }
@@ -5958,6 +5974,85 @@ mod tests {
             printed.text,
             "try {\n  work;\n} catch (e) {\n  console.error(e); msg.retry();\n}\n"
         );
+    }
+
+    /// `TsStmtKind::TryCatch` with an optional `catch` and a `finally` (1A.21, #3722,
+    /// Decision C; reused by 1A.32): `try`/`catch`, `try`/`finally` and
+    /// `try`/`catch`/`finally`, with and without a catch binding.
+    #[test]
+    fn a_try_prints_catch_finally_or_both() {
+        let work = || {
+            TsStmt::block(
+                vec![TsStmt::expr_stmt(TsExpr::Ident("work".to_string()), None)],
+                None,
+            )
+        };
+        let handle = || {
+            TsStmt::block(
+                vec![TsStmt::expr_stmt(TsExpr::Ident("handle".to_string()), None)],
+                None,
+            )
+        };
+        let tidy = || {
+            TsStmt::block(
+                vec![TsStmt::expr_stmt(TsExpr::Ident("tidy".to_string()), None)],
+                None,
+            )
+        };
+        let text = |stmt: TsStmt| {
+            let mut program = TsProgram::new();
+            program.push(stmt);
+            print(&program, "x.bynk", "", "x.ts").text
+        };
+        assert_eq!(
+            text(TsStmt::try_catch(work(), Some("e"), handle(), None)),
+            "try {\n  work;\n} catch (e) {\n  handle;\n}\n"
+        );
+        assert_eq!(
+            text(TsStmt::try_finally(work(), tidy(), None)),
+            "try {\n  work;\n} finally {\n  tidy;\n}\n"
+        );
+        assert_eq!(
+            text(TsStmt::try_catch_finally(
+                work(),
+                Some("e"),
+                handle(),
+                tidy(),
+                None
+            )),
+            "try {\n  work;\n} catch (e) {\n  handle;\n} finally {\n  tidy;\n}\n"
+        );
+        assert_eq!(
+            text(TsStmt::try_catch_finally(
+                work(),
+                None::<String>,
+                handle(),
+                tidy(),
+                None
+            )),
+            "try {\n  work;\n} catch {\n  handle;\n} finally {\n  tidy;\n}\n"
+        );
+    }
+
+    /// A `try` with neither a `catch` nor a `finally` is a syntax error, so the printer
+    /// refuses it.
+    #[test]
+    #[should_panic(expected = "needs a `catch` or a `finally`")]
+    fn a_bare_try_is_refused() {
+        let mut program = TsProgram::new();
+        program.push(TsStmt {
+            kind: TsStmtKind::TryCatch {
+                try_block: Box::new(TsStmt::block(vec![], None)),
+                catch_param: None,
+                catch_block: None,
+                finally_block: None,
+            },
+            span: None,
+            nested_map: None,
+            no_blank_before: false,
+            nested_map_source_id: 0,
+        });
+        let _ = print(&program, "x.bynk", "", "x.ts");
     }
 
     /// #1323's own real gap: `TsBinaryOp::GreaterThan` — the request-body

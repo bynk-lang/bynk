@@ -738,12 +738,18 @@ impl Walk {
                 try_block,
                 catch_param,
                 catch_block,
+                finally_block,
             } => {
                 if let Some(p) = catch_param {
                     self.bind(p);
                 }
                 self.stmt(try_block);
-                self.stmt(catch_block);
+                if let Some(c) = catch_block {
+                    self.stmt(c);
+                }
+                if let Some(f) = finally_block {
+                    self.stmt(f);
+                }
             }
             TsStmtKind::Block(stmts) | TsStmtKind::InlineBlock(stmts) => self.stmts(stmts),
             TsStmtKind::Assign { target, value } => {
