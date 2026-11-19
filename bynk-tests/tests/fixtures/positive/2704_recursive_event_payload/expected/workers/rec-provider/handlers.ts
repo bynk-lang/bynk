@@ -29,7 +29,9 @@ export const gardener = {
   async call(t: Tree, deps: { __eventsDispatch: (events: globalThis.Array<{ type: string; payload: unknown; envelope: { eventId: string; publisherId: string; emittedAt: number; schemaVersion: number } }>) => globalThis.Promise<void> }): globalThis.Promise<void> {
     const __events: globalThis.Array<{ type: string; payload: unknown; envelope: { eventId: string; publisherId: string; emittedAt: number; schemaVersion: number } }> = [];
     const __result = await (async () => {
-    const __r0 = await (async () => { __events.push({ type: "Planted", payload: { tree: t }, envelope: { eventId: globalThis.crypto.randomUUID(), publisherId: "rec.provider", emittedAt: globalThis.Date.now(), schemaVersion: 1 } }); })();
+    const __r0 = await (async () => {
+      __events.push({ type: "Planted", payload: { tree: t }, envelope: { eventId: globalThis.crypto.randomUUID(), publisherId: "rec.provider", emittedAt: globalThis.Date.now(), schemaVersion: 1 } });
+    })();
     return undefined;
     })();
     if (__events.length > 0) {

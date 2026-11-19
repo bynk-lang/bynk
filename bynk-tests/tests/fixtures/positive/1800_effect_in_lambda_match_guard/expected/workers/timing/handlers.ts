@@ -10,22 +10,22 @@ import * as bynk from "../../bynk.js";
 export const stamp = {
   async call(n: number, deps: { Clock: bynk.Clock }): globalThis.Promise<number> {
     const f = async (m: number) => {
-    const __r0 = Some(m);
-    if (__r0.tag === "Some") {
-      const x = __r0.value;
-      if (await (async () => {
-    if (x > 0) {
-      const __r1 = await deps.Clock.now();
-      return true;
-    } else {
-      return false;
-    }
-  })()) {
-        return x;
+      const __r0 = Some(m);
+      if (__r0.tag === "Some") {
+        const x = __r0.value;
+        if (await (async () => {
+          if (x > 0) {
+            const __r1 = await deps.Clock.now();
+            return true;
+          } else {
+            return false;
+          }
+        })()) {
+          return x;
+        }
       }
-    }
-    return 0;
-  };
+      return 0;
+    };
     return f(n);
   },
 };

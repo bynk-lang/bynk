@@ -64,7 +64,9 @@ export class Ledger {
     const __result = await (async () => {
       const next = __state.total + amount;
       __state.total = next;
-      const __r0 = await (async () => { __events.push({ type: "Bumped", payload: { amount: amount }, envelope: { eventId: globalThis.crypto.randomUUID(), publisherId: "ledger", emittedAt: globalThis.Date.now(), schemaVersion: 1 } }); })();
+      const __r0 = await (async () => {
+        __events.push({ type: "Bumped", payload: { amount: amount }, envelope: { eventId: globalThis.crypto.randomUUID(), publisherId: "ledger", emittedAt: globalThis.Date.now(), schemaVersion: 1 } });
+      })();
       return next;
     })();
     await this.commitState(__state);

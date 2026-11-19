@@ -15,7 +15,11 @@ export async function countOr<T>(sku: string, fallback: T, pick: (a0: number) =>
 }
 
 export async function warnAll(items: readonly string[], deps: { Logger: Logger }): globalThis.Promise<void> {
-  const __r0 = await (async (__xs: readonly string[]) => { for (const __x of __xs) { await (async (i: string) => deps.Logger.error(i))(__x); } })(items);
+  const __r0 = await (async (__xs: readonly string[]) => {
+    for (const __x of __xs) {
+      await (async (i: string) => deps.Logger.error(i))(__x);
+    }
+  })(items);
   return undefined;
 }
 
