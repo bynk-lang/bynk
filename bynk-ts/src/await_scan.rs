@@ -10,8 +10,10 @@ use crate::program::{TsArrowBody, TsExpr, TsObjectEntry, TsStmt, TsStmtKind};
 pub fn expr_contains_await(expr: &TsExpr) -> bool {
     match expr {
         TsExpr::Await(_) => true,
-        TsExpr::Ident(_) | TsExpr::Lit(_) => false,
-        TsExpr::VerbatimExpr(text, _) => text.contains("await"),
+        TsExpr::Lit(_) => false,
+        // An `Ident` or a `VerbatimExpr` may carry expression text (a still-text operand wrapped for
+        // a node-taking caller), so both are searched as text: a false positive only hoists.
+        TsExpr::Ident(text) | TsExpr::VerbatimExpr(text, _) => text.contains("await"),
         TsExpr::Member { object, .. } | TsExpr::OptionalMember { object, .. } => {
             expr_contains_await(object)
         }
@@ -19,13 +21,8 @@ pub fn expr_contains_await(expr: &TsExpr) -> bool {
         TsExpr::Index { object, index } | TsExpr::OptionalIndex { object, index } => {
             expr_contains_await(object) || expr_contains_await(index)
         }
-        TsExpr::Arrow { params, body, .. }
-            if params
-                .iter()
-                .any(|p| p.default.as_ref().is_some_and(expr_contains_await)) =>
-        {
-            let _ = body;
-            true
+        TsExpr::DefaultIife { default, body, .. } => {
+            expr_contains_await(default) || body.iter().any(stmt_contains_await)
         }
         TsExpr::Arrow { body, .. } => match &**body {
             TsArrowBody::Expr(e) => expr_contains_await(e),
@@ -149,7 +146,13 @@ mod tests {
             right: Box::new(TsExpr::Lit(TsLit::Num("1".to_string()))),
         };
         assert!(!expr_contains_await(&e));
-        assert!(!expr_contains_await(&id("await_not_an_await")));
+    }
+
+    /// Text in an `Ident` is searched as text, as a `VerbatimExpr` is.
+    #[test]
+    fn an_await_hidden_in_ident_text_is_found() {
+        assert!(expr_contains_await(&id("(await f())")));
+        assert!(!expr_contains_await(&id("plain")));
     }
 
     #[test]
@@ -172,7 +175,6 @@ mod tests {
                 name: "x".to_string(),
                 ty: None,
                 optional: false,
-                default: None,
             }],
             is_async: true,
             generics: Vec::new(),

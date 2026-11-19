@@ -213,7 +213,6 @@ pub(crate) fn request_headers_ts_type() -> TsType {
         name: "name".to_string(),
         ty: Some(TsType::named("string")),
         optional: false,
-        default: None,
     };
     TsType::Object(vec![
         bynk_ts::TsTypeMember::method("get", vec![name], opt()),
@@ -232,7 +231,6 @@ pub(crate) fn request_query_ts_type() -> TsType {
         name: "name".to_string(),
         ty: Some(TsType::named("string")),
         optional: false,
-        default: None,
     };
     let opt = TsType::union(vec![
         TsType::Object(vec![
@@ -262,7 +260,6 @@ pub(crate) fn request_cookies_ts_type() -> TsType {
         name: "name".to_string(),
         ty: Some(TsType::named("string")),
         optional: false,
-        default: None,
     };
     let opt = TsType::union(vec![
         TsType::Object(vec![
@@ -296,7 +293,6 @@ pub(crate) fn token_claims_ts_type() -> TsType {
         name: "name".to_string(),
         ty: Some(TsType::named("string")),
         optional: false,
-        default: None,
     };
     TsType::Object(vec![
         bynk_ts::TsTypeMember::method("get", vec![name()], opt),

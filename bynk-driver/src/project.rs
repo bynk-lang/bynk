@@ -5400,7 +5400,6 @@ fn emit_composition_root(
             name: "env".to_string(),
             ty: Some(TsType::named("unknown")),
             optional: true,
-            default: None,
         }]
     } else {
         Vec::new()
@@ -5611,7 +5610,6 @@ fn emit_composition_root(
                         vec![TsType::named(bynk_emit::emitter::EVENTS_WIRE_EVENT_TS_TYPE)],
                     )),
                     optional: false,
-                    default: None,
                 }],
                 is_async: true,
                 generics: Vec::new(),

@@ -589,7 +589,6 @@ pub(super) fn emit_test_history_property_function(
                     "globalThis.Array<{ h: number, args: unknown[] }>",
                 )),
                 optional: false,
-                default: None,
             }],
             is_async: false,
             generics: Vec::new(),

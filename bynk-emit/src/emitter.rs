@@ -2519,7 +2519,6 @@ fn emit_context_rebrands(
                     name: "value".to_string(),
                     ty: Some(bynk_ts::TsType::named(ts_base_name)),
                     optional: false,
-                    default: None,
                 }],
                 return_type: Some(bynk_ts::TsType::named_with_args(
                     "Result",
@@ -2554,7 +2553,6 @@ fn emit_context_rebrands(
                         name: "value".to_string(),
                         ty: Some(bynk_ts::TsType::named(ts_base_name)),
                         optional: false,
-                        default: None,
                     }],
                     return_type: Some(bynk_ts::TsType::named(name.clone())),
                     doc: None,

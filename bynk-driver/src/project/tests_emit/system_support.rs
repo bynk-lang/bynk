@@ -464,7 +464,6 @@ pub(super) fn emit_system_http_support(
                         )
                     ))),
                     optional: false,
-                    default: None,
                 }
             });
             // #2854: a `query` param (unless a `:query` path segment binds the
@@ -865,7 +864,6 @@ pub(super) fn emit_system_http_support(
                     name: bynk_emit::emitter::ts_ident(&p.name.name),
                     ty: Some(TsType::named(driver_param_ty(&p.type_ref, &ns))),
                     optional: false,
-                    default: None,
                 })
                 .chain(extra_headers_param.clone())
                 .collect();
@@ -884,7 +882,6 @@ pub(super) fn emit_system_http_support(
                         },
                     )),
                     optional: false,
-                    default: None,
                 })
                 .chain(extra_headers_param)
                 .collect();
@@ -1306,13 +1303,11 @@ pub(super) fn emit_system_http_support(
                         name: "method".to_string(),
                         ty: Some(TsType::named("string")),
                         optional: false,
-                        default: None,
                     },
                     TsParam {
                         name: "path".to_string(),
                         ty: Some(TsType::named("string")),
                         optional: false,
-                        default: None,
                     },
                 ],
                 return_type: None,
@@ -1360,7 +1355,6 @@ pub(super) fn emit_system_http_support(
                                         name: "__j".to_string(),
                                         ty: Some(TsType::named("__JsonValue")),
                                         optional: false,
-                                        default: None,
                                     }],
                                     is_async: false,
                                     generics: Vec::new(),
@@ -1724,7 +1718,6 @@ pub(super) fn service_binding_forward(worker_ident: &str, env_ident: &str, sends
         name: "req".to_string(),
         ty: Some(TsType::named("globalThis.Request")),
         optional: false,
-        default: None,
     };
     // #1994: a Worker whose handlers send with `detach` takes the execution
     // context as `fetch`'s third argument; the harness hands it a collecting
@@ -1737,7 +1730,6 @@ pub(super) fn service_binding_forward(worker_ident: &str, env_ident: &str, sends
                     name: "exec".to_string(),
                     ty: None,
                     optional: false,
-                    default: None,
                 }],
                 is_async: false,
                 generics: Vec::new(),

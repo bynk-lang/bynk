@@ -324,7 +324,6 @@ pub(super) fn emit_test_deps(
                     vec![TsType::named(bynk_emit::emitter::EVENTS_WIRE_EVENT_TS_TYPE)],
                 )),
                 optional: false,
-                default: None,
             }],
             return_type: None,
             doc: None,
@@ -386,7 +385,6 @@ pub(super) fn emit_test_deps(
                 name: name.to_string(),
                 ty: Some(TsType::named(ty)),
                 optional: true,
-                default: None,
             })
             .collect(),
             return_type: None,

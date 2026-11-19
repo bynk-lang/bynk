@@ -465,7 +465,8 @@ pub fn emit_client(
                     "ConnectOptions",
                     vec![TsType::named("A")],
                 )),
-                optional: false, default: None }],
+                optional: false,
+            }],
             return_type: Some(TsType::named_with_args("Client", vec![TsType::named("A")])),
             body: vec![
                 TsStmt::const_stmt(
@@ -588,7 +589,6 @@ fn service_params(
             name: super::ts_ident(name),
             ty: Some(ts_type(&renamed(t))),
             optional: false,
-            default: None,
         })
         .collect()
 }

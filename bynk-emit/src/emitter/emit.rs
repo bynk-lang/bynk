@@ -297,7 +297,6 @@ fn emit_refined_type(
             name: "value".to_string(),
             ty: Some(base_ty.clone()),
             optional: false,
-            default: None,
         }],
         return_type: Some(bynk_ts::TsType::named_with_args(
             "Result",
@@ -332,7 +331,6 @@ fn emit_refined_type(
                 name: "value".to_string(),
                 ty: Some(base_ty),
                 optional: false,
-                default: None,
             }],
             return_type: Some(bynk_ts::TsType::named(name.clone())),
             doc: None,
@@ -662,7 +660,6 @@ fn emit_sum_type(
                     name: ts_ident(&payload_prop(field)),
                     ty: Some(ts_ty_to_ts_type(*ty, unit.render(commons))),
                     optional: false,
-                    default: None,
                 })
                 .collect();
             let mut obj_entries = vec![bynk_ts::TsObjectEntry::Prop(
@@ -805,7 +802,6 @@ pub(crate) fn emit_forwarded_methods(
                 name: "self".to_string(),
                 ty: Some(bynk_ts::TsType::named(type_name)),
                 optional: false,
-                default: None,
             });
             args.push(bynk_ts::TsExpr::Ident("self".to_string()));
         }
@@ -815,7 +811,6 @@ pub(crate) fn emit_forwarded_methods(
                 name: ident.clone(),
                 ty: Some(bynk_ts::TsType::named(ts_ty(*ty, tys))),
                 optional: false,
-                default: None,
             });
             args.push(bynk_ts::TsExpr::Ident(ident));
         }
@@ -869,13 +864,11 @@ fn exec_param(name: &str) -> bynk_ts::TsParam {
                         vec![bynk_ts::TsType::named("unknown")],
                     )),
                     optional: false,
-                    default: None,
                 }],
                 bynk_ts::TsType::named("void"),
             ),
         ])),
         optional: false,
-        default: None,
     }
 }
 
@@ -944,7 +937,6 @@ fn emit_method(
             name: "self".to_string(),
             ty: Some(bynk_ts::TsType::named(format!("{type_name}{self_ty_args}"))),
             optional: false,
-            default: None,
         });
     }
     for p in &f.params {
@@ -952,7 +944,6 @@ fn emit_method(
             name: ts_ident(&p.name.name),
             ty: Some(bynk_ts::TsType::named(ts_type_ref(&p.type_ref))),
             optional: false,
-            default: None,
         });
     }
     let empty = bynk_check::resolver::CrossContextInfo::default();
@@ -1114,7 +1105,6 @@ fn emit_free_fn_in(
             name: ts_ident(&p.name.name),
             ty: Some(ts_type_ref_to_ts_type(&p.type_ref, None)),
             optional: false,
-            default: None,
         })
         .collect();
     let is_async = is_effectful_return(&f.return_type);
@@ -1172,7 +1162,6 @@ fn emit_free_fn_in(
                     .collect(),
             )),
             optional: false,
-            default: None,
         });
     }
     // #2719: the execution context, last.
@@ -1889,7 +1878,6 @@ fn emit_message_entry_renderer(
                 ],
             )),
             optional: false,
-            default: None,
         }],
         is_async: false,
         generics: Vec::new(),
@@ -1952,7 +1940,6 @@ fn emit_icu_placeholder(
                 name: "__arg".to_string(),
                 ty: None,
                 optional: false,
-                default: None,
             }],
             is_async: false,
             generics: Vec::new(),
@@ -2404,13 +2391,11 @@ pub(crate) fn emit_messages_bundle(
                     name: "tag".to_string(),
                     ty: Some(bynk_ts::TsType::named("__bynkLocaleTag")),
                     optional: false,
-                    default: None,
                 },
                 bynk_ts::TsParam {
                     name: "msg".to_string(),
                     ty: Some(bynk_ts::TsType::named("__bynkMessage")),
                     optional: false,
-                    default: None,
                 },
             ],
             return_type: Some(bynk_ts::TsType::named("string")),
@@ -2514,7 +2499,6 @@ pub(crate) fn emit_capability(
                         ts_ty_to_ts_type(*ty, unit.render(commons))
                     }),
                     optional: false,
-                    default: None,
                 })
                 .collect();
             // #3458: a typed read's `Effect[P]` payload mentions a `Codable`
@@ -2847,7 +2831,6 @@ pub(crate) fn emit_provider(
                 name: ts_ident(&p.name.name),
                 ty: Some(ts_type_ref_to_ts_type(&p.type_ref, None)),
                 optional: false,
-                default: None,
             })
             .collect();
         // P6.55 (design/tracks/the-ir.md §6b): computed once, not twice —
@@ -3101,7 +3084,6 @@ pub(crate) fn emit_service(
                 name: ts_ident(name),
                 ty: Some(ts_ty_to_ts_type(*ty, tys)),
                 optional: false,
-                default: None,
             })
             .collect();
         // v0.103/v0.106: a `from websocket` lifecycle handler receives the
@@ -3118,7 +3100,6 @@ pub(crate) fn emit_service(
                         vec![ts_ty_to_ts_type(*out_ty, tys)],
                     )),
                     optional: false,
-                    default: None,
                 },
             );
         }
@@ -3146,7 +3127,6 @@ pub(crate) fn emit_service(
                             name: "__bynkSchemaEnv".to_string(),
                             ty: Some(bynk_ts::TsType::named("EventEnvelope")),
                             optional: false,
-                            default: None,
                         },
                     );
                     Some("__bynkSchemaEnv".to_string())
@@ -3368,7 +3348,6 @@ pub(crate) fn emit_service(
                             vec![bynk_ts::TsType::named("unknown")],
                         )),
                         optional: false,
-                        default: None,
                     }],
                     bynk_ts::TsType::named("void"),
                 )]),
@@ -3421,7 +3400,6 @@ pub(crate) fn emit_service(
             name: "deps".to_string(),
             ty: Some(bynk_ts::TsType::Object(deps_members)),
             optional: false,
-            default: None,
         });
         // Events track, slice 0 (spine #936): release-at-commit (the retired
         // events track's §3.0, `design/archive/retired-tracks.md`) needs a
@@ -4036,7 +4014,6 @@ fn emit_context_deps_interface(
                         vec![bynk_ts::TsType::named("unknown")],
                     )),
                     optional: false,
-                    default: None,
                 }],
                 bynk_ts::TsType::named("void"),
             )]),
@@ -4138,14 +4115,12 @@ pub(crate) fn emit_make_surface(
         name: "deps".to_string(),
         ty: Some(bynk_ts::TsType::named(deps_name)),
         optional: false,
-        default: None,
     }];
     if any_caller {
         params.push(bynk_ts::TsParam {
             name: "__caller".to_string(),
             ty: Some(bynk_ts::TsType::named("string")),
             optional: false,
-            default: None,
         });
     }
     let mut entries: Vec<bynk_ts::TsObjectEntry> = Vec::new();
@@ -4179,7 +4154,6 @@ pub(crate) fn emit_make_surface(
                 name: surface_param(&p.name.name),
                 ty: Some(ts_type_ref_to_ts_type(&p.type_ref, None)),
                 optional: false,
-                default: None,
             })
             .collect();
         let mut call_args: Vec<bynk_ts::TsExpr> = h
@@ -6520,7 +6494,6 @@ fn commit_state_params(
         name: "s".to_string(),
         ty: Some(bynk_ts::TsType::named(state_ty.to_string())),
         optional: false,
-        default: None,
     }];
     if !ctx.inspect_agents {
         return (body, params);
@@ -6550,7 +6523,6 @@ fn commit_state_params(
         name: "__handler".to_string(),
         ty: Some(bynk_ts::TsType::named("string")),
         optional: true,
-        default: None,
     });
     (body, params)
 }
@@ -6913,7 +6885,6 @@ fn emit_agent_state_persistence(
                         name: "s".to_string(),
                         ty: Some(bynk_ts::TsType::named(state_ty.clone())),
                         optional: false,
-                        default: None,
                     },
                     // #1649: the stored record, so a field absent from it keeps
                     // its in-memory zero instead of being decoded (ADR 0124 D4).
@@ -6921,7 +6892,6 @@ fn emit_agent_state_persistence(
                         name: "stored".to_string(),
                         ty: Some(bynk_ts::TsType::named(state_ty.clone())),
                         optional: false,
-                        default: None,
                     },
                 ],
                 return_type: Some(bynk_ts::TsType::named("void")),
@@ -6964,7 +6934,6 @@ fn emit_agent_state_persistence(
                     name: "s".to_string(),
                     ty: Some(bynk_ts::TsType::named(state_ty.clone())),
                     optional: false,
-                    default: None,
                 }],
                 return_type: Some(bynk_ts::TsType::named("globalThis.Record<string, unknown>")),
                 body: vec![bynk_ts::TsStmt::raw(encode_body, None)],
@@ -7263,7 +7232,6 @@ fn emit_agent_handlers(
                 name: ts_ident(&p.name.name),
                 ty: Some(ts_type_ref_to_ts_type(&p.type_ref, None)),
                 optional: false,
-                default: None,
             })
             .collect();
         // Lower body into a buffer so we can detect cross-context usage and
@@ -7399,7 +7367,6 @@ fn emit_agent_handlers(
             name: "deps".to_string(),
             ty: Some(bynk_ts::TsType::Object(deps_members)),
             optional: false,
-            default: None,
         });
         let ret = ts_type_ref_to_ts_type(&h.return_type, None);
         let method = h
@@ -7944,7 +7911,6 @@ fn emit_agent_dispatch(
                 name: "request".to_string(),
                 ty: Some(bynk_ts::TsType::named("globalThis.Request")),
                 optional: false,
-                default: None,
             }],
             return_type: Some(bynk_ts::TsType::named_with_args(
                 "globalThis.Promise",
@@ -8046,7 +8012,6 @@ fn emit_agent_factory(
                 name: "state".to_string(),
                 ty: None,
                 optional: false,
-                default: None,
             }],
             is_async: false,
             generics: Vec::new(),
@@ -8107,13 +8072,11 @@ fn emit_agent_factory(
                     name: "key".to_string(),
                     ty: Some(key_ts),
                     optional: false,
-                    default: None,
                 },
                 bynk_ts::TsParam {
                     name: "env".to_string(),
                     ty: Some(bynk_ts::TsType::Object(env_props)),
                     optional: true,
-                    default: None,
                 },
             ],
             return_type: Some(bynk_ts::TsType::named(a.name.name.clone())),
@@ -9211,14 +9174,12 @@ fn emit_ws_do_method(
             ts_ty(host.out_ty, UnitFacts::of(ctx).render(commons))
         ))),
         optional: false,
-        default: None,
     }];
     for p in &h.params {
         params.push(bynk_ts::TsParam {
             name: ts_ident(&p.name.name),
             ty: Some(ts_type_ref_to_ts_type(&p.type_ref, None)),
             optional: false,
-            default: None,
         });
     }
     let mut module = ModuleCtx::for_unit(commons, ctx);
@@ -9323,7 +9284,6 @@ fn emit_ws_do_method(
         name: "deps".to_string(),
         ty: Some(bynk_ts::TsType::Object(deps_members)),
         optional: false,
-        default: None,
     });
     let method_entry = bynk_ts::TsClassMethod {
         name: method.to_string(),
@@ -9475,7 +9435,6 @@ fn migrate_wake_branch_stmt(version: i64) -> bynk_ts::TsStmt {
                     name: "s".to_string(),
                     ty: None,
                     optional: false,
-                    default: None,
                 }],
                 this_call("commitState", vec![bynk_ts::TsExpr::Ident("s".to_string())]),
             ),
@@ -9520,7 +9479,6 @@ fn events_deps_const_stmt() -> bynk_ts::TsStmt {
                         )],
                     )),
                     optional: false,
-                    default: None,
                 }],
                 is_async: false,
                 generics: Vec::new(),
@@ -10125,7 +10083,6 @@ fn emit_ws_dispatch_handlers(
                     name: "ws".to_string(),
                     ty: Some(bynk_ts::TsType::named(ws_ty)),
                     optional: false,
-                    default: None,
                 },
                 bynk_ts::TsParam {
                     name: "message".to_string(),
@@ -10134,7 +10091,6 @@ fn emit_ws_dispatch_handlers(
                         bynk_ts::TsType::named("globalThis.ArrayBuffer"),
                     ])),
                     optional: false,
-                    default: None,
                 },
             ],
             return_type: Some(bynk_ts::TsType::named_with_args(
@@ -10180,25 +10136,21 @@ fn emit_ws_dispatch_handlers(
                     name: "ws".to_string(),
                     ty: Some(bynk_ts::TsType::named(ws_ty)),
                     optional: false,
-                    default: None,
                 },
                 bynk_ts::TsParam {
                     name: "code".to_string(),
                     ty: Some(bynk_ts::TsType::named("number")),
                     optional: false,
-                    default: None,
                 },
                 bynk_ts::TsParam {
                     name: "reason".to_string(),
                     ty: Some(bynk_ts::TsType::named("string")),
                     optional: false,
-                    default: None,
                 },
                 bynk_ts::TsParam {
                     name: "wasClean".to_string(),
                     ty: Some(bynk_ts::TsType::named("boolean")),
                     optional: false,
-                    default: None,
                 },
             ],
             return_type: Some(bynk_ts::TsType::named_with_args(

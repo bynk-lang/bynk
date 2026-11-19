@@ -229,7 +229,8 @@ impl<'a> LowerCtx<'a> {
                             ty: Some(bynk_ts::TsType::named(format!(
                                 "(a: {p}, b: {p}) => number"
                             ))),
-                            optional: false, default: None }
+                            optional: false,
+                        }
                     }
                     WitnessKind::Codec => {
                         let ident = codec::witness_ident(&p);
@@ -239,7 +240,8 @@ impl<'a> LowerCtx<'a> {
                             ty: Some(bynk_ts::TsType::named(format!(
                                 "{{ encode: (v: {p}) => __JsonValue; decode: (j: __JsonValue, path: string) => Result<{p}, __BoundaryError> }}"
                             ))),
-                            optional: false, default: None }
+                            optional: false,
+                        }
                     }
                 }
             })

@@ -14,6 +14,6 @@ Closes #3722. Part of #3676.
 **Probes.** `ts_writes` and `lowering_text_bridge` fall (1377 to 1371 and 68 to 62 against 1A.20). `ts_text_idents`, `ts_any` and `ast_importers` do not move.
 
 **Departures and named leftovers.**
-- `bynk_ts` contract addition: `TsParam.default` (`name[: ty] = default`), so `Json.encodePlain` keeps its default-parameter form; every other `TsParam` passes `None`.
+- `bynk_ts` contract addition: `TsExpr::DefaultIife` (`((name = default): ret => { body })()`), so `Json.encodePlain` keeps its default-parameter form; no `TsParam` changes.
 - A `Form.decode` keeps its decoder as text, and a `Form.encode` over a record with `@name` fields keeps its call as text: the field-spec table is `workers_entry` source text.
 - A serialiser value that is still text is wrapped by `text_value` (marked `// 1A: serialiser value is text`); the snapshot `expect`'s known-type arm stays text.

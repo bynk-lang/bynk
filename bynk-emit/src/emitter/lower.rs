@@ -2002,7 +2002,6 @@ fn trace_node(cx: &LowerCtx, cap: &str, op: &str) -> bynk_ts::TsExpr {
                 name: "__c".to_string(),
                 ty: Some(call_args_type()),
                 optional: false,
-                default: None,
             }],
             is_async: false,
             generics: Vec::new(),
@@ -2138,7 +2137,6 @@ fn lower_observation(o: &ObservationExpr, cx: &mut LowerCtx) -> Built {
                                         name: "__c".to_string(),
                                         ty: Some(call_args_type()),
                                         optional: false,
-                                        default: None,
                                     }],
                                     is_async: false,
                                     generics: Vec::new(),
@@ -8451,7 +8449,6 @@ fn lower_lambda(e: &Expr, lambda: &LambdaExpr, cx: &mut LowerCtx) -> Built {
                 name: ts_ident(&p.name.name),
                 ty,
                 optional: false,
-                default: None,
             })
         })
         .collect();
@@ -8665,7 +8662,6 @@ fn lower_match_as_iife(discriminant: &Expr, arms: &[MatchArm], cx: &mut LowerCtx
             name: "__d".to_string(),
             ty: None,
             optional: false,
-            default: None,
         }];
         return pre.finish(LoweredExpr::Node(arrow_call(
             params,
@@ -9502,7 +9498,6 @@ fn lower_is(value: &Expr, pattern: &Pattern, cx: &mut LowerCtx) -> Lowered {
                         name: "__c".to_string(),
                         ty: Some(bynk_ts::TsType::named("boolean")),
                         optional: false,
-                        default: None,
                     }],
                     is_async: false,
                     generics: Vec::new(),

@@ -287,13 +287,12 @@ fn walk_expr<'a>(expr: &'a TsExpr, out: &mut Vec<(VerbatimOrigin, &'a str)>) {
             walk_expr(object, out);
             walk_expr(index, out);
         }
-        TsExpr::Arrow { params, body, .. } => {
-            for p in params {
-                if let Some(default) = &p.default {
-                    walk_expr(default, out);
-                }
+        TsExpr::Arrow { body, .. } => walk_arrow_body(body, out),
+        TsExpr::DefaultIife { default, body, .. } => {
+            walk_expr(default, out);
+            for s in body {
+                walk_stmt(s, out);
             }
-            walk_arrow_body(body, out)
         }
         TsExpr::Call { callee, args } | TsExpr::New { callee, args } => {
             walk_expr(callee, out);
@@ -1351,6 +1350,17 @@ pub enum TsExpr {
         callee: Box<TsExpr>,
         type_args: Vec<TsType>,
     },
+    /// `((name = default): ret => { body })()`: an immediately invoked arrow whose one untyped
+    /// parameter takes its value from a default, which JS evaluates at call time, before the body
+    /// runs (1A.21, #3722). `Json.encodePlain` evaluates its argument this way before the body
+    /// raises a flag. A node of its own, rather than a default on [`TsParam`], so the 189 parameter
+    /// literals stay as they are. Prints as a call, so it takes the brackets a call takes.
+    DefaultIife {
+        name: String,
+        default: Box<TsExpr>,
+        return_type: TsType,
+        body: Vec<TsStmt>,
+    },
     /// An array printed one item per line, each with a trailing comma and the
     /// closing bracket back at the enclosing depth, wherever it sits (1A.14:
     /// `par`'s `await __bynkSettleAll([…])`). Unlike [`TsExpr::Array`] with
@@ -2208,9 +2218,6 @@ pub struct TsParam {
     /// parameter needs this; nothing in the grounding file needs a default
     /// value, so only optionality is represented, not defaults.
     pub optional: bool,
-    /// `name[: ty] = default` (1A.21, #3722): a parameter default, which JS evaluates at call time.
-    /// `Json.encodePlain` needs it to evaluate its argument before raising a flag in the body.
-    pub default: Option<TsExpr>,
 }
 
 /// One `class` field.

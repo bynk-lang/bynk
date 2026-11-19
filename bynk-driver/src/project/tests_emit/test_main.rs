@@ -132,7 +132,6 @@ pub(super) fn sysdrive_driver(
         name: "__sub".to_string(),
         ty: Some(TsType::named("string")),
         optional: false,
-        default: None,
     });
     // #2019: a refinement-guarded route signs the claims the acting actor
     // presents (`{}` for a non-refinement actor) next to `sub`.
@@ -144,7 +143,6 @@ pub(super) fn sysdrive_driver(
                 vec![TsType::named("string"), TsType::named("unknown")],
             )),
             optional: false,
-            default: None,
         });
     }
     if takes_as {
@@ -152,7 +150,6 @@ pub(super) fn sysdrive_driver(
             name: "__as".to_string(),
             ty: Some(TsType::named("string")),
             optional: false,
-            default: None,
         });
     }
     let mut body = Vec::new();
@@ -304,7 +301,6 @@ pub(super) fn build_run_function(entries: &[(String, String)]) -> Vec<TsStmt> {
                     name: "n".to_string(),
                     ty: Some(TsType::named("string")),
                     optional: false,
-                    default: None,
                 }],
                 is_async: false,
                 generics: Vec::new(),
@@ -338,7 +334,6 @@ pub(super) fn build_run_function(entries: &[(String, String)]) -> Vec<TsStmt> {
                         name: "only".to_string(),
                         ty: Some(TsType::named("string")),
                         optional: true,
-                        default: None,
                     },
                     TsParam {
                         name: "onCase".to_string(),
@@ -348,7 +343,6 @@ pub(super) fn build_run_function(entries: &[(String, String)]) -> Vec<TsStmt> {
                             ret: Box::new(TsType::named("void")),
                         }),
                         optional: true,
-                        default: None,
                     },
                 ],
                 return_type: None,
@@ -490,7 +484,6 @@ pub(crate) fn emit_test_main(tests: &[RunnableTest], import_ext: ImportExt, pg: 
                         name: "code".to_string(),
                         ty: Some(TsType::named("number")),
                         optional: false,
-                        default: None,
                     }],
                     TsType::named("never"),
                 ),
@@ -580,7 +573,6 @@ pub(crate) fn emit_test_main(tests: &[RunnableTest], import_ext: ImportExt, pg: 
                     name: "m".to_string(),
                     ty: None,
                     optional: false,
-                    default: None,
                 }],
                 is_async: false,
                 generics: Vec::new(),
@@ -667,7 +659,6 @@ pub(crate) fn emit_test_main(tests: &[RunnableTest], import_ext: ImportExt, pg: 
                     name: "o".to_string(),
                     ty: Some(TsType::named("unknown")),
                     optional: false,
-                    default: None,
                 }],
                 is_async: false,
                 generics: Vec::new(),
@@ -736,7 +727,6 @@ pub(crate) fn emit_test_main(tests: &[RunnableTest], import_ext: ImportExt, pg: 
                             name: "r".to_string(),
                             ty: Some(TsType::named("Result")),
                             optional: false,
-                            default: None,
                         }],
                         return_type: None,
                         body: detach.wrap_ndjson(vec![TsStmt::if_else_same_line_stmt(
@@ -868,7 +858,6 @@ pub(crate) fn emit_test_main(tests: &[RunnableTest], import_ext: ImportExt, pg: 
                             name: "r".to_string(),
                             ty: Some(TsType::named("Result")),
                             optional: false,
-                            default: None,
                         }],
                         return_type: None,
                         body: detach.wrap_human(vec![TsStmt::if_else_same_line_stmt(

@@ -215,7 +215,6 @@ fn param(name: &str, ty: TsType) -> TsParam {
         name: name.to_string(),
         ty: Some(ty),
         optional: false,
-        default: None,
     }
 }
 
@@ -649,8 +648,8 @@ pub(in super::super) fn json_encode(
 ///
 /// The argument must be evaluated *before* the flag is raised, or a tagged `Json.encode` (or a
 /// function that calls one) inside it would come out plain. An argument that awaits is hoisted to
-/// a temporary; any other is the argument of the arrow's call, which JS evaluates before the body
-/// raises the flag (the parameter's type is inferred from it). A text argument keeps the
+/// a temporary; any other is the default of the arrow's one parameter, which JS evaluates at call
+/// time, before the body raises the flag (its type is inferred). A text argument keeps the
 /// default-parameter form it always had.
 fn encode_plain(pre: &mut Pre, arg: &Expr, tref: &TypeRef, v: LoweredExpr, cx: &LowerCtx) -> Built {
     let value = match v {
@@ -677,8 +676,17 @@ fn encode_plain(pre: &mut Pre, arg: &Expr, tref: &TypeRef, v: LoweredExpr, cx: &
             ));
         }
     };
+    let ser =
+        super::super::serialisation::serialise_expr(tref, &ident_node("__pv"), cx.runtime_use());
+    Ok(plain_iife(pre, arg.id.0, value, ser))
+}
+
+/// The `encodePlain` arrow over an argument node `value` and the serialiser `ser` of `__pv`: an
+/// argument that awaits is first hoisted to `const __pj<id> = <value>;`, and the parameter
+/// default is then that temporary; any other argument is the default itself.
+fn plain_iife(pre: &mut Pre, id: u32, value: TsExpr, ser: TsExpr) -> TsExpr {
     let argument = if bynk_ts::expr_contains_await(&value) {
-        let tmp = format!("__pj{}", arg.id.0);
+        let tmp = format!("__pj{id}");
         pre.push_node(TsStmt::const_stmt(
             TsBindingName::Ident(tmp.clone()),
             None,
@@ -689,8 +697,6 @@ fn encode_plain(pre: &mut Pre, arg: &Expr, tref: &TypeRef, v: LoweredExpr, cx: &
     } else {
         value
     };
-    let ser =
-        super::super::serialisation::serialise_expr(tref, &ident_node("__pv"), cx.runtime_use());
     let g = || ident_node("__g");
     let flag = || member(g(), "__bynkPlainJson");
     let body = vec![
@@ -716,21 +722,12 @@ fn encode_plain(pre: &mut Pre, arg: &Expr, tref: &TypeRef, v: LoweredExpr, cx: &
             None,
         ),
     ];
-    Ok(call(
-        TsExpr::Paren(Box::new(TsExpr::Arrow {
-            params: vec![TsParam {
-                name: "__pv".to_string(),
-                ty: None,
-                optional: false,
-                default: Some(argument),
-            }],
-            is_async: false,
-            generics: Vec::new(),
-            return_type: Some(TsType::named("string")),
-            body: Box::new(TsArrowBody::Multiline(body)),
-        })),
-        Vec::new(),
-    ))
+    TsExpr::DefaultIife {
+        name: "__pv".to_string(),
+        default: Box::new(argument),
+        return_type: TsType::named("string"),
+        body,
+    }
 }
 
 /// #917 and constrained generics slice 3: record the variable-free parts of a
@@ -881,4 +878,38 @@ fn pg_row_pass(t: bynk_check::checker::TyId, cx: &LowerCtx) -> Vec<TsStmt> {
         )))),
     };
     vec![const_("__fix", None, fix), apply_to_rows("__fix")]
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    fn awaiting() -> TsExpr {
+        TsExpr::Await(Box::new(call(ident_node("f"), vec![])))
+    }
+
+    /// An awaiting argument is hoisted ahead of the IIFE, and the parameter default is the
+    /// temporary (no source produces one today, so the builder is driven directly).
+    #[test]
+    fn an_awaiting_plain_argument_is_hoisted() {
+        let mut pre = Pre::new();
+        let iife = plain_iife(&mut pre, 7, awaiting(), ident_node("ser"));
+        assert_eq!(pre.stmts(), vec!["const __pj7 = await f();".to_string()]);
+        let text = bynk_ts::print_expr(&iife);
+        assert!(text.starts_with("((__pv = __pj7): string => {"), "{text}");
+    }
+
+    #[test]
+    fn a_plain_argument_that_does_not_await_is_not_hoisted() {
+        let mut pre = Pre::new();
+        let iife = plain_iife(
+            &mut pre,
+            7,
+            call(ident_node("g"), vec![]),
+            ident_node("ser"),
+        );
+        assert!(pre.stmts().is_empty());
+        let text = bynk_ts::print_expr(&iife);
+        assert!(text.starts_with("((__pv = g()): string => {"), "{text}");
+    }
 }

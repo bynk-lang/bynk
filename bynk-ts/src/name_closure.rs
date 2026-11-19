@@ -663,9 +663,6 @@ impl Walk {
             if let Some(t) = &p.ty {
                 self.ty(t);
             }
-            if let Some(default) = &p.default {
-                self.expr(default);
-            }
         }
     }
 
@@ -913,6 +910,18 @@ impl Walk {
                     TsArrowBody::Block(stmts) | TsArrowBody::Multiline(stmts) => self.stmts(stmts),
                 }
             }
+            // 1A.21: the default is read in the enclosing scope; the parameter is bound for the body.
+            TsExpr::DefaultIife {
+                name,
+                default,
+                return_type,
+                body,
+            } => {
+                self.expr(default);
+                self.bind(name);
+                self.ty(return_type);
+                self.stmts(body);
+            }
             TsExpr::Call { callee, args } | TsExpr::New { callee, args } => {
                 self.expr(callee);
                 for a in args {
@@ -1013,7 +1022,6 @@ mod tests {
                     name: "value".to_string(),
                     ty: Some(TsType::named(param_ty)),
                     optional: false,
-                    default: None,
                 }],
                 return_type: Some(TsType::named("__JsonValue")),
                 body: vec![TsStmt::return_stmt(
@@ -1136,7 +1144,6 @@ mod tests {
                     name: "path: string = \"$\"".to_string(),
                     ty: Some(TsType::named("T")),
                     optional: false,
-                    default: None,
                 }],
                 return_type: None,
                 body: vec![
@@ -1220,28 +1227,22 @@ mod tests {
         assert_eq!(unbound_names(&p), ["Note"]);
     }
 
-    /// 1A.21: a parameter's default is an expression that uses names, so a name only a default
-    /// uses is still unbound when nothing declares it.
+    /// 1A.21: a `DefaultIife`'s default is a name use, so a name only the default uses is unbound
+    /// when nothing declares it.
     #[test]
-    fn a_parameter_default_is_a_name_use() {
-        let arrow = |name: &str| TsExpr::Arrow {
-            params: vec![TsParam {
-                name: "p".to_string(),
-                ty: None,
-                optional: false,
-                default: Some(TsExpr::Ident(name.to_string())),
-            }],
-            is_async: false,
-            generics: Vec::new(),
-            return_type: None,
-            body: Box::new(TsArrowBody::Expr(Box::new(TsExpr::Ident("p".to_string())))),
+    fn a_default_iife_default_is_a_name_use() {
+        let iife = |name: &str| TsExpr::DefaultIife {
+            name: "p".to_string(),
+            default: Box::new(TsExpr::Ident(name.to_string())),
+            return_type: TsType::named("string"),
+            body: vec![TsStmt::return_stmt(
+                Some(TsExpr::Ident("p".to_string())),
+                None,
+            )],
         };
-        let p = program(vec![TsStmt::expr_stmt(arrow("missing"), None)]);
+        let p = program(vec![TsStmt::expr_stmt(iife("missing"), None)]);
         assert_eq!(unbound_names(&p), ["missing"]);
-        let p = program(vec![
-            TsStmt::expr_stmt(arrow("Err"), None),
-            import(&["Err"]),
-        ]);
+        let p = program(vec![TsStmt::expr_stmt(iife("Err"), None), import(&["Err"])]);
         assert!(unbound_names(&p).is_empty(), "{:?}", unbound_names(&p));
     }
 

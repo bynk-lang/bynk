@@ -1155,7 +1155,7 @@ fn needs_parens_as_operand(expr: &TsExpr) -> bool {
 /// re-read as `(new f()).g()`.
 fn new_callee_needs_parens(callee: &TsExpr) -> bool {
     match callee {
-        TsExpr::Call { .. } | TsExpr::New { .. } => true,
+        TsExpr::Call { .. } | TsExpr::DefaultIife { .. } | TsExpr::New { .. } => true,
         TsExpr::Member { object, .. }
         | TsExpr::OptionalMember { object, .. }
         | TsExpr::Index { object, .. }
@@ -1352,6 +1352,7 @@ fn render_binary_operand(
         | TsExpr::OptionalIndex { .. }
         | TsExpr::TypeApp { .. }
         | TsExpr::Call { .. }
+        | TsExpr::DefaultIife { .. }
         | TsExpr::New { .. }
         | TsExpr::Object { .. }
         | TsExpr::Array { .. }
@@ -1713,6 +1714,23 @@ fn render_expr(out: &mut String, expr: &TsExpr, depth: usize, m: &mut Option<Mer
             out.push_str(" => ");
             render_arrow_body(out, body, depth, m);
         }
+        // 1A.21 (#3722): `((name = default): ret => { body })()`.
+        TsExpr::DefaultIife {
+            name,
+            default,
+            return_type,
+            body,
+        } => {
+            out.push_str("((");
+            out.push_str(name);
+            out.push_str(" = ");
+            render_expr(out, default, depth, m);
+            out.push_str("): ");
+            render_type(out, return_type);
+            out.push_str(" => ");
+            render_arrow_body(out, &TsArrowBody::Multiline(body.clone()), depth, m);
+            out.push_str(")()");
+        }
         TsExpr::Call { callee, args } => {
             render_operand(out, callee, depth, m);
             out.push('(');
@@ -1975,6 +1993,7 @@ fn starts_with_object(expr: &TsExpr) -> bool {
         | TsExpr::OptionalIndex { object, .. } => starts_with_object(object),
         TsExpr::Call { callee, .. } | TsExpr::TypeApp { callee, .. } => starts_with_object(callee),
         TsExpr::As { expr, .. } => starts_with_object(expr),
+        TsExpr::DefaultIife { .. } => false,
         TsExpr::Binary { left, .. } => starts_with_object(left),
         TsExpr::Conditional { test, .. } => starts_with_object(test),
         TsExpr::Ident(_)
@@ -2619,11 +2638,6 @@ fn render_params(out: &mut String, params: &[TsParam]) {
         if let Some(ty) = &p.ty {
             out.push_str(": ");
             render_type(out, ty);
-        }
-        // 1A.21 (#3722): `name[: ty] = default`.
-        if let Some(default) = &p.default {
-            out.push_str(" = ");
-            render_expr(out, default, 0, &mut None);
         }
     }
 }
@@ -3870,13 +3884,11 @@ mod tests {
                     name: "_state".to_string(),
                     ty: Some(TsType::named("DurableObjectState")),
                     optional: false,
-                    default: None,
                 },
                 TsParam {
                     name: "env".to_string(),
                     ty: Some(TsType::named("unknown")),
                     optional: true,
-                    default: None,
                 },
             ],
             body: vec![TsStmt::assign(
@@ -3907,7 +3919,6 @@ mod tests {
                 name: "request".to_string(),
                 ty: Some(TsType::named("Request")),
                 optional: false,
-                default: None,
             }],
             return_type: Some(TsType::named_with_args(
                 "Promise",
@@ -5029,7 +5040,6 @@ mod tests {
                         name: "a".to_string(),
                         ty: Some(TsType::named("string")),
                         optional: false,
-                        default: None,
                     }],
                     return_type: None,
                     doc: None,
@@ -5079,7 +5089,6 @@ mod tests {
                         vec![TsType::named("Wire")],
                     )),
                     optional: false,
-                    default: None,
                 }],
                 is_async: false,
                 generics: Vec::new(),
@@ -5109,7 +5118,6 @@ mod tests {
                         vec![TsType::named("Wire")],
                     )),
                     optional: false,
-                    default: None,
                 }],
                 is_async: true,
                 generics: Vec::new(),
@@ -5146,7 +5154,6 @@ mod tests {
                     name: "v".to_string(),
                     ty: Some(TsType::named("number")),
                     optional: false,
-                    default: None,
                 }],
                 is_async: false,
                 generics: Vec::new(),
@@ -5210,7 +5217,6 @@ mod tests {
                         name: "x".to_string(),
                         ty: None,
                         optional: false,
-                        default: None,
                     }],
                     is_async: false,
                     generics: Vec::new(),
@@ -5237,7 +5243,6 @@ mod tests {
                         name: "x".to_string(),
                         ty: None,
                         optional: false,
-                        default: None,
                     }],
                     is_async: false,
                     generics: Vec::new(),
@@ -5261,7 +5266,6 @@ mod tests {
                         name: "x".to_string(),
                         ty: None,
                         optional: false,
-                        default: None,
                     }],
                     is_async: false,
                     generics: Vec::new(),
@@ -5313,7 +5317,6 @@ mod tests {
                     name: "env".to_string(),
                     ty: Some(TsType::named("Env")),
                     optional: false,
-                    default: None,
                 }],
                 return_type: None,
                 body: vec![TsStmt::return_stmt(Some(TsExpr::Lit(TsLit::Null)), None)],
@@ -5346,7 +5349,6 @@ mod tests {
                     name: "x".to_string(),
                     ty: Some(TsType::named("A")),
                     optional: false,
-                    default: None,
                 }],
                 return_type: Some(TsType::named("A")),
                 body: vec![TsStmt::return_stmt(
@@ -5810,7 +5812,6 @@ mod tests {
                         vec![TsType::named("unknown")],
                     )),
                     optional: false,
-                    default: None,
                 }],
                 TsType::named("void"),
             ),
@@ -6041,39 +6042,28 @@ mod tests {
         );
     }
 
-    /// A parameter default (1A.21): `name = expr`, after the type annotation when there is one,
-    /// and a default that needs no brackets (a call, an object literal) prints bare.
+    /// `TsExpr::DefaultIife` (1A.21): `((name = default): ret => { body })()`, as a call operand
+    /// and with a default that is a call or an object literal.
     #[test]
-    fn a_parameter_prints_its_default_after_its_type() {
+    fn a_default_iife_prints_its_argument_as_the_parameter_default() {
         let id = |n: &str| TsExpr::Ident(n.to_string());
-        let arrow = |ty: Option<TsType>, default: TsExpr| TsExpr::Arrow {
-            params: vec![TsParam {
-                name: "__pv".to_string(),
-                ty,
-                optional: false,
-                default: Some(default),
-            }],
-            is_async: false,
-            generics: Vec::new(),
-            return_type: Some(TsType::named("string")),
-            body: Box::new(TsArrowBody::Expr(Box::new(id("__pv")))),
+        let iife = |default: TsExpr| TsExpr::DefaultIife {
+            name: "__pv".to_string(),
+            default: Box::new(default),
+            return_type: TsType::named("string"),
+            body: vec![TsStmt::return_stmt(Some(id("__pv")), None)],
         };
         assert_eq!(
-            print_expr(&arrow(None, id("p"))),
-            "(__pv = p): string => __pv"
+            print_expr(&iife(id("p"))),
+            "((__pv = p): string => {\n  return __pv;\n})()"
         );
-        assert_eq!(
-            print_expr(&arrow(Some(TsType::named("string")), id("p"))),
-            "(__pv: string = p): string => __pv"
-        );
-        let call = TsExpr::Call {
-            callee: Box::new(id("f")),
-            args: vec![TsExpr::object(vec![("a".to_string(), id("b"))])],
+        let object = TsExpr::object(vec![("a".to_string(), id("b"))]);
+        assert!(print_expr(&iife(object)).starts_with("((__pv = { a: b }): string => {"));
+        let member = TsExpr::Member {
+            object: Box::new(iife(id("p"))),
+            property: "length".to_string(),
         };
-        assert_eq!(
-            print_expr(&arrow(None, call)),
-            "(__pv = f({ a: b })): string => __pv"
-        );
+        assert!(print_expr(&member).ends_with("})().length"));
     }
 
     /// An `if` whose inline block holds a multi-line expression (a block-bodied arrow in a
@@ -7011,7 +7001,6 @@ mod tests {
                     name: "value".to_string(),
                     ty: Some(TsType::named("string")),
                     optional: false,
-                    default: None,
                 }],
                 return_type: Some(TsType::named("Uuid")),
                 doc: None,
@@ -7046,13 +7035,11 @@ mod tests {
                         name: "self".to_string(),
                         ty: Some(TsType::named("Box<A>")),
                         optional: false,
-                        default: None,
                     },
                     TsParam {
                         name: "f".to_string(),
                         ty: Some(TsType::named("(a0: A) => U")),
                         optional: false,
-                        default: None,
                     },
                 ],
                 return_type: Some(TsType::named("Box<U>")),
@@ -7116,7 +7103,6 @@ mod tests {
                     name: "self".to_string(),
                     ty: Some(TsType::named("Timestamp")),
                     optional: false,
-                    default: None,
                 }],
                 return_type: Some(TsType::named("Span")),
                 doc: Some("Compute the duration between two timestamps.".to_string()),
@@ -7154,13 +7140,11 @@ mod tests {
                         name: "self".to_string(),
                         ty: Some(TsType::named("Cents")),
                         optional: false,
-                        default: None,
                     },
                     TsParam {
                         name: "other".to_string(),
                         ty: Some(TsType::named("Cents")),
                         optional: false,
-                        default: None,
                     },
                 ],
                 return_type: Some(TsType::named("boolean")),
@@ -7220,7 +7204,6 @@ mod tests {
                 name: "value".to_string(),
                 ty: Some(TsType::named("string")),
                 optional: false,
-                default: None,
             }],
             return_type: Some(TsType::named("Uuid")),
             doc: None,
@@ -7374,7 +7357,6 @@ mod tests {
                         name: "unit".to_string(),
                         ty: Some(TsType::named("T")),
                         optional: false,
-                        default: None,
                     }],
                     ret: TsType::named("number"),
                     doc: Some("Returns the current time.".to_string()),
@@ -7408,7 +7390,6 @@ mod tests {
                 name: "n".to_string(),
                 ty: Some(TsType::named("number")),
                 optional: false,
-                default: None,
             }],
             return_type: Some(TsType::named("number")),
             doc: None,
@@ -7493,7 +7474,6 @@ mod tests {
                     name: "value".to_string(),
                     ty: Some(TsType::named("T")),
                     optional: false,
-                    default: None,
                 }],
                 is_async: false,
                 generics: vec!["T".to_string()],
@@ -7961,7 +7941,6 @@ mod tests {
                 name: "x".to_string(),
                 ty: None,
                 optional: false,
-                default: None,
             }],
             is_async: false,
             generics: Vec::new(),
@@ -8027,7 +8006,6 @@ mod tests {
                 name: "x".to_string(),
                 ty: None,
                 optional: false,
-                default: None,
             }],
             is_async: false,
             generics: Vec::new(),

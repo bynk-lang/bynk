@@ -275,7 +275,6 @@ fn fanout_events(context: &str, layout: &bynk_project::worker_layout::WorkerLayo
             name: "e".to_string(),
             ty: None,
             optional: false,
-            default: None,
         }],
         is_async: false,
         generics: Vec::new(),
@@ -681,7 +680,6 @@ pub fn emit_worker_compose(
                     vec![TsType::named(crate::emitter::EVENTS_WIRE_EVENT_TS_TYPE)],
                 )),
                 optional: false,
-                default: None,
             }],
             is_async: false,
             generics: Vec::new(),
@@ -961,7 +959,6 @@ pub fn emit_worker_compose(
         name: "env".to_string(),
         ty: Some(TsType::named("Env")),
         optional: false,
-        default: None,
     }];
     // Locale capability track, slice 2 (#882): `request` is threaded
     // independently of `exec` — the two-way independence matters because
@@ -973,7 +970,6 @@ pub fn emit_worker_compose(
             name: "request".to_string(),
             ty: Some(TsType::named("globalThis.Request")),
             optional: true,
-            default: None,
         });
     }
     // L7 (#2414, Decision E): an `EdgeCache` instance is built from the
@@ -985,7 +981,6 @@ pub fn emit_worker_compose(
             name: "exec".to_string(),
             ty: Some(TsType::named("unknown")),
             optional: true,
-            default: None,
         });
     }
     if ctx_uses_send {
@@ -1001,7 +996,6 @@ pub fn emit_worker_compose(
                 "{ waitUntil(promise: globalThis.Promise<unknown>): void }",
             )),
             optional: false,
-            default: None,
         });
     }
 
@@ -1253,7 +1247,6 @@ fn emit_call_wrapper(
                 "handlers",
             )),
             optional: false,
-            default: None,
         })
         .collect();
     let param_args: Vec<TsExpr> = h
@@ -1275,7 +1268,6 @@ fn emit_call_wrapper(
                 name: "__who".to_string(),
                 ty: Some(crate::emitter::emit::call_sum_ts_type(members)),
                 optional: false,
-                default: None,
             },
         );
         deps_spread_with("who", ident("__who"))
@@ -1286,7 +1278,6 @@ fn emit_call_wrapper(
                 name: "__caller".to_string(),
                 ty: Some(TsType::named("string")),
                 optional: false,
-                default: None,
             },
         );
         deps_spread_with("identity", ident("__caller"))
@@ -1342,7 +1333,6 @@ fn emit_rejected_wrapper(sname: &str) -> TsObjectEntry {
                 "{ readonly tag: string; readonly detail: string }",
             )),
             optional: false,
-            default: None,
         }],
         return_type: None,
         doc: None,
@@ -1386,13 +1376,11 @@ fn emit_event_wrapper(sname: &str, h: &Handler, protocol: &ServiceProtocol) -> T
                 name: "payload".to_string(),
                 ty: Some(TsType::named("unknown")),
                 optional: false,
-                default: None,
             },
             TsParam {
                 name: "envelope".to_string(),
                 ty: Some(TsType::named("unknown")),
                 optional: false,
-                default: None,
             },
         ],
         return_type: None,
@@ -1419,7 +1407,6 @@ fn emit_cron_wrapper(sname: &str, cron_idx: usize, h: &Handler) -> TsObjectEntry
             name: wire_ident(&p.name.name),
             ty: Some(qualified_ts_type_ref(&p.type_ref)),
             optional: false,
-            default: None,
         })
         .collect();
     let mut call_args: Vec<TsExpr> = h
@@ -1509,7 +1496,6 @@ fn emit_queue_wrapper(
             name: wire_ident(&p.name.name),
             ty: Some(qualified_ts_type_ref(&p.type_ref)),
             optional: false,
-            default: None,
         })
         .collect();
     let mut call_args: Vec<TsExpr> = h
@@ -1523,7 +1509,6 @@ fn emit_queue_wrapper(
                 name: "__sender".to_string(),
                 ty: Some(TsType::named("__SenderIdentity")),
                 optional: false,
-                default: None,
             });
             if bynk_check::actors::sender_binder_for(h, actors).is_some() {
                 call_args.push(deps_spread_with("identity", ident("__sender")));
@@ -1588,13 +1573,11 @@ fn emit_websocket_upgrade(
         name: "request".to_string(),
         ty: Some(TsType::named("globalThis.Request")),
         optional: false,
-        default: None,
     }];
     params.extend(h.params.iter().map(|p| TsParam {
         name: wire_ident(&p.name.name),
         ty: Some(TsType::named("string")),
         optional: false,
-        default: None,
     }));
     let method_name = format!("ws_{sname}_open");
 
@@ -2126,13 +2109,11 @@ fn emit_http_wrapper(
             name: "request".to_string(),
             ty: Some(TsType::named("globalThis.Request")),
             optional: false,
-            default: None,
         }];
         params.extend(h.params.iter().map(|p| TsParam {
             name: wire_ident(&p.name.name),
             ty: Some(qualified_ts_type_ref(&p.type_ref)),
             optional: false,
-            default: None,
         }));
         let secret = crate::emitter::escape_ts_string(&seam.secret);
         let mut stmts: Vec<TsStmt> = Vec::new();
@@ -2240,7 +2221,6 @@ fn emit_http_wrapper(
             name: wire_ident(&p.name.name),
             ty: Some(qualified_ts_type_ref(&p.type_ref)),
             optional: false,
-            default: None,
         })
         .collect();
     let mut call_args = param_args;
@@ -2290,13 +2270,11 @@ fn emit_http_oidc_wrapper(
         name: "request".to_string(),
         ty: Some(TsType::named("globalThis.Request")),
         optional: false,
-        default: None,
     }];
     params.extend(h.params.iter().map(|p| TsParam {
         name: wire_ident(&p.name.name),
         ty: Some(qualified_ts_type_ref(&p.type_ref)),
         optional: false,
-        default: None,
     }));
     let mut stmts: Vec<TsStmt> = Vec::new();
     stmts.push(const_(
@@ -2522,13 +2500,11 @@ fn emit_http_signed_cookie_wrapper(
         name: "request".to_string(),
         ty: Some(TsType::named("globalThis.Request")),
         optional: false,
-        default: None,
     }];
     params.extend(h.params.iter().map(|p| TsParam {
         name: wire_ident(&p.name.name),
         ty: Some(qualified_ts_type_ref(&p.type_ref)),
         optional: false,
-        default: None,
     }));
     let mut stmts: Vec<TsStmt> = Vec::new();
     if !matches!(method, bynk_model::IrHttpMethod::Get) {
@@ -2670,13 +2646,11 @@ fn emit_http_sum_wrapper(
         name: "request".to_string(),
         ty: Some(TsType::named("globalThis.Request")),
         optional: false,
-        default: None,
     }];
     params.extend(path_params.iter().map(|(n, ty)| TsParam {
         name: n.clone(),
         ty: Some(qualified_ts_type_ref(ty)),
         optional: false,
-        default: None,
     }));
     let mut stmts: Vec<TsStmt> = Vec::new();
 

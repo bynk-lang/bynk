@@ -197,7 +197,6 @@ fn parse_iife(is_int: bool, s: LoweredExpr) -> Built {
                     name: "__s".to_string(),
                     ty: Some(TsType::named("string")),
                     optional: false,
-                    default: None,
                 }],
                 is_async: false,
                 generics: vec![],
