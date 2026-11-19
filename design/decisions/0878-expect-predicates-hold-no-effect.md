@@ -1,13 +1,6 @@
----
-level: patch
-probes: emit_diagnostics, diagnostic_coverage, explained_codes
-changelog: An `expect` predicate and an observation's `with` predicate may not hold an effectful call (`bynk.expect.impure_predicate`, `bynk.observe.impure_with`), and an `expect` comparison evaluates each operand once, so a capability call can no longer be recorded twice by a claim about it
-breaking: An `expect` predicate that holds an effectful call, such as `expect [Logger.log("x")].length() == 1`, is now `bynk.expect.impure_predicate`, and an effectful call in a `with` predicate is now `bynk.observe.impure_with`. Run the call first with `let x <- …` and state the claim about `x`.
----
+# 0878 — An `expect` predicate and an observation's `with` predicate hold no `Effect`
 
-## ADR: expect-predicates-hold-no-effect
-title: An `expect` predicate and an observation's `with` predicate hold no `Effect`
-summary: The test predicate positions enforce ADR 0144 D3 by type, not by syntax
+- **Status:** Accepted (v0.639.35)
 
 **Context.** ADR 0144 D3 bars effects and capabilities from every predicate position, and ADR 0145 D2 makes `expect` "the invariant predicate, checked identically"; ADR 0145 D6 rests the expected-vs-actual display, which evaluates a comparison's operands for the failure message, on that purity. But only `bynk.expect.not_bool` guarded `expect`. The purity gate the other positions share, `predicate_impure_construct`, is syntactic: it refuses `Effect.pure`, `?`, `expect`, `Val`, observations, `faults` and `trace`, and relies on those positions having no capability in scope. A `case` body has its capabilities in scope, so an `Effect` held inside a pure expression type-checked: `expect [Logger.log("x")].length() == 1`, or one returned by a lambda in a `map`. A capability call lowers to an eager call on the case's recording `deps`, so the claim ran the call and the recorder (ADR 0152) logged it. Combined with the comparison's double lowering, a `?` operand that held one was recorded twice on a passing claim, and `expect Logger.log called once` failed on a correct program (#3768). An observation's `with` predicate, checked by the same syntactic gate and evaluated once per recorded call, had the same gap.
 

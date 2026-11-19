@@ -28,6 +28,7 @@ per-commit history. While Bynk is pre-1.0, increments may change behaviour.
 
 | Version | Highlights |
 |---|---|
+| **v0.639.35** | An `expect` predicate and an observation's `with` predicate may not hold an effectful call (`bynk.expect.impure_predicate`, `bynk.observe.impure_with`), and an `expect` comparison evaluates each operand once, so a capability call can no longer be recorded twice by a claim about it |
 | **v0.639.34** | The persisted-store operations (held `Map`, `Map`, `Set`, `Cache`, `Log`, `Cell`) are built as TypeScript nodes rather than text, so each operation's statement IIFE is laid out as an indented block; no change to what the emitted code does |
 | **v0.639.33** | The `Query` operations over a store (`filter`, `sortBy`, `distinctBy`, `groupBy`, the joins, the terminals) are built as TypeScript nodes rather than text, so a statement-bodied step is laid out as an indented block; no change to what the emitted code does |
 | **v0.639.32** | The `Json`, `Yaml` and `Form` codec calls and the typed decoders are built as TypeScript nodes rather than text, so a typed decoder is laid out as an indented block; no change to what the emitted code does |

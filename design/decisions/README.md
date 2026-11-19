@@ -17,6 +17,7 @@ or a row links to no file. Summaries and statuses are curated by hand; the
 
 | # | Decision | Status |
 |---|---|---|
+| [0878](0878-expect-predicates-hold-no-effect.md) | **An `expect` predicate and an observation's `with` predicate hold no `Effect`** (v0.639.35) — The test predicate positions enforce ADR 0144 D3 by type, not by syntax | Accepted (v0.639.35) |
 | [0877](0877-tree-native-lowering.md) | **Tree-native lowering is the route Part 15.1 left open** (v0.639.8) — Phase 1A lowers into the existing bynk_ts tree through a counted bridge, and no expression IR is built | Accepted (v0.639.8) |
 | [0876](0876-back-half-feature-freeze.md) | **A feature freeze on bynk until the back-half paydown's Phase 1 exits** (v0.639.7) — New language surface, std APIs, deploy kinds, targets and CLI subcommands are not built until Phase 1's exit criteria are met | Accepted (v0.639.7) |
 | [0875](0875-gated-growth-probes-are-ratchets.md) | **Gated growth probes are ratchets** (v0.639.3) — The five growth probes can only fall in an ordinary PR; a rise needs a reasoned `raises:` entry, recorded in a ledger | Accepted (v0.639.3) |

@@ -17,6 +17,10 @@ here broke nothing, or its author did not say so: please
 
 <!-- stamp:breaking-entries -->
 
+## v0.639.35
+
+An `expect` predicate that holds an effectful call, such as `expect [Logger.log("x")].length() == 1`, is now `bynk.expect.impure_predicate`, and an effectful call in a `with` predicate is now `bynk.observe.impure_with`. Run the call first with `let x <- …` and state the claim about `x`.
+
 ## v0.633.0
 
 a `[test.targets.*]` `vars` entry named `BYNK_DATASET_…` is now a manifest error ("`vars.BYNK_DATASET_…` is reserved"), because `bynk` writes that name to carry an `Analytics` dataset's qualified name; rename the variable
