@@ -88,8 +88,8 @@ export class Room {
 
   async greet(conn: Connection<ServerFrame>, deps: {}): globalThis.Promise<void> {
     const __state = await this.loadState();
-    const __r0 = await (conn).send({ text: "welcome" });
-    const __r1 = await (conn).close();
+    const __r0 = await conn.send({ text: "welcome" });
+    const __r1 = await conn.close();
     return undefined;
   }
 

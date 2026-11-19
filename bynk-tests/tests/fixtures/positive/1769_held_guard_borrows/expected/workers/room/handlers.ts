@@ -69,13 +69,13 @@ export class Room {
     if (slot.tag === "Some") {
       const conn = slot.value;
       if (greet) {
-        const __r0 = await (conn).send({ text: "welcome" });
-        return (conn).close();
+        const __r0 = await conn.send({ text: "welcome" });
+        return conn.close();
       }
     }
     if (slot.tag === "Some") {
       const conn = slot.value;
-      return (conn).close();
+      return conn.close();
     }
     if (slot.tag === "None") {
       return undefined;

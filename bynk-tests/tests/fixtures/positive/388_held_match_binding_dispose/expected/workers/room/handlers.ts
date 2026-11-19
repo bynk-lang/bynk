@@ -69,8 +69,8 @@ export class Room {
     switch (slot.tag) {
       case "Some": {
         const conn = slot.value;
-        const __r0 = await (conn).send({ text: "welcome" });
-        return (conn).close();
+        const __r0 = await conn.send({ text: "welcome" });
+        return conn.close();
       }
       case "None": {
         return undefined;

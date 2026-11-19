@@ -24,7 +24,7 @@ export const Token = {
 
 export const api = {
   async http_GET_me(cookies: { get(name: string): { readonly tag: "Some"; readonly value: string } | { readonly tag: "None" }; all(name: string): readonly string[]; names(): readonly string[] }, deps: {}): globalThis.Promise<HttpResult<string>> {
-    const __r0 = (cookies).get("__Host-sid");
+    const __r0 = cookies.get("__Host-sid");
     switch (__r0.tag) {
       case "None": {
         return HttpResult.Unauthorized;
@@ -48,10 +48,10 @@ export const api = {
     throw new globalThis.Error("non-exhaustive match");
   },
   async http_GET_names(cookies: { get(name: string): { readonly tag: "Some"; readonly value: string } | { readonly tag: "None" }; all(name: string): readonly string[]; names(): readonly string[] }, deps: {}): globalThis.Promise<HttpResult<number>> {
-    return HttpResult.Ok(((cookies).names()).length);
+    return HttpResult.Ok((cookies.names()).length);
   },
   async http_GET_all(cookies: { get(name: string): { readonly tag: "Some"; readonly value: string } | { readonly tag: "None" }; all(name: string): readonly string[]; names(): readonly string[] }, deps: {}): globalThis.Promise<HttpResult<number>> {
-    return HttpResult.Ok(((cookies).all("theme")).length);
+    return HttpResult.Ok((cookies.all("theme")).length);
   },
   async http_POST_login(deps: {}): globalThis.Promise<HttpResult<string>> {
     return ((__r: any) => ({ ...__r, cookies: [...(__r.cookies ?? []), ({ name: "__Host-sid", value: "abc", maxAge: { tag: "None" as const }, expires: { tag: "None" as const }, domain: { tag: "None" as const }, path: "/", secure: true, httpOnly: true, sameSite: { tag: "Lax" as const }, partitioned: false })] }))(HttpResult.Created("ok"));

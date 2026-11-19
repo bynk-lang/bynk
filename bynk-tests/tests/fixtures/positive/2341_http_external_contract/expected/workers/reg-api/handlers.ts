@@ -23,7 +23,7 @@ export function problem(code: string, message: string): globalThis.Uint8Array {
 
 export const api = {
   async http_GET_whoami(headers: { get(name: string): { readonly tag: "Some"; readonly value: string } | { readonly tag: "None" }; bearer(): { readonly tag: "Some"; readonly value: string } | { readonly tag: "None" }; clientIp(): { readonly tag: "Some"; readonly value: string } | { readonly tag: "None" } }, deps: {}): globalThis.Promise<HttpResult<string>> {
-    const __r0 = (headers).bearer();
+    const __r0 = headers.bearer();
     switch (__r0.tag) {
       case "Some": {
         const token = __r0.value;
@@ -36,11 +36,11 @@ export const api = {
     throw new globalThis.Error("non-exhaustive match");
   },
   async http_PUT_packages_Param_name(name: string, body: string, headers: { get(name: string): { readonly tag: "Some"; readonly value: string } | { readonly tag: "None" }; bearer(): { readonly tag: "Some"; readonly value: string } | { readonly tag: "None" }; clientIp(): { readonly tag: "Some"; readonly value: string } | { readonly tag: "None" } }, deps: {}): globalThis.Promise<HttpResult<string>> {
-    const __r0 = (headers).get("x-request-id");
+    const __r0 = headers.get("x-request-id");
     switch (__r0.tag) {
       case "Some": {
         const id = __r0.value;
-        return HttpResult.Ok(`${String(name)} ${String(body)} ${String(id)} ${String(((__o: Option<string>, __d: string) => __o.tag === "Some" ? __o.value : __d)((headers).clientIp(), "-"))}`);
+        return HttpResult.Ok(`${String(name)} ${String(body)} ${String(id)} ${String(((__o: Option<string>, __d: string) => __o.tag === "Some" ? __o.value : __d)(headers.clientIp(), "-"))}`);
       }
       case "None": {
         return HttpResult.RawError(409, problem("conflict", `${String(name)} needs a request id`), "application/json");
@@ -49,7 +49,7 @@ export const api = {
     throw new globalThis.Error("non-exhaustive match");
   },
   async http_POST_notes_Param_id(id: string, body: string, headers: { get(name: string): { readonly tag: "Some"; readonly value: string } | { readonly tag: "None" }; bearer(): { readonly tag: "Some"; readonly value: string } | { readonly tag: "None" }; clientIp(): { readonly tag: "Some"; readonly value: string } | { readonly tag: "None" } }, deps: { who: { tag: "Sender" } | { tag: "User", identity: UserId } }): globalThis.Promise<HttpResult<string>> {
-    const traceId = ((__o: Option<string>, __d: string) => __o.tag === "Some" ? __o.value : __d)((headers).get("x-trace"), "-");
+    const traceId = ((__o: Option<string>, __d: string) => __o.tag === "Some" ? __o.value : __d)(headers.get("x-trace"), "-");
     switch (deps.who.tag) {
       case "Sender": {
         return HttpResult.Ok(`sender ${String(id)} ${String(body)} ${String(traceId)}`);

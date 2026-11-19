@@ -49,7 +49,7 @@ export const ClientFrame = {
 
 export const ChatGateway = {
   async open(connection: Connection<ServerFrame>, roomId: RoomId, topic: string, deps: { identity: UserId }): globalThis.Promise<void> {
-    const __r0 = await (connection).send({ text: `welcome to ${String(topic)}` });
+    const __r0 = await connection.send({ text: `welcome to ${String(topic)}` });
     const __r1 = await __makeRoom(roomId).join(deps.identity, connection, deps);
     return undefined;
   },
@@ -149,7 +149,9 @@ export class Room {
 
   async post(sender: UserId, text: string, deps: {}): globalThis.Promise<void> {
     const __state = await this.loadState();
-    const __r0 = await __bynkThen(__state.conns.values(), (__q) => (async () => { await __bynkSettleAll(__q.map((__x) => () => (async (c: Connection<ServerFrame>) => (c).send({ text: text }))(__x))); })());
+    const __r0 = await __bynkThen(__state.conns.values(), (__q) => (async () => {
+      await __bynkSettleAll(__q.map((__x) => () => (async (c: Connection<ServerFrame>) => c.send({ text: text }))(__x)));
+    })());
     return undefined;
   }
 

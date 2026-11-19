@@ -70,7 +70,7 @@ export class Room {
     switch (__d.tag) {
       case "Some": {
         const __r0 = __d.value;
-        return (__r0).close();
+        return __r0.close();
       }
       case "None": {
         return globalThis.Promise.resolve(undefined);
@@ -78,7 +78,7 @@ export class Room {
     }
     throw new globalThis.Error("non-exhaustive match");
   })(slot);
-    return (conn).close();
+    return conn.close();
   }
 
   async fetch(request: globalThis.Request): globalThis.Promise<globalThis.Response> {

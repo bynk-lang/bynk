@@ -26,7 +26,11 @@ export async function notify(n: number, deps: { Mail: Mail }, __exec: { waitUnti
 }
 
 export async function notifyAll(ns: readonly number[], deps: { Mail: Mail }, __exec: { waitUntil(promise: globalThis.Promise<unknown>): void }): globalThis.Promise<void> {
-  return (async (__xs: readonly number[]) => { for (const __x of __xs) { await (async (n: number) => __bynkDetach(deps.Mail.send(n), __exec, "src/shapes.bynk:47:20", "MailError"))(__x); } })(ns);
+  return (async (__xs: readonly number[]) => {
+    for (const __x of __xs) {
+      await (async (n: number) => __bynkDetach(deps.Mail.send(n), __exec, "src/shapes.bynk:47:20", "MailError"))(__x);
+    }
+  })(ns);
 }
 
 export interface Mail {

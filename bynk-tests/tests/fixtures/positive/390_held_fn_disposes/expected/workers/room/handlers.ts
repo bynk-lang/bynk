@@ -18,7 +18,7 @@ export const ServerFrame = {
 };
 
 export async function dispose(c: Connection<ServerFrame>): globalThis.Promise<void> {
-  const __r0 = await (c).close();
+  const __r0 = await c.close();
   return undefined;
 }
 

@@ -155,12 +155,14 @@ export class Room {
 
   async post(sender: UserId, text: string, deps: {}): globalThis.Promise<void> {
     const __state = await this.loadState();
-    const __r0 = await __bynkThen(__state.conns.values().flatMap((__cid) => { const __c = __resolveConnection<ServerFrame>(this.state, __cid); return __c.tag === "Some" ? [__c.value] : []; }), (__q) => (async () => { await __bynkSettleAll(__q.map((__x) => () => (async (c: Connection<ServerFrame>) => (c).send({ text: text }))(__x))); })());
+    const __r0 = await __bynkThen(__state.conns.values().flatMap((__cid) => { const __c = __resolveConnection<ServerFrame>(this.state, __cid); return __c.tag === "Some" ? [__c.value] : []; }), (__q) => (async () => {
+      await __bynkSettleAll(__q.map((__x) => () => (async (c: Connection<ServerFrame>) => c.send({ text: text }))(__x)));
+    })());
     return undefined;
   }
 
   async __wsOpen_ChatGateway(connection: Connection<ServerFrame>, roomId: RoomId, deps: { identity: UserId }): globalThis.Promise<void> {
-    const __r0 = await (connection).send({ text: "welcome" });
+    const __r0 = await connection.send({ text: "welcome" });
     const __r1 = await this.join(deps.identity, connection, deps);
     return undefined;
   }

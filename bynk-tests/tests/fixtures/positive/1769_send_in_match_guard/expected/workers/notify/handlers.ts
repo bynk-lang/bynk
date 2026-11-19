@@ -15,13 +15,13 @@ export const api = {
     if (__r0.tag === "Some") {
       const x = __r0.value;
       if (await (async () => {
-    if (x > 0) {
-      await __bynkDetach(deps.Logger.info("positive"), deps.__exec, "notify.bynk:13:12");
-      return true;
-    } else {
-      return false;
-    }
-  })()) {
+        if (x > 0) {
+          await __bynkDetach(deps.Logger.info("positive"), deps.__exec, "notify.bynk:13:12");
+          return true;
+        } else {
+          return false;
+        }
+      })()) {
         return HttpResult.Ok("positive");
       }
     }

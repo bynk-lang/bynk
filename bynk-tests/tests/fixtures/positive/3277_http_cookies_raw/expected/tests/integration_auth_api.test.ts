@@ -156,7 +156,7 @@ async function test_a_prefixed_cookie_the_login_sets_is_the_one_the_view_reads()
     __bynkClockNow = 0;
     const deps = __makeHarness();
     const login = await __sysdrive_api_http_POST_login(undefined, "");
-    if (!(__bynkEq(((((login) as any).cookies ?? [])).map((__x: Cookie) => ((c) => c.name)(__x)), ["__Host-sid"]))) { throw __bynkExpectFailure("tests/api.bynk:33:10", 984, 1036, "expect login.cookies().map((c) => c.name) == [\"__Host-sid\"]\n  expected: login.cookies().map((c) => c.name) == [\"__Host-sid\"]\n  actual:   " + __bynkShow((((((login) as any).cookies ?? [])).map((__x: Cookie) => ((c) => c.name)(__x)))) + " == " + __bynkShow((["__Host-sid"]))); }
+    if (!(__bynkEq((((login as any).cookies ?? [])).map((__x: Cookie) => ((c) => c.name)(__x)), ["__Host-sid"]))) { throw __bynkExpectFailure("tests/api.bynk:33:10", 984, 1036, "expect login.cookies().map((c) => c.name) == [\"__Host-sid\"]\n  expected: login.cookies().map((c) => c.name) == [\"__Host-sid\"]\n  actual:   " + __bynkShow(((((login as any).cookies ?? [])).map((__x: Cookie) => ((c) => c.name)(__x)))) + " == " + __bynkShow((["__Host-sid"]))); }
     return { pass: true };
   } catch (e) {
     if (e instanceof ExpectationError) {
