@@ -1380,7 +1380,7 @@ thread_local! {
     /// Test-only: how many expressions left lowering as text (1A.4's
     /// "now lowers to a node" tests read it). Compiled only for bynk-emit's own
     /// test build and under the `text-exit-counters` feature (see `lower::text_counters`).
-    static TEXT_EXITS: std::cell::Cell<usize> = const { std::cell::Cell::new(0) };
+    pub(super) static TEXT_EXITS: std::cell::Cell<usize> = const { std::cell::Cell::new(0) };
     /// Test-only: how many statements were hoisted into a [`Pre`] as text
     /// (1A.8's "now hoists nodes" tests read it).
     static TEXT_STMTS: std::cell::Cell<usize> = const { std::cell::Cell::new(0) };
@@ -2617,12 +2617,15 @@ fn lower_method_call(e: &Expr, cx: &mut LowerCtx) -> Lowered {
         unreachable!("lower_method_call is called on a method call")
     };
     let mut pre = Pre::new();
-    // 1A: the domain-specific dispatchers below (store, scalar/collection
-    // statics, runtime values, D1, cross-context, events, cookies,
-    // capabilities, type statics, test and system services, agent calls) stay
-    // text, each its own family with its own runtime contract. Of the kernel
-    // methods only the `List` kernel builds nodes (1A.18a and 1A.18b); the plain instance
-    // call that ends this function is a node.
+    // Each dispatcher below returns a bridge value that ends in
+    // `pre.finish_built` (1A.20, #3721, Decision G): the statics (scalar,
+    // runtime value, declared type) build nodes (`lower_call/statics.rs`), and a
+    // dispatcher that has not converted yet returns `Option<String>`, wrapped
+    // here as `Err` (1A: the store, D1, cross-context, events, cookie,
+    // capability, test-service and agent families, each its own slice under
+    // `lower_call/`). Of the kernel methods the `List` kernel builds nodes
+    // (1A.18a and 1A.18b) and every delegated kernel's node passes through
+    // unprinted; the plain instance call that ends this function is a node.
     // Persisted-store receivers: held Map, Map, Set, Cache, Log, Cell (#3167).
     if let Some(s) = lower_store_method_call(e, receiver, method, args, cx, &mut pre) {
         return pre.finish_built(Err(s));
@@ -4490,9 +4493,11 @@ fn lower_effect_kernel_call(
 /// the one place the emitter turns a kernel operation into TypeScript, matching
 /// on the receiver kind and the operation. `None` when the operation has no
 /// inline lowering here, so the caller falls through to the UFCS lowering; any
-/// hoisted statements the attempt produced stay in `pre`. The `List` kernel
-/// returns a node when its operands are nodes (1A.18a); every other family is
-/// still text, wrapped here as `Err` (`// 1A:` at its arm below).
+/// hoisted statements the attempt produced stay in `pre`. The result is a
+/// [`Built`] (1A.20, Decision G): the `List` kernel returns a node when its
+/// operands are nodes (1A.18a), a delegated kernel's `Lowered` passes through
+/// `Pre::absorb_built` unprinted, and a family that is still text is `Err`
+/// (`// 1A:` at its arm below).
 fn lower_kernel_method_call(
     e: &Expr,
     receiver: &Expr,
@@ -10460,6 +10465,31 @@ mod bridge_tests {
             "a literal is a node"
         );
         l.expr.into_text()
+    }
+
+    /// 1A.20, Decision G: a delegated kernel's `Lowered` passes through
+    /// `Pre::absorb_built` as a node (not printed), an unconverted one's text as
+    /// `Err`, a declined kernel as `None`, and the hoisted statements land in the
+    /// `Pre` in each case.
+    #[test]
+    fn absorb_built_passes_a_kernel_node_through() {
+        let mut pre = Pre::new();
+        let stub = Lowered {
+            pre: vec![LoweredStmt::Text("const __t = 1;".to_string())],
+            expr: LoweredExpr::Node(ident_node("x")),
+        };
+        match pre.absorb_built(Some(stub)) {
+            Some(Ok(bynk_ts::TsExpr::Ident(name))) => assert_eq!(name, "x"),
+            other => panic!("expected a node, got {other:?}"),
+        }
+        assert_eq!(pre.stmts(), ["const __t = 1;"]);
+        let text = Lowered::bare("(m).size".to_string());
+        match pre.absorb_built(Some(text)) {
+            Some(Err(t)) => assert_eq!(t, "(m).size"),
+            other => panic!("expected text, got {other:?}"),
+        }
+        assert!(pre.absorb_built(None).is_none());
+        assert_eq!(pre.stmts().len(), 1, "declining hoists nothing");
     }
 
     #[test]

@@ -183,17 +183,17 @@ async function __prop_test_where_clause_matches_a_locally_constructed_sum() {
     const __where = (__vals: any[]) => {
       const n = globalThis.Number(__vals[0]);
       return (((__d) => {
-          switch (__d.tag) {
-            case "Hit": {
-              const score = __d.score;
-              return score === 5;
-            }
-            case "Miss": {
-              return false;
-            }
+        switch (__d.tag) {
+          case "Hit": {
+            const score = __d.score;
+            return score === 5;
           }
-          throw new globalThis.Error("non-exhaustive match");
-        })(Outcome.Hit(5)));
+          case "Miss": {
+            return false;
+          }
+        }
+        throw new globalThis.Error("non-exhaustive match");
+      })(Outcome.Hit(5)));
     };
     const __body = async (__vals: any[]) => {
       const n = globalThis.Number(__vals[0]);

@@ -587,3 +587,327 @@ pub(in crate::emitter) fn lower_runtime_value_static_call(
     }
     None
 }
+
+#[cfg(test)]
+mod tests {
+    use crate::emitter::lower::TEXT_EXITS;
+    use crate::testkit::emit_source;
+
+    /// `(text exits, emitted TypeScript)` for a one-function commons.
+    fn exits(body: &str) -> (usize, String) {
+        TEXT_EXITS.with(|c| c.set(0));
+        let ts = emit_source(&format!("commons st\n{body}\n"));
+        (TEXT_EXITS.with(|c| c.get()), ts)
+    }
+
+    /// The returned expression of `export function f`.
+    fn returned(ts: &str) -> String {
+        let at = ts.find("export function f(").expect("f");
+        let rest = &ts[at..];
+        let ret = rest.find("  return ").expect("a return") + "  return ".len();
+        let end = rest[ret..].find(";\n}\n").expect("end");
+        rest[ret..ret + end].to_string()
+    }
+
+    const INT_RE: &str = "/^[+-]?[0-9]+$/";
+    const FLOAT_RE: &str = r"/^[+-]?([0-9]+(\.[0-9]*)?|\.[0-9]+)([eE][+-]?[0-9]+)?$/";
+
+    fn parse_text(re: &str, value: &str, guard: &str, arg: &str) -> String {
+        format!(
+            "((__s: string) => {{ if (!{re}.test(__s)) return None; const __n = {value}; return {guard} ? Some(__n) : None; }})({arg})"
+        )
+    }
+
+    /// Each static over identifier arguments prints exactly today's text and
+    /// leaves no expression as text (1A.4's counter reads 0).
+    #[test]
+    fn statics_over_nodes_print_as_before_with_no_text_exit() {
+        let int_parse = parse_text(
+            INT_RE,
+            "globalThis.Number(__s) + 0",
+            "globalThis.Number.isSafeInteger(__n)",
+            "s",
+        );
+        let float_parse = parse_text(
+            FLOAT_RE,
+            "globalThis.Number(__s)",
+            "globalThis.Number.isFinite(__n)",
+            "s",
+        );
+        for (body, want) in [
+            (
+                "fn f() -> List[Int] { List.empty() }",
+                "([] as readonly number[])".to_string(),
+            ),
+            (
+                "fn f() -> Set[Int] { Set.empty() }",
+                "new globalThis.Set<number>()".to_string(),
+            ),
+            (
+                "fn f() -> Map[String, Int] { Map.empty() }",
+                "new globalThis.Map<string, number>()".to_string(),
+            ),
+            (
+                "fn f() -> Float { Float.pi() }",
+                "globalThis.Math.PI".to_string(),
+            ),
+            (
+                "fn f() -> Float { Float.e() }",
+                "globalThis.Math.E".to_string(),
+            ),
+            ("fn f(s: String) -> Option[Int] { Int.parse(s) }", int_parse),
+            (
+                "fn f(s: String) -> Option[Float] { Float.parse(s) }",
+                float_parse,
+            ),
+            (
+                "fn f(n: Int) -> Duration { Duration.millis(n) }",
+                "n".to_string(),
+            ),
+            (
+                "fn f(n: Int) -> Instant { Instant.fromEpochMillis(n) }",
+                "n".to_string(),
+            ),
+            (
+                "fn f(s: String) -> Option[Instant] { Instant.fromIso(s) }",
+                "__bynkInstantFromIso(s)".to_string(),
+            ),
+            (
+                "fn f(s: String) -> Bytes { Bytes.fromUtf8(s) }",
+                "new globalThis.TextEncoder().encode(s)".to_string(),
+            ),
+            (
+                "fn f() -> Bytes { Bytes.empty() }",
+                "new globalThis.Uint8Array()".to_string(),
+            ),
+            (
+                "fn f(s: String) -> Option[Bytes] { Bytes.fromBase64(s) }",
+                "__bynkBytesFromBase64(s)".to_string(),
+            ),
+            (
+                "fn f(s: String) -> Option[Bytes] { Bytes.fromHex(s) }",
+                "__bynkBytesFromHex(s)".to_string(),
+            ),
+            (
+                "fn f(s: String) -> Option[Bytes] { Bytes.fromBase64Url(s) }",
+                "__bynkBytesFromBase64Url(s)".to_string(),
+            ),
+            (
+                "fn f(s: String) -> Option[Decimal] { Decimal.parse(s) }",
+                "__bynkDecimalParse(s)".to_string(),
+            ),
+            (
+                "fn f(n: Int) -> Decimal { Decimal.fromInt(n) }",
+                "__bynkDecimalFromInt(n)".to_string(),
+            ),
+        ] {
+            let (n, ts) = exits(body);
+            assert_eq!(returned(&ts), want, "{body}");
+            assert_eq!(n, 0, "{body}: text exits\n{ts}");
+        }
+    }
+
+    /// `Set.of` over a plain key is a `Set` constructor; over a keyed one it
+    /// goes through `__bynkSetOf`, which is imported on both the node and the
+    /// text path.
+    #[test]
+    fn set_of_notes_its_key_helper_on_both_paths() {
+        let (n, ts) = exits("fn f(xs: List[Int]) -> Set[Int] { Set.of(xs) }");
+        assert_eq!(returned(&ts), "new globalThis.Set<number>(xs)");
+        assert_eq!(n, 0, "{ts}");
+        assert!(!ts.contains("__bynkSetOf"), "{ts}");
+
+        let (n, ts) = exits("fn f(xs: List[Bytes]) -> Set[Bytes] { Set.of(xs) }");
+        assert_eq!(returned(&ts), "__bynkSetOf<globalThis.Uint8Array>(xs)");
+        assert_eq!(n, 0, "{ts}");
+        assert!(ts.contains("__bynkSetOf"), "{ts}");
+
+        // A text argument falls back to today's text, with the import still noted.
+        let (n, ts) = exits("fn f(m: Map[String, Bytes]) -> Set[Bytes] { Set.of(m.values()) }");
+        assert_eq!(
+            returned(&ts),
+            "__bynkSetOf<globalThis.Uint8Array>([...(m).values()])"
+        );
+        assert!(n > 0, "{ts}");
+        assert!(ts.contains("__bynkSetOf"), "{ts}");
+        let (_, ts) = exits("fn f(m: Map[String, Int]) -> Set[Int] { Set.of(m.values()) }");
+        assert_eq!(
+            returned(&ts),
+            "new globalThis.Set<number>([...(m).values()])"
+        );
+    }
+
+    /// A static over a text argument (`s.trim()` is still a kernel text) falls
+    /// back to today's text, byte for byte.
+    #[test]
+    fn a_text_argument_keeps_the_text_form() {
+        let int_parse = parse_text(
+            INT_RE,
+            "globalThis.Number(__s) + 0",
+            "globalThis.Number.isSafeInteger(__n)",
+            "s.trim()",
+        );
+        let float_parse = parse_text(
+            FLOAT_RE,
+            "globalThis.Number(__s)",
+            "globalThis.Number.isFinite(__n)",
+            "s.trim()",
+        );
+        for (body, want) in [
+            (
+                "fn f(s: String) -> Option[Int] { Int.parse(s.trim()) }",
+                int_parse,
+            ),
+            (
+                "fn f(s: String) -> Option[Float] { Float.parse(s.trim()) }",
+                float_parse,
+            ),
+            (
+                "fn f(s: String) -> Option[Instant] { Instant.fromIso(s.trim()) }",
+                "__bynkInstantFromIso(s.trim())".to_string(),
+            ),
+            (
+                "fn f(s: String) -> Bytes { Bytes.fromUtf8(s.trim()) }",
+                "new globalThis.TextEncoder().encode(s.trim())".to_string(),
+            ),
+            (
+                "fn f(s: String) -> Option[Decimal] { Decimal.parse(s.trim()) }",
+                "__bynkDecimalParse(s.trim())".to_string(),
+            ),
+            (
+                "fn f(s: String) -> Duration { Duration.millis(s.length()) }",
+                "(s).length".to_string(),
+            ),
+        ] {
+            let (n, ts) = exits(body);
+            assert_eq!(returned(&ts), want, "{body}");
+            assert!(n > 0, "{body}: a text argument is a text exit\n{ts}");
+        }
+    }
+
+    /// The identity statics keep the hoists of their argument: the `?` temporary
+    /// still reaches the statement list, and the argument stays a node.
+    #[test]
+    fn an_identity_static_keeps_its_arguments_hoists() {
+        let (n, ts) = exits(
+            "fn g() -> Result[Int, String] { Ok(3) }\n\
+             fn f() -> Result[Duration, String] { Ok(Duration.millis(g()?)) }",
+        );
+        assert_eq!(n, 0, "{ts}");
+        assert!(ts.contains("const __r0 = g();"), "{ts}");
+        assert!(ts.contains("return Ok(__r0.value);"), "{ts}");
+    }
+
+    /// `Stream.of` stays text (an async generator has no `bynk_ts` node).
+    #[test]
+    fn stream_of_stays_text() {
+        let (n, ts) = exits("fn f(xs: List[String]) -> Stream[String] { Stream.of(xs) }");
+        assert_eq!(
+            returned(&ts),
+            "(async function* () { for (const __e of xs) { yield __e; } })()"
+        );
+        assert!(n > 0, "{ts}");
+    }
+
+    /// A static on a declared type: with and without explicit type arguments,
+    /// with a witness, and over a text argument.
+    #[test]
+    fn type_statics_print_with_type_arguments_and_witnesses() {
+        let box_ = "type Box[T] = { value: T }\n\
+                    fn Box.of(value: T) -> Box[T] { Box { value } }\n\
+                    fn Box.empty() -> Box[Option[T]] { Box { value: None } }\n";
+        for (f, want) in [
+            ("fn f(n: Int) -> Box[Int] { Box.of(n) }", "Box.of(n)"),
+            (
+                "fn f() -> Box[Option[Int]] { Box.empty[Int]() }",
+                "Box.empty<number>()",
+            ),
+            (
+                "fn f() -> Box[Option[List[Int]]] { Box.empty[List[Int]]() }",
+                "Box.empty<readonly number[]>()",
+            ),
+        ] {
+            let (n, ts) = exits(&format!("{box_}{f}"));
+            assert_eq!(returned(&ts), want, "{f}");
+            assert_eq!(n, 0, "{f}: text exits\n{ts}");
+        }
+        let (n, ts) = exits(&format!(
+            "{box_}fn f(s: String) -> Box[Int] {{ Box.of(s.length()) }}"
+        ));
+        assert_eq!(returned(&ts), "Box.of((s).length)");
+        assert!(n > 0, "{ts}");
+        // A comparator witness follows the arguments.
+        let (n, ts) = exits(
+            "type Sorted[T: Ord] = { items: List[T] }\n\
+             fn Sorted.empty() -> Sorted[T] { Sorted { items: [] } }\n\
+             fn f() -> Sorted[Int] { Sorted.empty() }",
+        );
+        assert_eq!(returned(&ts), "Sorted.empty(__bynkCmpInt)");
+        assert_eq!(n, 0, "{ts}");
+    }
+
+    /// A UFCS call with explicit type arguments: the receiver's own arguments
+    /// first (spelled when in scope everywhere, `any` otherwise), then the
+    /// explicit ones, printed as `ts_type_ref` prints them.
+    #[test]
+    fn ufcs_explicit_type_arguments_are_a_type_application() {
+        let head = "type Box[A] = { value: A }\ntype Item = { sku: String }\n\
+                    fn Box.probe[U](self) -> Bool { true }\n";
+        for (f, want) in [
+            (
+                "fn f(b: Box[Int]) -> Bool { b.probe[String]() }",
+                "Box.probe<number, string>(b)",
+            ),
+            (
+                "fn f(b: Box[Item]) -> Bool { b.probe[Item]() }",
+                "Box.probe<any, Item>(b)",
+            ),
+            (
+                "fn f(b: Box[List[Int]]) -> Bool { b.probe[Option[Int]]() }",
+                "Box.probe<readonly number[], Option<number>>(b)",
+            ),
+        ] {
+            let (n, ts) = exits(&format!("{head}{f}"));
+            assert_eq!(returned(&ts), want, "{f}");
+            assert_eq!(n, 0, "{f}: text exits\n{ts}");
+        }
+    }
+
+    /// Decision G, the pass-through: a delegated kernel that is still text
+    /// reaches the call's caller as the same text, byte for byte (one call per
+    /// kernel family).
+    #[test]
+    fn delegated_kernels_print_as_before() {
+        for (body, want) in [
+            (
+                "fn f(m: Map[String, Int]) -> Int { m.length() }",
+                "(m).size",
+            ),
+            ("fn f(s: Set[Int]) -> Bool { s.contains(1) }", "(s).has(1)"),
+            ("fn f(n: Int) -> Int { n.abs() }", "globalThis.Math.abs(n)"),
+            (
+                "fn f(x: Float) -> Int { x.floor() }",
+                "__bynkToInt(globalThis.Math.floor(x), \"floor\")",
+            ),
+            ("fn f(d: Duration) -> Int { d.toMillis() }", "d"),
+            ("fn f(i: Instant) -> Int { i.toEpochMillis() }", "i"),
+            ("fn f(b: Bytes) -> Int { b.length() }", "(b).length"),
+            (
+                "fn f(d: Decimal) -> String { d.toString() }",
+                "__bynkDecimalToString(d)",
+            ),
+            ("fn f(s: String) -> Int { s.length() }", "(s).length"),
+            (
+                "fn f(o: Option[Int]) -> Int { o.getOrElse(0) }",
+                "((__o: Option<number>, __d: number) => __o.tag === \"Some\" ? __o.value : __d)(o, 0)",
+            ),
+            (
+                "fn f(r: Result[Int, String]) -> Int { r.getOrElse(0) }",
+                "((__r: Result<number, string>, __d: number) => __r.tag === \"Ok\" ? __r.value : __d)(r, 0)",
+            ),
+        ] {
+            let (_, ts) = exits(body);
+            assert_eq!(returned(&ts), want, "{body}");
+        }
+    }
+}

@@ -1103,7 +1103,23 @@ fn new_callee_needs_parens(callee: &TsExpr) -> bool {
         | TsExpr::Index { object, .. }
         | TsExpr::OptionalIndex { object, .. } => new_callee_needs_parens(object),
         TsExpr::TypeApp { callee, .. } => new_callee_needs_parens(callee),
-        _ => false,
+        TsExpr::Ident(_)
+        | TsExpr::VerbatimExpr(..)
+        | TsExpr::LinesArray(_)
+        | TsExpr::Arrow { .. }
+        | TsExpr::Object { .. }
+        | TsExpr::Array { .. }
+        | TsExpr::TemplateLit { .. }
+        | TsExpr::Await(_)
+        | TsExpr::As { .. }
+        | TsExpr::Unary { .. }
+        | TsExpr::Binary { .. }
+        | TsExpr::Conditional { .. }
+        | TsExpr::Paren(_)
+        | TsExpr::Spread(_)
+        | TsExpr::Assign { .. }
+        | TsExpr::AddAssign { .. }
+        | TsExpr::Lit(_) => false,
     }
 }
 

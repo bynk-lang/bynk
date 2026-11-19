@@ -32,17 +32,17 @@ export const api = {
       case "Some": {
         const raw = __r0.value;
         return ((__d) => {
-    switch (__d.tag) {
-      case "Ok": {
-        const t = __d.value;
-        return HttpResult.Ok(`hello ${String(t)}`);
-      }
-      case "Err": {
-        return HttpResult.BadRequest("bad session cookie");
-      }
-    }
-    throw new globalThis.Error("non-exhaustive match");
-  })(Token.of(raw));
+          switch (__d.tag) {
+            case "Ok": {
+              const t = __d.value;
+              return HttpResult.Ok(`hello ${String(t)}`);
+            }
+            case "Err": {
+              return HttpResult.BadRequest("bad session cookie");
+            }
+          }
+          throw new globalThis.Error("non-exhaustive match");
+        })(Token.of(raw));
       }
     }
     throw new globalThis.Error("non-exhaustive match");
