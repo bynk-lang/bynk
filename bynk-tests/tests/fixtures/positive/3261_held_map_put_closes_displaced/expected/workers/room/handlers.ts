@@ -89,7 +89,19 @@ export class Room {
   async join(u: UserId, conn: Connection<ServerFrame>, deps: {}): globalThis.Promise<void> {
     const __state = { ...(await this.loadState()) };
     const __result = await (async () => {
-      const __r0 = await (async () => { const __k = String(u); const __new = __connIdOf(conn); const __old = await __state.conns.get(__k); if (__old !== undefined && __old !== __new) { const __c = __resolveConnection<ServerFrame>(this.state, __old); if (__c.tag === "Some") { await __c.value.close(); } } await __state.conns.put(__k, __new); return undefined; })();
+      const __r0 = await (async () => {
+        const __k = String(u);
+        const __new = __connIdOf(conn);
+        const __old = await __state.conns.get(__k);
+        if (__old !== undefined && __old !== __new) {
+          const __c = __resolveConnection<ServerFrame>(this.state, __old);
+          if (__c.tag === "Some") {
+            await __c.value.close();
+          }
+        }
+        await __state.conns.put(__k, __new);
+        return undefined;
+      })();
       return undefined;
     })();
     await this.commitState(__state);
@@ -99,11 +111,26 @@ export class Room {
   async rejoin(u: UserId, deps: {}): globalThis.Promise<void> {
     const __state = { ...(await this.loadState()) };
     const __result = await (async () => {
-      const held = await (() => { const __cid = __state.conns.get(String(u)); return __cid !== undefined ? __resolveConnection<ServerFrame>(this.state, __cid) : None; })();
+      const held = await (() => {
+        const __cid = __state.conns.get(String(u));
+        return __cid !== undefined ? __resolveConnection<ServerFrame>(this.state, __cid) : None;
+      })();
       switch (held.tag) {
         case "Some": {
           const c = held.value;
-          const __r0 = await (async () => { const __k = String(u); const __new = __connIdOf(c); const __old = await __state.conns.get(__k); if (__old !== undefined && __old !== __new) { const __c = __resolveConnection<ServerFrame>(this.state, __old); if (__c.tag === "Some") { await __c.value.close(); } } await __state.conns.put(__k, __new); return undefined; })();
+          const __r0 = await (async () => {
+            const __k = String(u);
+            const __new = __connIdOf(c);
+            const __old = await __state.conns.get(__k);
+            if (__old !== undefined && __old !== __new) {
+              const __c = __resolveConnection<ServerFrame>(this.state, __old);
+              if (__c.tag === "Some") {
+                await __c.value.close();
+              }
+            }
+            await __state.conns.put(__k, __new);
+            return undefined;
+          })();
           return undefined;
         }
         case "None": {
@@ -119,7 +146,18 @@ export class Room {
   async leave(u: UserId, deps: {}): globalThis.Promise<void> {
     const __state = { ...(await this.loadState()) };
     const __result = await (async () => {
-      const __r0 = await (async () => { const __k = String(u); const __cid = await __state.conns.get(__k); if (__cid !== undefined) { const __c = __resolveConnection<ServerFrame>(this.state, __cid); if (__c.tag === "Some") { await __c.value.close(); } await __state.conns.remove(__k); } return undefined; })();
+      const __r0 = await (async () => {
+        const __k = String(u);
+        const __cid = await __state.conns.get(__k);
+        if (__cid !== undefined) {
+          const __c = __resolveConnection<ServerFrame>(this.state, __cid);
+          if (__c.tag === "Some") {
+            await __c.value.close();
+          }
+          await __state.conns.remove(__k);
+        }
+        return undefined;
+      })();
       return undefined;
     })();
     await this.commitState(__state);

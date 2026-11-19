@@ -71,7 +71,10 @@ export class Cart {
   async add(sku: string, it: Item, deps: {}): globalThis.Promise<void> {
     const __state = { ...(await this.loadState()) };
     const __result = await (async () => {
-      const __r0 = await (async () => { await __state.items.put(String(sku), it); return undefined; })();
+      const __r0 = await (async () => {
+        await __state.items.put(String(sku), it);
+        return undefined;
+      })();
       return undefined;
     })();
     await this.commitState(__state);
@@ -80,14 +83,25 @@ export class Cart {
 
   async lookup(sku: string, deps: {}): globalThis.Promise<Option<Item>> {
     const __state = await this.loadState();
-    const found = await (async () => { const __k = String(sku); return __bynkThen(__state.items.has(__k), (__h) => __h ? __bynkThen(__state.items.get(__k), (__v) => Some(__v!)) : None); })();
+    const found = await (async () => {
+      const __k = String(sku);
+      return __bynkThen(__state.items.has(__k), (__h) => __h ? __bynkThen(__state.items.get(__k), (__v) => Some(__v!)) : None);
+    })();
     return found;
   }
 
   async bump(sku: string, deps: {}): globalThis.Promise<void> {
     const __state = { ...(await this.loadState()) };
     const __result = await (async () => {
-      const __r0 = await (async () => { await __state.items.modify(String(sku), (__c, __p) => { if (!__p) { throw new globalThis.Error("Map.update: key absent"); } return ((i: Item) => ({ ...i, qty: i.qty + 1 }))(__c!); }); return undefined; })();
+      const __r0 = await (async () => {
+        await __state.items.modify(String(sku), (__c, __p) => {
+          if (!__p) {
+            throw new globalThis.Error("Map.update: key absent");
+          }
+          return ((i: Item) => ({ ...i, qty: i.qty + 1 }))(__c!);
+        });
+        return undefined;
+      })();
       return undefined;
     })();
     await this.commitState(__state);

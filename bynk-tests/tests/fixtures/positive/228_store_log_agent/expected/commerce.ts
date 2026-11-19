@@ -84,7 +84,12 @@ export class Inventory {
   async reserve(sku: string, qty: number, deps: { Clock: Clock }): globalThis.Promise<void> {
     const __state = { ...(await this.loadState()) };
     const __result = await (async () => {
-      const __r0 = await (async () => { const __now = await deps.Clock.now(); await __state.history.append({ sku, qty }, __now); await __state.history.prune(__now - 2592000000); return undefined; })();
+      const __r0 = await (async () => {
+        const __now = await deps.Clock.now();
+        await __state.history.append({ sku, qty }, __now);
+        await __state.history.prune(__now - 2592000000);
+        return undefined;
+      })();
       return undefined;
     })();
     await this.commitState(__state);

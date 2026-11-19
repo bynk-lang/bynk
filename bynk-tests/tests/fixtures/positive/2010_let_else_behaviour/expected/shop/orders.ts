@@ -204,7 +204,10 @@ export class Stock {
       if (__state.held + qty > 5) {
         return Err(Problem.NoStock);
       } else {
-        const __r0 = await (() => { __state.held = ((h: number) => h + qty)(__state.held); return undefined; })();
+        const __r0 = await (() => {
+          __state.held = ((h: number) => h + qty)(__state.held);
+          return undefined;
+        })();
         return Ok(undefined);
       }
     })();
@@ -215,7 +218,10 @@ export class Stock {
   async release(qty: number, deps: {}): globalThis.Promise<void> {
     const __state = { ...(await this.loadState()) };
     const __result = await (async () => {
-      const __r0 = await (() => { __state.held = ((h: number) => h - qty)(__state.held); return undefined; })();
+      const __r0 = await (() => {
+        __state.held = ((h: number) => h - qty)(__state.held);
+        return undefined;
+      })();
       return undefined;
     })();
     await this.commitState(__state);

@@ -84,7 +84,10 @@ export class Shelf {
   async put(item: Item, deps: {}): globalThis.Promise<boolean> {
     const __state = { ...(await this.loadState()) };
     const __result = await (async () => {
-      const __r0 = await (async () => { await __state.items.put(String(item.name), item); return undefined; })();
+      const __r0 = await (async () => {
+        await __state.items.put(String(item.name), item);
+        return undefined;
+      })();
       return true;
     })();
     await this.commitState(__state);

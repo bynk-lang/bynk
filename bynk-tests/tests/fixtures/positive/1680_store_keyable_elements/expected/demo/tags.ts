@@ -93,7 +93,10 @@ export class Board {
   async tag(t: Tag, deps: {}): globalThis.Promise<void> {
     const __state = { ...(await this.loadState()) };
     const __result = await (async () => {
-      const __r0 = await (async () => { await __state.tags.add(String(t)); return undefined; })();
+      const __r0 = await (async () => {
+        await __state.tags.add(String(t));
+        return undefined;
+      })();
       return undefined;
     })();
     await this.commitState(__state);
@@ -109,7 +112,10 @@ export class Board {
   async own(u: UserId, n: number, deps: {}): globalThis.Promise<void> {
     const __state = { ...(await this.loadState()) };
     const __result = await (async () => {
-      const __r0 = await (async () => { await __state.owners.put(String(u), n); return undefined; })();
+      const __r0 = await (async () => {
+        await __state.owners.put(String(u), n);
+        return undefined;
+      })();
       return undefined;
     })();
     await this.commitState(__state);
@@ -118,7 +124,10 @@ export class Board {
 
   async owned(u: UserId, deps: {}): globalThis.Promise<number> {
     const __state = await this.loadState();
-    const r = await (async () => { const __k = String(u); return __bynkThen(__state.owners.has(__k), (__h) => __h ? __bynkThen(__state.owners.get(__k), (__v) => Some(__v!)) : None); })();
+    const r = await (async () => {
+      const __k = String(u);
+      return __bynkThen(__state.owners.has(__k), (__h) => __h ? __bynkThen(__state.owners.get(__k), (__v) => Some(__v!)) : None);
+    })();
     return ((__o: Option<number>, __d: number) => __o.tag === "Some" ? __o.value : __d)(r, 0);
   }
 

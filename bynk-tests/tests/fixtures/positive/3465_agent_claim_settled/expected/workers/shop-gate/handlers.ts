@@ -74,7 +74,10 @@ export class Gate {
           const __letElse487 = await (await (async (__k: string, __t: number) => __claims.note(__k, await deps.Idempotency.claim(__k, __claims.lease(__t)), __t))(`shop.gate.Gate.take::${job}`, 3600000));
           switch (__letElse487.tag) {
             case "Claimed": {
-              const __r0 = await (() => { __state.taken = ((n: number) => n + 1)(__state.taken); return undefined; })();
+              const __r0 = await (() => {
+                __state.taken = ((n: number) => n + 1)(__state.taken);
+                return undefined;
+              })();
               return (job === "bad" ? Err("rejected") : Ok("done"));
             }
             default: {

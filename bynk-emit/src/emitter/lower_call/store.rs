@@ -7,7 +7,6 @@
 //! (`TsArrowBody::Multiline`, Decision C), one statement per line.
 
 use bynk_check::checker::Callee;
-use bynk_syntax::ast::{BinOp, Expr, ExprKind, Ident, LambdaExpr};
 use bynk_ts::{TsBinaryOp, TsExpr, TsLit, TsStmt, TsType, TsUnaryOp, print_type};
 
 use super::super::lower::{Built, Lowered, LoweredExpr, Pre, member_node, node_or_text};
@@ -16,6 +15,7 @@ use super::super::lower_list::{
     arrow, binary, block, block_arrow, call, const_, expr_stmt, id, iife_block, member,
     method_call_bare, param, paren, ret, string_of, take,
 };
+use super::super::{BinOp, Expr, ExprKind, Ident, LambdaExpr};
 use super::query::{
     QueryShape, QuerySource, held_values_source, lower_query_by_name, note_par_fan_out,
     path_values_source, query_key_cmp, query_keyed, query_other_elem,

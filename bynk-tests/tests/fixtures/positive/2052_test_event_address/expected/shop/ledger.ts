@@ -57,7 +57,10 @@ export class Books {
   async bump(deps: {}): globalThis.Promise<void> {
     const __state = { ...(await this.loadState()) };
     const __result = await (async () => {
-      const __r0 = await (() => { __state.count = ((n: number) => n + 1)(__state.count); return undefined; })();
+      const __r0 = await (() => {
+        __state.count = ((n: number) => n + 1)(__state.count);
+        return undefined;
+      })();
       return undefined;
     })();
     await this.commitState(__state);

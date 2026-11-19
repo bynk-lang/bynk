@@ -71,7 +71,14 @@ export class Orders {
   async bulkAdd(items: readonly Order[], deps: {}): globalThis.Promise<void> {
     const __state = { ...(await this.loadState()) };
     const __result = await (async () => {
-      return (async (__xs: readonly Order[]) => { for (const __x of __xs) { await (async (o: Order) => (async () => { await __state.orders.put(String(o.id), o); return undefined; })())(__x); } })(items);
+      return (async (__xs: readonly Order[]) => {
+        for (const __x of __xs) {
+          await (async (o: Order) => (async () => {
+            await __state.orders.put(String(o.id), o);
+            return undefined;
+          })())(__x);
+        }
+      })(items);
     })();
     await this.commitState(__state);
     return __result;

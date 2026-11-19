@@ -493,8 +493,14 @@ export class Bag {
   async put(k: string, v: number, deps: {}): globalThis.Promise<void> {
     const __state = { ...(await this.loadState()) };
     const __result = await (async () => {
-      const __r0 = await (async () => { await __state.items.put(String(k), v); return undefined; })();
-      const __r1 = await (async () => { await __state.seen.add(String(k)); return undefined; })();
+      const __r0 = await (async () => {
+        await __state.items.put(String(k), v);
+        return undefined;
+      })();
+      const __r1 = await (async () => {
+        await __state.seen.add(String(k));
+        return undefined;
+      })();
       return undefined;
     })();
     await this.commitState(__state);
@@ -503,7 +509,10 @@ export class Bag {
 
   async get(k: string, deps: {}): globalThis.Promise<Option<number>> {
     const __state = await this.loadState();
-    const r = await (async () => { const __k = String(k); return __bynkThen(__state.items.has(__k), (__h) => __h ? __bynkThen(__state.items.get(__k), (__v) => Some(__v!)) : None); })();
+    const r = await (async () => {
+      const __k = String(k);
+      return __bynkThen(__state.items.has(__k), (__h) => __h ? __bynkThen(__state.items.get(__k), (__v) => Some(__v!)) : None);
+    })();
     return r;
   }
 
