@@ -131,6 +131,8 @@ mod integration {
     mod provider_agent_cross_context_target;
     #[path = "query_kernel_registry.rs"]
     mod query_kernel_registry;
+    #[path = "record_default_nodes.rs"]
+    mod record_default_nodes;
     #[path = "recursive_codec_depth_agreement.rs"]
     mod recursive_codec_depth_agreement;
     #[path = "reference_index.rs"]

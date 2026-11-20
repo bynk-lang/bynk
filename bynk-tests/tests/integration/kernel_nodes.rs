@@ -139,9 +139,9 @@ service api from http {
         &text,
         r#"return ((__r: any) => ({ ...__r, cookies: [...(__r.cookies ?? []), { ...(session("")), value: "", maxAge: Some(0), expires: Some(0) }] }))(HttpResult.NoContent);"#,
     );
-    // A record literal is still text: the same IIFE, byte for byte.
-    let (exits, text) = emit("3277_http_cookies_write");
-    assert!(exits > 0);
+    // A record literal that takes a default is a node since 1A.31 (it was this test's text
+    // example): the same IIFE, byte for byte.
+    let (_, text) = emit("3277_http_cookies_write");
     assert_contains(
         &text,
         r#"cookies: [...(__r.cookies ?? []), { ...({ name: "__Host-sid", value: "","#,
