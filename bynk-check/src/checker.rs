@@ -850,6 +850,27 @@ pub enum HandlerAddress {
     Ws(WsAddress),
 }
 
+impl HandlerAddress {
+    /// The address as the diagnostics write it (`POST /orders`, `call`, `ws open`).
+    pub fn describe(&self) -> String {
+        match self {
+            HandlerAddress::Call => "call".to_string(),
+            HandlerAddress::Http { verb, path: None } => verb.as_str().to_string(),
+            HandlerAddress::Http {
+                verb,
+                path: Some(path),
+            } => format!("{} {path}", verb.as_str()),
+            HandlerAddress::Schedule { expr: None } => "schedule".to_string(),
+            HandlerAddress::Schedule { expr: Some(expr) } => format!("schedule {expr}"),
+            HandlerAddress::Message => "message".to_string(),
+            HandlerAddress::Event => "event".to_string(),
+            HandlerAddress::Ws(WsAddress::Open) => "ws open".to_string(),
+            HandlerAddress::Ws(WsAddress::Message { .. }) => "ws message".to_string(),
+            HandlerAddress::Ws(WsAddress::Close { .. }) => "ws close".to_string(),
+        }
+    }
+}
+
 /// The WebSocket lifecycle step of a [`HandlerAddress::Ws`]. `Message` and `Close`
 /// carry what the emitter needs once the handler is matched: the index of the
 /// inbound-frame parameter and the parameter count, and the count for `close`.

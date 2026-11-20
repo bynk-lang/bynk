@@ -2795,8 +2795,10 @@ fn check_event_address_tier(
         .values()
         .filter_map(|c| match c {
             checker::Callee::TestService {
-                service, address, ..
-            } if address == "event" => Some(service.as_str()),
+                service,
+                address_t: checker::HandlerAddress::Event,
+                ..
+            } => Some(service.as_str()),
             _ => None,
         })
         .collect();
@@ -2835,8 +2837,10 @@ fn check_ws_address_tier(
         .values()
         .filter_map(|c| match c {
             checker::Callee::TestService {
-                service, address, ..
-            } if address.starts_with("ws ") => Some(service.as_str()),
+                service,
+                address_t: checker::HandlerAddress::Ws(_),
+                ..
+            } => Some(service.as_str()),
             _ => None,
         })
         .collect();
@@ -2874,13 +2878,14 @@ fn check_extra_headers_tier(
     }
     for e in exprs_in_order(&case.body) {
         let Some(checker::Callee::TestService {
-            address,
+            address_t,
             extra_headers: true,
             ..
         }) = callees.get(&e.id)
         else {
             continue;
         };
+        let address = address_t.describe();
         errors.push(
             CompileError::new(
                 "bynk.test.service_call_arity",
@@ -2960,8 +2965,10 @@ fn check_call_address_tier(
         .values()
         .filter_map(|c| match c {
             checker::Callee::TestService {
-                service, address, ..
-            } if address == "call" => Some(service.as_str()),
+                service,
+                address_t: checker::HandlerAddress::Call,
+                ..
+            } => Some(service.as_str()),
             _ => None,
         })
         .collect();
@@ -3034,8 +3041,10 @@ pub fn remote_unsupported(
     if let Some(svc) = named(&|c| match c {
         Callee::Cross { unit, service } => Some(format!("{unit}.{service}")),
         Callee::TestService {
-            service, address, ..
-        } if address == "call" => Some(service.clone()),
+            service,
+            address_t: checker::HandlerAddress::Call,
+            ..
+        } => Some(service.clone()),
         _ => None,
     }) {
         return refusal(
@@ -3066,9 +3075,14 @@ pub fn remote_unsupported(
         if let Some(svc) = named(&|c| match c {
             Callee::TestService {
                 service,
-                address: a,
+                address_t: checker::HandlerAddress::Schedule { .. },
                 ..
-            } if a == address || a.starts_with(&format!("{address} ")) => Some(service.clone()),
+            } if address == "schedule" => Some(service.clone()),
+            Callee::TestService {
+                service,
+                address_t: checker::HandlerAddress::Message,
+                ..
+            } if address == "message" => Some(service.clone()),
             _ => None,
         }) {
             return refusal(

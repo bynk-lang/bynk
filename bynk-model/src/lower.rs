@@ -467,7 +467,7 @@ pub fn lower_store_field_shape_ir(f: &StoreField, program: &CheckedProgram) -> S
 /// `expr_children`'s total child iterator.
 ///
 /// Unlike the deleted function's own name-based `mutating_op`, this walk
-/// needs no per-kind receiver-name set: a `Callee::Store { op, .. }` already
+/// needs no per-kind receiver-name set: a `Callee::Store { op_t, .. }` already
 /// carries the field's own resolved identity (the checker only ever records
 /// one for a method the field's own kind actually declares), so `op`'s
 /// membership in the store-op registry's mutating set
@@ -482,7 +482,7 @@ pub fn body_writes_state(body: &Block, program: &TypedCommons) -> bool {
             // #2194: the mutating set is the store-op registry's own
             // `mutates` flag. A `Callee::Store` already carries the op
             // resolved against its field's kind, so the op name alone decides.
-            Some(Callee::Store { op, .. }) => bynk_check::store_ops::is_mutating_any(op),
+            Some(Callee::Store { op_t, .. }) => op_t.mutates(),
             _ => false,
         }
     }

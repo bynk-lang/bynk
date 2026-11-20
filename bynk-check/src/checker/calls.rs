@@ -4936,8 +4936,10 @@ fn oidc_only_principal(bad: BadCredential) -> Option<OidcOnlyPrincipal> {
 pub(crate) fn nobody_outcome(value: &Expr, ty: TyId, ctx: &Ctx) -> TyId {
     let is_http_address = matches!(
         ctx.callees.get(&value.id),
-        Some(Callee::TestService { address, .. })
-            if address.split(' ').next().is_some_and(|m| bynk_syntax::ast::HttpMethod::from_ident(m).is_some())
+        Some(Callee::TestService {
+            address_t: HandlerAddress::Http { .. },
+            ..
+        })
     );
     if is_http_address {
         wire_outcome(ty, ctx)
