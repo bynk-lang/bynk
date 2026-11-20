@@ -31,7 +31,10 @@ export const __ModeToken: symbol = globalThis.Symbol("Mode");
 
 export class SecretMode implements Mode {
   private deps: { Secrets: bynk.Secrets };
-  constructor(deps: { Secrets: bynk.Secrets }) { this.deps = deps; }
+  constructor(deps: { Secrets: bynk.Secrets }) {
+    this.deps = deps;
+  }
+
   async current(): globalThis.Promise<string> {
     const m = await this.deps.Secrets.get("APP_MODE");
     switch (m.tag) {

@@ -133,10 +133,14 @@ export const __TakedownToken: symbol = globalThis.Symbol("Takedown");
 
 export class BucketTakedown implements Takedown {
   private deps: { Files: Files };
-  constructor(deps: { Files: Files }) { this.deps = deps; }
+  constructor(deps: { Files: Files }) {
+    this.deps = deps;
+  }
+
   async take(name: string): globalThis.Promise<number> {
     return __makeIndex(name).withdraw("1.0.0", this.deps);
   }
+
   async takeVia(name: string): globalThis.Promise<number> {
     return __makeFront(name).go("1.0.0-rc.1", this.deps);
   }

@@ -26,6 +26,7 @@ export class NoOpLogger implements Logger {
   async log(msg: string): globalThis.Promise<void> {
     return undefined;
   }
+
   async warn(msg: string): globalThis.Promise<void> {
     return undefined;
   }

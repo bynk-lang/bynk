@@ -176,9 +176,9 @@ fn fanout_program(
         ));
     }
     program.push(TsStmt::decl(
-        TsDecl::Export(Box::new(TsDecl::Class {
-            name: EVENTS_FANOUT_CLASS_NAME.to_string(),
-            fields: vec![TsClassField {
+        TsDecl::Export(Box::new(TsDecl::class(
+            EVENTS_FANOUT_CLASS_NAME,
+            vec![TsClassField {
                 name: "env".to_string(),
                 ty: TsType::named_with_args(
                     "globalThis.Record",
@@ -186,9 +186,9 @@ fn fanout_program(
                 ),
                 private: true,
             }],
-            constructor: Some(events_fanout_ctor()),
-            methods: vec![events_fanout_fetch(publisher)],
-        })),
+            Some(events_fanout_ctor()),
+            vec![events_fanout_fetch(publisher)],
+        ))),
         None,
     ));
     program
@@ -593,6 +593,7 @@ fn events_fanout_fetch(publisher: Option<&str>) -> TsClassMethod {
                 None,
             ),
         ],
+        span: None,
     }
 }
 

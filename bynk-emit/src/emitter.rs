@@ -390,6 +390,19 @@ fn single_file_ctx() -> EmitProjectCtx {
     }
 }
 
+/// Append one item's statements to `body`, giving the first the item's span: the checkpoint
+/// every line up to the next span maps back to.
+fn extend_with_span(
+    body: &mut Vec<bynk_ts::TsStmt>,
+    mut stmts: Vec<bynk_ts::TsStmt>,
+    span: bynk_syntax::span::Span,
+) {
+    if let Some(first) = stmts.first_mut() {
+        first.span = Some(span);
+    }
+    body.extend(stmts);
+}
+
 /// Emit TypeScript source for a single file inside a multi-file project,
 /// including cross-file and cross-commons imports computed from
 /// [`EmitProjectCtx`].
@@ -579,9 +592,8 @@ pub fn emit_project(
                 body.extend(item_stmts);
             }
             CommonsItem::Provider(p) => {
-                if let Some(mut stmt) = emit_provider(p, commons, ctx) {
-                    stmt.span = Some(p.span);
-                    body.push(stmt);
+                if let Some(item_stmts) = emit_provider(p, commons, ctx) {
+                    extend_with_span(&mut body, item_stmts, p.span);
                 }
             }
             CommonsItem::Service(s) => {
@@ -599,9 +611,8 @@ pub fn emit_project(
                     .iter()
                     .map(|h| lower_service_handler_signature_ir(h, program))
                     .collect();
-                let mut stmt = emit_service(s, &protocol, &signatures, commons, ctx);
-                stmt.span = Some(s.span);
-                body.push(stmt);
+                let item_stmts = emit_service(s, &protocol, &signatures, commons, ctx);
+                extend_with_span(&mut body, item_stmts, s.span);
             }
             CommonsItem::Agent(a) => {
                 let state: Vec<_> = a
@@ -2540,6 +2551,7 @@ fn emit_context_rebrands(
                     }),
                     None,
                 )],
+                span: None,
             };
             let mut entries = vec![of_entry];
             // ADR 0182: only opaque types have a public `.unsafe` to forward.
@@ -2570,6 +2582,7 @@ fn emit_context_rebrands(
                         }),
                         None,
                     )],
+                    span: None,
                 });
             }
             // v0.132.1 (#481): forward the commons' user-defined attached methods
@@ -3550,7 +3563,9 @@ fn emit_cross_context_namespace_imports(
         // consumed name suffices for the surface contract.)
         let target_paths = ctx.imported_decl_paths.get(q.as_str());
         let target = target_paths
-            .and_then(|m| m.values().next().cloned())
+            // #3807: the smallest path, so the output does not depend on hash order. Any
+            // single file is still wrong for a context whose declarations span several.
+            .and_then(|m| m.values().min().cloned())
             .unwrap_or_else(|| {
                 // No imported declaration pins the path (e.g. a capability-only
                 // consumed context, v0.15). Fall back to the unit's own module:

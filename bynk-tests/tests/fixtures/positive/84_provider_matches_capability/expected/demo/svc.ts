@@ -15,6 +15,7 @@ export class StubCounter implements Counter {
   async next(seed: number): globalThis.Promise<number> {
     return seed + 1;
   }
+
   async reset(): globalThis.Promise<void> {
     return undefined;
   }

@@ -14,7 +14,10 @@ export const __RatesToken: symbol = globalThis.Symbol("Rates");
 
 export class FixedRates implements Rates {
   private deps: { Base: shop_base.Base };
-  constructor(deps: { Base: shop_base.Base }) { this.deps = deps; }
+  constructor(deps: { Base: shop_base.Base }) {
+    this.deps = deps;
+  }
+
   async rate(): globalThis.Promise<number> {
     const b = await this.deps.Base.base();
     return b + 2;

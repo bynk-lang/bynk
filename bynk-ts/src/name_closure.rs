@@ -844,11 +844,16 @@ impl Walk {
             }
             TsDecl::Class {
                 name,
+                implements,
                 fields,
                 constructor,
                 methods,
+                ..
             } => {
                 self.bind(name);
+                for ty in implements {
+                    self.ty(ty);
+                }
                 for f in fields {
                     self.ty(&f.ty);
                 }

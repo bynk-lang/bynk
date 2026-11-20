@@ -59,7 +59,10 @@ export const __NullLoggerProvider = { token: __LoggerToken, factory: () => new N
 
 export class LoggedAudit implements Audit {
   private deps: { Logger: Logger };
-  constructor(deps: { Logger: Logger }) { this.deps = deps; }
+  constructor(deps: { Logger: Logger }) {
+    this.deps = deps;
+  }
+
   async note(what: string): globalThis.Promise<number> {
     const __r0 = await warn(`audit ${String(what)}`, this.deps);
     return 1;

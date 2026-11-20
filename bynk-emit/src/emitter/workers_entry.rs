@@ -2135,16 +2135,13 @@ pub fn emit_worker_entry(
     } else {
         fetch_body
     };
-    let mut default_entries: Vec<TsObjectEntry> = vec![TsObjectEntry::Method {
-        name: "fetch".to_string(),
-        is_async: true,
-        generics: Vec::new(),
-        params: fetch_params,
-        return_type: fetch_return,
-        doc: None,
-        inline: false,
-        body: fetch_body,
-    }];
+    let mut default_entries: Vec<TsObjectEntry> = vec![TsObjectEntry::method(
+        "fetch",
+        true,
+        fetch_params,
+        fetch_return,
+        fetch_body,
+    )];
 
     // v0.10a: scheduled (cron) entry point. Dispatches on `event.cron`. A
     // failing run has no retry channel, so an `Err` is logged and the run
@@ -2368,6 +2365,7 @@ fn emit_scheduled_handler(
         doc: None,
         inline: false,
         body,
+        span: None,
     }
 }
 
@@ -2565,6 +2563,7 @@ fn emit_queue_handler(
         doc: None,
         inline: false,
         body,
+        span: None,
     }
 }
 

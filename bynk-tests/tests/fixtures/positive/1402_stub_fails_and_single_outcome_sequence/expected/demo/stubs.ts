@@ -15,6 +15,7 @@ export class RealVault implements Vault {
   async open(): globalThis.Promise<number> {
     return 1;
   }
+
   async peek(): globalThis.Promise<number> {
     return 2;
   }

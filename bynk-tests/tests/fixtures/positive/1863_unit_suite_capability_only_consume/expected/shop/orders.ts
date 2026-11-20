@@ -20,7 +20,10 @@ export const __StampToken: symbol = globalThis.Symbol("Stamp");
 
 export class FeeStamp implements Stamp {
   private deps: { Fees: shop_fees.Fees };
-  constructor(deps: { Fees: shop_fees.Fees }) { this.deps = deps; }
+  constructor(deps: { Fees: shop_fees.Fees }) {
+    this.deps = deps;
+  }
+
   async next(): globalThis.Promise<number> {
     const f = await this.deps.Fees.fee();
     return f + 1;

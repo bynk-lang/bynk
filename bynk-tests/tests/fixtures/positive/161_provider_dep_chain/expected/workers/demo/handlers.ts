@@ -33,7 +33,10 @@ export const __CImplProvider = { token: __CToken, factory: () => new CImpl() };
 
 export class BImpl implements B {
   private deps: { C: C };
-  constructor(deps: { C: C }) { this.deps = deps; }
+  constructor(deps: { C: C }) {
+    this.deps = deps;
+  }
+
   async b(): globalThis.Promise<void> {
     const __r0 = await this.deps.C.c();
     return undefined;
@@ -44,7 +47,10 @@ export const __BImplProvider = { token: __BToken, factory: (deps: { C: C }) => n
 
 export class AImpl implements A {
   private deps: { B: B };
-  constructor(deps: { B: B }) { this.deps = deps; }
+  constructor(deps: { B: B }) {
+    this.deps = deps;
+  }
+
   async a(): globalThis.Promise<void> {
     const __r0 = await this.deps.B.b();
     return undefined;

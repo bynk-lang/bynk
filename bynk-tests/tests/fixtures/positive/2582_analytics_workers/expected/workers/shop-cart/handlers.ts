@@ -29,7 +29,10 @@ export const __TimerToken: symbol = globalThis.Symbol("Timer");
 
 export class DatasetTimer implements Timer {
   private deps: { CheckoutTimings: CheckoutTimings };
-  constructor(deps: { CheckoutTimings: CheckoutTimings }) { this.deps = deps; }
+  constructor(deps: { CheckoutTimings: CheckoutTimings }) {
+    this.deps = deps;
+  }
+
   async took(region: string, ms: number): globalThis.Promise<void> {
     return this.deps.CheckoutTimings.write({ index: Some(region), blobs: [], doubles: [ms] });
   }

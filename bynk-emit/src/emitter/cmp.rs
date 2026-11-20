@@ -209,13 +209,7 @@ impl<'a> CmpGen<'a> {
                 self.runtime_use.note_cmp("__bynkCmpSum");
                 call(
                     "__bynkCmpSum",
-                    vec![
-                        TsExpr::array(order),
-                        TsExpr::Object {
-                            entries: payloads,
-                            multiline: false,
-                        },
-                    ],
+                    vec![TsExpr::array(order), TsExpr::object_entries(payloads)],
                 )
             }
             _ => unreachable!("derive_source returns only records and sums"),
