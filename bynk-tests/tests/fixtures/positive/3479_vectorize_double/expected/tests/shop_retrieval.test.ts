@@ -1327,7 +1327,17 @@ async function test_a_filter_on_a_property_that_is_not_indexed_faults__naming_th
     type VectorMatch = __ns_bynk_cloudflare.VectorMatch;
     type VectorOf<M> = __ns_bynk_cloudflare.VectorOf<M>;
     type WorkerVersion = __ns_bynk_cloudflare.WorkerVersion;
-    if (!((await (async () => { try { await (reader.call([0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0], { filter: [{ field: "note", op: FilterOp.FilterEq(MetaValue.MetaText("x")) }], topK: 5, returnValues: false, returnMetadata: { tag: "Omit" as const }, namespace: { tag: "None" as const } }, deps)); return false; } catch (__e) { if (__e instanceof ExpectationError) { throw __e; } return true; } })()))) { throw __bynkExpectFailure("tests/shop/retrieval.bynk:93:9", 9679, 9944, "expect reader.call([0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0], QueryOptions { filter: [Condition { field: \"note\", op: FilterEq(MetaText(\"x\")) }] }) faults\n  the call returned without faulting"); }
+    if (!((await (async () => {
+      try {
+        await (reader.call([0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0], { filter: [{ field: "note", op: FilterOp.FilterEq(MetaValue.MetaText("x")) }], topK: 5, returnValues: false, returnMetadata: { tag: "Omit" as const }, namespace: { tag: "None" as const } }, deps));
+        return false;
+      } catch (__e) {
+        if (__e instanceof ExpectationError) {
+          throw __e;
+        }
+        return true;
+      }
+    })()))) { throw __bynkExpectFailure("tests/shop/retrieval.bynk:93:9", 9679, 9944, "expect reader.call([0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0], QueryOptions { filter: [Condition { field: \"note\", op: FilterEq(MetaText(\"x\")) }] }) faults\n  the call returned without faulting"); }
     return { pass: true };
   } catch (e) {
     if (e instanceof ExpectationError) {

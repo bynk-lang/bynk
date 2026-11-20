@@ -43,7 +43,9 @@ pub fn expr_contains_await(expr: &TsExpr) -> bool {
         }
         TsExpr::TemplateLit { exprs, .. } => exprs.iter().any(expr_contains_await),
         TsExpr::As { expr, .. } | TsExpr::Unary { expr, .. } => expr_contains_await(expr),
-        TsExpr::Paren(e) | TsExpr::Spread(e) | TsExpr::NonNull(e) => expr_contains_await(e),
+        TsExpr::Paren(e) | TsExpr::Spread(e) | TsExpr::NonNull(e) | TsExpr::AsConst(e) => {
+            expr_contains_await(e)
+        }
         TsExpr::Binary { left, right, .. } => {
             expr_contains_await(left) || expr_contains_await(right)
         }

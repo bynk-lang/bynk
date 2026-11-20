@@ -17,6 +17,7 @@ use bynk_model::is_effectful_return;
 use bynk_model::{ConstVal, EventPatternIr, EventPatternValueIr};
 
 use super::ctx::{BodyMode, ModuleCtx, TestShared};
+use super::default_value::default_value_node;
 use super::lower_call::agents::{
     lower_agent_init, lower_inline_agent_call, lower_let_bound_agent_call,
 };
@@ -4521,14 +4522,10 @@ fn lower_record_construction(
     let mut pre = Pre::new();
     let (mut slots, mut children) = field_inits(fields, &mut pre, cx);
     // #2607 (Decision C): each declared field the literal leaves out takes its
-    // default, written as a self-contained value (`lower_field_default_value`)
-    // so it needs nothing imported into this module. The checker has already
-    // required every field without a default, and rejected any default that
-    // has no such value.
-    //
-    // 1A: field defaults are front-half text (bynk_check::wire_default). A
-    // default is a `Text` child, so a record that takes one is never a node
-    // (`node_or_text`) and keeps today's text byte for byte.
+    // default, written as a self-contained value (`field_default_value`, built as a node by
+    // `default_value_node`) so it needs nothing imported into this module. The checker has
+    // already required every field without a default, and rejected any default that has no
+    // such value. A default is a node (1A.31, #3732), so a record that takes one stays one.
     let types = &cx.commons().types;
     if let Some(decl) = types.get(&type_name.name)
         && let TypeBody::Record(r) = &decl.body
@@ -4540,15 +4537,11 @@ fn lower_record_construction(
             if fields.iter().any(|f| f.name.name == declared.name.name) {
                 continue;
             }
-            match bynk_check::wire_default::lower_field_default_value(
-                init,
-                &declared.type_ref,
-                types,
-            ) {
+            match bynk_check::wire_default::field_default_value(init, &declared.type_ref, types) {
                 Ok(v) => {
                     slots.push(FieldSlot::Prop(declared.name.name.clone()));
-                    let text: Built = Err(v);
-                    children.push(text.into());
+                    let node: Built = Ok(default_value_node(&v));
+                    children.push(node.into());
                 }
                 Err(reason) => unreachable!(
                     "field `{}`'s default passed the checker but has no value: {reason}",
@@ -7530,20 +7523,52 @@ fn minus(x: Int) -> Int { 5 - - -x }
     }
 
     #[test]
-    fn a_record_that_takes_a_declared_default_stays_text() {
+    fn a_record_that_takes_a_declared_default_lowers_to_a_node() {
+        // 1A.31 (#3732): a default is a node, so the whole literal is one (before, it was text).
         let src = "commons defaults\n\
             type C = { n: Int, label: String = \"none\" }\n\
             fn mk(n: Int) -> C { C { n } }\n\
             fn full(n: Int) -> C { C { n, label: \"x\" } }\n";
+        assert_eq!(text_exits(src), 0);
         let ts = crate::testkit::emit_source(src);
         assert_eq!(returned(&ts, "mk"), "{ n, label: \"none\" }");
         assert_eq!(returned(&ts, "full"), "{ n, label: \"x\" }");
-        // Only the defaulted construction leaves as text.
-        let only_full = "commons defaults\n\
-            type C = { n: Int, label: String = \"none\" }\n\
-            fn full(n: Int) -> C { C { n, label: \"x\" } }\n";
-        assert!(text_exits(src) > text_exits(only_full));
-        assert_eq!(text_exits(only_full), 0);
+    }
+
+    #[test]
+    fn defaults_of_every_shape_and_their_neighbours_lower_to_nodes() {
+        let src = "commons defaults2\n\
+            type Plan = enum { Free, Pro }\n\
+            type In = { k: Int = -3 }\n\
+            type C = { a: Int, plan: Plan = Free, o: Option[Int] = None, l: List[Int] = [1, 2], \
+                m: Map[String, Int] = Map.empty(), i: In = In { }, p: Float = 1e3 }\n\
+            fn short(a: Int) -> C { C { a } }\n\
+            fn some(a: Int) -> C { C { a, o: Some(a) } }\n\
+            fn lam(xs: List[Int]) -> List[C] { xs.map((x) => C { a: x }) }\n";
+        assert_eq!(text_exits(src), 0);
+        let ts = crate::testkit::emit_source(src);
+        let tail = "plan: { tag: \"Free\" as const }, o: { tag: \"None\" as const }, l: [1, 2], \
+            m: new globalThis.Map(), i: { k: -3 }, p: 1e3 }";
+        assert_eq!(returned(&ts, "short"), format!("{{ a, {tail}"));
+        assert_eq!(
+            returned(&ts, "some"),
+            "{ a, o: Some(a), plan: { tag: \"Free\" as const }, \
+                l: [1, 2], m: new globalThis.Map(), i: { k: -3 }, p: 1e3 }"
+        );
+        assert!(ts.contains(&format!("=> ({{ a: x, {tail})")), "{ts}");
+    }
+
+    #[test]
+    fn a_defaulted_record_with_a_text_child_still_falls_back_byte_for_byte() {
+        // The plain `Set.remove` is a comma expression with no node, so it is still text; the
+        // record around it, default and all, prints today's bytes.
+        let src = "commons deftext\n\
+            type P = { n: Int, label: String = \"d\" }\n\
+            fn rec(a: Set[String], c: String) -> P { P { n: a.remove(c).length() } }\n";
+        assert!(text_exits(src) > 0);
+        let ts = crate::testkit::emit_source(src);
+        assert!(ts.contains("{ n: (("), "{ts}");
+        assert!(ts.contains(".size, label: \"d\" }"), "{ts}");
     }
 
     #[test]

@@ -319,10 +319,7 @@ pub fn emit_client(
         &contracts_doc(&services, ctx_name),
         "CONTRACTS",
         None,
-        TsExpr::As {
-            expr: Box::new(TsExpr::multiline_object(contract_entries)),
-            ty: TsType::named("const"),
-        },
+        TsExpr::AsConst(Box::new(TsExpr::multiline_object(contract_entries))),
     ));
 
     // The surface types.

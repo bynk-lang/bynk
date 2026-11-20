@@ -972,6 +972,7 @@ impl Walk {
                 self.expr(expr);
                 self.ty(ty);
             }
+            TsExpr::AsConst(expr) => self.expr(expr),
             TsExpr::Assign { target, value } | TsExpr::AddAssign { target, value } => {
                 self.expr(target);
                 self.expr(value);
