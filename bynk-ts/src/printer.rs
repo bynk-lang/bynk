@@ -1668,6 +1668,28 @@ fn render_object_entry_inline(
     }
 }
 
+/// The operand of an `as T` / `as const` cast: a binary expression, an arrow
+/// or a conditional is bracketed (see the `As` arm of [`render_expr`] for
+/// why `Await` is not); anything else prints bare.
+fn render_cast_operand(
+    out: &mut String,
+    expr: &TsExpr,
+    depth: usize,
+    m: &mut Option<MergeTarget<'_>>,
+) {
+    let needs_parens = matches!(
+        expr,
+        TsExpr::Binary { .. } | TsExpr::Arrow { .. } | TsExpr::Conditional { .. }
+    );
+    if needs_parens {
+        out.push('(');
+        render_expr(out, expr, depth, m);
+        out.push(')');
+    } else {
+        render_expr(out, expr, depth, m);
+    }
+}
+
 fn render_expr(out: &mut String, expr: &TsExpr, depth: usize, m: &mut Option<MergeTarget<'_>>) {
     match expr {
         TsExpr::Ident(name) => out.push_str(name),
@@ -1842,33 +1864,13 @@ fn render_expr(out: &mut String, expr: &TsExpr, depth: usize, m: &mut Option<Mer
             // `events_fanout.rs`'s own historical text) wraps its own
             // `Await` in an explicit [`TsExpr::Paren`] instead of relying on
             // an implicit per-shape rule here.
-            let needs_parens = matches!(
-                **expr,
-                TsExpr::Binary { .. } | TsExpr::Arrow { .. } | TsExpr::Conditional { .. }
-            );
-            if needs_parens {
-                out.push('(');
-                render_expr(out, expr, depth, m);
-                out.push(')');
-            } else {
-                render_expr(out, expr, depth, m);
-            }
+            render_cast_operand(out, expr, depth, m);
             out.push_str(" as ");
             render_type(out, ty);
         }
         // `<expr> as const`, bracketed exactly as `As` brackets its operand.
         TsExpr::AsConst(expr) => {
-            let needs_parens = matches!(
-                **expr,
-                TsExpr::Binary { .. } | TsExpr::Arrow { .. } | TsExpr::Conditional { .. }
-            );
-            if needs_parens {
-                out.push('(');
-                render_expr(out, expr, depth, m);
-                out.push(')');
-            } else {
-                render_expr(out, expr, depth, m);
-            }
+            render_cast_operand(out, expr, depth, m);
             out.push_str(" as const");
         }
         TsExpr::Unary { op, expr } => {
