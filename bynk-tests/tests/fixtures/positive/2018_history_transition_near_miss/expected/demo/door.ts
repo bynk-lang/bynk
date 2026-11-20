@@ -27,7 +27,11 @@ function __zeroOfDoorState(): DoorState { return { status: Status.Open }; }
 const __entryFieldsOfDoor = [] as const;
 
 function __rehydrateDoorState(s: DoorState, stored: DoorState): void {
-  if (globalThis.Object.prototype.hasOwnProperty.call(stored, "status")) { const __r = __deserialise_Status((s.status as unknown as __JsonValue), "status"); if (__r.tag === "Err") throw __rehydrationViolation("Door", __r.error); (s as { -readonly [K in keyof typeof s]: (typeof s)[K] }).status = __r.value as unknown as (typeof s)["status"]; }
+  if (globalThis.Object.prototype.hasOwnProperty.call(stored, "status")) {
+    const __r = __deserialise_Status((s.status as unknown as __JsonValue), "status");
+    if (__r.tag === "Err") throw __rehydrationViolation("Door", __r.error);
+    (s as { -readonly [K in keyof typeof s]: (typeof s)[K] }).status = __r.value as unknown as (typeof s)["status"];
+  }
 }
 
 function __encodeDoorState(s: DoorState): globalThis.Record<string, unknown> {

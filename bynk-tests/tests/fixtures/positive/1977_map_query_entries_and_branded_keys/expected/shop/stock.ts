@@ -40,15 +40,29 @@ function __zeroOfBoxState(): BoxState { return { items: new __StoreMap<number>()
 const __entryFieldsOfBox = [{ name: "items", kind: "map" }] as const;
 
 function __rehydrateBoxState(s: BoxState, stored: BoxState): void {
-  if (globalThis.Object.prototype.hasOwnProperty.call(stored, "items")) for (const __k of globalThis.Object.keys((s as unknown as globalThis.Record<string, unknown>).items as object)) { const __r = ((__v) => typeof __v !== "number" ? Err({ kind: "StructuralMismatch", path: "items", expected: "safe integer", actual: typeof __v } as __BoundaryError) : globalThis.Number.isSafeInteger(__v) ? Ok(__v) : Err({ kind: "StructuralMismatch", path: "items", expected: "safe integer", actual: String(__v) } as __BoundaryError))((((s as unknown as globalThis.Record<string, unknown>).items as globalThis.Record<string, unknown>)[__k] as unknown as __JsonValue)); if (__r.tag === "Err") throw __rehydrationViolation("Box", __r.error); ((s as unknown as globalThis.Record<string, unknown>).items as globalThis.Record<string, unknown>)[__k] = __r.value; }
-  if (globalThis.Object.prototype.hasOwnProperty.call(stored, "items")) for (const [__k] of __wireEntries((s as unknown as globalThis.Record<string, unknown>).items as never)) { const __r = ((__v) => typeof __v === "string" ? Ok(__v) : Err({ kind: "StructuralMismatch", path: "items", expected: "string", actual: typeof __v } as __BoundaryError))((__k as unknown as __JsonValue)); if (__r.tag === "Err") throw __rehydrationViolation("Box", __r.error); }
+  if (globalThis.Object.prototype.hasOwnProperty.call(stored, "items")) {
+    for (const __k of globalThis.Object.keys((s as unknown as globalThis.Record<string, unknown>).items as object)) {
+      const __r = ((__v) => typeof __v !== "number" ? Err({ kind: "StructuralMismatch", path: "items", expected: "safe integer", actual: typeof __v } as __BoundaryError) : globalThis.Number.isSafeInteger(__v) ? Ok(__v) : Err({ kind: "StructuralMismatch", path: "items", expected: "safe integer", actual: String(__v) } as __BoundaryError))((((s as unknown as globalThis.Record<string, unknown>).items as globalThis.Record<string, unknown>)[__k] as unknown as __JsonValue));
+      if (__r.tag === "Err") throw __rehydrationViolation("Box", __r.error);
+      ((s as unknown as globalThis.Record<string, unknown>).items as globalThis.Record<string, unknown>)[__k] = __r.value;
+    }
+  }
+  if (globalThis.Object.prototype.hasOwnProperty.call(stored, "items")) {
+    for (const [__k] of __wireEntries((s as unknown as globalThis.Record<string, unknown>).items as never)) {
+      const __r = ((__v) => typeof __v === "string" ? Ok(__v) : Err({ kind: "StructuralMismatch", path: "items", expected: "string", actual: typeof __v } as __BoundaryError))((__k as unknown as __JsonValue));
+      if (__r.tag === "Err") throw __rehydrationViolation("Box", __r.error);
+    }
+  }
 }
 
 function __hydrateBoxState(s: BoxState, stored: BoxState): void {
   const __z = __zeroOfBoxState();
   const __w = s as { -readonly [K in keyof BoxState]: BoxState[K] };
   const __r = stored as unknown as globalThis.Record<string, unknown>;
-  if (globalThis.Object.hasOwn(__r, "items")) { __fillMap(__z.items, __r["items"] as never); __w.items = __z.items; }
+  if (globalThis.Object.hasOwn(__r, "items")) {
+    __fillMap(__z.items, __r["items"] as never);
+    __w.items = __z.items;
+  }
 }
 
 function __encodeBoxState(s: BoxState): globalThis.Record<string, unknown> {
@@ -126,15 +140,29 @@ function __zeroOfByKeyState(): ByKeyState { return { items: new __StoreMap<numbe
 const __entryFieldsOfByKey = [{ name: "items", kind: "map" }] as const;
 
 function __rehydrateByKeyState(s: ByKeyState, stored: ByKeyState): void {
-  if (globalThis.Object.prototype.hasOwnProperty.call(stored, "items")) for (const __k of globalThis.Object.keys((s as unknown as globalThis.Record<string, unknown>).items as object)) { const __r = ((__v) => typeof __v !== "number" ? Err({ kind: "StructuralMismatch", path: "items", expected: "safe integer", actual: typeof __v } as __BoundaryError) : globalThis.Number.isSafeInteger(__v) ? Ok(__v) : Err({ kind: "StructuralMismatch", path: "items", expected: "safe integer", actual: String(__v) } as __BoundaryError))((((s as unknown as globalThis.Record<string, unknown>).items as globalThis.Record<string, unknown>)[__k] as unknown as __JsonValue)); if (__r.tag === "Err") throw __rehydrationViolation("ByKey", __r.error); ((s as unknown as globalThis.Record<string, unknown>).items as globalThis.Record<string, unknown>)[__k] = __r.value; }
-  if (globalThis.Object.prototype.hasOwnProperty.call(stored, "items")) for (const [__k] of __wireEntries((s as unknown as globalThis.Record<string, unknown>).items as never)) { const __r = __deserialise_Sku((__k as unknown as __JsonValue), "items"); if (__r.tag === "Err") throw __rehydrationViolation("ByKey", __r.error); }
+  if (globalThis.Object.prototype.hasOwnProperty.call(stored, "items")) {
+    for (const __k of globalThis.Object.keys((s as unknown as globalThis.Record<string, unknown>).items as object)) {
+      const __r = ((__v) => typeof __v !== "number" ? Err({ kind: "StructuralMismatch", path: "items", expected: "safe integer", actual: typeof __v } as __BoundaryError) : globalThis.Number.isSafeInteger(__v) ? Ok(__v) : Err({ kind: "StructuralMismatch", path: "items", expected: "safe integer", actual: String(__v) } as __BoundaryError))((((s as unknown as globalThis.Record<string, unknown>).items as globalThis.Record<string, unknown>)[__k] as unknown as __JsonValue));
+      if (__r.tag === "Err") throw __rehydrationViolation("ByKey", __r.error);
+      ((s as unknown as globalThis.Record<string, unknown>).items as globalThis.Record<string, unknown>)[__k] = __r.value;
+    }
+  }
+  if (globalThis.Object.prototype.hasOwnProperty.call(stored, "items")) {
+    for (const [__k] of __wireEntries((s as unknown as globalThis.Record<string, unknown>).items as never)) {
+      const __r = __deserialise_Sku((__k as unknown as __JsonValue), "items");
+      if (__r.tag === "Err") throw __rehydrationViolation("ByKey", __r.error);
+    }
+  }
 }
 
 function __hydrateByKeyState(s: ByKeyState, stored: ByKeyState): void {
   const __z = __zeroOfByKeyState();
   const __w = s as { -readonly [K in keyof ByKeyState]: ByKeyState[K] };
   const __r = stored as unknown as globalThis.Record<string, unknown>;
-  if (globalThis.Object.hasOwn(__r, "items")) { __fillMap(__z.items, __r["items"] as never); __w.items = __z.items; }
+  if (globalThis.Object.hasOwn(__r, "items")) {
+    __fillMap(__z.items, __r["items"] as never);
+    __w.items = __z.items;
+  }
 }
 
 function __encodeByKeyState(s: ByKeyState): globalThis.Record<string, unknown> {
@@ -229,14 +257,23 @@ function __zeroOfLedgerState(): LedgerState { return { balances: new __StoreMap<
 const __entryFieldsOfLedger = [{ name: "balances", kind: "map" }] as const;
 
 function __rehydrateLedgerState(s: LedgerState, stored: LedgerState): void {
-  if (globalThis.Object.prototype.hasOwnProperty.call(stored, "balances")) for (const __k of globalThis.Object.keys((s as unknown as globalThis.Record<string, unknown>).balances as object)) { const __r = ((__v) => typeof __v !== "number" ? Err({ kind: "StructuralMismatch", path: "balances", expected: "safe integer", actual: typeof __v } as __BoundaryError) : globalThis.Number.isSafeInteger(__v) ? Ok(__v) : Err({ kind: "StructuralMismatch", path: "balances", expected: "safe integer", actual: String(__v) } as __BoundaryError))((((s as unknown as globalThis.Record<string, unknown>).balances as globalThis.Record<string, unknown>)[__k] as unknown as __JsonValue)); if (__r.tag === "Err") throw __rehydrationViolation("Ledger", __r.error); ((s as unknown as globalThis.Record<string, unknown>).balances as globalThis.Record<string, unknown>)[__k] = __r.value; }
+  if (globalThis.Object.prototype.hasOwnProperty.call(stored, "balances")) {
+    for (const __k of globalThis.Object.keys((s as unknown as globalThis.Record<string, unknown>).balances as object)) {
+      const __r = ((__v) => typeof __v !== "number" ? Err({ kind: "StructuralMismatch", path: "balances", expected: "safe integer", actual: typeof __v } as __BoundaryError) : globalThis.Number.isSafeInteger(__v) ? Ok(__v) : Err({ kind: "StructuralMismatch", path: "balances", expected: "safe integer", actual: String(__v) } as __BoundaryError))((((s as unknown as globalThis.Record<string, unknown>).balances as globalThis.Record<string, unknown>)[__k] as unknown as __JsonValue));
+      if (__r.tag === "Err") throw __rehydrationViolation("Ledger", __r.error);
+      ((s as unknown as globalThis.Record<string, unknown>).balances as globalThis.Record<string, unknown>)[__k] = __r.value;
+    }
+  }
 }
 
 function __hydrateLedgerState(s: LedgerState, stored: LedgerState): void {
   const __z = __zeroOfLedgerState();
   const __w = s as { -readonly [K in keyof LedgerState]: LedgerState[K] };
   const __r = stored as unknown as globalThis.Record<string, unknown>;
-  if (globalThis.Object.hasOwn(__r, "balances")) { __fillMap(__z.balances, __r["balances"] as never); __w.balances = __z.balances; }
+  if (globalThis.Object.hasOwn(__r, "balances")) {
+    __fillMap(__z.balances, __r["balances"] as never);
+    __w.balances = __z.balances;
+  }
 }
 
 function __encodeLedgerState(s: LedgerState): globalThis.Record<string, unknown> {

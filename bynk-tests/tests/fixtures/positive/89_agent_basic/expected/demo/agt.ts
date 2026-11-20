@@ -35,7 +35,11 @@ function __zeroOfBoxState(): BoxState { return { n: 0 }; }
 const __entryFieldsOfBox = [] as const;
 
 function __rehydrateBoxState(s: BoxState, stored: BoxState): void {
-  if (globalThis.Object.prototype.hasOwnProperty.call(stored, "n")) { const __r = ((__v) => typeof __v !== "number" ? Err({ kind: "StructuralMismatch", path: "n", expected: "safe integer", actual: typeof __v } as __BoundaryError) : globalThis.Number.isSafeInteger(__v) ? Ok(__v) : Err({ kind: "StructuralMismatch", path: "n", expected: "safe integer", actual: String(__v) } as __BoundaryError))((s.n as unknown as __JsonValue)); if (__r.tag === "Err") throw __rehydrationViolation("Box", __r.error); (s as { -readonly [K in keyof typeof s]: (typeof s)[K] }).n = __r.value as unknown as (typeof s)["n"]; }
+  if (globalThis.Object.prototype.hasOwnProperty.call(stored, "n")) {
+    const __r = ((__v) => typeof __v !== "number" ? Err({ kind: "StructuralMismatch", path: "n", expected: "safe integer", actual: typeof __v } as __BoundaryError) : globalThis.Number.isSafeInteger(__v) ? Ok(__v) : Err({ kind: "StructuralMismatch", path: "n", expected: "safe integer", actual: String(__v) } as __BoundaryError))((s.n as unknown as __JsonValue));
+    if (__r.tag === "Err") throw __rehydrationViolation("Box", __r.error);
+    (s as { -readonly [K in keyof typeof s]: (typeof s)[K] }).n = __r.value as unknown as (typeof s)["n"];
+  }
 }
 
 function __encodeBoxState(s: BoxState): globalThis.Record<string, unknown> {

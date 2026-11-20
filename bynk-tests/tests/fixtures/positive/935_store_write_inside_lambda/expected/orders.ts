@@ -28,15 +28,29 @@ function __zeroOfOrdersState(): OrdersState { return { orders: new __StoreMap<Or
 const __entryFieldsOfOrders = [{ name: "orders", kind: "map" }] as const;
 
 function __rehydrateOrdersState(s: OrdersState, stored: OrdersState): void {
-  if (globalThis.Object.prototype.hasOwnProperty.call(stored, "orders")) for (const __k of globalThis.Object.keys((s as unknown as globalThis.Record<string, unknown>).orders as object)) { const __r = __deserialise_Order((((s as unknown as globalThis.Record<string, unknown>).orders as globalThis.Record<string, unknown>)[__k] as unknown as __JsonValue), "orders"); if (__r.tag === "Err") throw __rehydrationViolation("Orders", __r.error); ((s as unknown as globalThis.Record<string, unknown>).orders as globalThis.Record<string, unknown>)[__k] = __r.value; }
-  if (globalThis.Object.prototype.hasOwnProperty.call(stored, "orders")) for (const [__k] of __wireEntries((s as unknown as globalThis.Record<string, unknown>).orders as never)) { const __r = ((__v) => typeof __v === "string" ? Ok(__v) : Err({ kind: "StructuralMismatch", path: "orders", expected: "string", actual: typeof __v } as __BoundaryError))((__k as unknown as __JsonValue)); if (__r.tag === "Err") throw __rehydrationViolation("Orders", __r.error); }
+  if (globalThis.Object.prototype.hasOwnProperty.call(stored, "orders")) {
+    for (const __k of globalThis.Object.keys((s as unknown as globalThis.Record<string, unknown>).orders as object)) {
+      const __r = __deserialise_Order((((s as unknown as globalThis.Record<string, unknown>).orders as globalThis.Record<string, unknown>)[__k] as unknown as __JsonValue), "orders");
+      if (__r.tag === "Err") throw __rehydrationViolation("Orders", __r.error);
+      ((s as unknown as globalThis.Record<string, unknown>).orders as globalThis.Record<string, unknown>)[__k] = __r.value;
+    }
+  }
+  if (globalThis.Object.prototype.hasOwnProperty.call(stored, "orders")) {
+    for (const [__k] of __wireEntries((s as unknown as globalThis.Record<string, unknown>).orders as never)) {
+      const __r = ((__v) => typeof __v === "string" ? Ok(__v) : Err({ kind: "StructuralMismatch", path: "orders", expected: "string", actual: typeof __v } as __BoundaryError))((__k as unknown as __JsonValue));
+      if (__r.tag === "Err") throw __rehydrationViolation("Orders", __r.error);
+    }
+  }
 }
 
 function __hydrateOrdersState(s: OrdersState, stored: OrdersState): void {
   const __z = __zeroOfOrdersState();
   const __w = s as { -readonly [K in keyof OrdersState]: OrdersState[K] };
   const __r = stored as unknown as globalThis.Record<string, unknown>;
-  if (globalThis.Object.hasOwn(__r, "orders")) { __fillMap(__z.orders, __r["orders"] as never); __w.orders = __z.orders; }
+  if (globalThis.Object.hasOwn(__r, "orders")) {
+    __fillMap(__z.orders, __r["orders"] as never);
+    __w.orders = __z.orders;
+  }
 }
 
 function __encodeOrdersState(s: OrdersState): globalThis.Record<string, unknown> {

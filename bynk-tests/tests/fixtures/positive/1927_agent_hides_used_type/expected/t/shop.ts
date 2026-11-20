@@ -24,7 +24,11 @@ function __zeroOfCartState(): CartState { return { hits: 0 }; }
 const __entryFieldsOfCart = [] as const;
 
 function __rehydrateCartState(s: CartState, stored: CartState): void {
-  if (globalThis.Object.prototype.hasOwnProperty.call(stored, "hits")) { const __r = ((__v) => typeof __v !== "number" ? Err({ kind: "StructuralMismatch", path: "hits", expected: "safe integer", actual: typeof __v } as __BoundaryError) : globalThis.Number.isSafeInteger(__v) ? Ok(__v) : Err({ kind: "StructuralMismatch", path: "hits", expected: "safe integer", actual: String(__v) } as __BoundaryError))((s.hits as unknown as __JsonValue)); if (__r.tag === "Err") throw __rehydrationViolation("Cart", __r.error); (s as { -readonly [K in keyof typeof s]: (typeof s)[K] }).hits = __r.value as unknown as (typeof s)["hits"]; }
+  if (globalThis.Object.prototype.hasOwnProperty.call(stored, "hits")) {
+    const __r = ((__v) => typeof __v !== "number" ? Err({ kind: "StructuralMismatch", path: "hits", expected: "safe integer", actual: typeof __v } as __BoundaryError) : globalThis.Number.isSafeInteger(__v) ? Ok(__v) : Err({ kind: "StructuralMismatch", path: "hits", expected: "safe integer", actual: String(__v) } as __BoundaryError))((s.hits as unknown as __JsonValue));
+    if (__r.tag === "Err") throw __rehydrationViolation("Cart", __r.error);
+    (s as { -readonly [K in keyof typeof s]: (typeof s)[K] }).hits = __r.value as unknown as (typeof s)["hits"];
+  }
 }
 
 function __encodeCartState(s: CartState): globalThis.Record<string, unknown> {

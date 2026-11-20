@@ -18,7 +18,11 @@ function __zeroOfPackageIndexState(): PackageIndexState { return { yanked: false
 const __entryFieldsOfPackageIndex = [] as const;
 
 function __rehydratePackageIndexState(s: PackageIndexState, stored: PackageIndexState): void {
-  if (globalThis.Object.prototype.hasOwnProperty.call(stored, "yanked")) { const __r = ((__v) => typeof __v === "boolean" ? Ok(__v) : Err({ kind: "StructuralMismatch", path: "yanked", expected: "boolean", actual: typeof __v } as __BoundaryError))((s.yanked as unknown as __JsonValue)); if (__r.tag === "Err") throw __rehydrationViolation("PackageIndex", __r.error); (s as { -readonly [K in keyof typeof s]: (typeof s)[K] }).yanked = __r.value as unknown as (typeof s)["yanked"]; }
+  if (globalThis.Object.prototype.hasOwnProperty.call(stored, "yanked")) {
+    const __r = ((__v) => typeof __v === "boolean" ? Ok(__v) : Err({ kind: "StructuralMismatch", path: "yanked", expected: "boolean", actual: typeof __v } as __BoundaryError))((s.yanked as unknown as __JsonValue));
+    if (__r.tag === "Err") throw __rehydrationViolation("PackageIndex", __r.error);
+    (s as { -readonly [K in keyof typeof s]: (typeof s)[K] }).yanked = __r.value as unknown as (typeof s)["yanked"];
+  }
 }
 
 function __encodePackageIndexState(s: PackageIndexState): globalThis.Record<string, unknown> {

@@ -32,7 +32,11 @@ function __zeroOfGaugeState(): GaugeState { return { level: (1 as Level) }; }
 const __entryFieldsOfGauge = [] as const;
 
 function __rehydrateGaugeState(s: GaugeState, stored: GaugeState): void {
-  if (globalThis.Object.prototype.hasOwnProperty.call(stored, "level")) { const __r = __deserialise_Level((s.level as unknown as __JsonValue), "level"); if (__r.tag === "Err") throw __rehydrationViolation("Gauge", __r.error); (s as { -readonly [K in keyof typeof s]: (typeof s)[K] }).level = __r.value as unknown as (typeof s)["level"]; }
+  if (globalThis.Object.prototype.hasOwnProperty.call(stored, "level")) {
+    const __r = __deserialise_Level((s.level as unknown as __JsonValue), "level");
+    if (__r.tag === "Err") throw __rehydrationViolation("Gauge", __r.error);
+    (s as { -readonly [K in keyof typeof s]: (typeof s)[K] }).level = __r.value as unknown as (typeof s)["level"];
+  }
 }
 
 function __encodeGaugeState(s: GaugeState): globalThis.Record<string, unknown> {

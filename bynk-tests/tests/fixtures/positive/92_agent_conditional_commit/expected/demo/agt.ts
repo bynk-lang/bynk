@@ -35,7 +35,11 @@ function __zeroOfToggleState(): ToggleState { return { active: false }; }
 const __entryFieldsOfToggle = [] as const;
 
 function __rehydrateToggleState(s: ToggleState, stored: ToggleState): void {
-  if (globalThis.Object.prototype.hasOwnProperty.call(stored, "active")) { const __r = ((__v) => typeof __v === "boolean" ? Ok(__v) : Err({ kind: "StructuralMismatch", path: "active", expected: "boolean", actual: typeof __v } as __BoundaryError))((s.active as unknown as __JsonValue)); if (__r.tag === "Err") throw __rehydrationViolation("Toggle", __r.error); (s as { -readonly [K in keyof typeof s]: (typeof s)[K] }).active = __r.value as unknown as (typeof s)["active"]; }
+  if (globalThis.Object.prototype.hasOwnProperty.call(stored, "active")) {
+    const __r = ((__v) => typeof __v === "boolean" ? Ok(__v) : Err({ kind: "StructuralMismatch", path: "active", expected: "boolean", actual: typeof __v } as __BoundaryError))((s.active as unknown as __JsonValue));
+    if (__r.tag === "Err") throw __rehydrationViolation("Toggle", __r.error);
+    (s as { -readonly [K in keyof typeof s]: (typeof s)[K] }).active = __r.value as unknown as (typeof s)["active"];
+  }
 }
 
 function __encodeToggleState(s: ToggleState): globalThis.Record<string, unknown> {

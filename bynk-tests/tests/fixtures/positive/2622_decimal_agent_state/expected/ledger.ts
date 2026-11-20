@@ -34,17 +34,39 @@ function __zeroOfAccountState(): AccountState { return { balance: { coefficient:
 const __entryFieldsOfAccount = [{ name: "prices", kind: "map" }] as const;
 
 function __rehydrateAccountState(s: AccountState, stored: AccountState): void {
-  if (globalThis.Object.prototype.hasOwnProperty.call(stored, "balance")) { const __r = ((__v) => typeof __v === "string" ? ((__b) => __b.tag === "Some" ? Ok(__b.value) : Err({ kind: "StructuralMismatch", path: "balance", expected: "decimal string", actual: "invalid decimal" } as __BoundaryError))(__bynkDecimalParseWire(__v)) : Err({ kind: "StructuralMismatch", path: "balance", expected: "decimal string", actual: typeof __v } as __BoundaryError))((s.balance as unknown as __JsonValue)); if (__r.tag === "Err") throw __rehydrationViolation("Account", __r.error); (s as { -readonly [K in keyof typeof s]: (typeof s)[K] }).balance = __r.value as unknown as (typeof s)["balance"]; }
-  if (globalThis.Object.prototype.hasOwnProperty.call(stored, "last")) { const __r = __deserialise_Option_Price((s.last as unknown as __JsonValue), "last"); if (__r.tag === "Err") throw __rehydrationViolation("Account", __r.error); (s as { -readonly [K in keyof typeof s]: (typeof s)[K] }).last = __r.value as unknown as (typeof s)["last"]; }
-  if (globalThis.Object.prototype.hasOwnProperty.call(stored, "prices")) for (const __k of globalThis.Object.keys((s as unknown as globalThis.Record<string, unknown>).prices as object)) { const __r = ((__v) => typeof __v === "string" ? ((__b) => __b.tag === "Some" ? Ok(__b.value) : Err({ kind: "StructuralMismatch", path: "prices", expected: "decimal string", actual: "invalid decimal" } as __BoundaryError))(__bynkDecimalParseWire(__v)) : Err({ kind: "StructuralMismatch", path: "prices", expected: "decimal string", actual: typeof __v } as __BoundaryError))((((s as unknown as globalThis.Record<string, unknown>).prices as globalThis.Record<string, unknown>)[__k] as unknown as __JsonValue)); if (__r.tag === "Err") throw __rehydrationViolation("Account", __r.error); ((s as unknown as globalThis.Record<string, unknown>).prices as globalThis.Record<string, unknown>)[__k] = __r.value; }
-  if (globalThis.Object.prototype.hasOwnProperty.call(stored, "prices")) for (const [__k] of __wireEntries((s as unknown as globalThis.Record<string, unknown>).prices as never)) { const __r = ((__v) => typeof __v === "string" ? Ok(__v) : Err({ kind: "StructuralMismatch", path: "prices", expected: "string", actual: typeof __v } as __BoundaryError))((__k as unknown as __JsonValue)); if (__r.tag === "Err") throw __rehydrationViolation("Account", __r.error); }
+  if (globalThis.Object.prototype.hasOwnProperty.call(stored, "balance")) {
+    const __r = ((__v) => typeof __v === "string" ? ((__b) => __b.tag === "Some" ? Ok(__b.value) : Err({ kind: "StructuralMismatch", path: "balance", expected: "decimal string", actual: "invalid decimal" } as __BoundaryError))(__bynkDecimalParseWire(__v)) : Err({ kind: "StructuralMismatch", path: "balance", expected: "decimal string", actual: typeof __v } as __BoundaryError))((s.balance as unknown as __JsonValue));
+    if (__r.tag === "Err") throw __rehydrationViolation("Account", __r.error);
+    (s as { -readonly [K in keyof typeof s]: (typeof s)[K] }).balance = __r.value as unknown as (typeof s)["balance"];
+  }
+  if (globalThis.Object.prototype.hasOwnProperty.call(stored, "last")) {
+    const __r = __deserialise_Option_Price((s.last as unknown as __JsonValue), "last");
+    if (__r.tag === "Err") throw __rehydrationViolation("Account", __r.error);
+    (s as { -readonly [K in keyof typeof s]: (typeof s)[K] }).last = __r.value as unknown as (typeof s)["last"];
+  }
+  if (globalThis.Object.prototype.hasOwnProperty.call(stored, "prices")) {
+    for (const __k of globalThis.Object.keys((s as unknown as globalThis.Record<string, unknown>).prices as object)) {
+      const __r = ((__v) => typeof __v === "string" ? ((__b) => __b.tag === "Some" ? Ok(__b.value) : Err({ kind: "StructuralMismatch", path: "prices", expected: "decimal string", actual: "invalid decimal" } as __BoundaryError))(__bynkDecimalParseWire(__v)) : Err({ kind: "StructuralMismatch", path: "prices", expected: "decimal string", actual: typeof __v } as __BoundaryError))((((s as unknown as globalThis.Record<string, unknown>).prices as globalThis.Record<string, unknown>)[__k] as unknown as __JsonValue));
+      if (__r.tag === "Err") throw __rehydrationViolation("Account", __r.error);
+      ((s as unknown as globalThis.Record<string, unknown>).prices as globalThis.Record<string, unknown>)[__k] = __r.value;
+    }
+  }
+  if (globalThis.Object.prototype.hasOwnProperty.call(stored, "prices")) {
+    for (const [__k] of __wireEntries((s as unknown as globalThis.Record<string, unknown>).prices as never)) {
+      const __r = ((__v) => typeof __v === "string" ? Ok(__v) : Err({ kind: "StructuralMismatch", path: "prices", expected: "string", actual: typeof __v } as __BoundaryError))((__k as unknown as __JsonValue));
+      if (__r.tag === "Err") throw __rehydrationViolation("Account", __r.error);
+    }
+  }
 }
 
 function __hydrateAccountState(s: AccountState, stored: AccountState): void {
   const __z = __zeroOfAccountState();
   const __w = s as { -readonly [K in keyof AccountState]: AccountState[K] };
   const __r = stored as unknown as globalThis.Record<string, unknown>;
-  if (globalThis.Object.hasOwn(__r, "prices")) { __fillMap(__z.prices, __r["prices"] as never); __w.prices = __z.prices; }
+  if (globalThis.Object.hasOwn(__r, "prices")) {
+    __fillMap(__z.prices, __r["prices"] as never);
+    __w.prices = __z.prices;
+  }
 }
 
 function __encodeAccountState(s: AccountState): globalThis.Record<string, unknown> {

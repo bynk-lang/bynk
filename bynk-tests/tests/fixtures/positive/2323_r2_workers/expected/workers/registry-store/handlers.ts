@@ -57,15 +57,29 @@ function __zeroOfProjectionState(): ProjectionState { return { stamps: new __Sto
 const __entryFieldsOfProjection = [{ name: "stamps", kind: "map" }] as const;
 
 function __rehydrateProjectionState(s: ProjectionState, stored: ProjectionState): void {
-  if (globalThis.Object.prototype.hasOwnProperty.call(stored, "stamps")) for (const __k of globalThis.Object.keys((s as unknown as globalThis.Record<string, unknown>).stamps as object)) { const __r = ((__v) => typeof __v !== "number" ? Err({ kind: "StructuralMismatch", path: "stamps", expected: "safe integer", actual: typeof __v } as __BoundaryError) : globalThis.Number.isSafeInteger(__v) ? Ok(__v) : Err({ kind: "StructuralMismatch", path: "stamps", expected: "safe integer", actual: String(__v) } as __BoundaryError))((((s as unknown as globalThis.Record<string, unknown>).stamps as globalThis.Record<string, unknown>)[__k] as unknown as __JsonValue)); if (__r.tag === "Err") throw __rehydrationViolation("Projection", __r.error); ((s as unknown as globalThis.Record<string, unknown>).stamps as globalThis.Record<string, unknown>)[__k] = __r.value; }
-  if (globalThis.Object.prototype.hasOwnProperty.call(stored, "stamps")) for (const [__k] of __wireEntries((s as unknown as globalThis.Record<string, unknown>).stamps as never)) { const __r = ((__v) => typeof __v === "string" ? Ok(__v) : Err({ kind: "StructuralMismatch", path: "stamps", expected: "string", actual: typeof __v } as __BoundaryError))((__k as unknown as __JsonValue)); if (__r.tag === "Err") throw __rehydrationViolation("Projection", __r.error); }
+  if (globalThis.Object.prototype.hasOwnProperty.call(stored, "stamps")) {
+    for (const __k of globalThis.Object.keys((s as unknown as globalThis.Record<string, unknown>).stamps as object)) {
+      const __r = ((__v) => typeof __v !== "number" ? Err({ kind: "StructuralMismatch", path: "stamps", expected: "safe integer", actual: typeof __v } as __BoundaryError) : globalThis.Number.isSafeInteger(__v) ? Ok(__v) : Err({ kind: "StructuralMismatch", path: "stamps", expected: "safe integer", actual: String(__v) } as __BoundaryError))((((s as unknown as globalThis.Record<string, unknown>).stamps as globalThis.Record<string, unknown>)[__k] as unknown as __JsonValue));
+      if (__r.tag === "Err") throw __rehydrationViolation("Projection", __r.error);
+      ((s as unknown as globalThis.Record<string, unknown>).stamps as globalThis.Record<string, unknown>)[__k] = __r.value;
+    }
+  }
+  if (globalThis.Object.prototype.hasOwnProperty.call(stored, "stamps")) {
+    for (const [__k] of __wireEntries((s as unknown as globalThis.Record<string, unknown>).stamps as never)) {
+      const __r = ((__v) => typeof __v === "string" ? Ok(__v) : Err({ kind: "StructuralMismatch", path: "stamps", expected: "string", actual: typeof __v } as __BoundaryError))((__k as unknown as __JsonValue));
+      if (__r.tag === "Err") throw __rehydrationViolation("Projection", __r.error);
+    }
+  }
 }
 
 function __hydrateProjectionState(s: ProjectionState, stored: ProjectionState): void {
   const __z = __zeroOfProjectionState();
   const __w = s as { -readonly [K in keyof ProjectionState]: ProjectionState[K] };
   const __r = stored as unknown as globalThis.Record<string, unknown>;
-  if (globalThis.Object.hasOwn(__r, "stamps")) { __fillMap(__z.stamps, __r["stamps"] as never); __w.stamps = __z.stamps; }
+  if (globalThis.Object.hasOwn(__r, "stamps")) {
+    __fillMap(__z.stamps, __r["stamps"] as never);
+    __w.stamps = __z.stamps;
+  }
 }
 
 function __encodeProjectionState(s: ProjectionState): globalThis.Record<string, unknown> {

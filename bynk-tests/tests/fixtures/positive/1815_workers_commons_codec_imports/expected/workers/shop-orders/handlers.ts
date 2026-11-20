@@ -36,7 +36,11 @@ function __zeroOfOrderState(): OrderState { return { owner: None }; }
 const __entryFieldsOfOrder = [] as const;
 
 function __rehydrateOrderState(s: OrderState, stored: OrderState): void {
-  if (globalThis.Object.prototype.hasOwnProperty.call(stored, "owner")) { const __r = __deserialise_Option_CustomerId((s.owner as unknown as __JsonValue), "owner"); if (__r.tag === "Err") throw __rehydrationViolation("Order", __r.error); (s as { -readonly [K in keyof typeof s]: (typeof s)[K] }).owner = __r.value as unknown as (typeof s)["owner"]; }
+  if (globalThis.Object.prototype.hasOwnProperty.call(stored, "owner")) {
+    const __r = __deserialise_Option_CustomerId((s.owner as unknown as __JsonValue), "owner");
+    if (__r.tag === "Err") throw __rehydrationViolation("Order", __r.error);
+    (s as { -readonly [K in keyof typeof s]: (typeof s)[K] }).owner = __r.value as unknown as (typeof s)["owner"];
+  }
 }
 
 function __encodeOrderState(s: OrderState): globalThis.Record<string, unknown> {

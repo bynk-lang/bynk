@@ -29,7 +29,11 @@ function __zeroOfCounterState(): CounterState { return { n: 0 }; }
 const __entryFieldsOfCounter = [] as const;
 
 function __rehydrateCounterState(s: CounterState, stored: CounterState): void {
-  if (globalThis.Object.prototype.hasOwnProperty.call(stored, "n")) { const __r = ((__v) => typeof __v !== "number" ? Err({ kind: "StructuralMismatch", path: "n", expected: "safe integer", actual: typeof __v } as __BoundaryError) : globalThis.Number.isSafeInteger(__v) ? Ok(__v) : Err({ kind: "StructuralMismatch", path: "n", expected: "safe integer", actual: String(__v) } as __BoundaryError))((s.n as unknown as __JsonValue)); if (__r.tag === "Err") throw __rehydrationViolation("Counter", __r.error); (s as { -readonly [K in keyof typeof s]: (typeof s)[K] }).n = __r.value as unknown as (typeof s)["n"]; }
+  if (globalThis.Object.prototype.hasOwnProperty.call(stored, "n")) {
+    const __r = ((__v) => typeof __v !== "number" ? Err({ kind: "StructuralMismatch", path: "n", expected: "safe integer", actual: typeof __v } as __BoundaryError) : globalThis.Number.isSafeInteger(__v) ? Ok(__v) : Err({ kind: "StructuralMismatch", path: "n", expected: "safe integer", actual: String(__v) } as __BoundaryError))((s.n as unknown as __JsonValue));
+    if (__r.tag === "Err") throw __rehydrationViolation("Counter", __r.error);
+    (s as { -readonly [K in keyof typeof s]: (typeof s)[K] }).n = __r.value as unknown as (typeof s)["n"];
+  }
 }
 
 function __encodeCounterState(s: CounterState): globalThis.Record<string, unknown> {
@@ -107,7 +111,11 @@ function __zeroOfLedgerState(): LedgerState { return { seen: false }; }
 const __entryFieldsOfLedger = [] as const;
 
 function __rehydrateLedgerState(s: LedgerState, stored: LedgerState): void {
-  if (globalThis.Object.prototype.hasOwnProperty.call(stored, "seen")) { const __r = ((__v) => typeof __v === "boolean" ? Ok(__v) : Err({ kind: "StructuralMismatch", path: "seen", expected: "boolean", actual: typeof __v } as __BoundaryError))((s.seen as unknown as __JsonValue)); if (__r.tag === "Err") throw __rehydrationViolation("Ledger", __r.error); (s as { -readonly [K in keyof typeof s]: (typeof s)[K] }).seen = __r.value as unknown as (typeof s)["seen"]; }
+  if (globalThis.Object.prototype.hasOwnProperty.call(stored, "seen")) {
+    const __r = ((__v) => typeof __v === "boolean" ? Ok(__v) : Err({ kind: "StructuralMismatch", path: "seen", expected: "boolean", actual: typeof __v } as __BoundaryError))((s.seen as unknown as __JsonValue));
+    if (__r.tag === "Err") throw __rehydrationViolation("Ledger", __r.error);
+    (s as { -readonly [K in keyof typeof s]: (typeof s)[K] }).seen = __r.value as unknown as (typeof s)["seen"];
+  }
 }
 
 function __encodeLedgerState(s: LedgerState): globalThis.Record<string, unknown> {

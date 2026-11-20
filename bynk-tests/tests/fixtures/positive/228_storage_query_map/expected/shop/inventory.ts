@@ -28,15 +28,29 @@ function __zeroOfInventoryState(): InventoryState { return { reservations: new _
 const __entryFieldsOfInventory = [{ name: "reservations", kind: "map" }] as const;
 
 function __rehydrateInventoryState(s: InventoryState, stored: InventoryState): void {
-  if (globalThis.Object.prototype.hasOwnProperty.call(stored, "reservations")) for (const __k of globalThis.Object.keys((s as unknown as globalThis.Record<string, unknown>).reservations as object)) { const __r = __deserialise_Reservation((((s as unknown as globalThis.Record<string, unknown>).reservations as globalThis.Record<string, unknown>)[__k] as unknown as __JsonValue), "reservations"); if (__r.tag === "Err") throw __rehydrationViolation("Inventory", __r.error); ((s as unknown as globalThis.Record<string, unknown>).reservations as globalThis.Record<string, unknown>)[__k] = __r.value; }
-  if (globalThis.Object.prototype.hasOwnProperty.call(stored, "reservations")) for (const [__k] of __wireEntries((s as unknown as globalThis.Record<string, unknown>).reservations as never)) { const __r = ((__v) => typeof __v === "string" ? Ok(__v) : Err({ kind: "StructuralMismatch", path: "reservations", expected: "string", actual: typeof __v } as __BoundaryError))((__k as unknown as __JsonValue)); if (__r.tag === "Err") throw __rehydrationViolation("Inventory", __r.error); }
+  if (globalThis.Object.prototype.hasOwnProperty.call(stored, "reservations")) {
+    for (const __k of globalThis.Object.keys((s as unknown as globalThis.Record<string, unknown>).reservations as object)) {
+      const __r = __deserialise_Reservation((((s as unknown as globalThis.Record<string, unknown>).reservations as globalThis.Record<string, unknown>)[__k] as unknown as __JsonValue), "reservations");
+      if (__r.tag === "Err") throw __rehydrationViolation("Inventory", __r.error);
+      ((s as unknown as globalThis.Record<string, unknown>).reservations as globalThis.Record<string, unknown>)[__k] = __r.value;
+    }
+  }
+  if (globalThis.Object.prototype.hasOwnProperty.call(stored, "reservations")) {
+    for (const [__k] of __wireEntries((s as unknown as globalThis.Record<string, unknown>).reservations as never)) {
+      const __r = ((__v) => typeof __v === "string" ? Ok(__v) : Err({ kind: "StructuralMismatch", path: "reservations", expected: "string", actual: typeof __v } as __BoundaryError))((__k as unknown as __JsonValue));
+      if (__r.tag === "Err") throw __rehydrationViolation("Inventory", __r.error);
+    }
+  }
 }
 
 function __hydrateInventoryState(s: InventoryState, stored: InventoryState): void {
   const __z = __zeroOfInventoryState();
   const __w = s as { -readonly [K in keyof InventoryState]: InventoryState[K] };
   const __r = stored as unknown as globalThis.Record<string, unknown>;
-  if (globalThis.Object.hasOwn(__r, "reservations")) { __fillMap(__z.reservations, __r["reservations"] as never); __w.reservations = __z.reservations; }
+  if (globalThis.Object.hasOwn(__r, "reservations")) {
+    __fillMap(__z.reservations, __r["reservations"] as never);
+    __w.reservations = __z.reservations;
+  }
 }
 
 function __encodeInventoryState(s: InventoryState): globalThis.Record<string, unknown> {

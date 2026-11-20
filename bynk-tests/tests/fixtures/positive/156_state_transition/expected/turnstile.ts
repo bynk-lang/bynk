@@ -27,7 +27,11 @@ function __zeroOfTurnstileState(): TurnstileState { return { gate: Gate.Locked }
 const __entryFieldsOfTurnstile = [] as const;
 
 function __rehydrateTurnstileState(s: TurnstileState, stored: TurnstileState): void {
-  if (globalThis.Object.prototype.hasOwnProperty.call(stored, "gate")) { const __r = __deserialise_Gate((s.gate as unknown as __JsonValue), "gate"); if (__r.tag === "Err") throw __rehydrationViolation("Turnstile", __r.error); (s as { -readonly [K in keyof typeof s]: (typeof s)[K] }).gate = __r.value as unknown as (typeof s)["gate"]; }
+  if (globalThis.Object.prototype.hasOwnProperty.call(stored, "gate")) {
+    const __r = __deserialise_Gate((s.gate as unknown as __JsonValue), "gate");
+    if (__r.tag === "Err") throw __rehydrationViolation("Turnstile", __r.error);
+    (s as { -readonly [K in keyof typeof s]: (typeof s)[K] }).gate = __r.value as unknown as (typeof s)["gate"];
+  }
 }
 
 function __encodeTurnstileState(s: TurnstileState): globalThis.Record<string, unknown> {

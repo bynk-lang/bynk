@@ -27,7 +27,11 @@ function __zeroOfRegistryState(): RegistryState { return { totals: new globalThi
 const __entryFieldsOfRegistry = [] as const;
 
 function __rehydrateRegistryState(s: RegistryState, stored: RegistryState): void {
-  if (globalThis.Object.prototype.hasOwnProperty.call(stored, "totals")) { const __r = __deserialise_Map_OrderId_Int((s.totals as unknown as __JsonValue), "totals"); if (__r.tag === "Err") throw __rehydrationViolation("Registry", __r.error); (s as { -readonly [K in keyof typeof s]: (typeof s)[K] }).totals = __r.value as unknown as (typeof s)["totals"]; }
+  if (globalThis.Object.prototype.hasOwnProperty.call(stored, "totals")) {
+    const __r = __deserialise_Map_OrderId_Int((s.totals as unknown as __JsonValue), "totals");
+    if (__r.tag === "Err") throw __rehydrationViolation("Registry", __r.error);
+    (s as { -readonly [K in keyof typeof s]: (typeof s)[K] }).totals = __r.value as unknown as (typeof s)["totals"];
+  }
 }
 
 function __encodeRegistryState(s: RegistryState): globalThis.Record<string, unknown> {

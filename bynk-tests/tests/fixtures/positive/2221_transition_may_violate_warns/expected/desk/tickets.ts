@@ -38,7 +38,11 @@ function __zeroOfTicketState(): TicketState { return { state: Phase.Open }; }
 const __entryFieldsOfTicket = [] as const;
 
 function __rehydrateTicketState(s: TicketState, stored: TicketState): void {
-  if (globalThis.Object.prototype.hasOwnProperty.call(stored, "state")) { const __r = __deserialise_Phase((s.state as unknown as __JsonValue), "state"); if (__r.tag === "Err") throw __rehydrationViolation("Ticket", __r.error); (s as { -readonly [K in keyof typeof s]: (typeof s)[K] }).state = __r.value as unknown as (typeof s)["state"]; }
+  if (globalThis.Object.prototype.hasOwnProperty.call(stored, "state")) {
+    const __r = __deserialise_Phase((s.state as unknown as __JsonValue), "state");
+    if (__r.tag === "Err") throw __rehydrationViolation("Ticket", __r.error);
+    (s as { -readonly [K in keyof typeof s]: (typeof s)[K] }).state = __r.value as unknown as (typeof s)["state"];
+  }
 }
 
 function __encodeTicketState(s: TicketState): globalThis.Record<string, unknown> {
@@ -127,8 +131,16 @@ function __zeroOfGateState(): GateState { return { gate: Power.Idle, hits: 0 }; 
 const __entryFieldsOfGate = [] as const;
 
 function __rehydrateGateState(s: GateState, stored: GateState): void {
-  if (globalThis.Object.prototype.hasOwnProperty.call(stored, "gate")) { const __r = __deserialise_Power((s.gate as unknown as __JsonValue), "gate"); if (__r.tag === "Err") throw __rehydrationViolation("Gate", __r.error); (s as { -readonly [K in keyof typeof s]: (typeof s)[K] }).gate = __r.value as unknown as (typeof s)["gate"]; }
-  if (globalThis.Object.prototype.hasOwnProperty.call(stored, "hits")) { const __r = ((__v) => typeof __v !== "number" ? Err({ kind: "StructuralMismatch", path: "hits", expected: "safe integer", actual: typeof __v } as __BoundaryError) : globalThis.Number.isSafeInteger(__v) ? Ok(__v) : Err({ kind: "StructuralMismatch", path: "hits", expected: "safe integer", actual: String(__v) } as __BoundaryError))((s.hits as unknown as __JsonValue)); if (__r.tag === "Err") throw __rehydrationViolation("Gate", __r.error); (s as { -readonly [K in keyof typeof s]: (typeof s)[K] }).hits = __r.value as unknown as (typeof s)["hits"]; }
+  if (globalThis.Object.prototype.hasOwnProperty.call(stored, "gate")) {
+    const __r = __deserialise_Power((s.gate as unknown as __JsonValue), "gate");
+    if (__r.tag === "Err") throw __rehydrationViolation("Gate", __r.error);
+    (s as { -readonly [K in keyof typeof s]: (typeof s)[K] }).gate = __r.value as unknown as (typeof s)["gate"];
+  }
+  if (globalThis.Object.prototype.hasOwnProperty.call(stored, "hits")) {
+    const __r = ((__v) => typeof __v !== "number" ? Err({ kind: "StructuralMismatch", path: "hits", expected: "safe integer", actual: typeof __v } as __BoundaryError) : globalThis.Number.isSafeInteger(__v) ? Ok(__v) : Err({ kind: "StructuralMismatch", path: "hits", expected: "safe integer", actual: String(__v) } as __BoundaryError))((s.hits as unknown as __JsonValue));
+    if (__r.tag === "Err") throw __rehydrationViolation("Gate", __r.error);
+    (s as { -readonly [K in keyof typeof s]: (typeof s)[K] }).hits = __r.value as unknown as (typeof s)["hits"];
+  }
 }
 
 function __encodeGateState(s: GateState): globalThis.Record<string, unknown> {

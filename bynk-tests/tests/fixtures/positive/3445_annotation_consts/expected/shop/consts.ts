@@ -81,16 +81,34 @@ function __zeroOfMemoState(): MemoState { return { c: new __StoreCache<number>()
 const __entryFieldsOfMemo = [{ name: "c", kind: "cache" }, { name: "l", kind: "log" }] as const;
 
 function __rehydrateMemoState(s: MemoState, stored: MemoState): void {
-  if (globalThis.Object.prototype.hasOwnProperty.call(stored, "c")) for (const __e of globalThis.Object.values((s as unknown as globalThis.Record<string, unknown>).c as globalThis.Record<string, { v: unknown }>)) { const __r = ((__v) => typeof __v !== "number" ? Err({ kind: "StructuralMismatch", path: "c", expected: "safe integer", actual: typeof __v } as __BoundaryError) : globalThis.Number.isSafeInteger(__v) ? Ok(__v) : Err({ kind: "StructuralMismatch", path: "c", expected: "safe integer", actual: String(__v) } as __BoundaryError))((__e.v as unknown as __JsonValue)); if (__r.tag === "Err") throw __rehydrationViolation("Memo", __r.error); __e.v = __r.value; }
-  if (globalThis.Object.prototype.hasOwnProperty.call(stored, "l")) for (const __e of ((s as unknown as globalThis.Record<string, unknown>).l as ReadonlyArray<{ v: unknown }>)) { const __r = ((__v) => typeof __v !== "number" ? Err({ kind: "StructuralMismatch", path: "l", expected: "safe integer", actual: typeof __v } as __BoundaryError) : globalThis.Number.isSafeInteger(__v) ? Ok(__v) : Err({ kind: "StructuralMismatch", path: "l", expected: "safe integer", actual: String(__v) } as __BoundaryError))((__e.v as unknown as __JsonValue)); if (__r.tag === "Err") throw __rehydrationViolation("Memo", __r.error); __e.v = __r.value; }
+  if (globalThis.Object.prototype.hasOwnProperty.call(stored, "c")) {
+    for (const __e of globalThis.Object.values((s as unknown as globalThis.Record<string, unknown>).c as globalThis.Record<string, { v: unknown }>)) {
+      const __r = ((__v) => typeof __v !== "number" ? Err({ kind: "StructuralMismatch", path: "c", expected: "safe integer", actual: typeof __v } as __BoundaryError) : globalThis.Number.isSafeInteger(__v) ? Ok(__v) : Err({ kind: "StructuralMismatch", path: "c", expected: "safe integer", actual: String(__v) } as __BoundaryError))((__e.v as unknown as __JsonValue));
+      if (__r.tag === "Err") throw __rehydrationViolation("Memo", __r.error);
+      __e.v = __r.value;
+    }
+  }
+  if (globalThis.Object.prototype.hasOwnProperty.call(stored, "l")) {
+    for (const __e of ((s as unknown as globalThis.Record<string, unknown>).l as ReadonlyArray<{ v: unknown }>)) {
+      const __r = ((__v) => typeof __v !== "number" ? Err({ kind: "StructuralMismatch", path: "l", expected: "safe integer", actual: typeof __v } as __BoundaryError) : globalThis.Number.isSafeInteger(__v) ? Ok(__v) : Err({ kind: "StructuralMismatch", path: "l", expected: "safe integer", actual: String(__v) } as __BoundaryError))((__e.v as unknown as __JsonValue));
+      if (__r.tag === "Err") throw __rehydrationViolation("Memo", __r.error);
+      __e.v = __r.value;
+    }
+  }
 }
 
 function __hydrateMemoState(s: MemoState, stored: MemoState): void {
   const __z = __zeroOfMemoState();
   const __w = s as { -readonly [K in keyof MemoState]: MemoState[K] };
   const __r = stored as unknown as globalThis.Record<string, unknown>;
-  if (globalThis.Object.hasOwn(__r, "c")) { __fillMap(__z.c, __r["c"] as never); __w.c = __z.c; }
-  if (globalThis.Object.hasOwn(__r, "l")) { __fillLog(__z.l, __r["l"] as never); __w.l = __z.l; }
+  if (globalThis.Object.hasOwn(__r, "c")) {
+    __fillMap(__z.c, __r["c"] as never);
+    __w.c = __z.c;
+  }
+  if (globalThis.Object.hasOwn(__r, "l")) {
+    __fillLog(__z.l, __r["l"] as never);
+    __w.l = __z.l;
+  }
 }
 
 function __encodeMemoState(s: MemoState): globalThis.Record<string, unknown> {

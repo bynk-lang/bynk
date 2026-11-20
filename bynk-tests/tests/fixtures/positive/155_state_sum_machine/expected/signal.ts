@@ -28,7 +28,11 @@ function __zeroOfSignalState(): SignalState { return { colour: Light.Red }; }
 const __entryFieldsOfSignal = [] as const;
 
 function __rehydrateSignalState(s: SignalState, stored: SignalState): void {
-  if (globalThis.Object.prototype.hasOwnProperty.call(stored, "colour")) { const __r = __deserialise_Light((s.colour as unknown as __JsonValue), "colour"); if (__r.tag === "Err") throw __rehydrationViolation("Signal", __r.error); (s as { -readonly [K in keyof typeof s]: (typeof s)[K] }).colour = __r.value as unknown as (typeof s)["colour"]; }
+  if (globalThis.Object.prototype.hasOwnProperty.call(stored, "colour")) {
+    const __r = __deserialise_Light((s.colour as unknown as __JsonValue), "colour");
+    if (__r.tag === "Err") throw __rehydrationViolation("Signal", __r.error);
+    (s as { -readonly [K in keyof typeof s]: (typeof s)[K] }).colour = __r.value as unknown as (typeof s)["colour"];
+  }
 }
 
 function __encodeSignalState(s: SignalState): globalThis.Record<string, unknown> {

@@ -85,7 +85,11 @@ function __zeroOfOrderState(): OrderState { return { status: "new" }; }
 const __entryFieldsOfOrder = [] as const;
 
 function __rehydrateOrderState(s: OrderState, stored: OrderState): void {
-  if (globalThis.Object.prototype.hasOwnProperty.call(stored, "status")) { const __r = ((__v) => typeof __v === "string" ? Ok(__v) : Err({ kind: "StructuralMismatch", path: "status", expected: "string", actual: typeof __v } as __BoundaryError))((s.status as unknown as __JsonValue)); if (__r.tag === "Err") throw __rehydrationViolation("Order", __r.error); (s as { -readonly [K in keyof typeof s]: (typeof s)[K] }).status = __r.value as unknown as (typeof s)["status"]; }
+  if (globalThis.Object.prototype.hasOwnProperty.call(stored, "status")) {
+    const __r = ((__v) => typeof __v === "string" ? Ok(__v) : Err({ kind: "StructuralMismatch", path: "status", expected: "string", actual: typeof __v } as __BoundaryError))((s.status as unknown as __JsonValue));
+    if (__r.tag === "Err") throw __rehydrationViolation("Order", __r.error);
+    (s as { -readonly [K in keyof typeof s]: (typeof s)[K] }).status = __r.value as unknown as (typeof s)["status"];
+  }
 }
 
 function __encodeOrderState(s: OrderState): globalThis.Record<string, unknown> {
@@ -168,7 +172,11 @@ function __zeroOfStockState(): StockState { return { held: 0 }; }
 const __entryFieldsOfStock = [] as const;
 
 function __rehydrateStockState(s: StockState, stored: StockState): void {
-  if (globalThis.Object.prototype.hasOwnProperty.call(stored, "held")) { const __r = ((__v) => typeof __v !== "number" ? Err({ kind: "StructuralMismatch", path: "held", expected: "safe integer", actual: typeof __v } as __BoundaryError) : globalThis.Number.isSafeInteger(__v) ? Ok(__v) : Err({ kind: "StructuralMismatch", path: "held", expected: "safe integer", actual: String(__v) } as __BoundaryError))((s.held as unknown as __JsonValue)); if (__r.tag === "Err") throw __rehydrationViolation("Stock", __r.error); (s as { -readonly [K in keyof typeof s]: (typeof s)[K] }).held = __r.value as unknown as (typeof s)["held"]; }
+  if (globalThis.Object.prototype.hasOwnProperty.call(stored, "held")) {
+    const __r = ((__v) => typeof __v !== "number" ? Err({ kind: "StructuralMismatch", path: "held", expected: "safe integer", actual: typeof __v } as __BoundaryError) : globalThis.Number.isSafeInteger(__v) ? Ok(__v) : Err({ kind: "StructuralMismatch", path: "held", expected: "safe integer", actual: String(__v) } as __BoundaryError))((s.held as unknown as __JsonValue));
+    if (__r.tag === "Err") throw __rehydrationViolation("Stock", __r.error);
+    (s as { -readonly [K in keyof typeof s]: (typeof s)[K] }).held = __r.value as unknown as (typeof s)["held"];
+  }
 }
 
 function __encodeStockState(s: StockState): globalThis.Record<string, unknown> {

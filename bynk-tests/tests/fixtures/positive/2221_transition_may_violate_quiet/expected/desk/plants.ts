@@ -38,7 +38,11 @@ function __zeroOfDialState(): DialState { return { level: Level.Low }; }
 const __entryFieldsOfDial = [] as const;
 
 function __rehydrateDialState(s: DialState, stored: DialState): void {
-  if (globalThis.Object.prototype.hasOwnProperty.call(stored, "level")) { const __r = __deserialise_Level((s.level as unknown as __JsonValue), "level"); if (__r.tag === "Err") throw __rehydrationViolation("Dial", __r.error); (s as { -readonly [K in keyof typeof s]: (typeof s)[K] }).level = __r.value as unknown as (typeof s)["level"]; }
+  if (globalThis.Object.prototype.hasOwnProperty.call(stored, "level")) {
+    const __r = __deserialise_Level((s.level as unknown as __JsonValue), "level");
+    if (__r.tag === "Err") throw __rehydrationViolation("Dial", __r.error);
+    (s as { -readonly [K in keyof typeof s]: (typeof s)[K] }).level = __r.value as unknown as (typeof s)["level"];
+  }
 }
 
 function __encodeDialState(s: DialState): globalThis.Record<string, unknown> {
@@ -105,7 +109,11 @@ function __zeroOfPlantState(): PlantState { return { stage: Stage.Seed }; }
 const __entryFieldsOfPlant = [] as const;
 
 function __rehydratePlantState(s: PlantState, stored: PlantState): void {
-  if (globalThis.Object.prototype.hasOwnProperty.call(stored, "stage")) { const __r = __deserialise_Stage((s.stage as unknown as __JsonValue), "stage"); if (__r.tag === "Err") throw __rehydrationViolation("Plant", __r.error); (s as { -readonly [K in keyof typeof s]: (typeof s)[K] }).stage = __r.value as unknown as (typeof s)["stage"]; }
+  if (globalThis.Object.prototype.hasOwnProperty.call(stored, "stage")) {
+    const __r = __deserialise_Stage((s.stage as unknown as __JsonValue), "stage");
+    if (__r.tag === "Err") throw __rehydrationViolation("Plant", __r.error);
+    (s as { -readonly [K in keyof typeof s]: (typeof s)[K] }).stage = __r.value as unknown as (typeof s)["stage"];
+  }
 }
 
 function __encodePlantState(s: PlantState): globalThis.Record<string, unknown> {
@@ -170,8 +178,16 @@ function __zeroOfCounterState(): CounterState { return { stage: Stage.Seed, coun
 const __entryFieldsOfCounter = [] as const;
 
 function __rehydrateCounterState(s: CounterState, stored: CounterState): void {
-  if (globalThis.Object.prototype.hasOwnProperty.call(stored, "stage")) { const __r = __deserialise_Stage((s.stage as unknown as __JsonValue), "stage"); if (__r.tag === "Err") throw __rehydrationViolation("Counter", __r.error); (s as { -readonly [K in keyof typeof s]: (typeof s)[K] }).stage = __r.value as unknown as (typeof s)["stage"]; }
-  if (globalThis.Object.prototype.hasOwnProperty.call(stored, "count")) { const __r = ((__v) => typeof __v !== "number" ? Err({ kind: "StructuralMismatch", path: "count", expected: "safe integer", actual: typeof __v } as __BoundaryError) : globalThis.Number.isSafeInteger(__v) ? Ok(__v) : Err({ kind: "StructuralMismatch", path: "count", expected: "safe integer", actual: String(__v) } as __BoundaryError))((s.count as unknown as __JsonValue)); if (__r.tag === "Err") throw __rehydrationViolation("Counter", __r.error); (s as { -readonly [K in keyof typeof s]: (typeof s)[K] }).count = __r.value as unknown as (typeof s)["count"]; }
+  if (globalThis.Object.prototype.hasOwnProperty.call(stored, "stage")) {
+    const __r = __deserialise_Stage((s.stage as unknown as __JsonValue), "stage");
+    if (__r.tag === "Err") throw __rehydrationViolation("Counter", __r.error);
+    (s as { -readonly [K in keyof typeof s]: (typeof s)[K] }).stage = __r.value as unknown as (typeof s)["stage"];
+  }
+  if (globalThis.Object.prototype.hasOwnProperty.call(stored, "count")) {
+    const __r = ((__v) => typeof __v !== "number" ? Err({ kind: "StructuralMismatch", path: "count", expected: "safe integer", actual: typeof __v } as __BoundaryError) : globalThis.Number.isSafeInteger(__v) ? Ok(__v) : Err({ kind: "StructuralMismatch", path: "count", expected: "safe integer", actual: String(__v) } as __BoundaryError))((s.count as unknown as __JsonValue));
+    if (__r.tag === "Err") throw __rehydrationViolation("Counter", __r.error);
+    (s as { -readonly [K in keyof typeof s]: (typeof s)[K] }).count = __r.value as unknown as (typeof s)["count"];
+  }
 }
 
 function __encodeCounterState(s: CounterState): globalThis.Record<string, unknown> {

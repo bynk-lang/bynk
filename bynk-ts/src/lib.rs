@@ -58,7 +58,7 @@ pub use printer::{
 };
 pub use program::{
     ExportedName, TsArrowBody, TsBinaryOp, TsBindingName, TsClassCtor, TsClassField, TsClassMethod,
-    TsDecl, TsExpr, TsLit, TsObjectEntry, TsParam, TsProgram, TsStmt, TsSwitchCase, TsType,
-    TsTypeMember, TsUnaryOp, VerbatimOrigin,
+    TsDecl, TsExpr, TsLit, TsMappedModifier, TsObjectEntry, TsParam, TsProgram, TsStmt,
+    TsSwitchCase, TsType, TsTypeMember, TsUnaryOp, VerbatimOrigin,
 };
 pub use source_map::SourceMapBuilder;

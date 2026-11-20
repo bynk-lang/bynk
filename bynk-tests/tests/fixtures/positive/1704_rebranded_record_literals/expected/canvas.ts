@@ -24,8 +24,16 @@ function __zeroOfBoardState(): BoardState { return { total: 0, last: None }; }
 const __entryFieldsOfBoard = [] as const;
 
 function __rehydrateBoardState(s: BoardState, stored: BoardState): void {
-  if (globalThis.Object.prototype.hasOwnProperty.call(stored, "total")) { const __r = ((__v) => typeof __v !== "number" ? Err({ kind: "StructuralMismatch", path: "total", expected: "safe integer", actual: typeof __v } as __BoundaryError) : globalThis.Number.isSafeInteger(__v) ? Ok(__v) : Err({ kind: "StructuralMismatch", path: "total", expected: "safe integer", actual: String(__v) } as __BoundaryError))((s.total as unknown as __JsonValue)); if (__r.tag === "Err") throw __rehydrationViolation("Board", __r.error); (s as { -readonly [K in keyof typeof s]: (typeof s)[K] }).total = __r.value as unknown as (typeof s)["total"]; }
-  if (globalThis.Object.prototype.hasOwnProperty.call(stored, "last")) { const __r = __deserialise_Option_Line((s.last as unknown as __JsonValue), "last"); if (__r.tag === "Err") throw __rehydrationViolation("Board", __r.error); (s as { -readonly [K in keyof typeof s]: (typeof s)[K] }).last = __r.value as unknown as (typeof s)["last"]; }
+  if (globalThis.Object.prototype.hasOwnProperty.call(stored, "total")) {
+    const __r = ((__v) => typeof __v !== "number" ? Err({ kind: "StructuralMismatch", path: "total", expected: "safe integer", actual: typeof __v } as __BoundaryError) : globalThis.Number.isSafeInteger(__v) ? Ok(__v) : Err({ kind: "StructuralMismatch", path: "total", expected: "safe integer", actual: String(__v) } as __BoundaryError))((s.total as unknown as __JsonValue));
+    if (__r.tag === "Err") throw __rehydrationViolation("Board", __r.error);
+    (s as { -readonly [K in keyof typeof s]: (typeof s)[K] }).total = __r.value as unknown as (typeof s)["total"];
+  }
+  if (globalThis.Object.prototype.hasOwnProperty.call(stored, "last")) {
+    const __r = __deserialise_Option_Line((s.last as unknown as __JsonValue), "last");
+    if (__r.tag === "Err") throw __rehydrationViolation("Board", __r.error);
+    (s as { -readonly [K in keyof typeof s]: (typeof s)[K] }).last = __r.value as unknown as (typeof s)["last"];
+  }
 }
 
 function __encodeBoardState(s: BoardState): globalThis.Record<string, unknown> {

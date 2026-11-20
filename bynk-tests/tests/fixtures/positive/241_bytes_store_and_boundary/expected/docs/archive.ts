@@ -31,7 +31,11 @@ function __zeroOfVaultState(): VaultState { return { latest: { label: "", bytes:
 const __entryFieldsOfVault = [] as const;
 
 function __rehydrateVaultState(s: VaultState, stored: VaultState): void {
-  if (globalThis.Object.prototype.hasOwnProperty.call(stored, "latest")) { const __r = __deserialise_Blob((s.latest as unknown as __JsonValue), "latest"); if (__r.tag === "Err") throw __rehydrationViolation("Vault", __r.error); (s as { -readonly [K in keyof typeof s]: (typeof s)[K] }).latest = __r.value as unknown as (typeof s)["latest"]; }
+  if (globalThis.Object.prototype.hasOwnProperty.call(stored, "latest")) {
+    const __r = __deserialise_Blob((s.latest as unknown as __JsonValue), "latest");
+    if (__r.tag === "Err") throw __rehydrationViolation("Vault", __r.error);
+    (s as { -readonly [K in keyof typeof s]: (typeof s)[K] }).latest = __r.value as unknown as (typeof s)["latest"];
+  }
 }
 
 function __encodeVaultState(s: VaultState): globalThis.Record<string, unknown> {

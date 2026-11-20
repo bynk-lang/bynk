@@ -20,14 +20,22 @@ function __zeroOfAudienceState(): AudienceState { return { members: new __StoreS
 const __entryFieldsOfAudience = [{ name: "members", kind: "set" }] as const;
 
 function __rehydrateAudienceState(s: AudienceState, stored: AudienceState): void {
-  if (globalThis.Object.prototype.hasOwnProperty.call(stored, "members")) for (const [__k] of __wireEntries((s as unknown as globalThis.Record<string, unknown>).members as never)) { const __r = ((__v) => typeof __v === "string" ? Ok(__v) : Err({ kind: "StructuralMismatch", path: "members", expected: "string", actual: typeof __v } as __BoundaryError))((__k as unknown as __JsonValue)); if (__r.tag === "Err") throw __rehydrationViolation("Audience", __r.error); }
+  if (globalThis.Object.prototype.hasOwnProperty.call(stored, "members")) {
+    for (const [__k] of __wireEntries((s as unknown as globalThis.Record<string, unknown>).members as never)) {
+      const __r = ((__v) => typeof __v === "string" ? Ok(__v) : Err({ kind: "StructuralMismatch", path: "members", expected: "string", actual: typeof __v } as __BoundaryError))((__k as unknown as __JsonValue));
+      if (__r.tag === "Err") throw __rehydrationViolation("Audience", __r.error);
+    }
+  }
 }
 
 function __hydrateAudienceState(s: AudienceState, stored: AudienceState): void {
   const __z = __zeroOfAudienceState();
   const __w = s as { -readonly [K in keyof AudienceState]: AudienceState[K] };
   const __r = stored as unknown as globalThis.Record<string, unknown>;
-  if (globalThis.Object.hasOwn(__r, "members")) { __fillSet(__z.members, __r["members"] as never); __w.members = __z.members; }
+  if (globalThis.Object.hasOwn(__r, "members")) {
+    __fillSet(__z.members, __r["members"] as never);
+    __w.members = __z.members;
+  }
 }
 
 function __encodeAudienceState(s: AudienceState): globalThis.Record<string, unknown> {

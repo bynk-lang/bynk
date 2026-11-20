@@ -2154,6 +2154,41 @@ pub enum TsType {
     /// the ordinary `render_type` recursion, joined by ` & `), single-line
     /// only (nothing in `bynk-emit` builds a multi-line intersection).
     Intersection(Vec<TsType>),
+    /// A mapped type, `{ -readonly [K in keyof T]: V }`: one property per key of
+    /// `keys_of`, typed `value` (which may mention `key`).
+    ///
+    /// `readonly` is the modifier on the generated properties: `None` leaves them as
+    /// they are, `Some(Add)` prints `+readonly` and `Some(Remove)` prints `-readonly`.
+    /// `keys_of` is the operand of `keyof`, so the constraint is always
+    /// `key in keyof keys_of`. `key` is a name the type binds for `value`. Always
+    /// printed on one line, as a [`TsType::Object`] is.
+    Mapped {
+        readonly: Option<TsMappedModifier>,
+        key: String,
+        keys_of: Box<TsType>,
+        value: Box<TsType>,
+    },
+    /// `typeof x`: the type of a value. The operand is an identifier or a chain of
+    /// member accesses (`typeof a.b`), the only expressions TypeScript allows here;
+    /// it is a use of that value for `name_closure`.
+    TypeOf(Box<TsExpr>),
+    /// `T[K]`: an indexed access type, `object` indexed by `index` (a key type such
+    /// as [`TsType::StringLiteral`] or a mapped type's own key).
+    Indexed {
+        object: Box<TsType>,
+        index: Box<TsType>,
+    },
+    /// A string literal type, `"k"`, escaped as a [`TsLit::Str`] is.
+    StringLiteral(String),
+}
+
+/// The modifier on a [`TsType::Mapped`] type's `readonly`.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum TsMappedModifier {
+    /// `+readonly`.
+    Add,
+    /// `-readonly`.
+    Remove,
 }
 
 impl TsType {
@@ -2211,6 +2246,44 @@ impl TsType {
     /// `A & B` — an intersection type.
     pub fn intersection(members: Vec<TsType>) -> Self {
         TsType::Intersection(members)
+    }
+
+    /// `{ [key in keyof keys_of]: value }`, with no `readonly` modifier.
+    pub fn mapped(key: impl Into<String>, keys_of: TsType, value: TsType) -> Self {
+        TsType::Mapped {
+            readonly: None,
+            key: key.into(),
+            keys_of: Box::new(keys_of),
+            value: Box::new(value),
+        }
+    }
+
+    /// The same mapped type with its properties' `readonly` modifier set.
+    pub fn with_mapped_readonly(mut self, modifier: TsMappedModifier) -> Self {
+        if let TsType::Mapped { readonly, .. } = &mut self {
+            *readonly = Some(modifier);
+        } else {
+            debug_assert!(false, "with_mapped_readonly: not a mapped type");
+        }
+        self
+    }
+
+    /// `typeof name`.
+    pub fn type_of(operand: TsExpr) -> Self {
+        TsType::TypeOf(Box::new(operand))
+    }
+
+    /// `object[index]`.
+    pub fn indexed(object: TsType, index: TsType) -> Self {
+        TsType::Indexed {
+            object: Box::new(object),
+            index: Box::new(index),
+        }
+    }
+
+    /// The string literal type `"text"`.
+    pub fn string_literal(text: impl Into<String>) -> Self {
+        TsType::StringLiteral(text.into())
     }
 }
 

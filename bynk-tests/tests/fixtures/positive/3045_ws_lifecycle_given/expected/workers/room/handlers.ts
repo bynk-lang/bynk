@@ -56,17 +56,39 @@ function __zeroOfRoomState(): RoomState { return { stamps: new __StoreMap<number
 const __entryFieldsOfRoom = [{ name: "stamps", kind: "map" }] as const;
 
 function __rehydrateRoomState(s: RoomState, stored: RoomState): void {
-  if (globalThis.Object.prototype.hasOwnProperty.call(stored, "stamps")) for (const __k of globalThis.Object.keys((s as unknown as globalThis.Record<string, unknown>).stamps as object)) { const __r = ((__v) => typeof __v !== "number" ? Err({ kind: "StructuralMismatch", path: "stamps", expected: "safe integer", actual: typeof __v } as __BoundaryError) : globalThis.Number.isSafeInteger(__v) ? Ok(__v) : Err({ kind: "StructuralMismatch", path: "stamps", expected: "safe integer", actual: String(__v) } as __BoundaryError))((((s as unknown as globalThis.Record<string, unknown>).stamps as globalThis.Record<string, unknown>)[__k] as unknown as __JsonValue)); if (__r.tag === "Err") throw __rehydrationViolation("Room", __r.error); ((s as unknown as globalThis.Record<string, unknown>).stamps as globalThis.Record<string, unknown>)[__k] = __r.value; }
-  if (globalThis.Object.prototype.hasOwnProperty.call(stored, "stamps")) for (const [__k] of __wireEntries((s as unknown as globalThis.Record<string, unknown>).stamps as never)) { const __r = ((__v) => typeof __v === "string" ? Ok(__v) : Err({ kind: "StructuralMismatch", path: "stamps", expected: "string", actual: typeof __v } as __BoundaryError))((__k as unknown as __JsonValue)); if (__r.tag === "Err") throw __rehydrationViolation("Room", __r.error); }
-  if (globalThis.Object.prototype.hasOwnProperty.call(stored, "conns")) for (const [__k] of __wireEntries((s as unknown as globalThis.Record<string, unknown>).conns as never)) { const __r = ((__v) => typeof __v === "string" ? Ok(__v) : Err({ kind: "StructuralMismatch", path: "conns", expected: "string", actual: typeof __v } as __BoundaryError))((__k as unknown as __JsonValue)); if (__r.tag === "Err") throw __rehydrationViolation("Room", __r.error); }
+  if (globalThis.Object.prototype.hasOwnProperty.call(stored, "stamps")) {
+    for (const __k of globalThis.Object.keys((s as unknown as globalThis.Record<string, unknown>).stamps as object)) {
+      const __r = ((__v) => typeof __v !== "number" ? Err({ kind: "StructuralMismatch", path: "stamps", expected: "safe integer", actual: typeof __v } as __BoundaryError) : globalThis.Number.isSafeInteger(__v) ? Ok(__v) : Err({ kind: "StructuralMismatch", path: "stamps", expected: "safe integer", actual: String(__v) } as __BoundaryError))((((s as unknown as globalThis.Record<string, unknown>).stamps as globalThis.Record<string, unknown>)[__k] as unknown as __JsonValue));
+      if (__r.tag === "Err") throw __rehydrationViolation("Room", __r.error);
+      ((s as unknown as globalThis.Record<string, unknown>).stamps as globalThis.Record<string, unknown>)[__k] = __r.value;
+    }
+  }
+  if (globalThis.Object.prototype.hasOwnProperty.call(stored, "stamps")) {
+    for (const [__k] of __wireEntries((s as unknown as globalThis.Record<string, unknown>).stamps as never)) {
+      const __r = ((__v) => typeof __v === "string" ? Ok(__v) : Err({ kind: "StructuralMismatch", path: "stamps", expected: "string", actual: typeof __v } as __BoundaryError))((__k as unknown as __JsonValue));
+      if (__r.tag === "Err") throw __rehydrationViolation("Room", __r.error);
+    }
+  }
+  if (globalThis.Object.prototype.hasOwnProperty.call(stored, "conns")) {
+    for (const [__k] of __wireEntries((s as unknown as globalThis.Record<string, unknown>).conns as never)) {
+      const __r = ((__v) => typeof __v === "string" ? Ok(__v) : Err({ kind: "StructuralMismatch", path: "conns", expected: "string", actual: typeof __v } as __BoundaryError))((__k as unknown as __JsonValue));
+      if (__r.tag === "Err") throw __rehydrationViolation("Room", __r.error);
+    }
+  }
 }
 
 function __hydrateRoomState(s: RoomState, stored: RoomState): void {
   const __z = __zeroOfRoomState();
   const __w = s as { -readonly [K in keyof RoomState]: RoomState[K] };
   const __r = stored as unknown as globalThis.Record<string, unknown>;
-  if (globalThis.Object.hasOwn(__r, "stamps")) { __fillMap(__z.stamps, __r["stamps"] as never); __w.stamps = __z.stamps; }
-  if (globalThis.Object.hasOwn(__r, "conns")) { __fillHeld(__z.conns, __r["conns"] as never, __r["conns:order"] as never); __w.conns = __z.conns; }
+  if (globalThis.Object.hasOwn(__r, "stamps")) {
+    __fillMap(__z.stamps, __r["stamps"] as never);
+    __w.stamps = __z.stamps;
+  }
+  if (globalThis.Object.hasOwn(__r, "conns")) {
+    __fillHeld(__z.conns, __r["conns"] as never, __r["conns:order"] as never);
+    __w.conns = __z.conns;
+  }
 }
 
 function __encodeRoomState(s: RoomState): globalThis.Record<string, unknown> {

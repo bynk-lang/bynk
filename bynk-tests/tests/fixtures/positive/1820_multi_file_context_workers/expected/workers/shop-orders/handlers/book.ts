@@ -27,8 +27,16 @@ function __zeroOfBookState(): BookState { return { last: None, count: 0 }; }
 const __entryFieldsOfBook = [] as const;
 
 function __rehydrateBookState(s: BookState, stored: BookState): void {
-  if (globalThis.Object.prototype.hasOwnProperty.call(stored, "last")) { const __r = __deserialise_Option_Line((s.last as unknown as __JsonValue), "last"); if (__r.tag === "Err") throw __rehydrationViolation("Book", __r.error); (s as { -readonly [K in keyof typeof s]: (typeof s)[K] }).last = __r.value as unknown as (typeof s)["last"]; }
-  if (globalThis.Object.prototype.hasOwnProperty.call(stored, "count")) { const __r = ((__v) => typeof __v !== "number" ? Err({ kind: "StructuralMismatch", path: "count", expected: "safe integer", actual: typeof __v } as __BoundaryError) : globalThis.Number.isSafeInteger(__v) ? Ok(__v) : Err({ kind: "StructuralMismatch", path: "count", expected: "safe integer", actual: String(__v) } as __BoundaryError))((s.count as unknown as __JsonValue)); if (__r.tag === "Err") throw __rehydrationViolation("Book", __r.error); (s as { -readonly [K in keyof typeof s]: (typeof s)[K] }).count = __r.value as unknown as (typeof s)["count"]; }
+  if (globalThis.Object.prototype.hasOwnProperty.call(stored, "last")) {
+    const __r = __deserialise_Option_Line((s.last as unknown as __JsonValue), "last");
+    if (__r.tag === "Err") throw __rehydrationViolation("Book", __r.error);
+    (s as { -readonly [K in keyof typeof s]: (typeof s)[K] }).last = __r.value as unknown as (typeof s)["last"];
+  }
+  if (globalThis.Object.prototype.hasOwnProperty.call(stored, "count")) {
+    const __r = ((__v) => typeof __v !== "number" ? Err({ kind: "StructuralMismatch", path: "count", expected: "safe integer", actual: typeof __v } as __BoundaryError) : globalThis.Number.isSafeInteger(__v) ? Ok(__v) : Err({ kind: "StructuralMismatch", path: "count", expected: "safe integer", actual: String(__v) } as __BoundaryError))((s.count as unknown as __JsonValue));
+    if (__r.tag === "Err") throw __rehydrationViolation("Book", __r.error);
+    (s as { -readonly [K in keyof typeof s]: (typeof s)[K] }).count = __r.value as unknown as (typeof s)["count"];
+  }
 }
 
 function __encodeBookState(s: BookState): globalThis.Record<string, unknown> {

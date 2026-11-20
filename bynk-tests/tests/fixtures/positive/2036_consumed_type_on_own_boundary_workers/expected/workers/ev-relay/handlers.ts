@@ -49,7 +49,11 @@ function __zeroOfShelfState(): ShelfState { return { last: None }; }
 const __entryFieldsOfShelf = [] as const;
 
 function __rehydrateShelfState(s: ShelfState, stored: ShelfState): void {
-  if (globalThis.Object.prototype.hasOwnProperty.call(stored, "last")) { const __r = __deserialise_Option_Batch((s.last as unknown as __JsonValue), "last"); if (__r.tag === "Err") throw __rehydrationViolation("Shelf", __r.error); (s as { -readonly [K in keyof typeof s]: (typeof s)[K] }).last = __r.value as unknown as (typeof s)["last"]; }
+  if (globalThis.Object.prototype.hasOwnProperty.call(stored, "last")) {
+    const __r = __deserialise_Option_Batch((s.last as unknown as __JsonValue), "last");
+    if (__r.tag === "Err") throw __rehydrationViolation("Shelf", __r.error);
+    (s as { -readonly [K in keyof typeof s]: (typeof s)[K] }).last = __r.value as unknown as (typeof s)["last"];
+  }
 }
 
 function __encodeShelfState(s: ShelfState): globalThis.Record<string, unknown> {

@@ -22,7 +22,11 @@ function __zeroOfHoldState(): HoldState { return { placed: None }; }
 const __entryFieldsOfHold = [] as const;
 
 function __rehydrateHoldState(s: HoldState, stored: HoldState): void {
-  if (globalThis.Object.prototype.hasOwnProperty.call(stored, "placed")) { const __r = __deserialise_Option_Instant((s.placed as unknown as __JsonValue), "placed"); if (__r.tag === "Err") throw __rehydrationViolation("Hold", __r.error); (s as { -readonly [K in keyof typeof s]: (typeof s)[K] }).placed = __r.value as unknown as (typeof s)["placed"]; }
+  if (globalThis.Object.prototype.hasOwnProperty.call(stored, "placed")) {
+    const __r = __deserialise_Option_Instant((s.placed as unknown as __JsonValue), "placed");
+    if (__r.tag === "Err") throw __rehydrationViolation("Hold", __r.error);
+    (s as { -readonly [K in keyof typeof s]: (typeof s)[K] }).placed = __r.value as unknown as (typeof s)["placed"];
+  }
 }
 
 function __encodeHoldState(s: HoldState): globalThis.Record<string, unknown> {

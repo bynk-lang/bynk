@@ -631,6 +631,24 @@ impl Walk {
                     self.ty(m);
                 }
             }
+            // The key is the type's own binding, for its value.
+            TsType::Mapped {
+                key,
+                keys_of,
+                value,
+                ..
+            } => {
+                self.bind(key);
+                self.ty(keys_of);
+                self.ty(value);
+            }
+            // `typeof x` uses the value `x`.
+            TsType::TypeOf(operand) => self.expr(operand),
+            TsType::Indexed { object, index } => {
+                self.ty(object);
+                self.ty(index);
+            }
+            TsType::StringLiteral(_) => {}
         }
     }
 
@@ -1056,6 +1074,59 @@ mod tests {
             codec("__serialise_Note", "Note", "__serialise_Name"),
         ]);
         assert_eq!(unbound_names(&p), ["Note"]);
+    }
+
+    /// A function over `s` whose parameter type is `ty` and whose body does nothing.
+    fn function_over(ty: TsType) -> TsStmt {
+        TsStmt::decl(
+            TsDecl::Function {
+                name: "f".to_string(),
+                generics: vec![],
+                params: vec![TsParam::new("s".to_string(), Some(ty))],
+                return_type: None,
+                body: vec![],
+                is_async: false,
+                inline: false,
+            },
+            None,
+        )
+    }
+
+    #[test]
+    fn typeof_in_a_type_uses_the_value_it_names() {
+        // `typeof s` names the parameter, so it is bound there and unbound outside.
+        let p = program(vec![function_over(TsType::type_of(TsExpr::Ident(
+            "s".to_string(),
+        )))]);
+        assert!(unbound_names(&p).is_empty(), "{:?}", unbound_names(&p));
+        let p = program(vec![TsStmt::decl(
+            TsDecl::TypeAlias {
+                name: "T".to_string(),
+                type_params: vec![],
+                ty: TsType::type_of(TsExpr::Ident("missing".to_string())),
+            },
+            None,
+        )]);
+        assert_eq!(unbound_names(&p), ["missing"]);
+    }
+
+    #[test]
+    fn a_mapped_type_binds_its_key_and_uses_the_names_it_mentions() {
+        let mapped = |source: &str| {
+            TsType::mapped(
+                "K",
+                TsType::named(source),
+                TsType::indexed(TsType::named(source), TsType::named("K")),
+            )
+        };
+        // `K` is the mapped type's own, so only the source counts as a use.
+        let p = program(vec![function_over(mapped("Shape"))]);
+        assert_eq!(unbound_names(&p), ["Shape"]);
+        let p = program(vec![
+            import(&["type Shape"]),
+            function_over(mapped("Shape")),
+        ]);
+        assert!(unbound_names(&p).is_empty(), "{:?}", unbound_names(&p));
     }
 
     #[test]
