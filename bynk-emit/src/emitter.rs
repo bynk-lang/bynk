@@ -98,6 +98,7 @@ pub use wrangler::{ClassTombstones, emit_wrangler_toml};
 mod cmp;
 mod codec;
 pub mod ctx;
+mod default_value;
 mod lower;
 #[cfg(feature = "text-exit-counters")]
 pub use lower::text_counters;

@@ -304,7 +304,19 @@ fn qualified_call(e: &Expr) -> Option<(&str, &str, &[Expr])> {
     }
 }
 
+/// The wire text of a base literal: [`base_value`] rendered the way a JSON default is spliced.
 fn lower_base_literal(base: BaseType, e: &Expr) -> Result<String, DefaultReason> {
+    Ok(match base_value(base, e)? {
+        DefaultValue::Num(digits) => digits,
+        DefaultValue::Str(text) => format!("\"{}\"", bynk_ts::escape_ts_literal(&text)),
+        DefaultValue::Bool(b) => b.to_string(),
+        _ => unreachable!("`base_value` returns only `Num`, `Str` and `Bool`"),
+    })
+}
+
+/// A base-type literal as plain data. Both forms of a default read it: the wire text through
+/// [`lower_base_literal`], the in-memory value through [`field_default_value`].
+fn base_value(base: BaseType, e: &Expr) -> Result<DefaultValue, DefaultReason> {
     // Strip one level of negation so `-5`/`-5.0` reach the literal arms below,
     // mirroring `const_literal`'s admission — `i64::checked_neg` guards
     // `i64::MIN`, which has no positive counterpart to negate away from.
@@ -321,36 +333,34 @@ fn lower_base_literal(base: BaseType, e: &Expr) -> Result<String, DefaultReason>
             } else {
                 *value
             };
-            Ok(v.to_string())
+            Ok(DefaultValue::Num(v.to_string()))
         }
         (BaseType::Float, ExprKind::IntLit { value, .. }) => {
             let v = if negate { -*value } else { *value };
-            Ok(v.to_string())
+            Ok(DefaultValue::Num(v.to_string()))
         }
-        (BaseType::Float, ExprKind::FloatLit { lexeme, .. }) => Ok(if negate {
+        (BaseType::Float, ExprKind::FloatLit { lexeme, .. }) => Ok(DefaultValue::Num(if negate {
             format!("-{lexeme}")
         } else {
             lexeme.clone()
-        }),
+        })),
         // #2622: a `Decimal` is a JSON string on the wire, so its default is the
-        // canonical text, which the decoder then parses.
+        // canonical text, which the decoder then parses. The in-memory form keeps
+        // that text as a `Str` for now (1A.31, Decision D).
         (BaseType::Decimal, ExprKind::DecimalLit { coef, scale, .. }) => {
             let signed = if negate && bynk_syntax::decimal::sign(coef) != 0 {
                 format!("-{coef}")
             } else {
                 coef.clone()
             };
-            Ok(format!(
-                "\"{}\"",
-                bynk_syntax::decimal::render(&signed, *scale)
-            ))
+            Ok(DefaultValue::Str(bynk_syntax::decimal::render(
+                &signed, *scale,
+            )))
         }
-        (BaseType::String, ExprKind::StrLit(s)) if !negate => {
-            Ok(format!("\"{}\"", bynk_ts::escape_ts_literal(s)))
-        }
-        (BaseType::Bool, ExprKind::BoolLit(b)) if !negate => Ok(b.to_string()),
+        (BaseType::String, ExprKind::StrLit(s)) if !negate => Ok(DefaultValue::Str(s.clone())),
+        (BaseType::Bool, ExprKind::BoolLit(b)) if !negate => Ok(DefaultValue::Bool(*b)),
         (BaseType::Duration, ExprKind::DurationLit { millis, .. }) if !negate => {
-            Ok(millis.to_string())
+            Ok(DefaultValue::Num(millis.to_string()))
         }
         (BaseType::Bytes, _) => Err(DefaultReason::from(
             "a `Bytes` field has no literal default form".to_string(),
@@ -541,26 +551,52 @@ fn empty_collection(init: &Expr, collection: &str) -> Result<(), DefaultReason> 
     }
 }
 
-/// #2607 (Decision C): the **in-memory** TypeScript value a record literal
-/// takes for a field it leaves out — the twin of [`lower_field_default_wire`],
-/// over the same closed set of static values, but in the shape a Bynk value
-/// has at runtime (`{ tag: … }` sums and `Option`/`Result`, a real `Map`/`Set`)
-/// rather than its wire JSON.
+/// #2607 (Decision C): the **in-memory** value a record literal takes for a field it leaves
+/// out, as plain data — the twin of [`lower_field_default_wire`], over the same closed set of
+/// static values, but in the shape a Bynk value has at runtime (a sum and `Option`/`Result`
+/// carry a variant tag, a `Map`/`Set` is a real collection) rather than its wire JSON.
 ///
-/// Each tag is written `as const`: an unannotated `const x = { … }` in a test
-/// body would otherwise widen `tag` to `string`, and the literal would no longer
-/// be assignable to its `Option`/`Result`/sum type (#3404).
+/// It is a tree, not text, so the front half knows nothing of TypeScript (1A.31, #3732): the
+/// emitter turns it into nodes (`default_value_node` in `bynk-emit`), writing each tag
+/// `as const` so that an unannotated `const x = { … }` in a test body does not widen `tag` to
+/// `string` (#3404).
 ///
-/// It is self-contained on purpose: a literal may build a record declared in
-/// another unit (`FetchOptions` from `bynk`), whose default names values
-/// (`Redirect.Follow`) the literal's own module never imports. Writing each
-/// value structurally needs no import at all, the reason the wire form is
-/// structural too.
-pub fn lower_field_default_value(
+/// It is self-contained on purpose: a literal may build a record declared in another unit
+/// (`FetchOptions` from `bynk`), whose default names values (`Redirect.Follow`) the literal's
+/// own module never imports. Each value is structural, so it needs no import at all, the
+/// reason the wire form is structural too.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub enum DefaultValue {
+    /// A number's lexeme, sign included (`5`, `-5`, `1e3`, `3600000`).
+    Num(String),
+    /// A string's value, unescaped. A `Decimal` default is its canonical text here (the wire
+    /// shape; see Decision D of #3732).
+    Str(String),
+    Bool(bool),
+    /// A record: every declared field, in declaration order.
+    Record(Vec<(String, DefaultValue)>),
+    /// A sum variant and its payload fields.
+    Sum {
+        variant: String,
+        fields: Vec<(String, DefaultValue)>,
+    },
+    Some(Box<DefaultValue>),
+    None,
+    Ok(Box<DefaultValue>),
+    Err(Box<DefaultValue>),
+    List(Vec<DefaultValue>),
+    EmptyMap,
+    EmptySet,
+}
+
+/// The [`DefaultValue`] of a field's default `init`, given the field's `expected` type and the
+/// visible `types` table. `Err` for anything not closed-form; the checker has already required
+/// every default to have one.
+pub fn field_default_value(
     init: &Expr,
     expected: &TypeRef,
     types: &std::collections::HashMap<String, Arc<TypeDecl>>,
-) -> Result<String, DefaultReason> {
+) -> Result<DefaultValue, DefaultReason> {
     value_in(
         init,
         expected,
@@ -578,12 +614,12 @@ fn value_in(
     expected: &TypeRef,
     types: &std::collections::HashMap<String, Arc<TypeDecl>>,
     cx: Cx<'_>,
-) -> Result<String, DefaultReason> {
+) -> Result<DefaultValue, DefaultReason> {
     if let ExprKind::Paren(inner) = &init.kind {
         return value_in(inner, expected, types, cx);
     }
     match expected {
-        TypeRef::Base(b, _) => lower_base_literal(*b, init),
+        TypeRef::Base(b, _) => base_value(*b, init),
         TypeRef::Named(id) => {
             if cx.params.contains(&id.name) {
                 return Err(DefaultReason::UnresolvedType(id.name.clone()));
@@ -592,10 +628,10 @@ fn value_in(
                 return Err(DefaultReason::UnresolvedType(id.name.clone()));
             };
             match &decl.body {
-                TypeBody::Refined { base, .. } => lower_base_literal(*base, init),
+                TypeBody::Refined { base, .. } => base_value(*base, init),
                 TypeBody::Opaque { base, .. } => match qualified_call(init) {
                     Some((type_name, "unsafe", [lit])) if type_name == id.name => {
-                        lower_base_literal(*base, lit)
+                        base_value(*base, lit)
                     }
                     _ => Err(DefaultReason::from(format!(
                         "an opaque type's default must be `{}.unsafe(<literal>)`",
@@ -630,46 +666,31 @@ fn value_in(
             }
         }
         TypeRef::Option(inner, _) => match &init.kind {
-            ExprKind::None => Ok("{ tag: \"None\" as const }".to_string()),
-            ExprKind::Some(e) => {
-                let v = value_in(e, inner, types, cx)?;
-                Ok(format!("{{ tag: \"Some\" as const, value: {v} }}"))
-            }
+            ExprKind::None => Ok(DefaultValue::None),
+            ExprKind::Some(e) => Ok(DefaultValue::Some(Box::new(value_in(e, inner, types, cx)?))),
             _ => Err(DefaultReason::from(
                 "an `Option` field default must be `Some(...)` or `None`".to_string(),
             )),
         },
         TypeRef::Result(ok, err, _) => match &init.kind {
-            ExprKind::Ok(e) => {
-                let v = value_in(e, ok, types, cx)?;
-                Ok(format!("{{ tag: \"Ok\" as const, value: {v} }}"))
-            }
-            ExprKind::Err(e) => {
-                let v = value_in(e, err, types, cx)?;
-                Ok(format!("{{ tag: \"Err\" as const, error: {v} }}"))
-            }
+            ExprKind::Ok(e) => Ok(DefaultValue::Ok(Box::new(value_in(e, ok, types, cx)?))),
+            ExprKind::Err(e) => Ok(DefaultValue::Err(Box::new(value_in(e, err, types, cx)?))),
             _ => Err(DefaultReason::from(
                 "a `Result` field default must be `Ok(...)` or `Err(...)`".to_string(),
             )),
         },
         TypeRef::List(elem, _) => match &init.kind {
-            ExprKind::ListLit(items, ..) => {
-                let parts = items
-                    .iter()
-                    .map(|e| value_in(e, elem, types, cx))
-                    .collect::<Result<Vec<_>, _>>()?;
-                Ok(format!("[{}]", parts.join(", ")))
-            }
+            ExprKind::ListLit(items, ..) => items
+                .iter()
+                .map(|e| value_in(e, elem, types, cx))
+                .collect::<Result<Vec<_>, _>>()
+                .map(DefaultValue::List),
             _ => Err(DefaultReason::from(
                 "a `List` field default must be a list literal".to_string(),
             )),
         },
-        TypeRef::Map(..) => {
-            empty_collection(init, "Map").map(|()| "new globalThis.Map()".to_string())
-        }
-        TypeRef::Set(..) => {
-            empty_collection(init, "Set").map(|()| "new globalThis.Set()".to_string())
-        }
+        TypeRef::Map(..) => empty_collection(init, "Map").map(|()| DefaultValue::EmptyMap),
+        TypeRef::Set(..) => empty_collection(init, "Set").map(|()| DefaultValue::EmptySet),
         // Every other type is rejected by `lower_field_default_wire` at check
         // time, so a program that reaches emission never asks: a field that
         // applies a user generic (`App`), and the types with no wire form
@@ -684,7 +705,7 @@ fn value_in(
 }
 
 /// The in-memory twin of [`lower_sum_default`]: the wire form is
-/// `{ kind: "V", … }`; in memory the discriminant is `tag`, and the payload
+/// `{ kind: "V", … }`; in memory the discriminant is the variant, and the payload
 /// fields recurse in their own in-memory form.
 fn value_sum(
     sum_name: &str,
@@ -692,14 +713,16 @@ fn value_sum(
     init: &Expr,
     types: &std::collections::HashMap<String, Arc<TypeDecl>>,
     cx: Cx<'_>,
-) -> Result<String, DefaultReason> {
+) -> Result<DefaultValue, DefaultReason> {
     let (variant, args) = sum_default_parts(sum_name, variants, init)?;
-    let mut parts = vec![format!("tag: \"{}\" as const", variant.0)];
+    let mut fields = Vec::new();
     for ((field, ty), arg) in variant.1.iter().zip(args.iter()) {
-        let v = value_in(arg, ty, types, cx)?;
-        parts.push(format!("{field}: {v}"));
+        fields.push((field.clone(), value_in(arg, ty, types, cx)?));
     }
-    Ok(format!("{{ {} }}", parts.join(", ")))
+    Ok(DefaultValue::Sum {
+        variant: variant.0.clone(),
+        fields,
+    })
 }
 
 /// The in-memory twin of [`lower_record_default`].
@@ -708,15 +731,315 @@ fn value_record(
     init: &Expr,
     types: &std::collections::HashMap<String, Arc<TypeDecl>>,
     cx: Cx<'_>,
-) -> Result<String, DefaultReason> {
+) -> Result<DefaultValue, DefaultReason> {
     let ExprKind::RecordConstruction { fields, .. } = &init.kind else {
         return Err(DefaultReason::from("expected a record literal".to_string()));
     };
     let mut parts = Vec::new();
     for (name, ty, declared) in fields_of {
         let value = record_default_field(fields, name, *declared)?;
-        let v = value_in(value, ty, types, cx)?;
-        parts.push(format!("{name}: {v}"));
+        parts.push((name.to_string(), value_in(value, ty, types, cx)?));
     }
-    Ok(format!("{{ {} }}", parts.join(", ")))
+    Ok(DefaultValue::Record(parts))
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use bynk_syntax::ast::CommonsItem;
+    use std::collections::HashMap;
+
+    /// The shared declarations the cases lean on.
+    const PRELUDE: &str = "commons x\n\n\
+        type Age = Int where InRange(0, 150)\n\
+        type Tok = opaque String\n\
+        type Plan = enum { Free, Pro }\n\
+        type Shape = | Dot | Circle(r: Float) | Rect(w: Int, h: Int)\n\
+        type Inner = { n: Int = 7, s: String = \"i\" }\n\
+        type Box[A] = { value: A }\n\
+        type Opt[T] = | Has(value: T) | Nil\n\
+        type Loop[T] = { kid: Loop[T] = Loop { } }\n";
+
+    fn num(s: &str) -> DefaultValue {
+        DefaultValue::Num(s.to_string())
+    }
+    fn text(s: &str) -> DefaultValue {
+        DefaultValue::Str(s.to_string())
+    }
+    fn some(v: DefaultValue) -> DefaultValue {
+        DefaultValue::Some(Box::new(v))
+    }
+    fn sum(variant: &str, fields: Vec<(&str, DefaultValue)>) -> DefaultValue {
+        DefaultValue::Sum {
+            variant: variant.to_string(),
+            fields: fields
+                .into_iter()
+                .map(|(k, v)| (k.to_string(), v))
+                .collect(),
+        }
+    }
+    fn record(fields: Vec<(&str, DefaultValue)>) -> DefaultValue {
+        DefaultValue::Record(
+            fields
+                .into_iter()
+                .map(|(k, v)| (k.to_string(), v))
+                .collect(),
+        )
+    }
+
+    /// `(field type, default, the tree, the text the deleted `lower_field_default_value` produced)`.
+    /// The text column was captured from the `String` renderer before it was deleted
+    /// (1A.31, #3732), so the old output and the new tree sit side by side; `bynk-emit` prints
+    /// each tree and compares it with the same text.
+    pub fn cases() -> Vec<(&'static str, &'static str, DefaultValue, &'static str)> {
+        vec![
+            ("Int", "5", num("5"), "5"),
+            ("Int", "-5", num("-5"), "-5"),
+            ("Instant", "0", num("0"), "0"),
+            ("Float", "1.5", num("1.5"), "1.5"),
+            ("Float", "5", num("5"), "5"),
+            ("Float", "1e3", num("1e3"), "1e3"),
+            ("Float", "-2.5", num("-2.5"), "-2.5"),
+            ("Float", "-5", num("-5"), "-5"),
+            ("Duration", "5.minutes", num("300000"), "300000"),
+            ("Bool", "true", DefaultValue::Bool(true), "true"),
+            ("String", "\"x\"", text("x"), "\"x\""),
+            ("String", "\"a\\\"b\\n\"", text("a\"b\n"), "\"a\\\"b\\n\""),
+            ("String", "\"\"", text(""), "\"\""),
+            ("Decimal", "0.00d", text("0.00"), "\"0.00\""),
+            ("Decimal", "-1.50d", text("-1.50"), "\"-1.50\""),
+            ("Age", "3", num("3"), "3"),
+            ("Tok", "Tok.unsafe(\"k\")", text("k"), "\"k\""),
+            (
+                "Inner",
+                "Inner { }",
+                record(vec![("n", num("7")), ("s", text("i"))]),
+                "{ n: 7, s: \"i\" }",
+            ),
+            (
+                "Inner",
+                "Inner { n: 9 }",
+                record(vec![("n", num("9")), ("s", text("i"))]),
+                "{ n: 9, s: \"i\" }",
+            ),
+            (
+                "Plan",
+                "Free",
+                sum("Free", vec![]),
+                "{ tag: \"Free\" as const }",
+            ),
+            (
+                "Shape",
+                "Dot",
+                sum("Dot", vec![]),
+                "{ tag: \"Dot\" as const }",
+            ),
+            (
+                "Shape",
+                "Rect(1, -2)",
+                sum("Rect", vec![("w", num("1")), ("h", num("-2"))]),
+                "{ tag: \"Rect\" as const, w: 1, h: -2 }",
+            ),
+            (
+                "Option[Int]",
+                "Some(1)",
+                some(num("1")),
+                "{ tag: \"Some\" as const, value: 1 }",
+            ),
+            (
+                "Option[Int]",
+                "None",
+                DefaultValue::None,
+                "{ tag: \"None\" as const }",
+            ),
+            (
+                "Option[Option[Int]]",
+                "Some(None)",
+                some(DefaultValue::None),
+                "{ tag: \"Some\" as const, value: { tag: \"None\" as const } }",
+            ),
+            (
+                "Result[Int, String]",
+                "Ok(1)",
+                DefaultValue::Ok(Box::new(num("1"))),
+                "{ tag: \"Ok\" as const, value: 1 }",
+            ),
+            (
+                "Result[Int, String]",
+                "Err(\"e\")",
+                DefaultValue::Err(Box::new(text("e"))),
+                "{ tag: \"Err\" as const, error: \"e\" }",
+            ),
+            ("List[Int]", "[]", DefaultValue::List(vec![]), "[]"),
+            (
+                "List[Int]",
+                "[1, 2]",
+                DefaultValue::List(vec![num("1"), num("2")]),
+                "[1, 2]",
+            ),
+            (
+                "List[Option[Int]]",
+                "[None, Some(2)]",
+                DefaultValue::List(vec![DefaultValue::None, some(num("2"))]),
+                "[{ tag: \"None\" as const }, { tag: \"Some\" as const, value: 2 }]",
+            ),
+            (
+                "Map[String, Int]",
+                "Map.empty()",
+                DefaultValue::EmptyMap,
+                "new globalThis.Map()",
+            ),
+            (
+                "Set[Int]",
+                "Set.empty()",
+                DefaultValue::EmptySet,
+                "new globalThis.Set()",
+            ),
+            (
+                "Box[Int]",
+                "Box { value: 3 }",
+                record(vec![("value", num("3"))]),
+                "{ value: 3 }",
+            ),
+            (
+                "Opt[Int]",
+                "Has(4)",
+                sum("Has", vec![("value", num("4"))]),
+                "{ tag: \"Has\" as const, value: 4 }",
+            ),
+            (
+                "Opt[Int]",
+                "Nil",
+                sum("Nil", vec![]),
+                "{ tag: \"Nil\" as const }",
+            ),
+            (
+                "Box[Opt[String]]",
+                "Box { value: Has(\"s\") }",
+                record(vec![("value", sum("Has", vec![("value", text("s"))]))]),
+                "{ value: { tag: \"Has\" as const, value: \"s\" } }",
+            ),
+        ]
+    }
+
+    /// The `types` table and the `f` field of a record `Holder { f: <ty> = <init> }`.
+    pub fn holder(ty: &str, init: &str) -> (HashMap<String, Arc<TypeDecl>>, Expr, TypeRef) {
+        let src = format!("{PRELUDE}\ntype Holder = {{ f: {ty} = {init} }}\n");
+        let tokens = bynk_syntax::lexer::tokenize(&src).expect("lex");
+        let commons = bynk_syntax::parser::parse(&tokens, &src).expect("parse");
+        let types: HashMap<String, Arc<TypeDecl>> = commons
+            .items
+            .iter()
+            .filter_map(|i| match i {
+                CommonsItem::Type(t) => Some((t.name.name.clone(), Arc::new(t.clone()))),
+                _ => None,
+            })
+            .collect();
+        let TypeBody::Record(r) = &types["Holder"].body else {
+            panic!("Holder is a record");
+        };
+        let field = &r.fields[0];
+        (
+            types.clone(),
+            field.init.clone().expect("a default"),
+            field.type_ref.clone(),
+        )
+    }
+
+    #[test]
+    fn field_default_value_builds_the_tree_for_every_shape() {
+        for (ty, init, tree, _) in cases() {
+            let (types, e, t) = holder(ty, init);
+            assert_eq!(
+                field_default_value(&e, &t, &types),
+                Ok(tree),
+                "{ty} = {init}"
+            );
+        }
+    }
+
+    /// The wire text of a base literal still reads the shared [`base_value`].
+    #[test]
+    fn the_wire_form_is_unchanged() {
+        for (ty, init, wire) in [
+            ("String", "\"a\\\"b\"", "\"a\\\"b\""),
+            ("Decimal", "-1.50d", "\"-1.50\""),
+            ("Int", "-5", "-5"),
+            ("Bool", "true", "true"),
+        ] {
+            let (types, e, t) = holder(ty, init);
+            assert_eq!(
+                lower_field_default_wire(&e, &t, &types).as_deref(),
+                Ok(wire),
+                "{ty} = {init}"
+            );
+        }
+    }
+
+    /// `(field type, default, the rejection)` the old renderer gave, kept verbatim.
+    pub const REJECTIONS: &[(&str, &str, &str)] = &[
+        (
+            "Loop[Int]",
+            "Loop { }",
+            "the default nests generic instantiations too deeply",
+        ),
+        ("Bytes", "x", "a `Bytes` field has no literal default form"),
+        ("Int", "\"s\"", "expected a `Int` literal"),
+        (
+            "Tok",
+            "Tok.unsafe(\"k\", 1)",
+            "an opaque type's default must be `Tok.unsafe(<literal>)`",
+        ),
+        (
+            "Tok",
+            "5",
+            "an opaque type's default must be `Tok.unsafe(<literal>)`",
+        ),
+        (
+            "Option[Int]",
+            "5",
+            "an `Option` field default must be `Some(...)` or `None`",
+        ),
+        (
+            "Result[Int, Int]",
+            "5",
+            "a `Result` field default must be `Ok(...)` or `Err(...)`",
+        ),
+        (
+            "List[Int]",
+            "5",
+            "a `List` field default must be a list literal",
+        ),
+        (
+            "Map[String, Int]",
+            "5",
+            "a `Map` field default must be `Map.empty()`",
+        ),
+        (
+            "Set[Int]",
+            "Set.empty(1)",
+            "a `Set` field default must be `Set.empty()`",
+        ),
+        ("Effect[Int]", "5", "this field type cannot carry a default"),
+        ("Inner", "5", "expected a record literal"),
+        ("Shape", "Nope", "`Nope` is not a variant of `Shape`"),
+        ("Box[Int]", "5", "expected a record literal"),
+    ];
+
+    #[test]
+    fn field_default_value_rejects_with_the_old_messages() {
+        for (ty, init, msg) in REJECTIONS {
+            let (types, e, t) = holder(ty, init);
+            assert_eq!(
+                field_default_value(&e, &t, &types),
+                Err(DefaultReason::Invalid((*msg).to_string())),
+                "{ty} = {init}"
+            );
+        }
+        let (types, e, t) = holder("Missing", "Missing { }");
+        assert_eq!(
+            field_default_value(&e, &t, &types),
+            Err(DefaultReason::UnresolvedType("Missing".to_string()))
+        );
+    }
 }
