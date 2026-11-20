@@ -14,7 +14,10 @@ export const __StampToken: symbol = globalThis.Symbol("Stamp");
 
 export class ClockStamp implements Stamp {
   private deps: { Clock: bynk.Clock };
-  constructor(deps: { Clock: bynk.Clock }) { this.deps = deps; }
+  constructor(deps: { Clock: bynk.Clock }) {
+    this.deps = deps;
+  }
+
   async make(): globalThis.Promise<number> {
     const t = await this.deps.Clock.now();
     return t;

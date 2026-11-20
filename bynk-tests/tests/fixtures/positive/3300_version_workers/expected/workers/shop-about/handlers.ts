@@ -15,7 +15,10 @@ export const __BuildToken: symbol = globalThis.Symbol("Build");
 
 export class VersionBuild implements Build {
   private deps: { Version: bynk_cloudflare.Version };
-  constructor(deps: { Version: bynk_cloudflare.Version }) { this.deps = deps; }
+  constructor(deps: { Version: bynk_cloudflare.Version }) {
+    this.deps = deps;
+  }
+
   async label(): globalThis.Promise<string> {
     const v = await this.deps.Version.current();
     return `build ${String(v.id)}`;

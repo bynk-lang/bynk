@@ -23,12 +23,15 @@ export class MemStore implements Store {
   async count(): globalThis.Promise<number> {
     return 3;
   }
+
   async upsert(key: string): globalThis.Promise<Option<string>> {
     return None;
   }
+
   async insert(key: string): globalThis.Promise<number> {
     return 7;
   }
+
   async touch(): globalThis.Promise<void> {
     return undefined;
   }

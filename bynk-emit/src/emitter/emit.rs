@@ -2704,52 +2704,32 @@ capability Clock {
     }
 }
 
-/// #1480: returns one real [`bynk_ts::TsStmt`] (was `out: &mut String`) — a
-/// `Raw` carrier for the whole provider declaration (class header/
-/// wrapper text, Decision C: a real `TsDecl::Class` would need every
-/// method's own body captured into a local buffer for `Raw`-embedding
-/// anyway, and this class's own spacing convention already disagrees with
-/// `TsDecl::Class`'s own — not a further decomposition this slice attempts),
-/// with a class-wide `nested_map` combining every op method's own checkpoints
-/// at their real print-time offsets *within this function's own local `out`
-/// buffer* — recorded by `bynk_ts::print_class_method_and_merge` itself
-/// (#1477; 1A.15: the op bodies are statements, which the printer records
-/// the spans of). The
-/// caller then merges this ONE combined map into its own real module map at
-/// the class's own real splice offset, via `print_stmt_and_merge` — the same
-/// two-level "local map merges into a local buffer, that buffer's own map
-/// merges into the real one at its own real offset" composition
-/// `print_stmt_and_merge`'s own doc already establishes for a nested `Raw`.
+/// A provider's declarations (1A.32a, Decision A of #3733): its doc comment, if any, then
+/// `export class P implements Cap { .. }` as a [`bynk_ts::TsDecl::Class`] over typed members, then
+/// the `export const __PProvider = { token, factory }` registration. `None` for an external
+/// (bodiless) provider, which the adapter's binding supplies.
+///
+/// Source maps come from the printer alone: each op's [`bynk_ts::TsClassMethod::span`] anchors its
+/// header and prologue to its own `fn` line (#2280), the class's `end_span` anchors the closing
+/// brace to the provider, and the registration carries the provider's span. The caller gives the
+/// first statement the provider's span, as for every other item.
 pub(crate) fn emit_provider(
     p: &ProviderDecl,
     commons: &TypedCommons,
     ctx: &EmitProjectCtx,
-) -> Option<bynk_ts::TsStmt> {
+) -> Option<Vec<bynk_ts::TsStmt>> {
     // v0.17: an external (bodiless) provider inside an adapter is supplied by
     // the adapter's binding — the compiler emits no class for it. Its symbol is
     // imported and constructed by the consumer's compose (§6.1, Phase 2).
     if p.external {
         return None;
     }
-    let mut out = String::new();
-    let mut class_smb = SourceMapBuilder::new();
-    emit_doc_block(&mut out, p.documentation.as_deref(), 0);
-    writeln!(
-        out,
-        "export class {prov} implements {cap} {{",
-        prov = p.provider_name.name,
-        cap = p.capability.name,
-    )
-    .unwrap();
     // v0.12: a provider with `given` receives its dependencies through a
     // constructor; its bodies call them as `this.deps.<cap>`. The deps object
     // type lists exactly the provider's `given` capabilities.
     //
     // P7.2 (review of #1300): computed once here and reused below (the
-    // capability-scope collection a few lines down, and the factory's own
-    // `deps_ty` further below) — previously recomputed independently at each
-    // site from the same `p.given`, three calls into the same pure function
-    // for the same answer.
+    // capability-scope collection in each op, and the factory's own `deps` type).
     let given_ir = bynk_model::lower_provider_given_ir(p);
     // #2355: a provider whose ops construct a local agent hands `this.deps` to
     // the agent's methods, so it takes a `deps` even with no `given`; on
@@ -2758,30 +2738,38 @@ pub(crate) fn emit_provider(
     let constructs_agent =
         bynk_check::project_model::provider_constructs_agent(p, |n| ctx.local_agents.contains(n));
     let takes_deps = !p.given.is_empty() || constructs_agent;
-    // Arc F, slice 4 (#1463): `cap_ref_ty` now returns a real `TsType`, but
-    // this class's own wrapper (this `deps` field/constructor signature text)
-    // stays hand-written per Decision C — re-serialise via
-    // `bynk_ts::print_type`, no behaviour change.
-    let mut deps_fields: Vec<String> = given_ir
+    let mut deps_members: Vec<bynk_ts::TsTypeMember> = given_ir
         .iter()
-        .map(|c| {
-            format!(
-                "{}: {}",
-                c.name,
-                bynk_ts::print_type(&cap_ref_ty(c, &ctx.cross_context))
-            )
-        })
+        .map(|c| bynk_ts::TsTypeMember::prop(c.name.clone(), cap_ref_ty(c, &ctx.cross_context)))
         .collect();
     if constructs_agent && matches!(ctx.target, BuildTarget::Workers) {
         let mut agents: Vec<String> = ctx.local_agents.iter().cloned().collect();
         agents.sort();
-        deps_fields.push(format!(
-            "env: {}",
-            bynk_ts::print_type(&workers_env_ty(&[], &agents))
+        deps_members.push(bynk_ts::TsTypeMember::prop(
+            "env",
+            workers_env_ty(&[], &agents),
         ));
     }
-    let deps_ty = deps_fields.join("; ");
-    if takes_deps {
+    let deps_ty = bynk_ts::TsType::Object(deps_members);
+    let prov = p.provider_name.name.as_str();
+    let mut class = bynk_ts::TsDecl::class(
+        prov,
+        Vec::new(),
+        None,
+        p.ops
+            .iter()
+            .map(|op| provider_op_method(p, op, &given_ir, takes_deps, commons, ctx))
+            .collect(),
+    )
+    .implementing(vec![bynk_ts::TsType::named(p.capability.name.as_str())])
+    .ending_at(p.span);
+    if takes_deps
+        && let bynk_ts::TsDecl::Class {
+            fields,
+            constructor,
+            ..
+        } = &mut class
+    {
         // The field is declared separately and assigned in the constructor body
         // rather than written as a parameter property (`constructor(private deps:
         // …)`). A parameter property is the one type-directed construct pure
@@ -2792,147 +2780,155 @@ pub(crate) fn emit_provider(
         // and under ES2022 `useDefineForClassFields` the declaration defines
         // `this.deps` before the body assigns the real value; the end state is
         // correct and strips to `constructor(deps) { this.deps = deps; }`.
-        writeln!(out, "  private deps: {{ {deps_ty} }};").unwrap();
-        writeln!(
-            out,
-            "  constructor(deps: {{ {deps_ty} }}) {{ this.deps = deps; }}"
-        )
-        .unwrap();
-    }
-    // #1359 (R7.1): each op converts to a real `bynk_ts::TsClassMethod`
-    // (name/`is_async`/real `TsParam`s via `ts_type_ref_to_ts_type`, P7.9
-    // #1315/real return type), printed through the new fragment entry
-    // point `bynk_ts::print_class_method` (mirroring `print_object_entry`'s
-    // own "one fragment, not a whole document" scope, #1337) — the class's
-    // own wrapper (header/`implements`/deps field+constructor/closing
-    // brace) stays hand-written text, Decision C: building the WHOLE class
-    // as one real `TsDecl::Class` tree would need every method's own body
-    // captured into a local buffer for `Raw`-embedding, and this class's
-    // own real spacing (no blank line between methods) genuinely differs
-    // from `TsDecl::Class`'s own established "one blank line before each
-    // method" policy (`events_fanout.rs`'s real convention, #1317) — the
-    // same "two real files disagree on a formatting convention" tension
-    // this track has hit before.
-    //
-    // Each op's own body still lowers through `emit_block_as_function_
-    // body_with_return` — unconverted, out of scope — but can no longer
-    // write directly into `out` the way the pre-conversion code did (the
-    // fragment must be fully built before `out.len()` at the splice point
-    // is known). Captured into a local `body_text` buffer instead, using
-    // the same local-sub-builder-then-`merge` pattern #1352/#1353 already
-    // established, applied once per method instead of once per function:
-    // `body_smb` collects checkpoints relative to `body_text`, then
-    // `merge`s into the real `source_map`, rebased at `body_text`'s own
-    // exact splice offset within `print_class_method`'s own printed
-    // fragment (computed by arithmetic against the fragment's own known
-    // length, not a text search — two ops could plausibly lower to
-    // identical body text, which a search could match ambiguously).
-    for op in &p.ops {
-        let params: Vec<bynk_ts::TsParam> = op
-            .params
-            .iter()
-            .map(|p| bynk_ts::TsParam {
-                name: ts_ident(&p.name.name),
-                ty: Some(ts_type_ref_to_ts_type(&p.type_ref, None)),
-                optional: false,
-            })
-            .collect();
-        // P6.55 (design/tracks/the-ir.md §6b): computed once, not twice —
-        // `async_tail` below used to call `is_effectful_return(&op.return_type)`
-        // again for the identical value (the same duplicate-computation
-        // pattern P6.54 fixed in `emit_agent`).
-        let effectful = is_effectful_return(&op.return_type);
-        let mut module = ModuleCtx::for_unit(commons, ctx);
-        module.agent_method_givens = ctx.agent_method_givens.clone();
-        module.agent_called_contexts = ctx.agent_called_contexts.clone();
-        module.event_schema_versions = ctx.event_schema_versions.clone();
-        module.consumed_type_ns = consumed_type_ns(ctx);
-        module.consumed_type_declared = ctx.consumed_type_aliases.clone();
-        module.consumed_context_types = ctx.consumed_context_types();
-        module.target = ctx.target;
-        module.note_unit(ctx);
-        let mut cx = LowerCtx::new(
-            module,
-            BodyMode::ProviderOp {
-                handler: HandlerShared {
-                    // The provider's `given` capabilities are in scope in its
-                    // bodies, and resolve against the injected `this.deps`.
-                    capabilities: given_ir.iter().map(|c| c.name.clone()).collect(),
-                    deps_on_this: takes_deps,
-                    // #934: a provider's own op body can itself call a `given`
-                    // capability (e.g. a provider that dedups its own work via
-                    // `Idempotency`).
-                    handler_scope: Some(format!(
-                        "{}.provides.{}.{}",
-                        ctx.commons_name, p.capability.name, op.name.name
-                    )),
-                    owning_context: ctx.commons_name.clone(),
-                    ..HandlerShared::default()
+        fields.push(bynk_ts::TsClassField {
+            name: "deps".to_string(),
+            ty: deps_ty.clone(),
+            private: true,
+        });
+        *constructor = Some(bynk_ts::TsClassCtor {
+            params: vec![deps_param(&deps_ty)],
+            body: vec![bynk_ts::TsStmt::assign(
+                bynk_ts::TsExpr::Member {
+                    object: Box::new(bynk_ts::TsExpr::Ident("this".to_string())),
+                    property: "deps".to_string(),
                 },
-            },
-        );
-        cx.local_agents = ctx.local_agents.clone();
-        // #1653: parameters are bindings of the body's own scope, so a `let` that
-        // re-binds one gets a fresh name instead of redeclaring it.
-        for p in &op.params {
-            cx.declare_binder(&p.name.name);
-        }
-        let body = function_body_stmts(
-            &op.body,
-            &mut cx,
-            INDENT_STEP * 2,
-            effectful,
-            Some(&op.return_type),
-        );
-
-        // The class is always printed at depth 0 — `class_depth` names that
-        // once, so a merge site's own indent assumptions can never drift out
-        // of lockstep with the depth `print_class_method_and_merge` is
-        // actually called with.
-        let class_depth = 0;
-        let method = bynk_ts::TsClassMethod {
-            name: op.name.name.clone(),
-            private: false,
-            is_async: effectful,
-            params,
-            return_type: Some(ts_type_ref_to_ts_type(&op.return_type, None)),
-            doc: None,
-            body,
-            span: None,
-        };
-        // #2280: anchor the op's header and prologue to its own `fn` line
-        // rather than the previous op's last body line.
-        class_smb.record(out.len(), op.span);
-        bynk_ts::print_class_method_and_merge(&mut out, &method, class_depth, &mut class_smb, 0);
+                bynk_ts::TsExpr::Ident("deps".to_string()),
+                None,
+            )],
+        });
     }
-    // #2280: the class's closing brace and the registration below belong to the
-    // provider, not to the last op's final body line.
-    class_smb.record(out.len(), p.span);
-    writeln!(out, "}}").unwrap();
-    writeln!(out).unwrap();
-    let factory = if takes_deps {
-        format!(
-            "(deps: {{ {deps_ty} }}) => new {}(deps)",
-            p.provider_name.name
-        )
-    } else {
-        format!("() => new {}()", p.provider_name.name)
+    let mut stmts = Vec::new();
+    let has_doc = p.documentation.is_some();
+    if let Some(doc) = p.documentation.as_deref() {
+        stmts.push(bynk_ts::TsStmt::doc_comment(doc, None));
+    }
+    let mut class_stmt = bynk_ts::TsStmt::decl(bynk_ts::TsDecl::Export(Box::new(class)), None);
+    // A leading doc comment sits directly above the declaration it documents.
+    class_stmt.no_blank_before = has_doc;
+    stmts.push(class_stmt);
+    // The registration: `token` names the capability, `factory` builds the class from
+    // its dependencies. Its own line belongs to the provider, not to the last op.
+    let construct = |args: Vec<bynk_ts::TsExpr>| bynk_ts::TsExpr::New {
+        callee: Box::new(bynk_ts::TsExpr::Ident(prov.to_string())),
+        args,
     };
-    writeln!(
-        out,
-        "export const __{prov}Provider = {{ token: __{cap}Token, factory: {factory} }};",
-        prov = p.provider_name.name,
-        cap = p.capability.name,
-    )
-    .unwrap();
-    // #1486: no trailing blank baked into this Raw text any more —
-    // `bynk_ts::print` itself now supplies the one blank line between this
-    // statement and whatever follows it in `emit_project`'s own top-level
-    // list (see `TsStmt::no_blank_before`'s own doc for why keeping this
-    // would have doubled it).
-    let mut stmt = bynk_ts::TsStmt::raw(out, None);
-    stmt.nested_map = Some(class_smb);
-    Some(stmt)
+    let factory = bynk_ts::TsExpr::Arrow {
+        params: if takes_deps {
+            vec![deps_param(&deps_ty)]
+        } else {
+            Vec::new()
+        },
+        is_async: false,
+        generics: Vec::new(),
+        return_type: None,
+        body: Box::new(bynk_ts::TsArrowBody::Expr(Box::new(construct(
+            if takes_deps {
+                vec![bynk_ts::TsExpr::Ident("deps".to_string())]
+            } else {
+                Vec::new()
+            },
+        )))),
+    };
+    stmts.push(bynk_ts::TsStmt::decl(
+        bynk_ts::TsDecl::Export(Box::new(bynk_ts::TsDecl::ConstDecl {
+            name: format!("__{prov}Provider"),
+            ty: None,
+            init: bynk_ts::TsExpr::object(vec![
+                (
+                    "token".to_string(),
+                    bynk_ts::TsExpr::Ident(format!("__{}Token", p.capability.name)),
+                ),
+                ("factory".to_string(), factory),
+            ]),
+        })),
+        Some(p.span),
+    ));
+    Some(stmts)
+}
+
+/// `deps: <deps type>`: the one parameter of a provider's constructor and of its factory.
+fn deps_param(deps_ty: &bynk_ts::TsType) -> bynk_ts::TsParam {
+    bynk_ts::TsParam {
+        name: "deps".to_string(),
+        ty: Some(deps_ty.clone()),
+        optional: false,
+    }
+}
+
+/// One provider op as a class method, its body lowered through
+/// [`function_body_stmts`]. #2280: the method's span anchors its header and prologue to its
+/// own `fn` line rather than the previous op's last body line.
+fn provider_op_method(
+    p: &ProviderDecl,
+    op: &bynk_syntax::ast::ProviderOp,
+    given_ir: &[bynk_model::CapRefIr],
+    takes_deps: bool,
+    commons: &TypedCommons,
+    ctx: &EmitProjectCtx,
+) -> bynk_ts::TsClassMethod {
+    let params: Vec<bynk_ts::TsParam> = op
+        .params
+        .iter()
+        .map(|p| bynk_ts::TsParam {
+            name: ts_ident(&p.name.name),
+            ty: Some(ts_type_ref_to_ts_type(&p.type_ref, None)),
+            optional: false,
+        })
+        .collect();
+    // P6.55 (design/tracks/the-ir.md §6b): computed once, not twice.
+    let effectful = is_effectful_return(&op.return_type);
+    let mut module = ModuleCtx::for_unit(commons, ctx);
+    module.agent_method_givens = ctx.agent_method_givens.clone();
+    module.agent_called_contexts = ctx.agent_called_contexts.clone();
+    module.event_schema_versions = ctx.event_schema_versions.clone();
+    module.consumed_type_ns = consumed_type_ns(ctx);
+    module.consumed_type_declared = ctx.consumed_type_aliases.clone();
+    module.consumed_context_types = ctx.consumed_context_types();
+    module.target = ctx.target;
+    module.note_unit(ctx);
+    let mut cx = LowerCtx::new(
+        module,
+        BodyMode::ProviderOp {
+            handler: HandlerShared {
+                // The provider's `given` capabilities are in scope in its
+                // bodies, and resolve against the injected `this.deps`.
+                capabilities: given_ir.iter().map(|c| c.name.clone()).collect(),
+                deps_on_this: takes_deps,
+                // #934: a provider's own op body can itself call a `given`
+                // capability (e.g. a provider that dedups its own work via
+                // `Idempotency`).
+                handler_scope: Some(format!(
+                    "{}.provides.{}.{}",
+                    ctx.commons_name, p.capability.name, op.name.name
+                )),
+                owning_context: ctx.commons_name.clone(),
+                ..HandlerShared::default()
+            },
+        },
+    );
+    cx.local_agents = ctx.local_agents.clone();
+    // #1653: parameters are bindings of the body's own scope, so a `let` that
+    // re-binds one gets a fresh name instead of redeclaring it.
+    for p in &op.params {
+        cx.declare_binder(&p.name.name);
+    }
+    let body = function_body_stmts(
+        &op.body,
+        &mut cx,
+        INDENT_STEP * 2,
+        effectful,
+        Some(&op.return_type),
+    );
+    bynk_ts::TsClassMethod {
+        span: Some(op.span),
+        ..bynk_ts::TsClassMethod::new(
+            op.name.name.clone(),
+            effectful,
+            params,
+            Some(ts_type_ref_to_ts_type(&op.return_type, None)),
+            body,
+        )
+    }
 }
 
 /// Append one field to a `deps` object type under construction —
@@ -2992,35 +2988,23 @@ fn seam_identity_ts_type(seam: &ActorSeamIr) -> bynk_ts::TsType {
     ])
 }
 
-/// #1481: returns one real [`bynk_ts::TsStmt`] (was `out: &mut String`) — a
-/// `Raw` carrier for the whole `export const {name} = { ... };` object
-/// literal (Decision C, the same posture `emit_provider` (#1480) already
-/// takes for its class: a real `TsDecl::ConstDecl`/`TsExpr::multiline_
-/// object_entries` pair *could* represent this literal's own skeleton, but
-/// `render_decl_body`'s `ConstDecl` arm doesn't thread a source-map merge
-/// target into its own `init` — only a `TsDecl::Function`/`TsDecl::Class`
-/// body does, #1477's own scope — so a top-level `ConstDecl` here would
-/// silently lose every handler's own per-statement mapping), with a
-/// service-wide `service_smb` combining every handler's own checkpoints at
-/// its own real print-time offset *within this function's own local `out`
-/// buffer* — recorded by [`bynk_ts::print_object_entry_and_merge`] itself
-/// (#1477; 1A.15: a handler body is statements, which the printer records the
-/// spans of, so no per-body map is built or shifted). The caller merges this ONE combined
-/// map into its own real module map at the object's own real splice offset,
-/// via `print_stmt_and_merge` — the same two-level composition
-/// `emit_provider`'s own doc comment already establishes.
+/// A service's declarations (1A.32a, Decision A of #3733): its doc comment, if any, then
+/// `export const {name} = { .. };` as a [`bynk_ts::TsDecl::ConstDecl`] over a multiline object
+/// with one [`bynk_ts::TsObjectEntry::Method`] per handler.
+///
+/// Source maps come from the printer alone: each handler's entry span anchors its header and
+/// prologue to its own `on call` line (#2280), and the object's `end_span` anchors the closing
+/// `};` to the service. The caller gives the first statement the service's span, as for every
+/// other item.
 pub(crate) fn emit_service(
     s: &ServiceDecl,
     protocol: &ProtocolIr,
     signatures: &[HandlerSignatureIr],
     commons: &TypedCommons,
     ctx: &EmitProjectCtx,
-) -> bynk_ts::TsStmt {
+) -> Vec<bynk_ts::TsStmt> {
     let tys = UnitFacts::of(ctx).render(commons);
-    let mut out = String::new();
-    let mut service_smb = SourceMapBuilder::new();
-    emit_doc_block(&mut out, s.documentation.as_deref(), 0);
-    writeln!(out, "export const {name} = {{", name = s.name.name).unwrap();
+    let mut entries: Vec<bynk_ts::TsObjectEntry> = Vec::new();
     let mut cron_idx = 0usize;
     let mut queue_idx = 0usize;
     let ws_proto = matches!(protocol, ProtocolIr::WebSocket { .. });
@@ -3433,7 +3417,9 @@ pub(crate) fn emit_service(
         };
         let body = body.into_stmts(INDENT_STEP * 2);
 
-        let method_entry = bynk_ts::TsObjectEntry::Method {
+        // #2280: anchor the method header and prologue to the handler's own
+        // `on call` line rather than the previous statement's.
+        entries.push(bynk_ts::TsObjectEntry::Method {
             name: kind_name,
             is_async: *ir_effectful,
             generics: Vec::new(),
@@ -3442,34 +3428,28 @@ pub(crate) fn emit_service(
             doc: handler.documentation.as_deref().map(str::to_owned),
             inline: false,
             body,
-            span: None,
-        };
-        // The object (`export const {name} = { ... }`) is always printed at
-        // depth 0 — `object_depth` names that once so this call's own depth
-        // can't drift out of lockstep with `print_object_entry_and_merge`'s
-        // real depth (review of #1360, finding 3's own lesson, applied
-        // proactively here).
-        let object_depth = 0;
-        // #2280: anchor the method header and prologue to the handler's own
-        // `on call` line rather than the previous statement's.
-        service_smb.record(out.len(), handler.span);
-        bynk_ts::print_object_entry_and_merge(
-            &mut out,
-            &method_entry,
-            object_depth,
-            &mut service_smb,
-            0,
-        );
+            span: Some(handler.span),
+        });
     }
     // #2280: what follows the last handler belongs to the service, not to that
     // handler's final body line.
-    service_smb.record(out.len(), s.span);
-    writeln!(out, "}};").unwrap();
-    // #1486: no trailing blank baked into this Raw text any more — see
-    // `emit_provider`'s own identical note.
-    let mut stmt = bynk_ts::TsStmt::raw(out, None);
-    stmt.nested_map = Some(service_smb);
-    stmt
+    let mut stmts = Vec::new();
+    let has_doc = s.documentation.is_some();
+    if let Some(doc) = s.documentation.as_deref() {
+        stmts.push(bynk_ts::TsStmt::doc_comment(doc, None));
+    }
+    let mut object = bynk_ts::TsStmt::decl(
+        bynk_ts::TsDecl::Export(Box::new(bynk_ts::TsDecl::ConstDecl {
+            name: s.name.name.clone(),
+            ty: None,
+            init: bynk_ts::TsExpr::multiline_object_ending_at(entries, s.span),
+        })),
+        None,
+    );
+    // A leading doc comment sits directly above the declaration it documents.
+    object.no_blank_before = has_doc;
+    stmts.push(object);
+    stmts
 }
 
 /// v0.15: the TypeScript deps-field type for a `given` capability reference.

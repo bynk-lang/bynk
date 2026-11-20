@@ -27,7 +27,10 @@ export const __GateToken: symbol = globalThis.Symbol("Gate");
 
 export class LimitedGate implements Gate {
   private deps: { ReadLimit: ReadLimit };
-  constructor(deps: { ReadLimit: ReadLimit }) { this.deps = deps; }
+  constructor(deps: { ReadLimit: ReadLimit }) {
+    this.deps = deps;
+  }
+
   async open(key: string): globalThis.Promise<boolean> {
     return this.deps.ReadLimit.allow(key);
   }

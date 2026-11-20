@@ -24,7 +24,10 @@ export const __ReporterToken: symbol = globalThis.Symbol("Reporter");
 
 export class VersionReporter implements Reporter {
   private deps: { Version: bynk_cloudflare.Version };
-  constructor(deps: { Version: bynk_cloudflare.Version }) { this.deps = deps; }
+  constructor(deps: { Version: bynk_cloudflare.Version }) {
+    this.deps = deps;
+  }
+
   async describe(): globalThis.Promise<string> {
     const v = await this.deps.Version.current();
     return `version ${String(v.id)}`;

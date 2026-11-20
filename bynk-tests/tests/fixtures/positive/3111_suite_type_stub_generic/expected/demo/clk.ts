@@ -15,6 +15,7 @@ export class SystemClock implements Clock {
   async now(): globalThis.Promise<number> {
     return 0;
   }
+
   async label(prefix: string): globalThis.Promise<string> {
     return prefix;
   }

@@ -19,7 +19,10 @@ export const __ThumbnailerToken: symbol = globalThis.Symbol("Thumbnailer");
 
 export class ImagesThumbnailer implements Thumbnailer {
   private deps: { Images: bynk_cloudflare.Images };
-  constructor(deps: { Images: bynk_cloudflare.Images }) { this.deps = deps; }
+  constructor(deps: { Images: bynk_cloudflare.Images }) {
+    this.deps = deps;
+  }
+
   async thumb(image: globalThis.Uint8Array): globalThis.Promise<Option<globalThis.Uint8Array>> {
     const r = await this.deps.Images.transform(image, { width: Some(64), height: Some(64), fit: { tag: "None" as const }, rotate: { tag: "None" as const }, blur: { tag: "None" as const }, overlays: [] }, { format: ImageFormat.Webp, quality: { tag: "None" as const } });
     switch (r.tag) {

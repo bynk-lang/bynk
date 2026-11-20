@@ -40,7 +40,10 @@ export const __SignerToken: symbol = globalThis.Symbol("Signer");
 
 export class KeySigner implements Signer {
   private deps: { StripeKey: StripeKey };
-  constructor(deps: { StripeKey: StripeKey }) { this.deps = deps; }
+  constructor(deps: { StripeKey: StripeKey }) {
+    this.deps = deps;
+  }
+
   async sign(body: string): globalThis.Promise<boolean> {
     const key = await this.deps.StripeKey.get();
     return key !== "" && body !== "";

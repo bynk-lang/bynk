@@ -38,7 +38,10 @@ export const __TrailToken: symbol = globalThis.Symbol("Trail");
 
 export class QueuedTrail implements Trail {
   private deps: { Audit: Audit };
-  constructor(deps: { Audit: Audit }) { this.deps = deps; }
+  constructor(deps: { Audit: Audit }) {
+    this.deps = deps;
+  }
+
   async note(entries: readonly string[]): globalThis.Promise<void> {
     return this.deps.Audit.sendBatch(entries);
   }

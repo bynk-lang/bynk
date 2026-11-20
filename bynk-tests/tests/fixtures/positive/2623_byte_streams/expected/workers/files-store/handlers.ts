@@ -33,9 +33,11 @@ export class MemoryBlobs implements Blobs {
   async read(key: string): globalThis.Promise<Download> {
     return { contentType: "text/plain", body: (async function* () { for (const __e of [new globalThis.TextEncoder().encode("hello, "), new globalThis.TextEncoder().encode(key)]) { yield __e; } })() };
   }
+
   async shelf(name: string): globalThis.Promise<Shelf> {
     return { name: name, latest: { contentType: "text/plain", body: (async function* () { for (const __e of [new globalThis.TextEncoder().encode(name)]) { yield __e; } })() } };
   }
+
   async write(key: string, body: AsyncIterable<globalThis.Uint8Array>): globalThis.Promise<Receipt> {
     const parts = await (async (__s) => { const __m = __s as unknown as { [k: symbol]: boolean }; const __k = globalThis.Symbol.for("bynk.stream.read"); if (__m[__k]) { throw new globalThis.Error("bynk: a stream can be read only once"); } __m[__k] = true; const __r = []; for await (const __e of __s) { __r.push(__e); } return __r; })(body);
     return { key: key, parts: (parts).length };

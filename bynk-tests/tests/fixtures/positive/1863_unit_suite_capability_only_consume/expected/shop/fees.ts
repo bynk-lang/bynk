@@ -14,7 +14,10 @@ export const __FeesToken: symbol = globalThis.Symbol("Fees");
 
 export class FlatFees implements Fees {
   private deps: { Rates: shop_rates.Rates };
-  constructor(deps: { Rates: shop_rates.Rates }) { this.deps = deps; }
+  constructor(deps: { Rates: shop_rates.Rates }) {
+    this.deps = deps;
+  }
+
   async fee(): globalThis.Promise<number> {
     const r = await this.deps.Rates.rate();
     return 10 * r;

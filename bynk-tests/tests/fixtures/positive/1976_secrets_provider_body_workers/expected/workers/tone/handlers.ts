@@ -15,7 +15,10 @@ export const __ToneToken: symbol = globalThis.Symbol("Tone");
 
 export class PlainTone implements Tone {
   private deps: { Secrets: bynk.Secrets };
-  constructor(deps: { Secrets: bynk.Secrets }) { this.deps = deps; }
+  constructor(deps: { Secrets: bynk.Secrets }) {
+    this.deps = deps;
+  }
+
   async current(): globalThis.Promise<string> {
     const t = await this.deps.Secrets.get("TONE");
     switch (t.tag) {

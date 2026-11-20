@@ -64,7 +64,10 @@ export const __FetchHttpProvider = { token: __HttpToken, factory: () => new Fetc
 
 export class StripePayments implements Payments {
   private deps: { Http: Http; Logger: Logger };
-  constructor(deps: { Http: Http; Logger: Logger }) { this.deps = deps; }
+  constructor(deps: { Http: Http; Logger: Logger }) {
+    this.deps = deps;
+  }
+
   async authorise(amount: number): globalThis.Promise<Result<AuthId, PaymentError>> {
     const __r0 = await this.deps.Logger.info("charging");
     const result = await this.deps.Http.post("/charge");

@@ -27,7 +27,10 @@ export const __ConsoleLoggerProvider = { token: __LoggerToken, factory: () => ne
 
 export class PoliteGreeter implements Greeter {
   private deps: { Logger: Logger };
-  constructor(deps: { Logger: Logger }) { this.deps = deps; }
+  constructor(deps: { Logger: Logger }) {
+    this.deps = deps;
+  }
+
   async greet(): globalThis.Promise<void> {
     const __r0 = await this.deps.Logger.info("hello");
     return undefined;

@@ -101,7 +101,10 @@ export const __AllowAllProvider = { token: __TokensToken, factory: () => new All
 
 export class AgentYanks implements Yanks {
   private deps: { Tokens: Tokens; env: { PACKAGE_INDEX: __DurableObjectNamespace } };
-  constructor(deps: { Tokens: Tokens; env: { PACKAGE_INDEX: __DurableObjectNamespace } }) { this.deps = deps; }
+  constructor(deps: { Tokens: Tokens; env: { PACKAGE_INDEX: __DurableObjectNamespace } }) {
+    this.deps = deps;
+  }
+
   async set(value: boolean): globalThis.Promise<boolean> {
     const ok = await this.deps.Tokens.check();
     const changed = await __makePackageIndex("x", this.deps.env).setYanked(value, this.deps);
@@ -119,7 +122,10 @@ export const __UnyankToken: symbol = globalThis.Symbol("Unyank");
 
 export class AgentUnyank implements Unyank {
   private deps: { env: { PACKAGE_INDEX: __DurableObjectNamespace } };
-  constructor(deps: { env: { PACKAGE_INDEX: __DurableObjectNamespace } }) { this.deps = deps; }
+  constructor(deps: { env: { PACKAGE_INDEX: __DurableObjectNamespace } }) {
+    this.deps = deps;
+  }
+
   async clear(): globalThis.Promise<boolean> {
     return __makePackageIndex("x", this.deps.env).setYanked(false, this.deps);
   }

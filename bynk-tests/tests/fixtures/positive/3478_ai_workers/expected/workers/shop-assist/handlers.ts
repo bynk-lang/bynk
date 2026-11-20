@@ -16,7 +16,10 @@ export const __AnswererToken: symbol = globalThis.Symbol("Answerer");
 
 export class AiAnswerer implements Answerer {
   private deps: { Ai: bynk_cloudflare.Ai };
-  constructor(deps: { Ai: bynk_cloudflare.Ai }) { this.deps = deps; }
+  constructor(deps: { Ai: bynk_cloudflare.Ai }) {
+    this.deps = deps;
+  }
+
   async answer(question: string): globalThis.Promise<string> {
     const reply = await this.deps.Ai.run("@cf/meta/llama-3.2-1b-instruct", question);
     switch (reply.tag) {

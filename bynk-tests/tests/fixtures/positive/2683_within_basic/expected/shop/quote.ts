@@ -24,6 +24,7 @@ export class FixedPricing implements Pricing {
   async quote(id: number): globalThis.Promise<number> {
     return id;
   }
+
   async tryQuote(id: number): globalThis.Promise<Result<number, string>> {
     return Ok(id);
   }

@@ -28,11 +28,15 @@ export const __ConsoleLoggerProvider = { token: __LoggerToken, factory: () => ne
 
 export class LoggingStore implements Store {
   private deps: { Logger: Logger };
-  constructor(deps: { Logger: Logger }) { this.deps = deps; }
+  constructor(deps: { Logger: Logger }) {
+    this.deps = deps;
+  }
+
   async put(key: string): globalThis.Promise<void> {
     const __r0 = await this.deps.Logger.info("put");
     return undefined;
   }
+
   async get(key: string): globalThis.Promise<void> {
     const __r0 = await this.deps.Logger.info("get");
     return undefined;

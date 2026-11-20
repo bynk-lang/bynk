@@ -31,7 +31,10 @@ export const __PricesToken: symbol = globalThis.Symbol("Prices");
 
 export class CachedPrices implements Prices {
   private deps: { PriceCache: PriceCache };
-  constructor(deps: { PriceCache: PriceCache }) { this.deps = deps; }
+  constructor(deps: { PriceCache: PriceCache }) {
+    this.deps = deps;
+  }
+
   async price(sku: string): globalThis.Promise<Option<string>> {
     return this.deps.PriceCache.get(sku);
   }

@@ -390,6 +390,19 @@ fn single_file_ctx() -> EmitProjectCtx {
     }
 }
 
+/// Append one item's statements to `body`, giving the first the item's span: the checkpoint
+/// every line up to the next span maps back to.
+fn extend_with_span(
+    body: &mut Vec<bynk_ts::TsStmt>,
+    mut stmts: Vec<bynk_ts::TsStmt>,
+    span: bynk_syntax::span::Span,
+) {
+    if let Some(first) = stmts.first_mut() {
+        first.span = Some(span);
+    }
+    body.extend(stmts);
+}
+
 /// Emit TypeScript source for a single file inside a multi-file project,
 /// including cross-file and cross-commons imports computed from
 /// [`EmitProjectCtx`].
@@ -579,9 +592,8 @@ pub fn emit_project(
                 body.extend(item_stmts);
             }
             CommonsItem::Provider(p) => {
-                if let Some(mut stmt) = emit_provider(p, commons, ctx) {
-                    stmt.span = Some(p.span);
-                    body.push(stmt);
+                if let Some(item_stmts) = emit_provider(p, commons, ctx) {
+                    extend_with_span(&mut body, item_stmts, p.span);
                 }
             }
             CommonsItem::Service(s) => {
@@ -599,9 +611,8 @@ pub fn emit_project(
                     .iter()
                     .map(|h| lower_service_handler_signature_ir(h, program))
                     .collect();
-                let mut stmt = emit_service(s, &protocol, &signatures, commons, ctx);
-                stmt.span = Some(s.span);
-                body.push(stmt);
+                let item_stmts = emit_service(s, &protocol, &signatures, commons, ctx);
+                extend_with_span(&mut body, item_stmts, s.span);
             }
             CommonsItem::Agent(a) => {
                 let state: Vec<_> = a

@@ -36,7 +36,10 @@ export const __PackagesToken: symbol = globalThis.Symbol("Packages");
 
 export class StoredPackages implements Packages {
   private deps: { Archives: Archives };
-  constructor(deps: { Archives: Archives }) { this.deps = deps; }
+  constructor(deps: { Archives: Archives }) {
+    this.deps = deps;
+  }
+
   async bytes(key: string): globalThis.Promise<Option<globalThis.Uint8Array>> {
     return this.deps.Archives.get(key);
   }
