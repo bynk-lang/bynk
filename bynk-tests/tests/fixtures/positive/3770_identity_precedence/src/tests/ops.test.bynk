@@ -1,0 +1,29 @@
+suite ident.ops {
+  case "a duration's milliseconds keep their brackets under a product" {
+    expect scaled(2) == 6
+  }
+
+  case "an instant round trip keeps its brackets under a product" {
+    expect instantScaled(2, 3) == 10
+  }
+
+  case "unary minus applies to the whole operand" {
+    expect negated(2, 3) == -5
+  }
+
+  case "a subtrahend keeps its brackets" {
+    expect difference(10, 5, 2) == 7
+  }
+
+  case "toFloat keeps its brackets under a product" {
+    expect floatedMethod(2, 3) == 10.0
+  }
+
+  case "a difference of instants" {
+    expect roundTrip(2, 3) == 1
+  }
+
+  case "a text-lowered operand keeps its brackets" {
+    expect textOperand("a,b,c") == 8
+  }
+}

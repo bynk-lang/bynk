@@ -146,7 +146,10 @@ export class Room {
     const __state = { ...(await this.loadState()) };
     const __result = await (async () => {
       const now = await deps.Clock.now();
-      const __r0 = await (async () => { await __state.stamps.put(String(name), now); return undefined; })();
+      const __r0 = await (async () => {
+        await __state.stamps.put(String(name), now);
+        return undefined;
+      })();
       return undefined;
     })();
     await this.commitState(__state);

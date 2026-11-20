@@ -1136,7 +1136,7 @@ fn array(children: Vec<LoweredExpr>) -> Built {
 
 /// An explicit source `( … )`: `bynk_ts` has `TsExpr::Paren`, so the source's
 /// own parentheses are kept as a node.
-fn paren(child: LoweredExpr) -> Built {
+pub(super) fn paren(child: LoweredExpr) -> Built {
     node_or_text(
         vec![child],
         |c| bynk_ts::TsExpr::Paren(Box::new(one(c))),

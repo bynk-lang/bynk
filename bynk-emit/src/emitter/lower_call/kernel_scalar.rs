@@ -3,14 +3,16 @@
 //! for byte, then converted to nodes: each arm builds a node when its receiver and
 //! arguments are nodes and prints today's text otherwise (`node_or_text`).
 //!
-//! The arms that stay text are marked `// 1A:`: the identity kernels behind #3770, which a
-//! node would change (the printer would bracket the operand), and the one regex arm whose
-//! body is a statement block `bynk_ts` cannot yet express in an expression position.
+//! The arms that stay text are marked `// 1A:`: the one regex arm whose body is a statement
+//! block `bynk_ts` cannot yet express in an expression position. The identity kernels return
+//! their operand's node, so the printer brackets it (#3770).
 
 use bynk_check::kernel_op::{BytesOp, DecimalOp, DurationOp, FloatOp, InstantOp, IntOp, StringOp};
 use bynk_ts::{TsArrowBody, TsBinaryOp, TsExpr, TsType};
 
-use super::super::lower::{Built, Lowered, LoweredExpr, Pre, node_or_text, str_node};
+use super::super::lower::{
+    Built, Lowered, LoweredExpr, Pre, built_of, node_or_text, paren, str_node,
+};
 use super::super::lower_ctx::LowerCtx;
 use super::super::lower_list::{arrow, call, id, member, param, spread, take, zero};
 use super::super::{Expr, ExprKind, rounding_mode};
@@ -24,6 +26,24 @@ fn operands(pre: &mut Pre, cx: &mut LowerCtx, parts: &[&Expr]) -> Vec<LoweredExp
 /// A kernel's exit: the built node, or its text through the one shared text exit.
 fn finish(pre: Pre, built: Option<Built>) -> Option<Lowered> {
     built.map(|b| pre.finish_built(b))
+}
+
+/// An identity conversion: its operand, unchanged. A node is returned as is, so the printer of
+/// whatever node holds it brackets it by precedence (#3770). A still-text operand carries no
+/// precedence the printer could read, so it is bracketed here unless it is a plain name or member
+/// path, which can never bind looser than its parent.
+pub(super) fn identity(pre: &mut Pre, operand: &Expr, cx: &mut LowerCtx) -> Built {
+    match pre.lower_node(operand, cx) {
+        LoweredExpr::Text(t) if !is_simple_path(&t) => paren(LoweredExpr::Text(t)),
+        other => built_of(other),
+    }
+}
+
+fn is_simple_path(text: &str) -> bool {
+    !text.is_empty()
+        && text
+            .chars()
+            .all(|c| c.is_ascii_alphanumeric() || c == '_' || c == '$' || c == '.')
 }
 
 fn global_math(name: &str) -> TsExpr {
@@ -123,9 +143,8 @@ pub(in crate::emitter) fn lower_int_kernel(
 ) -> Option<Lowered> {
     let mut pre = Pre::new();
     let built: Option<Built> = match (op, args) {
-        // 1A: #3770, identity arm kept text so this paydown slice does not change
-        // behaviour; fixed in its own PR.
-        (IntOp::ToFloat, []) => Some(Err(pre.lower(receiver, cx))),
+        // The identity returns its operand unchanged, so a parent node's printer brackets it.
+        (IntOp::ToFloat, []) => Some(identity(&mut pre, receiver, cx)),
         (IntOp::Abs, []) => {
             let kids = operands(&mut pre, cx, &[receiver]);
             Some(math_call("abs", kids))
@@ -293,9 +312,8 @@ pub(in crate::emitter) fn lower_duration_kernel(
 ) -> Option<Lowered> {
     let mut pre = Pre::new();
     let built: Option<Built> = match (op, args) {
-        // 1A: #3770, identity arm kept text so this paydown slice does not change
-        // behaviour; fixed in its own PR.
-        (DurationOp::ToMillis, []) => Some(Err(pre.lower(receiver, cx))),
+        // The identity returns its operand unchanged, so a parent node's printer brackets it.
+        (DurationOp::ToMillis, []) => Some(identity(&mut pre, receiver, cx)),
         (DurationOp::ToString, []) => {
             let kids = operands(&mut pre, cx, &[receiver]);
             Some(plain_call("String", kids))
@@ -316,9 +334,8 @@ pub(in crate::emitter) fn lower_instant_kernel(
 ) -> Option<Lowered> {
     let mut pre = Pre::new();
     let built: Option<Built> = match (op, args) {
-        // 1A: #3770, identity arm kept text so this paydown slice does not change
-        // behaviour; fixed in its own PR.
-        (InstantOp::ToEpochMillis, []) => Some(Err(pre.lower(receiver, cx))),
+        // The identity returns its operand unchanged, so a parent node's printer brackets it.
+        (InstantOp::ToEpochMillis, []) => Some(identity(&mut pre, receiver, cx)),
         (InstantOp::ToString, []) => {
             let kids = operands(&mut pre, cx, &[receiver]);
             Some(plain_call("String", kids))
@@ -1484,24 +1501,37 @@ mod tests {
         }
     }
 
-    /// The identity kernels behind #3770 stay text. This pins today's (wrong) output for one case:
-    /// `Instant.fromEpochMillis(a + b).toEpochMillis() * 2` prints `a + b * 2`, not `(a + b) * 2`.
-    /// The fix PR for #3770 flips this assertion deliberately.
+    /// #3770: the identity kernels return their operand as a node, so the parent's printer brackets
+    /// a lower-precedence operand by precedence.
     #[test]
-    fn the_3770_identity_arms_keep_their_current_text() {
-        let (n, ts) = exits(
-            "a: Int, b: Int",
-            "Int { Instant.fromEpochMillis(a + b).toEpochMillis() * 2 }",
-        );
-        assert_eq!(returned(&ts), "a + b * 2");
-        assert!(n > 0, "the identity arm is a text exit\n{ts}");
-        let (_, ts) = exits(
-            "a: Int, b: Int",
-            "Int { Duration.millis(a + b).toMillis() * 2 }",
-        );
-        assert_eq!(returned(&ts), "a + b * 2");
-        let (_, ts) = exits("n: Int", "Float { n.toFloat() }");
-        assert_eq!(returned(&ts), "n");
+    fn the_identity_arms_bracket_their_operand() {
+        for (sig, body, want) in [
+            (
+                "a: Int, b: Int",
+                "Int { Instant.fromEpochMillis(a + b).toEpochMillis() * 2 }",
+                "(a + b) * 2",
+            ),
+            (
+                "a: Int, b: Int",
+                "Int { Duration.millis(a + b).toMillis() * 2 }",
+                "(a + b) * 2",
+            ),
+            (
+                "a: Int, b: Int",
+                "Int { -Duration.millis(a + b).toMillis() }",
+                "-(a + b)",
+            ),
+            (
+                "a: Int, b: Int",
+                "Int { a + b - Duration.millis(a - b).toMillis() }",
+                "a + b - (a - b)",
+            ),
+            ("n: Int", "Float { n.toFloat() }", "n"),
+        ] {
+            let (n, ts) = exits(sig, body);
+            assert_eq!(returned(&ts), want, "{body}");
+            assert_eq!(n, 0, "{body}: the identity arm is a node\n{ts}");
+        }
     }
 
     /// An identity arm keeps its receiver's hoisted statements.

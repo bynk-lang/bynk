@@ -1,0 +1,6 @@
+[project]
+name = "identity-precedence"
+version = "0.1.0"
+
+[paths]
+include = ["src"]
