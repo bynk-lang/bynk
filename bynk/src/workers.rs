@@ -195,9 +195,17 @@ pub fn compile_once_reporting(
     // `--no-install` stops, naming the detected command.
     let mode = bynk_driver::npm_install::Mode::of(build.dry_run, build.no_install);
     let setting = bynk_driver::npm_install::configured_manager(project_root);
-    if let Err(e) = bynk_driver::npm_install::install_for_project(
+    // #3796: a dry run builds in a scratch directory; its report names where a
+    // real deploy installs.
+    let shown_dir = if build.dry_run {
+        project_root.join(".bynk").join("deploy")
+    } else {
+        build_dir.to_path_buf()
+    };
+    if let Err(e) = bynk_driver::npm_install::install_for_project_shown_as(
         project_root,
         build_dir,
+        &shown_dir,
         setting.as_deref(),
         mode,
     ) {

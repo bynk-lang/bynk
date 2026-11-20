@@ -107,19 +107,40 @@ fn dry_run(dir: &Path, args: &[&str]) -> (bool, String) {
     )
 }
 
+/// A Worker's contract manifest from the last real deploy's build.
 fn manifest(dir: &Path, worker: &str) -> serde_json::Value {
-    let path = dir
-        .join(".bynk/deploy/workers")
+    manifest_under(&dir.join(".bynk/deploy"), worker)
+}
+
+fn manifest_under(build: &Path, worker: &str) -> serde_json::Value {
+    let path = build
+        .join("workers")
         .join(worker)
         .join("bynk-contracts.json");
     serde_json::from_str(&std::fs::read_to_string(&path).unwrap()).unwrap()
 }
 
+/// A Worker's contract manifest as the project builds now. A dry run leaves no
+/// build behind (#3796), so this builds the Workers into `out/` itself.
+fn built_manifest(dir: &Path, worker: &str) -> serde_json::Value {
+    let out = Command::new(env!("CARGO_BIN_EXE_bynk"))
+        .args(["build", "--target", "workers"])
+        .current_dir(dir)
+        .output()
+        .expect("run bynk build");
+    assert!(
+        out.status.success(),
+        "the Workers build:\n{}",
+        String::from_utf8_lossy(&out.stderr)
+    );
+    manifest_under(&dir.join("out"), worker)
+}
+
 /// Write the `bynk.deploy.lock` a real deploy of the project as it stands
 /// would have recorded, from the build's own manifests.
 fn seed_ledger(dir: &Path) {
-    let payment = manifest(dir, "shop-payment");
-    let orders = manifest(dir, "shop-orders");
+    let payment = built_manifest(dir, "shop-payment");
+    let orders = built_manifest(dir, "shop-orders");
     let hash = payment["provides"]["authorise"].as_str().unwrap();
     let shape = payment["provides_shapes"]["authorise"].as_str().unwrap();
     assert_eq!(
@@ -231,7 +252,7 @@ fn a_real_run_records_the_older_contract_and_rebuilds_the_callee_to_carry_it() {
     let (ok, out) = dry_run(&dir, &[]);
     assert!(ok, "the baseline plans:\n{out}");
     seed_ledger(&dir);
-    let v1_hash = manifest(&dir, "shop-payment")["provides"]["authorise"]
+    let v1_hash = built_manifest(&dir, "shop-payment")["provides"]["authorise"]
         .as_str()
         .unwrap()
         .to_string();

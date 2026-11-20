@@ -490,7 +490,9 @@ fn an_unapproved_adapters_npm_package_is_never_installed() {
     assert!(
         out.contains("npm packages that are not installed: jose")
             && out.contains("`pnpm install --ignore-scripts --ignore-workspace`")
-            && out.contains("pnpm-lock.yaml"),
+            && out.contains("pnpm-lock.yaml")
+            // #3796: where a real run installs, not the dry run's scratch build.
+            && out.contains(".bynk/deploy"),
         "{out}"
     );
     assert!(!ran.exists(), "a dry run ran a package manager");

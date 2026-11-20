@@ -697,6 +697,19 @@ pub fn install_for_project(
     setting: Option<&str>,
     mode: Mode,
 ) -> Result<(), String> {
+    install_for_project_shown_as(project_root, build_dir, build_dir, setting, mode)
+}
+
+/// [`install_for_project`], with a dry run's report naming `shown_dir`: where a
+/// real run would install. #3796: a deploy dry run builds in a scratch
+/// directory, but a real deploy installs in `.bynk/deploy`.
+pub fn install_for_project_shown_as(
+    project_root: &Path,
+    build_dir: &Path,
+    shown_dir: &Path,
+    setting: Option<&str>,
+    mode: Mode,
+) -> Result<(), String> {
     let project = RealProject(project_root);
     let toolbox = SystemToolbox;
     let install = Install {
@@ -714,7 +727,7 @@ pub fn install_for_project(
     }
     match ensure_installed(&install, build_dir, mode).map_err(|e| e.to_string())? {
         Outcome::WouldInstall(missing, found) => {
-            crate::colour::eprintln(&dry_run_message(&missing, &found, build_dir));
+            crate::colour::eprintln(&dry_run_message(&missing, &found, shown_dir));
             Ok(())
         }
         Outcome::Present | Outcome::Installed(_) => Ok(()),

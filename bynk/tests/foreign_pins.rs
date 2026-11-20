@@ -43,6 +43,27 @@ fn scratch(name: &str) -> PathBuf {
     dir
 }
 
+/// A Worker's contract manifest as the project builds now. A dry run leaves no
+/// build behind (#3796), so this builds the Workers into `out/` itself.
+fn built_manifest(dir: &Path, worker: &str) -> String {
+    let out = Command::new(env!("CARGO_BIN_EXE_bynk"))
+        .args(["build", "--target", "workers"])
+        .current_dir(dir)
+        .output()
+        .expect("run bynk build");
+    assert!(
+        out.status.success(),
+        "the Workers build:\n{}",
+        String::from_utf8_lossy(&out.stderr)
+    );
+    std::fs::read_to_string(
+        dir.join("out/workers")
+            .join(worker)
+            .join("bynk-contracts.json"),
+    )
+    .expect("the Worker records its contracts")
+}
+
 fn on_path(name: &str) -> bool {
     let finder = if cfg!(windows) { "where" } else { "which" };
     Command::new(finder)
@@ -129,9 +150,7 @@ fn deploy_holds_a_build_to_each_foreign_callers_pin() {
     );
 
     // Updating the pin is the override.
-    let generated =
-        std::fs::read_to_string(dir.join(".bynk/deploy/workers/shop-orders/bynk-contracts.json"))
-            .unwrap();
+    let generated = built_manifest(&dir, "shop-orders");
     let new_status = generated
         .lines()
         .find_map(|l| l.trim().strip_prefix("\"status\": \""))
